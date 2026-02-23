@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Jaiph — AI Workflow DSL</title>
+
+    <style>
+        :root {
+            --navy: #1f2a37;
+            --navy-light: #2b3a4d;
+            --orange: #fca228;
+            --orange-soft: #e8a75a;
+            --bg: #f4f1ec;
+            --text: #2a2a2a;
+            --muted: #6b7280;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            font-size: 1.25rem;
+        }
+
+        header {
+            background: url(data:image/webp;base64,UklGRlgAAABXRUJQVlA4TEsAAAAvB8ABAC+gIG0Dxr/k7tpQkLYB419ydxWkbcD4l9zd+Y//t5EEsE1bUNRIiqxowigYB7DHf4IEJBDR/9h8ft5sgdD158TE5zUEtgAA);
+            padding: 3rem 1.5rem;
+            text-align: center;
+            border-bottom: 0.25rem solid var(--orange);
+            color: var(--text);
+        }
+
+        .logo {
+            font-size: 2.8rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        .logo span {
+            color: var(--orange);
+        }
+
+        .tagline {
+            margin-top: 1rem;
+            font-size: 1.1rem;
+            color: var(--text);
+            font-weight: bold;
+            font-size: 1.3rem;
+        }
+
+        .tagline .separator {
+            margin: 0 0.75rem;
+            color: var(--orange);
+            line-height: inherit;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 2.5rem 1.5rem;
+        }
+
+        h2 {
+            color: var(--navy);
+            margin-top: 2.5rem;
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem 2.5rem;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.05);
+            margin-top: 1rem;
+        }
+
+        .small {
+            font-size: 1rem;
+            color: var(--muted);
+        }
+
+        .warning {
+            color: var(--orange-soft);
+        }
+
+        pre {
+            background: #f6f8fa;
+            color: #24292f;
+            padding: 2rem 0;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 0.9rem;
+            border: 1px solid #d0d7de;
+            position: relative;
+        }
+
+        code {
+            font-family: "Fira Code", monospace;
+            color: #24292f;
+        }
+
+        code:not(pre code) {
+            font-size: 0.9rem;
+            background: #f6f8fa;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            padding: 0.2rem 0.35rem;
+        }
+
+        pre code {
+            display: block;
+            white-space: pre;
+            counter-reset: line;
+        }
+
+        pre code .code-line {
+            display: block;
+            padding-left: 4em;
+            position: relative;
+            white-space: pre;
+        }
+
+        pre code .code-line::before {
+            counter-increment: line;
+            content: counter(line);
+            color: #8c959f;
+            position: absolute;
+            left: 0;
+            width: 2.25rem;
+            text-align: right;
+            user-select: none;
+        }
+
+        .copy-code-button {
+            position: absolute;
+            top: 0.75rem;
+            right: 0.75rem;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            background: white;
+            color: #24292f;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.25rem 0.6rem;
+            cursor: pointer;
+            transition: background 0.15s ease;
+        }
+
+        .copy-code-button:hover {
+            background: #f3f4f6;
+        }
+
+        .code-tab-list {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .code-tab-button {
+            border: 1px solid #d0d7de;
+            border-radius: 8px;
+            background: white;
+            color: var(--muted);
+            font-size: 0.9rem;
+            font-weight: 600;
+            font-family: "Fira Code", monospace;
+            padding: 0.45rem 0.9rem;
+            cursor: pointer;
+        }
+
+        .code-tab-button.is-active {
+            background: #e7f3ff;
+            border-color: #80bfff;
+            color: #0550ae;
+        }
+
+        .code-tab-hint {
+            color: var(--muted);
+            font-size: 0.85rem;
+        }
+
+        .code-tab-panel {
+            display: none;
+        }
+
+        .code-tab-panel.is-active {
+            display: block;
+        }
+
+        .primitive-list {
+            margin: 0.5rem 0 0;
+        }
+
+        .primitive-list dt {
+            font-weight: 600;
+            margin-top: 0.65rem;
+        }
+
+        .primitive-list dd {
+            margin: 0.2rem 0 0.6rem 1.25rem;
+            color: var(--text);
+        }
+
+        .footer {
+            margin-top: 4rem;
+            padding: 2rem;
+            text-align: center;
+            font-size: 0.9rem;
+            color: var(--muted);
+        }
+
+        .button {
+            display: inline-block;
+            margin-top: 1rem;
+            padding: 0.6rem 1.2rem;
+            background: var(--orange);
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 600;
+            transition: 0.2s ease;
+        }
+
+        .button:hover {
+            background: var(--orange-soft);
+        }
+
+
+        /* Keywords */
+        .ralph-keyword {
+            color: #cf222e;
+            font-weight: 600;
+        }
+
+        /* Rule / workflow names */
+        .ralph-definition {
+            color: #8250df;
+        }
+
+        /* Qualified prefix */
+        .ralph-qualifier {
+            color: #6639ba;
+        }
+
+        /* Identifier */
+        .ralph-identifier {
+            color: #0550ae;
+        }
+
+        /* Strings */
+        .ralph-string {
+            color: #0a3069;
+        }
+
+        /* Comments */
+        .ralph-comment {
+            color: #6e7781;
+            font-style: italic;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <h1><img src="logo.png" alt="Jaiph" width="420" /></h1>
+        <div class="tagline">
+            Open Source<span class="separator">•</span>Powerful<span class="separator">•</span>Friendly!
+        </div>
+    </header>
+
+    <div class="container">
+
+        <section>
+            <h2>What is Jaiph?</h2>
+            <div class="card">
+                <p>
+                    <strong>Jaiph</strong> is a scripting, declarative, and composable language to define AI agent
+                    workflows.
+                </p>
+                <p>
+                    It combines the power of declarative languages with bash, to create portable, and easy to understand
+                    AI agent workflows. It compiles to pure bash, making it fully compatible with existing shell
+                    environments.
+                </p>
+                <p class="small"><strong class="warning">⚠ Jaiph is still in an early stage.</strong><br/>You may expect breaking changes. You may also have a great impact as an early contributor.</p>
+                <p>
+                    <a href="https://github.com/jaiphlang/jaiph/tree/main/docs" target="_blank"
+                    rel="noopener noreferrer" class="button">Docs</a>
+                    <a href="https://github.com/jaiphlang/jaiph/tree/main/samples" target="_blank"
+                    rel="noopener noreferrer" class="button">Samples</a>
+                    <a href="https://github.com/jaiphlang/jaiph/issues" target="_blank"
+                    rel="noopener noreferrer" class="button">Contribute</a>
+                </p>
+                <!-- <p>Jaiph comes also with a control panel to manage and monitor your workflows.</p> -->
+            </div>
+        </section>
+
+        <section>
+            <h2>Example</h2>
+            <div class="card">
+                <div class="code-tab-list">
+                    <button type="button" class="code-tab-button is-active" data-target="main-jph">main.jph</button>
+                    <span class="code-tab-hint">transpiles to: </span>
+                    <button type="button" class="code-tab-button" data-target="main-sh">main.sh</button>
+                    <button type="button" class="code-tab-button" data-target="jaiph-stdlib">jaiph_stdlib.sh</button>
+                </div>
+
+                <div class="code-tab-panel is-active" data-panel="main-jph">
+                    <pre><code class="language-jaiph">import "security.jph" as security
+import "bootstrap_project.jph" as bootstrap
+
+# Validates local build prerequisites.
+rule project_ready {
+  test -f "package.json"
+  test -n "$NODE_ENV"
+}
+
+# Verifies the project compiles successfully.
+rule build_passes {
+  npm run build
+}
+
+# Orchestrates checks, prompt execution, and docs refresh.
+# Arguments:
+#   $1: Feature requirements passed to the prompt.
+workflow main {
+  if ! ensure project_ready; then
+    run bootstrap.nodejs
+  fi
+  
+  prompt "
+    Build the application using best practices.
+    Follow requirements: $1
+  "
+  
+  ensure build_passes
+  ensure security.scan_passes
+
+  run update_docs
+}
+
+# Refreshes documentation after a successful build.
+workflow update_docs {
+  prompt "Update docs"
+}</code></pre>
+                </div>
+
+                <div class="code-tab-panel" data-panel="main-sh">
+                    <pre><code class="language-bash">set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/jaiph_stdlib.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/bootstrap_project.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/tools/security.sh"
+
+# Validates local build prerequisites.
+main__rule_project_ready__impl() {
+  test -f "package.json"
+  test -n "$NODE_ENV"
+}
+
+main__rule_project_ready() {
+  jaiph__run_step main__rule_project_ready jaiph__execute_readonly main__rule_project_ready__impl
+}
+
+# Verifies the project compiles successfully.
+main__rule_build_passes__impl() {
+  npm run build
+}
+
+main__rule_build_passes() {
+  jaiph__run_step main__rule_build_passes jaiph__execute_readonly main__rule_build_passes__impl
+}
+
+# Orchestrates checks, prompt execution, and docs refresh.
+# Arguments:
+#   $1: Feature requirements passed to the prompt.
+main__workflow_main__impl() {
+  if ! main__rule_project_ready; then
+    bootstrap_project__workflow_nodejs
+  fi
+  jaiph__prompt "
+    Build the application using best practices.
+    Follow requirements: $1
+  "
+  main__rule_build_passes
+  tools__security__rule_scan_passes
+  main__workflow_update_docs
+}
+
+main__workflow_main() {
+  jaiph__run_step main__workflow_main main__workflow_main__impl "$@"
+}
+
+# Refreshes documentation after a successful build.
+main__workflow_update_docs__impl() {
+  jaiph__prompt "Update docs"
+}
+
+main__workflow_update_docs() {
+  jaiph__run_step main__workflow_update_docs main__workflow_update_docs__impl "$@"
+}</code></pre>
+                </div>
+
+                <div class="code-tab-panel" data-panel="jaiph-stdlib">
+                    <pre><code class="language-bash">#!/usr/bin/env bash
+# Standard helpers shared by transpiled Jaiph modules.
+
+jaiph__version() {
+  echo "jaiph 0.0.1"
+}
+
+jaiph__die() {
+  local message="$1"
+  echo "jai: $message" >&2
+  return 1
+}
+
+jaiph__prompt() {
+  cursor-agent "$@"
+}
+
+jaiph__new_run_id() {
+  if command -v uuidgen >/dev/null 2>&1; then
+    uuidgen | tr "[:upper:]" "[:lower:]"
+    return 0
+  fi
+  printf "%s-%s-%s" "$$" "$RANDOM" "$(date +%s)"
+}
+
+jaiph__sanitize_name() {
+  local raw="$1"
+  raw="${raw//[^[:alnum:]_.-]/_}"
+  printf "%s" "$raw"
+}
+
+jaiph__init_run_tracking() {
+  if [[ -n "${JAIPH_RUN_DIR:-}" ]]; then
+    return 0
+  fi
+  local started_at run_id
+  started_at="$(date -u +"%Y%m%dT%H%M%SZ")"
+  run_id="$(jaiph__new_run_id)"
+  JAIPH_RUN_DIR="$PWD/${started_at}-${run_id}"
+  JAIPH_PRECEDING_FILES=""
+  mkdir -p "$JAIPH_RUN_DIR"
+  export JAIPH_RUN_DIR JAIPH_PRECEDING_FILES
+}
+
+jaiph__track_output_files() {
+  local out_file="$1"
+  local err_file="$2"
+  if [[ -z "$JAIPH_PRECEDING_FILES" ]]; then
+    JAIPH_PRECEDING_FILES="${out_file},${err_file}"
+  else
+    JAIPH_PRECEDING_FILES="${JAIPH_PRECEDING_FILES},${out_file},${err_file}"
+  fi
+  export JAIPH_PRECEDING_FILES
+}
+
+jaiph__run_step() {
+  local func_name="$1"
+  shift || true
+  if [[ -z "$func_name" ]]; then
+    jaiph__die "jaiph__run_step requires a function name"
+    return 1
+  fi
+  if [[ "$#" -eq 0 ]]; then
+    jaiph__die "jaiph__run_step requires a command to execute"
+    return 1
+  fi
+  jaiph__init_run_tracking || return 1
+  local step_started_at safe_name out_file err_file status
+  step_started_at="$(date -u +"%Y%m%dT%H%M%SZ")"
+  safe_name="$(jaiph__sanitize_name "$func_name")"
+  out_file="$JAIPH_RUN_DIR/${step_started_at}-${safe_name}.out"
+  err_file="$JAIPH_RUN_DIR/${step_started_at}-${safe_name}.err"
+  "$@" >"$out_file" 2>"$err_file"
+  status=$?
+  jaiph__track_output_files "$out_file" "$err_file"
+  if [[ -s "$out_file" ]]; then
+    cat "$out_file"
+  fi
+  if [[ -s "$err_file" ]]; then
+    cat "$err_file" >&2
+  fi
+  return "$status"
+}
+
+# Wrapper to execute functions in a read-only filesystem sandbox.
+jaiph__execute_readonly() {
+  local func_name="$1"
+  if [[ -z "$func_name" ]]; then
+    jaiph__die "jaiph__execute_readonly requires a function name"
+    return 1
+  fi
+  if ! declare -f "$func_name" >/dev/null 2>&1; then
+    jaiph__die "unknown function: $func_name"
+    return 1
+  fi
+  if ! command -v unshare >/dev/null 2>&1; then
+    jaiph__die "unshare is required for read-only rule execution"
+    return 1
+  fi
+  if ! command -v sudo >/dev/null 2>&1; then
+    jaiph__die "sudo is required for read-only rule execution"
+    return 1
+  fi
+
+  export -f "$func_name"
+  export -f jaiph__die
+  export -f jaiph__prompt
+  sudo env JAIPH_PRECEDING_FILES="$JAIPH_PRECEDING_FILES" unshare -m bash -c "
+    mount --make-rprivate /
+    mount -o remount,ro /
+    $func_name
+  "
+}</code></pre>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <h2>Getting started</h2>
+            <div class="card">
+                <p>
+                    The installation below uses Jaiph from the main branch in the GitHub repository:
+                    <a href="https://github.com/jaiphlang/jaiph" target="_blank"
+                        rel="noopener noreferrer">https://github.com/jaiphlang/jaiph</a>.
+                    The specification is still in flux and may break in the future.
+                    You may expected breaking changes.
+                </p>
+                <h3>Installation</h3>
+                <pre><code class="language-bash">curl -fsSL https://raw.githubusercontent.com/jaiphlang/jaiph/main/install | bash</code></pre>
+                <p>
+                    Then verify the installation:
+                </p>
+                <pre><code class="language-bash">jaiph --version</code></pre>
+                <p>In case of error, check if <code>~/.local/bin</code> is in your PATH. This is the default
+                    installation directory.</p>
+                <h3>Running a workflow</h3>
+                <pre><code class="language-bash">jaiph run path/to/main.jph "feature request or task"</code></pre>
+            </div>
+        </section>
+
+        <section>
+            <h2>Documentation</h2>
+            <div class="card">
+                <dl class="primitive-list">
+                    <dt><code>import "file.jph" as alias</code></dt>
+                    <dd>Imports rules and workflows from another Jaiph module under an alias. Jaiph compiles each module to a single shell file, and verifies the import at compile time.</dd>
+
+                    <dt><code>rule name { ... }</code></dt>
+                    <dd>Defines a reusable check/action that returns a shell exit code. The rule is executed in a readonly subshell, and its stdout is preserved. Rule fails if the command returns a non-zero exit code.</dd>
+
+                    <dt><code>workflow name { ... }</code></dt>
+                    <dd>Defines an orchestration entrypoint made of ordered steps. As opposed to rules workflows can change the state of the system and are not restricted to readonly operations. Workflows fail if the script returns a non-zero exit code.
+
+                    <dt><code>ensure ref</code></dt>
+                    <dd>Executes a rule in a workflow or another rule.</dd>
+
+                    <dt><code>run ref</code></dt>
+                    <dd>Executes another workflow in a workflow or another rule.</dd>
+
+                    <dt><code>prompt "..."</code></dt>
+                    <dd>Sends prompt text to the configured agent command.</dd>
+                </dl>
+
+                <p>All language primitives can be freely combined with any valid Bash code—they are not isolated or blocking, but instead are fully interoperable with standard shell scripting within your workflows and rules.</p>
+
+                <a href="https://github.com/jaiphlang/jaiph/tree/main/docs" target="_blank" rel="noopener noreferrer"
+                    class="button">Open GitHub Docs</a>
+            </div>
+        </section>
+
+    </div>
+
+    <div class="footer">
+        © 2026 Jaiph — Open Source · Powerful · Friendly!
+    </div>
+
+</body>
+
+</html>
+
+
+<script>
+    (function () {
+
+        function escapeHTML(str) {
+            return str
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
+        }
+
+        const STATEMENT_KEYWORDS = new Set([
+            "import",
+            "rule",
+            "workflow",
+            "ensure",
+            "run",
+            "prompt",
+            "if",
+            "then",
+            "fi"
+        ]);
+
+        /**
+         * Tokenizes one Jaiph line while preserving multiline-string state.
+         *
+         * Args:
+         *   line: Source line.
+         *   state: Mutable lexer state ({ inString: boolean }).
+         * Returns:
+         *   Array of token objects.
+         */
+        function tokenizeJaiphLine(line, state) {
+            const tokens = [];
+            let i = 0;
+
+            while (i < line.length) {
+                const ch = line[i];
+
+                if (state.inString) {
+                    const start = i;
+                    while (i < line.length) {
+                        if (line[i] === '"' && line[i - 1] !== "\\") {
+                            i += 1;
+                            state.inString = false;
+                            break;
+                        }
+                        i += 1;
+                    }
+                    tokens.push({ type: "string", value: line.slice(start, i), kind: "string" });
+                    continue;
+                }
+
+                if (ch === " " || ch === "\t") {
+                    const start = i;
+                    while (i < line.length && (line[i] === " " || line[i] === "\t")) {
+                        i += 1;
+                    }
+                    tokens.push({ type: "whitespace", value: line.slice(start, i), kind: "plain" });
+                    continue;
+                }
+
+                if (ch === "/" && line[i + 1] === "/") {
+                    tokens.push({ type: "comment", value: line.slice(i), kind: "comment" });
+                    break;
+                }
+
+                if (ch === "#") {
+                    tokens.push({ type: "comment", value: line.slice(i), kind: "comment" });
+                    break;
+                }
+
+                if (ch === '"') {
+                    const start = i;
+                    i += 1;
+                    while (i < line.length) {
+                        if (line[i] === '"' && line[i - 1] !== "\\") {
+                            i += 1;
+                            break;
+                        }
+                        i += 1;
+                    }
+                    if (i >= line.length && line[i - 1] !== '"') {
+                        state.inString = true;
+                    }
+                    tokens.push({ type: "string", value: line.slice(start, i), kind: "string" });
+                    continue;
+                }
+
+                if (/[A-Za-z_]/.test(ch)) {
+                    const start = i;
+                    i += 1;
+                    while (i < line.length && /[A-Za-z0-9_]/.test(line[i])) {
+                        i += 1;
+                    }
+                    const value = line.slice(start, i);
+                    tokens.push({
+                        type: "identifier",
+                        value: value,
+                        kind: "plainIdentifier"
+                    });
+                    continue;
+                }
+
+                if (ch === ".") {
+                    tokens.push({ type: "dot", value: ".", kind: "plain" });
+                    i += 1;
+                    continue;
+                }
+
+                tokens.push({ type: "symbol", value: ch, kind: "plain" });
+                i += 1;
+            }
+
+            return tokens;
+        }
+
+        /**
+         * Applies semantic meaning to Jaiph tokens (AST-like annotation pass).
+         *
+         * Args:
+         *   tokens: Flat token list for one line.
+         * Returns:
+         *   New token list with refined token kinds.
+         */
+        function annotateJaiphTokens(tokens) {
+            const annotated = tokens.map(function (token) {
+                return { type: token.type, value: token.value, kind: token.kind };
+            });
+
+            const significant = annotated
+                .map(function (token, index) {
+                    return { token: token, index: index };
+                })
+                .filter(function (entry) {
+                    return entry.token.type !== "whitespace" && entry.token.type !== "comment";
+                });
+
+            if (significant.length === 0) {
+                return annotated;
+            }
+
+            const first = significant[0];
+            const firstValue = first.token.type === "identifier" ? first.token.value : "";
+
+            if (
+                first.token.type === "identifier" &&
+                STATEMENT_KEYWORDS.has(firstValue)
+            ) {
+                annotated[first.index].kind = "keyword";
+            }
+
+            if (
+                (firstValue === "rule" || firstValue === "workflow") &&
+                significant[1] &&
+                significant[1].token.type === "identifier"
+            ) {
+                annotated[significant[1].index].kind = "definition";
+            }
+
+            if (firstValue === "import") {
+                for (let i = 1; i < significant.length - 1; i += 1) {
+                    if (
+                        significant[i].token.type === "identifier" &&
+                        significant[i].token.value === "as" &&
+                        significant[i + 1].token.type === "identifier"
+                    ) {
+                        annotated[significant[i].index].kind = "keyword";
+                        annotated[significant[i + 1].index].kind = "qualifier";
+                        break;
+                    }
+                }
+            }
+
+            if (firstValue === "if") {
+                for (let i = 1; i < significant.length; i += 1) {
+                    if (
+                        significant[i].token.type === "identifier" &&
+                        significant[i].token.value === "then"
+                    ) {
+                        annotated[significant[i].index].kind = "keyword";
+                    }
+                }
+
+                for (let i = 1; i < significant.length - 1; i += 1) {
+                    if (
+                        significant[i].token.type === "identifier" &&
+                        (significant[i].token.value === "ensure" || significant[i].token.value === "run")
+                    ) {
+                        annotated[significant[i].index].kind = "keyword";
+                        if (significant[i + 1].token.type === "identifier") {
+                            annotated[significant[i + 1].index].kind = "identifier";
+                        }
+                        break;
+                    }
+                }
+            }
+
+            for (let i = 0; i < annotated.length - 2; i += 1) {
+                if (
+                    annotated[i].type === "identifier" &&
+                    annotated[i + 1].type === "dot" &&
+                    annotated[i + 2].type === "identifier"
+                ) {
+                    annotated[i].kind = "qualifier";
+                    annotated[i + 2].kind = "identifier";
+                }
+            }
+
+            if (firstValue === "ensure" || firstValue === "run") {
+                if (significant[1] && significant[1].token.type === "identifier") {
+                    annotated[significant[1].index].kind = "identifier";
+                }
+            }
+
+            if (firstValue === "ensure") {
+                for (let i = 1; i < significant.length; i += 1) {
+                    if (
+                        significant[i].token.type === "identifier" &&
+                        significant[i].token.value === "else"
+                    ) {
+                        annotated[significant[i].index].kind = "keyword";
+                        if (
+                            significant[i + 1] &&
+                            significant[i + 1].token.type === "identifier" &&
+                            significant[i + 1].token.value === "run"
+                        ) {
+                            annotated[significant[i + 1].index].kind = "keyword";
+                            if (significant[i + 2] && significant[i + 2].token.type === "identifier") {
+                                annotated[significant[i + 2].index].kind = "identifier";
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+
+            return annotated;
+        }
+
+        /**
+         * Builds an AST-like representation for a full Jaiph code block.
+         *
+         * Args:
+         *   raw: Full source block.
+         * Returns:
+         *   Array of line nodes with annotated tokens.
+         */
+        function parseJaiph(raw) {
+            const state = { inString: false };
+            return raw.split("\n").map(function (line, lineIndex) {
+                const tokens = tokenizeJaiphLine(line, state);
+                return {
+                    type: "line",
+                    lineNumber: lineIndex + 1,
+                    tokens: annotateJaiphTokens(tokens)
+                };
+            });
+        }
+
+        /**
+         * Renders one token to highlighted HTML.
+         *
+         * Args:
+         *   token: Annotated token object.
+         * Returns:
+         *   HTML-safe token string.
+         */
+        function renderJaiphToken(token) {
+            const value = escapeHTML(token.value);
+            if (token.kind === "keyword") {
+                return `<span class="ralph-keyword">${value}</span>`;
+            }
+            if (token.kind === "definition") {
+                return `<span class="ralph-definition">${value}</span>`;
+            }
+            if (token.kind === "qualifier") {
+                return `<span class="ralph-qualifier">${value}</span>`;
+            }
+            if (token.kind === "identifier") {
+                return `<span class="ralph-identifier">${value}</span>`;
+            }
+            if (token.kind === "string") {
+                return `<span class="ralph-string">${value}</span>`;
+            }
+            if (token.kind === "comment") {
+                return `<span class="ralph-comment">${value}</span>`;
+            }
+            return value;
+        }
+
+        /**
+         * Parses and renders Jaiph with line wrappers for numbering.
+         *
+         * Args:
+         *   raw: Full Jaiph source block.
+         * Returns:
+         *   HTML string containing .code-line rows.
+         */
+        function highlightJaiphWithParser(raw) {
+            const ast = parseJaiph(raw);
+            return ast
+                .map(function (lineNode) {
+                    const html = lineNode.tokens.map(renderJaiphToken).join("");
+                    return `<span class="code-line">${html || "&nbsp;"}</span>`;
+                })
+                .join("");
+        }
+
+        function highlightBashFragment(fragment) {
+            let code = escapeHTML(fragment);
+            const stringTokens = [];
+            code = code.replace(/"([^"\\]|\\.)*"|'([^'\\]|\\.)*'/g, function (match) {
+                const token = `___BSTR_${stringTokens.length}___`;
+                stringTokens.push(match);
+                return token;
+            });
+
+            code = code.replace(
+                /\b(set|source|if|then|fi|local|return|export|function)\b/g,
+                '<span class="ralph-keyword">$1</span>'
+            );
+            code = code.replace(
+                /\$[A-Za-z_][A-Za-z0-9_]*/g,
+                '<span class="ralph-identifier">$&</span>'
+            );
+
+            code = code.replace(/___BSTR_(\d+)___/g, function (_, idx) {
+                return `<span class="ralph-string">${stringTokens[Number(idx)]}</span>`;
+            });
+
+            return code;
+        }
+
+        function highlightBashWithParser(raw) {
+            return raw
+                .split("\n")
+                .map(function (line) {
+                    const trimmed = line.trim();
+                    if (!trimmed) {
+                        return '<span class="code-line">&nbsp;</span>';
+                    }
+                    if (trimmed.startsWith("#")) {
+                        return `<span class="code-line"><span class="ralph-comment">${escapeHTML(line)}</span></span>`;
+                    }
+                    const fnDeclMatch = line.match(/^(\s*)([A-Za-z_][A-Za-z0-9_]*)(\(\)\s*\{.*)$/);
+                    if (fnDeclMatch) {
+                        const rendered =
+                            escapeHTML(fnDeclMatch[1]) +
+                            `<span class="ralph-definition">${fnDeclMatch[2]}</span>` +
+                            highlightBashFragment(fnDeclMatch[3]);
+                        return `<span class="code-line">${rendered}</span>`;
+                    }
+                    return `<span class="code-line">${highlightBashFragment(line)}</span>`;
+                })
+                .join("");
+        }
+
+        /**
+         * Applies highlighting and line numbers to all pre/code blocks.
+         *
+         * Args:
+         *   None.
+         * Returns:
+         *   None.
+         */
+        function highlightAll() {
+            document.querySelectorAll("pre code").forEach(block => {
+                const raw = block.textContent;
+                block.dataset.copySource = raw;
+                const isJaiphBlock = block.matches(".language-ralph, .language-jaiph");
+                const isBashBlock = block.matches(".language-bash");
+                const rendered = isJaiphBlock
+                    ? highlightJaiphWithParser(raw)
+                    : isBashBlock
+                        ? highlightBashWithParser(raw)
+                        : raw
+                            .split("\n")
+                            .map(function (line) {
+                                return `<span class="code-line">${escapeHTML(line) || "&nbsp;"}</span>`;
+                            })
+                            .join("");
+                block.innerHTML = rendered;
+            });
+        }
+
+        async function copyCodeFromBlock(button, block) {
+            const originalLabel = button.textContent;
+            const copySource = block.dataset.copySource != null ? block.dataset.copySource : (block.textContent || "");
+            try {
+                await navigator.clipboard.writeText(copySource);
+                button.textContent = "Copied!";
+            } catch (error) {
+                button.textContent = "Copy failed";
+            }
+            window.setTimeout(function () {
+                button.textContent = originalLabel;
+            }, 1400);
+        }
+
+        function attachCopyButtons() {
+            document.querySelectorAll("pre").forEach(function (pre) {
+                if (pre.querySelector(".copy-code-button")) {
+                    return;
+                }
+                const block = pre.querySelector("code");
+                if (!block) {
+                    return;
+                }
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "copy-code-button";
+                button.textContent = "Copy";
+                button.addEventListener("click", function () {
+                    copyCodeFromBlock(button, block);
+                });
+                pre.appendChild(button);
+            });
+        }
+
+        function attachCodeTabs() {
+            const buttons = document.querySelectorAll(".code-tab-button");
+            buttons.forEach(function (button) {
+                button.addEventListener("click", function () {
+                    const target = button.getAttribute("data-target");
+                    if (!target) {
+                        return;
+                    }
+
+                    document.querySelectorAll(".code-tab-button").forEach(function (btn) {
+                        btn.classList.toggle("is-active", btn === button);
+                    });
+
+                    document.querySelectorAll(".code-tab-panel").forEach(function (panel) {
+                        panel.classList.toggle("is-active", panel.getAttribute("data-panel") === target);
+                    });
+                });
+            });
+        }
+
+        // Auto-run on DOM ready
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", function () {
+                highlightAll();
+                attachCopyButtons();
+                attachCodeTabs();
+            });
+        } else {
+            highlightAll();
+            attachCopyButtons();
+            attachCodeTabs();
+        }
+
+    })();
+</script>

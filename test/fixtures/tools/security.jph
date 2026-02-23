@@ -1,0 +1,3 @@
+rule scan_passes {
+  echo "Security scan placeholder here"
+}

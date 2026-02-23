@@ -1,0 +1,20 @@
+{
+  "name": "jaiph",
+  "version": "0.0.1",
+  "private": true,
+  "description": "jaiph compiler/transpiler",
+  "type": "commonjs",
+  "bin": {
+    "jaiph": "dist/src/cli.js"
+  },
+  "scripts": {
+    "build": "node ./node_modules/typescript/bin/tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/test/sample-build.test.js",
+    "test:jest": "npm run build && jest --runInBand test/fixtures-build.jest.test.js"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "jest": "^30.2.0",
+    "typescript": "^5.9.2"
+  }
+}

@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+if [ -n "${NO_COLOR+x}" ] || [ ! -t 1 ]; then
+  GREEN=''
+  YELLOW=''
+  RED=''
+  BOLD=''
+  DIM=''
+  NC=''
+else
+  GREEN='\033[0;32m'
+  YELLOW='\033[0;33m'
+  RED='\033[0;31m'
+  BOLD='\033[1m'
+  DIM='\033[2m'
+  NC='\033[0m'
+fi
+
+print_step() {
+  echo -e "${DIM}▸ ${1}${NC}"
+}
+
+print_success() {
+  echo -e "${GREEN}✓ ${1}${NC}"
+}
+
+print_warning() {
+  echo -e "${YELLOW}! ${1}${NC}"
+}
+
+print_error() {
+  echo -e "${RED}✗ ${1}${NC}"
+}
+
+require_cmd() {
+  local cmd="$1"
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    print_error "Missing required command: $cmd"
+    exit 1
+  fi
+}
+
+REPO_URL="${JAIPH_REPO_URL:-https://github.com/jaiphlang/jaiph.git}"
+REPO_REF="${JAIPH_REPO_REF:-main}"
+BIN_DIR="${JAIPH_BIN_DIR:-$HOME/.local/bin}"
+TARGET="${BIN_DIR}/jaiph"
+
+echo ""
+echo -e "${BOLD}Jaiph installer${NC}"
+echo ""
+
+require_cmd git
+require_cmd node
+require_cmd npm
+
+print_step "Creating bin directory at ${BIN_DIR}..."
+mkdir -p "${BIN_DIR}"
+
+tmp_dir="$(mktemp -d)"
+cleanup() {
+  rm -rf "${tmp_dir}"
+}
+trap cleanup EXIT
+
+print_step "Cloning ${REPO_URL} (${REPO_REF})..."
+git clone --depth 1 --branch "${REPO_REF}" "${REPO_URL}" "${tmp_dir}/src" >/dev/null 2>&1
+
+print_step "Installing dependencies..."
+npm --prefix "${tmp_dir}/src" install >/dev/null 2>&1
+
+print_step "Building CLI..."
+npm --prefix "${tmp_dir}/src" run build >/dev/null 2>&1
+
+print_step "Installing binary to ${TARGET}..."
+install -m 755 "${tmp_dir}/src/dist/src/cli.js" "${TARGET}"
+
+echo ""
+print_success "Installed jaiph to ${TARGET}"
+echo ""
+
+if [[ ":${PATH}:" == *":${BIN_DIR}:"* ]]; then
+  print_success "${BIN_DIR} is already on PATH"
+  echo "Try:"
+  echo "  jaiph --help"
+else
+  print_warning "${BIN_DIR} is not on PATH"
+  echo ""
+  echo "Add PATH for zsh:"
+  echo "  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.zshrc && source ~/.zshrc"
+  echo ""
+  echo "Add PATH for bash:"
+  echo "  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc && source ~/.bashrc"
+fi
+echo ""

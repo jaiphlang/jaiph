@@ -1,0 +1,37 @@
+import "bootstrap_project.jph" as bootstrap
+import "tools/security.jph" as security
+
+# Validates local build prerequisites.
+rule project_ready {
+  test -f "package.json"
+  test -n "$NODE_ENV"
+}
+
+# Verifies the project compiles successfully.
+rule build_passes {
+  npm run build
+}
+
+# Orchestrates checks, prompt execution, and docs refresh.
+# Arguments:
+#   $1: Feature requirements passed to the prompt.
+workflow main {
+  if ! ensure project_ready; then
+    run bootstrap.nodejs
+  fi
+  
+  prompt "
+    Build the application using best practices.
+    Follow requirements: $1
+  "
+  
+  ensure build_passes
+  ensure security.scan_passes
+
+  run update_docs
+}
+
+# Refreshes documentation after a successful build.
+workflow update_docs {
+  prompt "Update docs"
+}
