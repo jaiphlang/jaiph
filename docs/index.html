@@ -976,14 +976,46 @@ jaiph__execute_readonly() {
             });
         }
 
+        function legacyCopyText(text) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.setAttribute("readonly", "");
+            textArea.style.position = "fixed";
+            textArea.style.top = "-9999px";
+            textArea.style.left = "-9999px";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            let copied = false;
+            try {
+                copied = document.execCommand("copy");
+            } catch (_) {
+                copied = false;
+            }
+            document.body.removeChild(textArea);
+            return copied;
+        }
+
+        async function writeTextToClipboard(text) {
+            if (
+                window.isSecureContext &&
+                navigator.clipboard &&
+                typeof navigator.clipboard.writeText === "function"
+            ) {
+                await navigator.clipboard.writeText(text);
+                return true;
+            }
+            return legacyCopyText(text);
+        }
+
         async function copyCodeFromBlock(button, block) {
             const originalLabel = button.textContent;
             const copySource = block.dataset.copySource != null ? block.dataset.copySource : (block.textContent || "");
             try {
-                await navigator.clipboard.writeText(copySource);
-                button.textContent = "Copied!";
+                const copied = await writeTextToClipboard(copySource);
+                button.textContent = copied ? "Copied!" : "Copy failed";
             } catch (error) {
-                button.textContent = "Copy failed";
+                button.textContent = legacyCopyText(copySource) ? "Copied!" : "Copy failed";
             }
             window.setTimeout(function () {
                 button.textContent = originalLabel;
