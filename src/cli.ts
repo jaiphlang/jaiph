@@ -188,7 +188,9 @@ const BOOTSTRAP_TEMPLATE = `# Bootstraps Jaiph workflows for this repository.
 workflow default {
   prompt "
     You are bootstrapping Jaiph for this repository.
-    First, read Jaiph language documentation at https://jaiph.org/ and follow that syntax and primitives.
+    First, read the Jaiph agent bootstrap guide at:
+    https://github.com/jaiphlang/jaiph/blob/main/docs/jaiph-skill.md
+    Follow that guide and Jaiph language rules exactly.
     Perform these tasks in order:
     1) Analyze repository structure, languages, package manager, and build/test/lint commands.
     2) Detect existing contribution conventions (branching, commit style, CI checks).

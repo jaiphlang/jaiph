@@ -13,7 +13,9 @@ It combines declarative workflow structure with Bash, then compiles to pure shel
 > [!WARNING]
 > Jaiph is still in an early stage. Expect breaking changes.
 
-- Docs: <https://github.com/jaiphlang/jaiph/tree/main/docs>
+- Docs (canonical): <https://jaiph.org/>
+- Grammar reference: <https://github.com/jaiphlang/jaiph/blob/main/docs/grammar.md>
+- Agent bootstrap guide: <https://github.com/jaiphlang/jaiph/blob/main/docs/jaiph-skill.md>
 - Samples: <https://github.com/jaiphlang/jaiph/tree/main/samples>
 - Contribute: <https://github.com/jaiphlang/jaiph/issues>
 
@@ -137,4 +139,6 @@ Known limitations and gotchas:
 
 ## More Documentation
 
-- Full docs: <https://github.com/jaiphlang/jaiph/tree/main/docs>
+- Full docs: <https://jaiph.org/>
+- Grammar: `docs/grammar.md`
+- Agent bootstrap skill: `docs/jaiph-skill.md`

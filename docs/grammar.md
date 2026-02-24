@@ -1,15 +1,16 @@
-# Grammar
+# Jaiph Grammar (Current Parser)
 
-This grammar describes the current parser behavior.
+This document reflects parser and transpiler behavior in the current codebase (`src/parser.ts`, `src/transpiler.ts`).
 
-## Lexical notes
+## Lexical Notes
 
 - `IDENT := [A-Za-z_][A-Za-z0-9_]*`
 - `REF := IDENT | IDENT "." IDENT`
-- comments: lines starting with `#`
-- whitespace-only lines are ignored
+- Comments are full-line comments starting with `#`.
+- Empty or whitespace-only lines are ignored.
+- Input files supported by build/run/import resolution: `.jph`, `.jh`, `.jrh`.
 
-## EBNF
+## EBNF (Practical Form)
 
 ```ebnf
 file            = { top_level } ;
@@ -19,21 +20,22 @@ top_level       = import_stmt | rule_decl | workflow_decl ;
 import_stmt     = "import" string "as" IDENT ;
 
 rule_decl       = [ "export" ] "rule" IDENT "{" { rule_line } "}" ;
-rule_line       = command_line ;
+rule_line       = comment_line | command_line ;
 
 workflow_decl   = [ "export" ] "workflow" IDENT "{" { workflow_step } "}" ;
 
 workflow_step   = ensure_stmt
                 | run_stmt
                 | prompt_stmt
-                | if_ensure_run_stmt
-                | shell_stmt ;
+                | if_not_ensure_then_run_stmt
+                | shell_stmt
+                | comment_line ;
 
-ensure_stmt     = "ensure" REF ;
+ensure_stmt     = "ensure" REF [ args_tail ] ;
 run_stmt        = "run" REF ;
 prompt_stmt     = "prompt" quoted_or_multiline_string ;
 
-if_ensure_run_stmt
+if_not_ensure_then_run_stmt
                 = "if" "!" "ensure" REF ";" "then"
                   run_stmt
                   "fi" ;
@@ -41,19 +43,30 @@ if_ensure_run_stmt
 shell_stmt      = command_line ;
 ```
 
-## Validation rules
+## Important Parse/Runtime Semantics
 
-1. Imported alias names must be unique per file.
-2. `ensure foo` requires local rule `foo`.
-3. `ensure alias.foo` requires imported rule `foo` in module `alias`.
-4. `run bar` requires local workflow `bar`.
-5. `run alias.bar` requires imported workflow `bar` in module `alias`.
-6. Import targets must exist on disk.
+1. `ensure` accepts argument tail and forwards it as-is (example: `ensure check_branch "$1"`).
+2. `run` inside a workflow must target a workflow reference (`foo` or `alias.foo`), not an arbitrary shell command.
+3. Inside a `rule`, `run some shell` is treated as command shorthand and transpiles as the shell command.
+4. `prompt` supports multiline quoted text and compiles to `jaiph__prompt ...`.
+5. Workflow and rule declarations support optional `export` keyword.
 
-## Transpilation rules
+## Validation Rules
 
-1. Every generated file sources `jaiph_stdlib.sh`.
-2. Each rule compiles to `<rule_fn>__impl` plus `<rule_fn>` wrapper that calls `jaiph__execute_readonly`.
-3. `ensure` compiles to a call to `<rule_fn>` (the wrapper).
-4. `prompt` compiles to `jaiph__prompt ...`.
-5. `if ! ensure X; then run Y; fi` keeps that control flow in Bash with transpiled symbols.
+1. Import aliases must be unique within a file.
+2. Import targets must exist on disk.
+3. Local `ensure foo` requires local rule `foo`.
+4. Imported `ensure alias.foo` requires imported rule `foo` in module `alias`.
+5. Local `run bar` requires local workflow `bar`.
+6. Imported `run alias.bar` requires imported workflow `bar` in module `alias`.
+
+## Transpilation Rules (Current)
+
+1. Build emits `jaiph_stdlib.sh` and each module sources it.
+2. Each rule transpiles into:
+   - `<module>__rule_<name>__impl`
+   - `<module>__rule_<name>` wrapper using `jaiph__run_step ... jaiph__execute_readonly`.
+3. Each workflow transpiles into:
+   - `<module>__workflow_<name>__impl`
+   - `<module>__workflow_<name>` wrapper using `jaiph__run_step`.
+4. `if ! ensure X; then run Y; fi` remains explicit Bash control flow using transpiled symbols.
