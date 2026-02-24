@@ -16,7 +16,10 @@ test("build transpiles .jh into strict bash with retry flow", () => {
     assert.match(stdlib, /jaiph__version\(\)/);
     assert.match(stdlib, /jaiph__prompt\(\)/);
     assert.match(stdlib, /jaiph__prompt__impl\(\)/);
-    assert.match(stdlib, /cursor-agent --workspace "\$workspace_root" --trust "\$@"/);
+    assert.match(
+      stdlib,
+      /cursor-agent --print --output-format text --workspace "\$workspace_root" --trust "\$@"/,
+    );
     assert.match(stdlib, /jaiph__run_step jaiph__prompt jaiph__prompt__impl "\$@"/);
     assert.match(stdlib, /jaiph__execute_readonly\(\)/);
     assert.match(stdlib, /jaiph__run_step\(\)/);
@@ -293,6 +296,7 @@ test("jaiph run stores prompt output in run logs", () => {
     assert.match(promptErrName!, /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z-/);
     const promptOut = readFileSync(join(latestRunDir, promptOutName!), "utf8");
     const promptErr = readFileSync(join(latestRunDir, promptErrName!), "utf8");
+    assert.match(promptOut, /^Prompt:\nhello from prompt\n\n/);
     assert.match(promptOut, /prompt-output:/);
     assert.match(promptErr, /prompt-error/);
   } finally {

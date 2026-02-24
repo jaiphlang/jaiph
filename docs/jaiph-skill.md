@@ -59,7 +59,7 @@ Notes:
 ## Suggested Starter Layout
 
 - `.jaiph/bootstrap.jph` (created by init; bootstrap prompt only)
-- `.jaiph/preflight.jph`
+- `.jaiph/readiness.jph`
 - `.jaiph/implementation.jph`
 - `.jaiph/verification.jph`
 - `.jaiph/main.jph` (contains `workflow default`)
@@ -77,7 +77,7 @@ jaiph run .jaiph/verification.jph
 
 Use this as a shape/template. Adapt commands and prompts to the target repository.
 
-`/.jaiph/preflight.jph`
+`/.jaiph/readiness.jph`
 
 ```jaiph
 rule git_clean {
@@ -116,7 +116,7 @@ workflow default {
 `/.jaiph/main.jph`
 
 ```jaiph
-import ".jaiph/preflight.jph" as preflight
+import ".jaiph/readiness.jph" as readiness
 import ".jaiph/verification.jph" as verification
 
 workflow implement {
@@ -130,7 +130,7 @@ workflow implement {
 }
 
 workflow default {
-  run preflight.default
+  run readiness.default
   run implement "$1"
   run verification.default
 }

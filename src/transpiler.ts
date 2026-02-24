@@ -20,7 +20,10 @@ jaiph__die() {
 jaiph__prompt__impl() {
   local workspace_root
   workspace_root="$(jaiph__workspace_root)"
-  cursor-agent --workspace "$workspace_root" --trust "$@"
+  if [[ "$#" -gt 0 ]]; then
+    printf "Prompt:\n%s\n\n" "$*"
+  fi
+  cursor-agent --print --output-format text --workspace "$workspace_root" --trust "$@"
 }
 
 jaiph__prompt() {
