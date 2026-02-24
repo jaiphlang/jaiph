@@ -195,7 +195,10 @@ test("jaiph run prints rule tree and fail summary", () => {
     assert.match(runResult.stdout, /workflow default/);
     assert.match(runResult.stdout, /└── rule current_branch/);
     assert.match(runResult.stderr, /✗ FAIL workflow default \(\d+ms\)/);
-    assert.match(runResult.stderr, /(Current branch is not 'main'\.|Workflow execution failed\.)/);
+    assert.match(runResult.stderr, /Current branch is not 'main'\./);
+    assert.match(runResult.stderr, /Logs: /);
+    assert.match(runResult.stderr, /out: /);
+    assert.match(runResult.stderr, /err: /);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -348,7 +348,7 @@
                     workflows.
                 </p>
                 <p>
-                    It combines the power of declarative languages with bash, to create portable, and easy to understand
+                    It combines the power of declarative languages with Bash to create portable and easy-to-understand
                     AI agent workflows. It compiles to pure bash, making it fully compatible with existing shell
                     environments.
                 </p>
@@ -599,7 +599,7 @@ jaiph__execute_readonly() {
                     <a href="https://github.com/jaiphlang/jaiph" target="_blank"
                         rel="noopener noreferrer">https://github.com/jaiphlang/jaiph</a>.
                     The specification is still in flux and may break in the future.
-                    You may expected breaking changes.
+                    You may expect breaking changes.
                 </p>
                 <h3>Installation</h3>
                 <pre><code class="language-bash">curl -fsSL https://jaiph.org/install | bash</code></pre>
@@ -607,7 +607,7 @@ jaiph__execute_readonly() {
                     Then verify the installation:
                 </p>
                 <pre><code class="language-bash">jaiph --version</code></pre>
-                <p>In case of error, check if <code>~/.local/bin</code> is in your PATH. This is the default
+                <p>In case of an error, check if <code>~/.local/bin</code> is in your PATH. This is the default
                     installation directory.</p>
                 <h3>Running a workflow</h3>
                 <pre><code class="language-bash">jaiph run path/to/main.jph "feature request or task"</code></pre>
@@ -628,12 +628,12 @@ jaiph__execute_readonly() {
 
                     <dt><code>rule name { ... }</code></dt>
                     <dd>Defines a reusable check/action that returns a shell exit code. The rule is executed in a
-                        readonly subshell, and its stdout is preserved. Rule fails if the command returns a non-zero
+                        read-only subshell, and its stdout is preserved. The rule fails if the command returns a non-zero
                         exit code.</dd>
 
                     <dt><code>workflow name { ... }</code></dt>
-                    <dd>Defines an orchestration entrypoint made of ordered steps. As opposed to rules workflows can
-                        change the state of the system and are not restricted to readonly operations. Workflows fail if
+                    <dd>Defines an orchestration entrypoint made of ordered steps. As opposed to rules, workflows can
+                        change the state of the system and are not restricted to read-only operations. Workflows fail if
                         the script returns a non-zero exit code.
 
                     <dt><code>ensure ref [args...]</code></dt>

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -79,6 +79,56 @@ function summarizeError(stderr: string, fallback?: string): string {
     return lines[lines.length - 1];
   }
   return fallback ?? "Workflow execution failed.";
+}
+
+type RunMeta = {
+  output: string;
+  status?: number;
+  runDir?: string;
+};
+
+function extractRunMeta(output: string): RunMeta {
+  const lines = output.split(/\r?\n/);
+  const visible: string[] = [];
+  let status: number | undefined;
+  let runDir: string | undefined;
+  for (const line of lines) {
+    if (line.startsWith("__JAIPH_META_STATUS__:")) {
+      const raw = line.slice("__JAIPH_META_STATUS__:".length).trim();
+      const parsed = Number.parseInt(raw, 10);
+      if (!Number.isNaN(parsed)) {
+        status = parsed;
+      }
+      continue;
+    }
+    if (line.startsWith("__JAIPH_META_RUN_DIR__:")) {
+      const raw = line.slice("__JAIPH_META_RUN_DIR__:".length).trim();
+      if (raw) {
+        runDir = raw;
+      }
+      continue;
+    }
+    visible.push(line);
+  }
+  return {
+    output: visible.join("\n").trimEnd(),
+    status,
+    runDir,
+  };
+}
+
+function latestRunFiles(runDir: string): { out?: string; err?: string } {
+  try {
+    const files = readdirSync(runDir).sort();
+    const out = [...files].reverse().find((name) => name.endsWith(".out"));
+    const err = [...files].reverse().find((name) => name.endsWith(".err"));
+    return {
+      out: out ? join(runDir, out) : undefined,
+      err: err ? join(runDir, err) : undefined,
+    };
+  } catch {
+    return {};
+  }
 }
 
 function printUsage(): void {
@@ -169,7 +219,13 @@ function runWorkflow(rest: string[]): number {
       '  echo "jaiph run requires workflow \'default\' in the input file" >&2',
       "  exit 1",
       "fi",
+      "set +e",
       '"$entrypoint" "$@"',
+      "status=$?",
+      "set -e",
+      'echo "__JAIPH_META_STATUS__:${status}"',
+      'echo "__JAIPH_META_RUN_DIR__:${JAIPH_RUN_DIR:-}"',
+      'exit "$status"',
     ].join("\n");
     const startedAt = Date.now();
     const execResult = spawnSync(
@@ -181,14 +237,20 @@ function runWorkflow(rest: string[]): number {
       },
     );
     const elapsedMs = Date.now() - startedAt;
-    if (execResult.stdout) {
-      process.stdout.write(execResult.stdout);
+    const stdoutMeta = extractRunMeta(execResult.stdout ?? "");
+    const stderrMeta = extractRunMeta(execResult.stderr ?? "");
+    const runDir = stdoutMeta.runDir ?? stderrMeta.runDir;
+    const resolvedStatus =
+      typeof execResult.status === "number" ? execResult.status : (stdoutMeta.status ?? stderrMeta.status ?? 1);
+
+    if (stdoutMeta.output) {
+      process.stdout.write(`${stdoutMeta.output}\n`);
     }
 
     const palette = colorPalette();
-    if (execResult.status === 0) {
-      if (execResult.stderr) {
-        process.stderr.write(execResult.stderr);
+    if (resolvedStatus === 0) {
+      if (stderrMeta.output) {
+        process.stderr.write(`${stderrMeta.output}\n`);
       }
       process.stdout.write(
         `${palette.green}\u2713 PASS${palette.reset} workflow default ${palette.dim}(${elapsedMs}ms)${palette.reset}\n`,
@@ -196,16 +258,23 @@ function runWorkflow(rest: string[]): number {
       return 0;
     }
 
-    const summary = summarizeError(execResult.stderr ?? "", execResult.error?.message);
+    const summary = summarizeError(stderrMeta.output, execResult.error?.message);
     process.stderr.write(
       `${palette.red}\u2717 FAIL${palette.reset} workflow default ${palette.dim}(${elapsedMs}ms)${palette.reset}\n`,
     );
     process.stderr.write(`  ${summary}\n`);
-
-    if (typeof execResult.status === "number") {
-      return execResult.status;
+    if (runDir) {
+      const files = latestRunFiles(runDir);
+      process.stderr.write(`  Logs: ${runDir}\n`);
+      if (files.out) {
+        process.stderr.write(`    out: ${files.out}\n`);
+      }
+      if (files.err) {
+        process.stderr.write(`    err: ${files.err}\n`);
+      }
     }
-    return 1;
+
+    return resolvedStatus;
   } finally {
     if (shouldCleanup) {
       rmSync(outDir, { recursive: true, force: true });
