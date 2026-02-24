@@ -39,7 +39,7 @@ rule build_passes {
 # Orchestrates checks, prompt execution, and docs refresh.
 # Arguments:
 #   $1: Feature requirements passed to the prompt.
-workflow main {
+workflow default {
   if ! ensure project_ready; then
     run bootstrap.nodejs
   fi
@@ -88,6 +88,8 @@ If that fails, check that `~/.local/bin` is in your `PATH` (default install dire
 jaiph run path/to/main.jph "feature request or task"
 ```
 
+Entrypoint resolution: `jaiph run path/to/file.jph` executes workflow `default`. Files without workflows are valid for `jaiph build`, but `jaiph run` requires `workflow default`.
+
 ## Language Primitives
 
 - `import "file.jph" as alias`  
@@ -99,8 +101,8 @@ jaiph run path/to/main.jph "feature request or task"
 - `workflow name { ... }`  
   Defines an orchestration entrypoint made of ordered steps. Workflows can change system state.
 
-- `ensure ref`  
-  Executes a rule in a workflow or another rule.
+- `ensure ref [args...]`  
+  Executes a rule in a workflow or another rule, optionally forwarding arguments (for example: `ensure my_rule "$1"`).
 
 - `run ref`  
   Executes another workflow in a workflow or another rule.
@@ -108,7 +110,12 @@ jaiph run path/to/main.jph "feature request or task"
 - `prompt "..."`  
   Sends prompt text to the configured agent command.
 
-All Jaiph primitives can be combined with valid Bash code; they are fully interoperable with normal shell scripting.
+All Jaiph primitives can be combined with Bash code and are interoperable with normal shell scripting.
+
+Known limitations and gotchas:
+
+- Parser limitation: inline brace-group short-circuit patterns like `cmd || { ... }` are not supported in `.jph` files yet. Use explicit conditionals like `if ! cmd; then ...; fi` instead.
+- Entrypoint naming: `jaiph run` does not use file-name-based workflow lookup. Use `workflow default` as the entrypoint for runnable files.
 
 ## More Documentation
 

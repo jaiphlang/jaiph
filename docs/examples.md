@@ -15,7 +15,7 @@ rule build_passes {
   npm run build
 }
 
-workflow main {
+workflow default {
   if ! ensure project_ready; then
     run bootstrap.nodejs
   fi
@@ -48,7 +48,7 @@ main__rule_project_ready() { jaiph__execute_readonly main__rule_project_ready__i
 main__rule_build_passes__impl() { ... }
 main__rule_build_passes() { jaiph__execute_readonly main__rule_build_passes__impl; }
 
-main__workflow_main() {
+main__workflow_default() {
   if ! main__rule_project_ready; then
     bootstrap_project__workflow_nodejs
   fi

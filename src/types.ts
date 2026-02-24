@@ -37,6 +37,7 @@ export type WorkflowStepDef =
   | {
       type: "ensure";
       ref: RuleRefDef;
+      args?: string;
     }
   | {
       type: "run";

@@ -15,7 +15,7 @@ rule build_passes {
 # Orchestrates checks, prompt execution, and docs refresh.
 # Arguments:
 #   $1: Feature requirements passed to the prompt.
-workflow main {
+workflow default {
   if ! ensure project_ready; then
     run bootstrap.nodejs
   fi

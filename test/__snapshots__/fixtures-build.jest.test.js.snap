@@ -107,6 +107,7 @@ jaiph__run_step() {
 # Wrapper to execute functions in a read-only filesystem sandbox.
 jaiph__execute_readonly() {
   local func_name="$1"
+  shift || true
   if [[ -z "$func_name" ]]; then
     jaiph__die "jaiph__execute_readonly requires a function name"
     return 1
@@ -115,23 +116,22 @@ jaiph__execute_readonly() {
     jaiph__die "unknown function: $func_name"
     return 1
   fi
-  if ! command -v unshare >/dev/null 2>&1; then
-    jaiph__die "unshare is required for read-only rule execution"
-    return 1
-  fi
-  if ! command -v sudo >/dev/null 2>&1; then
-    jaiph__die "sudo is required for read-only rule execution"
-    return 1
+  if ! command -v unshare >/dev/null 2>&1 || ! command -v sudo >/dev/null 2>&1; then
+    # Best-effort fallback for environments without Linux mount namespace tooling (e.g. macOS).
+    "$func_name" "$@"
+    return $?
   fi
 
   export -f "$func_name"
   export -f jaiph__die
   export -f jaiph__prompt
-  sudo env JAIPH_PRECEDING_FILES="$JAIPH_PRECEDING_FILES" unshare -m bash -c "
+  sudo env JAIPH_PRECEDING_FILES="$JAIPH_PRECEDING_FILES" unshare -m bash -c '
     mount --make-rprivate /
     mount -o remount,ro /
-    $func_name
-  "
+    func_name="$1"
+    shift || true
+    "$func_name" "$@"
+  ' _ "$func_name" "$@"
 }
 ",
     "main.sh": "set -euo pipefail
@@ -146,7 +146,7 @@ main__rule_project_ready__impl() {
 }
 
 main__rule_project_ready() {
-  jaiph__run_step main__rule_project_ready jaiph__execute_readonly main__rule_project_ready__impl
+  jaiph__run_step main__rule_project_ready jaiph__execute_readonly main__rule_project_ready__impl "$@"
 }
 
 # Verifies the project compiles successfully.
@@ -155,13 +155,13 @@ main__rule_build_passes__impl() {
 }
 
 main__rule_build_passes() {
-  jaiph__run_step main__rule_build_passes jaiph__execute_readonly main__rule_build_passes__impl
+  jaiph__run_step main__rule_build_passes jaiph__execute_readonly main__rule_build_passes__impl "$@"
 }
 
 # Orchestrates checks, prompt execution, and docs refresh.
 # Arguments:
 #   $1: Feature requirements passed to the prompt.
-main__workflow_main__impl() {
+main__workflow_default__impl() {
   if ! main__rule_project_ready; then
     bootstrap_project__workflow_nodejs
   fi
@@ -174,8 +174,8 @@ main__workflow_main__impl() {
   main__workflow_update_docs
 }
 
-main__workflow_main() {
-  jaiph__run_step main__workflow_main main__workflow_main__impl "$@"
+main__workflow_default() {
+  jaiph__run_step main__workflow_default main__workflow_default__impl "$@"
 }
 
 # Refreshes documentation after a successful build.
@@ -194,7 +194,7 @@ tools__security__rule_scan_passes__impl() {
 }
 
 tools__security__rule_scan_passes() {
-  jaiph__run_step tools__security__rule_scan_passes jaiph__execute_readonly tools__security__rule_scan_passes__impl
+  jaiph__run_step tools__security__rule_scan_passes jaiph__execute_readonly tools__security__rule_scan_passes__impl "$@"
 }",
   },
 }

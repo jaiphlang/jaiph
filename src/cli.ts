@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, extname, join, resolve } from "node:path";
+import { dirname, extname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { build, workflowSymbolForFile } from "./transpiler";
 
@@ -81,11 +81,24 @@ function runWorkflow(rest: string[]): number {
     }
     const builtPath = results[0].outputPath;
     const workflowSymbol = workflowSymbolForFile(inputAbs, dirname(inputAbs));
-    const stem = basename(inputAbs).replace(/\.(jph|jh|jrh)$/, "");
-    const command = `source "$1"; shift; ${workflowSymbol}__workflow_${stem} "$@"`;
-    const execResult = spawnSync("bash", ["-c", command, "jaiph-run", builtPath, ...runArgs], {
+    const command = [
+      'built_script="$1"; shift',
+      'workflow_symbol="$1"; shift',
+      'source "$built_script"',
+      'entrypoint="${workflow_symbol}__workflow_default"',
+      'if ! declare -F "$entrypoint" >/dev/null; then',
+      '  echo "jaiph run requires workflow \'default\' in the input file" >&2',
+      "  exit 1",
+      "fi",
+      '"$entrypoint" "$@"',
+    ].join("\n");
+    const execResult = spawnSync(
+      "bash",
+      ["-c", command, "jaiph-run", builtPath, workflowSymbol, ...runArgs],
+      {
       stdio: "inherit",
-    });
+      },
+    );
     if (typeof execResult.status === "number") {
       return execResult.status;
     }

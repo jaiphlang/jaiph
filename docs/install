@@ -94,6 +94,7 @@ echo ""
 if [[ ":${PATH}:" == *":${BIN_DIR}:"* ]]; then
   print_success "${BIN_DIR} is already on PATH"
   echo "Try:"
+  echo "  jaiph --version"
   echo "  jaiph --help"
 else
   print_warning "${BIN_DIR} is not on PATH"
@@ -103,5 +104,8 @@ else
   echo ""
   echo "Add PATH for bash:"
   echo "  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc && source ~/.bashrc"
+  echo ""
+  echo "Then verify:"
+  echo "  jaiph --version"
 fi
 echo ""

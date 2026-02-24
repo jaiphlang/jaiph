@@ -91,6 +91,7 @@ jaiph__run_step() {
 # Wrapper to execute functions in a read-only filesystem sandbox.
 jaiph__execute_readonly() {
   local func_name="$1"
+  shift || true
   if [[ -z "$func_name" ]]; then
     jaiph__die "jaiph__execute_readonly requires a function name"
     return 1
@@ -99,23 +100,22 @@ jaiph__execute_readonly() {
     jaiph__die "unknown function: $func_name"
     return 1
   fi
-  if ! command -v unshare >/dev/null 2>&1; then
-    jaiph__die "unshare is required for read-only rule execution"
-    return 1
-  fi
-  if ! command -v sudo >/dev/null 2>&1; then
-    jaiph__die "sudo is required for read-only rule execution"
-    return 1
+  if ! command -v unshare >/dev/null 2>&1 || ! command -v sudo >/dev/null 2>&1; then
+    # Best-effort fallback for environments without Linux mount namespace tooling (e.g. macOS).
+    "$func_name" "$@"
+    return $?
   fi
 
   export -f "$func_name"
   export -f jaiph__die
   export -f jaiph__prompt
-  sudo env JAIPH_PRECEDING_FILES="$JAIPH_PRECEDING_FILES" unshare -m bash -c "
+  sudo env JAIPH_PRECEDING_FILES="$JAIPH_PRECEDING_FILES" unshare -m bash -c '
     mount --make-rprivate /
     mount -o remount,ro /
-    $func_name
-  "
+    func_name="$1"
+    shift || true
+    "$func_name" "$@"
+  ' _ "$func_name" "$@"
 }
 `;
 
@@ -215,7 +215,7 @@ export function transpileFile(inputFile: string, rootDir: string): string {
     out.push("}");
     out.push("");
     out.push(`${ruleSymbol}() {`);
-    out.push(`  jaiph__run_step ${ruleSymbol} jaiph__execute_readonly ${ruleSymbol}__impl`);
+    out.push(`  jaiph__run_step ${ruleSymbol} jaiph__execute_readonly ${ruleSymbol}__impl "$@"`);
     out.push("}");
     out.push("");
   }
@@ -230,7 +230,9 @@ export function transpileFile(inputFile: string, rootDir: string): string {
     } else {
       for (const step of workflow.steps) {
         if (step.type === "ensure") {
-          out.push(`  ${transpileRuleRef(step.ref, workflowSymbol, importedWorkflowSymbols)}`);
+          const transpiledRef = transpileRuleRef(step.ref, workflowSymbol, importedWorkflowSymbols);
+          const args = step.args ? ` ${step.args}` : "";
+          out.push(`  ${transpiledRef}${args}`);
           continue;
         }
         if (step.type === "run") {

@@ -225,16 +225,22 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
         }
 
         if (inner.startsWith("ensure ")) {
-          const ref = inner.slice("ensure ".length).trim();
-          if (!isRef(ref)) {
+          const ensureBody = inner.slice("ensure ".length).trim();
+          const ensureMatch = ensureBody.match(
+            /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
+          );
+          if (!ensureMatch || !isRef(ensureMatch[1])) {
             fail(filePath, "invalid ensure statement", innerNo);
           }
+          const ref = ensureMatch[1];
+          const args = ensureMatch[2]?.trim();
           workflow.steps.push({
             type: "ensure",
             ref: {
               value: ref,
               loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 },
             },
+            args,
           });
           continue;
         }

@@ -35,8 +35,8 @@ test("build transpiles .jh into strict bash with retry flow", () => {
     assert.match(generated, /main__rule_build_passes\(\)/);
     assert.match(generated, /tools__security__rule_scan_passes/);
     assert.match(generated, /main__workflow_update_docs/);
-    assert.match(generated, /main__workflow_main__impl\(\) \{/);
-    assert.match(generated, /jaiph__run_step main__workflow_main main__workflow_main__impl "\$@"/);
+    assert.match(generated, /main__workflow_default__impl\(\) \{/);
+    assert.match(generated, /jaiph__run_step main__workflow_default main__workflow_default__impl "\$@"/);
 
     const securityGenerated = readFileSync(join(outDir, "tools/security.sh"), "utf8");
     assert.match(securityGenerated, /tools__security__rule_scan_passes\(\) \{/);
@@ -117,7 +117,7 @@ test("jaiph run compiles and executes workflow with args", () => {
     writeFileSync(
       filePath,
       [
-        "workflow echo {",
+        "workflow default {",
         "  printf '%s\\n' \"$1\"",
         "}",
         "",
@@ -134,5 +134,89 @@ test("jaiph run compiles and executes workflow with args", () => {
     assert.match(runResult.stdout, /hello-run/);
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph run fails when workflow default is missing", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-missing-default-"));
+  try {
+    const filePath = join(root, "pr.jph");
+    writeFileSync(
+      filePath,
+      [
+        "workflow main {",
+        "  printf 'fallback:%s\\n' \"$1\"",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runResult = spawnSync("node", [cliPath, "run", filePath, "hello-main"], {
+      encoding: "utf8",
+      cwd: root,
+    });
+
+    assert.equal(runResult.status, 1);
+    assert.match(runResult.stderr, /requires workflow 'default'/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("build accepts files with no workflows", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-no-workflows-"));
+  const outDir = mkdtempSync(join(tmpdir(), "jaiph-no-workflows-out-"));
+  try {
+    const filePath = join(root, "rules-only.jph");
+    writeFileSync(
+      filePath,
+      [
+        "rule only_rule {",
+        "  echo ok",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const results = build(filePath, outDir);
+    assert.equal(results.length, 1);
+    assert.match(results[0].bash, /rule_only_rule/);
+    assert.doesNotMatch(results[0].bash, /__workflow_/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outDir, { recursive: true, force: true });
+  }
+});
+
+test("build transpiles ensure statements with arguments", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-ensure-args-"));
+  const outDir = mkdtempSync(join(tmpdir(), "jaiph-ensure-args-out-"));
+  try {
+    const filePath = join(root, "entry.jph");
+    writeFileSync(
+      filePath,
+      [
+        "rule check_branch {",
+        "  test \"$1\" = \"main\"",
+        "}",
+        "",
+        "workflow default {",
+        "  ensure check_branch \"$1\"",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const results = build(filePath, outDir);
+    assert.equal(results.length, 1);
+    assert.match(
+      results[0].bash,
+      /jaiph__run_step entry__rule_check_branch jaiph__execute_readonly entry__rule_check_branch__impl "\$@"/,
+    );
+    assert.match(results[0].bash, /entry__rule_check_branch "\$1"/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outDir, { recursive: true, force: true });
   }
 });

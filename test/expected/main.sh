@@ -25,7 +25,7 @@ main__rule_build_passes() {
 # Orchestrates checks, prompt execution, and docs refresh.
 # Arguments:
 #   $1: Feature requirements passed to the prompt.
-main__workflow_main__impl() {
+main__workflow_default__impl() {
   if ! main__rule_project_ready; then
     bootstrap_project__workflow_nodejs
   fi
@@ -38,8 +38,8 @@ main__workflow_main__impl() {
   main__workflow_update_docs
 }
 
-main__workflow_main() {
-  jaiph__run_step main__workflow_main main__workflow_main__impl "$@"
+main__workflow_default() {
+  jaiph__run_step main__workflow_default main__workflow_default__impl "$@"
 }
 
 # Refreshes documentation after a successful build.

@@ -352,16 +352,17 @@
                     AI agent workflows. It compiles to pure bash, making it fully compatible with existing shell
                     environments.
                 </p>
-                <p class="small"><strong class="warning">⚠ Jaiph is still in an early stage.</strong><br/>You may expect breaking changes. You may also have a great impact as an early contributor.</p>
+                <p class="small"><strong class="warning">⚠ Jaiph is still in an early stage.</strong><br />You may
+                    expect breaking changes. You may also have a great impact as an early contributor.</p>
                 <p>
                     <a href="https://github.com/jaiphlang/jaiph/tree/main/docs" target="_blank"
-                    rel="noopener noreferrer" class="button">Docs</a>
+                        rel="noopener noreferrer" class="button">Docs</a>
                     <a href="https://github.com/jaiphlang/jaiph/tree/main/samples" target="_blank"
-                    rel="noopener noreferrer" class="button">Samples</a>
-                    <a href="https://marketplace.visualstudio.com/items?itemName=jaiph.jaiph-syntax-vscode" target="_blank"
-                    rel="noopener noreferrer" class="button">VS Code Syntax Plugin</a>
-                    <a href="https://github.com/jaiphlang/jaiph/issues" target="_blank"
-                    rel="noopener noreferrer" class="button">Contribute</a>
+                        rel="noopener noreferrer" class="button">Samples</a>
+                    <a href="https://marketplace.visualstudio.com/items?itemName=jaiph.jaiph-syntax-vscode"
+                        target="_blank" rel="noopener noreferrer" class="button">VS Code Syntax Plugin</a>
+                    <a href="https://github.com/jaiphlang/jaiph/issues" target="_blank" rel="noopener noreferrer"
+                        class="button">Contribute</a>
                 </p>
                 <!-- <p>Jaiph comes also with a control panel to manage and monitor your workflows.</p> -->
             </div>
@@ -395,7 +396,7 @@ rule build_passes {
 # Orchestrates checks, prompt execution, and docs refresh.
 # Arguments:
 #   $1: Feature requirements passed to the prompt.
-workflow main {
+workflow default {
   if ! ensure project_ready; then
     run bootstrap.nodejs
   fi
@@ -445,7 +446,7 @@ main__rule_build_passes() {
 # Orchestrates checks, prompt execution, and docs refresh.
 # Arguments:
 #   $1: Feature requirements passed to the prompt.
-main__workflow_main__impl() {
+main__workflow_default__impl() {
   if ! main__rule_project_ready; then
     bootstrap_project__workflow_nodejs
   fi
@@ -458,8 +459,8 @@ main__workflow_main__impl() {
   main__workflow_update_docs
 }
 
-main__workflow_main() {
-  jaiph__run_step main__workflow_main main__workflow_main__impl "$@"
+main__workflow_default() {
+  jaiph__run_step main__workflow_default main__workflow_default__impl "$@"
 }
 
 # Refreshes documentation after a successful build.
@@ -610,6 +611,10 @@ jaiph__execute_readonly() {
                     installation directory.</p>
                 <h3>Running a workflow</h3>
                 <pre><code class="language-bash">jaiph run path/to/main.jph "feature request or task"</code></pre>
+                <p><strong>Entrypoint resolution:</strong> <code>jaiph run path/to/file.jph</code> executes workflow
+                    <code>default</code>. Files with no workflows are valid for <code>jaiph build</code>, but
+                    <code>jaiph run</code> requires <code>workflow default</code>.
+                </p>
             </div>
         </section>
 
@@ -618,16 +623,23 @@ jaiph__execute_readonly() {
             <div class="card">
                 <dl class="primitive-list">
                     <dt><code>import "file.jph" as alias</code></dt>
-                    <dd>Imports rules and workflows from another Jaiph module under an alias. Jaiph compiles each module to a single shell file, and verifies the import at compile time.</dd>
+                    <dd>Imports rules and workflows from another Jaiph module under an alias. Jaiph compiles each module
+                        to a single shell file, and verifies the import at compile time.</dd>
 
                     <dt><code>rule name { ... }</code></dt>
-                    <dd>Defines a reusable check/action that returns a shell exit code. The rule is executed in a readonly subshell, and its stdout is preserved. Rule fails if the command returns a non-zero exit code.</dd>
+                    <dd>Defines a reusable check/action that returns a shell exit code. The rule is executed in a
+                        readonly subshell, and its stdout is preserved. Rule fails if the command returns a non-zero
+                        exit code.</dd>
 
                     <dt><code>workflow name { ... }</code></dt>
-                    <dd>Defines an orchestration entrypoint made of ordered steps. As opposed to rules workflows can change the state of the system and are not restricted to readonly operations. Workflows fail if the script returns a non-zero exit code.
+                    <dd>Defines an orchestration entrypoint made of ordered steps. As opposed to rules workflows can
+                        change the state of the system and are not restricted to readonly operations. Workflows fail if
+                        the script returns a non-zero exit code.
 
-                    <dt><code>ensure ref</code></dt>
-                    <dd>Executes a rule in a workflow or another rule.</dd>
+                    <dt><code>ensure ref [args...]</code></dt>
+                    <dd>Executes a rule in a workflow or another rule, optionally forwarding arguments (for example:
+                        <code>ensure my_rule "$1"</code>).
+                    </dd>
 
                     <dt><code>run ref</code></dt>
                     <dd>Executes another workflow in a workflow or another rule.</dd>
@@ -636,7 +648,19 @@ jaiph__execute_readonly() {
                     <dd>Sends prompt text to the configured agent command.</dd>
                 </dl>
 
-                <p>All language primitives can be freely combined with any valid Bash code—they are not isolated or blocking, but instead are fully interoperable with standard shell scripting within your workflows and rules.</p>
+                <p>All language primitives can be freely combined with Bash code—they are not isolated or blocking, but
+                    instead are interoperable with standard shell scripting within your workflows and rules.</p>
+                <h3>Known limitations and gotchas</h3>
+                <ul>
+                    <li><strong>Parser limitation:</strong> inline brace-group short-circuit patterns like
+                        <code>cmd || { ... }</code> are not supported in <code>.jph</code> files yet. Use explicit
+                        conditionals such as <code>if ! cmd; then ...; fi</code> instead.
+                    </li>
+                    <li><strong>Entrypoint naming:</strong> <code>jaiph run</code> searches for
+                        <code>workflow default</code> as the entrypoint for runnable files. If the file does not contain
+                        a default entrypoint, the command will fail.
+                    </li>
+                </ul>
 
                 <a href="https://github.com/jaiphlang/jaiph/tree/main/docs" target="_blank" rel="noopener noreferrer"
                     class="button">Open GitHub Docs</a>
