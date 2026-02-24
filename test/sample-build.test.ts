@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -15,7 +15,9 @@ test("build transpiles .jh into strict bash with retry flow", () => {
     const stdlib = readFileSync(join(outDir, "jaiph_stdlib.sh"), "utf8");
     assert.match(stdlib, /jaiph__version\(\)/);
     assert.match(stdlib, /jaiph__prompt\(\)/);
+    assert.match(stdlib, /jaiph__prompt__impl\(\)/);
     assert.match(stdlib, /cursor-agent --workspace "\$workspace_root" --trust "\$@"/);
+    assert.match(stdlib, /jaiph__run_step jaiph__prompt jaiph__prompt__impl "\$@"/);
     assert.match(stdlib, /jaiph__execute_readonly\(\)/);
     assert.match(stdlib, /jaiph__run_step\(\)/);
     assert.match(stdlib, /sudo env JAIPH_PRECEDING_FILES="\$JAIPH_PRECEDING_FILES" unshare -m bash -c/);
@@ -201,6 +203,65 @@ test("jaiph run prints rule tree and fail summary", () => {
     assert.match(runResult.stderr, /out: /);
     assert.match(runResult.stderr, /err: /);
     assert.match(runResult.stderr, /\.jaiph\/runs\//);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph run stores prompt output in run logs", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-prompt-"));
+  try {
+    const binDir = join(root, "bin");
+    mkdirSync(binDir, { recursive: true });
+    const fakeAgent = join(binDir, "cursor-agent");
+    writeFileSync(
+      fakeAgent,
+      [
+        "#!/usr/bin/env bash",
+        "echo prompt-output:$*",
+        "echo prompt-error >&2",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(fakeAgent, 0o755);
+
+    const filePath = join(root, "prompt.jph");
+    writeFileSync(
+      filePath,
+      [
+        "workflow default {",
+        '  prompt "hello from prompt"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runResult = spawnSync("node", [cliPath, "run", filePath], {
+      encoding: "utf8",
+      cwd: root,
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH ?? ""}`,
+      },
+    });
+
+    assert.equal(runResult.status, 0, runResult.stderr);
+    const runsRoot = join(root, ".jaiph/runs");
+    assert.equal(existsSync(runsRoot), true);
+    const runDirs = readdirSync(runsRoot);
+    assert.equal(runDirs.length > 0, true);
+    const sortedRunDirs = [...runDirs].sort();
+    const latestRunDir = join(runsRoot, sortedRunDirs[sortedRunDirs.length - 1]);
+    const runFiles = readdirSync(latestRunDir);
+    const promptOutName = runFiles.find((name) => name.endsWith("-jaiph__prompt.out"));
+    const promptErrName = runFiles.find((name) => name.endsWith("-jaiph__prompt.err"));
+    assert.equal(Boolean(promptOutName), true);
+    assert.equal(Boolean(promptErrName), true);
+    const promptOut = readFileSync(join(latestRunDir, promptOutName!), "utf8");
+    const promptErr = readFileSync(join(latestRunDir, promptErrName!), "utf8");
+    assert.match(promptOut, /prompt-output:/);
+    assert.match(promptErr, /prompt-error/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

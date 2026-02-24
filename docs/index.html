@@ -487,10 +487,14 @@ jaiph__die() {
   return 1
 }
 
-jaiph__prompt() {
+jaiph__prompt__impl() {
   local workspace_root
   workspace_root="$(jaiph__workspace_root)"
   cursor-agent --workspace "$workspace_root" --trust "$@"
+}
+
+jaiph__prompt() {
+  jaiph__run_step jaiph__prompt jaiph__prompt__impl "$@"
 }
 
 jaiph__new_run_id() {
@@ -511,10 +515,11 @@ jaiph__init_run_tracking() {
   if [[ -n "${JAIPH_RUN_DIR:-}" ]]; then
     return 0
   fi
-  local started_at run_id
+  local started_at run_id workspace_root
   started_at="$(date -u +"%Y%m%dT%H%M%SZ")"
   run_id="$(jaiph__new_run_id)"
-  JAIPH_RUN_DIR="$PWD/${started_at}-${run_id}"
+  workspace_root="$(jaiph__workspace_root)"
+  JAIPH_RUN_DIR="$workspace_root/.jaiph/runs/${started_at}-${run_id}"
   JAIPH_PRECEDING_FILES=""
   mkdir -p "$JAIPH_RUN_DIR"
   export JAIPH_RUN_DIR JAIPH_PRECEDING_FILES
@@ -543,13 +548,21 @@ jaiph__run_step() {
     return 1
   fi
   jaiph__init_run_tracking || return 1
-  local step_started_at safe_name out_file err_file status
+  local step_started_at safe_name out_file err_file status had_errexit
   step_started_at="$(date -u +"%Y%m%dT%H%M%SZ")"
   safe_name="$(jaiph__sanitize_name "$func_name")"
   out_file="$JAIPH_RUN_DIR/${step_started_at}-${safe_name}.out"
   err_file="$JAIPH_RUN_DIR/${step_started_at}-${safe_name}.err"
+  had_errexit=0
+  case "$-" in
+    *e*) had_errexit=1 ;;
+  esac
+  set +e
   "$@" >"$out_file" 2>"$err_file"
   status=$?
+  if [[ "$had_errexit" -eq 1 ]]; then
+    set -e
+  fi
   jaiph__track_output_files "$out_file" "$err_file"
   if [[ -s "$out_file" ]]; then
     cat "$out_file"
@@ -571,23 +584,26 @@ jaiph__execute_readonly() {
     jaiph__die "unknown function: $func_name"
     return 1
   fi
-  if ! command -v unshare >/dev/null 2>&1; then
-    jaiph__die "unshare is required for read-only rule execution"
-    return 1
+  if ! command -v unshare >/dev/null 2>&1 || ! command -v sudo >/dev/null 2>&1 || ! sudo -n true >/dev/null 2>&1 || ! unshare -m true >/dev/null 2>&1; then
+    # Best-effort fallback for environments without Linux mount namespace tooling (e.g. macOS).
+    # Execute in a child shell so "exit" inside a rule does not terminate the parent runner.
+    bash -c '
+      func_name="$1"
+      shift || true
+      "$func_name" "$@"
+    ' _ "$func_name" "$@"
+    return $?
   fi
-  if ! command -v sudo >/dev/null 2>&1; then
-    jaiph__die "sudo is required for read-only rule execution"
-    return 1
-  fi
-
   export -f "$func_name"
   export -f jaiph__die
   export -f jaiph__prompt
-  sudo env JAIPH_PRECEDING_FILES="$JAIPH_PRECEDING_FILES" unshare -m bash -c "
+  sudo env JAIPH_PRECEDING_FILES="$JAIPH_PRECEDING_FILES" unshare -m bash -c '
     mount --make-rprivate /
     mount -o remount,ro /
-    $func_name
-  "
+    func_name="$1"
+    shift || true
+    "$func_name" "$@"
+  ' _ "$func_name" "$@"
 }</code></pre>
                 </div>
             </div>
@@ -655,7 +671,9 @@ jaiph__execute_readonly() {
                     <dd>Executes another workflow in a workflow or another rule.</dd>
 
                     <dt><code>prompt "..."</code></dt>
-                    <dd>Sends prompt text to the configured agent command.</dd>
+                    <dd>Sends prompt text to the configured agent command and stores prompt stdout/stderr in
+                        <code>.jaiph/runs/</code> step logs (for example:
+                        <code>*-jaiph__prompt.out</code> and <code>*-jaiph__prompt.err</code>).</dd>
                 </dl>
 
                 <p>All language primitives can be freely combined with Bash code—they are not isolated or blocking, but

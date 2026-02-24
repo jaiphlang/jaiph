@@ -17,10 +17,14 @@ jaiph__die() {
   return 1
 }
 
-jaiph__prompt() {
+jaiph__prompt__impl() {
   local workspace_root
   workspace_root="$(jaiph__workspace_root)"
   cursor-agent --workspace "$workspace_root" --trust "$@"
+}
+
+jaiph__prompt() {
+  jaiph__run_step jaiph__prompt jaiph__prompt__impl "$@"
 }
 
 jaiph__new_run_id() {
