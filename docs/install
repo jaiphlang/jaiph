@@ -89,10 +89,10 @@ chmod 755 "${TARGET}"
 
 echo ""
 print_success "Installed jaiph to ${TARGET}"
-echo ""
 
 if [[ ":${PATH}:" == *":${BIN_DIR}:"* ]]; then
   print_success "${BIN_DIR} is already on PATH"
+  echo ""
   echo "Try:"
   echo "  jaiph --version"
   echo "  jaiph --help"

@@ -142,6 +142,35 @@ test("jaiph run compiles and executes workflow with args", () => {
   }
 });
 
+test("jaiph run enables xtrace when JAIPH_DEBUG=true", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-debug-"));
+  try {
+    const filePath = join(root, "debug.jrh");
+    writeFileSync(
+      filePath,
+      [
+        "workflow default {",
+        "  printf 'debug-run:%s\\n' \"$1\"",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runResult = spawnSync("node", [cliPath, "run", filePath, "hello-debug"], {
+      encoding: "utf8",
+      cwd: root,
+      env: { ...process.env, JAIPH_DEBUG: "true" },
+    });
+
+    assert.equal(runResult.status, 0, runResult.stderr);
+    assert.match(runResult.stdout, /debug-run:hello-debug/);
+    assert.match(runResult.stderr, /\+ .*__workflow_default/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("jaiph run fails when workflow default is missing", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-run-missing-default-"));
   try {
