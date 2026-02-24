@@ -131,6 +131,8 @@ test("jaiph run compiles and executes workflow with args", () => {
     });
 
     assert.equal(runResult.status, 0, runResult.stderr);
+    assert.match(runResult.stdout, /workflow default/);
+    assert.match(runResult.stdout, /✓ PASS workflow default \(\d+ms\)/);
     assert.match(runResult.stdout, /hello-run/);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -159,6 +161,41 @@ test("jaiph run fails when workflow default is missing", () => {
 
     assert.equal(runResult.status, 1);
     assert.match(runResult.stderr, /requires workflow 'default'/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph run prints rule tree and fail summary", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-tree-fail-"));
+  try {
+    const filePath = join(root, "fail.jph");
+    writeFileSync(
+      filePath,
+      [
+        "rule current_branch {",
+        "  echo \"Current branch is not 'main'.\" >&2",
+        "  exit 1",
+        "}",
+        "",
+        "workflow default {",
+        "  ensure current_branch",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runResult = spawnSync("node", [cliPath, "run", filePath], {
+      encoding: "utf8",
+      cwd: root,
+    });
+
+    assert.equal(runResult.status, 1);
+    assert.match(runResult.stdout, /workflow default/);
+    assert.match(runResult.stdout, /└── rule current_branch/);
+    assert.match(runResult.stderr, /✗ FAIL workflow default \(\d+ms\)/);
+    assert.match(runResult.stderr, /(Current branch is not 'main'\.|Workflow execution failed\.)/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

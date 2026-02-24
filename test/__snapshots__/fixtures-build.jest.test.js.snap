@@ -92,8 +92,10 @@ jaiph__run_step() {
   safe_name="$(jaiph__sanitize_name "$func_name")"
   out_file="$JAIPH_RUN_DIR/\${step_started_at}-\${safe_name}.out"
   err_file="$JAIPH_RUN_DIR/\${step_started_at}-\${safe_name}.err"
+  set +e
   "$@" >"$out_file" 2>"$err_file"
   status=$?
+  set -e
   jaiph__track_output_files "$out_file" "$err_file"
   if [[ -s "$out_file" ]]; then
     cat "$out_file"
@@ -116,7 +118,7 @@ jaiph__execute_readonly() {
     jaiph__die "unknown function: $func_name"
     return 1
   fi
-  if ! command -v unshare >/dev/null 2>&1 || ! command -v sudo >/dev/null 2>&1; then
+  if ! command -v unshare >/dev/null 2>&1 || ! command -v sudo >/dev/null 2>&1 || ! sudo -n true >/dev/null 2>&1 || ! unshare -m true >/dev/null 2>&1; then
     # Best-effort fallback for environments without Linux mount namespace tooling (e.g. macOS).
     "$func_name" "$@"
     return $?
