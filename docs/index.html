@@ -490,7 +490,7 @@ jaiph__die() {
 jaiph__prompt() {
   local workspace_root
   workspace_root="$(jaiph__workspace_root)"
-  cursor-agent --workspace "$workspace_root" "$@"
+  cursor-agent --workspace "$workspace_root" --trust "$@"
 }
 
 jaiph__new_run_id() {
