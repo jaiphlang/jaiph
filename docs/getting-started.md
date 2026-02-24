@@ -40,6 +40,24 @@ Entrypoint resolution: `jaiph run path/to/file.jph` executes workflow `default`.
 
 Files with no workflows are valid for `jaiph build`, but `jaiph run` requires `workflow default`.
 
+## Initialize Jaiph workspace
+
+```bash
+jaiph init
+```
+
+This creates `.jaiph/bootstrap.jph`.
+
+Then run:
+
+```bash
+jaiph run .jaiph/bootstrap.jph
+```
+
+This asks an agent to detect project configuration and bootstrap recommended Jaiph workflows for feature implementation.
+
+Tip: add `.jaiph/runs/` and `.jaiph/cache/` to your `.gitignore`.
+
 Known parser limitation: inline brace-group short-circuit patterns like `cmd || { ... }` are not supported in `.jph` files yet. Use explicit conditionals like `if ! cmd; then ...; fi`.
 
 ## Build transpiled scripts

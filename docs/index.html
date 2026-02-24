@@ -615,6 +615,14 @@ jaiph__execute_readonly() {
                     <code>default</code>. Files with no workflows are valid for <code>jaiph build</code>, but
                     <code>jaiph run</code> requires <code>workflow default</code>.
                 </p>
+                <h3>Initialize Jaiph workspace</h3>
+                <pre><code class="language-bash">jaiph init</code></pre>
+                <p>This creates <code>.jaiph/bootstrap.jph</code>.</p>
+                <p>Then run:</p>
+                <pre><code class="language-bash">jaiph run .jaiph/bootstrap.jph</code></pre>
+                <p>This asks an agent to detect project configuration and bootstrap recommended Jaiph workflows for
+                    feature implementation.</p>
+                <p>Tip: add <code>.jaiph/runs/</code> and <code>.jaiph/cache/</code> to your <code>.gitignore</code>.</p>
             </div>
         </section>
 

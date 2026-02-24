@@ -51,14 +51,31 @@ jaiph__sanitize_name() {
   printf "%s" "$raw"
 }
 
+jaiph__workspace_root() {
+  if [[ -n "\${JAIPH_WORKSPACE:-}" ]]; then
+    printf "%s" "$JAIPH_WORKSPACE"
+    return 0
+  fi
+  local current="$PWD"
+  while [[ "$current" != "/" ]]; do
+    if [[ -d "$current/.jaiph" || -d "$current/.git" ]]; then
+      printf "%s" "$current"
+      return 0
+    fi
+    current="$(dirname "$current")"
+  done
+  printf "%s" "$PWD"
+}
+
 jaiph__init_run_tracking() {
   if [[ -n "\${JAIPH_RUN_DIR:-}" ]]; then
     return 0
   fi
-  local started_at run_id
+  local started_at run_id workspace_root
   started_at="$(date -u +"%Y%m%dT%H%M%SZ")"
   run_id="$(jaiph__new_run_id)"
-  JAIPH_RUN_DIR="$PWD/\${started_at}-\${run_id}"
+  workspace_root="$(jaiph__workspace_root)"
+  JAIPH_RUN_DIR="$workspace_root/.jaiph/runs/\${started_at}-\${run_id}"
   JAIPH_PRECEDING_FILES=""
   mkdir -p "$JAIPH_RUN_DIR"
   export JAIPH_RUN_DIR JAIPH_PRECEDING_FILES

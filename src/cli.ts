@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { build, workflowSymbolForFile } from "./transpiler";
 import { parsejaiph } from "./parser";
-import { WorkflowStepDef, jaiphModule } from "./types";
+import { jaiphModule } from "./types";
 
 function colorPalette(): { green: string; red: string; dim: string; reset: string } {
   const enabled = process.stdout.isTTY && process.env.NO_COLOR === undefined;
@@ -137,11 +137,13 @@ function printUsage(): void {
       "Usage:",
       "  jaiph build [--target <dir>] <path>",
       "  jaiph run [--target <dir>] <file.jph|file.jh|file.jrh> [args...]",
+      "  jaiph init [workspace-path]",
       "",
       "Examples:",
       "  jaiph build ./",
       "  jaiph build --target ./build ./",
       "  jaiph run ./flows/review.jph 'review this diff'",
+      "  jaiph init",
       "",
     ].join("\n"),
   );
@@ -179,6 +181,49 @@ function runBuild(rest: string[]): number {
   if (results.length === 0) {
     process.stdout.write("no .jh files found\n");
   }
+  return 0;
+}
+
+const BOOTSTRAP_TEMPLATE = `# Bootstraps Jaiph workflows for this repository.
+workflow default {
+  prompt "
+    You are bootstrapping Jaiph for this repository.
+    First, read Jaiph language documentation at https://jaiph.org/ and follow that syntax and primitives.
+    Perform these tasks in order:
+    1) Analyze repository structure, languages, package manager, and build/test/lint commands.
+    2) Detect existing contribution conventions (branching, commit style, CI checks).
+    3) Create or update Jaiph workflows under .jaiph/ for safe feature implementation, including:
+       - preflight checks (clean git state, branch guards when relevant)
+       - implementation workflow
+       - verification workflow (tests/lint/build)
+    4) Keep workflows minimal, composable, and specific to this project.
+    5) Print a short usage guide with exact jaiph run commands.
+  "
+}
+`;
+
+function runInit(rest: string[]): number {
+  const workspaceArg = rest[0] ?? ".";
+  const workspaceRoot = resolve(workspaceArg);
+  const stats = statSync(workspaceRoot);
+  if (!stats.isDirectory()) {
+    process.stderr.write(`jaiph init expects a directory path, got: ${workspaceArg}\n`);
+    return 1;
+  }
+
+  const jaiphDir = join(workspaceRoot, ".jaiph");
+  const bootstrapPath = join(jaiphDir, "bootstrap.jph");
+  mkdirSync(jaiphDir, { recursive: true });
+
+  if (!existsSync(bootstrapPath)) {
+    writeFileSync(bootstrapPath, BOOTSTRAP_TEMPLATE, "utf8");
+  }
+
+  process.stdout.write(`initialized ${join(".jaiph", "bootstrap.jph")} in ${workspaceRoot}\n`);
+  process.stdout.write("Run this to bootstrap project-specific workflows:\n");
+  process.stdout.write("  jaiph run .jaiph/bootstrap.jph\n");
+  process.stdout.write("This asks an agent to analyze the project and scaffold recommended Jaiph workflows.\n");
+  process.stdout.write("Tip: add `.jaiph/runs/` and `.jaiph/cache/` to your `.gitignore`.\n");
   return 0;
 }
 
@@ -294,6 +339,9 @@ function main(argv: string[]): number {
     }
     if (cmd === "run") {
       return runWorkflow(rest);
+    }
+    if (cmd === "init") {
+      return runInit(rest);
     }
     process.stderr.write(`Unknown command: ${cmd}\n`);
     printUsage();

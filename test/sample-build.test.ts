@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -199,6 +199,35 @@ test("jaiph run prints rule tree and fail summary", () => {
     assert.match(runResult.stderr, /Logs: /);
     assert.match(runResult.stderr, /out: /);
     assert.match(runResult.stderr, /err: /);
+    assert.match(runResult.stderr, /\.jaiph\/runs\//);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph init creates workspace structure and guidance", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-init-"));
+  try {
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const initResult = spawnSync("node", [cliPath, "init"], {
+      encoding: "utf8",
+      cwd: root,
+    });
+
+    assert.equal(initResult.status, 0, initResult.stderr);
+    assert.equal(existsSync(join(root, ".jaiph")), true);
+    assert.equal(existsSync(join(root, ".jaiph/lib")), false);
+    assert.equal(existsSync(join(root, ".jaiph/bootstrap.jph")), true);
+    const bootstrap = readFileSync(join(root, ".jaiph/bootstrap.jph"), "utf8");
+    assert.match(bootstrap, /workflow default \{/);
+    assert.match(bootstrap, /https:\/\/jaiph\.org\//);
+    assert.match(bootstrap, /Analyze repository structure/);
+    assert.match(bootstrap, /Create or update Jaiph workflows under \.jaiph\//);
+    assert.doesNotMatch(bootstrap, /\$1/);
+    assert.equal(existsSync(join(root, ".gitignore")), false);
+    assert.match(initResult.stdout, /jaiph run \.jaiph\/bootstrap\.jph/);
+    assert.match(initResult.stdout, /analyze the project/i);
+    assert.match(initResult.stdout, /add `\.jaiph\/runs\/` and `\.jaiph\/cache\/` to your `\.gitignore`/i);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
