@@ -253,7 +253,7 @@ function runInit(rest: string[]): number {
   process.stdout.write("  jaiph run .jaiph/bootstrap.jph\n");
   process.stdout.write("\n");
   process.stdout.write("This asks an agent to analyze the project and scaffold recommended workflows.\n");
-  process.stdout.write("Tip: add `.jaiph/runs/` and `.jaiph/cache/` to `.gitignore`.\n");
+  process.stdout.write("Tip: add `.jaiph/runs/` to `.gitignore`.\n");
   process.stdout.write("\n");
   return 0;
 }

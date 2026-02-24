@@ -108,7 +108,7 @@ jaiph run .jaiph/bootstrap.jph
 
 This asks an agent to detect project configuration and bootstrap recommended Jaiph workflows for feature implementation.
 
-Tip: add `.jaiph/runs/` and `.jaiph/cache/` to your `.gitignore`.
+Tip: add `.jaiph/runs/` to your `.gitignore`.
 
 ## Language Primitives
 
