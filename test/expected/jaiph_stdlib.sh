@@ -29,12 +29,16 @@ jaiph__sanitize_name() {
   printf "%s" "$raw"
 }
 
+jaiph__timestamp_utc() {
+  date -u +"%Y-%m-%dT%H-%M-%SZ"
+}
+
 jaiph__init_run_tracking() {
   if [[ -n "${JAIPH_RUN_DIR:-}" ]]; then
     return 0
   fi
   local started_at run_id
-  started_at="$(date -u +"%Y%m%dT%H%M%SZ")"
+  started_at="$(jaiph__timestamp_utc)"
   run_id="$(jaiph__new_run_id)"
   JAIPH_RUN_DIR="$PWD/${started_at}-${run_id}"
   JAIPH_PRECEDING_FILES=""
@@ -66,7 +70,7 @@ jaiph__run_step() {
   fi
   jaiph__init_run_tracking || return 1
   local step_started_at safe_name out_file err_file status
-  step_started_at="$(date -u +"%Y%m%dT%H%M%SZ")"
+  step_started_at="$(jaiph__timestamp_utc)"
   safe_name="$(jaiph__sanitize_name "$func_name")"
   out_file="$JAIPH_RUN_DIR/${step_started_at}-${safe_name}.out"
   err_file="$JAIPH_RUN_DIR/${step_started_at}-${safe_name}.err"

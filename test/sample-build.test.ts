@@ -281,12 +281,16 @@ test("jaiph run stores prompt output in run logs", () => {
     const runDirs = readdirSync(runsRoot);
     assert.equal(runDirs.length > 0, true);
     const sortedRunDirs = [...runDirs].sort();
-    const latestRunDir = join(runsRoot, sortedRunDirs[sortedRunDirs.length - 1]);
+    const latestRunDirName = sortedRunDirs[sortedRunDirs.length - 1];
+    assert.match(latestRunDirName, /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z-/);
+    const latestRunDir = join(runsRoot, latestRunDirName);
     const runFiles = readdirSync(latestRunDir);
     const promptOutName = runFiles.find((name) => name.endsWith("-jaiph__prompt.out"));
     const promptErrName = runFiles.find((name) => name.endsWith("-jaiph__prompt.err"));
     assert.equal(Boolean(promptOutName), true);
     assert.equal(Boolean(promptErrName), true);
+    assert.match(promptOutName!, /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z-/);
+    assert.match(promptErrName!, /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z-/);
     const promptOut = readFileSync(join(latestRunDir, promptOutName!), "utf8");
     const promptErr = readFileSync(join(latestRunDir, promptErrName!), "utf8");
     assert.match(promptOut, /prompt-output:/);
