@@ -171,6 +171,21 @@ function parseArgs(args: string[]): { target?: string; positional: string[] } {
   return { target, positional };
 }
 
+function detectWorkspaceRoot(startDir: string): string {
+  const fallback = resolve(startDir);
+  let current = fallback;
+  while (true) {
+    if (existsSync(join(current, ".jaiph")) || existsSync(join(current, ".git"))) {
+      return current;
+    }
+    const parent = dirname(current);
+    if (parent === current) {
+      return fallback;
+    }
+    current = parent;
+  }
+}
+
 function runBuild(rest: string[]): number {
   const { target, positional } = parseArgs(rest);
   const input = positional[0] ?? "./";
@@ -238,6 +253,7 @@ function runWorkflow(rest: string[]): number {
     return 1;
   }
   const inputAbs = resolve(input);
+  const workspaceRoot = detectWorkspaceRoot(dirname(inputAbs));
   const inputStat = statSync(inputAbs);
   if (!inputStat.isFile() || ![".jph", ".jh", ".jrh"].includes(extname(inputAbs))) {
     process.stderr.write("jaiph run expects a single .jph, .jh or .jrh file\n");
@@ -281,6 +297,8 @@ function runWorkflow(rest: string[]): number {
       {
         stdio: "pipe",
         encoding: "utf8",
+        cwd: workspaceRoot,
+        env: { ...process.env, JAIPH_WORKSPACE: workspaceRoot },
       },
     );
     const elapsedMs = Date.now() - startedAt;

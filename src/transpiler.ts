@@ -18,7 +18,9 @@ jaiph__die() {
 }
 
 jaiph__prompt() {
-  cursor-agent "$@"
+  local workspace_root
+  workspace_root="$(jaiph__workspace_root)"
+  cursor-agent --workspace "$workspace_root" "$@"
 }
 
 jaiph__new_run_id() {

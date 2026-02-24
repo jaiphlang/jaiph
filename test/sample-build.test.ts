@@ -15,6 +15,7 @@ test("build transpiles .jh into strict bash with retry flow", () => {
     const stdlib = readFileSync(join(outDir, "jaiph_stdlib.sh"), "utf8");
     assert.match(stdlib, /jaiph__version\(\)/);
     assert.match(stdlib, /jaiph__prompt\(\)/);
+    assert.match(stdlib, /cursor-agent --workspace "\$workspace_root" "\$@"/);
     assert.match(stdlib, /jaiph__execute_readonly\(\)/);
     assert.match(stdlib, /jaiph__run_step\(\)/);
     assert.match(stdlib, /sudo env JAIPH_PRECEDING_FILES="\$JAIPH_PRECEDING_FILES" unshare -m bash -c/);
