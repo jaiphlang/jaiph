@@ -230,17 +230,31 @@ function runInit(rest: string[]): number {
 
   const jaiphDir = join(workspaceRoot, ".jaiph");
   const bootstrapPath = join(jaiphDir, "bootstrap.jph");
+  const palette = colorPalette();
+
+  process.stdout.write("\n");
+  process.stdout.write("Jaiph init\n");
+  process.stdout.write("\n");
+  process.stdout.write(`${palette.dim}▸ Creating ${join(".jaiph", "bootstrap.jph")} in ${workspaceRoot}...${palette.reset}\n`);
   mkdirSync(jaiphDir, { recursive: true });
 
+  let createdBootstrap = false;
   if (!existsSync(bootstrapPath)) {
     writeFileSync(bootstrapPath, BOOTSTRAP_TEMPLATE, "utf8");
+    createdBootstrap = true;
   }
 
-  process.stdout.write(`initialized ${join(".jaiph", "bootstrap.jph")} in ${workspaceRoot}\n`);
-  process.stdout.write("Run this to bootstrap project-specific workflows:\n");
+  process.stdout.write(`${palette.green}✓ Initialized ${join(".jaiph", "bootstrap.jph")}${palette.reset}\n`);
+  if (!createdBootstrap) {
+    process.stdout.write(`${palette.dim}▸ Note: bootstrap file already existed; left unchanged.${palette.reset}\n`);
+  }
+  process.stdout.write("\n");
+  process.stdout.write("Try:\n");
   process.stdout.write("  jaiph run .jaiph/bootstrap.jph\n");
-  process.stdout.write("This asks an agent to analyze the project and scaffold recommended Jaiph workflows.\n");
-  process.stdout.write("Tip: add `.jaiph/runs/` and `.jaiph/cache/` to your `.gitignore`.\n");
+  process.stdout.write("\n");
+  process.stdout.write("This asks an agent to analyze the project and scaffold recommended workflows.\n");
+  process.stdout.write("Tip: add `.jaiph/runs/` and `.jaiph/cache/` to `.gitignore`.\n");
+  process.stdout.write("\n");
   return 0;
 }
 

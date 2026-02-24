@@ -226,9 +226,12 @@ test("jaiph init creates workspace structure and guidance", () => {
     assert.match(bootstrap, /Create or update Jaiph workflows under \.jaiph\//);
     assert.doesNotMatch(bootstrap, /\$1/);
     assert.equal(existsSync(join(root, ".gitignore")), false);
+    assert.match(initResult.stdout, /Jaiph init/);
+    assert.match(initResult.stdout, /▸ Creating \.jaiph\/bootstrap\.jph/);
+    assert.match(initResult.stdout, /✓ Initialized \.jaiph\/bootstrap\.jph/);
     assert.match(initResult.stdout, /jaiph run \.jaiph\/bootstrap\.jph/);
     assert.match(initResult.stdout, /analyze the project/i);
-    assert.match(initResult.stdout, /add `\.jaiph\/runs\/` and `\.jaiph\/cache\/` to your `\.gitignore`/i);
+    assert.match(initResult.stdout, /add `\.jaiph\/runs\/` and `\.jaiph\/cache\/` to `\.gitignore`/i);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
