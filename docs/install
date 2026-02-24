@@ -45,6 +45,7 @@ require_cmd() {
 REPO_URL="${JAIPH_REPO_URL:-https://github.com/jaiphlang/jaiph.git}"
 REPO_REF="${JAIPH_REPO_REF:-main}"
 BIN_DIR="${JAIPH_BIN_DIR:-$HOME/.local/bin}"
+LIB_DIR="${JAIPH_LIB_DIR:-${BIN_DIR}/.jaiph}"
 TARGET="${BIN_DIR}/jaiph"
 
 echo ""
@@ -73,8 +74,18 @@ npm --prefix "${tmp_dir}/src" install >/dev/null 2>&1
 print_step "Building CLI..."
 npm --prefix "${tmp_dir}/src" run build >/dev/null 2>&1
 
+print_step "Installing runtime to ${LIB_DIR}..."
+rm -rf "${LIB_DIR}"
+mkdir -p "${LIB_DIR}"
+cp -R "${tmp_dir}/src/dist/src" "${LIB_DIR}/src"
+
 print_step "Installing binary to ${TARGET}..."
-install -m 755 "${tmp_dir}/src/dist/src/cli.js" "${TARGET}"
+cat > "${TARGET}" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+exec node "${LIB_DIR}/src/cli.js" "\$@"
+EOF
+chmod 755 "${TARGET}"
 
 echo ""
 print_success "Installed jaiph to ${TARGET}"
