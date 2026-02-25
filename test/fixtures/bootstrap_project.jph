@@ -1,3 +1,4 @@
+#!/usr/bin/env jaiph
 workflow nodejs {
   echo "Sorry, I cannot setup nodejs yet"
   exit 1

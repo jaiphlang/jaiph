@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -199,7 +199,8 @@ function runBuild(rest: string[]): number {
   return 0;
 }
 
-const BOOTSTRAP_TEMPLATE = `# Bootstraps Jaiph workflows for this repository.
+const BOOTSTRAP_TEMPLATE = `#!/usr/bin/env jaiph
+# Bootstraps Jaiph workflows for this repository.
 workflow default {
   prompt "
     You are bootstrapping Jaiph for this repository.
@@ -243,6 +244,7 @@ function runInit(rest: string[]): number {
     writeFileSync(bootstrapPath, BOOTSTRAP_TEMPLATE, "utf8");
     createdBootstrap = true;
   }
+  chmodSync(bootstrapPath, 0o755);
 
   process.stdout.write(`${palette.green}✓ Initialized ${join(".jaiph", "bootstrap.jph")}${palette.reset}\n`);
   if (!createdBootstrap) {

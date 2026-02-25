@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -318,18 +318,20 @@ test("jaiph init creates workspace structure and guidance", () => {
     assert.equal(existsSync(join(root, ".jaiph/lib")), false);
     assert.equal(existsSync(join(root, ".jaiph/bootstrap.jph")), true);
     const bootstrap = readFileSync(join(root, ".jaiph/bootstrap.jph"), "utf8");
+    assert.match(bootstrap, /^#!\/usr\/bin\/env jaiph/);
     assert.match(bootstrap, /workflow default \{/);
     assert.match(bootstrap, /docs\/jaiph-skill\.md/);
     assert.match(bootstrap, /Analyze repository structure/);
     assert.match(bootstrap, /Create or update Jaiph workflows under \.jaiph\//);
     assert.doesNotMatch(bootstrap, /\$1/);
+    assert.equal(statSync(join(root, ".jaiph/bootstrap.jph")).mode & 0o777, 0o755);
     assert.equal(existsSync(join(root, ".gitignore")), false);
     assert.match(initResult.stdout, /Jaiph init/);
     assert.match(initResult.stdout, /▸ Creating \.jaiph\/bootstrap\.jph/);
     assert.match(initResult.stdout, /✓ Initialized \.jaiph\/bootstrap\.jph/);
     assert.match(initResult.stdout, /jaiph run \.jaiph\/bootstrap\.jph/);
     assert.match(initResult.stdout, /analyze the project/i);
-    assert.match(initResult.stdout, /add `\.jaiph\/runs\/` and `\.jaiph\/cache\/` to `\.gitignore`/i);
+    assert.match(initResult.stdout, /add `\.jaiph\/runs\/` to `\.gitignore`/i);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

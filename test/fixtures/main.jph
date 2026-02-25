@@ -1,3 +1,4 @@
+#!/usr/bin/env jaiph
 import "bootstrap_project.jph" as bootstrap
 import "tools/security.jph" as security
 

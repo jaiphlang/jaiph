@@ -24,6 +24,7 @@ It combines declarative workflow structure with Bash, then compiles to pure shel
 `main.jph`:
 
 ```jaiph
+#!/usr/bin/env jaiph
 import "security.jph" as security
 import "bootstrap_project.jph" as bootstrap
 

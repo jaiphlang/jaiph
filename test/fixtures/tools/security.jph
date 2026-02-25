@@ -1,3 +1,4 @@
+#!/usr/bin/env jaiph
 rule scan_passes {
   echo "Security scan placeholder here"
 }

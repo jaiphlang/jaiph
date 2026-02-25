@@ -60,6 +60,10 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
       continue;
     }
 
+    if (lineNo === 1 && line.startsWith("#!")) {
+      continue;
+    }
+
     if (line.startsWith("#")) {
       pendingTopLevelComments.push(line);
       continue;
