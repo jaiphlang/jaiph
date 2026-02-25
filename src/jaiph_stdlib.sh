@@ -5,6 +5,10 @@ jaiph__version() {
   echo "jaiph 0.0.1"
 }
 
+jaiph__runtime_api() {
+  echo "1"
+}
+
 jaiph__die() {
   local message="$1"
   echo "jai: $message" >&2

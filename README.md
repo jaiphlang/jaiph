@@ -10,7 +10,7 @@
 
 **Jaiph** is a composable scripting language and runtime for defining and orchestrating AI agent workflows.
 
-It combines declarative workflow structure with Bash, then compiles to pure shell scripts. That keeps workflows portable and easy to understand while staying compatible with standard shell environments.
+It combines declarative workflow structure with bash, then compiles to pure shell scripts. That keeps workflows portable and easy to understand while staying compatible with standard shell environments.
 
 > [!WARNING]
 > Jaiph is still in an early stage. Expect breaking changes.
@@ -67,7 +67,7 @@ workflow update_docs {
 }
 ```
 
-Transpiled output is standard Bash and includes Jaiph runtime helpers (`jaiph_stdlib.sh`), so workflows remain shell-native.
+Transpiled output is standard bash and sources the installed global Jaiph runtime stdlib (`$JAIPH_STDLIB`, default `~/.local/bin/jaiph_stdlib.sh`), so workflows remain shell-native.
 
 ## Getting Started
 
@@ -94,6 +94,7 @@ jaiph use 0.2.3     # installs tag v0.2.3
 ```
 
 If that fails, check that `~/.local/bin` is in your `PATH` (default install directory).
+Installation places both `jaiph` and global runtime stdlib at `~/.local/bin/jaiph_stdlib.sh`.
 
 ### Running a workflow
 
@@ -101,7 +102,7 @@ If that fails, check that `~/.local/bin` is in your `PATH` (default install dire
 ./path/to/main.jph "feature request or task"
 ```
 
-Arguments are passed exactly like Bash scripts (`$1`, `$2`, `"$@"`).
+Arguments are passed exactly like bash scripts (`$1`, `$2`, `"$@"`).
 
 Entrypoint resolution: executable `.jph` files (with `#!/usr/bin/env jaiph`) run `workflow default`.  
 `jaiph run path/to/file.jph` is also supported and follows the same argument semantics.
@@ -157,7 +158,7 @@ See `docs/cli.md` for command syntax, examples, and supported environment variab
 - `prompt "..."`  
   Sends prompt text to the configured agent command.
 
-All Jaiph primitives can be combined with Bash code and are interoperable with normal shell scripting.
+All Jaiph primitives can be combined with bash code and are interoperable with normal shell scripting.
 
 Known limitations and gotchas:
 

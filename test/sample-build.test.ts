@@ -6,14 +6,15 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { build } from "../src/transpiler";
 
-test("build transpiles .jh into strict bash with retry flow", () => {
+test("build transpiles .jph into strict bash with retry flow", () => {
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-build-"));
   try {
     const results = build(join(process.cwd(), "test/fixtures"), outDir);
     assert.equal(results.length, 3);
 
-    const stdlib = readFileSync(join(outDir, "jaiph_stdlib.sh"), "utf8");
+    const stdlib = readFileSync(join(process.cwd(), "src/jaiph_stdlib.sh"), "utf8");
     assert.match(stdlib, /jaiph__version\(\)/);
+    assert.match(stdlib, /jaiph__runtime_api\(\)/);
     assert.match(stdlib, /jaiph__prompt\(\)/);
     assert.match(stdlib, /jaiph__prompt__impl\(\)/);
     assert.match(stdlib, /agent_command="\$\{JAIPH_AGENT_COMMAND:-cursor-agent\}"/);
@@ -30,7 +31,9 @@ test("build transpiles .jh into strict bash with retry flow", () => {
     const generated = readFileSync(generatedPath, "utf8");
 
     assert.match(generated, /set -euo pipefail/);
-    assert.ok(generated.includes('source "$(dirname "${BASH_SOURCE[0]}")/jaiph_stdlib.sh"'));
+    assert.match(generated, /jaiph_stdlib_path="\$\{JAIPH_STDLIB:-\$HOME\/\.local\/bin\/jaiph_stdlib\.sh\}"/);
+    assert.match(generated, /source "\$jaiph_stdlib_path"/);
+    assert.match(generated, /if \[\[ "\$\(jaiph__runtime_api\)" != "1" \]\]/);
     assert.match(generated, /# Validates local build prerequisites\./);
     assert.match(generated, /# Orchestrates checks, prompt execution, and docs refresh\./);
     assert.match(generated, /main__rule_project_ready\(\) \{/);
@@ -56,7 +59,7 @@ test("build validates imported rule references with deterministic errors", () =>
   const root = mkdtempSync(join(tmpdir(), "jaiph-invalid-"));
   try {
     writeFileSync(
-      join(root, "main.jrh"),
+      join(root, "main.jph"),
       [
         'import "./mod.jph" as mod',
         "",
@@ -95,7 +98,7 @@ test("build fails on missing import file", () => {
   try {
     mkdirSync(join(root, "sub"));
     writeFileSync(
-      join(root, "sub/entry.jrh"),
+      join(root, "sub/entry.jph"),
       [
         'import "../missing/mod.jph" as mod',
         "",
@@ -120,7 +123,7 @@ test("build fails on missing import file", () => {
 test("jaiph run compiles and executes workflow with args", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-run-"));
   try {
-    const filePath = join(root, "echo.jrh");
+    const filePath = join(root, "echo.jph");
     writeFileSync(
       filePath,
       [
@@ -146,10 +149,41 @@ test("jaiph run compiles and executes workflow with args", () => {
   }
 });
 
+test("executable .jph invokes jaiph run semantics", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-exec-jph-"));
+  try {
+    const filePath = join(root, "echo.jph");
+    writeFileSync(
+      filePath,
+      [
+        "#!/usr/bin/env jaiph",
+        "",
+        "workflow default {",
+        "  printf 'exec-arg:%s\\n' \"$1\"",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(filePath, 0o755);
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runResult = spawnSync("node", [cliPath, filePath, "hello-exec"], {
+      encoding: "utf8",
+      cwd: root,
+    });
+
+    assert.equal(runResult.status, 0, runResult.stderr);
+    assert.match(runResult.stdout, /exec-arg:hello-exec/);
+    assert.match(runResult.stdout, /✓ PASS workflow default/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("jaiph run enables xtrace when JAIPH_DEBUG=true", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-run-debug-"));
   try {
-    const filePath = join(root, "debug.jrh");
+    const filePath = join(root, "debug.jph");
     writeFileSync(
       filePath,
       [
@@ -354,6 +388,57 @@ test("jaiph run applies model from local TOML config", () => {
 
     assert.equal(runResult.status, 0, runResult.stderr);
     assert.match(runResult.stdout, /model-args:.*--model gpt-5-mini/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph run uses JAIPH_STDLIB global runtime path", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-global-stdlib-"));
+  try {
+    const stdlibPath = join(root, "jaiph_stdlib.sh");
+    writeFileSync(
+      stdlibPath,
+      [
+        "#!/usr/bin/env bash",
+        "jaiph__runtime_api() { echo 1; }",
+        "jaiph__run_step() {",
+        "  local _name=\"$1\"",
+        "  shift || true",
+        "  \"$@\"",
+        "}",
+        "jaiph__execute_readonly() {",
+        "  shift || true",
+        "  \"$@\"",
+        "}",
+        "jaiph__prompt() {",
+        "  :",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(stdlibPath, 0o755);
+
+    const filePath = join(root, "echo.jph");
+    writeFileSync(
+      filePath,
+      [
+        "workflow default {",
+        "  echo global-stdlib-ok",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runResult = spawnSync("node", [cliPath, "run", filePath], {
+      encoding: "utf8",
+      cwd: root,
+      env: { ...process.env, JAIPH_STDLIB: stdlibPath },
+    });
+
+    assert.equal(runResult.status, 0, runResult.stderr);
+    assert.match(runResult.stdout, /global-stdlib-ok/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

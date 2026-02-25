@@ -4,8 +4,6 @@ import { jaiphError } from "./errors";
 import { parsejaiph } from "./parser";
 import { CompileResult, jaiphModule, RuleRefDef, WorkflowRefDef } from "./types";
 
-const JAIPH_STDLIB_SH = readFileSync(join(__dirname, "jaiph_stdlib.sh"), "utf8");
-
 function toWorkflowSymbol(inputFile: string, rootDir: string): string {
   const rel = relative(rootDir, inputFile);
   const parsed = parse(rel);
@@ -17,21 +15,10 @@ export function workflowSymbolForFile(inputFile: string, rootDir: string): strin
   return toWorkflowSymbol(resolve(inputFile), resolve(rootDir));
 }
 
-function toStdlibSourcePath(inputFile: string, rootDir: string): string {
-  const relInput = relative(rootDir, inputFile);
-  const dir = dirname(relInput);
-  if (dir === ".") {
-    return "jaiph_stdlib.sh";
-  }
-  const segments = dir.split(sep).filter(Boolean).length;
-  const up = new Array(segments).fill("..").join("/");
-  return `${up}/jaiph_stdlib.sh`;
-}
-
 function toImportSource(importPath: string, inputFile: string, rootDir: string): string {
   const importedFile = resolveImportPath(inputFile, importPath);
-  const importedRel = relative(rootDir, importedFile).replace(/\.(jph|jh|jrh)$/, ".sh");
-  const currentRel = relative(rootDir, inputFile).replace(/\.(jph|jh|jrh)$/, ".sh");
+  const importedRel = relative(rootDir, importedFile).replace(/\.jph$/, ".sh");
+  const currentRel = relative(rootDir, inputFile).replace(/\.jph$/, ".sh");
   const currentDir = dirname(currentRel);
   return relative(currentDir, importedRel).split(sep).join("/");
 }
@@ -80,7 +67,16 @@ export function transpileFile(inputFile: string, rootDir: string): string {
 
   const out: string[] = [];
   out.push("set -euo pipefail");
-  out.push(`source "$(dirname "\${BASH_SOURCE[0]}")/${toStdlibSourcePath(inputFile, rootDir)}"`);
+  out.push('jaiph_stdlib_path="${JAIPH_STDLIB:-$HOME/.local/bin/jaiph_stdlib.sh}"');
+  out.push('if [[ ! -f "$jaiph_stdlib_path" ]]; then');
+  out.push('  echo "jai: stdlib not found at $jaiph_stdlib_path (set JAIPH_STDLIB or reinstall jaiph)" >&2');
+  out.push("  exit 1");
+  out.push("fi");
+  out.push('source "$jaiph_stdlib_path"');
+  out.push('if [[ "$(jaiph__runtime_api)" != "1" ]]; then');
+  out.push('  echo "jai: incompatible jaiph stdlib runtime (required api=1)" >&2');
+  out.push("  exit 1");
+  out.push("fi");
   for (const imp of ast.imports) {
     out.push(`source "$(dirname "\${BASH_SOURCE[0]}")/${toImportSource(imp.path, inputFile, rootDir)}"`);
   }
@@ -159,10 +155,7 @@ export function transpileFile(inputFile: string, rootDir: string): string {
 }
 
 function resolveImportPath(fromFile: string, importPath: string): string {
-  const normalized =
-    importPath.endsWith(".jph") || importPath.endsWith(".jh") || importPath.endsWith(".jrh")
-      ? importPath
-      : `${importPath}.jph`;
+  const normalized = importPath.endsWith(".jph") ? importPath : `${importPath}.jph`;
   return resolve(dirname(fromFile), normalized);
 }
 
@@ -315,7 +308,7 @@ function ensureDir(path: string): void {
 function walkjhFiles(inputPath: string): string[] {
   const s = statSync(inputPath);
   if (s.isFile()) {
-    return [".jph", ".jh", ".jrh"].includes(extname(inputPath)) ? [inputPath] : [];
+    return extname(inputPath) === ".jph" ? [inputPath] : [];
   }
 
   const files: string[] = [];
@@ -326,7 +319,7 @@ function walkjhFiles(inputPath: string): string[] {
       const full = join(current, entry.name);
       if (entry.isDirectory()) {
         stack.push(full);
-      } else if (entry.isFile() && [".jph", ".jh", ".jrh"].includes(extname(entry.name))) {
+      } else if (entry.isFile() && extname(entry.name) === ".jph") {
         files.push(full);
       }
     }
@@ -343,13 +336,10 @@ export function build(inputPath: string, targetDir?: string): CompileResult[] {
   ensureDir(outRoot);
 
   const files = walkjhFiles(absInput);
-  if (files.length > 0) {
-    writeFileSync(join(outRoot, "jaiph_stdlib.sh"), JAIPH_STDLIB_SH, "utf8");
-  }
   const results: CompileResult[] = [];
   for (const file of files) {
     const bash = transpileFile(file, rootDir);
-    const rel = relative(rootDir, file).replace(/\.(jph|jh|jrh)$/, ".sh");
+    const rel = relative(rootDir, file).replace(/\.jph$/, ".sh");
     const outPath = join(outRoot, rel);
     ensureDir(dirname(outPath));
     writeFileSync(outPath, bash, "utf8");

@@ -8,7 +8,7 @@ This document reflects parser and transpiler behavior in the current codebase (`
 - `REF := IDENT | IDENT "." IDENT`
 - Comments are full-line comments starting with `#`.
 - Empty or whitespace-only lines are ignored.
-- Input files supported by build/run/import resolution: `.jph`, `.jh`, `.jrh`.
+- Input files supported by build/run/import resolution: `.jph`.
 
 ## EBNF (Practical Form)
 
@@ -62,7 +62,7 @@ shell_stmt      = command_line ;
 
 ## Transpilation Rules (Current)
 
-1. Build emits `jaiph_stdlib.sh` and each module sources it.
+1. Build emits module scripts that source the installed global stdlib (`$JAIPH_STDLIB`, default `~/.local/bin/jaiph_stdlib.sh`).
 2. Each rule transpiles into:
    - `<module>__rule_<name>__impl`
    - `<module>__rule_<name>` wrapper using `jaiph__run_step ... jaiph__execute_readonly`.

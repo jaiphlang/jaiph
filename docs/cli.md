@@ -4,7 +4,7 @@ Jaiph provides four core CLI commands.
 
 ## `jaiph build`
 
-Compile `.jph`, `.jh`, or `.jrh` files into shell scripts.
+Compile `.jph` files into shell scripts.
 
 ```bash
 jaiph build [--target <dir>] <path>
@@ -23,7 +23,7 @@ Compile and run a Jaiph workflow file.
 `jaiph run` requires a `workflow default` entrypoint.
 
 ```bash
-jaiph run [--target <dir>] <file.jph|file.jh|file.jrh> [args...]
+jaiph run [--target <dir>] <file.jph> [args...]
 ```
 
 Examples:
@@ -33,7 +33,7 @@ jaiph run ./.jaiph/bootstrap.jph
 jaiph run ./flows/review.jph "review this diff"
 ```
 
-Argument passing matches standard Bash script behavior:
+Argument passing matches standard bash script behavior:
 
 - first argument -> `$1`
 - second argument -> `$2`
@@ -83,6 +83,7 @@ jaiph use 0.2.3
 
 Runtime/config override variables:
 
+- `JAIPH_STDLIB`
 - `JAIPH_AGENT_MODEL`
 - `JAIPH_AGENT_COMMAND`
 - `JAIPH_RUNS_DIR`

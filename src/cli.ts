@@ -137,7 +137,7 @@ function printUsage(): void {
     [
       "Usage:",
       "  jaiph build [--target <dir>] <path>",
-      "  jaiph run [--target <dir>] <file.jph|file.jh|file.jrh> [args...]",
+      "  jaiph run [--target <dir>] <file.jph> [args...]",
       "  jaiph init [workspace-path]",
       "  jaiph use <version|nightly>",
       "",
@@ -197,7 +197,7 @@ function runBuild(rest: string[]): number {
     process.stdout.write(`built ${resolve(item.outputPath)}\n`);
   }
   if (results.length === 0) {
-    process.stdout.write("no .jh files found\n");
+    process.stdout.write("no .jph files found\n");
   }
   return 0;
 }
@@ -292,15 +292,15 @@ function runWorkflow(rest: string[]): number {
   const input = positional[0];
   const runArgs = positional.slice(1);
   if (!input) {
-    process.stderr.write("jaiph run requires a .jph/.jh/.jrh file path\n");
+    process.stderr.write("jaiph run requires a .jph file path\n");
     return 1;
   }
   const inputAbs = resolve(input);
   const workspaceRoot = detectWorkspaceRoot(dirname(inputAbs));
   const config = loadJaiphConfig(workspaceRoot);
   const inputStat = statSync(inputAbs);
-  if (!inputStat.isFile() || ![".jph", ".jh", ".jrh"].includes(extname(inputAbs))) {
-    process.stderr.write("jaiph run expects a single .jph, .jh or .jrh file\n");
+  if (!inputStat.isFile() || extname(inputAbs) !== ".jph") {
+    process.stderr.write("jaiph run expects a single .jph file\n");
     return 1;
   }
 
@@ -350,6 +350,9 @@ function runWorkflow(rest: string[]): number {
     }
     if (runtimeEnv.JAIPH_DEBUG === undefined && config.run?.debug === true) {
       runtimeEnv.JAIPH_DEBUG = "true";
+    }
+    if (runtimeEnv.JAIPH_STDLIB === undefined) {
+      runtimeEnv.JAIPH_STDLIB = join(__dirname, "jaiph_stdlib.sh");
     }
     const execResult = spawnSync(
       "bash",
@@ -451,6 +454,9 @@ function main(argv: string[]): number {
     return 0;
   }
   try {
+    if (cmd.endsWith(".jph") && existsSync(resolve(cmd))) {
+      return runWorkflow([cmd, ...rest]);
+    }
     if (cmd === "build") {
       return runBuild(rest);
     }
