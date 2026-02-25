@@ -46,10 +46,11 @@ shell_stmt      = command_line ;
 ## Important Parse/Runtime Semantics
 
 1. `ensure` accepts argument tail and forwards it as-is (example: `ensure check_branch "$1"`).
-2. `run` inside a workflow must target a workflow reference (`foo` or `alias.foo`), not an arbitrary shell command.
-3. Inside a `rule`, `run some shell` is treated as command shorthand and transpiles as the shell command.
-4. `prompt` supports multiline quoted text and compiles to `jaiph__prompt ...`.
-5. Workflow and rule declarations support optional `export` keyword.
+2. Rules can consume forwarded positional parameters as shell args (`$1`, `$2`, `"$@"`) without special declaration syntax.
+3. `run` inside a workflow must target a workflow reference (`foo` or `alias.foo`), not an arbitrary shell command.
+4. Inside a `rule`, `run some shell` is treated as command shorthand and transpiles as the shell command.
+5. `prompt` supports multiline quoted text and compiles to `jaiph__prompt ...`.
+6. Workflow and rule declarations support optional `export` keyword.
 
 ## Validation Rules
 

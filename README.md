@@ -144,7 +144,7 @@ See `docs/cli.md` for command syntax, examples, and supported environment variab
   Imports rules/workflows from another Jaiph module under an alias. Imports are verified at compile time.
 
 - `rule name { ... }`  
-  Defines a reusable check/action that returns a shell exit code. Rules run in a read-only subshell and preserve stdout.
+  Defines a reusable check/action that returns a shell exit code. Rules run in a read-only subshell and preserve stdout. Rules can consume positional parameters (`$1`, `$2`, `"$@"`) forwarded by `ensure`.
 
 - `workflow name { ... }`  
   Defines an orchestration entrypoint made of ordered steps. Workflows can change system state.

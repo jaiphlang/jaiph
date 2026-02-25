@@ -69,14 +69,17 @@ run_output="$(jaiph run "${WORK_DIR}/hello.jph")"
 cp "${ROOT_DIR}/e2e/current_branch.jph" "${WORK_DIR}/current_branch.jph"
 (
   cd "${WORK_DIR}"
-  if git init -b main >/dev/null 2>&1; then
-    :
-  else
-    git init >/dev/null 2>&1
-  fi
+  git init -b main >/dev/null 2>&1 || git init >/dev/null 2>&1
   current_branch="$(git branch --show-current)"
-  if [[ -z "${current_branch}" ]]; then
-    current_branch="main"
-  fi
+  [[ -n "${current_branch}" ]] || current_branch="main"
+
+  # Should pass with the actual branch name.
   jaiph run "./current_branch.jph" "${current_branch}"
+
+  # Should fail with a different branch name.
+  wrong_branch="${current_branch}-wrong"
+  if jaiph run "./current_branch.jph" "${wrong_branch}"; then
+    echo "Expected current_branch.jph to fail for branch: ${wrong_branch}" >&2
+    exit 1
+  fi
 )

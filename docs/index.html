@@ -559,7 +559,8 @@ jaiph use 0.2.3</code></pre>
                     <dt><code>rule name { ... }</code></dt>
                     <dd>Defines a reusable check/action that returns a shell exit code. The rule is executed in a
                         read-only subshell, and its stdout is preserved. The rule fails if the command returns a non-zero
-                        exit code.</dd>
+                        exit code. Rules can consume positional parameters (<code>$1</code>, <code>$2</code>,
+                        <code>"$@"</code>) forwarded by <code>ensure</code>.</dd>
 
                     <dt><code>workflow name { ... }</code></dt>
                     <dd>Defines an orchestration entrypoint made of ordered steps. As opposed to rules, workflows can

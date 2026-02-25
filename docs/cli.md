@@ -39,6 +39,18 @@ Argument passing matches standard bash script behavior:
 - second argument -> `$2`
 - all arguments -> `"$@"`
 
+Rules also receive forwarded arguments through `ensure`, for example:
+
+```jaiph
+rule current_branch {
+  test "$(git branch --show-current)" = "$1"
+}
+
+workflow default {
+  ensure current_branch "main"
+}
+```
+
 If a `.jph` file is executable and has `#!/usr/bin/env jaiph`, you can run it directly:
 
 ```bash
