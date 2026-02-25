@@ -107,6 +107,15 @@ function parsePromptText(raw: string): string {
   return out;
 }
 
+function validatePromptTextSafety(promptText: string): void {
+  if (promptText.includes("`")) {
+    throw new Error("prompt cannot contain backticks (`...`); use variable expansion only");
+  }
+  if (promptText.includes("$(")) {
+    throw new Error("prompt cannot contain command substitution ($( ... )); use variable expansion only");
+  }
+}
+
 function promptDelimiter(content: string, seed: number): string {
   const lines = new Set(content.split("\n"));
   let index = seed;
@@ -224,12 +233,13 @@ export function transpileFile(inputFile: string, rootDir: string): string {
           let promptText: string;
           try {
             promptText = parsePromptText(step.raw);
+            validatePromptTextSafety(promptText);
           } catch (error) {
             const message = error instanceof Error ? error.message : "invalid prompt literal";
             throw jaiphError(ast.filePath, step.loc.line, step.loc.col, "E_PARSE", message);
           }
           const delimiter = promptDelimiter(promptText, step.loc.line);
-          out.push(`  jaiph__prompt "$@" <<'${delimiter}'`);
+          out.push(`  jaiph__prompt "$@" <<${delimiter}`);
           for (const line of promptText.split("\n")) {
             out.push(line);
           }

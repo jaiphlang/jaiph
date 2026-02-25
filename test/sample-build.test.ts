@@ -42,7 +42,7 @@ test("build transpiles .jph into strict bash with retry flow", () => {
     assert.match(generated, /jaiph__run_step main__rule_project_ready jaiph__execute_readonly main__rule_project_ready__impl/);
     assert.match(generated, /if ! main__rule_project_ready; then/);
     assert.match(generated, /bootstrap_project__workflow_nodejs/);
-    assert.match(generated, /jaiph__prompt "\$@" <<'__JAIPH_PROMPT_/);
+    assert.match(generated, /jaiph__prompt "\$@" <<__JAIPH_PROMPT_/);
     assert.match(generated, /main__rule_build_passes\(\)/);
     assert.match(generated, /tools__security__rule_scan_passes/);
     assert.match(generated, /main__workflow_update_docs/);
@@ -474,63 +474,39 @@ test("jaiph run stores prompt output in run logs", () => {
   }
 });
 
-test("jaiph run treats prompt text as literal (no shell interpolation)", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-run-prompt-literal-"));
+test("build rejects command substitution in prompt text", () => {
+  const rootBackticks = mkdtempSync(join(tmpdir(), "jaiph-build-prompt-backticks-"));
+  const rootSubshell = mkdtempSync(join(tmpdir(), "jaiph-build-prompt-subshell-"));
   try {
-    const binDir = join(root, "bin");
-    mkdirSync(binDir, { recursive: true });
-    const fakeAgent = join(binDir, "cursor-agent");
     writeFileSync(
-      fakeAgent,
-      [
-        "#!/usr/bin/env bash",
-        "printf 'arg:%s\\n' \"$1\"",
-        "",
-      ].join("\n"),
-    );
-    chmodSync(fakeAgent, 0o755);
-
-    const filePath = join(root, "prompt-literal.jph");
-    writeFileSync(
-      filePath,
+      join(rootBackticks, "main.jph"),
       [
         "workflow default {",
-        '  prompt "',
-        "literal backticks: `uname`",
-        "literal command substitution: $(echo SHOULD_NOT_RUN)",
-        "literal var: $HOME",
-        'literal escaped quote: \\"quoted\\"',
-        '"',
+        '  prompt "literal backticks: `uname`"',
         "}",
         "",
       ].join("\n"),
     );
-
-    const cliPath = join(process.cwd(), "dist/src/cli.js");
-    const runResult = spawnSync("node", [cliPath, "run", filePath], {
-      encoding: "utf8",
-      cwd: root,
-      env: {
-        ...process.env,
-        PATH: `${binDir}:${process.env.PATH ?? ""}`,
-      },
-    });
-
-    assert.equal(runResult.status, 0, runResult.stderr);
-    const runsRoot = join(root, ".jaiph/runs");
-    const runDirs = readdirSync(runsRoot).sort();
-    const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
-    const runFiles = readdirSync(latestRunDir);
-    const promptOutName = runFiles.find((name) => name.endsWith("-jaiph__prompt.out"));
-    assert.equal(Boolean(promptOutName), true);
-    const promptOut = readFileSync(join(latestRunDir, promptOutName!), "utf8");
-    assert.match(promptOut, /Prompt:\n\nliteral backticks: `uname`/);
-    assert.match(promptOut, /literal command substitution: \$\(echo SHOULD_NOT_RUN\)/);
-    assert.match(promptOut, /literal var: \$HOME/);
-    assert.match(promptOut, /literal escaped quote: "quoted"/);
-    assert.doesNotMatch(promptOut, /literal command substitution: SHOULD_NOT_RUN/);
+    writeFileSync(
+      join(rootSubshell, "main.jph"),
+      [
+        "workflow default {",
+        '  prompt "literal command substitution: $(echo SHOULD_NOT_RUN)"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => build(rootBackticks, join(rootBackticks, "out")),
+      /E_PARSE prompt cannot contain backticks/,
+    );
+    assert.throws(
+      () => build(rootSubshell, join(rootSubshell, "out")),
+      /E_PARSE prompt cannot contain command substitution/,
+    );
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    rmSync(rootBackticks, { recursive: true, force: true });
+    rmSync(rootSubshell, { recursive: true, force: true });
   }
 });
 
@@ -582,6 +558,62 @@ test("jaiph run interpolates positional args in prompt text", () => {
     assert.match(promptOut, /Prompt:\nSay hello to Alice and mention Alice again\./);
     assert.match(promptOut, /prompt-arg:.*Say hello to Alice and mention Alice again\./);
     assert.doesNotMatch(promptOut, /\$1|\$\{1\}/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph run interpolates named array placeholders in prompt text", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-prompt-array-"));
+  try {
+    const binDir = join(root, "bin");
+    mkdirSync(binDir, { recursive: true });
+    const fakeAgent = join(binDir, "cursor-agent");
+    writeFileSync(
+      fakeAgent,
+      [
+        "#!/usr/bin/env bash",
+        "echo prompt-array:$*",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(fakeAgent, 0o755);
+
+    const filePath = join(root, "prompt-array.jph");
+    writeFileSync(
+      filePath,
+      [
+        "workflow default {",
+        '  DOCS=("README.md" "docs/cli.md")',
+        '  prompt "',
+        "Files to keep in sync:",
+        "${DOCS[@]}",
+        '"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runResult = spawnSync("node", [cliPath, "run", filePath], {
+      encoding: "utf8",
+      cwd: root,
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH ?? ""}`,
+      },
+    });
+
+    assert.equal(runResult.status, 0, runResult.stderr);
+    const runsRoot = join(root, ".jaiph/runs");
+    const runDirs = readdirSync(runsRoot).sort();
+    const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
+    const runFiles = readdirSync(latestRunDir);
+    const promptOutName = runFiles.find((name) => name.endsWith("-jaiph__prompt.out"));
+    assert.equal(Boolean(promptOutName), true);
+    const promptOut = readFileSync(join(latestRunDir, promptOutName!), "utf8");
+    assert.match(promptOut, /Prompt:\n\nFiles to keep in sync:\nREADME\.md docs\/cli\.md/);
+    assert.doesNotMatch(promptOut, /\$\{DOCS\[@\]\}/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

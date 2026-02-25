@@ -64,7 +64,6 @@ jaiph__prompt__impl() {
   local agent_command
   local stdin_prompt
   local prompt_text
-  local idx value
   workspace_root="$(jaiph__workspace_root)"
   agent_command="${JAIPH_AGENT_COMMAND:-cursor-agent}"
   if [[ ! -t 0 ]]; then
@@ -77,16 +76,6 @@ jaiph__prompt__impl() {
   else
     prompt_text="$*"
   fi
-  # Safe interpolation for positional placeholders only.
-  for ((idx = 1; idx <= 9; idx += 1)); do
-    if [[ "$#" -ge "$idx" ]]; then
-      value="${!idx}"
-    else
-      value=""
-    fi
-    prompt_text="${prompt_text//\$\{$idx\}/$value}"
-    prompt_text="${prompt_text//\$$idx/$value}"
-  done
   if [[ -n "$prompt_text" ]]; then
     printf "Prompt:\n%s\n\n" "$prompt_text"
   fi

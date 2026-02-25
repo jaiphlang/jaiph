@@ -64,6 +64,9 @@ workflow default {
 }
 ```
 
+`prompt` text follows bash-style variable expansion (for example `$1`, `${HOME}`, `${FILES[@]}`).
+For safety, command substitution is not allowed in prompt text: `$(...)` and backticks are rejected with `E_PARSE`.
+
 If a `.jph` file is executable and has `#!/usr/bin/env jaiph`, you can run it directly:
 
 ```bash
