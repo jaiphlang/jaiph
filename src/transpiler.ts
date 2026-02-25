@@ -198,7 +198,7 @@ export function transpileFile(inputFile: string, rootDir: string): string {
     out.push("}");
     out.push("");
     out.push(`${functionSymbol}() {`);
-    out.push(`  jaiph__run_step ${functionSymbol} ${functionSymbol}__impl "$@"`);
+    out.push(`  jaiph__run_step_passthrough ${functionSymbol} ${functionSymbol}__impl "$@"`);
     out.push("}");
     out.push("");
     // Keep author-friendly call sites working while still namespacing internals.

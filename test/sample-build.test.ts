@@ -359,6 +359,41 @@ test("jaiph run fails when required arg is missing and rule handles it", () => {
   }
 });
 
+test("jaiph run allows rules to call top-level helper functions in readonly mode", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-rule-helper-fn-"));
+  try {
+    const filePath = join(root, "helpers.jph");
+    writeFileSync(
+      filePath,
+      [
+        "function helper_value() {",
+        "  echo ok",
+        "}",
+        "",
+        "rule helper_is_ok {",
+        '  test "$(helper_value)" = "ok"',
+        "}",
+        "",
+        "workflow default {",
+        "  ensure helper_is_ok",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runResult = spawnSync("node", [cliPath, "run", filePath], {
+      encoding: "utf8",
+      cwd: root,
+    });
+
+    assert.equal(runResult.status, 0, runResult.stderr);
+    assert.match(runResult.stdout, /✓ PASS workflow default/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("jaiph run prints rule tree and fail summary", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-run-tree-fail-"));
   try {
@@ -954,7 +989,7 @@ test("build supports top-level functions with namespaced wrappers", () => {
     assert.equal(results.length, 1);
     assert.match(results[0].bash, /entry__function_changed_files__impl\(\) \{/);
     assert.match(results[0].bash, /entry__function_changed_files\(\) \{/);
-    assert.match(results[0].bash, /jaiph__run_step entry__function_changed_files entry__function_changed_files__impl "\$@"/);
+    assert.match(results[0].bash, /jaiph__run_step_passthrough entry__function_changed_files entry__function_changed_files__impl "\$@"/);
     assert.match(results[0].bash, /changed_files\(\) \{/);
     assert.match(results[0].bash, /entry__function_changed_files "\$@"/);
   } finally {

@@ -325,6 +325,38 @@ jaiph__run_step() {
   return "$status"
 }
 
+# Variant that preserves command stdout/stderr while still emitting step events.
+jaiph__run_step_passthrough() {
+  local func_name="$1"
+  shift || true
+  if [[ -z "$func_name" ]]; then
+    jaiph__die "jaiph__run_step_passthrough requires a function name"
+    return 1
+  fi
+  if [[ "$#" -eq 0 ]]; then
+    jaiph__die "jaiph__run_step_passthrough requires a command to execute"
+    return 1
+  fi
+  jaiph__init_run_tracking || return 1
+  local status had_errexit step_started_seconds step_elapsed_seconds elapsed_ms
+  step_started_seconds="$SECONDS"
+  jaiph__emit_step_event "STEP_START" "$func_name"
+  had_errexit=0
+  case "$-" in
+    *e*) had_errexit=1 ;;
+  esac
+  set +e
+  "$@"
+  status=$?
+  if [[ "$had_errexit" -eq 1 ]]; then
+    set -e
+  fi
+  step_elapsed_seconds="$((SECONDS - step_started_seconds))"
+  elapsed_ms="$((step_elapsed_seconds * 1000))"
+  jaiph__emit_step_event "STEP_END" "$func_name" "$status" "$elapsed_ms" "" ""
+  return "$status"
+}
+
 # Wrapper to execute functions in a read-only filesystem sandbox.
 jaiph__execute_readonly() {
   local func_name="$1"
@@ -337,6 +369,12 @@ jaiph__execute_readonly() {
     jaiph__die "unknown function: $func_name"
     return 1
   fi
+  # Rules execute in child shells for readonly isolation.
+  # Export all functions so rule bodies can call local helpers/shims.
+  local exported_fn
+  while IFS= read -r exported_fn; do
+    export -f "$exported_fn" >/dev/null 2>&1 || true
+  done < <(compgen -A function)
   export -f "$func_name"
   export -f jaiph__die
   export -f jaiph__prompt
