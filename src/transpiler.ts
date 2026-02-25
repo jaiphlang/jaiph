@@ -55,6 +55,70 @@ function transpileWorkflowRef(
   throw new Error(`ValidationError: invalid workflow reference "${ref.value}"`);
 }
 
+function parsePromptText(raw: string): string {
+  if (!raw.startsWith(`"`)) {
+    throw new Error("invalid prompt literal");
+  }
+  let closingQuote = -1;
+  for (let i = 1; i < raw.length; i += 1) {
+    if (raw[i] !== `"`) {
+      continue;
+    }
+    let backslashes = 0;
+    for (let j = i - 1; j >= 0 && raw[j] === `\\`; j -= 1) {
+      backslashes += 1;
+    }
+    if (backslashes % 2 === 1) {
+      continue;
+    }
+    closingQuote = i;
+    break;
+  }
+  if (closingQuote === -1) {
+    throw new Error("unterminated prompt string");
+  }
+  if (raw.slice(closingQuote + 1).trim().length > 0) {
+    throw new Error("prompt allows only whitespace after closing quote");
+  }
+  const quoted = raw.slice(1, closingQuote);
+  let out = "";
+  for (let i = 0; i < quoted.length; i += 1) {
+    const ch = quoted[i];
+    if (ch !== `\\`) {
+      out += ch;
+      continue;
+    }
+    const next = quoted[i + 1];
+    if (next === undefined) {
+      out += `\\`;
+      continue;
+    }
+    if (next === "\n") {
+      i += 1;
+      continue;
+    }
+    if (next === "$" || next === "`" || next === `"` || next === `\\`) {
+      out += next;
+      i += 1;
+      continue;
+    }
+    out += `\\`;
+  }
+  return out;
+}
+
+function promptDelimiter(content: string, seed: number): string {
+  const lines = new Set(content.split("\n"));
+  let index = seed;
+  while (true) {
+    const candidate = `__JAIPH_PROMPT_${index}__`;
+    if (!lines.has(candidate)) {
+      return candidate;
+    }
+    index += 1;
+  }
+}
+
 export function transpileFile(inputFile: string, rootDir: string): string {
   const ast = parsejaiph(readFileSync(inputFile, "utf8"), inputFile);
   validateReferences(ast);
@@ -90,6 +154,7 @@ export function transpileFile(inputFile: string, rootDir: string): string {
       out.push(comment);
     }
     out.push(`${ruleSymbol}__impl() {`);
+    out.push("  set -euo pipefail");
     if (rule.commands.length === 0) {
       out.push("  :");
     } else {
@@ -111,6 +176,7 @@ export function transpileFile(inputFile: string, rootDir: string): string {
       out.push(comment);
     }
     out.push(`${functionSymbol}__impl() {`);
+    out.push("  set -euo pipefail");
     if (fn.commands.length === 0) {
       out.push("  :");
     } else {
@@ -136,6 +202,7 @@ export function transpileFile(inputFile: string, rootDir: string): string {
       out.push(comment);
     }
     out.push(`${workflowSymbol}__workflow_${workflow.name}__impl() {`);
+    out.push("  set -euo pipefail");
     if (workflow.steps.length === 0) {
       out.push("  :");
     } else {
@@ -151,11 +218,20 @@ export function transpileFile(inputFile: string, rootDir: string): string {
           continue;
         }
         if (step.type === "prompt") {
-          const promptLines = step.raw.split("\n");
-          out.push(`  jaiph__prompt ${promptLines[0]}`);
-          for (let lineNo = 1; lineNo < promptLines.length; lineNo += 1) {
-            out.push(promptLines[lineNo]);
+          let promptText: string;
+          try {
+            promptText = parsePromptText(step.raw);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "invalid prompt literal";
+            throw jaiphError(ast.filePath, step.loc.line, step.loc.col, "E_PARSE", message);
           }
+          const delimiter = promptDelimiter(promptText, step.loc.line);
+          out.push(`  jaiph__prompt "$(cat <<'${delimiter}'`);
+          for (const line of promptText.split("\n")) {
+            out.push(line);
+          }
+          out.push(delimiter);
+          out.push(')"');
           continue;
         }
         if (step.type === "shell") {

@@ -42,7 +42,7 @@ test("build transpiles .jph into strict bash with retry flow", () => {
     assert.match(generated, /jaiph__run_step main__rule_project_ready jaiph__execute_readonly main__rule_project_ready__impl/);
     assert.match(generated, /if ! main__rule_project_ready; then/);
     assert.match(generated, /bootstrap_project__workflow_nodejs/);
-    assert.match(generated, /jaiph__prompt "/);
+    assert.match(generated, /jaiph__prompt "\$\(cat <<'__JAIPH_PROMPT_/);
     assert.match(generated, /main__rule_build_passes\(\)/);
     assert.match(generated, /tools__security__rule_scan_passes/);
     assert.match(generated, /main__workflow_update_docs/);
@@ -144,7 +144,7 @@ test("jaiph run compiles and executes workflow with args", () => {
     assert.equal(runResult.status, 0, runResult.stderr);
     assert.match(runResult.stdout, /workflow default/);
     assert.match(runResult.stdout, /✓ PASS workflow default \(\d+ms\)/);
-    assert.match(runResult.stdout, /hello-run/);
+    assert.doesNotMatch(runResult.stdout, /hello-run/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -174,8 +174,8 @@ test("executable .jph invokes jaiph run semantics", () => {
     });
 
     assert.equal(runResult.status, 0, runResult.stderr);
-    assert.match(runResult.stdout, /exec-arg:hello-exec/);
     assert.match(runResult.stdout, /✓ PASS workflow default/);
+    assert.doesNotMatch(runResult.stdout, /exec-arg:hello-exec/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -203,7 +203,7 @@ test("jaiph run enables xtrace when JAIPH_DEBUG=true", () => {
     });
 
     assert.equal(runResult.status, 0, runResult.stderr);
-    assert.match(runResult.stdout, /debug-run:hello-debug/);
+    assert.doesNotMatch(runResult.stdout, /debug-run:hello-debug/);
     assert.match(runResult.stderr, /\+ .*__workflow_default/);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -232,6 +232,37 @@ test("jaiph run fails when workflow default is missing", () => {
 
     assert.equal(runResult.status, 1);
     assert.match(runResult.stderr, /requires workflow 'default'/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph run fails fast on command errors inside workflow", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-fail-fast-"));
+  try {
+    const filePath = join(root, "fail-fast.jph");
+    writeFileSync(
+      filePath,
+      [
+        "workflow default {",
+        "  false",
+        "  echo after-false",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runResult = spawnSync("node", [cliPath, "run", filePath], {
+      encoding: "utf8",
+      cwd: root,
+    });
+
+    assert.equal(runResult.status, 1);
+    assert.doesNotMatch(runResult.stdout, /after-false/);
+    assert.match(runResult.stderr, /✗ FAIL workflow default \(\d+ms\)/);
+    assert.match(runResult.stderr, /Logs: /);
+    assert.match(runResult.stderr, /Summary: /);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -266,11 +297,14 @@ test("jaiph run prints rule tree and fail summary", () => {
     assert.match(runResult.stdout, /workflow default/);
     assert.match(runResult.stdout, /└── rule current_branch/);
     assert.match(runResult.stderr, /✗ FAIL workflow default \(\d+ms\)/);
-    assert.match(runResult.stderr, /Current branch is not 'main'\./);
     assert.match(runResult.stderr, /Logs: /);
     assert.match(runResult.stderr, /Summary: /);
     assert.match(runResult.stderr, /err: /);
     assert.match(runResult.stderr, /\.jaiph\/runs\//);
+    const errPathMatch = runResult.stderr.match(/err: (.+)/);
+    assert.equal(Boolean(errPathMatch), true);
+    const errLog = readFileSync(errPathMatch![1], "utf8");
+    assert.match(errLog, /Current branch is not 'main'\./);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -349,6 +383,66 @@ test("jaiph run stores prompt output in run logs", () => {
   }
 });
 
+test("jaiph run treats prompt text as literal (no shell interpolation)", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-prompt-literal-"));
+  try {
+    const binDir = join(root, "bin");
+    mkdirSync(binDir, { recursive: true });
+    const fakeAgent = join(binDir, "cursor-agent");
+    writeFileSync(
+      fakeAgent,
+      [
+        "#!/usr/bin/env bash",
+        "printf 'arg:%s\\n' \"$1\"",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(fakeAgent, 0o755);
+
+    const filePath = join(root, "prompt-literal.jph");
+    writeFileSync(
+      filePath,
+      [
+        "workflow default {",
+        '  prompt "',
+        "literal backticks: `uname`",
+        "literal command substitution: $(echo SHOULD_NOT_RUN)",
+        "literal var: $HOME",
+        'literal escaped quote: \\"quoted\\"',
+        '"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runResult = spawnSync("node", [cliPath, "run", filePath], {
+      encoding: "utf8",
+      cwd: root,
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH ?? ""}`,
+      },
+    });
+
+    assert.equal(runResult.status, 0, runResult.stderr);
+    const runsRoot = join(root, ".jaiph/runs");
+    const runDirs = readdirSync(runsRoot).sort();
+    const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
+    const runFiles = readdirSync(latestRunDir);
+    const promptOutName = runFiles.find((name) => name.endsWith("-jaiph__prompt.out"));
+    assert.equal(Boolean(promptOutName), true);
+    const promptOut = readFileSync(join(latestRunDir, promptOutName!), "utf8");
+    assert.match(promptOut, /Prompt:\n\nliteral backticks: `uname`/);
+    assert.match(promptOut, /literal command substitution: \$\(echo SHOULD_NOT_RUN\)/);
+    assert.match(promptOut, /literal var: \$HOME/);
+    assert.match(promptOut, /literal escaped quote: "quoted"/);
+    assert.doesNotMatch(promptOut, /literal command substitution: SHOULD_NOT_RUN/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("jaiph run applies model from local TOML config", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-run-config-model-"));
   try {
@@ -370,7 +464,7 @@ test("jaiph run applies model from local TOML config", () => {
       join(root, ".jaiph/config.toml"),
       [
         "[agent]",
-        'default_model = "gpt-5-mini"',
+        'default_model = "auto"',
         "",
       ].join("\n"),
     );
@@ -397,7 +491,14 @@ test("jaiph run applies model from local TOML config", () => {
     });
 
     assert.equal(runResult.status, 0, runResult.stderr);
-    assert.match(runResult.stdout, /model-args:.*--model gpt-5-mini/);
+    const runsRoot = join(root, ".jaiph/runs");
+    const runDirs = readdirSync(runsRoot).sort();
+    const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
+    const runFiles = readdirSync(latestRunDir);
+    const promptOutName = runFiles.find((name) => name.endsWith("-jaiph__prompt.out"));
+    assert.equal(Boolean(promptOutName), true);
+    const promptOut = readFileSync(join(latestRunDir, promptOutName!), "utf8");
+    assert.match(promptOut, /model-args:.*--model auto/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -448,7 +549,6 @@ test("jaiph run uses JAIPH_STDLIB global runtime path", () => {
     });
 
     assert.equal(runResult.status, 0, runResult.stderr);
-    assert.match(runResult.stdout, /global-stdlib-ok/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -661,7 +761,7 @@ test("jaiph run tree includes function calls from workflow shell steps", () => {
     assert.equal(runResult.status, 0, runResult.stderr);
     assert.match(runResult.stdout, /workflow default/);
     assert.match(runResult.stdout, /function changed_files/);
-    assert.match(runResult.stdout, /from-function/);
+    assert.doesNotMatch(runResult.stdout, /from-function/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

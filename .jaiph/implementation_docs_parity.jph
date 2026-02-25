@@ -84,17 +84,13 @@ workflow default {
 
     Ensure there is a CHANGELOG.md file with a list of all features that are
     supported by the current version. It should be in the following format:
-    ```
-      # [VERSION]
-    
-       - Feature 1
-       - Feature 2
-       - Feature 3
-    
-      # [VERSION]
-    
-       - Feature 1
-    ```
+    # [VERSION]
+     - Feature 1
+     - Feature 2
+     - Feature 3
+
+    # [VERSION]
+     - Feature 1
     Don't modify changes from previous versions.
   "
 
