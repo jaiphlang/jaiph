@@ -53,6 +53,7 @@ jaiph use nightly
 jaiph init "${WORK_DIR}"
 test -f "${WORK_DIR}/.jaiph/bootstrap.jph"
 test -f "${WORK_DIR}/.jaiph/config.toml"
+test -f "${WORK_DIR}/.jaiph/jaiph-skill.md"
 test -x "${WORK_DIR}/.jaiph/bootstrap.jph"
 
 cat > "${WORK_DIR}/hello.jph" <<'EOF'

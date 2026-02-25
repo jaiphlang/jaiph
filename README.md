@@ -113,7 +113,7 @@ Entrypoint resolution: executable `.jph` files (with `#!/usr/bin/env jaiph`) run
 jaiph init
 ```
 
-This creates `.jaiph/bootstrap.jph`.
+This creates `.jaiph/bootstrap.jph`, `.jaiph/config.toml`, and `.jaiph/jaiph-skill.md` (synced from your installed Jaiph copy).
 
 Then run:
 

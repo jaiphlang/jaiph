@@ -131,7 +131,7 @@ workflow implement {
 
 workflow default {
   run readiness.default
-  run implement "$1"
+  run implement
   run verification.default
 }
 ```

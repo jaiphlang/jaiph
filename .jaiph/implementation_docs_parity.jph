@@ -1,0 +1,26 @@
+#!/usr/bin/env jaiph
+
+rule docs_files_present {
+  test -f "README.md"
+  test -f "docs/index.html"
+  test -f "docs/cli.md"
+  test -f "docs/configuration.md"
+}
+
+rule tests_pass {
+  npm test
+}
+
+workflow default {
+  ensure docs_files_present
+
+  prompt "
+    Ensure implementation/docs parity for this repository.
+    If behavior, command syntax, runtime semantics, or installation details changed,
+    update README.md, docs/index.html, docs/cli.md, docs/configuration.md, and docs/install
+    so they remain accurate and consistent.
+    Keep examples executable and aligned with current CLI behavior.
+  "
+
+  ensure tests_pass
+}

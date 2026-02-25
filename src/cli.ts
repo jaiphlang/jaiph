@@ -209,7 +209,7 @@ workflow default {
   prompt "
     You are bootstrapping Jaiph for this repository.
     First, read the Jaiph agent bootstrap guide at:
-    https://github.com/jaiphlang/jaiph/blob/main/docs/jaiph-skill.md
+    .jaiph/jaiph-skill.md
     Follow that guide and Jaiph language rules exactly.
     Perform these tasks in order:
     1) Analyze repository structure, languages, package manager, and build/test/lint commands.
@@ -236,6 +236,18 @@ logs_dir = ".jaiph/runs"
 debug = false
 `;
 
+function resolveInstalledSkillPath(): string | undefined {
+  if (process.env.JAIPH_SKILL_PATH && existsSync(process.env.JAIPH_SKILL_PATH)) {
+    return process.env.JAIPH_SKILL_PATH;
+  }
+  const candidates = [
+    join(__dirname, "..", "jaiph-skill.md"),
+    join(__dirname, "..", "..", "docs", "jaiph-skill.md"),
+    join(process.cwd(), "docs", "jaiph-skill.md"),
+  ];
+  return candidates.find((path) => existsSync(path));
+}
+
 function runInit(rest: string[]): number {
   const workspaceArg = rest[0] ?? ".";
   const workspaceRoot = resolve(workspaceArg);
@@ -248,6 +260,7 @@ function runInit(rest: string[]): number {
   const jaiphDir = join(workspaceRoot, ".jaiph");
   const bootstrapPath = join(jaiphDir, "bootstrap.jph");
   const configPath = join(jaiphDir, "config.toml");
+  const skillPath = join(jaiphDir, "jaiph-skill.md");
   const palette = colorPalette();
 
   process.stdout.write("\n");
@@ -267,6 +280,12 @@ function runInit(rest: string[]): number {
     writeFileSync(configPath, LOCAL_CONFIG_TEMPLATE, "utf8");
     createdConfig = true;
   }
+  const installedSkillPath = resolveInstalledSkillPath();
+  let syncedSkill = false;
+  if (installedSkillPath) {
+    writeFileSync(skillPath, readFileSync(installedSkillPath, "utf8"), "utf8");
+    syncedSkill = true;
+  }
 
   process.stdout.write(`${palette.green}✓ Initialized ${join(".jaiph", "bootstrap.jph")}${palette.reset}\n`);
   if (!createdBootstrap) {
@@ -277,9 +296,14 @@ function runInit(rest: string[]): number {
   } else {
     process.stdout.write(`${palette.dim}▸ Note: config file already existed; left unchanged.${palette.reset}\n`);
   }
+  if (syncedSkill) {
+    process.stdout.write(`${palette.green}✓ Synced ${join(".jaiph", "jaiph-skill.md")}${palette.reset}\n`);
+  } else {
+    process.stdout.write(`${palette.dim}▸ Note: local jaiph-skill.md not found in installation; skipped sync.${palette.reset}\n`);
+  }
   process.stdout.write("\n");
   process.stdout.write("Try:\n");
-  process.stdout.write("  jaiph run .jaiph/bootstrap.jph\n");
+  process.stdout.write("  ./.jaiph/bootstrap.jph\n");
   process.stdout.write("\n");
   process.stdout.write("This asks an agent to analyze the project and scaffold recommended workflows.\n");
   process.stdout.write("Tip: add `.jaiph/runs/` to `.gitignore`.\n");

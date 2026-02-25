@@ -458,10 +458,11 @@ test("jaiph init creates workspace structure and guidance", () => {
     assert.equal(existsSync(join(root, ".jaiph/lib")), false);
     assert.equal(existsSync(join(root, ".jaiph/bootstrap.jph")), true);
     assert.equal(existsSync(join(root, ".jaiph/config.toml")), true);
+    assert.equal(existsSync(join(root, ".jaiph/jaiph-skill.md")), true);
     const bootstrap = readFileSync(join(root, ".jaiph/bootstrap.jph"), "utf8");
     assert.match(bootstrap, /^#!\/usr\/bin\/env jaiph\n\n/);
     assert.match(bootstrap, /workflow default \{/);
-    assert.match(bootstrap, /docs\/jaiph-skill\.md/);
+    assert.match(bootstrap, /\.jaiph\/jaiph-skill\.md/);
     assert.match(bootstrap, /Analyze repository structure/);
     assert.match(bootstrap, /Create or update Jaiph workflows under \.jaiph\//);
     assert.doesNotMatch(bootstrap, /\$1/);
@@ -471,12 +472,15 @@ test("jaiph init creates workspace structure and guidance", () => {
     assert.match(localConfig, /default_model = "gpt-5"/);
     assert.match(localConfig, /\[run\]/);
     assert.match(localConfig, /logs_dir = "\.jaiph\/runs"/);
+    const localSkill = readFileSync(join(root, ".jaiph/jaiph-skill.md"), "utf8");
+    assert.match(localSkill, /Jaiph Bootstrap Skill/);
     assert.equal(existsSync(join(root, ".gitignore")), false);
     assert.match(initResult.stdout, /Jaiph init/);
     assert.match(initResult.stdout, /▸ Creating \.jaiph\/bootstrap\.jph/);
     assert.match(initResult.stdout, /✓ Initialized \.jaiph\/bootstrap\.jph/);
     assert.match(initResult.stdout, /✓ Initialized \.jaiph\/config\.toml/);
-    assert.match(initResult.stdout, /jaiph run \.jaiph\/bootstrap\.jph/);
+    assert.match(initResult.stdout, /Synced \.jaiph\/jaiph-skill\.md/);
+    assert.match(initResult.stdout, /\.\/\.jaiph\/bootstrap\.jph/);
     assert.match(initResult.stdout, /analyze the project/i);
     assert.match(initResult.stdout, /add `\.jaiph\/runs\/` to `\.gitignore`/i);
   } finally {

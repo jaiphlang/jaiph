@@ -58,6 +58,7 @@ Creates:
 
 - `.jaiph/bootstrap.jph`
 - `.jaiph/config.toml`
+- `.jaiph/jaiph-skill.md` (synced from local Jaiph installation)
 
 ## `jaiph use`
 
