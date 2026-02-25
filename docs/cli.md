@@ -1,6 +1,8 @@
 # Jaiph CLI Reference
 
-[Home](/) · [CLI](/cli) · [Configuration](/configuration) · [Grammar](/grammar) · [Agent Skill](/jaiph-skill) · [Install](/install)
+[jaiph.org](https://jaiph.org) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Agent Skill](jaiph-skill.md) · [Install](install)
+
+---
 
 Jaiph provides four core CLI commands plus a file shorthand.
 
@@ -118,3 +120,4 @@ Install/use variables:
 - `JAIPH_REPO_URL`
 - `JAIPH_REPO_REF`
 - `JAIPH_BIN_DIR`
+- `JAIPH_LIB_DIR`

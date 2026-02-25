@@ -1,6 +1,8 @@
 # Jaiph Bootstrap Skill (for Agents)
 
-[Home](/) · [CLI](/cli) · [Configuration](/configuration) · [Grammar](/grammar) · [Agent Skill](/jaiph-skill) · [Install](/install)
+[jaiph.org](https://jaiph.org) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Agent Skill](jaiph-skill.md) · [Install](install)
+
+---
 
 Use this guide when generating `.jaiph/*.jph` workflows for a repository after `jaiph init`.
 

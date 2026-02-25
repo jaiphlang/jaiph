@@ -1,6 +1,8 @@
 # Jaiph configuration
 
-[Home](/) · [CLI](/cli) · [Configuration](/configuration) · [Grammar](/grammar) · [Agent Skill](/jaiph-skill) · [Install](/install)
+[jaiph.org](https://jaiph.org) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Agent Skill](jaiph-skill.md) · [Install](install)
+
+---
 
 Jaiph reads configuration from TOML files in two scopes:
 

@@ -16,8 +16,7 @@ It combines declarative workflow structure with bash, then compiles to pure shel
 > Jaiph is still in an early stage. Expect breaking changes.
 
 - Docs (canonical): <https://jaiph.org/>
-- Grammar reference: <https://github.com/jaiphlang/jaiph/blob/main/docs/grammar.md>
-- Agent bootstrap guide: <https://github.com/jaiphlang/jaiph/blob/main/docs/jaiph-skill.md>
+- Agent skill: <https://github.com/jaiphlang/jaiph/blob/main/docs/jaiph-skill.md>
 - Samples: <https://github.com/jaiphlang/jaiph/tree/main/samples>
 - Contribute: <https://github.com/jaiphlang/jaiph/issues>
 
@@ -28,8 +27,8 @@ It combines declarative workflow structure with bash, then compiles to pure shel
 ```jaiph
 #!/usr/bin/env jaiph
 
-import "security.jph" as security
 import "bootstrap_project.jph" as bootstrap
+import "tools/security.jph" as security
 
 # Validates local build prerequisites.
 rule project_ready {

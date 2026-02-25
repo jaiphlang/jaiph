@@ -51,6 +51,7 @@ rule tests_pass {
 workflow default {
   EXPECTED_DOC_FILES=(
     "README.md"
+    "CHANGELOG.md"
     "docs/index.html"
     "docs/cli.md"
     "docs/configuration.md"
@@ -77,9 +78,24 @@ workflow default {
     Keep examples executable and aligned with current CLI behavior.
 
     For docs markdown pages, ensure each page has a top navigation block
-    immediately after its H1 with links to the main page and other docs pages.
-    Use GH Pages-friendly site routes (for example: /, /cli, /configuration,
-    /install etc.), not repository URLs or local filesystem paths.
+    immediately after its H1 with links to jaiph.org, and to pages in docs/.
+    Use relative links to configuration.md, configuration.md,
+    install.md etc., not repository URLs or local filesystem paths.
+
+    Ensure there is a CHANGELOG.md file with a list of all features that are
+    supported by the current version. It should be in the following format:
+    ```
+      # [VERSION]
+    
+       - Feature 1
+       - Feature 2
+       - Feature 3
+    
+      # [VERSION]
+    
+       - Feature 1
+    ```
+    Don't modify changes from previous versions.
   "
 
   EXPECTED_DOC_FILES_TEXT="$(printf '%s\n' "${EXPECTED_DOC_FILES[@]}")"
