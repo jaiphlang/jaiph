@@ -580,8 +580,45 @@ async function runWorkflow(rest: string[]): Promise<number> {
         stdio: "pipe",
         cwd: workspaceRoot,
         env: runtimeEnv,
+        detached: true,
       },
     );
+    let forceKillTimer: NodeJS.Timeout | undefined;
+    const terminateRunProcessGroup = (signal: NodeJS.Signals): void => {
+      const childPid = execResult.pid;
+      if (!childPid) {
+        return;
+      }
+      try {
+        process.kill(-childPid, signal);
+      } catch {
+        try {
+          execResult.kill(signal);
+        } catch {
+          // no-op
+        }
+      }
+    };
+    const handleInterrupt = (): void => {
+      terminateRunProcessGroup("SIGINT");
+      if (forceKillTimer) {
+        clearTimeout(forceKillTimer);
+      }
+      forceKillTimer = setTimeout(() => {
+        terminateRunProcessGroup("SIGKILL");
+      }, 1500);
+    };
+    const handleTerminate = (): void => {
+      terminateRunProcessGroup("SIGTERM");
+      if (forceKillTimer) {
+        clearTimeout(forceKillTimer);
+      }
+      forceKillTimer = setTimeout(() => {
+        terminateRunProcessGroup("SIGKILL");
+      }, 1500);
+    };
+    process.once("SIGINT", handleInterrupt);
+    process.once("SIGTERM", handleTerminate);
     let capturedStderr = "";
     let stderrBuffer = "";
     let activeStepStartedAt = startedAt;
@@ -706,6 +743,12 @@ async function runWorkflow(rest: string[]): Promise<number> {
     });
     const childExit = await new Promise<{ status: number; signal: NodeJS.Signals | null }>((resolveExit) => {
       execResult.on("close", (code, signal) => {
+        process.removeListener("SIGINT", handleInterrupt);
+        process.removeListener("SIGTERM", handleTerminate);
+        if (forceKillTimer) {
+          clearTimeout(forceKillTimer);
+          forceKillTimer = undefined;
+        }
         resolveExit({ status: typeof code === "number" ? code : 1, signal });
       });
     });
