@@ -66,6 +66,8 @@ export function transpileFile(inputFile: string, rootDir: string): string {
   }
 
   const out: string[] = [];
+  out.push("#!/usr/bin/env bash");
+  out.push("");
   out.push("set -euo pipefail");
   out.push('jaiph_stdlib_path="${JAIPH_STDLIB:-$HOME/.local/bin/jaiph_stdlib.sh}"');
   out.push('if [[ ! -f "$jaiph_stdlib_path" ]]; then');

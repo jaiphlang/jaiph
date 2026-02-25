@@ -30,6 +30,7 @@ test("build transpiles .jph into strict bash with retry flow", () => {
     const generatedPath = join(outDir, "main.sh");
     const generated = readFileSync(generatedPath, "utf8");
 
+    assert.match(generated, /^#!\/usr\/bin\/env bash/m);
     assert.match(generated, /set -euo pipefail/);
     assert.match(generated, /jaiph_stdlib_path="\$\{JAIPH_STDLIB:-\$HOME\/\.local\/bin\/jaiph_stdlib\.sh\}"/);
     assert.match(generated, /source "\$jaiph_stdlib_path"/);

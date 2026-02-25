@@ -61,8 +61,8 @@ function collectWorkflowChildren(mod: jaiphModule, workflowName: string): Array<
   return items;
 }
 
-function renderRunTree(mod: jaiphModule): string {
-  const lines = ["workflow default"];
+function renderRunTree(mod: jaiphModule, rootLabel = "workflow default"): string {
+  const lines = [rootLabel];
   const visited = new Set<string>(["default"]);
 
   const renderChildren = (workflowName: string, prefix: string): void => {
@@ -414,6 +414,8 @@ function runWorkflow(rest: string[]): number {
     if (stdoutMeta.output) {
       process.stdout.write(`${stdoutMeta.output}\n`);
     }
+
+    process.stdout.write(`${renderRunTree(mod, `workflow default (${elapsedMs}ms)`)}\n`);
 
     const palette = colorPalette();
     if (resolvedStatus === 0) {
