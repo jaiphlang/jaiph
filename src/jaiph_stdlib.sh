@@ -19,18 +19,41 @@ jaiph__stream_json_to_text() {
   node -e '
     const readline = require("node:readline");
     const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
-    const emit = (value) => {
+    let currentSection = "";
+    let wroteAny = false;
+    let lastChar = "";
+    const writeRaw = (value) => {
       if (typeof value === "string" && value.length > 0) {
         process.stdout.write(value);
+        wroteAny = true;
+        lastChar = value[value.length - 1];
       }
     };
-    const pick = (obj) => {
+    const startSection = (name) => {
+      if (currentSection === name) {
+        return;
+      }
+      if (wroteAny && lastChar !== "\n") {
+        writeRaw("\n");
+      }
+      if (wroteAny) {
+        writeRaw("\n");
+      }
+      writeRaw(`${name}:\n`);
+      currentSection = name;
+    };
+    const emit = (value) => {
+      if (typeof value === "string" && value.length > 0) {
+        writeRaw(value);
+      }
+    };
+    const pickGeneric = (obj) => {
       if (!obj || typeof obj !== "object") return "";
+      if (obj.message && typeof obj.message.content === "string") return obj.message.content;
       if (typeof obj.delta === "string") return obj.delta;
-      if (typeof obj.text === "string") return obj.text;
       if (typeof obj.output_text === "string") return obj.output_text;
       if (typeof obj.content === "string") return obj.content;
-      if (obj.message && typeof obj.message.content === "string") return obj.message.content;
+      if (typeof obj.text === "string") return obj.text;
       if (Array.isArray(obj.choices) && obj.choices[0]) {
         const c = obj.choices[0];
         if (typeof c.text === "string") return c.text;
@@ -51,9 +74,27 @@ jaiph__stream_json_to_text() {
         return;
       }
       try {
-        emit(pick(JSON.parse(line)));
+        const obj = JSON.parse(line);
+        if (obj && typeof obj === "object") {
+          if (obj.type === "thinking" && typeof obj.text === "string" && obj.text.length > 0) {
+            startSection("Reasoning");
+            emit(obj.text);
+            return;
+          }
+          if (obj.type === "assistant" && obj.message && typeof obj.message.content === "string" && obj.message.content.length > 0) {
+            startSection("Final answer");
+            emit(obj.message.content);
+            return;
+          }
+          if (obj.type === "result" && typeof obj.result === "string" && obj.result.length > 0) {
+            startSection("Final answer");
+            emit(obj.result);
+            return;
+          }
+        }
+        emit(pickGeneric(obj));
       } catch {
-        process.stdout.write(`${line}\n`);
+        writeRaw(`${line}\n`);
       }
     });
   '

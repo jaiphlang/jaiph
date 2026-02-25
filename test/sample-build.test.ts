@@ -474,6 +474,60 @@ test("jaiph run stores prompt output in run logs", () => {
   }
 });
 
+test("jaiph run stores both reasoning and final answer from stream-json", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-prompt-stream-json-"));
+  try {
+    const binDir = join(root, "bin");
+    mkdirSync(binDir, { recursive: true });
+    const fakeAgent = join(binDir, "cursor-agent");
+    writeFileSync(
+      fakeAgent,
+      [
+        "#!/usr/bin/env bash",
+        "echo '{\"type\":\"thinking\",\"text\":\"Plan: check name.\"}'",
+        "echo '{\"type\":\"thinking\",\"text\":\" Then answer.\"}'",
+        "echo '{\"type\":\"result\",\"result\":\"Hello Mike! Fun fact: Mike Shinoda co-founded Linkin Park.\"}'",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(fakeAgent, 0o755);
+
+    const filePath = join(root, "prompt-stream-json.jph");
+    writeFileSync(
+      filePath,
+      [
+        "workflow default {",
+        '  prompt "hello from prompt"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runResult = spawnSync("node", [cliPath, "run", filePath], {
+      encoding: "utf8",
+      cwd: root,
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH ?? ""}`,
+      },
+    });
+
+    assert.equal(runResult.status, 0, runResult.stderr);
+    const runsRoot = join(root, ".jaiph/runs");
+    const runDirs = readdirSync(runsRoot).sort();
+    const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
+    const runFiles = readdirSync(latestRunDir);
+    const promptOutName = runFiles.find((name) => name.endsWith("-jaiph__prompt.out"));
+    assert.equal(Boolean(promptOutName), true);
+    const promptOut = readFileSync(join(latestRunDir, promptOutName!), "utf8");
+    assert.match(promptOut, /Reasoning:\nPlan: check name\. Then answer\./);
+    assert.match(promptOut, /Final answer:\nHello Mike! Fun fact: Mike Shinoda co-founded Linkin Park\./);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("build rejects command substitution in prompt text", () => {
   const rootBackticks = mkdtempSync(join(tmpdir(), "jaiph-build-prompt-backticks-"));
   const rootSubshell = mkdtempSync(join(tmpdir(), "jaiph-build-prompt-subshell-"));
