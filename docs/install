@@ -70,6 +70,8 @@ trap cleanup EXIT
 print_step "Cloning ${REPO_URL} (${REPO_REF})..."
 git clone --depth 1 --branch "${REPO_REF}" "${REPO_URL}" "${tmp_dir}/src" >/dev/null 2>&1
 
+JAIPH_VERSION="$(node -p "require(process.argv[1]).version" "${tmp_dir}/src/package.json")"
+
 print_step "Installing dependencies..."
 npm --prefix "${tmp_dir}/src" install >/dev/null 2>&1
 
@@ -96,7 +98,7 @@ EOF
 chmod 755 "${TARGET}"
 
 echo ""
-print_success "Installed jaiph to ${TARGET}"
+print_success "Installed jaiph ${JAIPH_VERSION} to ${TARGET}"
 
 if [[ ":${PATH}:" == *":${BIN_DIR}:"* ]]; then
   print_success "${BIN_DIR} is already on PATH"

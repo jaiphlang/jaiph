@@ -907,7 +907,7 @@ async function main(argv: string[]): Promise<number> {
     return 0;
   }
   if (cmd === "--version" || cmd === "-v") {
-    process.stdout.write("jaiph 0.0.1\n");
+    process.stdout.write("jaiph 0.1.0\n");
     return 0;
   }
   try {

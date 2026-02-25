@@ -1,4 +1,4 @@
-# 0.0.1
+# 0.1.0
 
 - `jaiph build [--target <dir>] <path>` compiles `.jph` files to bash scripts
 - `jaiph run [--target <dir>] <file.jph> [args...]` compiles and executes workflows
