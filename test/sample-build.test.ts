@@ -479,7 +479,7 @@ test("jaiph init creates workspace structure and guidance", () => {
     assert.equal(statSync(join(root, ".jaiph/bootstrap.jph")).mode & 0o777, 0o755);
     const localConfig = readFileSync(join(root, ".jaiph/config.toml"), "utf8");
     assert.match(localConfig, /\[agent\]/);
-    assert.match(localConfig, /default_model = "gpt-5"/);
+    assert.match(localConfig, /default_model = "auto"/);
     assert.match(localConfig, /\[run\]/);
     assert.match(localConfig, /logs_dir = "\.jaiph\/runs"/);
     const localSkill = readFileSync(join(root, ".jaiph/jaiph-skill.md"), "utf8");

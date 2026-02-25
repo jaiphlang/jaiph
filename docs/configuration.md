@@ -15,7 +15,7 @@ When both are present, local values override global values.
 
 ```toml
 [agent]
-default_model = "gpt-5"
+default_model = "auto"
 command = "cursor-agent"
 
 [run]

@@ -378,7 +378,7 @@ workflow default {
 const LOCAL_CONFIG_TEMPLATE = `# Jaiph project configuration
 [agent]
 # Default model for prompt steps (passed as --model to the agent command).
-default_model = "gpt-5"
+default_model = "auto"
 
 [run]
 # Store run logs under .jaiph/runs by default (relative to workspace root).
