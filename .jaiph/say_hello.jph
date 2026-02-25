@@ -1,0 +1,16 @@
+#!/usr/bin/env jaiph
+
+rule name_provided {
+  if [ -z "$1" ]; then
+    echo "You didn't provide your name :(" >&2
+    exit 1
+  fi
+}
+
+workflow default {
+  ensure name_provided "$1"
+
+  prompt "
+    Say hello to $1 and provide a fan fact about a person with the same name.
+  "
+}

@@ -167,6 +167,17 @@ function styleDim(text: string): string {
   return `\u001b[2m${text}\u001b[0m`;
 }
 
+function formatElapsedDuration(elapsedMs: number): string {
+  if (elapsedMs < 60_000) {
+    const seconds = elapsedMs / 1000;
+    return `${seconds.toFixed(1).replace(/\.0$/, "")}s`;
+  }
+  const totalSeconds = Math.floor(elapsedMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}m ${seconds}s`;
+}
+
 function renderProgressTree(
   rows: TreeRow[],
   states: RowState[],
@@ -777,6 +788,7 @@ async function runWorkflow(rest: string[]): Promise<number> {
       capturedStderr = `Process terminated by signal ${childExit.signal}`;
     }
     const elapsedMs = Date.now() - startedAt;
+    const elapsedLabel = formatElapsedDuration(elapsedMs);
     let runDir: string | undefined;
     let summaryFile: string | undefined;
     if (existsSync(metaFile)) {
@@ -819,14 +831,14 @@ async function runWorkflow(rest: string[]): Promise<number> {
     const palette = colorPalette();
     if (resolvedStatus === 0) {
       process.stdout.write(
-        `${palette.green}\u2713 PASS${palette.reset} workflow default ${palette.dim}(${elapsedMs}ms)${palette.reset}\n`,
+        `${palette.green}\u2713 PASS${palette.reset} workflow default ${palette.dim}(${elapsedLabel})${palette.reset}\n`,
       );
       return 0;
     }
 
     const summary = summarizeError(capturedStderr, "Workflow execution failed.");
     process.stderr.write(
-      `${palette.red}\u2717 FAIL${palette.reset} workflow default ${palette.dim}(${elapsedMs}ms)${palette.reset}\n`,
+      `${palette.red}\u2717 FAIL${palette.reset} workflow default ${palette.dim}(${elapsedLabel})${palette.reset}\n`,
     );
     process.stderr.write(`  ${summary}\n`);
     if (runDir) {

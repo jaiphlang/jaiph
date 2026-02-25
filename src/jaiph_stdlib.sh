@@ -63,23 +63,39 @@ jaiph__prompt__impl() {
   local workspace_root
   local agent_command
   local stdin_prompt
+  local prompt_text
+  local idx value
   workspace_root="$(jaiph__workspace_root)"
   agent_command="${JAIPH_AGENT_COMMAND:-cursor-agent}"
-  if [[ "$#" -eq 0 ]]; then
+  if [[ ! -t 0 ]]; then
     stdin_prompt="$(cat)"
-    if [[ -n "$stdin_prompt" ]]; then
-      set -- "$stdin_prompt"
-    fi
+  else
+    stdin_prompt=""
   fi
-  if [[ "$#" -gt 0 ]]; then
-    printf "Prompt:\n%s\n\n" "$*"
+  if [[ -n "$stdin_prompt" ]]; then
+    prompt_text="$stdin_prompt"
+  else
+    prompt_text="$*"
+  fi
+  # Safe interpolation for positional placeholders only.
+  for ((idx = 1; idx <= 9; idx += 1)); do
+    if [[ "$#" -ge "$idx" ]]; then
+      value="${!idx}"
+    else
+      value=""
+    fi
+    prompt_text="${prompt_text//\$\{$idx\}/$value}"
+    prompt_text="${prompt_text//\$$idx/$value}"
+  done
+  if [[ -n "$prompt_text" ]]; then
+    printf "Prompt:\n%s\n\n" "$prompt_text"
   fi
   if [[ -n "${JAIPH_AGENT_MODEL:-}" ]]; then
-    "$agent_command" --print --output-format stream-json --stream-partial-output --workspace "$workspace_root" --model "$JAIPH_AGENT_MODEL" --trust "$@" \
+    "$agent_command" --print --output-format stream-json --stream-partial-output --workspace "$workspace_root" --model "$JAIPH_AGENT_MODEL" --trust "$prompt_text" \
       | jaiph__stream_json_to_text
     return $?
   fi
-  "$agent_command" --print --output-format stream-json --stream-partial-output --workspace "$workspace_root" --trust "$@" \
+  "$agent_command" --print --output-format stream-json --stream-partial-output --workspace "$workspace_root" --trust "$prompt_text" \
     | jaiph__stream_json_to_text
 }
 

@@ -154,7 +154,8 @@ export function transpileFile(inputFile: string, rootDir: string): string {
       out.push(comment);
     }
     out.push(`${ruleSymbol}__impl() {`);
-    out.push("  set -euo pipefail");
+    out.push("  set -eo pipefail");
+    out.push("  set +u");
     if (rule.commands.length === 0) {
       out.push("  :");
     } else {
@@ -176,7 +177,8 @@ export function transpileFile(inputFile: string, rootDir: string): string {
       out.push(comment);
     }
     out.push(`${functionSymbol}__impl() {`);
-    out.push("  set -euo pipefail");
+    out.push("  set -eo pipefail");
+    out.push("  set +u");
     if (fn.commands.length === 0) {
       out.push("  :");
     } else {
@@ -202,7 +204,8 @@ export function transpileFile(inputFile: string, rootDir: string): string {
       out.push(comment);
     }
     out.push(`${workflowSymbol}__workflow_${workflow.name}__impl() {`);
-    out.push("  set -euo pipefail");
+    out.push("  set -eo pipefail");
+    out.push("  set +u");
     if (workflow.steps.length === 0) {
       out.push("  :");
     } else {
@@ -226,7 +229,7 @@ export function transpileFile(inputFile: string, rootDir: string): string {
             throw jaiphError(ast.filePath, step.loc.line, step.loc.col, "E_PARSE", message);
           }
           const delimiter = promptDelimiter(promptText, step.loc.line);
-          out.push(`  jaiph__prompt <<'${delimiter}'`);
+          out.push(`  jaiph__prompt "$@" <<'${delimiter}'`);
           for (const line of promptText.split("\n")) {
             out.push(line);
           }
