@@ -64,7 +64,11 @@ EOF
 
 jaiph build "${WORK_DIR}/hello.jph"
 run_output="$(jaiph run "${WORK_DIR}/hello.jph")"
-[[ "${run_output}" == *"hello-e2e"* ]]
+if [[ "${run_output}" != *"PASS workflow default"* ]]; then
+  echo "Expected jaiph run to report PASS for hello workflow. Output was:" >&2
+  printf '%s\n' "${run_output}" >&2
+  exit 1
+fi
 
 cp "${ROOT_DIR}/e2e/current_branch.jph" "${WORK_DIR}/current_branch.jph"
 (
