@@ -337,6 +337,51 @@ test("jaiph init creates workspace structure and guidance", () => {
   }
 });
 
+test("jaiph use maps nightly and version refs for reinstallation", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-use-"));
+  try {
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const installSpy = join(root, "install-spy.sh");
+    const outputPath = join(root, "used-ref.txt");
+    writeFileSync(
+      installSpy,
+      [
+        "#!/usr/bin/env bash",
+        "set -euo pipefail",
+        "printf '%s' \"$JAIPH_REPO_REF\" > \"$JAIPH_USE_REF_OUT\"",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(installSpy, 0o755);
+
+    const nightlyResult = spawnSync("node", [cliPath, "use", "nightly"], {
+      encoding: "utf8",
+      cwd: root,
+      env: {
+        ...process.env,
+        JAIPH_INSTALL_COMMAND: `"${installSpy}"`,
+        JAIPH_USE_REF_OUT: outputPath,
+      },
+    });
+    assert.equal(nightlyResult.status, 0, nightlyResult.stderr);
+    assert.equal(readFileSync(outputPath, "utf8"), "main");
+
+    const versionResult = spawnSync("node", [cliPath, "use", "0.2.3"], {
+      encoding: "utf8",
+      cwd: root,
+      env: {
+        ...process.env,
+        JAIPH_INSTALL_COMMAND: `"${installSpy}"`,
+        JAIPH_USE_REF_OUT: outputPath,
+      },
+    });
+    assert.equal(versionResult.status, 0, versionResult.stderr);
+    assert.equal(readFileSync(outputPath, "utf8"), "v0.2.3");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("build accepts files with no workflows", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-no-workflows-"));
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-no-workflows-out-"));

@@ -83,6 +83,13 @@ Verify installation:
 jaiph --version
 ```
 
+Switch installed version:
+
+```bash
+jaiph use nightly   # tracks main branch
+jaiph use 0.2.3     # installs tag v0.2.3
+```
+
 If that fails, check that `~/.local/bin` is in your `PATH` (default install directory).
 
 ### Running a workflow

@@ -138,12 +138,14 @@ function printUsage(): void {
       "  jaiph build [--target <dir>] <path>",
       "  jaiph run [--target <dir>] <file.jph|file.jh|file.jrh> [args...]",
       "  jaiph init [workspace-path]",
+      "  jaiph use <version|nightly>",
       "",
       "Examples:",
       "  jaiph build ./",
       "  jaiph build --target ./build ./",
       "  jaiph run ./flows/review.jph 'review this diff'",
       "  jaiph init",
+      "  jaiph use nightly",
       "",
     ].join("\n"),
   );
@@ -366,6 +368,43 @@ function runWorkflow(rest: string[]): number {
   }
 }
 
+function toInstallRef(version: string): string | undefined {
+  const trimmed = version.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  if (trimmed === "nightly") {
+    return "main";
+  }
+  return `v${trimmed}`;
+}
+
+function runUse(rest: string[]): number {
+  const version = rest[0];
+  if (!version) {
+    process.stderr.write("jaiph use requires a version (e.g. 0.1.0) or 'nightly'\n");
+    return 1;
+  }
+  const ref = toInstallRef(version);
+  if (!ref) {
+    process.stderr.write("jaiph use requires a non-empty version or 'nightly'\n");
+    return 1;
+  }
+  const installCommand = process.env.JAIPH_INSTALL_COMMAND ?? "curl -fsSL https://jaiph.org/install | bash";
+  process.stdout.write(`Reinstalling Jaiph from ref '${ref}'...\n`);
+  const result = spawnSync("bash", ["-c", installCommand], {
+    stdio: "inherit",
+    env: { ...process.env, JAIPH_REPO_REF: ref },
+  });
+  if (typeof result.status === "number") {
+    return result.status;
+  }
+  if (result.error) {
+    process.stderr.write(`${result.error.message}\n`);
+  }
+  return 1;
+}
+
 function main(argv: string[]): number {
   const [, , cmd, ...rest] = argv;
   if (!cmd || cmd === "--help" || cmd === "-h") {
@@ -381,6 +420,9 @@ function main(argv: string[]): number {
     }
     if (cmd === "init") {
       return runInit(rest);
+    }
+    if (cmd === "use") {
+      return runUse(rest);
     }
     process.stderr.write(`Unknown command: ${cmd}\n`);
     printUsage();
