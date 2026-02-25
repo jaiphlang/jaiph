@@ -61,24 +61,127 @@ function collectWorkflowChildren(mod: jaiphModule, workflowName: string): Array<
   return items;
 }
 
-function styleTreeLabel(label: string): string {
+type TreeRow = {
+  rawLabel: string;
+  prefix: string;
+  branch?: string;
+  isRoot: boolean;
+};
+
+function buildRunTreeRows(mod: jaiphModule, rootLabel = "workflow default"): TreeRow[] {
+  const rows: TreeRow[] = [{ rawLabel: rootLabel, prefix: "", isRoot: true }];
+  const visited = new Set<string>(["default"]);
+  const renderChildren = (workflowName: string, prefix: string): void => {
+    const children = collectWorkflowChildren(mod, workflowName);
+    for (let i = 0; i < children.length; i += 1) {
+      const child = children[i];
+      const isLast = i === children.length - 1;
+      const branch = isLast ? "└── " : "├── ";
+      rows.push({ rawLabel: child.label, prefix, branch, isRoot: false });
+      if (!child.nested) {
+        continue;
+      }
+      if (child.nested.includes(".") || visited.has(child.nested)) {
+        continue;
+      }
+      visited.add(child.nested);
+      renderChildren(child.nested, `${prefix}${isLast ? "    " : "│   "}`);
+    }
+  };
+  renderChildren("default", "");
+  return rows;
+}
+
+function parseLabel(rawLabel: string): { kind: string; name: string } {
+  const firstSpace = rawLabel.indexOf(" ");
+  if (firstSpace === -1) {
+    return { kind: "step", name: rawLabel };
+  }
+  return {
+    kind: rawLabel.slice(0, firstSpace),
+    name: rawLabel.slice(firstSpace + 1),
+  };
+}
+
+function parseStepMarker(line: string): { funcName: string; status: number; elapsedSec: number } | undefined {
+  const prefix = "__JAIPH_STEP_END__|";
+  if (!line.startsWith(prefix)) {
+    return undefined;
+  }
+  const payload = line.slice(prefix.length).split("|");
+  if (payload.length !== 3) {
+    return undefined;
+  }
+  const status = Number.parseInt(payload[1], 10);
+  const elapsedSec = Number.parseInt(payload[2], 10);
+  if (Number.isNaN(status) || Number.isNaN(elapsedSec)) {
+    return undefined;
+  }
+  return { funcName: payload[0], status, elapsedSec };
+}
+
+function parseFunctionRef(funcName: string): { kind: string; name: string } {
+  if (funcName.includes("__workflow_")) {
+    return { kind: "workflow", name: funcName.slice(funcName.lastIndexOf("__workflow_") + "__workflow_".length) };
+  }
+  if (funcName.includes("__rule_")) {
+    return { kind: "rule", name: funcName.slice(funcName.lastIndexOf("__rule_") + "__rule_".length) };
+  }
+  if (funcName.includes("__function_")) {
+    return { kind: "function", name: funcName.slice(funcName.lastIndexOf("__function_") + "__function_".length) };
+  }
+  if (funcName === "jaiph__prompt") {
+    return { kind: "prompt", name: "prompt" };
+  }
+  return { kind: "step", name: funcName };
+}
+
+type RowState = { status: "pending" | "done" | "failed"; elapsedSec?: number };
+
+function styleKeywordLabel(rawLabel: string): string {
+  const { kind, name } = parseLabel(rawLabel);
   const enabled = process.stdout.isTTY && process.env.NO_COLOR === undefined;
   if (!enabled) {
-    return label;
+    return `${kind} ${name}`;
   }
-  if (label.startsWith("workflow ")) {
-    return `\u001b[1m\u001b[36m${label}\u001b[0m`;
+  return `\u001b[1m${kind}\u001b[0m ${name}`;
+}
+
+function styleDim(text: string): string {
+  const enabled = process.stdout.isTTY && process.env.NO_COLOR === undefined;
+  if (!enabled) {
+    return text;
   }
-  if (label.startsWith("rule ")) {
-    return `\u001b[1m\u001b[35m${label}\u001b[0m`;
+  return `\u001b[2m${text}\u001b[0m`;
+}
+
+function renderProgressTree(
+  rows: TreeRow[],
+  states: RowState[],
+  rootElapsedSec?: number,
+): string {
+  const lines: string[] = [];
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
+    if (row.isRoot) {
+      const rootStatus = typeof rootElapsedSec === "number" ? ` ${styleDim(`(${rootElapsedSec}s)`)}` : "";
+      lines.push(`${styleKeywordLabel(row.rawLabel)}${rootStatus}`);
+      continue;
+    }
+    const state = states[i];
+    const suffix =
+      state.status === "pending"
+        ? styleDim("(pending)")
+        : state.status === "failed"
+          ? styleDim(`(${state.elapsedSec ?? 0}s failed)`)
+          : styleDim(`(${state.elapsedSec ?? 0}s)`);
+    lines.push(`${row.prefix}${row.branch ?? ""}${styleKeywordLabel(row.rawLabel)} ${suffix}`);
   }
-  if (label.startsWith("function ")) {
-    return `\u001b[1m\u001b[33m${label}\u001b[0m`;
-  }
-  if (label.startsWith("prompt ")) {
-    return `\u001b[1m\u001b[34m${label}\u001b[0m`;
-  }
-  return label;
+  return lines.join("\n");
+}
+
+function styleTreeLabel(label: string): string {
+  return styleKeywordLabel(label);
 }
 
 function renderRunTree(mod: jaiphModule, rootLabel = "workflow default"): string {
@@ -368,7 +471,9 @@ async function runWorkflow(rest: string[]): Promise<number> {
   const shouldCleanup = !target;
   try {
     const mod = parsejaiph(readFileSync(inputAbs, "utf8"), inputAbs);
-    process.stdout.write(`${renderRunTree(mod)}\n`);
+    const treeRows = buildRunTreeRows(mod);
+    const rowStates: RowState[] = treeRows.map((row) => (row.isRoot ? { status: "done" } : { status: "pending" }));
+    process.stdout.write(`${renderProgressTree(treeRows, rowStates)}\n`);
 
     const results = build(inputAbs, outDir);
     if (results.length !== 1) {
@@ -428,6 +533,7 @@ async function runWorkflow(rest: string[]): Promise<number> {
       },
     );
     let capturedStderr = "";
+    let stderrBuffer = "";
     let counterVisible = false;
     const clearCounter = (): void => {
       if (!counterVisible || !process.stderr.isTTY) {
@@ -444,6 +550,36 @@ async function runWorkflow(rest: string[]): Promise<number> {
       process.stderr.write(`\r${colorPalette().dim}… running ${seconds}s${colorPalette().reset}`);
       counterVisible = true;
     };
+    const applyStepUpdate = (funcName: string, status: number, elapsedSec: number): void => {
+      const parsed = parseFunctionRef(funcName);
+      if (parsed.kind === "workflow" && parsed.name === "default") {
+        return;
+      }
+      let changed = false;
+      for (let i = 1; i < treeRows.length; i += 1) {
+        const label = parseLabel(treeRows[i].rawLabel);
+        const nameMatches = label.name === parsed.name || label.name.endsWith(`.${parsed.name}`);
+        if (label.kind === parsed.kind && nameMatches && rowStates[i].status === "pending") {
+          rowStates[i] = { status: status === 0 ? "done" : "failed", elapsedSec };
+          changed = true;
+          break;
+        }
+      }
+      if (changed) {
+        process.stdout.write(`${renderProgressTree(treeRows, rowStates)}\n`);
+      }
+    };
+    const handleStderrLine = (line: string): void => {
+      const marker = parseStepMarker(line);
+      if (marker) {
+        applyStepUpdate(marker.funcName, marker.status, marker.elapsedSec);
+        return;
+      }
+      if (line.length > 0) {
+        capturedStderr += `${line}\n`;
+        process.stderr.write(`${line}\n`);
+      }
+    };
     const counterTimer = setInterval(renderCounter, 1000);
     execResult.stdout?.setEncoding("utf8");
     execResult.stderr?.setEncoding("utf8");
@@ -453,8 +589,14 @@ async function runWorkflow(rest: string[]): Promise<number> {
     });
     execResult.stderr?.on("data", (chunk: string) => {
       clearCounter();
-      capturedStderr += chunk;
-      process.stderr.write(chunk);
+      stderrBuffer += chunk;
+      let newlineIndex = stderrBuffer.indexOf("\n");
+      while (newlineIndex !== -1) {
+        const line = stderrBuffer.slice(0, newlineIndex).replace(/\r$/, "");
+        stderrBuffer = stderrBuffer.slice(newlineIndex + 1);
+        handleStderrLine(line);
+        newlineIndex = stderrBuffer.indexOf("\n");
+      }
     });
     const childExit = await new Promise<{ status: number; signal: NodeJS.Signals | null }>((resolveExit) => {
       execResult.on("close", (code, signal) => {
@@ -463,6 +605,10 @@ async function runWorkflow(rest: string[]): Promise<number> {
     });
     clearInterval(counterTimer);
     clearCounter();
+    if (stderrBuffer.length > 0) {
+      handleStderrLine(stderrBuffer.replace(/\r$/, ""));
+      stderrBuffer = "";
+    }
     if (childExit.signal && capturedStderr.trim().length === 0) {
       capturedStderr = `Process terminated by signal ${childExit.signal}`;
     }
@@ -481,7 +627,7 @@ async function runWorkflow(rest: string[]): Promise<number> {
     }
     const resolvedStatus = childExit.status;
 
-    process.stdout.write(`${renderRunTree(mod, `workflow default (${elapsedMs}ms)`)}\n`);
+    process.stdout.write(`${renderProgressTree(treeRows, rowStates, Math.floor(elapsedMs / 1000))}\n`);
 
     const palette = colorPalette();
     if (resolvedStatus === 0) {
