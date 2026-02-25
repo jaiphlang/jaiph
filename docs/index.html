@@ -658,16 +658,19 @@ jaiph use 0.2.3</code></pre>
                 <p>In case of an error, check if <code>~/.local/bin</code> is in your PATH. This is the default
                     installation directory.</p>
                 <h3>Running a workflow</h3>
-                <pre><code class="language-bash">jaiph run path/to/main.jph "feature request or task"</code></pre>
-                <p><strong>Entrypoint resolution:</strong> <code>jaiph run path/to/file.jph</code> executes workflow
-                    <code>default</code>. Files with no workflows are valid for <code>jaiph build</code>, but
-                    <code>jaiph run</code> requires <code>workflow default</code>.
+                <pre><code class="language-bash">./path/to/main.jph "feature request or task"</code></pre>
+                <p><strong>Argument passing:</strong> values map like Bash scripts (<code>$1</code>, <code>$2</code>,
+                    <code>"$@"</code>).
+                </p>
+                <p><strong>Entrypoint resolution:</strong> executable <code>.jph</code> files with shebang run
+                    <code>workflow default</code>. You can also use <code>jaiph run path/to/file.jph</code> with the
+                    same argument semantics.
                 </p>
                 <h3>Initialize Jaiph workspace</h3>
                 <pre><code class="language-bash">jaiph init</code></pre>
                 <p>This creates <code>.jaiph/bootstrap.jph</code> and <code>.jaiph/config.toml</code>.</p>
                 <p>Then run:</p>
-                <pre><code class="language-bash">jaiph run .jaiph/bootstrap.jph</code></pre>
+                <pre><code class="language-bash">./.jaiph/bootstrap.jph</code></pre>
                 <p>This asks an agent to detect project configuration and bootstrap recommended Jaiph workflows for
                     feature implementation.</p>
                 <p>Tip: add <code>.jaiph/runs/</code> to your <code>.gitignore</code>.</p>
@@ -680,6 +683,10 @@ jaiph use 0.2.3</code></pre>
                 <p>Local config overrides global config. For supported keys and precedence, read
                     <a href="https://github.com/jaiphlang/jaiph/blob/main/docs/configuration.md" target="_blank"
                         rel="noopener noreferrer">configuration docs</a>.
+                </p>
+                <p>For command syntax and flags, read
+                    <a href="https://github.com/jaiphlang/jaiph/blob/main/docs/cli.md" target="_blank"
+                        rel="noopener noreferrer">CLI reference</a>.
                 </p>
             </div>
         </section>
@@ -741,6 +748,9 @@ jaiph use 0.2.3</code></pre>
                     ·
                     <a href="https://github.com/jaiphlang/jaiph/blob/main/docs/configuration.md" target="_blank"
                         rel="noopener noreferrer">Configuration</a>
+                    ·
+                    <a href="https://github.com/jaiphlang/jaiph/blob/main/docs/cli.md" target="_blank"
+                        rel="noopener noreferrer">CLI reference</a>
                 </p>
                 <a href="https://github.com/jaiphlang/jaiph/tree/main/docs" target="_blank" rel="noopener noreferrer"
                     class="button">Open docs repository</a>

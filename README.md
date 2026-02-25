@@ -98,10 +98,13 @@ If that fails, check that `~/.local/bin` is in your `PATH` (default install dire
 ### Running a workflow
 
 ```bash
-jaiph run path/to/main.jph "feature request or task"
+./path/to/main.jph "feature request or task"
 ```
 
-Entrypoint resolution: `jaiph run path/to/file.jph` executes workflow `default`. Files without workflows are valid for `jaiph build`, but `jaiph run` requires `workflow default`.
+Arguments are passed exactly like Bash scripts (`$1`, `$2`, `"$@"`).
+
+Entrypoint resolution: executable `.jph` files (with `#!/usr/bin/env jaiph`) run `workflow default`.  
+`jaiph run path/to/file.jph` is also supported and follows the same argument semantics.
 
 ### Initialize Jaiph workspace
 
@@ -114,7 +117,7 @@ This creates `.jaiph/bootstrap.jph`.
 Then run:
 
 ```bash
-jaiph run .jaiph/bootstrap.jph
+./.jaiph/bootstrap.jph
 ```
 
 This asks an agent to detect project configuration and bootstrap recommended Jaiph workflows for feature implementation.
@@ -129,6 +132,10 @@ Jaiph supports both global and local TOML config files:
 - Local: `.jaiph/config.toml` (in your workspace)
 
 Local config overrides global config. See `docs/configuration.md` for full details and examples.
+
+### CLI reference
+
+See `docs/cli.md` for command syntax, examples, and supported environment variables.
 
 ## Language Primitives
 
@@ -163,3 +170,4 @@ Known limitations and gotchas:
 - Grammar: `docs/grammar.md`
 - Agent bootstrap skill: `docs/jaiph-skill.md`
 - Configuration: `docs/configuration.md`
+- CLI: `docs/cli.md`

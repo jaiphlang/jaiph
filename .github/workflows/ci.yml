@@ -24,8 +24,12 @@ jobs:
         run: npm test
 
   e2e:
-    name: E2E install and CLI workflow
-    runs-on: ubuntu-latest
+    name: E2E install and CLI workflow (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     steps:
       - name: Checkout
         uses: actions/checkout@v4

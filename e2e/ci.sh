@@ -68,7 +68,14 @@ run_output="$(jaiph run "${WORK_DIR}/hello.jph")"
 cp "${ROOT_DIR}/e2e/current_branch.jph" "${WORK_DIR}/current_branch.jph"
 (
   cd "${WORK_DIR}"
-  git init >/dev/null 2>&1
+  if git init -b main >/dev/null 2>&1; then
+    :
+  else
+    git init >/dev/null 2>&1
+  fi
   current_branch="$(git branch --show-current)"
+  if [[ -z "${current_branch}" ]]; then
+    current_branch="main"
+  fi
   jaiph run "./current_branch.jph" "${current_branch}"
 )
