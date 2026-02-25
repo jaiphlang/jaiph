@@ -62,8 +62,15 @@ jaiph__stream_json_to_text() {
 jaiph__prompt__impl() {
   local workspace_root
   local agent_command
+  local stdin_prompt
   workspace_root="$(jaiph__workspace_root)"
   agent_command="${JAIPH_AGENT_COMMAND:-cursor-agent}"
+  if [[ "$#" -eq 0 ]]; then
+    stdin_prompt="$(cat)"
+    if [[ -n "$stdin_prompt" ]]; then
+      set -- "$stdin_prompt"
+    fi
+  fi
   if [[ "$#" -gt 0 ]]; then
     printf "Prompt:\n%s\n\n" "$*"
   fi

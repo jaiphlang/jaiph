@@ -42,7 +42,7 @@ test("build transpiles .jph into strict bash with retry flow", () => {
     assert.match(generated, /jaiph__run_step main__rule_project_ready jaiph__execute_readonly main__rule_project_ready__impl/);
     assert.match(generated, /if ! main__rule_project_ready; then/);
     assert.match(generated, /bootstrap_project__workflow_nodejs/);
-    assert.match(generated, /jaiph__prompt "\$\(cat <<'__JAIPH_PROMPT_/);
+    assert.match(generated, /jaiph__prompt <<'__JAIPH_PROMPT_/);
     assert.match(generated, /main__rule_build_passes\(\)/);
     assert.match(generated, /tools__security__rule_scan_passes/);
     assert.match(generated, /main__workflow_update_docs/);
@@ -263,6 +263,59 @@ test("jaiph run fails fast on command errors inside workflow", () => {
     assert.match(runResult.stderr, /✗ FAIL workflow default \(\d+ms\)/);
     assert.match(runResult.stderr, /Logs: /);
     assert.match(runResult.stderr, /Summary: /);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph run fails when runtime emits non-xtrace stderr", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-runtime-stderr-"));
+  try {
+    const filePath = join(root, "runtime-stderr.jph");
+    writeFileSync(
+      filePath,
+      [
+        "workflow default {",
+        "  :",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const stdlibPath = join(root, "jaiph_stdlib.sh");
+    writeFileSync(
+      stdlibPath,
+      [
+        "#!/usr/bin/env bash",
+        "jaiph__runtime_api() { echo 1; }",
+        "jaiph__run_step() {",
+        "  local _name=\"$1\"",
+        "  shift || true",
+        "  \"$@\"",
+        "}",
+        "jaiph__execute_readonly() {",
+        "  shift || true",
+        "  \"$@\"",
+        "}",
+        "jaiph__prompt() {",
+        "  :",
+        "}",
+        "echo runtime-broken >&2",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(stdlibPath, 0o755);
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runResult = spawnSync("node", [cliPath, "run", filePath], {
+      encoding: "utf8",
+      cwd: root,
+      env: { ...process.env, JAIPH_STDLIB: stdlibPath },
+    });
+
+    assert.equal(runResult.status, 1);
+    assert.match(runResult.stderr, /runtime-broken/);
+    assert.match(runResult.stderr, /✗ FAIL workflow default \(\d+ms\)/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
