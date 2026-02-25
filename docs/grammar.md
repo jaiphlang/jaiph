@@ -15,12 +15,15 @@ This document reflects parser and transpiler behavior in the current codebase (`
 ```ebnf
 file            = { top_level } ;
 
-top_level       = import_stmt | rule_decl | workflow_decl ;
+top_level       = import_stmt | rule_decl | function_decl | workflow_decl ;
 
 import_stmt     = "import" string "as" IDENT ;
 
 rule_decl       = [ "export" ] "rule" IDENT "{" { rule_line } "}" ;
 rule_line       = comment_line | command_line ;
+
+function_decl   = "function" IDENT [ "()" ] "{" { function_line } "}" ;
+function_line   = comment_line | command_line ;
 
 workflow_decl   = [ "export" ] "workflow" IDENT "{" { workflow_step } "}" ;
 
@@ -47,10 +50,12 @@ shell_stmt      = command_line ;
 
 1. `ensure` accepts argument tail and forwards it as-is (example: `ensure check_branch "$1"`).
 2. Rules can consume forwarded positional parameters as shell args (`$1`, `$2`, `"$@"`) without special declaration syntax.
-3. `run` inside a workflow must target a workflow reference (`foo` or `alias.foo`), not an arbitrary shell command.
-4. Inside a `rule`, `run some shell` is treated as command shorthand and transpiles as the shell command.
-5. `prompt` supports multiline quoted text and compiles to `jaiph__prompt ...`.
-6. Workflow and rule declarations support optional `export` keyword.
+3. Top-level `function` blocks define writable shell functions and are namespaced in transpiled output.
+4. Original function names remain callable via generated shims that invoke the namespaced wrapper.
+5. `run` inside a workflow must target a workflow reference (`foo` or `alias.foo`), not an arbitrary shell command.
+6. Inside a `rule`, `run some shell` is treated as command shorthand and transpiles as the shell command.
+7. `prompt` supports multiline quoted text and compiles to `jaiph__prompt ...`.
+8. Workflow and rule declarations support optional `export` keyword.
 
 ## Validation Rules
 
@@ -70,4 +75,8 @@ shell_stmt      = command_line ;
 3. Each workflow transpiles into:
    - `<module>__workflow_<name>__impl`
    - `<module>__workflow_<name>` wrapper using `jaiph__run_step`.
-4. `if ! ensure X; then run Y; fi` remains explicit Bash control flow using transpiled symbols.
+4. Each top-level function transpiles into:
+   - `<module>__function_<name>__impl`
+   - `<module>__function_<name>` wrapper using `jaiph__run_step`
+   - `<name>` shim forwarding to the namespaced wrapper.
+5. `if ! ensure X; then run Y; fi` remains explicit Bash control flow using transpiled symbols.

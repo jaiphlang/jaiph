@@ -33,6 +33,13 @@ export interface WorkflowDef {
   loc: SourceLoc;
 }
 
+export interface FunctionDef {
+  name: string;
+  comments: string[];
+  commands: string[];
+  loc: SourceLoc;
+}
+
 export type WorkflowStepDef =
   | {
       type: "ensure";
@@ -64,6 +71,7 @@ export interface jaiphModule {
   imports: ImportDef[];
   exports: string[];
   rules: RuleDef[];
+  functions: FunctionDef[];
   workflows: WorkflowDef[];
 }
 

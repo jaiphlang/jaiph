@@ -589,3 +589,70 @@ test("build transpiles ensure statements with arguments", () => {
     rmSync(outDir, { recursive: true, force: true });
   }
 });
+
+test("build supports top-level functions with namespaced wrappers", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-functions-"));
+  const outDir = mkdtempSync(join(tmpdir(), "jaiph-functions-out-"));
+  try {
+    const filePath = join(root, "entry.jph");
+    writeFileSync(
+      filePath,
+      [
+        "function changed_files() {",
+        "  echo from-function",
+        "}",
+        "",
+        "workflow default {",
+        "  VALUE=\"$(changed_files)\"",
+        "  printf '%s\\n' \"$VALUE\"",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const results = build(filePath, outDir);
+    assert.equal(results.length, 1);
+    assert.match(results[0].bash, /entry__function_changed_files__impl\(\) \{/);
+    assert.match(results[0].bash, /entry__function_changed_files\(\) \{/);
+    assert.match(results[0].bash, /jaiph__run_step entry__function_changed_files entry__function_changed_files__impl "\$@"/);
+    assert.match(results[0].bash, /changed_files\(\) \{/);
+    assert.match(results[0].bash, /entry__function_changed_files "\$@"/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outDir, { recursive: true, force: true });
+  }
+});
+
+test("jaiph run tree includes function calls from workflow shell steps", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-function-tree-"));
+  try {
+    const filePath = join(root, "entry.jph");
+    writeFileSync(
+      filePath,
+      [
+        "function changed_files() {",
+        "  echo from-function",
+        "}",
+        "",
+        "workflow default {",
+        "  VALUE=\"$(changed_files)\"",
+        "  printf '%s\\n' \"$VALUE\"",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runResult = spawnSync("node", [cliPath, "run", filePath], {
+      encoding: "utf8",
+      cwd: root,
+    });
+
+    assert.equal(runResult.status, 0, runResult.stderr);
+    assert.match(runResult.stdout, /workflow default/);
+    assert.match(runResult.stdout, /function changed_files/);
+    assert.match(runResult.stdout, /from-function/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

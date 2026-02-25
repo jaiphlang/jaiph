@@ -26,6 +26,17 @@ function collectWorkflowChildren(mod: jaiphModule, workflowName: string): Array<
   if (!workflow) {
     return [];
   }
+  const functionNames = mod.functions.map((item) => item.name);
+  const collectFunctionCalls = (command: string): string[] => {
+    const hits: string[] = [];
+    for (const fnName of functionNames) {
+      const pattern = new RegExp(`(^|[^A-Za-z0-9_])${fnName}(\\s|\\)|$)`);
+      if (pattern.test(command)) {
+        hits.push(fnName);
+      }
+    }
+    return hits;
+  };
   const items: Array<{ label: string; nested?: string }> = [];
   for (const step of workflow.steps) {
     if (step.type === "ensure") {
@@ -40,6 +51,11 @@ function collectWorkflowChildren(mod: jaiphModule, workflowName: string): Array<
       items.push({ label: `rule ${step.ensureRef.value}` });
       items.push({ label: `workflow ${step.runWorkflow.value}`, nested: step.runWorkflow.value });
       continue;
+    }
+    if (step.type === "shell") {
+      for (const fnName of collectFunctionCalls(step.command)) {
+        items.push({ label: `function ${fnName}` });
+      }
     }
   }
   return items;

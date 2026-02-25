@@ -1,4 +1,4 @@
-import { jaiphModule, RuleDef, WorkflowDef } from "./types";
+import { FunctionDef, jaiphModule, RuleDef, WorkflowDef } from "./types";
 import { jaiphError } from "./errors";
 
 function fail(filePath: string, message: string, lineNo: number, col = 1): never {
@@ -32,7 +32,7 @@ function hasUnescapedClosingQuote(text: string, startIndex: number): boolean {
 
 export function parsejaiph(source: string, filePath: string): jaiphModule {
   const lines = source.split(/\r?\n/);
-  const mod: jaiphModule = { filePath, imports: [], exports: [], rules: [], workflows: [] };
+  const mod: jaiphModule = { filePath, imports: [], exports: [], rules: [], functions: [], workflows: [] };
   let i = 0;
   let pendingTopLevelComments: string[] = [];
 
@@ -46,6 +46,12 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
     name,
     comments: [],
     steps: [],
+    loc: { line, col: 1 },
+  });
+  const openFunction = (name: string, line: number): FunctionDef => ({
+    name,
+    comments: [],
+    commands: [],
     loc: { line, col: 1 },
   });
 
@@ -120,6 +126,42 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
       }
       i += 1;
       mod.rules.push(rule);
+      continue;
+    }
+
+    if (line.includes("function ")) {
+      const match = line.match(/^function\s+([A-Za-z_][A-Za-z0-9_]*)(?:\(\))?\s*\{$/);
+      if (!match) {
+        fail(filePath, "invalid function declaration", lineNo);
+      }
+      const fn = openFunction(match[1], lineNo);
+      fn.comments = pendingTopLevelComments;
+      pendingTopLevelComments = [];
+      for (; i < lines.length; i += 1) {
+        const innerNo = i + 1;
+        const innerRaw = lines[i];
+        const inner = innerRaw.trim();
+        if (!inner) {
+          continue;
+        }
+        if (inner === "}") {
+          break;
+        }
+        if (inner.startsWith("#")) {
+          fn.commands.push(innerRaw.trim());
+          continue;
+        }
+        const cmd = inner.startsWith("run ") ? inner.slice("run ".length).trim() : inner;
+        if (!cmd) {
+          fail(filePath, "function command is required", innerNo);
+        }
+        fn.commands.push(stripQuotes(cmd));
+      }
+      if (i >= lines.length) {
+        fail(filePath, `unterminated function block: ${fn.name}`, lineNo);
+      }
+      i += 1;
+      mod.functions.push(fn);
       continue;
     }
 

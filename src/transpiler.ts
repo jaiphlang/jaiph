@@ -103,6 +103,32 @@ export function transpileFile(inputFile: string, rootDir: string): string {
     out.push("");
   }
 
+  for (const fn of ast.functions) {
+    const functionSymbol = `${workflowSymbol}__function_${fn.name}`;
+    for (const comment of fn.comments) {
+      out.push(comment);
+    }
+    out.push(`${functionSymbol}__impl() {`);
+    if (fn.commands.length === 0) {
+      out.push("  :");
+    } else {
+      for (const cmd of fn.commands) {
+        out.push(`  ${cmd}`);
+      }
+    }
+    out.push("}");
+    out.push("");
+    out.push(`${functionSymbol}() {`);
+    out.push(`  jaiph__run_step ${functionSymbol} ${functionSymbol}__impl "$@"`);
+    out.push("}");
+    out.push("");
+    // Keep author-friendly call sites working while still namespacing internals.
+    out.push(`${fn.name}() {`);
+    out.push(`  ${functionSymbol} "$@"`);
+    out.push("}");
+    out.push("");
+  }
+
   for (const workflow of ast.workflows) {
     for (const comment of workflow.comments) {
       out.push(comment);
