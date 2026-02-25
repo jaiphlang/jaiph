@@ -52,6 +52,10 @@ jaiph__timestamp_utc() {
   date -u +"%Y-%m-%dT%H-%M-%SZ"
 }
 
+jaiph__style_enabled() {
+  [[ -t 1 && -z "${NO_COLOR:-}" ]]
+}
+
 jaiph__workspace_root() {
   if [[ -n "${JAIPH_WORKSPACE:-}" ]]; then
     printf "%s" "$JAIPH_WORKSPACE"
@@ -113,7 +117,14 @@ jaiph__run_step() {
     return 1
   fi
   jaiph__init_run_tracking || return 1
-  local step_started_at safe_name out_file err_file status had_errexit
+  local step_started_at safe_name out_file err_file status had_errexit step_started_seconds step_elapsed_seconds
+  local step_kind step_display_name display_label color_kind color_pass color_fail style_bold style_reset
+  step_started_seconds="$SECONDS"
+  color_kind=""
+  color_pass=""
+  color_fail=""
+  style_bold=""
+  style_reset=""
   step_started_at="$(jaiph__timestamp_utc)"
   safe_name="$(jaiph__sanitize_name "$func_name")"
   out_file="$JAIPH_RUN_DIR/${step_started_at}-${safe_name}.out"
@@ -134,6 +145,42 @@ jaiph__run_step() {
   fi
   if [[ -s "$err_file" ]]; then
     cat "$err_file" >&2
+  fi
+  step_kind="step"
+  step_display_name="$func_name"
+  if [[ "$func_name" == *"__workflow_"* ]]; then
+    step_kind="workflow"
+    step_display_name="${func_name##*__workflow_}"
+  elif [[ "$func_name" == *"__rule_"* ]]; then
+    step_kind="rule"
+    step_display_name="${func_name##*__rule_}"
+  elif [[ "$func_name" == *"__function_"* ]]; then
+    step_kind="function"
+    step_display_name="${func_name##*__function_}"
+  elif [[ "$func_name" == "jaiph__prompt" ]]; then
+    step_kind="prompt"
+    step_display_name="prompt"
+  fi
+  display_label="${step_kind} ${step_display_name}"
+  if jaiph__style_enabled; then
+    style_bold=$'\033[1m'
+    style_reset=$'\033[0m'
+    color_pass=$'\033[0;32m'
+    color_fail=$'\033[0;31m'
+    case "$step_kind" in
+      workflow) color_kind=$'\033[0;36m' ;;
+      rule) color_kind=$'\033[0;35m' ;;
+      function) color_kind=$'\033[0;33m' ;;
+      prompt) color_kind=$'\033[0;34m' ;;
+      *) color_kind="" ;;
+    esac
+    display_label="${style_bold}${color_kind}${display_label}${style_reset}"
+  fi
+  step_elapsed_seconds="$((SECONDS - step_started_seconds))"
+  if [[ "$status" -eq 0 ]]; then
+    echo "${color_pass}✓ PASS${style_reset} ${display_label} (${step_elapsed_seconds}s)"
+  else
+    echo "${color_fail}✗ FAIL${style_reset} ${display_label} (${step_elapsed_seconds}s)" >&2
   fi
   return "$status"
 }

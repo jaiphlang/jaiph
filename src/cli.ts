@@ -2,7 +2,7 @@
 import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { build, workflowSymbolForFile } from "./transpiler";
 import { parsejaiph } from "./parser";
 import { jaiphModule } from "./types";
@@ -61,8 +61,28 @@ function collectWorkflowChildren(mod: jaiphModule, workflowName: string): Array<
   return items;
 }
 
+function styleTreeLabel(label: string): string {
+  const enabled = process.stdout.isTTY && process.env.NO_COLOR === undefined;
+  if (!enabled) {
+    return label;
+  }
+  if (label.startsWith("workflow ")) {
+    return `\u001b[1m\u001b[36m${label}\u001b[0m`;
+  }
+  if (label.startsWith("rule ")) {
+    return `\u001b[1m\u001b[35m${label}\u001b[0m`;
+  }
+  if (label.startsWith("function ")) {
+    return `\u001b[1m\u001b[33m${label}\u001b[0m`;
+  }
+  if (label.startsWith("prompt ")) {
+    return `\u001b[1m\u001b[34m${label}\u001b[0m`;
+  }
+  return label;
+}
+
 function renderRunTree(mod: jaiphModule, rootLabel = "workflow default"): string {
-  const lines = [rootLabel];
+  const lines = [styleTreeLabel(rootLabel)];
   const visited = new Set<string>(["default"]);
 
   const renderChildren = (workflowName: string, prefix: string): void => {
@@ -71,7 +91,7 @@ function renderRunTree(mod: jaiphModule, rootLabel = "workflow default"): string
       const child = children[i];
       const isLast = i === children.length - 1;
       const branch = isLast ? "└── " : "├── ";
-      lines.push(`${prefix}${branch}${child.label}`);
+      lines.push(`${prefix}${branch}${styleTreeLabel(child.label)}`);
       if (!child.nested) {
         continue;
       }
@@ -327,7 +347,7 @@ function runInit(rest: string[]): number {
   return 0;
 }
 
-function runWorkflow(rest: string[]): number {
+async function runWorkflow(rest: string[]): Promise<number> {
   const { target, positional } = parseArgs(rest);
   const input = positional[0];
   const runArgs = positional.slice(1);
@@ -358,6 +378,7 @@ function runWorkflow(rest: string[]): number {
     const builtPath = results[0].outputPath;
     const workflowSymbol = workflowSymbolForFile(inputAbs, dirname(inputAbs));
     const command = [
+      'meta_file="$1"; shift',
       'built_script="$1"; shift',
       'workflow_symbol="$1"; shift',
       'source "$built_script"',
@@ -373,8 +394,10 @@ function runWorkflow(rest: string[]): number {
       '"$entrypoint" "$@"',
       "status=$?",
       "set -e",
-      'echo "__JAIPH_META_STATUS__:${status}"',
-      'echo "__JAIPH_META_RUN_DIR__:${JAIPH_RUN_DIR:-}"',
+      'if [[ -n "${meta_file:-}" ]]; then',
+      '  printf "status=%s\\n" "$status" > "$meta_file"',
+      '  printf "run_dir=%s\\n" "${JAIPH_RUN_DIR:-}" >> "$meta_file"',
+      "fi",
       'exit "$status"',
     ].join("\n");
     const startedAt = Date.now();
@@ -394,41 +417,81 @@ function runWorkflow(rest: string[]): number {
     if (runtimeEnv.JAIPH_STDLIB === undefined) {
       runtimeEnv.JAIPH_STDLIB = join(__dirname, "jaiph_stdlib.sh");
     }
-    const execResult = spawnSync(
+    const metaFile = join(outDir, `.jaiph-run-meta-${Date.now()}-${process.pid}.txt`);
+    const execResult = spawn(
       "bash",
-      ["-c", command, "jaiph-run", builtPath, workflowSymbol, ...runArgs],
+      ["-c", command, "jaiph-run", metaFile, builtPath, workflowSymbol, ...runArgs],
       {
         stdio: "pipe",
-        encoding: "utf8",
         cwd: workspaceRoot,
         env: runtimeEnv,
       },
     );
-    const elapsedMs = Date.now() - startedAt;
-    const stdoutMeta = extractRunMeta(execResult.stdout ?? "");
-    const stderrMeta = extractRunMeta(execResult.stderr ?? "");
-    const runDir = stdoutMeta.runDir ?? stderrMeta.runDir;
-    const resolvedStatus =
-      typeof execResult.status === "number" ? execResult.status : (stdoutMeta.status ?? stderrMeta.status ?? 1);
-
-    if (stdoutMeta.output) {
-      process.stdout.write(`${stdoutMeta.output}\n`);
+    let capturedStderr = "";
+    let counterVisible = false;
+    const clearCounter = (): void => {
+      if (!counterVisible || !process.stderr.isTTY) {
+        return;
+      }
+      process.stderr.write("\r\x1b[2K");
+      counterVisible = false;
+    };
+    const renderCounter = (): void => {
+      if (!process.stderr.isTTY) {
+        return;
+      }
+      const seconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+      process.stderr.write(`\r${colorPalette().dim}… running ${seconds}s${colorPalette().reset}`);
+      counterVisible = true;
+    };
+    const counterTimer = setInterval(renderCounter, 1000);
+    execResult.stdout?.setEncoding("utf8");
+    execResult.stderr?.setEncoding("utf8");
+    execResult.stdout?.on("data", (chunk: string) => {
+      clearCounter();
+      process.stdout.write(chunk);
+    });
+    execResult.stderr?.on("data", (chunk: string) => {
+      clearCounter();
+      capturedStderr += chunk;
+      process.stderr.write(chunk);
+    });
+    const childExit = await new Promise<{ status: number; signal: NodeJS.Signals | null }>((resolveExit) => {
+      execResult.on("close", (code, signal) => {
+        resolveExit({ status: typeof code === "number" ? code : 1, signal });
+      });
+    });
+    clearInterval(counterTimer);
+    clearCounter();
+    if (childExit.signal && capturedStderr.trim().length === 0) {
+      capturedStderr = `Process terminated by signal ${childExit.signal}`;
     }
+    const elapsedMs = Date.now() - startedAt;
+    let runDir: string | undefined;
+    if (existsSync(metaFile)) {
+      const metaLines = readFileSync(metaFile, "utf8").split(/\r?\n/);
+      for (const line of metaLines) {
+        if (line.startsWith("run_dir=")) {
+          const value = line.slice("run_dir=".length).trim();
+          if (value) {
+            runDir = value;
+          }
+        }
+      }
+    }
+    const resolvedStatus = childExit.status;
 
     process.stdout.write(`${renderRunTree(mod, `workflow default (${elapsedMs}ms)`)}\n`);
 
     const palette = colorPalette();
     if (resolvedStatus === 0) {
-      if (stderrMeta.output) {
-        process.stderr.write(`${stderrMeta.output}\n`);
-      }
       process.stdout.write(
         `${palette.green}\u2713 PASS${palette.reset} workflow default ${palette.dim}(${elapsedMs}ms)${palette.reset}\n`,
       );
       return 0;
     }
 
-    const summary = summarizeError(stderrMeta.output, execResult.error?.message);
+    const summary = summarizeError(capturedStderr, "Workflow execution failed.");
     process.stderr.write(
       `${palette.red}\u2717 FAIL${palette.reset} workflow default ${palette.dim}(${elapsedMs}ms)${palette.reset}\n`,
     );
@@ -489,7 +552,7 @@ function runUse(rest: string[]): number {
   return 1;
 }
 
-function main(argv: string[]): number {
+async function main(argv: string[]): Promise<number> {
   const [, , cmd, ...rest] = argv;
   if (!cmd || cmd === "--help" || cmd === "-h") {
     printUsage();
@@ -525,4 +588,12 @@ function main(argv: string[]): number {
   }
 }
 
-process.exit(main(process.argv));
+main(process.argv)
+  .then((code) => {
+    process.exit(code);
+  })
+  .catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`${message}\n`);
+    process.exit(1);
+  });
