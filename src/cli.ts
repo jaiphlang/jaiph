@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 import { build, workflowSymbolForFile } from "./transpiler";
 import { parsejaiph } from "./parser";
 import { jaiphModule } from "./types";
+import { loadJaiphConfig } from "./config";
 
 function colorPalette(): { green: string; red: string; dim: string; reset: string } {
   const enabled = process.stdout.isTTY && process.env.NO_COLOR === undefined;
@@ -202,6 +203,7 @@ function runBuild(rest: string[]): number {
 }
 
 const BOOTSTRAP_TEMPLATE = `#!/usr/bin/env jaiph
+
 # Bootstraps Jaiph workflows for this repository.
 workflow default {
   prompt "
@@ -222,6 +224,18 @@ workflow default {
 }
 `;
 
+const LOCAL_CONFIG_TEMPLATE = `# Jaiph project configuration
+[agent]
+# Default model for prompt steps (passed as --model to the agent command).
+default_model = "gpt-5"
+
+[run]
+# Store run logs under .jaiph/runs by default (relative to workspace root).
+logs_dir = ".jaiph/runs"
+# Set to true to enable shell xtrace during jaiph run.
+debug = false
+`;
+
 function runInit(rest: string[]): number {
   const workspaceArg = rest[0] ?? ".";
   const workspaceRoot = resolve(workspaceArg);
@@ -233,6 +247,7 @@ function runInit(rest: string[]): number {
 
   const jaiphDir = join(workspaceRoot, ".jaiph");
   const bootstrapPath = join(jaiphDir, "bootstrap.jph");
+  const configPath = join(jaiphDir, "config.toml");
   const palette = colorPalette();
 
   process.stdout.write("\n");
@@ -247,10 +262,20 @@ function runInit(rest: string[]): number {
     createdBootstrap = true;
   }
   chmodSync(bootstrapPath, 0o755);
+  let createdConfig = false;
+  if (!existsSync(configPath)) {
+    writeFileSync(configPath, LOCAL_CONFIG_TEMPLATE, "utf8");
+    createdConfig = true;
+  }
 
   process.stdout.write(`${palette.green}✓ Initialized ${join(".jaiph", "bootstrap.jph")}${palette.reset}\n`);
   if (!createdBootstrap) {
     process.stdout.write(`${palette.dim}▸ Note: bootstrap file already existed; left unchanged.${palette.reset}\n`);
+  }
+  if (createdConfig) {
+    process.stdout.write(`${palette.green}✓ Initialized ${join(".jaiph", "config.toml")}${palette.reset}\n`);
+  } else {
+    process.stdout.write(`${palette.dim}▸ Note: config file already existed; left unchanged.${palette.reset}\n`);
   }
   process.stdout.write("\n");
   process.stdout.write("Try:\n");
@@ -272,6 +297,7 @@ function runWorkflow(rest: string[]): number {
   }
   const inputAbs = resolve(input);
   const workspaceRoot = detectWorkspaceRoot(dirname(inputAbs));
+  const config = loadJaiphConfig(workspaceRoot);
   const inputStat = statSync(inputAbs);
   if (!inputStat.isFile() || ![".jph", ".jh", ".jrh"].includes(extname(inputAbs))) {
     process.stderr.write("jaiph run expects a single .jph, .jh or .jrh file\n");
@@ -312,6 +338,19 @@ function runWorkflow(rest: string[]): number {
       'exit "$status"',
     ].join("\n");
     const startedAt = Date.now();
+    const runtimeEnv = { ...process.env, JAIPH_WORKSPACE: workspaceRoot } as Record<string, string | undefined>;
+    if (runtimeEnv.JAIPH_AGENT_MODEL === undefined && config.agent?.defaultModel) {
+      runtimeEnv.JAIPH_AGENT_MODEL = config.agent.defaultModel;
+    }
+    if (runtimeEnv.JAIPH_AGENT_COMMAND === undefined && config.agent?.command) {
+      runtimeEnv.JAIPH_AGENT_COMMAND = config.agent.command;
+    }
+    if (runtimeEnv.JAIPH_RUNS_DIR === undefined && config.run?.logsDir) {
+      runtimeEnv.JAIPH_RUNS_DIR = config.run.logsDir;
+    }
+    if (runtimeEnv.JAIPH_DEBUG === undefined && config.run?.debug === true) {
+      runtimeEnv.JAIPH_DEBUG = "true";
+    }
     const execResult = spawnSync(
       "bash",
       ["-c", command, "jaiph-run", builtPath, workflowSymbol, ...runArgs],
@@ -319,7 +358,7 @@ function runWorkflow(rest: string[]): number {
         stdio: "pipe",
         encoding: "utf8",
         cwd: workspaceRoot,
-        env: { ...process.env, JAIPH_WORKSPACE: workspaceRoot },
+        env: runtimeEnv,
       },
     );
     const elapsedMs = Date.now() - startedAt;

@@ -16,9 +16,10 @@ test("build transpiles .jh into strict bash with retry flow", () => {
     assert.match(stdlib, /jaiph__version\(\)/);
     assert.match(stdlib, /jaiph__prompt\(\)/);
     assert.match(stdlib, /jaiph__prompt__impl\(\)/);
+    assert.match(stdlib, /agent_command="\$\{JAIPH_AGENT_COMMAND:-cursor-agent\}"/);
     assert.match(
       stdlib,
-      /cursor-agent --print --output-format text --workspace "\$workspace_root" --trust "\$@"/,
+      /--print --output-format text --workspace "\$workspace_root" --model "\$JAIPH_AGENT_MODEL" --trust "\$@"/,
     );
     assert.match(stdlib, /jaiph__run_step jaiph__prompt jaiph__prompt__impl "\$@"/);
     assert.match(stdlib, /jaiph__execute_readonly\(\)/);
@@ -304,6 +305,60 @@ test("jaiph run stores prompt output in run logs", () => {
   }
 });
 
+test("jaiph run applies model from local TOML config", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-config-model-"));
+  try {
+    const binDir = join(root, "bin");
+    mkdirSync(binDir, { recursive: true });
+    const fakeAgent = join(binDir, "cursor-agent");
+    writeFileSync(
+      fakeAgent,
+      [
+        "#!/usr/bin/env bash",
+        "echo model-args:$*",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(fakeAgent, 0o755);
+
+    mkdirSync(join(root, ".jaiph"), { recursive: true });
+    writeFileSync(
+      join(root, ".jaiph/config.toml"),
+      [
+        "[agent]",
+        'default_model = "gpt-5-mini"',
+        "",
+      ].join("\n"),
+    );
+
+    const filePath = join(root, "prompt.jph");
+    writeFileSync(
+      filePath,
+      [
+        "workflow default {",
+        '  prompt "hello from config"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runResult = spawnSync("node", [cliPath, "run", filePath], {
+      encoding: "utf8",
+      cwd: root,
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH ?? ""}`,
+      },
+    });
+
+    assert.equal(runResult.status, 0, runResult.stderr);
+    assert.match(runResult.stdout, /model-args:.*--model gpt-5-mini/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("jaiph init creates workspace structure and guidance", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-init-"));
   try {
@@ -317,18 +372,25 @@ test("jaiph init creates workspace structure and guidance", () => {
     assert.equal(existsSync(join(root, ".jaiph")), true);
     assert.equal(existsSync(join(root, ".jaiph/lib")), false);
     assert.equal(existsSync(join(root, ".jaiph/bootstrap.jph")), true);
+    assert.equal(existsSync(join(root, ".jaiph/config.toml")), true);
     const bootstrap = readFileSync(join(root, ".jaiph/bootstrap.jph"), "utf8");
-    assert.match(bootstrap, /^#!\/usr\/bin\/env jaiph/);
+    assert.match(bootstrap, /^#!\/usr\/bin\/env jaiph\n\n/);
     assert.match(bootstrap, /workflow default \{/);
     assert.match(bootstrap, /docs\/jaiph-skill\.md/);
     assert.match(bootstrap, /Analyze repository structure/);
     assert.match(bootstrap, /Create or update Jaiph workflows under \.jaiph\//);
     assert.doesNotMatch(bootstrap, /\$1/);
     assert.equal(statSync(join(root, ".jaiph/bootstrap.jph")).mode & 0o777, 0o755);
+    const localConfig = readFileSync(join(root, ".jaiph/config.toml"), "utf8");
+    assert.match(localConfig, /\[agent\]/);
+    assert.match(localConfig, /default_model = "gpt-5"/);
+    assert.match(localConfig, /\[run\]/);
+    assert.match(localConfig, /logs_dir = "\.jaiph\/runs"/);
     assert.equal(existsSync(join(root, ".gitignore")), false);
     assert.match(initResult.stdout, /Jaiph init/);
     assert.match(initResult.stdout, /▸ Creating \.jaiph\/bootstrap\.jph/);
     assert.match(initResult.stdout, /✓ Initialized \.jaiph\/bootstrap\.jph/);
+    assert.match(initResult.stdout, /✓ Initialized \.jaiph\/config\.toml/);
     assert.match(initResult.stdout, /jaiph run \.jaiph\/bootstrap\.jph/);
     assert.match(initResult.stdout, /analyze the project/i);
     assert.match(initResult.stdout, /add `\.jaiph\/runs\/` to `\.gitignore`/i);

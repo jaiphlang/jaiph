@@ -13,11 +13,17 @@ jaiph__die() {
 
 jaiph__prompt__impl() {
   local workspace_root
+  local agent_command
   workspace_root="$(jaiph__workspace_root)"
+  agent_command="${JAIPH_AGENT_COMMAND:-cursor-agent}"
   if [[ "$#" -gt 0 ]]; then
     printf "Prompt:\n%s\n\n" "$*"
   fi
-  cursor-agent --print --output-format text --workspace "$workspace_root" --trust "$@"
+  if [[ -n "${JAIPH_AGENT_MODEL:-}" ]]; then
+    "$agent_command" --print --output-format text --workspace "$workspace_root" --model "$JAIPH_AGENT_MODEL" --trust "$@"
+    return $?
+  fi
+  "$agent_command" --print --output-format text --workspace "$workspace_root" --trust "$@"
 }
 
 jaiph__prompt() {
@@ -66,7 +72,15 @@ jaiph__init_run_tracking() {
   started_at="$(jaiph__timestamp_utc)"
   run_id="$(jaiph__new_run_id)"
   workspace_root="$(jaiph__workspace_root)"
-  JAIPH_RUN_DIR="$workspace_root/.jaiph/runs/${started_at}-${run_id}"
+  if [[ -n "${JAIPH_RUNS_DIR:-}" ]]; then
+    if [[ "$JAIPH_RUNS_DIR" = /* ]]; then
+      JAIPH_RUN_DIR="${JAIPH_RUNS_DIR}/${started_at}-${run_id}"
+    else
+      JAIPH_RUN_DIR="${workspace_root}/${JAIPH_RUNS_DIR}/${started_at}-${run_id}"
+    fi
+  else
+    JAIPH_RUN_DIR="$workspace_root/.jaiph/runs/${started_at}-${run_id}"
+  fi
   JAIPH_PRECEDING_FILES=""
   mkdir -p "$JAIPH_RUN_DIR"
   export JAIPH_RUN_DIR JAIPH_PRECEDING_FILES
