@@ -86,19 +86,93 @@ jaiph__init_run_tracking() {
     JAIPH_RUN_DIR="$workspace_root/.jaiph/runs/${started_at}-${run_id}"
   fi
   JAIPH_PRECEDING_FILES=""
+  JAIPH_RUN_SUMMARY_FILE="$JAIPH_RUN_DIR/run_summary.jsonl"
   mkdir -p "$JAIPH_RUN_DIR"
-  export JAIPH_RUN_DIR JAIPH_PRECEDING_FILES
+  : >"$JAIPH_RUN_SUMMARY_FILE"
+  export JAIPH_RUN_DIR JAIPH_PRECEDING_FILES JAIPH_RUN_SUMMARY_FILE
 }
 
 jaiph__track_output_files() {
-  local out_file="$1"
-  local err_file="$2"
-  if [[ -z "$JAIPH_PRECEDING_FILES" ]]; then
-    JAIPH_PRECEDING_FILES="${out_file},${err_file}"
-  else
-    JAIPH_PRECEDING_FILES="${JAIPH_PRECEDING_FILES},${out_file},${err_file}"
-  fi
+  local file
+  for file in "$@"; do
+    if [[ -z "$file" ]]; then
+      continue
+    fi
+    if [[ -z "$JAIPH_PRECEDING_FILES" ]]; then
+      JAIPH_PRECEDING_FILES="$file"
+    else
+      JAIPH_PRECEDING_FILES="${JAIPH_PRECEDING_FILES},${file}"
+    fi
+  done
   export JAIPH_PRECEDING_FILES
+}
+
+jaiph__event_fd() {
+  if (: >&3) 2>/dev/null; then
+    printf "3"
+    return 0
+  fi
+  printf "2"
+}
+
+jaiph__json_escape() {
+  local raw="$1"
+  raw="${raw//\\/\\\\}"
+  raw="${raw//\"/\\\"}"
+  raw="${raw//$'\n'/\\n}"
+  raw="${raw//$'\r'/\\r}"
+  printf "%s" "$raw"
+}
+
+jaiph__step_identity() {
+  local func_name="$1"
+  if [[ "$func_name" == *"__workflow_"* ]]; then
+    printf "workflow|%s" "${func_name##*__workflow_}"
+    return 0
+  fi
+  if [[ "$func_name" == *"__rule_"* ]]; then
+    printf "rule|%s" "${func_name##*__rule_}"
+    return 0
+  fi
+  if [[ "$func_name" == *"__function_"* ]]; then
+    printf "function|%s" "${func_name##*__function_}"
+    return 0
+  fi
+  if [[ "$func_name" == "jaiph__prompt" ]]; then
+    printf "prompt|prompt"
+    return 0
+  fi
+  printf "step|%s" "$func_name"
+}
+
+jaiph__emit_step_event() {
+  local event_type="$1"
+  local func_name="$2"
+  local status="${3:-}"
+  local elapsed_ms="${4:-}"
+  local out_file="${5:-}"
+  local err_file="${6:-}"
+  local timestamp kind name payload marker_fd
+  local step_identity
+  step_identity="$(jaiph__step_identity "$func_name")"
+  kind="${step_identity%%|*}"
+  name="${step_identity#*|}"
+  timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  payload="$(printf '{"type":"%s","func":"%s","kind":"%s","name":"%s","ts":"%s","status":%s,"elapsed_ms":%s,"out_file":"%s","err_file":"%s"}' \
+    "$(jaiph__json_escape "$event_type")" \
+    "$(jaiph__json_escape "$func_name")" \
+    "$(jaiph__json_escape "$kind")" \
+    "$(jaiph__json_escape "$name")" \
+    "$(jaiph__json_escape "$timestamp")" \
+    "${status:-null}" \
+    "${elapsed_ms:-null}" \
+    "$(jaiph__json_escape "$out_file")" \
+    "$(jaiph__json_escape "$err_file")")"
+  marker_fd="$(jaiph__event_fd)"
+  printf "__JAIPH_EVENT__ %s\n" "$payload" >&"$marker_fd"
+  if [[ "$event_type" == "STEP_END" && -n "${JAIPH_RUN_SUMMARY_FILE:-}" ]]; then
+    printf "%s\n" "$payload" >>"$JAIPH_RUN_SUMMARY_FILE"
+  fi
 }
 
 jaiph__run_step() {
@@ -114,34 +188,47 @@ jaiph__run_step() {
   fi
   jaiph__init_run_tracking || return 1
   local step_started_at safe_name out_file err_file status had_errexit step_started_seconds step_elapsed_seconds
+  local out_tmp err_tmp elapsed_ms
   step_started_seconds="$SECONDS"
   step_started_at="$(jaiph__timestamp_utc)"
   safe_name="$(jaiph__sanitize_name "$func_name")"
   out_file="$JAIPH_RUN_DIR/${step_started_at}-${safe_name}.out"
   err_file="$JAIPH_RUN_DIR/${step_started_at}-${safe_name}.err"
+  out_tmp="${out_file}.tmp.$$"
+  err_tmp="${err_file}.tmp.$$"
+  jaiph__emit_step_event "STEP_START" "$func_name"
   had_errexit=0
   case "$-" in
     *e*) had_errexit=1 ;;
   esac
   set +e
-  "$@" >"$out_file" 2>"$err_file"
+  "$@" >"$out_tmp" 2>"$err_tmp"
   status=$?
   if [[ "$had_errexit" -eq 1 ]]; then
     set -e
   fi
+  if [[ -s "$out_tmp" ]]; then
+    mv "$out_tmp" "$out_file"
+  else
+    rm -f "$out_tmp"
+    out_file=""
+  fi
+  if [[ -s "$err_tmp" ]]; then
+    mv "$err_tmp" "$err_file"
+  else
+    rm -f "$err_tmp"
+    err_file=""
+  fi
   jaiph__track_output_files "$out_file" "$err_file"
-  if [[ -s "$out_file" ]]; then
+  if [[ -n "$out_file" ]]; then
     cat "$out_file"
   fi
-  if [[ -s "$err_file" ]]; then
+  if [[ -n "$err_file" ]]; then
     cat "$err_file" >&2
   fi
   step_elapsed_seconds="$((SECONDS - step_started_seconds))"
-  local marker_fd=2
-  if (: >&3) 2>/dev/null; then
-    marker_fd=3
-  fi
-  printf "__JAIPH_STEP_END__|%s|%s|%s\n" "$func_name" "$status" "$step_elapsed_seconds" >&"$marker_fd"
+  elapsed_ms="$((step_elapsed_seconds * 1000))"
+  jaiph__emit_step_event "STEP_END" "$func_name" "$status" "$elapsed_ms" "$out_file" "$err_file"
   return "$status"
 }
 

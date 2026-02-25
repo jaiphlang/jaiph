@@ -268,7 +268,7 @@ test("jaiph run prints rule tree and fail summary", () => {
     assert.match(runResult.stderr, /✗ FAIL workflow default \(\d+ms\)/);
     assert.match(runResult.stderr, /Current branch is not 'main'\./);
     assert.match(runResult.stderr, /Logs: /);
-    assert.match(runResult.stderr, /out: /);
+    assert.match(runResult.stderr, /Summary: /);
     assert.match(runResult.stderr, /err: /);
     assert.match(runResult.stderr, /\.jaiph\/runs\//);
   } finally {
@@ -324,6 +324,7 @@ test("jaiph run stores prompt output in run logs", () => {
     assert.match(latestRunDirName, /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z-/);
     const latestRunDir = join(runsRoot, latestRunDirName);
     const runFiles = readdirSync(latestRunDir);
+    assert.equal(runFiles.includes("run_summary.jsonl"), true);
     const promptOutName = runFiles.find((name) => name.endsWith("-jaiph__prompt.out"));
     const promptErrName = runFiles.find((name) => name.endsWith("-jaiph__prompt.err"));
     assert.equal(Boolean(promptOutName), true);
@@ -335,6 +336,14 @@ test("jaiph run stores prompt output in run logs", () => {
     assert.match(promptOut, /^Prompt:\nhello from prompt\n\n/);
     assert.match(promptOut, /prompt-output:/);
     assert.match(promptErr, /prompt-error/);
+    const summary = readFileSync(join(latestRunDir, "run_summary.jsonl"), "utf8");
+    assert.match(summary, /"type":"STEP_END"/);
+    assert.match(summary, /"kind":"prompt"/);
+    const stepLogFiles = runFiles.filter((name) => name.endsWith(".out") || name.endsWith(".err"));
+    for (const stepFile of stepLogFiles) {
+      const size = statSync(join(latestRunDir, stepFile)).size;
+      assert.equal(size > 0, true, `expected non-empty step log file: ${stepFile}`);
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

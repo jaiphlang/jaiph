@@ -581,11 +581,14 @@ jaiph use 0.2.3</code></pre>
                     <dd>Sends prompt text to the configured agent command (with optional model from config) and stores
                         prompt stdout/stderr in
                         <code>.jaiph/runs/</code> step logs (for example:
-                        <code>*-jaiph__prompt.out</code> and <code>*-jaiph__prompt.err</code>).</dd>
+                        <code>*-jaiph__prompt.out</code> and <code>*-jaiph__prompt.err</code>). Jaiph also writes
+                        <code>run_summary.jsonl</code> in each run directory and skips creating empty step log files.</dd>
                 </dl>
 
                 <p>All language primitives can be freely combined with bash code—they are not isolated or blocking, but
                     instead are interoperable with standard shell scripting within your workflows and rules.</p>
+                <p><code>jaiph run</code> progress is event-driven: TTY mode keeps one live running-step line, while
+                    non-TTY mode prints one completion line per finished step.</p>
                 <h3>Known limitations and gotchas</h3>
                 <ul>
                     <li><strong>Parser limitation:</strong> inline brace-group short-circuit patterns like

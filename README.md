@@ -124,6 +124,14 @@ This asks an agent to detect project configuration and bootstrap recommended Jai
 
 Tip: add `.jaiph/runs/` to your `.gitignore`.
 
+### Run reporting and logs
+
+- During `jaiph run`, progress rendering is event-driven.
+  - TTY: one live running step line + committed step completion lines.
+  - Non-TTY: one completion line per finished step.
+- Each run writes `.jaiph/runs/<timestamp>-<id>/run_summary.jsonl`.
+- Step `.out` / `.err` files are created only when the step produced output (empty log files are skipped).
+
 ### Configuration
 
 Jaiph supports both global and local TOML config files:

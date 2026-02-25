@@ -107,37 +107,45 @@ function parseLabel(rawLabel: string): { kind: string; name: string } {
   };
 }
 
-function parseStepMarker(line: string): { funcName: string; status: number; elapsedSec: number } | undefined {
-  const prefix = "__JAIPH_STEP_END__|";
+type StepEvent = {
+  type: "STEP_START" | "STEP_END";
+  func: string;
+  kind: string;
+  name: string;
+  ts: string;
+  status: number | null;
+  elapsed_ms: number | null;
+  out_file: string;
+  err_file: string;
+};
+
+function parseStepEvent(line: string): StepEvent | undefined {
+  const prefix = "__JAIPH_EVENT__ ";
   if (!line.startsWith(prefix)) {
     return undefined;
   }
-  const payload = line.slice(prefix.length).split("|");
-  if (payload.length !== 3) {
+  try {
+    const parsed = JSON.parse(line.slice(prefix.length)) as Partial<StepEvent>;
+    if (!parsed || (parsed.type !== "STEP_START" && parsed.type !== "STEP_END")) {
+      return undefined;
+    }
+    if (typeof parsed.kind !== "string" || typeof parsed.name !== "string" || typeof parsed.func !== "string") {
+      return undefined;
+    }
+    return {
+      type: parsed.type,
+      func: parsed.func,
+      kind: parsed.kind,
+      name: parsed.name,
+      ts: typeof parsed.ts === "string" ? parsed.ts : "",
+      status: typeof parsed.status === "number" ? parsed.status : null,
+      elapsed_ms: typeof parsed.elapsed_ms === "number" ? parsed.elapsed_ms : null,
+      out_file: typeof parsed.out_file === "string" ? parsed.out_file : "",
+      err_file: typeof parsed.err_file === "string" ? parsed.err_file : "",
+    };
+  } catch {
     return undefined;
   }
-  const status = Number.parseInt(payload[1], 10);
-  const elapsedSec = Number.parseInt(payload[2], 10);
-  if (Number.isNaN(status) || Number.isNaN(elapsedSec)) {
-    return undefined;
-  }
-  return { funcName: payload[0], status, elapsedSec };
-}
-
-function parseFunctionRef(funcName: string): { kind: string; name: string } {
-  if (funcName.includes("__workflow_")) {
-    return { kind: "workflow", name: funcName.slice(funcName.lastIndexOf("__workflow_") + "__workflow_".length) };
-  }
-  if (funcName.includes("__rule_")) {
-    return { kind: "rule", name: funcName.slice(funcName.lastIndexOf("__rule_") + "__rule_".length) };
-  }
-  if (funcName.includes("__function_")) {
-    return { kind: "function", name: funcName.slice(funcName.lastIndexOf("__function_") + "__function_".length) };
-  }
-  if (funcName === "jaiph__prompt") {
-    return { kind: "prompt", name: "prompt" };
-  }
-  return { kind: "step", name: funcName };
 }
 
 type RowState = { status: "pending" | "done" | "failed"; elapsedSec?: number };
@@ -532,6 +540,7 @@ async function runWorkflow(rest: string[]): Promise<number> {
       'if [[ -n "${meta_file:-}" ]]; then',
       '  printf "status=%s\\n" "$status" > "$meta_file"',
       '  printf "run_dir=%s\\n" "${JAIPH_RUN_DIR:-}" >> "$meta_file"',
+      '  printf "summary_file=%s\\n" "${JAIPH_RUN_SUMMARY_FILE:-}" >> "$meta_file"',
       "fi",
       'exit "$status"',
     ].join("\n");
@@ -560,6 +569,9 @@ async function runWorkflow(rest: string[]): Promise<number> {
     if (runtimeEnv.JAIPH_STDLIB === undefined) {
       runtimeEnv.JAIPH_STDLIB = join(__dirname, "jaiph_stdlib.sh");
     }
+    runtimeEnv.JAIPH_RUN_DIR = undefined;
+    runtimeEnv.JAIPH_PRECEDING_FILES = undefined;
+    runtimeEnv.JAIPH_RUN_SUMMARY_FILE = undefined;
     const metaFile = join(outDir, `.jaiph-run-meta-${Date.now()}-${process.pid}.txt`);
     const execResult = spawn(
       "bash",
@@ -572,22 +584,47 @@ async function runWorkflow(rest: string[]): Promise<number> {
     );
     let capturedStderr = "";
     let stderrBuffer = "";
+    let activeStepStartedAt = startedAt;
+    const findPendingRowIndex = (kind: string, name: string): number => {
+      for (let i = 1; i < treeRows.length; i += 1) {
+        if (rowStates[i].status !== "pending") {
+          continue;
+        }
+        const label = parseLabel(treeRows[i].rawLabel);
+        const nameMatches = label.name === name || label.name.endsWith(`.${name}`);
+        if (label.kind === kind && nameMatches) {
+          return i;
+        }
+      }
+      return -1;
+    };
     const applyStepUpdate = (funcName: string, status: number, elapsedSec: number): void => {
-      const parsed = parseFunctionRef(funcName);
-      if (parsed.kind === "workflow" && parsed.name === "default") {
+      const kind = funcName.includes("__workflow_")
+        ? "workflow"
+        : funcName.includes("__rule_")
+          ? "rule"
+          : funcName.includes("__function_")
+            ? "function"
+            : funcName === "jaiph__prompt"
+              ? "prompt"
+              : "step";
+      const name = kind === "workflow"
+        ? funcName.slice(funcName.lastIndexOf("__workflow_") + "__workflow_".length)
+        : kind === "rule"
+          ? funcName.slice(funcName.lastIndexOf("__rule_") + "__rule_".length)
+          : kind === "function"
+            ? funcName.slice(funcName.lastIndexOf("__function_") + "__function_".length)
+            : kind === "prompt"
+              ? "prompt"
+              : funcName;
+      if (kind === "workflow" && name === "default") {
         return;
       }
       let changed = false;
-      let changedRowIndex = -1;
-      for (let i = 1; i < treeRows.length; i += 1) {
-        const label = parseLabel(treeRows[i].rawLabel);
-        const nameMatches = label.name === parsed.name || label.name.endsWith(`.${parsed.name}`);
-        if (label.kind === parsed.kind && nameMatches && rowStates[i].status === "pending") {
-          rowStates[i] = { status: status === 0 ? "done" : "failed", elapsedSec };
-          changed = true;
-          changedRowIndex = i;
-          break;
-        }
+      const changedRowIndex = findPendingRowIndex(kind, name);
+      if (changedRowIndex !== -1) {
+        rowStates[changedRowIndex] = { status: status === 0 ? "done" : "failed", elapsedSec };
+        changed = true;
       }
       if (changed) {
         if (interactiveProgress) {
@@ -605,10 +642,29 @@ async function runWorkflow(rest: string[]): Promise<number> {
         }
       }
     };
+    const applyStepStart = (kind: string, name: string): void => {
+      if (!interactiveProgress) {
+        return;
+      }
+      if (kind === "workflow" && name === "default") {
+        return;
+      }
+      const nextIndex = findPendingRowIndex(kind, name);
+      if (nextIndex === -1) {
+        return;
+      }
+      activeRowIndex = nextIndex;
+      activeStepStartedAt = Date.now();
+      writeActiveLine(formatRunningLine(activeRowIndex, 0));
+    };
     const handleStderrLine = (line: string): void => {
-      const marker = parseStepMarker(line);
-      if (marker) {
-        applyStepUpdate(marker.funcName, marker.status, marker.elapsedSec);
+      const event = parseStepEvent(line);
+      if (event) {
+        if (event.type === "STEP_START") {
+          applyStepStart(event.kind, event.name);
+          return;
+        }
+        applyStepUpdate(event.func, event.status ?? 1, Math.max(0, Math.floor((event.elapsed_ms ?? 0) / 1000)));
         return;
       }
       if (line.length > 0) {
@@ -618,13 +674,13 @@ async function runWorkflow(rest: string[]): Promise<number> {
         }
         process.stderr.write(`${line}\n`);
         if (interactiveProgress && activeRowIndex !== -1) {
-          writeActiveLine(formatRunningLine(activeRowIndex, Math.max(0, Math.floor((Date.now() - startedAt) / 1000))));
+          writeActiveLine(formatRunningLine(activeRowIndex, Math.max(0, Math.floor((Date.now() - activeStepStartedAt) / 1000))));
         }
       }
     };
     const counterTimer = setInterval(() => {
       if (interactiveProgress && activeRowIndex !== -1) {
-        writeActiveLine(formatRunningLine(activeRowIndex, Math.max(0, Math.floor((Date.now() - startedAt) / 1000))));
+        writeActiveLine(formatRunningLine(activeRowIndex, Math.max(0, Math.floor((Date.now() - activeStepStartedAt) / 1000))));
       }
     }, 1000);
     execResult.stdout?.setEncoding("utf8");
@@ -635,7 +691,7 @@ async function runWorkflow(rest: string[]): Promise<number> {
       }
       process.stdout.write(chunk);
       if (interactiveProgress && activeRowIndex !== -1) {
-        writeActiveLine(formatRunningLine(activeRowIndex, Math.max(0, Math.floor((Date.now() - startedAt) / 1000))));
+        writeActiveLine(formatRunningLine(activeRowIndex, Math.max(0, Math.floor((Date.now() - activeStepStartedAt) / 1000))));
       }
     });
     execResult.stderr?.on("data", (chunk: string) => {
@@ -663,6 +719,7 @@ async function runWorkflow(rest: string[]): Promise<number> {
     }
     const elapsedMs = Date.now() - startedAt;
     let runDir: string | undefined;
+    let summaryFile: string | undefined;
     if (existsSync(metaFile)) {
       const metaLines = readFileSync(metaFile, "utf8").split(/\r?\n/);
       for (const line of metaLines) {
@@ -670,6 +727,12 @@ async function runWorkflow(rest: string[]): Promise<number> {
           const value = line.slice("run_dir=".length).trim();
           if (value) {
             runDir = value;
+          }
+        }
+        if (line.startsWith("summary_file=")) {
+          const value = line.slice("summary_file=".length).trim();
+          if (value) {
+            summaryFile = value;
           }
         }
       }
@@ -690,9 +753,6 @@ async function runWorkflow(rest: string[]): Promise<number> {
           }
         }
       }
-      process.stdout.write(`${styleKeywordLabel(treeRows[0].rawLabel)} ${styleDim(`(${Math.floor(elapsedMs / 1000)}s)`) }\n`);
-    } else {
-      process.stdout.write(`${styleKeywordLabel(treeRows[0].rawLabel)} ${styleDim(`(${Math.floor(elapsedMs / 1000)}s)`) }\n`);
     }
 
     const palette = colorPalette();
@@ -709,8 +769,11 @@ async function runWorkflow(rest: string[]): Promise<number> {
     );
     process.stderr.write(`  ${summary}\n`);
     if (runDir) {
-      const files = latestRunFiles(runDir);
       process.stderr.write(`  Logs: ${runDir}\n`);
+      if (summaryFile) {
+        process.stderr.write(`  Summary: ${summaryFile}\n`);
+      }
+      const files = latestRunFiles(runDir);
       if (files.out) {
         process.stderr.write(`    out: ${files.out}\n`);
       }
