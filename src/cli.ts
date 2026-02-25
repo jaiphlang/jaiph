@@ -473,7 +473,37 @@ async function runWorkflow(rest: string[]): Promise<number> {
     const mod = parsejaiph(readFileSync(inputAbs, "utf8"), inputAbs);
     const treeRows = buildRunTreeRows(mod);
     const rowStates: RowState[] = treeRows.map((row) => (row.isRoot ? { status: "done" } : { status: "pending" }));
-    process.stdout.write(`${renderProgressTree(treeRows, rowStates)}\n`);
+    const interactiveProgress = process.stdout.isTTY;
+    let frameLines = 0;
+    const clearProgressFrame = (): void => {
+      if (!interactiveProgress || frameLines === 0) {
+        return;
+      }
+      process.stdout.write(`\u001b[${frameLines}F`);
+      for (let i = 0; i < frameLines; i += 1) {
+        process.stdout.write("\u001b[2K");
+        if (i < frameLines - 1) {
+          process.stdout.write("\u001b[1E");
+        }
+      }
+      process.stdout.write("\r");
+      frameLines = 0;
+    };
+    const renderProgressFrame = (includeCounter: boolean, rootElapsedSec?: number): void => {
+      const treeText = renderProgressTree(treeRows, rowStates, rootElapsedSec);
+      if (!interactiveProgress) {
+        process.stdout.write(`${treeText}\n`);
+        return;
+      }
+      const lines = treeText.split("\n");
+      if (includeCounter) {
+        const seconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+        lines.push(styleDim(`… running ${seconds}s`));
+      }
+      clearProgressFrame();
+      process.stdout.write(`${lines.join("\n")}\n`);
+      frameLines = lines.length;
+    };
 
     const results = build(inputAbs, outDir);
     if (results.length !== 1) {
@@ -506,6 +536,7 @@ async function runWorkflow(rest: string[]): Promise<number> {
       'exit "$status"',
     ].join("\n");
     const startedAt = Date.now();
+    renderProgressFrame(true);
     const runtimeEnv = { ...process.env, JAIPH_WORKSPACE: workspaceRoot } as Record<string, string | undefined>;
     if (runtimeEnv.JAIPH_AGENT_MODEL === undefined && config.agent?.defaultModel) {
       runtimeEnv.JAIPH_AGENT_MODEL = config.agent.defaultModel;
@@ -534,22 +565,6 @@ async function runWorkflow(rest: string[]): Promise<number> {
     );
     let capturedStderr = "";
     let stderrBuffer = "";
-    let counterVisible = false;
-    const clearCounter = (): void => {
-      if (!counterVisible || !process.stderr.isTTY) {
-        return;
-      }
-      process.stderr.write("\r\x1b[2K");
-      counterVisible = false;
-    };
-    const renderCounter = (): void => {
-      if (!process.stderr.isTTY) {
-        return;
-      }
-      const seconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
-      process.stderr.write(`\r${colorPalette().dim}… running ${seconds}s${colorPalette().reset}`);
-      counterVisible = true;
-    };
     const applyStepUpdate = (funcName: string, status: number, elapsedSec: number): void => {
       const parsed = parseFunctionRef(funcName);
       if (parsed.kind === "workflow" && parsed.name === "default") {
@@ -566,7 +581,9 @@ async function runWorkflow(rest: string[]): Promise<number> {
         }
       }
       if (changed) {
-        process.stdout.write(`${renderProgressTree(treeRows, rowStates)}\n`);
+        if (interactiveProgress) {
+          renderProgressFrame(true);
+        }
       }
     };
     const handleStderrLine = (line: string): void => {
@@ -577,18 +594,28 @@ async function runWorkflow(rest: string[]): Promise<number> {
       }
       if (line.length > 0) {
         capturedStderr += `${line}\n`;
+        clearProgressFrame();
         process.stderr.write(`${line}\n`);
+        if (interactiveProgress) {
+          renderProgressFrame(true);
+        }
       }
     };
-    const counterTimer = setInterval(renderCounter, 1000);
+    const counterTimer = setInterval(() => {
+      if (interactiveProgress) {
+        renderProgressFrame(true);
+      }
+    }, 1000);
     execResult.stdout?.setEncoding("utf8");
     execResult.stderr?.setEncoding("utf8");
     execResult.stdout?.on("data", (chunk: string) => {
-      clearCounter();
+      clearProgressFrame();
       process.stdout.write(chunk);
+      if (interactiveProgress) {
+        renderProgressFrame(true);
+      }
     });
     execResult.stderr?.on("data", (chunk: string) => {
-      clearCounter();
       stderrBuffer += chunk;
       let newlineIndex = stderrBuffer.indexOf("\n");
       while (newlineIndex !== -1) {
@@ -604,7 +631,6 @@ async function runWorkflow(rest: string[]): Promise<number> {
       });
     });
     clearInterval(counterTimer);
-    clearCounter();
     if (stderrBuffer.length > 0) {
       handleStderrLine(stderrBuffer.replace(/\r$/, ""));
       stderrBuffer = "";
@@ -627,7 +653,11 @@ async function runWorkflow(rest: string[]): Promise<number> {
     }
     const resolvedStatus = childExit.status;
 
-    process.stdout.write(`${renderProgressTree(treeRows, rowStates, Math.floor(elapsedMs / 1000))}\n`);
+    if (interactiveProgress) {
+      renderProgressFrame(false, Math.floor(elapsedMs / 1000));
+    } else {
+      process.stdout.write(`${renderProgressTree(treeRows, rowStates, Math.floor(elapsedMs / 1000))}\n`);
+    }
 
     const palette = colorPalette();
     if (resolvedStatus === 0) {
