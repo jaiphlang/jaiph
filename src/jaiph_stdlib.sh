@@ -15,6 +15,50 @@ jaiph__die() {
   return 1
 }
 
+jaiph__stream_json_to_text() {
+  node -e '
+    const readline = require("node:readline");
+    const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
+    const emit = (value) => {
+      if (typeof value === "string" && value.length > 0) {
+        process.stdout.write(value);
+      }
+    };
+    const pick = (obj) => {
+      if (!obj || typeof obj !== "object") return "";
+      if (typeof obj.delta === "string") return obj.delta;
+      if (typeof obj.text === "string") return obj.text;
+      if (typeof obj.output_text === "string") return obj.output_text;
+      if (typeof obj.content === "string") return obj.content;
+      if (obj.message && typeof obj.message.content === "string") return obj.message.content;
+      if (Array.isArray(obj.choices) && obj.choices[0]) {
+        const c = obj.choices[0];
+        if (typeof c.text === "string") return c.text;
+        if (c.delta && typeof c.delta.content === "string") return c.delta.content;
+      }
+      if (Array.isArray(obj.delta) && obj.delta.length > 0) {
+        const first = obj.delta[0];
+        if (first && typeof first.text === "string") return first.text;
+      }
+      if (Array.isArray(obj.content) && obj.content.length > 0) {
+        const first = obj.content[0];
+        if (first && typeof first.text === "string") return first.text;
+      }
+      return "";
+    };
+    rl.on("line", (line) => {
+      if (!line.trim()) {
+        return;
+      }
+      try {
+        emit(pick(JSON.parse(line)));
+      } catch {
+        process.stdout.write(`${line}\n`);
+      }
+    });
+  '
+}
+
 jaiph__prompt__impl() {
   local workspace_root
   local agent_command
@@ -24,10 +68,12 @@ jaiph__prompt__impl() {
     printf "Prompt:\n%s\n\n" "$*"
   fi
   if [[ -n "${JAIPH_AGENT_MODEL:-}" ]]; then
-    "$agent_command" --print --output-format text --workspace "$workspace_root" --model "$JAIPH_AGENT_MODEL" --trust "$@"
+    "$agent_command" --print --output-format stream-json --stream-partial-output --workspace "$workspace_root" --model "$JAIPH_AGENT_MODEL" --trust "$@" \
+      | jaiph__stream_json_to_text
     return $?
   fi
-  "$agent_command" --print --output-format text --workspace "$workspace_root" --trust "$@"
+  "$agent_command" --print --output-format stream-json --stream-partial-output --workspace "$workspace_root" --trust "$@" \
+    | jaiph__stream_json_to_text
 }
 
 jaiph__prompt() {

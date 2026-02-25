@@ -20,7 +20,7 @@ test("build transpiles .jph into strict bash with retry flow", () => {
     assert.match(stdlib, /agent_command="\$\{JAIPH_AGENT_COMMAND:-cursor-agent\}"/);
     assert.match(
       stdlib,
-      /--print --output-format text --workspace "\$workspace_root" --model "\$JAIPH_AGENT_MODEL" --trust "\$@"/,
+      /--print --output-format stream-json --stream-partial-output --workspace "\$workspace_root" --model "\$JAIPH_AGENT_MODEL" --trust "\$@"/,
     );
     assert.match(stdlib, /jaiph__run_step jaiph__prompt jaiph__prompt__impl "\$@"/);
     assert.match(stdlib, /jaiph__execute_readonly\(\)/);
