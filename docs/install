@@ -47,6 +47,7 @@ REPO_REF="${JAIPH_REPO_REF:-main}"
 BIN_DIR="${JAIPH_BIN_DIR:-$HOME/.local/bin}"
 LIB_DIR="${JAIPH_LIB_DIR:-${BIN_DIR}/.jaiph}"
 TARGET="${BIN_DIR}/jaiph"
+STDLIB_TARGET="${BIN_DIR}/jaiph_stdlib.sh"
 
 echo ""
 echo -e "${BOLD}Jaiph installer${NC}"
@@ -79,10 +80,15 @@ rm -rf "${LIB_DIR}"
 mkdir -p "${LIB_DIR}"
 cp -R "${tmp_dir}/src/dist/src" "${LIB_DIR}/src"
 
+print_step "Installing stdlib to ${STDLIB_TARGET}..."
+cp "${tmp_dir}/src/src/jaiph_stdlib.sh" "${STDLIB_TARGET}"
+chmod 755 "${STDLIB_TARGET}"
+
 print_step "Installing binary to ${TARGET}..."
 cat > "${TARGET}" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
+export JAIPH_STDLIB="${STDLIB_TARGET}"
 exec node "${LIB_DIR}/src/cli.js" "\$@"
 EOF
 chmod 755 "${TARGET}"

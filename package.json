@@ -8,7 +8,7 @@
     "jaiph": "dist/src/cli.js"
   },
   "scripts": {
-    "build": "node ./node_modules/typescript/bin/tsc -p tsconfig.json",
+    "build": "node ./node_modules/typescript/bin/tsc -p tsconfig.json && node -e \"require('node:fs').copyFileSync('src/jaiph_stdlib.sh','dist/src/jaiph_stdlib.sh')\"",
     "test": "npm run build && node --test dist/test/sample-build.test.js",
     "test:jest": "npm run build && jest --runInBand test/fixtures-build.jest.test.js"
   },
