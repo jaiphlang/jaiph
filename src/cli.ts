@@ -493,6 +493,10 @@ function main(argv: string[]): number {
     printUsage();
     return 0;
   }
+  if (cmd === "--version" || cmd === "-v") {
+    process.stdout.write("jaiph 0.0.1\n");
+    return 0;
+  }
   try {
     if (cmd.endsWith(".jph") && existsSync(resolve(cmd))) {
       return runWorkflow([cmd, ...rest]);

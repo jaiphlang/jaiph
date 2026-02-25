@@ -149,11 +149,14 @@ See `docs/cli.md` for command syntax, examples, and supported environment variab
 - `workflow name { ... }`  
   Defines an orchestration entrypoint made of ordered steps. Workflows can change system state.
 
+- `function name() { ... }`  
+  Defines a reusable writable shell function. Functions can be called from workflows/rules and are tracked as regular Jaiph steps.
+
 - `ensure ref [args...]`  
   Executes a rule in a workflow or another rule, optionally forwarding arguments (for example: `ensure my_rule "$1"`).
 
 - `run ref`  
-  Executes another workflow in a workflow or another rule.
+  Executes another workflow from a workflow. Inside a rule, `run` is treated as a shell command shorthand.
 
 - `prompt "..."`  
   Sends prompt text to the configured agent command.

@@ -1,10 +1,47 @@
 #!/usr/bin/env jaiph
 
 rule docs_files_present {
-  test -f "README.md"
-  test -f "docs/index.html"
-  test -f "docs/cli.md"
-  test -f "docs/configuration.md"
+  test "$#" -gt 0
+  EXPECTED_DOC_FILES=("$@")
+
+  for file in "${EXPECTED_DOC_FILES[@]}"; do
+    test -f "$file"
+  done
+}
+
+function changed_files() {
+  {
+    git diff --name-only
+    git ls-files --others --exclude-standard
+  } | sort -u
+}
+
+rule only_expected_docs_changed_after_prompt {
+  test "$#" -eq 2
+  EXPECTED_DOC_FILES="$1"
+  BEFORE_CHANGED_FILES="$2"
+  AFTER_CHANGED_FILES="$(changed_files)"
+
+  NEW_CHANGED_FILES="$(
+    comm -13 \
+      <(printf '%s\n' "$BEFORE_CHANGED_FILES") \
+      <(printf '%s\n' "$AFTER_CHANGED_FILES") || true
+  )"
+
+  if [ -z "$NEW_CHANGED_FILES" ]; then
+    exit 0
+  fi
+
+  while IFS= read -r changed_file; do
+    [ -z "$changed_file" ] && continue
+
+    if [[ $'\n'"$EXPECTED_DOC_FILES"$'\n' == *$'\n'"$changed_file"$'\n'* ]]; then
+      continue
+    fi
+
+    echo "Unexpected file changed by docs prompt: $changed_file"
+    exit 1
+  done <<< "$NEW_CHANGED_FILES"
 }
 
 rule tests_pass {
@@ -12,15 +49,39 @@ rule tests_pass {
 }
 
 workflow default {
-  ensure docs_files_present
+  EXPECTED_DOC_FILES=(
+    "README.md"
+    "docs/index.html"
+    "docs/cli.md"
+    "docs/configuration.md"
+    "docs/install"
+    "docs/jaiph-skill.md"
+    "docs/grammar.md"
+  )
+
+  ensure tests_pass
+  ensure docs_files_present "${EXPECTED_DOC_FILES[@]}"
+
+  BEFORE_CHANGED_FILES="$(changed_files)"
 
   prompt "
     Ensure implementation/docs parity for this repository.
-    If behavior, command syntax, runtime semantics, or installation details changed,
-    update README.md, docs/index.html, docs/cli.md, docs/configuration.md, and docs/install
-    so they remain accurate and consistent.
+
+    If behavior, command syntax, runtime semantics, or installation details
+    changed, update relevant files so they remain accurate and consistent:
+    ${EXPECTED_DOC_FILES[@]}
+
+    If there is a new docs/*.md file, add it to the EXPECTED_DOC_FILES array in
+    this workflow file and follow the same rules as for existing files.
+    
     Keep examples executable and aligned with current CLI behavior.
+
+    For docs markdown pages, ensure each page has a top navigation block
+    immediately after its H1 with links to the main page and other docs pages.
+    Use GH Pages-friendly site routes (for example: /, /cli, /configuration,
+    /install etc.), not repository URLs or local filesystem paths.
   "
 
-  ensure tests_pass
+  EXPECTED_DOC_FILES_TEXT="$(printf '%s\n' "${EXPECTED_DOC_FILES[@]}")"
+  ensure only_expected_docs_changed_after_prompt "$EXPECTED_DOC_FILES_TEXT" "$BEFORE_CHANGED_FILES"
 }

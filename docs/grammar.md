@@ -1,5 +1,7 @@
 # Jaiph Grammar (Current Parser)
 
+[Home](/) · [CLI](/cli) · [Configuration](/configuration) · [Grammar](/grammar) · [Agent Skill](/jaiph-skill) · [Install](/install)
+
 This document reflects parser and transpiler behavior in the current codebase (`src/parser.ts`, `src/transpiler.ts`).
 
 ## Lexical Notes

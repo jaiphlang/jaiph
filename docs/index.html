@@ -538,12 +538,10 @@ jaiph use 0.2.3</code></pre>
                     <li>Local: <code>.jaiph/config.toml</code> (workspace root)</li>
                 </ul>
                 <p>Local config overrides global config. For supported keys and precedence, read
-                    <a href="https://github.com/jaiphlang/jaiph/blob/main/docs/configuration.md" target="_blank"
-                        rel="noopener noreferrer">configuration docs</a>.
+                    <a href="/configuration">configuration docs</a>.
                 </p>
                 <p>For command syntax and flags, read
-                    <a href="https://github.com/jaiphlang/jaiph/blob/main/docs/cli.md" target="_blank"
-                        rel="noopener noreferrer">CLI reference</a>.
+                    <a href="/cli">CLI reference</a>.
                 </p>
             </div>
         </section>
@@ -567,13 +565,17 @@ jaiph use 0.2.3</code></pre>
                         change the state of the system and are not restricted to read-only operations. Workflows fail if
                         the script returns a non-zero exit code.
 
+                    <dt><code>function name() { ... }</code></dt>
+                    <dd>Defines a reusable writable shell function. Functions can be called from workflows/rules and are
+                        tracked as regular Jaiph steps.</dd>
+
                     <dt><code>ensure ref [args...]</code></dt>
                     <dd>Executes a rule in a workflow or another rule, optionally forwarding arguments (for example:
                         <code>ensure my_rule "$1"</code>).
                     </dd>
 
                     <dt><code>run ref</code></dt>
-                    <dd>Executes another workflow in a workflow or another rule.</dd>
+                    <dd>Executes another workflow from a workflow. Inside a rule, <code>run</code> is treated as a shell command shorthand.</dd>
 
                     <dt><code>prompt "..."</code></dt>
                     <dd>Sends prompt text to the configured agent command (with optional model from config) and stores
@@ -598,17 +600,13 @@ jaiph use 0.2.3</code></pre>
 
                 <p>
                     Additional references:
-                    <a href="https://github.com/jaiphlang/jaiph/blob/main/docs/grammar.md" target="_blank"
-                        rel="noopener noreferrer">Grammar</a>
+                    <a href="/grammar">Grammar</a>
                     ·
-                    <a href="https://github.com/jaiphlang/jaiph/blob/main/docs/jaiph-skill.md" target="_blank"
-                        rel="noopener noreferrer">Agent bootstrap guide</a>
+                    <a href="/jaiph-skill">Agent bootstrap guide</a>
                     ·
-                    <a href="https://github.com/jaiphlang/jaiph/blob/main/docs/configuration.md" target="_blank"
-                        rel="noopener noreferrer">Configuration</a>
+                    <a href="/configuration">Configuration</a>
                     ·
-                    <a href="https://github.com/jaiphlang/jaiph/blob/main/docs/cli.md" target="_blank"
-                        rel="noopener noreferrer">CLI reference</a>
+                    <a href="/cli">CLI reference</a>
                 </p>
                 <a href="https://github.com/jaiphlang/jaiph/tree/main/docs" target="_blank" rel="noopener noreferrer"
                     class="button">Open docs repository</a>

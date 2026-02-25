@@ -1,6 +1,17 @@
 # Jaiph CLI Reference
 
-Jaiph provides four core CLI commands.
+[Home](/) · [CLI](/cli) · [Configuration](/configuration) · [Grammar](/grammar) · [Agent Skill](/jaiph-skill) · [Install](/install)
+
+Jaiph provides four core CLI commands plus a file shorthand.
+
+## `jaiph <file.jph>` (shorthand)
+
+If the first argument ends in `.jph` and the file exists, Jaiph treats it as `jaiph run <file.jph>`:
+
+```bash
+jaiph ./flows/review.jph "review this diff"
+# equivalent to: jaiph run ./flows/review.jph "review this diff"
+```
 
 ## `jaiph build`
 

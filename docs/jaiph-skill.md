@@ -1,5 +1,7 @@
 # Jaiph Bootstrap Skill (for Agents)
 
+[Home](/) · [CLI](/cli) · [Configuration](/configuration) · [Grammar](/grammar) · [Agent Skill](/jaiph-skill) · [Install](/install)
+
 Use this guide when generating `.jaiph/*.jph` workflows for a repository after `jaiph init`.
 
 ## Source of Truth
@@ -32,6 +34,7 @@ Prefer composable modules over one monolithic file.
 - `import "path.jph" as alias`
 - `rule name { ... }`
 - `workflow name { ... }`
+- `function name() { ... }`
 - `ensure ref [args...]`
 - `run ref`
 - `prompt "..."` (quoted string, can be multiline)

@@ -1,5 +1,7 @@
 # Jaiph configuration
 
+[Home](/) · [CLI](/cli) · [Configuration](/configuration) · [Grammar](/grammar) · [Agent Skill](/jaiph-skill) · [Install](/install)
+
 Jaiph reads configuration from TOML files in two scopes:
 
 1. Global: `${XDG_CONFIG_HOME:-~/.config}/jaiph/config.toml`
