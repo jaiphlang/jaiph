@@ -53,6 +53,7 @@ workflow default {
     "README.md"
     "CHANGELOG.md"
     "docs/index.html"
+    "docs/getting-started.md"
     "docs/cli.md"
     "docs/configuration.md"
     "docs/install"
@@ -64,6 +65,8 @@ workflow default {
   ensure docs_files_present "${EXPECTED_DOC_FILES[@]}"
 
   BEFORE_CHANGED_FILES="$(changed_files)"
+
+  cp README.md docs/getting-started.md
 
   prompt "
     Ensure implementation/docs parity for this repository.
@@ -80,18 +83,19 @@ workflow default {
     For docs markdown pages, ensure each page has a top navigation block
     immediately after its H1 with links to jaiph.org, and to *.md pages in docs/.
     Use relative links to configuration.md, cli.md, not repository URLs or local
-    filesystem paths.
+    filesystem paths. Don't include non-markdown files in the navigation block.
+    Agent skill should point to github raw url, not the rendered version.
+    Don't update links in index.html, only add navigation blocks to .md files.
 
     Ensure there is a CHANGELOG.md file with a list of all features that are
     supported by the current version. It should be in the following format:
-    ```
+    
       # [VERSION]
       - Feature 1
       - Feature 2
 
       # [VERSION]
       - Feature 3
-    ```
 
     Don't modify changes from previous versions.
   "

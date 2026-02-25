@@ -1,5 +1,9 @@
 # ![Jaiph](docs/logo.png)
 
+[jaiph.org](https://jaiph.org) · [Getting started](getting-started.md) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Agent Skill](jaiph-skill.md)
+
+---
+
 **Open Source • Powerful • Friendly**
 
 [![CI](https://github.com/jaiphlang/jaiph/actions/workflows/ci.yml/badge.svg)](https://github.com/jaiphlang/jaiph/actions/workflows/ci.yml)
@@ -15,7 +19,7 @@ It combines declarative workflow structure with bash, then compiles to pure shel
 > [!WARNING]
 > Jaiph is still in an early stage. Expect breaking changes.
 
-- Docs (canonical): <https://jaiph.org/>
+- Docs (canonical): <https://jaiph.org/getting-started>
 - Agent skill: <https://raw.githubusercontent.com/jaiphlang/jaiph/main/docs/jaiph-skill.md>
 - Samples: <https://github.com/jaiphlang/jaiph/tree/main/samples>
 - Contribute: <https://github.com/jaiphlang/jaiph/issues>
@@ -139,11 +143,11 @@ Jaiph supports both global and local TOML config files:
 - Global: `${XDG_CONFIG_HOME:-~/.config}/jaiph/config.toml`
 - Local: `.jaiph/config.toml` (in your workspace)
 
-Local config overrides global config. See `docs/configuration.md` for full details and examples.
+Local config overrides global config. See [configuration](configuration.md) for full details and examples.
 
 ### CLI reference
 
-See `docs/cli.md` for command syntax, examples, and supported environment variables.
+See [cli](cli.md) for command syntax, examples, and supported environment variables.
 
 ## Language Primitives
 
@@ -178,7 +182,7 @@ Known limitations and gotchas:
 ## More Documentation
 
 - Full docs: <https://jaiph.org/>
-- Grammar: `docs/grammar.md`
-- Agent bootstrap skill: `docs/jaiph-skill.md`
-- Configuration: `docs/configuration.md`
-- CLI: `docs/cli.md`
+- Grammar: [grammar](grammar.md)
+- Agent bootstrap skill: [jaiph-skill](jaiph-skill.md)
+- Configuration: [configuration](configuration.md)
+- CLI: [cli](cli.md)
