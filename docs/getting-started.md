@@ -1,4 +1,4 @@
-# ![Jaiph](docs/logo.png)
+# ![Jaiph](logo.png)
 
 [jaiph.org](https://jaiph.org) · [Getting started](getting-started.md) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Agent Skill](jaiph-skill.md)
 

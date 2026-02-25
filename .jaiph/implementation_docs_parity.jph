@@ -67,6 +67,7 @@ workflow default {
   BEFORE_CHANGED_FILES="$(changed_files)"
 
   cp README.md docs/getting-started.md
+  perl -pi -e 's{docs/logo\.png}{logo.png}g' docs/getting-started.md
 
   prompt "
     Ensure implementation/docs parity for this repository.
