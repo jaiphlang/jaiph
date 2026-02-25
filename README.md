@@ -93,7 +93,7 @@ jaiph use 0.2.3     # installs tag v0.2.3
 ```
 
 If that fails, check that `~/.local/bin` is in your `PATH` (default install directory).
-Installation places both `jaiph` and global runtime stdlib at `~/.local/bin/jaiph_stdlib.sh`.
+Installation places both the `jaiph` CLI and the global runtime stdlib (`jaiph_stdlib.sh`) in `~/.local/bin/`.
 
 ### Running a workflow
 

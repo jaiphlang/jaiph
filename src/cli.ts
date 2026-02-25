@@ -490,6 +490,15 @@ async function runWorkflow(rest: string[]): Promise<number> {
     const commitActiveLine = (text: string): void => {
       process.stdout.write(`\r\u001b[2K${text}\n`);
     };
+    const formatNonInteractiveCompletedLine = (rowIndex: number): string => {
+      const row = treeRows[rowIndex];
+      const state = rowStates[rowIndex];
+      const treeLead = `${row.prefix}${row.branch ?? ""}`;
+      if (state.status === "failed") {
+        return `${treeLead}${styleKeywordLabel(row.rawLabel)} ${styleDim(`(${state.elapsedSec ?? 0}s failed)`)}`;
+      }
+      return `${treeLead}${styleKeywordLabel(row.rawLabel)} ${styleDim(`(${state.elapsedSec ?? 0}s)`)}`;
+    };
 
     const results = build(inputAbs, outDir);
     if (results.length !== 1) {
@@ -529,7 +538,7 @@ async function runWorkflow(rest: string[]): Promise<number> {
         writeActiveLine(formatRunningLine(activeRowIndex, 0));
       }
     } else {
-      process.stdout.write(`${renderProgressTree(treeRows, rowStates)}\n`);
+      process.stdout.write(`${styleKeywordLabel(treeRows[0].rawLabel)}\n`);
     }
     const runtimeEnv = { ...process.env, JAIPH_WORKSPACE: workspaceRoot } as Record<string, string | undefined>;
     if (runtimeEnv.JAIPH_AGENT_MODEL === undefined && config.agent?.defaultModel) {
@@ -565,12 +574,14 @@ async function runWorkflow(rest: string[]): Promise<number> {
         return;
       }
       let changed = false;
+      let changedRowIndex = -1;
       for (let i = 1; i < treeRows.length; i += 1) {
         const label = parseLabel(treeRows[i].rawLabel);
         const nameMatches = label.name === parsed.name || label.name.endsWith(`.${parsed.name}`);
         if (label.kind === parsed.kind && nameMatches && rowStates[i].status === "pending") {
           rowStates[i] = { status: status === 0 ? "done" : "failed", elapsedSec };
           changed = true;
+          changedRowIndex = i;
           break;
         }
       }
@@ -585,6 +596,8 @@ async function runWorkflow(rest: string[]): Promise<number> {
             }
             writeActiveLine(formatRunningLine(activeRowIndex, 0));
           }
+        } else if (changedRowIndex !== -1) {
+          process.stdout.write(`${formatNonInteractiveCompletedLine(changedRowIndex)}\n`);
         }
       }
     };
@@ -675,7 +688,7 @@ async function runWorkflow(rest: string[]): Promise<number> {
       }
       process.stdout.write(`${styleKeywordLabel(treeRows[0].rawLabel)} ${styleDim(`(${Math.floor(elapsedMs / 1000)}s)`) }\n`);
     } else {
-      process.stdout.write(`${renderProgressTree(treeRows, rowStates, Math.floor(elapsedMs / 1000))}\n`);
+      process.stdout.write(`${styleKeywordLabel(treeRows[0].rawLabel)} ${styleDim(`(${Math.floor(elapsedMs / 1000)}s)`) }\n`);
     }
 
     const palette = colorPalette();
