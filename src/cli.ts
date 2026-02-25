@@ -596,6 +596,10 @@ async function runWorkflow(rest: string[]): Promise<number> {
     if (runtimeEnv.JAIPH_STDLIB === undefined) {
       runtimeEnv.JAIPH_STDLIB = join(__dirname, "jaiph_stdlib.sh");
     }
+    // Prevent non-interactive bash from sourcing caller-provided startup files
+    // (e.g. GitHub Actions BASH_ENV), which can inject stderr noise and flip
+    // successful runs into false failures.
+    runtimeEnv.BASH_ENV = undefined;
     runtimeEnv.JAIPH_RUN_DIR = undefined;
     runtimeEnv.JAIPH_PRECEDING_FILES = undefined;
     runtimeEnv.JAIPH_RUN_SUMMARY_FILE = undefined;
