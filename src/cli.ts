@@ -502,6 +502,7 @@ async function runWorkflow(rest: string[]): Promise<number> {
       'meta_file="$1"; shift',
       'built_script="$1"; shift',
       'workflow_symbol="$1"; shift',
+      "exec 3>&2",
       'source "$built_script"',
       'entrypoint="${workflow_symbol}__workflow_default"',
       'if ! declare -F "$entrypoint" >/dev/null; then',
@@ -672,7 +673,7 @@ async function runWorkflow(rest: string[]): Promise<number> {
           }
         }
       }
-      process.stdout.write(`${renderProgressTree(treeRows, rowStates, Math.floor(elapsedMs / 1000))}\n`);
+      process.stdout.write(`${styleKeywordLabel(treeRows[0].rawLabel)} ${styleDim(`(${Math.floor(elapsedMs / 1000)}s)`) }\n`);
     } else {
       process.stdout.write(`${renderProgressTree(treeRows, rowStates, Math.floor(elapsedMs / 1000))}\n`);
     }

@@ -137,7 +137,11 @@ jaiph__run_step() {
     cat "$err_file" >&2
   fi
   step_elapsed_seconds="$((SECONDS - step_started_seconds))"
-  printf "__JAIPH_STEP_END__|%s|%s|%s\n" "$func_name" "$status" "$step_elapsed_seconds" >&2
+  local marker_fd=2
+  if (: >&3) 2>/dev/null; then
+    marker_fd=3
+  fi
+  printf "__JAIPH_STEP_END__|%s|%s|%s\n" "$func_name" "$status" "$step_elapsed_seconds" >&"$marker_fd"
   return "$status"
 }
 
