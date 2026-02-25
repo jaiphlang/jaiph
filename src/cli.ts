@@ -52,6 +52,10 @@ function collectWorkflowChildren(mod: jaiphModule, workflowName: string): Array<
       items.push({ label: `workflow ${step.runWorkflow.value}`, nested: step.runWorkflow.value });
       continue;
     }
+    if (step.type === "prompt") {
+      items.push({ label: "prompt prompt" });
+      continue;
+    }
     if (step.type === "shell") {
       for (const fnName of collectFunctionCalls(step.command)) {
         items.push({ label: `function ${fnName}` });
