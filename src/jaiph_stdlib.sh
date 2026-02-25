@@ -188,7 +188,7 @@ jaiph__run_step() {
   fi
   jaiph__init_run_tracking || return 1
   local step_started_at safe_name out_file err_file status had_errexit step_started_seconds step_elapsed_seconds
-  local out_tmp err_tmp elapsed_ms
+  local out_tmp err_tmp elapsed_ms out_pipe err_pipe out_tee_pid err_tee_pid
   step_started_seconds="$SECONDS"
   step_started_at="$(jaiph__timestamp_utc)"
   safe_name="$(jaiph__sanitize_name "$func_name")"
@@ -196,14 +196,25 @@ jaiph__run_step() {
   err_file="$JAIPH_RUN_DIR/${step_started_at}-${safe_name}.err"
   out_tmp="${out_file}.tmp.$$"
   err_tmp="${err_file}.tmp.$$"
+  out_pipe="${out_file}.pipe.$$"
+  err_pipe="${err_file}.pipe.$$"
   jaiph__emit_step_event "STEP_START" "$func_name"
   had_errexit=0
   case "$-" in
     *e*) had_errexit=1 ;;
   esac
+  rm -f "$out_pipe" "$err_pipe"
+  mkfifo "$out_pipe" "$err_pipe"
+  tee "$out_tmp" <"$out_pipe" &
+  out_tee_pid=$!
+  tee "$err_tmp" <"$err_pipe" >&2 &
+  err_tee_pid=$!
   set +e
-  "$@" >"$out_tmp" 2>"$err_tmp"
+  "$@" >"$out_pipe" 2>"$err_pipe"
   status=$?
+  wait "$out_tee_pid" || true
+  wait "$err_tee_pid" || true
+  rm -f "$out_pipe" "$err_pipe"
   if [[ "$had_errexit" -eq 1 ]]; then
     set -e
   fi
