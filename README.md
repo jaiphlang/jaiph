@@ -2,11 +2,13 @@
 
 **Open Source • Powerful • Friendly**
 
+[![CI](https://github.com/jaiphlang/jaiph/actions/workflows/ci.yml/badge.svg)](https://github.com/jaiphlang/jaiph/actions/workflows/ci.yml)
+
 [jaiph.org](https://jaiph.org)
 
 ## What is Jaiph?
 
-**Jaiph** is a simple scripting language to define AI agent workflows and a runtime to orchestrate them.
+**Jaiph** is a composable scripting language and runtime for defining and orchestrating AI agent workflows.
 
 It combines declarative workflow structure with Bash, then compiles to pure shell scripts. That keeps workflows portable and easy to understand while staying compatible with standard shell environments.
 
