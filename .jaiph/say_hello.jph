@@ -11,6 +11,6 @@ workflow default {
   ensure name_provided "$1"
 
   prompt "
-    Say hello to $1 and provide a fan fact about a person with the same name.
+    Say hello to $1 and provide a fun fact about a person with the same name.
   "
 }
