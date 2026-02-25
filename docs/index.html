@@ -15,6 +15,7 @@
             --bg: #f4f1ec;
             --text: #2a2a2a;
             --muted: #6b7280;
+            --link: #5389b0;
         }
 
         * {
@@ -76,6 +77,10 @@
         h2 {
             color: var(--navy);
             margin-top: 2.5rem;
+        }
+
+        a {
+            color: var(--link);
         }
 
         .card {
@@ -344,8 +349,8 @@
             <h2>What is Jaiph?</h2>
             <div class="card">
                 <p>
-                    <strong>Jaiph</strong> is a simple, scripting, composable language to define AI agent
-                    workflows.
+                    <strong>Jaiph</strong> is a simple scripting language to define AI agent workflows and a runtime
+                    to orchestrate them.
                 </p>
                 <p>
                     It combines the power of declarative languages with Bash to create portable and easy-to-understand
@@ -379,7 +384,9 @@
                 </div>
 
                 <div class="code-tab-panel is-active" data-panel="main-jph">
-                    <pre><code class="language-jaiph">import "security.jph" as security
+                    <pre><code class="language-jaiph">#!/usr/bin/env jaiph
+
+import "security.jph" as security
 import "bootstrap_project.jph" as bootstrap
 
 # Validates local build prerequisites.
@@ -489,11 +496,17 @@ jaiph__die() {
 
 jaiph__prompt__impl() {
   local workspace_root
+  local agent_command
   workspace_root="$(jaiph__workspace_root)"
+  agent_command="${JAIPH_AGENT_COMMAND:-cursor-agent}"
   if [[ "$#" -gt 0 ]]; then
     printf "Prompt:\n%s\n\n" "$*"
   fi
-  cursor-agent --print --output-format text --workspace "$workspace_root" --trust "$@"
+  if [[ -n "${JAIPH_AGENT_MODEL:-}" ]]; then
+    "$agent_command" --print --output-format text --workspace "$workspace_root" --model "$JAIPH_AGENT_MODEL" --trust "$@"
+    return $?
+  fi
+  "$agent_command" --print --output-format text --workspace "$workspace_root" --trust "$@"
 }
 
 jaiph__prompt() {
@@ -526,7 +539,15 @@ jaiph__init_run_tracking() {
   started_at="$(jaiph__timestamp_utc)"
   run_id="$(jaiph__new_run_id)"
   workspace_root="$(jaiph__workspace_root)"
-  JAIPH_RUN_DIR="$workspace_root/.jaiph/runs/${started_at}-${run_id}"
+  if [[ -n "${JAIPH_RUNS_DIR:-}" ]]; then
+    if [[ "$JAIPH_RUNS_DIR" = /* ]]; then
+      JAIPH_RUN_DIR="${JAIPH_RUNS_DIR}/${started_at}-${run_id}"
+    else
+      JAIPH_RUN_DIR="${workspace_root}/${JAIPH_RUNS_DIR}/${started_at}-${run_id}"
+    fi
+  else
+    JAIPH_RUN_DIR="$workspace_root/.jaiph/runs/${started_at}-${run_id}"
+  fi
   JAIPH_PRECEDING_FILES=""
   mkdir -p "$JAIPH_RUN_DIR"
   export JAIPH_RUN_DIR JAIPH_PRECEDING_FILES
@@ -632,6 +653,9 @@ jaiph__execute_readonly() {
                     Then verify the installation:
                 </p>
                 <pre><code class="language-bash">jaiph --version</code></pre>
+                <p>Switch installed version:</p>
+                <pre><code class="language-bash">jaiph use nightly
+jaiph use 0.2.3</code></pre>
                 <p>In case of an error, check if <code>~/.local/bin</code> is in your PATH. This is the default
                     installation directory.</p>
                 <h3>Running a workflow</h3>
@@ -642,12 +666,22 @@ jaiph__execute_readonly() {
                 </p>
                 <h3>Initialize Jaiph workspace</h3>
                 <pre><code class="language-bash">jaiph init</code></pre>
-                <p>This creates <code>.jaiph/bootstrap.jph</code>.</p>
+                <p>This creates <code>.jaiph/bootstrap.jph</code> and <code>.jaiph/config.toml</code>.</p>
                 <p>Then run:</p>
                 <pre><code class="language-bash">jaiph run .jaiph/bootstrap.jph</code></pre>
                 <p>This asks an agent to detect project configuration and bootstrap recommended Jaiph workflows for
                     feature implementation.</p>
                 <p>Tip: add <code>.jaiph/runs/</code> to your <code>.gitignore</code>.</p>
+                <h3>Configuration</h3>
+                <p>Jaiph supports TOML configuration in two scopes:</p>
+                <ul>
+                    <li>Global: <code>${XDG_CONFIG_HOME:-~/.config}/jaiph/config.toml</code></li>
+                    <li>Local: <code>.jaiph/config.toml</code> (workspace root)</li>
+                </ul>
+                <p>Local config overrides global config. For supported keys and precedence, read
+                    <a href="https://github.com/jaiphlang/jaiph/blob/main/docs/configuration.md" target="_blank"
+                        rel="noopener noreferrer">configuration docs</a>.
+                </p>
             </div>
         </section>
 
@@ -678,7 +712,8 @@ jaiph__execute_readonly() {
                     <dd>Executes another workflow in a workflow or another rule.</dd>
 
                     <dt><code>prompt "..."</code></dt>
-                    <dd>Sends prompt text to the configured agent command and stores prompt stdout/stderr in
+                    <dd>Sends prompt text to the configured agent command (with optional model from config) and stores
+                        prompt stdout/stderr in
                         <code>.jaiph/runs/</code> step logs (for example:
                         <code>*-jaiph__prompt.out</code> and <code>*-jaiph__prompt.err</code>).</dd>
                 </dl>
@@ -704,6 +739,9 @@ jaiph__execute_readonly() {
                     ·
                     <a href="https://github.com/jaiphlang/jaiph/blob/main/docs/jaiph-skill.md" target="_blank"
                         rel="noopener noreferrer">Agent bootstrap guide</a>
+                    ·
+                    <a href="https://github.com/jaiphlang/jaiph/blob/main/docs/configuration.md" target="_blank"
+                        rel="noopener noreferrer">Configuration</a>
                 </p>
                 <a href="https://github.com/jaiphlang/jaiph/tree/main/docs" target="_blank" rel="noopener noreferrer"
                     class="button">Open docs repository</a>

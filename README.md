@@ -6,7 +6,7 @@
 
 ## What is Jaiph?
 
-**Jaiph** is a scripting, declarative, and composable language for defining AI agent workflows.
+**Jaiph** is a simple scripting language to define AI agent workflows and a runtime to orchestrate them.
 
 It combines declarative workflow structure with Bash, then compiles to pure shell scripts. That keeps workflows portable and easy to understand while staying compatible with standard shell environments.
 
@@ -25,6 +25,7 @@ It combines declarative workflow structure with Bash, then compiles to pure shel
 
 ```jaiph
 #!/usr/bin/env jaiph
+
 import "security.jph" as security
 import "bootstrap_project.jph" as bootstrap
 
@@ -118,6 +119,15 @@ This asks an agent to detect project configuration and bootstrap recommended Jai
 
 Tip: add `.jaiph/runs/` to your `.gitignore`.
 
+### Configuration
+
+Jaiph supports both global and local TOML config files:
+
+- Global: `${XDG_CONFIG_HOME:-~/.config}/jaiph/config.toml`
+- Local: `.jaiph/config.toml` (in your workspace)
+
+Local config overrides global config. See `docs/configuration.md` for full details and examples.
+
 ## Language Primitives
 
 - `import "file.jph" as alias`  
@@ -150,3 +160,4 @@ Known limitations and gotchas:
 - Full docs: <https://jaiph.org/>
 - Grammar: `docs/grammar.md`
 - Agent bootstrap skill: `docs/jaiph-skill.md`
+- Configuration: `docs/configuration.md`
