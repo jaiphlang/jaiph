@@ -474,35 +474,21 @@ async function runWorkflow(rest: string[]): Promise<number> {
     const treeRows = buildRunTreeRows(mod);
     const rowStates: RowState[] = treeRows.map((row) => (row.isRoot ? { status: "done" } : { status: "pending" }));
     const interactiveProgress = process.stdout.isTTY;
-    let frameLines = 0;
-    const clearProgressFrame = (): void => {
-      if (!interactiveProgress || frameLines === 0) {
-        return;
-      }
-      process.stdout.write(`\u001b[${frameLines}F`);
-      for (let i = 0; i < frameLines; i += 1) {
-        process.stdout.write("\u001b[2K");
-        if (i < frameLines - 1) {
-          process.stdout.write("\u001b[1E");
-        }
-      }
-      process.stdout.write("\r");
-      frameLines = 0;
+    let activeRowIndex = treeRows.length > 1 ? 1 : -1;
+    const formatCompletedLine = (rowIndex: number): string => {
+      const row = treeRows[rowIndex];
+      const state = rowStates[rowIndex];
+      return `${row.prefix}├── ${styleKeywordLabel(row.rawLabel)} ${styleDim(`(${state.elapsedSec ?? 0}s)`)}`;
     };
-    const renderProgressFrame = (includeCounter: boolean, rootElapsedSec?: number): void => {
-      const treeText = renderProgressTree(treeRows, rowStates, rootElapsedSec);
-      if (!interactiveProgress) {
-        process.stdout.write(`${treeText}\n`);
-        return;
-      }
-      const lines = treeText.split("\n");
-      if (includeCounter) {
-        const seconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
-        lines.push(styleDim(`… running ${seconds}s`));
-      }
-      clearProgressFrame();
-      process.stdout.write(`${lines.join("\n")}\n`);
-      frameLines = lines.length;
+    const formatRunningLine = (rowIndex: number, seconds: number): string => {
+      const row = treeRows[rowIndex];
+      return `${row.prefix}└── ${styleKeywordLabel(row.rawLabel)} ${styleDim(`(running ${seconds}s)`)}`;
+    };
+    const writeActiveLine = (text: string): void => {
+      process.stdout.write(`\r\u001b[2K${text}`);
+    };
+    const commitActiveLine = (text: string): void => {
+      process.stdout.write(`\r\u001b[2K${text}\n`);
     };
 
     const results = build(inputAbs, outDir);
@@ -536,7 +522,14 @@ async function runWorkflow(rest: string[]): Promise<number> {
       'exit "$status"',
     ].join("\n");
     const startedAt = Date.now();
-    renderProgressFrame(true);
+    if (interactiveProgress) {
+      process.stdout.write(`${styleKeywordLabel(treeRows[0].rawLabel)}\n`);
+      if (activeRowIndex !== -1) {
+        writeActiveLine(formatRunningLine(activeRowIndex, 0));
+      }
+    } else {
+      process.stdout.write(`${renderProgressTree(treeRows, rowStates)}\n`);
+    }
     const runtimeEnv = { ...process.env, JAIPH_WORKSPACE: workspaceRoot } as Record<string, string | undefined>;
     if (runtimeEnv.JAIPH_AGENT_MODEL === undefined && config.agent?.defaultModel) {
       runtimeEnv.JAIPH_AGENT_MODEL = config.agent.defaultModel;
@@ -582,7 +575,15 @@ async function runWorkflow(rest: string[]): Promise<number> {
       }
       if (changed) {
         if (interactiveProgress) {
-          renderProgressFrame(true);
+          while (activeRowIndex !== -1 && rowStates[activeRowIndex].status !== "pending") {
+            commitActiveLine(formatCompletedLine(activeRowIndex));
+            activeRowIndex += 1;
+            if (activeRowIndex >= treeRows.length) {
+              activeRowIndex = -1;
+              break;
+            }
+            writeActiveLine(formatRunningLine(activeRowIndex, 0));
+          }
         }
       }
     };
@@ -594,25 +595,29 @@ async function runWorkflow(rest: string[]): Promise<number> {
       }
       if (line.length > 0) {
         capturedStderr += `${line}\n`;
-        clearProgressFrame();
-        process.stderr.write(`${line}\n`);
         if (interactiveProgress) {
-          renderProgressFrame(true);
+          process.stdout.write("\r\u001b[2K\n");
+        }
+        process.stderr.write(`${line}\n`);
+        if (interactiveProgress && activeRowIndex !== -1) {
+          writeActiveLine(formatRunningLine(activeRowIndex, Math.max(0, Math.floor((Date.now() - startedAt) / 1000))));
         }
       }
     };
     const counterTimer = setInterval(() => {
-      if (interactiveProgress) {
-        renderProgressFrame(true);
+      if (interactiveProgress && activeRowIndex !== -1) {
+        writeActiveLine(formatRunningLine(activeRowIndex, Math.max(0, Math.floor((Date.now() - startedAt) / 1000))));
       }
     }, 1000);
     execResult.stdout?.setEncoding("utf8");
     execResult.stderr?.setEncoding("utf8");
     execResult.stdout?.on("data", (chunk: string) => {
-      clearProgressFrame();
-      process.stdout.write(chunk);
       if (interactiveProgress) {
-        renderProgressFrame(true);
+        process.stdout.write("\r\u001b[2K");
+      }
+      process.stdout.write(chunk);
+      if (interactiveProgress && activeRowIndex !== -1) {
+        writeActiveLine(formatRunningLine(activeRowIndex, Math.max(0, Math.floor((Date.now() - startedAt) / 1000))));
       }
     });
     execResult.stderr?.on("data", (chunk: string) => {
@@ -654,7 +659,20 @@ async function runWorkflow(rest: string[]): Promise<number> {
     const resolvedStatus = childExit.status;
 
     if (interactiveProgress) {
-      renderProgressFrame(false, Math.floor(elapsedMs / 1000));
+      if (activeRowIndex !== -1) {
+        while (activeRowIndex !== -1 && activeRowIndex < treeRows.length) {
+          const state = rowStates[activeRowIndex];
+          if (state.status === "pending") {
+            rowStates[activeRowIndex] = { status: resolvedStatus === 0 ? "done" : "failed", elapsedSec: 0 };
+          }
+          commitActiveLine(formatCompletedLine(activeRowIndex));
+          activeRowIndex += 1;
+          if (activeRowIndex >= treeRows.length) {
+            activeRowIndex = -1;
+          }
+        }
+      }
+      process.stdout.write(`${renderProgressTree(treeRows, rowStates, Math.floor(elapsedMs / 1000))}\n`);
     } else {
       process.stdout.write(`${renderProgressTree(treeRows, rowStates, Math.floor(elapsedMs / 1000))}\n`);
     }
