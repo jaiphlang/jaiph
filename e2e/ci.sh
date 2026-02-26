@@ -51,10 +51,10 @@ jaiph --help
 jaiph use nightly
 
 jaiph init "${WORK_DIR}"
-test -f "${WORK_DIR}/.jaiph/bootstrap.jph"
+test -f "${WORK_DIR}/.jaiph/bootstrap.jh"
 test -f "${WORK_DIR}/.jaiph/config.toml"
 test -f "${WORK_DIR}/.jaiph/jaiph-skill.md"
-test -x "${WORK_DIR}/.jaiph/bootstrap.jph"
+test -x "${WORK_DIR}/.jaiph/bootstrap.jh"
 
 cat > "${WORK_DIR}/hello.jph" <<'EOF'
 workflow default {
@@ -67,6 +67,41 @@ run_output="$(jaiph run "${WORK_DIR}/hello.jph")"
 if [[ "${run_output}" != *"PASS workflow default"* ]]; then
   echo "Expected jaiph run to report PASS for hello workflow. Output was:" >&2
   printf '%s\n' "${run_output}" >&2
+  exit 1
+fi
+
+# .jh entrypoint and run
+cat > "${WORK_DIR}/hello.jh" <<'EOF'
+workflow default {
+  echo "hello-jh"
+}
+EOF
+jaiph build "${WORK_DIR}/hello.jh"
+run_output_jh="$(jaiph run "${WORK_DIR}/hello.jh")"
+if [[ "${run_output_jh}" != *"PASS workflow default"* ]] || [[ "${run_output_jh}" != *"hello-jh"* ]]; then
+  echo "Expected jaiph run hello.jh to report PASS and output hello-jh. Output was:" >&2
+  printf '%s\n' "${run_output_jh}" >&2
+  exit 1
+fi
+
+# Mixed extension: .jh entrypoint importing .jph module
+cat > "${WORK_DIR}/lib.jph" <<'EOF'
+rule ready {
+  echo "from-jph"
+}
+EOF
+cat > "${WORK_DIR}/app.jh" <<'EOF'
+import "lib.jph" as lib
+workflow default {
+  ensure lib.ready
+  echo "mixed-ok"
+}
+EOF
+jaiph build "${WORK_DIR}/app.jh"
+run_mixed="$(jaiph run "${WORK_DIR}/app.jh")"
+if [[ "${run_mixed}" != *"PASS workflow default"* ]] || [[ "${run_mixed}" != *"from-jph"* ]] || [[ "${run_mixed}" != *"mixed-ok"* ]]; then
+  echo "Expected mixed .jh/.jph run to pass and show from-jph and mixed-ok. Output was:" >&2
+  printf '%s\n' "${run_mixed}" >&2
   exit 1
 fi
 

@@ -373,7 +373,7 @@
             <h2>Example</h2>
             <div class="card">
                 <div class="code-tab-list">
-                    <button type="button" class="code-tab-button is-active" data-target="main-jph">main.jph</button>
+                    <button type="button" class="code-tab-button is-active" data-target="main-jph">main.jh</button>
                     <span class="code-tab-hint">transpiles to: </span>
                     <button type="button" class="code-tab-button" data-target="main-sh">main.sh</button>
                 </div>
@@ -381,8 +381,8 @@
                 <div class="code-tab-panel is-active" data-panel="main-jph">
                     <pre><code class="language-jaiph">#!/usr/bin/env jaiph
 
-import "bootstrap_project.jph" as bootstrap
-import "tools/security.jph" as security
+import "bootstrap_project.jh" as bootstrap
+import "tools/security.jh" as security
 
 # Validates local build prerequisites.
 rule project_ready {
@@ -505,26 +505,26 @@ main__workflow_update_docs() {
                 <pre><code class="language-bash">jaiph --version</code></pre>
                 <p>Switch installed version:</p>
                 <pre><code class="language-bash">jaiph use nightly
-jaiph use 0.2.3</code></pre>
+jaiph use 0.2.0</code></pre>
                 <p>In case of an error, check if <code>~/.local/bin</code> is in your PATH. This is the default
                     installation directory.</p>
                 <p>Installation places both the <code>jaiph</code> CLI and the global runtime stdlib
                     (<code>jaiph_stdlib.sh</code>) in <code>~/.local/bin/</code>.</p>
                 <h3>Running a workflow</h3>
-                <pre><code class="language-bash">./path/to/main.jph "feature request or task"</code></pre>
+                <pre><code class="language-bash">./path/to/main.jh "feature request or task"</code></pre>
                 <p><strong>Argument passing:</strong> values map like bash scripts (<code>$1</code>, <code>$2</code>,
                     <code>"$@"</code>).
                 </p>
-                <p><strong>Entrypoint resolution:</strong> executable <code>.jph</code> files with shebang run
-                    <code>workflow default</code>. You can also use <code>jaiph run path/to/file.jph</code> with the
+                <p><strong>Entrypoint resolution:</strong> executable <code>.jh</code> files with shebang run
+                    <code>workflow default</code>. You can also use <code>jaiph run path/to/file.jh</code> with the
                     same argument semantics.
                 </p>
                 <h3>Initialize Jaiph workspace</h3>
                 <pre><code class="language-bash">jaiph init</code></pre>
-                <p>This creates <code>.jaiph/bootstrap.jph</code>, <code>.jaiph/config.toml</code>, and
+                <p>This creates <code>.jaiph/bootstrap.jh</code>, <code>.jaiph/config.toml</code>, and
                     <code>.jaiph/jaiph-skill.md</code> (synced from local Jaiph installation).</p>
                 <p>Then run:</p>
-                <pre><code class="language-bash">./.jaiph/bootstrap.jph</code></pre>
+                <pre><code class="language-bash">./.jaiph/bootstrap.jh</code></pre>
                 <p>This asks an agent to detect project configuration and bootstrap recommended Jaiph workflows for
                     feature implementation.</p>
                 <p>Tip: add <code>.jaiph/runs/</code> to your <code>.gitignore</code>.</p>
@@ -547,7 +547,7 @@ jaiph use 0.2.3</code></pre>
             <h2>Documentation</h2>
             <div class="card">
                 <dl class="primitive-list">
-                    <dt><code>import "file.jph" as alias</code></dt>
+                    <dt><code>import "file.jh" as alias</code></dt>
                     <dd>Imports rules and workflows from another Jaiph module under an alias. Jaiph compiles each module
                         to a single shell file, and verifies the import at compile time.</dd>
 
@@ -589,7 +589,7 @@ jaiph use 0.2.3</code></pre>
                 <h3>Known limitations and gotchas</h3>
                 <ul>
                     <li><strong>Parser limitation:</strong> inline brace-group short-circuit patterns like
-                        <code>cmd || { ... }</code> are not supported in <code>.jph</code> files yet. Use explicit
+                        <code>cmd || { ... }</code> are not supported in <code>.jh</code> files yet. Use explicit
                         conditionals such as <code>if ! cmd; then ...; fi</code> instead.
                     </li>
                     <li><strong>Entrypoint naming:</strong> <code>jaiph run</code> searches for

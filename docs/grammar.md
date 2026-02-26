@@ -1,6 +1,6 @@
 # Jaiph Grammar (Current Parser)
 
-[jaiph.org](https://jaiph.org) · [Getting started](getting-started.md) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Agent Skill](jaiph-skill.md)
+[jaiph.org](https://jaiph.org) · [Getting started](getting-started.md) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/main/docs/jaiph-skill.md)
 
 ---
 
@@ -12,7 +12,7 @@ This document reflects parser and transpiler behavior in the current codebase (`
 - `REF := IDENT | IDENT "." IDENT`
 - Comments are full-line comments starting with `#`.
 - Empty or whitespace-only lines are ignored.
-- Input files supported by build/run/import resolution: `.jph`.
+- Input files supported by build/run/import resolution: `.jh` (recommended), `.jph` (supported, deprecated for new use).
 
 ## EBNF (Practical Form)
 

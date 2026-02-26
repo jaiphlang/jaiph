@@ -15,10 +15,12 @@ export function workflowSymbolForFile(inputFile: string, rootDir: string): strin
   return toWorkflowSymbol(resolve(inputFile), resolve(rootDir));
 }
 
+const JAIPH_EXT_REGEX = /\.(jh|jph)$/;
+
 function toImportSource(importPath: string, inputFile: string, rootDir: string): string {
   const importedFile = resolveImportPath(inputFile, importPath);
-  const importedRel = relative(rootDir, importedFile).replace(/\.jph$/, ".sh");
-  const currentRel = relative(rootDir, inputFile).replace(/\.jph$/, ".sh");
+  const importedRel = relative(rootDir, importedFile).replace(JAIPH_EXT_REGEX, ".sh");
+  const currentRel = relative(rootDir, inputFile).replace(JAIPH_EXT_REGEX, ".sh");
   const currentDir = dirname(currentRel);
   return relative(currentDir, importedRel).split(sep).join("/");
 }
@@ -295,8 +297,19 @@ export function transpileFile(inputFile: string, rootDir: string): string {
 }
 
 function resolveImportPath(fromFile: string, importPath: string): string {
-  const normalized = importPath.endsWith(".jph") ? importPath : `${importPath}.jph`;
-  return resolve(dirname(fromFile), normalized);
+  const dir = dirname(fromFile);
+  if (importPath.endsWith(".jph") || importPath.endsWith(".jh")) {
+    return resolve(dir, importPath);
+  }
+  const withJh = resolve(dir, `${importPath}.jh`);
+  const withJph = resolve(dir, `${importPath}.jph`);
+  if (existsSync(withJh)) {
+    return withJh;
+  }
+  if (existsSync(withJph)) {
+    return withJph;
+  }
+  return withJph;
 }
 
 function validateReferences(ast: jaiphModule): void {
@@ -450,7 +463,8 @@ function ensureDir(path: string): void {
 function walkjhFiles(inputPath: string): string[] {
   const s = statSync(inputPath);
   if (s.isFile()) {
-    return extname(inputPath) === ".jph" ? [inputPath] : [];
+    const ext = extname(inputPath);
+    return ext === ".jph" || ext === ".jh" ? [inputPath] : [];
   }
 
   const files: string[] = [];
@@ -461,8 +475,11 @@ function walkjhFiles(inputPath: string): string[] {
       const full = join(current, entry.name);
       if (entry.isDirectory()) {
         stack.push(full);
-      } else if (entry.isFile() && extname(entry.name) === ".jph") {
-        files.push(full);
+      } else if (entry.isFile()) {
+        const ext = extname(entry.name);
+        if (ext === ".jph" || ext === ".jh") {
+          files.push(full);
+        }
       }
     }
   }
@@ -482,7 +499,7 @@ export function build(inputPath: string, targetDir?: string): CompileResult[] {
   const results: CompileResult[] = [];
   for (const file of files) {
     const bash = transpileFile(file, rootDir);
-    const rel = relative(rootDir, file).replace(/\.jph$/, ".sh");
+    const rel = relative(rootDir, file).replace(JAIPH_EXT_REGEX, ".sh");
     const outPath = join(outRoot, rel);
     ensureDir(dirname(outPath));
     writeFileSync(outPath, bash, "utf8");

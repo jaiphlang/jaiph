@@ -1,7 +1,7 @@
 #!/usr/bin/env jaiph
 
-import "bootstrap_project.jph" as bootstrap
-import "tools/security.jph" as security
+import "bootstrap_project.jh" as bootstrap
+import "tools/security.jh" as security
 
 # Validates local build prerequisites.
 rule project_ready {

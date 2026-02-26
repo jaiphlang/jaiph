@@ -347,14 +347,14 @@ function printUsage(): void {
     [
       "Usage:",
       "  jaiph build [--target <dir>] <path>",
-      "  jaiph run [--target <dir>] <file.jph> [args...]",
+      "  jaiph run [--target <dir>] <file.jh|file.jph> [args...]",
       "  jaiph init [workspace-path]",
       "  jaiph use <version|nightly>",
       "",
       "Examples:",
       "  jaiph build ./",
       "  jaiph build --target ./build ./",
-      "  jaiph run ./flows/review.jph 'review this diff'",
+      "  jaiph run ./flows/review.jh 'review this diff'",
       "  jaiph init",
       "  jaiph use nightly",
       "",
@@ -407,7 +407,7 @@ function runBuild(rest: string[]): number {
     process.stdout.write(`built ${resolve(item.outputPath)}\n`);
   }
   if (results.length === 0) {
-    process.stdout.write("no .jph files found\n");
+    process.stdout.write("no .jh or .jph files found\n");
   }
   return 0;
 }
@@ -468,7 +468,7 @@ function runInit(rest: string[]): number {
   }
 
   const jaiphDir = join(workspaceRoot, ".jaiph");
-  const bootstrapPath = join(jaiphDir, "bootstrap.jph");
+  const bootstrapPath = join(jaiphDir, "bootstrap.jh");
   const configPath = join(jaiphDir, "config.toml");
   const skillPath = join(jaiphDir, "jaiph-skill.md");
   const palette = colorPalette();
@@ -476,7 +476,7 @@ function runInit(rest: string[]): number {
   process.stdout.write("\n");
   process.stdout.write("Jaiph init\n");
   process.stdout.write("\n");
-  process.stdout.write(`${palette.dim}▸ Creating ${join(".jaiph", "bootstrap.jph")} in ${workspaceRoot}...${palette.reset}\n`);
+  process.stdout.write(`${palette.dim}▸ Creating ${join(".jaiph", "bootstrap.jh")} in ${workspaceRoot}...${palette.reset}\n`);
   mkdirSync(jaiphDir, { recursive: true });
 
   let createdBootstrap = false;
@@ -497,7 +497,7 @@ function runInit(rest: string[]): number {
     syncedSkill = true;
   }
 
-  process.stdout.write(`${palette.green}✓ Initialized ${join(".jaiph", "bootstrap.jph")}${palette.reset}\n`);
+  process.stdout.write(`${palette.green}✓ Initialized ${join(".jaiph", "bootstrap.jh")}${palette.reset}\n`);
   if (!createdBootstrap) {
     process.stdout.write(`${palette.dim}▸ Note: bootstrap file already existed; left unchanged.${palette.reset}\n`);
   }
@@ -513,7 +513,7 @@ function runInit(rest: string[]): number {
   }
   process.stdout.write("\n");
   process.stdout.write("Try:\n");
-  process.stdout.write("  ./.jaiph/bootstrap.jph\n");
+  process.stdout.write("  ./.jaiph/bootstrap.jh\n");
   process.stdout.write("\n");
   process.stdout.write("This asks an agent to analyze the project and scaffold recommended workflows.\n");
   process.stdout.write("Tip: add `.jaiph/runs/` to `.gitignore`.\n");
@@ -526,16 +526,22 @@ async function runWorkflow(rest: string[]): Promise<number> {
   const input = positional[0];
   const runArgs = positional.slice(1);
   if (!input) {
-    process.stderr.write("jaiph run requires a .jph file path\n");
+    process.stderr.write("jaiph run requires a .jh or .jph file path\n");
     return 1;
   }
   const inputAbs = resolve(input);
   const workspaceRoot = detectWorkspaceRoot(dirname(inputAbs));
   const config = loadJaiphConfig(workspaceRoot);
   const inputStat = statSync(inputAbs);
-  if (!inputStat.isFile() || extname(inputAbs) !== ".jph") {
-    process.stderr.write("jaiph run expects a single .jph file\n");
+  const ext = extname(inputAbs);
+  if (!inputStat.isFile() || (ext !== ".jph" && ext !== ".jh")) {
+    process.stderr.write("jaiph run expects a single .jh or .jph file\n");
     return 1;
+  }
+  if (ext === ".jph" && process.stderr.isTTY) {
+    process.stderr.write(
+      "jaiph: .jph extension is deprecated; use .jh for new files. Migration: mv *.jph *.jh\n",
+    );
   }
 
   const outDir = target ? resolve(target) : mkdtempSync(join(tmpdir(), "jaiph-run-"));
@@ -955,7 +961,7 @@ async function main(argv: string[]): Promise<number> {
     return 0;
   }
   try {
-    if (cmd.endsWith(".jph") && existsSync(resolve(cmd))) {
+    if ((cmd.endsWith(".jph") || cmd.endsWith(".jh")) && existsSync(resolve(cmd))) {
       return runWorkflow([cmd, ...rest]);
     }
     if (cmd === "build") {

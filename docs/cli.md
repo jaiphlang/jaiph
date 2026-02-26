@@ -1,23 +1,23 @@
 # Jaiph CLI Reference
 
-[jaiph.org](https://jaiph.org) · [Getting started](getting-started.md) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Agent Skill](jaiph-skill.md)
+[jaiph.org](https://jaiph.org) · [Getting started](getting-started.md) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/main/docs/jaiph-skill.md)
 
 ---
 
 Jaiph provides four core CLI commands plus a file shorthand.
 
-## `jaiph <file.jph>` (shorthand)
+## `jaiph <file.jh>` (shorthand)
 
-If the first argument ends in `.jph` and the file exists, Jaiph treats it as `jaiph run <file.jph>`:
+If the first argument ends in `.jh` or `.jph` and the file exists, Jaiph treats it as `jaiph run <file>`:
 
 ```bash
-jaiph ./flows/review.jph "review this diff"
-# equivalent to: jaiph run ./flows/review.jph "review this diff"
+jaiph ./flows/review.jh "review this diff"
+# equivalent to: jaiph run ./flows/review.jh "review this diff"
 ```
 
 ## `jaiph build`
 
-Compile `.jph` files into shell scripts.
+Compile `.jh` and `.jph` files into shell scripts.
 
 ```bash
 jaiph build [--target <dir>] <path>
@@ -36,14 +36,14 @@ Compile and run a Jaiph workflow file.
 `jaiph run` requires a `workflow default` entrypoint.
 
 ```bash
-jaiph run [--target <dir>] <file.jph> [args...]
+jaiph run [--target <dir>] <file.jh|file.jph> [args...]
 ```
 
 Examples:
 
 ```bash
-jaiph run ./.jaiph/bootstrap.jph
-jaiph run ./flows/review.jph "review this diff"
+jaiph run ./.jaiph/bootstrap.jh
+jaiph run ./flows/review.jh "review this diff"
 ```
 
 Argument passing matches standard bash script behavior:
@@ -67,11 +67,11 @@ workflow default {
 `prompt` text follows bash-style variable expansion (for example `$1`, `${HOME}`, `${FILES[@]}`).
 For safety, command substitution is not allowed in prompt text: `$(...)` and backticks are rejected with `E_PARSE`.
 
-If a `.jph` file is executable and has `#!/usr/bin/env jaiph`, you can run it directly:
+If a `.jh` or `.jph` file is executable and has `#!/usr/bin/env jaiph`, you can run it directly:
 
 ```bash
-./.jaiph/bootstrap.jph "task details"
-./flows/review.jph "review this diff"
+./.jaiph/bootstrap.jh "task details"
+./flows/review.jh "review this diff"
 ```
 
 ## `jaiph init`
@@ -84,7 +84,7 @@ jaiph init [workspace-path]
 
 Creates:
 
-- `.jaiph/bootstrap.jph`
+- `.jaiph/bootstrap.jh`
 - `.jaiph/config.toml`
 - `.jaiph/jaiph-skill.md` (synced from local Jaiph installation)
 
@@ -105,8 +105,15 @@ Examples:
 
 ```bash
 jaiph use nightly
-jaiph use 0.2.3
+jaiph use 0.2.0
 ```
+
+## File extensions
+
+- **`.jh`** is the recommended extension for new Jaiph files. Use it for entrypoints, imports, and `jaiph build` / `jaiph run`.
+- **`.jph`** remains supported for backward compatibility. Existing projects using `.jph` continue to work unchanged. The CLI may show a deprecation notice when you run a `.jph` file; migrate when convenient with `mv *.jph *.jh` and update import paths if they explicitly mention the extension.
+
+Imports resolve for both extensions: `import "foo" as x` finds `foo.jh` or `foo.jph` (`.jh` is preferred when both exist).
 
 ## Environment variables
 
