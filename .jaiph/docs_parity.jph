@@ -91,14 +91,15 @@ workflow default {
     Ensure there is a CHANGELOG.md file with a list of all features that are
     supported by the current version. It should be in the following format:
     
-      # [VERSION]
+      # VERSION
       - Feature 1
       - Feature 2
 
-      # [VERSION]
+      # VERSION
       - Feature 3
 
-    Don't modify changes from previous versions.
+    Don't modify changes from previous versions. Use git tags to find the 
+    previous version.
   "
 
   EXPECTED_DOC_FILES_TEXT="$(printf '%s\n' "${EXPECTED_DOC_FILES[@]}")"

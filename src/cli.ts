@@ -52,6 +52,10 @@ function collectWorkflowChildren(mod: jaiphModule, workflowName: string): Array<
       items.push({ label: `workflow ${step.runWorkflow.value}`, nested: step.runWorkflow.value });
       continue;
     }
+    if (step.type === "if_not_ensure_then_shell") {
+      items.push({ label: `rule ${step.ensureRef.value}` });
+      continue;
+    }
     if (step.type === "prompt") {
       items.push({ label: "prompt prompt" });
       continue;
@@ -307,6 +311,35 @@ function latestRunFiles(runDir: string): { out?: string; err?: string } {
   } catch {
     return {};
   }
+}
+
+const FAILED_STEP_OUTPUT_MAX_LINES = 30;
+
+function readFailedStepStderr(summaryPath: string): string | null {
+  if (!existsSync(summaryPath)) {
+    return null;
+  }
+  try {
+    const lines = readFileSync(summaryPath, "utf8").split(/\r?\n/).filter(Boolean);
+    for (const line of lines) {
+      const parsed = JSON.parse(line) as { type?: string; status?: number; err_file?: string };
+      if (parsed.type === "STEP_END" && parsed.status !== 0 && parsed.err_file) {
+        const errPath = parsed.err_file;
+        if (existsSync(errPath)) {
+          const content = readFileSync(errPath, "utf8").trimEnd();
+          const outputLines = content.split(/\n/);
+          if (outputLines.length > FAILED_STEP_OUTPUT_MAX_LINES) {
+            return outputLines.slice(-FAILED_STEP_OUTPUT_MAX_LINES).join("\n");
+          }
+          return content;
+        }
+        return null;
+      }
+    }
+  } catch {
+    // ignore parse/read errors
+  }
+  return null;
 }
 
 function printUsage(): void {
@@ -856,6 +889,13 @@ async function runWorkflow(rest: string[]): Promise<number> {
       }
       if (files.err) {
         process.stderr.write(`    err: ${files.err}\n`);
+      }
+      const failedStepStderr = summaryFile ? readFailedStepStderr(summaryFile) : null;
+      if (failedStepStderr) {
+        process.stderr.write("\n  Output of failed step:\n");
+        for (const line of failedStepStderr.split("\n")) {
+          process.stderr.write(`    ${line}\n`);
+        }
       }
     }
 

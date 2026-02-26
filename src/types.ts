@@ -64,6 +64,11 @@ export type WorkflowStepDef =
       type: "if_not_ensure_then_run";
       ensureRef: RuleRefDef;
       runWorkflow: WorkflowRefDef;
+    }
+  | {
+      type: "if_not_ensure_then_shell";
+      ensureRef: RuleRefDef;
+      commands: Array<{ command: string; loc: SourceLoc }>;
     };
 
 export interface jaiphModule {
