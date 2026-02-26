@@ -123,7 +123,7 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
             innerRaw.indexOf("run") + 1,
           );
         }
-        const cmd = inner.startsWith("run ") ? inner.slice("run ".length).trim() : inner;
+        const cmd = inner;
         if (!cmd) {
           fail(filePath, "rule command is required", innerNo);
         }

@@ -5,35 +5,6 @@ The first task in the list is always the current task.
 
 ---
 
-
-<!-- TASK id="1" -->
-## 1. Forbid `run` inside `rule` blocks
-
-**Status:** pending
-
-**What:** Remove the current context-sensitive behaviour where `run` inside a `rule` silently falls back to a raw shell command. Rules should only be able to call other rules via `ensure`. Using `run` inside a `rule` must be a hard compile-time error.
-
-**Why:** The dual meaning of `run` (workflow call in workflows, shell shorthand in rules) is a footgun. It creates silent, hard-to-debug behaviour differences depending on where the keyword appears.
-
-**Files to change:**
-- `src/parser.ts` — during rule body parsing, track the current block context (`rule` vs `workflow`)
-- `src/transpiler.ts` — emit a compile error if a `run` statement is found inside a rule context
-
-**Expected compiler error message:**
-```
-Error: `run` is not allowed inside a `rule` block.
-Use `ensure` to call another rule, or move this call to a `workflow`.
-```
-
-**Tests to add:**
-- Verify a `.jh` file with `run` inside a `rule` fails to compile
-- Verify `ensure other_rule` inside a `rule` still compiles correctly
-- Verify with `jaiph test` that a workflow using `ensure` only still passes with mocks
-
-<!-- END_TASK -->
-
----
-
 <!-- TASK id="3" -->
 ## 3. Output capture from `prompt`
 

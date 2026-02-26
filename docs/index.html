@@ -572,7 +572,7 @@ jaiph use 0.2.0</code></pre>
                     </dd>
 
                     <dt><code>run ref</code></dt>
-                    <dd>Executes another workflow from a workflow. Inside a rule, <code>run</code> is treated as a shell command shorthand.</dd>
+                    <dd>Executes another workflow from a workflow. <code>run</code> is not allowed inside a rule; use <code>ensure</code> to call another rule or move the call to a workflow.</dd>
 
                     <dt><code>prompt "..."</code></dt>
                     <dd>Sends prompt text to the configured agent command (with optional model from config) and stores

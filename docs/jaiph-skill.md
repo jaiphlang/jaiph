@@ -4,7 +4,7 @@
 
 ---
 
-Use this guide when generating `.jaiph/*.jph` workflows for a repository after `jaiph init`.
+Use this guide when generating `.jaiph/*.jh` workflows for a repository after `jaiph init`.
 
 ## Source of Truth
 
@@ -33,7 +33,7 @@ Prefer composable modules over one monolithic file.
 
 ## Language Rules You Must Respect
 
-- `import "path.jph" as alias`
+- `import "path.jh" as alias` or `import "path.jph" as alias`
 - `rule name { ... }`
 - `workflow name { ... }`
 - `function name() { ... }`
@@ -49,6 +49,7 @@ Notes:
 
 - `jaiph run` executes `workflow default`.
 - `run` in a workflow targets workflows, not raw shell commands.
+- `run` is not allowed inside a `rule`; use `ensure` to call another rule or move the call to a workflow.
 - Rules are executed via Jaiph read-only wrapper; keep mutating operations in workflows.
 
 ## Authoring Heuristics
@@ -63,26 +64,26 @@ Notes:
 
 ## Suggested Starter Layout
 
-- `.jaiph/bootstrap.jph` (created by init; bootstrap prompt only)
-- `.jaiph/readiness.jph`
-- `.jaiph/implementation.jph`
-- `.jaiph/verification.jph`
-- `.jaiph/main.jph` (contains `workflow default`)
+- `.jaiph/bootstrap.jh` (created by init; bootstrap prompt only)
+- `.jaiph/readiness.jh`
+- `.jaiph/implementation.jh`
+- `.jaiph/verification.jh`
+- `.jaiph/main.jh` (contains `workflow default`)
 
 ## Final Output Requirement
 
 After scaffolding workflows, print exact commands the developer should run, for example:
 
 ```bash
-jaiph run .jaiph/main.jph "implement feature X"
-jaiph run .jaiph/verification.jph
+jaiph run .jaiph/main.jh "implement feature X"
+jaiph run .jaiph/verification.jh
 ```
 
 ## Minimal Sample (Agent Reference)
 
 Use this as a shape/template. Adapt commands and prompts to the target repository.
 
-`/.jaiph/readiness.jph`
+`/.jaiph/readiness.jh`
 
 ```jaiph
 rule git_clean {
@@ -101,7 +102,7 @@ workflow default {
 }
 ```
 
-`/.jaiph/verification.jph`
+`/.jaiph/verification.jh`
 
 ```jaiph
 rule unit_tests_pass {
@@ -118,11 +119,11 @@ workflow default {
 }
 ```
 
-`/.jaiph/main.jph`
+`/.jaiph/main.jh`
 
 ```jaiph
-import ".jaiph/readiness.jph" as readiness
-import ".jaiph/verification.jph" as verification
+import ".jaiph/readiness.jh" as readiness
+import ".jaiph/verification.jh" as verification
 
 workflow implement {
   prompt "

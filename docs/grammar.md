@@ -57,7 +57,7 @@ shell_stmt      = command_line ;
 3. Top-level `function` blocks define writable shell functions and are namespaced in transpiled output.
 4. Original function names remain callable via generated shims that invoke the namespaced wrapper.
 5. `run` inside a workflow must target a workflow reference (`foo` or `alias.foo`), not an arbitrary shell command.
-6. Inside a `rule`, `run some shell` is treated as command shorthand and transpiles as the shell command.
+6. `run` is not allowed inside a `rule`; use `ensure` to call another rule or move the call to a workflow.
 7. `prompt` supports multiline quoted text and compiles to `jaiph__prompt ...` with bash-style variable expansion.
 8. `prompt` rejects command substitution (`$(...)` and backticks) with `E_PARSE`; only variable expansion is allowed.
 9. Workflow and rule declarations support optional `export` keyword.
