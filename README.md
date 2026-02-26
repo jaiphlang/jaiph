@@ -26,13 +26,13 @@ It combines declarative workflow structure with bash, then compiles to pure shel
 
 ## Example
 
-`main.jph`:
+`main.jh`:
 
 ```jaiph
 #!/usr/bin/env jaiph
 
-import "bootstrap_project.jph" as bootstrap
-import "tools/security.jph" as security
+import "bootstrap_project.jh" as bootstrap
+import "tools/security.jh" as security
 
 # Validates local build prerequisites.
 rule project_ready {
@@ -102,7 +102,7 @@ Installation places both the `jaiph` CLI and the global runtime stdlib (`jaiph_s
 ### Running a workflow
 
 ```bash
-./path/to/main.jph "feature request or task"
+./path/to/main.jh "feature request or task"
 ```
 
 Arguments are passed exactly like bash scripts (`$1`, `$2`, `"$@"`).
@@ -143,11 +143,11 @@ Jaiph supports both global and local TOML config files:
 - Global: `${XDG_CONFIG_HOME:-~/.config}/jaiph/config.toml`
 - Local: `.jaiph/config.toml` (in your workspace)
 
-Local config overrides global config. See `docs/configuration.md` for full details and examples.
+Local config overrides global config. See [configuration.md](docs/configuration.md) for full details and examples.
 
 ### CLI reference
 
-See `docs/cli.md` for command syntax, examples, and supported environment variables.
+See [cli.md](docs/cli.md) for command syntax, examples, and supported environment variables.
 
 ## Language Primitives
 
@@ -167,7 +167,7 @@ See `docs/cli.md` for command syntax, examples, and supported environment variab
   Executes a rule in a workflow or another rule, optionally forwarding arguments (for example: `ensure my_rule "$1"`).
 
 - `run ref`  
-  Executes another workflow from a workflow. Inside a rule, `run` is treated as a shell command shorthand.
+  Executes another workflow from a workflow. `run` is not allowed inside a rule; use `ensure` to call another rule or move the call to a workflow.
 
 - `prompt "..."`  
   Sends prompt text to the configured agent command.
@@ -182,7 +182,7 @@ Known limitations and gotchas:
 ## More Documentation
 
 - Full docs: <https://jaiph.org/>
-- Grammar: `docs/grammar.md`
-- Agent bootstrap skill: `docs/jaiph-skill.md`
-- Configuration: `docs/configuration.md`
-- CLI: `docs/cli.md`
+- Grammar: [grammar.md](docs/grammar.md)
+- Agent bootstrap skill: [jaiph-skill.md](docs/jaiph-skill.md)
+- Configuration: [configuration.md](docs/configuration.md)
+- CLI: [cli.md](docs/cli.md)

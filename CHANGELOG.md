@@ -4,6 +4,7 @@
 - `jaiph init` creates `.jaiph/bootstrap.jh` (and `.jaiph/config.toml`, `.jaiph/jaiph-skill.md`)
 - Import resolution prefers `.jh` over `.jph` when both exist
 - `JAIPH_INSTALL_COMMAND` environment variable for `jaiph use` (default: `curl -fsSL https://jaiph.org/install | bash`)
+- `run` is not allowed inside a `rule` block; use `ensure` to call another rule or move the call to a workflow
 
 # 0.1.0
 
