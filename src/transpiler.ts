@@ -305,7 +305,7 @@ export function transpileFile(inputFile: string, rootDir: string): string {
   return out.join("\n").trimEnd();
 }
 
-function resolveImportPath(fromFile: string, importPath: string): string {
+export function resolveImportPath(fromFile: string, importPath: string): string {
   const dir = dirname(fromFile);
   if (importPath.endsWith(".jph") || importPath.endsWith(".jh")) {
     return resolve(dir, importPath);

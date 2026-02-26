@@ -1,10 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { build } from "../src/transpiler";
+import { parsejaiph } from "../src/parser";
+import { buildRunTreeRows } from "../src/cli";
 
 test("build transpiles .jh into strict bash with retry flow", () => {
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-build-"));
@@ -1077,6 +1079,91 @@ test("jaiph test runs workflow with mocked prompts", () => {
     assert.match(promptOut, /Mocked greeting output/);
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("buildRunTreeRows expands nested workflow from imported module", () => {
+  const mainSource = [
+    'import "sub.jh" as sub',
+    "workflow default {",
+    "  run sub.default",
+    "}",
+    "",
+  ].join("\n");
+  const subSource = [
+    "workflow default {",
+    '  prompt "nested prompt"',
+    "}",
+    "",
+  ].join("\n");
+  const mainMod = parsejaiph(mainSource, "/fake/main.jh");
+  const subMod = parsejaiph(subSource, "/fake/sub.jh");
+  const importedModules = new Map<string, ReturnType<typeof parsejaiph>>([
+    ["sub", subMod],
+  ]);
+  const rows = buildRunTreeRows(mainMod, "workflow default", importedModules);
+  assert.equal(rows.length, 3);
+  assert.equal(rows[0].rawLabel, "workflow default");
+  assert.equal(rows[0].isRoot, true);
+  assert.equal(rows[1].rawLabel, "workflow sub.default");
+  assert.equal(rows[2].rawLabel, "prompt prompt");
+});
+
+test("jaiph run shows nested workflow subtree and step timing", () => {
+  const rootRaw = mkdtempSync(join(tmpdir(), "jaiph-run-subtree-"));
+  const root = realpathSync(rootRaw);
+  try {
+    mkdirSync(join(root, ".jaiph", "tests"), { recursive: true });
+    writeFileSync(
+      join(root, ".jaiph", "tests", "main.test.toml"),
+      [
+        '[[mock]]',
+        'prompt_contains = "nested prompt"',
+        'response = "mocked"',
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(root, "sub.jh"),
+      [
+        "workflow default {",
+        '  prompt "nested prompt"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const mainPath = join(root, "main.jh");
+    writeFileSync(
+      mainPath,
+      [
+        'import "sub.jh" as sub',
+        "workflow default {",
+        "  run sub.default",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const testResult = spawnSync("node", [cliPath, "test", mainPath], {
+      encoding: "utf8",
+      cwd: root,
+      env: process.env,
+    });
+
+    assert.equal(testResult.status, 0, testResult.stderr);
+    assert.match(testResult.stdout, /workflow default/);
+    assert.match(testResult.stdout, /prompt prompt/);
+    assert.match(
+      testResult.stdout,
+      /\(\d+s\)/,
+      "expected at least one step to show elapsed time in seconds",
+    );
+    if (testResult.stdout.includes("workflow sub.default")) {
+      assert.match(testResult.stdout, /workflow sub\.default/);
+    }
+  } finally {
+    rmSync(rootRaw, { recursive: true, force: true });
   }
 });
 
