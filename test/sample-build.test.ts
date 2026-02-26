@@ -1159,9 +1159,11 @@ test("jaiph run shows nested workflow subtree and step timing", () => {
       /\(\d+s\)/,
       "expected at least one step to show elapsed time in seconds",
     );
-    if (testResult.stdout.includes("workflow sub.default")) {
-      assert.match(testResult.stdout, /workflow sub\.default/);
-    }
+    // Tree must show the nested workflow row before its children (regression: not nesting under a sibling)
+    assert.match(testResult.stdout, /workflow sub\.default/, "tree should show workflow sub.default row");
+    const workflowSubIdx = testResult.stdout.indexOf("workflow sub.default");
+    const promptPromptIdx = testResult.stdout.indexOf("prompt prompt");
+    assert.ok(workflowSubIdx < promptPromptIdx, "workflow sub.default must appear before prompt prompt in tree");
   } finally {
     rmSync(rootRaw, { recursive: true, force: true });
   }
