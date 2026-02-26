@@ -1101,7 +1101,7 @@ test("buildRunTreeRows expands nested workflow from imported module", () => {
   const importedModules = new Map<string, ReturnType<typeof parsejaiph>>([
     ["sub", subMod],
   ]);
-  const rows = buildRunTreeRows(mainMod, "workflow default", importedModules);
+  const rows = buildRunTreeRows(mainMod, "workflow default", importedModules, "/fake");
   assert.equal(rows.length, 3);
   assert.equal(rows[0].rawLabel, "workflow default");
   assert.equal(rows[0].isRoot, true);

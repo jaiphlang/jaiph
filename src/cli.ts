@@ -21,7 +21,12 @@ function colorPalette(): { green: string; red: string; dim: string; reset: strin
   };
 }
 
-function collectWorkflowChildren(mod: jaiphModule, workflowName: string): Array<{ label: string; nested?: string }> {
+function collectWorkflowChildren(
+  mod: jaiphModule,
+  workflowName: string,
+  symbols?: Map<string, string>,
+  currentSymbol?: string,
+): Array<{ label: string; nested?: string; stepFunc?: string }> {
   const workflow = mod.workflows.find((item) => item.name === workflowName);
   if (!workflow) {
     return [];
@@ -37,32 +42,93 @@ function collectWorkflowChildren(mod: jaiphModule, workflowName: string): Array<
     }
     return hits;
   };
-  const items: Array<{ label: string; nested?: string }> = [];
+  const items: Array<{ label: string; nested?: string; stepFunc?: string }> = [];
   for (const step of workflow.steps) {
     if (step.type === "ensure") {
-      items.push({ label: `rule ${step.ref.value}` });
+      const ref = step.ref.value;
+      const stepFunc =
+        symbols && ref.includes(".")
+          ? (() => {
+              const dot = ref.indexOf(".");
+              const alias = ref.slice(0, dot);
+              const name = ref.slice(dot + 1);
+              return `${symbols.get(alias) ?? alias}__rule_${name}`;
+            })()
+          : currentSymbol
+            ? `${currentSymbol}__rule_${ref}`
+            : undefined;
+      items.push({ label: `rule ${ref}`, stepFunc });
       continue;
     }
     if (step.type === "run") {
-      items.push({ label: `workflow ${step.workflow.value}`, nested: step.workflow.value });
+      const wf = step.workflow.value;
+      const stepFunc =
+        symbols && wf.includes(".")
+          ? (() => {
+              const dot = wf.indexOf(".");
+              const alias = wf.slice(0, dot);
+              const name = wf.slice(dot + 1);
+              return `${symbols.get(alias) ?? alias}__workflow_${name}`;
+            })()
+          : currentSymbol
+            ? `${currentSymbol}__workflow_${wf}`
+            : undefined;
+      items.push({ label: `workflow ${wf}`, nested: wf, stepFunc });
       continue;
     }
     if (step.type === "if_not_ensure_then_run") {
-      items.push({ label: `rule ${step.ensureRef.value}` });
-      items.push({ label: `workflow ${step.runWorkflow.value}`, nested: step.runWorkflow.value });
+      const ensureRef = step.ensureRef.value;
+      const ensureStepFunc =
+        symbols && ensureRef.includes(".")
+          ? (() => {
+              const dot = ensureRef.indexOf(".");
+              const alias = ensureRef.slice(0, dot);
+              const name = ensureRef.slice(dot + 1);
+              return `${symbols.get(alias) ?? alias}__rule_${name}`;
+            })()
+          : currentSymbol
+            ? `${currentSymbol}__rule_${ensureRef}`
+            : undefined;
+      items.push({ label: `rule ${ensureRef}`, stepFunc: ensureStepFunc });
+      const wf = step.runWorkflow.value;
+      const runStepFunc =
+        symbols && wf.includes(".")
+          ? (() => {
+              const dot = wf.indexOf(".");
+              const alias = wf.slice(0, dot);
+              const name = wf.slice(dot + 1);
+              return `${symbols.get(alias) ?? alias}__workflow_${name}`;
+            })()
+          : currentSymbol
+            ? `${currentSymbol}__workflow_${wf}`
+            : undefined;
+      items.push({ label: `workflow ${wf}`, nested: wf, stepFunc: runStepFunc });
       continue;
     }
     if (step.type === "if_not_ensure_then_shell") {
-      items.push({ label: `rule ${step.ensureRef.value}` });
+      const ref = step.ensureRef.value;
+      const stepFunc =
+        symbols && ref.includes(".")
+          ? (() => {
+              const dot = ref.indexOf(".");
+              const alias = ref.slice(0, dot);
+              const name = ref.slice(dot + 1).replace(/\./g, "_");
+              return `${symbols.get(alias) ?? alias}__rule_${name}`;
+            })()
+          : currentSymbol
+            ? `${currentSymbol}__rule_${ref}`
+            : undefined;
+      items.push({ label: `rule ${ref}`, stepFunc });
       continue;
     }
     if (step.type === "prompt") {
-      items.push({ label: "prompt prompt" });
+      items.push({ label: "prompt prompt", stepFunc: "jaiph__prompt" });
       continue;
     }
     if (step.type === "shell") {
       for (const fnName of collectFunctionCalls(step.command)) {
-        items.push({ label: `function ${fnName}` });
+        const stepFunc = currentSymbol ? `${currentSymbol}__function_${fnName}` : undefined;
+        items.push({ label: `function ${fnName}`, stepFunc });
       }
     }
   }
@@ -85,22 +151,32 @@ type TreeRow = {
   prefix: string;
   branch?: string;
   isRoot: boolean;
+  stepFunc?: string;
 };
 
 export function buildRunTreeRows(
   mod: jaiphModule,
   rootLabel = "workflow default",
   importedModules?: Map<string, jaiphModule>,
+  rootDir?: string,
 ): TreeRow[] {
   const rows: TreeRow[] = [{ rawLabel: rootLabel, prefix: "", isRoot: true }];
+  const symbols = new Map<string, string>();
+  if (importedModules && rootDir) {
+    const root = resolve(rootDir);
+    for (const [alias, subMod] of importedModules) {
+      symbols.set(alias, workflowSymbolForFile(subMod.filePath, root));
+    }
+  }
+  const mainSymbol = rootDir ? workflowSymbolForFile(mod.filePath, resolve(rootDir)) : undefined;
   const visited = new Set<string>(["default"]);
-  const renderChildren = (currentMod: jaiphModule, workflowName: string, prefix: string): void => {
-    const children = collectWorkflowChildren(currentMod, workflowName);
+  const renderChildren = (currentMod: jaiphModule, workflowName: string, prefix: string, currentSymbol?: string): void => {
+    const children = collectWorkflowChildren(currentMod, workflowName, symbols.size > 0 ? symbols : undefined, currentSymbol);
     for (let i = 0; i < children.length; i += 1) {
       const child = children[i];
       const isLast = i === children.length - 1;
       const branch = isLast ? "└── " : "├── ";
-      rows.push({ rawLabel: child.label, prefix, branch, isRoot: false });
+      rows.push({ rawLabel: child.label, prefix, branch, isRoot: false, stepFunc: child.stepFunc });
       if (!child.nested) {
         continue;
       }
@@ -111,7 +187,8 @@ export function buildRunTreeRows(
         const wfName = nested.slice(dot + 1);
         const subMod = importedModules?.get(alias);
         if (subMod) {
-          renderChildren(subMod, wfName, `${prefix}${isLast ? "    " : "│   "}`);
+          const subSymbol = symbols.get(alias);
+          renderChildren(subMod, wfName, `${prefix}${isLast ? "    " : "│   "}`, subSymbol);
         }
         continue;
       }
@@ -119,10 +196,10 @@ export function buildRunTreeRows(
         continue;
       }
       visited.add(nested);
-      renderChildren(currentMod, nested, `${prefix}${isLast ? "    " : "│   "}`);
+      renderChildren(currentMod, nested, `${prefix}${isLast ? "    " : "│   "}`, currentSymbol);
     }
   };
-  renderChildren(mod, "default", "");
+  renderChildren(mod, "default", "", mainSymbol);
   return rows;
 }
 
@@ -623,7 +700,8 @@ async function runWorkflow(
   try {
     const mod = parsejaiph(readFileSync(inputAbs, "utf8"), inputAbs);
     const importedModules = loadImportedModules(mod);
-    const treeRows = buildRunTreeRows(mod, "workflow default", importedModules);
+    const rootDir = dirname(inputAbs);
+    const treeRows = buildRunTreeRows(mod, "workflow default", importedModules, rootDir);
     const rowStates: RowState[] = treeRows.map((row) => (row.isRoot ? { status: "done" } : { status: "pending" }));
     const interactiveProgress = process.stdout.isTTY;
     let activeRowIndex = treeRows.length > 1 ? 1 : -1;
@@ -786,6 +864,17 @@ async function runWorkflow(
       }
       return -1;
     };
+    const findPendingRowIndexByFunc = (funcName: string): number => {
+      for (let i = 1; i < treeRows.length; i += 1) {
+        if (rowStates[i].status !== "pending") {
+          continue;
+        }
+        if (treeRows[i].stepFunc === funcName) {
+          return i;
+        }
+      }
+      return -1;
+    };
     const applyStepUpdate = (funcName: string, status: number, elapsedSec: number): void => {
       const kind = funcName.includes("__workflow_")
         ? "workflow"
@@ -809,7 +898,10 @@ async function runWorkflow(
         return;
       }
       let changed = false;
-      const changedRowIndex = findPendingRowIndex(kind, name);
+      let changedRowIndex = findPendingRowIndexByFunc(funcName);
+      if (changedRowIndex === -1) {
+        changedRowIndex = findPendingRowIndex(kind, name);
+      }
       if (changedRowIndex !== -1) {
         rowStates[changedRowIndex] = { status: status === 0 ? "done" : "failed", elapsedSec };
         changed = true;
@@ -830,14 +922,17 @@ async function runWorkflow(
         }
       }
     };
-    const applyStepStart = (kind: string, name: string): void => {
+    const applyStepStart = (kind: string, name: string, funcName?: string): void => {
       if (!interactiveProgress) {
         return;
       }
       if (kind === "workflow" && name === "default") {
         return;
       }
-      const nextIndex = findPendingRowIndex(kind, name);
+      let nextIndex = funcName !== undefined ? findPendingRowIndexByFunc(funcName) : -1;
+      if (nextIndex === -1) {
+        nextIndex = findPendingRowIndex(kind, name);
+      }
       if (nextIndex === -1) {
         return;
       }
@@ -849,7 +944,7 @@ async function runWorkflow(
       const event = parseStepEvent(line);
       if (event) {
         if (event.type === "STEP_START") {
-          applyStepStart(event.kind, event.name);
+          applyStepStart(event.kind, event.name, event.func);
           return;
         }
         applyStepUpdate(event.func, event.status ?? 1, Math.max(0, Math.floor((event.elapsed_ms ?? 0) / 1000)));
