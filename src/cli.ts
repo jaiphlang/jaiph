@@ -921,7 +921,7 @@ function toInstallRef(version: string): string | undefined {
 function runUse(rest: string[]): number {
   const version = rest[0];
   if (!version) {
-    process.stderr.write("jaiph use requires a version (e.g. 0.1.0) or 'nightly'\n");
+    process.stderr.write("jaiph use requires a version (e.g. 0.2.0) or 'nightly'\n");
     return 1;
   }
   const ref = toInstallRef(version);
@@ -951,7 +951,7 @@ async function main(argv: string[]): Promise<number> {
     return 0;
   }
   if (cmd === "--version" || cmd === "-v") {
-    process.stdout.write("jaiph 0.1.0\n");
+    process.stdout.write("jaiph 0.2.0\n");
     return 0;
   }
   try {

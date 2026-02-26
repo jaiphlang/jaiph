@@ -2,7 +2,7 @@
 # Standard helpers shared by transpiled Jaiph modules.
 
 jaiph__version() {
-  echo "jaiph 0.1.0"
+  echo "jaiph 0.2.0"
 }
 
 jaiph__runtime_api() {

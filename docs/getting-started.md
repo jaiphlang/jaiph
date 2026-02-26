@@ -4,8 +4,6 @@
 
 ---
 
-**Open Source • Powerful • Friendly**
-
 [![CI](https://github.com/jaiphlang/jaiph/actions/workflows/ci.yml/badge.svg)](https://github.com/jaiphlang/jaiph/actions/workflows/ci.yml)
 
 [jaiph.org](https://jaiph.org)
@@ -19,7 +17,7 @@ It combines declarative workflow structure with bash, then compiles to pure shel
 > [!WARNING]
 > Jaiph is still in an early stage. Expect breaking changes.
 
-- Docs (canonical): <https://jaiph.org/getting-started>
+- Docs (canonical): <https://jaiph.org/>
 - Agent skill: <https://raw.githubusercontent.com/jaiphlang/jaiph/main/docs/jaiph-skill.md>
 - Samples: <https://github.com/jaiphlang/jaiph/tree/main/samples>
 - Contribute: <https://github.com/jaiphlang/jaiph/issues>
@@ -182,7 +180,7 @@ Known limitations and gotchas:
 ## More Documentation
 
 - Full docs: <https://jaiph.org/>
-- Grammar: [grammar](grammar.md)
-- Agent bootstrap skill: [jaiph-skill](jaiph-skill.md)
-- Configuration: [configuration](configuration.md)
-- CLI: [cli](cli.md)
+- [Grammar](grammar.md)
+- [Agent bootstrap skill](jaiph-skill.md)
+- [Configuration](configuration.md)
+- [CLI](cli.md)

@@ -117,6 +117,7 @@ Runtime/config override variables:
 - `JAIPH_AGENT_COMMAND`
 - `JAIPH_RUNS_DIR`
 - `JAIPH_DEBUG`
+- `JAIPH_SKILL_PATH` — path to skill file used by `jaiph init` when syncing `.jaiph/jaiph-skill.md`
 
 Install/use variables:
 
@@ -124,3 +125,4 @@ Install/use variables:
 - `JAIPH_REPO_REF`
 - `JAIPH_BIN_DIR`
 - `JAIPH_LIB_DIR`
+- `JAIPH_INSTALL_COMMAND` — command run by `jaiph use` to reinstall (default: `curl -fsSL https://jaiph.org/install | bash`)

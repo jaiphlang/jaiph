@@ -99,7 +99,7 @@ workflow default {
       - Feature 3
 
     Don't modify changes from previous versions. Use git tags to find the 
-    previous version.
+    previous version. Don't duplicate features from previous versions.
   "
 
   EXPECTED_DOC_FILES_TEXT="$(printf '%s\n' "${EXPECTED_DOC_FILES[@]}")"

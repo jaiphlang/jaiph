@@ -1,3 +1,6 @@
+# 0.2.0
+
+
 # 0.1.0
 
 - `jaiph build [--target <dir>] <path>` compiles `.jph` files to bash scripts
