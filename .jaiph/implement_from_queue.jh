@@ -35,6 +35,7 @@ workflow implement_task {
     3. Implement the changes described. Follow the existing code style exactly.
     4. Add the tests described under 'Tests to add'.
     5. Do not touch any other tasks or any files not listed in the task.
+    6. Ensure tests pass.
 
     When done, confirm which task ID you implemented and list every file you changed.
   "

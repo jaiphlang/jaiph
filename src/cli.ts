@@ -315,25 +315,38 @@ function latestRunFiles(runDir: string): { out?: string; err?: string } {
 
 const FAILED_STEP_OUTPUT_MAX_LINES = 30;
 
-function readFailedStepStderr(summaryPath: string): string | null {
+function readFailedStepOutput(summaryPath: string): string | null {
   if (!existsSync(summaryPath)) {
     return null;
   }
   try {
     const lines = readFileSync(summaryPath, "utf8").split(/\r?\n/).filter(Boolean);
     for (const line of lines) {
-      const parsed = JSON.parse(line) as { type?: string; status?: number; err_file?: string };
-      if (parsed.type === "STEP_END" && parsed.status !== 0 && parsed.err_file) {
-        const errPath = parsed.err_file;
-        if (existsSync(errPath)) {
-          const content = readFileSync(errPath, "utf8").trimEnd();
+      const parsed = JSON.parse(line) as {
+        type?: string;
+        status?: number;
+        out_file?: string;
+        err_file?: string;
+      };
+      if (parsed.type === "STEP_END" && parsed.status !== 0) {
+        const trimLines = (path: string): string => {
+          if (!existsSync(path)) return "";
+          const content = readFileSync(path, "utf8").trimEnd();
           const outputLines = content.split(/\n/);
           if (outputLines.length > FAILED_STEP_OUTPUT_MAX_LINES) {
             return outputLines.slice(-FAILED_STEP_OUTPUT_MAX_LINES).join("\n");
           }
           return content;
-        }
-        return null;
+        };
+        const outPath = typeof parsed.out_file === "string" ? parsed.out_file : "";
+        const errPath = typeof parsed.err_file === "string" ? parsed.err_file : "";
+        const outContent = outPath ? trimLines(outPath) : "";
+        const errContent = errPath ? trimLines(errPath) : "";
+        const parts: string[] = [];
+        if (outContent) parts.push(outContent);
+        if (errContent) parts.push(errContent);
+        if (parts.length === 0) return null;
+        return parts.join("\n");
       }
     }
   } catch {
@@ -677,11 +690,12 @@ async function runWorkflow(
     }
     // Prevent non-interactive bash from sourcing caller-provided startup files
     // (e.g. GitHub Actions BASH_ENV), which can inject stderr noise and flip
-    // successful runs into false failures.
-    runtimeEnv.BASH_ENV = undefined;
-    runtimeEnv.JAIPH_RUN_DIR = undefined;
-    runtimeEnv.JAIPH_PRECEDING_FILES = undefined;
-    runtimeEnv.JAIPH_RUN_SUMMARY_FILE = undefined;
+    // successful runs into false failures. Delete (do not set to undefined) so
+    // the child process does not receive BASH_ENV="undefined" on some platforms.
+    delete runtimeEnv.BASH_ENV;
+    delete runtimeEnv.JAIPH_RUN_DIR;
+    delete runtimeEnv.JAIPH_PRECEDING_FILES;
+    delete runtimeEnv.JAIPH_RUN_SUMMARY_FILE;
     const metaFile = join(outDir, `.jaiph-run-meta-${Date.now()}-${process.pid}.txt`);
     const execResult = spawn(
       "bash",
@@ -936,10 +950,10 @@ async function runWorkflow(
       if (files.err) {
         process.stderr.write(`    err: ${files.err}\n`);
       }
-      const failedStepStderr = summaryFile ? readFailedStepStderr(summaryFile) : null;
-      if (failedStepStderr) {
+      const failedStepOutput = summaryFile ? readFailedStepOutput(summaryFile) : null;
+      if (failedStepOutput) {
         process.stderr.write("\n  Output of failed step:\n");
-        for (const line of failedStepStderr.split("\n")) {
+        for (const line of failedStepOutput.split("\n")) {
           process.stderr.write(`    ${line}\n`);
         }
       }

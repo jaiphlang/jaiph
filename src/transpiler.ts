@@ -171,6 +171,15 @@ export function transpileFile(inputFile: string, rootDir: string): string {
       out.push("  :");
     } else {
       for (const cmd of rule.commands) {
+        if (cmd.startsWith("run ")) {
+          throw jaiphError(
+            ast.filePath,
+            rule.loc.line,
+            rule.loc.col,
+            "E_PARSE",
+            "`run` is not allowed inside a `rule` block.\nUse `ensure` to call another rule, or move this call to a `workflow`.",
+          );
+        }
         const ensureMatch = cmd.match(
           /^ensure\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
         );

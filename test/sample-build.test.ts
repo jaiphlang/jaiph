@@ -1141,3 +1141,104 @@ test("jaiph test fails when mock file is missing", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("build fails when run is used inside a rule block", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-in-rule-"));
+  const outDir = mkdtempSync(join(tmpdir(), "jaiph-run-in-rule-out-"));
+  try {
+    const filePath = join(root, "entry.jh");
+    writeFileSync(
+      filePath,
+      [
+        "rule bad {",
+        "  run some_workflow",
+        "}",
+        "",
+        "workflow default {",
+        "  ensure bad",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    assert.throws(() => build(filePath, outDir), /`run` is not allowed inside a `rule` block/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outDir, { recursive: true, force: true });
+  }
+});
+
+test("build accepts ensure inside a rule block", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-ensure-in-rule-"));
+  const outDir = mkdtempSync(join(tmpdir(), "jaiph-ensure-in-rule-out-"));
+  try {
+    const filePath = join(root, "entry.jh");
+    writeFileSync(
+      filePath,
+      [
+        "rule dep {",
+        "  echo dep",
+        "}",
+        "",
+        "rule main {",
+        "  ensure dep",
+        "}",
+        "",
+        "workflow default {",
+        "  ensure main",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const results = build(filePath, outDir);
+    assert.equal(results.length, 1);
+    assert.match(results[0].bash, /entry__rule_dep/);
+    assert.match(results[0].bash, /entry__rule_main/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outDir, { recursive: true, force: true });
+  }
+});
+
+test("jaiph test passes for workflow using ensure only with mocks", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-test-ensure-only-"));
+  try {
+    mkdirSync(join(root, ".jaiph", "tests"), { recursive: true });
+    writeFileSync(
+      join(root, ".jaiph", "tests", "ensure_only.test.toml"),
+      [
+        '[[mock]]',
+        'prompt_contains = ""',
+        'response = ""',
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(root, "ensure_only.jh"),
+      [
+        "rule ready {",
+        "  echo ok",
+        "}",
+        "",
+        "workflow default {",
+        "  ensure ready",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const testResult = spawnSync("node", [cliPath, "test", "ensure_only.jh"], {
+      encoding: "utf8",
+      cwd: root,
+      env: process.env,
+    });
+
+    assert.equal(testResult.status, 0, testResult.stderr);
+    assert.match(testResult.stdout, /PASS/);
+    assert.match(testResult.stdout, /workflow default/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
