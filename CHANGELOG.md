@@ -5,7 +5,7 @@
 - Import resolution prefers `.jh` over `.jph` when both exist
 - `JAIPH_INSTALL_COMMAND` environment variable for `jaiph use` (default: `curl -fsSL https://jaiph.org/install | bash`)
 
-
+# 0.1.0
 
 - `jaiph build [--target <dir>] <path>` compiles `.jph` files to bash scripts
 - `jaiph run [--target <dir>] <file.jph> [args...]` compiles and executes workflows

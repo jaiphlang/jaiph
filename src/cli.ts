@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, extname, join, resolve } from "node:path";
+import { dirname, extname, join, resolve, basename } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { build, workflowSymbolForFile } from "./transpiler";
 import { parsejaiph } from "./parser";
@@ -348,6 +348,7 @@ function printUsage(): void {
       "Usage:",
       "  jaiph build [--target <dir>] <path>",
       "  jaiph run [--target <dir>] <file.jh|file.jph> [args...]",
+      "  jaiph test <file.jh|file.jph> [args...]",
       "  jaiph init [workspace-path]",
       "  jaiph use <version|nightly>",
       "",
@@ -355,6 +356,8 @@ function printUsage(): void {
       "  jaiph build ./",
       "  jaiph build --target ./build ./",
       "  jaiph run ./flows/review.jh 'review this diff'",
+      "  jaiph test e2e/say_hello.jh",
+      "  jaiph test .jaiph/main.jh \"implement feature X\"",
       "  jaiph init",
       "  jaiph use nightly",
       "",
@@ -521,7 +524,39 @@ function runInit(rest: string[]): number {
   return 0;
 }
 
-async function runWorkflow(rest: string[]): Promise<number> {
+async function runTest(rest: string[]): Promise<number> {
+  const { positional } = parseArgs(rest);
+  const input = positional[0];
+  if (!input) {
+    process.stderr.write("jaiph test requires a .jh or .jph file path\n");
+    return 1;
+  }
+  const inputAbs = resolve(input);
+  const workspaceRoot = detectWorkspaceRoot(dirname(inputAbs));
+  const inputStat = statSync(inputAbs);
+  const ext = extname(inputAbs);
+  if (!inputStat.isFile() || (ext !== ".jph" && ext !== ".jh")) {
+    process.stderr.write("jaiph test expects a single .jh or .jph file\n");
+    return 1;
+  }
+  const stem = basename(inputAbs, ext);
+  const mockFile = join(workspaceRoot, ".jaiph", "tests", `${stem}.test.toml`);
+  if (!existsSync(mockFile)) {
+    process.stderr.write(`jaiph test: mock file not found: ${mockFile}\n`);
+    return 1;
+  }
+  const mockResolver = join(__dirname, "mock-resolver.js");
+  if (!existsSync(mockResolver)) {
+    process.stderr.write(`jaiph test: mock resolver not found: ${mockResolver}\n`);
+    return 1;
+  }
+  return runWorkflow(rest, { mockFile, mockResolver });
+}
+
+async function runWorkflow(
+  rest: string[],
+  testOptions?: { mockFile: string; mockResolver: string },
+): Promise<number> {
   const { target, positional } = parseArgs(rest);
   const input = positional[0];
   const runArgs = positional.slice(1);
@@ -634,6 +669,11 @@ async function runWorkflow(rest: string[]): Promise<number> {
     }
     if (runtimeEnv.JAIPH_STDLIB === undefined) {
       runtimeEnv.JAIPH_STDLIB = join(__dirname, "jaiph_stdlib.sh");
+    }
+    if (testOptions) {
+      runtimeEnv.JAIPH_TEST_MODE = "1";
+      runtimeEnv.JAIPH_MOCK_FILE = testOptions.mockFile;
+      runtimeEnv.JAIPH_MOCK_RESOLVER = testOptions.mockResolver;
     }
     // Prevent non-interactive bash from sourcing caller-provided startup files
     // (e.g. GitHub Actions BASH_ENV), which can inject stderr noise and flip
@@ -969,6 +1009,9 @@ async function main(argv: string[]): Promise<number> {
     }
     if (cmd === "run") {
       return runWorkflow(rest);
+    }
+    if (cmd === "test") {
+      return await runTest(rest);
     }
     if (cmd === "init") {
       return runInit(rest);

@@ -1,0 +1,3 @@
+[[mock]]
+prompt_contains = "Say hello to"
+response = "Hello! Fun fact: your name is awesome."

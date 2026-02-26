@@ -117,6 +117,12 @@ jaiph__prompt__impl() {
   else
     prompt_text="$*"
   fi
+  if [[ "${JAIPH_TEST_MODE:-}" == "1" && -n "${JAIPH_MOCK_FILE:-}" && -n "${JAIPH_MOCK_RESOLVER:-}" ]]; then
+    local mock_response
+    mock_response="$(printf '%s' "$prompt_text" | node "$JAIPH_MOCK_RESOLVER" "$JAIPH_MOCK_FILE")" || return 1
+    printf '%s' "$mock_response"
+    return 0
+  fi
   if [[ -n "$prompt_text" ]]; then
     printf "Prompt:\n%s\n\n" "$prompt_text"
   fi
