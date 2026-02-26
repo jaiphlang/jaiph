@@ -6,56 +6,6 @@ The first task in the list is always the current task.
 ---
 
 
-<!-- TASK id="7" -->
-## 7. `jaiph test` command with prompt mocking
-
-**Status:** pending
-
-**What:** Add a `jaiph test` subcommand that runs workflows in test mode, intercepting `prompt` calls and substituting mock responses.
-
-**Why:** Prompt-heavy workflows need deterministic tests before adding more syntax/semantics. This reduces regression risk for the full automation flow.
-
-**Test file format** (`.jaiph/tests/<name>.test.toml`):
-```toml
-[[mock]]
-prompt_contains = "Analyse the diff"
-response = '{"type":"refactor","risk":"low","summary":"Renamed variables"}'
-
-[[mock]]
-prompt_contains = "Update docs"
-response = "Documentation updated."
-```
-
-**CLI usage:**
-```
-jaiph test e2e/say_hello.jh
-jaiph test .jaiph/main.jh "implement feature X"
-```
-
-**Behaviour:**
-- Intercepts each `jaiph__prompt` / `jaiph__prompt_typed` call
-- Matches mock by `prompt_contains` substring
-- Substitutes mock `response` as stdout
-- Fails if a prompt call has no matching mock
-- Reports pass/fail per step
-
-**Files to change:**
-- `src/cli.ts` — add `test` subcommand
-- `src/stdlib.sh` — check `JAIPH_TEST_MODE=1` and `JAIPH_MOCK_FILE`; route prompts through mock resolver
-- New file: `src/mock-resolver.ts` — matches prompt text against mock definitions
-- `e2e/say_hello.jh` — ensure it is runnable under `jaiph test` with a mock file
-- `.jaiph/main.jh` — ensure full flow can be tested in deterministic mode without side effects
-
-**Acceptance criteria:**
-- `jaiph test e2e/say_hello.jh` passes with mocks
-- `jaiph test .jaiph/main.jh "<input>"` executes the full flow with mocked prompts
-- Test mode does not perform real networked prompt calls
-- Test mode can avoid destructive side effects (commit/push) while validating flow wiring
-
-<!-- END_TASK -->
-
----
-
 <!-- TASK id="1" -->
 ## 1. Forbid `run` inside `rule` blocks
 
@@ -78,7 +28,7 @@ Use `ensure` to call another rule, or move this call to a `workflow`.
 **Tests to add:**
 - Verify a `.jh` file with `run` inside a `rule` fails to compile
 - Verify `ensure other_rule` inside a `rule` still compiles correctly
-- (After task 7) Verify with `jaiph test` that a workflow using `ensure` only still passes with mocks
+- Verify with `jaiph test` that a workflow using `ensure` only still passes with mocks
 
 <!-- END_TASK -->
 
@@ -112,7 +62,7 @@ result=$(jaiph__prompt "Summarize the changes made")
 **Tests to add:**
 - Capture compiles to correct bash assignment
 - Variable is accessible in subsequent bash expressions within the same workflow
-- (Requires task 7) Testable with `jaiph test`: mock response for the prompt is captured into the variable
+- Testable with `jaiph test`: mock response for the prompt is captured into the variable
 
 <!-- END_TASK -->
 
@@ -137,7 +87,7 @@ result=$(jaiph__prompt "Summarize the changes made")
 - Prompt steps inside imported workflows appear in the tree
 - Existing local (non-imported) subtree rendering remains unchanged
 - Recursive rendering avoids infinite loops on cyclic references
-- (Requires task 7) Nested tree is observable when running `jaiph test .jaiph/main.jh` with mocks
+- Nested tree is observable when running `jaiph test .jaiph/main.jh` with mocks
 
 <!-- END_TASK -->
 
@@ -170,7 +120,7 @@ jaiph__ensure_retry 3 5 main__rule_build_passes
 ```
 
 **Tests / acceptance:**
-- (Requires task 7) Testable with `jaiph test`: workflow using `ensure --retry N` can be run with mocks (e.g. rule fails then succeeds within retries).
+- Testable with `jaiph test`: workflow using `ensure --retry N` can be run with mocks (e.g. rule fails then succeeds within retries).
 
 <!-- END_TASK -->
 
@@ -280,7 +230,7 @@ result = prompt "Analyse the diff and classify the change" returns {
 - Unsupported declared type fails with compile-time schema error
 - Raw `$result` still contains the original JSON string
 - Error classes are distinct and test-covered: parse error vs schema/type error vs missing-field error
-- (Requires task 7) Testable with `jaiph test`: mock JSON response that satisfies the schema is accepted and typed fields are available
+- Testable with `jaiph test`: mock JSON response that satisfies the schema is accepted and typed fields are available
 
 <!-- END_TASK -->
 
@@ -306,7 +256,7 @@ result = prompt "Analyse the diff and classify the change" returns {
 - `$result_<field>` variables are available in subsequent steps
 - No additional `jq` call is needed at each access site
 - Export behaviour is deterministic for all declared primitive fields (`string|number|boolean`)
-- (Requires task 7) Testable with `jaiph test`: mock response is unpacked into prefixed variables
+- Testable with `jaiph test`: mock response is unpacked into prefixed variables
 
 <!-- END_TASK -->
 

@@ -1,0 +1,11 @@
+[[mock]]
+prompt_contains = "You are working on the Jaiph codebase"
+response = "Task implemented. Files changed: src/example.ts"
+
+[[mock]]
+prompt_contains = "The first task in .jaiph/QUEUE.md has just been implemented"
+response = "Removed the first task block from QUEUE.md."
+
+[[mock]]
+prompt_contains = "Ensure implementation/docs parity"
+response = "Documentation updated."
