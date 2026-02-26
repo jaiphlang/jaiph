@@ -1,0 +1,5 @@
+#!/usr/bin/env jaiph
+# E2E fixture: prompt with no matching mock -> jaiph test must fail with clear error.
+workflow default {
+  prompt "e2e-unmatched-prompt-never-mocked"
+}

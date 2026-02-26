@@ -5,35 +5,6 @@ The first task in the list is always the current task.
 
 ---
 
-<!-- TASK id="13" -->
-## 13. Strengthen e2e coverage for workflows, rules, and prompts
-
-**Status:** pending
-
-**What:** Add robust end-to-end tests in the `e2e/` directory that use mocked commands and fixtures to validate success and failure scenarios across rules, workflows, and prompt steps.
-
-**Why:** Current confidence is too low for orchestration behavior. We need deterministic e2e coverage that verifies runtime behavior, failure propagation, and user-facing errors.
-
-**Files to change:**
-- `e2e/*` — add/extend e2e scenarios and fixtures
-- `e2e/ci.sh` — ensure new tests run in CI
-- `test fixtures used by e2e` — add mock command scripts and workflow inputs as needed
-
-**Acceptance criteria:**
-- E2E suite includes mocked command tests for:
-  - passing and failing `rule` execution
-  - passing and failing `ensure` inside workflows
-  - prompt execution success path
-  - prompt failure path and surfaced error
-  - nested workflow/run behavior
-- Failures from rules/workflows/prompts produce clear, asserted stderr output
-- Tests are deterministic (no network/API dependency; fully mocked command behavior)
-- `npm run test:e2e` passes locally and in CI
-
-<!-- END_TASK -->
-
----
-
 <!-- TASK id="12" -->
 ## 12. Print subtrees for imported workflows in run tree
 

@@ -1,0 +1,5 @@
+#!/usr/bin/env jaiph
+# E2E fixture: nested workflow via run.
+workflow default {
+  echo "e2e-nested-inner"
+}

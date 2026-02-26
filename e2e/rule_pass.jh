@@ -1,0 +1,9 @@
+#!/usr/bin/env jaiph
+# E2E fixture: rule that runs mock_ok (deterministic pass).
+rule check_passes {
+  mock_ok
+}
+workflow default {
+  ensure check_passes
+  echo "e2e-rule-pass-done"
+}

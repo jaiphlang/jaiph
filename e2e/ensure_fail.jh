@@ -1,0 +1,12 @@
+#!/usr/bin/env jaiph
+# E2E fixture: ensure pass then ensure fail; we only run the fail path in e2e.
+rule step_ok {
+  mock_ok
+}
+rule step_fail {
+  mock_fail
+}
+workflow default {
+  ensure step_ok
+  ensure step_fail
+}

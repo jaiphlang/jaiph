@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Mock command that exits 0. Used by e2e tests for deterministic rule/ensure pass.
+exit 0
