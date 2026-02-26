@@ -5,16 +5,6 @@ The first task in the list is always the current task.
 
 ---
 
-<!-- TASK id="0" -->
-## 0. Upgrade project version to `0.2.0`
-
-**Status:** pending
-
-**What:** Update project version to 0.2.0, current one is 0.1.0. Search for all occurences in docs and in the code
-
-<!-- END_TASK -->
-
----
 
 <!-- TASK id="11" -->
 ## 11. Print output of errored rule/workflow in failure summary
