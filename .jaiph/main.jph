@@ -9,5 +9,4 @@ workflow default {
 
   run implement.default
   run docs.default
-  run git.commit
 }
