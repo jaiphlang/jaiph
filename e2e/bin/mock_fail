@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Mock command that exits 1 and prints to stderr. Used by e2e tests for deterministic rule/ensure fail.
+echo "e2e-rule-fail-message" >&2
+exit 1

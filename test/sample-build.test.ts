@@ -1380,7 +1380,17 @@ test("jaiph test captures mock response into variable and variable is available 
 
     assert.equal(testResult.status, 0, testResult.stderr);
     assert.match(testResult.stdout, /PASS/);
-    assert.match(testResult.stdout, /CAPTURED_MOCK_OUTPUT/);
+    // Workflow stdout (e.g. echo) is written to the run log, not process stdout
+    const runsRoot = join(root, ".jaiph/runs");
+    const runDirs = readdirSync(runsRoot).sort();
+    const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
+    const runFiles = readdirSync(latestRunDir);
+    const workflowOutName = runFiles.find(
+      (name) => name.endsWith(".out") && name.includes("workflow"),
+    );
+    assert.equal(Boolean(workflowOutName), true);
+    const workflowOut = readFileSync(join(latestRunDir, workflowOutName!), "utf8");
+    assert.match(workflowOut, /CAPTURED_MOCK_OUTPUT/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -1434,7 +1444,7 @@ test("jaiph run prompt capture: variable accessible in subsequent shell step", (
     );
     assert.equal(Boolean(workflowOutName), true);
     const workflowOut = readFileSync(join(latestRunDir, workflowOutName!), "utf8");
-    assert.match(workflowOut, /captured:.*agent-summary/);
+    assert.match(workflowOut, /captured:[\s\S]*agent-summary/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

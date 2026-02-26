@@ -1038,16 +1038,20 @@ async function runWorkflow(
 
     if (interactiveProgress) {
       if (activeRowIndex !== -1) {
-        while (activeRowIndex !== -1 && activeRowIndex < treeRows.length) {
-          const state = rowStates[activeRowIndex];
-          if (state.status === "pending") {
-            rowStates[activeRowIndex] = { status: resolvedStatus === 0 ? "done" : "failed", elapsedSec: 0 };
+        if (resolvedStatus === 0) {
+          while (activeRowIndex !== -1 && activeRowIndex < treeRows.length) {
+            const state = rowStates[activeRowIndex];
+            if (state.status === "pending") {
+              rowStates[activeRowIndex] = { status: "done", elapsedSec: 0 };
+            }
+            commitActiveLine(formatCompletedLine(activeRowIndex));
+            activeRowIndex += 1;
+            if (activeRowIndex >= treeRows.length) {
+              activeRowIndex = -1;
+            }
           }
-          commitActiveLine(formatCompletedLine(activeRowIndex));
-          activeRowIndex += 1;
-          if (activeRowIndex >= treeRows.length) {
-            activeRowIndex = -1;
-          }
+        } else {
+          writeActiveLine("");
         }
       }
     }

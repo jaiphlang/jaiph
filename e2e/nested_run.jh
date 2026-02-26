@@ -1,0 +1,7 @@
+#!/usr/bin/env jaiph
+# E2E fixture: main workflow that runs nested_inner.default then echoes.
+import "nested_inner.jh" as inner
+workflow default {
+  run inner.default
+  echo "e2e-nested-outer"
+}
