@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { build } from "../src/transpiler";
 
-test("build transpiles .jph into strict bash with retry flow", () => {
+test("build transpiles .jh into strict bash with retry flow", () => {
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-build-"));
   try {
     const results = build(join(process.cwd(), "test/fixtures"), outDir);
@@ -60,9 +60,9 @@ test("build validates imported rule references with deterministic errors", () =>
   const root = mkdtempSync(join(tmpdir(), "jaiph-invalid-"));
   try {
     writeFileSync(
-      join(root, "main.jph"),
+      join(root, "main.jh"),
       [
-        'import "./mod.jph" as mod',
+        'import "./mod.jh" as mod',
         "",
         "rule local {",
         "  echo ok",
@@ -75,7 +75,7 @@ test("build validates imported rule references with deterministic errors", () =>
       ].join("\n"),
     );
     writeFileSync(
-      join(root, "mod.jph"),
+      join(root, "mod.jh"),
       [
         "rule existing {",
         "  echo hi",
@@ -99,9 +99,9 @@ test("build fails on missing import file", () => {
   try {
     mkdirSync(join(root, "sub"));
     writeFileSync(
-      join(root, "sub/entry.jph"),
+      join(root, "sub/entry.jh"),
       [
-        'import "../missing/mod.jph" as mod',
+        'import "../missing/mod.jh" as mod',
         "",
         "rule local {",
         "  echo ok",
@@ -124,7 +124,7 @@ test("build fails on missing import file", () => {
 test("jaiph run compiles and executes workflow with args", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-run-"));
   try {
-    const filePath = join(root, "echo.jph");
+    const filePath = join(root, "echo.jh");
     writeFileSync(
       filePath,
       [
@@ -150,10 +150,10 @@ test("jaiph run compiles and executes workflow with args", () => {
   }
 });
 
-test("executable .jph invokes jaiph run semantics", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-exec-jph-"));
+test("executable .jh invokes jaiph run semantics", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-exec-jh-"));
   try {
-    const filePath = join(root, "echo.jph");
+    const filePath = join(root, "echo.jh");
     writeFileSync(
       filePath,
       [
@@ -184,7 +184,7 @@ test("executable .jph invokes jaiph run semantics", () => {
 test("jaiph run enables xtrace when JAIPH_DEBUG=true", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-run-debug-"));
   try {
-    const filePath = join(root, "debug.jph");
+    const filePath = join(root, "debug.jh");
     writeFileSync(
       filePath,
       [
@@ -213,7 +213,7 @@ test("jaiph run enables xtrace when JAIPH_DEBUG=true", () => {
 test("jaiph run fails when workflow default is missing", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-run-missing-default-"));
   try {
-    const filePath = join(root, "pr.jph");
+    const filePath = join(root, "pr.jh");
     writeFileSync(
       filePath,
       [
@@ -240,7 +240,7 @@ test("jaiph run fails when workflow default is missing", () => {
 test("jaiph run fails fast on command errors inside workflow", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-run-fail-fast-"));
   try {
-    const filePath = join(root, "fail-fast.jph");
+    const filePath = join(root, "fail-fast.jh");
     writeFileSync(
       filePath,
       [
@@ -271,7 +271,7 @@ test("jaiph run fails fast on command errors inside workflow", () => {
 test("jaiph run fails when runtime emits non-xtrace stderr", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-run-runtime-stderr-"));
   try {
-    const filePath = join(root, "runtime-stderr.jph");
+    const filePath = join(root, "runtime-stderr.jh");
     writeFileSync(
       filePath,
       [
@@ -324,7 +324,7 @@ test("jaiph run fails when runtime emits non-xtrace stderr", () => {
 test("jaiph run fails when required arg is missing and rule handles it", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-run-missing-arg-"));
   try {
-    const filePath = join(root, "missing-arg.jph");
+    const filePath = join(root, "missing-arg.jh");
     writeFileSync(
       filePath,
       [
@@ -362,7 +362,7 @@ test("jaiph run fails when required arg is missing and rule handles it", () => {
 test("jaiph run allows rules to call top-level helper functions in readonly mode", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-run-rule-helper-fn-"));
   try {
-    const filePath = join(root, "helpers.jph");
+    const filePath = join(root, "helpers.jh");
     writeFileSync(
       filePath,
       [
@@ -397,7 +397,7 @@ test("jaiph run allows rules to call top-level helper functions in readonly mode
 test("jaiph run prints rule tree and fail summary", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-run-tree-fail-"));
   try {
-    const filePath = join(root, "fail.jph");
+    const filePath = join(root, "fail.jh");
     writeFileSync(
       filePath,
       [
@@ -453,7 +453,7 @@ test("jaiph run stores prompt output in run logs", () => {
     );
     chmodSync(fakeAgent, 0o755);
 
-    const filePath = join(root, "prompt.jph");
+    const filePath = join(root, "prompt.jh");
     writeFileSync(
       filePath,
       [
@@ -527,7 +527,7 @@ test("jaiph run stores both reasoning and final answer from stream-json", () => 
     );
     chmodSync(fakeAgent, 0o755);
 
-    const filePath = join(root, "prompt-stream-json.jph");
+    const filePath = join(root, "prompt-stream-json.jh");
     writeFileSync(
       filePath,
       [
@@ -568,7 +568,7 @@ test("build rejects command substitution in prompt text", () => {
   const rootSubshell = mkdtempSync(join(tmpdir(), "jaiph-build-prompt-subshell-"));
   try {
     writeFileSync(
-      join(rootBackticks, "main.jph"),
+      join(rootBackticks, "main.jh"),
       [
         "workflow default {",
         '  prompt "literal backticks: `uname`"',
@@ -577,7 +577,7 @@ test("build rejects command substitution in prompt text", () => {
       ].join("\n"),
     );
     writeFileSync(
-      join(rootSubshell, "main.jph"),
+      join(rootSubshell, "main.jh"),
       [
         "workflow default {",
         '  prompt "literal command substitution: $(echo SHOULD_NOT_RUN)"',
@@ -615,7 +615,7 @@ test("jaiph run interpolates positional args in prompt text", () => {
     );
     chmodSync(fakeAgent, 0o755);
 
-    const filePath = join(root, "prompt-args.jph");
+    const filePath = join(root, "prompt-args.jh");
     writeFileSync(
       filePath,
       [
@@ -668,7 +668,7 @@ test("jaiph run interpolates named array placeholders in prompt text", () => {
     );
     chmodSync(fakeAgent, 0o755);
 
-    const filePath = join(root, "prompt-array.jph");
+    const filePath = join(root, "prompt-array.jh");
     writeFileSync(
       filePath,
       [
@@ -734,7 +734,7 @@ test("jaiph run applies model from local TOML config", () => {
       ].join("\n"),
     );
 
-    const filePath = join(root, "prompt.jph");
+    const filePath = join(root, "prompt.jh");
     writeFileSync(
       filePath,
       [
@@ -795,7 +795,7 @@ test("jaiph run uses JAIPH_STDLIB global runtime path", () => {
     );
     chmodSync(stdlibPath, 0o755);
 
-    const filePath = join(root, "echo.jph");
+    const filePath = join(root, "echo.jh");
     writeFileSync(
       filePath,
       [
@@ -831,17 +831,17 @@ test("jaiph init creates workspace structure and guidance", () => {
     assert.equal(initResult.status, 0, initResult.stderr);
     assert.equal(existsSync(join(root, ".jaiph")), true);
     assert.equal(existsSync(join(root, ".jaiph/lib")), false);
-    assert.equal(existsSync(join(root, ".jaiph/bootstrap.jph")), true);
+    assert.equal(existsSync(join(root, ".jaiph/bootstrap.jh")), true);
     assert.equal(existsSync(join(root, ".jaiph/config.toml")), true);
     assert.equal(existsSync(join(root, ".jaiph/jaiph-skill.md")), true);
-    const bootstrap = readFileSync(join(root, ".jaiph/bootstrap.jph"), "utf8");
+    const bootstrap = readFileSync(join(root, ".jaiph/bootstrap.jh"), "utf8");
     assert.match(bootstrap, /^#!\/usr\/bin\/env jaiph\n\n/);
     assert.match(bootstrap, /workflow default \{/);
     assert.match(bootstrap, /\.jaiph\/jaiph-skill\.md/);
     assert.match(bootstrap, /Analyze repository structure/);
     assert.match(bootstrap, /Create or update Jaiph workflows under \.jaiph\//);
     assert.doesNotMatch(bootstrap, /\$1/);
-    assert.equal(statSync(join(root, ".jaiph/bootstrap.jph")).mode & 0o777, 0o755);
+    assert.equal(statSync(join(root, ".jaiph/bootstrap.jh")).mode & 0o777, 0o755);
     const localConfig = readFileSync(join(root, ".jaiph/config.toml"), "utf8");
     assert.match(localConfig, /\[agent\]/);
     assert.match(localConfig, /default_model = "auto"/);
@@ -851,11 +851,11 @@ test("jaiph init creates workspace structure and guidance", () => {
     assert.match(localSkill, /Jaiph Bootstrap Skill/);
     assert.equal(existsSync(join(root, ".gitignore")), false);
     assert.match(initResult.stdout, /Jaiph init/);
-    assert.match(initResult.stdout, /▸ Creating \.jaiph\/bootstrap\.jph/);
-    assert.match(initResult.stdout, /✓ Initialized \.jaiph\/bootstrap\.jph/);
+    assert.match(initResult.stdout, /▸ Creating \.jaiph\/bootstrap\.jh/);
+    assert.match(initResult.stdout, /✓ Initialized \.jaiph\/bootstrap\.jh/);
     assert.match(initResult.stdout, /✓ Initialized \.jaiph\/config\.toml/);
     assert.match(initResult.stdout, /Synced \.jaiph\/jaiph-skill\.md/);
-    assert.match(initResult.stdout, /\.\/\.jaiph\/bootstrap\.jph/);
+    assert.match(initResult.stdout, /\.\/\.jaiph\/bootstrap\.jh/);
     assert.match(initResult.stdout, /analyze the project/i);
     assert.match(initResult.stdout, /add `\.jaiph\/runs\/` to `\.gitignore`/i);
   } finally {
@@ -912,7 +912,7 @@ test("build accepts files with no workflows", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-no-workflows-"));
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-no-workflows-out-"));
   try {
-    const filePath = join(root, "rules-only.jph");
+    const filePath = join(root, "rules-only.jh");
     writeFileSync(
       filePath,
       [
@@ -937,7 +937,7 @@ test("build transpiles ensure statements with arguments", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-ensure-args-"));
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-ensure-args-out-"));
   try {
-    const filePath = join(root, "entry.jph");
+    const filePath = join(root, "entry.jh");
     writeFileSync(
       filePath,
       [
@@ -969,7 +969,7 @@ test("build supports top-level functions with namespaced wrappers", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-functions-"));
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-functions-out-"));
   try {
-    const filePath = join(root, "entry.jph");
+    const filePath = join(root, "entry.jh");
     writeFileSync(
       filePath,
       [
@@ -1001,7 +1001,7 @@ test("build supports top-level functions with namespaced wrappers", () => {
 test("jaiph run tree includes function calls from workflow shell steps", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-run-function-tree-"));
   try {
-    const filePath = join(root, "entry.jph");
+    const filePath = join(root, "entry.jh");
     writeFileSync(
       filePath,
       [

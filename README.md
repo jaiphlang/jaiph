@@ -1,5 +1,9 @@
 # ![Jaiph](docs/logo.png)
 
+[jaiph.org](https://jaiph.org) · [Getting started](docs/getting-started.md) · [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Grammar](docs/grammar.md) · [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/main/docs/jaiph-skill.md)
+
+---
+
 **Open Source • Powerful • Friendly**
 
 [![CI](https://github.com/jaiphlang/jaiph/actions/workflows/ci.yml/badge.svg)](https://github.com/jaiphlang/jaiph/actions/workflows/ci.yml)
@@ -89,7 +93,7 @@ Switch installed version:
 
 ```bash
 jaiph use nightly   # tracks main branch
-jaiph use 0.2.3     # installs tag v0.2.3
+jaiph use 0.2.0     # installs tag v0.2.0
 ```
 
 If that fails, check that `~/.local/bin` is in your `PATH` (default install directory).
@@ -103,8 +107,8 @@ Installation places both the `jaiph` CLI and the global runtime stdlib (`jaiph_s
 
 Arguments are passed exactly like bash scripts (`$1`, `$2`, `"$@"`).
 
-Entrypoint resolution: executable `.jph` files (with `#!/usr/bin/env jaiph`) run `workflow default`.  
-`jaiph run path/to/file.jph` is also supported and follows the same argument semantics.
+Entrypoint resolution: executable `.jh` or `.jph` files (with `#!/usr/bin/env jaiph`) run `workflow default`.  
+`jaiph run path/to/file.jh` (or `file.jph`) is also supported and follows the same argument semantics.
 
 ### Initialize Jaiph workspace
 
@@ -112,12 +116,12 @@ Entrypoint resolution: executable `.jph` files (with `#!/usr/bin/env jaiph`) run
 jaiph init
 ```
 
-This creates `.jaiph/bootstrap.jph`, `.jaiph/config.toml`, and `.jaiph/jaiph-skill.md` (synced from your installed Jaiph copy).
+This creates `.jaiph/bootstrap.jh`, `.jaiph/config.toml`, and `.jaiph/jaiph-skill.md` (synced from your installed Jaiph copy).
 
 Then run:
 
 ```bash
-./.jaiph/bootstrap.jph
+./.jaiph/bootstrap.jh
 ```
 
 This asks an agent to detect project configuration and bootstrap recommended Jaiph workflows for feature implementation.
@@ -172,7 +176,7 @@ All Jaiph primitives can be combined with bash code and are interoperable with n
 
 Known limitations and gotchas:
 
-- Parser limitation: inline brace-group short-circuit patterns like `cmd || { ... }` are not supported in `.jph` files yet. Use explicit conditionals like `if ! cmd; then ...; fi` instead.
+- Parser limitation: inline brace-group short-circuit patterns like `cmd || { ... }` are not supported in `.jh`/`.jph` files yet. Use explicit conditionals like `if ! cmd; then ...; fi` instead.
 - Entrypoint naming: `jaiph run` does not use file-name-based workflow lookup. Use `workflow default` as the entrypoint for runnable files.
 
 ## More Documentation

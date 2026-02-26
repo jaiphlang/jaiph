@@ -4,15 +4,27 @@ exports[`fixture build snapshots build output matches snapshot 1`] = `
 {
   "files": [
     "bootstrap_project.sh",
-    "jaiph_stdlib.sh",
     "main.sh",
     "tools/security.sh",
   ],
   "outputByFile": {
-    "bootstrap_project.sh": "set -euo pipefail
-source "$(dirname "\${BASH_SOURCE[0]}")/jaiph_stdlib.sh"
+    "bootstrap_project.sh": "#!/usr/bin/env bash
+
+set -euo pipefail
+jaiph_stdlib_path="\${JAIPH_STDLIB:-$HOME/.local/bin/jaiph_stdlib.sh}"
+if [[ ! -f "$jaiph_stdlib_path" ]]; then
+  echo "jai: stdlib not found at $jaiph_stdlib_path (set JAIPH_STDLIB or reinstall jaiph)" >&2
+  exit 1
+fi
+source "$jaiph_stdlib_path"
+if [[ "$(jaiph__runtime_api)" != "1" ]]; then
+  echo "jai: incompatible jaiph stdlib runtime (required api=1)" >&2
+  exit 1
+fi
 
 bootstrap_project__workflow_nodejs__impl() {
+  set -eo pipefail
+  set +u
   echo "Sorry, I cannot setup nodejs yet"
   exit 1
 }
@@ -20,172 +32,26 @@ bootstrap_project__workflow_nodejs__impl() {
 bootstrap_project__workflow_nodejs() {
   jaiph__run_step bootstrap_project__workflow_nodejs bootstrap_project__workflow_nodejs__impl "$@"
 }",
-    "jaiph_stdlib.sh": "#!/usr/bin/env bash
-# Standard helpers shared by transpiled Jaiph modules.
+    "main.sh": "#!/usr/bin/env bash
 
-jaiph__version() {
-  echo "jaiph 0.2.0"
-}
-
-jaiph__die() {
-  local message="$1"
-  echo "jai: $message" >&2
-  return 1
-}
-
-jaiph__prompt__impl() {
-  local workspace_root
-  workspace_root="$(jaiph__workspace_root)"
-  if [[ "$#" -gt 0 ]]; then
-    printf "Prompt:
-%s
-
-" "$*"
-  fi
-  cursor-agent --print --output-format text --workspace "$workspace_root" --trust "$@"
-}
-
-jaiph__prompt() {
-  jaiph__run_step jaiph__prompt jaiph__prompt__impl "$@"
-}
-
-jaiph__new_run_id() {
-  if command -v uuidgen >/dev/null 2>&1; then
-    uuidgen | tr "[:upper:]" "[:lower:]"
-    return 0
-  fi
-  printf "%s-%s-%s" "$$" "$RANDOM" "$(date +%s)"
-}
-
-jaiph__sanitize_name() {
-  local raw="$1"
-  raw="\${raw//[^[:alnum:]_.-]/_}"
-  printf "%s" "$raw"
-}
-
-jaiph__timestamp_utc() {
-  date -u +"%Y-%m-%dT%H-%M-%SZ"
-}
-
-jaiph__workspace_root() {
-  if [[ -n "\${JAIPH_WORKSPACE:-}" ]]; then
-    printf "%s" "$JAIPH_WORKSPACE"
-    return 0
-  fi
-  local current="$PWD"
-  while [[ "$current" != "/" ]]; do
-    if [[ -d "$current/.jaiph" || -d "$current/.git" ]]; then
-      printf "%s" "$current"
-      return 0
-    fi
-    current="$(dirname "$current")"
-  done
-  printf "%s" "$PWD"
-}
-
-jaiph__init_run_tracking() {
-  if [[ -n "\${JAIPH_RUN_DIR:-}" ]]; then
-    return 0
-  fi
-  local started_at run_id workspace_root
-  started_at="$(jaiph__timestamp_utc)"
-  run_id="$(jaiph__new_run_id)"
-  workspace_root="$(jaiph__workspace_root)"
-  JAIPH_RUN_DIR="$workspace_root/.jaiph/runs/\${started_at}-\${run_id}"
-  JAIPH_PRECEDING_FILES=""
-  mkdir -p "$JAIPH_RUN_DIR"
-  export JAIPH_RUN_DIR JAIPH_PRECEDING_FILES
-}
-
-jaiph__track_output_files() {
-  local out_file="$1"
-  local err_file="$2"
-  if [[ -z "$JAIPH_PRECEDING_FILES" ]]; then
-    JAIPH_PRECEDING_FILES="\${out_file},\${err_file}"
-  else
-    JAIPH_PRECEDING_FILES="\${JAIPH_PRECEDING_FILES},\${out_file},\${err_file}"
-  fi
-  export JAIPH_PRECEDING_FILES
-}
-
-jaiph__run_step() {
-  local func_name="$1"
-  shift || true
-  if [[ -z "$func_name" ]]; then
-    jaiph__die "jaiph__run_step requires a function name"
-    return 1
-  fi
-  if [[ "$#" -eq 0 ]]; then
-    jaiph__die "jaiph__run_step requires a command to execute"
-    return 1
-  fi
-  jaiph__init_run_tracking || return 1
-  local step_started_at safe_name out_file err_file status had_errexit
-  step_started_at="$(jaiph__timestamp_utc)"
-  safe_name="$(jaiph__sanitize_name "$func_name")"
-  out_file="$JAIPH_RUN_DIR/\${step_started_at}-\${safe_name}.out"
-  err_file="$JAIPH_RUN_DIR/\${step_started_at}-\${safe_name}.err"
-  had_errexit=0
-  case "$-" in
-    *e*) had_errexit=1 ;;
-  esac
-  set +e
-  "$@" >"$out_file" 2>"$err_file"
-  status=$?
-  if [[ "$had_errexit" -eq 1 ]]; then
-    set -e
-  fi
-  jaiph__track_output_files "$out_file" "$err_file"
-  if [[ -s "$out_file" ]]; then
-    cat "$out_file"
-  fi
-  if [[ -s "$err_file" ]]; then
-    cat "$err_file" >&2
-  fi
-  return "$status"
-}
-
-# Wrapper to execute functions in a read-only filesystem sandbox.
-jaiph__execute_readonly() {
-  local func_name="$1"
-  shift || true
-  if [[ -z "$func_name" ]]; then
-    jaiph__die "jaiph__execute_readonly requires a function name"
-    return 1
-  fi
-  if ! declare -f "$func_name" >/dev/null 2>&1; then
-    jaiph__die "unknown function: $func_name"
-    return 1
-  fi
-  export -f "$func_name"
-  export -f jaiph__die
-  export -f jaiph__prompt
-  if ! command -v unshare >/dev/null 2>&1 || ! command -v sudo >/dev/null 2>&1 || ! sudo -n true >/dev/null 2>&1 || ! unshare -m true >/dev/null 2>&1; then
-    # Best-effort fallback for environments without Linux mount namespace tooling (e.g. macOS).
-    # Execute in a child shell so "exit" inside a rule does not terminate the parent runner.
-    bash -c '
-      func_name="$1"
-      shift || true
-      "$func_name" "$@"
-    ' _ "$func_name" "$@"
-    return $?
-  fi
-  sudo env JAIPH_PRECEDING_FILES="$JAIPH_PRECEDING_FILES" unshare -m bash -c '
-    mount --make-rprivate /
-    mount -o remount,ro /
-    func_name="$1"
-    shift || true
-    "$func_name" "$@"
-  ' _ "$func_name" "$@"
-}
-",
-    "main.sh": "set -euo pipefail
-source "$(dirname "\${BASH_SOURCE[0]}")/jaiph_stdlib.sh"
+set -euo pipefail
+jaiph_stdlib_path="\${JAIPH_STDLIB:-$HOME/.local/bin/jaiph_stdlib.sh}"
+if [[ ! -f "$jaiph_stdlib_path" ]]; then
+  echo "jai: stdlib not found at $jaiph_stdlib_path (set JAIPH_STDLIB or reinstall jaiph)" >&2
+  exit 1
+fi
+source "$jaiph_stdlib_path"
+if [[ "$(jaiph__runtime_api)" != "1" ]]; then
+  echo "jai: incompatible jaiph stdlib runtime (required api=1)" >&2
+  exit 1
+fi
 source "$(dirname "\${BASH_SOURCE[0]}")/bootstrap_project.sh"
 source "$(dirname "\${BASH_SOURCE[0]}")/tools/security.sh"
 
 # Validates local build prerequisites.
 main__rule_project_ready__impl() {
+  set -eo pipefail
+  set +u
   test -f "package.json"
   test -n "$NODE_ENV"
 }
@@ -196,6 +62,8 @@ main__rule_project_ready() {
 
 # Verifies the project compiles successfully.
 main__rule_build_passes__impl() {
+  set -eo pipefail
+  set +u
   npm run build
 }
 
@@ -207,13 +75,17 @@ main__rule_build_passes() {
 # Arguments:
 #   $1: Feature requirements passed to the prompt.
 main__workflow_default__impl() {
+  set -eo pipefail
+  set +u
   if ! main__rule_project_ready; then
     bootstrap_project__workflow_nodejs
   fi
-  jaiph__prompt "
+  jaiph__prompt "$@" <<__JAIPH_PROMPT_25__
+
     Build the application using best practices.
     Follow requirements: $1
-  "
+  
+__JAIPH_PROMPT_25__
   main__rule_build_passes
   tools__security__rule_scan_passes
   main__workflow_update_docs
@@ -225,16 +97,33 @@ main__workflow_default() {
 
 # Refreshes documentation after a successful build.
 main__workflow_update_docs__impl() {
-  jaiph__prompt "Update docs"
+  set -eo pipefail
+  set +u
+  jaiph__prompt "$@" <<__JAIPH_PROMPT_38__
+Update docs
+__JAIPH_PROMPT_38__
 }
 
 main__workflow_update_docs() {
   jaiph__run_step main__workflow_update_docs main__workflow_update_docs__impl "$@"
 }",
-    "tools/security.sh": "set -euo pipefail
-source "$(dirname "\${BASH_SOURCE[0]}")/../jaiph_stdlib.sh"
+    "tools/security.sh": "#!/usr/bin/env bash
+
+set -euo pipefail
+jaiph_stdlib_path="\${JAIPH_STDLIB:-$HOME/.local/bin/jaiph_stdlib.sh}"
+if [[ ! -f "$jaiph_stdlib_path" ]]; then
+  echo "jai: stdlib not found at $jaiph_stdlib_path (set JAIPH_STDLIB or reinstall jaiph)" >&2
+  exit 1
+fi
+source "$jaiph_stdlib_path"
+if [[ "$(jaiph__runtime_api)" != "1" ]]; then
+  echo "jai: incompatible jaiph stdlib runtime (required api=1)" >&2
+  exit 1
+fi
 
 tools__security__rule_scan_passes__impl() {
+  set -eo pipefail
+  set +u
   echo "Security scan placeholder here"
 }
 

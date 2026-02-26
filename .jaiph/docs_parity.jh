@@ -68,6 +68,7 @@ workflow default {
 
   cp README.md docs/getting-started.md
   perl -pi -e 's{docs/logo\.png}{logo.png}g' docs/getting-started.md
+  perl -pi -e 's{\]\(docs/([a-z.-]+\.md)\)}{]($1)}g' docs/getting-started.md
 
   prompt "
     Ensure implementation/docs parity for this repository.

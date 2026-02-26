@@ -1,8 +1,8 @@
 #!/usr/bin/env jaiph
 
-import "implement_from_queue.jph" as implement
-import "docs_parity.jph" as docs
-import "git.jph" as git
+import "implement_from_queue.jh" as implement
+import "docs_parity.jh" as docs
+import "git.jh" as git
 
 workflow default {
   ensure git.is_clean

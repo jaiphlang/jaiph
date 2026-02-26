@@ -6,50 +6,51 @@ The first task in the list is always the current task.
 ---
 
 
-<!-- TASK id="11" -->
-## 11. Print output of errored rule/workflow in failure summary
-
-**Status:** done
-
-**What:** When a workflow run fails, the CLI prints the stderr of the failed step (rule or workflow) in the failure summary so the user sees why it failed without opening log files.
-
-**Why:** Reduces friction when debugging: "ensure: command not found" or other step errors are visible immediately.
-
-**Implemented:** On failure, read the run summary JSONL, find the first STEP_END with status !== 0, read that step's err_file, and print its content (up to 30 lines) under "Output of failed step:". Also fixed `ensure` inside rule bodies so they compile to the actual rule invocation (was emitting raw "ensure" as shell).
-
-<!-- END_TASK -->
-
----
-
-<!-- TASK id="10" -->
-## 10. Introduce `.jh` extension with backward-compatible `.jph` support
+<!-- TASK id="7" -->
+## 7. `jaiph test` command with prompt mocking
 
 **Status:** pending
 
-**What:** Support `.jh` as the primary Jaiph file extension while keeping `.jph` fully functional during a migration window.
+**What:** Add a `jaiph test` subcommand that runs workflows in test mode, intercepting `prompt` calls and substituting mock responses.
 
-**Why:** `.jh` is shorter, easier to type, and aligns better with shell-adjacent naming (`.sh`) without changing language semantics.
+**Why:** Prompt-heavy workflows need deterministic tests before adding more syntax/semantics. This reduces regression risk for the full automation flow.
 
-**Migration policy:**
-- `.jh` becomes the recommended extension in docs/examples
-- `.jph` remains supported for at least one release cycle
-- CLI emits a clear deprecation notice for new `.jph` usage where appropriate
-- Provide a mechanical migration path (`mv *.jph *.jh`) and compatibility guidance
+**Test file format** (`.jaiph/tests/<name>.test.toml`):
+```toml
+[[mock]]
+prompt_contains = "Analyse the diff"
+response = '{"type":"refactor","risk":"low","summary":"Renamed variables"}'
+
+[[mock]]
+prompt_contains = "Update docs"
+response = "Documentation updated."
+```
+
+**CLI usage:**
+```
+jaiph test e2e/say_hello.jh
+jaiph test .jaiph/main.jh "implement feature X"
+```
+
+**Behaviour:**
+- Intercepts each `jaiph__prompt` / `jaiph__prompt_typed` call
+- Matches mock by `prompt_contains` substring
+- Substitutes mock `response` as stdout
+- Fails if a prompt call has no matching mock
+- Reports pass/fail per step
 
 **Files to change:**
-- `src/cli.ts` — accept both `.jh` and `.jph` entrypoints/import targets
-- `src/parser.ts` and/or import resolver path logic — extension resolution compatibility
-- `docs/getting-started.md` — switch examples to `.jh`
-- `docs/cli.md` and `docs/grammar.md` — document dual support and migration guidance
-- `e2e/*` and fixture workflows — add or migrate coverage for `.jh`
-- `docs/index.html` - ensure samples show `.jh` extension, no need to mention jph
+- `src/cli.ts` — add `test` subcommand
+- `src/stdlib.sh` — check `JAIPH_TEST_MODE=1` and `JAIPH_MOCK_FILE`; route prompts through mock resolver
+- New file: `src/mock-resolver.ts` — matches prompt text against mock definitions
+- `e2e/say_hello.jh` — ensure it is runnable under `jaiph test` with a mock file
+- `.jaiph/main.jh` — ensure full flow can be tested in deterministic mode without side effects
 
 **Acceptance criteria:**
-- `jaiph run file.jh` works
-- Existing `.jph` projects continue to run unchanged
-- Imports resolve correctly for both extensions
-- Test suite covers mixed-extension projects
-- Deprecation messaging is explicit, non-breaking, and documented
+- `jaiph test e2e/say_hello.jh` passes with mocks
+- `jaiph test .jaiph/main.jh "<input>"` executes the full flow with mocked prompts
+- Test mode does not perform real networked prompt calls
+- Test mode can avoid destructive side effects (commit/push) while validating flow wiring
 
 <!-- END_TASK -->
 
@@ -75,8 +76,9 @@ Use `ensure` to call another rule, or move this call to a `workflow`.
 ```
 
 **Tests to add:**
-- Verify a `.jph` file with `run` inside a `rule` fails to compile
+- Verify a `.jh` file with `run` inside a `rule` fails to compile
 - Verify `ensure other_rule` inside a `rule` still compiles correctly
+- (After task 7) Verify with `jaiph test` that a workflow using `ensure` only still passes with mocks
 
 <!-- END_TASK -->
 
@@ -110,62 +112,11 @@ result=$(jaiph__prompt "Summarize the changes made")
 **Tests to add:**
 - Capture compiles to correct bash assignment
 - Variable is accessible in subsequent bash expressions within the same workflow
+- (Requires task 7) Testable with `jaiph test`: mock response for the prompt is captured into the variable
 
 <!-- END_TASK -->
 
 ---
-
-<!-- TASK id="7" -->
-## 7. `jaiph test` command with prompt mocking
-
-**Status:** pending
-
-**What:** Add a `jaiph test` subcommand that runs workflows in test mode, intercepting `prompt` calls and substituting mock responses.
-
-**Why:** Prompt-heavy workflows need deterministic tests before adding more syntax/semantics. This reduces regression risk for the full automation flow.
-
-**Test file format** (`.jaiph/tests/<name>.test.toml`):
-```toml
-[[mock]]
-prompt_contains = "Analyse the diff"
-response = '{"type":"refactor","risk":"low","summary":"Renamed variables"}'
-
-[[mock]]
-prompt_contains = "Update docs"
-response = "Documentation updated."
-```
-
-**CLI usage:**
-```
-jaiph test e2e/say_hello.jph
-jaiph test .jaiph/main.jph "implement feature X"
-```
-
-**Behaviour:**
-- Intercepts each `jaiph__prompt` / `jaiph__prompt_typed` call
-- Matches mock by `prompt_contains` substring
-- Substitutes mock `response` as stdout
-- Fails if a prompt call has no matching mock
-- Reports pass/fail per step
-
-**Files to change:**
-- `src/cli.ts` — add `test` subcommand
-- `src/stdlib.sh` — check `JAIPH_TEST_MODE=1` and `JAIPH_MOCK_FILE`; route prompts through mock resolver
-- New file: `src/mock-resolver.ts` — matches prompt text against mock definitions
-- `e2e/say_hello.jph` — ensure it is runnable under `jaiph test` with a mock file
-- `.jaiph/main.jph` — ensure full flow can be tested in deterministic mode without side effects
-
-**Acceptance criteria:**
-- `jaiph test e2e/say_hello.jph` passes with mocks
-- `jaiph test .jaiph/main.jph "<input>"` executes the full flow with mocked prompts
-- Test mode does not perform real networked prompt calls
-- Test mode can avoid destructive side effects (commit/push) while validating flow wiring
-
-<!-- END_TASK -->
-
----
-
-
 
 <!-- TASK id="12" -->
 ## 12. Print subtrees for imported workflows in run tree
@@ -174,7 +125,7 @@ jaiph test .jaiph/main.jph "implement feature X"
 
 **What:** Expand `jaiph run` tree rendering so `run alias.workflow` entries include nested steps from the imported module (rules, prompts, nested runs), not just a single flat workflow line.
 
-**Why:** The current tree hides execution shape of imported workflows, which makes it look like prompts/rules are skipped and reduces debuggability for orchestrator files like `.jaiph/main.jph`.
+**Why:** The current tree hides execution shape of imported workflows, which makes it look like prompts/rules are skipped and reduces debuggability for orchestrator files like `.jaiph/main.jh`.
 
 **Files to change:**
 - `src/cli.ts` — resolve workflow refs across imports and recursively render imported workflow children
@@ -182,10 +133,11 @@ jaiph test .jaiph/main.jph "implement feature X"
 - `e2e/*` or CLI tests — assert dotted workflow refs show nested tree rows
 
 **Acceptance criteria:**
-- `jaiph run .jaiph/main.jph` prints nested tree rows for `implement.default`, `docs.default`, and `git.commit`
+- `jaiph run .jaiph/main.jh` prints nested tree rows for `implement.default`, `docs.default`, and `git.commit`
 - Prompt steps inside imported workflows appear in the tree
 - Existing local (non-imported) subtree rendering remains unchanged
 - Recursive rendering avoids infinite loops on cyclic references
+- (Requires task 7) Nested tree is observable when running `jaiph test .jaiph/main.jh` with mocks
 
 <!-- END_TASK -->
 
@@ -217,6 +169,9 @@ Optional `--delay S` adds a sleep of S seconds between retries.
 jaiph__ensure_retry 3 5 main__rule_build_passes
 ```
 
+**Tests / acceptance:**
+- (Requires task 7) Testable with `jaiph test`: workflow using `ensure --retry N` can be run with mocks (e.g. rule fails then succeeds within retries).
+
 <!-- END_TASK -->
 
 ---
@@ -241,6 +196,7 @@ jaiph__ensure_retry 3 5 main__rule_build_passes
 - Existing default backend remains unchanged and backward compatible
 - Output capture (`result = prompt "..."`) continues to work with Claude CLI backend
 - Clear error if Claude CLI is selected but unavailable
+- `jaiph test` continues to use mocks only; test mode must not invoke Claude CLI
 
 <!-- END_TASK -->
 
@@ -324,6 +280,7 @@ result = prompt "Analyse the diff and classify the change" returns {
 - Unsupported declared type fails with compile-time schema error
 - Raw `$result` still contains the original JSON string
 - Error classes are distinct and test-covered: parse error vs schema/type error vs missing-field error
+- (Requires task 7) Testable with `jaiph test`: mock JSON response that satisfies the schema is accepted and typed fields are available
 
 <!-- END_TASK -->
 
@@ -349,6 +306,7 @@ result = prompt "Analyse the diff and classify the change" returns {
 - `$result_<field>` variables are available in subsequent steps
 - No additional `jq` call is needed at each access site
 - Export behaviour is deterministic for all declared primitive fields (`string|number|boolean`)
+- (Requires task 7) Testable with `jaiph test`: mock response is unpacked into prefixed variables
 
 <!-- END_TASK -->
 

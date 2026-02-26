@@ -1,8 +1,10 @@
 # ![Jaiph](logo.png)
 
-[jaiph.org](https://jaiph.org) · [Getting started](getting-started.md) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Agent Skill](jaiph-skill.md)
+[jaiph.org](https://jaiph.org) · [Getting started](getting-started.md) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/main/docs/jaiph-skill.md)
 
 ---
+
+**Open Source • Powerful • Friendly**
 
 [![CI](https://github.com/jaiphlang/jaiph/actions/workflows/ci.yml/badge.svg)](https://github.com/jaiphlang/jaiph/actions/workflows/ci.yml)
 
@@ -91,7 +93,7 @@ Switch installed version:
 
 ```bash
 jaiph use nightly   # tracks main branch
-jaiph use 0.2.3     # installs tag v0.2.3
+jaiph use 0.2.0     # installs tag v0.2.0
 ```
 
 If that fails, check that `~/.local/bin` is in your `PATH` (default install directory).
@@ -105,8 +107,8 @@ Installation places both the `jaiph` CLI and the global runtime stdlib (`jaiph_s
 
 Arguments are passed exactly like bash scripts (`$1`, `$2`, `"$@"`).
 
-Entrypoint resolution: executable `.jph` files (with `#!/usr/bin/env jaiph`) run `workflow default`.  
-`jaiph run path/to/file.jph` is also supported and follows the same argument semantics.
+Entrypoint resolution: executable `.jh` or `.jph` files (with `#!/usr/bin/env jaiph`) run `workflow default`.  
+`jaiph run path/to/file.jh` (or `file.jph`) is also supported and follows the same argument semantics.
 
 ### Initialize Jaiph workspace
 
@@ -114,12 +116,12 @@ Entrypoint resolution: executable `.jph` files (with `#!/usr/bin/env jaiph`) run
 jaiph init
 ```
 
-This creates `.jaiph/bootstrap.jph`, `.jaiph/config.toml`, and `.jaiph/jaiph-skill.md` (synced from your installed Jaiph copy).
+This creates `.jaiph/bootstrap.jh`, `.jaiph/config.toml`, and `.jaiph/jaiph-skill.md` (synced from your installed Jaiph copy).
 
 Then run:
 
 ```bash
-./.jaiph/bootstrap.jph
+./.jaiph/bootstrap.jh
 ```
 
 This asks an agent to detect project configuration and bootstrap recommended Jaiph workflows for feature implementation.
@@ -141,11 +143,11 @@ Jaiph supports both global and local TOML config files:
 - Global: `${XDG_CONFIG_HOME:-~/.config}/jaiph/config.toml`
 - Local: `.jaiph/config.toml` (in your workspace)
 
-Local config overrides global config. See [configuration](configuration.md) for full details and examples.
+Local config overrides global config. See `docs/configuration.md` for full details and examples.
 
 ### CLI reference
 
-See [cli](cli.md) for command syntax, examples, and supported environment variables.
+See `docs/cli.md` for command syntax, examples, and supported environment variables.
 
 ## Language Primitives
 
@@ -174,13 +176,13 @@ All Jaiph primitives can be combined with bash code and are interoperable with n
 
 Known limitations and gotchas:
 
-- Parser limitation: inline brace-group short-circuit patterns like `cmd || { ... }` are not supported in `.jph` files yet. Use explicit conditionals like `if ! cmd; then ...; fi` instead.
+- Parser limitation: inline brace-group short-circuit patterns like `cmd || { ... }` are not supported in `.jh`/`.jph` files yet. Use explicit conditionals like `if ! cmd; then ...; fi` instead.
 - Entrypoint naming: `jaiph run` does not use file-name-based workflow lookup. Use `workflow default` as the entrypoint for runnable files.
 
 ## More Documentation
 
 - Full docs: <https://jaiph.org/>
-- [Grammar](grammar.md)
-- [Agent bootstrap skill](jaiph-skill.md)
-- [Configuration](configuration.md)
-- [CLI](cli.md)
+- Grammar: `docs/grammar.md`
+- Agent bootstrap skill: `docs/jaiph-skill.md`
+- Configuration: `docs/configuration.md`
+- CLI: `docs/cli.md`
