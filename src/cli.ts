@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSyn
 import { tmpdir } from "node:os";
 import { dirname, extname, join, resolve, basename } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
-import { build, workflowSymbolForFile } from "./transpiler";
+import { build, workflowSymbolForFile, resolveImportPath } from "./transpiler";
 import { parsejaiph } from "./parser";
 import { jaiphModule } from "./types";
 import { loadJaiphConfig } from "./config";
@@ -69,6 +69,17 @@ function collectWorkflowChildren(mod: jaiphModule, workflowName: string): Array<
   return items;
 }
 
+export function loadImportedModules(mainMod: jaiphModule): Map<string, jaiphModule> {
+  const map = new Map<string, jaiphModule>();
+  for (const imp of mainMod.imports) {
+    const resolved = resolveImportPath(mainMod.filePath, imp.path);
+    if (existsSync(resolved)) {
+      map.set(imp.alias, parsejaiph(readFileSync(resolved, "utf8"), resolved));
+    }
+  }
+  return map;
+}
+
 type TreeRow = {
   rawLabel: string;
   prefix: string;
@@ -76,11 +87,15 @@ type TreeRow = {
   isRoot: boolean;
 };
 
-function buildRunTreeRows(mod: jaiphModule, rootLabel = "workflow default"): TreeRow[] {
+export function buildRunTreeRows(
+  mod: jaiphModule,
+  rootLabel = "workflow default",
+  importedModules?: Map<string, jaiphModule>,
+): TreeRow[] {
   const rows: TreeRow[] = [{ rawLabel: rootLabel, prefix: "", isRoot: true }];
   const visited = new Set<string>(["default"]);
-  const renderChildren = (workflowName: string, prefix: string): void => {
-    const children = collectWorkflowChildren(mod, workflowName);
+  const renderChildren = (currentMod: jaiphModule, workflowName: string, prefix: string): void => {
+    const children = collectWorkflowChildren(currentMod, workflowName);
     for (let i = 0; i < children.length; i += 1) {
       const child = children[i];
       const isLast = i === children.length - 1;
@@ -89,14 +104,25 @@ function buildRunTreeRows(mod: jaiphModule, rootLabel = "workflow default"): Tre
       if (!child.nested) {
         continue;
       }
-      if (child.nested.includes(".") || visited.has(child.nested)) {
+      const nested = child.nested;
+      if (nested.includes(".")) {
+        const dot = nested.indexOf(".");
+        const alias = nested.slice(0, dot);
+        const wfName = nested.slice(dot + 1);
+        const subMod = importedModules?.get(alias);
+        if (subMod) {
+          renderChildren(subMod, wfName, `${prefix}${isLast ? "    " : "│   "}`);
+        }
         continue;
       }
-      visited.add(child.nested);
-      renderChildren(child.nested, `${prefix}${isLast ? "    " : "│   "}`);
+      if (visited.has(nested)) {
+        continue;
+      }
+      visited.add(nested);
+      renderChildren(currentMod, nested, `${prefix}${isLast ? "    " : "│   "}`);
     }
   };
-  renderChildren("default", "");
+  renderChildren(mod, "default", "");
   return rows;
 }
 
@@ -596,7 +622,8 @@ async function runWorkflow(
   const shouldCleanup = !target;
   try {
     const mod = parsejaiph(readFileSync(inputAbs, "utf8"), inputAbs);
-    const treeRows = buildRunTreeRows(mod);
+    const importedModules = loadImportedModules(mod);
+    const treeRows = buildRunTreeRows(mod, "workflow default", importedModules);
     const rowStates: RowState[] = treeRows.map((row) => (row.isRoot ? { status: "done" } : { status: "pending" }));
     const interactiveProgress = process.stdout.isTTY;
     let activeRowIndex = treeRows.length > 1 ? 1 : -1;
@@ -878,7 +905,12 @@ async function runWorkflow(
     });
     clearInterval(counterTimer);
     if (stderrBuffer.length > 0) {
-      handleStderrLine(stderrBuffer.replace(/\r$/, ""));
+      const remaining = stderrBuffer.replace(/\r$/, "").split(/\r?\n/);
+      for (const line of remaining) {
+        if (line.length > 0) {
+          handleStderrLine(line);
+        }
+      }
       stderrBuffer = "";
     }
     if (childExit.signal && capturedStderr.trim().length === 0) {
@@ -1043,12 +1075,18 @@ async function main(argv: string[]): Promise<number> {
   }
 }
 
-main(process.argv)
-  .then((code) => {
-    process.exit(code);
-  })
-  .catch((error) => {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`${message}\n`);
-    process.exit(1);
-  });
+function runCli(argv: string[]): void {
+  main(argv)
+    .then((code) => {
+      process.exit(code);
+    })
+    .catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`${message}\n`);
+      process.exit(1);
+    });
+}
+
+if (require.main === module) {
+  runCli(process.argv);
+}
