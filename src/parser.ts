@@ -115,6 +115,14 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
           rule.commands.push(innerRaw.trim());
           continue;
         }
+        if (inner.startsWith("run ")) {
+          fail(
+            filePath,
+            "`run` is not allowed inside a `rule` block.\nUse `ensure` to call another rule, or move this call to a `workflow`.",
+            innerNo,
+            innerRaw.indexOf("run") + 1,
+          );
+        }
         const cmd = inner.startsWith("run ") ? inner.slice("run ".length).trim() : inner;
         if (!cmd) {
           fail(filePath, "rule command is required", innerNo);
