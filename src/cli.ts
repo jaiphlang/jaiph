@@ -918,6 +918,13 @@ async function runWorkflow(
             writeActiveLine(formatRunningLine(activeRowIndex, 0));
           }
         } else if (changedRowIndex !== -1) {
+          // Non-interactive: ensure any earlier pending rows (e.g. workflow rows we never got STEP_END for) are written first
+          for (let i = 1; i < changedRowIndex; i += 1) {
+            if (rowStates[i].status === "pending") {
+              rowStates[i] = { status: "done", elapsedSec: 0 };
+              process.stdout.write(`${formatNonInteractiveCompletedLine(i)}\n`);
+            }
+          }
           process.stdout.write(`${formatNonInteractiveCompletedLine(changedRowIndex)}\n`);
         }
       }
@@ -935,6 +942,18 @@ async function runWorkflow(
       }
       if (nextIndex === -1) {
         return;
+      }
+      // When moving to a later row, commit any rows we're skipping (e.g. workflow rows that
+      // never emit STEP_END because their children run instead) so the tree shows correct
+      // parent/child structure instead of nesting everything under the first step.
+      if (activeRowIndex !== -1 && nextIndex > activeRowIndex) {
+        for (let i = activeRowIndex; i < nextIndex; i += 1) {
+          const state = rowStates[i];
+          if (state.status === "pending") {
+            rowStates[i] = { status: "done", elapsedSec: 0 };
+          }
+          commitActiveLine(formatCompletedLine(i));
+        }
       }
       activeRowIndex = nextIndex;
       activeStepStartedAt = Date.now();
