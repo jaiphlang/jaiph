@@ -261,11 +261,20 @@ export function transpileFile(inputFile: string, rootDir: string): string {
             throw jaiphError(ast.filePath, step.loc.line, step.loc.col, "E_PARSE", message);
           }
           const delimiter = promptDelimiter(promptText, step.loc.line);
-          out.push(`  jaiph__prompt "$@" <<${delimiter}`);
-          for (const line of promptText.split("\n")) {
-            out.push(line);
+          if (step.captureName) {
+            out.push(`  ${step.captureName}=$(jaiph__prompt "$@" <<${delimiter}`);
+            for (const line of promptText.split("\n")) {
+              out.push(line);
+            }
+            out.push(delimiter);
+            out.push(")");
+          } else {
+            out.push(`  jaiph__prompt "$@" <<${delimiter}`);
+            for (const line of promptText.split("\n")) {
+              out.push(line);
+            }
+            out.push(delimiter);
           }
-          out.push(delimiter);
           continue;
         }
         if (step.type === "shell") {

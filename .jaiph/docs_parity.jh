@@ -48,6 +48,10 @@ rule tests_pass {
   npm test
 }
 
+rule e2e_tests_pass {
+  npm run test:e2e
+}
+
 workflow default {
   EXPECTED_DOC_FILES=(
     "README.md"
@@ -62,6 +66,7 @@ workflow default {
   )
 
   ensure tests_pass
+  ensure e2e_tests_pass
   ensure docs_files_present "${EXPECTED_DOC_FILES[@]}"
 
   BEFORE_CHANGED_FILES="$(changed_files)"
@@ -101,8 +106,15 @@ workflow default {
 
     Don't modify changes from previous versions. Use git tags to find the 
     previous version. Don't duplicate features from previous versions.
+
+    Before finishing:
+    - run npm test
+    - run npm run test:e2e
+    - if either fails, fix and retry until both pass
   "
 
   EXPECTED_DOC_FILES_TEXT="$(printf '%s\n' "${EXPECTED_DOC_FILES[@]}")"
   ensure only_expected_docs_changed_after_prompt "$EXPECTED_DOC_FILES_TEXT" "$BEFORE_CHANGED_FILES"
+  ensure tests_pass
+  ensure e2e_tests_pass
 }

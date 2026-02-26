@@ -1288,6 +1288,158 @@ test("build accepts ensure inside a rule block", () => {
   }
 });
 
+test("build accepts ensure inside a rule block", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-ensure-in-rule-"));
+  const outDir = mkdtempSync(join(tmpdir(), "jaiph-ensure-in-rule-out-"));
+  try {
+    const filePath = join(root, "entry.jh");
+    writeFileSync(
+      filePath,
+      [
+        "rule dep {",
+        "  echo dep",
+        "}",
+        "",
+        "rule main {",
+        "  ensure dep",
+        "}",
+        "",
+        "workflow default {",
+        "  ensure main",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const results = build(filePath, outDir);
+    assert.equal(results.length, 1);
+    assert.match(results[0].bash, /entry__rule_dep/);
+    assert.match(results[0].bash, /entry__rule_main/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outDir, { recursive: true, force: true });
+  }
+});
+
+test("build emits prompt capture as name=$(jaiph__prompt ...) for name = prompt \"...\"", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-prompt-capture-build-"));
+  const outDir = mkdtempSync(join(tmpdir(), "jaiph-prompt-capture-out-"));
+  try {
+    const filePath = join(root, "entry.jh");
+    writeFileSync(
+      filePath,
+      [
+        "workflow default {",
+        '  result = prompt "Summarize the changes made"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const results = build(filePath, outDir);
+    assert.equal(results.length, 1);
+    assert.match(results[0].bash, /result=\$\(jaiph__prompt "\$@" <<__JAIPH_PROMPT_/);
+    assert.match(results[0].bash, /Summarize the changes made/);
+    assert.match(results[0].bash, /\s*\)\s*$/m);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outDir, { recursive: true, force: true });
+  }
+});
+
+test("jaiph test captures mock response into variable and variable is available in subsequent step", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-test-prompt-capture-"));
+  try {
+    mkdirSync(join(root, ".jaiph", "tests"), { recursive: true });
+    writeFileSync(
+      join(root, ".jaiph", "tests", "capture.test.toml"),
+      [
+        '[[mock]]',
+        'prompt_contains = "greet"',
+        'response = "CAPTURED_MOCK_OUTPUT"',
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(root, "capture.jh"),
+      [
+        "workflow default {",
+        '  result = prompt "Please greet the user"',
+        '  echo "$result"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const testResult = spawnSync("node", [cliPath, "test", "capture.jh"], {
+      encoding: "utf8",
+      cwd: root,
+      env: process.env,
+    });
+
+    assert.equal(testResult.status, 0, testResult.stderr);
+    assert.match(testResult.stdout, /PASS/);
+    assert.match(testResult.stdout, /CAPTURED_MOCK_OUTPUT/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph run prompt capture: variable accessible in subsequent shell step", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-prompt-capture-"));
+  try {
+    const binDir = join(root, "bin");
+    mkdirSync(binDir, { recursive: true });
+    const fakeAgent = join(binDir, "cursor-agent");
+    writeFileSync(
+      fakeAgent,
+      [
+        "#!/usr/bin/env bash",
+        "echo '{\"type\":\"result\",\"result\":\"agent-summary\"}'",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(fakeAgent, 0o755);
+
+    const filePath = join(root, "capture.jh");
+    writeFileSync(
+      filePath,
+      [
+        "workflow default {",
+        '  result = prompt "Summarize"',
+        '  printf \'captured:%s\\n\' "$result"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runResult = spawnSync("node", [cliPath, "run", filePath], {
+      encoding: "utf8",
+      cwd: root,
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH ?? ""}`,
+      },
+    });
+
+    assert.equal(runResult.status, 0, runResult.stderr);
+    const runsRoot = join(root, ".jaiph/runs");
+    const runDirs = readdirSync(runsRoot).sort();
+    const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
+    const runFiles = readdirSync(latestRunDir);
+    const workflowOutName = runFiles.find(
+      (name) => name.endsWith(".out") && name.includes("workflow"),
+    );
+    assert.equal(Boolean(workflowOutName), true);
+    const workflowOut = readFileSync(join(latestRunDir, workflowOutName!), "utf8");
+    assert.match(workflowOut, /captured:.*agent-summary/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("jaiph test passes for workflow using ensure only with mocks", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-test-ensure-only-"));
   try {
