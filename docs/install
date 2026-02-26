@@ -42,7 +42,15 @@ require_cmd() {
   fi
 }
 
-REPO_URL="${JAIPH_REPO_URL:-https://github.com/jaiphlang/jaiph.git}"
+# When installing from a local path, clone without --depth/--branch to use current branch state.
+JAIPH_FROM_LOCAL=
+if [ -n "${JAIPH_REPO_URL+x}" ] && [ -d "${JAIPH_REPO_URL}" ]; then
+  JAIPH_FROM_LOCAL=1
+  # Normalize so path has no trailing slash
+  JAIPH_REPO_URL="$(cd "${JAIPH_REPO_URL}" && pwd)"
+  REPO_URL="${JAIPH_REPO_URL}"
+fi
+REPO_URL="${REPO_URL:-${JAIPH_REPO_URL:-https://github.com/jaiphlang/jaiph.git}}"
 REPO_REF="${JAIPH_REPO_REF:-main}"
 BIN_DIR="${JAIPH_BIN_DIR:-$HOME/.local/bin}"
 LIB_DIR="${JAIPH_LIB_DIR:-${BIN_DIR}/.jaiph}"
@@ -68,7 +76,14 @@ cleanup() {
 trap cleanup EXIT
 
 print_step "Cloning ${REPO_URL} (${REPO_REF})..."
-git clone --depth 1 --branch "${REPO_REF}" "${REPO_URL}" "${tmp_dir}/src" >/dev/null 2>&1
+if [ -n "${JAIPH_FROM_LOCAL}" ]; then
+  print_step "Copying local source from ${REPO_URL} (includes uncommitted changes)..."
+  cp -R "${REPO_URL}" "${tmp_dir}/src"
+  rm -rf "${tmp_dir}/src/.git"
+  rm -rf "${tmp_dir}/src/node_modules"
+else
+  git clone --depth 1 --branch "${REPO_REF}" "${REPO_URL}" "${tmp_dir}/src" >/dev/null 2>&1
+fi
 
 JAIPH_VERSION="$(node -p "require(process.argv[1]).version" "${tmp_dir}/src/package.json")"
 

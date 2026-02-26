@@ -169,7 +169,18 @@ export function transpileFile(inputFile: string, rootDir: string): string {
       out.push("  :");
     } else {
       for (const cmd of rule.commands) {
-        out.push(`  ${cmd}`);
+        const ensureMatch = cmd.match(
+          /^ensure\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
+        );
+        if (ensureMatch) {
+          const ref: RuleRefDef = { value: ensureMatch[1], loc: { line: 0, col: 0 } };
+          const args = ensureMatch[2]?.trim();
+          out.push(
+            `  ${transpileRuleRef(ref, workflowSymbol, importedWorkflowSymbols)}${args ? ` ${args}` : ""}`,
+          );
+        } else {
+          out.push(`  ${cmd}`);
+        }
       }
     }
     out.push("}");
@@ -250,12 +261,24 @@ export function transpileFile(inputFile: string, rootDir: string): string {
           out.push(`  ${step.command}`);
           continue;
         }
-        out.push(
-          `  if ! ${transpileRuleRef(step.ensureRef, workflowSymbol, importedWorkflowSymbols)}; then`,
-        );
-        out.push(`    ${transpileWorkflowRef(step.runWorkflow, workflowSymbol, importedWorkflowSymbols)}`);
-        out.push("  fi");
-      }
+        if (step.type === "if_not_ensure_then_run") {
+          out.push(
+            `  if ! ${transpileRuleRef(step.ensureRef, workflowSymbol, importedWorkflowSymbols)}; then`,
+          );
+          out.push(`    ${transpileWorkflowRef(step.runWorkflow, workflowSymbol, importedWorkflowSymbols)}`);
+          out.push("  fi");
+          continue;
+        }
+        if (step.type === "if_not_ensure_then_shell") {
+          out.push(
+            `  if ! ${transpileRuleRef(step.ensureRef, workflowSymbol, importedWorkflowSymbols)}; then`,
+          );
+          for (const { command } of step.commands) {
+            out.push(`    ${command}`);
+          }
+          out.push("  fi");
+          continue;
+        }
     }
     out.push("}");
     out.push("");
@@ -265,6 +288,7 @@ export function transpileFile(inputFile: string, rootDir: string): string {
     );
     out.push("}");
     out.push("");
+    }
   }
 
   return out.join("\n").trimEnd();
@@ -412,6 +436,8 @@ function validateReferences(ast: jaiphModule): void {
       } else if (step.type === "if_not_ensure_then_run") {
         validateRuleRef(step.ensureRef);
         validateWorkflowRef(step.runWorkflow);
+      } else if (step.type === "if_not_ensure_then_shell") {
+        validateRuleRef(step.ensureRef);
       }
     }
   }
@@ -451,7 +477,8 @@ export function build(inputPath: string, targetDir?: string): CompileResult[] {
   const outRoot = resolve(targetDir ?? rootDir);
   ensureDir(outRoot);
 
-  const files = walkjhFiles(absInput);
+  const files = walkjhFiles(rootDir);
+  const entrypointFile = inputStat.isFile() ? absInput : null;
   const results: CompileResult[] = [];
   for (const file of files) {
     const bash = transpileFile(file, rootDir);
@@ -459,7 +486,9 @@ export function build(inputPath: string, targetDir?: string): CompileResult[] {
     const outPath = join(outRoot, rel);
     ensureDir(dirname(outPath));
     writeFileSync(outPath, bash, "utf8");
-    results.push({ outputPath: outPath, bash });
+    if (entrypointFile === null || file === entrypointFile) {
+      results.push({ outputPath: outPath, bash });
+    }
   }
 
   return results;

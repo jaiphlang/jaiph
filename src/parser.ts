@@ -202,41 +202,65 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
         );
         if (ifEnsureMatch) {
           const ensureRef = ifEnsureMatch[1];
+          const thenStart = i + 1;
           let runLine = -1;
           let fiLine = -1;
+          const shellCommands: Array<{ command: string; loc: { line: number; col: number } }> = [];
           for (let lookahead = i + 1; lookahead < lines.length; lookahead += 1) {
             const lookNo = lookahead + 1;
-            const lookTrim = lines[lookahead].trim();
+            const lookRaw = lines[lookahead];
+            const lookTrim = lookRaw.trim();
             if (!lookTrim || lookTrim.startsWith("#")) {
               continue;
             }
-            if (runLine === -1) {
-              const runMatch = lookTrim.match(
-                /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)$/,
-              );
-              if (!runMatch) {
-                fail(filePath, "if-block must contain: run <workflow>", lookNo);
-              }
+            if (lookTrim === "fi") {
+              fiLine = lookahead;
+              break;
+            }
+            const runMatch = lookTrim.match(
+              /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)$/,
+            );
+            if (runMatch && shellCommands.length === 0) {
               runLine = lookahead;
-              continue;
+              let foundFi = -1;
+              for (let f = lookahead + 1; f < lines.length; f += 1) {
+                const ft = lines[f].trim();
+                if (!ft || ft.startsWith("#")) continue;
+                if (ft === "fi") {
+                  foundFi = f;
+                  break;
+                }
+                fail(filePath, 'if-block must end with "fi"', f + 1);
+              }
+              if (foundFi === -1) {
+                fail(filePath, 'unterminated if-block, expected "fi"', innerNo);
+              }
+              workflow.steps.push({
+                type: "if_not_ensure_then_run",
+                ensureRef: { value: ensureRef, loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 } },
+                runWorkflow: {
+                  value: lines[runLine].trim().slice("run ".length).trim(),
+                  loc: { line: runLine + 1, col: lines[runLine].indexOf("run") + 1 },
+                },
+              });
+              i = foundFi;
+              break;
             }
-            if (lookTrim !== "fi") {
-              fail(filePath, 'if-block must end with "fi"', lookNo);
-            }
-            fiLine = lookahead;
+            shellCommands.push({
+              command: lookTrim,
+              loc: { line: lookNo, col: (lookRaw.match(/\S/)?.index ?? 0) + 1 },
+            });
+          }
+          if (fiLine === -1 && runLine === -1) {
+            fail(filePath, 'unterminated if-block, expected "fi"', innerNo);
+          }
+          if (runLine === -1 && fiLine >= 0) {
             workflow.steps.push({
-              type: "if_not_ensure_then_run",
+              type: "if_not_ensure_then_shell",
               ensureRef: { value: ensureRef, loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 } },
-              runWorkflow: {
-                value: lines[runLine].trim().slice("run ".length).trim(),
-                loc: { line: runLine + 1, col: lines[runLine].indexOf("run") + 1 },
-              },
+              commands: shellCommands,
             });
             i = fiLine;
-            break;
-          }
-          if (fiLine === -1) {
-            fail(filePath, 'unterminated if-block, expected "fi"', innerNo);
           }
           continue;
         }

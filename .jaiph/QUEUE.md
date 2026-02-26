@@ -5,6 +5,32 @@ The first task in the list is always the current task.
 
 ---
 
+<!-- TASK id="0" -->
+## 0. Upgrade project version to `0.2.0`
+
+**Status:** pending
+
+**What:** Update project version to 0.2.0, current one is 0.1.0. Search for all occurences in docs and in the code
+
+<!-- END_TASK -->
+
+---
+
+<!-- TASK id="11" -->
+## 11. Print output of errored rule/workflow in failure summary
+
+**Status:** done
+
+**What:** When a workflow run fails, the CLI prints the stderr of the failed step (rule or workflow) in the failure summary so the user sees why it failed without opening log files.
+
+**Why:** Reduces friction when debugging: "ensure: command not found" or other step errors are visible immediately.
+
+**Implemented:** On failure, read the run summary JSONL, find the first STEP_END with status !== 0, read that step's err_file, and print its content (up to 30 lines) under "Output of failed step:". Also fixed `ensure` inside rule bodies so they compile to the actual rule invocation (was emitting raw "ensure" as shell).
+
+<!-- END_TASK -->
+
+---
+
 <!-- TASK id="10" -->
 ## 10. Introduce `.jh` extension with backward-compatible `.jph` support
 
@@ -149,26 +175,27 @@ jaiph test .jaiph/main.jph "implement feature X"
 
 ---
 
-<!-- TASK id="0" -->
-## 0. Upgrade project workflow to `0.2.0`
+
+
+<!-- TASK id="12" -->
+## 12. Print subtrees for imported workflows in run tree
 
 **Status:** pending
 
-**What:** Add a top-level automation workflow that enforces clean git state, implements the next queued task, syncs docs parity, and commits with an AI-generated commit message.
+**What:** Expand `jaiph run` tree rendering so `run alias.workflow` entries include nested steps from the imported module (rules, prompts, nested runs), not just a single flat workflow line.
 
-**Why:** The `0.2.0` release should have a single repeatable entrypoint for shipping queue-driven changes safely and consistently.
+**Why:** The current tree hides execution shape of imported workflows, which makes it look like prompts/rules are skipped and reduces debuggability for orchestrator files like `.jaiph/main.jph`.
 
 **Files to change:**
-- `.jaiph/main.jph` — add the orchestrator workflow
-- `.jaiph/git.jph` — keep git safety checks and commit workflow isolated
-- `.jaiph/QUEUE.md` — track this upgrade task
+- `src/cli.ts` — resolve workflow refs across imports and recursively render imported workflow children
+- `src/parser.ts` or shared resolver logic — reuse/introduce import resolution helper for CLI tree building
+- `e2e/*` or CLI tests — assert dotted workflow refs show nested tree rows
 
 **Acceptance criteria:**
-- Verifies branch is clean before any changes
-- Runs `.jaiph/implement_from_queue.jph`
-- Runs `.jaiph/docs_parity.jph`
-- Creates one git commit with an AI-generated message
-- Is runnable via `jaiph test .jaiph/main.jph` with prompt mocks
+- `jaiph run .jaiph/main.jph` prints nested tree rows for `implement.default`, `docs.default`, and `git.commit`
+- Prompt steps inside imported workflows appear in the tree
+- Existing local (non-imported) subtree rendering remains unchanged
+- Recursive rendering avoids infinite loops on cyclic references
 
 <!-- END_TASK -->
 
