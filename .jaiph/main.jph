@@ -1,0 +1,13 @@
+#!/usr/bin/env jaiph
+
+import "implement_from_queue.jph" as implement
+import "docs_parity.jph" as docs
+import "git.jph" as git
+
+workflow default {
+  ensure git.is_clean
+
+  run implement.default
+  run docs.default
+  run git.commit
+}

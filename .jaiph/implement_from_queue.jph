@@ -1,0 +1,67 @@
+#!/usr/bin/env jaiph
+
+# Picks the first pending task from QUEUE.md, implements it, then removes it from the queue.
+# Usage: ./implement.jph
+
+# Verifies the queue file exists and has at least one pending task.
+rule queue_has_tasks {
+  test -f "QUEUE.md"
+  grep -q "<!-- TASK id=" QUEUE.md
+}
+
+# Verifies the project compiles after changes.
+rule project_compiles {
+  npm run build
+}
+
+# Verifies tests pass after changes.
+rule tests_pass {
+  npm test
+}
+
+# Reads the first task block from QUEUE.md and asks the agent to implement it.
+workflow implement_task {
+  prompt "
+    You are working on the Jaiph codebase (https://github.com/jaiphlang/jaiph).
+    The codebase is a TypeScript compiler and runtime for a DSL that transpiles to bash.
+    Key source files: src/parser.ts, src/transpiler.ts, src/cli.ts
+
+    Your job is to implement the FIRST task found in QUEUE.md.
+    The task is the first block between <!-- TASK id=\"...\" --> and <!-- END_TASK -->.
+
+    Steps:
+    1. Read QUEUE.md and extract the first task block.
+    2. Read the relevant source files listed under 'Files to change' in that task.
+    3. Implement the changes described. Follow the existing code style exactly.
+    4. Add the tests described under 'Tests to add'.
+    5. Do not touch any other tasks or any files not listed in the task.
+
+    When done, confirm which task ID you implemented and list every file you changed.
+  "
+}
+
+# Removes the first completed task block from QUEUE.md.
+workflow remove_completed_task {
+  prompt "
+    The first task in QUEUE.md has just been implemented successfully.
+
+    Edit QUEUE.md to remove:
+    - The first <!-- TASK id=\"...\" --> ... <!-- END_TASK --> block
+    - The --- separator line that follows it (if present)
+
+    Do not modify any other part of the file.
+    Do not change the remaining tasks in any way.
+  "
+}
+
+workflow default {
+  if ! ensure queue_has_tasks; then
+    echo "QUEUE.md is empty or missing. Nothing to do."
+    exit 0
+  fi
+
+  run implement_task
+  ensure project_compiles
+  ensure tests_pass
+  run remove_completed_task
+}
