@@ -273,6 +273,40 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
           continue;
         }
 
+        const promptAssignMatch = inner.match(
+          /^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*prompt\s+(.+)$/s,
+        );
+        if (promptAssignMatch) {
+          const captureName = promptAssignMatch[1];
+          const promptArg = promptAssignMatch[2].trimStart();
+          const promptCol = innerRaw.indexOf("prompt") + 1;
+          if (!promptArg.startsWith(`"`)) {
+            fail(filePath, 'prompt must match: name = prompt "<text>"', innerNo, promptCol);
+          }
+          let rawPrompt = promptArg;
+          if (!hasUnescapedClosingQuote(promptArg, 1)) {
+            let closed = false;
+            for (let lookahead = i + 1; lookahead < lines.length; lookahead += 1) {
+              rawPrompt += `\n${lines[lookahead]}`;
+              if (hasUnescapedClosingQuote(lines[lookahead], 0)) {
+                i = lookahead;
+                closed = true;
+                break;
+              }
+            }
+            if (!closed) {
+              fail(filePath, "unterminated prompt string", innerNo, promptCol);
+            }
+          }
+          workflow.steps.push({
+            type: "prompt",
+            raw: rawPrompt,
+            loc: { line: innerNo, col: promptCol },
+            captureName,
+          });
+          continue;
+        }
+
         if (inner.startsWith("prompt ")) {
           const promptCol = innerRaw.indexOf("prompt") + 1;
           const promptArg = innerRaw.slice(innerRaw.indexOf("prompt") + "prompt".length).trimStart();

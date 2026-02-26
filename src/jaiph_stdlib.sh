@@ -307,8 +307,13 @@ jaiph__run_step() {
     *e*) had_errexit=1 ;;
   esac
   set +e
-  "$@" >"$out_tmp" 2>"$err_tmp"
-  status=$?
+  if [[ "$func_name" == "jaiph__prompt" ]]; then
+    "$@" 2>"$err_tmp" | tee "$out_tmp"
+    status="${PIPESTATUS[0]}"
+  else
+    "$@" >"$out_tmp" 2>"$err_tmp"
+    status=$?
+  fi
   if [[ "$had_errexit" -eq 1 ]]; then
     set -e
   fi

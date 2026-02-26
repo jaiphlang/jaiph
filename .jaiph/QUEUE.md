@@ -5,35 +5,30 @@ The first task in the list is always the current task.
 
 ---
 
-<!-- TASK id="3" -->
-## 3. Output capture from `prompt`
+<!-- TASK id="13" -->
+## 13. Strengthen e2e coverage for workflows, rules, and prompts
 
 **Status:** pending
 
-**What:** Allow capturing the stdout of a `prompt` call into a named variable:
+**What:** Add robust end-to-end tests in the `e2e/` directory that use mocked commands and fixtures to validate success and failure scenarios across rules, workflows, and prompt steps.
 
-```
-result = prompt "Summarize the changes made"
-```
-
-The variable `$result` is then available as a standard bash variable in the rest of the workflow.
-
-**Why:** Currently `prompt` is fire-and-forget. Without output capture, workflows cannot make decisions based on what an agent returned, severely limiting orchestration logic.
+**Why:** Current confidence is too low for orchestration behavior. We need deterministic e2e coverage that verifies runtime behavior, failure propagation, and user-facing errors.
 
 **Files to change:**
-- `src/parser.ts` — parse the `name = prompt "..."` assignment form
-- `src/transpiler.ts` — emit `name=$(jaiph__prompt "...")` in the compiled bash
-- `src/stdlib.sh` — verify `jaiph__prompt` writes to stdout
+- `e2e/*` — add/extend e2e scenarios and fixtures
+- `e2e/ci.sh` — ensure new tests run in CI
+- `test fixtures used by e2e` — add mock command scripts and workflow inputs as needed
 
-**Example compiled output:**
-```bash
-result=$(jaiph__prompt "Summarize the changes made")
-```
-
-**Tests to add:**
-- Capture compiles to correct bash assignment
-- Variable is accessible in subsequent bash expressions within the same workflow
-- Testable with `jaiph test`: mock response for the prompt is captured into the variable
+**Acceptance criteria:**
+- E2E suite includes mocked command tests for:
+  - passing and failing `rule` execution
+  - passing and failing `ensure` inside workflows
+  - prompt execution success path
+  - prompt failure path and surfaced error
+  - nested workflow/run behavior
+- Failures from rules/workflows/prompts produce clear, asserted stderr output
+- Tests are deterministic (no network/API dependency; fully mocked command behavior)
+- `npm run test:e2e` passes locally and in CI
 
 <!-- END_TASK -->
 

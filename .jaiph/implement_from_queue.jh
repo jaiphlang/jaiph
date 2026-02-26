@@ -19,6 +19,10 @@ rule tests_pass {
   npm test
 }
 
+rule e2e_tests_pass {
+  npm run test:e2e
+}
+
 # Reads the first task block from .jaiph/QUEUE.md and asks the agent to implement it.
 workflow implement_task {
   prompt "
@@ -35,7 +39,9 @@ workflow implement_task {
     3. Implement the changes described. Follow the existing code style exactly.
     4. Add the tests described under 'Tests to add'.
     5. Do not touch any other tasks or any files not listed in the task.
-    6. Ensure tests pass.
+    6. Run npm test and npm run test:e2e.
+    7. If tests fail, fix them and retry until both pass.
+    8. Before finishing, make sure both unit/integration tests and e2e tests pass.
 
     When done, confirm which task ID you implemented and list every file you changed.
   "
@@ -63,6 +69,16 @@ workflow default {
 
   run implement_task
   ensure project_compiles
-  ensure tests_pass
+
+  if ! ensure tests_pass; then
+    prompt "Fix failing tests so npm test passes, then re-run npm test and ensure it succeeds."
+    ensure tests_pass
+  fi
+
+  if ! ensure e2e_tests_pass; then
+    prompt "Fix failing e2e tests so npm run test:e2e passes, then re-run npm run test:e2e and ensure it succeeds."
+    ensure e2e_tests_pass
+  fi
+
   run remove_completed_task
 }

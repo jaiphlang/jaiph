@@ -54,6 +54,8 @@ export type WorkflowStepDef =
       type: "prompt";
       raw: string;
       loc: SourceLoc;
+      /** When set, capture prompt stdout into this variable name. */
+      captureName?: string;
     }
   | {
       type: "shell";
