@@ -1,10 +1,10 @@
 # Jaiph CLI Reference
 
-[jaiph.org](https://jaiph.org) · [Getting started](getting-started.md) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/main/docs/jaiph-skill.md)
+[jaiph.org](https://jaiph.org) · [Getting started](getting-started.md) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Agent Skill](https://jaiph.org/jaiph-skill.md)
 
 ---
 
-Jaiph provides four core CLI commands plus a file shorthand.
+Jaiph provides five core CLI commands plus a file shorthand.
 
 ## `jaiph <file.jh>` (shorthand)
 
@@ -74,6 +74,21 @@ If a `.jh` or `.jph` file is executable and has `#!/usr/bin/env jaiph`, you can 
 ./flows/review.jh "review this diff"
 ```
 
+## `jaiph test`
+
+Run a workflow file with mocked `prompt` steps for testing. Requires a mock file at `.jaiph/tests/<stem>.test.toml` (where `<stem>` is the file name without extension). Does not invoke the real agent.
+
+```bash
+jaiph test <file.jh|file.jph> [args...]
+```
+
+Examples:
+
+```bash
+jaiph test e2e/say_hello.jh
+jaiph test .jaiph/main.jh "implement feature X"
+```
+
 ## `jaiph init`
 
 Initialize Jaiph files in a workspace directory.
@@ -110,7 +125,7 @@ jaiph use 0.2.0
 
 ## File extensions
 
-- **`.jh`** is the recommended extension for new Jaiph files. Use it for entrypoints, imports, and `jaiph build` / `jaiph run`.
+- **`.jh`** is the recommended extension for new Jaiph files. Use it for entrypoints, imports, and `jaiph build` / `jaiph run` / `jaiph test`.
 - **`.jph`** remains supported for backward compatibility. Existing projects using `.jph` continue to work unchanged. The CLI may show a deprecation notice when you run a `.jph` file; migrate when convenient with `mv *.jph *.jh` and update import paths if they explicitly mention the extension.
 
 Imports resolve for both extensions: `import "foo" as x` finds `foo.jh` or `foo.jph` (`.jh` is preferred when both exist).

@@ -88,11 +88,13 @@ workflow default {
     Keep examples executable and aligned with current CLI behavior.
 
     For docs markdown pages, ensure each page has a top navigation block
-    immediately after its H1 with links to jaiph.org, and to *.md pages in docs/.
-    Use relative links to configuration.md, cli.md, not repository URLs or local
-    filesystem paths. Don't include non-markdown files in the navigation block.
-    Agent skill should point to github raw url, not the rendered version.
-    Don't update links in index.html, only add navigation blocks to .md files.
+    immediately after its H1 with links to jaiph.org, and to documentation pages
+    in docs/ directory. Use relative links to configuration.md, cli.md, not 
+    repository URLs or local filesystem paths. Don't include non-markdown files
+    in the navigation block. Links in markdown files to markdown files should
+    end with .md ('configuration.md'). Existing links in index.html should not
+    end with .md ('configuration'). Agent skill should always point to:
+    https://jaiph.org/jaiph-skill.md.
 
     Ensure there is a CHANGELOG.md file with a list of all features that are
     supported by the current version. It should be in the following format:
@@ -104,8 +106,9 @@ workflow default {
       # VERSION
       - Feature 3
 
-    Don't modify changes from previous versions. Use git tags to find the 
-    previous version. Don't duplicate features from previous versions.
+    Don't modify changes from previous versions. Check for current Jaiph version
+    in package.json and use git tags to find the previous version.
+    Don't duplicate features from previous versions.
 
     Before finishing:
     - run npm test

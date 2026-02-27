@@ -1,6 +1,6 @@
 # ![Jaiph](docs/logo.png)
 
-[jaiph.org](https://jaiph.org) · [Getting started](docs/getting-started.md) · [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Grammar](docs/grammar.md) · [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/main/docs/jaiph-skill.md)
+[jaiph.org](https://jaiph.org) · [Getting started](docs/getting-started.md) · [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Grammar](docs/grammar.md) · [Agent Skill](https://jaiph.org/jaiph-skill.md)
 
 ---
 
@@ -20,7 +20,7 @@ It combines declarative workflow structure with bash, then compiles to pure shel
 > Jaiph is still in an early stage. Expect breaking changes.
 
 - Docs (canonical): <https://jaiph.org/>
-- Agent skill: <https://raw.githubusercontent.com/jaiphlang/jaiph/main/docs/jaiph-skill.md>
+- Agent skill: <https://jaiph.org/jaiph-skill.md>
 - Samples: <https://github.com/jaiphlang/jaiph/tree/main/samples>
 - Contribute: <https://github.com/jaiphlang/jaiph/issues>
 
@@ -151,7 +151,7 @@ See [cli.md](docs/cli.md) for command syntax, examples, and supported environmen
 
 ## Language Primitives
 
-- `import "file.jph" as alias`  
+- `import "file.jh" as alias`  
   Imports rules/workflows from another Jaiph module under an alias. Imports are verified at compile time.
 
 - `rule name { ... }`  

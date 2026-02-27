@@ -16,6 +16,7 @@
             --text: #2a2a2a;
             --muted: #6b7280;
             --link: #5389b0;
+            --success: #16a34a;
         }
 
         * {
@@ -147,6 +148,10 @@
             text-align: right;
             user-select: none;
         }
+
+        .jaiph-run .run-time { color: var(--muted); }
+        .jaiph-run .run-pass { color: var(--success); font-weight: 600; }
+        .jaiph-run .run-keyword { font-weight: 600; }
 
         .copy-code-button {
             position: absolute;
@@ -349,19 +354,20 @@
             <h2>What is Jaiph?</h2>
             <div class="card">
                 <p>
-                    <strong>Jaiph</strong> is a composable scripting language and runtime for defining and orchestrating AI agent workflows.
+                    <strong>Jaiph</strong> is a composable scripting language and runtime for defining and orchestrating
+                    AI agent workflows.
                 </p>
                 <p>
-                    It combines the power of declarative languages with bash to create portable and easy-to-understand
-                    AI agent workflows. It compiles to pure bash, making it fully compatible with existing shell
-                    environments.
+                    It combines the power of AI prompts with strict checks and orchestration to create portable and
+                    easy-to-understand AI agent workflows. It support native bash commands and compiles to pure bash,
+                    making it fully compatible with existing shell environments.
                 </p>
                 <p class="small"><strong class="warning">⚠ Jaiph is still in an early stage.</strong><br />You may
                     expect breaking changes. You may also have a great impact as an early contributor.</p>
                 <p>
-                    <a href="https://jaiph.org/getting-started" target="_blank"
-                        rel="noopener noreferrer" class="button">Docs</a>
-                        <a href="https://github.com/jaiphlang/jaiph" target="_blank" rel="noopener noreferrer"
+                    <a href="https://jaiph.org/getting-started" target="_blank" rel="noopener noreferrer"
+                        class="button">Docs</a>
+                    <a href="https://github.com/jaiphlang/jaiph" target="_blank" rel="noopener noreferrer"
                         class="button">GitHub</a>
                     <a href="https://marketplace.visualstudio.com/items?itemName=jaiph.jaiph-syntax-vscode"
                         target="_blank" rel="noopener noreferrer" class="button">VSC Extension</a>
@@ -370,7 +376,25 @@
         </section>
 
         <section>
-            <h2>Example</h2>
+            <h2>Sample run</h2>
+            <div class="card">
+                <p>This is the sample output from running a Jaiph workflow:</p>
+                <pre><code class="jaiph-run">➜  jaiph git:(development) .jaiph/docs_parity.jh 
+<span class="run-keyword">workflow</span> default
+├── <span class="run-keyword">rule</span> tests_pass <span class="run-time">(4s)</span>
+├── <span class="run-keyword">rule</span> e2e_tests_pass <span class="run-time">(5s)</span>
+├── <span class="run-keyword">rule</span> docs_files_present <span class="run-time">(0s)</span>
+├── <span class="run-keyword">function</span> changed_files <span class="run-time">(0s)</span>
+├── <span class="run-keyword">prompt</span> prompt <span class="run-time">(168s)</span>
+├── <span class="run-keyword">rule</span> only_expected_docs_changed_after_prompt <span class="run-time">(0s)</span>
+├── <span class="run-keyword">rule</span> tests_pass <span class="run-time">(4s)</span>
+├── <span class="run-keyword">rule</span> e2e_tests_pass <span class="run-time">(5s)</span>
+<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(3m 6s)</span></code></pre>
+            </div>
+        </section>
+
+        <section>
+            <h2>Sample workflow</h2>
             <div class="card">
                 <div class="code-tab-list">
                     <button type="button" class="code-tab-button is-active" data-target="main-jph">main.jh</button>
@@ -522,7 +546,8 @@ jaiph use 0.2.0</code></pre>
                 <h3>Initialize Jaiph workspace</h3>
                 <pre><code class="language-bash">jaiph init</code></pre>
                 <p>This creates <code>.jaiph/bootstrap.jh</code>, <code>.jaiph/config.toml</code>, and
-                    <code>.jaiph/jaiph-skill.md</code> (synced from local Jaiph installation).</p>
+                    <code>.jaiph/jaiph-skill.md</code> (synced from local Jaiph installation).
+                </p>
                 <p>Then run:</p>
                 <pre><code class="language-bash">./.jaiph/bootstrap.jh</code></pre>
                 <p>This asks an agent to detect project configuration and bootstrap recommended Jaiph workflows for
@@ -535,10 +560,10 @@ jaiph use 0.2.0</code></pre>
                     <li>Local: <code>.jaiph/config.toml</code> (workspace root)</li>
                 </ul>
                 <p>Local config overrides global config. For supported keys and precedence, read
-                    <a href="configuration.md">configuration docs</a>.
+                    <a href="configuration">configuration docs</a>.
                 </p>
                 <p>For command syntax and flags, read
-                    <a href="cli.md">CLI reference</a>.
+                    <a href="cli">CLI reference</a>.
                 </p>
             </div>
         </section>
@@ -553,9 +578,11 @@ jaiph use 0.2.0</code></pre>
 
                     <dt><code>rule name { ... }</code></dt>
                     <dd>Defines a reusable check/action that returns a shell exit code. The rule is executed in a
-                        read-only subshell, and its stdout is preserved. The rule fails if the command returns a non-zero
+                        read-only subshell, and its stdout is preserved. The rule fails if the command returns a
+                        non-zero
                         exit code. Rules can consume positional parameters (<code>$1</code>, <code>$2</code>,
-                        <code>"$@"</code>) forwarded by <code>ensure</code>.</dd>
+                        <code>"$@"</code>) forwarded by <code>ensure</code>.
+                    </dd>
 
                     <dt><code>workflow name { ... }</code></dt>
                     <dd>Defines an orchestration entrypoint made of ordered steps. As opposed to rules, workflows can
@@ -572,14 +599,17 @@ jaiph use 0.2.0</code></pre>
                     </dd>
 
                     <dt><code>run ref</code></dt>
-                    <dd>Executes another workflow from a workflow. <code>run</code> is not allowed inside a rule; use <code>ensure</code> to call another rule or move the call to a workflow.</dd>
+                    <dd>Executes another workflow from a workflow. <code>run</code> is not allowed inside a rule; use
+                        <code>ensure</code> to call another rule or move the call to a workflow.
+                    </dd>
 
                     <dt><code>prompt "..."</code></dt>
                     <dd>Sends prompt text to the configured agent command (with optional model from config) and stores
                         prompt stdout/stderr in
                         <code>.jaiph/runs/</code> step logs (for example:
                         <code>*-jaiph__prompt.out</code> and <code>*-jaiph__prompt.err</code>). Jaiph also writes
-                        <code>run_summary.jsonl</code> in each run directory and skips creating empty step log files.</dd>
+                        <code>run_summary.jsonl</code> in each run directory and skips creating empty step log files.
+                    </dd>
                 </dl>
 
                 <p>All language primitives can be freely combined with bash code—they are not isolated or blocking, but
@@ -600,13 +630,13 @@ jaiph use 0.2.0</code></pre>
 
                 <p>
                     Additional references:
-                    <a href="grammar.md">Grammar</a>
+                    <a href="grammar">Grammar</a>
                     ·
-                    <a href="jaiph-skill.md">Agent bootstrap guide</a>
+                    <a href="jaiph-skill">Agent bootstrap guide</a>
                     ·
-                    <a href="configuration.md">Configuration</a>
+                    <a href="configuration">Configuration</a>
                     ·
-                    <a href="cli.md">CLI reference</a>
+                    <a href="cli">CLI reference</a>
                 </p>
                 <a href="https://github.com/jaiphlang/jaiph/tree/main/docs" target="_blank" rel="noopener noreferrer"
                     class="button">Open docs repository</a>
@@ -991,6 +1021,17 @@ jaiph use 0.2.0</code></pre>
          */
         function highlightAll() {
             document.querySelectorAll("pre code").forEach(block => {
+                if (block.matches(".jaiph-run")) {
+                    block.dataset.copySource = block.textContent;
+                    const html = block.innerHTML;
+                    block.innerHTML = html
+                        .split("\n")
+                        .map(function (line) {
+                            return `<span class="code-line">${line || "&nbsp;"}</span>`;
+                        })
+                        .join("");
+                    return;
+                }
                 const raw = block.textContent;
                 block.dataset.copySource = raw;
                 const isJaiphBlock = block.matches(".language-ralph, .language-jaiph");

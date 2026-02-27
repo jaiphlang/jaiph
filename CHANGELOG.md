@@ -1,3 +1,7 @@
+# 0.3.0
+
+- `jaiph test <file.jh|file.jph> [args...]` runs workflows with mocked `prompt` steps (mock file: `.jaiph/tests/<stem>.test.toml`)
+
 # 0.2.0
 
 - `.jh` extension recommended for new files; `.jph` supported but deprecated (CLI shows migration hint when running `.jph` files)
