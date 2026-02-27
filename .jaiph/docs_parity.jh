@@ -94,7 +94,7 @@ workflow default {
     in the navigation block. Links in markdown files to markdown files should
     end with .md ('configuration.md'). Existing links in index.html should not
     end with .md ('configuration'). Agent skill should always point to:
-    https://jaiph.org/jaiph-skill.md.
+    https://jaiph.org/jaiph-skill.md (always with .md suffix).
 
     Ensure there is a CHANGELOG.md file with a list of all features that are
     supported by the current version. It should be in the following format:
