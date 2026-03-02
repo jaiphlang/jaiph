@@ -1,6 +1,6 @@
 # ![Jaiph](docs/logo.png)
 
-[jaiph.org](https://jaiph.org) · [Getting started](docs/getting-started.md) · [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Grammar](docs/grammar.md) · [Agent Skill](https://jaiph.org/jaiph-skill.md)
+[jaiph.org](https://jaiph.org) · [Getting started](docs/getting-started.md) · [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Grammar](docs/grammar.md) · [Testing](docs/testing.md) · [Agent Skill](https://jaiph.org/jaiph-skill.md)
 
 ---
 
@@ -183,6 +183,7 @@ Known limitations and gotchas:
 
 - Full docs: <https://jaiph.org/>
 - Grammar: [grammar.md](docs/grammar.md)
-- Agent bootstrap skill: [jaiph-skill.md](docs/jaiph-skill.md)
+- Testing: [testing.md](docs/testing.md)
+- Agent bootstrap skill: <https://jaiph.org/jaiph-skill.md>
 - Configuration: [configuration.md](docs/configuration.md)
 - CLI: [cli.md](docs/cli.md)

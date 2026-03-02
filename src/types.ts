@@ -80,9 +80,31 @@ export interface jaiphModule {
   rules: RuleDef[];
   functions: FunctionDef[];
   workflows: WorkflowDef[];
+  /** Present only when parsing a *.test.jh file. */
+  tests?: TestBlockDef[];
 }
 
 export interface CompileResult {
   outputPath: string;
   bash: string;
 }
+
+/** Step inside a test block. Only present when module is a test file (*.test.jh). */
+export type TestStepDef =
+  | { type: "test_shell"; command: string; loc: SourceLoc }
+  | { type: "test_mock_prompt"; response: string; loc: SourceLoc }
+  | { type: "test_run_workflow"; captureName: string; workflowRef: string; loc: SourceLoc }
+  | { type: "test_expect_contain"; variable: string; substring: string; loc: SourceLoc };
+
+export interface TestBlockDef {
+  description: string;
+  steps: TestStepDef[];
+  loc: SourceLoc;
+}
+
+export interface JaiphTestModule {
+  filePath: string;
+  imports: ImportDef[];
+  tests: TestBlockDef[];
+}
+

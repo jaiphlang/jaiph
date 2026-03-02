@@ -1,0 +1,8 @@
+#!/usr/bin/env jaiph
+# E2E fixture: prompt with no mock -> workflow fails with clear error.
+import "prompt_unmatched.jh" as p
+
+test "fails when no mock for prompt" {
+  response = p.default
+  expectContain response "no mock"
+}

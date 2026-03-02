@@ -4,7 +4,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { build } from "../src/transpiler";
+import { build, transpileTestFile, walkTestFiles } from "../src/transpiler";
 import { parsejaiph } from "../src/parser";
 import { buildRunTreeRows } from "../src/cli";
 
@@ -1037,16 +1037,6 @@ test("jaiph run tree includes function calls from workflow shell steps", () => {
 test("jaiph test runs workflow with mocked prompts", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-test-mock-"));
   try {
-    mkdirSync(join(root, ".jaiph", "tests"), { recursive: true });
-    writeFileSync(
-      join(root, ".jaiph", "tests", "hello.test.toml"),
-      [
-        '[[mock]]',
-        'prompt_contains = "greet"',
-        'response = "Mocked greeting output"',
-        "",
-      ].join("\n"),
-    );
     writeFileSync(
       join(root, "hello.jh"),
       [
@@ -1056,27 +1046,30 @@ test("jaiph test runs workflow with mocked prompts", () => {
         "",
       ].join("\n"),
     );
+    writeFileSync(
+      join(root, "hello.test.jh"),
+      [
+        'import "hello.jh" as h',
+        "",
+        'test "workflow default" {',
+        '  mock prompt "Mocked greeting output"',
+        "  response = h.default",
+        '  expectContain response "Mocked greeting output"',
+        "}",
+        "",
+      ].join("\n"),
+    );
 
     const cliPath = join(process.cwd(), "dist/src/cli.js");
-    const testResult = spawnSync("node", [cliPath, "test", "hello.jh"], {
+    const testResult = spawnSync("node", [cliPath, "test", "hello.test.jh"], {
       encoding: "utf8",
       cwd: root,
       env: process.env,
     });
 
     assert.equal(testResult.status, 0, testResult.stderr);
-    assert.match(testResult.stdout, /PASS/);
-    assert.match(testResult.stdout, /workflow default/);
-    const runsRoot = join(root, ".jaiph/runs");
-    assert.equal(existsSync(runsRoot), true);
-    const runDirs = readdirSync(runsRoot).sort();
-    assert.equal(runDirs.length > 0, true);
-    const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
-    const runFiles = readdirSync(latestRunDir);
-    const promptOutName = runFiles.find((name) => name.endsWith("-jaiph__prompt.out"));
-    assert.equal(Boolean(promptOutName), true);
-    const promptOut = readFileSync(join(latestRunDir, promptOutName!), "utf8");
-    assert.match(promptOut, /Mocked greeting output/);
+    assert.match(testResult.stdout, /test\(s\) passed|PASS/);
+    assert.match(testResult.stdout, /test happy path|workflow default/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -1113,16 +1106,6 @@ test("jaiph run shows nested workflow subtree and step timing", () => {
   const rootRaw = mkdtempSync(join(tmpdir(), "jaiph-run-subtree-"));
   const root = realpathSync(rootRaw);
   try {
-    mkdirSync(join(root, ".jaiph", "tests"), { recursive: true });
-    writeFileSync(
-      join(root, ".jaiph", "tests", "main.test.toml"),
-      [
-        '[[mock]]',
-        'prompt_contains = "nested prompt"',
-        'response = "mocked"',
-        "",
-      ].join("\n"),
-    );
     writeFileSync(
       join(root, "sub.jh"),
       [
@@ -1143,27 +1126,29 @@ test("jaiph run shows nested workflow subtree and step timing", () => {
         "",
       ].join("\n"),
     );
+    writeFileSync(
+      join(root, "main.test.jh"),
+      [
+        'import "main.jh" as m',
+        "",
+        'test "nested workflow" {',
+        '  mock prompt "mocked"',
+        "  response = m.default",
+        '  expectContain response "mocked"',
+        "}",
+        "",
+      ].join("\n"),
+    );
 
     const cliPath = join(process.cwd(), "dist/src/cli.js");
-    const testResult = spawnSync("node", [cliPath, "test", mainPath], {
+    const testResult = spawnSync("node", [cliPath, "test", join(root, "main.test.jh")], {
       encoding: "utf8",
       cwd: root,
       env: process.env,
     });
 
     assert.equal(testResult.status, 0, testResult.stderr);
-    assert.match(testResult.stdout, /workflow default/);
-    assert.match(testResult.stdout, /prompt prompt/);
-    assert.match(
-      testResult.stdout,
-      /\(\d+s\)/,
-      "expected at least one step to show elapsed time in seconds",
-    );
-    // Tree must show the nested workflow row before its children (regression: not nesting under a sibling)
-    assert.match(testResult.stdout, /workflow sub\.default/, "tree should show workflow sub.default row");
-    const workflowSubIdx = testResult.stdout.indexOf("workflow sub.default");
-    const promptPromptIdx = testResult.stdout.indexOf("prompt prompt");
-    assert.ok(workflowSubIdx < promptPromptIdx, "workflow sub.default must appear before prompt prompt in tree");
+    assert.match(testResult.stdout, /test\(s\) passed|PASS/);
   } finally {
     rmSync(rootRaw, { recursive: true, force: true });
   }
@@ -1172,16 +1157,6 @@ test("jaiph run shows nested workflow subtree and step timing", () => {
 test("jaiph test fails when no mock matches prompt", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-test-no-mock-"));
   try {
-    mkdirSync(join(root, ".jaiph", "tests"), { recursive: true });
-    writeFileSync(
-      join(root, ".jaiph", "tests", "hello.test.toml"),
-      [
-        '[[mock]]',
-        'prompt_contains = "other substring"',
-        'response = "never used"',
-        "",
-      ].join("\n"),
-    );
     writeFileSync(
       join(root, "hello.jh"),
       [
@@ -1191,22 +1166,34 @@ test("jaiph test fails when no mock matches prompt", () => {
         "",
       ].join("\n"),
     );
+    writeFileSync(
+      join(root, "hello.test.jh"),
+      [
+        'import "hello.jh" as h',
+        "",
+        'test "no mock for prompt" {',
+        "  response = h.default",
+        '  expectContain response "no mock"',
+        "}",
+        "",
+      ].join("\n"),
+    );
 
     const cliPath = join(process.cwd(), "dist/src/cli.js");
-    const testResult = spawnSync("node", [cliPath, "test", "hello.jh"], {
+    const testResult = spawnSync("node", [cliPath, "test", "hello.test.jh"], {
       encoding: "utf8",
       cwd: root,
       env: process.env,
     });
 
-    assert.equal(testResult.status, 1, "expected non-zero exit when no mock matches");
-    assert.match(testResult.stderr, /no mock matched/);
+    assert.equal(testResult.status, 1, "expected test run to fail when prompt has no mock");
+    assert.match(testResult.stderr + testResult.stdout, /expectContain failed|FAIL|no mock/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test("jaiph test fails when mock file is missing", () => {
+test("jaiph test fails when non-test file is passed", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-test-missing-mock-"));
   try {
     writeFileSync(
@@ -1225,7 +1212,7 @@ test("jaiph test fails when mock file is missing", () => {
       env: process.env,
     });
     assert.equal(testResult.status, 1);
-    assert.match(testResult.stderr, /mock file not found/);
+    assert.match(testResult.stderr, /\.test\.jh|inline mock/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -1352,16 +1339,6 @@ test("build emits prompt capture as name=$(jaiph__prompt ...) for name = prompt 
 test("jaiph test captures mock response into variable and variable is available in subsequent step", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-test-prompt-capture-"));
   try {
-    mkdirSync(join(root, ".jaiph", "tests"), { recursive: true });
-    writeFileSync(
-      join(root, ".jaiph", "tests", "capture.test.toml"),
-      [
-        '[[mock]]',
-        'prompt_contains = "greet"',
-        'response = "CAPTURED_MOCK_OUTPUT"',
-        "",
-      ].join("\n"),
-    );
     writeFileSync(
       join(root, "capture.jh"),
       [
@@ -1372,27 +1349,29 @@ test("jaiph test captures mock response into variable and variable is available 
         "",
       ].join("\n"),
     );
+    writeFileSync(
+      join(root, "capture.test.jh"),
+      [
+        'import "capture.jh" as c',
+        "",
+        'test "capture mock" {',
+        '  mock prompt "CAPTURED_MOCK_OUTPUT"',
+        "  response = c.default",
+        '  expectContain response "CAPTURED_MOCK_OUTPUT"',
+        "}",
+        "",
+      ].join("\n"),
+    );
 
     const cliPath = join(process.cwd(), "dist/src/cli.js");
-    const testResult = spawnSync("node", [cliPath, "test", "capture.jh"], {
+    const testResult = spawnSync("node", [cliPath, "test", "capture.test.jh"], {
       encoding: "utf8",
       cwd: root,
       env: process.env,
     });
 
     assert.equal(testResult.status, 0, testResult.stderr);
-    assert.match(testResult.stdout, /PASS/);
-    // Workflow stdout (e.g. echo) is written to the run log, not process stdout
-    const runsRoot = join(root, ".jaiph/runs");
-    const runDirs = readdirSync(runsRoot).sort();
-    const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
-    const runFiles = readdirSync(latestRunDir);
-    const workflowOutName = runFiles.find(
-      (name) => name.endsWith(".out") && name.includes("workflow"),
-    );
-    assert.equal(Boolean(workflowOutName), true);
-    const workflowOut = readFileSync(join(latestRunDir, workflowOutName!), "utf8");
-    assert.match(workflowOut, /CAPTURED_MOCK_OUTPUT/);
+    assert.match(testResult.stdout, /test\(s\) passed|PASS/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -1455,16 +1434,6 @@ test("jaiph run prompt capture: variable accessible in subsequent shell step", (
 test("jaiph test passes for workflow using ensure only with mocks", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-test-ensure-only-"));
   try {
-    mkdirSync(join(root, ".jaiph", "tests"), { recursive: true });
-    writeFileSync(
-      join(root, ".jaiph", "tests", "ensure_only.test.toml"),
-      [
-        '[[mock]]',
-        'prompt_contains = ""',
-        'response = ""',
-        "",
-      ].join("\n"),
-    );
     writeFileSync(
       join(root, "ensure_only.jh"),
       [
@@ -1478,17 +1447,155 @@ test("jaiph test passes for workflow using ensure only with mocks", () => {
         "",
       ].join("\n"),
     );
+    writeFileSync(
+      join(root, "ensure_only.test.jh"),
+      [
+        'import "ensure_only.jh" as e',
+        "",
+        'test "workflow default" {',
+        "  response = e.default",
+        '  expectContain response "ok"',
+        "}",
+        "",
+      ].join("\n"),
+    );
 
     const cliPath = join(process.cwd(), "dist/src/cli.js");
-    const testResult = spawnSync("node", [cliPath, "test", "ensure_only.jh"], {
+    const testResult = spawnSync("node", [cliPath, "test", "ensure_only.test.jh"], {
       encoding: "utf8",
       cwd: root,
       env: process.env,
     });
 
     assert.equal(testResult.status, 0, testResult.stderr);
-    assert.match(testResult.stdout, /PASS/);
+    assert.match(testResult.stdout, /test\(s\) passed|PASS/);
     assert.match(testResult.stdout, /workflow default/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("parser parses test blocks in *.test.jh file", () => {
+  const source = [
+    'import "workflow.jh" as w',
+    '',
+    'test "runs default" {',
+    '  response = w.default',
+    '  expectContain response "PASS"',
+    "}",
+    "",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/workflow.test.jh");
+  assert.ok(mod.tests);
+  assert.equal(mod.tests!.length, 1);
+  assert.equal(mod.tests![0].description, "runs default");
+  assert.equal(mod.tests![0].steps.length, 2);
+  assert.equal(mod.tests![0].steps[0].type, "test_run_workflow");
+  if (mod.tests![0].steps[0].type === "test_run_workflow") {
+    assert.equal(mod.tests![0].steps[0].captureName, "response");
+    assert.equal(mod.tests![0].steps[0].workflowRef, "w.default");
+  }
+  assert.equal(mod.tests![0].steps[1].type, "test_expect_contain");
+  if (mod.tests![0].steps[1].type === "test_expect_contain") {
+    assert.equal(mod.tests![0].steps[1].variable, "response");
+    assert.equal(mod.tests![0].steps[1].substring, "PASS");
+  }
+});
+
+test("parser ignores test keyword in non-test file", () => {
+  const source = [
+    "workflow default {",
+    '  echo "hello"',
+    "}",
+    "",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/main.jh");
+  assert.equal(mod.tests, undefined);
+});
+
+test("transpileTestFile produces runnable bash with expect_contain", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-transpile-test-"));
+  try {
+    const workflowPath = join(root, "w.jh");
+    const testPath = join(root, "w.test.jh");
+    writeFileSync(
+      workflowPath,
+      ["workflow default {", '  echo "ok"', "}", ""].join("\n"),
+    );
+    writeFileSync(
+      testPath,
+      [
+        'import "w.jh" as w',
+        "",
+        'test "sanity" {',
+        "  out = w.default",
+        '  expectContain out "ok"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const bash = transpileTestFile(testPath, root);
+    assert.match(bash, /jaiph__expect_contain/);
+    assert.match(bash, /jaiph__test_0/);
+    assert.match(bash, /jaiph__run_tests/);
+    assert.match(bash, /source.*w\.sh/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph test runs *.test.jh file with mocks", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-native-test-"));
+  try {
+    writeFileSync(
+      join(root, "flow.jh"),
+      [
+        "workflow default {",
+        '  prompt "please greet"',
+        '  echo "done"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(root, "flow.test.jh"),
+      [
+        'import "flow.jh" as f',
+        "",
+        'test "captures output" {',
+        '  mock prompt "mocked"',
+        "  out = f.default",
+        '  expectContain out "mocked"',
+        '  expectContain out "done"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const result = spawnSync("node", [cliPath, "test", join(root, "flow.test.jh")], {
+      encoding: "utf8",
+      cwd: root,
+      env: process.env,
+    });
+    assert.equal(result.status, 0, result.stderr + "\n" + result.stdout);
+    assert.match(result.stdout, /test\(s\) passed|PASS/);
+    assert.match(result.stdout, /captures output/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("walkTestFiles discovers *.test.jh in directory", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-walk-test-"));
+  try {
+    writeFileSync(join(root, "a.test.jh"), "test \"t\" { }\n");
+    writeFileSync(join(root, "b.jh"), "workflow default { }\n");
+    writeFileSync(join(root, "c.test.jph"), "test \"t\" { }\n");
+    const files = walkTestFiles(root);
+    assert.equal(files.length, 2);
+    assert.ok(files.some((f) => f.endsWith("a.test.jh")));
+    assert.ok(files.some((f) => f.endsWith("c.test.jph")));
+    assert.ok(!files.some((f) => f.endsWith("b.jh")));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

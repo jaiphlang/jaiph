@@ -1,0 +1,9 @@
+#!/usr/bin/env jaiph
+# E2E fixture: prompt workflow tested with inline mock.
+import "prompt_flow.jh" as p
+
+test "prompt returns mock response" {
+  mock prompt "e2e-prompt-mock-response"
+  response = p.default
+  expectContain response "e2e-prompt-mock-response"
+}

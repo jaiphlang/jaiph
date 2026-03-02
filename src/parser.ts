@@ -1,4 +1,4 @@
-import { FunctionDef, jaiphModule, RuleDef, WorkflowDef } from "./types";
+import { FunctionDef, jaiphModule, RuleDef, TestBlockDef, TestStepDef, WorkflowDef } from "./types";
 import { jaiphError } from "./errors";
 
 function fail(filePath: string, message: string, lineNo: number, col = 1): never {
@@ -86,6 +86,89 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
         alias: match[2],
         loc: { line: lineNo, col: raw.indexOf("import") + 1 },
       });
+      continue;
+    }
+
+    const isTestFile = filePath.endsWith(".test.jh") || filePath.endsWith(".test.jph");
+    if (isTestFile && line.startsWith("test ")) {
+      const testMatch = line.match(/^test\s+"((?:[^"\\]|\\.)*)"\s*\{\s*$/);
+      if (!testMatch) {
+        fail(filePath, 'test block must match: test "description" {', lineNo);
+      }
+      const description = testMatch[1].replace(/\\"/g, '"');
+      if (!mod.tests) {
+        mod.tests = [];
+      }
+      const testBlock: TestBlockDef = {
+        description,
+        steps: [],
+        loc: { line: lineNo, col: raw.indexOf("test") + 1 },
+      };
+      for (; i < lines.length; i += 1) {
+        const innerNo = i + 1;
+        const innerRaw = lines[i];
+        const inner = innerRaw.trim();
+        if (!inner) {
+          continue;
+        }
+        if (inner === "}") {
+          break;
+        }
+        if (inner.startsWith("#")) {
+          continue;
+        }
+        const col = (innerRaw.match(/\S/)?.index ?? 0) + 1;
+        const loc = { line: innerNo, col };
+
+        if (inner.startsWith("mock prompt ")) {
+          const arg = inner.slice("mock prompt ".length).trim();
+          if (!arg.startsWith('"') || !hasUnescapedClosingQuote(arg, 1)) {
+            fail(filePath, 'mock prompt must be: mock prompt "<response>"', innerNo, innerRaw.indexOf("mock"));
+          }
+          testBlock.steps.push({
+            type: "test_mock_prompt",
+            response: stripQuotes(arg),
+            loc,
+          });
+          continue;
+        }
+        const expectContainMatch = inner.match(/^expectContain\s+([A-Za-z_][A-Za-z0-9_]*)\s+"((?:[^"\\]|\\.)*)"\s*$/);
+        if (expectContainMatch) {
+          testBlock.steps.push({
+            type: "test_expect_contain",
+            variable: expectContainMatch[1],
+            substring: expectContainMatch[2].replace(/\\"/g, '"').replace(/\\n/g, "\n"),
+            loc,
+          });
+          continue;
+        }
+        const assignMatch = inner.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*$/);
+        if (assignMatch) {
+          const captureName = assignMatch[1];
+          const workflowRef = assignMatch[2];
+          if (!isRef(workflowRef)) {
+            fail(filePath, "assignment in test must be: name = <workflow_ref>", innerNo, col);
+          }
+          testBlock.steps.push({
+            type: "test_run_workflow",
+            captureName,
+            workflowRef,
+            loc,
+          });
+          continue;
+        }
+        testBlock.steps.push({
+          type: "test_shell",
+          command: innerRaw,
+          loc,
+        });
+      }
+
+      if (i >= lines.length) {
+        fail(filePath, `unterminated test block: ${description}`, lineNo);
+      }
+      i += 1;
+      mod.tests.push(testBlock);
       continue;
     }
 

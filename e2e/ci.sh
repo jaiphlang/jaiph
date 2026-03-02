@@ -24,7 +24,7 @@ mkdir -p "${BIN_DIR}" "${WORK_DIR}"
 export PATH="${BIN_DIR}:${PATH}"
 export JAIPH_BIN_DIR="${BIN_DIR}"
 if [[ -z "${JAIPH_REPO_URL:-}" ]]; then
-  export JAIPH_REPO_URL="file://${ROOT_DIR}"
+  export JAIPH_REPO_URL="${ROOT_DIR}"
 fi
 if [[ -z "${JAIPH_REPO_REF:-}" ]]; then
   detected_ref="$(git -C "${ROOT_DIR}" branch --show-current || true)"
@@ -184,42 +184,30 @@ if ! grep -q "e2e-rule-fail-message" "${ensure_fail_stderr}"; then
 fi
 rm -f "${ensure_fail_stderr}"
 
-# Prompt success path: jaiph test with mock
-mkdir -p "${WORK_DIR}/.jaiph/tests"
+# Prompt success path: *.test.jh with inline mock prompt
 cp "${ROOT_DIR}/e2e/prompt_flow.jh" "${WORK_DIR}/prompt_flow.jh"
-cat > "${WORK_DIR}/.jaiph/tests/prompt_flow.test.toml" <<'MOCK'
-[[mock]]
-prompt_contains = "e2e-prompt-please-return-mock"
-response = "e2e-prompt-mock-response"
-MOCK
-prompt_ok_out="$(jaiph test "${WORK_DIR}/prompt_flow.jh")"
-if [[ "${prompt_ok_out}" != *"PASS workflow default"* ]]; then
-  echo "Expected jaiph test prompt_flow.jh to PASS. Output was:" >&2
+cp "${ROOT_DIR}/e2e/prompt_flow.test.jh" "${WORK_DIR}/prompt_flow.test.jh"
+prompt_ok_out="$(jaiph test "${WORK_DIR}/prompt_flow.test.jh")"
+if [[ "${prompt_ok_out}" != *"passed"* ]] && [[ "${prompt_ok_out}" != *"PASS"* ]]; then
+  echo "Expected jaiph test prompt_flow.test.jh to PASS. Output was:" >&2
   printf '%s\n' "${prompt_ok_out}" >&2
   exit 1
 fi
 
-# Prompt failure path: no matching mock -> clear stderr error
+# Prompt failure path: *.test.jh with no mock -> test fails (expectContain fails or workflow exits)
 cp "${ROOT_DIR}/e2e/prompt_unmatched.jh" "${WORK_DIR}/prompt_unmatched.jh"
-cat > "${WORK_DIR}/.jaiph/tests/prompt_unmatched.test.toml" <<'MOCK'
-[[mock]]
-prompt_contains = "something-else"
-response = "never-used"
-MOCK
-prompt_fail_stderr="$(mktemp)"
-if jaiph test "${WORK_DIR}/prompt_unmatched.jh" 2>"${prompt_fail_stderr}"; then
-  echo "Expected jaiph test prompt_unmatched.jh to fail (no matching mock)" >&2
-  cat "${prompt_fail_stderr}" >&2
-  rm -f "${prompt_fail_stderr}"
+cp "${ROOT_DIR}/e2e/prompt_unmatched.test.jh" "${WORK_DIR}/prompt_unmatched.test.jh"
+prompt_fail_out="$(jaiph test "${WORK_DIR}/prompt_unmatched.test.jh" 2>&1)" || true
+if [[ "${prompt_fail_out}" == *"PASS"* ]] && [[ "${prompt_fail_out}" != *"FAIL"* ]]; then
+  echo "Expected jaiph test prompt_unmatched.test.jh to fail (no mock for prompt). Output was:" >&2
+  printf '%s\n' "${prompt_fail_out}" >&2
   exit 1
 fi
-if ! grep -q "no mock matched" "${prompt_fail_stderr}"; then
-  echo "Expected stderr to contain 'no mock matched'. stderr was:" >&2
-  cat "${prompt_fail_stderr}" >&2
-  rm -f "${prompt_fail_stderr}"
+if ! echo "${prompt_fail_out}" | grep -qE "expectContain failed|no mock|FAIL"; then
+  echo "Expected test output to contain expectContain failed or no mock or FAIL. Output was:" >&2
+  printf '%s\n' "${prompt_fail_out}" >&2
   exit 1
 fi
-rm -f "${prompt_fail_stderr}"
 
 # Nested workflow/run: run inner.default then outer step
 cp "${ROOT_DIR}/e2e/nested_inner.jh" "${WORK_DIR}/nested_inner.jh"
@@ -229,5 +217,15 @@ nested_out="$(jaiph run "${WORK_DIR}/nested_run.jh")"
 if [[ "${nested_out}" != *"PASS workflow default"* ]]; then
   echo "Expected nested_run.jh to PASS. Output was:" >&2
   printf '%s\n' "${nested_out}" >&2
+  exit 1
+fi
+
+# Native *.test.jh: Given/When/Then with inline mock prompt (QUEUE.md task 10)
+cp "${ROOT_DIR}/e2e/workflow_greeting.jh" "${WORK_DIR}/workflow_greeting.jh"
+cp "${ROOT_DIR}/e2e/workflow_greeting.test.jh" "${WORK_DIR}/workflow_greeting.test.jh"
+native_test_out="$(jaiph test "${WORK_DIR}/workflow_greeting.test.jh")"
+if [[ "${native_test_out}" != *"passed"* ]] && [[ "${native_test_out}" != *"PASS"* ]]; then
+  echo "Expected jaiph test workflow_greeting.test.jh to report PASS. Output was:" >&2
+  printf '%s\n' "${native_test_out}" >&2
   exit 1
 fi

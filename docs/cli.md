@@ -1,6 +1,6 @@
 # Jaiph CLI Reference
 
-[jaiph.org](https://jaiph.org) · [Getting started](getting-started.md) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Agent Skill](https://jaiph.org/jaiph-skill.md)
+[jaiph.org](https://jaiph.org) · [Getting started](getting-started.md) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Testing](testing.md) · [Agent Skill](https://jaiph.org/jaiph-skill.md)
 
 ---
 
@@ -76,15 +76,24 @@ If a `.jh` or `.jph` file is executable and has `#!/usr/bin/env jaiph`, you can 
 
 ## `jaiph test`
 
-Run a workflow file with mocked `prompt` steps for testing. Requires a mock file at `.jaiph/tests/<stem>.test.toml` (where `<stem>` is the file name without extension). Does not invoke the real agent.
+Run tests: either native `*.test.jh` test files (with `test "..." { ... }` blocks) or a single workflow file with mocked `prompt` steps.
+
+**Native test files** (recommended):
+
+- `jaiph test` — discover and run all `*.test.jh` / `*.test.jph` in the workspace.
+- `jaiph test <dir>` — run all test files under the given directory.
+- `jaiph test <file.test.jh>` — run a single test file.
+
+Test files use the same mock file convention: `.jaiph/tests/<stem>.test.toml` (e.g. `workflow.test.jh` → `workflow.test.toml`). See [Testing](testing.md) for test block syntax and `expectContain`.
+
+**Single workflow with mocks** (legacy):
+
+- `jaiph test <file.jh|file.jph> [args...]` — run the workflow with mocked prompts. Requires a mock file at `.jaiph/tests/<stem>.test.toml` (where `<stem>` is the file name without extension). Does not invoke the real agent.
 
 ```bash
-jaiph test <file.jh|file.jph> [args...]
-```
-
-Examples:
-
-```bash
+jaiph test
+jaiph test ./e2e
+jaiph test e2e/workflow.test.jh
 jaiph test e2e/say_hello.jh
 jaiph test .jaiph/main.jh "implement feature X"
 ```

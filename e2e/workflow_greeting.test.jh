@@ -1,0 +1,15 @@
+#!/usr/bin/env jaiph
+# E2E fixture: native *.test.jh with Given/When/Then and inline mock prompt (QUEUE.md task 10).
+import "workflow_greeting.jh" as w
+
+test "runs happy path and prints PASS" {
+  # Given
+  mock prompt "e2e-greeting-mock"
+
+  # When
+  response = w.default
+
+  # Then
+  expectContain response "e2e-greeting-mock"
+  expectContain response "done"
+}

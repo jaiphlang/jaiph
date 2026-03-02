@@ -15,6 +15,26 @@ jaiph__die() {
   return 1
 }
 
+jaiph__expect_contain() {
+  local haystack="$1"
+  local needle="$2"
+  if [[ -z "$needle" ]]; then
+    return 0
+  fi
+  if [[ "$haystack" != *"$needle"* ]]; then
+    echo "jai: expectContain failed: expected to find:" >&2
+    echo "---" >&2
+    printf '%s\n' "$needle" >&2
+    echo "---" >&2
+    echo "in output (${#haystack} chars):" >&2
+    echo "---" >&2
+    printf '%s\n' "$haystack" | head -100 >&2
+    echo "---" >&2
+    return 1
+  fi
+  return 0
+}
+
 jaiph__stream_json_to_text() {
   node -e '
     const readline = require("node:readline");
@@ -117,9 +137,21 @@ jaiph__prompt__impl() {
   else
     prompt_text="$*"
   fi
-  if [[ "${JAIPH_TEST_MODE:-}" == "1" && -n "${JAIPH_MOCK_FILE:-}" && -n "${JAIPH_MOCK_RESOLVER:-}" ]]; then
+  if [[ "${JAIPH_TEST_MODE:-}" == "1" && -n "${JAIPH_MOCK_RESPONSES_FILE:-}" ]]; then
+    if [[ ! -f "${JAIPH_MOCK_RESPONSES_FILE}" ]]; then
+      echo "jai: no mock for prompt (JAIPH_MOCK_RESPONSES_FILE missing or not a file)" >&2
+      return 1
+    fi
     local mock_response
-    mock_response="$(printf '%s' "$prompt_text" | node "$JAIPH_MOCK_RESOLVER" "$JAIPH_MOCK_FILE")" || return 1
+    mock_response="$(head -n 1 "${JAIPH_MOCK_RESPONSES_FILE}" 2>/dev/null)" || true
+    if [[ -z "$mock_response" ]]; then
+      echo "jai: no mock matched prompt (no more responses in mock file). Prompt preview: ${prompt_text:0:80}..." >&2
+      return 1
+    fi
+    # Consume the first line from the file
+    if [[ -s "${JAIPH_MOCK_RESPONSES_FILE}" ]]; then
+      tail -n +2 "${JAIPH_MOCK_RESPONSES_FILE}" > "${JAIPH_MOCK_RESPONSES_FILE}.tmp" 2>/dev/null && mv "${JAIPH_MOCK_RESPONSES_FILE}.tmp" "${JAIPH_MOCK_RESPONSES_FILE}" || true
+    fi
     printf '%s' "$mock_response"
     return 0
   fi
@@ -333,6 +365,9 @@ jaiph__run_step() {
   step_elapsed_seconds="$((SECONDS - step_started_seconds))"
   elapsed_ms="$((step_elapsed_seconds * 1000))"
   jaiph__emit_step_event "STEP_END" "$func_name" "$status" "$elapsed_ms" "$out_file" "$err_file"
+  if [[ "${JAIPH_TEST_MODE:-}" == "1" && -n "$out_file" && -f "$out_file" ]]; then
+    cat "$out_file"
+  fi
   return "$status"
 }
 

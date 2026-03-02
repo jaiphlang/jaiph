@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, extname, join, resolve, basename } from "node:path";
+import { dirname, extname, join, parse, relative, resolve, basename } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
-import { build, workflowSymbolForFile, resolveImportPath } from "./transpiler";
+import { build, workflowSymbolForFile, resolveImportPath, transpileTestFile, walkTestFiles } from "./transpiler";
 import { parsejaiph } from "./parser";
 import { jaiphModule } from "./types";
 import { loadJaiphConfig } from "./config";
@@ -465,6 +465,7 @@ function printUsage(): void {
       "  jaiph build [--target <dir>] <path>",
       "  jaiph run [--target <dir>] <file.jh|file.jph> [args...]",
       "  jaiph test <file.jh|file.jph> [args...]",
+      "  jaiph test [directory]   # discover and run *.test.jh",
       "  jaiph init [workspace-path]",
       "  jaiph use <version|nightly>",
       "",
@@ -643,36 +644,104 @@ function runInit(rest: string[]): number {
 async function runTest(rest: string[]): Promise<number> {
   const { positional } = parseArgs(rest);
   const input = positional[0];
+  const runArgs = positional.slice(1);
+
   if (!input) {
-    process.stderr.write("jaiph test requires a .jh or .jph file path\n");
-    return 1;
+    const workspaceRoot = detectWorkspaceRoot(process.cwd());
+    const testFiles = walkTestFiles(workspaceRoot);
+    if (testFiles.length === 0) {
+      process.stderr.write("jaiph test: no *.test.jh or *.test.jph files found\n");
+      return 1;
+    }
+    let exitCode = 0;
+    for (const testFile of testFiles) {
+      const code = await runSingleTestFile(testFile, workspaceRoot, runArgs);
+      if (code !== 0) exitCode = code;
+    }
+    return exitCode;
   }
+
   const inputAbs = resolve(input);
-  const workspaceRoot = detectWorkspaceRoot(dirname(inputAbs));
   const inputStat = statSync(inputAbs);
   const ext = extname(inputAbs);
+
+  if (inputStat.isDirectory()) {
+    const testFiles = walkTestFiles(inputAbs);
+    if (testFiles.length === 0) {
+      process.stderr.write(`jaiph test: no *.test.jh or *.test.jph files in ${input}\n`);
+      return 1;
+    }
+    const workspaceRoot = detectWorkspaceRoot(inputAbs);
+    let exitCode = 0;
+    for (const testFile of testFiles) {
+      const code = await runSingleTestFile(testFile, workspaceRoot, runArgs);
+      if (code !== 0) exitCode = code;
+    }
+    return exitCode;
+  }
+
   if (!inputStat.isFile() || (ext !== ".jph" && ext !== ".jh")) {
-    process.stderr.write("jaiph test expects a single .jh or .jph file\n");
+    process.stderr.write("jaiph test expects a .jh, .jph, *.test.jh, *.test.jph file or directory\n");
     return 1;
   }
-  const stem = basename(inputAbs, ext);
-  const mockFile = join(workspaceRoot, ".jaiph", "tests", `${stem}.test.toml`);
-  if (!existsSync(mockFile)) {
-    process.stderr.write(`jaiph test: mock file not found: ${mockFile}\n`);
-    return 1;
+
+  const isTestFile =
+    basename(inputAbs).endsWith(".test.jh") || basename(inputAbs).endsWith(".test.jph");
+  if (isTestFile) {
+    const workspaceRoot = detectWorkspaceRoot(dirname(inputAbs));
+    return await runSingleTestFile(inputAbs, workspaceRoot, runArgs);
   }
-  const mockResolver = join(__dirname, "mock-resolver.js");
-  if (!existsSync(mockResolver)) {
-    process.stderr.write(`jaiph test: mock resolver not found: ${mockResolver}\n`);
-    return 1;
-  }
-  return runWorkflow(rest, { mockFile, mockResolver });
+
+  process.stderr.write(
+    "jaiph test requires a *.test.jh or *.test.jph file with inline mock prompt steps. Example:\n" +
+      "  test \"...\" { mock prompt \"response\"; response = w.default; expectContain response \"...\"; }\n",
+  );
+  return 1;
 }
 
-async function runWorkflow(
-  rest: string[],
-  testOptions?: { mockFile: string; mockResolver: string },
+async function runSingleTestFile(
+  testFileAbs: string,
+  workspaceRoot: string,
+  _runArgs: string[],
 ): Promise<number> {
+  const outDir = mkdtempSync(join(tmpdir(), "jaiph-test-"));
+  try {
+    build(workspaceRoot, outDir);
+    const testBash = transpileTestFile(testFileAbs, workspaceRoot);
+    const rel = relative(workspaceRoot, testFileAbs).replace(/\.(test\.jh|test\.jph)$/, ".test.sh");
+    const testScriptPath = join(outDir, rel);
+    mkdirSync(dirname(testScriptPath), { recursive: true });
+    writeFileSync(testScriptPath, testBash, "utf8");
+    chmodSync(testScriptPath, 0o755);
+
+    const runtimeEnv = { ...process.env, JAIPH_WORKSPACE: workspaceRoot } as Record<string, string | undefined>;
+    runtimeEnv.JAIPH_TEST_MODE = "1";
+    runtimeEnv.JAIPH_TEST_FILE = basename(testFileAbs);
+    if (runtimeEnv.JAIPH_STDLIB === undefined) {
+      runtimeEnv.JAIPH_STDLIB = join(__dirname, "jaiph_stdlib.sh");
+    }
+    delete runtimeEnv.BASH_ENV;
+    delete runtimeEnv.JAIPH_RUN_DIR;
+    delete runtimeEnv.JAIPH_RUN_SUMMARY_FILE;
+    delete runtimeEnv.JAIPH_PRECEDING_FILES;
+
+    const result = spawnSync("bash", [testScriptPath], {
+      encoding: "utf8",
+      cwd: workspaceRoot,
+      env: runtimeEnv,
+    });
+    process.stdout.write(result.stdout ?? "");
+    process.stderr.write(result.stderr ?? "");
+    if (result.status !== 0) {
+      return result.status ?? 1;
+    }
+    return 0;
+  } finally {
+    rmSync(outDir, { recursive: true, force: true });
+  }
+}
+
+async function runWorkflow(rest: string[]): Promise<number> {
   const { target, positional } = parseArgs(rest);
   const input = positional[0];
   const runArgs = positional.slice(1);
@@ -765,11 +834,13 @@ async function runWorkflow(
     ].join("\n");
     const startedAt = Date.now();
     if (interactiveProgress) {
+      process.stdout.write(`running ${basename(inputAbs)}\n`);
       process.stdout.write(`${styleKeywordLabel(treeRows[0].rawLabel)}\n`);
       if (activeRowIndex !== -1) {
         writeActiveLine(formatRunningLine(activeRowIndex, 0));
       }
     } else {
+      process.stdout.write(`running ${basename(inputAbs)}\n`);
       process.stdout.write(`${styleKeywordLabel(treeRows[0].rawLabel)}\n`);
     }
     const runtimeEnv = { ...process.env, JAIPH_WORKSPACE: workspaceRoot } as Record<string, string | undefined>;
@@ -787,11 +858,6 @@ async function runWorkflow(
     }
     if (runtimeEnv.JAIPH_STDLIB === undefined) {
       runtimeEnv.JAIPH_STDLIB = join(__dirname, "jaiph_stdlib.sh");
-    }
-    if (testOptions) {
-      runtimeEnv.JAIPH_TEST_MODE = "1";
-      runtimeEnv.JAIPH_MOCK_FILE = testOptions.mockFile;
-      runtimeEnv.JAIPH_MOCK_RESOLVER = testOptions.mockResolver;
     }
     // Prevent non-interactive bash from sourcing caller-provided startup files
     // (e.g. GitHub Actions BASH_ENV), which can inject stderr noise and flip
@@ -1165,6 +1231,9 @@ async function main(argv: string[]): Promise<number> {
     return 0;
   }
   try {
+    if ((cmd.endsWith(".test.jph") || cmd.endsWith(".test.jh")) && existsSync(resolve(cmd))) {
+      return await runTest([cmd, ...rest]);
+    }
     if ((cmd.endsWith(".jph") || cmd.endsWith(".jh")) && existsSync(resolve(cmd))) {
       return runWorkflow([cmd, ...rest]);
     }
