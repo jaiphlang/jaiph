@@ -5,6 +5,55 @@ The first task in the list is always the current task.
 
 ---
 
+<!-- TASK id="10" -->
+## 10. Native `*.test.jh` test files and `test` blocks
+
+**Status:** pending
+
+**What:** Add native Jaiph test scripts via `*.test.jh` convention, with first-class `test "description" { ... }` blocks for flow testing.
+
+**Target usage:**
+```
+import <workflow> as w
+
+test "runs happy path and prints pass tree" {
+  # Given
+  mock prompt "response 1"
+  mock prompt "response 2"
+
+  # When
+  response = w.default
+
+  # Then
+  expectContain response "the
+execution tree
+PASS"
+}
+```
+
+**Why:** Current mock support is useful but not enough without a native test-file convention and block structure. Teams need test flows that are explicit, composable, and runnable by `jaiph test` without ad-hoc shell wrappers.
+
+**Files to change:**
+- `src/parser.ts` — parse `test "..." { ... }` blocks in test-mode scripts
+- `src/transpiler.ts` — compile test blocks into runnable assertions with clear pass/fail output
+- `src/cli.ts` — discover and run `*.test.jh` files natively via `jaiph test`
+- `src/stdlib.sh` — add/extend assertion helpers (e.g. `expectContain`)
+- `docs/testing.md` (or equivalent) — document file naming, test block semantics, and supported assertions/mocks
+
+**Acceptance criteria:**
+- `jaiph test` discovers and runs `*.test.jh` files by convention
+- Multiple `test` blocks in one file execute independently and report per-test PASS/FAIL
+- Existing `mock prompt` behavior works inside `test` blocks exactly as today
+- Test bodies accept regular bash statements in addition to test/mocking helpers
+- Workflow invocation inside tests captures non-zero exits and output without aborting the test process (v1 behavior), enabling explicit assertions against failure output
+- A failing expectation marks the test (and test run) failed with a readable error
+- Importing workflow modules and executing exported rules/functions from tests works
+- At least one end-to-end fixture covers Given/When/Then flow with mocked prompts
+
+<!-- END_TASK -->
+
+---
+
 <!-- TASK id="4" -->
 ## 4. `ensure` with retry support
 
@@ -110,11 +159,11 @@ stdlib_version = "0.2.3"
 ---
 
 <!-- TASK id="5a" -->
-## 5a. Typed `prompt` schema validation (without dot syntax)
+## 5a. Typed `prompt` schema validation with `--returns`
 
 **Status:** pending
 
-**What:** Add `returns { ... }` syntax on prompt assignment and validate returned JSON against declared fields/types.
+**What:** Add `--returns { ... }` syntax on prompt assignment and validate returned JSON against declared fields/types.
 
 **V1 scope constraints:**
 - Schema is flat only (no nested objects)
@@ -123,15 +172,25 @@ stdlib_version = "0.2.3"
 
 **Syntax:**
 ```
-result = prompt "Analyse the diff and classify the change" returns {
+result = prompt "Analyse the diff and classify the change" --returns {
   type: string,
   risk: string,
   summary: string
 }
 ```
 
+Allow multiline prompt + typed schema in bash style with line continuation:
+```
+result = prompt "Analyse the diff and classify the change" \
+  --returns {
+    type: string,
+    risk: string,
+    summary: string
+  }
+```
+
 **Files to change:**
-- `src/parser.ts` — parse `returns { field: type, ... }` annotation
+- `src/parser.ts` — parse `--returns { field: type, ... }` annotation (including `\` line continuation)
 - `src/transpiler.ts` — emit typed prompt call with schema payload
 - `src/stdlib.sh` — add helper that injects schema instructions and validates response JSON
 
@@ -140,9 +199,11 @@ result = prompt "Analyse the diff and classify the change" returns {
 - Missing field fails with clear field-specific schema error
 - Invalid JSON fails with parse error
 - Unsupported declared type fails with compile-time schema error
+- Legacy `prompt ... returns { ... }` syntax is a hard error with a migration hint to `--returns`
 - Raw `$result` still contains the original JSON string
 - Error classes are distinct and test-covered: parse error vs schema/type error vs missing-field error
 - Testable with `jaiph test`: mock JSON response that satisfies the schema is accepted and typed fields are available
+- Parser tests cover both single-line and multiline (`\`) `--returns` forms
 
 <!-- END_TASK -->
 
