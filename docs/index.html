@@ -4,6 +4,10 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#6b7280" />
+    <meta name="theme-color" content="#1f2a37" media="(prefers-color-scheme: dark)" />
+    <meta name="description" content="Jaiph — Open source AI workflow DSL. Powerful and friendly automation for AI-assisted development." />
+    <link rel="icon" href="favicon.png" type="image/png" />
     <title>Jaiph — AI Workflow DSL</title>
 
     <style>
@@ -267,6 +271,10 @@
         }
 
         @media (max-width: 768px) {
+            html {
+                background: linear-gradient(to bottom, var(--muted) 0%, var(--bg) 430px, var(--bg) 100%);
+            }
+
             body {
                 font-size: 1rem;
             }

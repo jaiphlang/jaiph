@@ -5,31 +5,6 @@ The first task in the list is always the current task.
 
 ---
 
-<!-- TASK id="12" -->
-## 12. Print subtrees for imported workflows in run tree
-
-**Status:** pending
-
-**What:** Expand `jaiph run` tree rendering so `run alias.workflow` entries include nested steps from the imported module (rules, prompts, nested runs), not just a single flat workflow line.
-
-**Why:** The current tree hides execution shape of imported workflows, which makes it look like prompts/rules are skipped and reduces debuggability for orchestrator files like `.jaiph/main.jh`.
-
-**Files to change:**
-- `src/cli.ts` — resolve workflow refs across imports and recursively render imported workflow children
-- `src/parser.ts` or shared resolver logic — reuse/introduce import resolution helper for CLI tree building
-- `e2e/*` or CLI tests — assert dotted workflow refs show nested tree rows
-
-**Acceptance criteria:**
-- `jaiph run .jaiph/main.jh` prints nested tree rows for `implement.default`, `docs.default`, and `git.commit`
-- Prompt steps inside imported workflows appear in the tree
-- Existing local (non-imported) subtree rendering remains unchanged
-- Recursive rendering avoids infinite loops on cyclic references
-- Nested tree is observable when running `jaiph test .jaiph/main.jh` with mocks
-
-<!-- END_TASK -->
-
----
-
 <!-- TASK id="4" -->
 ## 4. `ensure` with retry support
 
