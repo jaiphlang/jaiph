@@ -47,6 +47,21 @@ workflow implement_task {
   "
 }
 
+workflow make_ci_pass {
+  if ! ensure project_compiles; then
+    prompt "Fix failing compilation so npm run build passes."
+    run make_project_compiles
+  fi
+  if ! ensure tests_pass; then
+    prompt "Fix failing tests so npm test passes."
+    run make_tests_pass
+  fi
+  if ! ensure e2e_tests_pass; then
+    prompt "Fix failing e2e tests so npm run test:e2e passes."
+    run make_e2e_tests_pass
+  fi
+}
+
 # Removes the first completed task block from .jaiph/QUEUE.md.
 workflow remove_completed_task {
   prompt "
@@ -68,17 +83,6 @@ workflow default {
   fi
 
   run implement_task
-  ensure project_compiles
-
-  if ! ensure tests_pass; then
-    prompt "Fix failing tests so npm test passes, then re-run npm test and ensure it succeeds."
-    ensure tests_pass
-  fi
-
-  if ! ensure e2e_tests_pass; then
-    prompt "Fix failing e2e tests so npm run test:e2e passes, then re-run npm run test:e2e and ensure it succeeds."
-    ensure e2e_tests_pass
-  fi
-
+  run make_ci_pass
   run remove_completed_task
 }
