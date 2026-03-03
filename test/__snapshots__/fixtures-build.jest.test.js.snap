@@ -30,7 +30,7 @@ bootstrap_project::workflow::nodejs::impl() {
 }
 
 bootstrap_project::workflow::nodejs() {
-  jaiph__run_step bootstrap_project::workflow::nodejs bootstrap_project::workflow::nodejs::impl "$@"
+  jaiph::run_step bootstrap_project::workflow::nodejs bootstrap_project::workflow::nodejs::impl "$@"
 }",
     "main.sh": "#!/usr/bin/env bash
 
@@ -57,7 +57,7 @@ main::rule::project_ready::impl() {
 }
 
 main::rule::project_ready() {
-  jaiph__run_step main::rule::project_ready jaiph__execute_readonly main::rule::project_ready::impl "$@"
+  jaiph::run_step main::rule::project_ready jaiph::execute_readonly main::rule::project_ready::impl "$@"
 }
 
 # Verifies the project compiles successfully.
@@ -68,7 +68,7 @@ main::rule::build_passes::impl() {
 }
 
 main::rule::build_passes() {
-  jaiph__run_step main::rule::build_passes jaiph__execute_readonly main::rule::build_passes::impl "$@"
+  jaiph::run_step main::rule::build_passes jaiph::execute_readonly main::rule::build_passes::impl "$@"
 }
 
 # Orchestrates checks, prompt execution, and docs refresh.
@@ -80,7 +80,7 @@ main::workflow::default::impl() {
   if ! main::rule::project_ready; then
     bootstrap_project::workflow::nodejs
   fi
-  jaiph__prompt "$@" <<__JAIPH_PROMPT_25__
+  jaiph::prompt "$@" <<__JAIPH_PROMPT_25__
 
     Build the application using best practices.
     Follow requirements: $1
@@ -92,20 +92,20 @@ __JAIPH_PROMPT_25__
 }
 
 main::workflow::default() {
-  jaiph__run_step main::workflow::default main::workflow::default::impl "$@"
+  jaiph::run_step main::workflow::default main::workflow::default::impl "$@"
 }
 
 # Refreshes documentation after a successful build.
 main::workflow::update_docs::impl() {
   set -eo pipefail
   set +u
-  jaiph__prompt "$@" <<__JAIPH_PROMPT_38__
+  jaiph::prompt "$@" <<__JAIPH_PROMPT_38__
 Update docs
 __JAIPH_PROMPT_38__
 }
 
 main::workflow::update_docs() {
-  jaiph__run_step main::workflow::update_docs main::workflow::update_docs::impl "$@"
+  jaiph::run_step main::workflow::update_docs main::workflow::update_docs::impl "$@"
 }",
     "tools/security.sh": "#!/usr/bin/env bash
 
@@ -128,7 +128,7 @@ tools::security::rule::scan_passes::impl() {
 }
 
 tools::security::rule::scan_passes() {
-  jaiph__run_step tools::security::rule::scan_passes jaiph__execute_readonly tools::security::rule::scan_passes::impl "$@"
+  jaiph::run_step tools::security::rule::scan_passes jaiph::execute_readonly tools::security::rule::scan_passes::impl "$@"
 }",
   },
 }

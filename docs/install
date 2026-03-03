@@ -101,6 +101,8 @@ cp "${tmp_dir}/src/docs/jaiph-skill.md" "${SKILL_TARGET}"
 
 print_step "Installing stdlib to ${STDLIB_TARGET}..."
 cp "${tmp_dir}/src/src/jaiph_stdlib.sh" "${STDLIB_TARGET}"
+mkdir -p "${BIN_DIR}/runtime"
+cp -R "${tmp_dir}/src/src/runtime/"* "${BIN_DIR}/runtime/"
 chmod 755 "${STDLIB_TARGET}"
 
 print_step "Installing binary to ${TARGET}..."

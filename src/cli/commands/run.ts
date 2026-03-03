@@ -173,7 +173,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
           ? "rule"
           : funcName.includes("::function::")
             ? "function"
-            : funcName === "jaiph__prompt"
+            : funcName === "jaiph::prompt"
               ? "prompt"
               : "step";
       const name = kind === "workflow"

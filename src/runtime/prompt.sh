@@ -1,0 +1,135 @@
+# Runtime: prompt execution (agent invocation, stream parsing, test mocks).
+# Sourced by jaiph_stdlib.sh. Depends on steps.sh and test-mode.sh.
+
+jaiph::stream_json_to_text() {
+  node -e '
+    const readline = require("node:readline");
+    const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
+    let currentSection = "";
+    let wroteAny = false;
+    let lastChar = "";
+    const writeRaw = (value) => {
+      if (typeof value === "string" && value.length > 0) {
+        process.stdout.write(value);
+        wroteAny = true;
+        lastChar = value[value.length - 1];
+      }
+    };
+    const startSection = (name) => {
+      if (currentSection === name) {
+        return;
+      }
+      if (wroteAny && lastChar !== "\n") {
+        writeRaw("\n");
+      }
+      if (wroteAny) {
+        writeRaw("\n");
+      }
+      writeRaw(`${name}:\n`);
+      currentSection = name;
+    };
+    const emit = (value) => {
+      if (typeof value === "string" && value.length > 0) {
+        writeRaw(value);
+      }
+    };
+    const pickGeneric = (obj) => {
+      if (!obj || typeof obj !== "object") return "";
+      if (obj.message && typeof obj.message.content === "string") return obj.message.content;
+      if (typeof obj.delta === "string") return obj.delta;
+      if (typeof obj.output_text === "string") return obj.output_text;
+      if (typeof obj.content === "string") return obj.content;
+      if (typeof obj.text === "string") return obj.text;
+      if (Array.isArray(obj.choices) && obj.choices[0]) {
+        const c = obj.choices[0];
+        if (typeof c.text === "string") return c.text;
+        if (c.delta && typeof c.delta.content === "string") return c.delta.content;
+      }
+      if (Array.isArray(obj.delta) && obj.delta.length > 0) {
+        const first = obj.delta[0];
+        if (first && typeof first.text === "string") return first.text;
+      }
+      if (Array.isArray(obj.content) && obj.content.length > 0) {
+        const first = obj.content[0];
+        if (first && typeof first.text === "string") return first.text;
+      }
+      return "";
+    };
+    rl.on("line", (line) => {
+      if (!line.trim()) {
+        return;
+      }
+      try {
+        const obj = JSON.parse(line);
+        if (obj && typeof obj === "object") {
+          if (obj.type === "thinking" && typeof obj.text === "string" && obj.text.length > 0) {
+            startSection("Reasoning");
+            emit(obj.text);
+            return;
+          }
+          if (obj.type === "assistant" && obj.message && typeof obj.message.content === "string" && obj.message.content.length > 0) {
+            startSection("Final answer");
+            emit(obj.message.content);
+            return;
+          }
+          if (obj.type === "result" && typeof obj.result === "string" && obj.result.length > 0) {
+            startSection("Final answer");
+            emit(obj.result);
+            return;
+          }
+        }
+        emit(pickGeneric(obj));
+      } catch {
+        writeRaw(`${line}\n`);
+      }
+    });
+  '
+}
+
+jaiph::prompt_impl() {
+  local workspace_root
+  local agent_command
+  local stdin_prompt
+  local prompt_text
+  local mock_response
+  workspace_root="$(jaiph::workspace_root)"
+  agent_command="${JAIPH_AGENT_COMMAND:-cursor-agent}"
+  if [[ ! -t 0 ]]; then
+    stdin_prompt="$(cat)"
+  else
+    stdin_prompt=""
+  fi
+  if [[ -n "$stdin_prompt" ]]; then
+    prompt_text="$stdin_prompt"
+  else
+    prompt_text="$*"
+  fi
+  if jaiph::is_test_mode; then
+    if [[ -n "${JAIPH_MOCK_RESPONSES_FILE:-}" ]]; then
+      mock_response="$(jaiph::read_next_mock_response)" || {
+        if [[ -f "${JAIPH_MOCK_RESPONSES_FILE}" ]]; then
+          echo "jai: no mock matched prompt (no more responses in mock file). Prompt preview: ${prompt_text:0:80}..." >&2
+        fi
+        return 1
+      }
+      printf '%s' "$mock_response"
+      return 0
+    fi
+    echo "jai: no mock for prompt (JAIPH_MOCK_RESPONSES_FILE missing or not a file)" >&2
+    return 1
+  fi
+  if [[ -n "$prompt_text" ]]; then
+    printf "Prompt:\n%s\n\n" "$prompt_text"
+  fi
+  if [[ -n "${JAIPH_AGENT_MODEL:-}" ]]; then
+    "$agent_command" --print --output-format stream-json --stream-partial-output --workspace "$workspace_root" --model "$JAIPH_AGENT_MODEL" --trust "$prompt_text" \
+      | jaiph::stream_json_to_text
+    return $?
+  fi
+  "$agent_command" --print --output-format stream-json --stream-partial-output --workspace "$workspace_root" --trust "$prompt_text" \
+    | jaiph::stream_json_to_text
+}
+
+jaiph::prompt() {
+  jaiph::run_step jaiph::prompt jaiph::prompt_impl "$@"
+}

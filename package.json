@@ -8,7 +8,7 @@
     "jaiph": "dist/src/cli.js"
   },
   "scripts": {
-    "build": "node ./node_modules/typescript/bin/tsc -p tsconfig.json && node -e \"require('node:fs').copyFileSync('src/jaiph_stdlib.sh','dist/src/jaiph_stdlib.sh')\"",
+    "build": "node ./node_modules/typescript/bin/tsc -p tsconfig.json && node -e \"require('node:fs').copyFileSync('src/jaiph_stdlib.sh','dist/src/jaiph_stdlib.sh'); require('node:fs').cpSync('src/runtime','dist/src/runtime',{recursive:true})\"",
     "test": "npm run build && node --test dist/test/*.test.js",
     "test:acceptance:compiler": "npm run build && node --test dist/test/acceptance/*.acceptance.test.js",
     "test:acceptance:runtime": "bash ./e2e/test_all.sh",

@@ -58,7 +58,7 @@ shell_stmt      = command_line ;
 4. Original function names remain callable via generated shims that invoke the namespaced wrapper.
 5. `run` inside a workflow must target a workflow reference (`foo` or `alias.foo`), not an arbitrary shell command.
 6. `run` is not allowed inside a `rule`; use `ensure` to call another rule or move the call to a workflow.
-7. `prompt` supports multiline quoted text and compiles to `jaiph__prompt ...` with bash-style variable expansion.
+7. `prompt` supports multiline quoted text and compiles to `jaiph::prompt ...` with bash-style variable expansion.
 8. `prompt` rejects command substitution (`$(...)` and backticks) with `E_PARSE`; only variable expansion is allowed.
 9. Workflow and rule declarations support optional `export` keyword.
 
@@ -76,12 +76,12 @@ shell_stmt      = command_line ;
 1. Build emits module scripts that source the installed global stdlib (`$JAIPH_STDLIB`, default `~/.local/bin/jaiph_stdlib.sh`).
 2. Each rule transpiles into:
    - `<module>::rule::<name>::impl`
-   - `<module>::rule::<name>` wrapper using `jaiph__run_step ... jaiph__execute_readonly`.
+   - `<module>::rule::<name>` wrapper using `jaiph::run_step ... jaiph::execute_readonly`.
 3. Each workflow transpiles into:
    - `<module>::workflow::<name>::impl`
-   - `<module>::workflow::<name>` wrapper using `jaiph__run_step`.
+   - `<module>::workflow::<name>` wrapper using `jaiph::run_step`.
 4. Each top-level function transpiles into:
    - `<module>::function::<name>::impl`
-   - `<module>::function::<name>` wrapper using `jaiph__run_step`
+   - `<module>::function::<name>` wrapper using `jaiph::run_step`
    - `<name>` shim forwarding to the namespaced wrapper.
 5. `if ! ensure X; then run Y; fi` remains explicit Bash control flow using transpiled symbols.

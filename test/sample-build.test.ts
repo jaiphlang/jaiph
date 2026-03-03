@@ -14,19 +14,26 @@ test("build transpiles .jh into strict bash with retry flow", () => {
     const results = build(join(process.cwd(), "test/fixtures"), outDir);
     assert.equal(results.length, 3);
 
-    const stdlib = readFileSync(join(process.cwd(), "src/jaiph_stdlib.sh"), "utf8");
+    // Stdlib is split into aggregator + runtime modules; combined they provide the full API.
+    const srcDir = join(process.cwd(), "src");
+    const runtimeDir = join(srcDir, "runtime");
+    const stdlibAgg = readFileSync(join(srcDir, "jaiph_stdlib.sh"), "utf8");
+    const stdlibModules = ["events.sh", "test-mode.sh", "steps.sh", "prompt.sh", "sandbox.sh"]
+      .map((f) => readFileSync(join(runtimeDir, f), "utf8"))
+      .join("\n");
+    const stdlib = stdlibAgg + "\n" + stdlibModules;
     assert.match(stdlib, /jaiph__version\(\)/);
     assert.match(stdlib, /jaiph__runtime_api\(\)/);
-    assert.match(stdlib, /jaiph__prompt\(\)/);
-    assert.match(stdlib, /jaiph__prompt__impl\(\)/);
+    assert.match(stdlib, /jaiph::prompt\(\)/);
+    assert.match(stdlib, /jaiph::prompt_impl\(\)/);
     assert.match(stdlib, /agent_command="\$\{JAIPH_AGENT_COMMAND:-cursor-agent\}"/);
     assert.match(
       stdlib,
       /--print --output-format stream-json --stream-partial-output --workspace "\$workspace_root" --model "\$JAIPH_AGENT_MODEL" --trust "\$prompt_text"/,
     );
-    assert.match(stdlib, /jaiph__run_step jaiph__prompt jaiph__prompt__impl "\$@"/);
-    assert.match(stdlib, /jaiph__execute_readonly\(\)/);
-    assert.match(stdlib, /jaiph__run_step\(\)/);
+    assert.match(stdlib, /jaiph::run_step jaiph::prompt jaiph::prompt_impl "\$@"/);
+    assert.match(stdlib, /jaiph::execute_readonly\(\)/);
+    assert.match(stdlib, /jaiph::run_step\(\)/);
     assert.match(stdlib, /sudo env JAIPH_PRECEDING_FILES="\$JAIPH_PRECEDING_FILES" unshare -m bash -c/);
 
     const generatedPath = join(outDir, "main.sh");
@@ -41,15 +48,15 @@ test("build transpiles .jh into strict bash with retry flow", () => {
     assert.match(generated, /# Orchestrates checks, prompt execution, and docs refresh\./);
     assert.match(generated, /main::rule::project_ready\(\) \{/);
     assert.match(generated, /main::rule::project_ready::impl\(\) \{/);
-    assert.match(generated, /jaiph__run_step main::rule::project_ready jaiph__execute_readonly main::rule::project_ready::impl/);
+    assert.match(generated, /jaiph::run_step main::rule::project_ready jaiph::execute_readonly main::rule::project_ready::impl/);
     assert.match(generated, /if ! main::rule::project_ready; then/);
     assert.match(generated, /bootstrap_project::workflow::nodejs/);
-    assert.match(generated, /jaiph__prompt "\$@" <<__JAIPH_PROMPT_/);
+    assert.match(generated, /jaiph::prompt "\$@" <<__JAIPH_PROMPT_/);
     assert.match(generated, /main::rule::build_passes\(\)/);
     assert.match(generated, /tools::security::rule::scan_passes/);
     assert.match(generated, /main::workflow::update_docs/);
     assert.match(generated, /main::workflow::default::impl\(\) \{/);
-    assert.match(generated, /jaiph__run_step main::workflow::default main::workflow::default::impl "\$@"/);
+    assert.match(generated, /jaiph::run_step main::workflow::default main::workflow::default::impl "\$@"/);
 
     const securityGenerated = readFileSync(join(outDir, "tools/security.sh"), "utf8");
     assert.match(securityGenerated, /tools::security::rule::scan_passes\(\) \{/);
@@ -290,16 +297,16 @@ test("jaiph run fails when runtime emits non-xtrace stderr", () => {
       [
         "#!/usr/bin/env bash",
         "jaiph__runtime_api() { echo 1; }",
-        "jaiph__run_step() {",
+        "jaiph::run_step() {",
         "  local _name=\"$1\"",
         "  shift || true",
         "  \"$@\"",
         "}",
-        "jaiph__execute_readonly() {",
+        "jaiph::execute_readonly() {",
         "  shift || true",
         "  \"$@\"",
         "}",
-        "jaiph__prompt() {",
+        "jaiph::prompt() {",
         "  :",
         "}",
         "echo runtime-broken >&2",
@@ -780,16 +787,16 @@ test("jaiph run uses JAIPH_STDLIB global runtime path", () => {
       [
         "#!/usr/bin/env bash",
         "jaiph__runtime_api() { echo 1; }",
-        "jaiph__run_step() {",
+        "jaiph::run_step() {",
         "  local _name=\"$1\"",
         "  shift || true",
         "  \"$@\"",
         "}",
-        "jaiph__execute_readonly() {",
+        "jaiph::execute_readonly() {",
         "  shift || true",
         "  \"$@\"",
         "}",
-        "jaiph__prompt() {",
+        "jaiph::prompt() {",
         "  :",
         "}",
         "",
@@ -958,7 +965,7 @@ test("build transpiles ensure statements with arguments", () => {
     assert.equal(results.length, 1);
     assert.match(
       results[0].bash,
-      /jaiph__run_step entry::rule::check_branch jaiph__execute_readonly entry::rule::check_branch::impl "\$@"/,
+      /jaiph::run_step entry::rule::check_branch jaiph::execute_readonly entry::rule::check_branch::impl "\$@"/,
     );
     assert.match(results[0].bash, /entry::rule::check_branch "\$1"/);
   } finally {
@@ -991,7 +998,7 @@ test("build supports top-level functions with namespaced wrappers", () => {
     assert.equal(results.length, 1);
     assert.match(results[0].bash, /entry::function::changed_files::impl\(\) \{/);
     assert.match(results[0].bash, /entry::function::changed_files\(\) \{/);
-    assert.match(results[0].bash, /jaiph__run_step_passthrough entry::function::changed_files entry::function::changed_files::impl "\$@"/);
+    assert.match(results[0].bash, /jaiph::run_step_passthrough entry::function::changed_files entry::function::changed_files::impl "\$@"/);
     assert.match(results[0].bash, /changed_files\(\) \{/);
     assert.match(results[0].bash, /entry::function::changed_files "\$@"/);
   } finally {
@@ -1310,7 +1317,7 @@ test("build accepts ensure inside a rule block", () => {
   }
 });
 
-test("build emits prompt capture as name=$(jaiph__prompt ...) for name = prompt \"...\"", () => {
+test("build emits prompt capture as name=$(jaiph::prompt ...) for name = prompt \"...\"", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-prompt-capture-build-"));
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-prompt-capture-out-"));
   try {
@@ -1327,7 +1334,7 @@ test("build emits prompt capture as name=$(jaiph__prompt ...) for name = prompt 
 
     const results = build(filePath, outDir);
     assert.equal(results.length, 1);
-    assert.match(results[0].bash, /result=\$\(jaiph__prompt "\$@" <<__JAIPH_PROMPT_/);
+    assert.match(results[0].bash, /result=\$\(jaiph::prompt "\$@" <<__JAIPH_PROMPT_/);
     assert.match(results[0].bash, /Summarize the changes made/);
     assert.match(results[0].bash, /\s*\)\s*$/m);
   } finally {

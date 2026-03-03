@@ -1,0 +1,162 @@
+# Runtime: run tracking, step execution, and artifact writing.
+# Sourced by jaiph_stdlib.sh. Depends on events.sh and test-mode.sh.
+
+jaiph::new_run_id() {
+  if command -v uuidgen >/dev/null 2>&1; then
+    uuidgen | tr "[:upper:]" "[:lower:]"
+    return 0
+  fi
+  printf "%s-%s-%s" "$$" "$RANDOM" "$(date +%s)"
+}
+
+jaiph::sanitize_name() {
+  local raw="$1"
+  raw="${raw//[^[:alnum:]_.-]/_}"
+  printf "%s" "$raw"
+}
+
+jaiph::workspace_root() {
+  if [[ -n "${JAIPH_WORKSPACE:-}" ]]; then
+    printf "%s" "$JAIPH_WORKSPACE"
+    return 0
+  fi
+  local current="$PWD"
+  while [[ "$current" != "/" ]]; do
+    if [[ -d "$current/.jaiph" || -d "$current/.git" ]]; then
+      printf "%s" "$current"
+      return 0
+    fi
+    current="$(dirname "$current")"
+  done
+  printf "%s" "$PWD"
+}
+
+jaiph::init_run_tracking() {
+  if [[ -n "${JAIPH_RUN_DIR:-}" ]]; then
+    return 0
+  fi
+  local started_at run_id workspace_root
+  started_at="$(jaiph::timestamp_utc)"
+  run_id="$(jaiph::new_run_id)"
+  workspace_root="$(jaiph::workspace_root)"
+  if [[ -n "${JAIPH_RUNS_DIR:-}" ]]; then
+    if [[ "$JAIPH_RUNS_DIR" = /* ]]; then
+      JAIPH_RUN_DIR="${JAIPH_RUNS_DIR}/${started_at}-${run_id}"
+    else
+      JAIPH_RUN_DIR="${workspace_root}/${JAIPH_RUNS_DIR}/${started_at}-${run_id}"
+    fi
+  else
+    JAIPH_RUN_DIR="$workspace_root/.jaiph/runs/${started_at}-${run_id}"
+  fi
+  JAIPH_PRECEDING_FILES=""
+  JAIPH_RUN_SUMMARY_FILE="$JAIPH_RUN_DIR/run_summary.jsonl"
+  mkdir -p "$JAIPH_RUN_DIR"
+  : >"$JAIPH_RUN_SUMMARY_FILE"
+  export JAIPH_RUN_DIR JAIPH_PRECEDING_FILES JAIPH_RUN_SUMMARY_FILE
+}
+
+jaiph::track_output_files() {
+  local file
+  for file in "$@"; do
+    if [[ -z "$file" ]]; then
+      continue
+    fi
+    if [[ -z "$JAIPH_PRECEDING_FILES" ]]; then
+      JAIPH_PRECEDING_FILES="$file"
+    else
+      JAIPH_PRECEDING_FILES="${JAIPH_PRECEDING_FILES},${file}"
+    fi
+  done
+  export JAIPH_PRECEDING_FILES
+}
+
+jaiph::run_step() {
+  local func_name="$1"
+  shift || true
+  if [[ -z "$func_name" ]]; then
+    jaiph__die "jaiph::run_step requires a function name"
+    return 1
+  fi
+  if [[ "$#" -eq 0 ]]; then
+    jaiph__die "jaiph::run_step requires a command to execute"
+    return 1
+  fi
+  jaiph::init_run_tracking || return 1
+  local step_started_at safe_name out_file err_file status had_errexit step_started_seconds step_elapsed_seconds
+  local out_tmp err_tmp elapsed_ms
+  step_started_seconds="$SECONDS"
+  step_started_at="$(jaiph::timestamp_utc)"
+  safe_name="$(jaiph::sanitize_name "$func_name")"
+  out_file="$JAIPH_RUN_DIR/${step_started_at}-${safe_name}.out"
+  err_file="$JAIPH_RUN_DIR/${step_started_at}-${safe_name}.err"
+  out_tmp="${out_file}.tmp.$$"
+  err_tmp="${err_file}.tmp.$$"
+  jaiph::emit_step_event "STEP_START" "$func_name"
+  had_errexit=0
+  case "$-" in
+    *e*) had_errexit=1 ;;
+  esac
+  set +e
+  if [[ "$func_name" == "jaiph::prompt" ]]; then
+    "$@" 2>"$err_tmp" | tee "$out_tmp"
+    status="${PIPESTATUS[0]}"
+  else
+    "$@" >"$out_tmp" 2>"$err_tmp"
+    status=$?
+  fi
+  if [[ "$had_errexit" -eq 1 ]]; then
+    set -e
+  fi
+  if [[ -s "$out_tmp" ]]; then
+    mv "$out_tmp" "$out_file"
+  else
+    rm -f "$out_tmp"
+    out_file=""
+  fi
+  if [[ -s "$err_tmp" ]]; then
+    mv "$err_tmp" "$err_file"
+  else
+    rm -f "$err_tmp"
+    err_file=""
+  fi
+  jaiph::track_output_files "$out_file" "$err_file"
+  step_elapsed_seconds="$((SECONDS - step_started_seconds))"
+  elapsed_ms="$((step_elapsed_seconds * 1000))"
+  jaiph::emit_step_event "STEP_END" "$func_name" "$status" "$elapsed_ms" "$out_file" "$err_file"
+  if jaiph::is_test_mode && [[ -n "$out_file" && -f "$out_file" ]]; then
+    cat "$out_file"
+  fi
+  return "$status"
+}
+
+# Variant that preserves command stdout/stderr while still emitting step events.
+jaiph::run_step_passthrough() {
+  local func_name="$1"
+  shift || true
+  if [[ -z "$func_name" ]]; then
+    jaiph__die "jaiph::run_step_passthrough requires a function name"
+    return 1
+  fi
+  if [[ "$#" -eq 0 ]]; then
+    jaiph__die "jaiph::run_step_passthrough requires a command to execute"
+    return 1
+  fi
+  jaiph::init_run_tracking || return 1
+  local status had_errexit step_started_seconds step_elapsed_seconds elapsed_ms
+  step_started_seconds="$SECONDS"
+  jaiph::emit_step_event "STEP_START" "$func_name"
+  had_errexit=0
+  case "$-" in
+    *e*) had_errexit=1 ;;
+  esac
+  set +e
+  "$@"
+  status=$?
+  if [[ "$had_errexit" -eq 1 ]]; then
+    set -e
+  fi
+  step_elapsed_seconds="$((SECONDS - step_started_seconds))"
+  elapsed_ms="$((step_elapsed_seconds * 1000))"
+  jaiph::emit_step_event "STEP_END" "$func_name" "$status" "$elapsed_ms" "" ""
+  return "$status"
+}

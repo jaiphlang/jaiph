@@ -3,36 +3,6 @@
 Tasks are processed top-to-bottom. When a task is completed, it is removed from this file.
 The first task in the list is always the current task.
 
-<!-- TASK id="14" -->
-## 14. Refactor runtime stdlib shell into sourced submodules
-
-**Status:** pending
-
-**What:** Break `src/jaiph_stdlib.sh` into focused sourced parts while preserving runtime API and behavior.
-
-**Why:** Prompt execution, step eventing, run artifact writing, and readonly sandbox logic are currently co-located, making runtime hard to reason about and extend safely.
-
-**Target module boundaries:**
-- `src/runtime/prompt.sh`
-- `src/runtime/events.sh`
-- `src/runtime/steps.sh`
-- `src/runtime/sandbox.sh`
-- `src/runtime/test-mode.sh`
-- thin aggregator `src/jaiph_stdlib.sh`
-
-**Constraints:**
-- Keep runtime API version and exported function contract stable.
-- Preserve current behavior on both sandbox-capable and fallback hosts.
-
-**Acceptance criteria:**
-- `npm run test:acceptance:runtime` passes unchanged.
-- Run artifact contract (`run_summary.jsonl`, `.out/.err`) remains stable.
-- No CLI behavior differences caused by stdlib modularization.
-
-<!-- END_TASK -->
-
----
-
 <!-- TASK id="15" -->
 ## 15. Add signal/lifecycle acceptance coverage before deep CLI surgery
 

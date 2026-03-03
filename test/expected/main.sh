@@ -10,7 +10,7 @@ main::rule::project_ready::impl() {
 }
 
 main::rule::project_ready() {
-  jaiph__run_step main::rule::project_ready jaiph__execute_readonly main::rule::project_ready::impl
+  jaiph::run_step main::rule::project_ready jaiph::execute_readonly main::rule::project_ready::impl
 }
 
 # Verifies the project compiles successfully.
@@ -19,7 +19,7 @@ main::rule::build_passes::impl() {
 }
 
 main::rule::build_passes() {
-  jaiph__run_step main::rule::build_passes jaiph__execute_readonly main::rule::build_passes::impl
+  jaiph::run_step main::rule::build_passes jaiph::execute_readonly main::rule::build_passes::impl
 }
 
 # Orchestrates checks, prompt execution, and docs refresh.
@@ -29,7 +29,7 @@ main::workflow::default::impl() {
   if ! main::rule::project_ready; then
     bootstrap_project::workflow::nodejs
   fi
-  jaiph__prompt "
+  jaiph::prompt "
     Build the application using best practices.
     Follow requirements: $1
   "
@@ -39,14 +39,14 @@ main::workflow::default::impl() {
 }
 
 main::workflow::default() {
-  jaiph__run_step main::workflow::default main::workflow::default::impl "$@"
+  jaiph::run_step main::workflow::default main::workflow::default::impl "$@"
 }
 
 # Refreshes documentation after a successful build.
 main::workflow::update_docs::impl() {
-  jaiph__prompt "Update docs"
+  jaiph::prompt "Update docs"
 }
 
 main::workflow::update_docs() {
-  jaiph__run_step main::workflow::update_docs main::workflow::update_docs::impl "$@"
+  jaiph::run_step main::workflow::update_docs main::workflow::update_docs::impl "$@"
 }

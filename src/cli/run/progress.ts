@@ -113,7 +113,7 @@ export function collectWorkflowChildren(
       continue;
     }
     if (step.type === "prompt") {
-      items.push({ label: "prompt prompt", stepFunc: "jaiph__prompt" });
+      items.push({ label: "prompt prompt", stepFunc: "jaiph::prompt" });
       continue;
     }
     if (step.type === "shell") {

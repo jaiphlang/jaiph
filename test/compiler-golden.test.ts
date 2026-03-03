@@ -51,7 +51,7 @@ entry::rule::ok::impl() {
 }
 
 entry::rule::ok() {
-  jaiph__run_step entry::rule::ok jaiph__execute_readonly entry::rule::ok::impl "$@"
+  jaiph::run_step entry::rule::ok jaiph::execute_readonly entry::rule::ok::impl "$@"
 }
 
 entry::workflow::default::impl() {
@@ -62,7 +62,7 @@ entry::workflow::default::impl() {
 }
 
 entry::workflow::default() {
-  jaiph__run_step entry::workflow::default entry::workflow::default::impl "$@"
+  jaiph::run_step entry::workflow::default entry::workflow::default::impl "$@"
 }`);
     assert.equal(actual, expected);
   } finally {

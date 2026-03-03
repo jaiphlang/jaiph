@@ -169,7 +169,7 @@ export function emitWorkflow(
     out.push("}");
     out.push("");
     out.push(`${ruleSymbol}() {`);
-    out.push(`  jaiph__run_step ${ruleSymbol} jaiph__execute_readonly ${ruleSymbol}::impl "$@"`);
+    out.push(`  jaiph::run_step ${ruleSymbol} jaiph::execute_readonly ${ruleSymbol}::impl "$@"`);
     out.push("}");
     out.push("");
   }
@@ -192,7 +192,7 @@ export function emitWorkflow(
     out.push("}");
     out.push("");
     out.push(`${functionSymbol}() {`);
-    out.push(`  jaiph__run_step_passthrough ${functionSymbol} ${functionSymbol}::impl "$@"`);
+    out.push(`  jaiph::run_step_passthrough ${functionSymbol} ${functionSymbol}::impl "$@"`);
     out.push("}");
     out.push("");
     out.push(`${fn.name}() {`);
@@ -233,14 +233,14 @@ export function emitWorkflow(
           }
           const delimiter = promptDelimiter(promptText, step.loc.line);
           if (step.captureName) {
-            out.push(`  ${step.captureName}=$(jaiph__prompt "$@" <<${delimiter}`);
+            out.push(`  ${step.captureName}=$(jaiph::prompt "$@" <<${delimiter}`);
             for (const line of promptText.split("\n")) {
               out.push(line);
             }
             out.push(delimiter);
             out.push(")");
           } else {
-            out.push(`  jaiph__prompt "$@" <<${delimiter}`);
+            out.push(`  jaiph::prompt "$@" <<${delimiter}`);
             for (const line of promptText.split("\n")) {
               out.push(line);
             }
@@ -276,7 +276,7 @@ export function emitWorkflow(
     out.push("");
     out.push(`${workflowSymbol}::workflow::${workflow.name}() {`);
     out.push(
-      `  jaiph__run_step ${workflowSymbol}::workflow::${workflow.name} ${workflowSymbol}::workflow::${workflow.name}::impl "$@"`,
+      `  jaiph::run_step ${workflowSymbol}::workflow::${workflow.name} ${workflowSymbol}::workflow::${workflow.name}::impl "$@"`,
     );
     out.push("}");
     out.push("");
