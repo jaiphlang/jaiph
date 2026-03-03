@@ -5,7 +5,7 @@ on:
 
 jobs:
   test:
-    name: Unit tests
+    name: Compiler and unit tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -20,8 +20,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run tests
+      - name: Run core test suite
         run: npm test
+
+      - name: Run compiler acceptance tests
+        run: npm run test:acceptance:compiler
+
+      - name: Run fixture Jest tests
+        run: npm run test:jest
 
   e2e:
     name: E2E install and CLI workflow (${{ matrix.os }})
@@ -39,8 +45,5 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Run E2E scenario
-        env:
-          JAIPH_REPO_URL: https://github.com/${{ github.repository }}.git
-          JAIPH_REPO_REF: ${{ github.ref_name }}
-        run: bash ./e2e/ci.sh
+      - name: Run runtime acceptance E2E
+        run: npm run test:acceptance:runtime

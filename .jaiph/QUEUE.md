@@ -3,6 +3,189 @@
 Tasks are processed top-to-bottom. When a task is completed, it is removed from this file.
 The first task in the list is always the current task.
 
+<!-- TASK id="42" -->
+
+## 42. Change transpiller namespace separator
+
+Transpiler naming rule: use double colon (`::`) instead of double underscore (`__`) when generating namespaced identifiers.
+
+Samples:
+- `rule project_ready` -> `main::rule::project_ready` (not `main__rule_project_ready`)
+- `workflow deploy` -> `main::workflow::deploy`
+- `test smoke` -> `main::test::smoke`
+
+<!-- END TASK -->
+
+---
+
+<!-- TASK id="11" -->
+## 11. Refactor `src/cli.ts` into composable command/runtime modules
+
+**Status:** pending
+
+**What:** Split the current monolithic CLI into focused modules while preserving exact user-facing behavior.
+
+**Why:** `src/cli.ts` currently mixes command parsing, workflow process lifecycle, event parsing, progress rendering, init/use logic, and error reporting. This is the highest coupling hotspot and biggest blocker for safe iteration.
+
+**Target module boundaries:**
+- `src/cli/index.ts` — command routing + top-level error handling
+- `src/cli/commands/{build,run,test,init,use}.ts` — command-specific orchestration
+- `src/cli/run/lifecycle.ts` — subprocess launch, signals, exit handling
+- `src/cli/run/events.ts` — runtime event parsing and validation
+- `src/cli/run/progress.ts` — tree/progress rendering only
+- `src/cli/shared/{usage,paths,errors}.ts` — reusable helpers
+
+**Constraints:**
+- No intentional behavior changes in CLI output, exit codes, or flags.
+- Preserve current acceptance behavior and all existing tests.
+
+**Acceptance criteria:**
+- `npm test` and `npm run test:acceptance` remain green.
+- `jaiph run/test/init/use` UX and error messages remain backward-compatible.
+- Signal handling behavior remains unchanged (documented by tests).
+
+<!-- END_TASK -->
+
+---
+
+<!-- TASK id="12" -->
+## 12. Refactor `src/transpiler.ts` into phase-based pipeline
+
+**Status:** pending
+
+**What:** Decompose transpiler into explicit phases with pure core logic and minimal IO wrappers.
+
+**Why:** Current file couples path resolution, semantic validation, emission, and filesystem traversal/writes. This makes changes risky and obscures compiler invariants.
+
+**Target module boundaries:**
+- `src/transpile/resolve.ts` — import/workflow symbol/path resolution
+- `src/transpile/validate.ts` — semantic reference validation (rules/workflows/tests)
+- `src/transpile/emit-workflow.ts` — workflow shell emission
+- `src/transpile/emit-test.ts` — test shell emission
+- `src/transpile/build.ts` — directory walking + output writes
+
+**Constraints:**
+- Preserve emitted shell contract and deterministic errors (`E_PARSE`, `E_VALIDATE`, `E_IMPORT_NOT_FOUND`).
+- Preserve extension-resolution behavior and current import semantics.
+
+**Acceptance criteria:**
+- Existing compiler golden and acceptance tests pass unchanged.
+- Emitted output for current goldens remains stable.
+- Public API (`build`, `transpileFile`, `transpileTestFile`) remains compatible.
+
+<!-- END_TASK -->
+
+---
+
+<!-- TASK id="13" -->
+## 13. Refactor parser into grammar-domain modules
+
+**Status:** pending
+
+**What:** Split parser logic by domain (`imports/rules/functions/workflows/tests`) with shared parse primitives.
+
+**Why:** Parser currently handles many unrelated branches in one pass, which increases risk of regressions when adding syntax features.
+
+**Target module boundaries:**
+- `src/parse/core.ts` — line scanning, shared helpers, error helpers
+- `src/parse/imports.ts`
+- `src/parse/rules.ts`
+- `src/parse/functions.ts`
+- `src/parse/workflows.ts`
+- `src/parse/tests.ts`
+
+**Constraints:**
+- Preserve all existing syntax and error message shape/location.
+- Do not introduce new grammar features in this task.
+
+**Acceptance criteria:**
+- Parser acceptance tests for malformed syntax remain green and deterministic.
+- Existing runtime/compiler tests pass without fixture rewrites.
+
+<!-- END_TASK -->
+
+---
+
+<!-- TASK id="14" -->
+## 14. Refactor runtime stdlib shell into sourced submodules
+
+**Status:** pending
+
+**What:** Break `src/jaiph_stdlib.sh` into focused sourced parts while preserving runtime API and behavior.
+
+**Why:** Prompt execution, step eventing, run artifact writing, and readonly sandbox logic are currently co-located, making runtime hard to reason about and extend safely.
+
+**Target module boundaries:**
+- `src/runtime/prompt.sh`
+- `src/runtime/events.sh`
+- `src/runtime/steps.sh`
+- `src/runtime/sandbox.sh`
+- `src/runtime/test-mode.sh`
+- thin aggregator `src/jaiph_stdlib.sh`
+
+**Constraints:**
+- Keep runtime API version and exported function contract stable.
+- Preserve current behavior on both sandbox-capable and fallback hosts.
+
+**Acceptance criteria:**
+- `npm run test:acceptance:runtime` passes unchanged.
+- Run artifact contract (`run_summary.jsonl`, `.out/.err`) remains stable.
+- No CLI behavior differences caused by stdlib modularization.
+
+<!-- END_TASK -->
+
+---
+
+<!-- TASK id="15" -->
+## 15. Add signal/lifecycle acceptance coverage before deep CLI surgery
+
+**Status:** pending
+
+**What:** Add a deterministic acceptance test that validates `jaiph run` interruption behavior (SIGINT/SIGTERM path, non-hanging exit, cleanup).
+
+**Why:** Process lifecycle is the highest-risk area during CLI refactor and currently under-tested compared with parser/transpiler/runtime semantics.
+
+**Scope:**
+- Spawn a long-running workflow in a controlled test process.
+- Interrupt it and assert non-zero exit + bounded completion time.
+- Assert no stale child workflow process remains under the test process group.
+
+**Acceptance criteria:**
+- Test is reliable in CI and local development.
+- Captures current lifecycle behavior as a lock before refactor.
+
+<!-- END_TASK -->
+
+---
+
+<!-- TASK id="10" -->
+## 10. Move config to in-file workflow metadata
+
+**Status:** pending
+
+**What:** Replace external config-file dependency (`.jaiph/config.toml`, global config) with project-local in-file metadata declared inside `.jh/.jph` entry files.
+
+**Why:** Current config layering adds complexity and hidden behavior. In-file config keeps execution context explicit, portable, and reviewable together with workflow logic.
+
+**V1 direction:**
+- Introduce a top-level metadata block in workflow files (syntax TBD) for runtime options currently read from config/env.
+- Support key runtime settings first (e.g. model selection, runs/log directory).
+- Keep temporary backward compatibility with existing config files, but define explicit precedence and migration warning.
+
+**Files to change:**
+- `src/parser.ts` — parse and validate top-level metadata block
+- `src/transpiler.ts` — propagate metadata into generated runtime/env wiring
+- `src/cli.ts` — consume in-file metadata as primary source and limit config fallback
+- `docs/configuration.md` + `docs/grammar.md` — document new in-file config model and migration
+
+**Acceptance criteria:**
+- User can run a workflow with no external config files and get deterministic behavior from in-file metadata.
+- Metadata parse errors are explicit (`E_PARSE`) and point to file location.
+- Existing projects using config files still run during migration window with clear deprecation warning.
+- E2E coverage verifies metadata-driven behavior end-to-end.
+
+<!-- END_TASK -->
+
 ---
 
 <!-- TASK id="4" -->
