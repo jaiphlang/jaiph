@@ -3,35 +3,6 @@
 Tasks are processed top-to-bottom. When a task is completed, it is removed from this file.
 The first task in the list is always the current task.
 
-<!-- TASK id="13" -->
-## 13. Refactor parser into grammar-domain modules
-
-**Status:** pending
-
-**What:** Split parser logic by domain (`imports/rules/functions/workflows/tests`) with shared parse primitives.
-
-**Why:** Parser currently handles many unrelated branches in one pass, which increases risk of regressions when adding syntax features.
-
-**Target module boundaries:**
-- `src/parse/core.ts` — line scanning, shared helpers, error helpers
-- `src/parse/imports.ts`
-- `src/parse/rules.ts`
-- `src/parse/functions.ts`
-- `src/parse/workflows.ts`
-- `src/parse/tests.ts`
-
-**Constraints:**
-- Preserve all existing syntax and error message shape/location.
-- Do not introduce new grammar features in this task.
-
-**Acceptance criteria:**
-- Parser acceptance tests for malformed syntax remain green and deterministic.
-- Existing runtime/compiler tests pass without fixture rewrites.
-
-<!-- END_TASK -->
-
----
-
 <!-- TASK id="14" -->
 ## 14. Refactor runtime stdlib shell into sourced submodules
 
