@@ -44,25 +44,25 @@ if [[ "$(jaiph__runtime_api)" != "1" ]]; then
   exit 1
 fi
 
-entry__rule_ok__impl() {
+entry::rule::ok::impl() {
   set -eo pipefail
   set +u
   echo ok
 }
 
-entry__rule_ok() {
-  jaiph__run_step entry__rule_ok jaiph__execute_readonly entry__rule_ok__impl "$@"
+entry::rule::ok() {
+  jaiph__run_step entry::rule::ok jaiph__execute_readonly entry::rule::ok::impl "$@"
 }
 
-entry__workflow_default__impl() {
+entry::workflow::default::impl() {
   set -eo pipefail
   set +u
-  entry__rule_ok
+  entry::rule::ok
   echo done
 }
 
-entry__workflow_default() {
-  jaiph__run_step entry__workflow_default entry__workflow_default__impl "$@"
+entry::workflow::default() {
+  jaiph__run_step entry::workflow::default entry::workflow::default::impl "$@"
 }`);
     assert.equal(actual, expected);
   } finally {

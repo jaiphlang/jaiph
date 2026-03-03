@@ -263,16 +263,20 @@ jaiph__json_escape() {
 
 jaiph__step_identity() {
   local func_name="$1"
-  if [[ "$func_name" == *"__workflow_"* ]]; then
-    printf "workflow|%s" "${func_name##*__workflow_}"
+  local name
+  if [[ "$func_name" == *"::workflow::"* ]]; then
+    name="${func_name##*::workflow::}"
+    printf "workflow|%s" "${name%::impl}"
     return 0
   fi
-  if [[ "$func_name" == *"__rule_"* ]]; then
-    printf "rule|%s" "${func_name##*__rule_}"
+  if [[ "$func_name" == *"::rule::"* ]]; then
+    name="${func_name##*::rule::}"
+    printf "rule|%s" "${name%::impl}"
     return 0
   fi
-  if [[ "$func_name" == *"__function_"* ]]; then
-    printf "function|%s" "${func_name##*__function_}"
+  if [[ "$func_name" == *"::function::"* ]]; then
+    name="${func_name##*::function::}"
+    printf "function|%s" "${name%::impl}"
     return 0
   fi
   if [[ "$func_name" == "jaiph__prompt" ]]; then

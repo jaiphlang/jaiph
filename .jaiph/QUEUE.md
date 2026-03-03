@@ -3,21 +3,6 @@
 Tasks are processed top-to-bottom. When a task is completed, it is removed from this file.
 The first task in the list is always the current task.
 
-<!-- TASK id="42" -->
-
-## 42. Change transpiller namespace separator
-
-Transpiler naming rule: use double colon (`::`) instead of double underscore (`__`) when generating namespaced identifiers.
-
-Samples:
-- `rule project_ready` -> `main::rule::project_ready` (not `main__rule_project_ready`)
-- `workflow deploy` -> `main::workflow::deploy`
-- `test smoke` -> `main::test::smoke`
-
-<!-- END TASK -->
-
----
-
 <!-- TASK id="11" -->
 ## 11. Refactor `src/cli.ts` into composable command/runtime modules
 

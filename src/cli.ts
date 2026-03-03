@@ -52,10 +52,10 @@ function collectWorkflowChildren(
               const dot = ref.indexOf(".");
               const alias = ref.slice(0, dot);
               const name = ref.slice(dot + 1);
-              return `${symbols.get(alias) ?? alias}__rule_${name}`;
+              return `${symbols.get(alias) ?? alias}::rule::${name}`;
             })()
           : currentSymbol
-            ? `${currentSymbol}__rule_${ref}`
+            ? `${currentSymbol}::rule::${ref}`
             : undefined;
       items.push({ label: `rule ${ref}`, stepFunc });
       continue;
@@ -68,10 +68,10 @@ function collectWorkflowChildren(
               const dot = wf.indexOf(".");
               const alias = wf.slice(0, dot);
               const name = wf.slice(dot + 1);
-              return `${symbols.get(alias) ?? alias}__workflow_${name}`;
+              return `${symbols.get(alias) ?? alias}::workflow::${name}`;
             })()
           : currentSymbol
-            ? `${currentSymbol}__workflow_${wf}`
+            ? `${currentSymbol}::workflow::${wf}`
             : undefined;
       items.push({ label: `workflow ${wf}`, nested: wf, stepFunc });
       continue;
@@ -84,10 +84,10 @@ function collectWorkflowChildren(
               const dot = ensureRef.indexOf(".");
               const alias = ensureRef.slice(0, dot);
               const name = ensureRef.slice(dot + 1);
-              return `${symbols.get(alias) ?? alias}__rule_${name}`;
+              return `${symbols.get(alias) ?? alias}::rule::${name}`;
             })()
           : currentSymbol
-            ? `${currentSymbol}__rule_${ensureRef}`
+            ? `${currentSymbol}::rule::${ensureRef}`
             : undefined;
       items.push({ label: `rule ${ensureRef}`, stepFunc: ensureStepFunc });
       const wf = step.runWorkflow.value;
@@ -97,10 +97,10 @@ function collectWorkflowChildren(
               const dot = wf.indexOf(".");
               const alias = wf.slice(0, dot);
               const name = wf.slice(dot + 1);
-              return `${symbols.get(alias) ?? alias}__workflow_${name}`;
+              return `${symbols.get(alias) ?? alias}::workflow::${name}`;
             })()
           : currentSymbol
-            ? `${currentSymbol}__workflow_${wf}`
+            ? `${currentSymbol}::workflow::${wf}`
             : undefined;
       items.push({ label: `workflow ${wf}`, nested: wf, stepFunc: runStepFunc });
       continue;
@@ -113,10 +113,10 @@ function collectWorkflowChildren(
               const dot = ref.indexOf(".");
               const alias = ref.slice(0, dot);
               const name = ref.slice(dot + 1).replace(/\./g, "_");
-              return `${symbols.get(alias) ?? alias}__rule_${name}`;
+              return `${symbols.get(alias) ?? alias}::rule::${name}`;
             })()
           : currentSymbol
-            ? `${currentSymbol}__rule_${ref}`
+            ? `${currentSymbol}::rule::${ref}`
             : undefined;
       items.push({ label: `rule ${ref}`, stepFunc });
       continue;
@@ -127,7 +127,7 @@ function collectWorkflowChildren(
     }
     if (step.type === "shell") {
       for (const fnName of collectFunctionCalls(step.command)) {
-        const stepFunc = currentSymbol ? `${currentSymbol}__function_${fnName}` : undefined;
+        const stepFunc = currentSymbol ? `${currentSymbol}::function::${fnName}` : undefined;
         items.push({ label: `function ${fnName}`, stepFunc });
       }
     }
@@ -822,7 +822,7 @@ async function runWorkflow(rest: string[]): Promise<number> {
       'trap \'__jaiph_status=$?; jaiph__write_meta "$__jaiph_status"\' EXIT',
       "exec 3>&2",
       'source "$built_script"',
-      'entrypoint="${workflow_symbol}__workflow_default"',
+      'entrypoint="${workflow_symbol}::workflow::default"',
       'if ! declare -F "$entrypoint" >/dev/null; then',
       '  echo "jaiph run requires workflow \'default\' in the input file" >&2',
       "  exit 1",
@@ -942,21 +942,21 @@ async function runWorkflow(rest: string[]): Promise<number> {
       return -1;
     };
     const applyStepUpdate = (funcName: string, status: number, elapsedSec: number): void => {
-      const kind = funcName.includes("__workflow_")
+      const kind = funcName.includes("::workflow::")
         ? "workflow"
-        : funcName.includes("__rule_")
+        : funcName.includes("::rule::")
           ? "rule"
-          : funcName.includes("__function_")
+          : funcName.includes("::function::")
             ? "function"
             : funcName === "jaiph__prompt"
               ? "prompt"
               : "step";
       const name = kind === "workflow"
-        ? funcName.slice(funcName.lastIndexOf("__workflow_") + "__workflow_".length)
+        ? funcName.slice(funcName.lastIndexOf("::workflow::") + "::workflow::".length)
         : kind === "rule"
-          ? funcName.slice(funcName.lastIndexOf("__rule_") + "__rule_".length)
+          ? funcName.slice(funcName.lastIndexOf("::rule::") + "::rule::".length)
           : kind === "function"
-            ? funcName.slice(funcName.lastIndexOf("__function_") + "__function_".length)
+            ? funcName.slice(funcName.lastIndexOf("::function::") + "::function::".length)
             : kind === "prompt"
               ? "prompt"
               : funcName;

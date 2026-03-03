@@ -8,7 +8,7 @@ function toWorkflowSymbol(inputFile: string, rootDir: string): string {
   const rel = relative(rootDir, inputFile);
   const parsed = parse(rel);
   const dirParts = parsed.dir ? parsed.dir.split(sep).filter(Boolean) : [];
-  return [...dirParts, parsed.name].join("__");
+  return [...dirParts, parsed.name].join("::");
 }
 
 export function workflowSymbolForFile(inputFile: string, rootDir: string): string {
@@ -32,11 +32,11 @@ function transpileRuleRef(
 ): string {
   const parts = ref.value.split(".");
   if (parts.length === 1) {
-    return `${workflowSymbol}__rule_${parts[0]}`;
+    return `${workflowSymbol}::rule::${parts[0]}`;
   }
   if (parts.length === 2) {
     const importedSymbol = importedWorkflowSymbols.get(parts[0]) ?? parts[0];
-    return `${importedSymbol}__rule_${parts[1]}`;
+    return `${importedSymbol}::rule::${parts[1]}`;
   }
   throw new Error(`ValidationError: invalid rule reference "${ref.value}"`);
 }
@@ -48,11 +48,11 @@ function transpileWorkflowRef(
 ): string {
   const parts = ref.value.split(".");
   if (parts.length === 1) {
-    return `${workflowSymbol}__workflow_${parts[0]}`;
+    return `${workflowSymbol}::workflow::${parts[0]}`;
   }
   if (parts.length === 2) {
     const importedSymbol = importedWorkflowSymbols.get(parts[0]) ?? parts[0];
-    return `${importedSymbol}__workflow_${parts[1]}`;
+    return `${importedSymbol}::workflow::${parts[1]}`;
   }
   throw new Error(`ValidationError: invalid workflow reference "${ref.value}"`);
 }
@@ -160,11 +160,11 @@ export function transpileFile(inputFile: string, rootDir: string): string {
   out.push("");
 
   for (const rule of ast.rules) {
-    const ruleSymbol = `${workflowSymbol}__rule_${rule.name}`;
+    const ruleSymbol = `${workflowSymbol}::rule::${rule.name}`;
     for (const comment of rule.comments) {
       out.push(comment);
     }
-    out.push(`${ruleSymbol}__impl() {`);
+    out.push(`${ruleSymbol}::impl() {`);
     out.push("  set -eo pipefail");
     out.push("  set +u");
     if (rule.commands.length === 0) {
@@ -197,17 +197,17 @@ export function transpileFile(inputFile: string, rootDir: string): string {
     out.push("}");
     out.push("");
     out.push(`${ruleSymbol}() {`);
-    out.push(`  jaiph__run_step ${ruleSymbol} jaiph__execute_readonly ${ruleSymbol}__impl "$@"`);
+    out.push(`  jaiph__run_step ${ruleSymbol} jaiph__execute_readonly ${ruleSymbol}::impl "$@"`);
     out.push("}");
     out.push("");
   }
 
   for (const fn of ast.functions) {
-    const functionSymbol = `${workflowSymbol}__function_${fn.name}`;
+    const functionSymbol = `${workflowSymbol}::function::${fn.name}`;
     for (const comment of fn.comments) {
       out.push(comment);
     }
-    out.push(`${functionSymbol}__impl() {`);
+    out.push(`${functionSymbol}::impl() {`);
     out.push("  set -eo pipefail");
     out.push("  set +u");
     if (fn.commands.length === 0) {
@@ -220,7 +220,7 @@ export function transpileFile(inputFile: string, rootDir: string): string {
     out.push("}");
     out.push("");
     out.push(`${functionSymbol}() {`);
-    out.push(`  jaiph__run_step_passthrough ${functionSymbol} ${functionSymbol}__impl "$@"`);
+    out.push(`  jaiph__run_step_passthrough ${functionSymbol} ${functionSymbol}::impl "$@"`);
     out.push("}");
     out.push("");
     // Keep author-friendly call sites working while still namespacing internals.
@@ -234,7 +234,7 @@ export function transpileFile(inputFile: string, rootDir: string): string {
     for (const comment of workflow.comments) {
       out.push(comment);
     }
-    out.push(`${workflowSymbol}__workflow_${workflow.name}__impl() {`);
+    out.push(`${workflowSymbol}::workflow::${workflow.name}::impl() {`);
     out.push("  set -eo pipefail");
     out.push("  set +u");
     if (workflow.steps.length === 0) {
@@ -302,9 +302,9 @@ export function transpileFile(inputFile: string, rootDir: string): string {
     }
     out.push("}");
     out.push("");
-    out.push(`${workflowSymbol}__workflow_${workflow.name}() {`);
+    out.push(`${workflowSymbol}::workflow::${workflow.name}() {`);
     out.push(
-      `  jaiph__run_step ${workflowSymbol}__workflow_${workflow.name} ${workflowSymbol}__workflow_${workflow.name}__impl "$@"`,
+      `  jaiph__run_step ${workflowSymbol}::workflow::${workflow.name} ${workflowSymbol}::workflow::${workflow.name}::impl "$@"`,
     );
     out.push("}");
     out.push("");
@@ -461,7 +461,7 @@ export function transpileTestFile(inputFile: string, rootDir: string): string {
           const alias = parts[0];
           const wfName = parts[1];
           const sym = importedWorkflowSymbols.get(alias) ?? alias;
-          return `${sym}__workflow_${wfName}`;
+          return `${sym}::workflow::${wfName}`;
         })();
         out.push(`  export JAIPH_MOCK_RESPONSES_FILE="$jaiph__mock_file"`);
         out.push("  set +e");

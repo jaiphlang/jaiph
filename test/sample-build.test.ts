@@ -39,20 +39,20 @@ test("build transpiles .jh into strict bash with retry flow", () => {
     assert.match(generated, /if \[\[ "\$\(jaiph__runtime_api\)" != "1" \]\]/);
     assert.match(generated, /# Validates local build prerequisites\./);
     assert.match(generated, /# Orchestrates checks, prompt execution, and docs refresh\./);
-    assert.match(generated, /main__rule_project_ready\(\) \{/);
-    assert.match(generated, /main__rule_project_ready__impl\(\) \{/);
-    assert.match(generated, /jaiph__run_step main__rule_project_ready jaiph__execute_readonly main__rule_project_ready__impl/);
-    assert.match(generated, /if ! main__rule_project_ready; then/);
-    assert.match(generated, /bootstrap_project__workflow_nodejs/);
+    assert.match(generated, /main::rule::project_ready\(\) \{/);
+    assert.match(generated, /main::rule::project_ready::impl\(\) \{/);
+    assert.match(generated, /jaiph__run_step main::rule::project_ready jaiph__execute_readonly main::rule::project_ready::impl/);
+    assert.match(generated, /if ! main::rule::project_ready; then/);
+    assert.match(generated, /bootstrap_project::workflow::nodejs/);
     assert.match(generated, /jaiph__prompt "\$@" <<__JAIPH_PROMPT_/);
-    assert.match(generated, /main__rule_build_passes\(\)/);
-    assert.match(generated, /tools__security__rule_scan_passes/);
-    assert.match(generated, /main__workflow_update_docs/);
-    assert.match(generated, /main__workflow_default__impl\(\) \{/);
-    assert.match(generated, /jaiph__run_step main__workflow_default main__workflow_default__impl "\$@"/);
+    assert.match(generated, /main::rule::build_passes\(\)/);
+    assert.match(generated, /tools::security::rule::scan_passes/);
+    assert.match(generated, /main::workflow::update_docs/);
+    assert.match(generated, /main::workflow::default::impl\(\) \{/);
+    assert.match(generated, /jaiph__run_step main::workflow::default main::workflow::default::impl "\$@"/);
 
     const securityGenerated = readFileSync(join(outDir, "tools/security.sh"), "utf8");
-    assert.match(securityGenerated, /tools__security__rule_scan_passes\(\) \{/);
+    assert.match(securityGenerated, /tools::security::rule::scan_passes\(\) \{/);
   } finally {
     rmSync(outDir, { recursive: true, force: true });
   }
@@ -206,7 +206,7 @@ test("jaiph run enables xtrace when JAIPH_DEBUG=true", () => {
 
     assert.equal(runResult.status, 0, runResult.stderr);
     assert.doesNotMatch(runResult.stdout, /debug-run:hello-debug/);
-    assert.match(runResult.stderr, /\+ .*__workflow_default/);
+    assert.match(runResult.stderr, /\+ .*::workflow::default/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -927,7 +927,7 @@ test("build accepts files with no workflows", () => {
 
     const results = build(filePath, outDir);
     assert.equal(results.length, 1);
-    assert.match(results[0].bash, /rule_only_rule/);
+    assert.match(results[0].bash, /rules-only::rule::only_rule/);
     assert.doesNotMatch(results[0].bash, /__workflow_/);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -958,9 +958,9 @@ test("build transpiles ensure statements with arguments", () => {
     assert.equal(results.length, 1);
     assert.match(
       results[0].bash,
-      /jaiph__run_step entry__rule_check_branch jaiph__execute_readonly entry__rule_check_branch__impl "\$@"/,
+      /jaiph__run_step entry::rule::check_branch jaiph__execute_readonly entry::rule::check_branch::impl "\$@"/,
     );
-    assert.match(results[0].bash, /entry__rule_check_branch "\$1"/);
+    assert.match(results[0].bash, /entry::rule::check_branch "\$1"/);
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(outDir, { recursive: true, force: true });
@@ -989,11 +989,11 @@ test("build supports top-level functions with namespaced wrappers", () => {
 
     const results = build(filePath, outDir);
     assert.equal(results.length, 1);
-    assert.match(results[0].bash, /entry__function_changed_files__impl\(\) \{/);
-    assert.match(results[0].bash, /entry__function_changed_files\(\) \{/);
-    assert.match(results[0].bash, /jaiph__run_step_passthrough entry__function_changed_files entry__function_changed_files__impl "\$@"/);
+    assert.match(results[0].bash, /entry::function::changed_files::impl\(\) \{/);
+    assert.match(results[0].bash, /entry::function::changed_files\(\) \{/);
+    assert.match(results[0].bash, /jaiph__run_step_passthrough entry::function::changed_files entry::function::changed_files::impl "\$@"/);
     assert.match(results[0].bash, /changed_files\(\) \{/);
-    assert.match(results[0].bash, /entry__function_changed_files "\$@"/);
+    assert.match(results[0].bash, /entry::function::changed_files "\$@"/);
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(outDir, { recursive: true, force: true });
@@ -1269,8 +1269,8 @@ test("build accepts ensure inside a rule block", () => {
 
     const results = build(filePath, outDir);
     assert.equal(results.length, 1);
-    assert.match(results[0].bash, /entry__rule_dep/);
-    assert.match(results[0].bash, /entry__rule_main/);
+    assert.match(results[0].bash, /entry::rule::dep/);
+    assert.match(results[0].bash, /entry::rule::main/);
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(outDir, { recursive: true, force: true });
@@ -1302,8 +1302,8 @@ test("build accepts ensure inside a rule block", () => {
 
     const results = build(filePath, outDir);
     assert.equal(results.length, 1);
-    assert.match(results[0].bash, /entry__rule_dep/);
-    assert.match(results[0].bash, /entry__rule_main/);
+    assert.match(results[0].bash, /entry::rule::dep/);
+    assert.match(results[0].bash, /entry::rule::main/);
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(outDir, { recursive: true, force: true });

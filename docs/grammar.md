@@ -75,13 +75,13 @@ shell_stmt      = command_line ;
 
 1. Build emits module scripts that source the installed global stdlib (`$JAIPH_STDLIB`, default `~/.local/bin/jaiph_stdlib.sh`).
 2. Each rule transpiles into:
-   - `<module>__rule_<name>__impl`
-   - `<module>__rule_<name>` wrapper using `jaiph__run_step ... jaiph__execute_readonly`.
+   - `<module>::rule::<name>::impl`
+   - `<module>::rule::<name>` wrapper using `jaiph__run_step ... jaiph__execute_readonly`.
 3. Each workflow transpiles into:
-   - `<module>__workflow_<name>__impl`
-   - `<module>__workflow_<name>` wrapper using `jaiph__run_step`.
+   - `<module>::workflow::<name>::impl`
+   - `<module>::workflow::<name>` wrapper using `jaiph__run_step`.
 4. Each top-level function transpiles into:
-   - `<module>__function_<name>__impl`
-   - `<module>__function_<name>` wrapper using `jaiph__run_step`
+   - `<module>::function::<name>::impl`
+   - `<module>::function::<name>` wrapper using `jaiph__run_step`
    - `<name>` shim forwarding to the namespaced wrapper.
 5. `if ! ensure X; then run Y; fi` remains explicit Bash control flow using transpiled symbols.
