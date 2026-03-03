@@ -3,36 +3,6 @@
 Tasks are processed top-to-bottom. When a task is completed, it is removed from this file.
 The first task in the list is always the current task.
 
-<!-- TASK id="11" -->
-## 11. Refactor `src/cli.ts` into composable command/runtime modules
-
-**Status:** pending
-
-**What:** Split the current monolithic CLI into focused modules while preserving exact user-facing behavior.
-
-**Why:** `src/cli.ts` currently mixes command parsing, workflow process lifecycle, event parsing, progress rendering, init/use logic, and error reporting. This is the highest coupling hotspot and biggest blocker for safe iteration.
-
-**Target module boundaries:**
-- `src/cli/index.ts` — command routing + top-level error handling
-- `src/cli/commands/{build,run,test,init,use}.ts` — command-specific orchestration
-- `src/cli/run/lifecycle.ts` — subprocess launch, signals, exit handling
-- `src/cli/run/events.ts` — runtime event parsing and validation
-- `src/cli/run/progress.ts` — tree/progress rendering only
-- `src/cli/shared/{usage,paths,errors}.ts` — reusable helpers
-
-**Constraints:**
-- No intentional behavior changes in CLI output, exit codes, or flags.
-- Preserve current acceptance behavior and all existing tests.
-
-**Acceptance criteria:**
-- `npm test` and `npm run test:acceptance` remain green.
-- `jaiph run/test/init/use` UX and error messages remain backward-compatible.
-- Signal handling behavior remains unchanged (documented by tests).
-
-<!-- END_TASK -->
-
----
-
 <!-- TASK id="12" -->
 ## 12. Refactor `src/transpiler.ts` into phase-based pipeline
 
