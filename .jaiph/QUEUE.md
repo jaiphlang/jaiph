@@ -3,35 +3,6 @@
 Tasks are processed top-to-bottom. When a task is completed, it is removed from this file.
 The first task in the list is always the current task.
 
-<!-- TASK id="12" -->
-## 12. Refactor `src/transpiler.ts` into phase-based pipeline
-
-**Status:** pending
-
-**What:** Decompose transpiler into explicit phases with pure core logic and minimal IO wrappers.
-
-**Why:** Current file couples path resolution, semantic validation, emission, and filesystem traversal/writes. This makes changes risky and obscures compiler invariants.
-
-**Target module boundaries:**
-- `src/transpile/resolve.ts` — import/workflow symbol/path resolution
-- `src/transpile/validate.ts` — semantic reference validation (rules/workflows/tests)
-- `src/transpile/emit-workflow.ts` — workflow shell emission
-- `src/transpile/emit-test.ts` — test shell emission
-- `src/transpile/build.ts` — directory walking + output writes
-
-**Constraints:**
-- Preserve emitted shell contract and deterministic errors (`E_PARSE`, `E_VALIDATE`, `E_IMPORT_NOT_FOUND`).
-- Preserve extension-resolution behavior and current import semantics.
-
-**Acceptance criteria:**
-- Existing compiler golden and acceptance tests pass unchanged.
-- Emitted output for current goldens remains stable.
-- Public API (`build`, `transpileFile`, `transpileTestFile`) remains compatible.
-
-<!-- END_TASK -->
-
----
-
 <!-- TASK id="13" -->
 ## 13. Refactor parser into grammar-domain modules
 
