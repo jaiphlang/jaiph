@@ -50,15 +50,15 @@ workflow implement_task {
 workflow make_ci_pass {
   if ! ensure project_compiles; then
     prompt "Fix failing compilation so npm run build passes."
-    run make_project_compiles
+    run make_ci_pass
   fi
   if ! ensure tests_pass; then
     prompt "Fix failing tests so npm test passes."
-    run make_tests_pass
+    run make_ci_pass
   fi
   if ! ensure e2e_tests_pass; then
     prompt "Fix failing e2e tests so npm run test:e2e passes."
-    run make_e2e_tests_pass
+    run make_ci_pass
   fi
 }
 

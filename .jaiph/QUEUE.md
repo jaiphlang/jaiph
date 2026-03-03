@@ -3,26 +3,6 @@
 Tasks are processed top-to-bottom. When a task is completed, it is removed from this file.
 The first task in the list is always the current task.
 
-<!-- TASK id="15" -->
-## 15. Add signal/lifecycle acceptance coverage before deep CLI surgery
-
-**Status:** pending
-
-**What:** Add a deterministic acceptance test that validates `jaiph run` interruption behavior (SIGINT/SIGTERM path, non-hanging exit, cleanup).
-
-**Why:** Process lifecycle is the highest-risk area during CLI refactor and currently under-tested compared with parser/transpiler/runtime semantics.
-
-**Scope:**
-- Spawn a long-running workflow in a controlled test process.
-- Interrupt it and assert non-zero exit + bounded completion time.
-- Assert no stale child workflow process remains under the test process group.
-
-**Acceptance criteria:**
-- Test is reliable in CI and local development.
-- Captures current lifecycle behavior as a lock before refactor.
-
-<!-- END_TASK -->
-
 ---
 
 <!-- TASK id="10" -->
@@ -44,6 +24,7 @@ The first task in the list is always the current task.
 - `src/transpiler.ts` — propagate metadata into generated runtime/env wiring
 - `src/cli.ts` — consume in-file metadata as primary source and limit config fallback
 - `docs/configuration.md` + `docs/grammar.md` — document new in-file config model and migration
+- more?
 
 **Acceptance criteria:**
 - User can run a workflow with no external config files and get deterministic behavior from in-file metadata.
