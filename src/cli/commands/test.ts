@@ -92,7 +92,7 @@ export async function runSingleTestFile(
     runtimeEnv.JAIPH_TEST_MODE = "1";
     runtimeEnv.JAIPH_TEST_FILE = basename(testFileAbs);
     if (runtimeEnv.JAIPH_STDLIB === undefined) {
-      runtimeEnv.JAIPH_STDLIB = join(__dirname, "..", "..", "jaiph_stdlib.sh");
+      runtimeEnv.JAIPH_STDLIB = resolve(join(__dirname, "..", "..", "jaiph_stdlib.sh"));
     }
     delete runtimeEnv.BASH_ENV;
     delete runtimeEnv.JAIPH_RUN_DIR;

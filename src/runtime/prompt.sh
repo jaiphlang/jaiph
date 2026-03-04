@@ -88,11 +88,13 @@ jaiph::stream_json_to_text() {
 
 jaiph::prompt_impl() {
   local workspace_root
+  local backend
   local agent_command
   local stdin_prompt
   local prompt_text
   local mock_response
   workspace_root="$(jaiph::workspace_root)"
+  backend="${JAIPH_AGENT_BACKEND:-cursor}"
   agent_command="${JAIPH_AGENT_COMMAND:-cursor-agent}"
   if [[ ! -t 0 ]]; then
     stdin_prompt="$(cat)"
@@ -127,6 +129,14 @@ jaiph::prompt_impl() {
   fi
   if [[ -n "$prompt_text" ]]; then
     printf "Prompt:\n%s\n\n" "$prompt_text"
+  fi
+  if [[ "$backend" == "claude" ]]; then
+    if ! command -v claude >/dev/null 2>&1; then
+      echo "jai: agent.backend is \"claude\" but the Claude CLI (claude) was not found in PATH. Install the Anthropic Claude CLI or set agent.backend = \"cursor\" (or JAIPH_AGENT_BACKEND=cursor)." >&2
+      return 1
+    fi
+    printf '%s' "$prompt_text" | claude 2>&1 | jaiph::stream_json_to_text
+    return $?
   fi
   if [[ -n "${JAIPH_AGENT_MODEL:-}" ]]; then
     "$agent_command" --print --output-format stream-json --stream-partial-output --workspace "$workspace_root" --model "$JAIPH_AGENT_MODEL" --trust "$prompt_text" \

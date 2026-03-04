@@ -29,17 +29,16 @@ test("compiler golden: transpileFile emits stable workflow shell", () => {
       ].join("\n"),
     );
 
-    const actual = normalize(transpileFile(input, root));
     const expected = normalize(`#!/usr/bin/env bash
 
 set -euo pipefail
-jaiph_stdlib_path="\${JAIPH_STDLIB:-$HOME/.local/bin/jaiph_stdlib.sh}"
-if [[ ! -f "$jaiph_stdlib_path" ]]; then
-  echo "jai: stdlib not found at $jaiph_stdlib_path (set JAIPH_STDLIB or reinstall jaiph)" >&2
+jaiph_stdlib_path="\${JAIPH_STDLIB:-\$HOME/.local/bin/jaiph_stdlib.sh}"
+if [[ ! -f "\$jaiph_stdlib_path" ]]; then
+  echo "jai: stdlib not found at \$jaiph_stdlib_path (set JAIPH_STDLIB or reinstall jaiph)" >&2
   exit 1
 fi
-source "$jaiph_stdlib_path"
-if [[ "$(jaiph__runtime_api)" != "1" ]]; then
+source "\$jaiph_stdlib_path"
+if [[ "\$(jaiph__runtime_api)" != "1" ]]; then
   echo "jai: incompatible jaiph stdlib runtime (required api=1)" >&2
   exit 1
 fi
@@ -64,6 +63,7 @@ entry::workflow::default::impl() {
 entry::workflow::default() {
   jaiph::run_step entry::workflow::default entry::workflow::default::impl "$@"
 }`);
+    const actual = normalize(transpileFile(input, root));
     assert.equal(actual, expected);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -130,6 +130,45 @@ test("parser: metadata block parses and populates mod.metadata", () => {
   assert.equal(mod.metadata!.run?.logsDir, ".jaiph/runs");
 });
 
+test("parser: metadata agent.backend parses cursor and claude", () => {
+  const sourceCursor = [
+    "metadata {",
+    '  agent.backend = "cursor"',
+    "}",
+    "workflow default {",
+    "  echo ok",
+    "}",
+  ].join("\n");
+  const modCursor = parsejaiph(sourceCursor, "/fake/entry.jh");
+  assert.equal(modCursor.metadata?.agent?.backend, "cursor");
+
+  const sourceClaude = [
+    "metadata {",
+    '  agent.backend = "claude"',
+    "}",
+    "workflow default {",
+    "  echo ok",
+    "}",
+  ].join("\n");
+  const modClaude = parsejaiph(sourceClaude, "/fake/entry.jh");
+  assert.equal(modClaude.metadata?.agent?.backend, "claude");
+});
+
+test("parser: invalid agent.backend value throws E_PARSE", () => {
+  const source = [
+    "metadata {",
+    '  agent.backend = "foo"',
+    "}",
+    "workflow default {",
+    "  echo ok",
+    "}",
+  ].join("\n");
+  assert.throws(
+    () => parsejaiph(source, "/fake/entry.jh"),
+    /agent\.backend must be "cursor" or "claude"/,
+  );
+});
+
 test("parser: unknown metadata key throws E_PARSE with file location", () => {
   const source = [
     "metadata {",
@@ -187,6 +226,7 @@ test("compiler golden: workflow with metadata emits JAIPH export defaults", () =
       [
         "metadata {",
         '  agent.default_model = "gpt-4"',
+        '  agent.backend = "claude"',
         '  run.logs_dir = ".jaiph/runs"',
         "}",
         "rule ok {",
@@ -201,6 +241,7 @@ test("compiler golden: workflow with metadata emits JAIPH export defaults", () =
 
     const actual = normalize(transpileFile(input, root));
     assert.ok(actual.includes('export JAIPH_AGENT_MODEL="${JAIPH_AGENT_MODEL:-gpt-4}"'));
+    assert.ok(actual.includes('export JAIPH_AGENT_BACKEND="${JAIPH_AGENT_BACKEND:-claude}"'));
     assert.ok(actual.includes('export JAIPH_RUNS_DIR="${JAIPH_RUNS_DIR:-.jaiph/runs}"'));
     assert.ok(actual.includes("entry::rule::ok"));
     assert.ok(actual.includes("entry::workflow::default"));

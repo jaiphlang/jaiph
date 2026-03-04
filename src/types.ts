@@ -111,7 +111,7 @@ export interface jaiphModule {
 
 /** In-file workflow metadata (replaces config file for V1). */
 export interface WorkflowMetadata {
-  agent?: { defaultModel?: string; command?: string };
+  agent?: { defaultModel?: string; command?: string; backend?: "cursor" | "claude" };
   run?: { debug?: boolean; logsDir?: string };
 }
 

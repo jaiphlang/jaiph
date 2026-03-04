@@ -135,6 +135,10 @@ export function emitWorkflow(
       const v = ast.metadata.agent.command.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
       out.push(`export JAIPH_AGENT_COMMAND="\${JAIPH_AGENT_COMMAND:-${v}}"`);
     }
+    if (ast.metadata.agent?.backend !== undefined) {
+      const v = ast.metadata.agent.backend.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      out.push(`export JAIPH_AGENT_BACKEND="\${JAIPH_AGENT_BACKEND:-${v}}"`);
+    }
     if (ast.metadata.run?.logsDir !== undefined) {
       const v = ast.metadata.run.logsDir.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
       out.push(`export JAIPH_RUNS_DIR="\${JAIPH_RUNS_DIR:-${v}}"`);

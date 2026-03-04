@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { build, transpileTestFile, walkTestFiles } from "../src/transpiler";
 import { parsejaiph } from "../src/parser";
@@ -771,6 +771,159 @@ test("jaiph run applies model from in-file metadata", () => {
   }
 });
 
+test("jaiph run agent.backend = claude uses Claude CLI and captures output", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-backend-claude-"));
+  try {
+    const binDir = join(root, "bin");
+    mkdirSync(binDir, { recursive: true });
+    const fakeClaude = join(binDir, "claude");
+    writeFileSync(
+      fakeClaude,
+      [
+        "#!/usr/bin/env bash",
+        "cat",
+        "echo '{\"type\":\"result\",\"result\":\"claude-backend-output\"}'",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(fakeClaude, 0o755);
+
+    const filePath = join(root, "prompt.jh");
+    writeFileSync(
+      filePath,
+      [
+        "metadata {",
+        '  agent.backend = "claude"',
+        "}",
+        "workflow default {",
+        '  result = prompt "hello"',
+        '  printf \'captured:%s\\n\' "$result"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runResult = spawnSync("node", [cliPath, "run", filePath], {
+      encoding: "utf8",
+      cwd: root,
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH ?? ""}`,
+      },
+    });
+
+    assert.equal(runResult.status, 0, runResult.stderr);
+    const runsRoot = join(root, ".jaiph/runs");
+    const runDirs = readdirSync(runsRoot).sort();
+    const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
+    const runFiles = readdirSync(latestRunDir);
+    const workflowOutName = runFiles.find(
+      (name) => name.endsWith(".out") && name.includes("workflow"),
+    );
+    assert.equal(Boolean(workflowOutName), true);
+    const workflowOut = readFileSync(join(latestRunDir, workflowOutName!), "utf8");
+    assert.match(workflowOut, /captured:[\s\S]*claude-backend-output/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph run agent.backend = claude without claude in PATH fails with clear error", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-backend-claude-missing-"));
+  try {
+    const filePath = join(root, "prompt.jh");
+    writeFileSync(
+      filePath,
+      [
+        "metadata {",
+        '  agent.backend = "claude"',
+        "}",
+        "workflow default {",
+        '  prompt "hello"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runResult = spawnSync("node", [cliPath, "run", filePath], {
+      encoding: "utf8",
+      cwd: root,
+      env: {
+        ...process.env,
+        PATH: `${dirname(process.execPath)}:/bin:/usr/bin:/nonexistent`,
+      },
+    });
+
+    assert.equal(runResult.status, 1);
+    assert.match(
+      runResult.stderr + runResult.stdout,
+      /agent\.backend is "claude" but the Claude CLI.*not found|JAIPH_AGENT_BACKEND=cursor/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph run JAIPH_AGENT_BACKEND env overrides file default", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-backend-env-override-"));
+  try {
+    const binDir = join(root, "bin");
+    mkdirSync(binDir, { recursive: true });
+    const fakeCursor = join(binDir, "cursor-agent");
+    writeFileSync(
+      fakeCursor,
+      [
+        "#!/usr/bin/env bash",
+        "echo '{\"type\":\"result\",\"result\":\"cursor-from-env\"}'",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(fakeCursor, 0o755);
+
+    const filePath = join(root, "prompt.jh");
+    writeFileSync(
+      filePath,
+      [
+        "metadata {",
+        '  agent.backend = "claude"',
+        "}",
+        "workflow default {",
+        '  result = prompt "hi"',
+        '  printf \'out:%s\\n\' "$result"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runResult = spawnSync("node", [cliPath, "run", filePath], {
+      encoding: "utf8",
+      cwd: root,
+      env: {
+        ...process.env,
+        JAIPH_AGENT_BACKEND: "cursor",
+        PATH: `${binDir}:${process.env.PATH ?? ""}`,
+      },
+    });
+
+    assert.equal(runResult.status, 0, runResult.stderr);
+    const runsRoot = join(root, ".jaiph/runs");
+    const runDirs = readdirSync(runsRoot).sort();
+    const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
+    const runFiles = readdirSync(latestRunDir);
+    const workflowOutName = runFiles.find(
+      (name) => name.endsWith(".out") && name.includes("workflow"),
+    );
+    assert.equal(Boolean(workflowOutName), true);
+    const workflowOut = readFileSync(join(latestRunDir, workflowOutName!), "utf8");
+    assert.match(workflowOut, /out:[\s\S]*cursor-from-env/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("jaiph run uses JAIPH_STDLIB global runtime path", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-global-stdlib-"));
   try {
@@ -1487,6 +1640,51 @@ test("jaiph run prompt capture: variable accessible in subsequent shell step", (
     assert.equal(Boolean(workflowOutName), true);
     const workflowOut = readFileSync(join(latestRunDir, workflowOutName!), "utf8");
     assert.match(workflowOut, /captured:[\s\S]*agent-summary/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph test with agent.backend = claude uses mock and does not invoke claude", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-test-backend-claude-mock-"));
+  try {
+    writeFileSync(
+      join(root, "flow.jh"),
+      [
+        "metadata {",
+        '  agent.backend = "claude"',
+        "}",
+        "workflow default {",
+        '  result = prompt "ask"',
+        '  printf \'got:%s\\n\' "$result"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(root, "flow.test.jh"),
+      [
+        'import "flow.jh" as w',
+        "",
+        'test "mock overrides backend" {',
+        '  mock prompt "mock-response"',
+        "  out = w.default",
+        '  expectContain out "mock-response"',
+        '  expectContain out "got:"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const testResult = spawnSync("node", [cliPath, "test", join(root, "flow.test.jh")], {
+      encoding: "utf8",
+      cwd: root,
+      env: { ...process.env, PATH: `${dirname(process.execPath)}:/bin:/usr/bin:/nonexistent` },
+    });
+
+    assert.equal(testResult.status, 0, testResult.stderr + testResult.stdout);
+    assert.match(testResult.stdout + testResult.stderr, /mock-response|PASS|passed/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

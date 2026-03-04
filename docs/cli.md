@@ -145,6 +145,7 @@ Runtime/config override variables:
 - `JAIPH_STDLIB`
 - `JAIPH_AGENT_MODEL`
 - `JAIPH_AGENT_COMMAND`
+- `JAIPH_AGENT_BACKEND` — prompt backend: `cursor` (default) or `claude`. Overrides in-file `agent.backend`. See [Configuration](configuration.md).
 - `JAIPH_RUNS_DIR`
 - `JAIPH_DEBUG`
 - `JAIPH_SKILL_PATH` — path to skill file used by `jaiph init` when syncing `.jaiph/jaiph-skill.md`

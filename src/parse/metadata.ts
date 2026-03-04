@@ -4,6 +4,7 @@ import { colFromRaw, fail } from "./core";
 const ALLOWED_KEYS = new Set([
   "agent.default_model",
   "agent.command",
+  "agent.backend",
   "run.logs_dir",
   "run.debug",
 ]);
@@ -68,7 +69,7 @@ export function parseMetadataBlock(
     if (!ALLOWED_KEYS.has(key)) {
       return fail(
         filePath,
-        `unknown metadata key: ${key}. Allowed: agent.default_model, agent.command, run.logs_dir, run.debug`,
+        `unknown metadata key: ${key}. Allowed: agent.default_model, agent.command, agent.backend, run.logs_dir, run.debug`,
         lineNo,
         colFromRaw(raw),
       );
@@ -92,6 +93,23 @@ export function parseMetadataBlock(
         out.agent = {};
       }
       out.agent.command = value;
+    } else if (key === "agent.backend") {
+      if (typeof value !== "string") {
+        return fail(filePath, "agent.backend must be a string", lineNo, colFromRaw(raw));
+      }
+      const backend = value === "cursor" || value === "claude" ? value : undefined;
+      if (!backend) {
+        return fail(
+          filePath,
+          'agent.backend must be "cursor" or "claude"',
+          lineNo,
+          colFromRaw(raw),
+        );
+      }
+      if (!out.agent) {
+        out.agent = {};
+      }
+      out.agent.backend = backend;
     } else if (key === "run.logs_dir") {
       if (typeof value !== "string") {
         return fail(filePath, "run.logs_dir must be a string", lineNo, colFromRaw(raw));

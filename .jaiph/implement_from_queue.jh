@@ -3,6 +3,8 @@
 # Picks the first pending task from .jaiph/QUEUE.md, implements it, then removes it from the queue.
 # Usage: ./implement.jh
 
+import "./docs"
+
 # Verifies the queue file exists and has at least one pending task.
 rule queue_has_tasks {
   test -f ".jaiph/QUEUE.md"

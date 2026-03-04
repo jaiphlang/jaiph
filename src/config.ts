@@ -4,6 +4,7 @@ export type JaiphConfig = {
   agent?: {
     defaultModel?: string;
     command?: string;
+    backend?: "cursor" | "claude";
   };
   run?: {
     debug?: boolean;
