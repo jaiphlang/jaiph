@@ -5,32 +5,57 @@ The first task in the list is always the current task.
 
 ---
 
-<!-- TASK id="10" -->
-## 10. Move config to in-file workflow metadata
+<!-- TASK id="11" -->
+## 11. Remove TOML runtime config and inline test mocks
 
 **Status:** pending
 
-**What:** Replace external config-file dependency (`.jaiph/config.toml`, global config) with project-local in-file metadata declared inside `.jh/.jph` entry files.
+**What:** Remove all TOML-like project configuration paths by:
+- removing runtime TOML config (`.jaiph/config.toml`, global `~/.config/jaiph/config.toml`), and
+- moving prompt test mocks into inline `mock prompt { ... }` blocks inside `*.test.jh` files.
 
-**Why:** Current config layering adds complexity and hidden behavior. In-file config keeps execution context explicit, portable, and reviewable together with workflow logic.
+**Why:** Runtime behavior should be explicit and local to workflow files. Keeping TOML fallback creates hidden precedence and migration complexity.
 
-**V1 direction:**
-- Introduce a top-level metadata block in workflow files (syntax TBD) for runtime options currently read from config/env.
-- Support key runtime settings first (e.g. model selection, runs/log directory).
-- Keep temporary backward compatibility with existing config files, but define explicit precedence and migration warning.
+**Scope:**
+- `jaiph run` must no longer read TOML config files.
+- `jaiph init` must stop generating `.jaiph/config.toml`.
+- Docs/examples must stop recommending TOML runtime config.
+- Backward-compat fallback and deprecation notices can be removed.
+- `jaiph test` must no longer depend on `.jaiph/tests/*.test.toml` files.
+- Prompt mocks must be declared inline in test files.
+
+**Inline mock syntax (v1):**
+- Inside `test "..." { ... }`, support:
+  - `mock prompt {`
+  - `if $1 contains "..." ; then`
+  - `elif $1 contains "..." ; then`
+  - optional `else`
+  - `respond "..."`
+  - `fi`
+  - `}`
 
 **Files to change:**
-- `src/parser.ts` — parse and validate top-level metadata block
-- `src/transpiler.ts` — propagate metadata into generated runtime/env wiring
-- `src/cli.ts` — consume in-file metadata as primary source and limit config fallback
-- `docs/configuration.md` + `docs/grammar.md` — document new in-file config model and migration
-- more?
+- `src/config.ts` — remove TOML parser/loading APIs and keep metadata mapping utilities only.
+- `src/cli/commands/run.ts` — stop `loadJaiphConfig` + fallback merge; use metadata + env only.
+- `src/cli/commands/init.ts` — remove config template creation/output text.
+- `docs/configuration.md`, `docs/cli.md`, `README.md` — remove runtime TOML references and update precedence docs.
+- tests touching config fallback behavior (`e2e/tests/85_infile_metadata.sh`, unit tests if any).
+- `src/parse/tests.ts` (and shared parse helpers) — parse inline `mock prompt` blocks.
+- `src/transpile/emit-test.ts` — emit inline mock dispatch logic.
+- `src/runtime/test-mode.sh` + `src/runtime/prompt.sh` — consume inline mocks instead of fixture files.
+- `src/cli/commands/test.ts` — remove `.test.toml` resolution and update error/help text.
+- `src/mock-resolver.ts` — delete or repurpose (no TOML mock parser in test path).
+- docs/tests that currently use `.test.toml` — migrate examples and e2e/unit coverage to inline mocks.
 
 **Acceptance criteria:**
-- User can run a workflow with no external config files and get deterministic behavior from in-file metadata.
-- Metadata parse errors are explicit (`E_PARSE`) and point to file location.
-- Existing projects using config files still run during migration window with clear deprecation warning.
-- E2E coverage verifies metadata-driven behavior end-to-end.
+- Runtime config precedence is: env vars > in-file metadata > built-in defaults.
+- `.jaiph/config.toml` and global config files are ignored by runtime.
+- `jaiph init` does not create `.jaiph/config.toml`.
+- Docs contain no runtime-config TOML instructions.
+- `jaiph test` runs with no external `.test.toml` fixture requirement.
+- Inline `mock prompt` supports `if/elif/else/fi` with `contains` matching and deterministic first-match behavior.
+- Missing mock match (without `else`) fails with clear test-time error.
+- Parser/runtime errors for malformed inline mock blocks are explicit and test-covered.
 
 <!-- END_TASK -->
 
@@ -53,9 +78,10 @@ Optional `--delay S` adds a sleep of S seconds between retries.
 **Why:** In real CI/agent environments, rules often fail transiently. Without retry, users wrap `ensure` in custom bash loops, defeating the point of the abstraction.
 
 **Files to change:**
-- `src/parser.ts` — parse `--retry N` and `--delay S` flags on `ensure` statements
-- `src/transpiler.ts` — emit a retry loop in the compiled bash
-- `src/stdlib.sh` — add `jaiph__ensure_retry` helper
+- `src/parse/workflows.ts` and/or shared step parser — parse `--retry N` and `--delay S` on `ensure`.
+- `src/transpile/emit-workflow.ts` — emit retry-enabled ensure call in generated bash.
+- `src/jaiph_stdlib.sh` — add `jaiph__ensure_retry` helper and integrate with step eventing.
+- parser/transpiler tests + e2e flaky-case coverage.
 
 **Example compiled output:**
 ```bash
@@ -79,13 +105,13 @@ jaiph__ensure_retry 3 5 main__rule_build_passes
 **Why:** Users should be able to run the same workflows with different agent CLIs without rewriting workflow logic.
 
 **Files to change:**
-- `src/stdlib.sh` — route `jaiph__prompt` through a configurable backend
-- `src/cli.ts` — expose backend selection (flag/env/config)
-- `docs/cli.md` — document backend selection and Claude CLI requirements
-- `docs/configuration.md` — document config key(s) for backend choice
+- `src/jaiph_stdlib.sh` + `src/runtime/prompt.sh` — route prompt execution through a backend abstraction.
+- `src/cli/commands/run.ts` + `src/parse/metadata.ts` — expose backend selection via env + in-file metadata (not TOML).
+- `docs/cli.md` + `docs/configuration.md` — document backend selection and Claude CLI requirements.
+- tests for backend dispatch, missing binary errors, and test-mode isolation.
 
 **Acceptance criteria:**
-- User can select backend as Claude CLI globally or per invocation
+- User can select backend per invocation (env) and per entry workflow (metadata).
 - Existing default backend remains unchanged and backward compatible
 - Output capture (`result = prompt "..."`) continues to work with Claude CLI backend
 - Clear error if Claude CLI is selected but unavailable
@@ -100,16 +126,13 @@ jaiph__ensure_retry 3 5 main__rule_build_passes
 
 **Status:** pending
 
-**What:** Allow a project to pin the Jaiph stdlib version in `.jaiph/config.toml`. When set, `jaiph run` uses that pinned stdlib from a local cache.
-
-**Config example:**
-```toml
-stdlib_version = "0.2.3"
-```
+**What:** Allow a project to pin Jaiph stdlib version via in-file metadata (for example `run.stdlib_version = "0.2.3"`). `jaiph run` should resolve/download cached stdlib for that version.
 
 **Files to change:**
-- `src/cli.ts` — resolve stdlib path from config before running; download and cache to `~/.cache/jaiph/stdlib/<version>/jaiph_stdlib.sh` if not present; set `JAIPH_STDLIB` accordingly
-- `docs/configuration.md` — document the new key
+- `src/parse/metadata.ts` + `src/types.ts` — add and validate `run.stdlib_version`.
+- `src/cli/commands/run.ts` — resolve stdlib path from metadata; download/cache to `~/.cache/jaiph/stdlib/<version>/jaiph_stdlib.sh`; set `JAIPH_STDLIB`.
+- `docs/configuration.md` — document metadata key and precedence with env override.
+- tests for cache hit/miss and invalid version error handling.
 
 <!-- END_TASK -->
 
@@ -125,7 +148,8 @@ stdlib_version = "0.2.3"
 **Why:** This is a common bash idiom. Blocking it is a sharp edge for shell-fluent users and produces confusing parse errors.
 
 **Files to change:**
-- `src/parser.ts` — extend the grammar to handle inline brace groups as a statement form
+- `src/parse/workflows.ts` (and shared statement parsing, if needed) — extend grammar handling for inline brace groups.
+- regression tests covering `|| { ... }` in rule/workflow bodies.
 
 **Acceptance criteria:**
 - The following compiles correctly:
@@ -172,9 +196,10 @@ result = prompt "Analyse the diff and classify the change" \
 ```
 
 **Files to change:**
-- `src/parser.ts` — parse `--returns { field: type, ... }` annotation (including `\` line continuation)
-- `src/transpiler.ts` — emit typed prompt call with schema payload
-- `src/stdlib.sh` — add helper that injects schema instructions and validates response JSON
+- `src/parse/workflows.ts` (prompt parsing path) — parse `--returns { field: type, ... }` including `\` continuation.
+- `src/transpile/emit-workflow.ts` — emit typed prompt call + schema payload.
+- `src/jaiph_stdlib.sh` — schema-aware prompt helper + JSON validation.
+- parser, transpile, and e2e tests for parse/type/missing-field error classes.
 
 **Acceptance criteria:**
 - Valid JSON response passes and exposes typed fields for extraction
@@ -203,8 +228,9 @@ result = prompt "Analyse the diff and classify the change" \
 **Why:** Keeps runtime simple and avoids repeated JSON parsing throughout workflows.
 
 **Files to change:**
-- `src/transpiler.ts` — emit unpack/export logic
-- `src/stdlib.sh` — support extraction/export implementation
+- `src/transpile/emit-workflow.ts` — emit deterministic unpack/export logic.
+- `src/jaiph_stdlib.sh` — extraction/export helper implementation.
+- tests for shell-safe export and primitive typing.
 
 **Acceptance criteria:**
 - `$result` contains raw JSON
@@ -227,8 +253,9 @@ result = prompt "Analyse the diff and classify the change" \
 **Why:** Improves readability without adding runtime overhead.
 
 **Files to change:**
-- `src/parser.ts` — parse `name.field` in relevant expression contexts
-- `src/transpiler.ts` — compile to prefixed bash variable references
+- `src/parse/workflows.ts` + expression helpers — parse `name.field` in supported contexts.
+- `src/transpile/emit-workflow.ts` — compile to prefixed bash variable references.
+- parser/transpiler tests for compatibility with existing syntax.
 
 **Acceptance criteria:**
 - `result.type` compiles to `$result_type`
@@ -260,9 +287,9 @@ Jaiph resolves, downloads, and caches the module on first use.
 - Cache location: `~/.cache/jaiph/modules/<org>/<repo>/<ref>/`
 
 **Files to change:**
-- `src/parser.ts` — recognise `github:` prefix in import paths
-- `src/transpiler.ts` — resolve remote imports before compilation, substituting cache paths
-- `src/cli.ts` — add `module update` subcommand to refresh unpinned imports
+- `src/parse/imports.ts` — recognise `github:` import URI format.
+- `src/transpile/resolve.ts` + build pipeline (`src/transpiler.ts`) — resolve/download/cache remote imports before transpilation.
+- `src/cli/index.ts` + new `src/cli/commands/module.ts` — add `jaiph module update` for refreshing unpinned imports.
 - `docs/getting-started.md` — document remote imports
 
 <!-- END_TASK -->

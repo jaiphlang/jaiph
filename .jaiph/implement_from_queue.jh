@@ -28,20 +28,21 @@ workflow implement_task {
   prompt "
     You are working on the Jaiph codebase (https://github.com/jaiphlang/jaiph).
     The codebase is a TypeScript compiler and runtime for a DSL that transpiles to bash.
-    Key source files: src/parser.ts, src/transpiler.ts, src/cli.ts
 
     Your job is to implement the FIRST task found in .jaiph/QUEUE.md.
     The task is the first block between <!-- TASK id=\"...\" --> and <!-- END_TASK -->.
+    Start by reading ARCHITECTURE.md at the repository root for current module boundaries.
+    If ARCHITECTURE.md is missing or stale, infer architecture from existing directories/files first.
 
     Steps:
     1. Read .jaiph/QUEUE.md and extract the first task block.
-    2. Read the relevant source files listed under 'Files to change' in that task.
-    3. Implement the changes described. Follow the existing code style exactly.
-    4. Add the tests described under 'Tests to add'.
-    5. Do not touch any other tasks or any files not listed in the task.
-    6. Run npm test and npm run test:e2e.
-    7. If tests fail, fix them and retry until both pass.
-    8. Before finishing, make sure both unit/integration tests and e2e tests pass.
+    2. Read ARCHITECTURE.md, then read the relevant source files listed under 'Files to change' in that task.
+    3. If the task list is incomplete, edit only directly-related files needed to deliver acceptance criteria.
+    4. Implement the changes described. Follow the existing code style exactly.
+    5. Add or update tests needed for acceptance criteria.
+    6. Run npm run build, npm test, and npm run test:e2e.
+    7. If checks fail, fix and retry until all pass.
+    8. Before finishing, ensure acceptance criteria from the task are demonstrably satisfied.
 
     When done, confirm which task ID you implemented and list every file you changed.
   "
