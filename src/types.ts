@@ -65,7 +65,15 @@ export type WorkflowStepDef =
   | {
       type: "if_not_ensure_then_run";
       ensureRef: RuleRefDef;
-      runWorkflow: WorkflowRefDef;
+      runWorkflows: WorkflowRefDef[];
+    }
+  | {
+      type: "if_not_shell_then";
+      condition: string;
+      thenSteps: Array<
+        | { type: "shell"; command: string; loc: SourceLoc }
+        | { type: "run"; workflow: WorkflowRefDef }
+      >;
     }
   | {
       type: "if_not_ensure_then_shell";
@@ -75,6 +83,8 @@ export type WorkflowStepDef =
 
 export interface jaiphModule {
   filePath: string;
+  /** Optional in-file workflow metadata (agent model, command, run options). */
+  metadata?: WorkflowMetadata;
   imports: ImportDef[];
   exports: string[];
   rules: RuleDef[];
@@ -82,6 +92,12 @@ export interface jaiphModule {
   workflows: WorkflowDef[];
   /** Present only when parsing a *.test.jh file. */
   tests?: TestBlockDef[];
+}
+
+/** In-file workflow metadata (replaces config file for V1). */
+export interface WorkflowMetadata {
+  agent?: { defaultModel?: string; command?: string };
+  run?: { debug?: boolean; logsDir?: string };
 }
 
 export interface CompileResult {

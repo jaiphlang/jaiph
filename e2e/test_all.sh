@@ -14,8 +14,10 @@ TEST_SCRIPTS=(
   "e2e/tests/40_nested_and_native_tests.sh"
   "e2e/tests/50_cli_and_parse_guards.sh"
   "e2e/tests/60_ensure_conditionals.sh"
+  "e2e/tests/65_fail_then_retry_pass.sh"
   "e2e/tests/70_run_artifacts.sh"
   "e2e/tests/80_cli_behavior.sh"
+  "e2e/tests/85_infile_metadata.sh"
   "e2e/tests/90_function_steps.sh"
 )
 

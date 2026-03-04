@@ -10,7 +10,7 @@ import { dirname, join, resolve, extname } from "node:path";
 import { basename } from "node:path";
 import { parsejaiph } from "../../parser";
 import { build, workflowSymbolForFile } from "../../transpiler";
-import { loadJaiphConfig } from "../../config";
+import { loadJaiphConfig, mergeConfigWithMetadata, hasLocalConfigWithKeys } from "../../config";
 import {
   colorPalette,
   summarizeError,
@@ -59,10 +59,17 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     );
   }
 
+  const mod = parsejaiph(readFileSync(inputAbs, "utf8"), inputAbs);
+  const effectiveConfig = mergeConfigWithMetadata(config, mod.metadata);
+  if (hasLocalConfigWithKeys(workspaceRoot) && process.stderr.isTTY) {
+    process.stderr.write(
+      "jaiph: .jaiph/config.toml is deprecated; prefer in-file metadata in your .jh workflow. See docs/configuration.md.\n",
+    );
+  }
+
   const outDir = target ? resolve(target) : mkdtempSync(join(tmpdir(), "jaiph-run-"));
   const shouldCleanup = !target;
   try {
-    const mod = parsejaiph(readFileSync(inputAbs, "utf8"), inputAbs);
     const importedModules = loadImportedModules(mod);
     const rootDir = dirname(inputAbs);
     const treeRows = buildRunTreeRows(mod, "workflow default", importedModules, rootDir);
@@ -114,16 +121,16 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       process.stdout.write(`${styleKeywordLabel(treeRows[0].rawLabel)}\n`);
     }
     const runtimeEnv = { ...process.env, JAIPH_WORKSPACE: workspaceRoot } as Record<string, string | undefined>;
-    if (runtimeEnv.JAIPH_AGENT_MODEL === undefined && config.agent?.defaultModel) {
-      runtimeEnv.JAIPH_AGENT_MODEL = config.agent.defaultModel;
+    if (runtimeEnv.JAIPH_AGENT_MODEL === undefined && effectiveConfig.agent?.defaultModel) {
+      runtimeEnv.JAIPH_AGENT_MODEL = effectiveConfig.agent.defaultModel;
     }
-    if (runtimeEnv.JAIPH_AGENT_COMMAND === undefined && config.agent?.command) {
-      runtimeEnv.JAIPH_AGENT_COMMAND = config.agent.command;
+    if (runtimeEnv.JAIPH_AGENT_COMMAND === undefined && effectiveConfig.agent?.command) {
+      runtimeEnv.JAIPH_AGENT_COMMAND = effectiveConfig.agent.command;
     }
-    if (runtimeEnv.JAIPH_RUNS_DIR === undefined && config.run?.logsDir) {
-      runtimeEnv.JAIPH_RUNS_DIR = config.run.logsDir;
+    if (runtimeEnv.JAIPH_RUNS_DIR === undefined && effectiveConfig.run?.logsDir) {
+      runtimeEnv.JAIPH_RUNS_DIR = effectiveConfig.run.logsDir;
     }
-    if (runtimeEnv.JAIPH_DEBUG === undefined && config.run?.debug === true) {
+    if (runtimeEnv.JAIPH_DEBUG === undefined && effectiveConfig.run?.debug === true) {
       runtimeEnv.JAIPH_DEBUG = "true";
     }
     if (runtimeEnv.JAIPH_STDLIB === undefined) {

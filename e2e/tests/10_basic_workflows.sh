@@ -21,8 +21,13 @@ EOF
 jaiph build "${TEST_DIR}/hello.jh"
 hello_out="$(jaiph run "${TEST_DIR}/hello.jh")"
 
-# Then
-e2e::assert_contains "${hello_out}" "PASS workflow default" "hello.jh run passes"
+# Then: exact tree (shell-only workflow, no step rows)
+expected_hello=$(printf '%s\n' \
+  'running hello.jh' \
+  'workflow default' \
+  '✓ PASS workflow default (<time>)')
+expected_hello="${expected_hello%$'\n'}"
+e2e::assert_output_equals "${hello_out}" "${expected_hello}" "hello.jh run passes"
 
 # Given
 cat > "${TEST_DIR}/lib.jph" <<'EOF'
@@ -42,8 +47,14 @@ EOF
 jaiph build "${TEST_DIR}/app.jh"
 mixed_out="$(jaiph run "${TEST_DIR}/app.jh")"
 
-# Then
-e2e::assert_contains "${mixed_out}" "PASS workflow default" "mixed .jh/.jph run passes"
+# Then: exact tree (ensure lib.ready then shell)
+expected_mixed=$(printf '%s\n' \
+  'running app.jh' \
+  'workflow default' \
+  '└── rule lib.ready (<time>)' \
+  '✓ PASS workflow default (<time>)')
+expected_mixed="${expected_mixed%$'\n'}"
+e2e::assert_output_equals "${mixed_out}" "${expected_mixed}" "mixed .jh/.jph run passes"
 
 e2e::section "Git-aware rule arguments"
 # Given

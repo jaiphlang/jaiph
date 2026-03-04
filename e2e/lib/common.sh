@@ -62,6 +62,7 @@ e2e::normalize_output() {
   printf "%s" "${input}" \
     | sed -E $'s/\x1B\\[[0-9;]*[A-Za-z]//g' \
     | sed -E 's/\(([0-9]+(\.[0-9]+)?s|[0-9]+m [0-9]+s)\)/(<time>)/g' \
+    | sed -E 's/\(([0-9]+(\.[0-9]+)?s|[0-9]+m [0-9]+s) failed\)/(<time> failed)/g' \
     | sed -E 's/[[:space:]]+$//g'
 }
 
@@ -150,6 +151,23 @@ e2e::ensure_local_install() {
     return 0
   fi
 
+  # Fallback: use local build if we're in repo with dist/ and node
+  if [[ -f "${E2E_REPO_ROOT}/dist/src/cli.js" ]] && command -v node >/dev/null 2>&1; then
+    mkdir -p "${JAIPH_E2E_BIN_DIR}"
+    local stdlib_dest="${JAIPH_E2E_BIN_DIR}/jaiph_stdlib.sh"
+    cp "${E2E_REPO_ROOT}/src/jaiph_stdlib.sh" "${stdlib_dest}"
+    mkdir -p "${JAIPH_E2E_BIN_DIR}/runtime"
+    cp -R "${E2E_REPO_ROOT}/src/runtime/"* "${JAIPH_E2E_BIN_DIR}/runtime/"
+    cat > "${JAIPH_E2E_BIN_DIR}/jaiph" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+export JAIPH_STDLIB="\${JAIPH_STDLIB:-${JAIPH_E2E_BIN_DIR}/jaiph_stdlib.sh}"
+exec node "${E2E_REPO_ROOT}/dist/src/cli.js" "\$@"
+EOF
+    chmod 755 "${JAIPH_E2E_BIN_DIR}/jaiph" "${stdlib_dest}"
+    return 0
+  fi
+
   python3 -m http.server "${E2E_PORT}" --bind "${E2E_HOST}" --directory "${E2E_REPO_ROOT}/docs" >/dev/null 2>&1 &
   E2E_SERVER_PID="$!"
 
@@ -160,7 +178,7 @@ e2e::ensure_local_install() {
     sleep 0.2
   done
 
-  curl -fsSL "${E2E_SERVER_URL}/install" | bash
+  JAIPH_BIN_DIR="${JAIPH_E2E_BIN_DIR}" curl -fsSL "${E2E_SERVER_URL}/install" | bash
 }
 
 e2e::prepare_test_env() {

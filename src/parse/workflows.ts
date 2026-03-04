@@ -48,9 +48,9 @@ export function parseWorkflowBlock(
     );
     if (ifEnsureMatch) {
       const ensureRef = ifEnsureMatch[1];
-      let runLine = -1;
       let fiLine = -1;
       const shellCommands: Array<{ command: string; loc: { line: number; col: number } }> = [];
+      const runWorkflows: Array<{ value: string; loc: { line: number; col: number } }> = [];
       for (let lookahead = idx + 1; lookahead < lines.length; lookahead += 1) {
         const lookNo = lookahead + 1;
         const lookRaw = lines[lookahead];
@@ -65,48 +65,93 @@ export function parseWorkflowBlock(
         const runMatch = lookTrim.match(
           /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)$/,
         );
-        if (runMatch && shellCommands.length === 0) {
-          runLine = lookahead;
-          let foundFi = -1;
-          for (let f = lookahead + 1; f < lines.length; f += 1) {
-            const ft = lines[f].trim();
-            if (!ft || ft.startsWith("#")) continue;
-            if (ft === "fi") {
-              foundFi = f;
-              break;
-            }
-            fail(filePath, 'if-block must end with "fi"', f + 1);
-          }
-          if (foundFi === -1) {
-            fail(filePath, 'unterminated if-block, expected "fi"', innerNo);
-          }
-          workflow.steps.push({
-            type: "if_not_ensure_then_run",
-            ensureRef: { value: ensureRef, loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 } },
-            runWorkflow: {
-              value: lines[runLine].trim().slice("run ".length).trim(),
-              loc: { line: runLine + 1, col: lines[runLine].indexOf("run") + 1 },
-            },
+        if (runMatch) {
+          runWorkflows.push({
+            value: runMatch[1],
+            loc: { line: lookNo, col: lines[lookahead].indexOf("run") + 1 },
           });
-          idx = foundFi;
-          break;
+          continue;
         }
         shellCommands.push({
           command: lookTrim,
           loc: { line: lookNo, col: colFromRaw(lookRaw) },
         });
       }
-      if (fiLine === -1 && runLine === -1) {
+      if (fiLine === -1) {
         fail(filePath, 'unterminated if-block, expected "fi"', innerNo);
       }
-      if (runLine === -1 && fiLine >= 0) {
+      if (runWorkflows.length > 0 && shellCommands.length === 0) {
+        workflow.steps.push({
+          type: "if_not_ensure_then_run",
+          ensureRef: { value: ensureRef, loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 } },
+          runWorkflows: runWorkflows.map((r) => ({ value: r.value, loc: r.loc })),
+        });
+        idx = fiLine;
+      } else if (shellCommands.length > 0 && runWorkflows.length === 0) {
         workflow.steps.push({
           type: "if_not_ensure_then_shell",
           ensureRef: { value: ensureRef, loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 } },
           commands: shellCommands,
         });
         idx = fiLine;
+      } else if (runWorkflows.length > 0 && shellCommands.length > 0) {
+        fail(filePath, "if-block then-branch cannot mix run and shell commands", innerNo);
+      } else {
+        fail(filePath, "if-block then-branch must contain at least one run or shell command", innerNo);
       }
+      continue;
+    }
+
+    const ifShellMatch = inner.match(/^if\s+!\s+(.+?)\s*;\s*then$/);
+    if (ifShellMatch) {
+      const condition = ifShellMatch[1].trim();
+      const thenSteps: Array<
+        | { type: "shell"; command: string; loc: { line: number; col: number } }
+        | { type: "run"; workflow: { value: string; loc: { line: number; col: number } } }
+      > = [];
+      let foundFi = -1;
+      for (let lookahead = idx + 1; lookahead < lines.length; lookahead += 1) {
+        const lookNo = lookahead + 1;
+        const lookRaw = lines[lookahead];
+        const lookTrim = lookRaw.trim();
+        if (!lookTrim || lookTrim.startsWith("#")) {
+          continue;
+        }
+        if (lookTrim === "fi") {
+          foundFi = lookahead;
+          break;
+        }
+        const runMatch = lookTrim.match(
+          /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)$/,
+        );
+        if (runMatch) {
+          thenSteps.push({
+            type: "run",
+            workflow: {
+              value: runMatch[1],
+              loc: { line: lookNo, col: lines[lookahead].indexOf("run") + 1 },
+            },
+          });
+        } else {
+          thenSteps.push({
+            type: "shell",
+            command: lookRaw.trim(),
+            loc: { line: lookNo, col: colFromRaw(lookRaw) },
+          });
+        }
+      }
+      if (foundFi === -1) {
+        fail(filePath, 'unterminated if-block, expected "fi"', innerNo);
+      }
+      if (thenSteps.length === 0) {
+        fail(filePath, "if-block then-branch must contain at least one command or run", innerNo);
+      }
+      workflow.steps.push({
+        type: "if_not_shell_then",
+        condition,
+        thenSteps,
+      });
+      idx = foundFi;
       continue;
     }
 

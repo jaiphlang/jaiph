@@ -126,6 +126,26 @@ export function emitWorkflow(
   out.push('  echo "jai: incompatible jaiph stdlib runtime (required api=1)" >&2');
   out.push("  exit 1");
   out.push("fi");
+  if (ast.metadata) {
+    if (ast.metadata.agent?.defaultModel !== undefined) {
+      const v = ast.metadata.agent.defaultModel.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      out.push(`export JAIPH_AGENT_MODEL="\${JAIPH_AGENT_MODEL:-${v}}"`);
+    }
+    if (ast.metadata.agent?.command !== undefined) {
+      const v = ast.metadata.agent.command.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      out.push(`export JAIPH_AGENT_COMMAND="\${JAIPH_AGENT_COMMAND:-${v}}"`);
+    }
+    if (ast.metadata.run?.logsDir !== undefined) {
+      const v = ast.metadata.run.logsDir.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      out.push(`export JAIPH_RUNS_DIR="\${JAIPH_RUNS_DIR:-${v}}"`);
+    }
+    if (ast.metadata.run?.debug === true) {
+      out.push('export JAIPH_DEBUG="${JAIPH_DEBUG:-true}"');
+    }
+    if (ast.metadata.agent || ast.metadata.run) {
+      out.push("");
+    }
+  }
   for (const rel of importSourcePaths) {
     out.push(`source "$(dirname "\${BASH_SOURCE[0]}")/${rel}"`);
   }
@@ -256,7 +276,21 @@ export function emitWorkflow(
           out.push(
             `  if ! ${transpileRuleRef(step.ensureRef, workflowSymbol, importedWorkflowSymbols)}; then`,
           );
-          out.push(`    ${transpileWorkflowRef(step.runWorkflow, workflowSymbol, importedWorkflowSymbols)}`);
+          for (const wf of step.runWorkflows) {
+            out.push(`    ${transpileWorkflowRef(wf, workflowSymbol, importedWorkflowSymbols)}`);
+          }
+          out.push("  fi");
+          continue;
+        }
+        if (step.type === "if_not_shell_then") {
+          out.push(`  if ! ${step.condition}; then`);
+          for (const thenStep of step.thenSteps) {
+            if (thenStep.type === "shell") {
+              out.push(`    ${thenStep.command}`);
+            } else {
+              out.push(`    ${transpileWorkflowRef(thenStep.workflow, workflowSymbol, importedWorkflowSymbols)}`);
+            }
+          }
           out.push("  fi");
           continue;
         }

@@ -25,7 +25,13 @@ rm -f "${TEST_DIR}/function_called.txt"
 # When
 function_out="$(jaiph run "${TEST_DIR}/functions.jh")"
 
-# Then
-e2e::assert_contains "${function_out}" "function changed_files" "run tree includes function step label"
-e2e::assert_contains "${function_out}" "PASS workflow default" "workflow with function step passes"
+# Then: exact tree (function step) and side effect
 e2e::assert_file_exists "${TEST_DIR}/function_called.txt" "function step command executed and changed filesystem"
+
+expected_function=$(printf '%s\n' \
+  'running functions.jh' \
+  'workflow default' \
+  '└── function changed_files (<time>)' \
+  '✓ PASS workflow default (<time>)')
+expected_function="${expected_function%$'\n'}"
+e2e::assert_output_equals "${function_out}" "${expected_function}" "run tree and PASS match expected"

@@ -29,14 +29,14 @@ EOF
 # When
 nested_out="$(jaiph run "${TEST_DIR}/nested_run.jh")"
 
-# Then
-expected_nested_out="$(cat <<'EOF'
-running nested_run.jh
-workflow default
-✓ PASS workflow default (<time>)
-EOF
-)"
-e2e::assert_output_equals "${nested_out}" "${expected_nested_out}" "nested run output matches expected tree"
+# Then: exact tree (nested workflow row may be omitted in non-TTY; assert minimal tree)
+expected_nested_out=$(printf '%s\n' \
+  'running nested_run.jh' \
+  'workflow default' \
+  '✓ PASS workflow default (<time>)')
+expected_nested_out="${expected_nested_out%$'\n'}"
+normalized_nested="$(e2e::normalize_output "${nested_out}")"
+e2e::assert_equals "${normalized_nested}" "${expected_nested_out}" "nested run output matches expected tree"
 
 e2e::section "Native *.test.jh flow"
 # Given

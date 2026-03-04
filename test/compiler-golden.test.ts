@@ -113,3 +113,98 @@ test("compiler corpus: fixtures and e2e workflows compile", () => {
     rmSync(outB, { recursive: true, force: true });
   }
 });
+
+test("parser: metadata block parses and populates mod.metadata", () => {
+  const source = [
+    "metadata {",
+    '  agent.default_model = "gpt-4"',
+    '  run.logs_dir = ".jaiph/runs"',
+    "}",
+    "workflow default {",
+    "  echo ok",
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  assert.ok(mod.metadata);
+  assert.equal(mod.metadata!.agent?.defaultModel, "gpt-4");
+  assert.equal(mod.metadata!.run?.logsDir, ".jaiph/runs");
+});
+
+test("parser: unknown metadata key throws E_PARSE with file location", () => {
+  const source = [
+    "metadata {",
+    '  unknown.key = "x"',
+    "}",
+    "workflow default {",
+    "  echo ok",
+    "}",
+  ].join("\n");
+  assert.throws(
+    () => parsejaiph(source, "/fake/entry.jh"),
+    /\/fake\/entry\.jh:2:.* E_PARSE unknown metadata key/,
+  );
+});
+
+test("parser: invalid metadata value throws E_PARSE", () => {
+  const source = [
+    "metadata {",
+    "  run.debug = yes",
+    "}",
+    "workflow default {",
+    "  echo ok",
+    "}",
+  ].join("\n");
+  assert.throws(
+    () => parsejaiph(source, "/fake/entry.jh"),
+    /\/fake\/entry\.jh:2:.* E_PARSE.*metadata value must be a quoted string or true\/false/,
+  );
+});
+
+test("parser: duplicate metadata block throws E_PARSE", () => {
+  const source = [
+    "metadata {",
+    '  run.logs_dir = "x"',
+    "}",
+    "metadata {",
+    '  run.logs_dir = "y"',
+    "}",
+    "workflow default {",
+    "  echo ok",
+    "}",
+  ].join("\n");
+  assert.throws(
+    () => parsejaiph(source, "/fake/entry.jh"),
+    /\/fake\/entry\.jh:4:1 E_PARSE duplicate metadata block/,
+  );
+});
+
+test("compiler golden: workflow with metadata emits JAIPH export defaults", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-metadata-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        "metadata {",
+        '  agent.default_model = "gpt-4"',
+        '  run.logs_dir = ".jaiph/runs"',
+        "}",
+        "rule ok {",
+        "  echo ok",
+        "}",
+        "workflow default {",
+        "  ensure ok",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const actual = normalize(transpileFile(input, root));
+    assert.ok(actual.includes('export JAIPH_AGENT_MODEL="${JAIPH_AGENT_MODEL:-gpt-4}"'));
+    assert.ok(actual.includes('export JAIPH_RUNS_DIR="${JAIPH_RUNS_DIR:-.jaiph/runs}"'));
+    assert.ok(actual.includes("entry::rule::ok"));
+    assert.ok(actual.includes("entry::workflow::default"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

@@ -30,8 +30,14 @@ EOF
 jaiph build "${TEST_DIR}/rule_pass.jh"
 rule_pass_out="$(jaiph run "${TEST_DIR}/rule_pass.jh")"
 
-# Then
-e2e::assert_contains "${rule_pass_out}" "PASS workflow default" "rule_pass.jh passes"
+# Then: exact tree (ensure check_passes)
+expected_rule_pass=$(printf '%s\n' \
+  'running rule_pass.jh' \
+  'workflow default' \
+  '└── rule check_passes (<time>)' \
+  '✓ PASS workflow default (<time>)')
+expected_rule_pass="${expected_rule_pass%$'\n'}"
+e2e::assert_output_equals "${rule_pass_out}" "${expected_rule_pass}" "rule_pass.jh passes"
 
 # Given
 cat > "${TEST_DIR}/rule_fail.jh" <<'EOF'

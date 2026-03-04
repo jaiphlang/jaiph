@@ -22,10 +22,16 @@ rm -f "${TEST_DIR}/workflow_wrote.txt"
 # When
 workflow_write_out="$(jaiph run "${TEST_DIR}/fs_write_workflow.jh")"
 
-# Then
-e2e::assert_contains "${workflow_write_out}" "PASS workflow default" "workflow file write scenario passes"
+# Then: exact tree (shell-only workflow)
 e2e::assert_file_exists "${TEST_DIR}/workflow_wrote.txt" "workflow shell step created workflow_wrote.txt"
 e2e::assert_contains "$(cat "${TEST_DIR}/workflow_wrote.txt")" "abc" "workflow_wrote.txt has expected content"
+
+expected_workflow_write=$(printf '%s\n' \
+  'running fs_write_workflow.jh' \
+  'workflow default' \
+  '✓ PASS workflow default (<time>)')
+expected_workflow_write="${expected_workflow_write%$'\n'}"
+e2e::assert_output_equals "${workflow_write_out}" "${expected_workflow_write}" "workflow file write scenario passes"
 
 # Given
 cat > "${TEST_DIR}/fs_write_rule.jh" <<'EOF'
@@ -58,8 +64,15 @@ else
   # When
   permissive_out="$(jaiph run "${TEST_DIR}/fs_write_rule.jh")"
 
-  # Then
-  e2e::assert_contains "${permissive_out}" "PASS workflow default" "rule write runs in permissive fallback mode"
+  # Then: exact tree (ensure write_attempt)
   e2e::assert_file_exists "${TEST_DIR}/rule_wrote.txt" "fallback mode allows rule_wrote.txt creation"
+
+  expected_permissive=$(printf '%s\n' \
+    'running fs_write_rule.jh' \
+    'workflow default' \
+    '└── rule write_attempt (<time>)' \
+    '✓ PASS workflow default (<time>)')
+  expected_permissive="${expected_permissive%$'\n'}"
+  e2e::assert_output_equals "${permissive_out}" "${expected_permissive}" "rule write runs in permissive fallback mode"
   e2e::skip "readonly sandbox not available on this host; write-blocking assertion skipped"
 fi

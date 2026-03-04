@@ -61,14 +61,39 @@ recovery_out="$(jaiph run "${TEST_DIR}/ensure_run_branch.jh")"
 shell_out="$(jaiph run "${TEST_DIR}/ensure_shell_branch.jh")"
 skip_out="$(jaiph run "${TEST_DIR}/ensure_pass_branch.jh")"
 
-# Then
-e2e::assert_contains "${recovery_out}" "PASS workflow default" "if ! ensure can trigger run <workflow>"
+# Then: exact trees for each branch variant
 e2e::assert_file_exists "${TEST_DIR}/recovery_ran.txt" "recovery workflow ran after ensure failure"
 
-e2e::assert_contains "${shell_out}" "PASS workflow default" "if ! ensure can trigger shell fallback"
+expected_recovery=$(printf '%s\n' \
+  'running ensure_run_branch.jh' \
+  'workflow default' \
+  '├── rule always_fail (<time> failed)' \
+  '└── workflow recovery (<time>)' \
+  '✓ PASS workflow default (<time>)')
+expected_recovery="${expected_recovery%$'\n'}"
+e2e::assert_output_equals "${recovery_out}" "${expected_recovery}" "if ! ensure can trigger run <workflow>"
+
 e2e::assert_file_exists "${TEST_DIR}/shell_ran.txt" "shell fallback ran after ensure failure"
 
-e2e::assert_contains "${skip_out}" "PASS workflow default" "if ! ensure pass path still succeeds"
+expected_shell=$(printf '%s\n' \
+  'running ensure_shell_branch.jh' \
+  'workflow default' \
+  '└── rule always_fail (<time> failed)' \
+  '✓ PASS workflow default (<time>)')
+expected_shell="${expected_shell%$'\n'}"
+e2e::assert_output_equals "${shell_out}" "${expected_shell}" "if ! ensure can trigger shell fallback"
+
+expected_skip=$(printf '%s\n' \
+  'running ensure_pass_branch.jh' \
+  'workflow default' \
+  '└── rule always_ok (<time>)' \
+  '✓ PASS workflow default (<time>)')
+expected_skip="${expected_skip%$'\n'}"
+e2e::assert_output_equals "${skip_out}" "${expected_skip}" "if ! ensure pass path still succeeds"
+if [[ -f "${TEST_DIR}/should_not_run.txt" ]]; then
+  e2e::fail "if ! ensure should not execute then-branch when ensure passes"
+fi
+e2e::pass "if ! ensure skips then-branch when ensure passes"
 if [[ -f "${TEST_DIR}/should_not_run.txt" ]]; then
   e2e::fail "if ! ensure should not execute then-branch when ensure passes"
 fi

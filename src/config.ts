@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import type { WorkflowMetadata } from "./types";
 
 type TomlPrimitive = string | number | boolean;
 type TomlSection = Record<string, TomlPrimitive>;
@@ -130,4 +131,34 @@ export function loadJaiphConfig(workspaceRoot: string): JaiphConfig {
   const globalConfig = globalPath ? readConfigFile(globalPath) : {};
   const localConfig = readConfigFile(localPath);
   return mergeConfig(globalConfig, localConfig);
+}
+
+/** Convert in-file workflow metadata to JaiphConfig shape for merging. */
+export function metadataToConfig(metadata: WorkflowMetadata | undefined): JaiphConfig {
+  if (!metadata) {
+    return {};
+  }
+  const cfg: JaiphConfig = {};
+  if (metadata.agent) {
+    cfg.agent = { ...metadata.agent };
+  }
+  if (metadata.run) {
+    cfg.run = { ...metadata.run };
+  }
+  return cfg;
+}
+
+/** Merge config with in-file metadata; metadata wins. Use for runtime env resolution. */
+export function mergeConfigWithMetadata(config: JaiphConfig, metadata: WorkflowMetadata | undefined): JaiphConfig {
+  return mergeConfig(config, metadataToConfig(metadata));
+}
+
+/** True if local config file exists and has any recognized keys. */
+export function hasLocalConfigWithKeys(workspaceRoot: string): boolean {
+  const { localPath } = resolveConfigPaths(workspaceRoot);
+  if (!existsSync(localPath)) {
+    return false;
+  }
+  const cfg = readConfigFile(localPath);
+  return Boolean((cfg.agent && Object.keys(cfg.agent).length > 0) || (cfg.run && Object.keys(cfg.run).length > 0));
 }

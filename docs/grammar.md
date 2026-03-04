@@ -19,7 +19,10 @@ This document reflects parser and transpiler behavior in the current codebase (`
 ```ebnf
 file            = { top_level } ;
 
-top_level       = import_stmt | rule_decl | function_decl | workflow_decl ;
+top_level       = metadata_block | import_stmt | rule_decl | function_decl | workflow_decl ;
+
+metadata_block  = "metadata" "{" { metadata_line } "}" ;
+metadata_line   = ( "agent.default_model" | "agent.command" | "run.logs_dir" | "run.debug" ) "=" ( string | "true" | "false" ) ;
 
 import_stmt     = "import" string "as" IDENT ;
 
@@ -35,6 +38,7 @@ workflow_step   = ensure_stmt
                 | run_stmt
                 | prompt_stmt
                 | if_not_ensure_then_run_stmt
+                | if_not_shell_then_stmt
                 | shell_stmt
                 | comment_line ;
 
@@ -44,8 +48,15 @@ prompt_stmt     = "prompt" quoted_or_multiline_string ;
 
 if_not_ensure_then_run_stmt
                 = "if" "!" "ensure" REF ";" "then"
-                  run_stmt
+                  { run_stmt }
                   "fi" ;
+
+if_not_shell_then_stmt
+                = "if" "!" shell_condition ";" "then"
+                  { run_stmt | shell_stmt }
+                  "fi" ;
+
+shell_condition   = ? any shell expression, e.g. "test -f .file" ? ;
 
 shell_stmt      = command_line ;
 ```
@@ -64,24 +75,26 @@ shell_stmt      = command_line ;
 
 ## Validation Rules
 
-1. Import aliases must be unique within a file.
-2. Import targets must exist on disk.
-3. Local `ensure foo` requires local rule `foo`.
-4. Imported `ensure alias.foo` requires imported rule `foo` in module `alias`.
-5. Local `run bar` requires local workflow `bar`.
-6. Imported `run alias.bar` requires imported workflow `bar` in module `alias`.
+1. At most one `metadata` block per file; invalid keys or value types yield `E_PARSE` with file location.
+2. Import aliases must be unique within a file.
+3. Import targets must exist on disk.
+4. Local `ensure foo` requires local rule `foo`.
+5. Imported `ensure alias.foo` requires imported rule `foo` in module `alias`.
+6. Local `run bar` requires local workflow `bar`.
+7. Imported `run alias.bar` requires imported workflow `bar` in module `alias`.
 
 ## Transpilation Rules (Current)
 
 1. Build emits module scripts that source the installed global stdlib (`$JAIPH_STDLIB`, default `~/.local/bin/jaiph_stdlib.sh`).
-2. Each rule transpiles into:
+2. When the module has a `metadata` block, the generated script exports `JAIPH_AGENT_MODEL`, `JAIPH_AGENT_COMMAND`, `JAIPH_RUNS_DIR`, and (if `run.debug` is true) `JAIPH_DEBUG` with in-file values as defaults; environment variables override.
+3. Each rule transpiles into:
    - `<module>::rule::<name>::impl`
    - `<module>::rule::<name>` wrapper using `jaiph::run_step ... jaiph::execute_readonly`.
-3. Each workflow transpiles into:
+4. Each workflow transpiles into:
    - `<module>::workflow::<name>::impl`
    - `<module>::workflow::<name>` wrapper using `jaiph::run_step`.
-4. Each top-level function transpiles into:
+5. Each top-level function transpiles into:
    - `<module>::function::<name>::impl`
    - `<module>::function::<name>` wrapper using `jaiph::run_step`
    - `<name>` shim forwarding to the namespaced wrapper.
-5. `if ! ensure X; then run Y; fi` remains explicit Bash control flow using transpiled symbols.
+6. `if ! ensure X; then run Y; fi` remains explicit Bash control flow using transpiled symbols.
