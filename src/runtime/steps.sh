@@ -70,6 +70,29 @@ jaiph::track_output_files() {
   export JAIPH_PRECEDING_FILES
 }
 
+# If in test mode and JAIPH_MOCK_SCRIPTS_DIR has a script for the given symbol, print its path and return 0.
+# Otherwise print nothing and return 1.
+jaiph::mock_script_for_symbol() {
+  local func_name="${1:-}"
+  if [[ -z "$func_name" ]]; then
+    return 1
+  fi
+  if ! jaiph::is_test_mode; then
+    return 1
+  fi
+  if [[ -z "${JAIPH_MOCK_SCRIPTS_DIR:-}" || ! -d "${JAIPH_MOCK_SCRIPTS_DIR}" ]]; then
+    return 1
+  fi
+  local safe_name
+  safe_name="$(jaiph::sanitize_name "$func_name")"
+  local script_path="${JAIPH_MOCK_SCRIPTS_DIR}/${safe_name}"
+  if [[ -x "$script_path" ]]; then
+    printf '%s' "$script_path"
+    return 0
+  fi
+  return 1
+}
+
 jaiph::run_step() {
   local func_name="$1"
   shift || true
@@ -97,7 +120,12 @@ jaiph::run_step() {
     *e*) had_errexit=1 ;;
   esac
   set +e
-  if [[ "$func_name" == "jaiph::prompt" ]]; then
+  local mock_script
+  mock_script="$(jaiph::mock_script_for_symbol "$func_name")" || true
+  if [[ -n "$mock_script" && -x "$mock_script" ]]; then
+    "$mock_script" "$@" >"$out_tmp" 2>"$err_tmp"
+    status=$?
+  elif [[ "$func_name" == "jaiph::prompt" ]]; then
     "$@" 2>"$err_tmp" | tee "$out_tmp"
     status="${PIPESTATUS[0]}"
   else
@@ -150,8 +178,15 @@ jaiph::run_step_passthrough() {
     *e*) had_errexit=1 ;;
   esac
   set +e
-  "$@"
-  status=$?
+  local mock_script
+  mock_script="$(jaiph::mock_script_for_symbol "$func_name")" || true
+  if [[ -n "$mock_script" && -x "$mock_script" ]]; then
+    "$mock_script" "$@"
+    status=$?
+  else
+    "$@"
+    status=$?
+  fi
   if [[ "$had_errexit" -eq 1 ]]; then
     set -e
   fi

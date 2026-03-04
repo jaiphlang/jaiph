@@ -12,6 +12,7 @@ TEST_SCRIPTS=(
   "e2e/tests/20_rule_and_prompt.sh"
   "e2e/tests/30_filesystem_side_effects.sh"
   "e2e/tests/40_nested_and_native_tests.sh"
+  "e2e/tests/45_mock_workflow_rule_function.sh"
   "e2e/tests/50_cli_and_parse_guards.sh"
   "e2e/tests/60_ensure_conditionals.sh"
   "e2e/tests/65_fail_then_retry_pass.sh"

@@ -111,6 +111,26 @@ function parseMockPromptBlock(
   fail(filePath, "unterminated mock prompt block", blockStartLineNo);
 }
 
+/** Reads lines until "}" and returns body (trimmed lines joined) and nextIndex. */
+function parseMockSymbolBlock(
+  filePath: string,
+  lines: string[],
+  startLineIndex: number,
+): { body: string; nextIndex: number } {
+  const bodyLines: string[] = [];
+  let i = startLineIndex + 1;
+  while (i < lines.length) {
+    const raw = lines[i];
+    const line = raw.trim();
+    if (line === "}") {
+      return { body: bodyLines.join("\n"), nextIndex: i + 1 };
+    }
+    bodyLines.push(raw);
+    i += 1;
+  }
+  fail(filePath, "unterminated mock block", startLineIndex + 2);
+}
+
 export function parseTestBlock(
   filePath: string,
   lines: string[],
@@ -164,6 +184,39 @@ export function parseTestBlock(
         response: stripQuotes(arg),
         loc,
       });
+      continue;
+    }
+    const mockWorkflowMatch = inner.match(/^mock\s+workflow\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*\{\s*$/);
+    if (mockWorkflowMatch) {
+      const ref = mockWorkflowMatch[1];
+      if (!isRef(ref)) {
+        fail(filePath, "mock workflow ref must be <alias> or <alias>.<name>", innerNo, col);
+      }
+      const { body, nextIndex } = parseMockSymbolBlock(filePath, lines, i);
+      testBlock.steps.push({ type: "test_mock_workflow", ref, body, loc });
+      i = nextIndex - 1;
+      continue;
+    }
+    const mockRuleMatch = inner.match(/^mock\s+rule\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*\{\s*$/);
+    if (mockRuleMatch) {
+      const ref = mockRuleMatch[1];
+      if (!isRef(ref)) {
+        fail(filePath, "mock rule ref must be <alias> or <alias>.<name>", innerNo, col);
+      }
+      const { body, nextIndex } = parseMockSymbolBlock(filePath, lines, i);
+      testBlock.steps.push({ type: "test_mock_rule", ref, body, loc });
+      i = nextIndex - 1;
+      continue;
+    }
+    const mockFunctionMatch = inner.match(/^mock\s+function\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*\{\s*$/);
+    if (mockFunctionMatch) {
+      const ref = mockFunctionMatch[1];
+      if (!isRef(ref)) {
+        fail(filePath, "mock function ref must be <name> or <alias>.<name>", innerNo, col);
+      }
+      const { body, nextIndex } = parseMockSymbolBlock(filePath, lines, i);
+      testBlock.steps.push({ type: "test_mock_function", ref, body, loc });
+      i = nextIndex - 1;
       continue;
     }
     const expectContainMatch = inner.match(/^expectContain\s+([A-Za-z_][A-Za-z0-9_]*)\s+"((?:[^"\\]|\\.)*)"\s*$/);

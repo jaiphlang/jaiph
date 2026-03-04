@@ -1,7 +1,48 @@
-import type { jaiphModule } from "../types";
+import type { jaiphModule, TestStepDef } from "../types";
 
 function escapeBashSingleQuoted(s: string): string {
   return "'" + s.replace(/'/g, "'\\''") + "'";
+}
+
+/** Sanitize symbol for mock script filename (matches jaiph::sanitize_name in steps.sh). */
+function sanitizeSymbolForFile(symbol: string): string {
+  return symbol.replace(/[^a-zA-Z0-9_.-]/g, "_");
+}
+
+function refToWorkflowSymbol(ref: string, importedWorkflowSymbols: Map<string, string>): string {
+  const parts = ref.split(".");
+  if (parts.length === 1) {
+    const sym = Array.from(importedWorkflowSymbols.values())[0];
+    return `${sym ?? ref}::workflow::${parts[0]}`;
+  }
+  const alias = parts[0];
+  const name = parts[1];
+  const sym = importedWorkflowSymbols.get(alias) ?? alias;
+  return `${sym}::workflow::${name}`;
+}
+
+function refToRuleSymbol(ref: string, importedWorkflowSymbols: Map<string, string>): string {
+  const parts = ref.split(".");
+  if (parts.length === 1) {
+    const sym = Array.from(importedWorkflowSymbols.values())[0];
+    return `${sym ?? ref}::rule::${parts[0]}`;
+  }
+  const alias = parts[0];
+  const name = parts[1];
+  const sym = importedWorkflowSymbols.get(alias) ?? alias;
+  return `${sym}::rule::${name}`;
+}
+
+function refToFunctionSymbol(ref: string, importedWorkflowSymbols: Map<string, string>): string {
+  const parts = ref.split(".");
+  if (parts.length === 1) {
+    const sym = Array.from(importedWorkflowSymbols.values())[0];
+    return `${sym ?? ref}::function::${parts[0]}`;
+  }
+  const alias = parts[0];
+  const name = parts[1];
+  const sym = importedWorkflowSymbols.get(alias) ?? alias;
+  return `${sym}::function::${name}`;
 }
 
 function emitMockDispatchScript(
@@ -65,15 +106,42 @@ export function emitTest(
   let testIndex = 0;
   for (const block of ast.tests!) {
     const hasMockBlock = block.steps.some((s) => s.type === "test_mock_prompt_block");
+    const symbolMocks = block.steps.filter(
+      (s): s is TestStepDef & { ref: string; body: string } =>
+        s.type === "test_mock_workflow" || s.type === "test_mock_rule" || s.type === "test_mock_function",
+    );
     const funcName = `jaiph__test_${testIndex}`;
     out.push(`${funcName}() {`);
     out.push(`  jaiph__test_name=${escapeBashSingleQuoted(block.description)}`);
+    if (symbolMocks.length > 0) {
+      out.push(`  jaiph__mock_dir=$(mktemp -d)`);
+      out.push(`  trap 'rm -rf "$jaiph__mock_dir"' RETURN`);
+      for (const mock of symbolMocks) {
+        const symbol =
+          mock.type === "test_mock_workflow"
+            ? refToWorkflowSymbol(mock.ref, importedWorkflowSymbols)
+            : mock.type === "test_mock_rule"
+              ? refToRuleSymbol(mock.ref, importedWorkflowSymbols)
+              : refToFunctionSymbol(mock.ref, importedWorkflowSymbols);
+        const safeName = sanitizeSymbolForFile(symbol);
+        out.push(`  cat > "$jaiph__mock_dir/${safeName}" << 'JAIPH_MOCK_SCRIPT_EOF'`);
+        out.push("#!/usr/bin/env bash");
+        out.push(mock.body);
+        out.push(`JAIPH_MOCK_SCRIPT_EOF`);
+        out.push(`  chmod +x "$jaiph__mock_dir/${safeName}"`);
+      }
+      out.push(`  export JAIPH_MOCK_SCRIPTS_DIR="$jaiph__mock_dir"`);
+    } else {
+      out.push(`  unset JAIPH_MOCK_SCRIPTS_DIR`);
+    }
     if (hasMockBlock) {
       const mockBlockStep = block.steps.find((s) => s.type === "test_mock_prompt_block");
       if (mockBlockStep && mockBlockStep.type === "test_mock_prompt_block") {
         const dispatchScript = emitMockDispatchScript(mockBlockStep, escapeBashSingleQuoted);
         out.push(`  jaiph__mock_dispatch_script=$(mktemp)`);
-        out.push(`  trap 'rm -f "$jaiph__mock_dispatch_script"' RETURN`);
+        out.push(
+          `  trap '${symbolMocks.length > 0 ? 'rm -rf "$jaiph__mock_dir"; ' : ""}rm -f "$jaiph__mock_dispatch_script"' RETURN`,
+        );
         out.push(`  cat > "$jaiph__mock_dispatch_script" << 'JAIPH_MOCK_EOF'`);
         for (const scriptLine of dispatchScript) {
           out.push(scriptLine);
@@ -85,7 +153,9 @@ export function emitTest(
       }
     } else {
       out.push(`  jaiph__mock_file=$(mktemp)`);
-      out.push(`  trap 'rm -f "$jaiph__mock_file"' RETURN`);
+      out.push(
+        `  trap '${symbolMocks.length > 0 ? 'rm -rf "$jaiph__mock_dir"; ' : ""}rm -f "$jaiph__mock_file"' RETURN`,
+      );
       out.push(`  unset JAIPH_MOCK_DISPATCH_SCRIPT`);
     }
     for (const step of block.steps) {
@@ -102,14 +172,11 @@ export function emitTest(
       if (step.type === "test_mock_prompt_block") {
         continue;
       }
+      if (step.type === "test_mock_workflow" || step.type === "test_mock_rule" || step.type === "test_mock_function") {
+        continue;
+      }
       if (step.type === "test_run_workflow") {
-        const workflowSymbol = (() => {
-          const parts = step.workflowRef.split(".");
-          const alias = parts[0];
-          const wfName = parts[1];
-          const sym = importedWorkflowSymbols.get(alias) ?? alias;
-          return `${sym}::workflow::${wfName}`;
-        })();
+        const workflowSymbol = refToWorkflowSymbol(step.workflowRef, importedWorkflowSymbols);
         if (!hasMockBlock) {
           out.push(`  export JAIPH_MOCK_RESPONSES_FILE="$jaiph__mock_file"`);
         }
@@ -117,6 +184,10 @@ export function emitTest(
         out.push(`  ${step.captureName}=$(${workflowSymbol} 2>&1)`);
         out.push("  jaiph__test_exit=$?");
         out.push("  set -e");
+        out.push("  if [[ $jaiph__test_exit -ne 0 ]]; then");
+        out.push('    echo "jai: workflow exited with status $jaiph__test_exit" >&2');
+        out.push("    return 1");
+        out.push("  fi");
         continue;
       }
       if (step.type === "test_expect_contain") {

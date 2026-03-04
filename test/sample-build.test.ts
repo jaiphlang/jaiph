@@ -1431,7 +1431,7 @@ test("jaiph test fails when no mock branch matches and no else", () => {
     assert.equal(testResult.status, 1, "expected test to fail when no branch matches and no else");
     assert.match(
       testResult.stderr + testResult.stdout,
-      /no mock matched|no branch matched|expectContain failed|FAIL/,
+      /workflow exited with status|no mock matched|no branch matched|expectContain failed|FAIL/,
     );
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -1563,6 +1563,56 @@ test("parser parses test blocks in *.test.jh file", () => {
   }
 });
 
+test("parser parses mock workflow, rule, and function in test block", () => {
+  const source = [
+    'import "app.jh" as app',
+    "",
+    'test "isolated orchestration" {',
+    "  mock workflow app.build {",
+    '    echo "build ok"',
+    "    exit 0",
+    "  }",
+    "",
+    "  mock rule app.policy_check {",
+    '    echo "policy blocked" >&2',
+    "    exit 1",
+    "  }",
+    "",
+    "  mock function app.changed_files {",
+    '    echo "a.ts"',
+    '    echo "b.ts"',
+    "  }",
+    "",
+    "  out = app.default",
+    '  expectContain out "policy blocked"',
+    "}",
+    "",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/app.test.jh");
+  assert.ok(mod.tests);
+  assert.equal(mod.tests!.length, 1);
+  assert.equal(mod.tests![0].description, "isolated orchestration");
+  const steps = mod.tests![0].steps;
+  assert.equal(steps[0].type, "test_mock_workflow");
+  if (steps[0].type === "test_mock_workflow") {
+    assert.equal(steps[0].ref, "app.build");
+    assert.ok(steps[0].body.includes('echo "build ok"'));
+    assert.ok(steps[0].body.includes("exit 0"));
+  }
+  assert.equal(steps[1].type, "test_mock_rule");
+  if (steps[1].type === "test_mock_rule") {
+    assert.equal(steps[1].ref, "app.policy_check");
+    assert.ok(steps[1].body.includes("exit 1"));
+  }
+  assert.equal(steps[2].type, "test_mock_function");
+  if (steps[2].type === "test_mock_function") {
+    assert.equal(steps[2].ref, "app.changed_files");
+    assert.ok(steps[2].body.includes('echo "a.ts"'));
+  }
+  assert.equal(steps[3].type, "test_run_workflow");
+  assert.equal(steps[4].type, "test_expect_contain");
+});
+
 test("parser ignores test keyword in non-test file", () => {
   const source = [
     "workflow default {",
@@ -1600,6 +1650,125 @@ test("transpileTestFile produces runnable bash with expect_contain", () => {
     assert.match(bash, /jaiph__test_0/);
     assert.match(bash, /jaiph__run_tests/);
     assert.match(bash, /source.*w\.sh/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("transpileTestFile emits JAIPH_MOCK_SCRIPTS_DIR and mock scripts for mock workflow/rule/function", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-transpile-mock-symbols-"));
+  try {
+    writeFileSync(
+      join(root, "app.jh"),
+      [
+        "rule policy_check {",
+        "  echo real",
+        "}",
+        "function changed_files {",
+        "  echo real_files",
+        "}",
+        "workflow build {",
+        '  echo "real build"',
+        "}",
+        "workflow default {",
+        "  ensure policy_check",
+        "  run build",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(root, "app.test.jh"),
+      [
+        'import "app.jh" as app',
+        "",
+        'test "mocks" {',
+        "  mock workflow app.build {",
+        '    echo "mock build"',
+        "    exit 0",
+        "  }",
+        "  mock rule app.policy_check {",
+        "    exit 0",
+        "  }",
+        "  mock function app.changed_files {",
+        '    echo "a.ts"',
+        "  }",
+        "  out = app.default",
+        '  expectContain out "mock build"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    build(root, root);
+    const bash = transpileTestFile(join(root, "app.test.jh"), root);
+    assert.match(bash, /JAIPH_MOCK_SCRIPTS_DIR/);
+    assert.match(bash, /jaiph__mock_dir=\$\(mktemp -d\)/);
+    assert.match(bash, /mock build/);
+    assert.match(bash, /echo "a\.ts"/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph test runs *.test.jh with mock workflow, rule, and function", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-test-mock-symbols-"));
+  try {
+    writeFileSync(
+      join(root, "app.jh"),
+      [
+        "rule policy_check {",
+        "  echo real-policy",
+        "}",
+        "function changed_files {",
+        "  echo real_files",
+        "}",
+        "workflow build {",
+        '  echo "real build"',
+        "}",
+        "workflow default {",
+        "  ensure policy_check",
+        "  run build",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(root, "app.test.jh"),
+      [
+        'import "app.jh" as app',
+        "",
+        'test "isolated orchestration" {',
+        "  mock workflow app.build {",
+        '    echo "build ok"',
+        "    exit 0",
+        "  }",
+        "",
+        "  mock rule app.policy_check {",
+        '    echo "policy ok"',
+        "    exit 0",
+        "  }",
+        "",
+        "  mock function app.changed_files {",
+        '    echo "a.ts"',
+        '    echo "b.ts"',
+        "  }",
+        "",
+        "  out = app.default",
+        '  expectContain out "policy ok"',
+        '  expectContain out "build ok"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const result = spawnSync("node", [cliPath, "test", join(root, "app.test.jh")], {
+      encoding: "utf8",
+      cwd: root,
+      env: process.env,
+    });
+    assert.equal(result.status, 0, result.stderr + "\n" + result.stdout);
+    assert.match(result.stdout, /test\(s\) passed|PASS/);
+    assert.match(result.stdout, /isolated orchestration/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
