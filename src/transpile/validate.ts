@@ -147,6 +147,13 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         for (const wfRef of step.runWorkflows) {
           validateWorkflowRef(wfRef);
         }
+      } else if (step.type === "if_not_ensure_then") {
+        validateRuleRef(step.ensureRef);
+        for (const thenStep of step.thenSteps) {
+          if (thenStep.type === "run") {
+            validateWorkflowRef(thenStep.workflow);
+          }
+        }
       } else if (step.type === "if_not_shell_then") {
         for (const thenStep of step.thenSteps) {
           if (thenStep.type === "run") {

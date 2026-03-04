@@ -49,8 +49,11 @@ export function parseWorkflowBlock(
     if (ifEnsureMatch) {
       const ensureRef = ifEnsureMatch[1];
       let fiLine = -1;
-      const shellCommands: Array<{ command: string; loc: { line: number; col: number } }> = [];
-      const runWorkflows: Array<{ value: string; loc: { line: number; col: number } }> = [];
+      const thenSteps: Array<
+        | { type: "shell"; command: string; loc: { line: number; col: number } }
+        | { type: "run"; workflow: { value: string; loc: { line: number; col: number } } }
+        | { type: "prompt"; raw: string; loc: { line: number; col: number }; captureName?: string }
+      > = [];
       for (let lookahead = idx + 1; lookahead < lines.length; lookahead += 1) {
         const lookNo = lookahead + 1;
         const lookRaw = lines[lookahead];
@@ -66,13 +69,48 @@ export function parseWorkflowBlock(
           /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)$/,
         );
         if (runMatch) {
-          runWorkflows.push({
-            value: runMatch[1],
-            loc: { line: lookNo, col: lines[lookahead].indexOf("run") + 1 },
+          thenSteps.push({
+            type: "run",
+            workflow: {
+              value: runMatch[1],
+              loc: { line: lookNo, col: lines[lookahead].indexOf("run") + 1 },
+            },
           });
           continue;
         }
-        shellCommands.push({
+        const promptAssignMatch = lookTrim.match(
+          /^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*prompt\s+(.+)$/s,
+        );
+        if (promptAssignMatch) {
+          const captureName = promptAssignMatch[1];
+          const promptArg = promptAssignMatch[2].trimStart();
+          const promptCol = lookRaw.indexOf("prompt") + 1;
+          if (!promptArg.startsWith(`"`)) {
+            fail(filePath, 'prompt must match: name = prompt "<text>"', lookNo, promptCol);
+          }
+          thenSteps.push({
+            type: "prompt",
+            raw: promptArg,
+            loc: { line: lookNo, col: promptCol },
+            captureName,
+          });
+          continue;
+        }
+        if (lookTrim.startsWith("prompt ")) {
+          const promptCol = lookRaw.indexOf("prompt") + 1;
+          const promptArg = lookRaw.slice(lookRaw.indexOf("prompt") + "prompt".length).trimStart();
+          if (!promptArg.startsWith(`"`)) {
+            fail(filePath, 'prompt must match: prompt "<text>"', lookNo, promptCol);
+          }
+          thenSteps.push({
+            type: "prompt",
+            raw: promptArg,
+            loc: { line: lookNo, col: promptCol },
+          });
+          continue;
+        }
+        thenSteps.push({
+          type: "shell",
           command: lookTrim,
           loc: { line: lookNo, col: colFromRaw(lookRaw) },
         });
@@ -80,25 +118,33 @@ export function parseWorkflowBlock(
       if (fiLine === -1) {
         fail(filePath, 'unterminated if-block, expected "fi"', innerNo);
       }
-      if (runWorkflows.length > 0 && shellCommands.length === 0) {
+      if (thenSteps.length === 0) {
+        fail(filePath, "if-block then-branch must contain at least one run or shell command", innerNo);
+      }
+      if (
+        thenSteps.every((step) => step.type === "run")
+      ) {
         workflow.steps.push({
           type: "if_not_ensure_then_run",
           ensureRef: { value: ensureRef, loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 } },
-          runWorkflows: runWorkflows.map((r) => ({ value: r.value, loc: r.loc })),
+          runWorkflows: thenSteps.map((step) => (step as { type: "run"; workflow: { value: string; loc: { line: number; col: number } } }).workflow),
         });
-        idx = fiLine;
-      } else if (shellCommands.length > 0 && runWorkflows.length === 0) {
+      } else if (
+        thenSteps.every((step) => step.type === "shell")
+      ) {
         workflow.steps.push({
           type: "if_not_ensure_then_shell",
           ensureRef: { value: ensureRef, loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 } },
-          commands: shellCommands,
+          commands: thenSteps.map((step) => (step as { type: "shell"; command: string; loc: { line: number; col: number } })),
         });
-        idx = fiLine;
-      } else if (runWorkflows.length > 0 && shellCommands.length > 0) {
-        fail(filePath, "if-block then-branch cannot mix run and shell commands", innerNo);
       } else {
-        fail(filePath, "if-block then-branch must contain at least one run or shell command", innerNo);
+        workflow.steps.push({
+          type: "if_not_ensure_then",
+          ensureRef: { value: ensureRef, loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 } },
+          thenSteps,
+        });
       }
+      idx = fiLine;
       continue;
     }
 

@@ -98,6 +98,48 @@ export function collectWorkflowChildren(
       }
       continue;
     }
+    if (step.type === "if_not_ensure_then") {
+      const ensureRef = step.ensureRef.value;
+      const ensureStepFunc =
+        symbols && ensureRef.includes(".")
+          ? (() => {
+              const dot = ensureRef.indexOf(".");
+              const alias = ensureRef.slice(0, dot);
+              const name = ensureRef.slice(dot + 1);
+              return `${symbols.get(alias) ?? alias}::rule::${name}`;
+            })()
+          : currentSymbol
+            ? `${currentSymbol}::rule::${ensureRef}`
+            : undefined;
+      items.push({ label: `rule ${ensureRef}`, stepFunc: ensureStepFunc });
+      for (const thenStep of step.thenSteps) {
+        if (thenStep.type === "run") {
+          const wf = thenStep.workflow.value;
+          const runStepFunc =
+            symbols && wf.includes(".")
+              ? (() => {
+                  const dot = wf.indexOf(".");
+                  const alias = wf.slice(0, dot);
+                  const name = wf.slice(dot + 1);
+                  return `${symbols.get(alias) ?? alias}::workflow::${name}`;
+                })()
+              : currentSymbol
+                ? `${currentSymbol}::workflow::${wf}`
+                : undefined;
+          items.push({ label: `workflow ${wf}`, nested: wf, stepFunc: runStepFunc });
+          continue;
+        }
+        if (thenStep.type === "prompt") {
+          items.push({ label: "prompt prompt", stepFunc: "jaiph::prompt" });
+          continue;
+        }
+        for (const fnName of collectFunctionCalls(thenStep.command)) {
+          const stepFunc = currentSymbol ? `${currentSymbol}::function::${fnName}` : undefined;
+          items.push({ label: `function ${fnName}`, stepFunc });
+        }
+      }
+      continue;
+    }
     if (step.type === "if_not_shell_then") {
       for (const thenStep of step.thenSteps) {
         if (thenStep.type === "run") {

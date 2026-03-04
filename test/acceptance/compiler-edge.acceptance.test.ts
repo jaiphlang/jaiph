@@ -163,6 +163,37 @@ test("ACCEPTANCE: if ! ensure block must terminate with fi", () => {
   });
 });
 
+test("ACCEPTANCE: if ! ensure then-branch allows mixed prompt and run", () => {
+  withTempDir("jaiph-acc-if-ensure-mixed-", (root) => {
+    writeFileSync(
+      join(root, "main.jh"),
+      [
+        "rule gate {",
+        "  false",
+        "}",
+        "",
+        "workflow fix_build {",
+        '  prompt "fix build"',
+        "}",
+        "",
+        "workflow default {",
+        "  if ! ensure gate; then",
+        '    prompt "recover"',
+        "    run fix_build",
+        "  fi",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const output = build(join(root, "main.jh"), join(root, "out"));
+    assert.equal(output.length, 1);
+    assert.match(output[0].bash, /if ! .*::rule::gate; then/);
+    assert.match(output[0].bash, /jaiph::prompt \"\$@\" <<__JAIPH_PROMPT_/);
+    assert.match(output[0].bash, /::workflow::fix_build/);
+  });
+});
+
 test("ACCEPTANCE: test file without test blocks fails with E_PARSE", () => {
   withTempDir("jaiph-acc-empty-test-file-", (root) => {
     const testPath = join(root, "flow.test.jh");

@@ -282,6 +282,46 @@ export function emitWorkflow(
           out.push("  fi");
           continue;
         }
+        if (step.type === "if_not_ensure_then") {
+          out.push(
+            `  if ! ${transpileRuleRef(step.ensureRef, workflowSymbol, importedWorkflowSymbols)}; then`,
+          );
+          for (const thenStep of step.thenSteps) {
+            if (thenStep.type === "run") {
+              out.push(`    ${transpileWorkflowRef(thenStep.workflow, workflowSymbol, importedWorkflowSymbols)}`);
+              continue;
+            }
+            if (thenStep.type === "prompt") {
+              let promptText: string;
+              try {
+                promptText = parsePromptText(thenStep.raw);
+                validatePromptTextSafety(promptText);
+              } catch (error) {
+                const message = error instanceof Error ? error.message : "invalid prompt literal";
+                throw jaiphError(ast.filePath, thenStep.loc.line, thenStep.loc.col, "E_PARSE", message);
+              }
+              const delimiter = promptDelimiter(promptText, thenStep.loc.line);
+              if (thenStep.captureName) {
+                out.push(`    ${thenStep.captureName}=$(jaiph::prompt "$@" <<${delimiter}`);
+                for (const line of promptText.split("\n")) {
+                  out.push(line);
+                }
+                out.push(delimiter);
+                out.push(")");
+              } else {
+                out.push(`    jaiph::prompt "$@" <<${delimiter}`);
+                for (const line of promptText.split("\n")) {
+                  out.push(line);
+                }
+                out.push(delimiter);
+              }
+              continue;
+            }
+            out.push(`    ${thenStep.command}`);
+          }
+          out.push("  fi");
+          continue;
+        }
         if (step.type === "if_not_shell_then") {
           out.push(`  if ! ${step.condition}; then`);
           for (const thenStep of step.thenSteps) {
