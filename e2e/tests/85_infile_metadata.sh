@@ -10,7 +10,7 @@ e2e::prepare_test_env "infile_metadata"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
 e2e::section "in-file metadata drives run.logs_dir without config file"
-# Given: workflow with only in-file metadata (no .jaiph/config.toml)
+# Given: workflow with only in-file metadata
 rm -rf "${TEST_DIR}/.jaiph"
 mkdir -p "${TEST_DIR}"
 cat > "${TEST_DIR}/meta_workflow.jh" <<'EOF'
@@ -40,10 +40,8 @@ fi
 e2e::pass "run directory created under in-file metadata run.logs_dir"
 
 e2e::section "in-file metadata is used when set"
-# Given: workflow with metadata; config files are ignored by runtime
+# Given: workflow with metadata
 mkdir -p "${TEST_DIR}/.jaiph"
-# Place a config.toml that would set run.logs_dir; runtime must ignore it
-printf '%s\n' '[run]' 'logs_dir = "config_toml_dir"' > "${TEST_DIR}/.jaiph/config.toml"
 cat > "${TEST_DIR}/override.jh" <<'EOF'
 metadata {
   run.logs_dir = "metadata_wins"

@@ -6,88 +6,62 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## 11. Remove TOML runtime config and inline test mocks
+## 13. Test doubles for function/rule/workflow in `*.test.jh`
 
 **Status:** pending
 
-**What:** Remove all TOML-like project configuration paths by:
-- removing runtime TOML config (`.jaiph/config.toml`, global `~/.config/jaiph/config.toml`), and
-- moving prompt test mocks into inline `mock prompt { ... }` blocks inside `*.test.jh` files.
+**What:** Add first-class mocking/stubbing for Jaiph symbols in native test files so tests can replace function/rule/workflow behavior without executing real implementations.
 
-**Why:** Runtime behavior should be explicit and local to workflow files. Keeping TOML fallback creates hidden precedence and migration complexity.
+**Why:** Prompt mocking exists, but integration tests still require real rule/workflow/function execution. This makes tests slower, less deterministic, and harder to isolate.
 
-**Scope:**
-- `jaiph run` must no longer read TOML config files.
-- `jaiph init` must stop generating `.jaiph/config.toml`.
-- Docs/examples must stop recommending TOML runtime config.
-- Backward-compat fallback and deprecation notices can be removed.
-- `jaiph test` must no longer depend on `.jaiph/tests/*.test.toml` files.
-- Prompt mocks must be declared inline in test files.
-- Don't add any comments that this feature was there, we accept it as breaking change
+**V1 scope:**
+- Support mocks for:
+  - `workflow <ref>`
+  - `rule <ref>`
+  - `function <name>` (local module symbol in test scope)
+- Mock body is shell (bash) commands; stdout/stderr come from command output.
+- Support deterministic result configuration:
+  - explicit exit status (`exit N`) inside mock body
+  - stdout/stderr emitted by shell commands (for example `echo`, `echo ... >&2`)
+- Keep prompt mock behavior unchanged and compatible.
 
-**Inline mock syntax (v1):**
-- Inside `test "..." { ... }`, support:
-  - `mock prompt {`
-  - `if $1 contains "..." ; then`
-  - `elif $1 contains "..." ; then`
-  - optional `else`
-  - `respond "..."`
-  - `fi`
-  - `}`
+**Proposed syntax (example):**
+```jh
+test "isolated orchestration" {
+  mock workflow app.build {
+    echo "build ok"
+    exit 0
+  }
+
+  mock rule app.policy_check {
+    echo "policy blocked" >&2
+    exit 1
+  }
+
+  mock function changed_files {
+    echo "a.ts"
+    echo "b.ts"
+  }
+
+  out = app.default
+  expectContain out "policy blocked"
+}
+```
 
 **Files to change:**
-- `src/config.ts` — remove TOML parser/loading APIs and keep metadata mapping utilities only.
-- `src/cli/commands/run.ts` — stop `loadJaiphConfig` + fallback merge; use metadata + env only.
-- `src/cli/commands/init.ts` — remove config template creation/output text.
-- `docs/configuration.md`, `docs/cli.md`, `README.md` — remove runtime TOML references and update precedence docs.
-- tests touching config fallback behavior (`e2e/tests/85_infile_metadata.sh`, unit tests if any).
-- `src/parse/tests.ts` (and shared parse helpers) — parse inline `mock prompt` blocks.
-- `src/transpile/emit-test.ts` — emit inline mock dispatch logic.
-- `src/runtime/test-mode.sh` + `src/runtime/prompt.sh` — consume inline mocks instead of fixture files.
-- `src/cli/commands/test.ts` — remove `.test.toml` resolution and update error/help text.
-- `src/mock-resolver.ts` — delete or repurpose (no TOML mock parser in test path).
-- docs/tests that currently use `.test.toml` — migrate examples and e2e/unit coverage to inline mocks.
+- `src/parse/tests.ts` — parse mock declarations for workflow/rule/function.
+- `src/transpile/emit-test.ts` — emit mock installation/teardown for declared symbols.
+- `src/runtime/test-mode.sh` + `src/runtime/steps.sh` — resolve test doubles before real symbol execution.
+- `src/runtime/events.sh` — keep event stream consistent when mocked symbols run.
+- tests in `test/` and e2e coverage in `e2e/tests/`.
 
 **Acceptance criteria:**
-- Runtime config precedence is: env vars > in-file metadata > built-in defaults.
-- `.jaiph/config.toml` and global config files are ignored by runtime.
-- `jaiph init` does not create `.jaiph/config.toml`.
-- Docs contain no runtime-config TOML instructions.
-- `jaiph test` runs with no external `.test.toml` fixture requirement.
-- Inline `mock prompt` supports `if/elif/else/fi` with `contains` matching and deterministic first-match behavior.
-- Missing mock match (without `else`) fails with clear test-time error.
-- Parser/runtime errors for malformed inline mock blocks are explicit and test-covered.
-
----
-
-## 4. `ensure` with retry support
-
-**Status:** pending
-
-**What:** Add an optional `--retry N` flag to `ensure` that retries a failing rule up to N times before propagating failure:
-
-```
-ensure --retry 3 build_passes
-ensure --retry 3 --delay 5 flaky_network_check
-```
-
-Optional `--delay S` adds a sleep of S seconds between retries.
-
-**Why:** In real CI/agent environments, rules often fail transiently. Without retry, users wrap `ensure` in custom bash loops, defeating the point of the abstraction.
-
-**Files to change:**
-- `src/parse/workflows.ts` and/or shared step parser — parse `--retry N` and `--delay S` on `ensure`.
-- `src/transpile/emit-workflow.ts` — emit retry-enabled ensure call in generated bash.
-- `src/jaiph_stdlib.sh` — add `jaiph__ensure_retry` helper and integrate with step eventing.
-- parser/transpiler tests + e2e flaky-case coverage.
-
-**Example compiled output:**
-```bash
-jaiph__ensure_retry 3 5 main__rule_build_passes
-```
-
-**Tests / acceptance:**
-- Testable with `jaiph test`: workflow using `ensure --retry N` can be run with mocks (e.g. rule fails then succeeds within retries).
+- Test can mock a workflow, rule, and function independently.
+- Mocked symbol invocation is deterministic and does not execute original implementation.
+- Mock body can run bash statements and emit stdout/stderr naturally.
+- Mock can set exit code explicitly (`exit N`).
+- Existing prompt mock tests continue to pass unchanged.
+- Failures in mocked symbols surface with correct step labels and status in run/test output.
 
 ---
 
@@ -269,4 +243,3 @@ Jaiph resolves, downloads, and caches the module on first use.
 - `src/transpile/resolve.ts` + build pipeline (`src/transpiler.ts`) — resolve/download/cache remote imports before transpilation.
 - `src/cli/index.ts` + new `src/cli/commands/module.ts` — add `jaiph module update` for refreshing unpinned imports.
 - `docs/getting-started.md` — document remote imports
-

@@ -88,26 +88,20 @@ implement_from_queue::workflow::implement_task::impl() {
   set +u
   jaiph::prompt "$@" <<__JAIPH_PROMPT_47__
 
-    You are working on the Jaiph codebase (https://github.com/jaiphlang/jaiph).
-    The codebase is a TypeScript compiler and runtime for a DSL that transpiles to bash.
+    You are working on the Jaiph codebase (https://github.com/jaiphlang/jaiph), a TypeScript compiler and runtime for a DSL that transpiles to Bash.
 
-    Your job is to implement this task block (passed as argument):
+    Implement the provided task by following these steps, minimizing unnecessary changes and strictly adhering to established code style:
+    1. Parse the task block.
+    2. Read ARCHITECTURE.md (if present) for module boundaries; if missing or outdated, infer from project files.
+    3. Consult any 'Files to change' section; otherwise, select only directly relevant files.
+    4. Make code changes needed to satisfy the task requirements.
+    5. Add or update tests as needed to meet acceptance criteria.
+    6. Run: npm run build, npm test, and npm run test:e2e. Fix all failures.
+    7. Ensure all acceptance criteria are met before concluding.
+    8. When finished, state which task ID was completed and list all changed files.
+
+    Task:
     $1
-
-    Start by reading ARCHITECTURE.md at the repository root for current module boundaries.
-    If ARCHITECTURE.md is missing or stale, infer architecture from existing directories/files first.
-
-    Steps:
-    1. Parse the provided task block from $1.
-    2. Read ARCHITECTURE.md, then read the relevant source files listed under 'Files to change' in that task.
-    3. If the task list is incomplete, edit only directly-related files needed to deliver acceptance criteria.
-    4. Implement the changes described. Follow the existing code style exactly.
-    5. Add or update tests needed for acceptance criteria.
-    6. Run npm run build, npm test, and npm run test:e2e.
-    7. If checks fail, fix and retry until all pass.
-    8. Before finishing, ensure acceptance criteria from the task are demonstrably satisfied.
-
-    When done, confirm which task ID you implemented and list every file you changed.
   
 __JAIPH_PROMPT_47__
 }
@@ -120,22 +114,25 @@ implement_from_queue::workflow::make_ci_pass::impl() {
   set -eo pipefail
   set +u
   if ! implement_from_queue::rule::project_compiles; then
-    jaiph::prompt "$@" <<__JAIPH_PROMPT_73__
+    jaiph::prompt "$@" <<__JAIPH_PROMPT_67__
 Fix failing compilation so npm run build passes.
-__JAIPH_PROMPT_73__
+__JAIPH_PROMPT_67__
     implement_from_queue::workflow::make_ci_pass
+    return 0
   fi
   if ! implement_from_queue::rule::tests_pass; then
-    jaiph::prompt "$@" <<__JAIPH_PROMPT_77__
+    jaiph::prompt "$@" <<__JAIPH_PROMPT_72__
 Fix failing tests so npm test passes.
-__JAIPH_PROMPT_77__
+__JAIPH_PROMPT_72__
     implement_from_queue::workflow::make_ci_pass
+    return 0
   fi
   if ! implement_from_queue::rule::e2e_tests_pass; then
-    jaiph::prompt "$@" <<__JAIPH_PROMPT_81__
+    jaiph::prompt "$@" <<__JAIPH_PROMPT_77__
 Fix failing e2e tests so npm run test:e2e passes.
-__JAIPH_PROMPT_81__
+__JAIPH_PROMPT_77__
     implement_from_queue::workflow::make_ci_pass
+    return 0
   fi
 }
 
@@ -163,12 +160,10 @@ implement_from_queue::workflow::default::impl() {
   set -eo pipefail
   set +u
   task="$(get_first_task)"
-  task_header="${task%%$'\n'*}"
-  set -- "$task"
-  implement_from_queue::workflow::implement_task
+  task_header="${task%%$'\n'*}" # first line of the task block
+  implement_from_queue::workflow::implement_task "$task"
   implement_from_queue::workflow::make_ci_pass
-  set -- "$task_header"
-  implement_from_queue::workflow::remove_completed_task
+  implement_from_queue::workflow::remove_completed_task "$task_header"
 }
 
 implement_from_queue::workflow::default() {

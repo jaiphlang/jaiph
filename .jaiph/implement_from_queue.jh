@@ -45,26 +45,19 @@ function get_first_task() {
 # Reads the first task block from .jaiph/QUEUE.md and asks the agent to implement it.
 workflow implement_task {
   prompt "
-    You are working on the Jaiph codebase (https://github.com/jaiphlang/jaiph).
-    The codebase is a TypeScript compiler and runtime for a DSL that transpiles to bash.
+    You are working on the Jaiph codebase (https://github.com/jaiphlang/jaiph), a TypeScript compiler and runtime for a DSL that transpiles to Bash.
 
-    Your job is to implement this task block (passed as argument):
+    Implement the following task by:
+    - Consulting ARCHITECTURE.md at the repo root for module boundaries (or inferring from the file structure if missing or outdated).
+    - Editing only files directly relevant to the task or those listed under 'Files to change'.
+    - Following the codebase's existing style and conventions precisely.
+    - Adding or updating tests as needed for acceptance criteria.
+    - Running npm run build, npm test, and npm run test:e2e; fix any failures before continuing.
+    - Ensuring all acceptance criteria in the task are met.
+    - At the end, state which task ID was implemented and list all files changed.
+
+    Task:
     $1
-
-    Start by reading ARCHITECTURE.md at the repository root for current module boundaries.
-    If ARCHITECTURE.md is missing or stale, infer architecture from existing directories/files first.
-
-    Steps:
-    1. Parse the provided task block from $1.
-    2. Read ARCHITECTURE.md, then read the relevant source files listed under 'Files to change' in that task.
-    3. If the task list is incomplete, edit only directly-related files needed to deliver acceptance criteria.
-    4. Implement the changes described. Follow the existing code style exactly.
-    5. Add or update tests needed for acceptance criteria.
-    6. Run npm run build, npm test, and npm run test:e2e.
-    7. If checks fail, fix and retry until all pass.
-    8. Before finishing, ensure acceptance criteria from the task are demonstrably satisfied.
-
-    When done, confirm which task ID you implemented and list every file you changed.
   "
 }
 
@@ -72,14 +65,17 @@ workflow make_ci_pass {
   if ! ensure project_compiles; then
     prompt "Fix failing compilation so npm run build passes."
     run make_ci_pass
+    return 0
   fi
   if ! ensure tests_pass; then
     prompt "Fix failing tests so npm test passes."
     run make_ci_pass
+    return 0
   fi
   if ! ensure e2e_tests_pass; then
     prompt "Fix failing e2e tests so npm run test:e2e passes."
     run make_ci_pass
+    return 0
   fi
 }
 

@@ -4,7 +4,7 @@
 
 ---
 
-Runtime behavior is configured via **in-file metadata** and **environment variables**. Config files (TOML) are not used.
+Runtime behavior is configured via **in-file metadata** and **environment variables**.
 
 ## In-file metadata
 
