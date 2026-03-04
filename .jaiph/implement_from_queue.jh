@@ -1,15 +1,9 @@
 #!/usr/bin/env jaiph
 
 # Picks the first pending task from .jaiph/QUEUE.md, implements it, then removes it from the queue.
-# Usage: ./implement.jh
+# Usage: ./implement_from_queue.jh
 
-import "./docs"
-
-# Verifies the queue file exists and has at least one pending task.
-rule queue_has_tasks {
-  test -f ".jaiph/QUEUE.md"
-  grep -q "^## " .jaiph/QUEUE.md
-}
+import "./docs_parity.jh" as docs
 
 # Verifies the project compiles after changes.
 rule project_compiles {
@@ -97,6 +91,8 @@ workflow default {
 
   run implement_task "$task"
   run make_ci_pass
+
+  run docs.default
 
   run remove_completed_task "$task_header"
 }
