@@ -95,12 +95,10 @@ workflow remove_completed_task {
 
 workflow default {
   task="$(get_first_task)"
-  task_header="${task%%$'\n'*}"
+  task_header="${task%%$'\n'*}" # first line of the task block
 
-  set -- "$task"
-  run implement_task
+  run implement_task "$task"
   run make_ci_pass
 
-  set -- "$task_header"
-  run remove_completed_task
+  run remove_completed_task "$task_header"
 }

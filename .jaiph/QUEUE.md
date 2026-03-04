@@ -23,6 +23,7 @@ The first `##` task in the file is always the current task.
 - Backward-compat fallback and deprecation notices can be removed.
 - `jaiph test` must no longer depend on `.jaiph/tests/*.test.toml` files.
 - Prompt mocks must be declared inline in test files.
+- Don't add any comments that this feature was there, we accept it as breaking change
 
 **Inline mock syntax (v1):**
 - Inside `test "..." { ... }`, support:
@@ -154,30 +155,31 @@ jaiph__ensure_retry 3 5 main__rule_build_passes
 
 **Status:** pending
 
-**What:** Add `--returns { ... }` syntax on prompt assignment and validate returned JSON against declared fields/types.
+**What:** Add `--returns '{ ... }'` syntax on prompt assignment and validate returned JSON against declared fields/types.
 
 **V1 scope constraints:**
 - Schema is flat only (no nested objects)
 - No arrays or union types in v1
 - Supported field types are only `string`, `number`, `boolean`
+- The expected type is injected at the end of the prompt, then the runtime parses the last line (lines?) to extract json. If something is malformated, the prompt fails.
 
 **Syntax:**
 ```
-result = prompt "Analyse the diff and classify the change" --returns {
+result = prompt "Analyse the diff and classify the change" --returns '{
   type: string,
   risk: string,
   summary: string
-}
+}'
 ```
 
 Allow multiline prompt + typed schema in bash style with line continuation:
 ```
 result = prompt "Analyse the diff and classify the change" \
-  --returns {
+  --returns '{
     type: string,
     risk: string,
     summary: string
-  }
+  }'
 ```
 
 **Files to change:**
