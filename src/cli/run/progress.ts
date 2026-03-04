@@ -25,7 +25,7 @@ function selfRecursiveRunSiteCount(mod: jaiphModule, workflowName: string): numb
     }
     if (step.type === "if_not_ensure_then_run") {
       for (const wfRef of step.runWorkflows) {
-        if (wfRef.value === workflowName) {
+        if (wfRef.workflow.value === workflowName) {
           count += 1;
         }
       }
@@ -119,8 +119,8 @@ export function collectWorkflowChildren(
             ? `${currentSymbol}::rule::${ensureRef}`
             : undefined;
       items.push({ label: `rule ${ensureRef}`, stepFunc: ensureStepFunc });
-      for (const wfRef of step.runWorkflows) {
-        const wf = wfRef.value;
+      for (const runStep of step.runWorkflows) {
+        const wf = runStep.workflow.value;
         const runStepFunc =
           symbols && wf.includes(".")
             ? (() => {

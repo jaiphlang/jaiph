@@ -1,11 +1,11 @@
 # Jaiph Improvement Queue
 
-Tasks are processed top-to-bottom. When a task is completed, it is removed from this file.
-The first task in the list is always the current task.
+Tasks are processed top-to-bottom. Each task starts with a `##` header.
+When a task is completed, remove that whole section (from its `##` header until next `##` header).
+The first `##` task in the file is always the current task.
 
 ---
 
-<!-- TASK id="11" -->
 ## 11. Remove TOML runtime config and inline test mocks
 
 **Status:** pending
@@ -57,11 +57,8 @@ The first task in the list is always the current task.
 - Missing mock match (without `else`) fails with clear test-time error.
 - Parser/runtime errors for malformed inline mock blocks are explicit and test-covered.
 
-<!-- END_TASK -->
-
 ---
 
-<!-- TASK id="4" -->
 ## 4. `ensure` with retry support
 
 **Status:** pending
@@ -91,11 +88,8 @@ jaiph__ensure_retry 3 5 main__rule_build_passes
 **Tests / acceptance:**
 - Testable with `jaiph test`: workflow using `ensure --retry N` can be run with mocks (e.g. rule fails then succeeds within retries).
 
-<!-- END_TASK -->
-
 ---
 
-<!-- TASK id="9" -->
 ## 9. Support Claude CLI as prompt backend
 
 **Status:** pending
@@ -117,11 +111,8 @@ jaiph__ensure_retry 3 5 main__rule_build_passes
 - Clear error if Claude CLI is selected but unavailable
 - `jaiph test` continues to use mocks only; test mode must not invoke Claude CLI
 
-<!-- END_TASK -->
-
 ---
 
-<!-- TASK id="6" -->
 ## 6. Project-local stdlib version pinning
 
 **Status:** pending
@@ -134,11 +125,8 @@ jaiph__ensure_retry 3 5 main__rule_build_passes
 - `docs/configuration.md` — document metadata key and precedence with env override.
 - tests for cache hit/miss and invalid version error handling.
 
-<!-- END_TASK -->
-
 ---
 
-<!-- TASK id="2" -->
 ## 2. Fix `||` / `{ ... }` inline brace-group parser limitation
 
 **Status:** pending
@@ -160,11 +148,8 @@ jaiph__ensure_retry 3 5 main__rule_build_passes
   ```
 - Existing `if ! cmd; then ...; fi` patterns continue to work
 
-<!-- END_TASK -->
-
 ---
 
-<!-- TASK id="5a" -->
 ## 5a. Typed `prompt` schema validation with `--returns`
 
 **Status:** pending
@@ -212,11 +197,8 @@ result = prompt "Analyse the diff and classify the change" \
 - Testable with `jaiph test`: mock JSON response that satisfies the schema is accepted and typed fields are available
 - Parser tests cover both single-line and multiline (`\`) `--returns` forms
 
-<!-- END_TASK -->
-
 ---
 
-<!-- TASK id="5b" -->
 ## 5b. Deterministic field export for typed prompts
 
 **Status:** pending
@@ -239,11 +221,8 @@ result = prompt "Analyse the diff and classify the change" \
 - Export behaviour is deterministic for all declared primitive fields (`string|number|boolean`)
 - Testable with `jaiph test`: mock response is unpacked into prefixed variables
 
-<!-- END_TASK -->
-
 ---
 
-<!-- TASK id="5c" -->
 ## 5c. Dot notation sugar for typed prompt fields
 
 **Status:** pending
@@ -263,11 +242,8 @@ result = prompt "Analyse the diff and classify the change" \
 - Existing non-dot syntax remains backward compatible
 - Dot notation is sugar only and cannot bypass schema validation rules from 5a
 
-<!-- END_TASK -->
-
 ---
 
-<!-- TASK id="8" -->
 ## 8. Package registry via GitHub
 
 **Status:** pending
@@ -292,4 +268,3 @@ Jaiph resolves, downloads, and caches the module on first use.
 - `src/cli/index.ts` + new `src/cli/commands/module.ts` — add `jaiph module update` for refreshing unpinned imports.
 - `docs/getting-started.md` — document remote imports
 
-<!-- END_TASK -->

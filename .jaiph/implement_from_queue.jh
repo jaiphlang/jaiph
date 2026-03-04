@@ -6,7 +6,7 @@
 # Verifies the queue file exists and has at least one pending task.
 rule queue_has_tasks {
   test -f ".jaiph/QUEUE.md"
-  grep -q "<!-- TASK id=" .jaiph/QUEUE.md
+  grep -q "^## " .jaiph/QUEUE.md
 }
 
 # Verifies the project compiles after changes.
@@ -23,19 +23,39 @@ rule e2e_tests_pass {
   npm run test:e2e
 }
 
+function get_first_task() {
+  if ! test -f ".jaiph/QUEUE.md"; then
+    echo "missing .jaiph/QUEUE.md" >&2
+    return 1
+  fi
+
+  if ! task="$(awk 'BEGIN{in_task=0;found=0} /^## /{if(in_task) exit; in_task=1; found=1} in_task{if($0 ~ /^---$/) exit; print} END{if(!found) exit 2}' .jaiph/QUEUE.md)"; then
+    echo "no tasks found in .jaiph/QUEUE.md" >&2
+    return 1
+  fi
+
+  if ! test -n "${task}"; then
+    echo "first task is empty in .jaiph/QUEUE.md" >&2
+    return 1
+  fi
+
+  printf "%s" "${task}"
+}
+
 # Reads the first task block from .jaiph/QUEUE.md and asks the agent to implement it.
 workflow implement_task {
   prompt "
     You are working on the Jaiph codebase (https://github.com/jaiphlang/jaiph).
     The codebase is a TypeScript compiler and runtime for a DSL that transpiles to bash.
 
-    Your job is to implement the FIRST task found in .jaiph/QUEUE.md.
-    The task is the first block between <!-- TASK id=\"...\" --> and <!-- END_TASK -->.
+    Your job is to implement this task block (passed as argument):
+    $1
+
     Start by reading ARCHITECTURE.md at the repository root for current module boundaries.
     If ARCHITECTURE.md is missing or stale, infer architecture from existing directories/files first.
 
     Steps:
-    1. Read .jaiph/QUEUE.md and extract the first task block.
+    1. Parse the provided task block from $1.
     2. Read ARCHITECTURE.md, then read the relevant source files listed under 'Files to change' in that task.
     3. If the task list is incomplete, edit only directly-related files needed to deliver acceptance criteria.
     4. Implement the changes described. Follow the existing code style exactly.
@@ -65,25 +85,22 @@ workflow make_ci_pass {
 
 # Removes the first completed task block from .jaiph/QUEUE.md.
 workflow remove_completed_task {
-  prompt "
-    The first task in .jaiph/QUEUE.md has just been implemented successfully.
-
-    Edit .jaiph/QUEUE.md to remove:
-    - The first <!-- TASK id=\"...\" --> ... <!-- END_TASK --> block
-    - The --- separator line that follows it (if present)
-
-    Do not modify any other part of the file.
-    Ensure you only remove the single first task block.
-  "
+  test -n "${1:-}"
+  header="$1"
+  awk -v header="${header}" 'BEGIN{skipping=0;removed=0} {if(!removed && $0==header){skipping=1;removed=1;next} if(skipping && $0 ~ /^## /){skipping=0} if(!skipping){print}} END{if(!removed) exit 2}' .jaiph/QUEUE.md > .jaiph/QUEUE.md.tmp
+  mv .jaiph/QUEUE.md.tmp .jaiph/QUEUE.md
+  sed -i.bak -E '/^[[:space:]]*$/N;/^\n$/D' .jaiph/QUEUE.md
+  rm -f .jaiph/QUEUE.md.bak
 }
 
 workflow default {
-  if ! ensure queue_has_tasks; then
-    echo ".jaiph/QUEUE.md is empty or missing. Nothing to do."
-    exit 0
-  fi
+  task="$(get_first_task)"
+  task_header="${task%%$'\n'*}"
 
+  set -- "$task"
   run implement_task
   run make_ci_pass
+
+  set -- "$task_header"
   run remove_completed_task
 }

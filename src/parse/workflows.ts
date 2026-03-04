@@ -51,7 +51,7 @@ export function parseWorkflowBlock(
       let fiLine = -1;
       const thenSteps: Array<
         | { type: "shell"; command: string; loc: { line: number; col: number } }
-        | { type: "run"; workflow: { value: string; loc: { line: number; col: number } } }
+        | { type: "run"; workflow: { value: string; loc: { line: number; col: number } }; args?: string }
         | { type: "prompt"; raw: string; loc: { line: number; col: number }; captureName?: string }
       > = [];
       for (let lookahead = idx + 1; lookahead < lines.length; lookahead += 1) {
@@ -66,7 +66,7 @@ export function parseWorkflowBlock(
           break;
         }
         const runMatch = lookTrim.match(
-          /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)$/,
+          /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
         );
         if (runMatch) {
           thenSteps.push({
@@ -75,6 +75,7 @@ export function parseWorkflowBlock(
               value: runMatch[1],
               loc: { line: lookNo, col: lines[lookahead].indexOf("run") + 1 },
             },
+            args: runMatch[2]?.trim(),
           });
           continue;
         }
@@ -127,7 +128,14 @@ export function parseWorkflowBlock(
         workflow.steps.push({
           type: "if_not_ensure_then_run",
           ensureRef: { value: ensureRef, loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 } },
-          runWorkflows: thenSteps.map((step) => (step as { type: "run"; workflow: { value: string; loc: { line: number; col: number } } }).workflow),
+          runWorkflows: thenSteps.map((step) => {
+            const runStep = step as {
+              type: "run";
+              workflow: { value: string; loc: { line: number; col: number } };
+              args?: string;
+            };
+            return { workflow: runStep.workflow, args: runStep.args };
+          }),
         });
       } else if (
         thenSteps.every((step) => step.type === "shell")
@@ -153,7 +161,7 @@ export function parseWorkflowBlock(
       const condition = ifShellMatch[1].trim();
       const thenSteps: Array<
         | { type: "shell"; command: string; loc: { line: number; col: number } }
-        | { type: "run"; workflow: { value: string; loc: { line: number; col: number } } }
+        | { type: "run"; workflow: { value: string; loc: { line: number; col: number } }; args?: string }
       > = [];
       let foundFi = -1;
       for (let lookahead = idx + 1; lookahead < lines.length; lookahead += 1) {
@@ -168,7 +176,7 @@ export function parseWorkflowBlock(
           break;
         }
         const runMatch = lookTrim.match(
-          /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)$/,
+          /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
         );
         if (runMatch) {
           thenSteps.push({
@@ -177,6 +185,7 @@ export function parseWorkflowBlock(
               value: runMatch[1],
               loc: { line: lookNo, col: lines[lookahead].indexOf("run") + 1 },
             },
+            args: runMatch[2]?.trim(),
           });
         } else {
           thenSteps.push({
@@ -286,16 +295,20 @@ export function parseWorkflowBlock(
     }
 
     if (inner.startsWith("run ")) {
-      const workflowRef = inner.slice("run ".length).trim();
-      if (!isRef(workflowRef)) {
+      const runBody = inner.slice("run ".length).trim();
+      const runMatch = runBody.match(
+        /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
+      );
+      if (!runMatch || !isRef(runMatch[1])) {
         fail(filePath, "run must target a workflow reference", innerNo);
       }
       workflow.steps.push({
         type: "run",
         workflow: {
-          value: workflowRef,
+          value: runMatch[1],
           loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
         },
+        args: runMatch[2]?.trim(),
       });
       continue;
     }

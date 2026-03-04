@@ -49,6 +49,7 @@ export type WorkflowStepDef =
   | {
       type: "run";
       workflow: WorkflowRefDef;
+      args?: string;
     }
   | {
       type: "prompt";
@@ -65,14 +66,14 @@ export type WorkflowStepDef =
   | {
       type: "if_not_ensure_then_run";
       ensureRef: RuleRefDef;
-      runWorkflows: WorkflowRefDef[];
+      runWorkflows: Array<{ workflow: WorkflowRefDef; args?: string }>;
     }
   | {
       type: "if_not_ensure_then";
       ensureRef: RuleRefDef;
       thenSteps: Array<
         | { type: "shell"; command: string; loc: SourceLoc }
-        | { type: "run"; workflow: WorkflowRefDef }
+        | { type: "run"; workflow: WorkflowRefDef; args?: string }
         | {
             type: "prompt";
             raw: string;
@@ -86,7 +87,7 @@ export type WorkflowStepDef =
       condition: string;
       thenSteps: Array<
         | { type: "shell"; command: string; loc: SourceLoc }
-        | { type: "run"; workflow: WorkflowRefDef }
+        | { type: "run"; workflow: WorkflowRefDef; args?: string }
       >;
     }
   | {

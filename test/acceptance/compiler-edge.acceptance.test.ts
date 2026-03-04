@@ -289,3 +289,93 @@ test("ACCEPTANCE: import stem resolves .jh before .jph when both exist", () => {
     assert.match(output[0].bash, /source "\$\(dirname "\$\{BASH_SOURCE\[0\]\}"\)\/dep\.sh"/);
   });
 });
+
+test("ACCEPTANCE: inline mock prompt block with if/elif/else emits first-match dispatch", () => {
+  withTempDir("jaiph-acc-mock-block-", (root) => {
+    writeFileSync(
+      join(root, "w.jh"),
+      [
+        "workflow default {",
+        '  result = prompt "greeting"',
+        "  echo \"$result\"",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(root, "w.test.jh"),
+      [
+        'import "w.jh" as w',
+        "",
+        'test "mock block first match" {',
+        "  mock prompt {",
+        '    if $1 contains "greeting" ; then',
+        '      respond "hello"',
+        '    elif $1 contains "other" ; then',
+        '      respond "other"',
+        "    else",
+        '      respond "fallback"',
+        "    fi",
+        "  }",
+        "  response = w.default",
+        '  expectContain response "hello"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const bash = transpileTestFile(join(root, "w.test.jh"), root);
+    assert.match(bash, /JAIPH_MOCK_DISPATCH_SCRIPT/);
+    assert.match(bash, /greeting/);
+    assert.match(bash, /other/);
+  });
+});
+
+test("ACCEPTANCE: mock prompt block without else emits failure path for unmatched prompt", () => {
+  withTempDir("jaiph-acc-mock-no-else-", (root) => {
+    writeFileSync(
+      join(root, "w.jh"),
+      ["workflow default {", '  prompt "only-this-match"', "}", ""].join("\n"),
+    );
+    writeFileSync(
+      join(root, "w.test.jh"),
+      [
+        'import "w.jh" as w',
+        "",
+        'test "no else branch" {',
+        "  mock prompt {",
+        '    if $1 contains "wrong" ; then',
+        '      respond "x"',
+        "    fi",
+        "  }",
+        "  response = w.default",
+        '  expectContain response "x"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const bash = transpileTestFile(join(root, "w.test.jh"), root);
+    assert.match(bash, /no mock matched prompt/);
+    assert.match(bash, /exit 1/);
+  });
+});
+
+test("ACCEPTANCE: unterminated mock prompt block (missing fi and }) fails with E_PARSE", () => {
+  assert.throws(
+    () =>
+      parsejaiph(
+        [
+          'import "w.jh" as w',
+          "",
+          'test "unterminated" {',
+          "  mock prompt {",
+          '    if $1 contains "x" ; then',
+          '      respond "y"',
+          "  }",
+          "}",
+          "",
+        ].join("\n"),
+        "/fake/t.test.jh",
+      ),
+    /E_PARSE.*mock prompt block/,
+  );
+});

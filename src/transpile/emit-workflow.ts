@@ -239,7 +239,8 @@ export function emitWorkflow(
           continue;
         }
         if (step.type === "run") {
-          out.push(`  ${transpileWorkflowRef(step.workflow, workflowSymbol, importedWorkflowSymbols)}`);
+          const args = step.args ? ` ${step.args}` : "";
+          out.push(`  ${transpileWorkflowRef(step.workflow, workflowSymbol, importedWorkflowSymbols)}${args}`);
           continue;
         }
         if (step.type === "prompt") {
@@ -277,7 +278,8 @@ export function emitWorkflow(
             `  if ! ${transpileRuleRef(step.ensureRef, workflowSymbol, importedWorkflowSymbols)}; then`,
           );
           for (const wf of step.runWorkflows) {
-            out.push(`    ${transpileWorkflowRef(wf, workflowSymbol, importedWorkflowSymbols)}`);
+            const args = wf.args ? ` ${wf.args}` : "";
+            out.push(`    ${transpileWorkflowRef(wf.workflow, workflowSymbol, importedWorkflowSymbols)}${args}`);
           }
           out.push("  fi");
           continue;
@@ -288,7 +290,8 @@ export function emitWorkflow(
           );
           for (const thenStep of step.thenSteps) {
             if (thenStep.type === "run") {
-              out.push(`    ${transpileWorkflowRef(thenStep.workflow, workflowSymbol, importedWorkflowSymbols)}`);
+              const args = thenStep.args ? ` ${thenStep.args}` : "";
+              out.push(`    ${transpileWorkflowRef(thenStep.workflow, workflowSymbol, importedWorkflowSymbols)}${args}`);
               continue;
             }
             if (thenStep.type === "prompt") {
@@ -328,7 +331,8 @@ export function emitWorkflow(
             if (thenStep.type === "shell") {
               out.push(`    ${thenStep.command}`);
             } else {
-              out.push(`    ${transpileWorkflowRef(thenStep.workflow, workflowSymbol, importedWorkflowSymbols)}`);
+              const args = thenStep.args ? ` ${thenStep.args}` : "";
+              out.push(`    ${transpileWorkflowRef(thenStep.workflow, workflowSymbol, importedWorkflowSymbols)}${args}`);
             }
           }
           out.push("  fi");

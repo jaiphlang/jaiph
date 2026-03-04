@@ -20,7 +20,7 @@ function parseMetadataValue(filePath: string, rawLine: string, valuePart: string
     return trimmed.slice(1, -1).replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, `"`).replace(/\\\\/g, `\\`);
   }
   const col = rawLine.indexOf(valuePart) >= 0 ? colFromRaw(rawLine) : 1;
-  fail(filePath, `metadata value must be a quoted string or true/false: ${trimmed}`, lineNo, col);
+  return fail(filePath, `metadata value must be a quoted string or true/false: ${trimmed}`, lineNo, col);
 }
 
 export function parseMetadataBlock(
@@ -33,10 +33,10 @@ export function parseMetadataBlock(
   const lineOpen = rawOpen.trim();
 
   if (!lineOpen.startsWith("metadata") || !lineOpen.includes("{")) {
-    fail(filePath, "expected metadata block: metadata {", openLineNo, colFromRaw(rawOpen));
+    return fail(filePath, "expected metadata block: metadata {", openLineNo, colFromRaw(rawOpen));
   }
   if (!/^metadata\s*\{\s*$/.test(lineOpen)) {
-    fail(filePath, "metadata block must be exactly 'metadata {' on its own line", openLineNo, colFromRaw(rawOpen));
+    return fail(filePath, "metadata block must be exactly 'metadata {' on its own line", openLineNo, colFromRaw(rawOpen));
   }
 
   const out: WorkflowMetadata = {};
@@ -60,13 +60,13 @@ export function parseMetadataBlock(
 
     const eq = line.indexOf("=");
     if (eq === -1) {
-      fail(filePath, `metadata line must be key = value: ${line}`, lineNo, colFromRaw(raw));
+      return fail(filePath, `metadata line must be key = value: ${line}`, lineNo, colFromRaw(raw));
     }
     const key = line.slice(0, eq).trim();
     const valuePart = line.slice(eq + 1);
 
     if (!ALLOWED_KEYS.has(key)) {
-      fail(
+      return fail(
         filePath,
         `unknown metadata key: ${key}. Allowed: agent.default_model, agent.command, run.logs_dir, run.debug`,
         lineNo,
@@ -78,7 +78,7 @@ export function parseMetadataBlock(
 
     if (key === "agent.default_model") {
       if (typeof value !== "string") {
-        fail(filePath, "agent.default_model must be a string", lineNo, colFromRaw(raw));
+        return fail(filePath, "agent.default_model must be a string", lineNo, colFromRaw(raw));
       }
       if (!out.agent) {
         out.agent = {};
@@ -86,7 +86,7 @@ export function parseMetadataBlock(
       out.agent.defaultModel = value;
     } else if (key === "agent.command") {
       if (typeof value !== "string") {
-        fail(filePath, "agent.command must be a string", lineNo, colFromRaw(valuePart));
+        return fail(filePath, "agent.command must be a string", lineNo, colFromRaw(raw));
       }
       if (!out.agent) {
         out.agent = {};
@@ -94,7 +94,7 @@ export function parseMetadataBlock(
       out.agent.command = value;
     } else if (key === "run.logs_dir") {
       if (typeof value !== "string") {
-        fail(filePath, "run.logs_dir must be a string", lineNo, colFromRaw(raw));
+        return fail(filePath, "run.logs_dir must be a string", lineNo, colFromRaw(raw));
       }
       if (!out.run) {
         out.run = {};
@@ -102,7 +102,7 @@ export function parseMetadataBlock(
       out.run.logsDir = value;
     } else if (key === "run.debug") {
       if (typeof value !== "boolean") {
-        fail(filePath, "run.debug must be true or false", lineNo, colFromRaw(raw));
+        return fail(filePath, "run.debug must be true or false", lineNo, colFromRaw(raw));
       }
       if (!out.run) {
         out.run = {};
@@ -111,5 +111,5 @@ export function parseMetadataBlock(
     }
   }
 
-  fail(filePath, "metadata block not closed with '}'", startIndex + 1, 1);
+  return fail(filePath, "metadata block not closed with '}'", startIndex + 1, 1);
 }
