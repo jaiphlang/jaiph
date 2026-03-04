@@ -84,11 +84,11 @@ Run tests: either native `*.test.jh` test files (with `test "..." { ... }` block
 - `jaiph test <dir>` — run all test files under the given directory.
 - `jaiph test <file.test.jh>` — run a single test file.
 
-Test files use the same mock file convention: `.jaiph/tests/<stem>.test.toml` (e.g. `workflow.test.jh` → `workflow.test.toml`). See [Testing](testing.md) for test block syntax and `expectContain`.
+Test files declare prompt mocks inline inside each `test "..." { ... }` block (e.g. `mock prompt "response"` or `mock prompt { if $1 contains "..." ; then respond "..." ; fi }`). See [Testing](testing.md) for test block syntax and `expectContain`.
 
 **Single workflow with mocks** (legacy):
 
-- `jaiph test <file.jh|file.jph> [args...]` — run the workflow with mocked prompts. Requires a mock file at `.jaiph/tests/<stem>.test.toml` (where `<stem>` is the file name without extension). Does not invoke the real agent.
+- `jaiph test <file.jh|file.jph> [args...]` — run the workflow with mocked prompts. Requires a `*.test.jh` file that imports the workflow and declares inline mocks. Does not invoke the real agent.
 
 ```bash
 jaiph test
@@ -109,7 +109,6 @@ jaiph init [workspace-path]
 Creates:
 
 - `.jaiph/bootstrap.jh`
-- `.jaiph/config.toml`
 - `.jaiph/jaiph-skill.md` (synced from local Jaiph installation)
 
 ## `jaiph use`

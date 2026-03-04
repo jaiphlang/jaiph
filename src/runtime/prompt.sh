@@ -105,6 +105,13 @@ jaiph::prompt_impl() {
     prompt_text="$*"
   fi
   if jaiph::is_test_mode; then
+    if [[ -n "${JAIPH_MOCK_DISPATCH_SCRIPT:-}" ]]; then
+      mock_response="$(jaiph::mock_dispatch "$prompt_text")" || {
+        return 1
+      }
+      printf '%s' "$mock_response"
+      return 0
+    fi
     if [[ -n "${JAIPH_MOCK_RESPONSES_FILE:-}" ]]; then
       mock_response="$(jaiph::read_next_mock_response)" || {
         if [[ -f "${JAIPH_MOCK_RESPONSES_FILE}" ]]; then
@@ -115,7 +122,7 @@ jaiph::prompt_impl() {
       printf '%s' "$mock_response"
       return 0
     fi
-    echo "jai: no mock for prompt (JAIPH_MOCK_RESPONSES_FILE missing or not a file)" >&2
+    echo "jai: no mock for prompt (set JAIPH_MOCK_DISPATCH_SCRIPT or JAIPH_MOCK_RESPONSES_FILE in test)" >&2
     return 1
   fi
   if [[ -n "$prompt_text" ]]; then

@@ -1,11 +1,11 @@
-# 0.3.0
-
-- `jaiph test <file.jh|file.jph> [args...]` runs workflows with mocked `prompt` steps (mock file: `.jaiph/tests/<stem>.test.toml`)
-
 # 0.2.0
 
+- `jaiph test` runs `*.test.jh` / `*.test.jph` with inline prompt mocks (`mock prompt "..."` or `mock prompt { if $1 contains "..." ; then respond "..." ; fi }`). No external `.test.toml` files.
+- Runtime config is env vars and in-file metadata only; `.jaiph/config.toml` and global config files are no longer read.
+- `jaiph init` no longer creates `.jaiph/config.toml`.
+
 - `.jh` extension recommended for new files; `.jph` supported but deprecated (CLI shows migration hint when running `.jph` files)
-- `jaiph init` creates `.jaiph/bootstrap.jh` (and `.jaiph/config.toml`, `.jaiph/jaiph-skill.md`)
+- `jaiph init` creates `.jaiph/bootstrap.jh` and `.jaiph/jaiph-skill.md`
 - Import resolution prefers `.jh` over `.jph` when both exist
 - `JAIPH_INSTALL_COMMAND` environment variable for `jaiph use` (default: `curl -fsSL https://jaiph.org/install | bash`)
 - `run` is not allowed inside a `rule` block; use `ensure` to call another rule or move the call to a workflow

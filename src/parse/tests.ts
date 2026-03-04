@@ -1,6 +1,116 @@
 import type { TestBlockDef } from "../types";
 import { colFromRaw, fail, hasUnescapedClosingQuote, isRef, stripQuotes } from "./core";
 
+function parseMockPromptBlock(
+  filePath: string,
+  lines: string[],
+  startLineIndex: number,
+  blockStartLineNo: number,
+  blockStartCol: number,
+): {
+  step: {
+    type: "test_mock_prompt_block";
+    branches: Array<{ pattern: string; response: string }>;
+    elseResponse?: string;
+    loc: { line: number; col: number };
+  };
+  nextIndex: number;
+} {
+  const branches: Array<{ pattern: string; response: string }> = [];
+  let elseResponse: string | undefined;
+  let i = startLineIndex + 1;
+  let seenIf = false;
+  let seenFi = false;
+  let pendingPattern: string | null = null;
+  let inElse = false;
+
+  while (i < lines.length) {
+    const lineNo = i + 1;
+    const raw = lines[i];
+    const line = raw.trim();
+    if (!line) {
+      i += 1;
+      continue;
+    }
+    if (line === "}") {
+      if (!seenFi) {
+        fail(filePath, 'mock prompt block must end with fi then }', lineNo);
+      }
+      return {
+        step: {
+          type: "test_mock_prompt_block",
+          branches,
+          elseResponse,
+          loc: { line: blockStartLineNo, col: blockStartCol },
+        },
+        nextIndex: i + 1,
+      };
+    }
+    const ifMatch = line.match(/^if\s+\$1\s+contains\s+"((?:[^"\\]|\\.)*)"\s*;\s*then\s*$/);
+    if (ifMatch) {
+      if (inElse) {
+        fail(filePath, "elif after else not allowed in mock prompt block", lineNo);
+      }
+      seenIf = true;
+      pendingPattern = ifMatch[1].replace(/\\"/g, '"').replace(/\\n/g, "\n");
+      i += 1;
+      continue;
+    }
+    const elifMatch = line.match(/^elif\s+\$1\s+contains\s+"((?:[^"\\]|\\.)*)"\s*;\s*then\s*$/);
+    if (elifMatch) {
+      if (inElse) {
+        fail(filePath, "elif after else not allowed in mock prompt block", lineNo);
+      }
+      if (pendingPattern !== null) {
+        fail(filePath, "respond \"...\" required after if/elif ... then before next elif", lineNo);
+      }
+      pendingPattern = elifMatch[1].replace(/\\"/g, '"').replace(/\\n/g, "\n");
+      i += 1;
+      continue;
+    }
+    if (line === "else") {
+      if (inElse) {
+        fail(filePath, "duplicate else in mock prompt block", lineNo);
+      }
+      if (pendingPattern !== null) {
+        fail(filePath, "respond \"...\" required after if/elif ... then before else", lineNo);
+      }
+      inElse = true;
+      i += 1;
+      continue;
+    }
+    const respondMatch = line.match(/^respond\s+"((?:[^"\\]|\\.)*)"\s*$/);
+    if (respondMatch) {
+      const response = respondMatch[1].replace(/\\"/g, '"').replace(/\\n/g, "\n");
+      if (inElse) {
+        elseResponse = response;
+      } else if (pendingPattern !== null) {
+        branches.push({ pattern: pendingPattern, response });
+        pendingPattern = null;
+      } else {
+        fail(filePath, "respond must follow if/elif ... then or else in mock prompt block", lineNo);
+      }
+      i += 1;
+      continue;
+    }
+    if (line === "fi") {
+      if (pendingPattern !== null) {
+        fail(filePath, "respond \"...\" required after last elif ... then before fi", lineNo);
+      }
+      seenFi = true;
+      i += 1;
+      continue;
+    }
+    fail(
+      filePath,
+      'mock prompt block allows only: if $1 contains "..." ; then, elif ..., else, respond "...", fi, }',
+      lineNo,
+    );
+  }
+
+  fail(filePath, "unterminated mock prompt block", blockStartLineNo);
+}
+
 export function parseTestBlock(
   filePath: string,
   lines: string[],
@@ -40,8 +150,14 @@ export function parseTestBlock(
 
     if (inner.startsWith("mock prompt ")) {
       const arg = inner.slice("mock prompt ".length).trim();
+      if (arg === "{") {
+        const { step, nextIndex } = parseMockPromptBlock(filePath, lines, i, innerNo, colFromRaw(innerRaw));
+        testBlock.steps.push(step);
+        i = nextIndex - 1;
+        continue;
+      }
       if (!arg.startsWith('"') || !hasUnescapedClosingQuote(arg, 1)) {
-        fail(filePath, 'mock prompt must be: mock prompt "<response>"', innerNo, innerRaw.indexOf("mock"));
+        fail(filePath, 'mock prompt must be: mock prompt "<response>" or mock prompt { if $1 contains "..." ; then respond "..." ; fi }', innerNo, innerRaw.indexOf("mock"));
       }
       testBlock.steps.push({
         type: "test_mock_prompt",

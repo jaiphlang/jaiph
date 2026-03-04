@@ -25,18 +25,6 @@ workflow default {
 }
 `;
 
-const LOCAL_CONFIG_TEMPLATE = `# Jaiph project configuration
-[agent]
-# Default model for prompt steps (passed as --model to the agent command).
-default_model = "auto"
-
-[run]
-# Store run logs under .jaiph/runs by default (relative to workspace root).
-logs_dir = ".jaiph/runs"
-# Set to true to enable shell xtrace during jaiph run.
-debug = false
-`;
-
 export function runInit(rest: string[]): number {
   const workspaceArg = rest[0] ?? ".";
   const workspaceRoot = resolve(workspaceArg);
@@ -48,7 +36,6 @@ export function runInit(rest: string[]): number {
 
   const jaiphDir = join(workspaceRoot, ".jaiph");
   const bootstrapPath = join(jaiphDir, "bootstrap.jh");
-  const configPath = join(jaiphDir, "config.toml");
   const skillPath = join(jaiphDir, "jaiph-skill.md");
   const palette = colorPalette();
 
@@ -64,11 +51,6 @@ export function runInit(rest: string[]): number {
     createdBootstrap = true;
   }
   chmodSync(bootstrapPath, 0o755);
-  let createdConfig = false;
-  if (!existsSync(configPath)) {
-    writeFileSync(configPath, LOCAL_CONFIG_TEMPLATE, "utf8");
-    createdConfig = true;
-  }
   const installedSkillPath = resolveInstalledSkillPath();
   let syncedSkill = false;
   if (installedSkillPath) {
@@ -79,11 +61,6 @@ export function runInit(rest: string[]): number {
   process.stdout.write(`${palette.green}✓ Initialized ${join(".jaiph", "bootstrap.jh")}${palette.reset}\n`);
   if (!createdBootstrap) {
     process.stdout.write(`${palette.dim}▸ Note: bootstrap file already existed; left unchanged.${palette.reset}\n`);
-  }
-  if (createdConfig) {
-    process.stdout.write(`${palette.green}✓ Initialized ${join(".jaiph", "config.toml")}${palette.reset}\n`);
-  } else {
-    process.stdout.write(`${palette.dim}▸ Note: config file already existed; left unchanged.${palette.reset}\n`);
   }
   if (syncedSkill) {
     process.stdout.write(`${palette.green}✓ Synced ${join(".jaiph", "jaiph-skill.md")}${palette.reset}\n`);

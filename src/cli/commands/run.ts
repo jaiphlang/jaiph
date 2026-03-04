@@ -10,7 +10,7 @@ import { dirname, join, resolve, extname } from "node:path";
 import { basename } from "node:path";
 import { parsejaiph } from "../../parser";
 import { build, workflowSymbolForFile } from "../../transpiler";
-import { loadJaiphConfig, mergeConfigWithMetadata, hasLocalConfigWithKeys } from "../../config";
+import { metadataToConfig } from "../../config";
 import {
   colorPalette,
   summarizeError,
@@ -46,7 +46,6 @@ export async function runWorkflow(rest: string[]): Promise<number> {
   }
   const inputAbs = resolve(input);
   const workspaceRoot = detectWorkspaceRoot(dirname(inputAbs));
-  const config = loadJaiphConfig(workspaceRoot);
   const inputStat = statSync(inputAbs);
   const ext = extname(inputAbs);
   if (!inputStat.isFile() || (ext !== ".jph" && ext !== ".jh")) {
@@ -60,12 +59,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
   }
 
   const mod = parsejaiph(readFileSync(inputAbs, "utf8"), inputAbs);
-  const effectiveConfig = mergeConfigWithMetadata(config, mod.metadata);
-  if (hasLocalConfigWithKeys(workspaceRoot) && process.stderr.isTTY) {
-    process.stderr.write(
-      "jaiph: .jaiph/config.toml is deprecated; prefer in-file metadata in your .jh workflow. See docs/configuration.md.\n",
-    );
-  }
+  const effectiveConfig = metadataToConfig(mod.metadata);
 
   const outDir = target ? resolve(target) : mkdtempSync(join(tmpdir(), "jaiph-run-"));
   const shouldCleanup = !target;

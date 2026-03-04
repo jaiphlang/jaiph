@@ -12,6 +12,44 @@ export type TreeRow = {
 
 export type RowState = { status: "pending" | "done" | "failed"; elapsedSec?: number };
 
+function selfRecursiveRunSiteCount(mod: jaiphModule, workflowName: string): number {
+  const workflow = mod.workflows.find((item) => item.name === workflowName);
+  if (!workflow) {
+    return 0;
+  }
+  let count = 0;
+  for (const step of workflow.steps) {
+    if (step.type === "run" && step.workflow.value === workflowName) {
+      count += 1;
+      continue;
+    }
+    if (step.type === "if_not_ensure_then_run") {
+      for (const wfRef of step.runWorkflows) {
+        if (wfRef.value === workflowName) {
+          count += 1;
+        }
+      }
+      continue;
+    }
+    if (step.type === "if_not_shell_then") {
+      for (const thenStep of step.thenSteps) {
+        if (thenStep.type === "run" && thenStep.workflow.value === workflowName) {
+          count += 1;
+        }
+      }
+      continue;
+    }
+    if (step.type === "if_not_ensure_then") {
+      for (const thenStep of step.thenSteps) {
+        if (thenStep.type === "run" && thenStep.workflow.value === workflowName) {
+          count += 1;
+        }
+      }
+    }
+  }
+  return count;
+}
+
 export function collectWorkflowChildren(
   mod: jaiphModule,
   workflowName: string,
@@ -206,10 +244,33 @@ export function buildRunTreeRows(
   }
   const mainSymbol = rootDir ? workflowSymbolForFile(mod.filePath, resolve(rootDir)) : undefined;
   const visited = new Set<string>(["default"]);
-  const renderChildren = (currentMod: jaiphModule, workflowName: string, prefix: string, currentSymbol?: string): void => {
+  const renderChildren = (
+    currentMod: jaiphModule,
+    workflowName: string,
+    prefix: string,
+    currentSymbol?: string,
+    recursionDepth = 0,
+  ): void => {
     const children = collectWorkflowChildren(currentMod, workflowName, symbols.size > 0 ? symbols : undefined, currentSymbol);
+    const selfRecursiveSites = selfRecursiveRunSiteCount(currentMod, workflowName);
+    const recursionSiteIndexForDepth = selfRecursiveSites > 0 ? Math.min(recursionDepth, selfRecursiveSites - 1) : -1;
+    let currentSelfRecursiveSiteIndex = 0;
     for (let i = 0; i < children.length; i += 1) {
       const child = children[i];
+      const childIsLocalSelfRecursion =
+        child.nested !== undefined &&
+        !child.nested.includes(".") &&
+        child.nested === workflowName;
+      if (childIsLocalSelfRecursion) {
+        const shouldExpand = selfRecursiveSites > 0
+          && recursionDepth < selfRecursiveSites
+          && currentSelfRecursiveSiteIndex === recursionSiteIndexForDepth;
+        const shouldRender = recursionDepth === 0 || shouldExpand;
+        currentSelfRecursiveSiteIndex += 1;
+        if (!shouldRender) {
+          continue;
+        }
+      }
       const isLast = i === children.length - 1;
       const branch = isLast ? "└── " : "├── ";
       rows.push({ rawLabel: child.label, prefix, branch, isRoot: false, stepFunc: child.stepFunc });
@@ -217,6 +278,21 @@ export function buildRunTreeRows(
         continue;
       }
       const nested = child.nested;
+      if (childIsLocalSelfRecursion) {
+        const shouldExpand = selfRecursiveSites > 0
+          && recursionDepth < selfRecursiveSites
+          && (currentSelfRecursiveSiteIndex - 1) === recursionSiteIndexForDepth;
+        if (shouldExpand) {
+          renderChildren(
+            currentMod,
+            nested,
+            `${prefix}${isLast ? "    " : "│   "}`,
+            currentSymbol,
+            recursionDepth + 1,
+          );
+        }
+        continue;
+      }
       if (nested.includes(".")) {
         const dot = nested.indexOf(".");
         const alias = nested.slice(0, dot);
@@ -311,14 +387,40 @@ export function renderRunTree(mod: jaiphModule, rootLabel = "workflow default"):
   const lines = [styleTreeLabel(rootLabel)];
   const visited = new Set<string>(["default"]);
 
-  const renderChildren = (workflowName: string, prefix: string): void => {
+  const renderChildren = (workflowName: string, prefix: string, recursionDepth = 0): void => {
     const children = collectWorkflowChildren(mod, workflowName);
+    const selfRecursiveSites = selfRecursiveRunSiteCount(mod, workflowName);
+    const recursionSiteIndexForDepth = selfRecursiveSites > 0 ? Math.min(recursionDepth, selfRecursiveSites - 1) : -1;
+    let currentSelfRecursiveSiteIndex = 0;
     for (let i = 0; i < children.length; i += 1) {
       const child = children[i];
+      const childIsLocalSelfRecursion =
+        child.nested !== undefined &&
+        !child.nested.includes(".") &&
+        child.nested === workflowName;
+      if (childIsLocalSelfRecursion) {
+        const shouldExpand = selfRecursiveSites > 0
+          && recursionDepth < selfRecursiveSites
+          && currentSelfRecursiveSiteIndex === recursionSiteIndexForDepth;
+        const shouldRender = recursionDepth === 0 || shouldExpand;
+        currentSelfRecursiveSiteIndex += 1;
+        if (!shouldRender) {
+          continue;
+        }
+      }
       const isLast = i === children.length - 1;
       const branch = isLast ? "└── " : "├── ";
       lines.push(`${prefix}${branch}${styleTreeLabel(child.label)}`);
       if (!child.nested) {
+        continue;
+      }
+      if (childIsLocalSelfRecursion) {
+        const shouldExpand = selfRecursiveSites > 0
+          && recursionDepth < selfRecursiveSites
+          && (currentSelfRecursiveSiteIndex - 1) === recursionSiteIndexForDepth;
+        if (shouldExpand) {
+          renderChildren(child.nested, `${prefix}${isLast ? "    " : "│   "}`, recursionDepth + 1);
+        }
         continue;
       }
       if (child.nested.includes(".") || visited.has(child.nested)) {

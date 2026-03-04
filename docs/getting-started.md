@@ -116,7 +116,7 @@ Entrypoint resolution: executable `.jh` or `.jph` files (with `#!/usr/bin/env ja
 jaiph init
 ```
 
-This creates `.jaiph/bootstrap.jh`, `.jaiph/config.toml`, and `.jaiph/jaiph-skill.md` (synced from your installed Jaiph copy).
+This creates `.jaiph/bootstrap.jh` and `.jaiph/jaiph-skill.md` (synced from your installed Jaiph copy).
 
 Then run:
 
@@ -138,12 +138,7 @@ Tip: add `.jaiph/runs/` to your `.gitignore`.
 
 ### Configuration
 
-Jaiph supports both global and local TOML config files:
-
-- Global: `${XDG_CONFIG_HOME:-~/.config}/jaiph/config.toml`
-- Local: `.jaiph/config.toml` (in your workspace)
-
-Local config overrides global config. See [configuration.md](configuration.md) for full details and examples.
+Runtime behavior is controlled by in-file metadata and environment variables. See [Configuration](configuration.md) for full details and examples.
 
 ### CLI reference
 

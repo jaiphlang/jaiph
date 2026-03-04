@@ -9,23 +9,37 @@ trap e2e::cleanup EXIT
 e2e::prepare_test_env "fail_then_retry_pass"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
-# Scenario similar to make_ci_pass: if ! ensure rule; then run remediate; run same_workflow; fi
-# Rule fails first time; remediation creates state; retry runs workflow again; rule passes.
-e2e::section "if ! ensure then run remediate + run same workflow (fail first, pass on retry)"
-rm -f "${TEST_DIR}/.gate_passed"
+# Scenario with two recursive gates:
+# - first call fails gate1 -> remediate1 -> recurse
+# - second call fails gate2 -> remediate2 -> recurse
+# Tree should reflect nested recursion depth.
+e2e::section "if ! ensure supports multi-gate recursive nesting"
+rm -f "${TEST_DIR}/.gate1_passed" "${TEST_DIR}/.gate2_passed"
 
 cat > "${TEST_DIR}/make_pass.jh" <<'EOF'
-rule gate {
-  test -f .gate_passed
+rule gate1 {
+  test -f .gate1_passed
 }
 
-workflow remediate {
-  touch .gate_passed
+rule gate2 {
+  test -f .gate2_passed
+}
+
+workflow remediate1 {
+  touch .gate1_passed
+}
+
+workflow remediate2 {
+  touch .gate2_passed
 }
 
 workflow make_pass {
-  if ! ensure gate; then
-    run remediate
+  if ! ensure gate1; then
+    run remediate1
+    run make_pass
+  fi
+  if ! ensure gate2; then
+    run remediate2
     run make_pass
   fi
 }
@@ -36,22 +50,35 @@ workflow default {
 EOF
 
 out="$(jaiph run "${TEST_DIR}/make_pass.jh" 2>&1)"
-e2e::assert_file_exists "${TEST_DIR}/.gate_passed" "remediation ran (marker file created before retry)"
+e2e::assert_file_exists "${TEST_DIR}/.gate1_passed" "first remediation ran (gate1 marker created)"
+e2e::assert_file_exists "${TEST_DIR}/.gate2_passed" "second remediation ran (gate2 marker created)"
 
 # Exact expected tree (time normalized to (<time>) by assert_output_equals)
 expected_tree_ensure=$(printf '%s\n' \
   'running make_pass.jh' \
   'workflow default' \
   '└── workflow make_pass (<time>)' \
-  '    ├── rule gate (<time> failed)' \
-  '    ├── workflow remediate (<time>)' \
+  '    ├── rule gate1 (<time> failed)' \
+  '    ├── workflow remediate1 (<time>)' \
+  '    ├── workflow make_pass (<time>)' \
+  '    │   ├── rule gate1 (<time>)' \
+  '    │   ├── workflow remediate1 (<time>)' \
+  '    │   ├── rule gate2 (<time> failed)' \
+  '    │   ├── workflow remediate2 (<time>)' \
+  '    │   └── workflow make_pass (<time>)' \
+  '    │       ├── rule gate1 (<time>)' \
+  '    │       ├── workflow remediate1 (<time>)' \
+  '    │       ├── rule gate2 (<time>)' \
+  '    │       ├── workflow remediate2 (<time>)' \
+  '    ├── rule gate2 (<time>)' \
+  '    ├── workflow remediate2 (<time>)' \
   '    └── workflow make_pass (<time>)' \
   '✓ PASS workflow default (<time>)')
 expected_tree_ensure="${expected_tree_ensure%$'\n'}"
 normalized_out="$(e2e::normalize_output "${out}")"
-e2e::assert_equals "${normalized_out}" "${expected_tree_ensure}" "exact tree (ensure + remediate + make_pass)"
+e2e::assert_equals "${normalized_out}" "${expected_tree_ensure}" "exact tree (two gates + recursive nesting)"
 
-e2e::pass "if ! ensure with run remediate + run make_pass: fail first time, pass on retry"
+e2e::pass "if ! ensure with two recursive gates: fail gate1 then gate2, pass on nested retries"
 
 # Same scenario but condition is plain bash (if ! test -f ...; then touch; run make_pass; fi).
 e2e::section "if ! test (bash) then touch + run same workflow (fail first, pass on retry)"

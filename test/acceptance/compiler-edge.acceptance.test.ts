@@ -248,6 +248,26 @@ test("ACCEPTANCE: unsupported top-level statement fails with E_PARSE", () => {
   );
 });
 
+test("ACCEPTANCE: malformed mock prompt block (respond without if) fails with E_PARSE", () => {
+  assert.throws(
+    () =>
+      parsejaiph(
+        [
+          'import "w.jh" as w',
+          "",
+          'test "bad mock" {',
+          "  mock prompt {",
+          '    respond "x"',
+          "  }",
+          "}",
+          "",
+        ].join("\n"),
+        "/fake/t.test.jh",
+      ),
+    /E_PARSE.*respond must follow if\/elif/,
+  );
+});
+
 test("ACCEPTANCE: import stem resolves .jh before .jph when both exist", () => {
   withTempDir("jaiph-acc-import-preference-", (root) => {
     writeFileSync(join(root, "dep.jh"), "rule ready {\n  echo from-jh\n}\n");

@@ -569,7 +569,7 @@ jaiph use 0.2.0</code></pre>
                 </p>
                 <h3>Initialize Jaiph workspace</h3>
                 <pre><code class="language-bash">jaiph init</code></pre>
-                <p>This creates <code>.jaiph/bootstrap.jh</code>, <code>.jaiph/config.toml</code>, and
+                <p>This creates <code>.jaiph/bootstrap.jh</code> and
                     <code>.jaiph/jaiph-skill.md</code> (synced from local Jaiph installation).
                 </p>
                 <p>Then run:</p>
@@ -578,13 +578,8 @@ jaiph use 0.2.0</code></pre>
                     feature implementation.</p>
                 <p>Tip: add <code>.jaiph/runs/</code> to your <code>.gitignore</code>.</p>
                 <h3>Configuration</h3>
-                <p>Jaiph supports TOML configuration in two scopes:</p>
-                <ul>
-                    <li>Global: <code>${XDG_CONFIG_HOME:-~/.config}/jaiph/config.toml</code></li>
-                    <li>Local: <code>.jaiph/config.toml</code> (workspace root)</li>
-                </ul>
-                <p>Local config overrides global config. For supported keys and precedence, read
-                    <a href="configuration">configuration docs</a>.
+                <p>Runtime behavior is controlled by in-file metadata and environment variables. See
+                    <a href="configuration">configuration docs</a> for precedence and keys.
                 </p>
                 <p>For command syntax and flags, read
                     <a href="cli">CLI reference</a>.

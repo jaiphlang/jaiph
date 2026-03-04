@@ -30,5 +30,4 @@ else
 fi
 e2e::assert_file_exists "${BOOTSTRAP_FILE}" "bootstrap file exists"
 e2e::assert_file_executable "${BOOTSTRAP_FILE}" "bootstrap file is executable"
-e2e::assert_file_exists "${TEST_DIR}/.jaiph/config.toml" "config.toml exists"
 e2e::assert_file_exists "${TEST_DIR}/.jaiph/jaiph-skill.md" "jaiph-skill.md exists"

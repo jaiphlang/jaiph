@@ -717,8 +717,8 @@ test("jaiph run interpolates named array placeholders in prompt text", () => {
   }
 });
 
-test("jaiph run applies model from local TOML config", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-run-config-model-"));
+test("jaiph run applies model from in-file metadata", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-metadata-model-"));
   try {
     const binDir = join(root, "bin");
     mkdirSync(binDir, { recursive: true });
@@ -733,22 +733,15 @@ test("jaiph run applies model from local TOML config", () => {
     );
     chmodSync(fakeAgent, 0o755);
 
-    mkdirSync(join(root, ".jaiph"), { recursive: true });
-    writeFileSync(
-      join(root, ".jaiph/config.toml"),
-      [
-        "[agent]",
-        'default_model = "auto"',
-        "",
-      ].join("\n"),
-    );
-
     const filePath = join(root, "prompt.jh");
     writeFileSync(
       filePath,
       [
+        "metadata {",
+        '  agent.default_model = "auto"',
+        "}",
         "workflow default {",
-        '  prompt "hello from config"',
+        '  prompt "hello from metadata"',
         "}",
         "",
       ].join("\n"),
@@ -832,16 +825,17 @@ test("jaiph init creates workspace structure and guidance", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-init-"));
   try {
     const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const skillPath = join(process.cwd(), "docs/jaiph-skill.md");
     const initResult = spawnSync("node", [cliPath, "init"], {
       encoding: "utf8",
       cwd: root,
+      env: { ...process.env, ...(existsSync(skillPath) ? { JAIPH_SKILL_PATH: skillPath } : {}) },
     });
 
     assert.equal(initResult.status, 0, initResult.stderr);
     assert.equal(existsSync(join(root, ".jaiph")), true);
     assert.equal(existsSync(join(root, ".jaiph/lib")), false);
     assert.equal(existsSync(join(root, ".jaiph/bootstrap.jh")), true);
-    assert.equal(existsSync(join(root, ".jaiph/config.toml")), true);
     assert.equal(existsSync(join(root, ".jaiph/jaiph-skill.md")), true);
     const bootstrap = readFileSync(join(root, ".jaiph/bootstrap.jh"), "utf8");
     assert.match(bootstrap, /^#!\/usr\/bin\/env jaiph\n\n/);
@@ -851,18 +845,12 @@ test("jaiph init creates workspace structure and guidance", () => {
     assert.match(bootstrap, /Create or update Jaiph workflows under \.jaiph\//);
     assert.doesNotMatch(bootstrap, /\$1/);
     assert.equal(statSync(join(root, ".jaiph/bootstrap.jh")).mode & 0o777, 0o755);
-    const localConfig = readFileSync(join(root, ".jaiph/config.toml"), "utf8");
-    assert.match(localConfig, /\[agent\]/);
-    assert.match(localConfig, /default_model = "auto"/);
-    assert.match(localConfig, /\[run\]/);
-    assert.match(localConfig, /logs_dir = "\.jaiph\/runs"/);
     const localSkill = readFileSync(join(root, ".jaiph/jaiph-skill.md"), "utf8");
     assert.match(localSkill, /Jaiph Bootstrap Skill/);
     assert.equal(existsSync(join(root, ".gitignore")), false);
     assert.match(initResult.stdout, /Jaiph init/);
     assert.match(initResult.stdout, /▸ Creating \.jaiph\/bootstrap\.jh/);
     assert.match(initResult.stdout, /✓ Initialized \.jaiph\/bootstrap\.jh/);
-    assert.match(initResult.stdout, /✓ Initialized \.jaiph\/config\.toml/);
     assert.match(initResult.stdout, /Synced \.jaiph\/jaiph-skill\.md/);
     assert.match(initResult.stdout, /\.\/\.jaiph\/bootstrap\.jh/);
     assert.match(initResult.stdout, /analyze the project/i);
@@ -1284,39 +1272,6 @@ test("build accepts ensure inside a rule block", () => {
   }
 });
 
-test("build accepts ensure inside a rule block", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-ensure-in-rule-"));
-  const outDir = mkdtempSync(join(tmpdir(), "jaiph-ensure-in-rule-out-"));
-  try {
-    const filePath = join(root, "entry.jh");
-    writeFileSync(
-      filePath,
-      [
-        "rule dep {",
-        "  echo dep",
-        "}",
-        "",
-        "rule main {",
-        "  ensure dep",
-        "}",
-        "",
-        "workflow default {",
-        "  ensure main",
-        "}",
-        "",
-      ].join("\n"),
-    );
-
-    const results = build(filePath, outDir);
-    assert.equal(results.length, 1);
-    assert.match(results[0].bash, /entry::rule::dep/);
-    assert.match(results[0].bash, /entry::rule::main/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-    rmSync(outDir, { recursive: true, force: true });
-  }
-});
-
 test("build emits prompt capture as name=$(jaiph::prompt ...) for name = prompt \"...\"", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-prompt-capture-build-"));
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-prompt-capture-out-"));
@@ -1379,6 +1334,105 @@ test("jaiph test captures mock response into variable and variable is available 
 
     assert.equal(testResult.status, 0, testResult.stderr);
     assert.match(testResult.stdout, /test\(s\) passed|PASS/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph test inline mock prompt block with if/elif/else and first-match", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-test-mock-block-"));
+  try {
+    writeFileSync(
+      join(root, "multi_prompt.jh"),
+      [
+        "workflow default {",
+        '  a = prompt "greet"',
+        '  b = prompt "bye"',
+        '  echo "$a" "$b"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(root, "multi_prompt.test.jh"),
+      [
+        'import "multi_prompt.jh" as m',
+        "",
+        'test "mock block first-match" {',
+        "  mock prompt {",
+        '    if $1 contains "greet" ; then',
+        '      respond "hello"',
+        '    elif $1 contains "bye" ; then',
+        '      respond "goodbye"',
+        "    else",
+        '      respond "default"',
+        "    fi",
+        "  }",
+        "  out = m.default",
+        '  expectContain out "hello"',
+        '  expectContain out "goodbye"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const testResult = spawnSync("node", [cliPath, "test", "multi_prompt.test.jh"], {
+      encoding: "utf8",
+      cwd: root,
+      env: process.env,
+    });
+
+    assert.equal(testResult.status, 0, testResult.stderr + testResult.stdout);
+    assert.match(testResult.stdout, /test\(s\) passed|PASS/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph test fails when no mock branch matches and no else", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-test-mock-no-else-"));
+  try {
+    writeFileSync(
+      join(root, "single.jh"),
+      [
+        "workflow default {",
+        '  result = prompt "unmatched prompt text"',
+        '  echo "$result"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(root, "single.test.jh"),
+      [
+        'import "single.jh" as s',
+        "",
+        'test "no else branch" {',
+        "  mock prompt {",
+        '    if $1 contains "other" ; then',
+        '      respond "never"',
+        "    fi",
+        "  }",
+        "  out = s.default",
+        '  expectContain out "x"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const testResult = spawnSync("node", [cliPath, "test", "single.test.jh"], {
+      encoding: "utf8",
+      cwd: root,
+      env: process.env,
+    });
+
+    assert.equal(testResult.status, 1, "expected test to fail when no branch matches and no else");
+    assert.match(
+      testResult.stderr + testResult.stdout,
+      /no mock matched|no branch matched|expectContain failed|FAIL/,
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

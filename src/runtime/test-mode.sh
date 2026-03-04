@@ -23,3 +23,14 @@ jaiph::read_next_mock_response() {
   printf '%s' "$line"
   return 0
 }
+
+# Runs JAIPH_MOCK_DISPATCH_SCRIPT with prompt text as $1; outputs mock response to stdout.
+# Returns 0 on success, 1 on failure (e.g. no match and no else).
+jaiph::mock_dispatch() {
+  local prompt_text="${1:-}"
+  if [[ -z "${JAIPH_MOCK_DISPATCH_SCRIPT:-}" || ! -x "${JAIPH_MOCK_DISPATCH_SCRIPT}" ]]; then
+    echo "jai: no mock for prompt (JAIPH_MOCK_DISPATCH_SCRIPT missing or not executable)" >&2
+    return 1
+  fi
+  "$JAIPH_MOCK_DISPATCH_SCRIPT" "$prompt_text"
+}

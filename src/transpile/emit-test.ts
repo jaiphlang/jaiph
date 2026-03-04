@@ -4,6 +4,29 @@ function escapeBashSingleQuoted(s: string): string {
   return "'" + s.replace(/'/g, "'\\''") + "'";
 }
 
+function emitMockDispatchScript(
+  step: { branches: Array<{ pattern: string; response: string }>; elseResponse?: string },
+  escape: (s: string) => string,
+): string[] {
+  const lines: string[] = ["#!/usr/bin/env bash", "set -euo pipefail", 'prompt="${1:-}"'];
+  for (let i = 0; i < step.branches.length; i += 1) {
+    const { pattern, response } = step.branches[i];
+    const cond = i === 0 ? "if" : "elif";
+    lines.push(`${cond} [[ "$prompt" == *${escape(pattern)}* ]]; then`);
+    lines.push(`  printf '%s' ${escape(response)}`);
+  }
+  if (step.elseResponse !== undefined) {
+    lines.push("else");
+    lines.push(`  printf '%s' ${escape(step.elseResponse)}`);
+  } else {
+    lines.push("else");
+    lines.push('  echo "jai: no mock matched prompt (no branch matched). Prompt preview: ${prompt:0:80}..." >&2');
+    lines.push("  exit 1");
+  }
+  lines.push("fi");
+  return lines;
+}
+
 export function emitTest(
   ast: jaiphModule,
   importedWorkflowSymbols: Map<string, string>,
@@ -41,18 +64,42 @@ export function emitTest(
 
   let testIndex = 0;
   for (const block of ast.tests!) {
+    const hasMockBlock = block.steps.some((s) => s.type === "test_mock_prompt_block");
     const funcName = `jaiph__test_${testIndex}`;
     out.push(`${funcName}() {`);
     out.push(`  jaiph__test_name=${escapeBashSingleQuoted(block.description)}`);
-    out.push(`  jaiph__mock_file=$(mktemp)`);
-    out.push(`  trap 'rm -f "$jaiph__mock_file"' RETURN`);
+    if (hasMockBlock) {
+      const mockBlockStep = block.steps.find((s) => s.type === "test_mock_prompt_block");
+      if (mockBlockStep && mockBlockStep.type === "test_mock_prompt_block") {
+        const dispatchScript = emitMockDispatchScript(mockBlockStep, escapeBashSingleQuoted);
+        out.push(`  jaiph__mock_dispatch_script=$(mktemp)`);
+        out.push(`  trap 'rm -f "$jaiph__mock_dispatch_script"' RETURN`);
+        out.push(`  cat > "$jaiph__mock_dispatch_script" << 'JAIPH_MOCK_EOF'`);
+        for (const scriptLine of dispatchScript) {
+          out.push(scriptLine);
+        }
+        out.push(`JAIPH_MOCK_EOF`);
+        out.push(`  chmod +x "$jaiph__mock_dispatch_script"`);
+        out.push(`  export JAIPH_MOCK_DISPATCH_SCRIPT="$jaiph__mock_dispatch_script"`);
+        out.push(`  unset JAIPH_MOCK_RESPONSES_FILE`);
+      }
+    } else {
+      out.push(`  jaiph__mock_file=$(mktemp)`);
+      out.push(`  trap 'rm -f "$jaiph__mock_file"' RETURN`);
+      out.push(`  unset JAIPH_MOCK_DISPATCH_SCRIPT`);
+    }
     for (const step of block.steps) {
       if (step.type === "test_shell") {
         out.push(`  ${step.command}`);
         continue;
       }
       if (step.type === "test_mock_prompt") {
-        out.push(`  printf '%s\\n' ${escapeBashSingleQuoted(step.response)} >> "$jaiph__mock_file"`);
+        if (!hasMockBlock) {
+          out.push(`  printf '%s\\n' ${escapeBashSingleQuoted(step.response)} >> "$jaiph__mock_file"`);
+        }
+        continue;
+      }
+      if (step.type === "test_mock_prompt_block") {
         continue;
       }
       if (step.type === "test_run_workflow") {
@@ -63,7 +110,9 @@ export function emitTest(
           const sym = importedWorkflowSymbols.get(alias) ?? alias;
           return `${sym}::workflow::${wfName}`;
         })();
-        out.push(`  export JAIPH_MOCK_RESPONSES_FILE="$jaiph__mock_file"`);
+        if (!hasMockBlock) {
+          out.push(`  export JAIPH_MOCK_RESPONSES_FILE="$jaiph__mock_file"`);
+        }
         out.push("  set +e");
         out.push(`  ${step.captureName}=$(${workflowSymbol} 2>&1)`);
         out.push("  jaiph__test_exit=$?");

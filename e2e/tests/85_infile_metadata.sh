@@ -10,7 +10,7 @@ e2e::prepare_test_env "infile_metadata"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
 e2e::section "in-file metadata drives run.logs_dir without config file"
-# Given: workflow with only in-file metadata, no .jaiph/config.toml
+# Given: workflow with only in-file metadata (no .jaiph/config.toml)
 rm -rf "${TEST_DIR}/.jaiph"
 mkdir -p "${TEST_DIR}"
 cat > "${TEST_DIR}/meta_workflow.jh" <<'EOF'
@@ -39,13 +39,9 @@ if [[ ${#run_dirs[@]} -lt 1 ]]; then
 fi
 e2e::pass "run directory created under in-file metadata run.logs_dir"
 
-e2e::section "in-file metadata overrides config file"
-# Given: config file and workflow with metadata
+e2e::section "in-file metadata is used when set"
+# Given: workflow with metadata (config files are ignored by runtime)
 mkdir -p "${TEST_DIR}/.jaiph"
-cat > "${TEST_DIR}/.jaiph/config.toml" <<'EOF'
-[run]
-logs_dir = "config_runs"
-EOF
 cat > "${TEST_DIR}/override.jh" <<'EOF'
 metadata {
   run.logs_dir = "metadata_wins"
@@ -61,11 +57,11 @@ EOF
 # When
 jaiph run "${TEST_DIR}/override.jh" 2>/dev/null || true
 
-# Then: metadata wins, so run dir is under metadata_wins
+# Then: run dir is under metadata_wins
 shopt -s nullglob
 meta_dirs=("${TEST_DIR}/metadata_wins"/*)
 shopt -u nullglob
 if [[ ${#meta_dirs[@]} -lt 1 ]]; then
-  e2e::fail "expected run directory under metadata_wins (in-file over config)"
+  e2e::fail "expected run directory under metadata_wins (in-file metadata)"
 fi
-e2e::pass "in-file metadata overrides config file for run.logs_dir"
+e2e::pass "in-file metadata drives run.logs_dir"

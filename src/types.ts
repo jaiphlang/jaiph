@@ -123,6 +123,12 @@ export interface CompileResult {
 export type TestStepDef =
   | { type: "test_shell"; command: string; loc: SourceLoc }
   | { type: "test_mock_prompt"; response: string; loc: SourceLoc }
+  | {
+      type: "test_mock_prompt_block";
+      branches: Array<{ pattern: string; response: string }>;
+      elseResponse?: string;
+      loc: SourceLoc;
+    }
   | { type: "test_run_workflow"; captureName: string; workflowRef: string; loc: SourceLoc }
   | { type: "test_expect_contain"; variable: string; substring: string; loc: SourceLoc };
 
