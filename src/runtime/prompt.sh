@@ -1,6 +1,20 @@
 # Runtime: prompt execution (agent invocation, stream parsing, test mocks).
 # Sourced by jaiph_stdlib.sh. Depends on steps.sh and test-mode.sh.
 
+jaiph::format_shell_command() {
+  local out=""
+  local part escaped
+  for part in "$@"; do
+    escaped="$(printf "%q" "$part")"
+    if [[ -z "$out" ]]; then
+      out="$escaped"
+    else
+      out="$out $escaped"
+    fi
+  done
+  printf "%s" "$out"
+}
+
 jaiph::stream_json_to_text() {
   node -e '
     const fs = require("node:fs");
@@ -9,6 +23,9 @@ jaiph::stream_json_to_text() {
     let reasoning = "";
     let final = "";
     let fallback = "";
+    let wroteAnySection = false;
+    let wroteReasoningHeader = false;
+    let wroteFinalHeader = false;
     const append = (base, value) => (typeof value === "string" && value.length > 0 ? base + value : base);
     const pickGeneric = (obj) => {
       if (!obj || typeof obj !== "object") return "";
@@ -32,15 +49,36 @@ jaiph::stream_json_to_text() {
       }
       return "";
     };
-    const writeSection = (name, text, wroteAny) => {
-      if (typeof text !== "string" || text.length === 0) {
-        return wroteAny;
+    const ensureSection = (name) => {
+      if (name === "Reasoning") {
+        if (!wroteReasoningHeader) {
+          if (wroteAnySection) {
+            process.stdout.write("\n\n");
+          }
+          process.stdout.write("Reasoning:\n");
+          wroteAnySection = true;
+          wroteReasoningHeader = true;
+        }
+        return;
       }
-      if (wroteAny) {
-        process.stdout.write("\n\n");
+      if (!wroteFinalHeader) {
+        if (wroteAnySection) {
+          process.stdout.write("\n\n");
+        }
+        process.stdout.write("Final answer:\n");
+        wroteAnySection = true;
+        wroteFinalHeader = true;
       }
-      process.stdout.write(`${name}:\n${text}`);
-      return true;
+    };
+    const writeReasoningDelta = (text) => {
+      if (typeof text !== "string" || text.length === 0) return;
+      ensureSection("Reasoning");
+      process.stdout.write(text);
+    };
+    const writeFinalDelta = (text) => {
+      if (typeof text !== "string" || text.length === 0) return;
+      ensureSection("Final answer");
+      process.stdout.write(text);
     };
     rl.on("line", (line) => {
       if (!line.trim()) {
@@ -51,20 +89,27 @@ jaiph::stream_json_to_text() {
         if (obj && typeof obj === "object") {
           if (obj.type === "thinking" && typeof obj.text === "string" && obj.text.length > 0) {
             reasoning = append(reasoning, obj.text);
+            writeReasoningDelta(obj.text);
             return;
           }
           if (obj.type === "assistant" && obj.message && typeof obj.message.content === "string" && obj.message.content.length > 0) {
             final = append(final, obj.message.content);
+            writeFinalDelta(obj.message.content);
             return;
           }
           if (obj.type === "result" && typeof obj.result === "string" && obj.result.length > 0) {
             final = append(final, obj.result);
+            writeFinalDelta(obj.result);
             return;
           }
         }
-        final = append(final, pickGeneric(obj));
+        const generic = pickGeneric(obj);
+        final = append(final, generic);
+        writeFinalDelta(generic);
       } catch {
-        fallback = append(fallback, `${line}\n`);
+        const rawLine = `${line}\n`;
+        fallback = append(fallback, rawLine);
+        writeFinalDelta(rawLine);
       }
     });
     rl.on("close", () => {
@@ -77,9 +122,9 @@ jaiph::stream_json_to_text() {
           // Best-effort final capture; prompt logs should still be emitted.
         }
       }
-      let wroteAny = false;
-      wroteAny = writeSection("Reasoning", reasoning, wroteAny);
-      writeSection("Final answer", effectiveFinal, wroteAny);
+      if (!wroteAnySection && effectiveFinal.length > 0) {
+        process.stdout.write(`Final answer:\n${effectiveFinal}`);
+      }
     });
   '
 }
@@ -92,10 +137,35 @@ jaiph::prompt_impl() {
   local stdin_prompt
   local prompt_text
   local mock_response
+  local -a agent_command_parts
+  local -a cursor_extra_flags
+  local -a claude_extra_flags
+  local command_for_log
   workspace_root="$(jaiph::workspace_root)"
   backend="${JAIPH_AGENT_BACKEND:-cursor}"
   agent_command="${JAIPH_AGENT_COMMAND:-cursor-agent}"
+  # JAIPH_AGENT_COMMAND may contain executable + args (e.g. "cursor-agent --force").
+  if ! eval "set -- ${agent_command}"; then
+    echo "jai: failed to parse agent.command: ${agent_command}" >&2
+    return 1
+  fi
+  if [[ "$#" -eq 0 ]]; then
+    echo "jai: agent.command resolved to empty command" >&2
+    return 1
+  fi
+  agent_command_parts=("$@")
+
   trusted_workspace="${JAIPH_AGENT_TRUSTED_WORKSPACE:-$workspace_root}"
+  cursor_extra_flags=()
+  claude_extra_flags=()
+  if [[ -n "${JAIPH_AGENT_CURSOR_FLAGS:-}" ]]; then
+    # Flags are split on shell whitespace; quoted substrings are not preserved.
+    read -r -a cursor_extra_flags <<<"${JAIPH_AGENT_CURSOR_FLAGS}"
+  fi
+  if [[ -n "${JAIPH_AGENT_CLAUDE_FLAGS:-}" ]]; then
+    # Flags are split on shell whitespace; quoted substrings are not preserved.
+    read -r -a claude_extra_flags <<<"${JAIPH_AGENT_CLAUDE_FLAGS}"
+  fi
   if [[ ! -t 0 ]]; then
     stdin_prompt="$(cat)"
   else
@@ -108,13 +178,16 @@ jaiph::prompt_impl() {
   fi
   if jaiph::is_test_mode; then
     if [[ -n "${JAIPH_MOCK_DISPATCH_SCRIPT:-}" ]]; then
-      mock_response="$(jaiph::mock_dispatch "$prompt_text")" && {
+      mock_response="$(jaiph::mock_dispatch "$prompt_text")"
+      mock_dispatch_status=$?
+      if [[ $mock_dispatch_status -eq 0 ]]; then
         if [[ -n "${JAIPH_PROMPT_FINAL_FILE:-}" ]]; then
           printf '%s' "$mock_response" >"$JAIPH_PROMPT_FINAL_FILE"
         fi
         printf '%s' "$mock_response"
         return 0
-      }
+      fi
+      return "$mock_dispatch_status"
     fi
     if [[ -n "${JAIPH_MOCK_RESPONSES_FILE:-}" ]]; then
       mock_response="$(jaiph::read_next_mock_response)" && {
@@ -128,6 +201,14 @@ jaiph::prompt_impl() {
     # No mock set or mock did not match: run selected backend (cursor or claude) normally.
   fi
   if [[ -n "$prompt_text" ]]; then
+    if [[ "$backend" == "claude" ]]; then
+      command_for_log="$(printf "printf %%s %q \\| %s" "$prompt_text" "$(jaiph::format_shell_command claude "${claude_extra_flags[@]}")")"
+    elif [[ -n "${JAIPH_AGENT_MODEL:-}" ]]; then
+      command_for_log="$(jaiph::format_shell_command "${agent_command_parts[@]}" --print --output-format stream-json --stream-partial-output --workspace "$workspace_root" --model "$JAIPH_AGENT_MODEL" --trust "$trusted_workspace" "${cursor_extra_flags[@]}" "$prompt_text")"
+    else
+      command_for_log="$(jaiph::format_shell_command "${agent_command_parts[@]}" --print --output-format stream-json --stream-partial-output --workspace "$workspace_root" --trust "$trusted_workspace" "${cursor_extra_flags[@]}" "$prompt_text")"
+    fi
+    printf "Command:\n%s\n\n" "$command_for_log"
     printf "Prompt:\n%s\n\n" "$prompt_text"
   fi
   if [[ "$backend" == "claude" ]]; then
@@ -135,15 +216,15 @@ jaiph::prompt_impl() {
       echo "jai: agent.backend is \"claude\" but the Claude CLI (claude) was not found in PATH. Install the Anthropic Claude CLI or set agent.backend = \"cursor\" (or JAIPH_AGENT_BACKEND=cursor)." >&2
       return 1
     fi
-    printf '%s' "$prompt_text" | claude 2>&1 | jaiph::stream_json_to_text
+    printf '%s' "$prompt_text" | claude "${claude_extra_flags[@]}" 2>&1 | jaiph::stream_json_to_text
     return $?
   fi
   if [[ -n "${JAIPH_AGENT_MODEL:-}" ]]; then
-    "$agent_command" --print --output-format stream-json --stream-partial-output --workspace "$workspace_root" --model "$JAIPH_AGENT_MODEL" --trust "$trusted_workspace" "$prompt_text" \
+    "${agent_command_parts[@]}" --print --output-format stream-json --stream-partial-output --workspace "$workspace_root" --model "$JAIPH_AGENT_MODEL" --trust "$trusted_workspace" "${cursor_extra_flags[@]}" "$prompt_text" \
       | jaiph::stream_json_to_text
     return $?
   fi
-  "$agent_command" --print --output-format stream-json --stream-partial-output --workspace "$workspace_root" --trust "$trusted_workspace" "$prompt_text" \
+  "${agent_command_parts[@]}" --print --output-format stream-json --stream-partial-output --workspace "$workspace_root" --trust "$trusted_workspace" "${cursor_extra_flags[@]}" "$prompt_text" \
     | jaiph::stream_json_to_text
 }
 

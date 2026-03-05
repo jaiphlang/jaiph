@@ -1,7 +1,7 @@
 import { jaiphModule } from "./types";
 import { fail } from "./parse/core";
 import { parseImportLine } from "./parse/imports";
-import { parseMetadataBlock } from "./parse/metadata";
+import { parseConfigBlock } from "./parse/metadata";
 import { parseRuleBlock } from "./parse/rules";
 import { parseFunctionBlock } from "./parse/functions";
 import { parseWorkflowBlock } from "./parse/workflows";
@@ -33,11 +33,11 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
       continue;
     }
 
-    if (line.startsWith("metadata ") && line.includes("{")) {
+    if (/^config\s*\{/.test(line)) {
       if (mod.metadata !== undefined) {
-        fail(filePath, "duplicate metadata block (only one allowed per file)", lineNo, 1);
+        fail(filePath, "duplicate config block (only one allowed per file)", lineNo, 1);
       }
-      const { metadata, nextIndex } = parseMetadataBlock(filePath, lines, i - 1);
+      const { metadata, nextIndex } = parseConfigBlock(filePath, lines, i - 1);
       mod.metadata = metadata;
       i = nextIndex;
       pendingTopLevelComments = [];

@@ -30,7 +30,7 @@ test("build transpiles .jh into strict bash with retry flow", () => {
     assert.match(stdlib, /trusted_workspace="\$\{JAIPH_AGENT_TRUSTED_WORKSPACE:-\$workspace_root\}"/);
     assert.match(
       stdlib,
-      /--print --output-format stream-json --stream-partial-output --workspace "\$workspace_root" --model "\$JAIPH_AGENT_MODEL" --trust "\$trusted_workspace" "\$prompt_text"/,
+      /--print --output-format stream-json --stream-partial-output --workspace "\$workspace_root" --model "\$JAIPH_AGENT_MODEL" --trust "\$trusted_workspace"( "\$\{cursor_extra_flags\[@\]\}")? "\$prompt_text"/,
     );
     assert.match(stdlib, /jaiph::run_step jaiph::prompt jaiph::prompt_impl "\$@"/);
     assert.match(stdlib, /jaiph::execute_readonly\(\)/);
@@ -503,7 +503,8 @@ test("jaiph run stores prompt output in run logs", () => {
     assert.match(promptErrName!, /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z-/);
     const promptOut = readFileSync(join(latestRunDir, promptOutName!), "utf8");
     const promptErr = readFileSync(join(latestRunDir, promptErrName!), "utf8");
-    assert.match(promptOut, /^Prompt:\nhello from prompt\n\n/);
+    // Prompt log contains prompt text and agent output (Command section may appear depending on runtime)
+    assert.match(promptOut, /Prompt:\nhello from prompt\n\n/);
     assert.match(promptOut, /prompt-output:/);
     assert.match(promptErr, /prompt-error/);
     const summary = readFileSync(join(latestRunDir, "run_summary.jsonl"), "utf8");
@@ -554,6 +555,7 @@ test("jaiph run stores both reasoning and final answer from stream-json", () => 
       cwd: root,
       env: {
         ...process.env,
+        JAIPH_AGENT_TRUSTED_WORKSPACE: undefined,
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
       },
     });
@@ -738,8 +740,9 @@ test("jaiph run applies model from in-file metadata", () => {
     writeFileSync(
       filePath,
       [
-        "metadata {",
+        "config {",
         '  agent.default_model = "auto"',
+        '  agent.cursor_flags = "--force --sandbox enabled"',
         "}",
         "workflow default {",
         '  prompt "hello from metadata"',
@@ -767,6 +770,62 @@ test("jaiph run applies model from in-file metadata", () => {
     assert.equal(Boolean(promptOutName), true);
     const promptOut = readFileSync(join(latestRunDir, promptOutName!), "utf8");
     assert.match(promptOut, /model-args:.*--model auto/);
+    assert.match(promptOut, /model-args:.*--force/);
+    assert.match(promptOut, /model-args:.*--sandbox enabled/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph run supports agent.command with inline args", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-agent-command-args-"));
+  try {
+    const binDir = join(root, "bin");
+    mkdirSync(binDir, { recursive: true });
+    const fakeAgent = join(binDir, "cursor-agent");
+    writeFileSync(
+      fakeAgent,
+      [
+        "#!/usr/bin/env bash",
+        "echo cmd-args:$*",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(fakeAgent, 0o755);
+
+    const filePath = join(root, "prompt.jh");
+    writeFileSync(
+      filePath,
+      [
+        "config {",
+        '  agent.command = "cursor-agent --force"',
+        "}",
+        "workflow default {",
+        '  prompt "hello from command args"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runResult = spawnSync("node", [cliPath, "run", filePath], {
+      encoding: "utf8",
+      cwd: root,
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH ?? ""}`,
+      },
+    });
+
+    assert.equal(runResult.status, 0, runResult.stderr);
+    const runsRoot = join(root, ".jaiph/runs");
+    const runDirs = readdirSync(runsRoot).sort();
+    const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
+    const runFiles = readdirSync(latestRunDir);
+    const promptOutName = runFiles.find((name) => name.endsWith("-jaiph__prompt.out"));
+    assert.equal(Boolean(promptOutName), true);
+    const promptOut = readFileSync(join(latestRunDir, promptOutName!), "utf8");
+    assert.match(promptOut, /cmd-args:.*--force/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -783,7 +842,7 @@ test("jaiph run agent.backend = claude uses Claude CLI and captures output", () 
       [
         "#!/usr/bin/env bash",
         "cat",
-        "echo '{\"type\":\"result\",\"result\":\"claude-backend-output\"}'",
+        "echo '{\"type\":\"result\",\"result\":\"claude-backend-output '$*'\"}'",
         "",
       ].join("\n"),
     );
@@ -793,8 +852,9 @@ test("jaiph run agent.backend = claude uses Claude CLI and captures output", () 
     writeFileSync(
       filePath,
       [
-        "metadata {",
+        "config {",
         '  agent.backend = "claude"',
+        '  agent.claude_flags = "--model sonnet-4"',
         "}",
         "workflow default {",
         '  result = prompt "hello"',
@@ -825,6 +885,7 @@ test("jaiph run agent.backend = claude uses Claude CLI and captures output", () 
     assert.equal(Boolean(workflowOutName), true);
     const workflowOut = readFileSync(join(latestRunDir, workflowOutName!), "utf8");
     assert.match(workflowOut, /captured:[\s\S]*claude-backend-output/);
+    assert.match(workflowOut, /captured:[\s\S]*--model sonnet-4/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -837,7 +898,7 @@ test("jaiph run agent.backend = claude without claude in PATH fails with clear e
     writeFileSync(
       filePath,
       [
-        "metadata {",
+        "config {",
         '  agent.backend = "claude"',
         "}",
         "workflow default {",
@@ -887,7 +948,7 @@ test("jaiph run JAIPH_AGENT_BACKEND env overrides file default", () => {
     writeFileSync(
       filePath,
       [
-        "metadata {",
+        "config {",
         '  agent.backend = "claude"',
         "}",
         "workflow default {",
@@ -928,6 +989,7 @@ test("jaiph run JAIPH_AGENT_BACKEND env overrides file default", () => {
 test("jaiph run defaults Cursor trusted workspace to project root", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-run-trust-default-"));
   try {
+    mkdirSync(join(root, ".jaiph"), { recursive: true });
     const binDir = join(root, "bin");
     mkdirSync(binDir, { recursive: true });
     const fakeCursor = join(binDir, "cursor-agent");
@@ -954,11 +1016,12 @@ test("jaiph run defaults Cursor trusted workspace to project root", () => {
     );
 
     const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const { JAIPH_AGENT_TRUSTED_WORKSPACE: _drop, ...env } = process.env as Record<string, string>;
     const runResult = spawnSync("node", [cliPath, "run", filePath], {
       encoding: "utf8",
       cwd: root,
       env: {
-        ...process.env,
+        ...env,
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
       },
     });
@@ -997,7 +1060,7 @@ test("jaiph run JAIPH_AGENT_TRUSTED_WORKSPACE env overrides metadata", () => {
     writeFileSync(
       filePath,
       [
-        "metadata {",
+        "config {",
         '  agent.trusted_workspace = ".jaiph/.."',
         "}",
         "workflow default {",
@@ -1823,7 +1886,7 @@ test("jaiph test with agent.backend = claude uses mock and does not invoke claud
     writeFileSync(
       join(root, "flow.jh"),
       [
-        "metadata {",
+        "config {",
         '  agent.backend = "claude"',
         "}",
         "workflow default {",
@@ -1881,7 +1944,7 @@ test("jaiph test when prompt is not mocked runs selected backend", () => {
     writeFileSync(
       join(root, "flow.jh"),
       [
-        "metadata {",
+        "config {",
         '  agent.backend = "cursor"',
         "}",
         "workflow default {",

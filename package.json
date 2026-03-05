@@ -14,7 +14,7 @@
     "test:acceptance:runtime": "bash ./e2e/test_all.sh",
     "test:acceptance": "npm run test:acceptance:compiler && npm run test:acceptance:runtime",
     "test:jest": "npm run build && jest --runInBand test/fixtures-build.jest.test.js",
-    "test:e2e": "bash ./e2e/test_all.sh"
+    "test:e2e": "npm run build && bash ./e2e/test_all.sh"
   },
   "devDependencies": {
     "@types/node": "^24.5.2",

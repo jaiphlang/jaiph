@@ -107,6 +107,7 @@ jaiph::run_step() {
   jaiph::init_run_tracking || return 1
   local step_started_at safe_name out_file err_file status had_errexit step_started_seconds step_elapsed_seconds
   local out_tmp err_tmp elapsed_ms prompt_final_tmp
+  local prompt_writes_live_out=0
   step_started_seconds="$SECONDS"
   step_started_at="$(jaiph::timestamp_utc)"
   safe_name="$(jaiph::sanitize_name "$func_name")"
@@ -136,8 +137,10 @@ jaiph::run_step() {
     fi
   elif [[ "$func_name" == "jaiph::prompt" ]]; then
     prompt_final_tmp="${out_file}.final.tmp.$$"
-    JAIPH_PROMPT_FINAL_FILE="$prompt_final_tmp" "$@" 2>"$err_tmp" | tee "$out_tmp"
+    # Prompt output should be visible in the final .out file while streaming.
+    JAIPH_PROMPT_FINAL_FILE="$prompt_final_tmp" "$@" 2>"$err_tmp" | tee "$out_file"
     status="${PIPESTATUS[0]}"
+    prompt_writes_live_out=1
     if [[ -f "$prompt_final_tmp" ]]; then
       JAIPH_LAST_PROMPT_FINAL="$(<"$prompt_final_tmp")"
       rm -f "$prompt_final_tmp"
@@ -152,7 +155,12 @@ jaiph::run_step() {
   if [[ "$had_errexit" -eq 1 ]]; then
     set -e
   fi
-  if [[ -s "$out_tmp" ]]; then
+  if [[ "$prompt_writes_live_out" -eq 1 ]]; then
+    if [[ ! -s "$out_file" ]]; then
+      rm -f "$out_file"
+      out_file=""
+    fi
+  elif [[ -s "$out_tmp" ]]; then
     mv "$out_tmp" "$out_file"
   else
     rm -f "$out_tmp"

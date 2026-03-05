@@ -116,6 +116,8 @@ export interface WorkflowMetadata {
     command?: string;
     backend?: "cursor" | "claude";
     trustedWorkspace?: string;
+    cursorFlags?: string;
+    claudeFlags?: string;
   };
   run?: { debug?: boolean; logsDir?: string };
 }

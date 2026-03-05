@@ -138,16 +138,18 @@ Tip: add `.jaiph/runs/` to your `.gitignore`.
 
 ### Configuration
 
-Runtime behavior is controlled by in-file metadata and environment variables. See [Configuration](configuration.md) for full details and examples.
+Runtime behavior is controlled by in-file config and environment variables. See [Configuration](configuration.md) for full details and examples.
 
-Common metadata options:
+Common config options:
 
 ```jh
-metadata {
+config {
   agent.default_model = "gpt-4"
   agent.command = "cursor-agent"
   agent.backend = "cursor"
   agent.trusted_workspace = ".jaiph/.."
+  agent.cursor_flags = "--force"
+  agent.claude_flags = "--model sonnet-4"
   run.logs_dir = ".jaiph/runs"
   run.debug = false
 }
@@ -156,7 +158,9 @@ metadata {
 Notes:
 
 - `agent.trusted_workspace` controls Cursor backend trust scope (`--trust`); default is project root.
-- Environment variables override metadata (for example `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`).
+- `agent.command` accepts executable + inline args (for example `cursor-agent --force`).
+- `agent.cursor_flags` / `agent.claude_flags` append backend-specific CLI flags (split on whitespace).
+- Environment variables override config values (for example `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_AGENT_CURSOR_FLAGS`, `JAIPH_AGENT_CLAUDE_FLAGS`).
 
 ### CLI reference
 

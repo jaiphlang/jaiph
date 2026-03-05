@@ -1,5 +1,9 @@
 #!/usr/bin/env jaiph
 
+config {
+  agent.command = "cursor-agent --force"
+}
+
 rule project_compiles {
   npm run build
 }

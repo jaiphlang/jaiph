@@ -6,6 +6,30 @@ The first `##` task in the file is always the current task.
 
 ---
 
+## 10. Shorten CI failure feedback and avoid hidden prompt handoff
+
+**Status:** pending
+
+**What:** Reduce "looks stuck" time in `ensure_ci_passes` by making e2e failure cases deterministic/fast and by clearly signaling when control moved from a failed rule to `prompt` remediation.
+
+**Why:** Current runs can appear hung for 5-10 minutes because:
+- some e2e paths depend on real backend behavior and can take ~60-90s before failing/passing,
+- after a rule fails, workflow immediately starts prompt remediation, but tree/log focus can still look like the previous rule.
+
+**Files to change:**
+- `e2e/tests/40_nested_and_native_tests.sh` — make unmatched-mock case deterministic and fast (no dependency on external backend availability/latency).
+- `src/runtime/steps.sh` + `src/runtime/prompt.sh` — emit explicit handoff markers (e.g. "starting remediation prompt after <rule> failure") and optional heartbeat while waiting on backend output.
+- `src/cli/commands/run.ts` (if needed) — improve progress rendering when next active step is `jaiph::prompt`.
+- docs in `docs/configuration.md` / `docs/cli.md` — document any timeout/heartbeat knobs added.
+
+**Acceptance criteria:**
+- `e2e_tests_pass` failure path finishes quickly and reproducibly on clean machines (no backend-dependent 60s+ wait in unmatched-mock test).
+- When `ensure_ci_passes` transitions from failed rule to prompt remediation, logs make this transition obvious without opening multiple files.
+- During long prompt waits, user sees periodic progress output (or explicit timeout) instead of silent freeze.
+- Full test suite remains green.
+
+---
+
 ## 9. Support Claude CLI as prompt backend
 
 **Status:** pending

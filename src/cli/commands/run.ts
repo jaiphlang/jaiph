@@ -128,6 +128,12 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     if (process.env.JAIPH_AGENT_TRUSTED_WORKSPACE !== undefined) {
       runtimeEnv.JAIPH_AGENT_TRUSTED_WORKSPACE_LOCKED = "1";
     }
+    if (process.env.JAIPH_AGENT_CURSOR_FLAGS !== undefined) {
+      runtimeEnv.JAIPH_AGENT_CURSOR_FLAGS_LOCKED = "1";
+    }
+    if (process.env.JAIPH_AGENT_CLAUDE_FLAGS !== undefined) {
+      runtimeEnv.JAIPH_AGENT_CLAUDE_FLAGS_LOCKED = "1";
+    }
     if (process.env.JAIPH_RUNS_DIR !== undefined) {
       runtimeEnv.JAIPH_RUNS_DIR_LOCKED = "1";
     }
@@ -149,6 +155,12 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       } else {
         runtimeEnv.JAIPH_AGENT_TRUSTED_WORKSPACE = workspaceRoot;
       }
+    }
+    if (runtimeEnv.JAIPH_AGENT_CURSOR_FLAGS === undefined && effectiveConfig.agent?.cursorFlags) {
+      runtimeEnv.JAIPH_AGENT_CURSOR_FLAGS = effectiveConfig.agent.cursorFlags;
+    }
+    if (runtimeEnv.JAIPH_AGENT_CLAUDE_FLAGS === undefined && effectiveConfig.agent?.claudeFlags) {
+      runtimeEnv.JAIPH_AGENT_CLAUDE_FLAGS = effectiveConfig.agent.claudeFlags;
     }
     if (runtimeEnv.JAIPH_RUNS_DIR === undefined && effectiveConfig.run?.logsDir) {
       runtimeEnv.JAIPH_RUNS_DIR = effectiveConfig.run.logsDir;

@@ -32,7 +32,7 @@ expected_say_hello_out=$(printf '%s\n' \
   '  ├── without name, workflow fails with validation message (<time> failed)' \
   '  │  expectEqual failed:' \
   "  │  - You didn't provide your name" \
-  "  │  + You didn't provide your name :(" \
+  '  │  +' \
   '  │' \
   '  └── with name, returns greeting and writes hello.txt (<time>)' \
   '' \

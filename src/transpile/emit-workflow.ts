@@ -129,6 +129,14 @@ export function emitWorkflow(
     const v = ast.metadata.agent.trustedWorkspace.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
     scopedMetadataAssignments.push({ name: "JAIPH_AGENT_TRUSTED_WORKSPACE", value: v });
   }
+  if (ast.metadata?.agent?.cursorFlags !== undefined) {
+    const v = ast.metadata.agent.cursorFlags.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    scopedMetadataAssignments.push({ name: "JAIPH_AGENT_CURSOR_FLAGS", value: v });
+  }
+  if (ast.metadata?.agent?.claudeFlags !== undefined) {
+    const v = ast.metadata.agent.claudeFlags.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    scopedMetadataAssignments.push({ name: "JAIPH_AGENT_CLAUDE_FLAGS", value: v });
+  }
   if (ast.metadata?.run?.logsDir !== undefined) {
     const v = ast.metadata.run.logsDir.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
     scopedMetadataAssignments.push({ name: "JAIPH_RUNS_DIR", value: v });
@@ -167,6 +175,14 @@ export function emitWorkflow(
       const v = ast.metadata.agent.trustedWorkspace.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
       out.push(`export JAIPH_AGENT_TRUSTED_WORKSPACE="\${JAIPH_AGENT_TRUSTED_WORKSPACE:-${v}}"`);
     }
+    if (ast.metadata.agent?.cursorFlags !== undefined) {
+      const v = ast.metadata.agent.cursorFlags.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      out.push(`export JAIPH_AGENT_CURSOR_FLAGS="\${JAIPH_AGENT_CURSOR_FLAGS:-${v}}"`);
+    }
+    if (ast.metadata.agent?.claudeFlags !== undefined) {
+      const v = ast.metadata.agent.claudeFlags.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      out.push(`export JAIPH_AGENT_CLAUDE_FLAGS="\${JAIPH_AGENT_CLAUDE_FLAGS:-${v}}"`);
+    }
     if (ast.metadata.run?.logsDir !== undefined) {
       const v = ast.metadata.run.logsDir.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
       out.push(`export JAIPH_RUNS_DIR="\${JAIPH_RUNS_DIR:-${v}}"`);
@@ -188,6 +204,8 @@ export function emitWorkflow(
       "JAIPH_AGENT_COMMAND",
       "JAIPH_AGENT_BACKEND",
       "JAIPH_AGENT_TRUSTED_WORKSPACE",
+      "JAIPH_AGENT_CURSOR_FLAGS",
+      "JAIPH_AGENT_CLAUDE_FLAGS",
       "JAIPH_RUNS_DIR",
       "JAIPH_DEBUG",
     ];

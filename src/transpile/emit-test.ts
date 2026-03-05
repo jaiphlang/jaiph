@@ -182,12 +182,21 @@ export function emitTest(
         }
         const args = step.args?.length ? step.args.map(escapeBashSingleQuoted).join(" ") : "";
         out.push("  set +e");
+        out.push(`  jaiph__test_out=$(mktemp)`);
         if (step.captureName) {
-          out.push(`  ${step.captureName}=$(${workflowSymbol} ${args} 2>&1 | sed '/^__JAIPH_EVENT__/d')`);
+          out.push(
+            `  ${workflowSymbol} ${args} 2>&1 | sed '/^__JAIPH_EVENT__/d' > "$jaiph__test_out"`,
+          );
         } else {
-          out.push(`  jaiph__test_ignored=$(${workflowSymbol} ${args} 2>&1 | sed '/^__JAIPH_EVENT__/d')`);
+          out.push(
+            `  ${workflowSymbol} ${args} 2>&1 | sed '/^__JAIPH_EVENT__/d' > "$jaiph__test_out"`,
+          );
         }
-        out.push("  jaiph__test_exit=$?");
+        out.push("  jaiph__test_exit=${PIPESTATUS[0]}");
+        if (step.captureName) {
+          out.push(`  ${step.captureName}=$(cat "$jaiph__test_out")`);
+        }
+        out.push(`  rm -f "$jaiph__test_out"`);
         out.push("  set -e");
         if (!step.allowFailure) {
           out.push("  if [[ $jaiph__test_exit -ne 0 ]]; then");
