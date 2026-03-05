@@ -445,7 +445,8 @@
                         data-target="say-hello-jh">say_hello.jh</button>
                     <button type="button" class="code-tab-button"
                         data-target="say-hello-test-jh">say_hello.test.jh</button>
-                    <button type="button" class="code-tab-button" data-target="ensure-ci-passes-jh">ensure_ci_passes.jh</button>
+                    <button type="button" class="code-tab-button"
+                        data-target="ensure-ci-passes-jh">ensure_ci_passes.jh</button>
                 </div>
 
                 <div class="code-tab-panel is-active" data-panel="say-hello-jh">
@@ -501,7 +502,8 @@ languages use “yes” and “no” vs. “ja”/“da”-style words. So if yo
 
                 <div class="code-tab-panel" data-panel="say-hello-test-jh">
                     <p><strong>Jaiph</strong> has native support for testing. All files that end with
-                        <code>*.test.jh</code> are treated as tests.</p>
+                        <code>*.test.jh</code> are treated as tests.
+                    </p>
                     <p>And Jaiph highly recommends testing your workflows!</p>
                     <pre><code class="language-jaiph">#!/usr/bin/env jaiph
 
@@ -545,8 +547,10 @@ testing say_hello.test.jh
                 <div class="code-tab-panel" data-panel="ensure-ci-passes-jh">
                     <p>This is the workflow used in the Jaiph codebase to ensure compilation and tests pass. Note the
                         conditionals, which are used in the same way as in bash, and the recursive flow: if compilation
-                        or tests fail, a prompt is triggered, and the <code>ensure_ci_passes</code> workflow runs again.</p>
-                    <p>The workflow uses custom <code>config</code> to enable agent YOLO mode. Otherwise the agent cannot
+                        or tests fail, a prompt is triggered, and the <code>ensure_ci_passes</code> workflow runs again.
+                    </p>
+                    <p>The workflow uses custom <code>config</code> to enable agent YOLO mode. Otherwise the agent
+                        cannot
                         run some commands (for example <code>npm test</code>). By default Jaiph runs agents in their
                         default, more secure modes.</p>
                     <p><strong>Content of <code>.jaiph/ensure_ci_passes.jh</code></strong></p>
@@ -602,7 +606,7 @@ running ensure_ci_passes.jh
   <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> tests_pass
   <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">12s</span>
   <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> e2e_tests_pass
-  <span class="run-marker">·</span>   <span class="run-fail">✗</span> <span class="run-time">3s</span>
+  <span class="run-marker">·</span>   <span class="run-fail">✗ 3s</span>
   <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> prompt
   <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">21s</span>
   <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> ensure_ci_passes
