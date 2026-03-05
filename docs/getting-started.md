@@ -130,18 +130,17 @@ Tip: add `.jaiph/runs/` to your `.gitignore`.
 
 ### Run reporting and logs
 
-- During `jaiph run`, progress rendering is event-driven from runtime step events.
+- During `jaiph run`, progress rendering is event-driven.
   - TTY: one live running step line + committed step completion lines.
-  - Non-TTY: runtime step output is buffered, then the completed runtime tree is printed before buffered stdout.
-- Runtime trees now reflect actual invocation nesting (including recursive/repeated calls), rather than a precomputed workflow-only approximation.
+  - Non-TTY: one completion line per finished step.
 - Each run writes `.jaiph/runs/<timestamp>-<id>/run_summary.jsonl`.
 - Step `.out` / `.err` files are created only when the step produced output (empty log files are skipped).
 
 ### Configuration
 
-Runtime behavior is controlled by in-file config and environment variables. See [Configuration](configuration.md) for full details and examples.
+Runtime behavior is controlled by in-file config and environment variables. See [configuration.md](configuration.md) for details.
 
-Common config options:
+Typical config block:
 
 ```jh
 config {
@@ -156,9 +155,9 @@ config {
 }
 ```
 
-Notes:
+Important:
 
-- `agent.trusted_workspace` controls Cursor backend trust scope (`--trust`); default is project root.
+- `agent.trusted_workspace` sets Cursor backend trust scope (`--trust`), defaulting to project root.
 - `agent.command` accepts executable + inline args (for example `cursor-agent --force`).
 - `agent.cursor_flags` / `agent.claude_flags` append backend-specific CLI flags (split on whitespace).
 - Environment variables override config values (for example `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_AGENT_CURSOR_FLAGS`, `JAIPH_AGENT_CLAUDE_FLAGS`).
@@ -179,7 +178,7 @@ See [cli.md](cli.md) for command syntax, examples, and supported environment var
   Defines an orchestration entrypoint made of ordered steps. Workflows can change system state.
 
 - `function name() { ... }`  
-  Defines a reusable writable shell function. Functions can be called from workflows/rules, are tracked as regular Jaiph steps, and preserve function stdout/stderr passthrough.
+  Defines a reusable writable shell function. Functions can be called from workflows/rules and are tracked as regular Jaiph steps.
 
 - `ensure ref [args...]`  
   Executes a rule in a workflow or another rule, optionally forwarding arguments (for example: `ensure my_rule "$1"`).
