@@ -21,13 +21,12 @@ EOF
 jaiph build "${TEST_DIR}/hello.jh"
 hello_out="$(jaiph run "${TEST_DIR}/hello.jh")"
 
-# Then: exact tree (shell-only workflow, no step rows)
+# Then: step output is in .out files only; stdout has tree and result
 expected_hello=$(printf '%s\n' \
   '' \
   'running hello.jh' \
   '' \
   'workflow default' \
-  'hello-jh' \
   '✓ PASS workflow default (<time>)')
 expected_hello="${expected_hello%$'\n'}"
 e2e::assert_output_equals "${hello_out}" "${expected_hello}" "hello.jh run passes"
@@ -50,7 +49,7 @@ EOF
 jaiph build "${TEST_DIR}/app.jh"
 mixed_out="$(jaiph run "${TEST_DIR}/app.jh")"
 
-# Then: exact tree (ensure lib.ready then shell)
+# Then: step output in .out files only; stdout has tree and result
 expected_mixed=$(printf '%s\n' \
   '' \
   'running app.jh' \
@@ -58,8 +57,6 @@ expected_mixed=$(printf '%s\n' \
   'workflow default' \
   '  ▸ rule ready' \
   '  ✓ <time>' \
-  'from-jph' \
-  'mixed-ok' \
   '✓ PASS workflow default (<time>)')
 expected_mixed="${expected_mixed%$'\n'}"
 e2e::assert_output_equals "${mixed_out}" "${expected_mixed}" "mixed .jh/.jph run passes"

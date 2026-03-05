@@ -274,7 +274,9 @@ jaiph::run_step() {
   elapsed_ms="$((step_elapsed_seconds * 1000))"
   jaiph::emit_step_event "STEP_END" "$func_name" "$status" "$elapsed_ms" "$out_file" "$err_file" "$step_id" "$parent_id" "$step_seq" "$depth" "${JAIPH_RUN_ID:-}"
   jaiph::step_stack_pop
-  if [[ -n "$out_file" && -f "$out_file" ]]; then
+  # In test mode, emit step output so test capture (e.g. response = w.default) can read it.
+  # In normal runs, step output stays only in .out files.
+  if jaiph::is_test_mode && [[ -n "$out_file" && -f "$out_file" ]]; then
     cat "$out_file"
   fi
   if [[ "$status" -ne 0 ]] && jaiph::is_test_mode && [[ -n "$err_file" && -f "$err_file" ]]; then

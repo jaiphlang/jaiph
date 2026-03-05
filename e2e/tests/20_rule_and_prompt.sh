@@ -30,7 +30,7 @@ EOF
 jaiph build "${TEST_DIR}/rule_pass.jh"
 rule_pass_out="$(jaiph run "${TEST_DIR}/rule_pass.jh")"
 
-# Then: exact tree (ensure check_passes)
+# Then: step output in .out files only; stdout has tree and result
 expected_rule_pass=$(printf '%s\n' \
   '' \
   'running rule_pass.jh' \
@@ -38,7 +38,6 @@ expected_rule_pass=$(printf '%s\n' \
   'workflow default' \
   '  ▸ rule check_passes' \
   '  ✓ <time>' \
-  'e2e-rule-pass-done' \
   '✓ PASS workflow default (<time>)')
 expected_rule_pass="${expected_rule_pass%$'\n'}"
 e2e::assert_output_equals "${rule_pass_out}" "${expected_rule_pass}" "rule_pass.jh passes"

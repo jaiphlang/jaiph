@@ -154,7 +154,6 @@ test("jaiph run compiles and executes workflow with args", () => {
     assert.equal(runResult.status, 0, runResult.stderr);
     assert.match(runResult.stdout, /workflow default/);
     assert.match(runResult.stdout, /✓ PASS workflow default \((?:\d+(?:\.\d+)?s|\d+m \d+s)\)/);
-    assert.match(runResult.stdout, /hello-run/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -185,7 +184,6 @@ test("executable .jh invokes jaiph run semantics", () => {
 
     assert.equal(runResult.status, 0, runResult.stderr);
     assert.match(runResult.stdout, /✓ PASS workflow default/);
-    assert.match(runResult.stdout, /exec-arg:hello-exec/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -213,7 +211,6 @@ test("jaiph run enables xtrace when JAIPH_DEBUG=true", () => {
     });
 
     assert.equal(runResult.status, 0, runResult.stderr);
-    assert.match(runResult.stdout, /debug-run:hello-debug/);
     assert.match(runResult.stderr, /\+ .*::workflow::default/);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -1349,7 +1346,6 @@ test("jaiph run tree includes function calls from workflow shell steps", () => {
     assert.equal(runResult.status, 0, runResult.stderr);
     assert.match(runResult.stdout, /workflow default/);
     assert.match(runResult.stdout, /function changed_files/);
-    assert.match(runResult.stdout, /from-function/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
