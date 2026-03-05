@@ -184,19 +184,14 @@ export function emitTest(
         out.push("  set +e");
         if (step.captureName) {
           out.push(`  jaiph__test_out=$(${workflowSymbol} ${args} 2>&1)`);
+          out.push("  jaiph__test_exit=$?");
+          out.push(`  ${step.captureName}=$(printf '%s' "$jaiph__test_out" | sed '/^__JAIPH_EVENT__/d')`);
         } else {
           out.push(`  jaiph__test_out_file=$(mktemp)`);
           out.push(
             `  ${workflowSymbol} ${args} 2>&1 | sed '/^__JAIPH_EVENT__/d' > "$jaiph__test_out_file"`,
           );
-        }
-        out.push("  jaiph__test_exit=$?");
-        if (step.captureName) {
-          out.push(`  ${step.captureName}=$(printf '%s' "$jaiph__test_out" | sed '/^__JAIPH_EVENT__/d')`);
-          out.push(`  if [[ -z "$${step.captureName}" && $jaiph__test_exit -ne 0 && -n "\${JAIPH_RUN_DIR:-}" ]]; then`);
-          out.push(`    ${step.captureName}=$(cat "\${JAIPH_RUN_DIR}"/*.err 2>/dev/null || true)`);
-          out.push("  fi");
-        } else {
+          out.push("  jaiph__test_exit=$?");
           out.push(`  rm -f "$jaiph__test_out_file"`);
         }
         out.push("  set -e");

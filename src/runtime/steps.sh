@@ -279,8 +279,15 @@ jaiph::run_step() {
   if jaiph::is_test_mode && [[ -n "$out_file" && -f "$out_file" ]]; then
     cat "$out_file"
   fi
-  if [[ "$status" -ne 0 ]] && jaiph::is_test_mode && [[ -n "$err_file" && -f "$err_file" ]]; then
-    cat "$err_file" >&2
+  if [[ "$status" -ne 0 ]] && [[ -n "$err_file" && -f "$err_file" ]]; then
+    if jaiph::is_test_mode; then
+      if [[ -n "${JAIPH_TEST_CAPTURE_FILE:-}" ]]; then
+        cat "$err_file" >>"$JAIPH_TEST_CAPTURE_FILE" 2>/dev/null || true
+      fi
+      cat "$err_file"
+    else
+      cat "$err_file" >&2
+    fi
   fi
   return "$status"
 }
