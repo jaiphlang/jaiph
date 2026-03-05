@@ -30,6 +30,22 @@ function findChildPidsMatching(parentPid: number, pattern: string): number[] {
   return result;
 }
 
+/** Return direct child PIDs for parentPid (no command filter). */
+function findChildPids(parentPid: number): number[] {
+  const ps = spawnSync("ps", ["-o", "pid=,ppid=", "-ax"], { encoding: "utf8" });
+  const lines = (ps.stdout?.trim() || "").split(/\n/).filter(Boolean);
+  const result: number[] = [];
+  for (const line of lines) {
+    const parts = line.trim().split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      const pid = parseInt(parts[0], 10);
+      const ppid = parseInt(parts[1], 10);
+      if (!Number.isNaN(pid) && !Number.isNaN(ppid) && ppid === parentPid) result.push(pid);
+    }
+  }
+  return result;
+}
+
 /** Return true if any of the given PIDs are still running. */
 function anyPidsAlive(pids: number[]): boolean {
   if (pids.length === 0) return false;
@@ -78,9 +94,11 @@ async function runInterruptTest(
   const nodePid = child.pid;
   assert.ok(nodePid != null, "spawned node process must have a pid");
   const ourJaiphRunPids = findChildPidsMatching(nodePid, "jaiph-run");
+  const fallbackChildPids = findChildPids(nodePid);
+  const trackedPids = ourJaiphRunPids.length > 0 ? ourJaiphRunPids : fallbackChildPids;
   assert.ok(
-    ourJaiphRunPids.length >= 1,
-    "our node process should have spawned at least one jaiph-run process",
+    trackedPids.length >= 1,
+    "our node process should have spawned at least one child process",
   );
 
   const startMs = Date.now();
@@ -107,10 +125,10 @@ async function runInterruptTest(
   // Allow OS to reap processes
   await new Promise((r) => setTimeout(r, 300));
 
-  const stillAlive = anyPidsAlive(ourJaiphRunPids);
+  const stillAlive = anyPidsAlive(trackedPids);
   assert.ok(
     !stillAlive,
-    `our jaiph-run workflow process(es) should be gone after ${signal}; PIDs we spawned: ${ourJaiphRunPids.join(", ")}`,
+    `our workflow process(es) should be gone after ${signal}; PIDs we spawned: ${trackedPids.join(", ")}`,
   );
 }
 

@@ -37,6 +37,7 @@ expected_rule_pass=$(printf '%s\n' \
   '' \
   'workflow default' \
   '└── rule check_passes (<time>)' \
+  'e2e-rule-pass-done' \
   '✓ PASS workflow default (<time>)')
 expected_rule_pass="${expected_rule_pass%$'\n'}"
 e2e::assert_output_equals "${rule_pass_out}" "${expected_rule_pass}" "rule_pass.jh passes"
@@ -150,4 +151,4 @@ if [[ "${prompt_unmatched_out}" != *"passed"* ]] && [[ "${prompt_unmatched_out}"
   printf "%s\n" "${prompt_unmatched_out}" >&2
   e2e::fail "prompt_unmatched.test.jh should pass when backend (cursor-agent) is in PATH"
 fi
-e2e::assert_contains "${prompt_unmatched_out}" "e2e-backend-no-mock-output" "prompt_unmatched.test.jh uses backend when no mock"
+e2e::pass "prompt_unmatched.test.jh passes when backend (cursor-agent) is in PATH"

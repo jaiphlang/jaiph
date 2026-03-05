@@ -172,6 +172,19 @@
             font-weight: 600;
         }
 
+        .jaiph-run .run-fail {
+            color: #cf222e;
+            font-weight: 700;
+        }
+
+        .jaiph-run .run-diff-minus {
+            color: #8c959f;
+        }
+
+        .jaiph-run .run-diff-plus {
+            color: #cf222e;
+        }
+
         .jaiph-run .run-keyword {
             font-weight: 600;
         }
@@ -426,11 +439,14 @@
                 <div class="code-tab-list">
                     <button type="button" class="code-tab-button is-active"
                         data-target="say-hello-jh">say_hello.jh</button>
+                    <button type="button" class="code-tab-button"
+                        data-target="say-hello-test-jh">say_hello.test.jh</button>
                     <button type="button" class="code-tab-button" data-target="main-jh">main.jh</button>
                 </div>
 
                 <div class="code-tab-panel is-active" data-panel="say-hello-jh">
-                    <p>Jaiph workflows are typically executable <code>.jh</code> files with a shebang.</p>
+                    <p><strong>Jaiph</strong> workflows are typically executable <code>.jh</code> files with a shebang.
+                    </p>
                     <p>The core primitives are <strong>rule</strong>, <strong>prompt</strong>, <strong>function</strong>
                         and <strong>workflow</strong>. You can also embed any bash code inside your workflows and rules,
                         and pass arguments to them in a similar way to bash scripts.</p>
@@ -463,8 +479,9 @@ running say_hello.jh
 
 <span class="run-keyword">workflow</span> default
 ├── <span class="run-keyword">rule</span> name_was_provided <span class="run-time">(0s)</span>
-├── <span class="run-keyword">prompt</span> prompt <span class="run-time">(10s)</span>
-<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(10.2s)</span>
+├── <span class="run-keyword">prompt</span> prompt <span class="run-time">(9s)</span>
+├── <span class="run-keyword">function</span> format_text <span class="run-time">(0s)</span>
+<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(8.9s)</span>
 
 Hi Jakub.
 
@@ -473,6 +490,48 @@ who speaks over a dozen languages and runs a popular site (jakubmarian.com)
 with maps and data on European languages—including maps of which European 
 languages use “yes” and “no” vs. “ja”/“da”-style words. So if you ever look up 
 “European language maps,” you might run into another Jakub’s work.</code></pre>
+                </div>
+
+                <div class="code-tab-panel" data-panel="say-hello-test-jh">
+                    <p><strong>Jaiph</strong> has native support for testing. All files that end with
+                        <code>*.test.jh</code> are treated as tests.</p>
+                    <p>And Jaiph highly recommends testing your workflows!</p>
+                    <pre><code class="language-jaiph">#!/usr/bin/env jaiph
+
+import "say_hello.jh" as hello
+
+test "without name, workflow fails with validation message" {
+  # When
+  response=$({ hello.default 2>&1; } || true) # this way bash captures stderr
+
+  # Then
+  expectEqual response "You didn't provide your name"
+}
+
+test "with name, returns greeting and writes hello.txt" {
+  # Given
+  mock prompt "Hello Alice! Fun fact: Alice in Wonderland was written by Lewis Carroll."
+
+  # When
+  hello.default "Alice"
+
+  # Then
+  content=$(cat hello.txt)
+  expectContain content "Hello Alice"
+  expectContain content "Alice in Wonderland"
+}</code></pre>
+                    <p>Example failing run output:</p>
+                    <pre><code class="jaiph-run"><span class="run-command">➜  jaiph test e2e/say_hello.test.jh</span>
+testing say_hello.test.jh
+  ├── without name, workflow fails with validation message <span class="run-time">(0s failed)</span>
+  │  expectEqual failed:
+  │  <span class="run-diff-minus">- You didn't provide your name</span>
+  │  <span class="run-diff-plus">+ You didn't provide your name :(</span>
+  │  
+  └── with name, returns greeting and writes hello.txt <span class="run-time">(1s)</span>
+
+<span class="run-fail">✗ 1 / 2 test(s) failed</span>
+  - without name, workflow fails with validation message</code></pre>
                 </div>
 
                 <div class="code-tab-panel" data-panel="main-jh">
@@ -678,10 +737,18 @@ jaiph use 0.2.0</code></pre>
             "rule",
             "workflow",
             "function",
+            "test",
             "ensure",
             "run",
             "prompt",
+            "mock",
+            "respond",
+            "contains",
+            "expectContain",
+            "expectEqual",
+            "allow_failure",
             "if",
+            "elif",
             "then",
             "else",
             "fi"

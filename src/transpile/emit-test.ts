@@ -180,18 +180,29 @@ export function emitTest(
         if (!hasMockBlock) {
           out.push(`  export JAIPH_MOCK_RESPONSES_FILE="$jaiph__mock_file"`);
         }
+        const args = step.args?.length ? step.args.map(escapeBashSingleQuoted).join(" ") : "";
         out.push("  set +e");
-        out.push(`  ${step.captureName}=$(${workflowSymbol} 2>&1)`);
+        if (step.captureName) {
+          out.push(`  ${step.captureName}=$(${workflowSymbol} ${args} 2>&1 | sed '/^__JAIPH_EVENT__/d')`);
+        } else {
+          out.push(`  jaiph__test_ignored=$(${workflowSymbol} ${args} 2>&1 | sed '/^__JAIPH_EVENT__/d')`);
+        }
         out.push("  jaiph__test_exit=$?");
         out.push("  set -e");
-        out.push("  if [[ $jaiph__test_exit -ne 0 ]]; then");
-        out.push('    echo "jai: workflow exited with status $jaiph__test_exit" >&2');
-        out.push("    return 1");
-        out.push("  fi");
+        if (!step.allowFailure) {
+          out.push("  if [[ $jaiph__test_exit -ne 0 ]]; then");
+          out.push('    echo "jai: workflow exited with status $jaiph__test_exit" >&2');
+          out.push("    return 1");
+          out.push("  fi");
+        }
         continue;
       }
       if (step.type === "test_expect_contain") {
         out.push(`  jaiph__expect_contain "$${step.variable}" ${escapeBashSingleQuoted(step.substring)}`);
+        continue;
+      }
+      if (step.type === "test_expect_equal") {
+        out.push(`  jaiph__expect_equal "$${step.variable}" ${escapeBashSingleQuoted(step.expected)}`);
         continue;
       }
     }
@@ -201,17 +212,18 @@ export function emitTest(
   }
 
   out.push("jaiph__run_tests() {");
-  out.push("  local bold=$'\\e[1m' reset=$'\\e[0m'");
+  out.push("  local bold=$'\\e[1m' reset=$'\\e[0m' red=$'\\e[31m' green=$'\\e[32m'");
   out.push('  echo -e "${bold}testing${reset} $jaiph__test_display_name"');
   const n = ast.tests!.length;
   const lastIdx = n - 1;
-  out.push("  local total=0 failed=0 i start elapsed branch desc desc_show");
+  out.push("  local total=0 failed=0 i start elapsed branch desc desc_show err_file line detail_prefix");
   out.push("  local -a failed_names=()");
   out.push(`  for ((i=0; i<${n}; i++)); do`);
   out.push(`    desc="\${${descsVar}[${"$"}i]}"`);
   out.push('    desc_show="${desc/runs/${bold}test${reset}}"');
   out.push("    start=$SECONDS");
-  out.push(`    if jaiph__test_${"$"}i; then`);
+  out.push("    err_file=$(mktemp)");
+  out.push(`    if jaiph__test_${"$"}i 2>"$err_file"; then`);
   out.push("      elapsed=$((SECONDS - start))");
   out.push(`      [[ $i -eq ${lastIdx} ]] && branch="└──" || branch="├──"`);
   out.push('      echo -e "  $branch $desc_show (${elapsed}s)"');
@@ -220,17 +232,27 @@ export function emitTest(
   out.push('      failed_names+=("$desc")');
   out.push("      elapsed=$((SECONDS - start))");
   out.push(`      [[ $i -eq ${lastIdx} ]] && branch="└──" || branch="├──"`);
-  out.push('      echo -e "  $branch $desc_show (${elapsed}s failed)" >&2');
+  out.push('      echo -e "  $branch $desc_show (${elapsed}s failed)"');
+      out.push(`      [[ $i -eq ${lastIdx} ]] && detail_prefix="     " || detail_prefix="  │  "`);
+  out.push('      if [[ -s "$err_file" ]]; then');
+      out.push('        while IFS= read -r line || [[ -n "$line" ]]; do');
+      out.push('          echo "${detail_prefix}$line"');
+  out.push('        done < "$err_file"');
+  out.push("      fi");
+      out.push(`      if [[ $i -ne ${lastIdx} ]]; then`);
+      out.push('        echo "${detail_prefix}"');
+      out.push("      fi");
   out.push("    fi");
+  out.push('    rm -f "$err_file"');
   out.push("    total=$((total + 1))");
   out.push("  done");
   out.push("  if [[ $failed -gt 0 ]]; then");
-  out.push('    echo "" >&2');
-  out.push('    echo "✗ $failed / $total test(s) failed" >&2');
-  out.push('    for name in "${failed_names[@]}"; do echo "  - $name" >&2; done');
+  out.push('    echo ""');
+  out.push('    echo -e "${bold}${red}✗ $failed / $total test(s) failed${reset}"');
+  out.push('    for name in "${failed_names[@]}"; do echo "  - $name"; done');
   out.push("    return 1");
   out.push("  fi");
-  out.push('  echo "✓ $total test(s) passed"');
+  out.push('  echo -e "${bold}${green}✓ $total test(s) passed${reset}"');
   out.push("  return 0");
   out.push("}");
   out.push("");

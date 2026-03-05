@@ -229,17 +229,67 @@ export function parseTestBlock(
       });
       continue;
     }
-    const assignMatch = inner.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*$/);
-    if (assignMatch) {
-      const captureName = assignMatch[1];
-      const workflowRef = assignMatch[2];
-      if (!isRef(workflowRef)) {
-        fail(filePath, "assignment in test must be: name = <workflow_ref>", innerNo, col);
-      }
+    const expectEqualMatch = inner.match(/^expectEqual\s+([A-Za-z_][A-Za-z0-9_]*)\s+"((?:[^"\\]|\\.)*)"\s*$/);
+    if (expectEqualMatch) {
+      testBlock.steps.push({
+        type: "test_expect_equal",
+        variable: expectEqualMatch[1],
+        expected: expectEqualMatch[2].replace(/\\"/g, '"').replace(/\\n/g, "\n"),
+        loc,
+      });
+      continue;
+    }
+    const captureWithIgnoreFailureMatch = inner.match(
+      /^([A-Za-z_][A-Za-z0-9_]*)=\$\(\{\s*([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*)\s+2>&1;\s*\}\s*\|\|\s*true\s*\)\s*(?:#.*)?$/,
+    );
+    if (captureWithIgnoreFailureMatch) {
+      const captureName = captureWithIgnoreFailureMatch[1];
+      const workflowRef = captureWithIgnoreFailureMatch[2];
       testBlock.steps.push({
         type: "test_run_workflow",
         captureName,
         workflowRef,
+        allowFailure: true,
+        loc,
+      });
+      continue;
+    }
+    const assignMatch = inner.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+"((?:[^"\\]|\\.)*)")?(?:\s+(allow_failure))?\s*$/);
+    if (assignMatch) {
+      const captureName = assignMatch[1];
+      const workflowRef = assignMatch[2];
+      const arg1 = assignMatch[3];
+      const allowFailure = assignMatch[4] === "allow_failure";
+      if (!isRef(workflowRef)) {
+        fail(filePath, "assignment in test must be: name = <workflow_ref> or name = <workflow_ref> \"arg\" or name = <workflow_ref> allow_failure", innerNo, col);
+      }
+      const args: string[] = arg1 !== undefined ? [arg1.replace(/\\"/g, '"').replace(/\\n/g, "\n")] : [];
+      testBlock.steps.push({
+        type: "test_run_workflow",
+        captureName,
+        workflowRef,
+        args: args.length > 0 ? args : undefined,
+        allowFailure: allowFailure || undefined,
+        loc,
+      });
+      continue;
+    }
+    const runWorkflowMatch = inner.match(
+      /^([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*)(?:\s+"((?:[^"\\]|\\.)*)")?(?:\s+(allow_failure))?\s*$/,
+    );
+    if (runWorkflowMatch) {
+      const workflowRef = runWorkflowMatch[1];
+      const arg1 = runWorkflowMatch[2];
+      const allowFailure = runWorkflowMatch[3] === "allow_failure";
+      if (!isRef(workflowRef)) {
+        fail(filePath, "workflow run in test must be <alias>.<workflow>", innerNo, col);
+      }
+      const args: string[] = arg1 !== undefined ? [arg1.replace(/\\"/g, '"').replace(/\\n/g, "\n")] : [];
+      testBlock.steps.push({
+        type: "test_run_workflow",
+        workflowRef,
+        args: args.length > 0 ? args : undefined,
+        allowFailure: allowFailure || undefined,
         loc,
       });
       continue;

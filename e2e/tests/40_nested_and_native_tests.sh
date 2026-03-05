@@ -35,6 +35,8 @@ expected_nested_out=$(printf '%s\n' \
   'running nested_run.jh' \
   '' \
   'workflow default' \
+  'e2e-nested-inner' \
+  'e2e-nested-outer' \
   '✓ PASS workflow default (<time>)')
 expected_nested_out="${expected_nested_out%$'\n'}"
 normalized_nested="$(e2e::normalize_output "${nested_out}")"
@@ -75,3 +77,41 @@ if [[ "${native_test_out}" != *"passed"* ]] && [[ "${native_test_out}" != *"PASS
   e2e::fail "workflow_greeting.test.jh should pass"
 fi
 e2e::pass "workflow_greeting.test.jh passes"
+
+e2e::section "Mock prompt block with no else: unmatched prompt fails with clear message"
+# Given: workflow prompts with string that mock block does not match
+cat > "${TEST_DIR}/unmatched_mock_block.jh" <<'EOF'
+#!/usr/bin/env jaiph
+workflow default {
+  result = prompt "e2e-unmatched-prompt-never-mocked"
+  printf '%s' "$result"
+}
+EOF
+cat > "${TEST_DIR}/unmatched_mock_block.test.jh" <<'EOF'
+#!/usr/bin/env jaiph
+import "unmatched_mock_block.jh" as p
+
+test "unmatched prompt never mocked" {
+  mock prompt {
+    if $1 contains "other" ; then
+      respond "x"
+    fi
+  }
+  response = p.default
+  expectContain response "x"
+}
+EOF
+
+# When: run test (expect failure)
+set +e
+unmatched_out="$(jaiph test "${TEST_DIR}/unmatched_mock_block.test.jh" 2>&1)"
+unmatched_exit=$?
+set -e
+
+# Then: exit 1 and stderr reports failed workflow execution
+if [[ $unmatched_exit -eq 0 ]]; then
+  printf "%s\n" "${unmatched_out}" >&2
+  e2e::fail "unmatched_mock_block.test.jh should exit 1 when no branch matches"
+fi
+e2e::assert_contains "${unmatched_out}" "workflow exited with status" "unmatched prompt reports workflow failure status"
+e2e::pass "mock prompt block without else fails when prompt never matched"

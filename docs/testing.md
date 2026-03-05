@@ -47,7 +47,7 @@ test "runs happy path and prints pass tree" {
 - **Shell** — any bash statement (e.g. `echo "given"`, `# comment`).
 - **mock prompt** — `mock prompt "<response>"` adds a mock response for the next prompt call. Mocks are consumed in order when the workflow runs. Use one per prompt in the workflow.
 - **mock prompt block** — `mock prompt { ... }` dispatches by prompt content. Use `if $1 contains "..." ; then` / `elif $1 contains "..." ; then` / optional `else` / `respond "..."` / `fi`. First matching branch wins; if no branch matches and there is no `else`, the test fails with a clear error.
-- **Workflow capture** — `name = <alias>.<workflow>` runs the workflow, captures stdout+stderr into `name`, and does not abort on non-zero exit. You can then assert on the output.
+- **Workflow capture** — `name = <alias>.<workflow>` runs the workflow, captures stdout+stderr into `name`, and does not abort on non-zero exit. You can then assert on the output. Use `name = <alias>.<workflow> "arg"` to pass one argument, or `name = <alias>.<workflow> allow_failure` to run without failing the test on non-zero exit (so you can assert on failure output).
 - **expectContain** — `expectContain <variable> "<substring>"` fails the test with a readable error if the variable's value does not contain the substring.
 
 ## Pass/fail reporting
@@ -77,5 +77,6 @@ test "default workflow prints greeting" {
 
 ## Limitations (v1)
 
+- Mocks are **inline only** (e.g. `mock prompt "..."` or `mock prompt { ... }`). The legacy `.test.toml` format is not supported.
 - Workflow invocation inside tests captures combined stdout+stderr and does not abort the process on failure; you assert explicitly with `expectContain`.
 - Test files must not define rules or workflows; they only import and run tests.

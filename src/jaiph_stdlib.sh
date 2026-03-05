@@ -36,6 +36,21 @@ jaiph__expect_contain() {
   return 0
 }
 
+jaiph__expect_equal() {
+  local actual="$1"
+  local expected="$2"
+  if [[ "$actual" != "$expected" ]]; then
+    local gray=$'\e[90m'
+    local red=$'\e[31m'
+    local reset=$'\e[0m'
+    echo "expectEqual failed:" >&2
+    printf '%b- %s%b\n' "$gray" "$expected" "$reset" >&2
+    printf '%b+ %s%b\n' "$red" "$actual" "$reset" >&2
+    return 1
+  fi
+  return 0
+}
+
 # Source runtime submodules (order matters: events → test-mode → steps → prompt → sandbox).
 _jaiph_runtime_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=src/runtime/events.sh

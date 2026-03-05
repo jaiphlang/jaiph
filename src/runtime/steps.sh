@@ -124,7 +124,7 @@ jaiph::run_step() {
   local mock_script
   mock_script="$(jaiph::mock_script_for_symbol "$func_name")" || true
   if [[ -n "$mock_script" && -x "$mock_script" ]]; then
-    "$mock_script" "$@" >"$out_tmp" 2>"$err_tmp"
+    ( "$mock_script" "$@" >"$out_tmp" 2>"$err_tmp" )
     status=$?
     if [[ "$func_name" == "jaiph::prompt" ]]; then
       if [[ -f "$out_tmp" ]]; then
@@ -146,7 +146,7 @@ jaiph::run_step() {
     fi
     export JAIPH_LAST_PROMPT_FINAL
   else
-    "$@" >"$out_tmp" 2>"$err_tmp"
+    ( "$@" >"$out_tmp" 2>"$err_tmp" )
     status=$?
   fi
   if [[ "$had_errexit" -eq 1 ]]; then
@@ -170,6 +170,9 @@ jaiph::run_step() {
   jaiph::emit_step_event "STEP_END" "$func_name" "$status" "$elapsed_ms" "$out_file" "$err_file"
   if [[ -n "$out_file" && -f "$out_file" ]]; then
     cat "$out_file"
+  fi
+  if [[ "$status" -ne 0 ]] && jaiph::is_test_mode && [[ -n "$err_file" && -f "$err_file" ]]; then
+    cat "$err_file" >&2
   fi
   return "$status"
 }

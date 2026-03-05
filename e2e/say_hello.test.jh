@@ -1,0 +1,24 @@
+#!/usr/bin/env jaiph
+
+import "say_hello.jh" as hello
+
+test "without name, workflow fails with validation message" {
+  # When
+  response=$({ hello.default 2>&1; } || true) # this way bash captures stderr
+
+  # Then
+  expectEqual response "You didn't provide your name"
+}
+
+test "with name, returns greeting and writes hello.txt" {
+  # Given
+  mock prompt "Hello Alice! Fun fact: Alice in Wonderland was written by Lewis Carroll."
+
+  # When
+  hello.default "Alice"
+
+  # Then
+  content=$(cat hello.txt)
+  expectContain content "Hello Alice"
+  expectContain content "Alice in Wonderland"
+}

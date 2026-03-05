@@ -27,6 +27,7 @@ expected_hello=$(printf '%s\n' \
   'running hello.jh' \
   '' \
   'workflow default' \
+  'hello-jh' \
   '✓ PASS workflow default (<time>)')
 expected_hello="${expected_hello%$'\n'}"
 e2e::assert_output_equals "${hello_out}" "${expected_hello}" "hello.jh run passes"
@@ -56,6 +57,8 @@ expected_mixed=$(printf '%s\n' \
   '' \
   'workflow default' \
   '└── rule lib.ready (<time>)' \
+  'from-jph' \
+  'mixed-ok' \
   '✓ PASS workflow default (<time>)')
 expected_mixed="${expected_mixed%$'\n'}"
 e2e::assert_output_equals "${mixed_out}" "${expected_mixed}" "mixed .jh/.jph run passes"

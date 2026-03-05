@@ -135,8 +135,16 @@ export type TestStepDef =
       elseResponse?: string;
       loc: SourceLoc;
     }
-  | { type: "test_run_workflow"; captureName: string; workflowRef: string; loc: SourceLoc }
+  | {
+      type: "test_run_workflow";
+      captureName?: string;
+      workflowRef: string;
+      args?: string[];
+      allowFailure?: boolean;
+      loc: SourceLoc;
+    }
   | { type: "test_expect_contain"; variable: string; substring: string; loc: SourceLoc }
+  | { type: "test_expect_equal"; variable: string; expected: string; loc: SourceLoc }
   | { type: "test_mock_workflow"; ref: string; body: string; loc: SourceLoc }
   | { type: "test_mock_rule"; ref: string; body: string; loc: SourceLoc }
   | { type: "test_mock_function"; ref: string; body: string; loc: SourceLoc };
