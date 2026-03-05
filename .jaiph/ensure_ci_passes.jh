@@ -1,0 +1,35 @@
+#!/usr/bin/env jaiph
+
+rule project_compiles {
+  npm run build
+}
+
+rule tests_pass {
+  npm test
+}
+
+rule e2e_tests_pass {
+  npm run test:e2e
+}
+
+workflow ensure_ci_passes {
+  if ! ensure project_compiles; then
+    prompt "Fix failing compilation so npm run build passes."
+    run ensure_ci_passes
+    return 0
+  fi
+  if ! ensure tests_pass; then
+    prompt "Fix failing tests so npm test passes."
+    run ensure_ci_passes
+    return 0
+  fi
+  if ! ensure e2e_tests_pass; then
+    prompt "Fix failing e2e tests so npm run test:e2e passes."
+    run ensure_ci_passes
+    return 0
+  fi
+}
+
+workflow default {
+  run ensure_ci_passes
+}

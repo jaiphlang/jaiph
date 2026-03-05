@@ -4,20 +4,7 @@
 # Usage: ./implement_from_queue.jh
 
 import "./docs_parity.jh" as docs
-
-# Verifies the project compiles after changes.
-rule project_compiles {
-  npm run build
-}
-
-# Verifies tests pass after changes.
-rule tests_pass {
-  npm test
-}
-
-rule e2e_tests_pass {
-  npm run test:e2e
-}
+import "./ensure_ci_passes.jh" as ci
 
 function get_first_task() {
   if ! test -f ".jaiph/QUEUE.md"; then
@@ -57,24 +44,6 @@ workflow implement_task {
   "
 }
 
-workflow make_ci_pass {
-  if ! ensure project_compiles; then
-    prompt "Fix failing compilation so npm run build passes."
-    run make_ci_pass
-    return 0
-  fi
-  if ! ensure tests_pass; then
-    prompt "Fix failing tests so npm test passes."
-    run make_ci_pass
-    return 0
-  fi
-  if ! ensure e2e_tests_pass; then
-    prompt "Fix failing e2e tests so npm run test:e2e passes."
-    run make_ci_pass
-    return 0
-  fi
-}
-
 # Removes the first completed task block from .jaiph/QUEUE.md.
 workflow remove_completed_task {
   test -n "${1:-}"
@@ -90,7 +59,7 @@ workflow default {
   task_header="${task%%$'\n'*}" # first line of the task block
 
   run implement_task "$task"
-  run make_ci_pass
+  run ci.ensure_ci_passes
 
   run docs.default
 
