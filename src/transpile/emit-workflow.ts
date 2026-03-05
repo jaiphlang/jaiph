@@ -336,7 +336,7 @@ export function emitWorkflow(
           }
           const delimiter = promptDelimiter(promptText, step.loc.line);
           if (step.captureName) {
-            out.push(`  ${step.captureName}=$(jaiph::prompt "$@" <<${delimiter}`);
+            out.push(`  ${step.captureName}=$(jaiph::prompt_capture "$@" <<${delimiter}`);
             for (const line of promptText.split("\n")) {
               out.push(line);
             }
@@ -387,7 +387,7 @@ export function emitWorkflow(
               }
               const delimiter = promptDelimiter(promptText, thenStep.loc.line);
               if (thenStep.captureName) {
-                out.push(`    ${thenStep.captureName}=$(jaiph::prompt "$@" <<${delimiter}`);
+                out.push(`    ${thenStep.captureName}=$(jaiph::prompt_capture "$@" <<${delimiter}`);
                 for (const line of promptText.split("\n")) {
                   out.push(line);
                 }

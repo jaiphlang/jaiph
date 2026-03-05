@@ -3,36 +3,13 @@
 
 jaiph::stream_json_to_text() {
   node -e '
+    const fs = require("node:fs");
     const readline = require("node:readline");
     const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
-    let currentSection = "";
-    let wroteAny = false;
-    let lastChar = "";
-    const writeRaw = (value) => {
-      if (typeof value === "string" && value.length > 0) {
-        process.stdout.write(value);
-        wroteAny = true;
-        lastChar = value[value.length - 1];
-      }
-    };
-    const startSection = (name) => {
-      if (currentSection === name) {
-        return;
-      }
-      if (wroteAny && lastChar !== "\n") {
-        writeRaw("\n");
-      }
-      if (wroteAny) {
-        writeRaw("\n");
-      }
-      writeRaw(`${name}:\n`);
-      currentSection = name;
-    };
-    const emit = (value) => {
-      if (typeof value === "string" && value.length > 0) {
-        writeRaw(value);
-      }
-    };
+    let reasoning = "";
+    let final = "";
+    let fallback = "";
+    const append = (base, value) => (typeof value === "string" && value.length > 0 ? base + value : base);
     const pickGeneric = (obj) => {
       if (!obj || typeof obj !== "object") return "";
       if (obj.message && typeof obj.message.content === "string") return obj.message.content;
@@ -55,6 +32,16 @@ jaiph::stream_json_to_text() {
       }
       return "";
     };
+    const writeSection = (name, text, wroteAny) => {
+      if (typeof text !== "string" || text.length === 0) {
+        return wroteAny;
+      }
+      if (wroteAny) {
+        process.stdout.write("\n\n");
+      }
+      process.stdout.write(`${name}:\n${text}`);
+      return true;
+    };
     rl.on("line", (line) => {
       if (!line.trim()) {
         return;
@@ -63,25 +50,36 @@ jaiph::stream_json_to_text() {
         const obj = JSON.parse(line);
         if (obj && typeof obj === "object") {
           if (obj.type === "thinking" && typeof obj.text === "string" && obj.text.length > 0) {
-            startSection("Reasoning");
-            emit(obj.text);
+            reasoning = append(reasoning, obj.text);
             return;
           }
           if (obj.type === "assistant" && obj.message && typeof obj.message.content === "string" && obj.message.content.length > 0) {
-            startSection("Final answer");
-            emit(obj.message.content);
+            final = append(final, obj.message.content);
             return;
           }
           if (obj.type === "result" && typeof obj.result === "string" && obj.result.length > 0) {
-            startSection("Final answer");
-            emit(obj.result);
+            final = append(final, obj.result);
             return;
           }
         }
-        emit(pickGeneric(obj));
+        final = append(final, pickGeneric(obj));
       } catch {
-        writeRaw(`${line}\n`);
+        fallback = append(fallback, `${line}\n`);
       }
+    });
+    rl.on("close", () => {
+      const effectiveFinal = final.length > 0 ? final : fallback;
+      const finalPath = process.env.JAIPH_PROMPT_FINAL_FILE;
+      if (typeof finalPath === "string" && finalPath.length > 0) {
+        try {
+          fs.writeFileSync(finalPath, effectiveFinal, "utf8");
+        } catch {
+          // Best-effort final capture; prompt logs should still be emitted.
+        }
+      }
+      let wroteAny = false;
+      wroteAny = writeSection("Reasoning", reasoning, wroteAny);
+      writeSection("Final answer", effectiveFinal, wroteAny);
     });
   '
 }
@@ -111,12 +109,18 @@ jaiph::prompt_impl() {
   if jaiph::is_test_mode; then
     if [[ -n "${JAIPH_MOCK_DISPATCH_SCRIPT:-}" ]]; then
       mock_response="$(jaiph::mock_dispatch "$prompt_text")" && {
+        if [[ -n "${JAIPH_PROMPT_FINAL_FILE:-}" ]]; then
+          printf '%s' "$mock_response" >"$JAIPH_PROMPT_FINAL_FILE"
+        fi
         printf '%s' "$mock_response"
         return 0
       }
     fi
     if [[ -n "${JAIPH_MOCK_RESPONSES_FILE:-}" ]]; then
       mock_response="$(jaiph::read_next_mock_response)" && {
+        if [[ -n "${JAIPH_PROMPT_FINAL_FILE:-}" ]]; then
+          printf '%s' "$mock_response" >"$JAIPH_PROMPT_FINAL_FILE"
+        fi
         printf '%s' "$mock_response"
         return 0
       }
@@ -145,4 +149,16 @@ jaiph::prompt_impl() {
 
 jaiph::prompt() {
   jaiph::run_step jaiph::prompt jaiph::prompt_impl "$@"
+}
+
+jaiph::prompt_capture() {
+  local capture_file status
+  capture_file="$(mktemp)"
+  jaiph::prompt "$@" >"$capture_file"
+  status=$?
+  rm -f "$capture_file"
+  if [[ "$status" -ne 0 ]]; then
+    return "$status"
+  fi
+  printf '%s' "${JAIPH_LAST_PROMPT_FINAL:-}"
 }

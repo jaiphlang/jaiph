@@ -1534,7 +1534,7 @@ test("build accepts ensure inside a rule block", () => {
   }
 });
 
-test("build emits prompt capture as name=$(jaiph::prompt ...) for name = prompt \"...\"", () => {
+test("build emits prompt capture as name=$(jaiph::prompt_capture ...) for name = prompt \"...\"", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-prompt-capture-build-"));
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-prompt-capture-out-"));
   try {
@@ -1551,7 +1551,7 @@ test("build emits prompt capture as name=$(jaiph::prompt ...) for name = prompt 
 
     const results = build(filePath, outDir);
     assert.equal(results.length, 1);
-    assert.match(results[0].bash, /result=\$\(jaiph::prompt "\$@" <<__JAIPH_PROMPT_/);
+    assert.match(results[0].bash, /result=\$\(jaiph::prompt_capture "\$@" <<__JAIPH_PROMPT_/);
     assert.match(results[0].bash, /Summarize the changes made/);
     assert.match(results[0].bash, /\s*\)\s*$/m);
   } finally {
@@ -1752,6 +1752,66 @@ test("jaiph run prompt capture: variable accessible in subsequent shell step", (
     assert.equal(Boolean(workflowOutName), true);
     const workflowOut = readFileSync(join(latestRunDir, workflowOutName!), "utf8");
     assert.match(workflowOut, /captured:[\s\S]*agent-summary/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph run prompt capture stores only final answer in assigned variable", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-prompt-capture-final-only-"));
+  try {
+    const binDir = join(root, "bin");
+    mkdirSync(binDir, { recursive: true });
+    const fakeAgent = join(binDir, "cursor-agent");
+    writeFileSync(
+      fakeAgent,
+      [
+        "#!/usr/bin/env bash",
+        "echo '{\"type\":\"thinking\",\"text\":\"Plan: inspect data.\"}'",
+        "echo '{\"type\":\"result\",\"result\":\"final-only-value\"}'",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(fakeAgent, 0o755);
+
+    const filePath = join(root, "capture_final_only.jh");
+    writeFileSync(
+      filePath,
+      [
+        "workflow default {",
+        '  result = prompt "Summarize"',
+        '  printf \'captured:%s\\n\' "$result"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runResult = spawnSync("node", [cliPath, "run", filePath], {
+      encoding: "utf8",
+      cwd: root,
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH ?? ""}`,
+      },
+    });
+
+    assert.equal(runResult.status, 0, runResult.stderr);
+    const runsRoot = join(root, ".jaiph/runs");
+    const runDirs = readdirSync(runsRoot).sort();
+    const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
+    const runFiles = readdirSync(latestRunDir);
+    const workflowOutName = runFiles.find((name) => name.endsWith(".out") && name.includes("workflow"));
+    assert.equal(Boolean(workflowOutName), true);
+    const workflowOut = readFileSync(join(latestRunDir, workflowOutName!), "utf8");
+    assert.match(workflowOut, /captured:[\s\S]*final-only-value/);
+    assert.doesNotMatch(workflowOut, /captured:[\s\S]*Plan: inspect data\./);
+
+    const promptOutName = runFiles.find((name) => name.endsWith("-jaiph__prompt.out"));
+    assert.equal(Boolean(promptOutName), true);
+    const promptOut = readFileSync(join(latestRunDir, promptOutName!), "utf8");
+    assert.match(promptOut, /Reasoning:\nPlan: inspect data\./);
+    assert.match(promptOut, /Final answer:\nfinal-only-value/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

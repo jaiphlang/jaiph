@@ -106,7 +106,7 @@ jaiph::run_step() {
   fi
   jaiph::init_run_tracking || return 1
   local step_started_at safe_name out_file err_file status had_errexit step_started_seconds step_elapsed_seconds
-  local out_tmp err_tmp elapsed_ms
+  local out_tmp err_tmp elapsed_ms prompt_final_tmp
   step_started_seconds="$SECONDS"
   step_started_at="$(jaiph::timestamp_utc)"
   safe_name="$(jaiph::sanitize_name "$func_name")"
@@ -114,6 +114,7 @@ jaiph::run_step() {
   err_file="$JAIPH_RUN_DIR/${step_started_at}-${safe_name}.err"
   out_tmp="${out_file}.tmp.$$"
   err_tmp="${err_file}.tmp.$$"
+  prompt_final_tmp=""
   jaiph::emit_step_event "STEP_START" "$func_name"
   had_errexit=0
   case "$-" in
@@ -125,9 +126,25 @@ jaiph::run_step() {
   if [[ -n "$mock_script" && -x "$mock_script" ]]; then
     "$mock_script" "$@" >"$out_tmp" 2>"$err_tmp"
     status=$?
+    if [[ "$func_name" == "jaiph::prompt" ]]; then
+      if [[ -f "$out_tmp" ]]; then
+        JAIPH_LAST_PROMPT_FINAL="$(<"$out_tmp")"
+      else
+        JAIPH_LAST_PROMPT_FINAL=""
+      fi
+      export JAIPH_LAST_PROMPT_FINAL
+    fi
   elif [[ "$func_name" == "jaiph::prompt" ]]; then
-    "$@" 2>"$err_tmp" | tee "$out_tmp"
+    prompt_final_tmp="${out_file}.final.tmp.$$"
+    JAIPH_PROMPT_FINAL_FILE="$prompt_final_tmp" "$@" 2>"$err_tmp" | tee "$out_tmp"
     status="${PIPESTATUS[0]}"
+    if [[ -f "$prompt_final_tmp" ]]; then
+      JAIPH_LAST_PROMPT_FINAL="$(<"$prompt_final_tmp")"
+      rm -f "$prompt_final_tmp"
+    else
+      JAIPH_LAST_PROMPT_FINAL=""
+    fi
+    export JAIPH_LAST_PROMPT_FINAL
   else
     "$@" >"$out_tmp" 2>"$err_tmp"
     status=$?
