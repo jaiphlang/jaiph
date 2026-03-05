@@ -445,7 +445,7 @@
                         data-target="say-hello-jh">say_hello.jh</button>
                     <button type="button" class="code-tab-button"
                         data-target="say-hello-test-jh">say_hello.test.jh</button>
-                    <button type="button" class="code-tab-button" data-target="main-jh">main.jh</button>
+                    <button type="button" class="code-tab-button" data-target="ensure-ci-passes-jh">ensure_ci_passes.jh</button>
                 </div>
 
                 <div class="code-tab-panel is-active" data-panel="say-hello-jh">
@@ -542,46 +542,80 @@ testing say_hello.test.jh
   - without name, workflow fails with validation message</code></pre>
                 </div>
 
-                <div class="code-tab-panel" data-panel="main-jh">
+                <div class="code-tab-panel" data-panel="ensure-ci-passes-jh">
+                    <p>This is the workflow used in the Jaiph codebase to ensure compilation and tests pass. Note the
+                        conditionals, which are used in the same way as in bash, and the recursive flow: if compilation
+                        or tests fail, a prompt is triggered, and the <code>ensure_ci_passes</code> workflow runs again.</p>
+                    <p>The workflow uses custom <code>config</code> to enable agent YOLO mode. Otherwise the agent cannot
+                        run some commands (for example <code>npm test</code>). By default Jaiph runs agents in their
+                        default, more secure modes.</p>
+                    <p><strong>Content of <code>.jaiph/ensure_ci_passes.jh</code></strong></p>
                     <pre><code class="language-jaiph">#!/usr/bin/env jaiph
 
-import "bootstrap_project.jh" as bootstrap
-import "tools/security.jh" as security
-
-# Validates local build prerequisites.
-rule project_ready {
-  test -f "package.json"
-  test -n "$NODE_ENV"
+config {
+  agent.command = "cursor-agent --force"
 }
 
-# Verifies the project compiles successfully.
-rule build_passes {
+rule project_compiles {
   npm run build
 }
 
-# Orchestrates checks, prompt execution, and docs refresh.
-# Arguments:
-#   $1: Feature requirements passed to the prompt.
-workflow default {
-  if ! ensure project_ready; then
-    run bootstrap.nodejs
-  fi
-  
-  prompt "
-    Build the application using best practices.
-    Follow requirements: $1
-  "
-  
-  ensure build_passes
-  ensure security.scan_passes
-
-  run update_docs
+rule tests_pass {
+  npm test
 }
 
-# Refreshes documentation after a successful build.
-workflow update_docs {
-  prompt "Update docs"
+rule e2e_tests_pass {
+  npm run test:e2e
+}
+
+workflow ensure_ci_passes {
+  if ! ensure project_compiles; then
+    prompt "Fix failing compilation so npm run build passes."
+    run ensure_ci_passes
+    return 0
+  fi
+  if ! ensure tests_pass; then
+    prompt "Fix failing tests so npm test passes."
+    run ensure_ci_passes
+    return 0
+  fi
+  if ! ensure e2e_tests_pass; then
+    prompt "Fix failing e2e tests so npm run test:e2e passes."
+    run ensure_ci_passes
+    return 0
+  fi
+}
+
+workflow default {
+  run ensure_ci_passes
 }</code></pre>
+                    <p>In the run below, e2e tests fail, so Jaiph ran a prompt to fix them, then called the workflow
+                        again recursively to re-run all checks.</p>
+                    <p><strong>Output (with colors):</strong></p>
+                    <pre><code class="jaiph-run"><span class="run-command">➜  jaiph git:(main) ✗ .jaiph/ensure_ci_passes.jh</span>
+
+running ensure_ci_passes.jh
+
+<span class="run-keyword">workflow</span> default
+  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> ensure_ci_passes
+  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> project_compiles
+  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">1s</span>
+  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> tests_pass
+  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">12s</span>
+  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> e2e_tests_pass
+  <span class="run-marker">·</span>   <span class="run-fail">✗</span> <span class="run-time">3s</span>
+  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> prompt
+  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">21s</span>
+  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> ensure_ci_passes
+  <span class="run-marker">·</span>   <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> project_compiles
+  <span class="run-marker">·</span>   <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">0s</span>
+  <span class="run-marker">·</span>   <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> tests_pass
+  <span class="run-marker">·</span>   <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">13s</span>
+  <span class="run-marker">·</span>   <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> e2e_tests_pass
+  <span class="run-marker">·</span>   <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">6s</span>
+  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">19s</span>
+  <span class="run-pass">✓</span> <span class="run-time">56s</span>
+<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(56.4s)</span></code></pre>
                 </div>
 
             </div>
