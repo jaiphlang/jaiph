@@ -1,9 +1,18 @@
 # 0.2.0
 
+- `config { ... }` block for runtime behavior: `agent.backend` (`"cursor"` | `"claude"`), `agent.trusted_workspace`, and existing env-backed options
+- Claude CLI as alternative agent backend when `agent.backend = "claude"` (with clear error if `claude` not in PATH)
+- Trusted workspace and metadata scoping; config docs
+- Run progress driven by runtime event graph (not only CLI); normalized e2e output
+- First-class mocking in tests: mock workflows, rules, and functions (not only prompts)
+- `if_not_ensure_then` / `if_not_ensure_then_run` / `if_not_ensure_then_shell` workflow steps for conditional flows
+- CI checks for compilation and testing; e2e tests aligned with current output
+- Nested workflows and step functions in run tree; `run` disallowed inside `rule` blocks (use `ensure` or move to workflow)
+- Prompt capture fixes (assignments as final answer); improved test failure output
+- Documentation and docs site updates (getting started, testing, styling, mobile)
 - `jaiph test` runs `*.test.jh` / `*.test.jph` with inline prompt mocks (`mock prompt "..."` or `mock prompt { if $1 contains "..." ; then respond "..." ; fi }`). No external `.test.toml` files.
 - Runtime config is env vars and in-file metadata only; `.jaiph/config.toml` and global config files are no longer read.
 - `jaiph init` no longer creates `.jaiph/config.toml`.
-
 - `.jh` extension recommended for new files; `.jph` supported but deprecated (CLI shows migration hint when running `.jph` files)
 - `jaiph init` creates `.jaiph/bootstrap.jh` and `.jaiph/jaiph-skill.md`
 - Import resolution prefers `.jh` over `.jph` when both exist

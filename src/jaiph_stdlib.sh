@@ -3,7 +3,7 @@
 # Thin aggregator: core API + sourced runtime submodules.
 
 jaiph__version() {
-  echo "jaiph 0.2.0"
+  echo "jaiph 0.3.0"
 }
 
 jaiph__runtime_api() {
