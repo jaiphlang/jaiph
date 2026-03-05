@@ -29,7 +29,9 @@ function_out="$(jaiph run "${TEST_DIR}/functions.jh")"
 e2e::assert_file_exists "${TEST_DIR}/function_called.txt" "function step command executed and changed filesystem"
 
 expected_function=$(printf '%s\n' \
+  '' \
   'running functions.jh' \
+  '' \
   'workflow default' \
   '└── function changed_files (<time>)' \
   '✓ PASS workflow default (<time>)')

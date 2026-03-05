@@ -23,7 +23,9 @@ hello_out="$(jaiph run "${TEST_DIR}/hello.jh")"
 
 # Then: exact tree (shell-only workflow, no step rows)
 expected_hello=$(printf '%s\n' \
+  '' \
   'running hello.jh' \
+  '' \
   'workflow default' \
   '✓ PASS workflow default (<time>)')
 expected_hello="${expected_hello%$'\n'}"
@@ -49,7 +51,9 @@ mixed_out="$(jaiph run "${TEST_DIR}/app.jh")"
 
 # Then: exact tree (ensure lib.ready then shell)
 expected_mixed=$(printf '%s\n' \
+  '' \
   'running app.jh' \
+  '' \
   'workflow default' \
   '└── rule lib.ready (<time>)' \
   '✓ PASS workflow default (<time>)')

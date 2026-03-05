@@ -31,7 +31,9 @@ nested_out="$(jaiph run "${TEST_DIR}/nested_run.jh")"
 
 # Then: exact tree (nested workflow row may be omitted in non-TTY; assert minimal tree)
 expected_nested_out=$(printf '%s\n' \
+  '' \
   'running nested_run.jh' \
+  '' \
   'workflow default' \
   '✓ PASS workflow default (<time>)')
 expected_nested_out="${expected_nested_out%$'\n'}"

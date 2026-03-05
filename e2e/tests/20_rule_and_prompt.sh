@@ -32,7 +32,9 @@ rule_pass_out="$(jaiph run "${TEST_DIR}/rule_pass.jh")"
 
 # Then: exact tree (ensure check_passes)
 expected_rule_pass=$(printf '%s\n' \
+  '' \
   'running rule_pass.jh' \
+  '' \
   'workflow default' \
   '└── rule check_passes (<time>)' \
   '✓ PASS workflow default (<time>)')

@@ -27,7 +27,9 @@ e2e::assert_file_exists "${TEST_DIR}/workflow_wrote.txt" "workflow shell step cr
 e2e::assert_contains "$(cat "${TEST_DIR}/workflow_wrote.txt")" "abc" "workflow_wrote.txt has expected content"
 
 expected_workflow_write=$(printf '%s\n' \
+  '' \
   'running fs_write_workflow.jh' \
+  '' \
   'workflow default' \
   '✓ PASS workflow default (<time>)')
 expected_workflow_write="${expected_workflow_write%$'\n'}"
@@ -68,7 +70,9 @@ else
   e2e::assert_file_exists "${TEST_DIR}/rule_wrote.txt" "fallback mode allows rule_wrote.txt creation"
 
   expected_permissive=$(printf '%s\n' \
+    '' \
     'running fs_write_rule.jh' \
+    '' \
     'workflow default' \
     '└── rule write_attempt (<time>)' \
     '✓ PASS workflow default (<time>)')

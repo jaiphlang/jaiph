@@ -6,7 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#6b7280" />
     <meta name="theme-color" content="#1f2a37" media="(prefers-color-scheme: dark)" />
-    <meta name="description" content="Jaiph — Open source AI workflow DSL. Powerful and friendly automation for AI-assisted development." />
+    <meta name="description"
+        content="Jaiph — Open source AI workflow DSL. Powerful and friendly automation for AI-assisted development." />
     <link rel="icon" href="favicon.png" type="image/png" />
     <title>Jaiph — AI Workflow DSL</title>
 
@@ -112,7 +113,7 @@
         pre {
             background: #f6f8fa;
             color: #24292f;
-            padding: 2rem 0;
+            padding: 1rem 0;
             border-radius: 8px;
             overflow-x: auto;
             font-size: 0.9rem;
@@ -157,6 +158,11 @@
             user-select: none;
         }
 
+        .jaiph-run .run-command {
+            color: var(--muted);
+            font-weight: 600;
+        }
+
         .jaiph-run .run-time {
             color: var(--muted);
         }
@@ -170,10 +176,15 @@
             font-weight: 600;
         }
 
+        .code-block-wrap {
+            position: relative;
+        }
+
         .copy-code-button {
             position: absolute;
             top: 0.75rem;
             right: 0.75rem;
+            z-index: 2;
             border: 1px solid #d0d7de;
             border-radius: 6px;
             background: white;
@@ -309,7 +320,7 @@
 
             pre {
                 font-size: 0.82rem;
-                padding: 1.5rem 0;
+                padding: 1rem 0;
             }
 
             pre code .code-line {
@@ -358,6 +369,16 @@
             color: #6e7781;
             font-style: italic;
         }
+
+        /* Variable (assignment target) */
+        .ralph-variable {
+            color: #0969da;
+        }
+
+        /* Operator */
+        .ralph-operator {
+            color: #24292f;
+        }
     </style>
 </head>
 
@@ -400,33 +421,61 @@
         </section>
 
         <section>
-            <h2>Sample run</h2>
-            <div class="card">
-                <p>This is the sample output from running a Jaiph workflow:</p>
-                <pre><code class="jaiph-run">➜  jaiph git:(development) .jaiph/docs_parity.jh 
-<span class="run-keyword">workflow</span> default
-├── <span class="run-keyword">rule</span> tests_pass <span class="run-time">(4s)</span>
-├── <span class="run-keyword">rule</span> e2e_tests_pass <span class="run-time">(5s)</span>
-├── <span class="run-keyword">rule</span> docs_files_present <span class="run-time">(0s)</span>
-├── <span class="run-keyword">function</span> changed_files <span class="run-time">(0s)</span>
-├── <span class="run-keyword">prompt</span> prompt <span class="run-time">(168s)</span>
-├── <span class="run-keyword">rule</span> only_expected_docs_changed_after_prompt <span class="run-time">(0s)</span>
-├── <span class="run-keyword">rule</span> tests_pass <span class="run-time">(4s)</span>
-├── <span class="run-keyword">rule</span> e2e_tests_pass <span class="run-time">(5s)</span>
-<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(3m 6s)</span></code></pre>
-            </div>
-        </section>
-
-        <section>
-            <h2>Sample workflow</h2>
+            <h2>Samples</h2>
             <div class="card">
                 <div class="code-tab-list">
-                    <button type="button" class="code-tab-button is-active" data-target="main-jph">main.jh</button>
-                    <span class="code-tab-hint">transpiles to: </span>
-                    <button type="button" class="code-tab-button" data-target="main-sh">main.sh</button>
+                    <button type="button" class="code-tab-button is-active"
+                        data-target="say-hello-jh">say_hello.jh</button>
+                    <button type="button" class="code-tab-button" data-target="main-jh">main.jh</button>
                 </div>
 
-                <div class="code-tab-panel is-active" data-panel="main-jph">
+                <div class="code-tab-panel is-active" data-panel="say-hello-jh">
+                    <p>Jaiph workflows are typically executable <code>.jh</code> files with a shebang.</p>
+                    <p>The core primitives are <strong>rule</strong>, <strong>prompt</strong>, <strong>function</strong>
+                        and <strong>workflow</strong>. You can also embed any bash code inside your workflows and rules,
+                        and pass arguments to them in a similar way to bash scripts.</p>
+                    <pre><code class="language-jaiph">#!/usr/bin/env jaiph
+
+rule name_was_provided {
+  if [ -z "$1" ]; then
+    echo "You didn't provide your name :(" >&2
+    exit 1
+  fi
+}
+
+function format_text() {
+  fold -s -w 80
+}
+
+workflow default {
+  ensure name_was_provided "$1"
+
+  response = prompt "
+    Say hello to $1 and provide a fun fact about a person with the same name.
+  "
+
+  echo "$response" | format_text > hello.txt
+}</code></pre>
+                    <p>Running the workflow:</p>
+                    <pre><code class="jaiph-run"><span class="run-command">➜  ./say_hello.jh Jakub && cat hello.txt</span>
+
+running say_hello.jh
+
+<span class="run-keyword">workflow</span> default
+├── <span class="run-keyword">rule</span> name_was_provided <span class="run-time">(0s)</span>
+├── <span class="run-keyword">prompt</span> prompt <span class="run-time">(10s)</span>
+<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(10.2s)</span>
+
+Hi Jakub.
+
+**Fun fact:** **Jakub Marian** is a Czech linguist, mathematician, and polyglot
+who speaks over a dozen languages and runs a popular site (jakubmarian.com) 
+with maps and data on European languages—including maps of which European 
+languages use “yes” and “no” vs. “ja”/“da”-style words. So if you ever look up 
+“European language maps,” you might run into another Jakub’s work.</code></pre>
+                </div>
+
+                <div class="code-tab-panel" data-panel="main-jh">
                     <pre><code class="language-jaiph">#!/usr/bin/env jaiph
 
 import "bootstrap_project.jh" as bootstrap
@@ -465,70 +514,6 @@ workflow default {
 # Refreshes documentation after a successful build.
 workflow update_docs {
   prompt "Update docs"
-}</code></pre>
-                </div>
-
-                <div class="code-tab-panel" data-panel="main-sh">
-                    <pre><code class="language-bash">set -euo pipefail
-jaiph_stdlib_path="${JAIPH_STDLIB:-$HOME/.local/bin/jaiph_stdlib.sh}"
-if [[ ! -f "$jaiph_stdlib_path" ]]; then
-  echo "jai: stdlib not found at $jaiph_stdlib_path (set JAIPH_STDLIB or reinstall jaiph)" >&2
-  exit 1
-fi
-source "$jaiph_stdlib_path"
-if [[ "$(jaiph__runtime_api)" != "1" ]]; then
-  echo "jai: incompatible jaiph stdlib runtime (required api=1)" >&2
-  exit 1
-fi
-source "$(dirname "${BASH_SOURCE[0]}")/bootstrap_project.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/tools/security.sh"
-
-# Validates local build prerequisites.
-main::rule::project_ready::impl() {
-  test -f "package.json"
-  test -n "$NODE_ENV"
-}
-
-main::rule::project_ready() {
-  jaiph::run_step main::rule::project_ready jaiph::execute_readonly main::rule::project_ready::impl
-}
-
-# Verifies the project compiles successfully.
-main::rule::build_passes::impl() {
-  npm run build
-}
-
-main::rule::build_passes() {
-  jaiph::run_step main::rule::build_passes jaiph::execute_readonly main::rule::build_passes::impl
-}
-
-# Orchestrates checks, prompt execution, and docs refresh.
-# Arguments:
-#   $1: Feature requirements passed to the prompt.
-main::workflow::default::impl() {
-  if ! main::rule::project_ready; then
-    bootstrap_project::workflow::nodejs
-  fi
-  jaiph::prompt "
-    Build the application using best practices.
-    Follow requirements: $1
-  "
-  main::rule::build_passes
-  tools::security::rule::scan_passes
-  main::workflow::update_docs
-}
-
-main::workflow::default() {
-  jaiph::run_step main::workflow::default main::workflow::default::impl "$@"
-}
-
-# Refreshes documentation after a successful build.
-main::workflow::update_docs::impl() {
-  jaiph::prompt "Update docs"
-}
-
-main::workflow::update_docs() {
-  jaiph::run_step main::workflow::update_docs main::workflow::update_docs::impl "$@"
 }</code></pre>
                 </div>
 
@@ -687,13 +672,18 @@ jaiph use 0.2.0</code></pre>
 
         const STATEMENT_KEYWORDS = new Set([
             "import",
+            "as",
+            "metadata",
+            "export",
             "rule",
             "workflow",
+            "function",
             "ensure",
             "run",
             "prompt",
             "if",
             "then",
+            "else",
             "fi"
         ]);
 
@@ -748,15 +738,17 @@ jaiph use 0.2.0</code></pre>
 
                 if (ch === '"') {
                     const start = i;
+                    let closed = false;
                     i += 1;
                     while (i < line.length) {
                         if (line[i] === '"' && line[i - 1] !== "\\") {
                             i += 1;
+                            closed = true;
                             break;
                         }
                         i += 1;
                     }
-                    if (i >= line.length && line[i - 1] !== '"') {
+                    if (!closed) {
                         state.inString = true;
                     }
                     tokens.push({ type: "string", value: line.slice(start, i), kind: "string" });
@@ -799,7 +791,7 @@ jaiph use 0.2.0</code></pre>
          * Returns:
          *   New token list with refined token kinds.
          */
-        function annotateJaiphTokens(tokens) {
+        function annotateJaiphTokens(tokens, knownSymbols) {
             const annotated = tokens.map(function (token) {
                 return { type: token.type, value: token.value, kind: token.kind };
             });
@@ -819,20 +811,47 @@ jaiph use 0.2.0</code></pre>
             const first = significant[0];
             const firstValue = first.token.type === "identifier" ? first.token.value : "";
 
-            if (
-                first.token.type === "identifier" &&
-                STATEMENT_KEYWORDS.has(firstValue)
-            ) {
-                annotated[first.index].kind = "keyword";
-            }
+            // Mark all keyword identifiers anywhere on the line
+            significant.forEach(function (entry) {
+                if (entry.token.type === "identifier" && STATEMENT_KEYWORDS.has(entry.token.value)) {
+                    annotated[entry.index].kind = "keyword";
+                }
+            });
 
+            // Definition names after rule / workflow / function
             if (
-                (firstValue === "rule" || firstValue === "workflow") &&
+                (firstValue === "rule" || firstValue === "workflow" || firstValue === "function") &&
                 significant[1] &&
                 significant[1].token.type === "identifier"
             ) {
                 annotated[significant[1].index].kind = "definition";
             }
+
+            // Assignment: identifier = ... → variable and operator
+            for (let i = 0; i < significant.length - 1; i += 1) {
+                const curr = significant[i];
+                const next = significant[i + 1];
+                if (
+                    curr.token.type === "identifier" &&
+                    curr.token.kind !== "keyword" &&
+                    next.token.type === "symbol" &&
+                    next.token.value === "="
+                ) {
+                    annotated[curr.index].kind = "variable";
+                    annotated[next.index].kind = "operator";
+                }
+            }
+
+            // Known local functions referenced in shell lines (e.g. format_text)
+            significant.forEach(function (entry) {
+                if (
+                    entry.token.type === "identifier" &&
+                    annotated[entry.index].kind === "plainIdentifier" &&
+                    knownSymbols.functionNames.has(entry.token.value)
+                ) {
+                    annotated[entry.index].kind = "identifier";
+                }
+            });
 
             if (firstValue === "import") {
                 for (let i = 1; i < significant.length - 1; i += 1) {
@@ -876,7 +895,8 @@ jaiph use 0.2.0</code></pre>
                 if (
                     annotated[i].type === "identifier" &&
                     annotated[i + 1].type === "dot" &&
-                    annotated[i + 2].type === "identifier"
+                    annotated[i + 2].type === "identifier" &&
+                    knownSymbols.importAliases.has(annotated[i].value)
                 ) {
                     annotated[i].kind = "qualifier";
                     annotated[i + 2].kind = "identifier";
@@ -914,6 +934,54 @@ jaiph use 0.2.0</code></pre>
             return annotated;
         }
 
+        function collectJaiphSymbols(tokenLines) {
+            const knownSymbols = {
+                importAliases: new Set(),
+                functionNames: new Set()
+            };
+
+            tokenLines.forEach(function (tokens) {
+                const significant = tokens
+                    .map(function (token, index) {
+                        return { token: token, index: index };
+                    })
+                    .filter(function (entry) {
+                        return entry.token.type !== "whitespace" && entry.token.type !== "comment";
+                    });
+
+                if (significant.length === 0) {
+                    return;
+                }
+
+                const first = significant[0];
+                const firstValue = first.token.type === "identifier" ? first.token.value : "";
+
+                if (firstValue === "import") {
+                    for (let i = 1; i < significant.length - 1; i += 1) {
+                        if (
+                            significant[i].token.type === "identifier" &&
+                            significant[i].token.value === "as" &&
+                            significant[i + 1].token.type === "identifier"
+                        ) {
+                            knownSymbols.importAliases.add(significant[i + 1].token.value);
+                            break;
+                        }
+                    }
+                    return;
+                }
+
+                if (
+                    firstValue === "function" &&
+                    significant[1] &&
+                    significant[1].token.type === "identifier"
+                ) {
+                    knownSymbols.functionNames.add(significant[1].token.value);
+                }
+            });
+
+            return knownSymbols;
+        }
+
         /**
          * Builds an AST-like representation for a full Jaiph code block.
          *
@@ -924,12 +992,16 @@ jaiph use 0.2.0</code></pre>
          */
         function parseJaiph(raw) {
             const state = { inString: false };
-            return raw.split("\n").map(function (line, lineIndex) {
-                const tokens = tokenizeJaiphLine(line, state);
+            const tokenLines = raw.split("\n").map(function (line) {
+                return tokenizeJaiphLine(line, state);
+            });
+            const knownSymbols = collectJaiphSymbols(tokenLines);
+
+            return tokenLines.map(function (tokens, lineIndex) {
                 return {
                     type: "line",
                     lineNumber: lineIndex + 1,
-                    tokens: annotateJaiphTokens(tokens)
+                    tokens: annotateJaiphTokens(tokens, knownSymbols)
                 };
             });
         }
@@ -955,6 +1027,12 @@ jaiph use 0.2.0</code></pre>
             }
             if (token.kind === "identifier") {
                 return `<span class="ralph-identifier">${value}</span>`;
+            }
+            if (token.kind === "variable") {
+                return `<span class="ralph-variable">${value}</span>`;
+            }
+            if (token.kind === "operator") {
+                return `<span class="ralph-operator">${value}</span>`;
             }
             if (token.kind === "string") {
                 return `<span class="ralph-string">${value}</span>`;
@@ -1119,11 +1197,18 @@ jaiph use 0.2.0</code></pre>
 
         function attachCopyButtons() {
             document.querySelectorAll("pre").forEach(function (pre) {
-                if (pre.querySelector(".copy-code-button")) {
+                const block = pre.querySelector("code");
+                if (!block || block.matches(".jaiph-run")) {
                     return;
                 }
-                const block = pre.querySelector("code");
-                if (!block) {
+                let wrapper = pre.parentElement;
+                if (!wrapper || !wrapper.classList.contains("code-block-wrap")) {
+                    wrapper = document.createElement("div");
+                    wrapper.className = "code-block-wrap";
+                    pre.parentNode.insertBefore(wrapper, pre);
+                    wrapper.appendChild(pre);
+                }
+                if (wrapper.querySelector(".copy-code-button")) {
                     return;
                 }
                 const button = document.createElement("button");
@@ -1133,7 +1218,7 @@ jaiph use 0.2.0</code></pre>
                 button.addEventListener("click", function () {
                     copyCodeFromBlock(button, block);
                 });
-                pre.appendChild(button);
+                wrapper.appendChild(button);
             });
         }
 

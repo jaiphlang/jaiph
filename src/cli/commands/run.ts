@@ -104,14 +104,15 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     const workflowSymbol = workflowSymbolForFile(inputAbs, dirname(inputAbs));
     const command = buildRunWrapperCommand();
     const startedAt = Date.now();
+    const runBanner = `\nrunning ${basename(inputAbs)}\n\n`;
     if (interactiveProgress) {
-      process.stdout.write(`running ${basename(inputAbs)}\n`);
+      process.stdout.write(runBanner);
       process.stdout.write(`${styleKeywordLabel(treeRows[0].rawLabel)}\n`);
       if (activeRowIndex !== -1) {
         writeActiveLine(formatRunningLine(activeRowIndex, 0));
       }
     } else {
-      process.stdout.write(`running ${basename(inputAbs)}\n`);
+      process.stdout.write(runBanner);
       process.stdout.write(`${styleKeywordLabel(treeRows[0].rawLabel)}\n`);
     }
     const runtimeEnv = { ...process.env, JAIPH_WORKSPACE: workspaceRoot } as Record<string, string | undefined>;
