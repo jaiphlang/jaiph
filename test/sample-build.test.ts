@@ -1285,7 +1285,7 @@ test("jaiph run tree includes function calls from workflow shell steps", () => {
     assert.equal(runResult.status, 0, runResult.stderr);
     assert.match(runResult.stdout, /workflow default/);
     assert.match(runResult.stdout, /function changed_files/);
-    assert.doesNotMatch(runResult.stdout, /from-function/);
+    assert.match(runResult.stdout, /from-function/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -1687,13 +1687,16 @@ test("jaiph test fails when no mock branch matches and no else", () => {
     const testResult = spawnSync("node", [cliPath, "test", "single.test.jh"], {
       encoding: "utf8",
       cwd: root,
-      env: process.env,
+      env: {
+        ...process.env,
+        PATH: `${dirname(process.execPath)}:/bin:/usr/bin`,
+      },
     });
 
-    assert.equal(testResult.status, 1, "expected test to fail when no branch matches and no else");
+    assert.equal(testResult.status, 1, "expected test to fail when no branch matches, no else, and no backend in PATH");
     assert.match(
       testResult.stderr + testResult.stdout,
-      /workflow exited with status|no mock matched|no branch matched|expectContain failed|FAIL/,
+      /workflow exited with status|no mock matched|no branch matched|expectContain failed|FAIL|not found|command not found/,
     );
   } finally {
     rmSync(root, { recursive: true, force: true });

@@ -151,7 +151,7 @@ jaiph::run_step() {
   step_elapsed_seconds="$((SECONDS - step_started_seconds))"
   elapsed_ms="$((step_elapsed_seconds * 1000))"
   jaiph::emit_step_event "STEP_END" "$func_name" "$status" "$elapsed_ms" "$out_file" "$err_file"
-  if jaiph::is_test_mode && [[ -n "$out_file" && -f "$out_file" ]]; then
+  if [[ -n "$out_file" && -f "$out_file" ]]; then
     cat "$out_file"
   fi
   return "$status"
