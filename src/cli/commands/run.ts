@@ -18,7 +18,7 @@ import {
   latestRunFiles,
   readFailedStepOutput,
 } from "../shared/errors";
-import { loadImportedModules, detectWorkspaceRoot } from "../shared/paths";
+import { detectWorkspaceRoot } from "../shared/paths";
 import { parseArgs } from "../shared/usage";
 import { parseStepEvent } from "../run/events";
 import {
@@ -28,11 +28,13 @@ import {
   waitForRunExit,
 } from "../run/lifecycle";
 import {
-  buildRunTreeRows,
-  type RowState,
-  parseLabel,
+  beginRuntimeNode,
+  completeRuntimeNode,
+  createRuntimeGraphStore,
+  runtimeCompletedLine,
+  renderRuntimeTreeRows,
+  runtimeRunningLine,
   styleKeywordLabel,
-  styleDim,
   formatElapsedDuration,
 } from "../run/progress";
 
@@ -64,35 +66,15 @@ export async function runWorkflow(rest: string[]): Promise<number> {
   const outDir = target ? resolve(target) : mkdtempSync(join(tmpdir(), "jaiph-run-"));
   const shouldCleanup = !target;
   try {
-    const importedModules = loadImportedModules(mod);
-    const rootDir = dirname(inputAbs);
-    const treeRows = buildRunTreeRows(mod, "workflow default", importedModules, rootDir);
-    const rowStates: RowState[] = treeRows.map((row) => (row.isRoot ? { status: "done" } : { status: "pending" }));
+    const rootLabel = "workflow default";
+    const graphStore = createRuntimeGraphStore(rootLabel);
     const interactiveProgress = process.stdout.isTTY;
-    let activeRowIndex = treeRows.length > 1 ? 1 : -1;
-    const formatCompletedLine = (rowIndex: number): string => {
-      const row = treeRows[rowIndex];
-      const state = rowStates[rowIndex];
-      return `${row.prefix}├── ${styleKeywordLabel(row.rawLabel)} ${styleDim(`(${state.elapsedSec ?? 0}s)`)}`;
-    };
-    const formatRunningLine = (rowIndex: number, seconds: number): string => {
-      const row = treeRows[rowIndex];
-      return `${row.prefix}└── ${styleKeywordLabel(row.rawLabel)} ${styleDim(`(running ${seconds}s)`)}`;
-    };
+    let activeNodeId: string | null = null;
     const writeActiveLine = (text: string): void => {
       process.stdout.write(`\r\u001b[2K${text}`);
     };
     const commitActiveLine = (text: string): void => {
       process.stdout.write(`\r\u001b[2K${text}\n`);
-    };
-    const formatNonInteractiveCompletedLine = (rowIndex: number): string => {
-      const row = treeRows[rowIndex];
-      const state = rowStates[rowIndex];
-      const treeLead = `${row.prefix}${row.branch ?? ""}`;
-      if (state.status === "failed") {
-        return `${treeLead}${styleKeywordLabel(row.rawLabel)} ${styleDim(`(${state.elapsedSec ?? 0}s failed)`)}`;
-      }
-      return `${treeLead}${styleKeywordLabel(row.rawLabel)} ${styleDim(`(${state.elapsedSec ?? 0}s)`)}`;
     };
 
     const results = build(inputAbs, outDir);
@@ -107,13 +89,10 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     const runBanner = `\nrunning ${basename(inputAbs)}\n\n`;
     if (interactiveProgress) {
       process.stdout.write(runBanner);
-      process.stdout.write(`${styleKeywordLabel(treeRows[0].rawLabel)}\n`);
-      if (activeRowIndex !== -1) {
-        writeActiveLine(formatRunningLine(activeRowIndex, 0));
-      }
+      process.stdout.write(`${styleKeywordLabel(rootLabel)}\n`);
     } else {
       process.stdout.write(runBanner);
-      process.stdout.write(`${styleKeywordLabel(treeRows[0].rawLabel)}\n`);
+      process.stdout.write(`${styleKeywordLabel(rootLabel)}\n`);
     }
     const runtimeEnv = { ...process.env, JAIPH_WORKSPACE: workspaceRoot } as Record<string, string | undefined>;
     if (process.env.JAIPH_AGENT_MODEL !== undefined) {
@@ -183,119 +162,81 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     const signalHandlers = setupRunSignalHandlers(execResult, { forceKillAfterMs: 1500 });
     let capturedStderr = "";
     let stderrBuffer = "";
+    let bufferedStdout = "";
     let activeStepStartedAt = startedAt;
-    const findPendingRowIndex = (kind: string, name: string): number => {
-      for (let i = 1; i < treeRows.length; i += 1) {
-        if (rowStates[i].status !== "pending") {
-          continue;
-        }
-        const label = parseLabel(treeRows[i].rawLabel);
-        const nameMatches = label.name === name || label.name.endsWith(`.${name}`);
-        if (label.kind === kind && nameMatches) {
-          return i;
-        }
-      }
-      return -1;
+    const runtimeStack: string[] = [];
+    const legacyStack: string[] = [];
+    let legacyCounter = 0;
+    const removeLastMatching = (stack: string[], id: string): void => {
+      const idx = stack.lastIndexOf(id);
+      if (idx === -1) return;
+      stack.splice(idx, 1);
     };
-    const findPendingRowIndexByFunc = (funcName: string): number => {
-      for (let i = 1; i < treeRows.length; i += 1) {
-        if (rowStates[i].status !== "pending") {
-          continue;
-        }
-        if (treeRows[i].stepFunc === funcName) {
-          return i;
+    const resolveCurrentActiveNodeId = (): string | null => {
+      for (let i = runtimeStack.length - 1; i >= 0; i -= 1) {
+        const id = runtimeStack[i];
+        if (graphStore.nodesById.has(id)) {
+          return id;
         }
       }
-      return -1;
+      return null;
     };
-    const applyStepUpdate = (funcName: string, status: number, elapsedSec: number): void => {
-      const kind = funcName.includes("::workflow::")
-        ? "workflow"
-        : funcName.includes("::rule::")
-          ? "rule"
-          : funcName.includes("::function::")
-            ? "function"
-            : funcName === "jaiph::prompt"
-              ? "prompt"
-              : "step";
-      const name = kind === "workflow"
-        ? funcName.slice(funcName.lastIndexOf("::workflow::") + "::workflow::".length)
-        : kind === "rule"
-          ? funcName.slice(funcName.lastIndexOf("::rule::") + "::rule::".length)
-          : kind === "function"
-            ? funcName.slice(funcName.lastIndexOf("::function::") + "::function::".length)
-            : kind === "prompt"
-              ? "prompt"
-              : funcName;
-      if (kind === "workflow" && name === "default") {
-        return;
+    const resolveEventId = (eventType: "STEP_START" | "STEP_END", eventId: string, funcName: string): string => {
+      if (eventId.length > 0) {
+        return eventId;
       }
-      let changed = false;
-      let changedRowIndex = findPendingRowIndexByFunc(funcName);
-      if (changedRowIndex === -1) {
-        changedRowIndex = findPendingRowIndex(kind, name);
+      if (eventType === "STEP_START") {
+        legacyCounter += 1;
+        const id = `legacy:${legacyCounter}:${funcName}`;
+        legacyStack.push(id);
+        return id;
       }
-      if (changedRowIndex !== -1) {
-        rowStates[changedRowIndex] = { status: status === 0 ? "done" : "failed", elapsedSec };
-        changed = true;
+      const fromStack = legacyStack.pop();
+      if (fromStack) {
+        return fromStack;
       }
-      if (changed) {
-        if (interactiveProgress) {
-          while (activeRowIndex !== -1 && rowStates[activeRowIndex].status !== "pending") {
-            commitActiveLine(formatCompletedLine(activeRowIndex));
-            activeRowIndex += 1;
-            if (activeRowIndex >= treeRows.length) {
-              activeRowIndex = -1;
-              break;
-            }
-            writeActiveLine(formatRunningLine(activeRowIndex, 0));
-          }
-        } else if (changedRowIndex !== -1) {
-          for (let i = 1; i < changedRowIndex; i += 1) {
-            if (rowStates[i].status === "pending") {
-              rowStates[i] = { status: "done", elapsedSec: 0 };
-              process.stdout.write(`${formatNonInteractiveCompletedLine(i)}\n`);
-            }
-          }
-          process.stdout.write(`${formatNonInteractiveCompletedLine(changedRowIndex)}\n`);
-        }
-      }
-    };
-    const applyStepStart = (kind: string, name: string, funcName?: string): void => {
-      if (!interactiveProgress) {
-        return;
-      }
-      if (kind === "workflow" && name === "default") {
-        return;
-      }
-      let nextIndex = funcName !== undefined ? findPendingRowIndexByFunc(funcName) : -1;
-      if (nextIndex === -1) {
-        nextIndex = findPendingRowIndex(kind, name);
-      }
-      if (nextIndex === -1) {
-        return;
-      }
-      if (activeRowIndex !== -1 && nextIndex > activeRowIndex) {
-        for (let i = activeRowIndex; i < nextIndex; i += 1) {
-          const state = rowStates[i];
-          if (state.status === "pending") {
-            rowStates[i] = { status: "done", elapsedSec: 0 };
-          }
-          commitActiveLine(formatCompletedLine(i));
-        }
-      }
-      activeRowIndex = nextIndex;
-      activeStepStartedAt = Date.now();
-      writeActiveLine(formatRunningLine(activeRowIndex, 0));
+      legacyCounter += 1;
+      return `legacy:${legacyCounter}:${funcName}`;
     };
     const handleStderrLine = (line: string): void => {
       const event = parseStepEvent(line);
       if (event) {
+        const eventId = resolveEventId(event.type, event.id, event.func);
         if (event.type === "STEP_START") {
-          applyStepStart(event.kind, event.name, event.func);
+          const rawLabel = `${event.kind} ${event.name}`;
+          const parentCandidate = event.parent_id ?? (runtimeStack.length > 0 ? runtimeStack[runtimeStack.length - 1] : null);
+          if (event.kind === "workflow" && event.name === "default") {
+            graphStore.rootStepId = eventId;
+            runtimeStack.push(eventId);
+            activeNodeId = resolveCurrentActiveNodeId();
+            return;
+          }
+          const parentId = parentCandidate === graphStore.rootStepId ? null : parentCandidate;
+          beginRuntimeNode(graphStore, eventId, parentId, rawLabel, Date.now());
+          runtimeStack.push(eventId);
+          if (interactiveProgress) {
+            activeNodeId = eventId;
+            activeStepStartedAt = Date.now();
+            writeActiveLine(runtimeRunningLine(graphStore, activeNodeId, 0));
+          }
           return;
         }
-        applyStepUpdate(event.func, event.status ?? 1, Math.max(0, Math.floor((event.elapsed_ms ?? 0) / 1000)));
+        const elapsedSec = Math.max(0, Math.floor((event.elapsed_ms ?? 0) / 1000));
+        if (!(event.kind === "workflow" && event.name === "default")) {
+          const completed = completeRuntimeNode(graphStore, eventId, event.status ?? 1, elapsedSec);
+          if (completed) {
+            if (interactiveProgress) {
+              const rendered = runtimeCompletedLine(graphStore, eventId);
+              commitActiveLine(rendered);
+            }
+          }
+        }
+        removeLastMatching(runtimeStack, eventId);
+        activeNodeId = resolveCurrentActiveNodeId();
+        if (interactiveProgress && activeNodeId !== null) {
+          activeStepStartedAt = Date.now();
+          writeActiveLine(runtimeRunningLine(graphStore, activeNodeId, 0));
+        }
         return;
       }
       if (line.length > 0) {
@@ -304,25 +245,29 @@ export async function runWorkflow(rest: string[]): Promise<number> {
           process.stdout.write("\r\u001b[2K\n");
         }
         process.stderr.write(`${line}\n`);
-        if (interactiveProgress && activeRowIndex !== -1) {
-          writeActiveLine(formatRunningLine(activeRowIndex, Math.max(0, Math.floor((Date.now() - activeStepStartedAt) / 1000))));
+        if (interactiveProgress && activeNodeId !== null) {
+          writeActiveLine(runtimeRunningLine(graphStore, activeNodeId, Math.max(0, Math.floor((Date.now() - activeStepStartedAt) / 1000))));
         }
       }
     };
     const counterTimer = setInterval(() => {
-      if (interactiveProgress && activeRowIndex !== -1) {
-        writeActiveLine(formatRunningLine(activeRowIndex, Math.max(0, Math.floor((Date.now() - activeStepStartedAt) / 1000))));
+      if (interactiveProgress && activeNodeId !== null) {
+        writeActiveLine(runtimeRunningLine(graphStore, activeNodeId, Math.max(0, Math.floor((Date.now() - activeStepStartedAt) / 1000))));
       }
     }, 1000);
     execResult.stdout?.setEncoding("utf8");
     execResult.stderr?.setEncoding("utf8");
     execResult.stdout?.on("data", (chunk: string) => {
+      if (!interactiveProgress) {
+        bufferedStdout += chunk;
+        return;
+      }
       if (interactiveProgress) {
         process.stdout.write("\r\u001b[2K");
       }
       process.stdout.write(chunk);
-      if (interactiveProgress && activeRowIndex !== -1) {
-        writeActiveLine(formatRunningLine(activeRowIndex, Math.max(0, Math.floor((Date.now() - activeStepStartedAt) / 1000))));
+      if (interactiveProgress && activeNodeId !== null) {
+        writeActiveLine(runtimeRunningLine(graphStore, activeNodeId, Math.max(0, Math.floor((Date.now() - activeStepStartedAt) / 1000))));
       }
     });
     execResult.stderr?.on("data", (chunk: string) => {
@@ -373,25 +318,15 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     const runtimeDebugEnabled = runtimeEnv.JAIPH_DEBUG === "true";
     const runtimeErrorPrinted = hasFatalRuntimeStderr(capturedStderr, runtimeDebugEnabled);
     const resolvedStatus = childExit.status !== 0 || runtimeErrorPrinted ? 1 : 0;
-
-    if (interactiveProgress) {
-      if (activeRowIndex !== -1) {
-        if (resolvedStatus === 0) {
-          while (activeRowIndex !== -1 && activeRowIndex < treeRows.length) {
-            const state = rowStates[activeRowIndex];
-            if (state.status === "pending") {
-              rowStates[activeRowIndex] = { status: "done", elapsedSec: 0 };
-            }
-            commitActiveLine(formatCompletedLine(activeRowIndex));
-            activeRowIndex += 1;
-            if (activeRowIndex >= treeRows.length) {
-              activeRowIndex = -1;
-            }
-          }
-        } else {
-          writeActiveLine("");
-        }
+    if (!interactiveProgress) {
+      for (const row of renderRuntimeTreeRows(graphStore)) {
+        process.stdout.write(`${row}\n`);
       }
+      process.stdout.write(bufferedStdout);
+    }
+
+    if (interactiveProgress && activeNodeId !== null) {
+      writeActiveLine("");
     }
 
     const palette = colorPalette();

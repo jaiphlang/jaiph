@@ -1,0 +1,28 @@
+#!/usr/bin/env jaiph
+
+rule ensure_is_number {
+  if ! [[ "$1" =~ ^[0-9]+$ ]]; then
+    echo "Expected a non-negative integer, got: $1" >&2
+    exit 1
+  fi
+}
+
+function fib() {
+  local n="$1"
+  if [ "$n" -le 1 ]; then
+    echo "$n"
+    return
+  fi
+
+  local a b
+  a="$(fib "$((n - 1))")"
+  b="$(fib "$((n - 2))")"
+  echo "$((a + b))"
+}
+
+workflow default {
+  n="${1:-10}"
+  ensure ensure_is_number "$n"
+  result="$(fib "$n")"
+  echo "$result"
+}

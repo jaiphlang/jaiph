@@ -434,3 +434,140 @@ export function renderRunTree(mod: jaiphModule, rootLabel = "workflow default"):
   renderChildren("default", "");
   return lines.join("\n");
 }
+
+export type RuntimeNodeStatus = "running" | "done" | "failed";
+
+export type RuntimeNode = {
+  id: string;
+  parentId: string | null;
+  rawLabel: string;
+  state: RuntimeNodeStatus;
+  startedAtMs: number;
+  elapsedSec?: number;
+  children: string[];
+};
+
+export type RuntimeGraphStore = {
+  rootLabel: string;
+  rootStepId: string | null;
+  nodesById: Map<string, RuntimeNode>;
+  rootNodeIds: string[];
+};
+
+export function createRuntimeGraphStore(rootLabel = "workflow default"): RuntimeGraphStore {
+  return {
+    rootLabel,
+    rootStepId: null,
+    nodesById: new Map<string, RuntimeNode>(),
+    rootNodeIds: [],
+  };
+}
+
+function computeRuntimeNodePrefix(store: RuntimeGraphStore, nodeId: string): { prefix: string; branch: string } {
+  const segments: string[] = [];
+  let currentId: string | null = nodeId;
+  while (currentId) {
+    const node = store.nodesById.get(currentId);
+    if (!node) break;
+    const siblingIds = node.parentId === null
+      ? store.rootNodeIds
+      : (store.nodesById.get(node.parentId)?.children ?? []);
+    const isLast = siblingIds[siblingIds.length - 1] === currentId;
+    segments.push(isLast ? "    " : "│   ");
+    currentId = node.parentId;
+  }
+  const node = store.nodesById.get(nodeId);
+  if (!node) return { prefix: "", branch: "└── " };
+  const siblingIds = node.parentId === null
+    ? store.rootNodeIds
+    : (store.nodesById.get(node.parentId)?.children ?? []);
+  const isLast = siblingIds[siblingIds.length - 1] === nodeId;
+  segments.pop();
+  return {
+    prefix: segments.reverse().join(""),
+    branch: isLast ? "└── " : "├── ",
+  };
+}
+
+export function beginRuntimeNode(
+  store: RuntimeGraphStore,
+  nodeId: string,
+  parentId: string | null,
+  rawLabel: string,
+  startedAtMs: number,
+): RuntimeNode {
+  const node: RuntimeNode = {
+    id: nodeId,
+    parentId,
+    rawLabel,
+    state: "running",
+    startedAtMs,
+    children: [],
+  };
+  store.nodesById.set(nodeId, node);
+  if (parentId) {
+    const parent = store.nodesById.get(parentId);
+    if (parent) {
+      parent.children.push(nodeId);
+    } else {
+      store.rootNodeIds.push(nodeId);
+    }
+  } else {
+    store.rootNodeIds.push(nodeId);
+  }
+  return node;
+}
+
+export function completeRuntimeNode(
+  store: RuntimeGraphStore,
+  nodeId: string,
+  status: number,
+  elapsedSec: number,
+): RuntimeNode | undefined {
+  const node = store.nodesById.get(nodeId);
+  if (!node) return undefined;
+  node.state = status === 0 ? "done" : "failed";
+  node.elapsedSec = elapsedSec;
+  return node;
+}
+
+export function runtimeRunningLine(
+  store: RuntimeGraphStore,
+  nodeId: string,
+  runningSeconds: number,
+): string {
+  const node = store.nodesById.get(nodeId);
+  if (!node) return "";
+  const tree = computeRuntimeNodePrefix(store, nodeId);
+  return `${tree.prefix}${tree.branch}${styleKeywordLabel(node.rawLabel)} ${styleDim(`(running ${runningSeconds}s)`)}`;
+}
+
+export function runtimeCompletedLine(store: RuntimeGraphStore, nodeId: string): string {
+  const node = store.nodesById.get(nodeId);
+  if (!node) return "";
+  const tree = computeRuntimeNodePrefix(store, nodeId);
+  if (node.state === "failed") {
+    return `${tree.prefix}${tree.branch}${styleKeywordLabel(node.rawLabel)} ${styleDim(`(${node.elapsedSec ?? 0}s failed)`)}`;
+  }
+  return `${tree.prefix}${tree.branch}${styleKeywordLabel(node.rawLabel)} ${styleDim(`(${node.elapsedSec ?? 0}s)`)}`;
+}
+
+export function renderRuntimeTreeRows(store: RuntimeGraphStore): string[] {
+  const lines: string[] = [];
+  const walk = (nodeIds: string[], prefix: string): void => {
+    for (let i = 0; i < nodeIds.length; i += 1) {
+      const nodeId = nodeIds[i];
+      const node = store.nodesById.get(nodeId);
+      if (!node) continue;
+      const isLast = i === nodeIds.length - 1;
+      const branch = isLast ? "└── " : "├── ";
+      const suffix = node.state === "failed"
+        ? styleDim(`(${node.elapsedSec ?? 0}s failed)`)
+        : styleDim(`(${node.elapsedSec ?? 0}s)`);
+      lines.push(`${prefix}${branch}${styleKeywordLabel(node.rawLabel)} ${suffix}`);
+      walk(node.children, `${prefix}${isLast ? "    " : "│   "}`);
+    }
+  };
+  walk(store.rootNodeIds, "");
+  return lines;
+}

@@ -50,9 +50,98 @@ jaiph::init_run_tracking() {
   fi
   JAIPH_PRECEDING_FILES=""
   JAIPH_RUN_SUMMARY_FILE="$JAIPH_RUN_DIR/run_summary.jsonl"
+  JAIPH_RUN_ID="$run_id"
+  JAIPH_STEP_SEQ=0
+  JAIPH_STEP_STACK=""
+  JAIPH_LAST_STEP_ID=""
   mkdir -p "$JAIPH_RUN_DIR"
   : >"$JAIPH_RUN_SUMMARY_FILE"
-  export JAIPH_RUN_DIR JAIPH_PRECEDING_FILES JAIPH_RUN_SUMMARY_FILE
+  export JAIPH_RUN_DIR JAIPH_PRECEDING_FILES JAIPH_RUN_SUMMARY_FILE JAIPH_RUN_ID JAIPH_STEP_SEQ JAIPH_STEP_STACK JAIPH_LAST_STEP_ID
+}
+
+jaiph::step_stack_depth() {
+  if [[ -z "${JAIPH_STEP_STACK:-}" ]]; then
+    printf "0"
+    return 0
+  fi
+  local old_ifs="$IFS"
+  IFS=","
+  read -r -a ids <<<"${JAIPH_STEP_STACK}"
+  IFS="$old_ifs"
+  printf "%s" "${#ids[@]}"
+}
+
+jaiph::step_stack_peek() {
+  if [[ -z "${JAIPH_STEP_STACK:-}" ]]; then
+    printf ""
+    return 0
+  fi
+  local old_ifs="$IFS"
+  IFS=","
+  read -r -a ids <<<"${JAIPH_STEP_STACK}"
+  IFS="$old_ifs"
+  printf "%s" "${ids[$((${#ids[@]} - 1))]}"
+}
+
+jaiph::step_stack_push() {
+  local step_id="$1"
+  if [[ -z "${JAIPH_STEP_STACK:-}" ]]; then
+    JAIPH_STEP_STACK="$step_id"
+  else
+    JAIPH_STEP_STACK="${JAIPH_STEP_STACK},${step_id}"
+  fi
+  export JAIPH_STEP_STACK
+}
+
+jaiph::step_stack_pop() {
+  if [[ -z "${JAIPH_STEP_STACK:-}" ]]; then
+    return 0
+  fi
+  local old_ifs="$IFS"
+  IFS=","
+  read -r -a ids <<<"${JAIPH_STEP_STACK}"
+  IFS="$old_ifs"
+  if [[ "${#ids[@]}" -le 1 ]]; then
+    JAIPH_STEP_STACK=""
+    export JAIPH_STEP_STACK
+    return 0
+  fi
+  JAIPH_STEP_STACK=""
+  local i
+  for ((i = 0; i < ${#ids[@]} - 1; i += 1)); do
+    if [[ -z "$JAIPH_STEP_STACK" ]]; then
+      JAIPH_STEP_STACK="${ids[$i]}"
+    else
+      JAIPH_STEP_STACK="${JAIPH_STEP_STACK},${ids[$i]}"
+    fi
+  done
+  export JAIPH_STEP_STACK
+}
+
+jaiph::next_step_id() {
+  JAIPH_STEP_SEQ="$((JAIPH_STEP_SEQ + 1))"
+  JAIPH_LAST_STEP_ID="${JAIPH_RUN_ID:-run}:${BASHPID:-$$}:${JAIPH_STEP_SEQ}"
+  export JAIPH_LAST_STEP_ID
+  export JAIPH_STEP_SEQ
+}
+
+jaiph::forward_nested_events_from_err() {
+  local err_path="$1"
+  if [[ -z "$err_path" || ! -f "$err_path" ]]; then
+    return 0
+  fi
+  local marker_fd filtered_err line
+  marker_fd="$(jaiph::event_fd)"
+  filtered_err="${err_path}.filtered.$$"
+  : >"$filtered_err"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" == "__JAIPH_EVENT__ "* ]]; then
+      printf "%s\n" "$line" >&"$marker_fd"
+    else
+      printf "%s\n" "$line" >>"$filtered_err"
+    fi
+  done <"$err_path"
+  mv "$filtered_err" "$err_path"
 }
 
 jaiph::track_output_files() {
@@ -107,6 +196,7 @@ jaiph::run_step() {
   jaiph::init_run_tracking || return 1
   local step_started_at safe_name out_file err_file status had_errexit step_started_seconds step_elapsed_seconds
   local out_tmp err_tmp elapsed_ms prompt_final_tmp
+  local step_id parent_id depth step_seq
   local prompt_writes_live_out=0
   step_started_seconds="$SECONDS"
   step_started_at="$(jaiph::timestamp_utc)"
@@ -116,7 +206,13 @@ jaiph::run_step() {
   out_tmp="${out_file}.tmp.$$"
   err_tmp="${err_file}.tmp.$$"
   prompt_final_tmp=""
-  jaiph::emit_step_event "STEP_START" "$func_name"
+  jaiph::next_step_id
+  step_id="$JAIPH_LAST_STEP_ID"
+  step_seq="$JAIPH_STEP_SEQ"
+  parent_id="$(jaiph::step_stack_peek)"
+  depth="$(jaiph::step_stack_depth)"
+  jaiph::step_stack_push "$step_id"
+  jaiph::emit_step_event "STEP_START" "$func_name" "" "" "" "" "$step_id" "$parent_id" "$step_seq" "$depth" "${JAIPH_RUN_ID:-}"
   had_errexit=0
   case "$-" in
     *e*) had_errexit=1 ;;
@@ -155,6 +251,7 @@ jaiph::run_step() {
   if [[ "$had_errexit" -eq 1 ]]; then
     set -e
   fi
+  jaiph::forward_nested_events_from_err "$err_tmp"
   if [[ "$prompt_writes_live_out" -eq 1 ]]; then
     if [[ ! -s "$out_file" ]]; then
       rm -f "$out_file"
@@ -175,7 +272,8 @@ jaiph::run_step() {
   jaiph::track_output_files "$out_file" "$err_file"
   step_elapsed_seconds="$((SECONDS - step_started_seconds))"
   elapsed_ms="$((step_elapsed_seconds * 1000))"
-  jaiph::emit_step_event "STEP_END" "$func_name" "$status" "$elapsed_ms" "$out_file" "$err_file"
+  jaiph::emit_step_event "STEP_END" "$func_name" "$status" "$elapsed_ms" "$out_file" "$err_file" "$step_id" "$parent_id" "$step_seq" "$depth" "${JAIPH_RUN_ID:-}"
+  jaiph::step_stack_pop
   if [[ -n "$out_file" && -f "$out_file" ]]; then
     cat "$out_file"
   fi
@@ -199,8 +297,15 @@ jaiph::run_step_passthrough() {
   fi
   jaiph::init_run_tracking || return 1
   local status had_errexit step_started_seconds step_elapsed_seconds elapsed_ms
+  local step_id parent_id depth step_seq
   step_started_seconds="$SECONDS"
-  jaiph::emit_step_event "STEP_START" "$func_name"
+  jaiph::next_step_id
+  step_id="$JAIPH_LAST_STEP_ID"
+  step_seq="$JAIPH_STEP_SEQ"
+  parent_id="$(jaiph::step_stack_peek)"
+  depth="$(jaiph::step_stack_depth)"
+  jaiph::step_stack_push "$step_id"
+  jaiph::emit_step_event "STEP_START" "$func_name" "" "" "" "" "$step_id" "$parent_id" "$step_seq" "$depth" "${JAIPH_RUN_ID:-}"
   had_errexit=0
   case "$-" in
     *e*) had_errexit=1 ;;
@@ -220,6 +325,7 @@ jaiph::run_step_passthrough() {
   fi
   step_elapsed_seconds="$((SECONDS - step_started_seconds))"
   elapsed_ms="$((step_elapsed_seconds * 1000))"
-  jaiph::emit_step_event "STEP_END" "$func_name" "$status" "$elapsed_ms" "" ""
+  jaiph::emit_step_event "STEP_END" "$func_name" "$status" "$elapsed_ms" "" "" "$step_id" "$parent_id" "$step_seq" "$depth" "${JAIPH_RUN_ID:-}"
+  jaiph::step_stack_pop
   return "$status"
 }

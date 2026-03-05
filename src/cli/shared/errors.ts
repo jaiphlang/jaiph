@@ -26,16 +26,15 @@ export function summarizeError(stderr: string, fallback?: string): string {
 }
 
 export function hasFatalRuntimeStderr(stderr: string, debugEnabled: boolean): boolean {
+  if (debugEnabled) {
+    return false;
+  }
   const lines = stderr
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
   if (lines.length === 0) {
     return false;
-  }
-  if (debugEnabled) {
-    const nonXtraceLines = lines.filter((line) => !line.startsWith("+"));
-    return nonXtraceLines.length > 0;
   }
   return true;
 }

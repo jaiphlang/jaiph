@@ -63,18 +63,13 @@ expected_tree_ensure=$(printf '%s\n' \
   '    ├── rule gate1 (<time> failed)' \
   '    ├── workflow remediate1 (<time>)' \
   '    ├── workflow make_pass (<time>)' \
-  '    │   ├── rule gate1 (<time>)' \
-  '    │   ├── workflow remediate1 (<time>)' \
+  '    │   ├── rule gate2 (<time>)' \
   '    │   ├── rule gate2 (<time> failed)' \
   '    │   ├── workflow remediate2 (<time>)' \
   '    │   └── workflow make_pass (<time>)' \
   '    │       ├── rule gate1 (<time>)' \
-  '    │       ├── workflow remediate1 (<time>)' \
-  '    │       ├── rule gate2 (<time>)' \
-  '    │       ├── workflow remediate2 (<time>)' \
-  '    ├── rule gate2 (<time>)' \
-  '    ├── workflow remediate2 (<time>)' \
-  '    └── workflow make_pass (<time>)' \
+  '    │       └── rule gate2 (<time>)' \
+  '    └── rule gate2 (<time>)' \
   '✓ PASS workflow default (<time>)')
 expected_tree_ensure="${expected_tree_ensure%$'\n'}"
 normalized_out="$(e2e::normalize_output "${out}")"

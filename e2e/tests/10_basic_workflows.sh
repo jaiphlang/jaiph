@@ -56,7 +56,7 @@ expected_mixed=$(printf '%s\n' \
   'running app.jh' \
   '' \
   'workflow default' \
-  '└── rule lib.ready (<time>)' \
+  '└── rule ready (<time>)' \
   'from-jph' \
   'mixed-ok' \
   '✓ PASS workflow default (<time>)')

@@ -130,9 +130,10 @@ Tip: add `.jaiph/runs/` to your `.gitignore`.
 
 ### Run reporting and logs
 
-- During `jaiph run`, progress rendering is event-driven.
+- During `jaiph run`, progress rendering is event-driven from runtime step events.
   - TTY: one live running step line + committed step completion lines.
-  - Non-TTY: one completion line per finished step.
+  - Non-TTY: runtime step output is buffered, then the completed runtime tree is printed before buffered stdout.
+- Runtime trees now reflect actual invocation nesting (including recursive/repeated calls), rather than a precomputed workflow-only approximation.
 - Each run writes `.jaiph/runs/<timestamp>-<id>/run_summary.jsonl`.
 - Step `.out` / `.err` files are created only when the step produced output (empty log files are skipped).
 
@@ -178,7 +179,7 @@ See [cli.md](cli.md) for command syntax, examples, and supported environment var
   Defines an orchestration entrypoint made of ordered steps. Workflows can change system state.
 
 - `function name() { ... }`  
-  Defines a reusable writable shell function. Functions can be called from workflows/rules and are tracked as regular Jaiph steps.
+  Defines a reusable writable shell function. Functions can be called from workflows/rules, are tracked as regular Jaiph steps, and preserve function stdout/stderr passthrough.
 
 - `ensure ref [args...]`  
   Executes a rule in a workflow or another rule, optionally forwarding arguments (for example: `ensure my_rule "$1"`).
