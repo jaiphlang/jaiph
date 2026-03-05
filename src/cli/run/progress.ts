@@ -489,6 +489,18 @@ function computeRuntimeNodePrefix(store: RuntimeGraphStore, nodeId: string): { p
   };
 }
 
+function computeRuntimeIndent(store: RuntimeGraphStore, nodeId: string): string {
+  let depth = 0;
+  let currentId: string | null = nodeId;
+  while (currentId) {
+    const node = store.nodesById.get(currentId);
+    if (!node || node.parentId === null) break;
+    depth += 1;
+    currentId = node.parentId;
+  }
+  return "    ".repeat(depth);
+}
+
 export function beginRuntimeNode(
   store: RuntimeGraphStore,
   nodeId: string,
@@ -550,6 +562,45 @@ export function runtimeCompletedLine(store: RuntimeGraphStore, nodeId: string): 
     return `${tree.prefix}${tree.branch}${styleKeywordLabel(node.rawLabel)} ${styleDim(`(${node.elapsedSec ?? 0}s failed)`)}`;
   }
   return `${tree.prefix}${tree.branch}${styleKeywordLabel(node.rawLabel)} ${styleDim(`(${node.elapsedSec ?? 0}s)`)}`;
+}
+
+export function runtimeRunningIndentLine(
+  store: RuntimeGraphStore,
+  nodeId: string,
+  runningSeconds: number,
+): string {
+  const node = store.nodesById.get(nodeId);
+  if (!node) return "";
+  const indent = computeRuntimeIndent(store, nodeId);
+  return `${indent}${styleKeywordLabel(node.rawLabel)} ${styleDim(`(running ${runningSeconds}s)`)}`;
+}
+
+export function runtimeCompletedIndentLine(store: RuntimeGraphStore, nodeId: string): string {
+  const node = store.nodesById.get(nodeId);
+  if (!node) return "";
+  const indent = computeRuntimeIndent(store, nodeId);
+  if (node.state === "failed") {
+    return `${indent}${styleKeywordLabel(node.rawLabel)} ${styleDim(`(${node.elapsedSec ?? 0}s failed)`)}`;
+  }
+  return `${indent}${styleKeywordLabel(node.rawLabel)} ${styleDim(`(${node.elapsedSec ?? 0}s)`)}`;
+}
+
+export function renderRuntimeIndentRows(store: RuntimeGraphStore): string[] {
+  const lines: string[] = [];
+  const walk = (nodeIds: string[]): void => {
+    for (const nodeId of nodeIds) {
+      const node = store.nodesById.get(nodeId);
+      if (!node) continue;
+      const indent = computeRuntimeIndent(store, nodeId);
+      const suffix = node.state === "failed"
+        ? styleDim(`(${node.elapsedSec ?? 0}s failed)`)
+        : styleDim(`(${node.elapsedSec ?? 0}s)`);
+      lines.push(`${indent}${styleKeywordLabel(node.rawLabel)} ${suffix}`);
+      walk(node.children);
+    }
+  };
+  walk(store.rootNodeIds);
+  return lines;
 }
 
 export function renderRuntimeTreeRows(store: RuntimeGraphStore): string[] {

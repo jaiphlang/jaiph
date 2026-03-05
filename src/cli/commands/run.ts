@@ -28,12 +28,6 @@ import {
   waitForRunExit,
 } from "../run/lifecycle";
 import {
-  beginRuntimeNode,
-  completeRuntimeNode,
-  createRuntimeGraphStore,
-  runtimeCompletedLine,
-  renderRuntimeTreeRows,
-  runtimeRunningLine,
   styleKeywordLabel,
   formatElapsedDuration,
 } from "../run/progress";
@@ -67,14 +61,39 @@ export async function runWorkflow(rest: string[]): Promise<number> {
   const shouldCleanup = !target;
   try {
     const rootLabel = "workflow default";
-    const graphStore = createRuntimeGraphStore(rootLabel);
-    const interactiveProgress = process.stdout.isTTY;
-    let activeNodeId: string | null = null;
-    const writeActiveLine = (text: string): void => {
-      process.stdout.write(`\r\u001b[2K${text}`);
+    const stepIndentById = new Map<string, string>();
+    const colorEnabled = process.stdout.isTTY && process.env.NO_COLOR === undefined;
+    const colorize = (
+      text: string,
+      code: "dim" | "bold" | "green" | "red",
+    ): string => {
+      if (!colorEnabled) return text;
+      const prefix = code === "dim"
+        ? "\u001b[2m"
+        : code === "bold"
+          ? "\u001b[1m"
+          : code === "green"
+            ? "\u001b[32m"
+            : "\u001b[31m";
+      return `${prefix}${text}\u001b[0m`;
     };
-    const commitActiveLine = (text: string): void => {
-      process.stdout.write(`\r\u001b[2K${text}\n`);
+    const formatStartLine = (indent: string, kind: string, name: string): string => {
+      const prefix = indent.slice(0, -2);
+      const marker = colorize("▸", "dim");
+      const kindLabel = colorize(kind, "bold");
+      const dimPrefix = colorize(prefix, "dim");
+      return `${dimPrefix}${marker} ${kindLabel} ${name}`;
+    };
+    const formatCompletedLine = (indent: string, status: number, elapsedSec: number): string => {
+      const prefix = indent.slice(0, -2);
+      const dimPrefix = colorize(prefix, "dim");
+      if (status === 0) {
+        const ok = colorize("✓", "green");
+        const elapsed = colorize(`${elapsedSec}s`, "dim");
+        return `${dimPrefix}${ok} ${elapsed}`;
+      }
+      const fail = colorize(`✗ ${elapsedSec}s`, "red");
+      return `${dimPrefix}${fail}`;
     };
 
     const results = build(inputAbs, outDir);
@@ -87,13 +106,8 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     const command = buildRunWrapperCommand();
     const startedAt = Date.now();
     const runBanner = `\nrunning ${basename(inputAbs)}\n\n`;
-    if (interactiveProgress) {
-      process.stdout.write(runBanner);
-      process.stdout.write(`${styleKeywordLabel(rootLabel)}\n`);
-    } else {
-      process.stdout.write(runBanner);
-      process.stdout.write(`${styleKeywordLabel(rootLabel)}\n`);
-    }
+    process.stdout.write(runBanner);
+    process.stdout.write(`${styleKeywordLabel(rootLabel)}\n`);
     const runtimeEnv = { ...process.env, JAIPH_WORKSPACE: workspaceRoot } as Record<string, string | undefined>;
     if (process.env.JAIPH_AGENT_MODEL !== undefined) {
       runtimeEnv.JAIPH_AGENT_MODEL_LOCKED = "1";
@@ -162,8 +176,6 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     const signalHandlers = setupRunSignalHandlers(execResult, { forceKillAfterMs: 1500 });
     let capturedStderr = "";
     let stderrBuffer = "";
-    let bufferedStdout = "";
-    let activeStepStartedAt = startedAt;
     const runtimeStack: string[] = [];
     const legacyStack: string[] = [];
     let legacyCounter = 0;
@@ -171,15 +183,6 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       const idx = stack.lastIndexOf(id);
       if (idx === -1) return;
       stack.splice(idx, 1);
-    };
-    const resolveCurrentActiveNodeId = (): string | null => {
-      for (let i = runtimeStack.length - 1; i >= 0; i -= 1) {
-        const id = runtimeStack[i];
-        if (graphStore.nodesById.has(id)) {
-          return id;
-        }
-      }
-      return null;
     };
     const resolveEventId = (eventType: "STEP_START" | "STEP_END", eventId: string, funcName: string): string => {
       if (eventId.length > 0) {
@@ -203,72 +206,37 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       if (event) {
         const eventId = resolveEventId(event.type, event.id, event.func);
         if (event.type === "STEP_START") {
-          const rawLabel = `${event.kind} ${event.name}`;
-          const parentCandidate = event.parent_id ?? (runtimeStack.length > 0 ? runtimeStack[runtimeStack.length - 1] : null);
           if (event.kind === "workflow" && event.name === "default") {
-            graphStore.rootStepId = eventId;
             runtimeStack.push(eventId);
-            activeNodeId = resolveCurrentActiveNodeId();
             return;
           }
-          const parentId = parentCandidate === graphStore.rootStepId ? null : parentCandidate;
-          beginRuntimeNode(graphStore, eventId, parentId, rawLabel, Date.now());
+          const depth = Math.max(1, event.depth ?? runtimeStack.length);
+          const indent = "  · ".repeat(depth);
+          const label = formatStartLine(indent, event.kind, event.name);
+          stepIndentById.set(eventId, indent);
+          process.stdout.write(`${label}\n`);
           runtimeStack.push(eventId);
-          if (interactiveProgress) {
-            activeNodeId = eventId;
-            activeStepStartedAt = Date.now();
-            writeActiveLine(runtimeRunningLine(graphStore, activeNodeId, 0));
-          }
           return;
         }
         const elapsedSec = Math.max(0, Math.floor((event.elapsed_ms ?? 0) / 1000));
         if (!(event.kind === "workflow" && event.name === "default")) {
-          const completed = completeRuntimeNode(graphStore, eventId, event.status ?? 1, elapsedSec);
-          if (completed) {
-            if (interactiveProgress) {
-              const rendered = runtimeCompletedLine(graphStore, eventId);
-              commitActiveLine(rendered);
-            }
-          }
+          const indent = (stepIndentById.get(eventId) ?? "  · ");
+          const completedLine = formatCompletedLine(indent, event.status ?? 1, elapsedSec);
+          process.stdout.write(`${completedLine}\n`);
+          stepIndentById.delete(eventId);
         }
         removeLastMatching(runtimeStack, eventId);
-        activeNodeId = resolveCurrentActiveNodeId();
-        if (interactiveProgress && activeNodeId !== null) {
-          activeStepStartedAt = Date.now();
-          writeActiveLine(runtimeRunningLine(graphStore, activeNodeId, 0));
-        }
         return;
       }
       if (line.length > 0) {
         capturedStderr += `${line}\n`;
-        if (interactiveProgress) {
-          process.stdout.write("\r\u001b[2K\n");
-        }
         process.stderr.write(`${line}\n`);
-        if (interactiveProgress && activeNodeId !== null) {
-          writeActiveLine(runtimeRunningLine(graphStore, activeNodeId, Math.max(0, Math.floor((Date.now() - activeStepStartedAt) / 1000))));
-        }
       }
     };
-    const counterTimer = setInterval(() => {
-      if (interactiveProgress && activeNodeId !== null) {
-        writeActiveLine(runtimeRunningLine(graphStore, activeNodeId, Math.max(0, Math.floor((Date.now() - activeStepStartedAt) / 1000))));
-      }
-    }, 1000);
     execResult.stdout?.setEncoding("utf8");
     execResult.stderr?.setEncoding("utf8");
     execResult.stdout?.on("data", (chunk: string) => {
-      if (!interactiveProgress) {
-        bufferedStdout += chunk;
-        return;
-      }
-      if (interactiveProgress) {
-        process.stdout.write("\r\u001b[2K");
-      }
       process.stdout.write(chunk);
-      if (interactiveProgress && activeNodeId !== null) {
-        writeActiveLine(runtimeRunningLine(graphStore, activeNodeId, Math.max(0, Math.floor((Date.now() - activeStepStartedAt) / 1000))));
-      }
     });
     execResult.stderr?.on("data", (chunk: string) => {
       stderrBuffer += chunk;
@@ -281,7 +249,6 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       }
     });
     const childExit = await waitForRunExit(execResult, () => signalHandlers.remove());
-    clearInterval(counterTimer);
     if (stderrBuffer.length > 0) {
       const remaining = stderrBuffer.replace(/\r$/, "").split(/\r?\n/);
       for (const line of remaining) {
@@ -318,16 +285,6 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     const runtimeDebugEnabled = runtimeEnv.JAIPH_DEBUG === "true";
     const runtimeErrorPrinted = hasFatalRuntimeStderr(capturedStderr, runtimeDebugEnabled);
     const resolvedStatus = childExit.status !== 0 || runtimeErrorPrinted ? 1 : 0;
-    if (!interactiveProgress) {
-      for (const row of renderRuntimeTreeRows(graphStore)) {
-        process.stdout.write(`${row}\n`);
-      }
-      process.stdout.write(bufferedStdout);
-    }
-
-    if (interactiveProgress && activeNodeId !== null) {
-      writeActiveLine("");
-    }
 
     const palette = colorPalette();
     if (resolvedStatus === 0) {

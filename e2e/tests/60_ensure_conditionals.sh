@@ -69,8 +69,10 @@ expected_recovery=$(printf '%s\n' \
   'running ensure_run_branch.jh' \
   '' \
   'workflow default' \
-  '├── rule always_fail (<time> failed)' \
-  '└── workflow recovery (<time>)' \
+  '  ▸ rule always_fail' \
+  '  ✗ <time>' \
+  '  ▸ workflow recovery' \
+  '  ✓ <time>' \
   '✓ PASS workflow default (<time>)')
 expected_recovery="${expected_recovery%$'\n'}"
 e2e::assert_output_equals "${recovery_out}" "${expected_recovery}" "if ! ensure can trigger run <workflow>"
@@ -82,7 +84,8 @@ expected_shell=$(printf '%s\n' \
   'running ensure_shell_branch.jh' \
   '' \
   'workflow default' \
-  '└── rule always_fail (<time> failed)' \
+  '  ▸ rule always_fail' \
+  '  ✗ <time>' \
   '✓ PASS workflow default (<time>)')
 expected_shell="${expected_shell%$'\n'}"
 e2e::assert_output_equals "${shell_out}" "${expected_shell}" "if ! ensure can trigger shell fallback"
@@ -92,7 +95,8 @@ expected_skip=$(printf '%s\n' \
   'running ensure_pass_branch.jh' \
   '' \
   'workflow default' \
-  '└── rule always_ok (<time>)' \
+  '  ▸ rule always_ok' \
+  '  ✓ <time>' \
   '✓ PASS workflow default (<time>)')
 expected_skip="${expected_skip%$'\n'}"
 e2e::assert_output_equals "${skip_out}" "${expected_skip}" "if ! ensure pass path still succeeds"

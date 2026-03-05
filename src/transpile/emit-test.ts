@@ -182,21 +182,21 @@ export function emitTest(
         }
         const args = step.args?.length ? step.args.map(escapeBashSingleQuoted).join(" ") : "";
         out.push("  set +e");
-        out.push(`  jaiph__test_out=$(mktemp)`);
         if (step.captureName) {
-          out.push(
-            `  ${workflowSymbol} ${args} 2>&1 | sed '/^__JAIPH_EVENT__/d' > "$jaiph__test_out"`,
-          );
+          out.push(`  jaiph__test_out=$(${workflowSymbol} ${args} 2>&1)`);
         } else {
+          out.push(`  jaiph__test_out_file=$(mktemp)`);
           out.push(
-            `  ${workflowSymbol} ${args} 2>&1 | sed '/^__JAIPH_EVENT__/d' > "$jaiph__test_out"`,
+            `  ${workflowSymbol} ${args} 2>&1 | sed '/^__JAIPH_EVENT__/d' > "$jaiph__test_out_file"`,
           );
         }
-        out.push("  jaiph__test_exit=${PIPESTATUS[0]}");
+        out.push("  jaiph__test_exit=$?");
         if (step.captureName) {
-          out.push(`  ${step.captureName}=$(cat "$jaiph__test_out")`);
+          out.push(`  ${step.captureName}=$(printf '%s' "$jaiph__test_out" | sed '/^__JAIPH_EVENT__/d')`);
+        } else {
+          out.push(`  jaiph__test_out=$(cat "$jaiph__test_out_file")`);
+          out.push(`  rm -f "$jaiph__test_out_file"`);
         }
-        out.push(`  rm -f "$jaiph__test_out"`);
         out.push("  set -e");
         if (!step.allowFailure) {
           out.push("  if [[ $jaiph__test_exit -ne 0 ]]; then");
@@ -221,36 +221,29 @@ export function emitTest(
   }
 
   out.push("jaiph__run_tests() {");
-  out.push("  local bold=$'\\e[1m' reset=$'\\e[0m' red=$'\\e[31m' green=$'\\e[32m'");
+  out.push("  local bold=$'\\e[1m' reset=$'\\e[0m' red=$'\\e[31m' green=$'\\e[32m' dim=$'\\e[2m'");
   out.push('  echo -e "${bold}testing${reset} $jaiph__test_display_name"');
   const n = ast.tests!.length;
   const lastIdx = n - 1;
-  out.push("  local total=0 failed=0 i start elapsed branch desc desc_show err_file line detail_prefix");
+  out.push("  local total=0 failed=0 i start elapsed desc first_line");
   out.push("  local -a failed_names=()");
   out.push(`  for ((i=0; i<${n}; i++)); do`);
   out.push(`    desc="\${${descsVar}[${"$"}i]}"`);
-  out.push('    desc_show="${desc/runs/${bold}test${reset}}"');
   out.push("    start=$SECONDS");
   out.push("    err_file=$(mktemp)");
   out.push(`    if jaiph__test_${"$"}i 2>"$err_file"; then`);
   out.push("      elapsed=$((SECONDS - start))");
-  out.push(`      [[ $i -eq ${lastIdx} ]] && branch="└──" || branch="├──"`);
-  out.push('      echo -e "  $branch $desc_show (${elapsed}s)"');
+  out.push('      echo "  ▸ $desc"');
+  out.push('      echo -e "  ${green}✓${reset} ${dim}${elapsed}s${reset}"');
   out.push("    else");
   out.push("      failed=$((failed + 1))");
   out.push('      failed_names+=("$desc")');
   out.push("      elapsed=$((SECONDS - start))");
-  out.push(`      [[ $i -eq ${lastIdx} ]] && branch="└──" || branch="├──"`);
-  out.push('      echo -e "  $branch $desc_show (${elapsed}s failed)"');
-      out.push(`      [[ $i -eq ${lastIdx} ]] && detail_prefix="     " || detail_prefix="  │  "`);
-  out.push('      if [[ -s "$err_file" ]]; then');
-      out.push('        while IFS= read -r line || [[ -n "$line" ]]; do');
-      out.push('          echo "${detail_prefix}$line"');
-  out.push('        done < "$err_file"');
-  out.push("      fi");
-      out.push(`      if [[ $i -ne ${lastIdx} ]]; then`);
-      out.push('        echo "${detail_prefix}"');
-      out.push("      fi");
+  out.push('      echo "  ▸ $desc"');
+  out.push('      first_line=$(head -n1 "$err_file" || true)');
+  out.push('      echo -e "  ${red}✗${reset} ${first_line} ${dim}${elapsed}s${reset}"');
+  out.push('      tail -n +2 "$err_file" 2>/dev/null | while IFS= read -r line || [[ -n "$line" ]]; do echo "    $line"; done');
+  out.push('      echo ""');
   out.push("    fi");
   out.push('    rm -f "$err_file"');
   out.push("    total=$((total + 1))");

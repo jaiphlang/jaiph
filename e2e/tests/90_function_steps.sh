@@ -33,7 +33,8 @@ expected_function=$(printf '%s\n' \
   'running functions.jh' \
   '' \
   'workflow default' \
-  '└── function changed_files (<time>)' \
+  '  ▸ function changed_files' \
+  '  ✓ <time>' \
   '✓ PASS workflow default (<time>)')
 expected_function="${expected_function%$'\n'}"
 e2e::assert_output_equals "${function_out}" "${expected_function}" "run tree and PASS match expected"

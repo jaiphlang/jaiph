@@ -29,12 +29,13 @@ fi
 
 expected_say_hello_out=$(printf '%s\n' \
   'testing say_hello.test.jh' \
-  '  ├── without name, workflow fails with validation message (<time> failed)' \
-  '  │  expectEqual failed:' \
-  "  │  - You didn't provide your name" \
-  '  │  +' \
-  '  │' \
-  '  └── with name, returns greeting and writes hello.txt (<time>)' \
+  '  ▸ without name, workflow fails with validation message' \
+  '  ✗ expectEqual failed: <time>' \
+  "    - You didn't provide your name" \
+  '    + You didn'"'"'t provide your name :(' \
+  '' \
+  '  ▸ with name, returns greeting and writes hello.txt' \
+  '  ✓ <time>' \
   '' \
   '✗ 1 / 2 test(s) failed' \
   '  - without name, workflow fails with validation message')

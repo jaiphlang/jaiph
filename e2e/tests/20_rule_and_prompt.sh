@@ -36,7 +36,8 @@ expected_rule_pass=$(printf '%s\n' \
   'running rule_pass.jh' \
   '' \
   'workflow default' \
-  '└── rule check_passes (<time>)' \
+  '  ▸ rule check_passes' \
+  '  ✓ <time>' \
   'e2e-rule-pass-done' \
   '✓ PASS workflow default (<time>)')
 expected_rule_pass="${expected_rule_pass%$'\n'}"

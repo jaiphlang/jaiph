@@ -189,6 +189,10 @@
             font-weight: 600;
         }
 
+        .jaiph-run .run-marker {
+            color: var(--muted);
+        }
+
         .code-block-wrap {
             position: relative;
         }
@@ -478,9 +482,12 @@ workflow default {
 running say_hello.jh
 
 <span class="run-keyword">workflow</span> default
-├── <span class="run-keyword">rule</span> name_was_provided <span class="run-time">(0s)</span>
-├── <span class="run-keyword">prompt</span> prompt <span class="run-time">(9s)</span>
-├── <span class="run-keyword">function</span> format_text <span class="run-time">(0s)</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">rule</span> name_was_provided
+  <span class="run-pass">✓</span> <span class="run-time">0s</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> prompt
+  <span class="run-pass">✓</span> <span class="run-time">9s</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">function</span> format_text
+  <span class="run-pass">✓</span> <span class="run-time">0s</span>
 <span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(8.9s)</span>
 
 Hi Jakub.
@@ -521,14 +528,15 @@ test "with name, returns greeting and writes hello.txt" {
   expectContain content "Alice in Wonderland"
 }</code></pre>
                     <p>Example failing run output:</p>
-                    <pre><code class="jaiph-run"><span class="run-command">➜  jaiph test e2e/say_hello.test.jh</span>
+                    <pre><code class="jaiph-run"><span class="run-command">➜  ./say_hello.test.jh</span>
 testing say_hello.test.jh
-  ├── without name, workflow fails with validation message <span class="run-time">(0s failed)</span>
-  │  expectEqual failed:
-  │  <span class="run-diff-minus">- You didn't provide your name</span>
-  │  <span class="run-diff-plus">+ You didn't provide your name :(</span>
-  │  
-  └── with name, returns greeting and writes hello.txt <span class="run-time">(1s)</span>
+  <span class="run-marker">▸</span> without name, workflow fails with validation message <span class="run-time">(0s failed)</span>
+  <span class="run-fail">✗</span> expectEqual failed: <span class="run-time">0s</span>
+    <span class="run-diff-minus">- You didn't provide your name</span>
+    <span class="run-diff-plus">+ You didn't provide your name :(</span>
+    
+  <span class="run-marker">▸</span> with name, returns greeting and writes hello.txt
+  <span class="run-pass">✓</span> <span class="run-time">0s</span>
 
 <span class="run-fail">✗ 1 / 2 test(s) failed</span>
   - without name, workflow fails with validation message</code></pre>

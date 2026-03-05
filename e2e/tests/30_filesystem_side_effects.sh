@@ -74,7 +74,8 @@ else
     'running fs_write_rule.jh' \
     '' \
     'workflow default' \
-    '└── rule write_attempt (<time>)' \
+    '  ▸ rule write_attempt' \
+    '  ✓ <time>' \
     '✓ PASS workflow default (<time>)')
   expected_permissive="${expected_permissive%$'\n'}"
   e2e::assert_output_equals "${permissive_out}" "${expected_permissive}" "rule write runs in permissive fallback mode"

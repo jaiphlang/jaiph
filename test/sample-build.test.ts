@@ -431,7 +431,8 @@ test("jaiph run prints rule tree and fail summary", () => {
 
     assert.equal(runResult.status, 1);
     assert.match(runResult.stdout, /workflow default/);
-    assert.match(runResult.stdout, /└── rule current_branch/);
+    assert.match(runResult.stdout, /▸ rule current_branch/);
+    assert.match(runResult.stdout, /✗ \d+s/);
     assert.match(runResult.stderr, /✗ FAIL workflow default \((?:\d+(?:\.\d+)?s|\d+m \d+s)\)/);
     assert.match(runResult.stderr, /Logs: /);
     assert.match(runResult.stderr, /Summary: /);
