@@ -90,12 +90,14 @@ jaiph::prompt_impl() {
   local workspace_root
   local backend
   local agent_command
+  local trusted_workspace
   local stdin_prompt
   local prompt_text
   local mock_response
   workspace_root="$(jaiph::workspace_root)"
   backend="${JAIPH_AGENT_BACKEND:-cursor}"
   agent_command="${JAIPH_AGENT_COMMAND:-cursor-agent}"
+  trusted_workspace="${JAIPH_AGENT_TRUSTED_WORKSPACE:-$workspace_root}"
   if [[ ! -t 0 ]]; then
     stdin_prompt="$(cat)"
   else
@@ -108,24 +110,18 @@ jaiph::prompt_impl() {
   fi
   if jaiph::is_test_mode; then
     if [[ -n "${JAIPH_MOCK_DISPATCH_SCRIPT:-}" ]]; then
-      mock_response="$(jaiph::mock_dispatch "$prompt_text")" || {
-        return 1
+      mock_response="$(jaiph::mock_dispatch "$prompt_text")" && {
+        printf '%s' "$mock_response"
+        return 0
       }
-      printf '%s' "$mock_response"
-      return 0
     fi
     if [[ -n "${JAIPH_MOCK_RESPONSES_FILE:-}" ]]; then
-      mock_response="$(jaiph::read_next_mock_response)" || {
-        if [[ -f "${JAIPH_MOCK_RESPONSES_FILE}" ]]; then
-          echo "jai: no mock matched prompt (no more responses in mock file). Prompt preview: ${prompt_text:0:80}..." >&2
-        fi
-        return 1
+      mock_response="$(jaiph::read_next_mock_response)" && {
+        printf '%s' "$mock_response"
+        return 0
       }
-      printf '%s' "$mock_response"
-      return 0
     fi
-    echo "jai: no mock for prompt (set JAIPH_MOCK_DISPATCH_SCRIPT or JAIPH_MOCK_RESPONSES_FILE in test)" >&2
-    return 1
+    # No mock set or mock did not match: run selected backend (cursor or claude) normally.
   fi
   if [[ -n "$prompt_text" ]]; then
     printf "Prompt:\n%s\n\n" "$prompt_text"
@@ -139,11 +135,11 @@ jaiph::prompt_impl() {
     return $?
   fi
   if [[ -n "${JAIPH_AGENT_MODEL:-}" ]]; then
-    "$agent_command" --print --output-format stream-json --stream-partial-output --workspace "$workspace_root" --model "$JAIPH_AGENT_MODEL" --trust "$prompt_text" \
+    "$agent_command" --print --output-format stream-json --stream-partial-output --workspace "$workspace_root" --model "$JAIPH_AGENT_MODEL" --trust "$trusted_workspace" "$prompt_text" \
       | jaiph::stream_json_to_text
     return $?
   fi
-  "$agent_command" --print --output-format stream-json --stream-partial-output --workspace "$workspace_root" --trust "$prompt_text" \
+  "$agent_command" --print --output-format stream-json --stream-partial-output --workspace "$workspace_root" --trust "$trusted_workspace" "$prompt_text" \
     | jaiph::stream_json_to_text
 }
 

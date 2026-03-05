@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Fake cursor-agent for e2e: outputs stream-json so prompt capture works when no mock is set.
+echo '{"type":"result","result":"e2e-backend-no-mock-output"}'

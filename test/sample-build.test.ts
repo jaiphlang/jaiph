@@ -27,9 +27,10 @@ test("build transpiles .jh into strict bash with retry flow", () => {
     assert.match(stdlib, /jaiph::prompt\(\)/);
     assert.match(stdlib, /jaiph::prompt_impl\(\)/);
     assert.match(stdlib, /agent_command="\$\{JAIPH_AGENT_COMMAND:-cursor-agent\}"/);
+    assert.match(stdlib, /trusted_workspace="\$\{JAIPH_AGENT_TRUSTED_WORKSPACE:-\$workspace_root\}"/);
     assert.match(
       stdlib,
-      /--print --output-format stream-json --stream-partial-output --workspace "\$workspace_root" --model "\$JAIPH_AGENT_MODEL" --trust "\$prompt_text"/,
+      /--print --output-format stream-json --stream-partial-output --workspace "\$workspace_root" --model "\$JAIPH_AGENT_MODEL" --trust "\$trusted_workspace" "\$prompt_text"/,
     );
     assert.match(stdlib, /jaiph::run_step jaiph::prompt jaiph::prompt_impl "\$@"/);
     assert.match(stdlib, /jaiph::execute_readonly\(\)/);
@@ -153,7 +154,7 @@ test("jaiph run compiles and executes workflow with args", () => {
     assert.equal(runResult.status, 0, runResult.stderr);
     assert.match(runResult.stdout, /workflow default/);
     assert.match(runResult.stdout, /✓ PASS workflow default \((?:\d+(?:\.\d+)?s|\d+m \d+s)\)/);
-    assert.doesNotMatch(runResult.stdout, /hello-run/);
+    assert.match(runResult.stdout, /hello-run/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -184,7 +185,7 @@ test("executable .jh invokes jaiph run semantics", () => {
 
     assert.equal(runResult.status, 0, runResult.stderr);
     assert.match(runResult.stdout, /✓ PASS workflow default/);
-    assert.doesNotMatch(runResult.stdout, /exec-arg:hello-exec/);
+    assert.match(runResult.stdout, /exec-arg:hello-exec/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -212,7 +213,7 @@ test("jaiph run enables xtrace when JAIPH_DEBUG=true", () => {
     });
 
     assert.equal(runResult.status, 0, runResult.stderr);
-    assert.doesNotMatch(runResult.stdout, /debug-run:hello-debug/);
+    assert.match(runResult.stdout, /debug-run:hello-debug/);
     assert.match(runResult.stderr, /\+ .*::workflow::default/);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -919,6 +920,114 @@ test("jaiph run JAIPH_AGENT_BACKEND env overrides file default", () => {
     assert.equal(Boolean(workflowOutName), true);
     const workflowOut = readFileSync(join(latestRunDir, workflowOutName!), "utf8");
     assert.match(workflowOut, /out:[\s\S]*cursor-from-env/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph run defaults Cursor trusted workspace to project root", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-trust-default-"));
+  try {
+    const binDir = join(root, "bin");
+    mkdirSync(binDir, { recursive: true });
+    const fakeCursor = join(binDir, "cursor-agent");
+    writeFileSync(
+      fakeCursor,
+      [
+        "#!/usr/bin/env bash",
+        "echo \"{\\\"type\\\":\\\"result\\\",\\\"result\\\":\\\"cursor-args:$*\\\"}\"",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(fakeCursor, 0o755);
+
+    const filePath = join(root, "prompt.jh");
+    writeFileSync(
+      filePath,
+      [
+        "workflow default {",
+        '  result = prompt "hi"',
+        '  printf \'out:%s\\n\' "$result"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runResult = spawnSync("node", [cliPath, "run", filePath], {
+      encoding: "utf8",
+      cwd: root,
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH ?? ""}`,
+      },
+    });
+
+    assert.equal(runResult.status, 0, runResult.stderr);
+    const runsRoot = join(root, ".jaiph/runs");
+    const runDirs = readdirSync(runsRoot).sort();
+    const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
+    const runFiles = readdirSync(latestRunDir);
+    const promptOutName = runFiles.find((name) => name.endsWith("-jaiph__prompt.out"));
+    assert.equal(Boolean(promptOutName), true);
+    const promptOut = readFileSync(join(latestRunDir, promptOutName!), "utf8");
+    assert.match(promptOut, new RegExp(`--trust ${root.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph run JAIPH_AGENT_TRUSTED_WORKSPACE env overrides metadata", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-trust-env-override-"));
+  try {
+    const binDir = join(root, "bin");
+    mkdirSync(binDir, { recursive: true });
+    const fakeCursor = join(binDir, "cursor-agent");
+    writeFileSync(
+      fakeCursor,
+      [
+        "#!/usr/bin/env bash",
+        "echo \"{\\\"type\\\":\\\"result\\\",\\\"result\\\":\\\"cursor-args:$*\\\"}\"",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(fakeCursor, 0o755);
+
+    const filePath = join(root, "prompt.jh");
+    writeFileSync(
+      filePath,
+      [
+        "metadata {",
+        '  agent.trusted_workspace = ".jaiph/.."',
+        "}",
+        "workflow default {",
+        '  result = prompt "hi"',
+        '  printf \'out:%s\\n\' "$result"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runResult = spawnSync("node", [cliPath, "run", filePath], {
+      encoding: "utf8",
+      cwd: root,
+      env: {
+        ...process.env,
+        JAIPH_AGENT_TRUSTED_WORKSPACE: "/tmp/jaiph-explicit-trust",
+        PATH: `${binDir}:${process.env.PATH ?? ""}`,
+      },
+    });
+
+    assert.equal(runResult.status, 0, runResult.stderr);
+    const runsRoot = join(root, ".jaiph/runs");
+    const runDirs = readdirSync(runsRoot).sort();
+    const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
+    const runFiles = readdirSync(latestRunDir);
+    const promptOutName = runFiles.find((name) => name.endsWith("-jaiph__prompt.out"));
+    assert.equal(Boolean(promptOutName), true);
+    const promptOut = readFileSync(join(latestRunDir, promptOutName!), "utf8");
+    assert.match(promptOut, /--trust \/tmp\/jaiph-explicit-trust/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -1685,6 +1794,66 @@ test("jaiph test with agent.backend = claude uses mock and does not invoke claud
 
     assert.equal(testResult.status, 0, testResult.stderr + testResult.stdout);
     assert.match(testResult.stdout + testResult.stderr, /mock-response|PASS|passed/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph test when prompt is not mocked runs selected backend", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-test-unmocked-backend-"));
+  try {
+    const binDir = join(root, "bin");
+    mkdirSync(binDir, { recursive: true });
+    const fakeCursor = join(binDir, "cursor-agent");
+    writeFileSync(
+      fakeCursor,
+      [
+        "#!/usr/bin/env bash",
+        "echo '{\"type\":\"result\",\"result\":\"backend-ran\"}'",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(fakeCursor, 0o755);
+
+    writeFileSync(
+      join(root, "flow.jh"),
+      [
+        "metadata {",
+        '  agent.backend = "cursor"',
+        "}",
+        "workflow default {",
+        '  result = prompt "ask"',
+        '  printf \'got:%s\\n\' "$result"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(root, "flow.test.jh"),
+      [
+        'import "flow.jh" as w',
+        "",
+        'test "no mock uses backend" {',
+        "  out = w.default",
+        '  expectContain out "backend-ran"',
+        '  expectContain out "got:"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const testResult = spawnSync("node", [cliPath, "test", join(root, "flow.test.jh")], {
+      encoding: "utf8",
+      cwd: root,
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH ?? ""}`,
+      },
+    });
+
+    assert.equal(testResult.status, 0, testResult.stderr + testResult.stdout);
+    assert.match(testResult.stdout + testResult.stderr, /backend-ran|PASS|passed/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

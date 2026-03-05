@@ -22,7 +22,7 @@ file            = { top_level } ;
 top_level       = metadata_block | import_stmt | rule_decl | function_decl | workflow_decl ;
 
 metadata_block  = "metadata" "{" { metadata_line } "}" ;
-metadata_line   = ( "agent.default_model" | "agent.command" | "run.logs_dir" | "run.debug" ) "=" ( string | "true" | "false" ) ;
+metadata_line   = ( "agent.default_model" | "agent.command" | "agent.backend" | "agent.trusted_workspace" | "run.logs_dir" | "run.debug" ) "=" ( string | "true" | "false" ) ;
 
 import_stmt     = "import" string "as" IDENT ;
 
@@ -86,7 +86,7 @@ shell_stmt      = command_line ;
 ## Transpilation Rules (Current)
 
 1. Build emits module scripts that source the installed global stdlib (`$JAIPH_STDLIB`, default `~/.local/bin/jaiph_stdlib.sh`).
-2. When the module has a `metadata` block, the generated script exports `JAIPH_AGENT_MODEL`, `JAIPH_AGENT_COMMAND`, `JAIPH_RUNS_DIR`, and (if `run.debug` is true) `JAIPH_DEBUG` with in-file values as defaults; environment variables override.
+2. When the module has a `metadata` block, the generated script exports `JAIPH_AGENT_MODEL`, `JAIPH_AGENT_COMMAND`, `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_RUNS_DIR`, and (if `run.debug` is true) `JAIPH_DEBUG` with in-file values as defaults; environment variables override.
 3. Each rule transpiles into:
    - `<module>::rule::<name>::impl`
    - `<module>::rule::<name>` wrapper using `jaiph::run_step ... jaiph::execute_readonly`.

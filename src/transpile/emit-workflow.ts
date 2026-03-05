@@ -112,6 +112,30 @@ export function emitWorkflow(
   importedWorkflowSymbols: Map<string, string>,
   importSourcePaths: string[],
 ): string {
+  const scopedMetadataAssignments: Array<{ name: string; value: string }> = [];
+  if (ast.metadata?.agent?.defaultModel !== undefined) {
+    const v = ast.metadata.agent.defaultModel.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    scopedMetadataAssignments.push({ name: "JAIPH_AGENT_MODEL", value: v });
+  }
+  if (ast.metadata?.agent?.command !== undefined) {
+    const v = ast.metadata.agent.command.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    scopedMetadataAssignments.push({ name: "JAIPH_AGENT_COMMAND", value: v });
+  }
+  if (ast.metadata?.agent?.backend !== undefined) {
+    const v = ast.metadata.agent.backend.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    scopedMetadataAssignments.push({ name: "JAIPH_AGENT_BACKEND", value: v });
+  }
+  if (ast.metadata?.agent?.trustedWorkspace !== undefined) {
+    const v = ast.metadata.agent.trustedWorkspace.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    scopedMetadataAssignments.push({ name: "JAIPH_AGENT_TRUSTED_WORKSPACE", value: v });
+  }
+  if (ast.metadata?.run?.logsDir !== undefined) {
+    const v = ast.metadata.run.logsDir.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    scopedMetadataAssignments.push({ name: "JAIPH_RUNS_DIR", value: v });
+  }
+  if (ast.metadata?.run?.debug !== undefined) {
+    scopedMetadataAssignments.push({ name: "JAIPH_DEBUG", value: ast.metadata.run.debug ? "true" : "false" });
+  }
   const out: string[] = [];
   out.push("#!/usr/bin/env bash");
   out.push("");
@@ -139,6 +163,10 @@ export function emitWorkflow(
       const v = ast.metadata.agent.backend.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
       out.push(`export JAIPH_AGENT_BACKEND="\${JAIPH_AGENT_BACKEND:-${v}}"`);
     }
+    if (ast.metadata.agent?.trustedWorkspace !== undefined) {
+      const v = ast.metadata.agent.trustedWorkspace.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      out.push(`export JAIPH_AGENT_TRUSTED_WORKSPACE="\${JAIPH_AGENT_TRUSTED_WORKSPACE:-${v}}"`);
+    }
     if (ast.metadata.run?.logsDir !== undefined) {
       const v = ast.metadata.run.logsDir.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
       out.push(`export JAIPH_RUNS_DIR="\${JAIPH_RUNS_DIR:-${v}}"`);
@@ -154,6 +182,44 @@ export function emitWorkflow(
     out.push(`source "$(dirname "\${BASH_SOURCE[0]}")/${rel}"`);
   }
   out.push("");
+  if (scopedMetadataAssignments.length > 0) {
+    const scopedVars = [
+      "JAIPH_AGENT_MODEL",
+      "JAIPH_AGENT_COMMAND",
+      "JAIPH_AGENT_BACKEND",
+      "JAIPH_AGENT_TRUSTED_WORKSPACE",
+      "JAIPH_RUNS_DIR",
+      "JAIPH_DEBUG",
+    ];
+    out.push(`${workflowSymbol}::with_metadata_scope() {`);
+    for (const name of scopedVars) {
+      out.push(`  local __had_${name}=0`);
+      out.push(`  local __old_${name}=""`);
+      out.push(`  if [[ -n "\${${name}+x}" ]]; then`);
+      out.push(`    __had_${name}=1`);
+      out.push(`    __old_${name}="\${${name}}"`);
+      out.push("  fi");
+    }
+    for (const assignment of scopedMetadataAssignments) {
+      out.push(`  if [[ "\${${assignment.name}_LOCKED:-}" != "1" ]]; then`);
+      out.push(`    export ${assignment.name}="${assignment.value}"`);
+      out.push("  fi");
+    }
+    out.push("  set +e");
+    out.push('  "$@"');
+    out.push("  local __jaiph_scoped_status=$?");
+    out.push("  set -e");
+    for (const name of scopedVars) {
+      out.push(`  if [[ "$__had_${name}" == "1" ]]; then`);
+      out.push(`    export ${name}="$__old_${name}"`);
+      out.push("  else");
+      out.push(`    unset ${name}`);
+      out.push("  fi");
+    }
+    out.push("  return $__jaiph_scoped_status");
+    out.push("}");
+    out.push("");
+  }
 
   for (const rule of ast.rules) {
     const ruleSymbol = `${workflowSymbol}::rule::${rule.name}`;
@@ -193,7 +259,13 @@ export function emitWorkflow(
     out.push("}");
     out.push("");
     out.push(`${ruleSymbol}() {`);
-    out.push(`  jaiph::run_step ${ruleSymbol} jaiph::execute_readonly ${ruleSymbol}::impl "$@"`);
+    if (scopedMetadataAssignments.length > 0) {
+      out.push(
+        `  ${workflowSymbol}::with_metadata_scope jaiph::run_step ${ruleSymbol} jaiph::execute_readonly ${ruleSymbol}::impl "$@"`,
+      );
+    } else {
+      out.push(`  jaiph::run_step ${ruleSymbol} jaiph::execute_readonly ${ruleSymbol}::impl "$@"`);
+    }
     out.push("}");
     out.push("");
   }
@@ -216,7 +288,13 @@ export function emitWorkflow(
     out.push("}");
     out.push("");
     out.push(`${functionSymbol}() {`);
-    out.push(`  jaiph::run_step_passthrough ${functionSymbol} ${functionSymbol}::impl "$@"`);
+    if (scopedMetadataAssignments.length > 0) {
+      out.push(
+        `  ${workflowSymbol}::with_metadata_scope jaiph::run_step_passthrough ${functionSymbol} ${functionSymbol}::impl "$@"`,
+      );
+    } else {
+      out.push(`  jaiph::run_step_passthrough ${functionSymbol} ${functionSymbol}::impl "$@"`);
+    }
     out.push("}");
     out.push("");
     out.push(`${fn.name}() {`);
@@ -357,9 +435,15 @@ export function emitWorkflow(
     out.push("}");
     out.push("");
     out.push(`${workflowSymbol}::workflow::${workflow.name}() {`);
-    out.push(
-      `  jaiph::run_step ${workflowSymbol}::workflow::${workflow.name} ${workflowSymbol}::workflow::${workflow.name}::impl "$@"`,
-    );
+    if (scopedMetadataAssignments.length > 0) {
+      out.push(
+        `  ${workflowSymbol}::with_metadata_scope jaiph::run_step ${workflowSymbol}::workflow::${workflow.name} ${workflowSymbol}::workflow::${workflow.name}::impl "$@"`,
+      );
+    } else {
+      out.push(
+        `  jaiph::run_step ${workflowSymbol}::workflow::${workflow.name} ${workflowSymbol}::workflow::${workflow.name}::impl "$@"`,
+      );
+    }
     out.push("}");
     out.push("");
   }

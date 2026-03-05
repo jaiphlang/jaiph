@@ -115,11 +115,39 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       process.stdout.write(`${styleKeywordLabel(treeRows[0].rawLabel)}\n`);
     }
     const runtimeEnv = { ...process.env, JAIPH_WORKSPACE: workspaceRoot } as Record<string, string | undefined>;
+    if (process.env.JAIPH_AGENT_MODEL !== undefined) {
+      runtimeEnv.JAIPH_AGENT_MODEL_LOCKED = "1";
+    }
+    if (process.env.JAIPH_AGENT_COMMAND !== undefined) {
+      runtimeEnv.JAIPH_AGENT_COMMAND_LOCKED = "1";
+    }
+    if (process.env.JAIPH_AGENT_BACKEND !== undefined) {
+      runtimeEnv.JAIPH_AGENT_BACKEND_LOCKED = "1";
+    }
+    if (process.env.JAIPH_AGENT_TRUSTED_WORKSPACE !== undefined) {
+      runtimeEnv.JAIPH_AGENT_TRUSTED_WORKSPACE_LOCKED = "1";
+    }
+    if (process.env.JAIPH_RUNS_DIR !== undefined) {
+      runtimeEnv.JAIPH_RUNS_DIR_LOCKED = "1";
+    }
+    if (process.env.JAIPH_DEBUG !== undefined) {
+      runtimeEnv.JAIPH_DEBUG_LOCKED = "1";
+    }
     if (runtimeEnv.JAIPH_AGENT_MODEL === undefined && effectiveConfig.agent?.defaultModel) {
       runtimeEnv.JAIPH_AGENT_MODEL = effectiveConfig.agent.defaultModel;
     }
     if (runtimeEnv.JAIPH_AGENT_COMMAND === undefined && effectiveConfig.agent?.command) {
       runtimeEnv.JAIPH_AGENT_COMMAND = effectiveConfig.agent.command;
+    }
+    if (runtimeEnv.JAIPH_AGENT_BACKEND === undefined && effectiveConfig.agent?.backend) {
+      runtimeEnv.JAIPH_AGENT_BACKEND = effectiveConfig.agent.backend;
+    }
+    if (runtimeEnv.JAIPH_AGENT_TRUSTED_WORKSPACE === undefined) {
+      if (effectiveConfig.agent?.trustedWorkspace) {
+        runtimeEnv.JAIPH_AGENT_TRUSTED_WORKSPACE = resolve(workspaceRoot, effectiveConfig.agent.trustedWorkspace);
+      } else {
+        runtimeEnv.JAIPH_AGENT_TRUSTED_WORKSPACE = workspaceRoot;
+      }
     }
     if (runtimeEnv.JAIPH_RUNS_DIR === undefined && effectiveConfig.run?.logsDir) {
       runtimeEnv.JAIPH_RUNS_DIR = effectiveConfig.run.logsDir;

@@ -5,6 +5,7 @@ const ALLOWED_KEYS = new Set([
   "agent.default_model",
   "agent.command",
   "agent.backend",
+  "agent.trusted_workspace",
   "run.logs_dir",
   "run.debug",
 ]);
@@ -69,7 +70,7 @@ export function parseMetadataBlock(
     if (!ALLOWED_KEYS.has(key)) {
       return fail(
         filePath,
-        `unknown metadata key: ${key}. Allowed: agent.default_model, agent.command, agent.backend, run.logs_dir, run.debug`,
+        `unknown metadata key: ${key}. Allowed: agent.default_model, agent.command, agent.backend, agent.trusted_workspace, run.logs_dir, run.debug`,
         lineNo,
         colFromRaw(raw),
       );
@@ -110,6 +111,14 @@ export function parseMetadataBlock(
         out.agent = {};
       }
       out.agent.backend = backend;
+    } else if (key === "agent.trusted_workspace") {
+      if (typeof value !== "string") {
+        return fail(filePath, "agent.trusted_workspace must be a string", lineNo, colFromRaw(raw));
+      }
+      if (!out.agent) {
+        out.agent = {};
+      }
+      out.agent.trustedWorkspace = value;
     } else if (key === "run.logs_dir") {
       if (typeof value !== "string") {
         return fail(filePath, "run.logs_dir must be a string", lineNo, colFromRaw(raw));

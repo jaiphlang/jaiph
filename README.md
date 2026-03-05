@@ -140,6 +140,24 @@ Tip: add `.jaiph/runs/` to your `.gitignore`.
 
 Runtime behavior is controlled by in-file metadata and environment variables. See [configuration.md](docs/configuration.md) for details.
 
+Typical metadata block:
+
+```jh
+metadata {
+  agent.default_model = "gpt-4"
+  agent.command = "cursor-agent"
+  agent.backend = "cursor"
+  agent.trusted_workspace = ".jaiph/.."
+  run.logs_dir = ".jaiph/runs"
+  run.debug = false
+}
+```
+
+Important:
+
+- `agent.trusted_workspace` sets Cursor backend trust scope (`--trust`), defaulting to project root.
+- Environment variables override metadata (for example `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`).
+
 ### CLI reference
 
 See [cli.md](docs/cli.md) for command syntax, examples, and supported environment variables.

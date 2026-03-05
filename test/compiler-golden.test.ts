@@ -154,6 +154,19 @@ test("parser: metadata agent.backend parses cursor and claude", () => {
   assert.equal(modClaude.metadata?.agent?.backend, "claude");
 });
 
+test("parser: metadata agent.trusted_workspace parses string", () => {
+  const source = [
+    "metadata {",
+    '  agent.trusted_workspace = ".jaiph/.."',
+    "}",
+    "workflow default {",
+    "  echo ok",
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  assert.equal(mod.metadata?.agent?.trustedWorkspace, ".jaiph/..");
+});
+
 test("parser: invalid agent.backend value throws E_PARSE", () => {
   const source = [
     "metadata {",
@@ -227,6 +240,7 @@ test("compiler golden: workflow with metadata emits JAIPH export defaults", () =
         "metadata {",
         '  agent.default_model = "gpt-4"',
         '  agent.backend = "claude"',
+        '  agent.trusted_workspace = ".jaiph/.."',
         '  run.logs_dir = ".jaiph/runs"',
         "}",
         "rule ok {",
@@ -242,6 +256,7 @@ test("compiler golden: workflow with metadata emits JAIPH export defaults", () =
     const actual = normalize(transpileFile(input, root));
     assert.ok(actual.includes('export JAIPH_AGENT_MODEL="${JAIPH_AGENT_MODEL:-gpt-4}"'));
     assert.ok(actual.includes('export JAIPH_AGENT_BACKEND="${JAIPH_AGENT_BACKEND:-claude}"'));
+    assert.ok(actual.includes('export JAIPH_AGENT_TRUSTED_WORKSPACE="${JAIPH_AGENT_TRUSTED_WORKSPACE:-.jaiph/..}"'));
     assert.ok(actual.includes('export JAIPH_RUNS_DIR="${JAIPH_RUNS_DIR:-.jaiph/runs}"'));
     assert.ok(actual.includes("entry::rule::ok"));
     assert.ok(actual.includes("entry::workflow::default"));

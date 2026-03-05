@@ -5,6 +5,7 @@ export type JaiphConfig = {
     defaultModel?: string;
     command?: string;
     backend?: "cursor" | "claude";
+    trustedWorkspace?: string;
   };
   run?: {
     debug?: boolean;

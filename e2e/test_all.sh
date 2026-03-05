@@ -19,6 +19,7 @@ TEST_SCRIPTS=(
   "e2e/tests/70_run_artifacts.sh"
   "e2e/tests/80_cli_behavior.sh"
   "e2e/tests/85_infile_metadata.sh"
+  "e2e/tests/86_metadata_scope_nested.sh"
   "e2e/tests/90_function_steps.sh"
 )
 

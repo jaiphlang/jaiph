@@ -11,7 +11,7 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
 e2e::section "Rules, ensure, and prompt test behavior"
 E2E_MOCK_BIN="${ROOT_DIR}/e2e/bin"
-chmod 755 "${E2E_MOCK_BIN}/mock_ok" "${E2E_MOCK_BIN}/mock_fail"
+chmod 755 "${E2E_MOCK_BIN}/mock_ok" "${E2E_MOCK_BIN}/mock_fail" "${E2E_MOCK_BIN}/cursor-agent"
 export PATH="${E2E_MOCK_BIN}:${PATH}"
 
 # Given
@@ -122,35 +122,30 @@ if [[ "${prompt_ok_out}" != *"passed"* ]] && [[ "${prompt_ok_out}" != *"PASS"* ]
 fi
 e2e::pass "prompt_flow.test.jh passes with inline mock"
 
-# Given
+# Given: workflow with prompt but test does not mock it -> selected backend runs (cursor by default).
 cat > "${TEST_DIR}/prompt_unmatched.jh" <<'EOF'
 #!/usr/bin/env jaiph
 workflow default {
-  prompt "e2e-unmatched-prompt-never-mocked"
+  result = prompt "e2e-unmatched-prompt-never-mocked"
+  printf '%s' "$result"
 }
 EOF
 cat > "${TEST_DIR}/prompt_unmatched.test.jh" <<'EOF'
 #!/usr/bin/env jaiph
 import "prompt_unmatched.jh" as p
 
-test "fails when no mock for prompt" {
+test "when no mock, backend runs" {
   response = p.default
-  expectContain response "no mock"
+  expectContain response "e2e-backend-no-mock-output"
 }
 EOF
 
-# When
-prompt_fail_out="$(jaiph test "${TEST_DIR}/prompt_unmatched.test.jh" 2>&1)" || true
+# When (cursor-agent is in PATH via E2E_MOCK_BIN)
+prompt_unmatched_out="$(jaiph test "${TEST_DIR}/prompt_unmatched.test.jh" 2>&1)"
 
 # Then
-if [[ "${prompt_fail_out}" == *"PASS"* ]] && [[ "${prompt_fail_out}" != *"FAIL"* ]]; then
-  printf "%s\n" "${prompt_fail_out}" >&2
-  e2e::fail "prompt_unmatched.test.jh should fail"
+if [[ "${prompt_unmatched_out}" != *"passed"* ]] && [[ "${prompt_unmatched_out}" != *"PASS"* ]]; then
+  printf "%s\n" "${prompt_unmatched_out}" >&2
+  e2e::fail "prompt_unmatched.test.jh should pass when backend (cursor-agent) is in PATH"
 fi
-if [[ "${prompt_fail_out}" != *"expectContain failed"* ]] &&
-   [[ "${prompt_fail_out}" != *"no mock"* ]] &&
-   [[ "${prompt_fail_out}" != *"FAIL"* ]]; then
-  printf "%s\n" "${prompt_fail_out}" >&2
-  e2e::fail "prompt_unmatched.test.jh output should explain failure"
-fi
-e2e::pass "prompt_unmatched.test.jh fails with readable message"
+e2e::assert_contains "${prompt_unmatched_out}" "e2e-backend-no-mock-output" "prompt_unmatched.test.jh uses backend when no mock"
