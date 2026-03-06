@@ -269,6 +269,12 @@
             color: var(--text);
         }
 
+        .card hr {
+            border: none;
+            border-top: 1px solid #d0d7de;
+            margin: 1.5rem 0;
+        }
+
         .footer {
             margin-top: 4rem;
             padding: 2rem;
@@ -415,15 +421,12 @@
             <div class="card">
                 <p>
                     <strong>Jaiph</strong> is a composable scripting language and runtime for defining and orchestrating
-                    AI agent workflows.
+                    AI agent workflows. It supports native bash commands and a set of custom primitives to combine
+                    prompts with strict checks.
                 </p>
-                <p>
-                    It combines the power of AI prompts with strict checks and orchestration to create portable and
-                    easy-to-understand AI agent workflows. It supports native bash commands and compiles to pure bash,
-                    making it fully compatible with existing shell environments.
-                </p>
-                <p class="small"><strong class="warning">⚠ Jaiph is still in an early stage.</strong><br />You may
-                    expect breaking changes. You may also have a great impact as an early contributor.</p>
+                <pre><code class="language-bash">curl -fsSL https://jaiph.org/install | bash</code></pre>
+                <p class="small">The installer will install Jaiph to <strong>~/.local/bin</strong>. Current stable
+                    version is <strong>0.2.0</strong>. Jaiph is licensed under <a href="https://www.apache.org/licenses/LICENSE-2.0">Apache 2.0 license</a>.</p>
                 <p>
                     <a href="https://jaiph.org/getting-started" target="_blank" rel="noopener noreferrer"
                         class="button">Docs</a>
@@ -553,7 +556,6 @@ testing say_hello.test.jh
                         cannot
                         run some commands (for example <code>npm test</code>). By default Jaiph runs agents in their
                         default, more secure modes.</p>
-                    <p><strong>Content of <code>.jaiph/ensure_ci_passes.jh</code></strong></p>
                     <pre><code class="language-jaiph">#!/usr/bin/env jaiph
 
 config {
@@ -625,17 +627,14 @@ running ensure_ci_passes.jh
         </section>
 
         <section>
-            <h2>Getting started</h2>
+            <h2>Usage</h2>
             <div class="card">
                 <p>
-                    The installation below uses Jaiph from the main branch in the GitHub repository:
-                    <a href="https://github.com/jaiphlang/jaiph" target="_blank"
-                        rel="noopener noreferrer">https://github.com/jaiphlang/jaiph</a>.
-                    The specification is still in flux and may break in the future.
-                    You may expect breaking changes.
                 </p>
                 <h3>Installation</h3>
                 <pre><code class="language-bash">curl -fsSL https://jaiph.org/install | bash</code></pre>
+                <p>To install the nightly branch instead:</p>
+                <pre><code class="language-bash">curl -fsSL https://jaiph.org/install | bash -s nightly</code></pre>
                 <p>
                     Then verify the installation:
                 </p>
@@ -643,29 +642,20 @@ running ensure_ci_passes.jh
                 <p>Switch installed version:</p>
                 <pre><code class="language-bash">jaiph use nightly
 jaiph use 0.2.0</code></pre>
-                <p>In case of an error, check if <code>~/.local/bin</code> is in your PATH. This is the default
-                    installation directory.</p>
-                <p>Installation places both the <code>jaiph</code> CLI and the global runtime stdlib
-                    (<code>jaiph_stdlib.sh</code>) in <code>~/.local/bin/</code>.</p>
                 <h3>Running a workflow</h3>
-                <pre><code class="language-bash">./path/to/main.jh "feature request or task"</code></pre>
-                <p><strong>Argument passing:</strong> values map like bash scripts (<code>$1</code>, <code>$2</code>,
-                    <code>"$@"</code>).
+                <pre><code class="language-bash">./path/to/main.jh "arg1" "arg2" "arg3"</code></pre>
+                <p>Arguments are passed exactly like bash scripts (<code>$1</code>, <code>$2</code>, <code>"$@"</code>).
+                    When you call a workflow, it executes the <code>workflow default</code> entrypoint.</p>
+                <p>By convention it is recommended to keep your workflows in the
+                    <code>&lt;project_root&gt;/.jaiph/</code>
+                    directory. It ensures Jaiph detects workspace root and configures the agent correctly.</p>
+                <p>Jaiph stores all command output in <code>.jaiph/runs/</code> directory. It is recommended to add it
+                    to your <code>.gitignore</code>.</p>
+                <h3>Running tests</h3>
+                <p>Jaiph supports native test scripts via the <code>*.test.jh</code> convention and first-class
+                    <code>test "description" { ... }</code> blocks. When you run the executable
+                    <code></code>*.test.jh</code> file, it is executed as a test.
                 </p>
-                <p><strong>Entrypoint resolution:</strong> executable <code>.jh</code> files with shebang run
-                    <code>workflow default</code>. You can also use <code>jaiph run path/to/file.jh</code> with the
-                    same argument semantics.
-                </p>
-                <h3>Initialize Jaiph workspace</h3>
-                <pre><code class="language-bash">jaiph init</code></pre>
-                <p>This creates <code>.jaiph/bootstrap.jh</code> and
-                    <code>.jaiph/jaiph-skill.md</code> (synced from local Jaiph installation).
-                </p>
-                <p>Then run:</p>
-                <pre><code class="language-bash">./.jaiph/bootstrap.jh</code></pre>
-                <p>This asks an agent to detect project configuration and bootstrap recommended Jaiph workflows for
-                    feature implementation.</p>
-                <p>Tip: add <code>.jaiph/runs/</code> to your <code>.gitignore</code>.</p>
                 <h3>Configuration</h3>
                 <p>Runtime behavior is controlled by in-file config and environment variables. See
                     <a href="configuration">configuration docs</a> for precedence and keys.
@@ -718,24 +708,21 @@ jaiph use 0.2.0</code></pre>
                         <code>*-jaiph__prompt.out</code> and <code>*-jaiph__prompt.err</code>). Jaiph also writes
                         <code>run_summary.jsonl</code> in each run directory and skips creating empty step log files.
                     </dd>
+
+                    <dt><code>test "description" { ... }</code></dt>
+                    <dd>Defines a test case. Files named <code>*.test.jh</code> are run as test suites.</dd>
+
+                    <dt><code>mock prompt "..."</code></dt>
+                    <dd>In a test, stubs the next <code>prompt</code> call to return the given string instead of calling the agent.</dd>
+
+                    <dt><code>expectEqual var "value"</code> · <code>expectContain var "substring"</code></dt>
+                    <dd>Test assertions: <code>expectEqual</code> checks exact match; <code>expectContain</code> checks that the variable contains the substring. Fail the test if the check does not hold.</dd>
                 </dl>
 
                 <p>All language primitives can be freely combined with bash code—they are not isolated or blocking, but
                     instead are interoperable with standard shell scripting within your workflows and rules.</p>
-                <p><code>jaiph run</code> progress is event-driven: TTY mode keeps one live running-step line, while
-                    non-TTY mode prints one completion line per finished step.</p>
-                <h3>Known limitations and gotchas</h3>
-                <ul>
-                    <li><strong>Parser limitation:</strong> inline brace-group short-circuit patterns like
-                        <code>cmd || { ... }</code> are not supported in <code>.jh</code> files yet. Use explicit
-                        conditionals such as <code>if ! cmd; then ...; fi</code> instead.
-                    </li>
-                    <li><strong>Entrypoint naming:</strong> <code>jaiph run</code> searches for
-                        <code>workflow default</code> as the entrypoint for runnable files. If the file does not contain
-                        a default entrypoint, the command will fail.
-                    </li>
-                </ul>
 
+                <hr/>
                 <p>
                     Additional references:
                     <a href="grammar">Grammar</a>
@@ -748,8 +735,6 @@ jaiph use 0.2.0</code></pre>
                     ·
                     <a href="cli">CLI reference</a>
                 </p>
-                <a href="https://github.com/jaiphlang/jaiph/tree/main/docs" target="_blank" rel="noopener noreferrer"
-                    class="button">Open docs repository</a>
             </div>
         </section>
 
