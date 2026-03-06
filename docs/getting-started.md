@@ -168,6 +168,9 @@ See [cli.md](cli.md) for command syntax, examples, and supported environment var
 
 ## Language Primitives
 
+- `config { ... }`  
+  Optional block at the top of the entry workflow file. Sets runtime options (e.g. `agent.backend`, `agent.command`, `agent.trusted_workspace`, `run.logs_dir`). Environment variables override. See [configuration.md](configuration.md).
+
 - `import "file.jh" as alias`  
   Imports rules/workflows from another Jaiph module under an alias. Imports are verified at compile time.
 
@@ -185,6 +188,8 @@ See [cli.md](cli.md) for command syntax, examples, and supported environment var
 
 - `run ref`  
   Executes another workflow from a workflow. `run` is not allowed inside a rule; use `ensure` to call another rule or move the call to a workflow.
+
+- **Conditionals** — `if ! ensure ref; then run ref; fi` or `if ! <shell_condition>; then ... fi` run steps only when a rule fails or a shell condition is false. Then-branch can contain `run`, `prompt`, and shell commands.
 
 - `prompt "..."`  
   Sends prompt text to the configured agent command.

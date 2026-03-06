@@ -670,6 +670,9 @@ jaiph use 0.2.0</code></pre>
             <h2>Documentation</h2>
             <div class="card">
                 <dl class="primitive-list">
+                    <dt><code>config { ... }</code></dt>
+                    <dd>Optional block at the top of the entry file. Sets runtime options: <code>agent.backend</code> (cursor | claude), <code>agent.command</code>, <code>agent.trusted_workspace</code>, <code>run.logs_dir</code>, etc. Environment variables override. See <a href="configuration">Configuration</a>.</dd>
+
                     <dt><code>import "file.jh" as alias</code></dt>
                     <dd>Imports rules and workflows from another Jaiph module under an alias. Jaiph compiles each module
                         to a single shell file, and verifies the import at compile time.</dd>
@@ -701,6 +704,9 @@ jaiph use 0.2.0</code></pre>
                         <code>ensure</code> to call another rule or move the call to a workflow.
                     </dd>
 
+                    <dt><code>if ! ensure ref; then run ref; fi</code> · <code>if ! &lt;shell&gt;; then ... fi</code></dt>
+                    <dd>Conditional workflow steps: run one or more steps only when a rule fails or a shell condition is false. Then-branch can contain <code>run</code>, <code>prompt</code>, and shell commands.</dd>
+
                     <dt><code>prompt "..."</code></dt>
                     <dd>Sends prompt text to the configured agent command (with optional model from config) and stores
                         prompt stdout/stderr in
@@ -714,6 +720,12 @@ jaiph use 0.2.0</code></pre>
 
                     <dt><code>mock prompt "..."</code></dt>
                     <dd>In a test, stubs the next <code>prompt</code> call to return the given string instead of calling the agent.</dd>
+
+                    <dt><code>mock prompt { if $1 contains "..." ; then respond "..." ; fi }</code></dt>
+                    <dd>In a test, stub by prompt content: first matching branch wins; use <code>elif</code> / <code>else</code> as needed. See <a href="testing">Testing</a>.</dd>
+
+                    <dt><code>mock workflow</code> · <code>mock rule</code> · <code>mock function</code></dt>
+                    <dd>In a test, replace a workflow, rule, or function with a shell body for isolation. See <a href="testing">Testing</a>.</dd>
 
                     <dt><code>expectEqual var "value"</code> · <code>expectContain var "substring"</code></dt>
                     <dd>Test assertions: <code>expectEqual</code> checks exact match; <code>expectContain</code> checks that the variable contains the substring. Fail the test if the check does not hold.</dd>

@@ -147,6 +147,8 @@ Runtime/config override variables:
 - `JAIPH_AGENT_COMMAND`
 - `JAIPH_AGENT_BACKEND` — prompt backend: `cursor` (default) or `claude`. Overrides in-file `agent.backend`. See [Configuration](configuration.md).
 - `JAIPH_AGENT_TRUSTED_WORKSPACE` — trusted workspace directory for Cursor backend `--trust`. Defaults to project root.
+- `JAIPH_AGENT_CURSOR_FLAGS` — extra flags for Cursor backend (string, split on whitespace).
+- `JAIPH_AGENT_CLAUDE_FLAGS` — extra flags for Claude backend (string, split on whitespace).
 - `JAIPH_RUNS_DIR`
 - `JAIPH_DEBUG`
 - `JAIPH_SKILL_PATH` — path to skill file used by `jaiph init` when syncing `.jaiph/jaiph-skill.md`

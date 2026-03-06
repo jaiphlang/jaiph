@@ -47,6 +47,9 @@ test "runs happy path and prints pass tree" {
 - **Shell** — any bash statement (e.g. `echo "given"`, `# comment`).
 - **mock prompt** — `mock prompt "<response>"` adds a mock response for the next prompt call. Mocks are consumed in order when the workflow runs. Use one per prompt in the workflow.
 - **mock prompt block** — `mock prompt { ... }` dispatches by prompt content. Use `if $1 contains "..." ; then` / `elif $1 contains "..." ; then` / optional `else` / `respond "..."` / `fi`. First matching branch wins; if no branch matches and there is no `else`, the test fails with a clear error.
+- **mock workflow** — `mock workflow <alias>.<name> { ... }` replaces that workflow for this test with a shell body (e.g. `echo "ok"; exit 0`). Ref can be `alias` or `alias.workflow_name`.
+- **mock rule** — `mock rule <alias>.<name> { ... }` replaces that rule for this test with a shell body. Ref can be `alias` or `alias.rule_name`.
+- **mock function** — `mock function <name> { ... }` or `mock function <alias>.<name> { ... }` replaces that function for this test with a shell body.
 - **Workflow capture** — `name = <alias>.<workflow>` runs the workflow, captures stdout+stderr into `name`, and does not abort on non-zero exit. You can then assert on the output. Use `name = <alias>.<workflow> "arg"` to pass one argument, or `name = <alias>.<workflow> allow_failure` to run without failing the test on non-zero exit (so you can assert on failure output).
 - **expectContain** — `expectContain <variable> "<substring>"` fails the test with a readable error if the variable's value does not contain the substring.
 - **expectEqual** — `expectEqual <variable> "<expected>"` fails the test if the variable's value is not exactly equal to the expected string (useful for exact output assertions).

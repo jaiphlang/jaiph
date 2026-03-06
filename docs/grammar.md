@@ -38,6 +38,8 @@ workflow_step   = ensure_stmt
                 | run_stmt
                 | prompt_stmt
                 | if_not_ensure_then_run_stmt
+                | if_not_ensure_then_shell_stmt
+                | if_not_ensure_then_stmt
                 | if_not_shell_then_stmt
                 | shell_stmt
                 | comment_line ;
@@ -50,6 +52,17 @@ if_not_ensure_then_run_stmt
                 = "if" "!" "ensure" REF ";" "then"
                   { run_stmt }
                   "fi" ;
+
+if_not_ensure_then_shell_stmt
+                = "if" "!" "ensure" REF ";" "then"
+                  { shell_stmt }
+                  "fi" ;
+
+if_not_ensure_then_stmt
+                = "if" "!" "ensure" REF ";" "then"
+                  { run_stmt | prompt_stmt | shell_stmt }
+                  "fi" ;
+  (* mixed then-branch; used when then contains both run and non-run steps *)
 
 if_not_shell_then_stmt
                 = "if" "!" shell_condition ";" "then"
@@ -69,9 +82,10 @@ shell_stmt      = command_line ;
 4. Original function names remain callable via generated shims that invoke the namespaced wrapper.
 5. `run` inside a workflow must target a workflow reference (`foo` or `alias.foo`), not an arbitrary shell command.
 6. `run` is not allowed inside a `rule`; use `ensure` to call another rule or move the call to a workflow.
-7. `prompt` supports multiline quoted text and compiles to `jaiph::prompt ...` with bash-style variable expansion.
-8. `prompt` rejects command substitution (`$(...)` and backticks) with `E_PARSE`; only variable expansion is allowed.
-9. Workflow and rule declarations support optional `export` keyword.
+7. Conditional workflow steps: `if ! ensure REF; then ... fi` is parsed as one of: (a) `if_not_ensure_then_run` when the then-branch contains only `run` steps, (b) `if_not_ensure_then_shell` when only shell commands, (c) `if_not_ensure_then` when mixed. `if ! <shell_condition>; then ... fi` is `if_not_shell_then` and may contain `run` and shell steps.
+8. `prompt` supports multiline quoted text and compiles to `jaiph::prompt ...` with bash-style variable expansion.
+9. `prompt` rejects command substitution (`$(...)` and backticks) with `E_PARSE`; only variable expansion is allowed.
+10. Workflow and rule declarations support optional `export` keyword.
 
 ## Validation Rules
 
@@ -97,4 +111,4 @@ shell_stmt      = command_line ;
    - `<module>::function::<name>::impl`
    - `<module>::function::<name>` wrapper using `jaiph::run_step`
    - `<name>` shim forwarding to the namespaced wrapper.
-6. `if ! ensure X; then run Y; fi` remains explicit Bash control flow using transpiled symbols.
+6. `if ! ensure X; then run Y; fi` and other conditional forms remain explicit Bash control flow using transpiled symbols.
