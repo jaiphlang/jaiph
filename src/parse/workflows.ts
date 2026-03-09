@@ -1,6 +1,73 @@
 import type { WorkflowDef } from "../types";
 import { colFromRaw, fail, hasUnescapedClosingQuote, isRef } from "./core";
 
+/** Parse a single workflow statement string (e.g. "run foo", "ensure bar", "echo x") into a step. */
+function parseRecoverStatement(
+  filePath: string,
+  lineNo: number,
+  col: number,
+  stmt: string,
+): import("../types").WorkflowStepDef {
+  const t = stmt.trim();
+  if (!t) {
+    fail(filePath, "empty recover statement", lineNo, col);
+  }
+  const runMatch = t.match(
+    /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
+  );
+  if (runMatch && isRef(runMatch[1])) {
+    return {
+      type: "run",
+      workflow: { value: runMatch[1], loc: { line: lineNo, col } },
+      args: runMatch[2]?.trim(),
+    };
+  }
+  const ensureMatch = t.match(
+    /^ensure\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
+  );
+  if (ensureMatch && isRef(ensureMatch[1])) {
+    return {
+      type: "ensure",
+      ref: { value: ensureMatch[1], loc: { line: lineNo, col } },
+      args: ensureMatch[2]?.trim(),
+    };
+  }
+  const promptAssignMatch = t.match(
+    /^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*prompt\s+(.+)$/s,
+  );
+  if (promptAssignMatch) {
+    const captureName = promptAssignMatch[1];
+    const promptArg = promptAssignMatch[2].trimStart();
+    const promptCol = col + t.indexOf("prompt");
+    if (!promptArg.startsWith(`"`)) {
+      fail(filePath, 'prompt must match: name = prompt "<text>"', lineNo, promptCol);
+    }
+    return {
+      type: "prompt",
+      raw: promptArg,
+      loc: { line: lineNo, col: promptCol },
+      captureName,
+    };
+  }
+  if (t.startsWith("prompt ")) {
+    const promptArg = t.slice("prompt ".length).trimStart();
+    const promptCol = col + t.indexOf("prompt");
+    if (!promptArg.startsWith(`"`)) {
+      fail(filePath, 'prompt must match: prompt "<text>"', lineNo, promptCol);
+    }
+    return {
+      type: "prompt",
+      raw: promptArg,
+      loc: { line: lineNo, col: promptCol },
+    };
+  }
+  return {
+    type: "shell",
+    command: t,
+    loc: { line: lineNo, col },
+  };
+}
+
 export function parseWorkflowBlock(
   filePath: string,
   lines: string[],
@@ -275,7 +342,29 @@ export function parseWorkflowBlock(
 
     if (inner.startsWith("ensure ")) {
       const ensureBody = inner.slice("ensure ".length).trim();
-      const ensureMatch = ensureBody.match(
+      const recoverIdx = ensureBody.indexOf(" recover ");
+      if (recoverIdx === -1) {
+        const ensureMatch = ensureBody.match(
+          /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
+        );
+        if (!ensureMatch || !isRef(ensureMatch[1])) {
+          fail(filePath, "invalid ensure statement", innerNo);
+        }
+        const ref = ensureMatch[1];
+        const args = ensureMatch[2]?.trim();
+        workflow.steps.push({
+          type: "ensure",
+          ref: {
+            value: ref,
+            loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 },
+          },
+          args,
+        });
+        continue;
+      }
+      const left = ensureBody.slice(0, recoverIdx).trim();
+      const right = ensureBody.slice(recoverIdx + " recover ".length).trim();
+      const ensureMatch = left.match(
         /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
       );
       if (!ensureMatch || !isRef(ensureMatch[1])) {
@@ -283,6 +372,76 @@ export function parseWorkflowBlock(
       }
       const ref = ensureMatch[1];
       const args = ensureMatch[2]?.trim();
+      const recoverCol = innerRaw.indexOf("recover") + 1;
+
+      if (right === "{") {
+        const blockStartLine = innerNo;
+        let blockLines: string[] = [];
+        let closeLineIdx = -1;
+        for (let look = idx + 1; look < lines.length; look += 1) {
+          const lookTrim = lines[look].trim();
+          if (lookTrim === "}") {
+            closeLineIdx = look;
+            break;
+          }
+          blockLines.push(lines[look].trim());
+        }
+        if (closeLineIdx === -1) {
+          fail(filePath, 'unterminated recover block, expected "}"', blockStartLine, recoverCol);
+        }
+        const blockContent = blockLines.join("\n");
+        const statements = blockContent
+          .split(/[;\n]+/)
+          .map((s) => s.trim())
+          .filter(Boolean);
+        if (statements.length === 0) {
+          fail(filePath, "recover block must contain at least one statement", blockStartLine, recoverCol);
+        }
+        const blockSteps = statements.map((s) =>
+          parseRecoverStatement(filePath, blockStartLine, 1, s),
+        );
+        workflow.steps.push({
+          type: "ensure",
+          ref: {
+            value: ref,
+            loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 },
+          },
+          args,
+          recover: { block: blockSteps },
+        });
+        idx = closeLineIdx;
+        continue;
+      }
+
+      if (right.startsWith("{")) {
+        const closeBrace = right.indexOf("}");
+        if (closeBrace === -1) {
+          fail(filePath, 'unterminated recover block, expected "}"', innerNo, recoverCol);
+        }
+        const blockContent = right.slice(1, closeBrace).trim();
+        const statements = blockContent
+          .split(/[;\n]+/)
+          .map((s) => s.trim())
+          .filter(Boolean);
+        if (statements.length === 0) {
+          fail(filePath, "recover block must contain at least one statement", innerNo, recoverCol);
+        }
+        const blockSteps = statements.map((s) =>
+          parseRecoverStatement(filePath, innerNo, recoverCol, s),
+        );
+        workflow.steps.push({
+          type: "ensure",
+          ref: {
+            value: ref,
+            loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 },
+          },
+          args,
+          recover: { block: blockSteps },
+        });
+        continue;
+      }
+
+      const singleStep = parseRecoverStatement(filePath, innerNo, recoverCol, right);
       workflow.steps.push({
         type: "ensure",
         ref: {
@@ -290,6 +449,7 @@ export function parseWorkflowBlock(
           loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 },
         },
         args,
+        recover: { single: singleStep },
       });
       continue;
     }

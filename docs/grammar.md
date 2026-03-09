@@ -63,7 +63,10 @@ workflow_step   = ensure_stmt
                 | shell_stmt
                 | comment_line ;
 
-ensure_stmt     = "ensure" REF [ args_tail ] ;
+ensure_stmt     = "ensure" REF [ args_tail ]
+                | "ensure" REF [ args_tail ] "recover" single_stmt
+                | "ensure" REF [ args_tail ] "recover" "{" { stmt ";" } "}" ;
+single_stmt    = run_stmt | ensure_stmt | shell_stmt | prompt_stmt | prompt_capture_stmt ;
 run_stmt        = "run" REF [ args_tail ] ;
 prompt_stmt     = "prompt" quoted_or_multiline_string ;
 prompt_capture_stmt = IDENT "=" "prompt" quoted_or_multiline_string ;
@@ -97,7 +100,7 @@ shell_stmt      = command_line ;
 ## Parse and Runtime Semantics
 
 1. **Config block:** The opening line must be exactly `config {` (with optional trailing whitespace). At most one config block per file.
-2. **ensure:** Accepts an optional argument tail after the REF; it is forwarded as-is to the shell (e.g. `ensure check_branch "$1"`).
+2. **ensure:** Accepts an optional argument tail after the REF; it is forwarded as-is to the shell (e.g. `ensure check_branch "$1"`). With `recover`, the step becomes a retry loop: run the condition; on failure run the recover body; repeat until the condition passes. Recover is either a single statement (`ensure dep recover run install_deps`) or a block of `;`-separated statements (`ensure dep recover { run a; run b; }`).
 3. **Rules:** May use forwarded positional parameters as shell args (`$1`, `$2`, `"$@"`) without special declaration. Only `ensure` and shell commands are allowed inside a rule; `run` is not allowed (use `ensure` to call another rule or move the call to a workflow).
 4. **run:** Inside a workflow, `run` must target a workflow reference (`foo` or `alias.foo`), not an arbitrary shell command. Optional args after the REF are forwarded to the workflow (e.g. `run deploy "$env"`).
 5. **Functions:** Top-level `function` blocks define writable shell functions. They are transpiled to namespaced implementations; the original name remains callable via a shim that forwards to the namespaced wrapper.
@@ -132,4 +135,4 @@ Rules:
 3. **Rules:** Each rule is emitted as `<module>::rule::<name>::impl` (the implementation) and `<module>::rule::<name>` (a wrapper that calls `jaiph::run_step ... jaiph::execute_readonly` with the impl). When config is present, the wrapper is invoked inside a metadata scope that sets the config env vars for the duration of the step.
 4. **Workflows:** Each workflow is emitted as `<module>::workflow::<name>::impl` and `<module>::workflow::<name>`, with the wrapper using `jaiph::run_step` and the same metadata-scoping behavior as rules.
 5. **Functions:** Each top-level function is emitted as `<module>::function::<name>::impl`, `<module>::function::<name>` (wrapper using `jaiph::run_step_passthrough`), and a shim `<name>` that forwards to the namespaced wrapper so the original name remains callable.
-6. Conditional steps (`if ! ensure X; then ... fi` and `if ! <shell>; then ... fi`) are transpiled to explicit Bash control flow using the same transpiled rule/workflow symbols and step types.
+6. Conditional steps (`if ! ensure X; then ... fi` and `if ! <shell>; then ... fi`) are transpiled to explicit Bash control flow using the same transpiled rule/workflow symbols and step types. **ensure … recover:** `ensure REF [args] recover <body>` is transpiled to a **bounded** retry loop: `for _jaiph_retry in $(seq 1 "${JAIPH_ENSURE_MAX_RETRIES:-10}"); do if <rule>(args); then break; fi; <body>; done`, then if the condition still fails, the script exits with status 1. The recover body may be a single statement or a `{ stmt; stmt; ... }` block. Max retries default to 10 and can be overridden via `JAIPH_ENSURE_MAX_RETRIES`.

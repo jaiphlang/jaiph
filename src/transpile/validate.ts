@@ -1,5 +1,5 @@
 import { jaiphError } from "../errors";
-import type { jaiphModule, RuleRefDef, WorkflowRefDef } from "../types";
+import type { jaiphModule, RuleRefDef, WorkflowRefDef, WorkflowStepDef } from "../types";
 
 export interface ValidateContext {
   resolveImportPath: (fromFile: string, importPath: string) => string;
@@ -137,9 +137,44 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
   };
 
   for (const workflow of ast.workflows) {
+    const validateStep = (s: WorkflowStepDef): void => {
+      if (s.type === "ensure") {
+        validateRuleRef(s.ref);
+        if (s.recover) {
+          const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
+          for (const r of steps) validateStep(r);
+        }
+      } else if (s.type === "run") {
+        validateWorkflowRef(s.workflow);
+      } else if (s.type === "if_not_ensure_then_run") {
+        validateRuleRef(s.ensureRef);
+        for (const runStep of s.runWorkflows) {
+          validateWorkflowRef(runStep.workflow);
+        }
+      } else if (s.type === "if_not_ensure_then") {
+        validateRuleRef(s.ensureRef);
+        for (const thenStep of s.thenSteps) {
+          if (thenStep.type === "run") {
+            validateWorkflowRef(thenStep.workflow);
+          }
+        }
+      } else if (s.type === "if_not_shell_then") {
+        for (const thenStep of s.thenSteps) {
+          if (thenStep.type === "run") {
+            validateWorkflowRef(thenStep.workflow);
+          }
+        }
+      } else if (s.type === "if_not_ensure_then_shell") {
+        validateRuleRef(s.ensureRef);
+      }
+    };
     for (const step of workflow.steps) {
       if (step.type === "ensure") {
         validateRuleRef(step.ref);
+        if (step.recover) {
+          const steps = "single" in step.recover ? [step.recover.single] : step.recover.block;
+          for (const r of steps) validateStep(r);
+        }
       } else if (step.type === "run") {
         validateWorkflowRef(step.workflow);
       } else if (step.type === "if_not_ensure_then_run") {

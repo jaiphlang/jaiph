@@ -698,10 +698,8 @@ jaiph use 0.2.0</code></pre>
                     <dd>Defines a reusable writable shell function. Functions can be called from workflows/rules and are
                         tracked as regular Jaiph steps.</dd>
 
-                    <dt><code>ensure ref [args...]</code></dt>
-                    <dd>Executes a rule in a workflow or another rule, optionally forwarding arguments (for example:
-                        <code>ensure my_rule "$1"</code>).
-                    </dd>
+                    <dt><code>ensure ref [args...]</code> · <code>ensure ref recover &lt;stmt&gt;</code> · <code>ensure ref recover { stmt; ... }</code></dt>
+                    <dd>Executes a rule, optionally forwarding arguments (e.g. <code>ensure my_rule "$1"</code>). With <code>recover</code>, the step becomes a <strong>bounded</strong> retry loop: run the rule; on failure run the recover body (one statement or a <code>{ stmt; stmt; ... }</code> block); repeat until the rule passes or max retries is reached, then exit 1. Max retries default to 10; set <code>JAIPH_ENSURE_MAX_RETRIES</code> to override. See <a href="grammar">Grammar</a>.</dd>
 
                     <dt><code>run ref</code></dt>
                     <dd>Executes another workflow from a workflow. <code>run</code> is not allowed inside a rule; use
@@ -789,6 +787,7 @@ jaiph use 0.2.0</code></pre>
             "function",
             "test",
             "ensure",
+            "recover",
             "run",
             "prompt",
             "mock",

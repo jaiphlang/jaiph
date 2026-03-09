@@ -45,6 +45,10 @@ export type WorkflowStepDef =
       type: "ensure";
       ref: RuleRefDef;
       args?: string;
+      /** When set, transpiles to for/seq bounded retry loop (break on success, exit 1 after max). */
+      recover?:
+        | { single: WorkflowStepDef }
+        | { block: WorkflowStepDef[] };
     }
   | {
       type: "run";

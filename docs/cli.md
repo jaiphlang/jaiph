@@ -181,6 +181,7 @@ Imports resolve for both extensions: `import "foo" as x` finds `foo.jh` or `foo.
 - `JAIPH_AGENT_CLAUDE_FLAGS` — extra flags for Claude backend (string, split on whitespace).
 - `JAIPH_RUNS_DIR` — directory for run logs (default: `.jaiph/runs/` under workspace).
 - `JAIPH_DEBUG` — set to `true` to enable bash `set -x` during run.
+- `JAIPH_ENSURE_MAX_RETRIES` — max retries for `ensure ... recover` steps (default: 10). When exceeded, the workflow exits with status 1.
 - `NO_COLOR` — if set, disables colored output (e.g. progress and pass/fail).
 
 **Install and `jaiph use`:**

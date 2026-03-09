@@ -6,36 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## 11. ensure … recover (retry loop)
-
-**Status:** pending
-
-**What:** Add `ensure <condition> recover <body>` syntax. Transpiles to a while loop: run condition; on failure run recover body; repeat until condition passes.
-
-**Syntax:**
-- `ensure <rule_ref>( args ) recover <single_statement>` — one call in recover (e.g. `ensure dep recover run install_deps`).
-- `ensure <rule_ref>( args ) recover { stmt; stmt; ... }` — multiple statements in recover.
-
-**Why:** Retry-until-success is a common pattern (e.g. ensure service up, recover start_service). Single construct is clearer than hand-rolled `if ! ensure …; then …; fi` loops.
-
-**Design choices (decided):**
-- Keyword `recover`, not `--recover` (DSL is keyword-based; keep `--` for CLI only).
-- Recover body: either one statement or one `{ ... }` block.
-
-**Files to change:**
-- `src/parse/workflows.ts` — parse `ensure ... recover ...` and `ensure ... recover { ... }` (multiline).
-- `src/types.ts` — extend ensure step with optional `recover: { single: ... } | { block: ... }`.
-- `src/transpile/emit-workflow.ts` — emit `while ! <condition>; do <recover>; done`.
-- `src/transpile/validate.ts` — validate recover body (allowed: run, shell, ensure, etc. as per workflow steps).
-- docs + e2e tests.
-
-**Acceptance criteria:**
-- `ensure foo recover bar` and `ensure foo recover { a; b; }` parse and transpile to while loop.
-- Recover block allows multiple `;`-separated statements.
-- Existing bare `ensure rule_ref` (no recover) unchanged.
-
----
-
 ## 12. TTY: live elapsed time on last (running) tree line only
 
 **Status:** pending

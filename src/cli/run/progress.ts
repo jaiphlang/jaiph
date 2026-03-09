@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { jaiphModule } from "../../types";
+import { jaiphModule, type WorkflowStepDef } from "../../types";
 import { workflowSymbolForFile } from "../../transpiler";
 
 export type TreeRow = {
@@ -72,9 +72,24 @@ export function collectWorkflowChildren(
     return hits;
   };
   const items: Array<{ label: string; nested?: string; stepFunc?: string }> = [];
-  for (const step of workflow.steps) {
-    if (step.type === "ensure") {
-      const ref = step.ref.value;
+  const stepToItems = (s: WorkflowStepDef): Array<{ label: string; nested?: string; stepFunc?: string }> => {
+    if (s.type === "run") {
+      const wf = s.workflow.value;
+      const stepFunc =
+        symbols && wf.includes(".")
+          ? (() => {
+              const dot = wf.indexOf(".");
+              const alias = wf.slice(0, dot);
+              const name = wf.slice(dot + 1);
+              return `${symbols.get(alias) ?? alias}::workflow::${name}`;
+            })()
+          : currentSymbol
+            ? `${currentSymbol}::workflow::${wf}`
+            : undefined;
+      return [{ label: `workflow ${wf}`, nested: wf, stepFunc }];
+    }
+    if (s.type === "ensure") {
+      const ref = s.ref.value;
       const stepFunc =
         symbols && ref.includes(".")
           ? (() => {
@@ -86,7 +101,31 @@ export function collectWorkflowChildren(
           : currentSymbol
             ? `${currentSymbol}::rule::${ref}`
             : undefined;
-      items.push({ label: `rule ${ref}`, stepFunc });
+      const arr: Array<{ label: string; nested?: string; stepFunc?: string }> = [
+        { label: `rule ${ref}`, stepFunc },
+      ];
+      if (s.recover) {
+        const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
+        for (const r of steps) {
+          arr.push(...stepToItems(r));
+        }
+      }
+      return arr;
+    }
+    if (s.type === "prompt") {
+      return [{ label: "prompt prompt", stepFunc: "jaiph::prompt" }];
+    }
+    if (s.type === "shell") {
+      return collectFunctionCalls(s.command).map((fnName) => ({
+        label: `function ${fnName}`,
+        stepFunc: currentSymbol ? `${currentSymbol}::function::${fnName}` : undefined,
+      }));
+    }
+    return [];
+  };
+  for (const step of workflow.steps) {
+    if (step.type === "ensure") {
+      items.push(...stepToItems(step));
       continue;
     }
     if (step.type === "run") {

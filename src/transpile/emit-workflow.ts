@@ -1,5 +1,5 @@
 import { jaiphError } from "../errors";
-import type { jaiphModule, RuleRefDef, WorkflowRefDef } from "../types";
+import type { jaiphModule, RuleRefDef, WorkflowStepDef, WorkflowRefDef } from "../types";
 
 /** If args look like key=value key=value..., return ordered param keys for tree display; else null. */
 function parseParamKeysFromArgs(args: string): string[] | null {
@@ -331,7 +331,86 @@ export function emitWorkflow(
     out.push("");
   }
 
+/** Max retries for ensure ... recover before failing. Overridable via JAIPH_ENSURE_MAX_RETRIES. */
+const DEFAULT_ENSURE_MAX_RETRIES = 10;
+
+function emitEnsureRecoverLoop(
+  out: string[],
+  indent: string,
+  transpiledRef: string,
+  args: string,
+  recoverSteps: WorkflowStepDef[],
+  emitRecoverStep: (s: WorkflowStepDef, indent: string) => void,
+): void {
+  const retriesDefault = String(DEFAULT_ENSURE_MAX_RETRIES);
+  out.push(`${indent}for _jaiph_retry in $(seq 1 "\${JAIPH_ENSURE_MAX_RETRIES:-${retriesDefault}}"); do`);
+  out.push(`${indent}  if ${transpiledRef}${args}; then`);
+  out.push(`${indent}    break`);
+  out.push(`${indent}  fi`);
+  for (const r of recoverSteps) {
+    emitRecoverStep(r, indent + "  ");
+  }
+  out.push(`${indent}done`);
+  out.push(`${indent}if ! ${transpiledRef}${args}; then`);
+  out.push(`${indent}  echo "jaiph: ensure condition did not pass after \${JAIPH_ENSURE_MAX_RETRIES:-${retriesDefault}} retries" >&2`);
+  out.push(`${indent}  exit 1`);
+  out.push(`${indent}fi`);
+}
+
   for (const workflow of ast.workflows) {
+    const emitRecoverStep = (recoverStep: WorkflowStepDef, indent: string): void => {
+      if (recoverStep.type === "run") {
+        const args = recoverStep.args ? ` ${recoverStep.args}` : "";
+        const paramKeys = recoverStep.args ? parseParamKeysFromArgs(recoverStep.args) : null;
+        if (paramKeys != null && paramKeys.length > 0) {
+          out.push(`${indent}export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
+        }
+        out.push(`${indent}${transpileWorkflowRef(recoverStep.workflow, workflowSymbol, importedWorkflowSymbols)}${args}`);
+        return;
+      }
+      if (recoverStep.type === "ensure") {
+        const tr = transpileRuleRef(recoverStep.ref, workflowSymbol, importedWorkflowSymbols);
+        const a = recoverStep.args ? ` ${recoverStep.args}` : "";
+        if (recoverStep.recover) {
+          const steps =
+            "single" in recoverStep.recover ? [recoverStep.recover.single] : recoverStep.recover.block;
+          emitEnsureRecoverLoop(out, indent, tr, a, steps, emitRecoverStep);
+        } else {
+          out.push(`${indent}${tr}${a}`);
+        }
+        return;
+      }
+      if (recoverStep.type === "prompt") {
+        let promptText: string;
+        try {
+          promptText = parsePromptText(recoverStep.raw);
+          validatePromptTextSafety(promptText);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "invalid prompt literal";
+          throw jaiphError(ast.filePath, recoverStep.loc.line, recoverStep.loc.col, "E_PARSE", message);
+        }
+        const delimiter = promptDelimiter(promptText, recoverStep.loc.line);
+        if (recoverStep.captureName) {
+          out.push(`${indent}${recoverStep.captureName}=$(jaiph::prompt_capture "$@" <<${delimiter}`);
+          for (const line of promptText.split("\n")) {
+            out.push(line);
+          }
+          out.push(delimiter);
+          out.push(")");
+        } else {
+          out.push(`${indent}jaiph::prompt "$@" <<${delimiter}`);
+          for (const line of promptText.split("\n")) {
+            out.push(line);
+          }
+          out.push(delimiter);
+        }
+        return;
+      }
+      if (recoverStep.type === "shell") {
+        out.push(`${indent}${recoverStep.command}`);
+      }
+    };
+
     for (const comment of workflow.comments) {
       out.push(comment);
     }
@@ -349,7 +428,13 @@ export function emitWorkflow(
           if (paramKeys != null && paramKeys.length > 0) {
             out.push(`  export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
           }
-          out.push(`  ${transpiledRef}${args}`);
+          if (step.recover) {
+            const recoverSteps =
+              "single" in step.recover ? [step.recover.single] : step.recover.block;
+            emitEnsureRecoverLoop(out, "  ", transpiledRef, args, recoverSteps, emitRecoverStep);
+          } else {
+            out.push(`  ${transpiledRef}${args}`);
+          }
           continue;
         }
         if (step.type === "run") {

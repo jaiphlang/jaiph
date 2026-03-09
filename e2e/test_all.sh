@@ -15,6 +15,7 @@ TEST_SCRIPTS=(
   "e2e/tests/45_mock_workflow_rule_function.sh"
   "e2e/tests/50_cli_and_parse_guards.sh"
   "e2e/tests/60_ensure_conditionals.sh"
+  "e2e/tests/61_ensure_recover.sh"
   "e2e/tests/65_fail_then_retry_pass.sh"
   "e2e/tests/70_run_artifacts.sh"
   "e2e/tests/80_cli_behavior.sh"

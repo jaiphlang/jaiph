@@ -192,7 +192,7 @@ See [cli.md](cli.md) for command syntax, examples, and supported environment var
   Defines a reusable writable shell function. Functions can be called from workflows/rules and are tracked as regular Jaiph steps.
 
 - `ensure ref [args...]`  
-  Executes a rule in a workflow or another rule, optionally forwarding arguments (for example: `ensure my_rule "$1"`).
+  Executes a rule in a workflow or another rule, optionally forwarding arguments (for example: `ensure my_rule "$1"`). Optional: `ensure ref recover <stmt>` or `ensure ref recover { stmt; stmt; }` for a bounded retry loop (run rule; on failure run recover body; repeat until success or `JAIPH_ENSURE_MAX_RETRIES` exceeded, then exit 1; default max 10).
 
 - `run ref [args...]`  
   Executes another workflow from a workflow. You can pass arguments (e.g. `run update_docs "$1"`). `run` is not allowed inside a rule; use `ensure` to call another rule or call the workflow from a workflow.
