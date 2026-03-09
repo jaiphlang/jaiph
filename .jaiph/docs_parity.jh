@@ -2,101 +2,59 @@
 
 rule docs_files_present {
   test "$#" -gt 0
-  EXPECTED_DOC_FILES=("$@")
+  local expected_doc_files=("$@")
 
-  for file in "${EXPECTED_DOC_FILES[@]}"; do
+  for file in "${expected_doc_files[@]}"; do
     test -f "$file"
   done
 }
 
 function changed_files() {
   {
+    git diff --name-only --cached
     git diff --name-only
     git ls-files --others --exclude-standard
   } | sort -u
 }
 
-rule only_expected_docs_changed_after_prompt {
-  test "$#" -eq 2
-  EXPECTED_DOC_FILES="$1"
-  BEFORE_CHANGED_FILES="$2"
-  AFTER_CHANGED_FILES="$(changed_files)"
+rule worktree_is_clean {
+  local current_changed_files
+  current_changed_files="$(changed_files)"
 
-  NEW_CHANGED_FILES="$(
-    comm -13 \
-      <(printf '%s\n' "$BEFORE_CHANGED_FILES") \
-      <(printf '%s\n' "$AFTER_CHANGED_FILES") || true
-  )"
-
-  if [ -z "$NEW_CHANGED_FILES" ]; then
-    exit 0
+  if [ -n "$current_changed_files" ]; then
+    echo "Refusing to run docs parity workflow on a dirty worktree."
+    echo "Please commit, stash, or discard these files first:"
+    echo "$current_changed_files"
+    exit 1
   fi
+}
+
+function is_allowed_file() {
+  test "$#" -eq 2
+  local allowed_to_change_files="$1"
+  local file="$2"
+  [[ $'\n'"$allowed_to_change_files"$'\n' == *$'\n'"$file"$'\n'* ]]
+}
+
+rule only_expected_docs_changed_after_prompt {
+  test "$#" -eq 1
+  local allowed_to_change_files="$1"
+  local after_changed_files="$(changed_files)"
 
   while IFS= read -r changed_file; do
     [ -z "$changed_file" ] && continue
 
-    if [[ $'\n'"$EXPECTED_DOC_FILES"$'\n' == *$'\n'"$changed_file"$'\n'* ]]; then
+    if is_allowed_file "$allowed_to_change_files" "$changed_file"; then
       continue
     fi
 
     echo "Unexpected file changed by docs prompt: $changed_file"
     exit 1
-  done <<< "$NEW_CHANGED_FILES"
+  done <<< "$after_changed_files"
 }
 
-rule tests_pass {
-  npm test
-}
-
-rule e2e_tests_pass {
-  npm run test:e2e
-}
-
-workflow default {
-  EXPECTED_DOC_FILES=(
-    "README.md"
-    "CHANGELOG.md"
-    "docs/index.html"
-    "docs/getting-started.md"
-    "docs/cli.md"
-    "docs/configuration.md"
-    "docs/install"
-    "docs/jaiph-skill.md"
-    "docs/grammar.md"
-    "docs/testing.md"
-  )
-
-  ensure tests_pass
-  ensure e2e_tests_pass
-  ensure docs_files_present "${EXPECTED_DOC_FILES[@]}"
-
-  BEFORE_CHANGED_FILES="$(changed_files)"
-
-  cp README.md docs/getting-started.md
-  perl -pi -e 's{docs/logo\.png}{logo.png}g' docs/getting-started.md
-  perl -pi -e 's{\]\(docs/([a-z.-]+\.md)\)}{]($1)}g' docs/getting-started.md
-
+workflow changelog {
   prompt "
-    Ensure implementation/docs parity for this repository.
-
-    If behavior, command syntax, runtime semantics, or installation details
-    changed, update relevant files so they remain accurate and consistent:
-    ${EXPECTED_DOC_FILES[@]}
-
-    If there is a new docs/*.md file, add it to the EXPECTED_DOC_FILES array in
-    this workflow file and follow the same rules as for existing files.
-    
-    Keep examples executable and aligned with current CLI behavior.
-
-    For docs markdown pages, ensure each page has a top navigation block
-    immediately after its H1 with links to jaiph.org, and to documentation pages
-    in docs/ directory. Use relative links to configuration.md, cli.md, not 
-    repository URLs or local filesystem paths. Don't include non-markdown files
-    in the navigation block. Links in markdown files to markdown files should
-    end with .md ('configuration.md'). Existing links in index.html should not
-    end with .md ('configuration'). Agent skill should always point to:
-    https://jaiph.org/jaiph-skill.md (always with .md suffix).
-
     Ensure there is a CHANGELOG.md file with a list of all features that are
     supported by the current version. It should be in the following format:
     
@@ -111,14 +69,101 @@ workflow default {
     in package.json and use git tags to find the previous version.
     Don't duplicate features from previous versions.
 
-    Before finishing:
-    - run npm test
-    - run npm run test:e2e
-    - if either fails, fix and retry until both pass
+    Typically, every commit delivering a new feature should have a corresponding
+    entry in the CHANGELOG.md file. But this is not a strict rule, you need to
+    use your best judgment to determine if a commit should have a corresponding
+    entry in the CHANGELOG.md file.
   "
+}
 
-  EXPECTED_DOC_FILES_TEXT="$(printf '%s\n' "${EXPECTED_DOC_FILES[@]}")"
-  ensure only_expected_docs_changed_after_prompt "$EXPECTED_DOC_FILES_TEXT" "$BEFORE_CHANGED_FILES"
-  ensure tests_pass
-  ensure e2e_tests_pass
+workflow docs_page {
+  local file="$1"
+
+  prompt "
+    Double check the content of $file, which describes a given concept of the
+    language, runtime or a set of features:
+    1. Check if it has approachable structure with overview, describing high
+       level goals and concepts.
+    2. Jaiph source code is the single source of truth for the language. Verify
+       if the content is consistent with the source code and if it covers all
+       relevant features and concepts.
+    3. Add missing information, fix inconsistencies, errors, warnings,
+       suggestions, improvements and other issues.
+    4. Keep examples (if present) executable and aligned with current behavior.
+    5. Ensure the content is approachable and understandable by a human reader.
+       It should be written in a way that is easy to understand and follow.
+       Avoid too many emojis and AI-like language. Keep it simple, concise and
+       clear.
+  "
+}
+
+workflow docs_overview {
+  local all_docs_files="$(
+    printf '%s\n' "$@"
+  )"
+
+  prompt "
+    Read all $all_docs_files, they contain all the documentation for the 
+    project. Don't read the code. Please update docs in the following way:
+    1. Ensure they are consistent with each other.
+    2. Ensure they are organized in a logical way. If needed, add new files,
+       merge existing files, or split them into smaller files, or move
+       the content between files.
+    3. Ensure they are interconnected and form a coherent whole.
+    4. For docs markdown pages, ensure each page has a top navigation block
+       immediately after its H1 with links to jaiph.org, and to documentation pages
+       in docs/ directory. Use relative links to configuration.md, cli.md, not 
+       repository URLs or local filesystem paths. Don't include non-markdown files
+       in the navigation block. Links in markdown files to markdown files should
+       end with .md ('configuration.md'). Existing links in index.html should not
+       end with .md ('configuration'). Agent skill should always point to:
+       https://jaiph.org/jaiph-skill.md (always with .md suffix).
+    5. Ensure README.md follows best practices for README files, contains the
+       project description, features, installation instructions, usage examples,
+       contributing guidelines, and other relevant information.
+    6. Ensure docs/index.html is consistent with README.md and other docs files.
+    7. Ensure docs/index.html and README.md have links to getting-started.md
+       page of the documentation, and the agent skill URL
+       (https://jaiph.org/jaiph-skill.md).
+    8. Knowing the whole documentation, ensure the agent skill is up to date
+       and coherent with the documentation. It should be a minimal workflow set
+       that supports safe feature delivery, preflight checks, implementation
+       workflow, verification workflow, and a default entrypoint that
+       orchestrates the above.
+  "
+}
+
+workflow default {
+  ensure worktree_is_clean
+
+  local allowed_to_change_files=(
+    "README.md"
+    "CHANGELOG.md"
+    "docs/index.html"
+  )
+
+  local docs_md_files=()
+
+  for f in docs/*.md; do
+    allowed_to_change_files+=("$f")
+    docs_md_files+=("$f")
+  done
+
+  ensure docs_files_present "${allowed_to_change_files[@]}"
+
+  # Check each docs page for consistency and updates
+  for f in "${docs_md_files[@]}"; do
+    run docs_page "$f"
+  done
+
+  # Ensure changelog is up to date
+  run changelog
+
+  # Reorganize docs files to improve consistency and readability,
+  # improve README.md and index.html.
+  run docs_overview "${docs_md_files[@]}"
+
+  # Ensure only expected docs files were changed
+  local allowed_to_change_files_text="$(printf '%s\n' "${allowed_to_change_files[@]}")"
+  ensure only_expected_docs_changed_after_prompt "$allowed_to_change_files_text"
 }
