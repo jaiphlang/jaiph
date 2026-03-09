@@ -707,7 +707,7 @@ jaiph use 0.2.0</code></pre>
                     </dd>
 
                     <dt>Run tree and parameters</dt>
-                    <dd>During <code>jaiph run</code>, the progress tree shows each step. For <code>workflow</code>, <code>prompt</code>, and <code>function</code> steps called with arguments, the argument <strong>values</strong> are shown inline in gray after the step name (comma-separated in parentheses; no parameter names or internal refs). Values are truncated at 32 characters. See <a href="cli">CLI reference</a>.</dd>
+                    <dd>During <code>jaiph run</code>, the progress tree shows each step. In TTY mode, a single bottom line <code>  RUNNING workflow &lt;name&gt; (X.Xs)</code> is updated in place (e.g. every second) and removed when the run finishes; the tree itself is identical to non-TTY (no per-line live timers). For <code>workflow</code>, <code>prompt</code>, and <code>function</code> steps called with arguments, the argument <strong>values</strong> are shown inline in gray after the step name (comma-separated in parentheses; no parameter names or internal refs). Values are truncated at 32 characters. See <a href="cli">CLI reference</a>.</dd>
 
                     <dt><code>if ! ensure ref; then run ref; fi</code> · <code>if ! &lt;shell&gt;; then ... fi</code></dt>
                     <dd>Conditional workflow steps: run one or more steps only when a rule fails or a shell condition is false. Then-branch can contain <code>run</code>, <code>prompt</code>, and shell commands.</dd>

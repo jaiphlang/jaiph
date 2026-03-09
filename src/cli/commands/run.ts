@@ -30,6 +30,7 @@ import {
 import {
   styleKeywordLabel,
   formatElapsedDuration,
+  formatRunningBottomLine,
 } from "../run/progress";
 
 export async function runWorkflow(rest: string[]): Promise<number> {
@@ -153,6 +154,15 @@ function formatParamsForDisplay(params: Array<[string, string]>): string {
         ? colorize(formatParamsForDisplay(runArgs.map((a) => ["", a] as [string, string])), "dim")
         : "";
     process.stdout.write(`${styleKeywordLabel(rootLabel)}${rootParamsSuffix}\n`);
+    const isTTY = process.stdout.isTTY;
+    let runningInterval: ReturnType<typeof setInterval> | undefined;
+    if (isTTY) {
+      process.stdout.write("\n" + formatRunningBottomLine("default", 0));
+      runningInterval = setInterval(() => {
+        const elapsedSec = (Date.now() - startedAt) / 1000;
+        process.stdout.write("\r" + formatRunningBottomLine("default", elapsedSec) + "\u001b[K");
+      }, 1000);
+    }
     const runtimeEnv = { ...process.env, JAIPH_WORKSPACE: workspaceRoot } as Record<string, string | undefined>;
     if (process.env.JAIPH_AGENT_MODEL !== undefined) {
       runtimeEnv.JAIPH_AGENT_MODEL_LOCKED = "1";
@@ -261,7 +271,14 @@ function formatParamsForDisplay(params: Array<[string, string]>): string {
           const indent = "  · ".repeat(depth);
           const label = formatStartLine(indent, event.kind, event.name, event.params);
           stepIndentById.set(eventId, indent);
-          process.stdout.write(`${label}\n`);
+          if (isTTY && runningInterval !== undefined) {
+            process.stdout.write("\r\u001b[K\u001b[1A\r\u001b[K");
+          }
+          process.stdout.write(`${label}\n\n`);
+          if (isTTY && runningInterval !== undefined) {
+            const elapsedSec = (Date.now() - startedAt) / 1000;
+            process.stdout.write(formatRunningBottomLine("default", elapsedSec));
+          }
           runtimeStack.push(eventId);
           return;
         }
@@ -269,7 +286,14 @@ function formatParamsForDisplay(params: Array<[string, string]>): string {
         if (!(event.kind === "workflow" && event.name === "default" && eventId === rootStepId)) {
           const indent = (stepIndentById.get(eventId) ?? "  · ");
           const completedLine = formatCompletedLine(indent, event.status ?? 1, elapsedSec);
-          process.stdout.write(`${completedLine}\n`);
+          if (isTTY && runningInterval !== undefined) {
+            process.stdout.write("\r\u001b[K\u001b[1A\r\u001b[K");
+          }
+          process.stdout.write(`${completedLine}\n\n`);
+          if (isTTY && runningInterval !== undefined) {
+            const runningElapsedSec = (Date.now() - startedAt) / 1000;
+            process.stdout.write(formatRunningBottomLine("default", runningElapsedSec));
+          }
           stepIndentById.delete(eventId);
         }
         removeLastMatching(runtimeStack, eventId);
@@ -332,6 +356,12 @@ function formatParamsForDisplay(params: Array<[string, string]>): string {
     const runtimeDebugEnabled = runtimeEnv.JAIPH_DEBUG === "true";
     const runtimeErrorPrinted = hasFatalRuntimeStderr(capturedStderr, runtimeDebugEnabled);
     const resolvedStatus = childExit.status !== 0 || runtimeErrorPrinted ? 1 : 0;
+
+    if (runningInterval !== undefined) {
+      clearInterval(runningInterval);
+      runningInterval = undefined;
+      process.stdout.write("\r\u001b[K");
+    }
 
     const palette = colorPalette();
     if (resolvedStatus === 0) {

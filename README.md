@@ -139,8 +139,8 @@ Tip: add `.jaiph/runs/` to your `.gitignore`.
 ### Run reporting and logs
 
 - During `jaiph run`, progress rendering is event-driven.
-  - TTY: one live running step line + committed step completion lines.
-  - Non-TTY: one completion line per finished step.
+  - **TTY:** The progress tree is identical to non-TTY: each task line shows icon and final time when the step completes (e.g. `✓ 0s`, `▸ prompt (Donald)` then on completion `✓ 2s`). No per-step live elapsed on tree rows. A single **bottom line** shows `  RUNNING workflow <name> (X.Xs)` (RUNNING yellow, "workflow" bold, workflow name default, time dim) and is the only line updated in place (e.g. every second). When the run completes, that line is removed.
+  - **Non-TTY:** One completion line per finished step; no RUNNING line, no in-place updates.
 - For parameterized steps (`workflow`, `prompt`, `function`), the tree shows passed argument values inline in gray (comma-separated values in parentheses; no labels; values truncated to 32 chars).
 - Each run writes `.jaiph/runs/<timestamp>-<id>/run_summary.jsonl`.
 - Step `.out` / `.err` files are created only when the step produced output (empty log files are skipped).

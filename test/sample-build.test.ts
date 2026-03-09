@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import { build, transpileTestFile, walkTestFiles } from "../src/transpiler";
 import { parsejaiph } from "../src/parser";
 import { buildRunTreeRows } from "../src/cli";
+import { formatRunningBottomLine } from "../src/cli/run/progress";
 import { parseStepEvent } from "../src/cli/run/events";
 
 test("build transpiles .jh into strict bash with retry flow", () => {
@@ -1370,6 +1371,15 @@ test("parseStepEvent returns empty params when payload has no params", () => {
   const event = parseStepEvent(line);
   assert.ok(event);
   assert.equal(event?.params?.length, 0);
+});
+
+test("formatRunningBottomLine produces TTY bottom line with RUNNING, workflow name, and elapsed time", () => {
+  const line = formatRunningBottomLine("default", 2.6);
+  assert.ok(line.includes("RUNNING"), "contains RUNNING");
+  assert.ok(line.includes("workflow"), "contains workflow");
+  assert.ok(line.includes("default"), "contains workflow name");
+  assert.match(line, /\(\d+\.\ds\)/, "contains (X.Xs) time");
+  assert.match(line, /^  /, "starts with two spaces");
 });
 
 test("jaiph run tree shows workflow params inline when run has key=value args", () => {
