@@ -36,6 +36,35 @@ The first `##` task in the file is always the current task.
 
 ---
 
+## 12. TTY: live elapsed time on last (running) tree line only
+
+**Status:** pending
+
+**What:** In the progress tree (TTY only), update **only the last line** — the row for the currently running step. That line shows the running indicator (▸) and a live elapsed time (e.g. `▸ 7s`), both in yellow, with the time ticking (e.g. every second). Do not redraw the whole tree: overwrite the last line in place. When the step completes, print the final elapsed time on that line, then the "last line" becomes the next step's row and we start counting and updating only that new last line. In non-TTY, do not print any of this (no live tree, no in-place updates).
+
+**Example:** Before running step:
+```
+workflow default (Donald)
+  ▸ rule name_was_provided (Donald)
+  ✓ 0s
+  ▸ prompt (Donald)
+```
+While `prompt` runs we update only the last line in place so it becomes e.g. `  ▸ prompt (Donald)  ▸ 7s` (▸ and `7s` yellow, ticking). When prompt finishes we show final time on that line, then the next step becomes the new last line and we tick that one.
+
+**Why:** Clear feedback during long-running steps without redrawing the whole tree; non-TTY stays unchanged.
+
+**Files to change:**
+- `src/cli/run/progress.ts` — helpers to render the single "running" line with elapsed seconds (▸ + time, yellow); ensure we can redraw just that line (e.g. carriage return + same line).
+- `src/cli/commands/run.ts` — when a step starts (TTY): print tree up to and including the new running row (no time yet or 0s); start a timer (e.g. 1s); on tick, overwrite only the last line with updated elapsed; when step ends, write final time on that line, then next step becomes last line and repeat. Non-TTY: no tree printing / no timer.
+
+**Acceptance criteria:**
+- TTY: only the current running row is updated in place; ▸ and elapsed (e.g. `7s`) are yellow and count up ~1 Hz.
+- On step completion, that line shows final time; the next step's row becomes the single updated line.
+- Whole tree is not redrawn on each tick — only the last line is overwritten.
+- Non-TTY: no live tree and no in-place updates (current behavior unchanged).
+
+---
+
 ## 9. Support Claude CLI as prompt backend
 
 **Status:** pending
