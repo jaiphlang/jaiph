@@ -140,6 +140,7 @@ Tip: add `.jaiph/runs/` to your `.gitignore`.
 ### Run reporting and logs
 
 - During `jaiph run`, progress is event-driven: one live step line plus completed steps (TTY), or one line per finished step (non-TTY).
+- Parameterized steps (`workflow`, `prompt`, `function`) show passed argument values inline in the tree (gray, comma-separated values in parentheses; no parameter names; values truncated to 32 characters). See [CLI](cli.md) for details.
 - Each run creates a run directory under the logs dir (default `.jaiph/runs/`) named `<timestamp>-<id>`, containing `run_summary.jsonl`.
 - Step `.out` and `.err` files are written only when the step produced output (empty files are not created).
 

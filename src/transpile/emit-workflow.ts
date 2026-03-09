@@ -1,6 +1,16 @@
 import { jaiphError } from "../errors";
 import type { jaiphModule, RuleRefDef, WorkflowRefDef } from "../types";
 
+/** If args look like key=value key=value..., return ordered param keys for tree display; else null. */
+function parseParamKeysFromArgs(args: string): string[] | null {
+  const trimmed = args.trim();
+  if (trimmed.length === 0) return null;
+  const keyRegex = /\b([a-zA-Z_][a-zA-Z0-9_]*)=/g;
+  const matches = [...trimmed.matchAll(keyRegex)];
+  if (matches.length === 0) return null;
+  return matches.map((m) => m[1]);
+}
+
 function transpileRuleRef(
   ref: RuleRefDef,
   workflowSymbol: string,
@@ -335,11 +345,19 @@ export function emitWorkflow(
         if (step.type === "ensure") {
           const transpiledRef = transpileRuleRef(step.ref, workflowSymbol, importedWorkflowSymbols);
           const args = step.args ? ` ${step.args}` : "";
+          const paramKeys = step.args ? parseParamKeysFromArgs(step.args) : null;
+          if (paramKeys != null && paramKeys.length > 0) {
+            out.push(`  export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
+          }
           out.push(`  ${transpiledRef}${args}`);
           continue;
         }
         if (step.type === "run") {
           const args = step.args ? ` ${step.args}` : "";
+          const paramKeys = step.args ? parseParamKeysFromArgs(step.args) : null;
+          if (paramKeys != null && paramKeys.length > 0) {
+            out.push(`  export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
+          }
           out.push(`  ${transpileWorkflowRef(step.workflow, workflowSymbol, importedWorkflowSymbols)}${args}`);
           continue;
         }
@@ -379,6 +397,10 @@ export function emitWorkflow(
           );
           for (const wf of step.runWorkflows) {
             const args = wf.args ? ` ${wf.args}` : "";
+            const paramKeys = wf.args ? parseParamKeysFromArgs(wf.args) : null;
+            if (paramKeys != null && paramKeys.length > 0) {
+              out.push(`    export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
+            }
             out.push(`    ${transpileWorkflowRef(wf.workflow, workflowSymbol, importedWorkflowSymbols)}${args}`);
           }
           out.push("  fi");
@@ -391,6 +413,10 @@ export function emitWorkflow(
           for (const thenStep of step.thenSteps) {
             if (thenStep.type === "run") {
               const args = thenStep.args ? ` ${thenStep.args}` : "";
+              const paramKeys = thenStep.args ? parseParamKeysFromArgs(thenStep.args) : null;
+              if (paramKeys != null && paramKeys.length > 0) {
+                out.push(`    export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
+              }
               out.push(`    ${transpileWorkflowRef(thenStep.workflow, workflowSymbol, importedWorkflowSymbols)}${args}`);
               continue;
             }
@@ -432,6 +458,10 @@ export function emitWorkflow(
               out.push(`    ${thenStep.command}`);
             } else {
               const args = thenStep.args ? ` ${thenStep.args}` : "";
+              const paramKeys = thenStep.args ? parseParamKeysFromArgs(thenStep.args) : null;
+              if (paramKeys != null && paramKeys.length > 0) {
+                out.push(`    export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
+              }
               out.push(`    ${transpileWorkflowRef(thenStep.workflow, workflowSymbol, importedWorkflowSymbols)}${args}`);
             }
           }

@@ -1,3 +1,7 @@
+# Unreleased
+
+- **Run tree: step parameters inline** — When `jaiph run` prints the step tree, `workflow`, `prompt`, and `function` steps invoked with arguments show those argument **values** inline in gray after the step name (e.g. `▸ function fib (3)`, `▸ workflow docs_page (docs/cli.md, strict)`). Format: comma-separated values in parentheses; no parameter names or internal refs (e.g. `::impl`) are shown. Values are truncated to 32 characters with `...` when longer. Parameter order is stable for diff-friendly output. Steps without parameters are unchanged.
+
 # 0.2.0
 
 - `config { ... }` block for runtime behavior: `agent.backend` (`"cursor"` | `"claude"`), `agent.trusted_workspace`, and existing env-backed options

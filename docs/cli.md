@@ -89,6 +89,24 @@ If a `.jh` or `.jph` file is executable and has `#!/usr/bin/env jaiph`, you can 
 ./flows/review.jh "review this diff"
 ```
 
+### Run progress and tree output
+
+During `jaiph run`, the CLI renders a live tree of steps: each step appears as a line with a marker (▸ while running, ✓/✗ when done), the step kind (`workflow`, `prompt`, `function`, `rule`), and the step name.
+
+For **parameterized** invocations—when you pass arguments to a workflow, prompt, or function—the tree shows those argument **values** inline in gray immediately after the step name. Format:
+
+- Comma-separated **values** in parentheses (no parameter names or labels; internal refs such as `::impl` are omitted).
+- Values are truncated to 32 visible characters; longer values end with `...`.
+- Order follows the call site so repeated runs are diff-friendly.
+
+Example lines:
+
+- `▸ workflow docs_page (docs/cli.md, strict)`
+- `·   ▸ prompt prompt (greeting)`
+- `·   ▸ function fib (3)`
+
+If no parameters are passed, the line is unchanged (e.g. `▸ workflow default`). Color can be disabled with `NO_COLOR=1`.
+
 ## `jaiph test`
 
 Run tests from native test files (`*.test.jh` / `*.test.jph`) that contain `test "..." { ... }` blocks. Test files can import workflows and use `mock prompt` (or `mock prompt { ... }`) to simulate agent responses without calling the real backend.

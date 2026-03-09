@@ -35,6 +35,8 @@ expected_nested_out=$(printf '%s\n' \
   'running nested_run.jh' \
   '' \
   'workflow default' \
+  '  ▸ workflow default' \
+  '  ✓ <time>' \
   '✓ PASS workflow default (<time>)')
 expected_nested_out="${expected_nested_out%$'\n'}"
 normalized_nested="$(e2e::normalize_output "${nested_out}")"
@@ -120,3 +122,29 @@ if [[ "${unmatched_out}" != *"workflow exited with status"* ]] && [[ "${unmatche
   e2e::fail "unmatched prompt should report workflow failure or expectContain failure"
 fi
 e2e::pass "mock prompt block without else fails when prompt never matched"
+
+e2e::section "Fibonacci workflow: step params show values only (no labels, no impl ref)"
+# When: run fibonacci.jh with n=3
+fib_out="$(jaiph run "${ROOT_DIR}/e2e/fibonacci.jh" 3)"
+# Then: full output matches expected tree (params as values only, normalized time)
+expected_fib_out=$(printf '%s\n' \
+  '' \
+  'running fibonacci.jh' \
+  '' \
+  'workflow default' \
+  '  ▸ rule ensure_is_number' \
+  '  ✓ <time>' \
+  '  ▸ function fib (3)' \
+  '  ·   ▸ function fib (2)' \
+  '  ·   ·   ▸ function fib (1)' \
+  '  ·   ·   ✓ <time>' \
+  '  ·   ·   ▸ function fib (0)' \
+  '  ·   ·   ✓ <time>' \
+  '  ·   ✓ <time>' \
+  '  ·   ▸ function fib (1)' \
+  '  ·   ✓ <time>' \
+  '  ✓ <time>' \
+  '✓ PASS workflow default (<time>)')
+expected_fib_out="${expected_fib_out%$'\n'}"
+normalized_fib="$(e2e::normalize_output "${fib_out}")"
+e2e::assert_equals "${normalized_fib}" "${expected_fib_out}" "fibonacci run output matches expected tree"

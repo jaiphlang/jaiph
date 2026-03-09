@@ -13,6 +13,8 @@ export type StepEvent = {
   seq: number | null;
   depth: number | null;
   run_id: string;
+  /** Ordered list of [key, value] pairs for step parameters (workflow/prompt/function). */
+  params: Array<[string, string]>;
 };
 
 const PREFIX = "__JAIPH_EVENT__ ";
@@ -30,6 +32,15 @@ export function parseStepEvent(line: string): StepEvent | undefined {
     if (typeof parsed.kind !== "string" || typeof parsed.name !== "string" || typeof parsed.func !== "string") {
       return undefined;
     }
+    const paramsRaw = parsed.params;
+    let params: Array<[string, string]> = [];
+    if (Array.isArray(paramsRaw)) {
+      for (const entry of paramsRaw) {
+        if (Array.isArray(entry) && entry.length >= 2 && typeof entry[0] === "string" && typeof entry[1] === "string") {
+          params.push([entry[0], entry[1]]);
+        }
+      }
+    }
     return {
       type: parsed.type,
       func: parsed.func,
@@ -45,6 +56,7 @@ export function parseStepEvent(line: string): StepEvent | undefined {
       seq: typeof parsed.seq === "number" ? parsed.seq : null,
       depth: typeof parsed.depth === "number" ? parsed.depth : null,
       run_id: typeof parsed.run_id === "string" ? parsed.run_id : "",
+      params,
     };
   } catch {
     return undefined;

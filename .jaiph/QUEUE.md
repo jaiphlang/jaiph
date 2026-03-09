@@ -6,39 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## 11. Show step parameters inline in tree output
-
-**Status:** pending
-
-**What:** When runtime tree output includes parameterized invocations, render passed parameters in gray immediately after step labels for `workflow`, `prompt`, and `function` nodes.
-
-**Why:** Current tree output hides invocation context, so it is hard to distinguish repeated steps (for example multiple `workflow docs_page` runs) and debug argument flow.
-
-**Expected rendering (example intent):**
-- `▸ workflow docs_page (path="docs/cli.md", mode="strict")`
-- `·   ▸ prompt prompt (topic="configuration")`
-- `·   ▸ function changed_files (base="main")`
-
-**Formatting rules:**
-- Parameter segment is printed right after the node name, in gray.
-- Format as comma-separated `key=value` pairs inside parentheses.
-- Truncate each rendered parameter value to max 32 visible chars; append `...` when truncated.
-- Preserve stable parameter order (parser/runtime order) so repeated runs are diff-friendly.
-- If no parameters are passed, keep current output unchanged.
-
-**Files to change:**
-- `src/cli/commands/run.ts` (or tree renderer path) — include parameter suffix in displayed labels with ANSI gray styling.
-- runtime/event payload source for step metadata (where function/workflow/prompt args are emitted) — ensure parameter map/list is available to renderer.
-- tests for tree rendering with/without parameters and truncation edge cases.
-
-**Acceptance criteria:**
-- In tree output, `workflow`, `prompt`, and `function` nodes show passed parameters inline in gray.
-- Each parameter value is capped at 32 chars in display output, with clear truncation marker.
-- Existing tree output remains unchanged for nodes without parameters.
-- Snapshot/unit tests cover ANSI output and non-color-safe fallback behavior (if applicable).
-
----
-
 ## 10. Shorten CI failure feedback and avoid hidden prompt handoff
 
 **Status:** pending

@@ -77,12 +77,39 @@ export async function runWorkflow(rest: string[]): Promise<number> {
             : "\u001b[31m";
       return `${prefix}${text}\u001b[0m`;
     };
-    const formatStartLine = (indent: string, kind: string, name: string): string => {
+const MAX_PARAM_VALUE_DISPLAY = 32;
+
+/** True if the param value is an internal symbol (impl ref, execute_readonly) and should not be shown. */
+function isInternalParamValue(v: string): boolean {
+  return v.endsWith("::impl") || v === "jaiph::execute_readonly";
+}
+
+function formatParamsForDisplay(params: Array<[string, string]>): string {
+  const values = params
+    .map(([, v]) => v)
+    .filter((v) => !isInternalParamValue(v));
+  if (values.length === 0) return "";
+  const parts = values.map((v) => {
+    const visible =
+      v.length > MAX_PARAM_VALUE_DISPLAY ? `${v.slice(0, MAX_PARAM_VALUE_DISPLAY)}...` : v;
+    const needsQuotes = /[\s,]/.test(visible) || visible.includes('"');
+    const escaped = visible.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    return needsQuotes ? `"${escaped}"` : visible;
+  });
+  return ` (${parts.join(", ")})`;
+}
+
+    const formatStartLine = (indent: string, kind: string, name: string, params?: Array<[string, string]>): string => {
       const prefix = indent.slice(0, -2);
       const marker = colorize("▸", "dim");
       const kindLabel = colorize(kind, "bold");
       const dimPrefix = colorize(prefix, "dim");
-      return `${dimPrefix}${marker} ${kindLabel} ${name}`;
+      const namePart = `${kindLabel} ${name}`;
+      const paramSuffix =
+        params != null && params.length > 0 && (kind === "workflow" || kind === "prompt" || kind === "function")
+          ? colorize(formatParamsForDisplay(params), "dim")
+          : "";
+      return `${dimPrefix}${marker} ${namePart}${paramSuffix}`;
     };
     const formatCompletedLine = (indent: string, status: number, elapsedSec: number): string => {
       const prefix = indent.slice(0, -2);
@@ -179,6 +206,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     const runtimeStack: string[] = [];
     const legacyStack: string[] = [];
     let legacyCounter = 0;
+    let rootStepId: string | null = null;
     const removeLastMatching = (stack: string[], id: string): void => {
       const idx = stack.lastIndexOf(id);
       if (idx === -1) return;
@@ -206,20 +234,21 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       if (event) {
         const eventId = resolveEventId(event.type, event.id, event.func);
         if (event.type === "STEP_START") {
-          if (event.kind === "workflow" && event.name === "default") {
+          if (event.kind === "workflow" && event.name === "default" && runtimeStack.length === 0) {
+            rootStepId = eventId;
             runtimeStack.push(eventId);
             return;
           }
           const depth = Math.max(1, event.depth ?? runtimeStack.length);
           const indent = "  · ".repeat(depth);
-          const label = formatStartLine(indent, event.kind, event.name);
+          const label = formatStartLine(indent, event.kind, event.name, event.params);
           stepIndentById.set(eventId, indent);
           process.stdout.write(`${label}\n`);
           runtimeStack.push(eventId);
           return;
         }
         const elapsedSec = Math.max(0, Math.floor((event.elapsed_ms ?? 0) / 1000));
-        if (!(event.kind === "workflow" && event.name === "default")) {
+        if (!(event.kind === "workflow" && event.name === "default" && eventId === rootStepId)) {
           const indent = (stepIndentById.get(eventId) ?? "  · ");
           const completedLine = formatCompletedLine(indent, event.status ?? 1, elapsedSec);
           process.stdout.write(`${completedLine}\n`);

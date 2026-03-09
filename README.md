@@ -141,6 +141,7 @@ Tip: add `.jaiph/runs/` to your `.gitignore`.
 - During `jaiph run`, progress rendering is event-driven.
   - TTY: one live running step line + committed step completion lines.
   - Non-TTY: one completion line per finished step.
+- For parameterized steps (`workflow`, `prompt`, `function`), the tree shows passed argument values inline in gray (comma-separated values in parentheses; no labels; values truncated to 32 chars).
 - Each run writes `.jaiph/runs/<timestamp>-<id>/run_summary.jsonl`.
 - Step `.out` / `.err` files are created only when the step produced output (empty log files are skipped).
 

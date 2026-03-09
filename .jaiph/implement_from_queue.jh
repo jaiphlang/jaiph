@@ -1,7 +1,9 @@
 #!/usr/bin/env jaiph
 
-# Picks the first pending task from .jaiph/QUEUE.md, implements it, then removes it from the queue.
-# Usage: ./implement_from_queue.jh
+#
+# Picks the first pending task from .jaiph/QUEUE.md, implements it,
+# then removes it from the queue.
+#
 
 import "./docs_parity.jh" as docs
 import "./ensure_ci_passes.jh" as ci
@@ -73,8 +75,6 @@ workflow default {
 
   run implement_task "$task"
   run ci.ensure_ci_passes
-
-  run docs.default
-
+  run docs.update_from_task "$task"
   run remove_completed_task "$task_header"
 }
