@@ -24,4 +24,5 @@ fi
 
 export JAIPH_REPO_URL="${REPO_ROOT}"
 echo "Installing from local source: ${JAIPH_REPO_URL}"
-exec "${SCRIPT_DIR}/install"
+# Pass repo path as first arg so install uses it even if env is lost; install treats $1 as local path when it is a directory with package.json
+exec "${SCRIPT_DIR}/install" "${REPO_ROOT}"
