@@ -193,6 +193,10 @@
             color: var(--muted);
         }
 
+        .jaiph-run .run-params {
+            color: var(--muted);
+        }
+
         .code-block-wrap {
             position: relative;
         }
@@ -425,8 +429,7 @@
                     prompts with strict checks.
                 </p>
                 <pre><code class="language-bash">curl -fsSL https://jaiph.org/install | bash</code></pre>
-                <p class="small">The installer will install Jaiph to <strong>~/.local/bin</strong>. Current stable
-                    version is <strong>0.2.0</strong>. Jaiph is licensed under <a href="https://www.apache.org/licenses/LICENSE-2.0">Apache 2.0 license</a>.</p>
+                <p class="small">The installer will install the version <strong>0.2.0</strong> of Jaiph to <strong>~/.local/bin</strong>. Check out the <a href="https://github.com/jaiphlang/jaiph/blob/nightly/CHANGELOG.md">CHANGELOG</a> to see what's new in the <strong>nightly</strong> branch and use <code>jaiph use nightly</code> to switch.</p>
                 <p>
                     <a href="https://jaiph.org/getting-started" target="_blank" rel="noopener noreferrer"
                         class="button">Docs</a>
@@ -488,7 +491,7 @@ running say_hello.jh
 <span class="run-keyword">workflow</span> default
   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> name_was_provided
   <span class="run-pass">✓</span> <span class="run-time">0s</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> prompt
+  <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> prompt <span class="run-params">(greeting)</span>
   <span class="run-pass">✓</span> <span class="run-time">9s</span>
   <span class="run-marker">▸</span> <span class="run-keyword">function</span> format_text
   <span class="run-pass">✓</span> <span class="run-time">0s</span>
@@ -704,6 +707,9 @@ jaiph use 0.2.0</code></pre>
                     <dd>Executes another workflow from a workflow. <code>run</code> is not allowed inside a rule; use
                         <code>ensure</code> to call another rule or move the call to a workflow.
                     </dd>
+
+                    <dt>Run tree and parameters</dt>
+                    <dd>During <code>jaiph run</code>, the progress tree shows each step. For <code>workflow</code>, <code>prompt</code>, and <code>function</code> steps called with arguments, the argument <strong>values</strong> are shown inline in gray after the step name (comma-separated in parentheses; no parameter names or internal refs). Values are truncated at 32 characters. See <a href="cli">CLI reference</a>.</dd>
 
                     <dt><code>if ! ensure ref; then run ref; fi</code> · <code>if ! &lt;shell&gt;; then ... fi</code></dt>
                     <dd>Conditional workflow steps: run one or more steps only when a rule fails or a shell condition is false. Then-branch can contain <code>run</code>, <code>prompt</code>, and shell commands.</dd>

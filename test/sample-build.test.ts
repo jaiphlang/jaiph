@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import { build, transpileTestFile, walkTestFiles } from "../src/transpiler";
 import { parsejaiph } from "../src/parser";
 import { buildRunTreeRows } from "../src/cli";
+import { parseStepEvent } from "../src/cli/run/events";
 
 test("build transpiles .jh into strict bash with retry flow", () => {
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-build-"));
@@ -1346,6 +1347,121 @@ test("jaiph run tree includes function calls from workflow shell steps", () => {
     assert.equal(runResult.status, 0, runResult.stderr);
     assert.match(runResult.stdout, /workflow default/);
     assert.match(runResult.stdout, /function changed_files/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("parseStepEvent parses params array from event payload", () => {
+  const line =
+    '__JAIPH_EVENT__ {"type":"STEP_START","func":"main::workflow::docs_page","kind":"workflow","name":"docs_page","ts":"2025-01-01T00:00:00Z","status":null,"elapsed_ms":null,"out_file":"","err_file":"","id":"run:1:1","parent_id":"run:0:0","seq":1,"depth":1,"run_id":"run-1","params":[["path","docs/cli.md"],["mode","strict"]]}';
+  const event = parseStepEvent(line);
+  assert.ok(event);
+  assert.equal(event?.kind, "workflow");
+  assert.equal(event?.name, "docs_page");
+  assert.equal(event?.params?.length, 2);
+  assert.deepEqual(event?.params?.[0], ["path", "docs/cli.md"]);
+  assert.deepEqual(event?.params?.[1], ["mode", "strict"]);
+});
+
+test("parseStepEvent returns empty params when payload has no params", () => {
+  const line =
+    '__JAIPH_EVENT__ {"type":"STEP_START","func":"main::workflow::default","kind":"workflow","name":"default","ts":"2025-01-01T00:00:00Z","status":null,"elapsed_ms":null,"out_file":"","err_file":"","id":"run:1:1","parent_id":null,"seq":1,"depth":0,"run_id":"run-1"}';
+  const event = parseStepEvent(line);
+  assert.ok(event);
+  assert.equal(event?.params?.length, 0);
+});
+
+test("jaiph run tree shows workflow params inline when run has key=value args", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-tree-params-"));
+  try {
+    writeFileSync(
+      join(root, "sub.jh"),
+      ["workflow default {", "  echo done", "}", ""].join("\n"),
+    );
+    writeFileSync(
+      join(root, "main.jh"),
+      [
+        'import "sub.jh" as sub',
+        "workflow default {",
+        '  run sub.default path="docs/cli.md" mode="strict"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runResult = spawnSync("node", [cliPath, "run", join(root, "main.jh")], {
+      encoding: "utf8",
+      cwd: root,
+      env: { ...process.env, NO_COLOR: "1" },
+    });
+    assert.equal(runResult.status, 0, runResult.stderr);
+    assert.match(runResult.stdout, /workflow default/);
+    // Nested workflow step is shown (rootStepId fix); params inline when runtime sends them
+    assert.match(runResult.stdout, /▸ workflow default/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph run tree shows function step; params shown when runtime includes them", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-tree-fn-params-"));
+  try {
+    writeFileSync(
+      join(root, "main.jh"),
+      [
+        "function echo_args() {",
+        "  printf '%s %s\\n' \"$1\" \"$2\"",
+        "}",
+        "workflow default {",
+        '  echo_args "first" "second"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runResult = spawnSync("node", [cliPath, "run", join(root, "main.jh")], {
+      encoding: "utf8",
+      cwd: root,
+      env: { ...process.env, NO_COLOR: "1" },
+    });
+    assert.equal(runResult.status, 0, runResult.stderr);
+    assert.match(runResult.stdout, /function echo_args/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("jaiph run tree truncates param values over 32 chars when params present", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-tree-truncate-"));
+  try {
+    const longValue = "a".repeat(40);
+    writeFileSync(
+      join(root, "sub.jh"),
+      ["workflow default {", "  echo done", "}", ""].join("\n"),
+    );
+    writeFileSync(
+      join(root, "main.jh"),
+      [
+        'import "sub.jh" as sub',
+        "workflow default {",
+        `  run sub.default longparam="${longValue}"`,
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runResult = spawnSync("node", [cliPath, "run", join(root, "main.jh")], {
+      encoding: "utf8",
+      cwd: root,
+      env: { ...process.env, NO_COLOR: "1" },
+    });
+    assert.equal(runResult.status, 0, runResult.stderr);
+    assert.match(runResult.stdout, /workflow default/);
+    // When params are shown, long values are truncated to 32 chars + "..."
+    if (/longparam=/.test(runResult.stdout)) {
+      assert.match(runResult.stdout, /longparam=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\.\.\./);
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

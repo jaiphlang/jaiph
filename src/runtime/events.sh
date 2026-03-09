@@ -47,6 +47,42 @@ jaiph::step_identity() {
   printf "step|%s" "$func_name"
 }
 
+# Build JSON array of [key, value] pairs for step params. Uses JAIPH_STEP_PARAM_KEYS (comma-separated)
+# and positional args "$@" as values when set; each arg is expected to be "key=value" and we strip
+# the key prefix to get the display value. When JAIPH_STEP_PARAM_KEYS is not set, uses arg1, arg2, ...
+# for "$@" as positional param names.
+jaiph::step_params_json() {
+  local keys="${JAIPH_STEP_PARAM_KEYS:-}"
+  local args=("$@")
+  local result="["
+  local i
+  if [[ -n "$keys" ]]; then
+    local old_ifs="$IFS"
+    IFS=',' read -r -a keyarr <<< "$keys"
+    IFS="$old_ifs"
+    for ((i = 0; i < ${#keyarr[@]}; i++)); do
+      local key="${keyarr[i]}"
+      key="$(jaiph::json_escape "$key")"
+      local arg="${args[i]:-}"
+      # Strip "key=" prefix so value may contain =
+      local val="${arg#${keyarr[i]}=}"
+      val="$(jaiph::json_escape "$val")"
+      if [[ $i -gt 0 ]]; then result+=","; fi
+      result+="[\"$key\",\"$val\"]"
+    done
+  else
+    for ((i = 0; i < ${#args[@]}; i++)); do
+      local key="arg$((i + 1))"
+      local val="${args[i]:-}"
+      val="$(jaiph::json_escape "$val")"
+      if [[ $i -gt 0 ]]; then result+=","; fi
+      result+="[\"$key\",\"$val\"]"
+    done
+  fi
+  result+="]"
+  printf "%s" "$result"
+}
+
 jaiph::emit_step_event() {
   local event_type="$1"
   local func_name="$2"
@@ -59,6 +95,7 @@ jaiph::emit_step_event() {
   local seq="${9:-}"
   local depth="${10:-}"
   local run_id="${11:-${JAIPH_RUN_ID:-}}"
+  local params_json="${12:-}"
   local timestamp kind name payload marker_fd parent_json had_xtrace
   had_xtrace=0
   case "$-" in
@@ -76,21 +113,40 @@ jaiph::emit_step_event() {
   if [[ -n "$parent_id" ]]; then
     parent_json="\"$(jaiph::json_escape "$parent_id")\""
   fi
-  payload="$(printf '{"type":"%s","func":"%s","kind":"%s","name":"%s","ts":"%s","status":%s,"elapsed_ms":%s,"out_file":"%s","err_file":"%s","id":"%s","parent_id":%s,"seq":%s,"depth":%s,"run_id":"%s"}' \
-    "$(jaiph::json_escape "$event_type")" \
-    "$(jaiph::json_escape "$func_name")" \
-    "$(jaiph::json_escape "$kind")" \
-    "$(jaiph::json_escape "$name")" \
-    "$(jaiph::json_escape "$timestamp")" \
-    "${status:-null}" \
-    "${elapsed_ms:-null}" \
-    "$(jaiph::json_escape "$out_file")" \
-    "$(jaiph::json_escape "$err_file")" \
-    "$(jaiph::json_escape "$step_id")" \
-    "$parent_json" \
-    "${seq:-null}" \
-    "${depth:-null}" \
-    "$(jaiph::json_escape "$run_id")")"
+  if [[ -n "$params_json" ]]; then
+    payload="$(printf '{"type":"%s","func":"%s","kind":"%s","name":"%s","ts":"%s","status":%s,"elapsed_ms":%s,"out_file":"%s","err_file":"%s","id":"%s","parent_id":%s,"seq":%s,"depth":%s,"run_id":"%s","params":%s}' \
+      "$(jaiph::json_escape "$event_type")" \
+      "$(jaiph::json_escape "$func_name")" \
+      "$(jaiph::json_escape "$kind")" \
+      "$(jaiph::json_escape "$name")" \
+      "$(jaiph::json_escape "$timestamp")" \
+      "${status:-null}" \
+      "${elapsed_ms:-null}" \
+      "$(jaiph::json_escape "$out_file")" \
+      "$(jaiph::json_escape "$err_file")" \
+      "$(jaiph::json_escape "$step_id")" \
+      "$parent_json" \
+      "${seq:-null}" \
+      "${depth:-null}" \
+      "$(jaiph::json_escape "$run_id")" \
+      "$params_json")"
+  else
+    payload="$(printf '{"type":"%s","func":"%s","kind":"%s","name":"%s","ts":"%s","status":%s,"elapsed_ms":%s,"out_file":"%s","err_file":"%s","id":"%s","parent_id":%s,"seq":%s,"depth":%s,"run_id":"%s"}' \
+      "$(jaiph::json_escape "$event_type")" \
+      "$(jaiph::json_escape "$func_name")" \
+      "$(jaiph::json_escape "$kind")" \
+      "$(jaiph::json_escape "$name")" \
+      "$(jaiph::json_escape "$timestamp")" \
+      "${status:-null}" \
+      "${elapsed_ms:-null}" \
+      "$(jaiph::json_escape "$out_file")" \
+      "$(jaiph::json_escape "$err_file")" \
+      "$(jaiph::json_escape "$step_id")" \
+      "$parent_json" \
+      "${seq:-null}" \
+      "${depth:-null}" \
+      "$(jaiph::json_escape "$run_id")")"
+  fi
   marker_fd="$(jaiph::event_fd)"
   printf "__JAIPH_EVENT__ %s\n" "$payload" >&"$marker_fd"
   if [[ "$event_type" == "STEP_END" && -n "${JAIPH_RUN_SUMMARY_FILE:-}" ]]; then

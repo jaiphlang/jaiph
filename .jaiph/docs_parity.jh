@@ -53,6 +53,16 @@ rule only_expected_docs_changed_after_prompt {
   done <<< "$after_changed_files"
 }
 
+workflow update_from_task {
+  prompt "
+    Update relevant docs/*.md files and -- if needed -- README.md 
+    and docs/index.html to reflect the changes made in the task covered in
+    uncommitted changes. Update also the CHANGELOG.md file to reflect the changes
+    made in the task. The task description is:
+    $1
+  "
+}
+
 workflow changelog {
   prompt "
     Ensure there is a CHANGELOG.md file with a list of all features that are
