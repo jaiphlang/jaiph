@@ -1,5 +1,6 @@
 # Unreleased
 
+- **ensure … recover (retry loop)** — `ensure <rule_ref>(args) recover <body>` runs the rule and, on failure, runs the recover body in a **bounded** retry loop until the rule passes or max retries is reached (then exit 1). Recover body: single statement (e.g. `ensure dep recover run install_deps`) or block `ensure ref recover { stmt; stmt; }`. Max retries default to 10; override with `JAIPH_ENSURE_MAX_RETRIES`. Bare `ensure ref` (no recover) unchanged.
 - **Run tree: step parameters inline** — When `jaiph run` prints the step tree, `workflow`, `prompt`, and `function` steps invoked with arguments show those argument **values** inline in gray after the step name (e.g. `▸ function fib (3)`, `▸ workflow docs_page (docs/cli.md, strict)`). Format: comma-separated values in parentheses; no parameter names or internal refs (e.g. `::impl`) are shown. Values are truncated to 32 characters with `...` when longer. Parameter order is stable for diff-friendly output. Steps without parameters are unchanged.
 
 # 0.2.0

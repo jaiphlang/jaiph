@@ -1710,6 +1710,78 @@ test("build accepts ensure inside a rule block", () => {
   }
 });
 
+test("build transpiles ensure ... recover to bounded retry loop", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-ensure-recover-"));
+  const outDir = mkdtempSync(join(tmpdir(), "jaiph-ensure-recover-out-"));
+  try {
+    const filePath = join(root, "entry.jh");
+    writeFileSync(
+      filePath,
+      [
+        "rule dep {",
+        "  test -f ready.txt",
+        "}",
+        "",
+        "workflow install_deps {",
+        "  touch ready.txt",
+        "}",
+        "",
+        "workflow default {",
+        "  ensure dep recover run install_deps",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const results = build(filePath, outDir);
+    assert.equal(results.length, 1);
+    const bash = results[0].bash;
+    assert.match(bash, /for _jaiph_retry in \$\(seq 1/);
+    assert.match(bash, /JAIPH_ENSURE_MAX_RETRIES/);
+    assert.match(bash, /entry::rule::dep/);
+    assert.match(bash, /entry::workflow::install_deps/);
+    assert.match(bash, /\bdone\b/);
+    assert.match(bash, /ensure condition did not pass after/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outDir, { recursive: true, force: true });
+  }
+});
+
+test("build transpiles ensure ... recover { stmt; stmt; } to bounded retry loop with block", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-ensure-recover-block-"));
+  const outDir = mkdtempSync(join(tmpdir(), "jaiph-ensure-recover-block-out-"));
+  try {
+    const filePath = join(root, "entry.jh");
+    writeFileSync(
+      filePath,
+      [
+        "rule ready {",
+        "  test -f ready.txt",
+        "}",
+        "",
+        "workflow default {",
+        "  ensure ready recover { echo fixing; touch ready.txt; }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const results = build(filePath, outDir);
+    assert.equal(results.length, 1);
+    const bash = results[0].bash;
+    assert.match(bash, /for _jaiph_retry in \$\(seq 1/);
+    assert.match(bash, /entry::rule::ready/);
+    assert.match(bash, /echo fixing/);
+    assert.match(bash, /touch ready\.txt/);
+    assert.match(bash, /\bdone\b/);
+    assert.match(bash, /ensure condition did not pass after/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outDir, { recursive: true, force: true });
+  }
+});
+
 test("build emits prompt capture as name=$(jaiph::prompt_capture ...) for name = prompt \"...\"", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-prompt-capture-build-"));
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-prompt-capture-out-"));

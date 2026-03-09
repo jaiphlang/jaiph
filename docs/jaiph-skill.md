@@ -43,7 +43,7 @@ Prefer composable modules over one monolithic file.
 
 - **Imports:** `import "path.jh" as alias` or `import "path.jph" as alias`. Path is relative to the importing file; extensions `.jh` and `.jph` are supported (`.jh` preferred).
 - **Definitions:** `rule name { ... }`, `workflow name { ... }`, `function name() { ... }` (parentheses optional).
-- **Steps:** `ensure ref [args...]`, `run ref [args...]`. `ref` is a rule or workflow name, or `alias.name` for an imported rule/workflow. Optional args are passed through to the shell (ensure) or to the workflow (run).
+- **Steps:** `ensure ref [args...]`, optionally `ensure ref [args] recover <body>`. For ensure, `ref` is a rule name or `alias.rule_name`; args are passed to the shell. With `recover`, the step is a **bounded retry loop**: run the rule; on failure run the recover body (single statement or `recover { stmt; stmt; ... }`); repeat until the rule passes or max retries (default 10, override via `JAIPH_ENSURE_MAX_RETRIES`) is exceeded, then exit 1. `run ref [args...]` runs a workflow; args are passed to the workflow.
 - **Prompts:** `prompt "..."` — quoted string, may be multiline. Variable expansion (e.g. `$1`) is allowed; backticks and `$(...)` are not. See [Grammar](grammar.md) for the `name = prompt "..."` capture form.
 - **Conditionals:** Allowed forms:
   - `if ! ensure some_rule; then` followed by `run some_workflow` or shell commands, then `fi`.
