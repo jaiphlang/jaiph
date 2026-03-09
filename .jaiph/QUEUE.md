@@ -6,33 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## 12. TTY: live total elapsed on single bottom line only
-
-**Status:** pending
-
-**What:** In TTY mode, the progress tree is printed exactly as in non-TTY: each task line with icon and final time when done (e.g. `✓ 0s`, `▸ prompt (Donald)` then on completion `✓ 2s`). No per-step live counters, no in-place updates on tree lines. Add **one extra line at the bottom** in the same format as PASS: `  RUNNING workflow <name> (X.Xs)` showing which workflow is running and total elapsed. That line is the only thing updated in place (e.g. every second). When the run finishes, remove or replace that line (e.g. no more RUNNING line).
-
-**Format of the bottom line:** Same structure as PASS. Two spaces, then:
-- `RUNNING` — yellow
-- ` workflow` — bold (literal word "workflow")
-- ` <name>` — default style (workflow name, e.g. `default`)
-- ` (X.Xs)` — gray/dim; total seconds with one decimal, updating live
-
-Example: `  RUNNING workflow default (2.6s)`. No partial/per-step counters anywhere.
-
-**Why:** Clear total runtime feedback without redrawing the tree or per-line timers; tree stays identical to non-TTY output plus one status line.
-
-**Files to change:**
-- `src/cli/run/progress.ts` — render/update single bottom line `  RUNNING workflow <name> (Xs)` with colors (yellow RUNNING, bold "workflow", default name, dim time); overwrite in place (e.g. carriage return + same line).
-- `src/cli/commands/run.ts` — TTY: print tree as today (tasks + final times only); start a timer; on tick, overwrite only the bottom line with `  RUNNING workflow <name> (elapsed)s`; when run ends, clear or replace that line. Non-TTY: unchanged (no RUNNING line, no timer).
-
-**Acceptance criteria:**
-- TTY: tree lines are identical to non-TTY (task rows + final time when step completes); no live elapsed on any tree row.
-- TTY: one bottom line `  RUNNING workflow <name> (X.Xs)` — RUNNING yellow, "workflow" bold, workflow name default, time gray; updated in place ~1 Hz; only this line is redrawn.
-- When run completes, RUNNING line is removed or replaced; no RUNNING line in non-TTY.
-
----
-
 ## 10. Prompt line in tree: show prompt preview and cap arg length
 
 **Status:** pending

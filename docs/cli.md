@@ -91,7 +91,11 @@ If a `.jh` or `.jph` file is executable and has `#!/usr/bin/env jaiph`, you can 
 
 ### Run progress and tree output
 
-During `jaiph run`, the CLI renders a live tree of steps: each step appears as a line with a marker (▸ while running, ✓/✗ when done), the step kind (`workflow`, `prompt`, `function`, `rule`), and the step name.
+During `jaiph run`, the CLI renders a tree of steps. **Tree output is the same in TTY and non-TTY:** each step appears as a line with a marker (▸ when started, ✓/✗ when done), the step kind (`workflow`, `prompt`, `function`, `rule`), and the step name. Final elapsed time is shown only when a step completes (e.g. `✓ 2s`). There are no per-step live elapsed counters or in-place updates on tree lines.
+
+**TTY only:** One extra line at the bottom, in the same style as the final `PASS` line, shows which workflow is running and total elapsed: `  RUNNING workflow <name> (X.Xs)` — RUNNING in yellow, the word "workflow" in bold, workflow name in default style, time in gray/dim. This line is the **only** line updated in place (e.g. every second). When the run completes, that line is removed or replaced by the final PASS/FAIL line.
+
+**Non-TTY:** No RUNNING line and no in-place updates; only completed step lines are printed.
 
 For **parameterized** invocations—when you pass arguments to a workflow, prompt, or function—the tree shows those argument **values** inline in gray immediately after the step name. Format:
 

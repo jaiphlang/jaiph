@@ -382,6 +382,28 @@ export function styleDim(text: string): string {
   return `\u001b[2m${text}\u001b[0m`;
 }
 
+export function styleYellow(text: string): string {
+  const enabled = process.stdout.isTTY && process.env.NO_COLOR === undefined;
+  if (!enabled) {
+    return text;
+  }
+  return `\u001b[33m${text}\u001b[0m`;
+}
+
+export function styleBold(text: string): string {
+  const enabled = process.stdout.isTTY && process.env.NO_COLOR === undefined;
+  if (!enabled) {
+    return text;
+  }
+  return `\u001b[1m${text}\u001b[0m`;
+}
+
+/** Format the single TTY bottom status line: "  RUNNING workflow <name> (X.Xs)". Only this line is updated in place. */
+export function formatRunningBottomLine(workflowName: string, elapsedSec: number): string {
+  const timeStr = `${elapsedSec.toFixed(1)}s`;
+  return `${styleYellow("▸ RUNNING")}${styleBold(" workflow")} ${workflowName} ${styleDim(`(${timeStr})`)}`;
+}
+
 export function formatElapsedDuration(elapsedMs: number): string {
   if (elapsedMs < 60_000) {
     const seconds = elapsedMs / 1000;
