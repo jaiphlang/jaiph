@@ -6,27 +6,33 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## 10. Shorten CI failure feedback and avoid hidden prompt handoff
+## 11. ensure … recover (retry loop)
 
 **Status:** pending
 
-**What:** Reduce "looks stuck" time in `ensure_ci_passes` by making e2e failure cases deterministic/fast and by clearly signaling when control moved from a failed rule to `prompt` remediation.
+**What:** Add `ensure <condition> recover <body>` syntax. Transpiles to a while loop: run condition; on failure run recover body; repeat until condition passes.
 
-**Why:** Current runs can appear hung for 5-10 minutes because:
-- some e2e paths depend on real backend behavior and can take ~60-90s before failing/passing,
-- after a rule fails, workflow immediately starts prompt remediation, but tree/log focus can still look like the previous rule.
+**Syntax:**
+- `ensure <rule_ref>( args ) recover <single_statement>` — one call in recover (e.g. `ensure dep recover run install_deps`).
+- `ensure <rule_ref>( args ) recover { stmt; stmt; ... }` — multiple statements in recover.
+
+**Why:** Retry-until-success is a common pattern (e.g. ensure service up, recover start_service). Single construct is clearer than hand-rolled `if ! ensure …; then …; fi` loops.
+
+**Design choices (decided):**
+- Keyword `recover`, not `--recover` (DSL is keyword-based; keep `--` for CLI only).
+- Recover body: either one statement or one `{ ... }` block.
 
 **Files to change:**
-- `e2e/tests/40_nested_and_native_tests.sh` — make unmatched-mock case deterministic and fast (no dependency on external backend availability/latency).
-- `src/runtime/steps.sh` + `src/runtime/prompt.sh` — emit explicit handoff markers (e.g. "starting remediation prompt after <rule> failure") and optional heartbeat while waiting on backend output.
-- `src/cli/commands/run.ts` (if needed) — improve progress rendering when next active step is `jaiph::prompt`.
-- docs in `docs/configuration.md` / `docs/cli.md` — document any timeout/heartbeat knobs added.
+- `src/parse/workflows.ts` — parse `ensure ... recover ...` and `ensure ... recover { ... }` (multiline).
+- `src/types.ts` — extend ensure step with optional `recover: { single: ... } | { block: ... }`.
+- `src/transpile/emit-workflow.ts` — emit `while ! <condition>; do <recover>; done`.
+- `src/transpile/validate.ts` — validate recover body (allowed: run, shell, ensure, etc. as per workflow steps).
+- docs + e2e tests.
 
 **Acceptance criteria:**
-- `e2e_tests_pass` failure path finishes quickly and reproducibly on clean machines (no backend-dependent 60s+ wait in unmatched-mock test).
-- When `ensure_ci_passes` transitions from failed rule to prompt remediation, logs make this transition obvious without opening multiple files.
-- During long prompt waits, user sees periodic progress output (or explicit timeout) instead of silent freeze.
-- Full test suite remains green.
+- `ensure foo recover bar` and `ensure foo recover { a; b; }` parse and transpile to while loop.
+- Recover block allows multiple `;`-separated statements.
+- Existing bare `ensure rule_ref` (no recover) unchanged.
 
 ---
 
@@ -93,11 +99,11 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## 5a. Typed `prompt` schema validation with `--returns`
+## 5a. Typed `prompt` schema validation with `returns`
 
 **Status:** pending
 
-**What:** Add `--returns '{ ... }'` syntax on prompt assignment and validate returned JSON against declared fields/types.
+**What:** Add `returns '{ ... }'` syntax on prompt assignment and validate returned JSON against declared fields/types.
 
 **V1 scope constraints:**
 - Schema is flat only (no nested objects)
@@ -105,9 +111,9 @@ The first `##` task in the file is always the current task.
 - Supported field types are only `string`, `number`, `boolean`
 - The expected type is injected at the end of the prompt, then the runtime parses the last line (lines?) to extract json. If something is malformated, the prompt fails.
 
-**Syntax:**
+**Syntax (keyword `returns`, not `--returns` — DSL is keyword-based):**
 ```
-result = prompt "Analyse the diff and classify the change" --returns '{
+result = prompt "Analyse the diff and classify the change" returns '{
   type: string,
   risk: string,
   summary: string
@@ -117,7 +123,7 @@ result = prompt "Analyse the diff and classify the change" --returns '{
 Allow multiline prompt + typed schema in bash style with line continuation:
 ```
 result = prompt "Analyse the diff and classify the change" \
-  --returns '{
+  returns '{
     type: string,
     risk: string,
     summary: string
@@ -125,7 +131,7 @@ result = prompt "Analyse the diff and classify the change" \
 ```
 
 **Files to change:**
-- `src/parse/workflows.ts` (prompt parsing path) — parse `--returns { field: type, ... }` including `\` continuation.
+- `src/parse/workflows.ts` (prompt parsing path) — parse `returns { field: type, ... }` including `\` continuation.
 - `src/transpile/emit-workflow.ts` — emit typed prompt call + schema payload.
 - `src/jaiph_stdlib.sh` — schema-aware prompt helper + JSON validation.
 - parser, transpile, and e2e tests for parse/type/missing-field error classes.
@@ -135,11 +141,10 @@ result = prompt "Analyse the diff and classify the change" \
 - Missing field fails with clear field-specific schema error
 - Invalid JSON fails with parse error
 - Unsupported declared type fails with compile-time schema error
-- Legacy `prompt ... returns { ... }` syntax is a hard error with a migration hint to `--returns`
 - Raw `$result` still contains the original JSON string
 - Error classes are distinct and test-covered: parse error vs schema/type error vs missing-field error
 - Testable with `jaiph test`: mock JSON response that satisfies the schema is accepted and typed fields are available
-- Parser tests cover both single-line and multiline (`\`) `--returns` forms
+- Parser tests cover both single-line and multiline (`\`) `returns` forms
 
 ---
 
