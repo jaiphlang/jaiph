@@ -131,8 +131,8 @@ expected_fib_out=$(printf '%s\n' \
   '' \
   'running fibonacci.jh' \
   '' \
-  'workflow default' \
-  '  ▸ rule ensure_is_number' \
+  'workflow default (3)' \
+  '  ▸ rule ensure_is_number (3)' \
   '  ✓ <time>' \
   '  ▸ function fib (3)' \
   '  ·   ▸ function fib (2)' \
@@ -148,3 +148,64 @@ expected_fib_out=$(printf '%s\n' \
 expected_fib_out="${expected_fib_out%$'\n'}"
 normalized_fib="$(e2e::normalize_output "${fib_out}")"
 e2e::assert_equals "${normalized_fib}" "${expected_fib_out}" "fibonacci run output matches expected tree"
+
+e2e::section "Parametrized workflow, rule, and prompt: params in tree (exact output)"
+# Given: workflow with ensure (rule with arg) and prompt; we mock prompt and assert tree contains params
+cat > "${TEST_DIR}/param_demo.jh" <<'EOF'
+#!/usr/bin/env jaiph
+rule check_arg {
+  [ -n "$1" ]
+}
+workflow default {
+  ensure check_arg "$1"
+  response = prompt "e2e-param-prompt-text"
+  echo "$response"
+}
+EOF
+cat > "${TEST_DIR}/param_demo.test.jh" <<'EOF'
+#!/usr/bin/env jaiph
+import "param_demo.jh" as w
+
+test "parametrized workflow and rule show params in tree; prompt shows value only" {
+  mock prompt "e2e-param-mock-response"
+  response = w.default "Alice"
+  expectContain response "workflow default (Alice)"
+  expectContain response "rule check_arg (Alice)"
+  expectContain response "prompt (" 
+  expectContain response "e2e-param-mock-response"
+}
+EOF
+
+# When: run test
+param_test_out="$(jaiph test "${TEST_DIR}/param_demo.test.jh")"
+
+# Then: test passes and tree had correct param display
+if [[ "${param_test_out}" != *"passed"* ]] && [[ "${param_test_out}" != *"PASS"* ]]; then
+  printf "%s\n" "${param_test_out}" >&2
+  e2e::fail "param_demo.test.jh should pass"
+fi
+e2e::pass "parametrized workflow/rule/prompt show params in tree"
+
+# Exact output: run workflow with args, no prompt (so no agent needed)
+cat > "${TEST_DIR}/param_run_only.jh" <<'EOF'
+#!/usr/bin/env jaiph
+rule need_one {
+  [ -n "$1" ]
+}
+workflow default {
+  ensure need_one "$1"
+  echo "e2e-param-done"
+}
+EOF
+param_run_out="$(jaiph run "${TEST_DIR}/param_run_only.jh" Bob)"
+expected_param_run=$(printf '%s\n' \
+  '' \
+  'running param_run_only.jh' \
+  '' \
+  'workflow default (Bob)' \
+  '  ▸ rule need_one (Bob)' \
+  '  ✓ <time>' \
+  '✓ PASS workflow default (<time>)')
+expected_param_run="${expected_param_run%$'\n'}"
+normalized_param_run="$(e2e::normalize_output "${param_run_out}")"
+e2e::assert_equals "${normalized_param_run}" "${expected_param_run}" "parametrized run output matches expected tree"

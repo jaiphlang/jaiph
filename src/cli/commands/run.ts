@@ -79,15 +79,26 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     };
 const MAX_PARAM_VALUE_DISPLAY = 32;
 
-/** True if the param value is an internal symbol (impl ref, execute_readonly) and should not be shown. */
+/** True if the param value is an internal symbol (impl ref, execute_readonly, prompt_impl) and should not be shown. */
 function isInternalParamValue(v: string): boolean {
-  return v.endsWith("::impl") || v === "jaiph::execute_readonly";
+  return (
+    v.endsWith("::impl") ||
+    v === "jaiph::execute_readonly" ||
+    v === "jaiph::prompt_impl"
+  );
+}
+
+/** If value looks like key=value, return only the value part; otherwise return as-is. */
+function stripKeyPrefix(v: string): string {
+  const match = v.match(/^[a-zA-Z_][a-zA-Z0-9_]*=(.*)$/s);
+  return match ? match[1] : v;
 }
 
 function formatParamsForDisplay(params: Array<[string, string]>): string {
   const values = params
     .map(([, v]) => v)
-    .filter((v) => !isInternalParamValue(v));
+    .filter((v) => !isInternalParamValue(v))
+    .map(stripKeyPrefix);
   if (values.length === 0) return "";
   const parts = values.map((v) => {
     const visible =
@@ -104,11 +115,14 @@ function formatParamsForDisplay(params: Array<[string, string]>): string {
       const marker = colorize("▸", "dim");
       const kindLabel = colorize(kind, "bold");
       const dimPrefix = colorize(prefix, "dim");
-      const namePart = `${kindLabel} ${name}`;
-      const paramSuffix =
-        params != null && params.length > 0 && (kind === "workflow" || kind === "prompt" || kind === "function")
-          ? colorize(formatParamsForDisplay(params), "dim")
-          : "";
+      const namePart = kind === name ? kindLabel : `${kindLabel} ${name}`;
+      const showParams =
+        params != null &&
+        params.length > 0 &&
+        (kind === "workflow" || kind === "prompt" || kind === "function" || kind === "rule");
+      const paramSuffix = showParams
+        ? colorize(formatParamsForDisplay(params), "dim")
+        : "";
       return `${dimPrefix}${marker} ${namePart}${paramSuffix}`;
     };
     const formatCompletedLine = (indent: string, status: number, elapsedSec: number): string => {
@@ -134,7 +148,11 @@ function formatParamsForDisplay(params: Array<[string, string]>): string {
     const startedAt = Date.now();
     const runBanner = `\nrunning ${basename(inputAbs)}\n\n`;
     process.stdout.write(runBanner);
-    process.stdout.write(`${styleKeywordLabel(rootLabel)}\n`);
+    const rootParamsSuffix =
+      runArgs.length > 0
+        ? colorize(formatParamsForDisplay(runArgs.map((a) => ["", a] as [string, string])), "dim")
+        : "";
+    process.stdout.write(`${styleKeywordLabel(rootLabel)}${rootParamsSuffix}\n`);
     const runtimeEnv = { ...process.env, JAIPH_WORKSPACE: workspaceRoot } as Record<string, string | undefined>;
     if (process.env.JAIPH_AGENT_MODEL !== undefined) {
       runtimeEnv.JAIPH_AGENT_MODEL_LOCKED = "1";

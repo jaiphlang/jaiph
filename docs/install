@@ -42,17 +42,25 @@ require_cmd() {
   fi
 }
 
-# When installing from a local path, clone without --depth/--branch to use current branch state.
+# When installing from a local path, use it (from env JAIPH_REPO_URL or from first arg) and copy instead of clone.
 JAIPH_FROM_LOCAL=
-if [ -n "${JAIPH_REPO_URL+x}" ] && [ -d "${JAIPH_REPO_URL}" ]; then
+if [ -n "${JAIPH_REPO_URL+x}" ] && [ -d "${JAIPH_REPO_URL}" ] && [ -f "${JAIPH_REPO_URL}/package.json" ]; then
   JAIPH_FROM_LOCAL=1
-  # Normalize so path has no trailing slash
   JAIPH_REPO_URL="$(cd "${JAIPH_REPO_URL}" && pwd)"
   REPO_URL="${JAIPH_REPO_URL}"
+elif [ -n "${1+x}" ] && [ -d "${1}" ] && [ -f "${1}/package.json" ]; then
+  # First argument is a local repo path (e.g. from install-from-local.sh)
+  JAIPH_FROM_LOCAL=1
+  REPO_URL="$(cd "${1}" && pwd)"
+  JAIPH_REPO_URL="${REPO_URL}"
 fi
 REPO_URL="${REPO_URL:-${JAIPH_REPO_URL:-https://github.com/jaiphlang/jaiph.git}}"
-# Version/ref: first argument, or JAIPH_REPO_REF env, or default tag 0.2.0. Use "nightly" for nightly branch.
-REPO_REF="${1:-${JAIPH_REPO_REF:-0.2.0}}"
+# Version/ref: first argument only when not a local path, or JAIPH_REPO_REF env, or default tag 0.2.0.
+if [ -n "${JAIPH_FROM_LOCAL}" ]; then
+  REPO_REF="${JAIPH_REPO_REF:-0.2.0}"
+else
+  REPO_REF="${1:-${JAIPH_REPO_REF:-0.2.0}}"
+fi
 BIN_DIR="${JAIPH_BIN_DIR:-$HOME/.local/bin}"
 LIB_DIR="${JAIPH_LIB_DIR:-${BIN_DIR}/.jaiph}"
 TARGET="${BIN_DIR}/jaiph"
@@ -76,13 +84,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
-print_step "Cloning ${REPO_URL} (${REPO_REF})..."
 if [ -n "${JAIPH_FROM_LOCAL}" ]; then
-  print_step "Copying local source from ${REPO_URL} (includes uncommitted changes)..."
+  print_step "Using local source at ${REPO_URL}"
+  print_step "Copying (includes uncommitted changes)..."
   cp -R "${REPO_URL}" "${tmp_dir}/src"
   rm -rf "${tmp_dir}/src/.git"
   rm -rf "${tmp_dir}/src/node_modules"
 else
+  print_step "Cloning ${REPO_URL} (${REPO_REF})..."
   git clone --depth 1 --branch "${REPO_REF}" "${REPO_URL}" "${tmp_dir}/src" >/dev/null 2>&1
 fi
 
