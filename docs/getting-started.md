@@ -4,6 +4,8 @@
 
 ---
 
+This page is the main entry point for the documentation. For reference, see [CLI](cli.md), [Configuration](configuration.md), [Grammar](grammar.md), and [Testing](testing.md); for AI agents that generate workflows, see the [Agent Skill](https://jaiph.org/jaiph-skill.md).
+
 **Open Source • Powerful • Friendly**
 
 [![CI](https://github.com/jaiphlang/jaiph/actions/workflows/ci.yml/badge.svg)](https://github.com/jaiphlang/jaiph/actions/workflows/ci.yml)
@@ -15,6 +17,14 @@
 **Jaiph** is a composable scripting language and runtime for defining and orchestrating AI agent workflows.
 
 It combines declarative workflow structure with bash, then compiles to pure shell scripts. That keeps workflows portable and easy to understand while staying compatible with standard shell environments.
+
+**Goals and concepts:**
+
+- **Workflows** — Ordered steps (checks, agent prompts, shell, calls to other workflows) that can change system state.
+- **Rules** — Reusable checks or actions that return a shell exit code; used with `ensure` and in conditionals.
+- **Agent prompts** — `prompt "..."` sends text to a configured agent (e.g. Cursor or Claude CLI); workflows orchestrate when the agent runs.
+- **Composability** — Import other `.jh` modules and call their rules/workflows by alias (e.g. `ensure security.scan_passes`, `run bootstrap.nodejs`).
+- **Shell-native** — Transpiled output is bash; you can mix Jaiph primitives with normal shell commands and variables.
 
 > [!WARNING]
 > Jaiph is still in an early stage. Expect breaking changes.
@@ -70,7 +80,7 @@ workflow update_docs {
 }
 ```
 
-Transpiled output is standard bash and sources the installed global Jaiph runtime stdlib (`$JAIPH_STDLIB`, default `~/.local/bin/jaiph_stdlib.sh`), so workflows remain shell-native.
+Transpiled output is standard bash and sources the installed global Jaiph runtime stdlib (`$JAIPH_STDLIB`, default `~/.local/bin/jaiph_stdlib.sh`), so workflows remain shell-native. A runnable copy of this example lives in `test/fixtures/` (with stub modules `bootstrap_project.jh` and `tools/security.jh`).
 
 ## Getting Started
 
@@ -107,8 +117,7 @@ Installation places both the `jaiph` CLI and the global runtime stdlib (`jaiph_s
 
 Arguments are passed exactly like bash scripts (`$1`, `$2`, `"$@"`).
 
-Entrypoint resolution: executable `.jh` or `.jph` files (with `#!/usr/bin/env jaiph`) run `workflow default`.  
-`jaiph run path/to/file.jh` (or `file.jph`) is also supported and follows the same argument semantics.
+Entrypoint resolution: executable `.jh` or `.jph` files with `#!/usr/bin/env jaiph` run `workflow default`. You can also run `jaiph run path/to/file.jh` (or `file.jph`); arguments are passed the same way.
 
 ### Initialize Jaiph workspace
 
@@ -130,11 +139,9 @@ Tip: add `.jaiph/runs/` to your `.gitignore`.
 
 ### Run reporting and logs
 
-- During `jaiph run`, progress rendering is event-driven.
-  - TTY: one live running step line + committed step completion lines.
-  - Non-TTY: one completion line per finished step.
-- Each run writes `.jaiph/runs/<timestamp>-<id>/run_summary.jsonl`.
-- Step `.out` / `.err` files are created only when the step produced output (empty log files are skipped).
+- During `jaiph run`, progress is event-driven: one live step line plus completed steps (TTY), or one line per finished step (non-TTY).
+- Each run creates a run directory under the logs dir (default `.jaiph/runs/`) named `<timestamp>-<id>`, containing `run_summary.jsonl`.
+- Step `.out` and `.err` files are written only when the step produced output (empty files are not created).
 
 ### Configuration
 
@@ -157,10 +164,10 @@ config {
 
 Important:
 
-- `agent.trusted_workspace` sets Cursor backend trust scope (`--trust`), defaulting to project root.
-- `agent.command` accepts executable + inline args (for example `cursor-agent --force`).
-- `agent.cursor_flags` / `agent.claude_flags` append backend-specific CLI flags (split on whitespace).
-- Environment variables override config values (for example `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_AGENT_CURSOR_FLAGS`, `JAIPH_AGENT_CLAUDE_FLAGS`).
+- `agent.trusted_workspace` sets the Cursor backend trust scope (`--trust`); it defaults to the project root.
+- `agent.command` is the executable (and optional inline args) for the Cursor backend, e.g. `cursor-agent --force`.
+- `agent.cursor_flags` and `agent.claude_flags` append backend-specific CLI flags (split on whitespace).
+- Environment variables override config: `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_AGENT_CURSOR_FLAGS`, `JAIPH_AGENT_CLAUDE_FLAGS`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, etc. See [configuration.md](configuration.md).
 
 ### CLI reference
 
@@ -169,16 +176,16 @@ See [cli.md](cli.md) for command syntax, examples, and supported environment var
 ## Language Primitives
 
 - `config { ... }`  
-  Optional block at the top of the entry workflow file. Sets runtime options (e.g. `agent.backend`, `agent.command`, `agent.trusted_workspace`, `run.logs_dir`). Environment variables override. See [configuration.md](configuration.md).
+  Optional block in the entry workflow file (at the top, optionally after shebang or imports). Sets runtime options (e.g. `agent.backend`, `agent.command`, `agent.trusted_workspace`, `run.logs_dir`). The opening line must be exactly `config {` on its own line. Only one config block per file. Environment variables override. See [configuration.md](configuration.md).
 
 - `import "file.jh" as alias`  
   Imports rules/workflows from another Jaiph module under an alias. Imports are verified at compile time.
 
 - `rule name { ... }`  
-  Defines a reusable check/action that returns a shell exit code. Rules run in a read-only subshell and preserve stdout. Rules can consume positional parameters (`$1`, `$2`, `"$@"`) forwarded by `ensure`.
+  Defines a reusable check or action that returns a shell exit code. Rules run in a read-only subshell (best-effort; full isolation on Linux with `unshare`, child shell elsewhere) and preserve stdout. They can take positional parameters (`$1`, `$2`, `"$@"`) forwarded by `ensure`. Optional: `export rule name { ... }` so the rule can be used when the module is imported.
 
 - `workflow name { ... }`  
-  Defines an orchestration entrypoint made of ordered steps. Workflows can change system state.
+  Defines an orchestration entrypoint made of ordered steps. Workflows can change system state. Optional: `export workflow name { ... }` so the workflow can be run via the module alias.
 
 - `function name() { ... }`  
   Defines a reusable writable shell function. Functions can be called from workflows/rules and are tracked as regular Jaiph steps.
@@ -186,13 +193,16 @@ See [cli.md](cli.md) for command syntax, examples, and supported environment var
 - `ensure ref [args...]`  
   Executes a rule in a workflow or another rule, optionally forwarding arguments (for example: `ensure my_rule "$1"`).
 
-- `run ref`  
-  Executes another workflow from a workflow. `run` is not allowed inside a rule; use `ensure` to call another rule or move the call to a workflow.
+- `run ref [args...]`  
+  Executes another workflow from a workflow. You can pass arguments (e.g. `run update_docs "$1"`). `run` is not allowed inside a rule; use `ensure` to call another rule or call the workflow from a workflow.
 
-- **Conditionals** — `if ! ensure ref; then run ref; fi` or `if ! <shell_condition>; then ... fi` run steps only when a rule fails or a shell condition is false. Then-branch can contain `run`, `prompt`, and shell commands.
+- **Conditionals** — `if ! ensure ref; then ... fi` runs the then-branch when the rule fails. The then-branch may contain `run`, `prompt`, and shell commands. For a pure shell condition, `if ! <shell_condition>; then ... fi` is also supported; in that case the then-branch may contain only `run` and shell commands (no `prompt`).
 
 - `prompt "..."`  
-  Sends prompt text to the configured agent command.
+  Sends the prompt text to the configured agent command. Variable expansion (`$1`, `${VAR}`) is allowed in the string; command substitution (`$(...)`) and backticks are rejected at parse time.
+
+- `name = prompt "..."`  
+  Same as `prompt "..."` but captures the agent’s stdout into the variable `name` for use in later steps.
 
 All Jaiph primitives can be combined with bash code and are interoperable with normal shell scripting.
 

@@ -16,13 +16,21 @@
 
 It combines declarative workflow structure with bash, then compiles to pure shell scripts. That keeps workflows portable and easy to understand while staying compatible with standard shell environments.
 
+**Features:**
+
+- **Workflows** — Ordered steps (checks, agent prompts, shell, calls to other workflows) that can change system state.
+- **Rules** — Reusable checks or actions that return a shell exit code; used with `ensure` and in conditionals.
+- **Agent prompts** — `prompt "..."` sends text to a configured agent (e.g. Cursor or Claude CLI).
+- **Composability** — Import other `.jh` modules and call their rules/workflows by alias.
+- **Shell-native** — Transpiled output is bash; you can mix Jaiph primitives with normal shell commands.
+
 > [!WARNING]
 > Jaiph is still in an early stage. Expect breaking changes.
 
-- Docs (canonical): <https://jaiph.org/>
-- Agent skill: <https://jaiph.org/jaiph-skill.md>
-- Samples: <https://github.com/jaiphlang/jaiph/tree/main/samples>
-- Contribute: <https://github.com/jaiphlang/jaiph/issues>
+- **Documentation:** [Getting started](docs/getting-started.md) · <https://jaiph.org/>
+- **Agent skill (for AI agents):** <https://jaiph.org/jaiph-skill.md>
+- **Samples:** <https://github.com/jaiphlang/jaiph/tree/main/samples>
+- **Contributing:** <https://github.com/jaiphlang/jaiph/issues>
 
 ## Example
 
@@ -198,9 +206,7 @@ Known limitations and gotchas:
 
 ## More Documentation
 
+- [Getting started](docs/getting-started.md) — installation, first workflow, workspace setup
+- [Agent skill](https://jaiph.org/jaiph-skill.md) — guide for AI agents that generate or modify Jaiph workflows
 - Full docs: <https://jaiph.org/>
-- Grammar: [grammar.md](docs/grammar.md)
-- Testing: [testing.md](docs/testing.md)
-- Agent bootstrap skill: <https://jaiph.org/jaiph-skill.md>
-- Configuration: [configuration.md](docs/configuration.md)
-- CLI: [cli.md](docs/cli.md)
+- [CLI reference](docs/cli.md) · [Configuration](docs/configuration.md) · [Grammar](docs/grammar.md) · [Testing](docs/testing.md)

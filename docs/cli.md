@@ -4,15 +4,30 @@
 
 ---
 
-Jaiph provides five core CLI commands plus a file shorthand.
+## Overview
 
-## `jaiph <file.jh>` (shorthand)
+The Jaiph CLI compiles and runs workflow files (`.jh` / `.jph`), runs tests, and manages workspace setup. You can use explicit commands (`jaiph run`, `jaiph test`, etc.) or pass a file path directly when the first argument is a `.jh` or `.test.jh` file.
 
-If the first argument ends in `.jh` or `.jph` and the file exists, Jaiph treats it as `jaiph run <file>`:
+**Commands:** `build` (compile to shell scripts), `run` (compile and execute a workflow), `test` (run test files), `init` (create `.jaiph/` in a directory), `use` (reinstall a version). Global options: `jaiph --help`, `jaiph --version` (or `-h`, `-v`).
+
+---
+
+## `jaiph <file.jh>` and `jaiph <file.test.jh>` (shorthand)
+
+If the first argument is a path to an existing file whose name ends with `.jh` or `.jph`, Jaiph treats it as a workflow and runs it (same as `jaiph run <file>`). If the first argument ends with `.test.jh` or `.test.jph` and the file exists, Jaiph runs that test file (same as `jaiph test <file>`).
+
+Workflow shorthand:
 
 ```bash
 jaiph ./flows/review.jh "review this diff"
 # equivalent to: jaiph run ./flows/review.jh "review this diff"
+```
+
+Test shorthand:
+
+```bash
+jaiph ./e2e/say_hello.test.jh
+# equivalent to: jaiph test ./e2e/say_hello.test.jh
 ```
 
 ## `jaiph build`
@@ -76,26 +91,23 @@ If a `.jh` or `.jph` file is executable and has `#!/usr/bin/env jaiph`, you can 
 
 ## `jaiph test`
 
-Run tests: either native `*.test.jh` test files (with `test "..." { ... }` blocks) or a single workflow file with mocked `prompt` steps.
+Run tests from native test files (`*.test.jh` / `*.test.jph`) that contain `test "..." { ... }` blocks. Test files can import workflows and use `mock prompt` (or `mock prompt { ... }`) to simulate agent responses without calling the real backend.
 
-**Native test files** (recommended):
+**Usage:**
 
-- `jaiph test` — discover and run all `*.test.jh` / `*.test.jph` in the workspace.
+- `jaiph test` — discover and run all `*.test.jh` / `*.test.jph` under the workspace root.
 - `jaiph test <dir>` — run all test files under the given directory.
 - `jaiph test <file.test.jh>` — run a single test file.
 
-Test files declare prompt mocks inline inside each `test "..." { ... }` block (e.g. `mock prompt "response"` or `mock prompt { if $1 contains "..." ; then respond "..." ; fi }`). See [Testing](testing.md) for test block syntax and `expectContain`.
+You must pass a test file (e.g. `say_hello.test.jh`) or a directory. Passing a plain workflow file (e.g. `say_hello.jh`) is not supported; the test file imports the workflow and declares mocks. See [Testing](testing.md) for test block syntax and `expectContain` / `expectEqual`.
 
-**Single workflow with mocks** (legacy):
-
-- `jaiph test <file.jh|file.jph> [args...]` — run the workflow with mocked prompts. Requires a `*.test.jh` file that imports the workflow and declares inline mocks. Does not invoke the real agent.
+Examples:
 
 ```bash
 jaiph test
 jaiph test ./e2e
-jaiph test e2e/workflow.test.jh
-jaiph test e2e/say_hello.jh
-jaiph test .jaiph/main.jh "implement feature X"
+jaiph test e2e/workflow_greeting.test.jh
+jaiph test e2e/say_hello.test.jh
 ```
 
 ## `jaiph init`
@@ -108,7 +120,7 @@ jaiph init [workspace-path]
 
 Creates:
 
-- `.jaiph/bootstrap.jh`
+- `.jaiph/bootstrap.jh` (if it does not exist; otherwise left unchanged)
 - `.jaiph/jaiph-skill.md` (synced from local Jaiph installation)
 
 ## `jaiph use`
@@ -140,23 +152,27 @@ Imports resolve for both extensions: `import "foo" as x` finds `foo.jh` or `foo.
 
 ## Environment variables
 
-Runtime/config override variables:
+**Runtime and config overrides** (for `jaiph run` and workflow execution):
 
-- `JAIPH_STDLIB`
+- `JAIPH_STDLIB` — path to `jaiph_stdlib.sh`.
 - `JAIPH_AGENT_MODEL`
 - `JAIPH_AGENT_COMMAND`
 - `JAIPH_AGENT_BACKEND` — prompt backend: `cursor` (default) or `claude`. Overrides in-file `agent.backend`. See [Configuration](configuration.md).
 - `JAIPH_AGENT_TRUSTED_WORKSPACE` — trusted workspace directory for Cursor backend `--trust`. Defaults to project root.
 - `JAIPH_AGENT_CURSOR_FLAGS` — extra flags for Cursor backend (string, split on whitespace).
 - `JAIPH_AGENT_CLAUDE_FLAGS` — extra flags for Claude backend (string, split on whitespace).
-- `JAIPH_RUNS_DIR`
-- `JAIPH_DEBUG`
-- `JAIPH_SKILL_PATH` — path to skill file used by `jaiph init` when syncing `.jaiph/jaiph-skill.md`
+- `JAIPH_RUNS_DIR` — directory for run logs (default: `.jaiph/runs/` under workspace).
+- `JAIPH_DEBUG` — set to `true` to enable bash `set -x` during run.
+- `NO_COLOR` — if set, disables colored output (e.g. progress and pass/fail).
 
-Install/use variables:
+**Install and `jaiph use`:**
 
-- `JAIPH_REPO_URL`
-- `JAIPH_REPO_REF`
-- `JAIPH_BIN_DIR`
-- `JAIPH_LIB_DIR`
-- `JAIPH_INSTALL_COMMAND` — command run by `jaiph use` to reinstall (default: `curl -fsSL https://jaiph.org/install | bash`)
+- `JAIPH_REPO_URL` — Git repo URL or local path for install script.
+- `JAIPH_REPO_REF` — ref (e.g. branch or tag) used when installing; `jaiph use <version>` sets this to `v<version>` or `main` for nightly.
+- `JAIPH_BIN_DIR` — target bin directory (default: `$HOME/.local/bin`).
+- `JAIPH_LIB_DIR` — target lib directory (default: `$JAIPH_BIN_DIR/.jaiph`).
+- `JAIPH_INSTALL_COMMAND` — command run by `jaiph use` to reinstall (default: `curl -fsSL https://jaiph.org/install | bash`).
+
+**`jaiph init`:**
+
+- `JAIPH_SKILL_PATH` — path to the skill file copied to `.jaiph/jaiph-skill.md` when syncing from the local installation.

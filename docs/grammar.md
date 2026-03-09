@@ -1,20 +1,38 @@
-# Jaiph Grammar (Current Parser)
+# Jaiph Grammar
 
 [jaiph.org](https://jaiph.org) · [Getting started](getting-started.md) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Testing](testing.md) · [Agent Skill](https://jaiph.org/jaiph-skill.md)
 
 ---
 
-This document reflects parser and transpiler behavior in the current codebase (`src/parser.ts`, `src/transpiler.ts`).
+## Overview
+
+This document describes the grammar and semantics of Jaiph source files (`.jh` / `.jph`). It is intended for anyone who needs to write or reason about Jaiph code.
+
+**Scope:**
+
+- **In scope:** Lexical rules, syntax (EBNF), parse-time and runtime semantics, validation, and transpilation behavior for normal modules.
+- **Out of scope:** Test files (`*.test.jh`) have their own grammar and are described in [Testing](testing.md). The CLI and configuration file format are covered in [CLI](cli.md) and [Configuration](configuration.md).
+
+**Source of truth:** The behavior described here is derived from the implementation in `src/parser.ts`, `src/parse/*.ts`, `src/transpiler.ts`, and `src/transpile/*.ts`. When in doubt, the source code is authoritative.
+
+---
 
 ## Lexical Notes
 
-- `IDENT := [A-Za-z_][A-Za-z0-9_]*`
-- `REF := IDENT | IDENT "." IDENT`
-- Comments are full-line comments starting with `#`.
-- Empty or whitespace-only lines are ignored.
-- Input files supported by build/run/import resolution: `.jh` (recommended), `.jph` (supported, deprecated for new use).
+- **Identifiers:** `IDENT := [A-Za-z_][A-Za-z0-9_]*`
+- **References:** `REF := IDENT | IDENT "." IDENT` (e.g. `foo` or `mymod.foo`)
+- **Comments:** Full-line comments starting with `#`. Empty or whitespace-only lines are ignored.
+- **Shebang:** If the first line of the file starts with `#!`, it is ignored by the parser.
+- **Import path:** The path in `import "<path>" as IDENT` must be a quoted string (single or double quotes).
+- **File extensions:** Build, run, and import resolution support `.jh` (recommended) and `.jph` (supported, deprecated for new use).
 
 ## EBNF (Practical Form)
+
+Informal symbols used below:
+
+- `string` — Quoted string (single or double quotes).
+- `args_tail` — Rest of the line after a REF; passed through to the shell as-is (e.g. `"$1"` or `arg1 arg2`).
+- `quoted_or_multiline_string` — A double-quoted string; may span multiple lines. Supports `\$`, `\"`, `\\`, and `\n` escapes. Variable expansion (`$VAR`) is allowed; backticks and `$(...)` are not.
 
 ```ebnf
 file            = { top_level } ;
@@ -37,6 +55,7 @@ workflow_decl   = [ "export" ] "workflow" IDENT "{" { workflow_step } "}" ;
 workflow_step   = ensure_stmt
                 | run_stmt
                 | prompt_stmt
+                | prompt_capture_stmt
                 | if_not_ensure_then_run_stmt
                 | if_not_ensure_then_shell_stmt
                 | if_not_ensure_then_stmt
@@ -45,8 +64,9 @@ workflow_step   = ensure_stmt
                 | comment_line ;
 
 ensure_stmt     = "ensure" REF [ args_tail ] ;
-run_stmt        = "run" REF ;
+run_stmt        = "run" REF [ args_tail ] ;
 prompt_stmt     = "prompt" quoted_or_multiline_string ;
+prompt_capture_stmt = IDENT "=" "prompt" quoted_or_multiline_string ;
 
 if_not_ensure_then_run_stmt
                 = "if" "!" "ensure" REF ";" "then"
@@ -60,7 +80,7 @@ if_not_ensure_then_shell_stmt
 
 if_not_ensure_then_stmt
                 = "if" "!" "ensure" REF ";" "then"
-                  { run_stmt | prompt_stmt | shell_stmt }
+                  { run_stmt | prompt_stmt | prompt_capture_stmt | shell_stmt }
                   "fi" ;
   (* mixed then-branch; used when then contains both run and non-run steps *)
 
@@ -69,46 +89,47 @@ if_not_shell_then_stmt
                   { run_stmt | shell_stmt }
                   "fi" ;
 
-shell_condition   = ? any shell expression, e.g. "test -f .file" ? ;
+shell_condition  = ? any shell expression, e.g. "test -f .file" ? ;
 
 shell_stmt      = command_line ;
 ```
 
-## Important Parse/Runtime Semantics
+## Parse and Runtime Semantics
 
-1. `ensure` accepts argument tail and forwards it as-is (example: `ensure check_branch "$1"`).
-2. Rules can consume forwarded positional parameters as shell args (`$1`, `$2`, `"$@"`) without special declaration syntax.
-3. Top-level `function` blocks define writable shell functions and are namespaced in transpiled output.
-4. Original function names remain callable via generated shims that invoke the namespaced wrapper.
-5. `run` inside a workflow must target a workflow reference (`foo` or `alias.foo`), not an arbitrary shell command.
-6. `run` is not allowed inside a `rule`; use `ensure` to call another rule or move the call to a workflow.
-7. Conditional workflow steps: `if ! ensure REF; then ... fi` is parsed as one of: (a) `if_not_ensure_then_run` when the then-branch contains only `run` steps, (b) `if_not_ensure_then_shell` when only shell commands, (c) `if_not_ensure_then` when mixed. `if ! <shell_condition>; then ... fi` is `if_not_shell_then` and may contain `run` and shell steps.
-8. `prompt` supports multiline quoted text and compiles to `jaiph::prompt ...` with bash-style variable expansion.
-9. `prompt` rejects command substitution (`$(...)` and backticks) with `E_PARSE`; only variable expansion is allowed.
-10. Workflow and rule declarations support optional `export` keyword.
+1. **Config block:** The opening line must be exactly `config {` (with optional trailing whitespace). At most one config block per file.
+2. **ensure:** Accepts an optional argument tail after the REF; it is forwarded as-is to the shell (e.g. `ensure check_branch "$1"`).
+3. **Rules:** May use forwarded positional parameters as shell args (`$1`, `$2`, `"$@"`) without special declaration. Only `ensure` and shell commands are allowed inside a rule; `run` is not allowed (use `ensure` to call another rule or move the call to a workflow).
+4. **run:** Inside a workflow, `run` must target a workflow reference (`foo` or `alias.foo`), not an arbitrary shell command. Optional args after the REF are forwarded to the workflow (e.g. `run deploy "$env"`).
+5. **Functions:** Top-level `function` blocks define writable shell functions. They are transpiled to namespaced implementations; the original name remains callable via a shim that forwards to the namespaced wrapper.
+6. **Conditional steps:** `if ! ensure REF; then ... fi` is parsed as: (a) `if_not_ensure_then_run` when the then-branch contains only `run` steps, (b) `if_not_ensure_then_shell` when only shell commands, (c) `if_not_ensure_then` when mixed (run, prompt, or shell). `if ! <shell_condition>; then ... fi` is `if_not_shell_then` and may contain `run` and shell steps. The then-branch must contain at least one step.
+7. **prompt:** Two forms are supported:
+   - `prompt "<text>"` — Sends the text to the agent; compiles to `jaiph::prompt ...` with bash variable expansion.
+   - `name = prompt "<text>"` — Same, but the agent’s stdout is captured into the variable `name` (compiles to `jaiph::prompt_capture`).
+   - The prompt string may span multiple lines. Only variable expansion is allowed inside the string; backticks and `$(...)` are rejected with `E_PARSE`.
+8. **Export:** Rule and workflow declarations may be prefixed with `export` so they can be referenced from other modules that import this file.
 
 ## Validation Rules
 
-1. At most one `config` block per file; invalid keys or value types yield `E_PARSE` with file location.
-2. Import aliases must be unique within a file.
-3. Import targets must exist on disk.
-4. Local `ensure foo` requires local rule `foo`.
-5. Imported `ensure alias.foo` requires imported rule `foo` in module `alias`.
-6. Local `run bar` requires local workflow `bar`.
-7. Imported `run alias.bar` requires imported workflow `bar` in module `alias`.
+After parsing, the compiler validates references and config. Violations produce the following error codes:
 
-## Transpilation Rules (Current)
+- **E_PARSE:** Invalid syntax, duplicate config block, invalid config key/value, or invalid prompt content (e.g. command substitution in prompt).
+- **E_VALIDATE:** Reference or alias error (unknown rule/workflow, duplicate alias, etc.).
+- **E_IMPORT_NOT_FOUND:** The file resolved from an `import` path does not exist.
 
-1. Build emits module scripts that source the installed global stdlib (`$JAIPH_STDLIB`, default `~/.local/bin/jaiph_stdlib.sh`).
-2. When the module has a `config` block, the generated script exports `JAIPH_AGENT_MODEL`, `JAIPH_AGENT_COMMAND`, `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_AGENT_CURSOR_FLAGS`, `JAIPH_AGENT_CLAUDE_FLAGS`, `JAIPH_RUNS_DIR`, and (if `run.debug` is true) `JAIPH_DEBUG` with in-file values as defaults; environment variables override.
-3. Each rule transpiles into:
-   - `<module>::rule::<name>::impl`
-   - `<module>::rule::<name>` wrapper using `jaiph::run_step ... jaiph::execute_readonly`.
-4. Each workflow transpiles into:
-   - `<module>::workflow::<name>::impl`
-   - `<module>::workflow::<name>` wrapper using `jaiph::run_step`.
-5. Each top-level function transpiles into:
-   - `<module>::function::<name>::impl`
-   - `<module>::function::<name>` wrapper using `jaiph::run_step`
-   - `<name>` shim forwarding to the namespaced wrapper.
-6. `if ! ensure X; then run Y; fi` and other conditional forms remain explicit Bash control flow using transpiled symbols.
+Rules:
+
+1. At most one `config` block per file; duplicate config yields `E_PARSE`.
+2. Config keys must be one of the allowed keys; values must be a quoted string or `true`/`false`. Invalid key or value type yields `E_PARSE`.
+3. Import aliases must be unique within a file (`E_VALIDATE`).
+4. Import targets must exist on disk (`E_IMPORT_NOT_FOUND`).
+5. Local `ensure foo` requires a local rule `foo`. Imported `ensure alias.foo` requires an imported rule `foo` in the module bound to `alias`.
+6. Local `run bar` requires a local workflow `bar`. Imported `run alias.bar` requires an imported workflow `bar` in the module bound to `alias`.
+
+## Transpilation
+
+1. Build emits Bash scripts that source the installed stdlib (`$JAIPH_STDLIB`, default `~/.local/bin/jaiph_stdlib.sh`). The script checks for API compatibility before use.
+2. When the module has a `config` block, the generated script exports `JAIPH_AGENT_MODEL`, `JAIPH_AGENT_COMMAND`, `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_AGENT_CURSOR_FLAGS`, `JAIPH_AGENT_CLAUDE_FLAGS`, `JAIPH_RUNS_DIR`, and (if `run.debug` is set to `true`) `JAIPH_DEBUG`, using the in-file values as defaults; environment variables override these.
+3. **Rules:** Each rule is emitted as `<module>::rule::<name>::impl` (the implementation) and `<module>::rule::<name>` (a wrapper that calls `jaiph::run_step ... jaiph::execute_readonly` with the impl). When config is present, the wrapper is invoked inside a metadata scope that sets the config env vars for the duration of the step.
+4. **Workflows:** Each workflow is emitted as `<module>::workflow::<name>::impl` and `<module>::workflow::<name>`, with the wrapper using `jaiph::run_step` and the same metadata-scoping behavior as rules.
+5. **Functions:** Each top-level function is emitted as `<module>::function::<name>::impl`, `<module>::function::<name>` (wrapper using `jaiph::run_step_passthrough`), and a shim `<name>` that forwards to the namespaced wrapper so the original name remains callable.
+6. Conditional steps (`if ! ensure X; then ... fi` and `if ! <shell>; then ... fi`) are transpiled to explicit Bash control flow using the same transpiled rule/workflow symbols and step types.

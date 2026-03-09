@@ -5,7 +5,7 @@
 - Trusted workspace and metadata scoping; config docs
 - Run progress driven by runtime event graph (not only CLI); normalized e2e output
 - First-class mocking in tests: mock workflows, rules, and functions (not only prompts)
-- `if_not_ensure_then` / `if_not_ensure_then_run` / `if_not_ensure_then_shell` workflow steps for conditional flows
+- `if_not_ensure_then` / `if_not_ensure_then_run` / `if_not_ensure_then_shell` / `if_not_shell_then` workflow steps for conditional flows
 - CI checks for compilation and testing; e2e tests aligned with current output
 - Nested workflows and step functions in run tree; `run` disallowed inside `rule` blocks (use `ensure` or move to workflow)
 - Prompt capture fixes (assignments as final answer); improved test failure output

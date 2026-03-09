@@ -123,13 +123,15 @@ workflow docs_overview {
        contributing guidelines, and other relevant information.
     6. Ensure docs/index.html is consistent with README.md and other docs files.
     7. Ensure docs/index.html and README.md have links to getting-started.md
-       page of the documentation, and the agent skill URL
-       (https://jaiph.org/jaiph-skill.md).
+       page of the documentation or jaiph.org/getting-started, and the agent
+       skill URL (https://jaiph.org/jaiph-skill.md).
     8. Knowing the whole documentation, ensure the agent skill is up to date
        and coherent with the documentation. It should be a minimal workflow set
        that supports safe feature delivery, preflight checks, implementation
        workflow, verification workflow, and a default entrypoint that
        orchestrates the above.
+    9. Ensure src/cli/shared/usage.ts is up to date with the latest CLI commands
+       and options. It should be a single source of truth for the CLI usage.
   "
 }
 
@@ -140,6 +142,7 @@ workflow default {
     "README.md"
     "CHANGELOG.md"
     "docs/index.html"
+    "src/cli/shared/usage.ts"
   )
 
   local docs_md_files=()

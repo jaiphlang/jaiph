@@ -4,11 +4,13 @@
 
 ---
 
-Runtime behavior is configured via **in-file config** and **environment variables**.
+This page describes how to configure the Jaiph runtime: which agent runs `prompt` steps, where logs go, and how debugging behaves. Configuration comes from two places, **in-file config** (in the workflow you pass to `jaiph run`) and **environment variables**. Environment wins over in-file; in-file wins over built-in defaults.
 
 ## In-file config
 
-In the entry workflow file (the one you pass to `jaiph run`), you can declare runtime options at the top:
+In the entry workflow file (the one you pass to `jaiph run`), you can declare runtime options in a single `config` block. The block must start with exactly `config {` on its own line. You can put it at the top of the file (optionally after a shebang or imports). Only one `config` block per file; a second one causes a parse error (`E_PARSE` and file location).
+
+Inside the block, use `key = value` lines. Empty lines and lines starting with `#` are ignored. Values must be quoted strings (double or single quotes) or `true`/`false`. In quoted strings you can use `\\`, `\n`, `\t`, and `\"`.
 
 ```jh
 config {
@@ -22,6 +24,10 @@ config {
   run.debug = false
 }
 
+rule some_rule {
+  true
+}
+
 workflow default {
   ensure some_rule
 }
@@ -32,13 +38,11 @@ Allowed config keys:
 - `agent.default_model`: Default model for `prompt` steps (string).
 - `agent.command`: Command string for the **cursor** backend (string, e.g. `cursor-agent` or `cursor-agent --force`).
 - `agent.backend`: Which prompt backend to use: `"cursor"` (default) or `"claude"`. When `"claude"`, the **Claude CLI** (`claude`) is invoked; it must be on PATH. See [Backend selection](#backend-selection) below.
-- `agent.trusted_workspace`: Trusted workspace directory passed to the Cursor backend (`--trust`). Relative paths are resolved from the project root. Defaults to the project root.
+- `agent.trusted_workspace`: Trusted workspace directory passed to the Cursor backend (`--trust`). In-file: relative paths are resolved from the project root. When set via environment, the value is used as-is (no resolution). Defaults to the project root when unset.
 - `agent.cursor_flags`: Extra flags appended to Cursor backend invocation (string; split on whitespace).
 - `agent.claude_flags`: Extra flags appended to Claude backend invocation (string; split on whitespace).
-- `run.logs_dir`: Directory for step logs, relative to workspace or absolute (string).
+- `run.logs_dir`: Directory for step logs. Relative paths are relative to the workspace root; absolute paths are used as-is (string).
 - `run.debug`: If `true`, enable shell trace for `jaiph run` (boolean).
-
-Values must be quoted strings or `true`/`false`. Only one `config` block per file; parse errors report `E_PARSE` and the file location.
 
 ## Backend selection
 
@@ -65,9 +69,9 @@ Built-in defaults:
 
 Resolution order (highest wins):
 
-1. Environment variables (`JAIPH_AGENT_MODEL`, `JAIPH_AGENT_COMMAND`, `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_AGENT_CURSOR_FLAGS`, `JAIPH_AGENT_CLAUDE_FLAGS`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`)
-2. In-file config (from the entry workflow’s `config { ... }` block)
-3. Built-in defaults
+1. **Environment variables** — `JAIPH_AGENT_MODEL`, `JAIPH_AGENT_COMMAND`, `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_AGENT_CURSOR_FLAGS`, `JAIPH_AGENT_CLAUDE_FLAGS`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`. If a variable is set in the environment, it overrides in-file config and is not overridden when you `run` another module’s workflow (that module’s config applies only to variables not already set).
+2. **In-file config** — from the entry workflow’s `config { ... }` block (or the current module’s block when running that module’s workflow).
+3. **Built-in defaults** — see above.
 
 ## Config to env mapping
 
@@ -82,7 +86,7 @@ Resolution order (highest wins):
 
 ## Inspect effective config at runtime
 
-Inside workflows/rules/functions, these values are available as shell environment variables. You can log them to debug scoping and overrides:
+Inside workflows, rules, and functions, resolved config is available as shell environment variables (`JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, etc.). You can log them to debug scoping and overrides:
 
 ```jh
 workflow default {
@@ -91,7 +95,7 @@ workflow default {
 }
 ```
 
-When a workflow calls another module's workflow via `run alias.default`, the called workflow executes with that module's config scope, then the caller's scope is restored.
+When a workflow calls another module’s workflow via `run alias.default`, the called workflow runs with that module’s config scope (its `config { }` values fill in any variables not already set by the environment). When the call returns, the caller’s environment is restored.
 
 ## Created by `jaiph init`
 
