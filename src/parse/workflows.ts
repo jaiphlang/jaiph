@@ -1,5 +1,5 @@
 import type { WorkflowDef } from "../types";
-import { colFromRaw, fail, hasUnescapedClosingQuote, isRef } from "./core";
+import { braceDepthDelta, colFromRaw, fail, hasUnescapedClosingQuote, isRef } from "./core";
 
 /** Parse a single workflow statement string (e.g. "run foo", "ensure bar", "echo x") into a step. */
 function parseRecoverStatement(
@@ -130,22 +130,53 @@ export function parseWorkflowBlock(
   };
 
   let idx = startIndex + 1;
+  let braceDepth = 0;
+  let shellAccumulator: string[] = [];
+  let shellAccumulatorStartLine = 0;
+
+  const flushShellAccumulator = (): void => {
+    if (shellAccumulator.length === 0) return;
+    const command = shellAccumulator.join("\n").trim();
+    shellAccumulator = [];
+    workflow.steps.push({
+      type: "shell",
+      command,
+      loc: { line: shellAccumulatorStartLine, col: 1 },
+    });
+  };
+
   for (; idx < lines.length; idx += 1) {
     const innerNo = idx + 1;
     const innerRaw = lines[idx];
     const inner = innerRaw.trim();
     if (!inner) {
+      if (braceDepth > 0) shellAccumulator.push(innerRaw.trim());
+      else flushShellAccumulator();
       continue;
     }
     if (inner === "}") {
-      break;
+      if (braceDepth === 0) break;
+      braceDepth -= 1;
+      shellAccumulator.push(innerRaw.trim());
+      if (braceDepth === 0) flushShellAccumulator();
+      continue;
     }
     if (inner.startsWith("#")) {
-      workflow.steps.push({
-        type: "shell",
-        command: innerRaw.trim(),
-        loc: { line: innerNo, col: 1 },
-      });
+      if (braceDepth > 0) shellAccumulator.push(innerRaw.trim());
+      else {
+        flushShellAccumulator();
+        workflow.steps.push({
+          type: "shell",
+          command: innerRaw.trim(),
+          loc: { line: innerNo, col: 1 },
+        });
+      }
+      continue;
+    }
+    if (braceDepth > 0) {
+      shellAccumulator.push(innerRaw.trim());
+      braceDepth += braceDepthDelta(inner);
+      if (braceDepth === 0) flushShellAccumulator();
       continue;
     }
 
@@ -694,6 +725,13 @@ export function parseWorkflowBlock(
       continue;
     }
 
+    const shellDelta = braceDepthDelta(inner);
+    if (shellDelta > 0) {
+      shellAccumulator = [innerRaw.trim()];
+      shellAccumulatorStartLine = innerNo;
+      braceDepth = shellDelta;
+      continue;
+    }
     workflow.steps.push({
       type: "shell",
       command: inner,

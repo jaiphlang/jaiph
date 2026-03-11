@@ -687,13 +687,16 @@ jaiph use 0.2.0</code></pre>
                         read-only subshell, and its stdout is preserved. The rule fails if the command returns a
                         non-zero
                         exit code. Rules can consume positional parameters (<code>$1</code>, <code>$2</code>,
-                        <code>"$@"</code>) forwarded by <code>ensure</code>.
+                        <code>"$@"</code>) forwarded by <code>ensure</code>. Inline brace-group short-circuits like
+                        <code>cmd || { echo "failed"; exit 1; }</code> are supported (single- or multi-line).
                     </dd>
 
                     <dt><code>workflow name { ... }</code></dt>
                     <dd>Defines an orchestration entrypoint made of ordered steps. As opposed to rules, workflows can
                         change the state of the system and are not restricted to read-only operations. Workflows fail if
-                        the script returns a non-zero exit code.
+                        the script returns a non-zero exit code. Inline brace-group short-circuits like
+                        <code>cmd || { echo "failed"; exit 1; }</code> are supported (single- or multi-line).
+                    </dd>
 
                     <dt><code>function name() { ... }</code></dt>
                     <dd>Defines a reusable writable shell function. Functions can be called from workflows/rules and are

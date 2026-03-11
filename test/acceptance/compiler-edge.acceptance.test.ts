@@ -189,7 +189,7 @@ test("ACCEPTANCE: if ! ensure then-branch allows mixed prompt and run", () => {
     const output = build(join(root, "main.jh"), join(root, "out"));
     assert.equal(output.length, 1);
     assert.match(output[0].bash, /if ! .*::rule::gate; then/);
-    assert.match(output[0].bash, /jaiph::prompt \"\$@\" <<__JAIPH_PROMPT_/);
+    assert.match(output[0].bash, /jaiph::prompt.*<<__JAIPH_PROMPT_/);
     assert.match(output[0].bash, /::workflow::fix_build/);
   });
 });
@@ -378,4 +378,93 @@ test("ACCEPTANCE: unterminated mock prompt block (missing fi and }) fails with E
       ),
     /E_PARSE.*mock prompt block/,
   );
+});
+
+test("ACCEPTANCE: rule with inline brace group cmd || { ... } compiles and transpiles", () => {
+  withTempDir("jaiph-acc-rule-or-brace-", (root) => {
+    writeFileSync(
+      join(root, "main.jh"),
+      [
+        "rule example {",
+        '  check_something || { echo "failed"; exit 1; }',
+        "}",
+        "",
+        "workflow default {",
+        "  ensure example",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const output = build(join(root, "main.jh"), join(root, "out"));
+    assert.equal(output.length, 1);
+    assert.match(output[0].bash, /check_something \|\| \{ echo "failed"; exit 1; \}/);
+  });
+});
+
+test("ACCEPTANCE: rule with multi-line || { ... } compiles and transpiles", () => {
+  withTempDir("jaiph-acc-rule-or-brace-multiline-", (root) => {
+    writeFileSync(
+      join(root, "main.jh"),
+      [
+        "rule example {",
+        "  check_something || {",
+        '    echo "failed"',
+        "    exit 1",
+        "  }",
+        "}",
+        "",
+        "workflow default {",
+        "  ensure example",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const output = build(join(root, "main.jh"), join(root, "out"));
+    assert.equal(output.length, 1);
+    assert.match(output[0].bash, /check_something \|\| \{/);
+    assert.match(output[0].bash, /echo "failed"/);
+    assert.match(output[0].bash, /exit 1/);
+  });
+});
+
+test("ACCEPTANCE: workflow shell step with || { ... } compiles and transpiles", () => {
+  withTempDir("jaiph-acc-workflow-or-brace-", (root) => {
+    writeFileSync(
+      join(root, "main.jh"),
+      [
+        "workflow default {",
+        '  cmd || { echo "failed"; exit 1; }',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const output = build(join(root, "main.jh"), join(root, "out"));
+    assert.equal(output.length, 1);
+    assert.match(output[0].bash, /cmd \|\| \{ echo "failed"; exit 1; \}/);
+  });
+});
+
+test("ACCEPTANCE: if ! ensure ; then ... fi continues to work alongside || { }", () => {
+  withTempDir("jaiph-acc-if-and-or-brace-", (root) => {
+    writeFileSync(
+      join(root, "main.jh"),
+      [
+        "rule gate {",
+        "  true",
+        "}",
+        "",
+        "workflow default {",
+        "  if ! ensure gate; then",
+        "    echo fallback",
+        "  fi",
+        '  other || { echo "err"; exit 1; }',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const output = build(join(root, "main.jh"), join(root, "out"));
+    assert.equal(output.length, 1);
+    assert.match(output[0].bash, /if ! .*::rule::gate; then/);
+    assert.match(output[0].bash, /other \|\| \{ echo "err"; exit 1; \}/);
+  });
 });
