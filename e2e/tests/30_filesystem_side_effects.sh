@@ -28,7 +28,7 @@ e2e::assert_contains "$(cat "${TEST_DIR}/workflow_wrote.txt")" "abc" "workflow_w
 
 expected_workflow_write=$(printf '%s\n' \
   '' \
-  'running fs_write_workflow.jh' \
+  'Jaiph: Running fs_write_workflow.jh' \
   '' \
   'workflow default' \
   '✓ PASS workflow default (<time>)')
@@ -71,7 +71,7 @@ else
 
   expected_permissive=$(printf '%s\n' \
     '' \
-    'running fs_write_rule.jh' \
+    'Jaiph: Running fs_write_rule.jh' \
     '' \
     'workflow default' \
     '  ▸ rule write_attempt' \

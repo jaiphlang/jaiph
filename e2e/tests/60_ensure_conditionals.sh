@@ -66,7 +66,7 @@ e2e::assert_file_exists "${TEST_DIR}/recovery_ran.txt" "recovery workflow ran af
 
 expected_recovery=$(printf '%s\n' \
   '' \
-  'running ensure_run_branch.jh' \
+  'Jaiph: Running ensure_run_branch.jh' \
   '' \
   'workflow default' \
   '  ▸ rule always_fail' \
@@ -81,7 +81,7 @@ e2e::assert_file_exists "${TEST_DIR}/shell_ran.txt" "shell fallback ran after en
 
 expected_shell=$(printf '%s\n' \
   '' \
-  'running ensure_shell_branch.jh' \
+  'Jaiph: Running ensure_shell_branch.jh' \
   '' \
   'workflow default' \
   '  ▸ rule always_fail' \
@@ -92,7 +92,7 @@ e2e::assert_output_equals "${shell_out}" "${expected_shell}" "if ! ensure can tr
 
 expected_skip=$(printf '%s\n' \
   '' \
-  'running ensure_pass_branch.jh' \
+  'Jaiph: Running ensure_pass_branch.jh' \
   '' \
   'workflow default' \
   '  ▸ rule always_ok' \

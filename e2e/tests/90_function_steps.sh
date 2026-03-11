@@ -30,7 +30,7 @@ e2e::assert_file_exists "${TEST_DIR}/function_called.txt" "function step command
 
 expected_function=$(printf '%s\n' \
   '' \
-  'running functions.jh' \
+  'Jaiph: Running functions.jh' \
   '' \
   'workflow default' \
   '  ▸ function changed_files' \

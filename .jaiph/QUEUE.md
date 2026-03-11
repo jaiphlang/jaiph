@@ -6,6 +6,67 @@ The first `##` task in the file is always the current task.
 
 ---
 
+## 12. Project-local `.jaiph/hooks.json` support (Cursor-style)
+
+**Status:** pending
+
+**What:** Add support for project-local hook configuration file at `.jaiph/hooks.json`, similar to Cursor hooks. Users should be able to create this file in their repo and define commands to run for relevant Jaiph lifecycle events.
+
+**Why:** Gives a simple, explicit, repo-local integration point for custom automation (e.g. forwarding status to external tools like `jai`) without hardcoding destination logic in core runtime.
+
+**Scope / behavior (V1):**
+- Jaiph supports two hook config locations:
+  - Global: `~/.jaiph/hooks.json`
+  - Project-local: `<project>/.jaiph/hooks.json`
+- Jaiph loads both when present, with deterministic precedence (project-local overrides global for conflicting event entries).
+- If file exists and is valid JSON, Jaiph registers configured hook commands.
+- Hook execution is best-effort: hook failure must not crash or block main workflow execution.
+- Hook payload includes event metadata needed by external commands (workflow id, step id/name, status, timestamps, run path).
+- If neither file exists, Jaiph behaves exactly as today.
+
+**Files to change:**
+- `src/cli/commands/run.ts` (or shared runtime path) — load/validate global + project hook files, merge with precedence, dispatch hooks for workflow/step events.
+- `src/types.ts` — hook config and payload typing.
+- docs (`docs/cli.md` or new hooks doc) — schema, supported events, precedence rules, examples for both file locations.
+- tests for: valid config, missing file, invalid JSON, hook failure isolation, payload shape.
+
+**Acceptance criteria:**
+- A global `~/.jaiph/hooks.json` can define commands for supported Jaiph events.
+- A repo-local `.jaiph/hooks.json` can define commands and override conflicting global entries.
+- Hooks receive documented payload data and execute in event order.
+- Invalid or failing hooks produce clear warnings/logs but do not fail workflow run.
+- No behavior change when both hook files are absent.
+
+---
+
+## 11. Queue assignment capture for any step via `=`
+
+**Status:** pending
+
+**What:** Allow assignment capture syntax for any step, not just prompts, e.g. `response = ensure tests_pass`. This should capture the step's stdout into `response`.
+
+**Why:** Enables composable workflows where arbitrary step output can be reused downstream with consistent shell mental model.
+
+**Bash-consistent semantics (must match shell behavior):**
+- Assignment capture does **not** change exit behavior by default: if the command fails, the step fails.
+- If users want to continue on failure while still capturing output, they must write explicit short-circuiting (e.g. append `|| true`).
+- stderr is **not** captured unless explicitly redirected by the workflow author (e.g. `2>&1`).
+- Any future syntactic sugar for failure/stderr behavior is out of scope for this task.
+
+**Files to change:**
+- `src/parse/workflows.ts` — parse assignment form for generic steps.
+- `src/transpile/emit-workflow.ts` — emit bash that captures stdout for assigned generic steps.
+- `src/types.ts` and related step AST types — represent assignment target on non-prompt steps.
+- tests (parser + transpiler + e2e) covering success, failure (`|| true`), and stderr redirection behavior.
+
+**Acceptance criteria:**
+- `response = ensure tests_pass` is valid and assigns stdout to `$response`.
+- Failed command in assignment form fails workflow unless user explicitly writes `|| true`.
+- stderr is excluded from capture unless command explicitly redirects it.
+- Existing `result = prompt ...` behavior remains backward compatible.
+
+---
+
 ## 10. Prompt line in tree: show prompt preview and cap arg length
 
 **Status:** pending
@@ -51,19 +112,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## 6. Project-local stdlib version pinning
-
-**Status:** pending
-
-**What:** Allow a project to pin Jaiph stdlib version via in-file metadata (for example `run.stdlib_version = "0.2.3"`). `jaiph run` should resolve/download cached stdlib for that version.
-
-**Files to change:**
-- `src/parse/metadata.ts` + `src/types.ts` — add and validate `run.stdlib_version`.
-- `src/cli/commands/run.ts` — resolve stdlib path from metadata; download/cache to `~/.cache/jaiph/stdlib/<version>/jaiph_stdlib.sh`; set `JAIPH_STDLIB`.
-- `docs/configuration.md` — document metadata key and precedence with env override.
-- tests for cache hit/miss and invalid version error handling.
-
----
 
 ## 2. Fix `||` / `{ ... }` inline brace-group parser limitation
 

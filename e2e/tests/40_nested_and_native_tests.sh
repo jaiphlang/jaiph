@@ -32,7 +32,7 @@ nested_out="$(jaiph run "${TEST_DIR}/nested_run.jh")"
 # Then: step output in .out files only; stdout has tree and result
 expected_nested_out=$(printf '%s\n' \
   '' \
-  'running nested_run.jh' \
+  'Jaiph: Running nested_run.jh' \
   '' \
   'workflow default' \
   '  ▸ workflow default' \
@@ -129,7 +129,7 @@ fib_out="$(jaiph run "${ROOT_DIR}/e2e/fibonacci.jh" 3)"
 # Then: full output matches expected tree (params as values only, normalized time)
 expected_fib_out=$(printf '%s\n' \
   '' \
-  'running fibonacci.jh' \
+  'Jaiph: Running fibonacci.jh' \
   '' \
   'workflow default (3)' \
   '  ▸ rule ensure_is_number (3)' \
@@ -200,7 +200,7 @@ EOF
 param_run_out="$(jaiph run "${TEST_DIR}/param_run_only.jh" Bob)"
 expected_param_run=$(printf '%s\n' \
   '' \
-  'running param_run_only.jh' \
+  'Jaiph: Running param_run_only.jh' \
   '' \
   'workflow default (Bob)' \
   '  ▸ rule need_one (Bob)' \

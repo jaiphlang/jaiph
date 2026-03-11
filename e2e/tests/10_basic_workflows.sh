@@ -24,7 +24,7 @@ hello_out="$(jaiph run "${TEST_DIR}/hello.jh")"
 # Then: step output is in .out files only; stdout has tree and result
 expected_hello=$(printf '%s\n' \
   '' \
-  'running hello.jh' \
+  'Jaiph: Running hello.jh' \
   '' \
   'workflow default' \
   '✓ PASS workflow default (<time>)')
@@ -52,7 +52,7 @@ mixed_out="$(jaiph run "${TEST_DIR}/app.jh")"
 # Then: step output in .out files only; stdout has tree and result
 expected_mixed=$(printf '%s\n' \
   '' \
-  'running app.jh' \
+  'Jaiph: Running app.jh' \
   '' \
   'workflow default' \
   '  ▸ rule ready' \

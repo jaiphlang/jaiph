@@ -33,7 +33,7 @@ rule_pass_out="$(jaiph run "${TEST_DIR}/rule_pass.jh")"
 # Then: step output in .out files only; stdout has tree and result
 expected_rule_pass=$(printf '%s\n' \
   '' \
-  'running rule_pass.jh' \
+  'Jaiph: Running rule_pass.jh' \
   '' \
   'workflow default' \
   '  ▸ rule check_passes' \
