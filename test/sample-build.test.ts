@@ -54,7 +54,7 @@ test("build transpiles .jh into strict bash with retry flow", () => {
     assert.match(generated, /jaiph::run_step main::rule::project_ready jaiph::execute_readonly main::rule::project_ready::impl/);
     assert.match(generated, /if ! main::rule::project_ready; then/);
     assert.match(generated, /bootstrap_project::workflow::nodejs/);
-    assert.match(generated, /jaiph::prompt "\$@" <<__JAIPH_PROMPT_/);
+    assert.match(generated, /jaiph::prompt "\$JAIPH_PROMPT_PREVIEW" "\$@" <<__JAIPH_PROMPT_/);
     assert.match(generated, /main::rule::build_passes\(\)/);
     assert.match(generated, /tools::security::rule::scan_passes/);
     assert.match(generated, /main::workflow::update_docs/);
@@ -1541,7 +1541,7 @@ test("buildRunTreeRows expands nested workflow from imported module", () => {
   assert.equal(rows[0].rawLabel, "workflow default");
   assert.equal(rows[0].isRoot, true);
   assert.equal(rows[1].rawLabel, "workflow sub.default");
-  assert.equal(rows[2].rawLabel, "prompt prompt");
+  assert.equal(rows[2].rawLabel, 'prompt "nested prompt"');
 });
 
 test("jaiph run shows nested workflow subtree and step timing", () => {
@@ -1808,7 +1808,7 @@ test("build emits prompt capture as name=$(jaiph::prompt_capture ...) for name =
 
     const results = build(filePath, outDir);
     assert.equal(results.length, 1);
-    assert.match(results[0].bash, /result=\$\(jaiph::prompt_capture "\$@" <<__JAIPH_PROMPT_/);
+    assert.match(results[0].bash, /result=\$\(jaiph::prompt_capture "\$JAIPH_PROMPT_PREVIEW" "\$@" <<__JAIPH_PROMPT_/);
     assert.match(results[0].bash, /Summarize the changes made/);
     assert.match(results[0].bash, /\s*\)\s*$/m);
   } finally {

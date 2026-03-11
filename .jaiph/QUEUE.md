@@ -6,25 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## 10. Prompt line in tree: show prompt preview and cap arg length
-
-**Status:** pending
-
-**What:** Change how the prompt step is shown in the progress tree. Currently it displays only `▸ prompt (arg1)`. It should display: `▸ prompt "First 24 prompt chars..." (arg1)` — i.e. include a truncated preview of the prompt text (first 24 chars + "..." if longer). Additionally, cap the displayed argument list `(arg1)` to max 24 characters (e.g. truncate long args with "...").
-
-**Why:** Makes it easier to tell which prompt is running when multiple prompts exist; keeps the tree line from growing unbounded with long args.
-
-**Files to change:**
-- `src/cli/run/progress.ts` (or wherever tree row labels for steps are built) — for prompt steps, include prompt text preview (24 chars max) and cap args to 24 chars in the label.
-- Possibly `src/cli/commands/run.ts` if step labels are assembled when emitting step events.
-
-**Acceptance criteria:**
-- Tree line for a prompt step shows: `▸ prompt "<first 24 chars of prompt>..." (args)` when prompt is longer than 24 chars; no "..." when ≤24 chars.
-- The `(arg1, arg2, ...)` part is at most 24 characters displayed (truncate with "..." if needed).
-- Non-prompt steps unchanged.
-
----
-
 ## 2. Fix `||` / `{ ... }` inline brace-group parser limitation
 
 **Status:** pending

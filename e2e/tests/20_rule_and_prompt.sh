@@ -116,6 +116,7 @@ test "prompt returns mock response" {
 EOF
 
 # When
+jaiph build "${TEST_DIR}/prompt_flow.jh"
 prompt_ok_out="$(jaiph test "${TEST_DIR}/prompt_flow.test.jh")"
 
 # Then
@@ -124,6 +125,27 @@ if [[ "${prompt_ok_out}" != *"passed"* ]] && [[ "${prompt_ok_out}" != *"PASS"* ]
   e2e::fail "prompt_flow.test.jh should pass"
 fi
 e2e::pass "prompt_flow.test.jh passes with inline mock"
+
+# Run prompt workflow and assert tree contains prompt line with preview (single line, no newlines)
+prompt_run_out="$(jaiph run "${TEST_DIR}/prompt_flow.jh")"
+normalized_prompt_run="$(e2e::normalize_output "${prompt_run_out}")"
+e2e::assert_contains "${normalized_prompt_run}" 'prompt "e2e-prompt-please-return' "run prompt_flow.jh tree shows prompt line with preview"
+
+# Multi-line prompt is displayed as single line (newlines stripped from preview)
+cat > "${TEST_DIR}/multiline_prompt.jh" <<'EOF'
+#!/usr/bin/env jaiph
+workflow default {
+  prompt "
+    Line one and line two.
+  "
+  echo done
+}
+EOF
+jaiph build "${TEST_DIR}/multiline_prompt.jh"
+multiline_out="$(jaiph run "${TEST_DIR}/multiline_prompt.jh")"
+normalized_multiline="$(e2e::normalize_output "${multiline_out}")"
+e2e::assert_contains "${normalized_multiline}" 'prompt "Line one and line t' "multiline prompt displayed as single line in tree"
+e2e::pass "prompt preview has no newlines in tree"
 
 # Given: workflow with prompt but test does not mock it -> selected backend runs (cursor by default).
 cat > "${TEST_DIR}/prompt_unmatched.jh" <<'EOF'

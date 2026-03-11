@@ -139,9 +139,9 @@ Tip: add `.jaiph/runs/` to your `.gitignore`.
 ### Run reporting and logs
 
 - During `jaiph run`, progress rendering is event-driven.
-  - **TTY:** The progress tree is identical to non-TTY: each task line shows icon and final time when the step completes (e.g. `✓ 0s`, `▸ prompt (Donald)` then on completion `✓ 2s`). No per-step live elapsed on tree rows. A single **bottom line** shows `  RUNNING workflow <name> (X.Xs)` (RUNNING yellow, "workflow" bold, workflow name default, time dim) and is the only line updated in place (e.g. every second). When the run completes, that line is removed.
+  - **TTY:** The progress tree is identical to non-TTY: each task line shows icon and final time when the step completes (e.g. `✓ 0s`, `▸ prompt "First 24 chars..." (arg1)` then on completion `✓ 2s`). No per-step live elapsed on tree rows. A single **bottom line** shows `  RUNNING workflow <name> (X.Xs)` (RUNNING yellow, "workflow" bold, workflow name default, time dim) and is the only line updated in place (e.g. every second). When the run completes, that line is removed.
   - **Non-TTY:** One completion line per finished step; no RUNNING line, no in-place updates.
-- For parameterized steps (`workflow`, `prompt`, `function`), the tree shows passed argument values inline in gray (comma-separated values in parentheses; no labels; values truncated to 32 chars).
+- For parameterized steps (`workflow`, `prompt`, `function`), the tree shows passed argument values inline in gray (comma-separated values in parentheses; no labels; workflow/function values truncated to 32 chars). **Prompt** steps additionally show a truncated preview of the prompt text (first 24 chars) and the argument list is capped at 24 characters.
 - Each run writes `.jaiph/runs/<timestamp>-<id>/run_summary.jsonl`.
 - Step `.out` / `.err` files are created only when the step produced output (empty log files are skipped).
 
