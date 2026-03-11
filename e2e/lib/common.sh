@@ -154,7 +154,13 @@ e2e::ensure_local_install() {
     return 0
   fi
 
-  # Fallback: use local build if we're in repo with dist/ and node
+  # Prefer local repo binary for CI/local parity. Build dist on-demand when needed.
+  if command -v node >/dev/null 2>&1; then
+    if [[ ! -f "${E2E_REPO_ROOT}/dist/src/cli.js" ]]; then
+      (cd "${E2E_REPO_ROOT}" && npm run build >/dev/null)
+    fi
+  fi
+
   if [[ -f "${E2E_REPO_ROOT}/dist/src/cli.js" ]] && command -v node >/dev/null 2>&1; then
     mkdir -p "${JAIPH_E2E_BIN_DIR}"
     local stdlib_dest="${JAIPH_E2E_BIN_DIR}/jaiph_stdlib.sh"
