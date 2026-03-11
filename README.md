@@ -1,6 +1,6 @@
 # ![Jaiph](docs/logo.png)
 
-[jaiph.org](https://jaiph.org) · [Getting started](docs/getting-started.md) · [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Grammar](docs/grammar.md) · [Testing](docs/testing.md) · [Agent Skill](https://jaiph.org/jaiph-skill.md)
+[jaiph.org](https://jaiph.org) · [Getting started](docs/getting-started.md) · [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Grammar](docs/grammar.md) · [Testing](docs/testing.md) · [Hooks](docs/hooks.md) · [Agent Skill](https://jaiph.org/jaiph-skill.md)
 
 ---
 
@@ -174,7 +174,7 @@ Important:
 
 ### CLI reference
 
-See [cli.md](docs/cli.md) for command syntax, examples, and supported environment variables.
+See [cli.md](docs/cli.md) for command syntax, examples, and supported environment variables. For custom commands at workflow/step events, see [Hooks](docs/hooks.md).
 
 ## Language Primitives
 
@@ -211,4 +211,4 @@ Known limitations and gotchas:
 - [Getting started](docs/getting-started.md) — installation, first workflow, workspace setup
 - [Agent skill](https://jaiph.org/jaiph-skill.md) — guide for AI agents that generate or modify Jaiph workflows
 - Full docs: <https://jaiph.org/>
-- [CLI reference](docs/cli.md) · [Configuration](docs/configuration.md) · [Grammar](docs/grammar.md) · [Testing](docs/testing.md)
+- [CLI reference](docs/cli.md) · [Configuration](docs/configuration.md) · [Grammar](docs/grammar.md) · [Testing](docs/testing.md) · [Hooks](docs/hooks.md)

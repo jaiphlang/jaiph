@@ -1,6 +1,6 @@
 # Jaiph CLI Reference
 
-[jaiph.org](https://jaiph.org) · [Getting started](getting-started.md) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Testing](testing.md) · [Agent Skill](https://jaiph.org/jaiph-skill.md)
+[jaiph.org](https://jaiph.org) · [Getting started](getting-started.md) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Testing](testing.md) · [Hooks](hooks.md) · [Agent Skill](https://jaiph.org/jaiph-skill.md)
 
 ---
 
@@ -110,6 +110,10 @@ Example lines:
 - `·   ▸ function fib (3)`
 
 If no parameters are passed, the line is unchanged (e.g. `▸ workflow default`). Color can be disabled with `NO_COLOR=1`.
+
+### Hooks
+
+You can run custom commands at workflow/step lifecycle events via **hooks**. Config lives in `~/.jaiph/hooks.json` (global) and `<project>/.jaiph/hooks.json` (project-local); project-local overrides global per event. See [Hooks](hooks.md) for schema, events, payload, and examples.
 
 ## `jaiph test`
 

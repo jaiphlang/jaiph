@@ -666,6 +666,7 @@ jaiph use 0.2.0</code></pre>
                 <p>For command syntax and flags, read
                     <a href="cli">CLI reference</a>.
                 </p>
+                <p>To run custom commands at workflow/step events, use <a href="hooks">hooks</a> (<code>~/.jaiph/hooks.json</code> and <code>&lt;project&gt;/.jaiph/hooks.json</code>).</p>
                 <p>To get started from scratch: <a href="getting-started">Getting started</a>. For AI agents: <a href="https://jaiph.org/jaiph-skill.md">Agent Skill</a>.</p>
             </div>
         </section>
@@ -723,6 +724,9 @@ jaiph use 0.2.0</code></pre>
                     <dt><code>test "description" { ... }</code></dt>
                     <dd>Defines a test case. Files named <code>*.test.jh</code> are run as test suites.</dd>
 
+                    <dt>Hooks (<code>~/.jaiph/hooks.json</code>, <code>&lt;project&gt;/.jaiph/hooks.json</code>)</dt>
+                    <dd>Run custom shell commands at workflow/step lifecycle events (<code>workflow_start</code>, <code>workflow_end</code>, <code>step_start</code>, <code>step_end</code>). Project-local overrides global per event. Payload is JSON on stdin; failures are logged but do not block the run. See <a href="hooks">Hooks</a>.</dd>
+
                     <dt><code>mock prompt "..."</code></dt>
                     <dd>In a test, stubs the next <code>prompt</code> call to return the given string instead of calling the agent.</dd>
 
@@ -752,6 +756,8 @@ jaiph use 0.2.0</code></pre>
                     <a href="configuration">Configuration</a>
                     ·
                     <a href="cli">CLI reference</a>
+                    ·
+                    <a href="hooks">Hooks</a>
                 </p>
             </div>
         </section>
