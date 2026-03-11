@@ -199,6 +199,13 @@ See [cli.md](docs/cli.md) for command syntax, examples, and supported environmen
 - `prompt "..."`  
   Sends prompt text to the configured agent command.
 
+- **Assignment capture** — You can capture stdout from any step with `name = <step>`:
+  - `result = prompt "..."` — Captures the agent's stdout (unchanged from before).
+  - `response = ensure ref` — Captures the rule's stdout into `$response`.
+  - `out = run ref` — Captures the workflow's stdout into `$out`.
+  - `line = <shell_command>` — Captures the command's stdout into `$line`.
+  Capture is **stdout only**; stderr is not included unless the command redirects it (e.g. `2>&1`). If the command fails, the step fails unless you explicitly short-circuit (e.g. `... || true`). See [Grammar](docs/grammar.md).
+
 All Jaiph primitives can be combined with bash code and are interoperable with normal shell scripting.
 
 Known limitations and gotchas:

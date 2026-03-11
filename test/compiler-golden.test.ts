@@ -119,6 +119,27 @@ test("compiler corpus: fixtures and e2e workflows compile", () => {
   }
 });
 
+test("parser: assignment capture parses for ensure, run, and shell steps", () => {
+  const source = [
+    "rule tests_pass {",
+    "  echo ok",
+    "}",
+    "workflow default {",
+    "  response = ensure tests_pass",
+    "  out = echo hello",
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  assert.equal(mod.workflows.length, 1);
+  const steps = mod.workflows[0].steps;
+  assert.equal(steps.length, 2);
+  assert.equal(steps[0].type, "ensure");
+  assert.equal((steps[0] as { type: "ensure"; captureName?: string }).captureName, "response");
+  assert.equal(steps[1].type, "shell");
+  assert.equal((steps[1] as { type: "shell"; captureName?: string }).captureName, "out");
+  assert.equal((steps[1] as { type: "shell"; command: string }).command, "echo hello");
+});
+
 test("parser: config block parses and populates mod.metadata", () => {
   const source = [
     "config {",

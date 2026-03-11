@@ -203,7 +203,10 @@ See [cli.md](cli.md) for command syntax, examples, and supported environment var
   Sends the prompt text to the configured agent command. Variable expansion (`$1`, `${VAR}`) is allowed in the string; command substitution (`$(...)`) and backticks are rejected at parse time.
 
 - `name = prompt "..."`  
-  Same as `prompt "..."` but captures the agent’s stdout into the variable `name` for use in later steps.
+  Same as `prompt "..."` but captures the agent's stdout into the variable `name` for use in later steps.
+
+- **Assignment capture for any step** — `name = ensure ref`, `name = run ref`, and `name = <shell_command>` capture that step's stdout into `name`. Only stdout is captured; stderr is not included unless the command redirects it (e.g. `2>&1`). If the command fails, the step fails unless you add explicit short-circuiting (e.g. `|| true`). See [Grammar](grammar.md).
+
 
 All Jaiph primitives can be combined with bash code and are interoperable with normal shell scripting.
 

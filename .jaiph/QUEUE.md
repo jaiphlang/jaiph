@@ -6,34 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## 11. Queue assignment capture for any step via `=`
-
-**Status:** pending
-
-**What:** Allow assignment capture syntax for any step, not just prompts, e.g. `response = ensure tests_pass`. This should capture the step's stdout into `response`.
-
-**Why:** Enables composable workflows where arbitrary step output can be reused downstream with consistent shell mental model.
-
-**Bash-consistent semantics (must match shell behavior):**
-- Assignment capture does **not** change exit behavior by default: if the command fails, the step fails.
-- If users want to continue on failure while still capturing output, they must write explicit short-circuiting (e.g. append `|| true`).
-- stderr is **not** captured unless explicitly redirected by the workflow author (e.g. `2>&1`).
-- Any future syntactic sugar for failure/stderr behavior is out of scope for this task.
-
-**Files to change:**
-- `src/parse/workflows.ts` — parse assignment form for generic steps.
-- `src/transpile/emit-workflow.ts` — emit bash that captures stdout for assigned generic steps.
-- `src/types.ts` and related step AST types — represent assignment target on non-prompt steps.
-- tests (parser + transpiler + e2e) covering success, failure (`|| true`), and stderr redirection behavior.
-
-**Acceptance criteria:**
-- `response = ensure tests_pass` is valid and assigns stdout to `$response`.
-- Failed command in assignment form fails workflow unless user explicitly writes `|| true`.
-- stderr is excluded from capture unless command explicitly redirects it.
-- Existing `result = prompt ...` behavior remains backward compatible.
-
----
-
 ## 10. Prompt line in tree: show prompt preview and cap arg length
 
 **Status:** pending
