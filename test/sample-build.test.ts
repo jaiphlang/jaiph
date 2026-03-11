@@ -1817,6 +1817,68 @@ test("build emits prompt capture as name=$(jaiph::prompt_capture ...) for name =
   }
 });
 
+test("build emits assignment capture for ensure and shell", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-assign-capture-build-"));
+  const outDir = mkdtempSync(join(tmpdir(), "jaiph-assign-capture-out-"));
+  try {
+    const filePath = join(root, "entry.jh");
+    writeFileSync(
+      filePath,
+      [
+        "rule echo_ok {",
+        "  echo stdout-here",
+        "}",
+        "workflow default {",
+        "  response = ensure echo_ok",
+        "  out = echo hello",
+        "  printf '%s\\n' \"$response\" \"$out\"",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const results = build(filePath, outDir);
+    assert.equal(results.length, 1);
+    const bash = results[0].bash;
+    assert.match(bash, /response=\$\(entry::rule::echo_ok::impl\)/);
+    assert.match(bash, /out=\$\(echo hello\)/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outDir, { recursive: true, force: true });
+  }
+});
+
+test("build: failed command in assignment form fails workflow (no || true)", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-assign-fail-"));
+  const outDir = mkdtempSync(join(tmpdir(), "jaiph-assign-fail-out-"));
+  try {
+    const filePath = join(root, "entry.jh");
+    writeFileSync(
+      filePath,
+      [
+        "workflow default {",
+        "  out = false",
+        "  echo done",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const results = build(filePath, outDir);
+    assert.equal(results.length, 1);
+    assert.match(results[0].bash, /out=\$\(false\)/);
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runResult = spawnSync("node", [cliPath, "run", filePath], {
+      encoding: "utf8",
+      cwd: root,
+      env: { ...process.env, JAIPH_STDLIB: join(process.cwd(), "dist/src/jaiph_stdlib.sh") },
+    });
+    assert.notEqual(runResult.status, 0, "workflow with capture = false should fail");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outDir, { recursive: true, force: true });
+  }
+});
+
 test("jaiph test captures mock response into variable and variable is available in subsequent step", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-test-prompt-capture-"));
   try {

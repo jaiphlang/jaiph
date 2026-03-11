@@ -1,0 +1,10 @@
+#!/usr/bin/env jaiph
+# E2E fixture: assignment capture for ensure and shell.
+rule echo_line {
+  echo captured-stdout
+}
+workflow default {
+  response = ensure echo_line
+  out = echo shell-capture
+  printf '%s\n' "response=$response" "out=$out"
+}

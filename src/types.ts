@@ -45,6 +45,8 @@ export type WorkflowStepDef =
       type: "ensure";
       ref: RuleRefDef;
       args?: string;
+      /** When set, capture step stdout into this variable name. */
+      captureName?: string;
       /** When set, transpiles to for/seq bounded retry loop (break on success, exit 1 after max). */
       recover?:
         | { single: WorkflowStepDef }
@@ -54,6 +56,8 @@ export type WorkflowStepDef =
       type: "run";
       workflow: WorkflowRefDef;
       args?: string;
+      /** When set, capture step stdout into this variable name. */
+      captureName?: string;
     }
   | {
       type: "prompt";
@@ -66,6 +70,8 @@ export type WorkflowStepDef =
       type: "shell";
       command: string;
       loc: SourceLoc;
+      /** When set, capture step stdout into this variable name. */
+      captureName?: string;
     }
   | {
       type: "if_not_ensure_then_run";
@@ -76,8 +82,8 @@ export type WorkflowStepDef =
       type: "if_not_ensure_then";
       ensureRef: RuleRefDef;
       thenSteps: Array<
-        | { type: "shell"; command: string; loc: SourceLoc }
-        | { type: "run"; workflow: WorkflowRefDef; args?: string }
+        | { type: "shell"; command: string; loc: SourceLoc; captureName?: string }
+        | { type: "run"; workflow: WorkflowRefDef; args?: string; captureName?: string }
         | {
             type: "prompt";
             raw: string;

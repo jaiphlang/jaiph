@@ -12,6 +12,45 @@ function parseRecoverStatement(
   if (!t) {
     fail(filePath, "empty recover statement", lineNo, col);
   }
+  const genericAssignMatch = t.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/s);
+  if (
+    genericAssignMatch &&
+    !genericAssignMatch[2].trimStart().startsWith("prompt ") &&
+    !genericAssignMatch[2].trimStart().startsWith('"') &&
+    !genericAssignMatch[2].trimStart().startsWith("'") &&
+    !genericAssignMatch[2].trimStart().startsWith("$")
+  ) {
+    const captureName = genericAssignMatch[1];
+    const rest = genericAssignMatch[2].trim();
+    const runMatch = rest.match(
+      /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
+    );
+    if (runMatch && isRef(runMatch[1])) {
+      return {
+        type: "run",
+        workflow: { value: runMatch[1], loc: { line: lineNo, col } },
+        args: runMatch[2]?.trim(),
+        captureName,
+      };
+    }
+    const ensureMatch = rest.match(
+      /^ensure\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
+    );
+    if (ensureMatch && isRef(ensureMatch[1])) {
+      return {
+        type: "ensure",
+        ref: { value: ensureMatch[1], loc: { line: lineNo, col } },
+        args: ensureMatch[2]?.trim(),
+        captureName,
+      };
+    }
+    return {
+      type: "shell",
+      command: rest,
+      loc: { line: lineNo, col },
+      captureName,
+    };
+  }
   const runMatch = t.match(
     /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
   );
@@ -117,8 +156,8 @@ export function parseWorkflowBlock(
       const ensureRef = ifEnsureMatch[1];
       let fiLine = -1;
       const thenSteps: Array<
-        | { type: "shell"; command: string; loc: { line: number; col: number } }
-        | { type: "run"; workflow: { value: string; loc: { line: number; col: number } }; args?: string }
+        | { type: "shell"; command: string; loc: { line: number; col: number }; captureName?: string }
+        | { type: "run"; workflow: { value: string; loc: { line: number; col: number } }; args?: string; captureName?: string }
         | { type: "prompt"; raw: string; loc: { line: number; col: number }; captureName?: string }
       > = [];
       for (let lookahead = idx + 1; lookahead < lines.length; lookahead += 1) {
@@ -131,6 +170,36 @@ export function parseWorkflowBlock(
         if (lookTrim === "fi") {
           fiLine = lookahead;
           break;
+        }
+        const genericAssignMatch = lookTrim.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/s);
+        if (
+          genericAssignMatch &&
+          !genericAssignMatch[2].trimStart().startsWith("prompt ") &&
+          !genericAssignMatch[2].trimStart().startsWith('"') &&
+          !genericAssignMatch[2].trimStart().startsWith("'") &&
+          !genericAssignMatch[2].trimStart().startsWith("$")
+        ) {
+          const captureName = genericAssignMatch[1];
+          const rest = genericAssignMatch[2].trim();
+          const runMatch = rest.match(
+            /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
+          );
+          if (runMatch && isRef(runMatch[1])) {
+            thenSteps.push({
+              type: "run",
+              workflow: { value: runMatch[1], loc: { line: lookNo, col: lookRaw.indexOf("run") + 1 } },
+              args: runMatch[2]?.trim(),
+              captureName,
+            });
+            continue;
+          }
+          thenSteps.push({
+            type: "shell",
+            command: rest,
+            loc: { line: lookNo, col: colFromRaw(lookRaw) },
+            captureName,
+          });
+          continue;
         }
         const runMatch = lookTrim.match(
           /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
@@ -336,6 +405,158 @@ export function parseWorkflowBlock(
         type: "prompt",
         raw: rawPrompt,
         loc: { line: innerNo, col: promptCol },
+      });
+      continue;
+    }
+
+    const genericAssignMatch = inner.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/s);
+    if (
+      genericAssignMatch &&
+      !genericAssignMatch[2].trimStart().startsWith("prompt ") &&
+      !genericAssignMatch[2].trimStart().startsWith('"') &&
+      !genericAssignMatch[2].trimStart().startsWith("'") &&
+      !genericAssignMatch[2].trimStart().startsWith("$")
+    ) {
+      const captureName = genericAssignMatch[1];
+      const rest = genericAssignMatch[2].trim();
+      if (rest.startsWith("ensure ")) {
+        const ensureBody = rest.slice("ensure ".length).trim();
+        const recoverIdx = ensureBody.indexOf(" recover ");
+        if (recoverIdx === -1) {
+          const ensureMatch = ensureBody.match(
+            /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
+          );
+          if (!ensureMatch || !isRef(ensureMatch[1])) {
+            fail(filePath, "invalid ensure statement", innerNo);
+          }
+          workflow.steps.push({
+            type: "ensure",
+            ref: {
+              value: ensureMatch[1],
+              loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 },
+            },
+            args: ensureMatch[2]?.trim(),
+            captureName,
+          });
+          continue;
+        }
+        const left = ensureBody.slice(0, recoverIdx).trim();
+        const right = ensureBody.slice(recoverIdx + " recover ".length).trim();
+        const ensureMatch = left.match(
+          /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
+        );
+        if (!ensureMatch || !isRef(ensureMatch[1])) {
+          fail(filePath, "invalid ensure statement", innerNo);
+        }
+        const ref = ensureMatch[1];
+        const args = ensureMatch[2]?.trim();
+        const recoverCol = innerRaw.indexOf("recover") + 1;
+
+        if (right === "{") {
+          const blockStartLine = innerNo;
+          let blockLines: string[] = [];
+          let closeLineIdx = -1;
+          for (let look = idx + 1; look < lines.length; look += 1) {
+            const lookTrim = lines[look].trim();
+            if (lookTrim === "}") {
+              closeLineIdx = look;
+              break;
+            }
+            blockLines.push(lines[look].trim());
+          }
+          if (closeLineIdx === -1) {
+            fail(filePath, 'unterminated recover block, expected "}"', blockStartLine, recoverCol);
+          }
+          const blockContent = blockLines.join("\n");
+          const statements = blockContent
+            .split(/[;\n]+/)
+            .map((s) => s.trim())
+            .filter(Boolean);
+          if (statements.length === 0) {
+            fail(filePath, "recover block must contain at least one statement", blockStartLine, recoverCol);
+          }
+          const blockSteps = statements.map((s) =>
+            parseRecoverStatement(filePath, blockStartLine, 1, s),
+          );
+          workflow.steps.push({
+            type: "ensure",
+            ref: { value: ref, loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 } },
+            args,
+            recover: { block: blockSteps },
+            captureName,
+          });
+          idx = closeLineIdx;
+          continue;
+        }
+
+        if (right.startsWith("{")) {
+          const closeBrace = right.indexOf("}");
+          if (closeBrace === -1) {
+            fail(filePath, 'unterminated recover block, expected "}"', innerNo, recoverCol);
+          }
+          const blockContent = right.slice(1, closeBrace).trim();
+          const statements = blockContent
+            .split(/[;\n]+/)
+            .map((s) => s.trim())
+            .filter(Boolean);
+          if (statements.length === 0) {
+            fail(filePath, "recover block must contain at least one statement", innerNo, recoverCol);
+          }
+          const blockSteps = statements.map((s) =>
+            parseRecoverStatement(filePath, innerNo, recoverCol, s),
+          );
+          workflow.steps.push({
+            type: "ensure",
+            ref: { value: ref, loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 } },
+            args,
+            recover: { block: blockSteps },
+            captureName,
+          });
+          continue;
+        }
+
+        const singleStep = parseRecoverStatement(filePath, innerNo, recoverCol, right);
+        workflow.steps.push({
+          type: "ensure",
+          ref: { value: ref, loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 } },
+          args,
+          recover: { single: singleStep },
+          captureName,
+        });
+        continue;
+      }
+      if (rest.startsWith("run ")) {
+        const runBody = rest.slice("run ".length).trim();
+        const runMatch = runBody.match(
+          /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
+        );
+        if (!runMatch || !isRef(runMatch[1])) {
+          fail(filePath, "run must target a workflow reference", innerNo);
+        }
+        workflow.steps.push({
+          type: "run",
+          workflow: {
+            value: runMatch[1],
+            loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
+          },
+          args: runMatch[2]?.trim(),
+          captureName,
+        });
+        continue;
+      }
+      if (rest.trimStart().startsWith("(")) {
+        workflow.steps.push({
+          type: "shell",
+          command: inner,
+          loc: { line: innerNo, col: innerRaw.indexOf(rest) + 1 },
+        });
+        continue;
+      }
+      workflow.steps.push({
+        type: "shell",
+        command: rest,
+        loc: { line: innerNo, col: innerRaw.indexOf(rest) + 1 },
+        captureName,
       });
       continue;
     }

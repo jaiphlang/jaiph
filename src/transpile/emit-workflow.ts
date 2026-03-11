@@ -365,7 +365,12 @@ function emitEnsureRecoverLoop(
         if (paramKeys != null && paramKeys.length > 0) {
           out.push(`${indent}export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
         }
-        out.push(`${indent}${transpileWorkflowRef(recoverStep.workflow, workflowSymbol, importedWorkflowSymbols)}${args}`);
+        const wfRef = transpileWorkflowRef(recoverStep.workflow, workflowSymbol, importedWorkflowSymbols);
+        if (recoverStep.captureName) {
+          out.push(`${indent}${recoverStep.captureName}=$(${wfRef}::impl${args})`);
+        } else {
+          out.push(`${indent}${wfRef}${args}`);
+        }
         return;
       }
       if (recoverStep.type === "ensure") {
@@ -375,6 +380,8 @@ function emitEnsureRecoverLoop(
           const steps =
             "single" in recoverStep.recover ? [recoverStep.recover.single] : recoverStep.recover.block;
           emitEnsureRecoverLoop(out, indent, tr, a, steps, emitRecoverStep);
+        } else if (recoverStep.captureName) {
+          out.push(`${indent}${recoverStep.captureName}=$(${tr}::impl${a})`);
         } else {
           out.push(`${indent}${tr}${a}`);
         }
@@ -407,7 +414,11 @@ function emitEnsureRecoverLoop(
         return;
       }
       if (recoverStep.type === "shell") {
-        out.push(`${indent}${recoverStep.command}`);
+        if (recoverStep.captureName) {
+          out.push(`${indent}${recoverStep.captureName}=$(${recoverStep.command})`);
+        } else {
+          out.push(`${indent}${recoverStep.command}`);
+        }
       }
     };
 
@@ -432,6 +443,8 @@ function emitEnsureRecoverLoop(
             const recoverSteps =
               "single" in step.recover ? [step.recover.single] : step.recover.block;
             emitEnsureRecoverLoop(out, "  ", transpiledRef, args, recoverSteps, emitRecoverStep);
+          } else if (step.captureName) {
+            out.push(`  ${step.captureName}=$(${transpiledRef}::impl${args})`);
           } else {
             out.push(`  ${transpiledRef}${args}`);
           }
@@ -443,7 +456,12 @@ function emitEnsureRecoverLoop(
           if (paramKeys != null && paramKeys.length > 0) {
             out.push(`  export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
           }
-          out.push(`  ${transpileWorkflowRef(step.workflow, workflowSymbol, importedWorkflowSymbols)}${args}`);
+          const wfRef = transpileWorkflowRef(step.workflow, workflowSymbol, importedWorkflowSymbols);
+          if (step.captureName) {
+            out.push(`  ${step.captureName}=$(${wfRef}::impl${args})`);
+          } else {
+            out.push(`  ${wfRef}${args}`);
+          }
           continue;
         }
         if (step.type === "prompt") {
@@ -473,7 +491,11 @@ function emitEnsureRecoverLoop(
           continue;
         }
         if (step.type === "shell") {
-          out.push(`  ${step.command}`);
+          if (step.captureName) {
+            out.push(`  ${step.captureName}=$(${step.command})`);
+          } else {
+            out.push(`  ${step.command}`);
+          }
           continue;
         }
         if (step.type === "if_not_ensure_then_run") {
@@ -502,7 +524,12 @@ function emitEnsureRecoverLoop(
               if (paramKeys != null && paramKeys.length > 0) {
                 out.push(`    export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
               }
-              out.push(`    ${transpileWorkflowRef(thenStep.workflow, workflowSymbol, importedWorkflowSymbols)}${args}`);
+              const wfRef = transpileWorkflowRef(thenStep.workflow, workflowSymbol, importedWorkflowSymbols);
+              if (thenStep.captureName) {
+                out.push(`    ${thenStep.captureName}=$(${wfRef}::impl${args})`);
+              } else {
+                out.push(`    ${wfRef}${args}`);
+              }
               continue;
             }
             if (thenStep.type === "prompt") {
@@ -531,7 +558,14 @@ function emitEnsureRecoverLoop(
               }
               continue;
             }
-            out.push(`    ${thenStep.command}`);
+            if (thenStep.type === "shell") {
+              if (thenStep.captureName) {
+                out.push(`    ${thenStep.captureName}=$(${thenStep.command})`);
+              } else {
+                out.push(`    ${thenStep.command}`);
+              }
+              continue;
+            }
           }
           out.push("  fi");
           continue;

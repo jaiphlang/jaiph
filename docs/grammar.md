@@ -56,6 +56,9 @@ workflow_step   = ensure_stmt
                 | run_stmt
                 | prompt_stmt
                 | prompt_capture_stmt
+                | ensure_capture_stmt
+                | run_capture_stmt
+                | shell_capture_stmt
                 | if_not_ensure_then_run_stmt
                 | if_not_ensure_then_shell_stmt
                 | if_not_ensure_then_stmt
@@ -63,10 +66,17 @@ workflow_step   = ensure_stmt
                 | shell_stmt
                 | comment_line ;
 
+ensure_capture_stmt = IDENT "=" "ensure" REF [ args_tail ]
+                    | IDENT "=" "ensure" REF [ args_tail ] "recover" single_stmt
+                    | IDENT "=" "ensure" REF [ args_tail ] "recover" "{" { stmt ";" } "}" ;
+run_capture_stmt   = IDENT "=" "run" REF [ args_tail ] ;
+shell_capture_stmt = IDENT "=" shell_stmt ;
+
 ensure_stmt     = "ensure" REF [ args_tail ]
                 | "ensure" REF [ args_tail ] "recover" single_stmt
                 | "ensure" REF [ args_tail ] "recover" "{" { stmt ";" } "}" ;
-single_stmt    = run_stmt | ensure_stmt | shell_stmt | prompt_stmt | prompt_capture_stmt ;
+single_stmt    = run_stmt | ensure_stmt | shell_stmt | prompt_stmt | prompt_capture_stmt
+                | run_capture_stmt | ensure_capture_stmt | shell_capture_stmt ;
 run_stmt        = "run" REF [ args_tail ] ;
 prompt_stmt     = "prompt" quoted_or_multiline_string ;
 prompt_capture_stmt = IDENT "=" "prompt" quoted_or_multiline_string ;
@@ -83,7 +93,8 @@ if_not_ensure_then_shell_stmt
 
 if_not_ensure_then_stmt
                 = "if" "!" "ensure" REF ";" "then"
-                  { run_stmt | prompt_stmt | prompt_capture_stmt | shell_stmt }
+                  { run_stmt | prompt_stmt | prompt_capture_stmt | shell_stmt
+                  | run_capture_stmt | ensure_capture_stmt | shell_capture_stmt }
                   "fi" ;
   (* mixed then-branch; used when then contains both run and non-run steps *)
 
@@ -109,7 +120,12 @@ shell_stmt      = command_line ;
    - `prompt "<text>"` — Sends the text to the agent; compiles to `jaiph::prompt ...` with bash variable expansion.
    - `name = prompt "<text>"` — Same, but the agent’s stdout is captured into the variable `name` (compiles to `jaiph::prompt_capture`).
    - The prompt string may span multiple lines. Only variable expansion is allowed inside the string; backticks and `$(...)` are rejected with `E_PARSE`.
-8. **Export:** Rule and workflow declarations may be prefixed with `export` so they can be referenced from other modules that import this file.
+8. **Assignment capture for any step:** In addition to `name = prompt "..."`, you can capture stdout from any step with `name = <step>`:
+   - `name = ensure ref [args...]` — Runs the rule and captures its stdout into `name`. With `recover`, the same retry semantics apply; the captured value is the stdout of the rule when it passes.
+   - `name = run ref [args...]` — Runs the workflow and captures its stdout into `name`.
+   - `name = <shell_command>` — Runs the shell command and captures its stdout into `name`.
+   - **Bash-consistent semantics:** Assignment capture does **not** change exit behavior: if the command fails, the step fails and the workflow exits (with `set -e`). To capture output even on failure, the workflow author must explicitly short-circuit (e.g. append `|| true` to the command). Only **stdout** is captured; **stderr** is not included unless the command redirects it (e.g. `name = cmd 2>&1`).
+9. **Export:** Rule and workflow declarations may be prefixed with `export` so they can be referenced from other modules that import this file.
 
 ## Validation Rules
 
@@ -135,4 +151,4 @@ Rules:
 3. **Rules:** Each rule is emitted as `<module>::rule::<name>::impl` (the implementation) and `<module>::rule::<name>` (a wrapper that calls `jaiph::run_step ... jaiph::execute_readonly` with the impl). When config is present, the wrapper is invoked inside a metadata scope that sets the config env vars for the duration of the step.
 4. **Workflows:** Each workflow is emitted as `<module>::workflow::<name>::impl` and `<module>::workflow::<name>`, with the wrapper using `jaiph::run_step` and the same metadata-scoping behavior as rules.
 5. **Functions:** Each top-level function is emitted as `<module>::function::<name>::impl`, `<module>::function::<name>` (wrapper using `jaiph::run_step_passthrough`), and a shim `<name>` that forwards to the namespaced wrapper so the original name remains callable.
-6. Conditional steps (`if ! ensure X; then ... fi` and `if ! <shell>; then ... fi`) are transpiled to explicit Bash control flow using the same transpiled rule/workflow symbols and step types. **ensure … recover:** `ensure REF [args] recover <body>` is transpiled to a **bounded** retry loop: `for _jaiph_retry in $(seq 1 "${JAIPH_ENSURE_MAX_RETRIES:-10}"); do if <rule>(args); then break; fi; <body>; done`, then if the condition still fails, the script exits with status 1. The recover body may be a single statement or a `{ stmt; stmt; ... }` block. Max retries default to 10 and can be overridden via `JAIPH_ENSURE_MAX_RETRIES`.
+6. Conditional steps (`if ! ensure X; then ... fi` and `if ! <shell>; then ... fi`) are transpiled to explicit Bash control flow using the same transpiled rule/workflow symbols and step types. **ensure … recover:** `ensure REF [args] recover <body>` is transpiled to a **bounded** retry loop: `for _jaiph_retry in $(seq 1 "${JAIPH_ENSURE_MAX_RETRIES:-10}"); do if <rule>(args); then break; fi; <body>; done`, then if the condition still fails, the script exits with status 1. The recover body may be a single statement or a `{ stmt; stmt; ... }` block. Max retries default to 10 and can be overridden via `JAIPH_ENSURE_MAX_RETRIES`. Steps with an assignment target (e.g. `response = ensure foo`, `out = run bar`, `line = echo hello`) are emitted as `VAR=$(...)`; only stdout is captured, and the command's exit status is preserved (failure exits unless the user has added e.g. `|| true`).
