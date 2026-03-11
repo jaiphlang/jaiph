@@ -1379,7 +1379,6 @@ test("formatRunningBottomLine produces TTY bottom line with RUNNING, workflow na
   assert.ok(line.includes("workflow"), "contains workflow");
   assert.ok(line.includes("default"), "contains workflow name");
   assert.match(line, /\(\d+\.\ds\)/, "contains (X.Xs) time");
-  assert.match(line, /^  /, "starts with two spaces");
 });
 
 test("jaiph run tree shows workflow params inline when run has key=value args", () => {

@@ -147,7 +147,7 @@ function formatParamsForDisplay(params: Array<[string, string]>): string {
     const workflowSymbol = workflowSymbolForFile(inputAbs, dirname(inputAbs));
     const command = buildRunWrapperCommand();
     const startedAt = Date.now();
-    const runBanner = `\nrunning ${basename(inputAbs)}\n\n`;
+    const runBanner = `\nJaiph: Running ${basename(inputAbs)}\n\n`;
     process.stdout.write(runBanner);
     const rootParamsSuffix =
       runArgs.length > 0
@@ -274,7 +274,7 @@ function formatParamsForDisplay(params: Array<[string, string]>): string {
           if (isTTY && runningInterval !== undefined) {
             process.stdout.write("\r\u001b[K\u001b[1A\r\u001b[K");
           }
-          process.stdout.write(`${label}\n\n`);
+          process.stdout.write(`${label}${isTTY ? "\n\n" : "\n"}`);
           if (isTTY && runningInterval !== undefined) {
             const elapsedSec = (Date.now() - startedAt) / 1000;
             process.stdout.write(formatRunningBottomLine("default", elapsedSec));
@@ -289,7 +289,7 @@ function formatParamsForDisplay(params: Array<[string, string]>): string {
           if (isTTY && runningInterval !== undefined) {
             process.stdout.write("\r\u001b[K\u001b[1A\r\u001b[K");
           }
-          process.stdout.write(`${completedLine}\n\n`);
+          process.stdout.write(`${completedLine}${isTTY ? "\n\n" : "\n"}`);
           if (isTTY && runningInterval !== undefined) {
             const runningElapsedSec = (Date.now() - startedAt) / 1000;
             process.stdout.write(formatRunningBottomLine("default", runningElapsedSec));

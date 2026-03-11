@@ -56,7 +56,7 @@ e2e::assert_file_exists "${TEST_DIR}/.gate2_passed" "second remediation ran (gat
 # Exact expected tree (time normalized to (<time>) by assert_output_equals)
 expected_tree_ensure=$(printf '%s\n' \
   '' \
-  'running make_pass.jh' \
+  'Jaiph: Running make_pass.jh' \
   '' \
   'workflow default' \
   '  ▸ workflow make_pass' \
@@ -111,7 +111,7 @@ e2e::assert_file_exists "${TEST_DIR}/.gate_passed" "bash then-branch ran (marker
 # Exact expected tree (time normalized to (<time>) by assert_output_equals)
 expected_tree_bash=$(printf '%s\n' \
   '' \
-  'running make_pass_bash.jh' \
+  'Jaiph: Running make_pass_bash.jh' \
   '' \
   'workflow default' \
   '  ▸ workflow make_pass' \
