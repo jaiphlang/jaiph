@@ -34,16 +34,15 @@ EOF
 # cannot be tested with regular process spawning and redirection in Bash.
 set +e
 tty_out="$(
-  python3 - "${ROOT_DIR}/dist/src/cli.js" "${TEST_DIR}/tty_tree.jh" <<'PY'
+  python3 - "${TEST_DIR}/tty_tree.jh" <<'PY'
 import os
 import pty
 import select
 import subprocess
 import sys
 
-cli_path = sys.argv[1]
-workflow_path = sys.argv[2]
-cmd = ["node", cli_path, "run", workflow_path]
+workflow_path = sys.argv[1]
+cmd = ["jaiph", "run", workflow_path]
 
 master_fd, slave_fd = pty.openpty()
 proc = subprocess.Popen(cmd, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, close_fds=True)
