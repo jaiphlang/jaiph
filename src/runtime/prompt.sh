@@ -129,6 +129,30 @@ jaiph::stream_json_to_text() {
   '
 }
 
+# Backend abstraction: run the selected prompt backend (cursor or claude).
+# Uses caller's workspace_root, agent_command_parts, cursor_extra_flags, claude_extra_flags,
+# trusted_workspace, prompt_text. Streams output through jaiph::stream_json_to_text for
+# consistent stdout/stderr and JAIPH_PROMPT_FINAL_FILE capture.
+jaiph::run_prompt_backend() {
+  local backend="$1"
+  if [[ "$backend" == "claude" ]]; then
+    if ! command -v claude >/dev/null 2>&1; then
+      echo "jai: agent.backend is \"claude\" but the Claude CLI (claude) was not found in PATH. Install the Anthropic Claude CLI or set agent.backend = \"cursor\" (or JAIPH_AGENT_BACKEND=cursor)." >&2
+      return 1
+    fi
+    printf '%s' "$prompt_text" | claude "${claude_extra_flags[@]}" 2>&1 | jaiph::stream_json_to_text
+    return $?
+  fi
+  # cursor backend
+  if [[ -n "${JAIPH_AGENT_MODEL:-}" ]]; then
+    "${agent_command_parts[@]}" --print --output-format stream-json --stream-partial-output --workspace "$workspace_root" --model "$JAIPH_AGENT_MODEL" --trust "$trusted_workspace" "${cursor_extra_flags[@]}" "$prompt_text" \
+      | jaiph::stream_json_to_text
+    return $?
+  fi
+  "${agent_command_parts[@]}" --print --output-format stream-json --stream-partial-output --workspace "$workspace_root" --trust "$trusted_workspace" "${cursor_extra_flags[@]}" "$prompt_text" \
+    | jaiph::stream_json_to_text
+}
+
 jaiph::prompt_impl() {
   local workspace_root
   local backend
@@ -211,21 +235,7 @@ jaiph::prompt_impl() {
     printf "Command:\n%s\n\n" "$command_for_log"
     printf "Prompt:\n%s\n\n" "$prompt_text"
   fi
-  if [[ "$backend" == "claude" ]]; then
-    if ! command -v claude >/dev/null 2>&1; then
-      echo "jai: agent.backend is \"claude\" but the Claude CLI (claude) was not found in PATH. Install the Anthropic Claude CLI or set agent.backend = \"cursor\" (or JAIPH_AGENT_BACKEND=cursor)." >&2
-      return 1
-    fi
-    printf '%s' "$prompt_text" | claude "${claude_extra_flags[@]}" 2>&1 | jaiph::stream_json_to_text
-    return $?
-  fi
-  if [[ -n "${JAIPH_AGENT_MODEL:-}" ]]; then
-    "${agent_command_parts[@]}" --print --output-format stream-json --stream-partial-output --workspace "$workspace_root" --model "$JAIPH_AGENT_MODEL" --trust "$trusted_workspace" "${cursor_extra_flags[@]}" "$prompt_text" \
-      | jaiph::stream_json_to_text
-    return $?
-  fi
-  "${agent_command_parts[@]}" --print --output-format stream-json --stream-partial-output --workspace "$workspace_root" --trust "$trusted_workspace" "${cursor_extra_flags[@]}" "$prompt_text" \
-    | jaiph::stream_json_to_text
+  jaiph::run_prompt_backend "$backend"
 }
 
 jaiph::prompt() {
