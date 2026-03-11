@@ -116,6 +116,13 @@ function promptDelimiter(content: string, seed: number): string {
   }
 }
 
+/** Escape for use inside a Bash single-quoted string; used for JAIPH_PROMPT_PREVIEW. */
+function bashSingleQuotedEscape(s: string): string {
+  return s.replace(/'/g, "'\\''");
+}
+
+const PROMPT_PREVIEW_MAX_LEN = 24;
+
 export function emitWorkflow(
   ast: jaiphModule,
   workflowSymbol: string,
@@ -398,14 +405,16 @@ function emitEnsureRecoverLoop(
         }
         const delimiter = promptDelimiter(promptText, recoverStep.loc.line);
         if (recoverStep.captureName) {
-          out.push(`${indent}${recoverStep.captureName}=$(jaiph::prompt_capture "$@" <<${delimiter}`);
+          out.push(`${indent}export JAIPH_PROMPT_PREVIEW='${bashSingleQuotedEscape(promptText.slice(0, PROMPT_PREVIEW_MAX_LEN))}'`);
+          out.push(`${indent}${recoverStep.captureName}=$(jaiph::prompt_capture "$JAIPH_PROMPT_PREVIEW" "$@" <<${delimiter}`);
           for (const line of promptText.split("\n")) {
             out.push(line);
           }
           out.push(delimiter);
           out.push(")");
         } else {
-          out.push(`${indent}jaiph::prompt "$@" <<${delimiter}`);
+          out.push(`${indent}export JAIPH_PROMPT_PREVIEW='${bashSingleQuotedEscape(promptText.slice(0, PROMPT_PREVIEW_MAX_LEN))}'`);
+          out.push(`${indent}jaiph::prompt "$JAIPH_PROMPT_PREVIEW" "$@" <<${delimiter}`);
           for (const line of promptText.split("\n")) {
             out.push(line);
           }
@@ -475,14 +484,16 @@ function emitEnsureRecoverLoop(
           }
           const delimiter = promptDelimiter(promptText, step.loc.line);
           if (step.captureName) {
-            out.push(`  ${step.captureName}=$(jaiph::prompt_capture "$@" <<${delimiter}`);
+            out.push(`  export JAIPH_PROMPT_PREVIEW='${bashSingleQuotedEscape(promptText.slice(0, PROMPT_PREVIEW_MAX_LEN))}'`);
+            out.push(`  ${step.captureName}=$(jaiph::prompt_capture "$JAIPH_PROMPT_PREVIEW" "$@" <<${delimiter}`);
             for (const line of promptText.split("\n")) {
               out.push(line);
             }
             out.push(delimiter);
             out.push(")");
           } else {
-            out.push(`  jaiph::prompt "$@" <<${delimiter}`);
+            out.push(`  export JAIPH_PROMPT_PREVIEW='${bashSingleQuotedEscape(promptText.slice(0, PROMPT_PREVIEW_MAX_LEN))}'`);
+            out.push(`  jaiph::prompt "$JAIPH_PROMPT_PREVIEW" "$@" <<${delimiter}`);
             for (const line of promptText.split("\n")) {
               out.push(line);
             }
@@ -543,14 +554,16 @@ function emitEnsureRecoverLoop(
               }
               const delimiter = promptDelimiter(promptText, thenStep.loc.line);
               if (thenStep.captureName) {
-                out.push(`    ${thenStep.captureName}=$(jaiph::prompt_capture "$@" <<${delimiter}`);
+                out.push(`    export JAIPH_PROMPT_PREVIEW='${bashSingleQuotedEscape(promptText.slice(0, PROMPT_PREVIEW_MAX_LEN))}'`);
+                out.push(`    ${thenStep.captureName}=$(jaiph::prompt_capture "$JAIPH_PROMPT_PREVIEW" "$@" <<${delimiter}`);
                 for (const line of promptText.split("\n")) {
                   out.push(line);
                 }
                 out.push(delimiter);
                 out.push(")");
               } else {
-                out.push(`    jaiph::prompt "$@" <<${delimiter}`);
+                out.push(`    export JAIPH_PROMPT_PREVIEW='${bashSingleQuotedEscape(promptText.slice(0, PROMPT_PREVIEW_MAX_LEN))}'`);
+                out.push(`    jaiph::prompt "$JAIPH_PROMPT_PREVIEW" "$@" <<${delimiter}`);
                 for (const line of promptText.split("\n")) {
                   out.push(line);
                 }

@@ -12,6 +12,34 @@ export type TreeRow = {
 
 export type RowState = { status: "pending" | "done" | "failed"; elapsedSec?: number };
 
+const PROMPT_PREVIEW_MAX = 24;
+
+/** Extract prompt text from step.raw (between first and matching double-quote) for preview. */
+function promptPreviewFromRaw(raw: string): string {
+  const start = raw.indexOf('"');
+  if (start === -1) return "";
+  let content = "";
+  for (let i = start + 1; i < raw.length; i += 1) {
+    if (raw[i] === "\\" && i + 1 < raw.length) {
+      content += raw[i + 1];
+      i += 1;
+      continue;
+    }
+    if (raw[i] === '"') break;
+    content += raw[i];
+  }
+  return content;
+}
+
+function formatPromptLabel(promptRaw: string): string {
+  const content = promptPreviewFromRaw(promptRaw);
+  const oneLine = content.replace(/\s+/g, " ").trim();
+  const preview =
+    oneLine.length > PROMPT_PREVIEW_MAX ? oneLine.slice(0, PROMPT_PREVIEW_MAX) + "..." : oneLine;
+  const escaped = preview.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  return `prompt "${escaped}"`;
+}
+
 function selfRecursiveRunSiteCount(mod: jaiphModule, workflowName: string): number {
   const workflow = mod.workflows.find((item) => item.name === workflowName);
   if (!workflow) {
@@ -113,7 +141,7 @@ export function collectWorkflowChildren(
       return arr;
     }
     if (s.type === "prompt") {
-      return [{ label: "prompt prompt", stepFunc: "jaiph::prompt" }];
+      return [{ label: formatPromptLabel(s.raw), stepFunc: "jaiph::prompt" }];
     }
     if (s.type === "shell") {
       return collectFunctionCalls(s.command).map((fnName) => ({
@@ -207,7 +235,7 @@ export function collectWorkflowChildren(
           continue;
         }
         if (thenStep.type === "prompt") {
-          items.push({ label: "prompt prompt", stepFunc: "jaiph::prompt" });
+          items.push({ label: formatPromptLabel(thenStep.raw), stepFunc: "jaiph::prompt" });
           continue;
         }
         for (const fnName of collectFunctionCalls(thenStep.command)) {
@@ -254,7 +282,7 @@ export function collectWorkflowChildren(
       continue;
     }
     if (step.type === "prompt") {
-      items.push({ label: "prompt prompt", stepFunc: "jaiph::prompt" });
+      items.push({ label: formatPromptLabel(step.raw), stepFunc: "jaiph::prompt" });
       continue;
     }
     if (step.type === "shell") {

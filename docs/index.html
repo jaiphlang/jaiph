@@ -491,7 +491,7 @@ running say_hello.jh
 <span class="run-keyword">workflow</span> default
   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> name_was_provided
   <span class="run-pass">✓</span> <span class="run-time">0s</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> prompt <span class="run-params">(greeting)</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> "Say hello to $1 and..." <span class="run-params">(greeting)</span>
   <span class="run-pass">✓</span> <span class="run-time">9s</span>
   <span class="run-marker">▸</span> <span class="run-keyword">function</span> format_text
   <span class="run-pass">✓</span> <span class="run-time">0s</span>
@@ -612,7 +612,7 @@ running ensure_ci_passes.jh
   <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">12s</span>
   <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> e2e_tests_pass
   <span class="run-marker">·</span>   <span class="run-fail">✗ 3s</span>
-  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> prompt
+  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> "Fix failing compil..."
   <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">21s</span>
   <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> ensure_ci_passes
   <span class="run-marker">·</span>   <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> project_compiles
@@ -708,7 +708,7 @@ jaiph use 0.2.0</code></pre>
                     </dd>
 
                     <dt>Run tree and parameters</dt>
-                    <dd>During <code>jaiph run</code>, the progress tree shows each step. In TTY mode, a single bottom line <code>  RUNNING workflow &lt;name&gt; (X.Xs)</code> is updated in place (e.g. every second) and removed when the run finishes; the tree itself is identical to non-TTY (no per-line live timers). For <code>workflow</code>, <code>prompt</code>, and <code>function</code> steps called with arguments, the argument <strong>values</strong> are shown inline in gray after the step name (comma-separated in parentheses; no parameter names or internal refs). Values are truncated at 32 characters. See <a href="cli">CLI reference</a>.</dd>
+                    <dd>During <code>jaiph run</code>, the progress tree shows each step. In TTY mode, a single bottom line <code>  RUNNING workflow &lt;name&gt; (X.Xs)</code> is updated in place (e.g. every second) and removed when the run finishes; the tree itself is identical to non-TTY (no per-line live timers). For <code>workflow</code>, <code>prompt</code>, and <code>function</code> steps called with arguments, the argument <strong>values</strong> are shown inline in gray after the step name (comma-separated in parentheses; no parameter names or internal refs). Workflow/function values are truncated at 32 characters. <strong>Prompt</strong> steps show a truncated preview of the prompt text (first 24 characters, then <code>...</code> if longer) and the argument list is capped at 24 characters. See <a href="cli">CLI reference</a>.</dd>
 
                     <dt><code>if ! ensure ref; then run ref; fi</code> · <code>if ! &lt;shell&gt;; then ... fi</code></dt>
                     <dd>Conditional workflow steps: run one or more steps only when a rule fails or a shell condition is false. Then-branch can contain <code>run</code>, <code>prompt</code>, and shell commands.</dd>

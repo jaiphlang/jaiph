@@ -81,6 +81,8 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       return `${prefix}${text}\u001b[0m`;
     };
 const MAX_PARAM_VALUE_DISPLAY = 32;
+const PROMPT_PREVIEW_MAX = 24;
+const PROMPT_ARGS_DISPLAY_MAX = 24;
 
 /** True if the param value is an internal symbol (impl ref, execute_readonly, prompt_impl) and should not be shown. */
 function isInternalParamValue(v: string): boolean {
@@ -97,7 +99,7 @@ function stripKeyPrefix(v: string): string {
   return match ? match[1] : v;
 }
 
-function formatParamsForDisplay(params: Array<[string, string]>): string {
+function formatParamsForDisplay(params: Array<[string, string]>, options?: { capTotalLength?: number }): string {
   const values = params
     .map(([, v]) => v)
     .filter((v) => !isInternalParamValue(v))
@@ -110,7 +112,12 @@ function formatParamsForDisplay(params: Array<[string, string]>): string {
     const escaped = visible.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
     return needsQuotes ? `"${escaped}"` : visible;
   });
-  return ` (${parts.join(", ")})`;
+  let result = ` (${parts.join(", ")})`;
+  const cap = options?.capTotalLength;
+  if (typeof cap === "number" && result.length > cap) {
+    result = result.slice(0, cap - 3) + "...";
+  }
+  return result;
 }
 
     const formatStartLine = (indent: string, kind: string, name: string, params?: Array<[string, string]>): string => {
@@ -118,14 +125,38 @@ function formatParamsForDisplay(params: Array<[string, string]>): string {
       const marker = colorize("▸", "dim");
       const kindLabel = colorize(kind, "bold");
       const dimPrefix = colorize(prefix, "dim");
-      const namePart = kind === name ? kindLabel : `${kindLabel} ${name}`;
-      const showParams =
-        params != null &&
-        params.length > 0 &&
-        (kind === "workflow" || kind === "prompt" || kind === "function" || kind === "rule");
-      const paramSuffix = showParams
-        ? colorize(formatParamsForDisplay(params), "dim")
-        : "";
+      let namePart: string;
+      let paramSuffix = "";
+      if (kind === "prompt" && params != null && params.length > 0) {
+        const previewValue =
+          params.map(([, v]) => v).find((v) => !isInternalParamValue(v)) ?? "";
+        const oneLine = previewValue.replace(/\s+/g, " ").trim();
+        const previewDisplay =
+          oneLine.length > PROMPT_PREVIEW_MAX
+            ? `${oneLine.slice(0, PROMPT_PREVIEW_MAX)}...`
+            : oneLine;
+        const escaped = previewDisplay.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+        namePart = previewDisplay.length > 0 ? `${kindLabel} "${escaped}"` : `${kindLabel} ${name}`;
+        const restParams = params.filter(([, v]) => !isInternalParamValue(v));
+        const skipFirst = restParams.length > 0 && restParams[0][1] === previewValue ? 1 : 0;
+        const restForSuffix = restParams.slice(skipFirst);
+        paramSuffix =
+          restForSuffix.length > 0
+            ? colorize(
+                formatParamsForDisplay(restForSuffix, { capTotalLength: PROMPT_ARGS_DISPLAY_MAX }),
+                "dim",
+              )
+            : "";
+      } else {
+        namePart = kind === name ? kindLabel : `${kindLabel} ${name}`;
+        const showParams =
+          params != null &&
+          params.length > 0 &&
+          (kind === "workflow" || kind === "prompt" || kind === "function" || kind === "rule");
+        paramSuffix = showParams
+          ? colorize(formatParamsForDisplay(params), "dim")
+          : "";
+      }
       return `${dimPrefix}${marker} ${namePart}${paramSuffix}`;
     };
     const formatCompletedLine = (indent: string, status: number, elapsedSec: number): string => {
