@@ -1,5 +1,5 @@
 import type { RuleDef } from "../types";
-import { fail, stripQuotes } from "./core";
+import { braceDepthDelta, fail, stripQuotes } from "./core";
 
 export function parseRuleBlock(
   filePath: string,
@@ -24,18 +24,54 @@ export function parseRuleBlock(
   };
 
   let i = startIndex + 1;
+  let braceDepth = 0;
+  let currentCommandLines: string[] = [];
+
+  const flushCommand = (): void => {
+    if (currentCommandLines.length === 0) return;
+    const cmd = currentCommandLines.join("\n").trim();
+    currentCommandLines = [];
+    if (!cmd) return;
+    rule.commands.push(stripQuotes(cmd));
+  };
+
   for (; i < lines.length; i += 1) {
     const innerNo = i + 1;
     const innerRaw = lines[i];
     const inner = innerRaw.trim();
     if (!inner) {
+      if (braceDepth > 0) currentCommandLines.push(innerRaw);
+      else flushCommand();
+      continue;
+    }
+    if (inner.startsWith("#")) {
+      if (braceDepth > 0) currentCommandLines.push(innerRaw);
+      else {
+        flushCommand();
+        rule.commands.push(innerRaw.trim());
+      }
       continue;
     }
     if (inner === "}") {
-      break;
+      if (braceDepth === 0) break;
+      braceDepth -= 1;
+      currentCommandLines.push(innerRaw.trim());
+      if (braceDepth === 0) {
+        flushCommand();
+      }
+      continue;
     }
-    if (inner.startsWith("#")) {
-      rule.commands.push(innerRaw.trim());
+    if (braceDepth > 0) {
+      currentCommandLines.push(innerRaw.trim());
+      braceDepth += braceDepthDelta(inner);
+      if (braceDepth === 0) flushCommand();
+      continue;
+    }
+    const delta = braceDepthDelta(inner);
+    if (delta > 0) {
+      currentCommandLines.push(innerRaw.trim());
+      braceDepth = delta;
+      if (braceDepth === 0) flushCommand();
       continue;
     }
     if (inner.startsWith("run ")) {
@@ -46,12 +82,9 @@ export function parseRuleBlock(
         innerRaw.indexOf("run") + 1,
       );
     }
-    const cmd = inner;
-    if (!cmd) {
-      fail(filePath, "rule command is required", innerNo);
-    }
-    rule.commands.push(stripQuotes(cmd));
+    rule.commands.push(stripQuotes(inner));
   }
+  flushCommand();
   if (i >= lines.length) {
     fail(filePath, `unterminated rule block: ${rule.name}`, lineNo);
   }

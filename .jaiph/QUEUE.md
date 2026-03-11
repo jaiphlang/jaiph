@@ -6,29 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## 2. Fix `||` / `{ ... }` inline brace-group parser limitation
-
-**Status:** pending
-
-**What:** The parser currently fails on short-circuit brace-group patterns like `cmd || { echo "failed"; exit 1; }`. Users must work around this with explicit `if/then/fi` blocks.
-
-**Why:** This is a common bash idiom. Blocking it is a sharp edge for shell-fluent users and produces confusing parse errors.
-
-**Files to change:**
-- `src/parse/workflows.ts` (and shared statement parsing, if needed) — extend grammar handling for inline brace groups.
-- regression tests covering `|| { ... }` in rule/workflow bodies.
-
-**Acceptance criteria:**
-- The following compiles correctly:
-  ```
-  rule example {
-    check_something || { echo "check failed"; exit 1; }
-  }
-  ```
-- Existing `if ! cmd; then ...; fi` patterns continue to work
-
----
-
 ## 5a. Typed `prompt` schema validation with `returns`
 
 **Status:** pending

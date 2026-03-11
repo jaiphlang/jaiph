@@ -32,3 +32,13 @@ export function hasUnescapedClosingQuote(text: string, startIndex: number): bool
 export function colFromRaw(raw: string): number {
   return (raw.match(/\S/)?.index ?? 0) + 1;
 }
+
+/** Count brace depth change for a line (ignores quotes; used for inline { ... } in rule/workflow bodies). */
+export function braceDepthDelta(line: string): number {
+  let delta = 0;
+  for (let i = 0; i < line.length; i += 1) {
+    if (line[i] === "{") delta += 1;
+    else if (line[i] === "}") delta -= 1;
+  }
+  return delta;
+}

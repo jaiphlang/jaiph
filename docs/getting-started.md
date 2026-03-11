@@ -212,7 +212,6 @@ All Jaiph primitives can be combined with bash code and are interoperable with n
 
 Known limitations and gotchas:
 
-- Parser limitation: inline brace-group short-circuit patterns like `cmd || { ... }` are not supported in `.jh`/`.jph` files yet. Use explicit conditionals like `if ! cmd; then ...; fi` instead.
 - Entrypoint naming: `jaiph run` does not use file-name-based workflow lookup. Use `workflow default` as the entrypoint for runnable files.
 
 ## More Documentation

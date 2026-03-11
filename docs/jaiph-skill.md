@@ -48,6 +48,7 @@ Prefer composable modules over one monolithic file.
 - **Conditionals:** Allowed forms:
   - `if ! ensure some_rule; then` followed by `run some_workflow` or shell commands, then `fi`.
   - `if ! <shell_condition>; then` (e.g. `test -f .file`) followed by `run` steps or shell commands, then `fi`.
+  - Short-circuit brace groups in rule/workflow/function bodies: `cmd || { echo "failed"; exit 1; }` (single-line) or `cmd || { ... }` (multi-line). These compile and transpile as one shell command.
 
 Rules:
 
