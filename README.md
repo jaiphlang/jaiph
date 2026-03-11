@@ -166,6 +166,7 @@ config {
 
 Important:
 
+- You can set `agent.backend` to `"cursor"` (default) or `"claude"` per workflow file; `JAIPH_AGENT_BACKEND` overrides it. When backend is `"claude"`, the Anthropic Claude CLI (`claude`) must be on PATH or the run fails with a clear error.
 - `agent.trusted_workspace` sets Cursor backend trust scope (`--trust`), defaulting to project root.
 - `agent.command` accepts executable + inline args (for example `cursor-agent --force`).
 - `agent.cursor_flags` / `agent.claude_flags` append backend-specific CLI flags (split on whitespace).

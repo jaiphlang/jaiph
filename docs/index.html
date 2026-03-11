@@ -713,7 +713,7 @@ jaiph use 0.2.0</code></pre>
                     <dd>Conditional workflow steps: run one or more steps only when a rule fails or a shell condition is false. Then-branch can contain <code>run</code>, <code>prompt</code>, and shell commands.</dd>
 
                     <dt><code>prompt "..."</code></dt>
-                    <dd>Sends prompt text to the configured agent command (with optional model from config) and stores
+                    <dd>Sends prompt text to the configured agent (Cursor or Claude CLI; see <code>agent.backend</code> and <a href="configuration">Configuration</a>). Stores
                         prompt stdout/stderr in
                         <code>.jaiph/runs/</code> step logs (for example:
                         <code>*-jaiph__prompt.out</code> and <code>*-jaiph__prompt.err</code>). Jaiph also writes

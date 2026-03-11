@@ -179,7 +179,7 @@ Imports resolve for both extensions: `import "foo" as x` finds `foo.jh` or `foo.
 - `JAIPH_STDLIB` — path to `jaiph_stdlib.sh`.
 - `JAIPH_AGENT_MODEL`
 - `JAIPH_AGENT_COMMAND`
-- `JAIPH_AGENT_BACKEND` — prompt backend: `cursor` (default) or `claude`. Overrides in-file `agent.backend`. See [Configuration](configuration.md).
+- `JAIPH_AGENT_BACKEND` — prompt backend: `cursor` (default) or `claude`. Overrides in-file `agent.backend`. When set to `claude`, the Anthropic Claude CLI (`claude`) must be installed and on PATH; otherwise the run fails with a clear error. See [Configuration](configuration.md).
 - `JAIPH_AGENT_TRUSTED_WORKSPACE` — trusted workspace directory for Cursor backend `--trust`. Defaults to project root.
 - `JAIPH_AGENT_CURSOR_FLAGS` — extra flags for Cursor backend (string, split on whitespace).
 - `JAIPH_AGENT_CLAUDE_FLAGS` — extra flags for Claude backend (string, split on whitespace).

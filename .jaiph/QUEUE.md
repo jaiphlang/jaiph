@@ -6,32 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## 9. Support Claude CLI as prompt backend
-
-**Status:** pending
-
-**What:** Add support for using Claude CLI as an alternative backend for `prompt` execution in Jaiph workflows, with a file-level default backend (`agent.backend`) and env fallback.
-
-**Why:** Users should be able to run the same workflows with different agent CLIs without rewriting workflow logic.
-
-**Files to change:**
-- `src/jaiph_stdlib.sh` + `src/runtime/prompt.sh` — route prompt execution through a backend abstraction.
-- `src/cli/commands/run.ts` + `src/parse/metadata.ts` + `src/types.ts` — expose file-level `agent.backend` and env fallback.
-- `docs/cli.md` + `docs/configuration.md` — document backend selection and Claude CLI requirements.
-- tests for backend dispatch, missing binary errors, and prompt mocks in test mode.
-
-**Acceptance criteria:**
-- User can set backend per workflow file via `agent.backend = "cursor|claude"`.
-- Environment variable can override file default with deterministic precedence (env > file default > built-in default).
-- No prompt-level backend override syntax is introduced in this task.
-- Existing default backend remains unchanged and backward compatible
-- Output capture (`result = prompt "..."`) continues to work with Claude CLI backend
-- Clear error if Claude CLI is selected but unavailable
-- In `jaiph test`, prompt mocks override backend execution; when a prompt is not mocked, selected backend executes normally (including Claude CLI)
-- Prompt behavior (`stdout`/`stderr` capture and step event labels) stays consistent across backends
-
----
-
 ## 12. Project-local `.jaiph/hooks.json` support (Cursor-style)
 
 **Status:** pending
