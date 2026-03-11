@@ -6,39 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## 12. Project-local `.jaiph/hooks.json` support (Cursor-style)
-
-**Status:** pending
-
-**What:** Add support for project-local hook configuration file at `.jaiph/hooks.json`, similar to Cursor hooks. Users should be able to create this file in their repo and define commands to run for relevant Jaiph lifecycle events.
-
-**Why:** Gives a simple, explicit, repo-local integration point for custom automation (e.g. forwarding status to external tools like `jai`) without hardcoding destination logic in core runtime.
-
-**Scope / behavior (V1):**
-- Jaiph supports two hook config locations:
-  - Global: `~/.jaiph/hooks.json`
-  - Project-local: `<project>/.jaiph/hooks.json`
-- Jaiph loads both when present, with deterministic precedence (project-local overrides global for conflicting event entries).
-- If file exists and is valid JSON, Jaiph registers configured hook commands.
-- Hook execution is best-effort: hook failure must not crash or block main workflow execution.
-- Hook payload includes event metadata needed by external commands (workflow id, step id/name, status, timestamps, run path).
-- If neither file exists, Jaiph behaves exactly as today.
-
-**Files to change:**
-- `src/cli/commands/run.ts` (or shared runtime path) — load/validate global + project hook files, merge with precedence, dispatch hooks for workflow/step events.
-- `src/types.ts` — hook config and payload typing.
-- docs (`docs/cli.md` or new hooks doc) — schema, supported events, precedence rules, examples for both file locations.
-- tests for: valid config, missing file, invalid JSON, hook failure isolation, payload shape.
-
-**Acceptance criteria:**
-- A global `~/.jaiph/hooks.json` can define commands for supported Jaiph events.
-- A repo-local `.jaiph/hooks.json` can define commands and override conflicting global entries.
-- Hooks receive documented payload data and execute in event order.
-- Invalid or failing hooks produce clear warnings/logs but do not fail workflow run.
-- No behavior change when both hook files are absent.
-
----
-
 ## 11. Queue assignment capture for any step via `=`
 
 **Status:** pending

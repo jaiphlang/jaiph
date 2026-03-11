@@ -32,6 +32,7 @@ import {
   formatElapsedDuration,
   formatRunningBottomLine,
 } from "../run/progress";
+import { loadMergedHooks, runHooksForEvent } from "../run/hooks";
 
 export async function runWorkflow(rest: string[]): Promise<number> {
   const { target, positional } = parseArgs(rest);
@@ -43,6 +44,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
   }
   const inputAbs = resolve(input);
   const workspaceRoot = detectWorkspaceRoot(dirname(inputAbs));
+  const hooksConfig = loadMergedHooks(workspaceRoot);
   const inputStat = statSync(inputAbs);
   const ext = extname(inputAbs);
   if (!inputStat.isFile() || (ext !== ".jph" && ext !== ".jh")) {
@@ -224,6 +226,13 @@ function formatParamsForDisplay(params: Array<[string, string]>): string {
     delete runtimeEnv.JAIPH_PRECEDING_FILES;
     delete runtimeEnv.JAIPH_RUN_SUMMARY_FILE;
     const metaFile = join(outDir, `.jaiph-run-meta-${Date.now()}-${process.pid}.txt`);
+    runHooksForEvent(hooksConfig, "workflow_start", {
+      event: "workflow_start",
+      workflow_id: "",
+      timestamp: new Date().toISOString(),
+      run_path: inputAbs,
+      workspace: workspaceRoot,
+    });
     const execResult = spawnRunProcess(command, [metaFile, builtPath, workflowSymbol, ...runArgs], {
       cwd: workspaceRoot,
       env: runtimeEnv,
@@ -231,6 +240,7 @@ function formatParamsForDisplay(params: Array<[string, string]>): string {
     const signalHandlers = setupRunSignalHandlers(execResult, { forceKillAfterMs: 1500 });
     let capturedStderr = "";
     let stderrBuffer = "";
+    let workflowRunId = "";
     const runtimeStack: string[] = [];
     const legacyStack: string[] = [];
     let legacyCounter = 0;
@@ -260,8 +270,19 @@ function formatParamsForDisplay(params: Array<[string, string]>): string {
     const handleStderrLine = (line: string): void => {
       const event = parseStepEvent(line);
       if (event) {
+        if (event.run_id && !workflowRunId) workflowRunId = event.run_id;
         const eventId = resolveEventId(event.type, event.id, event.func);
         if (event.type === "STEP_START") {
+          runHooksForEvent(hooksConfig, "step_start", {
+            event: "step_start",
+            workflow_id: event.run_id,
+            step_id: eventId,
+            step_kind: event.kind,
+            step_name: event.name,
+            timestamp: event.ts || new Date().toISOString(),
+            run_path: inputAbs,
+            workspace: workspaceRoot,
+          });
           if (event.kind === "workflow" && event.name === "default" && runtimeStack.length === 0) {
             rootStepId = eventId;
             runtimeStack.push(eventId);
@@ -296,6 +317,20 @@ function formatParamsForDisplay(params: Array<[string, string]>): string {
           }
           stepIndentById.delete(eventId);
         }
+        runHooksForEvent(hooksConfig, "step_end", {
+          event: "step_end",
+          workflow_id: event.run_id,
+          step_id: eventId,
+          step_kind: event.kind,
+          step_name: event.name,
+          status: event.status ?? 1,
+          elapsed_ms: event.elapsed_ms ?? 0,
+          timestamp: event.ts || new Date().toISOString(),
+          run_path: inputAbs,
+          workspace: workspaceRoot,
+          out_file: event.out_file || undefined,
+          err_file: event.err_file || undefined,
+        });
         removeLastMatching(runtimeStack, eventId);
         return;
       }
@@ -362,6 +397,18 @@ function formatParamsForDisplay(params: Array<[string, string]>): string {
       runningInterval = undefined;
       process.stdout.write("\r\u001b[K");
     }
+
+    runHooksForEvent(hooksConfig, "workflow_end", {
+      event: "workflow_end",
+      workflow_id: workflowRunId,
+      status: resolvedStatus,
+      elapsed_ms: elapsedMs,
+      timestamp: new Date().toISOString(),
+      run_path: inputAbs,
+      workspace: workspaceRoot,
+      run_dir: runDir,
+      summary_file: summaryFile,
+    });
 
     const palette = colorPalette();
     if (resolvedStatus === 0) {

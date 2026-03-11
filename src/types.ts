@@ -167,3 +167,50 @@ export interface JaiphTestModule {
   tests: TestBlockDef[];
 }
 
+// --- Hooks (project/global .jaiph/hooks.json) ---
+
+/** Supported hook event names for jaiph run lifecycle. */
+export type HookEventName =
+  | "workflow_start"
+  | "workflow_end"
+  | "step_start"
+  | "step_end";
+
+/** Schema for hooks.json: event name -> array of shell commands to run. */
+export interface HookConfig {
+  workflow_start?: string[];
+  workflow_end?: string[];
+  step_start?: string[];
+  step_end?: string[];
+}
+
+/** Payload passed to hook commands (JSON on stdin). */
+export interface HookPayload {
+  event: HookEventName;
+  /** Workflow run id (from runtime; empty for workflow_start until first step). */
+  workflow_id: string;
+  /** Step id (only for step_start/step_end). */
+  step_id?: string;
+  /** Step kind: workflow, rule, function, prompt. */
+  step_kind?: string;
+  /** Step name (e.g. default, scan_passes). */
+  step_name?: string;
+  /** Exit status (step_end: 0 = success; workflow_end: resolved status). */
+  status?: number;
+  /** ISO timestamp when event occurred. */
+  timestamp: string;
+  /** Elapsed ms for step (step_end) or total run (workflow_end). */
+  elapsed_ms?: number;
+  /** Absolute path to the workflow file being run. */
+  run_path: string;
+  /** Workspace root (project directory). */
+  workspace: string;
+  /** Run directory (logs); set for workflow_end and step_end when available. */
+  run_dir?: string;
+  /** Path to run_summary.jsonl; set for workflow_end when available. */
+  summary_file?: string;
+  /** Step stdout log path (step_end). */
+  out_file?: string;
+  /** Step stderr log path (step_end). */
+  err_file?: string;
+}
