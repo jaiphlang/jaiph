@@ -46,7 +46,9 @@ jobs:
           node-version: "20"
 
       - name: Run runtime acceptance E2E
-        run: npm run test:e2e
+        run: |
+          npm ci
+          npm run test:e2e
 
   e2e-wsl:
     name: E2E install and CLI workflow (Windows)
@@ -76,4 +78,5 @@ jobs:
             sudo apt-get install -y nodejs
           fi
           cd \"\$(wslpath '$workspace')\"
+          npm ci
           npm run test:e2e
