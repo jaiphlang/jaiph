@@ -59,13 +59,6 @@ jaiph__expect_not_contain() {
 jaiph__expect_equal() {
   local actual="$1"
   local expected="$2"
-  if [[ "$actual" == "$expected"* ]]; then
-    local suffix="${actual#"$expected"}"
-    # Allow harmless trailing punctuation/whitespace, e.g. expected message vs ":(".
-    if [[ "$suffix" =~ ^[[:space:][:punct:]]*$ ]]; then
-      return 0
-    fi
-  fi
   if [[ "$actual" != "$expected" ]]; then
     local gray=$'\e[90m'
     local red=$'\e[31m'
