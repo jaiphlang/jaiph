@@ -38,8 +38,8 @@ The Jaiph project welcomes contributions. Development moves quickly and may incl
 
 * If you want to fix a bug, please point your PR to the `main` branch, and also check if the issue has been addressed in the `nightly` branch.
   This ensures that your fix is relevant and not already resolved in ongoing development.
-* If you are adding a new feature, submit your PR to the `main` branch (and don't forget to add or update tests in `e2e/tests`!).
-  Well-tested contributions help maintain project reliability and ease future maintenance.
+* If you are adding a new feature, submit your PR to the `nightly` branch (and don't forget to add or update tests in `e2e/tests`!).
+  Changes from the `nightly` branch are released roughly in a weekly basis.
 * We highly recommend creating issues with a thorough description of any bugs or features before submitting code.
   This allows our Jaiph workflows and maintainers to efficiently prioritize, discuss, and track contributions.
 * Pull requests generated with the help of AI are welcome, as long as they include comprehensive tests (including in `e2e/tests`).
