@@ -1,23 +1,23 @@
 # Testing Jaiph Workflows
 
-[jaiph.org](https://jaiph.org) · [Getting started](getting-started.md) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Testing](testing.md) · [Agent Skill](https://jaiph.org/jaiph-skill.md)
+[jaiph.org](https://jaiph.org) · [Getting started](getting-started.md) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Testing](testing.md) · [Hooks](hooks.md) · [Agent Skill](https://jaiph.org/jaiph-skill.md)
 
 ---
 
 You can test Jaiph workflows by writing test scripts that run workflows under controlled conditions and assert on their output or side effects. Tests live in dedicated files, use the same import system as workflows, and support mocking prompts and dependencies so runs are deterministic and fast.
 
-**Concepts:**
+**Concepts**
 
 - **Test files** — Files named `*.test.jh` (or `*.test.jph`) contain only imports and test blocks. They are discovered and run by `jaiph test`.
 - **Test blocks** — Each `test "description" { ... }` block is one test case: a sequence of steps (mocks, workflow runs, assertions).
 - **Mocks** — You can mock prompt responses, workflows, rules, and functions so the workflow under test sees fixed or scripted behavior.
-- **Assertions** — Capture workflow stdout+stderr into a variable, then use `expectContain` or `expectEqual` to verify the output.
+- **Assertions** — Capture workflow stdout+stderr into a variable, then use `expectContain`, `expectNotContain`, or `expectEqual` to verify the output.
 
 ## File naming
 
 - Name test files with the `.test.jh` (or `.test.jph`) suffix, for example `workflow.test.jh`.
 - A test file must contain at least one test block. Only imports and test blocks are allowed; do not define rules or workflows in test files.
-- `jaiph test` discovers all `*.test.jh` and `*.test.jph` files under the given path (recursively), or under the workspace root when no path is given.
+- `jaiph test` discovers all `*.test.jh` and `*.test.jph` files under the given path (recursively). When no path is given, the workspace root is inferred from the current directory and tests are discovered from there.
 
 ## Running tests
 
@@ -29,7 +29,7 @@ jaiph test
 jaiph test ./e2e
 
 # Run a single test file
-jaiph test ./e2e/workflow.test.jh
+jaiph test ./e2e/workflow_greeting.test.jh
 ```
 
 ## Test blocks
@@ -42,11 +42,13 @@ Inside a `*.test.jh` file you can use:
 Example:
 
 ```jaiph
-import "workflow" as w
+import "workflow_greeting.jh" as w
 
-test "runs happy path and output contains PASS" {
+test "runs happy path and output contains expected mock" {
+  mock prompt "greeting-mock"
   response = w.default
-  expectContain response "PASS"
+  expectContain response "greeting-mock"
+  expectContain response "done"
 }
 ```
 
@@ -54,13 +56,14 @@ test "runs happy path and output contains PASS" {
 
 - **Shell** — Any bash statement (e.g. `echo "given"`, `# comment`). Use for setup, reading files, or custom capture when needed.
 - **mock prompt** — `mock prompt "<response>"` adds a mock response for the next prompt call. Mocks are consumed in order when the workflow runs. Use one per prompt in the workflow. When the workflow uses a **typed prompt** (`result = prompt "..." returns '{ ... }'`), the mock response must be valid JSON that satisfies the declared schema (e.g. one line of JSON with the required fields and correct types); otherwise the step fails with a parse or schema error. You can mock with a single line such as `mock prompt '{"type":"fix","risk":"low","summary":"Done"}'` so that `$result`, `$result_type`, `$result_risk`, etc. are set as expected.
-- **mock prompt block** — `mock prompt { ... }` dispatches by prompt content. Use `if $1 contains "..." ; then` / `elif $1 contains "..." ; then` / optional `else` / `respond "..."` / `fi`. First matching branch wins; if no branch matches and there is no `else`, the test fails with a clear error.
+- **mock prompt block** — `mock prompt { ... }` dispatches by prompt content. Use `if $1 contains "..." ; then` / `elif $1 contains "..." ; then` / optional `else` / `respond "..."` / `fi`. Each branch pairs a condition with a response. First matching branch wins; if no branch matches and there is no `else`, the test fails with a clear error.
 - **mock workflow** — `mock workflow <alias>.<name> { ... }` replaces that workflow for this test with a shell body (e.g. `echo "ok"; exit 0`). Ref is `<alias>` or `<alias>.<workflow_name>`.
 - **mock rule** — `mock rule <alias>.<name> { ... }` replaces that rule for this test with a shell body. Ref is `<alias>` or `<alias>.<rule_name>`.
 - **mock function** — `mock function <name> { ... }` or `mock function <alias>.<name> { ... }` replaces that function for this test with a shell body.
-- **Workflow run (capture)** — `name = <alias>.<workflow>` runs the workflow, captures combined stdout+stderr into `name`, and does not abort the test on non-zero exit so you can assert on the output. Optional: `name = <alias>.<workflow> "arg"` to pass one argument; `name = <alias>.<workflow> allow_failure` to run without failing the test on non-zero exit so you can assert on failure output.
+- **Workflow run (capture)** — `name = <alias>.<workflow>` runs the workflow, captures combined stdout+stderr into `name`, and does not abort the test on non-zero exit so you can assert on the output. Optional: `name = <alias>.<workflow> "arg"` to pass one argument; `name = <alias>.<workflow> allow_failure` to run without failing the test on non-zero exit so you can assert on failure output. Prefer this over raw shell capture when you want to check failure output.
 - **Workflow run (no capture)** — `<alias>.<workflow>` or `<alias>.<workflow> "arg"` runs the workflow without capturing output. The test fails if the workflow exits non-zero. Add `allow_failure` to allow non-zero exit (e.g. when you only care about side effects like a written file).
 - **expectContain** — `expectContain <variable> "<substring>"` fails the test if the variable’s value does not contain the substring (error shows expected substring and output preview).
+- **expectNotContain** — `expectNotContain <variable> "<substring>"` fails the test if the variable’s value contains the substring (useful to assert that certain output is absent).
 - **expectEqual** — `expectEqual <variable> "<expected>"` fails the test if the variable’s value is not exactly equal to the expected string (error shows expected vs actual).
 
 ## Pass/fail reporting

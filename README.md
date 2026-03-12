@@ -27,14 +27,14 @@ It combines declarative workflow structure with bash, then compiles to pure shel
 > [!WARNING]
 > Jaiph is still in an early stage. Expect breaking changes.
 
-- **Documentation:** [Getting started](docs/getting-started.md) · <https://jaiph.org/>
+- **Documentation:** [Getting started](docs/getting-started.md) — installation, first workflow, workspace setup. Full reference: <https://jaiph.org/>
 - **Agent skill (for AI agents):** <https://jaiph.org/jaiph-skill.md>
 - **Samples:** <https://github.com/jaiphlang/jaiph/tree/main/samples>
 - **Contributing:** <https://github.com/jaiphlang/jaiph/issues>
 
-## Development Process and Contribution Notes
+## Contributing
 
-The Jaiph development process relies heavily on both AI agents and Jaiph workflows. Development moves quickly and may include breaking changes. There are two primary branches: `main`, which contains the current stable version, and `nightly`, which includes the most up-to-date changes.
+The Jaiph project welcomes contributions. Development moves quickly and may include breaking changes. Two primary branches: **main** (stable) and **nightly** (latest).
 
 * If you want to fix a bug, please point your PR to the `main` branch, and also check if the issue has been addressed in the `nightly` branch.
   This ensures that your fix is relevant and not already resolved in ongoing development.
@@ -155,7 +155,7 @@ Tip: add `.jaiph/runs/` to your `.gitignore`.
 - During `jaiph run`, progress rendering is event-driven.
   - **TTY:** The progress tree is identical to non-TTY: each task line shows icon and final time when the step completes (e.g. `✓ 0s`, `▸ prompt "First 24 chars..." (arg1)` then on completion `✓ 2s`). No per-step live elapsed on tree rows. A single **bottom line** shows `  RUNNING workflow <name> (X.Xs)` (RUNNING yellow, "workflow" bold, workflow name default, time dim) and is the only line updated in place (e.g. every second). When the run completes, that line is removed.
   - **Non-TTY:** One completion line per finished step; no RUNNING line, no in-place updates.
-- For parameterized steps (`workflow`, `prompt`, `function`), the tree shows passed argument values inline in gray (comma-separated values in parentheses; no labels; workflow/function values truncated to 32 chars). **Prompt** steps additionally show a truncated preview of the prompt text (first 24 chars) and the argument list is capped at 24 characters.
+- For parameterized steps (`workflow`, `prompt`, `function`), the tree shows passed argument values inline in gray (comma-separated values in parentheses; no labels; workflow/function values truncated to 32 chars). **Prompt** steps additionally show a truncated preview of the prompt text (first 24 chars) and the argument list is capped at 96 characters.
 - Each run writes `.jaiph/runs/<timestamp>-<id>/run_summary.jsonl`.
 - Step `.out` / `.err` files are created only when the step produced output (empty log files are skipped).
 
