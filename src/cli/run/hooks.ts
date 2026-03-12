@@ -136,13 +136,15 @@ export function runHooksForEvent(
         stdio: ["pipe", "ignore", "pipe"],
         env: { ...process.env },
       });
-      if (child.stdin?.writable) {
-        child.stdin.write(payloadJson, "utf8", (err) => {
-          if (err) {
-            process.stderr.write(`jaiph hooks: failed to write payload to ${cmd}: ${err.message}\n`);
-          }
-          child.stdin?.end();
+      if (child.stdin) {
+        child.stdin.on("error", (err) => {
+          process.stderr.write(`jaiph hooks: failed to write payload to ${cmd}: ${err.message}\n`);
         });
+      }
+      if (child.stdin?.writable) {
+        // Best-effort payload delivery. If the hook process exits early,
+        // stdin can emit EPIPE asynchronously; the error listener above handles it.
+        child.stdin.end(payloadJson, "utf8");
       }
       child.stderr?.on("data", (chunk: Buffer) => {
         process.stderr.write(chunk);
