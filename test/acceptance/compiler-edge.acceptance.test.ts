@@ -637,7 +637,7 @@ test("ACCEPTANCE: jaiph test typed prompt — invalid JSON fails with parse erro
         PATH: `${nodeDir}:${process.env.PATH ?? ""}`,
       },
     });
-    assert.notEqual(r.status, 0);
+    assert.notEqual(r.status, 0, `expected non-zero exit; stdout:\n${r.stdout ?? ""}\nstderr:\n${r.stderr ?? ""}`);
     const err = (r.stderr ?? "") + (r.stdout ?? "");
     assert.match(err, /invalid JSON|parse error/i, "stderr should mention JSON parse error");
   });
@@ -679,7 +679,7 @@ test("ACCEPTANCE: jaiph test typed prompt — missing field fails with schema er
         PATH: `${nodeDir}:${process.env.PATH ?? ""}`,
       },
     });
-    assert.notEqual(r.status, 0);
+    assert.notEqual(r.status, 0, `expected non-zero exit; stdout:\n${r.stdout ?? ""}\nstderr:\n${r.stderr ?? ""}`);
     const err = (r.stderr ?? "") + (r.stdout ?? "");
     assert.match(err, /missing required field|missing.*field/i);
   });

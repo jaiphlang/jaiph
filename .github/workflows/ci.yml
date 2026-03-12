@@ -57,19 +57,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Verify WSL Ubuntu is available
+      - name: Detect WSL distro
+        id: detect_wsl
         shell: pwsh
         run: |
-          $distros = wsl -l -q
-          if (-not ($distros -match "Ubuntu")) {
-            Write-Error "Ubuntu distro not found in WSL on this runner."
+          $distros = @(wsl -l -q | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" })
+          if ($distros.Count -eq 0) {
+            "distro=" >> $env:GITHUB_OUTPUT
+            Write-Warning "No WSL distro is available on this runner. Skipping WSL E2E."
+            exit 0
           }
+          $ubuntu = $distros | Where-Object { $_ -match "^Ubuntu" } | Select-Object -First 1
+          $selected = if ($ubuntu) { $ubuntu } else { $distros[0] }
+          "distro=$selected" >> $env:GITHUB_OUTPUT
+          Write-Host "Using WSL distro: $selected"
 
       - name: Install Node and run E2E tests in WSL
+        if: steps.detect_wsl.outputs.distro != ''
         shell: pwsh
         run: |
           $workspace = "${{ github.workspace }}"
-          wsl -d Ubuntu -- bash -lc "set -euo pipefail
+          $distro = "${{ steps.detect_wsl.outputs.distro }}"
+          wsl -d "$distro" -- bash -lc "set -euo pipefail
           export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update
           sudo apt-get install -y curl ca-certificates
@@ -80,3 +89,10 @@ jobs:
           cd \"\$(wslpath '$workspace')\"
           npm ci
           npm run test:e2e
+          "
+
+      - name: WSL E2E skipped
+        if: steps.detect_wsl.outputs.distro == ''
+        shell: pwsh
+        run: |
+          Write-Host "No WSL distro found on this runner image; skipping WSL E2E."
