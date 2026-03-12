@@ -51,7 +51,7 @@ jobs:
           npm run test:e2e
 
   e2e-wsl:
-    name: E2E install and CLI workflow (Windows)
+    name: E2E install and CLI workflow (windows-latest + wsl)
     runs-on: windows-latest
     steps:
       - name: Checkout
