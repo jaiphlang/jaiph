@@ -26,6 +26,7 @@ jaiph::stream_json_to_text() {
     let wroteAnySection = false;
     let wroteReasoningHeader = false;
     let wroteFinalHeader = false;
+    let sawFinalStreamDelta = false;
     const append = (base, value) => (typeof value === "string" && value.length > 0 ? base + value : base);
     const pickGeneric = (obj) => {
       if (!obj || typeof obj !== "object") return "";
@@ -87,10 +88,63 @@ jaiph::stream_json_to_text() {
       try {
         const obj = JSON.parse(line);
         if (obj && typeof obj === "object") {
+          if (obj.type === "stream_event" && obj.event && typeof obj.event === "object") {
+            const event = obj.event;
+            if (
+              event.type === "content_block_delta" &&
+              event.delta &&
+              typeof event.delta === "object"
+            ) {
+              if (
+                event.delta.type === "thinking_delta" &&
+                typeof event.delta.thinking === "string" &&
+                event.delta.thinking.length > 0
+              ) {
+                reasoning = append(reasoning, event.delta.thinking);
+                writeReasoningDelta(event.delta.thinking);
+                return;
+              }
+              if (
+                event.delta.type === "text_delta" &&
+                typeof event.delta.text === "string" &&
+                event.delta.text.length > 0
+              ) {
+                sawFinalStreamDelta = true;
+                final = append(final, event.delta.text);
+                writeFinalDelta(event.delta.text);
+                return;
+              }
+            }
+          }
           if (obj.type === "thinking" && typeof obj.text === "string" && obj.text.length > 0) {
             reasoning = append(reasoning, obj.text);
             writeReasoningDelta(obj.text);
             return;
+          }
+          if (obj.type === "assistant" && obj.message && Array.isArray(obj.message.content)) {
+            let reasoningText = "";
+            let finalText = "";
+            for (const block of obj.message.content) {
+              if (!block || typeof block !== "object") continue;
+              if (block.type === "thinking" && typeof block.thinking === "string") {
+                reasoningText = append(reasoningText, block.thinking);
+                continue;
+              }
+              if (block.type === "text" && typeof block.text === "string") {
+                finalText = append(finalText, block.text);
+              }
+            }
+            if (reasoningText.length > 0) {
+              reasoning = append(reasoning, reasoningText);
+              writeReasoningDelta(reasoningText);
+            }
+            if (!sawFinalStreamDelta && finalText.length > 0) {
+              final = append(final, finalText);
+              writeFinalDelta(finalText);
+            }
+            if (reasoningText.length > 0 || finalText.length > 0) {
+              return;
+            }
           }
           if (obj.type === "assistant" && obj.message && typeof obj.message.content === "string" && obj.message.content.length > 0) {
             final = append(final, obj.message.content);
@@ -98,8 +152,10 @@ jaiph::stream_json_to_text() {
             return;
           }
           if (obj.type === "result" && typeof obj.result === "string" && obj.result.length > 0) {
-            final = append(final, obj.result);
-            writeFinalDelta(obj.result);
+            if (!sawFinalStreamDelta) {
+              final = append(final, obj.result);
+              writeFinalDelta(obj.result);
+            }
             return;
           }
         }
@@ -140,7 +196,7 @@ jaiph::run_prompt_backend() {
       echo "jai: agent.backend is \"claude\" but the Claude CLI (claude) was not found in PATH. Install the Anthropic Claude CLI or set agent.backend = \"cursor\" (or JAIPH_AGENT_BACKEND=cursor)." >&2
       return 1
     fi
-    printf '%s' "$prompt_text" | claude "${claude_extra_flags[@]}" 2>&1 | jaiph::stream_json_to_text
+    printf '%s' "$prompt_text" | claude -p --verbose --output-format stream-json --include-partial-messages "${claude_extra_flags[@]}" 2>&1 | jaiph::stream_json_to_text
     return $?
   fi
   # cursor backend
@@ -226,7 +282,7 @@ jaiph::prompt_impl() {
   fi
   if [[ -n "$prompt_text" ]]; then
     if [[ "$backend" == "claude" ]]; then
-      command_for_log="$(printf "printf %%s %q \\| %s" "$prompt_text" "$(jaiph::format_shell_command claude "${claude_extra_flags[@]}")")"
+      command_for_log="$(printf "printf %%s %q \\| %s" "$prompt_text" "$(jaiph::format_shell_command claude -p --verbose --output-format stream-json --include-partial-messages "${claude_extra_flags[@]}")")"
     elif [[ -n "${JAIPH_AGENT_MODEL:-}" ]]; then
       command_for_log="$(jaiph::format_shell_command "${agent_command_parts[@]}" --print --output-format stream-json --stream-partial-output --workspace "$workspace_root" --model "$JAIPH_AGENT_MODEL" --trust "$trusted_workspace" "${cursor_extra_flags[@]}" "$prompt_text")"
     else
@@ -285,11 +341,28 @@ jaiph::prompt_capture_with_schema() {
     const fields = (schema.fields || []).map(f => ({ name: f.name, type: f.type }));
     const lines = raw.split(/\\n/).filter(l => l.trim().length > 0);
     const lastLine = lines.length > 0 ? lines[lines.length - 1].trim() : '';
+    const fence = String.fromCharCode(96).repeat(3);
+    const fencedPattern = new RegExp(fence + '(?:json)?\\\\s*([\\\\s\\\\S]*?)' + fence, 'gi');
+    const fencedMatches = [...raw.matchAll(fencedPattern)];
+    const fencedJson = fencedMatches.length > 0 ? String(fencedMatches[fencedMatches.length - 1][1] || '').trim() : '';
+    const objectLine = [...lines].reverse().map((l) => l.trim()).find((l) => l.startsWith('{') && l.endsWith('}')) || '';
+    const candidates = [lastLine, fencedJson, objectLine].filter((v, i, arr) => v.length > 0 && arr.indexOf(v) === i);
     let obj;
-    try {
-      obj = JSON.parse(lastLine);
-    } catch (e) {
-      process.stderr.write('jai: prompt returned invalid JSON (parse error): ' + e.message + '\\n');
+    let parsedFrom = '';
+    let parseError = null;
+    for (const candidate of candidates) {
+      try {
+        obj = JSON.parse(candidate);
+        parsedFrom = candidate;
+        parseError = null;
+        break;
+      } catch (e) {
+        parseError = e;
+      }
+    }
+    if (!obj) {
+      const message = parseError && parseError.message ? parseError.message : 'unknown parse error';
+      process.stderr.write('jai: prompt returned invalid JSON (parse error): ' + message + '\\n');
       process.stderr.write('Last line: ' + lastLine.slice(0, 200) + (lastLine.length > 200 ? '...' : '') + '\\n');
       process.exit(1);
     }
@@ -320,7 +393,7 @@ jaiph::prompt_capture_with_schema() {
       }
     }
     const esc = (s) => String(s).replace(/'/g, \"'\\\\''\");
-    let out = captureName + \"='\" + esc(lastLine) + \"'\";
+    let out = captureName + \"='\" + esc(parsedFrom) + \"'\";
     for (const f of fields) {
       const v = obj[f.name];
       out += \"; export \" + captureName + \"_\" + f.name + \"='\" + esc(String(v)) + \"'\";

@@ -32,6 +32,20 @@ It combines declarative workflow structure with bash, then compiles to pure shel
 - **Samples:** <https://github.com/jaiphlang/jaiph/tree/main/samples>
 - **Contributing:** <https://github.com/jaiphlang/jaiph/issues>
 
+## Development Process and Contribution Notes
+
+The Jaiph development process relies heavily on both AI agents and Jaiph workflows. Development moves quickly and may include breaking changes. There are two primary branches: `main`, which contains the current stable version, and `nightly`, which includes the most up-to-date changes.
+
+* If you want to fix a bug, please point your PR to the `main` branch, and also check if the issue has been addressed in the `nightly` branch.
+  This ensures that your fix is relevant and not already resolved in ongoing development.
+* If you are adding a new feature, submit your PR to the `main` branch (and don't forget to add or update tests in `e2e/tests`!).
+  Well-tested contributions help maintain project reliability and ease future maintenance.
+* We highly recommend creating issues with a thorough description of any bugs or features before submitting code.
+  This allows our Jaiph workflows and maintainers to efficiently prioritize, discuss, and track contributions.
+* Pull requests generated with the help of AI are welcome, as long as they include comprehensive tests (including in `e2e/tests`).
+  Strong test coverage makes it easier to review, merge, and maintain code contributed by both humans and AI.
+
+
 ## Example
 
 `main.jh`:

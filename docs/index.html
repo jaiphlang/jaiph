@@ -569,7 +569,11 @@ testing say_hello.test.jh
                     <pre><code class="language-jaiph">#!/usr/bin/env jaiph
 
 config {
-  agent.command = "cursor-agent --force"
+  agent.backend = "cursor"
+  agent.cursor_flags = "--force"
+  # for Claude you can use:
+  # agent.backend = "claude"
+  # agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
 rule project_compiles {
