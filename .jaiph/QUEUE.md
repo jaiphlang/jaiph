@@ -6,55 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## 5a. Typed `prompt` schema validation with `returns`
-
-**Status:** pending
-
-**What:** Add `returns '{ ... }'` syntax on prompt assignment and validate returned JSON against declared fields/types.
-
-**V1 scope constraints:**
-- Schema is flat only (no nested objects)
-- No arrays or union types in v1
-- Supported field types are only `string`, `number`, `boolean`
-- The expected type is injected at the end of the prompt, then the runtime parses the last line (lines?) to extract json. If something is malformated, the prompt fails.
-
-**Syntax (keyword `returns`, not `--returns` — DSL is keyword-based):**
-```
-result = prompt "Analyse the diff and classify the change" returns '{
-  type: string,
-  risk: string,
-  summary: string
-}'
-```
-
-Allow multiline prompt + typed schema in bash style with line continuation:
-```
-result = prompt "Analyse the diff and classify the change" \
-  returns '{
-    type: string,
-    risk: string,
-    summary: string
-  }'
-```
-
-**Files to change:**
-- `src/parse/workflows.ts` (prompt parsing path) — parse `returns { field: type, ... }` including `\` continuation.
-- `src/transpile/emit-workflow.ts` — emit typed prompt call + schema payload.
-- `src/jaiph_stdlib.sh` — schema-aware prompt helper + JSON validation.
-- parser, transpile, and e2e tests for parse/type/missing-field error classes.
-
-**Acceptance criteria:**
-- Valid JSON response passes and exposes typed fields for extraction
-- Missing field fails with clear field-specific schema error
-- Invalid JSON fails with parse error
-- Unsupported declared type fails with compile-time schema error
-- Raw `$result` still contains the original JSON string
-- Error classes are distinct and test-covered: parse error vs schema/type error vs missing-field error
-- Testable with `jaiph test`: mock JSON response that satisfies the schema is accepted and typed fields are available
-- Parser tests cover both single-line and multiline (`\`) `returns` forms
-
----
-
 ## 5b. Deterministic field export for typed prompts
 
 **Status:** pending

@@ -65,6 +65,8 @@ export type WorkflowStepDef =
       loc: SourceLoc;
       /** When set, capture prompt stdout into this variable name. */
       captureName?: string;
+      /** When set, validate response JSON against this flat schema (field: string|number|boolean). */
+      returns?: string;
     }
   | {
       type: "shell";
@@ -89,6 +91,7 @@ export type WorkflowStepDef =
             raw: string;
             loc: SourceLoc;
             captureName?: string;
+            returns?: string;
           }
       >;
     }
@@ -156,6 +159,7 @@ export type TestStepDef =
       loc: SourceLoc;
     }
   | { type: "test_expect_contain"; variable: string; substring: string; loc: SourceLoc }
+  | { type: "test_expect_not_contain"; variable: string; substring: string; loc: SourceLoc }
   | { type: "test_expect_equal"; variable: string; expected: string; loc: SourceLoc }
   | { type: "test_mock_workflow"; ref: string; body: string; loc: SourceLoc }
   | { type: "test_mock_rule"; ref: string; body: string; loc: SourceLoc }

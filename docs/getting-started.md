@@ -199,11 +199,7 @@ See [cli.md](cli.md) for command syntax, examples, and supported environment var
 
 - **Conditionals** — `if ! ensure ref; then ... fi` runs the then-branch when the rule fails. The then-branch may contain `run`, `prompt`, and shell commands. For a pure shell condition, `if ! <shell_condition>; then ... fi` is also supported; in that case the then-branch may contain only `run` and shell commands (no `prompt`).
 
-- `prompt "..."`  
-  Sends the prompt text to the configured agent command. Variable expansion (`$1`, `${VAR}`) is allowed in the string; command substitution (`$(...)`) and backticks are rejected at parse time.
-
-- `name = prompt "..."`  
-  Same as `prompt "..."` but captures the agent's stdout into the variable `name` for use in later steps.
+- **Agent prompts** — `prompt "..."` sends text to the configured agent command. Variable expansion (`$1`, `${VAR}`) is allowed in the string; command substitution (`$(...)`) and backticks are rejected at parse time. Optional **typed prompt:** `name = prompt "..." returns '{ field: type, ... }'` validates the agent's JSON response (flat schema; types `string`, `number`, `boolean`) and exports `$name` (raw JSON) plus `$name_field` for each field; invalid JSON or schema violation fails the step. See [Grammar](grammar.md).
 
 - **Assignment capture for any step** — `name = ensure ref`, `name = run ref`, and `name = <shell_command>` capture that step's stdout into `name`. Only stdout is captured; stderr is not included unless the command redirects it (e.g. `2>&1`). If the command fails, the step fails unless you add explicit short-circuiting (e.g. `|| true`). See [Grammar](grammar.md).
 

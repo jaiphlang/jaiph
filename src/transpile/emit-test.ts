@@ -207,6 +207,10 @@ export function emitTest(
         out.push(`  jaiph__expect_contain "$${step.variable}" ${escapeBashSingleQuoted(step.substring)}`);
         continue;
       }
+      if (step.type === "test_expect_not_contain") {
+        out.push(`  jaiph__expect_not_contain "$${step.variable}" ${escapeBashSingleQuoted(step.substring)}`);
+        continue;
+      }
       if (step.type === "test_expect_equal") {
         out.push(`  jaiph__expect_equal "$${step.variable}" ${escapeBashSingleQuoted(step.expected)}`);
         continue;
