@@ -253,3 +253,83 @@ jaiph::prompt_capture() {
   fi
   printf '%s' "${JAIPH_LAST_PROMPT_FINAL:-}"
 }
+
+# Typed prompt: run prompt, parse last line as JSON, validate against JAIPH_PROMPT_SCHEMA,
+# output eval string to set JAIPH_PROMPT_CAPTURE_NAME and JAIPH_PROMPT_CAPTURE_NAME_field for each field.
+# Stdin = prompt text. Exits: 0 = success; 1 = JSON parse error; 2 = missing required field; 3 = type mismatch.
+jaiph::prompt_capture_with_schema() {
+  local preview="$1"
+  shift
+  local prompt_text
+  prompt_text="$(cat)"
+  # Avoid a pipeline here: it runs the function in a subshell and would lose
+  # JAIPH_LAST_PROMPT_FINAL plus exported typed fields in the parent shell.
+  jaiph::prompt "$preview" "$@" <<< "$prompt_text"
+  local status=$?
+  if [[ "$status" -ne 0 ]]; then
+    return "$status"
+  fi
+  local raw="${JAIPH_LAST_PROMPT_FINAL:-}"
+  local schema="${JAIPH_PROMPT_SCHEMA:-}"
+  local capture_name="${JAIPH_PROMPT_CAPTURE_NAME:-}"
+  if [[ -z "$schema" || -z "$capture_name" ]]; then
+    echo "jai: prompt_capture_with_schema: JAIPH_PROMPT_SCHEMA and JAIPH_PROMPT_CAPTURE_NAME must be set" >&2
+    return 1
+  fi
+  local eval_line
+  eval_line="$(printf '%s' "$raw" | node -e "
+    const fs = require('fs');
+    const raw = fs.readFileSync(0, 'utf8');
+    const schema = JSON.parse(process.env.JAIPH_PROMPT_SCHEMA);
+    const captureName = process.env.JAIPH_PROMPT_CAPTURE_NAME || 'result';
+    const fields = (schema.fields || []).map(f => ({ name: f.name, type: f.type }));
+    const lines = raw.split(/\\n/).filter(l => l.trim().length > 0);
+    const lastLine = lines.length > 0 ? lines[lines.length - 1].trim() : '';
+    let obj;
+    try {
+      obj = JSON.parse(lastLine);
+    } catch (e) {
+      process.stderr.write('jai: prompt returned invalid JSON (parse error): ' + e.message + '\\n');
+      process.stderr.write('Last line: ' + lastLine.slice(0, 200) + (lastLine.length > 200 ? '...' : '') + '\\n');
+      process.exit(1);
+    }
+    if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) {
+      process.stderr.write('jai: prompt returned invalid JSON: root must be an object\\n');
+      process.exit(1);
+    }
+    for (const f of fields) {
+      if (!(f.name in obj)) {
+        process.stderr.write('jai: prompt response missing required field: ' + f.name + '\\n');
+        process.exit(2);
+      }
+    }
+    for (const f of fields) {
+      const v = obj[f.name];
+      const t = f.type;
+      if (t === 'string' && typeof v !== 'string') {
+        process.stderr.write('jai: prompt response field \"' + f.name + '\" expected string, got ' + typeof v + '\\n');
+        process.exit(3);
+      }
+      if (t === 'number' && typeof v !== 'number') {
+        process.stderr.write('jai: prompt response field \"' + f.name + '\" expected number, got ' + typeof v + '\\n');
+        process.exit(3);
+      }
+      if (t === 'boolean' && typeof v !== 'boolean') {
+        process.stderr.write('jai: prompt response field \"' + f.name + '\" expected boolean, got ' + typeof v + '\\n');
+        process.exit(3);
+      }
+    }
+    const esc = (s) => String(s).replace(/'/g, \"'\\\\''\");
+    let out = captureName + \"='\" + esc(lastLine) + \"'\";
+    for (const f of fields) {
+      const v = obj[f.name];
+      out += \"; export \" + captureName + \"_\" + f.name + \"='\" + esc(String(v)) + \"'\";
+    }
+    process.stdout.write(out);
+  " JAIPH_PROMPT_SCHEMA="$schema" JAIPH_PROMPT_CAPTURE_NAME="$capture_name")"
+  local node_status=$?
+  if [[ "$node_status" -ne 0 ]]; then
+    return "$node_status"
+  fi
+  eval "$eval_line"
+}

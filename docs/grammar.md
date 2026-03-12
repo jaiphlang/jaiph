@@ -78,8 +78,11 @@ ensure_stmt     = "ensure" REF [ args_tail ]
 single_stmt    = run_stmt | ensure_stmt | shell_stmt | prompt_stmt | prompt_capture_stmt
                 | run_capture_stmt | ensure_capture_stmt | shell_capture_stmt ;
 run_stmt        = "run" REF [ args_tail ] ;
-prompt_stmt     = "prompt" quoted_or_multiline_string ;
-prompt_capture_stmt = IDENT "=" "prompt" quoted_or_multiline_string ;
+prompt_stmt     = "prompt" quoted_or_multiline_string [ returns_schema ] ;
+prompt_capture_stmt = IDENT "=" "prompt" quoted_or_multiline_string [ returns_schema ] ;
+returns_schema  = "returns" ( single_quoted_string | double_quoted_string ) ;
+  (* Schema string contains a flat object shape: { fieldName: type, ... } with type in string | number | boolean. *)
+  (* Line continuation: after the closing " of the prompt, optional trailing \ continues to next line for returns_schema. *)
 
 if_not_ensure_then_run_stmt
                 = "if" "!" "ensure" REF ";" "then"
@@ -120,6 +123,7 @@ shell_stmt      = command_line ;
    - `prompt "<text>"` — Sends the text to the agent; compiles to `jaiph::prompt ...` with bash variable expansion.
    - `name = prompt "<text>"` — Same, but the agent’s stdout is captured into the variable `name` (compiles to `jaiph::prompt_capture`).
    - The prompt string may span multiple lines. Only variable expansion is allowed inside the string; backticks and `$(...)` are rejected with `E_PARSE`.
+   - **Typed prompt (returns schema):** Optional `returns '{ field: type, ... }'` (single- or double-quoted) after the prompt string. When present, the prompt **must** capture to a variable (e.g. `result = prompt "..." returns '{ type: string, risk: string }'`). The schema is **flat only** (no nested objects); allowed types are `string`, `number`, `boolean` (no arrays or union types in v1). The compiler appends instructions to the prompt so the agent is asked to respond with exactly one line of valid JSON matching the schema. At runtime, the last non-empty line of the response is parsed as JSON; if parsing fails the step fails with a parse error; if a required field is missing or a value has the wrong type, the step fails with a distinct schema/missing-field or type error. On success, the capture variable is set to the raw JSON string, and for each schema field a variable `name_field` is exported (e.g. `$result_type`, `$result_risk`). Line continuation with trailing `\` after the closing quote of the prompt is supported so the `returns` clause can continue on the next line(s).
 8. **Assignment capture for any step:** In addition to `name = prompt "..."`, you can capture stdout from any step with `name = <step>`:
    - `name = ensure ref [args...]` — Runs the rule and captures its stdout into `name`. With `recover`, the same retry semantics apply; the captured value is the stdout of the rule when it passes.
    - `name = run ref [args...]` — Runs the workflow and captures its stdout into `name`.
@@ -131,7 +135,8 @@ shell_stmt      = command_line ;
 
 After parsing, the compiler validates references and config. Violations produce the following error codes:
 
-- **E_PARSE:** Invalid syntax, duplicate config block, invalid config key/value, or invalid prompt content (e.g. command substitution in prompt).
+- **E_PARSE:** Invalid syntax, duplicate config block, invalid config key/value, invalid prompt content (e.g. command substitution in prompt), or `prompt "..." returns '...'` without a capture variable.
+- **E_SCHEMA:** Invalid or unsupported `returns` schema: empty schema, non-flat shape (e.g. arrays or union types), invalid entry (not `fieldName: type`), or unsupported type (only `string`, `number`, `boolean` allowed).
 - **E_VALIDATE:** Reference or alias error (unknown rule/workflow, duplicate alias, etc.).
 - **E_IMPORT_NOT_FOUND:** The file resolved from an `import` path does not exist.
 
@@ -151,4 +156,4 @@ Rules:
 3. **Rules:** Each rule is emitted as `<module>::rule::<name>::impl` (the implementation) and `<module>::rule::<name>` (a wrapper that calls `jaiph::run_step ... jaiph::execute_readonly` with the impl). When config is present, the wrapper is invoked inside a metadata scope that sets the config env vars for the duration of the step.
 4. **Workflows:** Each workflow is emitted as `<module>::workflow::<name>::impl` and `<module>::workflow::<name>`, with the wrapper using `jaiph::run_step` and the same metadata-scoping behavior as rules.
 5. **Functions:** Each top-level function is emitted as `<module>::function::<name>::impl`, `<module>::function::<name>` (wrapper using `jaiph::run_step_passthrough`), and a shim `<name>` that forwards to the namespaced wrapper so the original name remains callable.
-6. Conditional steps (`if ! ensure X; then ... fi` and `if ! <shell>; then ... fi`) are transpiled to explicit Bash control flow using the same transpiled rule/workflow symbols and step types. **ensure … recover:** `ensure REF [args] recover <body>` is transpiled to a **bounded** retry loop: `for _jaiph_retry in $(seq 1 "${JAIPH_ENSURE_MAX_RETRIES:-10}"); do if <rule>(args); then break; fi; <body>; done`, then if the condition still fails, the script exits with status 1. The recover body may be a single statement or a `{ stmt; stmt; ... }` block. Max retries default to 10 and can be overridden via `JAIPH_ENSURE_MAX_RETRIES`. Steps with an assignment target (e.g. `response = ensure foo`, `out = run bar`, `line = echo hello`) are emitted as `VAR=$(...)`; only stdout is captured, and the command's exit status is preserved (failure exits unless the user has added e.g. `|| true`).
+6. Conditional steps (`if ! ensure X; then ... fi` and `if ! <shell>; then ... fi`) are transpiled to explicit Bash control flow using the same transpiled rule/workflow symbols and step types. **prompt with returns:** When `returns '{ ... }'` is used, the step is emitted as `jaiph::prompt_capture_with_schema`; the stdlib parses the last line of the agent output as JSON, validates it against the schema, and on success sets the capture variable to the raw JSON and exports `name_field` for each field. Exit codes: 0 = success; 1 = JSON parse error; 2 = missing required field; 3 = type mismatch. **ensure … recover:** `ensure REF [args] recover <body>` is transpiled to a **bounded** retry loop: `for _jaiph_retry in $(seq 1 "${JAIPH_ENSURE_MAX_RETRIES:-10}"); do if <rule>(args); then break; fi; <body>; done`, then if the condition still fails, the script exits with status 1. The recover body may be a single statement or a `{ stmt; stmt; ... }` block. Max retries default to 10 and can be overridden via `JAIPH_ENSURE_MAX_RETRIES`. Steps with an assignment target (e.g. `response = ensure foo`, `out = run bar`, `line = echo hello`) are emitted as `VAR=$(...)`; only stdout is captured, and the command's exit status is preserved (failure exits unless the user has added e.g. `|| true`).

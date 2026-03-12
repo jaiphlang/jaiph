@@ -1,5 +1,69 @@
 import type { WorkflowDef } from "../types";
-import { braceDepthDelta, colFromRaw, fail, hasUnescapedClosingQuote, isRef } from "./core";
+import { braceDepthDelta, colFromRaw, fail, hasUnescapedClosingQuote, indexOfClosingDoubleQuote, isRef } from "./core";
+
+/**
+ * Split raw prompt literal (opening " to closing ") and optional `returns '...'` / `returns "..."`.
+ * Consumes line continuation (trailing \) after the closing quote.
+ * Returns promptRaw (including quotes), optional returns schema string, and next line index.
+ */
+function splitPromptAndReturns(
+  filePath: string,
+  lineNo: number,
+  rawPrompt: string,
+  lines: string[],
+  lineIndexAfterPrompt: number,
+): { promptRaw: string; returns?: string; nextIndex: number } {
+  const openIdx = rawPrompt.indexOf('"');
+  if (openIdx === -1) {
+    fail(filePath, "unterminated prompt string", lineNo, 1);
+  }
+  const closeIdx = indexOfClosingDoubleQuote(rawPrompt, openIdx + 1);
+  if (closeIdx === -1) {
+    fail(filePath, "unterminated prompt string", lineNo, 1);
+  }
+  const promptRaw = rawPrompt.slice(0, closeIdx + 1);
+  let rest = rawPrompt.slice(closeIdx + 1);
+  let nextIdx = lineIndexAfterPrompt;
+  while (nextIdx + 1 < lines.length && /\\\s*$/.test(rest.trimEnd())) {
+    rest += "\n" + lines[nextIdx + 1].replace(/\\\s*$/, "").trimStart();
+    nextIdx += 1;
+  }
+  let trimmed = rest.trim();
+  if (trimmed.length === 0) {
+    return { promptRaw, nextIndex: nextIdx + 1 };
+  }
+  const returnsMatch = trimmed.match(/^returns\s+([\'"])/);
+  if (!returnsMatch) {
+    fail(
+      filePath,
+      'after prompt string expected keyword "returns" with quoted schema (e.g. returns \'{ type: string }\') or end of line',
+      lineNo,
+      1,
+    );
+  }
+  const quoteChar = returnsMatch[1];
+  let contentStart = trimmed.indexOf(quoteChar) + 1;
+  let contentEnd = -1;
+  while (true) {
+    for (let i = contentStart; i < trimmed.length; i += 1) {
+      if (trimmed[i] === quoteChar && trimmed[i - 1] !== "\\") {
+        contentEnd = i;
+        break;
+      }
+    }
+    if (contentEnd >= 0) break;
+    if (nextIdx + 1 >= lines.length) break;
+    rest += "\n" + lines[nextIdx + 1];
+    nextIdx += 1;
+    trimmed = rest.trim();
+    contentStart = trimmed.indexOf(quoteChar) + 1;
+  }
+  if (contentEnd === -1) {
+    fail(filePath, "unterminated returns schema string", lineNo, 1);
+  }
+  const returnsContent = trimmed.slice(contentStart, contentEnd).replace(/\\'/g, "'").replace(/\\"/g, '"');
+  return { promptRaw, returns: returnsContent, nextIndex: nextIdx + 1 };
+}
 
 /** Parse a single workflow statement string (e.g. "run foo", "ensure bar", "echo x") into a step. */
 function parseRecoverStatement(
@@ -81,11 +145,19 @@ function parseRecoverStatement(
     if (!promptArg.startsWith(`"`)) {
       fail(filePath, 'prompt must match: name = prompt "<text>"', lineNo, promptCol);
     }
+    const { promptRaw, returns: returnsSchema } = splitPromptAndReturns(
+      filePath,
+      lineNo,
+      promptArg,
+      [],
+      lineNo - 1,
+    );
     return {
       type: "prompt",
-      raw: promptArg,
+      raw: promptRaw,
       loc: { line: lineNo, col: promptCol },
       captureName,
+      ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
     };
   }
   if (t.startsWith("prompt ")) {
@@ -94,10 +166,18 @@ function parseRecoverStatement(
     if (!promptArg.startsWith(`"`)) {
       fail(filePath, 'prompt must match: prompt "<text>"', lineNo, promptCol);
     }
+    const { promptRaw, returns: returnsSchema } = splitPromptAndReturns(
+      filePath,
+      lineNo,
+      promptArg,
+      [],
+      lineNo - 1,
+    );
     return {
       type: "prompt",
-      raw: promptArg,
+      raw: promptRaw,
       loc: { line: lineNo, col: promptCol },
+      ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
     };
   }
   return {
@@ -251,29 +331,77 @@ export function parseWorkflowBlock(
         );
         if (promptAssignMatch) {
           const captureName = promptAssignMatch[1];
-          const promptArg = promptAssignMatch[2].trimStart();
+          let promptArg = promptAssignMatch[2].trimStart();
           const promptCol = lookRaw.indexOf("prompt") + 1;
           if (!promptArg.startsWith(`"`)) {
             fail(filePath, 'prompt must match: name = prompt "<text>"', lookNo, promptCol);
           }
+          let rawPrompt = promptArg;
+          if (!hasUnescapedClosingQuote(promptArg, 1)) {
+            let closed = false;
+            for (let la = lookahead + 1; la < lines.length; la += 1) {
+              rawPrompt += `\n${lines[la]}`;
+              if (hasUnescapedClosingQuote(lines[la], 0)) {
+                lookahead = la;
+                closed = true;
+                break;
+              }
+            }
+            if (!closed) {
+              fail(filePath, "unterminated prompt string", lookNo, promptCol);
+            }
+          }
+          const { promptRaw, returns: returnsSchema, nextIndex: nextIdx } = splitPromptAndReturns(
+            filePath,
+            lookNo,
+            rawPrompt,
+            lines,
+            lookahead,
+          );
+          lookahead = nextIdx - 1;
           thenSteps.push({
             type: "prompt",
-            raw: promptArg,
+            raw: promptRaw,
             loc: { line: lookNo, col: promptCol },
             captureName,
+            ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
           });
           continue;
         }
         if (lookTrim.startsWith("prompt ")) {
           const promptCol = lookRaw.indexOf("prompt") + 1;
-          const promptArg = lookRaw.slice(lookRaw.indexOf("prompt") + "prompt".length).trimStart();
+          let promptArg = lookRaw.slice(lookRaw.indexOf("prompt") + "prompt".length).trimStart();
           if (!promptArg.startsWith(`"`)) {
             fail(filePath, 'prompt must match: prompt "<text>"', lookNo, promptCol);
           }
+          let rawPrompt = promptArg;
+          if (!hasUnescapedClosingQuote(promptArg, 1)) {
+            let closed = false;
+            for (let la = lookahead + 1; la < lines.length; la += 1) {
+              rawPrompt += `\n${lines[la]}`;
+              if (hasUnescapedClosingQuote(lines[la], 0)) {
+                lookahead = la;
+                closed = true;
+                break;
+              }
+            }
+            if (!closed) {
+              fail(filePath, "unterminated prompt string", lookNo, promptCol);
+            }
+          }
+          const { promptRaw, returns: returnsSchema, nextIndex: nextIdx } = splitPromptAndReturns(
+            filePath,
+            lookNo,
+            rawPrompt,
+            lines,
+            lookahead,
+          );
+          lookahead = nextIdx - 1;
           thenSteps.push({
             type: "prompt",
-            raw: promptArg,
+            raw: promptRaw,
             loc: { line: lookNo, col: promptCol },
+            ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
           });
           continue;
         }
@@ -402,11 +530,20 @@ export function parseWorkflowBlock(
           fail(filePath, "unterminated prompt string", innerNo, promptCol);
         }
       }
+      const { promptRaw, returns: returnsSchema, nextIndex: nextIdx } = splitPromptAndReturns(
+        filePath,
+        innerNo,
+        rawPrompt,
+        lines,
+        idx,
+      );
+      idx = nextIdx - 1;
       workflow.steps.push({
         type: "prompt",
-        raw: rawPrompt,
+        raw: promptRaw,
         loc: { line: innerNo, col: promptCol },
         captureName,
+        ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
       });
       continue;
     }
@@ -432,10 +569,19 @@ export function parseWorkflowBlock(
           fail(filePath, "unterminated prompt string", innerNo, promptCol);
         }
       }
+      const { promptRaw, returns: returnsSchema, nextIndex: nextIdx } = splitPromptAndReturns(
+        filePath,
+        innerNo,
+        rawPrompt,
+        lines,
+        idx,
+      );
+      idx = nextIdx - 1;
       workflow.steps.push({
         type: "prompt",
-        raw: rawPrompt,
+        raw: promptRaw,
         loc: { line: innerNo, col: promptCol },
+        ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
       });
       continue;
     }

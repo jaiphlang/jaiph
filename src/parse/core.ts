@@ -29,6 +29,16 @@ export function hasUnescapedClosingQuote(text: string, startIndex: number): bool
   return false;
 }
 
+/** Index of the first unescaped double-quote at or after startIndex, or -1. */
+export function indexOfClosingDoubleQuote(text: string, startIndex: number): number {
+  for (let i = startIndex; i < text.length; i += 1) {
+    if (text[i] === `"` && text[i - 1] !== `\\`) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 export function colFromRaw(raw: string): number {
   return (raw.match(/\S/)?.index ?? 0) + 1;
 }

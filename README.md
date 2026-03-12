@@ -20,7 +20,7 @@ It combines declarative workflow structure with bash, then compiles to pure shel
 
 - **Workflows** — Ordered steps (checks, agent prompts, shell, calls to other workflows) that can change system state.
 - **Rules** — Reusable checks or actions that return a shell exit code; used with `ensure` and in conditionals.
-- **Agent prompts** — `prompt "..."` sends text to a configured agent (e.g. Cursor or Claude CLI).
+- **Agent prompts** — `prompt "..."` sends text to a configured agent (e.g. Cursor or Claude CLI). Use `result = prompt "..." returns '{ type: string, risk: string }'` to validate the agent's JSON response and get typed fields (`$result`, `$result_type`, `$result_risk`, etc.); see [Grammar](docs/grammar.md).
 - **Composability** — Import other `.jh` modules and call their rules/workflows by alias.
 - **Shell-native** — Transpiled output is bash; you can mix Jaiph primitives with normal shell commands.
 
@@ -201,6 +201,7 @@ See [cli.md](docs/cli.md) for command syntax, examples, and supported environmen
 
 - **Assignment capture** — You can capture stdout from any step with `name = <step>`:
   - `result = prompt "..."` — Captures the agent's stdout (unchanged from before).
+  - `result = prompt "..." returns '{ type: string, risk: string }'` — Same, but validates the response as JSON against the schema and exports `$result`, `$result_type`, `$result_risk`, etc. Schema is flat; allowed types: `string`, `number`, `boolean`. Invalid JSON or missing/wrong-type field fails the step. See [Grammar](docs/grammar.md).
   - `response = ensure ref` — Captures the rule's stdout into `$response`.
   - `out = run ref` — Captures the workflow's stdout into `$out`.
   - `line = <shell_command>` — Captures the command's stdout into `$line`.

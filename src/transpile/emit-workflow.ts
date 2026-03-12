@@ -104,6 +104,66 @@ function validatePromptTextSafety(promptText: string): void {
   }
 }
 
+export type PromptSchemaField = { name: string; type: "string" | "number" | "boolean" };
+
+const SUPPORTED_SCHEMA_TYPES = new Set<string>(["string", "number", "boolean"]);
+
+/**
+ * Parse flat prompt returns schema string: { field: type, ... }.
+ * V1: only string, number, boolean; no nested objects, arrays, or unions.
+ */
+function parsePromptSchema(
+  rawSchema: string,
+  filePath: string,
+  line: number,
+  col: number,
+): PromptSchemaField[] {
+  const trimmed = rawSchema.trim();
+  if (trimmed.length === 0) {
+    throw jaiphError(filePath, line, col, "E_SCHEMA", "returns schema cannot be empty");
+  }
+  if (/[[\]|]/.test(trimmed)) {
+    throw jaiphError(
+      filePath,
+      line,
+      col,
+      "E_SCHEMA",
+      "returns schema must be flat (no arrays or union types); only string, number, boolean allowed",
+    );
+  }
+  const inner = trimmed.replace(/^\s*\{\s*/, "").replace(/\s*\}\s*$/, "").trim();
+  if (inner.length === 0) {
+    return [];
+  }
+  const fields: PromptSchemaField[] = [];
+  const parts = inner.split(",");
+  for (const part of parts) {
+    const m = part.trim().match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(\S+)\s*$/);
+    if (!m) {
+      throw jaiphError(
+        filePath,
+        line,
+        col,
+        "E_SCHEMA",
+        `invalid returns schema entry: expected "fieldName: type" (got ${part.trim().slice(0, 40)}...)`,
+      );
+    }
+    const [, name, typeStr] = m;
+    const typeLower = typeStr.trim().toLowerCase();
+    if (!SUPPORTED_SCHEMA_TYPES.has(typeLower)) {
+      throw jaiphError(
+        filePath,
+        line,
+        col,
+        "E_SCHEMA",
+        `unsupported type in returns schema: "${typeStr}" (only string, number, boolean allowed)`,
+      );
+    }
+    fields.push({ name, type: typeLower as "string" | "number" | "boolean" });
+  }
+  return fields;
+}
+
 function promptDelimiter(content: string, seed: number): string {
   const lines = new Set(content.split("\n"));
   let index = seed;
@@ -122,6 +182,67 @@ function bashSingleQuotedEscape(s: string): string {
 }
 
 const PROMPT_PREVIEW_MAX_LEN = 24;
+
+/** Emit a prompt step (untyped or typed with returns). When returns is set, captureName is required. */
+function emitPromptStep(
+  out: string[],
+  indent: string,
+  step: { type: "prompt"; raw: string; loc: { line: number; col: number }; captureName?: string; returns?: string },
+  filePath: string,
+): void {
+  let promptText: string;
+  try {
+    promptText = parsePromptText(step.raw);
+    validatePromptTextSafety(promptText);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "invalid prompt literal";
+    throw jaiphError(filePath, step.loc.line, step.loc.col, "E_PARSE", message);
+  }
+    if (step.returns !== undefined) {
+    if (!step.captureName) {
+      throw jaiphError(
+        filePath,
+        step.loc.line,
+        step.loc.col,
+        "E_PARSE",
+        'prompt with "returns" schema must capture to a variable (e.g. result = prompt "..." returns \'{ ... }\')',
+      );
+    }
+    const schemaFields = parsePromptSchema(step.returns, filePath, step.loc.line, step.loc.col);
+    const schemaPayload = JSON.stringify({ fields: schemaFields });
+    const schemaSuffix =
+      "\n\nRespond with exactly one line of valid JSON (no markdown, no explanation) matching this schema: " +
+      JSON.stringify(
+        Object.fromEntries(schemaFields.map((f) => [f.name, f.type])),
+      );
+    const fullPromptText = promptText + schemaSuffix;
+    const delimiter = promptDelimiter(fullPromptText, step.loc.line);
+    const schemaEscaped = schemaPayload.replace(/'/g, "'\\''");
+    out.push(`${indent}export JAIPH_PROMPT_PREVIEW='${bashSingleQuotedEscape(fullPromptText.slice(0, PROMPT_PREVIEW_MAX_LEN))}'`);
+    out.push(`${indent}export JAIPH_PROMPT_SCHEMA='${schemaEscaped}'`);
+    out.push(`${indent}export JAIPH_PROMPT_CAPTURE_NAME='${step.captureName}'`);
+    out.push(`${indent}jaiph::prompt_capture_with_schema "$JAIPH_PROMPT_PREVIEW" "$@" <<${delimiter}`);
+    for (const line of fullPromptText.split("\n")) {
+      out.push(line);
+    }
+    out.push(delimiter);
+    return;
+  }
+  const delimiter = promptDelimiter(promptText, step.loc.line);
+  out.push(`${indent}export JAIPH_PROMPT_PREVIEW='${bashSingleQuotedEscape(promptText.slice(0, PROMPT_PREVIEW_MAX_LEN))}'`);
+  if (step.captureName) {
+    out.push(`${indent}${step.captureName}=$(jaiph::prompt_capture "$JAIPH_PROMPT_PREVIEW" "$@" <<${delimiter}`);
+  } else {
+    out.push(`${indent}jaiph::prompt "$JAIPH_PROMPT_PREVIEW" "$@" <<${delimiter}`);
+  }
+  for (const line of promptText.split("\n")) {
+    out.push(line);
+  }
+  out.push(delimiter);
+  if (step.captureName) {
+    out.push(")");
+  }
+}
 
 export function emitWorkflow(
   ast: jaiphModule,
@@ -395,31 +516,7 @@ function emitEnsureRecoverLoop(
         return;
       }
       if (recoverStep.type === "prompt") {
-        let promptText: string;
-        try {
-          promptText = parsePromptText(recoverStep.raw);
-          validatePromptTextSafety(promptText);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : "invalid prompt literal";
-          throw jaiphError(ast.filePath, recoverStep.loc.line, recoverStep.loc.col, "E_PARSE", message);
-        }
-        const delimiter = promptDelimiter(promptText, recoverStep.loc.line);
-        if (recoverStep.captureName) {
-          out.push(`${indent}export JAIPH_PROMPT_PREVIEW='${bashSingleQuotedEscape(promptText.slice(0, PROMPT_PREVIEW_MAX_LEN))}'`);
-          out.push(`${indent}${recoverStep.captureName}=$(jaiph::prompt_capture "$JAIPH_PROMPT_PREVIEW" "$@" <<${delimiter}`);
-          for (const line of promptText.split("\n")) {
-            out.push(line);
-          }
-          out.push(delimiter);
-          out.push(")");
-        } else {
-          out.push(`${indent}export JAIPH_PROMPT_PREVIEW='${bashSingleQuotedEscape(promptText.slice(0, PROMPT_PREVIEW_MAX_LEN))}'`);
-          out.push(`${indent}jaiph::prompt "$JAIPH_PROMPT_PREVIEW" "$@" <<${delimiter}`);
-          for (const line of promptText.split("\n")) {
-            out.push(line);
-          }
-          out.push(delimiter);
-        }
+        emitPromptStep(out, indent, recoverStep, ast.filePath);
         return;
       }
       if (recoverStep.type === "shell") {
@@ -474,31 +571,7 @@ function emitEnsureRecoverLoop(
           continue;
         }
         if (step.type === "prompt") {
-          let promptText: string;
-          try {
-            promptText = parsePromptText(step.raw);
-            validatePromptTextSafety(promptText);
-          } catch (error) {
-            const message = error instanceof Error ? error.message : "invalid prompt literal";
-            throw jaiphError(ast.filePath, step.loc.line, step.loc.col, "E_PARSE", message);
-          }
-          const delimiter = promptDelimiter(promptText, step.loc.line);
-          if (step.captureName) {
-            out.push(`  export JAIPH_PROMPT_PREVIEW='${bashSingleQuotedEscape(promptText.slice(0, PROMPT_PREVIEW_MAX_LEN))}'`);
-            out.push(`  ${step.captureName}=$(jaiph::prompt_capture "$JAIPH_PROMPT_PREVIEW" "$@" <<${delimiter}`);
-            for (const line of promptText.split("\n")) {
-              out.push(line);
-            }
-            out.push(delimiter);
-            out.push(")");
-          } else {
-            out.push(`  export JAIPH_PROMPT_PREVIEW='${bashSingleQuotedEscape(promptText.slice(0, PROMPT_PREVIEW_MAX_LEN))}'`);
-            out.push(`  jaiph::prompt "$JAIPH_PROMPT_PREVIEW" "$@" <<${delimiter}`);
-            for (const line of promptText.split("\n")) {
-              out.push(line);
-            }
-            out.push(delimiter);
-          }
+          emitPromptStep(out, "  ", step, ast.filePath);
           continue;
         }
         if (step.type === "shell") {
@@ -544,31 +617,7 @@ function emitEnsureRecoverLoop(
               continue;
             }
             if (thenStep.type === "prompt") {
-              let promptText: string;
-              try {
-                promptText = parsePromptText(thenStep.raw);
-                validatePromptTextSafety(promptText);
-              } catch (error) {
-                const message = error instanceof Error ? error.message : "invalid prompt literal";
-                throw jaiphError(ast.filePath, thenStep.loc.line, thenStep.loc.col, "E_PARSE", message);
-              }
-              const delimiter = promptDelimiter(promptText, thenStep.loc.line);
-              if (thenStep.captureName) {
-                out.push(`    export JAIPH_PROMPT_PREVIEW='${bashSingleQuotedEscape(promptText.slice(0, PROMPT_PREVIEW_MAX_LEN))}'`);
-                out.push(`    ${thenStep.captureName}=$(jaiph::prompt_capture "$JAIPH_PROMPT_PREVIEW" "$@" <<${delimiter}`);
-                for (const line of promptText.split("\n")) {
-                  out.push(line);
-                }
-                out.push(delimiter);
-                out.push(")");
-              } else {
-                out.push(`    export JAIPH_PROMPT_PREVIEW='${bashSingleQuotedEscape(promptText.slice(0, PROMPT_PREVIEW_MAX_LEN))}'`);
-                out.push(`    jaiph::prompt "$JAIPH_PROMPT_PREVIEW" "$@" <<${delimiter}`);
-                for (const line of promptText.split("\n")) {
-                  out.push(line);
-                }
-                out.push(delimiter);
-              }
+              emitPromptStep(out, "    ", thenStep, ast.filePath);
               continue;
             }
             if (thenStep.type === "shell") {

@@ -82,7 +82,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     };
 const MAX_PARAM_VALUE_DISPLAY = 32;
 const PROMPT_PREVIEW_MAX = 24;
-const PROMPT_ARGS_DISPLAY_MAX = 24;
+const PROMPT_ARGS_DISPLAY_MAX = 96;
 
 /** True if the param value is an internal symbol (impl ref, execute_readonly, prompt_impl) and should not be shown. */
 function isInternalParamValue(v: string): boolean {

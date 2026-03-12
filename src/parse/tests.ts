@@ -176,7 +176,9 @@ export function parseTestBlock(
         i = nextIndex - 1;
         continue;
       }
-      if (!arg.startsWith('"') || !hasUnescapedClosingQuote(arg, 1)) {
+      const isDoubleQuoted = arg.startsWith('"') && hasUnescapedClosingQuote(arg, 1);
+      const isSingleQuoted = /^'(?:[^'\\]|\\.)*'$/.test(arg);
+      if (!isDoubleQuoted && !isSingleQuoted) {
         fail(filePath, 'mock prompt must be: mock prompt "<response>" or mock prompt { if $1 contains "..." ; then respond "..." ; fi }', innerNo, innerRaw.indexOf("mock"));
       }
       testBlock.steps.push({
@@ -225,6 +227,16 @@ export function parseTestBlock(
         type: "test_expect_contain",
         variable: expectContainMatch[1],
         substring: expectContainMatch[2].replace(/\\"/g, '"').replace(/\\n/g, "\n"),
+        loc,
+      });
+      continue;
+    }
+    const expectNotContainMatch = inner.match(/^expectNotContain\s+([A-Za-z_][A-Za-z0-9_]*)\s+"((?:[^"\\]|\\.)*)"\s*$/);
+    if (expectNotContainMatch) {
+      testBlock.steps.push({
+        type: "test_expect_not_contain",
+        variable: expectNotContainMatch[1],
+        substring: expectNotContainMatch[2].replace(/\\"/g, '"').replace(/\\n/g, "\n"),
         loc,
       });
       continue;

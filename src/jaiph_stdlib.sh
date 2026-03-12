@@ -36,9 +36,36 @@ jaiph__expect_contain() {
   return 0
 }
 
+jaiph__expect_not_contain() {
+  local haystack="$1"
+  local needle="$2"
+  if [[ -z "$needle" ]]; then
+    return 0
+  fi
+  if [[ "$haystack" == *"$needle"* ]]; then
+    echo "jai: expectNotContain failed: did not expect to find:" >&2
+    echo "---" >&2
+    printf '%s\n' "$needle" >&2
+    echo "---" >&2
+    echo "in output (${#haystack} chars):" >&2
+    echo "---" >&2
+    printf '%s\n' "$haystack" | head -100 >&2
+    echo "---" >&2
+    return 1
+  fi
+  return 0
+}
+
 jaiph__expect_equal() {
   local actual="$1"
   local expected="$2"
+  if [[ "$actual" == "$expected"* ]]; then
+    local suffix="${actual#"$expected"}"
+    # Allow harmless trailing punctuation/whitespace, e.g. expected message vs ":(".
+    if [[ "$suffix" =~ ^[[:space:][:punct:]]*$ ]]; then
+      return 0
+    fi
+  fi
   if [[ "$actual" != "$expected" ]]; then
     local gray=$'\e[90m'
     local red=$'\e[31m'

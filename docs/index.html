@@ -716,16 +716,11 @@ jaiph use 0.2.0</code></pre>
                     <dt><code>if ! ensure ref; then run ref; fi</code> · <code>if ! &lt;shell&gt;; then ... fi</code></dt>
                     <dd>Conditional workflow steps: run one or more steps only when a rule fails or a shell condition is false. Then-branch can contain <code>run</code>, <code>prompt</code>, and shell commands.</dd>
 
-                    <dt><code>prompt "..."</code></dt>
-                    <dd>Sends prompt text to the configured agent (Cursor or Claude CLI; see <code>agent.backend</code> and <a href="configuration">Configuration</a>). Stores
-                        prompt stdout/stderr in
-                        <code>.jaiph/runs/</code> step logs (for example:
-                        <code>*-jaiph__prompt.out</code> and <code>*-jaiph__prompt.err</code>). Jaiph also writes
-                        <code>run_summary.jsonl</code> in each run directory and skips creating empty step log files.
-                    </dd>
+                    <dt><code>prompt "..."</code> · <code>name = prompt "..." returns '{ field: type, ... }'</code></dt>
+                    <dd>Sends prompt text to the configured agent (Cursor or Claude CLI; see <code>agent.backend</code> and <a href="configuration">Configuration</a>). Without <code>returns</code>, stdout is sent to the agent and (if captured) stored in the variable. With <code>returns '{ field: type, ... }'</code>, the prompt must capture to a variable; the agent is instructed to respond with one line of JSON; the runtime parses and validates it (flat schema; types <code>string</code>, <code>number</code>, <code>boolean</code>). On success, the capture variable holds the raw JSON and <code>name_field</code> is set for each schema field (e.g. <code>$result_type</code>). Invalid JSON, missing field, or type mismatch fails the step with distinct error codes. Logs and <code>run_summary.jsonl</code> are written to <code>.jaiph/runs/</code>.</dd>
 
-                    <dt>Assignment capture: <code>name = prompt "..."</code> · <code>name = ensure ref</code> · <code>name = run ref</code> · <code>name = &lt;shell&gt;</code></dt>
-                    <dd>Capture a step's <strong>stdout</strong> into a variable. <code>result = prompt "..."</code> captures the agent's response. <code>response = ensure tests_pass</code>, <code>out = run helper</code>, and <code>line = echo hello</code> capture rule, workflow, or shell output. Exit behavior is unchanged: if the command fails, the step fails (use <code>|| true</code> to capture on failure). stderr is not captured unless the command redirects it (e.g. <code>2>&1</code>). See <a href="grammar">Grammar</a>.</dd>
+                    <dt>Assignment capture: <code>name = prompt "..."</code> · <code>name = prompt "..." returns '{ ... }'</code> · <code>name = ensure ref</code> · <code>name = run ref</code> · <code>name = &lt;shell&gt;</code></dt>
+                    <dd>Capture a step's <strong>stdout</strong> into a variable. <code>result = prompt "..."</code> captures the agent's response. With <code>returns '{ type: string, risk: string }'</code>, the response is validated as JSON and <code>$result</code>, <code>$result_type</code>, <code>$result_risk</code>, etc. are set. <code>response = ensure tests_pass</code>, <code>out = run helper</code>, and <code>line = echo hello</code> capture rule, workflow, or shell output. Exit behavior is unchanged: if the command fails, the step fails (use <code>|| true</code> to capture on failure). stderr is not captured unless the command redirects it (e.g. <code>2>&1</code>). See <a href="grammar">Grammar</a>.</dd>
 
                     <dt><code>test "description" { ... }</code></dt>
                     <dd>Defines a test case. Files named <code>*.test.jh</code> are run as test suites.</dd>
@@ -802,6 +797,7 @@ jaiph use 0.2.0</code></pre>
             "recover",
             "run",
             "prompt",
+            "returns",
             "mock",
             "respond",
             "contains",
