@@ -491,7 +491,7 @@ running say_hello.jh
 <span class="run-keyword">workflow</span> default
   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> name_was_provided
   <span class="run-pass">✓</span> <span class="run-time">0s</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> "Say hello to $1 and..." <span class="run-params">(greeting)</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> "Say hello to Jakub and..." <span class="run-params">(Jakub)</span>
   <span class="run-pass">✓</span> <span class="run-time">9s</span>
   <span class="run-marker">▸</span> <span class="run-keyword">function</span> format_text
   <span class="run-pass">✓</span> <span class="run-time">0s</span>
@@ -504,6 +504,13 @@ who speaks over a dozen languages and runs a popular site (jakubmarian.com)
 with maps and data on European languages—including maps of which European 
 languages use “yes” and “no” vs. “ja”/“da”-style words. So if you ever look up 
 “European language maps,” you might run into another Jakub’s work.</code></pre>
+                    <p>
+                        Jaiph also supports structured output. You can use the following syntax:
+                    </p>
+                    <pre><code class="language-jaiph">response = prompt "..." returns '{ hello: string, fact: string }'</code></pre>
+                    <p>
+                        Then, Jaiph will add at runtime instructions to the prompt asking the agent to return a JSON object with the fields <code>hello</code> and <code>fact</code>, and it will parse the response and set the capture variable to the raw JSON string. You can access the fields with <code>$response_hello</code> and <code>$response_fact</code>.
+                    </p>
                 </div>
 
                 <div class="code-tab-panel" data-panel="say-hello-test-jh">
