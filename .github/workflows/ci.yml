@@ -46,4 +46,34 @@ jobs:
           node-version: "20"
 
       - name: Run runtime acceptance E2E
-        run: npm run test:acceptance:runtime
+        run: npm run test:e2e
+
+  e2e-wsl:
+    name: E2E install and CLI workflow (Windows)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify WSL Ubuntu is available
+        shell: pwsh
+        run: |
+          $distros = wsl -l -q
+          if (-not ($distros -match "Ubuntu")) {
+            Write-Error "Ubuntu distro not found in WSL on this runner."
+          }
+
+      - name: Install Node and run E2E tests in WSL
+        shell: pwsh
+        run: |
+          $workspace = "${{ github.workspace }}"
+          wsl -d Ubuntu -- bash -lc "set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          sudo apt-get update
+          sudo apt-get install -y curl ca-certificates
+          if ! command -v node >/dev/null 2>&1; then
+            curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+            sudo apt-get install -y nodejs
+          fi
+          cd \"\$(wslpath '$workspace')\"
+          npm run test:e2e

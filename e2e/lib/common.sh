@@ -156,7 +156,8 @@ e2e::ensure_local_install() {
 
   # Prefer local repo binary for CI/local parity. Build dist on-demand when needed.
   if command -v node >/dev/null 2>&1; then
-    if [[ ! -f "${E2E_REPO_ROOT}/dist/src/cli.js" ]]; then
+    if [[ ! -f "${E2E_REPO_ROOT}/dist/src/cli.js" ]] && [[ -f "${E2E_REPO_ROOT}/node_modules/typescript/bin/tsc" ]]; then
+      # Build only when local dev deps are installed; otherwise fall back to install script path.
       (cd "${E2E_REPO_ROOT}" && npm run build >/dev/null)
     fi
   fi
