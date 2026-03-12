@@ -6,9 +6,16 @@
 
 ## Overview
 
-The Jaiph CLI compiles and runs workflow files (`.jh` / `.jph`), runs tests, and manages workspace setup. You can use explicit commands (`jaiph run`, `jaiph test`, etc.) or pass a file path directly when the first argument is a `.jh` or `.test.jh` file.
+The Jaiph CLI compiles and runs workflow files (`.jh` / `.jph`), runs tests, and manages workspace setup.
 
-**Commands:** `build` (compile to shell scripts), `run` (compile and execute a workflow), `test` (run test files), `init` (create `.jaiph/` in a directory), `use` (reinstall a version). Global options: `jaiph --help`, `jaiph --version` (or `-h`, `-v`).
+**High-level usage:**
+
+- **Run a workflow** — `jaiph run <file.jh>` or pass the file as the first argument: `jaiph <file.jh> [args...]`. Requires a `workflow default` in that file.
+- **Run tests** — `jaiph test` discovers and runs all `*.test.jh` / `*.test.jph` under the workspace; or pass a directory or a single test file.
+- **Compile only** — `jaiph build [--target <dir>] [path]` writes shell scripts to a temp dir (or `--target` path) without executing.
+- **Setup** — `jaiph init [workspace-path]` creates `.jaiph/` with a bootstrap workflow and synced skill guide; `jaiph use <version|nightly>` reinstalls the global Jaiph binary.
+
+**Commands:** `build`, `run`, `test`, `init`, `use`. Global options: `jaiph --help`, `jaiph --version` (or `-h`, `-v`).
 
 ---
 
@@ -35,8 +42,10 @@ jaiph ./e2e/say_hello.test.jh
 Compile `.jh` and `.jph` files into shell scripts.
 
 ```bash
-jaiph build [--target <dir>] <path>
+jaiph build [--target <dir>] [path]
 ```
+
+If `path` is omitted, the current directory (`./`) is used. Use `--target` to write compiled scripts to a specific directory (required when used: `--target <dir>`).
 
 Examples:
 
@@ -101,7 +110,7 @@ For **parameterized** invocations—when you pass arguments to a workflow, promp
 
 - Comma-separated **values** in parentheses (no parameter names or labels; internal refs such as `::impl` are omitted).
 - **Workflow and function:** Values are truncated to 32 visible characters; longer values end with `...`.
-- **Prompt steps:** The line shows a **prompt preview** (first 24 characters of the prompt text, then `...` if longer) in quotes, followed by any arguments. The **argument list** `(arg1, arg2, ...)` is capped at 24 characters total (truncated with `...` if longer). Example: `▸ prompt "Say hello to $1 and prov..." (greeting)`.
+- **Prompt steps:** The line shows a **prompt preview** (first 24 characters of the prompt text, then `...` if longer) in quotes, followed by any arguments. The **argument list** `(arg1, arg2, ...)` is capped at 96 characters total (truncated with `...` if longer). Example: `▸ prompt "Say hello to $1 and prov..." (greeting)`.
 - Order follows the call site so repeated runs are diff-friendly.
 
 Example lines:
@@ -122,7 +131,7 @@ Run tests from native test files (`*.test.jh` / `*.test.jph`) that contain `test
 
 **Usage:**
 
-- `jaiph test` — discover and run all `*.test.jh` / `*.test.jph` under the workspace root.
+- `jaiph test` — discover and run all `*.test.jh` / `*.test.jph` under the workspace root (the directory containing `.jaiph` or `.git`, found by walking up from the current working directory).
 - `jaiph test <dir>` — run all test files under the given directory.
 - `jaiph test <file.test.jh>` — run a single test file.
 
@@ -147,8 +156,8 @@ jaiph init [workspace-path]
 
 Creates:
 
-- `.jaiph/bootstrap.jh` (if it does not exist; otherwise left unchanged)
-- `.jaiph/jaiph-skill.md` (synced from local Jaiph installation)
+- `.jaiph/bootstrap.jh` — if it does not exist (otherwise left unchanged). Made executable.
+- `.jaiph/jaiph-skill.md` — synced from the local Jaiph installation when the skill file is found; otherwise sync is skipped and a note is printed.
 
 ## `jaiph use`
 
@@ -182,13 +191,13 @@ Imports resolve for both extensions: `import "foo" as x` finds `foo.jh` or `foo.
 **Runtime and config overrides** (for `jaiph run` and workflow execution):
 
 - `JAIPH_STDLIB` — path to `jaiph_stdlib.sh`.
-- `JAIPH_AGENT_MODEL`
-- `JAIPH_AGENT_COMMAND`
+- `JAIPH_AGENT_MODEL` — default model for `prompt` steps (overrides in-file `agent.default_model`).
+- `JAIPH_AGENT_COMMAND` — command for the Cursor backend (e.g. `cursor-agent`; overrides in-file `agent.command`).
 - `JAIPH_AGENT_BACKEND` — prompt backend: `cursor` (default) or `claude`. Overrides in-file `agent.backend`. When set to `claude`, the Anthropic Claude CLI (`claude`) must be installed and on PATH; otherwise the run fails with a clear error. See [Configuration](configuration.md).
 - `JAIPH_AGENT_TRUSTED_WORKSPACE` — trusted workspace directory for Cursor backend `--trust`. Defaults to project root.
 - `JAIPH_AGENT_CURSOR_FLAGS` — extra flags for Cursor backend (string, split on whitespace).
 - `JAIPH_AGENT_CLAUDE_FLAGS` — extra flags for Claude backend (string, split on whitespace).
-- `JAIPH_RUNS_DIR` — directory for run logs (default: `.jaiph/runs/` under workspace).
+- `JAIPH_RUNS_DIR` — directory for run logs (default: `.jaiph/runs` under workspace).
 - `JAIPH_DEBUG` — set to `true` to enable bash `set -x` during run.
 - `JAIPH_ENSURE_MAX_RETRIES` — max retries for `ensure ... recover` steps (default: 10). When exceeded, the workflow exits with status 1.
 - `NO_COLOR` — if set, disables colored output (e.g. progress and pass/fail).

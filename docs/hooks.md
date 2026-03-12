@@ -4,18 +4,24 @@
 
 ---
 
-Hooks let you run custom commands at Jaiph lifecycle events (e.g. to forward status to external tools). Config is loaded from **global** and **project-local** `hooks.json` files; project-local entries override global for each event.
+## Overview
+
+Hooks let you run custom shell commands at Jaiph lifecycle events. Typical uses: notifying external systems when a workflow finishes, logging step names or timing, or syncing run results elsewhere.
+
+Configuration is loaded from **global** and **project-local** `hooks.json` files. For each event, project-local commands override global ones (no merging). If no config exists, `jaiph run` runs as usual with no hooks.
 
 ## Config locations
 
 - **Global:** `~/.jaiph/hooks.json`
-- **Project-local:** `<project>/.jaiph/hooks.json` (workspace root is the directory containing `.jaiph` or `.git` for the file you run)
+- **Project-local:** `<workspace>/.jaiph/hooks.json`
 
-Both files are optional. If neither exists, `jaiph run` behaves as before (no hooks).
+The workspace is the first directory that contains `.jaiph` or `.git` when walking up from the workflow file’s directory. If none is found, the workflow file’s directory is used. Project-local config is resolved from this workspace root.
+
+Both files are optional.
 
 ## Schema
 
-Each file is a JSON object. Keys are event names; values are arrays of shell commands (strings). Commands are run in order. Unknown keys are ignored.
+Each file is a JSON object. Keys are event names; values are arrays of shell command strings. Only non-empty strings in each array are used; other values (e.g. numbers, empty strings) are ignored. Unknown keys are ignored. Commands for an event run in order.
 
 ```json
 {
@@ -40,7 +46,7 @@ Each file is a JSON object. Keys are event names; values are arrays of shell com
 For each event, **project-local** commands override **global** commands:
 
 - If project `.jaiph/hooks.json` has `workflow_end`, only those commands run for `workflow_end` (global `workflow_end` is ignored).
-- If project has no `workflow_end`, global `workflow_end` commands run.
+- If project has no `workflow_end` or has `workflow_end: []`, global `workflow_end` commands run.
 - Other events are independent: e.g. project `step_end` does not affect global `workflow_start`.
 
 ## Payload
@@ -61,12 +67,12 @@ Each command is invoked with the event payload as **JSON on stdin**. You can use
 | `elapsed_ms` | workflow_end, step_end | Elapsed milliseconds. |
 | `run_path` | Always | Absolute path to the workflow file. |
 | `workspace` | Always | Workspace root directory. |
-| `run_dir` | workflow_end, step_end | Run logs directory (when available). |
+| `run_dir` | workflow_end | Run logs directory (when available). |
 | `summary_file` | workflow_end | Path to `run_summary.jsonl` (when available). |
 | `out_file` | step_end | Step stdout log path. |
 | `err_file` | step_end | Step stderr log path. |
 
-Example payload (step_end):
+Example payload (`step_end`):
 
 ```json
 {
@@ -80,7 +86,6 @@ Example payload (step_end):
   "elapsed_ms": 1500,
   "run_path": "/repo/flows/ci.jh",
   "workspace": "/repo",
-  "run_dir": "/repo/.jaiph/runs/2025-03-11T12-00-00-abc",
   "out_file": "/repo/.jaiph/runs/.../step.out",
   "err_file": "/repo/.jaiph/runs/.../step.err"
 }
@@ -88,8 +93,9 @@ Example payload (step_end):
 
 ## Behavior
 
-- **Best-effort:** Hook failures do not crash or block the main run. If a command exits non-zero or throws, Jaiph logs a warning to stderr and continues.
-- **No wait:** Commands are started but Jaiph does not wait for them to finish before continuing the workflow or the next hook.
+- **Shell:** Each command is run with `sh -c <command>`. No separate process wait: Jaiph starts the command and continues; it does not wait for the hook process to exit.
+- **Best-effort:** Hook failures do not crash or block the run. If a command exits non-zero or throws, Jaiph logs a warning to stderr and continues.
+- **Working directory:** The hook process inherits the current working directory of the process that invoked `jaiph run`. To write under the project, use the `workspace` field from the payload (e.g. `"$(jq -r .workspace)/.jaiph/log.txt"`).
 - **Invalid config:** If a file exists but is not valid JSON or does not match the schema, Jaiph prints a warning and skips that file; the run continues without those hooks.
 
 ## Examples
@@ -102,7 +108,7 @@ Example payload (step_end):
 }
 ```
 
-**Project `.jaiph/hooks.json` — log step names and forward end to `jai`:**
+**Project `.jaiph/hooks.json` — log step names and forward workflow end to `jai`:**
 
 ```json
 {
@@ -110,5 +116,7 @@ Example payload (step_end):
   "workflow_end": ["jai status --run-dir \"$(jq -r .run_dir)\" --status \"$(jq -r .status)\""]
 }
 ```
+
+The `step_end` command appends to `.jaiph/step-log.txt` relative to the current working directory (where you ran `jaiph run`). To write under the project workspace instead, use the `workspace` field from the payload in a single `jq` (stdin is consumed once).
 
 **Project overrides global:** If global has `workflow_end: ["global-notify.sh"]` and project has `workflow_end: ["project-notify.sh"]`, only `project-notify.sh` runs.

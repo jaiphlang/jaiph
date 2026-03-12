@@ -1,6 +1,6 @@
 # Jaiph Grammar
 
-[jaiph.org](https://jaiph.org) · [Getting started](getting-started.md) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Testing](testing.md) · [Agent Skill](https://jaiph.org/jaiph-skill.md)
+[jaiph.org](https://jaiph.org) · [Getting started](getting-started.md) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Testing](testing.md) · [Hooks](hooks.md) · [Agent Skill](https://jaiph.org/jaiph-skill.md)
 
 ---
 
@@ -14,6 +14,16 @@ This document describes the grammar and semantics of Jaiph source files (`.jh` /
 - **Out of scope:** Test files (`*.test.jh`) have their own grammar and are described in [Testing](testing.md). The CLI and configuration file format are covered in [CLI](cli.md) and [Configuration](configuration.md).
 
 **Source of truth:** The behavior described here is derived from the implementation in `src/parser.ts`, `src/parse/*.ts`, `src/transpiler.ts`, and `src/transpile/*.ts`. When in doubt, the source code is authoritative.
+
+### High-level concepts
+
+- **Rules** — Named blocks of shell commands used as idempotent checks or actions. Only `ensure` and raw shell are allowed inside a rule; use `ensure` to call another rule.
+- **Workflows** — Named sequences of steps: `ensure` (call a rule), `run` (call a workflow), `prompt` (agent), or shell. Workflows orchestrate when each step runs.
+- **ensure** — Runs a rule; succeeds if its exit code is 0. Optional `recover` runs on failure and retries until the rule passes or max retries are reached.
+- **run** — Invokes a workflow (local or via import alias). Must reference a workflow, not a shell command.
+- **prompt** — Sends a double-quoted string to the configured agent. Optional `returns` schema asks the agent for one line of JSON and validates it.
+- **config** — Optional block at the top of a file setting agent and run options (model, backend, logs dir, etc.).
+- **import / export** — `import "path" as alias` loads another module; `export rule` / `export workflow` marks a declaration as part of the module’s public interface. Any rule or workflow in an imported module can be referenced (export is not enforced at reference time).
 
 ---
 
@@ -40,6 +50,7 @@ file            = { top_level } ;
 top_level       = config_block | import_stmt | rule_decl | function_decl | workflow_decl ;
 
 config_block    = "config" "{" { config_line } "}" ;
+  (* Inside the block, blank lines and full-line # comments are allowed. *)
 config_line     = ( "agent.default_model" | "agent.command" | "agent.backend" | "agent.trusted_workspace" | "agent.cursor_flags" | "agent.claude_flags" | "run.logs_dir" | "run.debug" ) "=" ( string | "true" | "false" ) ;
 
 import_stmt     = "import" string "as" IDENT ;
@@ -97,9 +108,9 @@ if_not_ensure_then_shell_stmt
 if_not_ensure_then_stmt
                 = "if" "!" "ensure" REF ";" "then"
                   { run_stmt | prompt_stmt | prompt_capture_stmt | shell_stmt
-                  | run_capture_stmt | ensure_capture_stmt | shell_capture_stmt }
+                  | run_capture_stmt | shell_capture_stmt }
                   "fi" ;
-  (* mixed then-branch; used when then contains both run and non-run steps *)
+  (* mixed then-branch: run, prompt, shell, and their capture forms; ensure/ensure_capture are not allowed in the then-branch. *)
 
 if_not_shell_then_stmt
                 = "if" "!" shell_condition ";" "then"
@@ -113,12 +124,12 @@ shell_stmt      = command_line ;
 
 ## Parse and Runtime Semantics
 
-1. **Config block:** The opening line must be exactly `config {` (with optional trailing whitespace). At most one config block per file.
-2. **ensure:** Accepts an optional argument tail after the REF; it is forwarded as-is to the shell (e.g. `ensure check_branch "$1"`). With `recover`, the step becomes a retry loop: run the condition; on failure run the recover body; repeat until the condition passes. Recover is either a single statement (`ensure dep recover run install_deps`) or a block of `;`-separated statements (`ensure dep recover { run a; run b; }`).
+1. **Config block:** The opening line must be exactly `config {` (optional trailing whitespace). At most one config block per file. Inside the block, lines are either `key = value`, `}`, blank, or full-line `#` comments. Allowed keys: `agent.default_model`, `agent.command`, `agent.backend`, `agent.trusted_workspace`, `agent.cursor_flags`, `agent.claude_flags`, `run.logs_dir`, `run.debug`. Value is a quoted string or `true`/`false`. For `agent.backend` the value must be `"cursor"` or `"claude"`.
+2. **ensure:** An optional argument tail after the REF is passed through to the shell (e.g. `ensure check_branch "$1"`). With `recover`, the step becomes a retry loop: run the condition; on failure run the recover body; repeat until the condition passes or max retries are reached. Recover is either a single statement (`ensure dep recover run install_deps`) or a block of statements separated by `;` or newline (`ensure dep recover { run a; run b }`).
 3. **Rules:** May use forwarded positional parameters as shell args (`$1`, `$2`, `"$@"`) without special declaration. Only `ensure` and shell commands are allowed inside a rule; `run` is not allowed (use `ensure` to call another rule or move the call to a workflow). **Inline brace groups:** A single logical command can span multiple lines when it contains unbalanced `{` … `}`; the parser tracks brace depth so that short-circuit patterns like `cmd || { echo "failed"; exit 1; }` (single-line) and `cmd || { … }` (multi-line) are accepted as one command in rule, workflow, and function bodies.
 4. **run:** Inside a workflow, `run` must target a workflow reference (`foo` or `alias.foo`), not an arbitrary shell command. Optional args after the REF are forwarded to the workflow (e.g. `run deploy "$env"`).
 5. **Functions:** Top-level `function` blocks define writable shell functions. They are transpiled to namespaced implementations; the original name remains callable via a shim that forwards to the namespaced wrapper.
-6. **Conditional steps:** `if ! ensure REF; then ... fi` is parsed as: (a) `if_not_ensure_then_run` when the then-branch contains only `run` steps, (b) `if_not_ensure_then_shell` when only shell commands, (c) `if_not_ensure_then` when mixed (run, prompt, or shell). `if ! <shell_condition>; then ... fi` is `if_not_shell_then` and may contain `run` and shell steps. The then-branch must contain at least one step.
+6. **Conditional steps:** `if ! ensure REF; then ... fi` is parsed as: (a) `if_not_ensure_then_run` when the then-branch contains only `run` steps, (b) `if_not_ensure_then_shell` when only shell commands, (c) `if_not_ensure_then` when mixed (run, prompt, or shell, including capture forms; ensure and ensure_capture are not allowed in the then-branch). `if ! <shell_condition>; then ... fi` is `if_not_shell_then` and may contain `run` and shell steps. The then-branch must contain at least one step.
 7. **prompt:** Two forms are supported:
    - `prompt "<text>"` — Sends the text to the agent; compiles to `jaiph::prompt ...` with bash variable expansion.
    - `name = prompt "<text>"` — Same, but the agent’s stdout is captured into the variable `name` (compiles to `jaiph::prompt_capture`).
@@ -129,7 +140,7 @@ shell_stmt      = command_line ;
    - `name = run ref [args...]` — Runs the workflow and captures its stdout into `name`.
    - `name = <shell_command>` — Runs the shell command and captures its stdout into `name`.
    - **Bash-consistent semantics:** Assignment capture does **not** change exit behavior: if the command fails, the step fails and the workflow exits (with `set -e`). To capture output even on failure, the workflow author must explicitly short-circuit (e.g. append `|| true` to the command). Only **stdout** is captured; **stderr** is not included unless the command redirects it (e.g. `name = cmd 2>&1`).
-9. **Export:** Rule and workflow declarations may be prefixed with `export` so they can be referenced from other modules that import this file.
+9. **Export:** Rule and workflow declarations may be prefixed with `export` to mark them as part of the module’s public interface. The implementation does not restrict references to exported symbols: any rule or workflow in an imported module can be referenced.
 
 ## Validation Rules
 
@@ -143,11 +154,11 @@ After parsing, the compiler validates references and config. Violations produce 
 Rules:
 
 1. At most one `config` block per file; duplicate config yields `E_PARSE`.
-2. Config keys must be one of the allowed keys; values must be a quoted string or `true`/`false`. Invalid key or value type yields `E_PARSE`.
+2. Config keys must be one of the allowed keys; values must be a quoted string or `true`/`false`. For `agent.backend`, the value must be `"cursor"` or `"claude"`. Invalid key or value type yields `E_PARSE`.
 3. Import aliases must be unique within a file (`E_VALIDATE`).
 4. Import targets must exist on disk (`E_IMPORT_NOT_FOUND`).
-5. Local `ensure foo` requires a local rule `foo`. Imported `ensure alias.foo` requires an imported rule `foo` in the module bound to `alias`.
-6. Local `run bar` requires a local workflow `bar`. Imported `run alias.bar` requires an imported workflow `bar` in the module bound to `alias`.
+5. Local `ensure foo` requires a local rule `foo`. Imported `ensure alias.foo` requires a rule `foo` in the module bound to `alias` (export is not required).
+6. Local `run bar` requires a local workflow `bar`. Imported `run alias.bar` requires a workflow `bar` in the module bound to `alias` (export is not required).
 
 ## Transpilation
 
@@ -156,4 +167,4 @@ Rules:
 3. **Rules:** Each rule is emitted as `<module>::rule::<name>::impl` (the implementation) and `<module>::rule::<name>` (a wrapper that calls `jaiph::run_step ... jaiph::execute_readonly` with the impl). When config is present, the wrapper is invoked inside a metadata scope that sets the config env vars for the duration of the step.
 4. **Workflows:** Each workflow is emitted as `<module>::workflow::<name>::impl` and `<module>::workflow::<name>`, with the wrapper using `jaiph::run_step` and the same metadata-scoping behavior as rules.
 5. **Functions:** Each top-level function is emitted as `<module>::function::<name>::impl`, `<module>::function::<name>` (wrapper using `jaiph::run_step_passthrough`), and a shim `<name>` that forwards to the namespaced wrapper so the original name remains callable.
-6. Conditional steps (`if ! ensure X; then ... fi` and `if ! <shell>; then ... fi`) are transpiled to explicit Bash control flow using the same transpiled rule/workflow symbols and step types. **prompt with returns:** When `returns '{ ... }'` is used, the step is emitted as `jaiph::prompt_capture_with_schema`; the stdlib parses the last line of the agent output as JSON, validates it against the schema, and on success sets the capture variable to the raw JSON and exports `name_field` for each field. Exit codes: 0 = success; 1 = JSON parse error; 2 = missing required field; 3 = type mismatch. **ensure … recover:** `ensure REF [args] recover <body>` is transpiled to a **bounded** retry loop: `for _jaiph_retry in $(seq 1 "${JAIPH_ENSURE_MAX_RETRIES:-10}"); do if <rule>(args); then break; fi; <body>; done`, then if the condition still fails, the script exits with status 1. The recover body may be a single statement or a `{ stmt; stmt; ... }` block. Max retries default to 10 and can be overridden via `JAIPH_ENSURE_MAX_RETRIES`. Steps with an assignment target (e.g. `response = ensure foo`, `out = run bar`, `line = echo hello`) are emitted as `VAR=$(...)`; only stdout is captured, and the command's exit status is preserved (failure exits unless the user has added e.g. `|| true`).
+6. **Conditional steps:** Transpiled to explicit Bash `if ! ...; then ... fi`. **Prompt with returns:** When `returns '{ ... }'` is used, the step is emitted as `jaiph::prompt_capture_with_schema`; the stdlib parses the last line of the agent output as JSON, validates it against the schema, and on success sets the capture variable and exports `name_field` for each field. Exit codes: 0 = success; 1 = JSON parse error; 2 = missing required field; 3 = type mismatch. **ensure … recover:** Transpiled to a bounded retry loop: `for _jaiph_retry in $(seq 1 "${JAIPH_ENSURE_MAX_RETRIES:-10}"); do if <rule>(args); then break; fi; <body>; done`, then if the condition still fails, the script exits with status 1. The recover body may be a single statement or a `{ stmt; ... }` block. Max retries default to 10 and can be overridden via `JAIPH_ENSURE_MAX_RETRIES`. **Assignment capture:** Steps with a capture variable (e.g. `response = ensure foo`, `out = run bar`) are emitted as `VAR=$(...)`; only stdout is captured, and the command’s exit status is preserved (failure exits unless the user adds e.g. `|| true`).

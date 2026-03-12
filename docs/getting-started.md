@@ -1,10 +1,10 @@
 # ![Jaiph](logo.png)
 
-[jaiph.org](https://jaiph.org) · [Getting started](getting-started.md) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Testing](testing.md) · [Agent Skill](https://jaiph.org/jaiph-skill.md)
+[jaiph.org](https://jaiph.org) · [Getting started](getting-started.md) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Testing](testing.md) · [Hooks](hooks.md) · [Agent Skill](https://jaiph.org/jaiph-skill.md)
 
 ---
 
-This page is the main entry point for the documentation. For reference, see [CLI](cli.md), [Configuration](configuration.md), [Grammar](grammar.md), and [Testing](testing.md); for AI agents that generate workflows, see the [Agent Skill](https://jaiph.org/jaiph-skill.md).
+This page is the main entry point: it introduces Jaiph, installation, running workflows, and the main language primitives. For reference, see [CLI](cli.md), [Configuration](configuration.md), [Grammar](grammar.md), [Testing](testing.md), and [Hooks](hooks.md); for AI agents that generate workflows, see the [Agent Skill](https://jaiph.org/jaiph-skill.md).
 
 **Open Source • Powerful • Friendly**
 
@@ -117,7 +117,7 @@ Installation places both the `jaiph` CLI and the global runtime stdlib (`jaiph_s
 
 Arguments are passed exactly like bash scripts (`$1`, `$2`, `"$@"`).
 
-Entrypoint resolution: executable `.jh` or `.jph` files with `#!/usr/bin/env jaiph` run `workflow default`. You can also run `jaiph run path/to/file.jh` (or `file.jph`); arguments are passed the same way.
+Entrypoint resolution: executable `.jh` or `.jph` files with `#!/usr/bin/env jaiph` run the `workflow default` defined in that file. You can also run `jaiph run path/to/file.jh` (or `file.jph`); arguments are passed the same way. The file must define a workflow named `default`.
 
 ### Initialize Jaiph workspace
 
@@ -140,7 +140,7 @@ Tip: add `.jaiph/runs/` to your `.gitignore`.
 ### Run reporting and logs
 
 - During `jaiph run`, progress is event-driven. **TTY:** The tree is the same as non-TTY (task rows with final time when each step completes); a single bottom line `  RUNNING workflow <name> (X.Xs)` is the only line updated in place (~1 Hz) and is removed when the run finishes. **Non-TTY:** One line per finished step; no RUNNING line.
-- Parameterized steps (`workflow`, `prompt`, `function`) show passed argument values inline in the tree (gray, comma-separated values in parentheses; no parameter names; workflow/function values truncated to 32 characters). **Prompt** steps show a truncated preview of the prompt text (first 24 characters) and the argument list is capped at 24 characters. See [CLI](cli.md) for details.
+- Parameterized steps (`workflow`, `prompt`, `function`) show passed argument values inline in the tree (gray, comma-separated values in parentheses; no parameter names; workflow/function values truncated to 32 characters). **Prompt** steps show a truncated preview of the prompt text (first 24 characters) and the argument list is capped at 96 characters. See [CLI](cli.md) for details.
 - Each run creates a run directory under the logs dir (default `.jaiph/runs/`) named `<timestamp>-<id>`, containing `run_summary.jsonl`.
 - Step `.out` and `.err` files are written only when the step produced output (empty files are not created).
 
@@ -168,11 +168,11 @@ Important:
 - `agent.trusted_workspace` sets the Cursor backend trust scope (`--trust`); it defaults to the project root.
 - `agent.command` is the executable (and optional inline args) for the Cursor backend, e.g. `cursor-agent --force`.
 - `agent.cursor_flags` and `agent.claude_flags` append backend-specific CLI flags (split on whitespace).
-- Environment variables override config: `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_AGENT_CURSOR_FLAGS`, `JAIPH_AGENT_CLAUDE_FLAGS`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, etc. See [configuration.md](configuration.md).
+- Environment variables override config: `JAIPH_AGENT_MODEL`, `JAIPH_AGENT_COMMAND`, `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_AGENT_CURSOR_FLAGS`, `JAIPH_AGENT_CLAUDE_FLAGS`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`. See [configuration.md](configuration.md).
 
 ### CLI reference
 
-See [cli.md](cli.md) for command syntax, examples, and supported environment variables.
+See [cli.md](cli.md) for command syntax, examples, environment variables, and lifecycle hooks.
 
 ## Language Primitives
 
@@ -195,7 +195,7 @@ See [cli.md](cli.md) for command syntax, examples, and supported environment var
   Executes a rule in a workflow or another rule, optionally forwarding arguments (for example: `ensure my_rule "$1"`). Optional: `ensure ref recover <stmt>` or `ensure ref recover { stmt; stmt; }` for a bounded retry loop (run rule; on failure run recover body; repeat until success or `JAIPH_ENSURE_MAX_RETRIES` exceeded, then exit 1; default max 10).
 
 - `run ref [args...]`  
-  Executes another workflow from a workflow. You can pass arguments (e.g. `run update_docs "$1"`). `run` is not allowed inside a rule; use `ensure` to call another rule or call the workflow from a workflow.
+  Executes another workflow from a workflow (not a shell command). You can pass arguments (e.g. `run update_docs "$1"`). `run` is not allowed inside a rule; use `ensure` to call another rule or call the workflow from a workflow.
 
 - **Conditionals** — `if ! ensure ref; then ... fi` runs the then-branch when the rule fails. The then-branch may contain `run`, `prompt`, and shell commands. For a pure shell condition, `if ! <shell_condition>; then ... fi` is also supported; in that case the then-branch may contain only `run` and shell commands (no `prompt`).
 
@@ -213,8 +213,6 @@ Known limitations and gotchas:
 ## More Documentation
 
 - Full docs: <https://jaiph.org/>
-- Grammar: [grammar.md](grammar.md)
-- Testing: [testing.md](testing.md)
-- Agent bootstrap skill: <https://jaiph.org/jaiph-skill.md>
-- Configuration: [configuration.md](configuration.md)
-- CLI: [cli.md](cli.md)
+- [Getting started](getting-started.md) — this page
+- [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Testing](testing.md) · [Hooks](hooks.md)
+- Agent skill (for AI agents): <https://jaiph.org/jaiph-skill.md>
