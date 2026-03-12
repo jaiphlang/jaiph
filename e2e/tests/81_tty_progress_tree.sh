@@ -88,9 +88,10 @@ tree_projection="$(
   printf '%s\n' "${normalized}" | awk '
     /^Jaiph: Running tty_tree\.jh$/ { print; next }
     /^workflow default$/ { print; next }
-    /^▸ RUNNING workflow default \(\<time\>\)$/ {
+    /RUNNING workflow default \(\<time\>\)/ {
       if (!seen_running) {
-        print
+        # Canonicalize possible TTY redraw variants to one stable line.
+        print "▸ RUNNING workflow default (<time>)"
         seen_running=1
       }
       next

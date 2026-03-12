@@ -167,7 +167,7 @@ Examples:
 
 ```bash
 jaiph use nightly
-jaiph use 0.2.0
+jaiph use 0.3.0
 ```
 
 ## File extensions

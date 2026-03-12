@@ -55,11 +55,11 @@ elif [ -n "${1+x}" ] && [ -d "${1}" ] && [ -f "${1}/package.json" ]; then
   JAIPH_REPO_URL="${REPO_URL}"
 fi
 REPO_URL="${REPO_URL:-${JAIPH_REPO_URL:-https://github.com/jaiphlang/jaiph.git}}"
-# Version/ref: first argument only when not a local path, or JAIPH_REPO_REF env, or default tag 0.2.0.
+# Version/ref: first argument only when not a local path, or JAIPH_REPO_REF env, or default tag 0.3.0.
 if [ -n "${JAIPH_FROM_LOCAL}" ]; then
-  REPO_REF="${JAIPH_REPO_REF:-0.2.0}"
+  REPO_REF="${JAIPH_REPO_REF:-0.3.0}"
 else
-  REPO_REF="${1:-${JAIPH_REPO_REF:-0.2.0}}"
+  REPO_REF="${1:-${JAIPH_REPO_REF:-0.3.0}}"
 fi
 BIN_DIR="${JAIPH_BIN_DIR:-$HOME/.local/bin}"
 LIB_DIR="${JAIPH_LIB_DIR:-${BIN_DIR}/.jaiph}"
