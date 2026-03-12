@@ -80,7 +80,9 @@ main::workflow::default::impl() {
   if ! main::rule::project_ready; then
     bootstrap_project::workflow::nodejs
   fi
-  jaiph::prompt "$@" <<__JAIPH_PROMPT_25__
+  export JAIPH_PROMPT_PREVIEW='
+    Build the applicati'
+  jaiph::prompt "$JAIPH_PROMPT_PREVIEW" "$@" <<__JAIPH_PROMPT_25__
 
     Build the application using best practices.
     Follow requirements: $1
@@ -99,7 +101,8 @@ main::workflow::default() {
 main::workflow::update_docs::impl() {
   set -eo pipefail
   set +u
-  jaiph::prompt "$@" <<__JAIPH_PROMPT_38__
+  export JAIPH_PROMPT_PREVIEW='Update docs'
+  jaiph::prompt "$JAIPH_PROMPT_PREVIEW" "$@" <<__JAIPH_PROMPT_38__
 Update docs
 __JAIPH_PROMPT_38__
 }

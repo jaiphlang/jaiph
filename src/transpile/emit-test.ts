@@ -115,7 +115,6 @@ export function emitTest(
     out.push(`  jaiph__test_name=${escapeBashSingleQuoted(block.description)}`);
     if (symbolMocks.length > 0) {
       out.push(`  jaiph__mock_dir=$(mktemp -d)`);
-      out.push(`  trap 'rm -rf "$jaiph__mock_dir"' RETURN`);
       for (const mock of symbolMocks) {
         const symbol =
           mock.type === "test_mock_workflow"
@@ -139,9 +138,6 @@ export function emitTest(
       if (mockBlockStep && mockBlockStep.type === "test_mock_prompt_block") {
         const dispatchScript = emitMockDispatchScript(mockBlockStep, escapeBashSingleQuoted);
         out.push(`  jaiph__mock_dispatch_script=$(mktemp)`);
-        out.push(
-          `  trap '${symbolMocks.length > 0 ? 'rm -rf "$jaiph__mock_dir"; ' : ""}rm -f "$jaiph__mock_dispatch_script"' RETURN`,
-        );
         out.push(`  cat > "$jaiph__mock_dispatch_script" << 'JAIPH_MOCK_EOF'`);
         for (const scriptLine of dispatchScript) {
           out.push(scriptLine);
@@ -153,9 +149,6 @@ export function emitTest(
       }
     } else {
       out.push(`  jaiph__mock_file=$(mktemp)`);
-      out.push(
-        `  trap '${symbolMocks.length > 0 ? 'rm -rf "$jaiph__mock_dir"; ' : ""}rm -f "$jaiph__mock_file"' RETURN`,
-      );
       out.push(`  unset JAIPH_MOCK_DISPATCH_SCRIPT`);
     }
     for (const step of block.steps) {
@@ -181,6 +174,10 @@ export function emitTest(
           out.push(`  export JAIPH_MOCK_RESPONSES_FILE="$jaiph__mock_file"`);
         }
         const args = step.args?.length ? step.args.map(escapeBashSingleQuoted).join(" ") : "";
+        out.push("  jaiph__had_errexit=0");
+        out.push("  case \"$-\" in");
+        out.push("    *e*) jaiph__had_errexit=1 ;;");
+        out.push("  esac");
         out.push("  set +e");
         if (step.captureName) {
           out.push(`  jaiph__test_out=$(${workflowSymbol} ${args} 2>&1)`);
@@ -194,7 +191,9 @@ export function emitTest(
           out.push("  jaiph__test_exit=$?");
           out.push(`  rm -f "$jaiph__test_out_file"`);
         }
-        out.push("  set -e");
+        out.push("  if [[ $jaiph__had_errexit -eq 1 ]]; then");
+        out.push("    set -e");
+        out.push("  fi");
         if (!step.allowFailure) {
           out.push("  if [[ $jaiph__test_exit -ne 0 ]]; then");
           out.push('    echo "jai: workflow exited with status $jaiph__test_exit" >&2');
@@ -232,7 +231,11 @@ export function emitTest(
   out.push(`    desc="\${${descsVar}[${"$"}i]}"`);
   out.push("    start=$SECONDS");
   out.push("    err_file=$(mktemp)");
-  out.push(`    if jaiph__test_${"$"}i 2>"$err_file"; then`);
+  out.push("    set +e");
+  out.push(`    jaiph__test_${"$"}i 2>"$err_file"`);
+  out.push("    jaiph__test_rc=$?");
+  out.push("    set -e");
+  out.push("    if [[ $jaiph__test_rc -eq 0 ]]; then");
   out.push("      elapsed=$((SECONDS - start))");
   out.push('      echo "  ▸ $desc"');
   out.push('      echo -e "  ${green}✓${reset} ${dim}${elapsed}s${reset}"');
