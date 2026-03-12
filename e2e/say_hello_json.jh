@@ -1,5 +1,9 @@
 #!/usr/bin/env jaiph
 
+config {
+  agent.backend = "claude"
+}
+
 rule name_was_provided {
   if [ -z "$1" ]; then
     echo "You didn't provide your name :(" >&2
