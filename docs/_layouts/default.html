@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#6b7280" />
+    <meta name="theme-color" content="#1f2a37" media="(prefers-color-scheme: dark)" />
+    <meta name="description"
+        content="Jaiph — Open source AI workflow DSL. Powerful and friendly automation for AI-assisted development." />
+    <link rel="icon" href="{{ '/favicon.png' | relative_url }}" type="image/png" />
+    <title>{{ page.title | default: site.title }} — Jaiph</title>
+    <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}" />
+</head>
+
+<body>
+
+    <header class="doc-header">
+        <h1><a href="{{ '/' | relative_url }}"><img src="{{ '/logo.png' | relative_url }}" alt="Jaiph" /></a></h1>
+        <nav class="doc-nav">
+            <a href="{{ '/' | relative_url }}">Home</a>
+            <span class="separator">·</span>
+            <a href="{{ '/getting-started' | relative_url }}">Getting started</a>
+            <span class="separator">·</span>
+            <a href="{{ '/cli' | relative_url }}">CLI</a>
+            <span class="separator">·</span>
+            <a href="{{ '/configuration' | relative_url }}">Configuration</a>
+            <span class="separator">·</span>
+            <a href="{{ '/grammar' | relative_url }}">Grammar</a>
+            <span class="separator">·</span>
+            <a href="{{ '/testing' | relative_url }}">Testing</a>
+            <span class="separator">·</span>
+            <a href="{{ '/hooks' | relative_url }}">Hooks</a>
+            <span class="separator">·</span>
+            <a href="{{ '/jaiph-skill' | relative_url }}">Agent Skill</a>
+        </nav>
+    </header>
+
+    <div class="container">
+        <div class="card doc-content">
+            {{ content }}
+        </div>
+    </div>
+
+    <div class="footer">
+        © 2026 Jaiph — Open Source · Powerful · Friendly!
+    </div>
+
+    <script src="{{ '/assets/js/main.js' | relative_url }}"></script>
+</body>
+
+</html>

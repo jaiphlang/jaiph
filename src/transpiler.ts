@@ -25,12 +25,15 @@ export function transpileFile(inputFile: string, rootDir: string): string {
   const workflowSymbol = workflowSymbolForFile(inputFile, rootDir);
   const importedWorkflowSymbols = new Map<string, string>();
   const importSourcePaths: string[] = [];
+  const importedModuleHasMetadata = new Map<string, boolean>();
   for (const imp of ast.imports) {
     const importedFile = resolveImportPath(ast.filePath, imp.path);
     importedWorkflowSymbols.set(imp.alias, workflowSymbolForFile(importedFile, rootDir));
     importSourcePaths.push(toImportSource(imp.path, inputFile, rootDir));
+    const importedAst = parsejaiph(readFileSync(importedFile, "utf8"), importedFile);
+    importedModuleHasMetadata.set(imp.alias, importedAst.metadata !== undefined);
   }
-  return emitWorkflow(ast, workflowSymbol, importedWorkflowSymbols, importSourcePaths);
+  return emitWorkflow(ast, workflowSymbol, importedWorkflowSymbols, importSourcePaths, importedModuleHasMetadata);
 }
 
 /**

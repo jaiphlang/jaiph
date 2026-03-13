@@ -8,6 +8,11 @@
 import "./docs_parity.jh" as docs
 import "./ensure_ci_passes.jh" as ci
 
+config {
+  agent.backend = "claude"
+  agent.claude_flags = "--permission-mode bypassPermissions"
+}
+
 function get_first_task() {
   if ! test -f ".jaiph/QUEUE.md"; then
     echo "missing .jaiph/QUEUE.md" >&2

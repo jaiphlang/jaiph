@@ -1,8 +1,11 @@
-# Jaiph Bootstrap Skill (for Agents)
-
-[jaiph.org](https://jaiph.org) · [Getting started](getting-started.md) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Testing](testing.md) · [Hooks](hooks.md) · [Agent Skill](https://jaiph.org/jaiph-skill.md)
-
 ---
+title: Agent Skill
+permalink: /jaiph-skill
+redirect_from:
+  - /jaiph-skill.md
+---
+
+# Jaiph Bootstrap Skill (for Agents)
 
 ## Overview
 
@@ -85,7 +88,7 @@ Optional: `.jaiph/implementation.jh` if you prefer the implementation workflow i
 
 ## Final Output Requirement
 
-After scaffolding workflows, print the exact commands the developer should run. The primary command runs the default entrypoint (preflight + implementation + verification). Point users to the canonical skill URL for agents: <https://jaiph.org/jaiph-skill.md>.
+After scaffolding workflows, print the exact commands the developer should run. The primary command runs the default entrypoint (preflight + implementation + verification). Point users to the canonical skill URL for agents: <https://jaiph.org/jaiph-skill>.
 
 ```bash
 jaiph run .jaiph/main.jh "implement feature X"

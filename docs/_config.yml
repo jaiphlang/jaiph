@@ -1,0 +1,31 @@
+title: Jaiph — AI Workflow DSL
+description: >-
+  Jaiph — Open source AI workflow DSL. Powerful and friendly automation for
+  AI-assisted development.
+
+markdown: kramdown
+kramdown:
+  input: GFM
+  syntax_highlighter: none
+
+highlighter: none
+
+plugins:
+  - jekyll-relative-links
+  - jekyll-redirect-from
+
+relative_links:
+  enabled: true
+  collections: false
+
+defaults:
+  - scope:
+      path: ""
+      type: "pages"
+    values:
+      layout: "default"
+
+exclude:
+  - install
+  - install-from-local.sh
+  - CNAME

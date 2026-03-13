@@ -1,8 +1,11 @@
-# Jaiph configuration
-
-[jaiph.org](https://jaiph.org) · [Getting started](getting-started.md) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Testing](testing.md) · [Hooks](hooks.md) · [Agent Skill](https://jaiph.org/jaiph-skill.md)
-
 ---
+title: Configuration
+permalink: /configuration
+redirect_from:
+  - /configuration.md
+---
+
+# Jaiph Configuration
 
 ## Overview
 

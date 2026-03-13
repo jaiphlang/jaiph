@@ -1,10 +1,13 @@
-# ![Jaiph](logo.png)
-
-[jaiph.org](https://jaiph.org) · [Getting started](getting-started.md) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Testing](testing.md) · [Hooks](hooks.md) · [Agent Skill](https://jaiph.org/jaiph-skill.md)
-
+---
+title: Getting Started
+permalink: /getting-started
+redirect_from:
+  - /getting-started.md
 ---
 
-This page is the main entry point: it introduces Jaiph, installation, running workflows, and the main language primitives. For reference, see [CLI](cli.md), [Configuration](configuration.md), [Grammar](grammar.md), [Testing](testing.md), and [Hooks](hooks.md); for AI agents that generate workflows, see the [Agent Skill](https://jaiph.org/jaiph-skill.md).
+# Getting Started
+
+This page is the main entry point: it introduces Jaiph, installation, running workflows, and the main language primitives. For reference, see [CLI](cli.md), [Configuration](configuration.md), [Grammar](grammar.md), [Testing](testing.md), and [Hooks](hooks.md); for AI agents that generate workflows, see the [Agent Skill](jaiph-skill.md).
 
 **Open Source • Powerful • Friendly**
 

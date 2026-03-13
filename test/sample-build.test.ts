@@ -753,13 +753,15 @@ test("jaiph run applies model from in-file metadata", () => {
     );
 
     const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      PATH: `${binDir}:${process.env.PATH ?? ""}`,
+    };
+    delete runEnv.JAIPH_AGENT_CURSOR_FLAGS;
     const runResult = spawnSync("node", [cliPath, "run", filePath], {
       encoding: "utf8",
       cwd: root,
-      env: {
-        ...process.env,
-        PATH: `${binDir}:${process.env.PATH ?? ""}`,
-      },
+      env: runEnv,
     });
 
     assert.equal(runResult.status, 0, runResult.stderr);
@@ -866,13 +868,16 @@ test("jaiph run agent.backend = claude uses Claude CLI and captures output", () 
     );
 
     const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      PATH: `${binDir}:${process.env.PATH ?? ""}`,
+    };
+    delete runEnv.JAIPH_AGENT_BACKEND;
+    delete runEnv.JAIPH_AGENT_CLAUDE_FLAGS;
     const runResult = spawnSync("node", [cliPath, "run", filePath], {
       encoding: "utf8",
       cwd: root,
-      env: {
-        ...process.env,
-        PATH: `${binDir}:${process.env.PATH ?? ""}`,
-      },
+      env: runEnv,
     });
 
     assert.equal(runResult.status, 0, runResult.stderr);
@@ -910,13 +915,15 @@ test("jaiph run agent.backend = claude without claude in PATH fails with clear e
     );
 
     const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      PATH: `${dirname(process.execPath)}:/bin:/usr/bin:/nonexistent`,
+    };
+    delete runEnv.JAIPH_AGENT_BACKEND;
     const runResult = spawnSync("node", [cliPath, "run", filePath], {
       encoding: "utf8",
       cwd: root,
-      env: {
-        ...process.env,
-        PATH: `${dirname(process.execPath)}:/bin:/usr/bin:/nonexistent`,
-      },
+      env: runEnv,
     });
 
     assert.equal(runResult.status, 1);

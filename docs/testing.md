@@ -1,8 +1,11 @@
-# Testing Jaiph Workflows
-
-[jaiph.org](https://jaiph.org) · [Getting started](getting-started.md) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Testing](testing.md) · [Hooks](hooks.md) · [Agent Skill](https://jaiph.org/jaiph-skill.md)
-
 ---
+title: Testing
+permalink: /testing
+redirect_from:
+  - /testing.md
+---
+
+# Testing Jaiph Workflows
 
 You can test Jaiph workflows by writing test scripts that run workflows under controlled conditions and assert on their output or side effects. Tests live in dedicated files, use the same import system as workflows, and support mocking prompts and dependencies so runs are deterministic and fast.
 

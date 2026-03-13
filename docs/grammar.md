@@ -1,8 +1,11 @@
-# Jaiph Grammar
-
-[jaiph.org](https://jaiph.org) · [Getting started](getting-started.md) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Testing](testing.md) · [Hooks](hooks.md) · [Agent Skill](https://jaiph.org/jaiph-skill.md)
-
 ---
+title: Grammar
+permalink: /grammar
+redirect_from:
+  - /grammar.md
+---
+
+# Jaiph Grammar
 
 ## Overview
 

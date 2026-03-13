@@ -35,6 +35,8 @@ workflow default {
 }
 EOF
 
+# Unset so run does not set JAIPH_AGENT_BACKEND_LOCKED=1; nested workflow must apply its own config.
+unset JAIPH_AGENT_BACKEND 2>/dev/null || true
 jaiph run "${TEST_DIR}/parent.jh" >/dev/null
 
 actual="$(cat "${META_FILE}")"

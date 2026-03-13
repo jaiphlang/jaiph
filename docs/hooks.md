@@ -1,8 +1,11 @@
-# Jaiph hooks
-
-[jaiph.org](https://jaiph.org) · [Getting started](getting-started.md) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Testing](testing.md) · [Agent Skill](https://jaiph.org/jaiph-skill.md)
-
 ---
+title: Hooks
+permalink: /hooks
+redirect_from:
+  - /hooks.md
+---
+
+# Jaiph Hooks
 
 ## Overview
 

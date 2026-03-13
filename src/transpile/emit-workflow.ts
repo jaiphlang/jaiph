@@ -1,6 +1,16 @@
 import { jaiphError } from "../errors";
 import type { jaiphModule, RuleRefDef, WorkflowStepDef, WorkflowRefDef } from "../types";
 
+/** Prefix to wrap an imported workflow call so it runs with that module's config (e.g. "child::with_metadata_scope "). */
+function prefixForImportedWorkflowCall(
+  workflowRef: WorkflowRefDef,
+  importedModuleHasMetadata: Map<string, boolean>,
+): string {
+  const parts = workflowRef.value.split(".");
+  if (parts.length !== 2 || !importedModuleHasMetadata.get(parts[0])) return "";
+  return `${parts[0]}::with_metadata_scope `;
+}
+
 /** If args look like key=value key=value..., return ordered param keys for tree display; else null. */
 function parseParamKeysFromArgs(args: string): string[] | null {
   const trimmed = args.trim();
@@ -249,6 +259,7 @@ export function emitWorkflow(
   workflowSymbol: string,
   importedWorkflowSymbols: Map<string, string>,
   importSourcePaths: string[],
+  importedModuleHasMetadata: Map<string, boolean>,
 ): string {
   const scopedMetadataAssignments: Array<{ name: string; value: string }> = [];
   if (ast.metadata?.agent?.defaultModel !== undefined) {
@@ -494,10 +505,11 @@ function emitEnsureRecoverLoop(
           out.push(`${indent}export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
         }
         const wfRef = transpileWorkflowRef(recoverStep.workflow, workflowSymbol, importedWorkflowSymbols);
+        const scopePrefix = prefixForImportedWorkflowCall(recoverStep.workflow, importedModuleHasMetadata);
         if (recoverStep.captureName) {
-          out.push(`${indent}${recoverStep.captureName}=$(${wfRef}::impl${args})`);
+          out.push(`${indent}${recoverStep.captureName}=$(${scopePrefix}${wfRef}::impl${args})`);
         } else {
-          out.push(`${indent}${wfRef}${args}`);
+          out.push(`${indent}${scopePrefix}${wfRef}${args}`);
         }
         return;
       }
@@ -563,10 +575,11 @@ function emitEnsureRecoverLoop(
             out.push(`  export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
           }
           const wfRef = transpileWorkflowRef(step.workflow, workflowSymbol, importedWorkflowSymbols);
+          const scopePrefix = prefixForImportedWorkflowCall(step.workflow, importedModuleHasMetadata);
           if (step.captureName) {
-            out.push(`  ${step.captureName}=$(${wfRef}::impl${args})`);
+            out.push(`  ${step.captureName}=$(${scopePrefix}${wfRef}::impl${args})`);
           } else {
-            out.push(`  ${wfRef}${args}`);
+            out.push(`  ${scopePrefix}${wfRef}${args}`);
           }
           continue;
         }
@@ -592,7 +605,9 @@ function emitEnsureRecoverLoop(
             if (paramKeys != null && paramKeys.length > 0) {
               out.push(`    export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
             }
-            out.push(`    ${transpileWorkflowRef(wf.workflow, workflowSymbol, importedWorkflowSymbols)}${args}`);
+            const wfRef = transpileWorkflowRef(wf.workflow, workflowSymbol, importedWorkflowSymbols);
+            const scopePrefix = prefixForImportedWorkflowCall(wf.workflow, importedModuleHasMetadata);
+            out.push(`    ${scopePrefix}${wfRef}${args}`);
           }
           out.push("  fi");
           continue;
@@ -609,10 +624,11 @@ function emitEnsureRecoverLoop(
                 out.push(`    export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
               }
               const wfRef = transpileWorkflowRef(thenStep.workflow, workflowSymbol, importedWorkflowSymbols);
+              const scopePrefix = prefixForImportedWorkflowCall(thenStep.workflow, importedModuleHasMetadata);
               if (thenStep.captureName) {
-                out.push(`    ${thenStep.captureName}=$(${wfRef}::impl${args})`);
+                out.push(`    ${thenStep.captureName}=$(${scopePrefix}${wfRef}::impl${args})`);
               } else {
-                out.push(`    ${wfRef}${args}`);
+                out.push(`    ${scopePrefix}${wfRef}${args}`);
               }
               continue;
             }
@@ -643,7 +659,9 @@ function emitEnsureRecoverLoop(
               if (paramKeys != null && paramKeys.length > 0) {
                 out.push(`    export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
               }
-              out.push(`    ${transpileWorkflowRef(thenStep.workflow, workflowSymbol, importedWorkflowSymbols)}${args}`);
+              const wfRef = transpileWorkflowRef(thenStep.workflow, workflowSymbol, importedWorkflowSymbols);
+              const scopePrefix = prefixForImportedWorkflowCall(thenStep.workflow, importedModuleHasMetadata);
+              out.push(`    ${scopePrefix}${wfRef}${args}`);
             }
           }
           out.push("  fi");

@@ -1,6 +1,6 @@
 # ![Jaiph](docs/logo.png)
 
-[jaiph.org](https://jaiph.org) · [Getting started](docs/getting-started.md) · [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Grammar](docs/grammar.md) · [Testing](docs/testing.md) · [Hooks](docs/hooks.md) · [Agent Skill](https://jaiph.org/jaiph-skill.md)
+[jaiph.org](https://jaiph.org) · [Getting started](docs/getting-started.md) · [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Grammar](docs/grammar.md) · [Testing](docs/testing.md) · [Hooks](docs/hooks.md) · [Agent Skill](https://jaiph.org/jaiph-skill)
 
 ---
 

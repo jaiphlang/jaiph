@@ -1,8 +1,11 @@
-# Jaiph CLI Reference
-
-[jaiph.org](https://jaiph.org) · [Getting started](getting-started.md) · [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Testing](testing.md) · [Hooks](hooks.md) · [Agent Skill](https://jaiph.org/jaiph-skill.md)
-
 ---
+title: CLI Reference
+permalink: /cli
+redirect_from:
+  - /cli.md
+---
+
+# Jaiph CLI Reference
 
 ## Overview
 
