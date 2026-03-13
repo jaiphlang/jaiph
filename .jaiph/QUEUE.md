@@ -6,71 +6,28 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## 5b. Deterministic field export for typed prompts
+## GitHub Pages template matching docs/index.html
 
 **Status:** pending
 
-**What:** Eagerly unpack typed response fields into prefixed variables immediately after prompt execution.
+**What:** Build a GitHub Pages template that matches the style in `docs/index.html` and apply it to the current GH Pages site built from the `docs/` directory.
 
-**Example:** `result` with field `risk` creates `$result_risk`.
+**Why:** The landing page (`docs/index.html`) has a distinct look (navy/orange palette, cards, code blocks with copy/tabs, syntax highlighting). The rest of the docs (e.g. `getting-started.md`, `configuration.md`, `cli.md`, `grammar.md`, `testing.md`, `hooks.md`) are plain Markdown and will render with default or no styling when served from `docs/`. Unifying them under the same template ensures a consistent, on-brand docs experience.
 
-**Why:** Keeps runtime simple and avoids repeated JSON parsing throughout workflows.
+**Scope:**
+- Extract or reuse the CSS, layout structure, and scripts from `docs/index.html` into a reusable template (e.g. Jekyll layout in `_layouts/default.html` if using Jekyll, or a build step that wraps each page in the same shell).
+- Ensure the docs site is built from `docs/` (no change to publish source).
+- Apply the template so that:
+  - The existing `index.html` style is the reference (no visual regression).
+  - All doc pages (Markdown or HTML) use the same header, container, cards, code block styling, footer, and behaviour (copy buttons, code tabs, syntax highlighting where applicable).
 
-**Files to change:**
-- `src/transpile/emit-workflow.ts` — emit deterministic unpack/export logic.
-- `src/jaiph_stdlib.sh` — extraction/export helper implementation.
-- tests for shell-safe export and primitive typing.
+**Files to touch (indicative):**
+- `docs/index.html` — keep as reference; optionally refactor to use the shared template/layout.
+- New: template/layout file(s) in `docs/` (e.g. `_layouts/default.html` and `_config.yml` if Jekyll, or equivalent).
+- Doc pages in `docs/*.md` — ensure they are rendered through the template (front matter or build pipeline).
 
 **Acceptance criteria:**
-- `$result` contains raw JSON
-- `$result_<field>` variables are available in subsequent steps
-- No additional `jq` call is needed at each access site
-- Export behaviour is deterministic for all declared primitive fields (`string|number|boolean`)
-- Testable with `jaiph test`: mock response is unpacked into prefixed variables
-
----
-
-## 5c. Dot notation sugar for typed prompt fields
-
-**Status:** pending
-
-**What:** Support `result.field` syntax in workflow expressions as sugar for `$result_field`.
-
-**Why:** Improves readability without adding runtime overhead.
-
-**Files to change:**
-- `src/parse/workflows.ts` + expression helpers — parse `name.field` in supported contexts.
-- `src/transpile/emit-workflow.ts` — compile to prefixed bash variable references.
-- parser/transpiler tests for compatibility with existing syntax.
-
-**Acceptance criteria:**
-- `result.type` compiles to `$result_type`
-- Generated bash has no dynamic field lookup calls at access sites
-- Existing non-dot syntax remains backward compatible
-- Dot notation is sugar only and cannot bypass schema validation rules from 5a
-
----
-
-## 8. Package registry via GitHub
-
-**Status:** pending
-
-**What:** Allow importing Jaiph modules from GitHub using a `github:` URI scheme:
-
-```
-import "github:org/repo/path/to/file.jph@v1.2.0" as security
-```
-
-Jaiph resolves, downloads, and caches the module on first use.
-
-**Resolution rules:**
-- `@tag` pins to a git tag
-- `@sha` pins to a commit SHA
-- Without `@` resolves to `main` with a warning (unpinned)
-- Cache location: `~/.cache/jaiph/modules/<org>/<repo>/<ref>/`
-
-**Files to change:**
-- `src/parse/imports.ts` — recognise `github:` import URI format.
-- `src/transpile/resolve.ts` + build pipeline (`src/transpiler.ts`) — resolve/download/cache remote imports before transpilation.
-- `src/cli/index.ts` + new `src/cli/commands/module.ts` — add `jaiph module update` for refreshing unpinned imports.
-- `docs/getting-started.md` — document remote imports
+- GH Pages built from `docs/` displays all content with the same visual style as `docs/index.html` (colors, typography, cards, code blocks, footer).
+- Code blocks on doc pages have the same styling and copy-button behaviour as on the landing page.
+- No duplicate CSS/JS: single source of truth for the template (shared layout or single shell).
+- Existing links and URLs (e.g. `/getting-started`, `/configuration`) continue to work.
