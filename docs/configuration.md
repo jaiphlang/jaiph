@@ -7,8 +7,6 @@ redirect_from:
 
 # Jaiph Configuration
 
-## Overview
-
 Configuration controls how the Jaiph runtime behaves: which agent runs `prompt` steps, where step logs are stored, and whether shell trace (debug) is enabled. There are two sources of configuration:
 
 1. **In-file config** — a `config { ... }` block in the workflow file you pass to `jaiph run`.

@@ -591,8 +591,8 @@
 
     /**
      * Restructures doc-sections content so that:
-     * - Everything before the first h2 becomes a .doc-hero panel
-     * - Each h2 sits outside a .card, with its section content inside
+     * - h1 stays unwrapped; any content below it until the first h2 is wrapped in a .card.
+     * - Each h2 sits outside a .card, with its section content inside.
      */
     function restructureDocSections() {
         var container = document.querySelector(".doc-sections");
@@ -603,9 +603,7 @@
         var children = Array.prototype.slice.call(container.childNodes);
         var fragment = document.createDocumentFragment();
 
-        var heroPanel = document.createElement("div");
-        heroPanel.className = "doc-hero";
-
+        var heroNodes = [];
         var currentCard = null;
         var inHero = true;
 
@@ -621,7 +619,7 @@
                 currentCard = document.createElement("div");
                 currentCard.className = "card";
             } else if (inHero) {
-                heroPanel.appendChild(child);
+                heroNodes.push(child);
             } else {
                 if (!currentCard) {
                     currentCard = document.createElement("div");
@@ -636,22 +634,70 @@
         }
 
         container.innerHTML = "";
-        if (heroPanel.childNodes.length > 0) {
-            container.appendChild(heroPanel);
+        if (heroNodes.length > 0) {
+            var heroH1 = null;
+            for (var h = 0; h < heroNodes.length; h++) {
+                if (heroNodes[h].nodeType === 1 && heroNodes[h].tagName === "H1") {
+                    heroH1 = heroNodes[h];
+                    break;
+                }
+            }
+            if (heroH1) {
+                container.appendChild(heroH1);
+            }
+            var rest = [];
+            for (var r = 0; r < heroNodes.length; r++) {
+                if (heroNodes[r] !== heroH1) {
+                    rest.push(heroNodes[r]);
+                }
+            }
+            if (rest.length > 0) {
+                var heroCard = document.createElement("div");
+                heroCard.className = "card";
+                for (var j = 0; j < rest.length; j++) {
+                    heroCard.appendChild(rest[j]);
+                }
+                container.appendChild(heroCard);
+            }
         }
         container.appendChild(fragment);
+    }
+
+    /**
+     * Wraps each table in .doc-sections (and .doc-content) in a scroll container
+     * so wide tables don't expand the card on mobile.
+     */
+    function wrapTablesInScrollContainer() {
+        var containers = document.querySelectorAll(".doc-sections .card, .doc-content");
+        containers.forEach(function (container) {
+            if (!container) {
+                return;
+            }
+            var tables = container.querySelectorAll(":scope > table");
+            tables.forEach(function (table) {
+                if (table.parentElement.classList.contains("table-scroll")) {
+                    return;
+                }
+                var wrapper = document.createElement("div");
+                wrapper.className = "table-scroll";
+                table.parentNode.insertBefore(wrapper, table);
+                wrapper.appendChild(table);
+            });
+        });
     }
 
     // Auto-run on DOM ready
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", function () {
             restructureDocSections();
+            wrapTablesInScrollContainer();
             highlightAll();
             attachCopyButtons();
             attachCodeTabs();
         });
     } else {
         restructureDocSections();
+        wrapTablesInScrollContainer();
         highlightAll();
         attachCopyButtons();
         attachCodeTabs();

@@ -431,10 +431,16 @@ header h1 img {
     margin: 1.5rem 0;
 }
 
+.doc-content .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 1rem 0;
+}
+
 .doc-content table {
     width: 100%;
+    min-width: 0;
     border-collapse: collapse;
-    margin: 1rem 0;
     font-size: 0.95rem;
 }
 
@@ -490,11 +496,7 @@ header h1 img {
     overflow-wrap: break-word;
 }
 
-.doc-hero {
-    margin-bottom: 0.5rem;
-}
-
-.doc-hero h1 {
+.doc-sections > h1 {
     color: var(--navy);
     text-shadow: 1px 0px 3px var(--bg);
     margin-top: 5rem;
@@ -529,10 +531,16 @@ header h1 img {
     margin: 1.5rem 0;
 }
 
+.doc-sections .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 1rem 0;
+}
+
 .doc-sections table {
     width: 100%;
+    min-width: 0;
     border-collapse: collapse;
-    margin: 1rem 0;
     font-size: 0.95rem;
 }
 
@@ -654,8 +662,4 @@ header h1 img {
         font-size: 0.85rem;
     }
 
-    .doc-hero {
-        padding: 1rem 1rem;
-        border-radius: 8px;
-    }
 }

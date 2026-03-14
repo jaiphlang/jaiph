@@ -7,8 +7,6 @@ redirect_from:
 
 # Jaiph Grammar
 
-## Overview
-
 This document describes the grammar and semantics of Jaiph source files (`.jh` / `.jph`). It is intended for anyone who needs to write or reason about Jaiph code.
 
 **Scope:**

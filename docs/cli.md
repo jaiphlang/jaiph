@@ -7,8 +7,6 @@ redirect_from:
 
 # Jaiph CLI Reference
 
-## Overview
-
 The Jaiph CLI compiles and runs workflow files (`.jh` / `.jph`), runs tests, and manages workspace setup.
 
 **High-level usage:**

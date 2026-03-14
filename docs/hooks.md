@@ -7,8 +7,6 @@ redirect_from:
 
 # Jaiph Hooks
 
-## Overview
-
 Hooks let you run custom shell commands at Jaiph lifecycle events. Typical uses: notifying external systems when a workflow finishes, logging step names or timing, or syncing run results elsewhere.
 
 Configuration is loaded from **global** and **project-local** `hooks.json` files. For each event, project-local commands override global ones (no merging). If no config exists, `jaiph run` runs as usual with no hooks.
