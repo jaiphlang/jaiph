@@ -26,6 +26,7 @@ defaults:
       layout: "default"
 
 exclude:
+  - vendor
   - install
   - install-from-local.sh
   - CNAME
