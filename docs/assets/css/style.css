@@ -342,6 +342,10 @@ header h1 img {
     margin-top: 0.75rem;
     font-size: 1rem;
     color: var(--muted);
+    border: var(--muted) 1px solid;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 10px;
+    padding: 1rem;
 }
 
 .doc-nav a {
@@ -361,9 +365,18 @@ header h1 img {
 /* ── Doc-page header (smaller than home) ── */
 
 .doc-header {
-    padding: 2rem 1.5rem 0.5rem;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    padding: 0.5rem 1.5rem 0.5rem;
     text-align: center;
     color: var(--text);
+}
+
+.doc-header + .container {
+    padding-top: 11rem;
 }
 
 .doc-header h1 {
@@ -470,6 +483,104 @@ header h1 img {
     display: inline;
 }
 
+/* ── Doc-sections layout (docs.html template) ── */
+
+.doc-sections {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+.doc-hero {
+    margin-bottom: 0.5rem;
+}
+
+.doc-hero h1 {
+    color: var(--navy);
+    text-shadow: 1px 0px 3px var(--bg);
+    margin-top: 5rem;
+    padding-bottom: 0.5rem;
+    font-size: 3rem;
+}
+
+.doc-sections h2 {
+    color: var(--navy);
+    text-shadow: 1px 0px 3px var(--bg);
+    margin-top: 2.5rem;
+    margin-bottom: 0;
+}
+
+.doc-sections > .card {
+    margin-top: 1rem;
+}
+
+.doc-sections h3 {
+    color: var(--navy-light);
+    margin-top: 1.5rem;
+}
+
+.doc-sections h4 {
+    color: var(--navy-light);
+    margin-top: 1.2rem;
+}
+
+.doc-sections .card hr {
+    border: none;
+    border-top: 1px solid #d0d7de;
+    margin: 1.5rem 0;
+}
+
+.doc-sections table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+    font-size: 0.95rem;
+}
+
+.doc-sections th {
+    background: #f6f8fa;
+    text-align: left;
+    font-weight: 600;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #d0d7de;
+}
+
+.doc-sections td {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #d0d7de;
+    vertical-align: top;
+}
+
+.doc-sections blockquote {
+    margin: 1rem 0;
+    padding: 0.75rem 1rem;
+    border-left: 4px solid var(--orange);
+    background: #fff8ee;
+    border-radius: 0 8px 8px 0;
+    color: var(--text);
+}
+
+.doc-sections blockquote p {
+    margin: 0.25rem 0;
+}
+
+.doc-sections ul,
+.doc-sections ol {
+    padding-left: 1.5rem;
+}
+
+.doc-sections li {
+    margin-bottom: 0.3rem;
+}
+
+.doc-sections img {
+    border-radius: 8px;
+}
+
+.doc-sections .badge-row img {
+    border-radius: 0;
+    display: inline;
+}
+
 /* ── Responsive ── */
 
 @media (max-width: 768px) {
@@ -528,7 +639,11 @@ header h1 img {
     }
 
     .doc-header {
-        padding: 1.5rem 1rem 0.25rem;
+        padding: 0.4rem 1rem 0.4rem;
+    }
+
+    .doc-header + .container {
+        padding-top: 3.75rem;
     }
 
     .doc-header h1 img {
@@ -537,5 +652,10 @@ header h1 img {
 
     .doc-nav {
         font-size: 0.85rem;
+    }
+
+    .doc-hero {
+        padding: 1rem 1rem;
+        border-radius: 8px;
     }
 }

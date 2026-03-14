@@ -589,14 +589,69 @@
         });
     }
 
+    /**
+     * Restructures doc-sections content so that:
+     * - Everything before the first h2 becomes a .doc-hero panel
+     * - Each h2 sits outside a .card, with its section content inside
+     */
+    function restructureDocSections() {
+        var container = document.querySelector(".doc-sections");
+        if (!container) {
+            return;
+        }
+
+        var children = Array.prototype.slice.call(container.childNodes);
+        var fragment = document.createDocumentFragment();
+
+        var heroPanel = document.createElement("div");
+        heroPanel.className = "doc-hero";
+
+        var currentCard = null;
+        var inHero = true;
+
+        for (var i = 0; i < children.length; i++) {
+            var child = children[i];
+
+            if (child.nodeType === 1 && child.tagName === "H2") {
+                inHero = false;
+                if (currentCard) {
+                    fragment.appendChild(currentCard);
+                }
+                fragment.appendChild(child);
+                currentCard = document.createElement("div");
+                currentCard.className = "card";
+            } else if (inHero) {
+                heroPanel.appendChild(child);
+            } else {
+                if (!currentCard) {
+                    currentCard = document.createElement("div");
+                    currentCard.className = "card";
+                }
+                currentCard.appendChild(child);
+            }
+        }
+
+        if (currentCard) {
+            fragment.appendChild(currentCard);
+        }
+
+        container.innerHTML = "";
+        if (heroPanel.childNodes.length > 0) {
+            container.appendChild(heroPanel);
+        }
+        container.appendChild(fragment);
+    }
+
     // Auto-run on DOM ready
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", function () {
+            restructureDocSections();
             highlightAll();
             attachCopyButtons();
             attachCodeTabs();
         });
     } else {
+        restructureDocSections();
         highlightAll();
         attachCopyButtons();
         attachCodeTabs();

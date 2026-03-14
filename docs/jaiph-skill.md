@@ -88,7 +88,7 @@ Optional: `.jaiph/implementation.jh` if you prefer the implementation workflow i
 
 ## Final Output Requirement
 
-After scaffolding workflows, print the exact commands the developer should run. The primary command runs the default entrypoint (preflight + implementation + verification). Point users to the canonical skill URL for agents: <https://jaiph.org/jaiph-skill>.
+After scaffolding workflows, print the exact commands the developer should run. The primary command runs the default entrypoint (preflight + implementation + verification). Point users to the canonical skill URL for agents: <https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md>.
 
 ```bash
 jaiph run .jaiph/main.jh "implement feature X"

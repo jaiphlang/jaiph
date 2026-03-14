@@ -7,13 +7,7 @@ redirect_from:
 
 # Getting Started
 
-This page is the main entry point: it introduces Jaiph, installation, running workflows, and the main language primitives. For reference, see [CLI](cli.md), [Configuration](configuration.md), [Grammar](grammar.md), [Testing](testing.md), and [Hooks](hooks.md); for AI agents that generate workflows, see the [Agent Skill](jaiph-skill.md).
-
-**Open Source • Powerful • Friendly**
-
-[![CI](https://github.com/jaiphlang/jaiph/actions/workflows/ci.yml/badge.svg)](https://github.com/jaiphlang/jaiph/actions/workflows/ci.yml)
-
-[jaiph.org](https://jaiph.org)
+This page introduces Jaiph, installation, running workflows, and the main language primitives.
 
 ## What is Jaiph?
 
@@ -33,7 +27,7 @@ It combines declarative workflow structure with bash, then compiles to pure shel
 > Jaiph is still in an early stage. Expect breaking changes.
 
 - Docs (canonical): <https://jaiph.org/>
-- Agent skill: <https://jaiph.org/jaiph-skill.md>
+- Agent skill: <https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md>
 - Samples: <https://github.com/jaiphlang/jaiph/tree/main/samples>
 - Contribute: <https://github.com/jaiphlang/jaiph/issues>
 
@@ -213,9 +207,3 @@ Known limitations and gotchas:
 
 - Entrypoint naming: `jaiph run` does not use file-name-based workflow lookup. Use `workflow default` as the entrypoint for runnable files.
 
-## More Documentation
-
-- Full docs: <https://jaiph.org/>
-- [Getting started](getting-started.md) — this page
-- [CLI](cli.md) · [Configuration](configuration.md) · [Grammar](grammar.md) · [Testing](testing.md) · [Hooks](hooks.md)
-- Agent skill (for AI agents): <https://jaiph.org/jaiph-skill.md>

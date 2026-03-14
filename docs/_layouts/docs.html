@@ -16,7 +16,7 @@
 <body>
 
     <header class="container doc-header">
-        <h1><a href="{{ '/' | relative_url }}"><img src="{{ '/logo.png' | relative_url }}" alt="Jaiph" /></a></h1>
+        <!-- <h1><a href="{{ '/' | relative_url }}"><img src="{{ '/logo.png' | relative_url }}" alt="Jaiph" /></a></h1> -->
         <nav class="doc-nav">
             <a href="{{ '/' | relative_url }}">jaiph.org</a>
             <span class="separator">·</span>
@@ -36,10 +36,8 @@
         </nav>
     </header>
 
-    <div class="container">
-        <div class="card doc-content">
-            {{ content }}
-        </div>
+    <div class="container doc-sections">
+        {{ content }}
     </div>
 
     <div class="footer">

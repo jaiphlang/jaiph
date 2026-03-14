@@ -1,6 +1,7 @@
 # Unreleased
 
 - **GitHub Pages template matching `docs/index.html`** — Extracted CSS, JS, and layout from `docs/index.html` into a reusable Jekyll template (`_layouts/default.html`, `assets/css/style.css`, `assets/js/main.js`) with `_config.yml`. All doc pages (`getting-started.md`, `cli.md`, `configuration.md`, `grammar.md`, `testing.md`, `hooks.md`, `jaiph-skill.md`) now render through the shared template with consistent header, nav, card styling, code block copy buttons, and footer. `docs/index.html` uses `layout: null` to keep its custom landing-page layout. Clean permalink URLs (e.g. `/getting-started` instead of `/getting-started.md`) with `redirect_from` for backward compatibility. No duplicate CSS/JS — single source of truth in `assets/`.
+- **Docs Jekyll theme: section-based layout** — New `_layouts/docs.html` template renders markdown pages with the same visual style as `docs/index.html`: h1 and intro in a hero panel, h2 headers outside white card boxes, section content inside cards. Navigation links to all docs pages are provided by the template header — removed manual navigation blocks from individual markdown pages. Updated `docs_parity.jh` prompts to enforce this pattern.
 
 # 0.3.0
 

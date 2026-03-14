@@ -1,6 +1,6 @@
 # ![Jaiph](docs/logo.png)
 
-[jaiph.org](https://jaiph.org) · [Getting started](docs/getting-started.md) · [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Grammar](docs/grammar.md) · [Testing](docs/testing.md) · [Hooks](docs/hooks.md) · [Agent Skill](https://jaiph.org/jaiph-skill)
+[jaiph.org](https://jaiph.org) · [Getting started](docs/getting-started.md) · [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Grammar](docs/grammar.md) · [Testing](docs/testing.md) · [Hooks](docs/hooks.md) · [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md)
 
 ---
 
@@ -28,7 +28,7 @@ It combines declarative workflow structure with bash, then compiles to pure shel
 > Jaiph is still in an early stage. Expect breaking changes.
 
 - **Documentation:** [Getting started](docs/getting-started.md) — installation, first workflow, workspace setup. Full reference: <https://jaiph.org/>
-- **Agent skill (for AI agents):** <https://jaiph.org/jaiph-skill.md>
+- **Agent skill (for AI agents):** <https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md>
 - **Samples:** <https://github.com/jaiphlang/jaiph/tree/main/samples>
 - **Contributing:** <https://github.com/jaiphlang/jaiph/issues>
 
@@ -230,6 +230,6 @@ Known limitations and gotchas:
 ## More Documentation
 
 - [Getting started](docs/getting-started.md) — installation, first workflow, workspace setup
-- [Agent skill](https://jaiph.org/jaiph-skill.md) — guide for AI agents that generate or modify Jaiph workflows
+- [Agent skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md) — guide for AI agents that generate or modify Jaiph workflows
 - Full docs: <https://jaiph.org/>
 - [CLI reference](docs/cli.md) · [Configuration](docs/configuration.md) · [Grammar](docs/grammar.md) · [Testing](docs/testing.md) · [Hooks](docs/hooks.md)

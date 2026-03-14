@@ -104,6 +104,11 @@ workflow docs_page {
        It should be written in a way that is easy to understand and follow.
        Avoid too many emojis and AI-like language. Keep it simple, concise and
        clear.
+    6. Navigation links between docs pages are provided by the Jekyll template
+       (docs/_layouts/docs.html). Do NOT add manual navigation blocks (like
+       'More Documentation' sections with links to other docs pages) to
+       individual markdown pages. Inline contextual links to other docs are
+       fine.
   "
 }
 
@@ -120,21 +125,21 @@ workflow docs_overview {
        merge existing files, or split them into smaller files, or move
        the content between files.
     3. Ensure they are interconnected and form a coherent whole.
-    4. For docs markdown pages, ensure each page has a top navigation block
-       immediately after its H1 with links to jaiph.org, and to documentation pages
-       in docs/ directory. Use relative links to configuration.md, cli.md, not 
-       repository URLs or local filesystem paths. Don't include non-markdown files
-       in the navigation block. Links in markdown files to markdown files should
-       end with .md ('configuration.md'). Existing links in index.html should not
-       end with .md ('configuration'). Agent skill should always point to:
-       https://jaiph.org/jaiph-skill.md (always with .md suffix).
+    4. Navigation links between docs pages are provided by the Jekyll template
+       (docs/_layouts/docs.html). Do NOT add manual navigation blocks (like
+       'More Documentation' sections) to individual markdown pages. Inline
+       contextual links to other docs are fine. Links in markdown files to
+       markdown files should end with .md ('configuration.md'). Existing
+       links in index.html should not end with .md ('configuration'). Agent
+       skill URL must always be hardcoded as:
+       https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md
     5. Ensure README.md follows best practices for README files, contains the
        project description, features, installation instructions, usage examples,
        contributing guidelines, and other relevant information.
     6. Ensure docs/index.html is consistent with README.md and other docs files.
     7. Ensure docs/index.html and README.md have links to getting-started.md
        page of the documentation or jaiph.org/getting-started, and the agent
-       skill URL (https://jaiph.org/jaiph-skill.md).
+       skill URL (https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md).
     8. Knowing the whole documentation, ensure the agent skill is up to date
        and coherent with the documentation. It should be a minimal workflow set
        that supports safe feature delivery, preflight checks, implementation
