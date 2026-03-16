@@ -1,0 +1,115 @@
+#!/usr/bin/env jaiph
+
+#
+# Business analyst workflow: verifies that the first task in QUEUE.md is
+# clear, consistent with the current implementation, and does not conflict
+# with other documented features. Marks the task as dev-ready or adds
+# questions/recommendations that must be answered before proceeding.
+#
+
+config {
+  agent.backend = "claude"
+  agent.claude_flags = "--permission-mode bypassPermissions"
+}
+
+function get_first_task() {
+  if ! test -f ".jaiph/QUEUE.md"; then
+    echo "missing .jaiph/QUEUE.md" >&2
+    return 1
+  fi
+
+  if ! task="$(awk 'BEGIN{in_task=0;found=0} /^## /{if(in_task) exit; in_task=1; found=1} in_task{if($0 ~ /^---$/) exit; print} END{if(!found) exit 2}' .jaiph/QUEUE.md)"; then
+    echo "no tasks found in .jaiph/QUEUE.md" >&2
+    return 1
+  fi
+
+  if ! test -n "${task}"; then
+    echo "first task is empty in .jaiph/QUEUE.md" >&2
+    return 1
+  fi
+
+  printf "%s" "${task}"
+}
+
+# Checks whether the first task block already contains the dev-ready marker.
+rule first_task_is_dev_ready {
+  local task
+  task="$(get_first_task)"
+  echo "$task" | grep -q '<!-- dev-ready -->'
+}
+
+# Inserts the dev-ready marker into the first task block in QUEUE.md.
+function mark_first_task_dev_ready() {
+  local header
+  header="$(get_first_task)"
+  header="${header%%$'\n'*}"
+
+  awk -v header="$header" '
+    BEGIN { marked=0 }
+    {
+      print
+      if (!marked && $0 == header) {
+        print ""
+        print "<!-- dev-ready -->"
+        marked=1
+      }
+    }
+  ' .jaiph/QUEUE.md > .jaiph/QUEUE.md.tmp
+  mv .jaiph/QUEUE.md.tmp .jaiph/QUEUE.md
+}
+
+workflow review_task {
+  result = prompt "
+    You are a business analyst reviewing a task from the Jaiph improvement
+    queue. Jaiph is a TypeScript compiler and runtime for a DSL that
+    transpiles to Bash.
+
+    Your job is to verify whether the task below is ready for development.
+    Evaluate it against these criteria:
+
+    1. **Clarity** — Is the task description unambiguous? Are acceptance
+       criteria specific and testable?
+    2. **Consistency** — Does the proposed change fit the existing codebase
+       architecture, conventions, and grammar? Review relevant source files
+       and docs to verify.
+    3. **No conflicts** — Does it conflict with any already-documented
+       features or other tasks in QUEUE.md?
+    4. **Feasibility** — Can the task be implemented with the current
+       compiler/runtime infrastructure, or does it depend on unfinished work?
+
+    If the task meets all criteria, respond with:
+      verdict: dev-ready
+
+    If the task does NOT meet all criteria, respond with:
+      verdict: needs-work
+
+    If the task does NOT meet all criteria, update the task block in QUEUE.md
+    with a numbered list of questions or concerns that must be answered
+    before development can start. Include recommendations or suggestions
+    where possible.
+
+    The full QUEUE.md is at .jaiph/QUEUE.md — read it for context on other
+    queued tasks.
+
+    Task to review:
+    $1
+  " returns '{ verdict: string }'
+
+  printf "%s" "$result_verdict"
+}
+
+workflow default {
+  if ! ensure first_task_is_dev_ready; then
+    task="$(get_first_task)"
+
+    verdict = run review_task "$task"
+
+    if [[ "$verdict" == "dev-ready" ]]; then
+      mark_first_task_dev_ready
+      echo "Task marked as dev-ready."
+    else
+      echo "Task is not dev-ready. Review the agent output above for questions and recommendations."
+      exit 1
+    fi
+  fi
+}

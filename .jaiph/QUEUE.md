@@ -6,13 +6,23 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Business analyst workflow
+## Support text before the json output
 
-Add Jaiph workflow to .japih directory that verifies the QUEUE.md file if it is clear and consistent with the current implementation, and does not conflict with other documented features.
+<!-- dev-ready -->
 
-The workflow agent prompt should either mark the task as dev-ready, or add questions to answer that are required to proceed (preferabbly along with suggestions/recommendations).
+Make e2e/say_hello_json.test.jh pass. Adjust Jaiph, don't change the Jaiph test file.
 
-The current workflow for implementing a task, should contain a check if the first task is marked as dev-ready (programatic check, no prompt).
+## Bug: Empty lines from prompt params in tree view are not removed
+
+### Questions / concerns before development
+
+1. **Missing reproduction case** — What does the prompt source look like that triggers this? Is it a multiline `prompt "..."` with blank lines in the text, or params passed via CLI args that happen to be empty strings? Please add a concrete before/after example (actual tree output vs expected tree output).
+2. **Missing acceptance criteria** — The task needs testable criteria. Suggested starting point:
+   - `formatParamsForDisplay()` in `src/cli/commands/run.ts` should filter out params whose value is empty or whitespace-only (after stripping key prefix).
+   - Tree view output for a multiline prompt with blank lines should collapse to a single-line preview with no extra whitespace artifacts.
+   - A test case (unit or `.test.jh`) should demonstrate the fix.
+3. **Scope clarification** — Should the fix apply only to `prompt`-kind steps, or to all step kinds that display params in the tree view? The `formatParamsForDisplay()` function is shared across workflow/prompt/function/rule kinds.
+4. **Where exactly are the empty lines introduced?** — The likely location is `formatParamsForDisplay()` (line 102, `run.ts`) which does not filter empty/whitespace-only values. Confirm this is the only site, or whether the emitter (`emit-workflow.ts`) should also stop emitting empty param keys.
 
 ---
 
