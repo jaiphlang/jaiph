@@ -74,10 +74,17 @@ workflow remove_completed_task {
   rm -f .jaiph/QUEUE.md.bak
 }
 
+# Verifies the first task in QUEUE.md has been marked dev-ready by the BA review.
+rule task_is_dev_ready {
+  echo "$1" | grep -q '<!-- dev-ready -->'
+}
+
 workflow default {
+
   task="$(get_first_task)"
   task_header="${task%%$'\n'*}" # first line of the task block
 
+  ensure task_is_dev_ready "$task"
   run implement_task "$task"
   run ci.ensure_ci_passes
   run docs.update_from_task "$task"

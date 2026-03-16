@@ -42,9 +42,10 @@ Ignore any legacy Markdown that contradicts these.
 A **minimal workflow set** under `.jaiph/` that supports safe feature delivery:
 
 1. **Preflight** — Rules and `ensure` for repo state and required tools (e.g. clean git, required binaries). Expose a small workflow (e.g. `workflow default` in `readiness.jh`) that runs these checks.
-2. **Implementation** — A workflow that drives coding changes (typically via `prompt`), e.g. `workflow implement` in `main.jh`.
-3. **Verification** — Rules and a workflow for lint/test/build (e.g. `verification.jh` with `workflow default`).
-4. **Entrypoint** — A single `workflow default` (e.g. in `.jaiph/main.jh`) that runs: preflight → implementation → verification. This is what `jaiph run .jaiph/main.jh "..."` executes.
+2. **Review (optional)** — A workflow that reviews queued tasks before development starts (e.g. `ba_review.jh`). An agent prompt evaluates the next task for clarity, consistency, conflicts, and feasibility, then either marks it as ready or exits with questions. The implementation workflow gates on this marker so unreviewed tasks cannot proceed. See the Jaiph project's own `.jaiph/ba_review.jh` for a reference implementation.
+3. **Implementation** — A workflow that drives coding changes (typically via `prompt`), e.g. `workflow implement` in `main.jh`. When using a task queue, the implementation workflow should check that the first task is marked as ready (e.g. via a `<!-- dev-ready -->` marker) before proceeding.
+4. **Verification** — Rules and a workflow for lint/test/build (e.g. `verification.jh` with `workflow default`).
+5. **Entrypoint** — A single `workflow default` (e.g. in `.jaiph/main.jh`) that runs: preflight → review → implementation → verification. This is what `jaiph run .jaiph/main.jh "..."` executes.
 
 Prefer composable modules over one large file.
 
@@ -81,8 +82,9 @@ Rules:
 
 - `.jaiph/bootstrap.jh` — Created by `jaiph init`; contains a single prompt that points the agent at this guide.
 - `.jaiph/readiness.jh` — Preflight: rules and `workflow default` that runs readiness checks.
+- `.jaiph/ba_review.jh` — (Optional) BA review: reads the first task from a queue file, sends it to an agent for review, and marks it `dev-ready` or exits with questions. Useful when tasks are queued in a Markdown file (e.g. `QUEUE.md`).
 - `.jaiph/verification.jh` — Verification: rules and `workflow default` for lint/test/build.
-- `.jaiph/main.jh` — Imports readiness and verification; defines implementation workflow and `workflow default` that orchestrates preflight → implementation → verification.
+- `.jaiph/main.jh` — Imports readiness, review, and verification; defines implementation workflow and `workflow default` that orchestrates preflight → review → implementation → verification.
 
 Optional: `.jaiph/implementation.jh` if you prefer the implementation workflow in a separate module; otherwise keep it in `main.jh`.
 
