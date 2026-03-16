@@ -117,7 +117,7 @@ languages use “yes” and “no” vs. “ja”/“da”-style words. So if yo
                     </p>
                     <pre><code class="language-jaiph">response = prompt "..." returns '{ hello: string, fact: string }'</code></pre>
                     <p>
-                        Then, Jaiph will add at runtime instructions to the prompt asking the agent to return a JSON object with the fields <code>hello</code> and <code>fact</code>, and it will parse the response and set the capture variable to the raw JSON string. You can access the fields with <code>$response_hello</code> and <code>$response_fact</code>.
+                        Then, Jaiph will add at runtime instructions to the prompt asking the agent to return a JSON object with the fields <code>hello</code> and <code>fact</code>, and it will parse the response and set the capture variable to the raw JSON string. The parser tolerates text before the JSON object (e.g. when the agent writes preamble before <code>{...}</code>). You can access the fields with <code>$response_hello</code> and <code>$response_fact</code>.
                     </p>
                 </div>
 

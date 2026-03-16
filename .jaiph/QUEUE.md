@@ -6,12 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Support text before the json output
-
-<!-- dev-ready -->
-
-Make e2e/say_hello_json.test.jh pass. Adjust Jaiph, don't change the Jaiph test file.
-
 ## Bug: Empty lines from prompt params in tree view are not removed
 
 ### Questions / concerns before development

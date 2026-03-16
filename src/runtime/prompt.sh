@@ -346,7 +346,20 @@ jaiph::prompt_capture_with_schema() {
     const fencedMatches = [...raw.matchAll(fencedPattern)];
     const fencedJson = fencedMatches.length > 0 ? String(fencedMatches[fencedMatches.length - 1][1] || '').trim() : '';
     const objectLine = [...lines].reverse().map((l) => l.trim()).find((l) => l.startsWith('{') && l.endsWith('}')) || '';
-    const candidates = [lastLine, fencedJson, objectLine].filter((v, i, arr) => v.length > 0 && arr.indexOf(v) === i);
+    const embeddedJson = (() => {
+      for (const line of [...lines].reverse()) {
+        const trimmed = line.trim();
+        const startIdx = trimmed.indexOf('{');
+        if (startIdx > 0) {
+          const endIdx = trimmed.lastIndexOf('}');
+          if (endIdx > startIdx) {
+            return trimmed.slice(startIdx, endIdx + 1);
+          }
+        }
+      }
+      return '';
+    })();
+    const candidates = [lastLine, fencedJson, objectLine, embeddedJson].filter((v, i, arr) => v.length > 0 && arr.indexOf(v) === i);
     let obj;
     let parsedFrom = '';
     let parseError = null;
