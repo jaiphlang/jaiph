@@ -1,0 +1,105 @@
+#!/usr/bin/env jaiph
+
+#
+# Task/queue management: reading, checking, and modifying tasks in QUEUE.md.
+#
+
+function get_all_task_headers() {
+  if ! test -f ".jaiph/QUEUE.md"; then
+    echo "missing .jaiph/QUEUE.md" >&2
+    return 1
+  fi
+
+  awk '/^## /{print}' .jaiph/QUEUE.md
+}
+
+function get_task_by_header() {
+  test -n "${1:-}" || { echo "get_task_by_header: header required" >&2; return 1; }
+
+  if ! test -f ".jaiph/QUEUE.md"; then
+    echo "missing .jaiph/QUEUE.md" >&2
+    return 1
+  fi
+
+  local header="$1"
+  local task
+
+  if ! task="$(awk -v header="$header" '
+    BEGIN { found=0 }
+    {
+      if ($0 == header) { found=1 }
+      else if (found && /^## /) { exit }
+      else if (found && /^---$/) { exit }
+      if (found) { print }
+    }
+    END { if (!found) exit 2 }
+  ' .jaiph/QUEUE.md)"; then
+    echo "task not found: $header" >&2
+    return 1
+  fi
+
+  if ! test -n "${task}"; then
+    echo "task is empty: $header" >&2
+    return 1
+  fi
+
+  printf "%s" "${task}"
+}
+
+function get_first_task() {
+  if ! test -f ".jaiph/QUEUE.md"; then
+    echo "missing .jaiph/QUEUE.md" >&2
+    return 1
+  fi
+
+  local first_header
+  first_header="$(get_all_task_headers | head -1)"
+
+  if ! test -n "${first_header}"; then
+    echo "no tasks found in .jaiph/QUEUE.md" >&2
+    return 1
+  fi
+
+  get_task_by_header "$first_header"
+}
+
+# Checks whether a given task block contains the dev-ready marker.
+rule task_is_dev_ready {
+  echo "$1" | grep -q '<!-- dev-ready -->'
+}
+
+# Inserts the dev-ready marker into a task block identified by its header line.
+# Errors if header not found.
+function mark_task_dev_ready() {
+  test -n "${1:-}" || { echo "mark_task_dev_ready: header required" >&2; return 1; }
+  local header="$1"
+
+  if ! awk -v header="$header" '
+    BEGIN { marked=0 }
+    {
+      print
+      if (!marked && $0 == header) {
+        print ""
+        print "<!-- dev-ready -->"
+        marked=1
+      }
+    }
+    END { if (!marked) exit 2 }
+  ' .jaiph/QUEUE.md > .jaiph/QUEUE.md.tmp; then
+    rm -f .jaiph/QUEUE.md.tmp
+    echo "task not found: $header" >&2
+    return 1
+  fi
+
+  mv .jaiph/QUEUE.md.tmp .jaiph/QUEUE.md
+}
+
+# Removes a completed task block (identified by its header line) from QUEUE.md.
+workflow remove_completed_task {
+  test -n "${1:-}"
+  header="$1"
+  awk -v header="${header}" 'BEGIN{skipping=0;removed=0} {if(!removed && $0==header){skipping=1;removed=1;next} if(skipping && $0 ~ /^## /){skipping=0} if(!skipping){print}} END{if(!removed) exit 2}' .jaiph/QUEUE.md > .jaiph/QUEUE.md.tmp
+  mv .jaiph/QUEUE.md.tmp .jaiph/QUEUE.md
+  sed -i.bak -E '/^[[:space:]]*$/N;/^\n$/D' .jaiph/QUEUE.md
+  rm -f .jaiph/QUEUE.md.bak
+}

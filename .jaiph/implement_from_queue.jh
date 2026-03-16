@@ -5,31 +5,13 @@
 # then removes it from the queue.
 #
 
+import "./queue.jh" as queue
 import "./docs_parity.jh" as docs
 import "./ensure_ci_passes.jh" as ci
 
 config {
   agent.backend = "claude"
   agent.claude_flags = "--permission-mode bypassPermissions"
-}
-
-function get_first_task() {
-  if ! test -f ".jaiph/QUEUE.md"; then
-    echo "missing .jaiph/QUEUE.md" >&2
-    return 1
-  fi
-
-  if ! task="$(awk 'BEGIN{in_task=0;found=0} /^## /{if(in_task) exit; in_task=1; found=1} in_task{if($0 ~ /^---$/) exit; print} END{if(!found) exit 2}' .jaiph/QUEUE.md)"; then
-    echo "no tasks found in .jaiph/QUEUE.md" >&2
-    return 1
-  fi
-
-  if ! test -n "${task}"; then
-    echo "first task is empty in .jaiph/QUEUE.md" >&2
-    return 1
-  fi
-
-  printf "%s" "${task}"
 }
 
 # Reads the first task block from .jaiph/QUEUE.md and asks the agent to implement it.
@@ -64,29 +46,14 @@ workflow implement_task {
   "
 }
 
-# Removes the first completed task block from .jaiph/QUEUE.md.
-workflow remove_completed_task {
-  test -n "${1:-}"
-  header="$1"
-  awk -v header="${header}" 'BEGIN{skipping=0;removed=0} {if(!removed && $0==header){skipping=1;removed=1;next} if(skipping && $0 ~ /^## /){skipping=0} if(!skipping){print}} END{if(!removed) exit 2}' .jaiph/QUEUE.md > .jaiph/QUEUE.md.tmp
-  mv .jaiph/QUEUE.md.tmp .jaiph/QUEUE.md
-  sed -i.bak -E '/^[[:space:]]*$/N;/^\n$/D' .jaiph/QUEUE.md
-  rm -f .jaiph/QUEUE.md.bak
-}
-
-# Verifies the first task in QUEUE.md has been marked dev-ready by the BA review.
-rule task_is_dev_ready {
-  echo "$1" | grep -q '<!-- dev-ready -->'
-}
-
 workflow default {
 
-  task="$(get_first_task)"
-  task_header="${task%%$'\n'*}" # first line of the task block
+  task="$(queue.get_first_task)"
+  task_header="${task%%$'\n'*}"
 
-  ensure task_is_dev_ready "$task"
+  ensure queue.task_is_dev_ready "$task"
   run implement_task "$task"
   run ci.ensure_ci_passes
   run docs.update_from_task "$task"
-  run remove_completed_task "$task_header"
+  run queue.remove_completed_task "$task_header"
 }

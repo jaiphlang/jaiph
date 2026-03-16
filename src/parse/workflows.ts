@@ -76,7 +76,7 @@ function parseRecoverStatement(
   if (!t) {
     fail(filePath, "empty recover statement", lineNo, col);
   }
-  const genericAssignMatch = t.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/s);
+  const genericAssignMatch = t.match(/^([A-Za-z_][A-Za-z0-9_]*)\s+=\s*(.+)$/s);
   if (
     genericAssignMatch &&
     !genericAssignMatch[2].trimStart().startsWith("prompt ") &&
@@ -282,7 +282,7 @@ export function parseWorkflowBlock(
           fiLine = lookahead;
           break;
         }
-        const genericAssignMatch = lookTrim.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/s);
+        const genericAssignMatch = lookTrim.match(/^([A-Za-z_][A-Za-z0-9_]*)\s+=\s*(.+)$/s);
         if (
           genericAssignMatch &&
           !genericAssignMatch[2].trimStart().startsWith("prompt ") &&
@@ -586,7 +586,7 @@ export function parseWorkflowBlock(
       continue;
     }
 
-    const genericAssignMatch = inner.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/s);
+    const genericAssignMatch = inner.match(/^([A-Za-z_][A-Za-z0-9_]*)\s+=\s*(.+)$/s);
     if (
       genericAssignMatch &&
       !genericAssignMatch[2].trimStart().startsWith("prompt ") &&
