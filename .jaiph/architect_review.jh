@@ -1,0 +1,93 @@
+#!/usr/bin/env jaiph
+
+#
+# Architect review: verifies that each task in QUEUE.md is clear,
+# architecturally sound, conflict-free, and appropriately scoped.
+# Marks qualifying tasks as dev-ready; annotates the rest with
+# questions/recommendations that must be addressed first.
+#
+
+import "./queue.jh" as queue
+
+config {
+  agent.backend = "claude"
+  agent.claude_flags = "--permission-mode bypassPermissions"
+}
+
+workflow review_task {
+  result = prompt "
+    You are a software architect reviewing a task from the Jaiph
+    improvement queue. Jaiph is a TypeScript compiler and runtime
+    for a DSL that transpiles to Bash.
+
+    Determine whether the task below is ready for development.
+    Evaluate against these criteria:
+
+    1. **Clarity** — Unambiguous description. Specific, testable
+       acceptance criteria.
+    2. **Architecture fit** — Consistent with the codebase's grammar,
+       compiler pipeline, and runtime conventions. Read relevant
+       source files and docs to verify.
+    3. **No conflicts** — Does not conflict with documented features
+       or other queued tasks in QUEUE.md.
+    4. **Feasibility** — Implementable with the current compiler/runtime
+       infrastructure without depending on unfinished work.
+    5. **Scope** — Appropriately sized for a single implementation
+       cycle. Suggest splitting if too broad.
+
+    Read the full QUEUE.md (.jaiph/QUEUE.md) for context on other
+    queued tasks.
+
+    If the task meets all criteria, respond with:
+      verdict: dev-ready
+
+    If NOT, respond with:
+      verdict: needs-work
+    and update the task block in QUEUE.md with a numbered list of
+    questions, concerns, or recommendations that must be addressed
+    before development can start.
+
+    If the task in the QUEUE.md already contains answers to the questions,
+    merge the answers into the description, remove redundancies, but keep
+    the original context and reasoning if it may help the developer. If all 
+    questions are answered, mark the task as dev-ready.
+
+    Task to review:
+    $1
+  " returns '{ verdict: string }'
+
+  printf "%s" "$result_verdict"
+}
+
+workflow default {
+  local headers
+  headers="$(queue.get_all_task_headers)"
+
+  local failed=0
+
+  while IFS= read -r header; do
+    [ -z "$header" ] && continue
+
+    task="$(queue.get_task_by_header "$header")"
+
+    if echo "$task" | grep -q '<!-- dev-ready -->'; then
+      echo "Already dev-ready: $header"
+      continue
+    fi
+
+    verdict = run review_task "$task"
+
+    if [[ "$verdict" == "dev-ready" ]]; then
+      queue.mark_task_dev_ready "$header"
+      echo "Marked dev-ready: $header"
+    else
+      echo "Needs work: $header"
+      failed=1
+    fi
+  done <<< "$headers"
+
+  if [[ "$failed" -eq 1 ]]; then
+    echo "One or more tasks need work. Review the agent output above."
+    exit 1
+  fi
+}

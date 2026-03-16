@@ -53,6 +53,25 @@ function transpileWorkflowRef(
   throw new Error(`ValidationError: invalid workflow reference "${ref.value}"`);
 }
 
+/**
+ * Replace `alias.func_name` patterns in shell commands with
+ * the fully-qualified bash symbol (`symbol::function::func_name`).
+ * Only aliases present in importedWorkflowSymbols are rewritten.
+ */
+function resolveShellFunctionRefs(
+  command: string,
+  importedWorkflowSymbols: Map<string, string>,
+): string {
+  for (const [alias, symbol] of importedWorkflowSymbols) {
+    const pattern = new RegExp(
+      `(?<![A-Za-z0-9_])${alias}\\.([A-Za-z_][A-Za-z0-9_]*)`,
+      "g",
+    );
+    command = command.replace(pattern, `${symbol}::function::$1`);
+  }
+  return command;
+}
+
 function parsePromptText(raw: string): string {
   if (!raw.startsWith(`"`)) {
     throw new Error("invalid prompt literal");
@@ -419,7 +438,7 @@ export function emitWorkflow(
             `  ${transpileRuleRef(ref, workflowSymbol, importedWorkflowSymbols)}${args ? ` ${args}` : ""}`,
           );
         } else {
-          out.push(`  ${cmd}`);
+          out.push(`  ${resolveShellFunctionRefs(cmd, importedWorkflowSymbols)}`);
         }
       }
     }
@@ -449,7 +468,7 @@ export function emitWorkflow(
       out.push("  :");
     } else {
       for (const cmd of fn.commands) {
-        out.push(`  ${cmd}`);
+        out.push(`  ${resolveShellFunctionRefs(cmd, importedWorkflowSymbols)}`);
       }
     }
     out.push("}");
@@ -532,10 +551,11 @@ function emitEnsureRecoverLoop(
         return;
       }
       if (recoverStep.type === "shell") {
+        const resolved = resolveShellFunctionRefs(recoverStep.command, importedWorkflowSymbols);
         if (recoverStep.captureName) {
-          out.push(`${indent}${recoverStep.captureName}=$(${recoverStep.command})`);
+          out.push(`${indent}${recoverStep.captureName}=$(${resolved})`);
         } else {
-          out.push(`${indent}${recoverStep.command}`);
+          out.push(`${indent}${resolved}`);
         }
       }
     };
@@ -588,10 +608,11 @@ function emitEnsureRecoverLoop(
           continue;
         }
         if (step.type === "shell") {
+          const resolved = resolveShellFunctionRefs(step.command, importedWorkflowSymbols);
           if (step.captureName) {
-            out.push(`  ${step.captureName}=$(${step.command})`);
+            out.push(`  ${step.captureName}=$(${resolved})`);
           } else {
-            out.push(`  ${step.command}`);
+            out.push(`  ${resolved}`);
           }
           continue;
         }
@@ -637,10 +658,11 @@ function emitEnsureRecoverLoop(
               continue;
             }
             if (thenStep.type === "shell") {
+              const resolved = resolveShellFunctionRefs(thenStep.command, importedWorkflowSymbols);
               if (thenStep.captureName) {
-                out.push(`    ${thenStep.captureName}=$(${thenStep.command})`);
+                out.push(`    ${thenStep.captureName}=$(${resolved})`);
               } else {
-                out.push(`    ${thenStep.command}`);
+                out.push(`    ${resolved}`);
               }
               continue;
             }
@@ -649,10 +671,11 @@ function emitEnsureRecoverLoop(
           continue;
         }
         if (step.type === "if_not_shell_then") {
-          out.push(`  if ! ${step.condition}; then`);
+          const resolvedCondition = resolveShellFunctionRefs(step.condition, importedWorkflowSymbols);
+          out.push(`  if ! ${resolvedCondition}; then`);
           for (const thenStep of step.thenSteps) {
             if (thenStep.type === "shell") {
-              out.push(`    ${thenStep.command}`);
+              out.push(`    ${resolveShellFunctionRefs(thenStep.command, importedWorkflowSymbols)}`);
             } else {
               const args = thenStep.args ? ` ${thenStep.args}` : "";
               const paramKeys = thenStep.args ? parseParamKeysFromArgs(thenStep.args) : null;
@@ -672,7 +695,7 @@ function emitEnsureRecoverLoop(
             `  if ! ${transpileRuleRef(step.ensureRef, workflowSymbol, importedWorkflowSymbols)}; then`,
           );
           for (const { command } of step.commands) {
-            out.push(`    ${command}`);
+            out.push(`    ${resolveShellFunctionRefs(command, importedWorkflowSymbols)}`);
           }
           out.push("  fi");
           continue;
