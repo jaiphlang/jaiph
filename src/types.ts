@@ -148,6 +148,11 @@ export type WorkflowStepDef =
       ensureRef: RuleRefDef;
       args?: string;
       commands: Array<{ command: string; loc: SourceLoc }>;
+    }
+  | {
+      type: "log";
+      message: string;
+      loc: SourceLoc;
     };
 
 export interface jaiphModule {

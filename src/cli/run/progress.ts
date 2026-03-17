@@ -140,6 +140,9 @@ export function collectWorkflowChildren(
     if (s.type === "prompt") {
       return [{ label: formatPromptLabel(s.raw), stepFunc: "jaiph::prompt" }];
     }
+    if (s.type === "log") {
+      return [{ label: `log ${s.message}` }];
+    }
     if (s.type === "shell") {
       return collectFunctionCalls(s.command).map((fnName) => ({
         label: `function ${fnName}`,
@@ -280,6 +283,10 @@ export function collectWorkflowChildren(
     }
     if (step.type === "prompt") {
       items.push({ label: formatPromptLabel(step.raw), stepFunc: "jaiph::prompt" });
+      continue;
+    }
+    if (step.type === "log") {
+      items.push({ label: `log ${step.message}` });
       continue;
     }
     if (step.type === "shell") {

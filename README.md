@@ -210,8 +210,11 @@ See [cli.md](docs/cli.md) for command syntax, examples, and supported environmen
 - `run ref`  
   Executes another workflow from a workflow. `run` is not allowed inside a rule; use `ensure` to call another rule or move the call to a workflow.
 
-- `prompt "..."`  
+- `prompt "..."`
   Sends prompt text to the configured agent command.
+
+- `log "message"`
+  Displays a message in the progress tree at the current depth. Takes a double-quoted string; shell variable interpolation works at runtime. No spinner, no timing — just a static annotation. See [Grammar](docs/grammar.md).
 
 - **Assignment capture** — You can capture stdout from any step with `name = <step>`:
   - `result = prompt "..."` — Captures the agent's stdout (unchanged from before).

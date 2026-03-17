@@ -56,6 +56,7 @@ Prefer composable modules over one large file.
 - **Steps:**
   - **ensure** — `ensure ref [args...]` runs a rule (local or `alias.rule_name`); args are passed to the shell. Optionally `ensure ref [args] recover <body>`: bounded retry loop (run rule; on failure run recover body; repeat until the rule passes or max retries, then exit 1). Max retries default to 10; override with `JAIPH_ENSURE_MAX_RETRIES`.
   - **run** — `run ref [args...]` runs a workflow (local or `alias.workflow_name`); args are passed to the workflow.
+  - **log** — `log "message"` displays a message in the progress tree at the current depth. Double-quoted string; shell variable interpolation works at runtime. No spinner, no timing — a static annotation. Useful for marking workflow phases (e.g. `log "Starting analysis phase"`).
   - **Assignment capture** — `name = ensure ref`, `name = run ref`, or `name = <shell_command>` captures that step's stdout into `name`. Exit semantics unchanged: failure fails the step unless you add `|| true`. Only stdout is captured; stderr not unless redirected (e.g. `2>&1`). See [Grammar](grammar.md).
 - **Prompts:** `prompt "..."` — quoted string, may be multiline. Variable expansion (e.g. `$1`) is allowed; backticks and `$(...)` are not. Capture: `name = prompt "..."`. Optional **typed prompt:** `name = prompt "..." returns '{ field: type, ... }'` (flat schema; types `string`, `number`, `boolean`) validates the agent's JSON and sets `$name` and `$name_field` per field. See [Grammar](grammar.md).
 - **Conditionals:** Allowed forms:

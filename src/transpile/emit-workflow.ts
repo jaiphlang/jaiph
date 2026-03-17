@@ -618,6 +618,10 @@ function emitEnsureRecoverLoop(
           }
           continue;
         }
+        if (step.type === "log") {
+          out.push(`  jaiph::log ${step.message}`);
+          continue;
+        }
         if (step.type === "if_not_ensure_then_run") {
           const ensureArgs = step.args ? ` ${step.args}` : "";
           out.push(
