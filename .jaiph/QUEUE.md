@@ -6,6 +6,28 @@ The first `##` task in the file is always the current task.
 
 ---
 
+## Feature: Support positive `if ensure ref args; then` in workflow parser
+
+The workflow parser only recognises the negated form `if ! ensure ref; then`
+(without args). The positive form `if ensure ref args; then` silently falls
+through as raw shell, leaving the `ensure` keyword as a literal bash command
+that doesn't exist — causing a runtime `ensure: command not found` error.
+
+### Acceptance criteria
+
+1. `if ensure <rule_ref> [args]; then ... fi` parses into a new (or extended)
+   step type and transpiles to `if <transpiled_rule_ref> [args]; then ... fi`.
+2. `if ! ensure <rule_ref> [args]; then ... fi` also gains args support (the
+   current regex drops everything after the ref before `;`).
+3. Both forms support `else` branches (currently only then-steps until `fi`
+   are collected; `else` is silently swallowed as a then-step).
+4. Parser emits a clear `E_PARSE` error when `ensure` appears inside an
+   unrecognised shell context instead of silently passing it through.
+5. At least one `.test.jh` or compiler-golden test covers the positive form
+   with args.
+
+---
+
 ## Bug: Empty lines from prompt params in tree view are not removed
 
 ### Questions / concerns before development

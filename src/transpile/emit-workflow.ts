@@ -1,14 +1,16 @@
 import { jaiphError } from "../errors";
 import type { jaiphModule, RuleRefDef, WorkflowStepDef, WorkflowRefDef } from "../types";
 
-/** Prefix to wrap an imported workflow call so it runs with that module's config (e.g. "child::with_metadata_scope "). */
+/** Prefix to wrap an imported workflow call so it runs with that module's config. Uses the module's emitted symbol (e.g. ensure_ci_passes), not the alias (e.g. ci). */
 function prefixForImportedWorkflowCall(
   workflowRef: WorkflowRefDef,
   importedModuleHasMetadata: Map<string, boolean>,
+  importedWorkflowSymbols: Map<string, string>,
 ): string {
   const parts = workflowRef.value.split(".");
   if (parts.length !== 2 || !importedModuleHasMetadata.get(parts[0])) return "";
-  return `${parts[0]}::with_metadata_scope `;
+  const symbol = importedWorkflowSymbols.get(parts[0]) ?? parts[0];
+  return `${symbol}::with_metadata_scope `;
 }
 
 /** If args look like key=value key=value..., return ordered param keys for tree display; else null. */
@@ -524,7 +526,7 @@ function emitEnsureRecoverLoop(
           out.push(`${indent}export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
         }
         const wfRef = transpileWorkflowRef(recoverStep.workflow, workflowSymbol, importedWorkflowSymbols);
-        const scopePrefix = prefixForImportedWorkflowCall(recoverStep.workflow, importedModuleHasMetadata);
+        const scopePrefix = prefixForImportedWorkflowCall(recoverStep.workflow, importedModuleHasMetadata, importedWorkflowSymbols);
         if (recoverStep.captureName) {
           out.push(`${indent}${recoverStep.captureName}=$(${scopePrefix}${wfRef}::impl${args})`);
         } else {
@@ -595,7 +597,7 @@ function emitEnsureRecoverLoop(
             out.push(`  export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
           }
           const wfRef = transpileWorkflowRef(step.workflow, workflowSymbol, importedWorkflowSymbols);
-          const scopePrefix = prefixForImportedWorkflowCall(step.workflow, importedModuleHasMetadata);
+          const scopePrefix = prefixForImportedWorkflowCall(step.workflow, importedModuleHasMetadata, importedWorkflowSymbols);
           if (step.captureName) {
             out.push(`  ${step.captureName}=$(${scopePrefix}${wfRef}::impl${args})`);
           } else {
@@ -627,7 +629,7 @@ function emitEnsureRecoverLoop(
               out.push(`    export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
             }
             const wfRef = transpileWorkflowRef(wf.workflow, workflowSymbol, importedWorkflowSymbols);
-            const scopePrefix = prefixForImportedWorkflowCall(wf.workflow, importedModuleHasMetadata);
+            const scopePrefix = prefixForImportedWorkflowCall(wf.workflow, importedModuleHasMetadata, importedWorkflowSymbols);
             out.push(`    ${scopePrefix}${wfRef}${args}`);
           }
           out.push("  fi");
@@ -645,7 +647,7 @@ function emitEnsureRecoverLoop(
                 out.push(`    export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
               }
               const wfRef = transpileWorkflowRef(thenStep.workflow, workflowSymbol, importedWorkflowSymbols);
-              const scopePrefix = prefixForImportedWorkflowCall(thenStep.workflow, importedModuleHasMetadata);
+              const scopePrefix = prefixForImportedWorkflowCall(thenStep.workflow, importedModuleHasMetadata, importedWorkflowSymbols);
               if (thenStep.captureName) {
                 out.push(`    ${thenStep.captureName}=$(${scopePrefix}${wfRef}::impl${args})`);
               } else {
@@ -683,7 +685,7 @@ function emitEnsureRecoverLoop(
                 out.push(`    export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
               }
               const wfRef = transpileWorkflowRef(thenStep.workflow, workflowSymbol, importedWorkflowSymbols);
-              const scopePrefix = prefixForImportedWorkflowCall(thenStep.workflow, importedModuleHasMetadata);
+              const scopePrefix = prefixForImportedWorkflowCall(thenStep.workflow, importedModuleHasMetadata, importedWorkflowSymbols);
               out.push(`    ${scopePrefix}${wfRef}${args}`);
             }
           }
