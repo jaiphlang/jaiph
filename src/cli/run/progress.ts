@@ -5,12 +5,9 @@ import { workflowSymbolForFile } from "../../transpiler";
 export type TreeRow = {
   rawLabel: string;
   prefix: string;
-  branch?: string;
   isRoot: boolean;
   stepFunc?: string;
 };
-
-export type RowState = { status: "pending" | "done" | "failed"; elapsedSec?: number };
 
 const PROMPT_PREVIEW_MAX = 24;
 
@@ -338,9 +335,7 @@ export function buildRunTreeRows(
           continue;
         }
       }
-      const isLast = i === children.length - 1;
-      const branch = isLast ? "└── " : "├── ";
-      rows.push({ rawLabel: child.label, prefix, branch, isRoot: false, stepFunc: child.stepFunc });
+      rows.push({ rawLabel: child.label, prefix, isRoot: false, stepFunc: child.stepFunc });
       if (!child.nested) {
         continue;
       }
@@ -353,7 +348,7 @@ export function buildRunTreeRows(
           renderChildren(
             currentMod,
             nested,
-            `${prefix}${isLast ? "    " : "│   "}`,
+            `${prefix}    `,
             currentSymbol,
             recursionDepth + 1,
           );
@@ -367,7 +362,7 @@ export function buildRunTreeRows(
         const subMod = importedModules?.get(alias);
         if (subMod) {
           const subSymbol = symbols.get(alias);
-          renderChildren(subMod, wfName, `${prefix}${isLast ? "    " : "│   "}`, subSymbol);
+          renderChildren(subMod, wfName, `${prefix}    `, subSymbol);
         }
         continue;
       }
@@ -375,7 +370,7 @@ export function buildRunTreeRows(
         continue;
       }
       visited.add(nested);
-      renderChildren(currentMod, nested, `${prefix}${isLast ? "    " : "│   "}`, currentSymbol);
+      renderChildren(currentMod, nested, `${prefix}    `, currentSymbol);
     }
   };
   renderChildren(mod, "default", "", mainSymbol);
@@ -443,271 +438,5 @@ export function formatElapsedDuration(elapsedMs: number): string {
   return `${minutes}m ${seconds}s`;
 }
 
-export function renderProgressTree(
-  rows: TreeRow[],
-  states: RowState[],
-  rootElapsedSec?: number,
-): string {
-  const lines: string[] = [];
-  for (let i = 0; i < rows.length; i += 1) {
-    const row = rows[i];
-    if (row.isRoot) {
-      const rootStatus = typeof rootElapsedSec === "number" ? ` ${styleDim(`(${rootElapsedSec}s)`)}` : "";
-      lines.push(`${styleKeywordLabel(row.rawLabel)}${rootStatus}`);
-      continue;
-    }
-    const state = states[i];
-    const suffix =
-      state.status === "pending"
-        ? styleDim("(pending)")
-        : state.status === "failed"
-          ? styleDim(`(${state.elapsedSec ?? 0}s failed)`)
-          : styleDim(`(${state.elapsedSec ?? 0}s)`);
-    lines.push(`${row.prefix}${row.branch ?? ""}${styleKeywordLabel(row.rawLabel)} ${suffix}`);
-  }
-  return lines.join("\n");
-}
 
-function styleTreeLabel(label: string): string {
-  return styleKeywordLabel(label);
-}
 
-export function renderRunTree(mod: jaiphModule, rootLabel = "workflow default"): string {
-  const lines = [styleTreeLabel(rootLabel)];
-  const visited = new Set<string>(["default"]);
-
-  const renderChildren = (workflowName: string, prefix: string, recursionDepth = 0): void => {
-    const children = collectWorkflowChildren(mod, workflowName);
-    const selfRecursiveSites = selfRecursiveRunSiteCount(mod, workflowName);
-    const recursionSiteIndexForDepth = selfRecursiveSites > 0 ? Math.min(recursionDepth, selfRecursiveSites - 1) : -1;
-    let currentSelfRecursiveSiteIndex = 0;
-    for (let i = 0; i < children.length; i += 1) {
-      const child = children[i];
-      const childIsLocalSelfRecursion =
-        child.nested !== undefined &&
-        !child.nested.includes(".") &&
-        child.nested === workflowName;
-      if (childIsLocalSelfRecursion) {
-        const shouldExpand = selfRecursiveSites > 0
-          && recursionDepth < selfRecursiveSites
-          && currentSelfRecursiveSiteIndex === recursionSiteIndexForDepth;
-        const shouldRender = recursionDepth === 0 || shouldExpand;
-        currentSelfRecursiveSiteIndex += 1;
-        if (!shouldRender) {
-          continue;
-        }
-      }
-      const isLast = i === children.length - 1;
-      const branch = isLast ? "└── " : "├── ";
-      lines.push(`${prefix}${branch}${styleTreeLabel(child.label)}`);
-      if (!child.nested) {
-        continue;
-      }
-      if (childIsLocalSelfRecursion) {
-        const shouldExpand = selfRecursiveSites > 0
-          && recursionDepth < selfRecursiveSites
-          && (currentSelfRecursiveSiteIndex - 1) === recursionSiteIndexForDepth;
-        if (shouldExpand) {
-          renderChildren(child.nested, `${prefix}${isLast ? "    " : "│   "}`, recursionDepth + 1);
-        }
-        continue;
-      }
-      if (child.nested.includes(".") || visited.has(child.nested)) {
-        continue;
-      }
-      visited.add(child.nested);
-      renderChildren(child.nested, `${prefix}${isLast ? "    " : "│   "}`);
-    }
-  };
-
-  renderChildren("default", "");
-  return lines.join("\n");
-}
-
-export type RuntimeNodeStatus = "running" | "done" | "failed";
-
-export type RuntimeNode = {
-  id: string;
-  parentId: string | null;
-  rawLabel: string;
-  state: RuntimeNodeStatus;
-  startedAtMs: number;
-  elapsedSec?: number;
-  children: string[];
-};
-
-export type RuntimeGraphStore = {
-  rootLabel: string;
-  rootStepId: string | null;
-  nodesById: Map<string, RuntimeNode>;
-  rootNodeIds: string[];
-};
-
-export function createRuntimeGraphStore(rootLabel = "workflow default"): RuntimeGraphStore {
-  return {
-    rootLabel,
-    rootStepId: null,
-    nodesById: new Map<string, RuntimeNode>(),
-    rootNodeIds: [],
-  };
-}
-
-function computeRuntimeNodePrefix(store: RuntimeGraphStore, nodeId: string): { prefix: string; branch: string } {
-  const segments: string[] = [];
-  let currentId: string | null = nodeId;
-  while (currentId) {
-    const node = store.nodesById.get(currentId);
-    if (!node) break;
-    const siblingIds = node.parentId === null
-      ? store.rootNodeIds
-      : (store.nodesById.get(node.parentId)?.children ?? []);
-    const isLast = siblingIds[siblingIds.length - 1] === currentId;
-    segments.push(isLast ? "    " : "│   ");
-    currentId = node.parentId;
-  }
-  const node = store.nodesById.get(nodeId);
-  if (!node) return { prefix: "", branch: "└── " };
-  const siblingIds = node.parentId === null
-    ? store.rootNodeIds
-    : (store.nodesById.get(node.parentId)?.children ?? []);
-  const isLast = siblingIds[siblingIds.length - 1] === nodeId;
-  segments.pop();
-  return {
-    prefix: segments.reverse().join(""),
-    branch: isLast ? "└── " : "├── ",
-  };
-}
-
-function computeRuntimeIndent(store: RuntimeGraphStore, nodeId: string): string {
-  let depth = 0;
-  let currentId: string | null = nodeId;
-  while (currentId) {
-    const node = store.nodesById.get(currentId);
-    if (!node || node.parentId === null) break;
-    depth += 1;
-    currentId = node.parentId;
-  }
-  return "    ".repeat(depth);
-}
-
-export function beginRuntimeNode(
-  store: RuntimeGraphStore,
-  nodeId: string,
-  parentId: string | null,
-  rawLabel: string,
-  startedAtMs: number,
-): RuntimeNode {
-  const node: RuntimeNode = {
-    id: nodeId,
-    parentId,
-    rawLabel,
-    state: "running",
-    startedAtMs,
-    children: [],
-  };
-  store.nodesById.set(nodeId, node);
-  if (parentId) {
-    const parent = store.nodesById.get(parentId);
-    if (parent) {
-      parent.children.push(nodeId);
-    } else {
-      store.rootNodeIds.push(nodeId);
-    }
-  } else {
-    store.rootNodeIds.push(nodeId);
-  }
-  return node;
-}
-
-export function completeRuntimeNode(
-  store: RuntimeGraphStore,
-  nodeId: string,
-  status: number,
-  elapsedSec: number,
-): RuntimeNode | undefined {
-  const node = store.nodesById.get(nodeId);
-  if (!node) return undefined;
-  node.state = status === 0 ? "done" : "failed";
-  node.elapsedSec = elapsedSec;
-  return node;
-}
-
-export function runtimeRunningLine(
-  store: RuntimeGraphStore,
-  nodeId: string,
-  runningSeconds: number,
-): string {
-  const node = store.nodesById.get(nodeId);
-  if (!node) return "";
-  const tree = computeRuntimeNodePrefix(store, nodeId);
-  return `${tree.prefix}${tree.branch}${styleKeywordLabel(node.rawLabel)} ${styleDim(`(running ${runningSeconds}s)`)}`;
-}
-
-export function runtimeCompletedLine(store: RuntimeGraphStore, nodeId: string): string {
-  const node = store.nodesById.get(nodeId);
-  if (!node) return "";
-  const tree = computeRuntimeNodePrefix(store, nodeId);
-  if (node.state === "failed") {
-    return `${tree.prefix}${tree.branch}${styleKeywordLabel(node.rawLabel)} ${styleDim(`(${node.elapsedSec ?? 0}s failed)`)}`;
-  }
-  return `${tree.prefix}${tree.branch}${styleKeywordLabel(node.rawLabel)} ${styleDim(`(${node.elapsedSec ?? 0}s)`)}`;
-}
-
-export function runtimeRunningIndentLine(
-  store: RuntimeGraphStore,
-  nodeId: string,
-  runningSeconds: number,
-): string {
-  const node = store.nodesById.get(nodeId);
-  if (!node) return "";
-  const indent = computeRuntimeIndent(store, nodeId);
-  return `${indent}${styleKeywordLabel(node.rawLabel)} ${styleDim(`(running ${runningSeconds}s)`)}`;
-}
-
-export function runtimeCompletedIndentLine(store: RuntimeGraphStore, nodeId: string): string {
-  const node = store.nodesById.get(nodeId);
-  if (!node) return "";
-  const indent = computeRuntimeIndent(store, nodeId);
-  if (node.state === "failed") {
-    return `${indent}${styleKeywordLabel(node.rawLabel)} ${styleDim(`(${node.elapsedSec ?? 0}s failed)`)}`;
-  }
-  return `${indent}${styleKeywordLabel(node.rawLabel)} ${styleDim(`(${node.elapsedSec ?? 0}s)`)}`;
-}
-
-export function renderRuntimeIndentRows(store: RuntimeGraphStore): string[] {
-  const lines: string[] = [];
-  const walk = (nodeIds: string[]): void => {
-    for (const nodeId of nodeIds) {
-      const node = store.nodesById.get(nodeId);
-      if (!node) continue;
-      const indent = computeRuntimeIndent(store, nodeId);
-      const suffix = node.state === "failed"
-        ? styleDim(`(${node.elapsedSec ?? 0}s failed)`)
-        : styleDim(`(${node.elapsedSec ?? 0}s)`);
-      lines.push(`${indent}${styleKeywordLabel(node.rawLabel)} ${suffix}`);
-      walk(node.children);
-    }
-  };
-  walk(store.rootNodeIds);
-  return lines;
-}
-
-export function renderRuntimeTreeRows(store: RuntimeGraphStore): string[] {
-  const lines: string[] = [];
-  const walk = (nodeIds: string[], prefix: string): void => {
-    for (let i = 0; i < nodeIds.length; i += 1) {
-      const nodeId = nodeIds[i];
-      const node = store.nodesById.get(nodeId);
-      if (!node) continue;
-      const isLast = i === nodeIds.length - 1;
-      const branch = isLast ? "└── " : "├── ";
-      const suffix = node.state === "failed"
-        ? styleDim(`(${node.elapsedSec ?? 0}s failed)`)
-        : styleDim(`(${node.elapsedSec ?? 0}s)`);
-      lines.push(`${prefix}${branch}${styleKeywordLabel(node.rawLabel)} ${suffix}`);
-      walk(node.children, `${prefix}${isLast ? "    " : "│   "}`);
-    }
-  };
-  walk(store.rootNodeIds, "");
-  return lines;
-}
