@@ -8,6 +8,8 @@ The first `##` task in the file is always the current task.
 
 ## Feature: Support positive `if ensure ref args; then` in workflow parser
 
+<!-- dev-ready -->
+
 The workflow parser only recognises the negated form `if ! ensure ref; then`
 (without args). The positive form `if ensure ref args; then` silently falls
 through as raw shell, leaving the `ensure` keyword as a literal bash command
@@ -30,59 +32,95 @@ that doesn't exist — causing a runtime `ensure: command not found` error.
 
 ## Bug: Empty lines from prompt params in tree view are not removed
 
-### Questions / concerns before development
+<!-- dev-ready -->
 
-1. **Missing reproduction case** — What does the prompt source look like that triggers this? Is it a multiline `prompt "..."` with blank lines in the text, or params passed via CLI args that happen to be empty strings? Please add a concrete before/after example (actual tree output vs expected tree output).
-2. **Missing acceptance criteria** — The task needs testable criteria. Suggested starting point:
-   - `formatParamsForDisplay()` in `src/cli/commands/run.ts` should filter out params whose value is empty or whitespace-only (after stripping key prefix).
-   - Tree view output for a multiline prompt with blank lines should collapse to a single-line preview with no extra whitespace artifacts.
-   - A test case (unit or `.test.jh`) should demonstrate the fix.
-3. **Scope clarification** — Should the fix apply only to `prompt`-kind steps, or to all step kinds that display params in the tree view? The `formatParamsForDisplay()` function is shared across workflow/prompt/function/rule kinds.
-4. **Where exactly are the empty lines introduced?** — The likely location is `formatParamsForDisplay()` (line 102, `run.ts`) which does not filter empty/whitespace-only values. Confirm this is the only site, or whether the emitter (`emit-workflow.ts`) should also stop emitting empty param keys.
+When a multiline `prompt "..."` has blank lines in its text, those blank lines arrive as empty-string params in the tree view display. After `stripKeyPrefix()`, these become empty strings that are not filtered out, resulting in empty quoted strings (`""`) or extra whitespace artifacts in the tree output.
+
+**Root cause:** `formatParamsForDisplay()` in `src/cli/commands/run.ts` (line 102) filters internal params (`isInternalParamValue`) and strips key prefixes, but does not filter out values that are empty or whitespace-only after stripping. The emitter (`emit-workflow.ts`) is not at fault — it correctly passes param keys; the display function simply needs to drop empties.
+
+**Scope:** The fix applies to `formatParamsForDisplay()`, which is shared across all step kinds (workflow, prompt, function, rule). This is correct — no step kind should display empty params.
+
+### Acceptance criteria
+
+1. `formatParamsForDisplay()` filters out params whose value is empty or whitespace-only after `stripKeyPrefix()`.
+2. Tree view output for a multiline prompt containing blank lines shows no extra whitespace artifacts or empty quoted strings.
+3. A unit test or `.test.jh` file demonstrates the fix (multiline prompt with blank lines → clean tree output).
 
 ---
 
-## Add `log` (or another keyword), do display additional information in the tree (keep identation)
+## Feature: Add `log` keyword to display messages in the progress tree
 
-### Questions / concerns before development
+<!-- dev-ready -->
 
-1. **Keyword not decided** — The task says "`log` (or another keyword)" but the keyword must be chosen before implementation. This affects the grammar (`src/parse/workflows.ts`), the AST type union (`WorkflowStepDef` in `src/types.ts`), the emitter (`src/transpile/emit-workflow.ts`), and the tree renderer (`src/cli/run/progress.ts`). Suggestion: settle on `log` as the keyword.
-2. **What is "additional information"?** — The task needs to specify what content `log` displays. Is it:
-   - A static string literal? (`log "Starting analysis phase"`)
-   - A variable interpolation? (`log "Result: $result"`)
-   - The output of an expression or shell command?
-   This determines whether the parser needs to handle string interpolation, heredocs, or bare expressions.
-3. **Display semantics unclear** — "Display in the tree (keep indentation)" could mean several things:
-   - **Compile-time only**: the log message appears as a label in the static tree view (`jaiph tree` / `jaiph run --dry-run`), but produces no runtime output.
-   - **Runtime only**: the message is `echo`'d at execution time and appears in the live progress tree (like `STEP_START`/`STEP_END` events in `src/runtime/events.sh`).
-   - **Both**: a static label in the tree + runtime output with tree indentation preserved.
-   Each option has very different implementation scope. Please specify which is intended.
-4. **No acceptance criteria** — The task needs testable criteria. Suggested starting point:
-   - Grammar accepts `log "..."` inside workflow blocks.
-   - The tree view (`jaiph tree`) renders log lines at the correct indentation level, preserving tree branch characters (`├──`, `└──`, `│`).
-   - At runtime, log output appears inline in the progress tree at the correct depth.
-   - A `.test.jh` file exercises the feature.
-5. **Interaction with existing step kinds** — Currently `collectWorkflowChildren()` in `progress.ts` only renders `run`, `ensure`, `prompt`, and `shell` (when it calls a known function). A `log` step is unlike these — it's not a callable unit. Clarify: should `log` appear as a tree node with status tracking (pending → done), or as a static annotation without timing?
-6. **Runtime event model** — If `log` produces runtime output, should it emit `STEP_START`/`STEP_END` events via `jaiph::run_step` (like other steps), or a new lighter-weight event type (e.g., `LOG`)? The current event schema in `events.sh` expects `kind` to be one of `workflow`/`rule`/`function`/`prompt`.
+Add a `log` keyword that displays a message in the progress tree at the correct indentation level, both in the static tree view (`jaiph tree`) and at runtime.
+
+### Syntax
+
+```jh
+workflow analyze {
+  log "Starting analysis phase"
+  run fetch_data
+  log "Processing results for $dataset"
+}
+```
+
+`log` takes a single double-quoted string argument. Shell variable interpolation (`$var`, `${var}`) works inside the string (same as other quoted strings in the DSL). No unquoted arguments, no heredocs, no command substitution.
+
+### Design decisions
+
+- **Keyword**: `log`.
+- **Display**: Both compile-time and runtime.
+  - `jaiph tree` / `--dry-run`: renders as a tree node with the literal string (unexpanded variables shown as-is).
+  - Runtime: emits a single `LOG` event (not a `STEP_START`/`STEP_END` pair) that the progress tree renderer displays inline at the correct depth. The message is the shell-expanded string.
+- **No status tracking**: `log` is not a callable unit — it has no pending/running/done states, no timing. It appears as a static annotation in the tree, not as a step with a spinner.
+- **Runtime event**: A new event type `LOG` with fields `{ type: "LOG", message: string, depth: number }` emitted on fd 3. The runtime function `jaiph::log` writes the message to the event stream and to stderr (for non-tree output modes).
+- **AST type**: New `WorkflowStepDef` variant `{ type: "log"; message: string; loc: SourceLoc; }`. No `captureName` (logs don't produce capturable output).
+- **Emitter**: `log "text"` transpiles to `jaiph::log "text"` — a thin bash function in the runtime that emits the `LOG` event.
+
+### Affected files
+
+- `src/parse/workflows.ts` — new regex match for `log "..."` before the shell fallback.
+- `src/types.ts` — add `log` variant to `WorkflowStepDef`.
+- `src/transpile/emit-workflow.ts` — emit `jaiph::log "message"` call.
+- `src/runtime/events.sh` — add `jaiph::log()` function that emits `LOG` event on fd 3.
+- `src/cli/run/progress.ts` — handle `LOG` events in the progress tree renderer; add `log` handler in `stepToItems()` / `collectWorkflowChildren()`.
+- `src/cli/commands/tree.ts` (if separate from progress.ts) — render log nodes in static tree.
+
+### Acceptance criteria
+
+1. Grammar accepts `log "..."` inside workflow blocks; parse error on `log` without a quoted string.
+2. `WorkflowStepDef` includes a `{ type: "log", message: string, loc: SourceLoc }` variant.
+3. `jaiph` output renders log lines at the correct indentation level.
+4. At runtime, log output appears inline in the progress tree at the correct depth, without spinner or timing.
+5. The runtime emits a `LOG` event on fd 3 (not `STEP_START`/`STEP_END`).
+6. Shell variable interpolation works in log messages at runtime.
+7. A `.test.jh` file exercises the feature (log in a workflow, nested workflow with log, variable interpolation).
 
 ---
 
 ## Compiler: enforce calling conventions and unify symbol namespace
 
+<!-- dev-ready -->
+
 ### Problem
 
 The compiler currently uses three separate bash symbol prefixes (`::rule::`, `::workflow::`, `::function::`) and only resolves qualified names (`alias.name`) for `ensure` and `run` keywords. Calling an imported function in shell context required a recent workaround (`resolveShellFunctionRefs`). There is no compile-time enforcement that rules are called with `ensure` or workflows with `run` — misuse silently produces broken bash.
+
+**Current state of validation:** The validator (`src/transpile/validate.ts:41-137`) already checks `ensure` references against a `localRules` set and `run` references against `localWorkflows`. Writing `ensure my_workflow` already fails, but with a misleading "unknown local rule reference" error. The delta in this task is cross-type awareness: when a name exists but is the wrong kind, the error message says *what* it is and *how* to call it (e.g., "workflow X must be called with run"). The validator does not currently track functions at all.
+
+**Scope of enforcement:** DSL-level keywords only (`ensure`, `run`). Shell blocks are opaque strings — scanning them for rule/workflow names would be fragile. Users who call a rule directly in a shell block bypass enforcement; this is acceptable.
 
 ### Required changes
 
 #### 1. Enforce calling conventions (compile-time errors)
 
-The parser/validator should reject:
+The validator should reject:
 - A rule reference used without `ensure` → `E_VALIDATE: rule "X" must be called with ensure`
 - A workflow reference used with `ensure` → `E_VALIDATE: workflow "X" must be called with run`
 - A workflow reference used without `run` in a non-shell context → `E_VALIDATE: workflow "X" must be called with run`
+- `ensure my_function` or `run my_function` → `E_VALIDATE: function "X" cannot be called with ensure/run`
 
-This requires the compiler to know which names are rules, workflows, and functions — both local and imported. The validator already has the AST; it needs cross-module symbol resolution for imports.
+This requires: (a) a `localFunctions` set in the validator (parallel to `localRules` and `localWorkflows`), (b) cross-module function resolution for imports, and (c) cross-type checks in `validateRuleRef()` and `validateWorkflowRef()` that look up the name in all three sets to produce specific error messages.
 
 #### 2. Flatten bash symbol namespace
 
@@ -93,29 +131,47 @@ Replace the triple-prefix scheme:
 
 Same-name declarations across types in one module (e.g., a rule and a workflow both named `check`) become a parse error (`E_PARSE: duplicate name "check" — rules, workflows, and functions share a single namespace`).
 
-#### 3. Uniform qualified-name resolution in shell context
+#### 3. Runtime kind communication
+
+With flat `symbol::name`, `jaiph::step_identity()` in `src/runtime/events.sh:25-48` can no longer determine the step kind from the function name. **Solution:** pass `kind` as an explicit argument to `jaiph::run_step`:
+
+```bash
+# Before: jaiph::run_step main::rule::check jaiph::execute_readonly main::rule::check::impl
+# After:  jaiph::run_step main::check rule jaiph::execute_readonly main::check::impl
+```
+
+The emitter already knows the kind at compile time, so it emits it as the second argument. `jaiph::step_identity()` reads the kind from this argument instead of pattern-matching the function name. This also requires updating `jaiph::run_step_passthrough()` in `src/runtime/steps.sh`.
+
+#### 4. Uniform qualified-name resolution in shell context
 
 With a flat namespace, `resolveShellFunctionRefs` becomes `resolveShellRefs` — it resolves any `alias.name` to `symbol::name` regardless of whether the target is a function, rule, or workflow. The calling convention enforcement (point 1) ensures correctness at a higher level.
+
+### Affected files
+
+- **`src/transpile/validate.ts`** — add `localFunctions` set, cross-type error messages, cross-module function resolution.
+- **`src/transpile/emit-workflow.ts`** — ~15 sites: change symbol generation from `symbol::rule::name` / `symbol::workflow::name` / `symbol::function::name` to `symbol::name`; emit `kind` argument in `jaiph::run_step` calls; rename `resolveShellFunctionRefs` → `resolveShellRefs`.
+- **`src/cli/run/progress.ts`** — ~20 sites that construct kind-specific symbols for correlating AST steps with runtime events. All switch to `{symbol}::name` and read kind from the runtime event payload (which now includes kind explicitly).
+- **`src/transpile/emit-test.ts`** — consolidate `refToWorkflowSymbol()`, `refToRuleSymbol()`, `refToFunctionSymbol()` into a single `refToSymbol()` that produces `symbol::name`.
+- **`src/runtime/events.sh`** — update `jaiph::step_identity()` to accept kind as parameter instead of pattern-matching function names. Update `jaiph::emit_step_event()` accordingly.
+- **`src/runtime/steps.sh`** — update `jaiph::run_step()` and `jaiph::run_step_passthrough()` signatures to accept and forward kind.
+- **`src/parser.ts` or `src/parse/*.ts`** — add unified namespace tracking for duplicate name detection across rule/workflow/function.
+- **`docs/grammar.md`** — update symbol format documentation and document calling conventions as compiler-enforced rules.
+- **`test/expected/*.sh`** — update expected bash output fixtures to match new flat symbol format.
 
 ### Acceptance criteria
 
 - Compiler emits `E_VALIDATE` when a rule is called without `ensure`.
-- Compiler emits `E_VALIDATE` when a workflow is called without `run`.
+- Compiler emits `E_VALIDATE` when a workflow is called with `ensure` (cross-type: "workflow X must be called with run").
+- Compiler emits `E_VALIDATE` when `ensure` or `run` is used on a function.
 - Functions can be called freely (no keyword required).
 - `E_PARSE` on duplicate names across rule/workflow/function in the same module.
 - Bash output uses a single `symbol::name` prefix (no `::rule::`, `::workflow::`, `::function::` segments).
+- `jaiph::run_step` receives `kind` as an explicit argument; `step_identity()` uses it.
+- Progress tree displays correctly with flat symbols (kind derived from runtime events, not function names).
 - Existing `.jh` files and all tests continue to work (calling convention is already followed).
 - `resolveShellFunctionRefs` generalized to `resolveShellRefs` using the flat namespace.
-- Docs updated (`docs/language.md` or equivalent) to document the calling conventions as compiler-enforced rules.
-
-### Questions / concerns before development
-
-1. **Runtime `step_identity()` broken by flat namespace** — `jaiph::step_identity()` in `src/runtime/events.sh:25-48` pattern-matches `::rule::`, `::workflow::`, `::function::` in bash function names to determine step kind for event tracking (used by the progress tree and run summaries). With flat `symbol::name`, this function cannot determine the kind. The task must specify how kind will be communicated at runtime — e.g., passed as an extra argument to `jaiph::run_step`, or encoded differently in the function name.
-2. **Progress tree reconstruction not accounted for** — `src/cli/run/progress.ts` has ~20 sites that construct `{symbol}::rule::name`, `{symbol}::workflow::name`, `{symbol}::function::name` strings to correlate AST steps with runtime events. This is a significant change surface that should be listed as an affected file with an approach (e.g., all sites switch to `{symbol}::name`).
-3. **Test emitter impact** — `src/transpile/emit-test.ts` has `refToWorkflowSymbol()`, `refToRuleSymbol()`, `refToFunctionSymbol()` that each produce kind-specific symbols. These need updating and should be mentioned in the required changes.
-4. **Validator already partially enforces calling conventions** — `ensure` references are validated against the rules list and `run` references against the workflows list (`src/transpile/validate.ts:41-137`). Writing `ensure my_workflow` already fails with "unknown local rule reference". The new enforcement improves error messages (cross-type awareness: "workflow X must be called with run") but isn't a net-new capability. The task should acknowledge what exists and clarify the delta.
-5. **Function symbol table needed in validator** — The acceptance criterion "Functions can be called freely" implies `ensure my_function` and `run my_function` should produce helpful errors. The validator currently does not track functions at all — it needs a `localFunctions` set and cross-module function resolution. This should be explicit in the required changes.
-6. **Shell block enforcement out of scope?** — The task says enforce calling conventions but doesn't clarify whether this applies inside shell blocks (opaque strings). A user could call `my_rule` directly in a shell block, bypassing `ensure`. Scanning shell blocks for rule/workflow names would be fragile. Recommend explicitly scoping enforcement to DSL-level keywords only (not shell blocks) to keep this tractable.
+- Docs updated (`docs/grammar.md`) to document the calling conventions as compiler-enforced rules and the flat symbol format.
+- This is a breaking change for any external scripts that call generated bash functions by name — document in release notes.
 
 ---
 
@@ -185,20 +241,25 @@ config {
 - Docs updated (`docs/configuration.md`, `docs/cli.md`).
 - `.jaiph/` added to scaffolded `.gitignore`.
 
-### Questions / concerns before development
+### Resolved design decisions
 
-1. **Config parser requires new value types** — The current config parser (`src/parse/metadata.ts`) only supports quoted strings and booleans. This task requires two new value types: bare integers (`runtime.docker_timeout = 300`) and arrays (`runtime.workspace = [...]`). These are non-trivial parser extensions that should be acknowledged as prerequisite work and either included explicitly in scope or split into a separate task.
-2. **Mount shorthand `"data:ro"` is ambiguous** — The two-part form `"data:ro"` is listed as producing `/jaiph/workspace/data:ro`, but the parsing logic is unclear. With only two colon-separated segments, is this `host_path:mode` (container path defaults to host name under workspace) or `host_path:container_path` (mode defaults to `ro` for non-workspace mounts)? The three-part form `"config:config:ro"` is unambiguous, but the two-part form needs an explicit grammar: define exactly how 1-, 2-, and 3-segment mount strings are parsed.
-3. **Docker orchestration architecture unspecified** — The task describes what `docker run` should do but not *where* the orchestration lives. Currently `src/cli/commands/run.ts` spawns the transpiled bash script as a child process. Should a new `src/runtime/docker.ts` module construct the `docker run` command and replace the direct spawn? Or should a bash wrapper script handle it? This architectural decision affects how config values flow from the TypeScript CLI to the container.
-4. **Runtime event fd 3 passthrough not addressed** — The progress tree and run summaries depend on structured JSON events emitted on file descriptor 3 (`src/runtime/events.sh`). Docker does not forward arbitrary file descriptors by default. The task must specify how fd 3 events reach the host CLI — e.g., via a named pipe mounted into the container, or by falling back to stderr with a prefix-based demux.
-5. **Environment variable names undefined** — The acceptance criterion "Precedence: env > in-file > defaults" references environment variables, but the task doesn't define them. What are the env var names? E.g., `JAIPH_RUNTIME_DOCKER_ENABLED`, `JAIPH_RUNTIME_DOCKER_IMAGE`? These need to be specified so the precedence logic can be implemented and documented.
-6. **`CI=true` disables Docker — rationale unclear** — The requirement "`CI=true` disables Docker by default" seems counter-intuitive. In CI environments, Docker isolation is typically *more* desirable. If the concern is that Docker-in-Docker isn't available in all CI runners, state that explicitly and consider making the default `CI=true → warn if Docker unavailable` rather than silently disabling.
-7. **Scope is too large for a single implementation cycle** — This task spans: (a) config parser extensions (arrays, integers, new `runtime.*` namespace), (b) mount string parsing and validation, (c) Docker CLI orchestration in TypeScript, (d) fd 3 event forwarding, (e) UID/GID mapping, (f) TTY detection and passthrough, (g) timeout/container kill logic, (h) docs. Recommend splitting into at least two tasks: **Task A** — config parser extensions (arrays, integers, `runtime.*` keys with validation); **Task B** — Docker runtime implementation (using the config values from Task A).
-8. **`runtime.docker_network = "default"` semantics unclear** — Docker's `--network` flag uses `bridge` as the default network, not `default`. Does `"default"` mean "use Docker's default (bridge)" or is it a literal network name? Also, should `"none"` be supported to run fully isolated containers? Clarify the allowed values and their mapping to `docker run` flags.
+- **Mount shorthand grammar** (was Q2): 2-segment form `"host_path:mode"` means host_path is mounted at `/jaiph/workspace/<host_path>` with the given mode; container path defaults to the host directory name under the workspace root. 3-segment form `"host_path:container_path:mode"` is the full explicit form. 1-segment is a parse error. Mode must be `ro` or `rw`.
+- **Docker orchestration** (was Q3): New `src/runtime/docker.ts` module constructs the `docker run` command and is called from `src/cli/run/lifecycle.ts`, replacing the direct `spawn("bash", ...)` when Docker is enabled. Config values flow from the TypeScript CLI to the Docker module; no bash wrapper needed.
+- **fd 3 events** (was Q4): Already solved by existing architecture. The CLI wrapper does `exec 3>&2`, and `parseStepEvent()` in `src/cli/run/events.ts` scans stderr for `__JAIPH_EVENT__` markers. Docker captures stderr by default and forwards it to the host process. No special fd forwarding is needed.
+- **Environment variable names** (was Q5): Following existing `JAIPH_*` convention: `JAIPH_DOCKER_ENABLED`, `JAIPH_DOCKER_IMAGE`, `JAIPH_DOCKER_NETWORK`, `JAIPH_DOCKER_TIMEOUT`. Workspace mounts are not overridable via env (too complex for a single env var).
+- **CI=true disables Docker** (was Q6): Rationale is that Docker-in-Docker is unavailable in many CI runners (GitHub Actions, GitLab shared runners). In-file `runtime.docker_enabled = true` overrides this default, so teams with DinD-capable runners can opt in explicitly.
+- **Network semantics** (was Q8): `"default"` means "use Docker's default behavior" (omit `--network` flag entirely, which uses bridge). `"none"` is supported for fully isolated containers. Any other string value is passed verbatim to `--network`.
+
+### Remaining blockers
+
+1. **Config parser prerequisite** — The current config parser (`src/parse/metadata.ts:parseMetadataValue()`) only supports quoted strings and booleans. This task requires bare integers (`runtime.docker_timeout = 300`) and arrays (`runtime.workspace = [...]`). **This must be implemented first as a separate task** before Docker runtime work can begin. Add a "Config parser: support integer and array value types" task above this one in the queue.
+2. **Scope must be split** — Even with the config parser extracted, this task spans: (a) mount string parsing and validation, (b) Docker CLI orchestration in TypeScript, (c) UID/GID mapping, (d) TTY detection and passthrough, (e) timeout/container kill logic, (f) docs. Recommend splitting into: **Task A** — Config parser extensions (integers, arrays, `runtime.*` key namespace with validation); **Task B** — Docker runtime implementation (mount parsing, orchestration, UID/GID, TTY, timeout, docs). Task A must complete before Task B.
 
 ---
 
 ## Add inbox/watch semantics for multi-agent workflows
+
+<!-- dev-ready -->
 
 ### Problem
 Jaiph needs first-class event passing between agent workflows so one workflow can produce output and another can react to it — without filesystem watching, polling, or parallelism complexity.
@@ -257,6 +318,99 @@ workflow default {
 - `run <workflow>`: direct invocation, no inbox involved.
 - `on` declarations live in `default` (or any orchestrator workflow). They are static routing rules registered at startup, not executable statements.
 
+### Send operator grammar
+
+The `->` send operator is detected before the shell fallback in the parser. Grammar production:
+
+```
+send_step = [ shell_command ] '->' identifier
+```
+
+**Detection rules:**
+- Match regex `^(.+?)\s+->\s+([A-Za-z_][A-Za-z0-9_]*)$` on the trimmed line, before the shell fallback (before `workflows.ts:881`).
+- Only match when `braceDepth == 0`. For multiline shell commands tracked via `braceDepth`/`shellAccumulator`, `->` detection happens when the accumulator is flushed (when `braceDepth` returns to 0), applied to the final accumulated line.
+- Quote-awareness: use the parser's existing `hasUnescapedClosingQuote` / `indexOfClosingDoubleQuote` utilities. Only match `->` that appears outside of quoted strings. If `->` appears inside a quoted argument (e.g., `echo "a -> b"`), it is not a send — the whole line falls through to shell.
+- **Standalone send**: `-> channel` (no preceding command) is allowed. It sends `$1` (the workflow's input argument) to the channel. Useful for forwarding messages.
+- **Capture interaction**: `name = cmd -> channel` is a **parse error** (`E_PARSE: capture and send cannot be combined; use separate steps`). Capture (`genericAssignMatch` at `workflows.ts:589`) is checked first; if a capture match is found AND the RHS contains `-> identifier` at the end, emit the parse error. If you need both, use two steps: `name = cmd` then `echo "$name" -> channel`.
+
+### AST representation
+
+**Send step** — new `WorkflowStepDef` variant:
+```typescript
+| { type: "send"; command: string; channel: string; loc: SourceLoc }
+```
+Where `command` is the shell command before `->` (empty string for standalone `-> channel`).
+
+**Route declarations** — parsed as steps but extracted into a separate `routes` array on `WorkflowDef`:
+```typescript
+export interface WorkflowRouteDef {
+  channel: string;
+  workflows: WorkflowRefDef[];
+  loc: SourceLoc;
+}
+
+export interface WorkflowDef {
+  // ... existing fields ...
+  routes?: WorkflowRouteDef[];
+}
+```
+
+The parser recognizes `on` lines inline, but stores them in `routes` (not `steps`). The transpiler emits `jaiph::register_route` calls at the top of the generated orchestrator function, regardless of where `on` appears in source. This keeps `steps[]` purely executable and `routes[]` purely declarative.
+
+### Bash transpilation strategy
+
+**New runtime functions** (in a new `src/runtime/inbox.sh`):
+
+- `jaiph::inbox_init` — called once at script start; creates `.jaiph/runs/<run-id>/inbox/`, initializes counter `JAIPH_INBOX_SEQ=0`.
+- `jaiph::send <channel> <content>` — increments `JAIPH_INBOX_SEQ`, writes content to `NNN-<channel>.txt`, appends `channel:NNN` to `JAIPH_DISPATCH_QUEUE` (a bash array).
+- `jaiph::register_route <channel> <workflow_func> [<workflow_func>...]` — appends to an associative array `JAIPH_ROUTES[channel]="func1 func2"`.
+- `jaiph::drain_queue` — while `JAIPH_DISPATCH_QUEUE` is non-empty, shift first entry, look up route, invoke target workflow(s) with message content as `$1`. Each invoked workflow may call `jaiph::send`, growing the queue. Max dispatch depth of 100 iterations (guard against infinite loops); exceeding this emits `E_DISPATCH_DEPTH` and aborts.
+
+**Transpilation examples:**
+
+`echo "foo" -> channel` transpiles to:
+```bash
+jaiph::send 'channel' "$(echo "foo")"
+```
+
+`-> channel` (standalone) transpiles to:
+```bash
+jaiph::send 'channel' "$1"
+```
+
+`on findings -> analyst` transpiles to (emitted at top of orchestrator function):
+```bash
+jaiph::register_route 'findings' 'main::workflow::analyst'
+```
+
+`on findings -> analyst, reviewer` transpiles to:
+```bash
+jaiph::register_route 'findings' 'main::workflow::analyst' 'main::workflow::reviewer'
+```
+
+**Drain loop placement:** `jaiph::drain_queue` is called once at the end of the orchestrator workflow's `::impl` function (after all steps execute). This means sends accumulate during workflow execution and are processed after the orchestrator's direct steps complete. Workflows invoked by dispatch may produce further sends, which are drained in the same loop iteration.
+
+### Error semantics
+
+- **Send to unregistered channel**: silent drop. The message is still written to the inbox directory for audit/debugging, but no workflow is dispatched. This allows workflows to be composed incrementally — not every channel needs a consumer.
+- **Dispatched workflow exits non-zero**: dispatch loop halts immediately (fail-fast). Consistent with `set -e` semantics used throughout the runtime. The error propagates to the orchestrator.
+- **Circular sends**: allowed — the queue grows naturally. A max dispatch depth of 100 guards against infinite loops. Exceeding the limit emits `E_DISPATCH_DEPTH` and aborts the run.
+
+### Multi-target route semantics
+
+For `on channel -> wf1, wf2`:
+- Each workflow receives the **same message content** as `$1`.
+- Workflows are called **sequentially in declaration order** (wf1, then wf2).
+- Each can produce further sends, which are appended to the dispatch queue and drained after all targets for the current message complete.
+
+### Progress tree integration
+
+Dispatched workflow calls appear as **children of the `on` route declaration** in the progress tree. The `on` route is rendered as a static tree node (like a section header); dispatched calls nest under it.
+
+- `on` route declarations are included in `collectWorkflowChildren()` output as nodes with label `on <channel> -> <workflow>`.
+- Dispatched workflows emit standard `STEP_START`/`STEP_END` events with an additional `dispatched: true` field and `channel: "<channel>"` in the event metadata. The progress tree renderer correlates these with `on` route nodes using the channel name.
+- `jaiph tree` (static view) shows `on` routes as leaf nodes (no children, since dispatch is dynamic).
+
 ### Trigger contract
 - Called workflow receives `$1` = message content (string, not file path).
 - `$2` is not passed in v1 (no event type needed without FS watching).
@@ -265,36 +419,46 @@ workflow default {
 ### Runtime dispatch loop (in-memory, no FS watching)
 
 ```
-1. Register all watch routing rules from default workflow.
-2. Execute default workflow top-to-bottom.
-3. When -> send is executed: append message to inbox dir and push to in-memory dispatch queue.
-4. After each workflow invocation completes, drain the dispatch queue sequentially:
-   - Find routing rule for channel.
-   - Invoke target workflow with message content as $1.
-   - That workflow may itself send (->), appending further messages to the queue.
-5. Repeat until queue is empty.
-6. Run ends. .jaiph/runs/<run-id>/ is retained for debugging; cleared at start of next run.
+1. Register all routing rules from orchestrator workflow (jaiph::register_route calls at top of function).
+2. Execute orchestrator workflow top-to-bottom (run steps, shell steps, etc.).
+3. When -> send is executed: write message to inbox dir, push channel:NNN to in-memory dispatch queue.
+4. After orchestrator completes, drain the dispatch queue:
+   a. Shift first entry from queue.
+   b. Look up route for channel in JAIPH_ROUTES.
+   c. If route exists, invoke each target workflow sequentially with message content as $1.
+   d. Invoked workflows may call jaiph::send, appending to the queue.
+   e. Repeat until queue is empty or depth limit (100) reached.
+5. Run ends. .jaiph/runs/<run-id>/ is retained for debugging; cleared at start of next run.
 ```
 
 No filesystem events, no watchers, no timers. The inbox directory is a durable audit log of the run, not the dispatch mechanism.
 
+### Affected files
+
+- `src/parse/workflows.ts` — detect `-> channel` send operator before shell fallback; parse `on channel -> workflow` routing declarations; extract routes to `WorkflowDef.routes`.
+- `src/types.ts` — add `send` variant to `WorkflowStepDef`; add `WorkflowRouteDef` interface; add optional `routes` field to `WorkflowDef`.
+- `src/transpile/emit-workflow.ts` — emit `jaiph::send` calls for send steps; emit `jaiph::register_route` calls for routes at top of orchestrator; emit `jaiph::drain_queue` at end of orchestrator.
+- `src/transpile/validate.ts` — validate that `on` route workflow references exist; validate channel names are valid identifiers.
+- `src/runtime/inbox.sh` (new) — `jaiph::inbox_init`, `jaiph::send`, `jaiph::register_route`, `jaiph::drain_queue`.
+- `src/cli/run/progress.ts` — render `on` route nodes in tree; correlate dispatched events with route nodes using `channel` metadata.
+- `src/runtime/events.sh` — add `dispatched` and `channel` fields to step event metadata for dispatch-triggered workflows.
+- `docs/inbox.md` (new) — document dispatch loop, send operator, `on` routing, and inbox layout.
+
 ### Acceptance criteria
-- Grammar supports `-> <channel>` send operator.
+- Grammar supports `-> <channel>` send operator (with or without preceding shell command).
 - Grammar supports `on <channel> -> <workflow>[, <workflow>...]`.
-- `on` declarations are parsed as static routing rules, not executable statements.
+- `name = cmd -> channel` is a parse error (`E_PARSE`).
+- `on` declarations are parsed into `WorkflowDef.routes`, not `steps`.
+- Transpiler emits `jaiph::register_route` at top of orchestrator, `jaiph::drain_queue` at end.
+- `echo "foo" -> ch` transpiles to `jaiph::send 'ch' "$(echo "foo")"`.
 - Runtime dispatch is sequential and in-memory; no inotifywait/fswatch/polling.
 - `$1` receives message content string.
 - Inbox files written as `NNN-<channel>.txt` with monotonic counter.
+- Send to unregistered channel is a silent drop (message still written to inbox).
+- Non-zero exit from dispatched workflow halts dispatch (fail-fast).
+- Max dispatch depth of 100 guards against circular sends.
+- Multi-target routes dispatch sequentially in declaration order; each target receives the same message.
+- Progress tree shows `on` routes as nodes; dispatched calls appear as children at runtime.
 - Workflows remain directly invokable via `jaiph run <workflow> "<arg>"` for testing.
-- Docs cover the dispatch loop, send operator, and `on` routing.
+- Docs cover the dispatch loop, send operator, `on` routing, and inbox layout.
 - Test file `inbox.test.jh` uses the exact syntax sample above with mocked commands.
-
-### Questions / concerns before development
-
-1. **`->` send operator grammar rule undefined** — The syntax `echo '## findings' -> findings` embeds `->` at the end of what the parser currently treats as an opaque shell line (falls through to `type: "shell"` at `src/parse/workflows.ts:881`). The parser needs an explicit rule for detecting `-> identifier` at the end of a line and splitting it into a send step (shell command + channel). Critical edge cases to specify: (a) What about multiline shell commands tracked via `braceDepth`/`shellAccumulator`? If `->` appears at the end of a brace-tracked block, the accumulator won't detect it. (b) What about `->` inside quoted strings in shell context — how does the parser avoid false matches? (c) Can `->` appear standalone without a preceding command (e.g., `-> channel` sending `$1` or a variable)? Define the grammar production explicitly.
-2. **Bash transpilation strategy missing** — The dispatch loop is described conceptually but not in terms of generated bash. The current architecture generates a self-contained bash script; all runtime support lives in bash (`steps.sh`, `events.sh`, etc.). The task must specify: (a) What new bash runtime functions are needed (e.g., `jaiph::send`, `jaiph::register_route`, `jaiph::drain_queue`)? (b) What bash code does `echo "foo" -> channel` transpile to? (c) What does `on findings -> analyst` transpile to — a `jaiph::register_route` call at the top of the function? (d) Where does the drain loop execute — after every `jaiph::run_step` call, or at the end of the orchestrator workflow? Without this, the implementer must make fundamental architectural decisions that should be settled in design.
-3. **`on` declaration position semantics ambiguous** — The task says `on` declarations are "static routing rules registered at startup, not executable statements," but in the syntax example they appear inline after `run researcher`. If position is irrelevant, should the parser extract them into a separate `routes` array on `WorkflowDef` (parallel to `steps`)? Or does the transpiler emit registration calls at the top of the generated function regardless of source order? This affects both the AST type in `src/types.ts` (new `WorkflowStepDef` variant vs. new field on `WorkflowDef`) and the emitter.
-4. **Error semantics undefined** — The task doesn't specify behavior for: (a) `->` targets a channel with no registered `on` route — silent drop or fatal error? (b) A dispatched workflow exits non-zero — does the dispatch loop halt or continue draining? (c) Circular sends (workflow A sends on channel X, triggering workflow B, which also sends on channel X) — is this allowed (queue grows), or should there be a max-depth guard?
-5. **Progress tree integration unspecified** — `src/cli/run/progress.ts` reconstructs the execution tree from static AST + runtime events (fd 3). Dispatched workflow calls are dynamic — they have no corresponding AST node in the orchestrator's `steps[]` array. The task should specify how dispatched calls appear in the progress tree (e.g., as children of the `on` route declaration, as top-level dynamic nodes, or suppressed). This also affects the event `kind` taxonomy in `events.sh` — does a dispatched workflow emit standard `STEP_START`/`STEP_END` events, or a new event type?
-6. **`on` with multiple workflows needs dispatch semantics** — The acceptance criteria include `on <channel> -> <workflow>[, <workflow>...]` but the example only shows single-target routes. For multi-target: does each workflow receive the same message content? Are they called sequentially in declaration order? Can they each produce further sends? Specify.
-7. **Capture interaction with `->` unspecified** — The existing grammar supports `name = shell_command` (capture stdout to variable). What does `name = echo "foo" -> channel` mean? Does the capture get the shell command's stdout AND the message is also sent to the channel? Or is capture incompatible with send? This must be defined since the parser's capture detection (`genericAssignMatch` at `workflows.ts:589`) would match before any `->` detection.

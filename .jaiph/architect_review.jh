@@ -52,6 +52,11 @@ workflow review_task {
     the original context and reasoning if it may help the developer. If all 
     questions are answered, mark the task as dev-ready.
 
+    If you are sure how to answer to questions, please do, and consider
+    answers in your evaluation. You are skilled analyst, so in most cases you
+    should be able to answer questions based on your knowledge of the codebase 
+    and the task in a reasonable way.
+
     Task to review:
     $1
   " returns '{ verdict: string }'
