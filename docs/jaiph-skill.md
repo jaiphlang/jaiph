@@ -59,9 +59,10 @@ Prefer composable modules over one large file.
   - **Assignment capture** — `name = ensure ref`, `name = run ref`, or `name = <shell_command>` captures that step's stdout into `name`. Exit semantics unchanged: failure fails the step unless you add `|| true`. Only stdout is captured; stderr not unless redirected (e.g. `2>&1`). See [Grammar](grammar.md).
 - **Prompts:** `prompt "..."` — quoted string, may be multiline. Variable expansion (e.g. `$1`) is allowed; backticks and `$(...)` are not. Capture: `name = prompt "..."`. Optional **typed prompt:** `name = prompt "..." returns '{ field: type, ... }'` (flat schema; types `string`, `number`, `boolean`) validates the agent's JSON and sets `$name` and `$name_field` per field. See [Grammar](grammar.md).
 - **Conditionals:** Allowed forms:
-  - `if ! ensure some_rule; then` followed by `run` steps, `prompt` steps, or shell commands, then `fi`.
+  - `if ensure some_rule [args]; then ... [else ...] fi` — runs the then-branch when the rule **succeeds**; optional else-branch for failure.
+  - `if ! ensure some_rule [args]; then ... [else ...] fi` — runs the then-branch when the rule **fails**; optional else-branch for success.
   - `if ! <shell_condition>; then` (e.g. `test -f .file`) followed by `run` steps or shell commands, then `fi`.
-  - Short-circuit brace groups in rule/workflow/function bodies: `cmd || { echo "failed"; exit 1; }` (single-line) or `cmd || { ... }` (multi-line). These compile as one shell command. The then-branch of `if ! ensure ...; then` may mix run, prompt, and shell (including capture forms); ensure/ensure_capture are not allowed in the then-branch.
+  - Short-circuit brace groups in rule/workflow/function bodies: `cmd || { echo "failed"; exit 1; }` (single-line) or `cmd || { ... }` (multi-line). These compile as one shell command. Then- and else-branches of `if [!] ensure ...; then` may mix run, prompt, and shell (including capture forms); ensure/ensure_capture are not allowed in either branch.
 
 Rules:
 

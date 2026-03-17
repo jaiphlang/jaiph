@@ -270,6 +270,222 @@ test("parser: duplicate config block throws E_PARSE", () => {
   );
 });
 
+test("parser: positive if ensure parses into if_ensure_then step", () => {
+  const source = [
+    "rule ready {",
+    "  true",
+    "}",
+    "workflow default {",
+    '  if ensure ready; then',
+    "    echo success",
+    "  fi",
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  const steps = mod.workflows[0].steps;
+  assert.equal(steps.length, 1);
+  assert.equal(steps[0].type, "if_ensure_then");
+  const step = steps[0] as { type: "if_ensure_then"; ensureRef: { value: string }; thenSteps: unknown[] };
+  assert.equal(step.ensureRef.value, "ready");
+  assert.equal(step.thenSteps.length, 1);
+});
+
+test("parser: positive if ensure with args parses correctly", () => {
+  const source = [
+    "rule check {",
+    "  true",
+    "}",
+    "workflow default {",
+    '  if ensure check foo=bar baz; then',
+    "    echo ok",
+    "  fi",
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  const step = mod.workflows[0].steps[0] as {
+    type: "if_ensure_then";
+    ensureRef: { value: string };
+    args?: string;
+  };
+  assert.equal(step.type, "if_ensure_then");
+  assert.equal(step.ensureRef.value, "check");
+  assert.equal(step.args, "foo=bar baz");
+});
+
+test("parser: negated if ensure with args parses correctly", () => {
+  const source = [
+    "rule check {",
+    "  true",
+    "}",
+    "workflow fix {",
+    "  echo fix",
+    "}",
+    "workflow default {",
+    '  if ! ensure check foo=bar; then',
+    "    run fix",
+    "  fi",
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  const step = mod.workflows[1].steps[0] as {
+    type: "if_not_ensure_then_run";
+    ensureRef: { value: string };
+    args?: string;
+  };
+  assert.equal(step.type, "if_not_ensure_then_run");
+  assert.equal(step.args, "foo=bar");
+});
+
+test("parser: if ensure with else branch parses correctly", () => {
+  const source = [
+    "rule ready {",
+    "  true",
+    "}",
+    "workflow default {",
+    '  if ensure ready; then',
+    "    echo yes",
+    "  else",
+    "    echo no",
+    "  fi",
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  const step = mod.workflows[0].steps[0] as {
+    type: "if_ensure_then";
+    thenSteps: unknown[];
+    elseSteps?: unknown[];
+  };
+  assert.equal(step.type, "if_ensure_then");
+  assert.equal(step.thenSteps.length, 1);
+  assert.ok(step.elseSteps);
+  assert.equal(step.elseSteps!.length, 1);
+});
+
+test("parser: negated if ensure with else branch parses correctly", () => {
+  const source = [
+    "rule ready {",
+    "  true",
+    "}",
+    "workflow default {",
+    '  if ! ensure ready; then',
+    "    echo fail",
+    "  else",
+    "    echo pass",
+    "  fi",
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  const step = mod.workflows[0].steps[0] as {
+    type: "if_not_ensure_then";
+    thenSteps: unknown[];
+    elseSteps?: unknown[];
+  };
+  assert.equal(step.type, "if_not_ensure_then");
+  assert.equal(step.thenSteps.length, 1);
+  assert.ok(step.elseSteps);
+  assert.equal(step.elseSteps!.length, 1);
+});
+
+test("parser: malformed if ensure emits E_PARSE", () => {
+  const source = [
+    "workflow default {",
+    "  if ensure; then",
+    "    echo x",
+    "  fi",
+    "}",
+  ].join("\n");
+  assert.throws(
+    () => parsejaiph(source, "/fake/entry.jh"),
+    /E_PARSE malformed if-ensure statement/,
+  );
+});
+
+test("compiler golden: positive if ensure with args transpiles correctly", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-if-ensure-pos-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        "rule ready {",
+        "  true",
+        "}",
+        "workflow default {",
+        '  if ensure ready foo=bar; then',
+        "    echo success",
+        "  fi",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const actual = normalize(transpileFile(input, root));
+    assert.match(actual, /if entry::rule::ready foo=bar; then/);
+    assert.match(actual, /echo success/);
+    assert.match(actual, /fi/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("compiler golden: positive if ensure with else transpiles correctly", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-if-ensure-else-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        "rule ready {",
+        "  true",
+        "}",
+        "workflow fallback {",
+        "  echo fallback",
+        "}",
+        "workflow default {",
+        '  if ensure ready; then',
+        "    echo yes",
+        "  else",
+        "    run fallback",
+        "  fi",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const actual = normalize(transpileFile(input, root));
+    assert.match(actual, /if entry::rule::ready; then/);
+    assert.match(actual, /echo yes/);
+    assert.match(actual, /else/);
+    assert.match(actual, /entry::workflow::fallback/);
+    assert.match(actual, /fi/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("compiler golden: negated if ensure with args transpiles correctly", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-if-not-ensure-args-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        "rule check {",
+        "  true",
+        "}",
+        "workflow default {",
+        '  if ! ensure check myarg; then',
+        "    echo fallback",
+        "  fi",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const actual = normalize(transpileFile(input, root));
+    assert.match(actual, /if ! entry::rule::check myarg; then/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("compiler golden: workflow with config emits JAIPH export defaults", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-golden-metadata-"));
   try {

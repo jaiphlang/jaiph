@@ -260,17 +260,31 @@ export function parseWorkflowBlock(
       continue;
     }
 
-    const ifEnsureMatch = inner.match(
-      /^if\s+!\s*ensure\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*;\s*then$/,
+    const ifNegEnsureMatch = inner.match(
+      /^if\s+!\s*ensure\s+(.+?)\s*;\s*then$/,
     );
-    if (ifEnsureMatch) {
-      const ensureRef = ifEnsureMatch[1];
-      let fiLine = -1;
-      const thenSteps: Array<
+    const ifPosEnsureMatch = !ifNegEnsureMatch
+      ? inner.match(/^if\s+ensure\s+(.+?)\s*;\s*then$/)
+      : null;
+    const ifEnsureBody = ifNegEnsureMatch?.[1] ?? ifPosEnsureMatch?.[1];
+    const isNegated = !!ifNegEnsureMatch;
+    if (ifEnsureBody) {
+      const ensureBodyMatch = ifEnsureBody.match(
+        /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
+      );
+      if (!ensureBodyMatch || !isRef(ensureBodyMatch[1])) {
+        fail(filePath, "invalid ensure reference in if-ensure statement", innerNo);
+      }
+      const ensureRef = ensureBodyMatch[1];
+      const ensureArgs = ensureBodyMatch[2]?.trim();
+      type IfEnsureStep =
         | { type: "shell"; command: string; loc: { line: number; col: number }; captureName?: string }
         | { type: "run"; workflow: { value: string; loc: { line: number; col: number } }; args?: string; captureName?: string }
-        | { type: "prompt"; raw: string; loc: { line: number; col: number }; captureName?: string }
-      > = [];
+        | { type: "prompt"; raw: string; loc: { line: number; col: number }; captureName?: string; returns?: string };
+      let fiLine = -1;
+      let inElse = false;
+      const thenSteps: IfEnsureStep[] = [];
+      const elseSteps: IfEnsureStep[] = [];
       for (let lookahead = idx + 1; lookahead < lines.length; lookahead += 1) {
         const lookNo = lookahead + 1;
         const lookRaw = lines[lookahead];
@@ -282,6 +296,14 @@ export function parseWorkflowBlock(
           fiLine = lookahead;
           break;
         }
+        if (lookTrim === "else") {
+          if (inElse) {
+            fail(filePath, "duplicate else in if-ensure block", lookNo);
+          }
+          inElse = true;
+          continue;
+        }
+        const target = inElse ? elseSteps : thenSteps;
         const genericAssignMatch = lookTrim.match(/^([A-Za-z_][A-Za-z0-9_]*)\s+=\s*(.+)$/s);
         if (
           genericAssignMatch &&
@@ -296,7 +318,7 @@ export function parseWorkflowBlock(
             /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
           );
           if (runMatch && isRef(runMatch[1])) {
-            thenSteps.push({
+            target.push({
               type: "run",
               workflow: { value: runMatch[1], loc: { line: lookNo, col: lookRaw.indexOf("run") + 1 } },
               args: runMatch[2]?.trim(),
@@ -304,7 +326,7 @@ export function parseWorkflowBlock(
             });
             continue;
           }
-          thenSteps.push({
+          target.push({
             type: "shell",
             command: rest,
             loc: { line: lookNo, col: colFromRaw(lookRaw) },
@@ -316,7 +338,7 @@ export function parseWorkflowBlock(
           /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
         );
         if (runMatch) {
-          thenSteps.push({
+          target.push({
             type: "run",
             workflow: {
               value: runMatch[1],
@@ -359,7 +381,7 @@ export function parseWorkflowBlock(
             lookahead,
           );
           lookahead = nextIdx - 1;
-          thenSteps.push({
+          target.push({
             type: "prompt",
             raw: promptRaw,
             loc: { line: lookNo, col: promptCol },
@@ -397,7 +419,7 @@ export function parseWorkflowBlock(
             lookahead,
           );
           lookahead = nextIdx - 1;
-          thenSteps.push({
+          target.push({
             type: "prompt",
             raw: promptRaw,
             loc: { line: lookNo, col: promptCol },
@@ -405,7 +427,10 @@ export function parseWorkflowBlock(
           });
           continue;
         }
-        thenSteps.push({
+        if (/^\s*ensure\b/.test(lookTrim)) {
+          fail(filePath, 'E_PARSE "ensure" is not allowed inside an if-ensure then/else branch', lookNo);
+        }
+        target.push({
           type: "shell",
           command: lookTrim,
           loc: { line: lookNo, col: colFromRaw(lookRaw) },
@@ -417,12 +442,31 @@ export function parseWorkflowBlock(
       if (thenSteps.length === 0) {
         fail(filePath, "if-block then-branch must contain at least one run or shell command", innerNo);
       }
-      if (
+      const ensureRefDef = { value: ensureRef, loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 } };
+      const hasElse = elseSteps.length > 0;
+      if (!isNegated) {
+        workflow.steps.push({
+          type: "if_ensure_then",
+          ensureRef: ensureRefDef,
+          args: ensureArgs,
+          thenSteps,
+          ...(hasElse ? { elseSteps } : {}),
+        });
+      } else if (hasElse) {
+        workflow.steps.push({
+          type: "if_not_ensure_then",
+          ensureRef: ensureRefDef,
+          args: ensureArgs,
+          thenSteps,
+          elseSteps,
+        });
+      } else if (
         thenSteps.every((step) => step.type === "run")
       ) {
         workflow.steps.push({
           type: "if_not_ensure_then_run",
-          ensureRef: { value: ensureRef, loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 } },
+          ensureRef: ensureRefDef,
+          args: ensureArgs,
           runWorkflows: thenSteps.map((step) => {
             const runStep = step as {
               type: "run";
@@ -437,13 +481,15 @@ export function parseWorkflowBlock(
       ) {
         workflow.steps.push({
           type: "if_not_ensure_then_shell",
-          ensureRef: { value: ensureRef, loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 } },
+          ensureRef: ensureRefDef,
+          args: ensureArgs,
           commands: thenSteps.map((step) => (step as { type: "shell"; command: string; loc: { line: number; col: number } })),
         });
       } else {
         workflow.steps.push({
           type: "if_not_ensure_then",
-          ensureRef: { value: ensureRef, loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 } },
+          ensureRef: ensureRefDef,
+          args: ensureArgs,
           thenSteps,
         });
       }
@@ -869,6 +915,10 @@ export function parseWorkflowBlock(
         args: runMatch[2]?.trim(),
       });
       continue;
+    }
+
+    if (/^if\s+(?:!\s*)?ensure\b/.test(inner)) {
+      fail(filePath, 'malformed if-ensure statement; expected "if [!] ensure <rule_ref> [args]; then"', innerNo);
     }
 
     const shellDelta = braceDepthDelta(inner);

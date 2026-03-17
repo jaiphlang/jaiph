@@ -151,11 +151,18 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         for (const runStep of s.runWorkflows) {
           validateWorkflowRef(runStep.workflow);
         }
-      } else if (s.type === "if_not_ensure_then") {
+      } else if (s.type === "if_not_ensure_then" || s.type === "if_ensure_then") {
         validateRuleRef(s.ensureRef);
         for (const thenStep of s.thenSteps) {
           if (thenStep.type === "run") {
             validateWorkflowRef(thenStep.workflow);
+          }
+        }
+        if (s.elseSteps) {
+          for (const elseStep of s.elseSteps) {
+            if (elseStep.type === "run") {
+              validateWorkflowRef(elseStep.workflow);
+            }
           }
         }
       } else if (s.type === "if_not_shell_then") {
@@ -182,11 +189,18 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         for (const runStep of step.runWorkflows) {
           validateWorkflowRef(runStep.workflow);
         }
-      } else if (step.type === "if_not_ensure_then") {
+      } else if (step.type === "if_not_ensure_then" || step.type === "if_ensure_then") {
         validateRuleRef(step.ensureRef);
         for (const thenStep of step.thenSteps) {
           if (thenStep.type === "run") {
             validateWorkflowRef(thenStep.workflow);
+          }
+        }
+        if (step.elseSteps) {
+          for (const elseStep of step.elseSteps) {
+            if (elseStep.type === "run") {
+              validateWorkflowRef(elseStep.workflow);
+            }
           }
         }
       } else if (step.type === "if_not_shell_then") {
