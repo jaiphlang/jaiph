@@ -6,24 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Bug: Empty lines from prompt params in tree view are not removed
-
-<!-- dev-ready -->
-
-When a multiline `prompt "..."` has blank lines in its text, those blank lines arrive as empty-string params in the tree view display. After `stripKeyPrefix()`, these become empty strings that are not filtered out, resulting in empty quoted strings (`""`) or extra whitespace artifacts in the tree output.
-
-**Root cause:** `formatParamsForDisplay()` in `src/cli/commands/run.ts` (line 102) filters internal params (`isInternalParamValue`) and strips key prefixes, but does not filter out values that are empty or whitespace-only after stripping. The emitter (`emit-workflow.ts`) is not at fault — it correctly passes param keys; the display function simply needs to drop empties.
-
-**Scope:** The fix applies to `formatParamsForDisplay()`, which is shared across all step kinds (workflow, prompt, function, rule). This is correct — no step kind should display empty params.
-
-### Acceptance criteria
-
-1. `formatParamsForDisplay()` filters out params whose value is empty or whitespace-only after `stripKeyPrefix()`.
-2. Tree view output for a multiline prompt containing blank lines shows no extra whitespace artifacts or empty quoted strings.
-3. A unit test or `.test.jh` file demonstrates the fix (multiline prompt with blank lines → clean tree output).
-
----
-
 ## Feature: Add `log` keyword to display messages in the progress tree
 
 <!-- dev-ready -->

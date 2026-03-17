@@ -109,7 +109,7 @@ During `jaiph run`, the CLI renders a tree of steps. **Tree output is the same i
 
 For **parameterized** invocations—when you pass arguments to a workflow, prompt, or function—the tree shows those argument **values** inline in gray immediately after the step name. Format:
 
-- Comma-separated **values** in parentheses (no parameter names or labels; internal refs such as `::impl` are omitted).
+- Comma-separated **values** in parentheses (no parameter names or labels; internal refs such as `::impl` and empty or whitespace-only values are omitted).
 - **Workflow and function:** Values are truncated to 32 visible characters; longer values end with `...`.
 - **Prompt steps:** The line shows a **prompt preview** (first 24 characters of the prompt text, then `...` if longer) in quotes, followed by any arguments. The **argument list** `(arg1, arg2, ...)` is capped at 96 characters total (truncated with `...` if longer). Example: `▸ prompt "Say hello to $1 and prov..." (greeting)`.
 - Order follows the call site so repeated runs are diff-friendly.
