@@ -6,53 +6,13 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Feature: Add `log` keyword to display messages in the progress tree
+## Docs and samples: Use `log` instead of cat
 
 <!-- dev-ready -->
 
-Add a `log` keyword that displays a message in the progress tree at the correct indentation level, both in the static tree view (`jaiph tree`) and at runtime.
+Change sample with ./say_hello.jh Jakub && cat hello.txt to simple ./say_hello.jh Jakub. And in the workflow use `log "$response"`
 
-### Syntax
-
-```jh
-workflow analyze {
-  log "Starting analysis phase"
-  run fetch_data
-  log "Processing results for $dataset"
-}
-```
-
-`log` takes a single double-quoted string argument. Shell variable interpolation (`$var`, `${var}`) works inside the string (same as other quoted strings in the DSL). No unquoted arguments, no heredocs, no command substitution.
-
-### Design decisions
-
-- **Keyword**: `log`.
-- **Display**: Both compile-time and runtime.
-  - `jaiph tree` / `--dry-run`: renders as a tree node with the literal string (unexpanded variables shown as-is).
-  - Runtime: emits a single `LOG` event (not a `STEP_START`/`STEP_END` pair) that the progress tree renderer displays inline at the correct depth. The message is the shell-expanded string.
-- **No status tracking**: `log` is not a callable unit — it has no pending/running/done states, no timing. It appears as a static annotation in the tree, not as a step with a spinner.
-- **Runtime event**: A new event type `LOG` with fields `{ type: "LOG", message: string, depth: number }` emitted on fd 3. The runtime function `jaiph::log` writes the message to the event stream and to stderr (for non-tree output modes).
-- **AST type**: New `WorkflowStepDef` variant `{ type: "log"; message: string; loc: SourceLoc; }`. No `captureName` (logs don't produce capturable output).
-- **Emitter**: `log "text"` transpiles to `jaiph::log "text"` — a thin bash function in the runtime that emits the `LOG` event.
-
-### Affected files
-
-- `src/parse/workflows.ts` — new regex match for `log "..."` before the shell fallback.
-- `src/types.ts` — add `log` variant to `WorkflowStepDef`.
-- `src/transpile/emit-workflow.ts` — emit `jaiph::log "message"` call.
-- `src/runtime/events.sh` — add `jaiph::log()` function that emits `LOG` event on fd 3.
-- `src/cli/run/progress.ts` — handle `LOG` events in the progress tree renderer; add `log` handler in `stepToItems()` / `collectWorkflowChildren()`.
-- `src/cli/commands/tree.ts` (if separate from progress.ts) — render log nodes in static tree.
-
-### Acceptance criteria
-
-1. Grammar accepts `log "..."` inside workflow blocks; parse error on `log` without a quoted string.
-2. `WorkflowStepDef` includes a `{ type: "log", message: string, loc: SourceLoc }` variant.
-3. `jaiph` output renders log lines at the correct indentation level.
-4. At runtime, log output appears inline in the progress tree at the correct depth, without spinner or timing.
-5. The runtime emits a `LOG` event on fd 3 (not `STEP_START`/`STEP_END`).
-6. Shell variable interpolation works in log messages at runtime.
-7. A `.test.jh` file exercises the feature (log in a workflow, nested workflow with log, variable interpolation).
+Update also syntax highlighting in js docs scripts.
 
 ---
 
@@ -211,7 +171,12 @@ config {
 ### Remaining blockers
 
 1. **Config parser prerequisite** — The current config parser (`src/parse/metadata.ts:parseMetadataValue()`) only supports quoted strings and booleans. This task requires bare integers (`runtime.docker_timeout = 300`) and arrays (`runtime.workspace = [...]`). **This must be implemented first as a separate task** before Docker runtime work can begin. Add a "Config parser: support integer and array value types" task above this one in the queue.
+
+=> Response: Please add a task for it before the current one
+
 2. **Scope must be split** — Even with the config parser extracted, this task spans: (a) mount string parsing and validation, (b) Docker CLI orchestration in TypeScript, (c) UID/GID mapping, (d) TTY detection and passthrough, (e) timeout/container kill logic, (f) docs. Recommend splitting into: **Task A** — Config parser extensions (integers, arrays, `runtime.*` key namespace with validation); **Task B** — Docker runtime implementation (mount parsing, orchestration, UID/GID, TTY, timeout, docs). Task A must complete before Task B.
+
+=> Response: please do. And note, this is important: docker container should receive transpilled bash only - no need for Jaiph source files and Jaiph runtime in docker container
 
 ---
 

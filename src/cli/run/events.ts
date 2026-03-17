@@ -17,7 +17,33 @@ export type StepEvent = {
   params: Array<[string, string]>;
 };
 
+export type LogEvent = {
+  type: "LOG";
+  message: string;
+  depth: number;
+};
+
 const PREFIX = "__JAIPH_EVENT__ ";
+
+export function parseLogEvent(line: string): LogEvent | undefined {
+  const markerIndex = line.indexOf(PREFIX);
+  if (markerIndex === -1) {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(line.slice(markerIndex + PREFIX.length)) as Record<string, unknown>;
+    if (!parsed || parsed.type !== "LOG") {
+      return undefined;
+    }
+    return {
+      type: "LOG",
+      message: typeof parsed.message === "string" ? parsed.message : "",
+      depth: typeof parsed.depth === "number" ? parsed.depth : 0,
+    };
+  } catch {
+    return undefined;
+  }
+}
 
 export function parseStepEvent(line: string): StepEvent | undefined {
   const markerIndex = line.indexOf(PREFIX);

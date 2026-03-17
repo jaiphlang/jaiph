@@ -21,7 +21,7 @@ import {
 } from "../shared/errors";
 import { detectWorkspaceRoot } from "../shared/paths";
 import { parseArgs } from "../shared/usage";
-import { parseStepEvent } from "../run/events";
+import { parseStepEvent, parseLogEvent } from "../run/events";
 import {
   buildRunWrapperCommand,
   spawnRunProcess,
@@ -263,6 +263,23 @@ const PROMPT_ARGS_DISPLAY_MAX = 96;
       return `legacy:${legacyCounter}:${funcName}`;
     };
     const handleStderrLine = (line: string): void => {
+      const logEvent = parseLogEvent(line);
+      if (logEvent) {
+        const depth = Math.max(1, logEvent.depth);
+        const indent = "  · ".repeat(depth);
+        const prefix = indent.slice(0, -2);
+        const dimPrefix = colorize(prefix, "dim");
+        const logLabel = `${dimPrefix}${colorize("log", "dim")} ${logEvent.message}`;
+        if (isTTY && runningInterval !== undefined) {
+          process.stdout.write("\r\u001b[K\u001b[1A\r\u001b[K");
+        }
+        process.stdout.write(`${logLabel}${isTTY ? "\n\n" : "\n"}`);
+        if (isTTY && runningInterval !== undefined) {
+          const elapsedSec = (Date.now() - startedAt) / 1000;
+          process.stdout.write(formatRunningBottomLine("default", elapsedSec));
+        }
+        return;
+      }
       const event = parseStepEvent(line);
       if (event) {
         if (event.run_id && !workflowRunId) workflowRunId = event.run_id;

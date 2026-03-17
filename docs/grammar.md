@@ -71,6 +71,7 @@ workflow_step   = ensure_stmt
                 | ensure_capture_stmt
                 | run_capture_stmt
                 | shell_capture_stmt
+                | log_stmt
                 | if_ensure_then_stmt
                 | if_not_ensure_then_run_stmt
                 | if_not_ensure_then_shell_stmt
@@ -78,6 +79,8 @@ workflow_step   = ensure_stmt
                 | if_not_shell_then_stmt
                 | shell_stmt
                 | comment_line ;
+
+log_stmt        = "log" double_quoted_string ;
 
 ensure_capture_stmt = IDENT "=" "ensure" REF [ args_tail ]
                     | IDENT "=" "ensure" REF [ args_tail ] "recover" single_stmt
@@ -159,7 +162,8 @@ shell_stmt      = command_line ;
    - `name = run ref [args...]` — Runs the workflow and captures its stdout into `name`.
    - `name = <shell_command>` — Runs the shell command and captures its stdout into `name`.
    - **Bash-consistent semantics:** Assignment capture does **not** change exit behavior: if the command fails, the step fails and the workflow exits (with `set -e`). To capture output even on failure, the workflow author must explicitly short-circuit (e.g. append `|| true` to the command). Only **stdout** is captured; **stderr** is not included unless the command redirects it (e.g. `name = cmd 2>&1`).
-9. **Export:** Rule and workflow declarations may be prefixed with `export` to mark them as part of the module’s public interface. The implementation does not restrict references to exported symbols: any rule or workflow in an imported module can be referenced.
+9. **log:** `log "message"` displays a message in the progress tree at the current indentation depth. The argument must be a double-quoted string (same quoting rules as `prompt`). Shell variable interpolation (`$var`, `${var}`) works at runtime; at compile time (`jaiph tree` / `--dry-run`), variables are shown unexpanded. `log` is not a step — it has no pending/running/done states, no timing, and no spinner. It transpiles to `jaiph::log "message"`, which emits a `LOG` event on fd 3 and echoes to stderr. Parse error if `log` is used without a quoted string.
+10. **Export:** Rule and workflow declarations may be prefixed with `export` to mark them as part of the module’s public interface. The implementation does not restrict references to exported symbols: any rule or workflow in an imported module can be referenced.
 
 ## Validation Rules
 

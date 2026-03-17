@@ -83,6 +83,29 @@ jaiph::step_params_json() {
   printf "%s" "$result"
 }
 
+jaiph::log() {
+  local message="$*"
+  local depth
+  depth="$(jaiph::step_stack_depth)"
+  local marker_fd payload had_xtrace
+  had_xtrace=0
+  case "$-" in
+    *x*) had_xtrace=1 ;;
+  esac
+  if [[ "$had_xtrace" -eq 1 ]]; then
+    set +x
+  fi
+  payload="$(printf '{"type":"LOG","message":"%s","depth":%s}' \
+    "$(jaiph::json_escape "$message")" \
+    "$depth")"
+  marker_fd="$(jaiph::event_fd)"
+  printf "__JAIPH_EVENT__ %s\n" "$payload" >&"$marker_fd"
+  echo "$message" >&2
+  if [[ "$had_xtrace" -eq 1 ]]; then
+    set -x
+  fi
+}
+
 jaiph::emit_step_event() {
   local event_type="$1"
   local func_name="$2"

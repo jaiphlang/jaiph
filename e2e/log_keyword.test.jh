@@ -1,0 +1,12 @@
+#!/usr/bin/env jaiph
+import "log_keyword.jh" as lk
+
+test "log in workflow produces output" {
+  response = lk.default
+  expectContain response "done"
+}
+
+test "nested workflow with log produces output" {
+  response = lk.helper
+  expectContain response "helper done"
+}
