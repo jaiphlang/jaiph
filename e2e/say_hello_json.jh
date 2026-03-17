@@ -11,10 +11,6 @@ rule name_was_provided {
   fi
 }
 
-function format_text() {
-  fold -s -w 80
-}
-
 workflow default {
   ensure name_was_provided "$1"
 
@@ -22,5 +18,5 @@ workflow default {
     Say hello to $1 and provide a fun fact about a person with the same name.
   " returns '{ hello: string, fact: string }'
 
-  echo "$response_fact" | format_text > "hello.txt"
+  log "$response_fact"
 }

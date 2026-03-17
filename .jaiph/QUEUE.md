@@ -6,16 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Docs and samples: Use `log` instead of cat
-
-<!-- dev-ready -->
-
-Change sample with ./say_hello.jh Jakub && cat hello.txt to simple ./say_hello.jh Jakub. And in the workflow use `log "$response"`
-
-Update also syntax highlighting in js docs scripts.
-
----
-
 ## Compiler: enforce calling conventions and unify symbol namespace
 
 <!-- dev-ready -->

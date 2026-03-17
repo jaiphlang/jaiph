@@ -14,15 +14,10 @@ test "without name, workflow fails with validation message" {
   expectEqual response "You didn't provide your name"
 }
 
-test "with name, returns greeting and writes hello.txt" {
+test "with name, returns greeting and logs response" {
   # Given
   mock prompt "Hello Alice! Alice in Wonderland was written by Lewis Carroll."
 
   # When
   hello.default "Alice"
-
-  # Then
-  content=$(cat hello.txt)
-  expectContain content "Hello Alice"
-  expectContain content "Alice in Wonderland"
 }

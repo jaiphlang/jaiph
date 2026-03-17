@@ -7,10 +7,6 @@ rule name_was_provided {
   fi
 }
 
-function format_text() {
-  fold -s -w 80
-}
-
 workflow default {
   ensure name_was_provided "$1"
 
@@ -18,5 +14,5 @@ workflow default {
     Say hello to $1 and provide a fun fact about a person with the same name.
   "
 
-  echo "$response" | format_text > "hello.txt"
+  log "$response"
 }
