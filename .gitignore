@@ -29,3 +29,19 @@ pnpm-debug.log*
 
 .jaiph/runs/
 .jaiph/*.sh
+
+# Jaiph transpilled workflows
+e2e/workflow_greeting.sh
+e2e/say_hello.sh
+e2e/say_hello_json.sh
+e2e/rule_pass.sh
+e2e/rule_fail.sh
+e2e/prompt_unmatched.sh
+e2e/prompt_flow.sh
+e2e/nested_run.sh
+e2e/nested_inner.sh
+e2e/log_keyword.sh
+e2e/fibonacci.sh
+e2e/ensure_fail.sh
+e2e/current_branch.sh
+e2e/assign_capture.sh

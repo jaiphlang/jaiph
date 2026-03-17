@@ -34,7 +34,7 @@ expected_say_hello_out=$(printf '%s\n' \
   "    - You didn't provide your name" \
   '    + You didn'"'"'t provide your name :(' \
   '' \
-  '  ▸ with name, returns greeting and writes hello.txt' \
+  '  ▸ with name, returns greeting and logs response' \
   '  ✓ <time>' \
   '' \
   '✗ 1 / 2 test(s) failed' \

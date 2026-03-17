@@ -78,10 +78,6 @@ rule name_was_provided {
   fi
 }
 
-function format_text() {
-  fold -s -w 80
-}
-
 workflow default {
   ensure name_was_provided "$1"
 
@@ -89,29 +85,20 @@ workflow default {
     Say hello to $1 and provide a fun fact about a person with the same name.
   "
 
-  echo "$response" | format_text > hello.txt
+  log "$response"
 }</code></pre>
                     <p>Running the workflow:</p>
-                    <pre><code class="jaiph-run"><span class="run-command">➜  ./say_hello.jh Jakub && cat hello.txt</span>
+                    <pre><code class="jaiph-run"><span class="run-command">➜  ./say_hello.jh Jakub</span>
 
 running say_hello.jh
 
 <span class="run-keyword">workflow</span> default
   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> name_was_provided
   <span class="run-pass">✓</span> <span class="run-time">0s</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> "Say hello to Jakub and..." <span class="run-params">(Jakub)</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> “Say hello to Jakub and..." <span class="run-params">(Jakub)</span>
   <span class="run-pass">✓</span> <span class="run-time">9s</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">function</span> format_text
-  <span class="run-pass">✓</span> <span class="run-time">0s</span>
-<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(8.9s)</span>
-
-Hi Jakub.
-
-**Fun fact:** **Jakub Marian** is a Czech linguist, mathematician, and polyglot
-who speaks over a dozen languages and runs a popular site (jakubmarian.com) 
-with maps and data on European languages—including maps of which European 
-languages use “yes” and “no” vs. “ja”/“da”-style words. So if you ever look up 
-“European language maps,” you might run into another Jakub’s work.</code></pre>
+  Hi Jakub! Here’s a fun fact: Jakub Marian is a Czech linguist and polyglot who speaks over a dozen languages.
+<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(8.9s)</span></code></pre>
                     <p>
                         Jaiph also supports structured output. You can use the following syntax:
                     </p>
@@ -138,17 +125,12 @@ test "without name, workflow fails with validation message" {
   expectEqual response "You didn't provide your name"
 }
 
-test "with name, returns greeting and writes hello.txt" {
+test "with name, returns greeting and logs response" {
   # Given
   mock prompt "Hello Alice! Fun fact: Alice in Wonderland was written by Lewis Carroll."
 
   # When
   hello.default "Alice"
-
-  # Then
-  content=$(cat hello.txt)
-  expectContain content "Hello Alice"
-  expectContain content "Alice in Wonderland"
 }</code></pre>
                     <p>Example failing run output:</p>
                     <pre><code class="jaiph-run"><span class="run-command">➜  ./say_hello.test.jh</span>
@@ -158,7 +140,7 @@ testing say_hello.test.jh
     <span class="run-diff-minus">- You didn't provide your name</span>
     <span class="run-diff-plus">+ You didn't provide your name :(</span>
     
-  <span class="run-marker">▸</span> with name, returns greeting and writes hello.txt
+  <span class="run-marker">▸</span> with name, returns greeting and logs response
   <span class="run-pass">✓</span> <span class="run-time">0s</span>
 
 <span class="run-fail">✗ 1 / 2 test(s) failed</span>

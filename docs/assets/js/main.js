@@ -22,6 +22,7 @@
         "prompt",
         "returns",
         "mock",
+        "log",
         "respond",
         "contains",
         "expectContain",
@@ -189,7 +190,7 @@
             }
         }
 
-        // Known local functions referenced in shell lines (e.g. format_text)
+        // Known local functions referenced in shell lines
         significant.forEach(function (entry) {
             if (
                 entry.token.type === "identifier" &&
