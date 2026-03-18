@@ -6,37 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Restructure .jaiph/runs directory <!-- dev-ready -->
-
-Currently it's too bloated. I'd like to have a different directory structure. It should be:
-
-.jaiph/runs/2026-03-18/07-03-28-<jaiph-file-name.jh>/
-
-### Implementation notes
-
-- **Source file name**: `run.ts` already has the input file path (`inputAbs`). Pass the basename (e.g., `say_hello.jh`) to the runtime via a new `JAIPH_SOURCE_FILE` env var.
-- **Directory format**: `<date>/<HH-MM-SS>-<basename>/` where date is `YYYY-MM-DD` and time is local (not UTC), matching the user's example.
-- **Collision handling**: If the directory already exists (same file run twice in the same second), append `-2`, `-3`, etc.
-- **Run ID**: Still generated via `jaiph::new_run_id()` and exported as `JAIPH_RUN_ID` for internal tracking / JSONL events. Just no longer part of the directory name.
-- **`JAIPH_RUNS_DIR` override**: Still respected — the date/time subdirectory structure applies under the custom root as well.
-
-### Files to modify
-
-1. `src/cli/commands/run.ts` — export `JAIPH_SOURCE_FILE` env var (basename of input file) before spawning the shell.
-2. `src/runtime/steps.sh` — rewrite `jaiph::init_run_tracking()`: build path as `<runs_dir>/<YYYY-MM-DD>/<HH-MM-SS>-<source_file>/`, handle collision suffix.
-3. `src/cli/shared/errors.ts` — `latestRunFiles()` still works (reads a flat dir); no change needed.
-4. `e2e/tests/70_run_artifacts.sh` — update assertions to match new directory layout.
-
-### Acceptance criteria
-
-1. Running `jaiph run foo.jh` creates `.jaiph/runs/YYYY-MM-DD/HH-MM-SS-foo.jh/` with `run_summary.jsonl` and step artifacts inside.
-2. Running the same file twice within one second produces two distinct directories (collision suffix).
-3. `JAIPH_RUNS_DIR` override still works; date/time subdirs are created under the custom root.
-4. Existing e2e tests pass (updated as needed).
-5. `JAIPH_RUN_ID` is still generated and available in the runtime environment.
-
----
-
 ## Harden inbox <!-- dev-ready -->
 
 Add e2e coverage for the inbox/dispatch system and a homepage sample demonstrating it.

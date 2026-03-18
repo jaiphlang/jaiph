@@ -96,7 +96,8 @@ Mount strings in `runtime.workspace` follow these forms:
   workspace/          # the mount targeting /jaiph/workspace (read-write root)
     .jaiph/
       runs/
-        <run-id>/
+        <YYYY-MM-DD>/
+          <HH-MM-SS>-<source-file>/
 ```
 
 - `/jaiph/generated/` contains the transpiled `.sh` script and `jaiph_stdlib.sh`. Both mounted read-only. `JAIPH_STDLIB` is set to `/jaiph/generated/jaiph_stdlib.sh` inside the container.

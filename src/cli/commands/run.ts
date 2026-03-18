@@ -221,6 +221,7 @@ const PROMPT_ARGS_DISPLAY_MAX = 96;
     if (runtimeEnv.JAIPH_STDLIB === undefined) {
       runtimeEnv.JAIPH_STDLIB = join(__dirname, "..", "..", "jaiph_stdlib.sh");
     }
+    runtimeEnv.JAIPH_SOURCE_FILE = basename(inputAbs);
     delete runtimeEnv.BASH_ENV;
     delete runtimeEnv.JAIPH_RUN_DIR;
     delete runtimeEnv.JAIPH_PRECEDING_FILES;

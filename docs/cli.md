@@ -204,7 +204,8 @@ Imports resolve for both extensions: `import "foo" as x` finds `foo.jh` or `foo.
 - `JAIPH_AGENT_TRUSTED_WORKSPACE` — trusted workspace directory for Cursor backend `--trust`. Defaults to project root.
 - `JAIPH_AGENT_CURSOR_FLAGS` — extra flags for Cursor backend (string, split on whitespace).
 - `JAIPH_AGENT_CLAUDE_FLAGS` — extra flags for Claude backend (string, split on whitespace).
-- `JAIPH_RUNS_DIR` — directory for run logs (default: `.jaiph/runs` under workspace).
+- `JAIPH_RUNS_DIR` — root directory for run logs (default: `.jaiph/runs` under workspace). Runs are stored as `<YYYY-MM-DD>/<HH-MM-SS>-<source-file>/` under this root.
+- `JAIPH_SOURCE_FILE` — set automatically by the CLI to the basename of the input file (e.g. `say_hello.jh`). Used by the runtime to name run directories. You should not need to set this manually.
 - `JAIPH_DEBUG` — set to `true` to enable bash `set -x` during run.
 - `JAIPH_ENSURE_MAX_RETRIES` — max retries for `ensure ... recover` steps (default: 10). When exceeded, the workflow exits with status 1.
 - `JAIPH_DOCKER_ENABLED` — set to `true` to enable Docker sandbox (overrides in-file `runtime.docker_enabled`).
