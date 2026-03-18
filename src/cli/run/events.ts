@@ -15,6 +15,10 @@ export type StepEvent = {
   run_id: string;
   /** Ordered list of [key, value] pairs for step parameters (workflow/prompt/function). */
   params: Array<[string, string]>;
+  /** True when this step was dispatched by the inbox. */
+  dispatched: boolean;
+  /** Inbox channel name when dispatched. */
+  channel: string;
 };
 
 export type LogEvent = {
@@ -83,6 +87,8 @@ export function parseStepEvent(line: string): StepEvent | undefined {
       depth: typeof parsed.depth === "number" ? parsed.depth : null,
       run_id: typeof parsed.run_id === "string" ? parsed.run_id : "",
       params,
+      dispatched: (parsed as Record<string, unknown>).dispatched === true,
+      channel: typeof (parsed as Record<string, unknown>).channel === "string" ? (parsed as Record<string, unknown>).channel as string : "",
     };
   } catch {
     return undefined;

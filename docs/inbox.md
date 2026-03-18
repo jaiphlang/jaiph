@@ -140,4 +140,23 @@ survive back into the parent process.
 - `on` route declarations appear as nodes in the progress tree.
 - Dispatched workflow calls emit `STEP_START`/`STEP_END` events with
   `dispatched: true` and `channel: "<channel>"` metadata.
+- The CLI renders dispatched steps with the channel name and message in
+  parentheses: `▸ workflow analyst (findings, "Found 3 issues in auth module")`.
+  Message values are truncated to 32 characters.
+- When a dispatched step produces stdout (captured to `out_file`), the output
+  is displayed indented below the step's completion line.
 - `jaiph tree` (static view) shows `on` routes as leaf nodes.
+
+### Example output
+
+```
+workflow default
+  ▸ workflow scanner
+  ✓ 0s
+  ▸ workflow analyst (findings, "Found 3 issues in auth module")
+  ✓ 0s
+  ▸ workflow reviewer (report, "Summary: Found 3 issues in auth module")
+  ✓ 0s
+    [reviewed] Summary: Found 3 issues in auth module
+✓ PASS workflow default (0.1s)
+```
