@@ -1,5 +1,5 @@
 import { execSync, spawn, ChildProcess } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, basename, dirname } from "node:path";
 import type { RuntimeConfig } from "../types";
@@ -79,7 +79,7 @@ export function validateMounts(mounts: MountSpec[]): void {
 // ---------------------------------------------------------------------------
 
 const DEFAULTS: DockerRunConfig = {
-  enabled: false,
+  enabled: true,
   image: "ubuntu:24.04",
   network: "default",
   timeout: 300,
@@ -171,12 +171,30 @@ export function pullImageIfNeeded(image: string): void {
 // ---------------------------------------------------------------------------
 
 /**
- * Create a temp directory with the transpiled script and jaiph_stdlib.sh,
+ * Create a temp directory with the transpiled script(s) and jaiph_stdlib.sh,
  * to be mounted read-only at /jaiph/generated/ inside the container.
+ * When buildOutDir is set, copies all *.sh from that directory (for workflows with imports).
  */
-export function prepareGeneratedDir(builtScriptPath: string, stdlibPath: string): string {
+export function prepareGeneratedDir(
+  builtScriptPath: string,
+  stdlibPath: string,
+  buildOutDir?: string,
+): string {
   const generatedDir = mkdtempSync(join(tmpdir(), "jaiph-docker-gen-"));
-  copyFileSync(builtScriptPath, join(generatedDir, basename(builtScriptPath)));
+  if (buildOutDir && existsSync(buildOutDir)) {
+    for (const entry of readdirSync(buildOutDir, { recursive: true })) {
+      const rel = typeof entry === "string" ? entry : "";
+      if (!rel.endsWith(".sh")) continue;
+      const full = join(buildOutDir, rel);
+      if (statSync(full).isFile()) {
+        const dest = join(generatedDir, rel);
+        mkdirSync(dirname(dest), { recursive: true });
+        copyFileSync(full, dest);
+      }
+    }
+  } else {
+    copyFileSync(builtScriptPath, join(generatedDir, basename(builtScriptPath)));
+  }
 
   // Copy jaiph_stdlib.sh
   copyFileSync(stdlibPath, join(generatedDir, "jaiph_stdlib.sh"));
@@ -187,7 +205,7 @@ export function prepareGeneratedDir(builtScriptPath: string, stdlibPath: string)
   if (existsSync(runtimeSrcDir)) {
     const runtimeDestDir = join(generatedDir, "runtime");
     mkdirSync(runtimeDestDir, { recursive: true });
-    for (const mod of ["events.sh", "test-mode.sh", "steps.sh", "prompt.sh", "sandbox.sh"]) {
+    for (const mod of ["events.sh", "test-mode.sh", "steps.sh", "inbox.sh", "prompt.sh", "sandbox.sh"]) {
       const src = join(runtimeSrcDir, mod);
       if (existsSync(src)) {
         copyFileSync(src, join(runtimeDestDir, mod));
@@ -206,6 +224,8 @@ export interface DockerSpawnOptions {
   config: DockerRunConfig;
   builtScriptPath: string;
   stdlibPath: string;
+  /** When set, all *.sh under this dir are copied into generated (for workflows with imports). */
+  buildOutDir?: string;
   workspaceRoot: string;
   wrapperCommand: string;
   metaFile: string;
@@ -303,7 +323,11 @@ export function spawnDockerProcess(opts: DockerSpawnOptions): DockerSpawnResult 
   checkDockerAvailable();
   pullImageIfNeeded(opts.config.image);
 
-  const generatedDir = prepareGeneratedDir(opts.builtScriptPath, opts.stdlibPath);
+  const generatedDir = prepareGeneratedDir(
+    opts.builtScriptPath,
+    opts.stdlibPath,
+    opts.buildOutDir,
+  );
   const dockerArgs = buildDockerArgs(opts, generatedDir);
 
   const child = spawn("docker", dockerArgs, {

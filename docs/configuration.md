@@ -70,7 +70,7 @@ Allowed config keys:
 
 **Runtime keys (Docker sandbox):**
 
-- `runtime.docker_enabled`: Enable Docker sandbox for the run (boolean, default `false`).
+- `runtime.docker_enabled`: Enable Docker sandbox for the run (boolean, default `true` locally, `false` in CI).
 - `runtime.docker_image`: Container image to use (string, default `"ubuntu:24.04"`).
 - `runtime.docker_network`: Docker network mode (string, default `"default"`).
 - `runtime.docker_timeout`: Maximum execution time in seconds (integer, default `300`).
@@ -106,7 +106,7 @@ Mount strings in `runtime.workspace` follow these forms:
 
 - `docker run --rm` with proper UID/GID mapping (`--user $(id -u):$(id -g)` on Linux).
 - TTY passthrough: `-t` flag when `process.stdout.isTTY` is true.
-- `CI=true` disables Docker by default (many CI runners lack Docker-in-Docker). In-file `runtime.docker_enabled = true` overrides this.
+- Docker is **enabled by default** on local machines. `CI=true` disables Docker by default (many CI runners lack Docker-in-Docker). In-file `runtime.docker_enabled = true` or `JAIPH_DOCKER_ENABLED=true` overrides this in either environment.
 - Docker missing → `E_DOCKER_NOT_FOUND` (no silent fallback).
 - Image auto-pulled if missing; pull failure is fatal.
 - Timeout kills container and reports `E_TIMEOUT`.
@@ -140,7 +140,7 @@ Built-in defaults:
 - `agent.claude_flags`: unset
 - `run.logs_dir`: `.jaiph/runs`
 - `run.debug`: `false`
-- `runtime.docker_enabled`: `false`
+- `runtime.docker_enabled`: `true` (locally), `false` (when `CI=true`)
 - `runtime.docker_image`: `"ubuntu:24.04"`
 - `runtime.docker_network`: `"default"`
 - `runtime.docker_timeout`: `300`

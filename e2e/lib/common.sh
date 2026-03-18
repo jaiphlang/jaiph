@@ -134,6 +134,8 @@ e2e::prepare_shared_context() {
   mkdir -p "${JAIPH_E2E_BIN_DIR}" "${JAIPH_E2E_WORK_DIR}"
   export PATH="${JAIPH_E2E_BIN_DIR}:${PATH}"
   export JAIPH_BIN_DIR="${JAIPH_E2E_BIN_DIR}"
+  # Docker is enabled by default locally; disable for e2e tests.
+  export JAIPH_DOCKER_ENABLED="${JAIPH_DOCKER_ENABLED:-false}"
 
   if [[ -z "${JAIPH_REPO_URL:-}" ]]; then
     export JAIPH_REPO_URL="${E2E_REPO_ROOT}"
