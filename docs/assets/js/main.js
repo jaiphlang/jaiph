@@ -12,6 +12,7 @@
         "as",
         "config",
         "export",
+        "local",
         "rule",
         "workflow",
         "function",
@@ -23,9 +24,11 @@
         "returns",
         "mock",
         "log",
+        "on",
         "respond",
         "contains",
         "expectContain",
+        "expectNotContain",
         "expectEqual",
         "allow_failure",
         "if",
@@ -121,6 +124,12 @@
             if (ch === ".") {
                 tokens.push({ type: "dot", value: ".", kind: "plain" });
                 i += 1;
+                continue;
+            }
+
+            if (ch === "-" && line[i + 1] === ">") {
+                tokens.push({ type: "arrow", value: "->", kind: "operator" });
+                i += 2;
                 continue;
             }
 
@@ -254,6 +263,28 @@
         if (firstValue === "ensure" || firstValue === "run") {
             if (significant[1] && significant[1].token.type === "identifier") {
                 annotated[significant[1].index].kind = "identifier";
+            }
+        }
+
+        // on channel -> workflow, workflow2
+        if (firstValue === "on") {
+            for (let i = 1; i < significant.length; i += 1) {
+                if (significant[i].token.type === "arrow") {
+                    // mark workflow targets after ->
+                    for (let j = i + 1; j < significant.length; j += 1) {
+                        if (significant[j].token.type === "identifier") {
+                            annotated[significant[j].index].kind = "identifier";
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
+        // local name = value → definition for variable name
+        if (firstValue === "local") {
+            if (significant[1] && significant[1].token.type === "identifier") {
+                annotated[significant[1].index].kind = "definition";
             }
         }
 
