@@ -6,24 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Bug: single-file run compiles all sibling `.jh` files <!-- dev-ready -->
-
-**Root cause**: `build()` in `src/transpile/build.ts:87` calls `walkjhFiles(rootDir)` which walks the entire parent directory, then transpiles ALL discovered `.jh` files (line 91) — even when a single file was specified. A parse error in any sibling file (e.g., `docs_parity.jh`) breaks execution of unrelated files (e.g., `architect_review.jh`).
-
-**Expected behavior**: `jaiph run file.jh` should only compile the specified file and its transitive imports. `jaiph build ./` (directory mode) should compile all files and report all errors.
-
-**Fix location**: `src/transpile/build.ts`, `build()` function. When `entrypointFile` is set (single-file mode), the `files` list should contain only the entrypoint file rather than all files in the directory. Import resolution is already handled internally by `transpileFile()`, which inlines imported modules.
-
-### Acceptance criteria
-
-1. `jaiph run file.jh` compiles only the specified file (and its imports), not all `.jh` files in the parent directory.
-2. A parse error in a sibling `.jh` file does not prevent execution of unrelated files.
-3. `jaiph build ./` (directory mode) continues to compile all files and report all errors.
-4. Existing e2e tests pass.
-5. Add an e2e test: place a syntactically invalid `.jh` file next to a valid one; running the valid file must succeed.
-
----
-
 ## Support top-level env <!-- dev-ready -->
 
 Add top-level variable declarations to Jaiph using the `local` keyword (bash parity). Variables are prefixed to avoid collisions, similar to how functions are prefixed.

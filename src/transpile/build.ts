@@ -1,7 +1,8 @@
-import { mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, extname, join, parse, relative, resolve } from "node:path";
+import { parsejaiph } from "../parser";
 import type { CompileResult } from "../types";
-import { JAIPH_EXT_REGEX } from "./resolve";
+import { JAIPH_EXT_REGEX, resolveImportPath } from "./resolve";
 
 function ensureDir(path: string): void {
   mkdirSync(path, { recursive: true });
@@ -69,6 +70,24 @@ export function walkTestFiles(inputPath: string): string[] {
   return files;
 }
 
+function collectFileWithImports(entrypoint: string): string[] {
+  const visited = new Set<string>();
+  const queue = [entrypoint];
+  while (queue.length > 0) {
+    const file = queue.pop()!;
+    if (visited.has(file)) continue;
+    visited.add(file);
+    const ast = parsejaiph(readFileSync(file, "utf8"), file);
+    for (const imp of ast.imports) {
+      const importedFile = resolveImportPath(file, imp.path);
+      if (!visited.has(importedFile)) queue.push(importedFile);
+    }
+  }
+  const files = [...visited];
+  files.sort();
+  return files;
+}
+
 /**
  * Directory walking and output writes. Receives transpileFile from the caller
  * to avoid circular dependency with the main transpiler.
@@ -84,8 +103,8 @@ export function build(
   const outRoot = resolve(targetDir ?? rootDir);
   ensureDir(outRoot);
 
-  const files = walkjhFiles(rootDir);
   const entrypointFile = inputStat.isFile() ? absInput : null;
+  const files = entrypointFile ? collectFileWithImports(entrypointFile) : walkjhFiles(rootDir);
   const results: CompileResult[] = [];
   for (const file of files) {
     const bash = transpileFileFn(file, rootDir);
