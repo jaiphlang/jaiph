@@ -168,6 +168,15 @@ export interface jaiphModule {
   tests?: TestBlockDef[];
 }
 
+/** Docker sandbox runtime configuration. */
+export interface RuntimeConfig {
+  dockerEnabled?: boolean;
+  dockerImage?: string;
+  dockerNetwork?: string;
+  dockerTimeout?: number;
+  workspace?: string[];
+}
+
 /** In-file workflow metadata (replaces config file for V1). */
 export interface WorkflowMetadata {
   agent?: {
@@ -179,6 +188,7 @@ export interface WorkflowMetadata {
     claudeFlags?: string;
   };
   run?: { debug?: boolean; logsDir?: string };
+  runtime?: RuntimeConfig;
 }
 
 export interface CompileResult {

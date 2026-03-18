@@ -173,8 +173,8 @@ See [cli.md](cli.md) for command syntax, examples, environment variables, and li
 
 ## Language Primitives
 
-- `config { ... }`  
-  Optional block in the entry workflow file (at the top, optionally after shebang or imports). Sets runtime options (e.g. `agent.backend`, `agent.command`, `agent.trusted_workspace`, `run.logs_dir`). The opening line must be exactly `config {` on its own line. Only one config block per file. Environment variables override. See [configuration.md](configuration.md).
+- `config { ... }`
+  Optional block in the entry workflow file (at the top, optionally after shebang or imports). Sets runtime options (e.g. `agent.backend`, `agent.command`, `agent.trusted_workspace`, `run.logs_dir`, `runtime.*`). Values can be quoted strings, booleans (`true`/`false`), bare integers, or bracket-delimited arrays of strings. The opening line must be exactly `config {` on its own line. Only one config block per file. Environment variables override. See [configuration.md](configuration.md).
 
 - `import "file.jh" as alias`  
   Imports rules/workflows from another Jaiph module under an alias. Imports are verified at compile time.
