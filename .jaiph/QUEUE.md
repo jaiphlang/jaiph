@@ -6,90 +6,176 @@ The first `##` task in the file is always the current task.
 
 ---
 
+## Config parser: support integer and array value types
+
+<!-- dev-ready -->
+
+### Problem
+The config parser (`src/parse/metadata.ts:parseMetadataValue()`) only supports quoted strings and booleans. The upcoming Docker sandbox runtime requires bare integers (`runtime.docker_timeout = 300`) and arrays of strings (`runtime.workspace = [...]`). This must land before the Docker task can begin.
+
+### Scope
+Extend the config parser to support two new value types and add the `runtime.*` key namespace.
+
+### New value types
+
+**Integers** — bare numeric literals:
+```jh
+config {
+  runtime.docker_timeout = 300
+}
+```
+- `parseMetadataValue()` returns `number` (add to return type union: `string | boolean | number | string[]`).
+- Regex: `/^[0-9]+$/` on trimmed value. No floats, no negatives, no hex in v1.
+- Type validation: keys expecting integers reject strings/booleans/arrays with `E_VALIDATE`.
+
+**Arrays of strings** — bracket-delimited, multi-line:
+```jh
+config {
+  runtime.workspace = [
+    ".:/jaiph/workspace:rw",
+    "config:config:ro"
+  ]
+}
+```
+- Opening `[` must be on the same line as `=`.
+- Each element is a quoted string on its own line (same quoting rules as existing strings).
+- Trailing commas allowed. Comments (`#`) allowed between elements.
+- Closing `]` on its own line.
+- Empty array `= []` is valid (single-line).
+- `parseMetadataValue()` returns `string[]`.
+- Type validation: keys expecting arrays reject strings/booleans/integers with `E_VALIDATE`.
+
+### New config keys
+
+Add these to `ALLOWED_KEYS` (or replace with a typed key registry):
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `runtime.docker_enabled` | boolean | `false` | Enable Docker sandbox |
+| `runtime.docker_image` | string | `"ubuntu:24.04"` | Container image |
+| `runtime.docker_network` | string | `"default"` | Docker network mode |
+| `runtime.docker_timeout` | integer | `300` | Max execution time (seconds) |
+| `runtime.workspace` | string[] | `[".:/jaiph/workspace:rw"]` | Mount specifications |
+
+- Unknown `runtime.*` keys → `E_PARSE` (same as unknown keys today).
+- Values populate a new `runtime` field on `WorkflowMetadata` (add `RuntimeConfig` interface to `src/types.ts`).
+
+### Affected files
+- `src/parse/metadata.ts` — extend `parseMetadataValue()` for integers and arrays; add multi-line array accumulation in `parseConfigBlock()`; add `runtime.*` keys to allowed keys with type validation.
+- `src/types.ts` — add `RuntimeConfig` interface; add optional `runtime?: RuntimeConfig` to `WorkflowMetadata`.
+
+### Acceptance criteria
+- `parseMetadataValue()` parses bare integers and returns `number`.
+- `parseMetadataValue()` / `parseConfigBlock()` parses `[...]` arrays and returns `string[]`.
+- Trailing commas and inline comments within arrays are handled.
+- All five `runtime.*` keys are accepted with correct type validation.
+- Unknown `runtime.*` keys → `E_PARSE`.
+- `RuntimeConfig` type added to `WorkflowMetadata`.
+- Existing config tests still pass; new tests cover integers, arrays, and runtime keys.
+
+---
+
 ## Add Docker sandbox runtime for Jaiph execution
+
+<!-- dev-ready -->
 
 ### Problem
 Jaiph currently executes transpiled shell directly on the host. We need an optional disposable container runtime to isolate execution while still allowing controlled workspace writes.
 
+### Key design constraint
+The Docker container receives **only transpiled bash and the shell stdlib** (`jaiph_stdlib.sh`). No Jaiph source files, no TypeScript runtime, no Node.js — just `bash` inside the container. The TypeScript CLI orchestrates Docker from the host side.
+
 ### Proposed syntax
 
-Use the existing in-file `config { ... }` flow (no new top-level keywords):
+Uses the `runtime.*` config keys added by the prerequisite task:
 
 ```jh
 config {
-  # Runtime execution settings (all runtime.* keys)
   runtime.docker_enabled = true
   runtime.docker_image = "ubuntu:24.04"
   runtime.docker_network = "default"
-  runtime.docker_timeout = 300            # seconds
+  runtime.docker_timeout = 300
 
-  # All workspace & mount layout is defined in one array
   runtime.workspace = [
-    ".:/jaiph/workspace:rw",              # default main workspace (host "." → container "/jaiph/workspace")
-    "config:config:ro"                    # shorthand: host "config" → /jaiph/workspace/config:ro
-    # "data:/jaiph/data:ro"               # full syntax: absolute container path
+    ".:/jaiph/workspace:rw",
+    "config:config:ro"
   ]
 }
 ```
 
-**Mount parsing rules** (applied automatically):
-- Full form: `"host_path:container_path:mode"`
-- Shorthand: if `container_path` does not start with `/`, it is placed under `/jaiph/workspace/` automatically
-  (`"config:config:ro"` → `/jaiph/workspace/config:ro`, `"data:ro"` → `/jaiph/workspace/data:ro`)
-- Exactly one mount must target `/jaiph/workspace` (parser-enforced; defaults to `"./:/jaiph/workspace:rw"` if omitted).
+### Mount parsing rules
+
+- Full form: `"host_path:container_path:mode"` (3 segments split on `:`).
+- Shorthand: `"host_path:mode"` (2 segments) — mounts at `/jaiph/workspace/<host_path>` with given mode.
+- 1 segment → `E_PARSE`.
+- Mode must be `ro` or `rw` → `E_PARSE` otherwise.
+- Exactly one mount must target `/jaiph/workspace` (enforced at validation time; defaults to `".:/jaiph/workspace:rw"` if `runtime.workspace` is omitted entirely).
 - All mounts outside `/jaiph/workspace` are read-only unless `:rw` is explicit.
 
 ### Workspace structure inside the container
 
 ```
 /jaiph/
-  generated/          # transpiled bash script(s), mounted read-only
-  workspace/          # always the mount targeting /jaiph/workspace (read-write root)
+  generated/          # transpiled bash + jaiph_stdlib.sh, mounted read-only
+  workspace/          # the mount targeting /jaiph/workspace (read-write root)
     .jaiph/
       runs/
         <run-id>/
           inbox/      # transient per run — see inbox task
 ```
 
-- Generated script is always read-only.
+- `/jaiph/generated/` contains: the transpiled `.sh` script and `jaiph_stdlib.sh`. Both mounted read-only. `JAIPH_STDLIB` env var is set to `/jaiph/generated/jaiph_stdlib.sh` inside the container.
 - `.jaiph/` is auto-created and belongs in `.gitignore`.
+
+### Docker orchestration
+
+- New `src/runtime/docker.ts` module constructs the `docker run` command.
+- Called from `src/cli/run/lifecycle.ts`, replacing the direct `spawn("bash", ...)` when Docker is enabled.
+- Config values flow from the TypeScript CLI to the Docker module; no bash wrapper needed.
+- The CLI copies/symlinks `jaiph_stdlib.sh` to a temp directory alongside the transpiled script, mounts that directory read-only at `/jaiph/generated/`.
 
 ### Required behavior
 - Transpilation unchanged.
 - `docker run --rm` with proper UID/GID mapping (`--user $(id -u):$(id -g)` on Linux).
-- Works in TTY mode if TTY is available.
+- Works in TTY mode if TTY is available (detect `process.stdout.isTTY`; pass `-t` flag).
 - `CI=true` disables Docker by default unless `runtime.docker_enabled = true` is set in file (in-file wins).
-- Docker missing → clear error, no silent fallback.
+- Docker missing → clear error (`E_DOCKER_NOT_FOUND`), no silent fallback.
 - Image pulled automatically if missing; pull failure is fatal.
-- Timeout kills container with `E_TIMEOUT`.
+- Timeout kills container with `E_TIMEOUT` (use `docker kill` after timeout expires).
+- Precedence: env vars (`JAIPH_DOCKER_*`) > in-file config > defaults.
+
+### fd 3 / event forwarding
+Already solved by existing architecture. The CLI wrapper does `exec 3>&2`, and `parseStepEvent()` in `src/cli/run/events.ts` scans stderr for `__JAIPH_EVENT__` markers. Docker captures stderr by default and forwards it to the host process. No special fd forwarding needed.
+
+### Environment variable mapping
+Following existing `JAIPH_*` convention: `JAIPH_DOCKER_ENABLED`, `JAIPH_DOCKER_IMAGE`, `JAIPH_DOCKER_NETWORK`, `JAIPH_DOCKER_TIMEOUT`. Workspace mounts are not overridable via env (too complex for a single env var).
+
+### Network semantics
+`"default"` means use Docker's default behavior (omit `--network` flag entirely, uses bridge). `"none"` is supported for fully isolated containers. Any other string value is passed verbatim to `--network`.
+
+### CI behavior
+`CI=true` disables Docker by default because Docker-in-Docker is unavailable in many CI runners (GitHub Actions, GitLab shared runners). In-file `runtime.docker_enabled = true` overrides this default, so teams with DinD-capable runners can opt in explicitly.
+
+### Affected files
+- `src/runtime/docker.ts` (new) — builds `docker run` command from `RuntimeConfig`; handles mount parsing/validation, UID/GID, TTY, timeout, image pull.
+- `src/cli/run/lifecycle.ts` — conditionally call Docker module instead of direct `spawn("bash", ...)`.
+- `src/cli/commands/run.ts` — pass `RuntimeConfig` through to lifecycle; handle `JAIPH_DOCKER_*` env vars.
+- `docs/configuration.md`, `docs/cli.md` — document runtime config keys and Docker behavior.
 
 ### Acceptance criteria
-- Config parser supports all `runtime.docker_*` keys including `runtime.workspace` array and shorthand parsing.
-- Exactly one mount must target `/jaiph/workspace` (enforced at parse time).
+- Mount string parsing handles 2-segment shorthand and 3-segment full form correctly.
+- Exactly one mount must target `/jaiph/workspace` (validated before Docker invocation).
+- Container receives only transpiled bash + `jaiph_stdlib.sh`; no Jaiph source or Node.js.
+- `JAIPH_STDLIB` is set to `/jaiph/generated/jaiph_stdlib.sh` inside the container.
 - Precedence: env > in-file > defaults.
-- Unknown `runtime.docker_*` keys → `E_PARSE`.
 - Workspace writes persist with correct ownership on Linux.
-- Docs updated (`docs/configuration.md`, `docs/cli.md`).
+- TTY passthrough works when available.
+- Timeout kills container and reports `E_TIMEOUT`.
+- Docker missing → `E_DOCKER_NOT_FOUND`.
+- Image auto-pulled; pull failure is fatal.
+- `CI=true` disables Docker unless in-file override.
+- Docs updated.
 - `.jaiph/` added to scaffolded `.gitignore`.
-
-### Resolved design decisions
-
-- **Mount shorthand grammar** (was Q2): 2-segment form `"host_path:mode"` means host_path is mounted at `/jaiph/workspace/<host_path>` with the given mode; container path defaults to the host directory name under the workspace root. 3-segment form `"host_path:container_path:mode"` is the full explicit form. 1-segment is a parse error. Mode must be `ro` or `rw`.
-- **Docker orchestration** (was Q3): New `src/runtime/docker.ts` module constructs the `docker run` command and is called from `src/cli/run/lifecycle.ts`, replacing the direct `spawn("bash", ...)` when Docker is enabled. Config values flow from the TypeScript CLI to the Docker module; no bash wrapper needed.
-- **fd 3 events** (was Q4): Already solved by existing architecture. The CLI wrapper does `exec 3>&2`, and `parseStepEvent()` in `src/cli/run/events.ts` scans stderr for `__JAIPH_EVENT__` markers. Docker captures stderr by default and forwards it to the host process. No special fd forwarding is needed.
-- **Environment variable names** (was Q5): Following existing `JAIPH_*` convention: `JAIPH_DOCKER_ENABLED`, `JAIPH_DOCKER_IMAGE`, `JAIPH_DOCKER_NETWORK`, `JAIPH_DOCKER_TIMEOUT`. Workspace mounts are not overridable via env (too complex for a single env var).
-- **CI=true disables Docker** (was Q6): Rationale is that Docker-in-Docker is unavailable in many CI runners (GitHub Actions, GitLab shared runners). In-file `runtime.docker_enabled = true` overrides this default, so teams with DinD-capable runners can opt in explicitly.
-- **Network semantics** (was Q8): `"default"` means "use Docker's default behavior" (omit `--network` flag entirely, which uses bridge). `"none"` is supported for fully isolated containers. Any other string value is passed verbatim to `--network`.
-
-### Remaining blockers
-
-1. **Config parser prerequisite** — The current config parser (`src/parse/metadata.ts:parseMetadataValue()`) only supports quoted strings and booleans. This task requires bare integers (`runtime.docker_timeout = 300`) and arrays (`runtime.workspace = [...]`). **This must be implemented first as a separate task** before Docker runtime work can begin. Add a "Config parser: support integer and array value types" task above this one in the queue.
-
-=> Response: Please add a task for it before the current one
-
-2. **Scope must be split** — Even with the config parser extracted, this task spans: (a) mount string parsing and validation, (b) Docker CLI orchestration in TypeScript, (c) UID/GID mapping, (d) TTY detection and passthrough, (e) timeout/container kill logic, (f) docs. Recommend splitting into: **Task A** — Config parser extensions (integers, arrays, `runtime.*` key namespace with validation); **Task B** — Docker runtime implementation (mount parsing, orchestration, UID/GID, TTY, timeout, docs). Task A must complete before Task B.
-
-=> Response: please do. And note, this is important: docker container should receive transpilled bash only - no need for Jaiph source files and Jaiph runtime in docker container
 
 ---
 
