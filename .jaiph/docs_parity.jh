@@ -53,8 +53,22 @@ rule only_expected_docs_changed_after_prompt {
   done <<< "$after_changed_files"
 }
 
+local role="
+  You are an expert technical writer for this project.
+  1. You are fluent in Markdown and can read TypeScript code
+  2. You write for a developer audience, focusing on clarity and practical
+     examples
+  3. You are concise, specific, and value dense
+  4. Write so that a new developer to this codebase can understand your
+     writing, but don't assume your audience are experts in the topic/area you
+     are writing about.
+"
+
 workflow update_from_task {
   prompt "
+    <role>
+    $role
+    <task>
     Update relevant docs/*.md files and -- if needed -- README.md 
     and docs/index.html to reflect the changes made in the task covered in
     uncommitted changes. Update also the CHANGELOG.md file to reflect the changes
@@ -65,6 +79,9 @@ workflow update_from_task {
 
 workflow changelog {
   prompt "
+    <role>
+    $role
+    <task>
     Ensure there is a CHANGELOG.md file with a list of all features that are
     supported by the current version. It should be in the following format:
     
@@ -90,6 +107,9 @@ workflow docs_page {
   local file="$1"
 
   prompt "
+    <role>
+    $role
+    <task>
     Double check the content of $file, which describes a given concept of the
     language, runtime or a set of features:
     1. Check if it has approachable structure with overview, describing high
@@ -118,6 +138,9 @@ workflow docs_overview {
   )"
 
   prompt "
+    <role>
+    $role
+    <task>
     Read all $all_docs_files, they contain all the documentation for the 
     project. Don't read the code. Please update docs in the following way:
     1. Ensure they are consistent with each other.
@@ -125,7 +148,10 @@ workflow docs_overview {
        merge existing files, or split them into smaller files, or move
        the content between files.
     3. Ensure they are interconnected and form a coherent whole.
-    4. Navigation links between docs pages are provided by the Jekyll template
+    4. Ensure there is no misleading or reduntant information. Typically you may
+       detect some leftovers from previous versions or low level details that
+       are no longer relevant or too detailed.
+    5. Navigation links between docs pages are provided by the Jekyll template
        (docs/_layouts/docs.html). Do NOT add manual navigation blocks (like
        'More Documentation' sections) to individual markdown pages. Inline
        contextual links to other docs are fine. Links in markdown files to
@@ -133,19 +159,19 @@ workflow docs_overview {
        links in index.html should not end with .md ('configuration'). Agent
        skill URL must always be hardcoded as:
        https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md
-    5. Ensure README.md follows best practices for README files, contains the
+    6. Ensure README.md follows best practices for README files, contains the
        project description, features, installation instructions, usage examples,
        contributing guidelines, and other relevant information.
-    6. Ensure docs/index.html is consistent with README.md and other docs files.
-    7. Ensure docs/index.html and README.md have links to getting-started.md
+    7. Ensure docs/index.html is consistent with README.md and other docs files.
+    8. Ensure docs/index.html and README.md have links to getting-started.md
        page of the documentation or jaiph.org/getting-started, and the agent
        skill URL (https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md).
-    8. Knowing the whole documentation, ensure the agent skill is up to date
+    9. Knowing the whole documentation, ensure the agent skill is up to date
        and coherent with the documentation. It should be a minimal workflow set
        that supports safe feature delivery, preflight checks, implementation
        workflow, verification workflow, and a default entrypoint that
        orchestrates the above.
-    9. Ensure src/cli/shared/usage.ts is up to date with the latest CLI commands
+    10.Ensure src/cli/shared/usage.ts is up to date with the latest CLI commands
        and options. It should be a single source of truth for the CLI usage.
   "
 }
