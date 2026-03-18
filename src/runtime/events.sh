@@ -165,7 +165,15 @@ jaiph::emit_step_event() {
   fi
   # Append dispatched/channel metadata if set by inbox dispatch.
   if [[ -n "${JAIPH_DISPATCH_CHANNEL:-}" ]]; then
-    payload="${payload%\}},\"dispatched\":true,\"channel\":\"$(jaiph::json_escape "$JAIPH_DISPATCH_CHANNEL")\"}"
+    local dispatch_extra=",\"dispatched\":true,\"channel\":\"$(jaiph::json_escape "$JAIPH_DISPATCH_CHANNEL")\""
+    # Include stdout content in the event so the CLI can display it without
+    # reading the out_file (which lives inside the Docker container).
+    if [[ "$event_type" == "STEP_END" && -n "$out_file" && -f "$out_file" ]]; then
+      local out_content
+      out_content="$(<"$out_file")"
+      dispatch_extra="${dispatch_extra},\"out_content\":\"$(jaiph::json_escape "$out_content")\""
+    fi
+    payload="${payload%\}}${dispatch_extra}}"
   fi
   marker_fd="$(jaiph::event_fd)"
   printf "__JAIPH_EVENT__ %s\n" "$payload" >&"$marker_fd"
