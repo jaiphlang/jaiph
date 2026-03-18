@@ -163,6 +163,10 @@ jaiph::emit_step_event() {
       "${depth:-null}" \
       "$(jaiph::json_escape "$run_id")")"
   fi
+  # Append dispatched/channel metadata if set by inbox dispatch.
+  if [[ -n "${JAIPH_DISPATCH_CHANNEL:-}" ]]; then
+    payload="${payload%\}},\"dispatched\":true,\"channel\":\"$(jaiph::json_escape "$JAIPH_DISPATCH_CHANNEL")\"}"
+  fi
   marker_fd="$(jaiph::event_fd)"
   printf "__JAIPH_EVENT__ %s\n" "$payload" >&"$marker_fd"
   if [[ "$event_type" == "STEP_END" && -n "${JAIPH_RUN_SUMMARY_FILE:-}" ]]; then

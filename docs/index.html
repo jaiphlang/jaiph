@@ -332,6 +332,12 @@ jaiph use 0.3.0</code></pre>
                     <dt>Hooks (<code>~/.jaiph/hooks.json</code>, <code>&lt;project&gt;/.jaiph/hooks.json</code>)</dt>
                     <dd>Run custom shell commands at workflow/step lifecycle events (<code>workflow_start</code>, <code>workflow_end</code>, <code>step_start</code>, <code>step_end</code>). Project-local overrides global per event. Payload is JSON on stdin; failures are logged but do not block the run. See <a href="hooks">Hooks</a>.</dd>
 
+                    <dt><code>echo "data" -&gt; channel</code> · <code>-&gt; channel</code></dt>
+                    <dd>Sends content to a named inbox channel. The runtime dispatches messages to workflows registered via <code>on</code> route declarations. Standalone <code>-&gt; channel</code> forwards <code>$1</code>. Combining capture and send (<code>name = cmd -&gt; channel</code>) is a parse error. See <a href="inbox">Inbox &amp; Dispatch</a>.</dd>
+
+                    <dt><code>on channel -&gt; workflow</code> · <code>on channel -&gt; wf1, wf2</code></dt>
+                    <dd>Declares a static routing rule: when a message arrives on <code>channel</code>, call the target workflow(s) with the message content as <code>$1</code>. Multiple targets dispatch sequentially in declaration order. Routes are declarations, not executable steps — stored in <code>routes</code>, not <code>steps</code>. The dispatch queue drains after the orchestrator completes; max depth 100 guards against circular sends. See <a href="inbox">Inbox &amp; Dispatch</a>.</dd>
+
                     <dt><code>mock prompt "..."</code></dt>
                     <dd>In a test, stubs the next <code>prompt</code> call to return the given string instead of calling the agent.</dd>
 
@@ -363,6 +369,8 @@ jaiph use 0.3.0</code></pre>
                     <a href="cli">CLI reference</a>
                     ·
                     <a href="hooks">Hooks</a>
+                    ·
+                    <a href="inbox">Inbox &amp; Dispatch</a>
                 </p>
             </div>
         </section>

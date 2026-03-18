@@ -201,6 +201,10 @@ See [cli.md](cli.md) for command syntax, examples, environment variables, and li
 
 - **Agent prompts** — `prompt "..."` sends text to the configured agent command. Variable expansion (`$1`, `${VAR}`) is allowed in the string; command substitution (`$(...)`) and backticks are rejected at parse time. Optional **typed prompt:** `name = prompt "..." returns '{ field: type, ... }'` validates the agent's JSON response (flat schema; types `string`, `number`, `boolean`) and exports `$name` (raw JSON) plus `$name_field` for each field; invalid JSON or schema violation fails the step. See [Grammar](grammar.md).
 
+- **Send operator** — `echo "data" -> channel` sends content to a named inbox channel; standalone `-> channel` forwards `$1`. The runtime dispatches to workflows registered with `on` routes. See [Inbox & Dispatch](inbox.md).
+
+- **Route declaration** — `on channel -> workflow` registers a static routing rule: when a message arrives on `channel`, call `workflow` with the message as `$1`. Multiple targets (`on ch -> wf1, wf2`) dispatch sequentially. Routes are declarations, not executable steps. See [Inbox & Dispatch](inbox.md).
+
 - **Assignment capture for any step** — `name = ensure ref`, `name = run ref`, and `name = <shell_command>` capture that step's stdout into `name`. Only stdout is captured; stderr is not included unless the command redirects it (e.g. `2>&1`). If the command fails, the step fails unless you add explicit short-circuiting (e.g. `|| true`). See [Grammar](grammar.md).
 
 

@@ -79,6 +79,8 @@ source "${_jaiph_runtime_dir}/runtime/events.sh"
 source "${_jaiph_runtime_dir}/runtime/test-mode.sh"
 # shellcheck source=src/runtime/steps.sh
 source "${_jaiph_runtime_dir}/runtime/steps.sh"
+# shellcheck source=src/runtime/inbox.sh
+source "${_jaiph_runtime_dir}/runtime/inbox.sh"
 # shellcheck source=src/runtime/prompt.sh
 source "${_jaiph_runtime_dir}/runtime/prompt.sh"
 # shellcheck source=src/runtime/sandbox.sh

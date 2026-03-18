@@ -26,10 +26,17 @@ export interface RuleDef {
   loc: SourceLoc;
 }
 
+export interface WorkflowRouteDef {
+  channel: string;
+  workflows: WorkflowRefDef[];
+  loc: SourceLoc;
+}
+
 export interface WorkflowDef {
   name: string;
   comments: string[];
   steps: WorkflowStepDef[];
+  routes?: WorkflowRouteDef[];
   loc: SourceLoc;
 }
 
@@ -152,6 +159,12 @@ export type WorkflowStepDef =
   | {
       type: "log";
       message: string;
+      loc: SourceLoc;
+    }
+  | {
+      type: "send";
+      command: string;
+      channel: string;
       loc: SourceLoc;
     };
 

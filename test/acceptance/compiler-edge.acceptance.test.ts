@@ -727,3 +727,89 @@ test.skip("ACCEPTANCE: jaiph test typed prompt — wrong type fails with type er
     assert.match(err, /expected string|got number|type.*mismatch/i);
   });
 });
+
+// === Inbox / send operator / on route acceptance tests ===
+
+test("ACCEPTANCE: on route with unknown workflow fails E_VALIDATE", () => {
+  withTempDir("jaiph-acc-on-route-unknown-wf-", (root) => {
+    writeFileSync(
+      join(root, "main.jh"),
+      [
+        "workflow default {",
+        "  on findings -> missing_wf",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(() => build(root), /E_VALIDATE unknown local workflow reference "missing_wf"/);
+  });
+});
+
+test("ACCEPTANCE: on route with rule ref fails E_VALIDATE", () => {
+  withTempDir("jaiph-acc-on-route-rule-ref-", (root) => {
+    writeFileSync(
+      join(root, "main.jh"),
+      [
+        "rule check {",
+        "  true",
+        "}",
+        "workflow default {",
+        "  on findings -> check",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(() => build(root), /E_VALIDATE rule "check" must be called with ensure/);
+  });
+});
+
+test("ACCEPTANCE: capture + send is parse error", () => {
+  withTempDir("jaiph-acc-capture-send-", (root) => {
+    writeFileSync(
+      join(root, "main.jh"),
+      [
+        "workflow default {",
+        "  name = echo hello -> channel",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(() => build(root), /capture and send cannot be combined/);
+  });
+});
+
+test("ACCEPTANCE: inbox.jh fixture builds successfully", () => {
+  withTempDir("jaiph-acc-inbox-fixture-", (root) => {
+    writeFileSync(
+      join(root, "inbox.jh"),
+      [
+        "workflow researcher {",
+        "  echo '## findings' -> findings",
+        "}",
+        "",
+        "workflow analyst {",
+        '  echo "$1" > findings_file.md',
+        '  summary = echo "Summary of findings"',
+        '  echo "$summary" -> summary',
+        "}",
+        "",
+        "workflow reviewer {",
+        '  echo "[reviewed] $1" -> final_summary',
+        "}",
+        "",
+        "workflow default {",
+        "  run researcher",
+        "  on findings -> analyst",
+        "  on summary -> reviewer",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const output = build(join(root, "inbox.jh"), join(root, "out"));
+    assert.equal(output.length, 1);
+    assert.match(output[0].bash, /jaiph::inbox_init/);
+    assert.match(output[0].bash, /jaiph::register_route/);
+    assert.match(output[0].bash, /jaiph::drain_queue/);
+    assert.match(output[0].bash, /jaiph::send/);
+  });
+});
