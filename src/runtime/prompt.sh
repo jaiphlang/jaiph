@@ -295,7 +295,7 @@ jaiph::prompt_impl() {
 }
 
 jaiph::prompt() {
-  jaiph::run_step jaiph::prompt jaiph::prompt_impl "$@"
+  jaiph::run_step jaiph::prompt prompt jaiph::prompt_impl "$@"
 }
 
 jaiph::prompt_capture() {

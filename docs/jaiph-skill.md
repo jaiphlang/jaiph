@@ -71,6 +71,8 @@ Rules:
 - Inside a workflow, `run` targets a workflow (local or `alias.workflow_name`), not a raw shell command.
 - Inside a rule, only `ensure` and shell commands are allowed; `run` is forbidden. Use `ensure` to call another rule, or move the call to a workflow.
 - Rules run in a read-only wrapper; put mutating operations in workflows.
+- **Unified namespace:** Rules, workflows, and functions share a single name space per module. Using the same name for two items (e.g. a rule `foo` and a workflow `foo`) is a compile error (`E_PARSE`).
+- **Calling conventions (compiler-enforced):** `ensure` must target a rule — using it on a workflow or function is `E_VALIDATE`. `run` must target a workflow — using it on a rule or function is `E_VALIDATE`. Functions are called directly by name in shell context.
 
 ## Authoring Heuristics
 

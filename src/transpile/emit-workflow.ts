@@ -23,20 +23,28 @@ function parseParamKeysFromArgs(args: string): string[] | null {
   return matches.map((m) => m[1]);
 }
 
+function transpileRef(
+  refValue: string,
+  workflowSymbol: string,
+  importedWorkflowSymbols: Map<string, string>,
+): string {
+  const parts = refValue.split(".");
+  if (parts.length === 1) {
+    return `${workflowSymbol}::${parts[0]}`;
+  }
+  if (parts.length === 2) {
+    const importedSymbol = importedWorkflowSymbols.get(parts[0]) ?? parts[0];
+    return `${importedSymbol}::${parts[1]}`;
+  }
+  throw new Error(`ValidationError: invalid reference "${refValue}"`);
+}
+
 function transpileRuleRef(
   ref: RuleRefDef,
   workflowSymbol: string,
   importedWorkflowSymbols: Map<string, string>,
 ): string {
-  const parts = ref.value.split(".");
-  if (parts.length === 1) {
-    return `${workflowSymbol}::rule::${parts[0]}`;
-  }
-  if (parts.length === 2) {
-    const importedSymbol = importedWorkflowSymbols.get(parts[0]) ?? parts[0];
-    return `${importedSymbol}::rule::${parts[1]}`;
-  }
-  throw new Error(`ValidationError: invalid rule reference "${ref.value}"`);
+  return transpileRef(ref.value, workflowSymbol, importedWorkflowSymbols);
 }
 
 function transpileWorkflowRef(
@@ -44,23 +52,15 @@ function transpileWorkflowRef(
   workflowSymbol: string,
   importedWorkflowSymbols: Map<string, string>,
 ): string {
-  const parts = ref.value.split(".");
-  if (parts.length === 1) {
-    return `${workflowSymbol}::workflow::${parts[0]}`;
-  }
-  if (parts.length === 2) {
-    const importedSymbol = importedWorkflowSymbols.get(parts[0]) ?? parts[0];
-    return `${importedSymbol}::workflow::${parts[1]}`;
-  }
-  throw new Error(`ValidationError: invalid workflow reference "${ref.value}"`);
+  return transpileRef(ref.value, workflowSymbol, importedWorkflowSymbols);
 }
 
 /**
- * Replace `alias.func_name` patterns in shell commands with
- * the fully-qualified bash symbol (`symbol::function::func_name`).
+ * Replace `alias.name` patterns in shell commands with
+ * the fully-qualified bash symbol (`symbol::name`).
  * Only aliases present in importedWorkflowSymbols are rewritten.
  */
-function resolveShellFunctionRefs(
+function resolveShellRefs(
   command: string,
   importedWorkflowSymbols: Map<string, string>,
 ): string {
@@ -69,7 +69,7 @@ function resolveShellFunctionRefs(
       `(?<![A-Za-z0-9_])${alias}\\.([A-Za-z_][A-Za-z0-9_]*)`,
       "g",
     );
-    command = command.replace(pattern, `${symbol}::function::$1`);
+    command = command.replace(pattern, `${symbol}::$1`);
   }
   return command;
 }
@@ -410,7 +410,7 @@ export function emitWorkflow(
   }
 
   for (const rule of ast.rules) {
-    const ruleSymbol = `${workflowSymbol}::rule::${rule.name}`;
+    const ruleSymbol = `${workflowSymbol}::${rule.name}`;
     for (const comment of rule.comments) {
       out.push(comment);
     }
@@ -440,7 +440,7 @@ export function emitWorkflow(
             `  ${transpileRuleRef(ref, workflowSymbol, importedWorkflowSymbols)}${args ? ` ${args}` : ""}`,
           );
         } else {
-          out.push(`  ${resolveShellFunctionRefs(cmd, importedWorkflowSymbols)}`);
+          out.push(`  ${resolveShellRefs(cmd, importedWorkflowSymbols)}`);
         }
       }
     }
@@ -449,17 +449,17 @@ export function emitWorkflow(
     out.push(`${ruleSymbol}() {`);
     if (scopedMetadataAssignments.length > 0) {
       out.push(
-        `  ${workflowSymbol}::with_metadata_scope jaiph::run_step ${ruleSymbol} jaiph::execute_readonly ${ruleSymbol}::impl "$@"`,
+        `  ${workflowSymbol}::with_metadata_scope jaiph::run_step ${ruleSymbol} rule jaiph::execute_readonly ${ruleSymbol}::impl "$@"`,
       );
     } else {
-      out.push(`  jaiph::run_step ${ruleSymbol} jaiph::execute_readonly ${ruleSymbol}::impl "$@"`);
+      out.push(`  jaiph::run_step ${ruleSymbol} rule jaiph::execute_readonly ${ruleSymbol}::impl "$@"`);
     }
     out.push("}");
     out.push("");
   }
 
   for (const fn of ast.functions) {
-    const functionSymbol = `${workflowSymbol}::function::${fn.name}`;
+    const functionSymbol = `${workflowSymbol}::${fn.name}`;
     for (const comment of fn.comments) {
       out.push(comment);
     }
@@ -470,7 +470,7 @@ export function emitWorkflow(
       out.push("  :");
     } else {
       for (const cmd of fn.commands) {
-        out.push(`  ${resolveShellFunctionRefs(cmd, importedWorkflowSymbols)}`);
+        out.push(`  ${resolveShellRefs(cmd, importedWorkflowSymbols)}`);
       }
     }
     out.push("}");
@@ -478,10 +478,10 @@ export function emitWorkflow(
     out.push(`${functionSymbol}() {`);
     if (scopedMetadataAssignments.length > 0) {
       out.push(
-        `  ${workflowSymbol}::with_metadata_scope jaiph::run_step_passthrough ${functionSymbol} ${functionSymbol}::impl "$@"`,
+        `  ${workflowSymbol}::with_metadata_scope jaiph::run_step_passthrough ${functionSymbol} function ${functionSymbol}::impl "$@"`,
       );
     } else {
-      out.push(`  jaiph::run_step_passthrough ${functionSymbol} ${functionSymbol}::impl "$@"`);
+      out.push(`  jaiph::run_step_passthrough ${functionSymbol} function ${functionSymbol}::impl "$@"`);
     }
     out.push("}");
     out.push("");
@@ -553,7 +553,7 @@ function emitEnsureRecoverLoop(
         return;
       }
       if (recoverStep.type === "shell") {
-        const resolved = resolveShellFunctionRefs(recoverStep.command, importedWorkflowSymbols);
+        const resolved = resolveShellRefs(recoverStep.command, importedWorkflowSymbols);
         if (recoverStep.captureName) {
           out.push(`${indent}${recoverStep.captureName}=$(${resolved})`);
         } else {
@@ -565,7 +565,7 @@ function emitEnsureRecoverLoop(
     for (const comment of workflow.comments) {
       out.push(comment);
     }
-    out.push(`${workflowSymbol}::workflow::${workflow.name}::impl() {`);
+    out.push(`${workflowSymbol}::${workflow.name}::impl() {`);
     out.push("  set -eo pipefail");
     out.push("  set +u");
     if (workflow.steps.length === 0) {
@@ -610,7 +610,7 @@ function emitEnsureRecoverLoop(
           continue;
         }
         if (step.type === "shell") {
-          const resolved = resolveShellFunctionRefs(step.command, importedWorkflowSymbols);
+          const resolved = resolveShellRefs(step.command, importedWorkflowSymbols);
           if (step.captureName) {
             out.push(`  ${step.captureName}=$(${resolved})`);
           } else {
@@ -668,7 +668,7 @@ function emitEnsureRecoverLoop(
                 continue;
               }
               if (thenStep.type === "shell") {
-                const resolved = resolveShellFunctionRefs(thenStep.command, importedWorkflowSymbols);
+                const resolved = resolveShellRefs(thenStep.command, importedWorkflowSymbols);
                 if (thenStep.captureName) {
                   out.push(`${indent}${thenStep.captureName}=$(${resolved})`);
                 } else {
@@ -687,11 +687,11 @@ function emitEnsureRecoverLoop(
           continue;
         }
         if (step.type === "if_not_shell_then") {
-          const resolvedCondition = resolveShellFunctionRefs(step.condition, importedWorkflowSymbols);
+          const resolvedCondition = resolveShellRefs(step.condition, importedWorkflowSymbols);
           out.push(`  if ! ${resolvedCondition}; then`);
           for (const thenStep of step.thenSteps) {
             if (thenStep.type === "shell") {
-              out.push(`    ${resolveShellFunctionRefs(thenStep.command, importedWorkflowSymbols)}`);
+              out.push(`    ${resolveShellRefs(thenStep.command, importedWorkflowSymbols)}`);
             } else {
               const args = thenStep.args ? ` ${thenStep.args}` : "";
               const paramKeys = thenStep.args ? parseParamKeysFromArgs(thenStep.args) : null;
@@ -712,7 +712,7 @@ function emitEnsureRecoverLoop(
             `  if ! ${transpileRuleRef(step.ensureRef, workflowSymbol, importedWorkflowSymbols)}${ensureArgs}; then`,
           );
           for (const { command } of step.commands) {
-            out.push(`    ${resolveShellFunctionRefs(command, importedWorkflowSymbols)}`);
+            out.push(`    ${resolveShellRefs(command, importedWorkflowSymbols)}`);
           }
           out.push("  fi");
           continue;
@@ -721,14 +721,14 @@ function emitEnsureRecoverLoop(
     }
     out.push("}");
     out.push("");
-    out.push(`${workflowSymbol}::workflow::${workflow.name}() {`);
+    out.push(`${workflowSymbol}::${workflow.name}() {`);
     if (scopedMetadataAssignments.length > 0) {
       out.push(
-        `  ${workflowSymbol}::with_metadata_scope jaiph::run_step ${workflowSymbol}::workflow::${workflow.name} ${workflowSymbol}::workflow::${workflow.name}::impl "$@"`,
+        `  ${workflowSymbol}::with_metadata_scope jaiph::run_step ${workflowSymbol}::${workflow.name} workflow ${workflowSymbol}::${workflow.name}::impl "$@"`,
       );
     } else {
       out.push(
-        `  jaiph::run_step ${workflowSymbol}::workflow::${workflow.name} ${workflowSymbol}::workflow::${workflow.name}::impl "$@"`,
+        `  jaiph::run_step ${workflowSymbol}::${workflow.name} workflow ${workflowSymbol}::${workflow.name}::impl "$@"`,
       );
     }
     out.push("}");

@@ -94,5 +94,29 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
     fail(filePath, `unsupported top-level statement: ${line}`, lineNo);
   }
 
+  // Unified namespace: rules, workflows, and functions share a single name space.
+  const seen = new Map<string, string>();
+  for (const r of mod.rules) {
+    const prev = seen.get(r.name);
+    if (prev) {
+      fail(filePath, `duplicate name "${r.name}" — rules, workflows, and functions share a single namespace (already declared as ${prev})`, r.loc.line, r.loc.col);
+    }
+    seen.set(r.name, "rule");
+  }
+  for (const fn of mod.functions) {
+    const prev = seen.get(fn.name);
+    if (prev) {
+      fail(filePath, `duplicate name "${fn.name}" — rules, workflows, and functions share a single namespace (already declared as ${prev})`, fn.loc.line, fn.loc.col);
+    }
+    seen.set(fn.name, "function");
+  }
+  for (const w of mod.workflows) {
+    const prev = seen.get(w.name);
+    if (prev) {
+      fail(filePath, `duplicate name "${w.name}" — rules, workflows, and functions share a single namespace (already declared as ${prev})`, w.loc.line, w.loc.col);
+    }
+    seen.set(w.name, "workflow");
+  }
+
   return mod;
 }

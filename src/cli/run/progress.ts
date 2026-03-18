@@ -106,10 +106,10 @@ export function collectWorkflowChildren(
               const dot = wf.indexOf(".");
               const alias = wf.slice(0, dot);
               const name = wf.slice(dot + 1);
-              return `${symbols.get(alias) ?? alias}::workflow::${name}`;
+              return `${symbols.get(alias) ?? alias}::${name}`;
             })()
           : currentSymbol
-            ? `${currentSymbol}::workflow::${wf}`
+            ? `${currentSymbol}::${wf}`
             : undefined;
       return [{ label: `workflow ${wf}`, nested: wf, stepFunc }];
     }
@@ -121,10 +121,10 @@ export function collectWorkflowChildren(
               const dot = ref.indexOf(".");
               const alias = ref.slice(0, dot);
               const name = ref.slice(dot + 1);
-              return `${symbols.get(alias) ?? alias}::rule::${name}`;
+              return `${symbols.get(alias) ?? alias}::${name}`;
             })()
           : currentSymbol
-            ? `${currentSymbol}::rule::${ref}`
+            ? `${currentSymbol}::${ref}`
             : undefined;
       const arr: Array<{ label: string; nested?: string; stepFunc?: string }> = [
         { label: `rule ${ref}`, stepFunc },
@@ -146,7 +146,7 @@ export function collectWorkflowChildren(
     if (s.type === "shell") {
       return collectFunctionCalls(s.command).map((fnName) => ({
         label: `function ${fnName}`,
-        stepFunc: currentSymbol ? `${currentSymbol}::function::${fnName}` : undefined,
+        stepFunc: currentSymbol ? `${currentSymbol}::${fnName}` : undefined,
       }));
     }
     return [];
@@ -164,10 +164,10 @@ export function collectWorkflowChildren(
               const dot = wf.indexOf(".");
               const alias = wf.slice(0, dot);
               const name = wf.slice(dot + 1);
-              return `${symbols.get(alias) ?? alias}::workflow::${name}`;
+              return `${symbols.get(alias) ?? alias}::${name}`;
             })()
           : currentSymbol
-            ? `${currentSymbol}::workflow::${wf}`
+            ? `${currentSymbol}::${wf}`
             : undefined;
       items.push({ label: `workflow ${wf}`, nested: wf, stepFunc });
       continue;
@@ -180,10 +180,10 @@ export function collectWorkflowChildren(
               const dot = ensureRef.indexOf(".");
               const alias = ensureRef.slice(0, dot);
               const name = ensureRef.slice(dot + 1);
-              return `${symbols.get(alias) ?? alias}::rule::${name}`;
+              return `${symbols.get(alias) ?? alias}::${name}`;
             })()
           : currentSymbol
-            ? `${currentSymbol}::rule::${ensureRef}`
+            ? `${currentSymbol}::${ensureRef}`
             : undefined;
       items.push({ label: `rule ${ensureRef}`, stepFunc: ensureStepFunc });
       for (const runStep of step.runWorkflows) {
@@ -194,10 +194,10 @@ export function collectWorkflowChildren(
                 const dot = wf.indexOf(".");
                 const alias = wf.slice(0, dot);
                 const name = wf.slice(dot + 1);
-                return `${symbols.get(alias) ?? alias}::workflow::${name}`;
+                return `${symbols.get(alias) ?? alias}::${name}`;
               })()
             : currentSymbol
-              ? `${currentSymbol}::workflow::${wf}`
+              ? `${currentSymbol}::${wf}`
               : undefined;
         items.push({ label: `workflow ${wf}`, nested: wf, stepFunc: runStepFunc });
       }
@@ -211,10 +211,10 @@ export function collectWorkflowChildren(
               const dot = ensureRef.indexOf(".");
               const alias = ensureRef.slice(0, dot);
               const name = ensureRef.slice(dot + 1);
-              return `${symbols.get(alias) ?? alias}::rule::${name}`;
+              return `${symbols.get(alias) ?? alias}::${name}`;
             })()
           : currentSymbol
-            ? `${currentSymbol}::rule::${ensureRef}`
+            ? `${currentSymbol}::${ensureRef}`
             : undefined;
       items.push({ label: `rule ${ensureRef}`, stepFunc: ensureStepFunc });
       for (const thenStep of step.thenSteps) {
@@ -226,10 +226,10 @@ export function collectWorkflowChildren(
                   const dot = wf.indexOf(".");
                   const alias = wf.slice(0, dot);
                   const name = wf.slice(dot + 1);
-                  return `${symbols.get(alias) ?? alias}::workflow::${name}`;
+                  return `${symbols.get(alias) ?? alias}::${name}`;
                 })()
               : currentSymbol
-                ? `${currentSymbol}::workflow::${wf}`
+                ? `${currentSymbol}::${wf}`
                 : undefined;
           items.push({ label: `workflow ${wf}`, nested: wf, stepFunc: runStepFunc });
           continue;
@@ -239,7 +239,7 @@ export function collectWorkflowChildren(
           continue;
         }
         for (const fnName of collectFunctionCalls(thenStep.command)) {
-          const stepFunc = currentSymbol ? `${currentSymbol}::function::${fnName}` : undefined;
+          const stepFunc = currentSymbol ? `${currentSymbol}::${fnName}` : undefined;
           items.push({ label: `function ${fnName}`, stepFunc });
         }
       }
@@ -255,10 +255,10 @@ export function collectWorkflowChildren(
                   const dot = wf.indexOf(".");
                   const alias = wf.slice(0, dot);
                   const name = wf.slice(dot + 1);
-                  return `${symbols.get(alias) ?? alias}::workflow::${name}`;
+                  return `${symbols.get(alias) ?? alias}::${name}`;
                 })()
               : currentSymbol
-                ? `${currentSymbol}::workflow::${wf}`
+                ? `${currentSymbol}::${wf}`
                 : undefined;
           items.push({ label: `workflow ${wf}`, nested: wf, stepFunc: runStepFunc });
         }
@@ -273,10 +273,10 @@ export function collectWorkflowChildren(
               const dot = ref.indexOf(".");
               const alias = ref.slice(0, dot);
               const name = ref.slice(dot + 1).replace(/\./g, "_");
-              return `${symbols.get(alias) ?? alias}::rule::${name}`;
+              return `${symbols.get(alias) ?? alias}::${name}`;
             })()
           : currentSymbol
-            ? `${currentSymbol}::rule::${ref}`
+            ? `${currentSymbol}::${ref}`
             : undefined;
       items.push({ label: `rule ${ref}`, stepFunc });
       continue;
@@ -291,7 +291,7 @@ export function collectWorkflowChildren(
     }
     if (step.type === "shell") {
       for (const fnName of collectFunctionCalls(step.command)) {
-        const stepFunc = currentSymbol ? `${currentSymbol}::function::${fnName}` : undefined;
+        const stepFunc = currentSymbol ? `${currentSymbol}::${fnName}` : undefined;
         items.push({ label: `function ${fnName}`, stepFunc });
       }
     }

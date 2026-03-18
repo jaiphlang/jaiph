@@ -184,7 +184,8 @@ jaiph::mock_script_for_symbol() {
 
 jaiph::run_step() {
   local func_name="$1"
-  shift || true
+  local step_kind="${2:-}"
+  shift 2 || shift || true
   if [[ -z "$func_name" ]]; then
     jaiph__die "jaiph::run_step requires a function name"
     return 1
@@ -214,7 +215,7 @@ jaiph::run_step() {
   jaiph::step_stack_push "$step_id"
   local step_params_json
   step_params_json="$(jaiph::step_params_json "$@")"
-  jaiph::emit_step_event "STEP_START" "$func_name" "" "" "" "" "$step_id" "$parent_id" "$step_seq" "$depth" "${JAIPH_RUN_ID:-}" "$step_params_json"
+  jaiph::emit_step_event "STEP_START" "$func_name" "" "" "" "" "$step_id" "$parent_id" "$step_seq" "$depth" "${JAIPH_RUN_ID:-}" "$step_params_json" "$step_kind"
   unset JAIPH_STEP_PARAM_KEYS 2>/dev/null || true
   had_errexit=0
   case "$-" in
@@ -275,7 +276,7 @@ jaiph::run_step() {
   jaiph::track_output_files "$out_file" "$err_file"
   step_elapsed_seconds="$((SECONDS - step_started_seconds))"
   elapsed_ms="$((step_elapsed_seconds * 1000))"
-  jaiph::emit_step_event "STEP_END" "$func_name" "$status" "$elapsed_ms" "$out_file" "$err_file" "$step_id" "$parent_id" "$step_seq" "$depth" "${JAIPH_RUN_ID:-}" ""
+  jaiph::emit_step_event "STEP_END" "$func_name" "$status" "$elapsed_ms" "$out_file" "$err_file" "$step_id" "$parent_id" "$step_seq" "$depth" "${JAIPH_RUN_ID:-}" "" "$step_kind"
   jaiph::step_stack_pop
   # In test mode, emit step output so test capture (e.g. response = w.default) can read it.
   # In normal runs, step output stays only in .out files.
@@ -298,7 +299,8 @@ jaiph::run_step() {
 # Variant that preserves command stdout/stderr while still emitting step events.
 jaiph::run_step_passthrough() {
   local func_name="$1"
-  shift || true
+  local step_kind="${2:-}"
+  shift 2 || shift || true
   if [[ -z "$func_name" ]]; then
     jaiph__die "jaiph::run_step_passthrough requires a function name"
     return 1
@@ -319,7 +321,7 @@ jaiph::run_step_passthrough() {
   jaiph::step_stack_push "$step_id"
   local step_params_json
   step_params_json="$(jaiph::step_params_json "$@")"
-  jaiph::emit_step_event "STEP_START" "$func_name" "" "" "" "" "$step_id" "$parent_id" "$step_seq" "$depth" "${JAIPH_RUN_ID:-}" "$step_params_json"
+  jaiph::emit_step_event "STEP_START" "$func_name" "" "" "" "" "$step_id" "$parent_id" "$step_seq" "$depth" "${JAIPH_RUN_ID:-}" "$step_params_json" "$step_kind"
   unset JAIPH_STEP_PARAM_KEYS 2>/dev/null || true
   had_errexit=0
   case "$-" in
@@ -340,7 +342,7 @@ jaiph::run_step_passthrough() {
   fi
   step_elapsed_seconds="$((SECONDS - step_started_seconds))"
   elapsed_ms="$((step_elapsed_seconds * 1000))"
-  jaiph::emit_step_event "STEP_END" "$func_name" "$status" "$elapsed_ms" "" "" "$step_id" "$parent_id" "$step_seq" "$depth" "${JAIPH_RUN_ID:-}" ""
+  jaiph::emit_step_event "STEP_END" "$func_name" "$status" "$elapsed_ms" "" "" "$step_id" "$parent_id" "$step_seq" "$depth" "${JAIPH_RUN_ID:-}" "" "$step_kind"
   jaiph::step_stack_pop
   return "$status"
 }

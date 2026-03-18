@@ -24,20 +24,12 @@ jaiph::json_escape() {
 
 jaiph::step_identity() {
   local func_name="$1"
-  local name
-  if [[ "$func_name" == *"::workflow::"* ]]; then
-    name="${func_name##*::workflow::}"
-    printf "workflow|%s" "${name%::impl}"
-    return 0
-  fi
-  if [[ "$func_name" == *"::rule::"* ]]; then
-    name="${func_name##*::rule::}"
-    printf "rule|%s" "${name%::impl}"
-    return 0
-  fi
-  if [[ "$func_name" == *"::function::"* ]]; then
-    name="${func_name##*::function::}"
-    printf "function|%s" "${name%::impl}"
+  local kind="${2:-}"
+  if [[ -n "$kind" ]]; then
+    # Kind is passed explicitly by the compiler; extract name from flat symbol.
+    local name="${func_name##*::}"
+    name="${name%::impl}"
+    printf "%s|%s" "$kind" "$name"
     return 0
   fi
   if [[ "$func_name" == "jaiph::prompt" ]]; then
@@ -119,6 +111,7 @@ jaiph::emit_step_event() {
   local depth="${10:-}"
   local run_id="${11:-${JAIPH_RUN_ID:-}}"
   local params_json="${12:-}"
+  local step_kind="${13:-}"
   local timestamp kind name payload marker_fd parent_json had_xtrace
   had_xtrace=0
   case "$-" in
@@ -128,7 +121,7 @@ jaiph::emit_step_event() {
     set +x
   fi
   local step_identity
-  step_identity="$(jaiph::step_identity "$func_name")"
+  step_identity="$(jaiph::step_identity "$func_name" "$step_kind")"
   kind="${step_identity%%|*}"
   name="${step_identity#*|}"
   timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"

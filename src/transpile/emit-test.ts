@@ -9,40 +9,16 @@ function sanitizeSymbolForFile(symbol: string): string {
   return symbol.replace(/[^a-zA-Z0-9_.-]/g, "_");
 }
 
-function refToWorkflowSymbol(ref: string, importedWorkflowSymbols: Map<string, string>): string {
+function refToSymbol(ref: string, importedWorkflowSymbols: Map<string, string>): string {
   const parts = ref.split(".");
   if (parts.length === 1) {
     const sym = Array.from(importedWorkflowSymbols.values())[0];
-    return `${sym ?? ref}::workflow::${parts[0]}`;
+    return `${sym ?? ref}::${parts[0]}`;
   }
   const alias = parts[0];
   const name = parts[1];
   const sym = importedWorkflowSymbols.get(alias) ?? alias;
-  return `${sym}::workflow::${name}`;
-}
-
-function refToRuleSymbol(ref: string, importedWorkflowSymbols: Map<string, string>): string {
-  const parts = ref.split(".");
-  if (parts.length === 1) {
-    const sym = Array.from(importedWorkflowSymbols.values())[0];
-    return `${sym ?? ref}::rule::${parts[0]}`;
-  }
-  const alias = parts[0];
-  const name = parts[1];
-  const sym = importedWorkflowSymbols.get(alias) ?? alias;
-  return `${sym}::rule::${name}`;
-}
-
-function refToFunctionSymbol(ref: string, importedWorkflowSymbols: Map<string, string>): string {
-  const parts = ref.split(".");
-  if (parts.length === 1) {
-    const sym = Array.from(importedWorkflowSymbols.values())[0];
-    return `${sym ?? ref}::function::${parts[0]}`;
-  }
-  const alias = parts[0];
-  const name = parts[1];
-  const sym = importedWorkflowSymbols.get(alias) ?? alias;
-  return `${sym}::function::${name}`;
+  return `${sym}::${name}`;
 }
 
 function emitMockDispatchScript(
@@ -116,12 +92,7 @@ export function emitTest(
     if (symbolMocks.length > 0) {
       out.push(`  jaiph__mock_dir=$(mktemp -d)`);
       for (const mock of symbolMocks) {
-        const symbol =
-          mock.type === "test_mock_workflow"
-            ? refToWorkflowSymbol(mock.ref, importedWorkflowSymbols)
-            : mock.type === "test_mock_rule"
-              ? refToRuleSymbol(mock.ref, importedWorkflowSymbols)
-              : refToFunctionSymbol(mock.ref, importedWorkflowSymbols);
+        const symbol = refToSymbol(mock.ref, importedWorkflowSymbols);
         const safeName = sanitizeSymbolForFile(symbol);
         out.push(`  cat > "$jaiph__mock_dir/${safeName}" << 'JAIPH_MOCK_SCRIPT_EOF'`);
         out.push("#!/usr/bin/env bash");
@@ -169,7 +140,7 @@ export function emitTest(
         continue;
       }
       if (step.type === "test_run_workflow") {
-        const workflowSymbol = refToWorkflowSymbol(step.workflowRef, importedWorkflowSymbols);
+        const workflowSymbol = refToSymbol(step.workflowRef, importedWorkflowSymbols);
         if (!hasMockBlock) {
           out.push(`  export JAIPH_MOCK_RESPONSES_FILE="$jaiph__mock_file"`);
         }
