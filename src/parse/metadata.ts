@@ -10,9 +10,31 @@ const ALLOWED_KEYS = new Set([
   "agent.claude_flags",
   "run.logs_dir",
   "run.debug",
+  "runtime.docker_enabled",
+  "runtime.docker_image",
+  "runtime.docker_network",
+  "runtime.docker_timeout",
+  "runtime.workspace",
 ]);
 
-function parseMetadataValue(filePath: string, rawLine: string, valuePart: string, lineNo: number): string | boolean {
+/** Expected value type for each key that needs type validation. */
+const KEY_TYPES: Record<string, "string" | "boolean" | "number" | "string[]"> = {
+  "agent.default_model": "string",
+  "agent.command": "string",
+  "agent.backend": "string",
+  "agent.trusted_workspace": "string",
+  "agent.cursor_flags": "string",
+  "agent.claude_flags": "string",
+  "run.logs_dir": "string",
+  "run.debug": "boolean",
+  "runtime.docker_enabled": "boolean",
+  "runtime.docker_image": "string",
+  "runtime.docker_network": "string",
+  "runtime.docker_timeout": "number",
+  "runtime.workspace": "string[]",
+};
+
+function parseMetadataValue(filePath: string, rawLine: string, valuePart: string, lineNo: number): string | boolean | number | string[] {
   const trimmed = valuePart.trim();
   if (trimmed === "true") {
     return true;
@@ -20,11 +42,89 @@ function parseMetadataValue(filePath: string, rawLine: string, valuePart: string
   if (trimmed === "false") {
     return false;
   }
+  if (/^[0-9]+$/.test(trimmed)) {
+    return Number(trimmed);
+  }
+  if (trimmed === "[]") {
+    return [];
+  }
   if ((trimmed.startsWith(`"`) && trimmed.endsWith(`"`)) || (trimmed.startsWith(`'`) && trimmed.endsWith(`'`))) {
     return trimmed.slice(1, -1).replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, `"`).replace(/\\\\/g, `\\`);
   }
   const col = rawLine.indexOf(valuePart) >= 0 ? colFromRaw(rawLine) : 1;
   return fail(filePath, `config value must be a quoted string or true/false: ${trimmed}`, lineNo, col);
+}
+
+function validateKeyType(
+  filePath: string,
+  key: string,
+  value: string | boolean | number | string[],
+  lineNo: number,
+  raw: string,
+): void {
+  const expected = KEY_TYPES[key];
+  if (!expected) return;
+
+  if (expected === "string" && typeof value !== "string") {
+    return fail(filePath, `${key} must be a string`, lineNo, colFromRaw(raw));
+  }
+  if (expected === "boolean" && typeof value !== "boolean") {
+    return fail(filePath, `${key} must be true or false`, lineNo, colFromRaw(raw));
+  }
+  if (expected === "number" && typeof value !== "number") {
+    return fail(filePath, `${key} must be an integer`, lineNo, colFromRaw(raw));
+  }
+  if (expected === "string[]" && !Array.isArray(value)) {
+    return fail(filePath, `${key} must be an array of strings`, lineNo, colFromRaw(raw));
+  }
+}
+
+function parseArrayValue(
+  filePath: string,
+  lines: string[],
+  startIdx: number,
+): { value: string[]; nextIndex: number } {
+  const result: string[] = [];
+  let idx = startIdx;
+
+  for (; idx < lines.length; idx += 1) {
+    const lineNo = idx + 1;
+    const raw = lines[idx];
+    const line = raw.trim();
+
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+
+    if (line === "]" || line === "],") {
+      return { value: result, nextIndex: idx };
+    }
+
+    // Strip inline comment first, then trailing comma
+    let element = line;
+    // Remove inline comment
+    const commentIdx = element.indexOf(" #");
+    if (commentIdx >= 0) {
+      element = element.slice(0, commentIdx).trimEnd();
+    }
+    // Remove trailing comma
+    if (element.endsWith(",")) {
+      element = element.slice(0, -1).trimEnd();
+    }
+
+    if (
+      (element.startsWith(`"`) && element.endsWith(`"`)) ||
+      (element.startsWith(`'`) && element.endsWith(`'`))
+    ) {
+      result.push(
+        element.slice(1, -1).replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, `"`).replace(/\\\\/g, `\\`),
+      );
+    } else {
+      return fail(filePath, `array elements must be quoted strings: ${element}`, lineNo, colFromRaw(raw));
+    }
+  }
+
+  return fail(filePath, "array not closed with ']'", startIdx, 1);
 }
 
 export function parseConfigBlock(
@@ -72,34 +172,37 @@ export function parseConfigBlock(
     if (!ALLOWED_KEYS.has(key)) {
       return fail(
         filePath,
-        `unknown config key: ${key}. Allowed: agent.default_model, agent.command, agent.backend, agent.trusted_workspace, agent.cursor_flags, agent.claude_flags, run.logs_dir, run.debug`,
+        `unknown config key: ${key}. Allowed: ${[...ALLOWED_KEYS].join(", ")}`,
         lineNo,
         colFromRaw(raw),
       );
     }
 
-    const value = parseMetadataValue(filePath, raw, valuePart, lineNo);
+    // Check for array opening bracket
+    let value: string | boolean | number | string[];
+    const trimmedValue = valuePart.trim();
+    if (trimmedValue === "[") {
+      // Multi-line array
+      const arrayResult = parseArrayValue(filePath, lines, idx + 1);
+      value = arrayResult.value;
+      idx = arrayResult.nextIndex;
+    } else {
+      value = parseMetadataValue(filePath, raw, valuePart, lineNo);
+    }
+
+    validateKeyType(filePath, key, value, lineNo, raw);
 
     if (key === "agent.default_model") {
-      if (typeof value !== "string") {
-        return fail(filePath, "agent.default_model must be a string", lineNo, colFromRaw(raw));
-      }
       if (!out.agent) {
         out.agent = {};
       }
-      out.agent.defaultModel = value;
+      out.agent.defaultModel = value as string;
     } else if (key === "agent.command") {
-      if (typeof value !== "string") {
-        return fail(filePath, "agent.command must be a string", lineNo, colFromRaw(raw));
-      }
       if (!out.agent) {
         out.agent = {};
       }
-      out.agent.command = value;
+      out.agent.command = value as string;
     } else if (key === "agent.backend") {
-      if (typeof value !== "string") {
-        return fail(filePath, "agent.backend must be a string", lineNo, colFromRaw(raw));
-      }
       const backend = value === "cursor" || value === "claude" ? value : undefined;
       if (!backend) {
         return fail(
@@ -114,45 +217,55 @@ export function parseConfigBlock(
       }
       out.agent.backend = backend;
     } else if (key === "agent.trusted_workspace") {
-      if (typeof value !== "string") {
-        return fail(filePath, "agent.trusted_workspace must be a string", lineNo, colFromRaw(raw));
-      }
       if (!out.agent) {
         out.agent = {};
       }
-      out.agent.trustedWorkspace = value;
+      out.agent.trustedWorkspace = value as string;
     } else if (key === "agent.cursor_flags") {
-      if (typeof value !== "string") {
-        return fail(filePath, "agent.cursor_flags must be a string", lineNo, colFromRaw(raw));
-      }
       if (!out.agent) {
         out.agent = {};
       }
-      out.agent.cursorFlags = value;
+      out.agent.cursorFlags = value as string;
     } else if (key === "agent.claude_flags") {
-      if (typeof value !== "string") {
-        return fail(filePath, "agent.claude_flags must be a string", lineNo, colFromRaw(raw));
-      }
       if (!out.agent) {
         out.agent = {};
       }
-      out.agent.claudeFlags = value;
+      out.agent.claudeFlags = value as string;
     } else if (key === "run.logs_dir") {
-      if (typeof value !== "string") {
-        return fail(filePath, "run.logs_dir must be a string", lineNo, colFromRaw(raw));
-      }
       if (!out.run) {
         out.run = {};
       }
-      out.run.logsDir = value;
+      out.run.logsDir = value as string;
     } else if (key === "run.debug") {
-      if (typeof value !== "boolean") {
-        return fail(filePath, "run.debug must be true or false", lineNo, colFromRaw(raw));
-      }
       if (!out.run) {
         out.run = {};
       }
-      out.run.debug = value;
+      out.run.debug = value as boolean;
+    } else if (key === "runtime.docker_enabled") {
+      if (!out.runtime) {
+        out.runtime = {};
+      }
+      out.runtime.dockerEnabled = value as boolean;
+    } else if (key === "runtime.docker_image") {
+      if (!out.runtime) {
+        out.runtime = {};
+      }
+      out.runtime.dockerImage = value as string;
+    } else if (key === "runtime.docker_network") {
+      if (!out.runtime) {
+        out.runtime = {};
+      }
+      out.runtime.dockerNetwork = value as string;
+    } else if (key === "runtime.docker_timeout") {
+      if (!out.runtime) {
+        out.runtime = {};
+      }
+      out.runtime.dockerTimeout = value as number;
+    } else if (key === "runtime.workspace") {
+      if (!out.runtime) {
+        out.runtime = {};
+      }
+      out.runtime.workspace = value as string[];
     }
   }
 

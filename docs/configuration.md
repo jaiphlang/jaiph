@@ -18,7 +18,12 @@ Environment overrides in-file; in-file overrides built-in defaults. So: env wins
 
 In the entry workflow file (the one you pass to `jaiph run`), you can declare runtime options in a single **config block**. The block is optional. If present, it must start with exactly `config {` on its own line. You can place it at top level anywhere before any rule, function, or workflow (e.g. after a shebang or imports). Only one config block per file; a second one causes a parse error (`E_PARSE` with file location). An unknown config key also yields `E_PARSE`; the error message lists the allowed keys.
 
-Inside the block, use `key = value` lines. Empty lines and lines starting with `#` are ignored. Values must be quoted strings (double or single quotes) or `true` / `false`. In quoted strings you can use `\\`, `\n`, `\t`, and `\"` (backslash, newline, tab, double quote).
+Inside the block, use `key = value` lines. Empty lines and lines starting with `#` are ignored. Values can be:
+
+- **Quoted strings** — double or single quotes. Escape sequences: `\\`, `\n`, `\t`, `\"`.
+- **Booleans** — `true` or `false` (unquoted).
+- **Integers** — bare numeric literals (e.g. `300`). No floats, negatives, or hex.
+- **Arrays of strings** — bracket-delimited, e.g. `["a", "b"]`. Opening `[` must be on the same line as `=`. Each element is a quoted string on its own line. Trailing commas and `#` comments between elements are allowed. Empty array `= []` is valid.
 
 ```jh
 config {
@@ -30,6 +35,12 @@ config {
   agent.claude_flags = "--model sonnet-4"
   run.logs_dir = ".jaiph/runs"
   run.debug = false
+  runtime.docker_enabled = true
+  runtime.docker_timeout = 300
+  runtime.workspace = [
+    ".:/jaiph/workspace:rw",
+    "config:config:ro"
+  ]
 }
 
 rule some_rule {
@@ -43,14 +54,29 @@ workflow default {
 
 Allowed config keys:
 
+**Agent keys:**
+
 - `agent.default_model`: Default model for `prompt` steps (string).
 - `agent.command`: Command string for the **cursor** backend (string, e.g. `cursor-agent` or `cursor-agent --force`).
 - `agent.backend`: Which prompt backend to use: `"cursor"` (default) or `"claude"`. When `"claude"`, the **Claude CLI** (`claude`) is invoked; it must be on PATH. See [Backend selection](#backend-selection) below.
 - `agent.trusted_workspace`: Trusted workspace directory passed to the Cursor backend (`--trust`). When set in-file, relative paths are resolved from the workspace (project) root. When set via environment, the value is used as-is. Defaults to the project root when unset.
 - `agent.cursor_flags`: Extra flags appended to Cursor backend invocation (string; split on whitespace).
 - `agent.claude_flags`: Extra flags appended to Claude backend invocation (string; split on whitespace).
+
+**Run keys:**
+
 - `run.logs_dir`: Directory for step logs. Relative paths are resolved against the workspace root at runtime; absolute paths are used as-is (string).
 - `run.debug`: If `true`, enables Bash `set -x` (shell trace) for the run (boolean).
+
+**Runtime keys (Docker sandbox):**
+
+- `runtime.docker_enabled`: Enable Docker sandbox for the run (boolean, default `false`).
+- `runtime.docker_image`: Container image to use (string, default `"ubuntu:24.04"`).
+- `runtime.docker_network`: Docker network mode (string, default `"default"`).
+- `runtime.docker_timeout`: Maximum execution time in seconds (integer, default `300`).
+- `runtime.workspace`: Mount specifications (string array, default `[".:/jaiph/workspace:rw"]`).
+
+Each key enforces its expected type: assigning a string to an integer key, or a boolean to a string key, etc., produces `E_VALIDATE`. Unknown `runtime.*` keys produce `E_PARSE`.
 
 ## Backend selection
 
@@ -74,6 +100,11 @@ Built-in defaults:
 - `agent.claude_flags`: unset
 - `run.logs_dir`: `.jaiph/runs`
 - `run.debug`: `false`
+- `runtime.docker_enabled`: `false`
+- `runtime.docker_image`: `"ubuntu:24.04"`
+- `runtime.docker_network`: `"default"`
+- `runtime.docker_timeout`: `300`
+- `runtime.workspace`: `[".:/jaiph/workspace:rw"]`
 
 Resolution order (highest wins):
 

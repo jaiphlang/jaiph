@@ -52,7 +52,15 @@ top_level       = config_block | import_stmt | rule_decl | function_decl | workf
 
 config_block    = "config" "{" { config_line } "}" ;
   (* Inside the block, blank lines and full-line # comments are allowed. *)
-config_line     = ( "agent.default_model" | "agent.command" | "agent.backend" | "agent.trusted_workspace" | "agent.cursor_flags" | "agent.claude_flags" | "run.logs_dir" | "run.debug" ) "=" ( string | "true" | "false" ) ;
+config_line     = config_key "=" config_value ;
+config_key      = "agent.default_model" | "agent.command" | "agent.backend" | "agent.trusted_workspace"
+                | "agent.cursor_flags" | "agent.claude_flags" | "run.logs_dir" | "run.debug"
+                | "runtime.docker_enabled" | "runtime.docker_image" | "runtime.docker_network"
+                | "runtime.docker_timeout" | "runtime.workspace" ;
+config_value    = string | "true" | "false" | integer | string_array ;
+integer         = digit { digit } ;           (* bare non-negative integer, e.g. 300 *)
+string_array    = "[" { array_element } "]" ;  (* opening "[" on same line as "="; elements on own lines *)
+array_element   = string [ "," ] ;             (* trailing comma and inline # comments allowed *)
 
 import_stmt     = "import" string "as" IDENT ;
 
@@ -140,7 +148,7 @@ shell_stmt      = command_line ;
 
 ## Parse and Runtime Semantics
 
-1. **Config block:** The opening line must be exactly `config {` (optional trailing whitespace). At most one config block per file. Inside the block, lines are either `key = value`, `}`, blank, or full-line `#` comments. Allowed keys: `agent.default_model`, `agent.command`, `agent.backend`, `agent.trusted_workspace`, `agent.cursor_flags`, `agent.claude_flags`, `run.logs_dir`, `run.debug`. Value is a quoted string or `true`/`false`. For `agent.backend` the value must be `"cursor"` or `"claude"`.
+1. **Config block:** The opening line must be exactly `config {` (optional trailing whitespace). At most one config block per file. Inside the block, lines are either `key = value`, `}`, blank, or full-line `#` comments. Allowed keys: `agent.default_model`, `agent.command`, `agent.backend`, `agent.trusted_workspace`, `agent.cursor_flags`, `agent.claude_flags`, `run.logs_dir`, `run.debug`, `runtime.docker_enabled`, `runtime.docker_image`, `runtime.docker_network`, `runtime.docker_timeout`, `runtime.workspace`. Values may be a quoted string, `true`/`false`, a bare integer (`/^[0-9]+$/`), or a bracket-delimited array of quoted strings (`[...]`). Each key has an expected type; mismatches yield `E_VALIDATE`. For `agent.backend` the value must be `"cursor"` or `"claude"`. Arrays: opening `[` must be on the same line as `=`; each element is a quoted string on its own line; trailing commas and inline `#` comments between elements are allowed; empty array `= []` is valid.
 2. **ensure:** An optional argument tail after the REF is passed through to the shell (e.g. `ensure check_branch "$1"`). With `recover`, the step becomes a retry loop: run the condition; on failure run the recover body; repeat until the condition passes or max retries are reached. Recover is either a single statement (`ensure dep recover run install_deps`) or a block of statements separated by `;` or newline (`ensure dep recover { run a; run b }`).
 3. **Rules:** May use forwarded positional parameters as shell args (`$1`, `$2`, `"$@"`) without special declaration. Only `ensure` and shell commands are allowed inside a rule; `run` is not allowed (use `ensure` to call another rule or move the call to a workflow). **Inline brace groups:** A single logical command can span multiple lines when it contains unbalanced `{` … `}`; the parser tracks brace depth so that short-circuit patterns like `cmd || { echo "failed"; exit 1; }` (single-line) and `cmd || { … }` (multi-line) are accepted as one command in rule, workflow, and function bodies.
 4. **run:** Inside a workflow, `run` must target a workflow reference (`foo` or `alias.foo`), not an arbitrary shell command. Optional args after the REF are forwarded to the workflow (e.g. `run deploy "$env"`).
@@ -177,7 +185,7 @@ After parsing, the compiler validates references and config. Violations produce 
 Rules:
 
 1. At most one `config` block per file; duplicate config yields `E_PARSE`.
-2. Config keys must be one of the allowed keys; values must be a quoted string or `true`/`false`. For `agent.backend`, the value must be `"cursor"` or `"claude"`. Invalid key or value type yields `E_PARSE`.
+2. Config keys must be one of the allowed keys; values must be a quoted string, `true`/`false`, a bare integer, or a bracket-delimited array of quoted strings. Each key has an expected type (string, boolean, number, or string[]); a type mismatch yields `E_VALIDATE`. For `agent.backend`, the value must be `"cursor"` or `"claude"`. Invalid key yields `E_PARSE`.
 3. Import aliases must be unique within a file (`E_VALIDATE`).
 4. Import targets must exist on disk (`E_IMPORT_NOT_FOUND`).
 5. **Unified namespace:** Rules, workflows, and functions share a single name space per module. Declaring two items with the same name (e.g. a rule `foo` and a workflow `foo`) yields `E_PARSE`.
@@ -192,7 +200,7 @@ Rules:
 ## Transpilation
 
 1. Build emits Bash scripts that source the installed stdlib (`$JAIPH_STDLIB`, default `~/.local/bin/jaiph_stdlib.sh`). The script checks for API compatibility before use.
-2. When the module has a `config` block, the generated script exports `JAIPH_AGENT_MODEL`, `JAIPH_AGENT_COMMAND`, `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_AGENT_CURSOR_FLAGS`, `JAIPH_AGENT_CLAUDE_FLAGS`, `JAIPH_RUNS_DIR`, and (if `run.debug` is set to `true`) `JAIPH_DEBUG`, using the in-file values as defaults; environment variables override these.
+2. When the module has a `config` block, the generated script exports `JAIPH_AGENT_MODEL`, `JAIPH_AGENT_COMMAND`, `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_AGENT_CURSOR_FLAGS`, `JAIPH_AGENT_CLAUDE_FLAGS`, `JAIPH_RUNS_DIR`, and (if `run.debug` is set to `true`) `JAIPH_DEBUG`, using the in-file values as defaults; environment variables override these. `runtime.*` keys populate the `RuntimeConfig` on `WorkflowMetadata` (see `src/types.ts`).
 3. **Flat symbol namespace:** Rules, workflows, and functions share a single namespace per module. All are emitted as `<module>::<name>::impl` and `<module>::<name>`. The kind (rule, workflow, function) is communicated via an explicit argument to `jaiph::run_step`, not encoded in the symbol name. Duplicate names across types within a module produce `E_PARSE`.
 4. **Rules:** Each rule is emitted as `<module>::<name>::impl` (the implementation) and `<module>::<name>` (a wrapper that calls `jaiph::run_step <symbol> rule jaiph::execute_readonly <symbol>::impl`). When config is present, the wrapper is invoked inside a metadata scope that sets the config env vars for the duration of the step.
 5. **Workflows:** Each workflow is emitted as `<module>::<name>::impl` and `<module>::<name>`, with the wrapper using `jaiph::run_step <symbol> workflow <symbol>::impl "$@"` and the same metadata-scoping behavior as rules.

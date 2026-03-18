@@ -270,6 +270,144 @@ test("parser: duplicate config block throws E_PARSE", () => {
   );
 });
 
+test("parser: config integer value parses as number", () => {
+  const source = [
+    "config {",
+    "  runtime.docker_timeout = 300",
+    "}",
+    "workflow default {",
+    "  echo ok",
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  assert.ok(mod.metadata);
+  assert.strictEqual(mod.metadata!.runtime?.dockerTimeout, 300);
+  assert.strictEqual(typeof mod.metadata!.runtime?.dockerTimeout, "number");
+});
+
+test("parser: config integer key rejects string value with E_PARSE", () => {
+  const source = [
+    "config {",
+    '  runtime.docker_timeout = "fast"',
+    "}",
+    "workflow default {",
+    "  echo ok",
+    "}",
+  ].join("\n");
+  assert.throws(
+    () => parsejaiph(source, "/fake/entry.jh"),
+    /runtime\.docker_timeout must be an integer/,
+  );
+});
+
+test("parser: config array value parses multi-line array", () => {
+  const source = [
+    "config {",
+    "  runtime.workspace = [",
+    '    ".:/jaiph/workspace:rw",',
+    '    "config:config:ro"',
+    "  ]",
+    "}",
+    "workflow default {",
+    "  echo ok",
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  assert.ok(mod.metadata);
+  assert.deepStrictEqual(mod.metadata!.runtime?.workspace, [
+    ".:/jaiph/workspace:rw",
+    "config:config:ro",
+  ]);
+});
+
+test("parser: config empty array parses as empty string[]", () => {
+  const source = [
+    "config {",
+    "  runtime.workspace = []",
+    "}",
+    "workflow default {",
+    "  echo ok",
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  assert.ok(mod.metadata);
+  assert.deepStrictEqual(mod.metadata!.runtime?.workspace, []);
+});
+
+test("parser: config array with trailing commas and comments", () => {
+  const source = [
+    "config {",
+    "  runtime.workspace = [",
+    '    ".:/jaiph/workspace:rw",  # main workspace',
+    '    "config:config:ro",',
+    "    # another comment",
+    "  ]",
+    "}",
+    "workflow default {",
+    "  echo ok",
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  assert.deepStrictEqual(mod.metadata!.runtime?.workspace, [
+    ".:/jaiph/workspace:rw",
+    "config:config:ro",
+  ]);
+});
+
+test("parser: config array key rejects non-array value with E_PARSE", () => {
+  const source = [
+    "config {",
+    '  runtime.workspace = "not-an-array"',
+    "}",
+    "workflow default {",
+    "  echo ok",
+    "}",
+  ].join("\n");
+  assert.throws(
+    () => parsejaiph(source, "/fake/entry.jh"),
+    /runtime\.workspace must be an array of strings/,
+  );
+});
+
+test("parser: all runtime config keys are accepted", () => {
+  const source = [
+    "config {",
+    "  runtime.docker_enabled = true",
+    '  runtime.docker_image = "ubuntu:24.04"',
+    '  runtime.docker_network = "host"',
+    "  runtime.docker_timeout = 600",
+    "  runtime.workspace = [",
+    '    ".:/jaiph/workspace:rw"',
+    "  ]",
+    "}",
+    "workflow default {",
+    "  echo ok",
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  assert.ok(mod.metadata?.runtime);
+  assert.strictEqual(mod.metadata!.runtime!.dockerEnabled, true);
+  assert.strictEqual(mod.metadata!.runtime!.dockerImage, "ubuntu:24.04");
+  assert.strictEqual(mod.metadata!.runtime!.dockerNetwork, "host");
+  assert.strictEqual(mod.metadata!.runtime!.dockerTimeout, 600);
+  assert.deepStrictEqual(mod.metadata!.runtime!.workspace, [".:/jaiph/workspace:rw"]);
+});
+
+test("parser: unknown runtime key throws E_PARSE", () => {
+  const source = [
+    "config {",
+    '  runtime.unknown_key = "x"',
+    "}",
+    "workflow default {",
+    "  echo ok",
+    "}",
+  ].join("\n");
+  assert.throws(
+    () => parsejaiph(source, "/fake/entry.jh"),
+    /unknown config key: runtime\.unknown_key/,
+  );
+});
+
 test("parser: positive if ensure parses into if_ensure_then step", () => {
   const source = [
     "rule ready {",
