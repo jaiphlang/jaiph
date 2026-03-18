@@ -1,5 +1,41 @@
-import type { WorkflowDef } from "../types";
+import type { WorkflowDef, WorkflowRouteDef } from "../types";
 import { braceDepthDelta, colFromRaw, fail, hasUnescapedClosingQuote, indexOfClosingDoubleQuote, isRef } from "./core";
+
+/**
+ * Match `-> channel` send operator in a line, only when `->` appears outside quoted strings.
+ * Returns { command, channel } if matched, or null.
+ */
+function matchSendOperator(line: string): { command: string; channel: string } | null {
+  // Walk the line tracking quote state; find `->` outside quotes.
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (ch === "\\" && (inDoubleQuote || inSingleQuote)) {
+      i += 1; // skip escaped char
+      continue;
+    }
+    if (ch === "'" && !inDoubleQuote) {
+      inSingleQuote = !inSingleQuote;
+      continue;
+    }
+    if (ch === '"' && !inSingleQuote) {
+      inDoubleQuote = !inDoubleQuote;
+      continue;
+    }
+    if (!inSingleQuote && !inDoubleQuote && ch === "-" && line[i + 1] === ">") {
+      // Require whitespace before -> (or start of line) and whitespace after ->
+      const before = line.slice(0, i).trimEnd();
+      const after = line.slice(i + 2).trimStart();
+      // Channel must be a valid identifier
+      const channelMatch = after.match(/^([A-Za-z_][A-Za-z0-9_]*)$/);
+      if (channelMatch) {
+        return { command: before, channel: channelMatch[1] };
+      }
+    }
+  }
+  return null;
+}
 
 /**
  * Split raw prompt literal (opening " to closing ") and optional `returns '...'` / `returns "..."`.
@@ -218,6 +254,17 @@ export function parseWorkflowBlock(
     if (shellAccumulator.length === 0) return;
     const command = shellAccumulator.join("\n").trim();
     shellAccumulator = [];
+    // Check for send operator on accumulated multiline shell command.
+    const sendMatch = matchSendOperator(command);
+    if (sendMatch) {
+      workflow.steps.push({
+        type: "send",
+        command: sendMatch.command,
+        channel: sendMatch.channel,
+        loc: { line: shellAccumulatorStartLine, col: 1 },
+      });
+      return;
+    }
     workflow.steps.push({
       type: "shell",
       command,
@@ -642,6 +689,10 @@ export function parseWorkflowBlock(
     ) {
       const captureName = genericAssignMatch[1];
       const rest = genericAssignMatch[2].trim();
+      // Capture + send is a parse error.
+      if (matchSendOperator(rest)) {
+        fail(filePath, "E_PARSE capture and send cannot be combined; use separate steps", innerNo);
+      }
       if (rest.startsWith("ensure ")) {
         const ensureBody = rest.slice("ensure ".length).trim();
         const recoverIdx = ensureBody.indexOf(" recover ");
@@ -938,6 +989,44 @@ export function parseWorkflowBlock(
 
     if (/^if\s+(?:!\s*)?ensure\b/.test(inner)) {
       fail(filePath, 'malformed if-ensure statement; expected "if [!] ensure <rule_ref> [args]; then"', innerNo);
+    }
+
+    // `on <channel> -> <workflow>[, <workflow>...]` route declaration.
+    const onRouteMatch = inner.match(
+      /^on\s+([A-Za-z_][A-Za-z0-9_]*)\s+->\s+(.+)$/,
+    );
+    if (onRouteMatch) {
+      const channel = onRouteMatch[1];
+      const targetsStr = onRouteMatch[2].trim();
+      const targetNames = targetsStr.split(/\s*,\s*/);
+      const workflows = targetNames.map((name) => {
+        const trimmedName = name.trim();
+        if (!isRef(trimmedName)) {
+          fail(filePath, `invalid workflow reference in on route: "${trimmedName}"`, innerNo);
+        }
+        return { value: trimmedName, loc: { line: innerNo, col: innerRaw.indexOf(trimmedName) + 1 } };
+      });
+      if (!workflow.routes) {
+        workflow.routes = [];
+      }
+      workflow.routes.push({
+        channel,
+        workflows,
+        loc: { line: innerNo, col: 1 },
+      });
+      continue;
+    }
+
+    // `[cmd] -> <channel>` send operator (detected before shell fallback).
+    const sendMatch = matchSendOperator(inner);
+    if (sendMatch) {
+      workflow.steps.push({
+        type: "send",
+        command: sendMatch.command,
+        channel: sendMatch.channel,
+        loc: { line: innerNo, col: 1 },
+      });
+      continue;
     }
 
     const shellDelta = braceDepthDelta(inner);

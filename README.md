@@ -1,6 +1,6 @@
 # ![Jaiph](docs/logo.png)
 
-[jaiph.org](https://jaiph.org) · [Getting started](docs/getting-started.md) · [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Grammar](docs/grammar.md) · [Testing](docs/testing.md) · [Hooks](docs/hooks.md) · [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md)
+[jaiph.org](https://jaiph.org) · [Getting started](docs/getting-started.md) · [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Grammar](docs/grammar.md) · [Testing](docs/testing.md) · [Hooks](docs/hooks.md) · [Inbox & Dispatch](docs/inbox.md) · [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md)
 
 ---
 
@@ -223,6 +223,12 @@ See [cli.md](docs/cli.md) for command syntax, examples, and supported environmen
 - `log "message"`
   Displays a message in the progress tree at the current depth. Takes a double-quoted string; shell variable interpolation works at runtime. No spinner, no timing — just a static annotation. See [Grammar](docs/grammar.md).
 
+- `echo "data" -> channel` · `-> channel`
+  Sends content to a named inbox channel. The runtime dispatches to workflows registered via `on` routes. Standalone `-> channel` forwards `$1`. Combining capture and send (`name = cmd -> channel`) is a parse error. See [Inbox & Dispatch](docs/inbox.md).
+
+- `on channel -> workflow` · `on channel -> wf1, wf2`
+  Declares a static routing rule: when a message arrives on `channel`, the runtime calls the target workflow(s) with the message as `$1`. Multiple targets are dispatched sequentially. Routes are declarations, not executable steps. See [Inbox & Dispatch](docs/inbox.md).
+
 - **Assignment capture** — You can capture stdout from any step with `name = <step>`:
   - `result = prompt "..."` — Captures the agent's stdout (unchanged from before).
   - `result = prompt "..." returns '{ type: string, risk: string }'` — Same, but validates the response as JSON against the schema and exports `$result`, `$result_type`, `$result_risk`, etc. Schema is flat; allowed types: `string`, `number`, `boolean`. Invalid JSON or missing/wrong-type field fails the step. See [Grammar](docs/grammar.md).
@@ -242,4 +248,4 @@ Known limitations and gotchas:
 - [Getting started](docs/getting-started.md) — installation, first workflow, workspace setup
 - [Agent skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md) — guide for AI agents that generate or modify Jaiph workflows
 - Full docs: <https://jaiph.org/>
-- [CLI reference](docs/cli.md) · [Configuration](docs/configuration.md) · [Grammar](docs/grammar.md) · [Testing](docs/testing.md) · [Hooks](docs/hooks.md)
+- [CLI reference](docs/cli.md) · [Configuration](docs/configuration.md) · [Grammar](docs/grammar.md) · [Testing](docs/testing.md) · [Hooks](docs/hooks.md) · [Inbox & Dispatch](docs/inbox.md)

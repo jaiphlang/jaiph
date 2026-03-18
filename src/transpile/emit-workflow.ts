@@ -565,10 +565,20 @@ function emitEnsureRecoverLoop(
     for (const comment of workflow.comments) {
       out.push(comment);
     }
+    const hasRoutes = workflow.routes && workflow.routes.length > 0;
     out.push(`${workflowSymbol}::${workflow.name}::impl() {`);
     out.push("  set -eo pipefail");
     out.push("  set +u");
-    if (workflow.steps.length === 0) {
+    if (hasRoutes) {
+      out.push("  jaiph::inbox_init");
+      for (const route of workflow.routes!) {
+        const targetFuncs = route.workflows.map((wfRef) =>
+          transpileWorkflowRef(wfRef, workflowSymbol, importedWorkflowSymbols),
+        );
+        out.push(`  jaiph::register_route '${route.channel}' ${targetFuncs.map((f) => `'${f}'`).join(" ")}`);
+      }
+    }
+    if (workflow.steps.length === 0 && !hasRoutes) {
       out.push("  :");
     } else {
       for (const step of workflow.steps) {
@@ -620,6 +630,16 @@ function emitEnsureRecoverLoop(
         }
         if (step.type === "log") {
           out.push(`  jaiph::log ${step.message}`);
+          continue;
+        }
+        if (step.type === "send") {
+          if (step.command === "") {
+            // Standalone send: -> channel forwards $1
+            out.push(`  jaiph::send '${step.channel}' "$1"`);
+          } else {
+            const resolved = resolveShellRefs(step.command, importedWorkflowSymbols);
+            out.push(`  jaiph::send '${step.channel}' "$(${resolved})"`);
+          }
           continue;
         }
         if (step.type === "if_not_ensure_then_run") {
@@ -718,6 +738,9 @@ function emitEnsureRecoverLoop(
           continue;
         }
       }
+    }
+    if (hasRoutes) {
+      out.push("  jaiph::drain_queue");
     }
     out.push("}");
     out.push("");

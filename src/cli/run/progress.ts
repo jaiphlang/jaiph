@@ -143,6 +143,10 @@ export function collectWorkflowChildren(
     if (s.type === "log") {
       return [{ label: `log ${s.message}` }];
     }
+    if (s.type === "send") {
+      const label = s.command ? `send -> ${s.channel}` : `send -> ${s.channel}`;
+      return [{ label }];
+    }
     if (s.type === "shell") {
       return collectFunctionCalls(s.command).map((fnName) => ({
         label: `function ${fnName}`,
@@ -151,6 +155,15 @@ export function collectWorkflowChildren(
     }
     return [];
   };
+
+  // Add on route declarations as tree nodes.
+  if (workflow.routes) {
+    for (const route of workflow.routes) {
+      const targetNames = route.workflows.map((w) => w.value).join(", ");
+      items.push({ label: `on ${route.channel} -> ${targetNames}` });
+    }
+  }
+
   for (const step of workflow.steps) {
     if (step.type === "ensure") {
       items.push(...stepToItems(step));
@@ -287,6 +300,10 @@ export function collectWorkflowChildren(
     }
     if (step.type === "log") {
       items.push({ label: `log ${step.message}` });
+      continue;
+    }
+    if (step.type === "send") {
+      items.push({ label: `send -> ${step.channel}` });
       continue;
     }
     if (step.type === "shell") {

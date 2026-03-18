@@ -662,3 +662,234 @@ test("compiler golden: workflow with config emits JAIPH export defaults", () => 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// === Inbox / send operator / on route tests ===
+
+test("parser: send operator parses echo -> channel", () => {
+  const source = [
+    "workflow default {",
+    "  echo 'hello' -> findings",
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  assert.equal(mod.workflows[0].steps.length, 1);
+  const step = mod.workflows[0].steps[0];
+  assert.equal(step.type, "send");
+  assert.equal((step as { type: "send"; command: string }).command, "echo 'hello'");
+  assert.equal((step as { type: "send"; channel: string }).channel, "findings");
+});
+
+test("parser: standalone send -> channel forwards $1", () => {
+  const source = [
+    "workflow default {",
+    "  -> findings",
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  assert.equal(mod.workflows[0].steps.length, 1);
+  const step = mod.workflows[0].steps[0];
+  assert.equal(step.type, "send");
+  assert.equal((step as { type: "send"; command: string }).command, "");
+  assert.equal((step as { type: "send"; channel: string }).channel, "findings");
+});
+
+test("parser: -> inside quotes is not a send", () => {
+  const source = [
+    "workflow default {",
+    '  echo "a -> b"',
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  assert.equal(mod.workflows[0].steps.length, 1);
+  assert.equal(mod.workflows[0].steps[0].type, "shell");
+});
+
+test("parser: on route declaration parses into routes", () => {
+  const source = [
+    "workflow analyst {",
+    "  echo ok",
+    "}",
+    "workflow default {",
+    "  on findings -> analyst",
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  const defaultWf = mod.workflows.find((w) => w.name === "default")!;
+  assert.equal(defaultWf.steps.length, 0);
+  assert.ok(defaultWf.routes);
+  assert.equal(defaultWf.routes!.length, 1);
+  assert.equal(defaultWf.routes![0].channel, "findings");
+  assert.equal(defaultWf.routes![0].workflows.length, 1);
+  assert.equal(defaultWf.routes![0].workflows[0].value, "analyst");
+});
+
+test("parser: on route with multiple targets", () => {
+  const source = [
+    "workflow a {",
+    "  echo ok",
+    "}",
+    "workflow b {",
+    "  echo ok",
+    "}",
+    "workflow default {",
+    "  on findings -> a, b",
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  const defaultWf = mod.workflows.find((w) => w.name === "default")!;
+  assert.ok(defaultWf.routes);
+  assert.equal(defaultWf.routes![0].workflows.length, 2);
+  assert.equal(defaultWf.routes![0].workflows[0].value, "a");
+  assert.equal(defaultWf.routes![0].workflows[1].value, "b");
+});
+
+test("parser: capture + send is E_PARSE", () => {
+  const source = [
+    "workflow default {",
+    "  name = echo hello -> channel",
+    "}",
+  ].join("\n");
+  assert.throws(
+    () => parsejaiph(source, "/fake/entry.jh"),
+    /capture and send cannot be combined/,
+  );
+});
+
+test("compiler golden: send operator transpiles to jaiph::send", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-send-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        "workflow default {",
+        "  echo 'foo' -> channel",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const actual = normalize(transpileFile(input, root));
+    assert.match(actual, /jaiph::send 'channel' "\$\(echo 'foo'\)"/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("compiler golden: standalone send transpiles to jaiph::send with $1", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-send-standalone-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        "workflow default {",
+        "  -> channel",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const actual = normalize(transpileFile(input, root));
+    assert.match(actual, /jaiph::send 'channel' "\$1"/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("compiler golden: on route emits register_route and drain_queue", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-route-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        "workflow analyst {",
+        "  echo ok",
+        "}",
+        "workflow default {",
+        "  on findings -> analyst",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const actual = normalize(transpileFile(input, root));
+    assert.match(actual, /jaiph::inbox_init/);
+    assert.match(actual, /jaiph::register_route 'findings' 'entry::analyst'/);
+    assert.match(actual, /jaiph::drain_queue/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("compiler golden: multi-target route emits multiple funcs in register_route", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-route-multi-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        "workflow a {",
+        "  echo ok",
+        "}",
+        "workflow b {",
+        "  echo ok",
+        "}",
+        "workflow default {",
+        "  on findings -> a, b",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const actual = normalize(transpileFile(input, root));
+    assert.match(actual, /jaiph::register_route 'findings' 'entry::a' 'entry::b'/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("compiler golden: inbox.jh fixture compiles successfully", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-inbox-fixture-"));
+  try {
+    const input = join(root, "inbox.jh");
+    writeFileSync(
+      input,
+      [
+        "workflow researcher {",
+        "  echo '## findings' -> findings",
+        "}",
+        "",
+        "workflow analyst {",
+        '  echo "$1" > findings_file.md',
+        '  summary = echo "Summary of findings"',
+        '  echo "$summary" -> summary',
+        "}",
+        "",
+        "workflow reviewer {",
+        '  echo "[reviewed] $1" -> final_summary',
+        "}",
+        "",
+        "workflow default {",
+        "  run researcher",
+        "  on findings -> analyst",
+        "  on summary -> reviewer",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const actual = normalize(transpileFile(input, root));
+    // researcher workflow sends to findings
+    assert.match(actual, /jaiph::send 'findings'/);
+    // analyst workflow sends to summary
+    assert.match(actual, /jaiph::send 'summary'/);
+    // reviewer workflow sends to final_summary
+    assert.match(actual, /jaiph::send 'final_summary'/);
+    // default workflow registers routes and drains
+    assert.match(actual, /jaiph::inbox_init/);
+    assert.match(actual, /jaiph::register_route 'findings' 'inbox::analyst'/);
+    assert.match(actual, /jaiph::register_route 'summary' 'inbox::reviewer'/);
+    assert.match(actual, /jaiph::drain_queue/);
+    // default workflow runs researcher
+    assert.match(actual, /inbox::researcher/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

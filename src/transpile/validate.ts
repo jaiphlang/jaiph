@@ -259,7 +259,18 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
       } else if (s.type === "if_not_ensure_then_shell") {
         validateRuleRef(s.ensureRef);
       }
+      // send steps have no refs to validate (channel is a string identifier)
     };
+
+    // Validate route declarations.
+    if (workflow.routes) {
+      for (const route of workflow.routes) {
+        for (const wfRef of route.workflows) {
+          validateWorkflowRef(wfRef);
+        }
+      }
+    }
+
     for (const step of workflow.steps) {
       if (step.type === "ensure") {
         validateRuleRef(step.ref);

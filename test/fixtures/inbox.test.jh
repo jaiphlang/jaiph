@@ -1,0 +1,16 @@
+import "inbox.jh" as inbox
+
+test "researcher sends findings to inbox" {
+  out = inbox.researcher
+  expectContain out "## findings"
+}
+
+test "analyst receives message as first argument" {
+  out = inbox.analyst "test input"
+  expectContain out "Summary of findings"
+}
+
+test "reviewer prefixes message with reviewed tag" {
+  out = inbox.reviewer "some summary"
+  expectContain out "[reviewed] some summary"
+}
