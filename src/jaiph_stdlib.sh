@@ -12,7 +12,7 @@ jaiph__runtime_api() {
 
 jaiph__die() {
   local message="$1"
-  echo "jai: $message" >&2
+  echo "jaiph: $message" >&2
   return 1
 }
 
@@ -23,7 +23,7 @@ jaiph__expect_contain() {
     return 0
   fi
   if [[ "$haystack" != *"$needle"* ]]; then
-    echo "jai: expectContain failed: expected to find:" >&2
+    echo "jaiph: expectContain failed: expected to find:" >&2
     echo "---" >&2
     printf '%s\n' "$needle" >&2
     echo "---" >&2
@@ -43,7 +43,7 @@ jaiph__expect_not_contain() {
     return 0
   fi
   if [[ "$haystack" == *"$needle"* ]]; then
-    echo "jai: expectNotContain failed: did not expect to find:" >&2
+    echo "jaiph: expectNotContain failed: did not expect to find:" >&2
     echo "---" >&2
     printf '%s\n' "$needle" >&2
     echo "---" >&2

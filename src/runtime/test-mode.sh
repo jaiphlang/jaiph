@@ -9,7 +9,7 @@ jaiph::is_test_mode() {
 # Outputs the line to stdout. Returns 0 if a line was read, 1 if no file or empty.
 jaiph::read_next_mock_response() {
   if [[ -z "${JAIPH_MOCK_RESPONSES_FILE:-}" || ! -f "${JAIPH_MOCK_RESPONSES_FILE}" ]]; then
-    echo "jai: no mock for prompt (JAIPH_MOCK_RESPONSES_FILE missing or not a file)" >&2
+    echo "jaiph: no mock for prompt (JAIPH_MOCK_RESPONSES_FILE missing or not a file)" >&2
     return 1
   fi
   local line
@@ -29,7 +29,7 @@ jaiph::read_next_mock_response() {
 jaiph::mock_dispatch() {
   local prompt_text="${1:-}"
   if [[ -z "${JAIPH_MOCK_DISPATCH_SCRIPT:-}" || ! -x "${JAIPH_MOCK_DISPATCH_SCRIPT}" ]]; then
-    echo "jai: no mock for prompt (JAIPH_MOCK_DISPATCH_SCRIPT missing or not executable)" >&2
+    echo "jaiph: no mock for prompt (JAIPH_MOCK_DISPATCH_SCRIPT missing or not executable)" >&2
     return 1
   fi
   "$JAIPH_MOCK_DISPATCH_SCRIPT" "$prompt_text"

@@ -6,12 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Don't use `jai` in messages. It's jaiph
-
-Search for instance for: "jai:" to see occurencies
-
----
-
 ## Restructure .jaiph/runs directory <!-- dev-ready -->
 
 Currently it's too bloated. I'd like to have a different directory structure. It should be:
