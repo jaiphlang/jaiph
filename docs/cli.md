@@ -48,21 +48,27 @@ jaiph build [--target <dir>] [path]
 
 If `path` is omitted, the current directory (`./`) is used. Use `--target` to write compiled scripts to a specific directory (required when used: `--target <dir>`).
 
+- **Directory mode** (`jaiph build ./` or `jaiph build ./flows`) — compiles all `.jh`/`.jph` files found in the directory tree and reports all errors.
+- **Single-file mode** (`jaiph build file.jh`) — compiles only the specified file and its transitive imports. Parse errors in sibling files are ignored.
+
 Examples:
 
 ```bash
 jaiph build ./
 jaiph build --target ./build ./flows
+jaiph build ./flows/review.jh
 ```
 
 ## `jaiph run`
 
-Compile and run a Jaiph workflow file.  
+Compile and run a Jaiph workflow file.
 `jaiph run` requires a `workflow default` entrypoint.
 
 ```bash
 jaiph run [--target <dir>] <file.jh|file.jph> [args...]
 ```
+
+Only the specified file and its transitive imports are compiled. Parse errors in sibling `.jh` files do not affect the run.
 
 Examples:
 
