@@ -2,13 +2,25 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { build, transpileTestFile, walkTestFiles } from "../src/transpiler";
 import { parsejaiph } from "../src/parser";
 import { buildRunTreeRows } from "../src/cli";
 import { formatRunningBottomLine } from "../src/cli/run/progress";
 import { parseStepEvent } from "../src/cli/run/events";
+
+/** Resolve latest run directory. Layout: runsRoot/YYYY-MM-DD/HH-MM-SS-source/ */
+function getLatestRunDir(runsRoot: string): string {
+  const dateDirs = readdirSync(runsRoot)
+    .filter((n) => /^\d{4}-\d{2}-\d{2}$/.test(n))
+    .sort();
+  assert.ok(dateDirs.length > 0, "expected at least one date directory under " + runsRoot);
+  const dateDirPath = join(runsRoot, dateDirs[dateDirs.length - 1]);
+  const runDirNames = readdirSync(dateDirPath).sort();
+  assert.ok(runDirNames.length > 0, "expected at least one run directory under " + dateDirPath);
+  return join(dateDirPath, runDirNames[runDirNames.length - 1]);
+}
 
 // Skip: triggers heap exhaustion (build + full stdlib read). TODO: fix memory usage and re-enable.
 test.skip("build transpiles .jh into strict bash with retry flow", () => {
@@ -496,12 +508,11 @@ test("jaiph run stores prompt output in run logs", () => {
     assert.equal(runResult.status, 0, runResult.stderr);
     const runsRoot = join(root, ".jaiph/runs");
     assert.equal(existsSync(runsRoot), true);
-    const runDirs = readdirSync(runsRoot);
-    assert.equal(runDirs.length > 0, true);
-    const sortedRunDirs = [...runDirs].sort();
-    const latestRunDirName = sortedRunDirs[sortedRunDirs.length - 1];
-    assert.match(latestRunDirName, /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z-/);
-    const latestRunDir = join(runsRoot, latestRunDirName);
+    const latestRunDir = getLatestRunDir(runsRoot);
+    const runDirName = dirname(latestRunDir).startsWith(runsRoot) ? dirname(latestRunDir).slice(runsRoot.length + 1) : "";
+    const dateDirName = runDirName ? runDirName.split("/")[0] : "";
+    assert.match(dateDirName, /^\d{4}-\d{2}-\d{2}$/);
+    assert.match(basename(latestRunDir), /^\d{2}-\d{2}-\d{2}-/);
     const runFiles = readdirSync(latestRunDir);
     assert.equal(runFiles.includes("run_summary.jsonl"), true);
     const promptOutName = runFiles.find((name) => name.endsWith("-jaiph__prompt.out"));
@@ -572,8 +583,7 @@ test("jaiph run stores both reasoning and final answer from stream-json", () => 
 
     assert.equal(runResult.status, 0, runResult.stderr);
     const runsRoot = join(root, ".jaiph/runs");
-    const runDirs = readdirSync(runsRoot).sort();
-    const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
+    const latestRunDir = getLatestRunDir(runsRoot);
     const runFiles = readdirSync(latestRunDir);
     const promptOutName = runFiles.find((name) => name.endsWith("-jaiph__prompt.out"));
     assert.equal(Boolean(promptOutName), true);
@@ -661,8 +671,7 @@ test("jaiph run interpolates positional args in prompt text", () => {
 
     assert.equal(runResult.status, 0, runResult.stderr);
     const runsRoot = join(root, ".jaiph/runs");
-    const runDirs = readdirSync(runsRoot).sort();
-    const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
+    const latestRunDir = getLatestRunDir(runsRoot);
     const runFiles = readdirSync(latestRunDir);
     const promptOutName = runFiles.find((name) => name.endsWith("-jaiph__prompt.out"));
     assert.equal(Boolean(promptOutName), true);
@@ -719,8 +728,7 @@ test("jaiph run interpolates named array placeholders in prompt text", () => {
 
     assert.equal(runResult.status, 0, runResult.stderr);
     const runsRoot = join(root, ".jaiph/runs");
-    const runDirs = readdirSync(runsRoot).sort();
-    const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
+    const latestRunDir = getLatestRunDir(runsRoot);
     const runFiles = readdirSync(latestRunDir);
     const promptOutName = runFiles.find((name) => name.endsWith("-jaiph__prompt.out"));
     assert.equal(Boolean(promptOutName), true);
@@ -778,8 +786,7 @@ test("jaiph run applies model from in-file metadata", () => {
 
     assert.equal(runResult.status, 0, runResult.stderr);
     const runsRoot = join(root, ".jaiph/runs");
-    const runDirs = readdirSync(runsRoot).sort();
-    const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
+    const latestRunDir = getLatestRunDir(runsRoot);
     const runFiles = readdirSync(latestRunDir);
     const promptOutName = runFiles.find((name) => name.endsWith("-jaiph__prompt.out"));
     assert.equal(Boolean(promptOutName), true);
@@ -835,8 +842,7 @@ test("jaiph run supports agent.command with inline args", () => {
 
     assert.equal(runResult.status, 0, runResult.stderr);
     const runsRoot = join(root, ".jaiph/runs");
-    const runDirs = readdirSync(runsRoot).sort();
-    const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
+    const latestRunDir = getLatestRunDir(runsRoot);
     const runFiles = readdirSync(latestRunDir);
     const promptOutName = runFiles.find((name) => name.endsWith("-jaiph__prompt.out"));
     assert.equal(Boolean(promptOutName), true);
@@ -896,8 +902,7 @@ test("jaiph run agent.backend = claude uses Claude CLI and captures output", () 
 
     assert.equal(runResult.status, 0, runResult.stderr);
     const runsRoot = join(root, ".jaiph/runs");
-    const runDirs = readdirSync(runsRoot).sort();
-    const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
+    const latestRunDir = getLatestRunDir(runsRoot);
     const runFiles = readdirSync(latestRunDir);
     const workflowOutName = runFiles.find(
       (name) => name.endsWith(".out") && !name.includes("jaiph__prompt"),
@@ -996,8 +1001,7 @@ test("jaiph run JAIPH_AGENT_BACKEND env overrides file default", () => {
 
     assert.equal(runResult.status, 0, runResult.stderr);
     const runsRoot = join(root, ".jaiph/runs");
-    const runDirs = readdirSync(runsRoot).sort();
-    const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
+    const latestRunDir = getLatestRunDir(runsRoot);
     const runFiles = readdirSync(latestRunDir);
     const workflowOutName = runFiles.find(
       (name) => name.endsWith(".out") && !name.includes("jaiph__prompt"),
@@ -1053,8 +1057,7 @@ test("jaiph run defaults Cursor trusted workspace to project root", () => {
 
     assert.equal(runResult.status, 0, runResult.stderr);
     const runsRoot = join(root, ".jaiph/runs");
-    const runDirs = readdirSync(runsRoot).sort();
-    const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
+    const latestRunDir = getLatestRunDir(runsRoot);
     const runFiles = readdirSync(latestRunDir);
     const promptOutName = runFiles.find((name) => name.endsWith("-jaiph__prompt.out"));
     assert.equal(Boolean(promptOutName), true);
@@ -1110,8 +1113,7 @@ test("jaiph run JAIPH_AGENT_TRUSTED_WORKSPACE env overrides metadata", () => {
 
     assert.equal(runResult.status, 0, runResult.stderr);
     const runsRoot = join(root, ".jaiph/runs");
-    const runDirs = readdirSync(runsRoot).sort();
-    const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
+    const latestRunDir = getLatestRunDir(runsRoot);
     const runFiles = readdirSync(latestRunDir);
     const promptOutName = runFiles.find((name) => name.endsWith("-jaiph__prompt.out"));
     assert.equal(Boolean(promptOutName), true);
@@ -2091,8 +2093,7 @@ test("jaiph run prompt capture: variable accessible in subsequent shell step", (
 
     assert.equal(runResult.status, 0, runResult.stderr);
     const runsRoot = join(root, ".jaiph/runs");
-    const runDirs = readdirSync(runsRoot).sort();
-    const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
+    const latestRunDir = getLatestRunDir(runsRoot);
     const runFiles = readdirSync(latestRunDir);
     const workflowOutName = runFiles.find(
       (name) => name.endsWith(".out") && !name.includes("jaiph__prompt"),
@@ -2147,8 +2148,7 @@ test("jaiph run prompt capture stores only final answer in assigned variable", (
 
     assert.equal(runResult.status, 0, runResult.stderr);
     const runsRoot = join(root, ".jaiph/runs");
-    const runDirs = readdirSync(runsRoot).sort();
-    const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
+    const latestRunDir = getLatestRunDir(runsRoot);
     const runFiles = readdirSync(latestRunDir);
     const workflowOutName = runFiles.find((name) => name.endsWith(".out") && !name.includes("jaiph__prompt"));
     assert.equal(Boolean(workflowOutName), true);

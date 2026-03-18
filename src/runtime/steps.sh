@@ -35,19 +35,31 @@ jaiph::init_run_tracking() {
   if [[ -n "${JAIPH_RUN_DIR:-}" ]]; then
     return 0
   fi
-  local started_at run_id workspace_root
-  started_at="$(jaiph::timestamp_utc)"
+  local run_id workspace_root runs_root
+  local date_part time_part source_file candidate suffix
   run_id="$(jaiph::new_run_id)"
   workspace_root="$(jaiph::workspace_root)"
+  date_part="$(date +%Y-%m-%d)"
+  time_part="$(date +%H-%M-%S)"
+  source_file="${JAIPH_SOURCE_FILE:-run}"
   if [[ -n "${JAIPH_RUNS_DIR:-}" ]]; then
     if [[ "$JAIPH_RUNS_DIR" = /* ]]; then
-      JAIPH_RUN_DIR="${JAIPH_RUNS_DIR}/${started_at}-${run_id}"
+      runs_root="${JAIPH_RUNS_DIR}"
     else
-      JAIPH_RUN_DIR="${workspace_root}/${JAIPH_RUNS_DIR}/${started_at}-${run_id}"
+      runs_root="${workspace_root}/${JAIPH_RUNS_DIR}"
     fi
   else
-    JAIPH_RUN_DIR="$workspace_root/.jaiph/runs/${started_at}-${run_id}"
+    runs_root="$workspace_root/.jaiph/runs"
   fi
+  candidate="${runs_root}/${date_part}/${time_part}-${source_file}"
+  if [[ -d "$candidate" ]]; then
+    suffix=2
+    while [[ -d "${candidate}-${suffix}" ]]; do
+      suffix="$((suffix + 1))"
+    done
+    candidate="${candidate}-${suffix}"
+  fi
+  JAIPH_RUN_DIR="$candidate"
   JAIPH_PRECEDING_FILES=""
   JAIPH_RUN_SUMMARY_FILE="$JAIPH_RUN_DIR/run_summary.jsonl"
   JAIPH_RUN_ID="$run_id"

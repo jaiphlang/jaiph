@@ -87,7 +87,7 @@ echo "$name" -> channel
 ## Inbox layout
 
 ```
-.jaiph/runs/<run-id>/inbox/
+.jaiph/runs/<YYYY-MM-DD>/<HH-MM-SS>-<source-file>/inbox/
   001-findings.txt
   002-summary.txt
   003-findings.txt

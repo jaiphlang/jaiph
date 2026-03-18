@@ -40,12 +40,18 @@ run_err_out="$(cat "${run_err_file}")"
 rm -f "${run_err_file}"
 
 shopt -s nullglob
-run_dirs=( "${TEST_DIR}/runs_out"/* )
+date_dirs=( "${TEST_DIR}/runs_out"/*/ )
+shopt -u nullglob
+if [[ "${#date_dirs[@]}" -ne 1 ]]; then
+  e2e::fail "expected exactly one date directory under runs_out, got ${#date_dirs[@]}"
+fi
+shopt -s nullglob
+run_dirs=( "${date_dirs[0]}"*/ )
 shopt -u nullglob
 if [[ "${#run_dirs[@]}" -ne 1 ]]; then
-  e2e::fail "expected exactly one run directory under runs_out"
+  e2e::fail "expected exactly one run directory under date dir, got ${#run_dirs[@]}"
 fi
-run_dir="${run_dirs[0]}"
+run_dir="${run_dirs[0]%/}"
 summary_file="${run_dir}/run_summary.jsonl"
 
 shopt -s nullglob
