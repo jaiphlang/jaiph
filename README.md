@@ -148,7 +148,7 @@ Then run:
 
 This asks an agent to detect project configuration and bootstrap recommended Jaiph workflows for feature implementation.
 
-Tip: add `.jaiph/runs/` to your `.gitignore`.
+Tip: add `.jaiph/` to your `.gitignore`.
 
 ### Run reporting and logs
 
@@ -175,6 +175,12 @@ config {
   agent.claude_flags = "--model sonnet-4"
   run.logs_dir = ".jaiph/runs"
   run.debug = false
+  runtime.docker_enabled = true
+  runtime.docker_image = "ubuntu:24.04"
+  runtime.docker_timeout = 300
+  runtime.workspace = [
+    ".:/jaiph/workspace:rw",
+  ]
 }
 ```
 
@@ -185,6 +191,7 @@ Important:
 - `agent.command` accepts executable + inline args (for example `cursor-agent --force`).
 - `agent.cursor_flags` / `agent.claude_flags` append backend-specific CLI flags (split on whitespace).
 - Environment variables override config values (for example `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_AGENT_CURSOR_FLAGS`, `JAIPH_AGENT_CLAUDE_FLAGS`).
+- `runtime.docker_enabled` enables an optional Docker sandbox — the container receives only transpiled bash and the shell stdlib; no Jaiph source or Node.js. See [configuration.md](docs/configuration.md) for mount parsing rules, workspace structure, and Docker behavior details.
 
 ### CLI reference
 

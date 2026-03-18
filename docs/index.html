@@ -253,7 +253,7 @@ jaiph use 0.3.0</code></pre>
                 <p>By convention it is recommended to keep your workflows in the
                     <code>&lt;project_root&gt;/.jaiph/</code>
                     directory. It ensures Jaiph detects workspace root and configures the agent correctly.</p>
-                <p>Jaiph stores all command output in <code>.jaiph/runs/</code> directory. It is recommended to add it
+                <p>Jaiph stores runtime data (run logs, Docker workspace artifacts) in <code>.jaiph/</code>. It is recommended to add <code>.jaiph/</code>
                     to your <code>.gitignore</code>.</p>
                 <h3>Running tests</h3>
                 <p>Jaiph supports native test scripts via the <code>*.test.jh</code> convention and first-class

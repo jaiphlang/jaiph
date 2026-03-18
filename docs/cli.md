@@ -201,6 +201,10 @@ Imports resolve for both extensions: `import "foo" as x` finds `foo.jh` or `foo.
 - `JAIPH_RUNS_DIR` — directory for run logs (default: `.jaiph/runs` under workspace).
 - `JAIPH_DEBUG` — set to `true` to enable bash `set -x` during run.
 - `JAIPH_ENSURE_MAX_RETRIES` — max retries for `ensure ... recover` steps (default: 10). When exceeded, the workflow exits with status 1.
+- `JAIPH_DOCKER_ENABLED` — set to `true` to enable Docker sandbox (overrides in-file `runtime.docker_enabled`).
+- `JAIPH_DOCKER_IMAGE` — Docker image for sandbox (overrides in-file `runtime.docker_image`).
+- `JAIPH_DOCKER_NETWORK` — Docker network mode (overrides in-file `runtime.docker_network`).
+- `JAIPH_DOCKER_TIMEOUT` — execution timeout in seconds (overrides in-file `runtime.docker_timeout`).
 - `NO_COLOR` — if set, disables colored output (e.g. progress and pass/fail).
 
 **Install and `jaiph use`:**

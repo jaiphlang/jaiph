@@ -78,6 +78,46 @@ Allowed config keys:
 
 Each key enforces its expected type: assigning a string to an integer key, or a boolean to a string key, etc., produces `E_VALIDATE`. Unknown `runtime.*` keys produce `E_PARSE`.
 
+### Mount parsing rules
+
+Mount strings in `runtime.workspace` follow these forms:
+
+- **Full form** (3 segments): `"host_path:container_path:mode"` — mounts `host_path` at `container_path` with mode `ro` or `rw`.
+- **Shorthand** (2 segments): `"host_path:mode"` — mounts at `/jaiph/workspace/<host_path>` with the given mode.
+- **1 segment** → `E_PARSE` (invalid).
+- Mode must be `ro` or `rw` → `E_PARSE` otherwise.
+- Exactly one mount must target `/jaiph/workspace` (validated before Docker invocation). If `runtime.workspace` is omitted, the default `[".:/jaiph/workspace:rw"]` satisfies this.
+
+### Workspace structure inside the container
+
+```
+/jaiph/
+  generated/          # transpiled bash + jaiph_stdlib.sh, mounted read-only
+  workspace/          # the mount targeting /jaiph/workspace (read-write root)
+    .jaiph/
+      runs/
+        <run-id>/
+```
+
+- `/jaiph/generated/` contains the transpiled `.sh` script and `jaiph_stdlib.sh`. Both mounted read-only. `JAIPH_STDLIB` is set to `/jaiph/generated/jaiph_stdlib.sh` inside the container.
+- Container receives **only** transpiled bash and the shell stdlib. No Jaiph source files, no TypeScript, no Node.js.
+
+### Docker behavior
+
+- `docker run --rm` with proper UID/GID mapping (`--user $(id -u):$(id -g)` on Linux).
+- TTY passthrough: `-t` flag when `process.stdout.isTTY` is true.
+- `CI=true` disables Docker by default (many CI runners lack Docker-in-Docker). In-file `runtime.docker_enabled = true` overrides this.
+- Docker missing → `E_DOCKER_NOT_FOUND` (no silent fallback).
+- Image auto-pulled if missing; pull failure is fatal.
+- Timeout kills container and reports `E_TIMEOUT`.
+- Network: `"default"` omits `--network` flag (uses Docker bridge). `"none"` passes `--network none`. Any other value is passed verbatim.
+
+### Docker environment variable mapping
+
+Following the `JAIPH_*` convention: `JAIPH_DOCKER_ENABLED`, `JAIPH_DOCKER_IMAGE`, `JAIPH_DOCKER_NETWORK`, `JAIPH_DOCKER_TIMEOUT`. Workspace mounts are not overridable via env.
+
+Precedence: env vars (`JAIPH_DOCKER_*`) > in-file config > defaults.
+
 ## Backend selection
 
 `prompt` steps can use either the **cursor** backend (default) or the **Claude CLI** backend.
@@ -122,6 +162,11 @@ Resolution order (highest wins):
 - `agent.claude_flags` -> `JAIPH_AGENT_CLAUDE_FLAGS`
 - `run.logs_dir` -> `JAIPH_RUNS_DIR`
 - `run.debug` -> `JAIPH_DEBUG`
+- `runtime.docker_enabled` -> `JAIPH_DOCKER_ENABLED`
+- `runtime.docker_image` -> `JAIPH_DOCKER_IMAGE`
+- `runtime.docker_network` -> `JAIPH_DOCKER_NETWORK`
+- `runtime.docker_timeout` -> `JAIPH_DOCKER_TIMEOUT`
+- `runtime.workspace` -> _(not overridable via env)_
 
 ## Inspect effective config at runtime
 
