@@ -152,6 +152,7 @@ test("jaiph run compiles and executes workflow with args", () => {
     const runResult = spawnSync("node", [cliPath, "run", filePath, "hello-run"], {
       encoding: "utf8",
       cwd: root,
+      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
     });
 
     assert.equal(runResult.status, 0, runResult.stderr);
@@ -210,7 +211,7 @@ test("jaiph run enables xtrace when JAIPH_DEBUG=true", () => {
     const runResult = spawnSync("node", [cliPath, "run", filePath, "hello-debug"], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_DEBUG: "true" },
+      env: { ...process.env, JAIPH_DEBUG: "true", JAIPH_DOCKER_ENABLED: "false" },
     });
 
     assert.equal(runResult.status, 0, runResult.stderr);
@@ -238,6 +239,7 @@ test("jaiph run fails when workflow default is missing", () => {
     const runResult = spawnSync("node", [cliPath, "run", filePath, "hello-main"], {
       encoding: "utf8",
       cwd: root,
+      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
     });
 
     assert.equal(runResult.status, 1);
@@ -266,6 +268,7 @@ test("jaiph run fails fast on command errors inside workflow", () => {
     const runResult = spawnSync("node", [cliPath, "run", filePath], {
       encoding: "utf8",
       cwd: root,
+      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
     });
 
     assert.equal(runResult.status, 1);
@@ -321,7 +324,7 @@ test("jaiph run fails when runtime emits non-xtrace stderr", () => {
     const runResult = spawnSync("node", [cliPath, "run", filePath], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_STDLIB: stdlibPath },
+      env: { ...process.env, JAIPH_STDLIB: stdlibPath, JAIPH_DOCKER_ENABLED: "false" },
     });
 
     assert.equal(runResult.status, 1);
@@ -358,6 +361,7 @@ test("jaiph run fails when required arg is missing and rule handles it", () => {
     const runResult = spawnSync("node", [cliPath, "run", filePath], {
       encoding: "utf8",
       cwd: root,
+      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
     });
 
     assert.equal(runResult.status, 1);
@@ -396,6 +400,7 @@ test("jaiph run allows rules to call top-level helper functions in readonly mode
     const runResult = spawnSync("node", [cliPath, "run", filePath], {
       encoding: "utf8",
       cwd: root,
+      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
     });
 
     assert.equal(runResult.status, 0, runResult.stderr);
@@ -428,6 +433,7 @@ test("jaiph run prints rule tree and fail summary", () => {
     const runResult = spawnSync("node", [cliPath, "run", filePath], {
       encoding: "utf8",
       cwd: root,
+      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
     });
 
     assert.equal(runResult.status, 1);
@@ -482,6 +488,7 @@ test("jaiph run stores prompt output in run logs", () => {
       cwd: root,
       env: {
         ...process.env,
+        JAIPH_DOCKER_ENABLED: "false",
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
       },
     });
@@ -558,6 +565,7 @@ test("jaiph run stores both reasoning and final answer from stream-json", () => 
       env: {
         ...process.env,
         JAIPH_AGENT_TRUSTED_WORKSPACE: undefined,
+        JAIPH_DOCKER_ENABLED: "false",
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
       },
     });
@@ -646,6 +654,7 @@ test("jaiph run interpolates positional args in prompt text", () => {
       cwd: root,
       env: {
         ...process.env,
+        JAIPH_DOCKER_ENABLED: "false",
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
       },
     });
@@ -703,6 +712,7 @@ test("jaiph run interpolates named array placeholders in prompt text", () => {
       cwd: root,
       env: {
         ...process.env,
+        JAIPH_DOCKER_ENABLED: "false",
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
       },
     });
@@ -756,6 +766,7 @@ test("jaiph run applies model from in-file metadata", () => {
     const cliPath = join(process.cwd(), "dist/src/cli.js");
     const runEnv: NodeJS.ProcessEnv = {
       ...process.env,
+      JAIPH_DOCKER_ENABLED: "false",
       PATH: `${binDir}:${process.env.PATH ?? ""}`,
     };
     delete runEnv.JAIPH_AGENT_CURSOR_FLAGS;
@@ -817,6 +828,7 @@ test("jaiph run supports agent.command with inline args", () => {
       cwd: root,
       env: {
         ...process.env,
+        JAIPH_DOCKER_ENABLED: "false",
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
       },
     });
@@ -871,6 +883,7 @@ test("jaiph run agent.backend = claude uses Claude CLI and captures output", () 
     const cliPath = join(process.cwd(), "dist/src/cli.js");
     const runEnv: NodeJS.ProcessEnv = {
       ...process.env,
+      JAIPH_DOCKER_ENABLED: "false",
       PATH: `${binDir}:${process.env.PATH ?? ""}`,
     };
     delete runEnv.JAIPH_AGENT_BACKEND;
@@ -918,6 +931,7 @@ test("jaiph run agent.backend = claude without claude in PATH fails with clear e
     const cliPath = join(process.cwd(), "dist/src/cli.js");
     const runEnv: NodeJS.ProcessEnv = {
       ...process.env,
+      JAIPH_DOCKER_ENABLED: "false",
       PATH: `${dirname(process.execPath)}:/bin:/usr/bin:/nonexistent`,
     };
     delete runEnv.JAIPH_AGENT_BACKEND;
@@ -975,6 +989,7 @@ test("jaiph run JAIPH_AGENT_BACKEND env overrides file default", () => {
       env: {
         ...process.env,
         JAIPH_AGENT_BACKEND: "cursor",
+        JAIPH_DOCKER_ENABLED: "false",
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
       },
     });
@@ -1031,6 +1046,7 @@ test("jaiph run defaults Cursor trusted workspace to project root", () => {
       cwd: root,
       env: {
         ...env,
+        JAIPH_DOCKER_ENABLED: "false",
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
       },
     });
@@ -1087,6 +1103,7 @@ test("jaiph run JAIPH_AGENT_TRUSTED_WORKSPACE env overrides metadata", () => {
       env: {
         ...process.env,
         JAIPH_AGENT_TRUSTED_WORKSPACE: "/tmp/jaiph-explicit-trust",
+        JAIPH_DOCKER_ENABLED: "false",
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
       },
     });
@@ -1353,6 +1370,7 @@ test("jaiph run tree includes function calls from workflow shell steps", () => {
     const runResult = spawnSync("node", [cliPath, "run", filePath], {
       encoding: "utf8",
       cwd: root,
+      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
     });
 
     assert.equal(runResult.status, 0, runResult.stderr);
@@ -1412,7 +1430,7 @@ test("jaiph run tree shows workflow params inline when run has key=value args", 
     const runResult = spawnSync("node", [cliPath, "run", join(root, "main.jh")], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, NO_COLOR: "1" },
+      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false", NO_COLOR: "1" },
     });
     assert.equal(runResult.status, 0, runResult.stderr);
     assert.match(runResult.stdout, /workflow default/);
@@ -1442,7 +1460,7 @@ test("jaiph run tree shows function step; params shown when runtime includes the
     const runResult = spawnSync("node", [cliPath, "run", join(root, "main.jh")], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, NO_COLOR: "1" },
+      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false", NO_COLOR: "1" },
     });
     assert.equal(runResult.status, 0, runResult.stderr);
     assert.match(runResult.stdout, /function echo_args/);
@@ -1473,7 +1491,7 @@ test("jaiph run tree truncates param values over 32 chars when params present", 
     const runResult = spawnSync("node", [cliPath, "run", join(root, "main.jh")], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, NO_COLOR: "1" },
+      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false", NO_COLOR: "1" },
     });
     assert.equal(runResult.status, 0, runResult.stderr);
     assert.match(runResult.stdout, /workflow default/);
@@ -2066,6 +2084,7 @@ test("jaiph run prompt capture: variable accessible in subsequent shell step", (
       cwd: root,
       env: {
         ...process.env,
+        JAIPH_DOCKER_ENABLED: "false",
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
       },
     });
@@ -2121,6 +2140,7 @@ test("jaiph run prompt capture stores only final answer in assigned variable", (
       cwd: root,
       env: {
         ...process.env,
+        JAIPH_DOCKER_ENABLED: "false",
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
       },
     });

@@ -245,6 +245,7 @@ const PROMPT_ARGS_DISPLAY_MAX = 96;
         config: dockerConfig,
         builtScriptPath: builtPath,
         stdlibPath,
+        buildOutDir: outDir,
         workspaceRoot,
         wrapperCommand: command,
         metaFile,

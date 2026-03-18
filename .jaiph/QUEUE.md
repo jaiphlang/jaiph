@@ -6,26 +6,9 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Bug: Docker not enabled by default for local execution <!-- dev-ready -->
+## Don't use `jai` in messages. It's jaiph
 
-**Symptom**: Running `e2e/say_hello.jh` on a local machine does not spawn a Docker container, even though the intended behavior is Docker-by-default locally.
-
-**Root cause**: `DEFAULTS.enabled` in `src/runtime/docker.ts:82` is `false`. In `resolveDockerConfig()` (line 107), when no env var or in-file config is set, the fallback path evaluates `ciDefault ? false : DEFAULTS.enabled` — which is `false` in all cases. Docker is therefore never enabled unless explicitly configured.
-
-**Fix**: Change `DEFAULTS.enabled` from `false` to `true` in `src/runtime/docker.ts:82`. The existing CI detection logic (`env.CI === "true"` at line 98) already disables Docker in CI environments, so no additional changes are needed for CI behavior.
-
-### Files to modify
-
-1. `src/runtime/docker.ts` — change `enabled: false` to `enabled: true` in `DEFAULTS` (line 82).
-2. `test/docker.test.ts` — update the "defaults when no in-file and no env" test (line 99) to expect `enabled: true`. Verify the CI=true test still expects `enabled: false`.
-
-### Acceptance criteria
-
-1. `resolveDockerConfig(undefined, {})` returns `enabled: true` (Docker on by default locally).
-2. `resolveDockerConfig(undefined, { CI: "true" })` returns `enabled: false` (Docker off in CI).
-3. Explicit `JAIPH_DOCKER_ENABLED=false` env var still disables Docker locally.
-4. In-file `runtime.docker_enabled = false` still disables Docker locally.
-5. Existing e2e and unit tests pass (with updated assertions).
+Search for instance for: "jai:" to see occurencies
 
 ---
 
