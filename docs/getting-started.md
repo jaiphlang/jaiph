@@ -185,8 +185,11 @@ See [cli.md](cli.md) for command syntax, examples, environment variables, and li
 - `workflow name { ... }`  
   Defines an orchestration entrypoint made of ordered steps. Workflows can change system state. Optional: `export workflow name { ... }` so the workflow can be run via the module alias.
 
-- `function name() { ... }`  
+- `function name() { ... }`
   Defines a reusable writable shell function. Functions can be called from workflows/rules and are tracked as regular Jaiph steps.
+
+- `local name = value`
+  Declares a module-scoped variable at the top level. Values may be double-quoted strings (multi-line, same quoting rules as `prompt`), single-quoted strings, or bare values. The variable is accessible as `$name` inside all rules, functions, and workflows in the same module. Under the hood, Jaiph prefixes the variable to avoid collisions (e.g. `local role` in module `entry` becomes bash variable `entry__role`) and emits `local` shims inside each body. Variable names share the unified namespace with rules, workflows, and functions — duplicates are a parse error. Variables are module-scoped only and not exportable.
 
 - `ensure ref [args...]`  
   Executes a rule in a workflow or another rule, optionally forwarding arguments (for example: `ensure my_rule "$1"`). Optional: `ensure ref recover <stmt>` or `ensure ref recover { stmt; stmt; }` for a bounded retry loop (run rule; on failure run recover body; repeat until success or `JAIPH_ENSURE_MAX_RETRIES` exceeded, then exit 1; default max 10).

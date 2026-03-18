@@ -368,6 +368,16 @@ export function emitWorkflow(
     out.push(`source "$(dirname "\${BASH_SOURCE[0]}")/${rel}"`);
   }
   out.push("");
+  // Emit top-level env declarations as prefixed variables.
+  const envPrefix = workflowSymbol.replace(/::/g, "__");
+  const envDecls = ast.envDecls ?? [];
+  if (envDecls.length > 0) {
+    for (const env of envDecls) {
+      const escaped = env.value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      out.push(`export ${envPrefix}__${env.name}="${escaped}"`);
+    }
+    out.push("");
+  }
   if (scopedMetadataAssignments.length > 0) {
     const scopedVars = [
       "JAIPH_AGENT_MODEL",
@@ -409,6 +419,13 @@ export function emitWorkflow(
     out.push("");
   }
 
+  /** Emit `local name="$prefix__name"` shims for all env declarations. */
+  const emitEnvShims = (indent: string): void => {
+    for (const env of envDecls) {
+      out.push(`${indent}local ${env.name}="\$${envPrefix}__${env.name}"`);
+    }
+  };
+
   for (const rule of ast.rules) {
     const ruleSymbol = `${workflowSymbol}::${rule.name}`;
     for (const comment of rule.comments) {
@@ -417,6 +434,7 @@ export function emitWorkflow(
     out.push(`${ruleSymbol}::impl() {`);
     out.push("  set -eo pipefail");
     out.push("  set +u");
+    emitEnvShims("  ");
     if (rule.commands.length === 0) {
       out.push("  :");
     } else {
@@ -466,6 +484,7 @@ export function emitWorkflow(
     out.push(`${functionSymbol}::impl() {`);
     out.push("  set -eo pipefail");
     out.push("  set +u");
+    emitEnvShims("  ");
     if (fn.commands.length === 0) {
       out.push("  :");
     } else {
@@ -569,6 +588,7 @@ function emitEnsureRecoverLoop(
     out.push(`${workflowSymbol}::${workflow.name}::impl() {`);
     out.push("  set -eo pipefail");
     out.push("  set +u");
+    emitEnvShims("  ");
     if (hasRoutes) {
       out.push("  jaiph::inbox_init");
       for (const route of workflow.routes!) {

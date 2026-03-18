@@ -6,31 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Support top-level env <!-- dev-ready -->
-
-Add top-level variable declarations to Jaiph using the `local` keyword (bash parity). Variables are prefixed to avoid collisions, similar to how functions are prefixed.
-
-**Keyword**: `local` only in this iteration. Matches bash parity and the existing commented-out usage in `.jaiph/docs_parity.jh`. A future iteration could add `const` (mapping to bash `readonly`).
-
-**Variable prefixing**: Use `__` (double underscore) as the separator — e.g., `local role` in module `entry` becomes bash variable `entry__role`. The `::` separator used for function names is invalid in bash variable identifiers (`[a-zA-Z_][a-zA-Z0-9_]*`), so `__` is the natural alternative with low collision risk.
-
-**Multi-line string values**: Reuse the same quoting rules as `prompt` strings (double-quote delimited, spanning multiple lines). The parser infrastructure for this already exists.
-
-**Scope / visibility**: Module-scoped only, not exportable. Importing modules cannot access another module's locals. Cross-module variable access can be considered in a future iteration.
-
-### Acceptance criteria
-
-1. Parser accepts `local <name>=<value>` at the top level (single-line and multi-line string values). New parse function in `src/parse/` following the pattern of `rules.ts`/`functions.ts`.
-2. New `EnvDeclDef` type added to `src/types.ts`; `jaiphModule` gains `envDecls?: EnvDeclDef[]`.
-3. Transpiler emits prefixed bash variable assignment (e.g., `entry__role="..."`) at the top of the generated script, before function/rule/workflow definitions.
-4. A shim or `local` alias is emitted inside each function/rule/workflow body so `$role` resolves to the prefixed variable (e.g., `local role="$entry__role"`).
-5. `docs_parity.jh` compiles and runs correctly with the `local role` uncommented.
-6. Grammar doc (`docs/grammar.md`) updated with the new `env_decl` production.
-7. At least one e2e test exercising a top-level local with multi-line string value.
-8. Unified namespace check in `src/parser.ts` extended to prevent variable names from colliding with rule/function/workflow names.
-
----
-
 ## Bug: Docker not enabled by default for local execution <!-- dev-ready -->
 
 **Symptom**: Running `e2e/say_hello.jh` on a local machine does not spawn a Docker container, even though the intended behavior is Docker-by-default locally.

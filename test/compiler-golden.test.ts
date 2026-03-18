@@ -893,3 +893,134 @@ test("compiler golden: inbox.jh fixture compiles successfully", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// === Top-level local (env declaration) tests ===
+
+test("parser: top-level local declaration parses single-line string", () => {
+  const source = [
+    'local greeting = "hello world"',
+    "workflow default {",
+    "  echo $greeting",
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  assert.ok(mod.envDecls);
+  assert.equal(mod.envDecls!.length, 1);
+  assert.equal(mod.envDecls![0].name, "greeting");
+  assert.equal(mod.envDecls![0].value, "hello world");
+});
+
+test("parser: top-level local declaration parses multi-line string", () => {
+  const source = [
+    'local role = "You are an expert.',
+    "    1. You write clearly",
+    '    2. You are concise"',
+    "workflow default {",
+    "  echo $role",
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  assert.ok(mod.envDecls);
+  assert.equal(mod.envDecls!.length, 1);
+  assert.equal(mod.envDecls![0].name, "role");
+  assert.ok(mod.envDecls![0].value.includes("You are an expert."));
+  assert.ok(mod.envDecls![0].value.includes("You are concise"));
+});
+
+test("parser: top-level local declaration parses bare value", () => {
+  const source = [
+    "local count = 42",
+    "workflow default {",
+    "  echo $count",
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  assert.ok(mod.envDecls);
+  assert.equal(mod.envDecls![0].name, "count");
+  assert.equal(mod.envDecls![0].value, "42");
+});
+
+test("parser: top-level local name collision with rule is E_PARSE", () => {
+  const source = [
+    'local foo = "bar"',
+    "rule foo {",
+    "  echo ok",
+    "}",
+    "workflow default {",
+    "  ensure foo",
+    "}",
+  ].join("\n");
+  assert.throws(
+    () => parsejaiph(source, "/fake/entry.jh"),
+    /duplicate name "foo".*variable name collides with rule/,
+  );
+});
+
+test("parser: top-level local name collision with workflow is E_PARSE", () => {
+  const source = [
+    'local default = "val"',
+    "workflow default {",
+    "  echo ok",
+    "}",
+  ].join("\n");
+  assert.throws(
+    () => parsejaiph(source, "/fake/entry.jh"),
+    /duplicate name "default".*variable name collides with workflow/,
+  );
+});
+
+test("parser: top-level local name collision with function is E_PARSE", () => {
+  const source = [
+    'local helper = "val"',
+    "function helper {",
+    "  echo ok",
+    "}",
+    "workflow default {",
+    "  helper",
+    "}",
+  ].join("\n");
+  assert.throws(
+    () => parsejaiph(source, "/fake/entry.jh"),
+    /duplicate name "helper".*variable name collides with function/,
+  );
+});
+
+test("compiler golden: top-level local emits prefixed variable and shims", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-env-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        'local greeting = "hello world"',
+        "",
+        "rule check {",
+        "  echo $greeting",
+        "}",
+        "",
+        "function helper() {",
+        "  echo $greeting",
+        "}",
+        "",
+        "workflow default {",
+        "  ensure check",
+        "  helper",
+        "  echo $greeting",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const actual = normalize(transpileFile(input, root));
+    // Exported prefixed variable at top (export needed for child-shell rule sandbox)
+    assert.match(actual, /export entry__greeting="hello world"/);
+    // Local shims in rule impl
+    assert.match(actual, /entry::check::impl\(\) \{[\s\S]*?local greeting="\$entry__greeting"/);
+    // Local shims in function impl
+    assert.match(actual, /entry::helper::impl\(\) \{[\s\S]*?local greeting="\$entry__greeting"/);
+    // Local shims in workflow impl
+    assert.match(actual, /entry::default::impl\(\) \{[\s\S]*?local greeting="\$entry__greeting"/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

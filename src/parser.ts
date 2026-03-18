@@ -1,5 +1,6 @@
 import { jaiphModule } from "./types";
 import { fail } from "./parse/core";
+import { parseEnvDecl } from "./parse/env";
 import { parseImportLine } from "./parse/imports";
 import { parseConfigBlock } from "./parse/metadata";
 import { parseRuleBlock } from "./parse/rules";
@@ -61,6 +62,17 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
       continue;
     }
 
+    if (/^local\s+[A-Za-z_]/.test(line)) {
+      pendingTopLevelComments = [];
+      const { envDecl, nextIndex } = parseEnvDecl(filePath, lines, i - 1);
+      if (!mod.envDecls) {
+        mod.envDecls = [];
+      }
+      mod.envDecls.push(envDecl);
+      i = nextIndex;
+      continue;
+    }
+
     if (line.includes("rule ")) {
       const { rule, nextIndex, exported } = parseRuleBlock(filePath, lines, i - 1, pendingTopLevelComments);
       pendingTopLevelComments = [];
@@ -116,6 +128,15 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
       fail(filePath, `duplicate name "${w.name}" — rules, workflows, and functions share a single namespace (already declared as ${prev})`, w.loc.line, w.loc.col);
     }
     seen.set(w.name, "workflow");
+  }
+  if (mod.envDecls) {
+    for (const env of mod.envDecls) {
+      const prev = seen.get(env.name);
+      if (prev) {
+        fail(filePath, `duplicate name "${env.name}" — variable name collides with ${prev} of the same name`, env.loc.line, env.loc.col);
+      }
+      seen.set(env.name, "local");
+    }
   }
 
   return mod;
