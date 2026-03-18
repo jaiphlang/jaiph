@@ -29,6 +29,11 @@ import {
   waitForRunExit,
 } from "../run/lifecycle";
 import {
+  resolveDockerConfig,
+  spawnDockerProcess,
+  cleanupDocker,
+} from "../../runtime/docker";
+import {
   styleKeywordLabel,
   formatElapsedDuration,
   formatRunningBottomLine,
@@ -228,10 +233,34 @@ const PROMPT_ARGS_DISPLAY_MAX = 96;
       run_path: inputAbs,
       workspace: workspaceRoot,
     });
-    const execResult = spawnRunProcess(command, [metaFile, builtPath, workflowSymbol, ...runArgs], {
-      cwd: workspaceRoot,
-      env: runtimeEnv,
-    });
+
+    // Resolve Docker config (env > in-file > defaults)
+    const dockerConfig = resolveDockerConfig(mod.metadata?.runtime, runtimeEnv);
+    let dockerResult: ReturnType<typeof spawnDockerProcess> | undefined;
+    let execResult;
+
+    if (dockerConfig.enabled) {
+      const stdlibPath = runtimeEnv.JAIPH_STDLIB ?? join(__dirname, "..", "..", "jaiph_stdlib.sh");
+      dockerResult = spawnDockerProcess({
+        config: dockerConfig,
+        builtScriptPath: builtPath,
+        stdlibPath,
+        workspaceRoot,
+        wrapperCommand: command,
+        metaFile,
+        workflowSymbol,
+        runArgs,
+        env: runtimeEnv,
+        isTTY: !!isTTY,
+      });
+      execResult = dockerResult.child;
+    } else {
+      execResult = spawnRunProcess(command, [metaFile, builtPath, workflowSymbol, ...runArgs], {
+        cwd: workspaceRoot,
+        env: runtimeEnv,
+      });
+    }
+
     const signalHandlers = setupRunSignalHandlers(execResult, { forceKillAfterMs: 1500 });
     let capturedStderr = "";
     let stderrBuffer = "";
@@ -376,6 +405,17 @@ const PROMPT_ARGS_DISPLAY_MAX = 96;
       }
       stderrBuffer = "";
     }
+    // Clean up Docker resources
+    if (dockerResult) {
+      const timedOut = dockerResult.timeoutTimer === undefined && dockerConfig.timeout > 0
+        ? false
+        : (Date.now() - startedAt) >= dockerConfig.timeout * 1000;
+      cleanupDocker(dockerResult);
+      if (timedOut && childExit.status !== 0) {
+        capturedStderr += "E_TIMEOUT container execution exceeded timeout\n";
+      }
+    }
+
     if (childExit.signal && capturedStderr.trim().length === 0) {
       capturedStderr = `Process terminated by signal ${childExit.signal}`;
     }

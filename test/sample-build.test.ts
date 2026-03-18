@@ -1189,7 +1189,7 @@ test("jaiph init creates workspace structure and guidance", () => {
     assert.match(initResult.stdout, /Synced \.jaiph\/jaiph-skill\.md/);
     assert.match(initResult.stdout, /\.\/\.jaiph\/bootstrap\.jh/);
     assert.match(initResult.stdout, /analyze the project/i);
-    assert.match(initResult.stdout, /add `\.jaiph\/runs\/` to `\.gitignore`/i);
+    assert.match(initResult.stdout, /add `\.jaiph\/` to `\.gitignore`/i);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
