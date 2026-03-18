@@ -370,22 +370,27 @@ const MAX_PARAM_VALUE_DISPLAY = 32;
             process.stdout.write("\r\u001b[K\u001b[1A\r\u001b[K");
           }
           process.stdout.write(`${completedLine}${isTTY ? "\n\n" : "\n"}`);
-          if (event.dispatched && event.out_file) {
-            try {
-              const content = readFileSync(event.out_file, "utf8").trimEnd();
-              if (content.length > 0) {
-                const depth = Math.max(1, event.depth ?? 1);
-                const outputIndent = "    ".repeat(depth);
-                const dimOutputIndent = colorize(outputIndent, "dim");
-                for (const outLine of content.split("\n")) {
-                  if (isTTY && runningInterval !== undefined) {
-                    process.stdout.write("\r\u001b[K\u001b[1A\r\u001b[K");
-                  }
-                  process.stdout.write(`${dimOutputIndent}${outLine}${isTTY ? "\n\n" : "\n"}`);
-                }
+          if (event.dispatched) {
+            let content = "";
+            if (event.out_content) {
+              content = event.out_content.trimEnd();
+            } else if (event.out_file) {
+              try {
+                content = readFileSync(event.out_file, "utf8").trimEnd();
+              } catch {
+                // File may not exist (e.g., Docker mode without out_content) — silently skip.
               }
-            } catch {
-              // File may not exist (e.g., Docker mode) — silently skip.
+            }
+            if (content.length > 0) {
+              const depth = Math.max(1, event.depth ?? 1);
+              const outputIndent = "    ".repeat(depth);
+              const dimOutputIndent = colorize(outputIndent, "dim");
+              for (const outLine of content.split("\n")) {
+                if (isTTY && runningInterval !== undefined) {
+                  process.stdout.write("\r\u001b[K\u001b[1A\r\u001b[K");
+                }
+                process.stdout.write(`${dimOutputIndent}${outLine}${isTTY ? "\n\n" : "\n"}`);
+              }
             }
           }
           if (isTTY && runningInterval !== undefined) {

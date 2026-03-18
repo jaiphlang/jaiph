@@ -19,6 +19,8 @@ export type StepEvent = {
   dispatched: boolean;
   /** Inbox channel name when dispatched. */
   channel: string;
+  /** Stdout content of a dispatched step (embedded so the CLI can display it without file access). */
+  out_content: string;
 };
 
 export type LogEvent = {
@@ -89,6 +91,7 @@ export function parseStepEvent(line: string): StepEvent | undefined {
       params,
       dispatched: (parsed as Record<string, unknown>).dispatched === true,
       channel: typeof (parsed as Record<string, unknown>).channel === "string" ? (parsed as Record<string, unknown>).channel as string : "",
+      out_content: typeof (parsed as Record<string, unknown>).out_content === "string" ? (parsed as Record<string, unknown>).out_content as string : "",
     };
   } catch {
     return undefined;
