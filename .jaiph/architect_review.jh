@@ -45,7 +45,8 @@ workflow review_task {
       verdict: needs-work
     and update the task block in QUEUE.md with a numbered list of
     questions, concerns, or recommendations that must be addressed
-    before development can start.
+    before development can start. This is mandatory if you consider the task
+    as not ready for development.
 
     If the task in the QUEUE.md already contains answers to the questions,
     merge the answers into the description, remove redundancies, but keep
