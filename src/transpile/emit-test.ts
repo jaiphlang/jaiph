@@ -37,7 +37,7 @@ function emitMockDispatchScript(
     lines.push(`  printf '%s' ${escape(step.elseResponse)}`);
   } else {
     lines.push("else");
-    lines.push('  echo "jai: no mock matched prompt (no branch matched). Prompt preview: ${prompt:0:80}..." >&2');
+    lines.push('  echo "jaiph: no mock matched prompt (no branch matched). Prompt preview: ${prompt:0:80}..." >&2');
     lines.push("  exit 1");
   }
   lines.push("fi");
@@ -55,12 +55,12 @@ export function emitTest(
   out.push("set -euo pipefail");
   out.push('jaiph_stdlib_path="${JAIPH_STDLIB:-$HOME/.local/bin/jaiph_stdlib.sh}"');
   out.push('if [[ ! -f "$jaiph_stdlib_path" ]]; then');
-  out.push('  echo "jai: stdlib not found at $jaiph_stdlib_path (set JAIPH_STDLIB or reinstall jaiph)" >&2');
+  out.push('  echo "jaiph: stdlib not found at $jaiph_stdlib_path (set JAIPH_STDLIB or reinstall jaiph)" >&2');
   out.push("  exit 1");
   out.push("fi");
   out.push('source "$jaiph_stdlib_path"');
   out.push('if [[ "$(jaiph__runtime_api)" != "1" ]]; then');
-  out.push('  echo "jai: incompatible jaiph stdlib runtime (required api=1)" >&2');
+  out.push('  echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2');
   out.push("  exit 1");
   out.push("fi");
   const scriptDir = '$(dirname "${BASH_SOURCE[0]}")';
@@ -167,7 +167,7 @@ export function emitTest(
         out.push("  fi");
         if (!step.allowFailure) {
           out.push("  if [[ $jaiph__test_exit -ne 0 ]]; then");
-          out.push('    echo "jai: workflow exited with status $jaiph__test_exit" >&2');
+          out.push('    echo "jaiph: workflow exited with status $jaiph__test_exit" >&2');
           out.push("    return 1");
           out.push("  fi");
         }

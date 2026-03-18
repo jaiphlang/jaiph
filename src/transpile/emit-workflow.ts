@@ -320,12 +320,12 @@ export function emitWorkflow(
   out.push("set -euo pipefail");
   out.push('jaiph_stdlib_path="${JAIPH_STDLIB:-$HOME/.local/bin/jaiph_stdlib.sh}"');
   out.push('if [[ ! -f "$jaiph_stdlib_path" ]]; then');
-  out.push('  echo "jai: stdlib not found at $jaiph_stdlib_path (set JAIPH_STDLIB or reinstall jaiph)" >&2');
+  out.push('  echo "jaiph: stdlib not found at $jaiph_stdlib_path (set JAIPH_STDLIB or reinstall jaiph)" >&2');
   out.push("  exit 1");
   out.push("fi");
   out.push('source "$jaiph_stdlib_path"');
   out.push('if [[ "$(jaiph__runtime_api)" != "1" ]]; then');
-  out.push('  echo "jai: incompatible jaiph stdlib runtime (required api=1)" >&2');
+  out.push('  echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2');
   out.push("  exit 1");
   out.push("fi");
   if (ast.metadata) {

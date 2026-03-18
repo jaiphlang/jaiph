@@ -193,7 +193,7 @@ jaiph::run_prompt_backend() {
   local backend="$1"
   if [[ "$backend" == "claude" ]]; then
     if ! command -v claude >/dev/null 2>&1; then
-      echo "jai: agent.backend is \"claude\" but the Claude CLI (claude) was not found in PATH. Install the Anthropic Claude CLI or set agent.backend = \"cursor\" (or JAIPH_AGENT_BACKEND=cursor)." >&2
+      echo "jaiph: agent.backend is \"claude\" but the Claude CLI (claude) was not found in PATH. Install the Anthropic Claude CLI or set agent.backend = \"cursor\" (or JAIPH_AGENT_BACKEND=cursor)." >&2
       return 1
     fi
     printf '%s' "$prompt_text" | claude -p --verbose --output-format stream-json --include-partial-messages "${claude_extra_flags[@]}" 2>&1 | jaiph::stream_json_to_text
@@ -226,11 +226,11 @@ jaiph::prompt_impl() {
   agent_command="${JAIPH_AGENT_COMMAND:-cursor-agent}"
   # JAIPH_AGENT_COMMAND may contain executable + args (e.g. "cursor-agent --force").
   if ! eval "set -- ${agent_command}"; then
-    echo "jai: failed to parse agent.command: ${agent_command}" >&2
+    echo "jaiph: failed to parse agent.command: ${agent_command}" >&2
     return 1
   fi
   if [[ "$#" -eq 0 ]]; then
-    echo "jai: agent.command resolved to empty command" >&2
+    echo "jaiph: agent.command resolved to empty command" >&2
     return 1
   fi
   agent_command_parts=("$@")
@@ -329,7 +329,7 @@ jaiph::prompt_capture_with_schema() {
   local schema="${JAIPH_PROMPT_SCHEMA:-}"
   local capture_name="${JAIPH_PROMPT_CAPTURE_NAME:-}"
   if [[ -z "$schema" || -z "$capture_name" ]]; then
-    echo "jai: prompt_capture_with_schema: JAIPH_PROMPT_SCHEMA and JAIPH_PROMPT_CAPTURE_NAME must be set" >&2
+    echo "jaiph: prompt_capture_with_schema: JAIPH_PROMPT_SCHEMA and JAIPH_PROMPT_CAPTURE_NAME must be set" >&2
     return 1
   fi
   local eval_line
@@ -375,17 +375,17 @@ jaiph::prompt_capture_with_schema() {
     }
     if (!obj) {
       const message = parseError && parseError.message ? parseError.message : 'unknown parse error';
-      process.stderr.write('jai: prompt returned invalid JSON (parse error): ' + message + '\\n');
+      process.stderr.write('jaiph: prompt returned invalid JSON (parse error): ' + message + '\\n');
       process.stderr.write('Last line: ' + lastLine.slice(0, 200) + (lastLine.length > 200 ? '...' : '') + '\\n');
       process.exit(1);
     }
     if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) {
-      process.stderr.write('jai: prompt returned invalid JSON: root must be an object\\n');
+      process.stderr.write('jaiph: prompt returned invalid JSON: root must be an object\\n');
       process.exit(1);
     }
     for (const f of fields) {
       if (!(f.name in obj)) {
-        process.stderr.write('jai: prompt response missing required field: ' + f.name + '\\n');
+        process.stderr.write('jaiph: prompt response missing required field: ' + f.name + '\\n');
         process.exit(2);
       }
     }
@@ -393,15 +393,15 @@ jaiph::prompt_capture_with_schema() {
       const v = obj[f.name];
       const t = f.type;
       if (t === 'string' && typeof v !== 'string') {
-        process.stderr.write('jai: prompt response field \"' + f.name + '\" expected string, got ' + typeof v + '\\n');
+        process.stderr.write('jaiph: prompt response field \"' + f.name + '\" expected string, got ' + typeof v + '\\n');
         process.exit(3);
       }
       if (t === 'number' && typeof v !== 'number') {
-        process.stderr.write('jai: prompt response field \"' + f.name + '\" expected number, got ' + typeof v + '\\n');
+        process.stderr.write('jaiph: prompt response field \"' + f.name + '\" expected number, got ' + typeof v + '\\n');
         process.exit(3);
       }
       if (t === 'boolean' && typeof v !== 'boolean') {
-        process.stderr.write('jai: prompt response field \"' + f.name + '\" expected boolean, got ' + typeof v + '\\n');
+        process.stderr.write('jaiph: prompt response field \"' + f.name + '\" expected boolean, got ' + typeof v + '\\n');
         process.exit(3);
       }
     }

@@ -7,7 +7,7 @@ jaiph__version() {
 
 jaiph__die() {
   local message="$1"
-  echo "jai: $message" >&2
+  echo "jaiph: $message" >&2
   return 1
 }
 
