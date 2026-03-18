@@ -106,7 +106,7 @@ Mount strings in `runtime.workspace` follow these forms:
 ### Docker behavior
 
 - `docker run --rm` with proper UID/GID mapping (`--user $(id -u):$(id -g)` on Linux).
-- TTY passthrough: `-t` flag when `process.stdout.isTTY` is true.
+- TTY passthrough: `-t` flag when `process.stdout.isTTY` is true. Because Docker with `-t` merges the container's stderr into stdout, the CLI buffers Docker stdout line-by-line and filters out `__JAIPH_EVENT__` lines (routing them through the event handler instead). This ensures the progress tree output is identical whether Docker is enabled or not.
 - Docker is **enabled by default** on local machines. `CI=true` disables Docker by default (many CI runners lack Docker-in-Docker). In-file `runtime.docker_enabled = true` or `JAIPH_DOCKER_ENABLED=true` overrides this in either environment.
 - Docker missing → `E_DOCKER_NOT_FOUND` (no silent fallback).
 - Image auto-pulled if missing; pull failure is fatal.

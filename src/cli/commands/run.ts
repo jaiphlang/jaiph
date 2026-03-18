@@ -88,8 +88,9 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     };
 const PROMPT_PREVIEW_MAX = 24;
 const PROMPT_ARGS_DISPLAY_MAX = 96;
+const MAX_PARAM_VALUE_DISPLAY = 32;
 
-    const formatStartLine = (indent: string, kind: string, name: string, params?: Array<[string, string]>): string => {
+    const formatStartLine = (indent: string, kind: string, name: string, params?: Array<[string, string]>, channel?: string): string => {
       const prefix = indent.slice(0, -2);
       const marker = colorize("▸", "dim");
       const kindLabel = colorize(kind, "bold");
@@ -118,13 +119,28 @@ const PROMPT_ARGS_DISPLAY_MAX = 96;
             : "";
       } else {
         namePart = kind === name ? kindLabel : `${kindLabel} ${name}`;
-        const showParams =
-          params != null &&
-          params.length > 0 &&
-          (kind === "workflow" || kind === "prompt" || kind === "function" || kind === "rule");
-        paramSuffix = showParams
-          ? colorize(formatParamsForDisplay(params), "dim")
-          : "";
+        if (channel) {
+          // Dispatched step: show (channel, "message") format.
+          const values = (params ?? [])
+            .map(([, v]) => v)
+            .filter((v) => !isInternalParamValue(v))
+            .filter((v) => v.trim() !== "");
+          const msgParts = values.map((v) => {
+            const visible = v.length > MAX_PARAM_VALUE_DISPLAY ? `${v.slice(0, MAX_PARAM_VALUE_DISPLAY)}...` : v;
+            const escaped = visible.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+            return `"${escaped}"`;
+          });
+          const allParts = [channel, ...msgParts];
+          paramSuffix = colorize(` (${allParts.join(", ")})`, "dim");
+        } else {
+          const showParams =
+            params != null &&
+            params.length > 0 &&
+            (kind === "workflow" || kind === "prompt" || kind === "function" || kind === "rule");
+          paramSuffix = showParams
+            ? colorize(formatParamsForDisplay(params), "dim")
+            : "";
+        }
       }
       return `${dimPrefix}${marker} ${namePart}${paramSuffix}`;
     };
@@ -333,7 +349,7 @@ const PROMPT_ARGS_DISPLAY_MAX = 96;
           }
           const depth = Math.max(1, event.depth ?? runtimeStack.length);
           const indent = "  · ".repeat(depth);
-          const label = formatStartLine(indent, event.kind, event.name, event.params);
+          const label = formatStartLine(indent, event.kind, event.name, event.params, event.channel || undefined);
           stepIndentById.set(eventId, indent);
           if (isTTY && runningInterval !== undefined) {
             process.stdout.write("\r\u001b[K\u001b[1A\r\u001b[K");
@@ -354,6 +370,24 @@ const PROMPT_ARGS_DISPLAY_MAX = 96;
             process.stdout.write("\r\u001b[K\u001b[1A\r\u001b[K");
           }
           process.stdout.write(`${completedLine}${isTTY ? "\n\n" : "\n"}`);
+          if (event.dispatched && event.out_file) {
+            try {
+              const content = readFileSync(event.out_file, "utf8").trimEnd();
+              if (content.length > 0) {
+                const depth = Math.max(1, event.depth ?? 1);
+                const outputIndent = "    ".repeat(depth);
+                const dimOutputIndent = colorize(outputIndent, "dim");
+                for (const outLine of content.split("\n")) {
+                  if (isTTY && runningInterval !== undefined) {
+                    process.stdout.write("\r\u001b[K\u001b[1A\r\u001b[K");
+                  }
+                  process.stdout.write(`${dimOutputIndent}${outLine}${isTTY ? "\n\n" : "\n"}`);
+                }
+              }
+            } catch {
+              // File may not exist (e.g., Docker mode) — silently skip.
+            }
+          }
           if (isTTY && runningInterval !== undefined) {
             const runningElapsedSec = (Date.now() - startedAt) / 1000;
             process.stdout.write(formatRunningBottomLine("default", runningElapsedSec));
@@ -384,9 +418,30 @@ const PROMPT_ARGS_DISPLAY_MAX = 96;
     };
     execResult.stdout?.setEncoding("utf8");
     execResult.stderr?.setEncoding("utf8");
-    execResult.stdout?.on("data", (chunk: string) => {
-      process.stdout.write(chunk);
-    });
+    let stdoutBuffer = "";
+    if (dockerConfig.enabled) {
+      // Docker with -t merges stderr into stdout, so event lines arrive on
+      // stdout.  Buffer line-by-line and route event lines through the same
+      // handler that normally processes stderr.
+      execResult.stdout?.on("data", (chunk: string) => {
+        stdoutBuffer += chunk;
+        let newlineIndex = stdoutBuffer.indexOf("\n");
+        while (newlineIndex !== -1) {
+          const line = stdoutBuffer.slice(0, newlineIndex).replace(/\r$/, "");
+          stdoutBuffer = stdoutBuffer.slice(newlineIndex + 1);
+          if (parseLogEvent(line) || parseStepEvent(line)) {
+            handleStderrLine(line);
+          } else {
+            process.stdout.write(`${line}\n`);
+          }
+          newlineIndex = stdoutBuffer.indexOf("\n");
+        }
+      });
+    } else {
+      execResult.stdout?.on("data", (chunk: string) => {
+        process.stdout.write(chunk);
+      });
+    }
     execResult.stderr?.on("data", (chunk: string) => {
       stderrBuffer += chunk;
       let newlineIndex = stderrBuffer.indexOf("\n");
@@ -398,6 +453,19 @@ const PROMPT_ARGS_DISPLAY_MAX = 96;
       }
     });
     const childExit = await waitForRunExit(execResult, () => signalHandlers.remove());
+    if (stdoutBuffer.length > 0) {
+      const remaining = stdoutBuffer.replace(/\r$/, "").split(/\r?\n/);
+      for (const line of remaining) {
+        if (line.length > 0) {
+          if (dockerConfig.enabled && (parseLogEvent(line) || parseStepEvent(line))) {
+            handleStderrLine(line);
+          } else {
+            process.stdout.write(`${line}\n`);
+          }
+        }
+      }
+      stdoutBuffer = "";
+    }
     if (stderrBuffer.length > 0) {
       const remaining = stderrBuffer.replace(/\r$/, "").split(/\r?\n/);
       for (const line of remaining) {

@@ -132,3 +132,35 @@ if [[ -z "${inbox_file}" ]]; then
 fi
 e2e::assert_file_exists "${inbox_file}" "inbox file 001-audit.txt exists after send"
 e2e::assert_contains "$(cat "${inbox_file}")" "inbox-content-check" "inbox file contains sent message"
+
+e2e::section "Dispatched step CLI output shows channel and message"
+# Given
+cat > "${TEST_DIR}/display_inbox.jh" <<'EOF'
+workflow scanner {
+  echo "Found 3 issues in auth module" -> findings
+}
+
+workflow analyst {
+  echo "Summary: $1" -> report
+}
+
+workflow reviewer {
+  echo "[reviewed] $1"
+}
+
+workflow default {
+  run scanner
+  on findings -> analyst
+  on report -> reviewer
+}
+EOF
+
+# When
+jaiph build "${TEST_DIR}/display_inbox.jh"
+display_out="$(jaiph run "${TEST_DIR}/display_inbox.jh" 2>/dev/null)"
+normalized="$(e2e::normalize_output "${display_out}")"
+
+# Then: dispatched steps include channel name in output
+e2e::assert_contains "${normalized}" "analyst (findings," "dispatched step shows channel name for analyst"
+e2e::assert_contains "${normalized}" "reviewer (report," "dispatched step shows channel name for reviewer"
+e2e::assert_contains "${normalized}" "[reviewed] Summary: Found 3 issues in auth module" "dispatched step stdout is displayed after completion"
