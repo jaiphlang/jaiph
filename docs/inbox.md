@@ -102,15 +102,24 @@ zero-padded monotonic counter scoped to the run.
 ```
 1. Register all routing rules (jaiph::register_route calls).
 2. Execute orchestrator workflow top-to-bottom.
-3. When -> is executed: write message to inbox dir, push to in-memory queue.
+3. When -> is executed: write message to inbox dir, append to file-based queue.
 4. After orchestrator completes, drain the dispatch queue:
-   a. Shift first entry from queue.
+   a. Read next unprocessed entry from the queue file.
    b. Look up route for channel.
    c. If route exists, invoke each target workflow with message as $1.
    d. Invoked workflows may call jaiph::send, growing the queue.
    e. Repeat until queue is empty or depth limit (100) reached.
 5. Run ends.
 ```
+
+### Implementation notes
+
+Routes are stored as a newline-delimited list (`channel<TAB>targets`) instead
+of bash associative arrays, avoiding known bugs in bash 3.2 where reading a
+non-existent key can return the last inserted value. The dispatch queue and
+sequence counter are file-backed (`inbox/.queue`, `inbox/.seq`) so that
+increments and enqueues performed inside subshells (e.g. `run_step` pipelines)
+survive back into the parent process.
 
 ## Error semantics
 

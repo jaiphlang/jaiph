@@ -61,6 +61,8 @@ layout: null
                         data-target="say-hello-test-jh">say_hello.test.jh</button>
                     <button type="button" class="code-tab-button"
                         data-target="ensure-ci-passes-jh">ensure_ci_passes.jh</button>
+                    <button type="button" class="code-tab-button"
+                        data-target="inbox-pipeline-jh">inbox_pipeline.jh</button>
                 </div>
 
                 <div class="code-tab-panel is-active" data-panel="say-hello-jh">
@@ -225,6 +227,41 @@ running ensure_ci_passes.jh
   <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">19s</span>
   <span class="run-pass">✓</span> <span class="run-time">56s</span>
 <span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(56.4s)</span></code></pre>
+                </div>
+
+                <div class="code-tab-panel" data-panel="inbox-pipeline-jh">
+                    <p>The <strong>inbox</strong> system lets workflows communicate through named channels.
+                        A workflow sends a message with <code>-&gt;</code> and an <code>on</code> route
+                        dispatches it to one or more receivers as <code>$1</code>.</p>
+                    <pre><code class="language-jaiph">#!/usr/bin/env jaiph
+
+workflow scanner {
+  echo "Found 3 issues in auth module" -> findings
+}
+
+workflow analyst {
+  echo "Summary: $1" -> report
+}
+
+workflow reviewer {
+  echo "[reviewed] $1"
+}
+
+workflow default {
+  run scanner
+  on findings -> analyst
+  on report -> reviewer
+}</code></pre>
+                    <p>Running the workflow:</p>
+                    <pre><code class="jaiph-run"><span class="run-command">➜  ./inbox_pipeline.jh</span>
+
+running inbox_pipeline.jh
+
+<span class="run-keyword">workflow</span> default
+  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> scanner
+  <span class="run-pass">✓</span> <span class="run-time">0s</span>
+  [reviewed] Summary: Found 3 issues in auth module
+<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(0.1s)</span></code></pre>
                 </div>
 
             </div>
