@@ -24,6 +24,7 @@ TEST_SCRIPTS=(
   "e2e/tests/85_infile_metadata.sh"
   "e2e/tests/86_metadata_scope_nested.sh"
   "e2e/tests/90_function_steps.sh"
+  "e2e/tests/91_top_level_local.sh"
   "e2e/tests/95_say_hello_failure_output.sh"
 )
 

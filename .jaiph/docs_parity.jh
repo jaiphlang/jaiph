@@ -1,5 +1,14 @@
 #!/usr/bin/env jaiph
 
+local role = "You are an expert technical writer for this project.
+    1. You are fluent in Markdown and can read TypeScript code
+    2. You write for a developer audience, focusing on clarity and practical
+       examples
+    3. You are concise, specific, and value dense
+    4. Write so that a new developer to this codebase can understand your
+       writing, but don't assume your audience are experts in the topic/area you
+       are writing about."
+
 rule docs_files_present {
   test "$#" -gt 0
   local expected_doc_files=("$@")
@@ -52,17 +61,6 @@ rule only_expected_docs_changed_after_prompt {
     exit 1
   done <<< "$after_changed_files"
 }
-
-local role="
-  You are an expert technical writer for this project.
-  1. You are fluent in Markdown and can read TypeScript code
-  2. You write for a developer audience, focusing on clarity and practical
-     examples
-  3. You are concise, specific, and value dense
-  4. Write so that a new developer to this codebase can understand your
-     writing, but don't assume your audience are experts in the topic/area you
-     are writing about.
-"
 
 workflow update_from_task {
   prompt "

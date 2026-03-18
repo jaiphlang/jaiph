@@ -283,6 +283,9 @@ jaiph use 0.3.0</code></pre>
                     <dd>Imports rules and workflows from another Jaiph module under an alias. Jaiph compiles each module
                         to a single shell file, and verifies the import at compile time.</dd>
 
+                    <dt><code>local name = value</code></dt>
+                    <dd>Declares a module-scoped variable at the top level. Values may be double-quoted strings (multi-line), single-quoted strings, or bare values. Accessible as <code>$name</code> inside all rules, functions, and workflows in the same module. The transpiler prefixes the variable to avoid collisions (e.g. <code>entry__role</code>) and emits <code>local</code> shims inside each body. Variable names share the unified namespace — duplicates with rules, workflows, or functions are a parse error. Not exportable; module-scoped only. See <a href="grammar">Grammar</a>.</dd>
+
                     <dt><code>rule name { ... }</code></dt>
                     <dd>Defines a reusable check/action that returns a shell exit code. The rule is executed in a
                         read-only subshell, and its stdout is preserved. The rule fails if the command returns a

@@ -168,6 +168,12 @@ export type WorkflowStepDef =
       loc: SourceLoc;
     };
 
+export interface EnvDeclDef {
+  name: string;
+  value: string;
+  loc: SourceLoc;
+}
+
 export interface jaiphModule {
   filePath: string;
   /** Optional in-file workflow metadata (agent model, command, run options). */
@@ -177,6 +183,8 @@ export interface jaiphModule {
   rules: RuleDef[];
   functions: FunctionDef[];
   workflows: WorkflowDef[];
+  /** Top-level variable declarations (`local name = value`). */
+  envDecls?: EnvDeclDef[];
   /** Present only when parsing a *.test.jh file. */
   tests?: TestBlockDef[];
 }

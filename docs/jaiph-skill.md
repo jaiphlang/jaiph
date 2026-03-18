@@ -53,6 +53,7 @@ Prefer composable modules over one large file.
 
 - **Imports:** `import "path.jh" as alias` or `import 'path.jh' as alias`. Path may be single- or double-quoted. Path is relative to the importing file; extensions `.jh` and `.jph` are supported (`.jh` preferred).
 - **Definitions:** `rule name { ... }`, `workflow name { ... }`, `function name() { ... }` (parentheses optional). Optional `export` before `rule` or `workflow` marks it as public (see [Grammar](grammar.md)). Optional `config { ... }` at the top of a file sets agent, run, and runtime options. Config values can be quoted strings, booleans (`true`/`false`), bare integers, or bracket-delimited arrays of strings (see [Grammar](grammar.md) and [Configuration](configuration.md)).
+- **Top-level locals:** `local name = value` declares a module-scoped variable. Values may be double-quoted strings (multi-line, same quoting rules as `prompt`), single-quoted strings, or bare values. The variable is accessible as `$name` inside all rules, functions, and workflows in the same module. Variable names share the unified namespace with rules, workflows, and functions — duplicates are `E_PARSE`. Not exportable; module-scoped only.
 - **Steps:**
   - **ensure** — `ensure ref [args...]` runs a rule (local or `alias.rule_name`); args are passed to the shell. Optionally `ensure ref [args] recover <body>`: bounded retry loop (run rule; on failure run recover body; repeat until the rule passes or max retries, then exit 1). Max retries default to 10; override with `JAIPH_ENSURE_MAX_RETRIES`.
   - **run** — `run ref [args...]` runs a workflow (local or `alias.workflow_name`); args are passed to the workflow.
@@ -73,7 +74,7 @@ Rules:
 - Inside a workflow, `run` targets a workflow (local or `alias.workflow_name`), not a raw shell command.
 - Inside a rule, only `ensure` and shell commands are allowed; `run` is forbidden. Use `ensure` to call another rule, or move the call to a workflow.
 - Rules run in a read-only wrapper; put mutating operations in workflows.
-- **Unified namespace:** Rules, workflows, and functions share a single name space per module. Using the same name for two items (e.g. a rule `foo` and a workflow `foo`) is a compile error (`E_PARSE`).
+- **Unified namespace:** Rules, workflows, functions, and top-level locals share a single name space per module. Using the same name for two items (e.g. a rule `foo` and a local `foo`) is a compile error (`E_PARSE`).
 - **Calling conventions (compiler-enforced):** `ensure` must target a rule — using it on a workflow or function is `E_VALIDATE`. `run` must target a workflow — using it on a rule or function is `E_VALIDATE`. Functions are called directly by name in shell context.
 
 ## Authoring Heuristics
