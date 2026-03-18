@@ -35,7 +35,7 @@ test.skip("build transpiles .jh into strict bash with retry flow", () => {
       stdlib,
       /--print --output-format stream-json --stream-partial-output --workspace "\$workspace_root" --model "\$JAIPH_AGENT_MODEL" --trust "\$trusted_workspace"( "\$\{cursor_extra_flags\[@\]\}")? "\$prompt_text"/,
     );
-    assert.match(stdlib, /jaiph::run_step jaiph::prompt jaiph::prompt_impl "\$@"/);
+    assert.match(stdlib, /jaiph::run_step jaiph::prompt prompt jaiph::prompt_impl "\$@"/);
     assert.match(stdlib, /jaiph::execute_readonly\(\)/);
     assert.match(stdlib, /jaiph::run_step\(\)/);
     assert.match(stdlib, /sudo env JAIPH_PRECEDING_FILES="\$JAIPH_PRECEDING_FILES" unshare -m bash -c/);
@@ -50,20 +50,20 @@ test.skip("build transpiles .jh into strict bash with retry flow", () => {
     assert.match(generated, /if \[\[ "\$\(jaiph__runtime_api\)" != "1" \]\]/);
     assert.match(generated, /# Validates local build prerequisites\./);
     assert.match(generated, /# Orchestrates checks, prompt execution, and docs refresh\./);
-    assert.match(generated, /main::rule::project_ready\(\) \{/);
-    assert.match(generated, /main::rule::project_ready::impl\(\) \{/);
-    assert.match(generated, /jaiph::run_step main::rule::project_ready jaiph::execute_readonly main::rule::project_ready::impl/);
-    assert.match(generated, /if ! main::rule::project_ready; then/);
-    assert.match(generated, /bootstrap_project::workflow::nodejs/);
+    assert.match(generated, /main::project_ready\(\) \{/);
+    assert.match(generated, /main::project_ready::impl\(\) \{/);
+    assert.match(generated, /jaiph::run_step main::project_ready rule jaiph::execute_readonly main::project_ready::impl/);
+    assert.match(generated, /if ! main::project_ready; then/);
+    assert.match(generated, /bootstrap_project::nodejs/);
     assert.match(generated, /jaiph::prompt "\$JAIPH_PROMPT_PREVIEW" "\$@" <<__JAIPH_PROMPT_/);
-    assert.match(generated, /main::rule::build_passes\(\)/);
-    assert.match(generated, /tools::security::rule::scan_passes/);
-    assert.match(generated, /main::workflow::update_docs/);
-    assert.match(generated, /main::workflow::default::impl\(\) \{/);
-    assert.match(generated, /jaiph::run_step main::workflow::default main::workflow::default::impl "\$@"/);
+    assert.match(generated, /main::build_passes\(\)/);
+    assert.match(generated, /tools::security::scan_passes/);
+    assert.match(generated, /main::update_docs/);
+    assert.match(generated, /main::default::impl\(\) \{/);
+    assert.match(generated, /jaiph::run_step main::default workflow main::default::impl "\$@"/);
 
     const securityGenerated = readFileSync(join(outDir, "tools/security.sh"), "utf8");
-    assert.match(securityGenerated, /tools::security::rule::scan_passes\(\) \{/);
+    assert.match(securityGenerated, /tools::security::scan_passes\(\) \{/);
   } finally {
     rmSync(outDir, { recursive: true, force: true });
   }
@@ -214,7 +214,7 @@ test("jaiph run enables xtrace when JAIPH_DEBUG=true", () => {
     });
 
     assert.equal(runResult.status, 0, runResult.stderr);
-    assert.match(runResult.stderr, /\+ .*::workflow::default/);
+    assert.match(runResult.stderr, /\+ .*::default/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -300,7 +300,8 @@ test("jaiph run fails when runtime emits non-xtrace stderr", () => {
         "jaiph__runtime_api() { echo 1; }",
         "jaiph::run_step() {",
         "  local _name=\"$1\"",
-        "  shift || true",
+        "  local _kind=\"$2\"",
+        "  shift 2 || shift || true",
         "  \"$@\"",
         "}",
         "jaiph::execute_readonly() {",
@@ -886,7 +887,7 @@ test("jaiph run agent.backend = claude uses Claude CLI and captures output", () 
     const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
     const runFiles = readdirSync(latestRunDir);
     const workflowOutName = runFiles.find(
-      (name) => name.endsWith(".out") && name.includes("workflow"),
+      (name) => name.endsWith(".out") && !name.includes("jaiph__prompt"),
     );
     assert.equal(Boolean(workflowOutName), true);
     const workflowOut = readFileSync(join(latestRunDir, workflowOutName!), "utf8");
@@ -984,7 +985,7 @@ test("jaiph run JAIPH_AGENT_BACKEND env overrides file default", () => {
     const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
     const runFiles = readdirSync(latestRunDir);
     const workflowOutName = runFiles.find(
-      (name) => name.endsWith(".out") && name.includes("workflow"),
+      (name) => name.endsWith(".out") && !name.includes("jaiph__prompt"),
     );
     assert.equal(Boolean(workflowOutName), true);
     const workflowOut = readFileSync(join(latestRunDir, workflowOutName!), "utf8");
@@ -1115,7 +1116,8 @@ test("jaiph run uses JAIPH_STDLIB global runtime path", () => {
         "jaiph__runtime_api() { echo 1; }",
         "jaiph::run_step() {",
         "  local _name=\"$1\"",
-        "  shift || true",
+        "  local _kind=\"$2\"",
+        "  shift 2 || shift || true",
         "  \"$@\"",
         "}",
         "jaiph::execute_readonly() {",
@@ -1255,7 +1257,7 @@ test("build accepts files with no workflows", () => {
 
     const results = build(filePath, outDir);
     assert.equal(results.length, 1);
-    assert.match(results[0].bash, /rules-only::rule::only_rule/);
+    assert.match(results[0].bash, /rules-only::only_rule/);
     assert.doesNotMatch(results[0].bash, /__workflow_/);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -1286,9 +1288,9 @@ test("build transpiles ensure statements with arguments", () => {
     assert.equal(results.length, 1);
     assert.match(
       results[0].bash,
-      /jaiph::run_step entry::rule::check_branch jaiph::execute_readonly entry::rule::check_branch::impl "\$@"/,
+      /jaiph::run_step entry::check_branch rule jaiph::execute_readonly entry::check_branch::impl "\$@"/,
     );
-    assert.match(results[0].bash, /entry::rule::check_branch "\$1"/);
+    assert.match(results[0].bash, /entry::check_branch "\$1"/);
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(outDir, { recursive: true, force: true });
@@ -1317,11 +1319,11 @@ test("build supports top-level functions with namespaced wrappers", () => {
 
     const results = build(filePath, outDir);
     assert.equal(results.length, 1);
-    assert.match(results[0].bash, /entry::function::changed_files::impl\(\) \{/);
-    assert.match(results[0].bash, /entry::function::changed_files\(\) \{/);
-    assert.match(results[0].bash, /jaiph::run_step_passthrough entry::function::changed_files entry::function::changed_files::impl "\$@"/);
+    assert.match(results[0].bash, /entry::changed_files::impl\(\) \{/);
+    assert.match(results[0].bash, /entry::changed_files\(\) \{/);
+    assert.match(results[0].bash, /jaiph::run_step_passthrough entry::changed_files function entry::changed_files::impl "\$@"/);
     assert.match(results[0].bash, /changed_files\(\) \{/);
-    assert.match(results[0].bash, /entry::function::changed_files "\$@"/);
+    assert.match(results[0].bash, /entry::changed_files "\$@"/);
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(outDir, { recursive: true, force: true });
@@ -1363,7 +1365,7 @@ test("jaiph run tree includes function calls from workflow shell steps", () => {
 
 test("parseStepEvent parses params array from event payload", () => {
   const line =
-    '__JAIPH_EVENT__ {"type":"STEP_START","func":"main::workflow::docs_page","kind":"workflow","name":"docs_page","ts":"2025-01-01T00:00:00Z","status":null,"elapsed_ms":null,"out_file":"","err_file":"","id":"run:1:1","parent_id":"run:0:0","seq":1,"depth":1,"run_id":"run-1","params":[["path","docs/cli.md"],["mode","strict"]]}';
+    '__JAIPH_EVENT__ {"type":"STEP_START","func":"main::docs_page","kind":"workflow","name":"docs_page","ts":"2025-01-01T00:00:00Z","status":null,"elapsed_ms":null,"out_file":"","err_file":"","id":"run:1:1","parent_id":"run:0:0","seq":1,"depth":1,"run_id":"run-1","params":[["path","docs/cli.md"],["mode","strict"]]}';
   const event = parseStepEvent(line);
   assert.ok(event);
   assert.equal(event?.kind, "workflow");
@@ -1375,7 +1377,7 @@ test("parseStepEvent parses params array from event payload", () => {
 
 test("parseStepEvent returns empty params when payload has no params", () => {
   const line =
-    '__JAIPH_EVENT__ {"type":"STEP_START","func":"main::workflow::default","kind":"workflow","name":"default","ts":"2025-01-01T00:00:00Z","status":null,"elapsed_ms":null,"out_file":"","err_file":"","id":"run:1:1","parent_id":null,"seq":1,"depth":0,"run_id":"run-1"}';
+    '__JAIPH_EVENT__ {"type":"STEP_START","func":"main::default","kind":"workflow","name":"default","ts":"2025-01-01T00:00:00Z","status":null,"elapsed_ms":null,"out_file":"","err_file":"","id":"run:1:1","parent_id":null,"seq":1,"depth":0,"run_id":"run-1"}';
   const event = parseStepEvent(line);
   assert.ok(event);
   assert.equal(event?.params?.length, 0);
@@ -1719,8 +1721,8 @@ test("build accepts ensure inside a rule block", () => {
 
     const results = build(filePath, outDir);
     assert.equal(results.length, 1);
-    assert.match(results[0].bash, /entry::rule::dep/);
-    assert.match(results[0].bash, /entry::rule::main/);
+    assert.match(results[0].bash, /entry::dep/);
+    assert.match(results[0].bash, /entry::main/);
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(outDir, { recursive: true, force: true });
@@ -1755,8 +1757,8 @@ test("build transpiles ensure ... recover to bounded retry loop", () => {
     const bash = results[0].bash;
     assert.match(bash, /for _jaiph_retry in \$\(seq 1/);
     assert.match(bash, /JAIPH_ENSURE_MAX_RETRIES/);
-    assert.match(bash, /entry::rule::dep/);
-    assert.match(bash, /entry::workflow::install_deps/);
+    assert.match(bash, /entry::dep/);
+    assert.match(bash, /entry::install_deps/);
     assert.match(bash, /\bdone\b/);
     assert.match(bash, /ensure condition did not pass after/);
   } finally {
@@ -1788,7 +1790,7 @@ test("build transpiles ensure ... recover { stmt; stmt; } to bounded retry loop 
     assert.equal(results.length, 1);
     const bash = results[0].bash;
     assert.match(bash, /for _jaiph_retry in \$\(seq 1/);
-    assert.match(bash, /entry::rule::ready/);
+    assert.match(bash, /entry::ready/);
     assert.match(bash, /echo fixing/);
     assert.match(bash, /touch ready\.txt/);
     assert.match(bash, /\bdone\b/);
@@ -1848,7 +1850,7 @@ test("build emits assignment capture for ensure and shell", () => {
     const results = build(filePath, outDir);
     assert.equal(results.length, 1);
     const bash = results[0].bash;
-    assert.match(bash, /response=\$\(entry::rule::echo_ok::impl\)/);
+    assert.match(bash, /response=\$\(entry::echo_ok::impl\)/);
     assert.match(bash, /out=\$\(echo hello\)/);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -2074,7 +2076,7 @@ test("jaiph run prompt capture: variable accessible in subsequent shell step", (
     const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
     const runFiles = readdirSync(latestRunDir);
     const workflowOutName = runFiles.find(
-      (name) => name.endsWith(".out") && name.includes("workflow"),
+      (name) => name.endsWith(".out") && !name.includes("jaiph__prompt"),
     );
     assert.equal(Boolean(workflowOutName), true);
     const workflowOut = readFileSync(join(latestRunDir, workflowOutName!), "utf8");
@@ -2128,7 +2130,7 @@ test("jaiph run prompt capture stores only final answer in assigned variable", (
     const runDirs = readdirSync(runsRoot).sort();
     const latestRunDir = join(runsRoot, runDirs[runDirs.length - 1]);
     const runFiles = readdirSync(latestRunDir);
-    const workflowOutName = runFiles.find((name) => name.endsWith(".out") && name.includes("workflow"));
+    const workflowOutName = runFiles.find((name) => name.endsWith(".out") && !name.includes("jaiph__prompt"));
     assert.equal(Boolean(workflowOutName), true);
     const workflowOut = readFileSync(join(latestRunDir, workflowOutName!), "utf8");
     assert.match(workflowOut, /captured:[\s\S]*final-only-value/);

@@ -46,25 +46,25 @@ test("compiler golden: transpileFile emits stable workflow shell", () => {
       "  exit 1",
       "fi",
       "",
-      "entry::rule::ok::impl() {",
+      "entry::ok::impl() {",
       "  set -eo pipefail",
       "  set +u",
       "  echo ok",
       "}",
       "",
-      "entry::rule::ok() {",
-      '  jaiph::run_step entry::rule::ok jaiph::execute_readonly entry::rule::ok::impl "$@"',
+      "entry::ok() {",
+      '  jaiph::run_step entry::ok rule jaiph::execute_readonly entry::ok::impl "$@"',
       "}",
       "",
-      "entry::workflow::default::impl() {",
+      "entry::default::impl() {",
       "  set -eo pipefail",
       "  set +u",
-      "  entry::rule::ok",
+      "  entry::ok",
       "  echo done",
       "}",
       "",
-      "entry::workflow::default() {",
-      '  jaiph::run_step entry::workflow::default entry::workflow::default::impl "$@"',
+      "entry::default() {",
+      '  jaiph::run_step entry::default workflow entry::default::impl "$@"',
       "}",
     ];
     const expected = normalize(lines.join("\n"));
@@ -419,7 +419,7 @@ test("compiler golden: positive if ensure with args transpiles correctly", () =>
       ].join("\n"),
     );
     const actual = normalize(transpileFile(input, root));
-    assert.match(actual, /if entry::rule::ready foo=bar; then/);
+    assert.match(actual, /if entry::ready foo=bar; then/);
     assert.match(actual, /echo success/);
     assert.match(actual, /fi/);
   } finally {
@@ -451,10 +451,10 @@ test("compiler golden: positive if ensure with else transpiles correctly", () =>
       ].join("\n"),
     );
     const actual = normalize(transpileFile(input, root));
-    assert.match(actual, /if entry::rule::ready; then/);
+    assert.match(actual, /if entry::ready; then/);
     assert.match(actual, /echo yes/);
     assert.match(actual, /else/);
-    assert.match(actual, /entry::workflow::fallback/);
+    assert.match(actual, /entry::fallback/);
     assert.match(actual, /fi/);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -480,7 +480,7 @@ test("compiler golden: negated if ensure with args transpiles correctly", () => 
       ].join("\n"),
     );
     const actual = normalize(transpileFile(input, root));
-    assert.match(actual, /if ! entry::rule::check myarg; then/);
+    assert.match(actual, /if ! entry::check myarg; then/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -518,8 +518,8 @@ test("compiler golden: workflow with config emits JAIPH export defaults", () => 
     assert.ok(actual.includes('export JAIPH_AGENT_CURSOR_FLAGS="${JAIPH_AGENT_CURSOR_FLAGS:---force}"'));
     assert.ok(actual.includes('export JAIPH_AGENT_CLAUDE_FLAGS="${JAIPH_AGENT_CLAUDE_FLAGS:---model sonnet-4}"'));
     assert.ok(actual.includes('export JAIPH_RUNS_DIR="${JAIPH_RUNS_DIR:-.jaiph/runs}"'));
-    assert.ok(actual.includes("entry::rule::ok"));
-    assert.ok(actual.includes("entry::workflow::default"));
+    assert.ok(actual.includes("entry::ok"));
+    assert.ok(actual.includes("entry::default"));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

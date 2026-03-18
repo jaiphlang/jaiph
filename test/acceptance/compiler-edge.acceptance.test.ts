@@ -189,9 +189,9 @@ test("ACCEPTANCE: if ! ensure then-branch allows mixed prompt and run", () => {
 
     const output = build(join(root, "main.jh"), join(root, "out"));
     assert.equal(output.length, 1);
-    assert.match(output[0].bash, /if ! .*::rule::gate; then/);
+    assert.match(output[0].bash, /if ! .*::gate; then/);
     assert.match(output[0].bash, /jaiph::prompt.*<<__JAIPH_PROMPT_/);
-    assert.match(output[0].bash, /::workflow::fix_build/);
+    assert.match(output[0].bash, /::fix_build/);
   });
 });
 
@@ -465,7 +465,7 @@ test("ACCEPTANCE: if ! ensure ; then ... fi continues to work alongside || { }",
     );
     const output = build(join(root, "main.jh"), join(root, "out"));
     assert.equal(output.length, 1);
-    assert.match(output[0].bash, /if ! .*::rule::gate; then/);
+    assert.match(output[0].bash, /if ! .*::gate; then/);
     assert.match(output[0].bash, /other \|\| \{ echo "err"; exit 1; \}/);
   });
 });

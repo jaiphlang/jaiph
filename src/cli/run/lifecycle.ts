@@ -17,7 +17,7 @@ export function buildRunWrapperCommand(): string {
     'trap \'__jaiph_status=$?; jaiph__write_meta "$__jaiph_status"\' EXIT',
     "exec 3>&2",
     'source "$built_script"',
-    'entrypoint="${workflow_symbol}::workflow::default"',
+    'entrypoint="${workflow_symbol}::default"',
     'if ! declare -F "$entrypoint" >/dev/null; then',
     '  echo "jaiph run requires workflow \'default\' in the input file" >&2',
     "  exit 1",
