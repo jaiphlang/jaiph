@@ -139,6 +139,28 @@ expected_prompt_run=$(printf '%s\n' \
 expected_prompt_run="${expected_prompt_run%$'\n'}"
 e2e::assert_output_equals "${prompt_run_out}" "${expected_prompt_run}" "run prompt_flow.jh tree shows prompt line only, no output block"
 
+# Prompt with variable references shows named params in tree (not positional args)
+cat > "${TEST_DIR}/prompt_with_vars.jh" <<'EOF'
+#!/usr/bin/env jaiph
+local role = "engineer"
+local task = "Fix bugs"
+workflow default {
+  prompt "$role does $task"
+}
+EOF
+jaiph build "${TEST_DIR}/prompt_with_vars.jh"
+prompt_vars_out="$(jaiph run "${TEST_DIR}/prompt_with_vars.jh")"
+expected_prompt_vars=$(printf '%s\n' \
+  '' \
+  'Jaiph: Running prompt_with_vars.jh' \
+  '' \
+  'workflow default' \
+  '  ▸ prompt "$role does $task" (role="engineer", task="Fix bugs")' \
+  '  ✓ <time>' \
+  '✓ PASS workflow default (<time>)')
+expected_prompt_vars="${expected_prompt_vars%$'\n'}"
+e2e::assert_output_equals "${prompt_vars_out}" "${expected_prompt_vars}" "prompt with var refs shows named params in tree"
+
 # Prompt step .out file contains full agent transcript (mock run: workspace = TEST_DIR, so command is deterministic)
 shopt -s nullglob
 prompt_flow_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*prompt_flow.jh/ )

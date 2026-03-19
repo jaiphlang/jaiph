@@ -6,51 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Fix tree line for `prompt` steps: wrong parameter display (positional vs single string) <!-- dev-ready -->
-
-**Problem.** In workflow tree output, a nested step can render like:
-
-```
-➜  jaiph git:(nightly) ✗ CI=true .jaiph/engineer.jh refactorer
-
-Jaiph: Running engineer.jh
-
-workflow default (refactorer)
-  ▸ function get_first_task
-  ·   ▸ function get_all_task_headers
-  ·   ✓ 0s
-  ·   ▸ function get_task_by_header ("## E2E: add full .out file conte...")
-  ·   ✓ 0s
-  ✓ 0s
-  ▸ rule task_is_dev_ready ("## E2E: add full .out file conte...")
-  ✓ 0s
-  ▸ workflow implement_poc ("## E2E: add full .out file conte...", refactorer)
-  ·   ▸ rule is_clean
-  ·   ·   ▸ rule in_git_repo
-  ·   ·   ✓ 0s
-  ·   ·   ▸ rule branch_clean
-  ·   ·   ✓ 0s
-  ·   ✓ 0s
-  ·   ▸ prompt "$role <task>" ("## E2E: add full .out file conte...", refactorer)
-```
-
-That implies two positional arguments (`$1`, `$2`) passed to `prompt`, but `prompt` accepts **one** string expression (the expanded result is a single argument). The display is misleading.
-
-**Expected.**
-
-- If multiple named bindings contribute (e.g. `$role`, `$task`), show **named** parameters in the tree, e.g. `$role="…", $task="…"` (or equivalent), consistent with how other steps expose named params — not fake `$1`/`$2` for `prompt`.
-- If parameters are used as $1, display them in a similar way.
-- So it could be `prompt "$role <task>" (role="...", task="...")
-
-**Scope.** Likely `formatParamsForDisplay` / step param JSON / transpiler emission for `prompt` calls inside workflows. Align CLI rendering with the real call signature of `prompt`.
-
-**Acceptance criteria.**
-
-- Tree line for `prompt` never suggests multiple positional args when the builtin only takes one string.
-- E2E or unit coverage for a workflow that invokes `prompt` with interpolated content, asserting the displayed parameter line matches one of the agreed formats above.
-
----
-
 ## E2E: add full .out file content assertions where run artifacts exist <!-- dev-ready -->
 
 **Goal.** Where e2e tests run workflows that write step output to `.jaiph/runs/…/*.out`, add `e2e::assert_equals` (or equivalent) so the test asserts the **full** content of the relevant .out file(s), not only substrings.
@@ -61,7 +16,7 @@ That implies two positional arguments (`$1`, `$2`) passed to `prompt`, but `prom
 
 **Acceptance criteria.**
 
-- At least one additional e2e test file (or additional cases in 20_rule_and_prompt or 70_run_artifacts) includes full .out content assertions.
+- All *.sh tests where workflows are executed compare also all output files
 - Pattern is consistent with 20_rule_and_prompt (run dir discovery, single .out or per-step .out, deterministic expected).
 - All e2e tests pass.
 

@@ -13,6 +13,22 @@ function prefixForImportedWorkflowCall(
   return `${symbol}::with_metadata_scope `;
 }
 
+/** Extract shell variable references ($name, ${name}, $1, etc.) from prompt text for tree display. */
+function extractShellVarRefs(promptText: string): string[] {
+  const seen = new Set<string>();
+  const refs: string[] = [];
+  const regex = /\$\{([a-zA-Z_][a-zA-Z0-9_]*|[1-9][0-9]*)\}|\$([a-zA-Z_][a-zA-Z0-9_]*|[1-9][0-9]*)/g;
+  let match;
+  while ((match = regex.exec(promptText)) !== null) {
+    const name = match[1] ?? match[2];
+    if (!seen.has(name)) {
+      seen.add(name);
+      refs.push(name);
+    }
+  }
+  return refs;
+}
+
 /** If args look like key=value key=value..., return ordered param keys for tree display; else null. */
 function parseParamKeysFromArgs(args: string): string[] | null {
   const trimmed = args.trim();
@@ -246,6 +262,16 @@ function emitPromptStep(
     const message = error instanceof Error ? error.message : "invalid prompt literal";
     throw jaiphError(filePath, step.loc.line, step.loc.col, "E_PARSE", message);
   }
+
+  // Extract variable references from prompt text for named display params.
+  const varRefs = extractShellVarRefs(promptText);
+  const namedArgsSuffix = varRefs.length > 0
+    ? " " + varRefs.map((v) => `"${v}=$${v}"`).join(" ")
+    : "";
+  const paramKeysLine = varRefs.length > 0
+    ? `${indent}export JAIPH_STEP_PARAM_KEYS='__prompt_impl,__preview,${varRefs.join(",")}'`
+    : null;
+
     if (step.returns !== undefined) {
     if (!step.captureName) {
       throw jaiphError(
@@ -270,10 +296,11 @@ function emitPromptStep(
     if (useAposSchema) {
       out.push(`${indent}local ${JAIPH_APOS_VAR}=$'\\''`);
     }
+    if (paramKeysLine != null) out.push(paramKeysLine);
     out.push(`${indent}export JAIPH_PROMPT_PREVIEW='${bashSingleQuotedEscape(fullPromptText.slice(0, PROMPT_PREVIEW_MAX_LEN))}'`);
     out.push(`${indent}export JAIPH_PROMPT_SCHEMA='${schemaEscaped}'`);
     out.push(`${indent}export JAIPH_PROMPT_CAPTURE_NAME='${step.captureName}'`);
-    out.push(`${indent}jaiph::prompt_capture_with_schema "$JAIPH_PROMPT_PREVIEW" "$@" <<${delimiter}`);
+    out.push(`${indent}jaiph::prompt_capture_with_schema "$JAIPH_PROMPT_PREVIEW"${namedArgsSuffix} <<${delimiter}`);
     for (const line of fullPromptText.split("\n")) {
       out.push(heredocLineEscape(line, useAposSchema));
     }
@@ -285,11 +312,12 @@ function emitPromptStep(
   if (useApos) {
     out.push(`${indent}local ${JAIPH_APOS_VAR}=$'\\''`);
   }
+  if (paramKeysLine != null) out.push(paramKeysLine);
   out.push(`${indent}export JAIPH_PROMPT_PREVIEW='${bashSingleQuotedEscape(promptText.slice(0, PROMPT_PREVIEW_MAX_LEN))}'`);
   if (step.captureName) {
-    out.push(`${indent}${step.captureName}=$(jaiph::prompt_capture "$JAIPH_PROMPT_PREVIEW" "$@" <<${delimiter}`);
+    out.push(`${indent}${step.captureName}=$(jaiph::prompt_capture "$JAIPH_PROMPT_PREVIEW"${namedArgsSuffix} <<${delimiter}`);
   } else {
-    out.push(`${indent}jaiph::prompt "$JAIPH_PROMPT_PREVIEW" "$@" <<${delimiter}`);
+    out.push(`${indent}jaiph::prompt "$JAIPH_PROMPT_PREVIEW"${namedArgsSuffix} <<${delimiter}`);
   }
   for (const line of promptText.split("\n")) {
     out.push(heredocLineEscape(line, useApos));
