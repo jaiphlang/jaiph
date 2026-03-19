@@ -42,6 +42,15 @@ expected_rule_pass=$(printf '%s\n' \
 expected_rule_pass="${expected_rule_pass%$'\n'}"
 e2e::assert_output_equals "${rule_pass_out}" "${expected_rule_pass}" "rule_pass.jh passes"
 
+# Assert .out file content for rule_pass.jh
+shopt -s nullglob
+rule_pass_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*rule_pass.jh/ )
+shopt -u nullglob
+[[ ${#rule_pass_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for rule_pass.jh"
+rule_pass_out_files=( "${rule_pass_run_dir[0]}"*.out )
+[[ ${#rule_pass_out_files[@]} -eq 1 ]] || e2e::fail "expected one .out file for rule_pass.jh, got ${#rule_pass_out_files[@]}"
+e2e::assert_equals "$(<"${rule_pass_out_files[0]}")" "e2e-rule-pass-done" "rule_pass.jh default workflow .out content"
+
 # Given
 cat > "${TEST_DIR}/rule_fail.jh" <<'EOF'
 #!/usr/bin/env jaiph
@@ -160,6 +169,22 @@ expected_prompt_vars=$(printf '%s\n' \
   '✓ PASS workflow default (<time>)')
 expected_prompt_vars="${expected_prompt_vars%$'\n'}"
 e2e::assert_output_equals "${prompt_vars_out}" "${expected_prompt_vars}" "prompt with var refs shows named params in tree"
+
+# prompt_with_vars.jh agent .out file
+shopt -s nullglob
+prompt_vars_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*prompt_with_vars.jh/ )
+shopt -u nullglob
+[[ ${#prompt_vars_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for prompt_with_vars.jh"
+prompt_vars_out_file=( "${prompt_vars_run_dir[0]}"*jaiph__prompt.out )
+[[ ${#prompt_vars_out_file[@]} -eq 1 ]] || e2e::fail "expected one jaiph__prompt.out for prompt_with_vars.jh"
+expected_prompt_vars_out=$(printf '%s\n%s\n\n%s\n%s\n\n%s\n%s' \
+  'Command:' \
+  "cursor-agent --print --output-format stream-json --stream-partial-output --workspace ${TEST_DIR} --trust ${TEST_DIR} engineer\\ does\\ Fix\\ bugs" \
+  'Prompt:' \
+  'engineer does Fix bugs' \
+  'Final answer:' \
+  'e2e-backend-no-mock-output')
+e2e::assert_equals "$(<"${prompt_vars_out_file[0]}")" "${expected_prompt_vars_out}" "prompt_with_vars.jh agent .out file full content"
 
 # Prompt step .out file contains full agent transcript (mock run: workspace = TEST_DIR, so command is deterministic)
 shopt -s nullglob

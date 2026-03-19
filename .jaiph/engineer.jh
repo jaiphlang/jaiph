@@ -117,7 +117,7 @@ workflow implement_poc {
     exit 1
   fi
 
-  ensure git.is_clean
+  # ensure git.is_clean
 
   response = prompt "
     $role

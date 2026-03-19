@@ -176,3 +176,14 @@ expected_display=$(printf '%s\n' \
   '✓ PASS workflow default (<time>)')
 expected_display="${expected_display%$'\n'}"
 e2e::assert_output_equals "${display_out}" "${expected_display}" "dispatched step tree output with channels and stdout"
+
+# Assert .out file content for display_inbox.jh (reviewer produces stdout)
+shopt -s nullglob
+display_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*display_inbox.jh/ )
+shopt -u nullglob
+[[ ${#display_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for display_inbox.jh"
+display_out_files=( "${display_run_dir[0]}"*.out )
+[[ ${#display_out_files[@]} -eq 1 ]] || e2e::fail "expected one .out file for display_inbox.jh, got ${#display_out_files[@]}"
+reviewer_out=( "${display_run_dir[0]}"*display_inbox__reviewer.out )
+[[ ${#reviewer_out[@]} -eq 1 ]] || e2e::fail "expected display_inbox__reviewer.out"
+e2e::assert_equals "$(<"${reviewer_out[0]}")" "[reviewed] Summary: Found 3 issues in auth module" "display_inbox.jh reviewer .out content"

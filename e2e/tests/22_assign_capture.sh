@@ -30,3 +30,15 @@ expected_assign=$(printf '%s\n' \
   '✓ PASS workflow default (<time>)')
 expected_assign="${expected_assign%$'\n'}"
 e2e::assert_output_equals "${assign_out}" "${expected_assign}" "assign capture tree output"
+
+# Assert .out file content for assign_capture.jh
+shopt -s nullglob
+assign_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*assign_capture.jh/ )
+shopt -u nullglob
+[[ ${#assign_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for assign_capture.jh"
+assign_out_files=( "${assign_run_dir[0]}"*.out )
+[[ ${#assign_out_files[@]} -eq 1 ]] || e2e::fail "expected one .out file for assign_capture.jh, got ${#assign_out_files[@]}"
+expected_assign_out=$(printf '%s\n%s' \
+  'response=captured-stdout' \
+  'out=shell-capture')
+e2e::assert_equals "$(<"${assign_out_files[0]}")" "${expected_assign_out}" "assign_capture.jh default workflow .out content"

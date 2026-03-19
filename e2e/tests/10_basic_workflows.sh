@@ -31,6 +31,15 @@ expected_hello=$(printf '%s\n' \
 expected_hello="${expected_hello%$'\n'}"
 e2e::assert_output_equals "${hello_out}" "${expected_hello}" "hello.jh run passes"
 
+# Assert .out file content for hello.jh
+shopt -s nullglob
+hello_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*hello.jh/ )
+shopt -u nullglob
+[[ ${#hello_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for hello.jh"
+hello_out_files=( "${hello_run_dir[0]}"*.out )
+[[ ${#hello_out_files[@]} -eq 1 ]] || e2e::fail "expected one .out file for hello.jh, got ${#hello_out_files[@]}"
+e2e::assert_equals "$(<"${hello_out_files[0]}")" "hello-jh" "hello.jh default workflow .out content"
+
 # Given
 cat > "${TEST_DIR}/lib.jph" <<'EOF'
 rule ready {
@@ -60,6 +69,20 @@ expected_mixed=$(printf '%s\n' \
   '✓ PASS workflow default (<time>)')
 expected_mixed="${expected_mixed%$'\n'}"
 e2e::assert_output_equals "${mixed_out}" "${expected_mixed}" "mixed .jh/.jph run passes"
+
+# Assert .out file content for app.jh
+shopt -s nullglob
+app_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*app.jh/ )
+shopt -u nullglob
+[[ ${#app_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for app.jh"
+app_out_files=( "${app_run_dir[0]}"*.out )
+[[ ${#app_out_files[@]} -eq 2 ]] || e2e::fail "expected two .out files for app.jh, got ${#app_out_files[@]}"
+app_rule_out=( "${app_run_dir[0]}"*lib__ready.out )
+[[ ${#app_rule_out[@]} -eq 1 ]] || e2e::fail "expected lib__ready.out"
+e2e::assert_equals "$(<"${app_rule_out[0]}")" "from-jph" "app.jh lib.ready rule .out content"
+app_default_out=( "${app_run_dir[0]}"*app__default.out )
+[[ ${#app_default_out[@]} -eq 1 ]] || e2e::fail "expected app__default.out"
+e2e::assert_equals "$(<"${app_default_out[0]}")" "mixed-ok" "app.jh default workflow .out content"
 
 e2e::section "Git-aware rule arguments"
 # Given
@@ -94,6 +117,14 @@ EOF
 
   # Then
   e2e::pass "current_branch.jph passes for current branch"
+
+  # Assert no .out files for current_branch.jph (rule produces no stdout)
+  shopt -s nullglob
+  cb_run_dir=( ".jaiph/runs/"*/*current_branch.jph/ )
+  [[ ${#cb_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for current_branch.jph"
+  cb_out_files=( "${cb_run_dir[0]}"*.out )
+  shopt -u nullglob
+  [[ ${#cb_out_files[@]} -eq 0 ]] || e2e::fail "expected no .out files for current_branch.jph, got ${#cb_out_files[@]}"
 
   wrong_branch="${current_branch}-wrong"
   # When

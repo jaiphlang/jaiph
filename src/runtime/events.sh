@@ -200,6 +200,9 @@ jaiph::emit_step_event() {
   marker_fd="$(jaiph::event_fd)"
   printf "__JAIPH_EVENT__ %s\n" "$payload" >&"$marker_fd"
   if [[ "$event_type" == "STEP_END" && -n "${JAIPH_RUN_SUMMARY_FILE:-}" ]]; then
+    # Some workflows (notably CI/e2e cleanup) may remove .jaiph/runs while a
+    # run is still active; recreate parent dir so summary append does not fail.
+    mkdir -p "$(dirname "$JAIPH_RUN_SUMMARY_FILE")" 2>/dev/null || true
     printf "%s\n" "$payload" >>"$JAIPH_RUN_SUMMARY_FILE"
   fi
   if [[ "$had_xtrace" -eq 1 ]]; then

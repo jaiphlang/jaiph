@@ -39,6 +39,14 @@ expected_function=$(printf '%s\n' \
 expected_function="${expected_function%$'\n'}"
 e2e::assert_output_equals "${function_out}" "${expected_function}" "run tree and PASS match expected"
 
+# Assert no .out files for functions.jh (echo redirected to file)
+shopt -s nullglob
+functions_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*functions.jh/ )
+[[ ${#functions_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for functions.jh"
+functions_out_files=( "${functions_run_dir[0]}"*.out )
+shopt -u nullglob
+[[ ${#functions_out_files[@]} -eq 0 ]] || e2e::fail "expected no .out files for functions.jh, got ${#functions_out_files[@]}"
+
 e2e::section "run, ensure, and function argument forwarding"
 # Given
 cat > "${TEST_DIR}/args_forwarding.jh" <<'EOF'
@@ -85,4 +93,13 @@ expected_args=$(printf '%s\n' \
   '✓ PASS workflow default (<time>)')
 expected_args="${expected_args%$'\n'}"
 e2e::assert_output_equals "${args_out}" "${expected_args}" "run, ensure, and function argument forwarding tree output"
+
+# Assert no .out files for args_forwarding.jh (printf redirected to files, test produces no stdout)
+shopt -s nullglob
+args_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*args_forwarding.jh/ )
+[[ ${#args_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for args_forwarding.jh"
+args_out_files=( "${args_run_dir[0]}"*.out )
+shopt -u nullglob
+[[ ${#args_out_files[@]} -eq 0 ]] || e2e::fail "expected no .out files for args_forwarding.jh, got ${#args_out_files[@]}"
+
 e2e::pass "run, ensure, and function all support argument forwarding"

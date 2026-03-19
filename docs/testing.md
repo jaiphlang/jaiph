@@ -94,6 +94,47 @@ test "default workflow prints greeting" {
 }
 ```
 
+## E2E testing: asserting on run artifacts
+
+The E2E test suite (`e2e/tests/*.sh`) goes beyond tree-output assertions by also verifying the content of run artifact files (`.out` and `.err`) written to `.jaiph/runs/`. This catches regressions in the runtime's output-capture pipeline — not just what the CLI displays, but what the runtime actually writes to disk for each step.
+
+### Pattern
+
+Every E2E test that executes a workflow follows the same artifact-assertion pattern:
+
+1. **Discover the run directory** — After a workflow completes, glob for the run dir under the test workspace:
+   ```bash
+   shopt -s nullglob
+   run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*my_workflow.jh/ )
+   shopt -u nullglob
+   [[ ${#run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir"
+   ```
+
+2. **Find `.out` files** — Glob for step output files inside the run dir:
+   ```bash
+   out_files=( "${run_dir[0]}"*.out )
+   ```
+
+3. **Assert full content** — Compare the entire file content against an expected value:
+   ```bash
+   e2e::assert_equals "$(<"${out_files[0]}")" "expected-output" "description"
+   ```
+
+4. **Assert absence** — When a workflow produces no stdout (e.g. all output is redirected to files, or only side effects like `touch`), assert that no `.out` files exist:
+   ```bash
+   [[ ${#out_files[@]} -eq 0 ]] || e2e::fail "expected no .out files"
+   ```
+
+### When to use
+
+- **Steps with deterministic stdout** — shell commands, rules, functions, or mocked prompts that produce known output. Assert the full `.out` content.
+- **Steps with no stdout** — `touch`, `test`, output redirected to files (`> file.txt`). Assert zero `.out` files.
+- **Multi-step workflows** — Assert each step's `.out` file by matching on the step symbol in the filename (e.g. `*my_module__step_name.out`).
+
+### Why both tree output and artifact assertions?
+
+Tree output assertions (`e2e::assert_output_equals`) verify what the **user sees** in the terminal. Artifact assertions (`e2e::assert_equals` on `.out` files) verify what the **runtime persists** to disk. A bug could break one without affecting the other — for example, the CLI could display correct output while the runtime silently fails to write the `.out` file, or vice versa.
+
 ## Limitations (v1)
 
 - Mocks are inline only (e.g. `mock prompt "..."` or `mock prompt { ... }`). The legacy `.test.toml` format is not supported.

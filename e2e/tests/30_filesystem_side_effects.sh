@@ -35,6 +35,14 @@ expected_workflow_write=$(printf '%s\n' \
 expected_workflow_write="${expected_workflow_write%$'\n'}"
 e2e::assert_output_equals "${workflow_write_out}" "${expected_workflow_write}" "workflow file write scenario passes"
 
+# Assert no .out files for fs_write_workflow.jh (stdout redirected to file)
+shopt -s nullglob
+fs_wf_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*fs_write_workflow.jh/ )
+[[ ${#fs_wf_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for fs_write_workflow.jh"
+fs_wf_out_files=( "${fs_wf_run_dir[0]}"*.out )
+shopt -u nullglob
+[[ ${#fs_wf_out_files[@]} -eq 0 ]] || e2e::fail "expected no .out files for fs_write_workflow.jh, got ${#fs_wf_out_files[@]}"
+
 # Given
 cat > "${TEST_DIR}/fs_write_rule.jh" <<'EOF'
 #!/usr/bin/env jaiph
@@ -79,5 +87,14 @@ else
     '✓ PASS workflow default (<time>)')
   expected_permissive="${expected_permissive%$'\n'}"
   e2e::assert_output_equals "${permissive_out}" "${expected_permissive}" "rule write runs in permissive fallback mode"
+
+  # Assert no .out files for fs_write_rule.jh (stdout redirected to file)
+  shopt -s nullglob
+  fs_rule_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*fs_write_rule.jh/ )
+  [[ ${#fs_rule_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for fs_write_rule.jh"
+  fs_rule_out_files=( "${fs_rule_run_dir[0]}"*.out )
+  shopt -u nullglob
+  [[ ${#fs_rule_out_files[@]} -eq 0 ]] || e2e::fail "expected no .out files for fs_write_rule.jh, got ${#fs_rule_out_files[@]}"
+
   e2e::skip "readonly sandbox not available on this host; write-blocking assertion skipped"
 fi
