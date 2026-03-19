@@ -126,10 +126,26 @@ if [[ "${prompt_ok_out}" != *"passed"* ]] && [[ "${prompt_ok_out}" != *"PASS"* ]
 fi
 e2e::pass "prompt_flow.test.jh passes with inline mock"
 
-# Run prompt workflow and assert tree contains prompt line with preview (single line, no newlines)
+# Run prompt workflow and assert full tree output
 prompt_run_out="$(jaiph run "${TEST_DIR}/prompt_flow.jh")"
-normalized_prompt_run="$(e2e::normalize_output "${prompt_run_out}")"
-e2e::assert_contains "${normalized_prompt_run}" 'prompt "e2e-prompt-please-return' "run prompt_flow.jh tree shows prompt line with preview"
+expected_prompt_run=$(printf '%s\n' \
+  '' \
+  'Jaiph: Running prompt_flow.jh' \
+  '' \
+  'workflow default' \
+  '  ▸ prompt "e2e-prompt-please-return"' \
+  '  ✓ <time>' \
+  '    Command:' \
+  '    <agent-command>' \
+  '' \
+  '    Prompt:' \
+  '    e2e-prompt-please-return-mock' \
+  '' \
+  '    Final answer:' \
+  '    e2e-backend-no-mock-output' \
+  '✓ PASS workflow default (<time>)')
+expected_prompt_run="${expected_prompt_run%$'\n'}"
+e2e::assert_output_equals "${prompt_run_out}" "${expected_prompt_run}" "run prompt_flow.jh tree shows prompt line with preview"
 
 # Multi-line prompt is displayed as single line (newlines stripped from preview)
 cat > "${TEST_DIR}/multiline_prompt.jh" <<'EOF'
@@ -143,9 +159,26 @@ workflow default {
 EOF
 jaiph build "${TEST_DIR}/multiline_prompt.jh"
 multiline_out="$(jaiph run "${TEST_DIR}/multiline_prompt.jh")"
-normalized_multiline="$(e2e::normalize_output "${multiline_out}")"
-e2e::assert_contains "${normalized_multiline}" 'prompt "Line one and line t' "multiline prompt displayed as single line in tree"
-e2e::pass "prompt preview has no newlines in tree"
+expected_multiline=$(printf '%s\n' \
+  '' \
+  'Jaiph: Running multiline_prompt.jh' \
+  '' \
+  'workflow default' \
+  '  ▸ prompt "Line one and line t"' \
+  '  ✓ <time>' \
+  '    Command:' \
+  '    <agent-command>' \
+  '' \
+  '    Prompt:' \
+  '' \
+  '        Line one and line two.' \
+  '' \
+  '' \
+  '    Final answer:' \
+  '    e2e-backend-no-mock-output' \
+  '✓ PASS workflow default (<time>)')
+expected_multiline="${expected_multiline%$'\n'}"
+e2e::assert_output_equals "${multiline_out}" "${expected_multiline}" "multiline prompt displayed as single line in tree"
 
 # Given: workflow with prompt but test does not mock it -> selected backend runs (cursor by default).
 cat > "${TEST_DIR}/prompt_unmatched.jh" <<'EOF'

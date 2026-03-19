@@ -21,5 +21,12 @@ if [[ "${assign_out}" != *"PASS"* ]]; then
 fi
 e2e::pass "assign_capture.jh passes with response = ensure and out = echo"
 
-# Captured stdout appears in run output (workflow step output is in .out files; tree on stdout)
-e2e::assert_contains "${assign_out}" "workflow default" "output shows workflow tree"
+# Full tree output for assign capture workflow
+expected_assign=$(printf '%s\n' \
+  '' \
+  'Jaiph: Running assign_capture.jh' \
+  '' \
+  'workflow default' \
+  '✓ PASS workflow default (<time>)')
+expected_assign="${expected_assign%$'\n'}"
+e2e::assert_output_equals "${assign_out}" "${expected_assign}" "assign capture tree output"

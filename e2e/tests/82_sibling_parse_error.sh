@@ -28,7 +28,14 @@ EOF
 run_out="$(jaiph run "${TEST_DIR}/valid.jh")"
 
 # Then: the valid file succeeds despite the broken sibling
-e2e::assert_contains "${run_out}" "PASS" "valid.jh succeeds despite broken sibling"
+expected_valid=$(printf '%s\n' \
+  '' \
+  'Jaiph: Running valid.jh' \
+  '' \
+  'workflow default' \
+  '✓ PASS workflow default (<time>)')
+expected_valid="${expected_valid%$'\n'}"
+e2e::assert_output_equals "${run_out}" "${expected_valid}" "valid.jh succeeds despite broken sibling"
 
 # When: building the directory (should report errors)
 build_err_file="$(mktemp)"

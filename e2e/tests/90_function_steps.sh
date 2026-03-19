@@ -71,6 +71,18 @@ e2e::assert_file_exists "${TEST_DIR}/function_args.txt" "function received forwa
 e2e::assert_file_exists "${TEST_DIR}/workflow_args.txt" "workflow received arguments from run"
 e2e::assert_equals "$(tr -d '\r\n' < "${TEST_DIR}/function_args.txt")" "one|two words" "function args exact match"
 e2e::assert_equals "$(tr -d '\r\n' < "${TEST_DIR}/workflow_args.txt")" "one|two words" "workflow args exact match"
-e2e::assert_contains "${args_out}" "rule expect_args" "ensure with args executed in called workflow"
-e2e::assert_contains "${args_out}" "workflow called" "run with args executed target workflow"
+expected_args=$(printf '%s\n' \
+  '' \
+  'Jaiph: Running args_forwarding.jh' \
+  '' \
+  'workflow default' \
+  '  ▸ workflow called (one, "two words")' \
+  '  ·   ▸ rule expect_args (one, "two words")' \
+  '  ·   ✓ <time>' \
+  '  ·   ▸ function write_args (one, "two words")' \
+  '  ·   ✓ <time>' \
+  '  ✓ <time>' \
+  '✓ PASS workflow default (<time>)')
+expected_args="${expected_args%$'\n'}"
+e2e::assert_output_equals "${args_out}" "${expected_args}" "run, ensure, and function argument forwarding tree output"
 e2e::pass "run, ensure, and function all support argument forwarding"

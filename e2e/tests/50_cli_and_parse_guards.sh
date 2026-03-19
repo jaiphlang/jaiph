@@ -43,10 +43,17 @@ mkdir -p "${TEST_DIR}/empty_tests"
 discovery_out="$(jaiph test "${TEST_DIR}")"
 
 # Then
-e2e::assert_contains "${discovery_out}" "testing" "jaiph test prints test execution header"
-e2e::assert_contains "${discovery_out}" "ok_a.test.jh" "jaiph test runs first test file"
-e2e::assert_contains "${discovery_out}" "ok_b.test.jh" "jaiph test runs second test file"
-e2e::assert_contains "${discovery_out}" "✓ 1 test(s) passed" "jaiph test reports passing summary per file"
+expected_discovery=$(printf '%s\n' \
+  'testing ok_a.test.jh' \
+  '  ▸ A passes' \
+  '  ✓ <time>' \
+  '✓ 1 test(s) passed' \
+  'testing ok_b.test.jh' \
+  '  ▸ B passes' \
+  '  ✓ <time>' \
+  '✓ 1 test(s) passed')
+expected_discovery="${expected_discovery%$'\n'}"
+e2e::assert_output_equals "${discovery_out}" "${expected_discovery}" "jaiph test discovery output"
 
 # When
 empty_err="$(mktemp)"
