@@ -370,19 +370,7 @@ const MAX_PARAM_VALUE_DISPLAY = 32;
             process.stdout.write("\r\u001b[K\u001b[1A\r\u001b[K");
           }
           process.stdout.write(`${completedLine}${isTTY ? "\n\n" : "\n"}`);
-          // Prompt steps show a preview (Command/Prompt/Final answer) on stdout; other steps stay in .out only.
-          const rawContent = [event.out_content, event.err_content].filter(Boolean).join("\n").trimEnd();
-          if (event.kind === "prompt" && rawContent.length > 0) {
-            const depth = Math.max(1, event.depth ?? 1);
-            const outputIndent = "    ".repeat(depth);
-            const dimOutputIndent = colorize(outputIndent, "dim");
-            for (const outLine of rawContent.split("\n")) {
-              if (isTTY && runningInterval !== undefined) {
-                process.stdout.write("\r\u001b[K\u001b[1A\r\u001b[K");
-              }
-              process.stdout.write(`${dimOutputIndent}${outLine}${isTTY ? "\n\n" : "\n"}`);
-            }
-          }
+          // No embedded step output in tree; output appears only when user calls log. Full transcript stays in .out files.
           if (isTTY && runningInterval !== undefined) {
             const runningElapsedSec = (Date.now() - startedAt) / 1000;
             process.stdout.write(formatRunningBottomLine("default", runningElapsedSec));

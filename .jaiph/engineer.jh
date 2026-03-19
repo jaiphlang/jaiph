@@ -113,7 +113,7 @@ workflow implement_poc {
   elif [ "$role_name" = "refactorer" ]; then
     role="$role_refactorer"
   else
-    echo "Error: Invalid role: $role_name"
+    echo "Error: Role does not match minimalist, pragmatic, or refactorer. Got: $role_name"
     exit 1
   fi
 
@@ -122,7 +122,8 @@ workflow implement_poc {
   response = prompt "
     $role
     <task>
-    You are working on the Jaiph codebase (https://github.com/jaiphlang/jaiph), a TypeScript compiler and runtime for a DSL that transpiles to Bash.
+    You are working on the Jaiph codebase (https://github.com/jaiphlang/jaiph),
+    a TypeScript compiler and runtime for a DSL that transpiles to Bash.
 
     Implement the following task by:
     - Following the codebase's existing style and conventions precisely.
@@ -147,7 +148,7 @@ workflow implement_poc {
       in the task/PR notes.
 
     Task description:
-    $1
+    $task
   "
 
   local patch_file = "impl_$role_name.patch"
@@ -161,12 +162,13 @@ workflow implement_poc {
 }
 
 workflow default {
+  local role_name = "$1"
 
   task="$(queue.get_first_task)"
   task_header="${task%%$'\n'*}"
 
   ensure queue.task_is_dev_ready "$task"
-  run implement_poc "$task" "minimalist"
+  run implement_poc "$task" "$role_name"
   run ci.ensure_ci_passes
   run docs.update_from_task "$task"
   run queue.remove_completed_task "$task_header"
