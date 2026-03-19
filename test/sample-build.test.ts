@@ -1838,9 +1838,69 @@ test("build emits prompt capture as name=$(jaiph::prompt_capture ...) for name =
 
     const results = build(filePath, outDir);
     assert.equal(results.length, 1);
-    assert.match(results[0].bash, /result=\$\(jaiph::prompt_capture "\$JAIPH_PROMPT_PREVIEW" "\$@" <<__JAIPH_PROMPT_/);
+    assert.match(results[0].bash, /result=\$\(jaiph::prompt_capture "\$JAIPH_PROMPT_PREVIEW" <<__JAIPH_PROMPT_/);
     assert.match(results[0].bash, /Summarize the changes made/);
     assert.match(results[0].bash, /\s*\)\s*$/m);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outDir, { recursive: true, force: true });
+  }
+});
+
+test("build emits JAIPH_STEP_PARAM_KEYS and named args for prompt with variable references", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-prompt-named-params-"));
+  const outDir = mkdtempSync(join(tmpdir(), "jaiph-prompt-named-out-"));
+  try {
+    const filePath = join(root, "entry.jh");
+    writeFileSync(
+      filePath,
+      [
+        "workflow default {",
+        '  prompt "$role does $task"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const results = build(filePath, outDir);
+    assert.equal(results.length, 1);
+    const bash = results[0].bash;
+    // Should emit JAIPH_STEP_PARAM_KEYS with __prompt_impl, __preview, and the var refs
+    assert.match(bash, /export JAIPH_STEP_PARAM_KEYS='__prompt_impl,__preview,role,task'/);
+    // Should pass named args instead of "$@"
+    assert.match(bash, /jaiph::prompt "\$JAIPH_PROMPT_PREVIEW" "role=\$role" "task=\$task" <</);
+    // Should NOT contain "$@" in prompt call
+    assert.doesNotMatch(bash, /jaiph::prompt.*"\$@"/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outDir, { recursive: true, force: true });
+  }
+});
+
+test("build emits no named args for prompt without variable references", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-prompt-no-vars-"));
+  const outDir = mkdtempSync(join(tmpdir(), "jaiph-prompt-no-vars-out-"));
+  try {
+    const filePath = join(root, "entry.jh");
+    writeFileSync(
+      filePath,
+      [
+        "workflow default {",
+        '  prompt "Hello world"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const results = build(filePath, outDir);
+    assert.equal(results.length, 1);
+    const bash = results[0].bash;
+    // Should NOT emit JAIPH_STEP_PARAM_KEYS for prompt without vars
+    assert.doesNotMatch(bash, /JAIPH_STEP_PARAM_KEYS/);
+    // Should NOT pass "$@"
+    assert.doesNotMatch(bash, /jaiph::prompt.*"\$@"/);
+    // Should only pass preview
+    assert.match(bash, /jaiph::prompt "\$JAIPH_PROMPT_PREVIEW" <</);
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(outDir, { recursive: true, force: true });

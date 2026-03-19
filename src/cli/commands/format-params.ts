@@ -15,6 +15,34 @@ function stripKeyPrefix(v: string): string {
   return match ? match[1] : v;
 }
 
+/** Strip key= prefix from value using the known key name. */
+function stripKnownKeyPrefix(key: string, value: string): string {
+  const prefix = key + "=";
+  return value.startsWith(prefix) ? value.slice(prefix.length) : value;
+}
+
+/** Format params as key="value" pairs. Positional numeric keys (1, 2, ...) are prefixed with $. */
+export function formatNamedParamsForDisplay(params: Array<[string, string]>, options?: { capTotalLength?: number }): string {
+  const entries = params
+    .filter(([, v]) => !isInternalParamValue(v))
+    .map(([k, v]) => [k, stripKnownKeyPrefix(k, v)] as const)
+    .filter(([, v]) => v.trim() !== "");
+  if (entries.length === 0) return "";
+  const parts = entries.map(([k, v]) => {
+    const visible =
+      v.length > MAX_PARAM_VALUE_DISPLAY ? `${v.slice(0, MAX_PARAM_VALUE_DISPLAY)}...` : v;
+    const escaped = visible.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    const displayKey = /^[1-9]\d*$/.test(k) ? `$${k}` : k;
+    return `${displayKey}="${escaped}"`;
+  });
+  let result = ` (${parts.join(", ")})`;
+  const cap = options?.capTotalLength;
+  if (typeof cap === "number" && result.length > cap) {
+    result = result.slice(0, cap - 3) + "...";
+  }
+  return result;
+}
+
 export function formatParamsForDisplay(params: Array<[string, string]>, options?: { capTotalLength?: number }): string {
   const values = params
     .map(([, v]) => v)

@@ -137,6 +137,13 @@ e2e::prepare_shared_context() {
   export JAIPH_BIN_DIR="${JAIPH_E2E_BIN_DIR}"
   # Docker is enabled by default locally; disable for e2e tests.
   export JAIPH_DOCKER_ENABLED="${JAIPH_DOCKER_ENABLED:-false}"
+  # Keep e2e deterministic by removing user/machine agent overrides.
+  unset JAIPH_AGENT_MODEL
+  unset JAIPH_AGENT_COMMAND
+  unset JAIPH_AGENT_BACKEND
+  unset JAIPH_AGENT_TRUSTED_WORKSPACE
+  unset JAIPH_AGENT_CURSOR_FLAGS
+  unset JAIPH_AGENT_CLAUDE_FLAGS
 
   if [[ -z "${JAIPH_REPO_URL:-}" ]]; then
     export JAIPH_REPO_URL="${E2E_REPO_ROOT}"

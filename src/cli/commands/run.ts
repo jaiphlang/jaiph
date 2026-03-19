@@ -11,7 +11,7 @@ import { basename } from "node:path";
 import { parsejaiph } from "../../parser";
 import { build, workflowSymbolForFile } from "../../transpiler";
 import { metadataToConfig } from "../../config";
-import { formatParamsForDisplay, isInternalParamValue } from "./format-params.js";
+import { formatParamsForDisplay, formatNamedParamsForDisplay, isInternalParamValue } from "./format-params.js";
 import {
   colorPalette,
   summarizeError,
@@ -110,10 +110,13 @@ const MAX_PARAM_VALUE_DISPLAY = 32;
         const restParams = params.filter(([, v]) => !isInternalParamValue(v));
         const skipFirst = restParams.length > 0 && restParams[0][1] === previewValue ? 1 : 0;
         const restForSuffix = restParams.slice(skipFirst);
+        const hasNamedKeys = restForSuffix.some(([k]) => !/^arg\d+$/.test(k));
         paramSuffix =
           restForSuffix.length > 0
             ? colorize(
-                formatParamsForDisplay(restForSuffix, { capTotalLength: PROMPT_ARGS_DISPLAY_MAX }),
+                hasNamedKeys
+                  ? formatNamedParamsForDisplay(restForSuffix, { capTotalLength: PROMPT_ARGS_DISPLAY_MAX })
+                  : formatParamsForDisplay(restForSuffix, { capTotalLength: PROMPT_ARGS_DISPLAY_MAX }),
                 "dim",
               )
             : "";
