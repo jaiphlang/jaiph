@@ -10,8 +10,9 @@ e2e::prepare_test_env "mock_workflow_rule_function"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
 e2e::section "Mock workflow, rule, and function in *.test.jh"
-# Given: module with rule, function, workflows
-cat > "${TEST_DIR}/app.jh" <<'EOF'
+
+# Given
+e2e::file "app.jh" <<'EOF'
 #!/usr/bin/env jaiph
 rule policy_check {
   echo real-policy
@@ -28,7 +29,7 @@ workflow default {
 }
 EOF
 
-cat > "${TEST_DIR}/app.test.jh" <<'EOF'
+e2e::file "app.test.jh" <<'EOF'
 #!/usr/bin/env jaiph
 import "app.jh" as app
 

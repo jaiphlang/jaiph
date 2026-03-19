@@ -94,46 +94,97 @@ test "default workflow prints greeting" {
 }
 ```
 
-## E2E testing: asserting on run artifacts
+## E2E testing
 
-The E2E test suite (`e2e/tests/*.sh`) goes beyond tree-output assertions by also verifying the content of run artifact files (`.out` and `.err`) written to `.jaiph/runs/`. This catches regressions in the runtime's output-capture pipeline — not just what the CLI displays, but what the runtime actually writes to disk for each step.
+The E2E test suite (`e2e/tests/*.sh`) exercises the full build-and-run pipeline from the outside: compile a workflow, run it, and assert on both the CLI tree output and the run artifact files (`.out`, `.err`) written to `.jaiph/runs/`.
 
-### Pattern
+### Test structure
 
-Every E2E test that executes a workflow follows the same artifact-assertion pattern:
+Every E2E test follows a **Given / When / Then** pattern using helper functions from `e2e/lib/common.sh`. The helpers eliminate boilerplate so each test reads like a specification:
 
-1. **Discover the run directory** — After a workflow completes, glob for the run dir under the test workspace:
-   ```bash
-   shopt -s nullglob
-   run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*my_workflow.jh/ )
-   shopt -u nullglob
-   [[ ${#run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir"
-   ```
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-2. **Find `.out` files** — Glob for step output files inside the run dir:
-   ```bash
-   out_files=( "${run_dir[0]}"*.out )
-   ```
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "${ROOT_DIR}/e2e/lib/common.sh"
+trap e2e::cleanup EXIT
 
-3. **Assert full content** — Compare the entire file content against an expected value:
-   ```bash
-   e2e::assert_equals "$(<"${out_files[0]}")" "expected-output" "description"
-   ```
+e2e::prepare_test_env "my_test"
+TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
-4. **Assert absence** — When a workflow produces no stdout (e.g. all output is redirected to files, or only side effects like `touch`), assert that no `.out` files exist:
-   ```bash
-   [[ ${#out_files[@]} -eq 0 ]] || e2e::fail "expected no .out files"
-   ```
+e2e::section "Feature under test"
 
-### When to use
+# Given — create the workflow file inline
+e2e::file "hello.jh" <<'EOF'
+workflow default {
+  echo "hello-jh"
+}
+EOF
 
-- **Steps with deterministic stdout** — shell commands, rules, functions, or mocked prompts that produce known output. Assert the full `.out` content.
-- **Steps with no stdout** — `touch`, `test`, output redirected to files (`> file.txt`). Assert zero `.out` files.
-- **Multi-step workflows** — Assert each step's `.out` file by matching on the step symbol in the filename (e.g. `*my_module__step_name.out`).
+# When — build and run
+hello_out="$(e2e::run "hello.jh")"
+
+# Then — assert on CLI tree output
+e2e::expect_stdout "${hello_out}" <<'EOF'
+
+Jaiph: Running hello.jh
+
+workflow default
+✓ PASS workflow default (<time>)
+EOF
+
+# Then — assert on run artifacts
+e2e::expect_out_files "hello.jh" 1
+e2e::expect_out "hello.jh" "default" "hello-jh"
+```
+
+### Helper reference
+
+All helpers are defined in `e2e/lib/common.sh`.
+
+#### File and run helpers
+
+| Helper | Description |
+|--------|-------------|
+| `e2e::file "name" <<'EOF' ... EOF` | Write a workflow file into the test directory from a heredoc. Creates parent directories as needed. |
+| `e2e::run "file" [args...]` | Build and run a workflow file. Returns the CLI stdout for capture. |
+| `e2e::expect_fail "file" [args...]` | Assert that running the workflow fails (non-zero exit). |
+| `e2e::git_init` | Initialize a git repo in the test directory (portable across bash versions). |
+| `e2e::git_current_branch` | Return the current branch name (defaults to `main` if detached). |
+
+#### Tree output assertions
+
+| Helper | Description |
+|--------|-------------|
+| `e2e::expect_stdout "$var" <<'EOF' ... EOF` | Assert that the captured CLI output matches the expected heredoc exactly (after ANSI stripping and time normalization). Use `<time>` as a placeholder for timing values. |
+
+#### Run artifact assertions
+
+After a workflow runs, its step outputs are written as files under `.jaiph/runs/`. These helpers verify the content of those files, catching bugs in the runtime's output-capture pipeline independently from what the CLI displays.
+
+| Helper | Description |
+|--------|-------------|
+| `e2e::expect_out_files "file" N` | Assert that the run directory for `file` contains exactly `N` `.out` files. Use `0` for steps with no stdout (e.g. `touch`, `test`, redirected output). |
+| `e2e::expect_out "file" "workflow" "expected"` | Assert that the `.out` file for a workflow step matches `expected` exactly. |
+| `e2e::expect_rule_out "file" "rule" "expected"` | Assert that the `.out` file for a rule step matches `expected` exactly. Dot-separated rule names are normalized (e.g. `lib.ready` → `lib__ready`). |
+| `e2e::expect_file "glob" <<'EOF' ... EOF` | Assert that exactly one file matching `glob` exists under `.jaiph/runs/` and its content matches the heredoc. Useful for `.err` files or non-standard artifact names. |
+| `e2e::expect_no_file "glob"` | Assert that no file matching `glob` exists under `.jaiph/runs/`. |
+
+#### Low-level assertions
+
+| Helper | Description |
+|--------|-------------|
+| `e2e::assert_contains "$actual" "$needle" "label"` | Assert that `actual` contains `needle`. |
+| `e2e::assert_equals "$actual" "$expected" "label"` | Assert exact string equality. |
+| `e2e::assert_file_exists "path" "label"` | Assert that a file exists at `path`. |
+| `e2e::pass "label"` | Print a `[PASS]` line. |
+| `e2e::fail "label"` | Print a `[FAIL]` line to stderr and exit. |
+| `e2e::skip "label"` | Print a `[SKIP]` line (for platform-dependent tests). |
 
 ### Why both tree output and artifact assertions?
 
-Tree output assertions (`e2e::assert_output_equals`) verify what the **user sees** in the terminal. Artifact assertions (`e2e::assert_equals` on `.out` files) verify what the **runtime persists** to disk. A bug could break one without affecting the other — for example, the CLI could display correct output while the runtime silently fails to write the `.out` file, or vice versa.
+Tree output assertions (`e2e::expect_stdout`) verify what the **user sees** in the terminal. Artifact assertions (`e2e::expect_out`, `e2e::expect_file`) verify what the **runtime persists** to disk. A bug could break one without affecting the other — for example, the CLI could display correct output while the runtime silently fails to write the `.out` file, or vice versa.
 
 ## Limitations (v1)
 

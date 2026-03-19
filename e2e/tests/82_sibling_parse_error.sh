@@ -10,43 +10,36 @@ e2e::prepare_test_env "sibling_parse_error"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
 e2e::section "Single-file run ignores sibling parse errors"
-# Given: a valid workflow file
-cat > "${TEST_DIR}/valid.jh" <<'EOF'
+
+# Given
+e2e::file "valid.jh" <<'EOF'
 workflow default {
   echo "valid-ok"
 }
 EOF
 
-# Given: a sibling file with a syntax error
-cat > "${TEST_DIR}/broken.jh" <<'EOF'
+e2e::file "broken.jh" <<'EOF'
 workflow broken {
   name = echo "oops" -> bad
 }
 EOF
 
-# When: running the valid file
-run_out="$(jaiph run "${TEST_DIR}/valid.jh")"
+# When
+run_out="$(e2e::run "valid.jh")"
 
-# Then: the valid file succeeds despite the broken sibling
-expected_valid=$(printf '%s\n' \
-  '' \
-  'Jaiph: Running valid.jh' \
-  '' \
-  'workflow default' \
-  '✓ PASS workflow default (<time>)')
-expected_valid="${expected_valid%$'\n'}"
-e2e::assert_output_equals "${run_out}" "${expected_valid}" "valid.jh succeeds despite broken sibling"
+# Then
+e2e::expect_stdout "${run_out}" <<'EOF'
 
-# Assert .out file content for valid.jh
-shopt -s nullglob
-valid_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*valid.jh/ )
-shopt -u nullglob
-[[ ${#valid_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for valid.jh"
-valid_out_files=( "${valid_run_dir[0]}"*.out )
-[[ ${#valid_out_files[@]} -eq 1 ]] || e2e::fail "expected one .out file for valid.jh, got ${#valid_out_files[@]}"
-e2e::assert_equals "$(<"${valid_out_files[0]}")" "valid-ok" "valid.jh default workflow .out content"
+Jaiph: Running valid.jh
 
-# When: building the directory (should report errors)
+workflow default
+✓ PASS workflow default (<time>)
+EOF
+
+e2e::expect_out_files "valid.jh" 1
+e2e::expect_out "valid.jh" "default" "valid-ok"
+
+# When
 build_err_file="$(mktemp)"
 if jaiph build "${TEST_DIR}" 2>"${build_err_file}"; then
   cat "${build_err_file}" >&2
@@ -56,5 +49,5 @@ fi
 build_err="$(cat "${build_err_file}")"
 rm -f "${build_err_file}"
 
-# Then: directory build reports the parse error
+# Then
 e2e::assert_contains "${build_err}" "broken.jh" "directory build reports error in broken.jh"

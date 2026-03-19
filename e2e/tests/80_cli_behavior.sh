@@ -10,6 +10,7 @@ e2e::prepare_test_env "cli_behavior"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
 e2e::section "CLI version and unknown command behavior"
+
 # When
 version_out="$(jaiph --version)"
 
@@ -34,8 +35,9 @@ e2e::assert_contains "${unknown_err}" "Unknown command: definitely-not-a-command
 e2e::assert_contains "${unknown_out}" "Usage:" "unknown command prints usage help"
 
 e2e::section "CLI file extension guard for run"
+
 # Given
-cat > "${TEST_DIR}/not_a_workflow.txt" <<'EOF'
+e2e::file "not_a_workflow.txt" <<'EOF'
 hello
 EOF
 

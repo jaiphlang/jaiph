@@ -12,8 +12,9 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 unset JAIPH_STDLIB
 
 e2e::section "Basic send + route"
+
 # Given
-cat > "${TEST_DIR}/basic_inbox.jh" <<'EOF'
+e2e::file "basic_inbox.jh" <<'EOF'
 workflow sender {
   echo "hello from sender" -> greetings
 }
@@ -29,16 +30,16 @@ workflow default {
 EOF
 
 # When
-jaiph build "${TEST_DIR}/basic_inbox.jh"
-jaiph run "${TEST_DIR}/basic_inbox.jh" >/dev/null
+e2e::run "basic_inbox.jh" >/dev/null
 
 # Then
 e2e::assert_file_exists "${TEST_DIR}/received.txt" "receiver was invoked by inbox dispatch"
 e2e::assert_contains "$(cat "${TEST_DIR}/received.txt")" "hello from sender" "receiver gets message content via inbox route"
 
 e2e::section "Multi-target route"
+
 # Given
-cat > "${TEST_DIR}/multi_target.jh" <<'EOF'
+e2e::file "multi_target.jh" <<'EOF'
 workflow producer {
   echo "data-payload" -> results
 }
@@ -58,8 +59,7 @@ workflow default {
 EOF
 
 # When
-jaiph build "${TEST_DIR}/multi_target.jh"
-jaiph run "${TEST_DIR}/multi_target.jh" >/dev/null
+e2e::run "multi_target.jh" >/dev/null
 
 # Then
 e2e::assert_file_exists "${TEST_DIR}/consumer_a.txt" "consumer_a was dispatched"
@@ -68,9 +68,9 @@ e2e::assert_file_exists "${TEST_DIR}/consumer_b.txt" "consumer_b was dispatched"
 e2e::assert_contains "$(cat "${TEST_DIR}/consumer_b.txt")" "B got: data-payload" "consumer_b receives dispatched message"
 
 e2e::section "Silent drop on unregistered channel"
-# Given: a workflow that sends to an unrouted channel while having at least one
-# route registered (so that inbox_init / drain_queue are emitted by the transpiler).
-cat > "${TEST_DIR}/unrouted_drop.jh" <<'EOF'
+
+# Given
+e2e::file "unrouted_drop.jh" <<'EOF'
 workflow sender {
   echo "dropped" -> unknown_channel
 }
@@ -86,9 +86,8 @@ workflow default {
 EOF
 
 # When
-jaiph build "${TEST_DIR}/unrouted_drop.jh"
 drop_stderr="$(mktemp)"
-jaiph run "${TEST_DIR}/unrouted_drop.jh" >/dev/null 2>"${drop_stderr}" || true
+e2e::run "unrouted_drop.jh" >/dev/null 2>"${drop_stderr}" || true
 drop_exit=$?
 drop_err="$(cat "${drop_stderr}")"
 rm -f "${drop_stderr}"
@@ -105,8 +104,9 @@ fi
 e2e::pass "unrouted channel does not dispatch to other routes"
 
 e2e::section "Inbox file written"
+
 # Given
-cat > "${TEST_DIR}/inbox_file.jh" <<'EOF'
+e2e::file "inbox_file.jh" <<'EOF'
 workflow writer {
   echo "inbox-content-check" -> audit
 }
@@ -122,10 +122,9 @@ workflow default {
 EOF
 
 # When
-jaiph build "${TEST_DIR}/inbox_file.jh"
-jaiph run "${TEST_DIR}/inbox_file.jh" >/dev/null
+e2e::run "inbox_file.jh" >/dev/null
 
-# Then: find 001-audit.txt in any inbox directory under .jaiph/runs
+# Then
 inbox_file="$(find "${TEST_DIR}/.jaiph/runs" -path '*/inbox/001-audit.txt' 2>/dev/null | head -1)"
 if [[ -z "${inbox_file}" ]]; then
   e2e::fail "001-audit.txt not found in any inbox directory"
@@ -134,8 +133,9 @@ e2e::assert_file_exists "${inbox_file}" "inbox file 001-audit.txt exists after s
 e2e::assert_contains "$(cat "${inbox_file}")" "inbox-content-check" "inbox file contains sent message"
 
 e2e::section "Dispatched step CLI output shows channel and message"
+
 # Given
-cat > "${TEST_DIR}/display_inbox.jh" <<'EOF'
+e2e::file "display_inbox.jh" <<'EOF'
 workflow scanner {
   echo "Found 3 issues in auth module" -> findings
 }
@@ -156,34 +156,25 @@ workflow default {
 EOF
 
 # When
-jaiph build "${TEST_DIR}/display_inbox.jh"
-display_out="$(jaiph run "${TEST_DIR}/display_inbox.jh" 2>/dev/null)"
-normalized="$(e2e::normalize_output "${display_out}")"
+display_out="$(e2e::run "display_inbox.jh" 2>/dev/null)"
 
-# Then: full tree output for dispatched steps
-expected_display=$(printf '%s\n' \
-  '' \
-  'Jaiph: Running display_inbox.jh' \
-  '' \
-  'workflow default' \
-  '  ▸ workflow scanner' \
-  '  ✓ <time>' \
-  '  ▸ workflow analyst (findings, "Found 3 issues in auth module")' \
-  '  ✓ <time>' \
-  '  ▸ workflow reviewer (report, "Summary: Found 3 issues in auth ...")' \
-  '  ✓ <time>' \
-  '    [reviewed] Summary: Found 3 issues in auth module' \
-  '✓ PASS workflow default (<time>)')
-expected_display="${expected_display%$'\n'}"
-e2e::assert_output_equals "${display_out}" "${expected_display}" "dispatched step tree output with channels and stdout"
+# Then
+e2e::expect_stdout "${display_out}" <<'EOF'
 
-# Assert .out file content for display_inbox.jh (reviewer produces stdout)
-shopt -s nullglob
-display_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*display_inbox.jh/ )
-shopt -u nullglob
-[[ ${#display_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for display_inbox.jh"
-display_out_files=( "${display_run_dir[0]}"*.out )
-[[ ${#display_out_files[@]} -eq 1 ]] || e2e::fail "expected one .out file for display_inbox.jh, got ${#display_out_files[@]}"
-reviewer_out=( "${display_run_dir[0]}"*display_inbox__reviewer.out )
-[[ ${#reviewer_out[@]} -eq 1 ]] || e2e::fail "expected display_inbox__reviewer.out"
-e2e::assert_equals "$(<"${reviewer_out[0]}")" "[reviewed] Summary: Found 3 issues in auth module" "display_inbox.jh reviewer .out content"
+Jaiph: Running display_inbox.jh
+
+workflow default
+  ▸ workflow scanner
+  ✓ <time>
+  ▸ workflow analyst (findings, "Found 3 issues in auth module")
+  ✓ <time>
+  ▸ workflow reviewer (report, "Summary: Found 3 issues in auth ...")
+  ✓ <time>
+    [reviewed] Summary: Found 3 issues in auth module
+✓ PASS workflow default (<time>)
+EOF
+
+e2e::expect_out_files "display_inbox.jh" 1
+e2e::expect_file "*display_inbox__reviewer.out" <<'EOF'
+[reviewed] Summary: Found 3 issues in auth module
+EOF

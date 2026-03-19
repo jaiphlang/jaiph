@@ -10,6 +10,7 @@ e2e::prepare_test_env "install_and_init"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
 e2e::section "Installer and smoke checks"
+
 # When
 help_output="$(jaiph --help)"
 
@@ -17,6 +18,7 @@ help_output="$(jaiph --help)"
 e2e::assert_contains "${help_output}" "jaiph" "jaiph CLI responds to --help"
 
 e2e::section "Project init and generated files"
+
 # When
 jaiph init "${TEST_DIR}"
 

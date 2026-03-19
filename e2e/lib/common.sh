@@ -93,6 +93,151 @@ e2e::assert_file_executable() {
   e2e::pass "${label}"
 }
 
+e2e::file() {
+  local name="$1"
+  local path="${JAIPH_E2E_TEST_DIR}/${name}"
+  mkdir -p "$(dirname "${path}")"
+  cat > "${path}"
+}
+
+e2e::run() {
+  local file="$1"
+  shift || true
+
+  jaiph build "${JAIPH_E2E_TEST_DIR}/${file}" >/dev/null
+  jaiph run "${JAIPH_E2E_TEST_DIR}/${file}" "$@"
+}
+
+e2e::run_dir() {
+  local file="$1"
+
+  shopt -s nullglob
+  local dirs=( "${JAIPH_E2E_TEST_DIR}/.jaiph/runs/"*/*"${file}"/ )
+  shopt -u nullglob
+
+  [[ ${#dirs[@]} -eq 1 ]] || e2e::fail "expected one run dir for ${file}, got ${#dirs[@]}"
+  printf "%s" "${dirs[0]}"
+}
+
+e2e::expect_out_files() {
+  local file="$1"
+  local expected="$2"
+
+  local dir
+  dir="$(e2e::run_dir "${file}")"
+
+  shopt -s nullglob
+  local files=( "${dir}"*.out )
+  shopt -u nullglob
+
+  [[ ${#files[@]} -eq "${expected}" ]] \
+    || e2e::fail "expected ${expected} .out files for ${file}, got ${#files[@]}"
+
+  e2e::pass "${file} has ${expected} .out files"
+}
+
+e2e::expect_out() {
+  local file="$1"
+  local workflow="$2"
+  local expected="$3"
+
+  local dir
+  dir="$(e2e::run_dir "${file}")"
+
+  shopt -s nullglob
+  local matches=( "${dir}"*"${file%.*}__${workflow}.out" )
+  shopt -u nullglob
+
+  [[ ${#matches[@]} -eq 1 ]] || e2e::fail "missing ${workflow} .out for ${file}"
+
+  local content
+  content="$(<"${matches[0]}")"
+
+  e2e::assert_equals "${content}" "${expected}" "${file} ${workflow} .out"
+}
+
+e2e::expect_rule_out() {
+  local file="$1"
+  local rule="$2"
+  local expected="$3"
+
+  local dir
+  dir="$(e2e::run_dir "${file}")"
+
+  local normalized="${rule//./__}"
+
+  shopt -s nullglob
+  local matches=( "${dir}"*"${normalized}.out" )
+  shopt -u nullglob
+
+  [[ ${#matches[@]} -eq 1 ]] || e2e::fail "missing ${rule} .out for ${file}"
+
+  local content
+  content="$(<"${matches[0]}")"
+
+  e2e::assert_equals "${content}" "${expected}" "${file} ${rule} .out"
+}
+
+e2e::expect_stdout() {
+  local actual="$1"
+  local expected
+
+  expected="$(cat)"
+  expected="${expected%$'\n'}"
+
+  e2e::assert_output_equals "${actual}" "${expected}" "stdout matches"
+}
+
+e2e::expect_fail() {
+  local file="$1"
+  shift || true
+
+  if e2e::run "${file}" "$@" >/dev/null 2>&1; then
+    e2e::fail "${file} should fail"
+  fi
+}
+
+e2e::expect_file() {
+  local pattern="$1"
+  local expected
+
+  expected="$(cat)"
+  expected="${expected%$'\n'}"
+
+  shopt -s nullglob
+  local matches=( "${JAIPH_E2E_TEST_DIR}"/.jaiph/runs/*/*/${pattern} )
+  shopt -u nullglob
+
+  [[ ${#matches[@]} -eq 1 ]] || e2e::fail "expected one match for ${pattern}, got ${#matches[@]}"
+
+  local content
+  content="$(<"${matches[0]}")"
+
+  e2e::assert_equals "${content}" "${expected}" "${pattern} content"
+}
+
+e2e::expect_no_file() {
+  local pattern="$1"
+
+  shopt -s nullglob
+  local matches=( "${JAIPH_E2E_TEST_DIR}"/.jaiph/runs/*/*/${pattern} )
+  shopt -u nullglob
+
+  [[ ${#matches[@]} -eq 0 ]] || e2e::fail "expected no match for ${pattern}, got ${#matches[@]}"
+  e2e::pass "no ${pattern}"
+}
+
+e2e::git_init() {
+  git init -b main >/dev/null 2>&1 || git init >/dev/null 2>&1
+}
+
+e2e::git_current_branch() {
+  local branch
+  branch="$(git branch --show-current || true)"
+  [[ -n "${branch}" ]] || branch="main"
+  printf "%s" "${branch}"
+}
+
 e2e::readonly_sandbox_available() {
   command -v unshare >/dev/null 2>&1 &&
     command -v sudo >/dev/null 2>&1 &&
