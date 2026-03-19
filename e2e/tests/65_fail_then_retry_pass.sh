@@ -16,7 +16,8 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::section "if ! ensure supports multi-gate recursive nesting"
 rm -f "${TEST_DIR}/.gate1_passed" "${TEST_DIR}/.gate2_passed"
 
-cat > "${TEST_DIR}/make_pass.jh" <<'EOF'
+# Given
+e2e::file "make_pass.jh" <<'EOF'
 rule gate1 {
   test -f .gate1_passed
 }
@@ -49,58 +50,52 @@ workflow default {
 }
 EOF
 
-out="$(jaiph run "${TEST_DIR}/make_pass.jh" 2>&1)"
+# When
+out="$(e2e::run "make_pass.jh" 2>&1)"
+
+# Then
 e2e::assert_file_exists "${TEST_DIR}/.gate1_passed" "first remediation ran (gate1 marker created)"
 e2e::assert_file_exists "${TEST_DIR}/.gate2_passed" "second remediation ran (gate2 marker created)"
 
-# Exact expected tree (time normalized to (<time>) by assert_output_equals)
-expected_tree_ensure=$(printf '%s\n' \
-  '' \
-  'Jaiph: Running make_pass.jh' \
-  '' \
-  'workflow default' \
-  '  ▸ workflow make_pass' \
-  '  ·   ▸ rule gate1' \
-  '  ·   ✗ <time>' \
-  '  ·   ▸ workflow remediate1' \
-  '  ·   ✓ <time>' \
-  '  ·   ▸ workflow make_pass' \
-  '  ·   ·   ▸ rule gate1' \
-  '  ·   ·   ✓ <time>' \
-  '  ·   ·   ▸ rule gate2' \
-  '  ·   ·   ✗ <time>' \
-  '  ·   ·   ▸ workflow remediate2' \
-  '  ·   ·   ✓ <time>' \
-  '  ·   ·   ▸ workflow make_pass' \
-  '  ·   ·   ·   ▸ rule gate1' \
-  '  ·   ·   ·   ✓ <time>' \
-  '  ·   ·   ·   ▸ rule gate2' \
-  '  ·   ·   ·   ✓ <time>' \
-  '  ·   ·   ✓ <time>' \
-  '  ·   ✓ <time>' \
-  '  ·   ▸ rule gate2' \
-  '  ·   ✓ <time>' \
-  '  ✓ <time>' \
-  '✓ PASS workflow default (<time>)')
-expected_tree_ensure="${expected_tree_ensure%$'\n'}"
-normalized_out="$(e2e::normalize_output "${out}")"
-e2e::assert_equals "${normalized_out}" "${expected_tree_ensure}" "exact tree (two gates + recursive nesting)"
+e2e::expect_stdout "${out}" <<'EOF'
+
+Jaiph: Running make_pass.jh
+
+workflow default
+  ▸ workflow make_pass
+  ·   ▸ rule gate1
+  ·   ✗ <time>
+  ·   ▸ workflow remediate1
+  ·   ✓ <time>
+  ·   ▸ workflow make_pass
+  ·   ·   ▸ rule gate1
+  ·   ·   ✓ <time>
+  ·   ·   ▸ rule gate2
+  ·   ·   ✗ <time>
+  ·   ·   ▸ workflow remediate2
+  ·   ·   ✓ <time>
+  ·   ·   ▸ workflow make_pass
+  ·   ·   ·   ▸ rule gate1
+  ·   ·   ·   ✓ <time>
+  ·   ·   ·   ▸ rule gate2
+  ·   ·   ·   ✓ <time>
+  ·   ·   ✓ <time>
+  ·   ✓ <time>
+  ·   ▸ rule gate2
+  ·   ✓ <time>
+  ✓ <time>
+✓ PASS workflow default (<time>)
+EOF
 
 e2e::pass "if ! ensure with two recursive gates: fail gate1 then gate2, pass on nested retries"
-
-# Assert no .out files for make_pass.jh (touch and test produce no stdout)
-shopt -s nullglob
-make_pass_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*make_pass.jh/ )
-[[ ${#make_pass_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for make_pass.jh"
-make_pass_out_files=( "${make_pass_run_dir[0]}"*.out )
-shopt -u nullglob
-[[ ${#make_pass_out_files[@]} -eq 0 ]] || e2e::fail "expected no .out files for make_pass.jh, got ${#make_pass_out_files[@]}"
+e2e::expect_out_files "make_pass.jh" 0
 
 # Same scenario but condition is plain bash (if ! test -f ...; then touch; run make_pass; fi).
 e2e::section "if ! test (bash) then touch + run same workflow (fail first, pass on retry)"
 rm -f "${TEST_DIR}/.gate_passed"
 
-cat > "${TEST_DIR}/make_pass_bash.jh" <<'EOF'
+# Given
+e2e::file "make_pass_bash.jh" <<'EOF'
 workflow make_pass {
   if ! test -f .gate_passed; then
     touch .gate_passed
@@ -113,30 +108,24 @@ workflow default {
 }
 EOF
 
-out_bash="$(jaiph run "${TEST_DIR}/make_pass_bash.jh" 2>&1)"
+# When
+out_bash="$(e2e::run "make_pass_bash.jh" 2>&1)"
+
+# Then
 e2e::assert_file_exists "${TEST_DIR}/.gate_passed" "bash then-branch ran (marker created before retry)"
 
-# Exact expected tree (time normalized to (<time>) by assert_output_equals)
-expected_tree_bash=$(printf '%s\n' \
-  '' \
-  'Jaiph: Running make_pass_bash.jh' \
-  '' \
-  'workflow default' \
-  '  ▸ workflow make_pass' \
-  '  ·   ▸ workflow make_pass' \
-  '  ·   ✓ <time>' \
-  '  ✓ <time>' \
-  '✓ PASS workflow default (<time>)')
-expected_tree_bash="${expected_tree_bash%$'\n'}"
-normalized_bash="$(e2e::normalize_output "${out_bash}")"
-e2e::assert_equals "${normalized_bash}" "${expected_tree_bash}" "exact tree (bash condition + run make_pass)"
+e2e::expect_stdout "${out_bash}" <<'EOF'
 
-# Assert no .out files for make_pass_bash.jh (touch produces no stdout)
-shopt -s nullglob
-make_pass_bash_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*make_pass_bash.jh/ )
-[[ ${#make_pass_bash_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for make_pass_bash.jh"
-make_pass_bash_out_files=( "${make_pass_bash_run_dir[0]}"*.out )
-shopt -u nullglob
-[[ ${#make_pass_bash_out_files[@]} -eq 0 ]] || e2e::fail "expected no .out files for make_pass_bash.jh, got ${#make_pass_bash_out_files[@]}"
+Jaiph: Running make_pass_bash.jh
+
+workflow default
+  ▸ workflow make_pass
+  ·   ▸ workflow make_pass
+  ·   ✓ <time>
+  ✓ <time>
+✓ PASS workflow default (<time>)
+EOF
+
+e2e::expect_out_files "make_pass_bash.jh" 0
 
 e2e::pass "if ! test with touch + run make_pass: fail first time, pass on retry"

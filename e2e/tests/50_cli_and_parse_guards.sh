@@ -10,13 +10,15 @@ e2e::prepare_test_env "cli_and_parse_guards"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
 e2e::section "jaiph test discovery and empty-directory failure"
+
 # Given
-cat > "${TEST_DIR}/ok_a.jh" <<'EOF'
+e2e::file "ok_a.jh" <<'EOF'
 workflow default {
   echo "A"
 }
 EOF
-cat > "${TEST_DIR}/ok_a.test.jh" <<'EOF'
+
+e2e::file "ok_a.test.jh" <<'EOF'
 import "ok_a.jh" as w
 
 test "A passes" {
@@ -24,12 +26,14 @@ test "A passes" {
   expectContain out "A"
 }
 EOF
-cat > "${TEST_DIR}/ok_b.jh" <<'EOF'
+
+e2e::file "ok_b.jh" <<'EOF'
 workflow default {
   echo "B"
 }
 EOF
-cat > "${TEST_DIR}/ok_b.test.jh" <<'EOF'
+
+e2e::file "ok_b.test.jh" <<'EOF'
 import "ok_b.jh" as w
 
 test "B passes" {
@@ -43,17 +47,16 @@ mkdir -p "${TEST_DIR}/empty_tests"
 discovery_out="$(jaiph test "${TEST_DIR}")"
 
 # Then
-expected_discovery=$(printf '%s\n' \
-  'testing ok_a.test.jh' \
-  '  ▸ A passes' \
-  '  ✓ <time>' \
-  '✓ 1 test(s) passed' \
-  'testing ok_b.test.jh' \
-  '  ▸ B passes' \
-  '  ✓ <time>' \
-  '✓ 1 test(s) passed')
-expected_discovery="${expected_discovery%$'\n'}"
-e2e::assert_output_equals "${discovery_out}" "${expected_discovery}" "jaiph test discovery output"
+e2e::expect_stdout "${discovery_out}" <<'EOF'
+testing ok_a.test.jh
+  ▸ A passes
+  ✓ <time>
+✓ 1 test(s) passed
+testing ok_b.test.jh
+  ▸ B passes
+  ✓ <time>
+✓ 1 test(s) passed
+EOF
 
 # When
 empty_err="$(mktemp)"
@@ -69,8 +72,9 @@ rm -f "${empty_err}"
 e2e::assert_contains "${empty_out}" "no *.test.jh or *.test.jph files" "jaiph test reports no tests in directory"
 
 e2e::section "jaiph run requires workflow default"
+
 # Given
-cat > "${TEST_DIR}/no_default.jh" <<'EOF'
+e2e::file "no_default.jh" <<'EOF'
 workflow docs {
   echo "no default here"
 }
@@ -90,13 +94,15 @@ rm -f "${no_default_err}"
 e2e::assert_contains "${no_default_out}" "requires workflow 'default'" "jaiph run explains missing default workflow"
 
 e2e::section "prompt parse guards reject shell substitution"
+
 # Given
-cat > "${TEST_DIR}/bad_prompt_subshell.jh" <<'EOF'
+e2e::file "bad_prompt_subshell.jh" <<'EOF'
 workflow default {
   prompt "show host $(uname)"
 }
 EOF
-cat > "${TEST_DIR}/bad_prompt_backticks.jh" <<'EOF'
+
+e2e::file "bad_prompt_backticks.jh" <<'EOF'
 workflow default {
   prompt "show host `uname`"
 }

@@ -15,7 +15,8 @@ if ! command -v python3 >/dev/null 2>&1; then
   e2e::fail "python3 is required for PTY TTY test (e2e/tests/81_tty_progress_tree.sh)"
 fi
 
-cat > "${TEST_DIR}/tty_tree.jh" <<'EOF'
+# Given
+e2e::file "tty_tree.jh" <<'EOF'
 function leaf_fn() {
   sleep 4
 }
@@ -30,7 +31,7 @@ workflow default {
 EOF
 
 # We use Python here to spawn the CLI within a pseudoterminal (PTY), simulating a real TTY environment.
-# This allows us to accurately capture and test the CLI's interactive TTY rendering behavior, which 
+# This allows us to accurately capture and test the CLI's interactive TTY rendering behavior, which
 # cannot be tested with regular process spawning and redirection in Bash.
 set +e
 tty_out="$(
@@ -86,6 +87,7 @@ PY
 tty_status=$?
 set -e
 
+# Then
 e2e::assert_equals "${tty_status}" "0" "jaiph run exits 0 in PTY"
 
 normalized_input="${tty_out//$'\r'/$'\n'}"
@@ -111,12 +113,6 @@ expected_tree_with_running="${expected_tree_with_running%$'\n'}"
 
 e2e::assert_equals "${tree_projection}" "${expected_tree_with_running}" "TTY projected tree matches expected flow"
 
-# Assert no .out files for tty_tree.jh (sleep produces no stdout)
-shopt -s nullglob
-tty_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*tty_tree.jh/ )
-[[ ${#tty_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for tty_tree.jh"
-tty_out_files=( "${tty_run_dir[0]}"*.out )
-shopt -u nullglob
-[[ ${#tty_out_files[@]} -eq 0 ]] || e2e::fail "expected no .out files for tty_tree.jh, got ${#tty_out_files[@]}"
+e2e::expect_out_files "tty_tree.jh" 0
 
 e2e::pass "TTY progress timer and tree projection are stable"

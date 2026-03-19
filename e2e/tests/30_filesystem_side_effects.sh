@@ -10,8 +10,9 @@ e2e::prepare_test_env "filesystem_side_effects"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
 e2e::section "Blackbox filesystem side effects"
+
 # Given
-cat > "${TEST_DIR}/fs_write_workflow.jh" <<'EOF'
+e2e::file "fs_write_workflow.jh" <<'EOF'
 #!/usr/bin/env jaiph
 workflow default {
   echo "abc" > workflow_wrote.txt
@@ -20,31 +21,24 @@ EOF
 rm -f "${TEST_DIR}/workflow_wrote.txt"
 
 # When
-workflow_write_out="$(jaiph run "${TEST_DIR}/fs_write_workflow.jh")"
+workflow_write_out="$(e2e::run "fs_write_workflow.jh")"
 
-# Then: exact tree (shell-only workflow)
+# Then
 e2e::assert_file_exists "${TEST_DIR}/workflow_wrote.txt" "workflow shell step created workflow_wrote.txt"
 e2e::assert_contains "$(cat "${TEST_DIR}/workflow_wrote.txt")" "abc" "workflow_wrote.txt has expected content"
 
-expected_workflow_write=$(printf '%s\n' \
-  '' \
-  'Jaiph: Running fs_write_workflow.jh' \
-  '' \
-  'workflow default' \
-  '✓ PASS workflow default (<time>)')
-expected_workflow_write="${expected_workflow_write%$'\n'}"
-e2e::assert_output_equals "${workflow_write_out}" "${expected_workflow_write}" "workflow file write scenario passes"
+e2e::expect_stdout "${workflow_write_out}" <<'EOF'
 
-# Assert no .out files for fs_write_workflow.jh (stdout redirected to file)
-shopt -s nullglob
-fs_wf_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*fs_write_workflow.jh/ )
-[[ ${#fs_wf_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for fs_write_workflow.jh"
-fs_wf_out_files=( "${fs_wf_run_dir[0]}"*.out )
-shopt -u nullglob
-[[ ${#fs_wf_out_files[@]} -eq 0 ]] || e2e::fail "expected no .out files for fs_write_workflow.jh, got ${#fs_wf_out_files[@]}"
+Jaiph: Running fs_write_workflow.jh
+
+workflow default
+✓ PASS workflow default (<time>)
+EOF
+
+e2e::expect_out_files "fs_write_workflow.jh" 0
 
 # Given
-cat > "${TEST_DIR}/fs_write_rule.jh" <<'EOF'
+e2e::file "fs_write_rule.jh" <<'EOF'
 #!/usr/bin/env jaiph
 rule write_attempt {
   echo "abc" > rule_wrote.txt
@@ -55,10 +49,11 @@ workflow default {
 }
 EOF
 rm -f "${TEST_DIR}/rule_wrote.txt"
+
 if e2e::readonly_sandbox_available; then
   # When
   rule_write_stderr="$(mktemp)"
-  if jaiph run "${TEST_DIR}/fs_write_rule.jh" 2>"${rule_write_stderr}"; then
+  if e2e::run "fs_write_rule.jh" 2>"${rule_write_stderr}"; then
     cat "${rule_write_stderr}" >&2
     rm -f "${rule_write_stderr}"
     e2e::fail "rule write should be blocked when readonly sandbox is available"
@@ -72,29 +67,22 @@ if e2e::readonly_sandbox_available; then
   e2e::pass "rule write is blocked in readonly sandbox"
 else
   # When
-  permissive_out="$(jaiph run "${TEST_DIR}/fs_write_rule.jh")"
+  permissive_out="$(e2e::run "fs_write_rule.jh")"
 
-  # Then: exact tree (ensure write_attempt)
+  # Then
   e2e::assert_file_exists "${TEST_DIR}/rule_wrote.txt" "fallback mode allows rule_wrote.txt creation"
 
-  expected_permissive=$(printf '%s\n' \
-    '' \
-    'Jaiph: Running fs_write_rule.jh' \
-    '' \
-    'workflow default' \
-    '  ▸ rule write_attempt' \
-    '  ✓ <time>' \
-    '✓ PASS workflow default (<time>)')
-  expected_permissive="${expected_permissive%$'\n'}"
-  e2e::assert_output_equals "${permissive_out}" "${expected_permissive}" "rule write runs in permissive fallback mode"
+  e2e::expect_stdout "${permissive_out}" <<'EOF'
 
-  # Assert no .out files for fs_write_rule.jh (stdout redirected to file)
-  shopt -s nullglob
-  fs_rule_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*fs_write_rule.jh/ )
-  [[ ${#fs_rule_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for fs_write_rule.jh"
-  fs_rule_out_files=( "${fs_rule_run_dir[0]}"*.out )
-  shopt -u nullglob
-  [[ ${#fs_rule_out_files[@]} -eq 0 ]] || e2e::fail "expected no .out files for fs_write_rule.jh, got ${#fs_rule_out_files[@]}"
+Jaiph: Running fs_write_rule.jh
+
+workflow default
+  ▸ rule write_attempt
+  ✓ <time>
+✓ PASS workflow default (<time>)
+EOF
+
+  e2e::expect_out_files "fs_write_rule.jh" 0
 
   e2e::skip "readonly sandbox not available on this host; write-blocking assertion skipped"
 fi

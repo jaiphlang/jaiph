@@ -10,8 +10,9 @@ e2e::prepare_test_env "run_artifacts"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
 e2e::section "run artifacts on workflow failure"
+
 # Given
-cat > "${TEST_DIR}/artifacts_fail.jh" <<'EOF'
+e2e::file "artifacts_fail.jh" <<'EOF'
 rule ok_step {
   echo "ok-out"
 }

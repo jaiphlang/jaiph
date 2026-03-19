@@ -13,7 +13,8 @@ e2e::section "config scoping across nested workflow calls"
 META_FILE="${TEST_DIR}/config_scope.log"
 export JAIPH_META_SCOPE_FILE="${META_FILE}"
 
-cat > "${TEST_DIR}/child.jh" <<'EOF'
+# Given
+e2e::file "child.jh" <<'EOF'
 config {
   agent.backend = "claude"
 }
@@ -22,7 +23,7 @@ workflow default {
 }
 EOF
 
-cat > "${TEST_DIR}/parent.jh" <<'EOF'
+e2e::file "parent.jh" <<'EOF'
 import "child.jh" as child
 
 config {
@@ -35,10 +36,11 @@ workflow default {
 }
 EOF
 
-# Unset so run does not set JAIPH_AGENT_BACKEND_LOCKED=1; nested workflow must apply its own config.
+# When
 unset JAIPH_AGENT_BACKEND 2>/dev/null || true
 jaiph run "${TEST_DIR}/parent.jh" >/dev/null
 
+# Then
 actual="$(cat "${META_FILE}")"
 expected="$(printf '%s\n' \
   'parent_before:cursor' \
@@ -46,11 +48,4 @@ expected="$(printf '%s\n' \
   'parent_after:cursor')"
 
 e2e::assert_equals "${actual}" "${expected}" "called workflow config is scoped and restored"
-
-# Assert no .out files for parent.jh (all output redirected to file via >>)
-shopt -s nullglob
-parent_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*parent.jh/ )
-[[ ${#parent_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for parent.jh"
-parent_out_files=( "${parent_run_dir[0]}"*.out )
-shopt -u nullglob
-[[ ${#parent_out_files[@]} -eq 0 ]] || e2e::fail "expected no .out files for parent.jh, got ${#parent_out_files[@]}"
+e2e::expect_out_files "parent.jh" 0

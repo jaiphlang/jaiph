@@ -27,18 +27,16 @@ if [[ ${say_hello_exit} -eq 0 ]]; then
   e2e::fail "say_hello.test.jh should fail intentionally"
 fi
 
-expected_say_hello_out=$(printf '%s\n' \
-  'testing say_hello.test.jh' \
-  '  ▸ without name, workflow fails with validation message' \
-  '  ✗ expectEqual failed: <time>' \
-  "    - You didn't provide your name" \
-  '    + You didn'"'"'t provide your name :(' \
-  '' \
-  '  ▸ with name, returns greeting and logs response' \
-  '  ✓ <time>' \
-  '' \
-  '✗ 1 / 2 test(s) failed' \
-  '  - without name, workflow fails with validation message')
-expected_say_hello_out="${expected_say_hello_out%$'\n'}"
+e2e::expect_stdout "${say_hello_out}" <<'EOF'
+testing say_hello.test.jh
+  ▸ without name, workflow fails with validation message
+  ✗ expectEqual failed: <time>
+    - You didn't provide your name
+    + You didn't provide your name :(
 
-e2e::assert_output_equals "${say_hello_out}" "${expected_say_hello_out}" "say_hello.test.jh failing output matches exactly"
+  ▸ with name, returns greeting and logs response
+  ✓ <time>
+
+✗ 1 / 2 test(s) failed
+  - without name, workflow fails with validation message
+EOF
