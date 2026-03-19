@@ -6,21 +6,48 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## E2E: add full .out file content assertions where run artifacts exist <!-- dev-ready -->
+## Fix: Line breaks in prompt parameters should be removed and unify parameters display everywhere
 
-**Goal.** Where e2e tests run workflows that write step output to `.jaiph/runs/…/*.out`, add `e2e::assert_equals` (or equivalent) so the test asserts the **full** content of the relevant .out file(s), not only substrings.
+Bug sample (last line):
+```
+➜  jaiph git:(nightly) CI=true .jaiph/engineer.jh pragmatic
 
-**Reference.** `e2e/tests/20_rule_and_prompt.sh` already does this for prompt steps: after `jaiph run prompt_flow.jh` / `multiline_prompt.jh` it finds the run dir, reads the prompt step `.out` file, builds expected content (with deterministic command line using `TEST_DIR`), and uses `e2e::assert_equals` for full match.
+Jaiph: Running engineer.jh
 
-**Scope.** Identify other e2e tests that run workflows and could assert on .out content (e.g. rule steps, shell steps, or other prompt runs). Add full-content assertions for those .out files where the output is deterministic (no-prompt, or mocked prompt). Use the same pattern: glob for run dir under `TEST_DIR/.jaiph/runs/`, find the .out file(s), build expected string (normalize only truly variable parts if needed), `assert_equals` actual vs expected.
+workflow default (pragmatic)
+  ▸ function get_first_task
+  ·   ▸ function get_all_task_headers
+  ·   ✓ 0s
+  ·   ▸ function get_task_by_header ("## E2E: add full .out file conte...")
+  ·   ✓ 0s
+  ✓ 0s
+  ▸ rule task_is_dev_ready ("## E2E: add full .out file conte...")
+  ✓ 0s
+  ▸ workflow implement_poc ("## E2E: add full .out file conte...", pragmatic)
+  ·   ▸ rule is_clean
+  ·   ·   ▸ rule in_git_repo
+  ·   ·   ✓ 0s
+  ·   ·   ▸ rule branch_clean
+  ·   ·   ✓ 0s
+  ·   ✓ 0s
+  ·   ▸ prompt "$role <task>" (role="<role>
+  You are a pragmatic eng...", task="## E2E: add full .out file conte...")
+```
 
-**Acceptance criteria.**
+Best solution is to have common utilities for normalization of parameter print.
 
-- All *.sh tests where workflows are executed compare also all output files
-- Pattern is consistent with 20_rule_and_prompt (run dir discovery, single .out or per-step .out, deterministic expected).
-- All e2e tests pass.
+Addionally double check prompts where some parameters are named and some are `$1` etc.
+
+The best way is to show names everywhere like: workflow test (1="...")
 
 ---
+
+## Bug: When Jaiph is executed in docker, nothing is saved in local .jaiph/runs directory
+
+Acceptance criteria: Write a Bash test that enforces jaiph in Docker
+
+OR: Create a CI that uses Docker for all tests with no changing the output.
+This way we can guarantee output parity.
 
 ## Fix prompt/agent step output: no output in tree unless logged with `log`<!-- dev-ready -->
 

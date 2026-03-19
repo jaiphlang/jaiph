@@ -110,4 +110,13 @@ expected_tree_with_running=$(printf '%s\n' \
 expected_tree_with_running="${expected_tree_with_running%$'\n'}"
 
 e2e::assert_equals "${tree_projection}" "${expected_tree_with_running}" "TTY projected tree matches expected flow"
+
+# Assert no .out files for tty_tree.jh (sleep produces no stdout)
+shopt -s nullglob
+tty_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*tty_tree.jh/ )
+[[ ${#tty_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for tty_tree.jh"
+tty_out_files=( "${tty_run_dir[0]}"*.out )
+shopt -u nullglob
+[[ ${#tty_out_files[@]} -eq 0 ]] || e2e::fail "expected no .out files for tty_tree.jh, got ${#tty_out_files[@]}"
+
 e2e::pass "TTY progress timer and tree projection are stable"

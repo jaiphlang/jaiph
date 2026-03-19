@@ -37,6 +37,15 @@ expected_valid=$(printf '%s\n' \
 expected_valid="${expected_valid%$'\n'}"
 e2e::assert_output_equals "${run_out}" "${expected_valid}" "valid.jh succeeds despite broken sibling"
 
+# Assert .out file content for valid.jh
+shopt -s nullglob
+valid_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*valid.jh/ )
+shopt -u nullglob
+[[ ${#valid_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for valid.jh"
+valid_out_files=( "${valid_run_dir[0]}"*.out )
+[[ ${#valid_out_files[@]} -eq 1 ]] || e2e::fail "expected one .out file for valid.jh, got ${#valid_out_files[@]}"
+e2e::assert_equals "$(<"${valid_out_files[0]}")" "valid-ok" "valid.jh default workflow .out content"
+
 # When: building the directory (should report errors)
 build_err_file="$(mktemp)"
 if jaiph build "${TEST_DIR}" 2>"${build_err_file}"; then

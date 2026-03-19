@@ -46,3 +46,11 @@ expected="$(printf '%s\n' \
   'parent_after:cursor')"
 
 e2e::assert_equals "${actual}" "${expected}" "called workflow config is scoped and restored"
+
+# Assert no .out files for parent.jh (all output redirected to file via >>)
+shopt -s nullglob
+parent_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*parent.jh/ )
+[[ ${#parent_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for parent.jh"
+parent_out_files=( "${parent_run_dir[0]}"*.out )
+shopt -u nullglob
+[[ ${#parent_out_files[@]} -eq 0 ]] || e2e::fail "expected no .out files for parent.jh, got ${#parent_out_files[@]}"

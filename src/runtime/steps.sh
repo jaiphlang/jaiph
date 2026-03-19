@@ -33,6 +33,13 @@ jaiph::workspace_root() {
 
 jaiph::init_run_tracking() {
   if [[ -n "${JAIPH_RUN_DIR:-}" ]]; then
+    # The run directory can be removed during long workflows (e.g. test cleanup).
+    # Recreate it so subsequent step artifacts/events can still be written.
+    mkdir -p "$JAIPH_RUN_DIR"
+    if [[ -n "${JAIPH_RUN_SUMMARY_FILE:-}" ]]; then
+      mkdir -p "$(dirname "$JAIPH_RUN_SUMMARY_FILE")"
+      : >>"$JAIPH_RUN_SUMMARY_FILE"
+    fi
     return 0
   fi
   local run_id workspace_root runs_root

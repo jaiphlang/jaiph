@@ -88,6 +88,14 @@ e2e::assert_equals "${normalized_out}" "${expected_tree_ensure}" "exact tree (tw
 
 e2e::pass "if ! ensure with two recursive gates: fail gate1 then gate2, pass on nested retries"
 
+# Assert no .out files for make_pass.jh (touch and test produce no stdout)
+shopt -s nullglob
+make_pass_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*make_pass.jh/ )
+[[ ${#make_pass_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for make_pass.jh"
+make_pass_out_files=( "${make_pass_run_dir[0]}"*.out )
+shopt -u nullglob
+[[ ${#make_pass_out_files[@]} -eq 0 ]] || e2e::fail "expected no .out files for make_pass.jh, got ${#make_pass_out_files[@]}"
+
 # Same scenario but condition is plain bash (if ! test -f ...; then touch; run make_pass; fi).
 e2e::section "if ! test (bash) then touch + run same workflow (fail first, pass on retry)"
 rm -f "${TEST_DIR}/.gate_passed"
@@ -122,5 +130,13 @@ expected_tree_bash=$(printf '%s\n' \
 expected_tree_bash="${expected_tree_bash%$'\n'}"
 normalized_bash="$(e2e::normalize_output "${out_bash}")"
 e2e::assert_equals "${normalized_bash}" "${expected_tree_bash}" "exact tree (bash condition + run make_pass)"
+
+# Assert no .out files for make_pass_bash.jh (touch produces no stdout)
+shopt -s nullglob
+make_pass_bash_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*make_pass_bash.jh/ )
+[[ ${#make_pass_bash_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for make_pass_bash.jh"
+make_pass_bash_out_files=( "${make_pass_bash_run_dir[0]}"*.out )
+shopt -u nullglob
+[[ ${#make_pass_bash_out_files[@]} -eq 0 ]] || e2e::fail "expected no .out files for make_pass_bash.jh, got ${#make_pass_bash_out_files[@]}"
 
 e2e::pass "if ! test with touch + run make_pass: fail first time, pass on retry"

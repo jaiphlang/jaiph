@@ -77,6 +77,14 @@ expected_recovery=$(printf '%s\n' \
 expected_recovery="${expected_recovery%$'\n'}"
 e2e::assert_output_equals "${recovery_out}" "${expected_recovery}" "if ! ensure can trigger run <workflow>"
 
+# Assert no .out files for ensure_run_branch.jh (all stdout redirected to files)
+shopt -s nullglob
+run_branch_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*ensure_run_branch.jh/ )
+[[ ${#run_branch_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for ensure_run_branch.jh"
+run_branch_out_files=( "${run_branch_run_dir[0]}"*.out )
+shopt -u nullglob
+[[ ${#run_branch_out_files[@]} -eq 0 ]] || e2e::fail "expected no .out files for ensure_run_branch.jh, got ${#run_branch_out_files[@]}"
+
 e2e::assert_file_exists "${TEST_DIR}/shell_ran.txt" "shell fallback ran after ensure failure"
 
 expected_shell=$(printf '%s\n' \
@@ -90,6 +98,14 @@ expected_shell=$(printf '%s\n' \
 expected_shell="${expected_shell%$'\n'}"
 e2e::assert_output_equals "${shell_out}" "${expected_shell}" "if ! ensure can trigger shell fallback"
 
+# Assert no .out files for ensure_shell_branch.jh (all stdout redirected to files)
+shopt -s nullglob
+shell_branch_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*ensure_shell_branch.jh/ )
+[[ ${#shell_branch_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for ensure_shell_branch.jh"
+shell_branch_out_files=( "${shell_branch_run_dir[0]}"*.out )
+shopt -u nullglob
+[[ ${#shell_branch_out_files[@]} -eq 0 ]] || e2e::fail "expected no .out files for ensure_shell_branch.jh, got ${#shell_branch_out_files[@]}"
+
 expected_skip=$(printf '%s\n' \
   '' \
   'Jaiph: Running ensure_pass_branch.jh' \
@@ -100,6 +116,15 @@ expected_skip=$(printf '%s\n' \
   '✓ PASS workflow default (<time>)')
 expected_skip="${expected_skip%$'\n'}"
 e2e::assert_output_equals "${skip_out}" "${expected_skip}" "if ! ensure pass path still succeeds"
+
+# Assert no .out files for ensure_pass_branch.jh (rule produces no stdout)
+shopt -s nullglob
+pass_branch_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*ensure_pass_branch.jh/ )
+[[ ${#pass_branch_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for ensure_pass_branch.jh"
+pass_branch_out_files=( "${pass_branch_run_dir[0]}"*.out )
+shopt -u nullglob
+[[ ${#pass_branch_out_files[@]} -eq 0 ]] || e2e::fail "expected no .out files for ensure_pass_branch.jh, got ${#pass_branch_out_files[@]}"
+
 if [[ -f "${TEST_DIR}/should_not_run.txt" ]]; then
   e2e::fail "if ! ensure should not execute then-branch when ensure passes"
 fi

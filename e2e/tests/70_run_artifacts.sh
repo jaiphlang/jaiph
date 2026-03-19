@@ -74,3 +74,14 @@ e2e::pass "run artifacts include .out and .err files"
 summary_content="$(cat "${summary_file}")"
 e2e::assert_contains "${summary_content}" "\"type\":\"STEP_END\"" "summary records step end events"
 e2e::assert_contains "${summary_content}" "\"status\":1" "summary records non-zero failing step status"
+
+# Assert full .out and .err file content
+ok_out=( "${run_dir}"/*artifacts_fail__ok_step.out )
+[[ ${#ok_out[@]} -eq 1 ]] || e2e::fail "expected one ok_step .out file"
+e2e::assert_equals "$(<"${ok_out[0]}")" "ok-out" "ok_step .out full content"
+fail_out=( "${run_dir}"/*artifacts_fail__failing_step.out )
+[[ ${#fail_out[@]} -eq 1 ]] || e2e::fail "expected one failing_step .out file"
+e2e::assert_equals "$(<"${fail_out[0]}")" "bad-out" "failing_step .out full content"
+fail_err=( "${run_dir}"/*artifacts_fail__failing_step.err )
+[[ ${#fail_err[@]} -eq 1 ]] || e2e::fail "expected one failing_step .err file"
+e2e::assert_equals "$(<"${fail_err[0]}")" "bad-err" "failing_step .err full content"
