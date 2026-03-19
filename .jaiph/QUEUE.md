@@ -6,6 +6,251 @@ The first `##` task in the file is always the current task.
 
 ---
 
+## E2E tests: make it human readable <!-- dev-ready -->
+
+This is a sample e2e test e2e/tests/10_basic_workflows.sh reworked to more readable way:
+
+```
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "${ROOT_DIR}/e2e/lib/common.sh"
+trap e2e::cleanup EXIT
+
+e2e::prepare_test_env "basic_workflows"
+TEST_DIR="${JAIPH_E2E_TEST_DIR}"
+
+e2e::section "Basic workflow execution"
+
+# Given
+e2e::file "hello.jh" <<'EOF'
+workflow default {
+  echo "hello-jh"
+}
+EOF
+
+# When
+hello_out="$(e2e::run "hello.jh")"
+
+# Then
+e2e::expect_stdout "${hello_out}" <<'EOF'
+Jaiph: Running hello.jh
+
+workflow default
+✓ PASS workflow default (<time>)
+EOF
+
+e2e::expect_out_files "hello.jh" 1
+e2e::expect_out "hello.jh" "default" "hello-jh"
+
+# Given
+e2e::file "lib.jph" <<'EOF'
+rule ready {
+  echo "from-jph"
+}
+EOF
+
+e2e::file "app.jh" <<'EOF'
+import "lib.jph" as lib
+workflow default {
+  ensure lib.ready
+  echo "mixed-ok"
+}
+EOF
+
+# When
+mixed_out="$(e2e::run "app.jh")"
+
+# Then
+e2e::expect_stdout "${mixed_out}" <<'EOF'
+Jaiph: Running app.jh
+
+workflow default
+  ▸ rule ready
+  ✓ <time>
+✓ PASS workflow default (<time>)
+EOF
+
+e2e::expect_out_files "app.jh" 2
+e2e::expect_rule_out "app.jh" "lib.ready" "from-jph"
+e2e::expect_out "app.jh" "default" "mixed-ok"
+
+e2e::section "Git-aware rule arguments"
+
+# Given
+e2e::file "current_branch.jph" <<'EOF'
+#!/usr/bin/env jaiph
+rule current_branch {
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "Not inside a git repository." >&2
+    exit 1
+  fi
+
+  if [ "$(git branch --show-current)" != "$1" ]; then
+    echo "Current branch is not '$1'." >&2
+    exit 1
+  fi
+}
+
+workflow default {
+  ensure current_branch "$1"
+}
+EOF
+
+(
+  cd "${TEST_DIR}"
+
+  # Given
+  e2e::git_init
+  current_branch="$(e2e::git_current_branch)"
+
+  # When
+  e2e::run "current_branch.jph" "${current_branch}" >/dev/null
+
+  # Then
+  e2e::pass "current_branch.jph passes for current branch"
+  e2e::expect_out_files "current_branch.jph" 0
+
+  wrong_branch="${current_branch}-wrong"
+
+  # When / Then
+  e2e::expect_fail "current_branch.jph" "${wrong_branch}"
+  e2e::pass "current_branch.jph fails for wrong branch"
+)
+```
+
+You need to rework all e2e tests to follow similar pattern.
+
+Functions that might be added to e2e/lib/common.sh:
+
+```
+e2e::file() {
+  local name="$1"
+  local path="${JAIPH_E2E_TEST_DIR}/${name}"
+  mkdir -p "$(dirname "${path}")"
+  cat > "${path}"
+}
+
+e2e::run() {
+  local file="$1"
+  shift || true
+
+  jaiph build "${JAIPH_E2E_TEST_DIR}/${file}" >/dev/null
+  jaiph run "${JAIPH_E2E_TEST_DIR}/${file}" "$@"
+}
+
+e2e::run_dir() {
+  local file="$1"
+
+  shopt -s nullglob
+  local dirs=( "${JAIPH_E2E_TEST_DIR}/.jaiph/runs/"*/*"${file}"/ )
+  shopt -u nullglob
+
+  [[ ${#dirs[@]} -eq 1 ]] || e2e::fail "expected one run dir for ${file}, got ${#dirs[@]}"
+  printf "%s" "${dirs[0]}"
+}
+
+e2e::expect_out_files() {
+  local file="$1"
+  local expected="$2"
+
+  local dir
+  dir="$(e2e::run_dir "${file}")"
+
+  shopt -s nullglob
+  local files=( "${dir}"*.out )
+  shopt -u nullglob
+
+  [[ ${#files[@]} -eq "${expected}" ]] \
+    || e2e::fail "expected ${expected} .out files for ${file}, got ${#files[@]}"
+
+  e2e::pass "${file} has ${expected} .out files"
+}
+
+e2e::expect_out() {
+  local file="$1"
+  local workflow="$2"
+  local expected="$3"
+
+  local dir
+  dir="$(e2e::run_dir "${file}")"
+
+  local out_file="${dir}${file%.*}__${workflow}.out"
+
+  [[ -f "${out_file}" ]] || e2e::fail "missing ${workflow} .out for ${file}"
+
+  local content
+  content="$(<"${out_file}")"
+
+  e2e::assert_equals "${content}" "${expected}" "${file} ${workflow} .out"
+}
+
+e2e::expect_rule_out() {
+  local file="$1"
+  local rule="$2"
+  local expected="$3"
+
+  local dir
+  dir="$(e2e::run_dir "${file}")"
+
+  local normalized="${rule//./__}"
+  local out_file="${dir}${normalized}.out"
+
+  [[ -f "${out_file}" ]] || e2e::fail "missing ${rule} .out for ${file}"
+
+  local content
+  content="$(<"${out_file}")"
+
+  e2e::assert_equals "${content}" "${expected}" "${file} ${rule} .out"
+}
+
+e2e::expect_stdout() {
+  local actual="$1"
+  local expected
+
+  expected="$(cat)"
+  expected="${expected%$'\n'}"
+
+  e2e::assert_output_equals "${actual}" "${expected}" "stdout matches"
+}
+
+e2e::expect_fail() {
+  local file="$1"
+  shift || true
+
+  if e2e::run "${file}" "$@" >/dev/null 2>&1; then
+    e2e::fail "${file} should fail"
+  fi
+}
+
+e2e::git_init() {
+  git init -b main >/dev/null 2>&1 || git init >/dev/null 2>&1
+}
+
+e2e::git_current_branch() {
+  local branch
+  branch="$(git branch --show-current || true)"
+  [[ -n "${branch}" ]] || branch="main"
+  printf "%s" "${branch}"
+}
+```
+
+Also I want to compare all files content in Jaiph runs directory.
+
+That might be something like:
+
+```
+e2e::expect_no_file "*ensure_ci_passes_ensure_ci_passes.err"
+
+e2e::expect_file "*ensure_ci_passes_ensure_ci_passes.err" <<'EOF'
+# the exact content
+EOF
+```
+
+---
+
 ## Fix: Line breaks in prompt parameters should be removed and unify parameters display everywhere
 
 Bug sample (last line):
