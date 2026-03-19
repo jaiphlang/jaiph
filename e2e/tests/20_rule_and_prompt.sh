@@ -126,7 +126,7 @@ if [[ "${prompt_ok_out}" != *"passed"* ]] && [[ "${prompt_ok_out}" != *"PASS"* ]
 fi
 e2e::pass "prompt_flow.test.jh passes with inline mock"
 
-# Run prompt workflow and assert full tree output
+# Run prompt workflow and assert tree has no embedded output (output only via log)
 prompt_run_out="$(jaiph run "${TEST_DIR}/prompt_flow.jh")"
 expected_prompt_run=$(printf '%s\n' \
   '' \
@@ -135,17 +135,25 @@ expected_prompt_run=$(printf '%s\n' \
   'workflow default' \
   '  ▸ prompt "e2e-prompt-please-return"' \
   '  ✓ <time>' \
-  '    Command:' \
-  '    <agent-command>' \
-  '' \
-  '    Prompt:' \
-  '    e2e-prompt-please-return-mock' \
-  '' \
-  '    Final answer:' \
-  '    e2e-backend-no-mock-output' \
   '✓ PASS workflow default (<time>)')
 expected_prompt_run="${expected_prompt_run%$'\n'}"
-e2e::assert_output_equals "${prompt_run_out}" "${expected_prompt_run}" "run prompt_flow.jh tree shows prompt line with preview"
+e2e::assert_output_equals "${prompt_run_out}" "${expected_prompt_run}" "run prompt_flow.jh tree shows prompt line only, no output block"
+
+# Prompt step .out file contains full agent transcript (mock run: workspace = TEST_DIR, so command is deterministic)
+shopt -s nullglob
+prompt_flow_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*prompt_flow.jh/ )
+shopt -u nullglob
+[[ ${#prompt_flow_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for prompt_flow.jh"
+prompt_out_file=( "${prompt_flow_run_dir[0]}"*jaiph__prompt.out )
+[[ ${#prompt_out_file[@]} -eq 1 ]] || e2e::fail "expected one .out file in run dir"
+expected_prompt_out=$(printf '%s\n%s\n\n%s\n%s\n\n%s\n%s' \
+  'Command:' \
+  "cursor-agent --print --output-format stream-json --stream-partial-output --workspace ${TEST_DIR} --trust ${TEST_DIR} e2e-prompt-please-return-mock" \
+  'Prompt:' \
+  'e2e-prompt-please-return-mock' \
+  'Final answer:' \
+  'e2e-backend-no-mock-output')
+e2e::assert_equals "$(<"${prompt_out_file[0]}")" "${expected_prompt_out}" "prompt_flow.jh agent .out file full content"
 
 # Multi-line prompt is displayed as single line (newlines stripped from preview)
 cat > "${TEST_DIR}/multiline_prompt.jh" <<'EOF'
@@ -166,19 +174,26 @@ expected_multiline=$(printf '%s\n' \
   'workflow default' \
   '  ▸ prompt "Line one and line t"' \
   '  ✓ <time>' \
-  '    Command:' \
-  '    <agent-command>' \
-  '' \
-  '    Prompt:' \
-  '' \
-  '        Line one and line two.' \
-  '' \
-  '' \
-  '    Final answer:' \
-  '    e2e-backend-no-mock-output' \
   '✓ PASS workflow default (<time>)')
 expected_multiline="${expected_multiline%$'\n'}"
-e2e::assert_output_equals "${multiline_out}" "${expected_multiline}" "multiline prompt displayed as single line in tree"
+e2e::assert_output_equals "${multiline_out}" "${expected_multiline}" "multiline prompt tree shows step only, no output block"
+
+# Multiline prompt step .out file contains full agent transcript (mock run: command deterministic)
+shopt -s nullglob
+multiline_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*multiline_prompt.jh/ )
+shopt -u nullglob
+[[ ${#multiline_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for multiline_prompt.jh"
+multiline_out_file=( "${multiline_run_dir[0]}"*jaiph__prompt.out )
+[[ ${#multiline_out_file[@]} -eq 1 ]] || e2e::fail "expected one .out file in run dir"
+expected_multiline_out=$(printf '%s\n%s\n\n%s\n\n%s\n%s\n\n%s\n%s' \
+  'Command:' \
+  "cursor-agent --print --output-format stream-json --stream-partial-output --workspace ${TEST_DIR} --trust ${TEST_DIR} \$'\n    Line one and line two.\n  '" \
+  'Prompt:' \
+  '    Line one and line two.' \
+  '  ' \
+  'Final answer:' \
+  'e2e-backend-no-mock-output')
+e2e::assert_equals "$(<"${multiline_out_file[0]}")" "${expected_multiline_out}" "multiline_prompt.jh agent .out file full content"
 
 # Given: workflow with prompt but test does not mock it -> selected backend runs (cursor by default).
 cat > "${TEST_DIR}/prompt_unmatched.jh" <<'EOF'
