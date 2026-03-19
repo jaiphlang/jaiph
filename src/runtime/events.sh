@@ -165,15 +165,37 @@ jaiph::emit_step_event() {
   fi
   # Append dispatched/channel metadata if set by inbox dispatch.
   if [[ -n "${JAIPH_DISPATCH_CHANNEL:-}" ]]; then
-    local dispatch_extra=",\"dispatched\":true,\"channel\":\"$(jaiph::json_escape "$JAIPH_DISPATCH_CHANNEL")\""
-    # Include stdout content in the event so the CLI can display it without
-    # reading the out_file (which lives inside the Docker container).
-    if [[ "$event_type" == "STEP_END" && -n "$out_file" && -f "$out_file" ]]; then
+    payload="${payload%\}},\"dispatched\":true,\"channel\":\"$(jaiph::json_escape "$JAIPH_DISPATCH_CHANNEL")\"}"
+  fi
+  # Always embed out_content (and err_content for failed steps) in STEP_END
+  # events so the CLI can display output without reading files from disk.
+  # This is the single source of truth for step output in both Docker and
+  # non-Docker modes.  Content is capped at 1 MB to keep event payloads sane;
+  # the full output remains in out_file/err_file on disk for debugging.
+  local _jaiph_max_embed=1048576  # 1 MB
+  if [[ "$event_type" == "STEP_END" ]]; then
+    local embed_extra=""
+    if [[ -n "$out_file" && -f "$out_file" ]]; then
       local out_content
       out_content="$(<"$out_file")"
-      dispatch_extra="${dispatch_extra},\"out_content\":\"$(jaiph::json_escape "$out_content")\""
+      if [[ "${#out_content}" -gt "$_jaiph_max_embed" ]]; then
+        out_content="${out_content:0:$_jaiph_max_embed}
+[truncated]"
+      fi
+      embed_extra="${embed_extra},\"out_content\":\"$(jaiph::json_escape "$out_content")\""
     fi
-    payload="${payload%\}}${dispatch_extra}}"
+    if [[ -n "$err_file" && -f "$err_file" && "${status:-0}" != "0" ]]; then
+      local err_content
+      err_content="$(<"$err_file")"
+      if [[ "${#err_content}" -gt "$_jaiph_max_embed" ]]; then
+        err_content="${err_content:0:$_jaiph_max_embed}
+[truncated]"
+      fi
+      embed_extra="${embed_extra},\"err_content\":\"$(jaiph::json_escape "$err_content")\""
+    fi
+    if [[ -n "$embed_extra" ]]; then
+      payload="${payload%\}}${embed_extra}}"
+    fi
   fi
   marker_fd="$(jaiph::event_fd)"
   printf "__JAIPH_EVENT__ %s\n" "$payload" >&"$marker_fd"

@@ -370,27 +370,19 @@ const MAX_PARAM_VALUE_DISPLAY = 32;
             process.stdout.write("\r\u001b[K\u001b[1A\r\u001b[K");
           }
           process.stdout.write(`${completedLine}${isTTY ? "\n\n" : "\n"}`);
-          if (event.dispatched) {
-            let content = "";
-            if (event.out_content) {
-              content = event.out_content.trimEnd();
-            } else if (event.out_file) {
-              try {
-                content = readFileSync(event.out_file, "utf8").trimEnd();
-              } catch {
-                // File may not exist (e.g., Docker mode without out_content) — silently skip.
+          // Display embedded step output (out_content / err_content) from the event.
+          // The bash stdlib always embeds these in STEP_END events; no file-reading
+          // fallback — out_file/err_file remain on disk for debugging/archival only.
+          const rawContent = [event.out_content, event.err_content].filter(Boolean).join("\n").trimEnd();
+          if (rawContent.length > 0) {
+            const depth = Math.max(1, event.depth ?? 1);
+            const outputIndent = "    ".repeat(depth);
+            const dimOutputIndent = colorize(outputIndent, "dim");
+            for (const outLine of rawContent.split("\n")) {
+              if (isTTY && runningInterval !== undefined) {
+                process.stdout.write("\r\u001b[K\u001b[1A\r\u001b[K");
               }
-            }
-            if (content.length > 0) {
-              const depth = Math.max(1, event.depth ?? 1);
-              const outputIndent = "    ".repeat(depth);
-              const dimOutputIndent = colorize(outputIndent, "dim");
-              for (const outLine of content.split("\n")) {
-                if (isTTY && runningInterval !== undefined) {
-                  process.stdout.write("\r\u001b[K\u001b[1A\r\u001b[K");
-                }
-                process.stdout.write(`${dimOutputIndent}${outLine}${isTTY ? "\n\n" : "\n"}`);
-              }
+              process.stdout.write(`${dimOutputIndent}${outLine}${isTTY ? "\n\n" : "\n"}`);
             }
           }
           if (isTTY && runningInterval !== undefined) {
@@ -428,6 +420,12 @@ const MAX_PARAM_VALUE_DISPLAY = 32;
       // Docker with -t merges stderr into stdout, so event lines arrive on
       // stdout.  Buffer line-by-line and route event lines through the same
       // handler that normally processes stderr.
+      //
+      // NOTE (out-of-scope): Docker TTY mode merges stdout and stderr into a
+      // single stream.  The line-based demux below separates event lines from
+      // user output, but ordering and timing may still differ from non-Docker
+      // mode because of this merged stream.  This is a known limitation and
+      // should be addressed in a follow-up if needed.
       execResult.stdout?.on("data", (chunk: string) => {
         stdoutBuffer += chunk;
         let newlineIndex = stdoutBuffer.indexOf("\n");
