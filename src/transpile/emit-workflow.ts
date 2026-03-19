@@ -74,6 +74,14 @@ function resolveShellRefs(
   return command;
 }
 
+/** Bash requires no space around = in local/export/readonly. Normalize "local name = value" -> "local name=value". */
+function normalizeShellLocalExport(command: string): string {
+  return command.replace(
+    /\b(local|export|readonly)\s+([A-Za-z_][A-Za-z0-9_]*)\s+=\s+/g,
+    "$1 $2=",
+  );
+}
+
 function parsePromptText(raw: string): string {
   if (!raw.startsWith(`"`)) {
     throw new Error("invalid prompt literal");
@@ -475,7 +483,7 @@ export function emitWorkflow(
             `  ${transpileRuleRef(ref, workflowSymbol, importedWorkflowSymbols)}${args ? ` ${args}` : ""}`,
           );
         } else {
-          out.push(`  ${resolveShellRefs(cmd, importedWorkflowSymbols)}`);
+          out.push(`  ${normalizeShellLocalExport(resolveShellRefs(cmd, importedWorkflowSymbols))}`);
         }
       }
     }
@@ -506,7 +514,7 @@ export function emitWorkflow(
       out.push("  :");
     } else {
       for (const cmd of fn.commands) {
-        out.push(`  ${resolveShellRefs(cmd, importedWorkflowSymbols)}`);
+        out.push(`  ${normalizeShellLocalExport(resolveShellRefs(cmd, importedWorkflowSymbols))}`);
       }
     }
     out.push("}");
@@ -589,7 +597,9 @@ function emitEnsureRecoverLoop(
         return;
       }
       if (recoverStep.type === "shell") {
-        const resolved = resolveShellRefs(recoverStep.command, importedWorkflowSymbols);
+        const resolved = normalizeShellLocalExport(
+          resolveShellRefs(recoverStep.command, importedWorkflowSymbols),
+        );
         if (recoverStep.captureName) {
           out.push(`${indent}${recoverStep.captureName}=$(${resolved})`);
         } else {
@@ -657,7 +667,9 @@ function emitEnsureRecoverLoop(
           continue;
         }
         if (step.type === "shell") {
-          const resolved = resolveShellRefs(step.command, importedWorkflowSymbols);
+          const resolved = normalizeShellLocalExport(
+            resolveShellRefs(step.command, importedWorkflowSymbols),
+          );
           if (step.captureName) {
             out.push(`  ${step.captureName}=$(${resolved})`);
           } else {
@@ -725,7 +737,9 @@ function emitEnsureRecoverLoop(
                 continue;
               }
               if (thenStep.type === "shell") {
-                const resolved = resolveShellRefs(thenStep.command, importedWorkflowSymbols);
+                const resolved = normalizeShellLocalExport(
+                  resolveShellRefs(thenStep.command, importedWorkflowSymbols),
+                );
                 if (thenStep.captureName) {
                   out.push(`${indent}${thenStep.captureName}=$(${resolved})`);
                 } else {
@@ -748,7 +762,7 @@ function emitEnsureRecoverLoop(
           out.push(`  if ! ${resolvedCondition}; then`);
           for (const thenStep of step.thenSteps) {
             if (thenStep.type === "shell") {
-              out.push(`    ${resolveShellRefs(thenStep.command, importedWorkflowSymbols)}`);
+              out.push(`    ${normalizeShellLocalExport(resolveShellRefs(thenStep.command, importedWorkflowSymbols))}`);
             } else {
               const args = thenStep.args ? ` ${thenStep.args}` : "";
               const paramKeys = thenStep.args ? parseParamKeysFromArgs(thenStep.args) : null;
@@ -769,7 +783,7 @@ function emitEnsureRecoverLoop(
             `  if ! ${transpileRuleRef(step.ensureRef, workflowSymbol, importedWorkflowSymbols)}${ensureArgs}; then`,
           );
           for (const { command } of step.commands) {
-            out.push(`    ${resolveShellRefs(command, importedWorkflowSymbols)}`);
+            out.push(`    ${normalizeShellLocalExport(resolveShellRefs(command, importedWorkflowSymbols))}`);
           }
           out.push("  fi");
           continue;
