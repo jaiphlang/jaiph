@@ -30,10 +30,22 @@ jaiph build "${TEST_DIR}/retry_single.jh"
 out="$(jaiph run "${TEST_DIR}/retry_single.jh" 2>&1)"
 e2e::assert_file_exists "${TEST_DIR}/ready.txt" "recover ran and created ready.txt"
 
-# Tree: rule dep (fail), workflow install_deps (recover), rule dep (pass)
-e2e::assert_contains "${out}" "rule dep" "output mentions ensure rule"
-e2e::assert_contains "${out}" "workflow install_deps" "output mentions recover workflow"
-e2e::assert_contains "${out}" "PASS" "workflow passes"
+expected_single=$(printf '%s\n' \
+  '' \
+  'Jaiph: Running retry_single.jh' \
+  '' \
+  'workflow default' \
+  '  ▸ rule dep' \
+  '  ✗ <time>' \
+  '  ▸ workflow install_deps' \
+  '  ✓ <time>' \
+  '  ▸ rule dep' \
+  '  ✓ <time>' \
+  '  ▸ rule dep' \
+  '  ✓ <time>' \
+  '✓ PASS workflow default (<time>)')
+expected_single="${expected_single%$'\n'}"
+e2e::assert_output_equals "${out}" "${expected_single}" "ensure/recover single-statement tree output"
 
 e2e::pass "ensure dep recover run install_deps: retry until success"
 
@@ -58,7 +70,20 @@ out_block="$(jaiph run "${TEST_DIR}/retry_block.jh" 2>&1)"
 e2e::assert_file_exists "${TEST_DIR}/ready2.txt" "recover block ran and created ready2.txt"
 e2e::assert_file_exists "${TEST_DIR}/recover_ran.txt" "recover block first statement ran"
 e2e::assert_contains "$(cat "${TEST_DIR}/recover_ran.txt")" "recovering" "recover block echoed into file"
-e2e::assert_contains "${out_block}" "PASS" "workflow passes"
+expected_block=$(printf '%s\n' \
+  '' \
+  'Jaiph: Running retry_block.jh' \
+  '' \
+  'workflow default' \
+  '  ▸ rule ready' \
+  '  ✗ <time>' \
+  '  ▸ rule ready' \
+  '  ✓ <time>' \
+  '  ▸ rule ready' \
+  '  ✓ <time>' \
+  '✓ PASS workflow default (<time>)')
+expected_block="${expected_block%$'\n'}"
+e2e::assert_output_equals "${out_block}" "${expected_block}" "ensure/recover block tree output"
 
 e2e::pass "ensure ready recover { echo ...; touch ...; }: block runs until condition passes"
 

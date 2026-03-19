@@ -370,11 +370,9 @@ const MAX_PARAM_VALUE_DISPLAY = 32;
             process.stdout.write("\r\u001b[K\u001b[1A\r\u001b[K");
           }
           process.stdout.write(`${completedLine}${isTTY ? "\n\n" : "\n"}`);
-          // Display embedded step output (out_content / err_content) from the event.
-          // The bash stdlib always embeds these in STEP_END events; no file-reading
-          // fallback — out_file/err_file remain on disk for debugging/archival only.
+          // Prompt steps show a preview (Command/Prompt/Final answer) on stdout; other steps stay in .out only.
           const rawContent = [event.out_content, event.err_content].filter(Boolean).join("\n").trimEnd();
-          if (rawContent.length > 0) {
+          if (event.kind === "prompt" && rawContent.length > 0) {
             const depth = Math.max(1, event.depth ?? 1);
             const outputIndent = "    ".repeat(depth);
             const dimOutputIndent = colorize(outputIndent, "dim");

@@ -160,7 +160,19 @@ jaiph build "${TEST_DIR}/display_inbox.jh"
 display_out="$(jaiph run "${TEST_DIR}/display_inbox.jh" 2>/dev/null)"
 normalized="$(e2e::normalize_output "${display_out}")"
 
-# Then: dispatched steps include channel name in output
-e2e::assert_contains "${normalized}" "analyst (findings," "dispatched step shows channel name for analyst"
-e2e::assert_contains "${normalized}" "reviewer (report," "dispatched step shows channel name for reviewer"
-e2e::assert_contains "${normalized}" "[reviewed] Summary: Found 3 issues in auth module" "dispatched step stdout is displayed after completion"
+# Then: full tree output for dispatched steps
+expected_display=$(printf '%s\n' \
+  '' \
+  'Jaiph: Running display_inbox.jh' \
+  '' \
+  'workflow default' \
+  '  ▸ workflow scanner' \
+  '  ✓ <time>' \
+  '  ▸ workflow analyst (findings, "Found 3 issues in auth module")' \
+  '  ✓ <time>' \
+  '  ▸ workflow reviewer (report, "Summary: Found 3 issues in auth ...")' \
+  '  ✓ <time>' \
+  '    [reviewed] Summary: Found 3 issues in auth module' \
+  '✓ PASS workflow default (<time>)')
+expected_display="${expected_display%$'\n'}"
+e2e::assert_output_equals "${display_out}" "${expected_display}" "dispatched step tree output with channels and stdout"
