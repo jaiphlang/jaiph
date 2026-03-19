@@ -107,7 +107,8 @@ Mount strings in `runtime.workspace` follow these forms:
 
 - `docker run --rm` with proper UID/GID mapping (`--user $(id -u):$(id -g)` on Linux).
 - TTY passthrough: `-t` flag when `process.stdout.isTTY` is true. Because Docker with `-t` merges the container's stderr into stdout, the CLI buffers Docker stdout line-by-line and filters out `__JAIPH_EVENT__` lines (routing them through the event handler instead). This ensures the progress tree output is identical whether Docker is enabled or not.
-- Dispatched step output: when an inbox-dispatched step completes, the runtime embeds its stdout in the `STEP_END` event (`out_content` field). The CLI uses this embedded content to display step output — it does not attempt to read `out_file` from the container filesystem, which is inaccessible from the host.
+- Step output reporting: the bash stdlib always embeds `out_content` in `STEP_END` events (and `err_content` for failed steps), regardless of dispatch status. The CLI uses this embedded content exclusively for display — it never reads `out_file`/`err_file` from disk for rendering. This makes step output identical in Docker and non-Docker modes. Embedded content is capped at 1 MB; larger output is truncated with a `[truncated]` marker. The full output remains in `out_file`/`err_file` on disk for debugging and archival.
+- Docker TTY stream merging: Docker with `-t` merges the container's stderr into stdout. The CLI demuxes event lines from user output via line-based buffering. Ordering and timing of interleaved stdout/stderr may still differ from non-Docker mode — this is a known limitation.
 - Docker is **enabled by default** on local machines. `CI=true` disables Docker by default (many CI runners lack Docker-in-Docker). In-file `runtime.docker_enabled = true` or `JAIPH_DOCKER_ENABLED=true` overrides this in either environment.
 - Docker missing → `E_DOCKER_NOT_FOUND` (no silent fallback).
 - Image auto-pulled if missing; pull failure is fatal.

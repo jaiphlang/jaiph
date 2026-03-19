@@ -103,21 +103,31 @@ export function readFailedStepOutput(summaryPath: string): string | null {
         status?: number;
         out_file?: string;
         err_file?: string;
+        out_content?: string;
+        err_content?: string;
       };
       if (parsed.type === "STEP_END" && parsed.status !== 0) {
-        const trimLines = (path: string): string => {
-          if (!existsSync(path)) return "";
-          const content = readFileSync(path, "utf8").trimEnd();
-          const outputLines = content.split(/\n/);
+        const trimContent = (raw: string): string => {
+          const trimmed = raw.trimEnd();
+          const outputLines = trimmed.split(/\n/);
           if (outputLines.length > FAILED_STEP_OUTPUT_MAX_LINES) {
             return outputLines.slice(-FAILED_STEP_OUTPUT_MAX_LINES).join("\n");
           }
-          return content;
+          return trimmed;
         };
-        const outPath = typeof parsed.out_file === "string" ? parsed.out_file : "";
-        const errPath = typeof parsed.err_file === "string" ? parsed.err_file : "";
-        const outContent = outPath ? trimLines(outPath) : "";
-        const errContent = errPath ? trimLines(errPath) : "";
+        // Prefer embedded content from the event (works in both Docker and
+        // non-Docker modes). Fall back to reading files only for older
+        // summaries that lack embedded content.
+        const readFileContent = (path: string): string => {
+          if (!path || !existsSync(path)) return "";
+          return readFileSync(path, "utf8").trimEnd();
+        };
+        const outRaw = typeof parsed.out_content === "string" ? parsed.out_content
+          : readFileContent(typeof parsed.out_file === "string" ? parsed.out_file : "");
+        const errRaw = typeof parsed.err_content === "string" ? parsed.err_content
+          : readFileContent(typeof parsed.err_file === "string" ? parsed.err_file : "");
+        const outContent = outRaw ? trimContent(outRaw) : "";
+        const errContent = errRaw ? trimContent(errRaw) : "";
         const parts: string[] = [];
         if (outContent) parts.push(outContent);
         if (errContent) parts.push(errContent);

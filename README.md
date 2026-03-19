@@ -157,7 +157,8 @@ Tip: add `.jaiph/` to your `.gitignore`.
   - **Non-TTY:** One completion line per finished step; no RUNNING line, no in-place updates.
 - For parameterized steps (`workflow`, `prompt`, `function`), the tree shows passed argument values inline in gray (comma-separated values in parentheses; no labels; workflow/function values truncated to 32 chars). **Prompt** steps additionally show a truncated preview of the prompt text (first 24 chars) and the argument list is capped at 96 characters.
 - Each run writes `.jaiph/runs/<timestamp>-<id>/run_summary.jsonl`.
-- Step `.out` / `.err` files are created only when the step produced output (empty log files are skipped).
+- Step output is embedded directly in `STEP_END` events (`out_content`, and `err_content` for failures) and displayed from the event payload. This makes output identical in Docker and non-Docker modes. Embedded content is capped at 1 MB (truncated with `[truncated]` if exceeded).
+- Step `.out` / `.err` files are still written to disk for debugging/archival but are not used for CLI display.
 
 ### Configuration
 
