@@ -212,6 +212,15 @@ function bashSingleQuotedEscape(s: string): string {
   return s.replace(/'/g, "'\\''");
 }
 
+/** In an unquoted heredoc, single quotes start a quoted span and backslash is literal inside it, so we cannot use '\''.
+ *  Emit a variable JAIPH_APOS=$'\'' before the heredoc and use ${JAIPH_APOS} in the body when the prompt contains '. */
+const JAIPH_APOS_VAR = "JAIPH_APOS";
+
+function heredocLineEscape(s: string, useAposVar: boolean): string {
+  if (!useAposVar) return s;
+  return s.replace(/'/g, `\${JAIPH_APOS_VAR}`);
+}
+
 const PROMPT_PREVIEW_MAX_LEN = 24;
 
 /** Emit a prompt step (untyped or typed with returns). When returns is set, captureName is required. */
@@ -249,17 +258,25 @@ function emitPromptStep(
     const fullPromptText = promptText + schemaSuffix;
     const delimiter = promptDelimiter(fullPromptText, step.loc.line);
     const schemaEscaped = schemaPayload.replace(/'/g, "'\\''");
+    const useAposSchema = fullPromptText.includes("'");
+    if (useAposSchema) {
+      out.push(`${indent}local ${JAIPH_APOS_VAR}=$'\\''`);
+    }
     out.push(`${indent}export JAIPH_PROMPT_PREVIEW='${bashSingleQuotedEscape(fullPromptText.slice(0, PROMPT_PREVIEW_MAX_LEN))}'`);
     out.push(`${indent}export JAIPH_PROMPT_SCHEMA='${schemaEscaped}'`);
     out.push(`${indent}export JAIPH_PROMPT_CAPTURE_NAME='${step.captureName}'`);
     out.push(`${indent}jaiph::prompt_capture_with_schema "$JAIPH_PROMPT_PREVIEW" "$@" <<${delimiter}`);
     for (const line of fullPromptText.split("\n")) {
-      out.push(line);
+      out.push(heredocLineEscape(line, useAposSchema));
     }
     out.push(delimiter);
     return;
   }
   const delimiter = promptDelimiter(promptText, step.loc.line);
+  const useApos = promptText.includes("'");
+  if (useApos) {
+    out.push(`${indent}local ${JAIPH_APOS_VAR}=$'\\''`);
+  }
   out.push(`${indent}export JAIPH_PROMPT_PREVIEW='${bashSingleQuotedEscape(promptText.slice(0, PROMPT_PREVIEW_MAX_LEN))}'`);
   if (step.captureName) {
     out.push(`${indent}${step.captureName}=$(jaiph::prompt_capture "$JAIPH_PROMPT_PREVIEW" "$@" <<${delimiter}`);
@@ -267,7 +284,7 @@ function emitPromptStep(
     out.push(`${indent}jaiph::prompt "$JAIPH_PROMPT_PREVIEW" "$@" <<${delimiter}`);
   }
   for (const line of promptText.split("\n")) {
-    out.push(line);
+    out.push(heredocLineEscape(line, useApos));
   }
   out.push(delimiter);
   if (step.captureName) {
