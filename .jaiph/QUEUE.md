@@ -6,7 +6,7 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Improve e2e tests -- assert full stdout, not only selected lines
+## Improve e2e tests -- assert full stdout, not only selected lines <!-- dev-ready -->
 
 ### Scope
 
@@ -47,7 +47,3 @@ For each test below, replace the grouped `e2e::assert_contains` calls on the cap
 5. **Parameter key registration.** For the standard `formatParamsForDisplay` to render the channel, the transpiler must register it as a named parameter key via `JAIPH_STEP_PARAM_KEYS`. But dispatched workflows are invoked dynamically by the runtime (`inbox.sh`), not statically by transpiled code. How should the parameter key for channel be registered? The runtime would need to export `JAIPH_STEP_PARAM_KEYS='channel,...'` before invocation.
 
 ---
-
-## Add instructions on top of QUEUE.md (this file) that are useful for implementation.
-
-Maybe even provide a template.

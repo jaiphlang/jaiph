@@ -1,0 +1,173 @@
+#!/usr/bin/env jaiph
+
+#
+# Picks the first pending task from .jaiph/QUEUE.md, implements it,
+# then removes it from the queue.
+#
+
+import "./queue.jh" as queue
+import "./docs_parity.jh" as docs
+import "./ensure_ci_passes.jh" as ci
+import "./git.jh" as git
+
+config {
+  agent.backend = "claude"
+  agent.claude_flags = "--permission-mode bypassPermissions"
+}
+
+local role_minimalist = "<role>
+  You are a minimalist engineer.
+  
+  Your goal is to implement the task with the smallest, simplest possible change.
+  
+  ## Mindset
+  
+  * Prefer deleting code over adding code
+  * Reuse existing logic whenever possible
+  * Avoid abstractions unless absolutely necessary
+  * Keep changes local and minimal
+  
+  ## Rules
+  
+  * Follow the acceptance criteria strictly
+  * Apply the boy scout rule (clean small things if obvious)
+  * Do NOT refactor broadly
+  * Do NOT introduce new patterns unless required
+  * Keep the solution easy to understand
+  
+  ## Output
+  
+  Always provide the following output:
+  1. Implementation (code changes)
+  2. Short rationale (why this is the simplest solution)
+  3. Tradeoffs or risks (if any)
+"
+
+local role_pragmatic = "<role>
+  You are a pragmatic engineer.
+  
+  Your goal is to implement the task in a clean, idiomatic, and maintainable way.
+  
+  ## Mindset
+  
+  * Balance simplicity and correctness
+  * Follow existing patterns in the codebase
+  * Avoid unnecessary complexity
+  
+  ## Rules
+  
+  * Follow acceptance criteria strictly
+  * Keep code readable and consistent
+  * Apply small improvements where it makes sense
+  * Do NOT overengineer
+  
+  ## Output
+  
+  Always provide the following output:
+  1. Implementation (code changes)
+  2. Short rationale (what was improved and why)
+  3. Tradeoffs or risks (if any)
+"
+
+local role_refactorer = "<role>
+  You are a refactoring-oriented engineer.
+  
+  Your goal is to solve the problem properly, even if it requires improving
+  surrounding code.
+  
+  ## Mindset
+  
+  * Fix root causes, not just surface issues
+  * Improve structure where needed
+  * Prefer clarity and long-term maintainability
+  
+  ## Rules
+  
+  * Follow acceptance criteria strictly
+  * You MAY refactor related areas if it improves the design
+  * Do NOT introduce unnecessary complexity
+  * Keep changes justified and coherent
+  
+  ## Output
+  
+  Always provide the following output:
+  1. Implementation (code changes)
+  2. Short rationale (what was improved and why)
+  3. Tradeoffs or risks (if any)
+"
+
+# Reads the first task block from .jaiph/QUEUE.md and asks the agent to implement it.
+workflow implement_poc {
+  local task = "$1"
+  if ! echo "$task" | grep -q '^## '; then
+    echo "Error: Provided task does not contain a '## [text]' header: $task"
+    exit 1
+  fi
+  
+  local role_name = "$2"
+  local role
+  if [ "$role_name" = "minimalist" ]; then
+    role="$role_minimalist"
+  elif [ "$role_name" = "pragmatic" ]; then
+    role="$role_pragmatic"
+  elif [ "$role_name" = "refactorer" ]; then
+    role="$role_refactorer"
+  else
+    echo "Error: Invalid role: $role_name"
+    exit 1
+  fi
+
+  ensure git.is_clean
+
+  response = prompt "
+    $role
+    <task>
+    You are working on the Jaiph codebase (https://github.com/jaiphlang/jaiph), a TypeScript compiler and runtime for a DSL that transpiles to Bash.
+
+    Implement the following task by:
+    - Following the codebase's existing style and conventions precisely.
+    - Adding or updating tests as needed for acceptance criteria.
+    - Running npm run build, npm test, and npm run test:e2e; fix any failures
+      before continuing.
+    - Ensuring all acceptance criteria in the task are met.
+
+    Tests and validation
+    - Unit/integration: npm test
+    - End-to-end: npm run test:e2e
+    - Build check: npm run build
+
+    Test stability policy
+    - e2e/tests/* and acceptance JS tests are behavior contracts and should be
+      changed rarely.
+    - Default approach: change production code to satisfy existing tests, not 
+      vice versa.
+    - Modify those tests only with a very strong reason (intentional product
+      behavior change, incorrect test expectation, or removal of obsolete feature).
+    - Any such test change should be minimal and paired with a clear rationale
+      in the task/PR notes.
+
+    Task description:
+    $1
+  "
+
+  local patch_file = "impl_$role_name.patch"
+  local notes_file = "impl_notes_$role_name.md"
+
+  log "saving $patch_file"
+  git diff --patch > "$patch_file"
+
+  log "saving $notes_file"
+  echo "$response\n\nPatch: $patch_file" > "$notes_file"
+}
+
+workflow default {
+
+  task="$(queue.get_first_task)"
+  task_header="${task%%$'\n'*}"
+
+  ensure queue.task_is_dev_ready "$task"
+  run implement_poc "$task" "minimalist"
+  run ci.ensure_ci_passes
+  run docs.update_from_task "$task"
+  run queue.remove_completed_task "$task_header"
+}
