@@ -665,10 +665,10 @@ test("compiler golden: workflow with config emits JAIPH export defaults", () => 
 
 // === Inbox / send operator / on route tests ===
 
-test("parser: send operator parses echo -> channel", () => {
+test("parser: send operator parses channel <- echo", () => {
   const source = [
     "workflow default {",
-    "  echo 'hello' -> findings",
+    "  findings <- echo 'hello'",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -679,10 +679,10 @@ test("parser: send operator parses echo -> channel", () => {
   assert.equal((step as { type: "send"; channel: string }).channel, "findings");
 });
 
-test("parser: standalone send -> channel forwards $1", () => {
+test("parser: standalone channel <- forwards $1", () => {
   const source = [
     "workflow default {",
-    "  -> findings",
+    "  findings <-",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -693,10 +693,10 @@ test("parser: standalone send -> channel forwards $1", () => {
   assert.equal((step as { type: "send"; channel: string }).channel, "findings");
 });
 
-test("parser: -> inside quotes is not a send", () => {
+test("parser: <- inside quotes is not a send", () => {
   const source = [
     "workflow default {",
-    '  echo "a -> b"',
+    '  echo "a <- b"',
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -704,13 +704,13 @@ test("parser: -> inside quotes is not a send", () => {
   assert.equal(mod.workflows[0].steps[0].type, "shell");
 });
 
-test("parser: on route declaration parses into routes", () => {
+test("parser: route declaration parses into routes", () => {
   const source = [
     "workflow analyst {",
     "  echo ok",
     "}",
     "workflow default {",
-    "  on findings -> analyst",
+    "  findings -> analyst",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -723,7 +723,7 @@ test("parser: on route declaration parses into routes", () => {
   assert.equal(defaultWf.routes![0].workflows[0].value, "analyst");
 });
 
-test("parser: on route with multiple targets", () => {
+test("parser: route with multiple targets", () => {
   const source = [
     "workflow a {",
     "  echo ok",
@@ -732,7 +732,7 @@ test("parser: on route with multiple targets", () => {
     "  echo ok",
     "}",
     "workflow default {",
-    "  on findings -> a, b",
+    "  findings -> a, b",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -746,7 +746,7 @@ test("parser: on route with multiple targets", () => {
 test("parser: capture + send is E_PARSE", () => {
   const source = [
     "workflow default {",
-    "  name = echo hello -> channel",
+    "  name = channel <- echo hello",
     "}",
   ].join("\n");
   assert.throws(
@@ -763,7 +763,7 @@ test("compiler golden: send operator transpiles to jaiph::send", () => {
       input,
       [
         "workflow default {",
-        "  echo 'foo' -> channel",
+        "  channel <- echo 'foo'",
         "}",
         "",
       ].join("\n"),
@@ -783,7 +783,7 @@ test("compiler golden: standalone send transpiles to jaiph::send with $1", () =>
       input,
       [
         "workflow default {",
-        "  -> channel",
+        "  channel <-",
         "}",
         "",
       ].join("\n"),
@@ -795,7 +795,7 @@ test("compiler golden: standalone send transpiles to jaiph::send with $1", () =>
   }
 });
 
-test("compiler golden: on route emits register_route and drain_queue", () => {
+test("compiler golden: route emits register_route and drain_queue", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-golden-route-"));
   try {
     const input = join(root, "entry.jh");
@@ -806,7 +806,7 @@ test("compiler golden: on route emits register_route and drain_queue", () => {
         "  echo ok",
         "}",
         "workflow default {",
-        "  on findings -> analyst",
+        "  findings -> analyst",
         "}",
         "",
       ].join("\n"),
@@ -834,7 +834,7 @@ test("compiler golden: multi-target route emits multiple funcs in register_route
         "  echo ok",
         "}",
         "workflow default {",
-        "  on findings -> a, b",
+        "  findings -> a, b",
         "}",
         "",
       ].join("\n"),
@@ -854,23 +854,23 @@ test("compiler golden: inbox.jh fixture compiles successfully", () => {
       input,
       [
         "workflow researcher {",
-        "  echo '## findings' -> findings",
+        "  findings <- echo '## findings'",
         "}",
         "",
         "workflow analyst {",
         '  echo "$1" > findings_file.md',
         '  summary = echo "Summary of findings"',
-        '  echo "$summary" -> summary',
+        '  summary <- echo "$summary"',
         "}",
         "",
         "workflow reviewer {",
-        '  echo "[reviewed] $1" -> final_summary',
+        '  final_summary <- echo "[reviewed] $1"',
         "}",
         "",
         "workflow default {",
         "  run researcher",
-        "  on findings -> analyst",
-        "  on summary -> reviewer",
+        "  findings -> analyst",
+        "  summary -> reviewer",
         "}",
         "",
       ].join("\n"),

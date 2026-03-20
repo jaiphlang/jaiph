@@ -225,10 +225,10 @@ See [cli.md](docs/cli.md) for command syntax, examples, and supported environmen
 - `log "message"`
   Displays a message in the progress tree at the current depth. Takes a double-quoted string; shell variable interpolation works at runtime. No spinner, no timing — just a static annotation. See [Grammar](docs/grammar.md).
 
-- `echo "data" -> channel` · `-> channel`
-  Sends content to a named inbox channel. The runtime dispatches to workflows registered via `on` routes. Standalone `-> channel` forwards `$1`. Combining capture and send (`name = cmd -> channel`) is a parse error. See [Inbox & Dispatch](docs/inbox.md).
+- `channel <- echo "data"` · `channel <-`
+  Sends content to a named inbox channel. The channel identifier is always on the left side of `<-`. The runtime dispatches to workflows registered via route declarations. Standalone `channel <-` forwards `$1`. Combining capture and send (`name = channel <- cmd`) is a parse error. See [Inbox & Dispatch](docs/inbox.md).
 
-- `on channel -> workflow` · `on channel -> wf1, wf2`
+- `channel -> workflow` · `channel -> wf1, wf2`
   Declares a static routing rule: when a message arrives on `channel`, the runtime calls the target workflow(s) with the message as `$1`. Multiple targets are dispatched sequentially. Routes are declarations, not executable steps. See [Inbox & Dispatch](docs/inbox.md).
 
 - **Assignment capture** — You can capture stdout from any step with `name = <step>`:

@@ -711,7 +711,7 @@ function emitEnsureRecoverLoop(
         }
         if (step.type === "send") {
           if (step.command === "") {
-            // Standalone send: -> channel forwards $1
+            // Standalone send: channel <- (forwards $1)
             out.push(`  jaiph::send '${step.channel}' "$1"`);
           } else {
             const resolved = resolveShellRefs(step.command, importedWorkflowSymbols);

@@ -1,19 +1,19 @@
 #!/usr/bin/env jaiph
 
 workflow scanner {
-  echo "Found 3 issues in auth module" -> findings
+  findings <- echo "Found 3 issues in auth module"
 }
 
 workflow analyst {
-  echo "Summary: $1" -> report
+  report <- echo "Summary: $1"
 }
 
 workflow reviewer {
-  echo "[reviewed] $1"
+  log "[reviewed] $1"
 }
 
 workflow default {
   run scanner
-  on findings -> analyst
-  on report -> reviewer
+  findings -> analyst
+  report -> reviewer
 }

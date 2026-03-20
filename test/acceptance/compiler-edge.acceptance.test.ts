@@ -728,15 +728,15 @@ test.skip("ACCEPTANCE: jaiph test typed prompt — wrong type fails with type er
   });
 });
 
-// === Inbox / send operator / on route acceptance tests ===
+// === Inbox / send operator / route acceptance tests ===
 
-test("ACCEPTANCE: on route with unknown workflow fails E_VALIDATE", () => {
-  withTempDir("jaiph-acc-on-route-unknown-wf-", (root) => {
+test("ACCEPTANCE: route with unknown workflow fails E_VALIDATE", () => {
+  withTempDir("jaiph-acc-route-unknown-wf-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
       [
         "workflow default {",
-        "  on findings -> missing_wf",
+        "  findings -> missing_wf",
         "}",
         "",
       ].join("\n"),
@@ -745,8 +745,8 @@ test("ACCEPTANCE: on route with unknown workflow fails E_VALIDATE", () => {
   });
 });
 
-test("ACCEPTANCE: on route with rule ref fails E_VALIDATE", () => {
-  withTempDir("jaiph-acc-on-route-rule-ref-", (root) => {
+test("ACCEPTANCE: route with rule ref fails E_VALIDATE", () => {
+  withTempDir("jaiph-acc-route-rule-ref-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
       [
@@ -754,7 +754,7 @@ test("ACCEPTANCE: on route with rule ref fails E_VALIDATE", () => {
         "  true",
         "}",
         "workflow default {",
-        "  on findings -> check",
+        "  findings -> check",
         "}",
         "",
       ].join("\n"),
@@ -769,7 +769,7 @@ test("ACCEPTANCE: capture + send is parse error", () => {
       join(root, "main.jh"),
       [
         "workflow default {",
-        "  name = echo hello -> channel",
+        "  name = channel <- echo hello",
         "}",
         "",
       ].join("\n"),
@@ -784,23 +784,23 @@ test("ACCEPTANCE: inbox.jh fixture builds successfully", () => {
       join(root, "inbox.jh"),
       [
         "workflow researcher {",
-        "  echo '## findings' -> findings",
+        "  findings <- echo '## findings'",
         "}",
         "",
         "workflow analyst {",
         '  echo "$1" > findings_file.md',
         '  summary = echo "Summary of findings"',
-        '  echo "$summary" -> summary',
+        '  summary <- echo "$summary"',
         "}",
         "",
         "workflow reviewer {",
-        '  echo "[reviewed] $1" -> final_summary',
+        '  final_summary <- echo "[reviewed] $1"',
         "}",
         "",
         "workflow default {",
         "  run researcher",
-        "  on findings -> analyst",
-        "  on summary -> reviewer",
+        "  findings -> analyst",
+        "  summary -> reviewer",
         "}",
         "",
       ].join("\n"),
