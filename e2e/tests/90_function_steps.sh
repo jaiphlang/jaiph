@@ -80,10 +80,10 @@ e2e::expect_stdout "${args_out}" <<'EOF'
 Jaiph: Running args_forwarding.jh
 
 workflow default
-  ▸ workflow called (one, "two words")
-  ·   ▸ rule expect_args (one, "two words")
+  ▸ workflow called (1="one", 2="two words")
+  ·   ▸ rule expect_args (1="one", 2="two words")
   ·   ✓ <time>
-  ·   ▸ function write_args (one, "two words")
+  ·   ▸ function write_args (1="one", 2="two words")
   ·   ✓ <time>
   ✓ <time>
 ✓ PASS workflow default (<time>)

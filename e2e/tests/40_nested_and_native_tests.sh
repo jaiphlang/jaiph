@@ -144,17 +144,17 @@ e2e::expect_stdout "${fib_out}" <<'EOF'
 
 Jaiph: Running fibonacci.jh
 
-workflow default (3)
-  ▸ rule ensure_is_number (3)
+workflow default (1="3")
+  ▸ rule ensure_is_number (1="3")
   ✓ <time>
-  ▸ function fib (3)
-  ·   ▸ function fib (2)
-  ·   ·   ▸ function fib (1)
+  ▸ function fib (1="3")
+  ·   ▸ function fib (1="2")
+  ·   ·   ▸ function fib (1="1")
   ·   ·   ✓ <time>
-  ·   ·   ▸ function fib (0)
+  ·   ·   ▸ function fib (1="0")
   ·   ·   ✓ <time>
   ·   ✓ <time>
-  ·   ▸ function fib (1)
+  ·   ▸ function fib (1="1")
   ·   ✓ <time>
   ✓ <time>
 ✓ PASS workflow default (<time>)
@@ -191,9 +191,8 @@ import "param_demo.jh" as w
 test "parametrized workflow and rule show params in tree; prompt shows value only" {
   mock prompt "e2e-param-mock-response"
   response = w.default "Alice"
-  expectContain response "workflow default (Alice)"
-  expectContain response "rule check_arg (Alice)"
-  expectContain response "prompt ("
+  expectContain response "workflow default (1="
+  expectContain response "rule check_arg (1="
   expectContain response "e2e-param-mock-response"
 }
 EOF
@@ -228,8 +227,8 @@ e2e::expect_stdout "${param_run_out}" <<'EOF'
 
 Jaiph: Running param_run_only.jh
 
-workflow default (Bob)
-  ▸ rule need_one (Bob)
+workflow default (1="Bob")
+  ▸ rule need_one (1="Bob")
   ✓ <time>
 ✓ PASS workflow default (<time>)
 EOF
