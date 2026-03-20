@@ -6,6 +6,39 @@ The first `##` task in the file is always the current task.
 
 ---
 
+## Rework channel semantics: channel identifier always on the left<!-- dev-ready -->
+
+**Goal.** Redesign Jaiph channel syntax so channel identifiers are always on the left side of the operator.
+
+**Required syntax direction.**
+
+- Produce/send: `channelName <- expression`
+- Route/consume: `channelName -> workflowName`
+
+**Examples.**
+
+- `report <- echo "Summary: $1"`
+- `findings -> analyst`
+
+**Scope.**
+
+- Update parser/grammar and execution wiring to support this model consistently.
+- Update docs and E2E examples to use left-sided channel syntax.
+- Make channels visually distinct in syntax highlighting (docs highlighter and VS Code extension grammar/theme mappings).
+- Remove old channel forms instead of preserving them.
+
+**Backward compatibility.** Not required. Breaking change is explicitly allowed.
+
+**Acceptance criteria.**
+
+- `e2e/agent_inbox.jh` (and relevant tests) use left-sided channel syntax.
+- No legacy right-sided send syntax remains supported.
+- CLI output and docs reflect the new semantics.
+- Sample in docs/index.html uses new semantics and channel-distinct highlighting.
+- VS Code syntax highlighting marks channels distinctly from general identifiers.
+
+---
+
 ## Bug: When Jaiph is executed in docker, nothing is saved in local .jaiph/runs directory
 
 **Needs work — questions/concerns before development:**
