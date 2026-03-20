@@ -162,37 +162,24 @@ workflow default
 EOF
 
 # prompt_with_vars.jh agent .out file
-shopt -s nullglob
-prompt_vars_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*prompt_with_vars.jh/ )
-shopt -u nullglob
-[[ ${#prompt_vars_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for prompt_with_vars.jh"
-prompt_vars_out_file=( "${prompt_vars_run_dir[0]}"*jaiph__prompt.out )
-[[ ${#prompt_vars_out_file[@]} -eq 1 ]] || e2e::fail "expected one jaiph__prompt.out for prompt_with_vars.jh"
-expected_prompt_vars_out=$(printf '%s\n%s\n\n%s\n%s\n\n%s\n%s' \
-  'Command:' \
-  "cursor-agent --print --output-format stream-json --stream-partial-output --workspace ${TEST_DIR} --trust ${TEST_DIR} engineer\\ does\\ Fix\\ bugs" \
-  'Prompt:' \
-  'engineer does Fix bugs' \
-  'Final answer:' \
-  'e2e-backend-no-mock-output')
-e2e::assert_equals "$(<"${prompt_vars_out_file[0]}")" "${expected_prompt_vars_out}" "prompt_with_vars.jh agent .out file full content"
+e2e::expect_run_file "prompt_with_vars.jh" "000002-jaiph__prompt.out" "Command:
+cursor-agent --print --output-format stream-json --stream-partial-output --workspace ${TEST_DIR} --trust ${TEST_DIR} engineer\\ does\\ Fix\\ bugs
+
+Prompt:
+engineer does Fix bugs
+
+Final answer:
+e2e-backend-no-mock-output"
 
 # Prompt step .out file contains full agent transcript (mock run: workspace = TEST_DIR, so command is deterministic)
-# Note: prompt_flow.jh was run earlier; its .out is in a different run dir.
-shopt -s nullglob
-prompt_flow_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*prompt_flow.jh/ )
-shopt -u nullglob
-[[ ${#prompt_flow_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for prompt_flow.jh"
-prompt_out_file=( "${prompt_flow_run_dir[0]}"*jaiph__prompt.out )
-[[ ${#prompt_out_file[@]} -eq 1 ]] || e2e::fail "expected one .out file in run dir"
-expected_prompt_out=$(printf '%s\n%s\n\n%s\n%s\n\n%s\n%s' \
-  'Command:' \
-  "cursor-agent --print --output-format stream-json --stream-partial-output --workspace ${TEST_DIR} --trust ${TEST_DIR} e2e-prompt-please-return-mock" \
-  'Prompt:' \
-  'e2e-prompt-please-return-mock' \
-  'Final answer:' \
-  'e2e-backend-no-mock-output')
-e2e::assert_equals "$(<"${prompt_out_file[0]}")" "${expected_prompt_out}" "prompt_flow.jh agent .out file full content"
+e2e::expect_run_file "prompt_flow.jh" "000002-jaiph__prompt.out" "Command:
+cursor-agent --print --output-format stream-json --stream-partial-output --workspace ${TEST_DIR} --trust ${TEST_DIR} e2e-prompt-please-return-mock
+
+Prompt:
+e2e-prompt-please-return-mock
+
+Final answer:
+e2e-backend-no-mock-output"
 
 # Multi-line prompt is displayed as single line (newlines stripped from preview)
 e2e::file "multiline_prompt.jh" <<'EOF'
@@ -218,21 +205,12 @@ workflow default
 EOF
 
 # Multiline prompt step .out file contains full agent transcript (mock run: command deterministic)
-shopt -s nullglob
-multiline_run_dir=( "${TEST_DIR}/.jaiph/runs/"*/*multiline_prompt.jh/ )
-shopt -u nullglob
-[[ ${#multiline_run_dir[@]} -eq 1 ]] || e2e::fail "expected one run dir for multiline_prompt.jh"
-multiline_out_file=( "${multiline_run_dir[0]}"*jaiph__prompt.out )
-[[ ${#multiline_out_file[@]} -eq 1 ]] || e2e::fail "expected one .out file in run dir"
-expected_multiline_out=$(printf '%s\n%s\n\n%s\n\n%s\n%s\n\n%s\n%s' \
-  'Command:' \
+printf -v expected_multiline_prompt 'Command:\n%s\n\nPrompt:\n\n%s\n%s\n\nFinal answer:\n%s' \
   "cursor-agent --print --output-format stream-json --stream-partial-output --workspace ${TEST_DIR} --trust ${TEST_DIR} \$'\n    Line one and line two.\n  '" \
-  'Prompt:' \
   '    Line one and line two.' \
   '  ' \
-  'Final answer:' \
-  'e2e-backend-no-mock-output')
-e2e::assert_equals "$(<"${multiline_out_file[0]}")" "${expected_multiline_out}" "multiline_prompt.jh agent .out file full content"
+  'e2e-backend-no-mock-output'
+e2e::expect_run_file "multiline_prompt.jh" "000002-jaiph__prompt.out" "${expected_multiline_prompt}"
 
 # Given: workflow with prompt but test does not mock it -> selected backend runs (cursor by default).
 e2e::file "prompt_unmatched.jh" <<'EOF'

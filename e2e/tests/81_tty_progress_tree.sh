@@ -104,14 +104,10 @@ tree_projection="$(
   '
 )"
 
-expected_tree_with_running=$(printf '%s\n' \
-  'Jaiph: Running tty_tree.jh' \
-  'workflow default' \
-  '  ·   ✓ <time>' \
-  '  ✓ <time>')
-expected_tree_with_running="${expected_tree_with_running%$'\n'}"
-
-e2e::assert_equals "${tree_projection}" "${expected_tree_with_running}" "TTY projected tree matches expected flow"
+e2e::assert_equals "${tree_projection}" "Jaiph: Running tty_tree.jh
+workflow default
+  ·   ✓ <time>
+  ✓ <time>" "TTY projected tree matches expected flow"
 
 e2e::expect_out_files "tty_tree.jh" 0
 

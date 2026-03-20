@@ -161,12 +161,11 @@ workflow default (3)
 EOF
 
 # Assert .out file content for fibonacci.jh (run from e2e/ dir, workspace root is repo root)
+fib_run_dir="$(e2e::latest_run_dir_at "${ROOT_DIR}/.jaiph/runs" "fibonacci.jh")"
+
 shopt -s nullglob
-fib_run_dir=( "${ROOT_DIR}/.jaiph/runs/"*/*fibonacci.jh/ )
+fib_out_files=( "${fib_run_dir}"*.out )
 shopt -u nullglob
-[[ ${#fib_run_dir[@]} -ge 1 ]] || e2e::fail "expected at least one run dir for fibonacci.jh"
-latest_fib_run_dir="${fib_run_dir[$((${#fib_run_dir[@]} - 1))]}"
-fib_out_files=( "${latest_fib_run_dir}"*.out )
 [[ ${#fib_out_files[@]} -eq 1 ]] || e2e::fail "expected one .out file for fibonacci.jh, got ${#fib_out_files[@]}"
 e2e::assert_equals "$(<"${fib_out_files[0]}")" "2" "fibonacci.jh default workflow .out content (fib(3)=2)"
 

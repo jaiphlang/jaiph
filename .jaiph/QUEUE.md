@@ -6,87 +6,25 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## E2E tests: make it human readable (part 2) <!-- dev-ready -->
+## Fix prompt/agent step output: no output in tree unless logged with `log`<!-- dev-ready -->
 
-Part of this task might be already done (see the last commit). 
-I believe there are some remainders with `nullglob` 
-and `expected_prompt_out=$(printf '%s\n%s\n\n%s\n%s\n\n%s\n%s' \` patterns. 
-They should be aligned to match the style of already implemented tests.
+**Correct behavior.**
 
-The agent implementing that left some comments (tradeoffs):
-- Tests that use custom run dirs (`70_run_artifacts.sh` with `JAIPH_RUNS_DIR`, `85_infile_metadata.sh` with config-defined `run.logs_dir`) keep manual assertions for the custom dir — `e2e::run_dir` only searches `.jaiph/runs/`
-- Tests that run `jaiph test` (native test framework) can't use `e2e::run` and keep raw `jaiph test` calls
-- Tests with dynamic content in .out files (prompt .out files containing `${TEST_DIR}`) use manual assertions or non-heredoc `e2e::expect_file` where the pattern might match multiple files
+- **Tree:** Show no output for a prompt step. If the user writes `response = prompt "aaa"`, the tree shows only the step line and ✓ — no Command/Prompt/Reasoning/Final answer block.
+- **When user uses `log`:** Output appears in the tree only when they explicitly call `log`, e.g. `response = prompt "aaa"; log "$response"`. The `log` step emits a LOG event and the CLI already displays that; no change needed for log.
+- **.out files:** The step’s `.out` file in `.jaiph/runs/` continues to contain the full agent output (Command, Prompt, Reasoning, Final answer) for debugging. No change to runtime embedding — only stop displaying prompt step’s `out_content` in the tree.
 
-But we want to make it better as well. We want this part also be clearer for
-human -- more intent, less noise. And we want to compare all files from jaiph 
-runs directory, not only for prompts, and for all e2e tests that run workflows
-(better safe than sorry). To compare files we could have a helper on bash arrays,
-something similar to:
+**Implementation.**
 
-```
-e2e::expect_jaiph_run_files (
-    "file 1 content"
-    "file 2 content"
-    ...
-)
-```
+1. **`run.ts`** — Remove the block that displays `out_content` for prompt steps (lines ~372–384). Do not print embedded step output for prompt steps; the tree shows nothing under them. Full transcript remains in the event and on disk; we just don’t render it in the CLI.
+2. **E2E** — In `e2e/tests/20_rule_and_prompt.sh`, update expected output for prompt_flow and multiline_prompt: expect only the tree line and ✓, no "Command:", "Prompt:", "Final answer:" block.
 
-This way we can do meaningful (exact / total) comparison with no guessing of file names. We can change Jaiph naming of run files to ensure they are monotonous, or even make them predictable:
+**Acceptance criteria.**
 
-```
-.jaiph/runs/2026-03-19/21-02-50-agent-inbox.jh
-  inbox
-    .queue
-    .seq
-    000001-findings.txt
-  steps
-    000001-agent_inbox__reviewer.out
-```
-
-And compare individual file:
-
-```
-e2e::expect_jaiph_out_file "steps/000001-agent_inbox__reviewer.out" '
-the whole
-content
-'
-```
-
-(or EOF syntax)
-
-So, we can consider if this syntax is more natural for human reading:
-
-Instead of:
-
-```
-e2e::expect_stdout "${prompt_vars_out}" <<'EOF'
-
-Jaiph: Running prompt_with_vars.jh
-
-workflow default
-  ▸ prompt "$role does $task" (role="engineer", task="Fix bugs")
-  ✓ <time>
-✓ PASS workflow default (<time>)
-EOF
-```
-
-Do:
-
-```e2e::expect_stdout "${prompt_vars_out}" '
-
-Jaiph: Running prompt_with_vars.jh
-
-workflow default
-  ▸ prompt "$role does $task" (role="engineer", task="Fix bugs")
-  ✓ <time>
-✓ PASS workflow default (<time>)'
-```
-
-On one hand it feels more natural, on the other hand there are escaping issues.
-But I think it might be worth considering to switch for such helpers (everywhere,
-and keep it consistent, support only one version).
-
+- `response = prompt "aaa"` → tree shows prompt step line and ✓ only; no output block.
+- `response = prompt "aaa"; log "$response"` → tree shows prompt line, ✓, then the log line with the response (existing LOG handling).
+- Step `.out` files under `.jaiph/runs/` still contain full agent transcript (Reasoning, etc.).
+- E2E tests in 20_rule_and_prompt pass with updated expectations.
 
 ---
 
@@ -132,26 +70,6 @@ Acceptance criteria: Write a Bash test that enforces jaiph in Docker
 
 OR: Create a CI that uses Docker for all tests with no changing the output.
 This way we can guarantee output parity.
-
-## Fix prompt/agent step output: no output in tree unless logged with `log`<!-- dev-ready -->
-
-**Correct behavior.**
-
-- **Tree:** Show no output for a prompt step. If the user writes `response = prompt "aaa"`, the tree shows only the step line and ✓ — no Command/Prompt/Reasoning/Final answer block.
-- **When user uses `log`:** Output appears in the tree only when they explicitly call `log`, e.g. `response = prompt "aaa"; log "$response"`. The `log` step emits a LOG event and the CLI already displays that; no change needed for log.
-- **.out files:** The step’s `.out` file in `.jaiph/runs/` continues to contain the full agent output (Command, Prompt, Reasoning, Final answer) for debugging. No change to runtime embedding — only stop displaying prompt step’s `out_content` in the tree.
-
-**Implementation.**
-
-1. **`run.ts`** — Remove the block that displays `out_content` for prompt steps (lines ~372–384). Do not print embedded step output for prompt steps; the tree shows nothing under them. Full transcript remains in the event and on disk; we just don’t render it in the CLI.
-2. **E2E** — In `e2e/tests/20_rule_and_prompt.sh`, update expected output for prompt_flow and multiline_prompt: expect only the tree line and ✓, no "Command:", "Prompt:", "Final answer:" block.
-
-**Acceptance criteria.**
-
-- `response = prompt "aaa"` → tree shows prompt step line and ✓ only; no output block.
-- `response = prompt "aaa"; log "$response"` → tree shows prompt line, ✓, then the log line with the response (existing LOG handling).
-- Step `.out` files under `.jaiph/runs/` still contain full agent transcript (Reasoning, etc.).
-- E2E tests in 20_rule_and_prompt pass with updated expectations.
 
 ---
 

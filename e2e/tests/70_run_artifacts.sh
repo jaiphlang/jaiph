@@ -40,49 +40,19 @@ fi
 run_err_out="$(cat "${run_err_file}")"
 rm -f "${run_err_file}"
 
-shopt -s nullglob
-date_dirs=( "${TEST_DIR}/runs_out"/*/ )
-shopt -u nullglob
-if [[ "${#date_dirs[@]}" -ne 1 ]]; then
-  e2e::fail "expected exactly one date directory under runs_out, got ${#date_dirs[@]}"
-fi
-shopt -s nullglob
-run_dirs=( "${date_dirs[0]}"*/ )
-shopt -u nullglob
-if [[ "${#run_dirs[@]}" -ne 1 ]]; then
-  e2e::fail "expected exactly one run directory under date dir, got ${#run_dirs[@]}"
-fi
-run_dir="${run_dirs[0]%/}"
-summary_file="${run_dir}/run_summary.jsonl"
-
-shopt -s nullglob
-out_files=( "${run_dir}"/*.out )
-err_files=( "${run_dir}"/*.err )
-shopt -u nullglob
+run_dir="$(e2e::run_dir_at "${TEST_DIR}/runs_out" "artifacts_fail.jh")"
+summary_file="${run_dir}run_summary.jsonl"
 
 # Then
 e2e::assert_contains "${run_err_out}" "Logs:" "failure output includes logs location"
 e2e::assert_contains "${run_err_out}" "Summary:" "failure output includes summary location"
 e2e::assert_contains "${run_err_out}" "err:" "failure output includes failing stderr file path"
 e2e::assert_file_exists "${summary_file}" "run summary file is created"
-if [[ "${#out_files[@]}" -eq 0 ]]; then
-  e2e::fail "expected at least one .out file in run artifacts"
-fi
-if [[ "${#err_files[@]}" -eq 0 ]]; then
-  e2e::fail "expected at least one .err file in run artifacts"
-fi
-e2e::pass "run artifacts include .out and .err files"
-summary_content="$(cat "${summary_file}")"
+summary_content="$(<"${summary_file}")"
 e2e::assert_contains "${summary_content}" "\"type\":\"STEP_END\"" "summary records step end events"
 e2e::assert_contains "${summary_content}" "\"status\":1" "summary records non-zero failing step status"
 
 # Assert full .out and .err file content
-ok_out=( "${run_dir}"/*artifacts_fail__ok_step.out )
-[[ ${#ok_out[@]} -eq 1 ]] || e2e::fail "expected one ok_step .out file"
-e2e::assert_equals "$(<"${ok_out[0]}")" "ok-out" "ok_step .out full content"
-fail_out=( "${run_dir}"/*artifacts_fail__failing_step.out )
-[[ ${#fail_out[@]} -eq 1 ]] || e2e::fail "expected one failing_step .out file"
-e2e::assert_equals "$(<"${fail_out[0]}")" "bad-out" "failing_step .out full content"
-fail_err=( "${run_dir}"/*artifacts_fail__failing_step.err )
-[[ ${#fail_err[@]} -eq 1 ]] || e2e::fail "expected one failing_step .err file"
-e2e::assert_equals "$(<"${fail_err[0]}")" "bad-err" "failing_step .err full content"
+e2e::expect_run_file_at "${TEST_DIR}/runs_out" "artifacts_fail.jh" "000002-artifacts_fail__ok_step.out" "ok-out"
+e2e::expect_run_file_at "${TEST_DIR}/runs_out" "artifacts_fail.jh" "000003-artifacts_fail__failing_step.out" "bad-out"
+e2e::expect_run_file_at "${TEST_DIR}/runs_out" "artifacts_fail.jh" "000003-artifacts_fail__failing_step.err" "bad-err"
