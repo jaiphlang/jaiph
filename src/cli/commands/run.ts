@@ -11,7 +11,7 @@ import { basename } from "node:path";
 import { parsejaiph } from "../../parser";
 import { build, workflowSymbolForFile } from "../../transpiler";
 import { metadataToConfig } from "../../config";
-import { formatParamsForDisplay, formatNamedParamsForDisplay, isInternalParamValue } from "./format-params.js";
+import { formatNamedParamsForDisplay, isInternalParamValue, normalizeParamValue } from "./format-params.js";
 import {
   colorPalette,
   summarizeError,
@@ -110,13 +110,10 @@ const MAX_PARAM_VALUE_DISPLAY = 32;
         const restParams = params.filter(([, v]) => !isInternalParamValue(v));
         const skipFirst = restParams.length > 0 && restParams[0][1] === previewValue ? 1 : 0;
         const restForSuffix = restParams.slice(skipFirst);
-        const hasNamedKeys = restForSuffix.some(([k]) => !/^arg\d+$/.test(k));
         paramSuffix =
           restForSuffix.length > 0
             ? colorize(
-                hasNamedKeys
-                  ? formatNamedParamsForDisplay(restForSuffix, { capTotalLength: PROMPT_ARGS_DISPLAY_MAX })
-                  : formatParamsForDisplay(restForSuffix, { capTotalLength: PROMPT_ARGS_DISPLAY_MAX }),
+                formatNamedParamsForDisplay(restForSuffix, { capTotalLength: PROMPT_ARGS_DISPLAY_MAX }),
                 "dim",
               )
             : "";
@@ -129,7 +126,8 @@ const MAX_PARAM_VALUE_DISPLAY = 32;
             .filter((v) => !isInternalParamValue(v))
             .filter((v) => v.trim() !== "");
           const msgParts = values.map((v) => {
-            const visible = v.length > MAX_PARAM_VALUE_DISPLAY ? `${v.slice(0, MAX_PARAM_VALUE_DISPLAY)}...` : v;
+            const normalized = normalizeParamValue(v);
+            const visible = normalized.length > MAX_PARAM_VALUE_DISPLAY ? `${normalized.slice(0, MAX_PARAM_VALUE_DISPLAY)}...` : normalized;
             const escaped = visible.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
             return `"${escaped}"`;
           });
@@ -141,7 +139,7 @@ const MAX_PARAM_VALUE_DISPLAY = 32;
             params.length > 0 &&
             (kind === "workflow" || kind === "prompt" || kind === "function" || kind === "rule");
           paramSuffix = showParams
-            ? colorize(formatParamsForDisplay(params), "dim")
+            ? colorize(formatNamedParamsForDisplay(params), "dim")
             : "";
         }
       }
@@ -172,7 +170,7 @@ const MAX_PARAM_VALUE_DISPLAY = 32;
     process.stdout.write(runBanner);
     const rootParamsSuffix =
       runArgs.length > 0
-        ? colorize(formatParamsForDisplay(runArgs.map((a) => ["", a] as [string, string])), "dim")
+        ? colorize(formatNamedParamsForDisplay(runArgs.map((a, i) => [String(i + 1), a] as [string, string])), "dim")
         : "";
     process.stdout.write(`${styleKeywordLabel(rootLabel)}${rootParamsSuffix}\n`);
     const isTTY = process.stdout.isTTY;

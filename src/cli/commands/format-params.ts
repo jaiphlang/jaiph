@@ -21,19 +21,36 @@ function stripKnownKeyPrefix(key: string, value: string): string {
   return value.startsWith(prefix) ? value.slice(prefix.length) : value;
 }
 
-/** Format params as key="value" pairs. Positional numeric keys (1, 2, ...) are prefixed with $. */
+/** Collapse all whitespace (newlines, tabs, multiple spaces) into a single space and trim. */
+export function normalizeParamValue(v: string): string {
+  return v.replace(/\s+/g, " ").trim();
+}
+
+/** Map display key: argN → N, keep numeric keys as-is (no $ prefix), named keys unchanged. */
+function displayKey(k: string): string {
+  const argMatch = k.match(/^arg(\d+)$/);
+  if (argMatch) return argMatch[1];
+  return k;
+}
+
+/** Format params as key="value" pairs. Positional keys (argN or numeric) show as N="value". */
 export function formatNamedParamsForDisplay(params: Array<[string, string]>, options?: { capTotalLength?: number }): string {
   const entries = params
     .filter(([, v]) => !isInternalParamValue(v))
     .map(([k, v]) => [k, stripKnownKeyPrefix(k, v)] as const)
     .filter(([, v]) => v.trim() !== "");
   if (entries.length === 0) return "";
+  // Renumber positional (argN / numeric) keys sequentially after filtering.
+  const allPositional = entries.every(([k]) => /^arg\d+$/.test(k) || /^[1-9]\d*$/.test(k));
+  let positionalSeq = 1;
   const parts = entries.map(([k, v]) => {
+    const normalized = normalizeParamValue(v);
     const visible =
-      v.length > MAX_PARAM_VALUE_DISPLAY ? `${v.slice(0, MAX_PARAM_VALUE_DISPLAY)}...` : v;
+      normalized.length > MAX_PARAM_VALUE_DISPLAY ? `${normalized.slice(0, MAX_PARAM_VALUE_DISPLAY)}...` : normalized;
     const escaped = visible.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-    const displayKey = /^[1-9]\d*$/.test(k) ? `$${k}` : k;
-    return `${displayKey}="${escaped}"`;
+    const isPositional = /^arg\d+$/.test(k) || /^[1-9]\d*$/.test(k);
+    const key = allPositional && isPositional ? String(positionalSeq++) : displayKey(k);
+    return `${key}="${escaped}"`;
   });
   let result = ` (${parts.join(", ")})`;
   const cap = options?.capTotalLength;
@@ -51,8 +68,9 @@ export function formatParamsForDisplay(params: Array<[string, string]>, options?
     .filter((v) => v.trim() !== "");
   if (values.length === 0) return "";
   const parts = values.map((v) => {
+    const normalized = normalizeParamValue(v);
     const visible =
-      v.length > MAX_PARAM_VALUE_DISPLAY ? `${v.slice(0, MAX_PARAM_VALUE_DISPLAY)}...` : v;
+      normalized.length > MAX_PARAM_VALUE_DISPLAY ? `${normalized.slice(0, MAX_PARAM_VALUE_DISPLAY)}...` : normalized;
     const needsQuotes = /[\s,]/.test(visible) || visible.includes('"');
     const escaped = visible.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
     return needsQuotes ? `"${escaped}"` : visible;

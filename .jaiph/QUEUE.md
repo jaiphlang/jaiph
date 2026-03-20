@@ -6,42 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Fix: Line breaks in prompt parameters should be removed and unify parameters display everywhere
-
-Bug sample (last line):
-```
-➜  jaiph git:(nightly) CI=true .jaiph/engineer.jh pragmatic
-
-Jaiph: Running engineer.jh
-
-workflow default (pragmatic)
-  ▸ function get_first_task
-  ·   ▸ function get_all_task_headers
-  ·   ✓ 0s
-  ·   ▸ function get_task_by_header ("## E2E: add full .out file conte...")
-  ·   ✓ 0s
-  ✓ 0s
-  ▸ rule task_is_dev_ready ("## E2E: add full .out file conte...")
-  ✓ 0s
-  ▸ workflow implement_poc ("## E2E: add full .out file conte...", pragmatic)
-  ·   ▸ rule is_clean
-  ·   ·   ▸ rule in_git_repo
-  ·   ·   ✓ 0s
-  ·   ·   ▸ rule branch_clean
-  ·   ·   ✓ 0s
-  ·   ✓ 0s
-  ·   ▸ prompt "$role <task>" (role="<role>
-  You are a pragmatic eng...", task="## E2E: add full .out file conte...")
-```
-
-Best solution is to have common utilities for normalization of parameter print.
-
-Addionally double check prompts where some parameters are named and some are `$1` etc.
-
-The best way is to show names everywhere like: workflow test (1="...")
-
----
-
 ## Bug: When Jaiph is executed in docker, nothing is saved in local .jaiph/runs directory
 
 Acceptance criteria: Write a Bash test that enforces jaiph in Docker

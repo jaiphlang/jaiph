@@ -97,7 +97,7 @@ running say_hello.jh
 <span class="run-keyword">workflow</span> default
   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> name_was_provided
   <span class="run-pass">✓</span> <span class="run-time">0s</span>
-  <span class=”run-marker”>▸</span> <span class=”run-keyword”>prompt</span> “Say hello to Jakub and...” <span class=”run-params”>(Jakub)</span>
+  <span class=”run-marker”>▸</span> <span class=”run-keyword”>prompt</span> “Say hello to Jakub and...” <span class=”run-params”>(1=”Jakub”)</span>
   <span class=”run-pass”>✓</span> <span class=”run-time”>9s</span>
   <span class=”run-keyword”>log</span> Hi Jakub! Here’s a fun fact: Jakub Marian is a Czech linguist and polyglot who speaks over a dozen languages.
 <span class=”run-pass”>✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(8.9s)</span></code></pre>
@@ -355,7 +355,7 @@ jaiph use 0.3.0</code></pre>
                     </dd>
 
                     <dt>Run tree and parameters</dt>
-                    <dd>During <code>jaiph run</code>, the progress tree shows each step. In TTY mode, a single bottom line <code>  RUNNING workflow &lt;name&gt; (X.Xs)</code> is updated in place (e.g. every second) and removed when the run finishes; the tree itself is identical to non-TTY (no per-line live timers). For <code>workflow</code>, <code>prompt</code>, and <code>function</code> steps called with arguments, the argument <strong>values</strong> are shown inline in gray after the step name (comma-separated in parentheses; no parameter names or internal refs). Workflow/function values are truncated at 32 characters. <strong>Prompt</strong> steps show a truncated preview of the prompt text (first 24 characters, then <code>...</code> if longer) and the argument list is capped at 96 characters. Prompt steps show no output in the tree — only the step line and ✓; use <code>log</code> to display agent output. See <a href="cli">CLI reference</a>.</dd>
+                    <dd>During <code>jaiph run</code>, the progress tree shows each step. In TTY mode, a single bottom line <code>  RUNNING workflow &lt;name&gt; (X.Xs)</code> is updated in place (e.g. every second) and removed when the run finishes; the tree itself is identical to non-TTY (no per-line live timers). For <code>workflow</code>, <code>prompt</code>, <code>function</code>, and <code>rule</code> steps called with arguments, parameters are shown inline in gray after the step name using a uniform <code>key="value"</code> format. Positional args display as <code>1="value"</code>, <code>2="value"</code>; named args display as <code>name="value"</code>. Multi-line values (newlines, tabs) are collapsed to single spaces. Values are truncated at 32 characters. <strong>Prompt</strong> steps show a truncated preview of the prompt text (first 24 characters, then <code>...</code> if longer) and the argument list is capped at 96 characters. Prompt steps show no output in the tree — only the step line and ✓; use <code>log</code> to display agent output. See <a href="cli">CLI reference</a>.</dd>
 
                     <dt><code>log "message"</code></dt>
                     <dd>Displays a message in the progress tree at the current indentation depth. Takes a double-quoted string; shell variable interpolation (<code>$var</code>, <code>${var}</code>) works at runtime. No spinner, no timing — a static annotation for marking workflow phases. See <a href="grammar">Grammar</a>.</dd>

@@ -519,8 +519,8 @@ test("jaiph run stores prompt output in run logs", () => {
     const promptErrName = runFiles.find((name) => name.endsWith("-jaiph__prompt.err"));
     assert.equal(Boolean(promptOutName), true);
     assert.equal(Boolean(promptErrName), true);
-    assert.match(promptOutName!, /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z-/);
-    assert.match(promptErrName!, /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z-/);
+    assert.match(promptOutName!, /^\d{6}-/);
+    assert.match(promptErrName!, /^\d{6}-/);
     const promptOut = readFileSync(join(latestRunDir, promptOutName!), "utf8");
     const promptErr = readFileSync(join(latestRunDir, promptErrName!), "utf8");
     // Prompt log contains prompt text and agent output (Command section may appear depending on runtime)
