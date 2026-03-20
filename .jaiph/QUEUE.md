@@ -6,36 +6,26 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Bug: When Jaiph is executed in docker, nothing is saved in local .jaiph/runs directory<!-- dev-ready -->
+## Make `log` write to stdout and add `logerr` for stderr <!-- dev-ready -->
 
-**Status:** clarified after code investigation.
-
-**Root cause (confirmed).**
-
-- `run.ts` sets `JAIPH_WORKSPACE` to the host workspace path.
-- `buildDockerArgs()` forwards all `JAIPH_*` values unchanged into the container.
-- In Docker mode, the workspace is mounted at `/jaiph/workspace`, but `steps.sh` prefers `JAIPH_WORKSPACE` when computing run paths.
-- Result: run artifacts are written to a host-only absolute path inside the container filesystem and are lost on `docker run --rm`.
-- Same class of bug exists for absolute `JAIPH_RUNS_DIR` values (they are treated as-is in `steps.sh`).
-
-**Goal.** Make Docker runs persist artifacts on the host exactly like non-Docker runs.
+**Goal.** Change language/runtime logging semantics so `log` writes to stdout, and introduce a new keyword `logerr` that writes to stderr.
 
 **Scope.**
 
-- In Docker mode, force `JAIPH_WORKSPACE=/jaiph/workspace` inside the container (do not forward the host absolute path).
-- In Docker mode, if `JAIPH_RUNS_DIR` is absolute and points inside host workspace, remap it to the equivalent container path under `/jaiph/workspace`.
-- In Docker mode, if `JAIPH_RUNS_DIR` is absolute and outside host workspace, fail fast with a clear configuration error (unsupported in container path mapping).
-- Keep non-Docker behavior unchanged.
+- Update parser/compiler/runtime wiring so `log "msg"` emits to stdout and keeps event metadata intact.
+- Add a new keyword `logerr "msg"` that mirrors `log` behavior but writes to stderr.
+- Preserve existing step event emission (`LOG` events), run tree rendering, and hook behavior where possible.
+- Update docs/examples/index.html and syntax highlighting to reflect the new keyword split (`log` = stdout, `logerr` = stderr).
+- Output display for `log` should remain (gray ℹ). For `logerr` colour the whole message red and use `!` instead of `ℹ`.
 
 **Acceptance criteria.**
 
-- With `JAIPH_DOCKER_ENABLED=true` and default logs dir, a run writes artifacts to host `<workspace>/.jaiph/runs/...` (`run_summary.jsonl` + at least one `*.out`).
-- With `JAIPH_DOCKER_ENABLED=true` and relative `JAIPH_RUNS_DIR` (for example `runs_out`), artifacts are written under host `<workspace>/runs_out/...`.
-- With `JAIPH_DOCKER_ENABLED=true` and absolute `JAIPH_RUNS_DIR` under host workspace, artifacts are written to that host absolute path (via remap).
-- With `JAIPH_DOCKER_ENABLED=true` and absolute `JAIPH_RUNS_DIR` outside host workspace, command exits non-zero and prints a clear error about unsupported absolute path mapping.
-- Add one Docker E2E test covering the happy path artifact persistence. Gate it on Docker availability so local macOS runs can skip when Docker is unavailable.
-
-**Out of scope (separate task).** Migrating all CI jobs to Docker-based execution.
+- E2E covers `log` output path: message is visible on stdout and not stderr.
+- E2E covers `logerr` output path: message is visible on stderr and not stdout.
+- E2E validates `.jaiph/runs` artifacts for both cases:
+  - for `log`, message appears in `.out` files and does not appear in `.err` files for the relevant step/workflow output;
+  - for `logerr`, message appears in `.err` files and does not appear in `.out` files for the relevant step/workflow output.
+- Existing logging/event/progress tests continue to pass (or are updated with rationale if behavior intentionally changes).
 
 ---
 
