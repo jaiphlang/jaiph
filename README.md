@@ -157,8 +157,9 @@ Tip: add `.jaiph/` to your `.gitignore`.
   - **Non-TTY:** One completion line per finished step; no RUNNING line, no in-place updates.
 - For parameterized steps (`workflow`, `prompt`, `function`), the tree shows passed argument values inline in gray. Workflow/function values are truncated to 32 chars. **Prompt** steps additionally show a truncated preview of the prompt text (first 24 chars). When the prompt references named variables (`$role`, `$task`), the tree displays named pairs: `(role="engineer", task="Fix bugs")`; for positional args (`$1`, `$2`) the display is comma-separated values: `(greeting)`. The parameter list is capped at 96 characters.
 - Each run writes `.jaiph/runs/<timestamp>-<id>/run_summary.jsonl`.
-- Step output is embedded directly in `STEP_END` events (`out_content`, and `err_content` for failures) and displayed from the event payload. This makes output identical in Docker and non-Docker modes. Embedded content is capped at 1 MB (truncated with `[truncated]` if exceeded).
-- Step `.out` / `.err` files are still written to disk for debugging/archival but are not used for CLI display.
+- **Prompt steps** show no output in the tree — only the step line and ✓. To display agent output, use `log` explicitly (e.g. `response = prompt "..."; log "$response"`). The `log` line appears in the tree at the correct depth with the message text.
+- Step output is embedded in `STEP_END` events (`out_content`, `err_content` for failures) for error reporting. Embedded content is capped at 1 MB (truncated with `[truncated]` if exceeded). This makes error output identical in Docker and non-Docker modes.
+- Step `.out` / `.err` files are written to disk under `.jaiph/runs/` for debugging/archival. Prompt `.out` files contain the full agent transcript (Command, Prompt, Reasoning, Final answer).
 
 ### Configuration
 

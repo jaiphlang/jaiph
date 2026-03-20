@@ -97,10 +97,10 @@ running say_hello.jh
 <span class="run-keyword">workflow</span> default
   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> name_was_provided
   <span class="run-pass">✓</span> <span class="run-time">0s</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> “Say hello to Jakub and..." <span class="run-params">(Jakub)</span>
-  <span class="run-pass">✓</span> <span class="run-time">9s</span>
-  Hi Jakub! Here’s a fun fact: Jakub Marian is a Czech linguist and polyglot who speaks over a dozen languages.
-<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(8.9s)</span></code></pre>
+  <span class=”run-marker”>▸</span> <span class=”run-keyword”>prompt</span> “Say hello to Jakub and...” <span class=”run-params”>(Jakub)</span>
+  <span class=”run-pass”>✓</span> <span class=”run-time”>9s</span>
+  <span class=”run-keyword”>log</span> Hi Jakub! Here’s a fun fact: Jakub Marian is a Czech linguist and polyglot who speaks over a dozen languages.
+<span class=”run-pass”>✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(8.9s)</span></code></pre>
                     <p>
                         Jaiph also supports structured output. You can use the following syntax:
                     </p>
@@ -264,7 +264,6 @@ running agent_inbox.jh
   <span class="run-pass">✓</span> <span class="run-time">0s</span>
   <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> reviewer <span class="run-time">(report, "Summary: Found 3 issues in auth module")</span>
   <span class="run-pass">✓</span> <span class="run-time">0s</span>
-  [reviewed] Summary: Found 3 issues in auth module
 <span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(0.1s)</span></code></pre>
                 </div>
 
@@ -356,7 +355,7 @@ jaiph use 0.3.0</code></pre>
                     </dd>
 
                     <dt>Run tree and parameters</dt>
-                    <dd>During <code>jaiph run</code>, the progress tree shows each step. In TTY mode, a single bottom line <code>  RUNNING workflow &lt;name&gt; (X.Xs)</code> is updated in place (e.g. every second) and removed when the run finishes; the tree itself is identical to non-TTY (no per-line live timers). For <code>workflow</code>, <code>prompt</code>, and <code>function</code> steps called with arguments, the argument <strong>values</strong> are shown inline in gray after the step name (comma-separated in parentheses; no parameter names or internal refs). Workflow/function values are truncated at 32 characters. <strong>Prompt</strong> steps show a truncated preview of the prompt text (first 24 characters, then <code>...</code> if longer) and the argument list is capped at 96 characters. See <a href="cli">CLI reference</a>.</dd>
+                    <dd>During <code>jaiph run</code>, the progress tree shows each step. In TTY mode, a single bottom line <code>  RUNNING workflow &lt;name&gt; (X.Xs)</code> is updated in place (e.g. every second) and removed when the run finishes; the tree itself is identical to non-TTY (no per-line live timers). For <code>workflow</code>, <code>prompt</code>, and <code>function</code> steps called with arguments, the argument <strong>values</strong> are shown inline in gray after the step name (comma-separated in parentheses; no parameter names or internal refs). Workflow/function values are truncated at 32 characters. <strong>Prompt</strong> steps show a truncated preview of the prompt text (first 24 characters, then <code>...</code> if longer) and the argument list is capped at 96 characters. Prompt steps show no output in the tree — only the step line and ✓; use <code>log</code> to display agent output. See <a href="cli">CLI reference</a>.</dd>
 
                     <dt><code>log "message"</code></dt>
                     <dd>Displays a message in the progress tree at the current indentation depth. Takes a double-quoted string; shell variable interpolation (<code>$var</code>, <code>${var}</code>) works at runtime. No spinner, no timing — a static annotation for marking workflow phases. See <a href="grammar">Grammar</a>.</dd>
@@ -365,7 +364,7 @@ jaiph use 0.3.0</code></pre>
                     <dd>Conditional workflow steps. The positive form runs the then-branch when the rule succeeds; the negated form runs it when the rule fails. Both accept optional arguments after the rule reference and support an <code>else</code> branch. Then- and else-branches can contain <code>run</code>, <code>prompt</code>, and shell commands (but not <code>ensure</code>). <code>if ! &lt;shell&gt;; then ... fi</code> conditions on a shell expression.</dd>
 
                     <dt><code>prompt "..."</code> · <code>name = prompt "..." returns '{ field: type, ... }'</code></dt>
-                    <dd>Sends prompt text to the configured agent (Cursor or Claude CLI; see <code>agent.backend</code> and <a href="configuration">Configuration</a>). Without <code>returns</code>, stdout is sent to the agent and (if captured) stored in the variable. With <code>returns '{ field: type, ... }'</code>, the prompt must capture to a variable; the agent is instructed to respond with one line of JSON; the runtime parses and validates it (flat schema; types <code>string</code>, <code>number</code>, <code>boolean</code>). On success, the capture variable holds the raw JSON and <code>name_field</code> is set for each schema field (e.g. <code>$result_type</code>). Invalid JSON, missing field, or type mismatch fails the step with distinct error codes. Logs and <code>run_summary.jsonl</code> are written to <code>.jaiph/runs/</code>.</dd>
+                    <dd>Sends prompt text to the configured agent (Cursor or Claude CLI; see <code>agent.backend</code> and <a href="configuration">Configuration</a>). Without <code>returns</code>, stdout is sent to the agent and (if captured) stored in the variable. With <code>returns '{ field: type, ... }'</code>, the prompt must capture to a variable; the agent is instructed to respond with one line of JSON; the runtime parses and validates it (flat schema; types <code>string</code>, <code>number</code>, <code>boolean</code>). On success, the capture variable holds the raw JSON and <code>name_field</code> is set for each schema field (e.g. <code>$result_type</code>). Invalid JSON, missing field, or type mismatch fails the step with distinct error codes. <strong>Prompt output is not shown in the tree</strong> — only the step line and ✓ appear. Use <code>log</code> to display the response (e.g. <code>log "$response"</code>). The step's <code>.out</code> file in <code>.jaiph/runs/</code> still contains the full agent transcript for debugging.</dd>
 
                     <dt>Assignment capture: <code>name = prompt "..."</code> · <code>name = prompt "..." returns '{ ... }'</code> · <code>name = ensure ref</code> · <code>name = run ref</code> · <code>name = &lt;shell&gt;</code></dt>
                     <dd>Capture a step's <strong>stdout</strong> into a variable. <code>result = prompt "..."</code> captures the agent's response. With <code>returns '{ type: string, risk: string }'</code>, the response is validated as JSON and <code>$result</code>, <code>$result_type</code>, <code>$result_risk</code>, etc. are set. <code>response = ensure tests_pass</code>, <code>out = run helper</code>, and <code>line = echo hello</code> capture rule, workflow, or shell output. Exit behavior is unchanged: if the command fails, the step fails (use <code>|| true</code> to capture on failure). stderr is not captured unless the command redirects it (e.g. <code>2>&1</code>). See <a href="grammar">Grammar</a>.</dd>

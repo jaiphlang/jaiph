@@ -143,13 +143,11 @@ survive back into the parent process.
 - The CLI renders dispatched steps with the channel name and message in
   parentheses: `▸ workflow analyst (findings, "Found 3 issues in auth module")`.
   Message values are truncated to 32 characters.
-- When a dispatched step produces stdout, the output is displayed indented
-  below the step's completion line. The runtime embeds the stdout content
-  directly in the `STEP_END` event (`out_content` field) so the CLI can
-  display it without reading the `out_file` — this is required in Docker
-  mode, where the file lives inside the container and is not accessible
-  from the host. If `out_content` is not present (e.g. non-dispatched
-  steps), the CLI falls back to reading `out_file`.
+- Dispatched step output is not displayed in the tree. Use `log` within
+  the dispatched workflow to show output in the tree. The runtime embeds
+  stdout content in the `STEP_END` event (`out_content` field) for error
+  reporting; `.out` files under `.jaiph/runs/` contain the full output
+  for debugging.
 - `jaiph tree` (static view) shows `on` routes as leaf nodes.
 
 ### Example output

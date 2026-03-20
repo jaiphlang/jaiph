@@ -140,6 +140,7 @@ Tip: add `.jaiph/runs/` to your `.gitignore`.
 - Parameterized steps (`workflow`, `prompt`, `function`) show passed argument values inline in the tree (gray, comma-separated values in parentheses; no parameter names; workflow/function values truncated to 32 characters). **Prompt** steps show a truncated preview of the prompt text (first 24 characters) and the argument list is capped at 96 characters. See [CLI](cli.md) for details.
 - Each run creates a run directory under the logs dir (default `.jaiph/runs/`) using a date/time layout: `<YYYY-MM-DD>/<HH-MM-SS>-<source-file>/`, containing `run_summary.jsonl`. If the same file is run twice in the same second, a collision suffix is appended (`-2`, `-3`, etc.).
 - Step `.out` and `.err` files are named with a zero-padded sequence prefix matching step execution order (e.g. `000001-my_workflow__step_name.out`). Files are written only when the step produced output (empty files are not created).
+- **Prompt steps** show no output in the tree — only the step line and ✓. Use `log` to display agent output in the tree (e.g. `response = prompt "..."; log "$response"`). Prompt `.out` files still contain the full agent transcript for debugging.
 
 ### Configuration
 
