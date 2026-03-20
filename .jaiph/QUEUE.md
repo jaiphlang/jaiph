@@ -6,34 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Change display of log messages <!-- dev-ready -->
-
-Currently it is:
-
-```
-  ▸ rule task_is_dev_ready (1="## Rework channel semantics: cha...")
-  ✓ 0s
-  ▸ workflow implement_poc (1="## Rework channel semantics: cha...", 2="pragmatic")
-  ·   ▸ prompt "$role <task>" (role="<role> You are a pragmatic engin...", task="## Rework channel semantics: cha...")
-  ·   ✓ 1310s
-  ·   log saving impl_pragmatic.patch
-  ·   log saving impl_notes_pragmatic.md
-```
-
-Instead I'd like to have utf info: ℹ (still gray, as `log`):
-
-```
-  ▸ rule task_is_dev_ready (1="## Rework channel semantics: cha...")
-  ✓ 0s
-  ▸ workflow implement_poc (1="## Rework channel semantics: cha...", 2="pragmatic")
-  ·   ▸ prompt "$role <task>" (role="<role> You are a pragmatic engin...", task="## Rework channel semantics: cha...")
-  ·   ✓ 1310s
-  ·   ℹ saving impl_pragmatic.patch
-  ·   ℹ saving impl_notes_pragmatic.md
-```
-
----
-
 ## Bug: When Jaiph is executed in docker, nothing is saved in local .jaiph/runs directory
 
 **Needs work — questions/concerns before development:**
