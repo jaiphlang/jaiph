@@ -199,7 +199,10 @@ See [cli.md](cli.md) for command syntax, examples, environment variables, and li
   Executes another workflow from a workflow (not a shell command). You can pass arguments (e.g. `run update_docs "$1"`). `run` is not allowed inside a rule; use `ensure` to call another rule or call the workflow from a workflow.
 
 - `log "message"`
-  Displays a message in the progress tree at the current depth. Takes a double-quoted string; shell variable interpolation (`$var`, `${var}`) works at runtime. `log` is not a step — no spinner, no timing, no status tracking. Useful for annotating workflow progress (e.g. `log "Starting analysis phase"`).
+  Displays a message in the progress tree at the current depth and writes to **stdout**. Takes a double-quoted string; shell variable interpolation (`$var`, `${var}`) works at runtime. `log` is not a step — no spinner, no timing, no status tracking. Useful for annotating workflow progress (e.g. `log "Starting analysis phase"`).
+
+- `logerr "message"`
+  Same as `log`, but writes to **stderr** instead of stdout. In the progress tree, `logerr` lines display with a red `!` instead of the dim `ℹ` used by `log`. Useful for error messages or warnings that should not mix with stdout output.
 
 - **Conditionals** — `if ! ensure ref; then ... fi` runs the then-branch when the rule fails. The then-branch may contain `run`, `prompt`, and shell commands. For a pure shell condition, `if ! <shell_condition>; then ... fi` is also supported; in that case the then-branch may contain only `run` and shell commands (no `prompt`).
 

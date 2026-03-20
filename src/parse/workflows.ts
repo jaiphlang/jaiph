@@ -987,6 +987,25 @@ export function parseWorkflowBlock(
       continue;
     }
 
+    if (inner.startsWith("logerr ") || inner === "logerr") {
+      const logerrArg = inner.slice("logerr".length).trimStart();
+      const logerrCol = innerRaw.indexOf("logerr") + 1;
+      if (!logerrArg.startsWith('"')) {
+        fail(filePath, 'logerr must match: logerr "<message>"', innerNo, logerrCol);
+      }
+      const closeIdx = indexOfClosingDoubleQuote(logerrArg, 1);
+      if (closeIdx === -1) {
+        fail(filePath, "unterminated logerr string", innerNo, logerrCol);
+      }
+      const message = logerrArg.slice(0, closeIdx + 1);
+      workflow.steps.push({
+        type: "logerr",
+        message,
+        loc: { line: innerNo, col: logerrCol },
+      });
+      continue;
+    }
+
     if (/^if\s+(?:!\s*)?ensure\b/.test(inner)) {
       fail(filePath, 'malformed if-ensure statement; expected "if [!] ensure <rule_ref> [args]; then"', innerNo);
     }

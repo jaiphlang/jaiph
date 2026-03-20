@@ -139,7 +139,7 @@ response = prompt "Summarize the report"
 log "$response"
 ```
 
-The `log` line renders inline at the correct depth as `ℹ <message>` (dim/gray). The step's `.out` file in `.jaiph/runs/` still contains the full agent transcript for debugging.
+The `log` line renders inline at the correct depth as `ℹ <message>` (dim/gray) and writes to **stdout**. The `logerr` variant renders as `! <message>` in red and writes to **stderr**. The step's `.out` file in `.jaiph/runs/` still contains the full agent transcript for debugging.
 
 ### Hooks
 

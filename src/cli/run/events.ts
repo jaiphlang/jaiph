@@ -26,7 +26,7 @@ export type StepEvent = {
 };
 
 export type LogEvent = {
-  type: "LOG";
+  type: "LOG" | "LOGERR";
   message: string;
   depth: number;
 };
@@ -40,11 +40,11 @@ export function parseLogEvent(line: string): LogEvent | undefined {
   }
   try {
     const parsed = JSON.parse(line.slice(markerIndex + PREFIX.length)) as Record<string, unknown>;
-    if (!parsed || parsed.type !== "LOG") {
+    if (!parsed || (parsed.type !== "LOG" && parsed.type !== "LOGERR")) {
       return undefined;
     }
     return {
-      type: "LOG",
+      type: parsed.type as "LOG" | "LOGERR",
       message: typeof parsed.message === "string" ? parsed.message : "",
       depth: typeof parsed.depth === "number" ? parsed.depth : 0,
     };

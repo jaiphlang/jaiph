@@ -100,6 +100,29 @@ jaiph::log() {
     "$depth")"
   marker_fd="$(jaiph::event_fd)"
   printf "__JAIPH_EVENT__ %s\n" "$payload" >&"$marker_fd"
+  echo "$message"
+  if [[ "$had_xtrace" -eq 1 ]]; then
+    set -x
+  fi
+}
+
+jaiph::logerr() {
+  local message="$*"
+  local depth
+  depth="$(jaiph::step_stack_depth)"
+  local marker_fd payload had_xtrace
+  had_xtrace=0
+  case "$-" in
+    *x*) had_xtrace=1 ;;
+  esac
+  if [[ "$had_xtrace" -eq 1 ]]; then
+    set +x
+  fi
+  payload="$(printf '{"type":"LOGERR","message":"%s","depth":%s}' \
+    "$(jaiph::json_escape "$message")" \
+    "$depth")"
+  marker_fd="$(jaiph::event_fd)"
+  printf "__JAIPH_EVENT__ %s\n" "$payload" >&"$marker_fd"
   echo "$message" >&2
   if [[ "$had_xtrace" -eq 1 ]]; then
     set -x

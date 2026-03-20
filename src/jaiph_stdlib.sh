@@ -85,4 +85,15 @@ source "${_jaiph_runtime_dir}/runtime/inbox.sh"
 source "${_jaiph_runtime_dir}/runtime/prompt.sh"
 # shellcheck source=src/runtime/sandbox.sh
 source "${_jaiph_runtime_dir}/runtime/sandbox.sh"
+
+# Backwards-compatible top-level aliases for DSL convenience.
+# Some compiled scripts may call `log`/`logerr` directly.
+log() {
+  jaiph::log "$@"
+}
+
+logerr() {
+  jaiph::logerr "$@"
+}
+
 unset _jaiph_runtime_dir
