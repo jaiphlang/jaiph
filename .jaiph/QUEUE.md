@@ -6,6 +6,33 @@ The first `##` task in the file is always the current task.
 
 ---
 
+## Bug: Prompt messages seem to be displayed multiple times <!-- dev-ready -->
+
+Sample output:
+
+```
+➜  jaiph git:(nightly) ✗ CI=true e2e/say_hello.jh Barbara
+
+Jaiph: Running say_hello.jh
+
+workflow default (1="Barbara")
+  ▸ rule name_was_provided (1="Barbara")
+  ✓ 0s
+  ▸ prompt "Say hello to $1 and" (1="Barbara")
+  ✓ 8s
+  ℹ Hello, Barbara!
+
+Fun fact: **Barbara McClintock**, an American scientist, discovered "jumping genes" (transposable elements) in maize in the 1940s — decades before the scientific community accepted her work. She was largely ignored and even ridiculed for years, but was ultimately awarded the Nobel Prize in Physiology or Medicine in 1983, making her the only woman to receive an unshared Nobel in that category. She was 81 at the time. Pure persistence.Hello, Barbara!
+
+Fun fact: **Barbara McClintock**, an American scientist, discovered "jumping genes" (transposable elements) in maize in the 1940s — decades before the scientific community accepted her work. She was largely ignored and even ridiculed for years, but was ultimately awarded the Nobel Prize in Physiology or Medicine in 1983, making her the only woman to receive an unshared Nobel in that category. She was 81 at the time. Pure persistence.Hello, Barbara!
+
+Fun fact: **Barbara McClintock**, an American scientist, discovered "jumping genes" (transposable elements) in maize in the 1940s — decades before the scientific community accepted her work. She was largely ignored and even ridiculed for years, but was ultimately awarded the Nobel Prize in Physiology or Medicine in 1983, making her the only woman to receive an unshared Nobel in that category. She was 81 at the time. Pure persistence.
+
+✓ PASS workflow default (8s)
+```
+
+---
+
 ## Bug: When Jaiph is executed in docker, nothing is saved in local .jaiph/runs directory
 
 **Needs work — questions/concerns before development:**
