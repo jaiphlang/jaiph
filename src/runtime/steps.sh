@@ -214,21 +214,21 @@ jaiph::run_step() {
     return 1
   fi
   jaiph::init_run_tracking || return 1
-  local step_started_at safe_name out_file err_file status had_errexit step_started_seconds step_elapsed_seconds
+  local safe_name out_file err_file status had_errexit step_started_seconds step_elapsed_seconds
   local out_tmp err_tmp elapsed_ms prompt_final_tmp
-  local step_id parent_id depth step_seq
+  local step_id parent_id depth step_seq seq_prefix
   local prompt_writes_live_out=0
   step_started_seconds="$SECONDS"
-  step_started_at="$(jaiph::timestamp_utc)"
-  safe_name="$(jaiph::sanitize_name "$func_name")"
-  out_file="$JAIPH_RUN_DIR/${step_started_at}-${safe_name}.out"
-  err_file="$JAIPH_RUN_DIR/${step_started_at}-${safe_name}.err"
-  out_tmp="${out_file}.tmp.$$"
-  err_tmp="${err_file}.tmp.$$"
-  prompt_final_tmp=""
   jaiph::next_step_id
   step_id="$JAIPH_LAST_STEP_ID"
   step_seq="$JAIPH_STEP_SEQ"
+  printf -v seq_prefix "%06d" "$step_seq"
+  safe_name="$(jaiph::sanitize_name "$func_name")"
+  out_file="$JAIPH_RUN_DIR/${seq_prefix}-${safe_name}.out"
+  err_file="$JAIPH_RUN_DIR/${seq_prefix}-${safe_name}.err"
+  out_tmp="${out_file}.tmp.$$"
+  err_tmp="${err_file}.tmp.$$"
+  prompt_final_tmp=""
   parent_id="$(jaiph::step_stack_peek)"
   depth="$(jaiph::step_stack_depth)"
   jaiph::step_stack_push "$step_id"
