@@ -332,6 +332,12 @@ header h1 img {
     color: #0969da;
 }
 
+/* Channel identifier */
+.ralph-channel {
+    color: #0e8a16;
+    font-weight: 600;
+}
+
 /* Operator */
 .ralph-operator {
     color: #24292f;

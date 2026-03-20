@@ -1,20 +1,20 @@
 workflow researcher {
-  echo '## findings' -> findings
+  findings <- echo '## findings'
 }
 
 workflow analyst {
   echo "$1" > findings_file.md
   summary = echo "Summary of findings"
-  echo "$summary" -> summary
+  summary <- echo "$summary"
 }
 
 workflow reviewer {
-  echo "[reviewed] $1" -> final_summary
+  final_summary <- echo "[reviewed] $1"
 }
 
 # Orchestration / entrypoint workflow
 workflow default {
   run researcher
-  on findings -> analyst
-  on summary -> reviewer
+  findings -> analyst
+  summary -> reviewer
 }

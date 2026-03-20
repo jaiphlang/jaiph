@@ -16,7 +16,7 @@ e2e::section "Basic send + route"
 # Given
 e2e::file "basic_inbox.jh" <<'EOF'
 workflow sender {
-  echo "hello from sender" -> greetings
+  greetings <- echo "hello from sender"
 }
 
 workflow receiver {
@@ -25,7 +25,7 @@ workflow receiver {
 
 workflow default {
   run sender
-  on greetings -> receiver
+  greetings -> receiver
 }
 EOF
 
@@ -41,7 +41,7 @@ e2e::section "Multi-target route"
 # Given
 e2e::file "multi_target.jh" <<'EOF'
 workflow producer {
-  echo "data-payload" -> results
+  results <- echo "data-payload"
 }
 
 workflow consumer_a {
@@ -54,7 +54,7 @@ workflow consumer_b {
 
 workflow default {
   run producer
-  on results -> consumer_a, consumer_b
+  results -> consumer_a, consumer_b
 }
 EOF
 
@@ -72,7 +72,7 @@ e2e::section "Silent drop on unregistered channel"
 # Given
 e2e::file "unrouted_drop.jh" <<'EOF'
 workflow sender {
-  echo "dropped" -> unknown_channel
+  unknown_channel <- echo "dropped"
 }
 
 workflow dummy {
@@ -81,7 +81,7 @@ workflow dummy {
 
 workflow default {
   run sender
-  on some_channel -> dummy
+  some_channel -> dummy
 }
 EOF
 
@@ -108,7 +108,7 @@ e2e::section "Inbox file written"
 # Given
 e2e::file "inbox_file.jh" <<'EOF'
 workflow writer {
-  echo "inbox-content-check" -> audit
+  audit <- echo "inbox-content-check"
 }
 
 workflow auditor {
@@ -117,7 +117,7 @@ workflow auditor {
 
 workflow default {
   run writer
-  on audit -> auditor
+  audit -> auditor
 }
 EOF
 
@@ -137,11 +137,11 @@ e2e::section "Dispatched step CLI output shows channel via standard param displa
 # Given
 e2e::file "display_inbox.jh" <<'EOF'
 workflow scanner {
-  echo "Found 3 issues in auth module" -> findings
+  findings <- echo "Found 3 issues in auth module"
 }
 
 workflow analyst {
-  echo "Summary: $1" -> report
+  report <- echo "Summary: $1"
 }
 
 workflow reviewer {
@@ -150,8 +150,8 @@ workflow reviewer {
 
 workflow default {
   run scanner
-  on findings -> analyst
-  on report -> reviewer
+  findings -> analyst
+  report -> reviewer
 }
 EOF
 

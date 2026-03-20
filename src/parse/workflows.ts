@@ -2,11 +2,12 @@ import type { WorkflowDef, WorkflowRouteDef } from "../types";
 import { braceDepthDelta, colFromRaw, fail, hasUnescapedClosingQuote, indexOfClosingDoubleQuote, isRef } from "./core";
 
 /**
- * Match `-> channel` send operator in a line, only when `->` appears outside quoted strings.
+ * Match `channel <- command` send operator in a line, only when `<-` appears outside quoted strings.
+ * The channel identifier must be on the left side of the `<-` operator.
  * Returns { command, channel } if matched, or null.
  */
 function matchSendOperator(line: string): { command: string; channel: string } | null {
-  // Walk the line tracking quote state; find `->` outside quotes.
+  // Walk the line tracking quote state; find `<-` outside quotes.
   let inSingleQuote = false;
   let inDoubleQuote = false;
   for (let i = 0; i < line.length; i += 1) {
@@ -23,14 +24,13 @@ function matchSendOperator(line: string): { command: string; channel: string } |
       inDoubleQuote = !inDoubleQuote;
       continue;
     }
-    if (!inSingleQuote && !inDoubleQuote && ch === "-" && line[i + 1] === ">") {
-      // Require whitespace before -> (or start of line) and whitespace after ->
+    if (!inSingleQuote && !inDoubleQuote && ch === "<" && line[i + 1] === "-") {
       const before = line.slice(0, i).trimEnd();
       const after = line.slice(i + 2).trimStart();
-      // Channel must be a valid identifier
-      const channelMatch = after.match(/^([A-Za-z_][A-Za-z0-9_]*)$/);
+      // Channel must be a valid identifier on the left side
+      const channelMatch = before.match(/^([A-Za-z_][A-Za-z0-9_]*)$/);
       if (channelMatch) {
-        return { command: before, channel: channelMatch[1] };
+        return { command: after, channel: channelMatch[1] };
       }
     }
   }
@@ -991,18 +991,18 @@ export function parseWorkflowBlock(
       fail(filePath, 'malformed if-ensure statement; expected "if [!] ensure <rule_ref> [args]; then"', innerNo);
     }
 
-    // `on <channel> -> <workflow>[, <workflow>...]` route declaration.
-    const onRouteMatch = inner.match(
-      /^on\s+([A-Za-z_][A-Za-z0-9_]*)\s+->\s+(.+)$/,
+    // `<channel> -> <workflow>[, <workflow>...]` route declaration.
+    const routeMatch = inner.match(
+      /^([A-Za-z_][A-Za-z0-9_]*)\s+->\s+(.+)$/,
     );
-    if (onRouteMatch) {
-      const channel = onRouteMatch[1];
-      const targetsStr = onRouteMatch[2].trim();
+    if (routeMatch) {
+      const channel = routeMatch[1];
+      const targetsStr = routeMatch[2].trim();
       const targetNames = targetsStr.split(/\s*,\s*/);
       const workflows = targetNames.map((name) => {
         const trimmedName = name.trim();
         if (!isRef(trimmedName)) {
-          fail(filePath, `invalid workflow reference in on route: "${trimmedName}"`, innerNo);
+          fail(filePath, `invalid workflow reference in route: "${trimmedName}"`, innerNo);
         }
         return { value: trimmedName, loc: { line: innerNo, col: innerRaw.indexOf(trimmedName) + 1 } };
       });
@@ -1017,7 +1017,7 @@ export function parseWorkflowBlock(
       continue;
     }
 
-    // `[cmd] -> <channel>` send operator (detected before shell fallback).
+    // `<channel> <- [cmd]` send operator (detected before shell fallback).
     const sendMatch = matchSendOperator(inner);
     if (sendMatch) {
       workflow.steps.push({

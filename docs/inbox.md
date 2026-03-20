@@ -8,7 +8,7 @@ nav_order: 7
 
 Jaiph provides first-class event passing between agent workflows via an
 in-memory dispatch loop. One workflow produces output with the **send
-operator** (`->`), another reacts to it via an **`on` route declaration**.
+operator** (`<-`), another reacts to it via a **route declaration** (`->`).
 
 ## Design principles
 
@@ -20,22 +20,23 @@ operator** (`->`), another reacts to it via an **`on` route declaration**.
 
 ## Syntax
 
-### Send operator: `-> <channel>`
+### Send operator: `<channel> <- <command>`
 
-Writes content to the next inbox slot and signals the runtime to dispatch.
+The channel identifier is always on the left side. Writes content to the
+next inbox slot and signals the runtime to dispatch.
 
 ```jh
 workflow researcher {
-  echo '## findings' -> findings
+  findings <- echo '## findings'
 }
 ```
 
-The send operator may be preceded by a shell command. If no command is
+The send operator may be followed by a shell command. If no command is
 present, it forwards the workflow's `$1` argument:
 
 ```jh
 workflow forwarder {
-  -> findings
+  findings <-
 }
 ```
 
@@ -43,10 +44,10 @@ workflow forwarder {
 
 | Jaiph                        | Bash                                        |
 |------------------------------|---------------------------------------------|
-| `echo "foo" -> ch`          | `jaiph::send 'ch' "$(echo "foo")"`          |
-| `-> ch`                     | `jaiph::send 'ch' "$1"`                     |
+| `ch <- echo "foo"`          | `jaiph::send 'ch' "$(echo "foo")"`          |
+| `ch <-`                     | `jaiph::send 'ch' "$1"`                     |
 
-### Route declaration: `on <channel> -> <workflow>`
+### Route declaration: `<channel> -> <workflow>`
 
 Tells the runtime: when a message arrives on `<channel>`, call `<workflow>`
 with the message content as `$1`.
@@ -54,8 +55,8 @@ with the message content as `$1`.
 ```jh
 workflow default {
   run researcher
-  on findings -> analyst
-  on summary -> reviewer
+  findings -> analyst
+  summary -> reviewer
 }
 ```
 
@@ -63,10 +64,10 @@ Multiple targets are supported (comma-separated). They are called
 sequentially in declaration order, each receiving the same message:
 
 ```jh
-on findings -> analyst, reviewer
+findings -> analyst, reviewer
 ```
 
-**Note:** `on` declarations are static routing rules, not executable
+**Note:** Route declarations are static routing rules, not executable
 statements. They are stored in `routes` on the workflow definition, not in
 `steps`.
 
@@ -74,14 +75,14 @@ statements. They are stored in `routes` on the workflow definition, not in
 
 ```jh
 # ERROR: E_PARSE capture and send cannot be combined; use separate steps
-name = cmd -> channel
+name = channel <- cmd
 ```
 
 Use two steps instead:
 
 ```jh
 name = cmd
-echo "$name" -> channel
+channel <- echo "$name"
 ```
 
 ## Inbox layout
@@ -102,7 +103,7 @@ zero-padded monotonic counter scoped to the run.
 ```
 1. Register all routing rules (jaiph::register_route calls).
 2. Execute orchestrator workflow top-to-bottom.
-3. When -> is executed: write message to inbox dir, append to file-based queue.
+3. When <- is executed: write message to inbox dir, append to file-based queue.
 4. After orchestrator completes, drain the dispatch queue:
    a. Read next unprocessed entry from the queue file.
    b. Look up route for channel.
@@ -144,7 +145,7 @@ survive back into the parent process.
 
 ## Progress tree integration
 
-- `on` route declarations appear as nodes in the progress tree.
+- Route declarations appear as nodes in the progress tree.
 - Dispatched workflow calls emit `STEP_START`/`STEP_END` events with
   `dispatched: true` and `channel: "<channel>"` metadata.
 - The channel name is passed as a named parameter (`channel=<name>`), so
@@ -157,7 +158,7 @@ survive back into the parent process.
   stdout content in the `STEP_END` event (`out_content` field) for error
   reporting; `.out` files under `.jaiph/runs/` contain the full output
   for debugging.
-- `jaiph tree` (static view) shows `on` routes as leaf nodes.
+- `jaiph tree` (static view) shows route declarations as leaf nodes.
 
 ### Example output
 

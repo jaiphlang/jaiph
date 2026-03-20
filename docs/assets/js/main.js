@@ -24,7 +24,6 @@
         "returns",
         "mock",
         "log",
-        "on",
         "respond",
         "contains",
         "expectContain",
@@ -124,6 +123,12 @@
             if (ch === ".") {
                 tokens.push({ type: "dot", value: ".", kind: "plain" });
                 i += 1;
+                continue;
+            }
+
+            if (ch === "<" && line[i + 1] === "-") {
+                tokens.push({ type: "send_arrow", value: "<-", kind: "operator" });
+                i += 2;
                 continue;
             }
 
@@ -266,19 +271,29 @@
             }
         }
 
-        // on channel -> workflow, workflow2
-        if (firstValue === "on") {
-            for (let i = 1; i < significant.length; i += 1) {
-                if (significant[i].token.type === "arrow") {
-                    // mark workflow targets after ->
-                    for (let j = i + 1; j < significant.length; j += 1) {
-                        if (significant[j].token.type === "identifier") {
-                            annotated[significant[j].index].kind = "identifier";
-                        }
-                    }
-                    break;
+        // channel -> workflow, workflow2 (route declaration)
+        if (
+            first.token.type === "identifier" &&
+            !STATEMENT_KEYWORDS.has(firstValue) &&
+            significant.length >= 3 &&
+            significant[1].token.type === "arrow"
+        ) {
+            annotated[first.index].kind = "channel";
+            for (let j = 2; j < significant.length; j += 1) {
+                if (significant[j].token.type === "identifier") {
+                    annotated[significant[j].index].kind = "identifier";
                 }
             }
+        }
+
+        // channel <- command (send operator)
+        if (
+            first.token.type === "identifier" &&
+            !STATEMENT_KEYWORDS.has(firstValue) &&
+            significant.length >= 2 &&
+            significant[1].token.type === "send_arrow"
+        ) {
+            annotated[first.index].kind = "channel";
         }
 
         // local name = value → definition for variable name
@@ -406,6 +421,9 @@
         }
         if (token.kind === "identifier") {
             return `<span class="ralph-identifier">${value}</span>`;
+        }
+        if (token.kind === "channel") {
+            return `<span class="ralph-channel">${value}</span>`;
         }
         if (token.kind === "variable") {
             return `<span class="ralph-variable">${value}</span>`;
