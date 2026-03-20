@@ -11,7 +11,7 @@ import { basename } from "node:path";
 import { parsejaiph } from "../../parser";
 import { build, workflowSymbolForFile } from "../../transpiler";
 import { metadataToConfig } from "../../config";
-import { formatNamedParamsForDisplay, isInternalParamValue, normalizeParamValue } from "./format-params.js";
+import { formatNamedParamsForDisplay, isInternalParamValue } from "./format-params.js";
 import {
   colorPalette,
   summarizeError,
@@ -88,9 +88,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     };
 const PROMPT_PREVIEW_MAX = 24;
 const PROMPT_ARGS_DISPLAY_MAX = 96;
-const MAX_PARAM_VALUE_DISPLAY = 32;
-
-    const formatStartLine = (indent: string, kind: string, name: string, params?: Array<[string, string]>, channel?: string): string => {
+    const formatStartLine = (indent: string, kind: string, name: string, params?: Array<[string, string]>): string => {
       const prefix = indent.slice(0, -2);
       const marker = colorize("▸", "dim");
       const kindLabel = colorize(kind, "bold");
@@ -119,29 +117,13 @@ const MAX_PARAM_VALUE_DISPLAY = 32;
             : "";
       } else {
         namePart = kind === name ? kindLabel : `${kindLabel} ${name}`;
-        if (channel) {
-          // Dispatched step: show (channel, "message") format.
-          const values = (params ?? [])
-            .map(([, v]) => v)
-            .filter((v) => !isInternalParamValue(v))
-            .filter((v) => v.trim() !== "");
-          const msgParts = values.map((v) => {
-            const normalized = normalizeParamValue(v);
-            const visible = normalized.length > MAX_PARAM_VALUE_DISPLAY ? `${normalized.slice(0, MAX_PARAM_VALUE_DISPLAY)}...` : normalized;
-            const escaped = visible.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-            return `"${escaped}"`;
-          });
-          const allParts = [channel, ...msgParts];
-          paramSuffix = colorize(` (${allParts.join(", ")})`, "dim");
-        } else {
-          const showParams =
-            params != null &&
-            params.length > 0 &&
-            (kind === "workflow" || kind === "prompt" || kind === "function" || kind === "rule");
-          paramSuffix = showParams
-            ? colorize(formatNamedParamsForDisplay(params), "dim")
-            : "";
-        }
+        const showParams =
+          params != null &&
+          params.length > 0 &&
+          (kind === "workflow" || kind === "prompt" || kind === "function" || kind === "rule");
+        paramSuffix = showParams
+          ? colorize(formatNamedParamsForDisplay(params), "dim")
+          : "";
       }
       return `${dimPrefix}${marker} ${namePart}${paramSuffix}`;
     };
@@ -350,7 +332,7 @@ const MAX_PARAM_VALUE_DISPLAY = 32;
           }
           const depth = Math.max(1, event.depth ?? runtimeStack.length);
           const indent = "  · ".repeat(depth);
-          const label = formatStartLine(indent, event.kind, event.name, event.params, event.channel || undefined);
+          const label = formatStartLine(indent, event.kind, event.name, event.params);
           stepIndentById.set(eventId, indent);
           if (isTTY && runningInterval !== undefined) {
             process.stdout.write("\r\u001b[K\u001b[1A\r\u001b[K");

@@ -74,6 +74,7 @@ jaiph::init_run_tracking() {
   JAIPH_STEP_STACK=""
   JAIPH_LAST_STEP_ID=""
   mkdir -p "$JAIPH_RUN_DIR"
+  printf '%s' "0" >"$JAIPH_RUN_DIR/.seq"
   : >"$JAIPH_RUN_SUMMARY_FILE"
   export JAIPH_RUN_DIR JAIPH_PRECEDING_FILES JAIPH_RUN_SUMMARY_FILE JAIPH_RUN_ID JAIPH_STEP_SEQ JAIPH_STEP_STACK JAIPH_LAST_STEP_ID
 }
@@ -138,7 +139,15 @@ jaiph::step_stack_pop() {
 }
 
 jaiph::next_step_id() {
-  JAIPH_STEP_SEQ="$((JAIPH_STEP_SEQ + 1))"
+  local seq_file="${JAIPH_RUN_DIR:+${JAIPH_RUN_DIR}/.seq}"
+  if [[ -n "$seq_file" && -f "$seq_file" ]]; then
+    JAIPH_STEP_SEQ="$(( $(<"$seq_file") + 1 ))"
+  else
+    JAIPH_STEP_SEQ="$((JAIPH_STEP_SEQ + 1))"
+  fi
+  if [[ -n "$seq_file" ]]; then
+    printf '%s' "$JAIPH_STEP_SEQ" >"$seq_file"
+  fi
   JAIPH_LAST_STEP_ID="${JAIPH_RUN_ID:-run}:${BASHPID:-$$}:${JAIPH_STEP_SEQ}"
   export JAIPH_LAST_STEP_ID
   export JAIPH_STEP_SEQ

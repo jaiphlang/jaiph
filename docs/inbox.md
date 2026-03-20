@@ -132,7 +132,14 @@ survive back into the parent process.
 
 ## Trigger contract
 
-- Called workflow receives `$1` = message content (string, not file path).
+- Called workflow receives the channel name as a named parameter
+  (`channel=<name>`) and the message content as the next positional argument.
+  At runtime the dispatch invocation sets `JAIPH_STEP_PARAM_KEYS='channel'`
+  so the standard parameter display pipeline picks up the channel
+  automatically — no custom rendering logic required.
+- `JAIPH_DISPATCH_CHANNEL` is still set in the environment so that
+  `events.sh` can tag JSONL events with `"dispatched":true` and
+  `"channel":"…"` metadata.
 - Workflows remain directly callable: `jaiph run analyst "some content"`.
 
 ## Progress tree integration
@@ -140,9 +147,11 @@ survive back into the parent process.
 - `on` route declarations appear as nodes in the progress tree.
 - Dispatched workflow calls emit `STEP_START`/`STEP_END` events with
   `dispatched: true` and `channel: "<channel>"` metadata.
-- The CLI renders dispatched steps with the channel name and message in
-  parentheses: `▸ workflow analyst (findings, "Found 3 issues in auth module")`.
-  Message values are truncated to 32 characters.
+- The channel name is passed as a named parameter (`channel=<name>`), so
+  the standard `formatNamedParamsForDisplay` path renders it using the
+  same `key="value"` format as any other step parameter:
+  `▸ workflow analyst (channel="findings")`. No custom display code is
+  needed for dispatch.
 - Dispatched step output is not displayed in the tree. Use `log` within
   the dispatched workflow to show output in the tree. The runtime embeds
   stdout content in the `STEP_END` event (`out_content` field) for error
@@ -156,10 +165,9 @@ survive back into the parent process.
 workflow default
   ▸ workflow scanner
   ✓ 0s
-  ▸ workflow analyst (findings, "Found 3 issues in auth module")
+  ▸ workflow analyst (channel="findings")
   ✓ 0s
-  ▸ workflow reviewer (report, "Summary: Found 3 issues in auth module")
+  ▸ workflow reviewer (channel="report")
   ✓ 0s
-    [reviewed] Summary: Found 3 issues in auth module
 ✓ PASS workflow default (0.1s)
 ```

@@ -117,7 +117,7 @@ jaiph::drain_queue() {
       content="$(cat "$msg_file")"
       local target
       for target in $_route_result; do
-        JAIPH_DISPATCH_CHANNEL="$channel" "$target" "$content"
+        JAIPH_STEP_PARAM_KEYS='channel' JAIPH_DISPATCH_CHANNEL="$channel" "$target" "$content"
       done
     done <<< "$queue_lines"
   done
