@@ -119,6 +119,30 @@ e2e::run_dir() {
   printf "%s" "${dirs[0]}"
 }
 
+e2e::run_dir_at() {
+  local base="$1"
+  local file="$2"
+
+  shopt -s nullglob
+  local dirs=( "${base}/"*/*"${file}"/ )
+  shopt -u nullglob
+
+  [[ ${#dirs[@]} -eq 1 ]] || e2e::fail "expected one run dir for ${file} under ${base}, got ${#dirs[@]}"
+  printf "%s" "${dirs[0]}"
+}
+
+e2e::latest_run_dir_at() {
+  local base="$1"
+  local file="$2"
+
+  shopt -s nullglob
+  local dirs=( "${base}/"*/*"${file}"/ )
+  shopt -u nullglob
+
+  [[ ${#dirs[@]} -ge 1 ]] || e2e::fail "expected at least one run dir for ${file} under ${base}, got 0"
+  printf "%s" "${dirs[$((${#dirs[@]} - 1))]}"
+}
+
 e2e::expect_out_files() {
   local file="$1"
   local expected="$2"
@@ -227,6 +251,76 @@ e2e::expect_no_file() {
   e2e::pass "no ${pattern}"
 }
 
+e2e::expect_run_file() {
+  local file="$1"
+  local name="$2"
+  local expected="$3"
+
+  local dir
+  dir="$(e2e::run_dir "${file}")"
+
+  local path="${dir}${name}"
+  [[ -f "${path}" ]] || e2e::fail "missing ${name} in run dir for ${file}"
+
+  local content
+  content="$(<"${path}")"
+
+  e2e::assert_equals "${content}" "${expected}" "${file} ${name}"
+}
+
+e2e::expect_run_file_at() {
+  local base="$1"
+  local file="$2"
+  local name="$3"
+  local expected="$4"
+
+  local dir
+  dir="$(e2e::run_dir_at "${base}" "${file}")"
+
+  local path="${dir}${name}"
+  [[ -f "${path}" ]] || e2e::fail "missing ${name} in run dir for ${file} under ${base}"
+
+  local content
+  content="$(<"${path}")"
+
+  e2e::assert_equals "${content}" "${expected}" "${file} ${name}"
+}
+
+e2e::expect_run_file_count() {
+  local file="$1"
+  local expected="$2"
+
+  local dir
+  dir="$(e2e::run_dir "${file}")"
+
+  shopt -s nullglob
+  local files=( "${dir}"*.out "${dir}"*.err )
+  shopt -u nullglob
+
+  [[ ${#files[@]} -eq "${expected}" ]] \
+    || e2e::fail "expected ${expected} artifact files for ${file}, got ${#files[@]}"
+
+  e2e::pass "${file} has ${expected} artifact files"
+}
+
+e2e::expect_run_file_count_at() {
+  local base="$1"
+  local file="$2"
+  local expected="$3"
+
+  local dir
+  dir="$(e2e::run_dir_at "${base}" "${file}")"
+
+  shopt -s nullglob
+  local files=( "${dir}"*.out "${dir}"*.err )
+  shopt -u nullglob
+
+  [[ ${#files[@]} -eq "${expected}" ]] \
+    || e2e::fail "expected ${expected} artifact files for ${file} under ${base}, got ${#files[@]}"
+
+  e2e::pass "${file} has ${expected} artifact files under ${base}"
+}
+
 e2e::git_init() {
   git init -b main >/dev/null 2>&1 || git init >/dev/null 2>&1
 }
@@ -326,7 +420,7 @@ e2e::ensure_local_install() {
     cat > "${JAIPH_E2E_BIN_DIR}/jaiph" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-export JAIPH_STDLIB="\${JAIPH_STDLIB:-${JAIPH_E2E_BIN_DIR}/jaiph_stdlib.sh}"
+export JAIPH_STDLIB="${JAIPH_E2E_BIN_DIR}/jaiph_stdlib.sh"
 exec node "${E2E_REPO_ROOT}/dist/src/cli.js" "\$@"
 EOF
     chmod 755 "${JAIPH_E2E_BIN_DIR}/jaiph" "${stdlib_dest}"
