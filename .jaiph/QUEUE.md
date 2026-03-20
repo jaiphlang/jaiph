@@ -6,12 +6,30 @@ The first `##` task in the file is always the current task.
 
 ---
 
+## Bug: Deterministic runs directory skips some files
+
+To reproduce in e2e: Create similar workflow to: .jaiph/architect_review.jh (loop)
+
+Mock multiple prompts
+
+At the end you will find only last prompt output file.
+
+The reason is probably due to not incrementing sequence counter.
+
+---
+
+
 ## Bug: When Jaiph is executed in docker, nothing is saved in local .jaiph/runs directory
 
-Acceptance criteria: Write a Bash test that enforces jaiph in Docker
+**Needs work — questions/concerns before development:**
 
-OR: Create a CI that uses Docker for all tests with no changing the output.
-This way we can guarantee output parity.
+1. **Root cause identified but not documented in the task.** `buildDockerArgs()` in `docker.ts:282-287` forwards all `JAIPH_*` env vars into the container, including `JAIPH_WORKSPACE` (set to the host path at `run.ts:185`). Inside the container the workspace is mounted at `/jaiph/workspace`, but `jaiph::workspace_root()` in `steps.sh:19` returns the stale host path. Runs are therefore created under a non-existent host path on the container's ephemeral filesystem and are lost on `--rm`. Similarly, `JAIPH_RUNS_DIR` if set as an absolute host path will resolve to the wrong location. The fix should override `JAIPH_WORKSPACE=/jaiph/workspace` inside the container (and remap `JAIPH_RUNS_DIR` if it's an absolute host path). **Please confirm this root cause and include it in the task description so the developer knows exactly what to fix.**
+
+2. **Acceptance criteria are ambiguous and present two unrelated options.** "Write a Bash test that enforces jaiph in Docker" — what does "enforces" mean? A test that runs a workflow in Docker mode and asserts run artifacts exist on the host? And "Create a CI that uses Docker for all tests" is a completely different (and much larger) scope than fixing the env-var bug. **Pick one AC and make it specific.** Suggested AC: An E2E test that runs a workflow with `JAIPH_DOCKER_ENABLED=true`, then asserts that `.jaiph/runs/` on the host contains the expected artifact files (`.out`, `run_summary.jsonl`).
+
+3. **CI scope concern.** "Create a CI that uses Docker for all tests with no changing the output" would require Docker-in-Docker on GitHub Actions runners and would change the entire CI strategy. This is a separate initiative from the bug fix and should be a separate queue item if desired. **Recommend splitting: this task fixes the env-var bug + adds one Docker E2E test; a separate task addresses Docker-based CI.**
+
+4. **E2E test feasibility.** The existing E2E suite runs on `ubuntu-latest` and `macos-latest` GitHub Actions runners. Docker is available on `ubuntu-latest` but not on macOS runners. A Docker E2E test would need to be gated on Docker availability or only run in the `ubuntu-latest` matrix. **Clarify whether the Docker E2E test should be CI-only (Linux) or also run locally on macOS.**
 
 ---
 
