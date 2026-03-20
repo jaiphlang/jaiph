@@ -143,6 +143,9 @@ export function collectWorkflowChildren(
     if (s.type === "log") {
       return [{ label: `ℹ ${s.message}` }];
     }
+    if (s.type === "logerr") {
+      return [{ label: `! ${s.message}` }];
+    }
     if (s.type === "send") {
       return [{ label: `${s.channel} <- send` }];
     }
@@ -299,6 +302,10 @@ export function collectWorkflowChildren(
     }
     if (step.type === "log") {
       items.push({ label: `ℹ ${step.message}` });
+      continue;
+    }
+    if (step.type === "logerr") {
+      items.push({ label: `! ${step.message}` });
       continue;
     }
     if (step.type === "send") {

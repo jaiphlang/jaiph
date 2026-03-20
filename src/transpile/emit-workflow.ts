@@ -709,6 +709,10 @@ function emitEnsureRecoverLoop(
           out.push(`  jaiph::log ${step.message}`);
           continue;
         }
+        if (step.type === "logerr") {
+          out.push(`  jaiph::logerr ${step.message}`);
+          continue;
+        }
         if (step.type === "send") {
           if (step.command === "") {
             // Standalone send: channel <- (forwards $1)

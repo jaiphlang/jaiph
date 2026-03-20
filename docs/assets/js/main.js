@@ -24,6 +24,7 @@
         "returns",
         "mock",
         "log",
+        "logerr",
         "respond",
         "contains",
         "expectContain",

@@ -2,7 +2,7 @@
 
 rule name_was_provided {
   if [ -z "$1" ]; then
-    echo "You didn't provide your name :(" >&2
+    logerr "You didn't provide your name :("
     exit 1
   fi
 }

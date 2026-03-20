@@ -6,29 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Make `log` write to stdout and add `logerr` for stderr <!-- dev-ready -->
-
-**Goal.** Change language/runtime logging semantics so `log` writes to stdout, and introduce a new keyword `logerr` that writes to stderr.
-
-**Scope.**
-
-- Update parser/compiler/runtime wiring so `log "msg"` emits to stdout and keeps event metadata intact.
-- Add a new keyword `logerr "msg"` that mirrors `log` behavior but writes to stderr.
-- Preserve existing step event emission (`LOG` events), run tree rendering, and hook behavior where possible.
-- Update docs/examples/index.html and syntax highlighting to reflect the new keyword split (`log` = stdout, `logerr` = stderr).
-- Output display for `log` should remain (gray ℹ). For `logerr` colour the whole message red and use `!` instead of `ℹ`.
-
-**Acceptance criteria.**
-
-- E2E covers `log` output path: message is visible on stdout and not stderr.
-- E2E covers `logerr` output path: message is visible on stderr and not stdout.
-- E2E validates `.jaiph/runs` artifacts for both cases:
-  - for `log`, message appears in `.out` files and does not appear in `.err` files for the relevant step/workflow output;
-  - for `logerr`, message appears in `.err` files and does not appear in `.out` files for the relevant step/workflow output.
-- Existing logging/event/progress tests continue to pass (or are updated with rationale if behavior intentionally changes).
-
----
-
 ## Provide and use by default a Dockerfile with installed Claude and Cursor agent<!-- dev-ready -->
 
 **Goal.** Add a `.jaiph/Dockerfile` that ships a ready-to-use runtime image with both agent backends pre-installed, and modify `docker.ts` so the runtime auto-builds from that Dockerfile when present.

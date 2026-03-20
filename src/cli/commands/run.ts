@@ -14,10 +14,9 @@ import { metadataToConfig } from "../../config";
 import { formatNamedParamsForDisplay, isInternalParamValue } from "./format-params.js";
 import {
   colorPalette,
-  summarizeError,
+  resolveFailureDetails,
   hasFatalRuntimeStderr,
   latestRunFiles,
-  readFailedStepOutput,
 } from "../shared/errors";
 import { detectWorkspaceRoot } from "../shared/paths";
 import { parseArgs } from "../shared/usage";
@@ -299,7 +298,12 @@ const PROMPT_ARGS_DISPLAY_MAX = 96;
         const indent = "  · ".repeat(depth);
         const prefix = indent.slice(0, -2);
         const dimPrefix = colorize(prefix, "dim");
-        const logLabel = `${dimPrefix}${colorize("ℹ", "dim")} ${logEvent.message}`;
+        let logLabel: string;
+        if (logEvent.type === "LOGERR") {
+          logLabel = `${dimPrefix}${colorize(`! ${logEvent.message}`, "red")}`;
+        } else {
+          logLabel = `${dimPrefix}${colorize("ℹ", "dim")} ${logEvent.message}`;
+        }
         if (isTTY && runningInterval !== undefined) {
           process.stdout.write("\r\u001b[K\u001b[1A\r\u001b[K");
         }
@@ -378,8 +382,17 @@ const PROMPT_ARGS_DISPLAY_MAX = 96;
         return;
       }
       if (line.length > 0) {
+        if (isTTY && runningInterval !== undefined) {
+          process.stdout.write("\r\u001b[K\u001b[1A\r\u001b[K");
+        }
         capturedStderr += `${line}\n`;
-        process.stderr.write(`${line}\n`);
+        if (!isTTY) {
+          process.stderr.write(`${line}\n`);
+        }
+        if (isTTY && runningInterval !== undefined) {
+          const elapsedSec = (Date.now() - startedAt) / 1000;
+          process.stdout.write(formatRunningBottomLine("default", elapsedSec));
+        }
       }
     };
     execResult.stdout?.setEncoding("utf8");
@@ -512,11 +525,14 @@ const PROMPT_ARGS_DISPLAY_MAX = 96;
       return 0;
     }
 
-    const summary = summarizeError(capturedStderr, "Workflow execution failed.");
+    const failureDetails = resolveFailureDetails(capturedStderr, summaryFile);
+    process.stderr.write("\n");
     process.stderr.write(
       `${palette.red}\u2717 FAIL${palette.reset} workflow default ${palette.dim}(${elapsedLabel})${palette.reset}\n`,
     );
-    process.stderr.write(`  ${summary}\n`);
+    if (failureDetails.shouldPrintSummaryLine) {
+      process.stderr.write(`  ${failureDetails.summary}\n`);
+    }
     if (runDir) {
       process.stderr.write(`  Logs: ${runDir}\n`);
       if (summaryFile) {
@@ -529,10 +545,9 @@ const PROMPT_ARGS_DISPLAY_MAX = 96;
       if (files.err) {
         process.stderr.write(`    err: ${files.err}\n`);
       }
-      const failedStepOutput = summaryFile ? readFailedStepOutput(summaryFile) : null;
-      if (failedStepOutput) {
+      if (failureDetails.failedStepOutput) {
         process.stderr.write("\n  Output of failed step:\n");
-        for (const line of failedStepOutput.split("\n")) {
+        for (const line of failureDetails.failedStepOutput.split("\n")) {
           process.stderr.write(`    ${line}\n`);
         }
       }

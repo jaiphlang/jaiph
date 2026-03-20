@@ -25,6 +25,26 @@ export function summarizeError(stderr: string, fallback?: string): string {
   return fallback ?? "Workflow execution failed.";
 }
 
+export type FailureDetails = {
+  summary: string;
+  failedStepOutput: string | null;
+  shouldPrintSummaryLine: boolean;
+};
+
+/**
+ * Resolve canonical failure details for CLI rendering.
+ * Prefer detailed failed step output when available; summary is fallback-only.
+ */
+export function resolveFailureDetails(stderr: string, summaryPath?: string): FailureDetails {
+  const summary = summarizeError(stderr, "Workflow execution failed.");
+  const failedStepOutput = summaryPath ? readFailedStepOutput(summaryPath) : null;
+  return {
+    summary,
+    failedStepOutput,
+    shouldPrintSummaryLine: !failedStepOutput,
+  };
+}
+
 export function hasFatalRuntimeStderr(stderr: string, debugEnabled: boolean): boolean {
   if (debugEnabled) {
     return false;

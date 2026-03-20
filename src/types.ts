@@ -162,6 +162,11 @@ export type WorkflowStepDef =
       loc: SourceLoc;
     }
   | {
+      type: "logerr";
+      message: string;
+      loc: SourceLoc;
+    }
+  | {
       type: "send";
       command: string;
       channel: string;

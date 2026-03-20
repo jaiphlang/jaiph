@@ -223,7 +223,10 @@ See [cli.md](docs/cli.md) for command syntax, examples, and supported environmen
   Sends prompt text to the configured agent command.
 
 - `log "message"`
-  Displays a message in the progress tree at the current depth. Takes a double-quoted string; shell variable interpolation works at runtime. No spinner, no timing — just a static annotation. See [Grammar](docs/grammar.md).
+  Displays a message in the progress tree at the current depth and writes to **stdout**. Takes a double-quoted string; shell variable interpolation works at runtime. No spinner, no timing — just a static annotation. See [Grammar](docs/grammar.md).
+
+- `logerr "message"`
+  Same as `log`, but writes to **stderr** instead of stdout. In the progress tree, `logerr` lines are displayed with a red `!` instead of the dim `ℹ` used by `log`. See [Grammar](docs/grammar.md).
 
 - `channel <- echo "data"` · `channel <-`
   Sends content to a named inbox channel. The channel identifier is always on the left side of `<-`. The runtime dispatches to workflows registered via route declarations. Standalone `channel <-` forwards `$1`. Combining capture and send (`name = channel <- cmd`) is a parse error. See [Inbox & Dispatch](docs/inbox.md).
