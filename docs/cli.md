@@ -129,6 +129,15 @@ Example lines:
 
 If no parameters are passed, the line is unchanged (e.g. `▸ workflow default`). Color can be disabled with `NO_COLOR=1`.
 
+**Prompt steps show no output in the tree.** When a `prompt` step completes, only the step line and ✓ appear — no Command, Prompt, Reasoning, or Final answer block. To display agent output in the tree, use `log` explicitly:
+
+```jh
+response = prompt "Summarize the report"
+log "$response"
+```
+
+The `log` line renders inline at the correct depth with the message text. The step's `.out` file in `.jaiph/runs/` still contains the full agent transcript for debugging.
+
 ### Hooks
 
 You can run custom commands at workflow/step lifecycle events via **hooks**. Config lives in `~/.jaiph/hooks.json` (global) and `<project>/.jaiph/hooks.json` (project-local); project-local overrides global per event. See [Hooks](hooks.md) for schema, events, payload, and examples.

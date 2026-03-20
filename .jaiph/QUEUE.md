@@ -6,28 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Fix prompt/agent step output: no output in tree unless logged with `log`<!-- dev-ready -->
-
-**Correct behavior.**
-
-- **Tree:** Show no output for a prompt step. If the user writes `response = prompt "aaa"`, the tree shows only the step line and ✓ — no Command/Prompt/Reasoning/Final answer block.
-- **When user uses `log`:** Output appears in the tree only when they explicitly call `log`, e.g. `response = prompt "aaa"; log "$response"`. The `log` step emits a LOG event and the CLI already displays that; no change needed for log.
-- **.out files:** The step’s `.out` file in `.jaiph/runs/` continues to contain the full agent output (Command, Prompt, Reasoning, Final answer) for debugging. No change to runtime embedding — only stop displaying prompt step’s `out_content` in the tree.
-
-**Implementation.**
-
-1. **`run.ts`** — Remove the block that displays `out_content` for prompt steps (lines ~372–384). Do not print embedded step output for prompt steps; the tree shows nothing under them. Full transcript remains in the event and on disk; we just don’t render it in the CLI.
-2. **E2E** — In `e2e/tests/20_rule_and_prompt.sh`, update expected output for prompt_flow and multiline_prompt: expect only the tree line and ✓, no "Command:", "Prompt:", "Final answer:" block.
-
-**Acceptance criteria.**
-
-- `response = prompt "aaa"` → tree shows prompt step line and ✓ only; no output block.
-- `response = prompt "aaa"; log "$response"` → tree shows prompt line, ✓, then the log line with the response (existing LOG handling).
-- Step `.out` files under `.jaiph/runs/` still contain full agent transcript (Reasoning, etc.).
-- E2E tests in 20_rule_and_prompt pass with updated expectations.
-
----
-
 ## Fix: Line breaks in prompt parameters should be removed and unify parameters display everywhere
 
 Bug sample (last line):
