@@ -1,7 +1,7 @@
 import { execSync, spawn, ChildProcess } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve, basename, dirname } from "node:path";
+import { join, resolve, basename, dirname, relative, isAbsolute } from "node:path";
 import type { RuntimeConfig } from "../types";
 
 /** Parsed mount specification. */
@@ -235,6 +235,40 @@ export interface DockerSpawnOptions {
   isTTY: boolean;
 }
 
+const CONTAINER_WORKSPACE = "/jaiph/workspace";
+
+/**
+ * Remap JAIPH_WORKSPACE and JAIPH_RUNS_DIR for use inside the Docker container.
+ *
+ * - JAIPH_WORKSPACE is always overridden to `/jaiph/workspace`.
+ * - JAIPH_RUNS_DIR: relative values pass through unchanged; absolute values
+ *   inside the host workspace are remapped to the equivalent container path;
+ *   absolute values outside the host workspace cause a thrown error.
+ */
+export function remapDockerEnv(
+  env: Record<string, string | undefined>,
+  hostWorkspace: string,
+): Record<string, string | undefined> {
+  const out = { ...env };
+  out.JAIPH_WORKSPACE = CONTAINER_WORKSPACE;
+
+  const runsDir = out.JAIPH_RUNS_DIR;
+  if (runsDir !== undefined && isAbsolute(runsDir)) {
+    const absWorkspace = resolve(hostWorkspace);
+    const absRunsDir = resolve(runsDir);
+    const rel = relative(absWorkspace, absRunsDir);
+    if (rel.startsWith("..") || isAbsolute(rel)) {
+      throw new Error(
+        `E_DOCKER_RUNS_DIR absolute JAIPH_RUNS_DIR "${runsDir}" is outside the host workspace "${absWorkspace}". ` +
+        `In Docker mode, JAIPH_RUNS_DIR must be relative or inside the workspace.`,
+      );
+    }
+    out.JAIPH_RUNS_DIR = `${CONTAINER_WORKSPACE}/${rel}`;
+  }
+
+  return out;
+}
+
 /**
  * Build the full `docker run` argument list.
  */
@@ -276,11 +310,12 @@ export function buildDockerArgs(opts: DockerSpawnOptions, generatedDir: string):
   const metaBase = basename(opts.metaFile);
   args.push("-v", `${metaDir}:${metaDir}:rw`);
 
-  // Environment variables
+  // Environment variables — remap workspace-related paths for the container
+  const containerEnv = remapDockerEnv(opts.env, opts.workspaceRoot);
   args.push("-e", `JAIPH_STDLIB=/jaiph/generated/jaiph_stdlib.sh`);
 
   // Forward JAIPH_* env vars (except JAIPH_STDLIB which we override)
-  for (const [key, value] of Object.entries(opts.env)) {
+  for (const [key, value] of Object.entries(containerEnv)) {
     if (key.startsWith("JAIPH_") && key !== "JAIPH_STDLIB" && value !== undefined) {
       args.push("-e", `${key}=${value}`);
     }

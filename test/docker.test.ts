@@ -7,6 +7,7 @@ import {
   resolveDockerConfig,
   buildDockerArgs,
   prepareGeneratedDir,
+  remapDockerEnv,
   type MountSpec,
   type DockerSpawnOptions,
 } from "../src/runtime/docker";
@@ -346,4 +347,130 @@ test("buildDockerArgs: multiple mounts produce multiple -v flags", () => {
   const vFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-v");
   // At least: generated dir + 2 user mounts + meta dir
   assert.ok(vFlags.length >= 4);
+});
+
+test("buildDockerArgs: overrides JAIPH_WORKSPACE to container path", () => {
+  const opts: DockerSpawnOptions = {
+    config: {
+      enabled: true,
+      image: "ubuntu:24.04",
+      network: "default",
+      timeout: 300,
+      mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
+    },
+    builtScriptPath: "/tmp/out/main.sh",
+    stdlibPath: "/usr/lib/jaiph_stdlib.sh",
+    workspaceRoot: "/home/user/project",
+    wrapperCommand: 'echo "hello"',
+    metaFile: "/tmp/out/.jaiph-run-meta.txt",
+    workflowSymbol: "main",
+    runArgs: [],
+    env: { JAIPH_WORKSPACE: "/home/user/project" },
+    isTTY: false,
+  };
+  const args = buildDockerArgs(opts, "/tmp/gen");
+  assert.ok(args.includes("JAIPH_WORKSPACE=/jaiph/workspace"));
+  assert.ok(!args.some((a) => a === "JAIPH_WORKSPACE=/home/user/project"));
+});
+
+test("buildDockerArgs: remaps absolute JAIPH_RUNS_DIR inside workspace", () => {
+  const opts: DockerSpawnOptions = {
+    config: {
+      enabled: true,
+      image: "ubuntu:24.04",
+      network: "default",
+      timeout: 300,
+      mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
+    },
+    builtScriptPath: "/tmp/out/main.sh",
+    stdlibPath: "/usr/lib/jaiph_stdlib.sh",
+    workspaceRoot: "/home/user/project",
+    wrapperCommand: 'echo "hello"',
+    metaFile: "/tmp/out/.jaiph-run-meta.txt",
+    workflowSymbol: "main",
+    runArgs: [],
+    env: { JAIPH_RUNS_DIR: "/home/user/project/custom/runs" },
+    isTTY: false,
+  };
+  const args = buildDockerArgs(opts, "/tmp/gen");
+  assert.ok(args.includes("JAIPH_RUNS_DIR=/jaiph/workspace/custom/runs"));
+});
+
+test("buildDockerArgs: passes through relative JAIPH_RUNS_DIR unchanged", () => {
+  const opts: DockerSpawnOptions = {
+    config: {
+      enabled: true,
+      image: "ubuntu:24.04",
+      network: "default",
+      timeout: 300,
+      mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
+    },
+    builtScriptPath: "/tmp/out/main.sh",
+    stdlibPath: "/usr/lib/jaiph_stdlib.sh",
+    workspaceRoot: "/home/user/project",
+    wrapperCommand: 'echo "hello"',
+    metaFile: "/tmp/out/.jaiph-run-meta.txt",
+    workflowSymbol: "main",
+    runArgs: [],
+    env: { JAIPH_RUNS_DIR: "runs_out" },
+    isTTY: false,
+  };
+  const args = buildDockerArgs(opts, "/tmp/gen");
+  assert.ok(args.includes("JAIPH_RUNS_DIR=runs_out"));
+});
+
+test("buildDockerArgs: throws for absolute JAIPH_RUNS_DIR outside workspace", () => {
+  const opts: DockerSpawnOptions = {
+    config: {
+      enabled: true,
+      image: "ubuntu:24.04",
+      network: "default",
+      timeout: 300,
+      mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
+    },
+    builtScriptPath: "/tmp/out/main.sh",
+    stdlibPath: "/usr/lib/jaiph_stdlib.sh",
+    workspaceRoot: "/home/user/project",
+    wrapperCommand: 'echo "hello"',
+    metaFile: "/tmp/out/.jaiph-run-meta.txt",
+    workflowSymbol: "main",
+    runArgs: [],
+    env: { JAIPH_RUNS_DIR: "/var/log/jaiph-runs" },
+    isTTY: false,
+  };
+  assert.throws(() => buildDockerArgs(opts, "/tmp/gen"), /E_DOCKER_RUNS_DIR/);
+});
+
+// ---------------------------------------------------------------------------
+// remapDockerEnv
+// ---------------------------------------------------------------------------
+
+test("remapDockerEnv: overrides JAIPH_WORKSPACE to container path", () => {
+  const result = remapDockerEnv({ JAIPH_WORKSPACE: "/home/user/project" }, "/home/user/project");
+  assert.equal(result.JAIPH_WORKSPACE, "/jaiph/workspace");
+});
+
+test("remapDockerEnv: relative JAIPH_RUNS_DIR is unchanged", () => {
+  const result = remapDockerEnv({ JAIPH_RUNS_DIR: "runs_out" }, "/home/user/project");
+  assert.equal(result.JAIPH_RUNS_DIR, "runs_out");
+});
+
+test("remapDockerEnv: absolute JAIPH_RUNS_DIR inside workspace is remapped", () => {
+  const result = remapDockerEnv(
+    { JAIPH_RUNS_DIR: "/home/user/project/.jaiph/runs" },
+    "/home/user/project",
+  );
+  assert.equal(result.JAIPH_RUNS_DIR, "/jaiph/workspace/.jaiph/runs");
+});
+
+test("remapDockerEnv: absolute JAIPH_RUNS_DIR outside workspace throws", () => {
+  assert.throws(
+    () => remapDockerEnv({ JAIPH_RUNS_DIR: "/var/log/runs" }, "/home/user/project"),
+    /E_DOCKER_RUNS_DIR/,
+  );
+});
+
+test("remapDockerEnv: undefined JAIPH_RUNS_DIR is left undefined", () => {
+  const result = remapDockerEnv({}, "/home/user/project");
+  assert.equal(result.JAIPH_RUNS_DIR, undefined);
 });

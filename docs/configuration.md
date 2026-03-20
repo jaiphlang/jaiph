@@ -118,6 +118,18 @@ Mount strings in `runtime.workspace` follow these forms:
 - Timeout kills container and reports `E_TIMEOUT`.
 - Network: `"default"` omits `--network` flag (uses Docker bridge). `"none"` passes `--network none`. Any other value is passed verbatim.
 
+### Docker path remapping
+
+When Docker mode is enabled, the CLI remaps workspace-related environment variables before forwarding them into the container. This ensures that run artifacts are written to paths visible on the host (via the workspace mount) rather than to host-only absolute paths that exist only outside the container.
+
+- `JAIPH_WORKSPACE` is always set to `/jaiph/workspace` inside the container, regardless of the host value.
+- `JAIPH_RUNS_DIR` handling depends on the value:
+  - **Relative path** (e.g. `custom_runs`) — passed through unchanged. Resolved relative to `/jaiph/workspace` inside the container, which maps back to the host workspace via the mount.
+  - **Absolute path inside the host workspace** (e.g. `/home/user/project/.jaiph/runs`) — remapped to the equivalent container path (e.g. `/jaiph/workspace/.jaiph/runs`).
+  - **Absolute path outside the host workspace** (e.g. `/var/log/jaiph-runs`) — the run fails immediately with `E_DOCKER_RUNS_DIR`. There is no general way to map an arbitrary host path into the container; use a relative path or a path inside the workspace instead.
+
+This remapping is transparent — you configure `JAIPH_RUNS_DIR` exactly as you would for a non-Docker run and the CLI handles the translation.
+
 ### Docker environment variable mapping
 
 Following the `JAIPH_*` convention: `JAIPH_DOCKER_ENABLED`, `JAIPH_DOCKER_IMAGE`, `JAIPH_DOCKER_NETWORK`, `JAIPH_DOCKER_TIMEOUT`. Workspace mounts are not overridable via env.
