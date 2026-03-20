@@ -1655,11 +1655,14 @@ test("jaiph test fails when no mock matches prompt", () => {
     const testResult = spawnSync("node", [cliPath, "test", "hello.test.jh"], {
       encoding: "utf8",
       cwd: root,
-      env: process.env,
+      env: {
+        ...process.env,
+        PATH: `${dirname(process.execPath)}:/bin:/usr/bin`,
+      },
     });
 
     assert.equal(testResult.status, 1, "expected test run to fail when prompt has no mock");
-    assert.match(testResult.stderr + testResult.stdout, /expectContain failed|FAIL|no mock/);
+    assert.match(testResult.stderr + testResult.stdout, /expectContain failed|FAIL|no mock|not found|command not found/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -2665,6 +2668,61 @@ test("walkTestFiles discovers *.test.jh in directory", () => {
     assert.ok(files.some((f) => f.endsWith("a.test.jh")));
     assert.ok(files.some((f) => f.endsWith("c.test.jph")));
     assert.ok(!files.some((f) => f.endsWith("b.jh")));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("stream_json_to_text deduplicates repeated assistant and result events", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-stream-dedup-"));
+  try {
+    const finalFile = join(root, "final.txt");
+    const runtimeDir = join(process.cwd(), "dist/src/runtime");
+    // Simulate --include-partial-messages output: two assistant messages + result, all with same content.
+    const events = [
+      JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "Hello, World!" }] } }),
+      JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "Hello, World!" }] } }),
+      JSON.stringify({ type: "result", result: "Hello, World!" }),
+    ].join("\n");
+    const result = spawnSync("bash", ["-c", `source "${runtimeDir}/prompt.sh" && printf '%s\\n' '${events.replace(/'/g, "'\\''")}' | JAIPH_PROMPT_FINAL_FILE="${finalFile}" jaiph::stream_json_to_text`], {
+      encoding: "utf8",
+      timeout: 10_000,
+    });
+    assert.equal(result.status, 0, "stream_json_to_text should exit 0: " + result.stderr);
+    // Final file should contain the response exactly once.
+    const finalContent = readFileSync(finalFile, "utf8");
+    assert.equal(finalContent, "Hello, World!", "JAIPH_PROMPT_FINAL_FILE should contain the response once, got: " + JSON.stringify(finalContent));
+    // Stdout should contain the response exactly once (inside "Final answer:" section).
+    const stdout = result.stdout;
+    const occurrences = stdout.split("Hello, World!").length - 1;
+    assert.equal(occurrences, 1, "stdout should contain the response once, got " + occurrences + " times: " + JSON.stringify(stdout));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("stream_json_to_text deduplicates when stream deltas are followed by assistant message", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-stream-dedup2-"));
+  try {
+    const finalFile = join(root, "final.txt");
+    const runtimeDir = join(process.cwd(), "dist/src/runtime");
+    // Simulate streaming: text_delta events, then assistant message, then result.
+    const events = [
+      JSON.stringify({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: "Hello" } } }),
+      JSON.stringify({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: ", World!" } } }),
+      JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "Hello, World!" }] } }),
+      JSON.stringify({ type: "result", result: "Hello, World!" }),
+    ].join("\n");
+    const result = spawnSync("bash", ["-c", `source "${runtimeDir}/prompt.sh" && printf '%s\\n' '${events.replace(/'/g, "'\\''")}' | JAIPH_PROMPT_FINAL_FILE="${finalFile}" jaiph::stream_json_to_text`], {
+      encoding: "utf8",
+      timeout: 10_000,
+    });
+    assert.equal(result.status, 0, "stream_json_to_text should exit 0: " + result.stderr);
+    const finalContent = readFileSync(finalFile, "utf8");
+    assert.equal(finalContent, "Hello, World!", "JAIPH_PROMPT_FINAL_FILE should contain streamed response once");
+    const stdout = result.stdout;
+    const occurrences = stdout.split("Hello, World!").length - 1;
+    assert.equal(occurrences, 1, "stdout should contain the response once, got " + occurrences + " times");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -6,44 +6,36 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Bug: Prompt messages seem to be displayed multiple times <!-- dev-ready -->
+## Bug: When Jaiph is executed in docker, nothing is saved in local .jaiph/runs directory<!-- dev-ready -->
 
-Sample output:
+**Status:** clarified after code investigation.
 
-```
-➜  jaiph git:(nightly) ✗ CI=true e2e/say_hello.jh Barbara
+**Root cause (confirmed).**
 
-Jaiph: Running say_hello.jh
+- `run.ts` sets `JAIPH_WORKSPACE` to the host workspace path.
+- `buildDockerArgs()` forwards all `JAIPH_*` values unchanged into the container.
+- In Docker mode, the workspace is mounted at `/jaiph/workspace`, but `steps.sh` prefers `JAIPH_WORKSPACE` when computing run paths.
+- Result: run artifacts are written to a host-only absolute path inside the container filesystem and are lost on `docker run --rm`.
+- Same class of bug exists for absolute `JAIPH_RUNS_DIR` values (they are treated as-is in `steps.sh`).
 
-workflow default (1="Barbara")
-  ▸ rule name_was_provided (1="Barbara")
-  ✓ 0s
-  ▸ prompt "Say hello to $1 and" (1="Barbara")
-  ✓ 8s
-  ℹ Hello, Barbara!
+**Goal.** Make Docker runs persist artifacts on the host exactly like non-Docker runs.
 
-Fun fact: **Barbara McClintock**, an American scientist, discovered "jumping genes" (transposable elements) in maize in the 1940s — decades before the scientific community accepted her work. She was largely ignored and even ridiculed for years, but was ultimately awarded the Nobel Prize in Physiology or Medicine in 1983, making her the only woman to receive an unshared Nobel in that category. She was 81 at the time. Pure persistence.Hello, Barbara!
+**Scope.**
 
-Fun fact: **Barbara McClintock**, an American scientist, discovered "jumping genes" (transposable elements) in maize in the 1940s — decades before the scientific community accepted her work. She was largely ignored and even ridiculed for years, but was ultimately awarded the Nobel Prize in Physiology or Medicine in 1983, making her the only woman to receive an unshared Nobel in that category. She was 81 at the time. Pure persistence.Hello, Barbara!
+- In Docker mode, force `JAIPH_WORKSPACE=/jaiph/workspace` inside the container (do not forward the host absolute path).
+- In Docker mode, if `JAIPH_RUNS_DIR` is absolute and points inside host workspace, remap it to the equivalent container path under `/jaiph/workspace`.
+- In Docker mode, if `JAIPH_RUNS_DIR` is absolute and outside host workspace, fail fast with a clear configuration error (unsupported in container path mapping).
+- Keep non-Docker behavior unchanged.
 
-Fun fact: **Barbara McClintock**, an American scientist, discovered "jumping genes" (transposable elements) in maize in the 1940s — decades before the scientific community accepted her work. She was largely ignored and even ridiculed for years, but was ultimately awarded the Nobel Prize in Physiology or Medicine in 1983, making her the only woman to receive an unshared Nobel in that category. She was 81 at the time. Pure persistence.
+**Acceptance criteria.**
 
-✓ PASS workflow default (8s)
-```
+- With `JAIPH_DOCKER_ENABLED=true` and default logs dir, a run writes artifacts to host `<workspace>/.jaiph/runs/...` (`run_summary.jsonl` + at least one `*.out`).
+- With `JAIPH_DOCKER_ENABLED=true` and relative `JAIPH_RUNS_DIR` (for example `runs_out`), artifacts are written under host `<workspace>/runs_out/...`.
+- With `JAIPH_DOCKER_ENABLED=true` and absolute `JAIPH_RUNS_DIR` under host workspace, artifacts are written to that host absolute path (via remap).
+- With `JAIPH_DOCKER_ENABLED=true` and absolute `JAIPH_RUNS_DIR` outside host workspace, command exits non-zero and prints a clear error about unsupported absolute path mapping.
+- Add one Docker E2E test covering the happy path artifact persistence. Gate it on Docker availability so local macOS runs can skip when Docker is unavailable.
 
----
-
-## Bug: When Jaiph is executed in docker, nothing is saved in local .jaiph/runs directory
-
-**Needs work — questions/concerns before development:**
-
-1. **Root cause identified but not documented in the task.** `buildDockerArgs()` in `docker.ts:282-287` forwards all `JAIPH_*` env vars into the container, including `JAIPH_WORKSPACE` (set to the host path at `run.ts:185`). Inside the container the workspace is mounted at `/jaiph/workspace`, but `jaiph::workspace_root()` in `steps.sh:19` returns the stale host path. Runs are therefore created under a non-existent host path on the container's ephemeral filesystem and are lost on `--rm`. Similarly, `JAIPH_RUNS_DIR` if set as an absolute host path will resolve to the wrong location. The fix should override `JAIPH_WORKSPACE=/jaiph/workspace` inside the container (and remap `JAIPH_RUNS_DIR` if it's an absolute host path). **Please confirm this root cause and include it in the task description so the developer knows exactly what to fix.**
-
-2. **Acceptance criteria are ambiguous and present two unrelated options.** "Write a Bash test that enforces jaiph in Docker" — what does "enforces" mean? A test that runs a workflow in Docker mode and asserts run artifacts exist on the host? And "Create a CI that uses Docker for all tests" is a completely different (and much larger) scope than fixing the env-var bug. **Pick one AC and make it specific.** Suggested AC: An E2E test that runs a workflow with `JAIPH_DOCKER_ENABLED=true`, then asserts that `.jaiph/runs/` on the host contains the expected artifact files (`.out`, `run_summary.jsonl`).
-
-3. **CI scope concern.** "Create a CI that uses Docker for all tests with no changing the output" would require Docker-in-Docker on GitHub Actions runners and would change the entire CI strategy. This is a separate initiative from the bug fix and should be a separate queue item if desired. **Recommend splitting: this task fixes the env-var bug + adds one Docker E2E test; a separate task addresses Docker-based CI.**
-
-4. **E2E test feasibility.** The existing E2E suite runs on `ubuntu-latest` and `macos-latest` GitHub Actions runners. Docker is available on `ubuntu-latest` but not on macOS runners. A Docker E2E test would need to be gated on Docker availability or only run in the `ubuntu-latest` matrix. **Clarify whether the Docker E2E test should be CI-only (Linux) or also run locally on macOS.**
+**Out of scope (separate task).** Migrating all CI jobs to Docker-based execution.
 
 ---
 
@@ -75,8 +67,49 @@ Fun fact: **Barbara McClintock**, an American scientist, discovered "jumping gen
 
 ---
 
-## Explore removing Node.js runtime dependency from Jaiph stdlib
+## Explore removing Node.js runtime dependency from Jaiph stdlib <!-- dev-ready -->
 
 **Goal.** Investigate whether the Jaiph bash runtime's dependency on Node.js (currently `jaiph::stream_json_to_text` in `prompt.sh:19` shells out to `node -e` for JSON stream parsing) can be replaced with a pure-bash or lightweight alternative (e.g. `jq`). This would simplify the Docker image and reduce the runtime footprint.
 
 **Scope.** Research only — identify all `node` usages in the runtime bash code, evaluate alternatives, and document findings with a recommendation. If removal is feasible, write up an implementation plan. If Node.js is the most practical choice, document why and close the ticket.
+
+---
+
+## Make step outputs persist live to artifact files (tee for all step kinds)<!-- dev-ready -->
+
+**Goal.** Ensure every step writes to its `.jaiph/runs/.../*.out`/`*.err` files incrementally while it executes (not only at step end), so logs are always tail-able in real time.
+
+**Scope.**
+
+- Update runtime step execution (`src/runtime/steps.sh`) so non-prompt steps also stream output live to artifact files (prompt already uses `tee`).
+- Preserve existing semantics for step status, `run_summary.jsonl`, and event emission (`STEP_START`/`STEP_END`).
+- Avoid double-printing in normal run output and keep test-mode behavior stable.
+- Keep file writes bounded and efficient (no per-byte shell loops; use process-level redirection/`tee` patterns).
+
+**Acceptance criteria.**
+
+- During execution of a long-running non-prompt step, the corresponding `.out` and/or `.err` file grows before step completion.
+- Existing tests for prompt output and run artifacts continue to pass.
+- Add/extend tests (unit/e2e) proving live file growth behavior for at least one non-prompt step.
+- No regression in final PASS/FAIL reporting and step timing output.
+
+---
+
+## TTY live pane: show last 10 lines of active run output under RUNNING <!-- dev-ready -->
+
+**Goal.** In interactive TTY mode, display an ephemeral live pane under the `RUNNING workflow ...` status line that shows the latest ~10 lines from active step output; remove this pane when workflow finishes.
+
+**Scope.**
+
+- TTY-only rendering in CLI run path (`src/cli/commands/run.ts`), without changing non-TTY output format.
+- Show an empty spacer line plus 10 tail lines, refreshed live and cursor-safe.
+- Source lines from active run output in a way that avoids heavy polling and avoids re-reading entire files repeatedly.
+- Keep existing tree/progress flow intact: step start/end lines, logs, and final PASS/FAIL summary remain readable and stable.
+- Add guardrails for performance (bounded buffer, throttled redraw cadence, ANSI/control-char handling).
+
+**Acceptance criteria.**
+
+- While workflow is running in a PTY/TTY, the live pane appears below `RUNNING` and updates with recent output.
+- Pane is cleared/removed before final PASS/FAIL line is shown.
+- Non-TTY runs are unchanged.
+- PTY/e2e tests are added or updated to verify pane lifecycle (appears during run, absent at completion) and no regressions in existing progress-tree behavior.
