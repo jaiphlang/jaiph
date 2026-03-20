@@ -141,7 +141,7 @@ export function collectWorkflowChildren(
       return [{ label: formatPromptLabel(s.raw), stepFunc: "jaiph::prompt" }];
     }
     if (s.type === "log") {
-      return [{ label: `log ${s.message}` }];
+      return [{ label: `ℹ ${s.message}` }];
     }
     if (s.type === "send") {
       return [{ label: `${s.channel} <- send` }];
@@ -298,7 +298,7 @@ export function collectWorkflowChildren(
       continue;
     }
     if (step.type === "log") {
-      items.push({ label: `log ${step.message}` });
+      items.push({ label: `ℹ ${step.message}` });
       continue;
     }
     if (step.type === "send") {

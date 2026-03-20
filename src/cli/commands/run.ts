@@ -299,7 +299,7 @@ const PROMPT_ARGS_DISPLAY_MAX = 96;
         const indent = "  · ".repeat(depth);
         const prefix = indent.slice(0, -2);
         const dimPrefix = colorize(prefix, "dim");
-        const logLabel = `${dimPrefix}${colorize("log", "dim")} ${logEvent.message}`;
+        const logLabel = `${dimPrefix}${colorize("ℹ", "dim")} ${logEvent.message}`;
         if (isTTY && runningInterval !== undefined) {
           process.stdout.write("\r\u001b[K\u001b[1A\r\u001b[K");
         }

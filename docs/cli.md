@@ -107,7 +107,7 @@ If a `.jh` or `.jph` file is executable and has `#!/usr/bin/env jaiph`, you can 
 
 ### Run progress and tree output
 
-During `jaiph run`, the CLI renders a tree of steps. **Tree output is the same in TTY and non-TTY:** each step appears as a line with a marker (▸ when started, ✓/✗ when done), the step kind (`workflow`, `prompt`, `function`, `rule`), and the step name. **`log` messages** also appear inline in the tree at the correct indentation depth — they have no marker, spinner, or timing; just the keyword `log` followed by the message text. Final elapsed time is shown only when a step completes (e.g. `✓ 2s`). There are no per-step live elapsed counters or in-place updates on tree lines.
+During `jaiph run`, the CLI renders a tree of steps. **Tree output is the same in TTY and non-TTY:** each step appears as a line with a marker (▸ when started, ✓/✗ when done), the step kind (`workflow`, `prompt`, `function`, `rule`), and the step name. **`log` messages** also appear inline in the tree at the correct indentation depth — they have no marker, spinner, or timing; just the `ℹ` symbol (dim/gray) followed by the message text. Final elapsed time is shown only when a step completes (e.g. `✓ 2s`). There are no per-step live elapsed counters or in-place updates on tree lines.
 
 **TTY only:** One extra line at the bottom, in the same style as the final `PASS` line, shows which workflow is running and total elapsed: `  RUNNING workflow <name> (X.Xs)` — RUNNING in yellow, the word "workflow" in bold, workflow name in default style, time in gray/dim. This line is the **only** line updated in place (e.g. every second). When the run completes, that line is removed or replaced by the final PASS/FAIL line.
 
@@ -139,7 +139,7 @@ response = prompt "Summarize the report"
 log "$response"
 ```
 
-The `log` line renders inline at the correct depth with the message text. The step's `.out` file in `.jaiph/runs/` still contains the full agent transcript for debugging.
+The `log` line renders inline at the correct depth as `ℹ <message>` (dim/gray). The step's `.out` file in `.jaiph/runs/` still contains the full agent transcript for debugging.
 
 ### Hooks
 
