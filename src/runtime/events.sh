@@ -48,6 +48,12 @@ jaiph::step_params_json() {
   local args=("$@")
   local result="["
   local i
+  local _sj_first=1
+  # Prepend dispatch channel as a named param when set by inbox dispatch.
+  if [[ -n "${JAIPH_DISPATCH_CHANNEL:-}" ]]; then
+    result+="[\"channel\",\"$(jaiph::json_escape "$JAIPH_DISPATCH_CHANNEL")\"]"
+    _sj_first=0
+  fi
   if [[ -n "$keys" ]]; then
     local old_ifs="$IFS"
     IFS=',' read -r -a keyarr <<< "$keys"
@@ -59,7 +65,8 @@ jaiph::step_params_json() {
       # Strip "key=" prefix so value may contain =
       local val="${arg#${keyarr[i]}=}"
       val="$(jaiph::json_escape "$val")"
-      if [[ $i -gt 0 ]]; then result+=","; fi
+      if [[ $_sj_first -eq 0 ]]; then result+=","; fi
+      _sj_first=0
       result+="[\"$key\",\"$val\"]"
     done
   else
@@ -67,7 +74,8 @@ jaiph::step_params_json() {
       local key="arg$((i + 1))"
       local val="${args[i]:-}"
       val="$(jaiph::json_escape "$val")"
-      if [[ $i -gt 0 ]]; then result+=","; fi
+      if [[ $_sj_first -eq 0 ]]; then result+=","; fi
+      _sj_first=0
       result+="[\"$key\",\"$val\"]"
     done
   fi

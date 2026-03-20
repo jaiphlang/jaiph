@@ -132,7 +132,7 @@ fi
 e2e::assert_file_exists "${inbox_file}" "inbox file 001-audit.txt exists after send"
 e2e::assert_contains "$(cat "${inbox_file}")" "inbox-content-check" "inbox file contains sent message"
 
-e2e::section "Dispatched step CLI output shows channel and message"
+e2e::section "Dispatched step CLI output shows channel via standard param display"
 
 # Given
 e2e::file "display_inbox.jh" <<'EOF'
@@ -166,11 +166,10 @@ Jaiph: Running display_inbox.jh
 workflow default
   ▸ workflow scanner
   ✓ <time>
-  ▸ workflow analyst (findings, "Found 3 issues in auth module")
+  ▸ workflow analyst (channel="findings")
   ✓ <time>
-  ▸ workflow reviewer (report, "Summary: Found 3 issues in auth ...")
+  ▸ workflow reviewer (channel="report")
   ✓ <time>
-    [reviewed] Summary: Found 3 issues in auth module
 ✓ PASS workflow default (<time>)
 EOF
 
