@@ -33,21 +33,9 @@ if ! jaiph run "${TEST_DIR}/meta_workflow.jh" 2>/dev/null; then
 fi
 
 # Then
-shopt -s nullglob
-run_dirs=("${TEST_DIR}/meta_runs"/*)
-shopt -u nullglob
-if [[ ${#run_dirs[@]} -lt 1 ]]; then
-  e2e::fail "expected at least one run directory under meta_runs (in-file config)"
-fi
+e2e::expect_run_file_count_at "${TEST_DIR}/meta_runs" "meta_workflow.jh" 1
+e2e::expect_run_file_at "${TEST_DIR}/meta_runs" "meta_workflow.jh" "000002-meta_workflow__ok.out" "ok"
 e2e::pass "run directory created under in-file config run.logs_dir"
-
-shopt -s nullglob
-meta_run_dirs=( "${TEST_DIR}/meta_runs/"*/*meta_workflow.jh/ )
-shopt -u nullglob
-[[ ${#meta_run_dirs[@]} -eq 1 ]] || e2e::fail "expected one run dir for meta_workflow.jh"
-meta_out_files=( "${meta_run_dirs[0]}"*.out )
-[[ ${#meta_out_files[@]} -eq 1 ]] || e2e::fail "expected one .out file for meta_workflow.jh, got ${#meta_out_files[@]}"
-e2e::assert_equals "$(<"${meta_out_files[0]}")" "ok" "meta_workflow.jh rule ok .out content"
 
 e2e::section "in-file config is used when set"
 
@@ -70,18 +58,6 @@ EOF
 jaiph run "${TEST_DIR}/override.jh" 2>/dev/null || true
 
 # Then
-shopt -s nullglob
-meta_dirs=("${TEST_DIR}/config_wins"/*)
-shopt -u nullglob
-if [[ ${#meta_dirs[@]} -lt 1 ]]; then
-  e2e::fail "expected run directory under config_wins (in-file config)"
-fi
+e2e::expect_run_file_count_at "${TEST_DIR}/config_wins" "override.jh" 1
+e2e::expect_run_file_at "${TEST_DIR}/config_wins" "override.jh" "000002-override__ok.out" "ok"
 e2e::pass "in-file config drives run.logs_dir"
-
-shopt -s nullglob
-override_run_dirs=( "${TEST_DIR}/config_wins/"*/*override.jh/ )
-shopt -u nullglob
-[[ ${#override_run_dirs[@]} -eq 1 ]] || e2e::fail "expected one run dir for override.jh"
-override_out_files=( "${override_run_dirs[0]}"*.out )
-[[ ${#override_out_files[@]} -eq 1 ]] || e2e::fail "expected one .out file for override.jh, got ${#override_out_files[@]}"
-e2e::assert_equals "$(<"${override_out_files[0]}")" "ok" "override.jh rule ok .out content"
