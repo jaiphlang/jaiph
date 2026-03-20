@@ -27,6 +27,7 @@ jaiph::stream_json_to_text() {
     let wroteReasoningHeader = false;
     let wroteFinalHeader = false;
     let sawFinalStreamDelta = false;
+    let sawFinalMessage = false;
     const append = (base, value) => (typeof value === "string" && value.length > 0 ? base + value : base);
     const pickGeneric = (obj) => {
       if (!obj || typeof obj !== "object") return "";
@@ -139,29 +140,41 @@ jaiph::stream_json_to_text() {
               writeReasoningDelta(reasoningText);
             }
             if (!sawFinalStreamDelta && finalText.length > 0) {
-              final = append(final, finalText);
-              writeFinalDelta(finalText);
+              final = finalText;
+              if (!sawFinalMessage) {
+                writeFinalDelta(finalText);
+                sawFinalMessage = true;
+              }
             }
             if (reasoningText.length > 0 || finalText.length > 0) {
               return;
             }
           }
           if (obj.type === "assistant" && obj.message && typeof obj.message.content === "string" && obj.message.content.length > 0) {
-            final = append(final, obj.message.content);
-            writeFinalDelta(obj.message.content);
+            if (!sawFinalStreamDelta) {
+              final = obj.message.content;
+              if (!sawFinalMessage) {
+                writeFinalDelta(obj.message.content);
+                sawFinalMessage = true;
+              }
+            }
             return;
           }
           if (obj.type === "result" && typeof obj.result === "string" && obj.result.length > 0) {
-            if (!sawFinalStreamDelta) {
-              final = append(final, obj.result);
+            if (!sawFinalStreamDelta && !sawFinalMessage) {
+              final = obj.result;
               writeFinalDelta(obj.result);
+              sawFinalMessage = true;
             }
             return;
           }
         }
         const generic = pickGeneric(obj);
-        final = append(final, generic);
-        writeFinalDelta(generic);
+        if (!sawFinalStreamDelta && !sawFinalMessage && generic.length > 0) {
+          final = generic;
+          writeFinalDelta(generic);
+          sawFinalMessage = true;
+        }
       } catch {
         const rawLine = `${line}\n`;
         fallback = append(fallback, rawLine);
