@@ -23,6 +23,14 @@ jobs:
       - name: Run core test suite (unit, acceptance, fixture snapshots)
         run: npm test
 
+      - name: Verify public install URL (jaiph use default path)
+        run: curl -fsSL -o /dev/null --retry 3 --retry-delay 1 https://jaiph.org/install
+
+      - name: Verify git tag for package version exists (canonical repo)
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          git ls-remote --exit-code https://github.com/jaiphlang/jaiph.git "refs/tags/v${VERSION}"
+
   e2e:
     name: E2E install and CLI workflow (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

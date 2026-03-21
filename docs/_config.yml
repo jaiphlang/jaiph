@@ -27,6 +27,6 @@ defaults:
 
 exclude:
   - vendor
-  - install
+  # Keep install-from-local.sh out of the site (developer-only).
   - install-from-local.sh
   - CNAME

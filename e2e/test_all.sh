@@ -8,6 +8,7 @@ trap e2e::cleanup EXIT
 
 TEST_SCRIPTS=(
   "e2e/tests/00_install_and_init.sh"
+  "e2e/tests/05_jaiph_use_pinned_version.sh"
   "e2e/tests/10_basic_workflows.sh"
   "e2e/tests/20_rule_and_prompt.sh"
   "e2e/tests/22_assign_capture.sh"
