@@ -582,9 +582,11 @@ function emitEnsureRecoverLoop(
   out.push(`${indent}local _jaiph_ensure_chunk`);
   out.push(`${indent}local _jaiph_ensure_prev_args=()`);
   out.push(`${indent}local _jaiph_ensure_files_arr=()`);
+  out.push(`${indent}local _jaiph_ensure_passed=0`);
   out.push(`${indent}for _jaiph_retry in $(seq 1 "\${JAIPH_ENSURE_MAX_RETRIES:-${retriesDefault}}"); do`);
   out.push(`${indent}  _jaiph_ensure_prev_files="\${JAIPH_PRECEDING_FILES:-}"`);
   out.push(`${indent}  if ${transpiledRef}${args}; then`);
+  out.push(`${indent}    _jaiph_ensure_passed=1`);
   out.push(`${indent}    break`);
   out.push(`${indent}  fi`);
   out.push(`${indent}  _jaiph_ensure_output=""`);
@@ -614,7 +616,7 @@ function emitEnsureRecoverLoop(
   }
   out.push(`${indent}  set -- "\${_jaiph_ensure_prev_args[@]}"`);
   out.push(`${indent}done`);
-  out.push(`${indent}if ! ${transpiledRef}${args}; then`);
+  out.push(`${indent}if [[ "$_jaiph_ensure_passed" -ne 1 ]]; then`);
   out.push(`${indent}  echo "jaiph: ensure condition did not pass after \${JAIPH_ENSURE_MAX_RETRIES:-${retriesDefault}} retries" >&2`);
   out.push(`${indent}  exit 1`);
   out.push(`${indent}fi`);

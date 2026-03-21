@@ -8,34 +8,25 @@ config {
   # agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
-rule project_compiles {
-  npm run build
-}
-
-rule tests_pass {
-  npm test
-}
-
-rule e2e_tests_pass {
-  npm run test:e2e
+rule ci_passes {
+  npm run test:ci
 }
 
 workflow ensure_ci_passes {
-  if ! ensure project_compiles; then
-    prompt "Fix failing compilation so npm run build passes."
-    run ensure_ci_passes
-    return 0
-  fi
-  if ! ensure tests_pass; then
-    prompt "Fix failing tests so npm test passes."
-    run ensure_ci_passes
-    return 0
-  fi
-  if ! ensure e2e_tests_pass; then
-    prompt "Fix failing e2e tests so npm run test:e2e passes."
-    run ensure_ci_passes
-    return 0
-  fi
+  ci_log_dir=".jaiph/tmp"
+  ci_log_file="${ci_log_dir}/ensure_ci_passes.last.log"
+  mkdir -p "$ci_log_dir"
+
+  ensure ci_passes recover {
+    echo "$1" > "$ci_log_file"
+    if [[ ! -s "$ci_log_file" ]]; then
+      echo "jaiph: ci failure log is empty at $ci_log_file" >&2
+      exit 1
+    fi
+    prompt "Fix failing CI so npm run test:ci passes. Failure output was saved to: $ci_log_file. Start by inspecting the tail of the log (for example: tail -n 200 '$ci_log_file') and then apply the smallest safe fix."
+  }
+
+  rm -f "$ci_log_file"
 }
 
 workflow default {

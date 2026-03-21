@@ -46,13 +46,11 @@ workflow default
   ✓ <time>
   ▸ rule dep
   ✓ <time>
-  ▸ rule dep
-  ✓ <time>
 ✓ PASS workflow default (<time>)
 EOF
 
 e2e::pass "ensure dep recover run install_deps: retry until success"
-e2e::expect_out_files "retry_single.jh" 3
+e2e::expect_out_files "retry_single.jh" 2
 
 e2e::section "ensure ... recover { stmt; stmt; } (block) runs multiple recover statements"
 rm -f "${TEST_DIR}/ready2.txt" "${TEST_DIR}/recover_ran.txt"
@@ -86,8 +84,6 @@ Jaiph: Running retry_block.jh
 workflow default
   ▸ rule ready
   ✗ <time>
-  ▸ rule ready
-  ✓ <time>
   ▸ rule ready
   ✓ <time>
 ✓ PASS workflow default (<time>)
