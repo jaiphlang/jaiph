@@ -6,6 +6,68 @@ The first `##` task in the file is always the current task.
 
 ---
 
+## Fix parser bug: multiline `prompt` inside `recover` with params <!-- dev-ready -->
+
+**Goal.** Fix the parser/runtime bug where a multiline `prompt` inside `ensure ... recover { ... }` fails with `E_PARSE unterminated prompt string`, especially when the prompt includes interpolated parameters (for example `$ci_log_file`).
+
+**Scope.**
+
+- Reproduce the bug with a minimal workflow using `ensure some_rule recover { prompt " ... $var ... " }`.
+- Fix parsing/transpilation so multiline prompt strings are valid inside `recover` blocks and parameter interpolation is preserved.
+- Ensure behavior is consistent with multiline prompts in regular workflow blocks.
+- Add/extend docs only if syntax/limitations change.
+
+**Acceptance criteria.**
+
+- A multiline prompt inside `recover` parses and runs successfully.
+- Parameter interpolation inside that multiline prompt works (e.g. `$ci_log_file` appears correctly in prompt input).
+- Add a **full e2e test** that fails before the fix and passes after it, explicitly covering multiline `prompt` in `recover` with a parameter.
+- Existing prompt and `ensure ... recover` tests continue to pass.
+
+---
+
+## Fix unrelated e2e regression from missing `.jaiph` module import <!-- dev-ready -->
+
+**Goal.** Prevent unrelated e2e scripts (e.g. `e2e/say_hello.test.jh`) from failing because `.jaiph/main.jh` imports a missing file (`implement_from_queue.jh`), even though those tests do not target queue/implementation orchestration.
+
+**Scope.**
+
+- Audit `.jaiph` entrypoints/import graph and remove/replace stale module references that can break generic workflow execution.
+- Add a regression test that reproduces the failure mode (`E_IMPORT_NOT_FOUND` from `.jaiph/main.jh`) and verifies it no longer occurs.
+- Keep behavior of existing `.jaiph` workflows unchanged other than import-path correctness.
+- Document the root cause briefly (renamed/moved module without entrypoint update) in changelog or contributor docs.
+
+**Acceptance criteria.**
+
+- Running `e2e/say_hello.test.jh` no longer fails with `.jaiph/main.jh ... E_IMPORT_NOT_FOUND`.
+- `.jaiph/main.jh` only imports modules that exist in-repo.
+- New/updated automated test fails before the fix and passes after it.
+- No regressions in `.jaiph` queue/engineer/docs workflows.
+
+---
+
+## Fix inbox routing args contract for receiver workflows <!-- dev-ready -->
+
+**Goal.** Clarify and fix argument passing for channel-routed workflows (`channel -> receiver`) so receivers can access both routed message and channel metadata predictably, without breaking existing workflows that already rely on current `$1` behavior.
+
+**Problem statement.** In `e2e/agent_inbox.jh`, the routed call displays only `(channel="report")` in the step header while receiver output may not expose expected positional args clearly. We need a stable contract (for example `$1=message, $2=channel` or equivalent documented mapping) and consistent runtime behavior.
+
+**Scope.**
+
+- Reproduce current behavior with a focused e2e fixture that logs all receiver positional args for routed calls.
+- Define the canonical receiver arg contract for routed workflow invocations and document it.
+- Implement runtime/transpiler updates so routed calls populate args per that contract.
+- Preserve backward compatibility for existing inbox workflows as much as possible; if incompatible, provide a migration path and docs update.
+
+**Acceptance criteria.**
+
+- Routed receivers can deterministically access both message payload and channel name.
+- Existing `e2e/agent_inbox.jh` behavior does not regress (output content still works).
+- Add/extend e2e coverage that asserts exact positional arg mapping for routed receivers.
+- Docs/grammar mention the finalized mapping for channel-routed workflow args.
+
+---
+
 ## Explore removing Node.js runtime dependency from Jaiph stdlib <!-- dev-ready -->
 
 **Goal.** Investigate whether the Jaiph bash runtime's dependency on Node.js (currently `jaiph::stream_json_to_text` in `prompt.sh:19` shells out to `node -e` for JSON stream parsing) can be replaced with a pure-bash or lightweight alternative (e.g. `jq`). This would simplify the Docker image and reduce the runtime footprint.
