@@ -15,11 +15,13 @@ rm -f "${TEST_DIR}/ready.txt"
 # Given
 e2e::file "retry_single.jh" <<'EOF'
 rule dep {
-  test -f ready.txt
+  f="ready.txt"
+  echo "$f"
+  test -f "$f"
 }
 
 workflow install_deps {
-  touch ready.txt
+  touch "$1"
 }
 
 workflow default {
@@ -40,7 +42,7 @@ Jaiph: Running retry_single.jh
 workflow default
   ▸ rule dep
   ✗ <time>
-  ▸ workflow install_deps
+  ▸ workflow install_deps (1="ready.txt")
   ✓ <time>
   ▸ rule dep
   ✓ <time>
@@ -50,7 +52,7 @@ workflow default
 EOF
 
 e2e::pass "ensure dep recover run install_deps: retry until success"
-e2e::expect_out_files "retry_single.jh" 0
+e2e::expect_out_files "retry_single.jh" 3
 
 e2e::section "ensure ... recover { stmt; stmt; } (block) runs multiple recover statements"
 rm -f "${TEST_DIR}/ready2.txt" "${TEST_DIR}/recover_ran.txt"

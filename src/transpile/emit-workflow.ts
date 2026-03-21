@@ -575,13 +575,44 @@ function emitEnsureRecoverLoop(
   emitRecoverStep: (s: WorkflowStepDef, indent: string) => void,
 ): void {
   const retriesDefault = String(DEFAULT_ENSURE_MAX_RETRIES);
+  out.push(`${indent}local _jaiph_ensure_output`);
+  out.push(`${indent}local _jaiph_ensure_prev_files`);
+  out.push(`${indent}local _jaiph_ensure_new_files`);
+  out.push(`${indent}local _jaiph_ensure_file`);
+  out.push(`${indent}local _jaiph_ensure_chunk`);
+  out.push(`${indent}local _jaiph_ensure_prev_args=()`);
+  out.push(`${indent}local _jaiph_ensure_files_arr=()`);
   out.push(`${indent}for _jaiph_retry in $(seq 1 "\${JAIPH_ENSURE_MAX_RETRIES:-${retriesDefault}}"); do`);
+  out.push(`${indent}  _jaiph_ensure_prev_files="\${JAIPH_PRECEDING_FILES:-}"`);
   out.push(`${indent}  if ${transpiledRef}${args}; then`);
   out.push(`${indent}    break`);
   out.push(`${indent}  fi`);
+  out.push(`${indent}  _jaiph_ensure_output=""`);
+  out.push(`${indent}  _jaiph_ensure_new_files="\${JAIPH_PRECEDING_FILES:-}"`);
+  out.push(`${indent}  if [[ "$_jaiph_ensure_new_files" == "$_jaiph_ensure_prev_files" ]]; then`);
+  out.push(`${indent}    _jaiph_ensure_new_files=""`);
+  out.push(`${indent}  elif [[ -n "$_jaiph_ensure_prev_files" ]]; then`);
+  out.push(`${indent}    _jaiph_ensure_new_files="\${_jaiph_ensure_new_files#\${_jaiph_ensure_prev_files},}"`);
+  out.push(`${indent}  fi`);
+  out.push(`${indent}  if [[ -n "$_jaiph_ensure_new_files" ]]; then`);
+  out.push(`${indent}    IFS=',' read -r -a _jaiph_ensure_files_arr <<<"$_jaiph_ensure_new_files"`);
+  out.push(`${indent}    for _jaiph_ensure_file in "\${_jaiph_ensure_files_arr[@]}"; do`);
+  out.push(`${indent}      if [[ -f "$_jaiph_ensure_file" ]]; then`);
+  out.push(`${indent}        _jaiph_ensure_chunk="$(<"$_jaiph_ensure_file")"`);
+  out.push(`${indent}        if [[ -n "$_jaiph_ensure_output" ]]; then`);
+  out.push(`${indent}          _jaiph_ensure_output="\${_jaiph_ensure_output}"$'\\n'"$_jaiph_ensure_chunk"`);
+  out.push(`${indent}        else`);
+  out.push(`${indent}          _jaiph_ensure_output="$_jaiph_ensure_chunk"`);
+  out.push(`${indent}        fi`);
+  out.push(`${indent}      fi`);
+  out.push(`${indent}    done`);
+  out.push(`${indent}  fi`);
+  out.push(`${indent}  _jaiph_ensure_prev_args=("$@")`);
+  out.push(`${indent}  set -- "$_jaiph_ensure_output"`);
   for (const r of recoverSteps) {
     emitRecoverStep(r, indent + "  ");
   }
+  out.push(`${indent}  set -- "\${_jaiph_ensure_prev_args[@]}"`);
   out.push(`${indent}done`);
   out.push(`${indent}if ! ${transpiledRef}${args}; then`);
   out.push(`${indent}  echo "jaiph: ensure condition did not pass after \${JAIPH_ENSURE_MAX_RETRIES:-${retriesDefault}} retries" >&2`);
@@ -592,7 +623,7 @@ function emitEnsureRecoverLoop(
   for (const workflow of ast.workflows) {
     const emitRecoverStep = (recoverStep: WorkflowStepDef, indent: string): void => {
       if (recoverStep.type === "run") {
-        const args = recoverStep.args ? ` ${recoverStep.args}` : "";
+        const args = recoverStep.args ? ` ${recoverStep.args}` : ' "$@"';
         const paramKeys = recoverStep.args ? parseParamKeysFromArgs(recoverStep.args) : null;
         if (paramKeys != null && paramKeys.length > 0) {
           out.push(`${indent}export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
@@ -608,7 +639,7 @@ function emitEnsureRecoverLoop(
       }
       if (recoverStep.type === "ensure") {
         const tr = transpileRuleRef(recoverStep.ref, workflowSymbol, importedWorkflowSymbols);
-        const a = recoverStep.args ? ` ${recoverStep.args}` : "";
+        const a = recoverStep.args ? ` ${recoverStep.args}` : ' "$@"';
         if (recoverStep.recover) {
           const steps =
             "single" in recoverStep.recover ? [recoverStep.recover.single] : recoverStep.recover.block;

@@ -52,3 +52,24 @@ The first `##` task in the file is always the current task.
 - Pane is cleared/removed before final PASS/FAIL line is shown.
 - Non-TTY runs are unchanged.
 - PTY/e2e tests are added or updated to verify pane lifecycle (appears during run, absent at completion) and no regressions in existing progress-tree behavior.
+
+---
+
+## Make `if ! run workflow` transpile like `if ! ensure rule` <!-- dev-ready -->
+
+**Goal.** Remove the control-flow inconsistency where `if ! run some_workflow; then ... fi` behaves differently from `if ! ensure some_rule; then ... fi`, causing generated Bash to execute `run`/`prompt` as shell commands.
+
+**Scope.**
+
+- Update parser/transpiler handling so workflow calls in `if` conditions are emitted via transpiled workflow symbols, not raw DSL tokens.
+- Match `if ! ensure` behavior semantics for negation, args forwarding, then/else branch execution, and exit-code handling.
+- Add regression coverage for:
+  - `if ! run wf; then prompt ...; run ...; fi`
+  - positive `if run wf; then ... fi`
+  - imported workflow refs (`if ! run alias.wf; then ... fi`)
+
+**Acceptance criteria.**
+
+- Generated Bash never contains raw DSL `run`/`prompt` tokens in conditional branches.
+- `if run` and `if ! run` work for local and imported workflow refs with arguments.
+- Existing `if ! ensure` tests continue to pass unchanged.
