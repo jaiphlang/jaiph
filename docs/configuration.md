@@ -7,16 +7,18 @@ redirect_from:
 
 # Jaiph Configuration
 
-Configuration controls how the Jaiph runtime behaves: which agent runs `prompt` steps, where step logs are stored, and whether shell trace (debug) is enabled. There are two sources of configuration:
+Jaiph workflows compile to Bash scripts that run agent prompts, shell commands, and rule checks. Configuration lets you control which agent backend is used, where logs go, and how the runtime behaves -- without changing your workflow logic.
 
-1. **In-file config** — a `config { ... }` block in the workflow file you pass to `jaiph run`.
-2. **Environment variables** — `JAIPH_AGENT_*` and `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`.
+There are two sources of configuration:
 
-Environment overrides in-file; in-file overrides built-in defaults. So: env wins, then in-file, then defaults.
+1. **In-file config** -- a `config { ... }` block in the workflow file you pass to `jaiph run`.
+2. **Environment variables** -- `JAIPH_AGENT_*`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, and `JAIPH_DOCKER_*`.
+
+Precedence: environment wins over in-file, which wins over built-in defaults.
 
 ## In-file config
 
-In the entry workflow file (the one you pass to `jaiph run`), you can declare runtime options in a single **config block**. The block is optional. If present, it must start with exactly `config {` on its own line. You can place it at top level anywhere before any rule, function, or workflow (e.g. after a shebang or imports). Only one config block per file; a second one causes a parse error (`E_PARSE` with file location). An unknown config key also yields `E_PARSE`; the error message lists the allowed keys.
+In the entry workflow file (the one you pass to `jaiph run`), you can declare runtime options in a single **config block**. The block is optional. If present, it must start with `config {` on its own line and can appear anywhere at the top level (conventionally placed near the top, after the shebang and imports). Only one config block per file; a second one causes a parse error (`E_PARSE` with file location). An unknown config key also yields `E_PARSE`; the error message lists the allowed keys.
 
 Inside the block, use `key = value` lines. Empty lines and lines starting with `#` are ignored. Values can be:
 
@@ -78,7 +80,7 @@ Allowed config keys:
 - `runtime.docker_timeout`: Maximum execution time in seconds (integer, default `300`).
 - `runtime.workspace`: Mount specifications (string array, default `[".:/jaiph/workspace:rw"]`).
 
-Each key enforces its expected type: assigning a string to an integer key, or a boolean to a string key, etc., produces `E_VALIDATE`. Unknown `runtime.*` keys produce `E_PARSE`.
+Each key enforces its expected type: assigning a string to an integer key, or a boolean to a string key, etc., produces `E_PARSE`. Unknown keys (including unknown `runtime.*` keys) also produce `E_PARSE`.
 
 ## Backend selection
 
@@ -110,7 +112,7 @@ Built-in defaults:
 
 Resolution order (highest wins):
 
-1. **Environment variables** — `JAIPH_AGENT_MODEL`, `JAIPH_AGENT_COMMAND`, `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_AGENT_CURSOR_FLAGS`, `JAIPH_AGENT_CLAUDE_FLAGS`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`. If a variable is set in the environment, it overrides in-file config and is not overridden when you invoke another module’s workflow via `run` (that module’s config only fills in variables that are not already set).
+1. **Environment variables** — `JAIPH_AGENT_MODEL`, `JAIPH_AGENT_COMMAND`, `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_AGENT_CURSOR_FLAGS`, `JAIPH_AGENT_CLAUDE_FLAGS`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, and `JAIPH_DOCKER_*` (see [Config to env mapping](#config-to-env-mapping) for the full list). If set in the environment, the value overrides in-file config. Agent and run variables are locked for the entire execution and not overridden when you invoke another module’s workflow via `run` (that module’s config only fills in variables that are not already set).
 2. **In-file config** — from the entry workflow’s `config { ... }` block, or from the current module’s block when execution is inside that module’s workflow (e.g. after `run other.default`).
 3. **Built-in defaults** — see above.
 

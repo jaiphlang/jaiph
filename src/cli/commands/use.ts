@@ -14,7 +14,7 @@ function toInstallRef(version: string): string | undefined {
 export function runUse(rest: string[]): number {
   const version = rest[0];
   if (!version) {
-    process.stderr.write("jaiph use requires a version (e.g. 0.3.0) or 'nightly'\n");
+    process.stderr.write("jaiph use requires a version (e.g. 0.4.0) or 'nightly'\n");
     return 1;
   }
   const ref = toInstallRef(version);

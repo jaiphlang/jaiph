@@ -37,7 +37,7 @@ layout: null
                     prompts with strict checks.
                 </p>
                 <pre><code class="language-bash">curl -fsSL https://jaiph.org/install | bash</code></pre>
-                <p class="small">The installer will install the version <strong>0.3.0</strong> of Jaiph to <strong>~/.local/bin</strong>. Check out the <a href="https://github.com/jaiphlang/jaiph/blob/nightly/CHANGELOG.md">CHANGELOG</a> to see what's new in the <strong>nightly</strong> branch and use <code>jaiph use nightly</code> to switch.</p>
+                <p class="small">The installer will install the version <strong>0.4.0</strong> of Jaiph to <strong>~/.local/bin</strong>. Check out the <a href="https://github.com/jaiphlang/jaiph/blob/nightly/CHANGELOG.md">CHANGELOG</a> to see what's new in the <strong>nightly</strong> branch and use <code>jaiph use nightly</code> to switch.</p>
                 <p>
                     <a href="https://jaiph.org/getting-started" target="_blank" rel="noopener noreferrer"
                         class="button">Docs</a>
@@ -285,7 +285,7 @@ running agent_inbox.jh
                 <pre><code class="language-bash">jaiph --version</code></pre>
                 <p>Switch installed version:</p>
                 <pre><code class="language-bash">jaiph use nightly
-jaiph use 0.3.0</code></pre>
+jaiph use 0.4.0</code></pre>
                 <h3>Running a workflow</h3>
                 <pre><code class="language-bash">./path/to/main.jh "arg1" "arg2" "arg3"</code></pre>
                 <p>Arguments are passed exactly like bash scripts (<code>$1</code>, <code>$2</code>, <code>"$@"</code>).
@@ -393,8 +393,8 @@ jaiph use 0.3.0</code></pre>
                     <dt><code>mock workflow</code> · <code>mock rule</code> · <code>mock function</code></dt>
                     <dd>In a test, replace a workflow, rule, or function with a shell body for isolation. See <a href="testing">Testing</a>.</dd>
 
-                    <dt><code>expectEqual var "value"</code> · <code>expectContain var "substring"</code></dt>
-                    <dd>Test assertions: <code>expectEqual</code> checks exact match; <code>expectContain</code> checks that the variable contains the substring. Fail the test if the check does not hold.</dd>
+                    <dt><code>expectEqual var "value"</code> · <code>expectContain var "substring"</code> · <code>expectNotContain var "substring"</code></dt>
+                    <dd>Test assertions: <code>expectEqual</code> checks exact match; <code>expectContain</code> checks substring presence; <code>expectNotContain</code> checks substring absence. Fail the test if the check does not hold.</dd>
                 </dl>
 
                 <p>All language primitives can be freely combined with bash code—they are not isolated or blocking, but
@@ -409,6 +409,8 @@ jaiph use 0.3.0</code></pre>
                     <a href="grammar">Grammar</a>
                     ·
                     <a href="testing">Testing</a>
+                    ·
+                    <a href="contributing">Contributing</a>
                     ·
                     <a href="configuration">Configuration</a>
                     ·
