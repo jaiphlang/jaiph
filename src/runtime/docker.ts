@@ -81,7 +81,7 @@ export function validateMounts(mounts: MountSpec[]): void {
 // ---------------------------------------------------------------------------
 
 const DEFAULTS: DockerRunConfig = {
-  enabled: true,
+  enabled: false,
   image: "ubuntu:24.04",
   imageExplicit: false,
   network: "default",
@@ -92,22 +92,20 @@ const DEFAULTS: DockerRunConfig = {
 /**
  * Resolve effective Docker config.
  * Precedence: env vars (`JAIPH_DOCKER_*`) > in-file RuntimeConfig > defaults.
- * CI=true disables Docker by default unless in-file override is set.
+ * Docker is disabled by default; opt in via config or env.
  */
 export function resolveDockerConfig(
   inFile: RuntimeConfig | undefined,
   env: Record<string, string | undefined>,
 ): DockerRunConfig {
-  const ciDefault = env.CI === "true";
-
-  // enabled: env > in-file > (CI default | false)
+  // enabled: env > in-file > default (false)
   let enabled: boolean;
   if (env.JAIPH_DOCKER_ENABLED !== undefined) {
     enabled = env.JAIPH_DOCKER_ENABLED === "true";
   } else if (inFile?.dockerEnabled !== undefined) {
     enabled = inFile.dockerEnabled;
   } else {
-    enabled = ciDefault ? false : DEFAULTS.enabled;
+    enabled = DEFAULTS.enabled;
   }
 
   // image: env > in-file > default

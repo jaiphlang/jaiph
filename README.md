@@ -1,6 +1,6 @@
 # ![Jaiph](docs/logo.png)
 
-[jaiph.org](https://jaiph.org) · [Getting started](docs/getting-started.md) · [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Grammar](docs/grammar.md) · [Testing](docs/testing.md) · [Hooks](docs/hooks.md) · [Inbox & Dispatch](docs/inbox.md) · [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md)
+[jaiph.org](https://jaiph.org) · [Getting started](docs/getting-started.md) · [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Sandboxing](docs/sandboxing.md) · [Grammar](docs/grammar.md) · [Testing](docs/testing.md) · [Hooks](docs/hooks.md) · [Inbox & Dispatch](docs/inbox.md) · [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md)
 
 ---
 
@@ -163,7 +163,7 @@ Tip: add `.jaiph/` to your `.gitignore`.
 
 ### Configuration
 
-Runtime behavior is controlled by in-file config and environment variables. See [configuration.md](docs/configuration.md) for details.
+Runtime behavior is controlled by in-file config and environment variables. See [configuration.md](docs/configuration.md) for details. For Docker sandboxing (beta), see [Sandboxing](docs/sandboxing.md).
 
 Typical config block:
 
@@ -177,12 +177,6 @@ config {
   agent.claude_flags = "--model sonnet-4"
   run.logs_dir = ".jaiph/runs"
   run.debug = false
-  runtime.docker_enabled = true
-  runtime.docker_image = "ubuntu:24.04"
-  runtime.docker_timeout = 300
-  runtime.workspace = [
-    ".:/jaiph/workspace:rw",
-  ]
 }
 ```
 
@@ -193,7 +187,7 @@ Important:
 - `agent.command` accepts executable + inline args (for example `cursor-agent --force`).
 - `agent.cursor_flags` / `agent.claude_flags` append backend-specific CLI flags (split on whitespace).
 - Environment variables override config values (for example `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_AGENT_CURSOR_FLAGS`, `JAIPH_AGENT_CLAUDE_FLAGS`).
-- `runtime.docker_enabled` enables an optional Docker sandbox — the container receives only transpiled bash and the shell stdlib; no Jaiph source or Node.js. When no explicit `docker_image` is set and a `.jaiph/Dockerfile` exists, the runtime auto-builds from it (the shipped Dockerfile includes Node.js, Claude Code CLI, and cursor-agent). Agent env vars (`ANTHROPIC_API_KEY`, `CURSOR_*`) are forwarded into the container. See [configuration.md](docs/configuration.md) for mount parsing rules, workspace structure, and Docker behavior details.
+- `runtime.docker_enabled` enables an optional Docker sandbox (beta) — the container receives only transpiled bash and the shell stdlib; no Jaiph source or Node.js. See [Sandboxing](docs/sandboxing.md) for full Docker configuration, mount parsing rules, workspace structure, and behavior details.
 
 ### CLI reference
 
@@ -253,4 +247,4 @@ Known limitations and gotchas:
 - [Getting started](docs/getting-started.md) — installation, first workflow, workspace setup
 - [Agent skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md) — guide for AI agents that generate or modify Jaiph workflows
 - Full docs: <https://jaiph.org/>
-- [CLI reference](docs/cli.md) · [Configuration](docs/configuration.md) · [Grammar](docs/grammar.md) · [Testing](docs/testing.md) · [Hooks](docs/hooks.md) · [Inbox & Dispatch](docs/inbox.md)
+- [CLI reference](docs/cli.md) · [Configuration](docs/configuration.md) · [Sandboxing](docs/sandboxing.md) · [Grammar](docs/grammar.md) · [Testing](docs/testing.md) · [Hooks](docs/hooks.md) · [Inbox & Dispatch](docs/inbox.md)

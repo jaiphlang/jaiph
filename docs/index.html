@@ -317,7 +317,7 @@ jaiph use 0.3.0</code></pre>
             <div class="card">
                 <dl class="primitive-list">
                     <dt><code>config { ... }</code></dt>
-                    <dd>Optional block at the top of the entry file. Sets runtime options: <code>agent.backend</code> (cursor | claude), <code>agent.command</code>, <code>agent.trusted_workspace</code>, <code>run.logs_dir</code>, <code>runtime.*</code> (Docker sandbox), etc. Values can be quoted strings, booleans, bare integers, or arrays of strings. Environment variables override. When Docker is enabled and no explicit image is set, the runtime auto-builds from <code>.jaiph/Dockerfile</code> if present (shipped with Node.js, Claude Code CLI, and cursor-agent). Agent env vars (<code>ANTHROPIC_API_KEY</code>, <code>CURSOR_*</code>) are forwarded into the container. See <a href="configuration">Configuration</a>.</dd>
+                    <dd>Optional block at the top of the entry file. Sets runtime options: <code>agent.backend</code> (cursor | claude), <code>agent.command</code>, <code>agent.trusted_workspace</code>, <code>run.logs_dir</code>, <code>runtime.*</code> (Docker sandbox — beta), etc. Values can be quoted strings, booleans, bare integers, or arrays of strings. Environment variables override. Docker sandboxing is opt-in via <code>runtime.docker_enabled = true</code>. See <a href="configuration">Configuration</a> and <a href="sandboxing">Sandboxing</a>.</dd>
 
                     <dt><code>import "file.jh" as alias</code></dt>
                     <dd>Imports rules and workflows from another Jaiph module under an alias. Jaiph compiles each module
@@ -411,6 +411,8 @@ jaiph use 0.3.0</code></pre>
                     <a href="testing">Testing</a>
                     ·
                     <a href="configuration">Configuration</a>
+                    ·
+                    <a href="sandboxing">Sandboxing</a>
                     ·
                     <a href="cli">CLI reference</a>
                     ·
