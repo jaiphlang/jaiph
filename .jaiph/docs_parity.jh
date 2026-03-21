@@ -188,6 +188,7 @@ workflow default {
     "README.md"
     "CHANGELOG.md"
     "docs/index.html"
+    "docs/_layouts/docs.html"
     "src/cli/shared/usage.ts"
   )
 

@@ -7,7 +7,9 @@ redirect_from:
 
 # Jaiph Hooks
 
-Hooks let you run custom shell commands at Jaiph lifecycle events. Typical uses: notifying external systems when a workflow finishes, logging step names or timing, or syncing run results elsewhere.
+When `jaiph run` executes a workflow, it passes through a sequence of lifecycle events: the workflow starts, individual steps begin and end, and eventually the workflow finishes. Hooks let you attach shell commands to any of these events.
+
+Typical uses: notifying external systems when a workflow finishes, logging step names or timing, or syncing run results to another service.
 
 Configuration is loaded from **global** and **project-local** `hooks.json` files. For each event, project-local commands override global ones (no merging). If no config exists, `jaiph run` runs as usual with no hooks.
 
@@ -46,9 +48,11 @@ Each file is a JSON object. Keys are event names; values are arrays of shell com
 
 For each event, **project-local** commands override **global** commands:
 
-- If project `.jaiph/hooks.json` has `workflow_end`, only those commands run for `workflow_end` (global `workflow_end` is ignored).
+- If project `.jaiph/hooks.json` defines `workflow_end` with at least one non-empty command, only those commands run for `workflow_end` (global `workflow_end` is ignored).
 - If project has no `workflow_end` or has `workflow_end: []`, global `workflow_end` commands run.
 - Other events are independent: e.g. project `step_end` does not affect global `workflow_start`.
+
+There is no way to explicitly disable a global hook from a project config. Setting an event to `[]` or omitting it causes the global commands to run. If you need to suppress a global hook for one project, replace it with a no-op command (e.g. `"workflow_end": ["true"]`).
 
 ## Payload
 
@@ -94,8 +98,11 @@ Example payload (`step_end`):
 
 ## Behavior
 
-- **Shell:** Each command is run with `sh -c <command>`. No separate process wait: Jaiph starts the command and continues; it does not wait for the hook process to exit.
+- **Shell:** Each command is run with `sh -c <command>`.
+- **Fire-and-forget:** Jaiph spawns the hook process and continues immediately. It does not wait for the hook to exit before proceeding with the workflow.
 - **Best-effort:** Hook failures do not crash or block the run. If a command exits non-zero or throws, Jaiph logs a warning to stderr and continues.
+- **Stdout ignored:** Hook command stdout is discarded. Hook stderr is forwarded to the parent process stderr, so diagnostic output from hooks appears alongside Jaiph's own warnings.
+- **Environment:** The hook process inherits the full environment of the `jaiph run` process.
 - **Working directory:** The hook process inherits the current working directory of the process that invoked `jaiph run`. To write under the project, use the `workspace` field from the payload (e.g. `"$(jq -r .workspace)/.jaiph/log.txt"`).
 - **Invalid config:** If a file exists but is not valid JSON or does not match the schema, Jaiph prints a warning and skips that file; the run continues without those hooks.
 
@@ -114,10 +121,12 @@ Example payload (`step_end`):
 ```json
 {
   "step_end": ["jq -r '.step_kind + \"/\" + .step_name' >> .jaiph/step-log.txt"],
-  "workflow_end": ["jai status --run-dir \"$(jq -r .run_dir)\" --status \"$(jq -r .status)\""]
+  "workflow_end": ["p=$(cat); jai status --run-dir \"$(echo \"$p\" | jq -r .run_dir)\" --status \"$(echo \"$p\" | jq -r .status)\""]
 }
 ```
 
-The `step_end` command appends to `.jaiph/step-log.txt` relative to the current working directory (where you ran `jaiph run`). To write under the project workspace instead, use the `workspace` field from the payload in a single `jq` (stdin is consumed once).
+The payload is delivered on stdin. Since stdin can only be consumed once per command, the `workflow_end` example captures it to a variable first and then pipes it to each `jq` call separately. The simpler `step_end` command reads stdin in a single `jq` invocation, which works directly.
+
+The `step_end` command appends to `.jaiph/step-log.txt` relative to the current working directory (where you ran `jaiph run`). To write under the project workspace instead, use the `workspace` field from the payload.
 
 **Project overrides global:** If global has `workflow_end: ["global-notify.sh"]` and project has `workflow_end: ["project-notify.sh"]`, only `project-notify.sh` runs.

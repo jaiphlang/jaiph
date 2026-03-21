@@ -13,10 +13,11 @@ This document is a **skill guide** for AI agents that generate or modify Jaiph w
 
 **Concepts:**
 
-- **Rules** — Named blocks of shell commands used as checks or actions. Only `ensure` and shell are allowed inside a rule. Rules run in a read-only wrapper.
-- **Workflows** — Named sequences of steps: `ensure` (call a rule), `run` (call a workflow), `prompt` (agent), or shell. Workflows orchestrate execution.
+- **Rules** — Named blocks of shell commands used as checks or actions. Only `ensure` and shell are allowed inside a rule. Rules run in a read-only wrapper (Linux: mount namespace; macOS: child-shell isolation).
+- **Workflows** — Named sequences of steps: `ensure` (call a rule), `run` (call a workflow), `prompt` (agent), `log`/`logerr` (messages), `send`/`route` (inbox), or shell. Workflows orchestrate execution.
+- **Functions** — Named shell function blocks. Callable directly by name in shell context; cannot be used with `ensure` or `run`, and cannot be exported.
 - **ensure** — Runs a rule; succeeds if exit code is 0. Optional `recover` turns it into a bounded retry loop.
-- **run** — Invokes a workflow (local or via import alias). Must reference a workflow, not a shell command.
+- **run** — Invokes a workflow (local or via import alias). Must reference a workflow, not a shell command. **Does not forward positional args implicitly** — pass them explicitly (e.g. `run wf "$1"`).
 - **prompt** — Sends a string to the configured agent. Optional `returns` schema validates one line of JSON from the agent.
 
 **Audience:** Agents that produce or edit `.jh` files. For full language semantics and validation rules, see [Grammar](grammar.md) and [Configuration](configuration.md).
@@ -55,10 +56,10 @@ Prefer composable modules over one large file.
 - **Definitions:** `rule name { ... }`, `workflow name { ... }`, `function name() { ... }` (parentheses optional). Optional `export` before `rule` or `workflow` marks it as public (see [Grammar](grammar.md)). Optional `config { ... }` at the top of a file sets agent, run, and runtime options. Config values can be quoted strings, booleans (`true`/`false`), bare integers, or bracket-delimited arrays of strings (see [Grammar](grammar.md) and [Configuration](configuration.md)).
 - **Top-level locals:** `local name = value` declares a module-scoped variable. Values may be double-quoted strings (multi-line, same quoting rules as `prompt`), single-quoted strings, or bare values. The variable is accessible as `$name` inside all rules, functions, and workflows in the same module. Variable names share the unified namespace with rules, workflows, and functions — duplicates are `E_PARSE`. Not exportable; module-scoped only.
 - **Steps:**
-  - **ensure** — `ensure ref [args...]` runs a rule (local or `alias.rule_name`); args are passed to the shell. Optionally `ensure ref [args] recover <body>`: bounded retry loop (run rule; on failure run recover body; repeat until the rule passes or max retries, then exit 1). Max retries default to 10; override with `JAIPH_ENSURE_MAX_RETRIES`.
-  - **run** — `run ref [args...]` runs a workflow (local or `alias.workflow_name`); args are passed to the workflow.
-  - **log** — `log "message"` displays a message in the progress tree at the current depth and writes to **stdout**. Double-quoted string; shell variable interpolation works at runtime. No spinner, no timing — a static annotation. Useful for marking workflow phases (e.g. `log "Starting analysis phase"`).
-  - **logerr** — `logerr "message"` is identical to `log` except the message is written to **stderr** instead of stdout. In the progress tree, `logerr` lines display with a red `!` instead of the dim `ℹ` used by `log`. Useful for error messages or warnings.
+  - **ensure** — `ensure ref [args...]` runs a rule (local or `alias.rule_name`); args are passed to the shell. Optionally `ensure ref [args] recover <body>`: bounded retry loop (run rule; on failure run recover body; repeat until the rule passes or max retries, then exit 1). Max retries default to 10; override with `JAIPH_ENSURE_MAX_RETRIES`. Inside a recover body, `$1` is set to the captured output of the failed ensure step so the recover logic can inspect what went wrong.
+  - **run** — `run ref [args...]` runs a workflow (local or `alias.workflow_name`); explicit args are passed to the workflow. **`run` does not forward `$@` by default** — if you need positional args in the target workflow, pass them explicitly (e.g. `run wf "$1"`).
+  - **log** — `log "message"` displays a message in the progress tree at the current depth and writes to **stdout**. Double-quoted string (single-line only); shell variable interpolation works at runtime. No spinner, no timing — a static annotation. Useful for marking workflow phases (e.g. `log "Starting analysis phase"`).
+  - **logerr** — `logerr "message"` is identical to `log` except the message is written to **stderr** instead of stdout. In the progress tree, `logerr` lines display with a red `!` instead of the dim `ℹ` used by `log`. Same single-line quoting rules as `log`. Useful for error messages or warnings.
   - **Send** — `channel <- echo "data"` sends content to a named inbox channel; the channel identifier is always on the left side of `<-`. Standalone `channel <-` forwards `$1`. Combining capture and send (`name = channel <- cmd`) is `E_PARSE`. See [Inbox & Dispatch](inbox.md).
   - **Route** — `channel -> workflow` (inside an orchestrator workflow) registers a static routing rule: when a message arrives on `channel`, call `workflow` with the message as `$1`. Multiple targets are comma-separated (`ch -> wf1, wf2`). Routes are declarations, not executable steps. The dispatch queue drains after the orchestrator completes; max depth 100 guards against infinite loops. See [Inbox & Dispatch](inbox.md).
   - **Assignment capture** — `name = ensure ref`, `name = run ref`, or `name = <shell_command>` captures that step's stdout into `name`. Exit semantics unchanged: failure fails the step unless you add `|| true`. Only stdout is captured; stderr not unless redirected (e.g. `2>&1`). See [Grammar](grammar.md).
@@ -74,7 +75,7 @@ Rules:
 - `jaiph run <file.jh>` executes `workflow default` in that file. The file must define a `workflow default` (the runtime checks for it and exits with an error if missing).
 - Inside a workflow, `run` targets a workflow (local or `alias.workflow_name`), not a raw shell command.
 - Inside a rule, only `ensure` and shell commands are allowed; `run` is forbidden. Use `ensure` to call another rule, or move the call to a workflow.
-- Rules run in a read-only wrapper; put mutating operations in workflows.
+- Rules run in a read-only wrapper (Linux with `unshare`: filesystem mounted read-only; macOS: child-shell isolation only — no true FS lock); put mutating operations in workflows.
 - **Unified namespace:** Rules, workflows, functions, and top-level locals share a single name space per module. Using the same name for two items (e.g. a rule `foo` and a local `foo`) is a compile error (`E_PARSE`).
 - **Calling conventions (compiler-enforced):** `ensure` must target a rule — using it on a workflow or function is `E_VALIDATE`. `run` must target a workflow — using it on a rule or function is `E_VALIDATE`. Functions are called directly by name in shell context.
 
@@ -110,7 +111,7 @@ Arguments after the file path are passed to `workflow default` as positional par
 
 ## Minimal Sample (Agent Reference)
 
-Use this as a shape to adapt. Paths and prompts should match the target repository. All three files live under `.jaiph/`. Imports in `main.jh` are relative to that file (e.g. `"readiness.jh"` resolves to `.jaiph/readiness.jh`). When you run `jaiph run .jaiph/main.jh "implement feature X"`, the default workflow receives `"implement feature X"` as `$1`; `run implement` forwards positional args, so the implement workflow's prompt sees `$1` as well.
+Use this as a shape to adapt. Paths and prompts should match the target repository. All three files live under `.jaiph/`. Imports in `main.jh` are relative to that file (e.g. `"readiness.jh"` resolves to `.jaiph/readiness.jh`). When you run `jaiph run .jaiph/main.jh "implement feature X"`, the default workflow receives `"implement feature X"` as `$1`. Note that `run` does not forward args implicitly, so the default workflow passes `"$1"` explicitly to `run implement "$1"` so the implement workflow's prompt can use `$1`.
 
 **File: .jaiph/readiness.jh**
 
@@ -166,7 +167,7 @@ workflow implement {
 
 workflow default {
   run readiness.default
-  run implement
+  run implement "$1"
   run verification.default
 }
 ```

@@ -1,14 +1,38 @@
 ---
 title: Inbox & Dispatch
-layout: default
-nav_order: 7
+permalink: /inbox
+redirect_from:
+  - /inbox.md
 ---
 
 # Inbox & Dispatch
 
-Jaiph provides first-class event passing between agent workflows via an
-in-memory dispatch loop. One workflow produces output with the **send
-operator** (`<-`), another reacts to it via a **route declaration** (`->`).
+When a workflow produces output that another workflow needs to react to,
+you need a way to pass data between them. Jaiph solves this with an
+in-memory dispatch loop called the **inbox**.
+
+One workflow produces output with the **send operator** (`<-`), another
+reacts to it via a **route declaration** (`->`). The runtime handles
+dispatch — no file watchers, no polling, no external message brokers.
+
+```jh
+workflow researcher {
+  findings <- echo '## analysis results'
+}
+
+workflow analyst {
+  echo "Received: $1"
+}
+
+workflow default {
+  run researcher
+  findings -> analyst
+}
+```
+
+In this example, `researcher` sends data to the `findings` channel.
+The `default` workflow routes `findings` messages to `analyst`, which
+receives the message content as `$1`.
 
 ## Design principles
 
@@ -22,8 +46,11 @@ operator** (`<-`), another reacts to it via a **route declaration** (`->`).
 
 ### Send operator: `<channel> <- <command>`
 
-The channel identifier is always on the left side. Writes content to the
-next inbox slot and signals the runtime to dispatch.
+The channel identifier is always on the left side of the `<-` operator.
+Channel names must be valid identifiers (`[A-Za-z_][A-Za-z0-9_]*`).
+
+The send operator captures the command's stdout, writes it to the next
+inbox slot, and signals the runtime to dispatch.
 
 ```jh
 workflow researcher {
@@ -31,14 +58,17 @@ workflow researcher {
 }
 ```
 
-The send operator may be followed by a shell command. If no command is
-present, it forwards the workflow's `$1` argument:
+If no command follows `<-`, the workflow's `$1` argument is forwarded:
 
 ```jh
 workflow forwarder {
   findings <-
 }
 ```
+
+The `<-` operator is only recognized when it appears outside of quoted
+strings. The parser tracks quote state to avoid false matches inside
+shell commands.
 
 **Transpilation:**
 
@@ -67,9 +97,10 @@ sequentially in declaration order, each receiving the same message:
 findings -> analyst, reviewer
 ```
 
-**Note:** Route declarations are static routing rules, not executable
-statements. They are stored in `routes` on the workflow definition, not in
-`steps`.
+Route declarations are static routing rules, not executable statements.
+They are stored in `routes` on the workflow definition, not in `steps`.
+The compiler validates that all target workflow references exist — an
+unknown target is an `E_VALIDATE` error.
 
 ### Capture + send is a parse error
 
@@ -100,27 +131,37 @@ zero-padded monotonic counter scoped to the run.
 
 ## Runtime dispatch loop
 
+Only the workflow that declares route rules gets the inbox infrastructure.
+The compiler emits `jaiph::inbox_init` and `jaiph::register_route` calls
+at the top of that workflow's implementation, and `jaiph::drain_queue` at
+the end. Any child workflow called via `run` (or via dispatch) inherits
+the inbox environment and can call `jaiph::send`.
+
 ```
-1. Register all routing rules (jaiph::register_route calls).
-2. Execute orchestrator workflow top-to-bottom.
-3. When <- is executed: write message to inbox dir, append to file-based queue.
-4. After orchestrator completes, drain the dispatch queue:
+1. jaiph::inbox_init creates the inbox directory and resets state.
+2. jaiph::register_route populates the routing table.
+3. Execute the workflow steps top-to-bottom.
+4. When <- is executed: write message to inbox dir, append to queue file.
+5. After all steps complete, jaiph::drain_queue processes the queue:
    a. Read next unprocessed entry from the queue file.
    b. Look up route for channel.
    c. If route exists, invoke each target workflow with message as $1.
    d. Invoked workflows may call jaiph::send, growing the queue.
-   e. Repeat until queue is empty or depth limit (100) reached.
-5. Run ends.
+   e. Repeat until queue is empty or depth limit reached.
+6. Run ends.
 ```
 
 ### Implementation notes
 
 Routes are stored as a newline-delimited list (`channel<TAB>targets`) instead
 of bash associative arrays, avoiding known bugs in bash 3.2 where reading a
-non-existent key can return the last inserted value. The dispatch queue and
-sequence counter are file-backed (`inbox/.queue`, `inbox/.seq`) so that
-increments and enqueues performed inside subshells (e.g. `run_step` pipelines)
-survive back into the parent process.
+non-existent key can return the last inserted value.
+
+The dispatch queue (`inbox/.queue`) uses `channel:NNN` entries (e.g.
+`findings:001`). The sequence counter (`inbox/.seq`) is also file-backed.
+Both are files rather than shell variables so that increments and enqueues
+performed inside subshells (e.g. `run_step` pipelines) survive back into the
+parent process.
 
 ## Error semantics
 
@@ -129,18 +170,18 @@ survive back into the parent process.
 - **Dispatched workflow exits non-zero:** dispatch loop halts immediately
   (fail-fast), consistent with `set -e`.
 - **Circular sends:** allowed — the queue grows naturally. A max dispatch
-  depth of 100 guards against infinite loops (`E_DISPATCH_DEPTH`).
+  depth guards against infinite loops (`E_DISPATCH_DEPTH`). The default
+  limit is 100 and can be overridden with `JAIPH_INBOX_MAX_DISPATCH_DEPTH`.
 
 ## Trigger contract
 
-- Called workflow receives the channel name as a named parameter
-  (`channel=<name>`) and the message content as the next positional argument.
-  At runtime the dispatch invocation sets `JAIPH_STEP_PARAM_KEYS='channel'`
-  so the standard parameter display pipeline picks up the channel
-  automatically — no custom rendering logic required.
-- `JAIPH_DISPATCH_CHANNEL` is still set in the environment so that
-  `events.sh` can tag JSONL events with `"dispatched":true` and
-  `"channel":"…"` metadata.
+- The dispatched workflow receives the message content as `$1`. The channel
+  name is available via the `JAIPH_DISPATCH_CHANNEL` environment variable.
+- The runtime sets `JAIPH_STEP_PARAM_KEYS='channel'` on the dispatch
+  invocation so that the standard parameter display pipeline renders the
+  channel name automatically (e.g. `workflow analyst (channel="findings")`).
+- `JAIPH_DISPATCH_CHANNEL` is also used by the event system to tag JSONL
+  events with `"dispatched":true` and `"channel":"…"` metadata.
 - Workflows remain directly callable: `jaiph run analyst "some content"`.
 
 ## Progress tree integration
@@ -148,11 +189,9 @@ survive back into the parent process.
 - Route declarations appear as nodes in the progress tree.
 - Dispatched workflow calls emit `STEP_START`/`STEP_END` events with
   `dispatched: true` and `channel: "<channel>"` metadata.
-- The channel name is passed as a named parameter (`channel=<name>`), so
-  the standard `formatNamedParamsForDisplay` path renders it using the
-  same `key="value"` format as any other step parameter:
-  `▸ workflow analyst (channel="findings")`. No custom display code is
-  needed for dispatch.
+- The channel name is displayed using the same `key="value"` format as
+  any other step parameter:
+  `▸ workflow analyst (channel="findings")`.
 - Dispatched step output is not displayed in the tree. Use `log` within
   the dispatched workflow to show output in the tree. The runtime embeds
   stdout content in the `STEP_END` event (`out_content` field) for error

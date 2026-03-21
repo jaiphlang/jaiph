@@ -35,7 +35,7 @@ All Docker-related keys live under `runtime.*` in the config block:
 | `runtime.docker_timeout` | integer | `300` | Maximum execution time in seconds. |
 | `runtime.workspace` | string array | `[".:/jaiph/workspace:rw"]` | Mount specifications. |
 
-Each key enforces its expected type: assigning a string to an integer key, or a boolean to a string key, etc., produces `E_VALIDATE`. Unknown `runtime.*` keys produce `E_PARSE`.
+Each key enforces its expected type: assigning a string to an integer key, or a boolean to a string key, etc., produces `E_PARSE`. Unknown `runtime.*` keys also produce `E_PARSE`.
 
 ### Environment variable overrides
 
@@ -57,7 +57,16 @@ Mount strings in `runtime.workspace` follow these forms:
 
 ```
 /jaiph/
-  generated/          # transpiled bash + jaiph_stdlib.sh, mounted read-only
+  generated/          # mounted read-only
+    <script>.sh       # transpiled bash script(s)
+    jaiph_stdlib.sh   # shell stdlib
+    runtime/          # shell runtime modules
+      events.sh
+      steps.sh
+      prompt.sh
+      inbox.sh
+      sandbox.sh
+      test-mode.sh
   workspace/          # the mount targeting /jaiph/workspace (read-write root)
     .jaiph/
       runs/
@@ -68,8 +77,9 @@ Mount strings in `runtime.workspace` follow these forms:
             ...
 ```
 
-- `/jaiph/generated/` contains the transpiled `.sh` script and `jaiph_stdlib.sh`. Both mounted read-only. `JAIPH_STDLIB` is set to `/jaiph/generated/jaiph_stdlib.sh` inside the container.
-- Container receives **only** transpiled bash and the shell stdlib. No Jaiph source files, no TypeScript, no Node.js.
+- `/jaiph/generated/` contains the transpiled `.sh` script(s), `jaiph_stdlib.sh`, and the `runtime/` shell modules. All mounted read-only. `JAIPH_STDLIB` is set to `/jaiph/generated/jaiph_stdlib.sh` inside the container.
+- The container working directory is set to `/jaiph/workspace`.
+- Container receives **only** transpiled bash and the shell runtime. No Jaiph source files, no TypeScript, no Node.js.
 
 ## Docker behavior
 
@@ -78,7 +88,7 @@ Mount strings in `runtime.workspace` follow these forms:
 - Step output reporting: the bash stdlib always embeds `out_content` in `STEP_END` events (and `err_content` for failed steps), regardless of dispatch status. The CLI uses this embedded content exclusively for display — it never reads `out_file`/`err_file` from disk for rendering. This makes step output identical in Docker and non-Docker modes. Embedded content is capped at 1 MB; larger output is truncated with a `[truncated]` marker. The full output remains in `out_file`/`err_file` on disk for debugging and archival.
 - Docker TTY stream merging: Docker with `-t` merges the container's stderr into stdout. The CLI demuxes event lines from user output via line-based buffering. Ordering and timing of interleaved stdout/stderr may still differ from non-Docker mode — this is a known limitation.
 - Docker missing — `E_DOCKER_NOT_FOUND` (no silent fallback).
-- Image auto-pulled if missing; pull failure is fatal.
+- Image auto-pulled if missing; pull failure produces `E_DOCKER_PULL`.
 - Timeout kills container and reports `E_TIMEOUT`.
 - Network: `"default"` omits `--network` flag (uses Docker bridge). `"none"` passes `--network none`. Any other value is passed verbatim.
 
@@ -89,7 +99,7 @@ When no explicit `docker_image` is configured (neither `JAIPH_DOCKER_IMAGE` env 
 1. The runtime runs `docker build` from that Dockerfile and tags the result as `jaiph-runtime:latest`.
 2. The built image is used for the run instead of the default `ubuntu:24.04`.
 
-If `.jaiph/Dockerfile` does not exist, the runtime falls back to the default image (`ubuntu:24.04`). When an explicit image is configured, the Dockerfile is ignored entirely.
+Build failure produces `E_DOCKER_BUILD`. If `.jaiph/Dockerfile` does not exist, the runtime falls back to the default image (`ubuntu:24.04`). When an explicit image is configured, the Dockerfile is ignored entirely.
 
 The shipped `.jaiph/Dockerfile` includes:
 
@@ -97,7 +107,7 @@ The shipped `.jaiph/Dockerfile` includes:
 - **Node.js** latest LTS (required by `jaiph::stream_json_to_text` in `prompt.sh`)
 - **Claude Code CLI** (`@anthropic-ai/claude-code`)
 - **cursor-agent** (Cursor's agent backend)
-- Standard utilities: `bash`, `curl`, `git`, `ca-certificates`
+- Standard utilities: `bash`, `curl`, `git`, `ca-certificates`, `gnupg`
 
 ## Agent environment variable forwarding
 

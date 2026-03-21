@@ -13,7 +13,7 @@ The Jaiph CLI compiles and runs workflow files (`.jh` / `.jph`), runs tests, and
 
 - **Run a workflow** — `jaiph run <file.jh>` or pass the file as the first argument: `jaiph <file.jh> [args...]`. Requires a `workflow default` in that file.
 - **Run tests** — `jaiph test` discovers and runs all `*.test.jh` / `*.test.jph` under the workspace; or pass a directory or a single test file.
-- **Compile only** — `jaiph build [--target <dir>] [path]` writes shell scripts to a temp dir (or `--target` path) without executing.
+- **Compile only** — `jaiph build [--target <dir>] [path]` compiles `.jh`/`.jph` files into shell scripts without executing. Without `--target`, compiled scripts are written alongside the source files.
 - **Setup** — `jaiph init [workspace-path]` creates `.jaiph/` with a bootstrap workflow and synced skill guide; `jaiph use <version|nightly>` reinstalls the global Jaiph binary.
 
 **Commands:** `build`, `run`, `test`, `init`, `use`. Global options: `jaiph --help`, `jaiph --version` (or `-h`, `-v`).
@@ -46,9 +46,9 @@ Compile `.jh` and `.jph` files into shell scripts.
 jaiph build [--target <dir>] [path]
 ```
 
-If `path` is omitted, the current directory (`./`) is used. Use `--target` to write compiled scripts to a specific directory (required when used: `--target <dir>`).
+If `path` is omitted, the current directory (`./`) is used. Without `--target`, compiled `.sh` scripts are written alongside the source files. Use `--target` to redirect output to a specific directory.
 
-- **Directory mode** (`jaiph build ./` or `jaiph build ./flows`) — compiles all `.jh`/`.jph` files found in the directory tree and reports all errors.
+- **Directory mode** (`jaiph build ./` or `jaiph build ./flows`) — compiles all `.jh`/`.jph` files found in the directory tree (test files `*.test.jh`/`*.test.jph` are excluded) and reports all errors.
 - **Single-file mode** (`jaiph build file.jh`) — compiles only the specified file and its transitive imports. Parse errors in sibling files are ignored.
 
 Examples:
@@ -109,9 +109,9 @@ If a `.jh` or `.jph` file is executable and has `#!/usr/bin/env jaiph`, you can 
 
 During `jaiph run`, the CLI renders a tree of steps. **Tree output is the same in TTY and non-TTY:** each step appears as a line with a marker (▸ when started, ✓/✗ when done), the step kind (`workflow`, `prompt`, `function`, `rule`), and the step name. **`log` messages** also appear inline in the tree at the correct indentation depth — they have no marker, spinner, or timing; just the `ℹ` symbol (dim/gray) followed by the message text. Final elapsed time is shown only when a step completes (e.g. `✓ 2s`). There are no per-step live elapsed counters or in-place updates on tree lines.
 
-**TTY only:** One extra line at the bottom, in the same style as the final `PASS` line, shows which workflow is running and total elapsed: `  RUNNING workflow <name> (X.Xs)` — RUNNING in yellow, the word "workflow" in bold, workflow name in default style, time in gray/dim. This line is the **only** line updated in place (e.g. every second). When the run completes, that line is removed or replaced by the final PASS/FAIL line.
+**TTY only:** One extra line at the bottom shows which workflow is running and total elapsed: `▸ RUNNING workflow <name> (X.Xs)` — `▸ RUNNING` in yellow, `workflow` in bold, workflow name in default style, time in dim. This line is the **only** line updated in place (every second). When the run completes, that line is cleared and replaced by the final PASS/FAIL line.
 
-**Non-TTY:** No RUNNING line and no in-place updates; only completed step lines are printed.
+**Non-TTY:** No RUNNING line and no in-place updates. Step start lines (▸) and completion lines (✓/✗) print as they occur. Raw stderr from the child process is echoed to stderr (in TTY mode it is captured but not echoed).
 
 For **parameterized** invocations—when you pass arguments to a workflow, prompt, function, or rule—the tree shows those argument **values** inline in gray immediately after the step name. Format:
 
@@ -134,7 +134,7 @@ If no parameters are passed, the line is unchanged (e.g. `▸ workflow default`)
 
 **Prompt steps show no output in the tree.** When a `prompt` step completes, only the step line and ✓ appear — no Command, Prompt, Reasoning, or Final answer block. To display agent output in the tree, use `log` explicitly:
 
-```jh
+```jaiph
 response = prompt "Summarize the report"
 log "$response"
 ```
@@ -196,7 +196,7 @@ Examples:
 
 ```bash
 jaiph use nightly
-jaiph use 0.3.0
+jaiph use 0.4.0
 ```
 
 ## File extensions

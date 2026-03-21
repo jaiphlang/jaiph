@@ -1,4 +1,15 @@
-# Unreleased
+# 0.4.0
+
+## Summary
+
+- Docker sandboxing as an opt-in (beta) feature: disabled by default, with explicit config required to enable. New dedicated documentation page consolidates setup and options.
+- Agent inbox (channels) added: workflows can send (`channel <- echo "Message"`) and receive (`channel -> workflow`) messages via named channels for async event handling.
+- `ensure [rule] recover` now passes failed rule output as a parameter (`$1`) to the recover block, enabling context-aware recovery.
+- Logging system overhaul: `log` now outputs to stdout (for informational messages) while `logerr` is introduced to write errors/warnings to stderr.
+- Run artifact naming and persistence improved: sequence-prefixed filenames guarantee unique, ordered artifacts across subshells and loops.
+- E2E test suite greatly expanded: high-level helpers now assert on exact run artifacts and CLI output, improving coverage and test clarity.
+
+## All changes
 
 - **`ensure ... recover` now forwards failed ensure output to recover as `$1`** — In recover loops, Jaiph now captures the failed ensure invocation output (`stdout` + `stderr`) and temporarily binds it to positional arg `$1` while executing the recover body. This enables patterns like `ensure ci_passes recover { echo "$1"; ... }` and allows recover logic to inspect failure details directly. Original workflow args are restored after each recover attempt. Existing bounded retry behavior and `JAIPH_ENSURE_MAX_RETRIES` handling remain unchanged.
 - **Docker sandboxing is now opt-in (beta)** — Docker sandbox is no longer enabled by default on local machines. `runtime.docker_enabled` defaults to `false` in all environments; set `runtime.docker_enabled = true` or `JAIPH_DOCKER_ENABLED=true` to enable it. The CI-specific default logic (`CI=true` → disabled) is removed — the default is simply `false` everywhere. Docker sandboxing documentation is moved from `configuration.md` to a new dedicated page: [Sandboxing](docs/sandboxing.md). All references in README, getting-started, configuration, and the homepage now link to the sandboxing page and mark the feature as beta.
@@ -49,6 +60,16 @@
 
 # 0.3.0
 
+## Summary
+
+- Introduced typed prompt schemas via `returns '{ ... }'` with runtime JSON validation and exported field variables.
+- Added assignment capture for any step (`prompt`, `ensure`, `run`, or shell) with bash-consistent behavior.
+- Added project-local and global hooks for workflow/step lifecycle events.
+- Added Claude CLI backend support behind configurable `agent.backend`.
+- Improved run UX with parameter-rich tree output and bounded `ensure ... recover` retry flow.
+
+## All changes
+
 - **Typed `prompt` schema validation with `returns`** — You can declare the shape of the agent's JSON response with `result = prompt "..." returns '{ type: string, risk: string, summary: string }'`. The schema is **flat only** (no nested objects, arrays, or union types in v1). Allowed field types: `string`, `number`, `boolean`. The compiler appends instructions to the prompt; the runtime parses the last non-empty line as JSON and validates it. Valid response sets the capture variable to the raw JSON and exports `name_field` for each field (e.g. `$result_type`, `$result_risk`). Distinct failure modes: JSON parse error (exit 1), missing required field (exit 2), type mismatch (exit 3). Unsupported schema type or invalid schema syntax fails at compile time with `E_SCHEMA`; prompt with `returns` but without a capture variable fails with `E_PARSE`. Line continuation with `\` after the prompt string is supported for multiline `returns` clauses. Test with `jaiph test` by mocking the prompt with valid JSON that satisfies the schema.
 - **Inline brace-group short-circuit (`cmd || { ... }`)** — The parser now accepts short-circuit brace-group patterns in rule, workflow, and function bodies. Single-line `cmd || { echo "failed"; exit 1; }` and multi-line `cmd || { ... }` compile and transpile correctly. Existing `if ! cmd; then ...; fi` patterns continue to work.
 - **Prompt line in tree: prompt preview and capped args** — The progress tree line for a `prompt` step now shows a truncated preview of the prompt text (first 24 characters, then `...` if longer) and the argument list `(arg1, arg2, ...)` is capped at 24 characters total (truncated with `...` if longer). Example: `▸ prompt "Say hello to $1 and..." (greeting)` instead of only `▸ prompt (greeting)`. Non-prompt steps are unchanged. Makes it easier to tell which prompt is running when multiple prompts exist and keeps tree lines bounded.
@@ -60,6 +81,16 @@
 - **Run tree: step parameters inline** — When `jaiph run` prints the step tree, `workflow`, `prompt`, and `function` steps invoked with arguments show those argument **values** inline in gray after the step name (e.g. `▸ function fib (3)`, `▸ workflow docs_page (docs/cli.md, strict)`). Format: comma-separated values in parentheses; no parameter names or internal refs (e.g. `::impl`) are shown. Values are truncated to 32 characters with `...` when longer. Parameter order is stable for diff-friendly output. Steps without parameters are unchanged.
 
 # 0.2.0
+
+## Summary
+
+- Added first-class runtime config and backend settings through `config { ... }`.
+- Expanded test capabilities with first-class mocking for workflows, rules, and functions.
+- Improved run/test reliability through normalized progress output and CI alignment.
+- Strengthened workflow composition with nested flows and rule/workflow boundary checks.
+- Standardized on `.jh` while keeping `.jph` backward-compatible.
+
+## All changes
 
 - `config { ... }` block for runtime behavior: `agent.backend` (`"cursor"` | `"claude"`), `agent.trusted_workspace`, and existing env-backed options
 - Claude CLI as alternative agent backend when `agent.backend = "claude"` (with clear error if `claude` not in PATH)
@@ -81,6 +112,16 @@
 - `run` is not allowed inside a `rule` block; use `ensure` to call another rule or move the call to a workflow
 
 # 0.1.0
+
+## Summary
+
+- Initial Jaiph CLI release with build, run, init, and version switching commands.
+- Core DSL primitives introduced: `rule`, `workflow`, `function`, `ensure`, `run`, and `prompt`.
+- Added module imports, transpilation to bash, and run artifact logging.
+- Added testing and visualization foundations: run tree and shell interoperability.
+- Included installer workflow and runtime safety features like read-only sandboxing.
+
+## All changes
 
 - `jaiph build [--target <dir>] <path>` compiles `.jph` files to bash scripts
 - `jaiph run [--target <dir>] <file.jph> [args...]` compiles and executes workflows
