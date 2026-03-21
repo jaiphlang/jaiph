@@ -374,7 +374,7 @@ e2e::prepare_shared_context() {
   mkdir -p "${JAIPH_E2E_BIN_DIR}" "${JAIPH_E2E_WORK_DIR}"
   export PATH="${JAIPH_E2E_BIN_DIR}:${PATH}"
   export JAIPH_BIN_DIR="${JAIPH_E2E_BIN_DIR}"
-  # Docker is enabled by default locally; disable for e2e tests.
+  # Docker sandbox is opt-in (beta); keep it disabled for e2e tests.
   export JAIPH_DOCKER_ENABLED="${JAIPH_DOCKER_ENABLED:-false}"
   # Keep e2e deterministic by removing user/machine agent overrides.
   unset JAIPH_AGENT_MODEL

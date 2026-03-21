@@ -122,7 +122,7 @@ Entrypoint resolution: executable `.jh` or `.jph` files with `#!/usr/bin/env jai
 jaiph init
 ```
 
-This creates `.jaiph/bootstrap.jh` and `.jaiph/jaiph-skill.md` (synced from your installed Jaiph copy). A `.jaiph/Dockerfile` is also shipped with the project — it builds a runtime image with Node.js, Claude Code CLI, and cursor-agent pre-installed. When Docker mode is enabled and no explicit image is configured, the runtime auto-builds from this Dockerfile. See [configuration.md](configuration.md) for details.
+This creates `.jaiph/bootstrap.jh` and `.jaiph/jaiph-skill.md` (synced from your installed Jaiph copy). A `.jaiph/Dockerfile` is also shipped with the project — it builds a runtime image with Node.js, Claude Code CLI, and cursor-agent pre-installed. When Docker sandboxing (beta) is enabled and no explicit image is configured, the runtime auto-builds from this Dockerfile. See [Sandboxing](sandboxing.md) for details.
 
 Then run:
 
