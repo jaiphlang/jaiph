@@ -15,6 +15,8 @@ export interface MountSpec {
 export interface DockerRunConfig {
   enabled: boolean;
   image: string;
+  /** True when image was explicitly set via env or in-file config (not the default). */
+  imageExplicit: boolean;
   network: string;
   timeout: number;
   mounts: MountSpec[];
@@ -81,6 +83,7 @@ export function validateMounts(mounts: MountSpec[]): void {
 const DEFAULTS: DockerRunConfig = {
   enabled: true,
   image: "ubuntu:24.04",
+  imageExplicit: false,
   network: "default",
   timeout: 300,
   mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
@@ -108,6 +111,7 @@ export function resolveDockerConfig(
   }
 
   // image: env > in-file > default
+  const imageExplicit = env.JAIPH_DOCKER_IMAGE !== undefined || inFile?.dockerImage !== undefined;
   const image =
     env.JAIPH_DOCKER_IMAGE ??
     inFile?.dockerImage ??
@@ -134,7 +138,7 @@ export function resolveDockerConfig(
     ? parseMounts(mountSpecs as string[])
     : (mountSpecs as unknown as MountSpec[]);
 
-  return { enabled, image, network, timeout, mounts };
+  return { enabled, image, imageExplicit, network, timeout, mounts };
 }
 
 // ---------------------------------------------------------------------------
@@ -164,6 +168,48 @@ export function pullImageIfNeeded(image: string): void {
       throw new Error(`E_DOCKER_PULL failed to pull image "${image}"`);
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Dockerfile-based image build
+// ---------------------------------------------------------------------------
+
+const DOCKERFILE_IMAGE_TAG = "jaiph-runtime:latest";
+
+/**
+ * Build a Docker image from a Dockerfile and tag it.
+ * Throws on build failure.
+ */
+export function buildImageFromDockerfile(dockerfilePath: string, tag: string = DOCKERFILE_IMAGE_TAG): string {
+  const contextDir = dirname(dockerfilePath);
+  try {
+    execSync(`docker build -t ${tag} -f ${dockerfilePath} ${contextDir}`, {
+      stdio: "inherit",
+      timeout: 600_000,
+    });
+  } catch {
+    throw new Error(`E_DOCKER_BUILD failed to build image from "${dockerfilePath}"`);
+  }
+  return tag;
+}
+
+/**
+ * Resolve the Docker image to use.
+ *
+ * When the image was not explicitly configured (`imageExplicit === false`),
+ * checks for `.jaiph/Dockerfile` in the workspace root. If present, builds
+ * from it and returns the built image tag. Otherwise falls back to the
+ * configured (default) image and pulls it if needed.
+ */
+export function resolveImage(config: DockerRunConfig, workspaceRoot: string): string {
+  if (!config.imageExplicit) {
+    const dockerfilePath = join(workspaceRoot, ".jaiph", "Dockerfile");
+    if (existsSync(dockerfilePath)) {
+      return buildImageFromDockerfile(dockerfilePath);
+    }
+  }
+  pullImageIfNeeded(config.image);
+  return config.image;
 }
 
 // ---------------------------------------------------------------------------
@@ -236,6 +282,7 @@ export interface DockerSpawnOptions {
 }
 
 const CONTAINER_WORKSPACE = "/jaiph/workspace";
+const AGENT_ENV_PREFIXES = ["CURSOR_", "ANTHROPIC_", "CLAUDE_"] as const;
 
 /**
  * Remap JAIPH_WORKSPACE and JAIPH_RUNS_DIR for use inside the Docker container.
@@ -321,6 +368,14 @@ export function buildDockerArgs(opts: DockerSpawnOptions, generatedDir: string):
     }
   }
 
+  // Forward agent-related env vars for Cursor/Claude authentication.
+  for (const [key, value] of Object.entries(containerEnv)) {
+    if (value === undefined) continue;
+    if (AGENT_ENV_PREFIXES.some((prefix) => key.startsWith(prefix))) {
+      args.push("-e", `${key}=${value}`);
+    }
+  }
+
   // Working directory
   args.push("-w", "/jaiph/workspace");
 
@@ -356,7 +411,8 @@ export interface DockerSpawnResult {
  */
 export function spawnDockerProcess(opts: DockerSpawnOptions): DockerSpawnResult {
   checkDockerAvailable();
-  pullImageIfNeeded(opts.config.image);
+  const resolvedImage = resolveImage(opts.config, opts.workspaceRoot);
+  opts = { ...opts, config: { ...opts.config, image: resolvedImage } };
 
   const generatedDir = prepareGeneratedDir(
     opts.builtScriptPath,
