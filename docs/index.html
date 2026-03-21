@@ -30,14 +30,18 @@ layout: null
 
         <section>
             <h2>What is Jaiph?</h2>
-            <div class="card">
+            <div class="card doc-content">
                 <p>
                     <strong>Jaiph</strong> is a composable scripting language and runtime for defining and orchestrating
                     AI agent workflows. It supports native bash commands and a set of custom primitives to combine
                     prompts with strict checks.
                 </p>
                 <pre><code class="language-bash">curl -fsSL https://jaiph.org/install | bash</code></pre>
-                <p class="small">The installer will install the version <strong>0.4.0</strong> of Jaiph to <strong>~/.local/bin</strong>. Check out the <a href="https://github.com/jaiphlang/jaiph/blob/nightly/CHANGELOG.md">CHANGELOG</a> to see what's new in the <strong>nightly</strong> branch and use <code>jaiph use nightly</code> to switch.</p>
+                <p class="small">The installer will install the version <strong>0.4.0</strong> of Jaiph to
+                    <strong>~/.local/bin</strong>. Check out the <a
+                        href="https://github.com/jaiphlang/jaiph/blob/nightly/CHANGELOG.md">CHANGELOG</a> to see what's
+                    new in the <strong>nightly</strong> branch and use <code>jaiph use nightly</code> to switch.
+                </p>
                 <p>
                     <a href="https://jaiph.org/getting-started" target="_blank" rel="noopener noreferrer"
                         class="button">Docs</a>
@@ -45,15 +49,15 @@ layout: null
                         class="button">GitHub</a>
                     <a href="https://marketplace.visualstudio.com/items?itemName=jaiph.jaiph-syntax-vscode"
                         target="_blank" rel="noopener noreferrer" class="button">VSC Extension</a>
-                    <a href="https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md" target="_blank" rel="noopener noreferrer"
-                        class="button">Agent Skill</a>
+                    <a href="https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md"
+                        target="_blank" rel="noopener noreferrer" class="button">Agent Skill</a>
                 </p>
             </div>
         </section>
 
         <section>
             <h2>Samples</h2>
-            <div class="card">
+            <div class="card doc-content">
                 <div class="code-tab-list">
                     <button type="button" class="code-tab-button is-active"
                         data-target="say-hello-jh">say_hello.jh</button>
@@ -85,6 +89,7 @@ workflow default {
 
   response = prompt "
     Say hello to $1 and provide a fun fact about a person with the same name.
+    Respond with a single line. Do not inspect files or run tools.
   "
 
   log "$response"
@@ -92,21 +97,39 @@ workflow default {
                     <p>Running the workflow:</p>
                     <pre><code class="jaiph-run"><span class="run-command">➜  ./say_hello.jh Jakub</span>
 
-running say_hello.jh
+Jaiph: Running say_hello.jh
+
+<span class="run-keyword">workflow</span> default <span class="run-params">(1="Jakub")</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">rule</span> name_was_provided <span class="run-params">(1="Jakub")</span>
+  <span class="run-pass">✓</span> <span class="run-time">0s</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> "Say hello to $1 and" <span class="run-params">(1="Jakub")</span>
+  <span class="run-pass">✓</span> <span class="run-time">9s</span>
+  <span class="run-marker">ℹ</span> Hi Jakub — fun fact: Jakub Marian is a Czech linguist and polyglot who speaks over a dozen languages.
+
+<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(8.9s)</span></code></pre>
+                    <p>When you don't provide the name parameter, the workflow fails:</p>
+                    <pre><code class="jaiph-run"><span class="run-command">➜  ./say_hello.jh</span>
+
+Jaiph: Running say_hello.jh
 
 <span class="run-keyword">workflow</span> default
   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> name_was_provided
-  <span class="run-pass">✓</span> <span class="run-time">0s</span>
-  <span class=”run-marker”>▸</span> <span class=”run-keyword”>prompt</span> “Say hello to Jakub and...” <span class=”run-params”>(1=”Jakub”)</span>
-  <span class=”run-pass”>✓</span> <span class=”run-time”>9s</span>
-  <span class=”run-keyword”>log</span> Hi Jakub! Here’s a fun fact: Jakub Marian is a Czech linguist and polyglot who speaks over a dozen languages.
-<span class=”run-pass”>✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(8.9s)</span></code></pre>
+  <span class="run-marker">·</span>   <span class="run-fail">! You didn't provide your name :(</span>
+  <span class="run-fail">✗ 0s</span>
+
+<span class="run-fail">✗ FAIL</span> <span class="run-keyword">workflow</span> default <span class="run-time">(0.1s)</span>
+  Output of failed step:
+    You didn't provide your name :(</code></pre>
                     <p>
                         Jaiph also supports structured output. You can use the following syntax:
                     </p>
                     <pre><code class="language-jaiph">response = prompt "..." returns '{ hello: string, fact: string }'</code></pre>
                     <p>
-                        Then, Jaiph will add at runtime instructions to the prompt asking the agent to return a JSON object with the fields <code>hello</code> and <code>fact</code>, and it will parse the response and set the capture variable to the raw JSON string. The parser tolerates text before the JSON object (e.g. when the agent writes preamble before <code>{...}</code>). You can access the fields with <code>$response_hello</code> and <code>$response_fact</code>.
+                        Then, Jaiph will add at runtime instructions to the prompt asking the agent to return a JSON
+                        object with the fields <code>hello</code> and <code>fact</code>, and it will parse the response
+                        and set the capture variable to the raw JSON string. The parser tolerates text before the JSON
+                        object (e.g. when the agent writes preamble before <code>{...}</code>). You can access the
+                        fields with <code>$response_hello</code> and <code>$response_fact</code>.
                     </p>
                 </div>
 
@@ -150,10 +173,10 @@ testing say_hello.test.jh
                 </div>
 
                 <div class="code-tab-panel" data-panel="ensure-ci-passes-jh">
-                    <p>This is the workflow used in the Jaiph codebase to ensure compilation and tests pass. Note the
-                        conditionals, which are used in the same way as in bash, and the recursive flow: if compilation
-                        or tests fail, a prompt is triggered, and the <code>ensure_ci_passes</code> workflow runs again.
-                    </p>
+                    <p>This workflow uses Jaiph's <code>ensure ... recover</code> pattern to keep retrying a failing CI
+                        command after an agent-assisted fix.
+                        When CI fails, the failure output is written to a fixed log file so the prompt can point the
+                        agent to concrete diagnostics.</p>
                     <p>The workflow uses custom <code>config</code> to enable agent YOLO mode. Otherwise the agent
                         cannot
                         run some commands (for example <code>npm test</code>). By default Jaiph runs agents in their
@@ -168,65 +191,35 @@ config {
   # agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
-rule project_compiles {
-  npm run build
-}
-
-rule tests_pass {
-  npm test
-}
-
-rule e2e_tests_pass {
-  npm run test:e2e
-}
-
-workflow ensure_ci_passes {
-  if ! ensure project_compiles; then
-    prompt "Fix failing compilation so npm run build passes."
-    run ensure_ci_passes
-    return 0
-  fi
-  if ! ensure tests_pass; then
-    prompt "Fix failing tests so npm test passes."
-    run ensure_ci_passes
-    return 0
-  fi
-  if ! ensure e2e_tests_pass; then
-    prompt "Fix failing e2e tests so npm run test:e2e passes."
-    run ensure_ci_passes
-    return 0
-  fi
+rule ci_passes {
+  npm run test:ci
 }
 
 workflow default {
-  run ensure_ci_passes
+  ensure ci_passes recover {
+    echo "$1" > ./tmp_ci_test.out
+    prompt "Fix failing CI so npm run test:ci passes. Tail ./tmp_ci_test.out for details."
+  }
+
+  rm -f "$ci_log_file"
 }</code></pre>
-                    <p>In the run below, e2e tests fail, so Jaiph ran a prompt to fix them, then called the workflow
-                        again recursively to re-run all checks.</p>
+                    <p>In the run below, <code>ci_passes</code> fails once, Jaiph writes the failure output to the log
+                        file, prompts the agent for a minimal fix, and retries until the check passes.</p>
                     <pre><code class="jaiph-run"><span class="run-command">➜  jaiph git:(main) ✗ .jaiph/ensure_ci_passes.jh</span>
 
 running ensure_ci_passes.jh
 
 <span class="run-keyword">workflow</span> default
   <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> ensure_ci_passes
-  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> project_compiles
-  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">1s</span>
-  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> tests_pass
-  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">12s</span>
-  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> e2e_tests_pass
-  <span class="run-marker">·</span>   <span class="run-fail">✗ 3s</span>
-  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> "Fix failing compil..."
-  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">21s</span>
-  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> ensure_ci_passes
-  <span class="run-marker">·</span>   <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> project_compiles
-  <span class="run-marker">·</span>   <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">0s</span>
-  <span class="run-marker">·</span>   <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> tests_pass
-  <span class="run-marker">·</span>   <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">13s</span>
-  <span class="run-marker">·</span>   <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> e2e_tests_pass
-  <span class="run-marker">·</span>   <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">6s</span>
-  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">19s</span>
-  <span class="run-pass">✓</span> <span class="run-time">56s</span>
-<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(56.4s)</span></code></pre>
+  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> ci_passes
+  <span class="run-marker">·</span>   <span class="run-fail">✗ 11s</span>
+  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> "Fix failing CI so n..."
+  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">24s</span>
+  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> ci_passes
+  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">10s</span>
+  <span class="run-pass">✓</span> <span class="run-time">45s</span>
+
+<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(45.1s)</span></code></pre>
                 </div>
 
                 <div class="code-tab-panel" data-panel="inbox-pipeline-jh">
@@ -255,15 +248,16 @@ workflow default {
                     <p>Running the workflow:</p>
                     <pre><code class="jaiph-run"><span class="run-command">➜  ./agent_inbox.jh</span>
 
-running agent_inbox.jh
+Jaiph: Running agent_inbox.jh
 
 <span class="run-keyword">workflow</span> default
   <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> scanner
   <span class="run-pass">✓</span> <span class="run-time">0s</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> analyst <span class="run-time">(channel="findings")</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> analyst <span class="run-params">(channel="findings")</span>
   <span class="run-pass">✓</span> <span class="run-time">0s</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> reviewer <span class="run-time">(channel="report")</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> reviewer <span class="run-params">(channel="report")</span>
   <span class="run-pass">✓</span> <span class="run-time">0s</span>
+
 <span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(0.1s)</span></code></pre>
                 </div>
 
@@ -271,140 +265,142 @@ running agent_inbox.jh
         </section>
 
         <section>
-            <h2>Usage</h2>
-            <div class="card">
-                <p>
-                </p>
-                <h3>Installation</h3>
-                <pre><code class="language-bash">curl -fsSL https://jaiph.org/install | bash</code></pre>
-                <p>To install the nightly branch instead:</p>
-                <pre><code class="language-bash">curl -fsSL https://jaiph.org/install | bash -s nightly</code></pre>
-                <p>
-                    Then verify the installation:
-                </p>
-                <pre><code class="language-bash">jaiph --version</code></pre>
-                <p>Switch installed version:</p>
-                <pre><code class="language-bash">jaiph use nightly
-jaiph use 0.4.0</code></pre>
+            <h2>Core features</h2>
+            <div class="card doc-content">
                 <h3>Running a workflow</h3>
                 <pre><code class="language-bash">./path/to/main.jh "arg1" "arg2" "arg3"</code></pre>
                 <p>Arguments are passed exactly like bash scripts (<code>$1</code>, <code>$2</code>, <code>"$@"</code>).
                     When you call a workflow, it executes the <code>workflow default</code> entrypoint.</p>
-                <p>By convention it is recommended to keep your workflows in the
-                    <code>&lt;project_root&gt;/.jaiph/</code>
-                    directory. It ensures Jaiph detects workspace root and configures the agent correctly.</p>
-                <p>Jaiph stores runtime data (run logs, Docker workspace artifacts) in <code>.jaiph/</code>. It is recommended to add <code>.jaiph/</code>
-                    to your <code>.gitignore</code>.</p>
-                <h3>Running tests</h3>
-                <p>Jaiph supports native test scripts via the <code>*.test.jh</code> convention and first-class
-                    <code>test "description" { ... }</code> blocks. When you run the executable
-                    <code>*.test.jh</code> file, it is executed as a test.
+                <p>By convention, keep Jaiph workflow files in <code>&lt;project_root&gt;/.jaiph/</code> so
+                    workspace-root detection and agent setup stay predictable.
+                    Jaiph stores run artifacts in <code>.jaiph/runs/</code>; keep those out of git by adding
+                    <code>.jaiph/runs/</code> to your <code>.gitignore</code>.
                 </p>
-                <h3>Configuration</h3>
-                <p>Runtime behavior is controlled by in-file config and environment variables. See
-                    <a href="configuration">configuration docs</a> for precedence and keys.
+
+                <h3>Language</h3>
+                <p><strong>Combine prompts with strict checks.</strong> Compose <code>rule</code>,
+                    <code>function</code>, <code>ensure</code>, and <code>prompt</code> in one executable flow so checks
+                    and AI steps stay in the same pipeline. This way to can enforce structure over non-deterministic
+                    agent responses.
+                    See <a href="grammar">Grammar</a> and <a href="getting-started">Getting started</a>.
                 </p>
-                <p>For command syntax and flags, read
+                <p><strong>Use Bash natively.</strong> Jaiph interprets native Bash syntax wherever possible, allowing
+                    shell commands, pipelines, and expressions to run unmodified. Directly include bash logic inline and
+                    mix with Jaiph constructs for seamless agent and shell integration.</p>
+                <p><strong>Agent inbox pattern (channels).</strong> Use inbox channels as a way to pass messages between
+                    workflows with <code>channel &lt;- ...</code> and <code>channel -&gt; workflow</code> syntax.
+                    See <a href="inbox">Inbox &amp; Dispatch</a>.
+                </p>
+                <p><strong>Ensure recover pattern.</strong> <code>ensure ... recover ...</code> gives bounded
+                    self-healing retries: run a rule, apply a fix on failure, then retry up to the configured limit. See
+                    <a href="grammar">Grammar</a>.
+                </p>
+
+                <h3>Runtime</h3>
+                <p><strong>Docker sandboxing.</strong> Enable isolated execution with Docker for stronger containment of
+                    agent and shell actions. Configure in <code>config { runtime.* }</code>. See <a
+                        href="sandboxing">Sandboxing</a>.</p>
+                <p><strong>Hooks.</strong> Attach shell automation to workflow and step lifecycle events via
+                    <code>~/.jaiph/hooks.json</code> or <code>&lt;project&gt;/.jaiph/hooks.json</code>. See <a
+                        href="hooks">Hooks</a>.
+                </p>
+                <p><strong>Configuration.</strong> Control behavior with a top-level <code>config { ... }</code> block
+                    plus environment variables (env wins precedence). See <a href="configuration">Configuration</a> and
                     <a href="cli">CLI reference</a>.
                 </p>
-                <p>To run custom commands at workflow/step events, use <a href="hooks">hooks</a> (<code>~/.jaiph/hooks.json</code> and <code>&lt;project&gt;/.jaiph/hooks.json</code>).</p>
-                <p>To get started from scratch: <a href="getting-started">Getting started</a>. For AI agents: <a href="https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md">Agent Skill</a>.</p>
+                <p><strong>Testing Jaiph workflows.</strong> Test workflows with executable <code>*.test.jh</code>
+                    suites, mocks, and assertions to cover deterministic and agent-assisted paths. See <a
+                        href="testing">Testing</a>.</p>
+
+                <h3>Samples</h3>
+                <p>Jaiph source code is built mostly with real Jaiph workflows. The
+                    <a
+                        href="https://github.com/jaiphlang/jaiph/blob/main/.jaiph/docs_parity.jh">.jaiph/docs_parity.jh</a>
+                    workflow runs documentation maintenance checks, changelog updates, and cross-doc consistency guards.
+                    The <a href="https://github.com/jaiphlang/jaiph/blob/main/.jaiph/engineer.jh">.jaiph/engineer.jh</a>
+                    workflow implements a queue-driven engineering loop that picks work, implements changes, verifies
+                    CI, and updates queue state.
+                </p>
             </div>
         </section>
 
         <section>
-            <h2>Documentation</h2>
-            <div class="card">
+            <h2>Syntax</h2>
+            <div class="card doc-content">
+                <h3>Jaiph workflows</h3>
                 <dl class="primitive-list">
                     <dt><code>config { ... }</code></dt>
-                    <dd>Optional block at the top of the entry file. Sets runtime options: <code>agent.backend</code> (cursor | claude), <code>agent.command</code>, <code>agent.trusted_workspace</code>, <code>run.logs_dir</code>, <code>runtime.*</code> (Docker sandbox — beta), etc. Values can be quoted strings, booleans, bare integers, or arrays of strings. Environment variables override. Docker sandboxing is opt-in via <code>runtime.docker_enabled = true</code>. See <a href="configuration">Configuration</a> and <a href="sandboxing">Sandboxing</a>.</dd>
+                    <dd>Optional top-level runtime options (agent backend/flags, logs, runtime). Environment variables
+                        override config values. See <a href="configuration">Configuration</a>.</dd>
 
-                    <dt><code>import "file.jh" as alias</code></dt>
-                    <dd>Imports rules and workflows from another Jaiph module under an alias. Jaiph compiles each module
-                        to a single shell file, and verifies the import at compile time.</dd>
+                    <dt><code>import "file.jh" as alias</code> · <code>local name = value</code></dt>
+                    <dd>Import other modules and define module-scoped variables shared by rules/functions/workflows in
+                        the same file.</dd>
 
-                    <dt><code>local name = value</code></dt>
-                    <dd>Declares a module-scoped variable at the top level. Values may be double-quoted strings (multi-line), single-quoted strings, or bare values. Accessible as <code>$name</code> inside all rules, functions, and workflows in the same module. The transpiler prefixes the variable to avoid collisions (e.g. <code>entry__role</code>) and emits <code>local</code> shims inside each body. Variable names share the unified namespace — duplicates with rules, workflows, or functions are a parse error. Not exportable; module-scoped only. See <a href="grammar">Grammar</a>.</dd>
-
-                    <dt><code>rule name { ... }</code></dt>
-                    <dd>Defines a reusable check/action that returns a shell exit code. The rule is executed in a
-                        read-only subshell, and its stdout is preserved. The rule fails if the command returns a
-                        non-zero
-                        exit code. Rules can consume positional parameters (<code>$1</code>, <code>$2</code>,
-                        <code>"$@"</code>) forwarded by <code>ensure</code>. Inline brace-group short-circuits like
-                        <code>cmd || { echo "failed"; exit 1; }</code> are supported (single- or multi-line).
+                    <dt><code>rule name { ... }</code> · <code>workflow name { ... }</code> ·
+                        <code>function name() { ... }</code>
+                    </dt>
+                    <dd><code>rule</code> is for reusable checks/actions (used with <code>ensure</code>),
+                        <code>workflow</code> orchestrates ordered steps, and <code>function</code> defines reusable
+                        writable shell helpers.
                     </dd>
 
-                    <dt><code>workflow name { ... }</code></dt>
-                    <dd>Defines an orchestration entrypoint made of ordered steps. As opposed to rules, workflows can
-                        change the state of the system and are not restricted to read-only operations. Workflows fail if
-                        the script returns a non-zero exit code. Inline brace-group short-circuits like
-                        <code>cmd || { echo "failed"; exit 1; }</code> are supported (single- or multi-line).
-                    </dd>
+                    <dt><code>ensure ref [args...]</code> · <code>ensure ref recover { ... }</code> ·
+                        <code>run ref</code>
+                    </dt>
+                    <dd><code>ensure</code> executes a rule (with optional args); <code>recover</code> adds bounded
+                        retry repair logic; <code>run</code> calls another workflow from a workflow.</dd>
 
-                    <dt><code>function name() { ... }</code></dt>
-                    <dd>Defines a reusable writable shell function. Functions can be called from workflows/rules and are
-                        tracked as regular Jaiph steps.</dd>
+                    <dt><code>prompt "..."</code> · <code>name = prompt "..." returns '{ field: type }'</code></dt>
+                    <dd>Sends a prompt to the configured agent, optionally validates structured JSON output, and exposes
+                        captured variables.</dd>
 
-                    <dt><code>ensure ref [args...]</code> · <code>ensure ref recover &lt;stmt&gt;</code> · <code>ensure ref recover { stmt; ... }</code></dt>
-                    <dd>Executes a rule, optionally forwarding arguments (e.g. <code>ensure my_rule "$1"</code>). With <code>recover</code>, the step becomes a <strong>bounded</strong> retry loop: run the rule; on failure run the recover body (one statement or a <code>{ stmt; stmt; ... }</code> block); repeat until the rule passes or max retries is reached, then exit 1. Max retries default to 10; set <code>JAIPH_ENSURE_MAX_RETRIES</code> to override. See <a href="grammar">Grammar</a>.</dd>
+                    <dt><code>name = ensure ref</code> · <code>name = run ref</code> · <code>name = &lt;shell&gt;</code>
+                    </dt>
+                    <dd>Capture stdout of Jaiph steps or shell commands into variables; stderr is captured only if
+                        redirected (for example <code>2&gt;&amp;1</code>).</dd>
 
-                    <dt><code>run ref</code></dt>
-                    <dd>Executes another workflow from a workflow. <code>run</code> is not allowed inside a rule; use
-                        <code>ensure</code> to call another rule or move the call to a workflow.
-                    </dd>
+                    <dt><code>if ensure ref; then ... fi</code> · <code>if ! ensure ref; then ... fi</code> ·
+                        <code>if ! &lt;shell&gt;; then ... fi</code>
+                    </dt>
+                    <dd>Use native shell conditions and control flow around Jaiph steps, including standard bash loops
+                        and branching patterns.</dd>
 
-                    <dt>Run tree and parameters</dt>
-                    <dd>During <code>jaiph run</code>, the progress tree shows each step. In TTY mode, a single bottom line <code>  RUNNING workflow &lt;name&gt; (X.Xs)</code> is updated in place (e.g. every second) and removed when the run finishes; the tree itself is identical to non-TTY (no per-line live timers). For <code>workflow</code>, <code>prompt</code>, <code>function</code>, and <code>rule</code> steps called with arguments, parameters are shown inline in gray after the step name using a uniform <code>key="value"</code> format. Positional args display as <code>1="value"</code>, <code>2="value"</code>; named args display as <code>name="value"</code>. Multi-line values (newlines, tabs) are collapsed to single spaces. Values are truncated at 32 characters. <strong>Prompt</strong> steps show a truncated preview of the prompt text (first 24 characters, then <code>...</code> if longer) and the argument list is capped at 96 characters. Prompt steps show no output in the tree — only the step line and ✓; use <code>log</code> to display agent output. See <a href="cli">CLI reference</a>.</dd>
+                    <dt><code>log "message"</code> · <code>logerr "message"</code></dt>
+                    <dd>Emit informational or error output to the run tree while keeping workflow execution explicit and
+                        auditable.</dd>
 
-                    <dt><code>log "message"</code></dt>
-                    <dd>Displays a message in the progress tree at the current indentation depth and writes to <strong>stdout</strong>. Takes a double-quoted string; shell variable interpolation (<code>$var</code>, <code>${var}</code>) works at runtime. No spinner, no timing — a static annotation for marking workflow phases. See <a href="grammar">Grammar</a>.</dd>
-
-                    <dt><code>logerr "message"</code></dt>
-                    <dd>Same as <code>log</code>, but writes to <strong>stderr</strong> instead of stdout. In the progress tree, <code>logerr</code> lines display with a red <code>!</code> instead of the dim <code>ℹ</code> used by <code>log</code>. Useful for error messages or warnings that should not mix with stdout output. See <a href="grammar">Grammar</a>.</dd>
-
-                    <dt><code>if ensure ref [args]; then ... [else ...] fi</code> · <code>if ! ensure ref [args]; then ... [else ...] fi</code> · <code>if ! &lt;shell&gt;; then ... fi</code></dt>
-                    <dd>Conditional workflow steps. The positive form runs the then-branch when the rule succeeds; the negated form runs it when the rule fails. Both accept optional arguments after the rule reference and support an <code>else</code> branch. Then- and else-branches can contain <code>run</code>, <code>prompt</code>, and shell commands (but not <code>ensure</code>). <code>if ! &lt;shell&gt;; then ... fi</code> conditions on a shell expression.</dd>
-
-                    <dt><code>prompt "..."</code> · <code>name = prompt "..." returns '{ field: type, ... }'</code></dt>
-                    <dd>Sends prompt text to the configured agent (Cursor or Claude CLI; see <code>agent.backend</code> and <a href="configuration">Configuration</a>). Without <code>returns</code>, stdout is sent to the agent and (if captured) stored in the variable. With <code>returns '{ field: type, ... }'</code>, the prompt must capture to a variable; the agent is instructed to respond with one line of JSON; the runtime parses and validates it (flat schema; types <code>string</code>, <code>number</code>, <code>boolean</code>). On success, the capture variable holds the raw JSON and <code>name_field</code> is set for each schema field (e.g. <code>$result_type</code>). Invalid JSON, missing field, or type mismatch fails the step with distinct error codes. <strong>Prompt output is not shown in the tree</strong> — only the step line and ✓ appear. Use <code>log</code> to display the response (e.g. <code>log "$response"</code>). The step's <code>.out</code> file in <code>.jaiph/runs/</code> still contains the full agent transcript for debugging.</dd>
-
-                    <dt>Assignment capture: <code>name = prompt "..."</code> · <code>name = prompt "..." returns '{ ... }'</code> · <code>name = ensure ref</code> · <code>name = run ref</code> · <code>name = &lt;shell&gt;</code></dt>
-                    <dd>Capture a step's <strong>stdout</strong> into a variable. <code>result = prompt "..."</code> captures the agent's response. With <code>returns '{ type: string, risk: string }'</code>, the response is validated as JSON and <code>$result</code>, <code>$result_type</code>, <code>$result_risk</code>, etc. are set. <code>response = ensure tests_pass</code>, <code>out = run helper</code>, and <code>line = echo hello</code> capture rule, workflow, or shell output. Exit behavior is unchanged: if the command fails, the step fails (use <code>|| true</code> to capture on failure). stderr is not captured unless the command redirects it (e.g. <code>2>&1</code>). See <a href="grammar">Grammar</a>.</dd>
-
-                    <dt><code>test "description" { ... }</code></dt>
-                    <dd>Defines a test case. Files named <code>*.test.jh</code> are run as test suites.</dd>
-
-                    <dt>Hooks (<code>~/.jaiph/hooks.json</code>, <code>&lt;project&gt;/.jaiph/hooks.json</code>)</dt>
-                    <dd>Run custom shell commands at workflow/step lifecycle events (<code>workflow_start</code>, <code>workflow_end</code>, <code>step_start</code>, <code>step_end</code>). Project-local overrides global per event. Payload is JSON on stdin; failures are logged but do not block the run. See <a href="hooks">Hooks</a>.</dd>
-
-                    <dt><code>channel &lt;- echo "data"</code> · <code>channel &lt;-</code></dt>
-                    <dd>Sends content to a named inbox channel. The channel identifier is always on the left side of the <code>&lt;-</code> operator. The runtime dispatches messages to workflows registered via route declarations. Standalone <code>channel &lt;-</code> forwards <code>$1</code>. Combining capture and send (<code>name = channel &lt;- cmd</code>) is a parse error. See <a href="inbox">Inbox &amp; Dispatch</a>.</dd>
-
-                    <dt><code>channel -&gt; workflow</code> · <code>channel -&gt; wf1, wf2</code></dt>
-                    <dd>Declares a static routing rule: when a message arrives on <code>channel</code>, call the target workflow(s) with the message content as <code>$1</code>. Multiple targets dispatch sequentially in declaration order. Routes are declarations, not executable steps — stored in <code>routes</code>, not <code>steps</code>. The dispatch queue drains after the orchestrator completes; max depth 100 guards against circular sends. See <a href="inbox">Inbox &amp; Dispatch</a>.</dd>
-
-                    <dt><code>mock prompt "..."</code></dt>
-                    <dd>In a test, stubs the next <code>prompt</code> call to return the given string instead of calling the agent.</dd>
-
-                    <dt><code>mock prompt { if $1 contains "..." ; then respond "..." ; fi }</code></dt>
-                    <dd>In a test, stub by prompt content: first matching branch wins; use <code>elif</code> / <code>else</code> as needed. See <a href="testing">Testing</a>.</dd>
-
-                    <dt><code>mock workflow</code> · <code>mock rule</code> · <code>mock function</code></dt>
-                    <dd>In a test, replace a workflow, rule, or function with a shell body for isolation. See <a href="testing">Testing</a>.</dd>
-
-                    <dt><code>expectEqual var "value"</code> · <code>expectContain var "substring"</code> · <code>expectNotContain var "substring"</code></dt>
-                    <dd>Test assertions: <code>expectEqual</code> checks exact match; <code>expectContain</code> checks substring presence; <code>expectNotContain</code> checks substring absence. Fail the test if the check does not hold.</dd>
+                    <dt><code>channel &lt;- ...</code> · <code>channel -&gt; workflow</code></dt>
+                    <dd>Send and route messages between workflows using inbox channels. See <a href="inbox">Inbox &amp;
+                            Dispatch</a>.</dd>
                 </dl>
 
-                <p>All language primitives can be freely combined with bash code—they are not isolated or blocking, but
-                    instead are interoperable with standard shell scripting within your workflows and rules.</p>
+                <h3>Jaiph tests</h3>
+                <dl class="primitive-list">
+                    <dt><code>test "description" { ... }</code></dt>
+                    <dd>Defines a test case; files named <code>*.test.jh</code> execute as test suites. See <a
+                            href="testing">Testing</a>.</dd>
 
-                <hr/>
+                    <dt><code>mock prompt "..."</code> ·
+                        <code>mock prompt { if $1 contains "..." ; then respond "..." ; fi }</code>
+                    </dt>
+                    <dd>Stub prompt calls with fixed responses or content-based branching so tests stay deterministic.
+                    </dd>
+
+                    <dt><code>mock workflow</code> · <code>mock rule</code> · <code>mock function</code></dt>
+                    <dd>Replace workflow/rule/function implementations in tests for isolation and targeted assertions.
+                    </dd>
+
+                    <dt><code>expectEqual</code> · <code>expectContain</code> · <code>expectNotContain</code></dt>
+                    <dd>Core assertion helpers for exact matches and substring checks.</dd>
+                </dl>
+
+                <hr />
                 <p>
                     <a href="getting-started">Getting started</a>
                     ·
-                    <a href="https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md">Agent skill</a>
+                    <a href="https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md">Agent
+                        skill</a>
                     ·
                     <a href="grammar">Grammar</a>
                     ·

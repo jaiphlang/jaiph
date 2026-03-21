@@ -1,6 +1,6 @@
 :root {
     --navy: #1f2a37;
-    --navy-light: #2b3a4d;
+    --navy-light: #415d83;
     --orange: #fca228;
     --orange-soft: #e8a75a;
     --bg: #f4f1ec;
@@ -79,6 +79,10 @@ a {
     color: var(--link);
 }
 
+p {
+    margin-block-start: 0.5rem;
+}
+
 .card {
     background: white;
     border-radius: 10px;
@@ -119,6 +123,7 @@ code:not(pre code) {
     border: 1px solid #d0d7de;
     border-radius: 6px;
     padding: 0.2rem 0.35rem;
+    display: inline-block;
 }
 
 pre code {
@@ -332,12 +337,6 @@ header h1 img {
     color: #0969da;
 }
 
-/* Channel identifier */
-.ralph-channel {
-    color: #0e8a16;
-    font-weight: 600;
-}
-
 /* Operator */
 .ralph-operator {
     color: #24292f;
@@ -424,12 +423,14 @@ header h1 img {
 
 .doc-content h3 {
     color: var(--navy-light);
-    margin-top: 1.5rem;
+    margin: 1.5rem 0 0.3rem;
+    padding-bottom: 0;
 }
 
 .doc-content h4 {
     color: var(--navy-light);
-    margin-top: 1.2rem;
+    margin: 1.5rem 0 0.3rem;
+    padding-bottom: 0;
 }
 
 .doc-content hr {

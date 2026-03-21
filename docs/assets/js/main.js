@@ -272,14 +272,14 @@
             }
         }
 
-        // channel -> workflow, workflow2 (route declaration)
+        // <channel> -> workflow, workflow2 (route declaration)
         if (
             first.token.type === "identifier" &&
             !STATEMENT_KEYWORDS.has(firstValue) &&
             significant.length >= 3 &&
             significant[1].token.type === "arrow"
         ) {
-            annotated[first.index].kind = "channel";
+            annotated[first.index].kind = "identifier";
             for (let j = 2; j < significant.length; j += 1) {
                 if (significant[j].token.type === "identifier") {
                     annotated[significant[j].index].kind = "identifier";
@@ -287,14 +287,14 @@
             }
         }
 
-        // channel <- command (send operator)
+        // <channel> <- command (send operator)
         if (
             first.token.type === "identifier" &&
             !STATEMENT_KEYWORDS.has(firstValue) &&
             significant.length >= 2 &&
             significant[1].token.type === "send_arrow"
         ) {
-            annotated[first.index].kind = "channel";
+            annotated[first.index].kind = "identifier";
         }
 
         // local name = value → definition for variable name
@@ -422,9 +422,6 @@
         }
         if (token.kind === "identifier") {
             return `<span class="ralph-identifier">${value}</span>`;
-        }
-        if (token.kind === "channel") {
-            return `<span class="ralph-channel">${value}</span>`;
         }
         if (token.kind === "variable") {
             return `<span class="ralph-variable">${value}</span>`;
