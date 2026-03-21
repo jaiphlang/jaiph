@@ -193,7 +193,7 @@ Important:
 - `agent.command` accepts executable + inline args (for example `cursor-agent --force`).
 - `agent.cursor_flags` / `agent.claude_flags` append backend-specific CLI flags (split on whitespace).
 - Environment variables override config values (for example `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_AGENT_CURSOR_FLAGS`, `JAIPH_AGENT_CLAUDE_FLAGS`).
-- `runtime.docker_enabled` enables an optional Docker sandbox — the container receives only transpiled bash and the shell stdlib; no Jaiph source or Node.js. See [configuration.md](docs/configuration.md) for mount parsing rules, workspace structure, and Docker behavior details.
+- `runtime.docker_enabled` enables an optional Docker sandbox — the container receives only transpiled bash and the shell stdlib; no Jaiph source or Node.js. When no explicit `docker_image` is set and a `.jaiph/Dockerfile` exists, the runtime auto-builds from it (the shipped Dockerfile includes Node.js, Claude Code CLI, and cursor-agent). Agent env vars (`ANTHROPIC_API_KEY`, `CURSOR_*`) are forwarded into the container. See [configuration.md](docs/configuration.md) for mount parsing rules, workspace structure, and Docker behavior details.
 
 ### CLI reference
 

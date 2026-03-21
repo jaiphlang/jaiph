@@ -118,6 +118,31 @@ Mount strings in `runtime.workspace` follow these forms:
 - Timeout kills container and reports `E_TIMEOUT`.
 - Network: `"default"` omits `--network` flag (uses Docker bridge). `"none"` passes `--network none`. Any other value is passed verbatim.
 
+### Dockerfile-based image detection
+
+When no explicit `docker_image` is configured (neither `JAIPH_DOCKER_IMAGE` env var nor in-file `runtime.docker_image`), the runtime checks for `.jaiph/Dockerfile` in the workspace root. If present:
+
+1. The runtime runs `docker build` from that Dockerfile and tags the result as `jaiph-runtime:latest`.
+2. The built image is used for the run instead of the default `ubuntu:24.04`.
+
+If `.jaiph/Dockerfile` does not exist, the runtime falls back to the default image (`ubuntu:24.04`). When an explicit image is configured, the Dockerfile is ignored entirely.
+
+The shipped `.jaiph/Dockerfile` includes:
+
+- **Base image**: `ubuntu:latest`
+- **Node.js** latest LTS (required by `jaiph::stream_json_to_text` in `prompt.sh`)
+- **Claude Code CLI** (`@anthropic-ai/claude-code`)
+- **cursor-agent** (Cursor's agent backend)
+- Standard utilities: `bash`, `curl`, `git`, `ca-certificates`
+
+### Agent environment variable forwarding
+
+In addition to `JAIPH_*` variables, the following environment variables are forwarded into the Docker container for agent authentication:
+
+- `CURSOR_*` — all environment variables matching the `CURSOR_` prefix (e.g. `CURSOR_SESSION`, `CURSOR_API_KEY`) are forwarded for Cursor agent authentication.
+- `ANTHROPIC_*` — all environment variables matching the `ANTHROPIC_` prefix (e.g. `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`) are forwarded for Claude authentication/config.
+- `CLAUDE_*` — all environment variables matching the `CLAUDE_` prefix are forwarded for Claude CLI authentication/config.
+
 ### Docker path remapping
 
 When Docker mode is enabled, the CLI remaps workspace-related environment variables before forwarding them into the container. This ensures that run artifacts are written to paths visible on the host (via the workspace mount) rather than to host-only absolute paths that exist only outside the container.

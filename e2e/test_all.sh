@@ -21,6 +21,7 @@ TEST_SCRIPTS=(
   "e2e/tests/70_run_artifacts.sh"
   "e2e/tests/71_loop_run_artifacts.sh"
   "e2e/tests/72_docker_run_artifacts.sh"
+  "e2e/tests/73_docker_dockerfile_detection.sh"
   "e2e/tests/80_cli_behavior.sh"
   "e2e/tests/81_tty_progress_tree.sh"
   "e2e/tests/85_infile_metadata.sh"

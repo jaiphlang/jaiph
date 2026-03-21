@@ -6,34 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Provide and use by default a Dockerfile with installed Claude and Cursor agent<!-- dev-ready -->
-
-**Goal.** Add a `.jaiph/Dockerfile` that ships a ready-to-use runtime image with both agent backends pre-installed, and modify `docker.ts` so the runtime auto-builds from that Dockerfile when present.
-
-**Dockerfile (`.jaiph/Dockerfile`):**
-
-- Base image: `ubuntu:latest`
-- Install Node.js latest LTS (required by `jaiph::stream_json_to_text` in `prompt.sh` which shells out to `node -e`)
-- Install Claude Code CLI (latest): `npm install -g @anthropic-ai/claude-code`
-- Install `cursor-agent` (latest) — determine the correct installation method (npm package or binary download)
-- Standard utilities: bash, curl, git, ca-certificates
-
-**Runtime changes (`src/runtime/docker.ts`):**
-
-- Image resolution logic change: when no explicit `docker_image` is configured (`JAIPH_DOCKER_IMAGE` env or in-file `dockerImage`), check if `.jaiph/Dockerfile` exists in the workspace root. If it does, `docker build` from it and tag as `jaiph-runtime:latest`, then use that image. If `.jaiph/Dockerfile` does not exist, fall back to current default (`ubuntu:24.04`).
-- Env var forwarding: extend `buildDockerArgs()` (currently lines 282-287, forwards only `JAIPH_*`) to also forward agent-related env vars from the local environment: `ANTHROPIC_API_KEY`, `CURSOR_*` patterns. These are required for `claude` and `cursor-agent` authentication inside the container.
-- Document the Dockerfile detection and image-build behavior (update relevant docs).
-
-**Acceptance criteria.**
-
-- Running `jaiph run` with `docker_enabled=true` and no explicit `docker_image`, with a `.jaiph/Dockerfile` present, builds and uses the custom image.
-- `claude --version` and `cursor-agent --version` succeed inside the built container.
-- `ANTHROPIC_API_KEY` and `CURSOR_*` env vars are forwarded into the container.
-- Without `.jaiph/Dockerfile`, the runtime falls back to `ubuntu:24.04`.
-- E2E tests cover the Dockerfile detection, image build, and env var forwarding paths.
-
----
-
 ## Explore removing Node.js runtime dependency from Jaiph stdlib <!-- dev-ready -->
 
 **Goal.** Investigate whether the Jaiph bash runtime's dependency on Node.js (currently `jaiph::stream_json_to_text` in `prompt.sh:19` shells out to `node -e` for JSON stream parsing) can be replaced with a pure-bash or lightweight alternative (e.g. `jq`). This would simplify the Docker image and reduce the runtime footprint.
