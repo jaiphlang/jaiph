@@ -20,14 +20,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run core test suite
+      - name: Run core test suite (unit, acceptance, fixture snapshots)
         run: npm test
-
-      - name: Run compiler acceptance tests
-        run: npm run test:acceptance:compiler
-
-      - name: Run fixture Jest tests
-        run: npm run test:jest
 
   e2e:
     name: E2E install and CLI workflow (${{ matrix.os }})

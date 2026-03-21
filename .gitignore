@@ -28,6 +28,7 @@ pnpm-debug.log*
 *.swp
 
 .jaiph/runs/
+.jaiph/tmp/
 .jaiph/*.sh
 
 # Jaiph transpilled workflows

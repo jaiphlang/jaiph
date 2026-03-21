@@ -8,11 +8,13 @@
     "jaiph": "dist/src/cli.js"
   },
   "scripts": {
-    "build": "node ./node_modules/typescript/bin/tsc -p tsconfig.json && node -e \"require('node:fs').copyFileSync('src/jaiph_stdlib.sh','dist/src/jaiph_stdlib.sh'); require('node:fs').cpSync('src/runtime','dist/src/runtime',{recursive:true})\"",
-    "test": "npm run build && (for f in dist/test/hooks.test.js dist/test/signal-lifecycle.test.js dist/test/tty-running-timer.test.js dist/test/docker.test.js; do node --test \"$f\" || exit 1; done) && (for f in dist/test/compiler-golden.test.js dist/test/sample-build.test.js dist/test/acceptance/compiler-edge.acceptance.test.js; do NODE_OPTIONS='--max-old-space-size=32768' node --test \"$f\" || exit 1; done)",
+    "clean": "rm -rf dist",
+    "build": "tsc -p tsconfig.json && node -e \"require('node:fs').copyFileSync('src/jaiph_stdlib.sh','dist/src/jaiph_stdlib.sh'); require('node:fs').cpSync('src/runtime','dist/src/runtime',{recursive:true})\"",
+    "test": "npm run build && NODE_OPTIONS='--max-old-space-size=32768' node --test dist/test/*.test.js dist/test/acceptance/*.acceptance.test.js && jest --runInBand test/fixtures-build.jest.test.js",
     "test:acceptance:compiler": "npm run build && node --test dist/test/acceptance/*.acceptance.test.js",
     "test:acceptance:runtime": "bash ./e2e/test_all.sh",
     "test:acceptance": "npm run test:acceptance:compiler && npm run test:acceptance:runtime",
+    "test:ci": "npm test && npm run test:e2e",
     "test:jest": "npm run build && jest --runInBand test/fixtures-build.jest.test.js",
     "test:e2e": "npm run build && bash ./e2e/test_all.sh"
   },

@@ -4,6 +4,7 @@ exports[`fixture build snapshots build output matches snapshot 1`] = `
 {
   "files": [
     "bootstrap_project.sh",
+    "inbox.sh",
     "main.sh",
     "tools/security.sh",
   ],
@@ -22,15 +23,75 @@ if [[ "$(jaiph__runtime_api)" != "1" ]]; then
   exit 1
 fi
 
-bootstrap_project::workflow::nodejs::impl() {
+bootstrap_project::nodejs::impl() {
   set -eo pipefail
   set +u
   echo "Sorry, I cannot setup nodejs yet"
   exit 1
 }
 
-bootstrap_project::workflow::nodejs() {
-  jaiph::run_step bootstrap_project::workflow::nodejs bootstrap_project::workflow::nodejs::impl "$@"
+bootstrap_project::nodejs() {
+  jaiph::run_step bootstrap_project::nodejs workflow bootstrap_project::nodejs::impl "$@"
+}",
+    "inbox.sh": "#!/usr/bin/env bash
+
+set -euo pipefail
+jaiph_stdlib_path="\${JAIPH_STDLIB:-$HOME/.local/bin/jaiph_stdlib.sh}"
+if [[ ! -f "$jaiph_stdlib_path" ]]; then
+  echo "jaiph: stdlib not found at $jaiph_stdlib_path (set JAIPH_STDLIB or reinstall jaiph)" >&2
+  exit 1
+fi
+source "$jaiph_stdlib_path"
+if [[ "$(jaiph__runtime_api)" != "1" ]]; then
+  echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2
+  exit 1
+fi
+
+inbox::researcher::impl() {
+  set -eo pipefail
+  set +u
+  jaiph::send 'findings' "$(echo '## findings')"
+}
+
+inbox::researcher() {
+  jaiph::run_step inbox::researcher workflow inbox::researcher::impl "$@"
+}
+
+inbox::analyst::impl() {
+  set -eo pipefail
+  set +u
+  echo "$1" > findings_file.md
+  summary=$(echo "Summary of findings")
+  jaiph::send 'summary' "$(echo "$summary")"
+}
+
+inbox::analyst() {
+  jaiph::run_step inbox::analyst workflow inbox::analyst::impl "$@"
+}
+
+inbox::reviewer::impl() {
+  set -eo pipefail
+  set +u
+  jaiph::send 'final_summary' "$(echo "[reviewed] $1")"
+}
+
+inbox::reviewer() {
+  jaiph::run_step inbox::reviewer workflow inbox::reviewer::impl "$@"
+}
+
+# Orchestration / entrypoint workflow
+inbox::default::impl() {
+  set -eo pipefail
+  set +u
+  jaiph::inbox_init
+  jaiph::register_route 'findings' 'inbox::analyst'
+  jaiph::register_route 'summary' 'inbox::reviewer'
+  inbox::researcher
+  jaiph::drain_queue
+}
+
+inbox::default() {
+  jaiph::run_step inbox::default workflow inbox::default::impl "$@"
 }",
     "main.sh": "#!/usr/bin/env bash
 
@@ -49,66 +110,67 @@ source "$(dirname "\${BASH_SOURCE[0]}")/bootstrap_project.sh"
 source "$(dirname "\${BASH_SOURCE[0]}")/tools/security.sh"
 
 # Validates local build prerequisites.
-main::rule::project_ready::impl() {
+main::project_ready::impl() {
   set -eo pipefail
   set +u
   test -f "package.json"
   test -n "$NODE_ENV"
 }
 
-main::rule::project_ready() {
-  jaiph::run_step main::rule::project_ready jaiph::execute_readonly main::rule::project_ready::impl "$@"
+main::project_ready() {
+  jaiph::run_step main::project_ready rule jaiph::execute_readonly main::project_ready::impl "$@"
 }
 
 # Verifies the project compiles successfully.
-main::rule::build_passes::impl() {
+main::build_passes::impl() {
   set -eo pipefail
   set +u
   npm run build
 }
 
-main::rule::build_passes() {
-  jaiph::run_step main::rule::build_passes jaiph::execute_readonly main::rule::build_passes::impl "$@"
+main::build_passes() {
+  jaiph::run_step main::build_passes rule jaiph::execute_readonly main::build_passes::impl "$@"
 }
 
 # Orchestrates checks, prompt execution, and docs refresh.
 # Arguments:
 #   $1: Feature requirements passed to the prompt.
-main::workflow::default::impl() {
+main::default::impl() {
   set -eo pipefail
   set +u
-  if ! main::rule::project_ready; then
-    bootstrap_project::workflow::nodejs
+  if ! main::project_ready; then
+    bootstrap_project::nodejs
   fi
+  export JAIPH_STEP_PARAM_KEYS='__prompt_impl,__preview,1'
   export JAIPH_PROMPT_PREVIEW='
     Build the applicati'
-  jaiph::prompt "$JAIPH_PROMPT_PREVIEW" "$@" <<__JAIPH_PROMPT_25__
+  jaiph::prompt "$JAIPH_PROMPT_PREVIEW" "1=$1" <<__JAIPH_PROMPT_25__
 
     Build the application using best practices.
     Follow requirements: $1
   
 __JAIPH_PROMPT_25__
-  main::rule::build_passes
-  tools::security::rule::scan_passes
-  main::workflow::update_docs
+  main::build_passes
+  tools::security::scan_passes
+  main::update_docs
 }
 
-main::workflow::default() {
-  jaiph::run_step main::workflow::default main::workflow::default::impl "$@"
+main::default() {
+  jaiph::run_step main::default workflow main::default::impl "$@"
 }
 
 # Refreshes documentation after a successful build.
-main::workflow::update_docs::impl() {
+main::update_docs::impl() {
   set -eo pipefail
   set +u
   export JAIPH_PROMPT_PREVIEW='Update docs'
-  jaiph::prompt "$JAIPH_PROMPT_PREVIEW" "$@" <<__JAIPH_PROMPT_38__
+  jaiph::prompt "$JAIPH_PROMPT_PREVIEW" <<__JAIPH_PROMPT_38__
 Update docs
 __JAIPH_PROMPT_38__
 }
 
-main::workflow::update_docs() {
-  jaiph::run_step main::workflow::update_docs main::workflow::update_docs::impl "$@"
+main::update_docs() {
+  jaiph::run_step main::update_docs workflow main::update_docs::impl "$@"
 }",
     "tools/security.sh": "#!/usr/bin/env bash
 
@@ -124,14 +186,14 @@ if [[ "$(jaiph__runtime_api)" != "1" ]]; then
   exit 1
 fi
 
-tools::security::rule::scan_passes::impl() {
+tools::security::scan_passes::impl() {
   set -eo pipefail
   set +u
   echo "Security scan placeholder here"
 }
 
-tools::security::rule::scan_passes() {
-  jaiph::run_step tools::security::rule::scan_passes jaiph::execute_readonly tools::security::rule::scan_passes::impl "$@"
+tools::security::scan_passes() {
+  jaiph::run_step tools::security::scan_passes rule jaiph::execute_readonly tools::security::scan_passes::impl "$@"
 }",
   },
 }
