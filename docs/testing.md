@@ -94,6 +94,22 @@ test "default workflow prints greeting" {
 }
 ```
 
+## Stress and soak testing
+
+For concurrency-sensitive features (e.g. parallel inbox dispatch), Jaiph
+includes stress-style E2E tests that go beyond single-run assertions:
+
+- **High-volume and fan-out scenarios** exercise lock contention and
+  dispatch correctness under concurrent writes.
+- **Soak runs** repeat the same scenario across multiple iterations to
+  surface heisenbugs that only manifest under repeated execution.
+- **Order-insensitive assertions** validate counts, uniqueness, and
+  completeness without depending on execution order — important when
+  parallel dispatch makes ordering non-deterministic.
+
+See `e2e/tests/93_inbox_stress.sh` for a concrete example covering all
+of these patterns.
+
 ## E2E testing
 
 E2E testing guidance was moved to [Contributing](contributing.md#e2e-testing).

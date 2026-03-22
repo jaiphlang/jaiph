@@ -297,9 +297,8 @@ jaiph::run_step() {
     fi
     export JAIPH_LAST_PROMPT_FINAL
   else
-    ( "$@" >"$out_file" 2>"$err_file" )
+    ( "$@" >"$out_tmp" 2>"$err_tmp" )
     status=$?
-    step_writes_live=1
   fi
   if [[ "$had_errexit" -eq 1 ]]; then
     set -e
