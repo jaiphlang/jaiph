@@ -6,27 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Deduplicate prompt parsing in `workflows.ts` <!-- dev-ready -->
-
-**Goal.** Extract the repeated prompt-parsing code in `workflows.ts` into a single plain function and call it from all sites (workflow body, if-then branches, recover blocks, captured/uncaptured forms).
-
-**Why.** The same multiline-prompt + `returns` parsing logic is copy-pasted ~6 times in `workflows.ts` (1070 lines). Bug fixes (like the `recover` prompt bug in this queue) have to be applied in each copy independently.
-
-**Scope.**
-
-- Write one function like `parsePromptStep(filePath, lines, startIdx, rawLine, innerNo, col): { step: PromptStepDef; nextIndex: number }` that handles: single-line prompt, multiline prompt (scanning for closing quote), `returns` schema, and `captureName`.
-- Replace each copy-pasted prompt-parsing block with a call to this function.
-- No new abstractions — just a plain function that returns data. No classes, no generics.
-- Keep it in `workflows.ts` or move to `parse/prompt.ts` if the file is still too long after dedup.
-
-**Acceptance criteria.**
-
-- Prompt parsing logic exists in exactly one place.
-- `workflows.ts` drops below 700 lines.
-- All existing tests pass, golden output unchanged.
-
----
-
 ## Split `runWorkflow()` in `run.ts` into focused functions <!-- dev-ready -->
 
 **Goal.** Break the 563-line `runWorkflow()` function into separate plain functions that each do one thing, called sequentially from a shorter orchestrator.
