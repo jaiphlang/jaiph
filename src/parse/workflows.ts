@@ -101,6 +101,31 @@ function splitPromptAndReturns(
   return { promptRaw, returns: returnsContent, nextIndex: nextIdx + 1 };
 }
 
+/** Split recover block content into statements on `;` or `\n`, but not inside double-quoted strings. */
+function splitRecoverStatements(blockContent: string): string[] {
+  const statements: string[] = [];
+  let current = "";
+  let inDoubleQuote = false;
+  for (let i = 0; i < blockContent.length; i += 1) {
+    const ch = blockContent[i];
+    if (ch === '"' && (i === 0 || blockContent[i - 1] !== "\\")) {
+      inDoubleQuote = !inDoubleQuote;
+      current += ch;
+      continue;
+    }
+    if (!inDoubleQuote && (ch === ";" || ch === "\n")) {
+      const trimmed = current.trim();
+      if (trimmed) statements.push(trimmed);
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  const trimmed = current.trim();
+  if (trimmed) statements.push(trimmed);
+  return statements;
+}
+
 /** Parse a single workflow statement string (e.g. "run foo", "ensure bar", "echo x") into a step. */
 function parseRecoverStatement(
   filePath: string,
@@ -742,10 +767,7 @@ export function parseWorkflowBlock(
             fail(filePath, 'unterminated recover block, expected "}"', blockStartLine, recoverCol);
           }
           const blockContent = blockLines.join("\n");
-          const statements = blockContent
-            .split(/[;\n]+/)
-            .map((s) => s.trim())
-            .filter(Boolean);
+          const statements = splitRecoverStatements(blockContent);
           if (statements.length === 0) {
             fail(filePath, "recover block must contain at least one statement", blockStartLine, recoverCol);
           }
@@ -769,10 +791,7 @@ export function parseWorkflowBlock(
             fail(filePath, 'unterminated recover block, expected "}"', innerNo, recoverCol);
           }
           const blockContent = right.slice(1, closeBrace).trim();
-          const statements = blockContent
-            .split(/[;\n]+/)
-            .map((s) => s.trim())
-            .filter(Boolean);
+          const statements = splitRecoverStatements(blockContent);
           if (statements.length === 0) {
             fail(filePath, "recover block must contain at least one statement", innerNo, recoverCol);
           }
@@ -885,10 +904,7 @@ export function parseWorkflowBlock(
           fail(filePath, 'unterminated recover block, expected "}"', blockStartLine, recoverCol);
         }
         const blockContent = blockLines.join("\n");
-        const statements = blockContent
-          .split(/[;\n]+/)
-          .map((s) => s.trim())
-          .filter(Boolean);
+        const statements = splitRecoverStatements(blockContent);
         if (statements.length === 0) {
           fail(filePath, "recover block must contain at least one statement", blockStartLine, recoverCol);
         }
@@ -914,10 +930,7 @@ export function parseWorkflowBlock(
           fail(filePath, 'unterminated recover block, expected "}"', innerNo, recoverCol);
         }
         const blockContent = right.slice(1, closeBrace).trim();
-        const statements = blockContent
-          .split(/[;\n]+/)
-          .map((s) => s.trim())
-          .filter(Boolean);
+        const statements = splitRecoverStatements(blockContent);
         if (statements.length === 0) {
           fail(filePath, "recover block must contain at least one statement", innerNo, recoverCol);
         }

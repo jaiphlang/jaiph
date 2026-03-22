@@ -6,26 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Fix parser bug: multiline `prompt` inside `recover` with params <!-- dev-ready -->
-
-**Goal.** Fix the parser/runtime bug where a multiline `prompt` inside `ensure ... recover { ... }` fails with `E_PARSE unterminated prompt string`, especially when the prompt includes interpolated parameters (for example `$ci_log_file`).
-
-**Scope.**
-
-- Reproduce the bug with a minimal workflow using `ensure some_rule recover { prompt " ... $var ... " }`.
-- Fix parsing/transpilation so multiline prompt strings are valid inside `recover` blocks and parameter interpolation is preserved.
-- Ensure behavior is consistent with multiline prompts in regular workflow blocks.
-- Add/extend docs only if syntax/limitations change.
-
-**Acceptance criteria.**
-
-- A multiline prompt inside `recover` parses and runs successfully.
-- Parameter interpolation inside that multiline prompt works (e.g. `$ci_log_file` appears correctly in prompt input).
-- Add a **full e2e test** that fails before the fix and passes after it, explicitly covering multiline `prompt` in `recover` with a parameter.
-- Existing prompt and `ensure ... recover` tests continue to pass.
-
----
-
 ## Fix unrelated e2e regression from missing `.jaiph` module import <!-- dev-ready -->
 
 **Goal.** Prevent unrelated e2e scripts (e.g. `e2e/say_hello.test.jh`) from failing because `.jaiph/main.jh` imports a missing file (`implement_from_queue.jh`), even though those tests do not target queue/implementation orchestration.
