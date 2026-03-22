@@ -132,7 +132,7 @@ fi
 e2e::assert_file_exists "${inbox_file}" "inbox file 001-audit.txt exists after send"
 e2e::assert_contains "$(cat "${inbox_file}")" "inbox-content-check" "inbox file contains sent message"
 
-e2e::section "Dispatched step CLI output shows channel via standard param display"
+e2e::section "Dispatched step CLI output shows \$1,\$2,\$3 via standard positional param display"
 
 # Given
 e2e::file "display_inbox.jh" <<'EOF'
@@ -166,9 +166,9 @@ Jaiph: Running display_inbox.jh
 workflow default
   ▸ workflow scanner
   ✓ <time>
-  ▸ workflow analyst (channel="findings")
+  ▸ workflow analyst (1="Found 3 issues in auth module", 2="findings", 3="scanner")
   ✓ <time>
-  ▸ workflow reviewer (channel="report")
+  ▸ workflow reviewer (1="Summary: Found 3 issues in auth ...", 2="report", 3="analyst")
   ✓ <time>
 ✓ PASS workflow default (<time>)
 EOF
@@ -177,3 +177,32 @@ e2e::expect_out_files "display_inbox.jh" 1
 e2e::expect_file "*display_inbox__reviewer.out" <<'EOF'
 [reviewed] Summary: Found 3 issues in auth module
 EOF
+
+e2e::section "Receiver positional args: \$1=message, \$2=channel, \$3=sender"
+
+# Given
+e2e::file "receiver_args.jh" <<'EOF'
+workflow producer {
+  events <- echo "payload-data"
+}
+
+workflow consumer {
+  echo "msg=$1" > args.txt
+  echo "channel=$2" >> args.txt
+  echo "sender=$3" >> args.txt
+}
+
+workflow default {
+  run producer
+  events -> consumer
+}
+EOF
+
+# When
+e2e::run "receiver_args.jh" >/dev/null
+
+# Then
+e2e::assert_file_exists "${TEST_DIR}/args.txt" "receiver wrote args file"
+e2e::assert_contains "$(cat "${TEST_DIR}/args.txt")" "msg=payload-data" "receiver \$1 is message payload"
+e2e::assert_contains "$(cat "${TEST_DIR}/args.txt")" "channel=events" "receiver \$2 is channel name"
+e2e::assert_contains "$(cat "${TEST_DIR}/args.txt")" "sender=producer" "receiver \$3 is sender workflow name"

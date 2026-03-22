@@ -50,7 +50,7 @@ fi
 inbox::researcher::impl() {
   set -eo pipefail
   set +u
-  jaiph::send 'findings' "$(echo '## findings')"
+  jaiph::send 'findings' "$(echo '## findings')" 'researcher'
 }
 
 inbox::researcher() {
@@ -62,7 +62,7 @@ inbox::analyst::impl() {
   set +u
   echo "$1" > findings_file.md
   summary=$(echo "Summary of findings")
-  jaiph::send 'summary' "$(echo "$summary")"
+  jaiph::send 'summary' "$(echo "$summary")" 'analyst'
 }
 
 inbox::analyst() {
@@ -72,7 +72,7 @@ inbox::analyst() {
 inbox::reviewer::impl() {
   set -eo pipefail
   set +u
-  jaiph::send 'final_summary' "$(echo "[reviewed] $1")"
+  jaiph::send 'final_summary' "$(echo "[reviewed] $1")" 'reviewer'
 }
 
 inbox::reviewer() {

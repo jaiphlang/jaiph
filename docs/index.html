@@ -225,7 +225,7 @@ running ensure_ci_passes.jh
                 <div class="code-tab-panel" data-panel="inbox-pipeline-jh">
                     <p>The <strong>inbox</strong> system lets workflows communicate through named channels.
                         A workflow sends a message with <code>&lt;-</code> and a route declaration
-                        (<code>-&gt;</code>) dispatches it to one or more receivers as <code>$1</code>.</p>
+                        (<code>-&gt;</code>) dispatches it to receivers with <code>$1=message</code>, <code>$2=channel</code>, <code>$3=sender</code>.</p>
                     <pre><code class="language-jaiph">#!/usr/bin/env jaiph
 
 workflow scanner {
@@ -253,9 +253,9 @@ Jaiph: Running agent_inbox.jh
 <span class="run-keyword">workflow</span> default
   <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> scanner
   <span class="run-pass">✓</span> <span class="run-time">0s</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> analyst <span class="run-params">(channel="findings")</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> analyst <span class="run-params">(1="Found 3 issues in auth module", 2="findings", 3="scanner")</span>
   <span class="run-pass">✓</span> <span class="run-time">0s</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> reviewer <span class="run-params">(channel="report")</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> reviewer <span class="run-params">(1="Summary: Found 3 issues in auth ...", 2="report", 3="analyst")</span>
   <span class="run-pass">✓</span> <span class="run-time">0s</span>
 
 <span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(0.1s)</span></code></pre>
