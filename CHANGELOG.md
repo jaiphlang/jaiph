@@ -2,6 +2,7 @@
 
 ## All changes
 
+- **Fix: `.jaiph/main.jh` stale import regression guard** — Added a regression test verifying that `.jaiph/main.jh` only imports modules that exist in-repo. Root cause: `implement_from_queue.jh` was renamed to `engineer.jh` without updating the entrypoint import, which caused `E_IMPORT_NOT_FOUND` during `build()` for any `jaiph test` run in the workspace (since `build()` compiles all `.jh` files, not just the test target and its imports).
 - **Fix: Multiline `prompt` inside `recover` blocks parsed incorrectly** — A multiline `prompt` string inside an `ensure ... recover { ... }` block caused `E_PARSE unterminated prompt string` because the recover block parser split statements on raw `\n` and `;` characters without respecting double-quoted string boundaries. The fix introduces `splitRecoverStatements()`, a quote-aware splitter that tracks whether the current position is inside a double-quoted string (handling escaped quotes) before treating `\n` or `;` as a statement delimiter. All four recover-block splitting call sites (single-line and multi-line variants for both `ensure` and `ensure_capture`) now use the new function. Parameter interpolation (e.g. `$ci_log_file`) inside multiline recover prompts works correctly since the prompt string is preserved intact. New E2E test covers a multiline prompt with an interpolated `$ci_log_file` parameter inside a recover block.
 
 
