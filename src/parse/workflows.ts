@@ -1,5 +1,7 @@
 import type { WorkflowDef, WorkflowRouteDef } from "../types";
-import { braceDepthDelta, colFromRaw, fail, hasUnescapedClosingQuote, indexOfClosingDoubleQuote, isRef } from "./core";
+import { braceDepthDelta, colFromRaw, fail, indexOfClosingDoubleQuote, isRef } from "./core";
+import { parsePromptStep } from "./prompt";
+import { parseEnsureStep } from "./steps";
 
 /**
  * Match `channel <- command` send operator in a line, only when `<-` appears outside quoted strings.
@@ -39,216 +41,6 @@ function matchSendOperator(line: string): { command: string; channel: string } |
   return null;
 }
 
-/**
- * Split raw prompt literal (opening " to closing ") and optional `returns '...'` / `returns "..."`.
- * Consumes line continuation (trailing \) after the closing quote.
- * Returns promptRaw (including quotes), optional returns schema string, and next line index.
- */
-function splitPromptAndReturns(
-  filePath: string,
-  lineNo: number,
-  rawPrompt: string,
-  lines: string[],
-  lineIndexAfterPrompt: number,
-): { promptRaw: string; returns?: string; nextIndex: number } {
-  const openIdx = rawPrompt.indexOf('"');
-  if (openIdx === -1) {
-    fail(filePath, "unterminated prompt string", lineNo, 1);
-  }
-  const closeIdx = indexOfClosingDoubleQuote(rawPrompt, openIdx + 1);
-  if (closeIdx === -1) {
-    fail(filePath, "unterminated prompt string", lineNo, 1);
-  }
-  const promptRaw = rawPrompt.slice(0, closeIdx + 1);
-  let rest = rawPrompt.slice(closeIdx + 1);
-  let nextIdx = lineIndexAfterPrompt;
-  while (nextIdx + 1 < lines.length && /\\\s*$/.test(rest.trimEnd())) {
-    rest += "\n" + lines[nextIdx + 1].replace(/\\\s*$/, "").trimStart();
-    nextIdx += 1;
-  }
-  let trimmed = rest.trim();
-  if (trimmed.length === 0) {
-    return { promptRaw, nextIndex: nextIdx + 1 };
-  }
-  const returnsMatch = trimmed.match(/^returns\s+([\'"])/);
-  if (!returnsMatch) {
-    fail(
-      filePath,
-      'after prompt string expected keyword "returns" with quoted schema (e.g. returns \'{ type: string }\') or end of line',
-      lineNo,
-      1,
-    );
-  }
-  const quoteChar = returnsMatch[1];
-  let contentStart = trimmed.indexOf(quoteChar) + 1;
-  let contentEnd = -1;
-  while (true) {
-    for (let i = contentStart; i < trimmed.length; i += 1) {
-      if (trimmed[i] === quoteChar && trimmed[i - 1] !== "\\") {
-        contentEnd = i;
-        break;
-      }
-    }
-    if (contentEnd >= 0) break;
-    if (nextIdx + 1 >= lines.length) break;
-    rest += "\n" + lines[nextIdx + 1];
-    nextIdx += 1;
-    trimmed = rest.trim();
-    contentStart = trimmed.indexOf(quoteChar) + 1;
-  }
-  if (contentEnd === -1) {
-    fail(filePath, "unterminated returns schema string", lineNo, 1);
-  }
-  const returnsContent = trimmed.slice(contentStart, contentEnd).replace(/\\'/g, "'").replace(/\\"/g, '"');
-  return { promptRaw, returns: returnsContent, nextIndex: nextIdx + 1 };
-}
-
-/** Split recover block content into statements on `;` or `\n`, but not inside double-quoted strings. */
-function splitRecoverStatements(blockContent: string): string[] {
-  const statements: string[] = [];
-  let current = "";
-  let inDoubleQuote = false;
-  for (let i = 0; i < blockContent.length; i += 1) {
-    const ch = blockContent[i];
-    if (ch === '"' && (i === 0 || blockContent[i - 1] !== "\\")) {
-      inDoubleQuote = !inDoubleQuote;
-      current += ch;
-      continue;
-    }
-    if (!inDoubleQuote && (ch === ";" || ch === "\n")) {
-      const trimmed = current.trim();
-      if (trimmed) statements.push(trimmed);
-      current = "";
-      continue;
-    }
-    current += ch;
-  }
-  const trimmed = current.trim();
-  if (trimmed) statements.push(trimmed);
-  return statements;
-}
-
-/** Parse a single workflow statement string (e.g. "run foo", "ensure bar", "echo x") into a step. */
-function parseRecoverStatement(
-  filePath: string,
-  lineNo: number,
-  col: number,
-  stmt: string,
-): import("../types").WorkflowStepDef {
-  const t = stmt.trim();
-  if (!t) {
-    fail(filePath, "empty recover statement", lineNo, col);
-  }
-  const genericAssignMatch = t.match(/^([A-Za-z_][A-Za-z0-9_]*)\s+=\s*(.+)$/s);
-  if (
-    genericAssignMatch &&
-    !genericAssignMatch[2].trimStart().startsWith("prompt ") &&
-    !genericAssignMatch[2].trimStart().startsWith('"') &&
-    !genericAssignMatch[2].trimStart().startsWith("'") &&
-    !genericAssignMatch[2].trimStart().startsWith("$")
-  ) {
-    const captureName = genericAssignMatch[1];
-    const rest = genericAssignMatch[2].trim();
-    const runMatch = rest.match(
-      /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
-    );
-    if (runMatch && isRef(runMatch[1])) {
-      return {
-        type: "run",
-        workflow: { value: runMatch[1], loc: { line: lineNo, col } },
-        args: runMatch[2]?.trim(),
-        captureName,
-      };
-    }
-    const ensureMatch = rest.match(
-      /^ensure\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
-    );
-    if (ensureMatch && isRef(ensureMatch[1])) {
-      return {
-        type: "ensure",
-        ref: { value: ensureMatch[1], loc: { line: lineNo, col } },
-        args: ensureMatch[2]?.trim(),
-        captureName,
-      };
-    }
-    return {
-      type: "shell",
-      command: rest,
-      loc: { line: lineNo, col },
-      captureName,
-    };
-  }
-  const runMatch = t.match(
-    /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
-  );
-  if (runMatch && isRef(runMatch[1])) {
-    return {
-      type: "run",
-      workflow: { value: runMatch[1], loc: { line: lineNo, col } },
-      args: runMatch[2]?.trim(),
-    };
-  }
-  const ensureMatch = t.match(
-    /^ensure\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
-  );
-  if (ensureMatch && isRef(ensureMatch[1])) {
-    return {
-      type: "ensure",
-      ref: { value: ensureMatch[1], loc: { line: lineNo, col } },
-      args: ensureMatch[2]?.trim(),
-    };
-  }
-  const promptAssignMatch = t.match(
-    /^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*prompt\s+(.+)$/s,
-  );
-  if (promptAssignMatch) {
-    const captureName = promptAssignMatch[1];
-    const promptArg = promptAssignMatch[2].trimStart();
-    const promptCol = col + t.indexOf("prompt");
-    if (!promptArg.startsWith(`"`)) {
-      fail(filePath, 'prompt must match: name = prompt "<text>"', lineNo, promptCol);
-    }
-    const { promptRaw, returns: returnsSchema } = splitPromptAndReturns(
-      filePath,
-      lineNo,
-      promptArg,
-      [],
-      lineNo - 1,
-    );
-    return {
-      type: "prompt",
-      raw: promptRaw,
-      loc: { line: lineNo, col: promptCol },
-      captureName,
-      ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
-    };
-  }
-  if (t.startsWith("prompt ")) {
-    const promptArg = t.slice("prompt ".length).trimStart();
-    const promptCol = col + t.indexOf("prompt");
-    if (!promptArg.startsWith(`"`)) {
-      fail(filePath, 'prompt must match: prompt "<text>"', lineNo, promptCol);
-    }
-    const { promptRaw, returns: returnsSchema } = splitPromptAndReturns(
-      filePath,
-      lineNo,
-      promptArg,
-      [],
-      lineNo - 1,
-    );
-    return {
-      type: "prompt",
-      raw: promptRaw,
-      loc: { line: lineNo, col: promptCol },
-      ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
-    };
-  }
-  return {
-    type: "shell",
-    command: t,
-    loc: { line: lineNo, col },
-  };
-}
 
 export function parseWorkflowBlock(
   filePath: string,
@@ -351,14 +143,10 @@ export function parseWorkflowBlock(
       }
       const ensureRef = ensureBodyMatch[1];
       const ensureArgs = ensureBodyMatch[2]?.trim();
-      type IfEnsureStep =
-        | { type: "shell"; command: string; loc: { line: number; col: number }; captureName?: string }
-        | { type: "run"; workflow: { value: string; loc: { line: number; col: number } }; args?: string; captureName?: string }
-        | { type: "prompt"; raw: string; loc: { line: number; col: number }; captureName?: string; returns?: string };
       let fiLine = -1;
       let inElse = false;
-      const thenSteps: IfEnsureStep[] = [];
-      const elseSteps: IfEnsureStep[] = [];
+      const thenSteps: import("../types").WorkflowStepDef[] = [];
+      const elseSteps: import("../types").WorkflowStepDef[] = [];
       for (let lookahead = idx + 1; lookahead < lines.length; lookahead += 1) {
         const lookNo = lookahead + 1;
         const lookRaw = lines[lookahead];
@@ -426,79 +214,21 @@ export function parseWorkflowBlock(
           /^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*prompt\s+(.+)$/s,
         );
         if (promptAssignMatch) {
-          const captureName = promptAssignMatch[1];
-          let promptArg = promptAssignMatch[2].trimStart();
           const promptCol = lookRaw.indexOf("prompt") + 1;
-          if (!promptArg.startsWith(`"`)) {
-            fail(filePath, 'prompt must match: name = prompt "<text>"', lookNo, promptCol);
-          }
-          let rawPrompt = promptArg;
-          if (!hasUnescapedClosingQuote(promptArg, 1)) {
-            let closed = false;
-            for (let la = lookahead + 1; la < lines.length; la += 1) {
-              rawPrompt += `\n${lines[la]}`;
-              if (hasUnescapedClosingQuote(lines[la], 0)) {
-                lookahead = la;
-                closed = true;
-                break;
-              }
-            }
-            if (!closed) {
-              fail(filePath, "unterminated prompt string", lookNo, promptCol);
-            }
-          }
-          const { promptRaw, returns: returnsSchema, nextIndex: nextIdx } = splitPromptAndReturns(
-            filePath,
-            lookNo,
-            rawPrompt,
-            lines,
-            lookahead,
+          const result = parsePromptStep(
+            filePath, lines, lookahead, promptAssignMatch[2].trimStart(),
+            promptCol, promptAssignMatch[1],
           );
-          lookahead = nextIdx - 1;
-          target.push({
-            type: "prompt",
-            raw: promptRaw,
-            loc: { line: lookNo, col: promptCol },
-            captureName,
-            ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
-          });
+          lookahead = result.nextLineIdx;
+          target.push(result.step);
           continue;
         }
         if (lookTrim.startsWith("prompt ")) {
           const promptCol = lookRaw.indexOf("prompt") + 1;
-          let promptArg = lookRaw.slice(lookRaw.indexOf("prompt") + "prompt".length).trimStart();
-          if (!promptArg.startsWith(`"`)) {
-            fail(filePath, 'prompt must match: prompt "<text>"', lookNo, promptCol);
-          }
-          let rawPrompt = promptArg;
-          if (!hasUnescapedClosingQuote(promptArg, 1)) {
-            let closed = false;
-            for (let la = lookahead + 1; la < lines.length; la += 1) {
-              rawPrompt += `\n${lines[la]}`;
-              if (hasUnescapedClosingQuote(lines[la], 0)) {
-                lookahead = la;
-                closed = true;
-                break;
-              }
-            }
-            if (!closed) {
-              fail(filePath, "unterminated prompt string", lookNo, promptCol);
-            }
-          }
-          const { promptRaw, returns: returnsSchema, nextIndex: nextIdx } = splitPromptAndReturns(
-            filePath,
-            lookNo,
-            rawPrompt,
-            lines,
-            lookahead,
-          );
-          lookahead = nextIdx - 1;
-          target.push({
-            type: "prompt",
-            raw: promptRaw,
-            loc: { line: lookNo, col: promptCol },
-            ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
-          });
+          const promptArg = lookRaw.slice(lookRaw.indexOf("prompt") + "prompt".length).trimStart();
+          const result = parsePromptStep(filePath, lines, lookahead, promptArg, promptCol);
+          lookahead = result.nextLineIdx;
+          target.push(result.step);
           continue;
         }
         if (/^\s*ensure\b/.test(lookTrim)) {
@@ -522,8 +252,8 @@ export function parseWorkflowBlock(
         type: "if",
         negated: isNegated,
         condition: { kind: "ensure", ref: ensureRefDef, args: ensureArgs },
-        thenSteps: thenSteps as import("../types").WorkflowStepDef[],
-        ...(hasElse ? { elseSteps: elseSteps as import("../types").WorkflowStepDef[] } : {}),
+        thenSteps,
+        ...(hasElse ? { elseSteps } : {}),
       });
       idx = fiLine;
       continue;
@@ -588,80 +318,22 @@ export function parseWorkflowBlock(
       /^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*prompt\s+(.+)$/s,
     );
     if (promptAssignMatch) {
-      const captureName = promptAssignMatch[1];
-      const promptArg = promptAssignMatch[2].trimStart();
       const promptCol = innerRaw.indexOf("prompt") + 1;
-      if (!promptArg.startsWith(`"`)) {
-        fail(filePath, 'prompt must match: name = prompt "<text>"', innerNo, promptCol);
-      }
-      let rawPrompt = promptArg;
-      if (!hasUnescapedClosingQuote(promptArg, 1)) {
-        let closed = false;
-        for (let lookahead = idx + 1; lookahead < lines.length; lookahead += 1) {
-          rawPrompt += `\n${lines[lookahead]}`;
-          if (hasUnescapedClosingQuote(lines[lookahead], 0)) {
-            idx = lookahead;
-            closed = true;
-            break;
-          }
-        }
-        if (!closed) {
-          fail(filePath, "unterminated prompt string", innerNo, promptCol);
-        }
-      }
-      const { promptRaw, returns: returnsSchema, nextIndex: nextIdx } = splitPromptAndReturns(
-        filePath,
-        innerNo,
-        rawPrompt,
-        lines,
-        idx,
+      const result = parsePromptStep(
+        filePath, lines, idx, promptAssignMatch[2].trimStart(),
+        promptCol, promptAssignMatch[1],
       );
-      idx = nextIdx - 1;
-      workflow.steps.push({
-        type: "prompt",
-        raw: promptRaw,
-        loc: { line: innerNo, col: promptCol },
-        captureName,
-        ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
-      });
+      idx = result.nextLineIdx;
+      workflow.steps.push(result.step);
       continue;
     }
 
     if (inner.startsWith("prompt ")) {
       const promptCol = innerRaw.indexOf("prompt") + 1;
       const promptArg = innerRaw.slice(innerRaw.indexOf("prompt") + "prompt".length).trimStart();
-      if (!promptArg.startsWith(`"`)) {
-        fail(filePath, 'prompt must match: prompt "<text>"', innerNo, promptCol);
-      }
-      let rawPrompt = promptArg;
-      if (!hasUnescapedClosingQuote(promptArg, 1)) {
-        let closed = false;
-        for (let lookahead = idx + 1; lookahead < lines.length; lookahead += 1) {
-          rawPrompt += `\n${lines[lookahead]}`;
-          if (hasUnescapedClosingQuote(lines[lookahead], 0)) {
-            idx = lookahead;
-            closed = true;
-            break;
-          }
-        }
-        if (!closed) {
-          fail(filePath, "unterminated prompt string", innerNo, promptCol);
-        }
-      }
-      const { promptRaw, returns: returnsSchema, nextIndex: nextIdx } = splitPromptAndReturns(
-        filePath,
-        innerNo,
-        rawPrompt,
-        lines,
-        idx,
-      );
-      idx = nextIdx - 1;
-      workflow.steps.push({
-        type: "prompt",
-        raw: promptRaw,
-        loc: { line: innerNo, col: promptCol },
-        ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
-      });
+      const result = parsePromptStep(filePath, lines, idx, promptArg, promptCol);
+      idx = result.nextLineIdx;
+      workflow.steps.push(result.step);
       continue;
     }
 
@@ -680,103 +352,12 @@ export function parseWorkflowBlock(
         fail(filePath, "E_PARSE capture and send cannot be combined; use separate steps", innerNo);
       }
       if (rest.startsWith("ensure ")) {
-        const ensureBody = rest.slice("ensure ".length).trim();
-        const recoverIdx = ensureBody.indexOf(" recover ");
-        if (recoverIdx === -1) {
-          const ensureMatch = ensureBody.match(
-            /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
-          );
-          if (!ensureMatch || !isRef(ensureMatch[1])) {
-            fail(filePath, "invalid ensure statement", innerNo);
-          }
-          workflow.steps.push({
-            type: "ensure",
-            ref: {
-              value: ensureMatch[1],
-              loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 },
-            },
-            args: ensureMatch[2]?.trim(),
-            captureName,
-          });
-          continue;
-        }
-        const left = ensureBody.slice(0, recoverIdx).trim();
-        const right = ensureBody.slice(recoverIdx + " recover ".length).trim();
-        const ensureMatch = left.match(
-          /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
+        const result = parseEnsureStep(
+          filePath, lines, idx, innerNo, innerRaw,
+          rest.slice("ensure ".length).trim(), captureName,
         );
-        if (!ensureMatch || !isRef(ensureMatch[1])) {
-          fail(filePath, "invalid ensure statement", innerNo);
-        }
-        const ref = ensureMatch[1];
-        const args = ensureMatch[2]?.trim();
-        const recoverCol = innerRaw.indexOf("recover") + 1;
-
-        if (right === "{") {
-          const blockStartLine = innerNo;
-          let blockLines: string[] = [];
-          let closeLineIdx = -1;
-          for (let look = idx + 1; look < lines.length; look += 1) {
-            const lookTrim = lines[look].trim();
-            if (lookTrim === "}") {
-              closeLineIdx = look;
-              break;
-            }
-            blockLines.push(lines[look].trim());
-          }
-          if (closeLineIdx === -1) {
-            fail(filePath, 'unterminated recover block, expected "}"', blockStartLine, recoverCol);
-          }
-          const blockContent = blockLines.join("\n");
-          const statements = splitRecoverStatements(blockContent);
-          if (statements.length === 0) {
-            fail(filePath, "recover block must contain at least one statement", blockStartLine, recoverCol);
-          }
-          const blockSteps = statements.map((s) =>
-            parseRecoverStatement(filePath, blockStartLine, 1, s),
-          );
-          workflow.steps.push({
-            type: "ensure",
-            ref: { value: ref, loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 } },
-            args,
-            recover: { block: blockSteps },
-            captureName,
-          });
-          idx = closeLineIdx;
-          continue;
-        }
-
-        if (right.startsWith("{")) {
-          const closeBrace = right.indexOf("}");
-          if (closeBrace === -1) {
-            fail(filePath, 'unterminated recover block, expected "}"', innerNo, recoverCol);
-          }
-          const blockContent = right.slice(1, closeBrace).trim();
-          const statements = splitRecoverStatements(blockContent);
-          if (statements.length === 0) {
-            fail(filePath, "recover block must contain at least one statement", innerNo, recoverCol);
-          }
-          const blockSteps = statements.map((s) =>
-            parseRecoverStatement(filePath, innerNo, recoverCol, s),
-          );
-          workflow.steps.push({
-            type: "ensure",
-            ref: { value: ref, loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 } },
-            args,
-            recover: { block: blockSteps },
-            captureName,
-          });
-          continue;
-        }
-
-        const singleStep = parseRecoverStatement(filePath, innerNo, recoverCol, right);
-        workflow.steps.push({
-          type: "ensure",
-          ref: { value: ref, loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 } },
-          args,
-          recover: { single: singleStep },
-          captureName,
-        });
+        idx = result.nextIdx;
+        workflow.steps.push(result.step);
         continue;
       }
       if (rest.startsWith("run ")) {
@@ -816,110 +397,12 @@ export function parseWorkflowBlock(
     }
 
     if (inner.startsWith("ensure ")) {
-      const ensureBody = inner.slice("ensure ".length).trim();
-      const recoverIdx = ensureBody.indexOf(" recover ");
-      if (recoverIdx === -1) {
-        const ensureMatch = ensureBody.match(
-          /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
-        );
-        if (!ensureMatch || !isRef(ensureMatch[1])) {
-          fail(filePath, "invalid ensure statement", innerNo);
-        }
-        const ref = ensureMatch[1];
-        const args = ensureMatch[2]?.trim();
-        workflow.steps.push({
-          type: "ensure",
-          ref: {
-            value: ref,
-            loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 },
-          },
-          args,
-        });
-        continue;
-      }
-      const left = ensureBody.slice(0, recoverIdx).trim();
-      const right = ensureBody.slice(recoverIdx + " recover ".length).trim();
-      const ensureMatch = left.match(
-        /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
+      const result = parseEnsureStep(
+        filePath, lines, idx, innerNo, innerRaw,
+        inner.slice("ensure ".length).trim(),
       );
-      if (!ensureMatch || !isRef(ensureMatch[1])) {
-        fail(filePath, "invalid ensure statement", innerNo);
-      }
-      const ref = ensureMatch[1];
-      const args = ensureMatch[2]?.trim();
-      const recoverCol = innerRaw.indexOf("recover") + 1;
-
-      if (right === "{") {
-        const blockStartLine = innerNo;
-        let blockLines: string[] = [];
-        let closeLineIdx = -1;
-        for (let look = idx + 1; look < lines.length; look += 1) {
-          const lookTrim = lines[look].trim();
-          if (lookTrim === "}") {
-            closeLineIdx = look;
-            break;
-          }
-          blockLines.push(lines[look].trim());
-        }
-        if (closeLineIdx === -1) {
-          fail(filePath, 'unterminated recover block, expected "}"', blockStartLine, recoverCol);
-        }
-        const blockContent = blockLines.join("\n");
-        const statements = splitRecoverStatements(blockContent);
-        if (statements.length === 0) {
-          fail(filePath, "recover block must contain at least one statement", blockStartLine, recoverCol);
-        }
-        const blockSteps = statements.map((s) =>
-          parseRecoverStatement(filePath, blockStartLine, 1, s),
-        );
-        workflow.steps.push({
-          type: "ensure",
-          ref: {
-            value: ref,
-            loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 },
-          },
-          args,
-          recover: { block: blockSteps },
-        });
-        idx = closeLineIdx;
-        continue;
-      }
-
-      if (right.startsWith("{")) {
-        const closeBrace = right.indexOf("}");
-        if (closeBrace === -1) {
-          fail(filePath, 'unterminated recover block, expected "}"', innerNo, recoverCol);
-        }
-        const blockContent = right.slice(1, closeBrace).trim();
-        const statements = splitRecoverStatements(blockContent);
-        if (statements.length === 0) {
-          fail(filePath, "recover block must contain at least one statement", innerNo, recoverCol);
-        }
-        const blockSteps = statements.map((s) =>
-          parseRecoverStatement(filePath, innerNo, recoverCol, s),
-        );
-        workflow.steps.push({
-          type: "ensure",
-          ref: {
-            value: ref,
-            loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 },
-          },
-          args,
-          recover: { block: blockSteps },
-        });
-        continue;
-      }
-
-      const singleStep = parseRecoverStatement(filePath, innerNo, recoverCol, right);
-      workflow.steps.push({
-        type: "ensure",
-        ref: {
-          value: ref,
-          loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 },
-        },
-        args,
-        recover: { single: singleStep },
-      });
+      idx = result.nextIdx;
+      workflow.steps.push(result.step);
       continue;
     }
 
