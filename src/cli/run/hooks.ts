@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import type { HookConfig, HookEventName, HookPayload } from "../../types";
+import type { RunEmitter } from "./emitter";
 
 const HOOKS_FILENAME = "hooks.json";
 
@@ -162,4 +163,50 @@ export function runHooksForEvent(
       process.stderr.write(`jaiph hooks: failed to run ${cmd}: ${message}\n`);
     }
   }
+}
+
+/** Subscribe to emitter events and invoke hooks for each lifecycle event. */
+export function registerHooksSubscriber(
+  emitter: RunEmitter,
+  config: MergedHookConfig,
+  inputAbs: string,
+  workspaceRoot: string,
+): void {
+  emitter.on("step_start", (data) => {
+    runHooksForEvent(config, "step_start", {
+      event: "step_start",
+      workflow_id: data.event.run_id,
+      step_id: data.eventId,
+      step_kind: data.event.kind,
+      step_name: data.event.name,
+      timestamp: data.event.ts || new Date().toISOString(),
+      run_path: inputAbs,
+      workspace: workspaceRoot,
+    });
+  });
+
+  emitter.on("step_end", (data) => {
+    runHooksForEvent(config, "step_end", {
+      event: "step_end",
+      workflow_id: data.event.run_id,
+      step_id: data.eventId,
+      step_kind: data.event.kind,
+      step_name: data.event.name,
+      status: data.event.status ?? 1,
+      elapsed_ms: data.event.elapsed_ms ?? 0,
+      timestamp: data.event.ts || new Date().toISOString(),
+      run_path: inputAbs,
+      workspace: workspaceRoot,
+      out_file: data.event.out_file || undefined,
+      err_file: data.event.err_file || undefined,
+    });
+  });
+
+  emitter.on("workflow_start", (payload) => {
+    runHooksForEvent(config, "workflow_start", payload);
+  });
+
+  emitter.on("workflow_end", (payload) => {
+    runHooksForEvent(config, "workflow_end", payload);
+  });
 }

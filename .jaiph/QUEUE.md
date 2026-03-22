@@ -6,37 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Add runtime event emitter for CLI reporting <!-- dev-ready -->
-
-**Goal.** Replace the direct coupling between stderr event parsing and consumers (TTY rendering, hooks, state tracking) with a simple event emitter that consumers subscribe to. The emitter becomes the single source of truth for runtime events.
-
-**Why.** Today `handleStderrLine` in `run.ts` directly calls TTY rendering code, hook invocation, and state mutation in the same function body. Adding a new consumer (e.g. a JSON-stream API mode, a web dashboard, a test harness) means editing that function. An event emitter decouples event production from consumption so each consumer is a standalone subscriber.
-
-**Design constraints.**
-
-- Plain object with `on(event, callback)` and `emit(event, data)`. No class hierarchy, no generics, no EventEmitter inheritance. Just a typed record mapping event names to callback arrays.
-- Event types reuse existing `StepEvent` and `LogEvent` from `src/cli/run/events.ts` plus a few lifecycle events: `workflow_start`, `workflow_end`, `stderr_line` (raw, for passthrough).
-- File: `src/cli/run/emitter.ts`. Under 80 lines. One `createRunEmitter()` factory function that returns the emitter object.
-- Subscribers are plain functions registered in `runWorkflow()` before spawning the process: one for TTY rendering, one for hooks, one for state tracking.
-
-**Scope.**
-
-- Create `src/cli/run/emitter.ts` with `createRunEmitter()`.
-- In `runWorkflow()` (or the orchestrator after the split): create emitter, register subscribers, wire the stderr parser to call `emitter.emit(...)` instead of directly calling rendering/hooks.
-- Move hook invocation (`runHooksForEvent`) to a subscriber function.
-- Move TTY rendering (step start/end lines, running timer updates) to a subscriber function.
-- Keep the event types and parsing unchanged — the emitter sits between the parser and the consumers.
-
-**Acceptance criteria.**
-
-- `src/cli/run/emitter.ts` exists and is under 80 lines.
-- The stderr parser emits events through the emitter, not directly to consumers.
-- TTY rendering, hooks, and state tracking are each a separate subscriber — not interleaved in one function.
-- Adding a new consumer (e.g. JSON-line output mode) requires only adding a new subscriber, not editing existing ones.
-- All existing tests pass, no behavior change in CLI output or hook invocation.
-
----
-
 ## Detect and fill test coverage gaps <!-- dev-ready -->
 
 **Goal.** Systematically identify untested or under-tested code paths across the compiler, runtime, and CLI, then produce the missing tests.
@@ -68,15 +37,7 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Explore removing Node.js runtime dependency from Jaiph stdlib <!-- dev-ready -->
-
-**Goal.** Investigate whether the Jaiph bash runtime's dependency on Node.js (currently `jaiph::stream_json_to_text` in `prompt.sh:19` shells out to `node -e` for JSON stream parsing) can be replaced with a pure-bash or lightweight alternative (e.g. `jq`). This would simplify the Docker image and reduce the runtime footprint.
-
-**Scope.** Research only — identify all `node` usages in the runtime bash code, evaluate alternatives, and document findings with a recommendation. If removal is feasible, write up an implementation plan. If Node.js is the most practical choice, document why and close the ticket.
-
----
-
-## Make step outputs persist live to artifact files (tee for all step kinds)<!-- dev-ready -->
+## Make step outputs persist live to artifact files (probably tee or `|` for all step kinds)<!-- dev-ready -->
 
 **Goal.** Ensure every step writes to its `.jaiph/runs/.../*.out`/`*.err` files incrementally while it executes (not only at step end), so logs are always tail-able in real time.
 
@@ -93,27 +54,6 @@ The first `##` task in the file is always the current task.
 - Existing tests for prompt output and run artifacts continue to pass.
 - Add/extend tests (unit/e2e) proving live file growth behavior for at least one non-prompt step.
 - No regression in final PASS/FAIL reporting and step timing output.
-
----
-
-## TTY live pane: show last 10 lines of active run output under RUNNING <!-- dev-ready -->
-
-**Goal.** In interactive TTY mode, display an ephemeral live pane under the `RUNNING workflow ...` status line that shows the latest ~10 lines from active step output; remove this pane when workflow finishes.
-
-**Scope.**
-
-- TTY-only rendering in CLI run path (`src/cli/commands/run.ts`), without changing non-TTY output format.
-- Show an empty spacer line plus 10 tail lines, refreshed live and cursor-safe.
-- Source lines from active run output in a way that avoids heavy polling and avoids re-reading entire files repeatedly.
-- Keep existing tree/progress flow intact: step start/end lines, logs, and final PASS/FAIL summary remain readable and stable.
-- Add guardrails for performance (bounded buffer, throttled redraw cadence, ANSI/control-char handling).
-
-**Acceptance criteria.**
-
-- While workflow is running in a PTY/TTY, the live pane appears below `RUNNING` and updates with recent output.
-- Pane is cleared/removed before final PASS/FAIL line is shown.
-- Non-TTY runs are unchanged.
-- PTY/e2e tests are added or updated to verify pane lifecycle (appears during run, absent at completion) and no regressions in existing progress-tree behavior.
 
 ---
 
@@ -161,3 +101,34 @@ The first `##` task in the file is always the current task.
   - **Interaction:** at least one case involving nested `run` or a follow-on workflow in the same file shows the documented precedence (no silent wrong backend/model).
 - Unit/parser tests as needed for parse errors (invalid keys, duplicate inner config if disallowed).
 - `docs/configuration.md` and `docs/grammar.md` updated to describe inner workflow config and precedence.
+
+---
+
+## TTY live pane: show last 10 lines of active run output under RUNNING <!-- dev-ready -->
+
+**Goal.** In interactive TTY mode, display an ephemeral live pane under the `RUNNING workflow ...` status line that shows the latest ~10 lines from active step output; remove this pane when workflow finishes.
+
+**Scope.**
+
+- TTY-only rendering in CLI run path (`src/cli/commands/run.ts`), without changing non-TTY output format.
+- Show an empty spacer line plus 10 tail lines, refreshed live and cursor-safe.
+- Source lines from active run output in a way that avoids heavy polling and avoids re-reading entire files repeatedly.
+- Keep existing tree/progress flow intact: step start/end lines, logs, and final PASS/FAIL summary remain readable and stable.
+- Add guardrails for performance (bounded buffer, throttled redraw cadence, ANSI/control-char handling).
+
+**Acceptance criteria.**
+
+- While workflow is running in a PTY/TTY, the live pane appears below `RUNNING` and updates with recent output.
+- Pane is cleared/removed before final PASS/FAIL line is shown.
+- Non-TTY runs are unchanged.
+- PTY/e2e tests are added or updated to verify pane lifecycle (appears during run, absent at completion) and no regressions in existing progress-tree behavior.
+
+---
+
+## Explore removing Node.js runtime dependency from Jaiph stdlib <!-- dev-ready -->
+
+**Goal.** Investigate whether the Jaiph bash runtime's dependency on Node.js (currently `jaiph::stream_json_to_text` in `prompt.sh:19` shells out to `node -e` for JSON stream parsing) can be replaced with a pure-bash or lightweight alternative (e.g. `jq`). This would simplify the Docker image and reduce the runtime footprint.
+
+**Scope.** Research only — identify all `node` usages in the runtime bash code, evaluate alternatives, and document findings with a recommendation. If removal is feasible, write up an implementation plan. If Node.js is the most practical choice, document why and close the ticket.
+
+---
