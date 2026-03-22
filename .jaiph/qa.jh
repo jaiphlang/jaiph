@@ -6,6 +6,7 @@
 #
 
 import "./ensure_ci_passes.jh" as ci
+import "./git.jh" as git
 
 config {
   agent.backend = "claude"
@@ -78,6 +79,9 @@ workflow analyze_gaps {
 
     Sort by priority descending. Be thorough but skip trivial paths (like
     simple re-exports or type definitions).
+    </task>
+    </testing_philosophy>
+    </role>
   "
 
   echo "$gap_report" > .jaiph/tmp/qa_gap_report.md
@@ -127,10 +131,14 @@ workflow write_tests {
 
     Gap report:
     $gap_report
+    </task>
+    </testing_philosophy>
+    </role>
   "
 }
 
 workflow default {
+  ensure git.is_clean
   mkdir -p .jaiph/tmp
   run analyze_gaps
   run write_tests
