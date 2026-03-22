@@ -1,11 +1,9 @@
 #!/usr/bin/env jaiph
 
+# Uses cursor backend — faster and cheaper for targeted CI fixes.
 config {
   agent.backend = "cursor"
   agent.cursor_flags = "--force"
-  # for Claude you can use:
-  # agent.backend = "claude"
-  # agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
 rule ci_passes {
@@ -23,7 +21,20 @@ workflow ensure_ci_passes {
       echo "jaiph: ci failure log is empty at $ci_log_file" >&2
       exit 1
     fi
-    prompt "Fix failing CI so npm run test:ci passes. Failure output was saved to: $ci_log_file. Start by inspecting the tail of the log (for example: tail -n 200 '$ci_log_file') and then apply the smallest safe fix."
+    prompt "Fix failing CI so npm run test:ci passes. Failure output was
+      saved to: $ci_log_file. Start by inspecting the tail of the log
+      (for example: tail -n 200 '$ci_log_file') and then apply the smallest
+      safe fix.
+
+      Constraints:
+      - e2e/tests/* and acceptance JS tests are behavior contracts.
+      - Default approach: change production code to satisfy existing tests,
+        not vice versa.
+      - Modify tests only for intentional behavior changes, incorrect
+        expectations, or removal of obsolete features.
+      - Any test change must be minimal with a clear rationale.
+      - Do NOT add speculative fixes. Fix only what the log shows is broken.
+    "
   }
 
   rm -f "$ci_log_file"

@@ -28,11 +28,16 @@ workflow review_task {
     2. **Architecture fit** — Consistent with the codebase's grammar,
        compiler pipeline, and runtime conventions. Read relevant
        source files and docs to verify.
-    3. **No conflicts** — Does not conflict with documented features
+    3. **Code philosophy** — The proposed approach follows codebase
+       principles: plain functions with explicit arguments, flat control
+       flow, short files (<400 lines), no speculative abstractions, minimal
+       touch surface (≤3 files per feature). Flag tasks whose scope or
+       approach would violate these.
+    4. **No conflicts** — Does not conflict with documented features
        or other queued tasks in QUEUE.md.
-    4. **Feasibility** — Implementable with the current compiler/runtime
+    5. **Feasibility** — Implementable with the current compiler/runtime
        infrastructure without depending on unfinished work.
-    5. **Scope** — Appropriately sized for a single implementation
+    6. **Scope** — Appropriately sized for a single implementation
        cycle. Suggest splitting if too broad.
 
     Read the full QUEUE.md (.jaiph/QUEUE.md) for context on other
@@ -50,13 +55,12 @@ workflow review_task {
 
     If the task in the QUEUE.md already contains answers to the questions,
     merge the answers into the description, remove redundancies, but keep
-    the original context and reasoning if it may help the developer. If all 
+    the original context and reasoning if it may help the developer. If all
     questions are answered, mark the task as dev-ready.
 
-    If you are sure how to answer to questions, please do, and consider
-    answers in your evaluation. You are skilled analyst, so in most cases you
-    should be able to answer questions based on your knowledge of the codebase 
-    and the task in a reasonable way.
+    If you are able to answer the questions yourself based on your knowledge
+    of the codebase and the task, do so, and factor those answers into your
+    evaluation.
 
     Task to review:
     $1
