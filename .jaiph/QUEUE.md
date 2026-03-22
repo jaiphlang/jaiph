@@ -6,34 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Inbox concurrency stress suite + hardening follow-up gates <!-- dev-ready -->
-
-**Goal.** Prevent race-condition regressions by adding repeatable stress tests and explicit criteria for when deeper architectural hardening is required.
-
-**Scope.**
-
-- Add thorough tests (unit + e2e) that exercise concurrency and failure paths:
-  - high-volume send/dispatch race tests (counts, uniqueness, no loss)
-  - fan-out correctness (`N` messages × `M` targets)
-  - nested dispatch/reentrancy (dispatched workflow sends more messages)
-  - failure aggregation across parallel targets
-  - concurrent artifact writing checks for inbox, step logs, and summaries
-  - repeated soak runs (same scenario many iterations) to catch heisenbugs
-- Use assertions resilient to benign non-determinism (order-insensitive where ordering is not guaranteed), while still asserting strict invariants for IDs/counts/completeness.
-- Add hardening gates:
-  - If tests expose stale lock/deadlock/starvation/crash-resume issues, create/execute follow-up architecture tasks (e.g. stale-lock recovery metadata, retry/backoff, resume-safe queue state markers).
-  - If gates are not triggered, document why baseline lock model is sufficient for current workload assumptions.
-
-**Acceptance criteria.**
-
-- New tests fail on race regressions and pass reliably in CI.
-- At least one stress suite runs multiple iterations and proves stability over repeated runs.
-- A short hardening decision record is produced: either
-  - `baseline accepted` with evidence, or
-  - `follow-up hardening required` with concrete triggered issues and next tasks.
-
----
-
 ## Support parallel processes in workflow shell steps (`& ... wait`) <!-- dev-ready -->
 
 **Goal.** Allow users to run concurrent subprocesses inside workflow shell execution using standard Bash backgrounding (`prog1 &`, `prog2 &`, `wait`) while keeping Jaiph internals deterministic and race-safe.
