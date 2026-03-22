@@ -192,6 +192,11 @@ export function emitIfStep(
     out.push(
       `${indent}if ${negPrefix}${transpileRuleRef(step.condition.ref, ctx.workflowSymbol, ctx.importedWorkflowSymbols)}${ensureArgs}; then`,
     );
+  } else if (step.condition.kind === "run") {
+    const runArgs = step.condition.args ? ` ${step.condition.args}` : "";
+    const wfRef = transpileWorkflowRef(step.condition.ref, ctx.workflowSymbol, ctx.importedWorkflowSymbols);
+    const scopePrefix = prefixForImportedWorkflowCall(step.condition.ref, ctx.importedModuleHasMetadata, ctx.importedWorkflowSymbols);
+    out.push(`${indent}if ${negPrefix}${scopePrefix}${wfRef}${runArgs}; then`);
   } else {
     const resolvedCondition = resolveShellRefs(step.condition.command, ctx.importedWorkflowSymbols);
     out.push(`${indent}if ${negPrefix}${resolvedCondition}; then`);

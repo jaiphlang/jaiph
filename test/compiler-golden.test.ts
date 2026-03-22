@@ -632,6 +632,155 @@ test("compiler golden: negated if ensure with args transpiles correctly", () => 
   }
 });
 
+test("compiler golden: negated if-run transpiles workflow ref, not raw DSL tokens", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-if-not-run-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        "workflow check {",
+        "  true",
+        "}",
+        "workflow recovery {",
+        "  echo recovering",
+        "}",
+        "workflow default {",
+        "  if ! run check; then",
+        '    prompt "fix things"',
+        "    run recovery",
+        "  fi",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const actual = normalize(transpileFile(input, root));
+    assert.match(actual, /if ! entry::check; then/);
+    assert.match(actual, /entry::recovery/);
+    assert.doesNotMatch(actual, /\brun check\b/);
+    assert.doesNotMatch(actual, /\brun recovery\b/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("compiler golden: positive if-run transpiles workflow ref", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-if-pos-run-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        "workflow check {",
+        "  true",
+        "}",
+        "workflow default {",
+        "  if run check; then",
+        "    echo passed",
+        "  fi",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const actual = normalize(transpileFile(input, root));
+    assert.match(actual, /if entry::check; then/);
+    assert.match(actual, /echo passed/);
+    assert.doesNotMatch(actual, /\brun check\b/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("compiler golden: if-run with imported workflow ref", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-if-run-import-"));
+  try {
+    const libFile = join(root, "lib.jh");
+    writeFileSync(
+      libFile,
+      [
+        "workflow healthcheck {",
+        "  true",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        'import "lib.jh" as lib',
+        "workflow default {",
+        "  if ! run lib.healthcheck; then",
+        "    echo service down",
+        "  fi",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const actual = normalize(transpileFile(input, root));
+    assert.match(actual, /if ! [a-z0-9_]+::healthcheck; then/);
+    assert.match(actual, /echo service down/);
+    assert.doesNotMatch(actual, /\brun lib\.healthcheck\b/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("compiler golden: if-run with args transpiles correctly", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-if-run-args-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        "workflow check {",
+        "  true",
+        "}",
+        "workflow default {",
+        "  if ! run check foo=bar; then",
+        "    echo fallback",
+        "  fi",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const actual = normalize(transpileFile(input, root));
+    assert.match(actual, /if ! entry::check foo=bar; then/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("compiler golden: if-run with else branch transpiles correctly", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-if-run-else-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        "workflow check {",
+        "  true",
+        "}",
+        "workflow default {",
+        "  if run check; then",
+        "    echo success",
+        "  else",
+        "    echo failure",
+        "  fi",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const actual = normalize(transpileFile(input, root));
+    assert.match(actual, /if entry::check; then/);
+    assert.match(actual, /echo success/);
+    assert.match(actual, /else/);
+    assert.match(actual, /echo failure/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("compiler golden: workflow with config emits JAIPH export defaults", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-golden-metadata-"));
   try {

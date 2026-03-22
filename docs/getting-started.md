@@ -148,5 +148,6 @@ Jaiph files (`.jh`) contain **rules**, **workflows**, **functions**, and optiona
 - `log "message"` / `logerr "message"` — Display a message in the progress tree (stdout / stderr).
 - `channel <- cmd` / `channel -> workflow` — Send and route messages between workflows. See [Inbox & Dispatch](inbox.md).
 - `if [!] ensure ref; then ... fi` — Conditional based on rule result.
+- `if [!] run ref; then ... fi` — Conditional based on workflow exit code.
 
 Runtime behavior (progress tree, step output, run logs) is documented in [CLI Reference](cli.md). For agent backend configuration, see [Configuration](configuration.md). For Docker sandboxing (beta), see [Sandboxing](sandboxing.md). For testing workflows with mocks and assertions, see [Testing](testing.md). For lifecycle hooks, see [Hooks](hooks.md).
