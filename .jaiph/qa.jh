@@ -30,9 +30,14 @@ local testing_philosophy = "
   Key rules:
   - Tests are behavior contracts. Change production code to satisfy tests,
     not vice versa.
-  - E2E tests assert two things independently: CLI tree output
-    (e2e::expect_stdout) and runtime artifacts (e2e::expect_out,
-    e2e::expect_file).
+  - E2E tests assert two things independently: CLI tree output and runtime
+    artifacts. Prefer full-output contracts: e2e::expect_stdout (heredoc
+    expected), e2e::expect_out, e2e::expect_rule_out, e2e::expect_file, or
+    e2e::assert_equals / e2e::assert_output_equals on captured stdout/stderr
+    and file contents. Do not use e2e::assert_contains for whole messages or
+    whole files unless the output is inherently nondeterministic or unbounded;
+    if you must use substring checks, add a short comment explaining why full
+    equality is not feasible.
   - Prefer the narrowest test layer. A pure function bug = unit test.
     A runtime integration bug = e2e test.
   - Modify existing tests only for intentional behavior changes, incorrect
@@ -119,7 +124,9 @@ workflow write_tests {
     - For unit tests: add to test/ using Node test runner.
     - For e2e tests: add to e2e/tests/ following the Given/When/Then pattern
       with helpers from e2e/lib/common.sh (see docs/contributing.md for
-      reference).
+      reference). Assert complete stdout/stderr and artifact text with
+      expect_stdout, expect_out, expect_file, or assert_equals — not partial
+      substring matches unless unavoidable and commented.
     - Do NOT modify existing tests.
     - Do NOT modify production code.
     - After writing tests, run: npm run build && npm test && npm run test:e2e

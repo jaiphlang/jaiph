@@ -1,0 +1,156 @@
+#!/usr/bin/env jaiph
+
+#
+# Simplifier workflow: periodically reduce LOC, remove duplication, split
+# oversized modules, and simplify structure without changing behavior.
+# No queue — scan for opportunities, then apply refactors in one pass.
+#
+
+import "./ensure_ci_passes.jh" as ci
+import "./git.jh" as git
+
+config {
+  agent.backend = "claude"
+  agent.claude_flags = "--permission-mode bypassPermissions"
+}
+
+local simplifier_principles = "
+  Goal: fewer lines and clearer structure while preserving behavior.
+
+  Allowed moves:
+  - Extract shared logic into small modules or functions; delete duplicate copies.
+  - Replace repetitive patterns with a single well-named helper (no cleverness).
+  - Split files that mix unrelated concerns or are hard to navigate; keep
+    cohesive units with explicit exports.
+  - Flatten needless indirection (wrappers that add no value).
+  - Simplify types and control flow when it reduces noise without hiding errors.
+
+  Non-goals / guardrails:
+  - Do not change user-visible CLI behavior, file formats, or documented
+    semantics unless fixing a clear bug.
+  - Do not drive down line count by deleting comments that explain non-obvious
+    behavior, or by cramming multiple statements onto one line.
+  - Prefer mechanical, reviewable diffs over speculative rewrites.
+  - After edits, npm run build && npm test && npm run test:e2e must pass; fix
+    any failures your changes introduce.
+  - If a simplification would require a behavior change or large API churn,
+    stop and record it in .jaiph/tmp/simplifier_deferred.md instead of doing it
+    in this pass.
+  - Do not modify any file under test/ or e2e/ (including fixtures, golden
+    expected output, and e2e helpers). Production code must stay compatible with
+    existing tests unchanged.
+"
+
+function simplifier_changed_files() {
+  {
+    git diff --name-only --cached
+    git diff --name-only
+    git ls-files --others --exclude-standard
+  } | sort -u
+}
+
+# Like docs_parity.jh only_expected_docs_changed_after_prompt, but a blocklist:
+# fail if the worktree touches the test or e2e trees.
+rule no_test_or_e2e_paths_changed {
+  local changed
+  changed="$(simplifier_changed_files)"
+
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    if [[ "$f" == test/* ]] || [[ "$f" == e2e/* ]]; then
+      echo "Simplifier workflow must not modify tests or e2e: $f" >&2
+      exit 1
+    fi
+  done <<< "$changed"
+}
+
+workflow find_simplifications {
+  report = prompt "
+    <role>
+    You are a senior engineer focused on codebase simplification for the Jaiph
+    repository (TypeScript under src/ and supporting scripts). You may read
+    test/ and e2e/ for context; do not edit those trees (hard rule for the
+    follow-up apply step).
+
+    <principles>
+    $simplifier_principles
+    </principles>
+
+    <task>
+    Scan the codebase and produce a prioritized simplification plan. Use tools
+    to measure (e.g. line counts, duplicate strings, repeated control patterns).
+
+    Cover:
+    1. src/ — largest or most complex files; obvious duplication; modules that
+       could be split by responsibility.
+    2. test/ and e2e/ — note duplication or harness noise only as follow-up
+       ideas for humans; this workflow will not change those paths.
+
+    Output a structured report, one entry per opportunity:
+
+    ## Opportunity: [short title]
+    - Location: [path(s), approximate size or symbol names]
+    - Problem: [duplication, size, coupling, or noise]
+    - Proposed change: [concrete refactor, files to add/split/remove]
+    - Risk: [low | medium | high]
+    - Estimated impact: [e.g. lines removed, modules created]
+
+    Sort by (risk ascending, then impact descending). Skip cosmetic-only edits.
+    </task>
+    </role>
+  "
+
+  echo "$report" > .jaiph/tmp/simplifier_report.md
+  log "Simplification report saved to .jaiph/tmp/simplifier_report.md"
+
+  ensure no_test_or_e2e_paths_changed
+}
+
+workflow apply_simplifications {
+  local report_file=".jaiph/tmp/simplifier_report.md"
+
+  if [[ ! -s "$report_file" ]]; then
+    echo "No report at $report_file. Run find_simplifications first." >&2
+    exit 1
+  fi
+
+  local report
+  report="$(<"$report_file")"
+
+  prompt "
+    <role>
+    You are a senior engineer implementing simplifications in the Jaiph repo.
+    </role>
+
+    <principles>
+    $simplifier_principles
+    </principles>
+
+    <task>
+    Below is a simplification report. Implement the highest-value, lowest-risk
+    items first. You may skip or defer entries that are unsafe in one pass.
+
+    Rules:
+    - Keep each commit-sized chunk of work easy to review; prefer several small
+      refactors over one sweeping rewrite.
+    - Do not modify test/ or e2e/ — adjust production code only so existing
+      tests keep passing.
+    - Run: npm run build && npm test && npm run test:e2e
+    - If you defer work, append a brief note to .jaiph/tmp/simplifier_deferred.md
+
+    Report:
+    $report
+    </task>
+  "
+
+  ensure no_test_or_e2e_paths_changed
+}
+
+workflow default {
+  ensure git.is_clean
+  mkdir -p .jaiph/tmp
+  run find_simplifications
+  run apply_simplifications
+  run ci.ensure_ci_passes
+  ensure no_test_or_e2e_paths_changed
+}
