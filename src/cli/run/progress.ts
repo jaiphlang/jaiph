@@ -48,28 +48,20 @@ function selfRecursiveRunSiteCount(mod: jaiphModule, workflowName: string): numb
       count += 1;
       continue;
     }
-    if (step.type === "if_not_ensure_then_run") {
-      for (const wfRef of step.runWorkflows) {
-        if (wfRef.workflow.value === workflowName) {
-          count += 1;
-        }
-      }
-      continue;
-    }
-    if (step.type === "if_not_shell_then") {
+    if (step.type === "if") {
       for (const thenStep of step.thenSteps) {
         if (thenStep.type === "run" && thenStep.workflow.value === workflowName) {
           count += 1;
         }
       }
-      continue;
-    }
-    if (step.type === "if_not_ensure_then") {
-      for (const thenStep of step.thenSteps) {
-        if (thenStep.type === "run" && thenStep.workflow.value === workflowName) {
-          count += 1;
+      if (step.elseSteps) {
+        for (const elseStep of step.elseSteps) {
+          if (elseStep.type === "run" && elseStep.workflow.value === workflowName) {
+            count += 1;
+          }
         }
       }
+      continue;
     }
   }
   return count;
@@ -187,113 +179,30 @@ export function collectWorkflowChildren(
       items.push({ label: `workflow ${wf}`, nested: wf, stepFunc });
       continue;
     }
-    if (step.type === "if_not_ensure_then_run") {
-      const ensureRef = step.ensureRef.value;
-      const ensureStepFunc =
-        symbols && ensureRef.includes(".")
-          ? (() => {
-              const dot = ensureRef.indexOf(".");
-              const alias = ensureRef.slice(0, dot);
-              const name = ensureRef.slice(dot + 1);
-              return `${symbols.get(alias) ?? alias}::${name}`;
-            })()
-          : currentSymbol
-            ? `${currentSymbol}::${ensureRef}`
-            : undefined;
-      items.push({ label: `rule ${ensureRef}`, stepFunc: ensureStepFunc });
-      for (const runStep of step.runWorkflows) {
-        const wf = runStep.workflow.value;
-        const runStepFunc =
-          symbols && wf.includes(".")
+    if (step.type === "if") {
+      if (step.condition.kind === "ensure") {
+        const ensureRef = step.condition.ref.value;
+        const ensureStepFunc =
+          symbols && ensureRef.includes(".")
             ? (() => {
-                const dot = wf.indexOf(".");
-                const alias = wf.slice(0, dot);
-                const name = wf.slice(dot + 1);
+                const dot = ensureRef.indexOf(".");
+                const alias = ensureRef.slice(0, dot);
+                const name = ensureRef.slice(dot + 1);
                 return `${symbols.get(alias) ?? alias}::${name}`;
               })()
             : currentSymbol
-              ? `${currentSymbol}::${wf}`
+              ? `${currentSymbol}::${ensureRef}`
               : undefined;
-        items.push({ label: `workflow ${wf}`, nested: wf, stepFunc: runStepFunc });
+        items.push({ label: `rule ${ensureRef}`, stepFunc: ensureStepFunc });
       }
-      continue;
-    }
-    if (step.type === "if_not_ensure_then") {
-      const ensureRef = step.ensureRef.value;
-      const ensureStepFunc =
-        symbols && ensureRef.includes(".")
-          ? (() => {
-              const dot = ensureRef.indexOf(".");
-              const alias = ensureRef.slice(0, dot);
-              const name = ensureRef.slice(dot + 1);
-              return `${symbols.get(alias) ?? alias}::${name}`;
-            })()
-          : currentSymbol
-            ? `${currentSymbol}::${ensureRef}`
-            : undefined;
-      items.push({ label: `rule ${ensureRef}`, stepFunc: ensureStepFunc });
       for (const thenStep of step.thenSteps) {
-        if (thenStep.type === "run") {
-          const wf = thenStep.workflow.value;
-          const runStepFunc =
-            symbols && wf.includes(".")
-              ? (() => {
-                  const dot = wf.indexOf(".");
-                  const alias = wf.slice(0, dot);
-                  const name = wf.slice(dot + 1);
-                  return `${symbols.get(alias) ?? alias}::${name}`;
-                })()
-              : currentSymbol
-                ? `${currentSymbol}::${wf}`
-                : undefined;
-          items.push({ label: `workflow ${wf}`, nested: wf, stepFunc: runStepFunc });
-          continue;
-        }
-        if (thenStep.type === "prompt") {
-          items.push({ label: formatPromptLabel(thenStep.raw), stepFunc: "jaiph::prompt" });
-          continue;
-        }
-        for (const fnName of collectFunctionCalls(thenStep.command)) {
-          const stepFunc = currentSymbol ? `${currentSymbol}::${fnName}` : undefined;
-          items.push({ label: `function ${fnName}`, stepFunc });
+        items.push(...stepToItems(thenStep));
+      }
+      if (step.elseSteps) {
+        for (const elseStep of step.elseSteps) {
+          items.push(...stepToItems(elseStep));
         }
       }
-      continue;
-    }
-    if (step.type === "if_not_shell_then") {
-      for (const thenStep of step.thenSteps) {
-        if (thenStep.type === "run") {
-          const wf = thenStep.workflow.value;
-          const runStepFunc =
-            symbols && wf.includes(".")
-              ? (() => {
-                  const dot = wf.indexOf(".");
-                  const alias = wf.slice(0, dot);
-                  const name = wf.slice(dot + 1);
-                  return `${symbols.get(alias) ?? alias}::${name}`;
-                })()
-              : currentSymbol
-                ? `${currentSymbol}::${wf}`
-                : undefined;
-          items.push({ label: `workflow ${wf}`, nested: wf, stepFunc: runStepFunc });
-        }
-      }
-      continue;
-    }
-    if (step.type === "if_not_ensure_then_shell") {
-      const ref = step.ensureRef.value;
-      const stepFunc =
-        symbols && ref.includes(".")
-          ? (() => {
-              const dot = ref.indexOf(".");
-              const alias = ref.slice(0, dot);
-              const name = ref.slice(dot + 1).replace(/\./g, "_");
-              return `${symbols.get(alias) ?? alias}::${name}`;
-            })()
-          : currentSymbol
-            ? `${currentSymbol}::${ref}`
-            : undefined;
-      items.push({ label: `rule ${ref}`, stepFunc });
       continue;
     }
     if (step.type === "prompt") {

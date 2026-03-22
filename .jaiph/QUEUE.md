@@ -6,29 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Unify if-step AST types in `WorkflowStepDef` <!-- dev-ready -->
-
-**Goal.** Collapse the six `if-*` step variants (`if_not_ensure_then_run`, `if_not_ensure_then`, `if_ensure_then`, `if_not_shell_then`, `if_not_ensure_then_shell`, and the generic form) into a single `if` step type whose `thenSteps`/`elseSteps` arrays use `WorkflowStepDef[]` instead of inline type duplicates.
-
-**Why.** Right now adding any new step type (or fixing a bug in one) requires updating the inline type definitions in 5+ places across `types.ts`, `workflows.ts`, `emit-workflow.ts`, and `validate.ts`. The six variants exist for historical reasons, not because they represent fundamentally different semantics.
-
-**Scope.**
-
-- In `types.ts`: replace the six `if-*` union members with one `if` member: `{ type: "if"; negated: boolean; condition: { kind: "ensure"; ref: RuleRefDef; args?: string } | { kind: "shell"; command: string }; thenSteps: WorkflowStepDef[]; elseSteps?: WorkflowStepDef[] }`.
-- In `workflows.ts` (`parseWorkflowBlock`): update the if-parsing branches to produce the unified type. No structural changes to parsing logic itself — just change what object shape is pushed to `workflow.steps`.
-- In `emit-workflow.ts`: replace the six `if-*` emission branches with one `if` branch that checks `condition.kind` and `negated`. Straightforward if/else, no abstractions.
-- In `validate.ts`: replace the six `if-*` validation branches with one that walks `thenSteps`/`elseSteps` as `WorkflowStepDef[]`.
-- Keep all code flat and linear — no generics, no visitor pattern, no helper classes.
-
-**Acceptance criteria.**
-
-- `WorkflowStepDef` union has one `if` variant instead of six.
-- All existing unit, acceptance, and e2e tests pass.
-- Golden output tests produce identical bash output.
-- No new files created — changes are in-place.
-
----
-
 ## Deduplicate prompt parsing in `workflows.ts` <!-- dev-ready -->
 
 **Goal.** Extract the repeated prompt-parsing code in `workflows.ts` into a single plain function and call it from all sites (workflow body, if-then branches, recover blocks, captured/uncaptured forms).
