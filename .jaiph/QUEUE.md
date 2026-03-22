@@ -6,26 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Make step outputs persist live to artifact files (probably tee or `|` for all step kinds)<!-- dev-ready -->
-
-**Goal.** Ensure every step writes to its `.jaiph/runs/.../*.out`/`*.err` files incrementally while it executes (not only at step end), so logs are always tail-able in real time.
-
-**Scope.**
-
-- Update runtime step execution (`src/runtime/steps.sh`) so non-prompt steps also stream output live to artifact files (prompt already uses `tee`).
-- Preserve existing semantics for step status, `run_summary.jsonl`, and event emission (`STEP_START`/`STEP_END`).
-- Avoid double-printing in normal run output and keep test-mode behavior stable.
-- Keep file writes bounded and efficient (no per-byte shell loops; use process-level redirection/`tee` patterns).
-
-**Acceptance criteria.**
-
-- During execution of a long-running non-prompt step, the corresponding `.out` and/or `.err` file grows before step completion.
-- Existing tests for prompt output and run artifacts continue to pass.
-- Add/extend tests (unit/e2e) proving live file growth behavior for at least one non-prompt step.
-- No regression in final PASS/FAIL reporting and step timing output.
-
----
-
 ## Make `if ! run workflow` transpile like `if ! ensure rule` <!-- dev-ready -->
 
 **Goal.** Remove the control-flow inconsistency where `if ! run some_workflow; then ... fi` behaves differently from `if ! ensure some_rule; then ... fi`, causing generated Bash to execute `run`/`prompt` as shell commands.
