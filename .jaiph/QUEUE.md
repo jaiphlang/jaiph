@@ -6,32 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Support `config` blocks inside `workflow` (scoped overrides) <!-- dev-ready -->
-
-**Goal.** Allow an optional `config { ... }` block inside a `workflow { ... }` body so agent/run settings can differ per workflow within the same `.jh` file, with clear precedence versus module-level `config` and environment variables.
-
-**Why.** Today only one module-level `config` is allowed per file, so every workflow in a module shares the same agent backend, model, flags, and run options. Users who want different agent settings per workflow must split into multiple files or rely on undocumented shell tricks.
-
-**Scope.**
-
-- Grammar/parser: accept `config { ... }` as a workflow step (or dedicated leading clause inside the workflow body), reusing the same key/value grammar as module-level config. Reject duplicate module-level config remains; define whether multiple workflow-level configs in one workflow are allowed (prefer: at most one per workflow, at the start of the body after comments, matching module conventions).
-- Transpiler: wrap workflow body execution (or each step) in a metadata scope that applies workflow-local overrides, consistent with existing `with_metadata_scope` / `*_LOCKED` semantics from the outer run.
-- Document precedence in `docs/configuration.md` and `docs/grammar.md`: env > module config > workflow config > defaults (or the actual resolved order you implement — document it precisely).
-- Nested `run` into another module: behavior must remain coherent with current “callee fills unset vars” rules; extend docs if workflow-local scopes interact with cross-module calls.
-
-**Acceptance criteria.**
-
-- At least one workflow in a file can override `agent.*` / `run.*` (and any other keys that make sense) while another workflow in the same file keeps the module default or a different override.
-- Environment variables set at `jaiph run` invocation still win over both module and workflow in-file config where applicable (`*_LOCKED` behavior preserved or intentionally extended and documented).
-- **E2E:** New tests under `e2e/` (and matching `e2e/tests/*.sh` drivers) that verify:
-  - **Scoping:** a setting changed in workflow A is not visible after A finishes when workflow B runs in the same process (or is restored per your design), and prompts/shell in B see the expected values.
-  - **Overriding:** workflow-local config overrides module-level config for steps inside that workflow; module-level applies when workflow has no inner `config`.
-  - **Interaction:** at least one case involving nested `run` or a follow-on workflow in the same file shows the documented precedence (no silent wrong backend/model).
-- Unit/parser tests as needed for parse errors (invalid keys, duplicate inner config if disallowed).
-- `docs/configuration.md` and `docs/grammar.md` updated to describe inner workflow config and precedence.
-
----
-
 ## Include `type + name` on step completion lines (parallel-safe tree clarity) <!-- dev-ready -->
 
 **Goal.** Make completion lines self-identifying (e.g. `✓ workflow reviewer (0s)`) so output stays unambiguous when multiple sibling steps run concurrently.

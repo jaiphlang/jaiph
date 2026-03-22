@@ -304,8 +304,9 @@ Jaiph: Running agent_inbox.jh
                     <code>~/.jaiph/hooks.json</code> or <code>&lt;project&gt;/.jaiph/hooks.json</code>. See <a
                         href="hooks">Hooks</a>.
                 </p>
-                <p><strong>Configuration.</strong> Control behavior with a top-level <code>config { ... }</code> block
-                    plus environment variables (env wins precedence). See <a href="configuration">Configuration</a> and
+                <p><strong>Configuration.</strong> Control behavior with <code>config { ... }</code> blocks
+                    at the module level or inside individual workflows for per-workflow overrides, plus environment
+                    variables (env wins precedence). See <a href="configuration">Configuration</a> and
                     <a href="cli">CLI reference</a>.
                 </p>
                 <p><strong>Testing Jaiph workflows.</strong> Test workflows with executable <code>*.test.jh</code>
@@ -330,8 +331,10 @@ Jaiph: Running agent_inbox.jh
                 <h3>Jaiph workflows</h3>
                 <dl class="primitive-list">
                     <dt><code>config { ... }</code></dt>
-                    <dd>Optional top-level runtime options (agent backend/flags, logs, runtime). Environment variables
-                        override config values. See <a href="configuration">Configuration</a>.</dd>
+                    <dd>Optional runtime options (agent backend/flags, logs, runtime). Allowed at the top level
+                        (module-wide) and inside individual workflows (per-workflow overrides for <code>agent.*</code>
+                        and <code>run.*</code> keys). Environment variables override config values. See <a
+                            href="configuration">Configuration</a>.</dd>
 
                     <dt><code>import "file.jh" as alias</code> · <code>local name = value</code></dt>
                     <dd>Import other modules and define module-scoped variables shared by rules/functions/workflows in

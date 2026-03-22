@@ -1482,3 +1482,80 @@ test("compiler golden: mock prompt block without else emits error fallback", () 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("compiler golden: workflow-level config emits per-workflow with_metadata_scope with _LOCKED", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-wfconfig-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        "config {",
+        '  agent.backend = "cursor"',
+        "}",
+        "",
+        "rule check {",
+        "  true",
+        "}",
+        "",
+        "workflow fast {",
+        "  config {",
+        '    agent.backend = "claude"',
+        '    agent.default_model = "gpt-4"',
+        "  }",
+        "  ensure check",
+        "}",
+        "",
+        "workflow default {",
+        "  ensure check",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const bash = normalize(transpileFile(input, root));
+    // Module-level scope function exists.
+    assert.match(bash, /entry::with_metadata_scope\(\)/);
+    // Workflow-level scope function for 'fast' exists.
+    assert.match(bash, /entry::fast::with_metadata_scope\(\)/);
+    // Workflow 'fast' wrapper uses its own scope, not the module one.
+    assert.match(bash, /entry::fast::with_metadata_scope jaiph::run_step entry::fast workflow/);
+    // Workflow 'default' wrapper uses the module scope (no workflow config).
+    assert.match(bash, /entry::with_metadata_scope jaiph::run_step entry::default workflow/);
+    // Workflow scope sets _LOCKED to prevent inner module scope from overriding.
+    assert.match(bash, /export JAIPH_AGENT_BACKEND_LOCKED="1"/);
+    assert.match(bash, /export JAIPH_AGENT_MODEL_LOCKED="1"/);
+    // Workflow scope also restores _LOCKED state.
+    assert.match(bash, /unset JAIPH_AGENT_BACKEND_LOCKED/);
+    assert.match(bash, /unset JAIPH_AGENT_MODEL_LOCKED/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("compiler golden: workflow-level config without module config uses workflow scope only", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-wfconfig2-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        "workflow default {",
+        "  config {",
+        '    agent.backend = "claude"',
+        "  }",
+        '  echo "hello"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const bash = normalize(transpileFile(input, root));
+    // No module-level scope function (no module config).
+    assert.doesNotMatch(bash, /entry::with_metadata_scope\(\)/);
+    // Workflow-level scope function exists.
+    assert.match(bash, /entry::default::with_metadata_scope\(\)/);
+    // Wrapper uses workflow scope.
+    assert.match(bash, /entry::default::with_metadata_scope jaiph::run_step entry::default/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

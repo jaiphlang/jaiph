@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { parseConfigBlock } from "../src/parse/metadata";
+import { parsejaiph } from "../src/parser";
 
 test("parseConfigBlock: parses minimal config with one key", () => {
   const lines = [
@@ -182,4 +183,104 @@ test("parseConfigBlock: fails on type mismatch (number where string expected)", 
     () => parseConfigBlock("test.jh", lines, 0),
     /runtime\.docker_image must be a string/,
   );
+});
+
+// ---------------------------------------------------------------------------
+// Workflow-level config
+// ---------------------------------------------------------------------------
+
+test("workflow config: parses config inside workflow", () => {
+  const src = [
+    "workflow default {",
+    "  config {",
+    '    agent.backend = "claude"',
+    "  }",
+    '  echo "hello"',
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(src, "test.jh");
+  assert.equal(mod.workflows[0].metadata?.agent?.backend, "claude");
+  assert.equal(mod.workflows[0].steps.length, 1);
+  assert.equal(mod.workflows[0].steps[0].type, "shell");
+});
+
+test("workflow config: allows comments before config", () => {
+  const src = [
+    "workflow default {",
+    "  # a comment",
+    "  config {",
+    '    agent.default_model = "gpt-4"',
+    "  }",
+    '  echo "done"',
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(src, "test.jh");
+  assert.equal(mod.workflows[0].metadata?.agent?.defaultModel, "gpt-4");
+});
+
+test("workflow config: rejects duplicate config in same workflow", () => {
+  const src = [
+    "workflow default {",
+    "  config {",
+    '    agent.backend = "claude"',
+    "  }",
+    "  config {",
+    '    agent.backend = "cursor"',
+    "  }",
+    "}",
+  ].join("\n");
+  assert.throws(
+    () => parsejaiph(src, "test.jh"),
+    /duplicate config block inside workflow/,
+  );
+});
+
+test("workflow config: rejects config after steps", () => {
+  const src = [
+    "workflow default {",
+    '  echo "step"',
+    "  config {",
+    '    agent.backend = "claude"',
+    "  }",
+    "}",
+  ].join("\n");
+  assert.throws(
+    () => parsejaiph(src, "test.jh"),
+    /config block inside workflow must appear before any steps/,
+  );
+});
+
+test("workflow config: rejects runtime.* keys", () => {
+  const src = [
+    "workflow default {",
+    "  config {",
+    "    runtime.docker_enabled = true",
+    "  }",
+    "}",
+  ].join("\n");
+  assert.throws(
+    () => parsejaiph(src, "test.jh"),
+    /runtime\.\* keys are not allowed in workflow-level config/,
+  );
+});
+
+test("workflow config: coexists with module-level config", () => {
+  const src = [
+    "config {",
+    '  agent.backend = "cursor"',
+    "}",
+    "workflow a {",
+    "  config {",
+    '    agent.backend = "claude"',
+    "  }",
+    '  echo "a"',
+    "}",
+    "workflow b {",
+    '  echo "b"',
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(src, "test.jh");
+  assert.equal(mod.metadata?.agent?.backend, "cursor");
+  assert.equal(mod.workflows[0].metadata?.agent?.backend, "claude");
+  assert.equal(mod.workflows[1].metadata, undefined);
 });

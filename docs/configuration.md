@@ -9,16 +9,17 @@ redirect_from:
 
 Jaiph workflows compile to Bash scripts that run agent prompts, shell commands, and rule checks. Configuration lets you control which agent backend is used, where logs go, and how the runtime behaves -- without changing your workflow logic.
 
-There are two sources of configuration:
+There are three sources of configuration:
 
-1. **In-file config** -- a `config { ... }` block in the workflow file you pass to `jaiph run`.
-2. **Environment variables** -- `JAIPH_AGENT_*`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, and `JAIPH_DOCKER_*`.
+1. **Environment variables** -- `JAIPH_AGENT_*`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, and `JAIPH_DOCKER_*`.
+2. **In-file config** -- a `config { ... }` block at the top level of a workflow file, and optionally inside individual `workflow { ... }` bodies for per-workflow overrides.
+3. **Built-in defaults** -- sensible defaults for all settings.
 
-Precedence: environment wins over in-file, which wins over built-in defaults.
+Precedence: environment > workflow-level config > module-level config > defaults. See [Defaults and precedence](#defaults-and-precedence) for the full resolution order.
 
-## In-file config
+## In-file config (module-level)
 
-In the entry workflow file (the one you pass to `jaiph run`), you can declare runtime options in a single **config block**. The block is optional. If present, it must start with `config {` on its own line and can appear anywhere at the top level (conventionally placed near the top, after the shebang and imports). Only one config block per file; a second one causes a parse error (`E_PARSE` with file location). An unknown config key also yields `E_PARSE`; the error message lists the allowed keys.
+In the entry workflow file (the one you pass to `jaiph run`), you can declare runtime options in a single **config block** at the top level. The block is optional. If present, it must start with `config {` on its own line and can appear anywhere at the top level (conventionally placed near the top, after the shebang and imports). Only one top-level config block per file; a second one causes a parse error (`E_PARSE` with file location). An unknown config key also yields `E_PARSE`; the error message lists the allowed keys. For per-workflow overrides, see [Workflow-level config](#workflow-level-config) below.
 
 Inside the block, use `key = value` lines. Empty lines and lines starting with `#` are ignored. Values can be:
 
@@ -82,6 +83,41 @@ Allowed config keys:
 
 Each key enforces its expected type: assigning a string to an integer key, or a boolean to a string key, etc., produces `E_PARSE`. Unknown keys (including unknown `runtime.*` keys) also produce `E_PARSE`.
 
+## Workflow-level config
+
+A `config { ... }` block can also appear inside a `workflow { ... }` body to override module-level settings for that workflow only. The block must appear at the start of the workflow body (after any comments, before any steps). At most one config block per workflow. Only `agent.*` and `run.*` keys are allowed; `runtime.*` keys produce `E_PARSE` because Docker sandbox configuration is per-run, not per-workflow.
+
+```jh
+config {
+  agent.backend = "cursor"
+  agent.default_model = "gpt-3.5"
+}
+
+workflow fast_check {
+  config {
+    agent.backend = "claude"
+    agent.default_model = "gpt-4"
+  }
+  ensure some_rule
+}
+
+workflow default {
+  # Uses module-level config (cursor / gpt-3.5).
+  ensure some_rule
+}
+```
+
+Workflow-level config overrides module-level config for all steps inside that workflow — including rules and functions called from it. When the workflow finishes, the previous environment is restored. Other workflows in the same file are not affected.
+
+**Precedence (highest wins):**
+
+1. **Environment variables** — always win (`_LOCKED` semantics).
+2. **Workflow-level config** — overrides module config for steps inside that workflow. Also locks its overrides so that rules and nested module-scope calls do not revert them.
+3. **Module-level config** — applies to workflows without their own config.
+4. **Built-in defaults.**
+
+**Interaction with nested `run`:** When a workflow with config calls into another module via `run alias.workflow`, the workflow-level overrides propagate to the callee (they behave like env vars: the callee's module config only fills in variables that are not already set). When the call returns, the caller's environment is restored.
+
 ## Backend selection
 
 `prompt` steps can use either the **cursor** backend (default) or the **Claude CLI** backend.
@@ -113,8 +149,9 @@ Built-in defaults:
 Resolution order (highest wins):
 
 1. **Environment variables** — `JAIPH_AGENT_MODEL`, `JAIPH_AGENT_COMMAND`, `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_AGENT_CURSOR_FLAGS`, `JAIPH_AGENT_CLAUDE_FLAGS`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, and `JAIPH_DOCKER_*` (see [Config to env mapping](#config-to-env-mapping) for the full list). If set in the environment, the value overrides in-file config. Agent and run variables are locked for the entire execution and not overridden when you invoke another module’s workflow via `run` (that module’s config only fills in variables that are not already set).
-2. **In-file config** — from the entry workflow’s `config { ... }` block, or from the current module’s block when execution is inside that module’s workflow (e.g. after `run other.default`).
-3. **Built-in defaults** — see above.
+2. **Workflow-level config** — from a `config { ... }` block inside a `workflow { ... }` body. Overrides module-level config for all steps inside that workflow. Locks its overrides so that rules and module-scope wrappers do not revert them. See [Workflow-level config](#workflow-level-config).
+3. **Module-level config** — from the top-level `config { ... }` block, or from the current module’s block when execution is inside that module’s workflow (e.g. after `run other.default`).
+4. **Built-in defaults** — see above.
 
 ## Config to env mapping
 
