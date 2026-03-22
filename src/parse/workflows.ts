@@ -518,55 +518,13 @@ export function parseWorkflowBlock(
       }
       const ensureRefDef = { value: ensureRef, loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 } };
       const hasElse = elseSteps.length > 0;
-      if (!isNegated) {
-        workflow.steps.push({
-          type: "if_ensure_then",
-          ensureRef: ensureRefDef,
-          args: ensureArgs,
-          thenSteps,
-          ...(hasElse ? { elseSteps } : {}),
-        });
-      } else if (hasElse) {
-        workflow.steps.push({
-          type: "if_not_ensure_then",
-          ensureRef: ensureRefDef,
-          args: ensureArgs,
-          thenSteps,
-          elseSteps,
-        });
-      } else if (
-        thenSteps.every((step) => step.type === "run")
-      ) {
-        workflow.steps.push({
-          type: "if_not_ensure_then_run",
-          ensureRef: ensureRefDef,
-          args: ensureArgs,
-          runWorkflows: thenSteps.map((step) => {
-            const runStep = step as {
-              type: "run";
-              workflow: { value: string; loc: { line: number; col: number } };
-              args?: string;
-            };
-            return { workflow: runStep.workflow, args: runStep.args };
-          }),
-        });
-      } else if (
-        thenSteps.every((step) => step.type === "shell")
-      ) {
-        workflow.steps.push({
-          type: "if_not_ensure_then_shell",
-          ensureRef: ensureRefDef,
-          args: ensureArgs,
-          commands: thenSteps.map((step) => (step as { type: "shell"; command: string; loc: { line: number; col: number } })),
-        });
-      } else {
-        workflow.steps.push({
-          type: "if_not_ensure_then",
-          ensureRef: ensureRefDef,
-          args: ensureArgs,
-          thenSteps,
-        });
-      }
+      workflow.steps.push({
+        type: "if",
+        negated: isNegated,
+        condition: { kind: "ensure", ref: ensureRefDef, args: ensureArgs },
+        thenSteps: thenSteps as import("../types").WorkflowStepDef[],
+        ...(hasElse ? { elseSteps: elseSteps as import("../types").WorkflowStepDef[] } : {}),
+      });
       idx = fiLine;
       continue;
     }
@@ -617,9 +575,10 @@ export function parseWorkflowBlock(
         fail(filePath, "if-block then-branch must contain at least one command or run", innerNo);
       }
       workflow.steps.push({
-        type: "if_not_shell_then",
-        condition,
-        thenSteps,
+        type: "if",
+        negated: true,
+        condition: { kind: "shell", command: condition },
+        thenSteps: thenSteps as import("../types").WorkflowStepDef[],
       });
       idx = foundFi;
       continue;

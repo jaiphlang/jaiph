@@ -94,11 +94,7 @@ workflow_step   = ensure_stmt
                 | logerr_stmt
                 | send_stmt
                 | route_decl
-                | if_ensure_then_stmt
-                | if_not_ensure_then_run_stmt
-                | if_not_ensure_then_shell_stmt
-                | if_not_ensure_then_stmt
-                | if_not_shell_then_stmt
+                | if_stmt
                 | shell_stmt
                 | comment_line ;
 
@@ -132,38 +128,17 @@ returns_schema  = "returns" ( single_quoted_string | double_quoted_string ) ;
   (* Schema string contains a flat object shape: { fieldName: type, ... } with type in string | number | boolean. *)
   (* Line continuation: after the closing " of the prompt, optional trailing \ continues to next line for returns_schema. *)
 
-if_ensure_then_stmt
-                = "if" "ensure" REF [ args_tail ] ";" "then"
-                  { run_stmt | prompt_stmt | prompt_capture_stmt | shell_stmt
-                  | run_capture_stmt | shell_capture_stmt }
-                  [ "else" { run_stmt | prompt_stmt | prompt_capture_stmt | shell_stmt
-                  | run_capture_stmt | shell_capture_stmt } ]
+if_stmt         = "if" [ "!" ] if_condition ";" "then"
+                  { workflow_step }
+                  [ "else" { workflow_step } ]
                   "fi" ;
-  (* positive ensure conditional: runs then-branch when the rule succeeds; optional else-branch for rule failure. ensure/ensure_capture are not allowed inside either branch. *)
+  (* Unified conditional step. The optional "!" negates the condition. *)
+  (* The then- and else-branches accept any workflow step (run, prompt, shell, *)
+  (* capture forms, log, logerr, send, nested if, etc.). *)
+  (* ensure/ensure_capture are not allowed inside either branch. *)
 
-if_not_ensure_then_run_stmt
-                = "if" "!" "ensure" REF [ args_tail ] ";" "then"
-                  { run_stmt }
-                  "fi" ;
-
-if_not_ensure_then_shell_stmt
-                = "if" "!" "ensure" REF [ args_tail ] ";" "then"
-                  { shell_stmt }
-                  "fi" ;
-
-if_not_ensure_then_stmt
-                = "if" "!" "ensure" REF [ args_tail ] ";" "then"
-                  { run_stmt | prompt_stmt | prompt_capture_stmt | shell_stmt
-                  | run_capture_stmt | shell_capture_stmt }
-                  [ "else" { run_stmt | prompt_stmt | prompt_capture_stmt | shell_stmt
-                  | run_capture_stmt | shell_capture_stmt } ]
-                  "fi" ;
-  (* mixed then-branch: run, prompt, shell, and their capture forms; ensure/ensure_capture are not allowed in either branch. *)
-
-if_not_shell_then_stmt
-                = "if" "!" shell_condition ";" "then"
-                  { run_stmt | shell_stmt }
-                  "fi" ;
+if_condition    = "ensure" REF [ args_tail ]
+                | shell_condition ;
 
 shell_condition  = ? any shell expression, e.g. "test -f .file" ? ;
 
@@ -177,12 +152,13 @@ shell_stmt      = command_line ;
 3. **Rules:** May use forwarded positional parameters as shell args (`$1`, `$2`, `"$@"`) without special declaration. Only `ensure` and shell commands are allowed inside a rule; `run` is not allowed (use `ensure` to call another rule or move the call to a workflow). **Inline brace groups:** A single logical command can span multiple lines when it contains unbalanced `{` … `}`; the parser tracks brace depth so that short-circuit patterns like `cmd || { echo "failed"; exit 1; }` (single-line) and `cmd || { … }` (multi-line) are accepted as one command in rule, workflow, and function bodies.
 4. **run:** Inside a workflow, `run` must target a workflow reference (`foo` or `alias.foo`), not an arbitrary shell command. Optional args after the REF are forwarded to the workflow (e.g. `run deploy "$env"`).
 5. **Functions:** Top-level `function` blocks define writable shell functions. They are transpiled to namespaced implementations; the original name remains callable via a shim that forwards to the namespaced wrapper.
-6. **Conditional steps:** Both positive and negated ensure conditionals are supported:
-   - `if ensure REF [args]; then ... fi` (`if_ensure_then`) — runs the then-branch when the rule **succeeds**. An optional `else` branch runs when the rule fails.
-   - `if ! ensure REF [args]; then ... fi` — runs the then-branch when the rule **fails**. Parsed as: (a) `if_not_ensure_then_run` when the then-branch contains only `run` steps, (b) `if_not_ensure_then_shell` when only shell commands, (c) `if_not_ensure_then` when mixed (run, prompt, or shell, including capture forms). An optional `else` branch is supported in the mixed form.
+6. **Conditional steps:** There is a single unified `if` step type. Both positive and negated conditions are supported, with either an ensure-rule or a shell-expression condition:
+   - `if ensure REF [args]; then ... [else ...] fi` — runs the then-branch when the rule **succeeds**; optional else-branch for failure.
+   - `if ! ensure REF [args]; then ... [else ...] fi` — runs the then-branch when the rule **fails**; optional else-branch for success.
+   - `if ! <shell_condition>; then ... [else ...] fi` — shell-expression condition; runs the then-branch when the command **fails**.
+   - Both branches accept any workflow step (`run`, `prompt`, `shell`, capture forms, `log`, `logerr`, `send`, nested `if`, etc.).
    - Both forms accept optional arguments after the rule reference (e.g. `if ensure check "$env"; then`).
    - `ensure` and `ensure_capture` are **not** allowed inside the then- or else-branch of any if-ensure form; the parser emits `E_PARSE` if `ensure` appears in an unrecognised context.
-   - `if ! <shell_condition>; then ... fi` is `if_not_shell_then` and may contain `run` and shell steps.
    - The then-branch must contain at least one step.
 7. **prompt:** Two forms are supported:
    - `prompt "<text>"` — Sends the text to the agent; compiles to `jaiph::prompt ...` with bash variable expansion.
@@ -235,4 +211,4 @@ Rules:
 5. **Workflows:** Each workflow is emitted as `<module>::<name>::impl` and `<module>::<name>`, with the wrapper using `jaiph::run_step <symbol> workflow <symbol>::impl "$@"` and the same metadata-scoping behavior as rules.
 6. **Functions:** Each top-level function is emitted as `<module>::<name>::impl`, `<module>::<name>` (wrapper using `jaiph::run_step_passthrough <symbol> function <symbol>::impl "$@"`), and a shim `<name>` that forwards to the namespaced wrapper so the original name remains callable.
 7. **Send steps and routes:** Send steps transpile to `jaiph::send 'channel' "$(cmd)"` (or `jaiph::send 'channel' "$1"` for standalone `channel <-`). Route declarations transpile to `jaiph::register_route 'channel' '<module>::<name>'` calls emitted at the top of the orchestrator function. `jaiph::drain_queue` is emitted at the end of the orchestrator's `::impl` function. The runtime functions live in `src/runtime/inbox.sh` (sourced via `jaiph_stdlib.sh`): `jaiph::inbox_init` creates the inbox directory and initializes the counter; `jaiph::send` writes messages; `jaiph::register_route` populates the route table; `jaiph::drain_queue` processes the dispatch queue.
-8. **Conditional steps:** Transpiled to explicit Bash `if [!] ...; then ... [else ...] fi`. **Prompt with returns:** When `returns '{ ... }'` is used, the step is emitted as `jaiph::prompt_capture_with_schema`; the stdlib extracts JSON from the agent output (trying multiple strategies: last line, fenced code block, standalone object line, embedded JSON within a line), validates it against the schema, and on success sets the capture variable and exports `name_field` for each field. Exit codes: 0 = success; 1 = JSON parse error; 2 = missing required field; 3 = type mismatch. **ensure … recover:** Transpiled to a bounded retry loop: `for _jaiph_retry in $(seq 1 "${JAIPH_ENSURE_MAX_RETRIES:-10}"); do if <rule>(args); then break; fi; <body>; done`, then if the condition still fails, the script exits with status 1. The recover body may be a single statement or a `{ stmt; ... }` block. Max retries default to 10 and can be overridden via `JAIPH_ENSURE_MAX_RETRIES`. **Assignment capture:** Steps with a capture variable (e.g. `response = ensure foo`, `out = run bar`) are emitted as `VAR=$(...)`; only stdout is captured, and the command’s exit status is preserved (failure exits unless the user adds e.g. `|| true`).
+8. **Conditional steps:** The unified `if` step transpiles to explicit Bash `if [!] ...; then ... [else ...] fi`. Ensure conditions call the rule function; shell conditions pass through as-is. **Prompt with returns:** When `returns '{ ... }'` is used, the step is emitted as `jaiph::prompt_capture_with_schema`; the stdlib extracts JSON from the agent output (trying multiple strategies: last line, fenced code block, standalone object line, embedded JSON within a line), validates it against the schema, and on success sets the capture variable and exports `name_field` for each field. Exit codes: 0 = success; 1 = JSON parse error; 2 = missing required field; 3 = type mismatch. **ensure … recover:** Transpiled to a bounded retry loop: `for _jaiph_retry in $(seq 1 "${JAIPH_ENSURE_MAX_RETRIES:-10}"); do if <rule>(args); then break; fi; <body>; done`, then if the condition still fails, the script exits with status 1. The recover body may be a single statement or a `{ stmt; ... }` block. Max retries default to 10 and can be overridden via `JAIPH_ENSURE_MAX_RETRIES`. **Assignment capture:** Steps with a capture variable (e.g. `response = ensure foo`, `out = run bar`) are emitted as `VAR=$(...)`; only stdout is captured, and the command’s exit status is preserved (failure exits unless the user adds e.g. `|| true`).
