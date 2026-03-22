@@ -1,0 +1,23 @@
+#!/usr/bin/env jaiph
+# Fixture: typed prompt + printf field, same pattern as engineer classify_role.
+workflow classify_like {
+  local task="$1"
+  result = prompt "
+    Classify task \"$task\" into a single engineer role name (JSON only).
+  " returns '{ role: string }'
+
+  printf '%s' "$result_role"
+}
+
+# Same pattern as engineer.jh default: capture role from nested workflow (impl runs in cmdsub).
+workflow pick_role {
+  local task="$1"
+  role_name = run classify_like "$task"
+  printf '%s' "$role_name"
+}
+
+workflow default {
+  local subject="${1:-x}"
+  chosen = run classify_like "$subject"
+  log "chosen=$chosen"
+}

@@ -227,6 +227,7 @@ jaiph::run_step() {
   local out_tmp err_tmp elapsed_ms prompt_final_tmp
   local step_id parent_id depth step_seq seq_prefix
   local prompt_writes_live_out=0
+  local jaiph__prompt_used_tee=0
   step_started_seconds="$SECONDS"
   jaiph::next_step_id
   step_id="$JAIPH_LAST_STEP_ID"
@@ -265,9 +266,19 @@ jaiph::run_step() {
     fi
   elif [[ "$func_name" == "jaiph::prompt" ]]; then
     prompt_final_tmp="${out_file}.final.tmp.$$"
-    # Prompt output should be visible in the final .out file while streaming.
-    JAIPH_PROMPT_FINAL_FILE="$prompt_final_tmp" "$@" 2>"$err_tmp" | tee "$out_file"
-    status="${PIPESTATUS[0]}"
+    # When stdout is a pipe (e.g. command substitution `x=$(...)` capturing a nested
+    # workflow), duplicating prompt transcript via tee pollutes the capture. Write
+    # only to the step .out file; parent workflow stdout still aggregates when fd 1
+    # is a regular file (typical `run_step` subshell redirect).
+    if [[ -p /dev/fd/1 ]]; then
+      JAIPH_PROMPT_FINAL_FILE="$prompt_final_tmp" "$@" 2>"$err_tmp" >"$out_file"
+      status=$?
+    else
+      jaiph__prompt_used_tee=1
+      # Prompt output should be visible in the final .out file while streaming.
+      JAIPH_PROMPT_FINAL_FILE="$prompt_final_tmp" "$@" 2>"$err_tmp" | tee "$out_file"
+      status="${PIPESTATUS[0]}"
+    fi
     prompt_writes_live_out=1
     if [[ -f "$prompt_final_tmp" ]]; then
       JAIPH_LAST_PROMPT_FINAL="$(<"$prompt_final_tmp")"
@@ -308,8 +319,22 @@ jaiph::run_step() {
   jaiph::step_stack_pop
   # In test mode, emit step output so test capture (e.g. response = w.default) can read it.
   # In normal runs, step output stays only in .out files.
+  # - Prompt + tee: transcript already went to stdout; avoid duplicate cat.
+  # - Prompt + file-only (stdout is a pipe, e.g. nested cmdsub): cat would pollute the capture
+  #   (engineer pick_role = run classify); skip. When stdout is a regular file (workflow subshell),
+  #   cat still aggregates step logs for jaiph test.
   if jaiph::is_test_mode && [[ -n "$out_file" && -f "$out_file" ]]; then
-    cat "$out_file"
+    if [[ "$func_name" == "jaiph::prompt" ]]; then
+      if [[ "$jaiph__prompt_used_tee" -eq 1 ]]; then
+        :
+      elif [[ -p /dev/fd/1 ]]; then
+        :
+      else
+        cat "$out_file"
+      fi
+    else
+      cat "$out_file"
+    fi
   fi
   if [[ "$status" -ne 0 ]] && [[ -n "$err_file" && -f "$err_file" ]]; then
     if jaiph::is_test_mode; then
