@@ -119,3 +119,36 @@ set -e
 e2e::assert_equals "${exit_fail}" "1" "jaiph run exits 1 when ensure condition never passes within max retries"
 e2e::assert_contains "${out_fail}" "ensure condition did not pass after" "stderr mentions retry limit"
 e2e::pass "ensure ... recover: exit 1 after JAIPH_ENSURE_MAX_RETRIES"
+
+e2e::section "ensure ... recover { multiline prompt with param } parses and runs"
+
+E2E_MOCK_BIN="${ROOT_DIR}/e2e/bin"
+chmod 755 "${E2E_MOCK_BIN}/cursor-agent"
+export PATH="${E2E_MOCK_BIN}:${PATH}"
+rm -f "${TEST_DIR}/ready3.txt"
+
+# Given: multiline prompt inside recover block with a $ci_log_file parameter
+e2e::file "recover_multiline_prompt.jh" <<'EOF'
+local ci_log_file = "/tmp/ci.log"
+
+rule check_ready {
+  test -f ready3.txt
+}
+
+workflow default {
+  ensure check_ready recover {
+    prompt "The CI build failed.
+Please inspect the log file at $ci_log_file
+and suggest a fix."
+    touch ready3.txt
+  }
+}
+EOF
+
+# When
+out_ml="$(e2e::run "recover_multiline_prompt.jh" 2>&1)"
+
+# Then
+e2e::assert_file_exists "${TEST_DIR}/ready3.txt" "recover with multiline prompt ran and created ready3.txt"
+e2e::assert_contains "${out_ml}" "prompt" "output mentions prompt step"
+e2e::pass "ensure ... recover { multiline prompt with param }: parses and runs"

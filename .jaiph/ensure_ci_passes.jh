@@ -21,8 +21,14 @@ workflow ensure_ci_passes {
       echo "jaiph: ci failure log is empty at $ci_log_file" >&2
       exit 1
     fi
+    
+    prompt "
+      <role>
+      You are a software engineer fixing a failing CI build.
+      </role>
 
-    local prompt_content = "Fix failing CI so npm run test:ci passes. Failure output was
+      <task>
+      Fix failing CI so npm run test:ci passes. Failure output was
       saved to: $ci_log_file. Start by inspecting the tail of the log
       (for example: tail -n 200 '$ci_log_file') and then apply the smallest
       safe fix.
@@ -35,9 +41,8 @@ workflow ensure_ci_passes {
         expectations, or removal of obsolete features.
       - Any test change must be minimal with a clear rationale.
       - Do NOT add speculative fixes. Fix only what the log shows is broken.
+      </task>
     "
-
-    prompt "$prompt_content"
   }
 
   rm -f "$ci_log_file"
