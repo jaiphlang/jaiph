@@ -37,13 +37,16 @@ import {
   formatElapsedDuration,
   formatRunningBottomLine,
 } from "../run/progress";
-import { loadMergedHooks, runHooksForEvent } from "../run/hooks";
+import { loadMergedHooks, registerHooksSubscriber } from "../run/hooks";
 import { resolveRuntimeEnv } from "../run/env";
 import { colorize } from "../run/display";
+import { createRunEmitter } from "../run/emitter";
 import {
-  createStderrHandlerState,
-  handleStderrLine,
-  type StderrHandlerContext,
+  createStderrParser,
+  createRunState,
+  registerStateSubscriber,
+  registerTTYSubscriber,
+  type TTYContext,
 } from "../run/stderr-handler";
 
 export async function runWorkflow(rest: string[]): Promise<number> {
@@ -90,7 +93,17 @@ export async function runWorkflow(rest: string[]): Promise<number> {
 
     const runtimeEnv = resolveRuntimeEnv(effectiveConfig, workspaceRoot, inputAbs);
     const metaFile = join(outDir, `.jaiph-run-meta-${Date.now()}-${process.pid}.txt`);
-    runHooksForEvent(hooksConfig, "workflow_start", {
+
+    // Set up event emitter and subscribers
+    const emitter = createRunEmitter();
+    const runState = createRunState();
+    const ttyCtx: TTYContext = { isTTY, colorEnabled, startedAt, runningInterval: undefined };
+
+    registerStateSubscriber(emitter, runState);
+    registerTTYSubscriber(emitter, ttyCtx);
+    registerHooksSubscriber(emitter, hooksConfig, inputAbs, workspaceRoot);
+
+    emitter.emit("workflow_start", {
       event: "workflow_start",
       workflow_id: "",
       timestamp: new Date().toISOString(),
@@ -104,19 +117,14 @@ export async function runWorkflow(rest: string[]): Promise<number> {
 
     const signalHandlers = setupRunSignalHandlers(execResult, { forceKillAfterMs: 1500 });
 
-    const state = createStderrHandlerState();
-    let runningInterval: ReturnType<typeof setInterval> | undefined;
     if (isTTY) {
-      runningInterval = setInterval(() => {
+      ttyCtx.runningInterval = setInterval(() => {
         const elapsedSec = (Date.now() - startedAt) / 1000;
         process.stdout.write("\r" + formatRunningBottomLine("default", elapsedSec) + "\u001b[K");
       }, 1000);
     }
-    const ctx: StderrHandlerContext = {
-      isTTY, colorEnabled, startedAt, runningInterval,
-      hooksConfig, inputAbs, workspaceRoot,
-    };
-    const onLine = (line: string): void => handleStderrLine(line, state, ctx);
+
+    const onLine = createStderrParser(emitter);
     const buf: StreamBuffers = { stdout: "", stderr: "" };
 
     wireStreams(execResult, dockerConfig.enabled, onLine, buf);
@@ -129,23 +137,23 @@ export async function runWorkflow(rest: string[]): Promise<number> {
         : (Date.now() - startedAt) >= dockerConfig.timeout * 1000;
       cleanupDocker(dockerResult);
       if (timedOut && childExit.status !== 0) {
-        state.capturedStderr += "E_TIMEOUT container execution exceeded timeout\n";
+        runState.capturedStderr += "E_TIMEOUT container execution exceeded timeout\n";
       }
     }
 
-    if (childExit.signal && state.capturedStderr.trim().length === 0) {
-      state.capturedStderr = `Process terminated by signal ${childExit.signal}`;
+    if (childExit.signal && runState.capturedStderr.trim().length === 0) {
+      runState.capturedStderr = `Process terminated by signal ${childExit.signal}`;
     }
 
-    if (runningInterval !== undefined) {
-      clearInterval(runningInterval);
-      ctx.runningInterval = undefined;
+    if (ttyCtx.runningInterval !== undefined) {
+      clearInterval(ttyCtx.runningInterval);
+      ttyCtx.runningInterval = undefined;
       process.stdout.write("\r\u001b[K");
     }
 
     return reportResult(
-      state.capturedStderr, childExit.status, startedAt, runtimeEnv,
-      hooksConfig, state.workflowRunId, inputAbs, workspaceRoot, metaFile,
+      runState.capturedStderr, childExit.status, startedAt, runtimeEnv,
+      emitter, runState.workflowRunId, inputAbs, workspaceRoot, metaFile,
     );
   } finally {
     if (shouldCleanup) {
@@ -286,7 +294,7 @@ function reportResult(
   exitStatus: number,
   startedAt: number,
   runtimeEnv: Record<string, string | undefined>,
-  hooksConfig: ReturnType<typeof loadMergedHooks>,
+  emitter: ReturnType<typeof createRunEmitter>,
   workflowRunId: string,
   inputAbs: string,
   workspaceRoot: string,
@@ -313,7 +321,7 @@ function reportResult(
   const runtimeErrorPrinted = hasFatalRuntimeStderr(capturedStderr, runtimeDebugEnabled);
   const resolvedStatus = exitStatus !== 0 || runtimeErrorPrinted ? 1 : 0;
 
-  runHooksForEvent(hooksConfig, "workflow_end", {
+  emitter.emit("workflow_end", {
     event: "workflow_end",
     workflow_id: workflowRunId,
     status: resolvedStatus,
