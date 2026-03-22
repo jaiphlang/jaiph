@@ -140,6 +140,11 @@ jaiph::step_stack_pop() {
 
 jaiph::next_step_id() {
   local seq_file="${JAIPH_RUN_DIR:+${JAIPH_RUN_DIR}/.seq}"
+  local _locked=0
+  if [[ "${JAIPH_INBOX_PARALLEL:-}" == "true" && -n "$seq_file" ]]; then
+    jaiph::_lock "${seq_file}.lock"
+    _locked=1
+  fi
   if [[ -n "$seq_file" && -f "$seq_file" ]]; then
     JAIPH_STEP_SEQ="$(( $(<"$seq_file") + 1 ))"
   else
@@ -147,6 +152,9 @@ jaiph::next_step_id() {
   fi
   if [[ -n "$seq_file" ]]; then
     printf '%s' "$JAIPH_STEP_SEQ" >"$seq_file"
+  fi
+  if [[ "$_locked" -eq 1 ]]; then
+    jaiph::_unlock "${seq_file}.lock"
   fi
   JAIPH_LAST_STEP_ID="${JAIPH_RUN_ID:-run}:${BASHPID:-$$}:${JAIPH_STEP_SEQ}"
   export JAIPH_LAST_STEP_ID

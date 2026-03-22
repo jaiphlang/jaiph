@@ -185,6 +185,9 @@ export function emitWorkflow(
     if (ast.metadata.run?.debug === true) {
       out.push('export JAIPH_DEBUG="${JAIPH_DEBUG:-true}"');
     }
+    if (ast.metadata.run?.inboxParallel === true) {
+      out.push('export JAIPH_INBOX_PARALLEL="${JAIPH_INBOX_PARALLEL:-true}"');
+    }
     if (ast.metadata.agent || ast.metadata.run) {
       out.push("");
     }

@@ -10,6 +10,7 @@ const ALLOWED_KEYS = new Set([
   "agent.claude_flags",
   "run.logs_dir",
   "run.debug",
+  "run.inbox_parallel",
   "runtime.docker_enabled",
   "runtime.docker_image",
   "runtime.docker_network",
@@ -27,6 +28,7 @@ const KEY_TYPES: Record<string, "string" | "boolean" | "number" | "string[]"> = 
   "agent.claude_flags": "string",
   "run.logs_dir": "string",
   "run.debug": "boolean",
+  "run.inbox_parallel": "boolean",
   "runtime.docker_enabled": "boolean",
   "runtime.docker_image": "string",
   "runtime.docker_network": "string",
@@ -241,6 +243,11 @@ export function parseConfigBlock(
         out.run = {};
       }
       out.run.debug = value as boolean;
+    } else if (key === "run.inbox_parallel") {
+      if (!out.run) {
+        out.run = {};
+      }
+      out.run.inboxParallel = value as boolean;
     } else if (key === "runtime.docker_enabled") {
       if (!out.runtime) {
         out.runtime = {};

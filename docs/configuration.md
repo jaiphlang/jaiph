@@ -70,6 +70,7 @@ Allowed config keys:
 
 - `run.logs_dir`: Directory for step logs. Relative paths are resolved against the workspace root at runtime; absolute paths are used as-is (string).
 - `run.debug`: If `true`, enables Bash `set -x` (shell trace) for the run (boolean).
+- `run.inbox_parallel`: If `true`, inbox route targets are dispatched in parallel instead of sequentially (boolean, default `false`). See [Inbox & Dispatch — Parallel dispatch](inbox.md#parallel-dispatch).
 
 **Runtime keys (Docker sandbox — beta):**
 
@@ -140,6 +141,7 @@ Built-in defaults:
 - `agent.claude_flags`: unset
 - `run.logs_dir`: `.jaiph/runs`
 - `run.debug`: `false`
+- `run.inbox_parallel`: `false`
 - `runtime.docker_enabled`: `false`
 - `runtime.docker_image`: `"ubuntu:24.04"`
 - `runtime.docker_network`: `"default"`
@@ -163,6 +165,7 @@ Resolution order (highest wins):
 - `agent.claude_flags` -> `JAIPH_AGENT_CLAUDE_FLAGS`
 - `run.logs_dir` -> `JAIPH_RUNS_DIR`
 - `run.debug` -> `JAIPH_DEBUG`
+- `run.inbox_parallel` -> `JAIPH_INBOX_PARALLEL`
 - `runtime.docker_enabled` -> `JAIPH_DOCKER_ENABLED`
 - `runtime.docker_image` -> `JAIPH_DOCKER_IMAGE`
 - `runtime.docker_network` -> `JAIPH_DOCKER_NETWORK`

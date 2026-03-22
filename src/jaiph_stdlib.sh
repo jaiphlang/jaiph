@@ -16,6 +16,17 @@ jaiph__die() {
   return 1
 }
 
+# Portable file-lock primitives using mkdir (atomic on all POSIX systems).
+# Used by inbox parallel dispatch to protect shared state files.
+jaiph::_lock() {
+  local lockdir="$1"
+  while ! mkdir "$lockdir" 2>/dev/null; do :; done
+}
+
+jaiph::_unlock() {
+  rmdir "$1" 2>/dev/null || true
+}
+
 jaiph__expect_contain() {
   local haystack="$1"
   local needle="$2"

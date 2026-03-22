@@ -27,10 +27,17 @@ jaiph::inbox_init() {
 # Usage: jaiph::send <channel> <content> [<sender>]
 # Writes content to NNN-<channel>.txt and appends to the file-based dispatch queue.
 # <sender> is the workflow/function name that produced the message.
+# When JAIPH_INBOX_PARALLEL=true, a file lock protects the sequence counter and
+# queue append so concurrent senders cannot produce duplicate or skipped IDs.
 jaiph::send() {
   local channel="$1"
   local content="$2"
   local sender="${3:-}"
+  local _send_locked=0
+  if [[ "${JAIPH_INBOX_PARALLEL:-}" == "true" ]]; then
+    jaiph::_lock "${JAIPH_INBOX_DIR}/.seq.lock"
+    _send_locked=1
+  fi
   # Atomic sequence via a counter file so increments survive subshells.
   local seq_file="${JAIPH_INBOX_DIR}/.seq"
   local seq
@@ -42,6 +49,9 @@ jaiph::send() {
   local msg_file="${JAIPH_INBOX_DIR}/${seq_padded}-${channel}.txt"
   printf '%s' "$content" > "$msg_file"
   printf '%s\n' "${channel}:${seq_padded}:${sender}" >> "$JAIPH_INBOX_QUEUE_FILE"
+  if [[ "$_send_locked" -eq 1 ]]; then
+    jaiph::_unlock "${JAIPH_INBOX_DIR}/.seq.lock"
+  fi
 }
 
 # Register a routing rule: when a message arrives on <channel>, call the listed workflow functions.
@@ -89,42 +99,94 @@ jaiph::_lookup_route() {
   IFS="$IFS_save"
 }
 
-# Drain the dispatch queue: process messages sequentially until empty or depth limit reached.
+# Drain the dispatch queue: process messages until empty or depth limit reached.
 # Each dispatched workflow may call jaiph::send, growing the queue further.
+#
+# When JAIPH_INBOX_PARALLEL=true, all route targets for a batch of queue entries
+# are launched as background jobs and awaited together before the next batch.
+# Ordering among parallel targets is intentionally non-deterministic; only the
+# queue-entry order (FIFO) is preserved between batches.  Any failed target
+# causes the owning workflow to fail after all siblings in the batch complete.
 jaiph::drain_queue() {
   local depth=0
   local cursor=0
+  local parallel="${JAIPH_INBOX_PARALLEL:-false}"
   while true; do
     local queue_lines
     queue_lines="$(tail -n +$(( cursor + 1 )) "$JAIPH_INBOX_QUEUE_FILE" 2>/dev/null)" || true
     [[ -n "$queue_lines" ]] || break
-    local entry
-    while IFS= read -r entry; do
-      [[ -n "$entry" ]] || continue
-      depth=$(( depth + 1 ))
-      cursor=$(( cursor + 1 ))
-      if [[ $depth -gt $JAIPH_INBOX_MAX_DISPATCH_DEPTH ]]; then
-        echo "jaiph: E_DISPATCH_DEPTH — dispatch loop exceeded ${JAIPH_INBOX_MAX_DISPATCH_DEPTH} iterations (possible circular sends)" >&2
+    if [[ "$parallel" == "true" ]]; then
+      # --- parallel dispatch ---
+      local pids=()
+      local entry
+      while IFS= read -r entry; do
+        [[ -n "$entry" ]] || continue
+        depth=$(( depth + 1 ))
+        cursor=$(( cursor + 1 ))
+        if [[ $depth -gt $JAIPH_INBOX_MAX_DISPATCH_DEPTH ]]; then
+          echo "jaiph: E_DISPATCH_DEPTH — dispatch loop exceeded ${JAIPH_INBOX_MAX_DISPATCH_DEPTH} iterations (possible circular sends)" >&2
+          wait 2>/dev/null || true
+          exit 1
+        fi
+        local channel="${entry%%:*}"
+        local rest="${entry#*:}"
+        local seq_padded="${rest%%:*}"
+        local sender="${rest#*:}"
+        if [[ "$sender" == "$seq_padded" ]]; then sender=""; fi
+        jaiph::_lookup_route "$channel"
+        if [[ -z "$_route_result" ]]; then
+          continue
+        fi
+        local msg_file="${JAIPH_INBOX_DIR}/${seq_padded}-${channel}.txt"
+        local content
+        content="$(cat "$msg_file")"
+        local target
+        for target in $_route_result; do
+          JAIPH_DISPATCH_CHANNEL="$channel" JAIPH_DISPATCH_SENDER="$sender" "$target" "$content" "$channel" "$sender" &
+          pids+=($!)
+        done
+      done <<< "$queue_lines"
+      # Wait for all parallel targets; propagate first failure.
+      local any_fail=0
+      local pid
+      for pid in "${pids[@]}"; do
+        if ! wait "$pid"; then
+          any_fail=1
+        fi
+      done
+      if [[ "$any_fail" -eq 1 ]]; then
         exit 1
       fi
-      local channel="${entry%%:*}"
-      local rest="${entry#*:}"
-      local seq_padded="${rest%%:*}"
-      local sender="${rest#*:}"
-      # Entries written before sender tracking have no second colon; treat as empty.
-      if [[ "$sender" == "$seq_padded" ]]; then sender=""; fi
-      jaiph::_lookup_route "$channel"
-      if [[ -z "$_route_result" ]]; then
-        # No route registered for this channel — silent drop.
-        continue
-      fi
-      local msg_file="${JAIPH_INBOX_DIR}/${seq_padded}-${channel}.txt"
-      local content
-      content="$(cat "$msg_file")"
-      local target
-      for target in $_route_result; do
-        JAIPH_DISPATCH_CHANNEL="$channel" JAIPH_DISPATCH_SENDER="$sender" "$target" "$content" "$channel" "$sender"
-      done
-    done <<< "$queue_lines"
+    else
+      # --- sequential dispatch (default) ---
+      local entry
+      while IFS= read -r entry; do
+        [[ -n "$entry" ]] || continue
+        depth=$(( depth + 1 ))
+        cursor=$(( cursor + 1 ))
+        if [[ $depth -gt $JAIPH_INBOX_MAX_DISPATCH_DEPTH ]]; then
+          echo "jaiph: E_DISPATCH_DEPTH — dispatch loop exceeded ${JAIPH_INBOX_MAX_DISPATCH_DEPTH} iterations (possible circular sends)" >&2
+          exit 1
+        fi
+        local channel="${entry%%:*}"
+        local rest="${entry#*:}"
+        local seq_padded="${rest%%:*}"
+        local sender="${rest#*:}"
+        # Entries written before sender tracking have no second colon; treat as empty.
+        if [[ "$sender" == "$seq_padded" ]]; then sender=""; fi
+        jaiph::_lookup_route "$channel"
+        if [[ -z "$_route_result" ]]; then
+          # No route registered for this channel — silent drop.
+          continue
+        fi
+        local msg_file="${JAIPH_INBOX_DIR}/${seq_padded}-${channel}.txt"
+        local content
+        content="$(cat "$msg_file")"
+        local target
+        for target in $_route_result; do
+          JAIPH_DISPATCH_CHANNEL="$channel" JAIPH_DISPATCH_SENDER="$sender" "$target" "$content" "$channel" "$sender"
+        done
+      done <<< "$queue_lines"
+    fi
   done
 }

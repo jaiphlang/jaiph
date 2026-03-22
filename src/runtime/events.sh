@@ -233,7 +233,13 @@ jaiph::emit_step_event() {
     # Some workflows (notably CI/e2e cleanup) may remove .jaiph/runs while a
     # run is still active; recreate parent dir so summary append does not fail.
     mkdir -p "$(dirname "$JAIPH_RUN_SUMMARY_FILE")" 2>/dev/null || true
+    if [[ "${JAIPH_INBOX_PARALLEL:-}" == "true" ]]; then
+      jaiph::_lock "${JAIPH_RUN_SUMMARY_FILE}.lock"
+    fi
     printf "%s\n" "$payload" >>"$JAIPH_RUN_SUMMARY_FILE"
+    if [[ "${JAIPH_INBOX_PARALLEL:-}" == "true" ]]; then
+      jaiph::_unlock "${JAIPH_RUN_SUMMARY_FILE}.lock"
+    fi
   fi
   if [[ "$had_xtrace" -eq 1 ]]; then
     set -x
