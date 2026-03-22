@@ -6,34 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Parallel inbox dispatch with lock-based coordination (correctness-first) <!-- dev-ready -->
-
-**Goal.** Enable inbox route target execution in parallel while preserving deterministic correctness for queue/state files via synchronous file locks.
-
-**Why.** Inbox workloads are dominated by long-running agent steps, not high message throughput. A lock-and-coordinator model is the best tradeoff: simple, robust, and easy to reason about.
-
-**Scope.**
-
-- Runtime (`src/runtime/inbox.sh`):
-  - Introduce lock-protected critical sections for sequence allocation (`.seq`) and queue append/read bookkeeping.
-  - Keep message persistence file-backed; prefer atomic write patterns where practical.
-  - Add a coordinator dispatch mode that can run routed targets in parallel (e.g. bounded fan-out + `wait`) while preserving existing failure semantics.
-  - Define and document ordering guarantees explicitly (what is stable vs intentionally non-deterministic under parallel completion).
-- Config/feature gate:
-  - Add a runtime flag for inbox parallel mode (default chosen explicitly and documented; sequential fallback retained for safety/rollback).
-- CLI/runtime integration:
-  - Ensure event emission, run summary, and failure propagation remain correct when inbox dispatch overlaps.
-
-**Acceptance criteria.**
-
-- No duplicate or skipped sequence IDs under concurrent sends.
-- No dropped dispatches: for `N` messages and `M` route targets, exactly `N*M` target invocations occur (modulo expected failures).
-- Any failed awaited target causes the owning step/workflow to fail per documented behavior.
-- `.jaiph/runs/...` artifacts (including inbox files and run summary append path) remain valid and uncorrupted under concurrent activity.
-- Docs describe parallel inbox semantics, lock behavior, and rollback toggle.
-
----
-
 ## Inbox concurrency stress suite + hardening follow-up gates <!-- dev-ready -->
 
 **Goal.** Prevent race-condition regressions by adding repeatable stress tests and explicit criteria for when deeper architectural hardening is required.

@@ -40,7 +40,9 @@ receives `$1=message`, `$2=channel`, `$3=sender` (see [Trigger contract](#trigge
 
 - **Inbox is an event bus, not a filesystem watcher.** The runtime owns
   dispatch in memory — no `inotifywait`, no `fswatch`, no polling.
-- **Messages are sequential.** No parallel dispatch in v1.
+- **Sequential by default, parallel opt-in.** Dispatch is sequential
+  unless `run.inbox_parallel = true` is set (see
+  [Parallel dispatch](#parallel-dispatch) below).
 - **Inbox is transient per run.** The inbox directory is retained for
   debugging but is not the dispatch mechanism.
 
@@ -191,6 +193,64 @@ The dispatch queue (`inbox/.queue`) uses `channel:NNN` entries (e.g.
 Both are files rather than shell variables so that increments and enqueues
 performed inside subshells (e.g. `run_step` pipelines) survive back into the
 parent process.
+
+## Parallel dispatch
+
+When `run.inbox_parallel = true` is set (in-file config or via the
+`JAIPH_INBOX_PARALLEL=true` environment variable), route targets for
+each batch of queue entries are launched as concurrent background jobs
+instead of being called one at a time.
+
+```jh
+config {
+  run.inbox_parallel = true
+}
+
+workflow default {
+  run producer
+  findings -> analyst, reviewer   # analyst and reviewer run in parallel
+}
+```
+
+### Ordering guarantees
+
+- **Queue-entry order (FIFO) is preserved between batches.** A batch
+  is the set of entries visible when `drain_queue` reads the queue file.
+  All targets in a batch are launched before the next batch is read.
+- **Ordering among targets within a batch is intentionally
+  non-deterministic.** Targets may start, run, and complete in any
+  order.
+- **Sequence IDs are never duplicated or skipped.** File-based locks
+  (`mkdir`-based, portable across macOS and Linux) protect the inbox
+  sequence counter (`.seq`) and the step sequence counter so that
+  concurrent sends and step registrations remain correct.
+
+### Lock behavior
+
+Parallel dispatch introduces synchronous file locks around three
+shared-state files:
+
+| Lock target | Protects | When held |
+|---|---|---|
+| `inbox/.seq.lock` | Inbox sequence counter + queue append | During `jaiph::send` |
+| `.seq.lock` (run dir) | Step sequence counter | During `jaiph::next_step_id` |
+| `run_summary.jsonl.lock` | Summary file append | During `STEP_END` event write |
+
+Locks use `mkdir` (atomic on POSIX). They are only acquired when
+`JAIPH_INBOX_PARALLEL=true`; sequential mode has zero lock overhead.
+
+### Failure propagation
+
+If any background target exits non-zero, `drain_queue` waits for all
+remaining targets in the batch to complete, then exits with status 1.
+This is consistent with sequential mode's fail-fast behavior — the
+owning workflow fails when any dispatched target fails.
+
+### Rollback
+
+To revert to sequential dispatch, remove `run.inbox_parallel = true`
+from config or set `JAIPH_INBOX_PARALLEL=false` in the environment.
+Sequential mode is the default and requires no locks.
 
 ## Error semantics
 

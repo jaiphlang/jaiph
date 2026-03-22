@@ -157,7 +157,7 @@ export interface WorkflowMetadata {
     cursorFlags?: string;
     claudeFlags?: string;
   };
-  run?: { debug?: boolean; logsDir?: string };
+  run?: { debug?: boolean; logsDir?: string; inboxParallel?: boolean };
   runtime?: RuntimeConfig;
 }
 
