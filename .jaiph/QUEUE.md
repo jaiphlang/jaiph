@@ -6,37 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Detect and fill test coverage gaps <!-- dev-ready -->
-
-**Goal.** Systematically identify untested or under-tested code paths across the compiler, runtime, and CLI, then produce the missing tests.
-
-**Why.** The test suite has grown organically alongside features. Some areas (error paths, edge cases in the parser, config precedence, signal handling, Docker mode) may lack coverage. Gaps become regressions when refactoring.
-
-**Scope.**
-
-- Audit every parser code path (`src/parse/*.ts`) against existing unit/acceptance tests in `test/`. Identify parse branches with no corresponding test case.
-- Audit every emitter code path (`src/transpile/emit-workflow.ts`, `emit-test.ts`) against golden output tests. Identify emit branches with no golden fixture.
-- Audit every e2e test (`e2e/tests/*.sh`) against the feature list in docs. Identify features with no e2e coverage.
-- Audit CLI commands (`run`, `build`, `test`, `init`, `use`) for error-path coverage.
-- For each gap found: write the appropriate test type (see testing philosophy in `docs/contributing.md`).
-- Run `npm test` and `npm run test:e2e` after adding tests to confirm they pass on current code.
-
-**Test type selection guide.**
-
-- **Compiler correctness** (does `.jh` input produce expected `.sh` output?) → golden output test in `test/fixtures/` + `test/expected/`.
-- **Parser edge cases** (error messages, malformed input, boundary conditions) → acceptance test in `test/acceptance/`.
-- **Runtime behavior** (does the built workflow actually run correctly end-to-end?) → e2e test in `e2e/tests/`.
-- **Isolated unit logic** (pure functions like param formatting, event parsing, path resolution) → unit test in `test/`.
-
-**Acceptance criteria.**
-
-- A coverage gap report is produced listing each gap with: file, code path, reason it matters, test type needed.
-- Missing tests are written and passing.
-- No existing tests are modified.
-- Test count increases by at least 10 new test cases across the suite.
-
----
-
 ## Make step outputs persist live to artifact files (probably tee or `|` for all step kinds)<!-- dev-ready -->
 
 **Goal.** Ensure every step writes to its `.jaiph/runs/.../*.out`/`*.err` files incrementally while it executes (not only at step end), so logs are always tail-able in real time.
@@ -101,6 +70,94 @@ The first `##` task in the file is always the current task.
   - **Interaction:** at least one case involving nested `run` or a follow-on workflow in the same file shows the documented precedence (no silent wrong backend/model).
 - Unit/parser tests as needed for parse errors (invalid keys, duplicate inner config if disallowed).
 - `docs/configuration.md` and `docs/grammar.md` updated to describe inner workflow config and precedence.
+
+---
+
+## Include `type + name` on step completion lines (parallel-safe tree clarity) <!-- dev-ready -->
+
+**Goal.** Make completion lines self-identifying (e.g. `✓ workflow reviewer (0s)`) so output stays unambiguous when multiple sibling steps run concurrently.
+
+**Why.** Current completion lines only show `✓/✗ <time>`, which is readable for strictly sequential runs but becomes ambiguous under parallel execution where several steps may complete out of order.
+
+**Scope.**
+
+- Update TTY and non-TTY completion rendering to include `kind + name + elapsed` for every non-root step.
+- Keep existing start-line format unchanged (including params preview/suffix behavior).
+- Styling constraints:
+  - success marker stays green
+  - failure marker stays red
+  - for success lines, label (`kind + name`) and elapsed time are dim/grey
+  - for failures, preserve existing red emphasis behavior
+- Ensure compatibility with nested depth/prefix formatting and root PASS/FAIL summary line.
+- Rework user-facing output samples to match the new completion format, including examples in `index.html`.
+
+**Acceptance criteria.**
+
+- Example format is supported:
+  - `✓ workflow scanner (0s)`
+  - `✓ workflow analyst (0s)`
+  - `✗ workflow reviewer (2s)` (color semantics preserved per failure rules)
+- In concurrent runs, each completion line is attributable without relying on visual proximity to start lines.
+- Include an explicit before/after sample in docs or task notes using this baseline:
+  - Before:
+    - `Jaiph: Running agent_inbox.jh`
+    - ``
+    - `workflow default`
+    - `  ▸ workflow scanner`
+    - `  ✓ 0s`
+    - `  ▸ workflow analyst (1="Found 3 issues in auth module", 2="findings", 3="scanner")`
+    - `  ✓ 0s`
+    - `  ▸ workflow reviewer (1="Summary: Found 3 issues in auth ...", 2="report", 3="analyst")`
+    - `  ·   ℹ [reviewed] Summary: Found 3 issues in auth module`
+    - `  ✓ 0s`
+    - ``
+    - `✓ PASS workflow default (0.2s)`
+  - After:
+    - `Jaiph: Running agent_inbox.jh`
+    - ``
+    - `workflow default`
+    - `  ▸ workflow scanner`
+    - `  ✓ workflow scanner (0s)`
+    - `  ▸ workflow analyst (1="Found 3 issues in auth module", 2="findings", 3="scanner")`
+    - `  ✓ workflow analyst (0s)`
+    - `  ▸ workflow reviewer (1="Summary: Found 3 issues in auth ...", 2="report", 3="analyst")`
+    - `  ·   ℹ [reviewed] Summary: Found 3 issues in auth module`
+    - `  ✓ workflow reviewer (0s)`
+    - ``
+    - `✓ PASS workflow default (0.2s)`
+- Existing display tests are updated and new tests cover:
+  - success/failure completion line text for multiple kinds (`workflow`, `rule`, `function`, `prompt`)
+  - color-enabled vs color-disabled output semantics
+  - no regression in root final PASS/FAIL formatting
+
+---
+
+## Support parallel processes in workflow shell steps (`& ... wait`) <!-- dev-ready -->
+
+**Goal.** Allow users to run concurrent subprocesses inside workflow shell execution using standard Bash backgrounding (`prog1 &`, `prog2 &`, `wait`) while keeping Jaiph internals deterministic and race-safe.
+
+**Scope.**
+
+- Ensure generated/executed shell step wrappers preserve native Bash job control semantics for background jobs and `wait` exit codes.
+- Verify runtime behavior when multiple parallel subprocesses emit output concurrently to stdout/stderr and step artifacts.
+- Hardening for concurrent internal resource access:
+  - inbox/channels event files and message ordering assumptions
+  - `.jaiph/runs/...` artifact creation/writes (`*.out`, `*.err`, summaries, metadata)
+  - run-level status/event emission (`STEP_START`/`STEP_END`, PASS/FAIL) under interleaved outputs
+- Add clear failure semantics: non-zero from any awaited job must fail step/workflow per existing shell-step error model.
+- Document expected behavior and constraints (e.g., users must `wait` for all background jobs before step end if they need deterministic completion).
+
+**Acceptance criteria.**
+
+- A workflow step using:
+  - `prog1 &`
+  - `prog2 &`
+  - `wait`
+  executes reliably, and final step exit status reflects child process outcomes.
+- New/updated tests include both unit and e2e coverage for parallel subprocesses and concurrent writes.
+- Regression coverage proves no corruption/regression in inbox/channels handling and `.jaiph/runs` artifacts under concurrency.
+- Existing internals continue to behave correctly with interleaved output: event sequencing remains valid, summaries are complete, and final workflow status is accurate.
+- Docs updated with supported parallel pattern and caveats for safe usage.
 
 ---
 
