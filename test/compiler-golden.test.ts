@@ -1025,6 +1025,32 @@ test("compiler golden: top-level local emits prefixed variable and shims", () =>
   }
 });
 
+test("compiler golden: top-level local $sibling is expanded in export (set -u safe)", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-env-cross-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        'local shared = "MIDDLE"',
+        'local combined = "before $shared after"',
+        "",
+        "workflow default {",
+        "  echo $combined",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const actual = normalize(transpileFile(input, root));
+    assert.match(actual, /export entry__shared="MIDDLE"/);
+    assert.match(actual, /export entry__combined="before MIDDLE after"/);
+    assert.ok(!/export entry__combined="[^"]*\$shared/.test(actual));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 // === ensure...recover golden tests ===
 
 test("compiler golden: ensure...recover single statement emits retry loop", () => {

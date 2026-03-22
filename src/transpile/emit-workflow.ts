@@ -98,6 +98,46 @@ function normalizeShellLocalExport(command: string): string {
   );
 }
 
+/**
+ * Top-level env values are emitted as `export PREFIX__name="..."`. Bash expands
+ * `$other` inside those double quotes while the script loads, but sibling locals
+ * only exist as shims inside workflow/rule bodies — so `$sibling` must be inlined
+ * at compile time.
+ */
+function expandTopLevelEnvDeclReferences(
+  filePath: string,
+  rawByName: Map<string, string>,
+  value: string,
+  expanding: Set<string>,
+): string {
+  const refRe = /\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}|\$([a-zA-Z_][a-zA-Z0-9_]*)/g;
+  return value.replace(refRe, (full, braced?: string, plain?: string) => {
+    const refName = braced ?? plain;
+    if (refName === undefined) {
+      return full;
+    }
+    if (!rawByName.has(refName)) {
+      return full;
+    }
+    if (expanding.has(refName)) {
+      throw jaiphError(
+        filePath,
+        1,
+        1,
+        "E_PARSE",
+        `circular reference among top-level local declarations involving "${refName}"`,
+      );
+    }
+    expanding.add(refName);
+    try {
+      const raw = rawByName.get(refName)!;
+      return expandTopLevelEnvDeclReferences(filePath, rawByName, raw, expanding);
+    } finally {
+      expanding.delete(refName);
+    }
+  });
+}
+
 function parsePromptText(raw: string): string {
   if (!raw.startsWith(`"`)) {
     throw new Error("invalid prompt literal");
@@ -425,8 +465,10 @@ export function emitWorkflow(
   const envPrefix = workflowSymbol.replace(/::/g, "__");
   const envDecls = ast.envDecls ?? [];
   if (envDecls.length > 0) {
+    const rawByName = new Map(envDecls.map((e) => [e.name, e.value]));
     for (const env of envDecls) {
-      const escaped = env.value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      const expanded = expandTopLevelEnvDeclReferences(ast.filePath, rawByName, env.value, new Set());
+      const escaped = expanded.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
       out.push(`export ${envPrefix}__${env.name}="${escaped}"`);
     }
     out.push("");
