@@ -146,6 +146,24 @@ test("build fails on missing import file", () => {
   }
 });
 
+// Regression: .jaiph/main.jh once imported implement_from_queue.jh which had been
+// renamed to engineer.jh, causing E_IMPORT_NOT_FOUND for every `jaiph test` run
+// in the workspace (build() compiles all .jh files, not just the test target).
+test(".jaiph/main.jh imports only existing modules", () => {
+  const jaiphDir = join(process.cwd(), ".jaiph");
+  const mainJh = join(jaiphDir, "main.jh");
+  assert.ok(existsSync(mainJh), ".jaiph/main.jh should exist");
+
+  const ast = parsejaiph(readFileSync(mainJh, "utf8"), mainJh);
+  for (const imp of ast.imports) {
+    const resolved = join(dirname(mainJh), imp.path);
+    assert.ok(existsSync(resolved), `import "${imp.alias}" resolves to missing file "${resolved}"`);
+  }
+
+  // Verify build() does not throw for .jaiph directory
+  assert.doesNotThrow(() => build(jaiphDir));
+});
+
 test("jaiph run compiles and executes workflow with args", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-run-"));
   try {
