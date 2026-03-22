@@ -6,29 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Split `emit-workflow.ts` into per-step emitter functions <!-- dev-ready -->
-
-**Goal.** Break the 879-line `emitWorkflow()` function into separate emitter functions, one per step type, that the main function calls in a flat switch/if chain.
-
-**Why.** Step emission for prompt, ensure, run, shell, if, and send is duplicated between the main workflow body, `emitRecoverStep`, and `emitBranchSteps`. An AI editing prompt emission has to find and update 3 code paths.
-
-**Scope.**
-
-- For each step type, write one plain function: `emitEnsureStep(out, indent, step, ctx)`, `emitRunStep(out, indent, step, ctx)`, `emitPromptStepToOut(out, indent, step, ctx)`, `emitShellStep(out, indent, step, ctx)`, `emitSendStep(out, indent, step, ctx)`, `emitIfStep(out, indent, step, ctx)` where `ctx` carries `workflowSymbol`, `importedWorkflowSymbols`, `importedModuleHasMetadata`, `filePath`.
-- The main workflow emission loop becomes: for each step, call the matching emitter function.
-- `emitRecoverStep` and `emitBranchSteps` become the same flat dispatch — no separate implementations.
-- Move emitter functions to `src/transpile/emit-steps.ts` if needed to keep files under 400 lines. No deeper nesting.
-- No abstractions, no registries, no plugin systems. Just functions that push strings to an array.
-
-**Acceptance criteria.**
-
-- No emission logic is duplicated between workflow body, recover, and if-branches.
-- `emit-workflow.ts` is under 400 lines.
-- Golden output tests produce identical bash output.
-- All existing tests pass.
-
----
-
 ## Add runtime event emitter for CLI reporting <!-- dev-ready -->
 
 **Goal.** Replace the direct coupling between stderr event parsing and consumers (TTY rendering, hooks, state tracking) with a simple event emitter that consumers subscribe to. The emitter becomes the single source of truth for runtime events.
