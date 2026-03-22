@@ -798,57 +798,44 @@ function emitEnsureRecoverLoop(
           }
           continue;
         }
-        if (step.type === "if_not_ensure_then_run") {
-          const ensureArgs = step.args ? ` ${step.args}` : "";
-          out.push(
-            `  if ! ${transpileRuleRef(step.ensureRef, workflowSymbol, importedWorkflowSymbols)}${ensureArgs}; then`,
-          );
-          for (const wf of step.runWorkflows) {
-            const args = wf.args ? ` ${wf.args}` : "";
-            const paramKeys = wf.args ? parseParamKeysFromArgs(wf.args) : null;
-            if (paramKeys != null && paramKeys.length > 0) {
-              out.push(`    export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
-            }
-            const wfRef = transpileWorkflowRef(wf.workflow, workflowSymbol, importedWorkflowSymbols);
-            const scopePrefix = prefixForImportedWorkflowCall(wf.workflow, importedModuleHasMetadata, importedWorkflowSymbols);
-            out.push(`    ${scopePrefix}${wfRef}${args}`);
+        if (step.type === "if") {
+          const negPrefix = step.negated ? "! " : "";
+          if (step.condition.kind === "ensure") {
+            const ensureArgs = step.condition.args ? ` ${step.condition.args}` : "";
+            out.push(
+              `  if ${negPrefix}${transpileRuleRef(step.condition.ref, workflowSymbol, importedWorkflowSymbols)}${ensureArgs}; then`,
+            );
+          } else {
+            const resolvedCondition = resolveShellRefs(step.condition.command, importedWorkflowSymbols);
+            out.push(`  if ${negPrefix}${resolvedCondition}; then`);
           }
-          out.push("  fi");
-          continue;
-        }
-        if (step.type === "if_not_ensure_then" || step.type === "if_ensure_then") {
-          const ensureArgs = step.args ? ` ${step.args}` : "";
-          const negPrefix = step.type === "if_not_ensure_then" ? "! " : "";
-          out.push(
-            `  if ${negPrefix}${transpileRuleRef(step.ensureRef, workflowSymbol, importedWorkflowSymbols)}${ensureArgs}; then`,
-          );
-          const emitBranchSteps = (steps: typeof step.thenSteps, indent: string): void => {
-            for (const thenStep of steps) {
-              if (thenStep.type === "run") {
-                const args = thenStep.args ? ` ${thenStep.args}` : "";
-                const paramKeys = thenStep.args ? parseParamKeysFromArgs(thenStep.args) : null;
+          const emitIfBranchSteps = (steps: WorkflowStepDef[], indent: string): void => {
+            for (const branchStep of steps) {
+              if (branchStep.type === "run") {
+                const args = branchStep.args ? ` ${branchStep.args}` : "";
+                const paramKeys = branchStep.args ? parseParamKeysFromArgs(branchStep.args) : null;
                 if (paramKeys != null && paramKeys.length > 0) {
                   out.push(`${indent}export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
                 }
-                const wfRef = transpileWorkflowRef(thenStep.workflow, workflowSymbol, importedWorkflowSymbols);
-                const scopePrefix = prefixForImportedWorkflowCall(thenStep.workflow, importedModuleHasMetadata, importedWorkflowSymbols);
-                if (thenStep.captureName) {
-                  out.push(`${indent}${thenStep.captureName}=$(${scopePrefix}${wfRef}::impl${args})`);
+                const wfRef = transpileWorkflowRef(branchStep.workflow, workflowSymbol, importedWorkflowSymbols);
+                const scopePrefix = prefixForImportedWorkflowCall(branchStep.workflow, importedModuleHasMetadata, importedWorkflowSymbols);
+                if (branchStep.captureName) {
+                  out.push(`${indent}${branchStep.captureName}=$(${scopePrefix}${wfRef}::impl${args})`);
                 } else {
                   out.push(`${indent}${scopePrefix}${wfRef}${args}`);
                 }
                 continue;
               }
-              if (thenStep.type === "prompt") {
-                emitPromptStep(out, indent, thenStep, ast.filePath);
+              if (branchStep.type === "prompt") {
+                emitPromptStep(out, indent, branchStep, ast.filePath);
                 continue;
               }
-              if (thenStep.type === "shell") {
+              if (branchStep.type === "shell") {
                 const resolved = normalizeShellLocalExport(
-                  resolveShellRefs(thenStep.command, importedWorkflowSymbols),
+                  resolveShellRefs(branchStep.command, importedWorkflowSymbols),
                 );
-                if (thenStep.captureName) {
-                  out.push(`${indent}${thenStep.captureName}=$(${resolved})`);
+                if (branchStep.captureName) {
+                  out.push(`${indent}${branchStep.captureName}=$(${resolved})`);
                 } else {
                   out.push(`${indent}${resolved}`);
                 }
@@ -856,41 +843,10 @@ function emitEnsureRecoverLoop(
               }
             }
           };
-          emitBranchSteps(step.thenSteps, "    ");
+          emitIfBranchSteps(step.thenSteps, "    ");
           if (step.elseSteps && step.elseSteps.length > 0) {
             out.push("  else");
-            emitBranchSteps(step.elseSteps, "    ");
-          }
-          out.push("  fi");
-          continue;
-        }
-        if (step.type === "if_not_shell_then") {
-          const resolvedCondition = resolveShellRefs(step.condition, importedWorkflowSymbols);
-          out.push(`  if ! ${resolvedCondition}; then`);
-          for (const thenStep of step.thenSteps) {
-            if (thenStep.type === "shell") {
-              out.push(`    ${normalizeShellLocalExport(resolveShellRefs(thenStep.command, importedWorkflowSymbols))}`);
-            } else {
-              const args = thenStep.args ? ` ${thenStep.args}` : "";
-              const paramKeys = thenStep.args ? parseParamKeysFromArgs(thenStep.args) : null;
-              if (paramKeys != null && paramKeys.length > 0) {
-                out.push(`    export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
-              }
-              const wfRef = transpileWorkflowRef(thenStep.workflow, workflowSymbol, importedWorkflowSymbols);
-              const scopePrefix = prefixForImportedWorkflowCall(thenStep.workflow, importedModuleHasMetadata, importedWorkflowSymbols);
-              out.push(`    ${scopePrefix}${wfRef}${args}`);
-            }
-          }
-          out.push("  fi");
-          continue;
-        }
-        if (step.type === "if_not_ensure_then_shell") {
-          const ensureArgs = step.args ? ` ${step.args}` : "";
-          out.push(
-            `  if ! ${transpileRuleRef(step.ensureRef, workflowSymbol, importedWorkflowSymbols)}${ensureArgs}; then`,
-          );
-          for (const { command } of step.commands) {
-            out.push(`    ${normalizeShellLocalExport(resolveShellRefs(command, importedWorkflowSymbols))}`);
+            emitIfBranchSteps(step.elseSteps, "    ");
           }
           out.push("  fi");
           continue;

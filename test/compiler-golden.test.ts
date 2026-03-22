@@ -408,7 +408,7 @@ test("parser: unknown runtime key throws E_PARSE", () => {
   );
 });
 
-test("parser: positive if ensure parses into if_ensure_then step", () => {
+test("parser: positive if ensure parses into if step", () => {
   const source = [
     "rule ready {",
     "  true",
@@ -422,9 +422,11 @@ test("parser: positive if ensure parses into if_ensure_then step", () => {
   const mod = parsejaiph(source, "/fake/entry.jh");
   const steps = mod.workflows[0].steps;
   assert.equal(steps.length, 1);
-  assert.equal(steps[0].type, "if_ensure_then");
-  const step = steps[0] as { type: "if_ensure_then"; ensureRef: { value: string }; thenSteps: unknown[] };
-  assert.equal(step.ensureRef.value, "ready");
+  assert.equal(steps[0].type, "if");
+  const step = steps[0] as { type: "if"; negated: boolean; condition: { kind: "ensure"; ref: { value: string } }; thenSteps: unknown[] };
+  assert.equal(step.negated, false);
+  assert.equal(step.condition.kind, "ensure");
+  assert.equal(step.condition.ref.value, "ready");
   assert.equal(step.thenSteps.length, 1);
 });
 
@@ -441,13 +443,14 @@ test("parser: positive if ensure with args parses correctly", () => {
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
   const step = mod.workflows[0].steps[0] as {
-    type: "if_ensure_then";
-    ensureRef: { value: string };
-    args?: string;
+    type: "if";
+    negated: boolean;
+    condition: { kind: "ensure"; ref: { value: string }; args?: string };
   };
-  assert.equal(step.type, "if_ensure_then");
-  assert.equal(step.ensureRef.value, "check");
-  assert.equal(step.args, "foo=bar baz");
+  assert.equal(step.type, "if");
+  assert.equal(step.negated, false);
+  assert.equal(step.condition.ref.value, "check");
+  assert.equal(step.condition.args, "foo=bar baz");
 });
 
 test("parser: negated if ensure with args parses correctly", () => {
@@ -466,12 +469,13 @@ test("parser: negated if ensure with args parses correctly", () => {
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
   const step = mod.workflows[1].steps[0] as {
-    type: "if_not_ensure_then_run";
-    ensureRef: { value: string };
-    args?: string;
+    type: "if";
+    negated: boolean;
+    condition: { kind: "ensure"; ref: { value: string }; args?: string };
   };
-  assert.equal(step.type, "if_not_ensure_then_run");
-  assert.equal(step.args, "foo=bar");
+  assert.equal(step.type, "if");
+  assert.equal(step.negated, true);
+  assert.equal(step.condition.args, "foo=bar");
 });
 
 test("parser: if ensure with else branch parses correctly", () => {
@@ -489,11 +493,13 @@ test("parser: if ensure with else branch parses correctly", () => {
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
   const step = mod.workflows[0].steps[0] as {
-    type: "if_ensure_then";
+    type: "if";
+    negated: boolean;
     thenSteps: unknown[];
     elseSteps?: unknown[];
   };
-  assert.equal(step.type, "if_ensure_then");
+  assert.equal(step.type, "if");
+  assert.equal(step.negated, false);
   assert.equal(step.thenSteps.length, 1);
   assert.ok(step.elseSteps);
   assert.equal(step.elseSteps!.length, 1);
@@ -514,11 +520,13 @@ test("parser: negated if ensure with else branch parses correctly", () => {
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
   const step = mod.workflows[0].steps[0] as {
-    type: "if_not_ensure_then";
+    type: "if";
+    negated: boolean;
     thenSteps: unknown[];
     elseSteps?: unknown[];
   };
-  assert.equal(step.type, "if_not_ensure_then");
+  assert.equal(step.type, "if");
+  assert.equal(step.negated, true);
   assert.equal(step.thenSteps.length, 1);
   assert.ok(step.elseSteps);
   assert.equal(step.elseSteps!.length, 1);

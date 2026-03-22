@@ -282,33 +282,14 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         }
       } else if (s.type === "run") {
         validateWorkflowRef(s.workflow);
-      } else if (s.type === "if_not_ensure_then_run") {
-        validateRuleRef(s.ensureRef);
-        for (const runStep of s.runWorkflows) {
-          validateWorkflowRef(runStep.workflow);
+      } else if (s.type === "if") {
+        if (s.condition.kind === "ensure") {
+          validateRuleRef(s.condition.ref);
         }
-      } else if (s.type === "if_not_ensure_then" || s.type === "if_ensure_then") {
-        validateRuleRef(s.ensureRef);
-        for (const thenStep of s.thenSteps) {
-          if (thenStep.type === "run") {
-            validateWorkflowRef(thenStep.workflow);
-          }
-        }
+        for (const ts of s.thenSteps) validateStep(ts);
         if (s.elseSteps) {
-          for (const elseStep of s.elseSteps) {
-            if (elseStep.type === "run") {
-              validateWorkflowRef(elseStep.workflow);
-            }
-          }
+          for (const es of s.elseSteps) validateStep(es);
         }
-      } else if (s.type === "if_not_shell_then") {
-        for (const thenStep of s.thenSteps) {
-          if (thenStep.type === "run") {
-            validateWorkflowRef(thenStep.workflow);
-          }
-        }
-      } else if (s.type === "if_not_ensure_then_shell") {
-        validateRuleRef(s.ensureRef);
       }
       // send steps have no refs to validate (channel is a string identifier)
     };
@@ -332,35 +313,14 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         }
       } else if (step.type === "run") {
         validateWorkflowRef(step.workflow);
-      } else if (step.type === "if_not_ensure_then_run") {
-        validateRuleRef(step.ensureRef);
-        for (const runStep of step.runWorkflows) {
-          validateWorkflowRef(runStep.workflow);
+      } else if (step.type === "if") {
+        if (step.condition.kind === "ensure") {
+          validateRuleRef(step.condition.ref);
         }
-      } else if (step.type === "if_not_ensure_then" || step.type === "if_ensure_then") {
-        validateRuleRef(step.ensureRef);
-        for (const thenStep of step.thenSteps) {
-          if (thenStep.type === "run") {
-            validateWorkflowRef(thenStep.workflow);
-          }
-        }
+        for (const ts of step.thenSteps) validateStep(ts);
         if (step.elseSteps) {
-          for (const elseStep of step.elseSteps) {
-            if (elseStep.type === "run") {
-              validateWorkflowRef(elseStep.workflow);
-            }
-          }
+          for (const es of step.elseSteps) validateStep(es);
         }
-      } else if (step.type === "if_not_shell_then") {
-        for (const thenStep of step.thenSteps) {
-          if (thenStep.type === "run") {
-            validateWorkflowRef(thenStep.workflow);
-          }
-        }
-      } else if (step.type === "if_not_ensure_then_shell") {
-        validateRuleRef(step.ensureRef);
-      } else if (step.type === "send") {
-        validateChannelRef(step.channel, step.loc);
       }
     }
   }
