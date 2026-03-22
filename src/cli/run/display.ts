@@ -69,14 +69,17 @@ export function formatCompletedLine(
   status: number,
   elapsedSec: number,
   colorEnabled: boolean,
+  kind?: string,
+  name?: string,
 ): string {
   const prefix = indent.slice(0, -2);
   const dimPrefix = colorize(prefix, "dim", colorEnabled);
+  const label = kind != null && name != null ? `${kind} ${name} ` : "";
   if (status === 0) {
     const ok = colorize("✓", "green", colorEnabled);
-    const elapsed = colorize(`${elapsedSec}s`, "dim", colorEnabled);
+    const elapsed = colorize(`${label}(${elapsedSec}s)`, "dim", colorEnabled);
     return `${dimPrefix}${ok} ${elapsed}`;
   }
-  const fail = colorize(`✗ ${elapsedSec}s`, "red", colorEnabled);
+  const fail = colorize(`✗ ${label}(${elapsedSec}s)`, "red", colorEnabled);
   return `${dimPrefix}${fail}`;
 }

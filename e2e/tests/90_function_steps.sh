@@ -35,7 +35,7 @@ Jaiph: Running functions.jh
 
 workflow default
   ▸ function changed_files
-  ✓ <time>
+  ✓ function changed_files (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
@@ -82,10 +82,10 @@ Jaiph: Running args_forwarding.jh
 workflow default
   ▸ workflow called (1="one", 2="two words")
   ·   ▸ rule expect_args (1="one", 2="two words")
-  ·   ✓ <time>
+  ·   ✓ rule expect_args (<time>)
   ·   ▸ function write_args (1="one", 2="two words")
-  ·   ✓ <time>
-  ✓ <time>
+  ·   ✓ function write_args (<time>)
+  ✓ workflow called (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 

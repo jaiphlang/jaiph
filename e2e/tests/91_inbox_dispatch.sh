@@ -173,11 +173,11 @@ Jaiph: Running display_inbox.jh
 
 workflow default
   ▸ workflow scanner
-  ✓ <time>
+  ✓ workflow scanner (<time>)
   ▸ workflow analyst (1="Found 3 issues in auth module", 2="findings", 3="scanner")
-  ✓ <time>
+  ✓ workflow analyst (<time>)
   ▸ workflow reviewer (1="Summary: Found 3 issues in auth ...", 2="report", 3="analyst")
-  ✓ <time>
+  ✓ workflow reviewer (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 

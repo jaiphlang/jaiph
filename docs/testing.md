@@ -72,7 +72,7 @@ test "runs happy path and output contains expected mock" {
 ## Pass/fail reporting
 
 - Each test block runs independently. A failing step (e.g. `expectContain`, or a workflow run that exits non-zero without `allow_failure`) marks that test as failed.
-- Output: the runner prints `testing <file name>`, then for each test `  ▸ <description>` followed by either `  ✓` (and elapsed time) on success or `  ✗ <first error line>` (and elapsed time) on failure. Additional error lines are indented on stderr.
+- Output: the runner prints `testing <file name>`, then for each test `  ▸ <description>` followed by either `  ✓ <kind> <name> (<elapsed>)` on success or `  ✗ <kind> <name> (<elapsed>)` with the first error line on failure. Additional error lines are indented on stderr.
 - Exit code is 0 if all tests pass, non-zero otherwise.
 
 ## Given/When/Then style

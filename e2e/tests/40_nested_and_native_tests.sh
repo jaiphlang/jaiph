@@ -38,7 +38,7 @@ Jaiph: Running nested_run.jh
 
 workflow default
   ▸ workflow default
-  ✓ <time>
+  ✓ workflow default (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
@@ -146,17 +146,17 @@ Jaiph: Running fibonacci.jh
 
 workflow default (1="3")
   ▸ rule ensure_is_number (1="3")
-  ✓ <time>
+  ✓ rule ensure_is_number (<time>)
   ▸ function fib (1="3")
   ·   ▸ function fib (1="2")
   ·   ·   ▸ function fib (1="1")
-  ·   ·   ✓ <time>
+  ·   ·   ✓ function fib (<time>)
   ·   ·   ▸ function fib (1="0")
-  ·   ·   ✓ <time>
-  ·   ✓ <time>
+  ·   ·   ✓ function fib (<time>)
+  ·   ✓ function fib (<time>)
   ·   ▸ function fib (1="1")
-  ·   ✓ <time>
-  ✓ <time>
+  ·   ✓ function fib (<time>)
+  ✓ function fib (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
@@ -229,7 +229,7 @@ Jaiph: Running param_run_only.jh
 
 workflow default (1="Bob")
   ▸ rule need_one (1="Bob")
-  ✓ <time>
+  ✓ rule need_one (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 

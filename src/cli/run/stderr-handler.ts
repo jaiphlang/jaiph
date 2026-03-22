@@ -147,7 +147,7 @@ export function registerTTYSubscriber(emitter: RunEmitter, ctx: TTYContext): voi
     if (data.isRoot) return;
     const elapsedSec = Math.max(0, Math.floor((data.event.elapsed_ms ?? 0) / 1000));
     const indent = stepIndentById.get(data.eventId) ?? "  · ";
-    const completedLine = formatCompletedLine(indent, data.event.status ?? 1, elapsedSec, ctx.colorEnabled);
+    const completedLine = formatCompletedLine(indent, data.event.status ?? 1, elapsedSec, ctx.colorEnabled, data.event.kind, data.event.name);
     writeTTYLine(completedLine, ctx);
     stepIndentById.delete(data.eventId);
   });

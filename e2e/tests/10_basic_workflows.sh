@@ -58,7 +58,7 @@ Jaiph: Running app.jh
 
 workflow default
   ▸ rule ready
-  ✓ <time>
+  ✓ rule ready (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 

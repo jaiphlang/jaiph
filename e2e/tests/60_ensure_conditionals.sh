@@ -71,9 +71,9 @@ Jaiph: Running ensure_run_branch.jh
 
 workflow default
   ▸ rule always_fail
-  ✗ <time>
+  ✗ rule always_fail (<time>)
   ▸ workflow recovery
-  ✓ <time>
+  ✓ workflow recovery (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
@@ -87,7 +87,7 @@ Jaiph: Running ensure_shell_branch.jh
 
 workflow default
   ▸ rule always_fail
-  ✗ <time>
+  ✗ rule always_fail (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
@@ -99,7 +99,7 @@ Jaiph: Running ensure_pass_branch.jh
 
 workflow default
   ▸ rule always_ok
-  ✓ <time>
+  ✓ rule always_ok (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
