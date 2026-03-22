@@ -147,12 +147,37 @@ workflow implement_poc {
 
   response = prompt "
     $role
-    <task>
+
+    <context>
     You are working on the Jaiph codebase (https://github.com/jaiphlang/jaiph),
     a TypeScript compiler and runtime for a DSL that transpiles to Bash.
 
+    <code_philosophy>
+    This codebase is maintained by both humans and AI agents. All code you write
+    must follow these principles strictly:
+
+    1. Plain functions with explicit arguments. Avoid classes and abstraction-
+       heavy generics; if the surrounding file already uses generics, follow
+       local style and keep additions minimal. No visitor patterns or dependency
+       injection. Pass plain objects for shared context.
+    2. Flat control flow. If/else chains and switch statements. A function
+       should be readable top-to-bottom without jumping to 3 other files.
+    3. Short files. No source file over ~400 lines. Split into sibling files
+       in the same directory, not a deeper module tree.
+    4. No duplication across files. Same logic in two places = extract into
+       one plain function called from both.
+    5. Minimal touch surface. Adding a new feature should require changes in
+       at most 3 files. If more are needed, refactor first.
+    6. No speculative abstractions. No registries, plugin systems, or
+       indirection layers for future extensibility. Add the simplest thing
+       that works now.
+    7. Red flag: >100 lines of new code. Check if the library or existing
+       codebase already provides it. If not, explain why.
+
+    <task>
     Implement the following task by:
     - Following the codebase's existing style and conventions precisely.
+    - Following the code philosophy above for all new and modified code.
     - Adding or updating tests as needed for acceptance criteria.
     - Running npm run build, npm test, and npm run test:e2e; fix any failures
       before continuing.
