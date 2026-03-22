@@ -34,7 +34,7 @@ workflow default {
 
 In this example, `researcher` sends data to the `findings` channel.
 The `default` workflow routes `findings` messages to `analyst`, which
-receives the message content as `$1`.
+receives `$1=message`, `$2=channel`, `$3=sender` (see [Trigger contract](#trigger-contract)).
 
 ## Design principles
 
@@ -105,8 +105,8 @@ shell commands.
 
 ### Route declaration: `<channel_ref> -> <workflow>`
 
-Tells the runtime: when a message arrives on `<channel_ref>`, call `<workflow>`
-with the message content as `$1`.
+Tells the runtime: when a message arrives on `<channel>`, call `<workflow>`
+with positional args `$1=message`, `$2=channel`, `$3=sender`.
 
 ```jh
 channel findings
@@ -174,7 +174,7 @@ the inbox environment and can call `jaiph::send`.
 5. After all steps complete, jaiph::drain_queue processes the queue:
    a. Read next unprocessed entry from the queue file.
    b. Look up route for channel.
-   c. If route exists, invoke each target workflow with message as $1.
+   c. If route exists, invoke each target workflow with $1=message, $2=channel, $3=sender.
    d. Invoked workflows may call jaiph::send, growing the queue.
    e. Repeat until queue is empty or depth limit reached.
 6. Run ends.
@@ -204,23 +204,33 @@ parent process.
 
 ## Trigger contract
 
-- The dispatched workflow receives the message content as `$1`. The channel
-  name is available via the `JAIPH_DISPATCH_CHANNEL` environment variable.
-- The runtime sets `JAIPH_STEP_PARAM_KEYS='channel'` on the dispatch
-  invocation so that the standard parameter display pipeline renders the
-  channel name automatically (e.g. `workflow analyst (channel="findings")`).
+Routed receivers get three positional arguments:
+
+| Arg  | Value                                           |
+|------|-------------------------------------------------|
+| `$1` | Message payload (content sent to the channel)   |
+| `$2` | Channel name (e.g. `findings`)                  |
+| `$3` | Sender name (workflow that produced the message) |
+
+- The channel name and sender are also available via `JAIPH_DISPATCH_CHANNEL`
+  and `JAIPH_DISPATCH_SENDER` environment variables respectively.
+- The three positional arguments (`$1`, `$2`, `$3`) are passed through
+  `jaiph::run_step` like any other workflow invocation, so the progress
+  tree shows them with the usual numbered keys (e.g.
+  `workflow analyst (1="…", 2="findings", 3="scanner")`).
 - `JAIPH_DISPATCH_CHANNEL` is also used by the event system to tag JSONL
-  events with `"dispatched":true` and `"channel":"…"` metadata.
+  events with `"dispatched":true`, `"channel":"…"`, and `"sender":"…"` metadata.
 - Workflows remain directly callable: `jaiph run analyst "some content"`.
+  When called directly, `$2` and `$3` are unset.
 
 ## Progress tree integration
 
 - Route declarations appear as nodes in the progress tree.
 - Dispatched workflow calls emit `STEP_START`/`STEP_END` events with
   `dispatched: true` and `channel: "<channel>"` metadata.
-- The channel name is displayed using the same `key="value"` format as
-  any other step parameter:
-  `▸ workflow analyst (channel="findings")`.
+- Dispatched receivers show message, channel, and sender as positional
+  parameters in the tree, same as other workflows with three args:
+  `▸ workflow analyst (1="…", 2="findings", 3="scanner")`.
 - Dispatched step output is not displayed in the tree. Use `log` within
   the dispatched workflow to show output in the tree. The runtime embeds
   stdout content in the `STEP_END` event (`out_content` field) for error
@@ -234,9 +244,9 @@ parent process.
 workflow default
   ▸ workflow scanner
   ✓ 0s
-  ▸ workflow analyst (channel="findings")
+  ▸ workflow analyst (1="Found 3 issues in auth module", 2="findings", 3="scanner")
   ✓ 0s
-  ▸ workflow reviewer (channel="report")
+  ▸ workflow reviewer (1="Summary: Found 3 issues in auth ...", 2="report", 3="analyst")
   ✓ 0s
 ✓ PASS workflow default (0.1s)
 ```
