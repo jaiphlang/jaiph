@@ -1,102 +1,13 @@
 import { jaiphError } from "../errors";
-import type { jaiphModule, RuleRefDef, WorkflowStepDef, WorkflowRefDef } from "../types";
-
-/** Prefix to wrap an imported workflow call so it runs with that module's config. Uses the module's emitted symbol (e.g. ensure_ci_passes), not the alias (e.g. ci). */
-function prefixForImportedWorkflowCall(
-  workflowRef: WorkflowRefDef,
-  importedModuleHasMetadata: Map<string, boolean>,
-  importedWorkflowSymbols: Map<string, string>,
-): string {
-  const parts = workflowRef.value.split(".");
-  if (parts.length !== 2 || !importedModuleHasMetadata.get(parts[0])) return "";
-  const symbol = importedWorkflowSymbols.get(parts[0]) ?? parts[0];
-  return `${symbol}::with_metadata_scope `;
-}
-
-/** Extract shell variable references ($name, ${name}, $1, etc.) from prompt text for tree display. */
-function extractShellVarRefs(promptText: string): string[] {
-  const seen = new Set<string>();
-  const refs: string[] = [];
-  const regex = /\$\{([a-zA-Z_][a-zA-Z0-9_]*|[1-9][0-9]*)\}|\$([a-zA-Z_][a-zA-Z0-9_]*|[1-9][0-9]*)/g;
-  let match;
-  while ((match = regex.exec(promptText)) !== null) {
-    const name = match[1] ?? match[2];
-    if (!seen.has(name)) {
-      seen.add(name);
-      refs.push(name);
-    }
-  }
-  return refs;
-}
-
-/** If args look like key=value key=value..., return ordered param keys for tree display; else null. */
-function parseParamKeysFromArgs(args: string): string[] | null {
-  const trimmed = args.trim();
-  if (trimmed.length === 0) return null;
-  const keyRegex = /\b([a-zA-Z_][a-zA-Z0-9_]*)=/g;
-  const matches = [...trimmed.matchAll(keyRegex)];
-  if (matches.length === 0) return null;
-  return matches.map((m) => m[1]);
-}
-
-function transpileRef(
-  refValue: string,
-  workflowSymbol: string,
-  importedWorkflowSymbols: Map<string, string>,
-): string {
-  const parts = refValue.split(".");
-  if (parts.length === 1) {
-    return `${workflowSymbol}::${parts[0]}`;
-  }
-  if (parts.length === 2) {
-    const importedSymbol = importedWorkflowSymbols.get(parts[0]) ?? parts[0];
-    return `${importedSymbol}::${parts[1]}`;
-  }
-  throw new Error(`ValidationError: invalid reference "${refValue}"`);
-}
-
-function transpileRuleRef(
-  ref: RuleRefDef,
-  workflowSymbol: string,
-  importedWorkflowSymbols: Map<string, string>,
-): string {
-  return transpileRef(ref.value, workflowSymbol, importedWorkflowSymbols);
-}
-
-function transpileWorkflowRef(
-  ref: WorkflowRefDef,
-  workflowSymbol: string,
-  importedWorkflowSymbols: Map<string, string>,
-): string {
-  return transpileRef(ref.value, workflowSymbol, importedWorkflowSymbols);
-}
-
-/**
- * Replace `alias.name` patterns in shell commands with
- * the fully-qualified bash symbol (`symbol::name`).
- * Only aliases present in importedWorkflowSymbols are rewritten.
- */
-function resolveShellRefs(
-  command: string,
-  importedWorkflowSymbols: Map<string, string>,
-): string {
-  for (const [alias, symbol] of importedWorkflowSymbols) {
-    const pattern = new RegExp(
-      `(?<![A-Za-z0-9_])${alias}\\.([A-Za-z_][A-Za-z0-9_]*)`,
-      "g",
-    );
-    command = command.replace(pattern, `${symbol}::$1`);
-  }
-  return command;
-}
-
-/** Bash requires no space around = in local/export/readonly. Normalize "local name = value" -> "local name=value". */
-function normalizeShellLocalExport(command: string): string {
-  return command.replace(
-    /\b(local|export|readonly)\s+([A-Za-z_][A-Za-z0-9_]*)\s+=\s+/g,
-    "$1 $2=",
-  );
-}
+import type { jaiphModule } from "../types";
+import {
+  type StepEmitCtx,
+  emitStep,
+  transpileRuleRef,
+  transpileWorkflowRef,
+  resolveShellRefs,
+  normalizeShellLocalExport,
+} from "./emit-steps";
 
 /**
  * Top-level env values are emitted as `export PREFIX__name="..."`. Bash expands
@@ -113,18 +24,11 @@ function expandTopLevelEnvDeclReferences(
   const refRe = /\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}|\$([a-zA-Z_][a-zA-Z0-9_]*)/g;
   return value.replace(refRe, (full, braced?: string, plain?: string) => {
     const refName = braced ?? plain;
-    if (refName === undefined) {
-      return full;
-    }
-    if (!rawByName.has(refName)) {
-      return full;
-    }
+    if (refName === undefined) return full;
+    if (!rawByName.has(refName)) return full;
     if (expanding.has(refName)) {
       throw jaiphError(
-        filePath,
-        1,
-        1,
-        "E_PARSE",
+        filePath, 1, 1, "E_PARSE",
         `circular reference among top-level local declarations involving "${refName}"`,
       );
     }
@@ -136,236 +40,6 @@ function expandTopLevelEnvDeclReferences(
       expanding.delete(refName);
     }
   });
-}
-
-function parsePromptText(raw: string): string {
-  if (!raw.startsWith(`"`)) {
-    throw new Error("invalid prompt literal");
-  }
-  let closingQuote = -1;
-  for (let i = 1; i < raw.length; i += 1) {
-    if (raw[i] !== `"`) {
-      continue;
-    }
-    let backslashes = 0;
-    for (let j = i - 1; j >= 0 && raw[j] === `\\`; j -= 1) {
-      backslashes += 1;
-    }
-    if (backslashes % 2 === 1) {
-      continue;
-    }
-    closingQuote = i;
-    break;
-  }
-  if (closingQuote === -1) {
-    throw new Error("unterminated prompt string");
-  }
-  if (raw.slice(closingQuote + 1).trim().length > 0) {
-    throw new Error("prompt allows only whitespace after closing quote");
-  }
-  const quoted = raw.slice(1, closingQuote);
-  let out = "";
-  for (let i = 0; i < quoted.length; i += 1) {
-    const ch = quoted[i];
-    if (ch !== `\\`) {
-      out += ch;
-      continue;
-    }
-    const next = quoted[i + 1];
-    if (next === undefined) {
-      out += `\\`;
-      continue;
-    }
-    if (next === "\n") {
-      i += 1;
-      continue;
-    }
-    if (next === "$" || next === "`" || next === `"` || next === `\\`) {
-      out += next;
-      i += 1;
-      continue;
-    }
-    out += `\\`;
-  }
-  return out;
-}
-
-function validatePromptTextSafety(promptText: string): void {
-  if (promptText.includes("`")) {
-    throw new Error("prompt cannot contain backticks (`...`); use variable expansion only");
-  }
-  if (promptText.includes("$(")) {
-    throw new Error("prompt cannot contain command substitution ($( ... )); use variable expansion only");
-  }
-}
-
-export type PromptSchemaField = { name: string; type: "string" | "number" | "boolean" };
-
-const SUPPORTED_SCHEMA_TYPES = new Set<string>(["string", "number", "boolean"]);
-
-/**
- * Parse flat prompt returns schema string: { field: type, ... }.
- * V1: only string, number, boolean; no nested objects, arrays, or unions.
- */
-function parsePromptSchema(
-  rawSchema: string,
-  filePath: string,
-  line: number,
-  col: number,
-): PromptSchemaField[] {
-  const trimmed = rawSchema.trim();
-  if (trimmed.length === 0) {
-    throw jaiphError(filePath, line, col, "E_SCHEMA", "returns schema cannot be empty");
-  }
-  if (/[[\]|]/.test(trimmed)) {
-    throw jaiphError(
-      filePath,
-      line,
-      col,
-      "E_SCHEMA",
-      "returns schema must be flat (no arrays or union types); only string, number, boolean allowed",
-    );
-  }
-  const inner = trimmed.replace(/^\s*\{\s*/, "").replace(/\s*\}\s*$/, "").trim();
-  if (inner.length === 0) {
-    return [];
-  }
-  const fields: PromptSchemaField[] = [];
-  const parts = inner.split(",");
-  for (const part of parts) {
-    const m = part.trim().match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(\S+)\s*$/);
-    if (!m) {
-      throw jaiphError(
-        filePath,
-        line,
-        col,
-        "E_SCHEMA",
-        `invalid returns schema entry: expected "fieldName: type" (got ${part.trim().slice(0, 40)}...)`,
-      );
-    }
-    const [, name, typeStr] = m;
-    const typeLower = typeStr.trim().toLowerCase();
-    if (!SUPPORTED_SCHEMA_TYPES.has(typeLower)) {
-      throw jaiphError(
-        filePath,
-        line,
-        col,
-        "E_SCHEMA",
-        `unsupported type in returns schema: "${typeStr}" (only string, number, boolean allowed)`,
-      );
-    }
-    fields.push({ name, type: typeLower as "string" | "number" | "boolean" });
-  }
-  return fields;
-}
-
-function promptDelimiter(content: string, seed: number): string {
-  const lines = new Set(content.split("\n"));
-  let index = seed;
-  while (true) {
-    const candidate = `__JAIPH_PROMPT_${index}__`;
-    if (!lines.has(candidate)) {
-      return candidate;
-    }
-    index += 1;
-  }
-}
-
-/** Escape for use inside a Bash single-quoted string; used for JAIPH_PROMPT_PREVIEW. */
-function bashSingleQuotedEscape(s: string): string {
-  return s.replace(/'/g, "'\\''");
-}
-
-/** In an unquoted heredoc, single quotes start a quoted span and backslash is literal inside it, so we cannot use '\''.
- *  Emit a variable JAIPH_APOS=$'\'' before the heredoc and use ${JAIPH_APOS} in the body when the prompt contains '. */
-const JAIPH_APOS_VAR = "JAIPH_APOS";
-
-function heredocLineEscape(s: string, useAposVar: boolean): string {
-  if (!useAposVar) return s;
-  return s.replace(/'/g, `\${JAIPH_APOS_VAR}`);
-}
-
-const PROMPT_PREVIEW_MAX_LEN = 24;
-
-/** Emit a prompt step (untyped or typed with returns). When returns is set, captureName is required. */
-function emitPromptStep(
-  out: string[],
-  indent: string,
-  step: { type: "prompt"; raw: string; loc: { line: number; col: number }; captureName?: string; returns?: string },
-  filePath: string,
-): void {
-  let promptText: string;
-  try {
-    promptText = parsePromptText(step.raw);
-    validatePromptTextSafety(promptText);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "invalid prompt literal";
-    throw jaiphError(filePath, step.loc.line, step.loc.col, "E_PARSE", message);
-  }
-
-  // Extract variable references from prompt text for named display params.
-  const varRefs = extractShellVarRefs(promptText);
-  const namedArgsSuffix = varRefs.length > 0
-    ? " " + varRefs.map((v) => `"${v}=$${v}"`).join(" ")
-    : "";
-  const paramKeysLine = varRefs.length > 0
-    ? `${indent}export JAIPH_STEP_PARAM_KEYS='__prompt_impl,__preview,${varRefs.join(",")}'`
-    : null;
-
-    if (step.returns !== undefined) {
-    if (!step.captureName) {
-      throw jaiphError(
-        filePath,
-        step.loc.line,
-        step.loc.col,
-        "E_PARSE",
-        'prompt with "returns" schema must capture to a variable (e.g. result = prompt "..." returns \'{ ... }\')',
-      );
-    }
-    const schemaFields = parsePromptSchema(step.returns, filePath, step.loc.line, step.loc.col);
-    const schemaPayload = JSON.stringify({ fields: schemaFields });
-    const schemaSuffix =
-      "\n\nRespond with exactly one line of valid JSON (no markdown, no explanation) matching this schema: " +
-      JSON.stringify(
-        Object.fromEntries(schemaFields.map((f) => [f.name, f.type])),
-      );
-    const fullPromptText = promptText + schemaSuffix;
-    const delimiter = promptDelimiter(fullPromptText, step.loc.line);
-    const schemaEscaped = schemaPayload.replace(/'/g, "'\\''");
-    const useAposSchema = fullPromptText.includes("'");
-    if (useAposSchema) {
-      out.push(`${indent}local ${JAIPH_APOS_VAR}=$'\\''`);
-    }
-    if (paramKeysLine != null) out.push(paramKeysLine);
-    out.push(`${indent}export JAIPH_PROMPT_PREVIEW='${bashSingleQuotedEscape(fullPromptText.slice(0, PROMPT_PREVIEW_MAX_LEN))}'`);
-    out.push(`${indent}export JAIPH_PROMPT_SCHEMA='${schemaEscaped}'`);
-    out.push(`${indent}export JAIPH_PROMPT_CAPTURE_NAME='${step.captureName}'`);
-    out.push(`${indent}jaiph::prompt_capture_with_schema "$JAIPH_PROMPT_PREVIEW"${namedArgsSuffix} <<${delimiter}`);
-    for (const line of fullPromptText.split("\n")) {
-      out.push(heredocLineEscape(line, useAposSchema));
-    }
-    out.push(delimiter);
-    return;
-  }
-  const delimiter = promptDelimiter(promptText, step.loc.line);
-  const useApos = promptText.includes("'");
-  if (useApos) {
-    out.push(`${indent}local ${JAIPH_APOS_VAR}=$'\\''`);
-  }
-  if (paramKeysLine != null) out.push(paramKeysLine);
-  out.push(`${indent}export JAIPH_PROMPT_PREVIEW='${bashSingleQuotedEscape(promptText.slice(0, PROMPT_PREVIEW_MAX_LEN))}'`);
-  if (step.captureName) {
-    out.push(`${indent}${step.captureName}=$(jaiph::prompt_capture "$JAIPH_PROMPT_PREVIEW"${namedArgsSuffix} <<${delimiter}`);
-  } else {
-    out.push(`${indent}jaiph::prompt "$JAIPH_PROMPT_PREVIEW"${namedArgsSuffix} <<${delimiter}`);
-  }
-  for (const line of promptText.split("\n")) {
-    out.push(heredocLineEscape(line, useApos));
-  }
-  out.push(delimiter);
-  if (step.captureName) {
-    out.push(")");
-  }
 }
 
 export function emitWorkflow(
@@ -547,7 +221,7 @@ export function emitWorkflow(
           /^ensure\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
         );
         if (ensureMatch) {
-          const ref: RuleRefDef = { value: ensureMatch[1], loc: { line: 0, col: 0 } };
+          const ref = { value: ensureMatch[1], loc: { line: 0, col: 0 } };
           const args = ensureMatch[2]?.trim();
           out.push(
             `  ${transpileRuleRef(ref, workflowSymbol, importedWorkflowSymbols)}${args ? ` ${args}` : ""}`,
@@ -605,110 +279,14 @@ export function emitWorkflow(
     out.push("");
   }
 
-/** Max retries for ensure ... recover before failing. Overridable via JAIPH_ENSURE_MAX_RETRIES. */
-const DEFAULT_ENSURE_MAX_RETRIES = 10;
-
-function emitEnsureRecoverLoop(
-  out: string[],
-  indent: string,
-  transpiledRef: string,
-  args: string,
-  recoverSteps: WorkflowStepDef[],
-  emitRecoverStep: (s: WorkflowStepDef, indent: string) => void,
-): void {
-  const retriesDefault = String(DEFAULT_ENSURE_MAX_RETRIES);
-  out.push(`${indent}local _jaiph_ensure_output`);
-  out.push(`${indent}local _jaiph_ensure_prev_files`);
-  out.push(`${indent}local _jaiph_ensure_new_files`);
-  out.push(`${indent}local _jaiph_ensure_file`);
-  out.push(`${indent}local _jaiph_ensure_chunk`);
-  out.push(`${indent}local _jaiph_ensure_prev_args=()`);
-  out.push(`${indent}local _jaiph_ensure_files_arr=()`);
-  out.push(`${indent}local _jaiph_ensure_passed=0`);
-  out.push(`${indent}for _jaiph_retry in $(seq 1 "\${JAIPH_ENSURE_MAX_RETRIES:-${retriesDefault}}"); do`);
-  out.push(`${indent}  _jaiph_ensure_prev_files="\${JAIPH_PRECEDING_FILES:-}"`);
-  out.push(`${indent}  if ${transpiledRef}${args}; then`);
-  out.push(`${indent}    _jaiph_ensure_passed=1`);
-  out.push(`${indent}    break`);
-  out.push(`${indent}  fi`);
-  out.push(`${indent}  _jaiph_ensure_output=""`);
-  out.push(`${indent}  _jaiph_ensure_new_files="\${JAIPH_PRECEDING_FILES:-}"`);
-  out.push(`${indent}  if [[ "$_jaiph_ensure_new_files" == "$_jaiph_ensure_prev_files" ]]; then`);
-  out.push(`${indent}    _jaiph_ensure_new_files=""`);
-  out.push(`${indent}  elif [[ -n "$_jaiph_ensure_prev_files" ]]; then`);
-  out.push(`${indent}    _jaiph_ensure_new_files="\${_jaiph_ensure_new_files#\${_jaiph_ensure_prev_files},}"`);
-  out.push(`${indent}  fi`);
-  out.push(`${indent}  if [[ -n "$_jaiph_ensure_new_files" ]]; then`);
-  out.push(`${indent}    IFS=',' read -r -a _jaiph_ensure_files_arr <<<"$_jaiph_ensure_new_files"`);
-  out.push(`${indent}    for _jaiph_ensure_file in "\${_jaiph_ensure_files_arr[@]}"; do`);
-  out.push(`${indent}      if [[ -f "$_jaiph_ensure_file" ]]; then`);
-  out.push(`${indent}        _jaiph_ensure_chunk="$(<"$_jaiph_ensure_file")"`);
-  out.push(`${indent}        if [[ -n "$_jaiph_ensure_output" ]]; then`);
-  out.push(`${indent}          _jaiph_ensure_output="\${_jaiph_ensure_output}"$'\\n'"$_jaiph_ensure_chunk"`);
-  out.push(`${indent}        else`);
-  out.push(`${indent}          _jaiph_ensure_output="$_jaiph_ensure_chunk"`);
-  out.push(`${indent}        fi`);
-  out.push(`${indent}      fi`);
-  out.push(`${indent}    done`);
-  out.push(`${indent}  fi`);
-  out.push(`${indent}  _jaiph_ensure_prev_args=("$@")`);
-  out.push(`${indent}  set -- "$_jaiph_ensure_output"`);
-  for (const r of recoverSteps) {
-    emitRecoverStep(r, indent + "  ");
-  }
-  out.push(`${indent}  set -- "\${_jaiph_ensure_prev_args[@]}"`);
-  out.push(`${indent}done`);
-  out.push(`${indent}if [[ "$_jaiph_ensure_passed" -ne 1 ]]; then`);
-  out.push(`${indent}  echo "jaiph: ensure condition did not pass after \${JAIPH_ENSURE_MAX_RETRIES:-${retriesDefault}} retries" >&2`);
-  out.push(`${indent}  exit 1`);
-  out.push(`${indent}fi`);
-}
-
   for (const workflow of ast.workflows) {
-    const emitRecoverStep = (recoverStep: WorkflowStepDef, indent: string): void => {
-      if (recoverStep.type === "run") {
-        const args = recoverStep.args ? ` ${recoverStep.args}` : ' "$@"';
-        const paramKeys = recoverStep.args ? parseParamKeysFromArgs(recoverStep.args) : null;
-        if (paramKeys != null && paramKeys.length > 0) {
-          out.push(`${indent}export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
-        }
-        const wfRef = transpileWorkflowRef(recoverStep.workflow, workflowSymbol, importedWorkflowSymbols);
-        const scopePrefix = prefixForImportedWorkflowCall(recoverStep.workflow, importedModuleHasMetadata, importedWorkflowSymbols);
-        if (recoverStep.captureName) {
-          out.push(`${indent}${recoverStep.captureName}=$(${scopePrefix}${wfRef}::impl${args})`);
-        } else {
-          out.push(`${indent}${scopePrefix}${wfRef}${args}`);
-        }
-        return;
-      }
-      if (recoverStep.type === "ensure") {
-        const tr = transpileRuleRef(recoverStep.ref, workflowSymbol, importedWorkflowSymbols);
-        const a = recoverStep.args ? ` ${recoverStep.args}` : ' "$@"';
-        if (recoverStep.recover) {
-          const steps =
-            "single" in recoverStep.recover ? [recoverStep.recover.single] : recoverStep.recover.block;
-          emitEnsureRecoverLoop(out, indent, tr, a, steps, emitRecoverStep);
-        } else if (recoverStep.captureName) {
-          out.push(`${indent}${recoverStep.captureName}=$(${tr}::impl${a})`);
-        } else {
-          out.push(`${indent}${tr}${a}`);
-        }
-        return;
-      }
-      if (recoverStep.type === "prompt") {
-        emitPromptStep(out, indent, recoverStep, ast.filePath);
-        return;
-      }
-      if (recoverStep.type === "shell") {
-        const resolved = normalizeShellLocalExport(
-          resolveShellRefs(recoverStep.command, importedWorkflowSymbols),
-        );
-        if (recoverStep.captureName) {
-          out.push(`${indent}${recoverStep.captureName}=$(${resolved})`);
-        } else {
-          out.push(`${indent}${resolved}`);
-        }
-      }
+    const ctx: StepEmitCtx = {
+      workflowSymbol,
+      importedWorkflowSymbols,
+      importedModuleHasMetadata,
+      filePath: ast.filePath,
+      workflowName: workflow.name,
+      inRecoverBlock: false,
     };
 
     for (const comment of workflow.comments) {
@@ -732,125 +310,7 @@ function emitEnsureRecoverLoop(
       out.push("  :");
     } else {
       for (const step of workflow.steps) {
-        if (step.type === "ensure") {
-          const transpiledRef = transpileRuleRef(step.ref, workflowSymbol, importedWorkflowSymbols);
-          const args = step.args ? ` ${step.args}` : "";
-          const paramKeys = step.args ? parseParamKeysFromArgs(step.args) : null;
-          if (paramKeys != null && paramKeys.length > 0) {
-            out.push(`  export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
-          }
-          if (step.recover) {
-            const recoverSteps =
-              "single" in step.recover ? [step.recover.single] : step.recover.block;
-            emitEnsureRecoverLoop(out, "  ", transpiledRef, args, recoverSteps, emitRecoverStep);
-          } else if (step.captureName) {
-            out.push(`  ${step.captureName}=$(${transpiledRef}::impl${args})`);
-          } else {
-            out.push(`  ${transpiledRef}${args}`);
-          }
-          continue;
-        }
-        if (step.type === "run") {
-          const args = step.args ? ` ${step.args}` : "";
-          const paramKeys = step.args ? parseParamKeysFromArgs(step.args) : null;
-          if (paramKeys != null && paramKeys.length > 0) {
-            out.push(`  export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
-          }
-          const wfRef = transpileWorkflowRef(step.workflow, workflowSymbol, importedWorkflowSymbols);
-          const scopePrefix = prefixForImportedWorkflowCall(step.workflow, importedModuleHasMetadata, importedWorkflowSymbols);
-          if (step.captureName) {
-            out.push(`  ${step.captureName}=$(${scopePrefix}${wfRef}::impl${args})`);
-          } else {
-            out.push(`  ${scopePrefix}${wfRef}${args}`);
-          }
-          continue;
-        }
-        if (step.type === "prompt") {
-          emitPromptStep(out, "  ", step, ast.filePath);
-          continue;
-        }
-        if (step.type === "shell") {
-          const resolved = normalizeShellLocalExport(
-            resolveShellRefs(step.command, importedWorkflowSymbols),
-          );
-          if (step.captureName) {
-            out.push(`  ${step.captureName}=$(${resolved})`);
-          } else {
-            out.push(`  ${resolved}`);
-          }
-          continue;
-        }
-        if (step.type === "log") {
-          out.push(`  jaiph::log ${step.message}`);
-          continue;
-        }
-        if (step.type === "logerr") {
-          out.push(`  jaiph::logerr ${step.message}`);
-          continue;
-        }
-        if (step.type === "send") {
-          if (step.command === "") {
-            // Standalone send: channel <- (forwards $1)
-            out.push(`  jaiph::send '${step.channel}' "$1" '${workflow.name}'`);
-          } else {
-            const resolved = resolveShellRefs(step.command, importedWorkflowSymbols);
-            out.push(`  jaiph::send '${step.channel}' "$(${resolved})" '${workflow.name}'`);
-          }
-          continue;
-        }
-        if (step.type === "if") {
-          const negPrefix = step.negated ? "! " : "";
-          if (step.condition.kind === "ensure") {
-            const ensureArgs = step.condition.args ? ` ${step.condition.args}` : "";
-            out.push(
-              `  if ${negPrefix}${transpileRuleRef(step.condition.ref, workflowSymbol, importedWorkflowSymbols)}${ensureArgs}; then`,
-            );
-          } else {
-            const resolvedCondition = resolveShellRefs(step.condition.command, importedWorkflowSymbols);
-            out.push(`  if ${negPrefix}${resolvedCondition}; then`);
-          }
-          const emitIfBranchSteps = (steps: WorkflowStepDef[], indent: string): void => {
-            for (const branchStep of steps) {
-              if (branchStep.type === "run") {
-                const args = branchStep.args ? ` ${branchStep.args}` : "";
-                const paramKeys = branchStep.args ? parseParamKeysFromArgs(branchStep.args) : null;
-                if (paramKeys != null && paramKeys.length > 0) {
-                  out.push(`${indent}export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
-                }
-                const wfRef = transpileWorkflowRef(branchStep.workflow, workflowSymbol, importedWorkflowSymbols);
-                const scopePrefix = prefixForImportedWorkflowCall(branchStep.workflow, importedModuleHasMetadata, importedWorkflowSymbols);
-                if (branchStep.captureName) {
-                  out.push(`${indent}${branchStep.captureName}=$(${scopePrefix}${wfRef}::impl${args})`);
-                } else {
-                  out.push(`${indent}${scopePrefix}${wfRef}${args}`);
-                }
-                continue;
-              }
-              if (branchStep.type === "prompt") {
-                emitPromptStep(out, indent, branchStep, ast.filePath);
-                continue;
-              }
-              if (branchStep.type === "shell") {
-                const resolved = normalizeShellLocalExport(
-                  resolveShellRefs(branchStep.command, importedWorkflowSymbols),
-                );
-                if (branchStep.captureName) {
-                  out.push(`${indent}${branchStep.captureName}=$(${resolved})`);
-                } else {
-                  out.push(`${indent}${resolved}`);
-                }
-                continue;
-              }
-            }
-          };
-          emitIfBranchSteps(step.thenSteps, "    ");
-          if (step.elseSteps && step.elseSteps.length > 0) {
-            out.push("  else");
-            emitIfBranchSteps(step.elseSteps, "    ");
-          }
-          out.push("  fi");
-          continue;
-        }
+        emitStep(out, "  ", step, ctx);
       }
     }
     if (hasRoutes) {
