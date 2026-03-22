@@ -1,5 +1,6 @@
 import type { WorkflowDef, WorkflowRouteDef } from "../types";
 import { braceDepthDelta, colFromRaw, fail, indexOfClosingDoubleQuote, isRef } from "./core";
+import { parseConfigBlock } from "./metadata";
 import { parsePromptStep } from "./prompt";
 import { parseEnsureStep } from "./steps";
 
@@ -68,6 +69,8 @@ export function parseWorkflowBlock(
   let braceDepth = 0;
   let shellAccumulator: string[] = [];
   let shellAccumulatorStartLine = 0;
+  /** Track whether a non-comment step has been seen (config must come first). */
+  let hadNonCommentStep = false;
 
   const flushShellAccumulator = (): void => {
     if (shellAccumulator.length === 0) return;
@@ -119,12 +122,31 @@ export function parseWorkflowBlock(
       }
       continue;
     }
+    // Workflow-scoped config block (must appear before any non-comment steps).
+    if (/^config\s*\{/.test(inner)) {
+      flushShellAccumulator();
+      if (workflow.metadata !== undefined) {
+        fail(filePath, "duplicate config block inside workflow (only one allowed per workflow)", innerNo);
+      }
+      if (hadNonCommentStep) {
+        fail(filePath, "config block inside workflow must appear before any steps", innerNo);
+      }
+      const { metadata, nextIndex } = parseConfigBlock(filePath, lines, idx);
+      if (metadata.runtime) {
+        fail(filePath, "runtime.* keys are not allowed in workflow-level config (only agent.* and run.* keys)", innerNo);
+      }
+      workflow.metadata = metadata;
+      idx = nextIndex - 1; // for loop will increment
+      continue;
+    }
     if (braceDepth > 0) {
       shellAccumulator.push(innerRaw.trim());
       braceDepth += braceDepthDelta(inner);
       if (braceDepth === 0) flushShellAccumulator();
       continue;
     }
+
+    hadNonCommentStep = true;
 
     const ifNegEnsureMatch = inner.match(
       /^if\s+!\s*ensure\s+(.+?)\s*;\s*then$/,
