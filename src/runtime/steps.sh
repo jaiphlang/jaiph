@@ -227,6 +227,7 @@ jaiph::run_step() {
   local out_tmp err_tmp elapsed_ms prompt_final_tmp
   local step_id parent_id depth step_seq seq_prefix
   local prompt_writes_live_out=0
+  local step_writes_live=0
   local jaiph__prompt_used_tee=0
   step_started_seconds="$SECONDS"
   jaiph::next_step_id
@@ -288,14 +289,19 @@ jaiph::run_step() {
     fi
     export JAIPH_LAST_PROMPT_FINAL
   else
-    ( "$@" >"$out_tmp" 2>"$err_tmp" )
+    ( "$@" >"$out_file" 2>"$err_file" )
     status=$?
+    step_writes_live=1
   fi
   if [[ "$had_errexit" -eq 1 ]]; then
     set -e
   fi
-  jaiph::forward_nested_events_from_err "$err_tmp"
-  if [[ "$prompt_writes_live_out" -eq 1 ]]; then
+  if [[ "$step_writes_live" -eq 1 ]]; then
+    jaiph::forward_nested_events_from_err "$err_file"
+  else
+    jaiph::forward_nested_events_from_err "$err_tmp"
+  fi
+  if [[ "$prompt_writes_live_out" -eq 1 || "$step_writes_live" -eq 1 ]]; then
     if [[ ! -s "$out_file" ]]; then
       rm -f "$out_file"
       out_file=""
@@ -306,7 +312,12 @@ jaiph::run_step() {
     rm -f "$out_tmp"
     out_file=""
   fi
-  if [[ -s "$err_tmp" ]]; then
+  if [[ "$step_writes_live" -eq 1 ]]; then
+    if [[ ! -s "$err_file" ]]; then
+      rm -f "$err_file"
+      err_file=""
+    fi
+  elif [[ -s "$err_tmp" ]]; then
     mv "$err_tmp" "$err_file"
   else
     rm -f "$err_tmp"
