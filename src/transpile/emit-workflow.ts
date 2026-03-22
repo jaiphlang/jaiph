@@ -1,5 +1,5 @@
 import { jaiphError } from "../errors";
-import type { jaiphModule } from "../types";
+import type { jaiphModule, WorkflowMetadata } from "../types";
 import {
   type StepEmitCtx,
   emitStep,
@@ -8,6 +8,95 @@ import {
   resolveShellRefs,
   normalizeShellLocalExport,
 } from "./emit-steps";
+
+/** All env vars managed by metadata scope functions. */
+const SCOPED_VARS = [
+  "JAIPH_AGENT_MODEL",
+  "JAIPH_AGENT_COMMAND",
+  "JAIPH_AGENT_BACKEND",
+  "JAIPH_AGENT_TRUSTED_WORKSPACE",
+  "JAIPH_AGENT_CURSOR_FLAGS",
+  "JAIPH_AGENT_CLAUDE_FLAGS",
+  "JAIPH_RUNS_DIR",
+  "JAIPH_DEBUG",
+];
+
+/** Convert WorkflowMetadata agent/run keys to { envVarName, escapedValue } pairs. */
+function metadataToAssignments(
+  meta: WorkflowMetadata,
+): Array<{ name: string; value: string }> {
+  const esc = (v: string) => v.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  const out: Array<{ name: string; value: string }> = [];
+  if (meta.agent?.defaultModel !== undefined) out.push({ name: "JAIPH_AGENT_MODEL", value: esc(meta.agent.defaultModel) });
+  if (meta.agent?.command !== undefined) out.push({ name: "JAIPH_AGENT_COMMAND", value: esc(meta.agent.command) });
+  if (meta.agent?.backend !== undefined) out.push({ name: "JAIPH_AGENT_BACKEND", value: esc(meta.agent.backend) });
+  if (meta.agent?.trustedWorkspace !== undefined) out.push({ name: "JAIPH_AGENT_TRUSTED_WORKSPACE", value: esc(meta.agent.trustedWorkspace) });
+  if (meta.agent?.cursorFlags !== undefined) out.push({ name: "JAIPH_AGENT_CURSOR_FLAGS", value: esc(meta.agent.cursorFlags) });
+  if (meta.agent?.claudeFlags !== undefined) out.push({ name: "JAIPH_AGENT_CLAUDE_FLAGS", value: esc(meta.agent.claudeFlags) });
+  if (meta.run?.logsDir !== undefined) out.push({ name: "JAIPH_RUNS_DIR", value: esc(meta.run.logsDir) });
+  if (meta.run?.debug !== undefined) out.push({ name: "JAIPH_DEBUG", value: meta.run.debug ? "true" : "false" });
+  return out;
+}
+
+/**
+ * Emit a `with_metadata_scope` function that saves/sets/restores env vars.
+ * When `lockOverrides` is true, the scope also sets `_LOCKED=1` for each var
+ * it overrides (and restores the old lock state on exit). This prevents inner
+ * module-level scopes from reverting workflow-local overrides.
+ */
+function emitMetadataScopeFunction(
+  out: string[],
+  fnName: string,
+  assignments: Array<{ name: string; value: string }>,
+  lockOverrides: boolean,
+): void {
+  out.push(`${fnName}() {`);
+  for (const name of SCOPED_VARS) {
+    out.push(`  local __had_${name}=0`);
+    out.push(`  local __old_${name}=""`);
+    out.push(`  if [[ -n "\${${name}+x}" ]]; then`);
+    out.push(`    __had_${name}=1`);
+    out.push(`    __old_${name}="\${${name}}"`);
+    out.push("  fi");
+  }
+  if (lockOverrides) {
+    // Save current _LOCKED state for vars this scope overrides.
+    for (const a of assignments) {
+      out.push(`  local __old_${a.name}_LOCKED="\${${a.name}_LOCKED:-}"`);
+    }
+  }
+  for (const a of assignments) {
+    out.push(`  if [[ "\${${a.name}_LOCKED:-}" != "1" ]]; then`);
+    out.push(`    export ${a.name}="${a.value}"`);
+    if (lockOverrides) {
+      out.push(`    export ${a.name}_LOCKED="1"`);
+    }
+    out.push("  fi");
+  }
+  out.push("  set +e");
+  out.push('  "$@"');
+  out.push("  local __jaiph_scoped_status=$?");
+  out.push("  set -e");
+  for (const name of SCOPED_VARS) {
+    out.push(`  if [[ "$__had_${name}" == "1" ]]; then`);
+    out.push(`    export ${name}="$__old_${name}"`);
+    out.push("  else");
+    out.push(`    unset ${name}`);
+    out.push("  fi");
+  }
+  if (lockOverrides) {
+    for (const a of assignments) {
+      out.push(`  if [[ -n "$__old_${a.name}_LOCKED" ]]; then`);
+      out.push(`    export ${a.name}_LOCKED="$__old_${a.name}_LOCKED"`);
+      out.push("  else");
+      out.push(`    unset ${a.name}_LOCKED`);
+      out.push("  fi");
+    }
+  }
+  out.push("  return $__jaiph_scoped_status");
+  out.push("}");
+  out.push("");
+}
 
 /**
  * Top-level env values are emitted as `export PREFIX__name="..."`. Bash expands
@@ -49,38 +138,7 @@ export function emitWorkflow(
   importSourcePaths: string[],
   importedModuleHasMetadata: Map<string, boolean>,
 ): string {
-  const scopedMetadataAssignments: Array<{ name: string; value: string }> = [];
-  if (ast.metadata?.agent?.defaultModel !== undefined) {
-    const v = ast.metadata.agent.defaultModel.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-    scopedMetadataAssignments.push({ name: "JAIPH_AGENT_MODEL", value: v });
-  }
-  if (ast.metadata?.agent?.command !== undefined) {
-    const v = ast.metadata.agent.command.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-    scopedMetadataAssignments.push({ name: "JAIPH_AGENT_COMMAND", value: v });
-  }
-  if (ast.metadata?.agent?.backend !== undefined) {
-    const v = ast.metadata.agent.backend.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-    scopedMetadataAssignments.push({ name: "JAIPH_AGENT_BACKEND", value: v });
-  }
-  if (ast.metadata?.agent?.trustedWorkspace !== undefined) {
-    const v = ast.metadata.agent.trustedWorkspace.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-    scopedMetadataAssignments.push({ name: "JAIPH_AGENT_TRUSTED_WORKSPACE", value: v });
-  }
-  if (ast.metadata?.agent?.cursorFlags !== undefined) {
-    const v = ast.metadata.agent.cursorFlags.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-    scopedMetadataAssignments.push({ name: "JAIPH_AGENT_CURSOR_FLAGS", value: v });
-  }
-  if (ast.metadata?.agent?.claudeFlags !== undefined) {
-    const v = ast.metadata.agent.claudeFlags.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-    scopedMetadataAssignments.push({ name: "JAIPH_AGENT_CLAUDE_FLAGS", value: v });
-  }
-  if (ast.metadata?.run?.logsDir !== undefined) {
-    const v = ast.metadata.run.logsDir.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-    scopedMetadataAssignments.push({ name: "JAIPH_RUNS_DIR", value: v });
-  }
-  if (ast.metadata?.run?.debug !== undefined) {
-    scopedMetadataAssignments.push({ name: "JAIPH_DEBUG", value: ast.metadata.run.debug ? "true" : "false" });
-  }
+  const scopedMetadataAssignments = ast.metadata ? metadataToAssignments(ast.metadata) : [];
   const out: string[] = [];
   out.push("#!/usr/bin/env bash");
   out.push("");
@@ -148,44 +206,7 @@ export function emitWorkflow(
     out.push("");
   }
   if (scopedMetadataAssignments.length > 0) {
-    const scopedVars = [
-      "JAIPH_AGENT_MODEL",
-      "JAIPH_AGENT_COMMAND",
-      "JAIPH_AGENT_BACKEND",
-      "JAIPH_AGENT_TRUSTED_WORKSPACE",
-      "JAIPH_AGENT_CURSOR_FLAGS",
-      "JAIPH_AGENT_CLAUDE_FLAGS",
-      "JAIPH_RUNS_DIR",
-      "JAIPH_DEBUG",
-    ];
-    out.push(`${workflowSymbol}::with_metadata_scope() {`);
-    for (const name of scopedVars) {
-      out.push(`  local __had_${name}=0`);
-      out.push(`  local __old_${name}=""`);
-      out.push(`  if [[ -n "\${${name}+x}" ]]; then`);
-      out.push(`    __had_${name}=1`);
-      out.push(`    __old_${name}="\${${name}}"`);
-      out.push("  fi");
-    }
-    for (const assignment of scopedMetadataAssignments) {
-      out.push(`  if [[ "\${${assignment.name}_LOCKED:-}" != "1" ]]; then`);
-      out.push(`    export ${assignment.name}="${assignment.value}"`);
-      out.push("  fi");
-    }
-    out.push("  set +e");
-    out.push('  "$@"');
-    out.push("  local __jaiph_scoped_status=$?");
-    out.push("  set -e");
-    for (const name of scopedVars) {
-      out.push(`  if [[ "$__had_${name}" == "1" ]]; then`);
-      out.push(`    export ${name}="$__old_${name}"`);
-      out.push("  else");
-      out.push(`    unset ${name}`);
-      out.push("  fi");
-    }
-    out.push("  return $__jaiph_scoped_status");
-    out.push("}");
-    out.push("");
+    emitMetadataScopeFunction(out, `${workflowSymbol}::with_metadata_scope`, scopedMetadataAssignments, false);
   }
 
   /** Emit `local name="$prefix__name"` shims for all env declarations. */
@@ -280,6 +301,7 @@ export function emitWorkflow(
   }
 
   for (const workflow of ast.workflows) {
+    const wfSymbol = `${workflowSymbol}::${workflow.name}`;
     const ctx: StepEmitCtx = {
       workflowSymbol,
       importedWorkflowSymbols,
@@ -289,11 +311,26 @@ export function emitWorkflow(
       inRecoverBlock: false,
     };
 
+    // Determine which scope function this workflow uses.
+    const wfMetaAssignments = workflow.metadata ? metadataToAssignments(workflow.metadata) : [];
+    const hasWorkflowScope = wfMetaAssignments.length > 0;
+    if (hasWorkflowScope) {
+      // Workflow-level scope: locks its overrides so inner module-scope
+      // calls (rule/function wrappers) do not revert workflow values.
+      emitMetadataScopeFunction(out, `${wfSymbol}::with_metadata_scope`, wfMetaAssignments, true);
+    }
+    // Pick the most specific scope: workflow > module > none.
+    const scopePrefix = hasWorkflowScope
+      ? `${wfSymbol}::with_metadata_scope `
+      : scopedMetadataAssignments.length > 0
+        ? `${workflowSymbol}::with_metadata_scope `
+        : "";
+
     for (const comment of workflow.comments) {
       out.push(comment);
     }
     const hasRoutes = workflow.routes && workflow.routes.length > 0;
-    out.push(`${workflowSymbol}::${workflow.name}::impl() {`);
+    out.push(`${wfSymbol}::impl() {`);
     out.push("  set -eo pipefail");
     out.push("  set +u");
     emitEnvShims("  ");
@@ -318,14 +355,14 @@ export function emitWorkflow(
     }
     out.push("}");
     out.push("");
-    out.push(`${workflowSymbol}::${workflow.name}() {`);
-    if (scopedMetadataAssignments.length > 0) {
+    out.push(`${wfSymbol}() {`);
+    if (scopePrefix) {
       out.push(
-        `  ${workflowSymbol}::with_metadata_scope jaiph::run_step ${workflowSymbol}::${workflow.name} workflow ${workflowSymbol}::${workflow.name}::impl "$@"`,
+        `  ${scopePrefix}jaiph::run_step ${wfSymbol} workflow ${wfSymbol}::impl "$@"`,
       );
     } else {
       out.push(
-        `  jaiph::run_step ${workflowSymbol}::${workflow.name} workflow ${workflowSymbol}::${workflow.name}::impl "$@"`,
+        `  jaiph::run_step ${wfSymbol} workflow ${wfSymbol}::impl "$@"`,
       );
     }
     out.push("}");

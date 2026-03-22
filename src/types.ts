@@ -42,6 +42,8 @@ export interface WorkflowDef {
   comments: string[];
   steps: WorkflowStepDef[];
   routes?: WorkflowRouteDef[];
+  /** Optional workflow-scoped config (overrides module-level config for steps inside this workflow). */
+  metadata?: WorkflowMetadata;
   loc: SourceLoc;
 }
 
