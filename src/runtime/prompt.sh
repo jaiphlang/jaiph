@@ -372,7 +372,36 @@ jaiph::prompt_capture_with_schema() {
       }
       return '';
     })();
-    const candidates = [lastLine, fencedJson, objectLine, embeddedJson].filter((v, i, arr) => v.length > 0 && arr.indexOf(v) === i);
+    /** First balanced {...} on a line that parses as a JSON object (handles trailing junk like {"a":"b"}extra). */
+    const balancedObject = (() => {
+      for (const line of [...lines].reverse()) {
+        const trimmed = line.trim();
+        let from = 0;
+        while ((from = trimmed.indexOf('{', from)) >= 0) {
+          let depth = 0;
+          for (let i = from; i < trimmed.length; i++) {
+            const c = trimmed[i];
+            if (c === '{') depth++;
+            else if (c === '}') {
+              depth--;
+              if (depth === 0) {
+                const slice = trimmed.slice(from, i + 1);
+                try {
+                  const o = JSON.parse(slice);
+                  if (typeof o === 'object' && o !== null && !Array.isArray(o)) {
+                    return slice;
+                  }
+                } catch (_) {}
+                break;
+              }
+            }
+          }
+          from++;
+        }
+      }
+      return '';
+    })();
+    const candidates = [balancedObject, lastLine, fencedJson, objectLine, embeddedJson].filter((v, i, arr) => v.length > 0 && arr.indexOf(v) === i);
     let obj;
     let parsedFrom = '';
     let parseError = null;

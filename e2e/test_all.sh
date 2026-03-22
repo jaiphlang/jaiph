@@ -12,6 +12,7 @@ TEST_SCRIPTS=(
   "e2e/tests/10_basic_workflows.sh"
   "e2e/tests/20_rule_and_prompt.sh"
   "e2e/tests/22_assign_capture.sh"
+  "e2e/tests/23_prompt_returns_run_capture.sh"
   "e2e/tests/30_filesystem_side_effects.sh"
   "e2e/tests/40_nested_and_native_tests.sh"
   "e2e/tests/45_mock_workflow_rule_function.sh"

@@ -2709,6 +2709,38 @@ test("stream_json_to_text deduplicates repeated assistant and result events", ()
   }
 });
 
+test("run_step prompt does not forward transcript to stdout when fd 1 is a pipe", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-prompt-pipe-"));
+  try {
+    const stdlib = join(process.cwd(), "dist/src/jaiph_stdlib.sh");
+    const ws = join(root, "ws");
+    mkdirSync(join(ws, ".jaiph"), { recursive: true });
+    const runsDir = join(root, "runs");
+    mkdirSync(runsDir, { recursive: true });
+    const q = (s: string) => s.replace(/'/g, `'\\''`);
+    const script = `set -euo pipefail
+export JAIPH_WORKSPACE='${q(ws)}'
+export JAIPH_RUNS_DIR='${q(runsDir)}'
+export JAIPH_SOURCE_FILE='pipe-test'
+source '${q(stdlib)}'
+jaiph::init_run_tracking
+noisy_prompt_impl() {
+  printf 'Command:\\nfake\\n\\nPrompt:\\nhi\\n\\nFinal answer:\\n'
+  printf 'transcript-noise\\n'
+}
+captured=$( jaiph::run_step jaiph::prompt prompt noisy_prompt_impl "ignored" )
+if [[ -n "$captured" ]]; then
+  printf 'expected empty command-substitution capture, got: %q\\n' "$captured" >&2
+  exit 1
+fi
+`;
+    const result = spawnSync("bash", ["-c", script], { encoding: "utf8", timeout: 10_000 });
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("stream_json_to_text deduplicates when stream deltas are followed by assistant message", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-stream-dedup2-"));
   try {
