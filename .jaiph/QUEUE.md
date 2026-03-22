@@ -6,29 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Split `runWorkflow()` in `run.ts` into focused functions <!-- dev-ready -->
-
-**Goal.** Break the 563-line `runWorkflow()` function into separate plain functions that each do one thing, called sequentially from a shorter orchestrator.
-
-**Why.** `runWorkflow()` currently handles config resolution, process spawning, stderr event parsing, TTY rendering, Docker setup, signal handling, hook invocation, and error reporting — all in one function with deeply nested closures. An AI (or human) editing one concern risks breaking another.
-
-**Scope.**
-
-- Extract `resolveRuntimeEnv(effectiveConfig, workspaceRoot, inputAbs): Record<string, string>` — the 60-line env-precedence block (lines 166-226).
-- Extract `formatStepLine(...)` and `formatCompletedLine(...)` — already standalone closures, move to module-level exports.
-- Extract `handleStderrLine(line, state)` — move the 100-line closure to a standalone function that takes an explicit state object instead of closing over 15+ variables. Structure the state object and handler so they can be cleanly wrapped by an event emitter later (see next task).
-- Keep `runWorkflow()` as the orchestrator: build → resolve env → spawn → wire event handler → wait → report. Should be under 150 lines.
-- No classes, no deep abstractions. Plain functions with explicit arguments. The event handler should accept parsed events and state — not close over rendering or hook logic directly.
-
-**Acceptance criteria.**
-
-- `runWorkflow()` is under 150 lines.
-- No function in `src/cli/commands/run.ts` exceeds 100 lines.
-- Extracted functions live in the same file or sibling files in `src/cli/` — not a deep module tree.
-- All existing tests pass, no behavior change.
-
----
-
 ## Split `emit-workflow.ts` into per-step emitter functions <!-- dev-ready -->
 
 **Goal.** Break the 879-line `emitWorkflow()` function into separate emitter functions, one per step type, that the main function calls in a flat switch/if chain.
