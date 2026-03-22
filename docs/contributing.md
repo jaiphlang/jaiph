@@ -68,6 +68,22 @@ Jaiph has four test layers. Each layer catches a different class of bug. Use the
 4. **E2E tests assert two things independently:** what the user sees (CLI tree output via `e2e::expect_stdout`) and what the runtime persists (artifact files via `e2e::expect_out`, `e2e::expect_file`). A bug could break one without the other.
 5. **Prefer the narrowest test layer.** A pure function bug should be caught by a unit test, not an e2e test. E2e tests are expensive to run and hard to debug — reserve them for integration-level behavior.
 
+### Unit test file layout
+
+Unit tests in `test/*.test.ts` are organized by source module. Each test file maps to a specific source file or functional area:
+
+| Test file | Source module | What it covers |
+|-----------|--------------|----------------|
+| `parse-core.test.ts` | `src/parse/core.ts` | Low-level parsing primitives: `stripQuotes`, `isRef`, `hasUnescapedClosingQuote`, `indexOfClosingDoubleQuote`, `colFromRaw`, `braceDepthDelta`, `fail` |
+| `parse-imports.test.ts` | `src/parse/imports.ts` | Import line parsing: valid/invalid paths, aliases, error cases |
+| `parse-env.test.ts` | `src/parse/env.ts` | Env declaration parsing: quoted values, multiline, unterminated strings, trailing content |
+| `parse-metadata.test.ts` | `src/parse/metadata.ts` | Config block parsing: value types, key validation, backend validation, error paths |
+| `emit-steps.test.ts` | `src/transpile/emit-steps.ts` | Step emission helpers: param key extraction, shell local/export normalization, ref resolution, symbol transpilation |
+| `display.test.ts` | `src/cli/run/display.ts` | CLI display formatting: `colorize` (ANSI/NO_COLOR), `formatCompletedLine`, `formatStartLine` |
+| `resolve-env.test.ts` | `src/cli/run/env.ts` | Runtime environment resolution: workspace, config defaults, env precedence, locked keys, transient cleanup |
+
+When adding a new source module or extending an existing one, follow this pattern: create or extend the corresponding `test/<module>.test.ts` file. This keeps unit tests discoverable — given a source file, the test file is predictable.
+
 ## E2E testing
 
 The E2E test suite (`e2e/tests/*.sh`) exercises the full build-and-run pipeline from the outside: compile a workflow, run it, and assert on both the CLI tree output and the run artifact files (`.out`, `.err`) written to `.jaiph/runs/`.
