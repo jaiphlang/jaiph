@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { build, transpileFile } from "../src/transpiler";
+import { build, transpileFile, transpileTestFile } from "../src/transpiler";
 import { parsejaiph } from "../src/parser";
 
 function normalize(text: string): string {
@@ -1020,6 +1020,281 @@ test("compiler golden: top-level local emits prefixed variable and shims", () =>
     assert.match(actual, /entry::helper::impl\(\) \{[\s\S]*?local greeting="\$entry__greeting"/);
     // Local shims in workflow impl
     assert.match(actual, /entry::default::impl\(\) \{[\s\S]*?local greeting="\$entry__greeting"/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// === ensure...recover golden tests ===
+
+test("compiler golden: ensure...recover single statement emits retry loop", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-recover-single-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        "rule tests_pass {",
+        "  test -f results.txt",
+        "}",
+        "",
+        "workflow fix_tests {",
+        "  echo fixing",
+        "}",
+        "",
+        "workflow default {",
+        "  ensure tests_pass recover run fix_tests",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const actual = normalize(transpileFile(input, root));
+    // Retry loop structure
+    assert.match(actual, /local _jaiph_ensure_passed=0/);
+    assert.match(actual, /for _jaiph_retry in \$\(seq 1/);
+    assert.match(actual, /if entry::tests_pass; then/);
+    assert.match(actual, /_jaiph_ensure_passed=1/);
+    assert.match(actual, /break/);
+    // Recover step calls the workflow
+    assert.match(actual, /entry::fix_tests/);
+    // Failure message after max retries
+    assert.match(actual, /ensure condition did not pass after/);
+    assert.match(actual, /exit 1/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("compiler golden: ensure...recover block emits retry loop with multiple steps", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-recover-block-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        "rule ci_pass {",
+        "  test -f ci_ok.txt",
+        "}",
+        "",
+        "workflow fix_ci {",
+        "  echo fixing ci",
+        "}",
+        "",
+        "workflow default {",
+        "  ensure ci_pass recover {",
+        "    run fix_ci",
+        "    echo retrying",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const actual = normalize(transpileFile(input, root));
+    // Retry loop
+    assert.match(actual, /for _jaiph_retry in \$\(seq 1/);
+    assert.match(actual, /if entry::ci_pass; then/);
+    // Both recover steps present
+    assert.match(actual, /entry::fix_ci/);
+    assert.match(actual, /echo retrying/);
+    // Loop end + failure guard
+    assert.match(actual, /done/);
+    assert.match(actual, /if \[{2} "\$_jaiph_ensure_passed" -ne 1 \]{2}; then/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// === if_not_shell_then golden test ===
+
+test("compiler golden: if ! <shell_cmd>; then emits correct bash conditional", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-if-not-shell-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        "workflow setup {",
+        "  echo setting up",
+        "}",
+        "",
+        "workflow default {",
+        '  if ! test -f config.yml; then',
+        "    echo creating config",
+        "    run setup",
+        "  fi",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const actual = normalize(transpileFile(input, root));
+    assert.match(actual, /if ! test -f config\.yml; then/);
+    assert.match(actual, /echo creating config/);
+    assert.match(actual, /entry::setup/);
+    assert.match(actual, /fi/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// === if_not_ensure_then_shell golden test ===
+
+test("compiler golden: if ! ensure with only shell commands emits if_not_ensure_then_shell", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-if-not-ensure-shell-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        "rule config_exists {",
+        "  test -f config.yml",
+        "}",
+        "",
+        "workflow default {",
+        "  if ! ensure config_exists; then",
+        "    echo creating default config",
+        "    touch config.yml",
+        "  fi",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const actual = normalize(transpileFile(input, root));
+    assert.match(actual, /if ! entry::config_exists; then/);
+    assert.match(actual, /echo creating default config/);
+    assert.match(actual, /touch config\.yml/);
+    assert.match(actual, /fi/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// === prompt with returns golden test ===
+
+test("compiler golden: prompt with returns schema emits prompt_capture_with_schema and schema env vars", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-prompt-returns-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        "workflow default {",
+        "  result = prompt \"Analyse the diff\" returns '{ category: string, risk: boolean }'",
+        "  echo $result",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const actual = normalize(transpileFile(input, root));
+    // Schema-specific capture function
+    assert.match(actual, /jaiph::prompt_capture_with_schema/);
+    // Schema exported as env var
+    assert.match(actual, /JAIPH_PROMPT_SCHEMA/);
+    // Capture name exported
+    assert.match(actual, /JAIPH_PROMPT_CAPTURE_NAME='result'/);
+    // Preview exported
+    assert.match(actual, /JAIPH_PROMPT_PREVIEW/);
+    // Heredoc delimiter
+    assert.match(actual, /<<__JAIPH_PROMPT_/);
+    // Schema suffix appended to prompt body
+    assert.match(actual, /Respond with exactly one line of valid JSON/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// === test_mock_prompt_block dispatch script golden test ===
+
+test("compiler golden: mock prompt block emits if/elif/else dispatch script structure", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-mock-dispatch-"));
+  try {
+    writeFileSync(
+      join(root, "w.jh"),
+      [
+        "workflow default {",
+        '  result = prompt "question"',
+        '  echo "$result"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(root, "w.test.jh"),
+      [
+        'import "w.jh" as w',
+        "",
+        'test "dispatch test" {',
+        "  mock prompt {",
+        '    if $1 contains "greeting" ; then',
+        '      respond "hello"',
+        '    elif $1 contains "farewell" ; then',
+        '      respond "goodbye"',
+        "    else",
+        '      respond "default"',
+        "    fi",
+        "  }",
+        "  response = w.default",
+        '  expectContain response "hello"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const bash = transpileTestFile(join(root, "w.test.jh"), root);
+    const normalized = normalize(bash);
+    // Dispatch script uses if/elif/else pattern matching
+    assert.match(normalized, /if \[\[ "\$prompt" == \*'greeting'\* \]\]; then/);
+    assert.match(normalized, /printf '%s' 'hello'/);
+    assert.match(normalized, /elif \[\[ "\$prompt" == \*'farewell'\* \]\]; then/);
+    assert.match(normalized, /printf '%s' 'goodbye'/);
+    assert.match(normalized, /else/);
+    assert.match(normalized, /printf '%s' 'default'/);
+    assert.match(normalized, /fi/);
+    // Dispatch script is set via env var
+    assert.match(normalized, /JAIPH_MOCK_DISPATCH_SCRIPT/);
+    // Mock responses file is unset when dispatch is used
+    assert.match(normalized, /unset JAIPH_MOCK_RESPONSES_FILE/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("compiler golden: mock prompt block without else emits error fallback", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-mock-dispatch-noelse-"));
+  try {
+    writeFileSync(
+      join(root, "w.jh"),
+      [
+        "workflow default {",
+        '  prompt "something"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(root, "w.test.jh"),
+      [
+        'import "w.jh" as w',
+        "",
+        'test "no else fallback" {',
+        "  mock prompt {",
+        '    if $1 contains "match" ; then',
+        '      respond "found"',
+        "    fi",
+        "  }",
+        "  w.default",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const bash = transpileTestFile(join(root, "w.test.jh"), root);
+    const normalized = normalize(bash);
+    // When no else, should emit error fallback
+    assert.match(normalized, /no mock matched prompt/);
+    assert.match(normalized, /exit 1/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
