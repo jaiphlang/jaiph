@@ -73,12 +73,22 @@ workflow update_from_task {
   prompt "
     <role>
     $role
+    </role>
     <task>
-    Update relevant docs/*.md files and -- if needed -- README.md 
+    Update relevant docs/*.md files and -- if needed -- README.md
     and docs/index.html to reflect the changes made in the task covered in
     uncommitted changes. Update also the CHANGELOG.md file to reflect the changes
-    made in the task. The task description is:
+    made in the task.
+
+    Constraints:
+    - Only modify documentation files (docs/*.md, README.md, CHANGELOG.md,
+      docs/index.html). Do NOT modify source code, tests, or config files.
+    - Navigation links between docs pages are provided by the Jekyll template.
+      Do NOT add manual navigation blocks to individual markdown pages.
+
+    The task description is:
     $1
+    </task>
   "
 }
 
@@ -86,6 +96,7 @@ workflow changelog {
   prompt "
     <role>
     $role
+    </role>
     <task>
     Ensure there is a CHANGELOG.md file with a list of all features that are
     supported by the current version. It should be in the following format:
@@ -105,6 +116,7 @@ workflow changelog {
     entry in the CHANGELOG.md file. But this is not a strict rule, you need to
     use your best judgment to determine if a commit should have a corresponding
     entry in the CHANGELOG.md file.
+    </task>
   "
 }
 
@@ -114,6 +126,7 @@ workflow docs_page {
   prompt "
     <role>
     $role
+    </role>
     <task>
     Double check the content of $file, which describes a given concept of the
     language, runtime or a set of features:
@@ -134,6 +147,7 @@ workflow docs_page {
        'More Documentation' sections with links to other docs pages) to
        individual markdown pages. Inline contextual links to other docs are
        fine.
+    </task>
   "
 }
 
@@ -145,6 +159,7 @@ workflow docs_overview {
   prompt "
     <role>
     $role
+    </role>
     <task>
     Read all $all_docs_files, they contain all the documentation for the 
     project. Don't read the code. Please update docs in the following way:
@@ -178,6 +193,7 @@ workflow docs_overview {
        orchestrates the above.
     10.Ensure src/cli/shared/usage.ts is up to date with the latest CLI commands
        and options. It should be a single source of truth for the CLI usage.
+    </task>
   "
 }
 

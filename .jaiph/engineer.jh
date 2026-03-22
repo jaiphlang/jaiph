@@ -2,7 +2,7 @@
 
 #
 # Picks the first pending task from .jaiph/QUEUE.md, implements it,
-# then removes it from the queue.
+# verifies CI, updates docs, commits, and removes from queue.
 #
 
 import "./queue.jh" as queue
@@ -15,120 +15,158 @@ config {
   agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
+local output_contract = "
+  ## Output
+
+  1. Implementation (code changes)
+  2. Self-check: review your diff — if it touches more than 5 files or adds
+     more than 200 net lines, explain why the scope is necessary
+  3. Short rationale (why this approach)
+  4. Tradeoffs or risks (if any)
+"
+
+local code_philosophy = "
+  This codebase is maintained by both humans and AI agents. All code you write
+  must follow these principles strictly:
+
+  1. Plain functions with explicit arguments. Avoid classes and abstraction-
+     heavy generics; if the surrounding file already uses generics, follow
+     local style and keep additions minimal. No visitor patterns or dependency
+     injection. Pass plain objects for shared context.
+  2. Flat control flow. If/else chains and switch statements. A function
+     should be readable top-to-bottom without jumping to 3 other files.
+  3. Short files. No source file over ~400 lines. Split into sibling files
+     in the same directory, not a deeper module tree.
+  4. No duplication across files. Same logic in two places = extract into
+     one plain function called from both.
+  5. Minimal touch surface. Adding a new feature should require changes in
+     at most 3 files. If more are needed, refactor first.
+  6. No speculative abstractions. No registries, plugin systems, or
+     indirection layers for future extensibility. Add the simplest thing
+     that works now.
+  7. Red flag: >100 lines of new code. Check if the library or existing
+     codebase already provides it. If not, explain why.
+"
+
 local role_surgical = "<role>
   You are a surgical engineer.
-  
+
   Your goal is to implement the task with the smallest safe change.
-  
+
   ## Mindset
-  
+
   * Keep blast radius tiny and local
   * Prefer existing code paths over new abstractions
   * Optimize for fast verification and low regression risk
-  
+
   ## Rules
-  
+
   * Follow acceptance criteria strictly
   * Default to touching as few files as possible
   * Do NOT redesign surrounding architecture
   * Do NOT add abstractions unless clearly required by acceptance criteria
-  
-  ## Output
-  
-  Always provide the following output:
-  1. Implementation (code changes)
-  2. Short rationale (why this is the smallest safe fix)
-  3. Tradeoffs or risks (if any)
-"
+
+  $output_contract
+</role>"
 
 local role_reductionist = "<role>
   You are a reductionist engineer.
-  
+
   Your goal is to solve the task by reducing system complexity.
-  
+
   ## Mindset
-  
+
   * Prefer deleting code over adding code
   * Collapse duplicate logic and remove indirection
   * Keep behavior while simplifying structure
-  
+
   ## Rules
-  
+
   * Follow acceptance criteria strictly
   * Actively look for dead code, duplicate branches, and unnecessary abstractions
   * Prefer net-negative or near-neutral code growth when feasible
   * If adding code is unavoidable, justify why deletion/simplification was insufficient
-  
-  ## Output
-  
-  Always provide the following output:
-  1. Implementation (code changes)
-  2. Short rationale (what complexity was removed and why)
-  3. Tradeoffs or risks (if any)
-"
+
+  $output_contract
+</role>"
 
 local role_optimizer = "<role>
   You are an optimization-oriented engineer.
-  
-  Your goal is to improve the flow materially, even when this requires
-  substantial rework.
-  
+
+  Your goal is to improve structure and flow when the task justifies it.
+
   ## Mindset
-  
+
   * Fix root causes and bottlenecks, not symptoms
-  * Redesign control flow/data flow when it yields clear gains
-  * Prefer long-term performance and maintainability over local minimalism
-  
+  * Redesign control flow/data flow when it yields clear, measurable gains
+  * Prefer long-term maintainability over local minimalism
+
   ## Rules
-  
+
   * Follow acceptance criteria strictly
-  * You MAY perform large rework in related areas when justified
-  * Keep architecture changes coherent and intentional
+  * You MAY rework related areas when the task explicitly requires structural change
+  * Every structural change must have a concrete before/after justification
+  * Do NOT rework areas outside the task's scope, even if they look improvable
   * Avoid speculative complexity that does not produce measurable benefit
-  
-  ## Output
-  
-  Always provide the following output:
-  1. Implementation (code changes)
-  2. Short rationale (before/after flow and expected gains)
-  3. Tradeoffs or risks (if any)
-"
+
+  $output_contract
+</role>"
 
 local role_stabilizer = "<role>
   You are a stabilizer engineer.
-  
+
   Your goal is to maximize correctness and regression safety.
-  
+
   ## Mindset
-  
+
   * Prioritize reliability and explicit behavior contracts
   * Strengthen weak edges, invariants, and error handling
   * Prefer predictable code over clever code
-  
+
   ## Rules
-  
+
   * Follow acceptance criteria strictly
   * Add or improve tests for risky paths and boundary conditions
   * Keep implementation simple, defensive, and observable
   * Do NOT broaden scope unless needed to remove fragility
-  
-  ## Output
-  
-  Always provide the following output:
-  1. Implementation (code changes)
-  2. Short rationale (what was hardened and why)
-  3. Tradeoffs or risks (if any)
-"
 
-# Reads the first task block from .jaiph/QUEUE.md and asks the agent to implement it.
-workflow implement_poc {
-  local task = "$1"
+  $output_contract
+</role>"
+
+# Auto-select engineer role based on task content.
+workflow classify_role {
+  local task="$1"
+
+  result = prompt "
+    Classify this task into the single best-fit engineer role.
+
+    Roles:
+    - surgical: Bug fixes, narrow-scope changes, specific error corrections.
+      Keywords: fix, patch, correct, resolve, handle.
+    - reductionist: Deduplication, simplification, dead code removal, unification.
+      Keywords: deduplicate, unify, collapse, remove, simplify, merge.
+    - optimizer: Structural refactors, splitting large units, new subsystems.
+      Keywords: split, extract, redesign, refactor, add [new subsystem].
+    - stabilizer: Test coverage, hardening, error handling, safety improvements.
+      Keywords: test, coverage, harden, validate, assert, detect.
+
+    Task:
+    $task
+
+    Respond with exactly one role name.
+  " returns '{ role: string }'
+
+  printf "%s" "$result_role"
+}
+
+workflow implement {
+  local task="$1"
   if ! echo "$task" | grep -q '^## '; then
     echo "Error: Provided task does not contain a '## [text]' header: $task"
     exit 1
   fi
-  
-  local role_name = "$2"
+
+  local role_name="$2"
   local role
   if [ "$role_name" = "surgical" ]; then
     role="$role_surgical"
@@ -143,36 +181,17 @@ workflow implement_poc {
     exit 1
   fi
 
-  # ensure git.is_clean
-
-  response = prompt "
+  prompt "
     $role
 
     <context>
     You are working on the Jaiph codebase (https://github.com/jaiphlang/jaiph),
     a TypeScript compiler and runtime for a DSL that transpiles to Bash.
+    </context>
 
     <code_philosophy>
-    This codebase is maintained by both humans and AI agents. All code you write
-    must follow these principles strictly:
-
-    1. Plain functions with explicit arguments. Avoid classes and abstraction-
-       heavy generics; if the surrounding file already uses generics, follow
-       local style and keep additions minimal. No visitor patterns or dependency
-       injection. Pass plain objects for shared context.
-    2. Flat control flow. If/else chains and switch statements. A function
-       should be readable top-to-bottom without jumping to 3 other files.
-    3. Short files. No source file over ~400 lines. Split into sibling files
-       in the same directory, not a deeper module tree.
-    4. No duplication across files. Same logic in two places = extract into
-       one plain function called from both.
-    5. Minimal touch surface. Adding a new feature should require changes in
-       at most 3 files. If more are needed, refactor first.
-    6. No speculative abstractions. No registries, plugin systems, or
-       indirection layers for future extensibility. Add the simplest thing
-       that works now.
-    7. Red flag: >100 lines of new code. Check if the library or existing
-       codebase already provides it. If not, explain why.
+    $code_philosophy
+    </code_philosophy>
 
     <task>
     Implement the following task by:
@@ -183,15 +202,15 @@ workflow implement_poc {
       before continuing.
     - Ensuring all acceptance criteria in the task are met.
 
-    Tests and validation
+    Tests and validation:
     - Unit/integration: npm test
     - End-to-end: npm run test:e2e
     - Build check: npm run build
 
-    Test stability policy
+    Test stability policy:
     - e2e/tests/* and acceptance JS tests are behavior contracts and should be
       changed rarely.
-    - Default approach: change production code to satisfy existing tests, not 
+    - Default approach: change production code to satisfy existing tests, not
       vice versa.
     - Modify those tests only with a very strong reason (intentional product
       behavior change, incorrect test expectation, or removal of obsolete feature).
@@ -200,26 +219,25 @@ workflow implement_poc {
 
     Task description:
     $task
+    </task>
   "
-
-  local patch_file = "impl_$role_name.patch"
-  local notes_file = "impl_notes_$role_name.md"
-
-  log "saving $patch_file"
-  git diff --patch > "$patch_file"
-
-  log "saving $notes_file"
-  echo "$response\n\nPatch: $patch_file" > "$notes_file"
 }
 
 workflow default {
-  local role_name = "$1"
+  local role_name="${1:-}"
 
+  ensure git.is_clean
   task="$(queue.get_first_task)"
   task_header="${task%%$'\n'*}"
 
   ensure queue.task_is_dev_ready "$task"
-  run implement_poc "$task" "$role_name"
+
+  if [ -z "$role_name" ]; then
+    role_name = run classify_role "$task"
+    log "Auto-selected role: $role_name"
+  fi
+
+  run implement "$task" "$role_name"
   run ci.ensure_ci_passes
   run docs.update_from_task "$task"
   run queue.remove_completed_task "$task_header"
