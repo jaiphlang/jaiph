@@ -49,11 +49,6 @@ jaiph::step_params_json() {
   local result="["
   local i
   local _sj_first=1
-  # Prepend dispatch channel as a named param when set by inbox dispatch.
-  if [[ -n "${JAIPH_DISPATCH_CHANNEL:-}" ]]; then
-    result+="[\"channel\",\"$(jaiph::json_escape "$JAIPH_DISPATCH_CHANNEL")\"]"
-    _sj_first=0
-  fi
   if [[ -n "$keys" ]]; then
     local old_ifs="$IFS"
     IFS=',' read -r -a keyarr <<< "$keys"
@@ -194,9 +189,13 @@ jaiph::emit_step_event() {
       "${depth:-null}" \
       "$(jaiph::json_escape "$run_id")")"
   fi
-  # Append dispatched/channel metadata if set by inbox dispatch.
+  # Append dispatched/channel/sender metadata if set by inbox dispatch.
   if [[ -n "${JAIPH_DISPATCH_CHANNEL:-}" ]]; then
-    payload="${payload%\}},\"dispatched\":true,\"channel\":\"$(jaiph::json_escape "$JAIPH_DISPATCH_CHANNEL")\"}"
+    local _dispatch_extra=",\"dispatched\":true,\"channel\":\"$(jaiph::json_escape "$JAIPH_DISPATCH_CHANNEL")\""
+    if [[ -n "${JAIPH_DISPATCH_SENDER:-}" ]]; then
+      _dispatch_extra+=",\"sender\":\"$(jaiph::json_escape "$JAIPH_DISPATCH_SENDER")\""
+    fi
+    payload="${payload%\}}${_dispatch_extra}}"
   fi
   # Always embed out_content (and err_content for failed steps) in STEP_END
   # events so the CLI can display output without reading files from disk.

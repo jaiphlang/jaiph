@@ -21,8 +21,10 @@ rule is_clean {
 }
 
 workflow commit {
+  ensure in_git_repo
+
   if ! ensure has_changes; then
-    echo "No changes to commit."
+    log "No changes to commit — skipping."
     exit 0
   fi
 
@@ -30,10 +32,13 @@ workflow commit {
     Commit the current repository changes now.
 
     Requirements:
-    1. Review current git changes and generate a concise commit message.
+    1. Review current git changes (git diff --stat, git status).
     2. Stage all relevant changes with git add.
-    3. Create exactly one commit.
-    4. Do not push.
-    5. Print the created commit hash.
+    3. Write a commit message in imperative mood, subject under 72 chars.
+       Add a body paragraph only if the change is non-obvious.
+    4. Do NOT include files that contain secrets (.env, credentials, tokens).
+    5. Create exactly one commit.
+    6. Do not push.
+    7. Print the created commit hash.
   "
 }

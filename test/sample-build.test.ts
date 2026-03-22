@@ -146,6 +146,24 @@ test("build fails on missing import file", () => {
   }
 });
 
+// Regression: .jaiph/main.jh once imported implement_from_queue.jh which had been
+// renamed to engineer.jh, causing E_IMPORT_NOT_FOUND for every `jaiph test` run
+// in the workspace (build() compiles all .jh files, not just the test target).
+test(".jaiph/main.jh imports only existing modules", () => {
+  const jaiphDir = join(process.cwd(), ".jaiph");
+  const mainJh = join(jaiphDir, "main.jh");
+  assert.ok(existsSync(mainJh), ".jaiph/main.jh should exist");
+
+  const ast = parsejaiph(readFileSync(mainJh, "utf8"), mainJh);
+  for (const imp of ast.imports) {
+    const resolved = join(dirname(mainJh), imp.path);
+    assert.ok(existsSync(resolved), `import "${imp.alias}" resolves to missing file "${resolved}"`);
+  }
+
+  // Verify build() does not throw for .jaiph directory
+  assert.doesNotThrow(() => build(jaiphDir));
+});
+
 test("jaiph run compiles and executes workflow with args", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-run-"));
   try {
@@ -2704,6 +2722,38 @@ test("stream_json_to_text deduplicates repeated assistant and result events", ()
     const stdout = result.stdout;
     const occurrences = stdout.split("Hello, World!").length - 1;
     assert.equal(occurrences, 1, "stdout should contain the response once, got " + occurrences + " times: " + JSON.stringify(stdout));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("run_step prompt does not forward transcript to stdout when fd 1 is a pipe", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-prompt-pipe-"));
+  try {
+    const stdlib = join(process.cwd(), "dist/src/jaiph_stdlib.sh");
+    const ws = join(root, "ws");
+    mkdirSync(join(ws, ".jaiph"), { recursive: true });
+    const runsDir = join(root, "runs");
+    mkdirSync(runsDir, { recursive: true });
+    const q = (s: string) => s.replace(/'/g, `'\\''`);
+    const script = `set -euo pipefail
+export JAIPH_WORKSPACE='${q(ws)}'
+export JAIPH_RUNS_DIR='${q(runsDir)}'
+export JAIPH_SOURCE_FILE='pipe-test'
+source '${q(stdlib)}'
+jaiph::init_run_tracking
+noisy_prompt_impl() {
+  printf 'Command:\\nfake\\n\\nPrompt:\\nhi\\n\\nFinal answer:\\n'
+  printf 'transcript-noise\\n'
+}
+captured=$( jaiph::run_step jaiph::prompt prompt noisy_prompt_impl "ignored" )
+if [[ -n "$captured" ]]; then
+  printf 'expected empty command-substitution capture, got: %q\\n' "$captured" >&2
+  exit 1
+fi
+`;
+    const result = spawnSync("bash", ["-c", script], { encoding: "utf8", timeout: 10_000 });
+    assert.equal(result.status, 0, result.stderr + result.stdout);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -135,7 +135,7 @@ Tip: add `.jaiph/` to your `.gitignore`.
 
 Jaiph files (`.jh`) contain **rules**, **workflows**, **functions**, and optional **config** blocks. All primitives interoperate with standard bash. For the full grammar, validation rules, and transpilation details, see [Grammar](grammar.md).
 
-- `config { ... }` — Optional block setting runtime options (agent backend, model, Docker sandbox, etc.). See [Configuration](configuration.md).
+- `config { ... }` — Optional block setting runtime options (agent backend, model, Docker sandbox, etc.). Allowed at the top level (module-wide) and inside individual workflows for per-workflow overrides (`agent.*` and `run.*` keys only). See [Configuration](configuration.md).
 - `import "file.jh" as alias` — Import rules/workflows from another module. Verified at compile time.
 - `local name = value` — Module-scoped variable, accessible as `$name` in all blocks within the module.
 - `rule name { ... }` — Reusable check/action returning a shell exit code. Runs in a read-only subshell. Optional `export` for cross-module access.
@@ -148,5 +148,6 @@ Jaiph files (`.jh`) contain **rules**, **workflows**, **functions**, and optiona
 - `log "message"` / `logerr "message"` — Display a message in the progress tree (stdout / stderr).
 - `channel <- cmd` / `channel -> workflow` — Send and route messages between workflows. See [Inbox & Dispatch](inbox.md).
 - `if [!] ensure ref; then ... fi` — Conditional based on rule result.
+- `if [!] run ref; then ... fi` — Conditional based on workflow exit code.
 
 Runtime behavior (progress tree, step output, run logs) is documented in [CLI Reference](cli.md). For agent backend configuration, see [Configuration](configuration.md). For Docker sandboxing (beta), see [Sandboxing](sandboxing.md). For testing workflows with mocks and assertions, see [Testing](testing.md). For lifecycle hooks, see [Hooks](hooks.md).

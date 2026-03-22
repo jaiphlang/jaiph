@@ -225,7 +225,7 @@ running ensure_ci_passes.jh
                 <div class="code-tab-panel" data-panel="inbox-pipeline-jh">
                     <p>The <strong>inbox</strong> system lets workflows communicate through named channels.
                         A workflow sends a message with <code>&lt;-</code> and a route declaration
-                        (<code>-&gt;</code>) dispatches it to one or more receivers as <code>$1</code>.</p>
+                        (<code>-&gt;</code>) dispatches it to receivers with <code>$1=message</code>, <code>$2=channel</code>, <code>$3=sender</code>.</p>
                     <pre><code class="language-jaiph">#!/usr/bin/env jaiph
 
 workflow scanner {
@@ -253,9 +253,9 @@ Jaiph: Running agent_inbox.jh
 <span class="run-keyword">workflow</span> default
   <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> scanner
   <span class="run-pass">✓</span> <span class="run-time">0s</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> analyst <span class="run-params">(channel="findings")</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> analyst <span class="run-params">(1="Found 3 issues in auth module", 2="findings", 3="scanner")</span>
   <span class="run-pass">✓</span> <span class="run-time">0s</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> reviewer <span class="run-params">(channel="report")</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> reviewer <span class="run-params">(1="Summary: Found 3 issues in auth ...", 2="report", 3="analyst")</span>
   <span class="run-pass">✓</span> <span class="run-time">0s</span>
 
 <span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(0.1s)</span></code></pre>
@@ -304,8 +304,9 @@ Jaiph: Running agent_inbox.jh
                     <code>~/.jaiph/hooks.json</code> or <code>&lt;project&gt;/.jaiph/hooks.json</code>. See <a
                         href="hooks">Hooks</a>.
                 </p>
-                <p><strong>Configuration.</strong> Control behavior with a top-level <code>config { ... }</code> block
-                    plus environment variables (env wins precedence). See <a href="configuration">Configuration</a> and
+                <p><strong>Configuration.</strong> Control behavior with <code>config { ... }</code> blocks
+                    at the module level or inside individual workflows for per-workflow overrides, plus environment
+                    variables (env wins precedence). See <a href="configuration">Configuration</a> and
                     <a href="cli">CLI reference</a>.
                 </p>
                 <p><strong>Testing Jaiph workflows.</strong> Test workflows with executable <code>*.test.jh</code>
@@ -330,8 +331,10 @@ Jaiph: Running agent_inbox.jh
                 <h3>Jaiph workflows</h3>
                 <dl class="primitive-list">
                     <dt><code>config { ... }</code></dt>
-                    <dd>Optional top-level runtime options (agent backend/flags, logs, runtime). Environment variables
-                        override config values. See <a href="configuration">Configuration</a>.</dd>
+                    <dd>Optional runtime options (agent backend/flags, logs, runtime). Allowed at the top level
+                        (module-wide) and inside individual workflows (per-workflow overrides for <code>agent.*</code>
+                        and <code>run.*</code> keys). Environment variables override config values. See <a
+                            href="configuration">Configuration</a>.</dd>
 
                     <dt><code>import "file.jh" as alias</code> · <code>local name = value</code></dt>
                     <dd>Import other modules and define module-scoped variables shared by rules/functions/workflows in
@@ -360,11 +363,11 @@ Jaiph: Running agent_inbox.jh
                     <dd>Capture stdout of Jaiph steps or shell commands into variables; stderr is captured only if
                         redirected (for example <code>2&gt;&amp;1</code>).</dd>
 
-                    <dt><code>if ensure ref; then ... fi</code> · <code>if ! ensure ref; then ... fi</code> ·
+                    <dt><code>if [!] ensure ref; then ... fi</code> · <code>if [!] run ref; then ... fi</code> ·
                         <code>if ! &lt;shell&gt;; then ... fi</code>
                     </dt>
-                    <dd>Use native shell conditions and control flow around Jaiph steps, including standard bash loops
-                        and branching patterns.</dd>
+                    <dd>Conditional branching on rule results, workflow exit codes, or shell expressions, with
+                        optional else-branches.</dd>
 
                     <dt><code>log "message"</code> · <code>logerr "message"</code></dt>
                     <dd>Emit informational or error output to the run tree while keeping workflow execution explicit and

@@ -24,11 +24,13 @@ jaiph::inbox_init() {
 }
 
 # Send a message to a channel.
-# Usage: jaiph::send <channel> <content>
+# Usage: jaiph::send <channel> <content> [<sender>]
 # Writes content to NNN-<channel>.txt and appends to the file-based dispatch queue.
+# <sender> is the workflow/function name that produced the message.
 jaiph::send() {
   local channel="$1"
   local content="$2"
+  local sender="${3:-}"
   # Atomic sequence via a counter file so increments survive subshells.
   local seq_file="${JAIPH_INBOX_DIR}/.seq"
   local seq
@@ -39,7 +41,7 @@ jaiph::send() {
   seq_padded=$(printf '%03d' "$seq")
   local msg_file="${JAIPH_INBOX_DIR}/${seq_padded}-${channel}.txt"
   printf '%s' "$content" > "$msg_file"
-  printf '%s\n' "${channel}:${seq_padded}" >> "$JAIPH_INBOX_QUEUE_FILE"
+  printf '%s\n' "${channel}:${seq_padded}:${sender}" >> "$JAIPH_INBOX_QUEUE_FILE"
 }
 
 # Register a routing rule: when a message arrives on <channel>, call the listed workflow functions.
@@ -106,7 +108,11 @@ jaiph::drain_queue() {
         exit 1
       fi
       local channel="${entry%%:*}"
-      local seq_padded="${entry#*:}"
+      local rest="${entry#*:}"
+      local seq_padded="${rest%%:*}"
+      local sender="${rest#*:}"
+      # Entries written before sender tracking have no second colon; treat as empty.
+      if [[ "$sender" == "$seq_padded" ]]; then sender=""; fi
       jaiph::_lookup_route "$channel"
       if [[ -z "$_route_result" ]]; then
         # No route registered for this channel — silent drop.
@@ -117,7 +123,7 @@ jaiph::drain_queue() {
       content="$(cat "$msg_file")"
       local target
       for target in $_route_result; do
-        JAIPH_STEP_PARAM_KEYS='channel' JAIPH_DISPATCH_CHANNEL="$channel" "$target" "$content"
+        JAIPH_DISPATCH_CHANNEL="$channel" JAIPH_DISPATCH_SENDER="$sender" "$target" "$content" "$channel" "$sender"
       done
     done <<< "$queue_lines"
   done

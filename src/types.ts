@@ -37,6 +37,8 @@ export interface WorkflowDef {
   comments: string[];
   steps: WorkflowStepDef[];
   routes?: WorkflowRouteDef[];
+  /** Optional workflow-scoped config (overrides module-level config for steps inside this workflow). */
+  metadata?: WorkflowMetadata;
   loc: SourceLoc;
 }
 
@@ -83,78 +85,14 @@ export type WorkflowStepDef =
       captureName?: string;
     }
   | {
-      type: "if_not_ensure_then_run";
-      ensureRef: RuleRefDef;
-      args?: string;
-      runWorkflows: Array<{ workflow: WorkflowRefDef; args?: string }>;
-    }
-  | {
-      type: "if_not_ensure_then";
-      ensureRef: RuleRefDef;
-      args?: string;
-      thenSteps: Array<
-        | { type: "shell"; command: string; loc: SourceLoc; captureName?: string }
-        | { type: "run"; workflow: WorkflowRefDef; args?: string; captureName?: string }
-        | {
-            type: "prompt";
-            raw: string;
-            loc: SourceLoc;
-            captureName?: string;
-            returns?: string;
-          }
-      >;
-      elseSteps?: Array<
-        | { type: "shell"; command: string; loc: SourceLoc; captureName?: string }
-        | { type: "run"; workflow: WorkflowRefDef; args?: string; captureName?: string }
-        | {
-            type: "prompt";
-            raw: string;
-            loc: SourceLoc;
-            captureName?: string;
-            returns?: string;
-          }
-      >;
-    }
-  | {
-      type: "if_ensure_then";
-      ensureRef: RuleRefDef;
-      args?: string;
-      thenSteps: Array<
-        | { type: "shell"; command: string; loc: SourceLoc; captureName?: string }
-        | { type: "run"; workflow: WorkflowRefDef; args?: string; captureName?: string }
-        | {
-            type: "prompt";
-            raw: string;
-            loc: SourceLoc;
-            captureName?: string;
-            returns?: string;
-          }
-      >;
-      elseSteps?: Array<
-        | { type: "shell"; command: string; loc: SourceLoc; captureName?: string }
-        | { type: "run"; workflow: WorkflowRefDef; args?: string; captureName?: string }
-        | {
-            type: "prompt";
-            raw: string;
-            loc: SourceLoc;
-            captureName?: string;
-            returns?: string;
-          }
-      >;
-    }
-  | {
-      type: "if_not_shell_then";
-      condition: string;
-      thenSteps: Array<
-        | { type: "shell"; command: string; loc: SourceLoc }
-        | { type: "run"; workflow: WorkflowRefDef; args?: string }
-      >;
-    }
-  | {
-      type: "if_not_ensure_then_shell";
-      ensureRef: RuleRefDef;
-      args?: string;
-      commands: Array<{ command: string; loc: SourceLoc }>;
+      type: "if";
+      negated: boolean;
+      condition:
+        | { kind: "ensure"; ref: RuleRefDef; args?: string }
+        | { kind: "run"; ref: WorkflowRefDef; args?: string }
+        | { kind: "shell"; command: string };
+      thenSteps: WorkflowStepDef[];
+      elseSteps?: WorkflowStepDef[];
     }
   | {
       type: "log";

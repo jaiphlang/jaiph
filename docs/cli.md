@@ -141,6 +141,22 @@ log "$response"
 
 The `log` line renders inline at the correct depth as `ℹ <message>` (dim/gray) and writes to **stdout**. The `logerr` variant renders as `! <message>` in red and writes to **stderr**. The step's `.out` file in `.jaiph/runs/` still contains the full agent transcript for debugging.
 
+### Run artifacts and live output
+
+Every step writes its stdout and stderr to artifact files under `.jaiph/runs/<date>/<time>-<source>/` (see `JAIPH_RUNS_DIR`). Files are named with a zero-padded sequence prefix reflecting execution order: `000001-module__rule.out`, `000002-module__workflow.err`, etc.
+
+**All step kinds write to artifact files incrementally during execution**, not only after the step completes. This means you can tail a running step's output in real time from another terminal:
+
+```bash
+# In one terminal — run a long workflow
+jaiph run ./flows/deploy.jh
+
+# In another terminal — watch a step's output as it executes
+tail -f .jaiph/runs/2026-03-22/14-30-00-deploy.jh/000003-deploy__run_migrations.out
+```
+
+Both `.out` (stdout) and `.err` (stderr) files grow as the step produces output. Steps that produce no output on a given stream have no corresponding artifact file. Empty files are cleaned up automatically at step end.
+
 ### Hooks
 
 You can run custom commands at workflow/step lifecycle events via **hooks**. Config lives in `~/.jaiph/hooks.json` (global) and `<project>/.jaiph/hooks.json` (project-local); project-local overrides global per event. See [Hooks](hooks.md) for schema, events, payload, and examples.

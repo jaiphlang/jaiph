@@ -1,14 +1,17 @@
 #!/usr/bin/env jaiph
 
-import "engineer.jh" as implement
-import "architect_review.jh" as architect
-import "docs_parity.jh" as docs
-import "git.jh" as git
+#
+# Full pipeline: architect review → implement first queue task.
+# For periodic docs audit, run docs_parity.jh separately.
+#
+
+import "./engineer.jh" as implement
+import "./architect_review.jh" as architect
+import "./git.jh" as git
 
 workflow default {
   ensure git.is_clean
 
   run architect.default
   run implement.default
-  run docs.default
 }
