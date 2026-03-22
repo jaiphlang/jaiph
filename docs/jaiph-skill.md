@@ -67,8 +67,10 @@ Prefer composable modules over one large file.
 - **Conditionals:** Allowed forms:
   - `if ensure some_rule [args]; then ... [else ...] fi` — runs the then-branch when the rule **succeeds**; optional else-branch for failure.
   - `if ! ensure some_rule [args]; then ... [else ...] fi` — runs the then-branch when the rule **fails**; optional else-branch for success.
+  - `if run some_workflow [args]; then ... [else ...] fi` — runs the then-branch when the workflow **succeeds** (exit 0); optional else-branch for failure. Works with local and imported (`alias.workflow`) references.
+  - `if ! run some_workflow [args]; then ... [else ...] fi` — runs the then-branch when the workflow **fails** (non-zero exit); optional else-branch for success.
   - `if ! <shell_condition>; then` (e.g. `test -f .file`) followed by `run` steps or shell commands, then `fi`.
-  - Short-circuit brace groups in rule/workflow/function bodies: `cmd || { echo "failed"; exit 1; }` (single-line) or `cmd || { ... }` (multi-line). These compile as one shell command. Then- and else-branches of `if [!] ensure ...; then` may mix run, prompt, and shell (including capture forms); ensure/ensure_capture are not allowed in either branch.
+  - Short-circuit brace groups in rule/workflow/function bodies: `cmd || { echo "failed"; exit 1; }` (single-line) or `cmd || { ... }` (multi-line). These compile as one shell command. Then- and else-branches of `if [!] ensure/run ...; then` may mix run, prompt, and shell (including capture forms); ensure/ensure_capture are not allowed in either branch.
 
 Rules:
 

@@ -365,11 +365,11 @@ Jaiph: Running agent_inbox.jh
                     <dd>Capture stdout of Jaiph steps or shell commands into variables; stderr is captured only if
                         redirected (for example <code>2&gt;&amp;1</code>).</dd>
 
-                    <dt><code>if ensure ref; then ... fi</code> · <code>if ! ensure ref; then ... fi</code> ·
+                    <dt><code>if [!] ensure ref; then ... fi</code> · <code>if [!] run ref; then ... fi</code> ·
                         <code>if ! &lt;shell&gt;; then ... fi</code>
                     </dt>
-                    <dd>Use native shell conditions and control flow around Jaiph steps, including standard bash loops
-                        and branching patterns.</dd>
+                    <dd>Conditional branching on rule results, workflow exit codes, or shell expressions, with
+                        optional else-branches.</dd>
 
                     <dt><code>log "message"</code> · <code>logerr "message"</code></dt>
                     <dd>Emit informational or error output to the run tree while keeping workflow execution explicit and

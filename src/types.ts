@@ -92,6 +92,7 @@ export type WorkflowStepDef =
       negated: boolean;
       condition:
         | { kind: "ensure"; ref: RuleRefDef; args?: string }
+        | { kind: "run"; ref: WorkflowRefDef; args?: string }
         | { kind: "shell"; command: string };
       thenSteps: WorkflowStepDef[];
       elseSteps?: WorkflowStepDef[];
