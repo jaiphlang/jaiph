@@ -99,15 +99,15 @@ tree_projection="$(
   printf '%s\n' "${normalized}" | awk '
     /^Jaiph: Running tty_tree\.jh$/ { print; next }
     /^workflow default$/ { print; next }
-    /^  ·   ✓ <time>$/ { print; next }
-    /^  ✓ <time>$/ { print; next }
+    /^  ·   ✓ function leaf_fn \(<time>\)$/ { print; next }
+    /^  ✓ workflow leaf \(<time>\)$/ { print; next }
   '
 )"
 
 e2e::assert_equals "${tree_projection}" "Jaiph: Running tty_tree.jh
 workflow default
-  ·   ✓ <time>
-  ✓ <time>" "TTY projected tree matches expected flow"
+  ·   ✓ function leaf_fn (<time>)
+  ✓ workflow leaf (<time>)" "TTY projected tree matches expected flow"
 
 e2e::expect_out_files "tty_tree.jh" 0
 

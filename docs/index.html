@@ -101,9 +101,9 @@ Jaiph: Running say_hello.jh
 
 <span class="run-keyword">workflow</span> default <span class="run-params">(1="Jakub")</span>
   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> name_was_provided <span class="run-params">(1="Jakub")</span>
-  <span class="run-pass">✓</span> <span class="run-time">0s</span>
+  <span class="run-pass">✓</span> <span class="run-time">rule name_was_provided (0s)</span>
   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> "Say hello to $1 and" <span class="run-params">(1="Jakub")</span>
-  <span class="run-pass">✓</span> <span class="run-time">9s</span>
+  <span class="run-pass">✓</span> <span class="run-time">prompt prompt (9s)</span>
   <span class="run-marker">ℹ</span> Hi Jakub — fun fact: Jakub Marian is a Czech linguist and polyglot who speaks over a dozen languages.
 
 <span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(8.9s)</span></code></pre>
@@ -115,7 +115,7 @@ Jaiph: Running say_hello.jh
 <span class="run-keyword">workflow</span> default
   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> name_was_provided
   <span class="run-marker">·</span>   <span class="run-fail">! You didn't provide your name :(</span>
-  <span class="run-fail">✗ 0s</span>
+  <span class="run-fail">✗ rule name_was_provided (0s)</span>
 
 <span class="run-fail">✗ FAIL</span> <span class="run-keyword">workflow</span> default <span class="run-time">(0.1s)</span>
   Output of failed step:
@@ -212,12 +212,12 @@ running ensure_ci_passes.jh
 <span class="run-keyword">workflow</span> default
   <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> ensure_ci_passes
   <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> ci_passes
-  <span class="run-marker">·</span>   <span class="run-fail">✗ 11s</span>
+  <span class="run-marker">·</span>   <span class="run-fail">✗ rule ci_passes (11s)</span>
   <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> "Fix failing CI so n..."
-  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">24s</span>
+  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">prompt prompt (24s)</span>
   <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> ci_passes
-  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">10s</span>
-  <span class="run-pass">✓</span> <span class="run-time">45s</span>
+  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">rule ci_passes (10s)</span>
+  <span class="run-pass">✓</span> <span class="run-time">workflow ensure_ci_passes (45s)</span>
 
 <span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(45.1s)</span></code></pre>
                 </div>
@@ -255,11 +255,11 @@ Jaiph: Running agent_inbox.jh
 
 <span class="run-keyword">workflow</span> default
   <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> scanner
-  <span class="run-pass">✓</span> <span class="run-time">0s</span>
+  <span class="run-pass">✓</span> <span class="run-time">workflow scanner (0s)</span>
   <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> analyst <span class="run-params">(1="Found 3 issues in auth module", 2="findings", 3="scanner")</span>
-  <span class="run-pass">✓</span> <span class="run-time">0s</span>
+  <span class="run-pass">✓</span> <span class="run-time">workflow analyst (0s)</span>
   <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> reviewer <span class="run-params">(1="Summary: Found 3 issues in auth ...", 2="report", 3="analyst")</span>
-  <span class="run-pass">✓</span> <span class="run-time">0s</span>
+  <span class="run-pass">✓</span> <span class="run-time">workflow reviewer (0s)</span>
 
 <span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(0.1s)</span></code></pre>
                 </div>

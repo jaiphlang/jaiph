@@ -6,65 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Include `type + name` on step completion lines (parallel-safe tree clarity) <!-- dev-ready -->
-
-**Goal.** Make completion lines self-identifying (e.g. `✓ workflow reviewer (0s)`) so output stays unambiguous when multiple sibling steps run concurrently.
-
-**Why.** Current completion lines only show `✓/✗ <time>`, which is readable for strictly sequential runs but becomes ambiguous under parallel execution where several steps may complete out of order.
-
-**Scope.**
-
-- Update TTY and non-TTY completion rendering to include `kind + name + elapsed` for every non-root step.
-- Keep existing start-line format unchanged (including params preview/suffix behavior).
-- Styling constraints:
-  - success marker stays green
-  - failure marker stays red
-  - for success lines, label (`kind + name`) and elapsed time are dim/grey
-  - for failures, preserve existing red emphasis behavior
-- Ensure compatibility with nested depth/prefix formatting and root PASS/FAIL summary line.
-- Rework user-facing output samples to match the new completion format, including examples in `index.html`.
-
-**Acceptance criteria.**
-
-- Example format is supported:
-  - `✓ workflow scanner (0s)`
-  - `✓ workflow analyst (0s)`
-  - `✗ workflow reviewer (2s)` (color semantics preserved per failure rules)
-- In concurrent runs, each completion line is attributable without relying on visual proximity to start lines.
-- Include an explicit before/after sample in docs or task notes using this baseline:
-  - Before:
-    - `Jaiph: Running agent_inbox.jh`
-    - ``
-    - `workflow default`
-    - `  ▸ workflow scanner`
-    - `  ✓ 0s`
-    - `  ▸ workflow analyst (1="Found 3 issues in auth module", 2="findings", 3="scanner")`
-    - `  ✓ 0s`
-    - `  ▸ workflow reviewer (1="Summary: Found 3 issues in auth ...", 2="report", 3="analyst")`
-    - `  ·   ℹ [reviewed] Summary: Found 3 issues in auth module`
-    - `  ✓ 0s`
-    - ``
-    - `✓ PASS workflow default (0.2s)`
-  - After:
-    - `Jaiph: Running agent_inbox.jh`
-    - ``
-    - `workflow default`
-    - `  ▸ workflow scanner`
-    - `  ✓ workflow scanner (0s)`
-    - `  ▸ workflow analyst (1="Found 3 issues in auth module", 2="findings", 3="scanner")`
-    - `  ✓ workflow analyst (0s)`
-    - `  ▸ workflow reviewer (1="Summary: Found 3 issues in auth ...", 2="report", 3="analyst")`
-    - `  ·   ℹ [reviewed] Summary: Found 3 issues in auth module`
-    - `  ✓ workflow reviewer (0s)`
-    - ``
-    - `✓ PASS workflow default (0.2s)`
-- Existing display tests are updated and new tests cover:
-  - success/failure completion line text for multiple kinds (`workflow`, `rule`, `function`, `prompt`)
-  - color-enabled vs color-disabled output semantics
-  - no regression in root final PASS/FAIL formatting
-
----
-
 ## Parallel inbox dispatch with lock-based coordination (correctness-first) <!-- dev-ready -->
 
 **Goal.** Enable inbox route target execution in parallel while preserving deterministic correctness for queue/state files via synchronous file locks.
@@ -147,6 +88,15 @@ The first `##` task in the file is always the current task.
 - Regression coverage proves no corruption/regression in inbox/channels handling and `.jaiph/runs` artifacts under concurrency.
 - Existing internals continue to behave correctly with interleaved output: event sequencing remains valid, summaries are complete, and final workflow status is accurate.
 - Docs updated with supported parallel pattern and caveats for safe usage.
+
+---
+
+## Feature Jaiph reporting server
+
+You can provide env JAIPH_REPORTING_URL, and it sends all events to the target url
+
+Additionally you have a standalone implementation that you can start, and run it
+on localhost and display progress of all tasks. An evolution of https://jakub.sh/jai/ (?)
 
 ---
 

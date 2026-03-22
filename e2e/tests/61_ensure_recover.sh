@@ -41,11 +41,11 @@ Jaiph: Running retry_single.jh
 
 workflow default
   ▸ rule dep
-  ✗ <time>
+  ✗ rule dep (<time>)
   ▸ workflow install_deps (1="ready.txt")
-  ✓ <time>
+  ✓ workflow install_deps (<time>)
   ▸ rule dep
-  ✓ <time>
+  ✓ rule dep (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
@@ -83,9 +83,9 @@ Jaiph: Running retry_block.jh
 
 workflow default
   ▸ rule ready
-  ✗ <time>
+  ✗ rule ready (<time>)
   ▸ rule ready
-  ✓ <time>
+  ✓ rule ready (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 

@@ -243,10 +243,10 @@ Routed receivers get three positional arguments:
 ```
 workflow default
   ▸ workflow scanner
-  ✓ 0s
+  ✓ workflow scanner (0s)
   ▸ workflow analyst (1="Found 3 issues in auth module", 2="findings", 3="scanner")
-  ✓ 0s
+  ✓ workflow analyst (0s)
   ▸ workflow reviewer (1="Summary: Found 3 issues in auth ...", 2="report", 3="analyst")
-  ✓ 0s
+  ✓ workflow reviewer (0s)
 ✓ PASS workflow default (0.1s)
 ```

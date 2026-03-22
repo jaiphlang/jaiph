@@ -78,7 +78,7 @@ Jaiph: Running fs_write_rule.jh
 
 workflow default
   ▸ rule write_attempt
-  ✓ <time>
+  ✓ rule write_attempt (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 

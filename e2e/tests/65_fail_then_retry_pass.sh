@@ -64,26 +64,26 @@ Jaiph: Running make_pass.jh
 workflow default
   ▸ workflow make_pass
   ·   ▸ rule gate1
-  ·   ✗ <time>
+  ·   ✗ rule gate1 (<time>)
   ·   ▸ workflow remediate1
-  ·   ✓ <time>
+  ·   ✓ workflow remediate1 (<time>)
   ·   ▸ workflow make_pass
   ·   ·   ▸ rule gate1
-  ·   ·   ✓ <time>
+  ·   ·   ✓ rule gate1 (<time>)
   ·   ·   ▸ rule gate2
-  ·   ·   ✗ <time>
+  ·   ·   ✗ rule gate2 (<time>)
   ·   ·   ▸ workflow remediate2
-  ·   ·   ✓ <time>
+  ·   ·   ✓ workflow remediate2 (<time>)
   ·   ·   ▸ workflow make_pass
   ·   ·   ·   ▸ rule gate1
-  ·   ·   ·   ✓ <time>
+  ·   ·   ·   ✓ rule gate1 (<time>)
   ·   ·   ·   ▸ rule gate2
-  ·   ·   ·   ✓ <time>
-  ·   ·   ✓ <time>
-  ·   ✓ <time>
+  ·   ·   ·   ✓ rule gate2 (<time>)
+  ·   ·   ✓ workflow make_pass (<time>)
+  ·   ✓ workflow make_pass (<time>)
   ·   ▸ rule gate2
-  ·   ✓ <time>
-  ✓ <time>
+  ·   ✓ rule gate2 (<time>)
+  ✓ workflow make_pass (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
@@ -121,8 +121,8 @@ Jaiph: Running make_pass_bash.jh
 workflow default
   ▸ workflow make_pass
   ·   ▸ workflow make_pass
-  ·   ✓ <time>
-  ✓ <time>
+  ·   ✓ workflow make_pass (<time>)
+  ✓ workflow make_pass (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 

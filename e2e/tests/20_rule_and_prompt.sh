@@ -36,7 +36,7 @@ Jaiph: Running rule_pass.jh
 
 workflow default
   ▸ rule check_passes
-  ✓ <time>
+  ✓ rule check_passes (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
@@ -135,7 +135,7 @@ Jaiph: Running prompt_flow.jh
 
 workflow default
   ▸ prompt "e2e-prompt-please-return"
-  ✓ <time>
+  ✓ prompt prompt (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
@@ -157,7 +157,7 @@ Jaiph: Running prompt_with_vars.jh
 
 workflow default
   ▸ prompt "$role does $task" (role="engineer", task="Fix bugs")
-  ✓ <time>
+  ✓ prompt prompt (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
@@ -200,7 +200,7 @@ Jaiph: Running multiline_prompt.jh
 
 workflow default
   ▸ prompt "Line one and line t"
-  ✓ <time>
+  ✓ prompt prompt (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
