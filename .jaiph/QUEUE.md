@@ -6,27 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Make `if ! run workflow` transpile like `if ! ensure rule` <!-- dev-ready -->
-
-**Goal.** Remove the control-flow inconsistency where `if ! run some_workflow; then ... fi` behaves differently from `if ! ensure some_rule; then ... fi`, causing generated Bash to execute `run`/`prompt` as shell commands.
-
-**Scope.**
-
-- Update parser/transpiler handling so workflow calls in `if` conditions are emitted via transpiled workflow symbols, not raw DSL tokens.
-- Match `if ! ensure` behavior semantics for negation, args forwarding, then/else branch execution, and exit-code handling.
-- Add regression coverage for:
-  - `if ! run wf; then prompt ...; run ...; fi`
-  - positive `if run wf; then ... fi`
-  - imported workflow refs (`if ! run alias.wf; then ... fi`)
-
-**Acceptance criteria.**
-
-- Generated Bash never contains raw DSL `run`/`prompt` tokens in conditional branches.
-- `if run` and `if ! run` work for local and imported workflow refs with arguments.
-- Existing `if ! ensure` tests continue to pass unchanged.
-
----
-
 ## Support `config` blocks inside `workflow` (scoped overrides) <!-- dev-ready -->
 
 **Goal.** Allow an optional `config { ... }` block inside a `workflow { ... }` body so agent/run settings can differ per workflow within the same `.jh` file, with clear precedence versus module-level `config` and environment variables.
@@ -109,6 +88,62 @@ The first `##` task in the file is always the current task.
   - success/failure completion line text for multiple kinds (`workflow`, `rule`, `function`, `prompt`)
   - color-enabled vs color-disabled output semantics
   - no regression in root final PASS/FAIL formatting
+
+---
+
+## Parallel inbox dispatch with lock-based coordination (correctness-first) <!-- dev-ready -->
+
+**Goal.** Enable inbox route target execution in parallel while preserving deterministic correctness for queue/state files via synchronous file locks.
+
+**Why.** Inbox workloads are dominated by long-running agent steps, not high message throughput. A lock-and-coordinator model is the best tradeoff: simple, robust, and easy to reason about.
+
+**Scope.**
+
+- Runtime (`src/runtime/inbox.sh`):
+  - Introduce lock-protected critical sections for sequence allocation (`.seq`) and queue append/read bookkeeping.
+  - Keep message persistence file-backed; prefer atomic write patterns where practical.
+  - Add a coordinator dispatch mode that can run routed targets in parallel (e.g. bounded fan-out + `wait`) while preserving existing failure semantics.
+  - Define and document ordering guarantees explicitly (what is stable vs intentionally non-deterministic under parallel completion).
+- Config/feature gate:
+  - Add a runtime flag for inbox parallel mode (default chosen explicitly and documented; sequential fallback retained for safety/rollback).
+- CLI/runtime integration:
+  - Ensure event emission, run summary, and failure propagation remain correct when inbox dispatch overlaps.
+
+**Acceptance criteria.**
+
+- No duplicate or skipped sequence IDs under concurrent sends.
+- No dropped dispatches: for `N` messages and `M` route targets, exactly `N*M` target invocations occur (modulo expected failures).
+- Any failed awaited target causes the owning step/workflow to fail per documented behavior.
+- `.jaiph/runs/...` artifacts (including inbox files and run summary append path) remain valid and uncorrupted under concurrent activity.
+- Docs describe parallel inbox semantics, lock behavior, and rollback toggle.
+
+---
+
+## Inbox concurrency stress suite + hardening follow-up gates <!-- dev-ready -->
+
+**Goal.** Prevent race-condition regressions by adding repeatable stress tests and explicit criteria for when deeper architectural hardening is required.
+
+**Scope.**
+
+- Add thorough tests (unit + e2e) that exercise concurrency and failure paths:
+  - high-volume send/dispatch race tests (counts, uniqueness, no loss)
+  - fan-out correctness (`N` messages × `M` targets)
+  - nested dispatch/reentrancy (dispatched workflow sends more messages)
+  - failure aggregation across parallel targets
+  - concurrent artifact writing checks for inbox, step logs, and summaries
+  - repeated soak runs (same scenario many iterations) to catch heisenbugs
+- Use assertions resilient to benign non-determinism (order-insensitive where ordering is not guaranteed), while still asserting strict invariants for IDs/counts/completeness.
+- Add hardening gates:
+  - If tests expose stale lock/deadlock/starvation/crash-resume issues, create/execute follow-up architecture tasks (e.g. stale-lock recovery metadata, retry/backoff, resume-safe queue state markers).
+  - If gates are not triggered, document why baseline lock model is sufficient for current workload assumptions.
+
+**Acceptance criteria.**
+
+- New tests fail on race regressions and pass reliably in CI.
+- At least one stress suite runs multiple iterations and proves stability over repeated runs.
+- A short hardening decision record is produced: either
+  - `baseline accepted` with evidence, or
+  - `follow-up hardening required` with concrete triggered issues and next tasks.
 
 ---
 

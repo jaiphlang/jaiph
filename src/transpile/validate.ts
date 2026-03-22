@@ -234,6 +234,8 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
       } else if (s.type === "if") {
         if (s.condition.kind === "ensure") {
           validateRuleRef(s.condition.ref);
+        } else if (s.condition.kind === "run") {
+          validateWorkflowRef(s.condition.ref);
         }
         for (const ts of s.thenSteps) validateStep(ts);
         if (s.elseSteps) {
