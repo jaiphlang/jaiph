@@ -1,0 +1,14 @@
+#!/usr/bin/env jaiph
+import "prompt_returns_run_capture.jh" as pr
+
+test "run capture is only the typed JSON string field" {
+  mock prompt '{"role":"surgical"}'
+  got = pr.pick_role "task-a"
+  expectEqual got "surgical"
+}
+
+test "JSON line with trailing text still parses" {
+  mock prompt '{"role":"optimizer"}garbage'
+  got = pr.pick_role "x"
+  expectEqual got "optimizer"
+}
