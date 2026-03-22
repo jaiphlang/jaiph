@@ -35,6 +35,39 @@ jaiph --help
 
 The script installs from local source (including uncommitted changes) and places the CLI in `~/.local/bin` by default (or `JAIPH_BIN_DIR` if set).
 
+## Code philosophy
+
+Jaiph's codebase is maintained by both humans and AI agents. Code should be easy to read, navigate, and modify for both — which means the same thing: straightforward, flat, and explicit.
+
+### Principles
+
+1. **Plain functions with explicit arguments.** Avoid classes and abstraction-heavy generics. If a file already uses generics, follow the local style and keep additions minimal. No visitor patterns or dependency injection. A function takes data in, returns data out, or pushes to an array. If you need shared context, pass a plain object — not a class instance.
+2. **Flat control flow.** If/else chains and switch statements, not multi-layer abstractions. An AI (or human) should be able to read a function top-to-bottom and understand what it does without jumping to 3 other files.
+3. **Short files.** No source file should exceed ~400 lines. If a file grows past that, split it into sibling files in the same directory — not a deeper module tree.
+4. **No duplication across files.** If the same logic exists in two places, extract it into one plain function and call it from both. Duplication means bug fixes get applied in one place and missed in the other.
+5. **Minimal touch surface for new features.** Adding a new step type, CLI command, or runtime feature should require changes in at most 3 files (type definition, parser/handler, emitter/consumer). If it requires more, the architecture needs refactoring first.
+6. **No speculative abstractions.** Don't add indirection, registries, or plugin systems to "support future extensibility." Add the simplest thing that works now. Refactor when the concrete need appears.
+7. **Red flag: >100 lines of custom code.** Before writing a large chunk, check if the library or existing codebase already provides it. If not, explain why the new code is necessary.
+
+## Testing philosophy
+
+Jaiph has four test layers. Each layer catches a different class of bug. Use the narrowest layer that covers the behavior you're verifying.
+
+| Layer | Location | What it catches | When to use |
+|-------|----------|-----------------|-------------|
+| **Unit tests** | `test/*.test.ts` | Bugs in pure functions (event parsing, param formatting, path resolution, config merging) | The function is self-contained, takes input and returns output, no I/O |
+| **Compiler acceptance tests** | `test/acceptance/*.test.ts` | Parser/transpiler edge cases — malformed input, error messages, boundary conditions | You need to assert on a specific error code/message or a parser branch that doesn't map to a full workflow |
+| **Golden output tests** | `test/fixtures/` + `test/expected/` | Compiler regressions — verifies that a `.jh` file produces an exact `.sh` output | You changed the emitter and need to prove the bash output is identical (or intentionally different) |
+| **E2E tests** | `e2e/tests/*.sh` | Runtime behavior — does the built workflow actually execute correctly end-to-end? | The behavior involves the CLI, bash runtime, process lifecycle, or file artifacts |
+
+### Key principles
+
+1. **Tests are behavior contracts.** E2E tests and acceptance tests define what the product does. Default approach: change production code to satisfy tests, not the other way around.
+2. **Modify existing tests only with a strong reason:** intentional product behavior change, incorrect test expectation, or removal of an obsolete feature. Any such change should be minimal and paired with a clear rationale.
+3. **Golden outputs are the compiler's safety net.** After any transpiler change, run `npm test` — golden tests will catch unintended output differences. Use `scripts/dump-golden-output.js` to regenerate expected output when the change is intentional.
+4. **E2E tests assert two things independently:** what the user sees (CLI tree output via `e2e::expect_stdout`) and what the runtime persists (artifact files via `e2e::expect_out`, `e2e::expect_file`). A bug could break one without the other.
+5. **Prefer the narrowest test layer.** A pure function bug should be caught by a unit test, not an e2e test. E2e tests are expensive to run and hard to debug — reserve them for integration-level behavior.
+
 ## E2E testing
 
 The E2E test suite (`e2e/tests/*.sh`) exercises the full build-and-run pipeline from the outside: compile a workflow, run it, and assert on both the CLI tree output and the run artifact files (`.out`, `.err`) written to `.jaiph/runs/`.

@@ -1,0 +1,138 @@
+#!/usr/bin/env jaiph
+
+#
+# QA workflow: detect test coverage gaps and produce missing tests.
+# No queue — runs the full analysis-and-generate flow in one pass.
+#
+
+import "./ensure_ci_passes.jh" as ci
+
+config {
+  agent.backend = "claude"
+  agent.claude_flags = "--permission-mode bypassPermissions"
+}
+
+local testing_philosophy = "
+  Jaiph has four test layers. Use the narrowest layer that covers the behavior.
+
+  1. Unit tests (test/*.test.ts) — pure functions: event parsing, param
+     formatting, path resolution, config merging. Input in, output out, no I/O.
+  2. Compiler acceptance tests (test/acceptance/*.test.ts) — parser/transpiler
+     edge cases: malformed input, error messages, boundary conditions.
+  3. Golden output tests (test/fixtures/ + test/expected/) — compiler
+     regressions: verifies .jh input produces exact .sh output. Use
+     scripts/dump-golden-output.js to regenerate when change is intentional.
+  4. E2E tests (e2e/tests/*.sh) — runtime behavior: does the built workflow
+     actually execute correctly? Uses helpers from e2e/lib/common.sh with
+     Given/When/Then structure.
+
+  Key rules:
+  - Tests are behavior contracts. Change production code to satisfy tests,
+    not vice versa.
+  - E2E tests assert two things independently: CLI tree output
+    (e2e::expect_stdout) and runtime artifacts (e2e::expect_out,
+    e2e::expect_file).
+  - Prefer the narrowest test layer. A pure function bug = unit test.
+    A runtime integration bug = e2e test.
+  - Modify existing tests only for intentional behavior changes, incorrect
+    expectations, or obsolete feature removal. Keep changes minimal.
+"
+
+workflow analyze_gaps {
+  gap_report = prompt "
+    <role>
+    You are a QA engineer analyzing the Jaiph codebase for test coverage gaps.
+
+    <testing_philosophy>
+    $testing_philosophy
+
+    <task>
+    Your task:
+    1. Read every source file in src/parse/*.ts and list each parser branch
+       (rule, workflow, function, env, import, config, test blocks, conditionals,
+       recover, prompt, send, routes). For each branch, check if test/acceptance/
+       or test/fixtures/ has a corresponding test case. List branches with no test.
+
+    2. Read src/transpile/emit-workflow.ts and src/transpile/emit-test.ts.
+       For each emission branch (ensure, run, prompt, shell, if-variants, send,
+       log, logerr, recover loops, metadata scope), check if test/expected/
+       has a golden fixture covering it. List branches with no golden coverage.
+
+    3. Read e2e/tests/*.sh file names and compare against the feature list in
+       docs/grammar.md and docs/cli.md. List features with no e2e test.
+
+    4. Read src/cli/commands/*.ts and src/cli/run/*.ts. List error paths,
+       edge cases, and config-resolution branches that have no test coverage.
+
+    5. Read test/*.test.ts. List pure utility functions in src/ that have no
+       unit test.
+
+    Output a structured gap report in this format, one entry per gap:
+
+    ## Gap: [short description]
+    - File: [source file with untested code path]
+    - Code path: [specific branch/function/line range]
+    - Why it matters: [what bug this could hide]
+    - Test type: [unit | acceptance | golden | e2e]
+    - Priority: [high | medium | low]
+
+    Sort by priority descending. Be thorough but skip trivial paths (like
+    simple re-exports or type definitions).
+  "
+
+  echo "$gap_report" > .jaiph/tmp/qa_gap_report.md
+  log "Gap report saved to .jaiph/tmp/qa_gap_report.md"
+}
+
+workflow write_tests {
+  local report_file=".jaiph/tmp/qa_gap_report.md"
+
+  if [[ ! -s "$report_file" ]]; then
+    echo "No gap report found at $report_file. Run the analyze_gaps workflow first." >&2
+    exit 1
+  fi
+
+  local gap_report
+  gap_report="$(<"$report_file")"
+
+  prompt "
+    <role>
+    You are a test engineer for the Jaiph codebase.
+
+    <testing_philosophy>
+    $testing_philosophy
+
+    <task>
+    Below is a gap report listing untested code paths, sorted by priority.
+    Your task: write the missing tests, starting with high-priority gaps.
+
+    Rules:
+    - For golden output tests: add .jh fixture in test/fixtures/ and expected
+      .sh output in test/expected/. Run scripts/dump-golden-output.js to
+      generate the expected output, then verify it looks correct.
+    - For acceptance tests: add to test/acceptance/ using Node test runner
+      (import test from 'node:test' and assert from 'node:assert').
+    - For unit tests: add to test/ using Node test runner.
+    - For e2e tests: add to e2e/tests/ following the Given/When/Then pattern
+      with helpers from e2e/lib/common.sh (see docs/contributing.md for
+      reference).
+    - Do NOT modify existing tests.
+    - Do NOT modify production code.
+    - After writing tests, run: npm run build && npm test && npm run test:e2e
+    - Fix any test failures that come from your new tests (wrong expectations,
+      typos, etc). If a new test exposes a production bug, do NOT leave an
+      intentionally failing test in the suite; instead document the bug in
+      .jaiph/tmp/qa_bug_report.md with repro steps and mark the test as TODO
+      or skip with a clear comment.
+
+    Gap report:
+    $gap_report
+  "
+}
+
+workflow default {
+  mkdir -p .jaiph/tmp
+  run analyze_gaps
+  run write_tests
+  run ci.ensure_ci_passes
+}
