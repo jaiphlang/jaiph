@@ -11,7 +11,7 @@ workflow default {
   ensure name_was_provided "$1"
 
   response = prompt "
-    Say hello to $1 and provide a fun fact about a person with the same name.
+    Say hello to $1 and provide your model name, and then a fun fact about a person with the same name.
     Respond with a single line. Do not inspect files or run tools.
   "
 

@@ -67,6 +67,7 @@ layout: null
                         data-target="ensure-ci-passes-jh">ensure_ci_passes.jh</button>
                     <button type="button" class="code-tab-button"
                         data-target="inbox-pipeline-jh">agent_inbox.jh</button>
+                    <button type="button" class="code-tab-button" data-target="async-jh">async.jh</button>
                 </div>
 
                 <div class="code-tab-panel is-active" data-panel="say-hello-jh">
@@ -202,7 +203,8 @@ workflow default {
 }</code></pre>
                     <p>In the run below, <code>ci_passes</code> fails once. The failure output is captured in
                         <code>.jaiph/runs</code> artifacts. Jaiph prompts the agent for a fix and retries until the
-                        check passes.</p>
+                        check passes.
+                    </p>
                     <pre><code class="jaiph-run"><span class="run-command">➜  .jaiph/ensure_ci_passes.jh</span>
 
 Jaiph: Running ensure_ci_passes.jh
@@ -223,7 +225,8 @@ Jaiph: Running ensure_ci_passes.jh
                 <div class="code-tab-panel" data-panel="inbox-pipeline-jh">
                     <p>The <strong>inbox</strong> system lets workflows communicate through named channels.
                         A workflow sends a message with <code>&lt;-</code> and a route declaration
-                        (<code>-&gt;</code>) dispatches it to receivers with <code>$1=message</code>, <code>$2=channel</code>, <code>$3=sender</code>.</p>
+                        (<code>-&gt;</code>) dispatches it to receivers with <code>$1=message</code>,
+                        <code>$2=channel</code>, <code>$3=sender</code>.</p>
                     <pre><code class="language-jaiph">#!/usr/bin/env jaiph
 
 channel findings
@@ -262,6 +265,56 @@ Jaiph: Running agent_inbox.jh
 <span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(0.1s)</span></code></pre>
                 </div>
 
+                <div class="code-tab-panel" data-panel="async-jh">
+                    <p>This sample runs two prompt workflows in parallel: one with Cursor and one with Claude.</p>
+                    <p>Each workflow sets its own <code>agent.backend</code>, captures the prompt response, and logs it.
+                        The default workflow starts both in background and waits for completion.</p>
+                    <pre><code class="language-jaiph">#!/usr/bin/env jaiph
+
+local prompt_text = 'Say: "Greetings! I am [model name]."'
+
+workflow cursor_say_hello {
+  config {
+    agent.backend = "cursor"
+  }
+  response = prompt "$prompt_text"
+  log "$response"
+}
+
+workflow claude_say_hello {
+  config {
+    agent.backend = "claude"
+  }
+  response = prompt "$prompt_text"
+  log "$response"
+}
+
+workflow default {
+  run cursor_say_hello "$1" &
+  run claude_say_hello "$1" &
+  wait
+}</code></pre>
+                    <p>Running the workflow:</p>
+                    <pre><code class="jaiph-run"><span class="run-command">➜  ./async.jh</span>
+
+Jaiph: Running async.jh
+
+<span class="run-keyword">workflow</span> default
+  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> claude_say_hello
+  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> cursor_say_hello
+  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> "$prompt_text" <span class="run-params">(prompt_text="Say: \"Greetings! I am [model nam...")</span>
+  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> "$prompt_text" <span class="run-params">(prompt_text="Say: \"Greetings! I am [model nam...")</span>
+  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">prompt prompt (4s)</span>
+  <span class="run-marker">·</span>   <span class="run-marker">ℹ</span> Greetings! I am Claude Opus 4.6.
+  <span class="run-pass">✓</span> <span class="run-time">workflow claude_say_hello (4s)</span>
+  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">prompt prompt (5s)</span>
+  <span class="run-marker">·</span>   <span class="run-marker">ℹ</span> Greetings! I am Composer.
+  <span class="run-pass">✓</span> <span class="run-time">workflow cursor_say_hello (5s)</span>
+
+<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(5.2s)</span></code></pre>
+                    <p>Both workflows run in parallel, and in this case Claude was faster than Cursor.</p>
+                </div>
+
             </div>
         </section>
 
@@ -289,7 +342,8 @@ Jaiph: Running agent_inbox.jh
                     shell commands, pipelines, and expressions to run unmodified. Background commands with
                     <code>&amp;</code> and <code>wait</code> work inside shell steps for in-step parallelism.
                     Directly include bash logic inline and mix with Jaiph constructs for seamless agent and shell
-                    integration.</p>
+                    integration.
+                </p>
                 <p><strong>Agent inbox pattern (channels).</strong> Use inbox channels as a way to pass messages between
                     workflows. Declare channels once at top level with <code>channel &lt;name&gt;</code>, then use
                     <code>channel_ref &lt;- ...</code> and <code>channel_ref -&gt; workflow</code>
@@ -368,7 +422,8 @@ Jaiph: Running agent_inbox.jh
                     <dd>Capture values from steps into variables. Rules, workflows, and functions return explicit
                         <code>return "value"</code>; command stdout goes to <code>.jaiph/runs</code> artifacts only.
                         Shell steps capture full stdout (raw bash). See <a href="grammar#step-output-contract">Step
-                            Output Contract</a>.</dd>
+                            Output Contract</a>.
+                    </dd>
 
                     <dt><code>if [!] ensure ref; then ... fi</code> · <code>if [!] run ref; then ... fi</code> ·
                         <code>if ! &lt;shell&gt;; then ... fi</code>
@@ -380,12 +435,14 @@ Jaiph: Running agent_inbox.jh
                     <dd>Emit informational or error output to the run tree while keeping workflow execution explicit and
                         auditable.</dd>
 
-                    <dt><code>channel &lt;name&gt;</code> · <code>channel_ref &lt;- ...</code> · <code>channel_ref -&gt; workflow</code></dt>
+                    <dt><code>channel &lt;name&gt;</code> · <code>channel_ref &lt;- ...</code> ·
+                        <code>channel_ref -&gt; workflow</code></dt>
                     <dd>Declare channels at top level and then send/route messages between workflows.
                         <code>channel_ref</code> supports local and imported refs (for example
                         <code>findings</code>, <code>shared.findings</code>). Undefined refs fail validation.
                         See <a href="inbox">Inbox &amp;
-                            Dispatch</a>.</dd>
+                            Dispatch</a>.
+                    </dd>
                 </dl>
 
                 <h3>Jaiph tests</h3>

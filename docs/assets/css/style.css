@@ -119,7 +119,7 @@ code {
 }
 
 code:not(pre code) {
-    font-size: 0.75rem;
+    font-size: 0.9rem;
     background: #f6f8fa;
     border: 1px solid #d0d7de;
     border-radius: 6px;

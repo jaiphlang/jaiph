@@ -50,6 +50,13 @@ test("parseLogEvent: handles prefix appearing after other text in line", () => {
   assert.equal(result!.message, "found");
 });
 
+test("parseLogEvent: trims leading blank lines from message", () => {
+  const line = '__JAIPH_EVENT__ {"type":"LOG","message":"\\n\\nhello","depth":0}';
+  const result = parseLogEvent(line);
+  assert.ok(result);
+  assert.equal(result!.message, "hello");
+});
+
 // === parseStepEvent ===
 
 test("parseStepEvent: returns undefined for line without event prefix", () => {
