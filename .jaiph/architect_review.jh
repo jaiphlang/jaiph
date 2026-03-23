@@ -66,7 +66,7 @@ workflow review_task {
     $1
   " returns '{ verdict: string }'
 
-  printf "%s" "$result_verdict"
+  return "$result_verdict"
 }
 
 workflow default {
