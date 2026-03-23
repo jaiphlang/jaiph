@@ -108,7 +108,9 @@ includes stress-style E2E tests that go beyond single-run assertions:
   parallel dispatch makes ordering non-deterministic.
 
 See `e2e/tests/93_inbox_stress.sh` for a concrete example covering all
-of these patterns.
+of these patterns. For parallel shell step scenarios (background jobs,
+`wait` semantics, concurrent stdout capture, and artifact integrity),
+see `e2e/tests/94_parallel_shell_steps.sh`.
 
 ## E2E testing
 

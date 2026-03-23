@@ -183,7 +183,37 @@ shell_stmt      = command_line ;
 11. **Send operator (`<-`):** `channel <- echo "data"` writes the command's stdout to the next inbox slot and signals the runtime to dispatch. The channel identifier is always on the left side of the `<-` operator. The `<-` operator is detected before the shell fallback; it only matches when `braceDepth == 0` and `<-` appears outside of quoted strings. Standalone `channel <-` (no command after the operator) forwards `$1`. Combining capture and send (`name = channel <- cmd`) is a parse error (`E_PARSE: capture and send cannot be combined; use separate steps`). The send step transpiles to `jaiph::send 'channel' "$(cmd)"` (or `jaiph::send 'channel' "$1"` for standalone). See [Inbox & Dispatch](inbox.md).
 12. **Route declaration:** `channel -> workflow` registers a static routing rule: when a message arrives on `channel`, the runtime calls `workflow` with positional args `$1=message`, `$2=channel`, `$3=sender` (see [Trigger contract](inbox.md#trigger-contract)). Multiple targets are supported: `channel -> wf1, wf2` dispatches sequentially in declaration order; each target receives the same message. Route declarations are stored in `WorkflowDef.routes`, not in `steps`; they are not executable statements. The transpiler emits `jaiph::register_route` calls at the top of the orchestrator function, and `jaiph::drain_queue` at the end. See [Inbox & Dispatch](inbox.md).
 13. **Export:** Rule and workflow declarations may be prefixed with `export` to mark them as part of the module’s public interface. The implementation does not restrict references to exported symbols: any rule or workflow in an imported module can be referenced.
-14. **Top-level local (env declarations):** `local name = value` declares a module-scoped variable. The value may be a double-quoted string (may span multiple lines; stored raw without escape processing), a single-quoted string (single-line only), or a bare value (rest of line). The variable is transpiled to a prefixed bash variable using `__` as separator (e.g. `local role` in module `entry` becomes `entry__role="..."`). Inside each rule, function, and workflow body, a `local` shim is emitted so that `$role` resolves to the prefixed variable (`local role="$entry__role"`). Variable names participate in the unified namespace — they cannot collide with rule, workflow, or function names. Variables are module-scoped only and are not exportable; cross-module access is not supported.
+14. **Parallel processes in shell steps:** Shell steps support standard Bash job control — background a command with `&` and synchronise with `wait`. This is useful when a step needs to run multiple independent programs concurrently:
+
+    ```jh
+    workflow default {
+      build_frontend --prod &
+      build_backend --prod &
+      wait
+    }
+    ```
+
+    **How it works:** Shell steps are emitted as raw Bash inside the workflow's `::impl` function. The runtime executes `::impl` in a subshell with stdout/stderr redirected to `.out`/`.err` artifact files. Background jobs inherit these file descriptors, so their output is captured in the same artifacts.
+
+    **Exit status and `wait`:**
+    - Bare `wait` (no arguments) waits for all background children and returns **0** regardless of individual child exit statuses — this is standard Bash behaviour. The step succeeds even if a background job failed.
+    - `wait $pid` returns the exit status of the specific process. Combined with the `set -e` inside the impl function, a non-zero exit from a waited-for process fails the step.
+    - For deterministic failure detection, capture PIDs and wait explicitly:
+
+      ```jh
+      workflow default {
+        prog1 & pid1=$!
+        prog2 & pid2=$!
+        wait $pid1 || exit $?
+        wait $pid2 || exit $?
+      }
+      ```
+
+    **Constraints:**
+    - Users **must** `wait` for all background jobs before the step ends. If a background process is still running when the `::impl` function returns, it may be orphaned and its output may be lost (the artifact temp file is finalised immediately after the impl exits).
+    - Jaiph internal functions (`jaiph::send`, `jaiph::log`, `ensure`, `run`, etc.) should **not** be called from background subprocesses. These functions access shared run state (sequence counters, summary files) that is only lock-protected under `run.inbox_parallel = true`. Use standard external programs for backgrounded work.
+    - Output from concurrent background processes may interleave at the line level in `.out`/`.err` artifacts. This is normal Bash behaviour; writes up to `PIPE_BUF` bytes (typically 4096) are atomic.
+15. **Top-level local (env declarations):** `local name = value` declares a module-scoped variable. The value may be a double-quoted string (may span multiple lines; stored raw without escape processing), a single-quoted string (single-line only), or a bare value (rest of line). The variable is transpiled to a prefixed bash variable using `__` as separator (e.g. `local role` in module `entry` becomes `entry__role="..."`). Inside each rule, function, and workflow body, a `local` shim is emitted so that `$role` resolves to the prefixed variable (`local role="$entry__role"`). Variable names participate in the unified namespace — they cannot collide with rule, workflow, or function names. Variables are module-scoped only and are not exportable; cross-module access is not supported.
 
 ## Validation Rules
 

@@ -288,8 +288,10 @@ Jaiph: Running agent_inbox.jh
                     See <a href="grammar">Grammar</a> and <a href="getting-started">Getting started</a>.
                 </p>
                 <p><strong>Use Bash natively.</strong> Jaiph interprets native Bash syntax wherever possible, allowing
-                    shell commands, pipelines, and expressions to run unmodified. Directly include bash logic inline and
-                    mix with Jaiph constructs for seamless agent and shell integration.</p>
+                    shell commands, pipelines, and expressions to run unmodified. Background commands with
+                    <code>&amp;</code> and <code>wait</code> work inside shell steps for in-step parallelism.
+                    Directly include bash logic inline and mix with Jaiph constructs for seamless agent and shell
+                    integration.</p>
                 <p><strong>Agent inbox pattern (channels).</strong> Use inbox channels as a way to pass messages between
                     workflows. Declare channels once at top level with <code>channel &lt;name&gt;</code>, then use
                     <code>channel_ref &lt;- ...</code> and <code>channel_ref -&gt; workflow</code>
