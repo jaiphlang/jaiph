@@ -82,13 +82,9 @@ jobs:
 
           engineer_type="${{ inputs.engineer_type }}"
           if [ "${engineer_type}" = "auto" ]; then
-            engineer_type=""
-          fi
-
-          if [ -n "${engineer_type}" ]; then
-            jaiph run ./.jaiph/engineer.jh -- "${engineer_type}"
+            ./.jaiph/engineer.jh
           else
-            jaiph run ./.jaiph/engineer.jh
+            ./.jaiph/engineer.jh "${engineer_type}"
           fi
 
       - name: Create worktree patch artifact
