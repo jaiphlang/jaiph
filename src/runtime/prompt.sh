@@ -28,7 +28,17 @@ jaiph::stream_json_to_text() {
     let wroteFinalHeader = false;
     let sawFinalStreamDelta = false;
     let sawFinalMessage = false;
+    let sawVisibleFinalText = false;
     const append = (base, value) => (typeof value === "string" && value.length > 0 ? base + value : base);
+    const normalizeInitialFinalText = (text) => {
+      if (typeof text !== "string" || text.length === 0) return "";
+      if (sawVisibleFinalText) return text;
+      const normalized = text.replace(/^(?:\r?\n)+/, "");
+      if (normalized.length > 0) {
+        sawVisibleFinalText = true;
+      }
+      return normalized;
+    };
     const pickGeneric = (obj) => {
       if (!obj || typeof obj !== "object") return "";
       if (obj.message && typeof obj.message.content === "string") return obj.message.content;
@@ -110,9 +120,10 @@ jaiph::stream_json_to_text() {
                 typeof event.delta.text === "string" &&
                 event.delta.text.length > 0
               ) {
+                const normalized = normalizeInitialFinalText(event.delta.text);
                 sawFinalStreamDelta = true;
-                final = append(final, event.delta.text);
-                writeFinalDelta(event.delta.text);
+                final = append(final, normalized);
+                writeFinalDelta(normalized);
                 return;
               }
             }
@@ -140,9 +151,10 @@ jaiph::stream_json_to_text() {
               writeReasoningDelta(reasoningText);
             }
             if (!sawFinalStreamDelta && finalText.length > 0) {
-              final = finalText;
+              const normalized = normalizeInitialFinalText(finalText);
+              final = normalized;
               if (!sawFinalMessage) {
-                writeFinalDelta(finalText);
+                writeFinalDelta(normalized);
                 sawFinalMessage = true;
               }
             }
@@ -152,9 +164,10 @@ jaiph::stream_json_to_text() {
           }
           if (obj.type === "assistant" && obj.message && typeof obj.message.content === "string" && obj.message.content.length > 0) {
             if (!sawFinalStreamDelta) {
-              final = obj.message.content;
+              const normalized = normalizeInitialFinalText(obj.message.content);
+              final = normalized;
               if (!sawFinalMessage) {
-                writeFinalDelta(obj.message.content);
+                writeFinalDelta(normalized);
                 sawFinalMessage = true;
               }
             }
@@ -162,8 +175,9 @@ jaiph::stream_json_to_text() {
           }
           if (obj.type === "result" && typeof obj.result === "string" && obj.result.length > 0) {
             if (!sawFinalStreamDelta && !sawFinalMessage) {
-              final = obj.result;
-              writeFinalDelta(obj.result);
+              const normalized = normalizeInitialFinalText(obj.result);
+              final = normalized;
+              writeFinalDelta(normalized);
               sawFinalMessage = true;
             }
             return;
@@ -171,12 +185,13 @@ jaiph::stream_json_to_text() {
         }
         const generic = pickGeneric(obj);
         if (!sawFinalStreamDelta && !sawFinalMessage && generic.length > 0) {
-          final = generic;
-          writeFinalDelta(generic);
+          const normalized = normalizeInitialFinalText(generic);
+          final = normalized;
+          writeFinalDelta(normalized);
           sawFinalMessage = true;
         }
       } catch {
-        const rawLine = `${line}\n`;
+        const rawLine = normalizeInitialFinalText(`${line}\n`);
         fallback = append(fallback, rawLine);
         writeFinalDelta(rawLine);
       }

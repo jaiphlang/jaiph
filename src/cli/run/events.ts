@@ -45,7 +45,7 @@ export function parseLogEvent(line: string): LogEvent | undefined {
     }
     return {
       type: parsed.type as "LOG" | "LOGERR",
-      message: typeof parsed.message === "string" ? parsed.message : "",
+      message: typeof parsed.message === "string" ? parsed.message.replace(/^(?:\r?\n)+/, "") : "",
       depth: typeof parsed.depth === "number" ? parsed.depth : 0,
     };
   } catch {

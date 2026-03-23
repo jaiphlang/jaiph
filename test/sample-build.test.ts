@@ -2785,3 +2785,26 @@ test("stream_json_to_text deduplicates when stream deltas are followed by assist
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("stream_json_to_text trims leading blank lines from final answer", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-stream-leading-newline-"));
+  try {
+    const finalFile = join(root, "final.txt");
+    const runtimeDir = join(process.cwd(), "dist/src/runtime");
+    const events = [
+      JSON.stringify({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: "\n" } } }),
+      JSON.stringify({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: "\nHello, World!" } } }),
+    ].join("\n");
+    const result = spawnSync("bash", ["-c", `source "${runtimeDir}/prompt.sh" && printf '%s\\n' '${events.replace(/'/g, "'\\''")}' | JAIPH_PROMPT_FINAL_FILE="${finalFile}" jaiph::stream_json_to_text`], {
+      encoding: "utf8",
+      timeout: 10_000,
+    });
+    assert.equal(result.status, 0, "stream_json_to_text should exit 0: " + result.stderr);
+    const finalContent = readFileSync(finalFile, "utf8");
+    assert.equal(finalContent, "Hello, World!", "JAIPH_PROMPT_FINAL_FILE should not start with a blank line");
+    assert.match(result.stdout, /Final answer:\nHello, World!/);
+    assert.doesNotMatch(result.stdout, /Final answer:\n\nHello, World!/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

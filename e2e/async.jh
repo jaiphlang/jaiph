@@ -1,33 +1,25 @@
 #!/usr/bin/env jaiph
 
-rule name_was_provided {
-  if [ -z "$1" ]; then
-    logerr "You didn't provide your name :("
-    exit 1
-  fi
-}
+local prompt_text = 'Say: "Greetings! I am [model name]."'
 
-workflow say_hello {
-  response = prompt "
-    Say hello to $1 and provide a fun fact about a person with the same name.
-    Respond with a single line. Do not inspect files or run tools.
-    Provide non-obvious answer.
-  "
-  echo "$response"
+workflow cursor_say_hello {
+  config {
+    agent.backend = "cursor"
+  }
+  response = prompt "$prompt_text"
+  log "$response"
+}
+  
+workflow claude_say_hello {
+  config {
+    agent.backend = "claude"
+  }
+  response = prompt "$prompt_text"
+  log "$response"
 }
 
 workflow default {
-  ensure name_was_provided "$1"
-  
-  run say_hello "$1" > alice.txt &
-  run say_hello "$1" > bob.txt &
-  run say_hello "$1" > charlie.txt &
-
+  run cursor_say_hello "$1" &
+  run claude_say_hello "$1" &
   wait
-
-  log "Alice:   $(cat alice.txt)"
-  log "Bob:     $(cat bob.txt)"
-  log "Charlie: $(cat charlie.txt)"
-
-  rm -f alice.txt bob.txt charlie.txt
 }
