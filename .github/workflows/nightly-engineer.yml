@@ -179,7 +179,7 @@ jobs:
 
       - name: Create Pull Request to nightly (GITHUB_TOKEN)
         id: create_pr_default
-        if: success() && env.JAIPH_PR_TOKEN == ''
+        if: success() && (env.JAIPH_PR_TOKEN == '' || steps.create_pr_pat.outcome == 'failure')
         continue-on-error: true
         uses: peter-evans/create-pull-request@v6
         with:
@@ -195,10 +195,24 @@ jobs:
             - Engineer type: `${{ inputs.engineer_type }}`
           delete-branch: true
 
-      - name: PR creation fallback notice
-        if: success() && env.JAIPH_PR_TOKEN == '' && steps.create_pr_default.outcome == 'failure'
+      - name: Fail when PR creation did not succeed
+        if: success() && steps.create_pr_pat.outcome != 'success' && steps.create_pr_default.outcome != 'success'
         shell: bash
         run: |
-          echo "PR creation failed with GITHUB_TOKEN."
+          echo "PR creation failed with all available tokens." >&2
+          echo "PAT outcome: ${{
+            steps.create_pr_pat.outcome
+          }}" >&2
+          echo "GITHUB_TOKEN outcome: ${{
+            steps.create_pr_default.outcome
+          }}" >&2
+          echo "Fix permissions and rerun. Artifacts contain .jaiph/runs and worktree patch." >&2
+          exit 1
+
+      - name: PR creation fallback notice
+        if: success() && steps.create_pr_pat.outcome == 'failure' && steps.create_pr_default.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "PR creation failed with both JAIPH_PR_TOKEN and GITHUB_TOKEN."
           echo "Set repo Actions setting 'Allow GitHub Actions to create and approve pull requests'"
           echo "or add secret JAIPH_PR_TOKEN (PAT with repo scope)."
