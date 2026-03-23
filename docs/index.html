@@ -160,7 +160,7 @@ test "with name, returns greeting and logs response" {
                     <p>Example failing run output:</p>
                     <pre><code class="jaiph-run"><span class="run-command">➜  ./say_hello.test.jh</span>
 testing say_hello.test.jh
-  <span class="run-marker">▸</span> without name, workflow fails with validation message <span class="run-time">(0s failed)</span>
+  <span class="run-marker">▸</span> without name, workflow fails with validation message
   <span class="run-fail">✗</span> expectEqual failed: <span class="run-time">0s</span>
     <span class="run-diff-minus">- You didn't provide your name</span>
     <span class="run-diff-plus">+ You didn't provide your name :(</span>
@@ -205,9 +205,9 @@ workflow default {
 }</code></pre>
                     <p>In the run below, <code>ci_passes</code> fails once, Jaiph writes the failure output to the log
                         file, prompts the agent for a minimal fix, and retries until the check passes.</p>
-                    <pre><code class="jaiph-run"><span class="run-command">➜  jaiph git:(main) ✗ .jaiph/ensure_ci_passes.jh</span>
+                    <pre><code class="jaiph-run"><span class="run-command">➜  .jaiph/ensure_ci_passes.jh</span>
 
-running ensure_ci_passes.jh
+Jaiph: Running ensure_ci_passes.jh
 
 <span class="run-keyword">workflow</span> default
   <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> ensure_ci_passes

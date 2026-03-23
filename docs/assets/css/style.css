@@ -118,11 +118,11 @@ code {
 }
 
 code:not(pre code) {
-    font-size: 0.9rem;
+    font-size: 0.75rem;
     background: #f6f8fa;
     border: 1px solid #d0d7de;
     border-radius: 6px;
-    padding: 0.2rem 0.35rem;
+    padding: 0.15rem 0.5rem;
     display: inline-block;
 }
 
