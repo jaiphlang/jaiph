@@ -61,33 +61,98 @@ Sample file that fails: e2e/async.jh
 - e2e tests cover all rows from the spec table (`shell`, `ensure rule`, `run workflow`, `function call`, `prompt`, `log`/`logerr`) and validate both value channel behavior and `.jaiph/runs` log artifacts for each.
 - Add a dedicated e2e for `ensure ... recover ...` value semantics: assignment returns the last successful rule `return` value, and the `recover` block receives the rule `return` value (not command stdout/output stream).
 
+## Runtime: persist complete reporting event stream in `run_summary.jsonl` (reporting prerequisite, part 1/2) <!-- dev-ready -->
+
+**Problem.** `run_summary.jsonl` currently lacks key event types needed for a faithful reporting UI: `LOG`, `LOGERR`, inbox message flow, and non-terminal lifecycle events.
+
+**Goal.** Make `run_summary.jsonl` the canonical append-only runtime event stream by persisting all reporting-relevant events in order.
+
+**Scope.**
+
+- Persist `LOG` and `LOGERR` events with message + depth.
+- Persist inbox lifecycle events:
+  - message enqueued from `send`,
+  - message dispatched to target workflow/channel,
+  - dispatch completion with status + elapsed.
+- Persist lifecycle boundaries:
+  - `STEP_START` in addition to `STEP_END`,
+  - `WORKFLOW_START` and `WORKFLOW_END`.
+- Keep JSONL append-only format and preserve existing `STEP_END` compatibility.
+
+**Schema/format requirements.**
+
+- Add `event_version` (starting at `1`) for forward compatibility.
+- Every event must include: `type`, `ts`, `run_id`.
+- Step events must keep stable correlation fields: `id`, `parent_id`, `seq`, `depth` (where applicable).
+- Inbox payload handling must include:
+  - safe UI preview field,
+  - full payload reference/path when payload size is large.
+
+**Concurrency/ordering requirements.**
+
+- JSONL remains valid under parallel inbox execution.
+- Appends are lock-safe for all concurrent writers.
+- Consumers can tail by byte offset and process events idempotently.
+
+**Acceptance criteria.**
+
+- One `run_summary.jsonl` file is sufficient to reconstruct:
+  - full step lifecycle tree (start/end),
+  - `log`/`logerr` timeline,
+  - inbox send/dispatch/completion flow,
+  - workflow start/end boundaries.
+- Existing consumers reading current `STEP_END` records keep working unchanged.
+
+## Runtime: lock event contract with docs + e2e for reportability (reporting prerequisite, part 2/2) <!-- dev-ready -->
+
+**Problem.** Without explicit contract tests/docs, event schema can drift and break reporting pollers/UI.
+
+**Goal.** Freeze the persisted event contract with clear docs and regression coverage.
+
+**Scope.**
+
+- Document event taxonomy and required fields in docs.
+- Add per-event schema table (required/optional fields, semantics, correlation rules).
+- Add e2e coverage for all newly persisted event types and ordering guarantees.
+
+**Acceptance criteria.**
+
+- Docs include event table for: `WORKFLOW_START`, `WORKFLOW_END`, `STEP_START`, `STEP_END`, `LOG`, `LOGERR`, inbox lifecycle events.
+- e2e validates:
+  - `LOG`/`LOGERR` persistence,
+  - inbox send/dispatch/completion persistence,
+  - `STEP_START` and `STEP_END` pairing consistency,
+  - `WORKFLOW_START`/`WORKFLOW_END` correctness,
+  - JSONL validity under parallel dispatch.
+- e2e also validates schema compatibility for legacy `STEP_END` consumers.
+
 ## Feature Jaiph reporting server + lightweight dashboard UI (runs-dir backed) <!-- dev-ready -->
 
-**Problem.** Jaiph has run artifacts (`.jaiph/runs/**`) and runtime events, but no built-in way to browse run history, inspect step trees, and review logs/responses in a single lightweight UI.
+**Problem.** Jaiph has run artifacts (`.jaiph/runs/**`) but no built-in way to browse run history, inspect step trees, and review logs/responses in a single lightweight UI.
 
-**Goal.** Add a standalone reporting server with a minimal dashboard that uses `.jaiph/runs` as its primary database, plus optional live event ingestion for in-progress runs.
+**Goal.** Add a standalone reporting server with a minimal dashboard that uses `.jaiph/runs` (especially `run_summary.jsonl`) as its primary database for both history and live updates via polling.
 
 **First-principles constraints.**
 
 - Reuse existing artifacts and `run_summary.jsonl`; do not introduce a heavy database for v1.
 - Keep implementation lightweight: server + static HTML/CSS/JS (no SPA framework required).
 - Preserve backwards compatibility with existing run artifact format.
-- Support local use first (`localhost`), with optional event push via `JAIPH_REPORTING_URL`.
+- Support local use first (`localhost`).
 
 **Data model (source of truth).**
 
 - **Historical source:** `.jaiph/runs/<date>/<time>-<source>/run_summary.jsonl` + `*.out` + `*.err`.
 - **Tree reconstruction:** use `id`, `parent_id`, `seq`, `depth`, `kind`, `name`, `params`, `status`, `elapsed_ms`.
 - **Step output:** use embedded `out_content` / `err_content` for quick views; `.out/.err` for full/raw views.
-- **Optional live file (server-managed):** `<run_dir>/events.live.jsonl` for non-finalized events (`STEP_START`, `LOG`, `LOGERR`) to support real-time dashboard state across server restarts.
+- **Live source:** active run `run_summary.jsonl` files are tailed/polled incrementally (by file offset and mtime) to update in-progress state.
 
 **Reporting modes.**
 
 1. **History-only mode (required):**
    - Server reads existing runs from `.jaiph/runs` and serves history/tree/log views.
 2. **Live mode (required):**
-   - Server accepts runtime events via HTTP (`POST /api/events`) and updates active run state.
-   - Runtime can push events when `JAIPH_REPORTING_URL` is set (best-effort, non-blocking).
+   - Server discovers active runs and polls their `run_summary.jsonl` files for appended events.
+   - UI reflects newly appended events without page reload (poll or SSE from server-side poller).
 
 **Server/API scope (v1).**
 
@@ -101,10 +166,8 @@ Sample file that fails: e2e/async.jh
   - returns full raw `.out` or `.err`.
 - `GET /api/runs/:runId/aggregate`
   - returns one aggregated text output ordered by `seq` (clear section separators per step).
-- `POST /api/events`
-  - ingests single runtime event payload; updates in-memory active runs and optional `events.live.jsonl`.
 - `GET /api/active`
-  - returns currently running workflows with live step status.
+  - returns currently running workflows with live step status derived from polled summaries.
 
 **Lightweight UI scope (v1).**
 
@@ -122,14 +185,11 @@ Sample file that fails: e2e/async.jh
 - **No heavy frontend framework required**
   - server-rendered HTML or tiny client-side JS with fetch/SSE polling.
 
-**Runtime integration.**
+**Polling/indexing requirements.**
 
-- Introduce `JAIPH_REPORTING_URL` support in runtime event emission path.
-- On each event emission:
-  - send best-effort HTTP POST to reporting URL,
-  - never fail workflow execution if reporting endpoint is unavailable,
-  - keep existing stderr marker + run_summary behavior unchanged.
-- Include run/workspace metadata in payload needed for server correlation.
+- Maintain per-run polling cursor (byte offset + last inode/mtime) to avoid full-file rereads.
+- Handle file rotation/recreation safely (detect truncation and resync).
+- Incrementally update derived run state (active steps, latest logs, completion status) as new lines arrive.
 
 **Reliability/performance requirements.**
 
@@ -137,12 +197,13 @@ Sample file that fails: e2e/async.jh
 - Handle large runs safely:
   - response size caps for embedded output preview,
   - streaming for raw logs and aggregate views.
+- Polling loop must be lightweight and bounded (no busy loops; configurable interval/backoff).
 - Keep endpoint latency low for local use (target p95 < 200 ms for common metadata endpoints on moderate history sizes).
 
 **Security/safety (v1).**
 
 - Bind localhost by default.
-- Read-only over run artifacts (except optional `events.live.jsonl` append).
+- Read-only over run artifacts.
 - Sanitize/normalize run path resolution to prevent directory traversal.
 
 **Acceptance criteria.**
@@ -152,14 +213,13 @@ Sample file that fails: e2e/async.jh
   - step response,
   - raw out/err logs,
   - aggregated output view.
-- A run in progress appears in the active section and updates live.
-- If live reporting is disconnected, workflow execution still succeeds; history remains browsable from run artifacts.
-- `JAIPH_REPORTING_URL` is documented and covered by tests (happy path + endpoint-down behavior).
+- A run in progress appears in the active section and updates live by polling appended lines in its `run_summary.jsonl`.
+- If the poller is temporarily interrupted/restarted, workflow execution is unaffected and history remains browsable from run artifacts.
 - End-to-end test validates:
   - run list discovery from `.jaiph/runs`,
   - correct tree reconstruction from summary data,
   - log browsing and aggregate output endpoint behavior,
-  - live event ingestion updates active run state.
+  - summary polling updates active run state as events are appended.
 
 **Out of scope (v1).**
 

@@ -11,8 +11,8 @@ import "./ensure_ci_passes.jh" as ci
 import "./git.jh" as git
 
 config {
-  agent.backend = "claude"
-  agent.claude_flags = "--permission-mode bypassPermissions"
+  agent.backend = "cursor"
+  agent.cursor_flags = "--force"
 }
 
 local output_contract = "
