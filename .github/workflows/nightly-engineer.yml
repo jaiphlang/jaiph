@@ -26,6 +26,7 @@ jobs:
       CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
       CURSOR_TOKEN: ${{ secrets.CURSOR_TOKEN }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      JAIPH_PR_TOKEN: ${{ secrets.JAIPH_PR_TOKEN }}
     steps:
       - name: Checkout nightly
         uses: actions/checkout@v4
@@ -90,6 +91,21 @@ jobs:
             jaiph run ./.jaiph/engineer.jh
           fi
 
+      - name: Create worktree patch artifact
+        if: always()
+        id: patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .jaiph/artifacts
+          patch_file=".jaiph/artifacts/worktree-${GITHUB_RUN_ID}.patch"
+          git add -N . || true
+          git diff --binary > "${patch_file}" || true
+          if [ ! -s "${patch_file}" ]; then
+            echo "# No git diff produced by engineer run" > "${patch_file}"
+          fi
+          echo "patch_file=${patch_file}" >> "${GITHUB_OUTPUT}"
+
       - name: Upload Jaiph runs artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -97,6 +113,15 @@ jobs:
           name: jaiph-runs-${{ github.run_id }}
           path: .jaiph/runs
           if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload git patch artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jaiph-worktree-patch-${{ github.run_id }}
+          path: ${{ steps.patch.outputs.patch_file }}
+          if-no-files-found: error
           retention-days: 14
 
       - name: Derive commit message and PR title
@@ -134,10 +159,13 @@ jobs:
             echo "commit_message=${commit_message}"
           } >> "${GITHUB_OUTPUT}"
 
-      - name: Create Pull Request to nightly
+      - name: Create Pull Request to nightly (PAT)
+        id: create_pr_pat
+        if: success() && env.JAIPH_PR_TOKEN != ''
+        continue-on-error: true
         uses: peter-evans/create-pull-request@v6
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.JAIPH_PR_TOKEN }}
           base: nightly
           branch: automation/nightly-engineer-${{ github.run_id }}
           title: ${{ steps.metadata.outputs.pr_title }}
@@ -148,3 +176,29 @@ jobs:
             - Base branch: `nightly`
             - Engineer type: `${{ inputs.engineer_type }}`
           delete-branch: true
+
+      - name: Create Pull Request to nightly (GITHUB_TOKEN)
+        id: create_pr_default
+        if: success() && env.JAIPH_PR_TOKEN == ''
+        continue-on-error: true
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ github.token }}
+          base: nightly
+          branch: automation/nightly-engineer-${{ github.run_id }}
+          title: ${{ steps.metadata.outputs.pr_title }}
+          commit-message: ${{ steps.metadata.outputs.commit_message }}
+          body: |
+            Automated engineer run from workflow dispatch.
+
+            - Base branch: `nightly`
+            - Engineer type: `${{ inputs.engineer_type }}`
+          delete-branch: true
+
+      - name: PR creation fallback notice
+        if: success() && env.JAIPH_PR_TOKEN == '' && steps.create_pr_default.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "PR creation failed with GITHUB_TOKEN."
+          echo "Set repo Actions setting 'Allow GitHub Actions to create and approve pull requests'"
+          echo "or add secret JAIPH_PR_TOKEN (PAT with repo scope)."
