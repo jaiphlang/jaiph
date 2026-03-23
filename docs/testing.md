@@ -7,9 +7,11 @@ redirect_from:
 
 # Testing Jaiph Workflows
 
-You can test Jaiph workflows by writing test scripts that run workflows under controlled conditions and assert on their output or side effects. Tests live in dedicated files, use the same import system as workflows, and support mocking prompts and dependencies so runs are deterministic and fast.
+Jaiph workflows call LLM prompts, shell commands, and other workflows — all of which produce non-deterministic or environment-dependent output. Without mocking, every test run would hit a real LLM backend, making tests slow, flaky, and expensive.
 
-**Concepts**
+Jaiph's built-in test framework solves this: you write `.test.jh` files that mock prompts, replace dependencies, run workflows, and assert on captured output — all without leaving the Jaiph language.
+
+**Core concepts**
 
 - **Test files** — Files named `*.test.jh` (or `*.test.jph`) contain only imports and test blocks. They are discovered and run by `jaiph test`.
 - **Test blocks** — Each `test "description" { ... }` block is one test case: a sequence of steps (mocks, workflow runs, assertions).
@@ -57,7 +59,7 @@ test "runs happy path and output contains expected mock" {
 
 ### Steps inside a test block
 
-- **Shell** — Any bash statement (e.g. `echo "given"`, `# comment`). Use for setup, reading files, or custom capture when needed.
+- **Shell** — Any bash statement (e.g. `echo "setup value"`). Lines starting with `#` are treated as comments and silently skipped (they are not emitted as shell steps). Use shell steps for setup, reading files, or custom logic when needed.
 - **mock prompt** — `mock prompt "<response>"` (or `mock prompt '<response>'`) adds a mock response for the next prompt call. Mocks are consumed in order when the workflow runs. Use one per prompt in the workflow. When the workflow uses a **typed prompt** (`result = prompt "..." returns '{ ... }'`), the mock response must be valid JSON that satisfies the declared schema (e.g. one line of JSON with the required fields and correct types); otherwise the step fails with a parse or schema error. You can mock with a single line such as `mock prompt '{"type":"fix","risk":"low","summary":"Done"}'` so that `$result`, `$result_type`, `$result_risk`, etc. are set as expected.
 - **mock prompt block** — `mock prompt { ... }` dispatches by prompt content. Use `if $1 contains "..." ; then` / `elif $1 contains "..." ; then` / optional `else` / `respond "..."` / `fi`. Each branch pairs a condition with a response. First matching branch wins; if no branch matches and there is no `else`, the test fails with a clear error.
 - **mock workflow** — `mock workflow <alias>.<name> { ... }` replaces that workflow for this test with a shell body (e.g. `echo "ok"; exit 0`). Ref is `<alias>` or `<alias>.<workflow_name>`.
@@ -71,9 +73,23 @@ test "runs happy path and output contains expected mock" {
 
 ## Pass/fail reporting
 
-- Each test block runs independently. A failing step (e.g. `expectContain`, or a workflow run that exits non-zero without `allow_failure`) marks that test as failed.
-- Output: the runner prints `testing <file name>`, then for each test `  ▸ <description>` followed by either `  ✓ <kind> <name> (<elapsed>)` on success or `  ✗ <kind> <name> (<elapsed>)` with the first error line on failure. Additional error lines are indented on stderr.
-- Exit code is 0 if all tests pass, non-zero otherwise.
+Each test block runs independently. A failing step (assertion failure, or a workflow that exits non-zero without `allow_failure`) marks that test as failed.
+
+The runner prints output in this format:
+
+```
+testing <file name>
+  ▸ <description>
+  ✓ <elapsed>s                          # on success
+  ▸ <description>
+  ✗ <first error line> <elapsed>s       # on failure
+    <additional error lines indented>
+
+✗ 1 / 2 test(s) failed
+  - <failed test description>
+```
+
+When all tests pass, the summary line is `✓ N test(s) passed`. Exit code is 0 when all tests pass, non-zero otherwise.
 
 ## Given/When/Then style
 
