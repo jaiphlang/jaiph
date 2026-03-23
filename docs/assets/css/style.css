@@ -71,8 +71,9 @@ header {
 
 h2 {
     color: var(--navy);
-    text-shadow: 1px 1px 0px var(--bg), 1px -1px 0px var(--bg), -1px 1px 0px var(--bg), -1px -1px 0px var(--bg);
-    margin-top: 2.5rem;
+    text-shadow: 2px 1px 2px var(--bg);
+    margin-top: 5rem;
+    font-size: 3rem;
 }
 
 a {
