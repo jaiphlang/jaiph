@@ -197,14 +197,12 @@ rule ci_passes {
 
 workflow default {
   ensure ci_passes recover {
-    echo "$1" > ./tmp_ci_test.out
-    prompt "Fix failing CI so npm run test:ci passes. Tail ./tmp_ci_test.out for details."
+    prompt "Fix failing CI so npm run test:ci passes. Check .jaiph/runs for failure details."
   }
-
-  rm -f ./tmp_ci_test.out
 }</code></pre>
-                    <p>In the run below, <code>ci_passes</code> fails once, Jaiph writes the failure output to the log
-                        file, prompts the agent for a minimal fix, and retries until the check passes.</p>
+                    <p>In the run below, <code>ci_passes</code> fails once. The failure output is captured in
+                        <code>.jaiph/runs</code> artifacts. Jaiph prompts the agent for a fix and retries until the
+                        check passes.</p>
                     <pre><code class="jaiph-run"><span class="run-command">➜  .jaiph/ensure_ci_passes.jh</span>
 
 Jaiph: Running ensure_ci_passes.jh
@@ -367,8 +365,10 @@ Jaiph: Running agent_inbox.jh
 
                     <dt><code>name = ensure ref</code> · <code>name = run ref</code> · <code>name = &lt;shell&gt;</code>
                     </dt>
-                    <dd>Capture stdout of Jaiph steps or shell commands into variables; stderr is captured only if
-                        redirected (for example <code>2&gt;&amp;1</code>).</dd>
+                    <dd>Capture values from steps into variables. Rules, workflows, and functions return explicit
+                        <code>return "value"</code>; command stdout goes to <code>.jaiph/runs</code> artifacts only.
+                        Shell steps capture full stdout (raw bash). See <a href="grammar#step-output-contract">Step
+                            Output Contract</a>.</dd>
 
                     <dt><code>if [!] ensure ref; then ... fi</code> · <code>if [!] run ref; then ... fi</code> ·
                         <code>if ! &lt;shell&gt;; then ... fi</code>

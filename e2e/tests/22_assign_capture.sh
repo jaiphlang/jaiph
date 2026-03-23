@@ -23,11 +23,16 @@ e2e::expect_stdout "${assign_out}" <<'EOF'
 Jaiph: Running assign_capture.jh
 
 workflow default
+  ▸ rule echo_line
+  ✓ rule echo_line (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
-e2e::expect_out_files "assign_capture.jh" 1
+e2e::expect_out_files "assign_capture.jh" 2
 e2e::expect_file "*assign_capture__default.out" <<'EOF'
-response=captured-stdout
+response=captured-value
 out=shell-capture
+EOF
+e2e::expect_file "*assign_capture__echo_line.out" <<'EOF'
+this goes to logs only
 EOF

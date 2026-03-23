@@ -6,14 +6,14 @@ workflow classify_like {
     Classify task \"$task\" into a single engineer role name (JSON only).
   " returns '{ role: string }'
 
-  printf '%s' "$result_role"
+  return "$result_role"
 }
 
-# Same pattern as engineer.jh default: capture role from nested workflow (impl runs in cmdsub).
+# Same pattern as engineer.jh default: capture role from nested workflow.
 workflow pick_role {
   local task="$1"
   role_name = run classify_like "$task"
-  printf '%s' "$role_name"
+  return "$role_name"
 }
 
 workflow default {

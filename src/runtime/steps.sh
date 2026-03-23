@@ -218,6 +218,12 @@ jaiph::mock_script_for_symbol() {
   return 1
 }
 
+jaiph::set_return_value() {
+  if [[ -n "${JAIPH_RETURN_VALUE_FILE:-}" ]]; then
+    printf '%s' "$1" > "$JAIPH_RETURN_VALUE_FILE"
+  fi
+}
+
 jaiph::run_step() {
   local func_name="$1"
   local step_kind="${2:-}"

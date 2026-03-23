@@ -6,43 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Simplification: redesign step output contract (status/value/logs) <!-- dev-ready -->
-
-**Problem.** Output semantics are currently ambiguous: shell-like stdout capture and Jaiph step artifacts overlap, so users cannot reliably tell what is "return value" vs "log stream".
-
-**Goal.** Define and adopt a single step contract:
-
-- **Status**: exit code (`0` success, non-zero failure), with strict `set -e` behavior.
-- **Value**: explicit `return` value used for assignment capture (for rules, workflows, and functions).
-- **Logs**: stdout/stderr process output written to run artifacts (`.jaiph/runs/.../*.out|*.err`) and optionally streamed live.
-
-**Spec table to implement (and copy into `docs/grammar.md`).**
-
-| Step kind | Status source | Value channel (for `x = ...`) | Log channel |
-| --- | --- | --- | --- |
-| `shell` | shell exit code | full stdout of shell command | stdout/stderr to step artifacts |
-| `ensure rule` | rule exit code | explicit rule `return` value only | all rule command stdout/stderr to step artifacts |
-| `run workflow` | workflow exit code | explicit workflow `return` value only | all workflow step stdout/stderr to step artifacts |
-| `function call` | function exit code | explicit function `return` value only | all function command stdout/stderr to step artifacts |
-| `prompt` | prompt command exit code | final assistant answer only | prompt transcript/reasoning/tool logs to artifacts |
-| `log` / `logerr` | always `0` unless runtime error | empty | message emitted as log event (+ stdout for `log`, stderr for `logerr`) |
-
-**Scope.**
-
-- Keep bash-like redirection and pipelines for raw shell command streams.
-- For Jaiph-level composition (`x = ensure rule`, `x = run wf`, `x = fn`), assignment captures only explicit `return` values.
-- Preserve current event emission and run artifact structure.
-
-**Acceptance criteria.**
-
-- Table above is added to `docs/grammar.md` in runtime semantics.
-- All command stdout/stderr from rules/workflows/functions is written to `.jaiph/runs` artifacts.
-- Assignment capture for `ensure`, `run`, and function calls reads only explicit `return` values.
-- No accidental `echo`/shell stdout capture into assignment values for rules/workflows/functions.
-- Prompt capture returns final answer value while transcript remains in artifacts.
-- e2e tests cover all rows from the spec table (`shell`, `ensure rule`, `run workflow`, `function call`, `prompt`, `log`/`logerr`) and validate both value channel behavior and `.jaiph/runs` log artifacts for each.
-- Add a dedicated e2e for `ensure ... recover ...` value semantics: assignment returns the last successful rule `return` value, and the `recover` block receives the rule `return` value (not command stdout/output stream).
-
 ## Non-TTY long tasks: periodic running ping line in gray (status heartbeat) <!-- dev-ready -->
 
 **Problem.** In non-TTY mode, long-running steps can appear stalled because there is no periodic status output between start and end lines.

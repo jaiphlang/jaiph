@@ -151,9 +151,15 @@ export function emitTest(
         out.push("  esac");
         out.push("  set +e");
         if (step.captureName) {
-          out.push(`  jaiph__test_out=$(${workflowSymbol} ${args} 2>&1)`);
+          out.push(`  jaiph__test_rv_file=$(mktemp)`);
+          out.push(`  jaiph__test_out=$(JAIPH_RETURN_VALUE_FILE="$jaiph__test_rv_file" ${workflowSymbol} ${args} 2>&1)`);
           out.push("  jaiph__test_exit=$?");
-          out.push(`  ${step.captureName}=$(printf '%s' "$jaiph__test_out" | sed '/^__JAIPH_EVENT__/d')`);
+          out.push(`  if [[ -s "$jaiph__test_rv_file" ]]; then`);
+          out.push(`    ${step.captureName}=$(<"$jaiph__test_rv_file")`);
+          out.push("  else");
+          out.push(`    ${step.captureName}=$(printf '%s' "$jaiph__test_out" | sed '/^__JAIPH_EVENT__/d')`);
+          out.push("  fi");
+          out.push(`  rm -f "$jaiph__test_rv_file"`);
         } else {
           out.push(`  jaiph__test_out_file=$(mktemp)`);
           out.push(
