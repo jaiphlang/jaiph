@@ -1,0 +1,119 @@
+name: Nightly Engineer Run
+
+on:
+  workflow_dispatch:
+    inputs:
+      engineer_type:
+        description: "Engineer role (auto uses task classification)"
+        required: false
+        default: "auto"
+        type: choice
+        options:
+          - auto
+          - surgical
+          - reductionist
+          - optimizer
+          - stabilizer
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  run-engineer:
+    runs-on: ubuntu-latest
+    env:
+      CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+      CURSOR_TOKEN: ${{ secrets.CURSOR_TOKEN }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - name: Checkout nightly
+        uses: actions/checkout@v4
+        with:
+          ref: nightly
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install Jaiph from local source
+        shell: bash
+        run: bash ./docs/install-from-local.sh
+
+      - name: Run engineer
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          engineer_type="${{ inputs.engineer_type }}"
+          if [ "${engineer_type}" = "auto" ]; then
+            engineer_type=""
+          fi
+
+          if [ -n "${engineer_type}" ]; then
+            jaiph run ./.jaiph/engineer.jh -- "${engineer_type}"
+          else
+            jaiph run ./.jaiph/engineer.jh
+          fi
+
+      - name: Upload Jaiph runs artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jaiph-runs-${{ github.run_id }}
+          path: .jaiph/runs
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Derive commit message and PR title
+        id: metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          task_header="$(
+            awk '/^## / { print; exit }' .jaiph/QUEUE.md \
+              | sed -E 's/^##[[:space:]]+//' \
+              | sed -E 's/[[:space:]]*<!--.*$//'
+          )"
+
+          if [ -z "${task_header}" ]; then
+            task_header="Nightly engineer update"
+          fi
+
+          changelog_line="$(
+            awk '
+              BEGIN { in_nightly=0; in_changes=0 }
+              /^# Nightly$/ { in_nightly=1; next }
+              in_nightly && /^## All changes$/ { in_changes=1; next }
+              in_changes && /^- / { print; exit }
+            ' CHANGELOG.md
+          )"
+
+          commit_message="$(printf '%s' "${changelog_line}" | sed -E 's/^- //' | sed -E 's/^\*\*//' | sed -E 's/\*\*[[:space:]]*—.*$//')"
+          if [ -z "${commit_message}" ]; then
+            commit_message="chore: nightly engineer update"
+          fi
+
+          {
+            echo "pr_title=${task_header}"
+            echo "commit_message=${commit_message}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Create Pull Request to nightly
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          base: nightly
+          branch: automation/nightly-engineer-${{ github.run_id }}
+          title: ${{ steps.metadata.outputs.pr_title }}
+          commit-message: ${{ steps.metadata.outputs.commit_message }}
+          body: |
+            Automated engineer run from workflow dispatch.
+
+            - Base branch: `nightly`
+            - Engineer type: `${{ inputs.engineer_type }}`
+          delete-branch: true
