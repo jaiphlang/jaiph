@@ -6,6 +6,28 @@ The first `##` task in the file is always the current task.
 
 ---
 
+## Fix `run <workflow> ... > file` stdout semantics (async root cause) <!-- dev-ready -->
+
+**Problem.** `run some_workflow ... > out.txt` currently writes an empty/incorrect file in normal runs because `jaiph::run_step` captures child stdout into artifacts and does not forward workflow stdout to the caller stream. This breaks async/bash-like patterns and forces users to call transpiled internals (`module::workflow::impl`) to get redirectable output.
+
+Sample file that fails: e2e/async.jh
+
+**Goal.** Make `run` behave like normal shell execution for stdout redirection and pipelines, while still keeping Jaiph step artifacts/events.
+
+**Acceptance criteria.**
+
+- `run workflow "$1" > file &` captures workflow stdout in `file` without using `::impl`.
+- Piping works: `run workflow "$1" | some_filter` receives workflow stdout.
+- Existing step artifacts (`*.out/*.err`) and tree events are still generated.
+- No regressions for prompt capture behavior (`name = prompt ...`) and existing e2e suites.
+- Add e2e coverage for redirect + background `run` and for pipeline usage.
+
+---
+
+## Simplification: we need to redesign how outputs are captured
+
+I think it's good to either keep parity with bash: each echo
+
 ## Feature Jaiph reporting server
 
 You can provide env JAIPH_REPORTING_URL, and it sends all events to the target url
