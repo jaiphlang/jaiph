@@ -22,6 +22,8 @@ if [[ "$(jaiph__runtime_api)" != "1" ]]; then
   echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2
   exit 1
 fi
+exec 7>&1
+export JAIPH_STDOUT_SAVED=1
 
 bootstrap_project::nodejs::impl() {
   set -eo pipefail
@@ -46,6 +48,8 @@ if [[ "$(jaiph__runtime_api)" != "1" ]]; then
   echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2
   exit 1
 fi
+exec 7>&1
+export JAIPH_STDOUT_SAVED=1
 
 inbox::researcher::impl() {
   set -eo pipefail
@@ -106,6 +110,8 @@ if [[ "$(jaiph__runtime_api)" != "1" ]]; then
   echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2
   exit 1
 fi
+exec 7>&1
+export JAIPH_STDOUT_SAVED=1
 source "$(dirname "\${BASH_SOURCE[0]}")/bootstrap_project.sh"
 source "$(dirname "\${BASH_SOURCE[0]}")/tools/security.sh"
 
@@ -185,6 +191,8 @@ if [[ "$(jaiph__runtime_api)" != "1" ]]; then
   echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2
   exit 1
 fi
+exec 7>&1
+export JAIPH_STDOUT_SAVED=1
 
 tools::security::scan_passes::impl() {
   set -eo pipefail

@@ -45,6 +45,8 @@ test("compiler golden: transpileFile emits stable workflow shell", () => {
       '  echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2',
       "  exit 1",
       "fi",
+      "exec 7>&1",
+      "export JAIPH_STDOUT_SAVED=1",
       "",
       "entry::ok::impl() {",
       "  set -eo pipefail",

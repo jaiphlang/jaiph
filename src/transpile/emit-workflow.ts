@@ -153,6 +153,8 @@ export function emitWorkflow(
   out.push('  echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2');
   out.push("  exit 1");
   out.push("fi");
+  out.push("exec 7>&1");
+  out.push("export JAIPH_STDOUT_SAVED=1");
   if (ast.metadata) {
     if (ast.metadata.agent?.defaultModel !== undefined) {
       const v = ast.metadata.agent.defaultModel.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
