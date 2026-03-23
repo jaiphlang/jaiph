@@ -296,8 +296,13 @@ jaiph::run_step() {
       JAIPH_LAST_PROMPT_FINAL=""
     fi
     export JAIPH_LAST_PROMPT_FINAL
+  elif [[ "${JAIPH_STDOUT_SAVED:-}" == "1" ]] && ! jaiph::is_test_mode && ! [[ /dev/fd/1 -ef /dev/fd/7 ]] && ! [[ /dev/fd/1 -ef /dev/fd/8 ]]; then
+    # Caller redirected stdout (> file, | pipe) — tee to both artifact and caller.
+    "$@" 2>"$err_tmp" | tee "$out_tmp"
+    status="${PIPESTATUS[0]}"
   else
-    ( "$@" >"$out_tmp" 2>"$err_tmp" )
+    # Capture only: save capture target as fd 8 so nested steps can detect it.
+    ( exec 1>"$out_tmp" 2>"$err_tmp"; exec 8>&1; "$@" )
     status=$?
   fi
   if [[ "$had_errexit" -eq 1 ]]; then

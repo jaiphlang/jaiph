@@ -35,6 +35,7 @@ TEST_SCRIPTS=(
   "e2e/tests/92_log_logerr.sh"
   "e2e/tests/94_parallel_shell_steps.sh"
   "e2e/tests/95_say_hello_failure_output.sh"
+  "e2e/tests/96_run_stdout_redirect.sh"
 )
 
 PASS_COUNT=0
