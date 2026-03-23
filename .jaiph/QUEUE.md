@@ -43,6 +43,37 @@ The first `##` task in the file is always the current task.
 - e2e tests cover all rows from the spec table (`shell`, `ensure rule`, `run workflow`, `function call`, `prompt`, `log`/`logerr`) and validate both value channel behavior and `.jaiph/runs` log artifacts for each.
 - Add a dedicated e2e for `ensure ... recover ...` value semantics: assignment returns the last successful rule `return` value, and the `recover` block receives the rule `return` value (not command stdout/output stream).
 
+## Non-TTY long tasks: periodic running ping line in gray (status heartbeat) <!-- dev-ready -->
+
+**Problem.** In non-TTY mode, long-running steps can appear stalled because there is no periodic status output between start and end lines.
+
+**Goal.** For long tasks in non-TTY mode, emit periodic heartbeat progress lines using the same label format as completion lines, while keeping the entire line gray.
+
+**Expected output pattern.**
+
+- Current:
+  - `▸ prompt "Classify this task" (task="## Simplification: redesign step...")`
+  - `✓ prompt prompt (91s)`
+- Target:
+  - `▸ prompt "Classify this task" (task="## Simplification: redesign step...")`
+  - `· prompt prompt (running 60s)`
+  - `✓ prompt prompt (91s)`
+
+**Formatting/behavior requirements.**
+
+- Heartbeat line uses bullet `·` and the same task label style as step-end lines (same naming convention as `✓ ...`).
+- Entire heartbeat line stays gray, including marker, label, and `(running Ns)` suffix.
+- Emission is periodic for long-running tasks only (avoid noisy output for short tasks).
+- Applies to non-TTY mode; TTY mode behavior remains unchanged.
+- Existing start/end semantics remain unchanged.
+
+**Acceptance criteria.**
+
+- During a long non-TTY step, at least one gray heartbeat line appears before completion.
+- Heartbeat line text follows `· <label> (running <seconds>s)`.
+- Label in heartbeat matches the step-end label format for that same step.
+- Final completion line still prints normally with current status symbol and elapsed timing behavior.
+
 ## Runtime: persist complete reporting event stream in `run_summary.jsonl` (reporting prerequisite, part 1/2) <!-- dev-ready -->
 
 **Problem.** `run_summary.jsonl` currently lacks key event types needed for a faithful reporting UI: `LOG`, `LOGERR`, inbox message flow, and non-terminal lifecycle events.
