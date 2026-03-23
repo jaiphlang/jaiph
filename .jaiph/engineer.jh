@@ -12,6 +12,7 @@ import "./git.jh" as git
 
 config {
   agent.backend = "cursor"
+  agent.default_model = "composer-2"
   agent.cursor_flags = "--force"
 }
 
