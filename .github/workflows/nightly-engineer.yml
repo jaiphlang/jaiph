@@ -43,6 +43,37 @@ jobs:
         shell: bash
         run: bash ./docs/install-from-local.sh
 
+      - name: Install Cursor agent CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://cursor.com/install -o /tmp/install-cursor-agent.sh
+          bash /tmp/install-cursor-agent.sh
+          if command -v cursor-agent >/dev/null 2>&1; then
+            echo "cursor-agent installed at $(command -v cursor-agent)"
+          elif command -v agent >/dev/null 2>&1; then
+            sudo ln -sf "$(command -v agent)" /usr/local/bin/cursor-agent
+            echo "Linked agent -> /usr/local/bin/cursor-agent"
+          elif command -v cursor >/dev/null 2>&1; then
+            sudo ln -sf "$(command -v cursor)" /usr/local/bin/cursor-agent
+            echo "Linked cursor -> /usr/local/bin/cursor-agent"
+          else
+            echo "cursor-agent installation failed: no cursor-agent/agent/cursor binary found" >&2
+            exit 1
+          fi
+          command -v cursor-agent
+
+      - name: Backend command preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${JAIPH_AGENT_BACKEND:-}" = "claude" ]; then
+            command -v claude
+          fi
+          if [ "${JAIPH_AGENT_BACKEND:-}" = "cursor" ] || [ -z "${JAIPH_AGENT_BACKEND:-}" ]; then
+            command -v cursor-agent
+          fi
+
       - name: Run engineer
         shell: bash
         run: |
