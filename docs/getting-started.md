@@ -147,6 +147,7 @@ Jaiph files (`.jh`) contain **rules**, **workflows**, **functions**, and optiona
 - `name = <step>` — Capture stdout from any step (`prompt`, `ensure`, `run`, or shell command).
 - `log "message"` / `logerr "message"` — Display a message in the progress tree (stdout / stderr).
 - `channel <- cmd` / `channel -> workflow` — Send and route messages between workflows. See [Inbox & Dispatch](inbox.md).
+- `cmd &` / `wait` — Background commands and synchronise with `wait` inside shell steps for in-step parallelism. See [Grammar](grammar.md).
 - `if [!] ensure ref; then ... fi` — Conditional based on rule result.
 - `if [!] run ref; then ... fi` — Conditional based on workflow exit code.
 

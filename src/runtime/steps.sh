@@ -186,7 +186,7 @@ jaiph::track_output_files() {
     if [[ -z "$file" ]]; then
       continue
     fi
-    if [[ -z "$JAIPH_PRECEDING_FILES" ]]; then
+    if [[ -z "${JAIPH_PRECEDING_FILES:-}" ]]; then
       JAIPH_PRECEDING_FILES="$file"
     else
       JAIPH_PRECEDING_FILES="${JAIPH_PRECEDING_FILES},${file}"

@@ -6,35 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Support parallel processes in workflow shell steps (`& ... wait`) <!-- dev-ready -->
-
-**Goal.** Allow users to run concurrent subprocesses inside workflow shell execution using standard Bash backgrounding (`prog1 &`, `prog2 &`, `wait`) while keeping Jaiph internals deterministic and race-safe.
-
-**Scope.**
-
-- Ensure generated/executed shell step wrappers preserve native Bash job control semantics for background jobs and `wait` exit codes.
-- Verify runtime behavior when multiple parallel subprocesses emit output concurrently to stdout/stderr and step artifacts.
-- Hardening for concurrent internal resource access:
-  - inbox/channels event files and message ordering assumptions
-  - `.jaiph/runs/...` artifact creation/writes (`*.out`, `*.err`, summaries, metadata)
-  - run-level status/event emission (`STEP_START`/`STEP_END`, PASS/FAIL) under interleaved outputs
-- Add clear failure semantics: non-zero from any awaited job must fail step/workflow per existing shell-step error model.
-- Document expected behavior and constraints (e.g., users must `wait` for all background jobs before step end if they need deterministic completion).
-
-**Acceptance criteria.**
-
-- A workflow step using:
-  - `prog1 &`
-  - `prog2 &`
-  - `wait`
-  executes reliably, and final step exit status reflects child process outcomes.
-- New/updated tests include both unit and e2e coverage for parallel subprocesses and concurrent writes.
-- Regression coverage proves no corruption/regression in inbox/channels handling and `.jaiph/runs` artifacts under concurrency.
-- Existing internals continue to behave correctly with interleaved output: event sequencing remains valid, summaries are complete, and final workflow status is accurate.
-- Docs updated with supported parallel pattern and caveats for safe usage.
-
----
-
 ## Feature Jaiph reporting server
 
 You can provide env JAIPH_REPORTING_URL, and it sends all events to the target url
