@@ -12,6 +12,7 @@
         "as",
         "config",
         "export",
+        "channel",
         "local",
         "rule",
         "workflow",
@@ -183,11 +184,27 @@
 
         // Definition names after rule / workflow / function
         if (
-            (firstValue === "rule" || firstValue === "workflow" || firstValue === "function") &&
+            (firstValue === "rule" || firstValue === "workflow" || firstValue === "function" || firstValue === "channel") &&
             significant[1] &&
             significant[1].token.type === "identifier"
         ) {
             annotated[significant[1].index].kind = "definition";
+        }
+
+        function consumeRef(startAt) {
+            if (!significant[startAt] || significant[startAt].token.type !== "identifier") {
+                return null;
+            }
+            let endAt = startAt;
+            if (
+                significant[startAt + 1] &&
+                significant[startAt + 1].token.type === "dot" &&
+                significant[startAt + 2] &&
+                significant[startAt + 2].token.type === "identifier"
+            ) {
+                endAt = startAt + 2;
+            }
+            return { startAt: startAt, endAt: endAt };
         }
 
         // Assignment: identifier = ... → variable and operator
@@ -272,29 +289,39 @@
             }
         }
 
-        // <channel> -> workflow, workflow2 (route declaration)
+        // <channel_ref> -> workflow, workflow2 (route declaration)
+        const routeLeftRef = consumeRef(0);
+        const routeArrowAt = routeLeftRef ? routeLeftRef.endAt + 1 : -1;
         if (
-            first.token.type === "identifier" &&
-            !STATEMENT_KEYWORDS.has(firstValue) &&
-            significant.length >= 3 &&
-            significant[1].token.type === "arrow"
+            routeLeftRef &&
+            significant[routeArrowAt] &&
+            significant[routeArrowAt].token.type === "arrow"
         ) {
-            annotated[first.index].kind = "identifier";
-            for (let j = 2; j < significant.length; j += 1) {
+            for (let j = routeLeftRef.startAt; j <= routeLeftRef.endAt; j += 1) {
+                if (significant[j].token.type === "identifier") {
+                    annotated[significant[j].index].kind = "identifier";
+                }
+            }
+            for (let j = routeArrowAt + 1; j < significant.length; j += 1) {
                 if (significant[j].token.type === "identifier") {
                     annotated[significant[j].index].kind = "identifier";
                 }
             }
         }
 
-        // <channel> <- command (send operator)
+        // <channel_ref> <- command (send operator)
+        const sendLeftRef = consumeRef(0);
+        const sendArrowAt = sendLeftRef ? sendLeftRef.endAt + 1 : -1;
         if (
-            first.token.type === "identifier" &&
-            !STATEMENT_KEYWORDS.has(firstValue) &&
-            significant.length >= 2 &&
-            significant[1].token.type === "send_arrow"
+            sendLeftRef &&
+            significant[sendArrowAt] &&
+            significant[sendArrowAt].token.type === "send_arrow"
         ) {
-            annotated[first.index].kind = "identifier";
+            for (let j = sendLeftRef.startAt; j <= sendLeftRef.endAt; j += 1) {
+                if (significant[j].token.type === "identifier") {
+                    annotated[significant[j].index].kind = "identifier";
+                }
+            }
         }
 
         // local name = value → definition for variable name

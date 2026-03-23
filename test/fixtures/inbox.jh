@@ -1,3 +1,7 @@
+channel findings
+channel summary
+channel final_summary
+
 workflow researcher {
   findings <- echo '## findings'
 }

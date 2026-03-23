@@ -50,7 +50,7 @@ Informal symbols used below:
 ```ebnf
 file            = { top_level } ;
 
-top_level       = config_block | import_stmt | env_decl | rule_decl | function_decl | workflow_decl ;
+top_level       = config_block | import_stmt | channel_decl | env_decl | rule_decl | function_decl | workflow_decl ;
 
 config_block    = "config" "{" { config_line } "}" ;
   (* Inside the block, blank lines and full-line # comments are allowed. *)
@@ -65,6 +65,9 @@ string_array    = "[" { array_element } "]" ;  (* opening "[" on same line as "=
 array_element   = string [ "," ] ;             (* trailing comma and inline # comments allowed *)
 
 import_stmt     = "import" string "as" IDENT ;
+
+channel_decl    = "channel" IDENT ;
+  (* Top-level declaration only; one channel per line. *)
 
 env_decl        = "local" IDENT "=" env_value ;
 env_value       = quoted_or_multiline_string | single_quoted_string | bare_value ;
@@ -99,13 +102,13 @@ workflow_step   = ensure_stmt
                 | shell_stmt
                 | comment_line ;
 
-send_stmt       = IDENT "<-" [ shell_command ] ;
+send_stmt       = REF "<-" [ shell_command ] ;
   (* Writes content to inbox channel. Standalone "channel <-" forwards $1. *)
   (* The channel identifier is always on the left side of the "<-" operator. *)
   (* Detected before shell fallback; only matches when braceDepth == 0 and "<-" is outside quotes. *)
   (* "name = channel <- cmd" is E_PARSE: capture and send cannot be combined. *)
 
-route_decl      = IDENT "->" REF { "," REF } ;
+route_decl      = REF "->" REF { "," REF } ;
   (* Static routing declaration; stored in WorkflowDef.routes, not steps. *)
 
 log_stmt        = "log" double_quoted_string ;
@@ -193,10 +196,11 @@ shell_stmt      = command_line ;
    - **Bash-consistent semantics:** Assignment capture does **not** change exit behavior: if the command fails, the step fails and the workflow exits (with `set -e`). To capture output even on failure, the workflow author must explicitly short-circuit (e.g. append `|| true` to the command). Only **stdout** is captured; **stderr** is not included unless the command redirects it (e.g. `name = cmd 2>&1`).
 9. **log:** `log "message"` displays a message in the progress tree at the current indentation depth. The argument must be a double-quoted string (same quoting rules as `prompt`). Shell variable interpolation (`$var`, `${var}`) works at runtime; at compile time (`jaiph tree` / `--dry-run`), variables are shown unexpanded. `log` is not a step — it has no pending/running/done states, no timing, and no spinner. It transpiles to `jaiph::log "message"`, which emits a `LOG` event on fd 3 and echoes to stdout. Parse error if `log` is used without a quoted string.
 10. **logerr:** `logerr "message"` is identical to `log` except the message is written to stderr instead of stdout. It transpiles to `jaiph::logerr "message"`, which emits a `LOGERR` event on fd 3 and echoes to stderr. In the progress tree, `logerr` lines are displayed with a `!` symbol in red (instead of the dim `ℹ` used by `log`). Parse error if `logerr` is used without a quoted string.
-11. **Send operator (`<-`):** `channel <- echo "data"` writes the command's stdout to the next inbox slot and signals the runtime to dispatch. The channel identifier is always on the left side of the `<-` operator. The `<-` operator is detected before the shell fallback; it only matches when `braceDepth == 0` and `<-` appears outside of quoted strings. Standalone `channel <-` (no command after the operator) forwards `$1`. Combining capture and send (`name = channel <- cmd`) is a parse error (`E_PARSE: capture and send cannot be combined; use separate steps`). The send step transpiles to `jaiph::send 'channel' "$(cmd)"` (or `jaiph::send 'channel' "$1"` for standalone). See [Inbox & Dispatch](inbox.md).
-12. **Route declaration:** `channel -> workflow` registers a static routing rule: when a message arrives on `channel`, the runtime calls `workflow` with the message content as `$1`. Multiple targets are supported: `channel -> wf1, wf2` dispatches sequentially in declaration order; each target receives the same message. Route declarations are stored in `WorkflowDef.routes`, not in `steps`; they are not executable statements. The transpiler emits `jaiph::register_route` calls at the top of the orchestrator function, and `jaiph::drain_queue` at the end. See [Inbox & Dispatch](inbox.md).
-13. **Export:** Rule and workflow declarations may be prefixed with `export` to mark them as part of the module’s public interface. The implementation does not restrict references to exported symbols: any rule or workflow in an imported module can be referenced.
-14. **Top-level local (env declarations):** `local name = value` declares a module-scoped variable. The value may be a double-quoted string (may span multiple lines; stored raw without escape processing), a single-quoted string (single-line only), or a bare value (rest of line). The variable is transpiled to a prefixed bash variable using `__` as separator (e.g. `local role` in module `entry` becomes `entry__role="..."`). Inside each rule, function, and workflow body, a `local` shim is emitted so that `$role` resolves to the prefixed variable (`local role="$entry__role"`). Variable names participate in the unified namespace — they cannot collide with rule, workflow, or function names. Variables are module-scoped only and are not exportable; cross-module access is not supported.
+11. **Channel declaration (`channel`):** Top-level declaration (`channel findings`), one per line. Channels can be referenced locally (`findings`) or via import alias (`shared.findings`).
+12. **Send operator (`<-`):** `channel <- echo "data"` writes the command's stdout to the next inbox slot and signals the runtime to dispatch. The channel reference is always on the left side of the `<-` operator (`name` or `alias.name`). The `<-` operator is detected before the shell fallback; it only matches when `braceDepth == 0` and `<-` appears outside of quoted strings. Standalone `channel <-` (no command after the operator) forwards `$1`. Combining capture and send (`name = channel <- cmd`) is a parse error (`E_PARSE: capture and send cannot be combined; use separate steps`). The send step transpiles to `jaiph::send 'channel' "$(cmd)"` (or `jaiph::send 'channel' "$1"` for standalone). See [Inbox & Dispatch](inbox.md).
+13. **Route declaration:** `channel -> workflow` registers a static routing rule: when a message arrives on `channel`, the runtime calls `workflow` with the message content as `$1`. The channel may be `name` or `alias.name`. Multiple targets are supported: `channel -> wf1, wf2` dispatches sequentially in declaration order; each target receives the same message. Route declarations are stored in `WorkflowDef.routes`, not in `steps`; they are not executable statements. The transpiler emits `jaiph::register_route` calls at the top of the orchestrator function, and `jaiph::drain_queue` at the end. See [Inbox & Dispatch](inbox.md).
+14. **Export:** Rule and workflow declarations may be prefixed with `export` to mark them as part of the module’s public interface. The implementation does not restrict references to exported symbols: any rule or workflow in an imported module can be referenced.
+15. **Top-level local (env declarations):** `local name = value` declares a module-scoped variable. The value may be a double-quoted string (may span multiple lines; stored raw without escape processing), a single-quoted string (single-line only), or a bare value (rest of line). The variable is transpiled to a prefixed bash variable using `__` as separator (e.g. `local role` in module `entry` becomes `entry__role="..."`). Inside each rule, function, and workflow body, a `local` shim is emitted so that `$role` resolves to the prefixed variable (`local role="$entry__role"`). Variable names participate in the unified namespace — they cannot collide with rule, workflow, or function names. Variables are module-scoped only and are not exportable; cross-module access is not supported.
 
 ## Validation Rules
 
@@ -219,7 +223,7 @@ Rules:
    - `run` must target a workflow. Using `run` on a rule yields `E_VALIDATE` ("rule X must be called with ensure"). Using `run` on a function yields `E_VALIDATE` ("function X cannot be called with run").
    - Functions are called directly by name in shell context; they cannot be used with `ensure` or `run`.
    - These checks apply to both local and imported references.
-7. **Send and route validation:** Channel names must be valid identifiers. Workflow references in route declarations must exist (same resolution as `run`). `name = channel <- cmd` (capture combined with send) yields `E_PARSE`. Send to an unregistered channel at runtime is a silent drop (no error). Max dispatch depth of 100; exceeding it emits `E_DISPATCH_DEPTH`.
+7. **Send and route validation:** Channel references must be valid refs (`name` or `alias.name`) and must resolve to a declared channel in the current module or an imported module. Undefined channels fail with `E_VALIDATE: Channel "<name>" is not defined`. Workflow references in route declarations must exist (same resolution as `run`). `name = channel <- cmd` (capture combined with send) yields `E_PARSE`. Max dispatch depth of 100; exceeding it emits `E_DISPATCH_DEPTH`.
 8. Local `ensure foo` requires a local rule `foo`. Imported `ensure alias.foo` requires a rule `foo` in the module bound to `alias` (export is not required).
 9. Local `run bar` requires a local workflow `bar`. Imported `run alias.bar` requires a workflow `bar` in the module bound to `alias` (export is not required).
 

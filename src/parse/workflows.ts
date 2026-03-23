@@ -28,7 +28,9 @@ function matchSendOperator(line: string): { command: string; channel: string } |
       const before = line.slice(0, i).trimEnd();
       const after = line.slice(i + 2).trimStart();
       // Channel must be a valid identifier on the left side
-      const channelMatch = before.match(/^([A-Za-z_][A-Za-z0-9_]*)$/);
+      const channelMatch = before.match(
+        /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)$/,
+      );
       if (channelMatch) {
         return { command: after, channel: channelMatch[1] };
       }
@@ -1012,7 +1014,7 @@ export function parseWorkflowBlock(
 
     // `<channel> -> <workflow>[, <workflow>...]` route declaration.
     const routeMatch = inner.match(
-      /^([A-Za-z_][A-Za-z0-9_]*)\s+->\s+(.+)$/,
+      /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s+->\s+(.+)$/,
     );
     if (routeMatch) {
       const channel = routeMatch[1];

@@ -224,9 +224,12 @@ running ensure_ci_passes.jh
 
                 <div class="code-tab-panel" data-panel="inbox-pipeline-jh">
                     <p>The <strong>inbox</strong> system lets workflows communicate through named channels.
-                        A workflow sends a message with <code>&lt;-</code> and a route declaration
+                        Declare channels at top level, then send with <code>&lt;-</code> and route with
                         (<code>-&gt;</code>) dispatches it to one or more receivers as <code>$1</code>.</p>
                     <pre><code class="language-jaiph">#!/usr/bin/env jaiph
+
+channel findings
+channel report
 
 workflow scanner {
   findings <- echo "Found 3 issues in auth module"
@@ -288,7 +291,9 @@ Jaiph: Running agent_inbox.jh
                     shell commands, pipelines, and expressions to run unmodified. Directly include bash logic inline and
                     mix with Jaiph constructs for seamless agent and shell integration.</p>
                 <p><strong>Agent inbox pattern (channels).</strong> Use inbox channels as a way to pass messages between
-                    workflows with <code>channel &lt;- ...</code> and <code>channel -&gt; workflow</code> syntax.
+                    workflows. Declare channels once at top level with <code>channel &lt;name&gt;</code>, then use
+                    <code>channel_ref &lt;- ...</code> and <code>channel_ref -&gt; workflow</code>
+                    (<code>channel_ref</code> can be local or imported, e.g. <code>shared.findings</code>).
                     See <a href="inbox">Inbox &amp; Dispatch</a>.
                 </p>
                 <p><strong>Ensure recover pattern.</strong> <code>ensure ... recover ...</code> gives bounded
@@ -370,8 +375,11 @@ Jaiph: Running agent_inbox.jh
                     <dd>Emit informational or error output to the run tree while keeping workflow execution explicit and
                         auditable.</dd>
 
-                    <dt><code>channel &lt;- ...</code> · <code>channel -&gt; workflow</code></dt>
-                    <dd>Send and route messages between workflows using inbox channels. See <a href="inbox">Inbox &amp;
+                    <dt><code>channel &lt;name&gt;</code> · <code>channel_ref &lt;- ...</code> · <code>channel_ref -&gt; workflow</code></dt>
+                    <dd>Declare channels at top level and then send/route messages between workflows.
+                        <code>channel_ref</code> supports local and imported refs (for example
+                        <code>findings</code>, <code>shared.findings</code>). Undefined refs fail validation.
+                        See <a href="inbox">Inbox &amp;
                             Dispatch</a>.</dd>
                 </dl>
 

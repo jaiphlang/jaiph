@@ -1,5 +1,8 @@
 #!/usr/bin/env jaiph
 
+channel findings
+channel report
+
 workflow scanner {
   findings <- echo "Found 3 issues in auth module"
 }

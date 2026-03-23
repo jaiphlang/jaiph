@@ -16,6 +16,8 @@ reacts to it via a **route declaration** (`->`). The runtime handles
 dispatch — no file watchers, no polling, no external message brokers.
 
 ```jh
+channel findings
+
 workflow researcher {
   findings <- echo '## analysis results'
 }
@@ -44,15 +46,37 @@ receives the message content as `$1`.
 
 ## Syntax
 
-### Send operator: `<channel> <- <command>`
+### Channel declarations: `channel <name>`
 
-The channel identifier is always on the left side of the `<-` operator.
-Channel names must be valid identifiers (`[A-Za-z_][A-Za-z0-9_]*`).
+Declare channels at top level, one per line:
+
+```jh
+channel findings
+channel report
+
+workflow default { ... }
+```
+
+Every channel used by `send` (`<-`) or route declarations (`->`) must be
+defined in the current module or imported from another module (e.g.
+`shared.findings`). Undefined channels fail validation with:
+
+- `Channel "<name>" is not defined`
+
+### Send operator: `<channel_ref> <- <command>`
+
+The channel reference is always on the left side of the `<-` operator.
+Valid forms:
+
+- local channel: `findings`
+- imported channel: `shared.findings`
 
 The send operator captures the command's stdout, writes it to the next
 inbox slot, and signals the runtime to dispatch.
 
 ```jh
+channel findings
+
 workflow researcher {
   findings <- echo '## findings'
 }
@@ -61,6 +85,8 @@ workflow researcher {
 If no command follows `<-`, the workflow's `$1` argument is forwarded:
 
 ```jh
+channel findings
+
 workflow forwarder {
   findings <-
 }
@@ -77,12 +103,15 @@ shell commands.
 | `ch <- echo "foo"`          | `jaiph::send 'ch' "$(echo "foo")"`          |
 | `ch <-`                     | `jaiph::send 'ch' "$1"`                     |
 
-### Route declaration: `<channel> -> <workflow>`
+### Route declaration: `<channel_ref> -> <workflow>`
 
-Tells the runtime: when a message arrives on `<channel>`, call `<workflow>`
+Tells the runtime: when a message arrives on `<channel_ref>`, call `<workflow>`
 with the message content as `$1`.
 
 ```jh
+channel findings
+channel summary
+
 workflow default {
   run researcher
   findings -> analyst
@@ -165,8 +194,8 @@ parent process.
 
 ## Error semantics
 
-- **Send to unregistered channel:** silent drop. The message is still
-  written to the inbox directory for audit, but no workflow is dispatched.
+- **Undefined channel reference:** validation error
+  `Channel "<name>" is not defined`.
 - **Dispatched workflow exits non-zero:** dispatch loop halts immediately
   (fail-fast), consistent with `set -e`.
 - **Circular sends:** allowed — the queue grows naturally. A max dispatch

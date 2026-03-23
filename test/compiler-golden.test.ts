@@ -679,6 +679,100 @@ test("parser: send operator parses channel <- echo", () => {
   assert.equal((step as { type: "send"; channel: string }).channel, "findings");
 });
 
+test("parser: top-level channel declarations parse and are stored", () => {
+  const source = [
+    "channel findings",
+    "channel report",
+    "workflow analyst {",
+    "  echo ok",
+    "}",
+    "workflow default {",
+    "  findings <- echo hi",
+    "  report -> analyst",
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  assert.deepStrictEqual(mod.channels.map((c) => c.name), ["findings", "report"]);
+  const defaultWf = mod.workflows.find((w) => w.name === "default")!;
+  assert.equal(defaultWf.steps.length, 1);
+  assert.equal(defaultWf.steps[0].type, "send");
+  assert.ok(defaultWf.routes);
+  assert.equal(defaultWf.routes![0].channel, "report");
+});
+
+test("parser: channel declaration must be single per line", () => {
+  const source = [
+    "channel findings, report",
+    "workflow default {",
+    "  findings <- echo hi",
+    "}",
+  ].join("\n");
+  assert.throws(
+    () => parsejaiph(source, "/fake/entry.jh"),
+    /invalid channel declaration; expected exactly: channel <name>/,
+  );
+});
+
+test("validator: unknown local channel fails with required message", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-validate-channel-local-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        "workflow analyst {",
+        "  echo ok",
+        "}",
+        "workflow default {",
+        "  typo <- echo x",
+        "  typo -> analyst",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => transpileFile(input, root),
+      /E_VALIDATE Channel "typo" is not defined/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("validator: missing channel import fails with required message", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-validate-channel-import-"));
+  try {
+    const shared = join(root, "shared.jh");
+    writeFileSync(
+      shared,
+      [
+        "channel findings",
+        "workflow analyst {",
+        "  echo ok",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        'import "shared.jh" as shared',
+        "workflow default {",
+        "  shared.typo <- echo x",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => transpileFile(input, root),
+      /E_VALIDATE Channel "shared\.typo" is not defined/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("parser: standalone channel <- forwards $1", () => {
   const source = [
     "workflow default {",
@@ -762,6 +856,7 @@ test("compiler golden: send operator transpiles to jaiph::send", () => {
     writeFileSync(
       input,
       [
+        "channel channel",
         "workflow default {",
         "  channel <- echo 'foo'",
         "}",
@@ -782,6 +877,7 @@ test("compiler golden: standalone send transpiles to jaiph::send with $1", () =>
     writeFileSync(
       input,
       [
+        "channel channel",
         "workflow default {",
         "  channel <-",
         "}",
@@ -795,6 +891,40 @@ test("compiler golden: standalone send transpiles to jaiph::send with $1", () =>
   }
 });
 
+test("compiler golden: imported channel ref transpiles as channel key", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-send-imported-channel-"));
+  try {
+    const shared = join(root, "shared.jh");
+    writeFileSync(
+      shared,
+      [
+        "channel findings",
+        "workflow analyst {",
+        "  echo ok",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        'import "shared.jh" as shared',
+        "workflow default {",
+        "  shared.findings <- echo 'foo'",
+        "  shared.findings -> shared.analyst",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const actual = normalize(transpileFile(input, root));
+    assert.match(actual, /jaiph::send 'shared\.findings' "\$\(echo 'foo'\)"/);
+    assert.match(actual, /jaiph::register_route 'shared\.findings' 'shared::analyst'/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("compiler golden: route emits register_route and drain_queue", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-golden-route-"));
   try {
@@ -802,6 +932,7 @@ test("compiler golden: route emits register_route and drain_queue", () => {
     writeFileSync(
       input,
       [
+        "channel findings",
         "workflow analyst {",
         "  echo ok",
         "}",
@@ -827,6 +958,7 @@ test("compiler golden: multi-target route emits multiple funcs in register_route
     writeFileSync(
       input,
       [
+        "channel findings",
         "workflow a {",
         "  echo ok",
         "}",
@@ -853,6 +985,10 @@ test("compiler golden: inbox.jh fixture compiles successfully", () => {
     writeFileSync(
       input,
       [
+        "channel findings",
+        "channel summary",
+        "channel final_summary",
+        "",
         "workflow researcher {",
         "  findings <- echo '## findings'",
         "}",

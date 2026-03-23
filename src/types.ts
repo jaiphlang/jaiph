@@ -32,6 +32,11 @@ export interface WorkflowRouteDef {
   loc: SourceLoc;
 }
 
+export interface ChannelDef {
+  name: string;
+  loc: SourceLoc;
+}
+
 export interface WorkflowDef {
   name: string;
   comments: string[];
@@ -184,6 +189,7 @@ export interface jaiphModule {
   /** Optional in-file workflow metadata (agent model, command, run options). */
   metadata?: WorkflowMetadata;
   imports: ImportDef[];
+  channels: ChannelDef[];
   exports: string[];
   rules: RuleDef[];
   functions: FunctionDef[];

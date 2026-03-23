@@ -15,6 +15,8 @@ e2e::section "Basic send + route"
 
 # Given
 e2e::file "basic_inbox.jh" <<'EOF'
+channel greetings
+
 workflow sender {
   greetings <- echo "hello from sender"
 }
@@ -40,6 +42,8 @@ e2e::section "Multi-target route"
 
 # Given
 e2e::file "multi_target.jh" <<'EOF'
+channel results
+
 workflow producer {
   results <- echo "data-payload"
 }
@@ -67,10 +71,12 @@ e2e::assert_contains "$(cat "${TEST_DIR}/consumer_a.txt")" "A got: data-payload"
 e2e::assert_file_exists "${TEST_DIR}/consumer_b.txt" "consumer_b was dispatched"
 e2e::assert_contains "$(cat "${TEST_DIR}/consumer_b.txt")" "B got: data-payload" "consumer_b receives dispatched message"
 
-e2e::section "Silent drop on unregistered channel"
+e2e::section "Undefined channel fails validation"
 
 # Given
-e2e::file "unrouted_drop.jh" <<'EOF'
+e2e::file "undefined_channel.jh" <<'EOF'
+channel some_channel
+
 workflow sender {
   unknown_channel <- echo "dropped"
 }
@@ -87,26 +93,25 @@ EOF
 
 # When
 drop_stderr="$(mktemp)"
-e2e::run "unrouted_drop.jh" >/dev/null 2>"${drop_stderr}" || true
+set +e
+e2e::run "undefined_channel.jh" >/dev/null 2>"${drop_stderr}"
 drop_exit=$?
+set -e
 drop_err="$(cat "${drop_stderr}")"
 rm -f "${drop_stderr}"
 
 # Then
-if [[ ${drop_exit} -ne 0 ]]; then
-  printf "Expected exit 0 but got %d\nstderr: %s\n" "${drop_exit}" "${drop_err}" >&2
-  e2e::fail "unrouted channel send should exit 0"
+if [[ ${drop_exit} -eq 0 ]]; then
+  e2e::fail "undefined channel should fail validation"
 fi
-e2e::pass "unrouted channel send exits 0 (silent drop)"
-if [[ -f "${TEST_DIR}/dummy.txt" ]]; then
-  e2e::fail "dummy workflow should not have been called"
-fi
-e2e::pass "unrouted channel does not dispatch to other routes"
+e2e::assert_contains "${drop_err}" 'Channel "unknown_channel" is not defined' "undefined channel error is explicit"
 
 e2e::section "Inbox file written"
 
 # Given
 e2e::file "inbox_file.jh" <<'EOF'
+channel audit
+
 workflow writer {
   audit <- echo "inbox-content-check"
 }
@@ -136,6 +141,9 @@ e2e::section "Dispatched step CLI output shows channel via standard param displa
 
 # Given
 e2e::file "display_inbox.jh" <<'EOF'
+channel findings
+channel report
+
 workflow scanner {
   findings <- echo "Found 3 issues in auth module"
 }

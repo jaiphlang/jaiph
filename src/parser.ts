@@ -1,5 +1,6 @@
 import { jaiphModule } from "./types";
 import { fail } from "./parse/core";
+import { parseChannelLine } from "./parse/channels";
 import { parseEnvDecl } from "./parse/env";
 import { parseImportLine } from "./parse/imports";
 import { parseConfigBlock } from "./parse/metadata";
@@ -10,7 +11,7 @@ import { parseTestBlock } from "./parse/tests";
 
 export function parsejaiph(source: string, filePath: string): jaiphModule {
   const lines = source.split(/\r?\n/);
-  const mod: jaiphModule = { filePath, imports: [], exports: [], rules: [], functions: [], workflows: [] };
+  const mod: jaiphModule = { filePath, imports: [], channels: [], exports: [], rules: [], functions: [], workflows: [] };
   let i = 0;
   let pendingTopLevelComments: string[] = [];
 
@@ -48,6 +49,12 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
     if (line.startsWith("import ")) {
       pendingTopLevelComments = [];
       mod.imports.push(parseImportLine(filePath, line, raw, lineNo));
+      continue;
+    }
+
+    if (line.startsWith("channel ")) {
+      pendingTopLevelComments = [];
+      mod.channels.push(parseChannelLine(filePath, line, raw, lineNo));
       continue;
     }
 
@@ -108,6 +115,18 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
 
   // Unified namespace: rules, workflows, and functions share a single name space.
   const seen = new Map<string, string>();
+  for (const ch of mod.channels) {
+    const prev = seen.get(ch.name);
+    if (prev) {
+      fail(
+        filePath,
+        `duplicate name "${ch.name}" — channels, rules, workflows, and functions share a single namespace (already declared as ${prev})`,
+        ch.loc.line,
+        ch.loc.col,
+      );
+    }
+    seen.set(ch.name, "channel");
+  }
   for (const r of mod.rules) {
     const prev = seen.get(r.name);
     if (prev) {

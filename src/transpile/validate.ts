@@ -17,6 +17,7 @@ function lookupKind(mod: jaiphModule, name: string): "rule" | "workflow" | "func
 }
 
 export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void {
+  const localChannels = new Set(ast.channels.map((c) => c.name));
   const localRules = new Set(ast.rules.map((r) => r.name));
   const localWorkflows = new Set(ast.workflows.map((w) => w.name));
   const localFunctions = new Set(ast.functions.map((f) => f.name));
@@ -221,6 +222,56 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
     }
   };
 
+  const validateChannelRef = (
+    channel: string,
+    loc: { line: number; col: number },
+  ): void => {
+    const parts = channel.split(".");
+    if (parts.length === 1) {
+      if (!localChannels.has(channel)) {
+        throw jaiphError(
+          ast.filePath,
+          loc.line,
+          loc.col,
+          "E_VALIDATE",
+          `Channel "${channel}" is not defined`,
+        );
+      }
+      return;
+    }
+    if (parts.length !== 2) {
+      throw jaiphError(
+        ast.filePath,
+        loc.line,
+        loc.col,
+        "E_VALIDATE",
+        `Channel "${channel}" is not defined`,
+      );
+    }
+    const [alias, importedChannel] = parts;
+    const importedFile = importsByAlias.get(alias);
+    if (!importedFile) {
+      throw jaiphError(
+        ast.filePath,
+        loc.line,
+        loc.col,
+        "E_VALIDATE",
+        `Channel "${channel}" is not defined`,
+      );
+    }
+    const importedAst = importedAstCache.get(importedFile)!;
+    const importedChannels = new Set(importedAst.channels.map((c) => c.name));
+    if (!importedChannels.has(importedChannel)) {
+      throw jaiphError(
+        ast.filePath,
+        loc.line,
+        loc.col,
+        "E_VALIDATE",
+        `Channel "${channel}" is not defined`,
+      );
+    }
+  };
+
   for (const workflow of ast.workflows) {
     const validateStep = (s: WorkflowStepDef): void => {
       if (s.type === "ensure") {
@@ -265,6 +316,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
     // Validate route declarations.
     if (workflow.routes) {
       for (const route of workflow.routes) {
+        validateChannelRef(route.channel, route.loc);
         for (const wfRef of route.workflows) {
           validateWorkflowRef(wfRef);
         }
@@ -307,6 +359,8 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         }
       } else if (step.type === "if_not_ensure_then_shell") {
         validateRuleRef(step.ensureRef);
+      } else if (step.type === "send") {
+        validateChannelRef(step.channel, step.loc);
       }
     }
   }
