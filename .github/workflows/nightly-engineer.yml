@@ -84,7 +84,7 @@ jobs:
           if [ "${engineer_type}" = "auto" ]; then
             ./.jaiph/engineer.jh
           else
-            ./.jaiph/engineer.jh "${engineer_type}"
+            ./.jaiph/engineer.jh -- "${engineer_type}"
           fi
 
       - name: Create worktree patch artifact
@@ -155,60 +155,37 @@ jobs:
             echo "commit_message=${commit_message}"
           } >> "${GITHUB_OUTPUT}"
 
-      - name: Create Pull Request to nightly (PAT)
-        id: create_pr_pat
-        if: success() && env.JAIPH_PR_TOKEN != ''
-        continue-on-error: true
-        uses: peter-evans/create-pull-request@v6
-        with:
-          token: ${{ secrets.JAIPH_PR_TOKEN }}
-          base: nightly
-          branch: automation/nightly-engineer-${{ github.run_id }}
-          title: ${{ steps.metadata.outputs.pr_title }}
-          commit-message: ${{ steps.metadata.outputs.commit_message }}
-          body: |
-            Automated engineer run from workflow dispatch.
-
-            - Base branch: `nightly`
-            - Engineer type: `${{ inputs.engineer_type }}`
-          delete-branch: true
-
-      - name: Create Pull Request to nightly (GITHUB_TOKEN)
-        id: create_pr_default
-        if: success() && (env.JAIPH_PR_TOKEN == '' || steps.create_pr_pat.outcome == 'failure')
-        continue-on-error: true
-        uses: peter-evans/create-pull-request@v6
-        with:
-          token: ${{ github.token }}
-          base: nightly
-          branch: automation/nightly-engineer-${{ github.run_id }}
-          title: ${{ steps.metadata.outputs.pr_title }}
-          commit-message: ${{ steps.metadata.outputs.commit_message }}
-          body: |
-            Automated engineer run from workflow dispatch.
-
-            - Base branch: `nightly`
-            - Engineer type: `${{ inputs.engineer_type }}`
-          delete-branch: true
-
-      - name: Fail when PR creation did not succeed
-        if: success() && steps.create_pr_pat.outcome != 'success' && steps.create_pr_default.outcome != 'success'
+      - name: Push branch and create Pull Request (PAT)
+        if: success()
         shell: bash
         run: |
-          echo "PR creation failed with all available tokens." >&2
-          echo "PAT outcome: ${{
-            steps.create_pr_pat.outcome
-          }}" >&2
-          echo "GITHUB_TOKEN outcome: ${{
-            steps.create_pr_default.outcome
-          }}" >&2
-          echo "Fix permissions and rerun. Artifacts contain .jaiph/runs and worktree patch." >&2
-          exit 1
+          set -euo pipefail
 
-      - name: PR creation fallback notice
-        if: success() && steps.create_pr_pat.outcome == 'failure' && steps.create_pr_default.outcome == 'failure'
-        shell: bash
-        run: |
-          echo "PR creation failed with both JAIPH_PR_TOKEN and GITHUB_TOKEN."
-          echo "Set repo Actions setting 'Allow GitHub Actions to create and approve pull requests'"
-          echo "or add secret JAIPH_PR_TOKEN (PAT with repo scope)."
+          if [ -z "${JAIPH_PR_TOKEN:-}" ]; then
+            echo "JAIPH_PR_TOKEN is required for PR creation." >&2
+            exit 1
+          fi
+
+          export GH_TOKEN="${JAIPH_PR_TOKEN}"
+
+          branch_name="automation/nightly-engineer-${GITHUB_RUN_ID}"
+          git checkout -b "${branch_name}" nightly
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit. Skipping PR creation."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "${{ steps.metadata.outputs.commit_message }}"
+          git push --set-upstream "https://x-access-token:${JAIPH_PR_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "${branch_name}"
+
+          gh pr create --title "${{ steps.metadata.outputs.pr_title }}" --body "$(cat <<'EOF'
+          Automated engineer run from workflow dispatch.
+
+          - Base branch: `nightly`
+          - Engineer type: `${{ inputs.engineer_type }}`
+          EOF
+          )" --head "${branch_name}" --base nightly
