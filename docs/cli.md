@@ -65,10 +65,10 @@ Compile and run a Jaiph workflow file.
 `jaiph run` requires a `workflow default` entrypoint.
 
 ```bash
-jaiph run [--target <dir>] <file.jh|file.jph> [args...]
+jaiph run [--target <dir>] <file.jh|file.jph> [--] [args...]
 ```
 
-Only the specified file and its transitive imports are compiled. Parse errors in sibling `.jh` files do not affect the run.
+Only the specified file and its transitive imports are compiled. Parse errors in sibling `.jh` files do not affect the run. Use `--target` to keep the compiled shell script in a specific directory (useful for debugging the transpiler output); without it, the compiled script is written to a temp directory and cleaned up after the run. Use `--` to separate Jaiph flags from workflow arguments (e.g. `jaiph run file.jh -- --verbose`).
 
 Examples:
 
@@ -237,6 +237,7 @@ Imports resolve for both extensions: `import "foo" as x` finds `foo.jh` or `foo.
 - `JAIPH_SOURCE_FILE` — set automatically by the CLI to the basename of the input file (e.g. `say_hello.jh`). Used by the runtime to name run directories. You should not need to set this manually.
 - `JAIPH_DEBUG` — set to `true` to enable bash `set -x` during run.
 - `JAIPH_ENSURE_MAX_RETRIES` — max retries for `ensure ... recover` steps (default: 10). When exceeded, the workflow exits with status 1.
+- `JAIPH_INBOX_PARALLEL` — set to `true` to enable parallel dispatch of inbox route targets (overrides in-file `run.inbox_parallel`). See [Inbox](inbox.md).
 - `JAIPH_DOCKER_ENABLED` — set to `true` to enable Docker sandbox (overrides in-file `runtime.docker_enabled`).
 - `JAIPH_DOCKER_IMAGE` — Docker image for sandbox (overrides in-file `runtime.docker_image`).
 - `JAIPH_DOCKER_NETWORK` — Docker network mode (overrides in-file `runtime.docker_network`).

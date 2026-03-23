@@ -100,10 +100,10 @@ shell commands.
 
 **Transpilation:**
 
-| Jaiph                        | Bash                                        |
-|------------------------------|---------------------------------------------|
-| `ch <- echo "foo"`          | `jaiph::send 'ch' "$(echo "foo")"`          |
-| `ch <-`                     | `jaiph::send 'ch' "$1"`                     |
+| Jaiph                        | Bash (inside workflow `w`)                         |
+|------------------------------|-----------------------------------------------------|
+| `ch <- echo "foo"`          | `jaiph::send 'ch' "$(echo "foo")" 'w'`             |
+| `ch <-`                     | `jaiph::send 'ch' "$1" 'w'`                        |
 
 ### Route declaration: `<channel_ref> -> <workflow>`
 
@@ -188,8 +188,9 @@ Routes are stored as a newline-delimited list (`channel<TAB>targets`) instead
 of bash associative arrays, avoiding known bugs in bash 3.2 where reading a
 non-existent key can return the last inserted value.
 
-The dispatch queue (`inbox/.queue`) uses `channel:NNN` entries (e.g.
-`findings:001`). The sequence counter (`inbox/.seq`) is also file-backed.
+The dispatch queue (`inbox/.queue`) uses `channel:NNN:sender` entries
+(e.g. `findings:001:researcher`). The sequence counter (`inbox/.seq`)
+is also file-backed.
 Both are files rather than shell variables so that increments and enqueues
 performed inside subshells (e.g. `run_step` pipelines) survive back into the
 parent process.

@@ -57,7 +57,7 @@ Jaiph has four test layers. Each layer catches a different class of bug. Use the
 |-------|----------|-----------------|-------------|
 | **Unit tests** | `test/*.test.ts` | Bugs in pure functions (event parsing, param formatting, path resolution, config merging) | The function is self-contained, takes input and returns output, no I/O |
 | **Compiler acceptance tests** | `test/acceptance/*.test.ts` | Parser/transpiler edge cases — malformed input, error messages, boundary conditions | You need to assert on a specific error code/message or a parser branch that doesn't map to a full workflow |
-| **Golden output tests** | `test/fixtures/` + `test/expected/` | Compiler regressions — verifies that a `.jh` file produces an exact `.sh` output | You changed the emitter and need to prove the bash output is identical (or intentionally different) |
+| **Golden output tests** | `test/compiler-golden.test.ts`, `test/fixtures/`, `test/expected/` | Compiler regressions — verifies that a `.jh` file produces an exact `.sh` output | You changed the emitter and need to prove the bash output is identical (or intentionally different) |
 | **E2E tests** | `e2e/tests/*.sh` | Runtime behavior — does the built workflow actually execute correctly end-to-end? | The behavior involves the CLI, bash runtime, process lifecycle, or file artifacts |
 
 ### Key principles
@@ -81,8 +81,24 @@ Unit tests in `test/*.test.ts` are organized by source module. Each test file ma
 | `emit-steps.test.ts` | `src/transpile/emit-steps.ts` | Step emission helpers: param key extraction, shell local/export normalization, ref resolution, symbol transpilation |
 | `display.test.ts` | `src/cli/run/display.ts` | CLI display formatting: `colorize` (ANSI/NO_COLOR), `formatCompletedLine`, `formatStartLine` |
 | `resolve-env.test.ts` | `src/cli/run/env.ts` | Runtime environment resolution: workspace, config defaults, env precedence, locked keys, transient cleanup |
+| `errors.test.ts` | `src/cli/shared/errors.ts` | Error summarization: `summarizeError`, `resolveFailureDetails`, `hasFatalRuntimeStderr`, run metadata extraction |
+| `events.test.ts` | `src/cli/run/events.ts` | Event parsing: `parseLogEvent`, `parseStepEvent` for `__JAIPH_EVENT__` JSON lines |
+| `format-params-display.test.ts` | `src/cli/commands/format-params.ts` | Parameter display formatting: `formatParamsForDisplay`, `formatNamedParamsForDisplay`, `normalizeParamValue` |
+| `docker.test.ts` | `src/runtime/docker.ts` | Docker integration helpers: mount parsing/validation, config resolution, `buildDockerArgs` |
+| `hooks.test.ts` | `src/cli/run/hooks.ts` | Hook lifecycle: `globalHooksPath`, `projectHooksPath`, `parseHookConfig`, `loadMergedHooks`, `runHooksForEvent` |
 
 When adding a new source module or extending an existing one, follow this pattern: create or extend the corresponding `test/<module>.test.ts` file. This keeps unit tests discoverable — given a source file, the test file is predictable.
+
+### Other test files in `test/`
+
+A few test files in `test/` don't follow the unit-test-per-module pattern. They exercise broader behavior or acceptance criteria:
+
+| Test file | Kind | What it covers |
+|-----------|------|----------------|
+| `compiler-golden.test.ts` | Golden/regression | Runs the golden output tests — compares transpiler output for `test/fixtures/*.jh` against `test/expected/*.sh` |
+| `sample-build.test.ts` | Integration | Cross-module build/transpile/run-tree behavior using real compiler and CLI components |
+| `signal-lifecycle.test.ts` | Acceptance | After SIGINT/SIGTERM, verifies `jaiph run` exits within a time bound and leaves no stale child processes |
+| `tty-running-timer.test.ts` | Acceptance | In a TTY, verifies the "RUNNING workflow" line updates over time (requires Python 3 PTY harness) |
 
 ## E2E testing
 

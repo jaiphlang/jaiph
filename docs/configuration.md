@@ -11,7 +11,7 @@ Jaiph workflows compile to Bash scripts that run agent prompts, shell commands, 
 
 There are three sources of configuration:
 
-1. **Environment variables** -- `JAIPH_AGENT_*`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, and `JAIPH_DOCKER_*`.
+1. **Environment variables** -- `JAIPH_AGENT_*`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, `JAIPH_INBOX_PARALLEL`, and `JAIPH_DOCKER_*`.
 2. **In-file config** -- a `config { ... }` block at the top level of a workflow file, and optionally inside individual `workflow { ... }` bodies for per-workflow overrides.
 3. **Built-in defaults** -- sensible defaults for all settings.
 
@@ -127,7 +127,7 @@ Workflow-level config overrides module-level config for all steps inside that wo
 - **claude**: Runs the Anthropic **Claude CLI** (`claude`). Use this when you want the same workflow to drive Claude from the terminal. The `claude` binary must be installed and on your PATH. If you set `agent.backend = "claude"` and `claude` is not found, Jaiph prints a clear error and exits.
 - Backend-specific flags are appended from `agent.cursor_flags` / `agent.claude_flags` (or env vars below).
 
-No prompt-level backend override exists; the backend is fixed per run by file config and environment. In `jaiph test`, prompt mocks override backend execution; when a prompt is not mocked, the selected backend runs normally (including Claude CLI if `agent.backend = "claude"`).
+No prompt-level backend override exists; the backend is determined by the effective config at the point a prompt step executes (module-level config, workflow-level override, or environment variable). Different workflows in the same run can use different backends via workflow-level config. In `jaiph test`, prompt mocks override backend execution; when a prompt is not mocked, the selected backend runs normally (including Claude CLI if `agent.backend = "claude"`).
 
 ## Defaults and precedence
 

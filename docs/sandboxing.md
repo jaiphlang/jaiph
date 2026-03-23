@@ -5,13 +5,43 @@ redirect_from:
   - /sandboxing.md
 ---
 
-# Sandboxing (Docker)
+# Sandboxing
+
+Jaiph provides two independent layers of execution isolation:
+
+1. **Rule-level read-only isolation** — rules always execute in an isolated subprocess. On Linux with `unshare` available, the filesystem is remounted read-only inside a mount namespace, preventing rules from modifying the host. On macOS (or when `unshare` is unavailable), rules still run in a child shell for process isolation, but without filesystem write protection.
+
+2. **Docker container isolation** — opt-in. The entire transpiled workflow runs inside a Docker container, receiving only the transpiled bash script and the shell stdlib. No Jaiph source files, TypeScript, or Node.js enter the container.
+
+These layers are independent: rule-level isolation applies inside Docker containers too.
+
+## Rule-level read-only isolation
+
+Every `rule` block executes through `jaiph::execute_readonly`, which wraps the rule body in a subprocess. This happens automatically at transpile time — you don't need to configure anything.
+
+**On Linux** (with `unshare` and passwordless `sudo` available):
+
+```bash
+sudo unshare -m bash -c '
+  mount --make-rprivate /
+  mount -o remount,ro /
+  your_rule_function "$@"
+'
+```
+
+The mount namespace makes the entire filesystem read-only for the duration of the rule. The rule can read files but cannot create, modify, or delete anything on disk. This enforces the principle that rules are pure assertions — they check conditions but don't change state.
+
+**On macOS** (or when `unshare`/`sudo` are unavailable):
+
+The rule still runs in a child `bash` process for process isolation (an `exit` inside a rule won't kill the parent workflow), but the filesystem remains writable. This is a best-effort fallback.
+
+All currently defined shell functions are exported into the child process so rule bodies can call helpers and shims as expected.
+
+## Docker container isolation
 
 > **Beta.** Docker sandboxing is functional but still under active development. Expect rough edges, breaking changes, and incomplete platform coverage. Feedback is welcome at <https://github.com/jaiphlang/jaiph/issues>.
 
-Jaiph can run transpiled workflows inside a Docker container, isolating execution from the host. The container receives only the transpiled bash script and the shell stdlib — no Jaiph source files, TypeScript, or Node.js.
-
-## Enabling Docker sandbox
+### Enabling Docker sandbox
 
 Docker sandboxing is **opt-in**. Set `runtime.docker_enabled = true` in your config block or export `JAIPH_DOCKER_ENABLED=true`:
 
@@ -23,7 +53,7 @@ config {
 
 When Docker is enabled but the `docker` binary is not found, the run fails with `E_DOCKER_NOT_FOUND` (no silent fallback).
 
-## Configuration keys
+### Configuration keys
 
 All Docker-related keys live under `runtime.*` in the config block:
 
@@ -37,13 +67,13 @@ All Docker-related keys live under `runtime.*` in the config block:
 
 Each key enforces its expected type: assigning a string to an integer key, or a boolean to a string key, etc., produces `E_PARSE`. Unknown `runtime.*` keys also produce `E_PARSE`.
 
-### Environment variable overrides
+#### Environment variable overrides
 
 Following the `JAIPH_*` convention: `JAIPH_DOCKER_ENABLED`, `JAIPH_DOCKER_IMAGE`, `JAIPH_DOCKER_NETWORK`, `JAIPH_DOCKER_TIMEOUT`. Workspace mounts are not overridable via env.
 
 Precedence: env vars (`JAIPH_DOCKER_*`) > in-file config > defaults.
 
-## Mount parsing rules
+### Mount parsing rules
 
 Mount strings in `runtime.workspace` follow these forms:
 
@@ -51,9 +81,9 @@ Mount strings in `runtime.workspace` follow these forms:
 - **Shorthand** (2 segments): `"host_path:mode"` — mounts at `/jaiph/workspace/<host_path>` with the given mode.
 - **1 segment** — `E_PARSE` (invalid).
 - Mode must be `ro` or `rw` — `E_PARSE` otherwise.
-- Exactly one mount must target `/jaiph/workspace` (validated before Docker invocation). If `runtime.workspace` is omitted, the default `[".:/jaiph/workspace:rw"]` satisfies this.
+- Exactly one mount must target `/jaiph/workspace` — `E_VALIDATE` if zero or more than one match. If `runtime.workspace` is omitted, the default `[".:/jaiph/workspace:rw"]` satisfies this.
 
-## Workspace structure inside the container
+### Workspace structure inside the container
 
 ```
 /jaiph/
@@ -81,7 +111,7 @@ Mount strings in `runtime.workspace` follow these forms:
 - The container working directory is set to `/jaiph/workspace`.
 - Container receives **only** transpiled bash and the shell runtime. No Jaiph source files, no TypeScript, no Node.js.
 
-## Docker behavior
+### Docker behavior
 
 - `docker run --rm` with proper UID/GID mapping (`--user $(id -u):$(id -g)` on Linux).
 - TTY passthrough: `-t` flag when `process.stdout.isTTY` is true. Because Docker with `-t` merges the container's stderr into stdout, the CLI buffers Docker stdout line-by-line and filters out `__JAIPH_EVENT__` lines (routing them through the event handler instead). This ensures the progress tree output is identical whether Docker is enabled or not.
@@ -92,7 +122,7 @@ Mount strings in `runtime.workspace` follow these forms:
 - Timeout kills container and reports `E_TIMEOUT`.
 - Network: `"default"` omits `--network` flag (uses Docker bridge). `"none"` passes `--network none`. Any other value is passed verbatim.
 
-## Dockerfile-based image detection
+### Dockerfile-based image detection
 
 When no explicit `docker_image` is configured (neither `JAIPH_DOCKER_IMAGE` env var nor in-file `runtime.docker_image`), the runtime checks for `.jaiph/Dockerfile` in the workspace root. If present:
 
@@ -109,7 +139,7 @@ The shipped `.jaiph/Dockerfile` includes:
 - **cursor-agent** (Cursor's agent backend)
 - Standard utilities: `bash`, `curl`, `git`, `ca-certificates`, `gnupg`
 
-## Agent environment variable forwarding
+### Agent environment variable forwarding
 
 In addition to `JAIPH_*` variables, the following environment variables are forwarded into the Docker container for agent authentication:
 
@@ -117,7 +147,7 @@ In addition to `JAIPH_*` variables, the following environment variables are forw
 - `ANTHROPIC_*` — all environment variables matching the `ANTHROPIC_` prefix (e.g. `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`) are forwarded for Claude authentication/config.
 - `CLAUDE_*` — all environment variables matching the `CLAUDE_` prefix are forwarded for Claude CLI authentication/config.
 
-## Docker path remapping
+### Docker path remapping
 
 When Docker mode is enabled, the CLI remaps workspace-related environment variables before forwarding them into the container. This ensures that run artifacts are written to paths visible on the host (via the workspace mount) rather than to host-only absolute paths that exist only outside the container.
 
@@ -129,7 +159,7 @@ When Docker mode is enabled, the CLI remaps workspace-related environment variab
 
 This remapping is transparent — you configure `JAIPH_RUNS_DIR` exactly as you would for a non-Docker run and the CLI handles the translation.
 
-## Example
+### Example
 
 Minimal workflow with Docker sandbox enabled:
 

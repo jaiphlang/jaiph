@@ -6,7 +6,7 @@ export function printUsage(): void {
       "  jaiph <file.jh|file.jph> [args...]       # run workflow (same as jaiph run <file> [args...])",
       "  jaiph <file.test.jh|file.test.jph>      # run test file (same as jaiph test <file>)",
       "  jaiph build [--target <dir>] [path]     # compile .jh/.jph; path defaults to .",
-      "  jaiph run [--target <dir>] <file.jh|file.jph> [args...]",
+      "  jaiph run [--target <dir>] <file.jh|file.jph> [--] [args...]",
       "  jaiph test [<dir>]                       # discover and run *.test.jh under dir or workspace",
       "  jaiph test <file.test.jh|file.test.jph> # run a single test file",
       "  jaiph init [workspace-path]",

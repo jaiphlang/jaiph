@@ -74,8 +74,8 @@ Each command is invoked with the event payload as **JSON on stdin**. You can use
 | `workspace` | Always | Workspace root directory. |
 | `run_dir` | workflow_end | Run logs directory (when available). |
 | `summary_file` | workflow_end | Path to `run_summary.jsonl` (when available). |
-| `out_file` | step_end | Step stdout log path. |
-| `err_file` | step_end | Step stderr log path. |
+| `out_file` | step_end | Step stdout log path (when the step produced output). |
+| `err_file` | step_end | Step stderr log path (when the step produced output). |
 
 Example payload (`step_end`):
 
@@ -87,7 +87,7 @@ Example payload (`step_end`):
   "step_kind": "workflow",
   "step_name": "default",
   "status": 0,
-  "timestamp": "2025-03-11T12:00:00.000Z",
+  "timestamp": "2025-03-11T12:00:00Z",
   "elapsed_ms": 1500,
   "run_path": "/repo/flows/ci.jh",
   "workspace": "/repo",

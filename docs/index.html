@@ -201,7 +201,7 @@ workflow default {
     prompt "Fix failing CI so npm run test:ci passes. Tail ./tmp_ci_test.out for details."
   }
 
-  rm -f "$ci_log_file"
+  rm -f ./tmp_ci_test.out
 }</code></pre>
                     <p>In the run below, <code>ci_passes</code> fails once, Jaiph writes the failure output to the log
                         file, prompts the agent for a minimal fix, and retries until the check passes.</p>
