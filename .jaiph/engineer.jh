@@ -157,7 +157,7 @@ workflow classify_role {
     Respond with exactly one role name.
   " returns '{ role: string }'
 
-  printf "%s" "$result_role"
+  return "$result_role"
 }
 
 workflow implement {
