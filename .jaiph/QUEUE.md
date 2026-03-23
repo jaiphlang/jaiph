@@ -6,6 +6,83 @@ The first `##` task in the file is always the current task.
 
 ---
 
+## Enforce managed-call semantics: forbid Jaiph symbols in `$(...)`, require `run` for functions <!-- dev-ready -->
+
+**Problem.** Jaiph currently mixes two call channels:
+- managed Jaiph calls (`ensure`, `run`, capture via explicit `return`)
+- raw shell command substitution (`$(...)`)
+
+This creates inconsistent value semantics and hidden log/value coupling for rules, workflows, functions, and channel operations.
+
+**Goal.** Make call semantics explicit and uniform:
+- `ensure` is the only rule invocation keyword (predicate/guard semantics).
+- `run` is the managed invocation keyword for workflows **and functions**.
+- Command substitution `$(...)` is allowed only for pure shell commands, never Jaiph symbols.
+
+**Required compiler/validator checks.**
+- Reject command substitution containing:
+  - local/imported **workflow** refs,
+  - local/imported **function** refs,
+  - local/imported **rule** refs,
+  - channel operations/usages (`<-`, `->`, route-like refs) in substitution context.
+- Reject direct function invocation in workflow steps without `run` (e.g. `fn arg` or `x = fn arg` must fail with actionable error: use `run fn ...`).
+- Keep rule calls restricted to `ensure` only (no `run rule`, no shell-invoked rule calls in Jaiph-managed contexts).
+- Keep workflow calls restricted to `run` only.
+- Keep functions shell-like internally, but enforce that function value passing uses explicit `return` semantics (no stdout-as-value contract).
+- Add/confirm guard that function bodies cannot contain workflow orchestration forms (`run`, `ensure`, route declarations, workflow-like config blocks).
+
+**Runtime/transpilation expectations.**
+- `run <function>` must use managed step execution with:
+  - step logs to `.jaiph/runs` artifacts,
+  - value capture from explicit function `return`,
+  - stable status semantics aligned with `run <workflow>`.
+- `return` in functions remains explicit value channel (`return "..."` / `return "$var"`), while integer returns remain exit-code semantics.
+
+**Tests (mandatory).**
+- Add/extend parser/validator tests for all forbidden substitution cases.
+- Add acceptance/e2e tests for:
+  - `run function` success path with value capture + artifact logging,
+  - direct function invocation rejection (with and without capture),
+  - forbidden `$(workflow)`, `$(function)`, `$(rule)`, and channel-in-substitution failures,
+  - regressions for existing `ensure` and `run` behavior.
+
+**Acceptance criteria.**
+- There is exactly one managed value/log contract for Jaiph symbols:
+  - `ensure <rule>`
+  - `run <workflow>`
+  - `run <function>`
+- No Jaiph symbol can be invoked through `$(...)`.
+- Compiler errors are specific and migration-friendly.
+- Full test suite (`npm test`, `npm run test:e2e`) passes with updated expectations.
+
+## Document and migrate to managed-call model (grammar/docs/tests/samples) <!-- dev-ready -->
+
+**Problem.** The call model change is semantic, not cosmetic. Without explicit rationale and migration docs, users will keep writing ambiguous patterns.
+
+**Goal.** Update docs and examples so users understand *why* and *how* to use managed calls (`ensure`/`run`) and explicit `return` value channels.
+
+**Scope.**
+- Update `docs/grammar.md` step-output contract and calling-convention sections.
+- Update `README.md`, `docs/getting-started.md`, and `docs/testing.md` where call/capture semantics are described.
+- Update `docs/index.html` sample snippets to avoid function/rule/workflow substitution patterns and use managed calls.
+- Add migration notes with before/after examples:
+  - forbidden: `x="$(fn ...)"`, `x="$(wf ...)"`, `x="$(rule ...)"`,
+  - required: `x = run fn ...`, `x = run wf ...`, `x = ensure rule ...`.
+- Update any affected `.jaiph/*.jh` automation workflows and e2e fixtures to follow the new model.
+
+**Required explanation content.**
+- First-principles rationale for the change:
+  - separate status/value/log channels,
+  - avoid stdout/value ambiguity,
+  - deterministic artifact behavior.
+- Clear statement of allowed/forbidden forms with short error-driven migration guidance.
+
+**Acceptance criteria.**
+- Docs contain one consistent contract for function/workflow/rule invocation and capture.
+- `docs/index.html` examples reflect the new semantics.
+- Tests that assert docs/examples/samples behavior are updated and passing.
+- CHANGELOG entry explains the behavioral change and migration impact.
+
 ## Fix STEP_END embedded output JSON escaping (control chars leak as raw `__JAIPH_EVENT__`) <!-- dev-ready -->
 
 **Problem.** `STEP_END` events embed `out_content`/`err_content`, but runtime escaping in `src/runtime/events.sh` only escapes `\`, `"`, `\n`, and `\r`. Other JSON-invalid control chars from CI logs (for example tabs or ANSI control bytes) can remain unescaped, making the event line invalid JSON.
