@@ -6,6 +6,37 @@ The first `##` task in the file is always the current task.
 
 ---
 
+## Fix STEP_END embedded output JSON escaping (control chars leak as raw `__JAIPH_EVENT__`) <!-- dev-ready -->
+
+**Problem.** `STEP_END` events embed `out_content`/`err_content`, but runtime escaping in `src/runtime/events.sh` only escapes `\`, `"`, `\n`, and `\r`. Other JSON-invalid control chars from CI logs (for example tabs or ANSI control bytes) can remain unescaped, making the event line invalid JSON.
+
+**Observed regression.**
+
+- CI prints raw event marker lines like `__JAIPH_EVENT__ {"type":"STEP_END",...,"out_content":"..."}` instead of rendering normal step output.
+- This line then leaks into downstream output handling and can be treated as step output payload.
+
+**Root cause (first principles).**
+
+- Event transport depends on one invariant: every `__JAIPH_EVENT__` line must be valid JSON.
+- Embedded output introduces arbitrary process bytes into JSON string fields.
+- Current `jaiph::json_escape` is incomplete for JSON control-character requirements (`U+0000`-`U+001F`), so parser-side `JSON.parse(...)` can fail.
+- When parsing fails, the line is treated as plain stderr and forwarded to user-visible output.
+
+**Goal.** Make event payload encoding robust so embedded output never breaks JSON validity and never appears as raw marker lines in CI/non-TTY output.
+
+**Scope.**
+
+- Harden runtime JSON string escaping for all control chars required by JSON (not just newline/carriage return).
+- Keep existing `STEP_END` embedded-output feature and size cap behavior.
+- Add regression tests that include control characters in embedded output and assert parser/renderer behavior stays correct.
+
+**Acceptance criteria.**
+
+- A failing step whose output contains tabs and ANSI escape bytes still produces a valid `__JAIPH_EVENT__` JSON line.
+- CLI event parsing (`parseStepEvent`) succeeds for that line; it is not forwarded as plain stderr.
+- Non-TTY CI output does not show raw `__JAIPH_EVENT__ ...` lines for valid runtime events.
+- Existing e2e contracts around step output and ensure/recover continue to pass.
+
 ## Non-TTY long tasks: periodic running ping line in gray (status heartbeat) <!-- dev-ready -->
 
 **Problem.** In non-TTY mode, long-running steps can appear stalled because there is no periodic status output between start and end lines.
