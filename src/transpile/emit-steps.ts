@@ -13,6 +13,8 @@ export type StepEmitCtx = {
   workflowName: string;
   /** In recover blocks, run/ensure default to ' "$@"' args and ensure skips paramKeys. */
   inRecoverBlock: boolean;
+  /** Local function names (for detecting function calls in shell capture steps). */
+  localFunctionNames?: Set<string>;
 };
 
 // ---------------------------------------------------------------------------
@@ -118,7 +120,7 @@ export function emitRunStep(
   const wfRef = transpileWorkflowRef(step.workflow, ctx.workflowSymbol, ctx.importedWorkflowSymbols);
   const scopePrefix = prefixForImportedWorkflowCall(step.workflow, ctx.importedModuleHasMetadata, ctx.importedWorkflowSymbols);
   if (step.captureName) {
-    out.push(`${indent}${step.captureName}=$(${scopePrefix}${wfRef}::impl${args})`);
+    emitReturnValueCapture(out, indent, step.captureName, `${scopePrefix}${wfRef}${args}`);
   } else {
     out.push(`${indent}${scopePrefix}${wfRef}${args}`);
   }
@@ -134,7 +136,12 @@ export function emitShellStep(
     resolveShellRefs(step.command, ctx.importedWorkflowSymbols),
   );
   if (step.captureName) {
-    out.push(`${indent}${step.captureName}=$(${resolved})`);
+    const cmdWord = resolved.split(/\s/)[0];
+    if (ctx.localFunctionNames?.has(cmdWord)) {
+      emitReturnValueCapture(out, indent, step.captureName, resolved);
+    } else {
+      out.push(`${indent}${step.captureName}=$(${resolved})`);
+    }
   } else {
     out.push(`${indent}${resolved}`);
   }
@@ -163,7 +170,6 @@ export function emitEnsureStep(
   const transpiledRef = transpileRuleRef(step.ref, ctx.workflowSymbol, ctx.importedWorkflowSymbols);
   const defaultArgs = ctx.inRecoverBlock ? ' "$@"' : "";
   const args = step.args ? ` ${step.args}` : defaultArgs;
-  // In recover blocks, ensure skips paramKeys emission (matches existing behavior).
   if (!ctx.inRecoverBlock) {
     const paramKeys = step.args ? parseParamKeysFromArgs(step.args) : null;
     if (paramKeys != null && paramKeys.length > 0) {
@@ -172,9 +178,9 @@ export function emitEnsureStep(
   }
   if (step.recover) {
     const recoverSteps = "single" in step.recover ? [step.recover.single] : step.recover.block;
-    emitEnsureRecoverLoop(out, indent, transpiledRef, args, recoverSteps, ctx);
+    emitEnsureRecoverLoop(out, indent, transpiledRef, args, recoverSteps, ctx, step.captureName);
   } else if (step.captureName) {
-    out.push(`${indent}${step.captureName}=$(${transpiledRef}::impl${args})`);
+    emitReturnValueCapture(out, indent, step.captureName, `${transpiledRef}${args}`);
   } else {
     out.push(`${indent}${transpiledRef}${args}`);
   }
@@ -215,6 +221,28 @@ export function emitIfStep(
 }
 
 // ---------------------------------------------------------------------------
+// Return value capture helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Emit bash that captures the return value (via JAIPH_RETURN_VALUE_FILE)
+ * from a rule/workflow/function call into a variable.
+ * stdout goes to artifacts; only the explicit return value is captured.
+ */
+function emitReturnValueCapture(
+  out: string[],
+  indent: string,
+  captureName: string,
+  callExpr: string,
+): void {
+  const rv = `_jaiph_rv_${captureName}`;
+  out.push(`${indent}local ${rv}; ${rv}=$(mktemp)`);
+  out.push(`${indent}JAIPH_RETURN_VALUE_FILE="$${rv}" ${callExpr}`);
+  out.push(`${indent}${captureName}=""; [[ -s "$${rv}" ]] && ${captureName}=$(<"$${rv}")`);
+  out.push(`${indent}rm -f "$${rv}"`);
+}
+
+// ---------------------------------------------------------------------------
 // Recover loop
 // ---------------------------------------------------------------------------
 
@@ -228,42 +256,21 @@ export function emitEnsureRecoverLoop(
   args: string,
   recoverSteps: WorkflowStepDef[],
   ctx: StepEmitCtx,
+  captureName?: string,
 ): void {
   const retriesDefault = String(DEFAULT_ENSURE_MAX_RETRIES);
+  out.push(`${indent}local _jaiph_ensure_rv_file; _jaiph_ensure_rv_file=$(mktemp)`);
   out.push(`${indent}local _jaiph_ensure_output`);
-  out.push(`${indent}local _jaiph_ensure_prev_files`);
-  out.push(`${indent}local _jaiph_ensure_new_files`);
-  out.push(`${indent}local _jaiph_ensure_file`);
-  out.push(`${indent}local _jaiph_ensure_chunk`);
   out.push(`${indent}local _jaiph_ensure_prev_args=()`);
-  out.push(`${indent}local _jaiph_ensure_files_arr=()`);
   out.push(`${indent}local _jaiph_ensure_passed=0`);
   out.push(`${indent}for _jaiph_retry in $(seq 1 "\${JAIPH_ENSURE_MAX_RETRIES:-${retriesDefault}}"); do`);
-  out.push(`${indent}  _jaiph_ensure_prev_files="\${JAIPH_PRECEDING_FILES:-}"`);
-  out.push(`${indent}  if ${transpiledRef}${args}; then`);
+  out.push(`${indent}  : > "$_jaiph_ensure_rv_file"`);
+  out.push(`${indent}  if JAIPH_RETURN_VALUE_FILE="$_jaiph_ensure_rv_file" ${transpiledRef}${args}; then`);
   out.push(`${indent}    _jaiph_ensure_passed=1`);
   out.push(`${indent}    break`);
   out.push(`${indent}  fi`);
   out.push(`${indent}  _jaiph_ensure_output=""`);
-  out.push(`${indent}  _jaiph_ensure_new_files="\${JAIPH_PRECEDING_FILES:-}"`);
-  out.push(`${indent}  if [[ "$_jaiph_ensure_new_files" == "$_jaiph_ensure_prev_files" ]]; then`);
-  out.push(`${indent}    _jaiph_ensure_new_files=""`);
-  out.push(`${indent}  elif [[ -n "$_jaiph_ensure_prev_files" ]]; then`);
-  out.push(`${indent}    _jaiph_ensure_new_files="\${_jaiph_ensure_new_files#\${_jaiph_ensure_prev_files},}"`);
-  out.push(`${indent}  fi`);
-  out.push(`${indent}  if [[ -n "$_jaiph_ensure_new_files" ]]; then`);
-  out.push(`${indent}    IFS=',' read -r -a _jaiph_ensure_files_arr <<<"$_jaiph_ensure_new_files"`);
-  out.push(`${indent}    for _jaiph_ensure_file in "\${_jaiph_ensure_files_arr[@]}"; do`);
-  out.push(`${indent}      if [[ -f "$_jaiph_ensure_file" ]]; then`);
-  out.push(`${indent}        _jaiph_ensure_chunk="$(<"$_jaiph_ensure_file")"`);
-  out.push(`${indent}        if [[ -n "$_jaiph_ensure_output" ]]; then`);
-  out.push(`${indent}          _jaiph_ensure_output="\${_jaiph_ensure_output}"$'\\n'"$_jaiph_ensure_chunk"`);
-  out.push(`${indent}        else`);
-  out.push(`${indent}          _jaiph_ensure_output="$_jaiph_ensure_chunk"`);
-  out.push(`${indent}        fi`);
-  out.push(`${indent}      fi`);
-  out.push(`${indent}    done`);
-  out.push(`${indent}  fi`);
+  out.push(`${indent}  [[ -s "$_jaiph_ensure_rv_file" ]] && _jaiph_ensure_output=$(<"$_jaiph_ensure_rv_file")`);
   out.push(`${indent}  _jaiph_ensure_prev_args=("$@")`);
   out.push(`${indent}  set -- "$_jaiph_ensure_output"`);
   const recoverCtx: StepEmitCtx = { ...ctx, inRecoverBlock: true };
@@ -272,6 +279,10 @@ export function emitEnsureRecoverLoop(
   }
   out.push(`${indent}  set -- "\${_jaiph_ensure_prev_args[@]}"`);
   out.push(`${indent}done`);
+  if (captureName) {
+    out.push(`${indent}${captureName}=""; [[ -s "$_jaiph_ensure_rv_file" ]] && ${captureName}=$(<"$_jaiph_ensure_rv_file")`);
+  }
+  out.push(`${indent}rm -f "$_jaiph_ensure_rv_file"`);
   out.push(`${indent}if [[ "$_jaiph_ensure_passed" -ne 1 ]]; then`);
   out.push(`${indent}  echo "jaiph: ensure condition did not pass after \${JAIPH_ENSURE_MAX_RETRIES:-${retriesDefault}} retries" >&2`);
   out.push(`${indent}  exit 1`);
@@ -293,6 +304,7 @@ export function emitStep(
   if (step.type === "run") { emitRunStep(out, indent, step, ctx); return; }
   if (step.type === "prompt") { emitPromptStepToOut(out, indent, step, ctx); return; }
   if (step.type === "shell") { emitShellStep(out, indent, step, ctx); return; }
+  if (step.type === "return") { out.push(`${indent}jaiph::set_return_value ${step.value}`); out.push(`${indent}return 0`); return; }
   if (step.type === "log") { out.push(`${indent}jaiph::log ${step.message}`); return; }
   if (step.type === "logerr") { out.push(`${indent}jaiph::logerr ${step.message}`); return; }
   if (step.type === "send") { emitSendStep(out, indent, step, ctx); return; }

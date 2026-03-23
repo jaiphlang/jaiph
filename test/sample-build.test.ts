@@ -1798,8 +1798,8 @@ test("build transpiles ensure ... recover to bounded retry loop", () => {
     const bash = results[0].bash;
     assert.match(bash, /for _jaiph_retry in \$\(seq 1/);
     assert.match(bash, /JAIPH_ENSURE_MAX_RETRIES/);
-    assert.match(bash, /_jaiph_ensure_prev_files="\$\{JAIPH_PRECEDING_FILES:-\}"/);
-    assert.match(bash, /IFS=',' read -r -a _jaiph_ensure_files_arr/);
+    assert.match(bash, /local _jaiph_ensure_rv_file/);
+    assert.match(bash, /JAIPH_RETURN_VALUE_FILE="\$_jaiph_ensure_rv_file"/);
     assert.match(bash, /local _jaiph_ensure_passed=0/);
     assert.match(bash, /_jaiph_ensure_passed=1/);
     assert.match(bash, /set -- "\$_jaiph_ensure_output"/);
@@ -1838,7 +1838,7 @@ test("build transpiles ensure ... recover { stmt; stmt; } to bounded retry loop 
     const bash = results[0].bash;
     assert.match(bash, /for _jaiph_retry in \$\(seq 1/);
     assert.match(bash, /set -- "\$_jaiph_ensure_output"/);
-    assert.match(bash, /set -- "\$\{_jaiph_ensure_prev_args\[@\]\}"/);
+    assert.match(bash, /JAIPH_RETURN_VALUE_FILE="\$_jaiph_ensure_rv_file"/);
     assert.match(bash, /entry::ready/);
     assert.match(bash, /echo fixing/);
     assert.match(bash, /touch ready\.txt/);
@@ -1959,7 +1959,7 @@ test("build emits assignment capture for ensure and shell", () => {
     const results = build(filePath, outDir);
     assert.equal(results.length, 1);
     const bash = results[0].bash;
-    assert.match(bash, /response=\$\(entry::echo_ok::impl\)/);
+    assert.match(bash, /JAIPH_RETURN_VALUE_FILE="\$_jaiph_rv_response" entry::echo_ok/);
     assert.match(bash, /out=\$\(echo hello\)/);
   } finally {
     rmSync(root, { recursive: true, force: true });

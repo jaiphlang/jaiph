@@ -1374,7 +1374,7 @@ test("compiler golden: ensure...recover single statement emits retry loop", () =
     // Retry loop structure
     assert.match(actual, /local _jaiph_ensure_passed=0/);
     assert.match(actual, /for _jaiph_retry in \$\(seq 1/);
-    assert.match(actual, /if entry::tests_pass; then/);
+    assert.match(actual, /JAIPH_RETURN_VALUE_FILE="\$_jaiph_ensure_rv_file" entry::tests_pass; then/);
     assert.match(actual, /_jaiph_ensure_passed=1/);
     assert.match(actual, /break/);
     // Recover step calls the workflow
@@ -1415,7 +1415,7 @@ test("compiler golden: ensure...recover block emits retry loop with multiple ste
     const actual = normalize(transpileFile(input, root));
     // Retry loop
     assert.match(actual, /for _jaiph_retry in \$\(seq 1/);
-    assert.match(actual, /if entry::ci_pass; then/);
+    assert.match(actual, /JAIPH_RETURN_VALUE_FILE="\$_jaiph_ensure_rv_file" entry::ci_pass; then/);
     // Both recover steps present
     assert.match(actual, /entry::fix_ci/);
     assert.match(actual, /echo retrying/);

@@ -42,6 +42,18 @@ function matchSendOperator(line: string): { command: string; channel: string } |
   return null;
 }
 
+/**
+ * Detect Jaiph value-return syntax vs bash exit-code return.
+ * Jaiph value-return: return "..." | return '...' | return $var
+ * Bash return (kept as shell): return 0 | return 1 | return $?
+ */
+function isJaiphValueReturn(expr: string): boolean {
+  const arg = expr.trim();
+  if (/^[0-9]+$/.test(arg)) return false;
+  if (arg === "$?") return false;
+  return arg.startsWith('"') || arg.startsWith("'") || arg.startsWith("$");
+}
+
 
 export function parseWorkflowBlock(
   filePath: string,
@@ -583,6 +595,19 @@ export function parseWorkflowBlock(
         loc: { line: innerNo, col: logerrCol },
       });
       continue;
+    }
+
+    const returnMatch = inner.match(/^return\s+(.+)$/s);
+    if (returnMatch) {
+      const returnValue = returnMatch[1].trim();
+      if (isJaiphValueReturn(returnValue)) {
+        workflow.steps.push({
+          type: "return",
+          value: returnValue,
+          loc: { line: innerNo, col: innerRaw.indexOf("return") + 1 },
+        });
+        continue;
+      }
     }
 
     if (/^if\s+(?:!\s*)?ensure\b/.test(inner)) {

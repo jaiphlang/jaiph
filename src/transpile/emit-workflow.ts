@@ -9,6 +9,19 @@ import {
   normalizeShellLocalExport,
 } from "./emit-steps";
 
+/**
+ * Detect Jaiph return (value return) vs bash return (exit code).
+ * `return "..."` or `return '...'` or `return $var` → Jaiph return.
+ * `return 0`, `return 1`, `return $?` → bash return (kept as-is).
+ */
+function isJaiphReturn(cmd: string): boolean {
+  if (!cmd.startsWith("return ")) return false;
+  const arg = cmd.slice("return ".length).trimStart();
+  if (/^[0-9]+$/.test(arg)) return false;
+  if (arg === "$?") return false;
+  return arg.startsWith('"') || arg.startsWith("'") || arg.startsWith("$");
+}
+
 /** All env vars managed by metadata scope functions. */
 const SCOPED_VARS = [
   "JAIPH_AGENT_MODEL",
@@ -252,6 +265,10 @@ export function emitWorkflow(
           out.push(
             `  ${transpileRuleRef(ref, workflowSymbol, importedWorkflowSymbols)}${args ? ` ${args}` : ""}`,
           );
+        } else if (isJaiphReturn(cmd)) {
+          const value = cmd.slice("return ".length).trim();
+          out.push(`  jaiph::set_return_value ${value}`);
+          out.push("  return 0");
         } else {
           out.push(`  ${normalizeShellLocalExport(resolveShellRefs(cmd, importedWorkflowSymbols))}`);
         }
@@ -271,6 +288,8 @@ export function emitWorkflow(
     out.push("");
   }
 
+  const localFunctionNames = new Set(ast.functions.map((f) => f.name));
+
   for (const fn of ast.functions) {
     const functionSymbol = `${workflowSymbol}::${fn.name}`;
     for (const comment of fn.comments) {
@@ -284,7 +303,13 @@ export function emitWorkflow(
       out.push("  :");
     } else {
       for (const cmd of fn.commands) {
-        out.push(`  ${normalizeShellLocalExport(resolveShellRefs(cmd, importedWorkflowSymbols))}`);
+        if (isJaiphReturn(cmd)) {
+          const value = cmd.slice("return ".length).trim();
+          out.push(`  jaiph::set_return_value ${value}`);
+          out.push("  return 0");
+        } else {
+          out.push(`  ${normalizeShellLocalExport(resolveShellRefs(cmd, importedWorkflowSymbols))}`);
+        }
       }
     }
     out.push("}");
@@ -314,6 +339,7 @@ export function emitWorkflow(
       filePath: ast.filePath,
       workflowName: workflow.name,
       inRecoverBlock: false,
+      localFunctionNames,
     };
 
     // Determine which scope function this workflow uses.

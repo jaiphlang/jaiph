@@ -1,7 +1,8 @@
 #!/usr/bin/env jaiph
 # E2E fixture: assignment capture for ensure and shell.
 rule echo_line {
-  echo captured-stdout
+  echo "this goes to logs only"
+  return "captured-value"
 }
 workflow default {
   response = ensure echo_line

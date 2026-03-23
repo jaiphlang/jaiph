@@ -114,6 +114,11 @@ export type WorkflowStepDef =
       command: string;
       channel: string;
       loc: SourceLoc;
+    }
+  | {
+      type: "return";
+      value: string;
+      loc: SourceLoc;
     };
 
 export interface EnvDeclDef {

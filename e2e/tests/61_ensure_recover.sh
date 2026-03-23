@@ -13,11 +13,12 @@ e2e::section "ensure ... recover ... (single statement) transpiles to bounded re
 rm -f "${TEST_DIR}/ready.txt"
 
 # Given
+# NOTE: Keep this test parameterized on purpose ($f and "$1") to verify recover arg plumbing.
+# Do not simplify these to hardcoded filenames.
 e2e::file "retry_single.jh" <<'EOF'
 rule dep {
-  f="ready.txt"
-  echo "$f"
-  test -f "$f"
+  echo "$1" > "$JAIPH_RETURN_VALUE_FILE"
+  test -f "$1"
 }
 
 workflow install_deps {
@@ -25,7 +26,7 @@ workflow install_deps {
 }
 
 workflow default {
-  ensure dep recover run install_deps
+  ensure dep "ready.txt" recover run install_deps
 }
 EOF
 
@@ -40,17 +41,17 @@ e2e::expect_stdout "${out}" <<'EOF'
 Jaiph: Running retry_single.jh
 
 workflow default
-  ▸ rule dep
+  ▸ rule dep (1="ready.txt")
   ✗ rule dep (<time>)
   ▸ workflow install_deps (1="ready.txt")
   ✓ workflow install_deps (<time>)
-  ▸ rule dep
+  ▸ rule dep (1="ready.txt")
   ✓ rule dep (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
 e2e::pass "ensure dep recover run install_deps: retry until success"
-e2e::expect_out_files "retry_single.jh" 2
+e2e::expect_out_files "retry_single.jh" 0
 
 e2e::section "ensure ... recover { stmt; stmt; } (block) runs multiple recover statements"
 rm -f "${TEST_DIR}/ready2.txt" "${TEST_DIR}/recover_ran.txt"
