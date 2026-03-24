@@ -1,5 +1,5 @@
 import { parseStepEvent, parseLogEvent } from "./events";
-import { colorize, formatStartLine, formatCompletedLine } from "./display";
+import { colorize, formatStartLine, formatCompletedLine, formatHeartbeatLine } from "./display";
 import { formatRunningBottomLine } from "./progress";
 import type { RunEmitter } from "./emitter";
 
@@ -103,12 +103,61 @@ export function registerStateSubscriber(emitter: RunEmitter, state: RunState): v
 
 // ── Subscriber: TTY rendering ──
 
+export type NonTTYHeartbeatStep = {
+  eventId: string;
+  kind: string;
+  name: string;
+  indent: string;
+  startedAt: number;
+  lastHeartbeatAt: number;
+  lastPrintedElapsedSec: number;
+};
+
 export type TTYContext = {
   isTTY: boolean;
   colorEnabled: boolean;
   startedAt: number;
   runningInterval: ReturnType<typeof setInterval> | undefined;
+  nonTTYHeartbeatInterval: ReturnType<typeof setInterval> | undefined;
+  nonTTYHeartbeatStep: NonTTYHeartbeatStep | null;
 };
+
+function nonTTYHeartbeatFirstSec(): number {
+  const raw = process.env.JAIPH_NON_TTY_HEARTBEAT_FIRST_SEC;
+  if (raw === undefined || raw === "") return 60;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : 60;
+}
+
+/** Wall-clock interval between heartbeat lines (ms). Exported for `jaiph run` scheduling. */
+export function nonTTYHeartbeatTickMs(): number {
+  const raw = process.env.JAIPH_NON_TTY_HEARTBEAT_INTERVAL_MS;
+  if (raw === undefined || raw === "") return 30_000;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 250 ? n : 30_000;
+}
+
+/** Emit one gray heartbeat line if the current non-TTY step has run long enough (see env thresholds). */
+export function tickNonTTYHeartbeat(ctx: TTYContext): void {
+  if (ctx.isTTY) return;
+  const step = ctx.nonTTYHeartbeatStep;
+  if (step === null) return;
+  const firstSec = nonTTYHeartbeatFirstSec();
+  const tickMs = nonTTYHeartbeatTickMs();
+  const now = Date.now();
+  const elapsedSec = Math.floor((now - step.startedAt) / 1000);
+  if (elapsedSec < firstSec) return;
+  const isFirst = step.lastHeartbeatAt === 0;
+  if (!isFirst) {
+    if (now - step.lastHeartbeatAt < tickMs) return;
+    if (elapsedSec <= step.lastPrintedElapsedSec) return;
+  }
+  step.lastHeartbeatAt = now;
+  step.lastPrintedElapsedSec = elapsedSec;
+  const dimEnabled = process.env.NO_COLOR === undefined;
+  const line = formatHeartbeatLine(step.indent, step.kind, step.name, elapsedSec, dimEnabled);
+  process.stdout.write(`${line}\n`);
+}
 
 function writeTTYLine(line: string, ctx: TTYContext): void {
   if (ctx.isTTY && ctx.runningInterval !== undefined) {
@@ -123,6 +172,7 @@ function writeTTYLine(line: string, ctx: TTYContext): void {
 
 export function registerTTYSubscriber(emitter: RunEmitter, ctx: TTYContext): void {
   const stepIndentById = new Map<string, string>();
+  const nonTTYStack: NonTTYHeartbeatStep[] = [];
 
   emitter.on("log", (logEvent) => {
     const depth = Math.max(1, logEvent.depth);
@@ -140,6 +190,18 @@ export function registerTTYSubscriber(emitter: RunEmitter, ctx: TTYContext): voi
     const indent = "  · ".repeat(data.depth);
     const label = formatStartLine(indent, data.event.kind, data.event.name, ctx.colorEnabled, data.event.params);
     stepIndentById.set(data.eventId, indent);
+    if (!ctx.isTTY) {
+      nonTTYStack.push({
+        eventId: data.eventId,
+        kind: data.event.kind,
+        name: data.event.name,
+        indent,
+        startedAt: Date.now(),
+        lastHeartbeatAt: 0,
+        lastPrintedElapsedSec: -1,
+      });
+      ctx.nonTTYHeartbeatStep = nonTTYStack[nonTTYStack.length - 1] ?? null;
+    }
     writeTTYLine(label, ctx);
   });
 
@@ -151,6 +213,11 @@ export function registerTTYSubscriber(emitter: RunEmitter, ctx: TTYContext): voi
     const completedLine = formatCompletedLine(indent, data.event.status ?? 1, elapsedSec, ctx.colorEnabled, data.event.kind, data.event.name);
     writeTTYLine(completedLine, ctx);
     stepIndentById.delete(data.eventId);
+    if (!ctx.isTTY) {
+      const idx = nonTTYStack.findIndex((s) => s.eventId === data.eventId);
+      if (idx !== -1) nonTTYStack.splice(idx, 1);
+      ctx.nonTTYHeartbeatStep = nonTTYStack.length > 0 ? nonTTYStack[nonTTYStack.length - 1]! : null;
+    }
   });
 
   emitter.on("stderr_line", (data) => {

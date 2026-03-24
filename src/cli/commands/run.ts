@@ -46,6 +46,8 @@ import {
   createRunState,
   registerStateSubscriber,
   registerTTYSubscriber,
+  tickNonTTYHeartbeat,
+  nonTTYHeartbeatTickMs,
   type TTYContext,
 } from "../run/stderr-handler";
 
@@ -97,7 +99,14 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     // Set up event emitter and subscribers
     const emitter = createRunEmitter();
     const runState = createRunState();
-    const ttyCtx: TTYContext = { isTTY, colorEnabled, startedAt, runningInterval: undefined };
+    const ttyCtx: TTYContext = {
+      isTTY,
+      colorEnabled,
+      startedAt,
+      runningInterval: undefined,
+      nonTTYHeartbeatInterval: undefined,
+      nonTTYHeartbeatStep: null,
+    };
 
     registerStateSubscriber(emitter, runState);
     registerTTYSubscriber(emitter, ttyCtx);
@@ -122,6 +131,11 @@ export async function runWorkflow(rest: string[]): Promise<number> {
         const elapsedSec = (Date.now() - startedAt) / 1000;
         process.stdout.write("\r" + formatRunningBottomLine("default", elapsedSec) + "\u001b[K");
       }, 1000);
+    } else {
+      const hbMs = nonTTYHeartbeatTickMs();
+      ttyCtx.nonTTYHeartbeatInterval = setInterval(() => {
+        tickNonTTYHeartbeat(ttyCtx);
+      }, hbMs);
     }
 
     const onLine = createStderrParser(emitter);
@@ -149,6 +163,10 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       clearInterval(ttyCtx.runningInterval);
       ttyCtx.runningInterval = undefined;
       process.stdout.write("\r\u001b[K");
+    }
+    if (ttyCtx.nonTTYHeartbeatInterval !== undefined) {
+      clearInterval(ttyCtx.nonTTYHeartbeatInterval);
+      ttyCtx.nonTTYHeartbeatInterval = undefined;
     }
 
     return reportResult(

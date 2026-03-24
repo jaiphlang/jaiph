@@ -64,6 +64,19 @@ export function formatStartLine(
   return `${dimPrefix}${marker} ${namePart}${paramSuffix}`;
 }
 
+/** Non-TTY long-step heartbeat: same indent/prefix as start/end; full line dim when `dimEnabled`. */
+export function formatHeartbeatLine(
+  indent: string,
+  kind: string,
+  name: string,
+  runningSec: number,
+  dimEnabled: boolean,
+): string {
+  const prefix = indent.slice(0, -2);
+  const body = `${prefix}\u00b7 ${kind} ${name} (running ${runningSec}s)`;
+  return colorize(body, "dim", dimEnabled);
+}
+
 export function formatCompletedLine(
   indent: string,
   status: number,
