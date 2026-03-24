@@ -25,17 +25,16 @@ rule docs_files_present {
   done
 }
 
-function changed_files() {
-  return "$({
-    git diff --name-only --cached
-    git diff --name-only
-    git ls-files --others --exclude-standard
-  } | sort -u)"
-}
-
 rule worktree_is_clean {
+  # Rules allow only shell and `ensure` — not `run`. Duplicate git listing here and below.
   local current_changed_files
-  current_changed_files = run changed_files
+  current_changed_files="$(
+    {
+      git diff --name-only --cached
+      git diff --name-only
+      git ls-files --others --exclude-standard
+    } | sort -u
+  )"
 
   if [ -n "$current_changed_files" ]; then
     echo "Refusing to run docs parity workflow on a dirty worktree."
@@ -56,7 +55,13 @@ rule only_expected_docs_changed_after_prompt {
   test "$#" -eq 1
   local allowed_to_change_files="$1"
   local after_changed_files
-  after_changed_files = run changed_files
+  after_changed_files="$(
+    {
+      git diff --name-only --cached
+      git diff --name-only
+      git ls-files --others --exclude-standard
+    } | sort -u
+  )"
 
   while IFS= read -r changed_file; do
     [ -z "$changed_file" ] && continue
