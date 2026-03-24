@@ -6,7 +6,7 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Rewrite .jaiph/ workflows to new language syntax
+## Rewrite .jaiph/ workflows to new language syntax <!-- dev-ready -->
 
 **Spec**: `.jaiph/language_redesign_spec.md` — read the ENTIRE spec before starting. Every design decision, syntax rule, and migration pattern is documented there.
 
@@ -41,7 +41,7 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Add new language constructs to compiler: `fail`, `const`, `wait`, brace-style `if`
+## Add new language constructs to compiler: `fail`, `const`, `wait`, brace-style `if` <!-- dev-ready -->
 
 **Spec**: `.jaiph/language_redesign_spec.md` — sections: Design Decisions, Legality Matrix (workflow), Semantics, Implementation Plan Phase 1.
 
@@ -85,7 +85,7 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Remove shell from compiler, migrate all fixtures, pass all tests
+## Remove shell from compiler, migrate all fixtures, pass all tests <!-- dev-ready -->
 
 **Spec**: `.jaiph/language_redesign_spec.md` — sections: Legality Matrix (all three), Implementation Plan Phases 2–4, Code Changes Required, Migration Examples, Pattern Catalog (all P1–P11).
 
@@ -160,7 +160,7 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Implement function isolation and shared library support
+## Implement function isolation and shared library support <!-- dev-ready -->
 
 **Spec**: `.jaiph/language_redesign_spec.md` — sections: Function Isolation Model, Design Decisions #10–12.
 
