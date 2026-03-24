@@ -76,8 +76,11 @@ layout: null
                     <p>The core primitives are <strong>rule</strong>, <strong>prompt</strong>, <strong>function</strong>
                         and <strong>workflow</strong>. Workflows call rules with <code>ensure</code> and call other workflows
                         or module functions with <code>run</code> (managed steps, explicit <code>return</code> values, logs under
-                        <code>.jaiph/runs</code>). Bash <code>$(...)</code> is for pure shell only — not for Jaiph symbols.
-                        You can embed ordinary bash inside workflows and rules and pass arguments like bash scripts.</p>
+                        <code>.jaiph/runs</code>). Invocation is <strong>keyword-first</strong>: a Jaiph symbol is never a bare
+                        shell command name in a workflow step. Bash <code>$(...)</code> is for pure shell only — not for Jaiph
+                        symbols — and the compiler still checks the first word of each workflow shell line even when
+                        <code>$(...)</code> appears on the same line. You can embed ordinary bash inside workflows and rules and
+                        pass arguments like bash scripts.</p>
                     <pre><code class="language-jaiph">#!/usr/bin/env jaiph
 
 rule name_was_provided {

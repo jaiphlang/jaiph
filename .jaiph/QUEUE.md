@@ -6,39 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Simplify compiler with keyword-first invocation grammar (`ensure`/`run`) <!-- dev-ready -->
-
-**Problem.** The compiler currently needs extra heuristics to infer call intent from shell-like forms (especially around direct function calls and substitution contexts). This increases parser/validator complexity and creates edge cases.
-
-**Hypothesis.** If all Jaiph symbol invocations are keyword-first, the compiler pipeline can be simplified:
-- `ensure <rule>`
-- `run <workflow>`
-- `run <function>`
-- no direct symbol invocation as generic shell calls
-
-**Goal.** Identify and implement safe simplifications in parser/AST/validator/transpiler based on this invariant, while preserving existing runtime behavior contracts.
-
-**Scope.**
-- Remove or reduce heuristic symbol-detection paths used to distinguish shell commands from Jaiph symbol calls.
-- Consolidate call typing logic so invocation kind is explicit from syntax (keyword) instead of inferred.
-- Simplify substitution validation by reusing explicit symbol-kind tables and keyword requirements.
-- Reduce special-case emission logic tied to direct function-call capture and shell fallback ambiguity.
-
-**Implementation constraints.**
-- Keep backward-incompatible behavior intentional and documented (no silent semantic drift).
-- Prefer deleting code and collapsing branches over adding new abstraction layers.
-- Maintain clear compile-time errors for unsupported/legacy forms.
-
-**Tests (mandatory).**
-- Update parser/validator/transpiler tests to reflect keyword-first invocation only.
-- Add regression tests proving removed heuristics are no longer needed.
-- Ensure e2e suite passes with updated invocation model and no behavior regressions in managed logging/value channels.
-
-**Acceptance criteria.**
-- Compiler code paths for invocation classification are measurably simpler (fewer branches/files touched by invocation semantics).
-- Invocation semantics are fully explicit in grammar and validation (no implicit Jaiph symbol invocation forms).
-- Docs and changelog explain the simplification rationale and migration impact.
-
 ## Fix STEP_END embedded output JSON escaping (control chars leak as raw `__JAIPH_EVENT__`) <!-- dev-ready -->
 
 **Problem.** `STEP_END` events embed `out_content`/`err_content`, but runtime escaping in `src/runtime/events.sh` only escapes `\`, `"`, `\n`, and `\r`. Other JSON-invalid control chars from CI logs (for example tabs or ANSI control bytes) can remain unescaped, making the event line invalid JSON.

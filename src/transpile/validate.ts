@@ -445,7 +445,6 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         for (const rawLine of s.command.split("\n")) {
           const line = rawLine.trim();
           if (!line || line.startsWith("#")) continue;
-          if (line.includes("$(")) continue;
           validateManagedShellFragment(line, env);
         }
         return;
