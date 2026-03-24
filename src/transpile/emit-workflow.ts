@@ -37,6 +37,7 @@ const SCOPED_VARS = [
   "JAIPH_AGENT_CLAUDE_FLAGS",
   "JAIPH_RUNS_DIR",
   "JAIPH_DEBUG",
+  "JAIPH_INBOX_PARALLEL",
 ];
 
 /** Convert WorkflowMetadata agent/run keys to { envVarName, escapedValue } pairs. */
@@ -53,6 +54,9 @@ function metadataToAssignments(
   if (meta.agent?.claudeFlags !== undefined) out.push({ name: "JAIPH_AGENT_CLAUDE_FLAGS", value: esc(meta.agent.claudeFlags) });
   if (meta.run?.logsDir !== undefined) out.push({ name: "JAIPH_RUNS_DIR", value: esc(meta.run.logsDir) });
   if (meta.run?.debug !== undefined) out.push({ name: "JAIPH_DEBUG", value: meta.run.debug ? "true" : "false" });
+  if (meta.run?.inboxParallel !== undefined) {
+    out.push({ name: "JAIPH_INBOX_PARALLEL", value: meta.run.inboxParallel ? "true" : "false" });
+  }
   return out;
 }
 
