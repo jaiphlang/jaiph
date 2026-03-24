@@ -1,6 +1,6 @@
 # ![Jaiph](docs/logo.png)
 
-[jaiph.org](https://jaiph.org) · [Getting Started](docs/getting-started.md) · [CLI](docs/cli.md) · [Reporting](docs/reporting.md) · [Configuration](docs/configuration.md) · [Grammar](docs/grammar.md) · [Testing](docs/testing.md) · [Hooks](docs/hooks.md) · [Inbox & Dispatch](docs/inbox.md) · [Sandboxing](docs/sandboxing.md) · [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md)
+[jaiph.org](https://jaiph.org) · [Getting started](https://jaiph.org/getting-started) ([`docs/getting-started.md`](docs/getting-started.md)) · [CLI](docs/cli.md) · [Reporting](docs/reporting.md) · [Configuration](docs/configuration.md) · [Grammar](docs/grammar.md) · [Testing](docs/testing.md) · [Hooks](docs/hooks.md) · [Inbox & Dispatch](docs/inbox.md) · [Sandboxing](docs/sandboxing.md) · [Agent skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md) · [Contributing](docs/contributing.md)
 
 ---
 
@@ -25,8 +25,8 @@ It combines declarative workflow structure with bash, then compiles to pure shel
 > [!WARNING]
 > Jaiph is still in an early stage. Expect breaking changes.
 
-- **Documentation:** [Getting Started](docs/getting-started.md) — installation, first workflow, language overview. Full reference: <https://jaiph.org/>
-- **Agent skill (for AI agents):** <https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md>
+- **Documentation:** [Getting started (site)](https://jaiph.org/getting-started) · [Getting started (repo)](docs/getting-started.md) — install, first run, language map. Other guides are linked from the site and from the links at the top of this file.
+- **Agent skill (for AI assistants authoring `.jh` workflows):** <https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md>
 - **Samples:** <https://github.com/jaiphlang/jaiph/tree/main/samples>
 - **Contributing:** <https://github.com/jaiphlang/jaiph/issues>
 
@@ -109,4 +109,8 @@ For the full language reference, CLI commands, configuration, testing, Docker sa
 
 ## Contributing
 
-See [Contributing](docs/contributing.md) for branching strategy, pull request guidance, and E2E testing standards.
+See [Contributing](docs/contributing.md) for branch strategy, pull requests, the Node/Jest and bash E2E test layers, and code style expectations. Use [GitHub Issues](https://github.com/jaiphlang/jaiph/issues) for bugs and feature discussion.
+
+## License
+
+[Apache License 2.0](LICENSE).

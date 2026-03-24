@@ -7,26 +7,41 @@ redirect_from:
 
 # Jaiph Configuration
 
-Jaiph workflows compile to Bash scripts that run agent prompts, shell commands, and rule checks. Configuration lets you control which agent backend is used, where logs go, and how the runtime behaves -- without changing your workflow logic.
+## Why configuration exists
 
-There are three sources of configuration:
+Jaiph workflows compile to Bash scripts that run agent prompts, shell commands, inbox routing, and rule checks. **Configuration** is how you tune the runtime (which agent backend to use, where logs go, whether the Docker sandbox is on, how inbox dispatch behaves) **without** changing the workflow’s control flow.
 
-1. **Environment variables** -- `JAIPH_AGENT_*`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, `JAIPH_INBOX_PARALLEL`, and `JAIPH_DOCKER_*`.
-2. **In-file config** -- a `config { ... }` block at the top level of a workflow file, and optionally inside individual `workflow { ... }` bodies for per-workflow overrides.
-3. **Built-in defaults** -- sensible defaults for all settings.
+You typically set options once per project or per workflow, then rely on the same workflow source in different environments.
 
-Precedence: environment > workflow-level config > module-level config > defaults. See [Defaults and precedence](#defaults-and-precedence) for the full resolution order.
+## What you can configure (overview)
+
+Three mechanisms apply to **agent** and **run** settings (model, backend, logs directory, debug trace, inbox parallelism):
+
+1. **Environment variables** — `JAIPH_AGENT_*`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, `JAIPH_INBOX_PARALLEL`, and (for Docker) `JAIPH_DOCKER_*`.
+2. **In-file config** — a `config { ... }` block at **module** (file) scope in the entry `.jh` file, and optionally a nested `config { ... }` inside a `workflow { ... }` body for overrides limited to that workflow.
+3. **Built-in defaults** — used when nothing else sets a value.
+
+**Precedence** for those agent/run settings: **environment → workflow-level config → module-level config → defaults**. Details are in [Defaults and precedence](#defaults-and-precedence).
+
+**Docker / `runtime.*` keys** follow the same *idea* (environment overrides in-file values), but they are chosen in the `jaiph run` driver when the process starts. They are **not** allowed in workflow-level `config` blocks, and in-file `runtime.*` values are **not** copied into `JAIPH_DOCKER_*` inside the Bash script for you. See [Runtime keys](#runtime-keys-docker-sandbox--beta) and [Inspect effective config at runtime](#inspect-effective-config-at-runtime).
 
 ## In-file config (module-level)
 
-In the entry workflow file (the one you pass to `jaiph run`), you can declare runtime options in a single **config block** at the top level. The block is optional. If present, it must start with `config {` on its own line and can appear anywhere at the top level (conventionally placed near the top, after the shebang and imports). Only one top-level config block per file; a second one causes a parse error (`E_PARSE` with file location). An unknown config key also yields `E_PARSE`; the error message lists the allowed keys. For per-workflow overrides, see [Workflow-level config](#workflow-level-config) below.
+In the **entry** workflow file (the path you pass to `jaiph run`), you can declare a single **module-level** `config { ... }` block. It is optional. If it is present:
 
-Inside the block, use `key = value` lines. Empty lines and lines starting with `#` are ignored. Values can be:
+- The opening line must be exactly `config {` (whitespace allowed before `{`).
+- Only **one** module-level config block per file; a second one is `E_PARSE` (`duplicate config block`).
+- The block may appear at any position among other **top-level** constructs (e.g. before or after `import` lines); convention is near the top, after an optional shebang.
+- **Unknown keys** are `E_PARSE`; the error lists allowed keys. **Wrong value types** (e.g. a string for `runtime.docker_timeout`) are also `E_PARSE`. For `agent.backend`, only `"cursor"` and `"claude"` are allowed.
 
-- **Quoted strings** — double or single quotes. Escape sequences: `\\`, `\n`, `\t`, `\"`.
+Inside the block, each non-comment line is `key = value`. Empty lines and lines starting with `#` are ignored.
+
+### Value syntax
+
+- **Strings** — double- or single-quoted. Recognized escapes inside the quotes: `\\`, `\n`, `\t`, `\"`.
 - **Booleans** — `true` or `false` (unquoted).
-- **Integers** — bare numeric literals (e.g. `300`). No floats, negatives, or hex.
-- **Arrays of strings** — bracket-delimited, e.g. `["a", "b"]`. Opening `[` must be on the same line as `=`. Each element is a quoted string on its own line. Trailing commas and `#` comments between elements are allowed. Empty array `= []` is valid.
+- **Integers** — unsigned decimal digits only (e.g. `300`). No floats, negatives, or hex.
+- **String arrays** — start with `=` and `[` on the **same** line (after the key), then one quoted string per line, then `]` or `],`. Trailing commas and `#` comments between elements are allowed. `= []` is valid.
 
 ```jh
 config {
@@ -55,38 +70,38 @@ workflow default {
 }
 ```
 
-Allowed config keys:
+### Agent keys
 
-**Agent keys:**
+- `agent.default_model`: Default model for `prompt` steps (string). Exposed to Bash as `JAIPH_AGENT_MODEL`.
+- `agent.command`: Full command line for the **cursor** backend (string), e.g. `cursor-agent` or `cursor-agent --force`. Parsed in Bash for the executable and arguments.
+- `agent.backend`: `"cursor"` (default) or `"claude"`. For `"claude"`, the **Claude CLI** (`claude`) must be on `PATH`. See [Backend selection](#backend-selection).
+- `agent.trusted_workspace`: Directory passed to the Cursor backend (`--trust`). For **`jaiph run`**, when this comes from **module-level** config and is a relative path, the CLI resolves it to an absolute path under the workspace root before the workflow runs. **Workflow-level** overrides and the defaults emitted into the script use the string as written; at prompt time the runtime uses `"${JAIPH_AGENT_TRUSTED_WORKSPACE:-$workspace_root}"`, so relative values are interpreted relative to the process working directory (the workspace root for normal `jaiph run`). When set via **`JAIPH_AGENT_TRUSTED_WORKSPACE`** in the environment, that value is used as-is (and locks overrides from in-file config for the whole process).
+- `agent.cursor_flags` / `agent.claude_flags`: Extra flags appended for the selected backend (string; split on whitespace in Bash).
 
-- `agent.default_model`: Default model for `prompt` steps (string).
-- `agent.command`: Command string for the **cursor** backend (string, e.g. `cursor-agent` or `cursor-agent --force`).
-- `agent.backend`: Which prompt backend to use: `"cursor"` (default) or `"claude"`. When `"claude"`, the **Claude CLI** (`claude`) is invoked; it must be on PATH. See [Backend selection](#backend-selection) below.
-- `agent.trusted_workspace`: Trusted workspace directory passed to the Cursor backend (`--trust`). When set in-file, relative paths are resolved from the workspace (project) root. When set via environment, the value is used as-is. Defaults to the project root when unset.
-- `agent.cursor_flags`: Extra flags appended to Cursor backend invocation (string; split on whitespace).
-- `agent.claude_flags`: Extra flags appended to Claude backend invocation (string; split on whitespace).
+### Run keys
 
-**Run keys:**
+- `run.logs_dir`: Step log directory (string). Default `.jaiph/runs`. If the effective value is **relative**, the runtime joins it with the workspace root; **absolute** paths are used as-is. Maps to `JAIPH_RUNS_DIR`.
+- `run.debug`: If `true`, enables Bash `set -x` for the run (`JAIPH_DEBUG`). Omitted or `false` leaves tracing off unless the environment sets `JAIPH_DEBUG`.
+- `run.inbox_parallel`: If `true`, inbox route targets for each batch are dispatched concurrently (default `false`). See [Inbox & Dispatch — Parallel dispatch](inbox.md#parallel-dispatch). Maps to `JAIPH_INBOX_PARALLEL`.
 
-- `run.logs_dir`: Directory for step logs. Relative paths are resolved against the workspace root at runtime; absolute paths are used as-is (string).
-- `run.debug`: If `true`, enables Bash `set -x` (shell trace) for the run (boolean).
-- `run.inbox_parallel`: If `true`, inbox route targets are dispatched in parallel instead of sequentially (boolean, default `false`). See [Inbox & Dispatch — Parallel dispatch](inbox.md#parallel-dispatch).
+### Runtime keys (Docker sandbox — beta)
 
-**Runtime keys (Docker sandbox — beta):**
+> Docker sandboxing is in **beta**. See [Sandboxing](sandboxing.md) for mounts, workspace layout, Dockerfile detection, env forwarding, path remapping, and container behavior.
 
-> Docker sandboxing is in **beta**. See [Sandboxing](sandboxing.md) for full documentation, including mount parsing rules, workspace structure, Dockerfile detection, environment variable forwarding, path remapping, and Docker behavior details.
-
-- `runtime.docker_enabled`: Enable Docker sandbox for the run (boolean, default `false`).
-- `runtime.docker_image`: Container image to use (string, default `"ubuntu:24.04"`).
+- `runtime.docker_enabled`: Enable Docker for this run (boolean, default `false`).
+- `runtime.docker_image`: Image name (string, default `"ubuntu:24.04"`). When **no** image is set in config or environment, Jaiph may instead build and use an image from `.jaiph/Dockerfile` if that file exists in the workspace root.
 - `runtime.docker_network`: Docker network mode (string, default `"default"`).
-- `runtime.docker_timeout`: Maximum execution time in seconds (integer, default `300`).
-- `runtime.workspace`: Mount specifications (string array, default `[".:/jaiph/workspace:rw"]`).
-
-Each key enforces its expected type: assigning a string to an integer key, or a boolean to a string key, etc., produces `E_PARSE`. Unknown keys (including unknown `runtime.*` keys) also produce `E_PARSE`.
+- `runtime.docker_timeout`: Timeout in seconds (integer, default `300`).
+- `runtime.workspace`: Mount list (string array, default `[".:/jaiph/workspace:rw"]`). **Not** overridable via environment variables; only in-file values and defaults apply.
 
 ## Workflow-level config
 
-A `config { ... }` block can also appear inside a `workflow { ... }` body to override module-level settings for that workflow only. The block must appear at the start of the workflow body (after any comments, before any steps). At most one config block per workflow. Only `agent.*` and `run.*` keys are allowed; `runtime.*` keys produce `E_PARSE` because Docker sandbox configuration is per-run, not per-workflow.
+A `config { ... }` block may appear **inside** a `workflow { ... }` body to override module-level **agent** and **run** keys for that workflow only.
+
+Rules:
+
+- At most one such block per workflow; it must be the first content in the body (only comments may appear before it).
+- Allowed keys: **`agent.*` and `run.*` only**. Any `runtime.*` key is `E_PARSE` (Docker stays module-level / env).
 
 ```jh
 config {
@@ -108,37 +123,35 @@ workflow default {
 }
 ```
 
-Workflow-level config overrides module-level config for all steps inside that workflow — including rules and functions called from it. When the workflow finishes, the previous environment is restored. Other workflows in the same file are not affected.
+Workflow-level values apply to all steps in that workflow, including `ensure`d rules and functions called from it. When the workflow finishes, the previous environment is restored. Other workflows in the same file are unaffected.
 
-**Precedence (highest wins):**
+**Precedence inside a workflow (highest wins):**
 
-1. **Environment variables** — always win (`_LOCKED` semantics).
-2. **Workflow-level config** — overrides module config for steps inside that workflow. Also locks its overrides so that rules and nested module-scope calls do not revert them.
-3. **Module-level config** — applies to workflows without their own config.
-4. **Built-in defaults.**
+1. **Environment** — `JAIPH_*` values present when `jaiph run` starts win and set the corresponding `*_LOCKED` markers so nested `run` into another module cannot replace them.
+2. **Workflow-level `config`** — overrides module in-file values for the duration of that workflow; its exports also set `_LOCKED` so inner module-level scopes (rule/function wrappers) do not revert them.
+3. **Module-level `config`** — fills in values for workflows without their own block.
+4. **Defaults** — see below.
 
-**Interaction with nested `run`:** When a workflow with config calls into another module via `run alias.workflow`, the workflow-level overrides propagate to the callee (they behave like env vars: the callee's module config only fills in variables that are not already set). When the call returns, the caller's environment is restored.
+**Nested `run`:** When a workflow that has workflow-level `config` calls `run alias.workflow` in another file, the callee runs under `alias::with_metadata_scope` so the **callee’s** module `config` only supplies variables that are not already set (mirroring env semantics). Caller values restored when the call returns.
 
 ## Backend selection
 
-`prompt` steps can use either the **cursor** backend (default) or the **Claude CLI** backend.
+`prompt` steps use either the **cursor** backend (default) or the **Claude CLI**:
 
-- **cursor** (default): Runs the executable from `agent.command` (default `cursor-agent`) with stream-json output. Use this when you run workflows with Cursor’s agent.
-- **claude**: Runs the Anthropic **Claude CLI** (`claude`). Use this when you want the same workflow to drive Claude from the terminal. The `claude` binary must be installed and on your PATH. If you set `agent.backend = "claude"` and `claude` is not found, Jaiph prints a clear error and exits.
-- Backend-specific flags are appended from `agent.cursor_flags` / `agent.claude_flags` (or env vars below).
+- **cursor**: Runs `agent.command` (default `cursor-agent`) with stream-json output.
+- **claude**: Runs `claude` on `PATH`. If the backend is `claude` but the executable is missing, Jaiph reports an error and exits.
 
-No prompt-level backend override exists; the backend is determined by the effective config at the point a prompt step executes (module-level config, workflow-level override, or environment variable). Different workflows in the same run can use different backends via workflow-level config. In `jaiph test`, prompt mocks override backend execution; when a prompt is not mocked, the selected backend runs normally (including Claude CLI if `agent.backend = "claude"`).
+Backend-specific flags come from `agent.cursor_flags` / `agent.claude_flags` (or the matching env vars). There is no per-`prompt` backend override; the effective backend is whatever the config/env stack resolves to when the step runs. In `jaiph test`, mocked prompts skip real backend execution; unmocked prompts use the resolved backend.
 
 ## Defaults and precedence
 
-Built-in defaults:
+### Built-in defaults (agent, run, runtime)
 
-- `agent.default_model`: unset (only passed when configured)
+- `agent.default_model`: unset (omitted from generated exports until set)
 - `agent.command`: `cursor-agent`
 - `agent.backend`: `cursor`
-- `agent.trusted_workspace`: project root
-- `agent.cursor_flags`: unset
-- `agent.claude_flags`: unset
+- `agent.trusted_workspace`: workspace root (via runtime default when unset)
+- `agent.cursor_flags` / `agent.claude_flags`: unset
 - `run.logs_dir`: `.jaiph/runs`
 - `run.debug`: `false`
 - `run.inbox_parallel`: `false`
@@ -148,33 +161,39 @@ Built-in defaults:
 - `runtime.docker_timeout`: `300`
 - `runtime.workspace`: `[".:/jaiph/workspace:rw"]`
 
-Resolution order (highest wins):
+### Resolution order (agent / run)
 
-1. **Environment variables** — `JAIPH_AGENT_MODEL`, `JAIPH_AGENT_COMMAND`, `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_AGENT_CURSOR_FLAGS`, `JAIPH_AGENT_CLAUDE_FLAGS`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, and `JAIPH_DOCKER_*` (see [Config to env mapping](#config-to-env-mapping) for the full list). If set in the environment, the value overrides in-file config. Agent and run variables are locked for the entire execution and not overridden when you invoke another module’s workflow via `run` (that module’s config only fills in variables that are not already set).
-2. **Workflow-level config** — from a `config { ... }` block inside a `workflow { ... }` body. Overrides module-level config for all steps inside that workflow. Locks its overrides so that rules and module-scope wrappers do not revert them. See [Workflow-level config](#workflow-level-config).
-3. **Module-level config** — from the top-level `config { ... }` block, or from the current module’s block when execution is inside that module’s workflow (e.g. after `run other.default`).
-4. **Built-in defaults** — see above.
+1. **Environment** — `JAIPH_AGENT_MODEL`, `JAIPH_AGENT_COMMAND`, `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_AGENT_CURSOR_FLAGS`, `JAIPH_AGENT_CLAUDE_FLAGS`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, `JAIPH_INBOX_PARALLEL`. When set here, values override in-file config for the **entire** `jaiph run` process and lock against replacement on nested `run` (see [Config to env mapping](#config-to-env-mapping)).
+2. **Workflow-level `config`** — for steps inside that workflow; locks its overrides as described above.
+3. **Module-level `config`** — from the entry file, or from the current module after `run other.default` establishes that module’s scope.
+4. **Built-in defaults** — as listed.
+
+### Docker / `runtime.*` (driver-only)
+
+For `runtime.*`, the `jaiph run` driver merges **`JAIPH_DOCKER_*` environment** → **module-level in-file `runtime.*`** → **defaults** (mounts are **not** taken from env). Workflow-level `config` cannot set these. Invalid or unparsable `JAIPH_DOCKER_TIMEOUT` falls back to the default timeout.
 
 ## Config to env mapping
 
-- `agent.default_model` -> `JAIPH_AGENT_MODEL`
-- `agent.command` -> `JAIPH_AGENT_COMMAND`
-- `agent.backend` -> `JAIPH_AGENT_BACKEND`
-- `agent.trusted_workspace` -> `JAIPH_AGENT_TRUSTED_WORKSPACE`
-- `agent.cursor_flags` -> `JAIPH_AGENT_CURSOR_FLAGS`
-- `agent.claude_flags` -> `JAIPH_AGENT_CLAUDE_FLAGS`
-- `run.logs_dir` -> `JAIPH_RUNS_DIR`
-- `run.debug` -> `JAIPH_DEBUG`
-- `run.inbox_parallel` -> `JAIPH_INBOX_PARALLEL`
-- `runtime.docker_enabled` -> `JAIPH_DOCKER_ENABLED`
-- `runtime.docker_image` -> `JAIPH_DOCKER_IMAGE`
-- `runtime.docker_network` -> `JAIPH_DOCKER_NETWORK`
-- `runtime.docker_timeout` -> `JAIPH_DOCKER_TIMEOUT`
-- `runtime.workspace` -> _(not overridable via env)_
+| In-file key | Environment variable |
+|-------------|----------------------|
+| `agent.default_model` | `JAIPH_AGENT_MODEL` |
+| `agent.command` | `JAIPH_AGENT_COMMAND` |
+| `agent.backend` | `JAIPH_AGENT_BACKEND` |
+| `agent.trusted_workspace` | `JAIPH_AGENT_TRUSTED_WORKSPACE` |
+| `agent.cursor_flags` | `JAIPH_AGENT_CURSOR_FLAGS` |
+| `agent.claude_flags` | `JAIPH_AGENT_CLAUDE_FLAGS` |
+| `run.logs_dir` | `JAIPH_RUNS_DIR` |
+| `run.debug` | `JAIPH_DEBUG` |
+| `run.inbox_parallel` | `JAIPH_INBOX_PARALLEL` |
+| `runtime.docker_enabled` | `JAIPH_DOCKER_ENABLED` |
+| `runtime.docker_image` | `JAIPH_DOCKER_IMAGE` |
+| `runtime.docker_network` | `JAIPH_DOCKER_NETWORK` |
+| `runtime.docker_timeout` | `JAIPH_DOCKER_TIMEOUT` |
+| `runtime.workspace` | _(no env override)_ |
 
 ## Inspect effective config at runtime
 
-Inside workflows, rules, and functions, the resolved config is available as shell environment variables (`JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, etc.). You can log them to debug scoping and overrides:
+Inside workflows, rules, and functions, **agent** and **run** settings are visible as the usual `JAIPH_*` variables, for example `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_MODEL`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, and `JAIPH_INBOX_PARALLEL`.
 
 ```jh
 workflow default {
@@ -183,8 +202,10 @@ workflow default {
 }
 ```
 
-When a workflow calls another module’s workflow via `run alias.default`, the called workflow runs with that module’s config scope: its `config { }` values fill in any variables not already set by the environment. When the call returns, the caller’s environment is restored.
+`JAIPH_DOCKER_*` is **not** populated from in-file `runtime.*` inside the Bash process. Those variables only affect the run if they are already present in the environment that launches `jaiph run` (or if your script exports them itself).
+
+When a workflow calls another module via `run alias.default`, the callee runs under that module’s metadata scope; unset variables are filled from the callee’s module `config`. When the call returns, the caller’s values are restored.
 
 ## Created by `jaiph init`
 
-`jaiph init` creates `.jaiph/bootstrap.jh` and syncs `.jaiph/jaiph-skill.md` from your installation. It does not create a config file; use in-file config blocks in your workflow files.
+`jaiph init` creates `.jaiph/bootstrap.jh` and syncs `.jaiph/jaiph-skill.md` from your installation. It does **not** add a separate config file; use `config { ... }` in your workflow sources.

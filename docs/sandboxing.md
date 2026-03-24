@@ -7,43 +7,49 @@ redirect_from:
 
 # Sandboxing
 
-Jaiph provides two independent layers of execution isolation:
+Workflows mix shell, agents, and inbox routing. That makes it easy to accidentally depend on mutable global state or to run untrusted code with full host access. **Sandboxing** is how Jaiph narrows those risks: it separates *what runs where* and, on supported Linux setups, makes rule checks harder to abuse for destructive filesystem writes.
 
-1. **Rule-level read-only isolation** — rules always execute in an isolated subprocess. On Linux with `unshare` available, the filesystem is remounted read-only inside a mount namespace, preventing rules from modifying the host. On macOS (or when `unshare` is unavailable), rules still run in a child shell for process isolation, but without filesystem write protection.
+Jaiph provides two **independent** layers:
 
-2. **Docker container isolation** — opt-in. The entire transpiled workflow runs inside a Docker container, receiving only the transpiled bash script and the shell stdlib. No Jaiph source files, TypeScript, or Node.js enter the container.
+1. **Rule-level read-only isolation** — every `rule` runs in a subprocess. On Linux, when mount-namespace tooling is available, the filesystem can be remounted read-only inside that subprocess. Elsewhere, rules still run in a child shell so an `exit` inside a rule does not tear down the parent workflow, but the host filesystem may stay writable (see below).
 
-These layers are independent: rule-level isolation applies inside Docker containers too.
+2. **Docker container isolation** — optional. The transpiled workflow runs inside a container that receives only generated Bash, the shell stdlib, and copied runtime modules. Jaiph sources, TypeScript, and Node from the host toolchain are not required inside the container for the run itself.
+
+The layers stack: rule-level isolation still applies to rules executed inside Docker.
+
+For general `config` syntax, allowed keys, and precedence with environment variables, see [Configuration](configuration.md). Docker-related keys are documented here in detail.
 
 ## Rule-level read-only isolation
 
-Every `rule` block executes through `jaiph::execute_readonly`, which wraps the rule body in a subprocess. This happens automatically at transpile time — you don't need to configure anything.
+Every `rule` block is emitted so the implementation runs under `jaiph::execute_readonly` (see **Rules** under [Transpilation](grammar.md#transpilation) in the grammar doc). You do not configure this; the transpiler wires it automatically.
 
-**On Linux** (with `unshare` and passwordless `sudo` available):
+**On Linux**, when all of the following hold — `unshare` and `sudo` on `PATH`, passwordless `sudo` (`sudo -n`), and a working `unshare -m` — the rule body runs under:
 
 ```bash
-sudo unshare -m bash -c '
+sudo env JAIPH_PRECEDING_FILES="$JAIPH_PRECEDING_FILES" unshare -m bash -c '
   mount --make-rprivate /
   mount -o remount,ro /
-  your_rule_function "$@"
+  ... invoke the rule function ...
 '
 ```
 
-The mount namespace makes the entire filesystem read-only for the duration of the rule. The rule can read files but cannot create, modify, or delete anything on disk. This enforces the principle that rules are pure assertions — they check conditions but don't change state.
+The mount namespace makes the filesystem read-only for the duration of the rule: reads work; creating, modifying, or deleting files on mounted filesystems should fail. `JAIPH_PRECEDING_FILES` is forwarded so agent-related behavior that depends on it still works under `sudo`.
 
-**On macOS** (or when `unshare`/`sudo` are unavailable):
+**Otherwise** (typical macOS install, containers without usable namespaces, or missing passwordless sudo): the implementation falls back to a child `bash` that invokes the same function. Process boundaries remain (e.g. `exit` in a rule does not kill the workflow runner), but **the filesystem is not forced read-only**. Treat rules as non-mutating checks in your design; rely on Linux + the prerequisites above for enforcement.
 
-The rule still runs in a child `bash` process for process isolation (an `exit` inside a rule won't kill the parent workflow), but the filesystem remains writable. This is a best-effort fallback.
-
-All currently defined shell functions are exported into the child process so rule bodies can call helpers and shims as expected.
+All shell functions are exported into the child environment so rule bodies can call helpers and shims defined in the same module.
 
 ## Docker container isolation
 
 > **Beta.** Docker sandboxing is functional but still under active development. Expect rough edges, breaking changes, and incomplete platform coverage. Feedback is welcome at <https://github.com/jaiphlang/jaiph/issues>.
 
+### Where Docker settings may live
+
+`runtime.*` keys belong only in a **module-level** `config { ... }` block (top of the `.jh` file). They are **not** allowed inside a **workflow-level** `config` block (workflow blocks may only override `agent.*` and `run.*`). Putting `runtime.*` in a workflow-level block is a parse error.
+
 ### Enabling Docker sandbox
 
-Docker sandboxing is **opt-in**. Set `runtime.docker_enabled = true` in your config block or export `JAIPH_DOCKER_ENABLED=true`:
+Docker sandboxing is **opt-in**. Set `runtime.docker_enabled = true` in module-level config, or control enablement with `JAIPH_DOCKER_ENABLED`:
 
 ```jh
 config {
@@ -51,52 +57,58 @@ config {
 }
 ```
 
-When Docker is enabled but the `docker` binary is not found, the run fails with `E_DOCKER_NOT_FOUND` (no silent fallback).
+If `JAIPH_DOCKER_ENABLED` is **set** in the environment, it overrides in-file `runtime.docker_enabled`: only the literal string `true` turns Docker on; `false` or any other value turns it off. If `JAIPH_DOCKER_ENABLED` is **unset**, the in-file value (default `false`) applies.
+
+When Docker is enabled but the `docker` binary is not usable (`docker info` fails), the run fails with `E_DOCKER_NOT_FOUND` (no silent fallback).
 
 ### Configuration keys
 
-All Docker-related keys live under `runtime.*` in the config block:
+All Docker-related keys live under `runtime.*` in module-level config:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `runtime.docker_enabled` | boolean | `false` | Enable Docker sandbox for the run. |
 | `runtime.docker_image` | string | `"ubuntu:24.04"` | Container image to use. |
 | `runtime.docker_network` | string | `"default"` | Docker network mode. |
-| `runtime.docker_timeout` | integer | `300` | Maximum execution time in seconds. |
+| `runtime.docker_timeout` | integer | `300` | Maximum execution time in seconds (`0` disables the timeout timer). |
 | `runtime.workspace` | string array | `[".:/jaiph/workspace:rw"]` | Mount specifications. |
 
-Each key enforces its expected type: assigning a string to an integer key, or a boolean to a string key, etc., produces `E_PARSE`. Unknown `runtime.*` keys also produce `E_PARSE`.
+Each key enforces its expected type at parse time. Unknown config keys anywhere in `config` produce `E_PARSE` (message lists allowed keys).
 
 #### Environment variable overrides
 
-Following the `JAIPH_*` convention: `JAIPH_DOCKER_ENABLED`, `JAIPH_DOCKER_IMAGE`, `JAIPH_DOCKER_NETWORK`, `JAIPH_DOCKER_TIMEOUT`. Workspace mounts are not overridable via env.
+Following the `JAIPH_*` convention: `JAIPH_DOCKER_ENABLED`, `JAIPH_DOCKER_IMAGE`, `JAIPH_DOCKER_NETWORK`, `JAIPH_DOCKER_TIMEOUT`. Workspace mounts are **not** overridable via env.
 
-Precedence: env vars (`JAIPH_DOCKER_*`) > in-file config > defaults.
+Precedence: `JAIPH_DOCKER_*` environment variables → in-file config → defaults.
+
+If `JAIPH_DOCKER_TIMEOUT` is set but not a valid integer, the default timeout (`300`) is used.
 
 ### Mount parsing rules
 
-Mount strings in `runtime.workspace` follow these forms:
+Mount strings in `runtime.workspace` use these forms:
 
 - **Full form** (3 segments): `"host_path:container_path:mode"` — mounts `host_path` at `container_path` with mode `ro` or `rw`.
-- **Shorthand** (2 segments): `"host_path:mode"` — mounts at `/jaiph/workspace/<host_path>` with the given mode.
-- **1 segment** — `E_PARSE` (invalid).
-- Mode must be `ro` or `rw` — `E_PARSE` otherwise.
-- Exactly one mount must target `/jaiph/workspace` — `E_VALIDATE` if zero or more than one match. If `runtime.workspace` is omitted, the default `[".:/jaiph/workspace:rw"]` satisfies this.
+- **Shorthand** (2 segments): `"host_path:mode"` — mounts at `/jaiph/workspace/<host_path>` (relative segment; may contain further path components) with the given mode.
+- **1 segment** — invalid (`E_PARSE` from mount parsing when Docker config is resolved).
+- Mode must be `ro` or `rw` — otherwise `E_PARSE`.
+- Exactly one mount must target `/jaiph/workspace` — `E_VALIDATE` if zero or more than one. Omitting `runtime.workspace` uses the default `[".:/jaiph/workspace:rw"]`, which satisfies this.
+
+Host paths are resolved relative to the workspace root when building `docker run` `-v` arguments.
 
 ### Workspace structure inside the container
 
 ```
 /jaiph/
   generated/          # mounted read-only
-    <script>.sh       # transpiled bash script(s)
+    <script>.sh       # transpiled bash script(s); see below
     jaiph_stdlib.sh   # shell stdlib
     runtime/          # shell runtime modules
       events.sh
-      steps.sh
-      prompt.sh
-      inbox.sh
-      sandbox.sh
       test-mode.sh
+      steps.sh
+      inbox.sh
+      prompt.sh
+      sandbox.sh
   workspace/          # the mount targeting /jaiph/workspace (read-write root)
     .jaiph/
       runs/
@@ -107,61 +119,64 @@ Mount strings in `runtime.workspace` follow these forms:
             ...
 ```
 
-- `/jaiph/generated/` contains the transpiled `.sh` script(s), `jaiph_stdlib.sh`, and the `runtime/` shell modules. All mounted read-only. `JAIPH_STDLIB` is set to `/jaiph/generated/jaiph_stdlib.sh` inside the container.
-- The container working directory is set to `/jaiph/workspace`.
-- Container receives **only** transpiled bash and the shell runtime. No Jaiph source files, no TypeScript, no Node.js.
+- **`/jaiph/generated/`** — Contains `jaiph_stdlib.sh`, the primary generated workflow script, and the `runtime/` copies listed above. If the build produced additional `.sh` files (for example imports), those are copied into the same tree under `generated/` so the entry script’s `source` paths keep working. Everything under `generated/` is mounted read-only. `JAIPH_STDLIB` is set to `/jaiph/generated/jaiph_stdlib.sh` inside the container.
+- **Working directory** — `/jaiph/workspace`.
+- **What is not shipped as Jaiph sources** — The container is meant to run with transpiled Bash and shell runtime only; no `.jh` sources, TypeScript, or host Node install are required for that layout.
+
+The CLI also mounts the host directory containing the run meta file read-write at the same path inside the container so the wrapper can record exit status and paths.
 
 ### Docker behavior
 
-- `docker run --rm` with proper UID/GID mapping (`--user $(id -u):$(id -g)` on Linux).
-- TTY passthrough: `-t` flag when `process.stdout.isTTY` is true. Because Docker with `-t` merges the container's stderr into stdout, the CLI buffers Docker stdout line-by-line and filters out `__JAIPH_EVENT__` lines (routing them through the event handler instead). This ensures the progress tree output is identical whether Docker is enabled or not.
-- Step output reporting: the bash stdlib always embeds `out_content` in `STEP_END` events (and `err_content` for failed steps), regardless of dispatch status. The CLI uses this embedded content exclusively for display — it never reads `out_file`/`err_file` from disk for rendering. This makes step output identical in Docker and non-Docker modes. Embedded strings are escaped in the runtime (`jaiph::json_escape` in `events.sh`) per RFC 8259 (control characters through `U+001F`, plus `\` and `"`), so event lines stay valid JSON even when logs contain tabs or ANSI sequences. Embedded content is capped at 1 MB; larger output is truncated with a `[truncated]` marker. The full output remains in `out_file`/`err_file` on disk for debugging and archival.
-- Docker TTY stream merging: Docker with `-t` merges the container's stderr into stdout. The CLI demuxes event lines from user output via line-based buffering. Ordering and timing of interleaved stdout/stderr may still differ from non-Docker mode — this is a known limitation.
+- `docker run --rm` with UID/GID mapping (`--user $(id -u):$(id -g)`) on Linux when `id` succeeds; other platforms omit `--user` if mapping is not applied.
+- **Structured events** — The run wrapper duplicates stderr to fd 3 (`exec 3>&2`); step events are written to that fd so they land on stderr in normal runs. With `docker run -t`, Docker typically merges the container’s stderr into the stdout stream the CLI reads. The CLI then line-buffers stdout in Docker mode, treats lines that parse as `__JAIPH_EVENT__` JSON as events, and prints the rest as user-facing output. Without a TTY, events and user output follow the usual stdout/stderr split from the container. Interleaving and timing can still differ from a non-Docker run when a TTY is attached — that is a known limitation.
+- **`STEP_END` and step logs** — The shell runtime embeds `out_content` in every `STEP_END` event and `err_content` when the step failed, so consumers do not need host paths to step `.out`/`.err` files (critical in Docker). Payloads are JSON-escaped (`jaiph::json_escape` in `events.sh`) per RFC 8259 for control characters through `U+001F` plus `\` and `"`. Embedded content is capped at 1 MiB; larger output is truncated with a `[truncated]` marker while full logs remain in `out_file` / `err_file` under the run directory. After a run, failure summaries prefer embedded fields when present and may fall back to reading files for older summaries that predate embedding.
 - Docker missing — `E_DOCKER_NOT_FOUND` (no silent fallback).
-- Image auto-pulled if missing; pull failure produces `E_DOCKER_PULL`.
-- Timeout kills container and reports `E_TIMEOUT`.
-- Network: `"default"` omits `--network` flag (uses Docker bridge). `"none"` passes `--network none`. Any other value is passed verbatim.
+- Image — If not present locally, `docker pull` is attempted; pull failure → `E_DOCKER_PULL`.
+- Timeout — When `runtime.docker_timeout` is greater than zero, overrun kills the container; the CLI surfaces `E_TIMEOUT` when the run fails after a timeout.
+- Network — `"default"` omits `--network` (Docker’s default bridge). `"none"` passes `--network none`. Any other value is passed through to `docker run --network`.
 
 ### Dockerfile-based image detection
 
-When no explicit `docker_image` is configured (neither `JAIPH_DOCKER_IMAGE` env var nor in-file `runtime.docker_image`), the runtime checks for `.jaiph/Dockerfile` in the workspace root. If present:
+The runtime treats the image as **explicitly configured** if **either** `runtime.docker_image` appears in the file (any value) **or** `JAIPH_DOCKER_IMAGE` is set in the environment. In that case `.jaiph/Dockerfile` is **not** consulted.
 
-1. The runtime runs `docker build` from that Dockerfile and tags the result as `jaiph-runtime:latest`.
-2. The built image is used for the run instead of the default `ubuntu:24.04`.
+When the image is **not** explicit (no in-file `runtime.docker_image` and no `JAIPH_DOCKER_IMAGE`):
 
-Build failure produces `E_DOCKER_BUILD`. If `.jaiph/Dockerfile` does not exist, the runtime falls back to the default image (`ubuntu:24.04`). When an explicit image is configured, the Dockerfile is ignored entirely.
+1. If `.jaiph/Dockerfile` exists in the workspace root, the runtime runs `docker build`, tags the result `jaiph-runtime:latest`, and uses that image.
+2. Otherwise it uses the configured image name (default `ubuntu:24.04`), pulling if needed.
 
-The shipped `.jaiph/Dockerfile` includes:
+Build failure → `E_DOCKER_BUILD`.
+
+The repository’s example `.jaiph/Dockerfile` includes:
 
 - **Base image**: `ubuntu:latest`
-- **Node.js** latest LTS (required by `jaiph::stream_json_to_text` in `prompt.sh`)
-- **Claude Code CLI** (`@anthropic-ai/claude-code`)
-- **cursor-agent** (Cursor's agent backend)
-- Standard utilities: `bash`, `curl`, `git`, `ca-certificates`, `gnupg`
+- **Node.js** — latest LTS from NodeSource (used by `jaiph::stream_json_to_text` in `prompt.sh`)
+- **Claude Code CLI** — `@anthropic-ai/claude-code`
+- **cursor-agent** — installed via Cursor’s distribution, normalized to `/usr/local/bin/cursor-agent` when possible
+- **Utilities** — `bash`, `curl`, `git`, `ca-certificates`, `gnupg`
 
 ### Agent environment variable forwarding
 
-In addition to `JAIPH_*` variables, the following environment variables are forwarded into the Docker container for agent authentication:
+Besides variables forwarded as part of the normal `JAIPH_*` pass-through (except `JAIPH_STDLIB`, which the driver overrides), the following prefixes are forwarded for agent authentication and tooling:
 
-- `CURSOR_*` — all environment variables matching the `CURSOR_` prefix (e.g. `CURSOR_SESSION`, `CURSOR_API_KEY`) are forwarded for Cursor agent authentication.
-- `ANTHROPIC_*` — all environment variables matching the `ANTHROPIC_` prefix (e.g. `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`) are forwarded for Claude authentication/config.
-- `CLAUDE_*` — all environment variables matching the `CLAUDE_` prefix are forwarded for Claude CLI authentication/config.
+- `CURSOR_*`
+- `ANTHROPIC_*`
+- `CLAUDE_*`
 
 ### Docker path remapping
 
-When Docker mode is enabled, the CLI remaps workspace-related environment variables before forwarding them into the container. This ensures that run artifacts are written to paths visible on the host (via the workspace mount) rather than to host-only absolute paths that exist only outside the container.
+When Docker mode is enabled, the CLI remaps workspace-related environment variables before passing them into the container so run artifacts land under the workspace mount.
 
-- `JAIPH_WORKSPACE` is always set to `/jaiph/workspace` inside the container, regardless of the host value.
-- `JAIPH_RUNS_DIR` handling depends on the value:
-  - **Relative path** (e.g. `custom_runs`) — passed through unchanged. Resolved relative to `/jaiph/workspace` inside the container, which maps back to the host workspace via the mount.
-  - **Absolute path inside the host workspace** (e.g. `/home/user/project/.jaiph/runs`) — remapped to the equivalent container path (e.g. `/jaiph/workspace/.jaiph/runs`).
-  - **Absolute path outside the host workspace** (e.g. `/var/log/jaiph-runs`) — the run fails immediately with `E_DOCKER_RUNS_DIR`. There is no general way to map an arbitrary host path into the container; use a relative path or a path inside the workspace instead.
+- `JAIPH_WORKSPACE` is always `/jaiph/workspace` inside the container.
+- `JAIPH_RUNS_DIR`:
+  - **Relative** (e.g. `custom_runs`) — unchanged; resolved under `/jaiph/workspace`, which maps back to the host via the workspace mount.
+  - **Absolute path inside the host workspace** — rewritten to the equivalent path under `/jaiph/workspace`.
+  - **Absolute path outside the workspace** — `E_DOCKER_RUNS_DIR`; use a relative path or a directory inside the workspace.
 
-This remapping is transparent — you configure `JAIPH_RUNS_DIR` exactly as you would for a non-Docker run and the CLI handles the translation.
+Configure `JAIPH_RUNS_DIR` the same way as for a non-Docker run; remapping is automatic.
 
 ### Example
 
-Minimal workflow with Docker sandbox enabled:
+Minimal workflow with Docker sandbox enabled (expects a `config` directory beside the workflow if you keep the extra read-only mount):
 
 ```jh
 config {

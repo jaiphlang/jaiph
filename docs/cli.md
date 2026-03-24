@@ -7,9 +7,11 @@ redirect_from:
 
 # Jaiph CLI Reference
 
-The Jaiph CLI compiles and runs workflow files (`.jh` / `.jph`), runs tests, and manages workspace setup.
+## Overview
 
-**High-level usage:**
+Jaiph workflow sources (`.jh` / `.jph`) are programs: the CLI parses them, checks references, and transpiles them to bash that runs on your machine. Optional [Sandboxing](sandboxing.md) runs that generated bash inside Docker instead of directly on the host. The same `jaiph` executable drives compilation (`build`), execution (`run`), the native test runner (`test`), workspace scaffolding (`init`), reinstalling from a Git ref (`use`), and a read-only local UI over run logs (`report`). Language syntax and semantics are documented separately (for example [Grammar](grammar.md)); this page is the command-line contract.
+
+**Typical tasks:**
 
 - **Run a workflow** — `jaiph run <file.jh>` or pass the file as the first argument: `jaiph <file.jh> [args...]`. Requires a `workflow default` in that file.
 - **Run tests** — `jaiph test` discovers and runs all `*.test.jh` / `*.test.jph` under the workspace; or pass a directory or a single test file.
@@ -17,7 +19,9 @@ The Jaiph CLI compiles and runs workflow files (`.jh` / `.jph`), runs tests, and
 - **Setup** — `jaiph init [workspace-path]` creates `.jaiph/` with a bootstrap workflow and synced skill guide; `jaiph use <version|nightly>` reinstalls the global Jaiph binary.
 - **Reporting** — `jaiph report` serves a read-only local dashboard over `.jaiph/runs` (see [Reporting server](reporting.md)).
 
-**Commands:** `build`, `run`, `test`, `init`, `use`, `report`. Global options: `jaiph --help`, `jaiph --version` (or `-h`, `-v`).
+**Commands:** `build`, `run`, `test`, `init`, `use`, `report`.
+
+**Global options:** `-h` / `--help` and `-v` / `--version` are only recognized when they are the **first** argument (for example `jaiph --help`). They do not apply after a subcommand (`jaiph build --help` is not supported). The reporting subcommand documents its own flags: `jaiph report --help`.
 
 ---
 
@@ -49,7 +53,7 @@ jaiph build [--target <dir>] [path]
 
 If `path` is omitted, the current directory (`./`) is used. Without `--target`, compiled `.sh` scripts are written alongside the source files. Use `--target` to redirect output to a specific directory.
 
-- **Directory mode** (`jaiph build ./` or `jaiph build ./flows`) — compiles all `.jh`/`.jph` files found in the directory tree (test files `*.test.jh`/`*.test.jph` are excluded) and reports all errors.
+- **Directory mode** (`jaiph build ./` or `jaiph build ./flows`) — compiles every `.jh`/`.jph` file in the directory tree (test files `*.test.jh`/`*.test.jph` are excluded). The command stops on the first parse or validation error in any file.
 - **Single-file mode** (`jaiph build file.jh`) — compiles only the specified file and its transitive imports. Parse errors in sibling files are ignored.
 
 Examples:
@@ -121,9 +125,7 @@ During `jaiph run`, the CLI renders a tree of steps. **Shared in TTY and non-TTY
 - Cadence: nothing is printed until the step has been running at least **`JAIPH_NON_TTY_HEARTBEAT_FIRST_SEC`** seconds (default **60**). After that, additional heartbeats appear when at least **`JAIPH_NON_TTY_HEARTBEAT_INTERVAL_MS`** milliseconds have passed since the last heartbeat **and** the elapsed second count has increased (default interval **30000**; values below **250** fall back to the default). Short steps therefore usually emit **no** heartbeats.
 - **Nested steps:** heartbeats describe the **innermost** step currently running (the deepest active step on the stack).
 
-Raw stderr from the child process is echoed to stderr (in TTY mode it is captured but not echoed).
-
-The child runtime also emits **structured event lines** (`__JAIPH_EVENT__` followed by JSON) that the CLI parses to update the tree, hooks, and failure summaries. `STEP_END` payloads can embed step output (`out_content` / `err_content`); the runtime JSON-escapes those strings so tabs, ANSI escape bytes, and other control characters cannot invalidate the line. If a line were not valid JSON, the CLI would treat it as plain stderr — which in CI can surface as a raw `__JAIPH_EVENT__ …` line instead of normal progress output.
+On stderr, the runtime emits **`__JAIPH_EVENT__` lines** (each followed by JSON). The CLI parses valid JSON to drive the tree, hooks, and failure summaries, so those lines do not appear verbatim in the log. Any **other** stderr text is forwarded to your terminal; in TTY mode the bottom “RUNNING …” line is cleared and redrawn around those writes. `STEP_END` payloads may embed step output (`out_content` / `err_content`); the runtime JSON-escapes those strings so tabs, ANSI escape bytes, and other control characters cannot break the line. If a payload is not valid JSON, the CLI treats it as plain stderr — in CI you may see a raw `__JAIPH_EVENT__ …` line instead of structured progress.
 
 For **parameterized** invocations—when you pass arguments to a workflow, prompt, function, or rule—the tree shows those argument **values** inline in gray immediately after the step name. Format:
 
@@ -233,9 +235,11 @@ Run tests from native test files (`*.test.jh` / `*.test.jph`) that contain `test
 
 **Usage:**
 
-- `jaiph test` — discover and run all `*.test.jh` / `*.test.jph` under the workspace root (the directory containing `.jaiph` or `.git`, found by walking up from the current working directory).
-- `jaiph test <dir>` — run all test files under the given directory.
+- `jaiph test` — discover and run all `*.test.jh` / `*.test.jph` under the workspace root. The workspace root is the first directory found when walking **up** from the current working directory that contains `.jaiph` or `.git`. If neither marker exists on that path, the root is the resolved current working directory.
+- `jaiph test <dir>` — run all test files under the given directory (workspace root is detected the same way, starting from `<dir>`).
 - `jaiph test <file.test.jh>` — run a single test file.
+
+With no arguments, or with a directory that contains no test files, the command exits with status **1** and prints an error.
 
 You must pass a test file (e.g. `say_hello.test.jh`) or a directory. Passing a plain workflow file (e.g. `say_hello.jh`) is not supported; the test file imports the workflow and declares mocks. See [Testing](testing.md) for test block syntax and `expectContain` / `expectEqual`.
 
@@ -309,7 +313,7 @@ jaiph report [start|stop|status] [--host <addr>] [--port <n>] [--poll-ms <n>] [-
 ## File extensions
 
 - **`.jh`** is the recommended extension for new Jaiph files. Use it for entrypoints, imports, and `jaiph build` / `jaiph run` / `jaiph test`.
-- **`.jph`** remains supported for backward compatibility. Existing projects using `.jph` continue to work unchanged. The CLI may show a deprecation notice when you run a `.jph` file; migrate when convenient with `mv *.jph *.jh` and update import paths if they explicitly mention the extension.
+- **`.jph`** remains supported for backward compatibility. Existing projects using `.jph` continue to work unchanged. **`jaiph run`** (and the `jaiph <file.jph>` shorthand) prints a deprecation notice to stderr when stderr is a TTY; `jaiph build` does not. Migrate when convenient with `mv *.jph *.jh` and update import paths if they explicitly mention the extension.
 
 Imports resolve for both extensions: `import "foo" as x` finds `foo.jh` or `foo.jph` (`.jh` is preferred when both exist).
 
@@ -317,7 +321,8 @@ Imports resolve for both extensions: `import "foo" as x` finds `foo.jh` or `foo.
 
 **Runtime and config overrides** (for `jaiph run` and workflow execution):
 
-- `JAIPH_STDLIB` — path to `jaiph_stdlib.sh`.
+- `JAIPH_STDLIB` — normally unused: the CLI sets this to the **stdlib bundled with the same installation** as the `jaiph` binary so a stale global `JAIPH_STDLIB` in your shell cannot break new workflows. To force a custom stdlib path, set **`JAIPH_USE_CUSTOM_STDLIB=1`** and **`JAIPH_STDLIB`** to the absolute path of `jaiph_stdlib.sh` (advanced; tests and unusual installs).
+- `JAIPH_WORKSPACE` — set by the CLI to the workspace root: walk **up** from the directory that contains the entry `.jh` / `.jph` until a directory with `.jaiph` or `.git` is found; if the walk hits the filesystem root first, the root used is that entry directory (absolute path). Used by the generated bash and runtime helpers; you rarely set this yourself. In Docker sandbox mode the runtime remaps it inside the container (see [Sandboxing](sandboxing.md)).
 - `JAIPH_AGENT_MODEL` — default model for `prompt` steps (overrides in-file `agent.default_model`).
 - `JAIPH_AGENT_COMMAND` — command for the Cursor backend (e.g. `cursor-agent`; overrides in-file `agent.command`).
 - `JAIPH_AGENT_BACKEND` — prompt backend: `cursor` (default) or `claude`. Overrides in-file `agent.backend`. When set to `claude`, the Anthropic Claude CLI (`claude`) must be installed and on PATH; otherwise the run fails with a clear error. See [Configuration](configuration.md).
@@ -336,6 +341,8 @@ Imports resolve for both extensions: `import "foo" as x` finds `foo.jh` or `foo.
 - `NO_COLOR` — if set, disables colored output (e.g. progress and pass/fail).
 - `JAIPH_NON_TTY_HEARTBEAT_FIRST_SEC` — non-TTY only: minimum elapsed seconds before the **first** heartbeat line for a step (default: `60`). Non-negative number; invalid values fall back to `60`.
 - `JAIPH_NON_TTY_HEARTBEAT_INTERVAL_MS` — non-TTY only: timer interval used to schedule heartbeat checks and minimum spacing between **subsequent** heartbeats (default: `30000`). Values below `250` ms fall back to the default.
+
+For `JAIPH_DOCKER_*`, defaults, image selection (including `.jaiph/Dockerfile`), mounts, and container behavior are covered in [Sandboxing](sandboxing.md).
 
 **`jaiph report`:**
 

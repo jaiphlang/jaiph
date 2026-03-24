@@ -7,14 +7,14 @@ redirect_from:
 
 # Jaiph Grammar
 
-This document describes the grammar and semantics of Jaiph source files (`.jh` / `.jph`). It is intended for anyone who needs to write or reason about Jaiph code.
+Jaiph source files (`.jh` / `.jph`) combine a small workflow language with normal Bash. The compiler parses top-level declarations and workflow steps, validates references and shell fragments, then emits a Bash script that relies on the Jaiph stdlib for managed steps, agents, logging, and inbox routing. This page is the language reference: what you can write, what it means at runtime, and how it maps to generated shell.
 
 **Scope:**
 
 - **In scope:** Lexical rules, syntax (EBNF), parse-time and runtime semantics, validation, and transpilation behavior for normal modules.
 - **Out of scope:** Test files (`*.test.jh`) have their own grammar and are described in [Testing](testing.md). The CLI and configuration file format are covered in [CLI](cli.md) and [Configuration](configuration.md).
 
-**Source of truth:** The behavior described here is derived from the implementation in `src/parser.ts`, `src/parse/*.ts`, `src/transpiler.ts`, and `src/transpile/*.ts`. When in doubt, the source code is authoritative.
+**Source of truth:** When this document and the compiler disagree, treat the implementation as authoritative.
 
 ## High-level concepts
 
@@ -25,7 +25,7 @@ This document describes the grammar and semantics of Jaiph source files (`.jh` /
 - **run** — Invokes a **workflow** or **top-level function** (local or `alias.name`). Must not be used for rules or arbitrary shell commands.
 - **prompt** — Sends a double-quoted string to the configured agent. Optional `returns` schema asks the agent for one line of JSON and validates it.
 - **config** — Optional block setting agent and run options (model, backend, logs dir, etc.). Allowed at the top level of a file (module-wide) and inside individual workflow bodies for per-workflow overrides (`agent.*` and `run.*` keys only; `runtime.*` is top-level only).
-- **local** — `local name = value` declares a module-scoped variable. The name shares the unified namespace with rules, workflows, and functions. Variables are module-scoped only and cannot be exported or referenced across modules.
+- **local** — `local name = value` declares a module-scoped variable. The name shares the unified namespace with channels, rules, workflows, and functions. Variables are module-scoped only and cannot be exported or referenced across modules.
 - **import / export** — `import "path" as alias` loads another module; `export rule` / `export workflow` marks a declaration as part of the module’s public interface. Any rule or workflow in an imported module can be referenced (export is not enforced at reference time).
 
 ---
@@ -73,7 +73,7 @@ env_decl        = "local" IDENT "=" env_value ;
 env_value       = quoted_or_multiline_string | single_quoted_string | bare_value ;
   (* Module-scoped variable declaration. Transpiles to a prefixed bash variable (module__name). *)
   (* Inside rules, functions, and workflows, a local shim is emitted so $name resolves to the prefixed variable. *)
-  (* Variable names share the unified namespace with rules, workflows, and functions. *)
+  (* Variable names share the unified namespace with channels, rules, workflows, and functions. *)
 
 rule_decl       = [ "export" ] "rule" IDENT "{" { rule_line } "}" ;
 rule_line       = comment_line | command_line ;
@@ -224,10 +224,14 @@ Jaiph separates **managed** invocations (step records under `.jaiph/runs`, deter
    - `if run REF [args]; then ... [else ...] fi` — runs the then-branch when the workflow or function **succeeds** (exit code 0); optional else-branch for failure. The REF may be local or imported (`alias.name`).
    - `if ! run REF [args]; then ... [else ...] fi` — runs the then-branch when the workflow or function **fails** (non-zero exit); optional else-branch for success.
    - `if ! <shell_condition>; then ... fi` — shell-expression condition (negated form only); runs the then-branch when the command **fails**. Else-branches are not supported for shell conditions. Positive shell conditions (`if <cmd>; then ... fi`) are not parsed as Jaiph `if` steps — they fall through as raw shell lines.
-   - **Supported step types in branches:** Ensure-condition and run-condition branches support `run`, `prompt`, `prompt_capture`, and shell commands. Ensure-condition branches additionally support `run_capture` and `shell_capture`. Shell-condition branches support `run` and shell commands only. Other step types (`log`, `logerr`, `send`, nested `if`) in any branch are treated as raw shell commands (they will not behave as their Jaiph equivalents).
+   - **What the parser recognizes inside branches** (anything else is emitted as a **shell** step, so Jaiph-specific keywords on that line will not get managed-step behavior):
+     - **if ensure / if ! ensure:** `run …`, `name = run …` (managed run with optional return capture), `prompt …`, `name = prompt …`, and arbitrary shell (including `name = cmd` for stdout capture). A line that **starts with** `ensure` (other than the outer condition) is `E_PARSE`. A line like `name = ensure ref` is **not** parsed as a managed ensure step here—it becomes shell, so it does **not** use the rule wrapper or `JAIPH_RETURN_VALUE_FILE` capture. Use a top-level `name = ensure …` step or restructure instead of relying on ensure-capture inside these branches.
+     - **if run / if ! run:** `run …`, `prompt …`, `name = prompt …`, and shell. There is **no** `name = run …` fast path: an assignment to `run` is shell, not a managed run with return capture. Prefer moving capture outside the conditional or using shell assignment (losing managed semantics).
+     - **Shell condition** (`if ! …; then` only; see the bullet above): `run …` (only when the whole trimmed line matches `run ref…`) and shell. Assignments to `run` are shell, same as for if-run.
+     - Lines such as `log`, `logerr`, `channel <- …`, or nested `if …` that are not matched by the rules above are stored as shell and execute as Bash only.
    - All forms accept optional arguments after the reference (e.g. `if ensure check "$env"; then`, `if run deploy "$env"; then`).
-   - `ensure` and `ensure_capture` are **not** allowed inside the then- or else-branch of any if-ensure form; the parser emits `E_PARSE` if `ensure` appears in an unrecognised context.
-   - The then-branch must contain at least one step.
+   - Inside **if-ensure** then/else branches, a line whose first shell token is `ensure` (e.g. `ensure other_rule`) is `E_PARSE`. Assignment form `name = ensure ref` is **not** treated as ensure-capture; see the branch rules above.
+   - The then-branch must contain at least one step (for if-ensure and if-run the error text refers to “run or shell”; for the shell-condition form, “command or run”).
 7. **prompt:** Two forms are supported:
    - `prompt "<text>"` — Sends the text to the agent; compiles to `jaiph::prompt ...` with bash variable expansion.
    - `name = prompt "<text>"` — Same, but the agent’s stdout is captured into the variable `name` (compiles to `jaiph::prompt_capture`).
@@ -241,7 +245,7 @@ Jaiph separates **managed** invocations (step records under `.jaiph/runs`, deter
    - To set a return value inside a rule, workflow, or function, use `return "value"` or `return "$variable"`. `return` with a bare integer (e.g. `return 0`) is a bash exit code, not a value return.
    - **Exit semantics:** Assignment capture does **not** change exit behavior: if the command fails, the step fails and the workflow exits (with `set -e`). To capture output even on failure, the workflow author must explicitly short-circuit (e.g. append `|| true` to the command).
 9. **log:** `log "message"` displays a message in the progress tree at the current indentation depth. The argument must be a double-quoted string (same quoting rules as `prompt`). Shell variable interpolation (`$var`, `${var}`) works at runtime. `log` is not a step — it has no pending/running/done states, no timing, and no spinner. It transpiles to `jaiph::log "message"`, which emits a `LOG` event on fd 3 and echoes to stdout. Parse error if `log` is used without a quoted string.
-10. **logerr:** `logerr "message"` is identical to `log` except the message is written to stderr instead of stdout. It transpiles to `jaiph::logerr "message"`, which emits a `LOGERR` event on fd 3 and echoes to stderr. In the progress tree, `logerr` lines are displayed with a `!` symbol in red (instead of the dim `ℹ` used by `log`). Parse error if `logerr` is used without a quoted string.
+10. **logerr:** `logerr "message"` is identical to `log` except the message is written to stderr instead of stdout. It transpiles to `jaiph::logerr "message"`, which emits a `LOGERR` event on fd 3 and echoes to stderr. In the progress tree, `logerr` lines are shown with a red `!` marker (instead of the dim info marker used by `log`). Parse error if `logerr` is used without a quoted string.
 11. **Send operator (`<-`):** `channel <- echo "data"` writes the command's stdout to the next inbox slot and signals the runtime to dispatch. The channel identifier is always on the left side of the `<-` operator. The `<-` operator is detected before the shell fallback; it only matches when `braceDepth == 0` and `<-` appears outside of quoted strings. Standalone `channel <-` (no command after the operator) forwards `$1`. Combining capture and send (`name = channel <- cmd`) is a parse error (`E_PARSE: capture and send cannot be combined; use separate steps`). The send step transpiles to `jaiph::send 'channel' "$(cmd)" 'sender'` (or `jaiph::send 'channel' "$1" 'sender'` for standalone), where `sender` is the enclosing workflow name. See [Inbox & Dispatch](inbox.md).
 12. **Route declaration:** `channel -> workflow` registers a static routing rule: when a message arrives on `channel`, the runtime calls `workflow` with positional args `$1=message`, `$2=channel`, `$3=sender` (see [Trigger contract](inbox.md#trigger-contract)). Multiple targets are supported: `channel -> wf1, wf2` dispatches sequentially in declaration order; each target receives the same message. Route declarations are stored in `WorkflowDef.routes`, not in `steps`; they are not executable statements. The transpiler emits `jaiph::register_route` calls at the top of the orchestrator function, and `jaiph::drain_queue` at the end. See [Inbox & Dispatch](inbox.md).
 13. **Export:** Rule and workflow declarations may be prefixed with `export` to mark them as part of the module’s public interface. The implementation does not restrict references to exported symbols: any rule or workflow in an imported module can be referenced.
@@ -249,8 +253,8 @@ Jaiph separates **managed** invocations (step records under `.jaiph/runs`, deter
 
     ```jh
     workflow default {
-      build_frontend --prod &
-      build_backend --prod &
+      sleep 2 &
+      sleep 2 &
       wait
     }
     ```
@@ -264,8 +268,8 @@ Jaiph separates **managed** invocations (step records under `.jaiph/runs`, deter
 
       ```jh
       workflow default {
-        prog1 & pid1=$!
-        prog2 & pid2=$!
+        sleep 2 & pid1=$!
+        sleep 2 & pid2=$!
         wait $pid1 || exit $?
         wait $pid2 || exit $?
       }
@@ -275,13 +279,13 @@ Jaiph separates **managed** invocations (step records under `.jaiph/runs`, deter
     - Users **must** `wait` for all background jobs before the step ends. If a background process is still running when the `::impl` function returns, it may be orphaned and its output may be lost (the artifact temp file is finalised immediately after the impl exits).
     - Jaiph internal functions (`jaiph::send`, `jaiph::log`, `ensure`, `run`, etc.) should **not** be called from background subprocesses. These functions access shared run state (sequence counters, summary files) that is only lock-protected under `run.inbox_parallel = true`. Use standard external programs for backgrounded work.
     - Output from concurrent background processes may interleave at the line level in `.out`/`.err` artifacts. This is normal Bash behaviour; writes up to `PIPE_BUF` bytes (typically 4096) are atomic.
-15. **Top-level local (env declarations):** `local name = value` declares a module-scoped variable. The value may be a double-quoted string (may span multiple lines; stored raw without escape processing), a single-quoted string (single-line only), or a bare value (rest of line). The variable is transpiled to a prefixed bash variable using `__` as separator (e.g. `local role` in module `entry` becomes `entry__role="..."`). Inside each rule, function, and workflow body, a `local` shim is emitted so that `$role` resolves to the prefixed variable (`local role="$entry__role"`). Variable names participate in the unified namespace — they cannot collide with rule, workflow, or function names. Variables are module-scoped only and are not exportable; cross-module access is not supported.
+15. **Top-level local (env declarations):** `local name = value` declares a module-scoped variable. The value may be a double-quoted string (may span multiple lines; stored raw without escape processing), a single-quoted string (single-line only), or a bare value (rest of line). The variable is transpiled to a prefixed bash variable using `__` as separator (e.g. `local role` in module `entry` becomes `entry__role="..."`). Inside each rule, function, and workflow body, a `local` shim is emitted so that `$role` resolves to the prefixed variable (`local role="$entry__role"`). Variable names participate in the unified namespace — they cannot collide with channel, rule, workflow, or function names. A `local` initializer may reference another module `local` by name; a cyclic chain of references is rejected at transpile time with `E_PARSE`. Variables are module-scoped only and are not exportable; cross-module access is not supported.
 
 ## Validation Rules
 
 After parsing, the compiler validates references and config. Violations produce the following error codes:
 
-- **E_PARSE:** Invalid syntax, duplicate config block, invalid config key/value, invalid prompt content (e.g. command substitution in prompt), or `prompt "..." returns '...'` without a capture variable.
+- **E_PARSE:** Invalid syntax, duplicate config block, invalid config key/value, invalid prompt content (e.g. command substitution in prompt), `prompt "..." returns '...'` without a capture variable, or a circular reference among top-level `local` initializers.
 - **E_SCHEMA:** Invalid or unsupported `returns` schema: empty schema, non-flat shape (e.g. arrays or union types), invalid entry (not `fieldName: type`), or unsupported type (only `string`, `number`, `boolean` allowed).
 - **E_VALIDATE:** Reference or alias error (unknown rule/workflow, duplicate alias, etc.), forbidden Jaiph usage inside `$(...)` or as a bare shell call where a managed step is required, or invalid constructs inside function bodies.
 - **E_IMPORT_NOT_FOUND:** The file resolved from an `import` path does not exist.
@@ -292,7 +296,7 @@ Rules:
 2. Config keys must be one of the allowed keys; values must be a quoted string, `true`/`false`, a bare integer, or a bracket-delimited array of quoted strings. Each key has an expected type (string, boolean, number, or string[]); a type mismatch yields `E_PARSE`. For `agent.backend`, the value must be `"cursor"` or `"claude"`. Invalid key yields `E_PARSE`.
 3. Import aliases must be unique within a file (`E_VALIDATE`).
 4. Import targets must exist on disk (`E_IMPORT_NOT_FOUND`).
-5. **Unified namespace:** Rules, workflows, functions, and top-level locals share a single name space per module. Declaring two items with the same name (e.g. a rule `foo` and a local `foo`) yields `E_PARSE`.
+5. **Unified namespace:** Channels, rules, workflows, functions, and top-level locals share a single namespace per module. Declaring two items with the same name (e.g. a channel `foo` and a rule `foo`, or a local `foo` and a workflow `foo`) yields `E_PARSE`.
 6. **Calling conventions (compile-time enforcement):**
    - `ensure` must target a rule. Using `ensure` on a workflow yields `E_VALIDATE` ("workflow X must be called with run"). Using `ensure` on a function yields `E_VALIDATE` ("function X cannot be called with ensure").
    - `run` must target a workflow **or** function. Using `run` on a rule yields `E_VALIDATE` (e.g. "rule X must be called with ensure, not run").
@@ -306,7 +310,7 @@ Rules:
 
 1. Build emits Bash scripts that source the installed stdlib (`$JAIPH_STDLIB`, default `~/.local/bin/jaiph_stdlib.sh`). The script checks for API compatibility before use. After the compatibility check, the script saves the original stdout as fd 7 (`exec 7>&1`) and exports `JAIPH_STDOUT_SAVED=1`. The runtime uses fd 7 to detect caller-side redirections: when a `run` step's fd 1 differs from fd 7 (and fd 8, the capture target), the step's output is tee'd to both the artifact file and the caller's stdout.
 2. When the module has a `config` block, the generated script exports `JAIPH_AGENT_MODEL`, `JAIPH_AGENT_COMMAND`, `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_AGENT_CURSOR_FLAGS`, `JAIPH_AGENT_CLAUDE_FLAGS`, `JAIPH_RUNS_DIR`, (if `run.debug` is set to `true`) `JAIPH_DEBUG`, and (if `run.inbox_parallel` is set to `true`) `JAIPH_INBOX_PARALLEL`, using the in-file values as defaults; environment variables override these. `runtime.*` keys populate the `RuntimeConfig` on `WorkflowMetadata` (see `src/types.ts`).
-3. **Flat symbol namespace:** Rules, workflows, and functions share a single namespace per module. All are emitted as `<module>::<name>::impl` and `<module>::<name>`. The kind (rule, workflow, function) is communicated via an explicit argument to `jaiph::run_step`, not encoded in the symbol name. Duplicate names across types within a module produce `E_PARSE`.
+3. **Emitted symbols:** Rules, workflows, and functions share one namespace per module for generated Bash names. Each is emitted as `<module>::<name>::impl` and `<module>::<name>`. The kind (rule, workflow, function) is passed explicitly to `jaiph::run_step`, not encoded in the symbol name. Channels and top-level locals use different naming (`channel` declarations and `module__name` variables); duplicates between those and rules/workflows/functions are still rejected at parse time (`E_PARSE`).
 4. **Rules:** Each rule is emitted as `<module>::<name>::impl` (the implementation) and `<module>::<name>` (a wrapper that calls `jaiph::run_step <symbol> rule jaiph::execute_readonly <symbol>::impl`). When config is present, the wrapper is invoked inside a metadata scope that sets the config env vars for the duration of the step.
 5. **Workflows:** Each workflow is emitted as `<module>::<name>::impl` and `<module>::<name>`, with the wrapper using `jaiph::run_step <symbol> workflow <symbol>::impl "$@"` and the same metadata-scoping behavior as rules. When a workflow has its own `config` block, a dedicated `<module>::<name>::with_metadata_scope` function is emitted that saves, sets, and restores the config env vars — and locks its overrides (`_LOCKED=1`) so that inner module-scope wrappers (e.g. for rules or functions called from the workflow) do not revert the workflow's values. The workflow-level scope takes precedence over the module-level scope; if no workflow-level config exists, the module-level scope is used as before.
 6. **Functions:** Each top-level function is emitted as `<module>::<name>::impl`, `<module>::<name>` (wrapper using `jaiph::run_step` / the same managed-step machinery as workflows, with step kind `function`), and a shim `<name>` that forwards to the namespaced wrapper for non-workflow shell callers. Workflow steps invoke functions via `run`, which records the call like any other managed step.
