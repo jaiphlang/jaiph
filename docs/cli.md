@@ -115,6 +115,8 @@ During `jaiph run`, the CLI renders a tree of steps. **Tree output is the same i
 
 **Non-TTY:** No RUNNING line and no in-place updates. Step start lines (▸) and completion lines (✓/✗) print as they occur. Raw stderr from the child process is echoed to stderr (in TTY mode it is captured but not echoed).
 
+The child runtime also emits **structured event lines** (`__JAIPH_EVENT__` followed by JSON) that the CLI parses to update the tree, hooks, and failure summaries. `STEP_END` payloads can embed step output (`out_content` / `err_content`); the runtime JSON-escapes those strings so tabs, ANSI escape bytes, and other control characters cannot invalidate the line. If a line were not valid JSON, the CLI would treat it as plain stderr — which in CI can surface as a raw `__JAIPH_EVENT__ …` line instead of normal progress output.
+
 For **parameterized** invocations—when you pass arguments to a workflow, prompt, function, or rule—the tree shows those argument **values** inline in gray immediately after the step name. Format:
 
 - All parameters use a uniform **`key="value"`** format in parentheses. Internal refs such as `::impl` and empty or whitespace-only values are omitted.

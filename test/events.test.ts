@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { join } from "node:path";
 import { parseLogEvent, parseStepEvent } from "../src/cli/run/events";
+
+function bashSingleQuoted(path: string): string {
+  return `'${path.replace(/'/g, `'\"'\"'`)}'`;
+}
 
 // === parseLogEvent ===
 
@@ -184,4 +190,24 @@ test("parseStepEvent: defaults params to empty array when not provided", () => {
   const result = parseStepEvent(line);
   assert.ok(result);
   assert.deepEqual(result!.params, []);
+});
+
+// Regression: runtime jaiph::json_escape must emit valid JSON for STEP_END out_content
+// (tabs, ANSI ESC, etc.); otherwise parseStepEvent fails and CI shows raw __JAIPH_EVENT__ lines.
+test("parseStepEvent: STEP_END with tabs and ANSI in out_content via runtime json_escape", () => {
+  const eventsSh = join(process.cwd(), "src/runtime/events.sh");
+  const script = [
+    `source ${bashSingleQuoted(eventsSh)}`,
+    `raw=$(printf 'a\\011b\\033[0mc')`,
+    `jaiph::json_escape "$raw"`,
+  ].join("\n");
+  const r = spawnSync("bash", ["-c", script], { encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  const esc = r.stdout.replace(/\n$/, "");
+  const json = `{"type":"STEP_END","func":"f","kind":"rule","name":"n","ts":"t","status":1,"elapsed_ms":null,"out_file":"","err_file":"","id":"i","parent_id":null,"seq":null,"depth":null,"run_id":"r","out_content":"${esc}"}`;
+  assert.doesNotThrow(() => JSON.parse(json), "runtime escape must yield valid JSON string field");
+  const line = `__JAIPH_EVENT__ ${json}`;
+  const parsed = parseStepEvent(line);
+  assert.ok(parsed, "expected parseStepEvent to accept runtime-escaped STEP_END JSON");
+  assert.equal(parsed!.out_content, "a\tb\x1b[0mc");
 });
