@@ -71,14 +71,14 @@ workflow review_task {
 
 workflow default {
   local headers
-  headers="$(queue.get_all_task_headers)"
+  headers = run queue.get_all_task_headers
 
   local failed=0
 
   while IFS= read -r header; do
     [ -z "$header" ] && continue
 
-    task="$(queue.get_task_by_header "$header")"
+    task = run queue.get_task_by_header "$header"
 
     if echo "$task" | grep -q '<!-- dev-ready -->'; then
       echo "Already dev-ready: $header"
@@ -88,7 +88,7 @@ workflow default {
     verdict = run review_task "$task"
 
     if [[ "$verdict" == "dev-ready" ]]; then
-      queue.mark_task_dev_ready "$header"
+      run queue.mark_task_dev_ready "$header"
       echo "Marked dev-ready: $header"
     else
       echo "Needs work: $header"

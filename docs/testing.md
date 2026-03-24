@@ -16,7 +16,7 @@ Jaiph's built-in test framework solves this: you write `.test.jh` files that moc
 - **Test files** — Files named `*.test.jh` (or `*.test.jph`) contain only imports and test blocks. They are discovered and run by `jaiph test`.
 - **Test blocks** — Each `test "description" { ... }` block is one test case: a sequence of steps (mocks, workflow runs, assertions).
 - **Mocks** — You can mock prompt responses, workflows, rules, and functions so the workflow under test sees fixed or scripted behavior.
-- **Assertions** — Capture workflow stdout+stderr into a variable, then use `expectContain`, `expectNotContain`, or `expectEqual` to verify the output.
+- **Assertions** — Capture a workflow’s value or (when there is no explicit `return`) its combined output, then use `expectContain`, `expectNotContain`, or `expectEqual` to verify it. See **Workflow run (capture)** below.
 
 ## File naming
 
@@ -65,7 +65,7 @@ test "runs happy path and output contains expected mock" {
 - **mock workflow** — `mock workflow <alias>.<name> { ... }` replaces that workflow for this test with a shell body (e.g. `echo "ok"; exit 0`). Ref is `<alias>` or `<alias>.<workflow_name>`.
 - **mock rule** — `mock rule <alias>.<name> { ... }` replaces that rule for this test with a shell body. Ref is `<alias>` or `<alias>.<rule_name>`.
 - **mock function** — `mock function <name> { ... }` or `mock function <alias>.<name> { ... }` replaces that function for this test with a shell body.
-- **Workflow run (capture)** — `name = <alias>.<workflow>` runs the workflow and captures combined stdout+stderr into `name`. The test fails if the workflow exits non-zero. Variants: `name = <alias>.<workflow> "arg"` to pass one argument; `name = <alias>.<workflow> allow_failure` to suppress the non-zero exit check so you can assert on failure output; `name = <alias>.<workflow> "arg" allow_failure` to combine both.
+- **Workflow run (capture)** — `name = <alias>.<workflow>` runs the workflow through the same managed runtime as `jaiph run`. The variable `name` is filled from the workflow’s **explicit `return` value** when the callee sets one; otherwise the harness uses combined stdout+stderr with internal `__JAIPH_EVENT__` lines stripped (typical when asserting on messages from a failing run that did not `return` a value). The test fails if the workflow exits non-zero. Variants: `name = <alias>.<workflow> "arg"` to pass one argument; `name = <alias>.<workflow> allow_failure` to suppress the non-zero exit check; `name = <alias>.<workflow> "arg" allow_failure` to combine both. This is the test harness form of managed workflow invocation — do not wrap the generated workflow shell function in `$(...)` or other bash capture tricks.
 - **Workflow run (no capture)** — `<alias>.<workflow>` or `<alias>.<workflow> "arg"` runs the workflow without capturing output. The test fails if the workflow exits non-zero. Add `allow_failure` to suppress the exit check (e.g. `<alias>.<workflow> allow_failure` or `<alias>.<workflow> "arg" allow_failure`).
 - **expectContain** — `expectContain <variable> "<substring>"` fails the test if the variable’s value does not contain the substring (error shows expected substring and output preview).
 - **expectNotContain** — `expectNotContain <variable> "<substring>"` fails the test if the variable’s value contains the substring (useful to assert that certain output is absent).
@@ -135,5 +135,5 @@ E2E testing guidance was moved to [Contributing](contributing.md#e2e-testing).
 ## Limitations (v1)
 
 - Mocks are inline only (e.g. `mock prompt "..."` or `mock prompt { ... }`). The legacy `.test.toml` format is not supported.
-- Workflow invocation with capture stores combined stdout+stderr and strips internal event lines. Both capture and no-capture forms fail the test on non-zero exit unless `allow_failure` is used.
+- Workflow invocation with capture prefers the workflow’s explicit `return` value when present; otherwise it stores combined stdout+stderr with internal event lines stripped. Both capture and no-capture forms fail the test on non-zero exit unless `allow_failure` is used.
 - Test files must not define rules or workflows; they only import and run tests.

@@ -17,10 +17,10 @@ It combines declarative workflow structure with bash, then compiles to pure shel
 
 **Core concepts:**
 
-- **Workflows** — Ordered steps (checks, agent prompts, shell, calls to other workflows) that can change system state.
+- **Workflows** — Ordered steps (checks, agent prompts, shell, `run` calls to other workflows and functions) that can change system state.
 - **Rules** — Reusable checks or actions that return a shell exit code; used with `ensure` and in conditionals.
 - **Agent prompts** — `prompt "..."` sends text to a configured agent (e.g. Cursor or Claude CLI); workflows orchestrate when the agent runs.
-- **Composability** — Import other `.jh` modules and call their rules, workflows, and functions by alias (e.g. `ensure security.scan_passes`, `run bootstrap.nodejs`).
+- **Composability** — Import other `.jh` modules and call their rules, workflows, and functions by alias (e.g. `ensure security.scan_passes`, `run bootstrap.nodejs`). Use **`ensure` only for rules** and **`run` for workflows and functions**; capture return data with `x = ensure …` / `x = run …` (value = explicit `return` in the callee, logs in `.jaiph/runs`). See [Grammar — Step Output Contract](grammar.md#step-output-contract) and [Managed calls vs command substitution](grammar.md#managed-calls-vs-command-substitution).
 - **Shell-native** — Transpiled output is bash; you can mix Jaiph primitives with normal shell commands and variables.
 
 > [!WARNING]
@@ -147,16 +147,16 @@ Jaiph files (`.jh`) contain **rules**, **workflows**, **functions**, and optiona
 - `local name = value` — Module-scoped variable, accessible as `$name` in all blocks within the module.
 - `rule name { ... }` — Reusable check/action returning a shell exit code. Runs in an isolated child shell (read-only mount namespace on Linux; child-shell isolation elsewhere). Can call other rules via `ensure`. Optional `export` for cross-module access.
 - `workflow name { ... }` — Orchestration entrypoint of ordered steps. Can change system state. Optional `export` for cross-module access.
-- `function name { ... }` — Reusable writable shell function, tracked as a Jaiph step. The `()` after the name is optional (`function name() { ... }` also works).
+- `function name { ... }` — Reusable writable shell function (shell-like body; no `run`/`ensure`/routes inside). From a **workflow**, call it with **`run name`** so logs and return values use the managed step contract. The `()` after the name is optional (`function name() { ... }` also works).
 - `ensure ref [args...]` — Execute a rule; optional `recover` for bounded retry loops (max retries default to 10).
-- `run ref [args...]` — Execute another workflow. Not allowed inside rules.
+- `run ref [args...]` — Execute another workflow **or** a top-level function. Not allowed inside rules.
 - `prompt "..."` — Send text to the configured agent. Optional `returns '{ field: type }'` for validated JSON responses. See [Grammar](grammar.md).
-- `name = <step>` — Capture stdout from any step (`prompt`, `ensure`, `run`, or shell command).
+- `name = <step>` — Capture a value from a step: for `ensure` / `run`, only the callee’s explicit `return` (stdout from commands inside the callee goes to artifacts, not into `name`); for `prompt`, the final answer; for a plain shell command, full stdout (bash semantics). See [Grammar](grammar.md#step-output-contract) and [managed calls](grammar.md#managed-calls-vs-command-substitution).
 - `log "message"` / `logerr "message"` — Display a message in the progress tree (stdout / stderr).
 - `channel <- cmd` / `channel -> workflow` — Send and route messages between workflows. See [Inbox & Dispatch](inbox.md).
 - `cmd &` / `wait` — Background commands and synchronise with `wait` inside shell steps for in-step parallelism. See [Grammar](grammar.md).
 - `if [!] ensure ref; then ... [else ...] fi` — Conditional based on rule result.
-- `if [!] run ref; then ... [else ...] fi` — Conditional based on workflow exit code.
+- `if [!] run ref; then ... [else ...] fi` — Conditional based on workflow or function exit code.
 - `if ! <shell_cmd>; then ... fi` — Conditional based on a shell command exit code.
 
 Runtime behavior (progress tree, step output, run logs) is documented in [CLI Reference](cli.md). For agent backend configuration, see [Configuration](configuration.md). For Docker sandboxing (beta), see [Sandboxing](sandboxing.md). For testing workflows with mocks and assertions, see [Testing](testing.md). For lifecycle hooks, see [Hooks](hooks.md).

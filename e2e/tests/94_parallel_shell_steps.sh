@@ -148,6 +148,8 @@ e2e::section "Background jobs with inbox send do not corrupt state"
 # ---------------------------------------------------------------------------
 
 e2e::file "bg_inbox.jh" <<'EOF'
+channel ch
+
 workflow sender {
   ch <- echo "msg1"
   ch <- echo "msg2"

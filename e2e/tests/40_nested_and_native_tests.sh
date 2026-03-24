@@ -134,7 +134,7 @@ if [[ "${unmatched_out}" != *"workflow exited with status"* ]] && [[ "${unmatche
 fi
 e2e::pass "mock prompt block without else fails when prompt never matched"
 
-e2e::section "Fibonacci workflow: step params show values only (no labels, no impl ref)"
+e2e::section "Fibonacci workflow: managed run function (iterative impl, single step in tree)"
 
 # When
 fib_out="$(jaiph run "${ROOT_DIR}/e2e/fibonacci.jh" 3)"
@@ -148,14 +148,6 @@ workflow default (1="3")
   ▸ rule ensure_is_number (1="3")
   ✓ rule ensure_is_number (<time>)
   ▸ function fib (1="3")
-  ·   ▸ function fib (1="2")
-  ·   ·   ▸ function fib (1="1")
-  ·   ·   ✓ function fib (<time>)
-  ·   ·   ▸ function fib (1="0")
-  ·   ·   ✓ function fib (<time>)
-  ·   ✓ function fib (<time>)
-  ·   ▸ function fib (1="1")
-  ·   ✓ function fib (<time>)
   ✓ function fib (<time>)
 ✓ PASS workflow default (<time>)
 EOF

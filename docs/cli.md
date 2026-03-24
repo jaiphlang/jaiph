@@ -98,6 +98,8 @@ workflow default {
 `prompt` text follows bash-style variable expansion (for example `$1`, `${HOME}`, `${FILES[@]}`).
 For safety, command substitution is not allowed in prompt text: `$(...)` and backticks are rejected with `E_PARSE`.
 
+Elsewhere in workflows, `$(...)` is shell-only: it must not invoke Jaiph rules, workflows, or functions, contain inbox send (`<-`), or use `run` / `ensure` as shell commands (`E_VALIDATE`). The same rules apply to ordinary workflow shell lines (without nested `$(...)`): use **`run`** to call functions from a workflow, not a bare `fn arg` line. See [Grammar](grammar.md#managed-calls-vs-command-substitution).
+
 If a `.jh` or `.jph` file is executable and has `#!/usr/bin/env jaiph`, you can run it directly:
 
 ```bash

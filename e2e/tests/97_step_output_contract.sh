@@ -139,7 +139,7 @@ function compute_hash() {
   return "hash-abc123"
 }
 workflow default {
-  val = compute_hash
+  val = run compute_hash
   echo "captured=$val"
 }
 EOF

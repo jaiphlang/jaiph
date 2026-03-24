@@ -74,8 +74,10 @@ layout: null
                     <p><strong>Jaiph</strong> workflows are typically executable <code>.jh</code> files with a shebang.
                     </p>
                     <p>The core primitives are <strong>rule</strong>, <strong>prompt</strong>, <strong>function</strong>
-                        and <strong>workflow</strong>. You can also embed any bash code inside your workflows and rules,
-                        and pass arguments to them in a similar way to bash scripts.</p>
+                        and <strong>workflow</strong>. Workflows call rules with <code>ensure</code> and call other workflows
+                        or module functions with <code>run</code> (managed steps, explicit <code>return</code> values, logs under
+                        <code>.jaiph/runs</code>). Bash <code>$(...)</code> is for pure shell only — not for Jaiph symbols.
+                        You can embed ordinary bash inside workflows and rules and pass arguments like bash scripts.</p>
                     <pre><code class="language-jaiph">#!/usr/bin/env jaiph
 
 rule name_was_provided {
@@ -145,7 +147,7 @@ import "say_hello.jh" as hello
 
 test "without name, workflow fails with validation message" {
   # When
-  response=$({ hello.default 2>&1; } || true) # this way bash captures stderr
+  response = hello.default allow_failure
 
   # Then
   expectEqual response "You didn't provide your name"
@@ -411,7 +413,8 @@ Jaiph: Running async.jh
                         <code>run ref</code>
                     </dt>
                     <dd><code>ensure</code> executes a rule (with optional args); <code>recover</code> adds bounded
-                        retry repair logic; <code>run</code> calls another workflow from a workflow.</dd>
+                        retry repair logic; <code>run</code> calls another workflow or module function from a workflow
+                        (managed step — same value/log contract as <code>ensure</code>).</dd>
 
                     <dt><code>prompt "..."</code> · <code>name = prompt "..." returns '{ field: type }'</code></dt>
                     <dd>Sends a prompt to the configured agent, optionally validates structured JSON output, and exposes
@@ -460,6 +463,12 @@ Jaiph: Running async.jh
                     <dt><code>mock workflow</code> · <code>mock rule</code> · <code>mock function</code></dt>
                     <dd>Replace workflow/rule/function implementations in tests for isolation and targeted assertions.
                     </dd>
+
+                    <dt><code>name = alias.workflow</code> · <code>allow_failure</code></dt>
+                    <dd>Runs an imported workflow through the test harness (same managed semantics as <code>run</code> in
+                        <code>.jh</code> files): capture prefers an explicit <code>return</code> from the callee, otherwise
+                        combined output with internal event lines stripped. Add <code>allow_failure</code> when the test
+                        expects a non-zero exit. See <a href="testing">Testing</a>.</dd>
 
                     <dt><code>expectEqual</code> · <code>expectContain</code> · <code>expectNotContain</code></dt>
                     <dd>Core assertion helpers for exact matches and substring checks.</dd>

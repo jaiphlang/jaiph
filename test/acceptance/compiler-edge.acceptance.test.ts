@@ -81,7 +81,7 @@ test("ACCEPTANCE: unknown local workflow reference in run fails deterministicall
       ].join("\n"),
     );
 
-    assert.throws(() => build(root), /E_VALIDATE unknown local workflow reference "missing_workflow"/);
+    assert.throws(() => build(root), /E_VALIDATE unknown local workflow or function reference "missing_workflow"/);
   });
 });
 
@@ -97,7 +97,7 @@ test("ACCEPTANCE: invalid workflow reference shape fails at parse stage", () => 
       ].join("\n"),
     );
 
-    assert.throws(() => build(root), /E_PARSE run must target a workflow reference/);
+    assert.throws(() => build(root), /E_PARSE run must target a workflow or function reference/);
   });
 });
 
@@ -116,7 +116,7 @@ test("ACCEPTANCE: imported workflow missing fails with E_VALIDATE", () => {
       ].join("\n"),
     );
 
-    assert.throws(() => build(root), /E_VALIDATE imported workflow "lib\.missing" does not exist/);
+    assert.throws(() => build(root), /E_VALIDATE imported workflow or function "lib\.missing" does not exist/);
   });
 });
 
@@ -735,6 +735,7 @@ test("ACCEPTANCE: route with unknown workflow fails E_VALIDATE", () => {
     writeFileSync(
       join(root, "main.jh"),
       [
+        "channel findings",
         "workflow default {",
         "  findings -> missing_wf",
         "}",
@@ -750,6 +751,7 @@ test("ACCEPTANCE: route with rule ref fails E_VALIDATE", () => {
     writeFileSync(
       join(root, "main.jh"),
       [
+        "channel findings",
         "rule check {",
         "  true",
         "}",
@@ -783,6 +785,10 @@ test("ACCEPTANCE: inbox.jh fixture builds successfully", () => {
     writeFileSync(
       join(root, "inbox.jh"),
       [
+        "channel findings",
+        "channel summary",
+        "channel final_summary",
+        "",
         "workflow researcher {",
         "  findings <- echo '## findings'",
         "}",

@@ -71,7 +71,14 @@ export function parseFunctionBlock(
       if (braceDepth === 0) flushCommand();
       continue;
     }
-    const cmd = inner.startsWith("run ") ? inner.slice("run ".length).trim() : inner;
+    if (/^\s*(run|ensure)\s/.test(inner)) {
+      fail(
+        filePath,
+        "function body cannot use run or ensure (move orchestration to a workflow)",
+        innerNo,
+      );
+    }
+    const cmd = inner;
     if (!cmd) {
       fail(filePath, "function command is required", innerNo);
     }

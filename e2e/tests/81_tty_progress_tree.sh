@@ -22,7 +22,7 @@ function leaf_fn() {
 }
 
 workflow leaf {
-  leaf_fn
+  run leaf_fn
 }
 
 workflow default {
