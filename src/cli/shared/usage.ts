@@ -11,6 +11,7 @@ export function printUsage(): void {
       "  jaiph test <file.test.jh|file.test.jph> # run a single test file",
       "  jaiph init [workspace-path]",
       "  jaiph use <version|nightly>",
+      "  jaiph report [start|stop|status] [--host <addr>] [--port <n>] [--runs-dir <path>] [--workspace <path>]",
       "",
       "Global options:",
       "  -h, --help     show this usage",
@@ -29,6 +30,9 @@ export function printUsage(): void {
       "  jaiph test e2e/say_hello.test.jh",
       "  jaiph init",
       "  jaiph use nightly",
+      "  jaiph report",
+      "  jaiph report status",
+      "  jaiph report stop",
       "",
     ].join("\n"),
   );

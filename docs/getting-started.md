@@ -116,9 +116,10 @@ Other useful CLI commands:
 ```bash
 jaiph build [--target <dir>] [path]   # compile .jh files to bash without running
 jaiph test [<dir>|<file.test.jh>]     # run test files (see Testing docs)
+jaiph report --workspace .            # browse .jaiph/runs in a local dashboard
 ```
 
-For all CLI commands, flags, and environment variables, see [CLI Reference](cli.md).
+For all CLI commands, flags, and environment variables, see [CLI Reference](cli.md). For the run history UI and HTTP API, see [Reporting server](reporting.md).
 
 ## Initializing a workspace
 
@@ -159,4 +160,4 @@ Jaiph files (`.jh`) contain **rules**, **workflows**, **functions**, and optiona
 - `if [!] run ref; then ... [else ...] fi` — Conditional based on workflow or function exit code.
 - `if ! <shell_cmd>; then ... fi` — Conditional based on a shell command exit code.
 
-Runtime behavior (progress tree, step output, run logs) is documented in [CLI Reference](cli.md). For agent backend configuration, see [Configuration](configuration.md). For Docker sandboxing (beta), see [Sandboxing](sandboxing.md). For testing workflows with mocks and assertions, see [Testing](testing.md). For lifecycle hooks, see [Hooks](hooks.md).
+Runtime behavior (progress tree, step output, run logs) is documented in [CLI Reference](cli.md). To browse past and in-progress runs in a browser, use [Reporting server](reporting.md). For agent backend configuration, see [Configuration](configuration.md). For Docker sandboxing (beta), see [Sandboxing](sandboxing.md). For testing workflows with mocks and assertions, see [Testing](testing.md). For lifecycle hooks, see [Hooks](hooks.md).
