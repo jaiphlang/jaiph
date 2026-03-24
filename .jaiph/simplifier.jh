@@ -1,11 +1,5 @@
 #!/usr/bin/env jaiph
 
-#
-# Simplifier workflow: periodically reduce LOC, remove duplication, split
-# oversized modules, and simplify structure without changing behavior.
-# No queue — scan for opportunities, then apply refactors in one pass.
-#
-
 import "./ensure_ci_passes.jh" as ci
 import "./git.jh" as git
 
@@ -14,7 +8,7 @@ config {
   agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
-local simplifier_principles = "
+const simplifier_principles = "
   Goal: fewer lines and clearer structure while preserving behavior.
 
   Allowed moves:
@@ -41,31 +35,29 @@ local simplifier_principles = "
     existing tests unchanged.
 "
 
-function simplifier_changed_files() {
-  return "$({
-    git diff --name-only --cached
-    git diff --name-only
-    git ls-files --others --exclude-standard
-  } | sort -u)"
-}
-
-# Like docs_parity.jh only_expected_docs_changed_after_prompt, but a blocklist:
-# fail if the worktree touches the test or e2e trees.
-rule no_test_or_e2e_paths_changed {
-  local changed
-  changed = run simplifier_changed_files
-
+function assert_no_test_or_e2e_in_changed() {
+  source "${JAIPH_LIB}/git_paths.sh"
+  local bad=0
   while IFS= read -r f; do
     [ -z "$f" ] && continue
     if [[ "$f" == test/* ]] || [[ "$f" == e2e/* ]]; then
       echo "Simplifier workflow must not modify tests or e2e: $f" >&2
-      exit 1
+      bad=1
     fi
-  done <<< "$changed"
+  done < <(git_changed_paths_sorted)
+  return "$bad"
+}
+
+rule no_test_or_e2e_paths_changed {
+  run assert_no_test_or_e2e_in_changed
+}
+
+function report_file_nonempty() {
+  test -s ".jaiph/tmp/simplifier_report.md"
 }
 
 workflow find_simplifications {
-  report = prompt "
+  const report = prompt "
     <role>
     You are a senior engineer focused on codebase simplification for the Jaiph
     repository (TypeScript under src/ and supporting scripts). You may read
@@ -100,22 +92,24 @@ workflow find_simplifications {
     </role>
   "
 
-  echo "$report" > .jaiph/tmp/simplifier_report.md
+  run save_simplifier_report "$report"
   log "Simplification report saved to .jaiph/tmp/simplifier_report.md"
-
   ensure no_test_or_e2e_paths_changed
 }
 
+function save_simplifier_report() {
+  printf '%s\n' "$1" > .jaiph/tmp/simplifier_report.md
+}
+
+function read_simplifier_report() {
+  cat .jaiph/tmp/simplifier_report.md
+}
+
 workflow apply_simplifications {
-  local report_file=".jaiph/tmp/simplifier_report.md"
-
-  if [[ ! -s "$report_file" ]]; then
-    echo "No report at $report_file. Run find_simplifications first." >&2
-    exit 1
-  fi
-
-  local report
-  report="$(<"$report_file")"
+  if not run report_file_nonempty {
+    fail "No report at .jaiph/tmp/simplifier_report.md. Run find_simplifications first."
+  }
+  const report = run read_simplifier_report
 
   prompt "
     <role>
@@ -146,9 +140,13 @@ workflow apply_simplifications {
   ensure no_test_or_e2e_paths_changed
 }
 
+function mkdir_tmp_jaiph() {
+  mkdir -p .jaiph/tmp
+}
+
 workflow default {
   ensure git.is_clean
-  mkdir -p .jaiph/tmp
+  run mkdir_tmp_jaiph
   run find_simplifications
   run apply_simplifications
   run ci.ensure_ci_passes

@@ -13,6 +13,11 @@ export type StepEmitCtx = {
   workflowName: string;
   /** In recover blocks, run/ensure default to ' "$@"' args and ensure skips paramKeys. */
   inRecoverBlock: boolean;
+  /**
+   * When false (rule bodies), `fail` emits `return 1` after stderr message.
+   * Workflows and recover blocks use `exit 1` (default true).
+   */
+  failExitsProcess?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -103,6 +108,70 @@ export function normalizeShellLocalExport(command: string): string {
 // Per-step emitters
 // ---------------------------------------------------------------------------
 
+export function emitFailStep(
+  out: string[],
+  indent: string,
+  step: Extract<WorkflowStepDef, { type: "fail" }>,
+  ctx: StepEmitCtx,
+): void {
+  out.push(`${indent}echo ${step.message} >&2`);
+  if (ctx.failExitsProcess === false) {
+    out.push(`${indent}return 1`);
+  } else {
+    out.push(`${indent}exit 1`);
+  }
+}
+
+export function emitConstStep(
+  out: string[],
+  indent: string,
+  step: Extract<WorkflowStepDef, { type: "const" }>,
+  ctx: StepEmitCtx,
+): void {
+  const v = step.value;
+  if (v.kind === "expr") {
+    out.push(`${indent}local ${step.name}; ${step.name}=${v.bashRhs}`);
+    return;
+  }
+  if (v.kind === "run_capture") {
+    const syn: Extract<WorkflowStepDef, { type: "run" }> = {
+      type: "run",
+      workflow: v.ref,
+      args: v.args,
+      captureName: step.name,
+    };
+    emitRunStep(out, indent, syn, ctx);
+    return;
+  }
+  if (v.kind === "ensure_capture") {
+    const syn: Extract<WorkflowStepDef, { type: "ensure" }> = {
+      type: "ensure",
+      ref: v.ref,
+      args: v.args,
+      captureName: step.name,
+    };
+    emitEnsureStep(out, indent, syn, ctx);
+    return;
+  }
+  const promptStep: Extract<WorkflowStepDef, { type: "prompt" }> = {
+    type: "prompt",
+    raw: v.raw,
+    loc: v.loc,
+    captureName: step.name,
+    ...(v.returns !== undefined ? { returns: v.returns } : {}),
+  };
+  emitPromptStepToOut(out, indent, promptStep, ctx);
+}
+
+export function emitWaitStep(
+  out: string[],
+  indent: string,
+  _step: Extract<WorkflowStepDef, { type: "wait" }>,
+  _ctx: StepEmitCtx,
+): void {
+  out.push(`${indent}wait`);
+}
+
 export function emitRunStep(
   out: string[],
   indent: string,
@@ -179,30 +248,49 @@ export function emitEnsureStep(
   }
 }
 
+function emitIfConditionOpen(
+  out: string[],
+  indent: string,
+  keyword: "if" | "elif",
+  negated: boolean,
+  condition: Extract<WorkflowStepDef, { type: "if" }>["condition"],
+  ctx: StepEmitCtx,
+): void {
+  const negPrefix = negated ? "! " : "";
+  if (condition.kind === "ensure") {
+    const ensureArgs = condition.args ? ` ${condition.args}` : "";
+    out.push(
+      `${indent}${keyword} ${negPrefix}${transpileRuleRef(condition.ref, ctx.workflowSymbol, ctx.importedWorkflowSymbols)}${ensureArgs}; then`,
+    );
+  } else if (condition.kind === "run") {
+    const runArgs = condition.args ? ` ${condition.args}` : "";
+    const wfRef = transpileWorkflowRef(condition.ref, ctx.workflowSymbol, ctx.importedWorkflowSymbols);
+    const scopePrefix = prefixForImportedWorkflowCall(condition.ref, ctx.importedModuleHasMetadata, ctx.importedWorkflowSymbols);
+    out.push(`${indent}${keyword} ${negPrefix}${scopePrefix}${wfRef}${runArgs}; then`);
+  } else {
+    const resolvedCondition = resolveShellRefs(condition.command, ctx.importedWorkflowSymbols);
+    out.push(`${indent}${keyword} ${negPrefix}${resolvedCondition}; then`);
+  }
+}
+
 export function emitIfStep(
   out: string[],
   indent: string,
   step: Extract<WorkflowStepDef, { type: "if" }>,
   ctx: StepEmitCtx,
 ): void {
-  const negPrefix = step.negated ? "! " : "";
-  if (step.condition.kind === "ensure") {
-    const ensureArgs = step.condition.args ? ` ${step.condition.args}` : "";
-    out.push(
-      `${indent}if ${negPrefix}${transpileRuleRef(step.condition.ref, ctx.workflowSymbol, ctx.importedWorkflowSymbols)}${ensureArgs}; then`,
-    );
-  } else if (step.condition.kind === "run") {
-    const runArgs = step.condition.args ? ` ${step.condition.args}` : "";
-    const wfRef = transpileWorkflowRef(step.condition.ref, ctx.workflowSymbol, ctx.importedWorkflowSymbols);
-    const scopePrefix = prefixForImportedWorkflowCall(step.condition.ref, ctx.importedModuleHasMetadata, ctx.importedWorkflowSymbols);
-    out.push(`${indent}if ${negPrefix}${scopePrefix}${wfRef}${runArgs}; then`);
-  } else {
-    const resolvedCondition = resolveShellRefs(step.condition.command, ctx.importedWorkflowSymbols);
-    out.push(`${indent}if ${negPrefix}${resolvedCondition}; then`);
-  }
+  emitIfConditionOpen(out, indent, "if", step.negated, step.condition, ctx);
   const branchCtx: StepEmitCtx = { ...ctx, inRecoverBlock: false };
   for (const branchStep of step.thenSteps) {
     emitStep(out, indent + "  ", branchStep, branchCtx);
+  }
+  if (step.elseIfBranches) {
+    for (const br of step.elseIfBranches) {
+      emitIfConditionOpen(out, indent, "elif", br.negated, br.condition, ctx);
+      for (const branchStep of br.thenSteps) {
+        emitStep(out, indent + "  ", branchStep, branchCtx);
+      }
+    }
   }
   if (step.elseSteps && step.elseSteps.length > 0) {
     out.push(`${indent}else`);
@@ -222,7 +310,7 @@ export function emitIfStep(
  * from a rule/workflow/function call into a variable.
  * stdout goes to artifacts; only the explicit return value is captured.
  */
-function emitReturnValueCapture(
+export function emitReturnValueCapture(
   out: string[],
   indent: string,
   captureName: string,
@@ -302,4 +390,7 @@ export function emitStep(
   if (step.type === "logerr") { out.push(`${indent}jaiph::logerr ${step.message}`); return; }
   if (step.type === "send") { emitSendStep(out, indent, step, ctx); return; }
   if (step.type === "if") { emitIfStep(out, indent, step, ctx); return; }
+  if (step.type === "fail") { emitFailStep(out, indent, step, ctx); return; }
+  if (step.type === "const") { emitConstStep(out, indent, step, ctx); return; }
+  if (step.type === "wait") { emitWaitStep(out, indent, step, ctx); return; }
 }

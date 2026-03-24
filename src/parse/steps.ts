@@ -1,5 +1,6 @@
 import type { WorkflowStepDef } from "../types";
-import { fail, isRef } from "./core";
+import { parseConstRhs } from "./const-rhs";
+import { fail, indexOfClosingDoubleQuote, isRef } from "./core";
 import { parsePromptStep } from "./prompt";
 
 /** Split recover block content into statements on `;` or `\n`, but not inside double-quoted strings. */
@@ -37,6 +38,33 @@ function parseRecoverStatement(
   const t = stmt.trim();
   if (!t) {
     fail(filePath, "empty recover statement", lineNo, col);
+  }
+  if (t === "wait") {
+    return { type: "wait", loc: { line: lineNo, col } };
+  }
+  if (/^fail\s+/.test(t)) {
+    const arg = t.slice("fail".length).trimStart();
+    if (!arg.startsWith('"')) {
+      fail(filePath, 'fail must match: fail "<reason>"', lineNo, col);
+    }
+    const closeIdx = indexOfClosingDoubleQuote(arg, 1);
+    if (closeIdx === -1) {
+      fail(filePath, "unterminated fail string", lineNo, col);
+    }
+    const message = arg.slice(0, closeIdx + 1);
+    return { type: "fail", message, loc: { line: lineNo, col } };
+  }
+  const constRecover = t.match(/^const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/s);
+  if (constRecover) {
+    const name = constRecover[1];
+    const rhs = constRecover[2].trim();
+    const { value } = parseConstRhs(filePath, [], lineNo - 1, rhs, lineNo, col, false, name);
+    return {
+      type: "const",
+      name,
+      value,
+      loc: { line: lineNo, col },
+    };
   }
   const genericAssignMatch = t.match(/^([A-Za-z_][A-Za-z0-9_]*)\s+=\s*(.+)$/s);
   if (

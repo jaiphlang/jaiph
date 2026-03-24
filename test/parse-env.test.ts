@@ -64,7 +64,7 @@ test("parseEnvDecl: fails on content after closing single quote", () => {
 test("parseEnvDecl: fails on invalid declaration format", () => {
   assert.throws(
     () => parseEnvDecl("test.jh", ["not a local"], 0),
-    /invalid local declaration/,
+    /invalid declaration/,
   );
 });
 

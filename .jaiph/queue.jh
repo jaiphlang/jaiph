@@ -7,21 +7,20 @@
 #
 
 function get_all_task_headers() {
-  local queue_file="${JAIPH_WORKSPACE:-.}/.jaiph/QUEUE.md"
-  if ! test -f "$queue_file"; then
-    echo "missing $queue_file" >&2
+  local qf="${JAIPH_WORKSPACE:-.}/.jaiph/QUEUE.md"
+  if ! test -f "$qf"; then
+    echo "missing $qf" >&2
     return 1
   fi
-
-  return "$(awk '/^## /{print}' "$queue_file")"
+  awk '/^## /{print}' "$qf"
 }
 
 function get_task_by_header() {
   test -n "${1:-}" || { echo "get_task_by_header: header required" >&2; return 1; }
 
-  local queue_file="${JAIPH_WORKSPACE:-.}/.jaiph/QUEUE.md"
-  if ! test -f "$queue_file"; then
-    echo "missing $queue_file" >&2
+  local qf="${JAIPH_WORKSPACE:-.}/.jaiph/QUEUE.md"
+  if ! test -f "$qf"; then
+    echo "missing $qf" >&2
     return 1
   fi
 
@@ -37,7 +36,7 @@ function get_task_by_header() {
       if (found) { print }
     }
     END { if (!found) exit 2 }
-  ' "$queue_file")"; then
+  ' "$qf")"; then
     echo "task not found: $header" >&2
     return 1
   fi
@@ -47,40 +46,47 @@ function get_task_by_header() {
     return 1
   fi
 
-  return "$task"
+  printf '%s\n' "$task"
+}
+
+function task_contains_dev_ready_marker() {
+  printf '%s\n' "$1" | grep -q '<!-- dev-ready -->'
+}
+
+function file_exists() {
+  test -f "$1"
+}
+
+function first_header_line() {
+  awk '/^## /{print; exit}' "$1"
+}
+
+function arg_nonempty() {
+  [ -n "${1:-}" ]
 }
 
 workflow get_first_task {
-  local queue_file="${JAIPH_WORKSPACE:-.}/.jaiph/QUEUE.md"
-  if ! test -f "$queue_file"; then
-    echo "missing $queue_file" >&2
-    return 1
-  fi
-
-  local first_header
-  first_header=$(awk '/^## /{print; exit}' "$queue_file")
-
-  if ! test -n "${first_header}"; then
-    echo "no tasks found in $queue_file" >&2
-    return 1
-  fi
-
-  task = run get_task_by_header "$first_header"
+  const qf = "${JAIPH_WORKSPACE:-.}/.jaiph/QUEUE.md"
+  if not run file_exists "$qf" {
+    fail "missing queue file"
+  }
+  const first_header = run first_header_line "$qf"
+  if not run arg_nonempty "$first_header" {
+    fail "no tasks found in queue"
+  }
+  const task = run get_task_by_header "$first_header"
   return "$task"
 }
 
-# Checks whether a given task block contains the dev-ready marker.
 rule task_is_dev_ready {
-  echo "$1" | grep -q '<!-- dev-ready -->'
+  run task_contains_dev_ready_marker "$1"
 }
 
-# Inserts the dev-ready marker into a task block identified by its header line.
-# Errors if header not found.
 function mark_task_dev_ready() {
   test -n "${1:-}" || { echo "mark_task_dev_ready: header required" >&2; return 1; }
   local header="$1"
-  local queue_file="${JAIPH_WORKSPACE:-.}/.jaiph/QUEUE.md"
-  local tmp_file="${queue_file}.tmp.$$"
+  local qf="${JAIPH_WORKSPACE:-.}/.jaiph/QUEUE.md"
+  local tmp_file="${qf}.tmp.$$"
 
   if ! awk -v header="$header" '
     BEGIN { marked=0 }
@@ -93,23 +99,35 @@ function mark_task_dev_ready() {
       }
     }
     END { if (!marked) exit 2 }
-  ' "$queue_file" > "$tmp_file"; then
+  ' "$qf" > "$tmp_file"; then
     rm -f "$tmp_file"
     echo "mark_task_dev_ready: task not found: $header" >&2
     return 1
   fi
 
-  mv "$tmp_file" "$queue_file"
+  mv "$tmp_file" "$qf"
 }
 
-# Removes a completed task block (identified by its header line) from QUEUE.md.
+function remove_task_block_by_header() {
+  local header="$1"
+  local qf="$2"
+  local tmp_file="${qf}.tmp.$$"
+  awk -v header="${header}" 'BEGIN{skipping=0;removed=0} {if(!removed && $0==header){skipping=1;removed=1;next} if(skipping && $0 ~ /^## /){skipping=0} if(!skipping){print}} END{if(!removed) exit 2}' "$qf" > "$tmp_file" || return 1
+  mv "$tmp_file" "$qf"
+}
+
+function squeeze_consecutive_blanks_queue() {
+  local qf="$1"
+  sed -i.bak -E '/^[[:space:]]*$/N;/^\n$/D' "$qf"
+  rm -f "${qf}.bak"
+}
+
 workflow remove_completed_task {
-  test -n "${1:-}"
-  header="$1"
-  local queue_file="${JAIPH_WORKSPACE:-.}/.jaiph/QUEUE.md"
-  local tmp_file="${queue_file}.tmp.$$"
-  awk -v header="${header}" 'BEGIN{skipping=0;removed=0} {if(!removed && $0==header){skipping=1;removed=1;next} if(skipping && $0 ~ /^## /){skipping=0} if(!skipping){print}} END{if(!removed) exit 2}' "$queue_file" > "$tmp_file"
-  mv "$tmp_file" "$queue_file"
-  sed -i.bak -E '/^[[:space:]]*$/N;/^\n$/D' "$queue_file"
-  rm -f "${queue_file}.bak"
+  const h = "$1"
+  if not run arg_nonempty "$h" {
+    fail "header required"
+  }
+  const qf = "${JAIPH_WORKSPACE:-.}/.jaiph/QUEUE.md"
+  run remove_task_block_by_header "$h" "$qf"
+  run squeeze_consecutive_blanks_queue "$qf"
 }

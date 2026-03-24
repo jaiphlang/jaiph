@@ -1,18 +1,29 @@
 #!/usr/bin/env jaiph
 
-# Verifies this workflow is executed inside a git repository.
-rule in_git_repo {
+function git_inside_worktree() {
   git rev-parse --is-inside-work-tree >/dev/null 2>&1
 }
 
-# Verifies there are no tracked or untracked changes.
-rule branch_clean {
+function git_porcelain_empty() {
   test -z "$(git status --porcelain)"
 }
 
-# Verifies there is at least one change to commit.
-rule has_changes {
+function git_porcelain_nonempty() {
   test -n "$(git status --porcelain)"
+}
+
+rule in_git_repo {
+  if not run git_inside_worktree {
+    fail "not inside a git repository"
+  }
+}
+
+rule branch_clean {
+  run git_porcelain_empty
+}
+
+rule has_changes {
+  run git_porcelain_nonempty
 }
 
 rule is_clean {
@@ -23,10 +34,10 @@ rule is_clean {
 workflow commit {
   ensure in_git_repo
 
-  if ! ensure has_changes; then
+  if not ensure has_changes {
     log "No changes to commit — skipping."
-    exit 0
-  fi
+    return
+  }
 
   prompt "
     Commit the current repository changes now.

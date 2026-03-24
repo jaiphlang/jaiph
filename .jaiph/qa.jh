@@ -1,10 +1,5 @@
 #!/usr/bin/env jaiph
 
-#
-# QA workflow: detect test coverage gaps and produce missing tests.
-# No queue — runs the full analysis-and-generate flow in one pass.
-#
-
 import "./ensure_ci_passes.jh" as ci
 import "./git.jh" as git
 
@@ -13,7 +8,7 @@ config {
   agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
-local testing_philosophy = "
+const testing_philosophy = "
   Jaiph has four test layers. Use the narrowest layer that covers the behavior.
 
   1. Unit tests (test/*.test.ts) — pure functions: event parsing, param
@@ -44,8 +39,20 @@ local testing_philosophy = "
     expectations, or obsolete feature removal. Keep changes minimal.
 "
 
+function gap_report_nonempty() {
+  test -s ".jaiph/tmp/qa_gap_report.md"
+}
+
+function read_gap_report() {
+  cat .jaiph/tmp/qa_gap_report.md
+}
+
+function save_gap_report() {
+  printf '%s\n' "$1" > .jaiph/tmp/qa_gap_report.md
+}
+
 workflow analyze_gaps {
-  gap_report = prompt "
+  const gap_report = prompt "
     <role>
     You are a QA engineer analyzing the Jaiph codebase for test coverage gaps.
 
@@ -89,20 +96,15 @@ workflow analyze_gaps {
     </role>
   "
 
-  echo "$gap_report" > .jaiph/tmp/qa_gap_report.md
+  run save_gap_report "$gap_report"
   log "Gap report saved to .jaiph/tmp/qa_gap_report.md"
 }
 
 workflow write_tests {
-  local report_file=".jaiph/tmp/qa_gap_report.md"
-
-  if [[ ! -s "$report_file" ]]; then
-    echo "No gap report found at $report_file. Run the analyze_gaps workflow first." >&2
-    exit 1
-  fi
-
-  local gap_report
-  gap_report="$(<"$report_file")"
+  if not run gap_report_nonempty {
+    fail "No gap report found at .jaiph/tmp/qa_gap_report.md. Run analyze_gaps first."
+  }
+  const gap_report = run read_gap_report
 
   prompt "
     <role>
@@ -144,9 +146,13 @@ workflow write_tests {
   "
 }
 
+function mkdir_tmp_jaiph_qa() {
+  mkdir -p .jaiph/tmp
+}
+
 workflow default {
   ensure git.is_clean
-  mkdir -p .jaiph/tmp
+  run mkdir_tmp_jaiph_qa
   run analyze_gaps
   run write_tests
   run ci.ensure_ci_passes

@@ -1722,7 +1722,7 @@ test("jaiph test fails when non-test file is passed", () => {
   }
 });
 
-test("build fails when run is used inside a rule block", () => {
+test("build fails when run in rule references unknown symbol", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-run-in-rule-"));
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-run-in-rule-out-"));
   try {
@@ -1741,7 +1741,43 @@ test("build fails when run is used inside a rule block", () => {
       ].join("\n"),
     );
 
-    assert.throws(() => build(filePath, outDir), /`run` is not allowed inside a `rule` block/);
+    assert.throws(
+      () => build(filePath, outDir),
+      /unknown local function reference.*run in rules must target a function/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outDir, { recursive: true, force: true });
+  }
+});
+
+test("build fails when run in rule targets a workflow", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-wf-in-rule-"));
+  const outDir = mkdtempSync(join(tmpdir(), "jaiph-run-wf-in-rule-out-"));
+  try {
+    const filePath = join(root, "entry.jh");
+    writeFileSync(
+      filePath,
+      [
+        "workflow helper {",
+        '  log "hi"',
+        "}",
+        "",
+        "rule bad {",
+        "  run helper",
+        "}",
+        "",
+        "workflow default {",
+        "  ensure bad",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    assert.throws(
+      () => build(filePath, outDir),
+      /run inside a rule must target a function, not workflow/,
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(outDir, { recursive: true, force: true });

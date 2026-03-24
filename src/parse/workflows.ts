@@ -1,46 +1,18 @@
 import type { WorkflowDef, WorkflowRouteDef } from "../types";
-import { braceDepthDelta, colFromRaw, fail, indexOfClosingDoubleQuote, isRef } from "./core";
+import {
+  braceDepthDelta,
+  colFromRaw,
+  fail,
+  indexOfClosingDoubleQuote,
+  isRef,
+  matchSendOperator,
+} from "./core";
+import { parseConstRhs } from "./const-rhs";
+import { tryParseLegacyIfEnsure, tryParseLegacyIfRun } from "./legacy-if";
 import { parseConfigBlock } from "./metadata";
 import { parsePromptStep } from "./prompt";
 import { parseEnsureStep } from "./steps";
-
-/**
- * Match `channel <- command` send operator in a line, only when `<-` appears outside quoted strings.
- * The channel identifier must be on the left side of the `<-` operator.
- * Returns { command, channel } if matched, or null.
- */
-function matchSendOperator(line: string): { command: string; channel: string } | null {
-  // Walk the line tracking quote state; find `<-` outside quotes.
-  let inSingleQuote = false;
-  let inDoubleQuote = false;
-  for (let i = 0; i < line.length; i += 1) {
-    const ch = line[i];
-    if (ch === "\\" && (inDoubleQuote || inSingleQuote)) {
-      i += 1; // skip escaped char
-      continue;
-    }
-    if (ch === "'" && !inDoubleQuote) {
-      inSingleQuote = !inSingleQuote;
-      continue;
-    }
-    if (ch === '"' && !inSingleQuote) {
-      inDoubleQuote = !inDoubleQuote;
-      continue;
-    }
-    if (!inSingleQuote && !inDoubleQuote && ch === "<" && line[i + 1] === "-") {
-      const before = line.slice(0, i).trimEnd();
-      const after = line.slice(i + 2).trimStart();
-      // Channel must be a valid identifier on the left side
-      const channelMatch = before.match(
-        /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)$/,
-      );
-      if (channelMatch) {
-        return { command: after, channel: channelMatch[1] };
-      }
-    }
-  }
-  return null;
-}
+import { tryParseBraceIfChain } from "./workflow-brace";
 
 /**
  * Detect Jaiph value-return syntax vs bash exit-code return.
@@ -160,236 +132,69 @@ export function parseWorkflowBlock(
 
     hadNonCommentStep = true;
 
-    const ifNegEnsureMatch = inner.match(
-      /^if\s+!\s*ensure\s+(.+?)\s*;\s*then$/,
-    );
-    const ifPosEnsureMatch = !ifNegEnsureMatch
-      ? inner.match(/^if\s+ensure\s+(.+?)\s*;\s*then$/)
-      : null;
-    const ifEnsureBody = ifNegEnsureMatch?.[1] ?? ifPosEnsureMatch?.[1];
-    const isNegated = !!ifNegEnsureMatch;
-    if (ifEnsureBody) {
-      const ensureBodyMatch = ifEnsureBody.match(
-        /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
-      );
-      if (!ensureBodyMatch || !isRef(ensureBodyMatch[1])) {
-        fail(filePath, "invalid ensure reference in if-ensure statement", innerNo);
-      }
-      const ensureRef = ensureBodyMatch[1];
-      const ensureArgs = ensureBodyMatch[2]?.trim();
-      let fiLine = -1;
-      let inElse = false;
-      const thenSteps: import("../types").WorkflowStepDef[] = [];
-      const elseSteps: import("../types").WorkflowStepDef[] = [];
-      for (let lookahead = idx + 1; lookahead < lines.length; lookahead += 1) {
-        const lookNo = lookahead + 1;
-        const lookRaw = lines[lookahead];
-        const lookTrim = lookRaw.trim();
-        if (!lookTrim || lookTrim.startsWith("#")) {
-          continue;
-        }
-        if (lookTrim === "fi") {
-          fiLine = lookahead;
-          break;
-        }
-        if (lookTrim === "else") {
-          if (inElse) {
-            fail(filePath, "duplicate else in if-ensure block", lookNo);
-          }
-          inElse = true;
-          continue;
-        }
-        const target = inElse ? elseSteps : thenSteps;
-        const genericAssignMatch = lookTrim.match(/^([A-Za-z_][A-Za-z0-9_]*)\s+=\s*(.+)$/s);
-        if (
-          genericAssignMatch &&
-          !genericAssignMatch[2].trimStart().startsWith("prompt ") &&
-          !genericAssignMatch[2].trimStart().startsWith('"') &&
-          !genericAssignMatch[2].trimStart().startsWith("'") &&
-          !genericAssignMatch[2].trimStart().startsWith("$")
-        ) {
-          const captureName = genericAssignMatch[1];
-          const rest = genericAssignMatch[2].trim();
-          const runMatch = rest.match(
-            /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
-          );
-          if (runMatch && isRef(runMatch[1])) {
-            target.push({
-              type: "run",
-              workflow: { value: runMatch[1], loc: { line: lookNo, col: lookRaw.indexOf("run") + 1 } },
-              args: runMatch[2]?.trim(),
-              captureName,
-            });
-            continue;
-          }
-          target.push({
-            type: "shell",
-            command: rest,
-            loc: { line: lookNo, col: colFromRaw(lookRaw) },
-            captureName,
-          });
-          continue;
-        }
-        const runMatch = lookTrim.match(
-          /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
-        );
-        if (runMatch) {
-          target.push({
-            type: "run",
-            workflow: {
-              value: runMatch[1],
-              loc: { line: lookNo, col: lines[lookahead].indexOf("run") + 1 },
-            },
-            args: runMatch[2]?.trim(),
-          });
-          continue;
-        }
-        const promptAssignMatch = lookTrim.match(
-          /^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*prompt\s+(.+)$/s,
-        );
-        if (promptAssignMatch) {
-          const promptCol = lookRaw.indexOf("prompt") + 1;
-          const result = parsePromptStep(
-            filePath, lines, lookahead, promptAssignMatch[2].trimStart(),
-            promptCol, promptAssignMatch[1],
-          );
-          lookahead = result.nextLineIdx;
-          target.push(result.step);
-          continue;
-        }
-        if (lookTrim.startsWith("prompt ")) {
-          const promptCol = lookRaw.indexOf("prompt") + 1;
-          const promptArg = lookRaw.slice(lookRaw.indexOf("prompt") + "prompt".length).trimStart();
-          const result = parsePromptStep(filePath, lines, lookahead, promptArg, promptCol);
-          lookahead = result.nextLineIdx;
-          target.push(result.step);
-          continue;
-        }
-        if (/^\s*ensure\b/.test(lookTrim)) {
-          fail(filePath, 'E_PARSE "ensure" is not allowed inside an if-ensure then/else branch', lookNo);
-        }
-        target.push({
-          type: "shell",
-          command: lookTrim,
-          loc: { line: lookNo, col: colFromRaw(lookRaw) },
-        });
-      }
-      if (fiLine === -1) {
-        fail(filePath, 'unterminated if-block, expected "fi"', innerNo);
-      }
-      if (thenSteps.length === 0) {
-        fail(filePath, "if-block then-branch must contain at least one run or shell command", innerNo);
-      }
-      const ensureRefDef = { value: ensureRef, loc: { line: innerNo, col: innerRaw.indexOf("ensure") + 1 } };
-      const hasElse = elseSteps.length > 0;
-      workflow.steps.push({
-        type: "if",
-        negated: isNegated,
-        condition: { kind: "ensure", ref: ensureRefDef, args: ensureArgs },
-        thenSteps,
-        ...(hasElse ? { elseSteps } : {}),
-      });
-      idx = fiLine;
+    const braceIf = tryParseBraceIfChain(filePath, lines, idx);
+    if (braceIf) {
+      workflow.steps.push(braceIf.step);
+      idx = braceIf.nextIdx - 1;
       continue;
     }
 
-    const ifNegRunMatch = inner.match(
-      /^if\s+!\s*run\s+(.+?)\s*;\s*then$/,
-    );
-    const ifPosRunMatch = !ifNegRunMatch
-      ? inner.match(/^if\s+run\s+(.+?)\s*;\s*then$/)
-      : null;
-    const ifRunBody = ifNegRunMatch?.[1] ?? ifPosRunMatch?.[1];
-    const isRunNegated = !!ifNegRunMatch;
-    if (ifRunBody) {
-      const runBodyMatch = ifRunBody.match(
-        /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
+    const legEnsure = tryParseLegacyIfEnsure(filePath, lines, idx, inner, innerNo, innerRaw);
+    if (legEnsure) {
+      workflow.steps.push(legEnsure.step);
+      idx = legEnsure.nextIdx;
+      continue;
+    }
+
+    const legRun = tryParseLegacyIfRun(filePath, lines, idx, inner, innerNo, innerRaw);
+    if (legRun) {
+      workflow.steps.push(legRun.step);
+      idx = legRun.nextIdx;
+      continue;
+    }
+
+    const constDecl = inner.match(/^const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/s);
+    if (constDecl) {
+      const name = constDecl[1];
+      const rhs = constDecl[2].trim();
+      const { value, nextLineIdx } = parseConstRhs(
+        filePath, lines, idx, rhs, innerNo, innerRaw.indexOf(rhs) + 1, false, name,
       );
-      if (!runBodyMatch || !isRef(runBodyMatch[1])) {
-        fail(filePath, "invalid workflow reference in if-run statement", innerNo);
-      }
-      const runRef = runBodyMatch[1];
-      const runArgs = runBodyMatch[2]?.trim();
-      let fiLine = -1;
-      let inElse = false;
-      const thenSteps: import("../types").WorkflowStepDef[] = [];
-      const elseSteps: import("../types").WorkflowStepDef[] = [];
-      for (let lookahead = idx + 1; lookahead < lines.length; lookahead += 1) {
-        const lookNo = lookahead + 1;
-        const lookRaw = lines[lookahead];
-        const lookTrim = lookRaw.trim();
-        if (!lookTrim || lookTrim.startsWith("#")) {
-          continue;
-        }
-        if (lookTrim === "fi") {
-          fiLine = lookahead;
-          break;
-        }
-        if (lookTrim === "else") {
-          if (inElse) {
-            fail(filePath, "duplicate else in if-run block", lookNo);
-          }
-          inElse = true;
-          continue;
-        }
-        const target = inElse ? elseSteps : thenSteps;
-        const runMatch = lookTrim.match(
-          /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
-        );
-        if (runMatch) {
-          target.push({
-            type: "run",
-            workflow: {
-              value: runMatch[1],
-              loc: { line: lookNo, col: lines[lookahead].indexOf("run") + 1 },
-            },
-            args: runMatch[2]?.trim(),
-          });
-          continue;
-        }
-        const promptAssignMatch = lookTrim.match(
-          /^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*prompt\s+(.+)$/s,
-        );
-        if (promptAssignMatch) {
-          const promptCol = lookRaw.indexOf("prompt") + 1;
-          const result = parsePromptStep(
-            filePath, lines, lookahead, promptAssignMatch[2].trimStart(),
-            promptCol, promptAssignMatch[1],
-          );
-          lookahead = result.nextLineIdx;
-          target.push(result.step);
-          continue;
-        }
-        if (lookTrim.startsWith("prompt ")) {
-          const promptCol = lookRaw.indexOf("prompt") + 1;
-          const promptArg = lookRaw.slice(lookRaw.indexOf("prompt") + "prompt".length).trimStart();
-          const result = parsePromptStep(filePath, lines, lookahead, promptArg, promptCol);
-          lookahead = result.nextLineIdx;
-          target.push(result.step);
-          continue;
-        }
-        target.push({
-          type: "shell",
-          command: lookTrim,
-          loc: { line: lookNo, col: colFromRaw(lookRaw) },
-        });
-      }
-      if (fiLine === -1) {
-        fail(filePath, 'unterminated if-block, expected "fi"', innerNo);
-      }
-      if (thenSteps.length === 0) {
-        fail(filePath, "if-block then-branch must contain at least one run or shell command", innerNo);
-      }
-      const runRefDef = { value: runRef, loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 } };
-      const hasElse = elseSteps.length > 0;
+      const nextLine = value.kind === "prompt_capture" ? nextLineIdx + 1 : idx + 1;
       workflow.steps.push({
-        type: "if",
-        negated: isRunNegated,
-        condition: { kind: "run", ref: runRefDef, args: runArgs },
-        thenSteps,
-        ...(hasElse ? { elseSteps } : {}),
+        type: "const",
+        name,
+        value,
+        loc: { line: innerNo, col: innerRaw.indexOf("const") + 1 },
       });
-      idx = fiLine;
+      idx = nextLine - 1;
+      continue;
+    }
+
+    const failLine = inner.match(/^fail\s+/);
+    if (failLine) {
+      const arg = inner.slice("fail".length).trimStart();
+      if (!arg.startsWith('"')) {
+        fail(filePath, 'fail must match: fail "<reason>"', innerNo, innerRaw.indexOf("fail") + 1);
+      }
+      const closeIdx = indexOfClosingDoubleQuote(arg, 1);
+      if (closeIdx === -1) {
+        fail(filePath, "unterminated fail string", innerNo, innerRaw.indexOf("fail") + 1);
+      }
+      const message = arg.slice(0, closeIdx + 1);
+      workflow.steps.push({
+        type: "fail",
+        message,
+        loc: { line: innerNo, col: innerRaw.indexOf("fail") + 1 },
+      });
+      continue;
+    }
+
+    if (inner === "wait") {
+      workflow.steps.push({
+        type: "wait",
+        loc: { line: innerNo, col: innerRaw.indexOf("wait") + 1 },
+      });
       continue;
     }
 

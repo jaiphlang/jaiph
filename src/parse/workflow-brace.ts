@@ -1,0 +1,467 @@
+import type { IfConditionDef, WorkflowStepDef } from "../types";
+
+type NonShellIfCondition = Exclude<IfConditionDef, { kind: "shell" }>;
+import {
+  colFromRaw,
+  fail,
+  indexOfClosingDoubleQuote,
+  isRef,
+  matchSendOperator,
+} from "./core";
+import { parseConstRhs } from "./const-rhs";
+import { tryParseLegacyIfEnsure, tryParseLegacyIfRun } from "./legacy-if";
+import { parseEnsureStep } from "./steps";
+import { parsePromptStep } from "./prompt";
+
+type BraceIfHead =
+  | { kind: "ensure"; negated: boolean; ref: string; args?: string }
+  | { kind: "run"; negated: boolean; ref: string; args?: string };
+
+function parseIfBraceHead(inner: string): BraceIfHead | null {
+  let s = inner.trim();
+  if (!s.startsWith("if ")) return null;
+  s = s.slice(3).trimStart();
+  let negated = false;
+  if (s.startsWith("not ")) {
+    negated = true;
+    s = s.slice(4).trimStart();
+  }
+  if (s.startsWith("ensure ")) {
+    s = s.slice("ensure ".length).trimStart();
+    const lb = s.lastIndexOf("{");
+    if (lb === -1) return null;
+    if (s.slice(lb + 1).trim() !== "") return null;
+    const before = s.slice(0, lb).trim();
+    const refMatch = before.match(
+      /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.*))?$/,
+    );
+    if (!refMatch || !isRef(refMatch[1])) return null;
+    return { kind: "ensure", negated, ref: refMatch[1], args: refMatch[2]?.trim() };
+  }
+  if (s.startsWith("run ")) {
+    s = s.slice("run ".length).trimStart();
+    const lb = s.lastIndexOf("{");
+    if (lb === -1) return null;
+    if (s.slice(lb + 1).trim() !== "") return null;
+    const before = s.slice(0, lb).trim();
+    const refMatch = before.match(
+      /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.*))?$/,
+    );
+    if (!refMatch || !isRef(refMatch[1])) return null;
+    return { kind: "run", negated, ref: refMatch[1], args: refMatch[2]?.trim() };
+  }
+  return null;
+}
+
+function parseElseIfBraceHead(inner: string): BraceIfHead | null {
+  let s = inner.trim();
+  if (!s.startsWith("else if ")) return null;
+  s = s.slice("else if ".length).trimStart();
+  let negated = false;
+  if (s.startsWith("not ")) {
+    negated = true;
+    s = s.slice(4).trimStart();
+  }
+  if (s.startsWith("ensure ")) {
+    s = s.slice("ensure ".length).trimStart();
+    const lb = s.lastIndexOf("{");
+    if (lb === -1) return null;
+    if (s.slice(lb + 1).trim() !== "") return null;
+    const before = s.slice(0, lb).trim();
+    const refMatch = before.match(
+      /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.*))?$/,
+    );
+    if (!refMatch || !isRef(refMatch[1])) return null;
+    return { kind: "ensure", negated, ref: refMatch[1], args: refMatch[2]?.trim() };
+  }
+  if (s.startsWith("run ")) {
+    s = s.slice("run ".length).trimStart();
+    const lb = s.lastIndexOf("{");
+    if (lb === -1) return null;
+    if (s.slice(lb + 1).trim() !== "") return null;
+    const before = s.slice(0, lb).trim();
+    const refMatch = before.match(
+      /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.*))?$/,
+    );
+    if (!refMatch || !isRef(refMatch[1])) return null;
+    return { kind: "run", negated, ref: refMatch[1], args: refMatch[2]?.trim() };
+  }
+  return null;
+}
+
+function headToCondition(h: BraceIfHead, lineNo: number, innerRaw: string): NonShellIfCondition {
+  if (h.kind === "ensure") {
+    return {
+      kind: "ensure",
+      ref: { value: h.ref, loc: { line: lineNo, col: innerRaw.indexOf("ensure") + 1 } },
+      args: h.args,
+    };
+  }
+  return {
+    kind: "run",
+    ref: { value: h.ref, loc: { line: lineNo, col: innerRaw.indexOf("run") + 1 } },
+    args: h.args,
+  };
+}
+
+export type BlockParseOpts = { forRule?: boolean };
+
+/** Parse statements until a closing `}` at the current block level. */
+export function parseBraceBlockBody(
+  filePath: string,
+  lines: string[],
+  startIdx: number,
+  openerLineNo: number,
+  opts?: BlockParseOpts,
+): { steps: WorkflowStepDef[]; nextIdx: number } {
+  const steps: WorkflowStepDef[] = [];
+  let idx = startIdx;
+  while (idx < lines.length) {
+    const innerRaw = lines[idx];
+    const inner = innerRaw.trim();
+    const innerNo = idx + 1;
+    if (inner === "" || inner.startsWith("#")) {
+      idx += 1;
+      continue;
+    }
+    if (inner === "}") {
+      return { steps, nextIdx: idx + 1 };
+    }
+    const one = parseBlockStatement(filePath, lines, idx, opts);
+    steps.push(one.step);
+    idx = one.nextIdx;
+  }
+  fail(filePath, 'unterminated block, expected "}"', openerLineNo);
+}
+
+function parseElseBraceBlock(
+  filePath: string,
+  lines: string[],
+  idx: number,
+  innerNo: number,
+  opts?: BlockParseOpts,
+): { steps: WorkflowStepDef[]; nextIdx: number } {
+  const innerRaw = lines[idx];
+  const inner = innerRaw.trim();
+  const m = inner.match(/^else\s*\{\s*(.*)$/);
+  if (!m) {
+    fail(filePath, 'expected "else {" to start else branch', innerNo);
+  }
+  const after = m[1].trim();
+  if (after === "}") {
+    return { steps: [], nextIdx: idx + 1 };
+  }
+  if (after.includes("}")) {
+    fail(filePath, "else branch body must not be on the same line as opening brace (use multiple lines)", innerNo);
+  }
+  return parseBraceBlockBody(filePath, lines, idx + 1, innerNo, opts);
+}
+
+/**
+ * One workflow statement inside `{ … }` (brace-if body, else branch, etc.).
+ */
+export function parseBlockStatement(
+  filePath: string,
+  lines: string[],
+  idx: number,
+  opts?: BlockParseOpts,
+): { step: WorkflowStepDef; nextIdx: number } {
+  const innerRaw = lines[idx];
+  const inner = innerRaw.trim();
+  const innerNo = idx + 1;
+  const forRule = opts?.forRule === true;
+
+  const braceIf = tryParseBraceIfChain(filePath, lines, idx, opts);
+  if (braceIf) return { step: braceIf.step, nextIdx: braceIf.nextIdx };
+
+  const legEnsure = tryParseLegacyIfEnsure(filePath, lines, idx, inner, innerNo, innerRaw);
+  if (legEnsure) return { step: legEnsure.step, nextIdx: legEnsure.nextIdx + 1 };
+
+  const legRun = tryParseLegacyIfRun(filePath, lines, idx, inner, innerNo, innerRaw);
+  if (legRun) return { step: legRun.step, nextIdx: legRun.nextIdx + 1 };
+
+  const constMatch = inner.match(/^const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/s);
+  if (constMatch) {
+    const name = constMatch[1];
+    const rhs = constMatch[2].trim();
+    const { value, nextLineIdx } = parseConstRhs(
+      filePath, lines, idx, rhs, innerNo, innerRaw.indexOf(rhs) + 1, forRule, name,
+    );
+    const nextLine =
+      value.kind === "prompt_capture" ? nextLineIdx + 1 : idx + 1;
+    return {
+      step: { type: "const", name, value, loc: { line: innerNo, col: innerRaw.indexOf("const") + 1 } },
+      nextIdx: nextLine,
+    };
+  }
+
+  const failMatch = inner.match(/^fail\s+/);
+  if (failMatch) {
+    const arg = inner.slice("fail".length).trimStart();
+    if (!arg.startsWith('"')) {
+      fail(filePath, 'fail must match: fail "<reason>"', innerNo, innerRaw.indexOf("fail") + 1);
+    }
+    const closeIdx = indexOfClosingDoubleQuote(arg, 1);
+    if (closeIdx === -1) {
+      fail(filePath, "unterminated fail string", innerNo, innerRaw.indexOf("fail") + 1);
+    }
+    const message = arg.slice(0, closeIdx + 1);
+    return {
+      step: {
+        type: "fail",
+        message,
+        loc: { line: innerNo, col: innerRaw.indexOf("fail") + 1 },
+      },
+      nextIdx: idx + 1,
+    };
+  }
+
+  if (inner === "wait") {
+    if (forRule) {
+      fail(filePath, "wait is not allowed in rules", innerNo, innerRaw.indexOf("wait") + 1);
+    }
+    return { step: { type: "wait", loc: { line: innerNo, col: innerRaw.indexOf("wait") + 1 } }, nextIdx: idx + 1 };
+  }
+
+  if (inner.startsWith("ensure ")) {
+    const ensureBody = inner.slice("ensure ".length).trim();
+    if (forRule && /\brecover\b/.test(ensureBody)) {
+      fail(filePath, "ensure ... recover is not allowed in rules", innerNo, innerRaw.indexOf("ensure") + 1);
+    }
+    const r = parseEnsureStep(
+      filePath, lines, idx, innerNo, innerRaw,
+      ensureBody,
+    );
+    return { step: r.step, nextIdx: r.nextIdx + 1 };
+  }
+
+  if (inner.startsWith("run ")) {
+    const runBody = inner.slice("run ".length).trim();
+    const runMatch = runBody.match(
+      /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
+    );
+    if (!runMatch || !isRef(runMatch[1])) {
+      fail(filePath, "run must target a workflow or function reference", innerNo);
+    }
+    return {
+      step: {
+        type: "run",
+        workflow: {
+          value: runMatch[1],
+          loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
+        },
+        args: runMatch[2]?.trim(),
+      },
+      nextIdx: idx + 1,
+    };
+  }
+
+  if (forRule && (inner.startsWith("prompt ") || /^[A-Za-z_][A-Za-z0-9_]*\s*=\s*prompt\s/.test(inner))) {
+    fail(filePath, "prompt is not allowed in rules", innerNo, colFromRaw(innerRaw));
+  }
+
+  const promptAssignMatch = inner.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*prompt\s+(.+)$/s);
+  if (promptAssignMatch) {
+    const promptCol = innerRaw.indexOf("prompt") + 1;
+    const result = parsePromptStep(
+      filePath, lines, idx, promptAssignMatch[2].trimStart(),
+      promptCol, promptAssignMatch[1],
+    );
+    return { step: result.step, nextIdx: result.nextLineIdx + 1 };
+  }
+  if (inner.startsWith("prompt ")) {
+    const promptCol = innerRaw.indexOf("prompt") + 1;
+    const promptArg = innerRaw.slice(innerRaw.indexOf("prompt") + "prompt".length).trimStart();
+    const result = parsePromptStep(filePath, lines, idx, promptArg, promptCol);
+    return { step: result.step, nextIdx: result.nextLineIdx + 1 };
+  }
+
+  const genericAssignMatch = inner.match(/^([A-Za-z_][A-Za-z0-9_]*)\s+=\s*(.+)$/s);
+  if (
+    genericAssignMatch &&
+    !genericAssignMatch[2].trimStart().startsWith("prompt ") &&
+    !genericAssignMatch[2].trimStart().startsWith('"') &&
+    !genericAssignMatch[2].trimStart().startsWith("'") &&
+    !genericAssignMatch[2].trimStart().startsWith("$")
+  ) {
+    const captureName = genericAssignMatch[1];
+    const rest = genericAssignMatch[2].trim();
+    if (matchSendOperator(rest)) {
+      fail(filePath, "E_PARSE capture and send cannot be combined; use separate steps", innerNo);
+    }
+    if (rest.startsWith("ensure ")) {
+      const result = parseEnsureStep(
+        filePath, lines, idx, innerNo, innerRaw,
+        rest.slice("ensure ".length).trim(), captureName,
+      );
+      return { step: result.step, nextIdx: result.nextIdx + 1 };
+    }
+    if (rest.startsWith("run ")) {
+      const runBody = rest.slice("run ".length).trim();
+      const runMatch = runBody.match(
+        /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
+      );
+      if (!runMatch || !isRef(runMatch[1])) {
+        fail(filePath, "run must target a workflow or function reference", innerNo);
+      }
+      return {
+        step: {
+          type: "run",
+          workflow: {
+            value: runMatch[1],
+            loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
+          },
+          args: runMatch[2]?.trim(),
+          captureName,
+        },
+        nextIdx: idx + 1,
+      };
+    }
+    return {
+      step: {
+        type: "shell",
+        command: rest,
+        loc: { line: innerNo, col: innerRaw.indexOf(rest) + 1 },
+        captureName,
+      },
+      nextIdx: idx + 1,
+    };
+  }
+
+  if (inner.startsWith("log ") || inner === "log") {
+    const logArg = inner.slice("log".length).trimStart();
+    const logCol = innerRaw.indexOf("log") + 1;
+    if (!logArg.startsWith('"')) {
+      fail(filePath, 'log must match: log "<message>"', innerNo, logCol);
+    }
+    const closeIdx = indexOfClosingDoubleQuote(logArg, 1);
+    if (closeIdx === -1) {
+      fail(filePath, "unterminated log string", innerNo, logCol);
+    }
+    const message = logArg.slice(0, closeIdx + 1);
+    return { step: { type: "log", message, loc: { line: innerNo, col: logCol } }, nextIdx: idx + 1 };
+  }
+
+  if (inner.startsWith("logerr ") || inner === "logerr") {
+    const logerrArg = inner.slice("logerr".length).trimStart();
+    const logerrCol = innerRaw.indexOf("logerr") + 1;
+    if (!logerrArg.startsWith('"')) {
+      fail(filePath, 'logerr must match: logerr "<message>"', innerNo, logerrCol);
+    }
+    const closeIdx = indexOfClosingDoubleQuote(logerrArg, 1);
+    if (closeIdx === -1) {
+      fail(filePath, "unterminated logerr string", innerNo, logerrCol);
+    }
+    const message = logerrArg.slice(0, closeIdx + 1);
+    return { step: { type: "logerr", message, loc: { line: innerNo, col: logerrCol } }, nextIdx: idx + 1 };
+  }
+
+  const returnMatch = inner.match(/^return\s+(.+)$/s);
+  if (returnMatch) {
+    const returnValue = returnMatch[1].trim();
+    if (
+      !(/^[0-9]+$/.test(returnValue) || returnValue === "$?") &&
+      (returnValue.startsWith('"') || returnValue.startsWith("'") || returnValue.startsWith("$"))
+    ) {
+      return {
+        step: {
+          type: "return",
+          value: returnValue,
+          loc: { line: innerNo, col: innerRaw.indexOf("return") + 1 },
+        },
+        nextIdx: idx + 1,
+      };
+    }
+  }
+
+  const sendMatch = matchSendOperator(inner);
+  if (sendMatch) {
+    if (forRule) {
+      fail(filePath, "send operator is not allowed in rules", innerNo, 1);
+    }
+    return {
+      step: {
+        type: "send",
+        command: sendMatch.command,
+        channel: sendMatch.channel,
+        loc: { line: innerNo, col: 1 },
+      },
+      nextIdx: idx + 1,
+    };
+  }
+
+  return {
+    step: { type: "shell", command: inner, loc: { line: innerNo, col: 1 } },
+    nextIdx: idx + 1,
+  };
+}
+
+/** Brace-style `if [not] ensure|run … { … }` with optional `else if` / `else`. */
+export function tryParseBraceIfChain(
+  filePath: string,
+  lines: string[],
+  idx: number,
+  opts?: BlockParseOpts,
+): { step: WorkflowStepDef; nextIdx: number } | null {
+  const innerRaw = lines[idx];
+  const inner = innerRaw.trim();
+  const innerNo = idx + 1;
+  const head = parseIfBraceHead(inner);
+  if (!head) return null;
+
+  const condition = headToCondition(head, innerNo, innerRaw);
+  const { steps: thenSteps, nextIdx: afterThen } = parseBraceBlockBody(filePath, lines, idx + 1, innerNo, opts);
+  let cursor = afterThen;
+  const elseIfBranches: NonNullable<Extract<WorkflowStepDef, { type: "if" }>["elseIfBranches"]> = [];
+
+  while (cursor < lines.length) {
+    const t = lines[cursor].trim();
+    if (t === "") {
+      cursor += 1;
+      continue;
+    }
+    if (t.startsWith("else if ")) {
+      const eif = parseElseIfBraceHead(lines[cursor]);
+      if (!eif) {
+        fail(filePath, "malformed else if (expected else if [not] ensure|run … {)", cursor + 1);
+      }
+      const eifNo = cursor + 1;
+      const eifRaw = lines[cursor];
+      const cond = headToCondition(eif, eifNo, eifRaw);
+      const { steps: branchSteps, nextIdx: afterBranch } = parseBraceBlockBody(
+        filePath, lines, cursor + 1, eifNo, opts,
+      );
+      elseIfBranches.push({ negated: eif.negated, condition: cond, thenSteps: branchSteps });
+      cursor = afterBranch;
+      continue;
+    }
+    if (t.startsWith("else")) {
+      break;
+    }
+    break;
+  }
+
+  let elseSteps: WorkflowStepDef[] | undefined;
+  if (cursor < lines.length && lines[cursor].trim().startsWith("else")) {
+    const el = lines[cursor].trim();
+    if (el.startsWith("else if")) {
+      fail(filePath, 'malformed if-chain: "else if" must follow immediately after closing "}"', cursor + 1);
+    }
+    if (!/^else\s*\{/.test(el)) {
+      fail(filePath, 'expected "else {" after if-chain', cursor + 1);
+    }
+    const eb = parseElseBraceBlock(filePath, lines, cursor, cursor + 1, opts);
+    elseSteps = eb.steps;
+    cursor = eb.nextIdx;
+  }
+
+  const step: WorkflowStepDef = {
+    type: "if",
+    negated: head.negated,
+    condition,
+    thenSteps,
+    ...(elseIfBranches.length > 0 ? { elseIfBranches } : {}),
+    ...(elseSteps && elseSteps.length > 0 ? { elseSteps } : {}),
+  };
+  return { step, nextIdx: cursor };
+}

@@ -41,6 +41,7 @@ test("compiler golden: transpileFile emits stable workflow shell", () => {
       "  exit 1",
       "fi",
       'source "$jaiph_stdlib_path"',
+      'export JAIPH_LIB="${JAIPH_LIB:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib}"',
       'if [[ "$(jaiph__runtime_api)" != "1" ]]; then',
       '  echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2',
       "  exit 1",

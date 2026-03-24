@@ -52,3 +52,37 @@ export function braceDepthDelta(line: string): number {
   }
   return delta;
 }
+
+/**
+ * Match `channel <- command` when `<-` appears outside quoted strings.
+ */
+export function matchSendOperator(line: string): { command: string; channel: string } | null {
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (ch === "\\" && (inDoubleQuote || inSingleQuote)) {
+      i += 1;
+      continue;
+    }
+    if (ch === "'" && !inDoubleQuote) {
+      inSingleQuote = !inSingleQuote;
+      continue;
+    }
+    if (ch === '"' && !inSingleQuote) {
+      inDoubleQuote = !inDoubleQuote;
+      continue;
+    }
+    if (!inSingleQuote && !inDoubleQuote && ch === "<" && line[i + 1] === "-") {
+      const before = line.slice(0, i).trimEnd();
+      const after = line.slice(i + 2).trimStart();
+      const channelMatch = before.match(
+        /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)$/,
+      );
+      if (channelMatch) {
+        return { command: after, channel: channelMatch[1] };
+      }
+    }
+  }
+  return null;
+}

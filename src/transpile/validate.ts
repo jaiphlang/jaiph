@@ -227,6 +227,49 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
     }
   };
 
+  const validateRunInRuleRef = (ref: WorkflowRefDef): void => {
+    const parts = ref.value.split(".");
+    if (parts.length === 1) {
+      const name = parts[0];
+      if (localFunctions.has(name)) return;
+      if (localWorkflows.has(name)) {
+        throw jaiphError(
+          ast.filePath, ref.loc.line, ref.loc.col, "E_VALIDATE",
+          `run inside a rule must target a function, not workflow "${name}"`,
+        );
+      }
+      if (localRules.has(name)) {
+        throw jaiphError(
+          ast.filePath, ref.loc.line, ref.loc.col, "E_VALIDATE",
+          `rule "${name}" must be called with ensure, not run`,
+        );
+      }
+      throw jaiphError(
+        ast.filePath, ref.loc.line, ref.loc.col, "E_VALIDATE",
+        `unknown local function reference "${ref.value}" (run in rules must target a function)`,
+      );
+    }
+    if (parts.length !== 2) {
+      throw jaiphError(ast.filePath, ref.loc.line, ref.loc.col, "E_VALIDATE", `invalid run target reference "${ref.value}"`);
+    }
+    const [alias, importedName] = parts;
+    const importedFile = importsByAlias.get(alias);
+    if (!importedFile) {
+      throw jaiphError(ast.filePath, ref.loc.line, ref.loc.col, "E_VALIDATE", `unknown import alias "${alias}" for run target "${ref.value}"`);
+    }
+    const importedAst = importedAstCache.get(importedFile)!;
+    const importedFunctions = new Set(importedAst.functions.map((f) => f.name));
+    if (importedFunctions.has(importedName)) return;
+    const kind = lookupKind(importedAst, importedName);
+    if (kind === "workflow") {
+      throw jaiphError(ast.filePath, ref.loc.line, ref.loc.col, "E_VALIDATE", `run inside a rule must target a function, not workflow "${ref.value}"`);
+    }
+    if (kind === "rule") {
+      throw jaiphError(ast.filePath, ref.loc.line, ref.loc.col, "E_VALIDATE", `rule "${ref.value}" must be called with ensure, not run`);
+    }
+    throw jaiphError(ast.filePath, ref.loc.line, ref.loc.col, "E_VALIDATE", `imported function "${ref.value}" does not exist (run in rules must target a function)`);
+  };
+
   const validateRunTargetRef = (ref: WorkflowRefDef): void => {
     const parts = ref.value.split(".");
     if (parts.length === 1) {
@@ -379,11 +422,88 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
   }
 
   for (const rule of ast.rules) {
-    const env = makeSubEnv(rule.loc);
-    for (const cmd of rule.commands) {
-      const t = cmd.trim();
-      if (!t || t.startsWith("#")) continue;
-      validateNoJaiphCommandSubstitution(cmd, env);
+    const validateRuleStep = (s: WorkflowStepDef): void => {
+      if (s.type === "prompt" || s.type === "send" || s.type === "wait") {
+        throw jaiphError(
+          ast.filePath,
+          s.loc.line,
+          s.loc.col,
+          "E_VALIDATE",
+          `${s.type} is not allowed in rules`,
+        );
+      }
+      if (s.type === "shell") {
+        const env = makeSubEnv(s.loc);
+        validateNoJaiphCommandSubstitution(s.command, env);
+        for (const rawLine of s.command.split("\n")) {
+          const line = rawLine.trim();
+          if (!line || line.startsWith("#")) continue;
+          validateManagedShellFragment(line, env);
+        }
+        return;
+      }
+      if (s.type === "ensure") {
+        validateRuleRef(s.ref);
+        if (s.recover) {
+          throw jaiphError(
+            ast.filePath,
+            s.ref.loc.line,
+            s.ref.loc.col,
+            "E_VALIDATE",
+            "ensure ... recover is not allowed in rules",
+          );
+        }
+        return;
+      }
+      if (s.type === "run") {
+        validateRunInRuleRef(s.workflow);
+        return;
+      }
+      if (s.type === "if") {
+        if (s.condition.kind === "ensure") {
+          validateRuleRef(s.condition.ref);
+        } else if (s.condition.kind === "run") {
+          validateRunInRuleRef(s.condition.ref);
+        } else {
+          const env = makeSubEnv(rule.loc);
+          validateNoJaiphCommandSubstitution(s.condition.command, env);
+          validateManagedShellFragment(s.condition.command.trim(), env);
+        }
+        for (const ts of s.thenSteps) validateRuleStep(ts);
+        if (s.elseIfBranches) {
+          for (const br of s.elseIfBranches) {
+            if (br.condition.kind === "ensure") {
+              validateRuleRef(br.condition.ref);
+            } else {
+              validateRunInRuleRef(br.condition.ref);
+            }
+            for (const ts of br.thenSteps) validateRuleStep(ts);
+          }
+        }
+        if (s.elseSteps) {
+          for (const es of s.elseSteps) validateRuleStep(es);
+        }
+        return;
+      }
+      if (s.type === "fail" || s.type === "log" || s.type === "logerr" || s.type === "return") {
+        return;
+      }
+      if (s.type === "const") {
+        const v = s.value;
+        if (v.kind === "run_capture") {
+          validateRunInRuleRef(v.ref);
+        } else if (v.kind === "ensure_capture") {
+          validateRuleRef(v.ref);
+        } else if (v.kind === "prompt_capture") {
+          throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", "const ... = prompt is not allowed in rules");
+        }
+        return;
+      }
+      const _never: never = s;
+      return _never;
+    };
+    for (const st of rule.steps) {
+      validateRuleStep(st);
     }
   }
 
@@ -481,12 +601,34 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           validateManagedShellFragment(s.condition.command.trim(), env);
         }
         for (const ts of s.thenSteps) validateStep(ts);
+        if (s.elseIfBranches) {
+          for (const br of s.elseIfBranches) {
+            if (br.condition.kind === "ensure") {
+              validateRuleRef(br.condition.ref);
+            } else {
+              validateRunTargetRef(br.condition.ref);
+            }
+            for (const ts of br.thenSteps) validateStep(ts);
+          }
+        }
         if (s.elseSteps) {
           for (const es of s.elseSteps) validateStep(es);
         }
         return;
       }
       if (s.type === "prompt" || s.type === "log" || s.type === "logerr" || s.type === "return") {
+        return;
+      }
+      if (s.type === "fail" || s.type === "wait") {
+        return;
+      }
+      if (s.type === "const") {
+        const v = s.value;
+        if (v.kind === "run_capture") {
+          validateRunTargetRef(v.ref);
+        } else if (v.kind === "ensure_capture") {
+          validateRuleRef(v.ref);
+        }
         return;
       }
       const _never: never = s;

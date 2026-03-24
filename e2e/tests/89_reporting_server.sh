@@ -34,7 +34,7 @@ jaiph run "${TEST_DIR}/reporting_probe.jh"
 RUNS="${TEST_DIR}/.jaiph/runs"
 [[ -d "${RUNS}" ]] || e2e::fail "expected .jaiph/runs"
 
-node "${ROOT_DIR}/dist/src/reporting/cli.js" --port "${REPORT_PORT}" --host 127.0.0.1 --runs-dir "${RUNS}" --poll-ms 200 &
+node "${ROOT_DIR}/dist/src/reporting/cli.js" --workspace "${TEST_DIR}" --port "${REPORT_PORT}" --host 127.0.0.1 --runs-dir "${RUNS}" --poll-ms 200 &
 REPORT_PID=$!
 
 for _ in $(seq 1 50); do
@@ -104,7 +104,7 @@ kill "${REPORT_PID}" >/dev/null 2>&1 || true
 wait "${REPORT_PID}" 2>/dev/null || true
 REPORT_PID=""
 
-node "${ROOT_DIR}/dist/src/reporting/cli.js" --port "${REPORT_PORT}" --host 127.0.0.1 --runs-dir "${LIVE_ROOT}" --poll-ms 150 &
+node "${ROOT_DIR}/dist/src/reporting/cli.js" --workspace "${TEST_DIR}" --port "${REPORT_PORT}" --host 127.0.0.1 --runs-dir "${LIVE_ROOT}" --poll-ms 150 &
 REPORT_PID=$!
 
 for _ in $(seq 1 50); do
