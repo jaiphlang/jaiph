@@ -173,25 +173,52 @@ Both `.out` (stdout) and `.err` (stderr) files grow as the step produces output.
 
 Each run directory also contains **`run_summary.jsonl`**: one JSON object per line, appended in execution order. It is the canonical **append-only** record of reporting-oriented runtime events (lifecycle, logs, inbox flow, and step boundaries). Tooling can **tail the file by byte offset** and process new lines idempotently; parallel inbox dispatch may reorder some events relative to wall-clock time, but each line is written atomically under the same lock used for concurrent writers (see [Inbox — Lock behavior](inbox.md#lock-behavior)).
 
-**Versioning.** Every persisted object includes **`event_version`** (currently **`1`**). New fields may be added in later versions; consumers should tolerate unknown keys. Existing tools that only read **`STEP_END`** lines keep working: those records retain the same meaning, with **`event_version`** added.
+**Versioning.** Every persisted object includes **`event_version`** (currently **`1`**). New fields may be added in later versions; consumers should tolerate unknown keys.
 
 **Common fields.** All summary lines include **`type`**, **`ts`** (UTC timestamp), **`run_id`**, and **`event_version`**. Step-related types also carry stable correlation fields **`id`**, **`parent_id`**, **`seq`**, and **`depth`** where applicable (matching the `__JAIPH_EVENT__` stream on stderr).
 
-**Event types** (persisted to the summary file; the live `__JAIPH_EVENT__` line on stderr is unchanged except as noted):
+**Correlation rules (reporting).**
 
-| `type` | Role |
-|--------|------|
-| `WORKFLOW_START` | Workflow entry: `workflow` (name), `source` (basename of `.jh` file when set). |
-| `WORKFLOW_END` | Workflow exit boundary for the same workflow name. |
-| `STEP_START` | Step begins (kind, name, params, ids — same shape as today’s stderr events). |
-| `STEP_END` | Step completes; includes embedded `out_content` / `err_content` when present (same caps and truncation rules as stderr events). |
-| `LOG` | `log` keyword: `message`, `depth`. |
-| `LOGERR` | `logerr` keyword: `message`, `depth`. |
-| `INBOX_ENQUEUE` | Message recorded from `send`: `inbox_seq`, `channel`, `sender`, **`payload_preview`**, **`payload_ref`** (`null` if the full body fits in the preview, otherwise a run-relative path such as `inbox/NNN-channel.txt`). |
-| `INBOX_DISPATCH_START` | Dispatch of one queue entry to a route target: `inbox_seq`, `channel`, `target`, `sender`. |
-| `INBOX_DISPATCH_COMPLETE` | That dispatch finished: same ids plus `status`, `elapsed_ms`. |
+- **`run_id`:** Every line in a given run’s file uses the same `run_id` as the root workflow run.
+- **Workflow boundaries:** For each workflow name, the number of `WORKFLOW_START` lines with that `workflow` value equals the number of `WORKFLOW_END` lines with the same value. Nesting is stack-shaped in sequential runs; when **`JAIPH_INBOX_PARALLEL=true`**, lifecycle lines for different dispatched workflows may interleave—use per-name counts, not a single global stack.
+- **Steps:** `STEP_START` and `STEP_END` share the same **`id`**. For a given `id`, the start line appears before the end line in file order. Use **`parent_id`**, **`seq`**, and **`depth`** to rebuild the tree (same semantics as stderr `__JAIPH_EVENT__` payloads).
+- **Inbox:** One **`INBOX_ENQUEUE`** is emitted per `send` with a unique **`inbox_seq`** (zero-padded string, e.g. `001`). For each routed target, there is one **`INBOX_DISPATCH_START`** and one **`INBOX_DISPATCH_COMPLETE`** sharing the same **`inbox_seq`**, **`channel`**, **`target`**, and **`sender`**. The start line precedes its matching complete line. Enqueue for a given seq precedes any dispatch lines for that seq.
+- **Ordering under parallel inbox:** Lines are still a valid JSONL stream (one complete JSON object per line, appended atomically under lock). Wall-clock `ts` order may diverge from append order between concurrent dispatch targets; consumers should not assume total `ts` ordering across parallel branches.
+
+**Event taxonomy — persisted schema (`event_version` 1).** The live `__JAIPH_EVENT__` stream on stderr is unchanged except as noted in release notes; the tables below describe **only** what is written to `run_summary.jsonl`.
+
+| Field | `WORKFLOW_START` | `WORKFLOW_END` | `STEP_START` | `STEP_END` | `LOG` | `LOGERR` | `INBOX_ENQUEUE` | `INBOX_DISPATCH_START` | `INBOX_DISPATCH_COMPLETE` |
+|-------|------------------|----------------|--------------|------------|-------|----------|-----------------|------------------------|---------------------------|
+| `type` | required | required | required | required | required | required | required | required | required |
+| `ts` | required | required | required | required | required | required | required | required | required |
+| `run_id` | required | required | required | required | required | required | required | required | required |
+| `event_version` | required (`1`) | required (`1`) | required (`1`) | required (`1`) | required (`1`) | required (`1`) | required (`1`) | required (`1`) | required (`1`) |
+| `workflow` | required (name) | required (name) | — | — | — | — | — | — | — |
+| `source` | required (basename or empty) | required (basename or empty) | — | — | — | — | — | — | — |
+| `func`, `kind`, `name` | — | — | required | required | — | — | — | — | — |
+| `status`, `elapsed_ms` (step) | — | — | null on start | required numbers when ended | — | — | — | — | — |
+| `out_file`, `err_file` | — | — | required strings | required strings | — | — | — | — | — |
+| `id`, `parent_id`, `seq`, `depth` | — | — | required | required | — | — | — | — | — |
+| `params` | — | — | optional JSON array | optional JSON array | — | — | — | — | — |
+| `dispatched`, `channel`, `sender` | — | — | optional (inbox dispatch) | optional (inbox dispatch) | — | — | — | — | — |
+| `out_content`, `err_content` | — | — | — | optional on `STEP_END` | — | — | — | — | — |
+| `message`, `depth` | — | — | — | — | required | required | — | — | — |
+| `inbox_seq`, `channel`, `sender` | — | — | — | — | — | — | required | required | required |
+| `payload_preview`, `payload_ref` | — | — | — | — | — | — | required | — | — |
+| `target` | — | — | — | — | — | — | — | required | required |
+| `status`, `elapsed_ms` (dispatch) | — | — | — | — | — | — | — | — | required (exit code and ms) |
+
+Semantics and notes:
+
+- **`WORKFLOW_START` / `WORKFLOW_END`:** Mark entry and exit of a workflow body (`workflow` is the declared name; `source` is the `.jh` basename when the runtime set `JAIPH_SOURCE_FILE`).
+- **`STEP_START` / `STEP_END`:** Mirror stderr step events; persisted payloads include **`event_version`**. `STEP_END` may include **`out_content`** / **`err_content`** (embedded artifact text, size-capped; see runtime).
+- **`LOG` / `LOGERR`:** Emitted by the `log` / `logerr` keywords; **`depth`** is the step-stack depth at emission (integer).
+- **`INBOX_ENQUEUE`:** Recorded when a message is queued; **`payload_preview`** is a UTF-8-safe JSON string (prefix up to 4096 bytes of body; if truncated, ends with `...`). **`payload_ref`** is JSON `null` when the full body fits in the preview, otherwise a run-relative path such as `inbox/001-channel.txt`.
+- **`INBOX_DISPATCH_START` / `INBOX_DISPATCH_COMPLETE`:** Wrap one invocation of a route target. **`status`** is the process exit code; **`elapsed_ms`** is wall time for that dispatch.
 
 Together with step `.out` / `.err` files, a single `run_summary.jsonl` is enough to reconstruct the step tree (start/end pairs), log and logerr timelines, inbox enqueue → dispatch → completion flow, and workflow boundaries.
+
+Automated regression for this contract (including parallel inbox dispatch) lives in the repository E2E script `e2e/tests/88_run_summary_event_contract.sh` (uses `python3` to parse and assert on the JSONL file).
 
 ### Hooks
 

@@ -286,6 +286,9 @@ Routed receivers get three positional arguments:
   lines to `run_summary.jsonl` (see [CLI — Run summary](cli.md#run-summary-jsonl)).
   Large message bodies appear as a safe **`payload_preview`** plus **`payload_ref`**
   pointing at the `inbox/NNN-<channel>.txt` file under the run directory.
+  E2E `e2e/tests/88_run_summary_event_contract.sh` locks inbox-related summary
+  lines and ordering together with the rest of the persisted event contract under
+  parallel dispatch.
 - Workflows remain directly callable: `jaiph run analyst "some content"`.
   When called directly, `$2` and `$3` are unset.
 
