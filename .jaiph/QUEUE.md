@@ -6,29 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Runtime: lock event contract with docs + e2e for reportability (reporting prerequisite, part 2/2) <!-- dev-ready -->
-
-**Problem.** Without explicit contract tests/docs, event schema can drift and break reporting pollers/UI.
-
-**Goal.** Freeze the persisted event contract with clear docs and regression coverage.
-
-**Scope.**
-
-- Document event taxonomy and required fields in docs.
-- Add per-event schema table (required/optional fields, semantics, correlation rules).
-- Add e2e coverage for all newly persisted event types and ordering guarantees.
-
-**Acceptance criteria.**
-
-- Docs include event table for: `WORKFLOW_START`, `WORKFLOW_END`, `STEP_START`, `STEP_END`, `LOG`, `LOGERR`, inbox lifecycle events.
-- e2e validates:
-  - `LOG`/`LOGERR` persistence,
-  - inbox send/dispatch/completion persistence,
-  - `STEP_START` and `STEP_END` pairing consistency,
-  - `WORKFLOW_START`/`WORKFLOW_END` correctness,
-  - JSONL validity under parallel dispatch.
-- e2e also validates schema compatibility for legacy `STEP_END` consumers.
-
 ## Feature Jaiph reporting server + lightweight dashboard UI (runs-dir backed) <!-- dev-ready -->
 
 **Problem.** Jaiph has run artifacts (`.jaiph/runs/**`) but no built-in way to browse run history, inspect step trees, and review logs/responses in a single lightweight UI.
@@ -123,6 +100,8 @@ The first `##` task in the file is always the current task.
   - correct tree reconstruction from summary data,
   - log browsing and aggregate output endpoint behavior,
   - summary polling updates active run state as events are appended.
+
+Server needs to be implemented in a separate repository. Ultimately it will be migrated as a standalone project to a separate git repo.
 
 **Out of scope (v1).**
 

@@ -128,6 +128,11 @@ of these patterns. For parallel shell step scenarios (background jobs,
 `wait` semantics, concurrent stdout capture, and artifact integrity),
 see `e2e/tests/94_parallel_shell_steps.sh`.
 
+For **`run_summary.jsonl`** — valid JSON lines, `LOG` / `LOGERR` and inbox
+lifecycle events, step start/end pairing, and workflow start/end balance under
+**`run.inbox_parallel`** — see `e2e/tests/88_run_summary_event_contract.sh`
+(requires `python3`).
+
 ## E2E testing
 
 E2E testing guidance was moved to [Contributing](contributing.md#e2e-testing).
