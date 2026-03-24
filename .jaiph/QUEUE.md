@@ -6,11 +6,13 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Rewrite .jaiph/ workflows to new language syntax <!-- dev-ready -->
+## Rewrite .jaiph/ workflows to new syntax + add new language constructs to compiler <!-- dev-ready -->
 
 **Spec**: `.jaiph/language_redesign_spec.md` — read the ENTIRE spec before starting. Every design decision, syntax rule, and migration pattern is documented there.
 
-**Goal.** Rewrite all `.jaiph/*.jh` files to conform to the new language syntax defined in the spec. These files will NOT parse until the compiler is updated in subsequent tasks — that is expected and intentional.
+**Goal.** Two parts in one task: (1) rewrite all `.jaiph/*.jh` files to the new language syntax, and (2) add the new language constructs to the compiler so the rewritten files actually parse and build.
+
+### Part 1 — Rewrite `.jaiph/*.jh` files
 
 **What changes.**
 
@@ -29,19 +31,56 @@ The first `##` task in the file is always the current task.
 
 **Files to rewrite.** queue.jh, docs_parity.jh, simplifier.jh, architect_review.jh, engineer.jh, ensure_ci_passes.jh, qa.jh, git.jh, main.jh.
 
-**Acceptance criteria.**
+### Part 2 — Add new language constructs to compiler
+
+**Spec sections**: Design Decisions, Legality Matrix (workflow), Semantics, Implementation Plan Phase 1.
+
+**Scope.**
+
+1. **`fail "reason"`** — new step type in workflows.
+   - AST: add `{ type: "fail"; message: string; loc: SourceLoc }` to `WorkflowStepDef` in `src/types.ts`.
+   - Parser (`src/parse/workflows.ts`): recognize `fail "reason"` as a new keyword.
+   - Transpiler (`src/transpile/emit-steps.ts`): emit `echo "reason" >&2; exit 1`.
+   - Add parser test, golden fixture, and e2e test for `fail`.
+
+2. **`const name = ...`** — new declaration in workflows.
+   - AST: add `{ type: "const"; name: string; ... }` to `WorkflowStepDef`.
+   - Parser: `const name = "value"` / `const name = run ref` / `const name = ensure ref` / `const name = prompt "text"`.
+   - Transpiler: emit `local name; name="value"` or the appropriate capture form (same as existing `var = run/ensure/prompt` but with `const` keyword).
+   - Allowed RHS values: string literals, `$var`, `"${var:-default}"`, keyword captures. NOT allowed: `$(command)`, `"${var%%pattern}"`. See spec P10.
+
+3. **`wait`** — formalize as a keyword instead of shell fallback.
+   - AST: add `{ type: "wait"; loc: SourceLoc }`.
+   - Parser: recognize bare `wait` in workflows.
+   - Transpiler: emit `wait`.
+
+4. **Brace-style `if`** — replace `if ... then ... fi`.
+   - New syntax: `if [not] ensure ref [args] { ... } [else if ...] [else { ... }]` and `if [not] run ref [args] { ... }`.
+   - `not` replaces `!`. `else if` replaces `elif`. Braces `{ }` replace `then`/`fi`.
+   - Implement as new parsing path alongside existing `if ... then` (both work after this task).
+   - Shell condition form (`if ! command; then`) is NOT supported in the new syntax.
+
+**Files to change.** `src/types.ts`, `src/parse/workflows.ts`, `src/transpile/emit-steps.ts`, `src/transpile/emit-workflow.ts`. Add test fixtures in `test/fixtures/` and expected output in `test/expected/`.
+
+### Acceptance criteria
 
 - All `.jaiph/*.jh` files use the new syntax exclusively (zero raw shell in workflows/rules, `const` not `local`, brace-style `if`, `fail` not `exit 1`)
 - `.jaiph/lib/` exists with shared utility functions
 - All functions are self-contained (no module-level variable references, no cross-function calls)
 - `return "$(…)"` patterns in functions replaced with stdout passthrough
 - Files are syntactically consistent with the spec's legality matrix
+- `fail "reason"` parses and transpiles correctly in workflows. E2e test: workflow with `fail` exits non-zero with message on stderr.
+- `const name = "value"` and `const name = run/ensure/prompt` parse and transpile correctly. Existing `var = run/ensure/prompt` still works.
+- `wait` parses as a keyword (not shell fallback). Transpiles to `wait`.
+- New brace-style `if` parses and transpiles correctly with `not`, `else if`, `else`. Old `if ... then ... fi` still works.
+- All existing tests pass (zero regressions).
+- New golden fixtures added for each new construct.
 
-**Note.** These files will fail to parse until the compiler tasks below are completed. That is expected. Do NOT modify the compiler in this task.
+**Note.** The rewritten `.jaiph/*.jh` files may fail to parse until Part 2 compiler changes land — that is expected if implementing sequentially. Both parts must be complete before the task is done.
 
 ---
 
-## Add new language constructs to compiler: `fail`, `const`, `wait`, brace-style `if` <!-- dev-ready -->
+## Remove shell from compiler, migrate all fixtures, pass all tests <!-- dev-ready -->
 
 **Spec**: `.jaiph/language_redesign_spec.md` — sections: Design Decisions, Legality Matrix (workflow), Semantics, Implementation Plan Phase 1.
 
@@ -184,5 +223,26 @@ The first `##` task in the file is always the current task.
 - Cross-function call detection works (parser/validator error on reference to another Jaiph function)
 - All existing tests still pass
 - E2e test added: function isolation verified (function cannot read caller variables)
+
+---
+
+## Reporting server does not mark SIGKILL-terminated runs as ended <!-- dev-ready -->
+
+**Problem.** When `jaiph run` is killed by SIGKILL (or any signal that prevents the normal `WORKFLOW_END` event from being written to `run_summary.jsonl`), the reporting server (`jaiph report`) continues to show the run as active/in-progress indefinitely. There is no `WORKFLOW_END` event to trigger transition to a terminal state.
+
+**Goal.** The reporting server should detect runs that will never complete and mark them as failed/terminated in the UI.
+
+**Approach (investigate and pick one).**
+
+1. **Stale-run detection** — The server already polls `run_summary.jsonl`. If a run has had no new events for a configurable timeout (e.g. `JAIPH_REPORT_STALE_RUN_SEC`, default 120s) and the originating process is no longer alive, mark the run as terminated/stale in the API and UI.
+2. **PID-file or lock-file approach** — `jaiph run` writes a PID file (or holds a lock) in the run directory. The reporting server checks whether that PID is still alive; if not, the run is dead.
+3. **Hybrid** — Combine timeout heuristic with PID liveness check for reliability.
+
+**Acceptance criteria.**
+
+- A run killed with `kill -9` (SIGKILL) is eventually shown as failed/terminated in `jaiph report`, not stuck as active forever.
+- Normal runs that complete with `WORKFLOW_END` are unaffected.
+- The detection mechanism has a reasonable latency (under 2–3 poll cycles).
+- E2e or integration test: start a run, kill it with SIGKILL, verify `GET /api/active` eventually returns empty and `GET /api/runs` shows the run as failed/terminated.
 
 ---
