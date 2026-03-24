@@ -9,21 +9,27 @@ rule ensure_is_number {
 
 function fib() {
   local n="$1"
-  if [ "$n" -le 1 ]; then
-    return "$n"
-  fi
-  local a=0 b=1 i c
-  for ((i=2; i<=n; i++)); do
-    c=$((a + b))
-    a=$b
-    b=$c
-  done
-  return "$b"
+  fib_impl() {
+    local x="$1"
+    if [ "$x" -le 1 ]; then
+      echo "$x"
+      return 0
+    fi
+
+    local a b
+    a="$(fib_impl "$((x - 1))")"
+    b="$(fib_impl "$((x - 2))")"
+    echo "$((a + b))"
+  }
+
+  local result
+  result="$(fib_impl "$n")"
+  return "$result"
 }
 
 workflow default {
   n="${1:-10}"
   ensure ensure_is_number "$n"
   result = run fib "$n"
-  echo "$result"
+  log "$result"
 }
