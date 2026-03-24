@@ -1,6 +1,8 @@
 #!/usr/bin/env jaiph
 
-local role = "You are an expert technical writer for this project.
+import "./queue.jh" as queue
+
+const role = "You are an expert technical writer for this project.
     1. You are fluent in Markdown and can read TypeScript code and Bash
     2. You write for a developer audience, focusing on clarity and practical
        examples.
@@ -16,63 +18,90 @@ local role = "You are an expert technical writer for this project.
        while keeping details dense in separate sections, so both human and AI
        can easily follow the reasoning."
 
-rule docs_files_present {
-  test "$#" -gt 0
-  local expected_doc_files=("$@")
-
-  for file in "${expected_doc_files[@]}"; do
-    test -f "$file"
-  done
+function assert_newline_paths_are_files() {
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    test -f "$f" || return 1
+  done <<< "$1"
 }
 
-rule worktree_is_clean {
-  # Rules allow only shell and `ensure` — not `run`. Duplicate git listing here and below.
-  local current_changed_files
-  current_changed_files="$(
-    {
-      git diff --name-only --cached
-      git diff --name-only
-      git ls-files --others --exclude-standard
-    } | sort -u
-  )"
+rule docs_files_present {
+  run assert_newline_paths_are_files "$1"
+}
 
+function assert_worktree_clean_for_docs() {
+  source "${JAIPH_LIB}/git_paths.sh"
+  local current_changed_files
+  current_changed_files="$(git_changed_paths_sorted)"
   if [ -n "$current_changed_files" ]; then
-    echo "Refusing to run docs parity workflow on a dirty worktree."
-    echo "Please commit, stash, or discard these files first:"
-    echo "$current_changed_files"
-    exit 1
+    echo "Refusing to run docs parity workflow on a dirty worktree." >&2
+    echo "Please commit, stash, or discard these files first:" >&2
+    echo "$current_changed_files" >&2
+    return 1
   fi
 }
 
-function is_allowed_file() {
-  test "$#" -eq 2
-  local allowed_to_change_files="$1"
+rule worktree_is_clean {
+  run assert_worktree_clean_for_docs
+}
+
+function is_path_in_newline_list() {
+  local allowed="$1"
   local file="$2"
-  [[ $'\n'"$allowed_to_change_files"$'\n' == *$'\n'"$file"$'\n'* ]]
+  [[ $'\n'"$allowed"$'\n' == *$'\n'"$file"$'\n'* ]]
+}
+
+function assert_only_allowed_changed() {
+  local allowed="$1"
+  source "${JAIPH_LIB}/git_paths.sh"
+  local after_changed_files
+  after_changed_files="$(git_changed_paths_sorted)"
+  while IFS= read -r changed_file; do
+    [ -z "$changed_file" ] && continue
+    if is_path_in_newline_list "$allowed" "$changed_file"; then
+      continue
+    fi
+    echo "Unexpected file changed by docs prompt: $changed_file" >&2
+    return 1
+  done <<< "$after_changed_files"
 }
 
 rule only_expected_docs_changed_after_prompt {
-  test "$#" -eq 1
-  local allowed_to_change_files="$1"
-  local after_changed_files
-  after_changed_files="$(
-    {
-      git diff --name-only --cached
-      git diff --name-only
-      git ls-files --others --exclude-standard
-    } | sort -u
-  )"
+  run assert_only_allowed_changed "$1"
+}
 
-  while IFS= read -r changed_file; do
-    [ -z "$changed_file" ] && continue
+function arg_nonempty() {
+  [ -n "${1:-}" ]
+}
 
-    if is_allowed_file "$allowed_to_change_files" "$changed_file"; then
-      continue
-    fi
+function first_line_str() {
+  source "${JAIPH_LIB}/strings.sh"
+  first_line "$1"
+}
 
-    echo "Unexpected file changed by docs prompt: $changed_file"
-    exit 1
-  done <<< "$after_changed_files"
+function rest_lines_str() {
+  source "${JAIPH_LIB}/strings.sh"
+  rest_lines "$1"
+}
+
+function list_docs_md_paths() {
+  local f
+  for f in docs/*.md; do
+    echo "$f"
+  done
+}
+
+function build_allowed_paths_block() {
+  echo "README.md"
+  echo "CHANGELOG.md"
+  echo "docs/index.html"
+  echo "docs/_layouts/docs.html"
+  echo "src/cli/shared/usage.ts"
+  list_docs_md_paths
+}
+
+function join_newline_args() {
+  printf '%s\n' "$@"
 }
 
 workflow update_from_task {
@@ -106,7 +135,7 @@ workflow changelog {
     <task>
     Ensure there is a CHANGELOG.md file with a list of all features that are
     supported by the current version. It should be in the following format:
-    
+
       # VERSION
       - Feature 1
       - Feature 2
@@ -127,14 +156,12 @@ workflow changelog {
 }
 
 workflow docs_page {
-  local file="$1"
-
   prompt "
     <role>
     $role
     </role>
     <task>
-    Double check the content of $file, which describes a given concept of the
+    Double check the content of $1, which describes a given concept of the
     language, runtime or a set of features:
     1. Check if it has approachable structure with overview, describing high
        level goals and concepts.
@@ -158,16 +185,12 @@ workflow docs_page {
 }
 
 workflow docs_overview {
-  local all_docs_files="$(
-    printf '%s\n' "$@"
-  )"
-
   prompt "
     <role>
     $role
     </role>
     <task>
-    Read all $all_docs_files, they contain all the documentation for the 
+    Read all $1, they contain all the documentation for the
     project. Don't read the code. Please update docs in the following way:
     1. Ensure they are consistent with each other.
     2. Ensure they are organized in a logical way. If needed, add new files,
@@ -203,39 +226,28 @@ workflow docs_overview {
   "
 }
 
+workflow process_docs_md_recursive {
+  const file = "$1"
+  const remaining = "$2"
+  run docs_page "$file"
+  if run arg_nonempty "$remaining" {
+    const next = run first_line_str "$remaining"
+    const rest = run rest_lines_str "$remaining"
+    run process_docs_md_recursive "$next" "$rest"
+  }
+}
+
 workflow default {
   ensure worktree_is_clean
-
-  local allowed_to_change_files=(
-    "README.md"
-    "CHANGELOG.md"
-    "docs/index.html"
-    "docs/_layouts/docs.html"
-    "src/cli/shared/usage.ts"
-  )
-
-  local docs_md_files=()
-
-  for f in docs/*.md; do
-    allowed_to_change_files+=("$f")
-    docs_md_files+=("$f")
-  done
-
-  ensure docs_files_present "${allowed_to_change_files[@]}"
-
-  # Check each docs page for consistency and updates
-  for f in "${docs_md_files[@]}"; do
-    run docs_page "$f"
-  done
-
-  # Ensure changelog is up to date
+  const allowed_list = run build_allowed_paths_block
+  ensure docs_files_present "$allowed_list"
+  const docs_md_list = run list_docs_md_paths
+  const first_doc = run first_line_str "$docs_md_list"
+  const rest_docs = run rest_lines_str "$docs_md_list"
+  if run arg_nonempty "$first_doc" {
+    run process_docs_md_recursive "$first_doc" "$rest_docs"
+  }
   run changelog
-
-  # Reorganize docs files to improve consistency and readability,
-  # improve README.md and index.html.
-  run docs_overview "${docs_md_files[@]}"
-
-  # Ensure only expected docs files were changed
-  local allowed_to_change_files_text="$(printf '%s\n' "${allowed_to_change_files[@]}")"
-  ensure only_expected_docs_changed_after_prompt "$allowed_to_change_files_text"
+  run docs_overview "$docs_md_list"
+  ensure only_expected_docs_changed_after_prompt "$allowed_list"
 }

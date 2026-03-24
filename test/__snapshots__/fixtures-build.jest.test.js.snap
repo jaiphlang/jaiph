@@ -5,6 +5,7 @@ exports[`fixture build snapshots build output matches snapshot 1`] = `
   "files": [
     "bootstrap_project.sh",
     "inbox.sh",
+    "lang_redesign_smoke.sh",
     "main.sh",
     "tools/security.sh",
   ],
@@ -18,6 +19,7 @@ if [[ ! -f "$jaiph_stdlib_path" ]]; then
   exit 1
 fi
 source "$jaiph_stdlib_path"
+export JAIPH_LIB="\${JAIPH_LIB:-$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)/lib}"
 if [[ "$(jaiph__runtime_api)" != "1" ]]; then
   echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2
   exit 1
@@ -46,6 +48,7 @@ if [[ ! -f "$jaiph_stdlib_path" ]]; then
   exit 1
 fi
 source "$jaiph_stdlib_path"
+export JAIPH_LIB="\${JAIPH_LIB:-$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)/lib}"
 if [[ "$(jaiph__runtime_api)" != "1" ]]; then
   echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2
   exit 1
@@ -107,6 +110,115 @@ inbox::default::impl() {
 inbox::default() {
   jaiph::run_step inbox::default workflow inbox::default::impl "$@"
 }",
+    "lang_redesign_smoke.sh": "#!/usr/bin/env bash
+
+set -euo pipefail
+jaiph_stdlib_path="\${JAIPH_STDLIB:-$HOME/.local/bin/jaiph_stdlib.sh}"
+if [[ ! -f "$jaiph_stdlib_path" ]]; then
+  echo "jaiph: stdlib not found at $jaiph_stdlib_path (set JAIPH_STDLIB or reinstall jaiph)" >&2
+  exit 1
+fi
+source "$jaiph_stdlib_path"
+export JAIPH_LIB="\${JAIPH_LIB:-$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)/lib}"
+if [[ "$(jaiph__runtime_api)" != "1" ]]; then
+  echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2
+  exit 1
+fi
+exec 7>&1
+export JAIPH_STDOUT_SAVED=1
+
+lang_redesign_smoke::always_ok::impl() {
+  set -eo pipefail
+  set +u
+  echo ok
+}
+
+lang_redesign_smoke::always_ok() {
+  jaiph::run_step lang_redesign_smoke::always_ok rule jaiph::execute_readonly lang_redesign_smoke::always_ok::impl "$@"
+}
+
+lang_redesign_smoke::noop::impl() {
+  set -eo pipefail
+  set +u
+  :
+}
+
+lang_redesign_smoke::noop() {
+  jaiph::run_step lang_redesign_smoke::noop function lang_redesign_smoke::noop::impl "$@"
+}
+
+noop() {
+  lang_redesign_smoke::noop "$@"
+}
+
+lang_redesign_smoke::wf_fail::impl() {
+  set -eo pipefail
+  set +u
+  jaiph::emit_workflow_summary_event WORKFLOW_START 'wf_fail'
+  echo "expected failure" >&2
+  exit 1
+  jaiph::emit_workflow_summary_event WORKFLOW_END 'wf_fail'
+}
+
+lang_redesign_smoke::wf_fail() {
+  jaiph::run_step lang_redesign_smoke::wf_fail workflow lang_redesign_smoke::wf_fail::impl "$@"
+}
+
+lang_redesign_smoke::wf_const::impl() {
+  set -eo pipefail
+  set +u
+  jaiph::emit_workflow_summary_event WORKFLOW_START 'wf_const'
+  local msg; msg="hello"
+  jaiph::log "$msg"
+  jaiph::emit_workflow_summary_event WORKFLOW_END 'wf_const'
+}
+
+lang_redesign_smoke::wf_const() {
+  jaiph::run_step lang_redesign_smoke::wf_const workflow lang_redesign_smoke::wf_const::impl "$@"
+}
+
+lang_redesign_smoke::wf_wait::impl() {
+  set -eo pipefail
+  set +u
+  jaiph::emit_workflow_summary_event WORKFLOW_START 'wf_wait'
+  lang_redesign_smoke::noop &
+  wait
+  jaiph::emit_workflow_summary_event WORKFLOW_END 'wf_wait'
+}
+
+lang_redesign_smoke::wf_wait() {
+  jaiph::run_step lang_redesign_smoke::wf_wait workflow lang_redesign_smoke::wf_wait::impl "$@"
+}
+
+lang_redesign_smoke::wf_brace_if::impl() {
+  set -eo pipefail
+  set +u
+  jaiph::emit_workflow_summary_event WORKFLOW_START 'wf_brace_if'
+  if lang_redesign_smoke::always_ok; then
+    jaiph::log "then"
+  elif ! lang_redesign_smoke::always_ok; then
+    jaiph::log "elif"
+  else
+    jaiph::log "else"
+  fi
+  jaiph::emit_workflow_summary_event WORKFLOW_END 'wf_brace_if'
+}
+
+lang_redesign_smoke::wf_brace_if() {
+  jaiph::run_step lang_redesign_smoke::wf_brace_if workflow lang_redesign_smoke::wf_brace_if::impl "$@"
+}
+
+lang_redesign_smoke::default::impl() {
+  set -eo pipefail
+  set +u
+  jaiph::emit_workflow_summary_event WORKFLOW_START 'default'
+  lang_redesign_smoke::always_ok
+  jaiph::emit_workflow_summary_event WORKFLOW_END 'default'
+}
+
+lang_redesign_smoke::default() {
+  jaiph::run_step lang_redesign_smoke::default workflow lang_redesign_smoke::default::impl "$@"
+}",
     "main.sh": "#!/usr/bin/env bash
 
 set -euo pipefail
@@ -116,6 +228,7 @@ if [[ ! -f "$jaiph_stdlib_path" ]]; then
   exit 1
 fi
 source "$jaiph_stdlib_path"
+export JAIPH_LIB="\${JAIPH_LIB:-$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)/lib}"
 if [[ "$(jaiph__runtime_api)" != "1" ]]; then
   echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2
   exit 1
@@ -201,6 +314,7 @@ if [[ ! -f "$jaiph_stdlib_path" ]]; then
   exit 1
 fi
 source "$jaiph_stdlib_path"
+export JAIPH_LIB="\${JAIPH_LIB:-$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)/lib}"
 if [[ "$(jaiph__runtime_api)" != "1" ]]; then
   echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2
   exit 1

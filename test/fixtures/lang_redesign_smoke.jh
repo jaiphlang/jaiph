@@ -1,0 +1,39 @@
+#!/usr/bin/env jaiph
+
+rule always_ok {
+  echo ok
+}
+
+function noop() {
+  :
+}
+
+workflow wf_fail {
+  fail "expected failure"
+}
+
+workflow wf_const {
+  const msg = "hello"
+  log "$msg"
+}
+
+workflow wf_wait {
+  run noop &
+  wait
+}
+
+workflow wf_brace_if {
+  if ensure always_ok {
+    log "then"
+  }
+  else if not ensure always_ok {
+    log "elif"
+  }
+  else {
+    log "else"
+  }
+}
+
+workflow default {
+  ensure always_ok
+}

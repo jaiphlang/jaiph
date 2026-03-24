@@ -1,5 +1,11 @@
 # Nightly
 
+- **Orchestration syntax (language redesign)** — Workflows gain `fail "reason"` (non-zero exit, message on stderr), a dedicated `wait` step (join async `run … &` jobs; transpiles to bash `wait`), and `const name = …` bindings alongside existing `name = …` capture. `const` RHS allows string/`$var`/`"${var:-default}"`-style values, or `run` / `ensure` / `prompt` capture; command substitution and bash string ops such as `${var%%pat}` on the RHS are rejected (see design note in [Grammar](docs/grammar.md)).
+- **Brace-style `if`** — `if [not] ensure ref [args] { … } [ else if [not] ensure|run ref [args] { … } ] [ else { … } ]` and `if [not] run ref [args] { … }` (`not` negates the condition; `else if` chains). Legacy `if … then … fi` / `elif` for `ensure`, `run`, and shell conditions remains supported and emits the same bash.
+- **Rules as structured steps** — Rule bodies parse `ensure`, `run`, `const`, `if` (including brace form), `fail`, `log`, `logerr`, `return`, and shell fragments. Rules still disallow `prompt`, inbox `send`/`route`, `wait`, and `ensure … recover` (validation unchanged). Prefer `run` for **functions** and `ensure` for **rules** inside rule bodies; the compiler rejects `run`/`ensure` targets that violate the usual callee kinds.
+- **Module-level `const`** — Top-level declarations accept `const name = value` with the same value forms as `local name = value` (both declare module-scoped variables in the unified namespace).
+- **First-party `.jaiph/`** — Project agent workflows rewritten to the strict orchestration style: workflow bodies use Jaiph steps only (no raw shell lines); shell lives in named `function` blocks; shared bash helpers live under `.jaiph/lib/` and load with `source "$JAIPH_LIB/…"` inside functions (runtime sets `JAIPH_LIB` for function execution). List iteration over newline-delimited strings uses small helpers (e.g. `first_line` / `rest_lines`) and workflow recursion where a loop would otherwise wrap Jaiph steps.
+- **Design reference** — Rationale, legality matrix, and migration patterns: `.jaiph/language_redesign_spec.md` in the repository.
 
 # 0.5.0
 

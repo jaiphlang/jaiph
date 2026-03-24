@@ -1,27 +1,38 @@
 #!/usr/bin/env jaiph
 
-# Uses cursor backend — faster and cheaper for targeted CI fixes.
 config {
   agent.backend = "cursor"
   agent.cursor_flags = "--force"
 }
 
 rule ci_passes {
+  run npm_run_test_ci
+}
+
+function npm_run_test_ci() {
   npm run test:ci
 }
 
+function save_string_to_file() {
+  echo "$1" > "$2"
+}
+
+function assert_nonempty_file_or_fail() {
+  test -s "$1" || {
+    echo "jaiph: ci failure log is empty at $1" >&2
+    exit 1
+  }
+}
+
 workflow ensure_ci_passes {
-  ci_log_dir=".jaiph/tmp"
-  ci_log_file="${ci_log_dir}/ensure_ci_passes.last.log"
-  mkdir -p "$ci_log_dir"
+  const ci_log_dir = ".jaiph/tmp"
+  const ci_log_file = "${ci_log_dir}/ensure_ci_passes.last.log"
+  run mkdir_p_simple "$ci_log_dir"
 
   ensure ci_passes recover {
-    echo "$1" > "$ci_log_file"
-    if [[ ! -s "$ci_log_file" ]]; then
-      echo "jaiph: ci failure log is empty at $ci_log_file" >&2
-      exit 1
-    fi
-    
+    run save_string_to_file "$1" "$ci_log_file"
+    run assert_nonempty_file_or_fail "$ci_log_file"
+
     prompt "
       <role>
       You are a software engineer fixing a failing CI build.
@@ -45,7 +56,15 @@ workflow ensure_ci_passes {
     "
   }
 
-  rm -f "$ci_log_file"
+  run rm_file_simple "$ci_log_file"
+}
+
+function mkdir_p_simple() {
+  mkdir -p "$1"
+}
+
+function rm_file_simple() {
+  rm -f "$1"
 }
 
 workflow default {

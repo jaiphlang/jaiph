@@ -171,6 +171,9 @@ export function emitWorkflow(
   out.push("  exit 1");
   out.push("fi");
   out.push('source "$jaiph_stdlib_path"');
+  out.push(
+    'export JAIPH_LIB="${JAIPH_LIB:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib}"',
+  );
   out.push('if [[ "$(jaiph__runtime_api)" != "1" ]]; then');
   out.push('  echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2');
   out.push("  exit 1");
@@ -252,35 +255,20 @@ export function emitWorkflow(
     out.push("  set -eo pipefail");
     out.push("  set +u");
     emitEnvShims("  ");
-    if (rule.commands.length === 0) {
+    const ruleStepCtx: StepEmitCtx = {
+      workflowSymbol,
+      importedWorkflowSymbols,
+      importedModuleHasMetadata,
+      filePath: ast.filePath,
+      workflowName: rule.name,
+      inRecoverBlock: false,
+      failExitsProcess: false,
+    };
+    if (rule.steps.length === 0) {
       out.push("  :");
     } else {
-      for (const cmd of rule.commands) {
-        if (cmd.startsWith("run ")) {
-          throw jaiphError(
-            ast.filePath,
-            rule.loc.line,
-            rule.loc.col,
-            "E_PARSE",
-            "`run` is not allowed inside a `rule` block.\nUse `ensure` to call another rule, or move this call to a `workflow`.",
-          );
-        }
-        const ensureMatch = cmd.match(
-          /^ensure\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
-        );
-        if (ensureMatch) {
-          const ref = { value: ensureMatch[1], loc: { line: 0, col: 0 } };
-          const args = ensureMatch[2]?.trim();
-          out.push(
-            `  ${transpileRuleRef(ref, workflowSymbol, importedWorkflowSymbols)}${args ? ` ${args}` : ""}`,
-          );
-        } else if (isJaiphReturn(cmd)) {
-          const value = cmd.slice("return ".length).trim();
-          out.push(`  jaiph::set_return_value ${value}`);
-          out.push("  return 0");
-        } else {
-          out.push(`  ${normalizeShellLocalExport(resolveShellRefs(cmd, importedWorkflowSymbols))}`);
-        }
+      for (const st of rule.steps) {
+        emitStep(out, "  ", st, ruleStepCtx);
       }
     }
     out.push("}");

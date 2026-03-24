@@ -21,12 +21,12 @@ It combines declarative workflow structure with bash, then compiles to pure shel
 
 **Core concepts:**
 
-- **Workflows** — Ordered steps (checks, agent prompts, shell, `run` calls to other workflows and functions) that can change system state.
-- **Rules** — Reusable checks or actions that return a shell exit code; used with `ensure` and in conditionals.
+- **Workflows** — Ordered Jaiph steps (`ensure`, `run`, `prompt`, `const`, `if`, `fail`, `return`, logging, inbox, async `run … &` + `wait`, and optional shell). Prefer moving bash into **`function`** blocks and calling them with `run`.
+- **Rules** — Structured checks (`ensure`, `run` to functions, `const`, `if`, `fail`, `log` / `logerr`, `return`, plus shell where still accepted); used with `ensure` and in conditionals.
 - **Agent prompts** — `prompt "..."` sends text to a configured agent (e.g. Cursor or Claude CLI); workflows orchestrate when the agent runs.
 - **Composability** — Import other `.jh` / `.jph` modules and call their rules, workflows, and functions by alias (e.g. `ensure security.scan_passes`, `run bootstrap.nodejs`). Use **`ensure` only for rules** and **`run` for workflows and functions** so every Jaiph call is keyword-led; a bare symbol name cannot start a workflow shell step, including when the line also contains `$(...)`.
-- **Step capture** — Assign results with `x = ensure …` / `x = run …` / `x = prompt …` (for `ensure` / `run`, the captured value is the callee’s explicit `return`; ordinary command stdout goes to step artifacts under `.jaiph/runs`). See [Step output contract](grammar.md#step-output-contract) and [Managed calls vs command substitution](grammar.md#managed-calls-vs-command-substitution).
-- **Shell-native** — Transpiled output is bash; you can mix Jaiph primitives with normal shell commands and variables.
+- **Step capture** — Assign results with `x = ensure …` / `x = run …` / `x = prompt …`, or **`const x = …`** with the same RHS forms (see [Grammar](grammar.md)). For `ensure` / `run`, the captured value is the callee’s explicit `return`; ordinary command stdout goes to step artifacts under `.jaiph/runs`.
+- **Shell-native** — Transpiled output is bash. Shared bash helpers can live in `.jaiph/lib/` and be loaded from functions with `source "$JAIPH_LIB/…"`.
 
 > [!WARNING]
 > Jaiph is still in an early stage. Expect breaking changes.
@@ -46,24 +46,40 @@ It combines declarative workflow structure with bash, then compiles to pure shel
 import "bootstrap_project.jh" as bootstrap
 import "tools/security.jh" as security
 
+function file_exists() {
+  test -f "$1"
+}
+
+function non_empty() {
+  test -n "$1"
+}
+
 # Validates local build prerequisites.
 rule project_ready {
-  test -f "package.json"
-  test -n "$NODE_ENV"
+  if not run file_exists "package.json" {
+    fail "expected package.json"
+  }
+  if not run non_empty "$NODE_ENV" {
+    fail "NODE_ENV must be set"
+  }
+}
+
+function npm_run_build() {
+  npm run build
 }
 
 # Verifies the project compiles successfully.
 rule build_passes {
-  npm run build
+  run npm_run_build
 }
 
 # Orchestrates checks, prompt execution, and docs refresh.
 # Arguments:
 #   $1: Feature requirements passed to the prompt.
 workflow default {
-  if ! ensure project_ready; then
+  if not ensure project_ready {
     run bootstrap.nodejs
-  fi
+  }
 
   prompt "
     Build the application using best practices.
@@ -154,19 +170,18 @@ Jaiph source files use **`.jh`** (recommended); **`.jph`** is still accepted. A 
 
 - `config { ... }` — Optional block setting runtime options (agent backend, model, Docker sandbox, etc.). Allowed at the top level (module-wide) and inside individual workflows for per-workflow overrides (`agent.*` and `run.*` keys only). See [Configuration](configuration.md).
 - `import "path" as alias` — Import rules, workflows, and functions from another module. The path may include a `.jh` / `.jph` suffix or omit it; resolution prefers `.jh` when both exist. Verified at compile time.
-- `local name = value` — Module-scoped variable, accessible as `$name` in all blocks within the module.
-- `rule name { ... }` — Reusable check/action returning a shell exit code. Rules run in an isolated child shell; on Linux, a read-only mount namespace is used when `unshare` and passwordless `sudo` are available, otherwise the same child-shell fallback as on other platforms. Can call other rules via `ensure`. Optional `export` for cross-module access.
+- `local name = value` / `const name = value` — Module-scoped variable, accessible as `$name` in all blocks within the module. Prefer **`const`** in new orchestration code.
+- `rule name { ... }` — Reusable check/action: structured Jaiph steps and/or shell. Rules run in an isolated child shell; on Linux, a read-only mount namespace is used when `unshare` and passwordless `sudo` are available, otherwise the same child-shell fallback as on other platforms. Call other rules with **`ensure`**, functions with **`run`**. Optional `export` for cross-module access.
 - `workflow name { ... }` — Orchestration entrypoint of ordered steps. Can change system state. Optional `export` for cross-module access.
 - `function name { ... }` — Reusable writable shell function (shell-like body; no `run`/`ensure`/routes inside). From a **workflow**, call it with **`run name`** so logs and return values use the managed step contract. The `()` after the name is optional (`function name() { ... }` also works).
 - `ensure ref [args...]` — Execute a rule; optional `recover` for bounded retry loops (default max retries **10**, overridable with **`JAIPH_ENSURE_MAX_RETRIES`**). See [Grammar](grammar.md).
 - `run ref [args...]` — Execute another workflow **or** a top-level function. Not allowed inside rules.
 - `prompt "..."` — Send text to the configured agent. Optional `returns '{ field: type }'` for validated JSON responses. See [Grammar](grammar.md).
-- `name = <step>` — Capture a value from a step: for `ensure` / `run`, only the callee’s explicit `return` (stdout from commands inside the callee goes to artifacts, not into `name`); for `prompt`, the final answer; for a plain shell command, full stdout (bash semantics). See [Grammar](grammar.md#step-output-contract) and [managed calls](grammar.md#managed-calls-vs-command-substitution).
+- `name = <step>` / `const name = <step>` — Capture or bind: for `ensure` / `run`, only the callee’s explicit `return`; for `prompt`, the final answer; for shell RHS on `const`, only simple values (no `$(...)` — use `run` to a function instead). See [Grammar](grammar.md#step-output-contract).
+- `fail "reason"` — Abort the workflow or fail the rule with a message on stderr (non-zero exit).
 - `log "message"` / `logerr "message"` — Display a message in the progress tree (stdout / stderr).
 - `channel <- cmd` / `channel -> workflow` — Send and route messages between workflows. See [Inbox & Dispatch](inbox.md).
-- `cmd &` / `wait` — Background commands and synchronise with `wait` inside shell steps for in-step parallelism. See [Grammar](grammar.md).
-- `if [!] ensure ref; then ... [else ...] fi` — Conditional based on rule result.
-- `if [!] run ref; then ... [else ...] fi` — Conditional based on workflow or function exit code.
-- `if ! <shell_cmd>; then ... fi` — Conditional based on a shell command exit code.
+- `run ref &` / `wait` — Background managed runs and join with a **`wait`** step (Jaiph keyword). Shell steps still support `&` / `wait` for raw commands. See [Grammar](grammar.md).
+- `if [not] ensure ref { ... }` / `if [not] run ref { ... }` — Brace conditionals (`else if`, `else` supported). Legacy `if … then … fi` / `elif` remains available. Shell-only conditions stay on the legacy `if ! cmd; then … fi` form.
 
 Runtime behavior (progress tree, step output, run logs) is documented in [CLI Reference](cli.md). To browse past and in-progress runs in a browser, use [Reporting server](reporting.md). For agent backend configuration, see [Configuration](configuration.md). For Docker sandboxing (beta), see [Sandboxing](sandboxing.md). For testing workflows with mocks and assertions, see [Testing](testing.md). For lifecycle hooks, see [Hooks](hooks.md).

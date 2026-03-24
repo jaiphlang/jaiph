@@ -1,12 +1,5 @@
 #!/usr/bin/env jaiph
 
-#
-# Architect review: verifies that each task in QUEUE.md is clear,
-# architecturally sound, conflict-free, and appropriately scoped.
-# Marks qualifying tasks as dev-ready; annotates the rest with
-# questions/recommendations that must be addressed first.
-#
-
 import "./queue.jh" as queue
 
 config {
@@ -14,8 +7,49 @@ config {
   agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
+function first_line_str() {
+  source "${JAIPH_LIB}/strings.sh"
+  first_line "$1"
+}
+
+function rest_lines_str() {
+  source "${JAIPH_LIB}/strings.sh"
+  rest_lines "$1"
+}
+
+function arg_nonempty() {
+  [ -n "${1:-}" ]
+}
+
+function str_equals() {
+  [ "$1" = "$2" ]
+}
+
+function task_has_dev_ready_marker() {
+  printf '%s\n' "$1" | grep -q '<!-- dev-ready -->'
+}
+
+function queue_has_any_task_not_dev_ready() {
+  local qf
+  qf="${JAIPH_WORKSPACE:-.}/.jaiph/QUEUE.md"
+  awk '
+    BEGIN { bad=0 }
+    /^## / {
+      if (inblk && !marked) bad=1
+      inblk=1
+      marked=0
+      next
+    }
+    inblk && /<!-- dev-ready -->/ { marked=1 }
+    END {
+      if (inblk && !marked) bad=1
+      exit bad
+    }
+  ' "$qf"
+}
+
 workflow review_task {
-  result = prompt "
+  const result = prompt "
     You are a software architect reviewing a task from the Jaiph
     improvement queue. Jaiph is a TypeScript compiler and runtime
     for a DSL that transpiles to Bash.
@@ -69,35 +103,45 @@ workflow review_task {
   return "$result_verdict"
 }
 
+workflow review_one_header {
+  const header = "$1"
+  if not run arg_nonempty "$header" {
+    return
+  }
+  const task = run queue.get_task_by_header "$header"
+  if run task_has_dev_ready_marker "$task" {
+    log "Already dev-ready: $header"
+    return
+  }
+  const verdict = run review_task "$task"
+  if run str_equals "$verdict" "dev-ready" {
+    run queue.mark_task_dev_ready "$header"
+    log "Marked dev-ready: $header"
+  }
+  else {
+    log "Needs work: $header"
+  }
+}
+
+workflow process_headers_recursive {
+  const header = "$1"
+  const remaining = "$2"
+  run review_one_header "$header"
+  if run arg_nonempty "$remaining" {
+    const next = run first_line_str "$remaining"
+    const rest = run rest_lines_str "$remaining"
+    run process_headers_recursive "$next" "$rest"
+  }
+}
+
 workflow default {
-  local headers
-  headers = run queue.get_all_task_headers
-
-  local failed=0
-
-  while IFS= read -r header; do
-    [ -z "$header" ] && continue
-
-    task = run queue.get_task_by_header "$header"
-
-    if echo "$task" | grep -q '<!-- dev-ready -->'; then
-      echo "Already dev-ready: $header"
-      continue
-    fi
-
-    verdict = run review_task "$task"
-
-    if [[ "$verdict" == "dev-ready" ]]; then
-      run queue.mark_task_dev_ready "$header"
-      echo "Marked dev-ready: $header"
-    else
-      echo "Needs work: $header"
-      failed=1
-    fi
-  done <<< "$headers"
-
-  if [[ "$failed" -eq 1 ]]; then
-    echo "One or more tasks need work. Review the agent output above."
-    exit 1
-  fi
+  const headers = run queue.get_all_task_headers
+  const first = run first_line_str "$headers"
+  const rest = run rest_lines_str "$headers"
+  if run arg_nonempty "$first" {
+    run process_headers_recursive "$first" "$rest"
+  }
+  if run queue_has_any_task_not_dev_ready {
+    fail "One or more tasks need work. Review the agent output above."
+  }
 }

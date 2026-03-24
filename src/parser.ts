@@ -69,7 +69,7 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
       continue;
     }
 
-    if (/^local\s+[A-Za-z_]/.test(line)) {
+    if (/^(?:local|const)\s+[A-Za-z_]/.test(line)) {
       pendingTopLevelComments = [];
       const { envDecl, nextIndex } = parseEnvDecl(filePath, lines, i - 1);
       if (!mod.envDecls) {

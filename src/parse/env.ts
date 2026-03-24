@@ -10,10 +10,10 @@ export function parseEnvDecl(
   const raw = lines[startIndex];
   const line = raw.trim();
 
-  // Match: local NAME = "value" or local NAME = 'value' or local NAME = barevalue
-  const match = line.match(/^local\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)/);
+  // Match: local|const NAME = "value" or ... = 'value' or ... = barevalue
+  const match = line.match(/^(?:local|const)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)/);
   if (!match) {
-    fail(filePath, 'invalid local declaration — expected: local NAME = VALUE', lineNo);
+    fail(filePath, 'invalid declaration — expected: local NAME = VALUE or const NAME = VALUE', lineNo);
   }
   const name = match[1];
   let valuePart = match[2].trim();

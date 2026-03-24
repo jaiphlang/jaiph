@@ -16,17 +16,7 @@ config {
   agent.cursor_flags = "--force"
 }
 
-local output_contract = "
-  ## Output
-
-  1. Implementation (code changes)
-  2. Self-check: review your diff — if it touches more than 5 files or adds
-     more than 200 net lines, explain why the scope is necessary
-  3. Short rationale (why this approach)
-  4. Tradeoffs or risks (if any)
-"
-
-local code_philosophy = "
+const code_philosophy = "
   This codebase is maintained by both humans and AI agents. All code you write
   must follow these principles strictly:
 
@@ -49,7 +39,19 @@ local code_philosophy = "
      codebase already provides it. If not, explain why.
 "
 
-local role_surgical = "<role>
+function select_role() {
+  local oc
+  oc="$(cat <<'OC'
+  ## Output
+
+  1. Implementation (code changes)
+  2. Self-check: review your diff — if it touches more than 5 files or adds
+     more than 200 net lines, explain why the scope is necessary
+  3. Short rationale (why this approach)
+  4. Tradeoffs or risks (if any)
+OC
+)"
+  local role_surgical="<role>
   You are a surgical engineer.
 
   Your goal is to implement the task with the smallest safe change.
@@ -67,10 +69,10 @@ local role_surgical = "<role>
   * Do NOT redesign surrounding architecture
   * Do NOT add abstractions unless clearly required by acceptance criteria
 
-  $output_contract
+  $oc
 </role>"
 
-local role_reductionist = "<role>
+  local role_reductionist="<role>
   You are a reductionist engineer.
 
   Your goal is to solve the task by reducing system complexity.
@@ -88,10 +90,10 @@ local role_reductionist = "<role>
   * Prefer net-negative or near-neutral code growth when feasible
   * If adding code is unavoidable, justify why deletion/simplification was insufficient
 
-  $output_contract
+  $oc
 </role>"
 
-local role_optimizer = "<role>
+  local role_optimizer="<role>
   You are an optimization-oriented engineer.
 
   Your goal is to improve structure and flow when the task justifies it.
@@ -110,10 +112,10 @@ local role_optimizer = "<role>
   * Do NOT rework areas outside the task's scope, even if they look improvable
   * Avoid speculative complexity that does not produce measurable benefit
 
-  $output_contract
+  $oc
 </role>"
 
-local role_stabilizer = "<role>
+  local role_stabilizer="<role>
   You are a stabilizer engineer.
 
   Your goal is to maximize correctness and regression safety.
@@ -131,14 +133,36 @@ local role_stabilizer = "<role>
   * Keep implementation simple, defensive, and observable
   * Do NOT broaden scope unless needed to remove fragility
 
-  $output_contract
+  $oc
 </role>"
 
-# Auto-select engineer role based on task content.
-workflow classify_role {
-  local task="$1"
+  case "$1" in
+    surgical) printf '%s\n' "$role_surgical" ;;
+    reductionist) printf '%s\n' "$role_reductionist" ;;
+    optimizer) printf '%s\n' "$role_optimizer" ;;
+    stabilizer) printf '%s\n' "$role_stabilizer" ;;
+    *)
+      echo "Error: Role must be one of: surgical, reductionist, optimizer, stabilizer. Got: $1" >&2
+      return 1
+      ;;
+  esac
+}
 
-  result = prompt "
+function arg_nonempty() {
+  [ -n "${1:-}" ]
+}
+
+function task_text_has_header() {
+  printf '%s\n' "$1" | grep -q '^## '
+}
+
+function first_line_task() {
+  source "${JAIPH_LIB}/strings.sh"
+  first_line "$1"
+}
+
+workflow classify_role {
+  const result = prompt "
     Classify this task into the single best-fit engineer role.
 
     Roles:
@@ -152,7 +176,7 @@ workflow classify_role {
       Keywords: test, coverage, harden, validate, assert, detect.
 
     Task:
-    $task
+    $1
 
     Respond with exactly one role name.
   " returns '{ role: string }'
@@ -161,26 +185,12 @@ workflow classify_role {
 }
 
 workflow implement {
-  local task="$1"
-  if ! echo "$task" | grep -q '^## '; then
-    echo "Error: Provided task does not contain a '## [text]' header: $task"
-    exit 1
-  fi
-
-  local role_name="$2"
-  local role
-  if [ "$role_name" = "surgical" ]; then
-    role="$role_surgical"
-  elif [ "$role_name" = "reductionist" ]; then
-    role="$role_reductionist"
-  elif [ "$role_name" = "optimizer" ]; then
-    role="$role_optimizer"
-  elif [ "$role_name" = "stabilizer" ]; then
-    role="$role_stabilizer"
-  else
-    echo "Error: Role must be one of: surgical, reductionist, optimizer, stabilizer. Got: $role_name"
-    exit 1
-  fi
+  const task = "$1"
+  const role_name = "$2"
+  if not run task_text_has_header "$task" {
+    fail "Provided task does not contain a '## [text]' header"
+  }
+  const role = run select_role "$role_name"
 
   prompt "
     $role
@@ -225,20 +235,21 @@ workflow implement {
 }
 
 workflow default {
-  local role_name="${1:-}"
-
+  const role_arg = "${1:-}"
   ensure git.is_clean
-  task = run queue.get_first_task
-  task_header="${task%%$'\n'*}"
-
+  const task = run queue.get_first_task
+  const task_header = run first_line_task "$task"
   ensure queue.task_is_dev_ready "$task"
 
-  if [ -z "$role_name" ]; then
-    role_name = run classify_role "$task"
+  if not run arg_nonempty "$role_arg" {
+    const role_name = run classify_role "$task"
     log "Auto-selected role: $role_name"
-  fi
+    run implement "$task" "$role_name"
+  }
+  else {
+    run implement "$task" "$role_arg"
+  }
 
-  run implement "$task" "$role_name"
   run ci.ensure_ci_passes
   run docs.update_from_task "$task"
   run queue.remove_completed_task "$task_header"

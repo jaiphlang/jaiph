@@ -19,10 +19,28 @@ export interface WorkflowRefDef {
   loc: SourceLoc;
 }
 
+/** RHS of `const name = ...` in workflows/rules (P10). */
+export type ConstRhs =
+  | { kind: "expr"; bashRhs: string }
+  | { kind: "run_capture"; ref: WorkflowRefDef; args?: string }
+  | { kind: "ensure_capture"; ref: RuleRefDef; args?: string }
+  | {
+      kind: "prompt_capture";
+      raw: string;
+      loc: SourceLoc;
+      returns?: string;
+    };
+
+export type IfConditionDef =
+  | { kind: "ensure"; ref: RuleRefDef; args?: string }
+  | { kind: "run"; ref: WorkflowRefDef; args?: string }
+  | { kind: "shell"; command: string };
+
 export interface RuleDef {
   name: string;
   comments: string[];
-  commands: string[];
+  /** Structured rule body steps (shell steps remain for legacy e2e rules). */
+  steps: WorkflowStepDef[];
   loc: SourceLoc;
 }
 
@@ -90,13 +108,31 @@ export type WorkflowStepDef =
       captureName?: string;
     }
   | {
+      type: "fail";
+      message: string;
+      loc: SourceLoc;
+    }
+  | {
+      type: "const";
+      name: string;
+      value: ConstRhs;
+      loc: SourceLoc;
+    }
+  | {
+      type: "wait";
+      loc: SourceLoc;
+    }
+  | {
       type: "if";
       negated: boolean;
-      condition:
-        | { kind: "ensure"; ref: RuleRefDef; args?: string }
-        | { kind: "run"; ref: WorkflowRefDef; args?: string }
-        | { kind: "shell"; command: string };
+      condition: IfConditionDef;
       thenSteps: WorkflowStepDef[];
+      /** Brace-style `else if` chain (parser-only; emits bash `elif`). */
+      elseIfBranches?: Array<{
+        negated: boolean;
+        condition: Exclude<IfConditionDef, { kind: "shell" }>;
+        thenSteps: WorkflowStepDef[];
+      }>;
       elseSteps?: WorkflowStepDef[];
     }
   | {

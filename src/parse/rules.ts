@@ -1,5 +1,6 @@
 import type { RuleDef } from "../types";
 import { braceDepthDelta, fail, stripQuotes } from "./core";
+import { parseBlockStatement } from "./workflow-brace";
 
 export function parseRuleBlock(
   filePath: string,
@@ -19,7 +20,7 @@ export function parseRuleBlock(
   const rule: RuleDef = {
     name: match[2],
     comments: pendingComments,
-    commands: [],
+    steps: [],
     loc: { line: lineNo, col: 1 },
   };
 
@@ -32,7 +33,11 @@ export function parseRuleBlock(
     const cmd = currentCommandLines.join("\n").trim();
     currentCommandLines = [];
     if (!cmd) return;
-    rule.commands.push(stripQuotes(cmd));
+    rule.steps.push({
+      type: "shell",
+      command: stripQuotes(cmd),
+      loc: { line: lineNo, col: 1 },
+    });
   };
 
   for (; i < lines.length; i += 1) {
@@ -48,7 +53,11 @@ export function parseRuleBlock(
       if (braceDepth > 0) currentCommandLines.push(innerRaw);
       else {
         flushCommand();
-        rule.commands.push(innerRaw.trim());
+        rule.steps.push({
+          type: "shell",
+          command: innerRaw.trim(),
+          loc: { line: innerNo, col: 1 },
+        });
       }
       continue;
     }
@@ -64,9 +73,19 @@ export function parseRuleBlock(
     if (braceDepth > 0) {
       currentCommandLines.push(innerRaw.trim());
       braceDepth += braceDepthDelta(inner);
-      if (braceDepth === 0) flushCommand();
+      if (braceDepth === 0) {
+        flushCommand();
+      }
       continue;
     }
+    const st = parseBlockStatement(filePath, lines, i, { forRule: true });
+    if (st.step.type !== "shell") {
+      flushCommand();
+      rule.steps.push(st.step);
+      i = st.nextIdx - 1;
+      continue;
+    }
+
     const delta = braceDepthDelta(inner);
     if (delta > 0) {
       currentCommandLines.push(innerRaw.trim());
@@ -74,15 +93,9 @@ export function parseRuleBlock(
       if (braceDepth === 0) flushCommand();
       continue;
     }
-    if (inner.startsWith("run ")) {
-      fail(
-        filePath,
-        "`run` is not allowed inside a `rule` block.\nUse `ensure` to call another rule, or move this call to a `workflow`.",
-        innerNo,
-        innerRaw.indexOf("run") + 1,
-      );
-    }
-    rule.commands.push(stripQuotes(inner));
+
+    rule.steps.push(st.step);
+    i = st.nextIdx - 1;
   }
   flushCommand();
   if (i >= lines.length) {
