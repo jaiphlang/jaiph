@@ -109,11 +109,18 @@ If a `.jh` or `.jph` file is executable and has `#!/usr/bin/env jaiph`, you can 
 
 ### Run progress and tree output
 
-During `jaiph run`, the CLI renders a tree of steps. **Tree output is the same in TTY and non-TTY:** each step appears as a line with a marker (▸ when started, ✓/✗ when done), the step kind (`workflow`, `prompt`, `function`, `rule`), and the step name. **`log` messages** also appear inline in the tree at the correct indentation depth — they have no marker, spinner, or timing; just the `ℹ` symbol (dim/gray) followed by the message text. **Completion lines include the step kind and name** so that each line is self-identifying even when multiple steps run concurrently (e.g. `✓ workflow scanner (0s)`, `✗ rule ci_passes (11s)`). The root PASS/FAIL summary retains its existing format (`✓ PASS workflow default (0.2s)`). There are no per-step live elapsed counters or in-place updates on tree lines.
+During `jaiph run`, the CLI renders a tree of steps. **Shared in TTY and non-TTY:** each step appears as a line with a marker (▸ when started, ✓/✗ when done), the step kind (`workflow`, `prompt`, `function`, `rule`), and the step name. **`log` messages** also appear inline in the tree at the correct indentation depth — they have no marker, spinner, or timing; just the `ℹ` symbol (dim/gray) followed by the message text. **Completion lines include the step kind and name** so that each line is self-identifying even when multiple steps run concurrently (e.g. `✓ workflow scanner (0s)`, `✗ rule ci_passes (11s)`). The root PASS/FAIL summary retains its existing format (`✓ PASS workflow default (0.2s)`). There are no per-step live elapsed counters or in-place updates on the start/completion tree lines themselves.
 
 **TTY only:** One extra line at the bottom shows which workflow is running and total elapsed: `▸ RUNNING workflow <name> (X.Xs)` — `▸ RUNNING` in yellow, `workflow` in bold, workflow name in default style, time in dim. This line is the **only** line updated in place (every second). When the run completes, that line is cleared and replaced by the final PASS/FAIL line.
 
-**Non-TTY:** No RUNNING line and no in-place updates. Step start lines (▸) and completion lines (✓/✗) print as they occur. Raw stderr from the child process is echoed to stderr (in TTY mode it is captured but not echoed).
+**Non-TTY** (stdout not a TTY — CI, pipes, log capture): No RUNNING line and no in-place updates. Step start lines (▸) and completion lines (✓/✗) still print as they occur. **Long-running steps** additionally print **status heartbeat** lines so a quiet stretch between ▸ and ✓ does not look like a hang:
+
+- Format: **`· <kind> <name> (running <N>s)`** — middle dot `·`, same `<kind> <name>` pair as on the matching completion line (e.g. `· prompt prompt (running 60s)` before `✓ prompt prompt (91s)`), wall-clock seconds `N` since that step started.
+- Styling: the **entire** heartbeat line is dim/gray when colors are enabled; with `NO_COLOR` set, it is plain text (no ANSI dim).
+- Cadence: nothing is printed until the step has been running at least **`JAIPH_NON_TTY_HEARTBEAT_FIRST_SEC`** seconds (default **60**). After that, additional heartbeats appear when at least **`JAIPH_NON_TTY_HEARTBEAT_INTERVAL_MS`** milliseconds have passed since the last heartbeat **and** the elapsed second count has increased (default interval **30000**; values below **250** fall back to the default). Short steps therefore usually emit **no** heartbeats.
+- **Nested steps:** heartbeats describe the **innermost** step currently running (the deepest active step on the stack).
+
+Raw stderr from the child process is echoed to stderr (in TTY mode it is captured but not echoed).
 
 The child runtime also emits **structured event lines** (`__JAIPH_EVENT__` followed by JSON) that the CLI parses to update the tree, hooks, and failure summaries. `STEP_END` payloads can embed step output (`out_content` / `err_content`); the runtime JSON-escapes those strings so tabs, ANSI escape bytes, and other control characters cannot invalidate the line. If a line were not valid JSON, the CLI would treat it as plain stderr — which in CI can surface as a raw `__JAIPH_EVENT__ …` line instead of normal progress output.
 
@@ -129,6 +136,7 @@ For **parameterized** invocations—when you pass arguments to a workflow, promp
 Example lines:
 
 - `▸ workflow docs_page (1="docs/cli.md", 2="strict")`
+- `· prompt prompt (running 60s)` — non-TTY only, after the quiet threshold; entire line dim/gray; same `prompt prompt` label as the eventual `✓ prompt prompt (…)` line
 - `·   ▸ prompt "$role does $task" (role="engineer", task="Fix bugs")`
 - `·   ▸ prompt "Say hello to $1 and..." (1="greeting")`
 - `·   ▸ function fib (1="3")`
@@ -247,6 +255,8 @@ Imports resolve for both extensions: `import "foo" as x` finds `foo.jh` or `foo.
 - `JAIPH_DOCKER_NETWORK` — Docker network mode (overrides in-file `runtime.docker_network`).
 - `JAIPH_DOCKER_TIMEOUT` — execution timeout in seconds (overrides in-file `runtime.docker_timeout`).
 - `NO_COLOR` — if set, disables colored output (e.g. progress and pass/fail).
+- `JAIPH_NON_TTY_HEARTBEAT_FIRST_SEC` — non-TTY only: minimum elapsed seconds before the **first** heartbeat line for a step (default: `60`). Non-negative number; invalid values fall back to `60`.
+- `JAIPH_NON_TTY_HEARTBEAT_INTERVAL_MS` — non-TTY only: timer interval used to schedule heartbeat checks and minimum spacing between **subsequent** heartbeats (default: `30000`). Values below `250` ms fall back to the default.
 
 **Install and `jaiph use`:**
 

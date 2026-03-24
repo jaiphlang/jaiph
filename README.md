@@ -93,6 +93,8 @@ If that fails, check that `~/.local/bin` is in your `PATH` (default install dire
 
 Arguments are passed exactly like bash scripts (`$1`, `$2`, `"$@"`). The file must define a `workflow default`.
 
+When stdout is not a terminal (for example in CI), long-running steps can print periodic gray **heartbeat** lines between the start and completion markers so logs show the run is still active. See [CLI Reference — Run progress and tree output](docs/cli.md#run-progress-and-tree-output).
+
 ### Initialize a workspace
 
 ```bash

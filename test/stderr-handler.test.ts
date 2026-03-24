@@ -11,6 +11,8 @@ test("registerTTYSubscriber: STEP_END fallback indent uses event depth", () => {
     colorEnabled: false,
     startedAt: Date.now(),
     runningInterval: undefined,
+    nonTTYHeartbeatInterval: undefined,
+    nonTTYHeartbeatStep: null,
   };
   const writes: string[] = [];
   const originalWrite = process.stdout.write.bind(process.stdout);
