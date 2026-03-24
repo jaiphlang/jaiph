@@ -149,6 +149,7 @@ workflow default (1="3")
   ✓ rule ensure_is_number (<time>)
   ▸ function fib (1="3")
   ✓ function fib (<time>)
+  ℹ 2
 ✓ PASS workflow default (<time>)
 EOF
 
