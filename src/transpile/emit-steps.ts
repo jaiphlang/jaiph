@@ -13,8 +13,6 @@ export type StepEmitCtx = {
   workflowName: string;
   /** In recover blocks, run/ensure default to ' "$@"' args and ensure skips paramKeys. */
   inRecoverBlock: boolean;
-  /** Local function names (for detecting function calls in shell capture steps). */
-  localFunctionNames?: Set<string>;
 };
 
 // ---------------------------------------------------------------------------
@@ -136,12 +134,7 @@ export function emitShellStep(
     resolveShellRefs(step.command, ctx.importedWorkflowSymbols),
   );
   if (step.captureName) {
-    const cmdWord = resolved.split(/\s/)[0];
-    if (ctx.localFunctionNames?.has(cmdWord)) {
-      emitReturnValueCapture(out, indent, step.captureName, resolved);
-    } else {
-      out.push(`${indent}${step.captureName}=$(${resolved})`);
-    }
+    out.push(`${indent}${step.captureName}=$(${resolved})`);
   } else {
     out.push(`${indent}${resolved}`);
   }

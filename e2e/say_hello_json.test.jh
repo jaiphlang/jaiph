@@ -4,7 +4,7 @@ import "say_hello_json.jh" as hello
 
 test "without name, workflow fails with validation message" {
   # When
-  response=$({ hello.default 2>&1; } || true) # this way bash captures stderr
+  response = hello.default allow_failure
 
   # Then
   expectEqual response "You didn't provide your name"

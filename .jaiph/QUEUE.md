@@ -6,82 +6,38 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Enforce managed-call semantics: forbid Jaiph symbols in `$(...)`, require `run` for functions <!-- dev-ready -->
+## Simplify compiler with keyword-first invocation grammar (`ensure`/`run`) <!-- dev-ready -->
 
-**Problem.** Jaiph currently mixes two call channels:
-- managed Jaiph calls (`ensure`, `run`, capture via explicit `return`)
-- raw shell command substitution (`$(...)`)
+**Problem.** The compiler currently needs extra heuristics to infer call intent from shell-like forms (especially around direct function calls and substitution contexts). This increases parser/validator complexity and creates edge cases.
 
-This creates inconsistent value semantics and hidden log/value coupling for rules, workflows, functions, and channel operations.
+**Hypothesis.** If all Jaiph symbol invocations are keyword-first, the compiler pipeline can be simplified:
+- `ensure <rule>`
+- `run <workflow>`
+- `run <function>`
+- no direct symbol invocation as generic shell calls
 
-**Goal.** Make call semantics explicit and uniform:
-- `ensure` is the only rule invocation keyword (predicate/guard semantics).
-- `run` is the managed invocation keyword for workflows **and functions**.
-- Command substitution `$(...)` is allowed only for pure shell commands, never Jaiph symbols.
-
-**Required compiler/validator checks.**
-- Reject command substitution containing:
-  - local/imported **workflow** refs,
-  - local/imported **function** refs,
-  - local/imported **rule** refs,
-  - channel operations/usages (`<-`, `->`, route-like refs) in substitution context.
-- Reject direct function invocation in workflow steps without `run` (e.g. `fn arg` or `x = fn arg` must fail with actionable error: use `run fn ...`).
-- Keep rule calls restricted to `ensure` only (no `run rule`, no shell-invoked rule calls in Jaiph-managed contexts).
-- Keep workflow calls restricted to `run` only.
-- Keep functions shell-like internally, but enforce that function value passing uses explicit `return` semantics (no stdout-as-value contract).
-- Add/confirm guard that function bodies cannot contain workflow orchestration forms (`run`, `ensure`, route declarations, workflow-like config blocks).
-
-**Runtime/transpilation expectations.**
-- `run <function>` must use managed step execution with:
-  - step logs to `.jaiph/runs` artifacts,
-  - value capture from explicit function `return`,
-  - stable status semantics aligned with `run <workflow>`.
-- `return` in functions remains explicit value channel (`return "..."` / `return "$var"`), while integer returns remain exit-code semantics.
-
-**Tests (mandatory).**
-- Add/extend parser/validator tests for all forbidden substitution cases.
-- Add acceptance/e2e tests for:
-  - `run function` success path with value capture + artifact logging,
-  - direct function invocation rejection (with and without capture),
-  - forbidden `$(workflow)`, `$(function)`, `$(rule)`, and channel-in-substitution failures,
-  - regressions for existing `ensure` and `run` behavior.
-
-**Acceptance criteria.**
-- There is exactly one managed value/log contract for Jaiph symbols:
-  - `ensure <rule>`
-  - `run <workflow>`
-  - `run <function>`
-- No Jaiph symbol can be invoked through `$(...)`.
-- Compiler errors are specific and migration-friendly.
-- Full test suite (`npm test`, `npm run test:e2e`) passes with updated expectations.
-
-## Document and migrate to managed-call model (grammar/docs/tests/samples) <!-- dev-ready -->
-
-**Problem.** The call model change is semantic, not cosmetic. Without explicit rationale and migration docs, users will keep writing ambiguous patterns.
-
-**Goal.** Update docs and examples so users understand *why* and *how* to use managed calls (`ensure`/`run`) and explicit `return` value channels.
+**Goal.** Identify and implement safe simplifications in parser/AST/validator/transpiler based on this invariant, while preserving existing runtime behavior contracts.
 
 **Scope.**
-- Update `docs/grammar.md` step-output contract and calling-convention sections.
-- Update `README.md`, `docs/getting-started.md`, and `docs/testing.md` where call/capture semantics are described.
-- Update `docs/index.html` sample snippets to avoid function/rule/workflow substitution patterns and use managed calls.
-- Add migration notes with before/after examples:
-  - forbidden: `x="$(fn ...)"`, `x="$(wf ...)"`, `x="$(rule ...)"`,
-  - required: `x = run fn ...`, `x = run wf ...`, `x = ensure rule ...`.
-- Update any affected `.jaiph/*.jh` automation workflows and e2e fixtures to follow the new model.
+- Remove or reduce heuristic symbol-detection paths used to distinguish shell commands from Jaiph symbol calls.
+- Consolidate call typing logic so invocation kind is explicit from syntax (keyword) instead of inferred.
+- Simplify substitution validation by reusing explicit symbol-kind tables and keyword requirements.
+- Reduce special-case emission logic tied to direct function-call capture and shell fallback ambiguity.
 
-**Required explanation content.**
-- First-principles rationale for the change:
-  - separate status/value/log channels,
-  - avoid stdout/value ambiguity,
-  - deterministic artifact behavior.
-- Clear statement of allowed/forbidden forms with short error-driven migration guidance.
+**Implementation constraints.**
+- Keep backward-incompatible behavior intentional and documented (no silent semantic drift).
+- Prefer deleting code and collapsing branches over adding new abstraction layers.
+- Maintain clear compile-time errors for unsupported/legacy forms.
+
+**Tests (mandatory).**
+- Update parser/validator/transpiler tests to reflect keyword-first invocation only.
+- Add regression tests proving removed heuristics are no longer needed.
+- Ensure e2e suite passes with updated invocation model and no behavior regressions in managed logging/value channels.
 
 **Acceptance criteria.**
-- Docs contain one consistent contract for function/workflow/rule invocation and capture.
-- `docs/index.html` examples reflect the new semantics.
-- Tests that assert docs/examples/samples behavior are updated and passing.
-- CHANGELOG entry explains the behavioral change and migration impact.
+- Compiler code paths for invocation classification are measurably simpler (fewer branches/files touched by invocation semantics).
+- Invocation semantics are fully explicit in grammar and validation (no implicit Jaiph symbol invocation forms).
+- Docs and changelog explain the simplification rationale and migration impact.
 
 ## Fix STEP_END embedded output JSON escaping (control chars leak as raw `__JAIPH_EVENT__`) <!-- dev-ready -->
 

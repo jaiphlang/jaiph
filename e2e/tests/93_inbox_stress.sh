@@ -79,6 +79,8 @@ config {
   run.inbox_parallel = true
 }
 
+channel data
+
 workflow s1 {
   data <- echo "m1"
 }
@@ -165,6 +167,8 @@ config {
   run.inbox_parallel = true
 }
 
+channel ch
+
 workflow producer_a {
   ch <- echo "pa"
 }
@@ -238,6 +242,9 @@ config {
   run.inbox_parallel = true
 }
 
+channel ch_raw
+channel ch_processed
+
 workflow sender {
   ch_raw <- echo "raw-data"
 }
@@ -279,6 +286,8 @@ e2e::file "stress_failagg.jh" <<'EOF'
 config {
   run.inbox_parallel = true
 }
+
+channel ch
 
 workflow producer {
   ch <- echo "msg"
@@ -325,6 +334,8 @@ e2e::file "stress_artifacts.jh" <<'EOF'
 config {
   run.inbox_parallel = true
 }
+
+channel ev
 
 workflow s1 {
   ev <- echo "e1"
@@ -407,6 +418,8 @@ config {
   run.inbox_parallel = true
 }
 
+channel ch
+
 workflow s1 {
   ch <- echo "i1"
 }
@@ -482,6 +495,8 @@ e2e::section "Sequential mode: same high-volume scenario produces identical resu
 # This confirms sequential path is not regressed by parallel-mode changes.
 
 e2e::file "stress_seq_mode.jh" <<'EOF'
+channel data
+
 workflow s1 {
   data <- echo "m1"
 }

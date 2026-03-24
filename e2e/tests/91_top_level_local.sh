@@ -58,7 +58,7 @@ function write_msg() {
 
 workflow default {
   ensure check_msg
-  write_msg
+  run write_msg
   echo "$msg" > wf_msg.txt
 }
 EOF

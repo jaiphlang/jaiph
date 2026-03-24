@@ -416,7 +416,9 @@ test("jaiph run allows rules to call top-level helper functions in readonly mode
         "}",
         "",
         "rule helper_is_ok {",
-        '  test "$(helper_value)" = "ok"',
+        "  local v",
+        "  read -r v < <(helper_value)",
+        '  test "$v" = "ok"',
         "}",
         "",
         "workflow default {",
@@ -796,6 +798,7 @@ test("jaiph run applies model from in-file metadata", () => {
       PATH: `${binDir}:${process.env.PATH ?? ""}`,
     };
     delete runEnv.JAIPH_AGENT_CURSOR_FLAGS;
+    delete runEnv.JAIPH_AGENT_MODEL;
     const runResult = spawnSync("node", [cliPath, "run", filePath], {
       encoding: "utf8",
       cwd: root,
@@ -1343,11 +1346,11 @@ test("build supports top-level functions with namespaced wrappers", () => {
       filePath,
       [
         "function changed_files() {",
-        "  echo from-function",
+        "  return \"from-function\"",
         "}",
         "",
         "workflow default {",
-        "  VALUE=\"$(changed_files)\"",
+        "  VALUE = run changed_files",
         "  printf '%s\\n' \"$VALUE\"",
         "}",
         "",
@@ -1358,7 +1361,7 @@ test("build supports top-level functions with namespaced wrappers", () => {
     assert.equal(results.length, 1);
     assert.match(results[0].bash, /entry::changed_files::impl\(\) \{/);
     assert.match(results[0].bash, /entry::changed_files\(\) \{/);
-    assert.match(results[0].bash, /jaiph::run_step_passthrough entry::changed_files function entry::changed_files::impl "\$@"/);
+    assert.match(results[0].bash, /jaiph::run_step entry::changed_files function entry::changed_files::impl "\$@"/);
     assert.match(results[0].bash, /changed_files\(\) \{/);
     assert.match(results[0].bash, /entry::changed_files "\$@"/);
   } finally {
@@ -1375,11 +1378,11 @@ test("jaiph run tree includes function calls from workflow shell steps", () => {
       filePath,
       [
         "function changed_files() {",
-        "  echo from-function",
+        "  return \"from-function\"",
         "}",
         "",
         "workflow default {",
-        "  VALUE=\"$(changed_files)\"",
+        "  VALUE = run changed_files",
         "  printf '%s\\n' \"$VALUE\"",
         "}",
         "",
@@ -1471,7 +1474,7 @@ test("jaiph run tree shows function step; params shown when runtime includes the
         "  printf '%s %s\\n' \"$1\" \"$2\"",
         "}",
         "workflow default {",
-        '  echo_args "first" "second"',
+        '  run echo_args "first" "second"',
         "}",
         "",
       ].join("\n"),

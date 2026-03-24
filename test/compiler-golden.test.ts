@@ -1299,7 +1299,7 @@ test("compiler golden: top-level local emits prefixed variable and shims", () =>
         "",
         "workflow default {",
         "  ensure check",
-        "  helper",
+        "  run helper",
         "  echo $greeting",
         "}",
         "",

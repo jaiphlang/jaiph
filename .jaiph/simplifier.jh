@@ -42,18 +42,18 @@ local simplifier_principles = "
 "
 
 function simplifier_changed_files() {
-  {
+  return "$({
     git diff --name-only --cached
     git diff --name-only
     git ls-files --others --exclude-standard
-  } | sort -u
+  } | sort -u)"
 }
 
 # Like docs_parity.jh only_expected_docs_changed_after_prompt, but a blocklist:
 # fail if the worktree touches the test or e2e trees.
 rule no_test_or_e2e_paths_changed {
   local changed
-  changed="$(simplifier_changed_files)"
+  changed = run simplifier_changed_files
 
   while IFS= read -r f; do
     [ -z "$f" ] && continue

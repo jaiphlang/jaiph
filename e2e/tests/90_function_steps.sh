@@ -18,7 +18,7 @@ function changed_files() {
 }
 
 workflow default {
-  changed_files
+  run changed_files
 }
 EOF
 rm -f "${TEST_DIR}/function_called.txt"
@@ -56,7 +56,7 @@ function write_args() {
 
 workflow called {
   ensure expect_args "$1" "$2"
-  write_args "$1" "$2"
+  run write_args "$1" "$2"
   printf "%s|%s\n" "$1" "$2" > workflow_args.txt
 }
 

@@ -13,7 +13,7 @@ function get_all_task_headers() {
     return 1
   fi
 
-  awk '/^## /{print}' "$queue_file"
+  return "$(awk '/^## /{print}' "$queue_file")"
 }
 
 function get_task_by_header() {
@@ -47,10 +47,10 @@ function get_task_by_header() {
     return 1
   fi
 
-  echo "${task}"
+  return "$task"
 }
 
-function get_first_task() {
+workflow get_first_task {
   local queue_file="${JAIPH_WORKSPACE:-.}/.jaiph/QUEUE.md"
   if ! test -f "$queue_file"; then
     echo "missing $queue_file" >&2
@@ -58,14 +58,15 @@ function get_first_task() {
   fi
 
   local first_header
-  first_header="$(get_all_task_headers | head -1)"
+  first_header=$(awk '/^## /{print; exit}' "$queue_file")
 
   if ! test -n "${first_header}"; then
     echo "no tasks found in $queue_file" >&2
     return 1
   fi
 
-  get_task_by_header "$first_header"
+  task = run get_task_by_header "$first_header"
+  return "$task"
 }
 
 # Checks whether a given task block contains the dev-ready marker.

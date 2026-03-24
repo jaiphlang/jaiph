@@ -228,7 +228,7 @@ workflow default {
   local role_name="${1:-}"
 
   ensure git.is_clean
-  task="$(queue.get_first_task)"
+  task = run queue.get_first_task
   task_header="${task%%$'\n'*}"
 
   ensure queue.task_is_dev_ready "$task"

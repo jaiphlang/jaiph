@@ -288,8 +288,6 @@ export function emitWorkflow(
     out.push("");
   }
 
-  const localFunctionNames = new Set(ast.functions.map((f) => f.name));
-
   for (const fn of ast.functions) {
     const functionSymbol = `${workflowSymbol}::${fn.name}`;
     for (const comment of fn.comments) {
@@ -317,10 +315,10 @@ export function emitWorkflow(
     out.push(`${functionSymbol}() {`);
     if (scopedMetadataAssignments.length > 0) {
       out.push(
-        `  ${workflowSymbol}::with_metadata_scope jaiph::run_step_passthrough ${functionSymbol} function ${functionSymbol}::impl "$@"`,
+        `  ${workflowSymbol}::with_metadata_scope jaiph::run_step ${functionSymbol} function ${functionSymbol}::impl "$@"`,
       );
     } else {
-      out.push(`  jaiph::run_step_passthrough ${functionSymbol} function ${functionSymbol}::impl "$@"`);
+      out.push(`  jaiph::run_step ${functionSymbol} function ${functionSymbol}::impl "$@"`);
     }
     out.push("}");
     out.push("");
@@ -339,7 +337,6 @@ export function emitWorkflow(
       filePath: ast.filePath,
       workflowName: workflow.name,
       inRecoverBlock: false,
-      localFunctionNames,
     };
 
     // Determine which scope function this workflow uses.

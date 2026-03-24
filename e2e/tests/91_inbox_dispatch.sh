@@ -190,6 +190,8 @@ e2e::section "Receiver positional args: \$1=message, \$2=channel, \$3=sender"
 
 # Given
 e2e::file "receiver_args.jh" <<'EOF'
+channel events
+
 workflow producer {
   events <- echo "payload-data"
 }
@@ -222,6 +224,8 @@ e2e::file "parallel_multi.jh" <<'EOF'
 config {
   run.inbox_parallel = true
 }
+
+channel results
 
 workflow producer {
   results <- echo "parallel-payload"
@@ -257,6 +261,8 @@ e2e::file "parallel_seq.jh" <<'EOF'
 config {
   run.inbox_parallel = true
 }
+
+channel data
 
 workflow sender_a {
   data <- echo "from-a"
@@ -304,6 +310,8 @@ config {
   run.inbox_parallel = true
 }
 
+channel ch
+
 workflow producer {
   ch <- echo "msg"
 }
@@ -339,6 +347,8 @@ e2e::file "parallel_summary.jh" <<'EOF'
 config {
   run.inbox_parallel = true
 }
+
+channel events
 
 workflow sender {
   events <- echo "e1"
@@ -380,6 +390,8 @@ e2e::section "Parallel dispatch via JAIPH_INBOX_PARALLEL env var"
 
 # Given — same workflow as basic multi-target, but parallel enabled via env
 e2e::file "env_parallel.jh" <<'EOF'
+channel results
+
 workflow producer {
   results <- echo "env-parallel"
 }

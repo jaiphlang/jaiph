@@ -1,5 +1,10 @@
 import { jaiphError } from "../errors";
 import type { jaiphModule, RuleRefDef, WorkflowRefDef, WorkflowStepDef } from "../types";
+import type { SubstitutionValidateEnv } from "./validate-substitution";
+import {
+  validateManagedShellFragment,
+  validateNoJaiphCommandSubstitution,
+} from "./validate-substitution";
 
 export interface ValidateContext {
   resolveImportPath: (fromFile: string, importPath: string) => string;
@@ -222,6 +227,166 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
     }
   };
 
+  const validateRunTargetRef = (ref: WorkflowRefDef): void => {
+    const parts = ref.value.split(".");
+    if (parts.length === 1) {
+      const name = parts[0];
+      if (localWorkflows.has(name) || localFunctions.has(name)) {
+        return;
+      }
+      if (localRules.has(name)) {
+        throw jaiphError(
+          ast.filePath,
+          ref.loc.line,
+          ref.loc.col,
+          "E_VALIDATE",
+          `rule "${name}" must be called with ensure, not run`,
+        );
+      }
+      throw jaiphError(
+        ast.filePath,
+        ref.loc.line,
+        ref.loc.col,
+        "E_VALIDATE",
+        `unknown local workflow or function reference "${ref.value}"`,
+      );
+    }
+
+    if (parts.length !== 2) {
+      throw jaiphError(
+        ast.filePath,
+        ref.loc.line,
+        ref.loc.col,
+        "E_VALIDATE",
+        `invalid run target reference "${ref.value}"`,
+      );
+    }
+
+    const [alias, importedName] = parts;
+    const importedFile = importsByAlias.get(alias);
+    if (!importedFile) {
+      throw jaiphError(
+        ast.filePath,
+        ref.loc.line,
+        ref.loc.col,
+        "E_VALIDATE",
+        `unknown import alias "${alias}" for run target "${ref.value}"`,
+      );
+    }
+    const importedAst = importedAstCache.get(importedFile)!;
+    const importedWorkflows = new Set(importedAst.workflows.map((w) => w.name));
+    const importedFunctions = new Set(importedAst.functions.map((f) => f.name));
+    if (importedWorkflows.has(importedName) || importedFunctions.has(importedName)) {
+      return;
+    }
+    const kind = lookupKind(importedAst, importedName);
+    if (kind === "rule") {
+      throw jaiphError(
+        ast.filePath,
+        ref.loc.line,
+        ref.loc.col,
+        "E_VALIDATE",
+        `rule "${ref.value}" must be called with ensure, not run`,
+      );
+    }
+    throw jaiphError(
+      ast.filePath,
+      ref.loc.line,
+      ref.loc.col,
+      "E_VALIDATE",
+      `imported workflow or function "${ref.value}" does not exist`,
+    );
+  };
+
+  const lookupImportedKind = (alias: string, name: string): "rule" | "workflow" | "function" | undefined => {
+    const importedFile = importsByAlias.get(alias);
+    if (!importedFile) return undefined;
+    const importedAst = importedAstCache.get(importedFile)!;
+    return lookupKind(importedAst, name);
+  };
+
+  const makeSubEnv = (loc: { line: number; col: number }): SubstitutionValidateEnv => ({
+    filePath: ast.filePath,
+    loc,
+    localRules,
+    localWorkflows,
+    localFunctions,
+    importsByAlias,
+    lookupImported: lookupImportedKind,
+  });
+
+  for (const fn of ast.functions) {
+    const env = makeSubEnv(fn.loc);
+    for (const cmd of fn.commands) {
+      const t = cmd.trim();
+      if (!t || t.startsWith("#")) continue;
+      if (/^(run|ensure)\s/.test(t)) {
+        throw jaiphError(
+          ast.filePath,
+          fn.loc.line,
+          fn.loc.col,
+          "E_VALIDATE",
+          "function body cannot use run or ensure (move orchestration to a workflow)",
+        );
+      }
+      if (/^\s*config\s*\{/.test(t)) {
+        throw jaiphError(
+          ast.filePath,
+          fn.loc.line,
+          fn.loc.col,
+          "E_VALIDATE",
+          "function body cannot contain config blocks",
+        );
+      }
+      if (/^\s*(export\s+)?workflow\s/.test(t)) {
+        throw jaiphError(
+          ast.filePath,
+          fn.loc.line,
+          fn.loc.col,
+          "E_VALIDATE",
+          "function body cannot declare workflows",
+        );
+      }
+      if (/^\s*(export\s+)?rule\s/.test(t)) {
+        throw jaiphError(
+          ast.filePath,
+          fn.loc.line,
+          fn.loc.col,
+          "E_VALIDATE",
+          "function body cannot declare rules",
+        );
+      }
+      if (/^\s*function\s/.test(t)) {
+        throw jaiphError(
+          ast.filePath,
+          fn.loc.line,
+          fn.loc.col,
+          "E_VALIDATE",
+          "function body cannot declare nested functions",
+        );
+      }
+      if (/^[A-Za-z_][A-Za-z0-9_.]*\s+->\s+/.test(t)) {
+        throw jaiphError(
+          ast.filePath,
+          fn.loc.line,
+          fn.loc.col,
+          "E_VALIDATE",
+          "function body cannot declare channel routes (->)",
+        );
+      }
+      validateNoJaiphCommandSubstitution(cmd, env);
+    }
+  }
+
+  for (const rule of ast.rules) {
+    const env = makeSubEnv(rule.loc);
+    for (const cmd of rule.commands) {
+      const t = cmd.trim();
+      if (!t || t.startsWith("#")) continue;
+      validateNoJaiphCommandSubstitution(cmd, env);
+    }
+  }
+
   const validateChannelRef = (
     channel: string,
     loc: { line: number; col: number },
@@ -274,26 +439,59 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
 
   for (const workflow of ast.workflows) {
     const validateStep = (s: WorkflowStepDef): void => {
+      if (s.type === "shell") {
+        const env = makeSubEnv(s.loc);
+        validateNoJaiphCommandSubstitution(s.command, env);
+        for (const rawLine of s.command.split("\n")) {
+          const line = rawLine.trim();
+          if (!line || line.startsWith("#")) continue;
+          if (line.includes("$(")) continue;
+          validateManagedShellFragment(line, env);
+        }
+        return;
+      }
+      if (s.type === "send") {
+        validateChannelRef(s.channel, s.loc);
+        if (s.command !== "") {
+          const env = makeSubEnv(s.loc);
+          validateNoJaiphCommandSubstitution(s.command, env);
+          validateManagedShellFragment(s.command.trim(), env);
+        }
+        return;
+      }
       if (s.type === "ensure") {
         validateRuleRef(s.ref);
         if (s.recover) {
           const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
           for (const r of steps) validateStep(r);
         }
-      } else if (s.type === "run") {
-        validateWorkflowRef(s.workflow);
-      } else if (s.type === "if") {
+        return;
+      }
+      if (s.type === "run") {
+        validateRunTargetRef(s.workflow);
+        return;
+      }
+      if (s.type === "if") {
         if (s.condition.kind === "ensure") {
           validateRuleRef(s.condition.ref);
         } else if (s.condition.kind === "run") {
-          validateWorkflowRef(s.condition.ref);
+          validateRunTargetRef(s.condition.ref);
+        } else {
+          const env = makeSubEnv(workflow.loc);
+          validateNoJaiphCommandSubstitution(s.condition.command, env);
+          validateManagedShellFragment(s.condition.command.trim(), env);
         }
         for (const ts of s.thenSteps) validateStep(ts);
         if (s.elseSteps) {
           for (const es of s.elseSteps) validateStep(es);
         }
+        return;
       }
-      // send steps have no refs to validate (channel is a string identifier)
+      if (s.type === "prompt" || s.type === "log" || s.type === "logerr" || s.type === "return") {
+        return;
+      }
+      const _never: never = s;
+      return _never;
     };
 
     // Validate route declarations.
@@ -307,23 +505,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
     }
 
     for (const step of workflow.steps) {
-      if (step.type === "ensure") {
-        validateRuleRef(step.ref);
-        if (step.recover) {
-          const steps = "single" in step.recover ? [step.recover.single] : step.recover.block;
-          for (const r of steps) validateStep(r);
-        }
-      } else if (step.type === "run") {
-        validateWorkflowRef(step.workflow);
-      } else if (step.type === "if") {
-        if (step.condition.kind === "ensure") {
-          validateRuleRef(step.condition.ref);
-        }
-        for (const ts of step.thenSteps) validateStep(ts);
-        if (step.elseSteps) {
-          for (const es of step.elseSteps) validateStep(es);
-        }
-      }
+      validateStep(step);
     }
   }
 }

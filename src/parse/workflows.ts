@@ -500,7 +500,7 @@ export function parseWorkflowBlock(
           /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
         );
         if (!runMatch || !isRef(runMatch[1])) {
-          fail(filePath, "run must target a workflow reference", innerNo);
+          fail(filePath, "run must target a workflow or function reference", innerNo);
         }
         workflow.steps.push({
           type: "run",
@@ -546,7 +546,7 @@ export function parseWorkflowBlock(
         /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
       );
       if (!runMatch || !isRef(runMatch[1])) {
-        fail(filePath, "run must target a workflow reference", innerNo);
+        fail(filePath, "run must target a workflow or function reference", innerNo);
       }
       workflow.steps.push({
         type: "run",
