@@ -13,12 +13,45 @@ jaiph::event_fd() {
   printf "2"
 }
 
+# Escape a string for use inside JSON double-quoted string values (RFC 8259).
+# Must escape U+0000–U+001F; also backslash and double-quote.
 jaiph::json_escape() {
   local raw="$1"
   raw="${raw//\\/\\\\}"
   raw="${raw//\"/\\\"}"
+  raw="${raw//$'\b'/\\b}"
+  raw="${raw//$'\f'/\\f}"
   raw="${raw//$'\n'/\\n}"
   raw="${raw//$'\r'/\\r}"
+  raw="${raw//$'\t'/\\t}"
+  # Octal $'…' (not \xHH): Bash 3.2 / macOS does not support hex bytes in ANSI-C quotes.
+  # U+0000 cannot appear in bash strings (NUL truncates); skip explicit NUL replacement.
+  raw="${raw//$'\001'/\\u0001}"
+  raw="${raw//$'\002'/\\u0002}"
+  raw="${raw//$'\003'/\\u0003}"
+  raw="${raw//$'\004'/\\u0004}"
+  raw="${raw//$'\005'/\\u0005}"
+  raw="${raw//$'\006'/\\u0006}"
+  raw="${raw//$'\007'/\\u0007}"
+  raw="${raw//$'\013'/\\u000b}"
+  raw="${raw//$'\016'/\\u000e}"
+  raw="${raw//$'\017'/\\u000f}"
+  raw="${raw//$'\020'/\\u0010}"
+  raw="${raw//$'\021'/\\u0011}"
+  raw="${raw//$'\022'/\\u0012}"
+  raw="${raw//$'\023'/\\u0013}"
+  raw="${raw//$'\024'/\\u0014}"
+  raw="${raw//$'\025'/\\u0015}"
+  raw="${raw//$'\026'/\\u0016}"
+  raw="${raw//$'\027'/\\u0017}"
+  raw="${raw//$'\030'/\\u0018}"
+  raw="${raw//$'\031'/\\u0019}"
+  raw="${raw//$'\032'/\\u001a}"
+  raw="${raw//$'\033'/\\u001b}"
+  raw="${raw//$'\034'/\\u001c}"
+  raw="${raw//$'\035'/\\u001d}"
+  raw="${raw//$'\036'/\\u001e}"
+  raw="${raw//$'\037'/\\u001f}"
   printf "%s" "$raw"
 }
 

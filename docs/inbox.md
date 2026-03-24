@@ -295,8 +295,9 @@ Routed receivers get three positional arguments:
 - Dispatched step output is not displayed in the tree. Use `log` within
   the dispatched workflow to show output in the tree. The runtime embeds
   stdout content in the `STEP_END` event (`out_content` field) for error
-  reporting; `.out` files under `.jaiph/runs/` contain the full output
-  for debugging.
+  reporting, with the same RFC 8259 JSON string escaping as other runs so
+  embedded logs (tabs, ANSI, control bytes) cannot break event parsing.
+  `.out` files under `.jaiph/runs/` contain the full output for debugging.
 - `jaiph tree` (static view) shows route declarations as leaf nodes.
 
 ### Example output
