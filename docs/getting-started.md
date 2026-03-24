@@ -7,7 +7,11 @@ redirect_from:
 
 # Getting Started
 
-This page walks you through installing Jaiph, running your first workflow, and understanding the core language.
+This page walks you through installing Jaiph, running your first workflow, and mapping the core language to deeper reference pages.
+
+You will: install the CLI and stdlib, run a workflow (from the shell or as an executable `.jh` file), optionally scaffold `.jaiph/` in a repository, then use the language overview below as an index into [Grammar](grammar.md), [CLI Reference](cli.md), and the other guides.
+
+If you are hacking on the **compiler or CLI** in this repository, read [Contributing](contributing.md) for build commands, tests, and review expectations.
 
 ## What is Jaiph?
 
@@ -20,13 +24,14 @@ It combines declarative workflow structure with bash, then compiles to pure shel
 - **Workflows** — Ordered steps (checks, agent prompts, shell, `run` calls to other workflows and functions) that can change system state.
 - **Rules** — Reusable checks or actions that return a shell exit code; used with `ensure` and in conditionals.
 - **Agent prompts** — `prompt "..."` sends text to a configured agent (e.g. Cursor or Claude CLI); workflows orchestrate when the agent runs.
-- **Composability** — Import other `.jh` modules and call their rules, workflows, and functions by alias (e.g. `ensure security.scan_passes`, `run bootstrap.nodejs`). Use **`ensure` only for rules** and **`run` for workflows and functions** so every Jaiph call is keyword-led; a symbol name alone cannot start a shell step, including on lines that also contain `$(...)`. Capture return data with `x = ensure …` / `x = run …` (value = explicit `return` in the callee, logs in `.jaiph/runs`). See [Grammar — Step Output Contract](grammar.md#step-output-contract) and [Managed calls vs command substitution](grammar.md#managed-calls-vs-command-substitution).
+- **Composability** — Import other `.jh` / `.jph` modules and call their rules, workflows, and functions by alias (e.g. `ensure security.scan_passes`, `run bootstrap.nodejs`). Use **`ensure` only for rules** and **`run` for workflows and functions** so every Jaiph call is keyword-led; a bare symbol name cannot start a workflow shell step, including when the line also contains `$(...)`.
+- **Step capture** — Assign results with `x = ensure …` / `x = run …` / `x = prompt …` (for `ensure` / `run`, the captured value is the callee’s explicit `return`; ordinary command stdout goes to step artifacts under `.jaiph/runs`). See [Step output contract](grammar.md#step-output-contract) and [Managed calls vs command substitution](grammar.md#managed-calls-vs-command-substitution).
 - **Shell-native** — Transpiled output is bash; you can mix Jaiph primitives with normal shell commands and variables.
 
 > [!WARNING]
 > Jaiph is still in an early stage. Expect breaking changes.
 
-- Docs (canonical): <https://jaiph.org/>
+- Docs (canonical): <https://jaiph.org/> — tutorial: <https://jaiph.org/getting-started>
 - Agent skill: <https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md>
 - Samples: <https://github.com/jaiphlang/jaiph/tree/main/samples>
 - Contribute: <https://github.com/jaiphlang/jaiph/issues>
@@ -77,7 +82,9 @@ workflow update_docs {
 }
 ```
 
-Transpiled output is standard bash and sources the installed global Jaiph runtime stdlib (`$JAIPH_STDLIB`, default `~/.local/bin/jaiph_stdlib.sh`), so workflows remain shell-native. A runnable copy of this example lives in `test/fixtures/` (with stub modules `bootstrap_project.jh` and `tools/security.jh`).
+Transpiled output is standard bash. The generated script sources the runtime stdlib by reading **`JAIPH_STDLIB`** if set, otherwise defaulting to **`~/.local/bin/jaiph_stdlib.sh`** (the path used by the install script). When you run a workflow via **`jaiph run`**, **`jaiph ./file.jh`**, or a `#!/usr/bin/env jaiph` shebang, the CLI sets **`JAIPH_STDLIB`** to the `jaiph_stdlib.sh` bundled next to that `jaiph` binary so you always match the compiler version. Advanced overrides are documented under [Environment variables](cli.md#environment-variables).
+
+A runnable copy of this example lives in the Jaiph repository under `test/fixtures/` (with stub modules `bootstrap_project.jh` and `tools/security.jh`).
 
 ## Installation
 
@@ -109,15 +116,17 @@ Installation places both the `jaiph` CLI and the global runtime stdlib (`jaiph_s
 
 Arguments are passed exactly like bash scripts (`$1`, `$2`, `"$@"`).
 
-Entrypoint resolution: executable `.jh` files with `#!/usr/bin/env jaiph` run the `workflow default` defined in that file. You can also use `jaiph run path/to/file.jh`; arguments are passed the same way. The file must define a workflow named `default`. The `.jph` extension is still supported but deprecated for new files.
+Entrypoint resolution: the entry file must define a workflow named **`default`**. Executable `.jh` files with `#!/usr/bin/env jaiph` run that workflow when invoked as `./file.jh` (the `jaiph` binary must be on your **`PATH`**). The same applies to **`jaiph run path/to/file.jh`** and the shorthand **`jaiph path/to/file.jh`** when the path exists. The `.jph` extension is still supported but deprecated for new files; **`jaiph run`** prints a deprecation notice on a TTY when you pass a `.jph` path.
 
 Other useful CLI commands:
 
 ```bash
-jaiph build [--target <dir>] [path]   # compile .jh files to bash without running
-jaiph test [<dir>|<file.test.jh>]     # run test files (see Testing docs)
+jaiph build [--target <dir>] [path]   # compile .jh/.jph files to bash without running
+jaiph test [path]                     # run tests (see below)
 jaiph report --workspace .            # browse .jaiph/runs in a local dashboard
 ```
+
+**`jaiph test`:** With no path, Jaiph discovers every `*.test.jh` / `*.test.jph` under the workspace root: walk **up** from the current working directory until a directory containing `.jaiph` or `.git` is found; if neither exists on that path, the root is the resolved cwd. Pass a directory to run all tests under it (workspace root is detected the same way, starting from that path). Pass a single `*.test.jh` / `*.test.jph` file to run one suite. See [Testing](testing.md).
 
 For all CLI commands, flags, and environment variables, see [CLI Reference](cli.md). For the run history UI and HTTP API, see [Reporting server](reporting.md).
 
@@ -127,7 +136,7 @@ For all CLI commands, flags, and environment variables, see [CLI Reference](cli.
 jaiph init
 ```
 
-This creates `.jaiph/bootstrap.jh` and `.jaiph/jaiph-skill.md` (synced from your installed Jaiph copy).
+This creates `.jaiph/bootstrap.jh` (executable) and writes `.jaiph/jaiph-skill.md` when the installer ships a skill file next to the `jaiph` binary; if that file is missing, sync is skipped and a note is printed.
 
 Then run:
 
@@ -141,15 +150,15 @@ Tip: add `.jaiph/` to your `.gitignore`.
 
 ## Language overview
 
-Jaiph files (`.jh`) contain **rules**, **workflows**, **functions**, and optional **config** blocks. All primitives interoperate with standard bash. For the full grammar, validation rules, and transpilation details, see [Grammar](grammar.md).
+Jaiph source files use **`.jh`** (recommended); **`.jph`** is still accepted. A file contains **rules**, **workflows**, **functions**, and optional **config** blocks. All primitives interoperate with standard bash. For the full grammar, validation rules, and transpilation details, see [Grammar](grammar.md).
 
 - `config { ... }` — Optional block setting runtime options (agent backend, model, Docker sandbox, etc.). Allowed at the top level (module-wide) and inside individual workflows for per-workflow overrides (`agent.*` and `run.*` keys only). See [Configuration](configuration.md).
-- `import "file.jh" as alias` — Import rules, workflows, and functions from another module. Verified at compile time.
+- `import "path" as alias` — Import rules, workflows, and functions from another module. The path may include a `.jh` / `.jph` suffix or omit it; resolution prefers `.jh` when both exist. Verified at compile time.
 - `local name = value` — Module-scoped variable, accessible as `$name` in all blocks within the module.
-- `rule name { ... }` — Reusable check/action returning a shell exit code. Runs in an isolated child shell (read-only mount namespace on Linux; child-shell isolation elsewhere). Can call other rules via `ensure`. Optional `export` for cross-module access.
+- `rule name { ... }` — Reusable check/action returning a shell exit code. Rules run in an isolated child shell; on Linux, a read-only mount namespace is used when `unshare` and passwordless `sudo` are available, otherwise the same child-shell fallback as on other platforms. Can call other rules via `ensure`. Optional `export` for cross-module access.
 - `workflow name { ... }` — Orchestration entrypoint of ordered steps. Can change system state. Optional `export` for cross-module access.
 - `function name { ... }` — Reusable writable shell function (shell-like body; no `run`/`ensure`/routes inside). From a **workflow**, call it with **`run name`** so logs and return values use the managed step contract. The `()` after the name is optional (`function name() { ... }` also works).
-- `ensure ref [args...]` — Execute a rule; optional `recover` for bounded retry loops (max retries default to 10).
+- `ensure ref [args...]` — Execute a rule; optional `recover` for bounded retry loops (default max retries **10**, overridable with **`JAIPH_ENSURE_MAX_RETRIES`**). See [Grammar](grammar.md).
 - `run ref [args...]` — Execute another workflow **or** a top-level function. Not allowed inside rules.
 - `prompt "..."` — Send text to the configured agent. Optional `returns '{ field: type }'` for validated JSON responses. See [Grammar](grammar.md).
 - `name = <step>` — Capture a value from a step: for `ensure` / `run`, only the callee’s explicit `return` (stdout from commands inside the callee goes to artifacts, not into `name`); for `prompt`, the final answer; for a plain shell command, full stdout (bash semantics). See [Grammar](grammar.md#step-output-contract) and [managed calls](grammar.md#managed-calls-vs-command-substitution).
