@@ -332,8 +332,10 @@ Jaiph: Running async.jh
                     When you call a workflow, it executes the <code>workflow default</code> entrypoint.</p>
                 <p>By convention, keep Jaiph workflow files in <code>&lt;project_root&gt;/.jaiph/</code> so
                     workspace-root detection and agent setup stay predictable.
-                    Jaiph stores run artifacts in <code>.jaiph/runs/</code>; keep those out of git by adding
-                    <code>.jaiph/runs/</code> to your <code>.gitignore</code>.
+                    Jaiph stores run artifacts in <code>.jaiph/runs/</code> (step <code>.out</code>/<code>.err</code> logs
+                    plus <code>run_summary.jsonl</code>, an append-only JSONL event stream for reporting). Keep those out of
+                    git by adding <code>.jaiph/runs/</code> to your <code>.gitignore</code>. See the
+                    <a href="cli#run-summary-jsonl">CLI reference</a> for the event schema.
                 </p>
 
                 <h3>Language</h3>

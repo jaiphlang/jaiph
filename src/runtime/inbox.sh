@@ -49,6 +49,7 @@ jaiph::send() {
   local msg_file="${JAIPH_INBOX_DIR}/${seq_padded}-${channel}.txt"
   printf '%s' "$content" > "$msg_file"
   printf '%s\n' "${channel}:${seq_padded}:${sender}" >> "$JAIPH_INBOX_QUEUE_FILE"
+  jaiph::emit_inbox_enqueue_event "$channel" "$seq_padded" "$sender" "$content"
   if [[ "$_send_locked" -eq 1 ]]; then
     jaiph::_unlock "${JAIPH_INBOX_DIR}/.seq.lock"
   fi
@@ -99,6 +100,103 @@ jaiph::_lookup_route() {
   IFS="$IFS_save"
 }
 
+# JSON fragment: "payload_preview":"…","payload_ref":null|path (for INBOX_ENQUEUE).
+jaiph::_inbox_enqueue_payload_json() {
+  local content="$1"
+  local path_rel="$2"
+  local max=4096
+  if [[ "${#content}" -le "$max" ]]; then
+    printf '"payload_preview":"%s","payload_ref":null' "$(jaiph::json_escape "$content")"
+    return 0
+  fi
+  local prev="${content:0:max}"
+  printf '"payload_preview":"%s...","payload_ref":"%s"' \
+    "$(jaiph::json_escape "$prev")" \
+    "$(jaiph::json_escape "$path_rel")"
+}
+
+jaiph::emit_inbox_enqueue_event() {
+  local channel="$1"
+  local seq_padded="$2"
+  local sender="$3"
+  local content="$4"
+  if [[ -z "${JAIPH_RUN_SUMMARY_FILE:-}" ]]; then
+    return 0
+  fi
+  local ts path_rel pf line
+  ts="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  path_rel="inbox/${seq_padded}-${channel}.txt"
+  pf="$(jaiph::_inbox_enqueue_payload_json "$content" "$path_rel")"
+  line="$(printf '{"type":"INBOX_ENQUEUE","inbox_seq":"%s","channel":"%s","sender":"%s",%s,"ts":"%s","run_id":"%s","event_version":1}' \
+    "$(jaiph::json_escape "$seq_padded")" \
+    "$(jaiph::json_escape "$channel")" \
+    "$(jaiph::json_escape "$sender")" \
+    "$pf" \
+    "$(jaiph::json_escape "$ts")" \
+    "$(jaiph::json_escape "${JAIPH_RUN_ID:-}")")"
+  jaiph::_run_summary_append_line "$line"
+}
+
+jaiph::emit_inbox_dispatch_start() {
+  local seq_padded="$1"
+  local channel="$2"
+  local target="$3"
+  local sender="$4"
+  if [[ -z "${JAIPH_RUN_SUMMARY_FILE:-}" ]]; then
+    return 0
+  fi
+  local ts line
+  ts="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  line="$(printf '{"type":"INBOX_DISPATCH_START","inbox_seq":"%s","channel":"%s","target":"%s","sender":"%s","ts":"%s","run_id":"%s","event_version":1}' \
+    "$(jaiph::json_escape "$seq_padded")" \
+    "$(jaiph::json_escape "$channel")" \
+    "$(jaiph::json_escape "$target")" \
+    "$(jaiph::json_escape "$sender")" \
+    "$(jaiph::json_escape "$ts")" \
+    "$(jaiph::json_escape "${JAIPH_RUN_ID:-}")")"
+  jaiph::_run_summary_append_line "$line"
+}
+
+jaiph::emit_inbox_dispatch_complete() {
+  local seq_padded="$1"
+  local channel="$2"
+  local target="$3"
+  local sender="$4"
+  local status="$5"
+  local elapsed_ms="$6"
+  if [[ -z "${JAIPH_RUN_SUMMARY_FILE:-}" ]]; then
+    return 0
+  fi
+  local ts line
+  ts="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  line="$(printf '{"type":"INBOX_DISPATCH_COMPLETE","inbox_seq":"%s","channel":"%s","target":"%s","sender":"%s","status":%s,"elapsed_ms":%s,"ts":"%s","run_id":"%s","event_version":1}' \
+    "$(jaiph::json_escape "$seq_padded")" \
+    "$(jaiph::json_escape "$channel")" \
+    "$(jaiph::json_escape "$target")" \
+    "$(jaiph::json_escape "$sender")" \
+    "${status:-0}" \
+    "${elapsed_ms:-0}" \
+    "$(jaiph::json_escape "$ts")" \
+    "$(jaiph::json_escape "${JAIPH_RUN_ID:-}")")"
+  jaiph::_run_summary_append_line "$line"
+}
+
+# Run one routed inbox target; emits dispatch start/complete around the call.
+jaiph::_inbox_run_dispatch_target() {
+  local seq_padded="$1"
+  local channel="$2"
+  local target="$3"
+  local sender="$4"
+  local content="$5"
+  jaiph::emit_inbox_dispatch_start "$seq_padded" "$channel" "$target" "$sender"
+  local _t0="$SECONDS"
+  JAIPH_DISPATCH_CHANNEL="$channel" JAIPH_DISPATCH_SENDER="$sender" "$target" "$content" "$channel" "$sender"
+  local _st=$?
+  local _elapsed=$(( (SECONDS - _t0) * 1000 ))
+  jaiph::emit_inbox_dispatch_complete "$seq_padded" "$channel" "$target" "$sender" "$_st" "$_elapsed"
+  return "$_st"
+}
+
 # Drain the dispatch queue: process messages until empty or depth limit reached.
 # Each dispatched workflow may call jaiph::send, growing the queue further.
 #
@@ -142,7 +240,7 @@ jaiph::drain_queue() {
         content="$(cat "$msg_file")"
         local target
         for target in $_route_result; do
-          JAIPH_DISPATCH_CHANNEL="$channel" JAIPH_DISPATCH_SENDER="$sender" "$target" "$content" "$channel" "$sender" &
+          jaiph::_inbox_run_dispatch_target "$seq_padded" "$channel" "$target" "$sender" "$content" &
           pids+=($!)
         done
       done <<< "$queue_lines"
@@ -184,7 +282,7 @@ jaiph::drain_queue() {
         content="$(cat "$msg_file")"
         local target
         for target in $_route_result; do
-          JAIPH_DISPATCH_CHANNEL="$channel" JAIPH_DISPATCH_SENDER="$sender" "$target" "$content" "$channel" "$sender"
+          jaiph::_inbox_run_dispatch_target "$seq_padded" "$channel" "$target" "$sender" "$content"
         done
       done <<< "$queue_lines"
     fi

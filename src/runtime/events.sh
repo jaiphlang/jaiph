@@ -55,6 +55,46 @@ jaiph::json_escape() {
   printf "%s" "$raw"
 }
 
+# Append one JSON object line to run_summary.jsonl (lock when parallel inbox may race).
+jaiph::_run_summary_append_line() {
+  local line="$1"
+  if [[ -z "${JAIPH_RUN_SUMMARY_FILE:-}" ]]; then
+    return 0
+  fi
+  mkdir -p "$(dirname "$JAIPH_RUN_SUMMARY_FILE")" 2>/dev/null || true
+  if [[ "${JAIPH_INBOX_PARALLEL:-}" == "true" ]]; then
+    jaiph::_lock "${JAIPH_RUN_SUMMARY_FILE}.lock"
+  fi
+  printf '%s\n' "$line" >>"$JAIPH_RUN_SUMMARY_FILE"
+  if [[ "${JAIPH_INBOX_PARALLEL:-}" == "true" ]]; then
+    jaiph::_unlock "${JAIPH_RUN_SUMMARY_FILE}.lock"
+  fi
+}
+
+# Add event_version to a step event JSON object (stderr payload stays unchanged).
+jaiph::_step_payload_with_event_version() {
+  local p="$1"
+  printf '%s' "${p%\}},\"event_version\":1}"
+}
+
+jaiph::emit_workflow_summary_event() {
+  local wf_type="$1"
+  local wf_name="$2"
+  if [[ -z "${JAIPH_RUN_SUMMARY_FILE:-}" ]]; then
+    return 0
+  fi
+  local ts src line
+  ts="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  src="${JAIPH_SOURCE_FILE:-}"
+  line="$(printf '{"type":"%s","workflow":"%s","source":"%s","ts":"%s","run_id":"%s","event_version":1}' \
+    "$(jaiph::json_escape "$wf_type")" \
+    "$(jaiph::json_escape "$wf_name")" \
+    "$(jaiph::json_escape "$src")" \
+    "$(jaiph::json_escape "$ts")" \
+    "$(jaiph::json_escape "${JAIPH_RUN_ID:-}")")"
+  jaiph::_run_summary_append_line "$line"
+}
+
 jaiph::step_identity() {
   local func_name="$1"
   local kind="${2:-}"
@@ -128,6 +168,16 @@ jaiph::log() {
     "$depth")"
   marker_fd="$(jaiph::event_fd)"
   printf "__JAIPH_EVENT__ %s\n" "$payload" >&"$marker_fd"
+  if [[ -n "${JAIPH_RUN_SUMMARY_FILE:-}" ]]; then
+    local ts line_log
+    ts="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+    line_log="$(printf '{"type":"LOG","message":"%s","depth":%s,"ts":"%s","run_id":"%s","event_version":1}' \
+      "$(jaiph::json_escape "$message")" \
+      "$depth" \
+      "$(jaiph::json_escape "$ts")" \
+      "$(jaiph::json_escape "${JAIPH_RUN_ID:-}")")"
+    jaiph::_run_summary_append_line "$line_log"
+  fi
   echo "$message"
   if [[ "$had_xtrace" -eq 1 ]]; then
     set -x
@@ -151,6 +201,16 @@ jaiph::logerr() {
     "$depth")"
   marker_fd="$(jaiph::event_fd)"
   printf "__JAIPH_EVENT__ %s\n" "$payload" >&"$marker_fd"
+  if [[ -n "${JAIPH_RUN_SUMMARY_FILE:-}" ]]; then
+    local ts line_err
+    ts="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+    line_err="$(printf '{"type":"LOGERR","message":"%s","depth":%s,"ts":"%s","run_id":"%s","event_version":1}' \
+      "$(jaiph::json_escape "$message")" \
+      "$depth" \
+      "$(jaiph::json_escape "$ts")" \
+      "$(jaiph::json_escape "${JAIPH_RUN_ID:-}")")"
+    jaiph::_run_summary_append_line "$line_err"
+  fi
   echo "$message" >&2
   if [[ "$had_xtrace" -eq 1 ]]; then
     set -x
@@ -262,16 +322,9 @@ jaiph::emit_step_event() {
   fi
   marker_fd="$(jaiph::event_fd)"
   printf "__JAIPH_EVENT__ %s\n" "$payload" >&"$marker_fd"
-  if [[ "$event_type" == "STEP_END" && -n "${JAIPH_RUN_SUMMARY_FILE:-}" ]]; then
-    # Some workflows (notably CI/e2e cleanup) may remove .jaiph/runs while a
-    # run is still active; recreate parent dir so summary append does not fail.
-    mkdir -p "$(dirname "$JAIPH_RUN_SUMMARY_FILE")" 2>/dev/null || true
-    if [[ "${JAIPH_INBOX_PARALLEL:-}" == "true" ]]; then
-      jaiph::_lock "${JAIPH_RUN_SUMMARY_FILE}.lock"
-    fi
-    printf "%s\n" "$payload" >>"$JAIPH_RUN_SUMMARY_FILE"
-    if [[ "${JAIPH_INBOX_PARALLEL:-}" == "true" ]]; then
-      jaiph::_unlock "${JAIPH_RUN_SUMMARY_FILE}.lock"
+  if [[ -n "${JAIPH_RUN_SUMMARY_FILE:-}" ]]; then
+    if [[ "$event_type" == "STEP_START" || "$event_type" == "STEP_END" ]]; then
+      jaiph::_run_summary_append_line "$(jaiph::_step_payload_with_event_version "$payload")"
     fi
   fi
   if [[ "$had_xtrace" -eq 1 ]]; then

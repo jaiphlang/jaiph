@@ -91,7 +91,9 @@ export async function runSingleTestFile(
     const runtimeEnv = { ...process.env, JAIPH_WORKSPACE: workspaceRoot } as Record<string, string | undefined>;
     runtimeEnv.JAIPH_TEST_MODE = "1";
     runtimeEnv.JAIPH_TEST_FILE = basename(testFileAbs);
-    if (runtimeEnv.JAIPH_STDLIB === undefined) {
+    if (process.env.JAIPH_USE_CUSTOM_STDLIB === "1" && process.env.JAIPH_STDLIB) {
+      runtimeEnv.JAIPH_STDLIB = process.env.JAIPH_STDLIB;
+    } else {
       runtimeEnv.JAIPH_STDLIB = resolve(join(__dirname, "..", "..", "jaiph_stdlib.sh"));
     }
     delete runtimeEnv.BASH_ENV;
