@@ -80,7 +80,7 @@ Transpiled output is standard bash and sources the installed global Jaiph runtim
 curl -fsSL https://jaiph.org/install | bash
 ```
 
-Verify: `jaiph --version`. Switch version: `jaiph use nightly` or `jaiph use 0.4.0`.
+Verify: `jaiph --version`. Switch version: `jaiph use nightly` or `jaiph use 0.5.0`.
 
 If that fails, check that `~/.local/bin` is in your `PATH` (default install directory).
 
