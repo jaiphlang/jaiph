@@ -28,8 +28,10 @@ export JAIPH_STDOUT_SAVED=1
 bootstrap_project::nodejs::impl() {
   set -eo pipefail
   set +u
+  jaiph::emit_workflow_summary_event WORKFLOW_START 'nodejs'
   echo "Sorry, I cannot setup nodejs yet"
   exit 1
+  jaiph::emit_workflow_summary_event WORKFLOW_END 'nodejs'
 }
 
 bootstrap_project::nodejs() {
@@ -54,7 +56,9 @@ export JAIPH_STDOUT_SAVED=1
 inbox::researcher::impl() {
   set -eo pipefail
   set +u
+  jaiph::emit_workflow_summary_event WORKFLOW_START 'researcher'
   jaiph::send 'findings' "$(echo '## findings')" 'researcher'
+  jaiph::emit_workflow_summary_event WORKFLOW_END 'researcher'
 }
 
 inbox::researcher() {
@@ -64,9 +68,11 @@ inbox::researcher() {
 inbox::analyst::impl() {
   set -eo pipefail
   set +u
+  jaiph::emit_workflow_summary_event WORKFLOW_START 'analyst'
   echo "$1" > findings_file.md
   summary=$(echo "Summary of findings")
   jaiph::send 'summary' "$(echo "$summary")" 'analyst'
+  jaiph::emit_workflow_summary_event WORKFLOW_END 'analyst'
 }
 
 inbox::analyst() {
@@ -76,7 +82,9 @@ inbox::analyst() {
 inbox::reviewer::impl() {
   set -eo pipefail
   set +u
+  jaiph::emit_workflow_summary_event WORKFLOW_START 'reviewer'
   jaiph::send 'final_summary' "$(echo "[reviewed] $1")" 'reviewer'
+  jaiph::emit_workflow_summary_event WORKFLOW_END 'reviewer'
 }
 
 inbox::reviewer() {
@@ -87,11 +95,13 @@ inbox::reviewer() {
 inbox::default::impl() {
   set -eo pipefail
   set +u
+  jaiph::emit_workflow_summary_event WORKFLOW_START 'default'
   jaiph::inbox_init
   jaiph::register_route 'findings' 'inbox::analyst'
   jaiph::register_route 'summary' 'inbox::reviewer'
   inbox::researcher
   jaiph::drain_queue
+  jaiph::emit_workflow_summary_event WORKFLOW_END 'default'
 }
 
 inbox::default() {
@@ -144,6 +154,7 @@ main::build_passes() {
 main::default::impl() {
   set -eo pipefail
   set +u
+  jaiph::emit_workflow_summary_event WORKFLOW_START 'default'
   if ! main::project_ready; then
     bootstrap_project::nodejs
   fi
@@ -159,6 +170,7 @@ __JAIPH_PROMPT_25__
   main::build_passes
   tools::security::scan_passes
   main::update_docs
+  jaiph::emit_workflow_summary_event WORKFLOW_END 'default'
 }
 
 main::default() {
@@ -169,10 +181,12 @@ main::default() {
 main::update_docs::impl() {
   set -eo pipefail
   set +u
+  jaiph::emit_workflow_summary_event WORKFLOW_START 'update_docs'
   export JAIPH_PROMPT_PREVIEW='Update docs'
   jaiph::prompt "$JAIPH_PROMPT_PREVIEW" <<__JAIPH_PROMPT_38__
 Update docs
 __JAIPH_PROMPT_38__
+  jaiph::emit_workflow_summary_event WORKFLOW_END 'update_docs'
 }
 
 main::update_docs() {

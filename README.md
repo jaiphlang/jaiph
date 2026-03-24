@@ -95,6 +95,8 @@ Arguments are passed exactly like bash scripts (`$1`, `$2`, `"$@"`). The file mu
 
 When stdout is not a terminal (for example in CI), long-running steps can print periodic gray **heartbeat** lines between the start and completion markers so logs show the run is still active. See [CLI Reference — Run progress and tree output](docs/cli.md#run-progress-and-tree-output).
 
+Each run directory includes **`run_summary.jsonl`**, an append-only JSONL timeline of workflow boundaries, step start/end, `log` / `logerr`, and inbox enqueue/dispatch events — useful for dashboards and offline analysis. See [CLI — Run summary](docs/cli.md#run-summary-jsonl).
+
 ### Initialize a workspace
 
 ```bash

@@ -354,7 +354,12 @@ test("jaiph run fails when runtime emits non-xtrace stderr", () => {
     const runResult = spawnSync("node", [cliPath, "run", filePath], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_STDLIB: stdlibPath, JAIPH_DOCKER_ENABLED: "false" },
+      env: {
+        ...process.env,
+        JAIPH_USE_CUSTOM_STDLIB: "1",
+        JAIPH_STDLIB: stdlibPath,
+        JAIPH_DOCKER_ENABLED: "false",
+      },
     });
 
     assert.equal(runResult.status, 1);
@@ -1167,6 +1172,9 @@ test("jaiph run uses JAIPH_STDLIB global runtime path", () => {
         "jaiph::prompt() {",
         "  :",
         "}",
+        "jaiph::emit_workflow_summary_event() {",
+        "  :",
+        "}",
         "",
       ].join("\n"),
     );
@@ -1187,7 +1195,7 @@ test("jaiph run uses JAIPH_STDLIB global runtime path", () => {
     const runResult = spawnSync("node", [cliPath, "run", filePath], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_STDLIB: stdlibPath },
+      env: { ...process.env, JAIPH_USE_CUSTOM_STDLIB: "1", JAIPH_STDLIB: stdlibPath },
     });
 
     assert.equal(runResult.status, 0, runResult.stderr);

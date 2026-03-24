@@ -235,7 +235,7 @@ shared-state files:
 |---|---|---|
 | `inbox/.seq.lock` | Inbox sequence counter + queue append | During `jaiph::send` |
 | `.seq.lock` (run dir) | Step sequence counter | During `jaiph::next_step_id` |
-| `run_summary.jsonl.lock` | Summary file append | During `STEP_END` event write |
+| `run_summary.jsonl.lock` | Any append to `run_summary.jsonl` | During each summary line write (all event types) |
 
 Locks use `mkdir` (atomic on POSIX). They are only acquired when
 `JAIPH_INBOX_PARALLEL=true`; sequential mode has zero lock overhead.
@@ -281,6 +281,11 @@ Routed receivers get three positional arguments:
   `workflow analyst (1="…", 2="findings", 3="scanner")`).
 - `JAIPH_DISPATCH_CHANNEL` is also used by the event system to tag JSONL
   events with `"dispatched":true`, `"channel":"…"`, and `"sender":"…"` metadata.
+- **Run summary:** In addition to those step events, the runtime appends
+  **`INBOX_ENQUEUE`**, **`INBOX_DISPATCH_START`**, and **`INBOX_DISPATCH_COMPLETE`**
+  lines to `run_summary.jsonl` (see [CLI — Run summary](cli.md#run-summary-jsonl)).
+  Large message bodies appear as a safe **`payload_preview`** plus **`payload_ref`**
+  pointing at the `inbox/NNN-<channel>.txt` file under the run directory.
 - Workflows remain directly callable: `jaiph run analyst "some content"`.
   When called directly, `$2` and `$3` are unset.
 

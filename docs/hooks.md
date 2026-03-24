@@ -73,7 +73,7 @@ Each command is invoked with the event payload as **JSON on stdin**. You can use
 | `run_path` | Always | Absolute path to the workflow file. |
 | `workspace` | Always | Workspace root directory. |
 | `run_dir` | workflow_end | Run logs directory (when available). |
-| `summary_file` | workflow_end | Path to `run_summary.jsonl` (when available). |
+| `summary_file` | workflow_end | Path to `run_summary.jsonl` (when available). The file is an append-only JSONL stream of workflow/step/log/inbox events; see [CLI — Run summary](cli.md#run-summary-jsonl). |
 | `out_file` | step_end | Step stdout log path (when the step produced output). |
 | `err_file` | step_end | Step stderr log path (when the step produced output). |
 

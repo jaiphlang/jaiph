@@ -1,4 +1,6 @@
 import { basename, join, resolve } from "node:path";
+
+const bundledStdlibPath = () => resolve(join(__dirname, "..", "..", "jaiph_stdlib.sh"));
 import type { JaiphConfig } from "../../config";
 
 const LOCKED_ENV_KEYS = [
@@ -64,8 +66,13 @@ export function resolveRuntimeEnv(
   if (env.JAIPH_INBOX_PARALLEL === undefined && effectiveConfig.run?.inboxParallel === true) {
     env.JAIPH_INBOX_PARALLEL = "true";
   }
-  if (env.JAIPH_STDLIB === undefined) {
-    env.JAIPH_STDLIB = join(__dirname, "..", "..", "jaiph_stdlib.sh");
+  // Always use the stdlib shipped next to this CLI unless explicitly opting into a custom path
+  // (tests, advanced installs). A shell-level JAIPH_STDLIB pointing at an older global install
+  // would otherwise break newly transpiled workflows that call new runtime entry points.
+  if (process.env.JAIPH_USE_CUSTOM_STDLIB === "1" && process.env.JAIPH_STDLIB) {
+    env.JAIPH_STDLIB = process.env.JAIPH_STDLIB;
+  } else {
+    env.JAIPH_STDLIB = bundledStdlibPath();
   }
   env.JAIPH_SOURCE_FILE = basename(inputAbs);
 

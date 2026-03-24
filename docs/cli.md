@@ -169,6 +169,30 @@ tail -f .jaiph/runs/2026-03-22/14-30-00-deploy.jh/000003-deploy__run_migrations.
 
 Both `.out` (stdout) and `.err` (stderr) files grow as the step produces output. Steps that produce no output on a given stream have no corresponding artifact file. Empty files are cleaned up automatically at step end.
 
+### Run summary (`run_summary.jsonl`) {#run-summary-jsonl}
+
+Each run directory also contains **`run_summary.jsonl`**: one JSON object per line, appended in execution order. It is the canonical **append-only** record of reporting-oriented runtime events (lifecycle, logs, inbox flow, and step boundaries). Tooling can **tail the file by byte offset** and process new lines idempotently; parallel inbox dispatch may reorder some events relative to wall-clock time, but each line is written atomically under the same lock used for concurrent writers (see [Inbox — Lock behavior](inbox.md#lock-behavior)).
+
+**Versioning.** Every persisted object includes **`event_version`** (currently **`1`**). New fields may be added in later versions; consumers should tolerate unknown keys. Existing tools that only read **`STEP_END`** lines keep working: those records retain the same meaning, with **`event_version`** added.
+
+**Common fields.** All summary lines include **`type`**, **`ts`** (UTC timestamp), **`run_id`**, and **`event_version`**. Step-related types also carry stable correlation fields **`id`**, **`parent_id`**, **`seq`**, and **`depth`** where applicable (matching the `__JAIPH_EVENT__` stream on stderr).
+
+**Event types** (persisted to the summary file; the live `__JAIPH_EVENT__` line on stderr is unchanged except as noted):
+
+| `type` | Role |
+|--------|------|
+| `WORKFLOW_START` | Workflow entry: `workflow` (name), `source` (basename of `.jh` file when set). |
+| `WORKFLOW_END` | Workflow exit boundary for the same workflow name. |
+| `STEP_START` | Step begins (kind, name, params, ids — same shape as today’s stderr events). |
+| `STEP_END` | Step completes; includes embedded `out_content` / `err_content` when present (same caps and truncation rules as stderr events). |
+| `LOG` | `log` keyword: `message`, `depth`. |
+| `LOGERR` | `logerr` keyword: `message`, `depth`. |
+| `INBOX_ENQUEUE` | Message recorded from `send`: `inbox_seq`, `channel`, `sender`, **`payload_preview`**, **`payload_ref`** (`null` if the full body fits in the preview, otherwise a run-relative path such as `inbox/NNN-channel.txt`). |
+| `INBOX_DISPATCH_START` | Dispatch of one queue entry to a route target: `inbox_seq`, `channel`, `target`, `sender`. |
+| `INBOX_DISPATCH_COMPLETE` | That dispatch finished: same ids plus `status`, `elapsed_ms`. |
+
+Together with step `.out` / `.err` files, a single `run_summary.jsonl` is enough to reconstruct the step tree (start/end pairs), log and logerr timelines, inbox enqueue → dispatch → completion flow, and workflow boundaries.
+
 ### Hooks
 
 You can run custom commands at workflow/step lifecycle events via **hooks**. Config lives in `~/.jaiph/hooks.json` (global) and `<project>/.jaiph/hooks.json` (project-local); project-local overrides global per event. See [Hooks](hooks.md) for schema, events, payload, and examples.

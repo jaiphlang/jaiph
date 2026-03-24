@@ -6,48 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Runtime: persist complete reporting event stream in `run_summary.jsonl` (reporting prerequisite, part 1/2) <!-- dev-ready -->
-
-**Problem.** `run_summary.jsonl` currently lacks key event types needed for a faithful reporting UI: `LOG`, `LOGERR`, inbox message flow, and non-terminal lifecycle events.
-
-**Goal.** Make `run_summary.jsonl` the canonical append-only runtime event stream by persisting all reporting-relevant events in order.
-
-**Scope.**
-
-- Persist `LOG` and `LOGERR` events with message + depth.
-- Persist inbox lifecycle events:
-  - message enqueued from `send`,
-  - message dispatched to target workflow/channel,
-  - dispatch completion with status + elapsed.
-- Persist lifecycle boundaries:
-  - `STEP_START` in addition to `STEP_END`,
-  - `WORKFLOW_START` and `WORKFLOW_END`.
-- Keep JSONL append-only format and preserve existing `STEP_END` compatibility.
-
-**Schema/format requirements.**
-
-- Add `event_version` (starting at `1`) for forward compatibility.
-- Every event must include: `type`, `ts`, `run_id`.
-- Step events must keep stable correlation fields: `id`, `parent_id`, `seq`, `depth` (where applicable).
-- Inbox payload handling must include:
-  - safe UI preview field,
-  - full payload reference/path when payload size is large.
-
-**Concurrency/ordering requirements.**
-
-- JSONL remains valid under parallel inbox execution.
-- Appends are lock-safe for all concurrent writers.
-- Consumers can tail by byte offset and process events idempotently.
-
-**Acceptance criteria.**
-
-- One `run_summary.jsonl` file is sufficient to reconstruct:
-  - full step lifecycle tree (start/end),
-  - `log`/`logerr` timeline,
-  - inbox send/dispatch/completion flow,
-  - workflow start/end boundaries.
-- Existing consumers reading current `STEP_END` records keep working unchanged.
-
 ## Runtime: lock event contract with docs + e2e for reportability (reporting prerequisite, part 2/2) <!-- dev-ready -->
 
 **Problem.** Without explicit contract tests/docs, event schema can drift and break reporting pollers/UI.

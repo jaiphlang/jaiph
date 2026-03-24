@@ -22,6 +22,11 @@ function isJaiphReturn(cmd: string): boolean {
   return arg.startsWith('"') || arg.startsWith("'") || arg.startsWith("$");
 }
 
+/** Embed in a bash single-quoted literal: '…' */
+function bashSingleQuotedSegment(s: string): string {
+  return s.replace(/'/g, `'\"'\"'`);
+}
+
 /** All env vars managed by metadata scope functions. */
 const SCOPED_VARS = [
   "JAIPH_AGENT_MODEL",
@@ -362,6 +367,9 @@ export function emitWorkflow(
     out.push("  set -eo pipefail");
     out.push("  set +u");
     emitEnvShims("  ");
+    out.push(
+      `  jaiph::emit_workflow_summary_event WORKFLOW_START '${bashSingleQuotedSegment(workflow.name)}'`,
+    );
     if (hasRoutes) {
       out.push("  jaiph::inbox_init");
       for (const route of workflow.routes!) {
@@ -381,6 +389,9 @@ export function emitWorkflow(
     if (hasRoutes) {
       out.push("  jaiph::drain_queue");
     }
+    out.push(
+      `  jaiph::emit_workflow_summary_event WORKFLOW_END '${bashSingleQuotedSegment(workflow.name)}'`,
+    );
     out.push("}");
     out.push("");
     out.push(`${wfSymbol}() {`);
