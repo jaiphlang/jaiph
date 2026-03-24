@@ -27,6 +27,7 @@ jobs:
         run: curl -fsSL -o /dev/null --retry 3 --retry-delay 1 https://jaiph.org/install
 
       - name: Verify git tag for package version exists (canonical repo)
+        if: github.ref == 'refs/heads/main'
         run: |
           VERSION="$(node -p "require('./package.json').version")"
           git ls-remote --exit-code https://github.com/jaiphlang/jaiph.git "refs/tags/v${VERSION}"
