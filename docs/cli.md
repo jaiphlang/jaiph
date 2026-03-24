@@ -15,8 +15,9 @@ The Jaiph CLI compiles and runs workflow files (`.jh` / `.jph`), runs tests, and
 - **Run tests** — `jaiph test` discovers and runs all `*.test.jh` / `*.test.jph` under the workspace; or pass a directory or a single test file.
 - **Compile only** — `jaiph build [--target <dir>] [path]` compiles `.jh`/`.jph` files into shell scripts without executing. Without `--target`, compiled scripts are written alongside the source files.
 - **Setup** — `jaiph init [workspace-path]` creates `.jaiph/` with a bootstrap workflow and synced skill guide; `jaiph use <version|nightly>` reinstalls the global Jaiph binary.
+- **Reporting** — `jaiph report` serves a read-only local dashboard over `.jaiph/runs` (see [Reporting server](reporting.md)).
 
-**Commands:** `build`, `run`, `test`, `init`, `use`. Global options: `jaiph --help`, `jaiph --version` (or `-h`, `-v`).
+**Commands:** `build`, `run`, `test`, `init`, `use`, `report`. Global options: `jaiph --help`, `jaiph --version` (or `-h`, `-v`).
 
 ---
 
@@ -218,6 +219,8 @@ Semantics and notes:
 
 Together with step `.out` / `.err` files, a single `run_summary.jsonl` is enough to reconstruct the step tree (start/end pairs), log and logerr timelines, inbox enqueue → dispatch → completion flow, and workflow boundaries.
 
+The **`jaiph report`** command exposes this data through a small local HTTP API and browser UI (run list, step tree, embedded previews, raw logs, aggregate view, active runs). See [Reporting server](reporting.md).
+
 Automated regression for this contract (including parallel inbox dispatch) lives in the repository E2E script `e2e/tests/88_run_summary_event_contract.sh` (uses `python3` to parse and assert on the JSONL file).
 
 ### Hooks
@@ -278,6 +281,31 @@ jaiph use nightly
 jaiph use 0.4.0
 ```
 
+## `jaiph report` {#jaiph-report}
+
+Serve a **read-only** reporting dashboard over run artifacts: `run_summary.jsonl` plus step `.out` / `.err` files under the runs root (default `<workspace>/.jaiph/runs`). No database; the server indexes and tails summary files the runtime already writes.
+
+```bash
+jaiph report [start|stop|status] [--host <addr>] [--port <n>] [--poll-ms <n>] [--runs-dir <path>] [--workspace <path>] [--pid-file <path>]
+```
+
+**Commands:**
+
+- **`start`** — Start server in foreground and block until `Ctrl+C` (default when omitted).
+- **`stop`** — Stop the server process referenced by the PID file.
+- **`status`** — Check if the PID-referenced server is running.
+
+**Options:**
+
+- **`--host`** — Bind address (default **`127.0.0.1`**).
+- **`--port`** — Listen port (default **`8787`**).
+- **`--poll-ms`** — Interval for the server’s summary tail loop in milliseconds (default **500**, minimum **50**).
+- **`--runs-dir`** — Runs root directory. When omitted, uses **`JAIPH_REPORT_RUNS_DIR`** if set, otherwise `<workspace>/.jaiph/runs` (same layout as [Run artifacts](#run-artifacts-and-live-output)).
+- **`--workspace`** — Project directory used to resolve the default runs path (default: current working directory).
+- **`--pid-file`** — Path to PID file used by `status`/`stop` (default `<workspace>/.jaiph/report.pid`).
+
+**Behavior (summary):** Discovers runs under `<YYYY-MM-DD>/<time>-<source>/run_summary.jsonl`, keeps a **cached directory scan** with a minimum interval between full rescans, and **tails** each summary with a byte offset and inode/size tracking so appended lines update **live** state without rereading whole files. Truncation or file replacement triggers a full resync for that run. HTTP API and UI details: [Reporting server](reporting.md).
+
 ## File extensions
 
 - **`.jh`** is the recommended extension for new Jaiph files. Use it for entrypoints, imports, and `jaiph build` / `jaiph run` / `jaiph test`.
@@ -308,6 +336,14 @@ Imports resolve for both extensions: `import "foo" as x` finds `foo.jh` or `foo.
 - `NO_COLOR` — if set, disables colored output (e.g. progress and pass/fail).
 - `JAIPH_NON_TTY_HEARTBEAT_FIRST_SEC` — non-TTY only: minimum elapsed seconds before the **first** heartbeat line for a step (default: `60`). Non-negative number; invalid values fall back to `60`.
 - `JAIPH_NON_TTY_HEARTBEAT_INTERVAL_MS` — non-TTY only: timer interval used to schedule heartbeat checks and minimum spacing between **subsequent** heartbeats (default: `30000`). Values below `250` ms fall back to the default.
+
+**`jaiph report`:**
+
+- `JAIPH_REPORT_HOST` — bind address (default `127.0.0.1`).
+- `JAIPH_REPORT_PORT` — port (default `8787`).
+- `JAIPH_REPORT_POLL_MS` — summary tail loop interval in ms (default `500`, minimum `50`).
+- `JAIPH_REPORT_RUNS_DIR` — runs root (optional; default `<cwd>/.jaiph/runs` unless `--runs-dir` / `--workspace` override). See [`jaiph report`](#jaiph-report).
+- `JAIPH_REPORT_PID_FILE` — pid file used by `jaiph report status/stop` (default `<workspace>/.jaiph/report.pid` unless `--pid-file` override).
 
 **Install and `jaiph use`:**
 

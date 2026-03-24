@@ -363,6 +363,10 @@ Jaiph: Running async.jh
                 </p>
 
                 <h3>Runtime</h3>
+                <p><strong>Reporting server.</strong> Run <code>jaiph report --workspace .</code> to open a local
+                    read-only dashboard on <code>.jaiph/runs</code>: run history, step tree, log previews, raw
+                    <code>.out</code>/<code>.err</code> streaming, and an aggregate view, with live updates while
+                    workflows append <code>run_summary.jsonl</code>. See <a href="reporting">Reporting server</a>.</p>
                 <p><strong>Docker sandboxing.</strong> Enable isolated execution with Docker for stronger containment of
                     agent and shell actions. Configure in <code>config { runtime.* }</code>. See <a
                         href="sandboxing">Sandboxing</a>.</p>
@@ -497,6 +501,8 @@ Jaiph: Running async.jh
                     <a href="sandboxing">Sandboxing</a>
                     ·
                     <a href="cli">CLI reference</a>
+                    ·
+                    <a href="reporting">Reporting server</a>
                     ·
                     <a href="hooks">Hooks</a>
                     ·

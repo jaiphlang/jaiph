@@ -6,6 +6,7 @@ import { runWorkflow } from "./commands/run";
 import { runTest } from "./commands/test";
 import { runInit } from "./commands/init";
 import { runUse } from "./commands/use";
+import { runReportCommand } from "./commands/report";
 
 export async function main(argv: string[]): Promise<number> {
   const [, , cmd, ...rest] = argv;
@@ -38,6 +39,9 @@ export async function main(argv: string[]): Promise<number> {
     }
     if (cmd === "use") {
       return runUse(rest);
+    }
+    if (cmd === "report") {
+      return runReportCommand(rest);
     }
     process.stderr.write(`Unknown command: ${cmd}\n`);
     printUsage();
