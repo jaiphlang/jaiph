@@ -73,6 +73,27 @@ test("build accepts run with local function and capture", () => {
   }
 });
 
+test("E_VALIDATE: workflow shell line cannot lead with Jaiph ref even when line has $(...)", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-wf-plus-sub-"));
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        "workflow w {",
+        "  echo x",
+        "}",
+        "workflow default {",
+        "  w $(true)",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(() => build(join(root, "m.jh"), join(root, "out")), /workflow "w"/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("E_VALIDATE: send RHS cannot invoke Jaiph workflow via shell", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-send-wf-"));
   try {

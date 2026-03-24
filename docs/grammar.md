@@ -189,6 +189,8 @@ Every step produces three distinct outputs:
 
 Jaiph separates **managed** invocations (step records under `.jaiph/runs`, deterministic artifacts, explicit `return` as the value channel) from **raw shell**, including bash command substitution. Managed calls avoid stdout/value ambiguity: logs go to artifacts; only `return` feeds assignment capture.
 
+**Why keyword-first (`ensure` / `run` only):** If the compiler had to guess whether a bare shell token is “external program” or “Jaiph symbol,” it would need extra heuristics and would still hit ambiguous cases. Requiring keywords makes the invocation kind explicit in the source, so validation and transpilation can stay small and predictable: the same guard logic applies to `$(...)` bodies and to the first command word of each workflow shell line (after stripping leading env assignments and simple pipeline/operator splits).
+
 **Managed forms (only these invoke Jaiph symbols from a workflow):**
 
 | Callee kind | Invoke | Capture value |
@@ -205,7 +207,7 @@ Jaiph separates **managed** invocations (step records under `.jaiph/runs`, deter
 
 **Correction path:** If the compiler reports a Jaiph symbol inside `$(...)` or a bare call where a managed step is required, rewrite to `ensure` / `run` on the same reference and, when you need a value back, add `return "..."` / `return "$var"` in the callee.
 
-**Shell and `$(...)`:** Use command substitution only for ordinary shell. The compiler rejects `$(...)` bodies that reference Jaiph rules, workflows, or functions, contain a channel send (`<-`), or start with `run` / `ensure` as command words. The same restrictions apply to **workflow shell lines** when there is no nested `$(...)` to scan: a line whose first command word is a Jaiph symbol must use the appropriate managed step (`ensure` / `run`), not a bare shell call (e.g. `out = run my_fn "$1"` is valid; `out = my_fn "$1"` is not).
+**Shell and `$(...)`:** Use command substitution only for ordinary shell. The compiler rejects `$(...)` bodies that reference Jaiph rules, workflows, or functions, contain a channel send (`<-`), or start with `run` / `ensure` as command words. The same restrictions apply to **every workflow shell line**: the first command word is always checked, including when the line also contains `$(...)` (e.g. `my_fn $(true)` is rejected the same as a bare `my_fn`). A Jaiph symbol must use the appropriate managed step (`ensure` / `run`), not a bare shell command name (e.g. `out = run my_fn "$1"` is valid; `out = my_fn "$1"` is not).
 
 **Function bodies** stay shell-only for orchestration primitives: they must not contain `run`, `ensure`, `config`, nested top-level declarations, or inbox route lines (`channel -> ...`). Put workflow-style steps in a `workflow` block.
 
@@ -294,7 +296,7 @@ Rules:
 6. **Calling conventions (compile-time enforcement):**
    - `ensure` must target a rule. Using `ensure` on a workflow yields `E_VALIDATE` ("workflow X must be called with run"). Using `ensure` on a function yields `E_VALIDATE` ("function X cannot be called with ensure").
    - `run` must target a workflow **or** function. Using `run` on a rule yields `E_VALIDATE` (e.g. "rule X must be called with ensure, not run").
-   - **Functions in workflows:** A workflow step may not call a function as a bare shell command (`fn` or `name = fn ...`); use `run fn ...`. **Substitution and shell lines:** `$(...)` must not invoke Jaiph rules, workflows, or functions, must not contain `<-`, and must not use `run`/`ensure` as leading shell commands. Non-substitution workflow shell lines are checked the same way (first command word). Function bodies are scanned for `$(...)` with the same Jaiph-symbol rules; they also cannot contain `run`, `ensure`, `config`, nested declarations, or `channel ->` routes.
+   - **Functions in workflows:** A workflow step may not call a function as a bare shell command (`fn` or `name = fn ...`); use `run fn ...`. **Substitution and shell lines:** `$(...)` must not invoke Jaiph rules, workflows, or functions, must not contain `<-`, and must not use `run`/`ensure` as leading shell commands. Every workflow shell line is checked the same way on its first command word, even when the line also contains `$(...)`. Function bodies are scanned for `$(...)` with the same Jaiph-symbol rules; they also cannot contain `run`, `ensure`, `config`, nested declarations, or `channel ->` routes.
    - These checks apply to both local and imported references.
 7. **Send and route validation:** Channel references must be valid refs (`name` or `alias.name`) and must resolve to a declared channel in the current module or an imported module. Undefined channels fail with `E_VALIDATE: Channel "<name>" is not defined`. Workflow references in route declarations must exist and must target **workflows** (not functions). `name = channel <- cmd` (capture combined with send) yields `E_PARSE`. Max dispatch depth of 100; exceeding it emits `E_DISPATCH_DEPTH`.
 8. Local `ensure foo` requires a local rule `foo`. Imported `ensure alias.foo` requires a rule `foo` in the module bound to `alias` (export is not required).

@@ -19,7 +19,7 @@ It combines declarative workflow structure with bash, then compiles to pure shel
 - **Workflows** — Ordered steps (checks, agent prompts, shell, `run` calls to other workflows and functions) that can change system state.
 - **Rules** — Reusable checks or actions that return a shell exit code; used with `ensure` and in conditionals.
 - **Agent prompts** — `prompt "..."` sends text to a configured agent (e.g. Cursor or Claude CLI). Supports validated JSON responses via `returns '{ field: type }'`.
-- **Composability** — Import other `.jh` modules and call their rules, workflows, and functions by alias. **Managed calls only:** `ensure` for rules, `run` for workflows and functions. Assignment capture (`x = ensure …`, `x = run …`) reads the callee’s explicit `return` value; command stdout is logged to `.jaiph/runs`, not mixed into the variable. Do not wrap Jaiph symbols in `$(...)` or call module functions as bare shell steps in workflows.
+- **Composability** — Import other `.jh` modules and call their rules, workflows, and functions by alias. **Managed calls only:** `ensure` for rules, `run` for workflows and functions — keywords make each call explicit; a Jaiph symbol must not be the first command word of a workflow shell line, **even when that line also uses `$(...)`**. Assignment capture (`x = ensure …`, `x = run …`) reads the callee’s explicit `return` value; command stdout is logged to `.jaiph/runs`, not mixed into the variable. Do not wrap Jaiph symbols in `$(...)` or call module functions as bare shell steps in workflows.
 - **Shell-native** — Transpiled output is bash; you can mix Jaiph primitives with normal shell commands.
 
 > [!WARNING]
