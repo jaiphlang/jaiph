@@ -184,6 +184,18 @@ export function parseEnsureStep(
 ): { step: WorkflowStepDef; nextIdx: number } {
   const recoverIdx = ensureBody.indexOf(" recover ");
   const ensureCol = innerRaw.indexOf("ensure") + 1;
+
+  // `recover` at end of line with no block → error
+  if (/\srecover$/.test(ensureBody)) {
+    const recoverCol = innerRaw.indexOf("recover") + 1;
+    fail(
+      filePath,
+      'recover requires a { ... } block. Valid syntax: ensure <rule> [args] recover { ... }',
+      innerNo,
+      recoverCol,
+    );
+  }
+
   if (recoverIdx === -1) {
     const ensureMatch = ensureBody.match(
       /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
@@ -212,6 +224,17 @@ export function parseEnsureStep(
   const ref = ensureMatch[1];
   const args = ensureMatch[2]?.trim();
   const recoverCol = innerRaw.indexOf("recover") + 1;
+
+  // Arguments between `recover` and `{` → error
+  if (right && !right.startsWith("{") && right.includes("{")) {
+    fail(
+      filePath,
+      'invalid ensure syntax: rule arguments must appear before \'recover\'. Valid syntax: ensure <rule> [args] recover { ... }',
+      innerNo,
+      recoverCol,
+    );
+  }
+
   const refLoc = { value: ref, loc: { line: innerNo, col: ensureCol } };
   const base = { type: "ensure" as const, ref: refLoc, args, ...(captureName ? { captureName } : {}) };
 
