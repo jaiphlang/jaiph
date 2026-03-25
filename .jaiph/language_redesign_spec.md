@@ -27,6 +27,7 @@ These are not options. Implementation starts from this table.
 | 13 | `if` uses **brace syntax** (`if ... { } else { }`), **`not`** for negation, **`else if`** for chaining. No `then`/`fi`/`elif`. |
 | 14 | Scripts transpile to **separate executable files** with `+x` permission. |
 | 15 | Default shebang is `#!/usr/bin/env bash`. User can provide a custom shebang as the first line of the script body (e.g. `#!/usr/bin/env node`). |
+| 16 | Workflows, rules, and scripts support **named parameters** in declarations. Positional `$1`/`$2` boilerplate is eliminated. |
 
 ## Legality Matrix
 
@@ -86,6 +87,28 @@ These are not options. Implementation starts from this table.
 
 **Jaiph keyword guard**: for bash scripts (no shebang or `#!/usr/bin/env bash`), the parser rejects Jaiph-level keywords (`run`, `ensure`, `fail`, `const`, `log`, `logerr`, `prompt`) in the body. For custom shebangs (e.g. `#!/usr/bin/env node`), the guard is skipped — the user owns the body entirely.
 
+## Named Parameters
+
+All constructs support named parameters in their declarations:
+
+```
+workflow implement(task, role_name) { ... }
+rule ensure_is_number(value) { ... }
+script check_hash(file_path, expected_hash) { ... }
+```
+
+**Semantics:**
+
+- Parameters are available as named local variables inside the construct body.
+- For workflows/rules: the transpiler emits `local task="$1"; local role_name="$2"` at the top of the function body.
+- For bash scripts: the transpiler prepends `local file_path="$1"; local expected_hash="$2"` to the script file. For non-bash shebangs, named params are documentary only (the language uses its own argv mechanism).
+- **Optional/default parameters**: `workflow deploy(env, version, dry_run = "false")` transpiles to `local dry_run="${3:-false}"`.
+- Both positional and named calling conventions are valid at call sites:
+  - `run implement "$task" "$role_name"` — positional, mapped by declaration order.
+  - `run implement task="$task" role_name="$role_name"` — named (already partially supported via `parseParamKeysFromArgs`).
+- **Arity validation**: the validator can check call sites against the declaration. `run implement` with zero args when `implement` declares two required params is a validation error.
+- **Parentheses are optional**: `workflow default { ... }` (no params) remains valid. Constructs with params use `name(params) { ... }`.
+
 ## Script Isolation and Transpilation Model
 
 Scripts execute in **full isolation**. They receive only their positional arguments. No inherited variables from the orchestration scope, module-level constants, or other scripts' state.
@@ -130,7 +153,7 @@ script check_is_number() {
 ### Data flow
 
 **Data flow is always explicit**:
-- **Input**: positional arguments only (`$1`, `$2`, ...)
+- **Input**: named parameters (declared in signature) or positional arguments (`$1`, `$2`, ...). Named params are syntactic sugar — they transpile to positional arg assignments.
 - **Output**: stdout (value), stderr (diagnostics), exit code (success/failure)
 - **No side channel**: scripts cannot read `const` variables from workflows/rules
 
@@ -201,13 +224,13 @@ rule ensure_is_number {
 After:
 
 ```
-script check_is_number() {
-  [[ "$1" =~ ^[0-9]+$ ]]
+script check_is_number(value) {
+  [[ "$value" =~ ^[0-9]+$ ]]
 }
 
-rule ensure_is_number {
-  if not run check_is_number "$1" {
-    fail "Expected a non-negative integer, got: $1"
+rule ensure_is_number(value) {
+  if not run check_is_number "$value" {
+    fail "Expected a non-negative integer, got: $value"
   }
 }
 ```
@@ -228,8 +251,7 @@ workflow default {
 After:
 
 ```
-workflow default {
-  const n = "${1:-10}"
+workflow default(n = "10") {
   ensure ensure_is_number "$n"
   const result = run fib "$n"
   log "$result"
@@ -272,7 +294,7 @@ All data is internal. Caller captures via `const result = run fib "$n"`.
 ### Polyglot script: Node.js validation
 
 ```
-script validate_json_schema() {
+script validate_json_schema(schema_path, data_path) {
   #!/usr/bin/env node
   const Ajv = require('ajv');
   const fs = require('fs');
@@ -316,7 +338,7 @@ workflow implement {
 After:
 
 ```
-script select_role() {
+script select_role(role_name) {
   local role_surgical='<role>
     You are a surgical engineer. ...
   </role>'
@@ -324,16 +346,14 @@ script select_role() {
     You are a reductionist engineer. ...
   </role>'
 
-  case "$1" in
+  case "$role_name" in
     surgical) echo "$role_surgical" ;;
     reductionist) echo "$role_reductionist" ;;
-    *) echo "Unknown role: $1" >&2; return 1 ;;
+    *) echo "Unknown role: $role_name" >&2; return 1 ;;
   esac
 }
 
-workflow implement {
-  const task = "$1"
-  const role_name = "$2"
+workflow implement(task, role_name) {
   const role = run select_role "$role_name"
 
   prompt "
@@ -421,10 +441,7 @@ script list_docs_files() {
   done
 }
 
-workflow process_docs_recursive {
-  const file = "$1"
-  const remaining = "$2"
-
+workflow process_docs_recursive(file, remaining) {
   run docs_page "$file"
 
   if run has_value "$remaining" {
@@ -463,8 +480,7 @@ run docs_page each $docs_files
 **Resolution**: restructure to avoid mutable state. The per-item workflow performs side effects (marking tasks). After recursion completes, re-check the final state:
 
 ```
-workflow review_single_task {
-  const header = "$1"
+workflow review_single_task(header) {
   const task = run queue.get_task_by_header "$header"
 
   if run is_dev_ready "$task" {
@@ -502,12 +518,12 @@ No mutable counter. The source of truth is the queue state, not a variable.
 **Resolution**: push to scripts.
 
 ```
-script matches() {
-  [ "$1" = "$2" ]
+script matches(a, b) {
+  [ "$a" = "$b" ]
 }
 
-script has_value() {
-  [ -n "$1" ]
+script has_value(val) {
+  [ -n "$val" ]
 }
 
 if run matches "$verdict" "dev-ready" {
@@ -534,8 +550,8 @@ After: `awk '/^## /{print}' "$queue_file"` (just let stdout flow)
 **Migration**: under structured rules, `logerr` becomes a Jaiph keyword (already in legality matrix):
 
 ```
-rule name_was_provided {
-  if not run has_value "$1" {
+rule name_was_provided(name) {
+  if not run has_value "$name" {
     logerr "You didn't provide your name :("
     fail "name argument required"
   }
@@ -549,12 +565,12 @@ rule name_was_provided {
 **Migration**: shell in recover body moves to scripts. `prompt` stays (recover body follows workflow rules):
 
 ```
-script save_ci_log() {
-  echo "$1" > "$2"
+script save_ci_log(content, path) {
+  echo "$content" > "$path"
 }
 
-script ci_log_exists() {
-  [ -s "$1" ]
+script ci_log_exists(path) {
+  [ -s "$path" ]
 }
 
 workflow ensure_ci_passes {
@@ -593,10 +609,8 @@ workflow ensure_ci_passes {
 **Migration**: under full isolation + no script-to-script calls, inline the logic or use a shared lib:
 
 ```
-script check_only_expected_changed() {
+script check_only_expected_changed(allowed, changed) {
   source "$JAIPH_LIB/file_checks.sh"
-  local allowed="$1"
-  local changed="$2"
 
   while IFS= read -r f; do
     [ -z "$f" ] && continue
@@ -682,6 +696,14 @@ script check_only_expected_changed() {
 - Rename in all `e2e/*.jh` fixtures
 - Update test fixtures and golden outputs
 
+**3f. Named parameters**
+- Parser: recognize `name(param1, param2)` and `name(param1, param2 = "default")` in workflow, rule, and script declarations
+- AST: add `params?: Array<{ name: string; default?: string }>` to `WorkflowDef`, `RuleDef`, `ScriptDef`
+- Transpiler: for workflows/rules, emit `local param1="$1"; local param2="$2"` (or `"${2:-default}"` for defaults) at the top of the function body. For bash scripts, prepend the same to the script file. For non-bash scripts, params are documentary only.
+- Validator: check call-site arity against declared params. Missing required args = validation error. Extra args beyond declared params = validation warning.
+- Update all first-party `.jh` files to use named params where applicable
+- Parentheses optional when no params: `workflow default { ... }` remains valid
+
 ### Phase 4: Script isolation
 
 **4a. Implement full isolation for script execution**
@@ -735,9 +757,9 @@ script check_only_expected_changed() {
 
 | File | Change |
 |------|--------|
-| `src/types.ts` | Rename `FunctionDef` → `ScriptDef`, add `shebang?: string`. Rename `jaiphModule.functions` → `jaiphModule.scripts`. Add `fail`, `wait`, `const` step types. Change `RuleDef.commands` → `RuleDef.steps`. Remove `shell` condition kind from `if`. Add `not` / brace-style `if` AST. |
+| `src/types.ts` | Rename `FunctionDef` → `ScriptDef`, add `shebang?: string`, add `params?: ParamDef[]`. Rename `jaiphModule.functions` → `jaiphModule.scripts`. Add `params?: ParamDef[]` to `WorkflowDef`, `RuleDef`. Add `fail`, `wait`, `const` step types. Change `RuleDef.commands` → `RuleDef.steps`. Remove `shell` condition kind from `if`. Add `not` / brace-style `if` AST. |
 | `src/parser.ts` | Replace `function` keyword detection with `script`. Rename `parseFunctionBlock` → `parseScriptBlock`. |
-| `src/parse/functions.ts` → `src/parse/scripts.ts` | Rename file. Update regex to match `script` keyword. Add shebang extraction. Conditional keyword guard (skip for custom shebangs). |
+| `src/parse/functions.ts` → `src/parse/scripts.ts` | Rename file. Update regex to match `script` keyword. Add shebang extraction. Conditional keyword guard (skip for custom shebangs). Parse named params in signature. |
 | `src/parse/workflows.ts` | Remove shell fallback, shell accumulator. Add `fail`, `const`, `wait` parsing. Replace `if ... then ... fi` with brace syntax. |
 | `src/parse/rules.ts` | Full rewrite: keyword-aware structured parser mirroring workflow parser. |
 | `src/transpile/emit-workflow.ts` | Split: extract script emission to `emit-script.ts`, rule emission to `emit-rule.ts`. Change return type to include script files. Remove `jaiph::set_return_value` from script paths. |
@@ -786,3 +808,6 @@ script check_only_expected_changed() {
 - `jaiph::set_return_value` removed from script transpilation paths
 - `validate.ts` under 500 lines after dedup
 - `emit-workflow.ts` handles only orchestration; script/rule emission in separate files
+- Named parameters work in workflow, rule, and script declarations
+- Default parameter values work: `workflow deploy(env, dry_run = "false")`
+- Arity validation catches missing required args at call sites

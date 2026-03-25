@@ -1,24 +1,26 @@
 import { jaiphError } from "../errors";
-import type { jaiphModule, RuleRefDef, WorkflowRefDef, WorkflowStepDef } from "../types";
+import type { jaiphModule, WorkflowStepDef } from "../types";
 import type { SubstitutionValidateEnv } from "./validate-substitution";
 import {
   validateManagedWorkflowShell,
   validateNoJaiphCommandSubstitution,
 } from "./validate-substitution";
+import type { RefResolutionContext, RefTargetKind } from "./validate-ref-resolution";
+import {
+  BARE_SEND_REF_MSG,
+  lookupKind,
+  RULE_REF_EXPECT,
+  RUN_IN_RULE_REF_EXPECT,
+  RUN_TARGET_REF_EXPECT,
+  validateRef,
+  WORKFLOW_REF_EXPECT,
+} from "./validate-ref-resolution";
 
 export interface ValidateContext {
   resolveImportPath: (fromFile: string, importPath: string) => string;
   existsSync: (path: string) => boolean;
   readFile: (path: string) => string;
   parse: (content: string, filePath: string) => jaiphModule;
-}
-
-/** Look up which kind a name belongs to in a module: "rule", "workflow", "function", or undefined. */
-function lookupKind(mod: jaiphModule, name: string): "rule" | "workflow" | "function" | undefined {
-  if (mod.rules.some((r) => r.name === name)) return "rule";
-  if (mod.workflows.some((w) => w.name === name)) return "workflow";
-  if (mod.functions.some((f) => f.name === name)) return "function";
-  return undefined;
 }
 
 export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void {
@@ -53,299 +55,30 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
     importedAstCache.set(resolved, ctx.parse(ctx.readFile(resolved), resolved));
   }
 
-  const validateRuleRef = (ref: RuleRefDef): void => {
-    const parts = ref.value.split(".");
-    if (parts.length === 1) {
-      const name = parts[0];
-      if (!localRules.has(name)) {
-        if (localWorkflows.has(name)) {
-          throw jaiphError(
-            ast.filePath,
-            ref.loc.line,
-            ref.loc.col,
-            "E_VALIDATE",
-            `workflow "${name}" must be called with run`,
-          );
-        }
-        if (localFunctions.has(name)) {
-          throw jaiphError(
-            ast.filePath,
-            ref.loc.line,
-            ref.loc.col,
-            "E_VALIDATE",
-            `function "${name}" cannot be called with ensure`,
-          );
-        }
-        throw jaiphError(
-          ast.filePath,
-          ref.loc.line,
-          ref.loc.col,
-          "E_VALIDATE",
-          `unknown local rule reference "${ref.value}"`,
-        );
-      }
-      return;
-    }
-
-    if (parts.length !== 2) {
-      throw jaiphError(
-        ast.filePath,
-        ref.loc.line,
-        ref.loc.col,
-        "E_VALIDATE",
-        `invalid rule reference "${ref.value}"`,
-      );
-    }
-
-    const [alias, importedRule] = parts;
-    const importedFile = importsByAlias.get(alias);
-    if (!importedFile) {
-      throw jaiphError(
-        ast.filePath,
-        ref.loc.line,
-        ref.loc.col,
-        "E_VALIDATE",
-        `unknown import alias "${alias}" for rule reference "${ref.value}"`,
-      );
-    }
-    const importedAst = importedAstCache.get(importedFile)!;
-    const importedRules = new Set(importedAst.rules.map((r) => r.name));
-    if (!importedRules.has(importedRule)) {
-      const kind = lookupKind(importedAst, importedRule);
-      if (kind === "workflow") {
-        throw jaiphError(
-          ast.filePath,
-          ref.loc.line,
-          ref.loc.col,
-          "E_VALIDATE",
-          `workflow "${ref.value}" must be called with run`,
-        );
-      }
-      if (kind === "function") {
-        throw jaiphError(
-          ast.filePath,
-          ref.loc.line,
-          ref.loc.col,
-          "E_VALIDATE",
-          `function "${ref.value}" cannot be called with ensure`,
-        );
-      }
-      throw jaiphError(
-        ast.filePath,
-        ref.loc.line,
-        ref.loc.col,
-        "E_VALIDATE",
-        `imported rule "${ref.value}" does not exist`,
-      );
-    }
+  const refCtx: RefResolutionContext = {
+    importsByAlias,
+    importedAstCache,
+    localRules,
+    localWorkflows,
+    localFunctions,
   };
 
-  const validateWorkflowRef = (ref: WorkflowRefDef): void => {
-    const parts = ref.value.split(".");
-    if (parts.length === 1) {
-      const name = parts[0];
-      if (!localWorkflows.has(name)) {
-        if (localRules.has(name)) {
-          throw jaiphError(
-            ast.filePath,
-            ref.loc.line,
-            ref.loc.col,
-            "E_VALIDATE",
-            `rule "${name}" must be called with ensure`,
-          );
-        }
-        if (localFunctions.has(name)) {
-          throw jaiphError(
-            ast.filePath,
-            ref.loc.line,
-            ref.loc.col,
-            "E_VALIDATE",
-            `function "${name}" cannot be called with run`,
-          );
-        }
-        throw jaiphError(
-          ast.filePath,
-          ref.loc.line,
-          ref.loc.col,
-          "E_VALIDATE",
-          `unknown local workflow reference "${ref.value}"`,
-        );
-      }
-      return;
-    }
+  const expectRuleRef = { mode: "expect" as const, expect: RULE_REF_EXPECT };
+  const expectWorkflowRef = { mode: "expect" as const, expect: WORKFLOW_REF_EXPECT };
+  const expectRunInRuleRef = { mode: "expect" as const, expect: RUN_IN_RULE_REF_EXPECT };
+  const expectRunTargetRef = { mode: "expect" as const, expect: RUN_TARGET_REF_EXPECT };
 
-    if (parts.length !== 2) {
-      throw jaiphError(
-        ast.filePath,
-        ref.loc.line,
-        ref.loc.col,
-        "E_VALIDATE",
-        `invalid workflow reference "${ref.value}"`,
-      );
-    }
-
-    const [alias, importedWorkflow] = parts;
-    const importedFile = importsByAlias.get(alias);
-    if (!importedFile) {
-      throw jaiphError(
-        ast.filePath,
-        ref.loc.line,
-        ref.loc.col,
-        "E_VALIDATE",
-        `unknown import alias "${alias}" for workflow reference "${ref.value}"`,
-      );
-    }
-    const importedAst = importedAstCache.get(importedFile)!;
-    const importedWorkflows = new Set(importedAst.workflows.map((w) => w.name));
-    if (!importedWorkflows.has(importedWorkflow)) {
-      const kind = lookupKind(importedAst, importedWorkflow);
-      if (kind === "rule") {
-        throw jaiphError(
-          ast.filePath,
-          ref.loc.line,
-          ref.loc.col,
-          "E_VALIDATE",
-          `rule "${ref.value}" must be called with ensure`,
-        );
-      }
-      if (kind === "function") {
-        throw jaiphError(
-          ast.filePath,
-          ref.loc.line,
-          ref.loc.col,
-          "E_VALIDATE",
-          `function "${ref.value}" cannot be called with run`,
-        );
-      }
-      throw jaiphError(
-        ast.filePath,
-        ref.loc.line,
-        ref.loc.col,
-        "E_VALIDATE",
-        `imported workflow "${ref.value}" does not exist`,
-      );
-    }
-  };
-
-  const validateRunInRuleRef = (ref: WorkflowRefDef): void => {
-    const parts = ref.value.split(".");
-    if (parts.length === 1) {
-      const name = parts[0];
-      if (localFunctions.has(name)) return;
-      if (localWorkflows.has(name)) {
-        throw jaiphError(
-          ast.filePath, ref.loc.line, ref.loc.col, "E_VALIDATE",
-          `run inside a rule must target a function, not workflow "${name}"`,
-        );
-      }
-      if (localRules.has(name)) {
-        throw jaiphError(
-          ast.filePath, ref.loc.line, ref.loc.col, "E_VALIDATE",
-          `rule "${name}" must be called with ensure, not run`,
-        );
-      }
-      throw jaiphError(
-        ast.filePath, ref.loc.line, ref.loc.col, "E_VALIDATE",
-        `unknown local function reference "${ref.value}" (run in rules must target a function)`,
-      );
-    }
-    if (parts.length !== 2) {
-      throw jaiphError(ast.filePath, ref.loc.line, ref.loc.col, "E_VALIDATE", `invalid run target reference "${ref.value}"`);
-    }
-    const [alias, importedName] = parts;
-    const importedFile = importsByAlias.get(alias);
-    if (!importedFile) {
-      throw jaiphError(ast.filePath, ref.loc.line, ref.loc.col, "E_VALIDATE", `unknown import alias "${alias}" for run target "${ref.value}"`);
-    }
-    const importedAst = importedAstCache.get(importedFile)!;
-    const importedFunctions = new Set(importedAst.functions.map((f) => f.name));
-    if (importedFunctions.has(importedName)) return;
-    const kind = lookupKind(importedAst, importedName);
-    if (kind === "workflow") {
-      throw jaiphError(ast.filePath, ref.loc.line, ref.loc.col, "E_VALIDATE", `run inside a rule must target a function, not workflow "${ref.value}"`);
-    }
-    if (kind === "rule") {
-      throw jaiphError(ast.filePath, ref.loc.line, ref.loc.col, "E_VALIDATE", `rule "${ref.value}" must be called with ensure, not run`);
-    }
-    throw jaiphError(ast.filePath, ref.loc.line, ref.loc.col, "E_VALIDATE", `imported function "${ref.value}" does not exist (run in rules must target a function)`);
-  };
-
-  const validateRunTargetRef = (ref: WorkflowRefDef): void => {
-    const parts = ref.value.split(".");
-    if (parts.length === 1) {
-      const name = parts[0];
-      if (localWorkflows.has(name) || localFunctions.has(name)) {
-        return;
-      }
-      if (localRules.has(name)) {
-        throw jaiphError(
-          ast.filePath,
-          ref.loc.line,
-          ref.loc.col,
-          "E_VALIDATE",
-          `rule "${name}" must be called with ensure, not run`,
-        );
-      }
-      throw jaiphError(
-        ast.filePath,
-        ref.loc.line,
-        ref.loc.col,
-        "E_VALIDATE",
-        `unknown local workflow or function reference "${ref.value}"`,
-      );
-    }
-
-    if (parts.length !== 2) {
-      throw jaiphError(
-        ast.filePath,
-        ref.loc.line,
-        ref.loc.col,
-        "E_VALIDATE",
-        `invalid run target reference "${ref.value}"`,
-      );
-    }
-
-    const [alias, importedName] = parts;
-    const importedFile = importsByAlias.get(alias);
-    if (!importedFile) {
-      throw jaiphError(
-        ast.filePath,
-        ref.loc.line,
-        ref.loc.col,
-        "E_VALIDATE",
-        `unknown import alias "${alias}" for run target "${ref.value}"`,
-      );
-    }
-    const importedAst = importedAstCache.get(importedFile)!;
-    const importedWorkflows = new Set(importedAst.workflows.map((w) => w.name));
-    const importedFunctions = new Set(importedAst.functions.map((f) => f.name));
-    if (importedWorkflows.has(importedName) || importedFunctions.has(importedName)) {
-      return;
-    }
-    const kind = lookupKind(importedAst, importedName);
-    if (kind === "rule") {
-      throw jaiphError(
-        ast.filePath,
-        ref.loc.line,
-        ref.loc.col,
-        "E_VALIDATE",
-        `rule "${ref.value}" must be called with ensure, not run`,
-      );
-    }
-    throw jaiphError(
-      ast.filePath,
-      ref.loc.line,
-      ref.loc.col,
-      "E_VALIDATE",
-      `imported workflow or function "${ref.value}" does not exist`,
-    );
-  };
-
-  const lookupImportedKind = (alias: string, name: string): "rule" | "workflow" | "function" | undefined => {
+  const lookupImportedKind = (alias: string, name: string): RefTargetKind | undefined => {
     const importedFile = importsByAlias.get(alias);
     if (!importedFile) return undefined;
     const importedAst = importedAstCache.get(importedFile)!;
     return lookupKind(importedAst, name);
+  };
+
+  const bareSendRefSpec = {
+    mode: "bare_send_rhs" as const,
+    bareSend: BARE_SEND_REF_MSG,
+    lookupImportedKind,
   };
 
   const makeSubEnv = (loc: { line: number; col: number }): SubstitutionValidateEnv => ({
@@ -436,7 +169,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         return;
       }
       if (s.type === "ensure") {
-        validateRuleRef(s.ref);
+        validateRef(s.ref, ast, refCtx, expectRuleRef);
         if (s.recover) {
           throw jaiphError(
             ast.filePath,
@@ -449,22 +182,22 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         return;
       }
       if (s.type === "run") {
-        validateRunInRuleRef(s.workflow);
+        validateRef(s.workflow, ast, refCtx, expectRunInRuleRef);
         return;
       }
       if (s.type === "if") {
         if (s.condition.kind === "ensure") {
-          validateRuleRef(s.condition.ref);
+          validateRef(s.condition.ref, ast, refCtx, expectRuleRef);
         } else {
-          validateRunInRuleRef(s.condition.ref);
+          validateRef(s.condition.ref, ast, refCtx, expectRunInRuleRef);
         }
         for (const ts of s.thenSteps) validateRuleStep(ts);
         if (s.elseIfBranches) {
           for (const br of s.elseIfBranches) {
             if (br.condition.kind === "ensure") {
-              validateRuleRef(br.condition.ref);
+              validateRef(br.condition.ref, ast, refCtx, expectRuleRef);
             } else {
-              validateRunInRuleRef(br.condition.ref);
+              validateRef(br.condition.ref, ast, refCtx, expectRunInRuleRef);
             }
             for (const ts of br.thenSteps) validateRuleStep(ts);
           }
@@ -480,9 +213,9 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
       if (s.type === "const") {
         const v = s.value;
         if (v.kind === "run_capture") {
-          validateRunInRuleRef(v.ref);
+          validateRef(v.ref, ast, refCtx, expectRunInRuleRef);
         } else if (v.kind === "ensure_capture") {
-          validateRuleRef(v.ref);
+          validateRef(v.ref, ast, refCtx, expectRuleRef);
         } else if (v.kind === "prompt_capture") {
           throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", "const ... = prompt is not allowed in rules");
         }
@@ -499,93 +232,6 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
       validateRuleStep(st);
     }
   }
-
-  const validateBareSendSymbol = (ref: WorkflowRefDef): void => {
-    const parts = ref.value.split(".");
-    if (parts.length === 1) {
-      const name = parts[0];
-      const kind = lookupKind(ast, name);
-      if (kind === "workflow") {
-        throw jaiphError(
-          ast.filePath,
-          ref.loc.line,
-          ref.loc.col,
-          "E_VALIDATE",
-          `workflow "${ref.value}" must be called with run`,
-        );
-      }
-      if (kind === "function") {
-        throw jaiphError(
-          ast.filePath,
-          ref.loc.line,
-          ref.loc.col,
-          "E_VALIDATE",
-          `function "${ref.value}" must be called with run`,
-        );
-      }
-      if (kind === "rule") {
-        throw jaiphError(
-          ast.filePath,
-          ref.loc.line,
-          ref.loc.col,
-          "E_VALIDATE",
-          `rule "${ref.value}" must be called with ensure`,
-        );
-      }
-      throw jaiphError(
-        ast.filePath,
-        ref.loc.line,
-        ref.loc.col,
-        "E_VALIDATE",
-        `unknown symbol "${ref.value}" in send right-hand side`,
-      );
-    }
-    const [alias, importedName] = parts;
-    if (!importsByAlias.has(alias)) {
-      throw jaiphError(
-        ast.filePath,
-        ref.loc.line,
-        ref.loc.col,
-        "E_VALIDATE",
-        `unknown import alias "${alias}" for send reference "${ref.value}"`,
-      );
-    }
-    const ik = lookupImportedKind(alias, importedName);
-    if (ik === "workflow") {
-      throw jaiphError(
-        ast.filePath,
-        ref.loc.line,
-        ref.loc.col,
-        "E_VALIDATE",
-        `workflow "${ref.value}" must be called with run`,
-      );
-    }
-    if (ik === "function") {
-      throw jaiphError(
-        ast.filePath,
-        ref.loc.line,
-        ref.loc.col,
-        "E_VALIDATE",
-        `function "${ref.value}" must be called with run`,
-      );
-    }
-    if (ik === "rule") {
-      throw jaiphError(
-        ast.filePath,
-        ref.loc.line,
-        ref.loc.col,
-        "E_VALIDATE",
-        `rule "${ref.value}" must be called with ensure`,
-      );
-    }
-    throw jaiphError(
-      ast.filePath,
-      ref.loc.line,
-      ref.loc.col,
-      "E_VALIDATE",
-      `unknown symbol "${ref.value}" in send right-hand side`,
-    );
-  };
 
   const validateChannelRef = (
     channel: string,
@@ -645,9 +291,9 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
       if (s.type === "send") {
         validateChannelRef(s.channel, s.loc);
         if (s.rhs.kind === "run") {
-          validateRunTargetRef(s.rhs.ref);
+          validateRef(s.rhs.ref, ast, refCtx, expectRunTargetRef);
         } else if (s.rhs.kind === "bare_ref") {
-          validateBareSendSymbol(s.rhs.ref);
+          validateRef(s.rhs.ref, ast, refCtx, bareSendRefSpec);
         } else if (s.rhs.kind === "shell") {
           validateManagedWorkflowShell(
             s.rhs.command,
@@ -657,7 +303,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         return;
       }
       if (s.type === "ensure") {
-        validateRuleRef(s.ref);
+        validateRef(s.ref, ast, refCtx, expectRuleRef);
         if (s.recover) {
           const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
           for (const r of steps) validateStep(r);
@@ -665,22 +311,22 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         return;
       }
       if (s.type === "run") {
-        validateRunTargetRef(s.workflow);
+        validateRef(s.workflow, ast, refCtx, expectRunTargetRef);
         return;
       }
       if (s.type === "if") {
         if (s.condition.kind === "ensure") {
-          validateRuleRef(s.condition.ref);
+          validateRef(s.condition.ref, ast, refCtx, expectRuleRef);
         } else {
-          validateRunTargetRef(s.condition.ref);
+          validateRef(s.condition.ref, ast, refCtx, expectRunTargetRef);
         }
         for (const ts of s.thenSteps) validateStep(ts);
         if (s.elseIfBranches) {
           for (const br of s.elseIfBranches) {
             if (br.condition.kind === "ensure") {
-              validateRuleRef(br.condition.ref);
+              validateRef(br.condition.ref, ast, refCtx, expectRuleRef);
             } else {
-              validateRunTargetRef(br.condition.ref);
+              validateRef(br.condition.ref, ast, refCtx, expectRunTargetRef);
             }
             for (const ts of br.thenSteps) validateStep(ts);
           }
@@ -699,9 +345,9 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
       if (s.type === "const") {
         const v = s.value;
         if (v.kind === "run_capture") {
-          validateRunTargetRef(v.ref);
+          validateRef(v.ref, ast, refCtx, expectRunTargetRef);
         } else if (v.kind === "ensure_capture") {
-          validateRuleRef(v.ref);
+          validateRef(v.ref, ast, refCtx, expectRuleRef);
         }
         return;
       }
@@ -718,7 +364,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
       for (const route of workflow.routes) {
         validateChannelRef(route.channel, route.loc);
         for (const wfRef of route.workflows) {
-          validateWorkflowRef(wfRef);
+          validateRef(wfRef, ast, refCtx, expectWorkflowRef);
         }
       }
     }

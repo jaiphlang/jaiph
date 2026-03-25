@@ -266,7 +266,7 @@ Jaiph separates **managed** invocations (step records under `.jaiph/runs`, deter
 
 ## Validation Rules
 
-After parsing, the compiler validates references and config. Violations produce the following error codes:
+After parsing, the compiler validates references and config. (In this repository, reference checks live in `src/transpile/validate.ts` with shared resolution in `validate-ref-resolution.ts`; contributors can read the short map under **Reference validation** in [Contributing](contributing.md).) Violations produce the following error codes:
 
 - **E_PARSE:** Invalid syntax, duplicate config block, invalid config key/value, invalid prompt content (e.g. command substitution in prompt), `prompt "..." returns '...'` without a capture variable, invalid `const` RHS (e.g. command substitution or disallowed `${...}` forms), a circular reference among top-level `local` / `const` initializers, a workflow/rule line that is not a recognized Jaiph step, or an invalid send RHS.
 - **E_SCHEMA:** Invalid or unsupported `returns` schema: empty schema, non-flat shape (e.g. arrays or union types), invalid entry (not `fieldName: type`), or unsupported type (only `string`, `number`, `boolean` allowed).

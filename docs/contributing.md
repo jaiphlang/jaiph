@@ -109,6 +109,10 @@ Unit tests in `test/*.test.ts` are organized by source module. Each test file ma
 
 When adding a new source module or extending an existing one, follow this pattern: create or extend the corresponding `test/<module>.test.ts` file. This keeps unit tests discoverable — given a source file, the test file is predictable.
 
+### Reference validation: ensure, run, and send RHS
+
+After parse, the transpiler checks that `ensure` and `run` targets (and related refs, such as send right-hand sides) resolve to symbols of the right kind in the current or imported module. That logic lives in **`src/transpile/validate.ts`** (`validateReferences` and friends), with the shared **local vs `alias.name` resolution**, **wrong-kind** messages, and **`lookupKind`** extracted to **`src/transpile/validate-ref-resolution.ts`** (`validateRef` plus small message bundles per call site). If you change validation behavior, treat **exact `E_VALIDATE` strings** as part of the public contract unless you are deliberately shipping a breaking change — verify with `npm test`, compiler golden tests, and `npm run test:e2e`.
+
 ### Other test files in `test/`
 
 Some files in `test/` don't follow the strict one-file-per-module layout. They exercise integration behavior, subprocesses, or acceptance-style scenarios:
