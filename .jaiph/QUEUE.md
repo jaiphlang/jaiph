@@ -59,6 +59,53 @@ The first `##` task in the file is always the current task.
 
 ---
 
+## Recover payload contract: failed rule output (stdout+stderr) <!-- dev-ready -->
+
+**Goal.** Make `ensure <rule> recover { ... }` use one fixed contract: `$1` is the full combined stdout+stderr produced by the failed rule execution, including nested scripts/rules/workflows executed within that rule call.
+
+**Scope.**
+
+1. **Runtime contract source.** Ensure runtime captures the failed rule execution output as one merged payload stream that preserves practical ordering.
+2. **Recover wiring.** In transpiled recover loop, set recover argument (`$1`) to that merged failed-rule payload for each retry attempt.
+3. **No alternative modes.** Do not add flags/config/parameters for payload source, truncation, or precedence.
+4. **Docs update.** Update grammar/docs to state this exact contract in present tense.
+
+**E2e examples that must be covered.**
+
+1. **Simple script failure through rule.**
+   - `script simple_echo { echo "Hello"; echo "Oops" >&2; exit 1 }`
+   - `rule simple_echo_rule { run simple_echo }`
+   - `workflow default { ensure simple_echo_rule recover { log "Error: $1" } }`
+   - Assert recover log contains both `Hello` and `Oops`.
+
+2. **Nested rule + script failure aggregation.**
+   - `rule inner { run failing_script }`
+   - `rule outer { log "outer start"; ensure inner }`
+   - `workflow default { ensure outer recover { run save_string_to_file "$1" "recover.log" } }`
+   - Assert `recover.log` contains `outer start` plus nested script stderr/stdout from `failing_script`.
+
+3. **CI-style failure payload for prompt loop (`ensure_ci_passes` shape).**
+   - `rule ci_passes { run npm_run_test_ci }` where script fails with multi-line test output.
+   - Recover writes `$1` into file and validates non-empty before `prompt`.
+   - Assert saved file contains representative CI failure lines and is non-empty.
+
+4. **Retry payload updates per attempt.**
+   - First attempt fails with output `attempt-1`; recover mutates state; second attempt fails with `attempt-2`.
+   - Assert each recover iteration receives the current attempt output (not stale payload from previous attempt).
+
+5. **No false payload on success.**
+   - Rule eventually passes; recover block is not executed.
+   - Assert no recover payload writes/logs are emitted.
+
+**Acceptance criteria.**
+
+- For `ensure rule recover`, `$1` is always the merged stdout+stderr from the failed rule invocation that triggered recover.
+- Payload includes nested step output emitted during that failed rule invocation.
+- Contract is deterministic and documented; no user-facing tuning knobs introduced.
+- New/updated e2e tests pass with existing suite.
+
+---
+
 ## Inline construct interpolation: `${run ref}` and `${ensure ref}` in strings <!-- dev-ready -->
 
 **Goal.** Allow `run` and `ensure` calls inline inside `${}` interpolation in orchestration strings, eliminating the need for a temporary `const` when the result is only used once.
