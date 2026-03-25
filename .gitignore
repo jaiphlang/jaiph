@@ -29,6 +29,7 @@ pnpm-debug.log*
 
 .jaiph/runs/
 .jaiph/tmp/
+.jaiph/scripts/
 .jaiph/report.pid
 .jaiph/*.sh
 

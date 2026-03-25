@@ -11,9 +11,8 @@ import "./ensure_ci_passes.jh" as ci
 import "./git.jh" as git
 
 config {
-  agent.backend = "cursor"
-  agent.default_model = "composer-2"
-  agent.cursor_flags = "--force"
+  agent.backend = "claude"
+  agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
 const code_philosophy = "

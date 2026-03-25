@@ -142,6 +142,7 @@ Some files in `test/` don't follow the strict one-file-per-module layout. They e
 | `stderr-handler.test.ts` | Unit/TTY | `registerTTYSubscriber` / stderr routing edge cases with a stubbed stdout |
 | `signal-lifecycle.test.ts` | Acceptance | After SIGINT/SIGTERM, verifies `jaiph run` exits within a time bound and leaves no stale child processes |
 | `tty-running-timer.test.ts` | Acceptance | In a TTY, verifies the "RUNNING workflow" line updates over time (requires Python 3 PTY harness) |
+| `errors.test.ts` | Unit | Failure footer helpers: `readFailedStepOutput`, `failedStepArtifactPaths` (first failed `STEP_END` in `run_summary.jsonl` vs lexicographic “latest” artifacts in the run dir) |
 
 Compiler acceptance tests that need multiple files or `spawnSync` live under `test/acceptance/` with the `*.acceptance.test.ts` suffix so `npm test` picks them up after build.
 

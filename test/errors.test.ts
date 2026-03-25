@@ -10,6 +10,7 @@ import {
   extractRunMeta,
   latestRunFiles,
   readFailedStepOutput,
+  failedStepArtifactPaths,
 } from "../src/cli/shared/errors";
 
 // === summarizeError ===
@@ -215,6 +216,60 @@ test("readFailedStepOutput: falls back to reading file when out_content not embe
     );
     const result = readFailedStepOutput(summaryPath);
     assert.equal(result, "file-based output");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// === failedStepArtifactPaths ===
+
+test("failedStepArtifactPaths: empty when summary missing failed STEP_END", () => {
+  const dir = mkdtempSync(join(tmpdir(), "jaiph-failed-paths-none-"));
+  try {
+    const summaryPath = join(dir, "summary.jsonl");
+    writeFileSync(
+      summaryPath,
+      JSON.stringify({ type: "STEP_END", status: 0, out_file: "/x.out", err_file: "/y.err" }) + "\n",
+    );
+    assert.deepEqual(failedStepArtifactPaths(summaryPath), {});
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("failedStepArtifactPaths: maps to failed step out file, not lexicographically latest in run dir", () => {
+  const dir = mkdtempSync(join(tmpdir(), "jaiph-failed-paths-latest-"));
+  try {
+    const staleOut = join(dir, "099_late_unrelated.out");
+    const trueFailOut = join(dir, "020_true_fail.out");
+    const staleErr = join(dir, "098_stale.err");
+    writeFileSync(staleOut, "noise out");
+    writeFileSync(staleErr, "noise err");
+    writeFileSync(trueFailOut, "TRUE_FAIL_BODY");
+    const summaryPath = join(dir, "summary.jsonl");
+    writeFileSync(
+      summaryPath,
+      [
+        JSON.stringify({
+          type: "STEP_END",
+          status: 0,
+          out_file: staleOut,
+          err_file: staleErr,
+        }),
+        JSON.stringify({
+          type: "STEP_END",
+          status: 1,
+          out_file: trueFailOut,
+          err_file: "",
+          out_content: "TRUE_FAIL_BODY",
+        }),
+      ].join("\n") + "\n",
+    );
+    assert.deepEqual(failedStepArtifactPaths(summaryPath), { out: trueFailOut });
+    const latest = latestRunFiles(dir);
+    assert.equal(latest.out, staleOut);
+    assert.equal(latest.err, staleErr);
+    assert.equal(readFailedStepOutput(summaryPath), "TRUE_FAIL_BODY");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

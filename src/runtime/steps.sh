@@ -343,7 +343,9 @@ jaiph::run_step() {
   fi
   if [[ "$step_kind" == "script" && -n "${JAIPH_RETURN_VALUE_FILE:-}" ]]; then
     if [[ -n "$out_file" && -f "$out_file" ]]; then
-      cat "$out_file" > "$JAIPH_RETURN_VALUE_FILE"
+      # Append so ensure/recover can inspect stdout emitted across nested scripts
+      # in a failed rule attempt (the retry loop truncates the file per attempt).
+      cat "$out_file" >> "$JAIPH_RETURN_VALUE_FILE"
     else
       : > "$JAIPH_RETURN_VALUE_FILE"
     fi

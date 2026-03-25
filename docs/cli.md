@@ -160,6 +160,10 @@ log "$response"
 
 The `log` line renders inline at the correct depth as `ℹ <message>` (dim/gray) and writes to **stdout**. The `logerr` variant renders as `! <message>` in red and writes to **stderr**. (As above, the displayed/streamed text uses **`echo -e`**; event JSON keeps the raw string.) The step's `.out` file in `.jaiph/runs/` still contains the full agent transcript for debugging.
 
+### Failed run summary (stderr)
+
+On non-zero exit, the CLI may print a footer with the path to **`run_summary.jsonl`**, **`out:`** / **`err:`** artifact paths, and **`Output of failed step:`** plus a trimmed excerpt. Those paths and the excerpt are resolved from the **first** `STEP_END` object in the summary with **`status` ≠ 0**, using **`out_content` / `err_content`** when present and otherwise the **`out_file` / `err_file`** fields on that same line — not from “latest” filenames by sort order in the run directory, which can belong to a different step. If no failed `STEP_END` is found (or the summary is missing), the CLI falls back to the run-directory artifact heuristic.
+
 ### Run artifacts and live output
 
 Every step writes its stdout and stderr to artifact files under `.jaiph/runs/<date>/<time>-<source>/` (see `JAIPH_RUNS_DIR`). Files are named with a zero-padded sequence prefix reflecting execution order: `000001-module__rule.out`, `000002-module__workflow.err`, etc.
@@ -326,6 +330,7 @@ Imports resolve for both extensions: `import "foo" as x` finds `foo.jh` or `foo.
 **Runtime and config overrides** (for `jaiph run` and workflow execution):
 
 - `JAIPH_STDLIB` — normally unused: the CLI sets this to the **stdlib bundled with the same installation** as the `jaiph` binary so a stale global `JAIPH_STDLIB` in your shell cannot break new workflows. To force a custom stdlib path, set **`JAIPH_USE_CUSTOM_STDLIB=1`** and **`JAIPH_STDLIB`** to the absolute path of `jaiph_stdlib.sh` (advanced; tests and unusual installs).
+- `JAIPH_SCRIPTS` — the generated bash exports this to the directory holding compiled module scripts for **that** build. **`jaiph run`** and **`jaiph test`** **unset** any inherited **`JAIPH_SCRIPTS`** from the parent environment before executing so an outer run cannot pin the wrong script directory when workflows or package scripts invoke Jaiph again. You normally should not export this yourself.
 - `JAIPH_WORKSPACE` — set by the CLI to the workspace root: walk **up** from the directory that contains the entry `.jh` / `.jph` until a directory with `.jaiph` or `.git` is found; if the walk hits the filesystem root first, the root used is that entry directory (absolute path). Used by the generated bash and runtime helpers; you rarely set this yourself. In Docker sandbox mode the runtime remaps it inside the container (see [Sandboxing](sandboxing.md)).
 - `JAIPH_LIB` — directory for project-local shared bash libraries (conventionally `<workspace>/.jaiph/lib`). The **transpiled script** exports `JAIPH_LIB="${JAIPH_LIB:-${JAIPH_WORKSPACE:-.}/.jaiph/lib}"` near the top of its preamble so `source "$JAIPH_LIB/…"` works no matter where the generated `.sh` file lives. Override `JAIPH_LIB` when libraries live elsewhere. The runtime also sets `JAIPH_LIB` when executing **script** steps so behavior matches [Grammar — script bodies and shared libraries](grammar.md#step-output-contract).
 - `JAIPH_AGENT_MODEL` — default model for `prompt` steps (overrides in-file `agent.default_model`).
