@@ -400,9 +400,11 @@ Jaiph: Running async.jh
                     workflow runs documentation maintenance checks, changelog updates, and cross-doc consistency guards.
                     The <a href="https://github.com/jaiphlang/jaiph/blob/main/.jaiph/engineer.jh">.jaiph/engineer.jh</a>
                     workflow implements a queue-driven engineering loop that picks work, implements changes, verifies
-                    CI, and updates queue state. Shared bash helpers for those flows live under
+                    CI, and updates queue state.                     Shared bash helpers for those flows live under
                     <a href="https://github.com/jaiphlang/jaiph/tree/main/.jaiph/lib">.jaiph/lib/</a> and load via
-                    <code>source "$JAIPH_LIB/…"</code> inside functions.
+                    <code>source "$JAIPH_LIB/…"</code> inside functions. Generated workflow scripts export a default
+                    <code>JAIPH_LIB</code> rooted at <code>${JAIPH_WORKSPACE:-.}/.jaiph/lib</code> so paths stay tied to the
+                    project workspace, not the build output directory.
                 </p>
             </div>
         </section>

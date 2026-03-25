@@ -12,7 +12,7 @@ function get_all_task_headers() {
     echo "missing $qf" >&2
     return 1
   fi
-  awk '/^## /{print}' "$qf"
+  return "$(awk '/^## /{print}' "$qf")"
 }
 
 function get_task_by_header() {
@@ -46,7 +46,7 @@ function get_task_by_header() {
     return 1
   fi
 
-  printf '%s\n' "$task"
+  return "$task"
 }
 
 function task_contains_dev_ready_marker() {
@@ -58,7 +58,7 @@ function file_exists() {
 }
 
 function first_header_line() {
-  awk '/^## /{print; exit}' "$1"
+  return "$(awk '/^## /{print; exit}' "$1")"
 }
 
 function arg_nonempty() {

@@ -102,7 +102,7 @@ function save_simplifier_report() {
 }
 
 function read_simplifier_report() {
-  cat .jaiph/tmp/simplifier_report.md
+  return "$(cat .jaiph/tmp/simplifier_report.md)"
 }
 
 workflow apply_simplifications {

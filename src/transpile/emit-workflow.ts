@@ -172,7 +172,7 @@ export function emitWorkflow(
   out.push("fi");
   out.push('source "$jaiph_stdlib_path"');
   out.push(
-    'export JAIPH_LIB="${JAIPH_LIB:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib}"',
+    'export JAIPH_LIB="${JAIPH_LIB:-${JAIPH_WORKSPACE:-.}/.jaiph/lib}"',
   );
   out.push('if [[ "$(jaiph__runtime_api)" != "1" ]]; then');
   out.push('  echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2');

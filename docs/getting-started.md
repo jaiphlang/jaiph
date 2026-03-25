@@ -26,7 +26,7 @@ It combines declarative workflow structure with bash, then compiles to pure shel
 - **Agent prompts** — `prompt "..."` sends text to a configured agent (e.g. Cursor or Claude CLI); workflows orchestrate when the agent runs.
 - **Composability** — Import other `.jh` / `.jph` modules and call their rules, workflows, and functions by alias (e.g. `ensure security.scan_passes`, `run bootstrap.nodejs`). Use **`ensure` only for rules** and **`run` for workflows and functions** so every Jaiph call is keyword-led; a bare symbol name cannot start a workflow shell step, including when the line also contains `$(...)`.
 - **Step capture** — Assign results with `x = ensure …` / `x = run …` / `x = prompt …`, or **`const x = …`** with the same RHS forms (see [Grammar](grammar.md)). For `ensure` / `run`, the captured value is the callee’s explicit `return`; ordinary command stdout goes to step artifacts under `.jaiph/runs`.
-- **Shell-native** — Transpiled output is bash. Shared bash helpers can live in `.jaiph/lib/` and be loaded from functions with `source "$JAIPH_LIB/…"`.
+- **Shell-native** — Transpiled output is bash. Shared bash helpers can live in `.jaiph/lib/` and be loaded from functions with `source "$JAIPH_LIB/…"`. Emitted scripts export a default `JAIPH_LIB` under the workspace (`JAIPH_WORKSPACE`, or `.` if unset); see [CLI — Environment variables](cli.md#environment-variables).
 
 > [!WARNING]
 > Jaiph is still in an early stage. Expect breaking changes.
