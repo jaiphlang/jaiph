@@ -9,22 +9,23 @@ import {
   normalizeShellLocalExport,
 } from "./emit-steps";
 
-/**
- * Detect Jaiph return (value return) vs bash return (exit code).
- * `return "..."` or `return '...'` or `return $var` → Jaiph return.
- * `return 0`, `return 1`, `return $?` → bash return (kept as-is).
- */
-function isJaiphReturn(cmd: string): boolean {
-  if (!cmd.startsWith("return ")) return false;
-  const arg = cmd.slice("return ".length).trimStart();
-  if (/^[0-9]+$/.test(arg)) return false;
-  if (arg === "$?") return false;
-  return arg.startsWith('"') || arg.startsWith("'") || arg.startsWith("$");
-}
-
 /** Embed in a bash single-quoted literal: '…' */
 function bashSingleQuotedSegment(s: string): string {
   return s.replace(/'/g, `'\"'\"'`);
+}
+
+/** Emit one Jaiph function body line; Jaiph value-return becomes jaiph::set_return_value. */
+function emitFunctionBodyLine(cmd: string, importedWorkflowSymbols: Map<string, string>): string {
+  const t = cmd.trim();
+  const ret = t.match(/^return\s+(.+)$/s);
+  if (ret) {
+    const arg = ret[1].trim();
+    const isBashExitCode = /^[0-9]+$/.test(arg) || arg === "$?";
+    if (!isBashExitCode && (arg.startsWith('"') || arg.startsWith("'") || arg.startsWith("$"))) {
+      return `jaiph::set_return_value ${arg}; return 0`;
+    }
+  }
+  return normalizeShellLocalExport(resolveShellRefs(cmd, importedWorkflowSymbols));
 }
 
 /** All env vars managed by metadata scope functions. */
@@ -298,13 +299,7 @@ export function emitWorkflow(
       out.push("  :");
     } else {
       for (const cmd of fn.commands) {
-        if (isJaiphReturn(cmd)) {
-          const value = cmd.slice("return ".length).trim();
-          out.push(`  jaiph::set_return_value ${value}`);
-          out.push("  return 0");
-        } else {
-          out.push(`  ${normalizeShellLocalExport(resolveShellRefs(cmd, importedWorkflowSymbols))}`);
-        }
+        out.push(`  ${emitFunctionBodyLine(cmd, importedWorkflowSymbols)}`);
       }
     }
     out.push("}");

@@ -33,13 +33,23 @@ export type ConstRhs =
 
 export type IfConditionDef =
   | { kind: "ensure"; ref: RuleRefDef; args?: string }
+  | { kind: "run"; ref: WorkflowRefDef; args?: string };
+
+/** RHS of `channel <- …` */
+export type SendRhsDef =
+  | { kind: "forward" }
+  | { kind: "literal"; token: string }
+  | { kind: "var"; bash: string }
   | { kind: "run"; ref: WorkflowRefDef; args?: string }
-  | { kind: "shell"; command: string };
+  /** Parsed then rejected in validation (use `run ref` to capture a return value). */
+  | { kind: "bare_ref"; ref: WorkflowRefDef }
+  /** Shell fragment emitted as `"$(...)"` for inbox send. */
+  | { kind: "shell"; command: string; loc: SourceLoc };
 
 export interface RuleDef {
   name: string;
   comments: string[];
-  /** Structured rule body steps (shell steps remain for legacy e2e rules). */
+  /** Rule body: Jaiph keywords plus shell fragments. */
   steps: WorkflowStepDef[];
   loc: SourceLoc;
 }
@@ -101,11 +111,9 @@ export type WorkflowStepDef =
       returns?: string;
     }
   | {
-      type: "shell";
-      command: string;
+      type: "comment";
+      text: string;
       loc: SourceLoc;
-      /** When set, capture step stdout into this variable name. */
-      captureName?: string;
     }
   | {
       type: "fail";
@@ -130,7 +138,7 @@ export type WorkflowStepDef =
       /** Brace-style `else if` chain (parser-only; emits bash `elif`). */
       elseIfBranches?: Array<{
         negated: boolean;
-        condition: Exclude<IfConditionDef, { kind: "shell" }>;
+        condition: IfConditionDef;
         thenSteps: WorkflowStepDef[];
       }>;
       elseSteps?: WorkflowStepDef[];
@@ -147,14 +155,20 @@ export type WorkflowStepDef =
     }
   | {
       type: "send";
-      command: string;
       channel: string;
+      rhs: SendRhsDef;
       loc: SourceLoc;
     }
   | {
       type: "return";
       value: string;
       loc: SourceLoc;
+    }
+  | {
+      type: "shell";
+      command: string;
+      loc: SourceLoc;
+      captureName?: string;
     };
 
 export interface EnvDeclDef {

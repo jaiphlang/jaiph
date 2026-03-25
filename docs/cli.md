@@ -103,7 +103,7 @@ workflow default {
 `prompt` text follows bash-style variable expansion (for example `$1`, `${HOME}`, `${FILES[@]}`).
 For safety, command substitution is not allowed in prompt text: `$(...)` and backticks are rejected with `E_PARSE`.
 
-Elsewhere in workflows, `$(...)` is shell-only: it must not invoke Jaiph rules, workflows, or functions, contain inbox send (`<-`), or use `run` / `ensure` as shell commands (`E_VALIDATE`). The same rules apply to every workflow shell line: the first command word cannot name a Jaiph symbol, even when the line also contains `$(...)`; use **`run`** to call functions from a workflow, not a bare `fn arg` line. See [Grammar](grammar.md#managed-calls-vs-command-substitution).
+Workflow and rule bodies contain structured Jaiph steps only — use **`run`** to call a **`function`** for shell execution. In bash-bearing contexts (mainly **`function`** bodies, and restricted `const` / send RHS forms), `$(...)` and the first command word are validated: they must not invoke Jaiph rules, workflows, or functions, contain inbox send (`<-`), or use `run` / `ensure` as shell commands (`E_VALIDATE`). See [Grammar](grammar.md#managed-calls-vs-command-substitution).
 
 If a `.jh` or `.jph` file is executable and has `#!/usr/bin/env jaiph`, you can run it directly:
 
@@ -313,7 +313,7 @@ jaiph report [start|stop|status] [--host <addr>] [--port <n>] [--poll-ms <n>] [-
 ## File extensions
 
 - **`.jh`** is the recommended extension for new Jaiph files. Use it for entrypoints, imports, and `jaiph build` / `jaiph run` / `jaiph test`.
-- **`.jph`** remains supported for backward compatibility. Existing projects using `.jph` continue to work unchanged. **`jaiph run`** (and the `jaiph <file.jph>` shorthand) prints a deprecation notice to stderr when stderr is a TTY; `jaiph build` does not. Migrate when convenient with `mv *.jph *.jh` and update import paths if they explicitly mention the extension.
+- **`.jph`** remains supported for backward compatibility. Existing projects using `.jph` continue to work unchanged. **`jaiph run`** (and the `jaiph <file.jph>` shorthand) prints a deprecation notice to stderr when stderr is a TTY; `jaiph build` does not. Rename when convenient with `mv *.jph *.jh` and update import paths if they explicitly mention the extension.
 
 Imports resolve for both extensions: `import "foo" as x` finds `foo.jh` or `foo.jph` (`.jh` is preferred when both exist).
 

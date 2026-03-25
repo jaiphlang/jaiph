@@ -45,12 +45,6 @@ rule worktree_is_clean {
   run assert_worktree_clean_for_docs
 }
 
-function is_path_in_newline_list() {
-  local allowed="$1"
-  local file="$2"
-  [[ $'\n'"$allowed"$'\n' == *$'\n'"$file"$'\n'* ]]
-}
-
 function assert_only_allowed_changed() {
   local allowed="$1"
   source "${JAIPH_LIB}/git_paths.sh"
@@ -58,7 +52,7 @@ function assert_only_allowed_changed() {
   after_changed_files="$(git_changed_paths_sorted)"
   while IFS= read -r changed_file; do
     [ -z "$changed_file" ] && continue
-    if is_path_in_newline_list "$allowed" "$changed_file"; then
+    if [[ $'\n'"$allowed"$'\n' == *$'\n'"$changed_file"$'\n'* ]]; then
       continue
     fi
     echo "Unexpected file changed by docs prompt: $changed_file" >&2
@@ -76,12 +70,12 @@ function arg_nonempty() {
 
 function first_line_str() {
   source "${JAIPH_LIB}/strings.sh"
-  return "$(first_line "$1")"
+  first_line "$1"
 }
 
 function rest_lines_str() {
   source "${JAIPH_LIB}/strings.sh"
-  return "$(rest_lines "$1")"
+  rest_lines "$1"
 }
 
 function list_docs_md_paths() {
@@ -91,7 +85,7 @@ function list_docs_md_paths() {
     out="${out:+${out}
 }${f}"
   done
-  return "$out"
+  printf '%s\n' "$out"
 }
 
 function build_allowed_paths_block() {
@@ -105,7 +99,7 @@ src/cli/shared/usage.ts"
     out="${out}
 ${f}"
   done
-  return "$out"
+  printf '%s\n' "$out"
 }
 
 function join_newline_args() {

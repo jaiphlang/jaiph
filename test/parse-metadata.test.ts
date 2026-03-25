@@ -195,13 +195,13 @@ test("workflow config: parses config inside workflow", () => {
     "  config {",
     '    agent.backend = "claude"',
     "  }",
-    '  echo "hello"',
+    '  log "hello"',
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
   assert.equal(mod.workflows[0].metadata?.agent?.backend, "claude");
   assert.equal(mod.workflows[0].steps.length, 1);
-  assert.equal(mod.workflows[0].steps[0].type, "shell");
+  assert.equal(mod.workflows[0].steps[0].type, "log");
 });
 
 test("workflow config: allows comments before config", () => {
@@ -211,7 +211,7 @@ test("workflow config: allows comments before config", () => {
     "  config {",
     '    agent.default_model = "gpt-4"',
     "  }",
-    '  echo "done"',
+    '  log "done"',
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");

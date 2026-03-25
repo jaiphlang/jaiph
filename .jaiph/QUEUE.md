@@ -6,78 +6,41 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Remove shell from compiler, migrate all fixtures, pass all tests <!-- dev-ready -->
+## Rewrite docs wording to present-tense language truth <!-- dev-ready -->
 
-**Spec**: `.jaiph/language_redesign_spec.md` — sections: Legality Matrix (all three), Implementation Plan Phases 2–4, Code Changes Required, Migration Examples, Pattern Catalog (all P1–P11).
+**Goal.** Remove historical transition framing from user-facing docs and describe the language in current-state terms only.
 
-**Goal.** One-shot breaking cutover: (1) rules become structured (no raw shell), (2) workflows lose shell fallback, (3) functions enforce pure bash, (4) all `.jh` fixtures are migrated, (5) all tests pass. This task is indivisible — the compiler changes and fixture migration must land together.
+**Scope.**
 
-**Scope — Compiler changes.**
-
-1. **Rule parser rewrite.**
-   - Change `RuleDef` in `src/types.ts`: replace `commands: string[]` with `steps` array (reuse `WorkflowStepDef` subset or define `RuleStepDef`).
-   - Rewrite `src/parse/rules.ts` with keyword-aware parsing mirroring `src/parse/workflows.ts`. Rules support: `const`, `ensure` (other rules only, no `recover`), `run` (functions only, not workflows), `log`, `logerr`, `return "value"`, `fail "reason"`, brace-style `if`.
-   - Rules do NOT support: `prompt`, routing/send, async, `recover`.
-   - Rewrite rule emission in `src/transpile/emit-workflow.ts` to handle structured steps instead of opaque command strings.
-   - Update `src/transpile/validate.ts`: allow `run` in rules targeting functions only.
-
-2. **Remove shell fallback from workflows.**
-   - `src/parse/workflows.ts`: delete the catch-all `type: "shell"` codepath and the `shellAccumulator`/`braceDepthDelta` shell accumulation.
-   - Emit parser error with rewrite guidance: `"raw shell is not allowed in workflow; extract to a function"`.
-   - Remove old `if ... then ... fi` syntax (only brace-style `if` accepted).
-   - Remove shell condition form from `if` (`if ! command; then`).
-
-3. **Enforce function purity.**
-   - `src/parse/functions.ts`: reject Jaiph `return "value"` in function bodies (only allow `return N` where N is an integer or `$?`).
-   - Remove `jaiph::set_return_value` from function transpilation paths in `src/transpile/emit-workflow.ts`.
-   - Reject Jaiph keywords (`fail`, `const`, `log`, `logerr`) in function bodies.
-
-4. **Update send operator.**
-   - Send RHS accepts: `"value"` / `$var` / `run ref`. Reject raw shell as RHS.
-
-5. **Scope down or remove `src/transpile/shell-jaiph-guard.ts`** — shell only exists in functions now.
-
-**Scope — Fixture migration (must happen in the same task).**
-
-6. **Rewrite all `e2e/*.jh` files** to new syntax:
-   - `local` → `const` in workflows
-   - Raw shell → extract to named `function` blocks
-   - `if ... then ... fi` → brace-style `if`
-   - `exit 1` → `fail`, `exit 0` → `return`
-   - `return "value"` in functions → stdout passthrough (`echo`/direct output)
-   - See spec Migration Examples for before/after patterns for every common case.
-
-7. **Update test fixtures** (`test/fixtures/*.jh`) to new syntax.
-
-8. **Regenerate golden expected outputs.** Run `scripts/dump-golden-output.js` to regenerate `test/expected/` files.
-
-9. **Update acceptance tests** (`test/acceptance/`) if any test raw-shell parsing behavior that no longer exists.
-
-10. **Run full test suite**: `npm run build && npm test && npm run test:e2e`. Fix any failures.
-
-**Do NOT change.**
-- Reporting infrastructure (`src/reporting/`)
-- Run directory structure and artifacts
-- e2e test helpers (`e2e/lib/common.sh`)
-- Test infrastructure (test runners, e2e harness)
-- Only change e2e test SCRIPTS (`e2e/tests/*.sh`) if the expected output changed due to syntax changes (e.g. step names, error messages)
-
-**Compiler files to change.** `src/types.ts`, `src/parse/rules.ts` (full rewrite), `src/parse/workflows.ts`, `src/parse/functions.ts`, `src/transpile/emit-workflow.ts`, `src/transpile/emit-steps.ts`, `src/transpile/validate.ts`, `src/transpile/shell-jaiph-guard.ts`.
+1. Sweep docs (`README.md`, `docs/*.md`, `docs/index.html`, `docs/jaiph-skill.md`) for wording that frames rules as transitions (examples: "no longer", "legacy syntax", "migration patterns", "migrate to").
+2. Rewrite those passages to present-tense contracts (what is valid, what is rejected), without "before vs after" narration.
+3. Keep changelog entries historical (do not rewrite release history), but ensure reference docs and guides are state-only.
+4. Keep semantics unchanged; wording-only task unless a statement is factually wrong.
 
 **Acceptance criteria.**
 
-- Rules parse with structured keywords. Raw shell in rules produces a parser error.
-- Workflows reject raw shell with actionable error messages.
-- Functions reject `return "value"`, `fail`, `const`, `log`, `logerr`.
-- `jaiph::set_return_value` is gone from function transpilation.
-- Send operator accepts only `"value"` / `$var` / `run ref`.
-- Old `if ... then ... fi` no longer parses. Only brace-style accepted.
-- All `e2e/*.jh` and `test/fixtures/*.jh` files use new syntax exclusively.
-- `npm run build` passes.
-- `npm test` passes (including golden output comparison).
-- `npm run test:e2e` passes.
-- Reporting and run directory behavior unchanged.
-- Zero raw shell in any workflow or rule across the entire codebase.
+- Reference docs read as current behavior contracts, not migration guides.
+- No "legacy/migration/no longer" phrasing in current-state sections of README and docs.
+- Build/tests still pass after wording changes.
+
+---
+
+## Remove dead code after language redesign rewrite <!-- dev-ready -->
+
+**Goal.** Remove parser/transpiler/runtime code paths that only existed for transitional compatibility and are now redundant.
+
+**Scope.**
+
+1. Identify dead or unreachable compatibility code related to old orchestration syntax and shell fallbacks.
+2. Remove unused parser helpers, validator branches, and transpiler glue that are no longer referenced.
+3. Remove stale tests that only assert transitional compatibility behavior.
+4. Keep behavior and public contracts unchanged.
+
+**Acceptance criteria.**
+
+- No dead compatibility branches remain for removed syntax paths.
+- Typecheck/build/tests/e2e pass with no regressions.
+- Diff includes only removals/refactors justified by current parser/runtime behavior.
 
 ---
 
@@ -105,6 +68,27 @@ The first `##` task in the file is always the current task.
 - Cross-function call detection works (parser/validator error on reference to another Jaiph function)
 - All existing tests still pass
 - E2e test added: function isolation verified (function cannot read caller variables)
+
+---
+
+## Post-refactor sweep: dead code removal and docs cleanup <!-- dev-ready -->
+
+**Goal.** After the language refactor phases are complete, remove residual rewrite-era code and perform one final docs consistency sweep.
+
+**Scope.**
+
+1. Remove dead parser/transpiler/runtime helpers that were kept during the refactor but are now unused.
+2. Remove temporary compatibility tests/fixtures/messages that no longer protect active behavior.
+3. Run a full docs consistency pass across `README.md`, `docs/*.md`, `docs/index.html`, and `docs/jaiph-skill.md` so terminology matches the final grammar/runtime.
+4. Eliminate duplicate or contradictory wording between Grammar, CLI, Getting Started, and the skill docs.
+5. Keep changes focused on cleanup (no new feature work).
+
+**Acceptance criteria.**
+
+- No unused refactor-era branches/helpers remain in active code paths.
+- Docs are internally consistent and aligned with shipped behavior.
+- `npm run build && npm test && npm run test:e2e` pass after cleanup.
+- Diff is cleanup-only (removals, wording consistency, and minimal wiring fixes).
 
 ---
 

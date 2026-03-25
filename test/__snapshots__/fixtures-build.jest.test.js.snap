@@ -73,7 +73,7 @@ inbox::analyst::impl() {
   set +u
   jaiph::emit_workflow_summary_event WORKFLOW_START 'analyst'
   echo "$1" > findings_file.md
-  summary=$(echo "Summary of findings")
+  local summary; summary=$(echo "Summary of findings")
   jaiph::send 'summary' "$(echo "$summary")" 'analyst'
   jaiph::emit_workflow_summary_event WORKFLOW_END 'analyst'
 }

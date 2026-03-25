@@ -44,7 +44,7 @@ function gap_report_nonempty() {
 }
 
 function read_gap_report() {
-  return "$(cat .jaiph/tmp/qa_gap_report.md)"
+  cat .jaiph/tmp/qa_gap_report.md
 }
 
 function save_gap_report() {

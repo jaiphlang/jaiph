@@ -1,6 +1,5 @@
-import type { WorkflowDef, WorkflowRouteDef } from "../types";
+import type { WorkflowDef } from "../types";
 import {
-  braceDepthDelta,
   colFromRaw,
   fail,
   indexOfClosingDoubleQuote,
@@ -8,16 +7,17 @@ import {
   matchSendOperator,
 } from "./core";
 import { parseConstRhs } from "./const-rhs";
-import { tryParseLegacyIfEnsure, tryParseLegacyIfRun } from "./legacy-if";
 import { parseConfigBlock } from "./metadata";
 import { parsePromptStep } from "./prompt";
+import { parseSendRhs } from "./send-rhs";
 import { parseEnsureStep } from "./steps";
+import { tryParseLegacyIfEnsure, tryParseLegacyIfRun } from "./legacy-if";
 import { tryParseBraceIfChain } from "./workflow-brace";
 
 /**
  * Detect Jaiph value-return syntax vs bash exit-code return.
  * Jaiph value-return: return "..." | return '...' | return $var
- * Bash return (kept as shell): return 0 | return 1 | return $?
+ * Bash return: return 0 | return 1 | return $?
  */
 function isJaiphValueReturn(expr: string): boolean {
   const arg = expr.trim();
@@ -25,7 +25,6 @@ function isJaiphValueReturn(expr: string): boolean {
   if (arg === "$?") return false;
   return arg.startsWith('"') || arg.startsWith("'") || arg.startsWith("$");
 }
-
 
 export function parseWorkflowBlock(
   filePath: string,
@@ -50,65 +49,28 @@ export function parseWorkflowBlock(
   };
 
   let idx = startIndex + 1;
-  let braceDepth = 0;
-  let shellAccumulator: string[] = [];
-  let shellAccumulatorStartLine = 0;
   /** Track whether a non-comment step has been seen (config must come first). */
   let hadNonCommentStep = false;
-
-  const flushShellAccumulator = (): void => {
-    if (shellAccumulator.length === 0) return;
-    const command = shellAccumulator.join("\n").trim();
-    shellAccumulator = [];
-    // Check for send operator on accumulated multiline shell command.
-    const sendMatch = matchSendOperator(command);
-    if (sendMatch) {
-      workflow.steps.push({
-        type: "send",
-        command: sendMatch.command,
-        channel: sendMatch.channel,
-        loc: { line: shellAccumulatorStartLine, col: 1 },
-      });
-      return;
-    }
-    workflow.steps.push({
-      type: "shell",
-      command,
-      loc: { line: shellAccumulatorStartLine, col: 1 },
-    });
-  };
 
   for (; idx < lines.length; idx += 1) {
     const innerNo = idx + 1;
     const innerRaw = lines[idx];
     const inner = innerRaw.trim();
     if (!inner) {
-      if (braceDepth > 0) shellAccumulator.push(innerRaw.trim());
-      else flushShellAccumulator();
       continue;
     }
     if (inner === "}") {
-      if (braceDepth === 0) break;
-      braceDepth -= 1;
-      shellAccumulator.push(innerRaw.trim());
-      if (braceDepth === 0) flushShellAccumulator();
-      continue;
+      break;
     }
     if (inner.startsWith("#")) {
-      if (braceDepth > 0) shellAccumulator.push(innerRaw.trim());
-      else {
-        flushShellAccumulator();
-        workflow.steps.push({
-          type: "shell",
-          command: innerRaw.trim(),
-          loc: { line: innerNo, col: 1 },
-        });
-      }
+      workflow.steps.push({
+        type: "comment",
+        text: innerRaw.trim(),
+        loc: { line: innerNo, col: 1 },
+      });
       continue;
     }
-    // Workflow-scoped config block (must appear before any non-comment steps).
     if (/^config\s*\{/.test(inner)) {
-      flushShellAccumulator();
       if (workflow.metadata !== undefined) {
         fail(filePath, "duplicate config block inside workflow (only one allowed per workflow)", innerNo);
       }
@@ -120,13 +82,7 @@ export function parseWorkflowBlock(
         fail(filePath, "runtime.* keys are not allowed in workflow-level config (only agent.* and run.* keys)", innerNo);
       }
       workflow.metadata = metadata;
-      idx = nextIndex - 1; // for loop will increment
-      continue;
-    }
-    if (braceDepth > 0) {
-      shellAccumulator.push(innerRaw.trim());
-      braceDepth += braceDepthDelta(inner);
-      if (braceDepth === 0) flushShellAccumulator();
+      idx = nextIndex - 1;
       continue;
     }
 
@@ -136,20 +92,6 @@ export function parseWorkflowBlock(
     if (braceIf) {
       workflow.steps.push(braceIf.step);
       idx = braceIf.nextIdx - 1;
-      continue;
-    }
-
-    const legEnsure = tryParseLegacyIfEnsure(filePath, lines, idx, inner, innerNo, innerRaw);
-    if (legEnsure) {
-      workflow.steps.push(legEnsure.step);
-      idx = legEnsure.nextIdx;
-      continue;
-    }
-
-    const legRun = tryParseLegacyIfRun(filePath, lines, idx, inner, innerNo, innerRaw);
-    if (legRun) {
-      workflow.steps.push(legRun.step);
-      idx = legRun.nextIdx;
       continue;
     }
 
@@ -198,61 +140,6 @@ export function parseWorkflowBlock(
       continue;
     }
 
-    const ifShellMatch = inner.match(/^if\s+!\s+(.+?)\s*;\s*then$/);
-    if (ifShellMatch) {
-      const condition = ifShellMatch[1].trim();
-      const thenSteps: Array<
-        | { type: "shell"; command: string; loc: { line: number; col: number } }
-        | { type: "run"; workflow: { value: string; loc: { line: number; col: number } }; args?: string }
-      > = [];
-      let foundFi = -1;
-      for (let lookahead = idx + 1; lookahead < lines.length; lookahead += 1) {
-        const lookNo = lookahead + 1;
-        const lookRaw = lines[lookahead];
-        const lookTrim = lookRaw.trim();
-        if (!lookTrim || lookTrim.startsWith("#")) {
-          continue;
-        }
-        if (lookTrim === "fi") {
-          foundFi = lookahead;
-          break;
-        }
-        const runMatch = lookTrim.match(
-          /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
-        );
-        if (runMatch) {
-          thenSteps.push({
-            type: "run",
-            workflow: {
-              value: runMatch[1],
-              loc: { line: lookNo, col: lines[lookahead].indexOf("run") + 1 },
-            },
-            args: runMatch[2]?.trim(),
-          });
-        } else {
-          thenSteps.push({
-            type: "shell",
-            command: lookRaw.trim(),
-            loc: { line: lookNo, col: colFromRaw(lookRaw) },
-          });
-        }
-      }
-      if (foundFi === -1) {
-        fail(filePath, 'unterminated if-block, expected "fi"', innerNo);
-      }
-      if (thenSteps.length === 0) {
-        fail(filePath, "if-block then-branch must contain at least one command or run", innerNo);
-      }
-      workflow.steps.push({
-        type: "if",
-        negated: true,
-        condition: { kind: "shell", command: condition },
-        thenSteps: thenSteps as import("../types").WorkflowStepDef[],
-      });
-      idx = foundFi;
-      continue;
-    }
-
     const promptAssignMatch = inner.match(
       /^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*prompt\s+(.+)$/s,
     );
@@ -286,7 +173,6 @@ export function parseWorkflowBlock(
     ) {
       const captureName = genericAssignMatch[1];
       const rest = genericAssignMatch[2].trim();
-      // Capture + send is a parse error.
       if (matchSendOperator(rest)) {
         fail(filePath, "E_PARSE capture and send cannot be combined; use separate steps", innerNo);
       }
@@ -315,14 +201,6 @@ export function parseWorkflowBlock(
           },
           args: runMatch[2]?.trim(),
           captureName,
-        });
-        continue;
-      }
-      if (rest.trimStart().startsWith("(")) {
-        workflow.steps.push({
-          type: "shell",
-          command: inner,
-          loc: { line: innerNo, col: innerRaw.indexOf(rest) + 1 },
         });
         continue;
       }
@@ -415,11 +293,42 @@ export function parseWorkflowBlock(
       }
     }
 
-    if (/^if\s+(?:!\s*)?ensure\b/.test(inner)) {
-      fail(filePath, 'malformed if-ensure statement; expected "if [!] ensure <rule_ref> [args]; then"', innerNo);
+    if (/^if\s/.test(inner)) {
+      const legacyEnsure = tryParseLegacyIfEnsure(filePath, lines, idx, inner, innerNo, innerRaw);
+      if (legacyEnsure) {
+        workflow.steps.push(legacyEnsure.step);
+        idx = legacyEnsure.nextIdx - 1;
+        continue;
+      }
+      const legacyRun = tryParseLegacyIfRun(filePath, lines, idx, inner, innerNo, innerRaw);
+      if (legacyRun) {
+        workflow.steps.push(legacyRun.step);
+        idx = legacyRun.nextIdx - 1;
+        continue;
+      }
+      const looksLikeJaiphIf =
+        /^if\s+!\s*ensure\b/.test(inner) ||
+        /^if\s+ensure\b/.test(inner) ||
+        /^if\s+!\s*run\b/.test(inner) ||
+        /^if\s+run\b/.test(inner) ||
+        /^if\s+not\s+ensure\b/.test(inner) ||
+        /^if\s+not\s+run\b/.test(inner);
+      if (looksLikeJaiphIf) {
+        fail(
+          filePath,
+          'use brace-style if: if [not] ensure|run <ref> [args] { ... } (then/fi syntax is not supported)',
+          innerNo,
+          innerRaw.indexOf("if") + 1,
+        );
+      }
+      workflow.steps.push({
+        type: "shell",
+        command: inner,
+        loc: { line: innerNo, col: colFromRaw(innerRaw) },
+      });
+      continue;
     }
 
-    // `<channel> -> <workflow>[, <workflow>...]` route declaration.
     const routeMatch = inner.match(
       /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s+->\s+(.+)$/,
     );
@@ -445,29 +354,24 @@ export function parseWorkflowBlock(
       continue;
     }
 
-    // `<channel> <- [cmd]` send operator (detected before shell fallback).
     const sendMatch = matchSendOperator(inner);
     if (sendMatch) {
+      const arrowIdx = inner.indexOf("<-");
+      const rhsCol = arrowIdx >= 0 ? arrowIdx + 3 : 1;
+      const rhs = parseSendRhs(filePath, sendMatch.rhsText, innerNo, rhsCol);
       workflow.steps.push({
         type: "send",
-        command: sendMatch.command,
         channel: sendMatch.channel,
+        rhs,
         loc: { line: innerNo, col: 1 },
       });
       continue;
     }
 
-    const shellDelta = braceDepthDelta(inner);
-    if (shellDelta > 0) {
-      shellAccumulator = [innerRaw.trim()];
-      shellAccumulatorStartLine = innerNo;
-      braceDepth = shellDelta;
-      continue;
-    }
     workflow.steps.push({
       type: "shell",
       command: inner,
-      loc: { line: innerNo, col: 1 },
+      loc: { line: innerNo, col: colFromRaw(innerRaw) },
     });
   }
 

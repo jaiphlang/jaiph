@@ -9,12 +9,12 @@ config {
 
 function first_line_str() {
   source "${JAIPH_LIB}/strings.sh"
-  return "$(first_line "$1")"
+  first_line "$1"
 }
 
 function rest_lines_str() {
   source "${JAIPH_LIB}/strings.sh"
-  return "$(rest_lines "$1")"
+  rest_lines "$1"
 }
 
 function arg_nonempty() {

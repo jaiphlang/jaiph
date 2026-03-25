@@ -1,7 +1,6 @@
 /**
- * Keyword-first Jaiph invocations: managed shell and $(...) bodies must not use
- * bare REF tokens where `ensure` / `run` is required. Single place for symbol
- * classification used by substitution scanning and workflow shell lines.
+ * Keyword-first checks for Jaiph symbols inside bash `$(...)` and at the start of
+ * workflow/rule shell lines.
  */
 
 import { jaiphError } from "../errors";
@@ -17,8 +16,6 @@ export type SubstitutionValidateEnv = {
   importsByAlias: Map<string, string>;
   lookupImported: (alias: string, name: string) => SymbolKind | undefined;
 };
-
-export type SubstitutionValidationMode = "substitution" | "managed_shell";
 
 function stripLeadingEnvAssigns(segment: string): string {
   let s = segment.trim();
@@ -104,29 +101,20 @@ export function classifyJaiphShellRefToken(
 }
 
 /**
- * Reject Jaiph symbol used as shell command word; shared by $(...) and
- * workflow managed shell lines (keyword-first: use ensure / run).
+ * Reject Jaiph symbol used as the command word inside `$(...)` (function bodies).
  */
-export function assertKeywordFirstShellFragment(
-  inner: string,
-  env: SubstitutionValidateEnv,
-  mode: SubstitutionValidationMode,
-): void {
+export function assertKeywordFirstShellFragment(inner: string, env: SubstitutionValidateEnv): void {
   const trimmed = inner.trim();
   if (/^(?:run|ensure)\s/.test(trimmed)) {
     throwJaiphInSubstitution(
       env,
-      mode === "managed_shell"
-        ? 'workflow shell cannot use "run" or "ensure" as shell commands; use Jaiph step forms instead'
-        : 'command substitution cannot use Jaiph keywords "run" or "ensure"; use managed steps outside $(...)',
+      'command substitution cannot use Jaiph keywords "run" or "ensure"; use managed steps outside $(...)',
     );
   }
   if (hasSendOperatorOutsideQuotes(inner)) {
     throwJaiphInSubstitution(
       env,
-      mode === "managed_shell"
-        ? "channel send (<-) must be a dedicated send step, not embedded in shell"
-        : "command substitution cannot contain channel send (<-); use a workflow send step instead",
+      "command substitution cannot contain channel send (<-); use a workflow send step instead",
     );
   }
   const word = firstCommandWord(inner);
@@ -134,33 +122,62 @@ export function assertKeywordFirstShellFragment(
   if (cls === "rule") {
     throwJaiphInSubstitution(
       env,
-      mode === "managed_shell"
-        ? `rule "${word}" must be invoked with ensure, not as a shell command`
-        : `command substitution cannot invoke rule "${word}"; use ensure ${word} ... in a workflow step`,
+      `command substitution cannot invoke rule "${word}"; use ensure ${word} ... in a workflow step`,
     );
   }
   if (cls === "workflow") {
     throwJaiphInSubstitution(
       env,
-      mode === "managed_shell"
-        ? `workflow "${word}" must be invoked with run, not as a shell command`
-        : `command substitution cannot invoke workflow "${word}"; use run ${word} ... in a workflow step`,
+      `command substitution cannot invoke workflow "${word}"; use run ${word} ... in a workflow step`,
     );
   }
   if (cls === "function") {
     throwJaiphInSubstitution(
       env,
-      mode === "managed_shell"
-        ? `direct function call "${word}" is not allowed in a workflow; use: run ${word} ...`
-        : `command substitution cannot invoke function "${word}"; use run ${word} ... for managed calls (or use pure shell inside $(...))`,
+      `command substitution cannot invoke function "${word}"; use run ${word} ... for managed calls (or use pure shell inside $(...))`,
     );
   }
   if (cls === "unknown") {
     throwJaiphInSubstitution(
       env,
-      mode === "managed_shell"
-        ? `unknown imported symbol "${word}" used as a shell command`
-        : `command substitution references unknown imported symbol "${word}"`,
+      `command substitution references unknown imported symbol "${word}"`,
+    );
+  }
+}
+
+/** Reject Jaiph rule/workflow/function used as the first command word of a shell line. */
+export function assertNoJaiphLeadCommandWord(fragment: string, env: SubstitutionValidateEnv): void {
+  const trimmed = fragment.trim();
+  if (/^(?:run|ensure)\s/.test(trimmed)) {
+    throwJaiphInSubstitution(
+      env,
+      'workflow shell cannot use Jaiph keywords "run" or "ensure" as the shell command; use managed steps',
+    );
+  }
+  const word = firstCommandWord(trimmed);
+  const cls = classifyJaiphShellRefToken(word, env);
+  if (cls === "rule") {
+    throwJaiphInSubstitution(
+      env,
+      `rule "${word}" must be called with ensure, not as a shell command`,
+    );
+  }
+  if (cls === "workflow") {
+    throwJaiphInSubstitution(
+      env,
+      `workflow "${word}" must be called with run, not as a shell command`,
+    );
+  }
+  if (cls === "function") {
+    throwJaiphInSubstitution(
+      env,
+      `direct function call "${word}"; use run ${word} ... instead`,
+    );
+  }
+  if (cls === "unknown") {
+    throwJaiphInSubstitution(
+      env,
+      `shell line references unknown imported symbol "${word}"`,
     );
   }
 }

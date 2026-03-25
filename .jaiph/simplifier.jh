@@ -45,7 +45,7 @@ function assert_no_test_or_e2e_in_changed() {
       bad=1
     fi
   done < <(git_changed_paths_sorted)
-  return "$bad"
+  return $bad
 }
 
 rule no_test_or_e2e_paths_changed {
@@ -102,7 +102,7 @@ function save_simplifier_report() {
 }
 
 function read_simplifier_report() {
-  return "$(cat .jaiph/tmp/simplifier_report.md)"
+  cat .jaiph/tmp/simplifier_report.md
 }
 
 workflow apply_simplifications {

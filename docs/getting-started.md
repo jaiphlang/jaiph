@@ -21,11 +21,11 @@ It combines declarative workflow structure with bash, then compiles to pure shel
 
 **Core concepts:**
 
-- **Workflows** — Ordered Jaiph steps (`ensure`, `run`, `prompt`, `const`, `if`, `fail`, `return`, logging, inbox, async `run … &` + `wait`, and optional shell). Prefer moving bash into **`function`** blocks and calling them with `run`.
-- **Rules** — Structured checks (`ensure`, `run` to functions, `const`, `if`, `fail`, `log` / `logerr`, `return`, plus shell where still accepted); used with `ensure` and in conditionals.
+- **Workflows** — Ordered **Jaiph-only** steps (`ensure`, `run`, `prompt`, `const`, brace `if`, `fail`, `return`, logging, inbox, async `run … &` + `wait`). Unrecognized lines are parse errors — put bash in **`function`** blocks and call them with **`run`**. Conditionals use **brace form** only (`if [not] ensure|run ref { … }`).
+- **Rules** — Structured checks with the same keyword style (restricted set): `ensure` for rules, **`run` for functions only**, `const`, brace `if`, `fail`, `log` / `logerr`, `return "…"`; no `prompt`, inbox, `wait`, or `ensure … recover`.
 - **Agent prompts** — `prompt "..."` sends text to a configured agent (e.g. Cursor or Claude CLI); workflows orchestrate when the agent runs.
-- **Composability** — Import other `.jh` / `.jph` modules and call their rules, workflows, and functions by alias (e.g. `ensure security.scan_passes`, `run bootstrap.nodejs`). Use **`ensure` only for rules** and **`run` for workflows and functions** so every Jaiph call is keyword-led; a bare symbol name cannot start a workflow shell step, including when the line also contains `$(...)`.
-- **Step capture** — Assign results with `x = ensure …` / `x = run …` / `x = prompt …`, or **`const x = …`** with the same RHS forms (see [Grammar](grammar.md)). For `ensure` / `run`, the captured value is the callee’s explicit `return`; ordinary command stdout goes to step artifacts under `.jaiph/runs`.
+- **Composability** — Import other `.jh` / `.jph` modules and call their rules, workflows, and functions by alias (e.g. `ensure security.scan_passes`, `run bootstrap.nodejs`). Use **`ensure` only for rules** and **`run` for workflows and functions** so every managed call is keyword-led.
+- **Step capture** — Assign results with `x = ensure …` / `x = run …` / `x = prompt …`, or **`const x = …`** with the same RHS forms (see [Grammar](grammar.md)). For **rules and workflows**, capture uses explicit `return "…"` / `return "$var"`. For **`run` to a function**, capture follows **function stdout** (use `echo` / `printf` — not Jaiph `return "…"` inside the function).
 - **Shell-native** — Transpiled output is bash. Shared bash helpers can live in `.jaiph/lib/` and be loaded from functions with `source "$JAIPH_LIB/…"`. Emitted scripts export a default `JAIPH_LIB` under the workspace (`JAIPH_WORKSPACE`, or `.` if unset); see [CLI — Environment variables](cli.md#environment-variables).
 
 > [!WARNING]
@@ -171,17 +171,17 @@ Jaiph source files use **`.jh`** (recommended); **`.jph`** is still accepted. A 
 - `config { ... }` — Optional block setting runtime options (agent backend, model, Docker sandbox, etc.). Allowed at the top level (module-wide) and inside individual workflows for per-workflow overrides (`agent.*` and `run.*` keys only). See [Configuration](configuration.md).
 - `import "path" as alias` — Import rules, workflows, and functions from another module. The path may include a `.jh` / `.jph` suffix or omit it; resolution prefers `.jh` when both exist. Verified at compile time.
 - `local name = value` / `const name = value` — Module-scoped variable, accessible as `$name` in all blocks within the module. Prefer **`const`** in new orchestration code.
-- `rule name { ... }` — Reusable check/action: structured Jaiph steps and/or shell. Rules run in an isolated child shell; on Linux, a read-only mount namespace is used when `unshare` and passwordless `sudo` are available, otherwise the same child-shell fallback as on other platforms. Call other rules with **`ensure`**, functions with **`run`**. Optional `export` for cross-module access.
-- `workflow name { ... }` — Orchestration entrypoint of ordered steps. Can change system state. Optional `export` for cross-module access.
-- `function name { ... }` — Reusable writable shell function (shell-like body; no `run`/`ensure`/routes inside). From a **workflow**, call it with **`run name`** so logs and return values use the managed step contract. The `()` after the name is optional (`function name() { ... }` also works).
+- `rule name { ... }` — Reusable check: **Jaiph structured steps only** (subset: `ensure` for rules, `run` for **functions**, `const`, brace `if`, `fail`, `log`/`logerr`, `return "…"`). Rules run in an isolated child shell; on Linux, a read-only mount namespace is used when `unshare` and passwordless `sudo` are available, otherwise the same child-shell fallback as on other platforms. Optional `export` for cross-module access.
+- `workflow name { ... }` — Orchestration entrypoint: **Jaiph steps only** (no raw shell — extract bash to `function` + `run`). Can change system state. Optional `export` for cross-module access.
+- `function name { ... }` — Bash helper (no `run`/`ensure`/routes; no Jaiph `fail`/`const`/`log`/`logerr`/`return "…"`). From a **workflow** or **rule**, call with **`run name`**; string capture uses **stdout**. The `()` after the name is optional (`function name() { ... }` also works).
 - `ensure ref [args...]` — Execute a rule; optional `recover` for bounded retry loops (default max retries **10**, overridable with **`JAIPH_ENSURE_MAX_RETRIES`**). See [Grammar](grammar.md).
-- `run ref [args...]` — Execute another workflow **or** a top-level function. Not allowed inside rules.
+- `run ref [args...]` — In a **workflow**, run another workflow or a function. In a **rule**, run a **function** only.
 - `prompt "..."` — Send text to the configured agent. Optional `returns '{ field: type }'` for validated JSON responses. See [Grammar](grammar.md).
-- `name = <step>` / `const name = <step>` — Capture or bind: for `ensure` / `run`, only the callee’s explicit `return`; for `prompt`, the final answer; for shell RHS on `const`, only simple values (no `$(...)` — use `run` to a function instead). See [Grammar](grammar.md#step-output-contract).
+- `name = <step>` / `const name = <step>` — Capture or bind: for **`ensure`** and **`run` to a workflow**, the callee’s explicit **`return "…"`**; for **`run` to a function**, **stdout**; for **`prompt`**, the final answer; **`const`** RHS allows only simple value forms (no `$(...)` — use `run` to a function). See [Grammar](grammar.md#step-output-contract).
 - `fail "reason"` — Abort the workflow or fail the rule with a message on stderr (non-zero exit).
 - `log "message"` / `logerr "message"` — Display a message in the progress tree (stdout / stderr).
-- `channel <- cmd` / `channel -> workflow` — Send and route messages between workflows. See [Inbox & Dispatch](inbox.md).
-- `run ref &` / `wait` — Background managed runs and join with a **`wait`** step (Jaiph keyword). Shell steps still support `&` / `wait` for raw commands. See [Grammar](grammar.md).
-- `if [not] ensure ref { ... }` / `if [not] run ref { ... }` — Brace conditionals (`else if`, `else` supported). Legacy `if … then … fi` / `elif` remains available. Shell-only conditions stay on the legacy `if ! cmd; then … fi` form.
+- `channel <- …` / `channel -> workflow` — Send (RHS: literal, `$var`, or `run fn`) and route messages between workflows. See [Inbox & Dispatch](inbox.md).
+- `run ref &` / `wait` — Background managed runs and join with a **`wait`** step. Use **`function`** + **`run`** for bash background jobs. See [Grammar](grammar.md).
+- `if [not] ensure ref { ... }` / `if [not] run ref { ... }` — **Brace-only** conditionals (`else if`, `else` supported). Use **`run`** to a function for command-style tests.
 
 Runtime behavior (progress tree, step output, run logs) is documented in [CLI Reference](cli.md). To browse past and in-progress runs in a browser, use [Reporting server](reporting.md). For agent backend configuration, see [Configuration](configuration.md). For Docker sandboxing (beta), see [Sandboxing](sandboxing.md). For testing workflows with mocks and assertions, see [Testing](testing.md). For lifecycle hooks, see [Hooks](hooks.md).

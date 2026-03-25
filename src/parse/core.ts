@@ -56,7 +56,7 @@ export function braceDepthDelta(line: string): number {
 /**
  * Match `channel <- command` when `<-` appears outside quoted strings.
  */
-export function matchSendOperator(line: string): { command: string; channel: string } | null {
+export function matchSendOperator(line: string): { rhsText: string; channel: string } | null {
   let inSingleQuote = false;
   let inDoubleQuote = false;
   for (let i = 0; i < line.length; i += 1) {
@@ -80,7 +80,7 @@ export function matchSendOperator(line: string): { command: string; channel: str
         /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)$/,
       );
       if (channelMatch) {
-        return { command: after, channel: channelMatch[1] };
+        return { rhsText: after, channel: channelMatch[1] };
       }
     }
   }

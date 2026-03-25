@@ -115,7 +115,7 @@ Some files in `test/` don't follow the strict one-file-per-module layout. They e
 
 | Test file | Kind | What it covers |
 |-----------|------|----------------|
-| `compiler-golden.test.ts` | Golden/regression | Large suite of parser/transpiler checks; includes inline expected shell for the canonical minimal workflow (see `scripts/dump-golden-output.js`), plus focused cases for `fail`, workflow `const`, `wait`, and brace-style `if` |
+| `compiler-golden.test.ts` | Golden/regression | Large suite of parser/transpiler checks; includes inline expected bash for the canonical minimal workflow (see `scripts/dump-golden-output.js`), plus cases aligned with structured workflows/rules, `fail`, workflow `const`, `wait`, brace-only `if`, send RHS, and function bodies |
 | `fixtures-build.jest.test.js` | Snapshot | Builds everything under `test/fixtures/` and compares file list + contents to Jest snapshot |
 | `sample-build.test.ts` | Integration | Cross-module build/transpile/run-tree behavior using real compiler and CLI components |
 | `run-summary-jsonl.test.ts` | Integration | Runs the CLI on a small workflow and asserts structure and fields of `run_summary.jsonl` under `.jaiph/runs/` |
