@@ -11,7 +11,6 @@ import { parseConfigBlock } from "./metadata";
 import { parsePromptStep } from "./prompt";
 import { parseSendRhs } from "./send-rhs";
 import { parseEnsureStep } from "./steps";
-import { tryParseLegacyIfEnsure, tryParseLegacyIfRun } from "./legacy-if";
 import { tryParseBraceIfChain } from "./workflow-brace";
 
 /**
@@ -294,18 +293,6 @@ export function parseWorkflowBlock(
     }
 
     if (/^if\s/.test(inner)) {
-      const legacyEnsure = tryParseLegacyIfEnsure(filePath, lines, idx, inner, innerNo, innerRaw);
-      if (legacyEnsure) {
-        workflow.steps.push(legacyEnsure.step);
-        idx = legacyEnsure.nextIdx - 1;
-        continue;
-      }
-      const legacyRun = tryParseLegacyIfRun(filePath, lines, idx, inner, innerNo, innerRaw);
-      if (legacyRun) {
-        workflow.steps.push(legacyRun.step);
-        idx = legacyRun.nextIdx - 1;
-        continue;
-      }
       const looksLikeJaiphIf =
         /^if\s+!\s*ensure\b/.test(inner) ||
         /^if\s+ensure\b/.test(inner) ||

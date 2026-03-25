@@ -6,22 +6,24 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Remove dead code after language redesign rewrite <!-- dev-ready -->
+## Fix log/logerr to interpret escape sequences <!-- dev-ready -->
 
-**Goal.** Remove parser/transpiler/runtime code paths that only existed for transitional compatibility and are now redundant.
+**Problem.** `log` and `logerr` use `echo "$message"` for terminal output, which does not interpret escape sequences like `\n`, `\t`, etc. A `log "line1\nline2"` prints the literal string `line1\nline2` instead of two lines.
+
+**Goal.** `log` and `logerr` should behave like `echo -e` — interpreting backslash escape sequences in the message.
 
 **Scope.**
 
-1. Identify dead or unreachable compatibility code related to old orchestration syntax and shell fallbacks.
-2. Remove unused parser helpers, validator branches, and transpiler glue that are no longer referenced.
-3. Remove stale tests that only assert transitional compatibility behavior.
-4. Keep behavior and public contracts unchanged.
+1. In `src/runtime/events.sh`, change the output line in `jaiph::log()` (line ~181) from `echo "$message"` to `echo -e "$message"`.
+2. Same change in `jaiph::logerr()` for its stderr output line.
+3. Verify the JSON event payloads (`jaiph::json_escape`) still handle the raw message correctly (they use `printf` with `%s`, which is fine — the escaping is only for the human-readable terminal output).
 
 **Acceptance criteria.**
 
-- No dead compatibility branches remain for removed syntax paths.
-- Typecheck/build/tests/e2e pass with no regressions.
-- Diff includes only removals/refactors justified by current parser/runtime behavior.
+- `log "line1\nline2"` prints two lines to stdout.
+- `logerr "err1\terr2"` prints tab-separated output to stderr.
+- JSON event payloads contain the raw message with literal `\n` (no double-interpretation).
+- Existing e2e tests pass.
 
 ---
 
@@ -148,6 +150,171 @@ The first `##` task in the file is always the current task.
 
 ---
 
+## Inline construct interpolation: `${run ref}` and `${ensure ref}` in strings
+
+**Goal.** Allow `run` and `ensure` calls inline inside `${}` interpolation in orchestration strings, eliminating the need for a temporary `const` when the result is only used once.
+
+**Before:**
+```
+const branch = run git.current_branch
+log "Deploying from ${branch}"
+const ci_log = "${ci_log_dir}/ensure_ci_passes_${repo_dir}.last.log"
+```
+
+**After (also valid):**
+```
+log "Deploying from ${run git.current_branch}"
+const ci_log = "${ci_log_dir}/ensure_ci_passes_${repo_dir}.last.log"
+```
+
+Both `$var` and `${var}` remain valid for variable interpolation. `${}` is additionally required when embedding construct calls.
+
+**Syntax.**
+
+```
+${run <ref> [args]}        # inline run capture — stdout becomes the interpolated value
+${ensure <ref> [args]}     # inline ensure capture — stdout becomes the interpolated value
+${var}                     # variable lookup (existing)
+$var                       # variable lookup shorthand (existing, keep)
+```
+
+**Constraints.**
+
+- Only `run` and `ensure` are allowed inline. `prompt` is excluded (heavyweight, deserves its own step).
+- No nesting: `${run foo "${run bar}"}` is a parser error. Use `const` for composition.
+- Failure in `${run ref}` or `${ensure ref}` fails the enclosing step (same semantics as standalone `run`/`ensure`).
+- Allowed in: `const` RHS expressions, `log`, `logerr`, `fail`, `return`, `send` RHS.
+- Not allowed in: `prompt` text (prompt interpolation is handled by the runtime, not the transpiler).
+
+**Scope.**
+
+1. **Parser**: detect `${run ...}` and `${ensure ...}` inside string literals in orchestration constructs. Produce new AST nodes or annotate existing string expressions with embedded captures.
+2. **Validator**: validate refs inside inline interpolations using the same rules as standalone `run`/`ensure` (kind checks, import resolution).
+3. **Transpiler**: emit `$(symbol::ref "$@")` for inline `${run ref}` and `$(symbol::ref "$@")` for `${ensure ref}` within the enclosing bash string.
+4. **Error messages**: clear guidance when users try `${prompt ...}` or nested `${run ... ${run ...}}`.
+
+**Acceptance criteria.**
+
+- `log "Value: ${run compute_x}"` works — inline run capture interpolated into log output.
+- `const msg = "Branch: ${run git.current_branch}"` works — inline capture in const RHS.
+- `${ensure git.is_clean}` works inline — failure propagates to enclosing step.
+- `${prompt ...}` is a parser error with guidance.
+- Nested `${run ... ${run ...}}` is a parser error with guidance.
+- Bare `$var` and `${var}` continue to work for variable interpolation.
+- Unit tests and e2e test covering inline interpolation.
+
+---
+
+## Dot notation for JSON field access: `${var.field}`
+
+**Goal.** Access fields from `prompt ... returns` responses using dot notation instead of underscore-joined variable names.
+
+**Before:**
+```
+const response = prompt "..." returns '{ message: string, severity: string }'
+log "Message: ${response_message}, Severity: ${response_severity}"
+```
+
+**After:**
+```
+const response = prompt "..." returns '{ message: string, severity: string }'
+log "Message: ${response.message}, Severity: ${response.severity}"
+```
+
+Dot notation makes the field relationship explicit. `${response.message}` clearly means "field `message` of `response`" — `$response_message` is ambiguous (could be a standalone variable).
+
+**Implementation.** This is syntactic sugar in the parser/transpiler. Bash doesn't support dots in variable names, so `${response.message}` transpiles to `${response_message}` (the existing runtime mechanism). No runtime changes needed.
+
+**Scope.**
+
+1. **Parser**: recognize `${identifier.field}` in string interpolation. Distinguish from import refs (import refs only appear after `run`/`ensure`, not inside `${}`).
+2. **Transpiler**: emit `${identifier_field}` for `${identifier.field}` — direct mapping to the existing underscore-joined variables generated by `prompt_capture_with_schema`.
+3. **Validator**: verify that `identifier` is a `const` with a `prompt_capture` RHS that has a `returns` schema containing `field`. Emit clear error if the field doesn't exist in the schema.
+4. **Deprecate underscore form**: keep `$response_message` working but document `${response.message}` as the canonical form. Consider a parser warning in a future version.
+
+**Acceptance criteria.**
+
+- `${response.message}` works wherever `$response_message` works today.
+- Validator catches typos: `${response.typo}` errors with "field 'typo' not in schema for 'response'".
+- Both `${response.message}` and `$response_message` work (backward compatibility).
+- Works with all schema types: string, number, boolean.
+- Unit test and e2e test covering dot notation field access.
+
+---
+
+## Anonymous inline scripts
+
+**Goal.** Allow inline `script "body"` as a step in workflows and rules, eliminating the need to name trivial one-liner scripts.
+
+**Before:**
+```
+script npm_run_test_ci() {
+  npm run test:ci
+}
+
+rule ci_passes {
+  run npm_run_test_ci
+}
+```
+
+**After (also valid):**
+```
+rule ci_passes {
+  script "npm run test:ci"
+}
+```
+
+Anonymous scripts are syntactic sugar. The transpiler auto-generates a named script file under the hood (e.g. `_anon_ci_passes_1`). Same isolation, same shebang, same separate executable file.
+
+**Syntax.**
+
+```
+script "single line body"
+script "
+  multiline
+  body
+"
+const result = script "echo hello"
+```
+
+Custom shebang — first line of the string:
+```
+script "#!/usr/bin/env node
+const x = JSON.parse(process.argv[2]);
+process.exit(x.valid ? 0 : 1);
+"
+```
+
+**Constraints.**
+
+- Anonymous scripts follow all the same rules as named scripts: full isolation, positional args only, stdout for values, exit code for success/failure.
+- Shebang detection works the same way: if the first line of the body starts with `#!`, it becomes the shebang; otherwise `#!/usr/bin/env bash` is used.
+- Allowed in workflows and rules (same places where `run <script_ref>` is allowed).
+- Capture supported: `const result = script "echo hello"` captures stdout.
+- The auto-generated name is deterministic (derived from enclosing construct name + position) so builds are reproducible.
+
+**Spec update.** Decision #6 changes from "Every shell operation requires a **named `script`**" to "Every shell operation runs through a `script`. Named scripts are preferred; anonymous `script "body"` is available for trivial operations."
+
+**Scope.**
+
+1. **AST**: add new step type `{ type: "script_inline"; body: string; shebang?: string; captureName?: string; loc: SourceLoc }`.
+2. **Parser**: recognize `script "..."` (and `const x = script "..."`) as a step in workflows and rules. Extract shebang from first line if present.
+3. **Transpiler**: auto-generate a named script file from the inline body. Use deterministic naming: `_anon_<construct>_<index>`. Emit the call as `"$JAIPH_SCRIPTS/_anon_..." "$@"`.
+4. **Validator**: apply the same keyword guard as named scripts (bash-only guard for default shebang, skip for custom).
+5. **Tests**: unit test for parsing and emission, e2e test with inline script in a rule and a workflow.
+
+**Acceptance criteria.**
+
+- `script "npm run test:ci"` works in rules and workflows.
+- Multiline string bodies work.
+- Custom shebang in anonymous scripts works.
+- `const result = script "echo hello"` captures stdout.
+- Auto-generated script files appear in `build/scripts/` with `+x`.
+- Builds are deterministic (same input → same auto-generated names).
+- All existing tests pass.
+
+---
+
 ## Rewrite docs for script terminology and present-tense language
 
 **Goal.** Update all user-facing docs to use `script` terminology (replacing `function`) and remove historical transition framing.
@@ -208,5 +375,87 @@ The first `##` task in the file is always the current task.
 - Normal runs that complete with `WORKFLOW_END` are unaffected.
 - The detection mechanism has a reasonable latency (under 2–3 poll cycles).
 - E2e or integration test: start a run, kill it with SIGKILL, verify `GET /api/active` eventually returns empty and `GET /api/runs` shows the run as failed/terminated.
+
+---
+
+## Add `jaiph format <file>` command
+
+**Goal.** Provide an opinionated formatter for `.jh` files that normalizes indentation and spacing.
+
+**Scope.**
+
+1. Add a `format` subcommand to the CLI (`cli/commands/format.ts`). Accepts one or more file paths (`.jh` / `.jph`).
+2. Parse each file into the AST, then re-emit the source from the AST with consistent formatting.
+3. Support a `--indent` flag (default: `2` spaces). Accepts an integer for the number of spaces per indent level.
+4. Write the formatted output back to the file in-place (like `gofmt`). Add `--check` flag that exits non-zero if the file would change (for CI).
+5. Formatting rules:
+   - Consistent indentation within construct bodies (`workflow`, `rule`, `script`).
+   - One blank line between top-level constructs.
+   - No trailing whitespace.
+   - Consistent spacing around `=` in `const` declarations.
+   - Preserve comments in their relative position.
+6. If the file fails to parse, emit the parse error and exit non-zero (do not silently corrupt).
+
+**Acceptance criteria.**
+
+- `jaiph format file.jh` reformats the file in-place with 2-space indent.
+- `jaiph format --indent 4 file.jh` uses 4-space indent.
+- `jaiph format --check file.jh` exits 0 if already formatted, non-zero otherwise.
+- Formatting is idempotent: running `jaiph format` twice produces the same output.
+- Parse errors produce a clear message and non-zero exit (file is not modified).
+- Round-trip: formatted file parses identically to the original (AST equality).
+- Unit test and e2e test covering basic formatting and `--check` mode.
+
+---
+
+## Unified mock syntax for all constructs in test files
+
+**Goal.** All Jaiph constructs (`prompt`, `rule`, `workflow`, `script`) support both simple string mocks and block body mocks with a consistent syntax.
+
+**Current state.** `mock prompt` supports simple string and block forms. `mock workflow`, `mock rule`, `mock function` only support block body form. `mock function` needs renaming to `mock script`.
+
+**Syntax.**
+
+Prompt (unnamed — applies to all prompts in the test):
+```
+mock prompt "static response"
+mock prompt { <jaiph script code — receives same params as prompt, returns value via stdout> }
+```
+
+Named mocks (qualified ref: `name` for local, `alias.name` for imported):
+```
+mock prompt classify_role "surgical"
+mock rule git.is_clean "ok"
+mock workflow deploy "done"
+mock script select_role "reductionist-role-text"
+
+mock rule git.is_clean { <regular jaiph script code> }
+mock workflow deploy { <regular jaiph script code> }
+mock script select_role { <regular jaiph script code> }
+```
+
+Block bodies receive the same positional args as the real construct and return values via stdout (same contract as scripts).
+
+**Scope.**
+
+1. **Rename** `mock function` → `mock script` in parser (`parse/tests.ts`) and AST (`test_mock_function` → `test_mock_script`). Update `emit-test.ts` accordingly.
+2. **Add simple string form** for `mock workflow`, `mock rule`, `mock script`. Currently these only accept `{ body }`. Add parsing for `mock <type> <ref> "response"` that transpiles to a function echoing the string.
+3. **Rework `mock prompt { ... }` block** — replace the current `if $1 contains` / `respond` DSL with regular script code (receives prompt text as `$1`, returns value via stdout). Keep the old `if/elif/respond` form working during transition or drop it if you prefer a clean cut.
+4. **Add named prompt mock** — `mock prompt <ref> "response"` to mock a specific prompt step by name (when prompts are captured into a `const`).
+5. **Update emit-test.ts** — emit mock dispatch for all forms. Simple string mocks emit `echo "response"`. Block mocks emit the body verbatim.
+6. **Update existing tests** — rename `mock function` → `mock script` in all `.test.jh` files.
+
+**Acceptance criteria.**
+
+- `mock script <ref> "response"` works (simple string mock for scripts).
+- `mock rule <ref> "response"` works (simple string mock for rules).
+- `mock workflow <ref> "response"` works (simple string mock for workflows).
+- `mock script <ref> { body }` works (block mock, same as before but renamed).
+- `mock prompt "response"` still works (unnamed, all prompts).
+- `mock prompt { body }` uses regular script code, not `if/respond` DSL.
+- Qualified refs work: `mock rule git.is_clean "ok"`.
+- `mock function` is no longer accepted (parser error with guidance to use `mock script`).
+- All existing test files updated and passing.
+- E2e test covering simple string mock for each construct type.
 
 ---

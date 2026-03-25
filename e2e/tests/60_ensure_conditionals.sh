@@ -9,7 +9,7 @@ trap e2e::cleanup EXIT
 e2e::prepare_test_env "ensure_conditionals"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
-e2e::section "if ! ensure branch behavior"
+e2e::section "brace if not ensure branch behavior"
 
 # Given
 e2e::file "ensure_run_branch.jh" <<'EOF'
@@ -26,9 +26,9 @@ workflow recovery {
 }
 
 workflow default {
-  if ! ensure always_fail; then
+  if not ensure always_fail {
     run recovery
-  fi
+  }
 }
 EOF
 
@@ -38,9 +38,9 @@ rule always_fail {
 }
 
 workflow default {
-  if ! ensure always_fail; then
+  if not ensure always_fail {
     echo "shell-ran" > shell_ran.txt
-  fi
+  }
 }
 EOF
 
@@ -50,9 +50,9 @@ rule always_ok {
 }
 
 workflow default {
-  if ! ensure always_ok; then
+  if not ensure always_ok {
     echo "should-not-run" > should_not_run.txt
-  fi
+  }
 }
 EOF
 
@@ -106,6 +106,6 @@ EOF
 e2e::expect_out_files "ensure_pass_branch.jh" 0
 
 if [[ -f "${TEST_DIR}/should_not_run.txt" ]]; then
-  e2e::fail "if ! ensure should not execute then-branch when ensure passes"
+  e2e::fail "if not ensure should not execute then-branch when ensure passes"
 fi
-e2e::pass "if ! ensure skips then-branch when ensure passes"
+e2e::pass "if not ensure skips then-branch when ensure passes"

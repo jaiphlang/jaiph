@@ -9,7 +9,6 @@ import {
 import { parseConstRhs } from "./const-rhs";
 import { parseEnsureStep } from "./steps";
 import { parsePromptStep } from "./prompt";
-import { tryParseLegacyIfEnsure, tryParseLegacyIfRun } from "./legacy-if";
 import { parseSendRhs } from "./send-rhs";
 
 type BraceIfHead =
@@ -208,10 +207,6 @@ export function parseBlockStatement(
   if (braceIf) return { step: braceIf.step, nextIdx: braceIf.nextIdx };
 
   if (/^if\s/.test(inner)) {
-    const legacyEnsure = tryParseLegacyIfEnsure(filePath, lines, idx, inner, innerNo, innerRaw);
-    if (legacyEnsure) return legacyEnsure;
-    const legacyRun = tryParseLegacyIfRun(filePath, lines, idx, inner, innerNo, innerRaw);
-    if (legacyRun) return legacyRun;
     const looksLikeJaiphIf =
       /^if\s+!\s*ensure\b/.test(inner) ||
       /^if\s+ensure\b/.test(inner) ||

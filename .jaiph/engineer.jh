@@ -239,17 +239,16 @@ workflow implement {
 }
 
 workflow print_commit_message {
-  const message = prompt "
+  const response = prompt "
     Provide me with a suggested commit message for the current changes.
 
     Requirements:
-    1. Write a commit message in imperative mood, subject under 72 chars.
+    1. Write a commit message - first line in imperative mood, under 72 chars.
     2. Start with the common prefix like 'Feat:', 'Fix:', 'Refactor:' etc.
-    3. Add a body paragraph only if the change is non-obvious.
-    4. Do NOT include files that contain secrets (.env, credentials, tokens).
+    3. Write a body paragraph with more details about the change.
   " returns '{ message: string }'
 
-  log "Suggested commit message:\n\n$message\n"
+  log "Suggested commit message:\n\n$response_message\n"
 }
 
 workflow default {

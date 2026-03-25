@@ -175,7 +175,7 @@ brace_if_head   = "ensure" REF [ args_tail ] | "run" REF [ args_tail ] ;
 
 Jaiph treats **status**, **value**, and **logs** as separate channels so composition stays predictable:
 
-- **Status** — Exit code (success vs failure) drives control flow (`set -e`, `if ensure`, `if run`, test runner pass/fail).
+- **Status** — Exit code (success vs failure) drives control flow: `set -e`, brace **`if`** on **`ensure` / `run`** in workflows and rules (not shell `if …; then … fi` for those steps), and pass/fail under **`jaiph test`**.
 - **Value** — For `x = ensure …` / `x = run …` / `x = prompt …`, the captured data is **not** arbitrary stdout mixed into the variable. **Rules and workflows** set the value channel only with `return "…"` or `return "$var"`. **`run` to a function** uses **stdout** of the function body as the captured value (functions do not use Jaiph `return "…"` — use `echo` / `printf`).
 - **Logs** — Command output inside **functions** (and tool noise from managed steps) is recorded under `.jaiph/runs` as step artifacts so **return values** and **telemetry** stay separate.
 
