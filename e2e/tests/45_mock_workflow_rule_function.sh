@@ -17,7 +17,7 @@ e2e::file "app.jh" <<'EOF'
 rule policy_check {
   echo real-policy
 }
-function changed_files {
+script changed_files {
   echo real_files
 }
 workflow build {

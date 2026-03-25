@@ -90,7 +90,7 @@ Valid forms:
 - imported channel: `shared.findings`
 
 The send step resolves the message from the **RHS** (literal, variable expansion,
-`run` to a function, or forwarded `$1`), writes it to the next inbox slot,
+`run` to a script, or forwarded `$1`), writes it to the next inbox slot,
 and signals the runtime to dispatch.
 
 ```jh
@@ -131,10 +131,10 @@ Tells the runtime: when a message arrives on that channel, call each listed
 **workflow** with positional args `$1=message`, `$2=channel`, `$3=sender`.
 
 Targets must be **workflows** (local or imported as `alias.name`). **Rules**
-and **functions** are not valid route targets — the compiler uses workflow-only
+and **scripts** are not valid route targets — the compiler uses workflow-only
 reference checks, so a bad target is **`E_VALIDATE`** with messages such as
 `unknown local workflow reference "…"`, `imported workflow "…" does not exist`,
-`rule "…" must be called with ensure`, or `function "…" cannot be called with run`.
+`rule "…" must be called with ensure`, or `script "…" cannot be called with run`.
 A name that is not a valid `alias.name` / `name` pattern fails at parse time as
 **`E_PARSE`** `invalid workflow reference in route: "…"`.
 

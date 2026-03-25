@@ -416,7 +416,7 @@ test("jaiph run allows rules to call top-level helper functions in readonly mode
     writeFileSync(
       filePath,
       [
-        "function helper_value() {",
+        "script helper_value() {",
         "  echo ok",
         "}",
         "",
@@ -1353,7 +1353,7 @@ test("build supports top-level functions with namespaced wrappers", () => {
     writeFileSync(
       filePath,
       [
-        "function changed_files() {",
+        "script changed_files() {",
         "  return \"from-function\"",
         "}",
         "",
@@ -1369,7 +1369,7 @@ test("build supports top-level functions with namespaced wrappers", () => {
     assert.equal(results.length, 1);
     assert.match(results[0].bash, /entry::changed_files::impl\(\) \{/);
     assert.match(results[0].bash, /entry::changed_files\(\) \{/);
-    assert.match(results[0].bash, /jaiph::run_step entry::changed_files function entry::changed_files::impl "\$@"/);
+    assert.match(results[0].bash, /jaiph::run_step entry::changed_files script entry::changed_files::impl "\$@"/);
     assert.match(results[0].bash, /changed_files\(\) \{/);
     assert.match(results[0].bash, /entry::changed_files "\$@"/);
   } finally {
@@ -1385,7 +1385,7 @@ test("jaiph run tree includes function calls from workflow shell steps", () => {
     writeFileSync(
       filePath,
       [
-        "function changed_files() {",
+        "script changed_files() {",
         "  return \"from-function\"",
         "}",
         "",
@@ -1406,7 +1406,7 @@ test("jaiph run tree includes function calls from workflow shell steps", () => {
 
     assert.equal(runResult.status, 0, runResult.stderr);
     assert.match(runResult.stdout, /workflow default/);
-    assert.match(runResult.stdout, /function changed_files/);
+    assert.match(runResult.stdout, /script changed_files/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -1478,7 +1478,7 @@ test("jaiph run tree shows function step; params shown when runtime includes the
     writeFileSync(
       join(root, "main.jh"),
       [
-        "function echo_args() {",
+        "script echo_args() {",
         "  printf '%s %s\\n' \"$1\" \"$2\"",
         "}",
         "workflow default {",
@@ -1494,7 +1494,7 @@ test("jaiph run tree shows function step; params shown when runtime includes the
       env: { ...process.env, JAIPH_DOCKER_ENABLED: "false", NO_COLOR: "1" },
     });
     assert.equal(runResult.status, 0, runResult.stderr);
-    assert.match(runResult.stdout, /function echo_args/);
+    assert.match(runResult.stdout, /script echo_args/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -1743,7 +1743,7 @@ test("build fails when run in rule references unknown symbol", () => {
 
     assert.throws(
       () => build(filePath, outDir),
-      /unknown local function reference.*run in rules must target a function/,
+      /unknown local script reference.*run in rules must target a script/,
     );
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -1776,7 +1776,7 @@ test("build fails when run in rule targets a workflow", () => {
 
     assert.throws(
       () => build(filePath, outDir),
-      /run inside a rule must target a function, not workflow/,
+      /run inside a rule must target a script, not workflow/,
     );
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -2579,7 +2579,7 @@ test("transpileTestFile emits JAIPH_MOCK_SCRIPTS_DIR and mock scripts for mock w
         "rule policy_check {",
         "  echo real",
         "}",
-        "function changed_files {",
+        "script changed_files {",
         "  echo real_files",
         "}",
         "workflow build {",
@@ -2634,7 +2634,7 @@ test("jaiph test runs *.test.jh with mock workflow, rule, and function", () => {
         "rule policy_check {",
         "  echo real-policy",
         "}",
-        "function changed_files {",
+        "script changed_files {",
         "  echo real_files",
         "}",
         "workflow build {",

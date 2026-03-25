@@ -7,7 +7,7 @@ rule ensure_is_number {
   fi
 }
 
-function fib() {
+script fib() {
   local n="$1"
   fib_impl() {
     local x="$1"

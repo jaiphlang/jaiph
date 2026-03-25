@@ -144,7 +144,7 @@ lang_redesign_smoke::noop::impl() {
 }
 
 lang_redesign_smoke::noop() {
-  jaiph::run_step lang_redesign_smoke::noop function lang_redesign_smoke::noop::impl "$@"
+  jaiph::run_step lang_redesign_smoke::noop script lang_redesign_smoke::noop::impl "$@"
 }
 
 noop() {

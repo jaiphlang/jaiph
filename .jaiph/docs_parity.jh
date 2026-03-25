@@ -18,7 +18,7 @@ const role = "You are an expert technical writer for this project.
        while keeping details dense in separate sections, so both human and AI
        can easily follow the reasoning."
 
-function assert_newline_paths_are_files() {
+script assert_newline_paths_are_files() {
   while IFS= read -r f; do
     [ -z "$f" ] && continue
     test -f "$f" || return 1
@@ -29,7 +29,7 @@ rule docs_files_present {
   run assert_newline_paths_are_files "$1"
 }
 
-function assert_worktree_clean_for_docs() {
+script assert_worktree_clean_for_docs() {
   source "${JAIPH_LIB}/git_paths.sh"
   local current_changed_files
   current_changed_files="$(git_changed_paths_sorted)"
@@ -45,7 +45,7 @@ rule worktree_is_clean {
   run assert_worktree_clean_for_docs
 }
 
-function assert_only_allowed_changed() {
+script assert_only_allowed_changed() {
   local allowed="$1"
   source "${JAIPH_LIB}/git_paths.sh"
   local after_changed_files
@@ -64,21 +64,21 @@ rule only_expected_docs_changed_after_prompt {
   run assert_only_allowed_changed "$1"
 }
 
-function arg_nonempty() {
+script arg_nonempty() {
   [ -n "${1:-}" ]
 }
 
-function first_line_str() {
+script first_line_str() {
   source "${JAIPH_LIB}/strings.sh"
   first_line "$1"
 }
 
-function rest_lines_str() {
+script rest_lines_str() {
   source "${JAIPH_LIB}/strings.sh"
   rest_lines "$1"
 }
 
-function list_docs_md_paths() {
+script list_docs_md_paths() {
   local out=""
   local f
   for f in docs/*.md; do
@@ -88,7 +88,7 @@ function list_docs_md_paths() {
   printf '%s\n' "$out"
 }
 
-function build_allowed_paths_block() {
+script build_allowed_paths_block() {
   local out="README.md
 CHANGELOG.md
 docs/index.html
@@ -102,7 +102,7 @@ ${f}"
   printf '%s\n' "$out"
 }
 
-function join_newline_args() {
+script join_newline_args() {
   printf '%s\n' "$@"
 }
 

@@ -27,7 +27,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
   const localChannels = new Set(ast.channels.map((c) => c.name));
   const localRules = new Set(ast.rules.map((r) => r.name));
   const localWorkflows = new Set(ast.workflows.map((w) => w.name));
-  const localFunctions = new Set(ast.functions.map((f) => f.name));
+  const localScripts = new Set(ast.scripts.map((s) => s.name));
   const importsByAlias = new Map<string, string>();
   const importedAstCache = new Map<string, jaiphModule>();
 
@@ -60,7 +60,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
     importedAstCache,
     localRules,
     localWorkflows,
-    localFunctions,
+    localScripts,
   };
 
   const expectRuleRef = { mode: "expect" as const, expect: RULE_REF_EXPECT };
@@ -86,68 +86,68 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
     loc,
     localRules,
     localWorkflows,
-    localFunctions,
+    localScripts,
     importsByAlias,
     lookupImported: lookupImportedKind,
   });
 
-  for (const fn of ast.functions) {
-    const env = makeSubEnv(fn.loc);
-    for (const cmd of fn.commands) {
+  for (const sc of ast.scripts) {
+    const env = makeSubEnv(sc.loc);
+    for (const cmd of sc.commands) {
       const t = cmd.trim();
       if (!t || t.startsWith("#")) continue;
       if (/^(run|ensure)\s/.test(t)) {
         throw jaiphError(
           ast.filePath,
-          fn.loc.line,
-          fn.loc.col,
+          sc.loc.line,
+          sc.loc.col,
           "E_VALIDATE",
-          "function body cannot use run or ensure (move orchestration to a workflow)",
+          "script body cannot use run or ensure (move orchestration to a workflow)",
         );
       }
       if (/^\s*config\s*\{/.test(t)) {
         throw jaiphError(
           ast.filePath,
-          fn.loc.line,
-          fn.loc.col,
+          sc.loc.line,
+          sc.loc.col,
           "E_VALIDATE",
-          "function body cannot contain config blocks",
+          "script body cannot contain config blocks",
         );
       }
       if (/^\s*(export\s+)?workflow\s/.test(t)) {
         throw jaiphError(
           ast.filePath,
-          fn.loc.line,
-          fn.loc.col,
+          sc.loc.line,
+          sc.loc.col,
           "E_VALIDATE",
-          "function body cannot declare workflows",
+          "script body cannot declare workflows",
         );
       }
       if (/^\s*(export\s+)?rule\s/.test(t)) {
         throw jaiphError(
           ast.filePath,
-          fn.loc.line,
-          fn.loc.col,
+          sc.loc.line,
+          sc.loc.col,
           "E_VALIDATE",
-          "function body cannot declare rules",
+          "script body cannot declare rules",
         );
       }
-      if (/^\s*function\s/.test(t)) {
+      if (/^\s*script\s/.test(t)) {
         throw jaiphError(
           ast.filePath,
-          fn.loc.line,
-          fn.loc.col,
+          sc.loc.line,
+          sc.loc.col,
           "E_VALIDATE",
-          "function body cannot declare nested functions",
+          "script body cannot declare nested scripts",
         );
       }
       if (/^[A-Za-z_][A-Za-z0-9_.]*\s+->\s+/.test(t)) {
         throw jaiphError(
           ast.filePath,
-          fn.loc.line,
-          fn.loc.col,
+          sc.loc.line,
+          sc.loc.col,
           "E_VALIDATE",
-          "function body cannot declare channel routes (->)",
+          "script body cannot declare channel routes (->)",
         );
       }
       validateNoJaiphCommandSubstitution(cmd, env);

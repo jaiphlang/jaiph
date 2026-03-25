@@ -75,7 +75,7 @@ export interface WorkflowDef {
   loc: SourceLoc;
 }
 
-export interface FunctionDef {
+export interface ScriptDef {
   name: string;
   comments: string[];
   commands: string[];
@@ -185,7 +185,7 @@ export interface jaiphModule {
   channels: ChannelDef[];
   exports: string[];
   rules: RuleDef[];
-  functions: FunctionDef[];
+  scripts: ScriptDef[];
   workflows: WorkflowDef[];
   /** Top-level variable declarations (`local name = value`). */
   envDecls?: EnvDeclDef[];
@@ -282,7 +282,7 @@ export interface HookPayload {
   workflow_id: string;
   /** Step id (only for step_start/step_end). */
   step_id?: string;
-  /** Step kind: workflow, rule, function, prompt. */
+  /** Step kind: workflow, rule, script, prompt. */
   step_kind?: string;
   /** Step name (e.g. default, scan_passes). */
   step_name?: string;

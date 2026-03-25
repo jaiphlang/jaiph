@@ -6,33 +6,7 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Rename `function` → `script` keyword <!-- dev-ready -->
-
-**Spec**: `.jaiph/language_redesign_spec.md` — Implementation Plan Phase 3a, 3e.
-
-**Goal.** Replace the `function` keyword with `script` across the entire codebase: parser, AST, transpiler, all `.jh` files, tests, and fixtures.
-
-**Scope.**
-
-1. **Parser** (`parse/functions.ts` → rename file to `parse/scripts.ts`): change regex from `/^function\s+/` to `/^script\s+/`.
-2. **AST** (`types.ts`): rename `FunctionDef` → `ScriptDef`, rename `jaiphModule.functions` → `jaiphModule.scripts`.
-3. **Transpiler**: update all references from `functions` to `scripts`, `FunctionDef` to `ScriptDef` in `emit-workflow.ts` (or `emit-script.ts` after split), `validate.ts`, `emit-test.ts`.
-4. **Parser entry** (`parser.ts`): detect `script` keyword instead of `function`.
-5. **All `.jaiph/*.jh` files**: rename `function` → `script` keyword.
-6. **All `e2e/*.jh` fixtures**: rename keyword.
-7. **Test fixtures and golden outputs**: update for `script` keyword.
-8. **Error messages**: update to reference "script" instead of "function".
-
-**Acceptance criteria.**
-
-- `function` keyword is no longer accepted by the parser.
-- `script` keyword parses and transpiles identically to former `function` (aside from keyword name in errors).
-- All `.jh` files use `script` keyword.
-- `npm run build && npm test && npm run test:e2e` pass.
-
----
-
-## Add shebang support and separate file transpilation
+## Add shebang support and separate file transpilation <!-- dev-ready -->
 
 **Spec**: `.jaiph/language_redesign_spec.md` — Implementation Plan Phase 3b, 3c, 3d.
 
@@ -61,7 +35,7 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Implement script isolation and shared library support
+## Implement script isolation and shared library support <!-- dev-ready -->
 
 **Spec**: `.jaiph/language_redesign_spec.md` — Implementation Plan Phase 4.
 
@@ -85,7 +59,7 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Inline construct interpolation: `${run ref}` and `${ensure ref}` in strings
+## Inline construct interpolation: `${run ref}` and `${ensure ref}` in strings <!-- dev-ready -->
 
 **Goal.** Allow `run` and `ensure` calls inline inside `${}` interpolation in orchestration strings, eliminating the need for a temporary `const` when the result is only used once.
 
@@ -140,7 +114,7 @@ $var                       # variable lookup shorthand (existing, keep)
 
 ---
 
-## Dot notation for JSON field access: `${var.field}`
+## Dot notation for JSON field access: `${var.field}` <!-- dev-ready -->
 
 **Goal.** Access fields from `prompt ... returns` responses using dot notation instead of underscore-joined variable names.
 
@@ -177,7 +151,7 @@ Dot notation makes the field relationship explicit. `${response.message}` clearl
 
 ---
 
-## Anonymous inline scripts
+## Anonymous inline scripts <!-- dev-ready -->
 
 **Goal.** Allow inline `script "body"` as a step in workflows and rules, eliminating the need to name trivial one-liner scripts.
 
@@ -250,7 +224,7 @@ process.exit(x.valid ? 0 : 1);
 
 ---
 
-## Named parameters for workflows, rules, and scripts
+## Named parameters for workflows, rules, and scripts <!-- dev-ready -->
 
 **Spec**: `.jaiph/language_redesign_spec.md` — Design Decision #16, Implementation Plan Phase 3f.
 
@@ -309,7 +283,7 @@ script check_hash(file_path, expected_hash) {
 
 ---
 
-## Rewrite docs for script terminology and present-tense language
+## Rewrite docs for script terminology and present-tense language <!-- dev-ready -->
 
 **Goal.** Update all user-facing docs to use `script` terminology (replacing `function`) and remove historical transition framing.
 
@@ -334,7 +308,7 @@ script check_hash(file_path, expected_hash) {
 
 ---
 
-## Post-refactor sweep: dead code removal and docs cleanup
+## Post-refactor sweep: dead code removal and docs cleanup <!-- dev-ready -->
 
 **Goal.** After the script migration phases are complete, remove residual rewrite-era code and perform one final docs consistency sweep.
 
@@ -376,7 +350,7 @@ script check_hash(file_path, expected_hash) {
 
 ---
 
-## Add `jaiph format <file>` command
+## Add `jaiph format <file>` command <!-- dev-ready -->
 
 **Goal.** Provide an opinionated formatter for `.jh` files that normalizes indentation and spacing.
 
@@ -406,7 +380,7 @@ script check_hash(file_path, expected_hash) {
 
 ---
 
-## Unified mock syntax for all constructs in test files
+## Unified mock syntax for all constructs in test files <!-- dev-ready -->
 
 **Goal.** All Jaiph constructs (`prompt`, `rule`, `workflow`, `script`) support both simple string mocks and block body mocks with a consistent syntax.
 
@@ -458,7 +432,7 @@ Block bodies receive the same positional args as the real construct and return v
 
 ---
 
-## "Try it out" one-liner on landing page + `docs/run` script
+## "Try it out" one-liner on landing page + `docs/run` script <!-- dev-ready -->
 
 **Goal.** Add a hero "Try it out" section at the top of the landing page (`docs/index.html`) with a single `curl | bash` one-liner that installs Jaiph (if needed) and runs a sample workflow. Create the `docs/run` script that powers it.
 

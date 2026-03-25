@@ -134,7 +134,7 @@ e2e::section "function call: captures return value only, stdout to artifacts"
 # ===================================================================
 
 e2e::file "contract_fn.jh" <<'EOF'
-function compute_hash() {
+script compute_hash() {
   echo "fn-stdout-goes-to-artifacts"
   return "hash-abc123"
 }

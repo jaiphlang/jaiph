@@ -28,7 +28,7 @@ e2e::assert_contains "${out}" "hello-world" "const string value logged"
 e2e::section "const with run capture"
 
 e2e::file "const_run.jh" <<'EOF'
-function greet() {
+script greet() {
   return "hi from fn"
 }
 
@@ -82,7 +82,7 @@ e2e::assert_contains "${bad_out}" 'command substitution' "error mentions command
 e2e::section "wait step joins async run"
 
 e2e::file "wait_step.jh" <<'EOF'
-function write_marker() {
+script write_marker() {
   echo "waited" > waited.txt
 }
 
@@ -143,7 +143,7 @@ e2e::assert_contains "${out}" "negated-branch" "brace if not ensure ran"
 e2e::section "brace if with run + else"
 
 e2e::file "brace_if_run_else.jh" <<'EOF'
-function returns_false() {
+script returns_false() {
   return 1
 }
 
@@ -172,7 +172,7 @@ rule always_fail {
   false
 }
 
-function returns_ok() {
+script returns_ok() {
   true
 }
 
@@ -198,7 +198,7 @@ e2e::assert_contains "${out}" "second-branch" "else if chain selected correct br
 e2e::section "structured rule with run and fail"
 
 e2e::file "structured_rule.jh" <<'EOF'
-function check_arg() {
+script check_arg() {
   [ -n "$1" ]
 }
 
@@ -221,7 +221,7 @@ e2e::assert_contains "${out}" "passed" "structured rule passed with valid arg"
 e2e::section "structured rule fails correctly"
 
 e2e::file "structured_rule_fail.jh" <<'EOF'
-function check_arg() {
+script check_arg() {
   [ -n "$1" ]
 }
 
@@ -267,7 +267,7 @@ code=$?
 set -e
 
 [[ ${code} -ne 0 ]] || e2e::fail "run workflow inside rule should be rejected"
-e2e::assert_contains "${out}" "function" "error guides toward function"
+e2e::assert_contains "${out}" "script" "error guides toward script"
 
 # ---------------------------------------------------------------------------
 # module-level const

@@ -39,15 +39,15 @@ const testing_philosophy = "
     expectations, or obsolete feature removal. Keep changes minimal.
 "
 
-function gap_report_nonempty() {
+script gap_report_nonempty() {
   test -s ".jaiph/tmp/qa_gap_report.md"
 }
 
-function read_gap_report() {
+script read_gap_report() {
   cat .jaiph/tmp/qa_gap_report.md
 }
 
-function save_gap_report() {
+script save_gap_report() {
   printf '%s\n' "$1" > .jaiph/tmp/qa_gap_report.md
 }
 
@@ -62,7 +62,7 @@ workflow analyze_gaps {
     <task>
     Your task:
     1. Read every source file in src/parse/*.ts and list each parser branch
-       (rule, workflow, function, env, import, config, test blocks, conditionals,
+       (rule, workflow, script, env, import, config, test blocks, conditionals,
        recover, prompt, send, routes). For each branch, check if test/acceptance/
        or test/fixtures/ has a corresponding test case. List branches with no test.
 
@@ -146,7 +146,7 @@ workflow write_tests {
   "
 }
 
-function mkdir_tmp_jaiph_qa() {
+script mkdir_tmp_jaiph_qa() {
   mkdir -p .jaiph/tmp
 }
 

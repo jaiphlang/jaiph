@@ -52,9 +52,9 @@ test("formatCompletedLine: success with rule kind and name (no color)", () => {
   assert.equal(result, "✓ rule ci_passes (3s)");
 });
 
-test("formatCompletedLine: success with function kind and name (no color)", () => {
-  const result = formatCompletedLine("  ", 0, 1, false, "function", "deploy");
-  assert.equal(result, "✓ function deploy (1s)");
+test("formatCompletedLine: success with script kind and name (no color)", () => {
+  const result = formatCompletedLine("  ", 0, 1, false, "script", "deploy");
+  assert.equal(result, "✓ script deploy (1s)");
 });
 
 test("formatCompletedLine: success with prompt kind and name (no color)", () => {

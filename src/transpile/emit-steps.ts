@@ -347,7 +347,7 @@ export function emitIfStep(
 
 /**
  * Emit bash that captures the return value (via JAIPH_RETURN_VALUE_FILE)
- * from a rule/workflow/function call into a variable.
+ * from a rule/workflow/script call into a variable.
  * stdout goes to artifacts; only the explicit return value is captured.
  */
 export function emitReturnValueCapture(

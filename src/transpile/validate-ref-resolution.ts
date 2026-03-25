@@ -1,13 +1,13 @@
 import { jaiphError } from "../errors";
 import type { jaiphModule } from "../types";
 
-export type RefTargetKind = "rule" | "workflow" | "function";
+export type RefTargetKind = "rule" | "workflow" | "script";
 
-/** Look up which kind a name belongs to in a module: "rule", "workflow", "function", or undefined. */
+/** Look up which kind a name belongs to in a module: "rule", "workflow", "script", or undefined. */
 export function lookupKind(mod: jaiphModule, name: string): RefTargetKind | undefined {
   if (mod.rules.some((r) => r.name === name)) return "rule";
   if (mod.workflows.some((w) => w.name === name)) return "workflow";
-  if (mod.functions.some((f) => f.name === name)) return "function";
+  if (mod.scripts.some((s) => s.name === name)) return "script";
   return undefined;
 }
 
@@ -16,7 +16,7 @@ export interface RefResolutionContext {
   importedAstCache: Map<string, jaiphModule>;
   localRules: Set<string>;
   localWorkflows: Set<string>;
-  localFunctions: Set<string>;
+  localScripts: Set<string>;
 }
 
 function localSymbolKind(
@@ -25,7 +25,7 @@ function localSymbolKind(
 ): RefTargetKind | undefined {
   if (ctx.localRules.has(name)) return "rule";
   if (ctx.localWorkflows.has(name)) return "workflow";
-  if (ctx.localFunctions.has(name)) return "function";
+  if (ctx.localScripts.has(name)) return "script";
   return undefined;
 }
 
@@ -36,7 +36,7 @@ function importedHasAllowedKind(
 ): boolean {
   if (allowed.has("rule") && mod.rules.some((r) => r.name === name)) return true;
   if (allowed.has("workflow") && mod.workflows.some((w) => w.name === name)) return true;
-  if (allowed.has("function") && mod.functions.some((f) => f.name === name)) return true;
+  if (allowed.has("script") && mod.scripts.some((s) => s.name === name)) return true;
   return false;
 }
 
@@ -54,10 +54,10 @@ export interface BareSendRefMessages {
   unknownImportAlias: (alias: string, refValue: string) => string;
   unknownLocal: (refValue: string) => string;
   wrongWorkflowLocal: (refValue: string) => string;
-  wrongFunctionLocal: (refValue: string) => string;
+  wrongScriptLocal: (refValue: string) => string;
   wrongRuleLocal: (refValue: string) => string;
   wrongWorkflowImported: (refValue: string) => string;
-  wrongFunctionImported: (refValue: string) => string;
+  wrongScriptImported: (refValue: string) => string;
   wrongRuleImported: (refValue: string) => string;
   unknownSymbolImported: (refValue: string) => string;
 }
@@ -103,7 +103,7 @@ function throwWrongImported(
 
 /**
  * Validates a reference: either it must resolve to one of the allowed kinds (expect mode),
- * or it must not resolve to rule/workflow/function (bare send RHS mode).
+ * or it must not resolve to rule/workflow/script (bare send RHS mode).
  */
 export function validateRef(
   ref: { value: string; loc: { line: number; col: number } },
@@ -123,8 +123,8 @@ export function validateRef(
       if (kind === "workflow") {
         throw jaiphError(fp, line, col, "E_VALIDATE", msg.wrongWorkflowLocal(ref.value));
       }
-      if (kind === "function") {
-        throw jaiphError(fp, line, col, "E_VALIDATE", msg.wrongFunctionLocal(ref.value));
+      if (kind === "script") {
+        throw jaiphError(fp, line, col, "E_VALIDATE", msg.wrongScriptLocal(ref.value));
       }
       if (kind === "rule") {
         throw jaiphError(fp, line, col, "E_VALIDATE", msg.wrongRuleLocal(ref.value));
@@ -139,8 +139,8 @@ export function validateRef(
     if (ik === "workflow") {
       throw jaiphError(fp, line, col, "E_VALIDATE", msg.wrongWorkflowImported(ref.value));
     }
-    if (ik === "function") {
-      throw jaiphError(fp, line, col, "E_VALIDATE", msg.wrongFunctionImported(ref.value));
+    if (ik === "script") {
+      throw jaiphError(fp, line, col, "E_VALIDATE", msg.wrongScriptImported(ref.value));
     }
     if (ik === "rule") {
       throw jaiphError(fp, line, col, "E_VALIDATE", msg.wrongRuleImported(ref.value));
@@ -182,11 +182,11 @@ export const RULE_REF_EXPECT: RefExpectMessages = {
   missingImported: (rv) => `imported rule "${rv}" does not exist`,
   wrongLocal: {
     workflow: (name) => `workflow "${name}" must be called with run`,
-    function: (name) => `function "${name}" cannot be called with ensure`,
+    script: (name) => `script "${name}" cannot be called with ensure`,
   },
   wrongImported: {
     workflow: (rv) => `workflow "${rv}" must be called with run`,
-    function: (rv) => `function "${rv}" cannot be called with ensure`,
+    script: (rv) => `script "${rv}" cannot be called with ensure`,
   },
 };
 
@@ -198,38 +198,38 @@ export const WORKFLOW_REF_EXPECT: RefExpectMessages = {
   missingImported: (rv) => `imported workflow "${rv}" does not exist`,
   wrongLocal: {
     rule: (name) => `rule "${name}" must be called with ensure`,
-    function: (name) => `function "${name}" cannot be called with run`,
+    script: (name) => `script "${name}" cannot be called with run`,
   },
   wrongImported: {
     rule: (rv) => `rule "${rv}" must be called with ensure`,
-    function: (rv) => `function "${rv}" cannot be called with run`,
+    script: (rv) => `script "${rv}" cannot be called with run`,
   },
 };
 
 export const RUN_IN_RULE_REF_EXPECT: RefExpectMessages = {
-  allowedKinds: new Set<RefTargetKind>(["function"]),
+  allowedKinds: new Set<RefTargetKind>(["script"]),
   invalidSplitRef: (rv) => `invalid run target reference "${rv}"`,
   unknownImportAlias: (alias, rv) => `unknown import alias "${alias}" for run target "${rv}"`,
   unknownLocal: (rv) =>
-    `unknown local function reference "${rv}" (run in rules must target a function)`,
+    `unknown local script reference "${rv}" (run in rules must target a script)`,
   missingImported: (rv) =>
-    `imported function "${rv}" does not exist (run in rules must target a function)`,
+    `imported script "${rv}" does not exist (run in rules must target a script)`,
   wrongLocal: {
-    workflow: (name) => `run inside a rule must target a function, not workflow "${name}"`,
+    workflow: (name) => `run inside a rule must target a script, not workflow "${name}"`,
     rule: (name) => `rule "${name}" must be called with ensure, not run`,
   },
   wrongImported: {
-    workflow: (rv) => `run inside a rule must target a function, not workflow "${rv}"`,
+    workflow: (rv) => `run inside a rule must target a script, not workflow "${rv}"`,
     rule: (rv) => `rule "${rv}" must be called with ensure, not run`,
   },
 };
 
 export const RUN_TARGET_REF_EXPECT: RefExpectMessages = {
-  allowedKinds: new Set<RefTargetKind>(["workflow", "function"]),
+  allowedKinds: new Set<RefTargetKind>(["workflow", "script"]),
   invalidSplitRef: (rv) => `invalid run target reference "${rv}"`,
   unknownImportAlias: (alias, rv) => `unknown import alias "${alias}" for run target "${rv}"`,
-  unknownLocal: (rv) => `unknown local workflow or function reference "${rv}"`,
-  missingImported: (rv) => `imported workflow or function "${rv}" does not exist`,
+  unknownLocal: (rv) => `unknown local workflow or script reference "${rv}"`,
+  missingImported: (rv) => `imported workflow or script "${rv}" does not exist`,
   wrongLocal: {
     rule: (name) => `rule "${name}" must be called with ensure, not run`,
   },
@@ -242,10 +242,10 @@ export const BARE_SEND_REF_MSG: BareSendRefMessages = {
   unknownImportAlias: (alias, rv) => `unknown import alias "${alias}" for send reference "${rv}"`,
   unknownLocal: (rv) => `unknown symbol "${rv}" in send right-hand side`,
   wrongWorkflowLocal: (rv) => `workflow "${rv}" must be called with run`,
-  wrongFunctionLocal: (rv) => `function "${rv}" must be called with run`,
+  wrongScriptLocal: (rv) => `script "${rv}" must be called with run`,
   wrongRuleLocal: (rv) => `rule "${rv}" must be called with ensure`,
   wrongWorkflowImported: (rv) => `workflow "${rv}" must be called with run`,
-  wrongFunctionImported: (rv) => `function "${rv}" must be called with run`,
+  wrongScriptImported: (rv) => `script "${rv}" must be called with run`,
   wrongRuleImported: (rv) => `rule "${rv}" must be called with ensure`,
   unknownSymbolImported: (rv) => `unknown symbol "${rv}" in send right-hand side`,
 };

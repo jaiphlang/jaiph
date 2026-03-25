@@ -39,7 +39,7 @@ const code_philosophy = "
      codebase already provides it. If not, explain why.
 "
 
-function select_role() {
+script select_role() {
   local oc
   oc="$(cat <<'OC'
   ## Output
@@ -148,15 +148,15 @@ OC
   esac
 }
 
-function arg_nonempty() {
+script arg_nonempty() {
   [ -n "${1:-}" ]
 }
 
-function task_text_has_header() {
+script task_text_has_header() {
   printf '%s\n' "$1" | grep -q '^## '
 }
 
-function first_line_task() {
+script first_line_task() {
   source "${JAIPH_LIB}/strings.sh"
   local line
   line="$(first_line "$1")"
@@ -248,7 +248,7 @@ workflow print_commit_message {
     3. Write a body paragraph with more details about the change.
   " returns '{ message: string }'
 
-  log "Suggested commit message:\n\n$response_message\n"
+  log "Suggested commit message:\\n\\n$response_message\\n"
 }
 
 workflow default {

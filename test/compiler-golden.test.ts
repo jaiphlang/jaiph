@@ -17,7 +17,7 @@ test("compiler golden: transpileFile emits stable workflow shell", () => {
     writeFileSync(
       input,
       [
-        "function f_ok() {",
+        "script f_ok() {",
         "  echo ok",
         "}",
         "",
@@ -70,7 +70,7 @@ test("compiler golden: transpileFile emits stable workflow shell", () => {
       "}",
       "",
       "entry::f_ok() {",
-      '  jaiph::run_step entry::f_ok function entry::f_ok::impl "$@"',
+      '  jaiph::run_step entry::f_ok script entry::f_ok::impl "$@"',
       "}",
       "",
       "f_ok() {",
@@ -100,8 +100,8 @@ test("compiler golden: transpileFile emits stable workflow shell", () => {
 
 test("compiler golden: parser error message is deterministic", () => {
   assert.throws(
-    () => parsejaiph("function 123bad {\n  echo x\n}\n", "/fake/main.jh"),
-    /\/fake\/main\.jh:1:1 E_PARSE invalid function declaration/,
+    () => parsejaiph("script 123bad {\n  echo x\n}\n", "/fake/main.jh"),
+    /\/fake\/main\.jh:1:1 E_PARSE invalid script declaration/,
   );
 });
 
@@ -143,7 +143,7 @@ test.skip("compiler corpus: fixtures and e2e workflows compile", () => {
 
 test("parser: assignment capture parses for ensure, run, and const run capture", () => {
   const source = [
-    "function say_hello() {",
+    "script say_hello() {",
     "  echo hello",
     "}",
     "",
@@ -588,7 +588,7 @@ test("parser: fail step parses quoted message", () => {
 
 test("parser: const string expr and const run capture parse", () => {
   const source = [
-    "function noop() {",
+    "script noop() {",
     "  :",
     "}",
     "workflow default {",
@@ -645,7 +645,7 @@ test("parser: brace-style if parses not, else if, and else", () => {
     "rule bad {",
     "  fail \"no\"",
     "}",
-    "function check() {",
+    "script check() {",
     "  true",
     "}",
     "workflow default {",
@@ -1025,7 +1025,7 @@ test("compiler golden: workflow with config emits JAIPH export defaults", () => 
         '  agent.claude_flags = "--model sonnet-4"',
         '  run.logs_dir = ".jaiph/runs"',
         "}",
-        "function f_ok() {",
+        "script f_ok() {",
         "  echo ok",
         "}",
         "",
@@ -1381,15 +1381,15 @@ test("compiler golden: inbox.jh fixture compiles successfully", () => {
         "channel summary",
         "channel final_summary",
         "",
-        "function emit_findings() {",
+        "script emit_findings() {",
         "  echo '## findings'",
         "}",
         "",
-        "function write_findings_file() {",
+        "script write_findings_file() {",
         '  printf "%s\\n" "$1" > findings_file.md',
         "}",
         "",
-        "function emit_reviewed() {",
+        "script emit_reviewed() {",
         '  printf "[reviewed] %s\\n" "$1"',
         "}",
         "",
@@ -1509,10 +1509,10 @@ test("parser: top-level local name collision with workflow is E_PARSE", () => {
   );
 });
 
-test("parser: top-level local name collision with function is E_PARSE", () => {
+test("parser: top-level local name collision with script is E_PARSE", () => {
   const source = [
     'local helper = "val"',
-    "function helper() {",
+    "script helper() {",
     "  echo ok",
     "}",
     "workflow default {",
@@ -1521,7 +1521,7 @@ test("parser: top-level local name collision with function is E_PARSE", () => {
   ].join("\n");
   assert.throws(
     () => parsejaiph(source, "/fake/entry.jh"),
-    /duplicate name "helper".*variable name collides with function/,
+    /duplicate name "helper".*variable name collides with script/,
   );
 });
 
@@ -1538,7 +1538,7 @@ test("compiler golden: top-level local emits prefixed variable and shims", () =>
         "  log \"$greeting\"",
         "}",
         "",
-        "function helper() {",
+        "script helper() {",
         "  echo $greeting",
         "}",
         "",
@@ -1600,7 +1600,7 @@ test("compiler golden: ensure...recover single statement emits retry loop", () =
     writeFileSync(
       input,
       [
-        "function has_results_txt() {",
+        "script has_results_txt() {",
         "  test -f results.txt",
         "}",
         "",
@@ -1643,7 +1643,7 @@ test("compiler golden: ensure...recover block emits retry loop with multiple ste
     writeFileSync(
       input,
       [
-        "function has_ci_ok() {",
+        "script has_ci_ok() {",
         "  test -f ci_ok.txt",
         "}",
         "",
@@ -1689,7 +1689,7 @@ test("compiler golden: if not run <fn> emits bash conditional on workflow call",
     writeFileSync(
       input,
       [
-        "function config_yml_exists() {",
+        "script config_yml_exists() {",
         "  test -f config.yml",
         "}",
         "",
@@ -1724,11 +1724,11 @@ test("compiler golden: if not ensure with run steps in branch emits expected bas
     writeFileSync(
       input,
       [
-        "function has_config_yml() {",
+        "script has_config_yml() {",
         "  test -f config.yml",
         "}",
         "",
-        "function touch_config_yml() {",
+        "script touch_config_yml() {",
         "  touch config.yml",
         "}",
         "",

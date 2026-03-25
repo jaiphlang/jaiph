@@ -11,13 +11,13 @@ redirect_from:
 
 Jaiph ships a small **native test runner** for workflow modules. You write `*.test.jh` (or `*.test.jph`) files that import workflows under test, optionally replace prompts and other symbols with mocks, run workflows through the same managed runtime as `jaiph run`, and assert on captured output or return values.
 
-**Why mocks matter.** Real workflows call LLMs, shell, and other workflows. That output is non-deterministic and environment-dependent. The test harness records mock prompt responses and can substitute shell bodies for workflows, rules, and functions so runs stay fast, repeatable, and offline-friendly.
+**Why mocks matter.** Real workflows call LLMs, shell, and other workflows. That output is non-deterministic and environment-dependent. The test harness records mock prompt responses and can substitute shell bodies for workflows, rules, and Jaiph scripts so runs stay fast, repeatable, and offline-friendly.
 
 **Core concepts**
 
 - **Test files** — Names ending in `.test.jh` or `.test.jph`, discovered by `jaiph test`. Each file lists imports and one or more `test "..." { ... }` blocks.
 - **Test blocks** — A named block is one test case: ordered steps (shell, mocks, workflow runs, assertions).
-- **Mocks** — Fixed or content-based prompt responses; optional replacement bodies for imported workflows, rules, and functions.
+- **Mocks** — Fixed or content-based prompt responses; optional replacement bodies for imported workflows, rules, and scripts.
 - **Assertions** — After a captured workflow run, `expectContain`, `expectNotContain`, and `expectEqual` check the captured string. Capture semantics are described under **Workflow run (capture)** below.
 
 ## File naming and layout
@@ -79,7 +79,7 @@ test "runs happy path and output contains expected mock" {
   Matching uses **substring** match on the prompt text (same idea as “contains”). The first matching branch wins. Without `else`, an unmatched prompt fails the test with a short preview of the prompt text.
 - **`mock workflow <ref> { ... }`** — Replace that workflow for this test with the given shell body (e.g. `echo ok`). `<ref>` is `<alias>` or `<alias>.<workflow>`; a single-segment ref is resolved against the first import’s module symbol (prefer the two-part form for clarity).
 - **`mock rule <ref> { ... }`** — Same for a rule.
-- **`mock function <ref> { ... }`** — Same for a function; `<ref>` is `<name>` or `<alias>.<name>`.
+- **`mock function <ref> { ... }`** — Stubs a module **`script`** in tests (the test grammar still uses the keyword **`mock function`**); `<ref>` is `<name>` or `<alias>.<name>`.
 - **Workflow run (capture)** — `name = <alias>.<workflow>` runs the workflow like `jaiph run`. Capture prefers the workflow’s explicit **`return`** value when the callee wrote one; otherwise the harness stores **combined stdout and stderr** with lines starting with `__JAIPH_EVENT__` removed. The test fails on non-zero exit unless you add `allow_failure`. Variants: optional one string argument (`name = w.default "arg"`), and/or `allow_failure` (`name = w.default allow_failure`, `name = w.default "arg" allow_failure`). This is the test form of managed invocation—do not wrap the workflow call in `$(…)`; see [Grammar — Managed calls vs command substitution](grammar.md#managed-calls-vs-command-substitution). **Alternate** allow-failure capture form: `name=$( { alias.workflow 2>&1; } || true )` (equivalent to `allow_failure` on an assignment capture).
 - **Workflow run (no capture)** — `<alias>.<workflow>` or `<alias>.<workflow> "arg"` runs without storing output; still fails on non-zero exit unless `allow_failure` is appended (same optional argument patterns as above).
 - **`expectContain` / `expectNotContain` / `expectEqual`** — `expectContain <var> "substring"`, etc. The expected string must be **double-quoted** (escape `"` inside the string with `\"` if needed). Failures print expected vs actual previews where applicable.
