@@ -12,6 +12,7 @@
 - **Shell / Jaiph guard** — Keyword-first checks for Jaiph symbols in bash contexts are scoped to places that still contain shell (principally **`function`** bodies and related fragments), not workflow lines.
 - **Design reference** — Rationale and legality matrix: `.jaiph/language_redesign_spec.md` in the repository.
 - **Compiler: legacy conditional parser removed** — Deleted `src/parse/legacy-if.ts` and related workflow-parser wiring that only supported transitional `if … then … fi` / `elif` forms for `ensure`, `run`, or shell tests. Workflows and rules already require **brace** `if [not] ensure|run … { … }` on nightly; this change removes dead compatibility code with no intended change to accepted syntax or runtime behavior.
+- **`log` / `logerr` terminal output and escapes** — `jaiph::log` / `jaiph::logerr` write to stdout/stderr with `echo -e`, so backslash escapes in the message (for example `\n`, `\t`) produce newlines, tabs, and other control characters on the terminal and in the CLI tree text. `LOG` / `LOGERR` payloads on the event fd and in `run_summary.jsonl` still carry the **raw** shell string: only `jaiph::json_escape` is applied for JSON, with no second escape expansion for consumers.
 
 # 0.5.0
 

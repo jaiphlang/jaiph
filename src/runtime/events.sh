@@ -178,7 +178,7 @@ jaiph::log() {
       "$(jaiph::json_escape "${JAIPH_RUN_ID:-}")")"
     jaiph::_run_summary_append_line "$line_log"
   fi
-  echo "$message"
+  echo -e "$message"
   if [[ "$had_xtrace" -eq 1 ]]; then
     set -x
   fi
@@ -211,7 +211,7 @@ jaiph::logerr() {
       "$(jaiph::json_escape "${JAIPH_RUN_ID:-}")")"
     jaiph::_run_summary_append_line "$line_err"
   fi
-  echo "$message" >&2
+  echo -e "$message" >&2
   if [[ "$had_xtrace" -eq 1 ]]; then
     set -x
   fi
