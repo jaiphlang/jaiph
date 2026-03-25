@@ -11,7 +11,7 @@ test("E_VALIDATE: command substitution cannot call Jaiph function", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "function f() {",
+        "script f() {",
         "  return \"x\"",
         "}",
         "workflow default {",
@@ -20,7 +20,7 @@ test("E_VALIDATE: command substitution cannot call Jaiph function", () => {
         "",
       ].join("\n"),
     );
-    assert.throws(() => build(join(root, "m.jh"), join(root, "out")), /command substitution cannot invoke function "f"/);
+    assert.throws(() => build(join(root, "m.jh"), join(root, "out")), /command substitution cannot invoke script "f"/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -32,7 +32,7 @@ test("E_VALIDATE: workflow shell cannot call function directly", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "function f() {",
+        "script f() {",
         "  return \"x\"",
         "}",
         "workflow default {",
@@ -41,7 +41,7 @@ test("E_VALIDATE: workflow shell cannot call function directly", () => {
         "",
       ].join("\n"),
     );
-    assert.throws(() => build(join(root, "m.jh"), join(root, "out")), /direct function call "f"/);
+    assert.throws(() => build(join(root, "m.jh"), join(root, "out")), /direct script call "f"/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -54,7 +54,7 @@ test("build accepts run with local function and capture", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "function f() {",
+        "script f() {",
         "  return \"ok\"",
         "}",
         "workflow default {",

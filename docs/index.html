@@ -73,16 +73,16 @@ layout: null
                 <div class="code-tab-panel is-active" data-panel="say-hello-jh">
                     <p><strong>Jaiph</strong> workflows are typically executable <code>.jh</code> files with a shebang.
                     </p>
-                    <p>The core primitives are <strong>rule</strong>, <strong>prompt</strong>, <strong>function</strong>
+                    <p>The core primitives are <strong>rule</strong>, <strong>prompt</strong>, <strong>script</strong>
                         and <strong>workflow</strong>. <strong>Workflows and rules</strong> are Jaiph-only: <code>ensure</code>,
                         <code>run</code>, <code>const</code>, brace <code>if</code>, <code>fail</code>, <code>return</code>, inbox
                         <code>&lt;-</code> / <code>-&gt;</code>, … — not arbitrary bash lines. <strong>Bash</strong> belongs in
-                        <code>function</code> blocks (and shared <code>.jaiph/lib</code> loaded from there). Workflows call rules with
-                        <code>ensure</code> and call workflows or functions with <code>run</code>. Pass arguments like bash scripts
+                        <code>script</code> blocks (and shared <code>.jaiph/lib</code> loaded from there). Workflows call rules with
+                        <code>ensure</code> and call workflows or scripts with <code>run</code>. Pass arguments like bash scripts
                         (<code>$1</code>, <code>$2</code>).</p>
                     <pre><code class="language-jaiph">#!/usr/bin/env jaiph
 
-function arg_is_non_empty() {
+script arg_is_non_empty() {
   test -n "$1"
 }
 
@@ -200,7 +200,7 @@ config {
   # agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
-function npm_run_test_ci() {
+script npm_run_test_ci() {
   npm run test:ci
 }
 
@@ -237,7 +237,7 @@ Jaiph: Running ensure_ci_passes.jh
                 <div class="code-tab-panel" data-panel="inbox-pipeline-jh">
                     <p>The <strong>inbox</strong> system lets workflows communicate through named channels.
                         A workflow sends a message with <code>&lt;-</code> (RHS: quoted literal, <code>$var</code>, or
-                        <code>run</code> to a function) and a route declaration (<code>-&gt;</code>) dispatches it to receivers with
+                        <code>run</code> to a script) and a route declaration (<code>-&gt;</code>) dispatches it to receivers with
                         <code>$1=message</code>, <code>$2=channel</code>, <code>$3=sender</code>.</p>
                     <pre><code class="language-jaiph">#!/usr/bin/env jaiph
 
@@ -252,7 +252,7 @@ workflow analyst {
   report <- "Summary: $1"
 }
 
-function print_reviewed() {
+script print_reviewed() {
   echo "[reviewed] $1"
 }
 
@@ -351,14 +351,14 @@ Jaiph: Running async.jh
 
                 <h3>Language</h3>
                 <p><strong>Combine prompts with strict checks.</strong> Compose <code>rule</code>,
-                    <code>function</code>, <code>ensure</code>, and <code>prompt</code> in one executable flow so checks
+                    <code>script</code>, <code>ensure</code>, and <code>prompt</code> in one executable flow so checks
                     and AI steps stay in the same pipeline. This way you can enforce structure over non-deterministic
                     agent responses.
                     See <a href="grammar">Grammar</a> and <a href="getting-started">Getting started</a>
                     (<a href="https://jaiph.org/getting-started" target="_blank" rel="noopener noreferrer">jaiph.org/getting-started</a>).
                 </p>
-                <p><strong>Use Bash in functions.</strong> Command pipelines, checks, and background jobs belong in
-                    <code>function</code> blocks; workflows and rules call them with <code>run</code>. For async managed work, use
+                <p><strong>Use Bash in scripts.</strong> Command pipelines, checks, and background jobs belong in
+                    <code>script</code> blocks; workflows and rules call them with <code>run</code>. For async managed work, use
                     <code>run wf &amp;</code> and a <code>wait</code> step.
                 </p>
                 <p><strong>Agent inbox pattern (channels).</strong> Use inbox channels as a way to pass messages between
@@ -402,7 +402,7 @@ Jaiph: Running async.jh
                     workflow implements a queue-driven engineering loop that picks work, implements changes, verifies
                     CI, and updates queue state.                     Shared bash helpers for those flows live under
                     <a href="https://github.com/jaiphlang/jaiph/tree/main/.jaiph/lib">.jaiph/lib/</a> and load via
-                    <code>source "$JAIPH_LIB/…"</code> inside functions. Generated workflow scripts export a default
+                    <code>source "$JAIPH_LIB/…"</code> inside scripts. Generated workflow scripts export a default
                     <code>JAIPH_LIB</code> rooted at <code>${JAIPH_WORKSPACE:-.}/.jaiph/lib</code> so paths stay tied to the
                     project workspace, not the build output directory.
                 </p>
@@ -422,13 +422,13 @@ Jaiph: Running async.jh
 
                     <dt><code>import "file.jh" as alias</code> · <code>const name = value</code> / <code>local name = value</code></dt>
                     <dd>Import other modules and define module-scoped variables (prefer <code>const</code> for new code) shared by
-                        rules, functions, and workflows in the same file.</dd>
+                        rules, scripts, and workflows in the same file.</dd>
 
                     <dt><code>rule name { ... }</code> · <code>workflow name { ... }</code> ·
-                        <code>function name() { ... }</code>
+                        <code>script name() { ... }</code>
                     </dt>
                     <dd><code>rule</code> is for reusable checks (Jaiph structured steps; used with <code>ensure</code>),
-                        <code>workflow</code> orchestrates Jaiph steps only, and <code>function</code> holds bash invoked with
+                        <code>workflow</code> orchestrates Jaiph steps only, and <code>script</code> holds bash invoked with
                         <code>run</code>.
                     </dd>
 
@@ -436,7 +436,7 @@ Jaiph: Running async.jh
                         <code>run ref</code>
                     </dt>
                     <dd><code>ensure</code> executes a rule (with optional args); <code>recover</code> adds bounded
-                        retry repair logic; <code>run</code> calls another workflow or module function from a workflow
+                        retry repair logic; <code>run</code> calls another workflow or module script from a workflow
                         (managed step — same value/log contract as <code>ensure</code>).</dd>
 
                     <dt><code>prompt "..."</code> · <code>const name = prompt "..." returns '{ field: type }'</code></dt>
@@ -446,8 +446,8 @@ Jaiph: Running async.jh
                     <dt><code>const name = …</code> · <code>name = ensure ref</code> · <code>name = run ref</code>
                     </dt>
                     <dd>Bind or capture step values. For <code>ensure</code> / <code>run</code> to rules and workflows, explicit
-                        <code>return "value"</code> feeds the variable; for <code>run</code> to a <strong>function</strong>, capture follows
-                        stdout. <code>const</code> RHS has stricter rules (no <code>$(...)</code> — use <code>run</code> to a function). See
+                        <code>return "value"</code> feeds the variable; for <code>run</code> to a <strong>script</strong>, capture follows
+                        stdout. <code>const</code> RHS has stricter rules (no <code>$(...)</code> — use <code>run</code> to a script). See
                         <a href="grammar#step-output-contract">Step output contract</a>.
                     </dd>
 
@@ -456,7 +456,7 @@ Jaiph: Running async.jh
 
                     <dt><code>if [not] ensure ref { }</code> · <code>if [not] run ref { }</code></dt>
                     <dd>Brace conditionals only, with optional <code>else if</code> / <code>else</code> chains. Use <code>run</code> to a
-                        function to express command-based tests.</dd>
+                        script to express command-based tests.</dd>
 
                     <dt><code>log "message"</code> · <code>logerr "message"</code></dt>
                     <dd>Emit informational or error output to the run tree while keeping workflow execution explicit and
@@ -486,7 +486,7 @@ Jaiph: Running async.jh
                     </dd>
 
                     <dt><code>mock workflow</code> · <code>mock rule</code> · <code>mock function</code></dt>
-                    <dd>Replace workflow/rule/function implementations in tests for isolation and targeted assertions.
+                    <dd>Replace workflow, rule, or script implementations in tests for isolation and targeted assertions (<code>mock function</code> is the test-file spelling).
                     </dd>
 
                     <dt><code>name = alias.workflow</code> · <code>allow_failure</code></dt>

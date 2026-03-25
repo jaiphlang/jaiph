@@ -9,7 +9,7 @@ redirect_from:
 
 ## Overview
 
-**Jaiph** is a small language for describing workflows: **orchestration steps** (rules, prompts, managed calls) and **bash in functions**, compiled to Bash plus a runtime that records steps, routes messages between workflows, and (for rules) applies read-only isolation where the platform supports it.
+**Jaiph** is a small language for describing workflows: **orchestration steps** (rules, prompts, managed calls) and **bash in `script` blocks**, compiled to Bash plus a runtime that records steps, routes messages between workflows, and (for rules) applies read-only isolation where the platform supports it.
 
 This page is an **agent skill**: it tells an AI assistant how to **author** those workflows correctly and what a healthy project layout looks like. It is not a full language specification — use [Grammar](grammar.md) for syntax and validation details, [Configuration](configuration.md) for `config` keys, [Inbox & Dispatch](inbox.md) for channels, and [Sandboxing](sandboxing.md) for how rules are isolated.
 
@@ -17,12 +17,12 @@ This page is an **agent skill**: it tells an AI assistant how to **author** thos
 
 **Concepts:**
 
-- **Rules** — Structured checks: `ensure` (other **rules** only), `run` (**functions** only — not workflows), `const`, brace `if`, `fail`, `log`/`logerr`, `return "…"`. No raw shell lines, `prompt`, inbox send/route, `wait`, or `ensure … recover`. Rules run in a read-only wrapper (Linux: mount namespace when `unshare`/`sudo` allow; macOS or without those: child-shell isolation only — see [Sandboxing](sandboxing.md)).
-- **Workflows** — Named sequences of **Jaiph-only** steps: `ensure`, `run`, `prompt`, `const`, `fail`, `return`, `log`/`logerr`, `send`/`route`, brace `if` only, `wait`, async `run … &`. Unrecognized lines are errors — put bash in **`function`** blocks and call with `run`.
-- **Functions** — Named bash function blocks (no `run`, `ensure`, routes, nested declarations, or Jaiph keywords `fail` / `const` / `log` / `logerr`; no Jaiph-style `return "…"` — use `return N` / `return $?` and **stdout** for string data to callers). From a **workflow** or **rule**, call with **`run fn`**. Cannot be used with `ensure`, are not valid inbox route targets, cannot be exported, and must not be invoked through `$(...)` or as a bare shell step.
-- **Channels** — Top-level `channel name` declarations name inbox endpoints for `send` and `route`. Channel names participate in the same per-module namespace as rules, workflows, functions, and module-scoped `local` / `const` variables.
+- **Rules** — Structured checks: `ensure` (other **rules** only), `run` (**scripts** only — not workflows), `const`, brace `if`, `fail`, `log`/`logerr`, `return "…"`. No raw shell lines, `prompt`, inbox send/route, `wait`, or `ensure … recover`. Rules run in a read-only wrapper (Linux: mount namespace when `unshare`/`sudo` allow; macOS or without those: child-shell isolation only — see [Sandboxing](sandboxing.md)).
+- **Workflows** — Named sequences of **Jaiph-only** steps: `ensure`, `run`, `prompt`, `const`, `fail`, `return`, `log`/`logerr`, `send`/`route`, brace `if` only, `wait`, async `run … &`. Unrecognized lines are errors — put bash in **`script`** blocks and call with `run`.
+- **Scripts** — Top-level **`script`** blocks of plain bash (no `run`, `ensure`, routes, nested declarations, or Jaiph keywords `fail` / `const` / `log` / `logerr`; no Jaiph-style `return "…"` — use `return N` / `return $?` and **stdout** for string data to callers). From a **workflow** or **rule**, call with **`run fn`**. Cannot be used with `ensure`, are not valid inbox route targets, cannot be exported, and must not be invoked through `$(...)` or as a bare shell step.
+- **Channels** — Top-level `channel name` declarations name inbox endpoints for `send` and `route`. Channel names participate in the same per-module namespace as rules, workflows, scripts, and module-scoped `local` / `const` variables.
 - **ensure** — Runs a rule; succeeds if exit code is 0. Optional `recover` turns it into a bounded retry loop.
-- **run** — Invokes a workflow or function (local or `alias.name`). Must not target a rule or arbitrary shell command. **Does not forward positional args implicitly** — pass them explicitly (e.g. `run wf "$1"`, `run helper_fn "$1"`).
+- **run** — Invokes a workflow or script (local or `alias.name`). Must not target a rule or arbitrary shell command. **Does not forward positional args implicitly** — pass them explicitly (e.g. `run wf "$1"`, `run helper_fn "$1"`).
 - **prompt** — Sends a string to the configured agent. Optional `returns` schema validates one line of JSON from the agent.
 
 **Audience:** Agents that produce or edit `.jh` / `.jph` files (prefer `.jh`; `.jph` is still accepted but deprecated for new work).
@@ -34,7 +34,7 @@ This page is an **agent skill**: it tells an AI assistant how to **author** thos
 Use this loop whenever you add or change Jaiph workflows so failures surface before work is handed back:
 
 1. **Preflight** — Run the project’s readiness checks if they exist (often `jaiph run .jaiph/readiness.jh` or a named preflight workflow). Compile-check sources with `jaiph build` on the relevant path (for example `jaiph build .jaiph`). When the repo ships native tests (`*.test.jh`), run `jaiph test` before large edits when practical.
-2. **Implement** — Edit `.jh` modules using only constructs described in [Grammar](grammar.md); keep managed-call rules (`ensure` for rules, `run` for workflows and functions); keep bash inside **`function`** bodies only (no raw shell in workflow/rule bodies).
+2. **Implement** — Edit `.jh` modules using only constructs described in [Grammar](grammar.md); keep managed-call rules (`ensure` for rules, `run` for workflows and scripts); keep bash inside **`script`** bodies only (no raw shell in workflow/rule bodies).
 3. **Verify** — Run `jaiph test` (whole workspace or a focused path) and any verification workflow the repo defines (commonly `jaiph run .jaiph/verification.jh`). Fix failures you introduce.
 4. **Inspect (optional)** — Use `jaiph report --workspace .` to browse `.jaiph/runs` when you need the reporting UI or raw step logs instead of only the terminal tree.
 
@@ -69,40 +69,40 @@ Prefer composable modules over one large file.
 ## Language Rules You Must Respect
 
 - **Imports:** `import "path.jh" as alias` or `import 'path.jh' as alias`. Path may be single- or double-quoted. Path is relative to the importing file. If the path has no extension, the compiler resolves `.jh` first, then `.jph`. Prefer `.jh` for new files (`.jph` is deprecated).
-- **Definitions:** `channel name` (inbox endpoint); `rule name { ... }`, `workflow name { ... }`, `function name() { ... }` (parentheses optional). Optional `export` before `rule` or `workflow` marks it as public (see [Grammar](grammar.md)). Optional `config { ... }` at the top of a file sets agent, run, and runtime options. An optional `config { ... }` block can also appear inside a `workflow { ... }` body (before any steps) to override module-level settings for that workflow only — only `agent.*` and `run.*` keys are allowed; `runtime.*` yields `E_PARSE` (see [Configuration](configuration.md#workflow-level-config)). Config values can be quoted strings, booleans (`true`/`false`), bare integers, or bracket-delimited arrays of strings (see [Grammar](grammar.md) and [Configuration](configuration.md)).
-- **Module-scoped variables:** `local name = value` or `const name = value` (same value forms). Prefer **`const`** for new files. Accessible as `$name` inside all rules, functions, and workflows in the same module. Names share the unified namespace with channels, rules, workflows, and functions — duplicates are `E_PARSE`. Not exportable; module-scoped only.
+- **Definitions:** `channel name` (inbox endpoint); `rule name { ... }`, `workflow name { ... }`, `script name() { ... }` (parentheses optional). Optional `export` before `rule` or `workflow` marks it as public (see [Grammar](grammar.md)). Optional `config { ... }` at the top of a file sets agent, run, and runtime options. An optional `config { ... }` block can also appear inside a `workflow { ... }` body (before any steps) to override module-level settings for that workflow only — only `agent.*` and `run.*` keys are allowed; `runtime.*` yields `E_PARSE` (see [Configuration](configuration.md#workflow-level-config)). Config values can be quoted strings, booleans (`true`/`false`), bare integers, or bracket-delimited arrays of strings (see [Grammar](grammar.md) and [Configuration](configuration.md)).
+- **Module-scoped variables:** `local name = value` or `const name = value` (same value forms). Prefer **`const`** for new files. Accessible as `$name` inside all rules, scripts, and workflows in the same module. Names share the unified namespace with channels, rules, workflows, and scripts — duplicates are `E_PARSE`. Not exportable; module-scoped only.
 - **Steps:**
   - **ensure** — `ensure ref [args...]` runs a rule (local or `alias.rule_name`); args are passed to the shell. Optionally `ensure ref [args] recover <body>`: bounded retry loop (run rule; on failure run recover body; repeat until the rule passes or max retries, then exit 1). Max retries default to 10; override with `JAIPH_ENSURE_MAX_RETRIES`. Inside a recover body, `$1` is the failed rule's explicit `return` value (stdout is in artifacts), or empty if the rule did not set a value return.
-  - **run** — `run ref [args...]` runs a workflow or function (local or `alias.name`); explicit args are passed through. **`run` does not forward `$@` by default** — pass positional args explicitly (e.g. `run wf "$1"`, `run util_fn "$2"`).
+  - **run** — `run ref [args...]` runs a workflow or script (local or `alias.name`); explicit args are passed through. **`run` does not forward `$@` by default** — pass positional args explicitly (e.g. `run wf "$1"`, `run util_fn "$2"`).
   - **log** — `log "message"` displays a message in the progress tree at the current depth and writes to **stdout**. Double-quoted string; shell variable interpolation works at runtime. Terminal and tree text use **`echo -e`**: backslash escapes in the string (e.g. `\n`, `\t`) are interpreted on output. **`LOG`** events / `run_summary.jsonl` store the **raw** message string (JSON-escaped only), not a second expansion. No spinner, no timing — a static annotation. Useful for marking workflow phases (e.g. `log "Starting analysis phase"`).
   - **logerr** — `logerr "message"` is identical to `log` except the message is written to **stderr** instead of stdout. In the progress tree, `logerr` lines display with a red `!` instead of the dim `ℹ` used by `log`. Same quoting and escape behavior as `log`. Useful for error messages or warnings.
   - **Send** — After `<-`, use a **double-quoted literal**, **`$var` / `${…}`**, **`run ref [args]`**, or standalone `<-` (forward `$1`). Raw shell on the RHS is rejected — use `const x = run helper` then `channel <- "$x"`, or `channel <- run fmt_fn`. Combining capture and send (`name = channel <- …`) is `E_PARSE`. See [Inbox & Dispatch](inbox.md).
-  - **Route** — `channel -> workflow_ref` (inside an orchestrator workflow) registers a static routing rule: when a message arrives on `channel`, call that **workflow** (local or `alias.workflow`) with `$1=message`, `$2=channel`, `$3=sender`. Functions and rules are not valid route targets. Multiple targets are comma-separated (`ch -> wf1, wf2`). Routes are declarations, not executable steps. The dispatch queue drains after the orchestrator completes; by default at most 100 dispatch iterations run per drain (`JAIPH_INBOX_MAX_DISPATCH_DEPTH` overrides). See [Inbox & Dispatch](inbox.md).
-  - **Bindings and capture** — `const name = …` or `name = …`. For **`ensure`** / **`run` to a workflow or rule**, capture is the callee’s explicit **`return "…"`**. For **`run` to a function**, capture follows **stdout** from the function body. **`prompt`** capture is the agent answer. **`const`** RHS cannot use `$(...)` or disallowed `${...}` forms — use a **`function`** and `const x = run helper …`. Do not put Jaiph symbols inside `$(...)` — use `ensure` / `run`. See [Grammar](grammar.md#step-output-contract).
+  - **Route** — `channel -> workflow_ref` (inside an orchestrator workflow) registers a static routing rule: when a message arrives on `channel`, call that **workflow** (local or `alias.workflow`) with `$1=message`, `$2=channel`, `$3=sender`. Scripts and rules are not valid route targets. Multiple targets are comma-separated (`ch -> wf1, wf2`). Routes are declarations, not executable steps. The dispatch queue drains after the orchestrator completes; by default at most 100 dispatch iterations run per drain (`JAIPH_INBOX_MAX_DISPATCH_DEPTH` overrides). See [Inbox & Dispatch](inbox.md).
+  - **Bindings and capture** — `const name = …` or `name = …`. For **`ensure`** / **`run` to a workflow or rule**, capture is the callee’s explicit **`return "…"`**. For **`run` to a script**, capture follows **stdout** from the script body. **`prompt`** capture is the agent answer. **`const`** RHS cannot use `$(...)` or disallowed `${...}` forms — use a **`script`** and `const x = run helper …`. Do not put Jaiph symbols inside `$(...)` — use `ensure` / `run`. See [Grammar](grammar.md#step-output-contract).
   - **fail** — `fail "reason"` aborts with stderr message and non-zero exit (workflows; fails the rule when used inside a rule).
   - **wait** — After `run ref &`, use a **`wait`** line (Jaiph keyword) to join background managed jobs.
 - **Prompts:** `prompt "..."` — quoted string, may be multiline. Variable expansion (e.g. `$1`) is allowed; backticks and `$(...)` are not. Capture: `name = prompt "..."`. Optional **typed prompt:** `name = prompt "..." returns '{ field: type, ... }'` (flat schema; types `string`, `number`, `boolean`) validates the agent's JSON and sets `$name` and `$name_field` per field. See [Grammar](grammar.md).
 - **Conditionals:** Only **brace form** in workflows:
   - `if [not] ensure some_rule [args] { ... } [ else if [not] ensure|run ref [args] { ... } ] [ else { ... } ]`
-  - `if [not] run some_ref [args] { ... }` with the same `else if` / `else` chaining. Use **`not`** instead of `!` before `ensure`/`run`. Express “shell conditions” with `run` to a **function** that performs the test. Short-circuit brace groups remain valid **inside `function`** bodies: `cmd || { ... }`.
+  - `if [not] run some_ref [args] { ... }` with the same `else if` / `else` chaining. Use **`not`** instead of `!` before `ensure`/`run`. Express “shell conditions” with `run` to a **script** that performs the test. Short-circuit brace groups remain valid **inside `script`** bodies: `cmd || { ... }`.
 
 Rules:
 
 - `jaiph run <file.jh>` executes `workflow default` in that file. The file must define a `workflow default` (the runtime checks for it and exits with an error if missing).
-- Inside a workflow, `run` targets a workflow or function (local or `alias.name`), not a raw shell command. Call functions with `run`, never `fn args` or `$(fn ...)`.
-- Inside a rule, use `ensure` for **rules** and `run` for **functions only** — not `prompt`, `send`, `wait`, or `ensure … recover`.
+- Inside a workflow, `run` targets a workflow or script (local or `alias.name`), not a raw shell command. Call scripts with `run`, never `fn args` or `$(fn ...)`.
+- Inside a rule, use `ensure` for **rules** and `run` for **scripts only** — not `prompt`, `send`, `wait`, or `ensure … recover`.
 - Rules run in a read-only wrapper (Linux with `unshare` and passwordless `sudo`: filesystem mounted read-only; macOS or without those: child-shell isolation only — no filesystem lock); put mutating operations in workflows. Details: [Sandboxing](sandboxing.md).
-- **Parallelism:** `run wf_or_fn &` plus a **`wait`** step for managed async. For concurrent **bash**, use `&` / `wait` inside a **`function`** and call it with `run`. Do not call Jaiph internals from background subprocesses unless you understand `run.inbox_parallel` locking.
-- **Shared bash:** Optional `.jaiph/lib/*.sh` — from a **`function`**, `source "$JAIPH_LIB/yourlib.sh"`. Emitted scripts default `JAIPH_LIB` to `${JAIPH_WORKSPACE:-.}/.jaiph/lib` unless set; the runtime also sets `JAIPH_LIB` for function steps. Keep Jaiph orchestration out of library files.
-- **Unified namespace:** Channels, rules, workflows, functions, and module-scoped `local`/`const` share a single namespace per module (`E_PARSE` on collision).
-- **Calling conventions (compiler-enforced):** `ensure` must target a rule — using it on a workflow or function is `E_VALIDATE`. `run` in a **workflow** must target a workflow or function; `run` in a **rule** must target a **function** only. Jaiph symbols must not appear inside `$(...)` in bash contexts the compiler still scans (principally **`function`** bodies). Function bodies cannot contain `run`, `ensure`, `config`, nested declarations, routes, or Jaiph `fail` / `const` / `log` / `logerr` / `return "…"`.
+- **Parallelism:** `run wf_or_fn &` plus a **`wait`** step for managed async. For concurrent **bash**, use `&` / `wait` inside a **`script`** and call it with `run`. Do not call Jaiph internals from background subprocesses unless you understand `run.inbox_parallel` locking.
+- **Shared bash:** Optional `.jaiph/lib/*.sh` — from a **`script`**, `source "$JAIPH_LIB/yourlib.sh"`. Emitted scripts default `JAIPH_LIB` to `${JAIPH_WORKSPACE:-.}/.jaiph/lib` unless set; the runtime also sets `JAIPH_LIB` for script steps. Keep Jaiph orchestration out of library files.
+- **Unified namespace:** Channels, rules, workflows, scripts, and module-scoped `local`/`const` share a single namespace per module (`E_PARSE` on collision).
+- **Calling conventions (compiler-enforced):** `ensure` must target a rule — using it on a workflow or script is `E_VALIDATE`. `run` in a **workflow** must target a workflow or script; `run` in a **rule** must target a **script** only. Jaiph symbols must not appear inside `$(...)` in bash contexts the compiler still scans (principally **`script`** bodies). Script bodies cannot contain `run`, `ensure`, `config`, nested declarations, routes, or Jaiph `fail` / `const` / `log` / `logerr` / `return "…"`.
 
 ## Authoring Heuristics
 
 - Keep workflows short and explicit.
 - Put expensive checks after fast checks.
 - Include clear prompts with concrete acceptance criteria.
-- Reuse rules via `ensure`; reuse workflows and functions via `run`.
+- Reuse rules via `ensure`; reuse workflows and scripts via `run`.
 - Use only syntax described in [jaiph.org](https://jaiph.org) and [Grammar](grammar.md). For advanced constructs (e.g. `config` block, `export`, prompt capture), see the grammar. For testing workflows, see [Testing](testing.md) (`expectContain`, `expectNotContain`, `expectEqual`, mocks).
 
 ## Suggested Starter Layout
@@ -138,7 +138,7 @@ Use this as a shape to adapt. Paths and prompts should match the target reposito
 **File: .jaiph/readiness.jh**
 
 ```jaiph
-function git_is_clean() {
+script git_is_clean() {
   test -z "$(git status --porcelain)"
 }
 
@@ -148,7 +148,7 @@ rule git_clean {
   }
 }
 
-function require_git_node_npm() {
+script require_git_node_npm() {
   command -v git
   command -v node
   command -v npm
@@ -167,7 +167,7 @@ workflow default {
 **File: .jaiph/verification.jh**
 
 ```jaiph
-function npm_test_ci() {
+script npm_test_ci() {
   npm test
 }
 
@@ -175,7 +175,7 @@ rule unit_tests_pass {
   run npm_test_ci
 }
 
-function run_build() {
+script run_build() {
   npm run build
 }
 

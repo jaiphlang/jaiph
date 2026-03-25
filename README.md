@@ -16,11 +16,11 @@ It combines declarative workflow structure with bash, then compiles to pure shel
 
 **Features:**
 
-- **Workflows** — Ordered **Jaiph-only** steps (`ensure`, `run`, `prompt`, `const`, brace `if`, `fail`, `return`, `log` / `logerr`, inbox `send` / `route`, async `run … &` + `wait`). Anything that is not a recognized step is a parse error: move bash into a **`function`** and call it with **`run`**. Conditionals use **brace form only** (`if [not] ensure|run ref { … }`).
-- **Rules** — Reusable checks as **structured steps** (same keyword style, restricted set): `ensure` for other rules, **`run` for functions only**, `const`, brace `if`, `fail`, `log` / `logerr`, `return "…"`. No `prompt`, inbox, `wait`, or `ensure … recover`. Used with `ensure` and in conditionals.
+- **Workflows** — Ordered **Jaiph-only** steps (`ensure`, `run`, `prompt`, `const`, brace `if`, `fail`, `return`, `log` / `logerr`, inbox `send` / `route`, async `run … &` + `wait`). Anything that is not a recognized step is a parse error: move bash into a **`script`** and call it with **`run`**. Conditionals use **brace form only** (`if [not] ensure|run ref { … }`).
+- **Rules** — Reusable checks as **structured steps** (same keyword style, restricted set): `ensure` for other rules, **`run` for scripts only**, `const`, brace `if`, `fail`, `log` / `logerr`, `return "…"`. No `prompt`, inbox, `wait`, or `ensure … recover`. Used with `ensure` and in conditionals.
 - **Agent prompts** — `prompt "..."` sends text to a configured agent (e.g. Cursor or Claude CLI). Supports validated JSON responses via `returns '{ field: type }'`.
-- **Composability** — Import other `.jh` modules and call their rules, workflows, and functions by alias. **Managed calls only:** `ensure` for rules, `run` for workflows and functions. Assignment capture (`x = ensure …`, `x = run …`, or `const x = …`) uses each callee’s **value channel** (explicit `return "…"` in rules/workflows; **functions** pass data via **stdout**). Do not wrap Jaiph callees in `$(...)` or invoke them as bare bash commands.
-- **Shell-native** — Transpiled output is bash. Use **`function`** bodies for command pipelines, tests, and helpers (bash `return` / `exit` only — not Jaiph `return "…"` or `fail` / `log` / `logerr` / `const` inside functions). Module scope: **`const`** or **`local`** for shared values. Generated scripts default **`JAIPH_LIB`** to `<workspace>/.jaiph/lib` (via `JAIPH_WORKSPACE`) so `source "$JAIPH_LIB/…"` resolves predictably. See [Grammar](docs/grammar.md), [CLI environment variables](docs/cli.md#environment-variables), and `.jaiph/language_redesign_spec.md` for the orchestration vs execution boundary.
+- **Composability** — Import other `.jh` modules and call their rules, workflows, and scripts by alias. **Managed calls only:** `ensure` for rules, `run` for workflows and scripts. Assignment capture (`x = ensure …`, `x = run …`, or `const x = …`) uses each callee’s **value channel** (explicit `return "…"` in rules/workflows; **scripts** pass data via **stdout**). Do not wrap Jaiph callees in `$(...)` or invoke them as bare bash commands.
+- **Shell-native** — Transpiled output is bash. Use **`script`** blocks for command pipelines, tests, and helpers (bash `return` / `exit` only — not Jaiph `return "…"` or `fail` / `log` / `logerr` / `const` inside those bodies). Module scope: **`const`** or **`local`** for shared values. Generated scripts default **`JAIPH_LIB`** to `<workspace>/.jaiph/lib` (via `JAIPH_WORKSPACE`) so `source "$JAIPH_LIB/…"` resolves predictably. See [Grammar](docs/grammar.md), [CLI environment variables](docs/cli.md#environment-variables), and `.jaiph/language_redesign_spec.md` for the orchestration vs execution boundary.
 
 > [!WARNING]
 > Jaiph is still in an early stage. Expect breaking changes.
@@ -40,11 +40,11 @@ It combines declarative workflow structure with bash, then compiles to pure shel
 import "bootstrap_project.jh" as bootstrap
 import "tools/security.jh" as security
 
-function file_exists() {
+script file_exists() {
   test -f "$1"
 }
 
-function non_empty() {
+script non_empty() {
   test -n "$1"
 }
 
@@ -57,7 +57,7 @@ rule project_ready {
   }
 }
 
-function npm_run_build() {
+script npm_run_build() {
   npm run build
 }
 

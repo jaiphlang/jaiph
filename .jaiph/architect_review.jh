@@ -7,29 +7,29 @@ config {
   agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
-function first_line_str() {
+script first_line_str() {
   source "${JAIPH_LIB}/strings.sh"
   first_line "$1"
 }
 
-function rest_lines_str() {
+script rest_lines_str() {
   source "${JAIPH_LIB}/strings.sh"
   rest_lines "$1"
 }
 
-function arg_nonempty() {
+script arg_nonempty() {
   [ -n "${1:-}" ]
 }
 
-function str_equals() {
+script str_equals() {
   [ "$1" = "$2" ]
 }
 
-function task_has_dev_ready_marker() {
+script task_has_dev_ready_marker() {
   printf '%s\n' "$1" | grep -q '<!-- dev-ready -->'
 }
 
-function queue_has_any_task_not_dev_ready() {
+script queue_has_any_task_not_dev_ready() {
   local qf
   qf="${JAIPH_WORKSPACE:-.}/.jaiph/QUEUE.md"
   awk '

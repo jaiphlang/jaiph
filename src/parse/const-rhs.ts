@@ -13,19 +13,19 @@ export function validateConstBashExpr(filePath: string, expr: string, lineNo: nu
   if (/\$\(/.test(t)) {
     fail(
       filePath,
-      'const value cannot use command substitution "$(...)"; extract a function and use const name = run ref',
+      'const value cannot use command substitution "$(...)"; extract a script and use const name = run ref',
       lineNo,
       col,
     );
   }
   if (/\$\{[^}]*%%/.test(t)) {
-    fail(filePath, "const value cannot use ${var%%...} expansion; use a function", lineNo, col);
+    fail(filePath, "const value cannot use ${var%%...} expansion; use a script", lineNo, col);
   }
   if (/\$\{[^}]*\/\//.test(t)) {
-    fail(filePath, "const value cannot use ${var//...} expansion; use a function", lineNo, col);
+    fail(filePath, "const value cannot use ${var//...} expansion; use a script", lineNo, col);
   }
   if (/\$\{#/.test(t)) {
-    fail(filePath, "const value cannot use ${#var}; use a function", lineNo, col);
+    fail(filePath, "const value cannot use ${#var}; use a script", lineNo, col);
   }
 }
 
@@ -71,7 +71,7 @@ export function parseConstRhs(
       /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
     );
     if (!runMatch || !isRef(runMatch[1])) {
-      fail(filePath, "const ... = run must target a workflow or function reference", lineNo, col);
+      fail(filePath, "const ... = run must target a workflow or script reference", lineNo, col);
     }
     const ref: WorkflowRefDef = { value: runMatch[1], loc: { line: lineNo, col } };
     return {

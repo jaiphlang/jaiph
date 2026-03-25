@@ -1,42 +1,42 @@
-import type { FunctionDef } from "../types";
+import type { ScriptDef } from "../types";
 import { braceDepthDelta, fail, stripQuotes } from "./core";
 
-function assertAllowedFunctionLine(filePath: string, lineNo: number, cmd: string): void {
+function assertAllowedScriptLine(filePath: string, lineNo: number, cmd: string): void {
   const t = cmd.trim();
   if (!t || t.startsWith("#")) return;
   if (/^\s*(run|ensure)\s/.test(t)) {
     fail(
       filePath,
-      "function body cannot use run or ensure (move orchestration to a workflow)",
+      "script body cannot use run or ensure (move orchestration to a workflow)",
       lineNo,
     );
   }
   if (/^\s*fail\s/.test(t)) {
-    fail(filePath, 'fail is not allowed in function bodies; use return 1 or exit 1', lineNo);
+    fail(filePath, 'fail is not allowed in script bodies; use return 1 or exit 1', lineNo);
   }
   if (/^\s*const\s/.test(t)) {
-    fail(filePath, 'const is not allowed in function bodies; use bash local', lineNo);
+    fail(filePath, 'const is not allowed in script bodies; use bash local', lineNo);
   }
   if (/^\s*log\s/.test(t) || /^\s*logerr\s/.test(t)) {
-    fail(filePath, "log/logerr are not allowed in function bodies; use echo or echo >&2", lineNo);
+    fail(filePath, "log/logerr are not allowed in script bodies; use echo or echo >&2", lineNo);
   }
 }
 
-export function parseFunctionBlock(
+export function parseScriptBlock(
   filePath: string,
   lines: string[],
   startIndex: number,
   pendingComments: string[],
-): { fn: FunctionDef; nextIndex: number } {
+): { scriptDef: ScriptDef; nextIndex: number } {
   const lineNo = startIndex + 1;
   const raw = lines[startIndex];
   const line = raw.trim();
 
-  const match = line.match(/^function\s+([A-Za-z_][A-Za-z0-9_]*)(?:\(\))?\s*\{$/);
+  const match = line.match(/^script\s+([A-Za-z_][A-Za-z0-9_]*)(?:\(\))?\s*\{$/);
   if (!match) {
-    fail(filePath, "invalid function declaration", lineNo);
+    fail(filePath, "invalid script declaration", lineNo);
   }
-  const fn: FunctionDef = {
+  const scriptDef: ScriptDef = {
     name: match[1],
     comments: pendingComments,
     commands: [],
@@ -58,8 +58,8 @@ export function parseFunctionBlock(
     const cmd = currentCommandLines.join("\n").trim();
     currentCommandLines = [];
     if (!cmd) return;
-    assertAllowedFunctionLine(filePath, pendingCmdStartLine, cmd);
-    fn.commands.push(stripQuotes(cmd));
+    assertAllowedScriptLine(filePath, pendingCmdStartLine, cmd);
+    scriptDef.commands.push(stripQuotes(cmd));
   };
 
   for (; i < lines.length; i += 1) {
@@ -75,7 +75,7 @@ export function parseFunctionBlock(
       if (braceDepth > 0) pushCmdLine(innerRaw, innerNo);
       else {
         flushCommand();
-        fn.commands.push(innerRaw.trim());
+        scriptDef.commands.push(innerRaw.trim());
       }
       continue;
     }
@@ -99,16 +99,16 @@ export function parseFunctionBlock(
       if (braceDepth === 0) flushCommand();
       continue;
     }
-    assertAllowedFunctionLine(filePath, innerNo, inner);
+    assertAllowedScriptLine(filePath, innerNo, inner);
     const cmd = inner;
     if (!cmd) {
-      fail(filePath, "function command is required", innerNo);
+      fail(filePath, "script command is required", innerNo);
     }
-    fn.commands.push(stripQuotes(cmd));
+    scriptDef.commands.push(stripQuotes(cmd));
   }
   flushCommand();
   if (i >= lines.length) {
-    fail(filePath, `unterminated function block: ${fn.name}`, lineNo);
+    fail(filePath, `unterminated script block: ${scriptDef.name}`, lineNo);
   }
-  return { fn, nextIndex: i + 1 };
+  return { scriptDef, nextIndex: i + 1 };
 }

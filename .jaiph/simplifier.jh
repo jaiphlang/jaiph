@@ -35,7 +35,7 @@ const simplifier_principles = "
     existing tests unchanged.
 "
 
-function assert_no_test_or_e2e_in_changed() {
+script assert_no_test_or_e2e_in_changed() {
   source "${JAIPH_LIB}/git_paths.sh"
   local bad=0
   while IFS= read -r f; do
@@ -52,7 +52,7 @@ rule no_test_or_e2e_paths_changed {
   run assert_no_test_or_e2e_in_changed
 }
 
-function report_file_nonempty() {
+script report_file_nonempty() {
   test -s ".jaiph/tmp/simplifier_report.md"
 }
 
@@ -97,11 +97,11 @@ workflow find_simplifications {
   ensure no_test_or_e2e_paths_changed
 }
 
-function save_simplifier_report() {
+script save_simplifier_report() {
   printf '%s\n' "$1" > .jaiph/tmp/simplifier_report.md
 }
 
-function read_simplifier_report() {
+script read_simplifier_report() {
   cat .jaiph/tmp/simplifier_report.md
 }
 
@@ -140,7 +140,7 @@ workflow apply_simplifications {
   ensure no_test_or_e2e_paths_changed
 }
 
-function mkdir_tmp_jaiph() {
+script mkdir_tmp_jaiph() {
   mkdir -p .jaiph/tmp
 }
 

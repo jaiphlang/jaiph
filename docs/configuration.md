@@ -123,12 +123,12 @@ workflow default {
 }
 ```
 
-Workflow-level values apply to all steps in that workflow, including `ensure`d rules and functions called from it. When the workflow finishes, the previous environment is restored. Other workflows in the same file are unaffected.
+Workflow-level values apply to all steps in that workflow, including `ensure`d rules and scripts called from it. When the workflow finishes, the previous environment is restored. Other workflows in the same file are unaffected.
 
 **Precedence inside a workflow (highest wins):**
 
 1. **Environment** — `JAIPH_*` values present when `jaiph run` starts win and set the corresponding `*_LOCKED` markers so nested `run` into another module cannot replace them.
-2. **Workflow-level `config`** — overrides module in-file values for the duration of that workflow; its exports also set `_LOCKED` so inner module-level scopes (rule/function wrappers) do not revert them.
+2. **Workflow-level `config`** — overrides module in-file values for the duration of that workflow; its exports also set `_LOCKED` so inner module-level scopes (rule/script wrappers) do not revert them.
 3. **Module-level `config`** — fills in values for workflows without their own block.
 4. **Defaults** — see below.
 
@@ -193,7 +193,7 @@ For `runtime.*`, the `jaiph run` driver merges **`JAIPH_DOCKER_*` environment** 
 
 ## Inspect effective config at runtime
 
-Inside workflows, rules, and functions, **agent** and **run** settings are visible as the usual `JAIPH_*` variables, for example `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_MODEL`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, and `JAIPH_INBOX_PARALLEL`.
+Inside workflows, rules, and scripts, **agent** and **run** settings are visible as the usual `JAIPH_*` variables, for example `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_MODEL`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, and `JAIPH_INBOX_PARALLEL`.
 
 ```jh
 workflow default {

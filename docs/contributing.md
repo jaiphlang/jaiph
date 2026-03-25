@@ -121,7 +121,7 @@ After validation, each compiled workflow module becomes one bash script. Ownersh
 |---------------|----------------|
 | `emit-workflow.ts` | `emitWorkflow(...)` — shebang and stdlib bootstrap, metadata exports, env shims, inbox routes, orchestrates emission, then the main workflow `::impl` and entry dispatcher |
 | `emit-rule.ts` | `emitRuleFunctions(...)` — iterates `ast.rules`, emits each rule's `::impl` and readonly wrapper |
-| `emit-script.ts` | `emitScriptFunctions(...)` — iterates `ast.functions`, emits bash for top-level **`function`** blocks (Jaiph still calls these *functions* in the language) |
+| `emit-script.ts` | `emitScriptFunctions(...)` — iterates `ast.scripts`, emits bash for top-level **`script`** blocks |
 | `emit-workflow-helpers.ts` | Metadata-to-env assignment helpers, scoped-metadata `push`/`pop`, `bashSingleQuotedSegment`, top-level env reference expansion |
 | `emit-steps.ts` | `emitStep` and related helpers — individual Jaiph steps inside workflows and rules |
 
@@ -133,11 +133,11 @@ Some files in `test/` don't follow the strict one-file-per-module layout. They e
 
 | Test file | Kind | What it covers |
 |-----------|------|----------------|
-| `compiler-golden.test.ts` | Golden/regression | Large suite of parser/transpiler checks; includes inline expected bash for the canonical minimal workflow (see `scripts/dump-golden-output.js`), plus cases aligned with structured workflows/rules, `fail`, workflow `const`, `wait`, brace-only `if`, send RHS, and function bodies |
+| `compiler-golden.test.ts` | Golden/regression | Large suite of parser/transpiler checks; includes inline expected bash for the canonical minimal workflow (see `scripts/dump-golden-output.js`), plus cases aligned with structured workflows/rules, `fail`, workflow `const`, `wait`, brace-only `if`, send RHS, and script bodies |
 | `fixtures-build.jest.test.js` | Snapshot | Builds everything under `test/fixtures/` and compares file list + contents to Jest snapshot |
 | `sample-build.test.ts` | Integration | Cross-module build/transpile/run-tree behavior using real compiler and CLI components |
 | `run-summary-jsonl.test.ts` | Integration | Runs the CLI on a small workflow and asserts structure and fields of `run_summary.jsonl` under `.jaiph/runs/` |
-| `validate-managed-calls.test.ts` | Validation | Transpiler `E_VALIDATE` rules (e.g. disallowed command substitution calling Jaiph functions) |
+| `validate-managed-calls.test.ts` | Validation | Transpiler `E_VALIDATE` rules (e.g. disallowed command substitution calling Jaiph rules/workflows/scripts) |
 | `non-tty-heartbeat.test.ts` | Acceptance | Non-TTY run: long step produces heartbeat line shape; uses built `dist/src/cli.js` |
 | `stderr-handler.test.ts` | Unit/TTY | `registerTTYSubscriber` / stderr routing edge cases with a stubbed stdout |
 | `signal-lifecycle.test.ts` | Acceptance | After SIGINT/SIGTERM, verifies `jaiph run` exits within a time bound and leaves no stale child processes |

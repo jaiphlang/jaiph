@@ -6,7 +6,7 @@
 # always the one in the workspace root, regardless of cwd.
 #
 
-function get_all_task_headers() {
+script get_all_task_headers() {
   local qf="${JAIPH_WORKSPACE:-.}/.jaiph/QUEUE.md"
   if ! test -f "$qf"; then
     echo "missing $qf" >&2
@@ -21,7 +21,7 @@ function get_all_task_headers() {
   return "$headers"
 }
 
-function get_task_by_header() {
+script get_task_by_header() {
   test -n "${1:-}" || { echo "get_task_by_header: header required" >&2; return 1; }
 
   local qf="${JAIPH_WORKSPACE:-.}/.jaiph/QUEUE.md"
@@ -65,15 +65,15 @@ function get_task_by_header() {
   return "$task"
 }
 
-function task_contains_dev_ready_marker() {
+script task_contains_dev_ready_marker() {
   printf '%s\n' "$1" | grep -q '<!-- dev-ready -->'
 }
 
-function file_exists() {
+script file_exists() {
   test -f "$1"
 }
 
-function first_header_line() {
+script first_header_line() {
   local header
   header="$(awk '/^## /{
     sub(/^## /, "")
@@ -84,7 +84,7 @@ function first_header_line() {
   return "$header"
 }
 
-function arg_nonempty() {
+script arg_nonempty() {
   [ -n "${1:-}" ]
 }
 
@@ -105,7 +105,7 @@ rule task_is_dev_ready {
   run task_contains_dev_ready_marker "$1"
 }
 
-function mark_task_dev_ready() {
+script mark_task_dev_ready() {
   test -n "${1:-}" || { echo "mark_task_dev_ready: header required" >&2; return 1; }
   local header="$1"
   case "$header" in
@@ -141,7 +141,7 @@ function mark_task_dev_ready() {
   mv "$tmp_file" "$qf"
 }
 
-function remove_task_block_by_header() {
+script remove_task_block_by_header() {
   local header="$1"
   case "$header" in
     "## "*) ;;
@@ -168,7 +168,7 @@ function remove_task_block_by_header() {
   mv "$tmp_file" "$qf"
 }
 
-function squeeze_consecutive_blanks_queue() {
+script squeeze_consecutive_blanks_queue() {
   local qf="$1"
   sed -i.bak -E '/^[[:space:]]*$/N;/^\n$/D' "$qf"
   rm -f "${qf}.bak"

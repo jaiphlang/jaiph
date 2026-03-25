@@ -81,7 +81,7 @@ test("ACCEPTANCE: unknown local workflow reference in run fails deterministicall
       ].join("\n"),
     );
 
-    assert.throws(() => build(root), /E_VALIDATE unknown local workflow or function reference "missing_workflow"/);
+    assert.throws(() => build(root), /E_VALIDATE unknown local workflow or script reference "missing_workflow"/);
   });
 });
 
@@ -97,7 +97,7 @@ test("ACCEPTANCE: invalid workflow reference shape fails at parse stage", () => 
       ].join("\n"),
     );
 
-    assert.throws(() => build(root), /E_PARSE run must target a workflow or function reference/);
+    assert.throws(() => build(root), /E_PARSE run must target a workflow or script reference/);
   });
 });
 
@@ -116,7 +116,7 @@ test("ACCEPTANCE: imported workflow missing fails with E_VALIDATE", () => {
       ].join("\n"),
     );
 
-    assert.throws(() => build(root), /E_VALIDATE imported workflow or function "lib\.missing" does not exist/);
+    assert.throws(() => build(root), /E_VALIDATE imported workflow or script "lib\.missing" does not exist/);
   });
 });
 

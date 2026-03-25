@@ -103,7 +103,7 @@ workflow default {
 `prompt` text follows bash-style variable expansion (for example `$1`, `${HOME}`, `${FILES[@]}`).
 For safety, command substitution is not allowed in prompt text: `$(...)` and backticks are rejected with `E_PARSE`.
 
-Workflow and rule bodies contain structured Jaiph steps only — use **`run`** to call a **`function`** for shell execution. In bash-bearing contexts (mainly **`function`** bodies, and restricted `const` / send RHS forms), `$(...)` and the first command word are validated: they must not invoke Jaiph rules, workflows, or functions, contain inbox send (`<-`), or use `run` / `ensure` as shell commands (`E_VALIDATE`). See [Grammar](grammar.md#managed-calls-vs-command-substitution).
+Workflow and rule bodies contain structured Jaiph steps only — use **`run`** to call a **`script`** for shell execution. In bash-bearing contexts (mainly **`script`** bodies, and restricted `const` / send RHS forms), `$(...)` and the first command word are validated: they must not invoke Jaiph rules, workflows, or scripts, contain inbox send (`<-`), or use `run` / `ensure` as shell commands (`E_VALIDATE`). See [Grammar](grammar.md#managed-calls-vs-command-substitution).
 
 If a `.jh` or `.jph` file is executable and has `#!/usr/bin/env jaiph`, you can run it directly:
 
@@ -114,7 +114,7 @@ If a `.jh` or `.jph` file is executable and has `#!/usr/bin/env jaiph`, you can 
 
 ### Run progress and tree output
 
-During `jaiph run`, the CLI renders a tree of steps. **Shared in TTY and non-TTY:** each step appears as a line with a marker (▸ when started, ✓/✗ when done), the step kind (`workflow`, `prompt`, `function`, `rule`), and the step name. **`log` messages** also appear inline in the tree at the correct indentation depth — they have no marker, spinner, or timing; just the `ℹ` symbol (dim/gray) followed by the message text. **Completion lines include the step kind and name** so that each line is self-identifying even when multiple steps run concurrently (e.g. `✓ workflow scanner (0s)`, `✗ rule ci_passes (11s)`). The root PASS/FAIL summary retains its existing format (`✓ PASS workflow default (0.2s)`). There are no per-step live elapsed counters or in-place updates on the start/completion tree lines themselves.
+During `jaiph run`, the CLI renders a tree of steps. **Shared in TTY and non-TTY:** each step appears as a line with a marker (▸ when started, ✓/✗ when done), the step kind (`workflow`, `prompt`, `script`, `rule`), and the step name. **`log` messages** also appear inline in the tree at the correct indentation depth — they have no marker, spinner, or timing; just the `ℹ` symbol (dim/gray) followed by the message text. **Completion lines include the step kind and name** so that each line is self-identifying even when multiple steps run concurrently (e.g. `✓ workflow scanner (0s)`, `✗ rule ci_passes (11s)`). The root PASS/FAIL summary retains its existing format (`✓ PASS workflow default (0.2s)`). There are no per-step live elapsed counters or in-place updates on the start/completion tree lines themselves.
 
 **`log` / `logerr` and backslash escapes:** The string shown after `ℹ` / `!`, and the bytes written to stdout/stderr for those keywords, follow **`echo -e`** semantics after Jaiph/bash quoting and variable expansion — e.g. a literal `\n` or `\t` in the message becomes a newline or tab in the tree and on the streams. **`LOG` / `LOGERR`** JSON on stderr (and the **`message`** field in `run_summary.jsonl`) still carries the **unexpanded** shell string: the runtime only applies `jaiph::json_escape` for JSON, so consumers do not see a second round of escape interpretation.
 
@@ -129,7 +129,7 @@ During `jaiph run`, the CLI renders a tree of steps. **Shared in TTY and non-TTY
 
 On stderr, the runtime emits **`__JAIPH_EVENT__` lines** (each followed by JSON). The CLI parses valid JSON to drive the tree, hooks, and failure summaries, so those lines do not appear verbatim in the log. Any **other** stderr text is forwarded to your terminal; in TTY mode the bottom “RUNNING …” line is cleared and redrawn around those writes. `STEP_END` payloads may embed step output (`out_content` / `err_content`); the runtime JSON-escapes those strings so tabs, ANSI escape bytes, and other control characters cannot break the line. If a payload is not valid JSON, the CLI treats it as plain stderr — in CI you may see a raw `__JAIPH_EVENT__ …` line instead of structured progress.
 
-For **parameterized** invocations—when you pass arguments to a workflow, prompt, function, or rule—the tree shows those argument **values** inline in gray immediately after the step name. Format:
+For **parameterized** invocations—when you pass arguments to a workflow, prompt, script, or rule—the tree shows those argument **values** inline in gray immediately after the step name. Format:
 
 - All parameters use a uniform **`key="value"`** format in parentheses. Internal refs such as `::impl` and empty or whitespace-only values are omitted.
 - **Positional parameters** (`$1`, `$2`, or `argN`) display as `1="value"`, `2="value"`, etc. **Named parameters** display as `name="value"`.
@@ -144,7 +144,7 @@ Example lines:
 - `· prompt prompt (running 60s)` — non-TTY only, after the quiet threshold; entire line dim/gray; same `prompt prompt` label as the eventual `✓ prompt prompt (…)` line
 - `·   ▸ prompt "$role does $task" (role="engineer", task="Fix bugs")`
 - `·   ▸ prompt "Say hello to $1 and..." (1="greeting")`
-- `·   ▸ function fib (1="3")`
+- `·   ▸ script fib (1="3")`
 - `·   ▸ rule check_arg (1="Alice")`
 
 If no parameters are passed, the line is unchanged (e.g. `▸ workflow default`). Color can be disabled with `NO_COLOR=1`.
@@ -325,7 +325,7 @@ Imports resolve for both extensions: `import "foo" as x` finds `foo.jh` or `foo.
 
 - `JAIPH_STDLIB` — normally unused: the CLI sets this to the **stdlib bundled with the same installation** as the `jaiph` binary so a stale global `JAIPH_STDLIB` in your shell cannot break new workflows. To force a custom stdlib path, set **`JAIPH_USE_CUSTOM_STDLIB=1`** and **`JAIPH_STDLIB`** to the absolute path of `jaiph_stdlib.sh` (advanced; tests and unusual installs).
 - `JAIPH_WORKSPACE` — set by the CLI to the workspace root: walk **up** from the directory that contains the entry `.jh` / `.jph` until a directory with `.jaiph` or `.git` is found; if the walk hits the filesystem root first, the root used is that entry directory (absolute path). Used by the generated bash and runtime helpers; you rarely set this yourself. In Docker sandbox mode the runtime remaps it inside the container (see [Sandboxing](sandboxing.md)).
-- `JAIPH_LIB` — directory for project-local shared bash libraries (conventionally `<workspace>/.jaiph/lib`). The **transpiled script** exports `JAIPH_LIB="${JAIPH_LIB:-${JAIPH_WORKSPACE:-.}/.jaiph/lib}"` near the top of its preamble so `source "$JAIPH_LIB/…"` works no matter where the generated `.sh` file lives. Override `JAIPH_LIB` when libraries live elsewhere. The runtime also sets `JAIPH_LIB` when executing **function** steps so behavior matches [Grammar — function bodies and shared libraries](grammar.md#step-output-contract).
+- `JAIPH_LIB` — directory for project-local shared bash libraries (conventionally `<workspace>/.jaiph/lib`). The **transpiled script** exports `JAIPH_LIB="${JAIPH_LIB:-${JAIPH_WORKSPACE:-.}/.jaiph/lib}"` near the top of its preamble so `source "$JAIPH_LIB/…"` works no matter where the generated `.sh` file lives. Override `JAIPH_LIB` when libraries live elsewhere. The runtime also sets `JAIPH_LIB` when executing **script** steps so behavior matches [Grammar — script bodies and shared libraries](grammar.md#step-output-contract).
 - `JAIPH_AGENT_MODEL` — default model for `prompt` steps (overrides in-file `agent.default_model`).
 - `JAIPH_AGENT_COMMAND` — command for the Cursor backend (e.g. `cursor-agent`; overrides in-file `agent.command`).
 - `JAIPH_AGENT_BACKEND` — prompt backend: `cursor` (default) or `claude`. Overrides in-file `agent.backend`. When set to `claude`, the Anthropic Claude CLI (`claude`) must be installed and on PATH; otherwise the run fails with a clear error. See [Configuration](configuration.md).

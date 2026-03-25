@@ -12,7 +12,7 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::section "run function: return capture and step artifacts"
 
 e2e::file "run_fn_ok.jh" <<'EOF'
-function give() {
+script give() {
   echo "log-to-artifacts"
   return "captured-value"
 }
@@ -52,7 +52,7 @@ e2e::pass "run function success path"
 e2e::section "compiler rejects direct function call in workflow"
 
 e2e::file "direct_fn.jh" <<'EOF'
-function f() {
+script f() {
   return "x"
 }
 workflow default {
@@ -68,7 +68,7 @@ e2e::pass "direct function invocation rejected"
 e2e::section "compiler rejects Jaiph function inside command substitution"
 
 e2e::file "sub_fn.jh" <<'EOF'
-function f() {
+script f() {
   return "x"
 }
 workflow default {

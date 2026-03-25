@@ -45,7 +45,7 @@ An empty array (or omitting the key) means “no commands from this file for thi
 |-------|----------------|
 | `workflow_start` | After transpile/build succeeded and **before** the CLI spawns the workflow subprocess (local or Docker). If build fails, this event does not run. |
 | `workflow_end` | After the workflow subprocess has exited (any status). Runs before the CLI prints its final PASS/FAIL line. |
-| `step_start` | When the runtime reports that a step (workflow, rule, function, or prompt) has started. |
+| `step_start` | When the runtime reports that a step (workflow, rule, script, or prompt) has started. |
 | `step_end` | When the runtime reports that a step has finished. |
 
 Step hooks mirror the same stderr `__JAIPH_EVENT__` stream the CLI uses for the progress tree; see [CLI — Run progress and tree output](cli.md#run-progress-and-tree-output).
@@ -71,7 +71,7 @@ Each command receives one JSON object on **stdin** (UTF-8). Use `jq`, `python3 -
 | `event` | Always | `workflow_start`, `workflow_end`, `step_start`, or `step_end`. |
 | `workflow_id` | Always | Runtime run id from stderr events. **Empty string** on `workflow_start`; for step events, whatever the runtime sent (may be empty until the runtime assigns an id). |
 | `step_id` | `step_*` | Step identifier (`id` from the runtime event). |
-| `step_kind` | `step_*` | `workflow`, `rule`, `function`, or `prompt`. |
+| `step_kind` | `step_*` | `workflow`, `rule`, `script`, or `prompt`. |
 | `step_name` | `step_*` | Step name (e.g. `default`, `scan_passes`). |
 | `status` | `workflow_end`, `step_end` | Exit status: **0** success, **non-zero** failure. For `workflow_end`, this is the CLI’s resolved outcome: non-zero if the subprocess exited non-zero **or** the CLI detected fatal runtime output on stderr (see `jaiph run` behavior in [CLI](cli.md)). |
 | `timestamp` | Always | ISO 8601 time (from the CLI or runtime event). |

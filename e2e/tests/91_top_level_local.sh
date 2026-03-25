@@ -52,7 +52,7 @@ rule check_msg {
   test -n "$msg"
 }
 
-function write_msg() {
+script write_msg() {
   echo "$msg" > func_msg.txt
 }
 

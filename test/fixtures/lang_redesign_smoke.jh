@@ -4,7 +4,7 @@ rule always_ok {
   echo ok
 }
 
-function noop() {
+script noop() {
   :
 }
 

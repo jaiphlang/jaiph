@@ -13,7 +13,7 @@ e2e::section "function calls in workflow tree and side effects"
 
 # Given
 e2e::file "functions.jh" <<'EOF'
-function changed_files() {
+script changed_files() {
   echo "fn-called" > function_called.txt
 }
 
@@ -34,8 +34,8 @@ e2e::expect_stdout "${function_out}" <<'EOF'
 Jaiph: Running functions.jh
 
 workflow default
-  ▸ function changed_files
-  ✓ function changed_files (<time>)
+  ▸ script changed_files
+  ✓ script changed_files (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
@@ -50,7 +50,7 @@ rule expect_args {
   test "$2" = "two words"
 }
 
-function write_args() {
+script write_args() {
   printf "%s|%s\n" "$1" "$2" > function_args.txt
 }
 
@@ -83,8 +83,8 @@ workflow default
   ▸ workflow called (1="one", 2="two words")
   ·   ▸ rule expect_args (1="one", 2="two words")
   ·   ✓ rule expect_args (<time>)
-  ·   ▸ function write_args (1="one", 2="two words")
-  ·   ✓ function write_args (<time>)
+  ·   ▸ script write_args (1="one", 2="two words")
+  ·   ✓ script write_args (<time>)
   ✓ workflow called (<time>)
 ✓ PASS workflow default (<time>)
 EOF

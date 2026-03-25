@@ -13,7 +13,7 @@ export type StepEvent = {
   seq: number | null;
   depth: number | null;
   run_id: string;
-  /** Ordered list of [key, value] pairs for step parameters (workflow/prompt/function). */
+  /** Ordered list of [key, value] pairs for step parameters (workflow/prompt/script). */
   params: Array<[string, string]>;
   /** True when this step was dispatched by the inbox. */
   dispatched: boolean;
