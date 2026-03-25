@@ -104,9 +104,23 @@ export function normalizeShellLocalExport(command: string): string {
   );
 }
 
+let __sendSeq = 0;
+function __jaiphSendSeq(): number {
+  __sendSeq += 1;
+  return __sendSeq;
+}
+
 // ---------------------------------------------------------------------------
 // Per-step emitters
 // ---------------------------------------------------------------------------
+
+export function emitCommentStep(
+  out: string[],
+  indent: string,
+  step: Extract<WorkflowStepDef, { type: "comment" }>,
+): void {
+  out.push(`${indent}${step.text}`);
+}
 
 export function emitFailStep(
   out: string[],
@@ -172,6 +186,22 @@ export function emitWaitStep(
   out.push(`${indent}wait`);
 }
 
+export function emitShellStep(
+  out: string[],
+  indent: string,
+  step: Extract<WorkflowStepDef, { type: "shell" }>,
+  ctx: StepEmitCtx,
+): void {
+  const cmd = normalizeShellLocalExport(
+    resolveShellRefs(step.command, ctx.importedWorkflowSymbols),
+  );
+  if (step.captureName) {
+    out.push(`${indent}local ${step.captureName}; ${step.captureName}=$(${cmd})`);
+  } else {
+    out.push(`${indent}${cmd}`);
+  }
+}
+
 export function emitRunStep(
   out: string[],
   indent: string,
@@ -193,34 +223,47 @@ export function emitRunStep(
   }
 }
 
-export function emitShellStep(
-  out: string[],
-  indent: string,
-  step: Extract<WorkflowStepDef, { type: "shell" }>,
-  ctx: StepEmitCtx,
-): void {
-  const resolved = normalizeShellLocalExport(
-    resolveShellRefs(step.command, ctx.importedWorkflowSymbols),
-  );
-  if (step.captureName) {
-    out.push(`${indent}${step.captureName}=$(${resolved})`);
-  } else {
-    out.push(`${indent}${resolved}`);
-  }
-}
-
 export function emitSendStep(
   out: string[],
   indent: string,
   step: Extract<WorkflowStepDef, { type: "send" }>,
   ctx: StepEmitCtx,
 ): void {
-  if (step.command === "") {
-    out.push(`${indent}jaiph::send '${step.channel}' "$1" '${ctx.workflowName}'`);
-  } else {
-    const resolved = resolveShellRefs(step.command, ctx.importedWorkflowSymbols);
-    out.push(`${indent}jaiph::send '${step.channel}' "$(${resolved})" '${ctx.workflowName}'`);
+  const rhs = step.rhs;
+  if (rhs.kind === "bare_ref") {
+    throw new Error("internal: bare_ref send RHS must be rejected during validation");
   }
+  if (rhs.kind === "shell") {
+    const cmd = normalizeShellLocalExport(
+      resolveShellRefs(rhs.command, ctx.importedWorkflowSymbols),
+    );
+    out.push(`${indent}jaiph::send '${step.channel}' "$(${cmd})" '${ctx.workflowName}'`);
+    return;
+  }
+  if (rhs.kind === "forward") {
+    out.push(`${indent}jaiph::send '${step.channel}' "$1" '${ctx.workflowName}'`);
+    return;
+  }
+  if (rhs.kind === "literal") {
+    out.push(`${indent}jaiph::send '${step.channel}' ${rhs.token} '${ctx.workflowName}'`);
+    return;
+  }
+  if (rhs.kind === "var") {
+    out.push(`${indent}jaiph::send '${step.channel}' "${rhs.bash}" '${ctx.workflowName}'`);
+    return;
+  }
+  const wfRef = transpileWorkflowRef(rhs.ref, ctx.workflowSymbol, ctx.importedWorkflowSymbols);
+  const scopePrefix = prefixForImportedWorkflowCall(rhs.ref, ctx.importedModuleHasMetadata, ctx.importedWorkflowSymbols);
+  const defaultArgs = ctx.inRecoverBlock ? ' "$@"' : "";
+  const args = rhs.args ? ` ${rhs.args}` : defaultArgs;
+  const rv = `_jaiph_send_rv_${__jaiphSendSeq()}`;
+  out.push(`${indent}local ${rv}; ${rv}=$(mktemp)`);
+  out.push(`${indent}JAIPH_RETURN_VALUE_FILE="$${rv}" ${scopePrefix}${wfRef}${args}`);
+  out.push(
+    `${indent}local _jaiph_send_msg; _jaiph_send_msg=""; [[ -s "$${rv}" ]] && _jaiph_send_msg=$(<"$${rv}")`,
+  );
+  out.push(`${indent}rm -f "$${rv}"`);
+  out.push(`${indent}jaiph::send '${step.channel}' "$_jaiph_send_msg" '${ctx.workflowName}'`);
 }
 
 export function emitEnsureStep(
@@ -262,14 +305,11 @@ function emitIfConditionOpen(
     out.push(
       `${indent}${keyword} ${negPrefix}${transpileRuleRef(condition.ref, ctx.workflowSymbol, ctx.importedWorkflowSymbols)}${ensureArgs}; then`,
     );
-  } else if (condition.kind === "run") {
+  } else {
     const runArgs = condition.args ? ` ${condition.args}` : "";
     const wfRef = transpileWorkflowRef(condition.ref, ctx.workflowSymbol, ctx.importedWorkflowSymbols);
     const scopePrefix = prefixForImportedWorkflowCall(condition.ref, ctx.importedModuleHasMetadata, ctx.importedWorkflowSymbols);
     out.push(`${indent}${keyword} ${negPrefix}${scopePrefix}${wfRef}${runArgs}; then`);
-  } else {
-    const resolvedCondition = resolveShellRefs(condition.command, ctx.importedWorkflowSymbols);
-    out.push(`${indent}${keyword} ${negPrefix}${resolvedCondition}; then`);
   }
 }
 
@@ -384,7 +424,7 @@ export function emitStep(
   if (step.type === "ensure") { emitEnsureStep(out, indent, step, ctx); return; }
   if (step.type === "run") { emitRunStep(out, indent, step, ctx); return; }
   if (step.type === "prompt") { emitPromptStepToOut(out, indent, step, ctx); return; }
-  if (step.type === "shell") { emitShellStep(out, indent, step, ctx); return; }
+  if (step.type === "comment") { emitCommentStep(out, indent, step); return; }
   if (step.type === "return") { out.push(`${indent}jaiph::set_return_value ${step.value}`); out.push(`${indent}return 0`); return; }
   if (step.type === "log") { out.push(`${indent}jaiph::log ${step.message}`); return; }
   if (step.type === "logerr") { out.push(`${indent}jaiph::logerr ${step.message}`); return; }
@@ -393,4 +433,5 @@ export function emitStep(
   if (step.type === "fail") { emitFailStep(out, indent, step, ctx); return; }
   if (step.type === "const") { emitConstStep(out, indent, step, ctx); return; }
   if (step.type === "wait") { emitWaitStep(out, indent, step, ctx); return; }
+  if (step.type === "shell") { emitShellStep(out, indent, step, ctx); return; }
 }

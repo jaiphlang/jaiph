@@ -26,19 +26,20 @@ reacts to it via a **route declaration** (`->`). The runtime handles
 dispatch — no file watchers, no polling, no external message brokers.
 
 Send (`<-`), routes (`->`), and related parsing rules are specified in
-[Grammar — Parse and runtime semantics](grammar.md#parse-and-runtime-semantics)
-(items 11–12). Restrictions on `$(...)` and bare shell calls also apply to
-the RHS of a send; see [Grammar — Managed calls vs command substitution](grammar.md#managed-calls-vs-command-substitution).
+[Grammar — Parse and runtime semantics](grammar.md#parse-and-runtime-semantics).
+The **right-hand side** of `<-` may be only a double-quoted literal, `$var` / `${…}`,
+`run ref [args]`, or empty (forward `$1`) — not a raw shell command; see
+[Grammar — Managed calls vs command substitution](grammar.md#managed-calls-vs-command-substitution).
 
 ```jh
 channel findings
 
 workflow researcher {
-  findings <- echo '## analysis results'
+  findings <- "## analysis results"
 }
 
 workflow analyst {
-  echo "Received: $1"
+  log "Received: $1"
 }
 
 workflow default {
@@ -88,14 +89,15 @@ Valid forms:
 - local channel: `findings`
 - imported channel: `shared.findings`
 
-The send operator captures the command's stdout, writes it to the next
-inbox slot, and signals the runtime to dispatch.
+The send step resolves the message from the **RHS** (literal, variable expansion,
+`run` to a function, or forwarded `$1`), writes it to the next inbox slot,
+and signals the runtime to dispatch.
 
 ```jh
 channel findings
 
 workflow researcher {
-  findings <- echo '## findings'
+  findings <- "## findings"
 }
 ```
 
@@ -110,14 +112,15 @@ workflow forwarder {
 ```
 
 The `<-` operator is only recognized when it appears outside of quoted
-strings. The parser tracks quote state to avoid false matches inside
-shell commands.
+strings in the surrounding line so channel names and literals are not
+misread as send syntax.
 
 **Transpilation:**
 
 | Jaiph                 | Bash (generated in the workflow `::impl`)          |
 |-----------------------|----------------------------------------------------|
-| `ch <- echo "foo"`    | `jaiph::send 'ch' "$(echo "foo")" '<workflow>'`   |
+| `ch <- "foo"`         | `jaiph::send 'ch' "$(… literal …)" '<workflow>'`   |
+| `ch <- run fmt`       | `jaiph::send` with managed `run` to `fmt`        |
 | `ch <-`               | `jaiph::send 'ch' "$1" '<workflow>'`              |
 
 (`<workflow>` is the name of the workflow that contains the send step.)
@@ -174,8 +177,8 @@ name = channel <- cmd
 Use two steps instead:
 
 ```jh
-name = cmd
-channel <- echo "$name"
+const payload = run build_message
+channel <- "$payload"
 ```
 
 ## Inbox layout

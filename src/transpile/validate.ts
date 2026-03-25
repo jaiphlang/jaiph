@@ -2,7 +2,7 @@ import { jaiphError } from "../errors";
 import type { jaiphModule, RuleRefDef, WorkflowRefDef, WorkflowStepDef } from "../types";
 import type { SubstitutionValidateEnv } from "./validate-substitution";
 import {
-  validateManagedShellFragment,
+  validateManagedWorkflowShell,
   validateNoJaiphCommandSubstitution,
 } from "./validate-substitution";
 
@@ -432,14 +432,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           `${s.type} is not allowed in rules`,
         );
       }
-      if (s.type === "shell") {
-        const env = makeSubEnv(s.loc);
-        validateNoJaiphCommandSubstitution(s.command, env);
-        for (const rawLine of s.command.split("\n")) {
-          const line = rawLine.trim();
-          if (!line || line.startsWith("#")) continue;
-          validateManagedShellFragment(line, env);
-        }
+      if (s.type === "comment") {
         return;
       }
       if (s.type === "ensure") {
@@ -462,12 +455,8 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
       if (s.type === "if") {
         if (s.condition.kind === "ensure") {
           validateRuleRef(s.condition.ref);
-        } else if (s.condition.kind === "run") {
-          validateRunInRuleRef(s.condition.ref);
         } else {
-          const env = makeSubEnv(rule.loc);
-          validateNoJaiphCommandSubstitution(s.condition.command, env);
-          validateManagedShellFragment(s.condition.command.trim(), env);
+          validateRunInRuleRef(s.condition.ref);
         }
         for (const ts of s.thenSteps) validateRuleStep(ts);
         if (s.elseIfBranches) {
@@ -499,6 +488,10 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         }
         return;
       }
+      if (s.type === "shell") {
+        validateManagedWorkflowShell(s.command, makeSubEnv(s.loc));
+        return;
+      }
       const _never: never = s;
       return _never;
     };
@@ -506,6 +499,93 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
       validateRuleStep(st);
     }
   }
+
+  const validateBareSendSymbol = (ref: WorkflowRefDef): void => {
+    const parts = ref.value.split(".");
+    if (parts.length === 1) {
+      const name = parts[0];
+      const kind = lookupKind(ast, name);
+      if (kind === "workflow") {
+        throw jaiphError(
+          ast.filePath,
+          ref.loc.line,
+          ref.loc.col,
+          "E_VALIDATE",
+          `workflow "${ref.value}" must be called with run`,
+        );
+      }
+      if (kind === "function") {
+        throw jaiphError(
+          ast.filePath,
+          ref.loc.line,
+          ref.loc.col,
+          "E_VALIDATE",
+          `function "${ref.value}" must be called with run`,
+        );
+      }
+      if (kind === "rule") {
+        throw jaiphError(
+          ast.filePath,
+          ref.loc.line,
+          ref.loc.col,
+          "E_VALIDATE",
+          `rule "${ref.value}" must be called with ensure`,
+        );
+      }
+      throw jaiphError(
+        ast.filePath,
+        ref.loc.line,
+        ref.loc.col,
+        "E_VALIDATE",
+        `unknown symbol "${ref.value}" in send right-hand side`,
+      );
+    }
+    const [alias, importedName] = parts;
+    if (!importsByAlias.has(alias)) {
+      throw jaiphError(
+        ast.filePath,
+        ref.loc.line,
+        ref.loc.col,
+        "E_VALIDATE",
+        `unknown import alias "${alias}" for send reference "${ref.value}"`,
+      );
+    }
+    const ik = lookupImportedKind(alias, importedName);
+    if (ik === "workflow") {
+      throw jaiphError(
+        ast.filePath,
+        ref.loc.line,
+        ref.loc.col,
+        "E_VALIDATE",
+        `workflow "${ref.value}" must be called with run`,
+      );
+    }
+    if (ik === "function") {
+      throw jaiphError(
+        ast.filePath,
+        ref.loc.line,
+        ref.loc.col,
+        "E_VALIDATE",
+        `function "${ref.value}" must be called with run`,
+      );
+    }
+    if (ik === "rule") {
+      throw jaiphError(
+        ast.filePath,
+        ref.loc.line,
+        ref.loc.col,
+        "E_VALIDATE",
+        `rule "${ref.value}" must be called with ensure`,
+      );
+    }
+    throw jaiphError(
+      ast.filePath,
+      ref.loc.line,
+      ref.loc.col,
+      "E_VALIDATE",
+      `unknown symbol "${ref.value}" in send right-hand side`,
+    );
+  };
 
   const validateChannelRef = (
     channel: string,
@@ -559,22 +639,20 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
 
   for (const workflow of ast.workflows) {
     const validateStep = (s: WorkflowStepDef): void => {
-      if (s.type === "shell") {
-        const env = makeSubEnv(s.loc);
-        validateNoJaiphCommandSubstitution(s.command, env);
-        for (const rawLine of s.command.split("\n")) {
-          const line = rawLine.trim();
-          if (!line || line.startsWith("#")) continue;
-          validateManagedShellFragment(line, env);
-        }
+      if (s.type === "comment") {
         return;
       }
       if (s.type === "send") {
         validateChannelRef(s.channel, s.loc);
-        if (s.command !== "") {
-          const env = makeSubEnv(s.loc);
-          validateNoJaiphCommandSubstitution(s.command, env);
-          validateManagedShellFragment(s.command.trim(), env);
+        if (s.rhs.kind === "run") {
+          validateRunTargetRef(s.rhs.ref);
+        } else if (s.rhs.kind === "bare_ref") {
+          validateBareSendSymbol(s.rhs.ref);
+        } else if (s.rhs.kind === "shell") {
+          validateManagedWorkflowShell(
+            s.rhs.command,
+            makeSubEnv({ line: s.rhs.loc.line, col: s.rhs.loc.col }),
+          );
         }
         return;
       }
@@ -593,12 +671,8 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
       if (s.type === "if") {
         if (s.condition.kind === "ensure") {
           validateRuleRef(s.condition.ref);
-        } else if (s.condition.kind === "run") {
-          validateRunTargetRef(s.condition.ref);
         } else {
-          const env = makeSubEnv(workflow.loc);
-          validateNoJaiphCommandSubstitution(s.condition.command, env);
-          validateManagedShellFragment(s.condition.command.trim(), env);
+          validateRunTargetRef(s.condition.ref);
         }
         for (const ts of s.thenSteps) validateStep(ts);
         if (s.elseIfBranches) {
@@ -629,6 +703,10 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         } else if (v.kind === "ensure_capture") {
           validateRuleRef(v.ref);
         }
+        return;
+      }
+      if (s.type === "shell") {
+        validateManagedWorkflowShell(s.command, makeSubEnv(s.loc));
         return;
       }
       const _never: never = s;

@@ -83,7 +83,7 @@ export function tryParseLegacyIfEnsure(
     const runMatch = lookTrim.match(
       /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
     );
-    if (runMatch) {
+    if (runMatch && isRef(runMatch[1])) {
       target.push({
         type: "run",
         workflow: {
@@ -137,7 +137,7 @@ export function tryParseLegacyIfEnsure(
     thenSteps,
     ...(hasElse ? { elseSteps } : {}),
   };
-  return { step, nextIdx: fiLine };
+  return { step, nextIdx: fiLine + 1 };
 }
 
 /** Legacy `if [!] run ref [args]; then` … `fi`. */
@@ -189,7 +189,7 @@ export function tryParseLegacyIfRun(
     const runMatch = lookTrim.match(
       /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
     );
-    if (runMatch) {
+    if (runMatch && isRef(runMatch[1])) {
       target.push({
         type: "run",
         workflow: {
@@ -240,5 +240,5 @@ export function tryParseLegacyIfRun(
     thenSteps,
     ...(hasElse ? { elseSteps } : {}),
   };
-  return { step, nextIdx: fiLine };
+  return { step, nextIdx: fiLine + 1 };
 }

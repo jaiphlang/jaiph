@@ -5,11 +5,11 @@
 
 import {
   assertKeywordFirstShellFragment,
+  assertNoJaiphLeadCommandWord,
   type SubstitutionValidateEnv,
-  type SubstitutionValidationMode,
 } from "./shell-jaiph-guard";
 
-export type { SubstitutionValidateEnv, SubstitutionValidationMode } from "./shell-jaiph-guard";
+export type { SubstitutionValidateEnv } from "./shell-jaiph-guard";
 
 /** Skip `$(` at index i (i points at '$'); returns index after closing ')'. */
 function skipCommandSubstitution(s: string, dollarIdx: number): { end: number; inner: string } {
@@ -117,14 +117,10 @@ export function forEachCommandSubstitution(
  * Validate one $(...) inner, or a managed shell fragment (workflow line / send RHS).
  * Nested $(...) always uses substitution wording.
  */
-export function validateSubstitutionInner(
-  inner: string,
-  env: SubstitutionValidateEnv,
-  mode: SubstitutionValidationMode = "substitution",
-): void {
-  assertKeywordFirstShellFragment(inner, env, mode);
+export function validateSubstitutionInner(inner: string, env: SubstitutionValidateEnv): void {
+  assertKeywordFirstShellFragment(inner, env);
   forEachCommandSubstitution(inner, (nested) => {
-    validateSubstitutionInner(nested, env, "substitution");
+    validateSubstitutionInner(nested, env);
   });
 }
 
@@ -138,7 +134,9 @@ export function validateNoJaiphCommandSubstitution(
   });
 }
 
-/** Send RHS / workflow shell line: same symbol rules as $(...), migration-friendly errors. */
-export function validateManagedShellFragment(text: string, env: SubstitutionValidateEnv): void {
-  validateSubstitutionInner(text, env, "managed_shell");
+/** Validate a workflow/rule shell fragment: `$(...)` bodies and leading command word. */
+export function validateManagedWorkflowShell(command: string, env: SubstitutionValidateEnv): void {
+  validateNoJaiphCommandSubstitution(command, env);
+  assertNoJaiphLeadCommandWord(command, env);
 }
+

@@ -17,13 +17,17 @@ test("compiler golden: transpileFile emits stable workflow shell", () => {
     writeFileSync(
       input,
       [
-        "rule ok {",
+        "function f_ok() {",
         "  echo ok",
+        "}",
+        "",
+        "rule ok {",
+        "  run f_ok",
         "}",
         "",
         "workflow default {",
         "  ensure ok",
-        "  echo done",
+        "  log \"done\"",
         "}",
         "",
       ].join("\n"),
@@ -52,11 +56,25 @@ test("compiler golden: transpileFile emits stable workflow shell", () => {
       "entry::ok::impl() {",
       "  set -eo pipefail",
       "  set +u",
-      "  echo ok",
+      "  entry::f_ok",
       "}",
       "",
       "entry::ok() {",
       '  jaiph::run_step entry::ok rule jaiph::execute_readonly entry::ok::impl "$@"',
+      "}",
+      "",
+      "entry::f_ok::impl() {",
+      "  set -eo pipefail",
+      "  set +u",
+      "  echo ok",
+      "}",
+      "",
+      "entry::f_ok() {",
+      '  jaiph::run_step entry::f_ok function entry::f_ok::impl "$@"',
+      "}",
+      "",
+      "f_ok() {",
+      "  entry::f_ok \"$@\"",
       "}",
       "",
       "entry::default::impl() {",
@@ -64,7 +82,7 @@ test("compiler golden: transpileFile emits stable workflow shell", () => {
       "  set +u",
       "  jaiph::emit_workflow_summary_event WORKFLOW_START 'default'",
       "  entry::ok",
-      "  echo done",
+      "  jaiph::log \"done\"",
       "  jaiph::emit_workflow_summary_event WORKFLOW_END 'default'",
       "}",
       "",
@@ -123,14 +141,18 @@ test.skip("compiler corpus: fixtures and e2e workflows compile", () => {
   }
 });
 
-test("parser: assignment capture parses for ensure, run, and shell steps", () => {
+test("parser: assignment capture parses for ensure, run, and const run capture", () => {
   const source = [
+    "function say_hello() {",
+    "  echo hello",
+    "}",
+    "",
     "rule tests_pass {",
-    "  echo ok",
+    "  return \"ok\"",
     "}",
     "workflow default {",
     "  response = ensure tests_pass",
-    "  out = echo hello",
+    "  const out = run say_hello",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -139,9 +161,10 @@ test("parser: assignment capture parses for ensure, run, and shell steps", () =>
   assert.equal(steps.length, 2);
   assert.equal(steps[0].type, "ensure");
   assert.equal((steps[0] as { type: "ensure"; captureName?: string }).captureName, "response");
-  assert.equal(steps[1].type, "shell");
-  assert.equal((steps[1] as { type: "shell"; captureName?: string }).captureName, "out");
-  assert.equal((steps[1] as { type: "shell"; command: string }).command, "echo hello");
+  assert.equal(steps[1].type, "const");
+  const c1 = steps[1] as { type: "const"; name: string; value: { kind: string } };
+  assert.equal(c1.name, "out");
+  assert.equal(c1.value.kind, "run_capture");
 });
 
 test("parser: config block parses and populates mod.metadata", () => {
@@ -151,7 +174,7 @@ test("parser: config block parses and populates mod.metadata", () => {
     '  run.logs_dir = ".jaiph/runs"',
     "}",
     "workflow default {",
-    "  echo ok",
+    "  log \"ok\"",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -166,7 +189,7 @@ test("parser: config agent.backend parses cursor and claude", () => {
     '  agent.backend = "cursor"',
     "}",
     "workflow default {",
-    "  echo ok",
+    "  log \"ok\"",
     "}",
   ].join("\n");
   const modCursor = parsejaiph(sourceCursor, "/fake/entry.jh");
@@ -177,7 +200,7 @@ test("parser: config agent.backend parses cursor and claude", () => {
     '  agent.backend = "claude"',
     "}",
     "workflow default {",
-    "  echo ok",
+    "  log \"ok\"",
     "}",
   ].join("\n");
   const modClaude = parsejaiph(sourceClaude, "/fake/entry.jh");
@@ -190,7 +213,7 @@ test("parser: config agent.trusted_workspace parses string", () => {
     '  agent.trusted_workspace = ".jaiph/.."',
     "}",
     "workflow default {",
-    "  echo ok",
+    "  log \"ok\"",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -204,7 +227,7 @@ test("parser: config backend flag strings parse", () => {
     '  agent.claude_flags = "--model sonnet-4"',
     "}",
     "workflow default {",
-    "  echo ok",
+    "  log \"ok\"",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -218,7 +241,7 @@ test("parser: invalid agent.backend value throws E_PARSE", () => {
     '  agent.backend = "foo"',
     "}",
     "workflow default {",
-    "  echo ok",
+    "  log \"ok\"",
     "}",
   ].join("\n");
   assert.throws(
@@ -233,7 +256,7 @@ test("parser: unknown config key throws E_PARSE with file location", () => {
     '  unknown.key = "x"',
     "}",
     "workflow default {",
-    "  echo ok",
+    "  log \"ok\"",
     "}",
   ].join("\n");
   assert.throws(
@@ -248,7 +271,7 @@ test("parser: invalid config value throws E_PARSE", () => {
     "  run.debug = yes",
     "}",
     "workflow default {",
-    "  echo ok",
+    "  log \"ok\"",
     "}",
   ].join("\n");
   assert.throws(
@@ -266,7 +289,7 @@ test("parser: duplicate config block throws E_PARSE", () => {
     '  run.logs_dir = "y"',
     "}",
     "workflow default {",
-    "  echo ok",
+    "  log \"ok\"",
     "}",
   ].join("\n");
   assert.throws(
@@ -281,7 +304,7 @@ test("parser: config integer value parses as number", () => {
     "  runtime.docker_timeout = 300",
     "}",
     "workflow default {",
-    "  echo ok",
+    "  log \"ok\"",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -296,7 +319,7 @@ test("parser: config integer key rejects string value with E_PARSE", () => {
     '  runtime.docker_timeout = "fast"',
     "}",
     "workflow default {",
-    "  echo ok",
+    "  log \"ok\"",
     "}",
   ].join("\n");
   assert.throws(
@@ -314,7 +337,7 @@ test("parser: config array value parses multi-line array", () => {
     "  ]",
     "}",
     "workflow default {",
-    "  echo ok",
+    "  log \"ok\"",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -331,7 +354,7 @@ test("parser: config empty array parses as empty string[]", () => {
     "  runtime.workspace = []",
     "}",
     "workflow default {",
-    "  echo ok",
+    "  log \"ok\"",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -349,7 +372,7 @@ test("parser: config array with trailing commas and comments", () => {
     "  ]",
     "}",
     "workflow default {",
-    "  echo ok",
+    "  log \"ok\"",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -365,7 +388,7 @@ test("parser: config array key rejects non-array value with E_PARSE", () => {
     '  runtime.workspace = "not-an-array"',
     "}",
     "workflow default {",
-    "  echo ok",
+    "  log \"ok\"",
     "}",
   ].join("\n");
   assert.throws(
@@ -386,7 +409,7 @@ test("parser: all runtime config keys are accepted", () => {
     "  ]",
     "}",
     "workflow default {",
-    "  echo ok",
+    "  log \"ok\"",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -404,7 +427,7 @@ test("parser: unknown runtime key throws E_PARSE", () => {
     '  runtime.unknown_key = "x"',
     "}",
     "workflow default {",
-    "  echo ok",
+    "  log \"ok\"",
     "}",
   ].join("\n");
   assert.throws(
@@ -416,12 +439,12 @@ test("parser: unknown runtime key throws E_PARSE", () => {
 test("parser: positive if ensure parses into if step", () => {
   const source = [
     "rule ready {",
-    "  true",
+    "  return \"ok\"",
     "}",
     "workflow default {",
-    '  if ensure ready; then',
-    "    echo success",
-    "  fi",
+    "  if ensure ready {",
+    "    log \"success\"",
+    "  }",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -438,12 +461,12 @@ test("parser: positive if ensure parses into if step", () => {
 test("parser: positive if ensure with args parses correctly", () => {
   const source = [
     "rule check {",
-    "  true",
+    "  return \"ok\"",
     "}",
     "workflow default {",
-    '  if ensure check foo=bar baz; then',
-    "    echo ok",
-    "  fi",
+    "  if ensure check foo=bar baz {",
+    "    log \"ok\"",
+    "  }",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -461,15 +484,15 @@ test("parser: positive if ensure with args parses correctly", () => {
 test("parser: negated if ensure with args parses correctly", () => {
   const source = [
     "rule check {",
-    "  true",
+    "  return \"ok\"",
     "}",
     "workflow fix {",
-    "  echo fix",
+    "  log \"fix\"",
     "}",
     "workflow default {",
-    '  if ! ensure check foo=bar; then',
+    "  if not ensure check foo=bar {",
     "    run fix",
-    "  fi",
+    "  }",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -486,14 +509,14 @@ test("parser: negated if ensure with args parses correctly", () => {
 test("parser: if ensure with else branch parses correctly", () => {
   const source = [
     "rule ready {",
-    "  true",
+    "  return \"ok\"",
     "}",
     "workflow default {",
-    '  if ensure ready; then',
-    "    echo yes",
-    "  else",
-    "    echo no",
-    "  fi",
+    "  if ensure ready {",
+    "    log \"yes\"",
+    "  } else {",
+    "    log \"no\"",
+    "  }",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -513,14 +536,14 @@ test("parser: if ensure with else branch parses correctly", () => {
 test("parser: negated if ensure with else branch parses correctly", () => {
   const source = [
     "rule ready {",
-    "  true",
+    "  return \"ok\"",
     "}",
     "workflow default {",
-    '  if ! ensure ready; then',
-    "    echo fail",
-    "  else",
-    "    echo pass",
-    "  fi",
+    "  if not ensure ready {",
+    "    log \"fail\"",
+    "  } else {",
+    "    log \"pass\"",
+    "  }",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -541,13 +564,13 @@ test("parser: malformed if ensure emits E_PARSE", () => {
   const source = [
     "workflow default {",
     "  if ensure; then",
-    "    echo x",
+    "    log \"x\"",
     "  fi",
     "}",
   ].join("\n");
   assert.throws(
     () => parsejaiph(source, "/fake/entry.jh"),
-    /E_PARSE malformed if-ensure statement/,
+    /then\/fi syntax is not supported/,
   );
 });
 
@@ -617,10 +640,10 @@ test("parser: wait parses as workflow step (not shell)", () => {
 test("parser: brace-style if parses not, else if, and else", () => {
   const source = [
     "rule ok {",
-    "  true",
+    "  return \"ok\"",
     "}",
     "rule bad {",
-    "  false",
+    "  fail \"no\"",
     "}",
     "function check() {",
     "  true",
@@ -723,10 +746,10 @@ test("compiler golden: brace if transpiles to if elif else fi", () => {
       input,
       [
         "rule r1 {",
-        "  true",
+        "  return \"ok\"",
         "}",
         "rule r2 {",
-        "  false",
+        "  fail \"no\"",
         "}",
         "workflow default {",
         "  if ensure r1 {",
@@ -760,19 +783,19 @@ test("compiler golden: positive if ensure with args transpiles correctly", () =>
       input,
       [
         "rule ready {",
-        "  true",
+        "  return \"ok\"",
         "}",
         "workflow default {",
-        '  if ensure ready foo=bar; then',
-        "    echo success",
-        "  fi",
+        "  if ensure ready foo=bar {",
+        "    log \"success\"",
+        "  }",
         "}",
         "",
       ].join("\n"),
     );
     const actual = normalize(transpileFile(input, root));
     assert.match(actual, /if entry::ready foo=bar; then/);
-    assert.match(actual, /echo success/);
+    assert.match(actual, /jaiph::log "success"/);
     assert.match(actual, /fi/);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -787,24 +810,24 @@ test("compiler golden: positive if ensure with else transpiles correctly", () =>
       input,
       [
         "rule ready {",
-        "  true",
+        "  return \"ok\"",
         "}",
         "workflow fallback {",
-        "  echo fallback",
+        "  log \"fallback\"",
         "}",
         "workflow default {",
-        '  if ensure ready; then',
-        "    echo yes",
-        "  else",
+        "  if ensure ready {",
+        "    log \"yes\"",
+        "  } else {",
         "    run fallback",
-        "  fi",
+        "  }",
         "}",
         "",
       ].join("\n"),
     );
     const actual = normalize(transpileFile(input, root));
     assert.match(actual, /if entry::ready; then/);
-    assert.match(actual, /echo yes/);
+    assert.match(actual, /jaiph::log "yes"/);
     assert.match(actual, /else/);
     assert.match(actual, /entry::fallback/);
     assert.match(actual, /fi/);
@@ -821,12 +844,12 @@ test("compiler golden: negated if ensure with args transpiles correctly", () => 
       input,
       [
         "rule check {",
-        "  true",
+        "  return \"ok\"",
         "}",
         "workflow default {",
-        '  if ! ensure check myarg; then',
-        "    echo fallback",
-        "  fi",
+        "  if not ensure check myarg {",
+        "    log \"fallback\"",
+        "  }",
         "}",
         "",
       ].join("\n"),
@@ -846,16 +869,16 @@ test("compiler golden: negated if-run transpiles workflow ref, not raw DSL token
       input,
       [
         "workflow check {",
-        "  true",
+        "  log \"ok\"",
         "}",
         "workflow recovery {",
-        "  echo recovering",
+        "  log \"recovering\"",
         "}",
         "workflow default {",
-        "  if ! run check; then",
+        "  if not run check {",
         '    prompt "fix things"',
         "    run recovery",
-        "  fi",
+        "  }",
         "}",
         "",
       ].join("\n"),
@@ -878,19 +901,19 @@ test("compiler golden: positive if-run transpiles workflow ref", () => {
       input,
       [
         "workflow check {",
-        "  true",
+        "  log \"ok\"",
         "}",
         "workflow default {",
-        "  if run check; then",
-        "    echo passed",
-        "  fi",
+        "  if run check {",
+        "    log \"passed\"",
+        "  }",
         "}",
         "",
       ].join("\n"),
     );
     const actual = normalize(transpileFile(input, root));
     assert.match(actual, /if entry::check; then/);
-    assert.match(actual, /echo passed/);
+    assert.match(actual, /jaiph::log "passed"/);
     assert.doesNotMatch(actual, /\brun check\b/);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -905,7 +928,7 @@ test("compiler golden: if-run with imported workflow ref", () => {
       libFile,
       [
         "workflow healthcheck {",
-        "  true",
+        "  log \"ok\"",
         "}",
         "",
       ].join("\n"),
@@ -916,16 +939,16 @@ test("compiler golden: if-run with imported workflow ref", () => {
       [
         'import "lib.jh" as lib',
         "workflow default {",
-        "  if ! run lib.healthcheck; then",
-        "    echo service down",
-        "  fi",
+        "  if not run lib.healthcheck {",
+        "    log \"service down\"",
+        "  }",
         "}",
         "",
       ].join("\n"),
     );
     const actual = normalize(transpileFile(input, root));
     assert.match(actual, /if ! [a-z0-9_]+::healthcheck; then/);
-    assert.match(actual, /echo service down/);
+    assert.match(actual, /jaiph::log "service down"/);
     assert.doesNotMatch(actual, /\brun lib\.healthcheck\b/);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -940,12 +963,12 @@ test("compiler golden: if-run with args transpiles correctly", () => {
       input,
       [
         "workflow check {",
-        "  true",
+        "  log \"ok\"",
         "}",
         "workflow default {",
-        "  if ! run check foo=bar; then",
-        "    echo fallback",
-        "  fi",
+        "  if not run check foo=bar {",
+        "    log \"fallback\"",
+        "  }",
         "}",
         "",
       ].join("\n"),
@@ -965,23 +988,23 @@ test("compiler golden: if-run with else branch transpiles correctly", () => {
       input,
       [
         "workflow check {",
-        "  true",
+        "  log \"ok\"",
         "}",
         "workflow default {",
-        "  if run check; then",
-        "    echo success",
-        "  else",
-        "    echo failure",
-        "  fi",
+        "  if run check {",
+        "    log \"success\"",
+        "  } else {",
+        "    log \"failure\"",
+        "  }",
         "}",
         "",
       ].join("\n"),
     );
     const actual = normalize(transpileFile(input, root));
     assert.match(actual, /if entry::check; then/);
-    assert.match(actual, /echo success/);
+    assert.match(actual, /jaiph::log "success"/);
     assert.match(actual, /else/);
-    assert.match(actual, /echo failure/);
+    assert.match(actual, /jaiph::log "failure"/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -1002,8 +1025,12 @@ test("compiler golden: workflow with config emits JAIPH export defaults", () => 
         '  agent.claude_flags = "--model sonnet-4"',
         '  run.logs_dir = ".jaiph/runs"',
         "}",
-        "rule ok {",
+        "function f_ok() {",
         "  echo ok",
+        "}",
+        "",
+        "rule ok {",
+        "  run f_ok",
         "}",
         "workflow default {",
         "  ensure ok",
@@ -1028,18 +1055,20 @@ test("compiler golden: workflow with config emits JAIPH export defaults", () => 
 
 // === Inbox / send operator / on route tests ===
 
-test("parser: send operator parses channel <- echo", () => {
+test("parser: send operator parses channel <- \"literal\"", () => {
   const source = [
     "workflow default {",
-    "  findings <- echo 'hello'",
+    `  findings <- "hello"`,
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
   assert.equal(mod.workflows[0].steps.length, 1);
   const step = mod.workflows[0].steps[0];
   assert.equal(step.type, "send");
-  assert.equal((step as { type: "send"; command: string }).command, "echo 'hello'");
-  assert.equal((step as { type: "send"; channel: string }).channel, "findings");
+  if (step.type !== "send") throw new Error("expected send");
+  assert.equal(step.rhs.kind, "literal");
+  assert.equal(step.rhs.token, `"hello"`);
+  assert.equal(step.channel, "findings");
 });
 
 test("parser: top-level channel declarations parse and are stored", () => {
@@ -1047,10 +1076,10 @@ test("parser: top-level channel declarations parse and are stored", () => {
     "channel findings",
     "channel report",
     "workflow analyst {",
-    "  echo ok",
+    "  log \"ok\"",
     "}",
     "workflow default {",
-    "  findings <- echo hi",
+    `  findings <- "hi"`,
     "  report -> analyst",
     "}",
   ].join("\n");
@@ -1067,7 +1096,7 @@ test("parser: channel declaration must be single per line", () => {
   const source = [
     "channel findings, report",
     "workflow default {",
-    "  findings <- echo hi",
+    `  findings <- "hi"`,
     "}",
   ].join("\n");
   assert.throws(
@@ -1084,10 +1113,10 @@ test("validator: unknown local channel fails with required message", () => {
       input,
       [
         "workflow analyst {",
-        "  echo ok",
+        "  log \"ok\"",
         "}",
         "workflow default {",
-        "  typo <- echo x",
+        `  typo <- "x"`,
         "  typo -> analyst",
         "}",
         "",
@@ -1111,7 +1140,7 @@ test("validator: missing channel import fails with required message", () => {
       [
         "channel findings",
         "workflow analyst {",
-        "  echo ok",
+        "  log \"ok\"",
         "}",
         "",
       ].join("\n"),
@@ -1122,7 +1151,7 @@ test("validator: missing channel import fails with required message", () => {
       [
         'import "shared.jh" as shared',
         "workflow default {",
-        "  shared.typo <- echo x",
+        `  shared.typo <- "x"`,
         "}",
         "",
       ].join("\n"),
@@ -1146,25 +1175,25 @@ test("parser: standalone channel <- forwards $1", () => {
   assert.equal(mod.workflows[0].steps.length, 1);
   const step = mod.workflows[0].steps[0];
   assert.equal(step.type, "send");
-  assert.equal((step as { type: "send"; command: string }).command, "");
+  assert.equal(step.type === "send" && step.rhs.kind, "forward");
   assert.equal((step as { type: "send"; channel: string }).channel, "findings");
 });
 
 test("parser: <- inside quotes is not a send", () => {
   const source = [
     "workflow default {",
-    '  echo "a <- b"',
+    '  log "a <- b"',
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
   assert.equal(mod.workflows[0].steps.length, 1);
-  assert.equal(mod.workflows[0].steps[0].type, "shell");
+  assert.equal(mod.workflows[0].steps[0].type, "log");
 });
 
 test("parser: route declaration parses into routes", () => {
   const source = [
     "workflow analyst {",
-    "  echo ok",
+    "  log \"ok\"",
     "}",
     "workflow default {",
     "  findings -> analyst",
@@ -1183,10 +1212,10 @@ test("parser: route declaration parses into routes", () => {
 test("parser: route with multiple targets", () => {
   const source = [
     "workflow a {",
-    "  echo ok",
+    "  log \"ok\"",
     "}",
     "workflow b {",
-    "  echo ok",
+    "  log \"ok\"",
     "}",
     "workflow default {",
     "  findings -> a, b",
@@ -1203,7 +1232,7 @@ test("parser: route with multiple targets", () => {
 test("parser: capture + send is E_PARSE", () => {
   const source = [
     "workflow default {",
-    "  name = channel <- echo hello",
+    `  name = channel <- "hello"`,
     "}",
   ].join("\n");
   assert.throws(
@@ -1221,13 +1250,13 @@ test("compiler golden: send operator transpiles to jaiph::send", () => {
       [
         "channel channel",
         "workflow default {",
-        "  channel <- echo 'foo'",
+        `  channel <- "foo"`,
         "}",
         "",
       ].join("\n"),
     );
     const actual = normalize(transpileFile(input, root));
-    assert.match(actual, /jaiph::send 'channel' "\$\(echo 'foo'\)"/);
+    assert.match(actual, /jaiph::send 'channel' "foo"/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -1263,7 +1292,7 @@ test("compiler golden: imported channel ref transpiles as channel key", () => {
       [
         "channel findings",
         "workflow analyst {",
-        "  echo ok",
+        "  log \"ok\"",
         "}",
         "",
       ].join("\n"),
@@ -1274,14 +1303,14 @@ test("compiler golden: imported channel ref transpiles as channel key", () => {
       [
         'import "shared.jh" as shared',
         "workflow default {",
-        "  shared.findings <- echo 'foo'",
+        `  shared.findings <- "foo"`,
         "  shared.findings -> shared.analyst",
         "}",
         "",
       ].join("\n"),
     );
     const actual = normalize(transpileFile(input, root));
-    assert.match(actual, /jaiph::send 'shared\.findings' "\$\(echo 'foo'\)"/);
+    assert.match(actual, /jaiph::send 'shared\.findings' "foo"/);
     assert.match(actual, /jaiph::register_route 'shared\.findings' 'shared::analyst'/);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -1297,7 +1326,7 @@ test("compiler golden: route emits register_route and drain_queue", () => {
       [
         "channel findings",
         "workflow analyst {",
-        "  echo ok",
+        "  log \"ok\"",
         "}",
         "workflow default {",
         "  findings -> analyst",
@@ -1323,10 +1352,10 @@ test("compiler golden: multi-target route emits multiple funcs in register_route
       [
         "channel findings",
         "workflow a {",
-        "  echo ok",
+        "  log \"ok\"",
         "}",
         "workflow b {",
-        "  echo ok",
+        "  log \"ok\"",
         "}",
         "workflow default {",
         "  findings -> a, b",
@@ -1352,18 +1381,30 @@ test("compiler golden: inbox.jh fixture compiles successfully", () => {
         "channel summary",
         "channel final_summary",
         "",
+        "function emit_findings() {",
+        "  echo '## findings'",
+        "}",
+        "",
+        "function write_findings_file() {",
+        '  printf "%s\\n" "$1" > findings_file.md',
+        "}",
+        "",
+        "function emit_reviewed() {",
+        '  printf "[reviewed] %s\\n" "$1"',
+        "}",
+        "",
         "workflow researcher {",
-        "  findings <- echo '## findings'",
+        "  findings <- run emit_findings",
         "}",
         "",
         "workflow analyst {",
-        '  echo "$1" > findings_file.md',
-        '  summary = echo "Summary of findings"',
-        '  summary <- echo "$summary"',
+        "  run write_findings_file \"$1\"",
+        '  const summary = "Summary of findings"',
+        "  summary <- $summary",
         "}",
         "",
         "workflow reviewer {",
-        '  final_summary <- echo "[reviewed] $1"',
+        "  final_summary <- run emit_reviewed \"$1\"",
         "}",
         "",
         "workflow default {",
@@ -1399,7 +1440,7 @@ test("parser: top-level local declaration parses single-line string", () => {
   const source = [
     'local greeting = "hello world"',
     "workflow default {",
-    "  echo $greeting",
+    "  log \"$greeting\"",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -1415,7 +1456,7 @@ test("parser: top-level local declaration parses multi-line string", () => {
     "    1. You write clearly",
     '    2. You are concise"',
     "workflow default {",
-    "  echo $role",
+    "  log \"$role\"",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -1430,7 +1471,7 @@ test("parser: top-level local declaration parses bare value", () => {
   const source = [
     "local count = 42",
     "workflow default {",
-    "  echo $count",
+    "  log \"$count\"",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -1443,7 +1484,7 @@ test("parser: top-level local name collision with rule is E_PARSE", () => {
   const source = [
     'local foo = "bar"',
     "rule foo {",
-    "  echo ok",
+    "  return \"ok\"",
     "}",
     "workflow default {",
     "  ensure foo",
@@ -1459,7 +1500,7 @@ test("parser: top-level local name collision with workflow is E_PARSE", () => {
   const source = [
     'local default = "val"',
     "workflow default {",
-    "  echo ok",
+    "  log \"ok\"",
     "}",
   ].join("\n");
   assert.throws(
@@ -1471,11 +1512,11 @@ test("parser: top-level local name collision with workflow is E_PARSE", () => {
 test("parser: top-level local name collision with function is E_PARSE", () => {
   const source = [
     'local helper = "val"',
-    "function helper {",
+    "function helper() {",
     "  echo ok",
     "}",
     "workflow default {",
-    "  helper",
+    "  run helper",
     "}",
   ].join("\n");
   assert.throws(
@@ -1494,7 +1535,7 @@ test("compiler golden: top-level local emits prefixed variable and shims", () =>
         'local greeting = "hello world"',
         "",
         "rule check {",
-        "  echo $greeting",
+        "  log \"$greeting\"",
         "}",
         "",
         "function helper() {",
@@ -1504,7 +1545,7 @@ test("compiler golden: top-level local emits prefixed variable and shims", () =>
         "workflow default {",
         "  ensure check",
         "  run helper",
-        "  echo $greeting",
+        "  log \"$greeting\"",
         "}",
         "",
       ].join("\n"),
@@ -1535,7 +1576,7 @@ test("compiler golden: top-level local $sibling is expanded in export (set -u sa
         'local combined = "before $shared after"',
         "",
         "workflow default {",
-        "  echo $combined",
+        "  log \"$combined\"",
         "}",
         "",
       ].join("\n"),
@@ -1559,12 +1600,16 @@ test("compiler golden: ensure...recover single statement emits retry loop", () =
     writeFileSync(
       input,
       [
-        "rule tests_pass {",
+        "function has_results_txt() {",
         "  test -f results.txt",
         "}",
         "",
+        "rule tests_pass {",
+        "  run has_results_txt",
+        "}",
+        "",
         "workflow fix_tests {",
-        "  echo fixing",
+        "  log \"fixing\"",
         "}",
         "",
         "workflow default {",
@@ -1598,18 +1643,22 @@ test("compiler golden: ensure...recover block emits retry loop with multiple ste
     writeFileSync(
       input,
       [
-        "rule ci_pass {",
+        "function has_ci_ok() {",
         "  test -f ci_ok.txt",
         "}",
         "",
+        "rule ci_pass {",
+        "  run has_ci_ok",
+        "}",
+        "",
         "workflow fix_ci {",
-        "  echo fixing ci",
+        "  log \"fixing ci\"",
         "}",
         "",
         "workflow default {",
         "  ensure ci_pass recover {",
         "    run fix_ci",
-        "    echo retrying",
+        "    log \"retrying\"",
         "  }",
         "}",
         "",
@@ -1622,7 +1671,7 @@ test("compiler golden: ensure...recover block emits retry loop with multiple ste
     assert.match(actual, /JAIPH_RETURN_VALUE_FILE="\$_jaiph_ensure_rv_file" entry::ci_pass; then/);
     // Both recover steps present
     assert.match(actual, /entry::fix_ci/);
-    assert.match(actual, /echo retrying/);
+    assert.match(actual, /jaiph::log "retrying"/);
     // Loop end + failure guard
     assert.match(actual, /done/);
     assert.match(actual, /if \[{2} "\$_jaiph_ensure_passed" -ne 1 \]{2}; then/);
@@ -1631,32 +1680,36 @@ test("compiler golden: ensure...recover block emits retry loop with multiple ste
   }
 });
 
-// === if_not_shell_then golden test ===
+// === brace if + function replaces legacy shell-condition if ===
 
-test("compiler golden: if ! <shell_cmd>; then emits correct bash conditional", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-if-not-shell-"));
+test("compiler golden: if not run <fn> emits bash conditional on workflow call", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-if-not-run-fn-"));
   try {
     const input = join(root, "entry.jh");
     writeFileSync(
       input,
       [
+        "function config_yml_exists() {",
+        "  test -f config.yml",
+        "}",
+        "",
         "workflow setup {",
-        "  echo setting up",
+        "  log \"setting up\"",
         "}",
         "",
         "workflow default {",
-        '  if ! test -f config.yml; then',
-        "    echo creating config",
+        "  if not run config_yml_exists {",
+        "    log \"creating config\"",
         "    run setup",
-        "  fi",
+        "  }",
         "}",
         "",
       ].join("\n"),
     );
 
     const actual = normalize(transpileFile(input, root));
-    assert.match(actual, /if ! test -f config\.yml; then/);
-    assert.match(actual, /echo creating config/);
+    assert.match(actual, /if ! entry::config_yml_exists; then/);
+    assert.match(actual, /jaiph::log "creating config"/);
     assert.match(actual, /entry::setup/);
     assert.match(actual, /fi/);
   } finally {
@@ -1664,24 +1717,30 @@ test("compiler golden: if ! <shell_cmd>; then emits correct bash conditional", (
   }
 });
 
-// === if_not_ensure_then_shell golden test ===
-
-test("compiler golden: if ! ensure with only shell commands emits if_not_ensure_then_shell", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-if-not-ensure-shell-"));
+test("compiler golden: if not ensure with run steps in branch emits expected bash", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-if-not-ensure-run-"));
   try {
     const input = join(root, "entry.jh");
     writeFileSync(
       input,
       [
-        "rule config_exists {",
+        "function has_config_yml() {",
         "  test -f config.yml",
         "}",
         "",
+        "function touch_config_yml() {",
+        "  touch config.yml",
+        "}",
+        "",
+        "rule config_exists {",
+        "  run has_config_yml",
+        "}",
+        "",
         "workflow default {",
-        "  if ! ensure config_exists; then",
-        "    echo creating default config",
-        "    touch config.yml",
-        "  fi",
+        "  if not ensure config_exists {",
+        "    log \"creating default config\"",
+        "    run touch_config_yml",
+        "  }",
         "}",
         "",
       ].join("\n"),
@@ -1689,8 +1748,8 @@ test("compiler golden: if ! ensure with only shell commands emits if_not_ensure_
 
     const actual = normalize(transpileFile(input, root));
     assert.match(actual, /if ! entry::config_exists; then/);
-    assert.match(actual, /echo creating default config/);
-    assert.match(actual, /touch config\.yml/);
+    assert.match(actual, /jaiph::log "creating default config"/);
+    assert.match(actual, /entry::touch_config_yml/);
     assert.match(actual, /fi/);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -1708,7 +1767,7 @@ test("compiler golden: prompt with returns schema emits prompt_capture_with_sche
       [
         "workflow default {",
         "  result = prompt \"Analyse the diff\" returns '{ category: string, risk: boolean }'",
-        "  echo $result",
+        "  log \"done\"",
         "}",
         "",
       ].join("\n"),
@@ -1742,7 +1801,7 @@ test("compiler golden: mock prompt block emits if/elif/else dispatch script stru
       [
         "workflow default {",
         '  result = prompt "question"',
-        '  echo "$result"',
+        '  log "done"',
         "}",
         "",
       ].join("\n"),
@@ -1837,7 +1896,7 @@ test("compiler golden: workflow-level config emits per-workflow with_metadata_sc
         "}",
         "",
         "rule check {",
-        "  true",
+        "  return \"ok\"",
         "}",
         "",
         "workflow fast {",
@@ -1885,7 +1944,7 @@ test("compiler golden: workflow-level config without module config uses workflow
         "  config {",
         '    agent.backend = "claude"',
         "  }",
-        '  echo "hello"',
+        '  log "hello"',
         "}",
         "",
       ].join("\n"),

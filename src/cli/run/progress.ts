@@ -77,17 +77,6 @@ export function collectWorkflowChildren(
   if (!workflow) {
     return [];
   }
-  const functionNames = mod.functions.map((item) => item.name);
-  const collectFunctionCalls = (command: string): string[] => {
-    const hits: string[] = [];
-    for (const fnName of functionNames) {
-      const pattern = new RegExp(`(^|[^A-Za-z0-9_])${fnName}(\\s|\\)|$)`);
-      if (pattern.test(command)) {
-        hits.push(fnName);
-      }
-    }
-    return hits;
-  };
   const items: Array<{ label: string; nested?: string; stepFunc?: string }> = [];
   const stepToItems = (s: WorkflowStepDef): Array<{ label: string; nested?: string; stepFunc?: string }> => {
     if (s.type === "run") {
@@ -141,11 +130,25 @@ export function collectWorkflowChildren(
     if (s.type === "send") {
       return [{ label: `${s.channel} <- send` }];
     }
+    if (s.type === "fail") {
+      return [{ label: `fail ${s.message}` }];
+    }
+    if (s.type === "const") {
+      return [{ label: `const ${s.name}` }];
+    }
+    if (s.type === "wait") {
+      return [{ label: "wait" }];
+    }
+    if (s.type === "return") {
+      return [{ label: `return ${s.value}` }];
+    }
+    if (s.type === "comment") {
+      return [];
+    }
     if (s.type === "shell") {
-      return collectFunctionCalls(s.command).map((fnName) => ({
-        label: `function ${fnName}`,
-        stepFunc: currentSymbol ? `${currentSymbol}::${fnName}` : undefined,
-      }));
+      const t = s.command.trim();
+      const label = t.length > 56 ? `${t.slice(0, 53)}...` : t;
+      return [{ label: `$ ${label}` }];
     }
     return [];
   };
@@ -194,9 +197,59 @@ export function collectWorkflowChildren(
               ? `${currentSymbol}::${ensureRef}`
               : undefined;
         items.push({ label: `rule ${ensureRef}`, stepFunc: ensureStepFunc });
+      } else {
+        const wf = step.condition.ref.value;
+        const stepFunc =
+          symbols && wf.includes(".")
+            ? (() => {
+                const dot = wf.indexOf(".");
+                const alias = wf.slice(0, dot);
+                const name = wf.slice(dot + 1);
+                return `${symbols.get(alias) ?? alias}::${name}`;
+              })()
+            : currentSymbol
+              ? `${currentSymbol}::${wf}`
+              : undefined;
+        items.push({ label: `workflow ${wf}`, nested: wf, stepFunc });
       }
       for (const thenStep of step.thenSteps) {
         items.push(...stepToItems(thenStep));
+      }
+      if (step.elseIfBranches) {
+        for (const br of step.elseIfBranches) {
+          if (br.condition.kind === "ensure") {
+            const ensureRef = br.condition.ref.value;
+            const ensureStepFunc =
+              symbols && ensureRef.includes(".")
+                ? (() => {
+                    const dot = ensureRef.indexOf(".");
+                    const alias = ensureRef.slice(0, dot);
+                    const name = ensureRef.slice(dot + 1);
+                    return `${symbols.get(alias) ?? alias}::${name}`;
+                  })()
+                : currentSymbol
+                  ? `${currentSymbol}::${ensureRef}`
+                  : undefined;
+            items.push({ label: `rule ${ensureRef}`, stepFunc: ensureStepFunc });
+          } else {
+            const wf = br.condition.ref.value;
+            const stepFunc =
+              symbols && wf.includes(".")
+                ? (() => {
+                    const dot = wf.indexOf(".");
+                    const alias = wf.slice(0, dot);
+                    const name = wf.slice(dot + 1);
+                    return `${symbols.get(alias) ?? alias}::${name}`;
+                  })()
+                : currentSymbol
+                  ? `${currentSymbol}::${wf}`
+                  : undefined;
+            items.push({ label: `workflow ${wf}`, nested: wf, stepFunc });
+          }
+          for (const thenStep of br.thenSteps) {
+            items.push(...stepToItems(thenStep));
+          }
+        }
       }
       if (step.elseSteps) {
         for (const elseStep of step.elseSteps) {
@@ -221,11 +274,30 @@ export function collectWorkflowChildren(
       items.push({ label: `${step.channel} <- send` });
       continue;
     }
+    if (step.type === "fail") {
+      items.push({ label: `fail ${step.message}` });
+      continue;
+    }
+    if (step.type === "const") {
+      items.push({ label: `const ${step.name}` });
+      continue;
+    }
+    if (step.type === "wait") {
+      items.push({ label: "wait" });
+      continue;
+    }
+    if (step.type === "return") {
+      items.push({ label: `return ${step.value}` });
+      continue;
+    }
+    if (step.type === "comment") {
+      continue;
+    }
     if (step.type === "shell") {
-      for (const fnName of collectFunctionCalls(step.command)) {
-        const stepFunc = currentSymbol ? `${currentSymbol}::${fnName}` : undefined;
-        items.push({ label: `function ${fnName}`, stepFunc });
-      }
+      const t = step.command.trim();
+      const label = t.length > 56 ? `${t.slice(0, 53)}...` : t;
+      items.push({ label: `$ ${label}` });
+      continue;
     }
   }
   return items;

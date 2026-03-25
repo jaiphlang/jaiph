@@ -1,5 +1,5 @@
 import type { RuleDef } from "../types";
-import { braceDepthDelta, fail, stripQuotes } from "./core";
+import { braceDepthDelta, colFromRaw, fail, stripQuotes } from "./core";
 import { parseBlockStatement } from "./workflow-brace";
 
 export function parseRuleBlock(
@@ -27,6 +27,8 @@ export function parseRuleBlock(
   let i = startIndex + 1;
   let braceDepth = 0;
   let currentCommandLines: string[] = [];
+  let accumShellLine = lineNo;
+  let accumShellCol = 1;
 
   const flushCommand = (): void => {
     if (currentCommandLines.length === 0) return;
@@ -36,7 +38,7 @@ export function parseRuleBlock(
     rule.steps.push({
       type: "shell",
       command: stripQuotes(cmd),
-      loc: { line: lineNo, col: 1 },
+      loc: { line: accumShellLine, col: accumShellCol },
     });
   };
 
@@ -45,17 +47,27 @@ export function parseRuleBlock(
     const innerRaw = lines[i];
     const inner = innerRaw.trim();
     if (!inner) {
-      if (braceDepth > 0) currentCommandLines.push(innerRaw);
-      else flushCommand();
+      if (braceDepth > 0) {
+        if (currentCommandLines.length === 0) {
+          accumShellLine = innerNo;
+          accumShellCol = colFromRaw(innerRaw);
+        }
+        currentCommandLines.push(innerRaw);
+      } else flushCommand();
       continue;
     }
     if (inner.startsWith("#")) {
-      if (braceDepth > 0) currentCommandLines.push(innerRaw);
-      else {
+      if (braceDepth > 0) {
+        if (currentCommandLines.length === 0) {
+          accumShellLine = innerNo;
+          accumShellCol = colFromRaw(innerRaw);
+        }
+        currentCommandLines.push(innerRaw.trim());
+      } else {
         flushCommand();
         rule.steps.push({
-          type: "shell",
-          command: innerRaw.trim(),
+          type: "comment",
+          text: innerRaw.trim(),
           loc: { line: innerNo, col: 1 },
         });
       }
@@ -64,6 +76,10 @@ export function parseRuleBlock(
     if (inner === "}") {
       if (braceDepth === 0) break;
       braceDepth -= 1;
+      if (currentCommandLines.length === 0) {
+        accumShellLine = innerNo;
+        accumShellCol = colFromRaw(innerRaw);
+      }
       currentCommandLines.push(innerRaw.trim());
       if (braceDepth === 0) {
         flushCommand();
@@ -71,6 +87,10 @@ export function parseRuleBlock(
       continue;
     }
     if (braceDepth > 0) {
+      if (currentCommandLines.length === 0) {
+        accumShellLine = innerNo;
+        accumShellCol = colFromRaw(innerRaw);
+      }
       currentCommandLines.push(innerRaw.trim());
       braceDepth += braceDepthDelta(inner);
       if (braceDepth === 0) {
@@ -88,6 +108,8 @@ export function parseRuleBlock(
 
     const delta = braceDepthDelta(inner);
     if (delta > 0) {
+      accumShellLine = innerNo;
+      accumShellCol = colFromRaw(innerRaw);
       currentCommandLines.push(innerRaw.trim());
       braceDepth = delta;
       if (braceDepth === 0) flushCommand();

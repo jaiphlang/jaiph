@@ -136,18 +136,16 @@ OC
   $oc
 </role>"
 
-  local out
   case "$1" in
-    surgical) out="$role_surgical" ;;
-    reductionist) out="$role_reductionist" ;;
-    optimizer) out="$role_optimizer" ;;
-    stabilizer) out="$role_stabilizer" ;;
+    surgical) printf '%s\n' "$role_surgical" ;;
+    reductionist) printf '%s\n' "$role_reductionist" ;;
+    optimizer) printf '%s\n' "$role_optimizer" ;;
+    stabilizer) printf '%s\n' "$role_stabilizer" ;;
     *)
       echo "Error: Role must be one of: surgical, reductionist, optimizer, stabilizer. Got: $1" >&2
       return 1
       ;;
   esac
-  return "$out"
 }
 
 function arg_nonempty() {
@@ -160,7 +158,7 @@ function task_text_has_header() {
 
 function first_line_task() {
   source "${JAIPH_LIB}/strings.sh"
-  return "$(first_line "$1")"
+  first_line "$1"
 }
 
 workflow classify_role {
@@ -236,6 +234,20 @@ workflow implement {
   "
 }
 
+workflow print_commit_message {
+  const message = prompt "
+    Provide me with a suggested commit message for the current changes.
+
+    Requirements:
+    1. Write a commit message in imperative mood, subject under 72 chars.
+    2. Start with the common prefix like 'Feat:', 'Fix:', 'Refactor:' etc.
+    3. Add a body paragraph only if the change is non-obvious.
+    4. Do NOT include files that contain secrets (.env, credentials, tokens).
+  " returns '{ message: string }'
+
+  log "Suggested commit message:\n\n$message\n"
+}
+
 workflow default {
   const role_arg = "${1:-}"
   # ensure git.is_clean
@@ -255,4 +267,5 @@ workflow default {
   run ci.ensure_ci_passes
   run docs.update_from_task "$task"
   run queue.remove_completed_task "$task_header"
+  run print_commit_message
 }
