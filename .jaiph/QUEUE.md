@@ -8,50 +8,6 @@ The first `##` task in the file is always the current task.
 
 ## Remove shell from compiler, migrate all fixtures, pass all tests <!-- dev-ready -->
 
-**Spec**: `.jaiph/language_redesign_spec.md` — sections: Design Decisions, Legality Matrix (workflow), Semantics, Implementation Plan Phase 1.
-
-**Goal.** Add four new constructs to the workflow parser and transpiler. This task adds capabilities without removing anything — old syntax still parses after this task.
-
-**Scope.**
-
-1. **`fail "reason"`** — new step type in workflows.
-   - AST: add `{ type: "fail"; message: string; loc: SourceLoc }` to `WorkflowStepDef` in `src/types.ts`.
-   - Parser (`src/parse/workflows.ts`): recognize `fail "reason"` as a new keyword.
-   - Transpiler (`src/transpile/emit-steps.ts`): emit `echo "reason" >&2; exit 1`.
-   - Add parser test, golden fixture, and e2e test for `fail`.
-
-2. **`const name = ...`** — new declaration in workflows.
-   - AST: add `{ type: "const"; name: string; ... }` to `WorkflowStepDef`.
-   - Parser: `const name = "value"` / `const name = run ref` / `const name = ensure ref` / `const name = prompt "text"`.
-   - Transpiler: emit `local name; name="value"` or the appropriate capture form (same as existing `var = run/ensure/prompt` but with `const` keyword).
-   - Allowed RHS values: string literals, `$var`, `"${var:-default}"`, keyword captures. NOT allowed: `$(command)`, `"${var%%pattern}"`. See spec P10.
-
-3. **`wait`** — formalize as a keyword instead of shell fallback.
-   - AST: add `{ type: "wait"; loc: SourceLoc }`.
-   - Parser: recognize bare `wait` in workflows.
-   - Transpiler: emit `wait`.
-
-4. **Brace-style `if`** — replace `if ... then ... fi`.
-   - New syntax: `if [not] ensure ref [args] { ... } [else if ...] [else { ... }]` and `if [not] run ref [args] { ... }`.
-   - `not` replaces `!`. `else if` replaces `elif`. Braces `{ }` replace `then`/`fi`.
-   - Implement as new parsing path alongside existing `if ... then` (both work after this task).
-   - Shell condition form (`if ! command; then`) is NOT supported in the new syntax.
-
-**Files to change.** `src/types.ts`, `src/parse/workflows.ts`, `src/transpile/emit-steps.ts`, `src/transpile/emit-workflow.ts`. Add test fixtures in `test/fixtures/` and expected output in `test/expected/`.
-
-**Acceptance criteria.**
-
-- `fail "reason"` parses and transpiles correctly in workflows. E2e test: workflow with `fail` exits non-zero with message on stderr.
-- `const name = "value"` and `const name = run/ensure/prompt` parse and transpile correctly. Existing `var = run/ensure/prompt` still works.
-- `wait` parses as a keyword (not shell fallback). Transpiles to `wait`.
-- New brace-style `if` parses and transpiles correctly with `not`, `else if`, `else`. Old `if ... then ... fi` still works.
-- All existing tests pass (zero regressions).
-- New golden fixtures added for each new construct.
-
----
-
-## Remove shell from compiler, migrate all fixtures, pass all tests <!-- dev-ready -->
-
 **Spec**: `.jaiph/language_redesign_spec.md` — sections: Legality Matrix (all three), Implementation Plan Phases 2–4, Code Changes Required, Migration Examples, Pattern Catalog (all P1–P11).
 
 **Goal.** One-shot breaking cutover: (1) rules become structured (no raw shell), (2) workflows lose shell fallback, (3) functions enforce pure bash, (4) all `.jh` fixtures are migrated, (5) all tests pass. This task is indivisible — the compiler changes and fixture migration must land together.

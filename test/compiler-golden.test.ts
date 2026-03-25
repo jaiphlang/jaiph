@@ -41,7 +41,7 @@ test("compiler golden: transpileFile emits stable workflow shell", () => {
       "  exit 1",
       "fi",
       'source "$jaiph_stdlib_path"',
-      'export JAIPH_LIB="${JAIPH_LIB:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib}"',
+      'export JAIPH_LIB="${JAIPH_LIB:-${JAIPH_WORKSPACE:-.}/.jaiph/lib}"',
       'if [[ "$(jaiph__runtime_api)" != "1" ]]; then',
       '  echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2',
       "  exit 1",
@@ -549,6 +549,207 @@ test("parser: malformed if ensure emits E_PARSE", () => {
     () => parsejaiph(source, "/fake/entry.jh"),
     /E_PARSE malformed if-ensure statement/,
   );
+});
+
+test("parser: fail step parses quoted message", () => {
+  const source = [
+    "workflow default {",
+    '  fail "expected reason"',
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  const step = mod.workflows[0].steps[0] as { type: string; message: string };
+  assert.equal(step.type, "fail");
+  assert.equal(step.message, '"expected reason"');
+});
+
+test("parser: const string expr and const run capture parse", () => {
+  const source = [
+    "function noop() {",
+    "  :",
+    "}",
+    "workflow default {",
+    '  const msg = "hi"',
+    "  const out = run noop",
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  const steps = mod.workflows[0].steps;
+  assert.equal(steps.length, 2);
+  const c0 = steps[0] as { type: string; name: string; value: { kind: string; bashRhs?: string } };
+  const c1 = steps[1] as { type: string; name: string; value: { kind: string } };
+  assert.equal(c0.type, "const");
+  assert.equal(c0.name, "msg");
+  assert.equal(c0.value.kind, "expr");
+  assert.equal(c0.value.bashRhs, '"hi"');
+  assert.equal(c1.type, "const");
+  assert.equal(c1.name, "out");
+  assert.equal(c1.value.kind, "run_capture");
+});
+
+test("parser: const prompt capture parses", () => {
+  const source = [
+    "workflow default {",
+    '  const ans = prompt "type here"',
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  const step = mod.workflows[0].steps[0] as {
+    type: string;
+    name: string;
+    value: { kind: string };
+  };
+  assert.equal(step.type, "const");
+  assert.equal(step.name, "ans");
+  assert.equal(step.value.kind, "prompt_capture");
+});
+
+test("parser: wait parses as workflow step (not shell)", () => {
+  const source = [
+    "workflow default {",
+    "  wait",
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  assert.equal(mod.workflows[0].steps[0].type, "wait");
+});
+
+test("parser: brace-style if parses not, else if, and else", () => {
+  const source = [
+    "rule ok {",
+    "  true",
+    "}",
+    "rule bad {",
+    "  false",
+    "}",
+    "function check() {",
+    "  true",
+    "}",
+    "workflow default {",
+    "  if not ensure bad {",
+    "    log \"neg\"",
+    "  }",
+    "  else if run check {",
+    "    log \"elif\"",
+    "  }",
+    "  else {",
+    "    log \"final\"",
+    "  }",
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  const step = mod.workflows[0].steps[0] as {
+    type: string;
+    negated: boolean;
+    elseIfBranches?: Array<{ negated: boolean; condition: { kind: string } }>;
+    elseSteps?: unknown[];
+  };
+  assert.equal(step.type, "if");
+  assert.equal(step.negated, true);
+  assert.ok(step.elseIfBranches);
+  assert.equal(step.elseIfBranches!.length, 1);
+  assert.equal(step.elseIfBranches![0].negated, false);
+  assert.equal(step.elseIfBranches![0].condition.kind, "run");
+  assert.ok(step.elseSteps);
+  assert.equal(step.elseSteps!.length, 1);
+});
+
+test("compiler golden: fail step transpiles to stderr echo and exit 1", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-fail-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        "workflow default {",
+        '  fail "stop here"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const actual = normalize(transpileFile(input, root));
+    assert.match(actual, /echo "stop here" >&2/);
+    assert.match(actual, /exit 1/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("compiler golden: const string transpiles to local assignment", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-const-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        "workflow default {",
+        '  const x = "abc"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const actual = normalize(transpileFile(input, root));
+    assert.match(actual, /local x; x="abc"/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("compiler golden: wait step emits bare wait", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-wait-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        "workflow default {",
+        "  wait",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const actual = normalize(transpileFile(input, root));
+    assert.match(actual, /\n  wait\n/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("compiler golden: brace if transpiles to if elif else fi", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-brace-if-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        "rule r1 {",
+        "  true",
+        "}",
+        "rule r2 {",
+        "  false",
+        "}",
+        "workflow default {",
+        "  if ensure r1 {",
+        '    log "then"',
+        "  }",
+        "  else if not ensure r2 {",
+        '    log "mid"',
+        "  }",
+        "  else {",
+        '    log "last"',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const actual = normalize(transpileFile(input, root));
+    assert.match(actual, /if entry::r1; then/);
+    assert.match(actual, /elif ! entry::r2; then/);
+    assert.match(actual, /\n  else\n/);
+    assert.match(actual, /\nfi\n/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("compiler golden: positive if ensure with args transpiles correctly", () => {

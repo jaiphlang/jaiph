@@ -244,7 +244,7 @@ Jaiph separates **managed** invocations (step records under `.jaiph/runs`, deter
 
 **Shell and `$(...)`:** Use command substitution only for ordinary shell. The compiler rejects `$(...)` bodies that reference Jaiph rules, workflows, or functions, contain a channel send (`<-`), or start with `run` / `ensure` as command words. The same restrictions apply to **every workflow shell line**: the first command word is always checked, including when the line also contains `$(...)` (e.g. `my_fn $(true)` is rejected the same as a bare `my_fn`). A Jaiph symbol must use the appropriate managed step (`ensure` / `run`), not a bare shell command name (e.g. `out = run my_fn "$1"` is valid; `out = my_fn "$1"` is not).
 
-**Function bodies** stay shell-only for orchestration primitives: they must not contain `run`, `ensure`, `config`, nested top-level declarations, or inbox route lines (`channel -> ...`). Put workflow-style steps in a `workflow` block. Optional shared bash libraries (plain `.sh` files, e.g. under `.jaiph/lib/`) may be loaded with `source "$JAIPH_LIB/…"`; the runtime sets `JAIPH_LIB` when executing **function** steps.
+**Function bodies** stay shell-only for orchestration primitives: they must not contain `run`, `ensure`, `config`, nested top-level declarations, or inbox route lines (`channel -> ...`). Put workflow-style steps in a `workflow` block. Optional shared bash libraries (plain `.sh` files, e.g. under `.jaiph/lib/`) may be loaded with `source "$JAIPH_LIB/…"`. Generated workflow scripts default `JAIPH_LIB` to `${JAIPH_WORKSPACE:-.}/.jaiph/lib` (unless already set), matching the workspace root the CLI defines; the runtime sets `JAIPH_LIB` when executing **function** steps.
 
 ## Parse and Runtime Semantics
 
