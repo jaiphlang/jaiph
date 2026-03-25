@@ -6,28 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Split emit-workflow.ts — separate rule and script emitters <!-- dev-ready -->
-
-**Spec**: `.jaiph/language_redesign_spec.md` — Implementation Plan Phase 0b.
-
-**Goal.** Break the ~399-line `emitWorkflow` monolith into focused emitters: one for scripts (currently `function`), one for rules, and the remaining orchestration assembly in `emit-workflow.ts`.
-
-**Scope.**
-
-1. Extract the function/script emission loop into `emit-script.ts` with an `emitScriptFunctions(ast, workflowSymbol, ...)` export.
-2. Extract the rule emission loop into `emit-rule.ts` with an `emitRuleFunctions(ast, workflowSymbol, ...)` export.
-3. `emit-workflow.ts` imports both, calls them, and assembles the final output string.
-4. No behavioral change — output bash must be byte-identical before and after.
-
-**Acceptance criteria.**
-
-- `emit-workflow.ts` is under 250 lines (orchestration + boilerplate only).
-- `emit-script.ts` and `emit-rule.ts` exist with single-responsibility emitters.
-- Golden test output is byte-identical before and after.
-- `npm run build && npm test && npm run test:e2e` pass.
-
----
-
 ## Rename `function` → `script` keyword <!-- dev-ready -->
 
 **Spec**: `.jaiph/language_redesign_spec.md` — Implementation Plan Phase 3a, 3e.
@@ -477,5 +455,55 @@ Block bodies receive the same positional args as the real construct and return v
 - `mock function` is no longer accepted (parser error with guidance to use `mock script`).
 - All existing test files updated and passing.
 - E2e test covering simple string mock for each construct type.
+
+---
+
+## "Try it out" one-liner on landing page + `docs/run` script
+
+**Goal.** Add a hero "Try it out" section at the top of the landing page (`docs/index.html`) with a single `curl | bash` one-liner that installs Jaiph (if needed) and runs a sample workflow. Create the `docs/run` script that powers it.
+
+**Landing page (`docs/index.html`).**
+
+Add a section at the top (below header, above existing content) with:
+
+1. Heading: "Try it out!"
+2. A styled code block containing:
+   ```
+   curl -fsSL https://jaiph.org/run | bash -s '
+   workflow default {
+     const response = prompt "Say: Hello I'\''m [model name]!"
+     log "$response"
+   }'
+   ```
+3. A small note below: "Installs Jaiph (if not already installed) and runs the workflow."
+4. A copy-to-clipboard button on the code block so the user can paste it into their terminal.
+5. Style consistent with the existing page design (dark code block, monospace, subtle button).
+
+**`docs/run` script.**
+
+Create `docs/run` — a bash script served at `https://jaiph.org/run`. When piped through `bash -s '<workflow>'`:
+
+1. **Detect Jaiph**: check if `jaiph` is in `$PATH` (`command -v jaiph`).
+2. **Install if missing**: if not found, run `curl -fsSL https://jaiph.org/install | bash` (the existing installer).
+3. **Run the workflow**: write the workflow string (passed as `$1` or read from stdin after `-s`) to a temp `.jh` file, run `jaiph run <tempfile>`, clean up.
+4. Exit with the workflow's exit code.
+
+**Scope.**
+
+1. Create `docs/run` script (bash, `+x`).
+2. Update `docs/index.html` — add "Try it out" section with code block, note, and copy button.
+3. Add copy-to-clipboard JS (minimal inline or in `docs/assets/js/main.js`).
+4. Ensure the script works end-to-end: fresh machine with `curl` + `node` → installs jaiph → runs the sample workflow → outputs response.
+5. The `docs/run` script must be safe: no destructive operations, clear output, fail gracefully if node/npm is missing.
+
+**Acceptance criteria.**
+
+- `curl -fsSL https://jaiph.org/run | bash -s '<workflow>'` installs jaiph (if needed) and executes the workflow.
+- If jaiph is already installed, skips installation and runs directly.
+- Landing page shows the "Try it out" section with the one-liner.
+- Copy button works (copies the full curl command to clipboard).
+- The sample workflow actually runs and produces output (requires an AI backend configured, or gracefully shows what would happen).
+- `docs/run` exits with the workflow's exit code.
+- Script cleans up temp files on exit (trap).
 
 ---
