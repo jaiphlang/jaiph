@@ -6,6 +6,41 @@ The first `##` task in the file is always the current task.
 
 ---
 
+## Fix upgrade workflow CI recovery wiring and failure artifact reporting <!-- dev-ready -->
+
+**Goal.** Make `.jaiph/upgrade.jh` reliably run the CI recovery loop and report the true failing step output, instead of failing once with confusing artifacts.
+
+**Problem observed.**
+
+- `workflow default` calls `ensure ci_passes "$repo_dir"` directly, so `workflow ensure_ci_passes` recover flow is bypassed.
+- Inside `ensure_ci_passes`, `ensure ci_passes recover { ... }` does not pass `"$repo_dir"` to `ci_passes`.
+- Recover prompt says failure output is saved to `ci_log_file`, but the workflow does not write `$1` there.
+- Failure summary can point to an unrelated `err` file when the true failure output is in a different step's `.out`.
+
+**Scope.**
+
+1. **Upgrade workflow wiring.**
+   - In `default`, call `run ensure_ci_passes "$repo_dir"` instead of directly ensuring `ci_passes`.
+   - In `ensure_ci_passes`, pass `"$repo_dir"` to `ensure ci_passes`.
+2. **Recover payload handling.**
+   - In recover block, persist `$1` into `ci_log_file` before prompting.
+   - Assert log file is non-empty before prompting.
+3. **Failure artifact selection.**
+   - Runtime/reporting should display the failed step's own artifact path/content (prefer actual failing step output) rather than a stale prior-step `err` file.
+4. **Tests.**
+   - Add regression test for upgrade flow: failing CI triggers recover with repo arg and non-empty saved failure payload.
+   - Add reporting test: summary "Output of failed step" maps to the true failed step artifact.
+
+**Acceptance criteria.**
+
+- `upgrade.jh` uses `ensure_ci_passes` as the recovery entrypoint.
+- Recover receives current failed-rule output and saves it to `ci_log_file`.
+- Prompt instruction about `ci_log_file` matches actual behavior.
+- Failure summary points to the real failed step output artifact.
+- Regression tests cover this flow and pass.
+
+---
+
 ## Add shebang support and separate file transpilation <!-- dev-ready -->
 
 **Spec**: `.jaiph/language_redesign_spec.md` — Implementation Plan Phase 3b, 3c, 3d.
@@ -526,5 +561,39 @@ Create `docs/run` — a bash script served at `https://jaiph.org/run`. When pipe
 - The sample workflow actually runs and produces output (requires an AI backend configured, or gracefully shows what would happen).
 - `docs/run` exits with the workflow's exit code.
 - Script cleans up temp files on exit (trap).
+
+---
+
+## Add Codex backend support for prompts <!-- dev-ready -->
+
+**Goal.** Add a first-class `codex` backend so Jaiph can execute `prompt` steps through Codex with consistent request/response behavior, streaming semantics, and error handling aligned with existing backends.
+
+**Scope.**
+
+1. **Backend config.**
+   - Add `codex` as a supported backend option in config parsing/validation.
+   - Define required env vars/settings (for example API key, model, optional base URL) with clear validation errors when missing.
+2. **Runtime adapter.**
+   - Implement a Codex client adapter in runtime prompt execution path.
+   - Map Jaiph prompt input to Codex request payload, including system/user text, schema mode, and temperature/options used by existing backends where applicable.
+3. **Structured returns compatibility.**
+   - Ensure `prompt ... returns '{ ... }'` works with Codex output parsing and existing schema validation.
+   - Keep behavior parity for invalid JSON / schema mismatch errors.
+4. **Streaming and logging behavior.**
+   - Match existing backend behavior for streaming tokens and final captured output.
+   - Ensure run artifacts/logging include backend name and useful failure details without leaking secrets.
+5. **Tests and docs.**
+   - Add/extend unit tests for backend selection, request mapping, and response parsing.
+   - Add integration or e2e coverage using mocked Codex responses.
+   - Update docs (`README.md`, `docs/cli.md`, `docs/getting-started.md`) with setup and usage examples for `codex`.
+
+**Acceptance criteria.**
+
+- Setting backend to `codex` routes all `prompt` calls through the Codex adapter.
+- Missing/invalid Codex configuration fails fast with actionable error messages.
+- Plain text prompts and `returns` schema prompts both work with Codex.
+- Streaming and non-streaming output behavior matches current backend contract.
+- Unit/integration tests for Codex backend pass with the existing suite.
+- Docs include Codex setup, required env vars, and a minimal working example.
 
 ---

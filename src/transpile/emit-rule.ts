@@ -7,9 +7,11 @@ export function emitRuleFunctions(
   workflowSymbol: string,
   importedWorkflowSymbols: Map<string, string>,
   importedModuleHasMetadata: Map<string, boolean>,
+  importedScriptNames: Map<string, Set<string>>,
   hasModuleMetadataScope: boolean,
   emitEnvShims: (indent: string) => void,
 ): void {
+  const localScriptNames = new Set(ast.scripts.map((s) => s.name));
   for (const rule of ast.rules) {
     const ruleSymbol = `${workflowSymbol}::${rule.name}`;
     for (const comment of rule.comments) {
@@ -23,6 +25,8 @@ export function emitRuleFunctions(
       workflowSymbol,
       importedWorkflowSymbols,
       importedModuleHasMetadata,
+      localScriptNames,
+      importedScriptNames,
       filePath: ast.filePath,
       workflowName: rule.name,
       inRecoverBlock: false,

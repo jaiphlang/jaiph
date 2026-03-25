@@ -9,12 +9,12 @@ trap e2e::cleanup EXIT
 e2e::prepare_test_env "managed_call_semantics"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
-e2e::section "run function: return capture and step artifacts"
+e2e::section "run script: stdout capture and step artifacts"
 
 e2e::file "run_fn_ok.jh" <<'EOF'
 script give() {
   echo "log-to-artifacts"
-  return "captured-value"
+  echo "captured-value"
 }
 
 workflow default {
@@ -32,7 +32,8 @@ wf_outs=( "${run_dir}"*default.out )
 shopt -u nullglob
 [[ ${#wf_outs[@]} -ge 1 ]] || e2e::fail "expected default .out for run_fn_ok"
 default_out="$(<"${wf_outs[0]}")"
-e2e::assert_contains "${default_out}" "out=x=captured-value" "run function assigns explicit return only"
+e2e::assert_contains "${default_out}" "out=x=log-to-artifacts" "run capture is full script stdout (line 1)"
+e2e::assert_contains "${default_out}" "captured-value" "run capture includes line 2 in x"
 
 shopt -s nullglob
 fn_log_file=""
@@ -47,7 +48,7 @@ shopt -u nullglob
 [[ -n "$fn_log_file" ]] || e2e::fail "expected a non-default step .out containing function stdout"
 e2e::assert_contains "$(<"$fn_log_file")" "log-to-artifacts" "function stdout in step artifact"
 
-e2e::pass "run function success path"
+e2e::pass "run script success path"
 
 e2e::section "compiler rejects direct function call in workflow"
 

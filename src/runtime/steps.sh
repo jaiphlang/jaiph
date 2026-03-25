@@ -341,6 +341,13 @@ jaiph::run_step() {
     rm -f "$err_tmp"
     err_file=""
   fi
+  if [[ "$step_kind" == "script" && -n "${JAIPH_RETURN_VALUE_FILE:-}" ]]; then
+    if [[ -n "$out_file" && -f "$out_file" ]]; then
+      cat "$out_file" > "$JAIPH_RETURN_VALUE_FILE"
+    else
+      : > "$JAIPH_RETURN_VALUE_FILE"
+    fi
+  fi
   jaiph::track_output_files "$out_file" "$err_file"
   step_elapsed_seconds="$((SECONDS - step_started_seconds))"
   elapsed_ms="$((step_elapsed_seconds * 1000))"

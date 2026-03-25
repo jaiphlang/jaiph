@@ -29,7 +29,7 @@ e2e::section "const with run capture"
 
 e2e::file "const_run.jh" <<'EOF'
 script greet() {
-  return "hi from fn"
+  echo "hi from fn"
 }
 
 workflow default {
@@ -39,7 +39,7 @@ workflow default {
 EOF
 
 out="$(e2e::run "const_run.jh")"
-e2e::assert_contains "${out}" "hi from fn" "const captured run return value"
+e2e::assert_contains "${out}" "hi from fn" "const captured run stdout value"
 
 # ---------------------------------------------------------------------------
 e2e::section "const with ensure capture"

@@ -78,6 +78,8 @@ export interface WorkflowDef {
 export interface ScriptDef {
   name: string;
   comments: string[];
+  /** First body line `#!…` when present; omitted from `commands`. */
+  shebang?: string;
   commands: string[];
   loc: SourceLoc;
 }

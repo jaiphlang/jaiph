@@ -1,53 +1,94 @@
 import type { jaiphModule } from "../types";
+import { scriptShebangIsBash } from "../parse/script-bash";
 import { normalizeShellLocalExport, resolveShellRefs } from "./emit-steps";
 
-/** Emit one Jaiph script body line; Jaiph value-return becomes jaiph::set_return_value. */
 function emitScriptBodyLine(cmd: string, importedWorkflowSymbols: Map<string, string>): string {
   const t = cmd.trim();
+  if (/^\s*return\s*$/.test(t)) {
+    return "return $?";
+  }
   const ret = t.match(/^return\s+(.+)$/s);
   if (ret) {
     const arg = ret[1].trim();
-    const isBashExitCode = /^[0-9]+$/.test(arg) || arg === "$?";
-    if (!isBashExitCode && (arg.startsWith('"') || arg.startsWith("'") || arg.startsWith("$"))) {
-      return `jaiph::set_return_value ${arg}; return 0`;
+    const isBashExitCode =
+      /^[0-9]+$/.test(arg) ||
+      arg === "$?" ||
+      /^\$[A-Za-z_][A-Za-z0-9_]*$/.test(arg);
+    if (isBashExitCode) {
+      return t.replace(/^\s*return\s+/, "return ");
     }
   }
   return normalizeShellLocalExport(resolveShellRefs(cmd, importedWorkflowSymbols));
+}
+
+/** Mirror `emitEnvShims` in emit-workflow: module exports `PREFIX__name`, workflow/rule/script see `local name`. */
+function envShimLinesForStandaloneScript(workflowSymbol: string, envDecls: jaiphModule["envDecls"]): string {
+  if (!envDecls?.length) return "";
+  const envPrefix = workflowSymbol.replace(/::/g, "__");
+  return envDecls.map((e) => `  local ${e.name}="\$${envPrefix}__${e.name}"`).join("\n");
+}
+
+function wrapBashStandaloneScriptBody(body: string, envPreamble: string): string {
+  const preamble = envPreamble ? `${envPreamble}\n` : "";
+  if (!body.trim()) {
+    return ["set -euo pipefail", "set +u", "__jaiph_script_entry() {", preamble, "}", '__jaiph_script_entry "$@"'].join(
+      "\n",
+    );
+  }
+  const indented = body
+    .split("\n")
+    .map((line) => (line.length > 0 ? `  ${line}` : ""))
+    .join("\n");
+  return [
+    "set -euo pipefail",
+    "set +u",
+    "__jaiph_script_entry() {",
+    preamble,
+    indented,
+    "}",
+    '__jaiph_script_entry "$@"',
+  ].join("\n");
+}
+
+export function buildScriptFiles(
+  ast: jaiphModule,
+  importedWorkflowSymbols: Map<string, string>,
+  workflowSymbol: string,
+): Array<{ name: string; content: string }> {
+  const out: Array<{ name: string; content: string }> = [];
+  const envPreamble = envShimLinesForStandaloneScript(workflowSymbol, ast.envDecls);
+  for (const sc of ast.scripts) {
+    const shebang = sc.shebang ?? "#!/usr/bin/env bash";
+    const rawBody = scriptShebangIsBash(sc.shebang)
+      ? sc.commands.map((c) => emitScriptBodyLine(c, importedWorkflowSymbols)).join("\n")
+      : sc.commands.join("\n");
+    const body = scriptShebangIsBash(sc.shebang)
+      ? wrapBashStandaloneScriptBody(rawBody, envPreamble)
+      : rawBody;
+    const content = body.length > 0 ? `${shebang}\n${body}\n` : `${shebang}\n`;
+    out.push({ name: sc.name, content });
+  }
+  return out;
 }
 
 export function emitScriptFunctions(
   out: string[],
   ast: jaiphModule,
   workflowSymbol: string,
-  importedWorkflowSymbols: Map<string, string>,
   hasModuleMetadataScope: boolean,
-  emitEnvShims: (indent: string) => void,
 ): void {
   for (const sc of ast.scripts) {
     const scriptSymbol = `${workflowSymbol}::${sc.name}`;
     for (const comment of sc.comments) {
       out.push(comment);
     }
-    out.push(`${scriptSymbol}::impl() {`);
-    out.push("  set -eo pipefail");
-    out.push("  set +u");
-    emitEnvShims("  ");
-    if (sc.commands.length === 0) {
-      out.push("  :");
-    } else {
-      for (const cmd of sc.commands) {
-        out.push(`  ${emitScriptBodyLine(cmd, importedWorkflowSymbols)}`);
-      }
-    }
-    out.push("}");
-    out.push("");
     out.push(`${scriptSymbol}() {`);
     if (hasModuleMetadataScope) {
       out.push(
-        `  ${workflowSymbol}::with_metadata_scope jaiph::run_step ${scriptSymbol} script ${scriptSymbol}::impl "$@"`,
+        `  ${workflowSymbol}::with_metadata_scope jaiph::run_step ${scriptSymbol} script "$JAIPH_SCRIPTS/${sc.name}" "$@"`,
       );
     } else {
-      out.push(`  jaiph::run_step ${scriptSymbol} script ${scriptSymbol}::impl "$@"`);
+      out.push(`  jaiph::run_step ${scriptSymbol} script "$JAIPH_SCRIPTS/${sc.name}" "$@"`);
     }
     out.push("}");
     out.push("");

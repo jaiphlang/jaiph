@@ -105,6 +105,8 @@ For safety, command substitution is not allowed in prompt text: `$(...)` and bac
 
 Workflow and rule bodies contain structured Jaiph steps only — use **`run`** to call a **`script`** for shell execution. In bash-bearing contexts (mainly **`script`** bodies, and restricted `const` / send RHS forms), `$(...)` and the first command word are validated: they must not invoke Jaiph rules, workflows, or scripts, contain inbox send (`<-`), or use `run` / `ensure` as shell commands (`E_VALIDATE`). See [Grammar](grammar.md#managed-calls-vs-command-substitution).
 
+For **`const`** in those bodies, a **reference plus arguments** on the RHS must be written as **`const name = run ref [args…]`** (or **`ensure`** for rule capture), not as **`const name = ref [args…]`** — the latter is **`E_PARSE`** with text that explains the fix (same rule as managed calls elsewhere).
+
 If a `.jh` or `.jph` file is executable and has `#!/usr/bin/env jaiph`, you can run it directly:
 
 ```bash

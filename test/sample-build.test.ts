@@ -1354,7 +1354,7 @@ test("build supports top-level functions with namespaced wrappers", () => {
       filePath,
       [
         "script changed_files() {",
-        "  return \"from-function\"",
+        "  printf '%s' 'from-function'",
         "}",
         "",
         "workflow default {",
@@ -1367,9 +1367,11 @@ test("build supports top-level functions with namespaced wrappers", () => {
 
     const results = build(filePath, outDir);
     assert.equal(results.length, 1);
-    assert.match(results[0].bash, /entry::changed_files::impl\(\) \{/);
     assert.match(results[0].bash, /entry::changed_files\(\) \{/);
-    assert.match(results[0].bash, /jaiph::run_step entry::changed_files script entry::changed_files::impl "\$@"/);
+    assert.match(
+      results[0].bash,
+      /jaiph::run_step entry::changed_files script "\$JAIPH_SCRIPTS\/changed_files" "\$@"/,
+    );
     assert.match(results[0].bash, /changed_files\(\) \{/);
     assert.match(results[0].bash, /entry::changed_files "\$@"/);
   } finally {
@@ -1386,7 +1388,7 @@ test("jaiph run tree includes function calls from workflow shell steps", () => {
       filePath,
       [
         "script changed_files() {",
-        "  return \"from-function\"",
+        "  printf '%s' 'from-function'",
         "}",
         "",
         "workflow default {",

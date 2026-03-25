@@ -9,6 +9,8 @@ export type StepEmitCtx = {
   workflowSymbol: string;
   importedWorkflowSymbols: Map<string, string>;
   importedModuleHasMetadata: Map<string, boolean>;
+  localScriptNames: Set<string>;
+  importedScriptNames: Map<string, Set<string>>;
   filePath: string;
   workflowName: string;
   /** In recover blocks, run/ensure default to ' "$@"' args and ensure skips paramKeys. */
@@ -76,6 +78,40 @@ export function transpileWorkflowRef(
   importedWorkflowSymbols: Map<string, string>,
 ): string {
   return transpileRef(ref.value, workflowSymbol, importedWorkflowSymbols);
+}
+
+export function scriptBaseNameForWorkflowRef(ref: WorkflowRefDef): string {
+  const parts = ref.value.split(".");
+  return parts[parts.length - 1]!;
+}
+
+export function workflowRefTargetsScript(ref: WorkflowRefDef, ctx: StepEmitCtx): boolean {
+  const parts = ref.value.split(".");
+  if (parts.length === 1) return ctx.localScriptNames.has(parts[0]!);
+  if (parts.length === 2) {
+    const set = ctx.importedScriptNames.get(parts[0]!);
+    return set?.has(parts[1]!) ?? false;
+  }
+  return false;
+}
+
+/** Bash to invoke a `run` target (workflow function or external script under `$JAIPH_SCRIPTS`). */
+export function emitRunTargetInvocation(
+  ref: WorkflowRefDef,
+  ctx: StepEmitCtx,
+  args: string,
+): string {
+  const wfRef = transpileWorkflowRef(ref, ctx.workflowSymbol, ctx.importedWorkflowSymbols);
+  const scopePrefix = prefixForImportedWorkflowCall(
+    ref,
+    ctx.importedModuleHasMetadata,
+    ctx.importedWorkflowSymbols,
+  );
+  if (workflowRefTargetsScript(ref, ctx)) {
+    const base = scriptBaseNameForWorkflowRef(ref);
+    return `${scopePrefix}jaiph::run_step ${wfRef} script "$JAIPH_SCRIPTS/${base}"${args}`;
+  }
+  return `${scopePrefix}${wfRef}${args}`;
 }
 
 /**
@@ -214,12 +250,11 @@ export function emitRunStep(
   if (paramKeys != null && paramKeys.length > 0) {
     out.push(`${indent}export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
   }
-  const wfRef = transpileWorkflowRef(step.workflow, ctx.workflowSymbol, ctx.importedWorkflowSymbols);
-  const scopePrefix = prefixForImportedWorkflowCall(step.workflow, ctx.importedModuleHasMetadata, ctx.importedWorkflowSymbols);
+  const callExpr = emitRunTargetInvocation(step.workflow, ctx, args);
   if (step.captureName) {
-    emitReturnValueCapture(out, indent, step.captureName, `${scopePrefix}${wfRef}${args}`);
+    emitReturnValueCapture(out, indent, step.captureName, callExpr);
   } else {
-    out.push(`${indent}${scopePrefix}${wfRef}${args}`);
+    out.push(`${indent}${callExpr}`);
   }
 }
 
@@ -252,13 +287,12 @@ export function emitSendStep(
     out.push(`${indent}jaiph::send '${step.channel}' "${rhs.bash}" '${ctx.workflowName}'`);
     return;
   }
-  const wfRef = transpileWorkflowRef(rhs.ref, ctx.workflowSymbol, ctx.importedWorkflowSymbols);
-  const scopePrefix = prefixForImportedWorkflowCall(rhs.ref, ctx.importedModuleHasMetadata, ctx.importedWorkflowSymbols);
   const defaultArgs = ctx.inRecoverBlock ? ' "$@"' : "";
   const args = rhs.args ? ` ${rhs.args}` : defaultArgs;
+  const callExpr = emitRunTargetInvocation(rhs.ref, ctx, args);
   const rv = `_jaiph_send_rv_${__jaiphSendSeq()}`;
   out.push(`${indent}local ${rv}; ${rv}=$(mktemp)`);
-  out.push(`${indent}JAIPH_RETURN_VALUE_FILE="$${rv}" ${scopePrefix}${wfRef}${args}`);
+  out.push(`${indent}JAIPH_RETURN_VALUE_FILE="$${rv}" ${callExpr}`);
   out.push(
     `${indent}local _jaiph_send_msg; _jaiph_send_msg=""; [[ -s "$${rv}" ]] && _jaiph_send_msg=$(<"$${rv}")`,
   );
@@ -307,9 +341,8 @@ function emitIfConditionOpen(
     );
   } else {
     const runArgs = condition.args ? ` ${condition.args}` : "";
-    const wfRef = transpileWorkflowRef(condition.ref, ctx.workflowSymbol, ctx.importedWorkflowSymbols);
-    const scopePrefix = prefixForImportedWorkflowCall(condition.ref, ctx.importedModuleHasMetadata, ctx.importedWorkflowSymbols);
-    out.push(`${indent}${keyword} ${negPrefix}${scopePrefix}${wfRef}${runArgs}; then`);
+    const callExpr = emitRunTargetInvocation(condition.ref, ctx, runArgs);
+    out.push(`${indent}${keyword} ${negPrefix}${callExpr}; then`);
   }
 }
 

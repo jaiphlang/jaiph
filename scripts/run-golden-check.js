@@ -27,7 +27,7 @@ try {
       "",
     ].join("\n"),
   );
-  const actual = normalize(transpileFile(input, root));
+  const actual = normalize(transpileFile(input, root).module);
   const expected = normalize(
     [
       "#!/usr/bin/env bash",

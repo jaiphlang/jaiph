@@ -447,7 +447,9 @@ Jaiph: Running async.jh
                     </dt>
                     <dd>Bind or capture step values. For <code>ensure</code> / <code>run</code> to rules and workflows, explicit
                         <code>return "value"</code> feeds the variable; for <code>run</code> to a <strong>script</strong>, capture follows
-                        stdout. <code>const</code> RHS has stricter rules (no <code>$(...)</code> — use <code>run</code> to a script). See
+                        stdout. <code>const</code> RHS has stricter rules (no <code>$(...)</code> — use <code>run</code> to a script). A
+                        call-like RHS must use the keyword explicitly — e.g. <code>const x = run helper "$arg"</code>, not
+                        <code>const x = helper "$arg"</code> (compile error with a correction hint). See
                         <a href="grammar#step-output-contract">Step output contract</a>.
                     </dd>
 

@@ -5,7 +5,7 @@ import {
   transpileWorkflowRef,
 } from "./emit-steps";
 import { emitRuleFunctions } from "./emit-rule";
-import { emitScriptFunctions } from "./emit-script";
+import { buildScriptFiles, emitScriptFunctions } from "./emit-script";
 import {
   bashSingleQuotedSegment,
   emitMetadataScopeFunction,
@@ -13,13 +13,20 @@ import {
   metadataToAssignments,
 } from "./emit-workflow-helpers";
 
+export type EmittedModule = {
+  module: string;
+  scripts: Array<{ name: string; content: string }>;
+};
+
 export function emitWorkflow(
   ast: jaiphModule,
   workflowSymbol: string,
   importedWorkflowSymbols: Map<string, string>,
   importSourcePaths: string[],
   importedModuleHasMetadata: Map<string, boolean>,
-): string {
+  importedScriptNames: Map<string, Set<string>>,
+  jaiphScriptsRelFromModuleDir: string,
+): EmittedModule {
   const scopedMetadataAssignments = ast.metadata ? metadataToAssignments(ast.metadata) : [];
   const hasModuleMetadataScope = scopedMetadataAssignments.length > 0;
   const out: string[] = [];
@@ -35,6 +42,8 @@ export function emitWorkflow(
   out.push(
     'export JAIPH_LIB="${JAIPH_LIB:-${JAIPH_WORKSPACE:-.}/.jaiph/lib}"',
   );
+  const scriptsPathExpr = `$(cd "$(dirname "\${BASH_SOURCE[0]}")/${jaiphScriptsRelFromModuleDir}" && pwd)`;
+  out.push(`export JAIPH_SCRIPTS="\${JAIPH_SCRIPTS:-${scriptsPathExpr}}"`);
   out.push('if [[ "$(jaiph__runtime_api)" != "1" ]]; then');
   out.push('  echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2');
   out.push("  exit 1");
@@ -111,24 +120,21 @@ export function emitWorkflow(
     workflowSymbol,
     importedWorkflowSymbols,
     importedModuleHasMetadata,
+    importedScriptNames,
     hasModuleMetadataScope,
     emitEnvShims,
   );
-  emitScriptFunctions(
-    out,
-    ast,
-    workflowSymbol,
-    importedWorkflowSymbols,
-    hasModuleMetadataScope,
-    emitEnvShims,
-  );
+  emitScriptFunctions(out, ast, workflowSymbol, hasModuleMetadataScope);
 
+  const localScriptNames = new Set(ast.scripts.map((s) => s.name));
   for (const workflow of ast.workflows) {
     const wfSymbol = `${workflowSymbol}::${workflow.name}`;
     const ctx: StepEmitCtx = {
       workflowSymbol,
       importedWorkflowSymbols,
       importedModuleHasMetadata,
+      localScriptNames,
+      importedScriptNames,
       filePath: ast.filePath,
       workflowName: workflow.name,
       inRecoverBlock: false,
@@ -194,5 +200,6 @@ export function emitWorkflow(
     out.push("");
   }
 
-  return out.join("\n").trimEnd();
+  const scripts = buildScriptFiles(ast, importedWorkflowSymbols, workflowSymbol);
+  return { module: out.join("\n").trimEnd(), scripts };
 }
