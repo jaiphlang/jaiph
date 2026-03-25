@@ -37,6 +37,8 @@ const code_philosophy = "
      that works now.
   7. Red flag: >100 lines of new code. Check if the library or existing
      codebase already provides it. If not, explain why.
+  8. E2E bash tests should compare full CLI tree output and file contents, not 
+     just substrings.
 "
 
 script select_role() {
