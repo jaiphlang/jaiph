@@ -111,7 +111,14 @@ export function latestRunFiles(runDir: string): { out?: string; err?: string } {
 
 const FAILED_STEP_OUTPUT_MAX_LINES = 30;
 
-export function readFailedStepOutput(summaryPath: string): string | null {
+type FailedStepSummaryRecord = {
+  out_file: string;
+  err_file: string;
+  out_content?: string;
+  err_content?: string;
+};
+
+function readFirstFailedStepSummary(summaryPath: string): FailedStepSummaryRecord | null {
   if (!existsSync(summaryPath)) {
     return null;
   }
@@ -121,42 +128,70 @@ export function readFailedStepOutput(summaryPath: string): string | null {
       const parsed = JSON.parse(line) as {
         type?: string;
         status?: number;
-        out_file?: string;
-        err_file?: string;
-        out_content?: string;
-        err_content?: string;
+        out_file?: unknown;
+        err_file?: unknown;
+        out_content?: unknown;
+        err_content?: unknown;
       };
-      if (parsed.type === "STEP_END" && parsed.status !== 0) {
-        const trimContent = (raw: string): string => {
-          const trimmed = raw.trimEnd();
-          const outputLines = trimmed.split(/\n/);
-          if (outputLines.length > FAILED_STEP_OUTPUT_MAX_LINES) {
-            return outputLines.slice(-FAILED_STEP_OUTPUT_MAX_LINES).join("\n");
-          }
-          return trimmed;
-        };
-        // Prefer embedded content from the event (works in both Docker and
-        // non-Docker modes). Fall back to reading files only for older
-        // summaries that lack embedded content.
-        const readFileContent = (path: string): string => {
-          if (!path || !existsSync(path)) return "";
-          return readFileSync(path, "utf8").trimEnd();
-        };
-        const outRaw = typeof parsed.out_content === "string" ? parsed.out_content
-          : readFileContent(typeof parsed.out_file === "string" ? parsed.out_file : "");
-        const errRaw = typeof parsed.err_content === "string" ? parsed.err_content
-          : readFileContent(typeof parsed.err_file === "string" ? parsed.err_file : "");
-        const outContent = outRaw ? trimContent(outRaw) : "";
-        const errContent = errRaw ? trimContent(errRaw) : "";
-        const parts: string[] = [];
-        if (outContent) parts.push(outContent);
-        if (errContent) parts.push(errContent);
-        if (parts.length === 0) return null;
-        return parts.join("\n");
+      if (parsed.type !== "STEP_END" || parsed.status === 0) {
+        continue;
       }
+      return {
+        out_file: typeof parsed.out_file === "string" ? parsed.out_file : "",
+        err_file: typeof parsed.err_file === "string" ? parsed.err_file : "",
+        out_content: typeof parsed.out_content === "string" ? parsed.out_content : undefined,
+        err_content: typeof parsed.err_content === "string" ? parsed.err_content : undefined,
+      };
     }
   } catch {
     // ignore parse/read errors
   }
   return null;
+}
+
+/** Artifact paths from the first failed STEP_END in the run summary (not lexicographic "latest" in the run dir). */
+export function failedStepArtifactPaths(summaryPath: string): { out?: string; err?: string } {
+  const rec = readFirstFailedStepSummary(summaryPath);
+  if (!rec) {
+    return {};
+  }
+  const result: { out?: string; err?: string } = {};
+  if (rec.out_file) {
+    result.out = rec.out_file;
+  }
+  if (rec.err_file) {
+    result.err = rec.err_file;
+  }
+  return result;
+}
+
+export function readFailedStepOutput(summaryPath: string): string | null {
+  const rec = readFirstFailedStepSummary(summaryPath);
+  if (!rec) {
+    return null;
+  }
+  const trimContent = (raw: string): string => {
+    const trimmed = raw.trimEnd();
+    const outputLines = trimmed.split(/\n/);
+    if (outputLines.length > FAILED_STEP_OUTPUT_MAX_LINES) {
+      return outputLines.slice(-FAILED_STEP_OUTPUT_MAX_LINES).join("\n");
+    }
+    return trimmed;
+  };
+  // Prefer embedded content from the event (works in both Docker and
+  // non-Docker modes). Fall back to reading files only for older
+  // summaries that lack embedded content.
+  const readFileContent = (path: string): string => {
+    if (!path || !existsSync(path)) return "";
+    return readFileSync(path, "utf8").trimEnd();
+  };
+  const outRaw = rec.out_content !== undefined ? rec.out_content : readFileContent(rec.out_file);
+  const errRaw = rec.err_content !== undefined ? rec.err_content : readFileContent(rec.err_file);
+  const outContent = outRaw ? trimContent(outRaw) : "";
+  const errContent = errRaw ? trimContent(errRaw) : "";
+  const parts: string[] = [];
+  if (outContent) parts.push(outContent);
+  if (errContent) parts.push(errContent);
+  if (parts.length === 0) return null;
+  return parts.join("\n");
 }

@@ -135,7 +135,7 @@ For concurrency-sensitive behavior (for example parallel inbox dispatch), the re
 - Soak loops to flush out intermittent failures.
 - Order-insensitive checks (counts, uniqueness) when parallel work makes ordering non-deterministic.
 
-Examples: `e2e/tests/93_inbox_stress.sh`, `e2e/tests/94_parallel_shell_steps.sh` (background jobs, `wait`, concurrent stdout capture, artifact checks). For `run_summary.jsonl` contracts (`LOG` / `LOGERR`, inbox events, step pairing) under `run.inbox_parallel`, see `e2e/tests/88_run_summary_event_contract.sh` (needs `python3`).
+Examples: `e2e/tests/93_inbox_stress.sh`, `e2e/tests/94_parallel_shell_steps.sh` (background jobs, `wait`, concurrent stdout capture, artifact checks). `e2e/tests/93_ensure_recover_payload.sh` covers `ensure <rule> <param> recover`: retry succeeds after recover, and recover `$1` includes failed-attempt payload from nested rule/script execution before `prompt`. For `run_summary.jsonl` contracts (`LOG` / `LOGERR`, inbox events, step pairing) under `run.inbox_parallel`, see `e2e/tests/88_run_summary_event_contract.sh` (needs `python3`).
 
 ## E2E testing
 

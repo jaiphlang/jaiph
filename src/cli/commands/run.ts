@@ -17,6 +17,7 @@ import {
   resolveFailureDetails,
   hasFatalRuntimeStderr,
   latestRunFiles,
+  failedStepArtifactPaths,
 } from "../shared/errors";
 import { detectWorkspaceRoot } from "../shared/paths";
 import { parseArgs } from "../shared/usage";
@@ -372,7 +373,11 @@ function reportResult(
     if (summaryFile) {
       process.stderr.write(`  Summary: ${summaryFile}\n`);
     }
-    const files = latestRunFiles(runDir);
+    const fromSummary = summaryFile ? failedStepArtifactPaths(summaryFile) : {};
+    const files =
+      fromSummary.out !== undefined || fromSummary.err !== undefined
+        ? { out: fromSummary.out, err: fromSummary.err }
+        : latestRunFiles(runDir);
     if (files.out) process.stderr.write(`    out: ${files.out}\n`);
     if (files.err) process.stderr.write(`    err: ${files.err}\n`);
     if (failureDetails.failedStepOutput) {

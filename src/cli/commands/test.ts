@@ -100,6 +100,7 @@ export async function runSingleTestFile(
     delete runtimeEnv.JAIPH_RUN_DIR;
     delete runtimeEnv.JAIPH_RUN_SUMMARY_FILE;
     delete runtimeEnv.JAIPH_PRECEDING_FILES;
+    delete runtimeEnv.JAIPH_SCRIPTS;
 
     const result = spawnSync("bash", [testScriptPath], {
       encoding: "utf8",
