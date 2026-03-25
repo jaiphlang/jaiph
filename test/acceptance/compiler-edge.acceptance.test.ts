@@ -143,8 +143,8 @@ test("ACCEPTANCE: unterminated prompt string fails with E_PARSE", () => {
   });
 });
 
-test("ACCEPTANCE: if ! ensure block must terminate with fi", () => {
-  withTempDir("jaiph-acc-if-fi-", (root) => {
+test("ACCEPTANCE: brace if block must close before workflow ends", () => {
+  withTempDir("jaiph-acc-if-brace-close-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
       [
@@ -153,18 +153,17 @@ test("ACCEPTANCE: if ! ensure block must terminate with fi", () => {
         "}",
         "",
         "workflow default {",
-        "  if ! ensure gate; then",
+        "  if not ensure gate {",
         "    echo fallback",
-        "}",
         "",
       ].join("\n"),
     );
 
-    assert.throws(() => build(root), /E_PARSE unterminated if-block, expected "fi"/);
+    assert.throws(() => build(root), /E_PARSE unterminated block, expected "}"/);
   });
 });
 
-test("ACCEPTANCE: if ! ensure then-branch allows mixed prompt and run", () => {
+test("ACCEPTANCE: if not ensure then-branch allows mixed prompt and run", () => {
   withTempDir("jaiph-acc-if-ensure-mixed-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
@@ -178,10 +177,10 @@ test("ACCEPTANCE: if ! ensure then-branch allows mixed prompt and run", () => {
         "}",
         "",
         "workflow default {",
-        "  if ! ensure gate; then",
+        "  if not ensure gate {",
         '    prompt "recover"',
         "    run fix_build",
-        "  fi",
+        "  }",
         "}",
         "",
       ].join("\n"),
@@ -445,7 +444,7 @@ test("ACCEPTANCE: workflow shell step with || { ... } compiles and transpiles", 
   });
 });
 
-test("ACCEPTANCE: if ! ensure ; then ... fi continues to work alongside || { }", () => {
+test("ACCEPTANCE: if not ensure { } works alongside || { } shell short-circuit", () => {
   withTempDir("jaiph-acc-if-and-or-brace-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
@@ -455,9 +454,9 @@ test("ACCEPTANCE: if ! ensure ; then ... fi continues to work alongside || { }",
         "}",
         "",
         "workflow default {",
-        "  if ! ensure gate; then",
+        "  if not ensure gate {",
         "    echo fallback",
-        "  fi",
+        "  }",
         '  other || { echo "err"; exit 1; }',
         "}",
         "",

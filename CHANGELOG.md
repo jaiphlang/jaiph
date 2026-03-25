@@ -11,6 +11,7 @@
 - **Compiler golden tests** — Golden outputs and `compiler-golden.test.ts` track the stricter parsers and emitters (structured rules/workflows, brace `if`, send RHS, function bodies).
 - **Shell / Jaiph guard** — Keyword-first checks for Jaiph symbols in bash contexts are scoped to places that still contain shell (principally **`function`** bodies and related fragments), not workflow lines.
 - **Design reference** — Rationale and legality matrix: `.jaiph/language_redesign_spec.md` in the repository.
+- **Compiler: legacy conditional parser removed** — Deleted `src/parse/legacy-if.ts` and related workflow-parser wiring that only supported transitional `if … then … fi` / `elif` forms for `ensure`, `run`, or shell tests. Workflows and rules already require **brace** `if [not] ensure|run … { … }` on nightly; this change removes dead compatibility code with no intended change to accepted syntax or runtime behavior.
 
 # 0.5.0
 

@@ -13,7 +13,7 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 # - first call fails gate1 -> remediate1 -> recurse
 # - second call fails gate2 -> remediate2 -> recurse
 # Tree should reflect nested recursion depth.
-e2e::section "if ! ensure supports multi-gate recursive nesting"
+e2e::section "brace if not ensure supports multi-gate recursive nesting"
 rm -f "${TEST_DIR}/.gate1_passed" "${TEST_DIR}/.gate2_passed"
 
 # Given
@@ -35,14 +35,14 @@ workflow remediate2 {
 }
 
 workflow make_pass {
-  if ! ensure gate1; then
+  if not ensure gate1 {
     run remediate1
     run make_pass
-  fi
-  if ! ensure gate2; then
+  }
+  if not ensure gate2 {
     run remediate2
     run make_pass
-  fi
+  }
 }
 
 workflow default {
@@ -87,7 +87,7 @@ workflow default
 ✓ PASS workflow default (<time>)
 EOF
 
-e2e::pass "if ! ensure with two recursive gates: fail gate1 then gate2, pass on nested retries"
+e2e::pass "if not ensure with two recursive gates: fail gate1 then gate2, pass on nested retries"
 e2e::expect_out_files "make_pass.jh" 0
 
 # Same scenario but condition is plain bash (if ! test -f ...; then touch; run make_pass; fi).
