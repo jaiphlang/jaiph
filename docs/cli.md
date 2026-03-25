@@ -56,6 +56,8 @@ If `path` is omitted, the current directory (`./`) is used. Without `--target`, 
 - **Directory mode** (`jaiph build ./` or `jaiph build ./flows`) — compiles every `.jh`/`.jph` file in the directory tree (test files `*.test.jh`/`*.test.jph` are excluded). The command stops on the first parse or validation error in any file.
 - **Single-file mode** (`jaiph build file.jh`) — compiles only the specified file and its transitive imports. Parse errors in sibling files are ignored.
 
+Scripts declared in workflow modules are emitted as **separate executable files** under `<target>/scripts/<name>` with `chmod +x`. Each script file starts with a shebang (custom or default `#!/usr/bin/env bash`) followed by the script body. The compiled module `.sh` invokes scripts via `"$JAIPH_SCRIPTS/<name>"`.
+
 Examples:
 
 ```bash
