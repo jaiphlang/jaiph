@@ -6,58 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Emit compiler error for invalid `recover` usage in `ensure` <!-- dev-ready -->
-
-**Goal.** Reject invalid `ensure` syntax around `recover`: (a) rule arguments provided after `recover`, and (b) `recover` used without a recovery block. Once `recover` is parsed, the rule call is closed and it must be immediately followed by `{ ... }`.
-
-**Examples.**
-
-Valid:
-```
-ensure ci_passes "$repo_dir" recover {
-  prompt "Apply the smallest safe fix."
-}
-```
-
-Invalid (must fail at compile/validation time):
-```
-ensure ci_passes recover "$repo_dir" {
-  prompt "Apply the smallest safe fix."
-}
-```
-
-```
-ensure some_rule "a" recover "b" {
-  log "should not parse"
-}
-```
-
-```
-ensure ci_passes "$repo_dir" recover
-```
-
-**Scope.**
-
-1. **Parser/validator guard.** Detect `ensure` statements where positional arguments are present after `recover`.
-2. **Error message.** Emit a clear, actionable error, e.g.:
-   `Invalid ensure syntax: rule arguments must appear before 'recover'.`
-3. **Recover block requirement.** Enforce that `recover` must be followed by a recovery block (`recover { ... }`), otherwise emit a syntax/validation error.
-4. **Coverage.** Add parser and/or e2e tests for both valid and invalid forms.
-5. **No behavior change for valid syntax.** Existing `ensure <rule> [args] recover { ... }` and `ensure <rule> [args]` stay unchanged.
-
-**Acceptance criteria.**
-
-- `ensure ci_passes "$repo_dir" recover { ... }` remains valid.
-- `ensure ci_passes recover { ... }` remains valid.
-- `ensure ci_passes recover "$repo_dir" { ... }` fails with a clear compiler/validator error.
-- `ensure some_rule "a" recover "b" { ... }` fails with the same class of error.
-- `ensure ci_passes "$repo_dir" recover` fails with a clear error that `recover` requires a `{ ... }` block.
-- Error text points users to the valid ordering (`ensure <rule> [args] recover { ... }`).
-- Invalid forms fail at parse/validation time (before transpile/run), not at runtime.
-- Existing tests continue to pass.
-
----
-
 ## Implement script isolation and shared library support <!-- dev-ready -->
 
 **Spec**: `.jaiph/language_redesign_spec.md` — Implementation Plan Phase 4.

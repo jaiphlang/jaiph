@@ -818,3 +818,100 @@ test("ACCEPTANCE: inbox.jh fixture builds successfully", () => {
     assert.match(output[0].bash, /jaiph::send/);
   });
 });
+
+// === ensure ... recover validation ===
+
+test("ACCEPTANCE: ensure recover with args after recover fails with E_PARSE", () => {
+  withTempDir("jaiph-acc-recover-args-after-", (root) => {
+    writeFileSync(
+      join(root, "main.jh"),
+      [
+        "rule ci_passes {",
+        "  true",
+        "}",
+        "",
+        "workflow default {",
+        '  ensure ci_passes recover "$repo_dir" {',
+        '    prompt "Apply the smallest safe fix."',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => build(root),
+      /E_PARSE.*rule arguments must appear before 'recover'/,
+    );
+  });
+});
+
+test("ACCEPTANCE: ensure recover with multiple args after recover fails with E_PARSE", () => {
+  withTempDir("jaiph-acc-recover-multi-args-", (root) => {
+    writeFileSync(
+      join(root, "main.jh"),
+      [
+        "rule some_rule {",
+        "  true",
+        "}",
+        "",
+        "workflow default {",
+        '  ensure some_rule "a" recover "b" {',
+        '    log "should not parse"',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => build(root),
+      /E_PARSE.*rule arguments must appear before 'recover'/,
+    );
+  });
+});
+
+test("ACCEPTANCE: ensure recover without block fails with E_PARSE", () => {
+  assert.throws(
+    () =>
+      parsejaiph(
+        [
+          "rule ci_passes {",
+          "  true",
+          "}",
+          "",
+          "workflow default {",
+          '  ensure ci_passes "$repo_dir" recover',
+          "}",
+          "",
+        ].join("\n"),
+        "/fake/main.jh",
+      ),
+    /E_PARSE.*recover requires a \{ \.\.\. \} block/,
+  );
+});
+
+test("ACCEPTANCE: valid ensure recover block still works", () => {
+  withTempDir("jaiph-acc-recover-valid-", (root) => {
+    writeFileSync(
+      join(root, "main.jh"),
+      [
+        "rule ci_passes {",
+        "  true",
+        "}",
+        "",
+        "workflow fix_it {",
+        '  prompt "fix"',
+        "}",
+        "",
+        "workflow default {",
+        '  ensure ci_passes "$repo_dir" recover {',
+        "    run fix_it",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const output = build(join(root, "main.jh"), join(root, "out"));
+    assert.equal(output.length, 1);
+    assert.match(output[0].bash, /::ci_passes/);
+  });
+});
