@@ -360,8 +360,9 @@ Jaiph: Running async.jh
                     See <a href="grammar">Grammar</a> and <a href="getting-started">Getting started</a>
                     (<a href="https://jaiph.org/getting-started" target="_blank" rel="noopener noreferrer">jaiph.org/getting-started</a>).
                 </p>
-                <p><strong>Use Bash in scripts.</strong> Command pipelines, checks, and background jobs belong in
-                    <code>script</code> blocks; workflows and rules call them with <code>run</code>. For async managed work, use
+                <p><strong>Use Bash (or any language) in scripts.</strong> Command pipelines, checks, and background jobs belong in
+                    <code>script</code> blocks; workflows and rules call them with <code>run</code>. Add a custom shebang
+                    (e.g. <code>#!/usr/bin/env python3</code>) to write scripts in other languages. For async managed work, use
                     <code>run wf &amp;</code> and a <code>wait</code> step.
                 </p>
                 <p><strong>Agent inbox pattern (channels).</strong> Use inbox channels as a way to pass messages between
@@ -431,8 +432,10 @@ Jaiph: Running async.jh
                         <code>script name() { ... }</code>
                     </dt>
                     <dd><code>rule</code> is for reusable checks (Jaiph structured steps; used with <code>ensure</code>),
-                        <code>workflow</code> orchestrates Jaiph steps only, and <code>script</code> holds bash invoked with
-                        <code>run</code>.
+                        <code>workflow</code> orchestrates Jaiph steps only, and <code>script</code> holds bash (or any
+                        language via a custom shebang, e.g. <code>#!/usr/bin/env node</code>) invoked with
+                        <code>run</code>. Scripts are emitted as separate executable files under
+                        <code>build/scripts/</code>.
                     </dd>
 
                     <dt><code>ensure ref [args...]</code> · <code>ensure ref recover { ... }</code> ·

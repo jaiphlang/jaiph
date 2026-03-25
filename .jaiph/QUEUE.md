@@ -6,32 +6,55 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Add shebang support and separate file transpilation <!-- dev-ready -->
+## Emit compiler error for invalid `recover` usage in `ensure` <!-- dev-ready -->
 
-**Spec**: `.jaiph/language_redesign_spec.md` — Implementation Plan Phase 3b, 3c, 3d.
+**Goal.** Reject invalid `ensure` syntax around `recover`: (a) rule arguments provided after `recover`, and (b) `recover` used without a recovery block. Once `recover` is parsed, the rule call is closed and it must be immediately followed by `{ ... }`.
 
-**Goal.** Scripts transpile to standalone executable files with `+x` permission. Users can provide a custom shebang (e.g. `#!/usr/bin/env node`) as the first line of the script body; otherwise `#!/usr/bin/env bash` is used.
+**Examples.**
+
+Valid:
+```
+ensure ci_passes "$repo_dir" recover {
+  prompt "Apply the smallest safe fix."
+}
+```
+
+Invalid (must fail at compile/validation time):
+```
+ensure ci_passes recover "$repo_dir" {
+  prompt "Apply the smallest safe fix."
+}
+```
+
+```
+ensure some_rule "a" recover "b" {
+  log "should not parse"
+}
+```
+
+```
+ensure ci_passes "$repo_dir" recover
+```
 
 **Scope.**
 
-1. **AST**: add `shebang?: string` field to `ScriptDef`.
-2. **Parser**: check first non-empty line of script body for `#!`. If present, store in `shebang` and exclude from body commands.
-3. **Keyword guard**: for bash scripts (no shebang or `#!/usr/bin/env bash` shebang), keep Jaiph keyword rejection. For custom shebangs, skip the guard.
-4. **Emit**: change `emitWorkflow` return type to `{ module: string; scripts: Array<{ name: string; content: string }> }`. Script file content = shebang line + body.
-5. **Build**: `build.ts` writes each script to `build/scripts/<name>`, sets `chmod +x`. Module `.sh` calls scripts via `"$JAIPH_SCRIPTS/<name>" "$@"`.
-6. **Runtime**: set `$JAIPH_SCRIPTS` env var in lifecycle/stdlib to point to build scripts directory.
-7. **E2e test**: add test with a custom shebang script (e.g. `#!/usr/bin/env node` or `#!/usr/bin/env python3`) that validates the polyglot model works end-to-end.
+1. **Parser/validator guard.** Detect `ensure` statements where positional arguments are present after `recover`.
+2. **Error message.** Emit a clear, actionable error, e.g.:
+   `Invalid ensure syntax: rule arguments must appear before 'recover'.`
+3. **Recover block requirement.** Enforce that `recover` must be followed by a recovery block (`recover { ... }`), otherwise emit a syntax/validation error.
+4. **Coverage.** Add parser and/or e2e tests for both valid and invalid forms.
+5. **No behavior change for valid syntax.** Existing `ensure <rule> [args] recover { ... }` and `ensure <rule> [args]` stay unchanged.
 
 **Acceptance criteria.**
 
-- Scripts emit as separate files under `build/scripts/` with `+x`.
-- Default shebang is `#!/usr/bin/env bash` when none specified.
-- Custom shebang (e.g. `#!/usr/bin/env node`) is correctly placed in the output file.
-- Jaiph keyword guard is skipped for non-bash shebangs.
-- Module `.sh` correctly invokes scripts by path.
-- `$JAIPH_SCRIPTS` is set at runtime.
-- E2e test with custom shebang script passes.
-- All existing tests pass.
+- `ensure ci_passes "$repo_dir" recover { ... }` remains valid.
+- `ensure ci_passes recover { ... }` remains valid.
+- `ensure ci_passes recover "$repo_dir" { ... }` fails with a clear compiler/validator error.
+- `ensure some_rule "a" recover "b" { ... }` fails with the same class of error.
+- `ensure ci_passes "$repo_dir" recover` fails with a clear error that `recover` requires a `{ ... }` block.
+- Error text points users to the valid ordering (`ensure <rule> [args] recover { ... }`).
+- Invalid forms fail at parse/validation time (before transpile/run), not at runtime.
+- Existing tests continue to pass.
 
 ---
 
