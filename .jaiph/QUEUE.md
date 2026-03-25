@@ -6,28 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Refactor validate.ts — collapse duplicate ref resolution <!-- dev-ready -->
-
-**Spec**: `.jaiph/language_redesign_spec.md` — Implementation Plan Phase 0a.
-
-**Goal.** Reduce `validate.ts` from ~788 lines to ~400 by merging 5 near-identical ref resolution functions into one generic resolver.
-
-**Scope.**
-
-1. Merge `validateRuleRef`, `validateWorkflowRef`, `validateRunInRuleRef`, `validateRunTargetRef`, and `validateBareSendSymbol` into a single `validateRef(ref, allowedKinds, context)` function that takes the set of allowed target kinds and produces the appropriate error for each mismatch.
-2. Each call site passes its constraints (which kinds are allowed, which error messages to emit for mismatches).
-3. Keep all existing error messages and validation behavior identical.
-4. No new features — pure structural refactor.
-
-**Acceptance criteria.**
-
-- `validate.ts` is under 500 lines.
-- All existing validation tests pass unchanged.
-- Error messages remain identical (verify via golden test output and e2e).
-- `npm run build && npm test && npm run test:e2e` pass.
-
----
-
 ## Split emit-workflow.ts — separate rule and script emitters <!-- dev-ready -->
 
 **Spec**: `.jaiph/language_redesign_spec.md` — Implementation Plan Phase 0b.
@@ -294,6 +272,65 @@ process.exit(x.valid ? 0 : 1);
 
 ---
 
+## Named parameters for workflows, rules, and scripts
+
+**Spec**: `.jaiph/language_redesign_spec.md` — Design Decision #16, Implementation Plan Phase 3f.
+
+**Goal.** Replace positional `$1`/`$2` boilerplate with named parameters in construct declarations. Parameters become local variables inside the body.
+
+**Before:**
+```
+workflow implement {
+  const task = "$1"
+  const role_name = "$2"
+  const role = run select_role "$role_name"
+  ...
+}
+
+script check_hash() {
+  local actual=$(sha256sum "$1" | cut -d' ' -f1)
+  [ "$actual" = "$2" ]
+}
+```
+
+**After:**
+```
+workflow implement(task, role_name) {
+  const role = run select_role "$role_name"
+  ...
+}
+
+script check_hash(file_path, expected_hash) {
+  local actual=$(sha256sum "$file_path" | cut -d' ' -f1)
+  [ "$actual" = "$expected_hash" ]
+}
+```
+
+**Scope.**
+
+1. **AST**: add `params?: Array<{ name: string; default?: string }>` to `WorkflowDef`, `RuleDef`, `ScriptDef`.
+2. **Parser**: recognize `name(param1, param2)` and `name(param1, param2 = "default")` in all three construct declarations. Parentheses are optional when there are no params — `workflow default { ... }` remains valid.
+3. **Transpiler (workflows/rules)**: emit `local param1="$1"; local param2="$2"` at the top of the function body. For defaults: `local param2="${2:-default}"`.
+4. **Transpiler (bash scripts)**: prepend `local param1="$1"; ...` to the generated script file. For non-bash shebangs, params are documentary only.
+5. **Validator**: check call-site arity against declared params. Missing required args = validation error. Extra args beyond declared params = validation warning.
+6. **Update all `.jaiph/*.jh` files** to use named params where applicable.
+7. **Update all `e2e/*.jh` fixtures** to use named params.
+8. **Update test fixtures and golden outputs**.
+
+**Acceptance criteria.**
+
+- `workflow implement(task, role_name) { ... }` parses and `$task`, `$role_name` are available as locals.
+- `script check(value) { ... }` works — `$value` available in bash body.
+- Default params work: `workflow deploy(env, dry_run = "false")` — `$dry_run` is `"false"` when not provided.
+- No-param constructs still work without parentheses: `workflow default { ... }`.
+- Arity validation: `run implement` with zero args errors when `implement` declares two required params.
+- Both calling conventions work: `run implement "$t" "$r"` (positional) and `run implement task="$t" role_name="$r"` (named).
+- Non-bash scripts: params are documentary, no transpiler output for them.
+- All existing tests pass after migration.
+- Unit test and e2e test covering named params, defaults, and arity validation.
+
+---
+
 ## Rewrite docs for script terminology and present-tense language
 
 **Goal.** Update all user-facing docs to use `script` terminology (replacing `function`) and remove historical transition framing.
@@ -302,14 +339,18 @@ process.exit(x.valid ? 0 : 1);
 
 1. Sweep docs (`README.md`, `docs/*.md`, `docs/index.html`, `docs/jaiph-skill.md`) and replace `function` (Jaiph construct) references with `script`.
 2. Add documentation for custom shebang support and polyglot script model.
-3. Remove wording that frames rules/scripts as transitions ("no longer", "legacy syntax", "migration patterns").
-4. Rewrite those passages to present-tense contracts (what is valid, what is rejected).
-5. Keep changelog entries historical. Keep semantics unchanged.
+3. Document named parameters syntax, defaults, and arity validation.
+4. Document inline interpolation (`${run ref}`, `${ensure ref}`), dot notation (`${var.field}`), and anonymous scripts.
+5. Remove wording that frames rules/scripts as transitions ("no longer", "legacy syntax", "migration patterns").
+6. Rewrite those passages to present-tense contracts (what is valid, what is rejected).
+7. Keep changelog entries historical. Keep semantics unchanged.
 
 **Acceptance criteria.**
 
 - All docs reference `script` keyword, not `function`.
 - Shebang and polyglot model are documented.
+- Named parameters documented with examples and default values.
+- Inline interpolation, dot notation, and anonymous scripts documented.
 - Reference docs read as current behavior contracts, not migration guides.
 - Build/tests still pass after wording changes.
 
