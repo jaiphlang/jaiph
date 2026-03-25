@@ -147,7 +147,7 @@ Jaiph: Running fibonacci.jh
 workflow default (1="3")
   ▸ rule ensure_is_number (1="3")
   ✓ rule ensure_is_number (<time>)
-  ▸ script fib (1="3")
+  ▸ script fib (1="<script-path>", 2="3")
   ✓ script fib (<time>)
   ℹ 2
 ✓ PASS workflow default (<time>)
@@ -157,10 +157,10 @@ EOF
 fib_run_dir="$(e2e::latest_run_dir_at "${ROOT_DIR}/.jaiph/runs" "fibonacci.jh")"
 
 shopt -s nullglob
-fib_out_files=( "${fib_run_dir}"*.out )
+fib_out_files=( "${fib_run_dir}"*"__fib.out" )
 shopt -u nullglob
-[[ ${#fib_out_files[@]} -eq 1 ]] || e2e::fail "expected one .out file for fibonacci.jh, got ${#fib_out_files[@]}"
-e2e::assert_equals "$(<"${fib_out_files[0]}")" "2" "fibonacci.jh default workflow .out content (fib(3)=2)"
+[[ ${#fib_out_files[@]} -eq 1 ]] || e2e::fail "expected one fib .out file for fibonacci.jh, got ${#fib_out_files[@]}"
+e2e::assert_equals "$(<"${fib_out_files[0]}")" "2" "fibonacci.jh fib step .out content (fib(3)=2)"
 
 e2e::section "Parametrized workflow, rule, and prompt: params in tree (exact output)"
 

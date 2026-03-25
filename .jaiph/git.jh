@@ -36,7 +36,7 @@ workflow commit {
 
   if not ensure has_changes {
     log "No changes to commit — skipping."
-    return
+    return ""
   }
 
   prompt "

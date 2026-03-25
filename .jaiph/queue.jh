@@ -18,7 +18,7 @@ script get_all_task_headers() {
     sub(/[[:space:]]*<!--.*$/, "")
     print
   }' "$qf")"
-  return "$headers"
+  printf '%s\n' "$headers"
 }
 
 script get_task_by_header() {
@@ -62,7 +62,7 @@ script get_task_by_header() {
     return 1
   fi
 
-  return "$task"
+  printf '%s\n' "$task"
 }
 
 script task_contains_dev_ready_marker() {
@@ -81,7 +81,7 @@ script first_header_line() {
     print
     exit
   }' "$1")"
-  return "$header"
+  printf '%s\n' "$header"
 }
 
 script arg_nonempty() {

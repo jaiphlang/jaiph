@@ -27,7 +27,7 @@ try {
       "",
     ].join("\n")
   );
-  const actual = normalize(transpileFile(input, root));
+  const actual = normalize(transpileFile(input, root).module);
   process.stdout.write(actual);
   process.stdout.write("\n");
 } finally {

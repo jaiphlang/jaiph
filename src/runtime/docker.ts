@@ -214,6 +214,18 @@ export function resolveImage(config: DockerRunConfig, workspaceRoot: string): st
 // Generated directory setup
 // ---------------------------------------------------------------------------
 
+function copyExecutableScriptsDir(scriptsSrc: string, generatedDir: string): void {
+  if (!existsSync(scriptsSrc)) return;
+  const scriptsDest = join(generatedDir, "scripts");
+  mkdirSync(scriptsDest, { recursive: true });
+  for (const name of readdirSync(scriptsSrc)) {
+    const sf = join(scriptsSrc, name);
+    if (statSync(sf).isFile()) {
+      copyFileSync(sf, join(scriptsDest, name));
+    }
+  }
+}
+
 /**
  * Create a temp directory with the transpiled script(s) and jaiph_stdlib.sh,
  * to be mounted read-only at /jaiph/generated/ inside the container.
@@ -236,8 +248,10 @@ export function prepareGeneratedDir(
         copyFileSync(full, dest);
       }
     }
+    copyExecutableScriptsDir(join(buildOutDir, "scripts"), generatedDir);
   } else {
     copyFileSync(builtScriptPath, join(generatedDir, basename(builtScriptPath)));
+    copyExecutableScriptsDir(join(dirname(builtScriptPath), "scripts"), generatedDir);
   }
 
   // Copy jaiph_stdlib.sh

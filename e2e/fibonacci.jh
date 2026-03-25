@@ -24,7 +24,7 @@ script fib() {
 
   local result
   result="$(fib_impl "$n")"
-  return "$result"
+  echo "$result"
 }
 
 workflow default {

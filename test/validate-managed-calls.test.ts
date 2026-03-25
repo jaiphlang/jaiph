@@ -12,7 +12,7 @@ test("E_VALIDATE: command substitution cannot call Jaiph function", () => {
       join(root, "m.jh"),
       [
         "script f() {",
-        "  return \"x\"",
+        "  printf '%s' 'x'",
         "}",
         "workflow default {",
         '  x="$(f)"',
@@ -33,7 +33,7 @@ test("E_VALIDATE: workflow shell cannot call function directly", () => {
       join(root, "m.jh"),
       [
         "script f() {",
-        "  return \"x\"",
+        "  printf '%s' 'x'",
         "}",
         "workflow default {",
         "  f",
@@ -55,7 +55,7 @@ test("build accepts run with local function and capture", () => {
       join(root, "m.jh"),
       [
         "script f() {",
-        "  return \"ok\"",
+        "  printf '%s' 'ok'",
         "}",
         "workflow default {",
         "  x = run f",

@@ -34,7 +34,7 @@ e2e::expect_stdout "${function_out}" <<'EOF'
 Jaiph: Running functions.jh
 
 workflow default
-  ▸ script changed_files
+  ▸ script changed_files (1="<script-path>")
   ✓ script changed_files (<time>)
 ✓ PASS workflow default (<time>)
 EOF
@@ -83,7 +83,7 @@ workflow default
   ▸ workflow called (1="one", 2="two words")
   ·   ▸ rule expect_args (1="one", 2="two words")
   ·   ✓ rule expect_args (<time>)
-  ·   ▸ script write_args (1="one", 2="two words")
+  ·   ▸ script write_args (1="<script-path>", 2="one", 3="two words")
   ·   ✓ script write_args (<time>)
   ✓ workflow called (<time>)
 ✓ PASS workflow default (<time>)

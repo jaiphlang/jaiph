@@ -20,6 +20,7 @@ if [[ ! -f "$jaiph_stdlib_path" ]]; then
 fi
 source "$jaiph_stdlib_path"
 export JAIPH_LIB="\${JAIPH_LIB:-\${JAIPH_WORKSPACE:-.}/.jaiph/lib}"
+export JAIPH_SCRIPTS="\${JAIPH_SCRIPTS:-$(cd "$(dirname "\${BASH_SOURCE[0]}")/scripts" && pwd)}"
 if [[ "$(jaiph__runtime_api)" != "1" ]]; then
   echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2
   exit 1
@@ -49,6 +50,7 @@ if [[ ! -f "$jaiph_stdlib_path" ]]; then
 fi
 source "$jaiph_stdlib_path"
 export JAIPH_LIB="\${JAIPH_LIB:-\${JAIPH_WORKSPACE:-.}/.jaiph/lib}"
+export JAIPH_SCRIPTS="\${JAIPH_SCRIPTS:-$(cd "$(dirname "\${BASH_SOURCE[0]}")/scripts" && pwd)}"
 if [[ "$(jaiph__runtime_api)" != "1" ]]; then
   echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2
   exit 1
@@ -120,6 +122,7 @@ if [[ ! -f "$jaiph_stdlib_path" ]]; then
 fi
 source "$jaiph_stdlib_path"
 export JAIPH_LIB="\${JAIPH_LIB:-\${JAIPH_WORKSPACE:-.}/.jaiph/lib}"
+export JAIPH_SCRIPTS="\${JAIPH_SCRIPTS:-$(cd "$(dirname "\${BASH_SOURCE[0]}")/scripts" && pwd)}"
 if [[ "$(jaiph__runtime_api)" != "1" ]]; then
   echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2
   exit 1
@@ -137,14 +140,8 @@ lang_redesign_smoke::always_ok() {
   jaiph::run_step lang_redesign_smoke::always_ok rule jaiph::execute_readonly lang_redesign_smoke::always_ok::impl "$@"
 }
 
-lang_redesign_smoke::noop::impl() {
-  set -eo pipefail
-  set +u
-  :
-}
-
 lang_redesign_smoke::noop() {
-  jaiph::run_step lang_redesign_smoke::noop script lang_redesign_smoke::noop::impl "$@"
+  jaiph::run_step lang_redesign_smoke::noop script "$JAIPH_SCRIPTS/noop" "$@"
 }
 
 noop() {
@@ -181,7 +178,7 @@ lang_redesign_smoke::wf_wait::impl() {
   set -eo pipefail
   set +u
   jaiph::emit_workflow_summary_event WORKFLOW_START 'wf_wait'
-  lang_redesign_smoke::noop &
+  jaiph::run_step lang_redesign_smoke::noop script "$JAIPH_SCRIPTS/noop" &
   wait
   jaiph::emit_workflow_summary_event WORKFLOW_END 'wf_wait'
 }
@@ -229,6 +226,7 @@ if [[ ! -f "$jaiph_stdlib_path" ]]; then
 fi
 source "$jaiph_stdlib_path"
 export JAIPH_LIB="\${JAIPH_LIB:-\${JAIPH_WORKSPACE:-.}/.jaiph/lib}"
+export JAIPH_SCRIPTS="\${JAIPH_SCRIPTS:-$(cd "$(dirname "\${BASH_SOURCE[0]}")/scripts" && pwd)}"
 if [[ "$(jaiph__runtime_api)" != "1" ]]; then
   echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2
   exit 1
@@ -315,6 +313,7 @@ if [[ ! -f "$jaiph_stdlib_path" ]]; then
 fi
 source "$jaiph_stdlib_path"
 export JAIPH_LIB="\${JAIPH_LIB:-\${JAIPH_WORKSPACE:-.}/.jaiph/lib}"
+export JAIPH_SCRIPTS="\${JAIPH_SCRIPTS:-$(cd "$(dirname "\${BASH_SOURCE[0]}")/../scripts" && pwd)}"
 if [[ "$(jaiph__runtime_api)" != "1" ]]; then
   echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2
   exit 1

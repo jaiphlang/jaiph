@@ -164,7 +164,7 @@ script first_line_task() {
   line="$(first_line "$1")"
   line="${line#\#\# }"
   line="${line%% <!--*}"
-  return "$line"
+  printf '%s\n' "$line"
 }
 
 workflow classify_role {

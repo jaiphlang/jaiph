@@ -36,6 +36,7 @@ TEST_SCRIPTS=(
   "e2e/tests/90_function_steps.sh"
   "e2e/tests/91_inbox_dispatch.sh"
   "e2e/tests/91_top_level_local.sh"
+  "e2e/tests/92_custom_shebang_polyglot.sh"
   "e2e/tests/92_log_logerr.sh"
   "e2e/tests/94_parallel_shell_steps.sh"
   "e2e/tests/95_say_hello_failure_output.sh"

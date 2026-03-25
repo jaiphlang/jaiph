@@ -197,6 +197,26 @@ test("prepareGeneratedDir: copies script and stdlib", () => {
   }
 });
 
+test("prepareGeneratedDir: copies adjacent scripts/ for single-file layout", () => {
+  const srcDir = mkdtempSync(join(tmpdir(), "jaiph-docker-test-src-"));
+  try {
+    writeFileSync(join(srcDir, "main.sh"), "#!/bin/bash\necho hello");
+    mkdirSync(join(srcDir, "scripts"));
+    writeFileSync(join(srcDir, "scripts", "foo"), "#!/usr/bin/env bash\necho foo");
+    writeFileSync(join(srcDir, "jaiph_stdlib.sh"), "# stdlib");
+
+    const genDir = prepareGeneratedDir(join(srcDir, "main.sh"), join(srcDir, "jaiph_stdlib.sh"));
+    try {
+      assert.ok(existsSync(join(genDir, "scripts", "foo")));
+      assert.equal(readFileSync(join(genDir, "scripts", "foo"), "utf8"), "#!/usr/bin/env bash\necho foo");
+    } finally {
+      rmSync(genDir, { recursive: true, force: true });
+    }
+  } finally {
+    rmSync(srcDir, { recursive: true, force: true });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // buildDockerArgs
 // ---------------------------------------------------------------------------
