@@ -113,6 +113,20 @@ When adding a new source module or extending an existing one, follow this patter
 
 After parse, the transpiler checks that `ensure` and `run` targets (and related refs, such as send right-hand sides) resolve to symbols of the right kind in the current or imported module. That logic lives in **`src/transpile/validate.ts`** (`validateReferences` and friends), with the shared **local vs `alias.name` resolution**, **wrong-kind** messages, and **`lookupKind`** extracted to **`src/transpile/validate-ref-resolution.ts`** (`validateRef` plus small message bundles per call site). If you change validation behavior, treat **exact `E_VALIDATE` strings** as part of the public contract unless you are deliberately shipping a breaking change — verify with `npm test`, compiler golden tests, and `npm run test:e2e`.
 
+### Workflow module emission
+
+After validation, each compiled workflow module becomes one bash script. Ownership is split so no single file grows into an unmaintainable monolith (see **Short files** under [Code philosophy](#code-philosophy) and Implementation Plan **0b** in `.jaiph/language_redesign_spec.md`).
+
+| Source module | Responsibility |
+|---------------|----------------|
+| `emit-workflow.ts` | `emitWorkflow(...)` — shebang and stdlib bootstrap, metadata exports, env shims, inbox routes, orchestrates emission, then the main workflow `::impl` and entry dispatcher |
+| `emit-rule.ts` | `emitRuleFunctions(...)` — iterates `ast.rules`, emits each rule's `::impl` and readonly wrapper |
+| `emit-script.ts` | `emitScriptFunctions(...)` — iterates `ast.functions`, emits bash for top-level **`function`** blocks (Jaiph still calls these *functions* in the language) |
+| `emit-workflow-helpers.ts` | Metadata-to-env assignment helpers, scoped-metadata `push`/`pop`, `bashSingleQuotedSegment`, top-level env reference expansion |
+| `emit-steps.ts` | `emitStep` and related helpers — individual Jaiph steps inside workflows and rules |
+
+Moving logic between these modules is an internal refactor: **generated bash should stay byte-identical** unless you intend to change the transpiler contract. Use `npm test` (including `compiler-golden.test.ts` and fixture snapshots) and `npm run test:e2e` the same way as for any other emitter edit.
+
 ### Other test files in `test/`
 
 Some files in `test/` don't follow the strict one-file-per-module layout. They exercise integration behavior, subprocesses, or acceptance-style scenarios:
