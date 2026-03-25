@@ -460,7 +460,8 @@ Jaiph: Running async.jh
 
                     <dt><code>log "message"</code> · <code>logerr "message"</code></dt>
                     <dd>Emit informational or error output to the run tree while keeping workflow execution explicit and
-                        auditable.</dd>
+                        auditable. Terminal and tree text use <code>echo -e</code>-style backslash escapes; structured
+                        <code>LOG</code> / <code>LOGERR</code> payloads keep the raw message string.</dd>
 
                     <dt><code>channel &lt;name&gt;</code> · <code>channel_ref &lt;- ...</code> ·
                         <code>channel_ref -&gt; workflow</code></dt>

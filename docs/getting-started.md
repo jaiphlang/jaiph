@@ -179,7 +179,7 @@ Jaiph source files use **`.jh`** (recommended); **`.jph`** is still accepted. A 
 - `prompt "..."` — Send text to the configured agent. Optional `returns '{ field: type }'` for validated JSON responses. See [Grammar](grammar.md).
 - `name = <step>` / `const name = <step>` — Capture or bind: for **`ensure`** and **`run` to a workflow**, the callee’s explicit **`return "…"`**; for **`run` to a function**, **stdout**; for **`prompt`**, the final answer; **`const`** RHS allows only simple value forms (no `$(...)` — use `run` to a function). See [Grammar](grammar.md#step-output-contract).
 - `fail "reason"` — Abort the workflow or fail the rule with a message on stderr (non-zero exit).
-- `log "message"` / `logerr "message"` — Display a message in the progress tree (stdout / stderr).
+- `log "message"` / `logerr "message"` — Display a message in the progress tree and on stdout/stderr; terminal output interprets backslash escapes like **`echo -e`** (`\n`, `\t`, …). Event and summary JSON still record the raw message string.
 - `channel <- …` / `channel -> workflow` — Send (RHS: literal, `$var`, or `run fn`) and route messages between workflows. See [Inbox & Dispatch](inbox.md).
 - `run ref &` / `wait` — Background managed runs and join with a **`wait`** step. Use **`function`** + **`run`** for bash background jobs. See [Grammar](grammar.md).
 - `if [not] ensure ref { ... }` / `if [not] run ref { ... }` — **Brace-only** conditionals (`else if`, `else` supported). Use **`run`** to a function for command-style tests.

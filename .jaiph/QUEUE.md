@@ -6,27 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Fix log/logerr to interpret escape sequences <!-- dev-ready -->
-
-**Problem.** `log` and `logerr` use `echo "$message"` for terminal output, which does not interpret escape sequences like `\n`, `\t`, etc. A `log "line1\nline2"` prints the literal string `line1\nline2` instead of two lines.
-
-**Goal.** `log` and `logerr` should behave like `echo -e` — interpreting backslash escape sequences in the message.
-
-**Scope.**
-
-1. In `src/runtime/events.sh`, change the output line in `jaiph::log()` (line ~181) from `echo "$message"` to `echo -e "$message"`.
-2. Same change in `jaiph::logerr()` for its stderr output line.
-3. Verify the JSON event payloads (`jaiph::json_escape`) still handle the raw message correctly (they use `printf` with `%s`, which is fine — the escaping is only for the human-readable terminal output).
-
-**Acceptance criteria.**
-
-- `log "line1\nline2"` prints two lines to stdout.
-- `logerr "err1\terr2"` prints tab-separated output to stderr.
-- JSON event payloads contain the raw message with literal `\n` (no double-interpretation).
-- Existing e2e tests pass.
-
----
-
 ## Refactor validate.ts — collapse duplicate ref resolution <!-- dev-ready -->
 
 **Spec**: `.jaiph/language_redesign_spec.md` — Implementation Plan Phase 0a.

@@ -116,6 +116,8 @@ If a `.jh` or `.jph` file is executable and has `#!/usr/bin/env jaiph`, you can 
 
 During `jaiph run`, the CLI renders a tree of steps. **Shared in TTY and non-TTY:** each step appears as a line with a marker (▸ when started, ✓/✗ when done), the step kind (`workflow`, `prompt`, `function`, `rule`), and the step name. **`log` messages** also appear inline in the tree at the correct indentation depth — they have no marker, spinner, or timing; just the `ℹ` symbol (dim/gray) followed by the message text. **Completion lines include the step kind and name** so that each line is self-identifying even when multiple steps run concurrently (e.g. `✓ workflow scanner (0s)`, `✗ rule ci_passes (11s)`). The root PASS/FAIL summary retains its existing format (`✓ PASS workflow default (0.2s)`). There are no per-step live elapsed counters or in-place updates on the start/completion tree lines themselves.
 
+**`log` / `logerr` and backslash escapes:** The string shown after `ℹ` / `!`, and the bytes written to stdout/stderr for those keywords, follow **`echo -e`** semantics after Jaiph/bash quoting and variable expansion — e.g. a literal `\n` or `\t` in the message becomes a newline or tab in the tree and on the streams. **`LOG` / `LOGERR`** JSON on stderr (and the **`message`** field in `run_summary.jsonl`) still carries the **unexpanded** shell string: the runtime only applies `jaiph::json_escape` for JSON, so consumers do not see a second round of escape interpretation.
+
 **TTY only:** One extra line at the bottom shows which workflow is running and total elapsed: `▸ RUNNING workflow <name> (X.Xs)` — `▸ RUNNING` in yellow, `workflow` in bold, workflow name in default style, time in dim. This line is the **only** line updated in place (every second). When the run completes, that line is cleared and replaced by the final PASS/FAIL line.
 
 **Non-TTY** (stdout not a TTY — CI, pipes, log capture): No RUNNING line and no in-place updates. Step start lines (▸) and completion lines (✓/✗) still print as they occur. **Long-running steps** additionally print **status heartbeat** lines so a quiet stretch between ▸ and ✓ does not look like a hang:
@@ -154,7 +156,7 @@ response = prompt "Summarize the report"
 log "$response"
 ```
 
-The `log` line renders inline at the correct depth as `ℹ <message>` (dim/gray) and writes to **stdout**. The `logerr` variant renders as `! <message>` in red and writes to **stderr**. The step's `.out` file in `.jaiph/runs/` still contains the full agent transcript for debugging.
+The `log` line renders inline at the correct depth as `ℹ <message>` (dim/gray) and writes to **stdout**. The `logerr` variant renders as `! <message>` in red and writes to **stderr**. (As above, the displayed/streamed text uses **`echo -e`**; event JSON keeps the raw string.) The step's `.out` file in `.jaiph/runs/` still contains the full agent transcript for debugging.
 
 ### Run artifacts and live output
 
@@ -215,7 +217,7 @@ Semantics and notes:
 
 - **`WORKFLOW_START` / `WORKFLOW_END`:** Mark entry and exit of a workflow body (`workflow` is the declared name; `source` is the `.jh` basename when the runtime set `JAIPH_SOURCE_FILE`).
 - **`STEP_START` / `STEP_END`:** Mirror stderr step events; persisted payloads include **`event_version`**. `STEP_END` may include **`out_content`** / **`err_content`** (embedded artifact text, size-capped; see runtime).
-- **`LOG` / `LOGERR`:** Emitted by the `log` / `logerr` keywords; **`depth`** is the step-stack depth at emission (integer).
+- **`LOG` / `LOGERR`:** Emitted by the `log` / `logerr` keywords; **`depth`** is the step-stack depth at emission (integer). **`message`** is the log text as a JSON string — the shell string before terminal **`echo -e`** expansion (same value the runtime passes to `jaiph::json_escape`).
 - **`INBOX_ENQUEUE`:** Recorded when a message is queued; **`payload_preview`** is a UTF-8-safe JSON string (prefix up to 4096 bytes of body; if truncated, ends with `...`). **`payload_ref`** is JSON `null` when the full body fits in the preview, otherwise a run-relative path such as `inbox/001-channel.txt`.
 - **`INBOX_DISPATCH_START` / `INBOX_DISPATCH_COMPLETE`:** Wrap one invocation of a route target. **`status`** is the process exit code; **`elapsed_ms`** is wall time for that dispatch.
 

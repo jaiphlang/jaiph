@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseLogEvent, parseStepEvent } from "../src/cli/run/events";
 
@@ -210,4 +212,38 @@ test("parseStepEvent: STEP_END with tabs and ANSI in out_content via runtime jso
   const parsed = parseStepEvent(line);
   assert.ok(parsed, "expected parseStepEvent to accept runtime-escaped STEP_END JSON");
   assert.equal(parsed!.out_content, "a\tb\x1b[0mc");
+});
+
+// log / logerr use echo -e for TTY output; JSON payloads still carry the raw message (no echo -e on json_escape input).
+test("jaiph::log and jaiph::logerr: echo -e for stdout/stderr; LOG JSON message stays literal backslash escapes", () => {
+  const eventsSh = join(process.cwd(), "src/runtime/events.sh");
+  const dir = mkdtempSync(join(tmpdir(), "jaiph-log-escape-"));
+  const stdoutPath = join(dir, "stdout.txt");
+  const stderrPath = join(dir, "stderr.txt");
+  const eventsPath = join(dir, "events.txt");
+  try {
+    const script = [
+      `exec 3>${bashSingleQuoted(eventsPath)}`,
+      `jaiph::step_stack_depth() { printf "0"; }`,
+      `source ${bashSingleQuoted(eventsSh)}`,
+      `jaiph::log "line1\\nline2" >${bashSingleQuoted(stdoutPath)}`,
+      `jaiph::logerr "err1\\terr2" 2>${bashSingleQuoted(stderrPath)}`,
+    ].join("\n");
+    const r = spawnSync("bash", ["-c", script], { encoding: "utf8" });
+    assert.equal(r.status, 0, r.stderr);
+    const out = readFileSync(stdoutPath, "utf8");
+    assert.equal(out, "line1\nline2\n");
+    const err = readFileSync(stderrPath, "utf8");
+    assert.equal(err, "err1\terr2\n");
+    const evLines = readFileSync(eventsPath, "utf8").trimEnd().split("\n");
+    assert.equal(evLines.length, 2);
+    const logParsed = parseLogEvent(evLines[0]!);
+    const logerrParsed = parseLogEvent(evLines[1]!);
+    assert.ok(logParsed);
+    assert.ok(logerrParsed);
+    assert.equal(logParsed!.message, "line1\\nline2");
+    assert.equal(logerrParsed!.message, "err1\\terr2");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
