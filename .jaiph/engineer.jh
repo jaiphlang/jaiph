@@ -158,7 +158,11 @@ function task_text_has_header() {
 
 function first_line_task() {
   source "${JAIPH_LIB}/strings.sh"
-  first_line "$1"
+  local line
+  line="$(first_line "$1")"
+  line="${line#\#\# }"
+  line="${line%% <!--*}"
+  return "$line"
 }
 
 workflow classify_role {

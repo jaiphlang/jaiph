@@ -4,7 +4,7 @@
 
 Jaiph blends declarative orchestration with raw shell in workflows and rules. That blurs side-effect boundaries, blocks runtime portability (Go/Rust), and weakens sandbox control.
 
-Target: one strict boundary. Orchestration constructs orchestrate. A dedicated bash construct executes. No exceptions.
+Target: one strict boundary. Orchestration constructs orchestrate. A dedicated script construct executes. No exceptions.
 
 ## Design Decisions (Locked)
 
@@ -13,18 +13,20 @@ These are not options. Implementation starts from this table.
 | # | Decision |
 |---|----------|
 | 1 | Orchestration constructs (`workflow`, `rule`) contain **zero raw shell**. |
-| 2 | Execution construct (`function`) is **pure bash**. |
-| 3 | Construct name stays **`function`** (not `bash`). |
-| 4 | Variable declarations use **`const`** in orchestration, **`local`** in functions. |
+| 2 | Execution construct (`script`) is a **standalone executable** — bash by default, any language via custom shebang. |
+| 3 | Construct name is **`script`** (not `function` or `bash`). |
+| 4 | Variable declarations use **`const`** in orchestration, **`local`** in scripts. |
 | 5 | Rules get **structured keyword parsing** (same model as workflows, restricted subset). |
-| 6 | Every shell operation requires a **named `function`**. No anonymous bash blocks. |
-| 7 | Functions: **bash return semantics** (exit code via `return N`, values via stdout). |
+| 6 | Every shell operation requires a **named `script`**. No anonymous bash blocks. |
+| 7 | Scripts: **standard exit semantics** (exit code via `return N`/`exit N`, values via stdout). |
 | 8 | Workflows/rules: **`return "value"`** for values, **`fail "reason"`** for explicit failures. |
 | 9 | **One-shot cutover.** No compatibility mode, no deprecation warnings. |
-| 10 | Functions run in **full isolation** — only positional args, no inherited variables. |
-| 11 | **No function-to-function calls.** Functions are atomic. Composition happens in orchestration. |
-| 12 | Shared utility code lives in **shared bash libraries** (sourced explicitly), not in Jaiph function cross-calls. |
+| 10 | Scripts run in **full isolation** — only positional args, no inherited variables. |
+| 11 | **No script-to-script calls.** Scripts are atomic. Composition happens in orchestration. |
+| 12 | Shared utility code lives in **shared bash libraries** (sourced explicitly in bash scripts), not in Jaiph script cross-calls. |
 | 13 | `if` uses **brace syntax** (`if ... { } else { }`), **`not`** for negation, **`else if`** for chaining. No `then`/`fi`/`elif`. |
+| 14 | Scripts transpile to **separate executable files** with `+x` permission. |
+| 15 | Default shebang is `#!/usr/bin/env bash`. User can provide a custom shebang as the first line of the script body (e.g. `#!/usr/bin/env node`). |
 
 ## Legality Matrix
 
@@ -53,49 +55,91 @@ These are not options. Implementation starts from this table.
 |-----------|---------|--------|
 | const | Yes | `const name = "value"` / `const name = run ref` / `const name = ensure ref` (no `prompt` capture) |
 | ensure | Yes | `ensure ref [args]` — other rules only, **no `recover`** |
-| run | Yes | `run ref [args]` — **functions only**, not workflows |
+| run | Yes | `run ref [args]` — **scripts only**, not workflows |
 | log | Yes | `log "message"` |
 | logerr | Yes | `logerr "message"` |
 | return | Yes | `return "value"` / `return $var` |
 | fail | Yes | `fail "reason"` |
-| if | Yes | `if [not] ensure ref { ... }` / `if [not] run ref { ... }` (run targets functions only) |
+| if | Yes | `if [not] ensure ref { ... }` / `if [not] run ref { ... }` (run targets scripts only) |
 | prompt | **No** | Rules don't interact with AI |
 | route / send | **No** | Rules don't use channels |
 | async (`&`, `wait`) | **No** | |
 | recover (in `ensure`) | **No** | Not in rule-to-rule calls |
 | Raw shell | **No** | Hard parser error |
 
-### `function`
+### `script`
 
 | Construct | Allowed | Syntax |
 |-----------|---------|--------|
-| All bash syntax | Yes | Full bash including control flow, pipes, subshells |
-| Nested bash functions | Yes | `helper() { ... }` (internal to the function body) |
-| `source` shared lib | Yes | `source "$JAIPH_LIB/utils.sh"` |
-| `return N` | Yes | Bash exit code (integer only) |
+| Custom shebang | Yes | `#!/usr/bin/env node` (first line of body; omit for default `#!/usr/bin/env bash`) |
+| All body content | Yes | Full language content matching the shebang (bash by default) |
+| Nested bash functions | Yes (bash) | `helper() { ... }` (internal to the script body) |
+| `source` shared lib | Yes (bash) | `source "$JAIPH_LIB/utils.sh"` |
+| `return N` / `exit N` | Yes (bash) | Exit code (integer only) |
 | stdout (`echo`, `printf`) | Yes | Value output mechanism |
-| `local` | Yes | Bash variable declarations |
-| Other Jaiph function calls | **No** | Functions are atomic; compose in orchestration |
-| `run`, `ensure`, `prompt` | **No** | Hard parser error |
-| `return "value"` | **No** | Use `echo` for values, `return 0` for success |
-| `fail`, `const`, `log`, `logerr` | **No** | Jaiph keywords, not available in bash |
-| Parent scope variables | **No** | Full isolation — only `$1`, `$2`, etc. |
+| `local` | Yes (bash) | Bash variable declarations |
+| Other Jaiph script calls | **No** | Scripts are atomic; compose in orchestration |
+| `run`, `ensure`, `prompt` | **No** | Hard parser error (bash scripts only; skipped for custom shebangs) |
+| `return "value"` | **No** | Use `echo` for values, `return 0` for success (bash scripts only) |
+| `fail`, `const`, `log`, `logerr` | **No** | Jaiph keywords, not available in scripts (bash scripts only; skipped for custom shebangs) |
+| Parent scope variables | **No** | Full isolation — only positional args |
 
-## Function Isolation Model
+**Jaiph keyword guard**: for bash scripts (no shebang or `#!/usr/bin/env bash`), the parser rejects Jaiph-level keywords (`run`, `ensure`, `fail`, `const`, `log`, `logerr`, `prompt`) in the body. For custom shebangs (e.g. `#!/usr/bin/env node`), the guard is skipped — the user owns the body entirely.
 
-Functions execute in **full isolation**. They receive only their positional arguments. No inherited variables from the orchestration scope, module-level constants, or other functions' state.
+## Script Isolation and Transpilation Model
 
-**Transpilation**: function bodies run in a clean environment. Only positional args and explicitly passed env vars are available. Implementation: `env -i` wrapper or equivalent restricted execution context.
+Scripts execute in **full isolation**. They receive only their positional arguments. No inherited variables from the orchestration scope, module-level constants, or other scripts' state.
+
+### Transpilation to separate files
+
+Each `script` block transpiles to a **standalone executable file** in the build output:
+
+```
+build/
+  scripts/
+    check_is_number        # #!/usr/bin/env bash, +x
+    check_json_schema      # #!/usr/bin/env node, +x
+    select_role            # #!/usr/bin/env bash, +x
+  module_name.sh           # orchestration (workflows + rules)
+```
+
+The transpiler:
+1. Extracts each `script` body verbatim
+2. Prepends the shebang (user-provided or default `#!/usr/bin/env bash`)
+3. Writes to `build/scripts/<name>` with `chmod +x`
+4. In the module `.sh`, script calls become: `"$JAIPH_SCRIPTS/<name>" "$@"`
+
+The runtime sets `$JAIPH_SCRIPTS` to the build output scripts directory.
+
+### Shebang syntax
+
+The first non-empty line of the script body is checked for `#!`. If present, it becomes the file's shebang. If absent, `#!/usr/bin/env bash` is used.
+
+```
+script check_json() {
+  #!/usr/bin/env node
+  const data = JSON.parse(process.argv[2]);
+  process.exit(data.valid ? 0 : 1);
+}
+
+script check_is_number() {
+  [[ "$1" =~ ^[0-9]+$ ]]
+}
+```
+
+### Data flow
 
 **Data flow is always explicit**:
 - **Input**: positional arguments only (`$1`, `$2`, ...)
 - **Output**: stdout (value), stderr (diagnostics), exit code (success/failure)
-- **No side channel**: functions cannot read `const` variables from workflows/rules
+- **No side channel**: scripts cannot read `const` variables from workflows/rules
 
-**Shared utility code**: functions that need common logic `source` a shared bash library rather than calling other Jaiph functions. Libraries live in a conventional location (e.g. `.jaiph/lib/`) and are plain bash files.
+### Shared utility code (bash scripts only)
+
+Scripts that need common logic `source` a shared bash library rather than calling other Jaiph scripts. Libraries live in a conventional location (e.g. `.jaiph/lib/`) and are plain bash files.
 
 ```
-function check_is_number() {
+script check_is_number() {
   source "$JAIPH_LIB/validators.sh"
   is_integer "$1"
 }
@@ -103,15 +147,17 @@ function check_is_number() {
 
 The runtime sets `$JAIPH_LIB` to the project's shared library path. Libraries are not Jaiph constructs — they are plain bash, managed outside the Jaiph compiler.
 
+Non-bash scripts use their language's own module system for shared code.
+
 ## Semantics: Values, Returns, Failures
 
-### Functions (pure bash, isolated)
+### Scripts (isolated, standalone executables)
 
-Values are passed via **stdout**. Caller captures with `const result = run fn_name`.
+Values are passed via **stdout**. Caller captures with `const result = run script_name`.
 
-Exit code determines success/failure: `return 0` = success, `return 1` = failure.
+Exit code determines success/failure: `return 0` / `exit 0` = success, `return 1` / `exit 1` = failure.
 
-The existing `jaiph::set_return_value` mechanism is **removed** from function transpilation. `return "$string"` in a function body is a **parser error** (bash `return` only accepts integers).
+The existing `jaiph::set_return_value` mechanism is **removed** from script transpilation. `return "$string"` in a bash script body is a **parser error** (bash `return` only accepts integers).
 
 ### Workflows
 
@@ -129,11 +175,11 @@ Exit code: 0 on natural completion or `return`. Non-zero on `fail` or unrecovere
 
 A rule that completes without hitting `fail` passes.
 
-### `fail` vs bash failure
+### `fail` vs script failure
 
 | Context | How to fail | How to return a value |
 |---------|-------------|----------------------|
-| `function` | `return 1` / `exit 1` | `echo "value"` (stdout) |
+| `script` | `return 1` / `exit 1` | `echo "value"` (stdout) |
 | `workflow` | `fail "reason"` | `return "value"` |
 | `rule` | `fail "reason"` | `return "value"` |
 
@@ -155,7 +201,7 @@ rule ensure_is_number {
 After:
 
 ```
-function check_is_number() {
+script check_is_number() {
   [[ "$1" =~ ^[0-9]+$ ]]
 }
 
@@ -166,7 +212,7 @@ rule ensure_is_number {
 }
 ```
 
-### Workflow: inline shell → named function
+### Workflow: inline shell → named script
 
 Before:
 
@@ -190,7 +236,7 @@ workflow default {
 }
 ```
 
-### Function: return value via stdout (not `jaiph::set_return_value`)
+### Script: return value via stdout (not `jaiph::set_return_value`)
 
 Before:
 
@@ -205,7 +251,7 @@ function fib() {
 After:
 
 ```
-function fib() {
+script fib() {
   fib_impl() {
     local x="$1"
     if [ "$x" -le 1 ]; then
@@ -222,6 +268,30 @@ function fib() {
 ```
 
 All data is internal. Caller captures via `const result = run fib "$n"`.
+
+### Polyglot script: Node.js validation
+
+```
+script validate_json_schema() {
+  #!/usr/bin/env node
+  const Ajv = require('ajv');
+  const fs = require('fs');
+  const ajv = new Ajv();
+  const schema = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+  const data = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
+  const valid = ajv.validate(schema, data);
+  if (!valid) {
+    console.error(JSON.stringify(ajv.errors));
+    process.exit(1);
+  }
+}
+
+workflow validate_config {
+  ensure config_file_exists
+  const result = run validate_json_schema "schema.json" "config.json"
+  log "Config validated successfully"
+}
+```
 
 ### Prompt with `returns` + value dispatch (engineer.jh pattern)
 
@@ -246,7 +316,7 @@ workflow implement {
 After:
 
 ```
-function select_role() {
+script select_role() {
   local role_surgical='<role>
     You are a surgical engineer. ...
   </role>'
@@ -274,7 +344,7 @@ workflow implement {
 }
 ```
 
-Role data is internal to the function. Orchestration only passes the role name and receives the resolved text. Full isolation — function has zero knowledge of caller scope.
+Role data is internal to the script. Orchestration only passes the role name and receives the resolved text. Full isolation — script has zero knowledge of caller scope.
 
 ### Send operator
 
@@ -308,7 +378,7 @@ rule echo_line {
 After:
 
 ```
-function echo_impl() {
+script echo_impl() {
   echo "this goes to logs only" >&2
 }
 
@@ -328,24 +398,24 @@ Every `.jh` file was scanned. Below are all patterns found that require migratio
 
 **Examples**: `echo "..."`, `printf`, `mkdir -p`, `rm -f`, `exit 0`, `exit 1`, `test -n`, bare assignment (`dataset="testdata"`)
 
-**Migration**: each becomes a named `function` or a `const` declaration. `exit 0` → `return` (early success). `exit 1` → `fail "reason"`.
+**Migration**: each becomes a named `script` or a `const` declaration. `exit 0` → `return` (early success). `exit 1` → `fail "reason"`.
 
 ### P2: Raw shell in rules (every rule)
 
 **Files**: git.jh (`git rev-parse`, `test -z "$(git status)"`), queue.jh (`echo | grep -q`), ensure_ci_passes.jh (`npm run test:ci`), docs_parity.jh (`test -f`, `while IFS= read`), simplifier.jh, say_hello.jh, say_hello_json.jh, current_branch.jh
 
-**Migration**: shell logic moves to functions. Rules become structured: `run` the function, `if`/`fail` on the result.
+**Migration**: shell logic moves to scripts. Rules become structured: `run` the script, `if`/`fail` on the result.
 
 ### P3: Iteration in workflows
 
 **Files**: architect_review.jh (`while IFS= read -r header; do ... done <<< "$headers"`), docs_parity.jh (`for f in docs/*.md`, `for f in "${docs_md_files[@]}"`).
 
-**Problem**: the loop body contains orchestration keywords (`run`, `ensure`, `prompt`, `log`). Cannot be pushed to a function.
+**Problem**: the loop body contains orchestration keywords (`run`, `ensure`, `prompt`, `log`). Cannot be pushed to a script.
 
-**Resolution**: use **workflow recursion**. Extract per-item logic into a workflow, then recurse over the list. Shared utility functions `first_line` and `rest_lines` (in `$JAIPH_LIB`) split newline-delimited lists.
+**Resolution**: use **workflow recursion**. Extract per-item logic into a workflow, then recurse over the list. Shared utility scripts `first_line` and `rest_lines` (in `$JAIPH_LIB`) split newline-delimited lists.
 
 ```
-function list_docs_files() {
+script list_docs_files() {
   for f in docs/*.md; do
     echo "$f"
   done
@@ -384,7 +454,7 @@ run docs_page each $docs_files
 
 **File**: docs_parity.jh — builds arrays dynamically (`local files=()`, `files+=("$f")`), passes them as args (`"${files[@]}"`).
 
-**Resolution**: avoid arrays in orchestration. Represent lists as newline-delimited strings. Functions that need to process multiple items receive them as a single string argument. Glob expansion (`docs/*.md`) stays in functions.
+**Resolution**: avoid arrays in orchestration. Represent lists as newline-delimited strings. Scripts that need to process multiple items receive them as a single string argument. Glob expansion (`docs/*.md`) stays in scripts.
 
 ### P5: Mutable variables in workflows
 
@@ -429,14 +499,14 @@ No mutable counter. The source of truth is the queue state, not a variable.
 
 **Files**: architect_review.jh (`[[ "$verdict" == "dev-ready" ]]`), engineer.jh (role name dispatch), git.jh (`[ -z "$role_name" ]`).
 
-**Resolution**: push to functions under Path 1.
+**Resolution**: push to scripts.
 
 ```
-function matches() {
+script matches() {
   [ "$1" = "$2" ]
 }
 
-function has_value() {
+script has_value() {
   [ -n "$1" ]
 }
 
@@ -445,9 +515,9 @@ if run matches "$verdict" "dev-ready" {
 }
 ```
 
-These are small, reusable utility functions. Candidates for a shared library (`$JAIPH_LIB/checks.sh`).
+These are small, reusable utility scripts. Candidates for a shared library (`$JAIPH_LIB/checks.sh`).
 
-### P7: `return "$(command)"` in functions (Jaiph value return)
+### P7: `return "$(command)"` in scripts (Jaiph value return)
 
 **Files**: queue.jh (`return "$(awk ...)"`), docs_parity.jh (`return "$(git diff ...)"`), simplifier.jh (same pattern).
 
@@ -476,14 +546,14 @@ rule name_was_provided {
 
 **File**: ensure_ci_passes.jh — `recover` block contains `echo "$1" > "$ci_log_file"`, shell conditionals, and a `prompt`.
 
-**Migration**: shell in recover body moves to functions. `prompt` stays (recover body follows workflow rules):
+**Migration**: shell in recover body moves to scripts. `prompt` stays (recover body follows workflow rules):
 
 ```
-function save_ci_log() {
+script save_ci_log() {
   echo "$1" > "$2"
 }
 
-function ci_log_exists() {
+script ci_log_exists() {
   [ -s "$1" ]
 }
 
@@ -507,23 +577,23 @@ workflow ensure_ci_passes {
 
 **Files**: multiple — `"${1:-10}"`, `"${1:-}"`, `"${task%%$'\n'*}"`.
 
-**Ruling**: simple interpolation (`$var`, `"${var:-default}"`) is allowed in `const` RHS — these are value lookups, not computation. Bash string operations (`${var%%pattern}`, `${var//old/new}`) are computation — push to a function.
+**Ruling**: simple interpolation (`$var`, `"${var:-default}"`) is allowed in `const` RHS — these are value lookups, not computation. Bash string operations (`${var%%pattern}`, `${var//old/new}`) are computation — push to a script.
 
-| Allowed in `const` RHS | Not allowed (use function) |
+| Allowed in `const` RHS | Not allowed (use script) |
 |------------------------|---------------------------|
 | `"$var"` | `"${var%%pattern}"` |
 | `"${var:-default}"` | `"${var//old/new}"` |
 | `"${var:+alt}"` | `"${#var}"` |
 | `"literal"` | `$(command)` |
 
-### P11: Function-to-function calls
+### P11: Script-to-script calls
 
-**File**: docs_parity.jh — rule `only_expected_docs_changed_after_prompt` calls function `is_allowed_file` directly.
+**File**: docs_parity.jh — rule `only_expected_docs_changed_after_prompt` calls script `is_allowed_file` directly.
 
-**Migration**: under full isolation + no fn-to-fn calls, inline the logic or use a shared lib:
+**Migration**: under full isolation + no script-to-script calls, inline the logic or use a shared lib:
 
 ```
-function check_only_expected_changed() {
+script check_only_expected_changed() {
   source "$JAIPH_LIB/file_checks.sh"
   local allowed="$1"
   local changed="$2"
@@ -539,6 +609,19 @@ function check_only_expected_changed() {
 ```
 
 ## Implementation Plan
+
+### Phase 0: Architectural prep (before breaking changes)
+
+**0a. Refactor `validate.ts` — collapse duplicate ref resolution**
+- Merge `validateRuleRef`, `validateWorkflowRef`, `validateRunInRuleRef`, `validateRunTargetRef`, `validateBareSendSymbol` into one generic `validateRef(ref, allowedKinds, context)` function
+- Target: 788 → ~400 lines
+- Zero behavior change
+
+**0b. Split `emit-workflow.ts` — separate emitters**
+- Extract script emission into `emit-script.ts`
+- Extract rule emission into `emit-rule.ts`
+- `emit-workflow.ts` becomes orchestration-only assembly
+- Creates natural seam for Phase 3 (separate script files)
 
 ### Phase 1: Language additions (no breaking changes)
 
@@ -572,40 +655,68 @@ function check_only_expected_changed() {
 **2b. Update rule emission**
 - `emit-workflow.ts`: handle structured rule steps instead of opaque command strings
 
-### Phase 3: Function isolation
+### Phase 3: `function` → `script` rename and separate file transpilation
 
-**3a. Implement full isolation for function execution**
-- Transpile function calls to run in a clean environment (only positional args)
+**3a. Rename keyword**
+- Parser: accept `script` keyword instead of `function`
+- AST: rename `FunctionDef` → `ScriptDef`, add `shebang?: string` field
+- `jaiphModule`: rename `functions` → `scripts`
+- Update all validator references
+
+**3b. Add shebang extraction**
+- Parser: check first non-empty line of script body for `#!`
+- If present, store in `ScriptDef.shebang` and exclude from body commands
+- If absent, `shebang` remains `undefined` (default `#!/usr/bin/env bash`)
+
+**3c. Conditional keyword guard**
+- For bash scripts (no shebang or bash shebang): keep existing Jaiph keyword rejection
+- For custom shebangs: skip keyword guard entirely
+
+**3d. Emit scripts as separate files**
+- Change `emitWorkflow` return type: `{ module: string; scripts: ScriptFile[] }` where `ScriptFile = { name: string; content: string; shebang: string }`
+- Module `.sh` calls scripts via `"$JAIPH_SCRIPTS/<name>" "$@"`
+- `build.ts`: write script files with `chmod +x`, set `$JAIPH_SCRIPTS`
+
+**3e. Update all first-party `.jh` files**
+- Rename `function` → `script` in all `.jaiph/*.jh` files
+- Rename in all `e2e/*.jh` fixtures
+- Update test fixtures and golden outputs
+
+### Phase 4: Script isolation
+
+**4a. Implement full isolation for script execution**
+- Scripts run as separate processes (inherent from separate files + exec)
+- Only positional args available (inherent from separate executable)
 - Set `$JAIPH_LIB` env var for shared library access
-- Validate that no function body references Jaiph-level symbols
+- Set `$JAIPH_SCRIPTS` env var for build output scripts path
 
-**3b. Reject function-to-function calls**
-- Parser/validator: detect when a function body references another Jaiph function name
-- Error: `"functions cannot call other Jaiph functions; use a shared library or compose in a workflow"`
+**4b. Reject script-to-script calls**
+- Parser/validator: detect when a script body references another Jaiph script name
+- Error: `"scripts cannot call other Jaiph scripts; use a shared library or compose in a workflow"`
 
-### Phase 4: Remove shell (breaking changes)
+### Phase 5: Remove shell (breaking changes)
 
-**4a. Remove shell fallback from workflow parser**
+**5a. Remove shell fallback from workflow parser**
 - `workflows.ts`: delete the catch-all `type: "shell"` codepath
 - Remove `shellAccumulator` / `braceDepthDelta` shell accumulation
-- Emit parser error: `"raw shell is not allowed in workflow; extract to a function"`
+- Emit parser error: `"raw shell is not allowed in workflow; extract to a script"`
 
-**4b. Remove shell fallback from rule parser**
+**5b. Remove shell fallback from rule parser**
 - Same treatment after Phase 2
 
-**4c. Remove old `if` syntax**
+**5c. Remove old `if` syntax**
 - Drop `if ... then ... fi` / `elif` parsing
 - Only accept brace syntax with `not` / `else if`
 
-**4d. Enforce pure bash in functions**
-- `functions.ts`: reject `return "value"` (non-integer return)
-- Remove `jaiph::set_return_value` from function transpilation
+**5d. Enforce pure output in scripts**
+- `scripts.ts`: reject `return "value"` (non-integer return)
+- Remove `jaiph::set_return_value` from script transpilation
 
-**4e. Update send operator**
+**5e. Update send operator**
 - Accept `"value"` / `$var` / `run ref` as RHS
 - Reject raw shell command as RHS
 
-### Phase 5: Migrate all first-party code
+### Phase 6: Migrate all first-party code
 
 - Rewrite all `e2e/*.jh` fixtures
 - Rewrite all `.jaiph/*.jh` workflows
@@ -613,7 +724,7 @@ function check_only_expected_changed() {
 - Update test fixtures and golden transpilation outputs
 - Update docs and README examples
 
-### Phase 6: Ship
+### Phase 7: Ship
 
 - Hard parser errors on all legacy syntax
 - Error messages include rewrite examples
@@ -624,17 +735,22 @@ function check_only_expected_changed() {
 
 | File | Change |
 |------|--------|
-| `src/types.ts` | Add `fail`, `wait`, `const` step types. Change `RuleDef.commands` → `RuleDef.steps`. Remove `shell` condition kind from `if`. Add `not` / brace-style `if` AST. |
+| `src/types.ts` | Rename `FunctionDef` → `ScriptDef`, add `shebang?: string`. Rename `jaiphModule.functions` → `jaiphModule.scripts`. Add `fail`, `wait`, `const` step types. Change `RuleDef.commands` → `RuleDef.steps`. Remove `shell` condition kind from `if`. Add `not` / brace-style `if` AST. |
+| `src/parser.ts` | Replace `function` keyword detection with `script`. Rename `parseFunctionBlock` → `parseScriptBlock`. |
+| `src/parse/functions.ts` → `src/parse/scripts.ts` | Rename file. Update regex to match `script` keyword. Add shebang extraction. Conditional keyword guard (skip for custom shebangs). |
 | `src/parse/workflows.ts` | Remove shell fallback, shell accumulator. Add `fail`, `const`, `wait` parsing. Replace `if ... then ... fi` with brace syntax. |
 | `src/parse/rules.ts` | Full rewrite: keyword-aware structured parser mirroring workflow parser. |
-| `src/parse/functions.ts` | Reject Jaiph `return "value"`, reject calls to other Jaiph functions. |
-| `src/transpile/emit-workflow.ts` | Handle new step types. Rewrite rule emission for structured steps. Remove `jaiph::set_return_value` from function paths. Emit function calls with isolation wrapper. |
+| `src/transpile/emit-workflow.ts` | Split: extract script emission to `emit-script.ts`, rule emission to `emit-rule.ts`. Change return type to include script files. Remove `jaiph::set_return_value` from script paths. |
+| `src/transpile/emit-script.ts` | **New file.** Emit standalone script files with shebang + body. |
+| `src/transpile/emit-rule.ts` | **New file.** Rule emission extracted from `emit-workflow.ts`. |
 | `src/transpile/emit-steps.ts` | Remove `emitShellStep` for workflows. Add `emitFailStep`, `emitConstStep`, `emitWaitStep`. |
-| `src/transpile/validate.ts` | Allow `run` in rules (functions only). Remove shell-condition validation. Add function isolation validation. |
-| `src/transpile/shell-jaiph-guard.ts` | Scope down or remove — shell only exists in functions now. |
+| `src/transpile/build.ts` | Handle new `emitWorkflow` return shape. Write script files with `chmod +x`. Set `$JAIPH_SCRIPTS` path. |
+| `src/transpile/validate.ts` | Collapse duplicate ref resolution. Rename `function` → `script` in errors/lookups. Allow `run` in rules (scripts only). Remove shell-condition validation. Add script isolation validation. |
+| `src/transpile/shell-jaiph-guard.ts` | Scope down — only applies to bash scripts now. |
 | `e2e/*.jh` | Rewrite all fixtures to new syntax. |
 | `.jaiph/*.jh` | Rewrite all workflows to new syntax. Create `.jaiph/lib/` shared libraries. |
 | `test/fixtures/**` | Update golden transpilation outputs. |
+| `docs/*` | Update grammar, getting-started, CLI docs for `script` keyword and shebang. |
 
 ## Risks
 
@@ -642,13 +758,15 @@ function check_only_expected_changed() {
 |------|--------|------------|
 | Wide breakage: all raw-shell workflows/rules fail at parse time | High | Single branch, full e2e gate, no merge without 100% pass |
 | Rule parser rewrite introduces regressions | High | Port existing rule tests before rewriting parser |
-| Ergonomic cost of named functions for trivial shell | Medium | Accepted tradeoff — boundary clarity > brevity |
+| Ergonomic cost of named scripts for trivial shell | Medium | Accepted tradeoff — boundary clarity > brevity |
 | `fail` interacts badly with `recover` | Medium | Explicit test: `ensure rule_with_fail recover { ... }` must trigger recover |
 | `const` scoping conflicts with bash `local` | Low | `const` is parser-level immutability; transpiles to `local` |
-| Return semantics confusion during migration | Medium | Parser errors guide users: `"return 'value' not allowed in function; use echo"` |
-| Function isolation perf overhead | Medium | Measure fork cost; optimize hot paths if needed |
-| Shared lib mechanism needs runtime support (`$JAIPH_LIB`) | Low | Simple: runtime sets one env var before function execution |
-| .jaiph/ workflow migration is large (9 files) | High | Migrate in parallel with parser changes; each file is independently testable |
+| Return semantics confusion during migration | Medium | Parser errors guide users: `"return 'value' not allowed in script; use echo"` |
+| Script isolation perf overhead (fork+exec per call) | Medium | Measure fork cost; scripts are already logically isolated. Optimize hot paths if needed |
+| Shared lib mechanism needs runtime support (`$JAIPH_LIB`) | Low | Simple: runtime sets one env var before script execution |
+| `.jaiph/` workflow migration is large (9 files) | High | Migrate in parallel with parser changes; each file is independently testable |
+| Separate file management complexity | Medium | Deterministic naming (`scripts/<name>`), cleanup on rebuild |
+| Custom shebang scripts may have missing dependencies | Low | Not Jaiph's problem — user owns their runtime. Document clearly |
 
 ## Success Criteria
 
@@ -656,11 +774,15 @@ function check_only_expected_changed() {
 - 100% e2e pass under new runtime
 - Zero `type: "shell"` steps in workflow/rule AST output
 - `fail` triggers `recover` correctly in `ensure` blocks
-- Function bodies reject `return "value"`, `fail`, `const`, other Jaiph keywords
-- Function bodies reject calls to other Jaiph functions
-- Functions execute in full isolation (no inherited variables)
+- Script bodies reject `return "value"`, `fail`, `const`, other Jaiph keywords (bash scripts only)
+- Script bodies reject calls to other Jaiph scripts
+- Scripts execute as separate files with correct shebang and `+x`
+- Custom shebang scripts (e.g. `#!/usr/bin/env node`) work end-to-end
+- Scripts execute in full isolation (no inherited variables)
 - `const` declarations work in workflows and rules with all RHS forms
 - `if` brace syntax works with `not` and `else if`
-- Shared libraries loadable from functions via `$JAIPH_LIB`
+- Shared libraries loadable from bash scripts via `$JAIPH_LIB`
 - Parser errors for raw shell include actionable rewrite examples
-- `jaiph::set_return_value` removed from function transpilation paths
+- `jaiph::set_return_value` removed from script transpilation paths
+- `validate.ts` under 500 lines after dedup
+- `emit-workflow.ts` handles only orchestration; script/rule emission in separate files
