@@ -648,7 +648,7 @@
             const button = document.createElement("button");
             button.type = "button";
             button.className = "copy-code-button";
-            button.textContent = "Copy";
+            button.textContent = "Copy to clipboard";
             button.addEventListener("click", function () {
                 copyCodeFromBlock(button, block);
             });
@@ -773,11 +773,26 @@
         });
     }
 
+    /**
+     * Every second, pick one random paragraph in .comparison-col and toggle class "distinct".
+     */
+    function startComparisonDistinctPulse() {
+        window.setInterval(function () {
+            var list = document.querySelectorAll(".comparison-col p");
+            if (list.length === 0) {
+                return;
+            }
+            var idx = Math.floor(Math.random() * list.length);
+            list[idx].classList.toggle("distinct");
+        }, 1000);
+    }
+
     // Auto-run on DOM ready
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", function () {
             restructureDocSections();
             wrapTablesInScrollContainer();
+            startComparisonDistinctPulse();
             highlightAll();
             attachCopyButtons();
             attachCodeTabs();
@@ -785,6 +800,7 @@
     } else {
         restructureDocSections();
         wrapTablesInScrollContainer();
+        startComparisonDistinctPulse();
         highlightAll();
         attachCopyButtons();
         attachCodeTabs();
