@@ -7,7 +7,7 @@
 #
 
 script get_all_task_headers() {
-  local qf="${JAIPH_WORKSPACE:-.}/.jaiph/QUEUE.md"
+  local qf="${JAIPH_WORKSPACE:-.}/QUEUE.md"
   if ! test -f "$qf"; then
     echo "missing $qf" >&2
     return 1
@@ -24,7 +24,7 @@ script get_all_task_headers() {
 script get_task_by_header() {
   test -n "${1:-}" || { echo "get_task_by_header: header required" >&2; return 1; }
 
-  local qf="${JAIPH_WORKSPACE:-.}/.jaiph/QUEUE.md"
+  local qf="${JAIPH_WORKSPACE:-.}/QUEUE.md"
   if ! test -f "$qf"; then
     echo "missing $qf" >&2
     return 1
@@ -89,7 +89,7 @@ script arg_nonempty() {
 }
 
 workflow get_first_task {
-  const qf = "${JAIPH_WORKSPACE:-.}/.jaiph/QUEUE.md"
+  const qf = "${JAIPH_WORKSPACE:-.}/QUEUE.md"
   if not run file_exists "$qf" {
     fail "missing queue file"
   }
@@ -112,7 +112,7 @@ script mark_task_dev_ready() {
     "## "*) ;;
     *) header="## $header" ;;
   esac
-  local qf="${JAIPH_WORKSPACE:-.}/.jaiph/QUEUE.md"
+  local qf="${JAIPH_WORKSPACE:-.}/QUEUE.md"
   local tmp_file="${qf}.tmp.$$"
 
   if ! awk -v header="$header" '
@@ -179,7 +179,7 @@ workflow remove_completed_task {
   if not run arg_nonempty "$h" {
     fail "header required"
   }
-  const qf = "${JAIPH_WORKSPACE:-.}/.jaiph/QUEUE.md"
+  const qf = "${JAIPH_WORKSPACE:-.}/QUEUE.md"
   run remove_task_block_by_header "$h" "$qf"
   run squeeze_consecutive_blanks_queue "$qf"
 }
