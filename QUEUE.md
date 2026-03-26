@@ -6,28 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Post-refactor sweep: dead code removal and docs cleanup <!-- dev-ready -->
-
-**Goal.** After the script migration phases are complete, remove residual rewrite-era code and perform one final docs consistency sweep.
-
-**Scope.**
-
-1. Remove dead parser/transpiler/runtime helpers that were kept during the refactor but are now unused.
-2. Remove temporary compatibility tests/fixtures/messages that no longer protect active behavior.
-3. Run a full docs consistency pass across `README.md`, `docs/*.md`, `docs/index.html`, and `docs/jaiph-skill.md` so terminology matches the final grammar/runtime.
-4. Eliminate duplicate or contradictory wording between Grammar, CLI, Getting Started, and the skill docs.
-5. Keep changes focused on cleanup (no new feature work).
-6. Remove support for *.jph files
-
-**Acceptance criteria.**
-
-- No unused refactor-era branches/helpers remain in active code paths.
-- Docs are internally consistent and aligned with shipped behavior.
-- `npm run build && npm test && npm run test:e2e` pass after cleanup.
-- Diff is cleanup-only (removals, wording consistency, and minimal wiring fixes).
-
----
-
 ## "Try it out" one-liner on landing page + `docs/run` script <!-- dev-ready -->
 
 **Goal.** Add a hero "Try it out" section at the top of the landing page (`docs/index.html`) with a single `curl | bash` one-liner that installs Jaiph (if needed) and runs a sample workflow. Create the `docs/run` script that powers it.

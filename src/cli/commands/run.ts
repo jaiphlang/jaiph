@@ -57,7 +57,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
   const input = positional[0];
   const runArgs = positional.slice(1);
   if (!input) {
-    process.stderr.write("jaiph run requires a .jh or .jph file path\n");
+    process.stderr.write("jaiph run requires a .jh file path\n");
     return 1;
   }
   const inputAbs = resolve(input);
@@ -65,14 +65,9 @@ export async function runWorkflow(rest: string[]): Promise<number> {
   const hooksConfig = loadMergedHooks(workspaceRoot);
   const inputStat = statSync(inputAbs);
   const ext = extname(inputAbs);
-  if (!inputStat.isFile() || (ext !== ".jph" && ext !== ".jh")) {
-    process.stderr.write("jaiph run expects a single .jh or .jph file\n");
+  if (!inputStat.isFile() || ext !== ".jh") {
+    process.stderr.write("jaiph run expects a single .jh file\n");
     return 1;
-  }
-  if (ext === ".jph" && process.stderr.isTTY) {
-    process.stderr.write(
-      "jaiph: .jph extension is deprecated; use .jh for new files. Migration: mv *.jph *.jh\n",
-    );
   }
 
   const mod = parsejaiph(readFileSync(inputAbs, "utf8"), inputAbs);

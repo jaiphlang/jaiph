@@ -19,10 +19,10 @@ export async function main(argv: string[]): Promise<number> {
     return 0;
   }
   try {
-    if ((cmd.endsWith(".test.jph") || cmd.endsWith(".test.jh")) && existsSync(resolve(cmd))) {
+    if (cmd.endsWith(".test.jh") && existsSync(resolve(cmd))) {
       return await runTest([cmd, ...rest]);
     }
-    if ((cmd.endsWith(".jph") || cmd.endsWith(".jh")) && existsSync(resolve(cmd))) {
+    if (cmd.endsWith(".jh") && existsSync(resolve(cmd))) {
       return runWorkflow([cmd, ...rest]);
     }
     if (cmd === "build") {

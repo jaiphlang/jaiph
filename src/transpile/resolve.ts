@@ -1,7 +1,6 @@
-import { existsSync } from "node:fs";
 import { dirname, parse, relative, resolve, sep } from "node:path";
 
-export const JAIPH_EXT_REGEX = /\.(jh|jph)$/;
+export const JAIPH_EXT_REGEX = /\.jh$/;
 
 function toWorkflowSymbol(inputFile: string, rootDir: string): string {
   const rel = relative(rootDir, inputFile);
@@ -24,16 +23,8 @@ export function toImportSource(importPath: string, inputFile: string, rootDir: s
 
 export function resolveImportPath(fromFile: string, importPath: string): string {
   const dir = dirname(fromFile);
-  if (importPath.endsWith(".jph") || importPath.endsWith(".jh")) {
+  if (importPath.endsWith(".jh")) {
     return resolve(dir, importPath);
   }
-  const withJh = resolve(dir, `${importPath}.jh`);
-  const withJph = resolve(dir, `${importPath}.jph`);
-  if (existsSync(withJh)) {
-    return withJh;
-  }
-  if (existsSync(withJph)) {
-    return withJph;
-  }
-  return withJph;
+  return resolve(dir, `${importPath}.jh`);
 }

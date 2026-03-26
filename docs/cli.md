@@ -9,13 +9,13 @@ redirect_from:
 
 ## Overview
 
-Jaiph workflow sources (`.jh` / `.jph`) are programs: the CLI parses them, checks references, and transpiles them to bash that runs on your machine. Optional [Sandboxing](sandboxing.md) runs that generated bash inside Docker instead of directly on the host. The same `jaiph` executable drives compilation (`build`), execution (`run`), the native test runner (`test`), workspace scaffolding (`init`), reinstalling from a Git ref (`use`), and a read-only local UI over run logs (`report`). Language syntax and semantics are documented separately (for example [Grammar](grammar.md)); this page is the command-line contract.
+Jaiph workflow sources (`.jh`) are programs: the CLI parses them, checks references, and transpiles them to bash that runs on your machine. Optional [Sandboxing](sandboxing.md) runs that generated bash inside Docker instead of directly on the host. The same `jaiph` executable drives compilation (`build`), execution (`run`), the native test runner (`test`), workspace scaffolding (`init`), reinstalling from a Git ref (`use`), and a read-only local UI over run logs (`report`). Language syntax and semantics are documented separately (for example [Grammar](grammar.md)); this page is the command-line contract.
 
 **Typical tasks:**
 
 - **Run a workflow** — `jaiph run <file.jh>` or pass the file as the first argument: `jaiph <file.jh> [args...]`. Requires a `workflow default` in that file.
-- **Run tests** — `jaiph test` discovers and runs all `*.test.jh` / `*.test.jph` under the workspace; or pass a directory or a single test file.
-- **Compile only** — `jaiph build [--target <dir>] [path]` compiles `.jh`/`.jph` files into shell scripts without executing. Without `--target`, compiled scripts are written alongside the source files.
+- **Run tests** — `jaiph test` discovers and runs all `*.test.jh` under the workspace; or pass a directory or a single test file.
+- **Compile only** — `jaiph build [--target <dir>] [path]` compiles `.jh` files into shell scripts without executing. Without `--target`, compiled scripts are written alongside the source files.
 - **Setup** — `jaiph init [workspace-path]` creates `.jaiph/` with a bootstrap workflow and synced skill guide; `jaiph use <version|nightly>` reinstalls the global Jaiph binary.
 - **Reporting** — `jaiph report` serves a read-only local dashboard over `.jaiph/runs` (see [Reporting server](reporting.md)).
 
@@ -27,7 +27,7 @@ Jaiph workflow sources (`.jh` / `.jph`) are programs: the CLI parses them, check
 
 ## `jaiph <file.jh>` and `jaiph <file.test.jh>` (shorthand)
 
-If the first argument is a path to an existing file whose name ends with `.jh` or `.jph`, Jaiph treats it as a workflow and runs it (same as `jaiph run <file>`). If the first argument ends with `.test.jh` or `.test.jph` and the file exists, Jaiph runs that test file (same as `jaiph test <file>`).
+If the first argument is a path to an existing file whose name ends with `.jh`, Jaiph treats it as a workflow and runs it (same as `jaiph run <file>`). If the first argument ends with `.test.jh` and the file exists, Jaiph runs that test file (same as `jaiph test <file>`).
 
 Workflow shorthand:
 
@@ -45,7 +45,7 @@ jaiph ./e2e/say_hello.test.jh
 
 ## `jaiph build`
 
-Compile `.jh` and `.jph` files into shell scripts.
+Compile `.jh` files into shell scripts.
 
 ```bash
 jaiph build [--target <dir>] [path]
@@ -53,7 +53,7 @@ jaiph build [--target <dir>] [path]
 
 If `path` is omitted, the current directory (`./`) is used. Without `--target`, compiled `.sh` scripts are written alongside the source files. Use `--target` to redirect output to a specific directory.
 
-- **Directory mode** (`jaiph build ./` or `jaiph build ./flows`) — compiles every `.jh`/`.jph` file in the directory tree (test files `*.test.jh`/`*.test.jph` are excluded). The command stops on the first parse or validation error in any file.
+- **Directory mode** (`jaiph build ./` or `jaiph build ./flows`) — compiles every `.jh` file in the directory tree (test files `*.test.jh` are excluded). The command stops on the first parse or validation error in any file.
 - **Single-file mode** (`jaiph build file.jh`) — compiles only the specified file and its transitive imports. Parse errors in sibling files are ignored.
 
 Scripts declared in workflow modules are emitted as **separate executable files** under `<target>/scripts/<name>` with `chmod +x`. Each script file starts with a shebang (custom or default `#!/usr/bin/env bash`) followed by the script body. The compiled module `.sh` invokes scripts via `"$JAIPH_SCRIPTS/<name>"`.
@@ -72,7 +72,7 @@ Compile and run a Jaiph workflow file.
 `jaiph run` requires a `workflow default` entrypoint.
 
 ```bash
-jaiph run [--target <dir>] <file.jh|file.jph> [--] [args...]
+jaiph run [--target <dir>] <file.jh> [--] [args...]
 ```
 
 Only the specified file and its transitive imports are compiled. Parse errors in sibling `.jh` files do not affect the run. Use `--target` to keep the compiled shell script in a specific directory (useful for debugging the transpiler output); without it, the compiled script is written to a temp directory and cleaned up after the run. Use `--` to separate Jaiph flags from workflow arguments (e.g. `jaiph run file.jh -- --verbose`).
@@ -109,7 +109,7 @@ Workflow and rule bodies contain structured Jaiph steps only — use **`run`** t
 
 For **`const`** in those bodies, a **reference plus arguments** on the RHS must be written as **`const name = run ref [args…]`** (or **`ensure`** for rule capture), not as **`const name = ref [args…]`** — the latter is **`E_PARSE`** with text that explains the fix (same rule as managed calls elsewhere).
 
-If a `.jh` or `.jph` file is executable and has `#!/usr/bin/env jaiph`, you can run it directly:
+If a `.jh` file is executable and has `#!/usr/bin/env jaiph`, you can run it directly:
 
 ```bash
 ./.jaiph/bootstrap.jh "task details"
@@ -241,11 +241,11 @@ You can run custom commands at workflow/step lifecycle events via **hooks**. Con
 
 ## `jaiph test`
 
-Run tests from native test files (`*.test.jh` / `*.test.jph`) that contain `test "..." { ... }` blocks. Test files can import workflows and use `mock prompt` (or `mock prompt { ... }`) to simulate agent responses without calling the real backend.
+Run tests from native test files (`*.test.jh`) that contain `test "..." { ... }` blocks. Test files can import workflows and use `mock prompt` (or `mock prompt { ... }`) to simulate agent responses without calling the real backend.
 
 **Usage:**
 
-- `jaiph test` — discover and run all `*.test.jh` / `*.test.jph` under the workspace root. The workspace root is the first directory found when walking **up** from the current working directory that contains `.jaiph` or `.git`. If neither marker exists on that path, the root is the resolved current working directory.
+- `jaiph test` — discover and run all `*.test.jh` under the workspace root. The workspace root is the first directory found when walking **up** from the current working directory that contains `.jaiph` or `.git`. If neither marker exists on that path, the root is the resolved current working directory.
 - `jaiph test <dir>` — run all test files under the given directory (workspace root is detected the same way, starting from `<dir>`).
 - `jaiph test <file.test.jh>` — run a single test file.
 
@@ -320,12 +320,9 @@ jaiph report [start|stop|status] [--host <addr>] [--port <n>] [--poll-ms <n>] [-
 
 **Behavior (summary):** Discovers runs under `<YYYY-MM-DD>/<time>-<source>/run_summary.jsonl`, keeps a **cached directory scan** with a minimum interval between full rescans, and **tails** each summary with a byte offset and inode/size tracking so appended lines update **live** state without rereading whole files. Truncation or file replacement triggers a full resync for that run. HTTP API and UI details: [Reporting server](reporting.md).
 
-## File extensions
+## File extension
 
-- **`.jh`** is the recommended extension for new Jaiph files. Use it for entrypoints, imports, and `jaiph build` / `jaiph run` / `jaiph test`.
-- **`.jph`** is also accepted. Both extensions work identically with all CLI commands and import resolution.
-
-Imports resolve for both extensions: `import "foo" as x` finds `foo.jh` or `foo.jph` (`.jh` is preferred when both exist).
+**`.jh`** is the file extension for Jaiph source files. Use it for entrypoints, imports, and all CLI commands (`build`, `run`, `test`). Import resolution appends `.jh` when the path omits the extension.
 
 ## Environment variables
 
@@ -333,7 +330,7 @@ Imports resolve for both extensions: `import "foo" as x` finds `foo.jh` or `foo.
 
 - `JAIPH_STDLIB` — normally unused: the CLI sets this to the **stdlib bundled with the same installation** as the `jaiph` binary so a stale global `JAIPH_STDLIB` in your shell cannot break new workflows. To force a custom stdlib path, set **`JAIPH_USE_CUSTOM_STDLIB=1`** and **`JAIPH_STDLIB`** to the absolute path of `jaiph_stdlib.sh` (advanced; tests and unusual installs).
 - `JAIPH_SCRIPTS` — the generated bash exports this to the directory holding compiled module scripts for **that** build. **`jaiph run`** and **`jaiph test`** **unset** any inherited **`JAIPH_SCRIPTS`** from the parent environment before executing so an outer run cannot pin the wrong script directory when workflows or package scripts invoke Jaiph again. You normally should not export this yourself.
-- `JAIPH_WORKSPACE` — set by the CLI to the workspace root: walk **up** from the directory that contains the entry `.jh` / `.jph` until a directory with `.jaiph` or `.git` is found; if the walk hits the filesystem root first, the root used is that entry directory (absolute path). Used by the generated bash and runtime helpers; you rarely set this yourself. In Docker sandbox mode the runtime remaps it inside the container (see [Sandboxing](sandboxing.md)).
+- `JAIPH_WORKSPACE` — set by the CLI to the workspace root: walk **up** from the directory that contains the entry `.jh` file until a directory with `.jaiph` or `.git` is found; if the walk hits the filesystem root first, the root used is that entry directory (absolute path). Used by the generated bash and runtime helpers; you rarely set this yourself. In Docker sandbox mode the runtime remaps it inside the container (see [Sandboxing](sandboxing.md)).
 - `JAIPH_LIB` — directory for project-local shared bash libraries (conventionally `<workspace>/.jaiph/lib`). The **transpiled script** exports `JAIPH_LIB="${JAIPH_LIB:-${JAIPH_WORKSPACE:-.}/.jaiph/lib}"` near the top of its preamble so `source "$JAIPH_LIB/…"` works no matter where the generated `.sh` file lives. Override `JAIPH_LIB` when libraries live elsewhere. The runtime also sets `JAIPH_LIB` when executing **script** steps so behavior matches [Grammar — script bodies and shared libraries](grammar.md#step-output-contract).
 - `JAIPH_AGENT_MODEL` — default model for `prompt` steps (overrides in-file `agent.default_model`).
 - `JAIPH_AGENT_COMMAND` — command for the Cursor backend (e.g. `cursor-agent`; overrides in-file `agent.command`).

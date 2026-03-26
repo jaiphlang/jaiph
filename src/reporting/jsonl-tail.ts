@@ -15,7 +15,7 @@ export type TailAccumulator = {
   partial: string;
 };
 
-export function fileIdentityChanged(prev: FileCursor | undefined, st: Stats): boolean {
+function fileIdentityChanged(prev: FileCursor | undefined, st: Stats): boolean {
   if (!prev) {
     return true;
   }

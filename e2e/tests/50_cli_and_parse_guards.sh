@@ -69,7 +69,7 @@ empty_out="$(cat "${empty_err}")"
 rm -f "${empty_err}"
 
 # Then
-e2e::assert_contains "${empty_out}" "no *.test.jh or *.test.jph files" "jaiph test reports no tests in directory"
+e2e::assert_contains "${empty_out}" "no *.test.jh files" "jaiph test reports no tests in directory"
 
 e2e::section "jaiph run requires workflow default"
 

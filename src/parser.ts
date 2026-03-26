@@ -58,7 +58,7 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
       continue;
     }
 
-    const isTestFile = filePath.endsWith(".test.jh") || filePath.endsWith(".test.jph");
+    const isTestFile = filePath.endsWith(".test.jh");
     if (isTestFile && line.startsWith("test ")) {
       if (!mod.tests) {
         mod.tests = [];

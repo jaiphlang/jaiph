@@ -24,7 +24,7 @@ Jaiph is a compiler-driven workflow runtime with a CLI observer layer:
   - Dispatches hooks.
 
 - **Parser (`src/parser.ts`, `src/parse/*`)**
-  - Converts `.jh/.jph/.test.jh` into `jaiphModule` AST.
+  - Converts `.jh`/`.test.jh` into `jaiphModule` AST.
   - Parses workflows, rules, scripts, channels, routes, test blocks, metadata.
 
 - **AST / Types (`src/types.ts`)**

@@ -24,7 +24,7 @@ It combines declarative workflow structure with bash, then compiles to pure shel
 - **Workflows** — Ordered **Jaiph-only** steps (`ensure`, `run`, `prompt`, `const`, brace `if`, `fail`, `return`, logging, inbox, async `run … &` + `wait`). Unrecognized lines are parse errors — put bash in **`script`** blocks and call them with **`run`**. Conditionals use **brace form** only (`if [not] ensure|run ref { … }`).
 - **Rules** — Structured checks with the same keyword style (restricted set): `ensure` for rules, **`run` for scripts only**, `const`, brace `if`, `fail`, `log` / `logerr`, `return "…"`; no `prompt`, inbox, `wait`, or `ensure … recover`.
 - **Agent prompts** — `prompt "..."` sends text to a configured agent (e.g. Cursor or Claude CLI); workflows orchestrate when the agent runs.
-- **Composability** — Import other `.jh` / `.jph` modules and call their rules, workflows, and scripts by alias (e.g. `ensure security.scan_passes`, `run bootstrap.nodejs`). Use **`ensure` only for rules** and **`run` for workflows and scripts** so every managed call is keyword-led.
+- **Composability** — Import other `.jh` modules and call their rules, workflows, and scripts by alias (e.g. `ensure security.scan_passes`, `run bootstrap.nodejs`). Use **`ensure` only for rules** and **`run` for workflows and scripts** so every managed call is keyword-led.
 - **Step capture** — Assign results with `x = ensure …` / `x = run …` / `x = prompt …`, or **`const x = …`** with the same RHS forms (see [Grammar](grammar.md)). For **rules and workflows**, capture uses explicit `return "…"` / `return "$var"`. For **`run` to a script**, capture follows **script stdout** (use `echo` / `printf` — not Jaiph `return "…"` inside the script body). With **`const`**, use **`run`** / **`ensure`** explicitly for call-like RHSs (**`const x = run fn "$arg"`**, not **`const x = fn "$arg"`**).
 - **Shell-native** — Transpiled output is bash. Shared bash helpers can live in `.jaiph/lib/` and be loaded from scripts with `source "$JAIPH_LIB/…"`. Emitted scripts export a default `JAIPH_LIB` under the workspace (`JAIPH_WORKSPACE`, or `.` if unset); see [CLI — Environment variables](cli.md#environment-variables).
 
@@ -132,17 +132,17 @@ Installation places both the `jaiph` CLI and the global runtime stdlib (`jaiph_s
 
 Arguments are passed exactly like bash scripts (`$1`, `$2`, `"$@"`).
 
-Entrypoint resolution: the entry file must define a workflow named **`default`**. Executable `.jh` files with `#!/usr/bin/env jaiph` run that workflow when invoked as `./file.jh` (the `jaiph` binary must be on your **`PATH`**). The same applies to **`jaiph run path/to/file.jh`** and the shorthand **`jaiph path/to/file.jh`** when the path exists. Both `.jh` and `.jph` extensions are accepted; `.jh` is the recommended extension for new files.
+Entrypoint resolution: the entry file must define a workflow named **`default`**. Executable `.jh` files with `#!/usr/bin/env jaiph` run that workflow when invoked as `./file.jh` (the `jaiph` binary must be on your **`PATH`**). The same applies to **`jaiph run path/to/file.jh`** and the shorthand **`jaiph path/to/file.jh`** when the path exists.
 
 Other useful CLI commands:
 
 ```bash
-jaiph build [--target <dir>] [path]   # compile .jh/.jph files to bash without running
+jaiph build [--target <dir>] [path]   # compile .jh files to bash without running
 jaiph test [path]                     # run tests (see below)
 jaiph report --workspace .            # browse .jaiph/runs in a local dashboard
 ```
 
-**`jaiph test`:** With no path, Jaiph discovers every `*.test.jh` / `*.test.jph` under the workspace root: walk **up** from the current working directory until a directory containing `.jaiph` or `.git` is found; if neither exists on that path, the root is the resolved cwd. Pass a directory to run all tests under it (workspace root is detected the same way, starting from that path). Pass a single `*.test.jh` / `*.test.jph` file to run one suite. See [Testing](testing.md).
+**`jaiph test`:** With no path, Jaiph discovers every `*.test.jh` under the workspace root: walk **up** from the current working directory until a directory containing `.jaiph` or `.git` is found; if neither exists on that path, the root is the resolved cwd. Pass a directory to run all tests under it (workspace root is detected the same way, starting from that path). Pass a single `*.test.jh` file to run one suite. See [Testing](testing.md).
 
 For all CLI commands, flags, and environment variables, see [CLI Reference](cli.md). For the run history UI and HTTP API, see [Reporting server](reporting.md).
 
@@ -166,10 +166,10 @@ Tip: add `.jaiph/` to your `.gitignore`.
 
 ## Language overview
 
-Jaiph source files use **`.jh`** (recommended); **`.jph`** is also accepted. A file contains **rules**, **workflows**, **scripts**, and optional **config** blocks. All primitives interoperate with standard bash. For the full grammar, validation rules, and transpilation details, see [Grammar](grammar.md).
+Jaiph source files use the **`.jh`** extension. A file contains **rules**, **workflows**, **scripts**, and optional **config** blocks. All primitives interoperate with standard bash. For the full grammar, validation rules, and transpilation details, see [Grammar](grammar.md).
 
 - `config { ... }` — Optional block setting runtime options (agent backend, model, Docker sandbox, etc.). Allowed at the top level (module-wide) and inside individual workflows for per-workflow overrides (`agent.*` and `run.*` keys only). See [Configuration](configuration.md).
-- `import "path" as alias` — Import rules, workflows, and scripts from another module. The path may include a `.jh` / `.jph` suffix or omit it; resolution prefers `.jh` when both exist. Verified at compile time.
+- `import "path" as alias` — Import rules, workflows, and scripts from another module. The path may include a `.jh` suffix or omit it (the compiler appends `.jh`). Verified at compile time.
 - `local name = value` / `const name = value` — Module-scoped variable, accessible as `$name` in rules and workflows within the module (scripts are isolated and do not inherit these — pass data as arguments or use shared libraries). Prefer **`const`** in new orchestration code.
 - `rule name { ... }` — Reusable check: **Jaiph structured steps only** (subset: `ensure` for rules, `run` for **scripts**, `const`, brace `if`, `fail`, `log`/`logerr`, `return "…"`). Rules run in an isolated child shell; on Linux, a read-only mount namespace is used when `unshare` and passwordless `sudo` are available, otherwise the same child-shell fallback as on other platforms. Optional `export` for cross-module access.
 - `workflow name { ... }` — Orchestration entrypoint: **Jaiph steps only** (no raw shell — extract bash to `script` + `run`). Can change system state. Optional `export` for cross-module access.

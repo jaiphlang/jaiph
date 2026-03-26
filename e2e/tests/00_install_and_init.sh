@@ -25,10 +25,8 @@ jaiph init "${TEST_DIR}"
 # Then
 if [[ -f "${TEST_DIR}/.jaiph/bootstrap.jh" ]]; then
   BOOTSTRAP_FILE="${TEST_DIR}/.jaiph/bootstrap.jh"
-elif [[ -f "${TEST_DIR}/.jaiph/bootstrap.jph" ]]; then
-  BOOTSTRAP_FILE="${TEST_DIR}/.jaiph/bootstrap.jph"
 else
-  e2e::fail "Expected .jaiph/bootstrap.jh or .jaiph/bootstrap.jph to exist after init"
+  e2e::fail "Expected .jaiph/bootstrap.jh to exist after init"
 fi
 e2e::assert_file_exists "${BOOTSTRAP_FILE}" "bootstrap file exists"
 e2e::assert_file_executable "${BOOTSTRAP_FILE}" "bootstrap file is executable"
