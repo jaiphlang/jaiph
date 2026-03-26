@@ -6,54 +6,216 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Hard-cut migration: replace Bash orchestration runtime with JS runtime kernel <!-- dev-ready -->
+## JS runtime migration (part 1): prompt execution + artifacts parity <!-- dev-ready -->
 
 **Goal**  
-Remove Bash as the orchestration runtime target and execute workflows through a JavaScript runtime kernel while preserving **all** user-facing behavior and run artifacts contracts.
+Port only `prompt` orchestration from Bash runtime to JS kernel first, while keeping all current prompt-side artifacts and CLI behavior stable.
 
-**Context**  
-Bash remains valid for *user-authored script bodies* (including shebang-based polyglot scripts). All orchestration semantics (workflow, rule, prompt, ensure, run, channels, hooks wiring, event emission, test mode) move to a new JS/TS runtime kernel.
+**Standalone context (read this task in isolation)**
 
-**Execution model change**  
-Move from “transpile to Bash + external execution” to “in-process JS kernel interpretation inside the Bun standalone CLI binary” while keeping user script bodies as spawned external processes.
+- Current state: orchestration still relies on Bash runtime (`src/jaiph_stdlib.sh` + `src/runtime/*.sh`).
+- Target state: orchestration progressively moves to JS kernel (`src/runtime/kernel/`) executed in-process by CLI.
+- This part migrates **only prompt execution path**; all other orchestration can stay on existing runtime for now.
+- Non-negotiable contracts in this part:
+  1. CLI behavior for `jaiph run`/`jaiph test` around prompt steps remains stable.
+  2. Prompt-related `__JAIPH_EVENT__` JSONL shape/order remains compatible.
+  3. `.jaiph/runs` prompt artifacts and prompt-related `run_summary.jsonl` events remain compatible.
+- Keep parser/validator language surface unchanged unless absolutely required by migration.
+- Keep user script-body execution model unchanged (still external process execution when relevant).
 
-**Non-negotiable contracts (must remain stable)**
+**Out of scope (for this part)**
 
-1. CLI output/e2e behavior contracts for `jaiph run` and `jaiph test`.
-2. `__JAIPH_EVENT__` event stream shape and ordering guarantees used by CLI progress.
-3. `.jaiph/runs` artifact layout, including step `.out`/`.err` logs and prompt artifacts.
-4. `run_summary.jsonl` schema and event semantics (`STEP_*`, `LOG*`, `INBOX_*`, workflow boundaries).
-5. Channels and hooks behavior from the user perspective.
+- Full `run`/`ensure`/`rule`/workflow orchestration migration.
+- Channel/inbox runtime port.
+- Hook wiring migration.
+- Standalone binary packaging/docs cutover.
 
 **Scope**
 
-1. Replace `src/jaiph_stdlib.sh` + `src/runtime/*.sh` orchestration behavior with new JS/TS runtime modules (`src/runtime/kernel/`).
-2. Keep parser/validator language surface intact unless migration requires targeted changes.
-3. Keep user-authored script bodies (including shebang polyglot scripts) executed as external processes via `Bun.spawn` / `child_process`, preserving full isolation and shebang behavior.
-4. Keep channel transport and all reporting artifacts file-based under `.jaiph/runs` (no in-memory-only queue rewrite).
-5. Keep `jaiph test` semantics intact for `*.test.jh`, including mocks and assertions.
-6. Update the transpiler (`transpileFile` / `transpileTestFile`) and CLI execution launcher (`src/cli/run/*`) so workflows are executed by the new JS runtime kernel instead of generated Bash. **Prefer in-process AST interpretation** inside the CLI binary for better debugging and source mapping.
-7. Update the build pipeline so the CLI becomes a **single-file Bun standalone executable** (`bun build --compile --outfile jaiph ...`) supporting Linux/macOS/Windows (x64 + arm64). The JS runtime kernel runs inside this binary.
-8. Port the following orchestration primitives 1:1 into the new kernel:
-   - Step execution (`run`, `ensure`, `rule`, etc.)
-   - Prompt flow handling + artifact capture
-   - Channel / inbox init, send, route registration, queue drain (file-based)
-   - Event emission (`__JAIPH_EVENT__` JSON lines on stderr)
-   - Test-mode behavior (`JAIPH_TEST_MODE`, mocks, assertions)
-   - Hook wiring (still triggered from CLI, payload passing unchanged)
-9. Add source-map / line-number support so runtime errors in the JS kernel point back to the original `.jh` file + line.
-10. Preserve all existing environment variables (`JAIPH_TEST_MODE`, etc.) and working-directory behavior.
-11. Update docs and architecture docs (`ARCHITECTURE.md` including all Mermaid diagrams) and any user-facing READMEs to reflect the new JS runtime kernel, in-process execution model, and removed Bash orchestration target.
+1. Implement prompt execution path in `src/runtime/kernel/` (request build, backend call, capture, schema parse, error mapping).
+2. Preserve prompt artifact outputs under `.jaiph/runs` exactly as today (including prompt-related `.out`/`.err` and captured values).
+3. Keep `__JAIPH_EVENT__` prompt-related events shape/order compatible with current CLI progress handling.
+4. Keep parser/validator language surface unchanged for prompt syntax.
+5. Route only prompt steps to JS kernel; non-prompt orchestration can remain on existing runtime for this phase.
 
 **Acceptance criteria**
 
-- `npm run build`, `npm test`, and `npm run test:e2e` pass after migration.
-- Existing e2e contracts for CLI output remain green **without broad rebaselining**.
-- Event stream consumed by CLI progress remains fully compatible (`__JAIPH_EVENT__` parser unchanged or equivalent).
-- `.jaiph/runs` and `run_summary.jsonl` remain byte-for-byte compatible with the reporting server and existing tooling.
-- Channels, hooks, and prompt flows behave **equivalently** from the user perspective.
-- The shipped `jaiph` binary is a **single standalone executable** with zero external runtime dependencies.
-- Runtime errors and stack traces are at least as debuggable as the old Bash version (ideally better).
+- Existing prompt-focused unit/e2e tests pass without broad fixture rebaselining.
+- Prompt success/failure behavior and user-facing messages match current contracts.
+- Prompt artifacts and `run_summary.jsonl` entries remain compatible with reporting tooling.
+
+---
+
+## JS runtime migration (part 2): core step execution (`run`/`ensure`/`rule`/`workflow`) <!-- dev-ready -->
+
+**Goal**  
+Move core orchestration control flow to JS kernel after prompt parity is landed.
+
+**Standalone context (read this task in isolation)**
+
+- Baseline assumption: prompt path may already be on JS kernel or feature-flagged; this task must not regress prompt contracts.
+- Current state being replaced here: Bash-based orchestration control flow for `run`/`ensure`/`rule`/workflow execution semantics.
+- Target state for this part: JS kernel owns step dispatch/control flow; user-authored scripts still execute as external processes.
+- Non-negotiable contracts in this part:
+  1. CLI output/e2e behavior for `jaiph run` remains stable.
+  2. Failure propagation semantics remain equivalent (especially `ensure` behavior).
+  3. Working-directory and environment variable behavior remain compatible.
+
+**Out of scope (for this part)**
+
+- Event stream/run summary hardening beyond what is required for step execution.
+- Channel/inbox + hook behavior migration.
+- `jaiph test` semantics migration.
+- Binary packaging/docs finalization.
+
+**Scope**
+
+1. Port step dispatch/execution semantics for `run`, `ensure`, `rule`, and workflow boundaries.
+2. Keep user-authored script bodies as spawned external processes with shebang behavior preserved.
+3. Preserve env vars and working-directory behavior.
+4. Keep output contracts for `jaiph run` and failure propagation semantics unchanged.
+
+**Acceptance criteria**
+
+- Core workflow/rule execution e2e tests pass with equivalent behavior.
+- Step stdout/stderr capture and exit-code handling remain contract-compatible.
+
+---
+
+## JS runtime migration (part 3): event stream + run summary parity <!-- dev-ready -->
+
+**Goal**  
+Guarantee runtime observability compatibility once execution is in JS.
+
+**Standalone context (read this task in isolation)**
+
+- This task exists to protect downstream tooling from runtime migration regressions.
+- Producers: runtime kernel emits `__JAIPH_EVENT__` JSONL on stderr and writes `run_summary.jsonl`.
+- Consumers: CLI progress parser and reporting server/tooling.
+- Non-negotiable contracts in this part:
+  1. Event shape/order guarantees relied on by CLI progress remain compatible.
+  2. `run_summary.jsonl` schema and semantics stay compatible (`STEP_*`, `LOG*`, `INBOX_*`, workflow boundaries).
+  3. Run artifacts layout under `.jaiph/runs` remains stable from consumer perspective.
+
+**Out of scope (for this part)**
+
+- Core step execution semantics redesign.
+- Channel transport redesign (must stay file-based).
+- Packaging/distribution migration.
+
+**Scope**
+
+1. Port event emission to JS (`__JAIPH_EVENT__` on stderr JSONL) with stable ordering guarantees.
+2. Keep `run_summary.jsonl` schema and semantics (`STEP_*`, `LOG*`, `INBOX_*`, workflow boundaries) compatible.
+3. Validate byte-level or schema-level compatibility where strict byte parity is unrealistic.
+
+**Acceptance criteria**
+
+- CLI progress parser works unchanged (or via drop-in equivalent adapter).
+- Reporting server ingests new runs without regressions.
+
+---
+
+## JS runtime migration (part 4): channels/inbox + hooks wiring <!-- dev-ready -->
+
+**Goal**  
+Port inter-step communication and hook wiring while preserving user-visible behavior.
+
+**Standalone context (read this task in isolation)**
+
+- This task migrates communication plumbing, not language semantics.
+- Channel/inbox transport must remain file-backed under `.jaiph/runs` (no in-memory-only rewrite).
+- Hook triggering source remains CLI; payload contracts must stay unchanged.
+- Non-negotiable contracts in this part:
+  1. User-visible channel send/route/drain behavior remains equivalent.
+  2. Hook invocation timing/payload format remain compatible.
+  3. `INBOX_*` and related reporting semantics remain compatible for existing tooling.
+
+**Out of scope (for this part)**
+
+- Prompt backend logic changes.
+- Core workflow execution redesign unrelated to channels/hooks.
+- Standalone binary packaging/docs.
+
+**Scope**
+
+1. Port channel/inbox init, send, route registration, and queue drain using file-backed transport under `.jaiph/runs`.
+2. Keep hooks triggered from CLI with unchanged payload contract.
+3. Preserve ordering and delivery semantics from the user perspective.
+
+**Acceptance criteria**
+
+- Channel and hook e2e scenarios behave equivalently to current runtime.
+- No regression in file-based channel artifacts.
+
+---
+
+## JS runtime migration (part 5): `jaiph test` semantics on JS kernel <!-- dev-ready -->
+
+**Goal**  
+Move test runtime semantics after run-mode parity is stable.
+
+**Standalone context (read this task in isolation)**
+
+- This task is about test-mode parity, not new test language features.
+- Existing authoring contracts in `*.test.jh` must remain valid.
+- Non-negotiable contracts in this part:
+  1. `JAIPH_TEST_MODE` behavior remains compatible.
+  2. Mock and assertion semantics remain compatible.
+  3. `jaiph test` CLI UX and artifact expectations remain stable.
+
+**Out of scope (for this part)**
+
+- New mock syntax/features.
+- Non-test runtime feature additions.
+- Packaging/distribution changes.
+
+**Scope**
+
+1. Port `JAIPH_TEST_MODE`, mocks, assertions, and test-step behavior for `*.test.jh`.
+2. Update `transpileTestFile` / test launcher integration to target JS kernel execution.
+3. Keep existing test authoring semantics unchanged.
+
+**Acceptance criteria**
+
+- `jaiph test` behavior is contract-compatible for existing suites.
+- Test fixtures pass without semantic regressions in mocks/assertions.
+
+---
+
+## JS runtime migration (part 6): launcher switch, debug mapping, and standalone binary <!-- dev-ready -->
+
+**Goal**  
+Complete cutover to in-process JS kernel and finalize distribution/docs.
+
+**Standalone context (read this task in isolation)**
+
+- This is the cutover and hardening phase after runtime parity work.
+- Required end state:
+  1. CLI launcher executes workflows via JS kernel by default.
+  2. Runtime errors map back to `.jh` source locations with usable diagnostics.
+  3. Distribution is a standalone Bun-compiled executable for supported targets.
+  4. Docs/architecture reflect that Bash orchestration target is removed.
+- Non-negotiable contracts in this part:
+  1. No regression in core command behavior (`run`, `test`, `build`, `report`, `init`, `use`).
+  2. Existing artifact/event/reporting contracts remain compatible.
+
+**Out of scope (for this part)**
+
+- Large language-surface redesign unrelated to runtime cutover.
+
+**Scope**
+
+1. Switch CLI launcher (`src/cli/run/*`) and transpiler integration to execute workflows via JS kernel by default.
+2. Add source-map/line mapping so runtime errors point to `.jh` source locations.
+3. Update build pipeline to ship single-file Bun standalone executable for supported targets.
+4. Update docs (`ARCHITECTURE.md`, diagrams, READMEs) to reflect removed Bash orchestration runtime.
+
+**Acceptance criteria**
+
+- `npm run build`, `npm test`, and `npm run test:e2e` pass.
+- Shipped `jaiph` binary runs standalone with zero external runtime dependency.
+- Debuggability is at least on par with current runtime (preferably better).
 
 ---
 
