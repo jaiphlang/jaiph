@@ -14,10 +14,11 @@ rm -f "${TEST_DIR}/ready.txt"
 
 # Given
 # NOTE: Keep this test parameterized on purpose ($f and "$1") to verify recover arg plumbing.
-# Do not simplify these to hardcoded filenames.
+# The rule echoes its argument to stdout so the recover block receives it as $1
+# (the ensure/recover contract: $1 = merged stdout+stderr from the failed rule).
 e2e::file "retry_single.jh" <<'EOF'
 rule dep {
-  echo "$1" > "$JAIPH_RETURN_VALUE_FILE"
+  echo "$1"
   test -f "$1"
 }
 
@@ -51,7 +52,8 @@ workflow default
 EOF
 
 e2e::pass "ensure dep recover run install_deps: retry until success"
-e2e::expect_out_files "retry_single.jh" 0
+# Rule echoes "$1" to stdout, producing .out files for each attempt
+e2e::expect_out_files "retry_single.jh" 2
 
 e2e::section "ensure ... recover { stmt; stmt; } (block) runs multiple recover statements"
 rm -f "${TEST_DIR}/ready2.txt" "${TEST_DIR}/recover_ran.txt"

@@ -184,11 +184,11 @@ testing say_hello.test.jh
                 <div class="code-tab-panel" data-panel="ensure-ci-passes-jh">
                     <p>This workflow uses Jaiph's <code>ensure ... recover</code> pattern to keep retrying a failing CI
                         command after an agent-assisted fix.
-                        A larger flow should call a dedicated workflow with
-                        <code>run ensure_ci_passes "$repo_dir"</code> so the same recover loop runs and the repo path
-                        reaches <code>ensure ci_passes "$repo_dir"</code>. In recover, persist <code>$1</code> to a stable
-                        path (here under <code>.jaiph/tmp/</code>) and assert it is non-empty before the prompt, so the
-                        message about “inspect the log file” matches what is on disk.</p>
+                        Inside a recover block, <code>$1</code> is the full merged stdout+stderr from the failed rule
+                        execution — including output from nested scripts and rules. The payload refreshes on each retry
+                        attempt. Persist <code>$1</code> to a stable path (here under <code>.jaiph/tmp/</code>) and
+                        assert it is non-empty before the prompt, so the message about “inspect the log file” matches
+                        what is on disk.</p>
                     <p>The workflow uses custom <code>config</code> to enable agent YOLO mode. Otherwise the agent
                         cannot
                         run some commands (for example <code>npm test</code>). By default Jaiph runs agents in their
@@ -211,9 +211,14 @@ rule ci_passes {
   run npm_run_test_ci
 }
 
+script save_string_to_file() {
+  printf '%s' "$1" > "$2"
+}
+
 workflow default {
   ensure ci_passes recover {
-    prompt "Fix failing CI so npm run test:ci passes. Check .jaiph/runs for failure details."
+    run save_string_to_file "$1" ".jaiph/tmp/ci_failure.log"
+    prompt "The CI check failed. Failure output is in .jaiph/tmp/ci_failure.log — fix the code so npm run test:ci passes."
   }
 }</code></pre>
                     <p>In the run below, <code>ci_passes</code> fails once. The failure output is captured in
