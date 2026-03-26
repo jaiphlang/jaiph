@@ -44,6 +44,7 @@ TEST_SCRIPTS=(
   "e2e/tests/96_run_stdout_redirect.sh"
   "e2e/tests/99_managed_call_semantics.sh"
   "e2e/tests/100_ensure_recover_invalid.sh"
+  "e2e/tests/101_script_isolation.sh"
 )
 
 PASS_COUNT=0

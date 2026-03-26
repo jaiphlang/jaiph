@@ -41,7 +41,10 @@ e2e::assert_equals "$(echo "${greeting_content}" | tr -d '\n')" "hello world" "s
 
 e2e::expect_out_files "env_demo.jh" 0
 
-e2e::section "top-level local accessible in rules and functions"
+e2e::section "top-level local accessible in rules and workflows (not scripts)"
+
+# Scripts run in full isolation and cannot see module-level locals.
+# Rules and workflows still see them via env shims.
 
 # Given
 e2e::file "env_all.jh" <<'EOF'
@@ -53,7 +56,7 @@ rule check_msg {
 }
 
 script write_msg() {
-  echo "$msg" > func_msg.txt
+  echo "${msg:-}" > func_msg.txt
 }
 
 workflow default {
@@ -72,9 +75,9 @@ e2e::assert_file_exists "${TEST_DIR}/func_msg.txt" "function wrote msg"
 e2e::assert_file_exists "${TEST_DIR}/wf_msg.txt" "workflow wrote msg"
 
 e2e::assert_equals "$(tr -d '\n' < "${TEST_DIR}/rule_msg.txt")" "shared-value" "rule sees correct value"
-e2e::assert_equals "$(tr -d '\n' < "${TEST_DIR}/func_msg.txt")" "shared-value" "function sees correct value"
+e2e::assert_equals "$(tr -d '\n' < "${TEST_DIR}/func_msg.txt")" "" "script does NOT see module local (isolation)"
 e2e::assert_equals "$(tr -d '\n' < "${TEST_DIR}/wf_msg.txt")" "shared-value" "workflow sees correct value"
 
 e2e::expect_out_files "env_all.jh" 0
 
-e2e::pass "top-level local declarations work correctly"
+e2e::pass "top-level local declarations: rules+workflows see vars, scripts isolated"

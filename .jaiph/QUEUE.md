@@ -6,30 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Implement script isolation and shared library support <!-- dev-ready -->
-
-**Spec**: `.jaiph/language_redesign_spec.md` — Implementation Plan Phase 4.
-
-**Goal.** Scripts execute in full isolation — only positional arguments, no inherited variables. Shared utility code is loaded via `$JAIPH_LIB`.
-
-**Scope.**
-
-1. **Script isolation.** With separate-file transpilation (previous task), isolation is largely inherent — scripts run as separate processes via `exec`. Verify that no environment variables leak from the calling module beyond `$JAIPH_LIB` and `$JAIPH_SCRIPTS`. If needed, wrap calls with `env -i` or equivalent.
-2. **`$JAIPH_LIB` runtime support.** The runtime sets `$JAIPH_LIB` to the project's shared library path (e.g. `.jaiph/lib/` relative to workspace root) before script execution. Bash scripts can `source "$JAIPH_LIB/utils.sh"`.
-3. **Validate no cross-script calls.** Parser or validator: detect when a script body references another Jaiph script by its transpiled name. Emit error: `"scripts cannot call other Jaiph scripts; use a shared library or compose in a workflow"`.
-4. **Verify `.jaiph/lib/` shared libraries work end-to-end.** The shared libraries (`checks.sh`, `strings.sh`) must be loadable from scripts and work correctly under isolation.
-
-**Acceptance criteria.**
-
-- Scripts cannot access parent scope variables (test: script that tries to read a `const` from the calling workflow gets empty string or error).
-- `$JAIPH_LIB` is set correctly during script execution.
-- `source "$JAIPH_LIB/..."` works from within isolated scripts.
-- Cross-script call detection works (parser/validator error on reference to another Jaiph script).
-- All existing tests still pass.
-- E2e test added: script isolation verified (script cannot read caller variables).
-
----
-
 ## Recover payload contract: failed rule output (stdout+stderr) <!-- dev-ready -->
 
 **Goal.** Make `ensure <rule> recover { ... }` use one fixed contract: `$1` is the full combined stdout+stderr produced by the failed rule execution, including nested scripts/rules/workflows executed within that rule call.

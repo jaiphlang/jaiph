@@ -2,6 +2,7 @@ import type { jaiphModule } from "../types";
 import { scriptShebangIsBash } from "../parse/script-bash";
 import { normalizeShellLocalExport, resolveShellRefs } from "./emit-steps";
 
+
 function emitScriptBodyLine(cmd: string, importedWorkflowSymbols: Map<string, string>): string {
   const t = cmd.trim();
   if (/^\s*return\s*$/.test(t)) {
@@ -19,13 +20,6 @@ function emitScriptBodyLine(cmd: string, importedWorkflowSymbols: Map<string, st
     }
   }
   return normalizeShellLocalExport(resolveShellRefs(cmd, importedWorkflowSymbols));
-}
-
-/** Mirror `emitEnvShims` in emit-workflow: module exports `PREFIX__name`, workflow/rule/script see `local name`. */
-function envShimLinesForStandaloneScript(workflowSymbol: string, envDecls: jaiphModule["envDecls"]): string {
-  if (!envDecls?.length) return "";
-  const envPrefix = workflowSymbol.replace(/::/g, "__");
-  return envDecls.map((e) => `  local ${e.name}="\$${envPrefix}__${e.name}"`).join("\n");
 }
 
 function wrapBashStandaloneScriptBody(body: string, envPreamble: string): string {
@@ -53,17 +47,16 @@ function wrapBashStandaloneScriptBody(body: string, envPreamble: string): string
 export function buildScriptFiles(
   ast: jaiphModule,
   importedWorkflowSymbols: Map<string, string>,
-  workflowSymbol: string,
+  _workflowSymbol: string,
 ): Array<{ name: string; content: string }> {
   const out: Array<{ name: string; content: string }> = [];
-  const envPreamble = envShimLinesForStandaloneScript(workflowSymbol, ast.envDecls);
   for (const sc of ast.scripts) {
     const shebang = sc.shebang ?? "#!/usr/bin/env bash";
     const rawBody = scriptShebangIsBash(sc.shebang)
       ? sc.commands.map((c) => emitScriptBodyLine(c, importedWorkflowSymbols)).join("\n")
       : sc.commands.join("\n");
     const body = scriptShebangIsBash(sc.shebang)
-      ? wrapBashStandaloneScriptBody(rawBody, envPreamble)
+      ? wrapBashStandaloneScriptBody(rawBody, "")
       : rawBody;
     const content = body.length > 0 ? `${shebang}\n${body}\n` : `${shebang}\n`;
     out.push({ name: sc.name, content });
