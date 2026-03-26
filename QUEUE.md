@@ -6,46 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## JS runtime migration (part 1): prompt execution + artifacts parity <!-- dev-ready -->
-
-**Goal**  
-Port only `prompt` orchestration from Bash runtime to JS kernel first, while keeping all current prompt-side artifacts and CLI behavior stable.
-
-**Standalone context (read this task in isolation)**
-
-- Current state: orchestration still relies on Bash runtime (`src/jaiph_stdlib.sh` + `src/runtime/*.sh`).
-- Target state: orchestration progressively moves to JS kernel (`src/runtime/kernel/`) executed in-process by CLI.
-- This part migrates **only prompt execution path**; all other orchestration can stay on existing runtime for now.
-- Non-negotiable contracts in this part:
-  1. CLI behavior for `jaiph run`/`jaiph test` around prompt steps remains stable.
-  2. Prompt-related `__JAIPH_EVENT__` JSONL shape/order remains compatible.
-  3. `.jaiph/runs` prompt artifacts and prompt-related `run_summary.jsonl` events remain compatible.
-- Keep parser/validator language surface unchanged unless absolutely required by migration.
-- Keep user script-body execution model unchanged (still external process execution when relevant).
-
-**Out of scope (for this part)**
-
-- Full `run`/`ensure`/`rule`/workflow orchestration migration.
-- Channel/inbox runtime port.
-- Hook wiring migration.
-- Standalone binary packaging/docs cutover.
-
-**Scope**
-
-1. Implement prompt execution path in `src/runtime/kernel/` (request build, backend call, capture, schema parse, error mapping).
-2. Preserve prompt artifact outputs under `.jaiph/runs` exactly as today (including prompt-related `.out`/`.err` and captured values).
-3. Keep `__JAIPH_EVENT__` prompt-related events shape/order compatible with current CLI progress handling.
-4. Keep parser/validator language surface unchanged for prompt syntax.
-5. Route only prompt steps to JS kernel; non-prompt orchestration can remain on existing runtime for this phase.
-
-**Acceptance criteria**
-
-- Existing prompt-focused unit/e2e tests pass without broad fixture rebaselining.
-- Prompt success/failure behavior and user-facing messages match current contracts.
-- Prompt artifacts and `run_summary.jsonl` entries remain compatible with reporting tooling.
-
----
-
 ## JS runtime migration (part 2): core step execution (`run`/`ensure`/`rule`/`workflow`) <!-- dev-ready -->
 
 **Goal**  
@@ -216,6 +176,7 @@ Complete cutover to in-process JS kernel and finalize distribution/docs.
 - `npm run build`, `npm test`, and `npm run test:e2e` pass.
 - Shipped `jaiph` binary runs standalone with zero external runtime dependency.
 - Debuggability is at least on par with current runtime (preferably better).
+- No *.sh files are required for runtime
 
 ---
 
