@@ -214,6 +214,29 @@ sequenceDiagram
     CLI-->>User: test PASS/FAIL output
 ```
 
+## TypeScript test organization
+
+Tests are colocated with the modules they validate:
+
+- **Module tests** live next to their source in `src/` directories:
+  - `src/parse/*.test.ts` — parser unit tests.
+  - `src/cli/run/*.test.ts` — CLI run pipeline tests (display, events, hooks, etc.).
+  - `src/cli/shared/*.test.ts` — shared CLI utility tests (errors).
+  - `src/cli/commands/*.test.ts` — CLI command tests (format-params).
+  - `src/transpile/*.test.ts` — transpiler/compiler tests (emit, golden, validation, acceptance).
+  - `src/reporting/*.test.ts` — reporting module tests.
+  - `src/runtime/*.test.ts` — runtime adapter tests (docker).
+
+- **Cross-cutting tests** remain in `test/` when they span multiple modules or test process-level behavior:
+  - `test/sample-build.test.ts` — integration test spanning transpiler+parser+CLI.
+  - `test/signal-lifecycle.test.ts` — process signal handling.
+  - `test/run-summary-jsonl.test.ts` — process-level run summary integration.
+  - `test/tty-running-timer.test.ts` — PTY-based terminal rendering.
+  - `test/fixtures-build.jest.test.js` — Jest snapshot test for fixture builds.
+  - `test/fixtures/`, `test/expected/`, `test/__snapshots__/` — shared test data.
+
+- **E2E shell tests** in `e2e/tests/*.sh` — CLI contracts and golden outputs.
+
 ## Summary
 
 - `.jh` and `*.test.jh` share parser/AST/validation foundations, then diverge at transpilation target.

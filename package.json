@@ -10,8 +10,8 @@
   "scripts": {
     "clean": "rm -rf dist",
     "build": "tsc -p tsconfig.json && node -e \"require('node:fs').copyFileSync('src/jaiph_stdlib.sh','dist/src/jaiph_stdlib.sh'); require('node:fs').cpSync('src/runtime','dist/src/runtime',{recursive:true}); require('node:fs').cpSync('src/reporting/public','dist/src/reporting/public',{recursive:true})\"",
-    "test": "npm run build && NODE_OPTIONS='--max-old-space-size=32768' node --test dist/test/*.test.js dist/test/acceptance/*.acceptance.test.js && jest --runInBand test/fixtures-build.jest.test.js",
-    "test:acceptance:compiler": "npm run build && node --test dist/test/acceptance/*.acceptance.test.js",
+    "test": "npm run build && NODE_OPTIONS='--max-old-space-size=32768' node --test dist/test/*.test.js $(find dist/src -name '*.test.js' -o -name '*.acceptance.test.js') && jest --runInBand test/fixtures-build.jest.test.js",
+    "test:acceptance:compiler": "npm run build && node --test $(find dist/src -name '*.acceptance.test.js')",
     "test:acceptance:runtime": "bash ./e2e/test_all.sh",
     "test:acceptance": "npm run test:acceptance:compiler && npm run test:acceptance:runtime",
     "test:ci": "npm test && npm run test:e2e",

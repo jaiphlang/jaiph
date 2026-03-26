@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { colorize, formatCompletedLine, formatStartLine } from "../src/cli/run/display";
+import { colorize, formatCompletedLine, formatStartLine } from "./display";
 
 // === colorize ===
 

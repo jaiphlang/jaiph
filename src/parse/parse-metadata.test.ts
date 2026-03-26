@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseConfigBlock } from "../src/parse/metadata";
-import { parsejaiph } from "../src/parser";
+import { parseConfigBlock } from "./metadata";
+import { parsejaiph } from "../parser";
 
 test("parseConfigBlock: parses minimal config with one key", () => {
   const lines = [

@@ -47,11 +47,11 @@ For day-to-day work on the compiler and CLI you usually stay inside the clone: i
 |---------|----------------|
 | `npm install` | Installs TypeScript, Jest, and types (dev dependencies). |
 | `npm run build` | Compiles TypeScript to `dist/` and copies runtime assets (stdlib, `src/runtime`, reporting static files). |
-| `npm test` | `npm run build`, then the Node.js built-in test runner on `dist/test/*.test.js` and `dist/test/acceptance/*.acceptance.test.js`, then Jest on `test/fixtures-build.jest.test.js` (fixture build snapshot). |
+| `npm test` | `npm run build`, then the Node.js built-in test runner on cross-cutting tests in `dist/test/*.test.js` and all colocated module tests under `dist/src/**/*.test.js` (including `*.acceptance.test.js`), then Jest on `test/fixtures-build.jest.test.js` (fixture build snapshot). |
 | `npm run test:e2e` | Build plus `bash ./e2e/test_all.sh` (same as `test:acceptance:runtime`). |
 | `npm run test:ci` | `npm test` followed by `npm run test:e2e` — useful before pushing when you want the full local picture. |
 
-Run a single Node test file after a build with e.g. `node --test dist/test/parse-core.test.js`. The `dist/` paths mirror `test/*.test.ts` and `test/acceptance/*.acceptance.test.ts`.
+Run a single Node test file after a build with e.g. `node --test dist/src/parse/parse-core.test.js`. The `dist/` paths mirror the source layout under `src/`.
 
 ## Code philosophy
 
@@ -73,9 +73,10 @@ Jaiph uses several test layers. Each layer catches a different class of bug. Use
 
 | Layer | Location | What it catches | When to use |
 |-------|----------|-----------------|-------------|
-| **Unit tests** | `test/*.test.ts` | Bugs in pure functions (event parsing, param formatting, path resolution, config merging) | The function is self-contained, takes input and returns output, no I/O |
-| **Compiler acceptance tests** | `test/acceptance/*.acceptance.test.ts` | Cross-module compiler behavior: validation errors, resolution, and other cases that need a temp project tree or subprocess | You need a deterministic error string, multi-file `build()`, or behavior that does not fit a tiny golden snippet |
-| **Compiler golden tests** | `test/compiler-golden.test.ts` | Regressions in the transpiler and parser — many cases use **inline** expected `.sh` strings in the test file itself | You changed the emitter or parser and need to lock an exact emitted script or parse result (refresh the canonical workflow snippet with `scripts/dump-golden-output.js` when that embedded expectation changes) |
+| **Module tests** | `src/**/*.test.ts` (colocated) | Bugs in pure functions (event parsing, param formatting, path resolution, config merging) | The function is self-contained, takes input and returns output, no I/O |
+| **Compiler acceptance tests** | `src/transpile/*.acceptance.test.ts` (colocated) | Cross-module compiler behavior: validation errors, resolution, and other cases that need a temp project tree or subprocess | You need a deterministic error string, multi-file `build()`, or behavior that does not fit a tiny golden snippet |
+| **Compiler golden tests** | `src/transpile/compiler-golden.test.ts` (colocated) | Regressions in the transpiler and parser — many cases use **inline** expected `.sh` strings in the test file itself | You changed the emitter or parser and need to lock an exact emitted script or parse result (refresh the canonical workflow snippet with `scripts/dump-golden-output.js` when that embedded expectation changes) |
+| **Cross-cutting tests** | `test/*.test.ts` | Process-level integration behavior: signal handling, TTY rendering, run summary structure, sample builds | The test spans multiple modules or requires subprocess/PTY harnesses |
 | **Fixture build snapshots** | `test/fixtures-build.jest.test.js`, `test/fixtures/*.jh`, `test/__snapshots__/fixtures-build.jest.test.js.snap` | The **whole** fixture set still builds and the generated `.sh` tree matches the Jest snapshot | You changed emission globally and need to catch drift across multiple real-world-ish `.jh` files — update the snapshot intentionally when output is meant to change |
 | **E2E tests** | `e2e/tests/*.sh` | Runtime behavior — does the built workflow actually execute correctly end-to-end? | The behavior involves the CLI, bash runtime, process lifecycle, or file artifacts |
 
@@ -83,31 +84,36 @@ Jaiph uses several test layers. Each layer catches a different class of bug. Use
 
 1. **Tests are behavior contracts.** E2E tests and acceptance tests define what the product does. Default approach: change production code to satisfy tests, not the other way around.
 2. **Modify existing tests only with a strong reason:** intentional product behavior change, incorrect test expectation, or removal of an obsolete feature. Any such change should be minimal and paired with a clear rationale.
-3. **Golden and snapshot tests are the compiler's safety net.** After transpiler changes, run `npm test`. Failures in `compiler-golden.test.ts` usually mean updating an explicit expected string in that file; for the main minimal workflow golden, run `npm run build && node scripts/dump-golden-output.js` and reconcile with the test source (see the comment above that case in `compiler-golden.test.ts`). If Jest reports a fixture snapshot mismatch, refresh it only when the new emitted `.sh` tree is correct, e.g. `npm run test:jest -- -u`.
+3. **Golden and snapshot tests are the compiler's safety net.** After transpiler changes, run `npm test`. Failures in `src/transpile/compiler-golden.test.ts` usually mean updating an explicit expected string in that file; for the main minimal workflow golden, run `npm run build && node scripts/dump-golden-output.js` and reconcile with the test source (see the comment above that case in `compiler-golden.test.ts`). If Jest reports a fixture snapshot mismatch, refresh it only when the new emitted `.sh` tree is correct, e.g. `npm run test:jest -- -u`.
 4. **E2E tests assert two things independently:** what the user sees (CLI tree output via `e2e::expect_stdout`) and what the runtime persists (artifact files via `e2e::expect_out`, `e2e::expect_file`). A bug could break one without the other.
 5. **Prefer the narrowest test layer.** A pure function bug should be caught by a unit test, not an E2E test. E2E tests are expensive to run and hard to debug — reserve them for integration-level behavior.
 
-### Unit test file layout
+### Module test layout (colocated)
 
-Unit tests in `test/*.test.ts` are organized by source module. Each test file maps to a specific source file or functional area:
+Module tests live next to the source files they validate, inside the same `src/` directory. Each test file is named `<module>.test.ts` alongside its source:
 
 | Test file | Source module | What it covers |
 |-----------|--------------|----------------|
-| `parse-core.test.ts` | `src/parse/core.ts` | Low-level parsing primitives: `stripQuotes`, `isRef`, `hasUnescapedClosingQuote`, `indexOfClosingDoubleQuote`, `colFromRaw`, `braceDepthDelta`, `fail` |
-| `parse-imports.test.ts` | `src/parse/imports.ts` | Import line parsing: valid/invalid paths, aliases, error cases |
-| `parse-env.test.ts` | `src/parse/env.ts` | Env declaration parsing: quoted values, multiline, unterminated strings, trailing content |
-| `parse-metadata.test.ts` | `src/parse/metadata.ts` | Config block parsing: value types, key validation, backend validation, error paths |
-| `emit-steps.test.ts` | `src/transpile/emit-steps.ts` | Step emission helpers: param key extraction, shell local/export normalization, ref resolution, symbol transpilation |
-| `display.test.ts` | `src/cli/run/display.ts` | CLI display formatting: `colorize` (ANSI/NO_COLOR), `formatCompletedLine`, `formatStartLine` |
-| `resolve-env.test.ts` | `src/cli/run/env.ts` | Runtime environment resolution: workspace, config defaults, env precedence, locked keys, transient cleanup |
-| `errors.test.ts` | `src/cli/shared/errors.ts` | Error summarization: `summarizeError`, `resolveFailureDetails`, `hasFatalRuntimeStderr`, run metadata extraction |
-| `events.test.ts` | `src/cli/run/events.ts` | Event parsing: `parseLogEvent`, `parseStepEvent` for `__JAIPH_EVENT__` JSON lines |
-| `format-params-display.test.ts` | `src/cli/commands/format-params.ts` | Parameter display formatting: `formatParamsForDisplay`, `formatNamedParamsForDisplay`, `normalizeParamValue` |
-| `docker.test.ts` | `src/runtime/docker.ts` | Docker integration helpers: mount parsing/validation, config resolution, `buildDockerArgs` |
-| `hooks.test.ts` | `src/cli/run/hooks.ts` | Hook lifecycle: `globalHooksPath`, `projectHooksPath`, `parseHookConfig`, `loadMergedHooks`, `runHooksForEvent` |
-| `reporting-server.test.ts` | `src/reporting/` (`path-utils`, `summary-parser`, `artifact-path`, `run-registry`) | Safe paths, summary JSONL parsing, run registry polling, derived run status |
+| `src/parse/parse-core.test.ts` | `src/parse/core.ts` | Low-level parsing primitives: `stripQuotes`, `isRef`, `hasUnescapedClosingQuote`, `indexOfClosingDoubleQuote`, `colFromRaw`, `braceDepthDelta`, `fail` |
+| `src/parse/parse-imports.test.ts` | `src/parse/imports.ts` | Import line parsing: valid/invalid paths, aliases, error cases |
+| `src/parse/parse-env.test.ts` | `src/parse/env.ts` | Env declaration parsing: quoted values, multiline, unterminated strings, trailing content |
+| `src/parse/parse-metadata.test.ts` | `src/parse/metadata.ts` | Config block parsing: value types, key validation, backend validation, error paths |
+| `src/transpile/emit-steps.test.ts` | `src/transpile/emit-steps.ts` | Step emission helpers: param key extraction, shell local/export normalization, ref resolution, symbol transpilation |
+| `src/transpile/compiler-golden.test.ts` | `src/transpiler.ts`, `src/transpile/*` | Golden/regression: inline expected bash for the canonical minimal workflow and structured scenarios |
+| `src/transpile/validate-managed-calls.test.ts` | `src/transpile/validate.ts` | Transpiler `E_VALIDATE` rules (e.g. disallowed command substitution) |
+| `src/transpile/compiler-edge.acceptance.test.ts` | `src/transpile/*` | Cross-module compiler acceptance: validation errors, resolution, multi-file builds |
+| `src/cli/run/display.test.ts` | `src/cli/run/display.ts` | CLI display formatting: `colorize` (ANSI/NO_COLOR), `formatCompletedLine`, `formatStartLine` |
+| `src/cli/run/resolve-env.test.ts` | `src/cli/run/env.ts` | Runtime environment resolution: workspace, config defaults, env precedence, locked keys, transient cleanup |
+| `src/cli/run/events.test.ts` | `src/cli/run/events.ts` | Event parsing: `parseLogEvent`, `parseStepEvent` for `__JAIPH_EVENT__` JSON lines |
+| `src/cli/run/hooks.test.ts` | `src/cli/run/hooks.ts` | Hook lifecycle: `globalHooksPath`, `projectHooksPath`, `parseHookConfig`, `loadMergedHooks`, `runHooksForEvent` |
+| `src/cli/run/non-tty-heartbeat.test.ts` | `src/cli/run/*` | Non-TTY run: long step produces heartbeat line shape |
+| `src/cli/run/stderr-handler.test.ts` | `src/cli/run/stderr-handler.ts` | `registerTTYSubscriber` / stderr routing edge cases |
+| `src/cli/shared/errors.test.ts` | `src/cli/shared/errors.ts` | Error summarization: `summarizeError`, `resolveFailureDetails`, `hasFatalRuntimeStderr`, run metadata extraction |
+| `src/cli/commands/format-params-display.test.ts` | `src/cli/commands/format-params.ts` | Parameter display formatting: `formatParamsForDisplay`, `formatNamedParamsForDisplay`, `normalizeParamValue` |
+| `src/runtime/docker.test.ts` | `src/runtime/docker.ts` | Docker integration helpers: mount parsing/validation, config resolution, `buildDockerArgs` |
+| `src/reporting/reporting-server.test.ts` | `src/reporting/*` | Safe paths, summary JSONL parsing, run registry polling, derived run status |
 
-When adding a new source module or extending an existing one, follow this pattern: create or extend the corresponding `test/<module>.test.ts` file. This keeps unit tests discoverable — given a source file, the test file is predictable.
+When adding a new source module or extending an existing one, create or extend the corresponding `*.test.ts` file in the same directory. This keeps tests discoverable — given a source file, the test file is always a sibling.
 
 ### Reference validation: ensure, run, and send RHS
 
@@ -127,24 +133,19 @@ After validation, each compiled workflow module becomes one bash script. Ownersh
 
 Moving logic between these modules is an internal refactor: **generated bash should stay byte-identical** unless you intend to change the transpiler contract. Use `npm test` (including `compiler-golden.test.ts` and fixture snapshots) and `npm run test:e2e` the same way as for any other emitter edit.
 
-### Other test files in `test/`
+### Cross-cutting tests in `test/`
 
-Some files in `test/` don't follow the strict one-file-per-module layout. They exercise integration behavior, subprocesses, or acceptance-style scenarios:
+Tests that span multiple modules, require subprocess/PTY harnesses, or exercise process-level behavior remain in `test/`. These do not belong to a single module:
 
 | Test file | Kind | What it covers |
 |-----------|------|----------------|
-| `compiler-golden.test.ts` | Golden/regression | Large suite of parser/transpiler checks; includes inline expected bash for the canonical minimal workflow (see `scripts/dump-golden-output.js`), plus cases aligned with structured workflows/rules, `fail`, workflow `const` (including rejection of bare `ref args` without `run`), `wait`, brace-only `if`, send RHS, and script bodies |
-| `fixtures-build.jest.test.js` | Snapshot | Builds everything under `test/fixtures/` and compares file list + contents to Jest snapshot |
 | `sample-build.test.ts` | Integration | Cross-module build/transpile/run-tree behavior using real compiler and CLI components |
 | `run-summary-jsonl.test.ts` | Integration | Runs the CLI on a small workflow and asserts structure and fields of `run_summary.jsonl` under `.jaiph/runs/` |
-| `validate-managed-calls.test.ts` | Validation | Transpiler `E_VALIDATE` rules (e.g. disallowed command substitution calling Jaiph rules/workflows/scripts) |
-| `non-tty-heartbeat.test.ts` | Acceptance | Non-TTY run: long step produces heartbeat line shape; uses built `dist/src/cli.js` |
-| `stderr-handler.test.ts` | Unit/TTY | `registerTTYSubscriber` / stderr routing edge cases with a stubbed stdout |
 | `signal-lifecycle.test.ts` | Acceptance | After SIGINT/SIGTERM, verifies `jaiph run` exits within a time bound and leaves no stale child processes |
-| `tty-running-timer.test.ts` | Acceptance | In a TTY, verifies the "RUNNING workflow" line updates over time (requires Python 3 PTY harness) |
-| `errors.test.ts` | Unit | Failure footer helpers: `readFailedStepOutput`, `failedStepArtifactPaths` (first failed `STEP_END` in `run_summary.jsonl` vs lexicographic “latest” artifacts in the run dir) |
+| `tty-running-timer.test.ts` | Acceptance | In a TTY, verifies the “RUNNING workflow” line updates over time (requires Python 3 PTY harness) |
+| `fixtures-build.jest.test.js` | Snapshot | Builds everything under `test/fixtures/` and compares file list + contents to Jest snapshot |
 
-Compiler acceptance tests that need multiple files or `spawnSync` live under `test/acceptance/` with the `*.acceptance.test.ts` suffix so `npm test` picks them up after build.
+Shared test data (`test/fixtures/`, `test/expected/`, `test/__snapshots__/`) also remains in `test/`.
 
 ## E2E testing
 

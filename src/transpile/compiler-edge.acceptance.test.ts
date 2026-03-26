@@ -4,8 +4,8 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { spawnSync } from "node:child_process";
-import { build, transpileTestFile } from "../../src/transpiler";
-import { parsejaiph } from "../../src/parser";
+import { build, transpileTestFile } from "../transpiler";
+import { parsejaiph } from "../parser";
 
 function withTempDir(prefix: string, fn: (root: string) => void): void {
   const root = mkdtempSync(join(tmpdir(), prefix));

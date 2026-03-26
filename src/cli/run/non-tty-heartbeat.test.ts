@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { formatHeartbeatLine } from "../src/cli/run/display";
+import { formatHeartbeatLine } from "./display";
 
 test("formatHeartbeatLine matches step-end label shape", () => {
   const indent = "  · ";

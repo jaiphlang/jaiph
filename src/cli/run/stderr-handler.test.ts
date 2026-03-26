@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createRunEmitter } from "../src/cli/run/emitter";
-import { registerTTYSubscriber, type TTYContext } from "../src/cli/run/stderr-handler";
-import type { StepEvent } from "../src/cli/run/events";
+import { createRunEmitter } from "./emitter";
+import { registerTTYSubscriber, type TTYContext } from "./stderr-handler";
+import type { StepEvent } from "./events";
 
 test("registerTTYSubscriber: STEP_END fallback indent uses event depth", () => {
   const emitter = createRunEmitter();
