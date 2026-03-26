@@ -1,12 +1,73 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 
+/** Linux minimal images often omit procps (`ps` / `pgrep`); use /proc instead. */
+function useLinuxProcForPids(): boolean {
+  return process.platform === "linux" && existsSync("/proc/self/status");
+}
+
+function readPpidFromProcStatus(pid: number): number | null {
+  try {
+    const text = readFileSync(`/proc/${pid}/status`, "utf8");
+    const m = /^PPid:\s+(\d+)/m.exec(text);
+    if (!m) return null;
+    const n = parseInt(m[1], 10);
+    return Number.isNaN(n) ? null : n;
+  } catch {
+    return null;
+  }
+}
+
+function readProcCmdlineJoined(pid: number): string {
+  try {
+    return readFileSync(`/proc/${pid}/cmdline`).toString("latin1").replace(/\0/g, " ");
+  } catch {
+    return "";
+  }
+}
+
+function findChildPidsViaProc(parentPid: number): number[] {
+  const result: number[] = [];
+  let entries: string[];
+  try {
+    entries = readdirSync("/proc");
+  } catch {
+    return [];
+  }
+  for (const name of entries) {
+    if (!/^\d+$/.test(name)) continue;
+    const pid = parseInt(name, 10);
+    if (readPpidFromProcStatus(pid) === parentPid) result.push(pid);
+  }
+  return result;
+}
+
+function findChildPidsMatchingViaProc(parentPid: number, pattern: string): number[] {
+  return findChildPidsViaProc(parentPid).filter((pid) =>
+    readProcCmdlineJoined(pid).includes(pattern),
+  );
+}
+
+function anyPidsAliveViaProc(pids: number[]): boolean {
+  return pids.some((p) => existsSync(`/proc/${p}`));
+}
+
 /** Return PIDs matching pattern whose parent is parentPid (direct children only). */
 function findChildPidsMatching(parentPid: number, pattern: string): number[] {
+  if (useLinuxProcForPids()) {
+    return findChildPidsMatchingViaProc(parentPid, pattern);
+  }
   const pgrep = spawnSync("pgrep", ["-f", pattern], { encoding: "utf8" });
   const pids = (pgrep.stdout?.trim() || "")
     .split(/\s+/)
@@ -32,6 +93,9 @@ function findChildPidsMatching(parentPid: number, pattern: string): number[] {
 
 /** Return direct child PIDs for parentPid (no command filter). */
 function findChildPids(parentPid: number): number[] {
+  if (useLinuxProcForPids()) {
+    return findChildPidsViaProc(parentPid);
+  }
   const ps = spawnSync("ps", ["-o", "pid=,ppid=", "-ax"], { encoding: "utf8" });
   const lines = (ps.stdout?.trim() || "").split(/\n/).filter(Boolean);
   const result: number[] = [];
@@ -49,6 +113,9 @@ function findChildPids(parentPid: number): number[] {
 /** Return true if any of the given PIDs are still running. */
 function anyPidsAlive(pids: number[]): boolean {
   if (pids.length === 0) return false;
+  if (useLinuxProcForPids()) {
+    return anyPidsAliveViaProc(pids);
+  }
   const ps = spawnSync("ps", ["-o", "pid=", "-p", pids.join(",")], {
     encoding: "utf8",
   });

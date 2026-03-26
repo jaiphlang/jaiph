@@ -212,6 +212,7 @@ jaiph::logerr() {
     jaiph::_run_summary_append_line "$line_err"
   fi
   echo -e "$message" >&2
+  [[ -n "${JAIPH_ENSURE_OUTPUT_FILE:-}" ]] && printf '%s\n' "$message" >> "$JAIPH_ENSURE_OUTPUT_FILE"
   if [[ "$had_xtrace" -eq 1 ]]; then
     set -x
   fi

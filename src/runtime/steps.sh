@@ -365,11 +365,22 @@ jaiph::run_step() {
   fi
   if [[ "$step_kind" == "script" && -n "${JAIPH_RETURN_VALUE_FILE:-}" ]]; then
     if [[ -n "$out_file" && -f "$out_file" ]]; then
-      # Append so ensure/recover can inspect stdout emitted across nested scripts
-      # in a failed rule attempt (the retry loop truncates the file per attempt).
       cat "$out_file" >> "$JAIPH_RETURN_VALUE_FILE"
     else
       : > "$JAIPH_RETURN_VALUE_FILE"
+    fi
+  fi
+  # Append step output to the ensure/recover output capture file.
+  # .out is appended for all step kinds (scripts AND rules) so that rule-level
+  # echo/log output is included in the recover payload.
+  # .err is appended only for scripts: rule .err files contain catted nested
+  # stderr (run_step cats failed child .err to parent stderr), so appending
+  # rule .err would duplicate script stderr already captured at the leaf level.
+  # Rule-level logerr output is captured directly by jaiph::logerr.
+  if [[ -n "${JAIPH_ENSURE_OUTPUT_FILE:-}" ]]; then
+    [[ -n "$out_file" && -f "$out_file" ]] && cat "$out_file" >> "$JAIPH_ENSURE_OUTPUT_FILE"
+    if [[ "$step_kind" == "script" ]]; then
+      [[ -n "$err_file" && -f "$err_file" ]] && cat "$err_file" >> "$JAIPH_ENSURE_OUTPUT_FILE"
     fi
   fi
   jaiph::track_output_files "$out_file" "$err_file"

@@ -414,17 +414,19 @@ export function emitEnsureRecoverLoop(
 ): void {
   const retriesDefault = String(DEFAULT_ENSURE_MAX_RETRIES);
   out.push(`${indent}local _jaiph_ensure_rv_file; _jaiph_ensure_rv_file=$(mktemp)`);
+  out.push(`${indent}local _jaiph_ensure_output_file; _jaiph_ensure_output_file=$(mktemp)`);
   out.push(`${indent}local _jaiph_ensure_output`);
   out.push(`${indent}local _jaiph_ensure_prev_args=()`);
   out.push(`${indent}local _jaiph_ensure_passed=0`);
   out.push(`${indent}for _jaiph_retry in $(seq 1 "\${JAIPH_ENSURE_MAX_RETRIES:-${retriesDefault}}"); do`);
   out.push(`${indent}  : > "$_jaiph_ensure_rv_file"`);
-  out.push(`${indent}  if JAIPH_RETURN_VALUE_FILE="$_jaiph_ensure_rv_file" ${transpiledRef}${args}; then`);
+  out.push(`${indent}  : > "$_jaiph_ensure_output_file"`);
+  out.push(`${indent}  if JAIPH_RETURN_VALUE_FILE="$_jaiph_ensure_rv_file" JAIPH_ENSURE_OUTPUT_FILE="$_jaiph_ensure_output_file" ${transpiledRef}${args}; then`);
   out.push(`${indent}    _jaiph_ensure_passed=1`);
   out.push(`${indent}    break`);
   out.push(`${indent}  fi`);
   out.push(`${indent}  _jaiph_ensure_output=""`);
-  out.push(`${indent}  [[ -s "$_jaiph_ensure_rv_file" ]] && _jaiph_ensure_output=$(<"$_jaiph_ensure_rv_file")`);
+  out.push(`${indent}  [[ -s "$_jaiph_ensure_output_file" ]] && _jaiph_ensure_output=$(<"$_jaiph_ensure_output_file")`);
   out.push(`${indent}  _jaiph_ensure_prev_args=("$@")`);
   out.push(`${indent}  set -- "$_jaiph_ensure_output"`);
   const recoverCtx: StepEmitCtx = { ...ctx, inRecoverBlock: true };
@@ -436,7 +438,7 @@ export function emitEnsureRecoverLoop(
   if (captureName) {
     out.push(`${indent}${captureName}=""; [[ -s "$_jaiph_ensure_rv_file" ]] && ${captureName}=$(<"$_jaiph_ensure_rv_file")`);
   }
-  out.push(`${indent}rm -f "$_jaiph_ensure_rv_file"`);
+  out.push(`${indent}rm -f "$_jaiph_ensure_rv_file" "$_jaiph_ensure_output_file"`);
   out.push(`${indent}if [[ "$_jaiph_ensure_passed" -ne 1 ]]; then`);
   out.push(`${indent}  echo "jaiph: ensure condition did not pass after \${JAIPH_ENSURE_MAX_RETRIES:-${retriesDefault}} retries" >&2`);
   out.push(`${indent}  exit 1`);

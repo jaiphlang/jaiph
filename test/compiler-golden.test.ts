@@ -1748,9 +1748,11 @@ test("compiler golden: ensure...recover single statement emits retry loop", () =
     // Retry loop structure
     assert.match(actual, /local _jaiph_ensure_passed=0/);
     assert.match(actual, /for _jaiph_retry in \$\(seq 1/);
-    assert.match(actual, /JAIPH_RETURN_VALUE_FILE="\$_jaiph_ensure_rv_file" entry::tests_pass; then/);
+    assert.match(actual, /JAIPH_RETURN_VALUE_FILE="\$_jaiph_ensure_rv_file" JAIPH_ENSURE_OUTPUT_FILE="\$_jaiph_ensure_output_file" entry::tests_pass; then/);
     assert.match(actual, /_jaiph_ensure_passed=1/);
     assert.match(actual, /break/);
+    // Recover payload read from ensure output file (merged stdout+stderr)
+    assert.match(actual, /\$_jaiph_ensure_output_file/);
     // Recover step calls the workflow
     assert.match(actual, /entry::fix_tests/);
     // Failure message after max retries
@@ -1793,7 +1795,7 @@ test("compiler golden: ensure...recover block emits retry loop with multiple ste
     const actual = normalize(transpileFile(input, root).module);
     // Retry loop
     assert.match(actual, /for _jaiph_retry in \$\(seq 1/);
-    assert.match(actual, /JAIPH_RETURN_VALUE_FILE="\$_jaiph_ensure_rv_file" entry::ci_pass; then/);
+    assert.match(actual, /JAIPH_RETURN_VALUE_FILE="\$_jaiph_ensure_rv_file" JAIPH_ENSURE_OUTPUT_FILE="\$_jaiph_ensure_output_file" entry::ci_pass; then/);
     // Both recover steps present
     assert.match(actual, /entry::fix_ci/);
     assert.match(actual, /jaiph::log "retrying"/);

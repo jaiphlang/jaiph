@@ -51,17 +51,15 @@ fi
 e2e::pass "ensure...recover capture: return value only"
 
 # ===================================================================
-e2e::section "ensure...recover: recover block receives rule return value (not stdout)"
+e2e::section "ensure...recover: recover block receives merged stdout+stderr from failed rule"
 # ===================================================================
 
 rm -f "${TEST_DIR}/ready2.txt"
 rm -f "${TEST_DIR}/recover_received.txt"
 
-e2e::file "recover_receives_rv.jh" <<'EOF'
+e2e::file "recover_receives_output.jh" <<'EOF'
 rule analyze {
   echo "analysis-stdout-log"
-  # Populate value channel for recover on failed ensure attempt.
-  echo "analysis-result-42" > "$JAIPH_RETURN_VALUE_FILE"
   test -f ready2.txt
 }
 
@@ -74,19 +72,19 @@ workflow default {
 EOF
 rm -rf "${TEST_DIR}/runs_rrv"
 
-JAIPH_RUNS_DIR="runs_rrv" e2e::run "recover_receives_rv.jh" >/dev/null 2>&1
+JAIPH_RUNS_DIR="runs_rrv" e2e::run "recover_receives_output.jh" >/dev/null 2>&1
 
-# The recover block should receive the failed rule value channel as $1
+# The recover block should receive the merged stdout+stderr from the failed rule
 e2e::assert_file_exists "${TEST_DIR}/recover_received.txt" "recover block ran"
 recover_content="$(<"${TEST_DIR}/recover_received.txt")"
-e2e::assert_equals "${recover_content}" "analysis-result-42" "recover block receives rule value channel (not stdout)"
-e2e::pass "ensure...recover: recover block value semantics"
+e2e::assert_contains "${recover_content}" "analysis-stdout-log" "recover block receives rule stdout in \$1"
+e2e::pass "ensure...recover: recover block output semantics"
 
 # ===================================================================
 e2e::section "ensure...recover: rule stdout goes to artifacts"
 # ===================================================================
 
-run_dir="$(e2e::run_dir_at "${TEST_DIR}/runs_rrv" "recover_receives_rv.jh")"
+run_dir="$(e2e::run_dir_at "${TEST_DIR}/runs_rrv" "recover_receives_output.jh")"
 
 # Rule stdout goes to .out artifacts
 shopt -s nullglob

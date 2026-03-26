@@ -16,8 +16,8 @@ const testing_philosophy = "
   2. Compiler acceptance tests (test/acceptance/*.test.ts) — parser/transpiler
      edge cases: malformed input, error messages, boundary conditions.
   3. Golden output tests (test/fixtures/ + test/expected/) — compiler
-     regressions: verifies .jh input produces exact .sh output. Use
-     scripts/dump-golden-output.js to regenerate when change is intentional.
+     regressions: verifies .jh input produces exact .sh output. Update
+     test/expected/ when a change is intentional.
   4. E2E tests (e2e/tests/*.sh) — runtime behavior: does the built workflow
      actually execute correctly? Uses helpers from e2e/lib/common.sh with
      Given/When/Then structure.
@@ -119,8 +119,8 @@ workflow write_tests {
 
     Rules:
     - For golden output tests: add .jh fixture in test/fixtures/ and expected
-      .sh output in test/expected/. Run scripts/dump-golden-output.js to
-      generate the expected output, then verify it looks correct.
+      .sh output in test/expected/; align expected files with transpiler
+      output and verify before committing.
     - For acceptance tests: add to test/acceptance/ using Node test runner
       (import test from 'node:test' and assert from 'node:assert').
     - For unit tests: add to test/ using Node test runner.
