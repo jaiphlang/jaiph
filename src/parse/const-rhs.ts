@@ -13,19 +13,19 @@ export function validateConstBashExpr(filePath: string, expr: string, lineNo: nu
   if (/\$\(/.test(t)) {
     fail(
       filePath,
-      'const value cannot use command substitution "$(...)"; extract a function and use const name = run ref',
+      'const value cannot use command substitution "$(...)"; use a script and const name = run ref',
       lineNo,
       col,
     );
   }
   if (/\$\{[^}]*%%/.test(t)) {
-    fail(filePath, "const value cannot use ${var%%...} expansion; use a function", lineNo, col);
+    fail(filePath, "const value cannot use ${var%%...} expansion; use a script", lineNo, col);
   }
   if (/\$\{[^}]*\/\//.test(t)) {
-    fail(filePath, "const value cannot use ${var//...} expansion; use a function", lineNo, col);
+    fail(filePath, "const value cannot use ${var//...} expansion; use a script", lineNo, col);
   }
   if (/\$\{#/.test(t)) {
-    fail(filePath, "const value cannot use ${#var}; use a function", lineNo, col);
+    fail(filePath, "const value cannot use ${#var}; use a script", lineNo, col);
   }
 }
 
@@ -103,7 +103,7 @@ export function parseConstRhs(
     const bare = head.trimEnd();
     fail(
       filePath,
-      `Function/script calls in const assignments must use run. Use: const ${constName} = run ${bare}`,
+      `Script calls in const assignments must use run. Use: const ${constName} = run ${bare}`,
       lineNo,
       col,
     );

@@ -616,7 +616,7 @@ test("parser: const rejects bare call-like rhs without run", () => {
   ].join("\n");
   assert.throws(
     () => parsejaiph(source, "/fake/entry.jh"),
-    /Function\/script calls in const assignments must use run/,
+    /Script calls in const assignments must use run/,
   );
 });
 

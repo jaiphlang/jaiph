@@ -323,7 +323,7 @@ jaiph report [start|stop|status] [--host <addr>] [--port <n>] [--poll-ms <n>] [-
 ## File extensions
 
 - **`.jh`** is the recommended extension for new Jaiph files. Use it for entrypoints, imports, and `jaiph build` / `jaiph run` / `jaiph test`.
-- **`.jph`** remains supported for backward compatibility. Existing projects using `.jph` continue to work unchanged. **`jaiph run`** (and the `jaiph <file.jph>` shorthand) prints a deprecation notice to stderr when stderr is a TTY; `jaiph build` does not. Rename when convenient with `mv *.jph *.jh` and update import paths if they explicitly mention the extension.
+- **`.jph`** is also accepted. Both extensions work identically with all CLI commands and import resolution.
 
 Imports resolve for both extensions: `import "foo" as x` finds `foo.jh` or `foo.jph` (`.jh` is preferred when both exist).
 

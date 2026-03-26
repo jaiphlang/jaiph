@@ -2,7 +2,7 @@ import type { SendRhsDef, WorkflowRefDef } from "../types";
 import { fail, indexOfClosingDoubleQuote, isRef } from "./core";
 
 const SEND_RHS_HINT =
-  'send right-hand side must be a quoted string ("..."), a variable ($name or ${...}), or "run <ref> [args]" — not raw shell; extract to a function or use const';
+  'send right-hand side must be a quoted string ("..."), a variable ($name or ${...}), or "run <ref> [args]" — not raw shell; use a script or use const';
 
 /** Parse RHS after `<-` for the send operator. */
 export function parseSendRhs(
