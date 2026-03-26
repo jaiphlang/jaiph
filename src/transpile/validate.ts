@@ -5,6 +5,7 @@ import {
   validateManagedWorkflowShell,
   validateNoJaiphCommandSubstitution,
 } from "./validate-substitution";
+import { classifyJaiphShellRefToken } from "./shell-jaiph-guard";
 import type { RefResolutionContext, RefTargetKind } from "./validate-ref-resolution";
 import {
   BARE_SEND_REF_MSG,
@@ -151,6 +152,17 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         );
       }
       validateNoJaiphCommandSubstitution(cmd, env);
+      // Detect cross-script calls: a script body must not invoke another Jaiph script.
+      const leadWord = t.match(/^([A-Za-z_][A-Za-z0-9_.]*)/)?.[1];
+      if (leadWord && classifyJaiphShellRefToken(leadWord, env) === "script" && leadWord !== sc.name) {
+        throw jaiphError(
+          ast.filePath,
+          sc.loc.line,
+          sc.loc.col,
+          "E_VALIDATE",
+          `scripts cannot call other Jaiph scripts; use a shared library or compose in a workflow`,
+        );
+      }
     }
   }
 

@@ -218,6 +218,20 @@ jaiph::mock_script_for_symbol() {
   return 1
 }
 
+# Execute a script in an isolated environment: only essential system vars and
+# JAIPH_LIB / JAIPH_SCRIPTS / JAIPH_WORKSPACE are passed through.
+jaiph::_exec_script_isolated() {
+  env -i \
+    PATH="$PATH" \
+    HOME="${HOME:-}" \
+    TERM="${TERM:-}" \
+    USER="${USER:-}" \
+    JAIPH_LIB="${JAIPH_LIB:-}" \
+    JAIPH_SCRIPTS="${JAIPH_SCRIPTS:-}" \
+    JAIPH_WORKSPACE="${JAIPH_WORKSPACE:-}" \
+    "$@"
+}
+
 jaiph::set_return_value() {
   if [[ -n "${JAIPH_RETURN_VALUE_FILE:-}" ]]; then
     printf '%s' "$1" > "$JAIPH_RETURN_VALUE_FILE"
@@ -304,11 +318,19 @@ jaiph::run_step() {
     export JAIPH_LAST_PROMPT_FINAL
   elif [[ "${JAIPH_STDOUT_SAVED:-}" == "1" ]] && ! jaiph::is_test_mode && ! [[ /dev/fd/1 -ef /dev/fd/7 ]] && ! [[ /dev/fd/1 -ef /dev/fd/8 ]]; then
     # Caller redirected stdout (> file, | pipe) — tee to both artifact and caller.
-    "$@" 2>"$err_tmp" | tee "$out_tmp"
+    if [[ "$step_kind" == "script" ]]; then
+      jaiph::_exec_script_isolated "$@" 2>"$err_tmp" | tee "$out_tmp"
+    else
+      "$@" 2>"$err_tmp" | tee "$out_tmp"
+    fi
     status="${PIPESTATUS[0]}"
   else
     # Capture only: save capture target as fd 8 so nested steps can detect it.
-    ( exec 1>"$out_tmp" 2>"$err_tmp"; exec 8>&1; "$@" )
+    if [[ "$step_kind" == "script" ]]; then
+      ( exec 1>"$out_tmp" 2>"$err_tmp"; exec 8>&1; jaiph::_exec_script_isolated "$@" )
+    else
+      ( exec 1>"$out_tmp" 2>"$err_tmp"; exec 8>&1; "$@" )
+    fi
     status=$?
   fi
   if [[ "$had_errexit" -eq 1 ]]; then

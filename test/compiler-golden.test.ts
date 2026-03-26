@@ -1626,6 +1626,96 @@ test("compiler golden: top-level local $sibling is expanded in export (set -u sa
   }
 });
 
+// === script isolation golden tests ===
+
+test("compiler golden: standalone script file has no env shims (isolation)", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-script-iso-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        'local greeting = "hello world"',
+        "",
+        "script helper() {",
+        "  echo $greeting",
+        "}",
+        "",
+        "workflow default {",
+        "  run helper",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const result = transpileFile(input, root);
+    assert.equal(result.scripts.length, 1);
+    const scriptContent = result.scripts[0].content;
+    // Script file must NOT contain env shim lines
+    assert.ok(!/local greeting="\$entry__greeting"/.test(scriptContent), "script file should not contain env shim for greeting");
+    assert.ok(!/entry__/.test(scriptContent), "script file should not reference prefixed module variables");
+    // Script file should still contain the body
+    assert.ok(scriptContent.includes("echo $greeting"), "script body preserved");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("compiler golden: cross-script call is rejected", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-cross-script-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        "script helper() {",
+        "  echo ok",
+        "}",
+        "",
+        "script caller() {",
+        "  helper",
+        "}",
+        "",
+        "workflow default {",
+        "  run caller",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => transpileFile(input, root),
+      /scripts cannot call other Jaiph scripts/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("compiler golden: script calling itself is allowed", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-script-self-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        "script recurse() {",
+        "  recurse",
+        "}",
+        "",
+        "workflow default {",
+        "  run recurse",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    // Self-reference should not throw (a script calling itself is recursion, not cross-script)
+    const result = transpileFile(input, root);
+    assert.equal(result.scripts.length, 1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 // === ensure...recover golden tests ===
 
 test("compiler golden: ensure...recover single statement emits retry loop", () => {

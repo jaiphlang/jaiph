@@ -434,8 +434,11 @@ Jaiph: Running async.jh
                     <dd><code>rule</code> is for reusable checks (Jaiph structured steps; used with <code>ensure</code>),
                         <code>workflow</code> orchestrates Jaiph steps only, and <code>script</code> holds bash (or any
                         language via a custom shebang, e.g. <code>#!/usr/bin/env node</code>) invoked with
-                        <code>run</code>. Scripts are emitted as separate executable files under
-                        <code>build/scripts/</code>.
+                        <code>run</code>. Scripts run in <strong>full isolation</strong> — only positional arguments
+                        and essential Jaiph variables (<code>JAIPH_LIB</code>, <code>JAIPH_SCRIPTS</code>,
+                        <code>JAIPH_WORKSPACE</code>) are inherited; module-scoped variables are not visible.
+                        Use <code>source "$JAIPH_LIB/…"</code> for shared utilities. Scripts are emitted as
+                        separate executable files under <code>build/scripts/</code>.
                     </dd>
 
                     <dt><code>ensure ref [args...]</code> · <code>ensure ref recover { ... }</code> ·
