@@ -1,7 +1,7 @@
 #!/usr/bin/env jaiph
 
 #
-# Picks the first pending task from .jaiph/QUEUE.md, implements it,
+# Picks the first pending task from QUEUE.md, implements it,
 # verifies CI, updates docs, commits, and removes from queue.
 #
 
@@ -203,6 +203,7 @@ workflow implement {
     <context>
     You are working on the Jaiph codebase (https://github.com/jaiphlang/jaiph),
     a TypeScript compiler and runtime for a DSL that transpiles to Bash.
+    ARCHITECTURE.md is the source of truth for architecture and execution flow.
     </context>
 
     <code_philosophy>
@@ -211,6 +212,8 @@ workflow implement {
 
     <task>
     Implement the following task by:
+    - Reading ARCHITECTURE.md first and keeping architecture boundaries and
+      contracts intact unless task explicitly requires changing them.
     - Following the codebase's existing style and conventions precisely.
     - Following the code philosophy above for all new and modified code.
     - Adding or updating tests as needed for acceptance criteria.
@@ -232,6 +235,13 @@ workflow implement {
       behavior change, incorrect test expectation, or removal of obsolete feature).
     - Any such test change should be minimal and paired with a clear rationale
       in the task/PR notes.
+
+    Architecture invariants to preserve by default:
+    - Runtime owns workflow semantics (including channels/inbox dispatch).
+    - CLI owns orchestration/observation (compile, launch, progress, hooks).
+    - Runtime -> CLI live contract is __JAIPH_EVENT__.
+    - Runtime durable contract is .jaiph/runs + run_summary.jsonl artifacts.
+    - *.test.jh is a Jaiph runtime testing lane executed by jaiph test.
 
     Task description:
     $task

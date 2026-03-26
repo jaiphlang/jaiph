@@ -165,6 +165,8 @@ workflow docs_page {
     <task>
     Double check the content of $1, which describes a given concept of the
     language, runtime or a set of features:
+    0. Use ARCHITECTURE.md as the source of truth for architecture boundaries,
+       contracts, and execution flow. Keep docs consistent with it.
     1. Check if it has approachable structure with overview, describing high
        level goals and concepts.
     2. Jaiph source code is the single source of truth for the language. Verify
@@ -193,8 +195,14 @@ workflow docs_overview {
     </role>
     <task>
     Read all $1, they contain all the documentation for the
-    project. Don't read the code. Please update docs in the following way:
+    project. Also read ARCHITECTURE.md and treat it as architecture source of
+    truth. Please update docs in the following way:
     1. Ensure they are consistent with each other.
+    1a.Ensure they are consistent with ARCHITECTURE.md, especially:
+       - runtime vs CLI responsibilities,
+       - runtime/CLI contracts (__JAIPH_EVENT__ vs run artifacts),
+       - channels and hooks behavior,
+       - Jaiph runtime test lane (*.test.jh via jaiph test).
     2. Ensure they are organized in a logical way. If needed, add new files,
        merge existing files, or split them into smaller files, or move
        the content between files.

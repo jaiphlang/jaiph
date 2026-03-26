@@ -31,7 +31,7 @@ script task_has_dev_ready_marker() {
 
 script queue_has_any_task_not_dev_ready() {
   local qf
-  qf="${JAIPH_WORKSPACE:-.}/.jaiph/QUEUE.md"
+  qf="${JAIPH_WORKSPACE:-.}/QUEUE.md"
   awk '
     BEGIN { bad=0 }
     /^## / {
@@ -74,7 +74,7 @@ workflow review_task {
     6. **Scope** — Appropriately sized for a single implementation
        cycle. Suggest splitting if too broad.
 
-    Read the full QUEUE.md (.jaiph/QUEUE.md) for context on other
+    Read the full QUEUE.md (QUEUE.md) for context on other
     queued tasks.
 
     If the task meets all criteria, respond with:
