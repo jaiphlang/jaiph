@@ -6,29 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Dark mode for docs site (landing + Jekyll pages) with top-right toggle <!-- dev-ready -->
-
-**Goal.** Add light/dark theme support for the public docs site: `docs/index.html` (landing) and all other Jekyll-rendered pages under `docs/`, with a visible theme switch fixed or placed at the **top right** of the page. Respect `prefers-color-scheme` as the default when the user has not chosen a preference; persist the user’s choice (e.g. `localStorage`) across navigations. **Syntax highlighting** must follow the page theme: keep the current **GitHub Light**–style token colors in light mode and add a **GitHub Dark**–style palette in dark mode (same highlighter markup, theme-dependent CSS — not light-only highlights on a dark background).
-
-**Scope.**
-
-1. **`docs/assets/css/style.css`** — Define CSS custom properties (or equivalent) for light and dark palettes; use `[data-theme="dark"]` on `<html>` or `<body>` (or `.theme-dark` root class) so one stylesheet serves both themes. Ensure contrast, links, code blocks, cards, and buttons remain readable in dark mode. For fenced / `pre code` blocks and any custom highlighter spans (e.g. classes emitted by `docs/assets/js/main.js`), map token colors to **GitHub Light** vs **GitHub Dark** conventions (keywords, strings, comments, functions, etc.) so dark mode is not “light scheme on dark gray”.
-2. **`docs/index.html`** — Add a compact theme control in the header area **top right** (toggle button, switch, or sun/moon control) wired to flip theme and persist preference.
-3. **Jekyll layouts** — Identify shared layout(s) (e.g. `_layouts/default.html` or equivalent) and include the same theme control + minimal inline script or shared `docs/assets/js` snippet so every doc page gets the switch in the same position.
-4. **JavaScript** — On load: read saved preference; if none, follow `prefers-color-scheme`. On toggle: update root attribute/class, save preference, update any `meta theme-color` if present for mobile chrome.
-5. **No flash of wrong theme (optional but preferred)** — Inline a tiny script in `<head>` or critical CSS that applies the saved/system theme before first paint, or document tradeoff if deferred.
-
-**Acceptance criteria.**
-
-- Landing page (`docs/index.html`) shows a theme control at the **top right**; toggling switches between coherent light and dark styles.
-- At least one non-landing Jekyll page (e.g. getting-started or default layout) shows the same control in the same position and behavior.
-- First visit with no saved preference matches system light/dark (`prefers-color-scheme`).
-- Reloading or navigating to another page keeps the user’s explicit choice until cleared.
-- Focus states and keyboard use remain usable for the theme control (accessibility).
-- In **dark** mode, syntax-highlighted code (landing samples, doc pages, tabbed examples) uses **GitHub Dark**–aligned token colors; in **light** mode, highlighting stays **GitHub Light**–aligned (current behavior preserved).
-
----
-
 ## Hard-cut migration: replace Bash orchestration runtime with JS runtime kernel <!-- dev-ready -->
 
 **Goal**  

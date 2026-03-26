@@ -15,6 +15,13 @@ layout: null
     <title>Jaiph — AI Workflow DSL</title>
 
     <link rel="stylesheet" href="assets/css/style.css" />
+    <script>
+        (function () {
+            var saved = localStorage.getItem('jaiph-theme');
+            var theme = saved || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            if (theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+        })();
+    </script>
 </head>
 
 <body>
@@ -25,12 +32,15 @@ layout: null
                 <img src="logo-jaiph.png" alt="Jaiph" />
             </a>
             <div class="top-nav-links">
-                <a href="https://jaiph.org/getting-started" target="_blank" rel="noopener noreferrer">Docs</a>
+                <a href="/getting-started" rel="noopener noreferrer">Docs</a>
                 <a href="https://github.com/jaiphlang/jaiph" target="_blank" rel="noopener noreferrer">GitHub</a>
                 <a href="https://marketplace.visualstudio.com/items?itemName=jaiph.jaiph-syntax-vscode" target="_blank"
                     class="no-mobile" rel="noopener noreferrer">VSCode</a>
                 <a href="https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md"
                     target="_blank" rel="noopener noreferrer">Agent Skill</a>
+                <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle theme">
+                    <span class="theme-toggle-icon" aria-hidden="true"></span>
+                </button>
             </div>
         </div>
     </nav>
@@ -412,7 +422,7 @@ Jaiph: Running async.jh
                     and AI steps stay in the same pipeline. This way you can enforce structure over non-deterministic
                     agent responses.
                     See <a href="grammar">Grammar</a> and <a href="getting-started">Getting started</a>
-                    (<a href="https://jaiph.org/getting-started" target="_blank"
+                    (<a href="/getting-started" target="_blank"
                         rel="noopener noreferrer">jaiph.org/getting-started</a>).
                 </p>
                 <p><strong>Use Bash (or any language) in scripts.</strong> Command pipelines, checks, and background
