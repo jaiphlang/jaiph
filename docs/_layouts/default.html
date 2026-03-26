@@ -11,9 +11,20 @@
     <link rel="icon" href="{{ '/favicon.png' | relative_url }}" type="image/png" />
     <title>{{ page.title | default: site.title }} — Jaiph</title>
     <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}" />
+    <script>
+        (function () {
+            var saved = localStorage.getItem('jaiph-theme');
+            var theme = saved || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            if (theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+        })();
+    </script>
 </head>
 
 <body>
+
+    <button type="button" class="doc-theme-toggle" aria-label="Toggle dark mode" title="Toggle theme">
+        <span class="theme-toggle-icon" aria-hidden="true"></span>
+    </button>
 
     <header class="container doc-header">
         <h1><a href="{{ '/' | relative_url }}"><img src="{{ '/logo.png' | relative_url }}" alt="Jaiph" /></a></h1>

@@ -787,6 +787,89 @@
         }, 1000);
     }
 
+    /* ── Theme toggle ── */
+
+    function getThemeIcon(theme) {
+        // Sun for dark mode (click to go light), moon for light mode (click to go dark)
+        return theme === "dark" ? "\u2600\uFE0F" : "\uD83C\uDF19";
+    }
+
+    function updateThemeIcons(theme) {
+        var icons = document.querySelectorAll(".theme-toggle-icon");
+        for (var i = 0; i < icons.length; i++) {
+            icons[i].textContent = getThemeIcon(theme);
+        }
+    }
+
+    function getCurrentTheme() {
+        return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+    }
+
+    function setTheme(theme) {
+        if (theme === "dark") {
+            document.documentElement.setAttribute("data-theme", "dark");
+        } else {
+            document.documentElement.removeAttribute("data-theme");
+        }
+        localStorage.setItem("jaiph-theme", theme);
+        updateThemeIcons(theme);
+
+        var metaLight = document.querySelector('meta[name="theme-color"]:not([media])');
+        var metaDark = document.querySelector('meta[name="theme-color"][media]');
+        if (metaLight) metaLight.setAttribute("content", theme === "dark" ? "#0d1117" : "#6b7280");
+        if (metaDark) metaDark.setAttribute("content", theme === "dark" ? "#0d1117" : "#1f2a37");
+    }
+
+    function attachDocsNavToggle() {
+        var toggle = document.querySelector(".docs-nav-toggle");
+        var panel = document.getElementById("docs-nav-panel");
+        if (!toggle || !panel) {
+            return;
+        }
+
+        function setOpen(open) {
+            toggle.setAttribute("aria-expanded", open ? "true" : "false");
+            if (open) {
+                panel.removeAttribute("hidden");
+            } else {
+                panel.setAttribute("hidden", "");
+            }
+        }
+
+        toggle.addEventListener("click", function (e) {
+            e.stopPropagation();
+            var open = toggle.getAttribute("aria-expanded") === "true";
+            setOpen(!open);
+        });
+
+        document.addEventListener("click", function () {
+            setOpen(false);
+        });
+
+        panel.addEventListener("click", function (e) {
+            e.stopPropagation();
+        });
+
+        document.addEventListener("keydown", function (e) {
+            if (e.key === "Escape" && toggle.getAttribute("aria-expanded") === "true") {
+                setOpen(false);
+                toggle.focus();
+            }
+        });
+    }
+
+    function attachThemeToggle() {
+        var theme = getCurrentTheme();
+        updateThemeIcons(theme);
+
+        var buttons = document.querySelectorAll(".theme-toggle, .doc-theme-toggle");
+        for (var i = 0; i < buttons.length; i++) {
+            buttons[i].addEventListener("click", function () {
+                setTheme(getCurrentTheme() === "dark" ? "light" : "dark");
+            });
+        }
+    }
+
     // Auto-run on DOM ready
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", function () {
@@ -796,6 +879,8 @@
             highlightAll();
             attachCopyButtons();
             attachCodeTabs();
+            attachDocsNavToggle();
+            attachThemeToggle();
         });
     } else {
         restructureDocSections();
@@ -804,6 +889,8 @@
         highlightAll();
         attachCopyButtons();
         attachCodeTabs();
+        attachDocsNavToggle();
+        attachThemeToggle();
     }
 
 })();

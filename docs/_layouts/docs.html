@@ -11,38 +11,52 @@
     <link rel="icon" href="{{ '/favicon.png' | relative_url }}" type="image/png" />
     <title>{{ page.title | default: site.title }} — Jaiph</title>
     <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}" />
+    <script>
+        (function () {
+            var saved = localStorage.getItem('jaiph-theme');
+            var theme = saved || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            if (theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+        })();
+    </script>
 </head>
 
 <body>
 
-    <header class="container doc-header">
-        <!-- <h1><a href="{{ '/' | relative_url }}"><img src="{{ '/logo.png' | relative_url }}" alt="Jaiph" /></a></h1> -->
-        <nav class="doc-nav">
-            <a href="{{ '/' | relative_url }}">jaiph.org</a>
-            <span class="separator">·</span>
-            <a href="{{ '/getting-started' | relative_url }}">Getting started</a>
-            <span class="separator">·</span>
-            <a href="{{ '/cli' | relative_url }}">CLI</a>
-            <span class="separator">·</span>
-            <a href="{{ '/configuration' | relative_url }}">Configuration</a>
-            <span class="separator">·</span>
-            <a href="{{ '/grammar' | relative_url }}">Grammar</a>
-            <span class="separator">·</span>
-            <a href="{{ '/testing' | relative_url }}">Testing</a>
-            <span class="separator">·</span>
-            <a href="{{ '/reporting' | relative_url }}">Reporting</a>
-            <span class="separator">·</span>
-            <a href="{{ '/contributing' | relative_url }}">Contributing</a>
-            <span class="separator">·</span>
-            <a href="{{ '/hooks' | relative_url }}">Hooks</a>
-            <span class="separator">·</span>
-            <a href="{{ '/inbox' | relative_url }}">Inbox</a>
-            <span class="separator">·</span>
-            <a href="{{ '/sandboxing' | relative_url }}">Sandboxing</a>
-            <span class="separator">·</span>
-            <a href="https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md" target="_blank" rel="noopener noreferrer">Agent Skill</a>
-        </nav>
-    </header>
+    <nav class="top-nav" aria-label="Documentation">
+        <div class="top-nav-inner">
+            <a href="{{ '/' | relative_url }}" class="top-nav-logo top-nav-logo-with-brand">
+                <img src="{{ '/logo-jaiph.png' | relative_url }}" alt="" />
+                <span class="top-nav-brand">Jaiph</span>
+            </a>
+            <div class="top-nav-links">
+                <button type="button" class="docs-nav-toggle" id="docs-nav-toggle" aria-expanded="false"
+                    aria-controls="docs-nav-panel">
+                    <span class="docs-nav-toggle-label">Pages</span>
+                    <span class="docs-nav-toggle-chevron" aria-hidden="true"></span>
+                </button>
+                <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle theme">
+                    <span class="theme-toggle-icon" aria-hidden="true"></span>
+                </button>
+            </div>
+        </div>
+        <div id="docs-nav-panel" class="docs-nav-panel" role="region" aria-labelledby="docs-nav-toggle" hidden>
+            <ul class="docs-nav-list">
+                <li><a href="{{ '/' | relative_url }}">jaiph.org</a></li>
+                <li><a href="{{ '/getting-started' | relative_url }}">Getting started</a></li>
+                <li><a href="{{ '/cli' | relative_url }}">CLI</a></li>
+                <li><a href="{{ '/configuration' | relative_url }}">Configuration</a></li>
+                <li><a href="{{ '/grammar' | relative_url }}">Grammar</a></li>
+                <li><a href="{{ '/testing' | relative_url }}">Testing</a></li>
+                <li><a href="{{ '/reporting' | relative_url }}">Reporting</a></li>
+                <li><a href="{{ '/contributing' | relative_url }}">Contributing</a></li>
+                <li><a href="{{ '/hooks' | relative_url }}">Hooks</a></li>
+                <li><a href="{{ '/inbox' | relative_url }}">Inbox</a></li>
+                <li><a href="{{ '/sandboxing' | relative_url }}">Sandboxing</a></li>
+                <li><a href="https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md"
+                        target="_blank" rel="noopener noreferrer">Agent Skill</a></li>
+            </ul>
+        </div>
+    </nav>
 
     <div class="container doc-sections">
         {{ content }}
