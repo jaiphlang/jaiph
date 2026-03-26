@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# docs/run — "Try it out" bootstrap script for Jaiph.
+# Usage: curl -fsSL https://jaiph.org/run | bash -s '<workflow source>'
+#
+# Installs Jaiph (if not already installed) and runs the provided workflow.
+
+TMPFILE=""
+
+cleanup() {
+  [ -n "$TMPFILE" ] && rm -f "$TMPFILE"
+}
+trap cleanup EXIT INT TERM
+
+# ── Preflight ──
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "Error: node is required but not found in \$PATH." >&2
+  echo "Install Node.js (https://nodejs.org) and try again." >&2
+  exit 1
+fi
+
+# ── Install Jaiph if missing ──
+
+if ! command -v jaiph >/dev/null 2>&1; then
+  echo "Jaiph not found — installing..."
+  curl -fsSL https://jaiph.org/install | bash
+  # Re-check after install
+  export PATH="$HOME/.local/bin:$PATH"
+  if ! command -v jaiph >/dev/null 2>&1; then
+    echo "Error: jaiph was not found after installation." >&2
+    exit 1
+  fi
+fi
+
+# ── Resolve workflow source ──
+
+WORKFLOW="${1:-}"
+if [ -z "$WORKFLOW" ]; then
+  echo "Usage: curl -fsSL https://jaiph.org/run | bash -s '<workflow>'" >&2
+  exit 1
+fi
+
+# ── Write to temp file and run ──
+
+TMPFILE="$(mktemp "${TMPDIR:-/tmp}/jaiph-run-XXXXXX.jh")"
+printf '%s\n' "$WORKFLOW" > "$TMPFILE"
+
+jaiph run "$TMPFILE"
