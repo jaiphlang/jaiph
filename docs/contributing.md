@@ -111,6 +111,10 @@ Module tests live next to the source files they validate, inside the same `src/`
 | `src/cli/shared/errors.test.ts` | `src/cli/shared/errors.ts` | Error summarization: `summarizeError`, `resolveFailureDetails`, `hasFatalRuntimeStderr`, run metadata extraction |
 | `src/cli/commands/format-params-display.test.ts` | `src/cli/commands/format-params.ts` | Parameter display formatting: `formatParamsForDisplay`, `formatNamedParamsForDisplay`, `normalizeParamValue` |
 | `src/runtime/docker.test.ts` | `src/runtime/docker.ts` | Docker integration helpers: mount parsing/validation, config resolution, `buildDockerArgs` |
+| `src/runtime/kernel/prompt.test.ts` | `src/runtime/kernel/prompt.ts` | JS kernel prompt execution: config resolution, backend arg building, mock dispatch, end-to-end prompt flow |
+| `src/runtime/kernel/stream-parser.test.ts` | `src/runtime/kernel/stream-parser.ts` | Stream JSON parser: reasoning/final extraction, section headers, fallback handling |
+| `src/runtime/kernel/schema.test.ts` | `src/runtime/kernel/schema.ts` | Typed prompt schema validation: JSON extraction strategies, field presence/type checks, eval-line generation |
+| `src/runtime/kernel/mock.test.ts` | `src/runtime/kernel/mock.ts` | Test-mode mock helpers: sequential mock responses, dispatch script invocation |
 | `src/reporting/reporting-server.test.ts` | `src/reporting/*` | Safe paths, summary JSONL parsing, run registry polling, derived run status |
 
 When adding a new source module or extending an existing one, create or extend the corresponding `*.test.ts` file in the same directory. This keeps tests discoverable — given a source file, the test file is always a sibling.

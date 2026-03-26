@@ -12,7 +12,7 @@ Jaiph is a compiler-driven workflow runtime with a CLI observer layer:
 1. Parse source into AST.
 2. Validate references and language constraints.
 3. Transpile to Bash modules/scripts.
-4. Execute generated Bash on top of Jaiph runtime libraries.
+4. Execute generated Bash on top of Jaiph runtime libraries; prompt steps delegate to the JS kernel.
 5. Stream live events to CLI and persist durable run artifacts.
 
 ## Core components
@@ -41,8 +41,13 @@ Jaiph is a compiler-driven workflow runtime with a CLI observer layer:
   - Emits Bash code that calls runtime primitives.
 
 - **Runtime libraries (`src/jaiph_stdlib.sh`, `src/runtime/*.sh`)**
-  - Step execution, prompt flow, channels inbox/dispatch, event emission.
+  - Step execution, channels inbox/dispatch, event emission.
   - Writes artifacts to `.jaiph/runs`.
+
+- **JS kernel (`src/runtime/kernel/`)**
+  - Prompt execution path ported from Bash to TypeScript (request build, backend invocation, stream parsing, schema validation, test mocks).
+  - Called from `prompt.sh` via `node kernel/prompt.js`; the Bash layer is now a thin wrapper.
+  - Modules: `prompt.ts` (orchestration), `stream-parser.ts` (streaming JSON → text), `schema.ts` (typed prompt validation), `mock.ts` (test-mode mock helpers).
 
 - **Reporting (`src/reporting/*`)**
   - Reads `.jaiph/runs` and `run_summary.jsonl`.
@@ -56,6 +61,7 @@ Jaiph is a compiler-driven workflow runtime with a CLI observer layer:
 - Manage channels (`send`, routes, queue drain).
 - Emit step/log events.
 - Persist run logs and summary timeline.
+- Prompt steps delegate to the JS kernel (`src/runtime/kernel/`) for backend invocation, stream parsing, schema validation, and test mocks. Non-prompt orchestration remains in Bash.
 
 ### CLI responsibilities
 
@@ -144,8 +150,9 @@ flowchart TD
     CLI -->|jaiph test| EX2[Execution Launcher (Test Mode)]
     EX2 --> B2
 
-    B1 --> RT[Runtime Stdlib: steps/events/prompt/inbox]
+    B1 --> RT[Runtime Stdlib: steps/events/inbox]
     B2 --> RT
+    RT -->|prompt steps| KERNEL[JS Kernel: prompt/stream-parser/schema/mock]
 
     RT -->|live events| EV["__JAIPH_EVENT__ stream"]
     EV --> CLI
@@ -180,7 +187,8 @@ sequenceDiagram
     CLI->>Transpiler: transpile AST
     Transpiler-->>CLI: bash module + scripts
     CLI->>Bash: execute entrypoint
-    Bash->>Runtime: run steps / prompts / channels
+    Bash->>Runtime: run steps / channels
+    Runtime->>Runtime: prompt steps delegate to JS kernel (node kernel/prompt.js)
     Runtime-->>CLI: __JAIPH_EVENT__ (STEP/LOG stream)
     CLI-->>User: live progress output
     Runtime->>Report: write step logs + run_summary.jsonl + inbox artifacts
@@ -226,6 +234,7 @@ Tests are colocated with the modules they validate:
   - `src/transpile/*.test.ts` — transpiler/compiler tests (emit, golden, validation, acceptance).
   - `src/reporting/*.test.ts` — reporting module tests.
   - `src/runtime/*.test.ts` — runtime adapter tests (docker).
+  - `src/runtime/kernel/*.test.ts` — JS kernel tests (prompt execution, stream parsing, schema validation, mocks).
 
 - **Cross-cutting tests** remain in `test/` when they span multiple modules or test process-level behavior:
   - `test/sample-build.test.ts` — integration test spanning transpiler+parser+CLI.
@@ -240,5 +249,5 @@ Tests are colocated with the modules they validate:
 ## Summary
 
 - `.jh` and `*.test.jh` share parser/AST/validation foundations, then diverge at transpilation target.
-- Runtime is the source of execution truth (steps, channels, artifacts).
+- Runtime is the source of execution truth (steps, channels, artifacts). Prompt steps delegate to the JS kernel (`src/runtime/kernel/`); non-prompt orchestration remains in Bash.
 - CLI is the orchestration and observation layer (launch, progress, hooks, summaries).

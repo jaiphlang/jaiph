@@ -525,6 +525,7 @@ test("jaiph run stores prompt output in run logs", () => {
       cwd: root,
       env: {
         ...process.env,
+        JAIPH_AGENT_BACKEND: "cursor",
         JAIPH_DOCKER_ENABLED: "false",
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
       },
@@ -600,6 +601,7 @@ test("jaiph run stores both reasoning and final answer from stream-json", () => 
       cwd: root,
       env: {
         ...process.env,
+        JAIPH_AGENT_BACKEND: "cursor",
         JAIPH_AGENT_TRUSTED_WORKSPACE: undefined,
         JAIPH_DOCKER_ENABLED: "false",
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
@@ -689,6 +691,7 @@ test("jaiph run interpolates positional args in prompt text", () => {
       cwd: root,
       env: {
         ...process.env,
+        JAIPH_AGENT_BACKEND: "cursor",
         JAIPH_DOCKER_ENABLED: "false",
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
       },
@@ -746,6 +749,7 @@ test("jaiph run interpolates named array placeholders in prompt text", () => {
       cwd: root,
       env: {
         ...process.env,
+        JAIPH_AGENT_BACKEND: "cursor",
         JAIPH_DOCKER_ENABLED: "false",
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
       },
@@ -799,6 +803,7 @@ test("jaiph run applies model from in-file metadata", () => {
     const cliPath = join(process.cwd(), "dist/src/cli.js");
     const runEnv: NodeJS.ProcessEnv = {
       ...process.env,
+      JAIPH_AGENT_BACKEND: "cursor",
       JAIPH_DOCKER_ENABLED: "false",
       PATH: `${binDir}:${process.env.PATH ?? ""}`,
     };
@@ -861,6 +866,7 @@ test("jaiph run supports agent.command with inline args", () => {
       cwd: root,
       env: {
         ...process.env,
+        JAIPH_AGENT_BACKEND: "cursor",
         JAIPH_DOCKER_ENABLED: "false",
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
       },
@@ -1076,6 +1082,7 @@ test("jaiph run defaults Cursor trusted workspace to project root", () => {
       cwd: root,
       env: {
         ...env,
+        JAIPH_AGENT_BACKEND: "cursor",
         JAIPH_DOCKER_ENABLED: "false",
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
       },
@@ -1131,6 +1138,7 @@ test("jaiph run JAIPH_AGENT_TRUSTED_WORKSPACE env overrides metadata", () => {
       cwd: root,
       env: {
         ...process.env,
+        JAIPH_AGENT_BACKEND: "cursor",
         JAIPH_AGENT_TRUSTED_WORKSPACE: "/tmp/jaiph-explicit-trust",
         JAIPH_DOCKER_ENABLED: "false",
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
@@ -2224,6 +2232,7 @@ test("jaiph run prompt capture: variable accessible in subsequent shell step", (
       cwd: root,
       env: {
         ...process.env,
+        JAIPH_AGENT_BACKEND: "cursor",
         JAIPH_DOCKER_ENABLED: "false",
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
       },
@@ -2279,6 +2288,7 @@ test("jaiph run prompt capture stores only final answer in assigned variable", (
       cwd: root,
       env: {
         ...process.env,
+        JAIPH_AGENT_BACKEND: "cursor",
         JAIPH_DOCKER_ENABLED: "false",
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
       },
