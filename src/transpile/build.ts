@@ -13,7 +13,7 @@ export function walkjhFiles(inputPath: string): string[] {
   const s = statSync(inputPath);
   if (s.isFile()) {
     const ext = extname(inputPath);
-    if (ext !== ".jph" && ext !== ".jh") return [];
+    if (ext !== ".jh") return [];
     const base = parse(inputPath).name;
     if (base.endsWith(".test")) return [];
     return [inputPath];
@@ -30,7 +30,7 @@ export function walkjhFiles(inputPath: string): string[] {
       } else if (entry.isFile()) {
         const ext = extname(entry.name);
         const base = parse(entry.name).name;
-        if ((ext === ".jph" || ext === ".jh") && !base.endsWith(".test")) {
+        if (ext === ".jh" && !base.endsWith(".test")) {
           files.push(full);
         }
       }
@@ -45,7 +45,7 @@ export function walkTestFiles(inputPath: string): string[] {
   if (s.isFile()) {
     const ext = extname(inputPath);
     const base = parse(inputPath).name;
-    if ((ext === ".jh" || ext === ".jph") && base.endsWith(".test")) {
+    if (ext === ".jh" && base.endsWith(".test")) {
       return [inputPath];
     }
     return [];
@@ -61,7 +61,7 @@ export function walkTestFiles(inputPath: string): string[] {
       } else if (entry.isFile()) {
         const ext = extname(entry.name);
         const base = parse(entry.name).name;
-        if ((ext === ".jh" || ext === ".jph") && base.endsWith(".test")) {
+        if (ext === ".jh" && base.endsWith(".test")) {
           files.push(full);
         }
       }

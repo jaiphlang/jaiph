@@ -34,14 +34,14 @@ e2e::expect_out_files "hello.jh" 1
 e2e::expect_out "hello.jh" "default" "hello-jh"
 
 # Given
-e2e::file "lib.jph" <<'EOF'
+e2e::file "lib.jh" <<'EOF'
 rule ready {
-  echo "from-jph"
+  echo "from-lib"
 }
 EOF
 
 e2e::file "app.jh" <<'EOF'
-import "lib.jph" as lib
+import "lib.jh" as lib
 workflow default {
   ensure lib.ready
   echo "mixed-ok"
@@ -63,13 +63,13 @@ workflow default
 EOF
 
 e2e::expect_out_files "app.jh" 2
-e2e::expect_rule_out "app.jh" "lib.ready" "from-jph"
+e2e::expect_rule_out "app.jh" "lib.ready" "from-lib"
 e2e::expect_out "app.jh" "default" "mixed-ok"
 
 e2e::section "Git-aware rule arguments"
 
 # Given
-e2e::file "current_branch.jph" <<'EOF'
+e2e::file "current_branch.jh" <<'EOF'
 #!/usr/bin/env jaiph
 rule current_branch {
   if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -96,15 +96,15 @@ EOF
   current_branch="$(e2e::git_current_branch)"
 
   # When
-  e2e::run "current_branch.jph" "${current_branch}" >/dev/null
+  e2e::run "current_branch.jh" "${current_branch}" >/dev/null
 
   # Then
-  e2e::pass "current_branch.jph passes for current branch"
-  e2e::expect_out_files "current_branch.jph" 0
+  e2e::pass "current_branch.jh passes for current branch"
+  e2e::expect_out_files "current_branch.jh" 0
 
   wrong_branch="${current_branch}-wrong"
 
   # When / Then
-  e2e::expect_fail "current_branch.jph" "${wrong_branch}"
-  e2e::pass "current_branch.jph fails for wrong branch"
+  e2e::expect_fail "current_branch.jh" "${wrong_branch}"
+  e2e::pass "current_branch.jh fails for wrong branch"
 )

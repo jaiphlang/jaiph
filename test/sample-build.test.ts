@@ -2737,11 +2737,9 @@ test("walkTestFiles discovers *.test.jh in directory", () => {
   try {
     writeFileSync(join(root, "a.test.jh"), "test \"t\" { }\n");
     writeFileSync(join(root, "b.jh"), "workflow default { }\n");
-    writeFileSync(join(root, "c.test.jph"), "test \"t\" { }\n");
     const files = walkTestFiles(root);
-    assert.equal(files.length, 2);
+    assert.equal(files.length, 1);
     assert.ok(files.some((f) => f.endsWith("a.test.jh")));
-    assert.ok(files.some((f) => f.endsWith("c.test.jph")));
     assert.ok(!files.some((f) => f.endsWith("b.jh")));
   } finally {
     rmSync(root, { recursive: true, force: true });

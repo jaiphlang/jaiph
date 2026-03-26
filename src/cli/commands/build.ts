@@ -10,7 +10,7 @@ export function runBuild(rest: string[]): number {
     process.stdout.write(`built ${resolve(item.outputPath)}\n`);
   }
   if (results.length === 0) {
-    process.stdout.write("no .jh or .jph files found\n");
+    process.stdout.write("no .jh files found\n");
   }
   return 0;
 }

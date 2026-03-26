@@ -7,7 +7,7 @@ redirect_from:
 
 # Jaiph Grammar
 
-Jaiph source files (`.jh` / `.jph`) combine a small **orchestration** language with Bash inside **`script`** blocks. The compiler parses top-level declarations and structured steps in workflows and rules, validates references and bash fragments (where they still appear), then emits a Bash script that relies on the Jaiph stdlib for managed steps, agents, logging, and inbox routing. This page is the language reference: what you can write, what it means at runtime, and how it maps to generated shell.
+Jaiph source files (`.jh`) combine a small **orchestration** language with Bash inside **`script`** blocks. The compiler parses top-level declarations and structured steps in workflows and rules, validates references and bash fragments (where they still appear), then emits a Bash script that relies on the Jaiph stdlib for managed steps, agents, logging, and inbox routing. This page is the language reference: what you can write, what it means at runtime, and how it maps to generated shell.
 
 **Scope:**
 
@@ -135,8 +135,8 @@ A reference is either a bare `IDENT` (local symbol) or `IDENT.IDENT` (module-qua
 - **References:** `REF := IDENT | IDENT "." IDENT` (e.g. `foo` or `mymod.foo`)
 - **Comments:** Full-line comments starting with `#`. Empty or whitespace-only lines are ignored.
 - **Shebang:** If the first line of the file starts with `#!`, it is ignored by the parser.
-- **Import path:** The path in `import "<path>" as IDENT` must be a quoted string (single or double quotes). If the path omits the file extension, the compiler tries `<path>.jh` first, then `<path>.jph`.
-- **File extensions:** Build, run, and import resolution support `.jh` (recommended) and `.jph` (accepted).
+- **Import path:** The path in `import "<path>" as IDENT` must be a quoted string (single or double quotes). If the path omits the file extension, the compiler appends `.jh`.
+- **File extension:** All CLI commands and import resolution use `.jh`.
 
 ## EBNF (Practical Form)
 

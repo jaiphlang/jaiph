@@ -9,30 +9,30 @@ redirect_from:
 
 ## Overview
 
-Jaiph ships a small **native test runner** for workflow modules. You write `*.test.jh` (or `*.test.jph`) files that import workflows under test, optionally replace prompts and other symbols with mocks, run workflows through the same managed runtime as `jaiph run`, and assert on captured output or return values.
+Jaiph ships a small **native test runner** for workflow modules. You write `*.test.jh` files that import workflows under test, optionally replace prompts and other symbols with mocks, run workflows through the same managed runtime as `jaiph run`, and assert on captured output or return values.
 
 **Why mocks matter.** Real workflows call LLMs, shell, and other workflows. That output is non-deterministic and environment-dependent. The test harness records mock prompt responses and can substitute shell bodies for workflows, rules, and Jaiph scripts so runs stay fast, repeatable, and offline-friendly.
 
 **Core concepts**
 
-- **Test files** — Names ending in `.test.jh` or `.test.jph`, discovered by `jaiph test`. Each file lists imports and one or more `test "..." { ... }` blocks.
+- **Test files** — Names ending in `.test.jh`, discovered by `jaiph test`. Each file lists imports and one or more `test "..." { ... }` blocks.
 - **Test blocks** — A named block is one test case: ordered steps (shell, mocks, workflow runs, assertions).
 - **Mocks** — Fixed or content-based prompt responses; optional replacement bodies for imported workflows, rules, and scripts.
 - **Assertions** — After a captured workflow run, `expectContain`, `expectNotContain`, and `expectEqual` check the captured string. Capture semantics are described under **Workflow run (capture)** below.
 
 ## File naming and layout
 
-- Use the `.test.jh` or `.test.jph` suffix (for example `workflow_greeting.test.jh`).
-- **Content:** Use imports and `test` blocks only. The parser may accept other top-level declarations in a `*.test.jh` file, but `*.test.jh` / `*.test.jph` modules are **skipped when the workspace is compiled** to `.sh`, so workflows or rules defined only in a test file are never emitted as runnable shell modules. Keeping tests to imports + `test` blocks avoids dead code and matches how the runner is meant to be used.
-- **Imports:** Paths in `import "..." as alias` resolve **relative to the directory of the test file**, with the same extension fallback as ordinary modules (try `.jh`, then `.jph`). See [Grammar — Import path](grammar.md#lexical-notes).
+- Use the `.test.jh` suffix (for example `workflow_greeting.test.jh`).
+- **Content:** Use imports and `test` blocks only. The parser may accept other top-level declarations in a `*.test.jh` file, but `*.test.jh` modules are **skipped when the workspace is compiled** to `.sh`, so workflows or rules defined only in a test file are never emitted as runnable shell modules. Keeping tests to imports + `test` blocks avoids dead code and matches how the runner is meant to be used.
+- **Imports:** Paths in `import "..." as alias` resolve **relative to the directory of the test file**, with the same extension handling as ordinary modules (appends `.jh` when omitted). See [Grammar — Import path](grammar.md#lexical-notes).
 - **Discovery:** `jaiph test` walks the given directory recursively (or the workspace root when no path is passed). The workspace root is found by walking up from the current directory until a `.jaiph` or `.git` directory exists; if neither is found, the current directory is used.
 
 ## Running tests
 
-A path to a `*.test.jh` or `*.test.jph` file is treated like `jaiph test` on that file (see [CLI](cli.md)).
+A path to a `*.test.jh` file is treated like `jaiph test` on that file (see [CLI](cli.md)).
 
 ```bash
-# All *.test.jh / *.test.jph files under the detected workspace root (recursive)
+# All *.test.jh files under the detected workspace root (recursive)
 jaiph test
 
 # All tests under a directory (recursive)

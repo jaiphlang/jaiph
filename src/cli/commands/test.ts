@@ -24,7 +24,7 @@ export async function runTest(rest: string[]): Promise<number> {
     const workspaceRoot = detectWorkspaceRoot(process.cwd());
     const testFiles = walkTestFiles(workspaceRoot);
     if (testFiles.length === 0) {
-      process.stderr.write("jaiph test: no *.test.jh or *.test.jph files found\n");
+      process.stderr.write("jaiph test: no *.test.jh files found\n");
       return 1;
     }
     let exitCode = 0;
@@ -42,7 +42,7 @@ export async function runTest(rest: string[]): Promise<number> {
   if (inputStat.isDirectory()) {
     const testFiles = walkTestFiles(inputAbs);
     if (testFiles.length === 0) {
-      process.stderr.write(`jaiph test: no *.test.jh or *.test.jph files in ${input}\n`);
+      process.stderr.write(`jaiph test: no *.test.jh files in ${input}\n`);
       return 1;
     }
     const workspaceRoot = detectWorkspaceRoot(inputAbs);
@@ -54,20 +54,19 @@ export async function runTest(rest: string[]): Promise<number> {
     return exitCode;
   }
 
-  if (!inputStat.isFile() || (ext !== ".jph" && ext !== ".jh")) {
-    process.stderr.write("jaiph test expects a .jh, .jph, *.test.jh, *.test.jph file or directory\n");
+  if (!inputStat.isFile() || ext !== ".jh") {
+    process.stderr.write("jaiph test expects a .jh or *.test.jh file or directory\n");
     return 1;
   }
 
-  const isTestFile =
-    basename(inputAbs).endsWith(".test.jh") || basename(inputAbs).endsWith(".test.jph");
+  const isTestFile = basename(inputAbs).endsWith(".test.jh");
   if (isTestFile) {
     const workspaceRoot = detectWorkspaceRoot(dirname(inputAbs));
     return await runSingleTestFile(inputAbs, workspaceRoot, runArgs);
   }
 
   process.stderr.write(
-    "jaiph test requires a *.test.jh or *.test.jph file with inline mock prompt steps. Example:\n" +
+    "jaiph test requires a *.test.jh file with inline mock prompt steps. Example:\n" +
       "  test \"...\" { mock prompt \"response\"; response = w.default; expectContain response \"...\"; }\n",
   );
   return 1;
@@ -82,7 +81,7 @@ export async function runSingleTestFile(
   try {
     build(workspaceRoot, outDir);
     const testBash = transpileTestFile(testFileAbs, workspaceRoot);
-    const rel = relative(workspaceRoot, testFileAbs).replace(/\.(test\.jh|test\.jph)$/, ".test.sh");
+    const rel = relative(workspaceRoot, testFileAbs).replace(/\.test\.jh$/, ".test.sh");
     const testScriptPath = join(outDir, rel);
     mkdirSync(dirname(testScriptPath), { recursive: true });
     writeFileSync(testScriptPath, testBash, "utf8");

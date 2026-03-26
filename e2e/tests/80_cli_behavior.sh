@@ -46,10 +46,10 @@ bad_ext_err_file="$(mktemp)"
 if jaiph run "${TEST_DIR}/not_a_workflow.txt" 2>"${bad_ext_err_file}"; then
   cat "${bad_ext_err_file}" >&2
   rm -f "${bad_ext_err_file}"
-  e2e::fail "jaiph run should reject non-.jh/.jph files"
+  e2e::fail "jaiph run should reject non-.jh files"
 fi
 bad_ext_err="$(cat "${bad_ext_err_file}")"
 rm -f "${bad_ext_err_file}"
 
 # Then
-e2e::assert_contains "${bad_ext_err}" "expects a single .jh or .jph file" "run rejects unsupported file extension"
+e2e::assert_contains "${bad_ext_err}" "expects a single .jh file" "run rejects unsupported file extension"

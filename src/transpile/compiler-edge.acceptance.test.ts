@@ -268,28 +268,6 @@ test("ACCEPTANCE: malformed mock prompt block (respond without if) fails with E_
   );
 });
 
-test("ACCEPTANCE: import stem resolves .jh before .jph when both exist", () => {
-  withTempDir("jaiph-acc-import-preference-", (root) => {
-    writeFileSync(join(root, "dep.jh"), "rule ready {\n  echo from-jh\n}\n");
-    writeFileSync(join(root, "dep.jph"), "rule ready {\n  echo from-jph\n}\n");
-    writeFileSync(
-      join(root, "main.jh"),
-      [
-        'import "dep" as dep',
-        "",
-        "workflow default {",
-        "  ensure dep.ready",
-        "}",
-        "",
-      ].join("\n"),
-    );
-
-    const output = build(join(root, "main.jh"), join(root, "out"));
-    assert.equal(output.length, 1);
-    assert.match(output[0].bash, /source "\$\(dirname "\$\{BASH_SOURCE\[0\]\}"\)\/dep\.sh"/);
-  });
-});
-
 test("ACCEPTANCE: inline mock prompt block with if/elif/else emits first-match dispatch", () => {
   withTempDir("jaiph-acc-mock-block-", (root) => {
     writeFileSync(

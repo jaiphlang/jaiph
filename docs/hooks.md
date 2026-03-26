@@ -76,7 +76,7 @@ Each command receives one JSON object on **stdin** (UTF-8). Use `jq`, `python3 -
 | `status` | `workflow_end`, `step_end` | Exit status: **0** success, **non-zero** failure. For `workflow_end`, this is the CLI’s resolved outcome: non-zero if the subprocess exited non-zero **or** the CLI detected fatal runtime output on stderr (see `jaiph run` behavior in [CLI](cli.md)). |
 | `timestamp` | Always | ISO 8601 time (from the CLI or runtime event). |
 | `elapsed_ms` | `workflow_end`, `step_end` | Elapsed milliseconds: total wall time for the run (`workflow_end`), or step duration (`step_end`). |
-| `run_path` | Always | Absolute path to the `.jh` / `.jph` file being run. |
+| `run_path` | Always | Absolute path to the `.jh` file being run. |
 | `workspace` | Always | Workspace root directory (same rules as [Config locations](#config-locations)). |
 | `run_dir` | `workflow_end` | Absolute path to the run’s log directory, when the runtime wrote it into the run metadata file. |
 | `summary_file` | `workflow_end` | Absolute path to `run_summary.jsonl` when the runtime recorded it. Append-only JSONL of workflow/step/log/inbox events; see [CLI — Run summary](cli.md#run-summary-jsonl). |

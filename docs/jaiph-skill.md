@@ -25,7 +25,7 @@ This page is an **agent skill**: it tells an AI assistant how to **author** thos
 - **run** — Invokes a workflow or script (local or `alias.name`). Must not target a rule or arbitrary shell command. **Does not forward positional args implicitly** — pass them explicitly (e.g. `run wf "$1"`, `run helper_fn "$1"`).
 - **prompt** — Sends a string to the configured agent. Optional `returns` schema validates one line of JSON from the agent.
 
-**Audience:** Agents that produce or edit `.jh` / `.jph` files (prefer `.jh` for new work).
+**Audience:** Agents that produce or edit `.jh` files.
 
 ---
 
@@ -68,7 +68,7 @@ Prefer composable modules over one large file.
 
 ## Language Rules You Must Respect
 
-- **Imports:** `import "path.jh" as alias` or `import 'path.jh' as alias`. Path may be single- or double-quoted. Path is relative to the importing file. If the path has no extension, the compiler resolves `.jh` first, then `.jph`. Prefer `.jh` for new files.
+- **Imports:** `import "path.jh" as alias` or `import 'path.jh' as alias`. Path may be single- or double-quoted. Path is relative to the importing file. If the path has no extension, the compiler appends `.jh`.
 - **Definitions:** `channel name` (inbox endpoint); `rule name { ... }`, `workflow name { ... }`, `script name() { ... }` (parentheses optional; every script requires a name — anonymous script blocks are not supported). Optional `export` before `rule` or `workflow` marks it as public (see [Grammar](grammar.md)). Optional `config { ... }` at the top of a file sets agent, run, and runtime options. An optional `config { ... }` block can also appear inside a `workflow { ... }` body (before any steps) to override module-level settings for that workflow only — only `agent.*` and `run.*` keys are allowed; `runtime.*` yields `E_PARSE` (see [Configuration](configuration.md#workflow-level-config)). Config values can be quoted strings, booleans (`true`/`false`), bare integers, or bracket-delimited arrays of strings (see [Grammar](grammar.md) and [Configuration](configuration.md)).
 - **Module-scoped variables:** `local name = value` or `const name = value` (same value forms). Prefer **`const`** for new files. Accessible as `$name` inside all rules, scripts, and workflows in the same module. Names share the unified namespace with channels, rules, workflows, and scripts — duplicates are `E_PARSE`. Not exportable; module-scoped only.
 - **Steps:**
@@ -119,7 +119,7 @@ Optional: `.jaiph/implementation.jh` if you prefer the implementation workflow i
 
 After scaffolding workflows, print the exact commands the developer should run. The primary command runs the default entrypoint (typically preflight, then implementation, then verification — plus any optional review step you added). Point users to the canonical skill URL for agents: <https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md>.
 
-Include a compile check and, when the repository has native tests (`*.test.jh` / `*.test.jph`), `jaiph test` (see [Testing](testing.md)); skip `jaiph test` if there are no test files, since discovery mode exits with an error when nothing matches.
+Include a compile check and, when the repository has native tests (`*.test.jh`), `jaiph test` (see [Testing](testing.md)); skip `jaiph test` if there are no test files, since discovery mode exits with an error when nothing matches.
 
 ```bash
 jaiph build .jaiph
