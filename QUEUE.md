@@ -102,6 +102,57 @@ Create `docs/run` — a bash script served at `https://jaiph.org/run`. When pipe
 
 ---
 
+## Hard-cut migration: replace Bash orchestration runtime with JS runtime kernel <!-- dev-ready -->
+
+**Goal**  
+Remove Bash as the orchestration runtime target and execute workflows through a JavaScript runtime kernel while preserving **all** user-facing behavior and run artifacts contracts.
+
+**Context**  
+Bash remains valid for *user-authored script bodies* (including shebang-based polyglot scripts). All orchestration semantics (workflow, rule, prompt, ensure, run, channels, hooks wiring, event emission, test mode) move to a new JS/TS runtime kernel.
+
+**Execution model change**  
+Move from “transpile to Bash + external execution” to “in-process JS kernel interpretation inside the Bun standalone CLI binary” while keeping user script bodies as spawned external processes.
+
+**Non-negotiable contracts (must remain stable)**
+
+1. CLI output/e2e behavior contracts for `jaiph run` and `jaiph test`.
+2. `__JAIPH_EVENT__` event stream shape and ordering guarantees used by CLI progress.
+3. `.jaiph/runs` artifact layout, including step `.out`/`.err` logs and prompt artifacts.
+4. `run_summary.jsonl` schema and event semantics (`STEP_*`, `LOG*`, `INBOX_*`, workflow boundaries).
+5. Channels and hooks behavior from the user perspective.
+
+**Scope**
+
+1. Replace `src/jaiph_stdlib.sh` + `src/runtime/*.sh` orchestration behavior with new JS/TS runtime modules (`src/runtime/kernel/`).
+2. Keep parser/validator language surface intact unless migration requires targeted changes.
+3. Keep user-authored script bodies (including shebang polyglot scripts) executed as external processes via `Bun.spawn` / `child_process`, preserving full isolation and shebang behavior.
+4. Keep channel transport and all reporting artifacts file-based under `.jaiph/runs` (no in-memory-only queue rewrite).
+5. Keep `jaiph test` semantics intact for `*.test.jh`, including mocks and assertions.
+6. Update the transpiler (`transpileFile` / `transpileTestFile`) and CLI execution launcher (`src/cli/run/*`) so workflows are executed by the new JS runtime kernel instead of generated Bash. **Prefer in-process AST interpretation** inside the CLI binary for better debugging and source mapping.
+7. Update the build pipeline so the CLI becomes a **single-file Bun standalone executable** (`bun build --compile --outfile jaiph ...`) supporting Linux/macOS/Windows (x64 + arm64). The JS runtime kernel runs inside this binary.
+8. Port the following orchestration primitives 1:1 into the new kernel:
+   - Step execution (`run`, `ensure`, `rule`, etc.)
+   - Prompt flow handling + artifact capture
+   - Channel / inbox init, send, route registration, queue drain (file-based)
+   - Event emission (`__JAIPH_EVENT__` JSON lines on stderr)
+   - Test-mode behavior (`JAIPH_TEST_MODE`, mocks, assertions)
+   - Hook wiring (still triggered from CLI, payload passing unchanged)
+9. Add source-map / line-number support so runtime errors in the JS kernel point back to the original `.jh` file + line.
+10. Preserve all existing environment variables (`JAIPH_TEST_MODE`, etc.) and working-directory behavior.
+11. Update docs and architecture docs (`ARCHITECTURE.md` including all Mermaid diagrams) and any user-facing READMEs to reflect the new JS runtime kernel, in-process execution model, and removed Bash orchestration target.
+
+**Acceptance criteria**
+
+- `npm run build`, `npm test`, and `npm run test:e2e` pass after migration.
+- Existing e2e contracts for CLI output remain green **without broad rebaselining**.
+- Event stream consumed by CLI progress remains fully compatible (`__JAIPH_EVENT__` parser unchanged or equivalent).
+- `.jaiph/runs` and `run_summary.jsonl` remain byte-for-byte compatible with the reporting server and existing tooling.
+- Channels, hooks, and prompt flows behave **equivalently** from the user perspective.
+- The shipped `jaiph` binary is a **single standalone executable** with zero external runtime dependencies.
+- Runtime errors and stack traces are at least as debuggable as the old Bash version (ideally better).
+
+---
+
 ## Add `jaiph format <file>` command <!-- dev-ready -->
 
 **Goal.** Provide an opinionated formatter for `.jh` files that normalizes indentation and spacing.
@@ -184,6 +235,27 @@ Create `docs/run` — a bash script served at `https://jaiph.org/run`. When pipe
 - Normal runs that complete with `WORKFLOW_END` are unaffected.
 - The detection mechanism has a reasonable latency (under 2–3 poll cycles).
 - E2e or integration test: start a run, kill it with SIGKILL, verify `GET /api/active` eventually returns empty and `GET /api/runs` shows the run as failed/terminated.
+
+---
+
+## Distribution migration: ship `jaiph` as Bun standalone executable <!-- dev-ready -->
+
+**Goal.** Replace Node-based distribution with a standalone Bun-compiled executable so users can run Jaiph without Node runtime installation.
+
+**Scope.**
+
+1. Add Bun build target for CLI/runtime binary (`bun build --compile`).
+2. Produce release artifacts for supported OS/arch matrix.
+3. Update install/release scripts and docs to download the standalone binary.
+4. Validate runtime behavior parity between development run mode and compiled binary mode.
+5. Keep `jaiph run`, `jaiph test`, `jaiph build`, `jaiph report`, `jaiph init`, and `jaiph use` behavior stable.
+
+**Acceptance criteria.**
+
+- Standalone binary runs on supported targets without Node installed.
+- Core commands pass smoke/integration checks in compiled mode.
+- Installer and docs are updated to binary-first flow.
+- No regression in `.jaiph/runs` artifacts, event stream, or reporting server behavior.
 
 ---
 
