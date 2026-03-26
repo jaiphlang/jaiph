@@ -181,6 +181,44 @@ e2e-prompt-please-return-mock
 Final answer:
 e2e-backend-no-mock-output"
 
+# Known issue repro: async prompt branches currently collide on sequence/artifact ids.
+# This test intentionally documents existing broken behavior so we can remove it
+# after sequence allocation is moved into the JS runtime.
+e2e::file "async_prompt_artifacts.jh" <<'EOF'
+#!/usr/bin/env jaiph
+workflow left {
+  prompt "async-left"
+}
+workflow right {
+  prompt "async-right"
+}
+workflow default {
+  run left &
+  run right &
+  wait
+}
+EOF
+
+repro_found=0
+for _attempt in $(seq 1 12); do
+  e2e::run "async_prompt_artifacts.jh" >/dev/null || true
+  async_run_dir="$(e2e::latest_run_dir_at "${TEST_DIR}/.jaiph/runs" "async_prompt_artifacts.jh")"
+  shopt -s nullglob
+  prompt_outs=( "${async_run_dir}"*jaiph__prompt.out )
+  shopt -u nullglob
+  summary_content="$(<"${async_run_dir}run_summary.jsonl")"
+  seq2_count="$(printf '%s' "${summary_content}" | grep -c '"func":"async_prompt_artifacts::.*","kind":"workflow".*"seq":2' || true)"
+  if [[ ${#prompt_outs[@]} -eq 1 || "${seq2_count}" -ge 2 ]]; then
+    repro_found=1
+    break
+  fi
+done
+if [[ "${repro_found}" -eq 1 ]]; then
+  e2e::pass "known async seq/artifact collision was reproduced"
+else
+  e2e::skip "could not reproduce async seq/artifact collision in 12 attempts"
+fi
+
 # Multi-line prompt is displayed as single line (newlines stripped from preview)
 e2e::file "multiline_prompt.jh" <<'EOF'
 #!/usr/bin/env jaiph
