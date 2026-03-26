@@ -180,6 +180,33 @@ Complete cutover to in-process JS kernel and finalize distribution/docs.
 
 ---
 
+## Post-migration hardening: move sequence allocation into JS runtime for atomicity <!-- dev-ready -->
+
+**Goal**  
+Eliminate async artifact/step-id collisions by making JS runtime the single owner of step sequence allocation.
+
+**Problem statement**
+
+- Current Bash-side sequencing can race under managed async (`run ... &`), producing duplicate `seq` values and colliding artifact paths (for example prompt `.out` files).
+- A known repro exists in `e2e/tests/20_rule_and_prompt.sh` (`async_prompt_artifacts.jh` block): concurrent branches currently collapse into one prompt artifact and duplicate workflow `seq`.
+
+**Scope**
+
+1. Introduce a JS runtime sequence allocator that is shared by all concurrent step executions in a run.
+2. Ensure allocation is atomic across async branches/process boundaries.
+3. Make Bash runtime consume JS-assigned seq values (or remove Bash-side seq mutation entirely once migration phase allows).
+4. Preserve existing artifact naming contract (`%06d-<safe_name>.out|.err`) and run summary `seq` semantics.
+5. Replace/remove the known-bug repro assertions once fixed and add positive parity assertions (`2 prompt artifacts`, unique seqs).
+
+**Acceptance criteria**
+
+- Under concurrent async workflows, each step gets a unique monotonic `seq`.
+- Prompt artifacts from parallel branches are emitted as distinct files (no overwrite/interleaving).
+- `run_summary.jsonl` contains no duplicate `seq` per run for `STEP_START`/`STEP_END`.
+- Existing e2e suite remains green, and the async prompt repro is converted to a correctness assertion.
+
+---
+
 ## Add `jaiph format <file>` command <!-- dev-ready -->
 
 **Goal.** Provide an opinionated formatter for `.jh` files that normalizes indentation and spacing.
