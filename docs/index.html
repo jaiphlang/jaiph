@@ -19,10 +19,36 @@ layout: null
 
 <body>
 
+    <nav class="top-nav">
+        <div class="top-nav-inner">
+            <a href="/" class="top-nav-logo">
+                <img src="logo-jaiph.png" alt="Jaiph" />
+            </a>
+            <div class="top-nav-links">
+                <a href="https://jaiph.org/getting-started" target="_blank" rel="noopener noreferrer">Docs</a>
+                <a href="https://github.com/jaiphlang/jaiph" target="_blank" rel="noopener noreferrer">GitHub</a>
+                <a href="https://marketplace.visualstudio.com/items?itemName=jaiph.jaiph-syntax-vscode" target="_blank"
+                    class="no-mobile" rel="noopener noreferrer">VSCode</a>
+                <a href="https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md"
+                    target="_blank" rel="noopener noreferrer">Agent Skill</a>
+            </div>
+        </div>
+    </nav>
+
     <header>
-        <h1><img src="logo.png" alt="Jaiph" /></h1>
+        <h1>Jaiph</h1>
+        <div class="hero-cta">
+            <a href="#samples" rel="noopener noreferrer" class="button button-primary">Samples</a>
+            <a href="https://github.com/jaiphlang/jaiph" target="_blank" rel="noopener noreferrer"
+                class="button button-dark">GitHub</a>
+            <a href="https://marketplace.visualstudio.com/items?itemName=jaiph.jaiph-syntax-vscode" target="_blank"
+                rel="noopener noreferrer" class="button button-dark no-mobile">VSCode</a>
+            <a href="https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md"
+                target="_blank" rel="noopener noreferrer" class="button button-dark">Agent skill</a>
+        </div>
+        <p class="value-prop">Composable AI workflows you can trust.</p>
         <div class="tagline">
-            Open Source<span class="separator">•</span>Powerful<span class="separator">•</span>Friendly!
+            Open Source<span class="separator">&middot;</span>Powerful<span class="separator">&middot;</span>Friendly!
         </div>
     </header>
 
@@ -32,39 +58,42 @@ layout: null
             <h2>Try it out!</h2>
             <div class="card doc-content">
                 <pre><code class="language-bash static-highlight"><span class="code-line">curl -fsSL https://jaiph.org/run | bash -s '</span><span class="code-line"><span class="ralph-keyword">workflow</span> <span class="ralph-definition">default</span> {</span><span class="code-line">  <span class="ralph-keyword">const</span> <span class="ralph-variable">response</span> <span class="ralph-operator">=</span> <span class="ralph-keyword">prompt</span> <span class="ralph-string">"Say: Hello, I am [model name]!"</span></span><span class="code-line">  <span class="ralph-keyword">log</span> <span class="ralph-string">"$response"</span></span><span class="code-line">}'</span></code></pre>
-                <p class="small">Installs Jaiph (if not already installed) and runs the workflow.</p>
+                <p class="small">Installs Jaiph <strong>v0.5.0</strong> to <strong>~/.local/bin</strong> (if not already
+                    installed), and runs the sample workflow. See <a href="#samples">more samples</a>!</p>
             </div>
         </section>
 
         <section>
-            <h2>What is Jaiph?</h2>
+            <h2>Why Jaiph?</h2>
             <div class="card doc-content">
-                <p>
-                    <strong>Jaiph</strong> is a composable scripting language and runtime for defining and orchestrating
-                    AI agent workflows. It supports native bash commands and a set of custom primitives to combine
-                    prompts with strict checks.
-                </p>
-                <pre><code class="language-bash">curl -fsSL https://jaiph.org/install | bash</code></pre>
-                <p class="small">The installer will install the version <strong>0.5.0</strong> of Jaiph to
-                    <strong>~/.local/bin</strong>. Check out the <a
-                        href="https://github.com/jaiphlang/jaiph/blob/nightly/CHANGELOG.md">CHANGELOG</a> to see what's
-                    new in the <strong>nightly</strong> branch and use <code>jaiph use nightly</code> to switch.
-                </p>
-                <p>
-                    <a href="https://jaiph.org/getting-started" target="_blank" rel="noopener noreferrer"
-                        class="button">Docs</a>
-                    <a href="https://github.com/jaiphlang/jaiph" target="_blank" rel="noopener noreferrer"
-                        class="button">GitHub</a>
-                    <a href="https://marketplace.visualstudio.com/items?itemName=jaiph.jaiph-syntax-vscode"
-                        target="_blank" rel="noopener noreferrer" class="button">VSC Extension</a>
-                    <a href="https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md"
-                        target="_blank" rel="noopener noreferrer" class="button">Agent Skill</a>
-                </p>
+                <div class="comparison-grid">
+                    <div class="comparison-col">
+                        <h3>Language</h3>
+                            <p>Simple and easy to learn</p>
+                            <p>Strict checks and structure over non‑deterministic agent responses</p>
+                            <p>Embed scripts in your favorite language</p>
+                            <p>Built-in testing framework</p>
+                    </div>
+                    <div class="comparison-col">
+                        <h3>Runtime</h3>
+                            <p>Built-in reporting</p>
+                            <p>Built-in Docker sandboxing</p>
+                            <p>Tracks and saves all agent responses</p>
+                            <p>Can compile workflows to standalone binaries</p>
+                    </div>
+                    <div class="comparison-col">
+                        <h3>Open Source</h3>
+                            <p>No vendor lock-in: Use any AI agent you want</p>
+                            <p>No data gathering, no tracking. Verify it in the <a
+                                    href="https://github.com/jaiphlang/jaiph" target="_blank"
+                                    rel="noopener noreferrer">source code</a>!</li>
+                    </div>
+                </div>
             </div>
         </section>
 
         <section>
-            <h2>Samples</h2>
+            <h2 id="samples">Samples</h2>
             <div class="card doc-content">
                 <div class="code-tab-list">
                     <button type="button" class="code-tab-button is-active"
@@ -86,7 +115,8 @@ layout: null
                         <code>ensure</code>,
                         <code>run</code>, <code>const</code>, brace <code>if</code>, <code>fail</code>,
                         <code>return</code>, inbox
-                        <code>&lt;-</code> / <code>-&gt;</code>, … — not arbitrary bash lines. <strong>Bash</strong>
+                        <code>&lt;-</code> / <code>-&gt;</code>, &hellip; &mdash; not arbitrary bash lines.
+                        <strong>Bash</strong>
                         belongs in
                         <code>script</code> blocks (and shared <code>.jaiph/lib</code> loaded from there). Workflows
                         call rules with
@@ -187,7 +217,7 @@ testing say_hello.test.jh
   <span class="run-fail">✗</span> expectEqual failed: <span class="run-time">0s</span>
     <span class="run-diff-minus">- You didn't provide your name</span>
     <span class="run-diff-plus">+ You didn't provide your name :(</span>
-    
+
   <span class="run-marker">▸</span> with name, returns greeting and logs response
   <span class="run-pass">✓</span> <span class="run-time">0s</span>
 
@@ -201,7 +231,7 @@ testing say_hello.test.jh
                         Inside a recover block, <code>$1</code> is the full merged stdout+stderr from the failed rule
                         execution — including output from nested scripts and rules. The payload refreshes on each retry
                         attempt. Persist <code>$1</code> to a stable path (here under <code>.jaiph/tmp/</code>) and
-                        assert it is non-empty before the prompt, so the message about “inspect the log file” matches
+                        assert it is non-empty before the prompt, so the message about "inspect the log file" matches
                         what is on disk.</p>
                     <p>The workflow uses custom <code>config</code> to enable agent YOLO mode. Otherwise the agent
                         cannot
@@ -454,68 +484,76 @@ Jaiph: Running async.jh
                         and <code>run.*</code> keys). Environment variables override config values. See <a
                             href="configuration">Configuration</a>.</dd>
 
-                    <dt><code>import "file.jh" as alias</code> · <code>const name = value</code> /
-                        <code>local name = value</code></dt>
+                    <dt><code>import "file.jh" as alias</code> &middot; <code>const name = value</code> /
+                        <code>local name = value</code>
+                    </dt>
                     <dd>Import other modules and define module-scoped variables (prefer <code>const</code> for new code)
                         shared by
                         rules, scripts, and workflows in the same file.</dd>
 
-                    <dt><code>rule name { ... }</code> · <code>workflow name { ... }</code> ·
+                    <dt><code>rule name { ... }</code> &middot; <code>workflow name { ... }</code> &middot;
                         <code>script name() { ... }</code>
                     </dt>
                     <dd><code>rule</code> is for reusable checks (Jaiph structured steps; used with
                         <code>ensure</code>),
                         <code>workflow</code> orchestrates Jaiph steps only, and <code>script</code> holds bash (or any
                         language via a custom shebang, e.g. <code>#!/usr/bin/env node</code>) invoked with
-                        <code>run</code>. Scripts run in <strong>full isolation</strong> — only positional arguments
+                        <code>run</code>. Scripts run in <strong>full isolation</strong> &mdash; only positional
+                        arguments
                         and essential Jaiph variables (<code>JAIPH_LIB</code>, <code>JAIPH_SCRIPTS</code>,
                         <code>JAIPH_WORKSPACE</code>) are inherited; module-scoped variables are not visible.
                         Use <code>source "$JAIPH_LIB/…"</code> for shared utilities. Scripts are emitted as
                         separate executable files under <code>build/scripts/</code>.
                     </dd>
 
-                    <dt><code>ensure ref [args...]</code> · <code>ensure ref recover { ... }</code> ·
+                    <dt><code>ensure ref [args...]</code> &middot; <code>ensure ref recover { ... }</code> &middot;
                         <code>run ref</code>
                     </dt>
                     <dd><code>ensure</code> executes a rule (with optional args); <code>recover</code> adds bounded
                         retry repair logic; <code>run</code> calls another workflow or module script from a workflow
-                        (managed step — same value/log contract as <code>ensure</code>).</dd>
+                        (managed step &mdash; same value/log contract as <code>ensure</code>).</dd>
 
-                    <dt><code>prompt "..."</code> · <code>const name = prompt "..." returns '{ field: type }'</code>
+                    <dt><code>prompt "..."</code> &middot;
+                        <code>const name = prompt "..." returns '{ field: type }'</code>
                     </dt>
                     <dd>Sends a prompt to the configured agent, optionally validates structured JSON output, and exposes
                         captured variables.</dd>
 
-                    <dt><code>const name = …</code> · <code>name = ensure ref</code> · <code>name = run ref</code>
+                    <dt><code>const name = …</code> &middot; <code>name = ensure ref</code> &middot;
+                        <code>name = run ref</code>
                     </dt>
                     <dd>Bind or capture step values. For <code>ensure</code> / <code>run</code> to rules and workflows,
                         explicit
                         <code>return "value"</code> feeds the variable; for <code>run</code> to a
                         <strong>script</strong>, capture follows
-                        stdout. <code>const</code> RHS has stricter rules (no <code>$(...)</code> — use <code>run</code>
+                        stdout. <code>const</code> RHS has stricter rules (no <code>$(...)</code> &mdash; use
+                        <code>run</code>
                         to a script). A
-                        call-like RHS must use the keyword explicitly — e.g. <code>const x = run helper "$arg"</code>,
+                        call-like RHS must use the keyword explicitly &mdash; e.g.
+                        <code>const x = run helper "$arg"</code>,
                         not
                         <code>const x = helper "$arg"</code> (compile error with a correction hint). See
                         <a href="grammar#step-output-contract">Step output contract</a>.
                     </dd>
 
-                    <dt><code>fail "reason"</code> · <code>wait</code></dt>
+                    <dt><code>fail "reason"</code> &middot; <code>wait</code></dt>
                     <dd><code>fail</code> aborts with stderr + non-zero exit. <code>wait</code> joins async
-                        <code>run … &amp;</code> jobs.</dd>
+                        <code>run … &amp;</code> jobs.
+                    </dd>
 
-                    <dt><code>if [not] ensure ref { }</code> · <code>if [not] run ref { }</code></dt>
+                    <dt><code>if [not] ensure ref { }</code> &middot; <code>if [not] run ref { }</code></dt>
                     <dd>Brace conditionals only, with optional <code>else if</code> / <code>else</code> chains. Use
                         <code>run</code> to a
-                        script to express command-based tests.</dd>
+                        script to express command-based tests.
+                    </dd>
 
-                    <dt><code>log "message"</code> · <code>logerr "message"</code></dt>
+                    <dt><code>log "message"</code> &middot; <code>logerr "message"</code></dt>
                     <dd>Emit informational or error output to the run tree while keeping workflow execution explicit and
                         auditable. Terminal and tree text use <code>echo -e</code>-style backslash escapes; structured
                         <code>LOG</code> / <code>LOGERR</code> payloads keep the raw message string.
                     </dd>
 
-                    <dt><code>channel &lt;name&gt;</code> · <code>channel_ref &lt;- ...</code> ·
+                    <dt><code>channel &lt;name&gt;</code> &middot; <code>channel_ref &lt;- ...</code> &middot;
                         <code>channel_ref -&gt; workflow</code>
                     </dt>
                     <dd>Declare channels at top level and then send/route messages between workflows.
@@ -532,18 +570,19 @@ Jaiph: Running async.jh
                     <dd>Defines a test case; files named <code>*.test.jh</code> execute as test suites. See <a
                             href="testing">Testing</a>.</dd>
 
-                    <dt><code>mock prompt "..."</code> ·
+                    <dt><code>mock prompt "..."</code> &middot;
                         <code>mock prompt { if $1 contains "..." ; then respond "..." ; fi }</code>
                     </dt>
                     <dd>Stub prompt calls with fixed responses or content-based branching so tests stay deterministic.
                     </dd>
 
-                    <dt><code>mock workflow</code> · <code>mock rule</code> · <code>mock function</code></dt>
+                    <dt><code>mock workflow</code> &middot; <code>mock rule</code> &middot; <code>mock function</code>
+                    </dt>
                     <dd>Replace workflow, rule, or script implementations in tests for isolation and targeted assertions
                         (<code>mock function</code> is the test-file spelling).
                     </dd>
 
-                    <dt><code>name = alias.workflow</code> · <code>allow_failure</code></dt>
+                    <dt><code>name = alias.workflow</code> &middot; <code>allow_failure</code></dt>
                     <dd>Runs an imported workflow through the test harness (same managed semantics as <code>run</code>
                         in
                         <code>.jh</code> files): capture prefers an explicit <code>return</code> from the callee,
@@ -552,34 +591,47 @@ Jaiph: Running async.jh
                         expects a non-zero exit. See <a href="testing">Testing</a>.
                     </dd>
 
-                    <dt><code>expectEqual</code> · <code>expectContain</code> · <code>expectNotContain</code></dt>
+                    <dt><code>expectEqual</code> &middot; <code>expectContain</code> &middot;
+                        <code>expectNotContain</code></dt>
                     <dd>Core assertion helpers for exact matches and substring checks.</dd>
                 </dl>
 
                 <hr />
                 <p>
                     <a href="getting-started">Getting started</a>
-                    ·
+                    &middot;
                     <a href="https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md">Agent
                         skill</a>
-                    ·
+                    &middot;
                     <a href="grammar">Grammar</a>
-                    ·
+                    &middot;
                     <a href="testing">Testing</a>
-                    ·
+                    &middot;
                     <a href="contributing">Contributing</a>
-                    ·
+                    &middot;
                     <a href="configuration">Configuration</a>
-                    ·
+                    &middot;
                     <a href="sandboxing">Sandboxing</a>
-                    ·
+                    &middot;
                     <a href="cli">CLI reference</a>
-                    ·
+                    &middot;
                     <a href="reporting">Reporting server</a>
-                    ·
+                    &middot;
                     <a href="hooks">Hooks</a>
-                    ·
+                    &middot;
                     <a href="inbox">Inbox &amp; Dispatch</a>
+                </p>
+            </div>
+        </section>
+
+        <section class="install-section">
+            <h2>Install</h2>
+            <div class="card doc-content">
+                <pre><code class="language-bash">curl -fsSL https://jaiph.org/install | bash</code></pre>
+                <p class="small">The installer will install the version <strong>0.5.0</strong> of Jaiph to
+                    <strong>~/.local/bin</strong>. Check out the <a
+                        href="https://github.com/jaiphlang/jaiph/blob/nightly/CHANGELOG.md">CHANGELOG</a> to see what's
+                    new in the <strong>nightly</strong> branch and use <code>jaiph use nightly</code> to switch.
                 </p>
             </div>
         </section>
@@ -587,7 +639,7 @@ Jaiph: Running async.jh
     </div>
 
     <div class="footer">
-        © 2026 Jaiph — Open Source · Powerful · Friendly!
+        &copy; 2026 Jaiph &mdash; Open Source &middot; Powerful &middot; Friendly!
     </div>
 
     <script src="assets/js/main.js"></script>
