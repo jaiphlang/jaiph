@@ -102,6 +102,20 @@ Transpiled output is standard bash. The generated script sources the runtime std
 
 A runnable copy of this example lives in the Jaiph repository under `test/fixtures/` (with stub modules `bootstrap_project.jh` and `tools/security.jh`).
 
+## Quick try
+
+Run a sample workflow without installing anything first — the script installs Jaiph automatically if it is not already on your `PATH`:
+
+```bash
+curl -fsSL https://jaiph.org/run | bash -s '
+workflow default {
+  const response = prompt "Say: Hello I'\''m [model name]!"
+  log "$response"
+}'
+```
+
+Requires `node` and `curl`. If Jaiph is already installed, the script skips installation and runs the workflow directly.
+
 ## Installation
 
 ```bash

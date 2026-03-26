@@ -6,53 +6,26 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## "Try it out" one-liner on landing page + `docs/run` script <!-- dev-ready -->
+## Dark mode for docs site (landing + Jekyll pages) with top-right toggle <!-- dev-ready -->
 
-**Goal.** Add a hero "Try it out" section at the top of the landing page (`docs/index.html`) with a single `curl | bash` one-liner that installs Jaiph (if needed) and runs a sample workflow. Create the `docs/run` script that powers it.
-
-**Landing page (`docs/index.html`).**
-
-Add a section at the top (below header, above existing content) with:
-
-1. Heading: "Try it out!"
-2. A styled code block containing:
-   ```
-   curl -fsSL https://jaiph.org/run | bash -s '
-   workflow default {
-     const response = prompt "Say: Hello I'\''m [model name]!"
-     log "$response"
-   }'
-   ```
-3. A small note below: "Installs Jaiph (if not already installed) and runs the workflow."
-4. A copy-to-clipboard button on the code block so the user can paste it into their terminal.
-5. Style consistent with the existing page design (dark code block, monospace, subtle button).
-
-**`docs/run` script.**
-
-Create `docs/run` — a bash script served at `https://jaiph.org/run`. When piped through `bash -s '<workflow>'`:
-
-1. **Detect Jaiph**: check if `jaiph` is in `$PATH` (`command -v jaiph`).
-2. **Install if missing**: if not found, run `curl -fsSL https://jaiph.org/install | bash` (the existing installer).
-3. **Run the workflow**: write the workflow string (passed as `$1` or read from stdin after `-s`) to a temp `.jh` file, run `jaiph run <tempfile>`, clean up.
-4. Exit with the workflow's exit code.
+**Goal.** Add light/dark theme support for the public docs site: `docs/index.html` (landing) and all other Jekyll-rendered pages under `docs/`, with a visible theme switch fixed or placed at the **top right** of the page. Respect `prefers-color-scheme` as the default when the user has not chosen a preference; persist the user’s choice (e.g. `localStorage`) across navigations. **Syntax highlighting** must follow the page theme: keep the current **GitHub Light**–style token colors in light mode and add a **GitHub Dark**–style palette in dark mode (same highlighter markup, theme-dependent CSS — not light-only highlights on a dark background).
 
 **Scope.**
 
-1. Create `docs/run` script (bash, `+x`).
-2. Update `docs/index.html` — add "Try it out" section with code block, note, and copy button.
-3. Add copy-to-clipboard JS (minimal inline or in `docs/assets/js/main.js`).
-4. Ensure the script works end-to-end: fresh machine with `curl` + `node` → installs jaiph → runs the sample workflow → outputs response.
-5. The `docs/run` script must be safe: no destructive operations, clear output, fail gracefully if node/npm is missing.
+1. **`docs/assets/css/style.css`** — Define CSS custom properties (or equivalent) for light and dark palettes; use `[data-theme="dark"]` on `<html>` or `<body>` (or `.theme-dark` root class) so one stylesheet serves both themes. Ensure contrast, links, code blocks, cards, and buttons remain readable in dark mode. For fenced / `pre code` blocks and any custom highlighter spans (e.g. classes emitted by `docs/assets/js/main.js`), map token colors to **GitHub Light** vs **GitHub Dark** conventions (keywords, strings, comments, functions, etc.) so dark mode is not “light scheme on dark gray”.
+2. **`docs/index.html`** — Add a compact theme control in the header area **top right** (toggle button, switch, or sun/moon control) wired to flip theme and persist preference.
+3. **Jekyll layouts** — Identify shared layout(s) (e.g. `_layouts/default.html` or equivalent) and include the same theme control + minimal inline script or shared `docs/assets/js` snippet so every doc page gets the switch in the same position.
+4. **JavaScript** — On load: read saved preference; if none, follow `prefers-color-scheme`. On toggle: update root attribute/class, save preference, update any `meta theme-color` if present for mobile chrome.
+5. **No flash of wrong theme (optional but preferred)** — Inline a tiny script in `<head>` or critical CSS that applies the saved/system theme before first paint, or document tradeoff if deferred.
 
 **Acceptance criteria.**
 
-- `curl -fsSL https://jaiph.org/run | bash -s '<workflow>'` installs jaiph (if needed) and executes the workflow.
-- If jaiph is already installed, skips installation and runs directly.
-- Landing page shows the "Try it out" section with the one-liner.
-- Copy button works (copies the full curl command to clipboard).
-- The sample workflow actually runs and produces output (requires an AI backend configured, or gracefully shows what would happen).
-- `docs/run` exits with the workflow's exit code.
-- Script cleans up temp files on exit (trap).
+- Landing page (`docs/index.html`) shows a theme control at the **top right**; toggling switches between coherent light and dark styles.
+- At least one non-landing Jekyll page (e.g. getting-started or default layout) shows the same control in the same position and behavior.
+- First visit with no saved preference matches system light/dark (`prefers-color-scheme`).
+- Reloading or navigating to another page keeps the user’s explicit choice until cleared.
+- Focus states and keyboard use remain usable for the theme control (accessibility).
+- In **dark** mode, syntax-highlighted code (landing samples, doc pages, tabbed examples) uses **GitHub Dark**–aligned token colors; in **light** mode, highlighting stays **GitHub Light**–aligned (current behavior preserved).
 
 ---
 

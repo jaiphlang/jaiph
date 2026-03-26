@@ -78,6 +78,7 @@ h2 {
     color: var(--navy);
     text-shadow: 2px 1px 2px var(--bg);
     margin-top: 5rem;
+    margin-bottom: auto;
     font-size: 3em;
 }
 
@@ -275,6 +276,10 @@ pre code .code-line::before {
     border: none;
     border-top: 1px solid #d0d7de;
     margin: 1.5rem 0;
+}
+
+.try-it-out h2 {
+    margin-top: 0;
 }
 
 .footer {

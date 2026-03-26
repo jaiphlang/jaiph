@@ -542,6 +542,18 @@
      */
     function highlightAll() {
         document.querySelectorAll("pre code").forEach(block => {
+            if (block.matches(".static-highlight")) {
+                const lines = block.querySelectorAll(".code-line");
+                block.dataset.copySource =
+                    lines.length > 0
+                        ? Array.from(lines)
+                              .map(function (el) {
+                                  return el.textContent;
+                              })
+                              .join("\n")
+                        : block.textContent;
+                return;
+            }
             if (block.matches(".jaiph-run")) {
                 block.dataset.copySource = block.textContent;
                 const html = block.innerHTML;

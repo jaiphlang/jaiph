@@ -90,6 +90,20 @@ Transpiled output is standard bash and sources the installed global Jaiph runtim
 
 ## Getting Started
 
+### Quick try
+
+Run a sample workflow without installing anything first:
+
+```bash
+curl -fsSL https://jaiph.org/run | bash -s '
+workflow default {
+  const response = prompt "Say: Hello I'\''m [model name]!"
+  log "$response"
+}'
+```
+
+The script installs Jaiph automatically if it is not already on your `PATH`. Requires `node` and `curl`.
+
 ### Install
 
 ```bash
