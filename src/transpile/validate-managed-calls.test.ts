@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { build } from "../src/transpiler";
+import { build } from "../transpiler";
 
 test("E_VALIDATE: command substitution cannot call Jaiph function", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-sub-fn-"));

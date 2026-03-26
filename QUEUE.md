@@ -6,36 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Co-locate TypeScript tests with modules (remove central test directory) <!-- dev-ready -->
-
-**Goal.** Improve module isolation and maintainability by moving TypeScript tests next to the modules they validate.
-
-**Scope.**
-
-1. Move module-focused tests from `test/` into corresponding source directories (e.g. parser, transpile, cli/run, reporting, runtime adapters).
-2. Introduce module-level test entry files where needed (`index.ts` exports remain stable).
-3. Keep cross-module/system contract tests at top-level if they do not clearly belong to one module.
-4. Remove the separate centralized `test/` directory only after migration is complete.
-5. Update build/test commands, globs, and tsconfig includes so all moved tests still compile and run in CI.
-6. Keep behavior identical: no test deletions; any unavoidable relocation-only edits must preserve assertions.
-
-**Constraints.**
-
-- Do not remove coverage; migrate tests, do not drop tests.
-- If a test spans multiple modules and has no clear owner, keep it top-level.
-- Prefer small, incremental file moves with green tests at each step.
-
-**Acceptance criteria.**
-
-- Module tests are colocated with their owning modules.
-- Cross-cutting tests remain top-level with clear rationale.
-- No centralized `test/` directory remains (except intentionally retained top-level cross-cutting tests, if any).
-- `npm run build`, `npm test`, and `npm run test:e2e` pass.
-- CI behavior is unchanged from a product-contract perspective.
-- ARCHITECTURE.md, and AGENT.md updated to reflect the new test organization and ownership boundaries.
-
----
-
 ## Rewrite docs for script terminology and present-tense language <!-- dev-ready -->
 
 **Goal.** Update all user-facing docs to use `script` terminology (replacing `function`) and remove historical transition framing.
@@ -79,40 +49,6 @@ The first `##` task in the file is always the current task.
 - Docs are internally consistent and aligned with shipped behavior.
 - `npm run build && npm test && npm run test:e2e` pass after cleanup.
 - Diff is cleanup-only (removals, wording consistency, and minimal wiring fixes).
-
----
-
-## Add Codex backend support for prompts <!-- dev-ready -->
-
-**Goal.** Add a first-class `codex` backend so Jaiph can execute `prompt` steps through Codex with consistent request/response behavior, streaming semantics, and error handling aligned with existing backends.
-
-**Scope.**
-
-1. **Backend config.**
-   - Add `codex` as a supported backend option in config parsing/validation.
-   - Define required env vars/settings (for example API key, model, optional base URL) with clear validation errors when missing.
-2. **Runtime adapter.**
-   - Implement a Codex client adapter in runtime prompt execution path.
-   - Map Jaiph prompt input to Codex request payload, including system/user text, schema mode, and temperature/options used by existing backends where applicable.
-3. **Structured returns compatibility.**
-   - Ensure `prompt ... returns '{ ... }'` works with Codex output parsing and existing schema validation.
-   - Keep behavior parity for invalid JSON / schema mismatch errors.
-4. **Streaming and logging behavior.**
-   - Match existing backend behavior for streaming tokens and final captured output.
-   - Ensure run artifacts/logging include backend name and useful failure details without leaking secrets.
-5. **Tests and docs.**
-   - Add/extend unit tests for backend selection, request mapping, and response parsing.
-   - Add integration or e2e coverage using mocked Codex responses.
-   - Update docs (`README.md`, `docs/cli.md`, `docs/getting-started.md`) with setup and usage examples for `codex`.
-
-**Acceptance criteria.**
-
-- Setting backend to `codex` routes all `prompt` calls through the Codex adapter.
-- Missing/invalid Codex configuration fails fast with actionable error messages.
-- Plain text prompts and `returns` schema prompts both work with Codex.
-- Streaming and non-streaming output behavior matches current backend contract.
-- Unit/integration tests for Codex backend pass with the existing suite.
-- Docs include Codex setup, required env vars, and a minimal working example.
 
 ---
 
@@ -193,6 +129,40 @@ Create `docs/run` — a bash script served at `https://jaiph.org/run`. When pipe
 - Parse errors produce a clear message and non-zero exit (file is not modified).
 - Round-trip: formatted file parses identically to the original (AST equality).
 - Unit test and e2e test covering basic formatting and `--check` mode.
+
+---
+
+## Add Codex backend support for prompts <!-- dev-ready -->
+
+**Goal.** Add a first-class `codex` backend so Jaiph can execute `prompt` steps through Codex with consistent request/response behavior, streaming semantics, and error handling aligned with existing backends.
+
+**Scope.**
+
+1. **Backend config.**
+   - Add `codex` as a supported backend option in config parsing/validation.
+   - Define required env vars/settings (for example API key, model, optional base URL) with clear validation errors when missing.
+2. **Runtime adapter.**
+   - Implement a Codex client adapter in runtime prompt execution path.
+   - Map Jaiph prompt input to Codex request payload, including system/user text, schema mode, and temperature/options used by existing backends where applicable.
+3. **Structured returns compatibility.**
+   - Ensure `prompt ... returns '{ ... }'` works with Codex output parsing and existing schema validation.
+   - Keep behavior parity for invalid JSON / schema mismatch errors.
+4. **Streaming and logging behavior.**
+   - Match existing backend behavior for streaming tokens and final captured output.
+   - Ensure run artifacts/logging include backend name and useful failure details without leaking secrets.
+5. **Tests and docs.**
+   - Add/extend unit tests for backend selection, request mapping, and response parsing.
+   - Add integration or e2e coverage using mocked Codex responses.
+   - Update docs (`README.md`, `docs/cli.md`, `docs/getting-started.md`) with setup and usage examples for `codex`.
+
+**Acceptance criteria.**
+
+- Setting backend to `codex` routes all `prompt` calls through the Codex adapter.
+- Missing/invalid Codex configuration fails fast with actionable error messages.
+- Plain text prompts and `returns` schema prompts both work with Codex.
+- Streaming and non-streaming output behavior matches current backend contract.
+- Unit/integration tests for Codex backend pass with the existing suite.
+- Docs include Codex setup, required env vars, and a minimal working example.
 
 ---
 
@@ -492,4 +462,3 @@ Block bodies receive the same positional args as the real construct and return v
 - E2e test covering simple string mock for each construct type.
 
 ---
-

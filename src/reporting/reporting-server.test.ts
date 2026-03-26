@@ -3,16 +3,16 @@ import assert from "node:assert/strict";
 import { appendFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { safeRelativeRunPath, resolveRunsRoot, runDirFromRel } from "../src/reporting/path-utils";
+import { safeRelativeRunPath, resolveRunsRoot, runDirFromRel } from "./path-utils";
 import {
   applySummaryLine,
   buildStepTree,
   deriveStatus,
   emptyRunState,
   stepsSortedBySeq,
-} from "../src/reporting/summary-parser";
-import { safeArtifactPath } from "../src/reporting/artifact-path";
-import { createRunRegistry, listRunEntries, pollRunRegistry } from "../src/reporting/run-registry";
+} from "./summary-parser";
+import { safeArtifactPath } from "./artifact-path";
+import { createRunRegistry, listRunEntries, pollRunRegistry } from "./run-registry";
 
 test("safeRelativeRunPath rejects traversal", () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "jaiph-rpt-")));

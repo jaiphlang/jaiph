@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { formatParamsForDisplay, formatNamedParamsForDisplay, normalizeParamValue } from "../src/cli/commands/format-params.js";
+import { formatParamsForDisplay, formatNamedParamsForDisplay, normalizeParamValue } from "./format-params.js";
 
 test("formatParamsForDisplay filters empty and whitespace-only params", () => {
   const params: Array<[string, string]> = [

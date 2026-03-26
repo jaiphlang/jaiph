@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseImportLine } from "../src/parse/imports";
+import { parseImportLine } from "./imports";
 
 test("parseImportLine: parses valid double-quoted import", () => {
   const result = parseImportLine("test.jh", 'import "tools.jh" as tools', 'import "tools.jh" as tools', 1);

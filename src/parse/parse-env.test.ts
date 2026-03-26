@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseEnvDecl } from "../src/parse/env";
+import { parseEnvDecl } from "./env";
 
 test("parseEnvDecl: parses double-quoted single-line value", () => {
   const { envDecl, nextIndex } = parseEnvDecl("test.jh", ['local FOO = "bar"'], 0);

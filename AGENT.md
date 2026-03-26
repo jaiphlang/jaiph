@@ -21,15 +21,18 @@ This document defines how coding agents should work in this repository.
 
 - **Run tests for every substantive change.**
 - **Order of confidence:**
-  - Unit tests in `test/*.test.ts` for pure logic.
-  - Acceptance tests in `test/*.test.ts` for process/runtime behavior.
+  - Colocated module tests in `src/**/*.test.ts` for pure logic.
+  - Cross-cutting tests in `test/*.test.ts` for process/runtime behavior.
   - E2E shell tests in `e2e/tests/*.sh` for CLI contracts and golden outputs.
 - Before broad test runs, execute the most relevant targeted test(s) first.
+- New module tests go next to the source file they test (e.g. `src/parse/core.test.ts`).
+- Tests that span multiple modules or test process-level behavior go in `test/`.
 
 Useful commands:
 
 - `npm run build`
-- `node --test dist/test/*.test.js`
+- `node --test dist/src/**/*.test.js` (colocated module tests)
+- `node --test dist/test/*.test.js` (cross-cutting tests)
 - `bash e2e/test_all.sh`
 - Single e2e script: `bash e2e/tests/<name>.sh`
 

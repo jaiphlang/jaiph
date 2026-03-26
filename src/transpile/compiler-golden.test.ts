@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { build, transpileFile, transpileTestFile } from "../src/transpiler";
-import { parsejaiph } from "../src/parser";
+import { build, transpileFile, transpileTestFile } from "../transpiler";
+import { parsejaiph } from "../parser";
 
 function normalize(text: string): string {
   return text.replace(/\r\n/g, "\n").trimEnd();

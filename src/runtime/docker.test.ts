@@ -13,7 +13,7 @@ import {
   type MountSpec,
   type DockerRunConfig,
   type DockerSpawnOptions,
-} from "../src/runtime/docker";
+} from "./docker";
 import { mkdtempSync, writeFileSync, mkdirSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

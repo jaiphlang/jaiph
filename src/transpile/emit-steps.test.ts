@@ -6,7 +6,7 @@ import {
   resolveShellRefs,
   transpileRuleRef,
   transpileWorkflowRef,
-} from "../src/transpile/emit-steps";
+} from "./emit-steps";
 
 // === parseParamKeysFromArgs ===
 

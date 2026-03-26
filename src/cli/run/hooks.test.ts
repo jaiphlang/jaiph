@@ -10,7 +10,7 @@ import {
   loadMergedHooks,
   runHooksForEvent,
   type MergedHookConfig,
-} from "../src/cli/run/hooks";
+} from "./hooks";
 
 test("globalHooksPath returns path under homedir", () => {
   const p = globalHooksPath();

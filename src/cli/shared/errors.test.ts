@@ -11,7 +11,7 @@ import {
   latestRunFiles,
   readFailedStepOutput,
   failedStepArtifactPaths,
-} from "../src/cli/shared/errors";
+} from "./errors";
 
 // === summarizeError ===
 

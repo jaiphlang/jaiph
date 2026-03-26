@@ -8,7 +8,7 @@ import {
   colFromRaw,
   braceDepthDelta,
   fail,
-} from "../src/parse/core";
+} from "./core";
 
 // === stripQuotes ===
 
