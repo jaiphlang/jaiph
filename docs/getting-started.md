@@ -132,7 +132,7 @@ Installation places both the `jaiph` CLI and the global runtime stdlib (`jaiph_s
 
 Arguments are passed exactly like bash scripts (`$1`, `$2`, `"$@"`).
 
-Entrypoint resolution: the entry file must define a workflow named **`default`**. Executable `.jh` files with `#!/usr/bin/env jaiph` run that workflow when invoked as `./file.jh` (the `jaiph` binary must be on your **`PATH`**). The same applies to **`jaiph run path/to/file.jh`** and the shorthand **`jaiph path/to/file.jh`** when the path exists. The `.jph` extension is still supported but deprecated for new files; **`jaiph run`** prints a deprecation notice on a TTY when you pass a `.jph` path.
+Entrypoint resolution: the entry file must define a workflow named **`default`**. Executable `.jh` files with `#!/usr/bin/env jaiph` run that workflow when invoked as `./file.jh` (the `jaiph` binary must be on your **`PATH`**). The same applies to **`jaiph run path/to/file.jh`** and the shorthand **`jaiph path/to/file.jh`** when the path exists. Both `.jh` and `.jph` extensions are accepted; `.jh` is the recommended extension for new files.
 
 Other useful CLI commands:
 
@@ -166,7 +166,7 @@ Tip: add `.jaiph/` to your `.gitignore`.
 
 ## Language overview
 
-Jaiph source files use **`.jh`** (recommended); **`.jph`** is still accepted. A file contains **rules**, **workflows**, **scripts**, and optional **config** blocks. All primitives interoperate with standard bash. For the full grammar, validation rules, and transpilation details, see [Grammar](grammar.md).
+Jaiph source files use **`.jh`** (recommended); **`.jph`** is also accepted. A file contains **rules**, **workflows**, **scripts**, and optional **config** blocks. All primitives interoperate with standard bash. For the full grammar, validation rules, and transpilation details, see [Grammar](grammar.md).
 
 - `config { ... }` — Optional block setting runtime options (agent backend, model, Docker sandbox, etc.). Allowed at the top level (module-wide) and inside individual workflows for per-workflow overrides (`agent.*` and `run.*` keys only). See [Configuration](configuration.md).
 - `import "path" as alias` — Import rules, workflows, and scripts from another module. The path may include a `.jh` / `.jph` suffix or omit it; resolution prefers `.jh` when both exist. Verified at compile time.
@@ -183,5 +183,57 @@ Jaiph source files use **`.jh`** (recommended); **`.jph`** is still accepted. A 
 - `channel <- …` / `channel -> workflow` — Send (RHS: literal, `$var`, or `run fn`) and route messages between workflows. See [Inbox & Dispatch](inbox.md).
 - `run ref &` / `wait` — Background managed runs and join with a **`wait`** step. Use **`script`** + **`run`** for bash background jobs. See [Grammar](grammar.md).
 - `if [not] ensure ref { ... }` / `if [not] run ref { ... }` — **Brace-only** conditionals (`else if`, `else` supported). Use **`run`** to a script for command-style tests.
+
+### Named parameters
+
+Workflows, rules, and scripts support named parameters with optional defaults:
+
+```jaiph
+script check_hash(file_path, expected_hash) { ... }
+workflow deploy(env, version, dry_run = "false") { ... }
+```
+
+Named params transpile to `local` assignments at the top of the body (e.g. `local file_path="$1"`). Default values use bash expansion (`"${3:-false}"`). Parentheses are optional when no params exist. See [Grammar — Named parameters](grammar.md#named-parameters).
+
+### Polyglot scripts
+
+Scripts default to bash. Add a custom shebang as the first body line to use another language:
+
+```jaiph
+script analyze() {
+  #!/usr/bin/env python3
+  import sys
+  print(f"Result: {sys.argv[1]}")
+}
+```
+
+Non-bash scripts skip Jaiph keyword validation. See [Grammar — Polyglot scripts](grammar.md#polyglot-scripts-and-custom-shebangs).
+
+### Module-qualified references
+
+Imported symbols use **dot notation**: `alias.name` (e.g. `ensure security.scan_passes`, `run bootstrap.nodejs`). The compiler validates that the target exists and matches the calling keyword.
+
+### Inline capture
+
+`run` and `ensure` can appear inline in binding and send expressions — not only as standalone steps:
+
+```jaiph
+const result = run helper "$arg"       # capture script stdout into const
+check = ensure validator "$input"      # capture rule return value
+answer = prompt "Summarize" returns '{ summary: string }'
+
+channel <- run build_message "$data"   # send script output to channel
+```
+
+For **typed prompts** (`returns '{ field: type }'`), the runtime validates the agent's JSON and exposes per-field variables: `$answer_summary` in the example above. See [Grammar — Step output contract](grammar.md#step-output-contract).
+
+### Script naming
+
+Every `script` block requires an explicit name — anonymous (unnamed) script blocks are not supported. Extract reusable bash into named scripts and call them with `run`:
+
+```jaiph
+script check_port() { nc -z localhost "$1"; }
+workflow default { if not run check_port "8080" { fail "port closed" } }
+```
 
 Runtime behavior (progress tree, step output, run logs) is documented in [CLI Reference](cli.md). To browse past and in-progress runs in a browser, use [Reporting server](reporting.md). For agent backend configuration, see [Configuration](configuration.md). For Docker sandboxing (beta), see [Sandboxing](sandboxing.md). For testing workflows with mocks and assertions, see [Testing](testing.md). For lifecycle hooks, see [Hooks](hooks.md).

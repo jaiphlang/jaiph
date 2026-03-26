@@ -6,31 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Rewrite docs for script terminology and present-tense language <!-- dev-ready -->
-
-**Goal.** Update all user-facing docs to use `script` terminology (replacing `function`) and remove historical transition framing.
-
-**Scope.**
-
-1. Sweep docs (`README.md`, `docs/*.md`, `docs/index.html`, `docs/jaiph-skill.md`) and replace `function` (Jaiph construct) references with `script`.
-2. Add documentation for custom shebang support and polyglot script model.
-3. Document named parameters syntax, defaults, and arity validation.
-4. Document inline interpolation (`${run ref}`, `${ensure ref}`), dot notation (`${var.field}`), and anonymous scripts.
-5. Remove wording that frames rules/scripts as transitions ("no longer", "legacy syntax", "migration patterns").
-6. Rewrite those passages to present-tense contracts (what is valid, what is rejected).
-7. Keep changelog entries historical. Keep semantics unchanged.
-
-**Acceptance criteria.**
-
-- All docs reference `script` keyword, not `function`.
-- Shebang and polyglot model are documented.
-- Named parameters documented with examples and default values.
-- Inline interpolation, dot notation, and anonymous scripts documented.
-- Reference docs read as current behavior contracts, not migration guides.
-- Build/tests still pass after wording changes.
-
----
-
 ## Post-refactor sweep: dead code removal and docs cleanup <!-- dev-ready -->
 
 **Goal.** After the script migration phases are complete, remove residual rewrite-era code and perform one final docs consistency sweep.
@@ -42,6 +17,7 @@ The first `##` task in the file is always the current task.
 3. Run a full docs consistency pass across `README.md`, `docs/*.md`, `docs/index.html`, and `docs/jaiph-skill.md` so terminology matches the final grammar/runtime.
 4. Eliminate duplicate or contradictory wording between Grammar, CLI, Getting Started, and the skill docs.
 5. Keep changes focused on cleanup (no new feature work).
+6. Remove support for *.jph files
 
 **Acceptance criteria.**
 

@@ -16,7 +16,7 @@
         "local",
         "rule",
         "workflow",
-        "function",
+        "script",
         "test",
         "ensure",
         "recover",
@@ -182,9 +182,9 @@
             }
         });
 
-        // Definition names after rule / workflow / function
+        // Definition names after rule / workflow / script
         if (
-            (firstValue === "rule" || firstValue === "workflow" || firstValue === "function" || firstValue === "channel") &&
+            (firstValue === "rule" || firstValue === "workflow" || firstValue === "script" || firstValue === "channel") &&
             significant[1] &&
             significant[1].token.type === "identifier"
         ) {
@@ -222,7 +222,7 @@
             }
         }
 
-        // Known local functions referenced in shell lines
+        // Known local scripts referenced in shell lines
         significant.forEach(function (entry) {
             if (
                 entry.token.type === "identifier" &&
@@ -393,7 +393,7 @@
             }
 
             if (
-                firstValue === "function" &&
+                firstValue === "script" &&
                 significant[1] &&
                 significant[1].token.type === "identifier"
             ) {
