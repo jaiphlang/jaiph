@@ -102,7 +102,8 @@ Host paths are resolved relative to the workspace root when building `docker run
   generated/          # mounted read-only
     <script>.sh       # transpiled bash script(s); see below
     jaiph_stdlib.sh   # shell stdlib
-    runtime/          # shell runtime modules
+    runtime/          # shell runtime modules + bundled kernel/*.js
+      kernel/         # inbox.js, emit.js, prompt.js, run-step-exec.js, …
       events.sh
       test-mode.sh
       steps.sh
