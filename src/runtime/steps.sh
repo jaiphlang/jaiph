@@ -277,9 +277,7 @@ jaiph::run_step() {
   parent_id="$(jaiph::step_stack_peek)"
   depth="$(jaiph::step_stack_depth)"
   jaiph::step_stack_push "$step_id"
-  local step_params_json
-  step_params_json="$(jaiph::step_params_json "$@")"
-  jaiph::emit_step_event "STEP_START" "$func_name" "" "" "" "" "$step_id" "$parent_id" "$step_seq" "$depth" "${JAIPH_RUN_ID:-}" "$step_params_json" "$step_kind"
+  jaiph::emit_step_event "STEP_START" "$func_name" "$step_kind" "" "" "" "" "$step_id" "$parent_id" "$step_seq" "$depth" "$@"
   unset JAIPH_STEP_PARAM_KEYS 2>/dev/null || true
   had_errexit=0
   case "$-" in
@@ -389,7 +387,7 @@ jaiph::run_step() {
   jaiph::track_output_files "$out_file" "$err_file"
   step_elapsed_seconds="$((SECONDS - step_started_seconds))"
   elapsed_ms="$((step_elapsed_seconds * 1000))"
-  jaiph::emit_step_event "STEP_END" "$func_name" "$status" "$elapsed_ms" "$out_file" "$err_file" "$step_id" "$parent_id" "$step_seq" "$depth" "${JAIPH_RUN_ID:-}" "" "$step_kind"
+  jaiph::emit_step_event "STEP_END" "$func_name" "$step_kind" "$status" "$elapsed_ms" "$out_file" "$err_file" "$step_id" "$parent_id" "$step_seq" "$depth"
   jaiph::step_stack_pop
   # In test mode, emit step output so test capture (e.g. response = w.default) can read it.
   # In normal runs, step output remains in .out artifacts unless the step itself streams live.
@@ -446,9 +444,7 @@ jaiph::run_step_passthrough() {
   parent_id="$(jaiph::step_stack_peek)"
   depth="$(jaiph::step_stack_depth)"
   jaiph::step_stack_push "$step_id"
-  local step_params_json
-  step_params_json="$(jaiph::step_params_json "$@")"
-  jaiph::emit_step_event "STEP_START" "$func_name" "" "" "" "" "$step_id" "$parent_id" "$step_seq" "$depth" "${JAIPH_RUN_ID:-}" "$step_params_json" "$step_kind"
+  jaiph::emit_step_event "STEP_START" "$func_name" "$step_kind" "" "" "" "" "$step_id" "$parent_id" "$step_seq" "$depth" "$@"
   unset JAIPH_STEP_PARAM_KEYS 2>/dev/null || true
   had_errexit=0
   case "$-" in
@@ -469,7 +465,7 @@ jaiph::run_step_passthrough() {
   fi
   step_elapsed_seconds="$((SECONDS - step_started_seconds))"
   elapsed_ms="$((step_elapsed_seconds * 1000))"
-  jaiph::emit_step_event "STEP_END" "$func_name" "$status" "$elapsed_ms" "" "" "$step_id" "$parent_id" "$step_seq" "$depth" "${JAIPH_RUN_ID:-}" "" "$step_kind"
+  jaiph::emit_step_event "STEP_END" "$func_name" "$step_kind" "$status" "$elapsed_ms" "" "" "$step_id" "$parent_id" "$step_seq" "$depth"
   jaiph::step_stack_pop
   return "$status"
 }

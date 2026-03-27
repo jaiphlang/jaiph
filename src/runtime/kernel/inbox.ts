@@ -130,22 +130,30 @@ function cmdInit(): void {
 
 function cmdSend(): number {
   const dir = inboxDir();
-  const raw = readFileSync(0, "utf8").replace(/\r?\n$/, "");
   let channel: string;
   let content: string;
   let sender: string;
-  try {
-    const obj = JSON.parse(raw) as { channel?: string; content?: string; sender?: string };
-    if (typeof obj.channel !== "string" || typeof obj.content !== "string") {
-      process.stderr.write("jaiph inbox send: expected JSON {channel, content, sender?}\n");
+  const argChannel = process.argv[3];
+  const argContent = process.argv[4];
+  if (argChannel !== undefined && argContent !== undefined) {
+    channel = argChannel;
+    content = argContent;
+    sender = process.argv[5] ?? "";
+  } else {
+    const raw = readFileSync(0, "utf8").replace(/\r?\n$/, "");
+    try {
+      const obj = JSON.parse(raw) as { channel?: string; content?: string; sender?: string };
+      if (typeof obj.channel !== "string" || typeof obj.content !== "string") {
+        process.stderr.write("jaiph inbox send: expected args or JSON {channel, content, sender?}\n");
+        return 1;
+      }
+      channel = obj.channel;
+      content = obj.content;
+      sender = typeof obj.sender === "string" ? obj.sender : "";
+    } catch {
+      process.stderr.write("jaiph inbox send: invalid JSON on stdin\n");
       return 1;
     }
-    channel = obj.channel;
-    content = obj.content;
-    sender = typeof obj.sender === "string" ? obj.sender : "";
-  } catch {
-    process.stderr.write("jaiph inbox send: invalid JSON on stdin\n");
-    return 1;
   }
 
   const parallel = process.env.JAIPH_INBOX_PARALLEL === "true";
