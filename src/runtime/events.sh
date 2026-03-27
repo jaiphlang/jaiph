@@ -63,7 +63,9 @@ jaiph::_run_summary_append_line() {
   fi
   mkdir -p "$(dirname "$JAIPH_RUN_SUMMARY_FILE")" 2>/dev/null || true
   if [[ "${JAIPH_INBOX_PARALLEL:-}" == "true" ]]; then
-    jaiph::_lock "${JAIPH_RUN_SUMMARY_FILE}.lock"
+    if ! jaiph::_lock "${JAIPH_RUN_SUMMARY_FILE}.lock"; then
+      return 1
+    fi
   fi
   printf '%s\n' "$line" >>"$JAIPH_RUN_SUMMARY_FILE"
   if [[ "${JAIPH_INBOX_PARALLEL:-}" == "true" ]]; then
