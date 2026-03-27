@@ -3,7 +3,7 @@
     --navy-light: #415d83;
     --orange: #fca228;
     --orange-soft: #e8a75a;
-    --bg: #f4f1ec;
+    --bg: #fefefe;
     --text: #2a2a2a;
     --muted: #6b7280;
     --link: #5389b0;
@@ -174,6 +174,11 @@ body {
     margin-bottom: -6.2rem;
 }
 
+/* Landing logo hangs below sticky nav; keep in-page targets out from under it */
+#samples {
+    scroll-margin-top: 10rem;
+}
+
 .top-nav-brand {
     font-weight: 700;
     font-size: 1.35rem;
@@ -183,8 +188,8 @@ body {
     margin-left: 0.5rem;
 }
 
-.top-nav-brand-accent {
-    color: var(--orange);
+.jaiph-accent {
+    opacity: 0.8;
 }
 
 .top-nav-links {
@@ -363,7 +368,7 @@ header h1 img {
 .button-primary {
     height: 2.8rem;
     line-height: 2.8rem;
-    background: #bd7d2a;
+    background: #cf8e36;
     color: white;
     font-size: 1.4rem;
     display: inline-flex;

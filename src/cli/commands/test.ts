@@ -100,6 +100,9 @@ export async function runSingleTestFile(
     delete runtimeEnv.JAIPH_RUN_SUMMARY_FILE;
     delete runtimeEnv.JAIPH_PRECEDING_FILES;
     delete runtimeEnv.JAIPH_SCRIPTS;
+    // Same as jaiph run: a parent-exported module path would shadow the test script's preamble
+    // (emit-test only defaulted when unset) and break run-step-exec sourcing.
+    delete runtimeEnv.JAIPH_RUN_STEP_MODULE;
 
     const result = spawnSync("bash", [testScriptPath], {
       encoding: "utf8",

@@ -9,7 +9,7 @@ redirect_from:
 
 ## Overview
 
-Jaiph ships a small **native test runner** for workflow modules. You write `*.test.jh` files that import workflows under test, optionally replace prompts and other symbols with mocks, run workflows through the same managed runtime as `jaiph run`, and assert on captured output or return values.
+Jaiph ships a small **native test runner** for workflow modules. You write `*.test.jh` files that import workflows under test, optionally replace prompts and other symbols with mocks, run workflows through the **same** Bash stdlib and **Node.js kernel** stack as **`jaiph run`** (prompt execution, managed `run` / `ensure` / nested steps, inbox and event emission), and assert on captured output or return values. The runtime turns on **`JAIPH_TEST_MODE`** for those runs so **mock dispatch**, **assertion builtins**, and **capture** for `name = alias.workflow` follow the same contracts as before prompts and managed steps moved behind the kernel; you do not set this variable in test sources.
 
 **Why mocks matter.** Real workflows call LLMs, shell, and other workflows. That output is non-deterministic and environment-dependent. The test harness records mock prompt responses and can substitute shell bodies for workflows, rules, and Jaiph scripts so runs stay fast, repeatable, and offline-friendly.
 
@@ -25,7 +25,7 @@ Jaiph ships a small **native test runner** for workflow modules. You write `*.te
 - Use the `.test.jh` suffix (for example `workflow_greeting.test.jh`).
 - **Content:** Use imports and `test` blocks only. The parser may accept other top-level declarations in a `*.test.jh` file, but `*.test.jh` modules are **skipped when the workspace is compiled** to `.sh`, so workflows or rules defined only in a test file are never emitted as runnable shell modules. Keeping tests to imports + `test` blocks avoids dead code and matches how the runner is meant to be used.
 - **Imports:** Paths in `import "..." as alias` resolve **relative to the directory of the test file**, with the same extension handling as ordinary modules (appends `.jh` when omitted). See [Grammar — Import path](grammar.md#lexical-notes).
-- **Discovery:** `jaiph test` walks the given directory recursively (or the workspace root when no path is passed). The workspace root is found by walking up from the current directory until a `.jaiph` or `.git` directory exists; if neither is found, the current directory is used.
+- **Discovery:** `jaiph test` walks the given directory recursively (or the workspace root when no path is passed). The workspace root is found by walking up from the current directory until a `.jaiph` or `.git` directory exists; if neither is found, the current directory is used. On macOS temp checkouts under **`TMPDIR`**, ancestor markers inside the shared **`/var/folders/.../T/`** tree are ignored so the project directory you are in wins (same rule as **`jaiph run`**).
 
 ## Running tests
 
