@@ -10,7 +10,8 @@
   "scripts": {
     "clean": "rm -rf dist",
     "build": "tsc -p tsconfig.json && node -e \"require('node:fs').copyFileSync('src/jaiph_stdlib.sh','dist/src/jaiph_stdlib.sh'); require('node:fs').cpSync('src/runtime','dist/src/runtime',{recursive:true}); require('node:fs').cpSync('src/reporting/public','dist/src/reporting/public',{recursive:true})\"",
-    "test": "npm run clean && npm run build && NODE_OPTIONS='--max-old-space-size=32768' node --test dist/test/*.test.js $(find dist/src -name '*.test.js' -o -name '*.acceptance.test.js') && jest --runInBand test/fixtures-build.jest.test.js",
+    "build:standalone": "npm run build && node -e \"const fs=require('node:fs'); fs.copyFileSync('dist/src/jaiph_stdlib.sh','dist/jaiph_stdlib.sh'); fs.cpSync('dist/src/runtime','dist/runtime',{recursive:true}); fs.cpSync('dist/src/reporting/public','dist/reporting/public',{recursive:true});\" && bun build --compile ./src/cli.ts --outfile ./dist/jaiph",
+    "test": "npm run clean && npm run build && NODE_OPTIONS='--max-old-space-size=32768 --enable-source-maps' node --test dist/test/*.test.js $(find dist/src -name '*.test.js' -o -name '*.acceptance.test.js') && jest --runInBand test/fixtures-build.jest.test.js",
     "test:acceptance:compiler": "npm run build && node --test $(find dist/src -name '*.acceptance.test.js')",
     "test:acceptance:runtime": "bash ./e2e/test_all.sh",
     "test:acceptance": "npm run test:acceptance:compiler && npm run test:acceptance:runtime",

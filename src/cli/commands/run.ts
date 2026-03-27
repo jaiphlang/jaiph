@@ -20,6 +20,7 @@ import {
   failedStepArtifactPaths,
 } from "../shared/errors";
 import { detectWorkspaceRoot } from "../shared/paths";
+import type { SourceMapCache } from "../shared/jaiph-source-map";
 import { parseArgs } from "../shared/usage";
 import { parseLogEvent, parseStepEvent } from "../run/events";
 import {
@@ -134,7 +135,8 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       }, hbMs);
     }
 
-    const onLine = createStderrParser(emitter);
+    const sourceMapCache: SourceMapCache = new Map();
+    const onLine = createStderrParser(emitter, { sourceMapCache });
     const buf: StreamBuffers = { stdout: "", stderr: "" };
 
     wireStreams(execResult, dockerConfig.enabled, onLine, buf);
@@ -202,7 +204,7 @@ function spawnExec(
   runArgs: string[],
   isTTY: boolean,
 ): { execResult: ReturnType<typeof spawnRunProcess>; dockerResult: ReturnType<typeof spawnDockerProcess> | undefined; dockerConfig: ReturnType<typeof resolveDockerConfig> } {
-  const command = buildRunWrapperCommand();
+  const wrapperCommand = buildRunWrapperCommand();
   const dockerConfig = resolveDockerConfig(mod.metadata?.runtime, runtimeEnv);
   let dockerResult: ReturnType<typeof spawnDockerProcess> | undefined;
   let execResult;
@@ -215,7 +217,7 @@ function spawnExec(
       stdlibPath,
       buildOutDir: outDir,
       workspaceRoot,
-      wrapperCommand: command,
+      wrapperCommand,
       metaFile,
       workflowSymbol,
       runArgs,
@@ -224,7 +226,7 @@ function spawnExec(
     });
     execResult = dockerResult.child;
   } else {
-    execResult = spawnRunProcess(command, [metaFile, builtPath, workflowSymbol, ...runArgs], {
+    execResult = spawnRunProcess([metaFile, builtPath, workflowSymbol, ...runArgs], {
       cwd: workspaceRoot,
       env: runtimeEnv,
     });

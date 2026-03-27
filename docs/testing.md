@@ -9,7 +9,7 @@ redirect_from:
 
 ## Overview
 
-Jaiph ships a small **native test runner** for workflow modules. You write `*.test.jh` files that import workflows under test, optionally replace prompts and other symbols with mocks, run workflows through the **same** Bash stdlib and **Node.js kernel** stack as **`jaiph run`** (prompt execution, managed `run` / `ensure` / nested steps, inbox and event emission), and assert on captured output or return values. The runtime turns on **`JAIPH_TEST_MODE`** for those runs so **mock dispatch**, **assertion builtins**, and **capture** for `name = alias.workflow` follow the same contracts as before prompts and managed steps moved behind the kernel; you do not set this variable in test sources.
+Jaiph ships a small **native test runner** for workflow modules. You write `*.test.jh` files that import workflows under test, optionally replace prompts and other symbols with mocks, run workflows through the **same** CLI launcher, Bash stdlib, and **JS kernel** stack as **`jaiph run`** (prompt execution, managed `run` / `ensure` / nested steps, inbox and event emission), and assert on captured output or return values. The runtime turns on **`JAIPH_TEST_MODE`** for those runs so **mock dispatch**, **assertion builtins**, and **capture** for `name = alias.workflow` follow the same contracts as before prompts and managed steps moved behind the kernel; you do not set this variable in test sources.
 
 **Why mocks matter.** Real workflows call LLMs, shell, and other workflows. That output is non-deterministic and environment-dependent. The test harness records mock prompt responses and can substitute shell bodies for workflows, rules, and Jaiph scripts so runs stay fast, repeatable, and offline-friendly.
 

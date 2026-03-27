@@ -7,159 +7,115 @@ This document describes how Jaiph is structured and how execution flows through 
 
 ## System overview
 
-Jaiph is a compiler-driven workflow runtime with a CLI observer layer:
+Jaiph is a compiler-driven workflow runtime with a **TypeScript CLI** observer layer and a **generated shell intermediate** that executes workflow semantics on top of **TypeScript kernel** helpers:
 
 1. Parse source into AST.
 2. Validate references and language constraints.
-3. Transpile to Bash modules/scripts.
-4. Execute generated Bash on top of Jaiph runtime libraries; prompt steps delegate to the JS kernel.
+3. Transpile to **bash modules/scripts** (intermediate representation) plus optional **`*.jaiph.map`** line metadata for diagnostics.
+4. **CLI** (Node from `dist/src/cli.js`, or a **Bun-compiled** `jaiph` binary) builds outputs, resolves bundled `jaiph_stdlib.sh` / `runtime/`, and launches a **bash process group leader** (`jaiph-run`) that sources the generated module and enters `workflow default`. Prompt, inbox I/O, managed-step subprocesses, and event/summary emission delegate to the JS kernel under `src/runtime/kernel/`.
 5. Stream live events to CLI and persist durable run artifacts.
+
+**Authoring target** is `.jh` only. Bash is **emitted** for execution, not hand-written by users.
 
 ## Core components
 
 - **CLI (`src/cli`)**
   - Entry point (`run`, `build`, `test`, `init`, `use`, `report`).
-  - Orchestrates compile+execute lifecycle.
-  - Parses runtime events and renders progress.
-  - Dispatches hooks.
+  - **Workflow launch** is owned in TypeScript (`src/runtime/kernel/workflow-launch.ts` + `src/cli/run/lifecycle.ts`): builds the bash wrapper, spawns the detached `jaiph-run` leader with correct stdio for `__JAIPH_EVENT__` parsing.
+  - Parses runtime events and renders progress; dispatches hooks.
+  - Optional **stderr rewriting**: when a `.jaiph.map` sidecar exists next to a generated `.sh`, bash error fragments (`file.sh: line N:`) are annotated with **`.jh` line/column** references.
 
 - **Parser (`src/parser.ts`, `src/parse/*`)**
   - Converts `.jh`/`.test.jh` into `jaiphModule` AST.
-  - Parses workflows, rules, scripts, channels, routes, test blocks, metadata.
 
 - **AST / Types (`src/types.ts`)**
   - Shared compile-time schema (`jaiphModule`, step defs, test defs, hook payload types).
 
 - **Validator (`src/transpile/validate.ts`)**
-  - Resolves imports and symbol references.
-  - Enforces semantic constraints.
-  - Emits deterministic compile-time errors.
+  - Resolves imports and symbol references; emits deterministic compile-time errors.
 
 - **Transpiler (`src/transpiler.ts`, `src/transpile/*`)**
-  - `transpileFile()` for regular workflow modules.
+  - `transpileFile()` for regular workflow modules (bash IL + per-step source map entries).
   - `transpileTestFile()` for Jaiph test specs (`*.test.jh`).
-  - Emits Bash code that calls runtime primitives.
 
-- **Runtime libraries (`src/jaiph_stdlib.sh`, `src/runtime/*.sh`)**
-  - Step execution, channels inbox/dispatch, event emission.
-  - Writes artifacts to `.jaiph/runs`.
+- **Runtime shell libraries (`src/jaiph_stdlib.sh`, `src/runtime/*.sh`)**
+  - Sourced by generated modules: step tracking, channels inbox/dispatch callouts, coordination with the kernel.
+  - **Not** a separate “user-facing orchestration language”; they are the runtime implementation surface for the emitted IL.
 
 - **JS kernel (`src/runtime/kernel/`)**
-  - Prompt execution path ported from Bash to TypeScript (request build, backend invocation, stream parsing, schema validation, test mocks).
-  - Managed **script / workflow / rule** subprocess execution is delegated from `jaiph::run_step` via `node kernel/run-step-exec.js` (spawn, stdout/stderr capture, tee when required). Bash keeps run tracking, step stack, `STEP_START`/`STEP_END`, prompt branches, and mocks.
-  - Called from `prompt.sh` via `node kernel/prompt.js`; the Bash layer is now a thin wrapper for prompt.
-  - Modules: `prompt.ts` (orchestration), `stream-parser.ts` (streaming JSON → text), `schema.ts` (typed prompt validation), `mock.ts` (test-mode mock helpers), `run-step-exec.ts` (managed step subprocesses).
+  - Prompt execution (`prompt.ts` / `prompt.js`), managed subprocess execution (`run-step-exec.ts`), streaming parse, schema, mocks, **`emit.ts`** (live `__JAIPH_EVENT__` + `run_summary.jsonl`), **`inbox.ts`** (file-backed inbox), **`workflow-launch.ts`** (bash wrapper string + spawn contract shared with Docker).
 
 - **Reporting (`src/reporting/*`)**
-  - Reads `.jaiph/runs` and `run_summary.jsonl`.
-  - Serves local read-only run UI (`jaiph report`).
+  - Reads `.jaiph/runs` and `run_summary.jsonl`; `jaiph report` serves the local UI. Standalone binaries resolve static assets from `reporting/public` next to the executable when bundled.
 
 ## Runtime vs CLI responsibilities
 
 ### Runtime responsibilities
 
-- Execute workflow semantics.
-- Manage channels (`send`, routes, queue drain).
-- Emit step/log events.
-- Persist run logs and summary timeline.
-- Prompt steps delegate to the JS kernel (`src/runtime/kernel/`) for backend invocation, stream parsing, schema validation, and test mocks. Other managed steps delegate subprocess execution to `run-step-exec.js`; Bash retains step identity, events, and control around those calls.
+- Execute workflow semantics (via generated bash + stdlib, with kernel delegation).
+- Manage channels (`send`, routes, queue drain) through kernel + shell glue.
+- Emit step/log events; persist run logs and summary timeline.
+- Prompt steps and managed subprocesses: Node kernel; shell retains step identity, events, and control flow around those calls.
 
 ### CLI responsibilities
 
 - Compile and launch workflows/tests.
-- Parse live runtime events.
-- Render terminal progress and summaries.
-- Trigger hooks from lifecycle events.
+- Own **process spawn** for `jaiph run` (bash `jaiph-run` leader, detached process group for signal propagation).
+- Parse live runtime events; render terminal progress; trigger hooks.
 
 ## Contracts
 
-Jaiph uses two runtime outputs:
+- **Live contract (runtime -> CLI):** `__JAIPH_EVENT__` JSON lines on stderr (and related step metadata).
+- **Durable contract:** `.jaiph/runs/...` + `run_summary.jsonl`.
+- **Diagnostics:** sibling **`basename(module).jaiph.map`** next to each generated **`*.sh`** (JSON: bash line → `.jh` source line/col) for CLI stderr enhancement.
 
-- **Live contract (runtime -> CLI):** `__JAIPH_EVENT__` JSON lines on stderr
-  - step start/end,
-  - logs (`LOG`/`LOGERR`),
-  - step metadata (depth, ids, params, dispatched markers).
-
-- **Durable contract (runtime -> artifacts):** `.jaiph/runs/...`
-  - step `.out/.err`,
-  - prompt artifacts,
-  - inbox files (`inbox/.seq`, `.queue`, `NNN-channel.txt`),
-  - `run_summary.jsonl` (`STEP_*`, `LOG*`, `INBOX_*`, workflow boundaries).
-
-Channel transport is file/queue based in runtime inbox logic; it is not carried by `__JAIPH_EVENT__`.
+Channel transport remains file/queue based in runtime inbox logic.
 
 ## Channels and hooks in context
 
-### Channels
-
-- Parsed as AST nodes (`channel`, `channel <- ...`, `channel -> workflow`).
-- Validated at compile time (existence and target validity).
-- Transpiled into inbox runtime calls (`inbox_init`, `register_route`, `send`, `drain_queue`).
-- Executed in runtime via queue+dispatch in `src/runtime/inbox.sh`.
-
-### Hooks
-
-- Config:
-  - global: `~/.jaiph/hooks.json`
-  - project: `<workspace>/.jaiph/hooks.json`
-- Loaded/merged by CLI.
-- Triggered from run lifecycle events (`workflow_*`, `step_*`).
-- Executed as shell commands with JSON payload on stdin.
+(Unchanged semantics; see previous docs.) Channels are AST → validated → transpiled inbox calls → executed via queue/dispatch. Hooks load from `hooks.json` and run as shell commands with JSON on stdin.
 
 ## Jaiph runtime testing (`*.test.jh`)
 
-`*.test.jh` files are Jaiph-level runtime tests, not production workflows.
-
-- They use the same parser/AST pipeline but populate `tests` blocks.
-- They are validated with test-specific reference rules (`validateTestReferences`).
-- They transpile to a dedicated Bash test runner via `transpileTestFile()`.
-- `jaiph test` executes that generated test runner in test mode:
-  - sets test-mode env (`JAIPH_TEST_MODE`, etc.),
-  - supports prompt mocks and workflow assertions,
-  - still runs through runtime libraries.
-
-This creates a dedicated test lane parallel to normal `.jh` execution.
+`*.test.jh` files use the same parser/AST pipeline, `transpileTestFile()`, and `jaiph test` executes the generated bash harness in test mode (`JAIPH_TEST_MODE`, mocks, assertions) through the same stdlib + kernel stack as `jaiph run`.
 
 ## CLI progress reporting pipeline
 
-- Static tree preparation from AST/imports (`src/cli/run/progress.ts`).
-- Runtime event parsing (`src/cli/run/events.ts`, `src/cli/run/stderr-handler.ts`).
-- Event bus fanout (`src/cli/run/emitter.ts`).
-- Rendering (`src/cli/run/display.ts`, `progress.ts`):
-  - TTY running footer with in-place updates,
-  - non-TTY heartbeat lines for long-running steps.
+Static tree from AST (`progress.ts`); runtime events (`events.ts`, `stderr-handler.ts`); emitter (`emitter.ts`); display (`display.ts`, `progress.ts`).
+
+## Distribution: Node vs Bun standalone
+
+- **Development / npm:** `npm run build` → `tsc` + copy `jaiph_stdlib.sh`, `runtime/`, `reporting/public` into `dist/`. `node dist/src/cli.js` resolves stdlib via `dist/src/cli/run/env` paths.
+- **Standalone:** `npm run build:standalone` produces `dist/jaiph` (Bun `--compile`) and copies **`jaiph_stdlib.sh`**, **`runtime/`**, **`reporting/public`** into **`dist/`** next to the binary. `resolveBundledStdlibPath()` and reporting asset resolution fall back to `dirname(process.execPath)` so the bundle runs **without a Node.js install**. Target machines still need **bash** for the generated workflow module process.
 
 ## Mermaid architecture diagram
 
 ```mermaid
 flowchart TD
-    U[User / CI] --> CLI[CLI Entry: jaiph run/build/test/report]
+    U[User / CI] --> CLI[CLI: Node or Bun jaiph]
 
     CLI --> P[Parser]
     P --> AST[jaiphModule AST]
     AST --> V[Validator]
     V -->|compile errors| ERR[Deterministic Compile Errors]
 
-    V --> T1[Transpile Regular: transpileFile]
-    V --> T2[Transpile Tests: transpileTestFile]
+    V --> T1[Transpile: bash IL + scripts + .jaiph.map]
+    T1 --> B1[Generated .sh module + scripts/]
 
-    T1 --> B1[Generated Bash Workflow Modules/Scripts]
-    T2 --> B2[Generated Bash Test Runner]
+    CLI -->|jaiph run| EX[TS launcher: spawn bash jaiph-run leader]
+    EX --> B1
+    CLI -->|jaiph test| EX2[Test harness .sh + JAIPH_TEST_MODE]
+    EX2 --> B2[Generated test runner]
 
-    CLI -->|jaiph run| EX1[Execution Launcher]
-    EX1 --> B1
-    CLI -->|jaiph test| EX2[Execution Launcher (Test Mode)]
-    EX2 --> B2
-
-    B1 --> RT[Runtime Stdlib: steps/events/inbox]
+    B1 --> RT[Runtime: stdlib .sh + runtime/*.sh]
     B2 --> RT
-    RT -->|prompt + managed step subprocesses| KERNEL[JS Kernel: prompt/run-step-exec/stream-parser/schema/mock]
+    RT -->|delegation| KERNEL[JS kernel: prompt / run-step-exec / emit / inbox / stream / schema / mock]
 
     RT -->|live events| EV["__JAIPH_EVENT__ stream"]
     EV --> CLI
     CLI --> PR[Progress Rendering]
 
-    RT -->|channels queue/files| INBOX[Inbox Runtime State]
+    RT -->|channels queue/files| INBOX[Inbox state under .jaiph/runs]
     RT -->|durable artifacts| SUM[.jaiph/runs + run_summary.jsonl]
     SUM --> REP[Reporting Server/UI]
 
@@ -172,28 +128,29 @@ flowchart TD
 ```mermaid
 sequenceDiagram
     participant User
-    participant CLI as CLI (jaiph run)
+    participant CLI as CLI jaiph run
     participant Parser as Parser
     participant Validator as Validator
-    participant Transpiler as Transpiler (transpileFile)
-    participant Bash as Generated Bash
-    participant Runtime as Runtime libs
+    participant Transpiler as Transpiler
+    participant Bash as Bash jaiph-run + generated .sh
+    participant Runtime as Stdlib + runtime/*.sh
+    participant Kernel as JS kernel
     participant Report as Artifacts (.jaiph/runs)
 
     User->>CLI: jaiph run main.jh args...
     CLI->>Parser: parse source
     Parser-->>CLI: jaiphModule AST
-    CLI->>Validator: validate references/constraints
+    CLI->>Validator: validate
     Validator-->>CLI: ok or compile error
     CLI->>Transpiler: transpile AST
-    Transpiler-->>CLI: bash module + scripts
-    CLI->>Bash: execute entrypoint
+    Transpiler-->>CLI: bash module + scripts + map
+    CLI->>Bash: spawn detached leader; source module; default workflow
     Bash->>Runtime: run steps / channels
-    Runtime->>Runtime: prompt steps delegate to JS kernel (node kernel/prompt.js)
-    Runtime-->>CLI: __JAIPH_EVENT__ (STEP/LOG stream)
-    CLI-->>User: live progress output
-    Runtime->>Report: write step logs + run_summary.jsonl + inbox artifacts
-    CLI-->>User: final PASS/FAIL summary
+    Runtime->>Kernel: prompt / managed steps / emit / inbox
+    Runtime-->>CLI: __JAIPH_EVENT__ on stderr
+    CLI-->>User: live progress
+    Runtime->>Report: run_summary.jsonl + artifacts
+    CLI-->>User: PASS/FAIL
 ```
 
 ## Sequence diagram: test flow (`*.test.jh`)
@@ -201,54 +158,28 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant User
-    participant CLI as CLI (jaiph test)
-    participant Parser as Parser
-    participant Validator as Test Validator
-    participant Transpiler as Transpiler (transpileTestFile)
-    participant TestBash as Generated Test Runner
-    participant Runtime as Runtime libs (test mode)
-    participant Report as Artifacts (.jaiph/runs)
+    participant CLI as CLI jaiph test
+    participant Transpiler as Transpiler emitTest
+    participant TestBash as Generated test runner
+    participant Runtime as Stdlib + kernel (test mode)
+    participant Report as Artifacts
 
     User->>CLI: jaiph test flow.test.jh
-    CLI->>Parser: parse *.test.jh + imported modules
-    Parser-->>CLI: AST with tests[]
-    CLI->>Validator: validate test refs/mocks
-    Validator-->>CLI: ok or compile error
     CLI->>Transpiler: transpile test AST
     Transpiler-->>CLI: test runner bash
-    CLI->>TestBash: execute with JAIPH_TEST_MODE=1
-    TestBash->>Runtime: run mocked/unmocked workflow steps
-    Runtime-->>CLI: __JAIPH_EVENT__ + test output
-    Runtime->>Report: write run/test artifacts and summary
-    CLI-->>User: test PASS/FAIL output
+    CLI->>TestBash: execute JAIPH_TEST_MODE=1
+    TestBash->>Runtime: mocked / real steps
+    Runtime-->>CLI: events + output
+    Runtime->>Report: artifacts
+    CLI-->>User: PASS/FAIL
 ```
 
 ## TypeScript test organization
 
-Tests are colocated with the modules they validate:
-
-- **Module tests** live next to their source in `src/` directories:
-  - `src/parse/*.test.ts` — parser unit tests.
-  - `src/cli/run/*.test.ts` — CLI run pipeline tests (display, events, hooks, etc.).
-  - `src/cli/shared/*.test.ts` — shared CLI utility tests (errors).
-  - `src/cli/commands/*.test.ts` — CLI command tests (format-params).
-  - `src/transpile/*.test.ts` — transpiler/compiler tests (emit, golden, validation, acceptance).
-  - `src/reporting/*.test.ts` — reporting module tests.
-  - `src/runtime/*.test.ts` — runtime adapter tests (docker).
-  - `src/runtime/kernel/*.test.ts` — JS kernel tests (prompt execution, stream parsing, schema validation, mocks).
-
-- **Cross-cutting tests** remain in `test/` when they span multiple modules or test process-level behavior:
-  - `test/sample-build.test.ts` — integration test spanning transpiler+parser+CLI.
-  - `test/signal-lifecycle.test.ts` — process signal handling.
-  - `test/run-summary-jsonl.test.ts` — process-level run summary integration.
-  - `test/tty-running-timer.test.ts` — PTY-based terminal rendering.
-  - `test/fixtures-build.jest.test.js` — Jest snapshot test for fixture builds.
-  - `test/fixtures/`, `test/expected/`, `test/__snapshots__/` — shared test data.
-
-- **E2E shell tests** in `e2e/tests/*.sh` — CLI contracts and golden outputs.
+(Module tests in `src/**`, cross-cutting in `test/**`, e2e in `e2e/tests/*.sh` — unchanged.)
 
 ## Summary
 
-- `.jh` and `*.test.jh` share parser/AST/validation foundations, then diverge at transpilation target.
-- Runtime is the source of execution truth (steps, channels, artifacts). Prompt steps delegate to the JS kernel (`src/runtime/kernel/`); non-prompt orchestration remains in Bash.
-- CLI is the orchestration and observation layer (launch, progress, hooks, summaries).
+- `.jh` / `*.test.jh` share parser/AST/validation; transpilation emits **bash IL** and optional **`.jaiph.map`** for diagnostics.
+- **CLI orchestration is TypeScript-first** (launch, observation, hooks); **workflow execution** runs in a **bash** process group sourcing generated modules, with **kernel** work in **TypeScript**.
+- Contracts: `__JAIPH_EVENT__`, `.jaiph/runs`, `run_summary.jsonl`, hook payloads.

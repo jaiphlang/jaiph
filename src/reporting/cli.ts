@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { defaultRunsRoot, resolveRunsRoot } from "./path-utils";
 import { startReportingServer } from "./report-server";
 
@@ -194,7 +194,9 @@ export async function runReportingCli(argv: string[]): Promise<number> {
   if (!existsSync(runsRoot)) {
     process.stderr.write(`Note: runs directory does not exist yet (${runsRoot}); the UI will stay empty until runs appear.\n`);
   }
-  const publicDir = resolve(__dirname, "public");
+  const fromModule = resolve(__dirname, "public");
+  const nextToExec = resolve(join(dirname(process.execPath), "reporting", "public"));
+  const publicDir = existsSync(fromModule) ? fromModule : nextToExec;
   if (!existsSync(publicDir)) {
     throw new Error(`Missing static assets: ${publicDir} (build/copy step)`);
   }

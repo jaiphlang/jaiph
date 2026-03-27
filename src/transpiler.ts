@@ -5,7 +5,7 @@ import { parsejaiph } from "./parser";
 import type { CompileResult } from "./types";
 import { build as buildImpl, walkTestFiles } from "./transpile/build";
 import { emitTest } from "./transpile/emit-test";
-import { emitWorkflow, type EmittedModule } from "./transpile/emit-workflow";
+import { emitWorkflow, type EmittedModule, type JaiphSourceLineMapEntry } from "./transpile/emit-workflow";
 import {
   JAIPH_EXT_REGEX,
   resolveImportPath,
@@ -15,7 +15,7 @@ import {
 import { validateReferences, validateTestReferences } from "./transpile/validate";
 
 export { resolveImportPath, workflowSymbolForFile } from "./transpile/resolve";
-export type { EmittedModule };
+export type { EmittedModule, JaiphSourceLineMapEntry };
 
 function computeJaiphScriptsRelFromModuleDir(inputFile: string, rootDir: string): string {
   const relFile = relative(rootDir, inputFile);

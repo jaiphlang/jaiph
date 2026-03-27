@@ -6,40 +6,33 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## JS runtime migration (part 6): launcher switch, debug mapping, and standalone binary <!-- dev-ready -->
+## Runtime migration: remove `src/runtime/*.sh` and execute fully in TypeScript <!-- dev-ready -->
 
 **Goal**  
-Complete cutover to in-process JS kernel and finalize distribution/docs.
+Remove all shell-script runtime execution from `src/runtime` and run workflows/steps through the TypeScript runtime only, without breaking current end-to-end behavior.
 
-**Standalone context (read this task in isolation)**
+**Problem statement**
 
-- This is the cutover and hardening phase after runtime parity work.
-- Required end state:
-  1. CLI launcher executes workflows via JS kernel by default.
-  2. Runtime errors map back to `.jh` source locations with usable diagnostics.
-  3. Distribution is a standalone Bun-compiled executable for supported targets.
-  4. Docs/architecture reflect that Bash orchestration target is removed.
-- Non-negotiable contracts in this part:
-  1. No regression in core command behavior (`run`, `test`, `build`, `report`, `init`, `use`).
-  2. Existing artifact/event/reporting contracts remain compatible.
-
-**Out of scope (for this part)**
-
-- Large language-surface redesign unrelated to runtime cutover.
+- Runtime still depends on Bash scripts (`events.sh`, `inbox.sh`, `prompt.sh`, `sandbox.sh`, `steps.sh`, `test-mode.sh`) for execution-critical paths.
+- Mixed TS + Bash runtime increases race-condition surface area and makes behavior harder to reason about and test.
+- We need one execution engine (TS) while preserving current e2e contracts and artifacts.
 
 **Scope**
 
-1. Switch CLI launcher (`src/cli/run/*`) and transpiler integration to execute workflows via JS kernel by default.
-2. Add source-map/line mapping so runtime errors point to `.jh` source locations.
-3. Update build pipeline to ship single-file Bun standalone executable for supported targets.
-4. Update docs (`ARCHITECTURE.md`, diagrams, READMEs) to reflect removed Bash orchestration runtime.
+1. Identify every call path that invokes `src/runtime/*.sh` and replace it with TypeScript runtime equivalents.
+2. Port shell-script execution semantics (step lifecycle, artifacts, event emission, exit-code behavior, async behavior) into TS runtime modules.
+3. Remove runtime `.sh` files from `src/runtime` once parity is achieved.
+4. Keep public CLI behavior and output contracts stable (`jaiph run`, `jaiph test`, `.jaiph/runs` artifact layout, `run_summary.jsonl` semantics).
+5. Keep existing e2e tests (including shell-based test runners) and ensure they pass without weakening assertions.
+6. Add/adjust unit/integration tests for TS runtime components that replaced shell-script logic.
 
 **Acceptance criteria**
 
-- `npm run build`, `npm test`, and `npm run test:e2e` pass.
-- Shipped `jaiph` binary runs standalone with zero external runtime dependency.
-- Debuggability is at least on par with current runtime (preferably better).
-- No *.sh files are required for runtime
+- No `.sh` runtime executors remain in `src/runtime`.
+- `jaiph run` and `jaiph test` execute workflows without invoking runtime shell scripts.
+- Existing e2e test suite remains green with current assertions (no coverage reduction).
+- Artifact naming, event ordering/shape, and error reporting remain compatible with existing expectations.
+- Documentation reflects TS-only runtime execution architecture where relevant.
 
 ---
 
