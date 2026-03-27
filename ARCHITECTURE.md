@@ -46,8 +46,9 @@ Jaiph is a compiler-driven workflow runtime with a CLI observer layer:
 
 - **JS kernel (`src/runtime/kernel/`)**
   - Prompt execution path ported from Bash to TypeScript (request build, backend invocation, stream parsing, schema validation, test mocks).
-  - Called from `prompt.sh` via `node kernel/prompt.js`; the Bash layer is now a thin wrapper.
-  - Modules: `prompt.ts` (orchestration), `stream-parser.ts` (streaming JSON → text), `schema.ts` (typed prompt validation), `mock.ts` (test-mode mock helpers).
+  - Managed **script / workflow / rule** subprocess execution is delegated from `jaiph::run_step` via `node kernel/run-step-exec.js` (spawn, stdout/stderr capture, tee when required). Bash keeps run tracking, step stack, `STEP_START`/`STEP_END`, prompt branches, and mocks.
+  - Called from `prompt.sh` via `node kernel/prompt.js`; the Bash layer is now a thin wrapper for prompt.
+  - Modules: `prompt.ts` (orchestration), `stream-parser.ts` (streaming JSON → text), `schema.ts` (typed prompt validation), `mock.ts` (test-mode mock helpers), `run-step-exec.ts` (managed step subprocesses).
 
 - **Reporting (`src/reporting/*`)**
   - Reads `.jaiph/runs` and `run_summary.jsonl`.
@@ -61,7 +62,7 @@ Jaiph is a compiler-driven workflow runtime with a CLI observer layer:
 - Manage channels (`send`, routes, queue drain).
 - Emit step/log events.
 - Persist run logs and summary timeline.
-- Prompt steps delegate to the JS kernel (`src/runtime/kernel/`) for backend invocation, stream parsing, schema validation, and test mocks. Non-prompt orchestration remains in Bash.
+- Prompt steps delegate to the JS kernel (`src/runtime/kernel/`) for backend invocation, stream parsing, schema validation, and test mocks. Other managed steps delegate subprocess execution to `run-step-exec.js`; Bash retains step identity, events, and control around those calls.
 
 ### CLI responsibilities
 
@@ -152,7 +153,7 @@ flowchart TD
 
     B1 --> RT[Runtime Stdlib: steps/events/inbox]
     B2 --> RT
-    RT -->|prompt steps| KERNEL[JS Kernel: prompt/stream-parser/schema/mock]
+    RT -->|prompt + managed step subprocesses| KERNEL[JS Kernel: prompt/run-step-exec/stream-parser/schema/mock]
 
     RT -->|live events| EV["__JAIPH_EVENT__ stream"]
     EV --> CLI

@@ -39,6 +39,11 @@ export function emitWorkflow(
   out.push("  exit 1");
   out.push("fi");
   out.push('source "$jaiph_stdlib_path"');
+  out.push('if [[ -z "${JAIPH_RUN_STEP_MODULE:-}" ]]; then');
+  out.push(
+    '  export JAIPH_RUN_STEP_MODULE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"',
+  );
+  out.push("fi");
   out.push(
     'export JAIPH_LIB="${JAIPH_LIB:-${JAIPH_WORKSPACE:-.}/.jaiph/lib}"',
   );

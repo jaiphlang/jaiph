@@ -1,6 +1,9 @@
 # Runtime: run tracking, step execution, and artifact writing.
 # Sourced by jaiph_stdlib.sh. Depends on events.sh and test-mode.sh.
 
+_jaiph_run_step_kernel_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/kernel"
+export _jaiph_run_step_kernel_dir
+
 jaiph::new_run_id() {
   if command -v uuidgen >/dev/null 2>&1; then
     uuidgen | tr "[:upper:]" "[:lower:]"
@@ -318,21 +321,18 @@ jaiph::run_step() {
       JAIPH_LAST_PROMPT_FINAL=""
     fi
     export JAIPH_LAST_PROMPT_FINAL
-  elif [[ "${JAIPH_STDOUT_SAVED:-}" == "1" ]] && ! jaiph::is_test_mode && ! [[ /dev/fd/1 -ef /dev/fd/7 ]] && ! [[ /dev/fd/1 -ef /dev/fd/8 ]]; then
-    # Caller redirected stdout (> file, | pipe) — tee to both artifact and caller.
-    if [[ "$step_kind" == "script" ]]; then
-      jaiph::_exec_script_isolated "$@" 2>"$err_tmp" | tee "$out_tmp"
-    else
-      "$@" 2>"$err_tmp" | tee "$out_tmp"
-    fi
-    status="${PIPESTATUS[0]}"
   else
-    # Capture only: save capture target as fd 8 so nested steps can detect it.
-    if [[ "$step_kind" == "script" ]]; then
-      ( exec 1>"$out_tmp" 2>"$err_tmp"; exec 8>&1; jaiph::_exec_script_isolated "$@" )
-    else
-      ( exec 1>"$out_tmp" 2>"$err_tmp"; exec 8>&1; "$@" )
+    local _jaiph_rs_tee=0
+    if [[ "${JAIPH_STDOUT_SAVED:-}" == "1" ]] && ! jaiph::is_test_mode && ! [[ /dev/fd/1 -ef /dev/fd/7 ]] && ! [[ /dev/fd/1 -ef /dev/fd/8 ]]; then
+      _jaiph_rs_tee=1
     fi
+    export JAIPH_RUN_STEP_USE_TEE="$_jaiph_rs_tee"
+    export JAIPH_RUN_STEP_OUT_TMP="$out_tmp"
+    export JAIPH_RUN_STEP_ERR_TMP="$err_tmp"
+    # Tell the kernel which parent fd carries __JAIPH_EVENT__ (2 or 3). Avoids mistaking our own
+    # open() fds for the event stream when wiring nested bash stdio.
+    env JAIPH_RUN_STEP_KERNEL_EXTRA_FD="$(jaiph::event_fd)" \
+      node "${_jaiph_run_step_kernel_dir}/run-step-exec.js" "$func_name" "$step_kind" "$@"
     status=$?
   fi
   if [[ "$had_errexit" -eq 1 ]]; then

@@ -82,7 +82,8 @@ export function validateMounts(mounts: MountSpec[]): void {
 
 const DEFAULTS: DockerRunConfig = {
   enabled: false,
-  image: "ubuntu:24.04",
+  /** Node + bash; required for JS kernel (run-step-exec) inside the container. */
+  image: "node:20-bookworm",
   imageExplicit: false,
   network: "default",
   timeout: 300,
@@ -267,6 +268,18 @@ export function prepareGeneratedDir(
       const src = join(runtimeSrcDir, mod);
       if (existsSync(src)) {
         copyFileSync(src, join(runtimeDestDir, mod));
+      }
+    }
+    const kernelSrc = join(runtimeSrcDir, "kernel");
+    if (existsSync(kernelSrc)) {
+      const kernelDest = join(runtimeDestDir, "kernel");
+      mkdirSync(kernelDest, { recursive: true });
+      for (const name of readdirSync(kernelSrc)) {
+        if (!name.endsWith(".js")) continue;
+        const kf = join(kernelSrc, name);
+        if (statSync(kf).isFile()) {
+          copyFileSync(kf, join(kernelDest, name));
+        }
       }
     }
   }

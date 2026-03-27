@@ -78,7 +78,7 @@ Jaiph uses several test layers. Each layer catches a different class of bug. Use
 | **Compiler golden tests** | `src/transpile/compiler-golden.test.ts` (colocated) | Regressions in the transpiler and parser — many cases use **inline** expected `.sh` strings in the test file itself | You changed the emitter or parser and need to lock an exact emitted script or parse result (refresh the canonical workflow snippet with `scripts/dump-golden-output.js` when that embedded expectation changes) |
 | **Cross-cutting tests** | `test/*.test.ts` | Process-level integration behavior: signal handling, TTY rendering, run summary structure, sample builds | The test spans multiple modules or requires subprocess/PTY harnesses |
 | **Fixture build snapshots** | `test/fixtures-build.jest.test.js`, `test/fixtures/*.jh`, `test/__snapshots__/fixtures-build.jest.test.js.snap` | The **whole** fixture set still builds and the generated `.sh` tree matches the Jest snapshot | You changed emission globally and need to catch drift across multiple real-world-ish `.jh` files — update the snapshot intentionally when output is meant to change |
-| **E2E tests** | `e2e/tests/*.sh` | Runtime behavior — does the built workflow actually execute correctly end-to-end? | The behavior involves the CLI, bash runtime, process lifecycle, or file artifacts |
+| **E2E tests** | `e2e/tests/*.sh` | Runtime behavior — does the built workflow actually execute correctly end-to-end? | The behavior involves the CLI, Bash stdlib + Node kernel subprocess paths, process lifecycle, or file artifacts |
 
 ### Key principles
 
@@ -116,6 +116,8 @@ Module tests live next to the source files they validate, inside the same `src/`
 | `src/runtime/kernel/schema.test.ts` | `src/runtime/kernel/schema.ts` | Typed prompt schema validation: JSON extraction strategies, field presence/type checks, eval-line generation |
 | `src/runtime/kernel/mock.test.ts` | `src/runtime/kernel/mock.ts` | Test-mode mock helpers: sequential mock responses, dispatch script invocation |
 | `src/reporting/reporting-server.test.ts` | `src/reporting/*` | Safe paths, summary JSONL parsing, run registry polling, derived run status |
+
+**Kernel — `run-step-exec.ts`:** Managed script/workflow/rule subprocess execution lives in **`src/runtime/kernel/run-step-exec.ts`** (built to `kernel/run-step-exec.js`, invoked from **`jaiph::run_step`** in `steps.sh`). There is no colocated `run-step-exec.test.ts` yet; behavior is covered by the **E2E** suite and runtime integration. Prefer adding focused unit tests if you extract pure helpers from the spawn/capture path.
 
 When adding a new source module or extending an existing one, create or extend the corresponding `*.test.ts` file in the same directory. This keeps tests discoverable — given a source file, the test file is always a sibling.
 

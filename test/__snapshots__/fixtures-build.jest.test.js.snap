@@ -19,6 +19,9 @@ if [[ ! -f "$jaiph_stdlib_path" ]]; then
   exit 1
 fi
 source "$jaiph_stdlib_path"
+if [[ -z "\${JAIPH_RUN_STEP_MODULE:-}" ]]; then
+  export JAIPH_RUN_STEP_MODULE="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)/$(basename "\${BASH_SOURCE[0]}")"
+fi
 export JAIPH_LIB="\${JAIPH_LIB:-\${JAIPH_WORKSPACE:-.}/.jaiph/lib}"
 export JAIPH_SCRIPTS="\${JAIPH_SCRIPTS:-$(cd "$(dirname "\${BASH_SOURCE[0]}")/scripts" && pwd)}"
 if [[ "$(jaiph__runtime_api)" != "1" ]]; then
@@ -49,6 +52,9 @@ if [[ ! -f "$jaiph_stdlib_path" ]]; then
   exit 1
 fi
 source "$jaiph_stdlib_path"
+if [[ -z "\${JAIPH_RUN_STEP_MODULE:-}" ]]; then
+  export JAIPH_RUN_STEP_MODULE="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)/$(basename "\${BASH_SOURCE[0]}")"
+fi
 export JAIPH_LIB="\${JAIPH_LIB:-\${JAIPH_WORKSPACE:-.}/.jaiph/lib}"
 export JAIPH_SCRIPTS="\${JAIPH_SCRIPTS:-$(cd "$(dirname "\${BASH_SOURCE[0]}")/scripts" && pwd)}"
 if [[ "$(jaiph__runtime_api)" != "1" ]]; then
@@ -121,6 +127,9 @@ if [[ ! -f "$jaiph_stdlib_path" ]]; then
   exit 1
 fi
 source "$jaiph_stdlib_path"
+if [[ -z "\${JAIPH_RUN_STEP_MODULE:-}" ]]; then
+  export JAIPH_RUN_STEP_MODULE="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)/$(basename "\${BASH_SOURCE[0]}")"
+fi
 export JAIPH_LIB="\${JAIPH_LIB:-\${JAIPH_WORKSPACE:-.}/.jaiph/lib}"
 export JAIPH_SCRIPTS="\${JAIPH_SCRIPTS:-$(cd "$(dirname "\${BASH_SOURCE[0]}")/scripts" && pwd)}"
 if [[ "$(jaiph__runtime_api)" != "1" ]]; then
@@ -225,6 +234,9 @@ if [[ ! -f "$jaiph_stdlib_path" ]]; then
   exit 1
 fi
 source "$jaiph_stdlib_path"
+if [[ -z "\${JAIPH_RUN_STEP_MODULE:-}" ]]; then
+  export JAIPH_RUN_STEP_MODULE="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)/$(basename "\${BASH_SOURCE[0]}")"
+fi
 export JAIPH_LIB="\${JAIPH_LIB:-\${JAIPH_WORKSPACE:-.}/.jaiph/lib}"
 export JAIPH_SCRIPTS="\${JAIPH_SCRIPTS:-$(cd "$(dirname "\${BASH_SOURCE[0]}")/scripts" && pwd)}"
 if [[ "$(jaiph__runtime_api)" != "1" ]]; then
@@ -312,6 +324,9 @@ if [[ ! -f "$jaiph_stdlib_path" ]]; then
   exit 1
 fi
 source "$jaiph_stdlib_path"
+if [[ -z "\${JAIPH_RUN_STEP_MODULE:-}" ]]; then
+  export JAIPH_RUN_STEP_MODULE="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)/$(basename "\${BASH_SOURCE[0]}")"
+fi
 export JAIPH_LIB="\${JAIPH_LIB:-\${JAIPH_WORKSPACE:-.}/.jaiph/lib}"
 export JAIPH_SCRIPTS="\${JAIPH_SCRIPTS:-$(cd "$(dirname "\${BASH_SOURCE[0]}")/../scripts" && pwd)}"
 if [[ "$(jaiph__runtime_api)" != "1" ]]; then

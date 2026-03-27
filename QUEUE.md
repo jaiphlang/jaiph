@@ -6,42 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## JS runtime migration (part 2): core step execution (`run`/`ensure`/`rule`/`workflow`) <!-- dev-ready -->
-
-**Goal**  
-Move core orchestration control flow to JS kernel after prompt parity is landed.
-
-**Standalone context (read this task in isolation)**
-
-- Baseline assumption: prompt path may already be on JS kernel or feature-flagged; this task must not regress prompt contracts.
-- Current state being replaced here: Bash-based orchestration control flow for `run`/`ensure`/`rule`/workflow execution semantics.
-- Target state for this part: JS kernel owns step dispatch/control flow; user-authored scripts still execute as external processes.
-- Non-negotiable contracts in this part:
-  1. CLI output/e2e behavior for `jaiph run` remains stable.
-  2. Failure propagation semantics remain equivalent (especially `ensure` behavior).
-  3. Working-directory and environment variable behavior remain compatible.
-
-**Out of scope (for this part)**
-
-- Event stream/run summary hardening beyond what is required for step execution.
-- Channel/inbox + hook behavior migration.
-- `jaiph test` semantics migration.
-- Binary packaging/docs finalization.
-
-**Scope**
-
-1. Port step dispatch/execution semantics for `run`, `ensure`, `rule`, and workflow boundaries.
-2. Keep user-authored script bodies as spawned external processes with shebang behavior preserved.
-3. Preserve env vars and working-directory behavior.
-4. Keep output contracts for `jaiph run` and failure propagation semantics unchanged.
-
-**Acceptance criteria**
-
-- Core workflow/rule execution e2e tests pass with equivalent behavior.
-- Step stdout/stderr capture and exit-code handling remain contract-compatible.
-
----
-
 ## JS runtime migration (part 3): event stream + run summary parity <!-- dev-ready -->
 
 **Goal**  

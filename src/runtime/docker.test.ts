@@ -103,7 +103,7 @@ test("parseMounts: throws when no workspace mount", () => {
 test("resolveDockerConfig: defaults when no in-file and no env", () => {
   const cfg = resolveDockerConfig(undefined, {});
   assert.equal(cfg.enabled, false);
-  assert.equal(cfg.image, "ubuntu:24.04");
+  assert.equal(cfg.image, "node:20-bookworm");
   assert.equal(cfg.network, "default");
   assert.equal(cfg.timeout, 300);
   assert.equal(cfg.mounts.length, 1);

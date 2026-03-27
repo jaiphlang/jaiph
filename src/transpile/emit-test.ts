@@ -59,6 +59,11 @@ export function emitTest(
   out.push("  exit 1");
   out.push("fi");
   out.push('source "$jaiph_stdlib_path"');
+  out.push('if [[ -z "${JAIPH_RUN_STEP_MODULE:-}" ]]; then');
+  out.push(
+    '  export JAIPH_RUN_STEP_MODULE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"',
+  );
+  out.push("fi");
   out.push('if [[ "$(jaiph__runtime_api)" != "1" ]]; then');
   out.push('  echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2');
   out.push("  exit 1");
@@ -239,7 +244,11 @@ export function emitTest(
   out.push("  return 0");
   out.push("}");
   out.push("");
-  out.push("jaiph__run_tests");
+  // When this file is sourced as JAIPH_RUN_STEP_MODULE (JS run-step child bash), do not
+  // re-enter the test harness — only run tests when executed as the main script.
+  out.push('if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then');
+  out.push("  jaiph__run_tests");
+  out.push("fi");
 
   return out.join("\n").trimEnd();
 }
