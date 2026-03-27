@@ -207,6 +207,33 @@ Eliminate async artifact/step-id collisions by making JS runtime the single owne
 
 ---
 
+## Allow backticks in prompt strings as literal characters <!-- dev-ready -->
+
+**Goal**  
+Support backticks inside `prompt "..."` strings without parse errors.
+
+**Problem statement**
+
+- Current parser rejects backticks inside prompt literals (`E_PARSE prompt cannot contain backticks`).
+- Desired behavior: backticks are treated as regular text characters in Jaiph prompt strings.
+- Important: this is not Bash command substitution. Backticks must not trigger expansion/execution semantics.
+
+**Scope**
+
+1. Update prompt-string parsing to accept `` ` `` in prompt literals.
+2. Keep variable interpolation rules unchanged (`$var` / `${...}` semantics stay as-is).
+3. Ensure emitted Bash/JS runtime passes backticks through unchanged in prompt payload.
+4. Add tests for prompt literals containing backticks (including mixed content with variables).
+
+**Acceptance criteria**
+
+- Prompt literals containing backticks parse successfully.
+- Runtime output/prompt payload preserves literal backticks.
+- No command substitution behavior is introduced by backticks.
+- Existing prompt parsing/interpolation tests remain green.
+
+---
+
 ## Add `jaiph format <file>` command <!-- dev-ready -->
 
 **Goal.** Provide an opinionated formatter for `.jh` files that normalizes indentation and spacing.
