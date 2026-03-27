@@ -9,7 +9,7 @@ redirect_from:
 
 ## Overview
 
-**Jaiph** is a small language for describing workflows: **orchestration steps** (rules, prompts, managed calls) and **bash in `script` blocks**, compiled to Bash plus a runtime that records steps, routes messages between workflows, and (for rules) applies read-only isolation where the platform supports it. The runtime is **mostly Bash** (`jaiph_stdlib.sh`); **prompt** and **managed step subprocess** execution use a **bundled Node.js kernel** (`src/runtime/kernel/`) while user **`script`** bodies stay separate OS processes.
+**Jaiph** is a small language for describing workflows: **orchestration steps** (rules, prompts, managed calls) and **bash in `script` blocks**, compiled to Bash plus a runtime that records steps, routes messages between workflows, and (for rules) applies read-only isolation where the platform supports it. The runtime is **mostly Bash** (`jaiph_stdlib.sh`); **prompt**, **managed step subprocess** execution, and **stderr / summary event emission** (`kernel/emit.js`) use a **bundled Node.js kernel** (`src/runtime/kernel/`) while user **`script`** bodies stay separate OS processes.
 
 This page is an **agent skill**: it tells an AI assistant how to **author** those workflows correctly and what a healthy project layout looks like. It is not a full language specification — use [Grammar](grammar.md) for syntax and validation details, [Configuration](configuration.md) for `config` keys, [Inbox & Dispatch](inbox.md) for channels, and [Sandboxing](sandboxing.md) for how rules are isolated.
 

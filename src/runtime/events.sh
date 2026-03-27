@@ -1,7 +1,23 @@
 # Runtime: step event emission and run summary.
 # Sourced by jaiph_stdlib.sh. Depends on core (jaiph__die) from aggregator.
 
-_jaiph_emit_kernel_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/kernel"
+# Resolve kernel/emit.js: prefer directory next to JAIPH_STDLIB (CLI always sets it) so we never
+# depend on a fragile BASH_SOURCE path. Fall back to this file's .../runtime/kernel (e.g. tests).
+_jaiph_emit_kernel_dir=""
+if [[ -n "${JAIPH_STDLIB:-}" ]]; then
+  _emit_js_candidate="$(cd "$(dirname "$JAIPH_STDLIB")" && pwd)/runtime/kernel/emit.js"
+  if [[ -f "$_emit_js_candidate" ]]; then
+    _jaiph_emit_kernel_dir="$(cd "$(dirname "$_emit_js_candidate")" && pwd)"
+  fi
+fi
+if [[ -z "${_jaiph_emit_kernel_dir:-}" ]]; then
+  _jaiph_emit_kernel_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/kernel"
+fi
+unset _emit_js_candidate
+
+# Exported for child shells (e.g. jaiph::execute_readonly bash -c): they do not re-source this file,
+# so unexported _jaiph_emit_kernel_dir would expand empty and break node "${dir}/emit.js".
+export JAIPH_EMIT_JS="${_jaiph_emit_kernel_dir}/emit.js"
 
 jaiph::timestamp_utc() {
   date -u +"%Y-%m-%dT%H-%M-%SZ"
@@ -63,7 +79,7 @@ jaiph::_run_summary_append_line() {
   if [[ -z "${JAIPH_RUN_SUMMARY_FILE:-}" ]]; then
     return 0
   fi
-  printf '%s\n' "$line" | node "${_jaiph_emit_kernel_dir}/emit.js" summary-line
+  printf '%s\n' "$line" | node "${JAIPH_EMIT_JS}" summary-line
 }
 
 jaiph::emit_workflow_summary_event() {
@@ -156,7 +172,7 @@ jaiph::log() {
     "$(jaiph::json_escape "$message")" \
     "$depth")"
   marker_fd="$(jaiph::event_fd)"
-  printf '%s\n' "$payload" | JAIPH_EVENT_FD="$marker_fd" node "${_jaiph_emit_kernel_dir}/emit.js" live
+  printf '%s\n' "$payload" | JAIPH_EVENT_FD="$marker_fd" node "${JAIPH_EMIT_JS}" live
   echo -e "$message"
   if [[ "$had_xtrace" -eq 1 ]]; then
     set -x
@@ -179,7 +195,7 @@ jaiph::logerr() {
     "$(jaiph::json_escape "$message")" \
     "$depth")"
   marker_fd="$(jaiph::event_fd)"
-  printf '%s\n' "$payload" | JAIPH_EVENT_FD="$marker_fd" node "${_jaiph_emit_kernel_dir}/emit.js" live
+  printf '%s\n' "$payload" | JAIPH_EVENT_FD="$marker_fd" node "${JAIPH_EMIT_JS}" live
   echo -e "$message" >&2
   [[ -n "${JAIPH_ENSURE_OUTPUT_FILE:-}" ]] && printf '%s\n' "$message" >> "$JAIPH_ENSURE_OUTPUT_FILE"
   if [[ "$had_xtrace" -eq 1 ]]; then
@@ -291,7 +307,7 @@ jaiph::emit_step_event() {
     fi
   fi
   marker_fd="$(jaiph::event_fd)"
-  printf '%s\n' "$payload" | JAIPH_EVENT_FD="$marker_fd" node "${_jaiph_emit_kernel_dir}/emit.js" live
+  printf '%s\n' "$payload" | JAIPH_EVENT_FD="$marker_fd" node "${JAIPH_EMIT_JS}" live
   if [[ "$had_xtrace" -eq 1 ]]; then
     set -x
   fi

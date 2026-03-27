@@ -222,7 +222,9 @@ test("jaiph::log and jaiph::logerr: echo -e for stdout/stderr; LOG JSON message 
   const stderrPath = join(dir, "stderr.txt");
   const eventsPath = join(dir, "events.txt");
   try {
+    const bundledStdlib = join(process.cwd(), "dist/src/jaiph_stdlib.sh");
     const script = [
+      `export JAIPH_STDLIB=${bashSingleQuoted(bundledStdlib)}`,
       `exec 3>${bashSingleQuoted(eventsPath)}`,
       `jaiph::step_stack_depth() { printf "0"; }`,
       `source ${bashSingleQuoted(eventsSh)}`,
@@ -246,4 +248,19 @@ test("jaiph::log and jaiph::logerr: echo -e for stdout/stderr; LOG JSON message 
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// Regression: rules run under jaiph::execute_readonly use bash -c without re-sourcing events.sh;
+// emit path must be in the environment, not only in an unexported shell variable.
+test("JAIPH_EMIT_JS is exported for child bash (readonly rule subshell)", () => {
+  const eventsSh = join(process.cwd(), "src/runtime/events.sh");
+  const bundledStdlib = join(process.cwd(), "dist/src/jaiph_stdlib.sh");
+  const script = [
+    `export JAIPH_STDLIB=${bashSingleQuoted(bundledStdlib)}`,
+    `source ${bashSingleQuoted(eventsSh)}`,
+    `bash -c 'test -f "$JAIPH_EMIT_JS" && node "$JAIPH_EMIT_JS" 2>&1 | head -1'`,
+  ].join("\n");
+  const r = spawnSync("bash", ["-c", script], { encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /expected mode live or summary-line/);
 });
