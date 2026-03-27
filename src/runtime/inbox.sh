@@ -27,19 +27,10 @@ jaiph::inbox_init() {
   node "${JAIPH_INBOX_JS}" init || return $?
 }
 
-# Send a message to a channel (stdin JSON: {channel, content, sender?}).
+# Send a message to a channel.
 # Usage: jaiph::send <channel> <content> [<sender>]
 jaiph::send() {
-  local channel="$1"
-  local content="$2"
-  local sender="${3:-}"
-  if ! printf '{"channel":"%s","content":"%s","sender":"%s"}\n' \
-    "$(jaiph::json_escape "$channel")" \
-    "$(jaiph::json_escape "$content")" \
-    "$(jaiph::json_escape "$sender")" \
-    | node "${JAIPH_INBOX_JS}" send; then
-    return 1
-  fi
+  node "${JAIPH_INBOX_JS}" send "$1" "$2" "${3:-}" || return 1
 }
 
 # Register a routing rule: when a message arrives on <channel>, call the listed workflow functions.

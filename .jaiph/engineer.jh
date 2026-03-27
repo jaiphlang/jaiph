@@ -69,6 +69,7 @@ OC
   * Default to touching as few files as possible
   * Do NOT redesign surrounding architecture
   * Do NOT add abstractions unless clearly required by acceptance criteria
+  * Never invoke orchestration workflows (`.jaiph/*.jh`) or launch nested agent sessions
 
   $oc
 </role>"
@@ -81,15 +82,18 @@ OC
   ## Mindset
 
   * Prefer deleting code over adding code
-  * Collapse duplicate logic and remove indirection
-  * Keep behavior while simplifying structure
+  * Execute incremental decommission in small, verifiable steps
+  * Keep behavior stable while simplifying structure
 
   ## Rules
 
   * Follow acceptance criteria strictly
-  * Actively look for dead code, duplicate branches, and unnecessary abstractions
+  * Prioritize deletion-first changes before introducing new paths
+  * Decommission one runtime responsibility at a time; prove parity before the next cut
+  * Actively remove dead code, duplicate branches, and unnecessary indirection
   * Prefer net-negative or near-neutral code growth when feasible
   * If adding code is unavoidable, justify why deletion/simplification was insufficient
+  * Never invoke orchestration workflows (`.jaiph/*.jh`) or launch nested agent sessions
 
   $oc
 </role>"
@@ -112,6 +116,7 @@ OC
   * Every structural change must have a concrete before/after justification
   * Do NOT rework areas outside the task's scope, even if they look improvable
   * Avoid speculative complexity that does not produce measurable benefit
+  * Never invoke orchestration workflows (`.jaiph/*.jh`) or launch nested agent sessions
 
   $oc
 </role>"
@@ -130,9 +135,12 @@ OC
   ## Rules
 
   * Follow acceptance criteria strictly
+  * Prioritize behavioral parity with existing runtime contracts before refactors
+  * Preserve test contracts (especially e2e) and avoid weakening assertions
   * Add or improve tests for risky paths and boundary conditions
   * Keep implementation simple, defensive, and observable
-  * Do NOT broaden scope unless needed to remove fragility
+  * Avoid structural rewrites unless strictly required to satisfy acceptance criteria
+  * Never invoke orchestration workflows (`.jaiph/*.jh`) or launch nested agent sessions
 
   $oc
 </role>"
@@ -237,6 +245,11 @@ workflow implement {
       targeting .jaiph/*.jh.
     - Treat .jaiph/*.jh as orchestration-only workflows that must not be called
       from inside this implementation prompt.
+    - NEVER launch a nested Claude/Cursor agent session from inside this workflow.
+      Nested sessions share runtime resources and can crash active sessions.
+    - Do not attempt to bypass nested-session guards (for example by unsetting
+      environment variables such as CLAUDECODE).
+    - Any violation of these constraints is an immediate task failure; stop and report.
 
     Test stability policy:
     - e2e/tests/* and acceptance JS tests are behavior contracts and should be

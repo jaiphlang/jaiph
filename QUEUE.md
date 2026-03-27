@@ -6,33 +6,49 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Runtime migration: remove `src/runtime/*.sh` and execute fully in TypeScript <!-- dev-ready -->
+## Runtime migration B: remove Bash invocation paths from workflow/step execution <!-- dev-ready -->
 
 **Goal**  
-Remove all shell-script runtime execution from `src/runtime` and run workflows/steps through the TypeScript runtime only, without breaking current end-to-end behavior.
+After JS contracts are in place, remove Bash-based launch/execution paths from runtime workflow/step execution.
 
-**Problem statement**
+**Runtime execution rule**
 
-- Runtime still depends on Bash scripts (`events.sh`, `inbox.sh`, `prompt.sh`, `sandbox.sh`, `steps.sh`, `test-mode.sh`) for execution-critical paths.
-- Mixed TS + Bash runtime increases race-condition surface area and makes behavior harder to reason about and test.
-- We need one execution engine (TS) while preserving current e2e contracts and artifacts.
+- `script` remains the only allowed Bash execution surface.
+- Workflow/rule/orchestration execution must stay in the JS runtime (no Bash launch wrappers/indirection).
 
 **Scope**
 
-1. Identify every call path that invokes `src/runtime/*.sh` and replace it with TypeScript runtime equivalents.
-2. Port shell-script execution semantics (step lifecycle, artifacts, event emission, exit-code behavior, async behavior) into TS runtime modules.
-3. Remove runtime `.sh` files from `src/runtime` once parity is achieved.
-4. Keep public CLI behavior and output contracts stable (`jaiph run`, `jaiph test`, `.jaiph/runs` artifact layout, `run_summary.jsonl` semantics).
-5. Keep existing e2e tests (including shell-based test runners) and ensure they pass without weakening assertions.
-6. Add/adjust unit/integration tests for TS runtime components that replaced shell-script logic.
+1. Remove runtime workflow/step launch via `spawn("bash")`, `bash -c`, and sourced transpiled shell modules from execution paths.
+2. Cut over launch/lifecycle paths to JS-owned execution.
+3. Keep behavior parity for signals, step lifecycle, status/return semantics, and diagnostics.
 
 **Acceptance criteria**
 
-- No `.sh` runtime executors remain in `src/runtime`.
-- `jaiph run` and `jaiph test` execute workflows without invoking runtime shell scripts.
-- Existing e2e test suite remains green with current assertions (no coverage reduction).
-- Artifact naming, event ordering/shape, and error reporting remain compatible with existing expectations.
-- Documentation reflects TS-only runtime execution architecture where relevant.
+- No Bash-based workflow/step launch remains in runtime execution paths.
+- Runtime behavior remains contract-compatible (artifacts, events, error shape).
+- Existing e2e suite remains green without reduced assertion strength.
+- Evidence attached:
+  - `rg 'spawn\\("bash"|bash -c|source "\\$built_script"|jaiph_stdlib\\.sh' src/runtime src/cli src/transpile`
+  - focused diff + targeted tests + relevant e2e output.
+
+---
+
+## Runtime migration C: remove deprecated shell runtime files and finalize cleanup <!-- dev-ready -->
+
+**Goal**  
+Delete dead shell runtime assets after cutover and complete validation/docs cleanup.
+
+**Scope**
+
+1. Remove deprecated `src/runtime/*.sh` files and any dead compatibility glue no longer on execution path.
+2. Update docs/architecture notes to reflect JS-owned runtime execution.
+3. Run full verification pass.
+
+**Acceptance criteria**
+
+- Runtime shell files are removed (or explicitly retained only as non-execution fixtures, if any, with justification).
+- Full validation is green: `npm run build`, `npm test`, `npm run test:e2e`.
+- Final handoff includes diffs, verification outputs, and any explicitly deferred follow-ups.
 
 ---
 
@@ -151,6 +167,43 @@ Support backticks inside `prompt "..."` strings without parse errors.
 - Streaming and non-streaming output behavior matches current backend contract.
 - Unit/integration tests for Codex backend pass with the existing suite.
 - Docs include Codex setup, required env vars, and a minimal working example.
+
+---
+
+## Auto-detect available prompt model for selected backend <!-- dev-ready -->
+
+**Goal.** When backend is configured but model is not explicitly set (or is unavailable), Jaiph should automatically select a usable model instead of failing with a generic configuration error.
+
+**Problem statement**
+
+- Current backend setup requires users to manually provide a valid model identifier.
+- Model availability can differ by account/region/provider updates, causing avoidable runtime failures.
+- We need a predictable fallback strategy that keeps `jaiph run`/`jaiph test` usable with minimal setup.
+
+**Scope.**
+
+1. Add backend-specific model auto-detection in prompt runtime path (starting with `codex`, designed to extend to other backends).
+2. Detection order:
+   - Use explicit model from config/env if set and available.
+   - If missing/unavailable, query provider for available models and select best default by defined policy.
+   - If provider query fails, fall back to a documented static default (if safe), otherwise fail with actionable guidance.
+3. Define deterministic selection policy (for example: preferred model list by backend, then first compatible model).
+4. Emit clear diagnostics/logging:
+   - indicate selected model and whether it was auto-detected or user-specified,
+   - provide explicit remediation when no compatible model is available.
+5. Update docs (`README.md`, `docs/cli.md`, `docs/getting-started.md`) with model resolution behavior and override examples.
+6. Add tests for:
+   - explicit model success path,
+   - missing model with successful auto-detect,
+   - unavailable explicit model with fallback,
+   - no available models failure path.
+
+**Acceptance criteria.**
+
+- `jaiph run` works without explicit model config when provider offers at least one compatible model.
+- If configured model is unavailable, Jaiph auto-selects a compatible model (per policy) and reports that decision.
+- If no compatible model exists, error message is actionable and includes next steps.
+- Behavior is covered by unit/integration tests and does not regress existing prompt flows.
 
 ---
 

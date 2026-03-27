@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, it } from "node:test";
@@ -100,6 +100,122 @@ describe("emit kernel", () => {
       const sum = JSON.parse(readFileSync(summary, "utf8").trim()) as Record<string, unknown>;
       assert.equal(sum.event_version, 1);
       assert.equal(sum.type, "STEP_END");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("step-event mode builds STEP_START JSON from args", () => {
+    const dir = mkdtempSync(join(tmpdir(), "jaiph-emit-se-"));
+    try {
+      const summary = join(dir, "run_summary.jsonl");
+      const r = spawnSync(
+        process.execPath,
+        [emitJs, "step-event", "STEP_START", "mod::fn", "workflow", "", "", "", "", "sid", "pid", "1", "0", "key1=val1"],
+        {
+          env: {
+            ...process.env,
+            JAIPH_RUN_SUMMARY_FILE: summary,
+            JAIPH_RUN_ID: "run-t",
+            JAIPH_EVENT_FD: "2",
+            JAIPH_STEP_PARAM_KEYS: "key1",
+          },
+          encoding: "utf8",
+        },
+      );
+      assert.equal(r.status, 0, r.stderr);
+      assert.ok((r.stderr ?? "").includes("__JAIPH_EVENT__"));
+      const sum = JSON.parse(readFileSync(summary, "utf8").trim()) as Record<string, unknown>;
+      assert.equal(sum.type, "STEP_START");
+      assert.equal(sum.func, "mod::fn");
+      assert.equal(sum.kind, "workflow");
+      assert.equal(sum.name, "fn");
+      assert.equal(sum.run_id, "run-t");
+      assert.equal(sum.event_version, 1);
+      assert.deepEqual(sum.params, [["key1", "val1"]]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("step-event STEP_END embeds out_content from file", () => {
+    const dir = mkdtempSync(join(tmpdir(), "jaiph-emit-end-"));
+    try {
+      const summary = join(dir, "run_summary.jsonl");
+      const outFile = join(dir, "step.out");
+      writeFileSync(outFile, "hello output");
+      const r = spawnSync(
+        process.execPath,
+        [emitJs, "step-event", "STEP_END", "mod::fn", "script", "0", "100", outFile, "", "sid", "", "1", "0"],
+        {
+          env: {
+            ...process.env,
+            JAIPH_RUN_SUMMARY_FILE: summary,
+            JAIPH_RUN_ID: "run-t",
+            JAIPH_EVENT_FD: "2",
+          },
+          encoding: "utf8",
+        },
+      );
+      assert.equal(r.status, 0, r.stderr);
+      const sum = JSON.parse(readFileSync(summary, "utf8").trim()) as Record<string, unknown>;
+      assert.equal(sum.type, "STEP_END");
+      assert.equal(sum.status, 0);
+      assert.equal(sum.elapsed_ms, 100);
+      assert.equal(sum.out_content, "hello output");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("log mode builds LOG JSON with depth from JAIPH_STEP_STACK", () => {
+    const dir = mkdtempSync(join(tmpdir(), "jaiph-emit-log-"));
+    try {
+      const summary = join(dir, "run_summary.jsonl");
+      const r = spawnSync(process.execPath, [emitJs, "log", "hello world"], {
+        env: {
+          ...process.env,
+          JAIPH_RUN_SUMMARY_FILE: summary,
+          JAIPH_RUN_ID: "run-l",
+          JAIPH_EVENT_FD: "2",
+          JAIPH_STEP_STACK: "a,b",
+        },
+        encoding: "utf8",
+      });
+      assert.equal(r.status, 0, r.stderr);
+      assert.ok((r.stderr ?? "").includes("__JAIPH_EVENT__"));
+      assert.ok((r.stderr ?? "").includes('"depth":2'));
+      const sum = JSON.parse(readFileSync(summary, "utf8").trim()) as Record<string, unknown>;
+      assert.equal(sum.type, "LOG");
+      assert.equal(sum.message, "hello world");
+      assert.equal(sum.depth, 2);
+      assert.equal(sum.run_id, "run-l");
+      assert.equal(sum.event_version, 1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("workflow-event mode builds summary-only WORKFLOW_START", () => {
+    const dir = mkdtempSync(join(tmpdir(), "jaiph-emit-wf-"));
+    try {
+      const summary = join(dir, "run_summary.jsonl");
+      const r = spawnSync(process.execPath, [emitJs, "workflow-event", "WORKFLOW_START", "default"], {
+        env: {
+          ...process.env,
+          JAIPH_RUN_SUMMARY_FILE: summary,
+          JAIPH_RUN_ID: "run-w",
+          JAIPH_SOURCE_FILE: "main.jh",
+        },
+        encoding: "utf8",
+      });
+      assert.equal(r.status, 0, r.stderr);
+      const sum = JSON.parse(readFileSync(summary, "utf8").trim()) as Record<string, unknown>;
+      assert.equal(sum.type, "WORKFLOW_START");
+      assert.equal(sum.workflow, "default");
+      assert.equal(sum.source, "main.jh");
+      assert.equal(sum.run_id, "run-w");
+      assert.equal(sum.event_version, 1);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
