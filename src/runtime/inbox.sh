@@ -35,7 +35,9 @@ jaiph::send() {
   local sender="${3:-}"
   local _send_locked=0
   if [[ "${JAIPH_INBOX_PARALLEL:-}" == "true" ]]; then
-    jaiph::_lock "${JAIPH_INBOX_DIR}/.seq.lock"
+    if ! jaiph::_lock "${JAIPH_INBOX_DIR}/.seq.lock"; then
+      return 1
+    fi
     _send_locked=1
   fi
   # Atomic sequence via a counter file so increments survive subshells.
