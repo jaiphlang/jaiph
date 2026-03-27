@@ -17,7 +17,7 @@ If you are hacking on the **compiler or CLI** in this repository, read [Contribu
 
 **Jaiph** is a composable scripting language and runtime for defining and orchestrating AI agent workflows.
 
-It combines declarative workflow structure with bash, then compiles to bash that sources the Jaiph runtime stdlib. **Prompt** handling and **managed step subprocesses** (each `run` / `ensure` child, including **`script`** files under `build/scripts/`) go through a **small Node.js kernel** shipped with the CLI (`src/runtime/kernel/`); step bookkeeping, events, and inbox stay in Bash. Your **`script`** bodies still run as ordinary processes (default bash or a custom shebang).
+It combines declarative workflow structure with bash, then compiles to bash that sources the Jaiph runtime stdlib. **Prompt** handling, **managed step subprocesses** (each `run` / `ensure` child, including **`script`** files under `build/scripts/`), and **stderr / `run_summary.jsonl` event emission** (`kernel/emit.js`) go through a **small Node.js kernel** shipped with the CLI (`src/runtime/kernel/`); step stack orchestration and inbox routing stay in Bash. Your **`script`** bodies still run as ordinary processes (default bash or a custom shebang).
 
 **Core concepts:**
 
@@ -98,7 +98,7 @@ workflow update_docs {
 }
 ```
 
-Transpiled output is standard bash. The generated script sources the runtime stdlib by reading **`JAIPH_STDLIB`** if set, otherwise defaulting to **`~/.local/bin/jaiph_stdlib.sh`** (the path used by the install script). When you run a workflow via **`jaiph run`**, **`jaiph ./file.jh`**, or a `#!/usr/bin/env jaiph` shebang, the CLI sets **`JAIPH_STDLIB`** to the `jaiph_stdlib.sh` bundled next to that `jaiph` binary so you always match the compiler version; the same directory holds the **`kernel/*.js`** helpers used for prompts and managed step subprocesses. Advanced overrides are documented under [Environment variables](cli.md#environment-variables).
+Transpiled output is standard bash. The generated script sources the runtime stdlib by reading **`JAIPH_STDLIB`** if set, otherwise defaulting to **`~/.local/bin/jaiph_stdlib.sh`** (the path used by the install script). When you run a workflow via **`jaiph run`**, **`jaiph ./file.jh`**, or a `#!/usr/bin/env jaiph` shebang, the CLI sets **`JAIPH_STDLIB`** to the `jaiph_stdlib.sh` bundled next to that `jaiph` binary so you always match the compiler version; **`runtime/kernel/*.js`** under that install root (resolved from the stdlib path) includes **`emit.js`**, **`prompt.js`**, **`run-step-exec.js`**, and related helpers. Advanced overrides are documented under [Environment variables](cli.md#environment-variables).
 
 A runnable copy of this example lives in the Jaiph repository under `test/fixtures/` (with stub modules `bootstrap_project.jh` and `tools/security.jh`).
 
