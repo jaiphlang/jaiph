@@ -262,6 +262,7 @@ jaiph::run_step() {
   local prompt_writes_live_out=0
   local step_writes_live=0
   local jaiph__prompt_used_tee=0
+  local _jaiph_rs_tee=0
   step_started_seconds="$SECONDS"
   jaiph::next_step_id
   step_id="$JAIPH_LAST_STEP_ID"
@@ -322,7 +323,7 @@ jaiph::run_step() {
     fi
     export JAIPH_LAST_PROMPT_FINAL
   else
-    local _jaiph_rs_tee=0
+    _jaiph_rs_tee=0
     if [[ "${JAIPH_STDOUT_SAVED:-}" == "1" ]] && ! jaiph::is_test_mode && ! [[ /dev/fd/1 -ef /dev/fd/7 ]] && ! [[ /dev/fd/1 -ef /dev/fd/8 ]]; then
       _jaiph_rs_tee=1
     fi
@@ -391,7 +392,7 @@ jaiph::run_step() {
   jaiph::emit_step_event "STEP_END" "$func_name" "$status" "$elapsed_ms" "$out_file" "$err_file" "$step_id" "$parent_id" "$step_seq" "$depth" "${JAIPH_RUN_ID:-}" "" "$step_kind"
   jaiph::step_stack_pop
   # In test mode, emit step output so test capture (e.g. response = w.default) can read it.
-  # In normal runs, step output stays only in .out files.
+  # In normal runs, step output remains in .out artifacts unless the step itself streams live.
   # - Prompt + tee: transcript already went to stdout; avoid duplicate cat.
   # - Prompt + file-only (stdout is a pipe, e.g. nested cmdsub): cat would pollute the capture
   #   (engineer pick_role = run classify); skip. When stdout is a regular file (workflow subshell),

@@ -6,39 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## JS runtime migration (part 5): `jaiph test` semantics on JS kernel <!-- dev-ready -->
-
-**Goal**  
-Move test runtime semantics after run-mode parity is stable.
-
-**Standalone context (read this task in isolation)**
-
-- This task is about test-mode parity, not new test language features.
-- Existing authoring contracts in `*.test.jh` must remain valid.
-- Non-negotiable contracts in this part:
-  1. `JAIPH_TEST_MODE` behavior remains compatible.
-  2. Mock and assertion semantics remain compatible.
-  3. `jaiph test` CLI UX and artifact expectations remain stable.
-
-**Out of scope (for this part)**
-
-- New mock syntax/features.
-- Non-test runtime feature additions.
-- Packaging/distribution changes.
-
-**Scope**
-
-1. Port `JAIPH_TEST_MODE`, mocks, assertions, and test-step behavior for `*.test.jh`.
-2. Update `transpileTestFile` / test launcher integration to target JS kernel execution.
-3. Keep existing test authoring semantics unchanged.
-
-**Acceptance criteria**
-
-- `jaiph test` behavior is contract-compatible for existing suites.
-- Test fixtures pass without semantic regressions in mocks/assertions.
-
----
-
 ## JS runtime migration (part 6): launcher switch, debug mapping, and standalone binary <!-- dev-ready -->
 
 **Goal**  

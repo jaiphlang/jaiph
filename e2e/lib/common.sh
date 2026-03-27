@@ -75,9 +75,10 @@ e2e::assert_output_equals() {
   local actual="$1"
   local expected="$2"
   local label="$3"
-  local normalized_actual
+  local normalized_actual normalized_expected
   normalized_actual="$(e2e::normalize_output "${actual}")"
-  e2e::assert_equals "${normalized_actual}" "${expected}" "${label}"
+  normalized_expected="$(e2e::normalize_output "${expected}")"
+  e2e::assert_equals "${normalized_actual}" "${normalized_expected}" "${label}"
 }
 
 e2e::assert_file_exists() {

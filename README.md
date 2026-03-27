@@ -12,7 +12,7 @@
 
 **Jaiph** is a composable scripting language and runtime for defining and orchestrating AI agent workflows.
 
-It combines declarative workflow structure with bash, then compiles to bash that sources a small runtime stdlib. **Prompt** steps, **managed step subprocesses** (`run` / `ensure` / nested rule and workflow children, plus emitted **`script`** executables), **file-backed inbox** (init / send / routes / drain under `.jaiph/runs` via `kernel/inbox.js`), and **stderr `__JAIPH_EVENT__` / `run_summary.jsonl` emission** (via `kernel/emit.js`) run through a **bundled Node.js kernel** under `src/runtime/kernel/`; workflow orchestration and most other stdlib logic stay in Bash. User **`script`** bodies are still normal child processes (bash or another shebang). That keeps workflows portable while reusing familiar shell entrypoints.
+It combines declarative workflow structure with bash, then compiles to bash that sources a small runtime stdlib. **Prompt** steps, **managed step subprocesses** (`run` / `ensure` / nested rule and workflow children, plus emitted **`script`** executables), **file-backed inbox** (init / send / routes / drain under `.jaiph/runs` via `kernel/inbox.js`), and **stderr `__JAIPH_EVENT__` / `run_summary.jsonl` emission** (via `kernel/emit.js`) run through a **bundled Node.js kernel** under `src/runtime/kernel/`; workflow orchestration and most other stdlib logic stay in Bash. **`jaiph test`** drives **`*.test.jh`** files through that same stack under **`JAIPH_TEST_MODE`**, so mocks and assertions stay aligned with **`jaiph run`** without new authoring rules. User **`script`** bodies are still normal child processes (bash or another shebang). That keeps workflows portable while reusing familiar shell entrypoints.
 
 **Features:**
 

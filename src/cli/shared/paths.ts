@@ -36,6 +36,25 @@ function skipWorkspaceMarkerOnSharedTmpRoot(candidateRoot: string, absStartDir: 
   return s.startsWith(prefix);
 }
 
+/**
+ * macOS `TMPDIR` is `…/var/folders/…/T/<session>/…`. Stray `.jaiph` / `.git` on `T` or the session
+ * directory would steal nested temp projects (tests, tooling). Skip markers on strict ancestors of
+ * `absStartDir` inside that tree so the leaf directory wins as workspace.
+ */
+function skipStrayWorkspaceMarkerUnderMacOsTempTree(candidateRoot: string, absStartDir: string): boolean {
+  const c = resolve(candidateRoot);
+  const s = resolve(absStartDir);
+  if (s === c) {
+    return false;
+  }
+  const normS = s.replace(/^\/private/, "");
+  if (!/\/var\/folders\/[^/]+\/[^/]+\/T\//.test(normS)) {
+    return false;
+  }
+  const prefix = c.endsWith(sep) ? c : c + sep;
+  return s.startsWith(prefix);
+}
+
 export function detectWorkspaceRoot(startDir: string): string {
   const fallback = resolve(startDir);
   let current = fallback;
@@ -43,7 +62,8 @@ export function detectWorkspaceRoot(startDir: string): string {
     if (existsSync(join(current, ".jaiph")) || existsSync(join(current, ".git"))) {
       if (
         !startDirIsUnderAncestorJaiphTmp(fallback, current) &&
-        !skipWorkspaceMarkerOnSharedTmpRoot(current, fallback)
+        !skipWorkspaceMarkerOnSharedTmpRoot(current, fallback) &&
+        !skipStrayWorkspaceMarkerUnderMacOsTempTree(current, fallback)
       ) {
         return current;
       }
