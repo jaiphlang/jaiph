@@ -47,7 +47,8 @@ For day-to-day work on the compiler and CLI you usually stay inside the clone: i
 |---------|----------------|
 | `npm install` | Installs TypeScript, Jest, and types (dev dependencies). |
 | `npm run build` | Compiles TypeScript to `dist/` and copies runtime assets (stdlib, `src/runtime`, reporting static files). |
-| `npm test` | `npm run build`, then the Node.js built-in test runner on cross-cutting tests in `dist/test/*.test.js` and all colocated module tests under `dist/src/**/*.test.js` (including `*.acceptance.test.js`), then Jest on `test/fixtures-build.jest.test.js` (fixture build snapshot). |
+| `npm run build:standalone` | `npm run build`, then copies `jaiph_stdlib.sh`, `runtime/`, and `reporting/public` into `dist/` and runs **`bun build --compile`** on `src/cli.ts` → **`dist/jaiph`**. Requires [Bun](https://bun.sh) installed; ship the **`dist/`** directory (binary + sibling files) for a self-contained CLI layout. |
+| `npm test` | `npm run build`, then the Node.js built-in test runner (with **`--enable-source-maps`**) on cross-cutting tests in `dist/test/*.test.js` and all colocated module tests under `dist/src/**/*.test.js` (including `*.acceptance.test.js`), then Jest on `test/fixtures-build.jest.test.js` (fixture build snapshot). |
 | `npm run test:e2e` | Build plus `bash ./e2e/test_all.sh` (same as `test:acceptance:runtime`). |
 | `npm run test:ci` | `npm test` followed by `npm run test:e2e` — useful before pushing when you want the full local picture. |
 
@@ -78,7 +79,7 @@ Jaiph uses several test layers. Each layer catches a different class of bug. Use
 | **Compiler golden tests** | `src/transpile/compiler-golden.test.ts` (colocated) | Regressions in the transpiler and parser — many cases use **inline** expected `.sh` strings in the test file itself | You changed the emitter or parser and need to lock an exact emitted script or parse result (refresh the canonical workflow snippet with `scripts/dump-golden-output.js` when that embedded expectation changes) |
 | **Cross-cutting tests** | `test/*.test.ts` | Process-level integration behavior: signal handling, TTY rendering, run summary structure, sample builds | The test spans multiple modules or requires subprocess/PTY harnesses |
 | **Fixture build snapshots** | `test/fixtures-build.jest.test.js`, `test/fixtures/*.jh`, `test/__snapshots__/fixtures-build.jest.test.js.snap` | The **whole** fixture set still builds and the generated `.sh` tree matches the Jest snapshot | You changed emission globally and need to catch drift across multiple real-world-ish `.jh` files — update the snapshot intentionally when output is meant to change |
-| **E2E tests** | `e2e/tests/*.sh` | Runtime behavior — does the built workflow actually execute correctly end-to-end? | The behavior involves the CLI, Bash stdlib + Node kernel subprocess paths, process lifecycle, or file artifacts |
+| **E2E tests** | `e2e/tests/*.sh` | Runtime behavior — does the built workflow actually execute correctly end-to-end? | The behavior involves the CLI launcher, Bash stdlib + JS kernel subprocess paths, process lifecycle, or file artifacts |
 
 ### Key principles
 
@@ -108,6 +109,7 @@ Module tests live next to the source files they validate, inside the same `src/`
 | `src/cli/run/hooks.test.ts` | `src/cli/run/hooks.ts` | Hook lifecycle: `globalHooksPath`, `projectHooksPath`, `parseHookConfig`, `loadMergedHooks`, `runHooksForEvent` |
 | `src/cli/run/non-tty-heartbeat.test.ts` | `src/cli/run/*` | Non-TTY run: long step produces heartbeat line shape |
 | `src/cli/run/stderr-handler.test.ts` | `src/cli/run/stderr-handler.ts` | `registerTTYSubscriber` / stderr routing edge cases |
+| `src/cli/shared/jaiph-source-map.test.ts` | `src/cli/shared/jaiph-source-map.ts` | Load **`.jaiph.map`**, bash-line → **`.jh`** resolution, stderr diagnostic line rewriting |
 | `src/cli/shared/errors.test.ts` | `src/cli/shared/errors.ts` | Error summarization: `summarizeError`, `resolveFailureDetails`, `hasFatalRuntimeStderr`, run metadata extraction |
 | `src/cli/commands/format-params-display.test.ts` | `src/cli/commands/format-params.ts` | Parameter display formatting: `formatParamsForDisplay`, `formatNamedParamsForDisplay`, `normalizeParamValue` |
 | `src/runtime/docker.test.ts` | `src/runtime/docker.ts` | Docker integration helpers: mount parsing/validation, config resolution, `buildDockerArgs` |

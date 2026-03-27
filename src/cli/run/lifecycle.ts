@@ -1,46 +1,13 @@
-import { spawn, ChildProcess } from "node:child_process";
+import { ChildProcess } from "node:child_process";
 
-export function buildRunWrapperCommand(): string {
-  const command = [
-    'meta_file="$1"; shift',
-    'built_script="$1"; shift',
-    'workflow_symbol="$1"; shift',
-    "__jaiph_status=0",
-    "jaiph__write_meta() {",
-    "  local status_value=\"$1\"",
-    '  if [[ -n "${meta_file:-}" ]]; then',
-    '    printf "status=%s\\n" "$status_value" > "$meta_file"',
-    '    printf "run_dir=%s\\n" "${JAIPH_RUN_DIR:-}" >> "$meta_file"',
-    '    printf "summary_file=%s\\n" "${JAIPH_RUN_SUMMARY_FILE:-}" >> "$meta_file"',
-    "  fi",
-    "}",
-    'trap \'__jaiph_status=$?; jaiph__write_meta "$__jaiph_status"\' EXIT',
-    "exec 3>&2",
-    'source "$built_script"',
-    'entrypoint="${workflow_symbol}::default"',
-    'if ! declare -F "$entrypoint" >/dev/null; then',
-    '  echo "jaiph run requires workflow \'default\' in the input file" >&2',
-    "  exit 1",
-    "fi",
-    'if [[ "${JAIPH_DEBUG:-}" == "true" ]]; then',
-    "  set -x",
-    "fi",
-    '"$entrypoint" "$@"',
-  ].join("\n");
-  return command;
-}
+export { buildRunWrapperCommand } from "../../runtime/kernel/workflow-launch";
+import { spawnJaiphWorkflowProcess } from "../../runtime/kernel/workflow-launch";
 
 export function spawnRunProcess(
-  command: string,
   args: string[],
   options: { cwd: string; env: NodeJS.ProcessEnv },
 ): ChildProcess {
-  return spawn("bash", ["-c", command, "jaiph-run", ...args], {
-    stdio: "pipe",
-    cwd: options.cwd,
-    env: options.env,
-    detached: true,
-  });
+  return spawnJaiphWorkflowProcess(args, options);
 }
 
 export function terminateRunProcessGroup(

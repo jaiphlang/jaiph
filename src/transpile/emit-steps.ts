@@ -1,4 +1,4 @@
-import type { RuleRefDef, WorkflowStepDef, WorkflowRefDef } from "../types";
+import type { RuleRefDef, SourceLoc, WorkflowStepDef, WorkflowRefDef } from "../types";
 import { emitPromptStepToOut } from "./emit-prompt";
 
 // ---------------------------------------------------------------------------
@@ -20,7 +20,35 @@ export type StepEmitCtx = {
    * Workflows and recover blocks use `exit 1` (default true).
    */
   failExitsProcess?: boolean;
+  /** When set, records the next emitted bash line as originating from the given `.jh` location. */
+  recordSourceLine?: (bashLine: number, loc: SourceLoc) => void;
 };
+
+/** Primary source location for a workflow/rule step (for `.jaiph.map` diagnostics). */
+export function stepPrimaryLoc(step: WorkflowStepDef): SourceLoc | null {
+  switch (step.type) {
+    case "ensure":
+      return step.ref.loc;
+    case "run":
+      return step.workflow.loc;
+    case "prompt":
+    case "fail":
+    case "const":
+    case "wait":
+    case "log":
+    case "logerr":
+    case "send":
+    case "return":
+    case "shell":
+      return step.loc;
+    case "if":
+      return step.condition.ref.loc;
+    case "comment":
+      return null;
+    default:
+      return null;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Helpers (exported where needed by emit-workflow.ts)
@@ -456,6 +484,10 @@ export function emitStep(
   step: WorkflowStepDef,
   ctx: StepEmitCtx,
 ): void {
+  const loc = stepPrimaryLoc(step);
+  if (loc && ctx.recordSourceLine) {
+    ctx.recordSourceLine(out.length + 1, loc);
+  }
   if (step.type === "ensure") { emitEnsureStep(out, indent, step, ctx); return; }
   if (step.type === "run") { emitRunStep(out, indent, step, ctx); return; }
   if (step.type === "prompt") { emitPromptStepToOut(out, indent, step, ctx); return; }
