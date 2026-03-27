@@ -153,14 +153,16 @@ Example lines:
 
 If no parameters are passed, the line is unchanged (e.g. `▸ workflow default`). Color can be disabled with `NO_COLOR=1`.
 
-**Prompt steps show no output in the tree.** When a `prompt` step completes, only the step line and ✓ appear — no Command, Prompt, Reasoning, or Final answer block. To display agent output in the tree, use `log` explicitly:
+**Prompt steps do not add extra tree nodes for the transcript.** The progress renderer still shows only the usual ▸ / ✓ lines for a `prompt` step — not a nested Command / Prompt / Final answer subtree. **On terminal stdout (non-test runs),** after the step completes, when that step’s stdout was **not** already streamed live (no tee path for that managed step), the runtime **replays** the step’s `.out` artifact so the full transcript appears **after** the ✓ line. That ordering matches patterns such as inbox dispatch (step completion before routed output). **Prompt** replay is skipped when stdout is a pipe (so shell capture is not polluted) or when the prompt path already streamed via tee. **`jaiph test`** runs under **`JAIPH_TEST_MODE`** and **does not** use this replay path, so assignment capture (`response = alias.workflow`) and assertions stay the same as before the kernel split.
+
+To surface the agent answer as an inline **`ℹ`** line in the tree at the right depth, use **`log`** explicitly:
 
 ```jaiph
 response = prompt "Summarize the report"
 log "$response"
 ```
 
-The `log` line renders inline at the correct depth as `ℹ <message>` (dim/gray) and writes to **stdout**. The `logerr` variant renders as `! <message>` in red and writes to **stderr**. (As above, the displayed/streamed text uses **`echo -e`**; event JSON keeps the raw string.) The step's `.out` file in `.jaiph/runs/` still contains the full agent transcript for debugging.
+The `log` line renders inline as `ℹ <message>` (dim/gray) and writes to **stdout**. The `logerr` variant renders as `! <message>` in red and writes to **stderr**. (As above, the displayed/streamed text uses **`echo -e`**; event JSON keeps the raw string.) The step's `.out` file in `.jaiph/runs/` remains the full agent transcript for debugging and reporting.
 
 ### Failed run summary (stderr)
 
@@ -242,6 +244,8 @@ You can run custom commands at workflow/step lifecycle events via **hooks**. Con
 ## `jaiph test`
 
 Run tests from native test files (`*.test.jh`) that contain `test "..." { ... }` blocks. Test files can import workflows and use `mock prompt` (or `mock prompt { ... }`) to simulate agent responses without calling the real backend.
+
+Execution uses the **same Bash stdlib and bundled Node.js kernel** as `jaiph run` (`kernel/prompt.js`, `kernel/run-step-exec.js`, plus the same inbox/emit resolution). The runtime sets **`JAIPH_TEST_MODE`** so mocks, assertion helpers, and workflow capture semantics stay contract-compatible with existing suites; CLI reporting for the test command itself (per-test ✓/✗ lines and the final summary) is unchanged.
 
 **Usage:**
 
@@ -332,8 +336,8 @@ jaiph report [start|stop|status] [--host <addr>] [--port <n>] [--poll-ms <n>] [-
 - `JAIPH_EMIT_JS` — **internal:** absolute path to **`emit.js`** (stderr events and **`summary-line`** mode). Set and **exported** when the stdlib sources **`events.sh`**. You should not set this yourself. It is forwarded into **read-only rule** subshells (Linux `unshare` path) so nested **`bash`** that does not re-source **`events.sh`** can still invoke **`node`** for **`LOG`**, **`STEP_*`**, and summary appends.
 - `JAIPH_INBOX_JS` — **internal:** absolute path to **`inbox.js`** (inbox init/send/register-route/drain). Set and **exported** when **`inbox.sh`** is sourced (same directory resolution as **`JAIPH_EMIT_JS`**). You should not set this yourself.
 - `JAIPH_SCRIPTS` — the generated bash exports this to the directory holding compiled module scripts for **that** build. **`jaiph run`** and **`jaiph test`** **unset** any inherited **`JAIPH_SCRIPTS`** from the parent environment before executing so an outer run cannot pin the wrong script directory when workflows or package scripts invoke Jaiph again. You normally should not export this yourself.
-- `JAIPH_RUN_STEP_MODULE` — **internal:** absolute path to the generated workflow module **`*.sh`** for the current run (used when the inbox kernel spawns routed workflows). The transpiled preamble sets it when unset. **`jaiph run`** and **`jaiph test`** **unset** any value inherited from the parent environment so a nested invocation does not keep a stale path.
-- `JAIPH_WORKSPACE` — set by the CLI to the workspace root: walk **up** from the directory that contains the entry `.jh` file until a directory with `.jaiph` or `.git` is found; if the walk hits the filesystem root first, the root used is that entry directory (absolute path). Used by the generated bash and runtime helpers; you rarely set this yourself. In Docker sandbox mode the runtime remaps it inside the container (see [Sandboxing](sandboxing.md)).
+- `JAIPH_RUN_STEP_MODULE` — **internal:** absolute path to the generated **`*.sh`** module used for managed steps and inbox-spawned work ( **`run-step-exec`** sources this file). The transpiled **workflow** preamble sets it **when unset**. The generated **native test runner** emitted from each **`*.test.jh`** **always** exports it to that runner’s own script path so a parent shell cannot leave a stale module. **`jaiph run`** and **`jaiph test`** **unset** any value inherited from the parent environment before executing so nested CLI invocations do not keep a wrong path.
+- `JAIPH_WORKSPACE` — set by the CLI to the workspace root: walk **up** from the directory that contains the entry `.jh` file until a directory with `.jaiph` or `.git` is found; if the walk hits the filesystem root first, the root used is that entry directory (absolute path). On **macOS**, paths under **`/var/folders/.../T/`** (typical **`TMPDIR`** layout) **ignore** **`.jaiph`** / **`.git`** markers on strict **ancestors** inside that temp tree so a stray marker on a shared parent of **`T`** does not steal the workspace from a nested temp project. Used by the generated bash and runtime helpers; you rarely set this yourself. In Docker sandbox mode the runtime remaps it inside the container (see [Sandboxing](sandboxing.md)).
 - `JAIPH_LIB` — directory for project-local shared bash libraries (conventionally `<workspace>/.jaiph/lib`). The **transpiled script** exports `JAIPH_LIB="${JAIPH_LIB:-${JAIPH_WORKSPACE:-.}/.jaiph/lib}"` near the top of its preamble so `source "$JAIPH_LIB/…"` works no matter where the generated `.sh` file lives. Override `JAIPH_LIB` when libraries live elsewhere. The runtime also sets `JAIPH_LIB` when executing **script** steps so behavior matches [Grammar — script bodies and shared libraries](grammar.md#step-output-contract).
 - `JAIPH_AGENT_MODEL` — default model for `prompt` steps (overrides in-file `agent.default_model`).
 - `JAIPH_AGENT_COMMAND` — command for the Cursor backend (e.g. `cursor-agent`; overrides in-file `agent.command`).

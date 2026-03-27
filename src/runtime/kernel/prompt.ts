@@ -176,6 +176,9 @@ export async function executePrompt(
       if (result.status === 0) {
         writeFinalFile(config.promptFinalFile, result.response);
         stdout.write(result.response);
+        if (!result.response.endsWith("\n")) {
+          stdout.write("\n");
+        }
         return { final: result.response, status: 0 };
       }
       return { final: "", status: result.status };
@@ -186,6 +189,9 @@ export async function executePrompt(
       if (mockResult !== null) {
         writeFinalFile(config.promptFinalFile, mockResult);
         stdout.write(mockResult);
+        if (!mockResult.endsWith("\n")) {
+          stdout.write("\n");
+        }
         return { final: mockResult, status: 0 };
       }
     }
@@ -213,6 +219,9 @@ export async function executePrompt(
 
   const result = await runBackend(config, promptText, writer);
   writeFinalFile(config.promptFinalFile, result.final);
+  if (promptText) {
+    stdout.write("\n");
+  }
   return result;
 }
 

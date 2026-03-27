@@ -59,11 +59,11 @@ export function emitTest(
   out.push("  exit 1");
   out.push("fi");
   out.push('source "$jaiph_stdlib_path"');
-  out.push('if [[ -z "${JAIPH_RUN_STEP_MODULE:-}" ]]; then');
+  // Always pin to this test runner: inherited JAIPH_RUN_STEP_MODULE (e.g. from a parent jaiph run)
+  // would otherwise make run-step-exec source the wrong file and break workflow/rule steps.
   out.push(
-    '  export JAIPH_RUN_STEP_MODULE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"',
+    'export JAIPH_RUN_STEP_MODULE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"',
   );
-  out.push("fi");
   out.push('if [[ "$(jaiph__runtime_api)" != "1" ]]; then');
   out.push('  echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2');
   out.push("  exit 1");

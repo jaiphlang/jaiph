@@ -10,6 +10,10 @@ import { buildRunTreeRows } from "../src/cli";
 import { formatRunningBottomLine } from "../src/cli/run/progress";
 import { parseStepEvent } from "../src/cli/run/events";
 
+// Inherited JAIPH_RUNS_DIR (e.g. from a developer shell) would send runs outside each temp
+// workspace; these tests expect artifacts under `<cwd>/.jaiph/runs`.
+delete process.env.JAIPH_RUNS_DIR;
+
 /** Resolve latest run directory. Layout: runsRoot/YYYY-MM-DD/HH-MM-SS-source/ */
 function getLatestRunDir(runsRoot: string): string {
   const dateDirs = readdirSync(runsRoot)
@@ -2201,6 +2205,9 @@ test("jaiph test fails when no mock branch matches and no else", () => {
 test("jaiph run prompt capture: variable accessible in subsequent shell step", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-run-prompt-capture-"));
   try {
+    // Anchor workspace here: a parent of TMPDIR may contain `.jaiph`, which would otherwise
+    // become JAIPH_WORKSPACE and send runs outside this temp root.
+    mkdirSync(join(root, ".jaiph"), { recursive: true });
     const binDir = join(root, "bin");
     mkdirSync(binDir, { recursive: true });
     const fakeAgent = join(binDir, "cursor-agent");
@@ -2256,6 +2263,7 @@ test("jaiph run prompt capture: variable accessible in subsequent shell step", (
 test("jaiph run prompt capture stores only final answer in assigned variable", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-run-prompt-capture-final-only-"));
   try {
+    mkdirSync(join(root, ".jaiph"), { recursive: true });
     const binDir = join(root, "bin");
     mkdirSync(binDir, { recursive: true });
     const fakeAgent = join(binDir, "cursor-agent");
