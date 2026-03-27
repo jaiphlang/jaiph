@@ -9,7 +9,7 @@ redirect_from:
 
 ## Overview
 
-Jaiph workflow sources (`.jh`) are programs: the CLI parses them, checks references, and transpiles them to bash that runs on your machine. Optional [Sandboxing](sandboxing.md) runs that generated bash inside Docker instead of directly on the host. The same `jaiph` executable drives compilation (`build`), execution (`run`), the native test runner (`test`), workspace scaffolding (`init`), reinstalling from a Git ref (`use`), and a read-only local UI over run logs (`report`). Language syntax and semantics are documented separately (for example [Grammar](grammar.md)); this page is the command-line contract.
+Jaiph workflow sources (`.jh`) are programs: the CLI parses them, checks references, and transpiles them to bash that runs on your machine. At run time, generated bash sources **`jaiph_stdlib.sh`** and drives steps through Bash helpers; **prompt** steps and **managed step child processes** (each `run` / `ensure` target — workflows, rules, and emitted **`script`** executables) are spawned by a **bundled Node.js kernel** (`kernel/prompt.js`, `kernel/run-step-exec.js`) so stdout/stderr capture, cwd, script isolation, and exit codes stay consistent with the historical contract. Optional [Sandboxing](sandboxing.md) runs that generated bash inside Docker instead of directly on the host. The same `jaiph` executable drives compilation (`build`), execution (`run`), the native test runner (`test`), workspace scaffolding (`init`), reinstalling from a Git ref (`use`), and a read-only local UI over run logs (`report`). Language syntax and semantics are documented separately (for example [Grammar](grammar.md)); this page is the command-line contract.
 
 **Typical tasks:**
 

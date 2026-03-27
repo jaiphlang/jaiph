@@ -1,6 +1,8 @@
 # Runtime: step event emission and run summary.
 # Sourced by jaiph_stdlib.sh. Depends on core (jaiph__die) from aggregator.
 
+_jaiph_emit_kernel_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/kernel"
+
 jaiph::timestamp_utc() {
   date -u +"%Y-%m-%dT%H-%M-%SZ"
 }
@@ -61,22 +63,7 @@ jaiph::_run_summary_append_line() {
   if [[ -z "${JAIPH_RUN_SUMMARY_FILE:-}" ]]; then
     return 0
   fi
-  mkdir -p "$(dirname "$JAIPH_RUN_SUMMARY_FILE")" 2>/dev/null || true
-  if [[ "${JAIPH_INBOX_PARALLEL:-}" == "true" ]]; then
-    if ! jaiph::_lock "${JAIPH_RUN_SUMMARY_FILE}.lock"; then
-      return 1
-    fi
-  fi
-  printf '%s\n' "$line" >>"$JAIPH_RUN_SUMMARY_FILE"
-  if [[ "${JAIPH_INBOX_PARALLEL:-}" == "true" ]]; then
-    jaiph::_unlock "${JAIPH_RUN_SUMMARY_FILE}.lock"
-  fi
-}
-
-# Add event_version to a step event JSON object (stderr payload stays unchanged).
-jaiph::_step_payload_with_event_version() {
-  local p="$1"
-  printf '%s' "${p%\}},\"event_version\":1}"
+  printf '%s\n' "$line" | node "${_jaiph_emit_kernel_dir}/emit.js" summary-line
 }
 
 jaiph::emit_workflow_summary_event() {
@@ -169,17 +156,7 @@ jaiph::log() {
     "$(jaiph::json_escape "$message")" \
     "$depth")"
   marker_fd="$(jaiph::event_fd)"
-  printf "__JAIPH_EVENT__ %s\n" "$payload" >&"$marker_fd"
-  if [[ -n "${JAIPH_RUN_SUMMARY_FILE:-}" ]]; then
-    local ts line_log
-    ts="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    line_log="$(printf '{"type":"LOG","message":"%s","depth":%s,"ts":"%s","run_id":"%s","event_version":1}' \
-      "$(jaiph::json_escape "$message")" \
-      "$depth" \
-      "$(jaiph::json_escape "$ts")" \
-      "$(jaiph::json_escape "${JAIPH_RUN_ID:-}")")"
-    jaiph::_run_summary_append_line "$line_log"
-  fi
+  printf '%s\n' "$payload" | JAIPH_EVENT_FD="$marker_fd" node "${_jaiph_emit_kernel_dir}/emit.js" live
   echo -e "$message"
   if [[ "$had_xtrace" -eq 1 ]]; then
     set -x
@@ -202,17 +179,7 @@ jaiph::logerr() {
     "$(jaiph::json_escape "$message")" \
     "$depth")"
   marker_fd="$(jaiph::event_fd)"
-  printf "__JAIPH_EVENT__ %s\n" "$payload" >&"$marker_fd"
-  if [[ -n "${JAIPH_RUN_SUMMARY_FILE:-}" ]]; then
-    local ts line_err
-    ts="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    line_err="$(printf '{"type":"LOGERR","message":"%s","depth":%s,"ts":"%s","run_id":"%s","event_version":1}' \
-      "$(jaiph::json_escape "$message")" \
-      "$depth" \
-      "$(jaiph::json_escape "$ts")" \
-      "$(jaiph::json_escape "${JAIPH_RUN_ID:-}")")"
-    jaiph::_run_summary_append_line "$line_err"
-  fi
+  printf '%s\n' "$payload" | JAIPH_EVENT_FD="$marker_fd" node "${_jaiph_emit_kernel_dir}/emit.js" live
   echo -e "$message" >&2
   [[ -n "${JAIPH_ENSURE_OUTPUT_FILE:-}" ]] && printf '%s\n' "$message" >> "$JAIPH_ENSURE_OUTPUT_FILE"
   if [[ "$had_xtrace" -eq 1 ]]; then
@@ -324,12 +291,7 @@ jaiph::emit_step_event() {
     fi
   fi
   marker_fd="$(jaiph::event_fd)"
-  printf "__JAIPH_EVENT__ %s\n" "$payload" >&"$marker_fd"
-  if [[ -n "${JAIPH_RUN_SUMMARY_FILE:-}" ]]; then
-    if [[ "$event_type" == "STEP_START" || "$event_type" == "STEP_END" ]]; then
-      jaiph::_run_summary_append_line "$(jaiph::_step_payload_with_event_version "$payload")"
-    fi
-  fi
+  printf '%s\n' "$payload" | JAIPH_EVENT_FD="$marker_fd" node "${_jaiph_emit_kernel_dir}/emit.js" live
   if [[ "$had_xtrace" -eq 1 ]]; then
     set -x
   fi
