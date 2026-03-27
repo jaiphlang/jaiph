@@ -12,7 +12,8 @@ workflow cursor_say_hello {
   
 workflow claude_say_hello {
   config {
-    agent.backend = "claude"
+    agent.backend = "cursor"
+    agent.default_model = "gpt-5.5"
   }
   response = prompt "$prompt_text"
   log "$response"
