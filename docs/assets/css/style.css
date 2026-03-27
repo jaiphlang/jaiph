@@ -152,39 +152,39 @@ body {
 .top-nav-logo {
     position: relative;
     z-index: 260;
-}
-
-.top-nav-logo img {
-    width: 16rem;
-    display: block;
-    margin-bottom: -1.7em;
-    margin-top: 0.5rem;
-    margin-left: -3rem;
-}
-
-/* Docs: bold name beside wordmark (homepage keeps image-only .top-nav-logo) */
-.top-nav-logo-with-brand {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
     text-decoration: none;
+    margin-left: -3rem;
 }
 
-/* Smaller graphic than image-only nav — flex + text was reading as a larger lockup */
-.top-nav-logo-with-brand img {
-    width: 11rem;
-    margin-bottom: -1.05em;
-    margin-top: 0.35rem;
-    margin-left: -2rem;
+.top-nav-logo img {
+    height: 5.5rem;
+    margin-bottom: -2.2rem;
+    margin-top: 0.5rem;
+}
+
+.top-nav-logo-landing {
+    margin-left: -6rem;
+}
+
+.top-nav-logo-landing img {
+    height: 9.5rem;
+    margin-bottom: -6.2rem;
 }
 
 .top-nav-brand {
     font-weight: 700;
     font-size: 1.35rem;
     color: rgba(255, 255, 255, 0.96);
-    letter-spacing: 0.02em;
+    letter-spacing: 0.05em;
     line-height: 1;
     margin-left: 0.5rem;
+}
+
+.top-nav-brand-accent {
+    color: var(--orange);
 }
 
 .top-nav-links {
@@ -361,8 +361,15 @@ header h1 img {
 }
 
 .button-primary {
-    background: var(--orange);
+    height: 2.8rem;
+    line-height: 2.8rem;
+    background: #bd7d2a;
     color: white;
+    font-size: 1.4rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    letter-spacing: 0.03em;
 }
 
 .button-primary:hover {
