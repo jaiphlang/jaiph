@@ -173,7 +173,7 @@ jaiph::forward_nested_events_from_err() {
   fi
   local marker_fd filtered_err line
   marker_fd="$(jaiph::event_fd)"
-  filtered_err="${err_path}.filtered.$$"
+  filtered_err="${err_path}.filtered.${BASHPID:-$$}.${RANDOM}"
   : >"$filtered_err"
   while IFS= read -r line || [[ -n "$line" ]]; do
     if [[ "$line" == "__JAIPH_EVENT__ "* ]]; then
@@ -258,6 +258,7 @@ jaiph::run_step() {
   jaiph::init_run_tracking || return 1
   local safe_name out_file err_file status had_errexit step_started_seconds step_elapsed_seconds
   local out_tmp err_tmp elapsed_ms prompt_final_tmp
+  local tmp_suffix
   local step_id parent_id depth step_seq seq_prefix
   local prompt_writes_live_out=0
   local step_writes_live=0
@@ -271,8 +272,9 @@ jaiph::run_step() {
   safe_name="$(jaiph::sanitize_name "$func_name")"
   out_file="$JAIPH_RUN_DIR/${seq_prefix}-${safe_name}.out"
   err_file="$JAIPH_RUN_DIR/${seq_prefix}-${safe_name}.err"
-  out_tmp="${out_file}.tmp.$$"
-  err_tmp="${err_file}.tmp.$$"
+  tmp_suffix="${BASHPID:-$$}.${RANDOM}"
+  out_tmp="${out_file}.tmp.${tmp_suffix}"
+  err_tmp="${err_file}.tmp.${tmp_suffix}"
   prompt_final_tmp=""
   parent_id="$(jaiph::step_stack_peek)"
   depth="$(jaiph::step_stack_depth)"
@@ -298,7 +300,7 @@ jaiph::run_step() {
       export JAIPH_LAST_PROMPT_FINAL
     fi
   elif [[ "$func_name" == "jaiph::prompt" ]]; then
-    prompt_final_tmp="${out_file}.final.tmp.$$"
+    prompt_final_tmp="${out_file}.final.tmp.${tmp_suffix}"
     # When stdout is a pipe (e.g. command substitution `x=$(...)` capturing a nested
     # workflow), duplicating prompt transcript via tee pollutes the capture. Write
     # only to the step .out file; parent workflow stdout still aggregates when fd 1

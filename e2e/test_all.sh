@@ -42,6 +42,7 @@ TEST_SCRIPTS=(
   "e2e/tests/94_parallel_shell_steps.sh"
   "e2e/tests/95_say_hello_failure_output.sh"
   "e2e/tests/96_run_stdout_redirect.sh"
+  "e2e/tests/97_async_managed_failure.sh"
   "e2e/tests/99_managed_call_semantics.sh"
   "e2e/tests/100_ensure_recover_invalid.sh"
   "e2e/tests/101_script_isolation.sh"
