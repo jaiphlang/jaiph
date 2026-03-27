@@ -1,5 +1,5 @@
 import { chmodSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { dirname, extname, join, parse, relative, resolve } from "node:path";
+import { basename, dirname, extname, join, parse, relative, resolve } from "node:path";
 import { parsejaiph } from "../parser";
 import type { CompileResult } from "../types";
 import type { EmittedModule } from "./emit-workflow";
@@ -108,12 +108,24 @@ export function build(
   const files = entrypointFile ? collectFileWithImports(entrypointFile) : walkjhFiles(rootDir);
   const results: CompileResult[] = [];
   for (const file of files) {
-    const { module, scripts } = transpileFileFn(file, rootDir);
+    const { module, scripts, sourceLineMap } = transpileFileFn(file, rootDir);
     const rel = relative(rootDir, file).replace(JAIPH_EXT_REGEX, ".sh");
     const outPath = join(outRoot, rel);
     ensureDir(dirname(outPath));
     writeFileSync(outPath, module, "utf8");
     chmodSync(outPath, 0o755);
+    if (sourceLineMap && sourceLineMap.length > 0) {
+      const mapPath = join(dirname(outPath), `${basename(outPath, ".sh")}.jaiph.map`);
+      writeFileSync(
+        mapPath,
+        `${JSON.stringify(
+          { version: 1, shFile: outPath, mappings: sourceLineMap },
+          null,
+          2,
+        )}\n`,
+        "utf8",
+      );
+    }
     const scriptsRoot = join(outRoot, "scripts");
     ensureDir(scriptsRoot);
     for (const s of scripts) {

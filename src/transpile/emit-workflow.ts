@@ -1,4 +1,4 @@
-import type { jaiphModule } from "../types";
+import type { jaiphModule, SourceLoc } from "../types";
 import {
   type StepEmitCtx,
   emitStep,
@@ -13,9 +13,18 @@ import {
   metadataToAssignments,
 } from "./emit-workflow-helpers";
 
+/** Maps generated `.sh` line numbers back to `.jh` locations (sidecar `.jaiph.map`). */
+export type JaiphSourceLineMapEntry = {
+  bashLine: number;
+  source: string;
+  line: number;
+  col: number;
+};
+
 export type EmittedModule = {
   module: string;
   scripts: Array<{ name: string; content: string }>;
+  sourceLineMap?: JaiphSourceLineMapEntry[];
 };
 
 export function emitWorkflow(
@@ -27,6 +36,11 @@ export function emitWorkflow(
   importedScriptNames: Map<string, Set<string>>,
   jaiphScriptsRelFromModuleDir: string,
 ): EmittedModule {
+  const sourceLineMap: JaiphSourceLineMapEntry[] = [];
+  const recordSourceLine = (bashLine: number, loc: SourceLoc): void => {
+    sourceLineMap.push({ bashLine, source: ast.filePath, line: loc.line, col: loc.col });
+  };
+
   const scopedMetadataAssignments = ast.metadata ? metadataToAssignments(ast.metadata) : [];
   const hasModuleMetadataScope = scopedMetadataAssignments.length > 0;
   const out: string[] = [];
@@ -128,6 +142,7 @@ export function emitWorkflow(
     importedScriptNames,
     hasModuleMetadataScope,
     emitEnvShims,
+    recordSourceLine,
   );
   emitScriptFunctions(out, ast, workflowSymbol, hasModuleMetadataScope);
 
@@ -143,6 +158,7 @@ export function emitWorkflow(
       filePath: ast.filePath,
       workflowName: workflow.name,
       inRecoverBlock: false,
+      recordSourceLine,
     };
 
     const wfMetaAssignments = workflow.metadata ? metadataToAssignments(workflow.metadata) : [];
@@ -206,5 +222,9 @@ export function emitWorkflow(
   }
 
   const scripts = buildScriptFiles(ast, importedWorkflowSymbols, workflowSymbol);
-  return { module: out.join("\n").trimEnd(), scripts };
+  return {
+    module: out.join("\n").trimEnd(),
+    scripts,
+    sourceLineMap: sourceLineMap.length > 0 ? sourceLineMap : undefined,
+  };
 }

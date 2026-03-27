@@ -12,6 +12,7 @@ import { dirname, join, relative, resolve, extname } from "node:path";
 import { basename } from "node:path";
 import { spawnSync } from "node:child_process";
 import { build, transpileTestFile, walkTestFiles } from "../../transpiler";
+import { resolveBundledStdlibPath } from "../run/env";
 import { detectWorkspaceRoot } from "../shared/paths";
 import { parseArgs } from "../shared/usage";
 
@@ -93,7 +94,7 @@ export async function runSingleTestFile(
     if (process.env.JAIPH_USE_CUSTOM_STDLIB === "1" && process.env.JAIPH_STDLIB) {
       runtimeEnv.JAIPH_STDLIB = process.env.JAIPH_STDLIB;
     } else {
-      runtimeEnv.JAIPH_STDLIB = resolve(join(__dirname, "..", "..", "jaiph_stdlib.sh"));
+      runtimeEnv.JAIPH_STDLIB = resolveBundledStdlibPath();
     }
     delete runtimeEnv.BASH_ENV;
     delete runtimeEnv.JAIPH_RUN_DIR;

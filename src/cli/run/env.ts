@@ -1,6 +1,25 @@
-import { basename, join, resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 
-const bundledStdlibPath = () => resolve(join(__dirname, "..", "..", "jaiph_stdlib.sh"));
+/**
+ * Resolve `jaiph_stdlib.sh` for `node dist/src/cli.js` (tsc layout) and for Bun `--compile`
+ * binaries shipped beside `jaiph_stdlib.sh` + `runtime/` (see `npm run build:standalone`).
+ */
+export function resolveBundledStdlibPath(): string {
+  const fromModule = resolve(join(__dirname, "..", "..", "jaiph_stdlib.sh"));
+  if (existsSync(fromModule)) {
+    return fromModule;
+  }
+  const nextToExec = resolve(join(dirname(process.execPath), "jaiph_stdlib.sh"));
+  if (existsSync(nextToExec)) {
+    return nextToExec;
+  }
+  const execDistSrc = resolve(join(dirname(process.execPath), "src", "jaiph_stdlib.sh"));
+  if (existsSync(execDistSrc)) {
+    return execDistSrc;
+  }
+  return fromModule;
+}
 import type { JaiphConfig } from "../../config";
 
 const LOCKED_ENV_KEYS = [
@@ -72,7 +91,7 @@ export function resolveRuntimeEnv(
   if (process.env.JAIPH_USE_CUSTOM_STDLIB === "1" && process.env.JAIPH_STDLIB) {
     env.JAIPH_STDLIB = process.env.JAIPH_STDLIB;
   } else {
-    env.JAIPH_STDLIB = bundledStdlibPath();
+    env.JAIPH_STDLIB = resolveBundledStdlibPath();
   }
   env.JAIPH_SOURCE_FILE = basename(inputAbs);
 

@@ -1,4 +1,4 @@
-import type { jaiphModule } from "../types";
+import type { jaiphModule, SourceLoc } from "../types";
 import { type StepEmitCtx, emitStep } from "./emit-steps";
 
 export function emitRuleFunctions(
@@ -10,6 +10,7 @@ export function emitRuleFunctions(
   importedScriptNames: Map<string, Set<string>>,
   hasModuleMetadataScope: boolean,
   emitEnvShims: (indent: string) => void,
+  recordSourceLine: (bashLine: number, loc: SourceLoc) => void,
 ): void {
   const localScriptNames = new Set(ast.scripts.map((s) => s.name));
   for (const rule of ast.rules) {
@@ -31,6 +32,7 @@ export function emitRuleFunctions(
       workflowName: rule.name,
       inRecoverBlock: false,
       failExitsProcess: false,
+      recordSourceLine,
     };
     if (rule.steps.length === 0) {
       out.push("  :");

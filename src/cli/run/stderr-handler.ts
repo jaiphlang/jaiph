@@ -1,3 +1,4 @@
+import { rewriteJaiphDiagnosticsLine, type SourceMapCache } from "../shared/jaiph-source-map";
 import { parseStepEvent, parseLogEvent } from "./events";
 import { colorize, formatStartLine, formatCompletedLine, formatHeartbeatLine } from "./display";
 import { formatRunningBottomLine } from "./progress";
@@ -36,7 +37,12 @@ function resolveEventId(
   return `legacy:${state.legacyCounter}:${funcName}`;
 }
 
-function handleLine(line: string, state: StderrParserState, emitter: RunEmitter): void {
+function handleLine(
+  line: string,
+  state: StderrParserState,
+  emitter: RunEmitter,
+  formatDiagnosticLine: (line: string) => string,
+): void {
   const logEvent = parseLogEvent(line);
   if (logEvent) {
     emitter.emit("log", logEvent);
@@ -64,16 +70,26 @@ function handleLine(line: string, state: StderrParserState, emitter: RunEmitter)
   }
 
   if (line.length > 0) {
-    emitter.emit("stderr_line", { line });
+    emitter.emit("stderr_line", { line: formatDiagnosticLine(line) });
   }
 }
 
+export type StderrParserOptions = {
+  /** Rewrite human-facing stderr (e.g. map generated `.sh` line numbers to `.jh` via `.jaiph.map`). */
+  sourceMapCache?: SourceMapCache;
+};
+
 /** Create a line handler that parses stderr lines and emits events through the emitter. */
-export function createStderrParser(emitter: RunEmitter): (line: string) => void {
+export function createStderrParser(emitter: RunEmitter, opts?: StderrParserOptions): (line: string) => void {
+  const cache = opts?.sourceMapCache;
+  const formatDiagnosticLine =
+    cache !== undefined
+      ? (ln: string) => rewriteJaiphDiagnosticsLine(ln, cache)
+      : (ln: string) => ln;
   const state: StderrParserState = {
     runtimeStack: [], legacyStack: [], legacyCounter: 0, rootStepId: null,
   };
-  return (line: string) => handleLine(line, state, emitter);
+  return (line: string) => handleLine(line, state, emitter, formatDiagnosticLine);
 }
 
 // ── Run state (shared output read by runWorkflow after exit) ──

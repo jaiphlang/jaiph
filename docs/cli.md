@@ -9,7 +9,11 @@ redirect_from:
 
 ## Overview
 
-Jaiph workflow sources (`.jh`) are programs: the CLI parses them, checks references, and transpiles them to bash that runs on your machine. At run time, generated bash sources **`jaiph_stdlib.sh`** and drives steps through Bash helpers; **prompt** steps and **managed step child processes** (each `run` / `ensure` target — workflows, rules, and emitted **`script`** executables) are spawned by a **bundled Node.js kernel** (`kernel/prompt.js`, `kernel/run-step-exec.js`). **File-backed inbox** operations (init, send, route registration, queue drain under each run’s **`inbox/`** directory) run through **`kernel/inbox.js`**, invoked from **`inbox.sh`**. **Progress and reporting events** (`__JAIPH_EVENT__` on stderr and **`run_summary.jsonl`** summary lines) are written through **`kernel/emit.js`** from `events.sh`, keeping CLI trees, **hooks**, and **`jaiph report`** aligned with the same JSON contracts. Together, the kernel keeps stdout/stderr capture, cwd, script isolation, exit codes, inbox artifacts, and event shapes consistent with the historical contract. Optional [Sandboxing](sandboxing.md) runs that generated bash inside Docker instead of directly on the host. The same `jaiph` executable drives compilation (`build`), execution (`run`), the native test runner (`test`), workspace scaffolding (`init`), reinstalling from a Git ref (`use`), and a read-only local UI over run logs (`report`). Language syntax and semantics are documented separately (for example [Grammar](grammar.md)); this page is the command-line contract.
+Jaiph workflow sources (`.jh`) are programs: the CLI parses them, checks references, and transpiles them to bash. **`jaiph run` / `jaiph test`** use a **TypeScript-owned launcher** (`workflow-launch`): after compile, the CLI resolves **`jaiph_stdlib.sh`** and **`runtime/`** next to the **`jaiph` binary** (see [Environment variables](#environment-variables)), then spawns a **detached bash** process whose inline wrapper **`source`s** the generated module and invokes **`workflow default`**. Signals and process groups are handled from the CLI so interrupts reach nested work. Generated bash plus **`jaiph_stdlib.sh`** implement step bookkeeping; **prompt** steps, **managed step child processes** (each `run` / `ensure` target — workflows, rules, and emitted **`script`** executables), **file-backed inbox** (`kernel/inbox.js`), and **stderr / `run_summary.jsonl` events** (`kernel/emit.js`) delegate to the **bundled JS kernel** under **`runtime/kernel/`** (the stdlib invokes it with **`node`**). There is **no separate bash-only orchestration entrypoint** for these commands — the same kernel-backed path is default. Optional [Sandboxing](sandboxing.md) runs that generated bash inside Docker instead of directly on the host.
+
+Each compiled module **`*.sh`** is accompanied by a **`*.jaiph.map`** file (JSON) mapping generated shell lines back to **`.jh`** sources. When bash prints **`path/file.sh:line`** (or **`path/file.sh: line line:`**) on stderr, the CLI **rewrites** those fragments to **`.jh` paths and lines** when a map is loadable, improving debuggability without changing event or artifact contracts.
+
+The same `jaiph` executable drives compilation (`build`), execution (`run`), the native test runner (`test`), workspace scaffolding (`init`), reinstalling from a Git ref (`use`), and a read-only local UI over run logs (`report`). Language syntax and semantics are documented separately (for example [Grammar](grammar.md)); this page is the command-line contract.
 
 **Typical tasks:**
 
@@ -58,6 +62,8 @@ If `path` is omitted, the current directory (`./`) is used. Without `--target`, 
 
 Scripts declared in workflow modules are emitted as **separate executable files** under `<target>/scripts/<name>` with `chmod +x`. Each script file starts with a shebang (custom or default `#!/usr/bin/env bash`) followed by the script body. The compiled module `.sh` invokes scripts via `"$JAIPH_SCRIPTS/<name>"`.
 
+For each emitted module shell script **`foo.sh`**, the build also writes **`foo.jaiph.map`** in the same directory (source map for CLI diagnostics). Commit or ignore maps according to your workflow; runs work without them, but **`.jh`**-anchored stderr rewriting is skipped when a map is missing.
+
 Examples:
 
 ```bash
@@ -76,6 +82,8 @@ jaiph run [--target <dir>] <file.jh> [--] [args...]
 ```
 
 Only the specified file and its transitive imports are compiled. Parse errors in sibling `.jh` files do not affect the run. Use `--target` to keep the compiled shell script in a specific directory (useful for debugging the transpiler output); without it, the compiled script is written to a temp directory and cleaned up after the run. Use `--` to separate Jaiph flags from workflow arguments (e.g. `jaiph run file.jh -- --verbose`).
+
+**Process model:** one **bash** child runs the generated module (sourcing **`jaiph_stdlib.sh`**); the CLI attaches to its stdout/stderr, parses **`__JAIPH_EVENT__`** JSON, and forwards other stderr lines (after **`.jaiph.map`** rewriting when applicable). **Kernel-heavy** work runs inside that bash world via **`node runtime/kernel/*.js`** as today.
 
 Examples:
 
