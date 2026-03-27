@@ -21,7 +21,7 @@ e2e::section "docker dockerfile detection — custom Dockerfile builds and runs"
 # Given: a .jaiph/Dockerfile that produces a minimal image with a marker file
 mkdir -p "${TEST_DIR}/.jaiph"
 cat > "${TEST_DIR}/.jaiph/Dockerfile" <<'DOCKERFILE'
-FROM ubuntu:24.04
+FROM node:20-bookworm
 RUN touch /jaiph-runtime-marker
 DOCKERFILE
 
@@ -61,9 +61,9 @@ workflow default {
 EOF
 
 # When: run with Docker enabled AND explicit image (should skip Dockerfile)
-JAIPH_DOCKER_ENABLED=true JAIPH_DOCKER_IMAGE=ubuntu:24.04 jaiph run "${TEST_DIR}/dockerfile_skip.jh" >/dev/null 2>&1
+JAIPH_DOCKER_ENABLED=true JAIPH_DOCKER_IMAGE=node:20-bookworm jaiph run "${TEST_DIR}/dockerfile_skip.jh" >/dev/null 2>&1
 
-# Then: the marker file should NOT exist (standard ubuntu image, not custom)
+# Then: the marker file should NOT exist (stock pulled image, not custom build)
 e2e::expect_run_file "dockerfile_skip.jh" "000002-dockerfile_skip__check_no_marker.out" "no marker"
 e2e::pass "docker: explicit image skips .jaiph/Dockerfile"
 
@@ -84,11 +84,11 @@ EOF
 # When: run with Docker enabled but no .jaiph/Dockerfile present
 JAIPH_DOCKER_ENABLED=true JAIPH_WORKSPACE="${fallback_dir}" jaiph run "${fallback_dir}/fallback.jh" >/dev/null 2>&1
 
-# Then: should use default ubuntu:24.04 and succeed
+# Then: should use default Node image (bash + node for JS kernel) and succeed
 fallback_run_dir="$(e2e::run_dir_at "${fallback_dir}/.jaiph/runs" "fallback.jh")"
 fallback_summary="${fallback_run_dir}run_summary.jsonl"
 e2e::assert_file_exists "${fallback_summary}" "docker: fallback run_summary.jsonl exists"
-e2e::pass "docker: falls back to ubuntu:24.04 without .jaiph/Dockerfile"
+e2e::pass "docker: falls back to default image without .jaiph/Dockerfile"
 
 e2e::section "docker dockerfile detection — env var forwarding"
 

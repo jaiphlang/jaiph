@@ -7,7 +7,7 @@ redirect_from:
 
 # Jaiph Grammar
 
-Jaiph source files (`.jh`) combine a small **orchestration** language with Bash inside **`script`** blocks. The compiler parses top-level declarations and structured steps in workflows and rules, validates references and bash fragments (where they still appear), then emits a Bash script that relies on the Jaiph stdlib for managed steps, agents, logging, and inbox routing. This page is the language reference: what you can write, what it means at runtime, and how it maps to generated shell.
+Jaiph source files (`.jh`) combine a small **orchestration** language with Bash inside **`script`** blocks. The compiler parses top-level declarations and structured steps in workflows and rules, validates references and bash fragments (where they still appear), then emits a Bash script that relies on the Jaiph stdlib for managed steps, agents, logging, and inbox routing. **Prompt** execution and **managed step subprocesses** (spawning workflow/rule/script children, wiring stdio to run artifacts) are implemented in a **Node.js kernel** invoked from that stdlib; orchestration and event streaming remain Bash-driven. This page is the language reference: what you can write, what it means at runtime, and how it maps to generated shell.
 
 **Scope:**
 
