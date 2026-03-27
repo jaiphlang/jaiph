@@ -1,6 +1,6 @@
 /**
- * File-backed inbox transport (init, send, register-route, drain). Delegates dispatch to Bash
- * workflow functions (same contract as former jaiph::inbox_* in inbox.sh).
+ * File-backed inbox transport (init, send, register-route, drain). Dispatches through the
+ * transpiled workflow module entrypoint (same contract as former jaiph::inbox_* in inbox.sh).
  */
 import { spawn, spawnSync, type ChildProcess, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { once } from "node:events";
@@ -8,10 +8,6 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { join, resolve } from "node:path";
 import { appendRunSummaryLine, formatUtcTimestamp } from "./emit";
 import { acquireLock, releaseLock } from "./fs-lock";
-
-function shellSingleQuote(s: string): string {
-  return `'${s.replace(/'/g, `'\\''`)}'`;
-}
 
 function inboxDir(): string {
   const d = process.env.JAIPH_INBOX_DIR;
@@ -223,22 +219,13 @@ function parseQueueEntry(entry: string): { channel: string; seqPadded: string; s
   return { channel, seqPadded, sender };
 }
 
-function bashDispatchArgv(
-  target: string,
-  content: string,
-  channel: string,
-  sender: string,
-): string[] {
+function runStepModulePath(): string {
   const mod = process.env.JAIPH_RUN_STEP_MODULE;
   if (!mod || !existsSync(mod)) {
     process.stderr.write("jaiph inbox: JAIPH_RUN_STEP_MODULE must name an existing workflow module\n");
     process.exit(1);
   }
-  const inner = `set -eo pipefail
-set +u
-source ${shellSingleQuote(mod)}
-${shellSingleQuote(target)} ${shellSingleQuote(content)} ${shellSingleQuote(channel)} ${shellSingleQuote(sender)}`;
-  return ["--noprofile", "--norc", "-c", inner, "_"];
+  return mod;
 }
 
 function dispatchEnv(channel: string, sender: string): NodeJS.ProcessEnv {
@@ -258,7 +245,7 @@ function runDispatchSequential(
 ): number {
   emitDispatchStart(seqPadded, channel, target, sender);
   const t0 = Date.now();
-  const r = spawnSync("bash", bashDispatchArgv(target, content, channel, sender), {
+  const r = spawnSync(runStepModulePath(), ["__jaiph_dispatch", target, content, channel, sender], {
     env: dispatchEnv(channel, sender),
     stdio: "inherit",
   });
@@ -276,7 +263,7 @@ function startDispatchParallel(
 ): ChildProcessWithoutNullStreams {
   emitDispatchStart(seqPadded, channel, target, sender);
   const t0 = Date.now();
-  const cp = spawn("bash", bashDispatchArgv(target, content, channel, sender), {
+  const cp = spawn(runStepModulePath(), ["__jaiph_dispatch", target, content, channel, sender], {
     env: dispatchEnv(channel, sender),
     stdio: "inherit",
   }) as ChildProcessWithoutNullStreams;

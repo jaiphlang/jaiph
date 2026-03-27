@@ -211,8 +211,9 @@ Those three Bash functions are thin wrappers around **`node "$JAIPH_INBOX_JS"`**
 (`kernel/inbox.js` next to the installed stdlib — the same path-resolution idea
 as **`JAIPH_EMIT_JS`**). The kernel mutates the run’s **`inbox/`** directory,
 appends **`INBOX_*`** lines to **`run_summary.jsonl`** when applicable, and
-(for each routed target) spawns **bash** to invoke the generated workflow
-function with the usual `$1` / `$2` / `$3` contract.
+(for each routed target) executes the generated workflow module directly in
+**`__jaiph_dispatch`** mode using `JAIPH_RUN_STEP_MODULE`, preserving the usual
+`$1` / `$2` / `$3` contract.
 
 ```
 1. jaiph::inbox_init creates/resets inbox state (directory, `.queue`, `.seq`, `.routes`).
