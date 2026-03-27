@@ -64,9 +64,9 @@ workflow review_task {
        source files and docs to verify.
     3. **Code philosophy** — The proposed approach follows codebase
        principles: plain functions with explicit arguments, flat control
-       flow, short files (<400 lines), no speculative abstractions, minimal
-       touch surface (≤3 files per feature). Flag tasks whose scope or
-       approach would violate these.
+       flow, short files (<400 lines where possible), no speculative 
+       abstractions, minimal touch surface (≤3 files per feature preferably).
+       Flag tasks whose scope or approach would violate these.
     4. **No conflicts** — Does not conflict with documented features
        or other queued tasks in QUEUE.md.
     5. **Feasibility** — Implementable with the current compiler/runtime
