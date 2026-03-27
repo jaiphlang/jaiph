@@ -6,82 +6,9 @@
  * - live — stdin = one JSON object (live __JAIPH_EVENT__ payload). Writes event line, then summary when applicable.
  * - summary-line — stdin = one complete summary JSON line (workflow / inbox / any caller-built line).
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmdirSync, unlinkSync, writeFileSync, writeSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, writeSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-
-function sleepMs(ms: number): void {
-  const end = Date.now() + ms;
-  while (Date.now() < end) {
-    /* busy wait — matches bash lock polling without shelling out */
-  }
-}
-
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (e: unknown) {
-    const err = e as NodeJS.ErrnoException;
-    if (err.code === "EPERM") return true;
-    return false;
-  }
-}
-
-function acquireLock(lockdir: string): boolean {
-  const timeoutRaw = process.env.JAIPH_LOCK_TIMEOUT_SECONDS ?? "30";
-  const timeoutS = /^\d+$/.test(timeoutRaw) ? parseInt(timeoutRaw, 10) : 30;
-  let sleepMsVal = 50;
-  const sleepRaw = process.env.JAIPH_LOCK_SLEEP_SECONDS;
-  if (sleepRaw !== undefined && sleepRaw !== "") {
-    const parsed = parseFloat(sleepRaw);
-    if (!Number.isNaN(parsed) && parsed >= 0) sleepMsVal = Math.round(parsed * 1000);
-  }
-  const started = Date.now();
-  while (true) {
-    try {
-      mkdirSync(lockdir);
-      writeFileSync(join(lockdir, "pid"), `${process.pid}\n`);
-      return true;
-    } catch {
-      const pidPath = join(lockdir, "pid");
-      if (existsSync(pidPath)) {
-        const ownerRaw = readFileSync(pidPath, "utf8").trim();
-        const owner = parseInt(ownerRaw, 10);
-        if (owner > 0 && !isProcessAlive(owner)) {
-          try {
-            unlinkSync(pidPath);
-          } catch {
-            /* ignore */
-          }
-          try {
-            rmdirSync(lockdir);
-          } catch {
-            /* ignore */
-          }
-          continue;
-        }
-      }
-      if (Date.now() - started >= timeoutS * 1000) {
-        process.stderr.write(`jaiph: lock timeout while waiting for ${lockdir}\n`);
-        return false;
-      }
-      sleepMs(sleepMsVal);
-    }
-  }
-}
-
-function releaseLock(lockdir: string): void {
-  try {
-    unlinkSync(join(lockdir, "pid"));
-  } catch {
-    /* ignore */
-  }
-  try {
-    rmdirSync(lockdir);
-  } catch {
-    /* ignore */
-  }
-}
+import { acquireLock, releaseLock } from "./fs-lock";
 
 /** UTC timestamp matching `date -u +"%Y-%m-%dT%H:%M:%SZ"` (no milliseconds). */
 export function formatUtcTimestamp(): string {
@@ -97,9 +24,7 @@ export function appendRunSummaryLine(line: string): void {
   const parallel = process.env.JAIPH_INBOX_PARALLEL === "true";
   const lockPath = `${file}.lock`;
   if (parallel) {
-    if (!acquireLock(lockPath)) {
-      process.exit(1);
-    }
+    if (!acquireLock(lockPath)) process.exit(1);
   }
   try {
     appendFileSync(file, `${line}\n`, { flag: "a" });

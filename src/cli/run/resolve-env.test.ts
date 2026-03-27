@@ -73,7 +73,9 @@ test("resolveRuntimeEnv: marks env-provided keys as locked", () => {
 
 test("resolveRuntimeEnv: cleans transient keys", () => {
   const saved = process.env.JAIPH_RUN_DIR;
+  const savedModule = process.env.JAIPH_RUN_STEP_MODULE;
   process.env.JAIPH_RUN_DIR = "/old/run";
+  process.env.JAIPH_RUN_STEP_MODULE = "/stale/module.sh";
   try {
     const config: JaiphConfig = {};
     const env = resolveRuntimeEnv(config, "/ws", "/ws/main.sh");
@@ -81,11 +83,17 @@ test("resolveRuntimeEnv: cleans transient keys", () => {
     assert.equal(env.BASH_ENV, undefined);
     assert.equal(env.JAIPH_PRECEDING_FILES, undefined);
     assert.equal(env.JAIPH_RUN_SUMMARY_FILE, undefined);
+    assert.equal(env.JAIPH_RUN_STEP_MODULE, undefined);
   } finally {
     if (saved !== undefined) {
       process.env.JAIPH_RUN_DIR = saved;
     } else {
       delete process.env.JAIPH_RUN_DIR;
+    }
+    if (savedModule !== undefined) {
+      process.env.JAIPH_RUN_STEP_MODULE = savedModule;
+    } else {
+      delete process.env.JAIPH_RUN_STEP_MODULE;
     }
   }
 });

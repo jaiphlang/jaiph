@@ -6,40 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## JS runtime migration (part 4): channels/inbox + hooks wiring <!-- dev-ready -->
-
-**Goal**  
-Port inter-step communication and hook wiring while preserving user-visible behavior.
-
-**Standalone context (read this task in isolation)**
-
-- This task migrates communication plumbing, not language semantics.
-- Channel/inbox transport must remain file-backed under `.jaiph/runs` (no in-memory-only rewrite).
-- Hook triggering source remains CLI; payload contracts must stay unchanged.
-- Non-negotiable contracts in this part:
-  1. User-visible channel send/route/drain behavior remains equivalent.
-  2. Hook invocation timing/payload format remain compatible.
-  3. `INBOX_*` and related reporting semantics remain compatible for existing tooling.
-
-**Out of scope (for this part)**
-
-- Prompt backend logic changes.
-- Core workflow execution redesign unrelated to channels/hooks.
-- Standalone binary packaging/docs.
-
-**Scope**
-
-1. Port channel/inbox init, send, route registration, and queue drain using file-backed transport under `.jaiph/runs`.
-2. Keep hooks triggered from CLI with unchanged payload contract.
-3. Preserve ordering and delivery semantics from the user perspective.
-
-**Acceptance criteria**
-
-- Channel and hook e2e scenarios behave equivalently to current runtime.
-- No regression in file-based channel artifacts.
-
----
-
 ## JS runtime migration (part 5): `jaiph test` semantics on JS kernel <!-- dev-ready -->
 
 **Goal**  

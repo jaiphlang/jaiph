@@ -14,10 +14,13 @@ produces a result, another stage should run only after that result exists.
 You could glue stages together with temporary files and shell glue, but
 that is easy to get wrong (races, stale paths, unclear ownership).
 
-Jaiph instead offers a first-class **inbox**: an in-process channel between
-workflows. One workflow **sends** a message (`<-`); another is **dispatched**
-when that message is processed (`->`). The runtime owns routing and ordering;
-there are no file watchers, no polling, and no external brokers.
+Jaiph instead offers a first-class **inbox**: a logical channel between
+workflows (no external message broker). One workflow **sends** a message (`<-`);
+another is **dispatched** when the orchestrator drains the queue (`->`). The
+runtime owns routing and ordering. Implementation-wise, the queue, sequence
+counter, route table, and message bodies live **under the current run directory**
+on disk so sends survive subshell boundaries; there are still no directory
+watchers, no polling loops waiting on the filesystem, and no third-party brokers.
 
 ## At a glance
 
@@ -54,13 +57,15 @@ receives `$1=message`, `$2=channel`, `$3=sender` (see [Trigger contract](#trigge
 
 ## Design principles
 
-- **Inbox is an event bus, not a filesystem watcher.** The runtime owns
-  dispatch in memory — no `inotifywait`, no `fswatch`, no polling.
+- **Inbox is an event bus, not a filesystem watcher.** Delivery is driven by
+  explicit **drain** at the end of the orchestrator workflow — no `inotifywait`,
+  no `fswatch`, no polling for new files.
 - **Sequential by default, parallel opt-in.** Dispatch is sequential
   unless `run.inbox_parallel = true` or `JAIPH_INBOX_PARALLEL=true` (see
   [Parallel dispatch](#parallel-dispatch) below).
-- **Inbox is transient per run.** The inbox directory is retained for
-  debugging but is not the dispatch mechanism.
+- **Inbox is scoped per run.** Message files and queue state live under that
+  run’s **`inbox/`** directory for ordering, audit, and tooling; they are not
+  a separate productized mailbox outside `.jaiph/runs`.
 
 ## Syntax
 
@@ -202,16 +207,23 @@ at the top of that workflow's implementation, and `jaiph::drain_queue` at
 the end. Any child workflow called via `run` (or via dispatch) inherits
 the inbox environment and can call `jaiph::send`.
 
+Those three Bash functions are thin wrappers around **`node "$JAIPH_INBOX_JS"`**
+(`kernel/inbox.js` next to the installed stdlib — the same path-resolution idea
+as **`JAIPH_EMIT_JS`**). The kernel mutates the run’s **`inbox/`** directory,
+appends **`INBOX_*`** lines to **`run_summary.jsonl`** when applicable, and
+(for each routed target) spawns **bash** to invoke the generated workflow
+function with the usual `$1` / `$2` / `$3` contract.
+
 ```
-1. jaiph::inbox_init creates the inbox directory and resets state.
-2. jaiph::register_route populates the routing table.
+1. jaiph::inbox_init creates/resets inbox state (directory, `.queue`, `.seq`, `.routes`).
+2. jaiph::register_route merges targets into the persisted route map.
 3. Execute the workflow steps top-to-bottom.
-4. When <- is executed: write message to inbox dir, append to queue file.
-5. After all steps complete, jaiph::drain_queue processes the queue in a loop:
+4. When <- is executed: jaiph::send delegates to the kernel — message file, queue line, enqueue summary event.
+5. After all steps complete, jaiph::drain_queue runs the kernel drain loop:
    a. Read all lines from the current cursor through the end of `.queue` into memory (a snapshot); if there are none, stop.
    b. Walk each line (and bump the shared cursor / depth counter per line). Resolve the channel, load the message body from `NNN-<channel>.txt`, look up the route.
    c. If there is no route, skip that line (message file remains on disk).
-   d. If there is a route, invoke each target with $1=message, $2=channel, $3=sender — **sequentially** in target-list order by default, or **all targets for all lines in the snapshot as background jobs, then one shared wait** when `JAIPH_INBOX_PARALLEL=true` (see [Ordering guarantees](#ordering-guarantees)).
+   d. If there is a route, invoke each target with $1=message, $2=channel, $3=sender — **sequentially** in target-list order by default, or **all targets for all lines in the snapshot as concurrent child processes, then one shared wait** when `JAIPH_INBOX_PARALLEL=true` (see [Ordering guarantees](#ordering-guarantees)).
    e. Targets may call jaiph::send, appending new lines after the cursor; the next outer-loop iteration reads them.
    f. Repeat from (a) until a read finds no new lines, or until the dispatch depth limit is exceeded (`E_DISPATCH_DEPTH`).
 6. Run ends.
@@ -219,9 +231,10 @@ the inbox environment and can call `jaiph::send`.
 
 ### Implementation notes
 
-Routes are stored as a newline-delimited list (`channel<TAB>targets`) instead
-of bash associative arrays, avoiding known bugs in bash 3.2 where reading a
-non-existent key can return the last inserted value.
+Routes are persisted in **`inbox/.routes`**: one line per channel,
+`channel<TAB>targets` (space-separated workflow symbols), merged in source
+order as `jaiph::register_route` runs — the same tab-delimited shape the Bash
+runtime used before the kernel port, kept as a file instead of a shell variable.
 
 The dispatch queue (`inbox/.queue`) uses `channel:NNN:sender` entries
 (e.g. `findings:001:researcher`). The sequence counter (`inbox/.seq`)
@@ -234,8 +247,8 @@ parent process.
 
 When `run.inbox_parallel = true` is set in a `config` block (module or
 workflow scope) or the environment sets `JAIPH_INBOX_PARALLEL=true`, route
-targets are launched as concurrent background jobs instead of one-at-a-time
-calls.
+targets are launched as concurrent processes (Node **`spawn`**) instead of
+strictly one-at-a-time calls.
 
 **Precedence** matches the rest of Jaiph agent/run settings: an explicit
 environment value wins over in-file config. See [Configuration — Defaults and precedence](configuration.md#defaults-and-precedence).
@@ -260,7 +273,7 @@ that snapshot, then repeats if new lines were appended while dispatch ran.
 - **Sequential mode:** within that snapshot, lines are handled **FIFO**; for
   each line, route targets run **in list order**.
 - **Parallel mode:** for **all lines in that snapshot**, **every** routed
-  target is started as a background job before the runtime waits on them.
+  target is started before the runtime waits on all of them together.
   Order of execution is therefore **non-deterministic** across targets and
   across messages in the same snapshot — only the iteration boundaries
   (finish one snapshot, then read what was appended next) preserve coarse
@@ -277,17 +290,17 @@ shared-state files:
 
 | Lock target | Protects | When held |
 |---|---|---|
-| `inbox/.seq.lock` | Inbox sequence counter + queue append | During `jaiph::send` |
+| `inbox/.seq.lock` | Inbox sequence counter + queue append | During inbox **send** (kernel), when parallel mode is on |
 | `.seq.lock` (run dir) | Step sequence counter | During `jaiph::next_step_id` |
-| `run_summary.jsonl.lock` | Any append to `run_summary.jsonl` | During each summary line write (all event types) |
+| `run_summary.jsonl.lock` | Any append to `run_summary.jsonl` | During each summary line write (all event types, including **`INBOX_*`**) |
 
-Locks use `mkdir` (atomic on POSIX). They are only acquired when
-`JAIPH_INBOX_PARALLEL=true`; sequential mode has zero lock overhead.
+Locks use `mkdir` (atomic on POSIX). The inbox send lock is only acquired when
+`JAIPH_INBOX_PARALLEL=true`; sequential inbox mode has no send-lock overhead.
 
 ### Failure propagation
 
-If any background target exits non-zero, `drain_queue` waits for all
-other background jobs from the **same parallel snapshot** to finish,
+If any parallel target exits non-zero, `drain_queue` waits for all
+other concurrent dispatches from the **same parallel snapshot** to finish,
 then exits with status 1. The owning workflow still fails when any
 dispatched target fails; only the moment of exit differs from strict
 sequential fail-fast.
