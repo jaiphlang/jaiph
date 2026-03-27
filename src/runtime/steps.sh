@@ -142,7 +142,9 @@ jaiph::next_step_id() {
   local seq_file="${JAIPH_RUN_DIR:+${JAIPH_RUN_DIR}/.seq}"
   local _locked=0
   if [[ "${JAIPH_INBOX_PARALLEL:-}" == "true" && -n "$seq_file" ]]; then
-    jaiph::_lock "${seq_file}.lock"
+    if ! jaiph::_lock "${seq_file}.lock"; then
+      return 1
+    fi
     _locked=1
   fi
   if [[ -n "$seq_file" && -f "$seq_file" ]]; then

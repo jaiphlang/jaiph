@@ -20,11 +20,40 @@ jaiph__die() {
 # Used by inbox parallel dispatch to protect shared state files.
 jaiph::_lock() {
   local lockdir="$1"
-  while ! mkdir "$lockdir" 2>/dev/null; do :; done
+  local timeout_s="${JAIPH_LOCK_TIMEOUT_SECONDS:-30}"
+  local sleep_s="${JAIPH_LOCK_SLEEP_SECONDS:-0.05}"
+  case "$timeout_s" in
+    ''|*[!0-9]*) timeout_s=30 ;;
+  esac
+  if [[ -z "$sleep_s" ]]; then
+    sleep_s="0.05"
+  fi
+  local started_at="$SECONDS"
+  while ! mkdir "$lockdir" 2>/dev/null; do
+    # If owner pid is known and no longer alive, clear stale lock.
+    if [[ -f "${lockdir}/pid" ]]; then
+      local owner_pid
+      owner_pid="$(<"${lockdir}/pid")"
+      if [[ -n "$owner_pid" ]] && ! kill -0 "$owner_pid" 2>/dev/null; then
+        rm -f "${lockdir}/pid" 2>/dev/null || true
+        rmdir "$lockdir" 2>/dev/null || true
+        continue
+      fi
+    fi
+    if (( SECONDS - started_at >= timeout_s )); then
+      echo "jaiph: lock timeout while waiting for ${lockdir}" >&2
+      return 1
+    fi
+    sleep "$sleep_s"
+  done
+  printf '%s\n' "$$" > "${lockdir}/pid" 2>/dev/null || true
+  return 0
 }
 
 jaiph::_unlock() {
-  rmdir "$1" 2>/dev/null || true
+  local lockdir="$1"
+  rm -f "${lockdir}/pid" 2>/dev/null || true
+  rmdir "$lockdir" 2>/dev/null || true
 }
 
 jaiph__expect_contain() {
