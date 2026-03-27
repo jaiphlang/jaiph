@@ -244,8 +244,26 @@ export function emitTest(
   out.push("  return 0");
   out.push("}");
   out.push("");
-  // When this file is sourced as JAIPH_RUN_STEP_MODULE (JS run-step child bash), do not
-  // re-enter the test harness — only run tests when executed as the main script.
+  // Support JS kernel dispatch into this module when JAIPH_RUN_STEP_MODULE points at the
+  // test runner itself (e.g. test workflow/rule execution through run-step-exec).
+  out.push('if [[ "${1:-}" == "__jaiph_dispatch" ]]; then');
+  out.push("  shift");
+  out.push('  __jaiph_target="${1:-}"');
+  out.push("  shift");
+  out.push('  if [[ -z "$__jaiph_target" ]]; then');
+  out.push('    echo "jaiph inbox: missing dispatch target" >&2');
+  out.push("    exit 1");
+  out.push("  fi");
+  out.push('  if ! declare -F "$__jaiph_target" >/dev/null; then');
+  out.push('    echo "jaiph inbox: unknown dispatch target: $__jaiph_target" >&2');
+  out.push("    exit 1");
+  out.push("  fi");
+  out.push('  "$__jaiph_target" "$@"');
+  out.push("  exit $?");
+  out.push("fi");
+  out.push("");
+  // When this file is sourced as JAIPH_RUN_STEP_MODULE, do not re-enter the test harness —
+  // only run tests when executed as the main script.
   out.push('if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then');
   out.push("  jaiph__run_tests");
   out.push("fi");

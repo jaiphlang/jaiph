@@ -120,16 +120,16 @@ Host paths are resolved relative to the workspace root when building `docker run
             ...
 ```
 
-- **`/jaiph/generated/`** — Contains `jaiph_stdlib.sh`, the primary generated workflow script, and the `runtime/` copies listed above. If the build produced additional `.sh` files (for example imports), those are copied into the same tree under `generated/` so the entry script’s `source` paths keep working. Everything under `generated/` is mounted read-only. `JAIPH_STDLIB` is set to `/jaiph/generated/jaiph_stdlib.sh` inside the container.
+- **`/jaiph/generated/`** — Contains `jaiph_stdlib.sh`, the primary generated workflow script, and the `runtime/` copies listed above. If the build produced additional `.sh` files (for example imports), those are copied into the same tree under `generated/` so module `source` paths keep working. Everything under `generated/` is mounted read-only. `JAIPH_STDLIB` is set to `/jaiph/generated/jaiph_stdlib.sh` inside the container.
 - **Working directory** — `/jaiph/workspace`.
 - **What is not shipped as Jaiph sources** — The container is meant to run with transpiled Bash and shell runtime only; no `.jh` sources, TypeScript, or host Node install are required for that layout.
 
-The CLI also mounts the host directory containing the run meta file read-write at the same path inside the container so the wrapper can record exit status and paths.
+The CLI also mounts the host directory containing the run meta file read-write at the same path inside the container so the workflow module entrypoint can record exit status and paths (`JAIPH_META_FILE`).
 
 ### Docker behavior
 
 - `docker run --rm` with UID/GID mapping (`--user $(id -u):$(id -g)`) on Linux when `id` succeeds; other platforms omit `--user` if mapping is not applied.
-- **Structured events** — The run wrapper duplicates stderr to fd 3 (`exec 3>&2`); step events are written to that fd so they land on stderr in normal runs. With `docker run -t`, Docker typically merges the container’s stderr into the stdout stream the CLI reads. The CLI then line-buffers stdout in Docker mode, treats lines that parse as `__JAIPH_EVENT__` JSON as events, and prints the rest as user-facing output. Without a TTY, events and user output follow the usual stdout/stderr split from the container. Interleaving and timing can still differ from a non-Docker run when a TTY is attached — that is a known limitation.
+- **Structured events** — The generated module entrypoint duplicates stderr to fd 3 (`exec 3>&2`); step events are written to that fd so they land on stderr in normal runs. With `docker run -t`, Docker typically merges the container’s stderr into the stdout stream the CLI reads. The CLI then line-buffers stdout in Docker mode, treats lines that parse as `__JAIPH_EVENT__` JSON as events, and prints the rest as user-facing output. Without a TTY, events and user output follow the usual stdout/stderr split from the container. Interleaving and timing can still differ from a non-Docker run when a TTY is attached — that is a known limitation.
 - **`STEP_END` and step logs** — The shell runtime embeds `out_content` in every `STEP_END` event and `err_content` when the step failed, so consumers do not need host paths to step `.out`/`.err` files (critical in Docker). Payloads are JSON-escaped (`jaiph::json_escape` in `events.sh`) per RFC 8259 for control characters through `U+001F` plus `\` and `"`. Embedded content is capped at 1 MiB; larger output is truncated with a `[truncated]` marker while full logs remain in `out_file` / `err_file` under the run directory. After a run, failure summaries prefer embedded fields when present and may fall back to reading files for older summaries that predate embedding.
 - Docker missing — `E_DOCKER_NOT_FOUND` (no silent fallback).
 - Image — If not present locally, `docker pull` is attempted; pull failure → `E_DOCKER_PULL`.

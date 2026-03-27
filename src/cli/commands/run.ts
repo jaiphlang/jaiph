@@ -24,7 +24,6 @@ import type { SourceMapCache } from "../shared/jaiph-source-map";
 import { parseArgs } from "../shared/usage";
 import { parseLogEvent, parseStepEvent } from "../run/events";
 import {
-  buildRunWrapperCommand,
   spawnRunProcess,
   setupRunSignalHandlers,
   waitForRunExit,
@@ -204,7 +203,6 @@ function spawnExec(
   runArgs: string[],
   isTTY: boolean,
 ): { execResult: ReturnType<typeof spawnRunProcess>; dockerResult: ReturnType<typeof spawnDockerProcess> | undefined; dockerConfig: ReturnType<typeof resolveDockerConfig> } {
-  const wrapperCommand = buildRunWrapperCommand();
   const dockerConfig = resolveDockerConfig(mod.metadata?.runtime, runtimeEnv);
   let dockerResult: ReturnType<typeof spawnDockerProcess> | undefined;
   let execResult;
@@ -217,9 +215,7 @@ function spawnExec(
       stdlibPath,
       buildOutDir: outDir,
       workspaceRoot,
-      wrapperCommand,
       metaFile,
-      workflowSymbol,
       runArgs,
       env: runtimeEnv,
       isTTY,

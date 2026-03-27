@@ -6,11 +6,12 @@ import { spawnSync } from "node:child_process";
 import { closeSync, existsSync, fstatSync, openSync, writeFileSync } from "node:fs";
 
 const MAX_BUFFER = 256 * 1024 * 1024;
+const MAX_DISPATCH_DEPTH = 200;
 
 /**
- * Node only wires stdio 0–2 unless we extend the array. Nested workflow/rule bash must keep the
+ * Node only wires stdio 0–2 unless we extend the array. Nested managed-step children must keep the
  * same __JAIPH_EVENT__ fd as the parent (see jaiph::event_fd: 3 when open, else 2). Without passing
- * it through, nested bash falls back to stderr — redirected here to step .err files — so events
+ * it through, child events fall back to stderr — redirected here to step .err files — so events
  * only reach the CLI when the step ends.
  *
  * We read the fd number from the parent shell (env) and refuse to duplicate if it equals an
@@ -34,10 +35,6 @@ function stdioWithJaiphEventFd(
   }
   io.push(fd);
   return io;
-}
-
-function shellSingleQuote(s: string): string {
-  return `'${s.replace(/'/g, `'\\''`)}'`;
 }
 
 function isolatedScriptEnv(): NodeJS.ProcessEnv {
@@ -89,22 +86,30 @@ function runScriptTee(exe: string, args: string[], outPath: string, errPath: str
   return r.status ?? 1;
 }
 
-function runBashSourcedCommand(cmdArgs: string[], outPath: string, errPath: string, useTee: boolean): number {
+function runModuleDispatchCommand(cmdArgs: string[], outPath: string, errPath: string, useTee: boolean): number {
   const mod = process.env.JAIPH_RUN_STEP_MODULE;
   if (!mod || !existsSync(mod)) {
     process.stderr.write("jaiph run-step-exec: JAIPH_RUN_STEP_MODULE must name an existing workflow module\n");
     return 1;
   }
-  const inner = `set -eo pipefail
-set +u
-source ${shellSingleQuote(mod)}
-"$@"`;
-  const argv = ["--noprofile", "--norc", "-c", inner, "_", ...cmdArgs];
+  const rawDepth = process.env.JAIPH_RUN_STEP_DISPATCH_DEPTH;
+  const depth = rawDepth && /^\d+$/.test(rawDepth) ? parseInt(rawDepth, 10) : 0;
+  if (depth >= MAX_DISPATCH_DEPTH) {
+    process.stderr.write(
+      `jaiph run-step-exec: dispatch depth exceeded ${MAX_DISPATCH_DEPTH} (possible recursive module dispatch)\n`,
+    );
+    return 1;
+  }
+  const childEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    JAIPH_RUN_STEP_DISPATCH_DEPTH: String(depth + 1),
+  };
+  const argv = ["__jaiph_dispatch", ...cmdArgs];
   if (useTee) {
     const errFd = openSync(errPath, "w");
-    const r = spawnSync("bash", argv, {
+    const r = spawnSync(mod, argv, {
       stdio: stdioWithJaiphEventFd("inherit", "pipe", errFd),
-      env: process.env,
+      env: childEnv,
       cwd: process.cwd(),
       maxBuffer: MAX_BUFFER,
     });
@@ -120,9 +125,9 @@ source ${shellSingleQuote(mod)}
   }
   const outFd = openSync(outPath, "w");
   const errFd = openSync(errPath, "w");
-  const r = spawnSync("bash", argv, {
+  const r = spawnSync(mod, argv, {
     stdio: stdioWithJaiphEventFd("inherit", outFd, errFd),
-    env: process.env,
+    env: childEnv,
     cwd: process.cwd(),
     maxBuffer: MAX_BUFFER,
   });
@@ -161,7 +166,7 @@ function main(): number {
     return useTee ? runScriptTee(exe, args, outTmp, errTmp) : runScriptCapture(exe, args, outTmp, errTmp);
   }
   if (stepKind === "workflow" || stepKind === "rule") {
-    return runBashSourcedCommand(cmdArgs, outTmp, errTmp, useTee);
+    return runModuleDispatchCommand(cmdArgs, outTmp, errTmp, useTee);
   }
 
   process.stderr.write(`jaiph run-step-exec: unsupported step_kind ${stepKind}\n`);

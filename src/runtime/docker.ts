@@ -298,9 +298,7 @@ export interface DockerSpawnOptions {
   /** When set, all *.sh under this dir are copied into generated (for workflows with imports). */
   buildOutDir?: string;
   workspaceRoot: string;
-  wrapperCommand: string;
   metaFile: string;
-  workflowSymbol: string;
   runArgs: string[];
   env: Record<string, string | undefined>;
   isTTY: boolean;
@@ -385,6 +383,7 @@ export function buildDockerArgs(opts: DockerSpawnOptions, generatedDir: string):
   // Environment variables — remap workspace-related paths for the container
   const containerEnv = remapDockerEnv(opts.env, opts.workspaceRoot);
   args.push("-e", `JAIPH_STDLIB=/jaiph/generated/jaiph_stdlib.sh`);
+  args.push("-e", `JAIPH_META_FILE=${opts.metaFile}`);
 
   // Forward JAIPH_* env vars (except JAIPH_STDLIB which we override)
   for (const [key, value] of Object.entries(containerEnv)) {
@@ -407,13 +406,12 @@ export function buildDockerArgs(opts: DockerSpawnOptions, generatedDir: string):
   // Image
   args.push(opts.config.image);
 
-  // Command: bash -c <wrapper> jaiph-run <meta> <script> <symbol> [args...]
+  // Command: execute transpiled workflow module directly.
   const scriptName = basename(opts.builtScriptPath);
   args.push(
-    "bash", "-c", opts.wrapperCommand, "jaiph-run",
-    opts.metaFile,
     `/jaiph/generated/${scriptName}`,
-    opts.workflowSymbol,
+    "__jaiph_workflow",
+    "default",
     ...opts.runArgs,
   );
 
