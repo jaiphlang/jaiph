@@ -27,6 +27,24 @@ export type EmittedModule = {
   sourceLineMap?: JaiphSourceLineMapEntry[];
 };
 
+function hasManagedAsyncRun(steps: jaiphModule["workflows"][number]["steps"]): boolean {
+  for (const step of steps) {
+    if (step.type === "run" && step.args && /&\s*$/.test(step.args.trim()) && !step.captureName) {
+      return true;
+    }
+    if (step.type === "if") {
+      if (hasManagedAsyncRun(step.thenSteps)) return true;
+      if (step.elseSteps && hasManagedAsyncRun(step.elseSteps)) return true;
+      if (step.elseIfBranches) {
+        for (const br of step.elseIfBranches) {
+          if (hasManagedAsyncRun(br.thenSteps)) return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
 export function emitWorkflow(
   ast: jaiphModule,
   workflowSymbol: string,
@@ -159,6 +177,7 @@ export function emitWorkflow(
       workflowName: workflow.name,
       inRecoverBlock: false,
       recordSourceLine,
+      managedAsyncTracking: hasManagedAsyncRun(workflow.steps),
     };
 
     const wfMetaAssignments = workflow.metadata ? metadataToAssignments(workflow.metadata) : [];
@@ -179,6 +198,9 @@ export function emitWorkflow(
     out.push(`${wfSymbol}::impl() {`);
     out.push("  set -eo pipefail");
     out.push("  set +u");
+    if (ctx.managedAsyncTracking) {
+      out.push("  local -a _jaiph_async_run_pids=()");
+    }
     emitEnvShims("  ");
     out.push(
       `  jaiph::emit_workflow_summary_event WORKFLOW_START '${bashSingleQuotedSegment(workflow.name)}'`,

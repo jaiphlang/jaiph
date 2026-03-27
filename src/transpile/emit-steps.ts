@@ -22,6 +22,8 @@ export type StepEmitCtx = {
   failExitsProcess?: boolean;
   /** When set, records the next emitted bash line as originating from the given `.jh` location. */
   recordSourceLine?: (bashLine: number, loc: SourceLoc) => void;
+  /** True when workflow emits managed async run tracking and wait status propagation. */
+  managedAsyncTracking?: boolean;
 };
 
 /** Primary source location for a workflow/rule step (for `.jaiph.map` diagnostics). */
@@ -245,9 +247,25 @@ export function emitWaitStep(
   out: string[],
   indent: string,
   _step: Extract<WorkflowStepDef, { type: "wait" }>,
-  _ctx: StepEmitCtx,
+  ctx: StepEmitCtx,
 ): void {
-  out.push(`${indent}wait`);
+  if (!ctx.managedAsyncTracking) {
+    out.push(`${indent}wait`);
+    return;
+  }
+  out.push(`${indent}if [[ "\${#_jaiph_async_run_pids[@]}" -eq 0 ]]; then`);
+  out.push(`${indent}  wait`);
+  out.push(`${indent}else`);
+  out.push(`${indent}  local _jaiph_wait_status=0`);
+  out.push(`${indent}  local _jaiph_pid`);
+  out.push(`${indent}  for _jaiph_pid in "\${_jaiph_async_run_pids[@]}"; do`);
+  out.push(`${indent}    if ! wait "$_jaiph_pid"; then _jaiph_wait_status=1; fi`);
+  out.push(`${indent}  done`);
+  out.push(`${indent}  # Reap any non-managed background jobs started by raw shell steps.`);
+  out.push(`${indent}  if ! wait; then _jaiph_wait_status=1; fi`);
+  out.push(`${indent}  _jaiph_async_run_pids=()`);
+  out.push(`${indent}  if [[ "$_jaiph_wait_status" -ne 0 ]]; then return 1; fi`);
+  out.push(`${indent}fi`);
 }
 
 export function emitShellStep(
@@ -273,12 +291,30 @@ export function emitRunStep(
   ctx: StepEmitCtx,
 ): void {
   const defaultArgs = ctx.inRecoverBlock ? ' "$@"' : "";
-  const args = step.args ? ` ${step.args}` : defaultArgs;
-  const paramKeys = step.args ? parseParamKeysFromArgs(step.args) : null;
+  let args = defaultArgs;
+  let isAsync = false;
+  let paramSource = "";
+  if (step.args) {
+    const trimmed = step.args.trim();
+    if (!step.captureName && /&\s*$/.test(trimmed)) {
+      isAsync = true;
+      paramSource = trimmed.replace(/&\s*$/, "").trimEnd();
+      args = paramSource.length > 0 ? ` ${paramSource}` : "";
+    } else {
+      args = ` ${trimmed}`;
+      paramSource = trimmed;
+    }
+  }
+  const paramKeys = paramSource ? parseParamKeysFromArgs(paramSource) : null;
   if (paramKeys != null && paramKeys.length > 0) {
     out.push(`${indent}export JAIPH_STEP_PARAM_KEYS='${paramKeys.join(",")}'`);
   }
   const callExpr = emitRunTargetInvocation(step.workflow, ctx, args);
+  if (isAsync && ctx.managedAsyncTracking) {
+    out.push(`${indent}${callExpr} &`);
+    out.push(`${indent}_jaiph_async_run_pids+=($!)`);
+    return;
+  }
   if (step.captureName) {
     emitReturnValueCapture(out, indent, step.captureName, callExpr);
   } else {
