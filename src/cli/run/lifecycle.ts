@@ -1,6 +1,5 @@
 import { ChildProcess } from "node:child_process";
 
-export { buildRunWrapperCommand } from "../../runtime/kernel/workflow-launch";
 import { spawnJaiphWorkflowProcess } from "../../runtime/kernel/workflow-launch";
 
 export function spawnRunProcess(

@@ -243,6 +243,62 @@ export function emitWorkflow(
     out.push("");
   }
 
+  out.push('if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then');
+  out.push("  __jaiph_status=0");
+  out.push("  __jaiph_write_meta() {");
+  out.push('    local status_value="$1"');
+  out.push('    if [[ -n "${JAIPH_META_FILE:-}" ]]; then');
+  out.push('      printf "status=%s\\n" "$status_value" > "$JAIPH_META_FILE"');
+  out.push('      printf "run_dir=%s\\n" "${JAIPH_RUN_DIR:-}" >> "$JAIPH_META_FILE"');
+  out.push('      printf "summary_file=%s\\n" "${JAIPH_RUN_SUMMARY_FILE:-}" >> "$JAIPH_META_FILE"');
+  out.push("    fi");
+  out.push("  }");
+  out.push('  trap \'__jaiph_status=$?; __jaiph_write_meta "$__jaiph_status"\' EXIT');
+  out.push('  if [[ "${JAIPH_DEBUG:-}" == "true" ]]; then');
+  out.push("    set -x");
+  out.push("  fi");
+  out.push('  __jaiph_mode="${1:-__jaiph_workflow}"');
+  out.push("  case \"$__jaiph_mode\" in");
+  out.push("    __jaiph_dispatch)");
+  out.push("      shift");
+  out.push('      __jaiph_target="${1:-}"');
+  out.push("      shift");
+  out.push('      if [[ -z "$__jaiph_target" ]]; then');
+  out.push('        echo "jaiph inbox: missing dispatch target" >&2');
+  out.push("        exit 1");
+  out.push("      fi");
+  out.push('      if ! declare -F "$__jaiph_target" >/dev/null; then');
+  out.push('        echo "jaiph inbox: unknown dispatch target: $__jaiph_target" >&2');
+  out.push("        exit 1");
+  out.push("      fi");
+  out.push('      "$__jaiph_target" "$@"');
+  out.push("      ;;");
+  out.push("    __jaiph_workflow)");
+  out.push("      shift");
+  out.push('      __jaiph_workflow_name="${1:-default}"');
+  out.push("      shift");
+  out.push(`      __jaiph_entrypoint="${workflowSymbol}::\$__jaiph_workflow_name"`);
+  out.push('      if ! declare -F "$__jaiph_entrypoint" >/dev/null; then');
+  out.push('        if [[ "$__jaiph_workflow_name" == "default" ]]; then');
+  out.push('          echo "jaiph run requires workflow \'default\' in the input file" >&2');
+  out.push("        else");
+  out.push('          echo "jaiph run requires workflow \'$__jaiph_workflow_name\' in the input file" >&2');
+  out.push("        fi");
+  out.push("        exit 1");
+  out.push("      fi");
+  out.push('      "$__jaiph_entrypoint" "$@"');
+  out.push("      ;;");
+  out.push("    *)");
+  out.push(`      __jaiph_entrypoint="${workflowSymbol}::default"`);
+  out.push('      if ! declare -F "$__jaiph_entrypoint" >/dev/null; then');
+  out.push('        echo "jaiph run requires workflow \'default\' in the input file" >&2');
+  out.push("        exit 1");
+  out.push("      fi");
+  out.push('      "$__jaiph_entrypoint" "$@"');
+  out.push("      ;;");
+  out.push("  esac");
+  out.push("fi");
+
   const scripts = buildScriptFiles(ast, importedWorkflowSymbols, workflowSymbol);
   return {
     module: out.join("\n").trimEnd(),

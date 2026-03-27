@@ -6,33 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Runtime migration B: remove Bash invocation paths from workflow/step execution <!-- dev-ready -->
-
-**Goal**  
-After JS contracts are in place, remove Bash-based launch/execution paths from runtime workflow/step execution.
-
-**Runtime execution rule**
-
-- `script` remains the only allowed Bash execution surface.
-- Workflow/rule/orchestration execution must stay in the JS runtime (no Bash launch wrappers/indirection).
-
-**Scope**
-
-1. Remove runtime workflow/step launch via `spawn("bash")`, `bash -c`, and sourced transpiled shell modules from execution paths.
-2. Cut over launch/lifecycle paths to JS-owned execution.
-3. Keep behavior parity for signals, step lifecycle, status/return semantics, and diagnostics.
-
-**Acceptance criteria**
-
-- No Bash-based workflow/step launch remains in runtime execution paths.
-- Runtime behavior remains contract-compatible (artifacts, events, error shape).
-- Existing e2e suite remains green without reduced assertion strength.
-- Evidence attached:
-  - `rg 'spawn\\("bash"|bash -c|source "\\$built_script"|jaiph_stdlib\\.sh' src/runtime src/cli src/transpile`
-  - focused diff + targeted tests + relevant e2e output.
-
----
-
 ## Runtime migration C: remove deprecated shell runtime files and finalize cleanup <!-- dev-ready -->
 
 **Goal**  
