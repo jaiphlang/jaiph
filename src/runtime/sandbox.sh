@@ -31,7 +31,7 @@ jaiph::execute_readonly() {
     ' _ "$func_name" "$@"
     return $?
   fi
-  sudo env JAIPH_PRECEDING_FILES="$JAIPH_PRECEDING_FILES" unshare -m bash -c '
+  sudo env JAIPH_PRECEDING_FILES="$JAIPH_PRECEDING_FILES" JAIPH_EMIT_JS="$JAIPH_EMIT_JS" unshare -m bash -c '
     mount --make-rprivate /
     mount -o remount,ro /
     func_name="$1"

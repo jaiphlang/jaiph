@@ -115,7 +115,10 @@ Module tests live next to the source files they validate, inside the same `src/`
 | `src/runtime/kernel/stream-parser.test.ts` | `src/runtime/kernel/stream-parser.ts` | Stream JSON parser: reasoning/final extraction, section headers, fallback handling |
 | `src/runtime/kernel/schema.test.ts` | `src/runtime/kernel/schema.ts` | Typed prompt schema validation: JSON extraction strategies, field presence/type checks, eval-line generation |
 | `src/runtime/kernel/mock.test.ts` | `src/runtime/kernel/mock.ts` | Test-mode mock helpers: sequential mock responses, dispatch script invocation |
+| `src/runtime/kernel/emit.test.ts` | `src/runtime/kernel/emit.ts` | **`live`** stderr `__JAIPH_EVENT__` JSON and **`summary-line`** stdin → `run_summary.jsonl` append (fd routing, JSON shape) |
 | `src/reporting/reporting-server.test.ts` | `src/reporting/*` | Safe paths, summary JSONL parsing, run registry polling, derived run status |
+
+**Kernel — `emit.ts`:** **`src/runtime/kernel/emit.ts`** (built to **`kernel/emit.js`**) is invoked from **`events.sh`** for **`live`** (progress JSON to the event fd / stderr) and **`summary-line`** (one JSONL object per stdin line). **`JAIPH_STDLIB`** selects the install’s **`emit.js`** when the CLI sets it; **`JAIPH_EMIT_JS`** is exported for child **`bash`** (e.g. read-only rule subshells) that do not re-source **`events.sh`**.
 
 **Kernel — `run-step-exec.ts`:** Managed script/workflow/rule subprocess execution lives in **`src/runtime/kernel/run-step-exec.ts`** (built to `kernel/run-step-exec.js`, invoked from **`jaiph::run_step`** in `steps.sh`). There is no colocated `run-step-exec.test.ts` yet; behavior is covered by the **E2E** suite and runtime integration. Prefer adding focused unit tests if you extract pure helpers from the spawn/capture path.
 

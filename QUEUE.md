@@ -6,40 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## JS runtime migration (part 3): event stream + run summary parity <!-- dev-ready -->
-
-**Goal**  
-Guarantee runtime observability compatibility once execution is in JS.
-
-**Standalone context (read this task in isolation)**
-
-- This task exists to protect downstream tooling from runtime migration regressions.
-- Producers: runtime kernel emits `__JAIPH_EVENT__` JSONL on stderr and writes `run_summary.jsonl`.
-- Consumers: CLI progress parser and reporting server/tooling.
-- Non-negotiable contracts in this part:
-  1. Event shape/order guarantees relied on by CLI progress remain compatible.
-  2. `run_summary.jsonl` schema and semantics stay compatible (`STEP_*`, `LOG*`, `INBOX_*`, workflow boundaries).
-  3. Run artifacts layout under `.jaiph/runs` remains stable from consumer perspective.
-
-**Out of scope (for this part)**
-
-- Core step execution semantics redesign.
-- Channel transport redesign (must stay file-based).
-- Packaging/distribution migration.
-
-**Scope**
-
-1. Port event emission to JS (`__JAIPH_EVENT__` on stderr JSONL) with stable ordering guarantees.
-2. Keep `run_summary.jsonl` schema and semantics (`STEP_*`, `LOG*`, `INBOX_*`, workflow boundaries) compatible.
-3. Validate byte-level or schema-level compatibility where strict byte parity is unrealistic.
-
-**Acceptance criteria**
-
-- CLI progress parser works unchanged (or via drop-in equivalent adapter).
-- Reporting server ingests new runs without regressions.
-
----
-
 ## JS runtime migration (part 4): channels/inbox + hooks wiring <!-- dev-ready -->
 
 **Goal**  
