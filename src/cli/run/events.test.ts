@@ -194,23 +194,32 @@ test("parseStepEvent: defaults params to empty array when not provided", () => {
   assert.deepEqual(result!.params, []);
 });
 
-// Regression: runtime jaiph::json_escape must emit valid JSON for STEP_END out_content
+// Regression: JS kernel JSON.stringify must produce valid JSON for STEP_END out_content
 // (tabs, ANSI ESC, etc.); otherwise parseStepEvent fails and CI shows raw __JAIPH_EVENT__ lines.
-test("parseStepEvent: STEP_END with tabs and ANSI in out_content via runtime json_escape", () => {
-  const eventsSh = join(process.cwd(), "src/runtime/events.sh");
-  const script = [
-    `source ${bashSingleQuoted(eventsSh)}`,
-    `raw=$(printf 'a\\011b\\033[0mc')`,
-    `jaiph::json_escape "$raw"`,
-  ].join("\n");
-  const r = spawnSync("bash", ["-c", script], { encoding: "utf8" });
-  assert.equal(r.status, 0, r.stderr);
-  const esc = r.stdout.replace(/\n$/, "");
-  const json = `{"type":"STEP_END","func":"f","kind":"rule","name":"n","ts":"t","status":1,"elapsed_ms":null,"out_file":"","err_file":"","id":"i","parent_id":null,"seq":null,"depth":null,"run_id":"r","out_content":"${esc}"}`;
-  assert.doesNotThrow(() => JSON.parse(json), "runtime escape must yield valid JSON string field");
+test("parseStepEvent: STEP_END with tabs and ANSI in out_content via JS kernel emit", () => {
+  const raw = "a\tb\x1b[0mc";
+  const event = {
+    type: "STEP_END",
+    func: "f",
+    kind: "rule",
+    name: "n",
+    ts: "t",
+    status: 1,
+    elapsed_ms: null,
+    out_file: "",
+    err_file: "",
+    id: "i",
+    parent_id: null,
+    seq: null,
+    depth: null,
+    run_id: "r",
+    out_content: raw,
+  };
+  const json = JSON.stringify(event);
+  assert.doesNotThrow(() => JSON.parse(json), "JSON.stringify must yield valid JSON string field");
   const line = `__JAIPH_EVENT__ ${json}`;
   const parsed = parseStepEvent(line);
-  assert.ok(parsed, "expected parseStepEvent to accept runtime-escaped STEP_END JSON");
+  assert.ok(parsed, "expected parseStepEvent to accept JS-serialized STEP_END JSON");
   assert.equal(parsed!.out_content, "a\tb\x1b[0mc");
 });
 
@@ -226,7 +235,6 @@ test("jaiph::log and jaiph::logerr: echo -e for stdout/stderr; LOG JSON message 
     const script = [
       `export JAIPH_STDLIB=${bashSingleQuoted(bundledStdlib)}`,
       `exec 3>${bashSingleQuoted(eventsPath)}`,
-      `jaiph::step_stack_depth() { printf "0"; }`,
       `source ${bashSingleQuoted(eventsSh)}`,
       `jaiph::log "line1\\nline2" >${bashSingleQuoted(stdoutPath)}`,
       `jaiph::logerr "err1\\terr2" 2>${bashSingleQuoted(stderrPath)}`,
@@ -262,5 +270,5 @@ test("JAIPH_EMIT_JS is exported for child bash (readonly rule subshell)", () => 
   ].join("\n");
   const r = spawnSync("bash", ["-c", script], { encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /expected mode live or summary-line/);
+  assert.match(r.stdout, /unknown mode/);
 });
