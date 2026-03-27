@@ -12,7 +12,7 @@
 
 **Jaiph** is a composable scripting language and runtime for defining and orchestrating AI agent workflows.
 
-It combines declarative workflow structure with bash, then compiles to bash that sources a small runtime stdlib. **Prompt** steps, **managed step subprocesses** (`run` / `ensure` / nested rule and workflow children, plus emitted **`script`** executables), and **stderr `__JAIPH_EVENT__` / `run_summary.jsonl` emission** (via `kernel/emit.js`) run through a **bundled Node.js kernel** under `src/runtime/kernel/`; orchestration, inbox routing, and most other stdlib logic stay in Bash. User **`script`** bodies are still normal child processes (bash or another shebang). That keeps workflows portable while reusing familiar shell entrypoints.
+It combines declarative workflow structure with bash, then compiles to bash that sources a small runtime stdlib. **Prompt** steps, **managed step subprocesses** (`run` / `ensure` / nested rule and workflow children, plus emitted **`script`** executables), **file-backed inbox** (init / send / routes / drain under `.jaiph/runs` via `kernel/inbox.js`), and **stderr `__JAIPH_EVENT__` / `run_summary.jsonl` emission** (via `kernel/emit.js`) run through a **bundled Node.js kernel** under `src/runtime/kernel/`; workflow orchestration and most other stdlib logic stay in Bash. User **`script`** bodies are still normal child processes (bash or another shebang). That keeps workflows portable while reusing familiar shell entrypoints.
 
 **Features:**
 
@@ -86,7 +86,7 @@ workflow update_docs {
 }
 ```
 
-Transpiled output is standard bash and sources the installed global Jaiph runtime stdlib (`$JAIPH_STDLIB`, default `~/.local/bin/jaiph_stdlib.sh`). The same install bundles the kernel scripts (`kernel/prompt.js`, `kernel/run-step-exec.js`, `kernel/emit.js`, …) next to the stdlib so managed prompts, step subprocesses, and progress/summary event emission stay version-locked with the CLI.
+Transpiled output is standard bash and sources the installed global Jaiph runtime stdlib (`$JAIPH_STDLIB`, default `~/.local/bin/jaiph_stdlib.sh`). The same install bundles the kernel scripts (`kernel/prompt.js`, `kernel/run-step-exec.js`, `kernel/inbox.js`, `kernel/emit.js`, …) next to the stdlib so managed prompts, step subprocesses, inbox transport, and progress/summary event emission stay version-locked with the CLI.
 
 ## Getting Started
 

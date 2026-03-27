@@ -85,6 +85,9 @@ export function resolveRuntimeEnv(
   // `jaiph run` always builds scripts under that run's output dir; inherited JAIPH_SCRIPTS would shadow
   // the per-module default in the emitted `export JAIPH_SCRIPTS="${JAIPH_SCRIPTS:-$(cd ...)}"`.
   delete env.JAIPH_SCRIPTS;
+  // Same for the workflow module path: a parent shell or nested tool may export this; the emitted
+  // module only sets JAIPH_RUN_STEP_MODULE when unset, so a stale path would break run-step-exec.
+  delete env.JAIPH_RUN_STEP_MODULE;
 
   return env;
 }
