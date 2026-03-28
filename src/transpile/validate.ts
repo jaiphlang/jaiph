@@ -234,8 +234,13 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         return;
       }
       if (s.type === "shell") {
-        validateManagedWorkflowShell(s.command, makeSubEnv(s.loc));
-        return;
+        throw jaiphError(
+          ast.filePath,
+          s.loc.line,
+          s.loc.col,
+          "E_VALIDATE",
+          "inline shell steps are forbidden in rules; use explicit script blocks",
+        );
       }
       const _never: never = s;
       return _never;
@@ -364,8 +369,13 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         return;
       }
       if (s.type === "shell") {
-        validateManagedWorkflowShell(s.command, makeSubEnv(s.loc));
-        return;
+        throw jaiphError(
+          ast.filePath,
+          s.loc.line,
+          s.loc.col,
+          "E_VALIDATE",
+          "inline shell steps are forbidden in workflows; use explicit script blocks",
+        );
       }
       const _never: never = s;
       return _never;
