@@ -385,6 +385,9 @@ e2e::prepare_shared_context() {
   mkdir -p "${JAIPH_E2E_BIN_DIR}" "${JAIPH_E2E_WORK_DIR}"
   export PATH="${JAIPH_E2E_BIN_DIR}:${PATH}"
   export JAIPH_BIN_DIR="${JAIPH_E2E_BIN_DIR}"
+  # Keep test runtime pinned to the harness-installed stdlib/runtime pair.
+  # This avoids accidental fallback to repo dist paths during nested `jaiph test`.
+  export JAIPH_USE_CUSTOM_STDLIB="1"
   # Docker sandbox is opt-in (beta); keep it disabled for e2e tests.
   export JAIPH_DOCKER_ENABLED="${JAIPH_DOCKER_ENABLED:-false}"
   # Keep e2e deterministic by removing user/machine agent overrides.
@@ -425,9 +428,9 @@ e2e::ensure_local_install() {
   if [[ -f "${E2E_REPO_ROOT}/dist/src/cli.js" ]] && command -v node >/dev/null 2>&1; then
     mkdir -p "${JAIPH_E2E_BIN_DIR}"
     local stdlib_dest="${JAIPH_E2E_BIN_DIR}/jaiph_stdlib.sh"
-    cp "${E2E_REPO_ROOT}/src/jaiph_stdlib.sh" "${stdlib_dest}"
+    cp "${E2E_REPO_ROOT}/dist/src/jaiph_stdlib.sh" "${stdlib_dest}"
     mkdir -p "${JAIPH_E2E_BIN_DIR}/runtime"
-    cp -R "${E2E_REPO_ROOT}/src/runtime/"* "${JAIPH_E2E_BIN_DIR}/runtime/"
+    cp -R "${E2E_REPO_ROOT}/dist/src/runtime/"* "${JAIPH_E2E_BIN_DIR}/runtime/"
     cat > "${JAIPH_E2E_BIN_DIR}/jaiph" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail

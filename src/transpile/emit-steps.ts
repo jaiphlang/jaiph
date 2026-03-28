@@ -56,18 +56,6 @@ export function stepPrimaryLoc(step: WorkflowStepDef): SourceLoc | null {
 // Helpers (exported where needed by emit-workflow.ts)
 // ---------------------------------------------------------------------------
 
-/** Prefix to wrap an imported workflow call so it runs with that module's config. */
-function prefixForImportedWorkflowCall(
-  workflowRef: WorkflowRefDef,
-  importedModuleHasMetadata: Map<string, boolean>,
-  importedWorkflowSymbols: Map<string, string>,
-): string {
-  const parts = workflowRef.value.split(".");
-  if (parts.length !== 2 || !importedModuleHasMetadata.get(parts[0])) return "";
-  const symbol = importedWorkflowSymbols.get(parts[0]) ?? parts[0];
-  return `${symbol}::with_metadata_scope `;
-}
-
 /** If args look like key=value key=value..., return ordered param keys for tree display; else null. */
 export function parseParamKeysFromArgs(args: string): string[] | null {
   const trimmed = args.trim();
@@ -132,16 +120,18 @@ export function emitRunTargetInvocation(
   args: string,
 ): string {
   const wfRef = transpileWorkflowRef(ref, ctx.workflowSymbol, ctx.importedWorkflowSymbols);
-  const scopePrefix = prefixForImportedWorkflowCall(
-    ref,
-    ctx.importedModuleHasMetadata,
-    ctx.importedWorkflowSymbols,
-  );
+  // Nested cross-module `run alias.workflow`: invoke impl via jaiph::run_step so callee
+  // module/workflow with_metadata_scope does not override caller metadata (matches Node
+  // orchestrator executeWorkflow when inheritCallerMetadataScope && crossModuleNested).
   if (workflowRefTargetsScript(ref, ctx)) {
     const base = scriptBaseNameForWorkflowRef(ref);
-    return `${scopePrefix}jaiph::run_step ${wfRef} script "$JAIPH_SCRIPTS/${base}"${args}`;
+    return `jaiph::run_step ${wfRef} script "$JAIPH_SCRIPTS/${base}"${args}`;
   }
-  return `${scopePrefix}${wfRef}${args}`;
+  const parts = ref.value.split(".");
+  if (parts.length === 2) {
+    return `jaiph::run_step ${wfRef} workflow ${wfRef}::impl${args}`;
+  }
+  return `${wfRef}${args}`;
 }
 
 /**

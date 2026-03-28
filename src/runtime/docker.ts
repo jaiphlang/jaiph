@@ -369,19 +369,22 @@ export function buildDockerArgs(opts: DockerSpawnOptions, generatedDir: string):
     args.push("-v", `${hostAbs}:${mount.containerPath}:${mount.mode}`);
   }
 
-  // Mount meta file directory so the wrapper can write the meta file
+  // Mount meta file directory at a stable in-container path.
+  // Host temp paths like /var/folders/... can alias to /private/var/... on macOS,
+  // and reusing the host absolute path inside the container is brittle.
   const metaDir = dirname(opts.metaFile);
   const metaBase = basename(opts.metaFile);
-  args.push("-v", `${metaDir}:${metaDir}:rw`);
+  const containerMetaDir = "/jaiph/meta";
+  args.push("-v", `${metaDir}:${containerMetaDir}:rw`);
 
   // Environment variables — remap workspace-related paths for the container
   const containerEnv = remapDockerEnv(opts.env, opts.workspaceRoot);
   args.push("-e", `JAIPH_STDLIB=/jaiph/generated/jaiph_stdlib.sh`);
-  args.push("-e", `JAIPH_META_FILE=${opts.metaFile}`);
+  args.push("-e", `JAIPH_META_FILE=${containerMetaDir}/${metaBase}`);
 
   // Forward JAIPH_* env vars (except JAIPH_STDLIB which we override)
   for (const [key, value] of Object.entries(containerEnv)) {
-    if (key.startsWith("JAIPH_") && key !== "JAIPH_STDLIB" && value !== undefined) {
+    if (key.startsWith("JAIPH_") && key !== "JAIPH_STDLIB" && key !== "JAIPH_META_FILE" && value !== undefined) {
       args.push("-e", `${key}=${value}`);
     }
   }

@@ -6,7 +6,7 @@
 //   JAIPH_MOCK_RESPONSES_FILE, JAIPH_PROMPT_FINAL_FILE
 
 import { spawn as nodeSpawn } from "node:child_process";
-import { writeFileSync, readFileSync, existsSync, accessSync, constants as fsConstants } from "node:fs";
+import { writeFileSync, readFileSync, existsSync, accessSync, mkdirSync, cpSync, constants as fsConstants } from "node:fs";
 import { delimiter, join } from "node:path";
 import { parseStream, type StreamWriter } from "./stream-parser";
 import { readNextMockResponse, mockDispatch } from "./mock";
@@ -107,11 +107,208 @@ function commandExists(cmd: string): boolean {
   return false;
 }
 
+function isDirWritable(path: string): boolean {
+  try {
+    accessSync(path, fsConstants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+type ClaudeEnvPreparation = {
+  env: NodeJS.ProcessEnv;
+  warning?: string;
+  error?: string;
+};
+
+export type ProcNode = {
+  pid: number;
+  ppid: number;
+  elapsedSeconds: number;
+  command: string;
+};
+
+const DEFAULT_TAIL_KILL_POLL_MS = 15_000;
+const DEFAULT_TAIL_MAX_AGE_SECONDS = 10 * 60;
+
+/**
+ * Ensure Claude CLI has a writable config/session directory.
+ * Falls back to workspace-local `.jaiph/claude-config` when home config is not writable.
+ */
+export function prepareClaudeEnv(execEnv: NodeJS.ProcessEnv, workspaceRoot: string): ClaudeEnvPreparation {
+  const home = execEnv.HOME || process.env.HOME || "";
+  const defaultConfigDir = home ? join(home, ".claude") : "";
+  const configuredDir = execEnv.CLAUDE_CONFIG_DIR || defaultConfigDir;
+
+  if (configuredDir) {
+    try {
+      mkdirSync(join(configuredDir, "session-env"), { recursive: true });
+      if (isDirWritable(join(configuredDir, "session-env"))) {
+        return { env: execEnv };
+      }
+    } catch {
+      // Fallback to workspace-local config.
+    }
+  }
+
+  const fallbackConfigDir = join(workspaceRoot, ".jaiph", "claude-config");
+  try {
+    mkdirSync(fallbackConfigDir, { recursive: true });
+    if (
+      configuredDir &&
+      configuredDir !== fallbackConfigDir &&
+      existsSync(configuredDir) &&
+      !existsSync(join(fallbackConfigDir, "config.json"))
+    ) {
+      try {
+        cpSync(configuredDir, fallbackConfigDir, { recursive: true });
+      } catch {
+        // If source config is malformed/inaccessible, continue with clean fallback.
+      }
+    }
+    const fallbackSessionDir = join(fallbackConfigDir, "session-env");
+    mkdirSync(fallbackSessionDir, { recursive: true });
+    if (!isDirWritable(fallbackSessionDir)) {
+      return {
+        env: execEnv,
+        error:
+          `jaiph: Claude backend requires writable session state, but cannot write ` +
+          `'${fallbackSessionDir}'. Fix permissions or set CLAUDE_CONFIG_DIR to a writable path.`,
+      };
+    }
+    return {
+      env: { ...execEnv, CLAUDE_CONFIG_DIR: fallbackConfigDir },
+      warning:
+        `jaiph: Claude config dir '${configuredDir || "<unset>"}' is not writable; ` +
+        `using workspace fallback '${fallbackConfigDir}'.`,
+    };
+  } catch {
+    return {
+      env: execEnv,
+      error:
+        `jaiph: Claude backend could not initialize writable session state. ` +
+        `Set CLAUDE_CONFIG_DIR to a writable directory and retry.`,
+    };
+  }
+}
+
+export function parseEtimeToSeconds(raw: string): number {
+  const value = raw.trim();
+  if (value.length === 0) return 0;
+  const daySplit = value.split("-");
+  const hasDays = daySplit.length === 2;
+  const dayPart = hasDays ? daySplit[0] : "0";
+  const timePart = hasDays ? daySplit[1] : daySplit[0];
+  if (!timePart) return 0;
+  const day = Number(dayPart);
+  const parts = timePart.split(":").map((p) => Number(p));
+  if (parts.some((n) => Number.isNaN(n))) return 0;
+  let hour = 0;
+  let minute = 0;
+  let second = 0;
+  if (parts.length === 3) {
+    [hour, minute, second] = parts;
+  } else if (parts.length === 2) {
+    [minute, second] = parts;
+  } else if (parts.length === 1) {
+    [second] = parts;
+  } else {
+    return 0;
+  }
+  return day * 86_400 + hour * 3_600 + minute * 60 + second;
+}
+
+function isTailProcess(command: string): boolean {
+  return /(^|\/)tail$/.test(command.trim());
+}
+
+function listProcessNodes(): ProcNode[] {
+  const { spawnSync } = require("node:child_process") as typeof import("node:child_process");
+  const out = spawnSync("/bin/ps", ["-axo", "pid=,ppid=,etime=,comm="], { encoding: "utf8" });
+  if (out.status !== 0) return [];
+  const text = String(out.stdout ?? "");
+  const nodes: ProcNode[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const m = trimmed.match(/^(\d+)\s+(\d+)\s+(\S+)\s+(.+)$/);
+    if (!m) continue;
+    const pid = Number(m[1]);
+    const ppid = Number(m[2]);
+    const elapsedSeconds = parseEtimeToSeconds(m[3] ?? "");
+    const command = m[4] ?? "";
+    if (Number.isNaN(pid) || Number.isNaN(ppid)) continue;
+    nodes.push({ pid, ppid, elapsedSeconds, command });
+  }
+  return nodes;
+}
+
+export function selectTailToKill(nodes: ProcNode[], rootPid: number, minAgeSeconds: number): ProcNode | undefined {
+  const byParent = new Map<number, ProcNode[]>();
+  for (const n of nodes) {
+    const arr = byParent.get(n.ppid) ?? [];
+    arr.push(n);
+    byParent.set(n.ppid, arr);
+  }
+  const queue: Array<{ pid: number; depth: number }> = [{ pid: rootPid, depth: 0 }];
+  const depthByPid = new Map<number, number>([[rootPid, 0]]);
+  while (queue.length > 0) {
+    const cur = queue.shift()!;
+    const children = byParent.get(cur.pid) ?? [];
+    for (const child of children) {
+      if (depthByPid.has(child.pid)) continue;
+      const depth = cur.depth + 1;
+      depthByPid.set(child.pid, depth);
+      queue.push({ pid: child.pid, depth });
+    }
+  }
+  let best: { node: ProcNode; depth: number } | undefined;
+  for (const n of nodes) {
+    const depth = depthByPid.get(n.pid);
+    if (depth === undefined) continue;
+    if (!isTailProcess(n.command)) continue;
+    if (n.elapsedSeconds < minAgeSeconds) continue;
+    if (!best || depth > best.depth || (depth === best.depth && n.elapsedSeconds > best.node.elapsedSeconds)) {
+      best = { node: n, depth };
+    }
+  }
+  return best?.node;
+}
+
+function startTailWatchdog(rootPid: number, stderr: NodeJS.WritableStream, env: NodeJS.ProcessEnv): () => void {
+  const pollMs = Number(env.JAIPH_PROMPT_TAIL_KILL_POLL_MS ?? String(DEFAULT_TAIL_KILL_POLL_MS));
+  const minAgeSeconds = Number(env.JAIPH_PROMPT_TAIL_MAX_AGE_SECONDS ?? String(DEFAULT_TAIL_MAX_AGE_SECONDS));
+  if (!Number.isFinite(pollMs) || pollMs <= 0 || !Number.isFinite(minAgeSeconds) || minAgeSeconds <= 0) {
+    return () => {};
+  }
+  const timer = setInterval(() => {
+    try {
+      const nodes = listProcessNodes();
+      const target = selectTailToKill(nodes, rootPid, minAgeSeconds);
+      if (!target) return;
+      try {
+        process.kill(target.pid, "SIGTERM");
+        stderr.write(
+          `jaiph: killed stale tail subprocess pid=${target.pid} age_s=${target.elapsedSeconds} (threshold=${minAgeSeconds})\n`,
+        );
+      } catch {
+        // Process may already be gone; ignore.
+      }
+    } catch {
+      // Best-effort watchdog only.
+    }
+  }, pollMs);
+  timer.unref();
+  return () => clearInterval(timer);
+}
+
 /** Run the backend process and parse its streaming output. */
 function runBackend(
   config: PromptConfig,
   promptText: string,
   writer: StreamWriter,
+  execEnv: NodeJS.ProcessEnv = process.env,
 ): Promise<{ final: string; status: number }> {
   // Pre-flight check for claude backend
   if (config.backend === "claude" && !commandExists("claude")) {
@@ -125,13 +322,29 @@ function runBackend(
   return new Promise((resolve) => {
     const { command, args } = buildBackendArgs(config, promptText);
     const isClaude = config.backend === "claude";
+    let childEnv: NodeJS.ProcessEnv = execEnv;
+    if (isClaude) {
+      const prepared = prepareClaudeEnv(execEnv, config.workspaceRoot);
+      if (prepared.error) {
+        process.stderr.write(`${prepared.error}\n`);
+        resolve({ final: "", status: 1 });
+        return;
+      }
+      if (prepared.warning) {
+        process.stderr.write(`${prepared.warning}\n`);
+      }
+      childEnv = prepared.env;
+    }
     // Cursor: stdin is not used (prompt is passed as arg), stderr passes through to caller.
     // Claude: stdin receives prompt, stdout+stderr are merged for parsing (matches `2>&1 |`).
     const child = nodeSpawn(command, args, {
       stdio: isClaude ? ["pipe", "pipe", "pipe"] : ["ignore", "pipe", "pipe"],
+      env: childEnv,
     });
+    const stopTailWatchdog = startTailWatchdog(child.pid ?? -1, process.stderr, childEnv);
 
     child.on("error", (err) => {
+      stopTailWatchdog();
       process.stderr.write(`jaiph: failed to start ${command}: ${err.message}\n`);
       resolve({ final: "", status: 1 });
     });
@@ -158,9 +371,11 @@ function runBackend(
 
     parseStream(parseInput, writer).then((final) => {
       child.on("close", (code) => {
+        stopTailWatchdog();
         resolve({ final, status: code ?? 0 });
       });
       if (child.exitCode !== null) {
+        stopTailWatchdog();
         resolve({ final, status: child.exitCode });
       }
     });
@@ -245,7 +460,7 @@ export async function executePrompt(
     writeFinal: (text) => stdout.write(text),
   };
 
-  const result = await runBackend(config, promptText, writer);
+  const result = await runBackend(config, promptText, writer, execEnv);
   const final =
     config.backend === "cursor"
       ? trimSurroundingBlankLines(result.final)

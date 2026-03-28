@@ -35,14 +35,20 @@ rm -rf "${TEST_DIR}/loop_runs"
 # When
 JAIPH_RUNS_DIR="${TEST_DIR}/loop_runs" e2e::run "loop_prompts.jh" >/dev/null
 
-# Then: Node orchestrator emits workflow-level artifacts for default + 3 review calls.
-e2e::expect_run_file_count_at "${TEST_DIR}/loop_runs" "loop_prompts.jh" 8
+# Then: artifacts include workflow-level .out + prompt step .out for each review call.
+e2e::expect_run_file_count_at "${TEST_DIR}/loop_runs" "loop_prompts.jh" 14
 run_dir="$(e2e::run_dir_at "${TEST_DIR}/loop_runs" "loop_prompts.jh")"
-for seq in 000002 000003 000004; do
-  review_out_file="${run_dir}${seq}-workflow__review.out"
-  e2e::assert_file_exists "${review_out_file}" "${seq} review workflow .out exists"
+shopt -s nullglob
+review_out_files=( "${run_dir}"*-workflow__review.out )
+shopt -u nullglob
+[[ ${#review_out_files[@]} -eq 3 ]] || e2e::fail "expected 3 review workflow .out files, got ${#review_out_files[@]}"
+e2e::pass "loop_prompts.jh has 3 review workflow .out files"
+
+for review_out_file in "${review_out_files[@]}"; do
+  review_label="$(basename "${review_out_file}")"
+  e2e::assert_file_exists "${review_out_file}" "${review_label} exists"
   review_out="$(<"${review_out_file}")"
-  e2e::assert_contains "${review_out}" "Command:" "${seq} review .out contains prompt command transcript"
-  e2e::assert_contains "${review_out}" "Prompt:" "${seq} review .out contains prompt section"
-  e2e::assert_contains "${review_out}" "Final answer:" "${seq} review .out contains prompt final section"
+  e2e::assert_contains "${review_out}" "Command:" "${review_label} contains prompt command transcript"
+  e2e::assert_contains "${review_out}" "Prompt:" "${review_label} contains prompt section"
+  e2e::assert_contains "${review_out}" "Final answer:" "${review_label} contains prompt final section"
 done

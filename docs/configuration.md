@@ -132,7 +132,21 @@ Workflow-level values apply to all steps in that workflow, including `ensure`d r
 3. **Module-level `config`** — fills in values for workflows without their own block.
 4. **Defaults** — see below.
 
-**Nested `run`:** When a workflow that has workflow-level `config` calls `run alias.workflow` in another file, the callee runs under `alias::with_metadata_scope` so the **callee’s** module `config` only supplies variables that are not already set (mirroring env semantics). Caller values restored when the call returns.
+**Nested `run` — metadata scope inheritance:**
+
+When a workflow calls `run` into another workflow, the metadata scope that applies depends on whether the call crosses a module boundary:
+
+| Call type | What happens |
+|-----------|-------------|
+| **Same-module** `run` (workflow in the same `.jh` file) | Callee’s **workflow-level** `config` is layered on top of the caller’s effective env. Module-level config is **not** re-applied. |
+| **Cross-module** `run` (e.g. `run alias.default`) | The caller’s effective env is carried as-is — **neither** the callee’s module-level nor workflow-level config is applied. The callee inherits the caller’s scope wholesale. |
+| **Root entry** (`jaiph run file.jh`) | Full module + workflow metadata from the entry file is applied (normal precedence). |
+
+This means a parent workflow’s configuration is authoritative across nested calls. If `parent.jh` sets `agent.backend = "cursor"` and calls `run child.default` where `child.jh` sets `agent.backend = "claude"`, the child still runs with `cursor` — the caller’s scope wins.
+
+After a nested call returns, the caller’s scope is restored exactly as it was before the call.
+
+**Locked variables** (`JAIPH_*_LOCKED`) from CLI environment overrides remain authoritative across all nesting levels — neither module nor workflow config can override a locked value.
 
 ## Backend selection
 
@@ -204,7 +218,7 @@ workflow default {
 
 `JAIPH_DOCKER_*` is **not** populated from in-file `runtime.*` inside the Bash process. Those variables only affect the run if they are already present in the environment that launches `jaiph run` (or if your script exports them itself).
 
-When a workflow calls another module via `run alias.default`, the callee runs under that module’s metadata scope; unset variables are filled from the callee’s module `config`. When the call returns, the caller’s values are restored.
+When a workflow calls another module via `run alias.default`, the callee **inherits the caller’s effective metadata scope** — the callee’s own module `config` is not applied. This ensures the caller’s configuration (e.g. backend, model) remains authoritative across nested calls. When the call returns, the caller’s values are restored. For same-module nested calls, callee workflow-level config is still layered on top of the caller’s env.
 
 ## Created by `jaiph init`
 
