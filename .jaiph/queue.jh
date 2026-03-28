@@ -73,6 +73,10 @@ script file_exists() {
   test -f "$1"
 }
 
+script queue_file_path() {
+  printf '%s\n' "${JAIPH_WORKSPACE:-.}/QUEUE.md"
+}
+
 script first_header_line() {
   local header
   header="$(awk '/^## /{
@@ -89,7 +93,7 @@ script arg_nonempty() {
 }
 
 workflow get_first_task {
-  const qf = "${JAIPH_WORKSPACE:-.}/QUEUE.md"
+  const qf = run queue_file_path
   if not run file_exists "$qf" {
     fail "missing queue file"
   }
@@ -179,7 +183,7 @@ workflow remove_completed_task {
   if not run arg_nonempty "$h" {
     fail "header required"
   }
-  const qf = "${JAIPH_WORKSPACE:-.}/QUEUE.md"
+  const qf = run queue_file_path
   run remove_task_block_by_header "$h" "$qf"
   run squeeze_consecutive_blanks_queue "$qf"
 }

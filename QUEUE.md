@@ -248,6 +248,38 @@ Eliminate async artifact/step-id collisions by making JS runtime the single owne
 
 ---
 
+## Decommission Bash transpilation/runtime path after Node parity <!-- dev-ready -->
+
+**Goal**  
+Remove the Bash orchestration/transpilation execution path once Node runtime reaches full behavior parity, so Jaiph has one runtime source of truth.
+
+**Problem statement**
+
+- The codebase currently carries dual execution surfaces (Bash + Node orchestration), which increases maintenance cost and causes parity drift regressions.
+- Recent failures showed features can be correct in transpiled Bash while broken in Node runtime behavior.
+- Without a planned decommission sequence, dual-path complexity will continue to absorb engineering time and raise regression risk.
+
+**Scope**
+
+1. Define and document "parity complete" gates required before decommission:
+   - all runtime/e2e behavior contracts green under Node path,
+   - no remaining production-critical workflows depending on Bash-only semantics.
+2. Add an explicit compatibility matrix (`feature -> Node status -> Bash dependency`) and resolve open gaps.
+3. Migrate remaining Bash-owned runtime responsibilities to Node (or mark as removed non-goals with docs updates).
+4. Remove or freeze Bash orchestration/transpilation code paths that are no longer needed for execution.
+5. Keep script-step execution support (`script { ... }`) with clear boundaries if shell subprocess execution remains part of product behavior.
+6. Update docs to make Node runtime the only supported orchestration engine.
+7. Add regression coverage that fails if removed Bash execution entrypoints are accidentally reintroduced.
+
+**Acceptance criteria**
+
+- Jaiph orchestration (`run`, `ensure`, `prompt`, channels/inbox, events/artifacts) is implemented and validated solely via Node runtime.
+- No user-facing command path relies on Bash orchestration/transpiled workflow execution.
+- CI/e2e suites pass with Bash orchestration path removed/disabled.
+- Architecture docs clearly describe single-runtime design and migration rationale.
+
+---
+
 ## Allow backticks in prompt strings as literal characters <!-- dev-ready -->
 
 **Goal**  
@@ -724,3 +756,4 @@ Block bodies receive the same positional args as the real construct and return v
 - E2e test covering simple string mock for each construct type.
 
 ---
+
