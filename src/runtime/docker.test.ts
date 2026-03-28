@@ -178,16 +178,14 @@ test("prepareGeneratedDir: copies script and stdlib", () => {
   try {
     writeFileSync(join(srcDir, "main.sh"), "#!/bin/bash\necho hello");
     writeFileSync(join(srcDir, "jaiph_stdlib.sh"), "# stdlib");
-    mkdirSync(join(srcDir, "runtime"));
-    writeFileSync(join(srcDir, "runtime", "events.sh"), "# events");
-    writeFileSync(join(srcDir, "runtime", "steps.sh"), "# steps");
+    mkdirSync(join(srcDir, "runtime", "kernel"), { recursive: true });
+    writeFileSync(join(srcDir, "runtime", "kernel", "emit.js"), "console.log('emit')");
 
     const genDir = prepareGeneratedDir(join(srcDir, "main.sh"), join(srcDir, "jaiph_stdlib.sh"));
     try {
       assert.ok(existsSync(join(genDir, "main.sh")));
       assert.ok(existsSync(join(genDir, "jaiph_stdlib.sh")));
-      assert.ok(existsSync(join(genDir, "runtime", "events.sh")));
-      assert.ok(existsSync(join(genDir, "runtime", "steps.sh")));
+      assert.ok(existsSync(join(genDir, "runtime", "kernel", "emit.js")));
       assert.equal(readFileSync(join(genDir, "jaiph_stdlib.sh"), "utf8"), "# stdlib");
     } finally {
       rmSync(genDir, { recursive: true, force: true });

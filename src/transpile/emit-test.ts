@@ -4,7 +4,7 @@ function escapeBashSingleQuoted(s: string): string {
   return "'" + s.replace(/'/g, "'\\''") + "'";
 }
 
-/** Sanitize symbol for mock script filename (matches jaiph::sanitize_name in steps.sh). */
+/** Sanitize symbol for mock script filename (matches jaiph::sanitize_name in jaiph_stdlib.sh). */
 function sanitizeSymbolForFile(symbol: string): string {
   return symbol.replace(/[^a-zA-Z0-9_.-]/g, "_");
 }

@@ -6,25 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Runtime migration C: remove deprecated shell runtime files and finalize cleanup <!-- dev-ready -->
-
-**Goal**  
-Delete dead shell runtime assets after cutover and complete validation/docs cleanup.
-
-**Scope**
-
-1. Remove deprecated `src/runtime/*.sh` files and any dead compatibility glue no longer on execution path.
-2. Update docs/architecture notes to reflect JS-owned runtime execution.
-3. Run full verification pass.
-
-**Acceptance criteria**
-
-- Runtime shell files are removed (or explicitly retained only as non-execution fixtures, if any, with justification).
-- Full validation is green: `npm run build`, `npm test`, `npm run test:e2e`.
-- Final handoff includes diffs, verification outputs, and any explicitly deferred follow-ups.
-
----
-
 ## Post-migration hardening: move sequence allocation into JS runtime for atomicity <!-- dev-ready -->
 
 **Goal**  
