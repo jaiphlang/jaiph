@@ -10,10 +10,10 @@ export function parseEnvDecl(
   const raw = lines[startIndex];
   const line = raw.trim();
 
-  // Match: local|const NAME = "value" or ... = 'value' or ... = barevalue
-  const match = line.match(/^(?:local|const)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)/);
+  // Match: const NAME = "value" or ... = 'value' or ... = barevalue
+  const match = line.match(/^const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)/);
   if (!match) {
-    fail(filePath, 'invalid declaration — expected: local NAME = VALUE or const NAME = VALUE', lineNo);
+    fail(filePath, 'invalid declaration — expected: const NAME = VALUE', lineNo);
   }
   const name = match[1];
   let valuePart = match[2].trim();
@@ -33,16 +33,16 @@ export function parseEnvDecl(
         }
       }
       if (!closed) {
-        fail(filePath, "unterminated string in local declaration", lineNo);
+        fail(filePath, "unterminated string in const declaration", lineNo);
       }
     }
     const closeIdx = indexOfClosingDoubleQuote(rawValue, 1);
     if (closeIdx === -1) {
-      fail(filePath, "unterminated string in local declaration", lineNo);
+      fail(filePath, "unterminated string in const declaration", lineNo);
     }
     const afterClose = rawValue.slice(closeIdx + 1).trim();
     if (afterClose.length > 0) {
-      fail(filePath, "unexpected content after closing quote in local declaration", lineNo);
+      fail(filePath, "unexpected content after closing quote in const declaration", lineNo);
     }
     const value = rawValue.slice(1, closeIdx);
     return {
@@ -55,11 +55,11 @@ export function parseEnvDecl(
   if (valuePart.startsWith("'")) {
     const closeIdx = valuePart.indexOf("'", 1);
     if (closeIdx === -1) {
-      fail(filePath, "unterminated string in local declaration", lineNo);
+      fail(filePath, "unterminated string in const declaration", lineNo);
     }
     const afterClose = valuePart.slice(closeIdx + 1).trim();
     if (afterClose.length > 0) {
-      fail(filePath, "unexpected content after closing quote in local declaration", lineNo);
+      fail(filePath, "unexpected content after closing quote in const declaration", lineNo);
     }
     const value = valuePart.slice(1, closeIdx);
     return {

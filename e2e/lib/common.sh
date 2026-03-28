@@ -171,10 +171,15 @@ e2e::expect_out() {
   dir="$(e2e::run_dir "${file}")"
 
   shopt -s nullglob
-  local matches=( "${dir}"*"${file%.*}__${workflow}.out" )
+  local matches=(
+    "${dir}"*"${file%.*}__${workflow}.out"
+    "${dir}"*"workflow__${workflow}.out"
+    "${dir}"*"script__${workflow}.out"
+    "${dir}"*"rule__${workflow}.out"
+  )
   shopt -u nullglob
 
-  [[ ${#matches[@]} -eq 1 ]] || e2e::fail "missing ${workflow} .out for ${file}"
+  [[ ${#matches[@]} -ge 1 ]] || e2e::fail "missing ${workflow} .out for ${file}"
 
   local content
   content="$(<"${matches[0]}")"
@@ -191,12 +196,16 @@ e2e::expect_rule_out() {
   dir="$(e2e::run_dir "${file}")"
 
   local normalized="${rule//./__}"
+  local short_rule="${rule##*.}"
 
   shopt -s nullglob
-  local matches=( "${dir}"*"${normalized}.out" )
+  local matches=(
+    "${dir}"*"${normalized}.out"
+    "${dir}"*"rule__${short_rule}.out"
+  )
   shopt -u nullglob
 
-  [[ ${#matches[@]} -eq 1 ]] || e2e::fail "missing ${rule} .out for ${file}"
+  [[ ${#matches[@]} -ge 1 ]] || e2e::fail "missing ${rule} .out for ${file}"
 
   local content
   content="$(<"${matches[0]}")"

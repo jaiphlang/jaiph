@@ -1,6 +1,10 @@
 #!/usr/bin/env jaiph
 
 rule always_ok {
+  run always_ok_impl
+}
+
+script always_ok_impl() {
   echo ok
 }
 

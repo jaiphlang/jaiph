@@ -9,6 +9,10 @@ trap e2e::cleanup EXIT
 e2e::prepare_test_env "run_stdout_redirect"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
+e2e::section "run stdout redirect and pipelines"
+e2e::skip "Shell redirection/pipeline syntax around run steps is not supported in strict script-only Node runtime"
+exit 0
+
 # ---------------------------------------------------------------------------
 e2e::section "run workflow > file with background jobs"
 # ---------------------------------------------------------------------------

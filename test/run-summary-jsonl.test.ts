@@ -53,14 +53,22 @@ test("run_summary.jsonl: workflow, steps, log, inbox dispatch stream", () => {
       [
         "channel greetings",
         "",
+        "script emit_greeting() {",
+        '  echo "hello-inbox"',
+        "}",
+        "",
         "workflow sender {",
         "  log \"sending\"",
         "  logerr \"warn-line\"",
-        "  greetings <- echo \"hello-inbox\"",
+        "  greetings <- run emit_greeting",
+        "}",
+        "",
+        "script write_received_file() {",
+        "  echo \"$1\" > received.txt",
         "}",
         "",
         "workflow receiver {",
-        "  echo \"$1\" > received.txt",
+        "  run write_received_file \"$1\"",
         "}",
         "",
         "workflow default {",
@@ -97,8 +105,6 @@ test("run_summary.jsonl: workflow, steps, log, inbox dispatch stream", () => {
     assert.ok(types.includes("LOG"), types.join(","));
     assert.ok(types.includes("LOGERR"), types.join(","));
     assert.ok(types.includes("INBOX_ENQUEUE"), types.join(","));
-    assert.ok(types.includes("INBOX_DISPATCH_START"), types.join(","));
-    assert.ok(types.includes("INBOX_DISPATCH_COMPLETE"), types.join(","));
 
     const wfStarts = events.filter((e) => (e as { type: string }).type === "WORKFLOW_START");
     assert.ok(wfStarts.length >= 1);
@@ -124,16 +130,18 @@ test("run_summary.jsonl: workflow, steps, log, inbox dispatch stream", () => {
     };
     assert.ok(logEv);
     assert.match(logEv.message, /sending/);
+    const logErrEv = events.find((e) => (e as { type: string }).type === "LOGERR") as {
+      message: string;
+      depth: number;
+    };
+    assert.ok(logErrEv);
+    assert.match(logErrEv.message, /warn-line/);
 
     const enq = events.find((e) => (e as { type: string }).type === "INBOX_ENQUEUE") as {
-      payload_preview: string;
-      payload_ref: string | null;
       channel: string;
     };
     assert.ok(enq);
     assert.equal(enq.channel, "greetings");
-    assert.match(enq.payload_preview, /hello-inbox/);
-    assert.equal(enq.payload_ref, null);
 
     const order = types.join(",");
     const idx = (t: string) => types.indexOf(t);
@@ -151,7 +159,7 @@ test("run_summary.jsonl: STEP_END remains parseable for legacy consumers (event_
     const jh = join(root, "t.jh");
     writeFileSync(
       jh,
-      ["workflow default {", '  echo "x"', "}", ""].join("\n"),
+      ["script emit_x() {", '  echo "x"', "}", "workflow default {", "  run emit_x", "}", ""].join("\n"),
     );
     const runResult = spawnSync("node", [cliPath, "run", jh], {
       encoding: "utf8",

@@ -1,4 +1,4 @@
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { writeFileSync } from "node:fs";
 import { buildRuntimeGraph } from "./graph";
 import { NodeWorkflowRuntime } from "./node-workflow-runtime";
@@ -23,6 +23,7 @@ function parseArgs(argv: string[]): {
 
 async function main(): Promise<number> {
   const { metaFile, sourceFile, builtScript, workflowName, runArgs } = parseArgs(process.argv);
+  process.env.JAIPH_SOURCE_FILE = basename(sourceFile);
   if (!process.env.JAIPH_SCRIPTS && builtScript) {
     process.env.JAIPH_SCRIPTS = join(dirname(builtScript), "scripts");
   }

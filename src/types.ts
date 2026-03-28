@@ -189,7 +189,7 @@ export interface jaiphModule {
   rules: RuleDef[];
   scripts: ScriptDef[];
   workflows: WorkflowDef[];
-  /** Top-level variable declarations (`local name = value`). */
+  /** Top-level variable declarations (`const name = value`). */
   envDecls?: EnvDeclDef[];
   /** Present only when parsing a *.test.jh file. */
   tests?: TestBlockDef[];

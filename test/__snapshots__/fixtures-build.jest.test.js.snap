@@ -31,12 +31,19 @@ fi
 exec 7>&1
 export JAIPH_STDOUT_SAVED=1
 
+bootstrap_project::nodejs_impl() {
+  jaiph::run_step bootstrap_project::nodejs_impl script "$JAIPH_SCRIPTS/nodejs_impl" "$@"
+}
+
+nodejs_impl() {
+  bootstrap_project::nodejs_impl "$@"
+}
+
 bootstrap_project::nodejs::impl() {
   set -eo pipefail
   set +u
   jaiph::emit_workflow_summary_event WORKFLOW_START 'nodejs'
-  echo "Sorry, I cannot setup nodejs yet"
-  exit 1
+  jaiph::run_step bootstrap_project::nodejs_impl script "$JAIPH_SCRIPTS/nodejs_impl"
   jaiph::emit_workflow_summary_event WORKFLOW_END 'nodejs'
 }
 
@@ -120,11 +127,47 @@ fi
 exec 7>&1
 export JAIPH_STDOUT_SAVED=1
 
+inbox::emit_findings() {
+  jaiph::run_step inbox::emit_findings script "$JAIPH_SCRIPTS/emit_findings" "$@"
+}
+
+emit_findings() {
+  inbox::emit_findings "$@"
+}
+
+inbox::write_findings_file() {
+  jaiph::run_step inbox::write_findings_file script "$JAIPH_SCRIPTS/write_findings_file" "$@"
+}
+
+write_findings_file() {
+  inbox::write_findings_file "$@"
+}
+
+inbox::summarize_findings() {
+  jaiph::run_step inbox::summarize_findings script "$JAIPH_SCRIPTS/summarize_findings" "$@"
+}
+
+summarize_findings() {
+  inbox::summarize_findings "$@"
+}
+
+inbox::review_summary() {
+  jaiph::run_step inbox::review_summary script "$JAIPH_SCRIPTS/review_summary" "$@"
+}
+
+review_summary() {
+  inbox::review_summary "$@"
+}
+
 inbox::researcher::impl() {
   set -eo pipefail
   set +u
   jaiph::emit_workflow_summary_event WORKFLOW_START 'researcher'
-  jaiph::send 'findings' "$(echo '## findings')" 'researcher'
+  local _jaiph_send_rv_1; _jaiph_send_rv_1=$(mktemp)
+  JAIPH_RETURN_VALUE_FILE="$_jaiph_send_rv_1" jaiph::run_step inbox::emit_findings script "$JAIPH_SCRIPTS/emit_findings"
+  local _jaiph_send_msg; _jaiph_send_msg=""; [[ -s "$_jaiph_send_rv_1" ]] && _jaiph_send_msg=$(<"$_jaiph_send_rv_1")
+  rm -f "$_jaiph_send_rv_1"
+  jaiph::send 'findings' "$_jaiph_send_msg" 'researcher'
   jaiph::emit_workflow_summary_event WORKFLOW_END 'researcher'
 }
 
@@ -136,9 +179,12 @@ inbox::analyst::impl() {
   set -eo pipefail
   set +u
   jaiph::emit_workflow_summary_event WORKFLOW_START 'analyst'
-  echo "$1" > findings_file.md
-  local summary; summary=$(echo "Summary of findings")
-  jaiph::send 'summary' "$(echo "$summary")" 'analyst'
+  jaiph::run_step inbox::write_findings_file script "$JAIPH_SCRIPTS/write_findings_file" "$1"
+  local _jaiph_rv_summary; _jaiph_rv_summary=$(mktemp)
+  JAIPH_RETURN_VALUE_FILE="$_jaiph_rv_summary" jaiph::run_step inbox::summarize_findings script "$JAIPH_SCRIPTS/summarize_findings"
+  summary=""; [[ -s "$_jaiph_rv_summary" ]] && summary=$(<"$_jaiph_rv_summary")
+  rm -f "$_jaiph_rv_summary"
+  jaiph::send 'summary' "$summary" 'analyst'
   jaiph::emit_workflow_summary_event WORKFLOW_END 'analyst'
 }
 
@@ -150,7 +196,11 @@ inbox::reviewer::impl() {
   set -eo pipefail
   set +u
   jaiph::emit_workflow_summary_event WORKFLOW_START 'reviewer'
-  jaiph::send 'final_summary' "$(echo "[reviewed] $1")" 'reviewer'
+  local _jaiph_send_rv_2; _jaiph_send_rv_2=$(mktemp)
+  JAIPH_RETURN_VALUE_FILE="$_jaiph_send_rv_2" jaiph::run_step inbox::review_summary script "$JAIPH_SCRIPTS/review_summary" "$1"
+  local _jaiph_send_msg; _jaiph_send_msg=""; [[ -s "$_jaiph_send_rv_2" ]] && _jaiph_send_msg=$(<"$_jaiph_send_rv_2")
+  rm -f "$_jaiph_send_rv_2"
+  jaiph::send 'final_summary' "$_jaiph_send_msg" 'reviewer'
   jaiph::emit_workflow_summary_event WORKFLOW_END 'reviewer'
 }
 
@@ -254,11 +304,19 @@ export JAIPH_STDOUT_SAVED=1
 lang_redesign_smoke::always_ok::impl() {
   set -eo pipefail
   set +u
-  echo ok
+  jaiph::run_step lang_redesign_smoke::always_ok_impl script "$JAIPH_SCRIPTS/always_ok_impl"
 }
 
 lang_redesign_smoke::always_ok() {
   jaiph::run_step lang_redesign_smoke::always_ok rule jaiph::execute_readonly lang_redesign_smoke::always_ok::impl "$@"
+}
+
+lang_redesign_smoke::always_ok_impl() {
+  jaiph::run_step lang_redesign_smoke::always_ok_impl script "$JAIPH_SCRIPTS/always_ok_impl" "$@"
+}
+
+always_ok_impl() {
+  lang_redesign_smoke::always_ok_impl "$@"
 }
 
 lang_redesign_smoke::noop() {
@@ -434,8 +492,7 @@ source "$(dirname "\${BASH_SOURCE[0]}")/tools/security.sh"
 main::project_ready::impl() {
   set -eo pipefail
   set +u
-  test -f "package.json"
-  test -n "$NODE_ENV"
+  jaiph::run_step main::project_ready_impl script "$JAIPH_SCRIPTS/project_ready_impl"
 }
 
 main::project_ready() {
@@ -446,11 +503,27 @@ main::project_ready() {
 main::build_passes::impl() {
   set -eo pipefail
   set +u
-  npm run build
+  jaiph::run_step main::build_passes_impl script "$JAIPH_SCRIPTS/build_passes_impl"
 }
 
 main::build_passes() {
   jaiph::run_step main::build_passes rule jaiph::execute_readonly main::build_passes::impl "$@"
+}
+
+main::project_ready_impl() {
+  jaiph::run_step main::project_ready_impl script "$JAIPH_SCRIPTS/project_ready_impl" "$@"
+}
+
+project_ready_impl() {
+  main::project_ready_impl "$@"
+}
+
+main::build_passes_impl() {
+  jaiph::run_step main::build_passes_impl script "$JAIPH_SCRIPTS/build_passes_impl" "$@"
+}
+
+build_passes_impl() {
+  main::build_passes_impl "$@"
 }
 
 # Orchestrates checks, prompt execution, and docs refresh.
@@ -466,12 +539,12 @@ main::default::impl() {
   export JAIPH_STEP_PARAM_KEYS='__prompt_impl,__preview,1'
   export JAIPH_PROMPT_PREVIEW='
     Build the applicati'
-  jaiph::prompt "$JAIPH_PROMPT_PREVIEW" "1=$1" <<__JAIPH_PROMPT_25__
+  jaiph::prompt "$JAIPH_PROMPT_PREVIEW" "1=$1" <<__JAIPH_PROMPT_33__
 
     Build the application using best practices.
     Follow requirements: $1
   
-__JAIPH_PROMPT_25__
+__JAIPH_PROMPT_33__
   main::build_passes
   tools::security::scan_passes
   main::update_docs
@@ -488,9 +561,9 @@ main::update_docs::impl() {
   set +u
   jaiph::emit_workflow_summary_event WORKFLOW_START 'update_docs'
   export JAIPH_PROMPT_PREVIEW='Update docs'
-  jaiph::prompt "$JAIPH_PROMPT_PREVIEW" <<__JAIPH_PROMPT_38__
+  jaiph::prompt "$JAIPH_PROMPT_PREVIEW" <<__JAIPH_PROMPT_46__
 Update docs
-__JAIPH_PROMPT_38__
+__JAIPH_PROMPT_46__
   jaiph::emit_workflow_summary_event WORKFLOW_END 'update_docs'
 }
 
@@ -577,11 +650,19 @@ export JAIPH_STDOUT_SAVED=1
 tools::security::scan_passes::impl() {
   set -eo pipefail
   set +u
-  echo "Security scan placeholder here"
+  jaiph::run_step tools::security::scan_passes_impl script "$JAIPH_SCRIPTS/scan_passes_impl"
 }
 
 tools::security::scan_passes() {
   jaiph::run_step tools::security::scan_passes rule jaiph::execute_readonly tools::security::scan_passes::impl "$@"
+}
+
+tools::security::scan_passes_impl() {
+  jaiph::run_step tools::security::scan_passes_impl script "$JAIPH_SCRIPTS/scan_passes_impl" "$@"
+}
+
+scan_passes_impl() {
+  tools::security::scan_passes_impl "$@"
 }
 
 if [[ "\${BASH_SOURCE[0]}" == "$0" ]]; then

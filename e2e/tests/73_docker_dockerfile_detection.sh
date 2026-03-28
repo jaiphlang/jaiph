@@ -26,8 +26,11 @@ RUN touch /jaiph-runtime-marker
 DOCKERFILE
 
 e2e::file "dockerfile_detect.jh" <<'EOF'
-rule check_marker {
+script check_marker_impl() {
   test -f /jaiph-runtime-marker && echo "marker found"
+}
+rule check_marker {
+  run check_marker_impl
 }
 
 workflow default {
@@ -40,19 +43,22 @@ JAIPH_DOCKER_ENABLED=true jaiph run "${TEST_DIR}/dockerfile_detect.jh" >/dev/nul
 
 # Then: the workflow should succeed (marker file present = custom image was used)
 run_dir="$(e2e::run_dir "dockerfile_detect.jh")"
-e2e::expect_run_file "dockerfile_detect.jh" "000002-dockerfile_detect__check_marker.out" "marker found"
+e2e::expect_run_file "dockerfile_detect.jh" "000003-dockerfile_detect__check_marker_impl.out" "marker found"
 e2e::pass "docker: .jaiph/Dockerfile detected and image built"
 
 e2e::section "docker dockerfile detection — explicit image skips Dockerfile"
 
 # Given: same workspace with .jaiph/Dockerfile, but explicit image set
 e2e::file "dockerfile_skip.jh" <<'EOF'
-rule check_no_marker {
+script check_no_marker_impl() {
   if test -f /jaiph-runtime-marker; then
     echo "marker unexpectedly found"
     exit 1
   fi
   echo "no marker"
+}
+rule check_no_marker {
+  run check_no_marker_impl
 }
 
 workflow default {
@@ -64,7 +70,7 @@ EOF
 JAIPH_DOCKER_ENABLED=true JAIPH_DOCKER_IMAGE=node:20-bookworm jaiph run "${TEST_DIR}/dockerfile_skip.jh" >/dev/null 2>&1
 
 # Then: the marker file should NOT exist (stock pulled image, not custom build)
-e2e::expect_run_file "dockerfile_skip.jh" "000002-dockerfile_skip__check_no_marker.out" "no marker"
+e2e::expect_run_file "dockerfile_skip.jh" "000003-dockerfile_skip__check_no_marker_impl.out" "no marker"
 e2e::pass "docker: explicit image skips .jaiph/Dockerfile"
 
 e2e::section "docker dockerfile detection — fallback without Dockerfile"
@@ -72,8 +78,11 @@ e2e::section "docker dockerfile detection — fallback without Dockerfile"
 # Given: a separate test dir without .jaiph/Dockerfile
 fallback_dir="$(mktemp -d "${JAIPH_E2E_WORK_DIR}/docker_fallback.XXXXXX")"
 cat > "${fallback_dir}/fallback.jh" <<'EOF'
-rule greet {
+script greet_impl() {
   echo "hello fallback"
+}
+rule greet {
+  run greet_impl
 }
 
 workflow default {
@@ -90,13 +99,16 @@ fallback_summary="${fallback_run_dir}run_summary.jsonl"
 e2e::assert_file_exists "${fallback_summary}" "docker: fallback run_summary.jsonl exists"
 e2e::pass "docker: falls back to default image without .jaiph/Dockerfile"
 
-e2e::section "docker dockerfile detection — env var forwarding"
+e2e::section "docker dockerfile detection — agent env vars are sanitized"
 
-# Given: a workflow that checks for forwarded env vars
+# Given: a workflow that checks visibility of agent env vars
 e2e::file "envforward.jh" <<'EOF'
-rule check_env {
+script check_env_impl() {
   echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-unset}"
   echo "CURSOR_SESSION=${CURSOR_SESSION:-unset}"
+}
+rule check_env {
+  run check_env_impl
 }
 
 workflow default {
@@ -104,16 +116,16 @@ workflow default {
 }
 EOF
 
-# When: run with agent env vars set
+# When: run with agent env vars set on host
 JAIPH_DOCKER_ENABLED=true \
   ANTHROPIC_API_KEY="test-key-123" \
   CURSOR_SESSION="test-session-456" \
   jaiph run "${TEST_DIR}/envforward.jh" >/dev/null 2>&1
 
-# Then: env vars should be visible inside the container
+# Then: sensitive agent env vars are sanitized in container runtime
 run_dir="$(e2e::run_dir "envforward.jh")"
-out_content="$(<"${run_dir}000002-envforward__check_env.out")"
-e2e::assert_contains "${out_content}" "ANTHROPIC_API_KEY=test-key-123" "docker: ANTHROPIC_API_KEY forwarded"
-e2e::assert_contains "${out_content}" "CURSOR_SESSION=test-session-456" "docker: CURSOR_SESSION forwarded"
+out_content="$(<"${run_dir}000003-envforward__check_env_impl.out")"
+e2e::assert_contains "${out_content}" "ANTHROPIC_API_KEY=unset" "docker: ANTHROPIC_API_KEY not forwarded"
+e2e::assert_contains "${out_content}" "CURSOR_SESSION=unset" "docker: CURSOR_SESSION not forwarded"
 
 rm -rf "${fallback_dir}"
