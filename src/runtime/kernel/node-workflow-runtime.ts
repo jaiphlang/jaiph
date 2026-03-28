@@ -8,6 +8,7 @@ import { executePrompt, resolveConfig } from "./prompt";
 import { appendRunSummaryLine, formatUtcTimestamp } from "./emit";
 import { resolveRuleRef, resolveScriptRef, resolveWorkflowRef, type RuntimeGraph } from "./graph";
 import type { WorkflowMetadata } from "../../types";
+import { extractJson, validateFields } from "./schema";
 
 const MAX_EMBED = 1024 * 1024;
 type EnsureRecover = Extract<WorkflowStepDef, { type: "ensure" }>["recover"];
@@ -47,6 +48,8 @@ type WorkflowContext = {
   routes: Map<string, string[]>;
   queue: InboxMsg[];
 };
+
+type PromptSchemaField = { name: string; type: "string" | "number" | "boolean" };
 
 function sanitizeName(raw: string): string {
   return raw.replace(/[^a-zA-Z0-9_.-]/g, "_");
@@ -108,6 +111,30 @@ function stripOuterQuotes(value: string): string {
   return value;
 }
 
+function parsePromptSchema(rawSchema: string): PromptSchemaField[] {
+  const trimmed = rawSchema.trim();
+  if (trimmed.length === 0) return [];
+  if (/[[\]|]/.test(trimmed)) {
+    throw new Error("returns schema must be flat (no arrays or union types)");
+  }
+  const inner = trimmed.replace(/^\s*\{\s*/, "").replace(/\s*\}\s*$/, "").trim();
+  if (inner.length === 0) return [];
+  const fields: PromptSchemaField[] = [];
+  for (const part of inner.split(",")) {
+    const m = part.trim().match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(\S+)\s*$/);
+    if (!m) {
+      throw new Error(`invalid returns schema entry: ${part.trim().slice(0, 40)}`);
+    }
+    const [, name, typeStr] = m;
+    const type = typeStr.toLowerCase();
+    if (type !== "string" && type !== "number" && type !== "boolean") {
+      throw new Error(`unsupported returns schema type: ${typeStr}`);
+    }
+    fields.push({ name, type: type as "string" | "number" | "boolean" });
+  }
+  return fields;
+}
+
 export class NodeWorkflowRuntime {
   private readonly env: NodeJS.ProcessEnv;
   private readonly cwd: string;
@@ -118,6 +145,7 @@ export class NodeWorkflowRuntime {
   private stepSeq = 0;
   private stack: Frame[] = [];
   private inboxSeq = 0;
+  private promptSeq = 0;
   private workflowCtxStack: WorkflowContext[] = [];
 
   constructor(graph: RuntimeGraph, opts: { env?: NodeJS.ProcessEnv; cwd?: string }) {
@@ -194,6 +222,84 @@ export class NodeWorkflowRuntime {
     );
   }
 
+  private emitPromptEvent(
+    type: "PROMPT_START" | "PROMPT_END",
+    payload: { backend: string; status?: number; preview?: string },
+  ): void {
+    const current = this.stack.length > 0 ? this.stack[this.stack.length - 1] : null;
+    appendRunSummaryLine(
+      JSON.stringify({
+        type,
+        ts: nowIso(),
+        run_id: this.runId,
+        depth: this.stack.length,
+        step_id: current?.id ?? null,
+        step_name: current?.name ?? null,
+        backend: payload.backend,
+        status: payload.status ?? null,
+        preview: payload.preview ?? null,
+        event_version: 1,
+      }),
+    );
+  }
+
+  private emitPromptStepStart(
+    promptText: string,
+    backend: string,
+    scopeVars: Map<string, string>,
+  ): { id: string; startedAtMs: number } {
+    this.promptSeq += 1;
+    const current = this.stack.length > 0 ? this.stack[this.stack.length - 1] : null;
+    const id = `${this.runId}:${process.pid}:prompt:${this.promptSeq}`;
+    const preview = stripOuterQuotes(promptText).replace(/\s+/g, " ").trim();
+    const params: Array<[string, string]> = [["prompt_text", preview]];
+    const arg1 = scopeVars.get("1") ?? "";
+    if (arg1.length > 0) {
+      params.push(["arg1", arg1]);
+    }
+    this.emitStep({
+      type: "STEP_START",
+      func: "prompt",
+      kind: "prompt",
+      name: "prompt",
+      ts: nowIso(),
+      status: null,
+      elapsed_ms: null,
+      out_file: "",
+      err_file: "",
+      id,
+      parent_id: current?.id ?? null,
+      seq: null,
+      depth: this.stack.length,
+      run_id: this.runId,
+      params,
+    });
+    return { id, startedAtMs: Date.now() };
+  }
+
+  private emitPromptStepEnd(promptStepId: string, status: number, startedAtMs: number): void {
+    const current = this.stack.length > 0 ? this.stack[this.stack.length - 1] : null;
+    this.emitStep({
+      type: "STEP_END",
+      func: "prompt",
+      kind: "prompt",
+      name: "prompt",
+      ts: nowIso(),
+      status,
+      elapsed_ms: Date.now() - startedAtMs,
+      out_file: "",
+      err_file: "",
+      id: promptStepId,
+      parent_id: current?.id ?? null,
+      seq: null,
+      depth: this.stack.length,
+      run_id: this.runId,
+      params: [],
+      out_content: "",
+      err_content: "",
+    });
+  }
+
   private emitLog(type: "LOG" | "LOGERR", message: string): void {
     const payload = {
       type,
@@ -216,13 +322,25 @@ export class NodeWorkflowRuntime {
       return { status: 1, output: "", error: `Unknown workflow: ${workflowName}` };
     }
     return this.executeManagedStep("workflow", `${workflowName}`, args, async (io) => {
-      const moduleMeta = this.graph.modules.get(resolved.filePath)?.ast.metadata;
-      const workflowEnv = this.applyMetadataScope(scope.env, moduleMeta, resolved.workflow.metadata);
+      const isNested = this.stack.length > 1;
+      // Nested workflow calls preserve caller module scope but still allow
+      // the callee's explicit workflow-level overrides.
+      const workflowEnv = isNested
+        ? this.applyMetadataScope(scope.env, undefined, resolved.workflow.metadata)
+        : this.applyMetadataScope(
+            scope.env,
+            this.graph.modules.get(resolved.filePath)?.ast.metadata,
+            resolved.workflow.metadata,
+          );
       const childScope: Scope = {
         filePath: resolved.filePath,
         vars: this.newScopeVars(resolved.filePath, scope.vars, workflowEnv),
         env: workflowEnv,
       };
+      args.forEach((v, i) => {
+        childScope.vars.set(String(i + 1), v);
+        childScope.vars.set(`arg${i + 1}`, v);
+      });
       const ctx: WorkflowContext = {
         routes: new Map(),
         queue: [],
@@ -257,7 +375,12 @@ export class NodeWorkflowRuntime {
     return this.executeManagedStep("rule", `${ruleName}`, args, async (io) => {
       const moduleMeta = this.graph.modules.get(resolved.filePath)?.ast.metadata;
       const ruleEnv = this.applyMetadataScope(scope.env, moduleMeta);
-      return this.executeSteps({ filePath: resolved.filePath, vars: new Map(scope.vars), env: ruleEnv }, resolved.rule.steps, io);
+      const ruleVars = new Map(scope.vars);
+      args.forEach((v, i) => {
+        ruleVars.set(String(i + 1), v);
+        ruleVars.set(`arg${i + 1}`, v);
+      });
+      return this.executeSteps({ filePath: resolved.filePath, vars: ruleVars, env: ruleEnv }, resolved.rule.steps, io);
     });
   }
 
@@ -307,7 +430,8 @@ export class NodeWorkflowRuntime {
         });
       }
       if (step.type === "return") {
-        returnValue = interpolate(step.value, scope.vars, scope.env);
+        // Match Bash semantics: return "$var" should return var value, not literal quotes.
+        returnValue = stripOuterQuotes(interpolate(step.value, scope.vars, scope.env));
         return this.mergeStepResult(accOut, accErr, { status: 0, output: "", error: "", returnValue });
       }
       if (step.type === "send") {
@@ -360,7 +484,22 @@ export class NodeWorkflowRuntime {
         continue;
       }
       if (step.type === "prompt") {
-        const promptText = interpolate(step.raw, scope.vars, scope.env);
+        let promptText = interpolate(step.raw, scope.vars, scope.env);
+        const promptConfig = resolveConfig(scope.env);
+        const backend = promptConfig.backend || "cursor";
+        const promptStep = this.emitPromptStepStart(promptText, backend, scope.vars);
+        this.emitPromptEvent("PROMPT_START", {
+          backend,
+          preview: promptText.slice(0, 120),
+        });
+        let schemaFields: PromptSchemaField[] | undefined;
+        if (step.returns !== undefined) {
+          schemaFields = parsePromptSchema(step.returns);
+          const schemaObject = Object.fromEntries(schemaFields.map((f) => [f.name, f.type]));
+          promptText +=
+            "\n\nRespond with exactly one line of valid JSON (no markdown, no explanation) matching this schema: " +
+            JSON.stringify(schemaObject);
+        }
         const out = new PassThrough();
         const chunks: string[] = [];
         out.on("data", (d) => {
@@ -368,18 +507,48 @@ export class NodeWorkflowRuntime {
           chunks.push(chunk);
           io?.appendOut(chunk);
         });
-        const result = await executePrompt(promptText, resolveConfig(scope.env), out, scope.env);
+        const result = await executePrompt(promptText, promptConfig, out, scope.env);
+        this.emitPromptStepEnd(promptStep.id, result.status, promptStep.startedAtMs);
+        this.emitPromptEvent("PROMPT_END", { backend, status: result.status });
         const output = chunks.join("");
         accOut += output;
-        if (step.captureName) {
-          scope.vars.set(step.captureName, result.final);
-        }
         if (result.status !== 0) {
           return this.mergeStepResult(accOut, accErr, {
             status: result.status,
             output: "",
             error: "prompt failed",
           });
+        }
+        if (schemaFields) {
+          if (!step.captureName) {
+            return this.mergeStepResult(accOut, accErr, {
+              status: 1,
+              output: "",
+              error: 'prompt with "returns" schema must capture to a variable',
+            });
+          }
+          const extracted = extractJson(result.final);
+          if (!extracted) {
+            return this.mergeStepResult(accOut, accErr, {
+              status: 1,
+              output: "",
+              error: "prompt returned invalid JSON",
+            });
+          }
+          const validation = validateFields(extracted.obj, schemaFields);
+          if (validation !== 0) {
+            return this.mergeStepResult(accOut, accErr, {
+              status: validation,
+              output: "",
+              error: "prompt response failed schema validation",
+            });
+          }
+          scope.vars.set(step.captureName, extracted.source);
+          for (const field of schemaFields) {
+            scope.vars.set(`${step.captureName}_${field.name}`, String(extracted.obj[field.name]));
+          }
+        } else if (step.captureName) {
+          scope.vars.set(step.captureName, result.final);
         }
         continue;
       }
@@ -401,7 +570,22 @@ export class NodeWorkflowRuntime {
           continue;
         }
         if (step.value.kind === "prompt_capture") {
-          const promptText = interpolate(step.value.raw, scope.vars, scope.env);
+          let promptText = interpolate(step.value.raw, scope.vars, scope.env);
+          const promptConfig = resolveConfig(scope.env);
+          const backend = promptConfig.backend || "cursor";
+          const promptStep = this.emitPromptStepStart(promptText, backend, scope.vars);
+          this.emitPromptEvent("PROMPT_START", {
+            backend,
+            preview: promptText.slice(0, 120),
+          });
+          let schemaFields: PromptSchemaField[] | undefined;
+          if (step.value.returns !== undefined) {
+            schemaFields = parsePromptSchema(step.value.returns);
+            const schemaObject = Object.fromEntries(schemaFields.map((f) => [f.name, f.type]));
+            promptText +=
+              "\n\nRespond with exactly one line of valid JSON (no markdown, no explanation) matching this schema: " +
+              JSON.stringify(schemaObject);
+          }
           const out = new PassThrough();
           const chunks: string[] = [];
           out.on("data", (d) => {
@@ -409,7 +593,9 @@ export class NodeWorkflowRuntime {
             chunks.push(chunk);
             io?.appendOut(chunk);
           });
-          const result = await executePrompt(promptText, resolveConfig(scope.env), out, scope.env);
+          const result = await executePrompt(promptText, promptConfig, out, scope.env);
+          this.emitPromptStepEnd(promptStep.id, result.status, promptStep.startedAtMs);
+          this.emitPromptEvent("PROMPT_END", { backend, status: result.status });
           const pcOut = chunks.join("");
           accOut += pcOut;
           if (result.status !== 0) {
@@ -419,7 +605,30 @@ export class NodeWorkflowRuntime {
               error: "prompt failed",
             });
           }
-          scope.vars.set(step.name, result.final);
+          if (schemaFields) {
+            const extracted = extractJson(result.final);
+            if (!extracted) {
+              return this.mergeStepResult(accOut, accErr, {
+                status: 1,
+                output: "",
+                error: "prompt returned invalid JSON",
+              });
+            }
+            const validation = validateFields(extracted.obj, schemaFields);
+            if (validation !== 0) {
+              return this.mergeStepResult(accOut, accErr, {
+                status: validation,
+                output: "",
+                error: "prompt response failed schema validation",
+              });
+            }
+            scope.vars.set(step.name, extracted.source);
+            for (const field of schemaFields) {
+              scope.vars.set(`${step.name}_${field.name}`, String(extracted.obj[field.name]));
+            }
+          } else {
+            scope.vars.set(step.name, result.final);
+          }
           continue;
         }
       }

@@ -71,7 +71,7 @@ OC
   * Default to touching as few files as possible
   * Do NOT redesign surrounding architecture
   * Do NOT add abstractions unless clearly required by acceptance criteria
-  * Never invoke orchestration workflows (`.jaiph/*.jh`) or launch nested agent sessions
+  * Never invoke orchestration workflows (.jaiph/*.jh) or launch nested agent sessions
 
   $oc
 </role>"
@@ -95,7 +95,7 @@ OC
   * Actively remove dead code, duplicate branches, and unnecessary indirection
   * Prefer net-negative or near-neutral code growth when feasible
   * If adding code is unavoidable, justify why deletion/simplification was insufficient
-  * Never invoke orchestration workflows (`.jaiph/*.jh`) or launch nested agent sessions
+  * Never invoke orchestration workflows (.jaiph/*.jh) or launch nested agent sessions
 
   $oc
 </role>"
@@ -118,7 +118,7 @@ OC
   * Every structural change must have a concrete before/after justification
   * Do NOT rework areas outside the task's scope, even if they look improvable
   * Avoid speculative complexity that does not produce measurable benefit
-  * Never invoke orchestration workflows (`.jaiph/*.jh`) or launch nested agent sessions
+  * Never invoke orchestration workflows (.jaiph/*.jh) or launch nested agent sessions
 
   $oc
 </role>"
@@ -142,7 +142,7 @@ OC
   * Add or improve tests for risky paths and boundary conditions
   * Keep implementation simple, defensive, and observable
   * Avoid structural rewrites unless strictly required to satisfy acceptance criteria
-  * Never invoke orchestration workflows (`.jaiph/*.jh`) or launch nested agent sessions
+  * Never invoke orchestration workflows (.jaiph/*.jh) or launch nested agent sessions
 
   $oc
 </role>"
@@ -168,9 +168,8 @@ script task_text_has_header() {
 }
 
 script first_line_task() {
-  source "${JAIPH_LIB}/strings.sh"
   local line
-  line="$(first_line "$1")"
+  line="$(printf '%s\n' "$1" | awk 'NR==1 { print; exit }')"
   line="${line#\#\# }"
   line="${line%% <!--*}"
   printf '%s\n' "$line"
@@ -303,7 +302,7 @@ workflow print_commit_message {
 }
 
 workflow default {
-  const role_arg = "${1:-}"
+  const role_arg = "$1"
   # ensure git.is_clean
   const task = run queue.get_first_task
   const task_header = run first_line_task "$task"
