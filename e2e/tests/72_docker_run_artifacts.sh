@@ -20,8 +20,11 @@ e2e::section "docker run artifacts — happy path"
 
 # Given: a simple workflow that produces stdout artifacts
 e2e::file "docker_artifacts.jh" <<'EOF'
-rule greet {
+script greet_impl() {
   echo "hello from docker"
+}
+rule greet {
+  run greet_impl
 }
 
 workflow default {
@@ -49,14 +52,17 @@ shopt -u nullglob
 e2e::pass "docker: at least one .out file exists on host"
 
 # Verify the greet step output
-e2e::expect_run_file "docker_artifacts.jh" "000002-docker_artifacts__greet.out" "hello from docker"
+e2e::expect_run_file "docker_artifacts.jh" "000003-docker_artifacts__greet_impl.out" "hello from docker"
 
 e2e::section "docker run artifacts — relative JAIPH_RUNS_DIR"
 
 # Given: same workflow but with relative runs dir
 e2e::file "docker_rel_runs.jh" <<'EOF'
-rule greet {
+script greet_impl() {
   echo "hello relative"
+}
+rule greet {
+  run greet_impl
 }
 
 workflow default {
@@ -67,20 +73,23 @@ EOF
 rm -rf "${TEST_DIR}/custom_runs"
 
 # When: run with Docker and relative JAIPH_RUNS_DIR
-JAIPH_DOCKER_ENABLED=true JAIPH_RUNS_DIR="custom_runs" jaiph run "${TEST_DIR}/docker_rel_runs.jh" >/dev/null 2>&1
+(cd "${TEST_DIR}" && JAIPH_DOCKER_ENABLED=true JAIPH_RUNS_DIR="custom_runs" jaiph run "${TEST_DIR}/docker_rel_runs.jh" >/dev/null 2>&1)
 
 # Then: artifacts should be under the relative dir on host
 rel_run_dir="$(e2e::run_dir_at "${TEST_DIR}/custom_runs" "docker_rel_runs.jh")"
 rel_summary="${rel_run_dir}run_summary.jsonl"
 e2e::assert_file_exists "${rel_summary}" "docker: relative JAIPH_RUNS_DIR summary exists"
-e2e::expect_run_file_at "${TEST_DIR}/custom_runs" "docker_rel_runs.jh" "000002-docker_rel_runs__greet.out" "hello relative"
+e2e::expect_run_file_at "${TEST_DIR}/custom_runs" "docker_rel_runs.jh" "000003-docker_rel_runs__greet_impl.out" "hello relative"
 
 e2e::section "docker run artifacts — absolute JAIPH_RUNS_DIR inside workspace"
 
 # Given
 e2e::file "docker_abs_runs.jh" <<'EOF'
-rule greet {
+script greet_impl() {
   echo "hello absolute"
+}
+rule greet {
+  run greet_impl
 }
 
 workflow default {
@@ -98,14 +107,17 @@ JAIPH_DOCKER_ENABLED=true JAIPH_RUNS_DIR="${abs_runs_dir}" jaiph run "${TEST_DIR
 abs_run_dir="$(e2e::run_dir_at "${abs_runs_dir}" "docker_abs_runs.jh")"
 abs_summary="${abs_run_dir}run_summary.jsonl"
 e2e::assert_file_exists "${abs_summary}" "docker: absolute JAIPH_RUNS_DIR inside workspace summary exists"
-e2e::expect_run_file_at "${abs_runs_dir}" "docker_abs_runs.jh" "000002-docker_abs_runs__greet.out" "hello absolute"
+e2e::expect_run_file_at "${abs_runs_dir}" "docker_abs_runs.jh" "000003-docker_abs_runs__greet_impl.out" "hello absolute"
 
 e2e::section "docker run artifacts — absolute JAIPH_RUNS_DIR outside workspace fails"
 
 # Given
 e2e::file "docker_outside.jh" <<'EOF'
-rule greet {
+script greet_impl() {
   echo "should not run"
+}
+rule greet {
+  run greet_impl
 }
 
 workflow default {

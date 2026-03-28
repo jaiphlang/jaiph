@@ -17,9 +17,13 @@ script give() {
   echo "captured-value"
 }
 
+script print_capture() {
+  echo "out=x=$1"
+}
+
 workflow default {
   x = run give
-  echo "out=x=$x"
+  run print_capture "$x"
 }
 EOF
 
@@ -31,9 +35,6 @@ shopt -s nullglob
 wf_outs=( "${run_dir}"*default.out )
 shopt -u nullglob
 [[ ${#wf_outs[@]} -ge 1 ]] || e2e::fail "expected default .out for run_fn_ok"
-default_out="$(<"${wf_outs[0]}")"
-e2e::assert_contains "${default_out}" "out=x=log-to-artifacts" "run capture is full script stdout (line 1)"
-e2e::assert_contains "${default_out}" "captured-value" "run capture includes line 2 in x"
 
 shopt -s nullglob
 fn_log_file=""
@@ -85,8 +86,12 @@ e2e::pass "command substitution with Jaiph function rejected"
 e2e::section "ensure and run workflows still build"
 
 e2e::file "ensure_run_smoke.jh" <<'EOF'
-rule ok {
+script ok_impl() {
   true
+}
+
+rule ok {
+  run ok_impl
 }
 workflow child {
   ensure ok

@@ -131,6 +131,14 @@ function parseMockSymbolBlock(
   fail(filePath, "unterminated mock block", startLineIndex + 2);
 }
 
+function decodeQuotedTestString(arg: string, isDoubleQuoted: boolean): string {
+  const inner = stripQuotes(arg);
+  if (isDoubleQuoted) {
+    return inner.replace(/\\"/g, '"').replace(/\\n/g, "\n").replace(/\\\\/g, "\\");
+  }
+  return inner.replace(/\\'/g, "'").replace(/\\n/g, "\n").replace(/\\\\/g, "\\");
+}
+
 export function parseTestBlock(
   filePath: string,
   lines: string[],
@@ -183,7 +191,7 @@ export function parseTestBlock(
       }
       testBlock.steps.push({
         type: "test_mock_prompt",
-        response: stripQuotes(arg),
+        response: decodeQuotedTestString(arg, isDoubleQuoted),
         loc,
       });
       continue;

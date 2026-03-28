@@ -5,12 +5,20 @@ import "tools/security.jh" as security
 
 # Validates local build prerequisites.
 rule project_ready {
+  run project_ready_impl
+}
+
+script project_ready_impl() {
   test -f "package.json"
   test -n "$NODE_ENV"
 }
 
 # Verifies the project compiles successfully.
 rule build_passes {
+  run build_passes_impl
+}
+
+script build_passes_impl() {
   npm run build
 }
 

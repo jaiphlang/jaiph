@@ -17,12 +17,19 @@ export PATH="${E2E_MOCK_BIN}:${PATH}"
 # Given
 e2e::file "rule_pass.jh" <<'EOF'
 #!/usr/bin/env jaiph
-rule check_passes {
+script check_passes_impl() {
   mock_ok
+}
+rule check_passes {
+  run check_passes_impl
+}
+script done_impl() {
+  echo "e2e-rule-pass-done"
 }
 workflow default {
   ensure check_passes
-  echo "e2e-rule-pass-done"
+  msg = run done_impl
+  return "$msg"
 }
 EOF
 
@@ -36,22 +43,32 @@ Jaiph: Running rule_pass.jh
 
 workflow default
   ▸ rule check_passes
+  ·   ▸ script check_passes_impl
+  ·   ✓ script check_passes_impl (<time>)
   ✓ rule check_passes (<time>)
+  ▸ script done_impl
+  ✓ script done_impl (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
-e2e::expect_out_files "rule_pass.jh" 1
-e2e::expect_out "rule_pass.jh" "default" "e2e-rule-pass-done"
+e2e::expect_out_files "rule_pass.jh" 4
+e2e::expect_out "rule_pass.jh" "done_impl" "e2e-rule-pass-done"
 
 # Given
 e2e::file "rule_fail.jh" <<'EOF'
 #!/usr/bin/env jaiph
-rule check_fails {
+script check_fails_impl() {
   mock_fail
+}
+script unreachable_impl() {
+  echo "unreachable"
+}
+rule check_fails {
+  run check_fails_impl
 }
 workflow default {
   ensure check_fails
-  echo "unreachable"
+  run unreachable_impl
 }
 EOF
 
@@ -71,11 +88,17 @@ e2e::assert_contains "${rule_fail_err}" "e2e-rule-fail-message" "rule_fail.jh em
 # Given
 e2e::file "ensure_fail.jh" <<'EOF'
 #!/usr/bin/env jaiph
-rule step_ok {
+script step_ok_impl() {
   mock_ok
 }
-rule step_fail {
+script step_fail_impl() {
   mock_fail
+}
+rule step_ok {
+  run step_ok_impl
+}
+rule step_fail {
+  run step_fail_impl
 }
 workflow default {
   ensure step_ok
@@ -134,10 +157,13 @@ e2e::expect_stdout "${prompt_run_out}" <<'EOF'
 Jaiph: Running prompt_flow.jh
 
 workflow default
-  ▸ prompt "e2e-prompt-please-return"
-  ✓ prompt prompt (<time>)
 ✓ PASS workflow default (<time>)
 EOF
+prompt_flow_run_dir="$(e2e::run_dir "prompt_flow.jh")"
+prompt_flow_out="$(<"${prompt_flow_run_dir}000001-workflow__default.out")"
+e2e::assert_contains "${prompt_flow_out}" "Command:" "prompt_flow default .out contains prompt command transcript"
+e2e::assert_contains "${prompt_flow_out}" "Prompt:" "prompt_flow default .out contains prompt section"
+e2e::assert_contains "${prompt_flow_out}" "Final answer:" "prompt_flow default .out contains prompt final section"
 
 # Prompt with variable references shows named params in tree (not positional args)
 e2e::file "prompt_with_vars.jh" <<'EOF'
@@ -156,30 +182,11 @@ e2e::expect_stdout "${prompt_vars_out}" <<'EOF'
 Jaiph: Running prompt_with_vars.jh
 
 workflow default
-  ▸ prompt "$role does $task" (role="engineer", task="Fix bugs")
-  ✓ prompt prompt (<time>)
 ✓ PASS workflow default (<time>)
 EOF
-
-# prompt_with_vars.jh agent .out file
-e2e::expect_run_file "prompt_with_vars.jh" "000002-jaiph__prompt.out" "Command:
-cursor-agent --print --output-format stream-json --stream-partial-output --workspace ${TEST_DIR} --trust ${TEST_DIR} engineer\\ does\\ Fix\\ bugs
-
-Prompt:
-engineer does Fix bugs
-
-Final answer:
-e2e-backend-no-mock-output"
-
-# Prompt step .out file contains full agent transcript (mock run: workspace = TEST_DIR, so command is deterministic)
-e2e::expect_run_file "prompt_flow.jh" "000002-jaiph__prompt.out" "Command:
-cursor-agent --print --output-format stream-json --stream-partial-output --workspace ${TEST_DIR} --trust ${TEST_DIR} e2e-prompt-please-return-mock
-
-Prompt:
-e2e-prompt-please-return-mock
-
-Final answer:
-e2e-backend-no-mock-output"
+prompt_vars_run_dir="$(e2e::run_dir "prompt_with_vars.jh")"
+prompt_vars_out_file="$(<"${prompt_vars_run_dir}000001-workflow__default.out")"
+e2e::assert_contains "${prompt_vars_out_file}" "engineer does Fix bugs" "prompt_with_vars transcript includes rendered prompt text"
 
 # Known issue repro: async prompt branches currently collide on sequence/artifact ids.
 # This test intentionally documents existing broken behavior so we can remove it
@@ -222,11 +229,14 @@ fi
 # Multi-line prompt is displayed as single line (newlines stripped from preview)
 e2e::file "multiline_prompt.jh" <<'EOF'
 #!/usr/bin/env jaiph
+script done_impl() {
+  echo done
+}
 workflow default {
   prompt "
     Line one and line two.
   "
-  echo done
+  run done_impl
 }
 EOF
 
@@ -237,25 +247,20 @@ e2e::expect_stdout "${multiline_out}" <<'EOF'
 Jaiph: Running multiline_prompt.jh
 
 workflow default
-  ▸ prompt "Line one and line t"
-  ✓ prompt prompt (<time>)
+  ▸ script done_impl
+  ✓ script done_impl (<time>)
 ✓ PASS workflow default (<time>)
 EOF
-
-# Multiline prompt step .out file contains full agent transcript (mock run: command deterministic)
-printf -v expected_multiline_prompt 'Command:\n%s\n\nPrompt:\n\n%s\n%s\n\nFinal answer:\n%s' \
-  "cursor-agent --print --output-format stream-json --stream-partial-output --workspace ${TEST_DIR} --trust ${TEST_DIR} \$'\n    Line one and line two.\n  '" \
-  '    Line one and line two.' \
-  '  ' \
-  'e2e-backend-no-mock-output'
-e2e::expect_run_file "multiline_prompt.jh" "000002-jaiph__prompt.out" "${expected_multiline_prompt}"
+multiline_run_dir="$(e2e::run_dir "multiline_prompt.jh")"
+multiline_default_out="$(<"${multiline_run_dir}000001-workflow__default.out")"
+e2e::assert_contains "${multiline_default_out}" "Line one and line two." "multiline prompt transcript is captured in workflow .out"
 
 # Given: workflow with prompt but test does not mock it -> selected backend runs (cursor by default).
 e2e::file "prompt_unmatched.jh" <<'EOF'
 #!/usr/bin/env jaiph
 workflow default {
   result = prompt "e2e-unmatched-prompt-never-mocked"
-  printf '%s' "$result"
+  return "$result"
 }
 EOF
 

@@ -19,9 +19,17 @@ local role = "You are an expert.
 
 local greeting = "hello world"
 
+script write_role() {
+  echo "$1" > role_out.txt
+}
+
+script write_greeting() {
+  echo "$1" > greeting_out.txt
+}
+
 workflow default {
-  echo "$role" > role_out.txt
-  echo "$greeting" > greeting_out.txt
+  run write_role "$role"
+  run write_greeting "$greeting"
 }
 EOF
 
@@ -39,7 +47,7 @@ e2e::assert_contains "${role_content}" "You are concise" "multi-line role value 
 greeting_content="$(cat "${TEST_DIR}/greeting_out.txt")"
 e2e::assert_equals "$(echo "${greeting_content}" | tr -d '\n')" "hello world" "single-line greeting value matches"
 
-e2e::expect_out_files "env_demo.jh" 0
+e2e::expect_out_files "env_demo.jh" 3
 
 e2e::section "top-level local accessible in rules and workflows (not scripts)"
 
@@ -50,19 +58,27 @@ e2e::section "top-level local accessible in rules and workflows (not scripts)"
 e2e::file "env_all.jh" <<'EOF'
 local msg = "shared-value"
 
+script check_msg_impl() {
+  echo "$1" > rule_msg.txt
+  test -n "$1"
+}
+
 rule check_msg {
-  echo "$msg" > rule_msg.txt
-  test -n "$msg"
+  run check_msg_impl "$msg"
 }
 
 script write_msg() {
   echo "${msg:-}" > func_msg.txt
 }
 
+script write_wf_msg() {
+  echo "$1" > wf_msg.txt
+}
+
 workflow default {
   ensure check_msg
   run write_msg
-  echo "$msg" > wf_msg.txt
+  run write_wf_msg "$msg"
 }
 EOF
 
@@ -78,6 +94,6 @@ e2e::assert_equals "$(tr -d '\n' < "${TEST_DIR}/rule_msg.txt")" "shared-value" "
 e2e::assert_equals "$(tr -d '\n' < "${TEST_DIR}/func_msg.txt")" "" "script does NOT see module local (isolation)"
 e2e::assert_equals "$(tr -d '\n' < "${TEST_DIR}/wf_msg.txt")" "shared-value" "workflow sees correct value"
 
-e2e::expect_out_files "env_all.jh" 0
+e2e::expect_out_files "env_all.jh" 5
 
 e2e::pass "top-level local declarations: rules+workflows see vars, scripts isolated"

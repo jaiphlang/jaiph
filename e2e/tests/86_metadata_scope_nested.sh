@@ -18,8 +18,11 @@ e2e::file "child.jh" <<'EOF'
 config {
   agent.backend = "claude"
 }
+script log_backend() {
+  printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_META_SCOPE_FILE"
+}
 workflow default {
-  printf 'child:%s\n' "$JAIPH_AGENT_BACKEND" >> "$JAIPH_META_SCOPE_FILE"
+  run log_backend "child"
 }
 EOF
 
@@ -29,10 +32,13 @@ import "child.jh" as child
 config {
   agent.backend = "cursor"
 }
+script log_backend() {
+  printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_META_SCOPE_FILE"
+}
 workflow default {
-  printf 'parent_before:%s\n' "$JAIPH_AGENT_BACKEND" >> "$JAIPH_META_SCOPE_FILE"
+  run log_backend "parent_before"
   run child.default
-  printf 'parent_after:%s\n' "$JAIPH_AGENT_BACKEND" >> "$JAIPH_META_SCOPE_FILE"
+  run log_backend "parent_after"
 }
 EOF
 
@@ -44,8 +50,8 @@ jaiph run "${TEST_DIR}/parent.jh" >/dev/null
 actual="$(cat "${META_FILE}")"
 expected="$(printf '%s\n' \
   'parent_before:cursor' \
-  'child:claude' \
+  'child:cursor' \
   'parent_after:cursor')"
 
-e2e::assert_equals "${actual}" "${expected}" "called workflow config is scoped and restored"
-e2e::expect_out_files "parent.jh" 0
+e2e::assert_equals "${actual}" "${expected}" "nested workflow inherits caller config and preserves parent state"
+e2e::expect_out_files "parent.jh" 5

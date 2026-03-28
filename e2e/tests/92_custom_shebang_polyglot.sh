@@ -69,14 +69,14 @@ e2e::expect_stdout "${run_out}" <<'EOF'
 Jaiph: Running polyglot.jh
 
 workflow default
-  ▸ script py_echo_ok (1="<script-path>")
+  ▸ script py_echo_ok
   ✓ script py_echo_ok (<time>)
-  ▸ script bash_marker (1="<script-path>")
+  ▸ script bash_marker
   ✓ script bash_marker (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
 # Script steps are external processes; each run_step captures a .out artifact.
-e2e::expect_out_files "polyglot.jh" 2
+e2e::expect_out_files "polyglot.jh" 3
 
 e2e::pass "custom shebang python3 script runs via JAIPH_SCRIPTS end-to-end"

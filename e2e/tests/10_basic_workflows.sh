@@ -13,8 +13,12 @@ e2e::section "Basic workflow execution"
 
 # Given
 e2e::file "hello.jh" <<'EOF'
-workflow default {
+script hello_impl() {
   echo "hello-jh"
+}
+workflow default {
+  msg = run hello_impl
+  return "$msg"
 }
 EOF
 
@@ -27,24 +31,34 @@ e2e::expect_stdout "${hello_out}" <<'EOF'
 Jaiph: Running hello.jh
 
 workflow default
+  ▸ script hello_impl
+  ✓ script hello_impl (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
-e2e::expect_out_files "hello.jh" 1
-e2e::expect_out "hello.jh" "default" "hello-jh"
+e2e::expect_out_files "hello.jh" 2
+e2e::expect_out "hello.jh" "hello_impl" "hello-jh"
 
 # Given
 e2e::file "lib.jh" <<'EOF'
-rule ready {
+script ready_impl() {
   echo "from-lib"
+}
+rule ready {
+  result = run ready_impl
+  return "$result"
 }
 EOF
 
 e2e::file "app.jh" <<'EOF'
 import "lib.jh" as lib
+script mixed_ok_impl() {
+  echo "mixed-ok"
+}
 workflow default {
   ensure lib.ready
-  echo "mixed-ok"
+  msg = run mixed_ok_impl
+  return "$msg"
 }
 EOF
 
@@ -58,20 +72,24 @@ Jaiph: Running app.jh
 
 workflow default
   ▸ rule ready
+  ·   ▸ script ready_impl
+  ·   ✓ script ready_impl (<time>)
   ✓ rule ready (<time>)
+  ▸ script mixed_ok_impl
+  ✓ script mixed_ok_impl (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
-e2e::expect_out_files "app.jh" 2
-e2e::expect_rule_out "app.jh" "lib.ready" "from-lib"
-e2e::expect_out "app.jh" "default" "mixed-ok"
+e2e::expect_out_files "app.jh" 4
+e2e::expect_out "app.jh" "ready_impl" "from-lib"
+e2e::expect_out "app.jh" "mixed_ok_impl" "mixed-ok"
 
 e2e::section "Git-aware rule arguments"
 
 # Given
 e2e::file "current_branch.jh" <<'EOF'
 #!/usr/bin/env jaiph
-rule current_branch {
+script current_branch_impl() {
   if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     echo "Not inside a git repository." >&2
     exit 1
@@ -81,6 +99,9 @@ rule current_branch {
     echo "Current branch is not '$1'." >&2
     exit 1
   fi
+}
+rule current_branch {
+  run current_branch_impl "$1"
 }
 
 workflow default {
@@ -100,7 +121,7 @@ EOF
 
   # Then
   e2e::pass "current_branch.jh passes for current branch"
-  e2e::expect_out_files "current_branch.jh" 0
+  e2e::expect_out_files "current_branch.jh" 3
 
   wrong_branch="${current_branch}-wrong"
 

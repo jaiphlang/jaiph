@@ -1,6 +1,9 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert/strict";
-import { resolveConfig, buildBackendArgs } from "./prompt";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { buildBackendArgs, executePrompt, resolveConfig } from "./prompt";
 
 describe("resolveConfig", () => {
   it("uses defaults when env is empty", () => {
@@ -88,5 +91,52 @@ describe("buildBackendArgs", () => {
     assert.ok(args.includes("-p"));
     assert.ok(args.includes("--verbose"));
     assert.ok(args.includes("--max-tokens"));
+  });
+});
+
+describe("executePrompt", () => {
+  it("cursor backend trims surrounding blank lines from captured final", async () => {
+    const root = mkdtempSync(join(tmpdir(), "jaiph-prompt-cursor-trim-"));
+    try {
+      const fakeAgent = join(root, "fake-cursor-agent");
+      writeFileSync(
+        fakeAgent,
+        [
+          "#!/usr/bin/env bash",
+          "python3 - <<'PY'",
+          "import json",
+          "print(json.dumps({\"type\": \"result\", \"result\": \"\\n\\nhello-from-cursor\\n\\n\"}))",
+          "PY",
+          "",
+        ].join("\n"),
+      );
+      chmodSync(fakeAgent, 0o755);
+      const chunks: string[] = [];
+      const stdout: NodeJS.WritableStream = {
+        write: (chunk: unknown) => {
+          chunks.push(String(chunk));
+          return true;
+        },
+      } as NodeJS.WritableStream;
+      const result = await executePrompt(
+        "ignored",
+        {
+          backend: "cursor",
+          agentCommand: fakeAgent,
+          model: "",
+          workspaceRoot: root,
+          trustedWorkspace: root,
+          cursorFlags: [],
+          claudeFlags: [],
+          promptFinalFile: "",
+        },
+        stdout,
+      );
+      assert.equal(result.status, 0);
+      assert.equal(result.final, "hello-from-cursor");
+      assert.ok(chunks.join("").includes("Final answer:"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

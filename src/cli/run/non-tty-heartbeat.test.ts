@@ -20,8 +20,12 @@ test("ACCEPTANCE: non-TTY long step emits gray heartbeat before completion", () 
   writeFileSync(
     workflowPath,
     [
-      "workflow inner {",
+      "script sleep_impl() {",
       "  sleep 3",
+      "}",
+      "",
+      "workflow inner {",
+      "  run sleep_impl",
       "}",
       "",
       "workflow default {",
@@ -47,11 +51,11 @@ test("ACCEPTANCE: non-TTY long step emits gray heartbeat before completion", () 
     const out = result.stdout ?? "";
     assert.match(
       out,
-      /\s\u00b7 workflow inner \(running [0-9]+s\)/,
+      /\s\u00b7 script sleep_impl \(running [0-9]+s\)/,
       "expected heartbeat line before completion",
     );
-    const hbIdx = out.search(/\s\u00b7 workflow inner \(running /);
-    const okIdx = out.indexOf("\u2713 workflow inner");
+    const hbIdx = out.search(/\s\u00b7 script sleep_impl \(running /);
+    const okIdx = out.indexOf("\u2713 script sleep_impl");
     assert.ok(hbIdx !== -1 && okIdx !== -1 && hbIdx < okIdx, "heartbeat should precede completion line");
   } finally {
     rmSync(root, { recursive: true, force: true });

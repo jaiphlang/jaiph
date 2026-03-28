@@ -109,6 +109,6 @@ workflow default
   ·   ✓ script leaf_fn (<time>)
   ✓ workflow leaf (<time>)" "TTY projected tree matches expected flow"
 
-e2e::expect_out_files "tty_tree.jh" 0
+e2e::expect_out_files "tty_tree.jh" 3
 
 e2e::pass "TTY progress timer and tree projection are stable"

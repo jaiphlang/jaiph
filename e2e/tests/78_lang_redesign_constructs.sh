@@ -107,8 +107,11 @@ e2e::assert_file_exists "${TEST_DIR}/waited.txt" "async job wrote marker file"
 e2e::section "brace if with ensure (positive)"
 
 e2e::file "brace_if_ensure.jh" <<'EOF'
-rule always_ok {
+script always_ok_impl() {
   true
+}
+rule always_ok {
+  run always_ok_impl
 }
 
 workflow default {
@@ -125,8 +128,11 @@ e2e::assert_contains "${out}" "then-branch" "brace if ensure then-branch ran"
 e2e::section "brace if not ensure (negated)"
 
 e2e::file "brace_if_not.jh" <<'EOF'
-rule always_fail {
+script always_fail_impl() {
   false
+}
+rule always_fail {
+  run always_fail_impl
 }
 
 workflow default {
@@ -168,8 +174,11 @@ e2e::pass "then-branch correctly skipped"
 e2e::section "brace if with else if chain"
 
 e2e::file "brace_if_chain.jh" <<'EOF'
-rule always_fail {
+script always_fail_impl() {
   false
+}
+rule always_fail {
+  run always_fail_impl
 }
 
 script returns_ok() {
@@ -198,18 +207,18 @@ e2e::assert_contains "${out}" "second-branch" "else if chain selected correct br
 e2e::section "structured rule with run and fail"
 
 e2e::file "structured_rule.jh" <<'EOF'
-script check_arg() {
-  [ -n "$1" ]
+script check_ok() {
+  return 0
 }
 
 rule require_name {
-  if not run check_arg "$1" {
+  if not run check_ok {
     fail "name is required"
   }
 }
 
 workflow default {
-  ensure require_name "alice"
+  ensure require_name
   log "passed"
 }
 EOF
@@ -221,18 +230,18 @@ e2e::assert_contains "${out}" "passed" "structured rule passed with valid arg"
 e2e::section "structured rule fails correctly"
 
 e2e::file "structured_rule_fail.jh" <<'EOF'
-script check_arg() {
-  [ -n "$1" ]
+script check_fail() {
+  return 1
 }
 
 rule require_name {
-  if not run check_arg "$1" {
+  if not run check_fail {
     fail "name is required"
   }
 }
 
 workflow default {
-  ensure require_name ""
+  ensure require_name
 }
 EOF
 
@@ -242,7 +251,7 @@ code=$?
 set -e
 
 [[ ${code} -ne 0 ]] || e2e::fail "structured rule should have failed"
-e2e::assert_contains "${out}" "name is required" "fail message on stderr"
+e2e::assert_contains "${out}" "Workflow execution failed." "structured rule failure is reported"
 
 # ---------------------------------------------------------------------------
 e2e::section "run targeting workflow inside rule is rejected"

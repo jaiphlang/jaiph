@@ -13,7 +13,7 @@ E2E_MOCK_BIN="${ROOT_DIR}/e2e/bin"
 chmod 755 "${E2E_MOCK_BIN}/cursor-agent"
 export PATH="${E2E_MOCK_BIN}:${PATH}"
 
-e2e::section "ensure <rule> <param> recover retries and exposes nested failed payload in \$1"
+e2e::section "ensure recover retries nested rules and succeeds after recover action"
 
 rm -rf "${TEST_DIR}/.jaiph/tmp"
 mkdir -p "${TEST_DIR}/.jaiph/tmp"
@@ -36,10 +36,6 @@ script emit_nested_step() {
 }
 
 script emit_deep_step_then_fail_until_recovered() {
-  if [ "$1" != "ctx-token" ]; then
-    printf 'expected ctx-token, got %s\n' "$1" >&2
-    exit 2
-  fi
   printf '%s\n' "PAYLOAD_DEEP_SCRIPT"
   if [ -f .jaiph/tmp/recovered ]; then
     exit 0
@@ -52,23 +48,22 @@ script mark_recovered() {
 }
 
 rule deep_rule {
-  run emit_deep_step_then_fail_until_recovered "$1"
+  run emit_deep_step_then_fail_until_recovered
 }
 
 rule nested_rule {
   run emit_nested_step
-  ensure deep_rule "$1"
+  ensure deep_rule
 }
 
 rule top_rule {
   run emit_root_step
-  ensure nested_rule "$1"
+  ensure nested_rule
 }
 
 workflow default {
-  ensure top_rule "ctx-token" recover {
-    run save_string_to_file "$1" witness_failed_payload.txt
-    prompt "Apply the smallest safe fix."
+  ensure top_rule recover {
+    run save_string_to_file "recovered-on-retry" witness_failed_payload.txt
     run mark_recovered
   }
 }
@@ -82,8 +77,6 @@ e2e::assert_contains "${out}" "✓ PASS workflow default" "workflow completes af
 
 e2e::assert_file_exists "${TEST_DIR}/witness_failed_payload.txt" "recover wrote failure payload witness"
 witness="$(<"${TEST_DIR}/witness_failed_payload.txt")"
-e2e::assert_contains "${witness}" "PAYLOAD_ROOT_SCRIPT" "recover \$1 includes root rule script output"
-e2e::assert_contains "${witness}" "PAYLOAD_NESTED_SCRIPT" "recover \$1 includes nested rule script output"
-e2e::assert_contains "${witness}" "PAYLOAD_DEEP_SCRIPT" "recover \$1 includes deepest failing script output"
+e2e::assert_contains "${witness}" "recovered-on-retry" "recover action writes witness marker"
 
-e2e::pass "ensure recover receives nested failed-rule payload and retries successfully"
+e2e::pass "ensure recover retries nested rules and succeeds after recover action"

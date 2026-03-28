@@ -24,8 +24,11 @@ trap 'cleanup_report; e2e::cleanup' EXIT
 e2e::section "reporting server: discovery, tree, logs, aggregate, live polling"
 
 e2e::file "reporting_probe.jh" <<'EOF'
-workflow default {
+script agg_line_impl() {
   echo "agg-line"
+}
+workflow default {
+  run agg_line_impl
 }
 EOF
 
@@ -59,7 +62,7 @@ STEP_ID="$(echo "${TREE}" | node -e '
 const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
 function walk(nodes) {
   for (const x of nodes || []) {
-    if (x.out_file) {
+    if (x.name === "agg_line_impl" && x.out_file) {
       process.stdout.write(x.id);
       return;
     }
@@ -72,7 +75,7 @@ OUT_FILE="$(echo "${TREE}" | node -e '
 const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
 function walk(nodes) {
   for (const x of nodes || []) {
-    if (x.out_file) {
+    if (x.name === "agg_line_impl" && x.out_file) {
       process.stdout.write(x.out_file);
       return;
     }
@@ -81,7 +84,7 @@ function walk(nodes) {
 }
 walk(j.steps);
 ')"
-[[ -n "${STEP_ID}" ]] || e2e::fail "shell step id"
+[[ -n "${STEP_ID}" ]] || e2e::fail "script step id"
 [[ -f "${OUT_FILE}" ]] || e2e::fail "out file missing"
 
 OUT_JSON="$(curl -fsS "http://127.0.0.1:${REPORT_PORT}/api/runs/${ENC}/steps/${STEP_ID}/output")"

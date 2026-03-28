@@ -18,20 +18,32 @@ rm -f "${TEST_DIR}/.gate1_passed" "${TEST_DIR}/.gate2_passed"
 
 # Given
 e2e::file "make_pass.jh" <<'EOF'
-rule gate1 {
+script gate1_impl() {
   test -f .gate1_passed
 }
+rule gate1 {
+  run gate1_impl
+}
 
-rule gate2 {
+script gate2_impl() {
   test -f .gate2_passed
 }
-
-workflow remediate1 {
-  touch .gate1_passed
+rule gate2 {
+  run gate2_impl
 }
 
-workflow remediate2 {
+script remediate1_impl() {
+  touch .gate1_passed
+}
+workflow remediate1 {
+  run remediate1_impl
+}
+
+script remediate2_impl() {
   touch .gate2_passed
+}
+workflow remediate2 {
+  run remediate2_impl
 }
 
 workflow make_pass {
@@ -56,7 +68,6 @@ out="$(e2e::run "make_pass.jh" 2>&1)"
 # Then
 e2e::assert_file_exists "${TEST_DIR}/.gate1_passed" "first remediation ran (gate1 marker created)"
 e2e::assert_file_exists "${TEST_DIR}/.gate2_passed" "second remediation ran (gate2 marker created)"
-
 e2e::expect_stdout "${out}" <<'EOF'
 
 Jaiph: Running make_pass.jh
@@ -64,43 +75,67 @@ Jaiph: Running make_pass.jh
 workflow default
   ▸ workflow make_pass
   ·   ▸ rule gate1
+  ·   ·   ▸ script gate1_impl
+  ·   ·   ✗ script gate1_impl (<time>)
   ·   ✗ rule gate1 (<time>)
   ·   ▸ workflow remediate1
+  ·   ·   ▸ script remediate1_impl
+  ·   ·   ✓ script remediate1_impl (<time>)
   ·   ✓ workflow remediate1 (<time>)
   ·   ▸ workflow make_pass
   ·   ·   ▸ rule gate1
+  ·   ·   ·   ▸ script gate1_impl
+  ·   ·   ·   ✓ script gate1_impl (<time>)
   ·   ·   ✓ rule gate1 (<time>)
   ·   ·   ▸ rule gate2
+  ·   ·   ·   ▸ script gate2_impl
+  ·   ·   ·   ✗ script gate2_impl (<time>)
   ·   ·   ✗ rule gate2 (<time>)
   ·   ·   ▸ workflow remediate2
+  ·   ·   ·   ▸ script remediate2_impl
+  ·   ·   ·   ✓ script remediate2_impl (<time>)
   ·   ·   ✓ workflow remediate2 (<time>)
   ·   ·   ▸ workflow make_pass
   ·   ·   ·   ▸ rule gate1
+  ·   ·   ·   ·   ▸ script gate1_impl
+  ·   ·   ·   ·   ✓ script gate1_impl (<time>)
   ·   ·   ·   ✓ rule gate1 (<time>)
   ·   ·   ·   ▸ rule gate2
+  ·   ·   ·   ·   ▸ script gate2_impl
+  ·   ·   ·   ·   ✓ script gate2_impl (<time>)
   ·   ·   ·   ✓ rule gate2 (<time>)
   ·   ·   ✓ workflow make_pass (<time>)
   ·   ✓ workflow make_pass (<time>)
   ·   ▸ rule gate2
+  ·   ·   ▸ script gate2_impl
+  ·   ·   ✓ script gate2_impl (<time>)
   ·   ✓ rule gate2 (<time>)
   ✓ workflow make_pass (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
 e2e::pass "if not ensure with two recursive gates: fail gate1 then gate2, pass on nested retries"
-e2e::expect_out_files "make_pass.jh" 0
 
-# Same scenario but condition is plain bash (if ! test -f ...; then touch; run make_pass; fi).
-e2e::section "if ! test (bash) then touch + run same workflow (fail first, pass on retry)"
+# Same scenario but with a single ensure gate.
+e2e::section "single-gate recursive retry: fail first, pass on retry"
 rm -f "${TEST_DIR}/.gate_passed"
 
 # Given
 e2e::file "make_pass_bash.jh" <<'EOF'
+rule gate {
+  run check_gate
+}
+script check_gate() {
+  test -f .gate_passed
+}
+script mark_gate() {
+  touch .gate_passed
+}
 workflow make_pass {
-  if ! test -f .gate_passed; then
-    touch .gate_passed
+  if not ensure gate {
+    run mark_gate
     run make_pass
-  fi
+  }
 }
 
 workflow default {
@@ -112,20 +147,26 @@ EOF
 out_bash="$(e2e::run "make_pass_bash.jh" 2>&1)"
 
 # Then
-e2e::assert_file_exists "${TEST_DIR}/.gate_passed" "bash then-branch ran (marker created before retry)"
-
+e2e::assert_file_exists "${TEST_DIR}/.gate_passed" "retry branch ran (marker created before retry)"
 e2e::expect_stdout "${out_bash}" <<'EOF'
 
 Jaiph: Running make_pass_bash.jh
 
 workflow default
   ▸ workflow make_pass
+  ·   ▸ rule gate
+  ·   ·   ▸ script check_gate
+  ·   ·   ✗ script check_gate (<time>)
+  ·   ✗ rule gate (<time>)
+  ·   ▸ script mark_gate
+  ·   ✓ script mark_gate (<time>)
   ·   ▸ workflow make_pass
+  ·   ·   ▸ rule gate
+  ·   ·   ·   ▸ script check_gate
+  ·   ·   ·   ✓ script check_gate (<time>)
+  ·   ·   ✓ rule gate (<time>)
   ·   ✓ workflow make_pass (<time>)
   ✓ workflow make_pass (<time>)
 ✓ PASS workflow default (<time>)
 EOF
-
-e2e::expect_out_files "make_pass_bash.jh" 0
-
-e2e::pass "if ! test with touch + run make_pass: fail first time, pass on retry"
+e2e::pass "single-gate retry flow: fail first time, pass on retry"

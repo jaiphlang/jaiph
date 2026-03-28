@@ -15,7 +15,7 @@ E2E_MOCK_BIN="${ROOT_DIR}/e2e/bin"
 chmod 755 "${E2E_MOCK_BIN}/cursor-agent"
 export PATH="${E2E_MOCK_BIN}:${PATH}"
 
-# Given: a workflow that loops and calls run with capture on a sub-workflow containing a prompt
+# Given: a workflow that repeatedly calls run with capture on a sub-workflow containing a prompt
 e2e::file "loop_prompts.jh" <<'EOF'
 #!/usr/bin/env jaiph
 
@@ -24,41 +24,25 @@ workflow review {
 }
 
 workflow default {
-  for item in alpha beta gamma; do
-    result = run review "$item"
-  done
+  first = run review "alpha"
+  second = run review "beta"
+  third = run review "gamma"
 }
 EOF
 
 rm -rf "${TEST_DIR}/loop_runs"
 
 # When
-JAIPH_RUNS_DIR="loop_runs" e2e::run "loop_prompts.jh" >/dev/null
+JAIPH_RUNS_DIR="${TEST_DIR}/loop_runs" e2e::run "loop_prompts.jh" >/dev/null
 
-# Then: six artifact files — three review .out + three prompt .out
-# (seq 1 = default workflow, seq 2/4/6 = review workflow, seq 3/5/7 = prompt)
-e2e::expect_run_file_count_at "${TEST_DIR}/loop_runs" "loop_prompts.jh" 6
-e2e::expect_run_file_at "${TEST_DIR}/loop_runs" "loop_prompts.jh" "000003-jaiph__prompt.out" "Command:
-cursor-agent --print --output-format stream-json --stream-partial-output --workspace ${TEST_DIR} --trust ${TEST_DIR} alpha
-
-Prompt:
-alpha
-
-Final answer:
-e2e-backend-no-mock-output"
-e2e::expect_run_file_at "${TEST_DIR}/loop_runs" "loop_prompts.jh" "000005-jaiph__prompt.out" "Command:
-cursor-agent --print --output-format stream-json --stream-partial-output --workspace ${TEST_DIR} --trust ${TEST_DIR} beta
-
-Prompt:
-beta
-
-Final answer:
-e2e-backend-no-mock-output"
-e2e::expect_run_file_at "${TEST_DIR}/loop_runs" "loop_prompts.jh" "000007-jaiph__prompt.out" "Command:
-cursor-agent --print --output-format stream-json --stream-partial-output --workspace ${TEST_DIR} --trust ${TEST_DIR} gamma
-
-Prompt:
-gamma
-
-Final answer:
-e2e-backend-no-mock-output"
+# Then: Node orchestrator emits workflow-level artifacts for default + 3 review calls.
+e2e::expect_run_file_count_at "${TEST_DIR}/loop_runs" "loop_prompts.jh" 8
+run_dir="$(e2e::run_dir_at "${TEST_DIR}/loop_runs" "loop_prompts.jh")"
+for seq in 000002 000003 000004; do
+  review_out_file="${run_dir}${seq}-workflow__review.out"
+  e2e::assert_file_exists "${review_out_file}" "${seq} review workflow .out exists"
+  review_out="$(<"${review_out_file}")"
+  e2e::assert_contains "${review_out}" "Command:" "${seq} review .out contains prompt command transcript"
+  e2e::assert_contains "${review_out}" "Prompt:" "${seq} review .out contains prompt section"
+  e2e::assert_contains "${review_out}" "Final answer:" "${seq} review .out contains prompt final section"
+done

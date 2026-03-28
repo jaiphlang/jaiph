@@ -69,7 +69,11 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
       continue;
     }
 
-    if (/^(?:local|const)\s+[A-Za-z_]/.test(line)) {
+    if (/^local\s+[A-Za-z_]/.test(line)) {
+      fail(filePath, 'unknown top-level keyword "local" — use const NAME = VALUE', lineNo, 1);
+    }
+
+    if (/^const\s+[A-Za-z_]/.test(line)) {
       pendingTopLevelComments = [];
       const { envDecl, nextIndex } = parseEnvDecl(filePath, lines, i - 1);
       if (!mod.envDecls) {
@@ -154,7 +158,7 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
       if (prev) {
         fail(filePath, `duplicate name "${env.name}" — variable name collides with ${prev} of the same name`, env.loc.line, env.loc.col);
       }
-      seen.set(env.name, "local");
+      seen.set(env.name, "const");
     }
   }
 

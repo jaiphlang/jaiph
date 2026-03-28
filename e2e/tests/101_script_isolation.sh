@@ -39,7 +39,7 @@ e2e::assert_equals "${leak_out}" "secret=EMPTY" "script cannot read parent const
 e2e::pass "script isolation: parent variables not inherited"
 
 # ---------------------------------------------------------------------------
-e2e::section "JAIPH_LIB is available in isolated scripts"
+e2e::section "JAIPH_LIB is unset by default in isolated scripts"
 # ---------------------------------------------------------------------------
 
 e2e::file "lib_check.jh" <<'EOF'
@@ -61,12 +61,9 @@ lib_files=( "${run_dir}"*check_lib.out )
 shopt -u nullglob
 [[ ${#lib_files[@]} -ge 1 ]] || e2e::fail "expected check_lib .out artifact"
 lib_out="$(<"${lib_files[0]}")"
-e2e::assert_contains "${lib_out}" "lib=" "JAIPH_LIB is set (not UNSET)"
-if [[ "$lib_out" == *"UNSET"* ]]; then
-  e2e::fail "JAIPH_LIB should be set but was UNSET"
-fi
+e2e::assert_equals "${lib_out}" "lib=UNSET" "JAIPH_LIB is unset unless explicitly provided"
 
-e2e::pass "JAIPH_LIB available in isolated script"
+e2e::pass "JAIPH_LIB default is unset in isolated script"
 
 # ---------------------------------------------------------------------------
 e2e::section "source \$JAIPH_LIB/... works from isolated script"

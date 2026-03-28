@@ -76,7 +76,15 @@ test("ACCEPTANCE: TTY running timer updates and ends with PASS", () => {
 
   writeFileSync(
     workflowPath,
-    ["workflow default {", "  sleep 3", "}"].join("\n"),
+    [
+      "script sleep_impl() {",
+      "  sleep 3",
+      '  echo "tty-output-ok"',
+      "}",
+      "workflow default {",
+      "  run sleep_impl",
+      "}",
+    ].join("\n"),
   );
 
   try {
@@ -115,6 +123,11 @@ test("ACCEPTANCE: TTY running timer updates and ends with PASS", () => {
       normalized,
       /PASS workflow default/,
       "TTY output should end with PASS summary",
+    );
+    assert.doesNotMatch(
+      normalized,
+      /RUNNING workflow default[^\n]*PASS workflow default/,
+      "RUNNING line must not remain on the PASS summary line",
     );
   } finally {
     rmSync(root, { recursive: true, force: true });

@@ -118,7 +118,7 @@ export function expandTopLevelEnvDeclReferences(
     if (expanding.has(refName)) {
       throw jaiphError(
         filePath, 1, 1, "E_PARSE",
-        `circular reference among top-level local declarations involving "${refName}"`,
+        `circular reference among top-level const declarations involving "${refName}"`,
       );
     }
     expanding.add(refName);

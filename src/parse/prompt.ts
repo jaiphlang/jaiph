@@ -25,7 +25,7 @@ function splitPromptAndReturns(
   let rest = rawPrompt.slice(closeIdx + 1);
   let nextIdx = lineIndexAfterPrompt;
   while (nextIdx + 1 < lines.length && /\\\s*$/.test(rest.trimEnd())) {
-    rest += "\n" + lines[nextIdx + 1].replace(/\\\s*$/, "").trimStart();
+    rest = rest.replace(/\\\s*$/, "") + "\n" + lines[nextIdx + 1].replace(/\\\s*$/, "").trimStart();
     nextIdx += 1;
   }
   let trimmed = rest.trim();
