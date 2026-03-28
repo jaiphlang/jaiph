@@ -3,17 +3,33 @@ channel summary
 channel final_summary
 
 workflow researcher {
-  findings <- echo '## findings'
+  findings <- run emit_findings
+}
+
+script emit_findings() {
+  echo '## findings'
+}
+
+script write_findings_file() {
+  echo "$1" > findings_file.md
+}
+
+script summarize_findings() {
+  echo "Summary of findings"
+}
+
+script review_summary() {
+  echo "[reviewed] $1"
 }
 
 workflow analyst {
-  echo "$1" > findings_file.md
-  summary = echo "Summary of findings"
-  summary <- echo "$summary"
+  run write_findings_file "$1"
+  summary = run summarize_findings
+  summary <- "$summary"
 }
 
 workflow reviewer {
-  final_summary <- echo "[reviewed] $1"
+  final_summary <- run review_summary "$1"
 }
 
 # Orchestration / entrypoint workflow

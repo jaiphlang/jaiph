@@ -14,8 +14,11 @@ e2e::section "Blackbox filesystem side effects"
 # Given
 e2e::file "fs_write_workflow.jh" <<'EOF'
 #!/usr/bin/env jaiph
-workflow default {
+script write_workflow_file() {
   echo "abc" > workflow_wrote.txt
+}
+workflow default {
+  run write_workflow_file
 }
 EOF
 rm -f "${TEST_DIR}/workflow_wrote.txt"
@@ -32,16 +35,21 @@ e2e::expect_stdout "${workflow_write_out}" <<'EOF'
 Jaiph: Running fs_write_workflow.jh
 
 workflow default
+  ▸ script write_workflow_file
+  ✓ script write_workflow_file (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
-e2e::expect_out_files "fs_write_workflow.jh" 0
+e2e::expect_out_files "fs_write_workflow.jh" 2
 
 # Given
 e2e::file "fs_write_rule.jh" <<'EOF'
 #!/usr/bin/env jaiph
-rule write_attempt {
+script write_attempt_impl() {
   echo "abc" > rule_wrote.txt
+}
+rule write_attempt {
+  run write_attempt_impl
 }
 
 workflow default {
@@ -78,11 +86,13 @@ Jaiph: Running fs_write_rule.jh
 
 workflow default
   ▸ rule write_attempt
+  ·   ▸ script write_attempt_impl
+  ·   ✓ script write_attempt_impl (<time>)
   ✓ rule write_attempt (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
-  e2e::expect_out_files "fs_write_rule.jh" 0
+  e2e::expect_out_files "fs_write_rule.jh" 3
 
   e2e::skip "readonly sandbox not available on this host; write-blocking assertion skipped"
 fi

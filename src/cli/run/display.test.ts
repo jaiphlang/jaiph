@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { colorize, formatCompletedLine, formatStartLine } from "./display";
+import { colorize, formatCompletedLine, formatStartLine, sanitizeMultilineLogForTerminal } from "./display";
 
 // === colorize ===
 
@@ -115,4 +115,15 @@ test("formatStartLine: shows prompt preview from params", () => {
   ];
   const result = formatStartLine("  ", "prompt", "prompt", false, params);
   assert.ok(result.includes("prompt"));
+});
+
+test("sanitizeMultilineLogForTerminal: normalizes CR and strips embedded SGR", () => {
+  assert.equal(
+    sanitizeMultilineLogForTerminal('"Hi"\r\nMore'),
+    '"Hi"\nMore',
+  );
+  assert.equal(
+    sanitizeMultilineLogForTerminal('a\u001b[31mred\u001b[0mb'),
+    "aredb",
+  );
 });

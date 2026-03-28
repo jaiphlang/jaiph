@@ -139,9 +139,9 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     const onLine = createStderrParser(emitter, { sourceMapCache });
     const buf: StreamBuffers = { stdout: "", stderr: "" };
 
-    wireStreams(execResult, dockerConfig.enabled, onLine, buf);
+    wireStreams(execResult, dockerConfig.enabled, onLine, buf, ttyCtx);
     const childExit = await waitForRunExit(execResult, () => signalHandlers.remove());
-    drainBuffers(dockerConfig.enabled, onLine, buf);
+    drainBuffers(dockerConfig.enabled, onLine, buf, ttyCtx);
 
     if (dockerResult) {
       const timedOut = dockerResult.timeoutTimer === undefined && dockerConfig.timeout > 0
@@ -238,6 +238,7 @@ function wireStreams(
   isDocker: boolean,
   onLine: (line: string) => void,
   buf: StreamBuffers,
+  ttyCtx: TTYContext,
 ): void {
   execResult.stdout?.setEncoding("utf8");
   execResult.stderr?.setEncoding("utf8");
@@ -252,14 +253,14 @@ function wireStreams(
         if (parseLogEvent(line) || parseStepEvent(line)) {
           onLine(line);
         } else {
-          process.stdout.write(`${line}\n`);
+          writePlainStdout(`${line}\n`, ttyCtx);
         }
         idx = buf.stdout.indexOf("\n");
       }
     });
   } else {
     execResult.stdout?.on("data", (chunk: string) => {
-      process.stdout.write(chunk);
+      writePlainStdout(chunk, ttyCtx);
     });
   }
 
@@ -279,6 +280,7 @@ function drainBuffers(
   isDocker: boolean,
   onLine: (line: string) => void,
   buf: StreamBuffers,
+  ttyCtx: TTYContext,
 ): void {
   if (buf.stdout.length > 0) {
     const remaining = buf.stdout.replace(/\r$/, "").split(/\r?\n/);
@@ -287,7 +289,7 @@ function drainBuffers(
         if (isDocker && (parseLogEvent(line) || parseStepEvent(line))) {
           onLine(line);
         } else {
-          process.stdout.write(`${line}\n`);
+          writePlainStdout(`${line}\n`, ttyCtx);
         }
       }
     }
@@ -300,6 +302,25 @@ function drainBuffers(
     }
     buf.stderr = "";
   }
+}
+
+function clearTTYBottomLine(ttyCtx: TTYContext): void {
+  if (ttyCtx.isTTY && ttyCtx.runningInterval !== undefined) {
+    process.stdout.write("\r\u001b[K\u001b[1A\r\u001b[K");
+  }
+}
+
+function redrawTTYBottomLine(ttyCtx: TTYContext): void {
+  if (ttyCtx.isTTY && ttyCtx.runningInterval !== undefined) {
+    const elapsedSec = (Date.now() - ttyCtx.startedAt) / 1000;
+    process.stdout.write(formatRunningBottomLine("default", elapsedSec));
+  }
+}
+
+function writePlainStdout(chunk: string, ttyCtx: TTYContext): void {
+  clearTTYBottomLine(ttyCtx);
+  process.stdout.write(chunk);
+  redrawTTYBottomLine(ttyCtx);
 }
 
 function reportResult(

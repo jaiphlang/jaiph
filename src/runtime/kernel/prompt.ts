@@ -5,8 +5,9 @@
 //   JAIPH_WORKSPACE, JAIPH_TEST_MODE, JAIPH_MOCK_DISPATCH_SCRIPT,
 //   JAIPH_MOCK_RESPONSES_FILE, JAIPH_PROMPT_FINAL_FILE
 
-import { spawn as nodeSpawn, execFileSync } from "node:child_process";
-import { writeFileSync, readFileSync, existsSync } from "node:fs";
+import { spawn as nodeSpawn } from "node:child_process";
+import { writeFileSync, readFileSync, existsSync, accessSync, constants as fsConstants } from "node:fs";
+import { delimiter, join } from "node:path";
 import { parseStream, type StreamWriter } from "./stream-parser";
 import { readNextMockResponse, mockDispatch } from "./mock";
 
@@ -21,8 +22,7 @@ export type PromptConfig = {
   promptFinalFile: string;
 };
 
-export function resolveConfig(): PromptConfig {
-  const env = process.env;
+export function resolveConfig(env: NodeJS.ProcessEnv = process.env): PromptConfig {
   const workspaceRoot = env.JAIPH_WORKSPACE || process.cwd();
   return {
     backend: env.JAIPH_AGENT_BACKEND || "cursor",
@@ -36,8 +36,8 @@ export function resolveConfig(): PromptConfig {
   };
 }
 
-function isTestMode(): boolean {
-  return process.env.JAIPH_TEST_MODE === "1";
+function isTestMode(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.JAIPH_TEST_MODE === "1";
 }
 
 /**
@@ -84,12 +84,27 @@ export function buildBackendArgs(config: PromptConfig, promptText: string): { co
 
 /** Check if a command exists in PATH. */
 function commandExists(cmd: string): boolean {
-  try {
-    execFileSync("command", ["-v", cmd], { stdio: "ignore", shell: true });
-    return true;
-  } catch {
-    return false;
+  if (!cmd) return false;
+  if (cmd.includes("/")) {
+    try {
+      accessSync(cmd, fsConstants.X_OK);
+      return true;
+    } catch {
+      return false;
+    }
   }
+  const pathEnv = process.env.PATH ?? "";
+  for (const dir of pathEnv.split(delimiter)) {
+    if (!dir) continue;
+    const full = join(dir, cmd);
+    try {
+      accessSync(full, fsConstants.X_OK);
+      return true;
+    } catch {
+      // continue
+    }
+  }
+  return false;
 }
 
 /** Run the backend process and parse its streaming output. */
@@ -162,15 +177,42 @@ function writeFinalFile(filePath: string, content: string): void {
   }
 }
 
+/** Remove only surrounding blank lines while preserving inner formatting. */
+function trimSurroundingBlankLines(input: string): string {
+  return input.replace(/^(?:[ \t]*\r?\n)+/, "").replace(/(?:\r?\n[ \t]*)+$/, "");
+}
+
+/** Write Command:/Prompt: headers (same for real runs and test mocks) for run artifacts. */
+function writePromptTranscriptHeader(
+  stdout: NodeJS.WritableStream,
+  config: PromptConfig,
+  promptText: string,
+): void {
+  if (!promptText) return;
+  const { command, args } = buildBackendArgs(config, promptText);
+  let commandLog: string;
+  if (config.backend === "claude") {
+    commandLog = `printf %s ${shellQuote(promptText)} \\| ${formatShellCommand([command, ...args])}`;
+  } else {
+    commandLog = formatShellCommand([command, ...args]);
+  }
+  stdout.write(`Command:\n${commandLog}\n\n`);
+  stdout.write(`Prompt:\n${promptText}\n\n`);
+}
+
 /** Core prompt execution logic. Returns final text and exit status. */
 export async function executePrompt(
   promptText: string,
   config: PromptConfig,
   stdout: NodeJS.WritableStream,
+  /** Workflow/runtime env (JAIPH_TEST_MODE and mocks); defaults to process.env for CLI entry. */
+  execEnv: NodeJS.ProcessEnv = process.env,
 ): Promise<{ final: string; status: number }> {
+  writePromptTranscriptHeader(stdout, config, promptText);
+
   // Test mode: check mocks first
-  if (isTestMode()) {
-    const dispatchScript = process.env.JAIPH_MOCK_DISPATCH_SCRIPT || "";
+  if (isTestMode(execEnv)) {
+    const dispatchScript = execEnv.JAIPH_MOCK_DISPATCH_SCRIPT || "";
     if (dispatchScript) {
       const result = mockDispatch(promptText, dispatchScript);
       if (result.status === 0) {
@@ -183,7 +225,7 @@ export async function executePrompt(
       }
       return { final: "", status: result.status };
     }
-    const mockFile = process.env.JAIPH_MOCK_RESPONSES_FILE || "";
+    const mockFile = execEnv.JAIPH_MOCK_RESPONSES_FILE || "";
     if (mockFile) {
       const mockResult = readNextMockResponse(mockFile);
       if (mockResult !== null) {
@@ -198,31 +240,21 @@ export async function executePrompt(
     // No mock set or no match: fall through to real backend
   }
 
-  // Log command and prompt text
-  if (promptText) {
-    const { command, args } = buildBackendArgs(config, promptText);
-    let commandLog: string;
-    if (config.backend === "claude") {
-      // Match bash format: printf %s <escaped> \| <command...>
-      commandLog = `printf %s ${shellQuote(promptText)} \\| ${formatShellCommand([command, ...args])}`;
-    } else {
-      commandLog = formatShellCommand([command, ...args]);
-    }
-    stdout.write(`Command:\n${commandLog}\n\n`);
-    stdout.write(`Prompt:\n${promptText}\n\n`);
-  }
-
   const writer: StreamWriter = {
     writeReasoning: (text) => stdout.write(text),
     writeFinal: (text) => stdout.write(text),
   };
 
   const result = await runBackend(config, promptText, writer);
-  writeFinalFile(config.promptFinalFile, result.final);
+  const final =
+    config.backend === "cursor"
+      ? trimSurroundingBlankLines(result.final)
+      : result.final;
+  writeFinalFile(config.promptFinalFile, final);
   if (promptText) {
     stdout.write("\n");
   }
-  return result;
+  return { final, status: result.status };
 }
 
 /** Read prompt text from stdin. */

@@ -17,6 +17,17 @@ export function colorize(
   return `${prefix}${text}\u001b[0m`;
 }
 
+/**
+ * Normalize log/logerr message text before printing to a real terminal.
+ * Agent and CLI output often contains `\r` and embedded SGR sequences; raw `\r`
+ * moves the cursor and can erase the progress tree prefix, leaving fragments like `ℹ "`.
+ */
+export function sanitizeMultilineLogForTerminal(message: string): string {
+  let s = message.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  s = s.replace(/\u001b\[[0-9;:]*m/g, "");
+  return s;
+}
+
 export function formatStartLine(
   indent: string,
   kind: string,

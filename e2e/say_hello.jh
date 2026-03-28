@@ -1,10 +1,14 @@
 #!/usr/bin/env jaiph
 
-rule name_was_provided {
+script name_was_provided_impl() {
   if [ -z "$1" ]; then
-    logerr "You didn't provide your name :("
+    echo "You didn't provide your name :(" >&2
     exit 1
   fi
+}
+
+rule name_was_provided {
+  run name_was_provided_impl "$1"
 }
 
 workflow default {

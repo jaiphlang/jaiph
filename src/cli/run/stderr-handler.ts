@@ -1,6 +1,12 @@
 import { rewriteJaiphDiagnosticsLine, type SourceMapCache } from "../shared/jaiph-source-map";
 import { parseStepEvent, parseLogEvent } from "./events";
-import { colorize, formatStartLine, formatCompletedLine, formatHeartbeatLine } from "./display";
+import {
+  colorize,
+  formatStartLine,
+  formatCompletedLine,
+  formatHeartbeatLine,
+  sanitizeMultilineLogForTerminal,
+} from "./display";
 import { formatRunningBottomLine } from "./progress";
 import type { RunEmitter } from "./emitter";
 
@@ -175,11 +181,12 @@ export function tickNonTTYHeartbeat(ctx: TTYContext): void {
   process.stdout.write(`${line}\n`);
 }
 
-function writeTTYLine(line: string, ctx: TTYContext): void {
+function writeTTYLine(line: string, ctx: TTYContext, spacing: "single" | "double" = "double"): void {
   if (ctx.isTTY && ctx.runningInterval !== undefined) {
     process.stdout.write("\r\u001b[K\u001b[1A\r\u001b[K");
   }
-  process.stdout.write(`${line}${ctx.isTTY ? "\n\n" : "\n"}`);
+  const suffix = ctx.isTTY ? (spacing === "double" ? "\n\n" : "\n") : "\n";
+  process.stdout.write(`${line}${suffix}`);
   if (ctx.isTTY && ctx.runningInterval !== undefined) {
     const elapsedSec = (Date.now() - ctx.startedAt) / 1000;
     process.stdout.write(formatRunningBottomLine("default", elapsedSec));
@@ -195,9 +202,10 @@ export function registerTTYSubscriber(emitter: RunEmitter, ctx: TTYContext): voi
     const indent = "  · ".repeat(depth);
     const prefix = indent.slice(0, -2);
     const dimPrefix = colorize(prefix, "dim", ctx.colorEnabled);
+    const safeMessage = sanitizeMultilineLogForTerminal(logEvent.message);
     const logLabel = logEvent.type === "LOGERR"
-      ? `${dimPrefix}${colorize(`! ${logEvent.message}`, "red", ctx.colorEnabled)}`
-      : `${dimPrefix}${colorize("ℹ", "dim", ctx.colorEnabled)} ${logEvent.message}`;
+      ? `${dimPrefix}${colorize(`! ${safeMessage}`, "red", ctx.colorEnabled)}`
+      : `${dimPrefix}${colorize("ℹ", "dim", ctx.colorEnabled)} ${safeMessage}`;
     writeTTYLine(logLabel, ctx);
   });
 

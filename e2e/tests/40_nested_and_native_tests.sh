@@ -14,17 +14,23 @@ e2e::section "Output tree and nested workflow visibility"
 # Given
 e2e::file "nested_inner.jh" <<'EOF'
 #!/usr/bin/env jaiph
-workflow default {
+script nested_inner_impl() {
   echo "e2e-nested-inner"
+}
+workflow default {
+  run nested_inner_impl
 }
 EOF
 
 e2e::file "nested_run.jh" <<'EOF'
 #!/usr/bin/env jaiph
 import "nested_inner.jh" as inner
+script nested_outer_impl() {
+  echo "e2e-nested-outer"
+}
 workflow default {
   run inner.default
-  echo "e2e-nested-outer"
+  run nested_outer_impl
 }
 EOF
 
@@ -38,15 +44,19 @@ Jaiph: Running nested_run.jh
 
 workflow default
   ▸ workflow default
+  ·   ▸ script nested_inner_impl
+  ·   ✓ script nested_inner_impl (<time>)
   ✓ workflow default (<time>)
+  ▸ script nested_outer_impl
+  ✓ script nested_outer_impl (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
-e2e::expect_out_files "nested_run.jh" 2
-e2e::expect_file "*nested_inner__default.out" <<'EOF'
+e2e::expect_out_files "nested_run.jh" 4
+e2e::expect_file "*script__nested_inner_impl.out" <<'EOF'
 e2e-nested-inner
 EOF
-e2e::expect_file "*nested_run__default.out" <<'EOF'
+e2e::expect_file "*script__nested_outer_impl.out" <<'EOF'
 e2e-nested-outer
 EOF
 
@@ -55,9 +65,12 @@ e2e::section "Native *.test.jh flow"
 # Given
 e2e::file "workflow_greeting.jh" <<'EOF'
 #!/usr/bin/env jaiph
+script done_impl() {
+  echo "done"
+}
 workflow default {
   prompt "e2e-greeting-prompt"
-  echo "done"
+  run done_impl
 }
 EOF
 
@@ -93,9 +106,12 @@ e2e::section "Mock prompt block with no else: unmatched prompt fails with clear 
 # Given
 e2e::file "unmatched_mock_block.jh" <<'EOF'
 #!/usr/bin/env jaiph
+script print_result() {
+  printf '%s' "$1"
+}
 workflow default {
   result = prompt "e2e-unmatched-prompt-never-mocked"
-  printf '%s' "$result"
+  run print_result "$result"
 }
 EOF
 
@@ -146,10 +162,12 @@ Jaiph: Running fibonacci.jh
 
 workflow default (1="3")
   ▸ rule ensure_is_number (1="3")
+  ·   ▸ script ensure_is_number_impl (1="3")
+  ·   ✓ script ensure_is_number_impl (<time>)
   ✓ rule ensure_is_number (<time>)
-  ▸ script fib (1="<script-path>", 2="3")
+  ▸ script fib (1="3")
   ✓ script fib (<time>)
-  ℹ 2
+  ℹ "2"
 ✓ PASS workflow default (<time>)
 EOF
 
@@ -167,13 +185,19 @@ e2e::section "Parametrized workflow, rule, and prompt: params in tree (exact out
 # Given
 e2e::file "param_demo.jh" <<'EOF'
 #!/usr/bin/env jaiph
-rule check_arg {
+script check_arg_impl() {
   [ -n "$1" ]
+}
+script echo_response() {
+  echo "$1"
+}
+rule check_arg {
+  run check_arg_impl "$1"
 }
 workflow default {
   ensure check_arg "$1"
   response = prompt "e2e-param-prompt-text"
-  echo "$response"
+  run echo_response "$response"
 }
 EOF
 
@@ -203,12 +227,18 @@ e2e::pass "parametrized workflow/rule/prompt show params in tree"
 # Exact output: run workflow with args, no prompt (so no agent needed)
 e2e::file "param_run_only.jh" <<'EOF'
 #!/usr/bin/env jaiph
-rule need_one {
+script need_one_impl() {
   [ -n "$1" ]
+}
+script param_done_impl() {
+  echo "e2e-param-done"
+}
+rule need_one {
+  run need_one_impl "$1"
 }
 workflow default {
   ensure need_one "$1"
-  echo "e2e-param-done"
+  run param_done_impl
 }
 EOF
 
@@ -222,9 +252,13 @@ Jaiph: Running param_run_only.jh
 
 workflow default (1="Bob")
   ▸ rule need_one (1="Bob")
+  ·   ▸ script need_one_impl (1="Bob")
+  ·   ✓ script need_one_impl (<time>)
   ✓ rule need_one (<time>)
+  ▸ script param_done_impl
+  ✓ script param_done_impl (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
-e2e::expect_out_files "param_run_only.jh" 1
-e2e::expect_out "param_run_only.jh" "default" "e2e-param-done"
+e2e::expect_out_files "param_run_only.jh" 4
+e2e::expect_out "param_run_only.jh" "param_done_impl" "e2e-param-done"

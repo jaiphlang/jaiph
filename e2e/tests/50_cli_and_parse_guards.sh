@@ -13,8 +13,11 @@ e2e::section "jaiph test discovery and empty-directory failure"
 
 # Given
 e2e::file "ok_a.jh" <<'EOF'
-workflow default {
+script a_impl() {
   echo "A"
+}
+workflow default {
+  run a_impl
 }
 EOF
 
@@ -28,8 +31,11 @@ test "A passes" {
 EOF
 
 e2e::file "ok_b.jh" <<'EOF'
-workflow default {
+script b_impl() {
   echo "B"
+}
+workflow default {
+  run b_impl
 }
 EOF
 
@@ -75,8 +81,11 @@ e2e::section "jaiph run requires workflow default"
 
 # Given
 e2e::file "no_default.jh" <<'EOF'
-workflow docs {
+script no_default_impl() {
   echo "no default here"
+}
+workflow docs {
+  run no_default_impl
 }
 EOF
 

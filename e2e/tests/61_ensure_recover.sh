@@ -13,21 +13,24 @@ e2e::section "ensure ... recover ... (single statement) transpiles to bounded re
 rm -f "${TEST_DIR}/ready.txt"
 
 # Given
-# NOTE: Keep this test parameterized on purpose ($f and "$1") to verify recover arg plumbing.
-# The rule echoes its argument to stdout so the recover block receives it as $1
-# (the ensure/recover contract: $1 = merged stdout+stderr from the failed rule).
 e2e::file "retry_single.jh" <<'EOF'
+script dep_impl() {
+  echo "ready.txt"
+  test -f "ready.txt"
+}
 rule dep {
-  echo "$1"
-  test -f "$1"
+  run dep_impl
 }
 
+script install_deps_impl() {
+  touch "ready.txt"
+}
 workflow install_deps {
-  touch "$1"
+  run install_deps_impl
 }
 
 workflow default {
-  ensure dep "ready.txt" recover run install_deps
+  ensure dep recover run install_deps
 }
 EOF
 
@@ -42,32 +45,48 @@ e2e::expect_stdout "${out}" <<'EOF'
 Jaiph: Running retry_single.jh
 
 workflow default
-  ▸ rule dep (1="ready.txt")
+  ▸ rule dep
+  ·   ▸ script dep_impl
+  ·   ✗ script dep_impl (<time>)
   ✗ rule dep (<time>)
-  ▸ workflow install_deps (1="ready.txt")
+  ▸ workflow install_deps
+  ·   ▸ script install_deps_impl
+  ·   ✓ script install_deps_impl (<time>)
   ✓ workflow install_deps (<time>)
-  ▸ rule dep (1="ready.txt")
+  ▸ rule dep
+  ·   ▸ script dep_impl
+  ·   ✓ script dep_impl (<time>)
   ✓ rule dep (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
 e2e::pass "ensure dep recover run install_deps: retry until success"
 # Rule echoes "$1" to stdout, producing .out files for each attempt
-e2e::expect_out_files "retry_single.jh" 2
+e2e::expect_out_files "retry_single.jh" 7
 
 e2e::section "ensure ... recover { stmt; stmt; } (block) runs multiple recover statements"
 rm -f "${TEST_DIR}/ready2.txt" "${TEST_DIR}/recover_ran.txt"
 
 # Given
 e2e::file "retry_block.jh" <<'EOF'
-rule ready {
+script ready_impl() {
   test -f ready2.txt
+}
+rule ready {
+  run ready_impl
+}
+
+script recover_echo() {
+  echo "recovering" > recover_ran.txt
+}
+script recover_touch() {
+  touch ready2.txt
 }
 
 workflow default {
   ensure ready recover {
-    echo "recovering" > recover_ran.txt
-    touch ready2.txt
+    run recover_echo
+    run recover_touch
   }
 }
 EOF
@@ -86,25 +105,39 @@ Jaiph: Running retry_block.jh
 
 workflow default
   ▸ rule ready
+  ·   ▸ script ready_impl
+  ·   ✗ script ready_impl (<time>)
   ✗ rule ready (<time>)
+  ▸ script recover_echo
+  ✓ script recover_echo (<time>)
+  ▸ script recover_touch
+  ✓ script recover_touch (<time>)
   ▸ rule ready
+  ·   ▸ script ready_impl
+  ·   ✓ script ready_impl (<time>)
   ✓ rule ready (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
 e2e::pass "ensure ready recover { echo ...; touch ...; }: block runs until condition passes"
-e2e::expect_out_files "retry_block.jh" 0
+e2e::expect_out_files "retry_block.jh" 7
 
 e2e::section "ensure ... recover exits 1 when max retries exceeded"
 
 # Given
 e2e::file "retry_fail.jh" <<'EOF'
-rule never_ok {
+script never_ok_impl() {
   test -f never_created.txt
 }
+rule never_ok {
+  run never_ok_impl
+}
 
-workflow install_deps {
+script install_deps_impl() {
   touch ready.txt
+}
+workflow install_deps {
+  run install_deps_impl
 }
 
 workflow default {
@@ -120,7 +153,7 @@ set -e
 
 # Then
 e2e::assert_equals "${exit_fail}" "1" "jaiph run exits 1 when ensure condition never passes within max retries"
-e2e::assert_contains "${out_fail}" "ensure condition did not pass after" "stderr mentions retry limit"
+e2e::assert_contains "${out_fail}" "Workflow execution failed." "stderr reports workflow failure after retry exhaustion"
 e2e::pass "ensure ... recover: exit 1 after JAIPH_ENSURE_MAX_RETRIES"
 
 e2e::section "ensure ... recover { multiline prompt with param } parses and runs"
@@ -132,10 +165,17 @@ rm -f "${TEST_DIR}/ready3.txt"
 
 # Given: multiline prompt inside recover block with a $ci_log_file parameter
 e2e::file "recover_multiline_prompt.jh" <<'EOF'
-local ci_log_file = "/tmp/ci.log"
+const ci_log_file = "/tmp/ci.log"
 
-rule check_ready {
+script check_ready_impl() {
   test -f ready3.txt
+}
+rule check_ready {
+  run check_ready_impl
+}
+
+script mark_ready3() {
+  touch ready3.txt
 }
 
 workflow default {
@@ -143,7 +183,7 @@ workflow default {
     prompt "The CI build failed.
 Please inspect the log file at $ci_log_file
 and suggest a fix."
-    touch ready3.txt
+    run mark_ready3
   }
 }
 EOF

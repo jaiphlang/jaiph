@@ -14,14 +14,20 @@ e2e::section "Mock workflow, rule, and function in *.test.jh"
 # Given
 e2e::file "app.jh" <<'EOF'
 #!/usr/bin/env jaiph
-rule policy_check {
+script policy_check_impl() {
   echo real-policy
+}
+rule policy_check {
+  run policy_check_impl
 }
 script changed_files {
   echo real_files
 }
-workflow build {
+script build_impl() {
   echo "real build"
+}
+workflow build {
+  run build_impl
 }
 workflow default {
   ensure policy_check

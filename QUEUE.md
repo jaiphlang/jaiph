@@ -6,6 +6,221 @@ The first `##` task in the file is always the current task.
 
 ---
 
+## Restore nested metadata-scope inheritance semantics (fix e2e 86) <!-- dev-ready -->
+
+**Goal**  
+Make nested workflow calls inherit caller metadata scope unless explicitly overridden by locked env policy, so `e2e/tests/86_metadata_scope_nested.sh` passes.
+
+**Problem statement**
+
+- `e2e/tests/86_metadata_scope_nested.sh` currently fails:
+  - expected: `parent_before:cursor`, `child:cursor`, `parent_after:cursor`
+  - actual: `child:claude` (callee module config overrides caller scope)
+- Current `applyMetadataScope` layering in `src/runtime/kernel/node-workflow-runtime.ts` applies callee/module metadata too aggressively for nested workflow dispatch.
+- This conflicts with current migration expectation that caller scope remains authoritative across nested runs in one process.
+
+**Scope**
+
+1. Rework metadata merge precedence for nested `executeWorkflow` calls:
+   - preserve caller scope by default,
+   - allow explicit env/lock-based overrides only where intended.
+2. Ensure parent scope restoration after nested call remains deterministic.
+3. Keep existing `JAIPH_*_LOCKED` semantics for CLI env overrides.
+4. Update/add tests to lock the contract:
+   - `e2e/tests/86_metadata_scope_nested.sh` green,
+   - no regressions in metadata tests (`85`, `20`, `async` scenarios).
+
+**Acceptance criteria**
+
+- `e2e/tests/86_metadata_scope_nested.sh` passes with exact expected trace.
+- Parent workflow scope before/after child run is unchanged.
+- No regression in CLI env-lock behavior or in-file metadata handling elsewhere.
+
+---
+
+## Preserve parallel shell syntax (`&`, `wait`, `wait $pid`) in Node orchestration <!-- dev-ready -->
+
+**Goal**  
+Keep existing parallel shell-step authoring syntax working under the Node runtime, including background jobs (`&`) and both wait forms (`wait`, `wait $pid`).
+
+**Problem statement**
+
+- Strict shell-step ban currently blocks workflows that rely on shell-native parallel patterns.
+- `e2e/tests/94_parallel_shell_steps.sh` had to be temporarily skipped because those semantics are unsupported in the current script-only execution path.
+- This is a behavior regression versus prior Bash-oriented runtime expectations for users with existing workflows.
+
+**Scope**
+
+1. Define supported grammar/semantics for parallel shell execution in managed flow:
+   - background launch with `&`,
+   - bare `wait`,
+   - targeted `wait $pid`.
+2. Implement runtime support in Node orchestration so these patterns execute deterministically and preserve expected exit-code behavior.
+3. Preserve artifact/event contracts for parallel branches:
+   - unique step sequencing,
+   - stable `.out/.err` capture,
+   - valid `run_summary.jsonl` event ordering.
+4. Re-enable and update `e2e/tests/94_parallel_shell_steps.sh` from skip to active assertions.
+5. Ensure compatibility with strict shell policy by routing through explicit script execution rather than reintroducing arbitrary inline shell in workflows/rules.
+
+**Acceptance criteria**
+
+- Parallel jobs launched with `&` execute correctly and are joinable.
+- `wait` and `wait $pid` behavior matches expected shell semantics for success/failure propagation.
+- Concurrent output is captured without corruption; run summary remains valid JSONL with consistent step lifecycle events.
+- `e2e/tests/94_parallel_shell_steps.sh` is unskipped and green.
+- No regressions in existing e2e suites that already passed under Node orchestration.
+
+---
+
+## Scope `agent.default_model` / agent metadata to the workflow (no sticky env) <!-- dev-ready -->
+
+**Goal**  
+Per-workflow `config { agent.backend = "cursor"; agent.default_model = "composer" }` must affect **only** that workflow’s execution, not sibling workflows or later steps that run in the same Node process.
+
+**Problem statement**
+
+- Today, workflow metadata is merged into `scope.env` via `applyMetadataScope` in [`src/runtime/kernel/node-workflow-runtime.ts`](src/runtime/kernel/node-workflow-runtime.ts). That mutates the env object carried into child scopes.
+- Shallow copies still share the same underlying `process.env`-backed object in common paths, so `JAIPH_AGENT_MODEL` (and related keys) set for one workflow can **leak** to another—e.g. `e2e/async.jh` intends Composer only for `cursor_say_hello`, but `agent.default_model = "composer"` is a poor choice until scoping is fixed because it can influence what subsequent workflows see in the same run.
+- Locked-env keys (`JAIPH_*_LOCKED`) help CLI overrides but do **not** fix metadata bleed between two workflows that both rely on file config.
+
+**Scope**
+
+1. Introduce a **stack** (or explicit push/pop) of agent-related env overrides when entering/leaving `executeManagedStep` for a workflow (and optionally rule), restoring previous values on exit.
+2. Alternatively, resolve agent fields at prompt time from workflow metadata without writing `JAIPH_AGENT_MODEL` into the shared env map used by siblings.
+3. Add regression coverage (unit or e2e): parallel `run wf_a &` / `run wf_b &` where only `wf_a` sets `agent.default_model`; assert `wf_b` still sees the global/default model.
+4. Update docs/examples (`e2e/async.jh`, README snippets) to recommend the safe pattern once fixed; until then, prefer env-based `JAIPH_AGENT_MODEL` for one-off experiments or split entry files.
+
+**Acceptance criteria**
+
+- Sibling workflows in one `default` run do not inherit another workflow’s `agent.default_model` / `agent.backend` unless explicitly shared via parent module config.
+- No regression for `JAIPH_*_LOCKED` CLI semantics from [`src/cli/run/env.ts`](src/cli/run/env.ts).
+- Targeted test proves isolation for the async / parallel case.
+
+---
+
+## Re-enable inbox dispatch parity test coverage (e2e 91) <!-- dev-ready -->
+
+**Goal**  
+Unskip `e2e/tests/91_inbox_dispatch.sh` and restore end-to-end coverage for channel routing + dispatch lifecycle.
+
+**Problem statement**
+
+- The suite is currently skipped early with `Node inbox route dispatch parity is not implemented yet`.
+- This leaves send/route behavior and dispatch observability under-tested in Node runtime migration.
+
+**Scope**
+
+1. Implement missing inbox route dispatch parity in Node runtime (`send`, `channel -> targets`, receiver args, multi-target fanout).
+2. Restore deterministic tree expectations for display checks in e2e 91.
+3. Re-enable dispatch lifecycle event checks (`INBOX_DISPATCH_START/COMPLETE`) if those are still in contract.
+4. Unskip `e2e/tests/91_inbox_dispatch.sh`.
+
+**Acceptance criteria**
+
+- `e2e/tests/91_inbox_dispatch.sh` runs (not skipped) and passes.
+- Receiver files/content assertions pass across all scenarios in that script.
+- Event contract stays consistent with reporting consumers.
+
+---
+
+## Restore run-summary dispatch contract assertions (e2e 88) <!-- dev-ready -->
+
+**Goal**  
+Bring back strict `run_summary.jsonl` coverage that validates dispatch lifecycle and error events expected by downstream consumers.
+
+**Problem statement**
+
+- `e2e/tests/88_run_summary_event_contract.sh` was softened:
+  - dropped `LOGERR` requirements,
+  - removed `INBOX_DISPATCH_START/COMPLETE` pairing checks,
+  - removed payload-preview checks.
+- This weakens regression detection for reporting/event APIs.
+
+**Scope**
+
+1. Decide current event contract (including dispatch and `LOGERR`) and document it.
+2. Reintroduce assertions in e2e 88 to match intended contract.
+3. If runtime no longer emits some events, either restore emitters or explicitly version/deprecate the contract with migration notes.
+
+**Acceptance criteria**
+
+- e2e 88 asserts the full intended contract and passes.
+- Event payload shape remains stable for reporting server consumers.
+
+---
+
+## Fix argument forwarding regression in function/rule/workflow calls (e2e 90) <!-- dev-ready -->
+
+**Goal**  
+Restore expected positional argument forwarding (`$1`, `$2`, …) across `run`, `ensure`, and nested workflow invocations.
+
+**Problem statement**
+
+- `e2e/tests/90_function_steps.sh` currently expects `|` instead of `one|two words`, indicating missing/empty forwarded args.
+- This is a behavioral regression from prior runtime expectations.
+
+**Scope**
+
+1. Trace argument mapping in Node runtime for `executeRunRef`, `executeRule`, script invocation, and workflow nested calls.
+2. Restore correct propagation to scripts/rules/workflows.
+3. Revert e2e 90 assertions to exact `one|two words` behavior.
+
+**Acceptance criteria**
+
+- e2e 90 passes with exact arg forwarding assertions (`one|two words`).
+- Tree display params remain consistent with actual forwarded values.
+
+---
+
+## Normalize log/logerr message quoting (remove outer literal quotes) <!-- dev-ready -->
+
+**Goal**  
+Make `log "$value"` and `logerr "$value"` display the resolved value without extra surrounding quote characters.
+
+**Problem statement**
+
+- Current output often renders with quotes (e.g. `ℹ "message"`), which is noisy and confusing in tree view.
+- This appears to stem from preserving outer literal quotes in parsed log message tokens.
+
+**Scope**
+
+1. Adjust log/logerr interpolation path to strip only outer wrapping quotes when they come from literal syntax.
+2. Preserve inner quotes and multiline content.
+3. Update e2e expectations affected by log display text.
+
+**Acceptance criteria**
+
+- Tree/log output no longer adds synthetic outer quotes for standard `log "$x"` usage.
+- No regression for multiline logging or escaping behavior.
+
+---
+
+## Decide fate of deprecated redirect/pipeline test (e2e 96) <!-- dev-ready -->
+
+**Goal**  
+Resolve whether `e2e/tests/96_run_stdout_redirect.sh` should be removed, replaced, or re-enabled.
+
+**Problem statement**
+
+- The file is currently an always-skip placeholder for unsupported shell redirection around `run` steps.
+- Keeping permanently skipped tests creates maintenance noise.
+
+**Scope**
+
+1. Choose one path:
+   - remove test and document non-goal,
+   - keep but mark as explicit non-goal with rationale in docs,
+   - or implement support and unskip.
+2. Align with migration docs/QUEUE so status is explicit.
+
+**Acceptance criteria**
+
+- No ambiguous permanently-skipped test without documented rationale.
+- e2e suite communicates supported syntax clearly.
+
+---
+
 ## Post-migration hardening: move sequence allocation into JS runtime for atomicity <!-- dev-ready -->
 
 **Goal**  
@@ -179,6 +394,37 @@ Support backticks inside `prompt "..."` strings without parse errors.
 - Normal runs that complete with `WORKFLOW_END` are unaffected.
 - The detection mechanism has a reasonable latency (under 2–3 poll cycles).
 - E2e or integration test: start a run, kill it with SIGKILL, verify `GET /api/active` eventually returns empty and `GET /api/runs` shows the run as failed/terminated.
+
+---
+
+## Direct return from run/ensure in workflows and rules <!-- dev-ready -->
+
+**Goal.** Support direct return capture from managed calls, e.g. `return run my_script` and `return ensure my_rule`, without requiring an intermediate variable.
+
+**Problem statement**
+
+- Current behavior treats `return run ...` / `return ensure ...` as inline shell text and fails validation under strict shell-step ban.
+- Authors currently need boilerplate:
+  - `msg = run my_script`
+  - `return "$msg"`
+- This is verbose and inconsistent with the intent of managed-step-first syntax.
+
+**Scope**
+
+1. Extend parser/AST so `return` can accept `run`/`ensure` expression forms.
+2. Reuse existing managed call validation for the referenced script/rule.
+3. Emit transpilation/runtime behavior equivalent to managed capture + return:
+   - `tmp = run ...`
+   - `return "$tmp"`
+4. Keep existing string return behavior unchanged.
+5. Add unit + acceptance + e2e coverage for both success and failure paths.
+
+**Acceptance criteria**
+
+- `return run hello_impl` works in workflow/rule bodies.
+- `return ensure ci_passes` works in workflow/rule bodies.
+- Validation errors remain deterministic for unknown/invalid refs.
+- Behavior matches current `capture + return` semantics.
 
 ---
 

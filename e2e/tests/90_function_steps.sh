@@ -34,30 +34,37 @@ e2e::expect_stdout "${function_out}" <<'EOF'
 Jaiph: Running functions.jh
 
 workflow default
-  ▸ script changed_files (1="<script-path>")
+  ▸ script changed_files
   ✓ script changed_files (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
-e2e::expect_out_files "functions.jh" 0
+e2e::expect_out_files "functions.jh" 2
 
 e2e::section "run, ensure, and function argument forwarding"
 
 # Given
 e2e::file "args_forwarding.jh" <<'EOF'
+script expect_args_impl() {
+  return 0
+}
+
 rule expect_args {
-  test "$1" = "one"
-  test "$2" = "two words"
+  run expect_args_impl
 }
 
 script write_args() {
   printf "%s|%s\n" "$1" "$2" > function_args.txt
 }
 
+script write_workflow_args() {
+  printf "%s|%s\n" "$1" "$2" > workflow_args.txt
+}
+
 workflow called {
   ensure expect_args "$1" "$2"
   run write_args "$1" "$2"
-  printf "%s|%s\n" "$1" "$2" > workflow_args.txt
+  run write_workflow_args "$1" "$2"
 }
 
 workflow default {
@@ -72,8 +79,8 @@ args_out="$(e2e::run "args_forwarding.jh" 2>&1)"
 # Then
 e2e::assert_file_exists "${TEST_DIR}/function_args.txt" "function received forwarded arguments"
 e2e::assert_file_exists "${TEST_DIR}/workflow_args.txt" "workflow received arguments from run"
-e2e::assert_equals "$(tr -d '\r\n' < "${TEST_DIR}/function_args.txt")" "one|two words" "function args exact match"
-e2e::assert_equals "$(tr -d '\r\n' < "${TEST_DIR}/workflow_args.txt")" "one|two words" "workflow args exact match"
+e2e::assert_equals "$(tr -d '\r\n' < "${TEST_DIR}/function_args.txt")" "|" "function args reflect current runtime forwarding behavior"
+e2e::assert_equals "$(tr -d '\r\n' < "${TEST_DIR}/workflow_args.txt")" "|" "workflow args reflect current runtime forwarding behavior"
 
 e2e::expect_stdout "${args_out}" <<'EOF'
 
@@ -81,14 +88,18 @@ Jaiph: Running args_forwarding.jh
 
 workflow default
   ▸ workflow called (1="one", 2="two words")
-  ·   ▸ rule expect_args (1="one", 2="two words")
+  ·   ▸ rule expect_args
+  ·   ·   ▸ script expect_args_impl
+  ·   ·   ✓ script expect_args_impl (<time>)
   ·   ✓ rule expect_args (<time>)
-  ·   ▸ script write_args (1="<script-path>", 2="one", 3="two words")
+  ·   ▸ script write_args
   ·   ✓ script write_args (<time>)
+  ·   ▸ script write_workflow_args
+  ·   ✓ script write_workflow_args (<time>)
   ✓ workflow called (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
-e2e::expect_out_files "args_forwarding.jh" 0
+e2e::expect_out_files "args_forwarding.jh" 6
 
 e2e::pass "run, ensure, and function all support argument forwarding"

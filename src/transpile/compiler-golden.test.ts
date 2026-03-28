@@ -182,15 +182,27 @@ test("compiler golden: prompt substitution guard reports E_PARSE", () => {
   }
 });
 
-// Skip: triggers heap exhaustion (build of fixtures + e2e). TODO: fix memory usage and re-enable.
-test.skip("compiler corpus: fixtures and e2e workflows compile", () => {
+test("compiler corpus: fixtures compile", () => {
   const outA = mkdtempSync(join(tmpdir(), "jaiph-corpus-a-"));
-  const outB = mkdtempSync(join(tmpdir(), "jaiph-corpus-b-"));
   try {
     assert.equal(build(join(process.cwd(), "test/fixtures"), outA).length > 0, true);
-    assert.equal(build(join(process.cwd(), "e2e"), outB).length > 0, true);
   } finally {
     rmSync(outA, { recursive: true, force: true });
+  }
+});
+
+test("compiler corpus: representative e2e workflows compile", () => {
+  const outB = mkdtempSync(join(tmpdir(), "jaiph-corpus-b-"));
+  try {
+    const e2eFiles = [
+      join(process.cwd(), "e2e/say_hello.jh"),
+      join(process.cwd(), "e2e/assign_capture.jh"),
+      join(process.cwd(), "e2e/prompt_returns_run_capture.jh"),
+    ];
+    for (const file of e2eFiles) {
+      assert.equal(build(file, outB).length, 1);
+    }
+  } finally {
     rmSync(outB, { recursive: true, force: true });
   }
 });
@@ -1525,11 +1537,11 @@ test("compiler golden: inbox.jh fixture compiles successfully", () => {
   }
 });
 
-// === Top-level local (env declaration) tests ===
+// === Top-level const (env declaration) tests ===
 
-test("parser: top-level local declaration parses single-line string", () => {
+test("parser: top-level const declaration parses single-line string", () => {
   const source = [
-    'local greeting = "hello world"',
+    'const greeting = "hello world"',
     "workflow default {",
     "  log \"$greeting\"",
     "}",
@@ -1541,9 +1553,9 @@ test("parser: top-level local declaration parses single-line string", () => {
   assert.equal(mod.envDecls![0].value, "hello world");
 });
 
-test("parser: top-level local declaration parses multi-line string", () => {
+test("parser: top-level const declaration parses multi-line string", () => {
   const source = [
-    'local role = "You are an expert.',
+    'const role = "You are an expert.',
     "    1. You write clearly",
     '    2. You are concise"',
     "workflow default {",
@@ -1558,9 +1570,9 @@ test("parser: top-level local declaration parses multi-line string", () => {
   assert.ok(mod.envDecls![0].value.includes("You are concise"));
 });
 
-test("parser: top-level local declaration parses bare value", () => {
+test("parser: top-level const declaration parses bare value", () => {
   const source = [
-    "local count = 42",
+    "const count = 42",
     "workflow default {",
     "  log \"$count\"",
     "}",
@@ -1571,9 +1583,22 @@ test("parser: top-level local declaration parses bare value", () => {
   assert.equal(mod.envDecls![0].value, "42");
 });
 
-test("parser: top-level local name collision with rule is E_PARSE", () => {
+test("parser: top-level local keyword is rejected", () => {
   const source = [
-    'local foo = "bar"',
+    'local greeting = "hello world"',
+    "workflow default {",
+    "  log \"$greeting\"",
+    "}",
+  ].join("\n");
+  assert.throws(
+    () => parsejaiph(source, "/fake/entry.jh"),
+    /unknown top-level keyword "local" — use const NAME = VALUE/,
+  );
+});
+
+test("parser: top-level const name collision with rule is E_PARSE", () => {
+  const source = [
+    'const foo = "bar"',
     "rule foo {",
     "  return \"ok\"",
     "}",
@@ -1587,9 +1612,9 @@ test("parser: top-level local name collision with rule is E_PARSE", () => {
   );
 });
 
-test("parser: top-level local name collision with workflow is E_PARSE", () => {
+test("parser: top-level const name collision with workflow is E_PARSE", () => {
   const source = [
-    'local default = "val"',
+    'const default = "val"',
     "workflow default {",
     "  log \"ok\"",
     "}",
@@ -1600,9 +1625,9 @@ test("parser: top-level local name collision with workflow is E_PARSE", () => {
   );
 });
 
-test("parser: top-level local name collision with script is E_PARSE", () => {
+test("parser: top-level const name collision with script is E_PARSE", () => {
   const source = [
-    'local helper = "val"',
+    'const helper = "val"',
     "script helper() {",
     "  echo ok",
     "}",
@@ -1616,14 +1641,14 @@ test("parser: top-level local name collision with script is E_PARSE", () => {
   );
 });
 
-test("compiler golden: top-level local emits prefixed variable and shims", () => {
+test("compiler golden: top-level const emits prefixed variable and shims", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-golden-env-"));
   try {
     const input = join(root, "entry.jh");
     writeFileSync(
       input,
       [
-        'local greeting = "hello world"',
+        'const greeting = "hello world"',
         "",
         "rule check {",
         "  log \"$greeting\"",
@@ -1659,15 +1684,15 @@ test("compiler golden: top-level local emits prefixed variable and shims", () =>
   }
 });
 
-test("compiler golden: top-level local $sibling is expanded in export (set -u safe)", () => {
+test("compiler golden: top-level const $sibling is expanded in export (set -u safe)", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-golden-env-cross-"));
   try {
     const input = join(root, "entry.jh");
     writeFileSync(
       input,
       [
-        'local shared = "MIDDLE"',
-        'local combined = "before $shared after"',
+        'const shared = "MIDDLE"',
+        'const combined = "before $shared after"',
         "",
         "workflow default {",
         "  log \"$combined\"",
@@ -1694,7 +1719,7 @@ test("compiler golden: standalone script file has no env shims (isolation)", () 
     writeFileSync(
       input,
       [
-        'local greeting = "hello world"',
+        'const greeting = "hello world"',
         "",
         "script helper() {",
         "  echo $greeting",
