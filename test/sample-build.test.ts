@@ -2768,14 +2768,14 @@ test("stream_json_to_text deduplicates repeated assistant and result events", ()
   const root = mkdtempSync(join(tmpdir(), "jaiph-stream-dedup-"));
   try {
     const finalFile = join(root, "final.txt");
-    const runtimeDir = join(process.cwd(), "dist/src/runtime");
+    const stdlibPath = join(process.cwd(), "dist/src/jaiph_stdlib.sh");
     // Simulate --include-partial-messages output: two assistant messages + result, all with same content.
     const events = [
       JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "Hello, World!" }] } }),
       JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "Hello, World!" }] } }),
       JSON.stringify({ type: "result", result: "Hello, World!" }),
     ].join("\n");
-    const result = spawnSync("bash", ["-c", `source "${runtimeDir}/prompt.sh" && printf '%s\\n' '${events.replace(/'/g, "'\\''")}' | JAIPH_PROMPT_FINAL_FILE="${finalFile}" jaiph::stream_json_to_text`], {
+    const result = spawnSync("bash", ["-c", `source "${stdlibPath}" && printf '%s\\n' '${events.replace(/'/g, "'\\''")}' | JAIPH_PROMPT_FINAL_FILE="${finalFile}" jaiph::stream_json_to_text`], {
       encoding: "utf8",
       timeout: 10_000,
     });
@@ -2828,7 +2828,7 @@ test("stream_json_to_text deduplicates when stream deltas are followed by assist
   const root = mkdtempSync(join(tmpdir(), "jaiph-stream-dedup2-"));
   try {
     const finalFile = join(root, "final.txt");
-    const runtimeDir = join(process.cwd(), "dist/src/runtime");
+    const stdlibPath = join(process.cwd(), "dist/src/jaiph_stdlib.sh");
     // Simulate streaming: text_delta events, then assistant message, then result.
     const events = [
       JSON.stringify({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: "Hello" } } }),
@@ -2836,7 +2836,7 @@ test("stream_json_to_text deduplicates when stream deltas are followed by assist
       JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "Hello, World!" }] } }),
       JSON.stringify({ type: "result", result: "Hello, World!" }),
     ].join("\n");
-    const result = spawnSync("bash", ["-c", `source "${runtimeDir}/prompt.sh" && printf '%s\\n' '${events.replace(/'/g, "'\\''")}' | JAIPH_PROMPT_FINAL_FILE="${finalFile}" jaiph::stream_json_to_text`], {
+    const result = spawnSync("bash", ["-c", `source "${stdlibPath}" && printf '%s\\n' '${events.replace(/'/g, "'\\''")}' | JAIPH_PROMPT_FINAL_FILE="${finalFile}" jaiph::stream_json_to_text`], {
       encoding: "utf8",
       timeout: 10_000,
     });
@@ -2855,12 +2855,12 @@ test("stream_json_to_text trims leading blank lines from final answer", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-stream-leading-newline-"));
   try {
     const finalFile = join(root, "final.txt");
-    const runtimeDir = join(process.cwd(), "dist/src/runtime");
+    const stdlibPath = join(process.cwd(), "dist/src/jaiph_stdlib.sh");
     const events = [
       JSON.stringify({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: "\n" } } }),
       JSON.stringify({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: "\nHello, World!" } } }),
     ].join("\n");
-    const result = spawnSync("bash", ["-c", `source "${runtimeDir}/prompt.sh" && printf '%s\\n' '${events.replace(/'/g, "'\\''")}' | JAIPH_PROMPT_FINAL_FILE="${finalFile}" jaiph::stream_json_to_text`], {
+    const result = spawnSync("bash", ["-c", `source "${stdlibPath}" && printf '%s\\n' '${events.replace(/'/g, "'\\''")}' | JAIPH_PROMPT_FINAL_FILE="${finalFile}" jaiph::stream_json_to_text`], {
       encoding: "utf8",
       timeout: 10_000,
     });

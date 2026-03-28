@@ -258,18 +258,12 @@ export function prepareGeneratedDir(
   // Copy jaiph_stdlib.sh
   copyFileSync(stdlibPath, join(generatedDir, "jaiph_stdlib.sh"));
 
-  // Copy runtime modules alongside stdlib
+  // Copy JS runtime kernel alongside stdlib
   const stdlibDir = dirname(stdlibPath);
   const runtimeSrcDir = join(stdlibDir, "runtime");
   if (existsSync(runtimeSrcDir)) {
     const runtimeDestDir = join(generatedDir, "runtime");
     mkdirSync(runtimeDestDir, { recursive: true });
-    for (const mod of ["events.sh", "test-mode.sh", "steps.sh", "inbox.sh", "prompt.sh", "sandbox.sh"]) {
-      const src = join(runtimeSrcDir, mod);
-      if (existsSync(src)) {
-        copyFileSync(src, join(runtimeDestDir, mod));
-      }
-    }
     const kernelSrc = join(runtimeSrcDir, "kernel");
     if (existsSync(kernelSrc)) {
       const kernelDest = join(runtimeDestDir, "kernel");

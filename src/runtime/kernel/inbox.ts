@@ -1,6 +1,6 @@
 /**
  * File-backed inbox transport (init, send, register-route, drain). Dispatches through the
- * transpiled workflow module entrypoint (same contract as former jaiph::inbox_* in inbox.sh).
+ * transpiled workflow module entrypoint (same contract as stdlib jaiph::inbox_* helpers).
  */
 import { spawn, spawnSync, type ChildProcess, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { once } from "node:events";

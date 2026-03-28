@@ -1,5 +1,5 @@
 // JS kernel: schema validation for typed prompts (returns '{ field: type }').
-// Ports the inline Node.js in jaiph::prompt_capture_with_schema (prompt.sh).
+// Ports the inline Node.js in jaiph::prompt_capture_with_schema (jaiph_stdlib.sh).
 // Called from bash: echo "$raw" | node kernel/schema.js
 // Env: JAIPH_PROMPT_SCHEMA, JAIPH_PROMPT_CAPTURE_NAME
 // Stdout: eval-able shell string setting capture var + per-field exports.

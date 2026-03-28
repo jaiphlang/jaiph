@@ -1,6 +1,6 @@
 // Stream JSON parser: converts streaming backend output (cursor-agent / claude CLI)
 // into sectioned text (Reasoning + Final answer) and extracts the final response.
-// Port of the inline Node.js in jaiph::stream_json_to_text (src/runtime/prompt.sh).
+// Port of the inline Node.js in jaiph::stream_json_to_text (now in jaiph_stdlib.sh).
 
 import { createInterface, type Interface } from "node:readline";
 import { writeFileSync } from "node:fs";

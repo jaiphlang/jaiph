@@ -1,6 +1,6 @@
 /**
  * Runtime event emission: __JAIPH_EVENT__ JSONL on the event fd + matching run_summary.jsonl lines.
- * JS is the source of truth for event JSON building. Bash (events.sh) delegates here with raw args.
+ * JS is the source of truth for event JSON building. Bash stdlib delegates here with raw args.
  *
  * Modes (argv[2]):
  * - step-event — args = event fields + optional param args. Builds full STEP_START/STEP_END JSON.
