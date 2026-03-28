@@ -14,7 +14,7 @@ e2e::section "script cannot access parent scope variables"
 # ---------------------------------------------------------------------------
 
 e2e::file "isolation.jh" <<'EOF'
-local secret = "parent-secret-value"
+const secret = "parent-secret-value"
 
 script leak_check() {
   echo "secret=${secret:-EMPTY}"

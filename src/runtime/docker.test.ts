@@ -255,6 +255,12 @@ test("buildDockerArgs: includes basic docker run flags", () => {
   // JAIPH_STDLIB env
   const stdlibEnvIdx = args.indexOf("JAIPH_STDLIB=/jaiph/generated/jaiph_stdlib.sh");
   assert.ok(stdlibEnvIdx > 0);
+  const metaEnvIdx = args.indexOf("JAIPH_META_FILE=/jaiph/meta/.jaiph-run-meta.txt");
+  assert.ok(metaEnvIdx > 0);
+
+  // Meta dir mount should map to stable in-container path
+  const metaMountIdx = args.indexOf("/tmp/out:/jaiph/meta:rw");
+  assert.ok(metaMountIdx > 0);
 
   // Script path in command
   assert.ok(args.includes("/jaiph/generated/main.sh"));

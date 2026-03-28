@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, join, resolve, sep } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { parsejaiph } from "../../parser";
 import { resolveImportPath } from "../../transpiler";
 import { jaiphModule } from "../../types";
@@ -10,9 +10,23 @@ import { jaiphModule } from "../../types";
  * Skip markers for ancestors whose `.jaiph/tmp` contains `startDir`.
  */
 function startDirIsUnderAncestorJaiphTmp(absStartDir: string, candidateRoot: string): boolean {
-  const jaiphTmp = resolve(join(candidateRoot, ".jaiph", "tmp"));
   const start = resolve(absStartDir);
-  return start === jaiphTmp || start.startsWith(jaiphTmp + sep);
+  const candidate = resolve(candidateRoot);
+  const repoScopedJaiphTmp = resolve(join(candidate, ".jaiph", "tmp"));
+  if (start === repoScopedJaiphTmp || start.startsWith(repoScopedJaiphTmp + sep)) {
+    return true;
+  }
+  // Also guard against selecting the `.jaiph` directory itself as workspace root
+  // when the start dir is under `<repo>/.jaiph/tmp/...`.
+  const candidateParts = candidate.split(sep).filter(Boolean);
+  const candidateBasename = candidateParts.length > 0 ? candidateParts[candidateParts.length - 1]! : "";
+  if (candidateBasename === ".jaiph") {
+    const directJaiphTmp = resolve(join(candidate, "tmp"));
+    if (start === directJaiphTmp || start.startsWith(directJaiphTmp + sep)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -57,6 +71,12 @@ function skipStrayWorkspaceMarkerUnderMacOsTempTree(candidateRoot: string, absSt
 
 export function detectWorkspaceRoot(startDir: string): string {
   const fallback = resolve(startDir);
+  if (basename(fallback) === ".jaiph") {
+    const parent = dirname(fallback);
+    if (parent !== fallback) {
+      return detectWorkspaceRoot(parent);
+    }
+  }
   let current = fallback;
   while (true) {
     if (existsSync(join(current, ".jaiph")) || existsSync(join(current, ".git"))) {

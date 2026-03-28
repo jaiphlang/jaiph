@@ -6,38 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Restore nested metadata-scope inheritance semantics (fix e2e 86) <!-- dev-ready -->
-
-**Goal**  
-Make nested workflow calls inherit caller metadata scope unless explicitly overridden by locked env policy, so `e2e/tests/86_metadata_scope_nested.sh` passes.
-
-**Problem statement**
-
-- `e2e/tests/86_metadata_scope_nested.sh` currently fails:
-  - expected: `parent_before:cursor`, `child:cursor`, `parent_after:cursor`
-  - actual: `child:claude` (callee module config overrides caller scope)
-- Current `applyMetadataScope` layering in `src/runtime/kernel/node-workflow-runtime.ts` applies callee/module metadata too aggressively for nested workflow dispatch.
-- This conflicts with current migration expectation that caller scope remains authoritative across nested runs in one process.
-
-**Scope**
-
-1. Rework metadata merge precedence for nested `executeWorkflow` calls:
-   - preserve caller scope by default,
-   - allow explicit env/lock-based overrides only where intended.
-2. Ensure parent scope restoration after nested call remains deterministic.
-3. Keep existing `JAIPH_*_LOCKED` semantics for CLI env overrides.
-4. Update/add tests to lock the contract:
-   - `e2e/tests/86_metadata_scope_nested.sh` green,
-   - no regressions in metadata tests (`85`, `20`, `async` scenarios).
-
-**Acceptance criteria**
-
-- `e2e/tests/86_metadata_scope_nested.sh` passes with exact expected trace.
-- Parent workflow scope before/after child run is unchanged.
-- No regression in CLI env-lock behavior or in-file metadata handling elsewhere.
-
----
-
 ## Preserve parallel shell syntax (`&`, `wait`, `wait $pid`) in Node orchestration <!-- dev-ready -->
 
 **Goal**  
@@ -245,6 +213,61 @@ Eliminate async artifact/step-id collisions by making JS runtime the single owne
 - Prompt artifacts from parallel branches are emitted as distinct files (no overwrite/interleaving).
 - `run_summary.jsonl` contains no duplicate `seq` per run for `STEP_START`/`STEP_END`.
 - Existing e2e suite remains green, and the async prompt repro is converted to a correctness assertion.
+
+---
+
+## Enforce compile-time rejection for unsafe interpolation and backtick substitutions <!-- dev-ready -->
+
+**Goal**  
+Fail fast at compile/validation time for syntax patterns that currently degrade into runtime shell behavior (for example literal `${1:-}` propagation or backtick command substitution in orchestration text).
+
+**Problem statement**
+
+- Some invalid/unsafe interpolation patterns currently pass parsing and fail only at runtime with confusing shell errors.
+- Backticks in orchestration strings can trigger command substitution side effects instead of being rejected as unsupported syntax.
+- This causes delayed failures and makes debugging harder in long workflows.
+
+**Scope**
+
+1. Add validator/compiler checks that reject unsupported shell-style default expansion in orchestration value contexts (for example `${var:-fallback}`) unless explicitly supported by language spec.
+2. Add checks that reject backtick command substitution patterns in orchestration text/metadata where shell execution is not intended.
+3. Ensure error messages are actionable and point to source location + recommended replacement.
+4. Add unit/acceptance coverage for both positive and negative cases.
+5. Update docs/grammar to clarify what interpolation forms are allowed vs rejected at compile time.
+
+**Acceptance criteria**
+
+- Invalid interpolation/backtick patterns fail before execution with deterministic compile/validation errors.
+- Runtime no longer surfaces shell-level errors for these rejected patterns.
+- Tests cover regressions and docs match implemented validation rules.
+
+---
+
+## Show prompt model in run tree output (gray label) <!-- dev-ready -->
+
+**Goal**  
+Include model/backend context directly in prompt step lines in live run output, e.g. `prompt cursor "..."` (model/backend rendered in gray).
+
+**Problem statement**
+
+- Current prompt tree lines show prompt preview but not model/backend identity.
+- During mixed-backend workflows (for example async Cursor + Claude), this makes it harder to verify routing at a glance.
+- Prompt artifacts contain backend details, but live tree visibility is missing.
+
+**Scope**
+
+1. Extend prompt step rendering to include model/backend label in start lines, using a dim/gray style.
+2. Ensure label works for both direct prompt and captured prompt forms.
+3. Decide canonical display format (for example `prompt <backend> "<preview>"` or `prompt model=<backend> "<preview>"`) and keep docs/examples consistent.
+4. Keep non-TTY output readable without ANSI and avoid noisy duplication in params.
+5. Add tests for display formatting/parsing paths to lock behavior.
+
+**Acceptance criteria**
+
+- Prompt lines in run tree visibly include backend/model label.
+- Label is rendered gray/dim in TTY mode and plain text in non-TTY mode.
+- Async mixed-backend workflows show different prompt labels per branch.
+- Docs samples are updated to reflect final prompt line format.
 
 ---
 
@@ -756,4 +779,3 @@ Block bodies receive the same positional args as the real construct and return v
 - E2e test covering simple string mock for each construct type.
 
 ---
-

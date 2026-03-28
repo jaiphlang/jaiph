@@ -202,6 +202,10 @@ script save_string_to_file() {
   echo "$1" > "$2"
 }
 
+script mkdir_p_simple() {
+  mkdir -p "$1"
+}
+
 workflow implement {
   const task = "$1"
   const role_name = "$2"
@@ -273,19 +277,6 @@ workflow implement {
     $task
     </task>
   "
-
-  ensure ci.ci_passes recover {
-    const ci_failure_log = "$1"
-    const ci_log_file = ".jaiph/tmp/ensure_ci_passes.last.log"
-    run save_string_to_file "$ci_failure_log" "$ci_log_file"
-
-    const followup_task = "$task
-      Note: There is some unfinished work left. Fix failing CI so
-      npm run test:ci passes, and complete the task. Failure output was
-      saved to: $ci_log_file. Start by inspecting the tail of the log.
-    "
-    run implement "$followup_task" "$2"
-  }
 }
 
 workflow print_commit_message {
@@ -317,7 +308,7 @@ workflow default {
     run implement "$task" "$role_arg"
   }
 
-  # run ci.ensure_ci_passes
+  run ci.ensure_ci_passes
   run docs.update_from_task "$task"
   run queue.remove_completed_task "$task_header"
   run print_commit_message

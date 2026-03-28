@@ -25,7 +25,7 @@ function emitScriptBodyLine(cmd: string, importedWorkflowSymbols: Map<string, st
 function wrapBashStandaloneScriptBody(body: string, envPreamble: string): string {
   const preamble = envPreamble ? `${envPreamble}\n` : "";
   if (!body.trim()) {
-    return ["set -euo pipefail", "set +u", "__jaiph_script_entry() {", preamble, "}", '__jaiph_script_entry "$@"'].join(
+    return ["set -euo pipefail", "__jaiph_script_entry() {", preamble, "}", '__jaiph_script_entry "$@"'].join(
       "\n",
     );
   }
@@ -35,7 +35,6 @@ function wrapBashStandaloneScriptBody(body: string, envPreamble: string): string
     .join("\n");
   return [
     "set -euo pipefail",
-    "set +u",
     "__jaiph_script_entry() {",
     preamble,
     indented,

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { detectWorkspaceRoot } from "./paths";
@@ -39,3 +39,14 @@ test(
     assert.equal(detectWorkspaceRoot(sub), resolve(repoRoot));
   },
 );
+
+test("detectWorkspaceRoot: .jaiph config dir does not become workspace root", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-detect-root-jaiph-dir-"));
+  try {
+    mkdirSync(join(root, ".git"), { recursive: true });
+    mkdirSync(join(root, ".jaiph", ".jaiph"), { recursive: true });
+    assert.equal(detectWorkspaceRoot(join(root, ".jaiph")), resolve(root));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

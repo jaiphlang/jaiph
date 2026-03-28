@@ -534,7 +534,7 @@ main::default::impl() {
   set +u
   jaiph::emit_workflow_summary_event WORKFLOW_START 'default'
   if ! main::project_ready; then
-    bootstrap_project::nodejs
+    jaiph::run_step bootstrap_project::nodejs workflow bootstrap_project::nodejs::impl
   fi
   export JAIPH_STEP_PARAM_KEYS='__prompt_impl,__preview,1'
   export JAIPH_PROMPT_PREVIEW='

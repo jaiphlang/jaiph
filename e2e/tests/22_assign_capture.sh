@@ -29,14 +29,14 @@ workflow default
   ✓ rule echo_line (<time>)
   ▸ script shell_capture
   ✓ script shell_capture (<time>)
-  ▸ script format_output (1="\"captured-value\"", 2="shell-capture")
+  ▸ script format_output (1="captured-value", 2="shell-capture")
   ✓ script format_output (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
 e2e::expect_out_files "assign_capture.jh" 5
 e2e::expect_file "*script__format_output.out" <<'EOF'
-response="captured-value"
+response=captured-value
 out=shell-capture
 EOF
 e2e::expect_file "*script__echo_line_impl.out" <<'EOF'

@@ -157,6 +157,8 @@ e2e::expect_stdout "${prompt_run_out}" <<'EOF'
 Jaiph: Running prompt_flow.jh
 
 workflow default
+  ▸ prompt "e2e-prompt-please-return..."
+  ✓ prompt prompt (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 prompt_flow_run_dir="$(e2e::run_dir "prompt_flow.jh")"
@@ -168,8 +170,8 @@ e2e::assert_contains "${prompt_flow_out}" "Final answer:" "prompt_flow default .
 # Prompt with variable references shows named params in tree (not positional args)
 e2e::file "prompt_with_vars.jh" <<'EOF'
 #!/usr/bin/env jaiph
-local role = "engineer"
-local task = "Fix bugs"
+const role = "engineer"
+const task = "Fix bugs"
 workflow default {
   prompt "$role does $task"
 }
@@ -182,6 +184,8 @@ e2e::expect_stdout "${prompt_vars_out}" <<'EOF'
 Jaiph: Running prompt_with_vars.jh
 
 workflow default
+  ▸ prompt "engineer does Fix bugs"
+  ✓ prompt prompt (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 prompt_vars_run_dir="$(e2e::run_dir "prompt_with_vars.jh")"
@@ -247,6 +251,8 @@ e2e::expect_stdout "${multiline_out}" <<'EOF'
 Jaiph: Running multiline_prompt.jh
 
 workflow default
+  ▸ prompt "Line one and line two."
+  ✓ prompt prompt (<time>)
   ▸ script done_impl
   ✓ script done_impl (<time>)
 ✓ PASS workflow default (<time>)

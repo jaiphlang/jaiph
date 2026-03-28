@@ -97,6 +97,7 @@ export function resolveRuntimeEnv(
 
   // Clean transient keys that must not leak across runs.
   delete env.BASH_ENV;
+  delete env.JAIPH_META_FILE;
   delete env.JAIPH_RUN_DIR;
   delete env.JAIPH_PRECEDING_FILES;
   delete env.JAIPH_RUN_SUMMARY_FILE;

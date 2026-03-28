@@ -145,8 +145,13 @@ test("compiler golden: transpileFile emits stable workflow shell", () => {
       "fi",
     ];
     const expected = normalize(lines.join("\n"));
-    const actual = normalize(transpileFile(input, root).module);
+    const emitted = transpileFile(input, root);
+    const actual = normalize(emitted.module);
     assert.equal(actual, expected);
+    const fOkScript = emitted.scripts.find((s) => s.name === "f_ok");
+    assert.ok(fOkScript, "expected transpiled script file for f_ok");
+    assert.match(fOkScript.content, /set -euo pipefail/);
+    assert.doesNotMatch(fOkScript.content, /set \+u/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -1050,7 +1055,7 @@ test("compiler golden: if-run with imported workflow ref", () => {
       ].join("\n"),
     );
     const actual = normalize(transpileFile(input, root).module);
-    assert.match(actual, /if ! [a-z0-9_]+::healthcheck; then/);
+    assert.match(actual, /if ! jaiph::run_step [a-z0-9_]+::healthcheck workflow [a-z0-9_]+::healthcheck::impl; then/);
     assert.match(actual, /jaiph::log "service down"/);
     assert.doesNotMatch(actual, /\brun lib\.healthcheck\b/);
   } finally {

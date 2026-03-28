@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve as resolvePath } from "node:path";
 import { PassThrough } from "node:stream";
 import { randomUUID } from "node:crypto";
 import type { WorkflowStepDef } from "../../types";
@@ -50,6 +50,13 @@ type WorkflowContext = {
 };
 
 type PromptSchemaField = { name: string; type: "string" | "number" | "boolean" };
+type PromptStepHandle = {
+  id: string;
+  seq: number;
+  outFile: string;
+  errFile: string;
+  startedAtMs: number;
+};
 
 function sanitizeName(raw: string): string {
   return raw.replace(/[^a-zA-Z0-9_.-]/g, "_");
@@ -180,7 +187,7 @@ export class NodeWorkflowRuntime {
     const rootScope: Scope = {
       filePath: this.graph.entryFile,
       vars: this.newScopeVars(this.graph.entryFile, undefined, this.env),
-      env: this.env,
+      env: { ...this.env },
     };
     args.forEach((v, i) => {
       rootScope.vars.set(String(i + 1), v);
@@ -195,7 +202,7 @@ export class NodeWorkflowRuntime {
       this.emitWorkflow("WORKFLOW_END", "default");
       return 1;
     }
-    const result = await this.executeWorkflow(resolved.filePath, resolved.workflow.name, rootScope, args);
+    const result = await this.executeWorkflow(resolved.filePath, resolved.workflow.name, rootScope, args, false);
     this.emitWorkflow("WORKFLOW_END", "default");
     return result.status;
   }
@@ -247,10 +254,17 @@ export class NodeWorkflowRuntime {
     promptText: string,
     backend: string,
     scopeVars: Map<string, string>,
-  ): { id: string; startedAtMs: number } {
+  ): PromptStepHandle {
     this.promptSeq += 1;
+    this.stepSeq += 1;
     const current = this.stack.length > 0 ? this.stack[this.stack.length - 1] : null;
     const id = `${this.runId}:${process.pid}:prompt:${this.promptSeq}`;
+    const seq = this.stepSeq;
+    const safe = sanitizeName("prompt__prompt");
+    const outFile = join(this.runDir, `${String(seq).padStart(6, "0")}-${safe}.out`);
+    const errFile = join(this.runDir, `${String(seq).padStart(6, "0")}-${safe}.err`);
+    writeFileSync(outFile, "");
+    writeFileSync(errFile, "");
     const preview = stripOuterQuotes(promptText).replace(/\s+/g, " ").trim();
     const params: Array<[string, string]> = [["prompt_text", preview]];
     const arg1 = scopeVars.get("1") ?? "";
@@ -265,20 +279,23 @@ export class NodeWorkflowRuntime {
       ts: nowIso(),
       status: null,
       elapsed_ms: null,
-      out_file: "",
-      err_file: "",
+      out_file: outFile,
+      err_file: errFile,
       id,
       parent_id: current?.id ?? null,
-      seq: null,
+      seq,
       depth: this.stack.length,
       run_id: this.runId,
       params,
     });
-    return { id, startedAtMs: Date.now() };
+    return { id, seq, outFile, errFile, startedAtMs: Date.now() };
   }
 
-  private emitPromptStepEnd(promptStepId: string, status: number, startedAtMs: number): void {
+  private emitPromptStepEnd(prompt: PromptStepHandle, status: number, outContent: string, errContent: string): void {
     const current = this.stack.length > 0 ? this.stack[this.stack.length - 1] : null;
+    if (errContent.length > 0) {
+      writeFileSync(prompt.errFile, errContent);
+    }
     this.emitStep({
       type: "STEP_END",
       func: "prompt",
@@ -286,17 +303,17 @@ export class NodeWorkflowRuntime {
       name: "prompt",
       ts: nowIso(),
       status,
-      elapsed_ms: Date.now() - startedAtMs,
-      out_file: "",
-      err_file: "",
-      id: promptStepId,
+      elapsed_ms: Date.now() - prompt.startedAtMs,
+      out_file: prompt.outFile,
+      err_file: prompt.errFile,
+      id: prompt.id,
       parent_id: current?.id ?? null,
-      seq: null,
+      seq: prompt.seq,
       depth: this.stack.length,
       run_id: this.runId,
       params: [],
-      out_content: "",
-      err_content: "",
+      out_content: outContent.slice(0, MAX_EMBED),
+      err_content: status !== 0 ? errContent.slice(0, MAX_EMBED) : "",
     });
   }
 
@@ -313,7 +330,13 @@ export class NodeWorkflowRuntime {
     appendRunSummaryLine(JSON.stringify(payload));
   }
 
-  private async executeWorkflow(filePath: string, workflowName: string, scope: Scope, args: string[]): Promise<StepResult> {
+  private async executeWorkflow(
+    filePath: string,
+    workflowName: string,
+    scope: Scope,
+    args: string[],
+    inheritCallerMetadataScope: boolean,
+  ): Promise<StepResult> {
     const resolved = resolveWorkflowRef(this.graph, filePath, {
       value: workflowName,
       loc: { line: 1, col: 1 },
@@ -321,17 +344,27 @@ export class NodeWorkflowRuntime {
     if (!resolved) {
       return { status: 1, output: "", error: `Unknown workflow: ${workflowName}` };
     }
+    const callerModulePath = resolvePath(scope.filePath);
+    const calleeModulePath = resolvePath(resolved.filePath);
+    const crossModuleNested = callerModulePath !== calleeModulePath;
     return this.executeManagedStep("workflow", `${workflowName}`, args, async (io) => {
-      const isNested = this.stack.length > 1;
-      // Nested workflow calls preserve caller module scope but still allow
-      // the callee's explicit workflow-level overrides.
-      const workflowEnv = isNested
-        ? this.applyMetadataScope(scope.env, undefined, resolved.workflow.metadata)
-        : this.applyMetadataScope(
-            scope.env,
-            this.graph.modules.get(resolved.filePath)?.ast.metadata,
-            resolved.workflow.metadata,
-          );
+      // Root entry (`runDefault`, inheritCallerMetadataScope=false): apply entry module + workflow metadata.
+      // Nested cross-module (`run` / inbox to another module): caller env (locks + effective scope)
+      // is authoritative — do not layer callee module or callee workflow metadata.
+      // Same-module nested `run` (inheritCallerMetadataScope=true, !crossModuleNested): apply callee
+      // workflow-level config on top of caller env (workflow boundaries still apply within one module).
+      let workflowEnv: NodeJS.ProcessEnv;
+      if (inheritCallerMetadataScope && crossModuleNested) {
+        workflowEnv = { ...scope.env };
+      } else if (inheritCallerMetadataScope) {
+        workflowEnv = this.applyMetadataScope(scope.env, undefined, resolved.workflow.metadata);
+      } else {
+        workflowEnv = this.applyMetadataScope(
+          scope.env,
+          this.graph.modules.get(resolved.filePath)?.ast.metadata,
+          resolved.workflow.metadata,
+        );
+      }
       const childScope: Scope = {
         filePath: resolved.filePath,
         vars: this.newScopeVars(resolved.filePath, scope.vars, workflowEnv),
@@ -505,10 +538,11 @@ export class NodeWorkflowRuntime {
         out.on("data", (d) => {
           const chunk = String(d);
           chunks.push(chunk);
+          appendFileSync(promptStep.outFile, chunk);
           io?.appendOut(chunk);
         });
         const result = await executePrompt(promptText, promptConfig, out, scope.env);
-        this.emitPromptStepEnd(promptStep.id, result.status, promptStep.startedAtMs);
+        this.emitPromptStepEnd(promptStep, result.status, chunks.join(""), "");
         this.emitPromptEvent("PROMPT_END", { backend, status: result.status });
         const output = chunks.join("");
         accOut += output;
@@ -591,10 +625,11 @@ export class NodeWorkflowRuntime {
           out.on("data", (d) => {
             const chunk = String(d);
             chunks.push(chunk);
+            appendFileSync(promptStep.outFile, chunk);
             io?.appendOut(chunk);
           });
           const result = await executePrompt(promptText, promptConfig, out, scope.env);
-          this.emitPromptStepEnd(promptStep.id, result.status, promptStep.startedAtMs);
+          this.emitPromptStepEnd(promptStep, result.status, chunks.join(""), "");
           this.emitPromptEvent("PROMPT_END", { backend, status: result.status });
           const pcOut = chunks.join("");
           accOut += pcOut;
@@ -740,7 +775,9 @@ export class NodeWorkflowRuntime {
   private async executeRunRef(scope: Scope, ref: string, argsRaw: string): Promise<StepResult> {
     const args = parseArgsRaw(argsRaw, scope.vars, scope.env);
     const resolvedWorkflow = resolveWorkflowRef(this.graph, scope.filePath, { value: ref, loc: { line: 1, col: 1 } });
-    if (resolvedWorkflow) return this.executeWorkflow(resolvedWorkflow.filePath, resolvedWorkflow.workflow.name, scope, args);
+    if (resolvedWorkflow) {
+      return this.executeWorkflow(resolvedWorkflow.filePath, resolvedWorkflow.workflow.name, scope, args, true);
+    }
     const resolvedScript = resolveScriptRef(this.graph, scope.filePath, ref);
     if (!resolvedScript) return { status: 1, output: "", error: `Unknown run target: ${ref}` };
     return this.executeManagedStep(
@@ -769,7 +806,17 @@ export class NodeWorkflowRuntime {
       const res = await attempt();
       if (res.status === 0) return res;
       const recoverSteps = "single" in recover ? [recover.single] : recover.block;
-      const rr = await this.executeSteps(scope, recoverSteps);
+      // Recover blocks receive the failed ensure output in $1 while preserving
+      // existing positional args ($2, $3, ...), which orchestration flows use.
+      const recoverVars = new Map(scope.vars);
+      const recoverPayload = `${res.output}${res.error}`;
+      recoverVars.set("1", recoverPayload);
+      recoverVars.set("arg1", recoverPayload);
+      const recoverScope: Scope = {
+        ...scope,
+        vars: recoverVars,
+      };
+      const rr = await this.executeSteps(recoverScope, recoverSteps);
       if (rr.status !== 0) return rr;
     }
     return { status: 1, output: "", error: `ensure ${ref} failed after ${maxRetries} retries` };
