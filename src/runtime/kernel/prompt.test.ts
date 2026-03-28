@@ -1,9 +1,17 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildBackendArgs, executePrompt, resolveConfig } from "./prompt";
+import {
+  buildBackendArgs,
+  executePrompt,
+  parseEtimeToSeconds,
+  prepareClaudeEnv,
+  resolveConfig,
+  selectTailToKill,
+  type ProcNode,
+} from "./prompt";
 
 describe("resolveConfig", () => {
   it("uses defaults when env is empty", () => {
@@ -138,5 +146,58 @@ describe("executePrompt", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe("prepareClaudeEnv", () => {
+  it("keeps existing env when configured claude dir is writable", () => {
+    const root = mkdtempSync(join(tmpdir(), "jaiph-claude-env-ok-"));
+    try {
+      const cfg = join(root, ".claude");
+      const prepared = prepareClaudeEnv({ HOME: root, CLAUDE_CONFIG_DIR: cfg }, root);
+      assert.equal(prepared.error, undefined);
+      assert.equal(prepared.warning, undefined);
+      assert.equal(prepared.env.CLAUDE_CONFIG_DIR, cfg);
+      assert.ok(existsSync(join(cfg, "session-env")));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to workspace-local claude config when default is not writable", () => {
+    const root = mkdtempSync(join(tmpdir(), "jaiph-claude-env-fallback-"));
+    try {
+      const blockedPath = join(root, "blocked-config-path");
+      writeFileSync(blockedPath, "not-a-directory");
+      const prepared = prepareClaudeEnv({ CLAUDE_CONFIG_DIR: blockedPath }, root);
+      assert.equal(prepared.error, undefined);
+      assert.ok(prepared.warning);
+      assert.equal(prepared.env.CLAUDE_CONFIG_DIR, join(root, ".jaiph", "claude-config"));
+      assert.ok(existsSync(join(root, ".jaiph", "claude-config", "session-env")));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("tail watchdog helpers", () => {
+  it("parses ps etime values", () => {
+    assert.equal(parseEtimeToSeconds("00:59"), 59);
+    assert.equal(parseEtimeToSeconds("01:02:03"), 3723);
+    assert.equal(parseEtimeToSeconds("2-00:00:01"), 172801);
+  });
+
+  it("selects deepest stale tail descendant only", () => {
+    const nodes: ProcNode[] = [
+      { pid: 100, ppid: 1, elapsedSeconds: 5, command: "/usr/bin/node" },
+      { pid: 200, ppid: 100, elapsedSeconds: 50, command: "/bin/zsh" },
+      { pid: 300, ppid: 200, elapsedSeconds: 601, command: "/usr/bin/tail" },
+      { pid: 310, ppid: 200, elapsedSeconds: 999, command: "/usr/bin/tail" },
+      { pid: 320, ppid: 300, elapsedSeconds: 700, command: "/usr/bin/tail" },
+      { pid: 400, ppid: 1, elapsedSeconds: 700, command: "/usr/bin/tail" },
+    ];
+    const selected = selectTailToKill(nodes, 100, 600);
+    assert.ok(selected);
+    assert.equal(selected?.pid, 320);
   });
 });

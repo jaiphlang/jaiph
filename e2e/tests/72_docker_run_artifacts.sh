@@ -33,7 +33,10 @@ workflow default {
 EOF
 
 # When: run with Docker enabled (override the e2e default of JAIPH_DOCKER_ENABLED=false)
-JAIPH_DOCKER_ENABLED=true jaiph run "${TEST_DIR}/docker_artifacts.jh" >/dev/null 2>&1
+if ! JAIPH_DOCKER_ENABLED=true jaiph run "${TEST_DIR}/docker_artifacts.jh" >/dev/null 2>&1; then
+  JAIPH_DOCKER_ENABLED=true jaiph run "${TEST_DIR}/docker_artifacts.jh"
+  e2e::fail "docker: jaiph run docker_artifacts.jh failed"
+fi
 
 # Then: artifacts should exist on the host under .jaiph/runs
 run_dir="$(e2e::run_dir "docker_artifacts.jh")"

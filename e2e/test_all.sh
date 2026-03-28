@@ -46,6 +46,8 @@ TEST_SCRIPTS=(
   "e2e/tests/99_managed_call_semantics.sh"
   "e2e/tests/100_ensure_recover_invalid.sh"
   "e2e/tests/101_script_isolation.sh"
+  "e2e/tests/102_engineer_recover_contract.sh"
+  "e2e/tests/103_run_dir_source_name.sh"
 )
 
 PASS_COUNT=0

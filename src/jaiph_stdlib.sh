@@ -259,11 +259,15 @@ jaiph::init_run_tracking() {
   if [[ -n "${JAIPH_RUN_DIR:-}" ]]; then
     # The run directory can be removed during long workflows (e.g. test cleanup).
     # Recreate it so subsequent step artifacts/events can still be written.
+    JAIPH_STEP_SEQ="${JAIPH_STEP_SEQ:-0}"
+    JAIPH_STEP_STACK="${JAIPH_STEP_STACK:-}"
+    JAIPH_LAST_STEP_ID="${JAIPH_LAST_STEP_ID:-}"
     mkdir -p "$JAIPH_RUN_DIR"
     if [[ -n "${JAIPH_RUN_SUMMARY_FILE:-}" ]]; then
       mkdir -p "$(dirname "$JAIPH_RUN_SUMMARY_FILE")"
       : >>"$JAIPH_RUN_SUMMARY_FILE"
     fi
+    export JAIPH_STEP_SEQ JAIPH_STEP_STACK JAIPH_LAST_STEP_ID
     return 0
   fi
   local run_id workspace_root runs_root
@@ -374,7 +378,7 @@ jaiph::next_step_id() {
   if [[ -n "$seq_file" && -f "$seq_file" ]]; then
     JAIPH_STEP_SEQ="$(( $(<"$seq_file") + 1 ))"
   else
-    JAIPH_STEP_SEQ="$((JAIPH_STEP_SEQ + 1))"
+    JAIPH_STEP_SEQ="$(( ${JAIPH_STEP_SEQ:-0} + 1 ))"
   fi
   if [[ -n "$seq_file" ]]; then
     printf '%s' "$JAIPH_STEP_SEQ" >"$seq_file"

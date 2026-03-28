@@ -9,15 +9,15 @@ trap e2e::cleanup EXIT
 e2e::prepare_test_env "top_level_local"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
-e2e::section "top-level local with multi-line string value"
+e2e::section "top-level const with multi-line string value"
 
 # Given
 e2e::file "env_demo.jh" <<'EOF'
-local role = "You are an expert.
+const role = "You are an expert.
     1. You write clearly
     2. You are concise"
 
-local greeting = "hello world"
+const greeting = "hello world"
 
 script write_role() {
   echo "$1" > role_out.txt
@@ -49,14 +49,14 @@ e2e::assert_equals "$(echo "${greeting_content}" | tr -d '\n')" "hello world" "s
 
 e2e::expect_out_files "env_demo.jh" 3
 
-e2e::section "top-level local accessible in rules and workflows (not scripts)"
+e2e::section "top-level const accessible in rules and workflows (not scripts)"
 
-# Scripts run in full isolation and cannot see module-level locals.
+# Scripts run in full isolation and cannot see module-level consts.
 # Rules and workflows still see them via env shims.
 
 # Given
 e2e::file "env_all.jh" <<'EOF'
-local msg = "shared-value"
+const msg = "shared-value"
 
 script check_msg_impl() {
   echo "$1" > rule_msg.txt
@@ -91,9 +91,9 @@ e2e::assert_file_exists "${TEST_DIR}/func_msg.txt" "function wrote msg"
 e2e::assert_file_exists "${TEST_DIR}/wf_msg.txt" "workflow wrote msg"
 
 e2e::assert_equals "$(tr -d '\n' < "${TEST_DIR}/rule_msg.txt")" "shared-value" "rule sees correct value"
-e2e::assert_equals "$(tr -d '\n' < "${TEST_DIR}/func_msg.txt")" "" "script does NOT see module local (isolation)"
+e2e::assert_equals "$(tr -d '\n' < "${TEST_DIR}/func_msg.txt")" "" "script does NOT see module const (isolation)"
 e2e::assert_equals "$(tr -d '\n' < "${TEST_DIR}/wf_msg.txt")" "shared-value" "workflow sees correct value"
 
 e2e::expect_out_files "env_all.jh" 5
 
-e2e::pass "top-level local declarations: rules+workflows see vars, scripts isolated"
+e2e::pass "top-level const declarations: rules+workflows see vars, scripts isolated"

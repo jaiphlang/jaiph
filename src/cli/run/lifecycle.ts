@@ -66,12 +66,42 @@ export function setupRunSignalHandlers(
 
 export function waitForRunExit(
   child: ChildProcess,
-  onClose?: () => void,
+  onClosed?: () => void,
+  opts?: { closeGraceMs?: number },
 ): Promise<{ status: number; signal: NodeJS.Signals | null }> {
+  const closeGraceMs = opts?.closeGraceMs ?? 1000;
   return new Promise((resolveExit) => {
-    child.on("close", (code, signal) => {
-      onClose?.();
-      resolveExit({ status: typeof code === "number" ? code : 1, signal });
-    });
+    let done = false;
+    let closeTimer: NodeJS.Timeout | undefined;
+    let exitResult: { status: number; signal: NodeJS.Signals | null } | undefined;
+    const finish = (result: { status: number; signal: NodeJS.Signals | null }): void => {
+      if (done) return;
+      done = true;
+      if (closeTimer) {
+        clearTimeout(closeTimer);
+        closeTimer = undefined;
+      }
+      child.removeListener("exit", handleExit);
+      child.removeListener("close", handleClose);
+      onClosed?.();
+      resolveExit(result);
+    };
+    const handleExit = (code: number | null, signal: NodeJS.Signals | null): void => {
+      exitResult = { status: typeof code === "number" ? code : 1, signal };
+      if (closeGraceMs <= 0) {
+        finish(exitResult);
+        return;
+      }
+      closeTimer = setTimeout(() => {
+        if (exitResult) {
+          finish(exitResult);
+        }
+      }, closeGraceMs);
+    };
+    const handleClose = (code: number | null, signal: NodeJS.Signals | null): void => {
+      finish({ status: typeof code === "number" ? code : 1, signal });
+    };
+    child.on("exit", handleExit);
+    child.on("close", handleClose);
   });
 }
