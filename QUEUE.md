@@ -6,38 +6,142 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Preserve parallel shell syntax (`&`, `wait`, `wait $pid`) in Node orchestration <!-- dev-ready -->
+## Post-migration hardening: move sequence allocation into JS runtime for atomicity <!-- dev-ready -->
 
 **Goal**  
-Keep existing parallel shell-step authoring syntax working under the Node runtime, including background jobs (`&`) and both wait forms (`wait`, `wait $pid`).
+Eliminate async artifact/step-id collisions by making JS runtime the single owner of step sequence allocation.
 
 **Problem statement**
 
-- Strict shell-step ban currently blocks workflows that rely on shell-native parallel patterns.
-- `e2e/tests/94_parallel_shell_steps.sh` had to be temporarily skipped because those semantics are unsupported in the current script-only execution path.
-- This is a behavior regression versus prior Bash-oriented runtime expectations for users with existing workflows.
+- Current Bash-side sequencing can race under managed async (`run ... &`), producing duplicate `seq` values and colliding artifact paths (for example prompt `.out` files).
+- A known repro exists in `e2e/tests/20_rule_and_prompt.sh` (`async_prompt_artifacts.jh` block): concurrent branches currently collapse into one prompt artifact and duplicate workflow `seq`.
 
 **Scope**
 
-1. Define supported grammar/semantics for parallel shell execution in managed flow:
-   - background launch with `&`,
-   - bare `wait`,
-   - targeted `wait $pid`.
-2. Implement runtime support in Node orchestration so these patterns execute deterministically and preserve expected exit-code behavior.
-3. Preserve artifact/event contracts for parallel branches:
-   - unique step sequencing,
-   - stable `.out/.err` capture,
-   - valid `run_summary.jsonl` event ordering.
-4. Re-enable and update `e2e/tests/94_parallel_shell_steps.sh` from skip to active assertions.
-5. Ensure compatibility with strict shell policy by routing through explicit script execution rather than reintroducing arbitrary inline shell in workflows/rules.
+1. Introduce a JS runtime sequence allocator that is shared by all concurrent step executions in a run.
+2. Ensure allocation is atomic across async branches/process boundaries.
+3. Make Bash runtime consume JS-assigned seq values (or remove Bash-side seq mutation entirely once migration phase allows).
+4. Preserve existing artifact naming contract (`%06d-<safe_name>.out|.err`) and run summary `seq` semantics.
+5. Replace/remove the known-bug repro assertions once fixed and add positive parity assertions (`2 prompt artifacts`, unique seqs).
 
 **Acceptance criteria**
 
-- Parallel jobs launched with `&` execute correctly and are joinable.
-- `wait` and `wait $pid` behavior matches expected shell semantics for success/failure propagation.
-- Concurrent output is captured without corruption; run summary remains valid JSONL with consistent step lifecycle events.
-- `e2e/tests/94_parallel_shell_steps.sh` is unskipped and green.
-- No regressions in existing e2e suites that already passed under Node orchestration.
+- Under concurrent async workflows, each step gets a unique monotonic `seq`.
+- Prompt artifacts from parallel branches are emitted as distinct files (no overwrite/interleaving).
+- `run_summary.jsonl` contains no duplicate `seq` per run for `STEP_START`/`STEP_END`.
+- Existing e2e suite remains green, and the async prompt repro is converted to a correctness assertion.
+
+---
+
+## Add workflow-scoped `run async` for script calls (Node runtime only) <!-- dev-ready -->
+
+**Goal**  
+Support async fan-out/fan-in in workflows using explicit managed syntax (`run async ...`) instead of shell operators, with deterministic completion at workflow end.
+
+**Problem statement**
+
+- Current managed syntax lacks a first-class async primitive for script calls, so authors cannot express concurrent workflow work without shell-level hacks.
+- Existing parallel shell syntax (`&`, `wait`) is not the target language direction under strict managed orchestration.
+- We need a Node-runtime-native async model that is explicit, predictable, and compatible with run artifacts/events.
+
+**Scope**
+
+1. Add grammar for async managed calls:
+   - `run async <script_ref> [args...]` in workflow bodies.
+   - `async` is a keyword modifier on `run` (not a separate statement).
+   - `run async` is valid only inside workflows (reject in rules/scripts/tests).
+2. Define workflow-scope semantics:
+   - each `run async ...` starts immediately and returns control to the next step,
+   - the enclosing workflow performs an implicit join before `WORKFLOW_END`,
+   - failures are aggregated: if multiple async branches fail, workflow failure reports all failed branches.
+3. Constrain scope explicitly:
+   - JS runtime support only (no Bash parity requirement),
+   - async lifecycle is owned by workflow execution scope,
+   - no reintroduction of shell background/wait syntax.
+   - explicitly drop prior parallel authoring pattern using `&` and `wait` from current samples/examples.
+4. Define invalid forms and diagnostics:
+   - reject `const x = run async ...` in v1 (no direct capture result),
+   - emit parser/validator errors with actionable guidance (`use run async ...` as a standalone step).
+5. Implement runtime support in Node workflow runtime:
+   - track pending async step handles per workflow scope,
+   - await all pending handles on workflow completion path (success and error paths),
+   - preserve stable event/artifact contracts for concurrently executed steps.
+6. Update examples/docs and add/adjust tests:
+   - migrate current samples that demonstrate parallelism from `&`/`wait` to `run async ...`,
+   - remove or rewrite sample snippets that imply shell-level `&`/`wait` is a supported managed pattern,
+   - parser/compiler coverage for `run async ...`,
+   - runtime/e2e coverage for fan-out/fan-in ordering behavior (e.g. delayed writes resulting in sorted output),
+   - failure aggregation coverage when multiple async branches exit non-zero.
+
+**Language-spec snippet (draft)**
+
+```jh
+# Valid only in workflow bodies:
+workflow default() {
+  run async delayed 3
+  run async delayed 1
+  run async delayed 2
+}
+
+# Invalid (v1): capture from async run
+workflow invalid_capture() {
+  const x = run async delayed 1 "file.txt"  # E_*: async runs cannot be captured
+}
+
+# Invalid: async outside workflow
+rule invalid_rule {
+  run async delayed 1 "file.txt"            # E_*: run async is workflow-only
+}
+```
+
+The current sample from e2e/sleep-sort.jh should log sorted values
+
+Semantics:
+
+- `run async <script_ref> [args...]` starts a managed script execution and immediately continues to the next workflow step.
+- Async handles are tracked in workflow scope; the runtime performs an implicit join before workflow completion.
+- Workflow success requires all async branches to succeed.
+- If one or more async branches fail, the workflow fails and the error reports all failed async branches (aggregated), including step identity and exit context.
+- JS runtime only. Bash parity is explicitly out of scope.
+
+**Acceptance criteria**
+
+- `run async delayed 3`, `run async delayed 1`, `run async delayed 2` parse and execute under Node runtime.
+- Workflow does not finish until all workflow-scoped async runs settle.
+- Successful async completion produces expected deterministic observable result (for example sorted append output in the sample workflow).
+- `const x = run async ...` is rejected with clear diagnostic guidance.
+- `run async ...` outside workflows is rejected with clear diagnostic guidance.
+- If multiple async runs fail, workflow exits failed with aggregated error context for all failing branches.
+- Current samples/docs no longer present `&`/`wait` as the parallel orchestration pattern; they use `run async ...`.
+- Step artifacts and `run_summary.jsonl` remain valid and non-corrupt under concurrent async runs.
+- No Bash-runtime parity is required for this task.
+
+---
+
+## Allow brace-less `script` and `rule` declarations (separate syntax task) <!-- dev-ready -->
+
+**Goal**  
+Allow `script` and `rule` declaration forms without braces while preserving existing braced syntax for backward compatibility.
+
+**Problem statement**
+
+- Current declaration syntax requires braces for `script`/`rule`, which adds ceremony for simple declarations.
+- This change is parser/grammar focused and should be delivered independently from async runtime behavior.
+
+**Scope**
+
+1. Define accepted brace-less forms for `script` and `rule` declarations.
+2. Update parser/AST to support both old (braced) and new (brace-less) forms.
+3. Keep transpiler/runtime behavior unchanged for equivalent declarations.
+4. Add parser + golden coverage for mixed usage and ambiguity edge cases.
+5. Update docs/spec examples to show canonical preferred syntax.
+
+**Acceptance criteria**
+
+- Brace-less `script` and `rule` declarations parse successfully.
+- Existing braced declarations remain fully supported.
+- No runtime behavior change beyond syntax acceptance.
+- Tests cover both declaration styles and prevent parsing ambiguities.
 
 ---
 
@@ -186,33 +290,6 @@ Resolve whether `e2e/tests/96_run_stdout_redirect.sh` should be removed, replace
 
 - No ambiguous permanently-skipped test without documented rationale.
 - e2e suite communicates supported syntax clearly.
-
----
-
-## Post-migration hardening: move sequence allocation into JS runtime for atomicity <!-- dev-ready -->
-
-**Goal**  
-Eliminate async artifact/step-id collisions by making JS runtime the single owner of step sequence allocation.
-
-**Problem statement**
-
-- Current Bash-side sequencing can race under managed async (`run ... &`), producing duplicate `seq` values and colliding artifact paths (for example prompt `.out` files).
-- A known repro exists in `e2e/tests/20_rule_and_prompt.sh` (`async_prompt_artifacts.jh` block): concurrent branches currently collapse into one prompt artifact and duplicate workflow `seq`.
-
-**Scope**
-
-1. Introduce a JS runtime sequence allocator that is shared by all concurrent step executions in a run.
-2. Ensure allocation is atomic across async branches/process boundaries.
-3. Make Bash runtime consume JS-assigned seq values (or remove Bash-side seq mutation entirely once migration phase allows).
-4. Preserve existing artifact naming contract (`%06d-<safe_name>.out|.err`) and run summary `seq` semantics.
-5. Replace/remove the known-bug repro assertions once fixed and add positive parity assertions (`2 prompt artifacts`, unique seqs).
-
-**Acceptance criteria**
-
-- Under concurrent async workflows, each step gets a unique monotonic `seq`.
-- Prompt artifacts from parallel branches are emitted as distinct files (no overwrite/interleaving).
-- `run_summary.jsonl` contains no duplicate `seq` per run for `STEP_START`/`STEP_END`.
-- Existing e2e suite remains green, and the async prompt repro is converted to a correctness assertion.
 
 ---
 
