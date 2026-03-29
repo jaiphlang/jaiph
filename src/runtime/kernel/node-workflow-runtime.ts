@@ -461,6 +461,7 @@ export class NodeWorkflowRuntime {
     let accOut = "";
     let accErr = "";
     let returnValue: string | undefined;
+    const pendingAsync: Array<{ ref: string; promise: Promise<StepResult> }> = [];
     for (const step of steps) {
       if (step.type === "comment") continue;
       if (step.type === "log") {
@@ -712,6 +713,11 @@ export class NodeWorkflowRuntime {
         }
       }
       if (step.type === "run") {
+        if (step.async) {
+          const promise = this.executeRunRef(scope, step.workflow.value, step.args ?? "");
+          pendingAsync.push({ ref: step.workflow.value, promise });
+          continue;
+        }
         const runResult = await this.executeRunRef(scope, step.workflow.value, step.args ?? "");
         if (step.captureName && runResult.status === 0) {
           scope.vars.set(step.captureName, runResult.returnValue ?? runResult.output.trim());
@@ -764,6 +770,29 @@ export class NodeWorkflowRuntime {
           accErr += r.error;
         }
         continue;
+      }
+    }
+    // Implicit join: await all pending async steps before returning.
+    if (pendingAsync.length > 0) {
+      const settled = await Promise.allSettled(pendingAsync.map((p) => p.promise));
+      const failures: string[] = [];
+      for (let i = 0; i < settled.length; i += 1) {
+        const r = settled[i]!;
+        if (r.status === "rejected") {
+          failures.push(`run async ${pendingAsync[i]!.ref}: ${String(r.reason)}`);
+        } else if (r.value.status !== 0) {
+          failures.push(`run async ${pendingAsync[i]!.ref}: ${r.value.error}`);
+          accOut += r.value.output;
+          accErr += r.value.error;
+        } else {
+          accOut += r.value.output;
+        }
+      }
+      if (failures.length > 0) {
+        const aggregated = failures.length === 1
+          ? failures[0]!
+          : `${failures.length} async steps failed:\n${failures.join("\n")}`;
+        return { status: 1, output: accOut, error: accErr + aggregated };
       }
     }
     return { status: 0, output: accOut, error: accErr, returnValue };

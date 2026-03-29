@@ -279,6 +279,28 @@ export function parseBlockStatement(
     return { step: r.step, nextIdx: r.nextIdx + 1 };
   }
 
+  if (inner.startsWith("run async ")) {
+    const runBody = inner.slice("run async ".length).trim();
+    const runMatch = runBody.match(
+      /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
+    );
+    if (!runMatch || !isRef(runMatch[1])) {
+      fail(filePath, "run async must target a workflow or script reference", innerNo);
+    }
+    return {
+      step: {
+        type: "run",
+        workflow: {
+          value: runMatch[1],
+          loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
+        },
+        args: runMatch[2]?.trim(),
+        async: true,
+      },
+      nextIdx: idx + 1,
+    };
+  }
+
   if (inner.startsWith("run ")) {
     const runBody = inner.slice("run ".length).trim();
     const runMatch = runBody.match(
@@ -339,6 +361,9 @@ export function parseBlockStatement(
         rest.slice("ensure ".length).trim(), captureName,
       );
       return { step: result.step, nextIdx: result.nextIdx + 1 };
+    }
+    if (rest.startsWith("run async ")) {
+      fail(filePath, "capture is not supported with run async; use separate steps", innerNo, innerRaw.indexOf("run") + 1);
     }
     if (rest.startsWith("run ")) {
       const runBody = rest.slice("run ".length).trim();
