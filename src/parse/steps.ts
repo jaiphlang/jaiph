@@ -150,7 +150,7 @@ function parseRecoverStatement(
     if (closeIdx === -1) {
       fail(filePath, "unterminated log string", lineNo, logCol);
     }
-    const message = logArg.slice(0, closeIdx + 1);
+    const message = logArg.slice(1, closeIdx);
     return { type: "log", message, loc: { line: lineNo, col: logCol } };
   }
   if (t.startsWith("logerr ") || t === "logerr") {
@@ -163,7 +163,7 @@ function parseRecoverStatement(
     if (closeIdx === -1) {
       fail(filePath, "unterminated logerr string", lineNo, logerrCol);
     }
-    const message = logerrArg.slice(0, closeIdx + 1);
+    const message = logerrArg.slice(1, closeIdx);
     return { type: "logerr", message, loc: { line: lineNo, col: logerrCol } };
   }
   return { type: "shell", command: t, loc: { line: lineNo, col } };

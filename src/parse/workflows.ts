@@ -274,7 +274,7 @@ export function parseWorkflowBlock(
       if (closeIdx === -1) {
         fail(filePath, "unterminated log string", innerNo, logCol);
       }
-      const message = logArg.slice(0, closeIdx + 1);
+      const message = logArg.slice(1, closeIdx);
       workflow.steps.push({
         type: "log",
         message,
@@ -293,7 +293,7 @@ export function parseWorkflowBlock(
       if (closeIdx === -1) {
         fail(filePath, "unterminated logerr string", innerNo, logerrCol);
       }
-      const message = logerrArg.slice(0, closeIdx + 1);
+      const message = logerrArg.slice(1, closeIdx);
       workflow.steps.push({
         type: "logerr",
         message,

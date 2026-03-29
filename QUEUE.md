@@ -12,86 +12,59 @@ Process rules:
 
 ---
 
-## Normalize log/logerr display quoting <!-- dev-ready -->
-
-**Goal**  
-Remove synthetic outer quotes from rendered `log`/`logerr` messages.
-
-**Context**
-
-- The parser in `src/parse/steps.ts` (lines 149–153) stores the log message **including outer double quotes**: `logArg.slice(0, closeIdx + 1)` where `logArg` starts with `"`. So the AST stores `"message"` not `message`.
-- The runtime in `node-workflow-runtime.ts` (line ~461) calls `interpolate(step.message, ...)` which substitutes variables but does NOT strip the outer quotes.
-- The display in `src/cli/run/progress.ts` (line ~125) renders `ℹ ${s.message}`, producing `ℹ "message"` in the tree.
-- The live TTY display in `src/cli/run/stderr-handler.ts` (line ~208) renders `ℹ safeMessage`.
-- The `stripOuterQuotes` function already exists in `node-workflow-runtime.ts` (line ~110) and is used for `return` and `const` — but NOT for `log`/`logerr`.
-
-**Key files:**
-- `src/parse/steps.ts` — lines 149–153 (log), 162–166 (logerr): stores message with quotes
-- `src/runtime/kernel/node-workflow-runtime.ts` — line ~461 (log interpolation), ~469 (logerr interpolation), ~110 (`stripOuterQuotes` helper)
-- `src/cli/run/progress.ts` — lines ~125, ~266 (static tree label rendering)
-- `src/cli/run/stderr-handler.ts` — line ~208 (TTY live rendering)
-
-**Fix options** (pick one):
-- **Option A (parser)**: Strip quotes at parse time: `logArg.slice(1, closeIdx)` instead of `logArg.slice(0, closeIdx + 1)`. Cleanest — AST stores the actual message.
-- **Option B (runtime)**: Apply `stripOuterQuotes` before `interpolate` in the log/logerr handler.
-
-**Scope**
-
-1. Fix the quoting at the chosen layer (parser preferred).
-2. Preserve inner quotes and multiline formatting.
-3. Update affected e2e tests that assert tree output containing log messages (search for `ℹ` and `!` in `e2e/tests/*.sh`).
-4. Update display tests in `src/cli/run/display.test.ts` if needed.
-
-**Acceptance criteria**
-
-- Standard `log "Hello $name"` output shows `ℹ Hello world` not `ℹ "Hello world"`.
-- Escaping and multiline behavior remain correct.
-- All e2e and unit tests pass.
-
----
-
 ## Align interpolation with JS string semantics <!-- dev-ready -->
 
 **Goal**  
-Adopt JavaScript template literal semantics as the single interpolation model. Eliminate conflicting language direction around backticks and shell-style expansion.
+Adopt JavaScript template literal semantics as the single interpolation model. Eliminate conflicting language direction around backticks and shell-style expansion. Make `${argN}` the canonical form for positional arguments in Jaiph string contexts.
 
 **Context**
 
 - **Decision**: Jaiph strings follow JS string rules. `"something ${var}"` is the canonical interpolation form. Backticks that appear literally must be escaped. `${var:-fallback}` is shell syntax and should NOT be supported.
+- **Positional arguments**: Use `${arg1}`, `${arg2}`, ... in `log "Hello ${arg1}"`, `fail "Missing: ${arg1}"`, `prompt "Process ${arg1}"`, etc. This matches the runtime's `arg1=...` display keys and prepares for named parameters.
+- `$1` / `$2` remains supported as a **legacy shorthand inside `script` bodies only** (where shell idioms belong). Using `$1` in workflow/rule string literals should be discouraged or produce a lint-style warning in the future.
 - Previous queue had contradictory tasks: "reject backticks" and "allow backticks in prompt strings".
 - Current interpolation implementation in `node-workflow-runtime.ts` (line ~69) handles `${varName}` and `$varName` patterns but uses shell-style regex matching.
 - Substitution validation in `src/transpile/validate-substitution.ts` validates `$(...)` command substitutions.
 - No explicit backtick policy exists in the parser or validator.
 
 **Key files:**
-- `src/runtime/kernel/node-workflow-runtime.ts` — `interpolate()` function (line ~69)
+- `src/runtime/kernel/node-workflow-runtime.ts` — `interpolate()` function (line ~69). Update regex priority and add explicit `${argN}` handling if needed.
 - `src/transpile/validate-substitution.ts` — command substitution validation
 - `src/transpile/validate.ts` — main validation logic
 - `src/parse/steps.ts` — step parsing (string handling)
 - `src/parse/core.ts` — core parsing primitives
 - `docs/grammar.md` — grammar documentation
+- `docs/index.html` — update all examples, especially argument passing and rule examples
 
 **Scope**
 
 1. Define the explicit interpolation rule set:
-   - `${varName}` — supported (JS template literal style).
-   - `$varName` — supported (convenience shorthand, like shell).
-   - `${var:-fallback}` — **rejected** with compile-time error ("shell fallback syntax not supported; use conditional logic").
+   - `${varName}` — supported (JS template literal style, primary form).
+   - `${arg1}`, `${arg2}`, ... — **canonical for positional arguments** in Jaiph strings.
+   - `$varName` — supported (convenience shorthand, like shell; de-emphasize in docs).
+   - `$1`, `$2`, ... — **only in `script` bodies** (legacy shell style).
+   - `${var:-fallback}` — **rejected** with compile-time error ("shell fallback syntax not supported; use conditional logic or named params").
    - Backtick characters — **must be escaped** (`\``) in all string contexts. Unescaped backticks produce a compile-time error.
    - `$(...)` — **rejected** in orchestration contexts (already enforced), allowed in script bodies.
-2. Update parser/validator to enforce these rules.
-3. Add focused positive/negative tests:
-   - Valid: `"hello ${name}"`, `"value is $x"`, `"escaped backtick: \`cmd\`"`
+2. Update parser/validator to enforce these rules (prefer `${...}` form where unambiguous).
+3. Update **all documentation and samples**:
+   - Replace examples using `$1` in `log`/`fail`/`prompt` strings with `${arg1}`.
+   - Update `docs/index.html` (argument passing section, rule examples, async workflow example).
+   - Update `docs/grammar.md` (named parameters section, capture examples, validation rules).
+   - Update `docs/jaiph-skill.md` and any other doc files.
+4. Add focused positive/negative tests:
+   - Valid: `"hello ${name}"`, `"value is $x"`, `"arg is ${arg1}"`, `"escaped backtick: \`cmd\`"`, script body using `$1`
    - Invalid: `"${var:-default}"`, unescaped backtick in string, `"$(command)"` in workflow context.
-4. Update `docs/grammar.md` and any other docs that discuss string interpolation.
+5. Update `docs/grammar.md` and any other docs that discuss string interpolation. Explicitly document the `${argN}` convention.
 
 **Acceptance criteria**
 
 - Backtick and `${...}` behavior is fully deterministic and documented.
 - `${var:-fallback}` is rejected with actionable error.
 - Unescaped backticks are rejected with actionable error.
+- **All examples in `docs/index.html` and `docs/grammar.md` use `${argN}`** (or named params) in Jaiph strings.
 - No contradictory docs/tests remain.
-- Grammar docs explicitly state "JS template literal semantics."
+- Grammar docs explicitly state "JS template literal semantics" and document `${argN}` as canonical for positional arguments.
 
 ---
 
@@ -201,6 +174,7 @@ Render prompt backend/model inline in tree output (`prompt <backend> "<preview>"
 3. Apply the same format in both TTY and non-TTY modes.
 4. Add tests in CLI display/event parsing paths.
 5. Update docs/examples to match exact rendered format.
+6. Update sample outputs in `docs/index.html`
 
 **Acceptance criteria**
 

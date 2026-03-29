@@ -407,7 +407,7 @@ export function parseBlockStatement(
     if (closeIdx === -1) {
       fail(filePath, "unterminated log string", innerNo, logCol);
     }
-    const message = logArg.slice(0, closeIdx + 1);
+    const message = logArg.slice(1, closeIdx);
     return { step: { type: "log", message, loc: { line: innerNo, col: logCol } }, nextIdx: idx + 1 };
   }
 
@@ -421,7 +421,7 @@ export function parseBlockStatement(
     if (closeIdx === -1) {
       fail(filePath, "unterminated logerr string", innerNo, logerrCol);
     }
-    const message = logerrArg.slice(0, closeIdx + 1);
+    const message = logerrArg.slice(1, closeIdx);
     return { step: { type: "logerr", message, loc: { line: innerNo, col: logerrCol } }, nextIdx: idx + 1 };
   }
 
