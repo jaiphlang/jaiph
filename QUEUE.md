@@ -68,41 +68,6 @@ Make **`__JAIPH_EVENT__`** JSONL appear on **stderr only** for all **`jaiph run`
 
 ---
 
-## Restore strict run-summary contract assertions (e2e 88) <!-- dev-ready -->
-
-**Goal**  
-Reinstate strict contract checks in `e2e/tests/88_run_summary_event_contract.sh`.
-
-**Context**
-
-- The test currently runs (not skipped) and validates: valid JSONL, single `run_id`, required event keys (`type`, `ts`, `run_id`, `event_version`), LOG persistence, WORKFLOW_START/END balance, STEP_START/END pairing, and INBOX_ENQUEUE presence.
-- **Missing assertions**: The test does NOT check for `INBOX_DISPATCH_START`/`INBOX_DISPATCH_COMPLETE` events, even though the runtime already emits them (see `node-workflow-runtime.ts:762` and `inbox.ts:81`).
-- This is a **test-gap task**, not a runtime implementation task — the events exist but are unasserted.
-
-**Key files:**
-- `e2e/tests/88_run_summary_event_contract.sh` — the test to harden (python3 inline script starts at line 62)
-- `src/runtime/kernel/node-workflow-runtime.ts` — emits `INBOX_DISPATCH_START` (~line 762), `INBOX_DISPATCH_COMPLETE` (~line 783)
-- `src/runtime/kernel/inbox.ts` — also emits dispatch start/complete (~lines 81, 103)
-
-**Scope**
-
-1. Add dispatch pairing assertions to the python3 contract validator:
-   - Every `INBOX_DISPATCH_START` must have a matching `INBOX_DISPATCH_COMPLETE` for the same channel+target.
-   - `INBOX_DISPATCH_START` must precede its matching `INBOX_DISPATCH_COMPLETE`.
-   - Required payload fields: `channel`, `target`, `inbox_seq`.
-2. Add the dispatch event types to the `want_types` tuple (line 156):
-   - `"INBOX_DISPATCH_START"`, `"INBOX_DISPATCH_COMPLETE"`.
-3. Define the canonical event contract in code comments at the top of the test.
-4. If any event field discrepancy is found between what the test expects and what the runtime emits, update the test expectations to match the runtime (runtime is source of truth).
-
-**Acceptance criteria**
-
-- e2e 88 enforces dispatch start/complete pairing and passes.
-- All expected event types are asserted.
-- `run_summary.jsonl` contract is explicitly documented in test comments.
-
----
-
 ## Verify argument forwarding in managed calls (e2e 90) <!-- dev-ready -->
 
 **Goal**  

@@ -1,4 +1,27 @@
 #!/usr/bin/env bash
+#
+# run_summary.jsonl canonical event contract
+# ==========================================
+# Every run produces a JSONL file where each line is a JSON object with at
+# minimum: type, ts, run_id, event_version (always 1).
+#
+# Required event types for a workflow with inbox dispatch:
+#   WORKFLOW_START    — workflow={name}
+#   WORKFLOW_END      — workflow={name}
+#   STEP_START        — id={unique-step-id}
+#   STEP_END          — id={matching-step-id}
+#   LOG               — message={string}
+#   INBOX_ENQUEUE     — channel, inbox_seq
+#   INBOX_DISPATCH_START    — channel, target, inbox_seq, sender
+#   INBOX_DISPATCH_COMPLETE — channel, target, inbox_seq, sender, status, elapsed_ms
+#
+# Invariants:
+#   - Single run_id across all events
+#   - WORKFLOW_START/END counts balance per workflow name
+#   - STEP_START precedes its matching STEP_END (by id)
+#   - Every INBOX_DISPATCH_START has a matching INBOX_DISPATCH_COMPLETE
+#     for the same (channel, target, inbox_seq), and START precedes COMPLETE
+#
 
 set -euo pipefail
 
@@ -152,6 +175,38 @@ _e0 = enq_events[0]
 if _e0.get("channel") != "ch":
     sys.exit("INBOX_ENQUEUE.channel mismatch")
 
+dispatch_starts = {}
+dispatch_ends = {}
+for idx, e in enumerate(events):
+    t = e.get("type")
+    if t == "INBOX_DISPATCH_START":
+        for fld in ("channel", "target", "inbox_seq", "sender"):
+            if not e.get(fld):
+                sys.exit(f"INBOX_DISPATCH_START event {idx} missing required field {fld!r}")
+        key = (e["channel"], e["target"], e["inbox_seq"])
+        if key in dispatch_starts:
+            sys.exit(f"duplicate INBOX_DISPATCH_START for {key!r}")
+        dispatch_starts[key] = idx
+    elif t == "INBOX_DISPATCH_COMPLETE":
+        for fld in ("channel", "target", "inbox_seq", "sender", "status", "elapsed_ms"):
+            if fld not in e:
+                sys.exit(f"INBOX_DISPATCH_COMPLETE event {idx} missing required field {fld!r}")
+        key = (e["channel"], e["target"], e["inbox_seq"])
+        if key in dispatch_ends:
+            sys.exit(f"duplicate INBOX_DISPATCH_COMPLETE for {key!r}")
+        dispatch_ends[key] = idx
+
+if not dispatch_starts:
+    sys.exit("expected at least one INBOX_DISPATCH_START")
+
+for key in set(dispatch_starts) | set(dispatch_ends):
+    if key not in dispatch_starts:
+        sys.exit(f"INBOX_DISPATCH_COMPLETE without INBOX_DISPATCH_START for {key!r}")
+    if key not in dispatch_ends:
+        sys.exit(f"INBOX_DISPATCH_START without INBOX_DISPATCH_COMPLETE for {key!r}")
+    if dispatch_starts[key] >= dispatch_ends[key]:
+        sys.exit(f"INBOX_DISPATCH_START must precede INBOX_DISPATCH_COMPLETE for {key!r}")
+
 want_types = (
     "WORKFLOW_START",
     "WORKFLOW_END",
@@ -159,6 +214,8 @@ want_types = (
     "STEP_END",
     "LOG",
     "INBOX_ENQUEUE",
+    "INBOX_DISPATCH_START",
+    "INBOX_DISPATCH_COMPLETE",
 )
 seen = {e.get("type") for e in events}
 for wt in want_types:
@@ -166,4 +223,4 @@ for wt in want_types:
         sys.exit(f"missing event type {wt!r} in run_summary.jsonl")
 PY
 
-e2e::pass "run_summary.jsonl: LOG persistence, enqueue event, step pairing, workflow balance, JSONL validity (parallel)"
+e2e::pass "run_summary.jsonl: LOG persistence, enqueue event, dispatch pairing, step pairing, workflow balance, JSONL validity (parallel)"
