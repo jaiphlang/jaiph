@@ -16,6 +16,12 @@ import {
   validateRef,
   WORKFLOW_REF_EXPECT,
 } from "./validate-ref-resolution";
+import {
+  validatePromptString,
+  validateLogString,
+  validateFailString,
+  validateReturnString,
+} from "./validate-string";
 
 export interface ValidateContext {
   resolveImportPath: (fromFile: string, importPath: string) => string;
@@ -264,7 +270,20 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         }
         return;
       }
-      if (s.type === "fail" || s.type === "log" || s.type === "logerr" || s.type === "return") {
+      if (s.type === "fail") {
+        validateFailString(s.message, ast.filePath, s.loc.line, s.loc.col);
+        return;
+      }
+      if (s.type === "log") {
+        validateLogString(s.message, ast.filePath, s.loc.line, s.loc.col, "log");
+        return;
+      }
+      if (s.type === "logerr") {
+        validateLogString(s.message, ast.filePath, s.loc.line, s.loc.col, "logerr");
+        return;
+      }
+      if (s.type === "return") {
+        validateReturnString(s.value, ast.filePath, s.loc.line, s.loc.col);
         return;
       }
       if (s.type === "const") {
@@ -405,10 +424,27 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         }
         return;
       }
-      if (s.type === "prompt" || s.type === "log" || s.type === "logerr" || s.type === "return") {
+      if (s.type === "prompt") {
+        validatePromptString(s.raw, ast.filePath, s.loc.line, s.loc.col);
         return;
       }
-      if (s.type === "fail" || s.type === "wait") {
+      if (s.type === "log") {
+        validateLogString(s.message, ast.filePath, s.loc.line, s.loc.col, "log");
+        return;
+      }
+      if (s.type === "logerr") {
+        validateLogString(s.message, ast.filePath, s.loc.line, s.loc.col, "logerr");
+        return;
+      }
+      if (s.type === "return") {
+        validateReturnString(s.value, ast.filePath, s.loc.line, s.loc.col);
+        return;
+      }
+      if (s.type === "fail") {
+        validateFailString(s.message, ast.filePath, s.loc.line, s.loc.col);
+        return;
+      }
+      if (s.type === "wait") {
         return;
       }
       if (s.type === "const") {

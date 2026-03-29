@@ -30,9 +30,44 @@ Jaiph source files (`.jh`) combine a small **orchestration** language with Bash 
 - **local / const (module scope)** — `local name = value` or `const name = value` declares a module-scoped variable (same value forms). The name shares the unified namespace with channels, rules, workflows, and scripts. Prefer **`const`** for new orchestration modules; **`local`** remains accepted. Inside **`script`** bodies, use bash **`local`** for temporary variables. Variables are module-scoped only and cannot be exported or referenced across modules.
 - **import / export** — `import "path" as alias` loads another module; `export rule` / `export workflow` marks a declaration as part of the module’s public interface. Any rule or workflow in an imported module can be referenced (export is not enforced at reference time).
 
+## String interpolation {#string-interpolation}
+
+Jaiph strings follow **JS template literal semantics**. The canonical interpolation forms in Jaiph string contexts (`log`, `logerr`, `fail`, `prompt`, `return`, send literals) are:
+
+| Form | Status | Where |
+|---|---|---|
+| `${varName}` | **Primary** — JS template literal style | All Jaiph strings |
+| `${arg1}`, `${arg2}`, … | **Canonical for positional arguments** | All Jaiph strings |
+| `$varName` | Supported (convenience shorthand) | All Jaiph strings |
+| `$1`, `$2`, … | **Legacy — `script` bodies only** | Bash shell idiom |
+| `${var:-fallback}` | **Rejected** (`E_PARSE`) | Shell syntax; use conditional logic or named params |
+| `` ` `` (unescaped backtick) | **Rejected** (`E_PARSE`) | Must escape with `` \` `` |
+| `$(...)` | **Rejected** in orchestration strings (`E_PARSE`) | Use a `script` and `run` |
+
+**Examples:**
+
+```jaiph
+# Preferred: ${arg1} in Jaiph strings
+log "Processing ${arg1}"
+fail "Missing required value: ${arg1}"
+prompt "Implement feature ${arg1}"
+channel <- "Result: ${arg1}"
+
+# Shorthand (supported but de-emphasized)
+log "Processing $name"
+
+# Escaped backtick (allowed)
+log "Use \`command\` syntax"
+
+# Script bodies: $1 is fine (shell idiom)
+script greet() {
+  echo "Hello $1"
+}
+```
+
 ## Named parameters
 
-Workflows, rules, and scripts support **named parameters** in their declarations. Named parameters are syntactic sugar over positional arguments — at runtime, they map to positional arguments (`$1`, `$2`, …).
+Workflows, rules, and scripts support **named parameters** in their declarations. Named parameters are syntactic sugar over positional arguments — at runtime, they map to `${arg1}`, `${arg2}`, … (or `$1`, `$2` in script bodies).
 
 ```jaiph
 workflow implement(task, role_name) { ... }
@@ -43,16 +78,16 @@ script check_hash(file_path, expected_hash) { ... }
 **Semantics:**
 
 - Parameters are available as named local variables inside the construct body.
-- For workflows and rules, the runtime binds `task="$1"; role_name="$2"` at the top of the body.
+- For workflows and rules, the runtime binds `task="${arg1}"; role_name="${arg2}"` at the top of the body.
 - For bash scripts, the runtime prepends `local file_path="$1"; local expected_hash="$2"` to the script file. For non-bash shebangs, named params are documentary only (the target language uses its own argv mechanism).
-- **Default values:** `workflow deploy(env, version, dry_run = "false")` uses fallback expansion (`dry_run="${3:-false}"`). Required parameters (no default) must be provided at every call site.
+- **Default values:** `workflow deploy(env, version, dry_run = "false")`. Required parameters (no default) must be provided at every call site.
 - **Calling conventions:** Both positional and named forms are valid:
   - `run implement "$task" "$role"` — positional, mapped by declaration order.
   - `run implement task="$task" role_name="$role"` — named, matched by parameter name.
 - **Arity validation:** The compiler checks call sites against declarations. Calling `run implement` with zero args when `implement` declares two required params is a validation error.
 - **Parentheses are optional** when no params exist: `workflow default { ... }` remains valid. Constructs with params use `name(params) { ... }`.
 
-Positional access (`$1`, `$2`, `"$@"`) remains valid in all bodies alongside named parameters.
+Positional access (`$1`, `$2`, `"$@"`) remains valid in **script bodies** alongside named parameters. In Jaiph strings, prefer `${arg1}`, `${arg2}`.
 
 ## Polyglot scripts and custom shebangs
 
@@ -144,7 +179,7 @@ Informal symbols used below:
 
 - `string` — Quoted string (single or double quotes).
 - `args_tail` — Rest of the line after a REF; passed through to the shell as-is (e.g. `"$1"` or `arg1 arg2`).
-- `quoted_or_multiline_string` — A double-quoted string; may span multiple lines. Supports `\$`, `\"`, and `\\` escapes; a trailing `\` on a line acts as line continuation. Variable expansion (`$VAR`) is allowed in prompt context; backticks and `$(...)` are not.
+- `quoted_or_multiline_string` — A double-quoted string; may span multiple lines. Supports `\$`, `\"`, `\\`, and `` \` `` escapes; a trailing `\` on a line acts as line continuation. Variable expansion (`$var`, `${var}`, `${arg1}`) uses **JS template literal semantics**. Backticks must be escaped (`` \` ``); `$(...)` and `${var:-fallback}` are rejected (`E_PARSE`). See [String interpolation](#string-interpolation).
 
 ```ebnf
 file            = { top_level } ;
@@ -217,8 +252,8 @@ const_rhs       = quoted_or_multiline_string | single_quoted_string | bash_value
                 | "run" REF [ args_tail ]
                 | "ensure" REF [ args_tail ]
                 | "prompt" quoted_or_multiline_string [ returns_schema ] ;
-  (* bash_value_expr: module variables and simple expansions, e.g. $var, "${var:-default}". *)
-  (* Rejected: command substitution "$(...)", ${var%%...}, ${var//...}, ${#var}, etc. *)
+  (* bash_value_expr: module variables and simple expansions, e.g. $var, ${var}. *)
+  (* Rejected: command substitution "$(...)", ${var:-default}, ${var%%...}, ${var//...}, ${#var}, etc. *)
   (* Rejected: REF args_tail without leading run|ensure|prompt — call-like capture must be *)
   (*   "const name = run ref [args]" (or ensure for rules), not "const name = ref [args]". *)
   (*   E_PARSE with guidance, e.g. Script calls in const assignments must use run. *)
@@ -348,7 +383,7 @@ Jaiph separates **managed** invocations (step records under `.jaiph/runs`, deter
 7. **prompt:** Two forms are supported:
    - `prompt "<text>"` — Sends the text to the agent; compiles to `jaiph::prompt ...` with bash variable expansion. At runtime, prompt execution delegates to the JS kernel (`src/runtime/kernel/prompt.ts`) for backend invocation and stream parsing.
    - `name = prompt "<text>"` — Same, but the agent’s stdout is captured into the variable `name` (compiles to `jaiph::prompt_capture`).
-   - The prompt string may span multiple lines. Only variable expansion is allowed inside the string; backticks and `$(...)` are rejected with `E_PARSE`.
+   - The prompt string may span multiple lines and uses **JS template literal semantics**: `${varName}` and `${arg1}` are the canonical forms; `$varName` is supported as a convenience shorthand. Unescaped backticks, `$(...)`, and `${var:-fallback}` are rejected with `E_PARSE`. See [String interpolation](#string-interpolation).
    - **Typed prompt (returns schema):** Optional `returns '{ field: type, ... }'` (single- or double-quoted) after the prompt string. When present, the prompt **must** capture to a variable (e.g. `result = prompt "..." returns '{ type: string, risk: string }'`). The schema is **flat only** (no nested objects); allowed types are `string`, `number`, `boolean` (no arrays or union types in v1). The compiler appends instructions to the prompt so the agent is asked to respond with exactly one line of valid JSON matching the schema. At runtime, the response is searched for valid JSON using multiple strategies (in order): the last non-empty line, fenced code blocks, a standalone `{…}` line, and embedded JSON within a line (text before `{` is stripped). The first candidate that parses as valid JSON is used; if none parse successfully, the step fails with a parse error; if a required field is missing or a value has the wrong type, the step fails with a distinct schema/missing-field or type error. On success, the capture variable is set to the raw JSON string, and for each schema field a variable `name_field` is exported (e.g. `$result_type`, `$result_risk`). Line continuation with trailing `\` after the closing quote of the prompt is supported so the `returns` clause can continue on the next line(s).
 8. **`const` declarations:** `const name = <rhs>` introduces an immutable binding in the workflow (or rule) body. RHS forms: same **value** expressions allowed for module `const` (no `$(...)` or disallowed `${...}` ops), or explicit **`run` / `ensure` / `prompt`** capture (workflow only for `prompt`). **Call-like** text — a **reference** that resolves to a rule, workflow, or script, followed by **arguments** — is **not** a valid bare RHS: write **`const name = run ref [args…]`** (or **`const name = ensure ref [args…]`** for rule capture), not **`const name = ref [args…]`**. A bare **`ref args…`** does not lower to a managed step; the compiler rejects it with **`E_PARSE`** and a line showing the **`run`** form. At runtime, `const` binds the name and assigns from the value or managed capture, same as `name = run|ensure|prompt` for capture forms.
 9. **`fail`:** `fail "reason"` ends the step with a diagnostic on stderr and exit status 1 (workflow stops; in `ensure … recover`, a failing rule that executes `fail` behaves like a failed rule).
@@ -362,7 +397,7 @@ Jaiph separates **managed** invocations (step records under `.jaiph/runs`, deter
 12. **log:** `log "message"` displays a message in the progress tree at the current indentation depth. The argument must be a double-quoted string (same quoting rules as `prompt`). Shell variable interpolation (`$var`, `${var}`) works at runtime. `log` is not a step — it has no pending/running/done states, no timing, and no spinner. At runtime, the Node kernel emits a `LOG` event and prints to stdout with **`echo -e`**-style escapes (backslash escapes in the final string are interpreted for terminal output, e.g. `\n` → newline). The event **`message`** field is still the string **before** that expansion, JSON-encoded in the payload. Parse error if `log` is used without a quoted string.
 13. **logerr:** `logerr "message"` is identical to `log` except the message is written to stderr instead of stdout. At runtime, the Node kernel emits a `LOGERR` event and prints to stderr with **`echo -e`**-style escapes. In the progress tree, `logerr` lines are shown with a red `!` marker (instead of the dim info marker used by `log`). Parse error if `logerr` is used without a quoted string.
 14. **Send operator (`<-`):** The RHS must be **empty** (forward `$1`), a **double-quoted literal**, **`$var` / `${…}`**, or **`run ref [args]`** — not an arbitrary shell command (`E_PARSE` with a hint to use `const` + variable or `run`). The channel identifier is always on the left of `<-`. Combining capture and send (`name = channel <- …`) is `E_PARSE`. See [Inbox & Dispatch](inbox.md).
-15. **Route declaration:** `channel -> workflow` registers a static routing rule: when a message arrives on `channel`, the runtime calls `workflow` with positional args `$1=message`, `$2=channel`, `$3=sender` (see [Trigger contract](inbox.md#trigger-contract)). Multiple targets are supported: `channel -> wf1, wf2` dispatches sequentially in declaration order; each target receives the same message. Route declarations are stored in `WorkflowDef.routes`, not in `steps`; they are not executable statements. The Node runtime registers routes at the start of the workflow and drains the queue at the end. See [Inbox & Dispatch](inbox.md).
+15. **Route declaration:** `channel -> workflow` registers a static routing rule: when a message arrives on `channel`, the runtime calls `workflow` with positional args `${arg1}=message`, `${arg2}=channel`, `${arg3}=sender` (see [Trigger contract](inbox.md#trigger-contract)). Multiple targets are supported: `channel -> wf1, wf2` dispatches sequentially in declaration order; each target receives the same message. Route declarations are stored in `WorkflowDef.routes`, not in `steps`; they are not executable statements. The Node runtime registers routes at the start of the workflow and drains the queue at the end. See [Inbox & Dispatch](inbox.md).
 16. **Export:** Rule and workflow declarations may be prefixed with `export` to mark them as part of the module’s public interface. The implementation does not restrict references to exported symbols: any rule or workflow in an imported module can be referenced.
 17. **Parallel execution (`run async`):** `run async ref [args...]` starts a managed workflow or script concurrently within a workflow. The runtime adds the returned Promise to a pending list without awaiting it. At the end of the workflow body, an implicit join (`Promise.allSettled`) awaits all pending async steps. If any fail, their errors are aggregated into a single failure message; output from all completed async steps is accumulated into the workflow output.
 
@@ -379,7 +414,7 @@ Jaiph separates **managed** invocations (step records under `.jaiph/runs`, deter
 
 After parsing, the compiler validates references and config. (In this repository, reference checks live in `src/transpile/validate.ts` with shared resolution in `validate-ref-resolution.ts`; contributors can read **Reference validation** in [Contributing](contributing.md) for where validation lives in `src/transpile/`.) Violations produce the following error codes:
 
-- **E_PARSE:** Invalid syntax, duplicate config block, invalid config key/value, invalid prompt content (e.g. command substitution in prompt), `prompt "..." returns '...'` without a capture variable, invalid `const` RHS (e.g. command substitution, disallowed `${...}` forms, or **call-like** `ref [args…]` without **`run`** / **`ensure`** / **`prompt`** — use **`const x = run ref [args…]`**), a circular reference among top-level `local` / `const` initializers, a workflow/rule line that is not a recognized Jaiph step, an invalid send RHS, or invalid `ensure … recover` syntax (arguments after `recover`, or `recover` without a `{ … }` block).
+- **E_PARSE:** Invalid syntax, duplicate config block, invalid config key/value, invalid string content (unescaped backticks, `${var:-fallback}` shell expansion, or `$(...)` command substitution in Jaiph strings), `prompt "..." returns '...'` without a capture variable, invalid `const` RHS (e.g. command substitution, disallowed `${...}` forms, or **call-like** `ref [args…]` without **`run`** / **`ensure`** / **`prompt`** — use **`const x = run ref [args…]`**), a circular reference among top-level `local` / `const` initializers, a workflow/rule line that is not a recognized Jaiph step, an invalid send RHS, or invalid `ensure … recover` syntax (arguments after `recover`, or `recover` without a `{ … }` block).
 - **E_SCHEMA:** Invalid or unsupported `returns` schema: empty schema, non-flat shape (e.g. arrays or union types), invalid entry (not `fieldName: type`), or unsupported type (only `string`, `number`, `boolean` allowed).
 - **E_VALIDATE:** Reference or alias error (unknown rule/workflow, duplicate alias, etc.), forbidden Jaiph usage inside `$(...)` or as a bare shell call where a managed step is required, invalid constructs inside script bodies, or shell redirection/pipeline syntax (`>`, `>>`, `|`, `&`) around `run`/`ensure` steps.
 - **E_IMPORT_NOT_FOUND:** The file resolved from an `import` path does not exist.
