@@ -13,7 +13,7 @@ Jaiph provides two **independent** layers:
 
 1. **Rule-level read-only isolation** — every `rule` runs in a subprocess. On Linux, when mount-namespace tooling is available, the filesystem can be remounted read-only inside that subprocess. Elsewhere, rules still run in a child shell so an `exit` inside a rule does not tear down the parent workflow, but the host filesystem may stay writable (see below).
 
-2. **Docker container isolation** — optional. The workflow runs inside a container with the generated Bash build artifacts, the shell stdlib, and bundled JS runtime kernel files. Jaiph sources and the host TypeScript toolchain are not required inside the container for the run itself.
+2. **Docker container isolation** — optional. The workflow runs inside a container using the same **Node workflow runtime** (`node-workflow-runner`) as local execution. The container receives the compiled JS source tree, extracted script files, and the `.jh` sources (mounted via the workspace). No workflow-level `.sh` or `jaiph_stdlib.sh` is required.
 
 The layers stack: rule-level isolation still applies to rules executed inside Docker.
 
@@ -100,11 +100,14 @@ Host paths are resolved relative to the workspace root when building `docker run
 ```
 /jaiph/
   generated/          # mounted read-only
-    <script>.sh       # transpiled bash script(s); see below
-    jaiph_stdlib.sh   # shell stdlib
-    runtime/
-      kernel/         # inbox.js, emit.js, prompt.js, run-step-exec.js, …
+    scripts/          # extracted per-step script executables
+    src/              # compiled JS source tree (parser, types, transpile, runtime kernel)
+      runtime/
+        kernel/
+          node-workflow-runner.js
+          emit.js, inbox.js, prompt.js, run-step-exec.js, …
   workspace/          # the mount targeting /jaiph/workspace (read-write root)
+    *.jh              # source files (read by the runner at startup)
     .jaiph/
       runs/
         <YYYY-MM-DD>/
@@ -114,16 +117,16 @@ Host paths are resolved relative to the workspace root when building `docker run
             ...
 ```
 
-- **`/jaiph/generated/`** — Contains `jaiph_stdlib.sh`, the primary generated workflow script, and `runtime/kernel/*.js`. If the build produced additional `.sh` files (for example imports), those are copied into the same tree under `generated/` so module `source` paths keep working. Everything under `generated/` is mounted read-only. `JAIPH_STDLIB` is set to `/jaiph/generated/jaiph_stdlib.sh` inside the container.
+- **`/jaiph/generated/`** — Contains the compiled JS source tree (`src/`) and extracted script files (`scripts/`). The container entry is `node /jaiph/generated/src/runtime/kernel/node-workflow-runner.js`, which builds the runtime graph from `.jh` sources in the workspace mount and executes through `NodeWorkflowRuntime` — the same path as local `jaiph run`. Everything under `generated/` is mounted read-only. `JAIPH_SCRIPTS` points to `/jaiph/generated/scripts`.
 - **Working directory** — `/jaiph/workspace`.
-- **What is not shipped as Jaiph sources** — The container is meant to run with generated Bash build artifacts and the JS kernel only; no `.jh` sources or TypeScript are required for that layout.
+- **What is shipped** — The compiled JS tree (no TypeScript or `node_modules`) and per-step script executables. No workflow-level `.sh` or `jaiph_stdlib.sh` is needed. `.jh` source files are read from the workspace mount.
 
 The CLI also mounts the host directory containing the run meta file read-write at the same path inside the container so the workflow module entrypoint can record exit status and paths (`JAIPH_META_FILE`).
 
 ### Docker behavior
 
 - `docker run --rm` with UID/GID mapping (`--user $(id -u):$(id -g)`) on Linux when `id` succeeds; other platforms omit `--user` if mapping is not applied.
-- **Structured events** — The generated module entrypoint duplicates stderr to fd 3 (`exec 3>&2`); step events are written to that fd so they land on stderr in normal runs. With `docker run -t`, Docker typically merges the container’s stderr into the stdout stream the CLI reads. The CLI then line-buffers stdout in Docker mode, treats lines that parse as `__JAIPH_EVENT__` JSON as events, and prints the rest as user-facing output. Without a TTY, events and user output follow the usual stdout/stderr split from the container. Interleaving and timing can still differ from a non-Docker run when a TTY is attached — that is a known limitation.
+- **Structured events** — The `node-workflow-runner` process inside the container writes `__JAIPH_EVENT__` JSON to stderr, the same as local runs. With `docker run -t`, Docker typically merges the container’s stderr into the stdout stream the CLI reads. The CLI then line-buffers stdout in Docker mode, treats lines that parse as `__JAIPH_EVENT__` JSON as events, and prints the rest as user-facing output. Without a TTY, events and user output follow the usual stdout/stderr split from the container. Interleaving and timing can still differ from a non-Docker run when a TTY is attached — that is a known limitation.
 - **`STEP_END` and step logs** — The runtime embeds `out_content` in every `STEP_END` event and `err_content` when the step failed, so consumers do not need host paths to step `.out`/`.err` files (critical in Docker). Payloads are JSON-escaped by the JS emit kernel per RFC 8259 for control characters through `U+001F` plus `\` and `"`. Embedded content is capped at 1 MiB; larger output is truncated with a `[truncated]` marker while full logs remain in `out_file` / `err_file` under the run directory. After a run, failure summaries prefer embedded fields when present and may fall back to reading files for older summaries that predate embedding.
 - Docker missing — `E_DOCKER_NOT_FOUND` (no silent fallback).
 - Image — If not present locally, `docker pull` is attempted; pull failure → `E_DOCKER_PULL`.
@@ -144,14 +147,14 @@ Build failure → `E_DOCKER_BUILD`.
 The repository’s example `.jaiph/Dockerfile` includes:
 
 - **Base image**: `ubuntu:latest`
-- **Node.js** — latest LTS from NodeSource (used by the stdlib’s kernel delegation path)
+- **Node.js** — latest LTS from NodeSource (required: the container runs `node-workflow-runner`)
 - **Claude Code CLI** — `@anthropic-ai/claude-code`
 - **cursor-agent** — installed via Cursor’s distribution, normalized to `/usr/local/bin/cursor-agent` when possible
 - **Utilities** — `bash`, `curl`, `git`, `ca-certificates`, `gnupg`
 
 ### Agent environment variable forwarding
 
-Besides variables forwarded as part of the normal `JAIPH_*` pass-through (except `JAIPH_STDLIB`, which the driver overrides), the following prefixes are forwarded for agent authentication and tooling:
+Besides variables forwarded as part of the normal `JAIPH_*` pass-through (except driver-managed keys like `JAIPH_SCRIPTS` and `JAIPH_META_FILE`), the following prefixes are forwarded for agent authentication and tooling:
 
 - `CURSOR_*`
 - `ANTHROPIC_*`

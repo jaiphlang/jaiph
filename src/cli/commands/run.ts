@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve, extname } from "node:path";
 import { basename } from "node:path";
 import { parsejaiph } from "../../parser";
-import { build, buildScripts } from "../../transpiler";
+import { buildScripts } from "../../transpiler";
 import { metadataToConfig } from "../../config";
 import { formatNamedParamsForDisplay } from "./format-params.js";
 import {
@@ -85,19 +85,8 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     const runtimeEnv = resolveRuntimeEnv(effectiveConfig, workspaceRoot, inputAbs);
     runtimeEnv.JAIPH_SOURCE_ABS = inputAbs;
     const metaFile = join(outDir, `.jaiph-run-meta-${Date.now()}-${process.pid}.txt`);
-    const dockerConfig = resolveDockerConfig(mod.metadata?.runtime, runtimeEnv);
-    let builtPath = join(outDir, "entry.sh");
-    if (dockerConfig.enabled) {
-      const results = build(inputAbs, outDir);
-      if (results.length !== 1) {
-        process.stderr.write(`jaiph run expected one built output, got ${results.length}\n`);
-        return 1;
-      }
-      builtPath = results[0].outputPath;
-    } else {
-      const { scriptsDir } = buildScripts(inputAbs, outDir);
-      runtimeEnv.JAIPH_SCRIPTS = scriptsDir;
-    }
+    const { scriptsDir } = buildScripts(inputAbs, outDir);
+    runtimeEnv.JAIPH_SCRIPTS = scriptsDir;
 
     // Set up event emitter and subscribers
     const emitter = createRunEmitter();
@@ -124,7 +113,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     });
 
     const { execResult, dockerResult, dockerConfig: activeDockerConfig } = spawnExec(
-      mod, runtimeEnv, builtPath, outDir, workspaceRoot, metaFile, "default", runArgs, isTTY,
+      mod, runtimeEnv, outDir, workspaceRoot, metaFile, "default", runArgs, isTTY,
     );
 
     const signalHandlers = setupRunSignalHandlers(execResult, { forceKillAfterMs: 1500 });
@@ -145,9 +134,9 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     const onLine = createStderrParser(emitter, { sourceMapCache });
     const buf: StreamBuffers = { stdout: "", stderr: "" };
 
-    wireStreams(execResult, dockerConfig.enabled, onLine, buf, ttyCtx);
+    wireStreams(execResult, activeDockerConfig.enabled, onLine, buf, ttyCtx);
     const childExit = await waitForRunExit(execResult, () => signalHandlers.remove());
-    drainBuffers(dockerConfig.enabled, onLine, buf, ttyCtx);
+    drainBuffers(activeDockerConfig.enabled, onLine, buf, ttyCtx);
 
     if (dockerResult) {
       const timedOut = dockerResult.timeoutTimer === undefined && activeDockerConfig.timeout > 0
@@ -202,7 +191,6 @@ function writeBanner(
 function spawnExec(
   mod: ReturnType<typeof parsejaiph>,
   runtimeEnv: Record<string, string | undefined>,
-  builtPath: string,
   outDir: string,
   workspaceRoot: string,
   metaFile: string,
@@ -215,12 +203,10 @@ function spawnExec(
   let execResult;
 
   if (dockerConfig.enabled) {
-    const stdlibPath = runtimeEnv.JAIPH_STDLIB ?? join(__dirname, "..", "..", "jaiph_stdlib.sh");
     dockerResult = spawnDockerProcess({
       config: dockerConfig,
-      builtScriptPath: builtPath,
-      stdlibPath,
-      buildOutDir: outDir,
+      scriptsDir: runtimeEnv.JAIPH_SCRIPTS ?? join(outDir, "scripts"),
+      sourceAbs: runtimeEnv.JAIPH_SOURCE_ABS!,
       workspaceRoot,
       metaFile,
       runArgs,
@@ -229,7 +215,8 @@ function spawnExec(
     });
     execResult = dockerResult.child;
   } else {
-    execResult = spawnRunProcess([metaFile, builtPath, workflowSymbol, ...runArgs], {
+    const dummyBuiltPath = join(outDir, "entry.sh");
+    execResult = spawnRunProcess([metaFile, dummyBuiltPath, workflowSymbol, ...runArgs], {
       cwd: workspaceRoot,
       env: runtimeEnv,
     });
