@@ -275,3 +275,79 @@ test("NodeWorkflowRuntime: nested cross-module preserves locked JAIPH_AGENT_BACK
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("NodeWorkflowRuntime: sibling workflows do not inherit each other's metadata-derived agent settings", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-node-meta-sibling-"));
+  try {
+    const jh = join(root, "sibling_isolation.jh");
+    const metaFile = join(root, "sibling_scope.log");
+    writeFileSync(
+      jh,
+      [
+        "config {",
+        '  agent.default_model = "module-model"',
+        '  agent.backend = "cursor"',
+        "}",
+        "",
+        "script log_env() {",
+        '  printf \'%s:model=%s,backend=%s\\n\' "$1" "$JAIPH_AGENT_MODEL" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_SIBLING_LOG"',
+        "}",
+        "",
+        "workflow alpha {",
+        "  config {",
+        '    agent.default_model = "alpha-model"',
+        '    agent.backend = "claude"',
+        "  }",
+        '  run log_env "alpha"',
+        "}",
+        "",
+        "workflow beta {",
+        "  config {",
+        '    agent.default_model = "beta-model"',
+        "  }",
+        '  run log_env "beta"',
+        "}",
+        "",
+        "workflow default {",
+        "  run alpha",
+        "  run beta",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const scriptsDir = join(root, "scripts");
+    mkdirSync(scriptsDir, { recursive: true });
+    writeFileSync(
+      join(scriptsDir, "log_env"),
+      [
+        "#!/usr/bin/env bash",
+        'printf \'%s:model=%s,backend=%s\n\' "$1" "$JAIPH_AGENT_MODEL" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_SIBLING_LOG"',
+        "",
+      ].join("\n"),
+      { mode: 0o755 },
+    );
+
+    const graph = buildRuntimeGraph(jh);
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      JAIPH_TEST_MODE: "1",
+      JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
+      JAIPH_SCRIPTS: scriptsDir,
+      JAIPH_SIBLING_LOG: metaFile,
+    };
+    delete env.JAIPH_AGENT_MODEL;
+    delete env.JAIPH_AGENT_MODEL_LOCKED;
+    delete env.JAIPH_AGENT_BACKEND;
+    delete env.JAIPH_AGENT_BACKEND_LOCKED;
+
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });
+    const status = await runtime.runDefault([]);
+    assert.equal(status, 0);
+
+    const actual = readFileSync(metaFile, "utf8");
+    const expected = "alpha:model=alpha-model,backend=claude\nbeta:model=beta-model,backend=cursor\n";
+    assert.equal(actual, expected);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
