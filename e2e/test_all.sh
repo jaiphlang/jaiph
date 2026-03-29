@@ -33,7 +33,7 @@ TEST_SCRIPTS=(
   "e2e/tests/86_metadata_scope_nested.sh"
   "e2e/tests/88_run_summary_event_contract.sh"
   "e2e/tests/89_reporting_server.sh"
-  "e2e/tests/90_function_steps.sh"
+  "e2e/tests/90_script_steps.sh"
   "e2e/tests/91_inbox_dispatch.sh"
   "e2e/tests/91_top_level_local.sh"
   "e2e/tests/92_custom_shebang_polyglot.sh"
