@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { spawnSync } from "node:child_process";
-import { build, transpileTestFile } from "../transpiler";
+import { build } from "../transpiler";
 import { parsejaiph } from "../parser";
 
 function withTempDir(prefix: string, fn: (root: string) => void): void {
@@ -233,52 +233,6 @@ test("ACCEPTANCE: if not ensure then-branch allows mixed prompt and run", () => 
   });
 });
 
-test("ACCEPTANCE: test file without test blocks fails with E_PARSE", () => {
-  withTempDir("jaiph-acc-empty-test-file-", (root) => {
-    const testPath = join(root, "flow.test.jh");
-    writeFileSync(
-      testPath,
-      [
-        'import "flow.jh" as f',
-        "",
-      ].join("\n"),
-    );
-    writeFileSync(
-      join(root, "flow.jh"),
-      ["script flow_impl() {", "  echo ok", "}", "workflow default {", "  run flow_impl", "}", ""].join("\n"),
-    );
-
-    assert.throws(() => transpileTestFile(testPath, root), /E_PARSE test file must contain at least one test block/);
-  });
-});
-
-test("ACCEPTANCE: test workflow reference must be alias.workflow", () => {
-  withTempDir("jaiph-acc-test-ref-shape-", (root) => {
-    writeFileSync(
-      join(root, "flow.jh"),
-      ["script flow_impl() {", "  echo ok", "}", "workflow default {", "  run flow_impl", "}", ""].join("\n"),
-    );
-    const testPath = join(root, "flow.test.jh");
-    writeFileSync(
-      testPath,
-      [
-        'import "flow.jh" as f',
-        "",
-        'test "bad reference" {',
-        "  out = default",
-        '  expectContain out "ok"',
-        "}",
-        "",
-      ].join("\n"),
-    );
-
-    assert.throws(
-      () => transpileTestFile(testPath, root),
-      /E_VALIDATE test workflow reference must be <alias>\.<workflow>, got "default"/,
-    );
-  });
-});
-
 test("ACCEPTANCE: malformed import syntax fails with E_PARSE", () => {
   assert.throws(
     () => parsejaiph('import "lib.jh"\nworkflow default {\n  echo ok\n}\n', "/fake/main.jh"),
@@ -311,75 +265,6 @@ test("ACCEPTANCE: malformed mock prompt block (respond without if) fails with E_
       ),
     /E_PARSE.*respond must follow if\/elif/,
   );
-});
-
-test("ACCEPTANCE: inline mock prompt block with if/elif/else emits first-match dispatch", () => {
-  withTempDir("jaiph-acc-mock-block-", (root) => {
-    writeFileSync(
-      join(root, "w.jh"),
-      [
-        "workflow default {",
-        '  result = prompt "greeting"',
-        '  return "$result"',
-        "}",
-        "",
-      ].join("\n"),
-    );
-    writeFileSync(
-      join(root, "w.test.jh"),
-      [
-        'import "w.jh" as w',
-        "",
-        'test "mock block first match" {',
-        "  mock prompt {",
-        '    if $1 contains "greeting" ; then',
-        '      respond "hello"',
-        '    elif $1 contains "other" ; then',
-        '      respond "other"',
-        "    else",
-        '      respond "fallback"',
-        "    fi",
-        "  }",
-        "  response = w.default",
-        '  expectContain response "hello"',
-        "}",
-        "",
-      ].join("\n"),
-    );
-    const bash = transpileTestFile(join(root, "w.test.jh"), root);
-    assert.match(bash, /JAIPH_MOCK_DISPATCH_SCRIPT/);
-    assert.match(bash, /greeting/);
-    assert.match(bash, /other/);
-  });
-});
-
-test("ACCEPTANCE: mock prompt block without else emits failure path for unmatched prompt", () => {
-  withTempDir("jaiph-acc-mock-no-else-", (root) => {
-    writeFileSync(
-      join(root, "w.jh"),
-      ["workflow default {", '  prompt "only-this-match"', "}", ""].join("\n"),
-    );
-    writeFileSync(
-      join(root, "w.test.jh"),
-      [
-        'import "w.jh" as w',
-        "",
-        'test "no else branch" {',
-        "  mock prompt {",
-        '    if $1 contains "wrong" ; then',
-        '      respond "x"',
-        "    fi",
-        "  }",
-        "  response = w.default",
-        '  expectContain response "x"',
-        "}",
-        "",
-      ].join("\n"),
-    );
-    const bash = transpileTestFile(join(root, "w.test.jh"), root);
-    assert.match(bash, /no mock matched prompt/);
-    assert.match(bash, /exit 1/);
-  });
 });
 
 test("ACCEPTANCE: unterminated mock prompt block (missing fi and }) fails with E_PARSE", () => {

@@ -9,7 +9,7 @@ redirect_from:
 
 ## Why configuration exists
 
-Jaiph workflows compile to Bash scripts that run agent prompts, shell commands, inbox routing, and rule checks. **Configuration** is how you tune the runtime (which agent backend to use, where logs go, whether the Docker sandbox is on, how inbox dispatch behaves) **without** changing the workflow’s control flow.
+Jaiph workflows run agent prompts, shell commands, inbox routing, and rule checks through the Node workflow runtime. **Configuration** is how you tune the runtime (which agent backend to use, where logs go, whether the Docker sandbox is on, how inbox dispatch behaves) **without** changing the workflow’s control flow.
 
 You typically set options once per project or per workflow, then rely on the same workflow source in different environments.
 
@@ -81,7 +81,7 @@ workflow default {
 ### Run keys
 
 - `run.logs_dir`: Step log directory (string). Default `.jaiph/runs`. If the effective value is **relative**, the runtime joins it with the workspace root; **absolute** paths are used as-is. Maps to `JAIPH_RUNS_DIR`.
-- `run.debug`: If `true`, enables Bash `set -x` for the run (`JAIPH_DEBUG`). Omitted or `false` leaves tracing off unless the environment sets `JAIPH_DEBUG`.
+- `run.debug`: If `true`, enables debug tracing for the run (`JAIPH_DEBUG`). Omitted or `false` leaves tracing off unless the environment sets `JAIPH_DEBUG`.
 - `run.inbox_parallel`: If `true`, inbox route targets for each batch are dispatched concurrently (default `false`). See [Inbox & Dispatch — Parallel dispatch](inbox.md#parallel-dispatch). Maps to `JAIPH_INBOX_PARALLEL`.
 
 ### Runtime keys (Docker sandbox — beta)
@@ -216,7 +216,7 @@ workflow default {
 }
 ```
 
-`JAIPH_DOCKER_*` is **not** populated from in-file `runtime.*` inside the Bash process. Those variables only affect the run if they are already present in the environment that launches `jaiph run` (or if your script exports them itself).
+`JAIPH_DOCKER_*` is **not** populated from in-file `runtime.*` inside the workflow process. Those variables only affect the run if they are already present in the environment that launches `jaiph run` (or if your script exports them itself).
 
 When a workflow calls another module via `run alias.default`, the callee **inherits the caller’s effective metadata scope** — the callee’s own module `config` is not applied. This ensures the caller’s configuration (e.g. backend, model) remains authoritative across nested calls. When the call returns, the caller’s values are restored. For same-module nested calls, callee workflow-level config is still layered on top of the caller’s env.
 

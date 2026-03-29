@@ -6,33 +6,6 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Decommission Bash transpilation/runtime path after Node parity <!-- dev-ready -->
-
-**Goal**  
-Remove the Bash orchestration/transpilation execution path, so Jaiph has one runtime source of truth.
-
-**Problem statement**
-
-- The codebase currently carries dual execution surfaces (Bash + Node orchestration), which increases maintenance cost and causes parity drift regressions.
-- Recent failures showed features can be correct in transpiled Bash while broken in Node runtime behavior.
-- Without a planned decommission sequence, dual-path complexity will continue to absorb engineering time and raise regression risk.
-
-**Scope**
-
-1. Migrate remaining Bash-owned runtime responsibilities to Node (or mark as removed non-goals with docs updates).
-2. Remove Bash orchestration/transpilation code paths.
-3. Keep script-step execution support (`script { ... }`) with clear boundaries if shell subprocess execution remains part of product behavior.
-4. Update docs to make Node runtime the only supported orchestration engine.
-
-**Acceptance criteria**
-
-- Jaiph orchestration (`run`, `ensure`, `prompt`, channels/inbox, events/artifacts) is implemented and validated solely via Node runtime.
-- No user-facing command path relies on Bash orchestration/transpiled workflow execution.
-- CI/e2e suites pass with Bash orchestration path removed/disabled.
-- Architecture docs clearly describe single-runtime design and and don't mention bash runtime.
-
----
-
 ## Add workflow-scoped `run async` for script calls (Node runtime only) <!-- dev-ready -->
 
 **Goal**  

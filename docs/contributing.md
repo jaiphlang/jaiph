@@ -46,8 +46,8 @@ For day-to-day work on the compiler and CLI you usually stay inside the clone: i
 | Command | What it runs |
 |---------|----------------|
 | `npm install` | Installs TypeScript, Jest, and types (dev dependencies). |
-| `npm run build` | Compiles TypeScript to `dist/` and copies runtime assets (`jaiph_stdlib.sh`, `runtime/kernel`, reporting static files). |
-| `npm run build:standalone` | `npm run build`, then copies `jaiph_stdlib.sh`, `runtime/kernel`, and `reporting/public` into `dist/` and runs **`bun build --compile`** on `src/cli.ts` → **`dist/jaiph`**. Requires [Bun](https://bun.sh) installed; ship the **`dist/`** directory (binary + sibling files) for a self-contained CLI layout. |
+| `npm run build` | Compiles TypeScript to `dist/` and copies runtime assets (`runtime/kernel`, reporting static files). |
+| `npm run build:standalone` | `npm run build`, then copies `runtime/kernel` and `reporting/public` into `dist/` and runs **`bun build --compile`** on `src/cli.ts` → **`dist/jaiph`**. Requires [Bun](https://bun.sh) installed; ship the **`dist/`** directory (binary + sibling files) for a self-contained CLI layout. |
 | `npm test` | `npm run build`, then the Node.js built-in test runner (with **`--enable-source-maps`**) on cross-cutting tests in `dist/test/*.test.js` and all colocated module tests under `dist/src/**/*.test.js` (including `*.acceptance.test.js`), then Jest on `test/fixtures-build.jest.test.js` (fixture build snapshot). |
 | `npm run test:e2e` | Build plus `bash ./e2e/test_all.sh` (same as `test:acceptance:runtime`). |
 | `npm run test:ci` | `npm test` followed by `npm run test:e2e` — useful before pushing when you want the full local picture. |
@@ -79,7 +79,7 @@ Jaiph uses several test layers. Each layer catches a different class of bug. Use
 | **Compiler golden tests** | `src/transpile/compiler-golden.test.ts` (colocated) | Regressions in the transpiler and parser — many cases use **inline** expected `.sh` strings in the test file itself | You changed the emitter or parser and need to lock an exact emitted script or parse result (refresh the canonical workflow snippet with `scripts/dump-golden-output.js` when that embedded expectation changes) |
 | **Cross-cutting tests** | `test/*.test.ts` | Process-level integration behavior: signal handling, TTY rendering, run summary structure, sample builds | The test spans multiple modules or requires subprocess/PTY harnesses |
 | **Fixture build snapshots** | `test/fixtures-build.jest.test.js`, `test/fixtures/*.jh`, `test/__snapshots__/fixtures-build.jest.test.js.snap` | The **whole** fixture set still builds and the generated `.sh` tree matches the Jest snapshot | You changed emission globally and need to catch drift across multiple real-world-ish `.jh` files — update the snapshot intentionally when output is meant to change |
-| **E2E tests** | `e2e/tests/*.sh` | Runtime behavior — does the built workflow actually execute correctly end-to-end? | The behavior involves the CLI launcher, Bash stdlib + JS kernel subprocess paths, process lifecycle, or file artifacts |
+| **E2E tests** | `e2e/tests/*.sh` | Runtime behavior — does the workflow actually execute correctly end-to-end? | The behavior involves the CLI launcher, Node runtime, process lifecycle, or file artifacts |
 
 ### Key principles
 
@@ -121,13 +121,15 @@ Module tests live next to the source files they validate, inside the same `src/`
 | `src/runtime/kernel/emit.test.ts` | `src/runtime/kernel/emit.ts` | **`live`** stderr `__JAIPH_EVENT__` JSON and **`summary-line`** stdin → `run_summary.jsonl` append (fd routing, JSON shape) |
 | `src/reporting/reporting-server.test.ts` | `src/reporting/*` | Safe paths, summary JSONL parsing, run registry polling, derived run status |
 
-**Kernel — `emit.ts`:** **`src/runtime/kernel/emit.ts`** (built to **`kernel/emit.js`**) is invoked from stdlib helpers for **`live`** (progress JSON to the event fd / stderr) and **`summary-line`** (one JSONL object per stdin line). **`JAIPH_STDLIB`** selects the install’s **`emit.js`** when the CLI sets it; **`JAIPH_EMIT_JS`** is exported for child **`bash`** (e.g. read-only rule subshells) that do not re-source the stdlib. **`appendRunSummaryLine`** uses shared **`mkdir`-style locking** from **`fs-lock.ts`**.
+**Kernel — `emit.ts`:** **`src/runtime/kernel/emit.ts`** handles **`live`** progress JSON to stderr and **`summary-line`** appends to `run_summary.jsonl`. **`appendRunSummaryLine`** uses shared **`mkdir`-style locking** from **`fs-lock.ts`**.
 
-**Kernel — `seq-alloc.ts`:** **`src/runtime/kernel/seq-alloc.ts`** (built to **`kernel/seq-alloc.js`**) is the single owner of step-sequence allocation across all concurrent Bash branches in a run. The stdlib's **`jaiph::next_step_id`** calls `node "$JAIPH_SEQ_JS"` which reads, increments, and writes the `.seq` file under **`$JAIPH_RUN_DIR`** atomically using `mkdir`-style locking from **`fs-lock.ts`** (same mechanism as `emit.ts` and `inbox.ts`). This eliminates `seq` collisions that were possible under Bash-side file locking with `run … &` concurrency. **`JAIPH_SEQ_JS`** is exported alongside **`JAIPH_EMIT_JS`** so child shells resolve the same binary. Colocated test: `seq-alloc.test.ts`.
+**Kernel — `seq-alloc.ts`:** **`src/runtime/kernel/seq-alloc.ts`** is the single owner of step-sequence allocation. It reads, increments, and writes the `.seq` file under the run directory atomically using `mkdir`-style locking from **`fs-lock.ts`** (same mechanism as `emit.ts` and `inbox.ts`). Colocated test: `seq-alloc.test.ts`.
 
-**Kernel — `inbox.ts`:** **`src/runtime/kernel/inbox.ts`** (built to **`kernel/inbox.js`**) implements file-backed **init**, **send**, **register-route**, and **drain** under **`$JAIPH_RUN_DIR/inbox/`**, including **`INBOX_*` `run_summary.jsonl`** lines and parallel **`inbox/.seq.lock`** behavior. Stdlib helpers set **`JAIPH_INBOX_JS`** and shell out to **`node`**. There is no colocated `inbox.test.ts` yet; behavior is covered by **E2E** (e.g. inbox dispatch and run-summary contract tests).
+**Kernel — `inbox.ts`:** **`src/runtime/kernel/inbox.ts`** implements file-backed **init**, **send**, **register-route**, and **drain** under the run directory’s `inbox/` subdirectory, including **`INBOX_*` `run_summary.jsonl`** lines and parallel **`inbox/.seq.lock`** behavior. There is no colocated `inbox.test.ts` yet; behavior is covered by **E2E** (e.g. inbox dispatch and run-summary contract tests).
 
-**Kernel — `run-step-exec.ts`:** Managed script/workflow/rule subprocess execution lives in **`src/runtime/kernel/run-step-exec.ts`** (built to `kernel/run-step-exec.js`, invoked from **`jaiph::run_step`** in `jaiph_stdlib.sh`). There is no colocated `run-step-exec.test.ts` yet; behavior is covered by the **E2E** suite and runtime integration. Prefer adding focused unit tests if you extract pure helpers from the spawn/capture path.
+**Kernel — `run-step-exec.ts`:** Managed script subprocess execution lives in **`src/runtime/kernel/run-step-exec.ts`**. There is no colocated `run-step-exec.test.ts` yet; behavior is covered by the **E2E** suite and runtime integration. Prefer adding focused unit tests if you extract pure helpers from the spawn/capture path.
+
+**Kernel — `node-test-runner.ts`:** **`src/runtime/kernel/node-test-runner.ts`** executes `*.test.jh` test blocks using `NodeWorkflowRuntime` with mock support (prompt queues, content-based dispatch, workflow/rule/script body replacements) and assertion evaluation. Replaces the former Bash test transpiler (`emit-test.ts`).
 
 When adding a new source module or extending an existing one, create or extend the corresponding `*.test.ts` file in the same directory. This keeps tests discoverable — given a source file, the test file is always a sibling.
 

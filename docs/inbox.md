@@ -207,12 +207,9 @@ at the top of that workflow's implementation, and `jaiph::drain_queue` at
 the end. Any child workflow called via `run` (or via dispatch) inherits
 the inbox environment and can call `jaiph::send`.
 
-Those three Bash functions are thin wrappers around **`node "$JAIPH_INBOX_JS"`**
-(`kernel/inbox.js` next to the installed stdlib — the same path-resolution idea
-as **`JAIPH_EMIT_JS`**). The kernel mutates the run’s **`inbox/`** directory,
+The inbox logic lives in the JS kernel (`runtime/kernel/inbox.ts`). The kernel mutates the run’s **`inbox/`** directory,
 appends **`INBOX_*`** lines to **`run_summary.jsonl`** when applicable, and
-(for each routed target) executes the generated workflow module directly in
-**`__jaiph_dispatch`** mode using `JAIPH_RUN_STEP_MODULE`, preserving the usual
+(for each routed target) dispatches the workflow through the Node runtime, preserving the usual
 `$1` / `$2` / `$3` contract.
 
 ```
@@ -234,8 +231,7 @@ appends **`INBOX_*`** lines to **`run_summary.jsonl`** when applicable, and
 
 Routes are persisted in **`inbox/.routes`**: one line per channel,
 `channel<TAB>targets` (space-separated workflow symbols), merged in source
-order as `jaiph::register_route` runs — the same tab-delimited shape the Bash
-runtime used before the kernel port, kept as a file instead of a shell variable.
+order as routes are registered — kept as a file for persistence across subprocess boundaries.
 
 The dispatch queue (`inbox/.queue`) uses `channel:NNN:sender` entries
 (e.g. `findings:001:researcher`). The sequence counter (`inbox/.seq`)

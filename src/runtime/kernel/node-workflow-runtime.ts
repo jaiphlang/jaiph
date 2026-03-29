@@ -154,11 +154,13 @@ export class NodeWorkflowRuntime {
   private inboxSeq = 0;
   private promptSeq = 0;
   private workflowCtxStack: WorkflowContext[] = [];
+  private readonly mockBodies: Map<string, string>;
 
-  constructor(graph: RuntimeGraph, opts: { env?: NodeJS.ProcessEnv; cwd?: string }) {
+  constructor(graph: RuntimeGraph, opts: { env?: NodeJS.ProcessEnv; cwd?: string; mockBodies?: Map<string, string> }) {
     this.graph = graph;
     this.env = opts.env ?? process.env;
     this.cwd = opts.cwd ?? process.cwd();
+    this.mockBodies = opts.mockBodies ?? new Map();
     this.runId = randomUUID();
     const source = this.env.JAIPH_SOURCE_FILE ?? basename(graph.entryFile);
     const date = new Date();
@@ -205,6 +207,27 @@ export class NodeWorkflowRuntime {
     const result = await this.executeWorkflow(resolved.filePath, resolved.workflow.name, rootScope, args, false);
     this.emitWorkflow("WORKFLOW_END", "default");
     return result.status;
+  }
+
+  async runNamedWorkflow(ref: string, args: string[]): Promise<{ status: number; output: string; error?: string; returnValue?: string }> {
+    const rootScope: Scope = {
+      filePath: this.graph.entryFile,
+      vars: this.newScopeVars(this.graph.entryFile, undefined, this.env),
+      env: { ...this.env },
+    };
+    args.forEach((v, i) => {
+      rootScope.vars.set(String(i + 1), v);
+      rootScope.vars.set(`arg${i + 1}`, v);
+    });
+    const resolved = resolveWorkflowRef(this.graph, this.graph.entryFile, {
+      value: ref,
+      loc: { line: 1, col: 1 },
+    });
+    if (!resolved) {
+      return { status: 1, output: `Unknown workflow: ${ref}` };
+    }
+    const result = await this.executeWorkflow(resolved.filePath, resolved.workflow.name, rootScope, args, false);
+    return { status: result.status, output: result.output, error: result.error, returnValue: result.returnValue };
   }
 
   private resolveRunsRoot(): string {
@@ -326,7 +349,9 @@ export class NodeWorkflowRuntime {
       run_id: this.runId,
       event_version: 1,
     };
-    process.stderr.write(`__JAIPH_EVENT__ ${JSON.stringify({ type, message, depth: this.stack.length })}\n`);
+    if (this.env.JAIPH_TEST_MODE !== "1") {
+      process.stderr.write(`__JAIPH_EVENT__ ${JSON.stringify({ type, message, depth: this.stack.length })}\n`);
+    }
     appendRunSummaryLine(JSON.stringify(payload));
   }
 
@@ -772,20 +797,36 @@ export class NodeWorkflowRuntime {
     return { status: 0, output: "", error: "" };
   }
 
+  private mockKey(filePath: string, name: string): string {
+    return `${filePath}::${name}`;
+  }
+
   private async executeRunRef(scope: Scope, ref: string, argsRaw: string): Promise<StepResult> {
     const args = parseArgsRaw(argsRaw, scope.vars, scope.env);
     const resolvedWorkflow = resolveWorkflowRef(this.graph, scope.filePath, { value: ref, loc: { line: 1, col: 1 } });
     if (resolvedWorkflow) {
+      const mk = this.mockKey(resolvedWorkflow.filePath, resolvedWorkflow.workflow.name);
+      const mockBody = this.mockBodies.get(mk);
+      if (mockBody !== undefined) {
+        return this.executeManagedStep("workflow", ref, args, async () => this.executeMockBody(ref, mockBody, args));
+      }
       return this.executeWorkflow(resolvedWorkflow.filePath, resolvedWorkflow.workflow.name, scope, args, true);
     }
     const resolvedScript = resolveScriptRef(this.graph, scope.filePath, ref);
-    if (!resolvedScript) return { status: 1, output: "", error: `Unknown run target: ${ref}` };
-    return this.executeManagedStep(
-      "script",
-      ref,
-      args,
-      async (io) => this.executeScript(resolvedScript.filePath, resolvedScript.script.name, args, scope.env, io),
-    );
+    if (resolvedScript) {
+      const mk = this.mockKey(resolvedScript.filePath, resolvedScript.script.name);
+      const mockBody = this.mockBodies.get(mk);
+      if (mockBody !== undefined) {
+        return this.executeManagedStep("script", ref, args, async () => this.executeMockBody(ref, mockBody, args));
+      }
+      return this.executeManagedStep(
+        "script",
+        ref,
+        args,
+        async (io) => this.executeScript(resolvedScript.filePath, resolvedScript.script.name, args, scope.env, io),
+      );
+    }
+    return { status: 1, output: "", error: `Unknown run target: ${ref}` };
   }
 
   private async executeEnsureRef(
@@ -798,6 +839,11 @@ export class NodeWorkflowRuntime {
     const attempt = async (): Promise<StepResult> => {
       const resolvedRule = resolveRuleRef(this.graph, scope.filePath, { value: ref, loc: { line: 1, col: 1 } });
       if (!resolvedRule) return { status: 1, output: "", error: `Unknown ensure target: ${ref}` };
+      const mk = this.mockKey(resolvedRule.filePath, resolvedRule.rule.name);
+      const mockBody = this.mockBodies.get(mk);
+      if (mockBody !== undefined) {
+        return this.executeManagedStep("rule", ref, args, async () => this.executeMockBody(ref, mockBody, args));
+      }
       return this.executeRule(resolvedRule.filePath, resolvedRule.rule.name, scope, args);
     };
     if (!recover) return attempt();
@@ -1000,7 +1046,31 @@ export class NodeWorkflowRuntime {
   }
 
   private emitStep(payload: Record<string, unknown>): void {
-    process.stderr.write(`__JAIPH_EVENT__ ${JSON.stringify(payload)}\n`);
+    if (this.env.JAIPH_TEST_MODE !== "1") {
+      process.stderr.write(`__JAIPH_EVENT__ ${JSON.stringify(payload)}\n`);
+    }
     appendRunSummaryLine(JSON.stringify({ ...payload, event_version: 1 }));
+  }
+
+  private executeMockBody(ref: string, body: string, args: string[]): StepResult {
+    const { spawnSync } = require("node:child_process") as typeof import("node:child_process");
+    const { mkdtempSync, writeFileSync: wf, chmodSync } = require("node:fs") as typeof import("node:fs");
+    const { join: pjoin } = require("node:path") as typeof import("node:path");
+    const tmpDir = mkdtempSync(pjoin(require("node:os").tmpdir(), "jaiph-mock-"));
+    const scriptPath = pjoin(tmpDir, "mock.sh");
+    wf(scriptPath, `#!/usr/bin/env bash\nset -euo pipefail\n${body}\n`);
+    chmodSync(scriptPath, 0o755);
+    const r = spawnSync(scriptPath, args, {
+      encoding: "utf8",
+      cwd: this.cwd,
+      env: this.env,
+    });
+    try { require("node:fs").rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    return {
+      status: r.status ?? 1,
+      output: r.stdout ?? "",
+      error: r.stderr ?? "",
+      returnValue: (r.stdout ?? "").trim(),
+    };
   }
 }

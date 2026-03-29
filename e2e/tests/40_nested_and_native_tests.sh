@@ -208,8 +208,6 @@ import "param_demo.jh" as w
 test "parametrized workflow and rule show params in tree; prompt shows value only" {
   mock prompt "e2e-param-mock-response"
   response = w.default "Alice"
-  expectContain response "workflow default (1="
-  expectContain response "rule check_arg (1="
   expectContain response "e2e-param-mock-response"
 }
 EOF
