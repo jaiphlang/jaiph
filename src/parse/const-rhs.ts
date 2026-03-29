@@ -27,6 +27,14 @@ export function validateConstBashExpr(filePath: string, expr: string, lineNo: nu
   if (/\$\{#/.test(t)) {
     fail(filePath, "const value cannot use ${#var}; use a script", lineNo, col);
   }
+  if (/\$\{[a-zA-Z_][a-zA-Z0-9_]*:[-+=?]/.test(t)) {
+    fail(
+      filePath,
+      "shell fallback syntax (e.g. ${var:-default}) is not supported; use conditional logic or named params instead",
+      lineNo,
+      col,
+    );
+  }
 }
 
 /**

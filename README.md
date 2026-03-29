@@ -74,7 +74,7 @@ workflow default {
 
   prompt "
     Build the application using best practices.
-    Follow requirements: $1
+    Follow requirements: ${arg1}
   "
 
   ensure build_passes
@@ -123,7 +123,7 @@ If that fails, check that `~/.local/bin` is in your `PATH` (default install dire
 # or: jaiph run ./path/to/main.jh "feature request or task"
 ```
 
-Arguments are passed exactly like bash scripts (`$1`, `$2`, `"$@"`). The file must define a `workflow default`.
+Arguments are passed positionally. In Jaiph strings (log, prompt, fail, send), use `${arg1}`, `${arg2}` (JS template literal style). In script bodies, `$1`, `$2`, `"$@"` remain valid. The file must define a `workflow default`.
 
 When stdout is not a terminal (for example in CI), long-running steps can print periodic gray **heartbeat** lines between the start and completion markers so logs show the run is still active. See [CLI Reference — Run progress and tree output](docs/cli.md#run-progress-and-tree-output) for heartbeats, tree formatting, and **`log` / `logerr`** (terminal output uses **`echo -e`**-style escapes; `LOG` / `LOGERR` JSON keeps the raw message string).
 

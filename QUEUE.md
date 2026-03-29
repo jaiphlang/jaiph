@@ -12,59 +12,58 @@ Process rules:
 
 ---
 
-## Align interpolation with JS string semantics <!-- dev-ready -->
+## String interpolation: canonical `${argN}` / `${name}` only (remove `$1`, `$2`, bare `$name`) <!-- dev-ready -->
 
 **Goal**  
-Adopt JavaScript template literal semantics as the single interpolation model. Eliminate conflicting language direction around backticks and shell-style expansion. Make `${argN}` the canonical form for positional arguments in Jaiph string contexts.
+Drop legacy Jaiph orchestration-string interpolation: **`$1`**, **`$2`**, bare **`$named`**, and **`${1}`**-style numeric braced forms. **Author-facing** strings (e.g. `log`, `logerr`, `fail`, `prompt`, `return "…"`, double-quoted send RHS, and any other path that uses the Node kernel `interpolate()` / compile-time string validation) must use **only** braced forms: **`${arg1}`**, **`${arg2}`**, … for positional args and **`${paramName}`** for named parameters (and **`${ENV_VAR}`** where env expansion is intentionally supported — keep behavior explicit in code and docs). **No backward compatibility** for the old forms in those contexts.
 
 **Context**
 
-- **Decision**: Jaiph strings follow JS string rules. `"something ${var}"` is the canonical interpolation form. Backticks that appear literally must be escaped. `${var:-fallback}` is shell syntax and should NOT be supported.
-- **Positional arguments**: Use `${arg1}`, `${arg2}`, ... in `log "Hello ${arg1}"`, `fail "Missing: ${arg1}"`, `prompt "Process ${arg1}"`, etc. This matches the runtime's `arg1=...` display keys and prepares for named parameters.
-- `$1` / `$2` remains supported as a **legacy shorthand inside `script` bodies only** (where shell idioms belong). Using `$1` in workflow/rule string literals should be discouraged or produce a lint-style warning in the future.
-- Previous queue had contradictory tasks: "reject backticks" and "allow backticks in prompt strings".
-- Current interpolation implementation in `node-workflow-runtime.ts` (line ~69) handles `${varName}` and `$varName` patterns but uses shell-style regex matching.
-- Substitution validation in `src/transpile/validate-substitution.ts` validates `$(...)` command substitutions.
-- No explicit backtick policy exists in the parser or validator.
-
-**Key files:**
-- `src/runtime/kernel/node-workflow-runtime.ts` — `interpolate()` function (line ~69). Update regex priority and add explicit `${argN}` handling if needed.
-- `src/transpile/validate-substitution.ts` — command substitution validation
-- `src/transpile/validate.ts` — main validation logic
-- `src/parse/steps.ts` — step parsing (string handling)
-- `src/parse/core.ts` — core parsing primitives
-- `docs/grammar.md` — grammar documentation
-- `docs/index.html` — update all examples, especially argument passing and rule examples
+- `src/runtime/kernel/node-workflow-runtime.ts` — `interpolate()` (currently applies both `\$\{…\}` and bare `\$ident` / `\$N`); positional values are also bound under numeric keys `"1"`, `"2"` alongside `arg1`, `arg2` (`newScopeVars` / child scopes).
+- `src/transpile/emit-prompt.ts` — `extractShellVarRefs()` documents/implements the old pattern set.
+- `src/transpile/validate-string.ts` (+ call sites) — does not yet reject bare `$` interpolation in Jaiph strings.
+- Docs still describe **`$varName`** as a convenience shorthand and mixed positional styles; `docs/grammar.md`, `docs/cli.md`, `docs/inbox.md`, `docs/getting-started.md`, `docs/jaiph-skill.md`, `docs/index.html`, and any README/CHANGELOG samples need a single consistent story.
+- **Out of scope for “legacy removal”:** bash **`script`** bodies, **`run`/`ensure` argument tails** passed through to the shell as raw argv (e.g. `"$1"` meaning shell positional when the emitted script runs), **`mock prompt { if $1 contains … }`** (mock DSL), and **inbox trigger contract** phrasing ($1=message as *bash* / emitted shell semantics) — those remain shell idioms; only Jaiph **orchestration** double-quoted string semantics change.
+- **Regression risk (params in output):** Progress / CLI / `STEP_START` / run-summary payloads should list **all** workflow call parameters for each step, as they used to. There is a suspected regression for **prompts** (e.g. `emitPromptStepStart` only adds an extra `arg1` entry when `scopeVars.get("1")` is non-empty, so named-only or multi-arg visibility may be wrong). Fixing interpolation keys must **not** further shrink what operators see; verify and restore full param display (prompts first, then audit `run` / `ensure` / other step kinds for parity).
 
 **Scope**
 
-1. Define the explicit interpolation rule set:
-   - `${varName}` — supported (JS template literal style, primary form).
-   - `${arg1}`, `${arg2}`, ... — **canonical for positional arguments** in Jaiph strings.
-   - `$varName` — supported (convenience shorthand, like shell; de-emphasize in docs).
-   - `$1`, `$2`, ... — **only in `script` bodies** (legacy shell style).
-   - `${var:-fallback}` — **rejected** with compile-time error ("shell fallback syntax not supported; use conditional logic or named params").
-   - Backtick characters — **must be escaped** (`\``) in all string contexts. Unescaped backticks produce a compile-time error.
-   - `$(...)` — **rejected** in orchestration contexts (already enforced), allowed in script bodies.
-2. Update parser/validator to enforce these rules (prefer `${...}` form where unambiguous).
-3. Update **all documentation and samples**:
-   - Replace examples using `$1` in `log`/`fail`/`prompt` strings with `${arg1}`.
-   - Update `docs/index.html` (argument passing section, rule examples, async workflow example).
-   - Update `docs/grammar.md` (named parameters section, capture examples, validation rules).
-   - Update `docs/jaiph-skill.md` and any other doc files.
-4. Add focused positive/negative tests:
-   - Valid: `"hello ${name}"`, `"value is $x"`, `"arg is ${arg1}"`, `"escaped backtick: \`cmd\`"`, script body using `$1`
-   - Invalid: `"${var:-default}"`, unescaped backtick in string, `"$(command)"` in workflow context.
-5. Update `docs/grammar.md` and any other docs that discuss string interpolation. Explicitly document the `${argN}` convention.
+1. **Runtime:** Restrict `interpolate()` (and `parseArgsRaw` if it shares the same rules) so only `\$\{[^}]+\}` is expanded; implement clear rules for **positional** (`argN` only, not numeric `${1}` / `$1`) and **named** bindings. Remove or stop relying on numeric `"1"` keys in scope maps for **string** interpolation if nothing else needs them (audit `scope.vars.get("1")`, inbox fake argv, recover, `emitPromptStepStart`, etc.).
+2. **Compile-time:** Extend `validateJaiphStringContent` (or equivalent) so invalid legacy forms in Jaiph strings produce **`E_PARSE`** with actionable hints (point to `${arg1}` / `${name}`).
+3. **Transpile:** Update `extractShellVarRefs` and any golden/compiler tests that assume bare `$` in prompts.
+4. **Tests:** Unit tests (`validate-string.test.ts`, runtime tests touching `interpolate`, compiler golden/edge, e2e fixtures under `.jaiph/` and `e2e/` if any sample uses legacy forms in orchestration strings).
+5. **Docs & samples:** Grammar table, CLI, inbox, getting-started, skill doc, `docs/index.html` — replace orchestration examples with `${arg1}` / `${named}`; keep script-body bash examples as `$1` where appropriate; update `CHANGELOG.md` with a breaking-change note.
+6. **Observability:** Ensure **all** parameters for each invocation appear in user-visible output (terminal progress tree, `STEP_START` / summary JSON `params`, and any related preview fields) **matching prior behavior**, not a subset. Add or extend tests that assert multi-arg and named-arg workflows still print every bound parameter for **`prompt`** (and spot-check other step kinds).
 
 **Acceptance criteria**
 
-- Backtick and `${...}` behavior is fully deterministic and documented.
-- `${var:-fallback}` is rejected with actionable error.
-- Unescaped backticks are rejected with actionable error.
-- **All examples in `docs/index.html` and `docs/grammar.md` use `${argN}`** (or named params) in Jaiph strings.
-- No contradictory docs/tests remain.
-- Grammar docs explicitly state "JS template literal semantics" and document `${argN}` as canonical for positional arguments.
+- Legacy forms in Jaiph orchestration strings are rejected at compile time (preferred) and/or do not expand at runtime.
+- Canonical `${arg1}`, `${arg2}`, `${paramName}` work everywhere orchestration interpolation applies.
+- Docs and bundled samples contain no contradictory “shorthand `$var`” / “`$1` in Jaiph strings” guidance; script vs orchestration boundary is explicit.
+- **Parameters:** Full argument lists are visible in outputs again (at minimum no regression vs pre-change behavior for prompts; align other steps if gaps are found).
+- Test suite green.
+
+---
+
+## E2E: verify custom shebang polyglot scripts (Python and Node) <!-- dev-ready -->
+
+**Goal**  
+Confirm end-to-end that `script` blocks with custom shebangs run correctly for **both** Python and Node interpreters (not only one).
+
+**Context**
+
+- Grammar and docs describe polyglot scripts (`#!` as first non-empty body line); `e2e/tests/92_custom_shebang_polyglot.sh` currently exercises **Python only** (`#!/usr/bin/env python3`).
+- Node (`#!/usr/bin/env node`) should be covered the same way so regressions in emission, `chmod +x`, or `run_step` do not only surface for one interpreter.
+
+**Scope**
+
+1. Extend `92_custom_shebang_polyglot.sh` (or add a sibling test) so a **`script`** with `#!/usr/bin/env node` runs in the workflow and its stdout is asserted like the Python case.
+2. If Node or python3 are not in the path => fail the test. We should be strict there.
+3. Keep the existing Python coverage.
+
+**Acceptance criteria**
+
+- E2E run proves both interpreters when available; CI/local runs without one interpreter still pass via skip.
 
 ---
 

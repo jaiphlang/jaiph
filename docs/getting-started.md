@@ -75,7 +75,7 @@ rule build_passes {
 
 # Orchestrates checks, prompt execution, and docs refresh.
 # Arguments:
-#   $1: Feature requirements passed to the prompt.
+#   ${arg1}: Feature requirements passed to the prompt.
 workflow default {
   if not ensure project_ready {
     run bootstrap.nodejs
@@ -83,7 +83,7 @@ workflow default {
 
   prompt "
     Build the application using best practices.
-    Follow requirements: $1
+    Follow requirements: ${arg1}
   "
 
   ensure build_passes
@@ -144,7 +144,7 @@ Installation places the `jaiph` CLI in `~/.local/bin/`.
 ./path/to/main.jh "feature request or task"
 ```
 
-Arguments are passed exactly like bash scripts (`$1`, `$2`, `"$@"`).
+Arguments are passed positionally. In Jaiph strings (log, prompt, fail, send), use `${arg1}`, `${arg2}` (JS template literal style). In script bodies, `$1`, `$2`, `"$@"` remain valid.
 
 Entrypoint resolution: the entry file must define a workflow named **`default`**. Executable `.jh` files with `#!/usr/bin/env jaiph` run that workflow when invoked as `./file.jh` (the `jaiph` binary must be on your **`PATH`**). The same applies to **`jaiph run path/to/file.jh`** and the shorthand **`jaiph path/to/file.jh`** when the path exists.
 
@@ -206,7 +206,7 @@ script check_hash(file_path, expected_hash) { ... }
 workflow deploy(env, version, dry_run = "false") { ... }
 ```
 
-Named params map to positional arguments at runtime (e.g. `file_path` binds to `$1`). Default values use fallback expansion (`"${3:-false}"`). Parentheses are optional when no params exist. See [Grammar — Named parameters](grammar.md#named-parameters).
+Named params map to positional arguments at runtime (e.g. `file_path` binds to `${arg1}` in Jaiph strings, `$1` in script bodies). Parentheses are optional when no params exist. See [Grammar — Named parameters](grammar.md#named-parameters).
 
 ### Polyglot scripts
 

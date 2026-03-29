@@ -127,7 +127,7 @@ Example lines:
 - `▸ workflow docs_page (1="docs/cli.md", 2="strict")`
 - `· prompt prompt (running 60s)` — non-TTY only, after the quiet threshold; entire line dim/gray; same `prompt prompt` label as the eventual `✓ prompt prompt (…)` line
 - `·   ▸ prompt "$role does $task" (role="engineer", task="Fix bugs")`
-- `·   ▸ prompt "Say hello to $1 and..." (1="greeting")`
+- `·   ▸ prompt "Say hello to ${arg1} and..." (arg1="greeting")`
 - `·   ▸ script fib (1="3")`
 - `·   ▸ rule check_arg (1="Alice")`
 

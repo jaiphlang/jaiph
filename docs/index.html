@@ -147,9 +147,9 @@ layout: null
                         belongs in
                         <code>script</code> blocks (and shared <code>.jaiph/lib</code> loaded from there). Workflows
                         call rules with
-                        <code>ensure</code> and call workflows or scripts with <code>run</code>. Pass arguments like
-                        bash scripts
-                        (<code>$1</code>, <code>$2</code>).
+                        <code>ensure</code> and call workflows or scripts with <code>run</code>. In Jaiph
+                        strings, use JS template literal style: <code>${arg1}</code>, <code>${arg2}</code>
+                        (positional) or <code>${varName}</code> (named).
                     </p>
                     <pre><code class="language-jaiph">#!/usr/bin/env jaiph
 
@@ -168,7 +168,7 @@ workflow default {
   ensure name_was_provided "$1"
 
   const response = prompt "
-    Say hello to $1 and provide a fun fact about a person with the same name.
+    Say hello to ${arg1} and provide a fun fact about a person with the same name.
     Respond with a single line. Do not inspect files or run tools.
   "
 
@@ -182,7 +182,7 @@ Jaiph: Running say_hello.jh
 <span class="run-keyword">workflow</span> default <span class="run-params">(1="Jakub")</span>
   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> name_was_provided <span class="run-params">(1="Jakub")</span>
   <span class="run-pass">✓</span> <span class="run-time">rule name_was_provided (0s)</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> "Say hello to $1 and" <span class="run-params">(1="Jakub")</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> "Say hello to ${arg1} and" <span class="run-params">(arg1="Jakub")</span>
   <span class="run-pass">✓</span> <span class="run-time">prompt prompt (9s)</span>
   <span class="run-marker">ℹ</span> Hi Jakub — fun fact: Jakub Marian is a Czech linguist and polyglot who speaks over a dozen languages.
 
@@ -318,7 +318,7 @@ Jaiph: Running ensure_ci_passes.jh
                         A workflow sends a message with <code>&lt;-</code> (RHS: quoted literal, <code>$var</code>, or
                         <code>run</code> to a script) and a route declaration (<code>-&gt;</code>) dispatches it to
                         receivers with
-                        <code>$1=message</code>, <code>$2=channel</code>, <code>$3=sender</code>.
+                        <code>${arg1}=message</code>, <code>${arg2}=channel</code>, <code>${arg3}=sender</code>.
                     </p>
                     <pre><code class="language-jaiph">#!/usr/bin/env jaiph
 
@@ -330,7 +330,7 @@ workflow scanner {
 }
 
 workflow analyst {
-  report <- "Summary: $1"
+  report <- "Summary: ${arg1}"
 }
 
 script print_reviewed() {
@@ -419,7 +419,9 @@ Jaiph: Running async.jh
             <div class="card doc-content">
                 <h3>Running a workflow</h3>
                 <pre><code class="language-bash">./path/to/main.jh "arg1" "arg2" "arg3"</code></pre>
-                <p>Arguments are passed exactly like bash scripts (<code>$1</code>, <code>$2</code>, <code>"$@"</code>).
+                <p>Arguments are passed positionally. In Jaiph strings (log, prompt, fail, send), use
+                    <code>${arg1}</code>, <code>${arg2}</code> (JS template literal style). In script bodies,
+                    <code>$1</code>, <code>$2</code>, <code>"$@"</code> remain valid.
                     When you call a workflow, it executes the <code>workflow default</code> entrypoint.</p>
                 <p>By convention, keep Jaiph workflow files in <code>&lt;project_root&gt;/.jaiph/</code> so
                     workspace-root detection and agent setup stay predictable.

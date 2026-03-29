@@ -42,7 +42,7 @@ workflow researcher {
 }
 
 workflow analyst {
-  log "Received: $1"
+  log "Received: ${arg1}"
 }
 
 workflow default {
@@ -53,7 +53,7 @@ workflow default {
 
 In this example, `researcher` sends data to the `findings` channel.
 The `default` workflow routes `findings` messages to `analyst`, which
-receives `$1=message`, `$2=channel`, `$3=sender` (see [Trigger contract](#trigger-contract)).
+receives `${arg1}=message`, `${arg2}=channel`, `${arg3}=sender` (see [Trigger contract](#trigger-contract)).
 
 ## Design principles
 
@@ -133,7 +133,7 @@ misread as send syntax.
 ### Route declaration: `<channel_ref> -> <workflow>`
 
 Tells the runtime: when a message arrives on that channel, call each listed
-**workflow** with positional args `$1=message`, `$2=channel`, `$3=sender`.
+**workflow** with positional args `${arg1}=message`, `${arg2}=channel`, `${arg3}=sender`.
 
 Targets must be **workflows** (local or imported as `alias.name`). **Rules**
 and **scripts** are not valid route targets — the compiler uses workflow-only
@@ -338,13 +338,13 @@ Routed receivers get three positional arguments:
 
 | Arg  | Value                                           |
 |------|-------------------------------------------------|
-| `$1` | Message payload (content sent to the channel)   |
-| `$2` | Channel name (e.g. `findings`)                  |
-| `$3` | Sender name (the **workflow name** that called `send`) |
+| `${arg1}` | Message payload (content sent to the channel)   |
+| `${arg2}` | Channel name (e.g. `findings`)                  |
+| `${arg3}` | Sender name (the **workflow name** that called `send`) |
 
 - The channel name and sender are also available via `JAIPH_DISPATCH_CHANNEL`
   and `JAIPH_DISPATCH_SENDER` environment variables respectively.
-- The three positional arguments (`$1`, `$2`, `$3`) are passed through
+- The three positional arguments (`${arg1}`, `${arg2}`, `${arg3}`) are passed through
   `jaiph::run_step` like any other workflow invocation, so the progress
   tree shows them with the usual numbered keys (e.g.
   `workflow analyst (1="…", 2="findings", 3="scanner")`).
