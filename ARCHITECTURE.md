@@ -33,9 +33,8 @@ Jaiph is a workflow system with a **TypeScript CLI**. The default orchestration 
   - Resolves imports and symbol references; emits deterministic compile-time errors.
 
 - **Transpiler (`src/transpiler.ts`, `src/transpile/*`)**
-  - `transpileFile()` still emits module `.sh` + per-step source map entries and extracted script files.
-  - `buildScripts()` is the default runtime preparation path for `jaiph run` / `jaiph test` (scripts-only output, no module `.sh` emission).
-  - Full `build()` output (module `.sh` + scripts) remains for internal compatibility flows (not user-facing as a CLI subcommand).
+  - `transpileFile()` drives validation and still **computes** a legacy **module bash** string for `emitWorkflow` today, but **`buildScripts()`** — the normal **`jaiph run` / `jaiph test`** path — **persists only atomic `script` files** under `scripts/`.
+  - Full **`build()`** still writes **workflow module `.sh`** files plus scripts; that exists for **Docker `jaiph run`** until removed (`QUEUE.md`: *Remove bash workflow modules*). Product direction: **no workflow-level `.sh`**, only per-step script executables.
 
 - **Node Workflow Runtime (`src/runtime/kernel/node-workflow-runtime.ts`)**
   - `NodeWorkflowRuntime` interprets the AST directly: walks workflow steps, manages scope/variables, delegates prompt and script execution to kernel helpers, handles channels/inbox/dispatch, emits events, and writes run artifacts.
@@ -103,13 +102,13 @@ flowchart TD
     subgraph Transpile["Per-module transpile: transpileFile()"]
         PARSE[parsejaiph]
         VAL[validateReferences]
-        EMIT[Emit script files and optional workflow .sh]
+        EMIT[Emit atomic script files under scripts/]
         PARSE --> VAL
         VAL -->|compile errors| ERR[Deterministic compile errors]
         VAL --> EMIT
     end
 
-    CLI -->|jaiph run| BS1[buildScripts or full build when Docker]
+    CLI -->|jaiph run| BS1[buildScripts or legacy build when Docker]
     BS1 --> Transpile
 
     CLI -->|jaiph test| BS2[buildScripts workspace]
@@ -117,7 +116,7 @@ flowchart TD
     BS2 --> TR[Node Test Runner in-process]
 
     Transpile -->|default jaiph run| RW[Node workflow runner child]
-    Transpile -->|Docker jaiph run| DC[Container runs generated module .sh + stdlib]
+    Transpile -->|Docker jaiph run today| DC[Container runs legacy generated module .sh + stdlib]
 
     RW --> G[buildRuntimeGraph parse-only + imports]
     G --> GRAPH[RuntimeGraph]
@@ -143,6 +142,8 @@ flowchart TD
     HK --> HPROC[Hook shell commands]
 ```
 
+**Emit artifacts:** `buildScripts()` persists **only** extracted **`script`** bodies. **Workflow module `.sh`** (bash that orchestrates `run` / `if` / `prompt` at the module level) is still produced by **`build()`** today for **Docker**; the queue task *Remove bash workflow modules* deletes that path so orchestration is **Node-only** everywhere (`QUEUE.md`).
+
 ## Sequence diagram: regular flow (`*.jh`)
 
 ```mermaid
@@ -161,7 +162,7 @@ sequenceDiagram
     Note over CLI: parse once for metadata config only
     CLI->>Prep: buildScripts(input) or build() if Docker
     Prep->>TF: loop: parse + validateReferences + emit
-    TF-->>Prep: scripts/ and optional module .sh
+    TF-->>Prep: scripts/ atomic only or legacy build adds module .sh for Docker
     Prep-->>CLI: output dir paths + env JAIPH_SCRIPTS
     alt default non-Docker
         CLI->>Runner: spawn detached node-workflow-runner
@@ -223,5 +224,5 @@ sequenceDiagram
 - `.jh` / `*.test.jh` share parser/AST; **compile-time** validation runs in `transpileFile` during **`buildScripts` / `build`**. **`buildRuntimeGraph`** loads modules with **parse-only** imports.
 - **Default Node runtime:** local `jaiph run` (non-Docker) and `jaiph test` execute through `NodeWorkflowRuntime`. Docker `jaiph run` executes the generated bash module inside the container.
 - **CLI** owns launch, observation, hooks, and runtime preparation (`buildScripts` or full `build`). **Default** workflow execution runs in **`NodeWorkflowRuntime`**, with **script steps** as managed subprocesses.
-- User-facing CLI no longer exposes a `build` subcommand; full `.sh` emission remains an internal compatibility path only.
+- User-facing CLI no longer exposes a `build` subcommand; **`build()`** (module `.sh` + scripts) remains **internal** for Docker until the queue removes bash workflows entirely (`QUEUE.md`).
 - Contracts: `__JAIPH_EVENT__`, `.jaiph/runs`, `run_summary.jsonl`, hook payloads.
