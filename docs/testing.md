@@ -13,6 +13,8 @@ Jaiph ships a **native test runner** for workflow modules. You write `*.test.jh`
 
 **Why mocks matter.** Real workflows call LLMs, shell, and other workflows. That output is non-deterministic and environment-dependent. The test harness records mock prompt responses and can substitute shell bodies for workflows, rules, and Jaiph scripts so runs stay fast, repeatable, and offline-friendly.
 
+**Graph caching.** The runtime graph (`buildRuntimeGraph`) for each test file is built **once per `runTestFile` invocation** and reused across all blocks and `test_run_workflow` steps. The graph depends only on the test file and its import closure, which are constant within a single run. This avoids redundant parsing when a file contains multiple test blocks that each invoke workflows. If a future test step were to mutate imported files on disk mid-run, a manual rebuild would be needed — but that is not a supported pattern today.
+
 **Core concepts**
 
 - **Test files** — Names ending in `.test.jh`, discovered by `jaiph test`. Each file lists imports and one or more `test "..." { ... }` blocks.
