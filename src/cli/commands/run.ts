@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve, extname } from "node:path";
 import { basename } from "node:path";
 import { parsejaiph } from "../../parser";
-import { build, workflowSymbolForFile } from "../../transpiler";
+import { build, buildScripts } from "../../transpiler";
 import { metadataToConfig } from "../../config";
 import { formatNamedParamsForDisplay } from "./format-params.js";
 import {
@@ -76,13 +76,6 @@ export async function runWorkflow(rest: string[]): Promise<number> {
   const outDir = target ? resolve(target) : mkdtempSync(join(tmpdir(), "jaiph-run-"));
   const shouldCleanup = !target;
   try {
-    const results = build(inputAbs, outDir);
-    if (results.length !== 1) {
-      process.stderr.write(`jaiph run expected one built output, got ${results.length}\n`);
-      return 1;
-    }
-    const builtPath = results[0].outputPath;
-    const workflowSymbol = workflowSymbolForFile(inputAbs, dirname(inputAbs));
     const colorEnabled = process.stdout.isTTY && process.env.NO_COLOR === undefined;
     const isTTY = !!process.stdout.isTTY;
     const startedAt = Date.now();
@@ -92,6 +85,19 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     const runtimeEnv = resolveRuntimeEnv(effectiveConfig, workspaceRoot, inputAbs);
     runtimeEnv.JAIPH_SOURCE_ABS = inputAbs;
     const metaFile = join(outDir, `.jaiph-run-meta-${Date.now()}-${process.pid}.txt`);
+    const dockerConfig = resolveDockerConfig(mod.metadata?.runtime, runtimeEnv);
+    let builtPath = join(outDir, "entry.sh");
+    if (dockerConfig.enabled) {
+      const results = build(inputAbs, outDir);
+      if (results.length !== 1) {
+        process.stderr.write(`jaiph run expected one built output, got ${results.length}\n`);
+        return 1;
+      }
+      builtPath = results[0].outputPath;
+    } else {
+      const { scriptsDir } = buildScripts(inputAbs, outDir);
+      runtimeEnv.JAIPH_SCRIPTS = scriptsDir;
+    }
 
     // Set up event emitter and subscribers
     const emitter = createRunEmitter();
@@ -117,8 +123,8 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       workspace: workspaceRoot,
     });
 
-    const { execResult, dockerResult, dockerConfig } = spawnExec(
-      mod, runtimeEnv, builtPath, outDir, workspaceRoot, metaFile, workflowSymbol, runArgs, isTTY,
+    const { execResult, dockerResult, dockerConfig: activeDockerConfig } = spawnExec(
+      mod, runtimeEnv, builtPath, outDir, workspaceRoot, metaFile, "default", runArgs, isTTY,
     );
 
     const signalHandlers = setupRunSignalHandlers(execResult, { forceKillAfterMs: 1500 });
@@ -144,9 +150,9 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     drainBuffers(dockerConfig.enabled, onLine, buf, ttyCtx);
 
     if (dockerResult) {
-      const timedOut = dockerResult.timeoutTimer === undefined && dockerConfig.timeout > 0
+      const timedOut = dockerResult.timeoutTimer === undefined && activeDockerConfig.timeout > 0
         ? false
-        : (Date.now() - startedAt) >= dockerConfig.timeout * 1000;
+        : (Date.now() - startedAt) >= activeDockerConfig.timeout * 1000;
       cleanupDocker(dockerResult);
       if (timedOut && childExit.status !== 0) {
         runState.capturedStderr += "E_TIMEOUT container execution exceeded timeout\n";
