@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { build, transpileFile, transpileTestFile } from "../transpiler";
+import { build, transpileFile } from "../transpiler";
 import { parsejaiph } from "../parser";
 
 function normalize(text: string): string {
@@ -2014,97 +2014,6 @@ test("compiler golden: prompt with returns schema emits prompt_capture_with_sche
 });
 
 // === test_mock_prompt_block dispatch script golden test ===
-
-test("compiler golden: mock prompt block emits if/elif/else dispatch script structure", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-mock-dispatch-"));
-  try {
-    writeFileSync(
-      join(root, "w.jh"),
-      [
-        "workflow default {",
-        '  result = prompt "question"',
-        '  log "done"',
-        "}",
-        "",
-      ].join("\n"),
-    );
-    writeFileSync(
-      join(root, "w.test.jh"),
-      [
-        'import "w.jh" as w',
-        "",
-        'test "dispatch test" {',
-        "  mock prompt {",
-        '    if $1 contains "greeting" ; then',
-        '      respond "hello"',
-        '    elif $1 contains "farewell" ; then',
-        '      respond "goodbye"',
-        "    else",
-        '      respond "default"',
-        "    fi",
-        "  }",
-        "  response = w.default",
-        '  expectContain response "hello"',
-        "}",
-        "",
-      ].join("\n"),
-    );
-    const bash = transpileTestFile(join(root, "w.test.jh"), root);
-    const normalized = normalize(bash);
-    // Dispatch script uses if/elif/else pattern matching
-    assert.match(normalized, /if \[\[ "\$prompt" == \*'greeting'\* \]\]; then/);
-    assert.match(normalized, /printf '%s' 'hello'/);
-    assert.match(normalized, /elif \[\[ "\$prompt" == \*'farewell'\* \]\]; then/);
-    assert.match(normalized, /printf '%s' 'goodbye'/);
-    assert.match(normalized, /else/);
-    assert.match(normalized, /printf '%s' 'default'/);
-    assert.match(normalized, /fi/);
-    // Dispatch script is set via env var
-    assert.match(normalized, /JAIPH_MOCK_DISPATCH_SCRIPT/);
-    // Mock responses file is unset when dispatch is used
-    assert.match(normalized, /unset JAIPH_MOCK_RESPONSES_FILE/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("compiler golden: mock prompt block without else emits error fallback", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-mock-dispatch-noelse-"));
-  try {
-    writeFileSync(
-      join(root, "w.jh"),
-      [
-        "workflow default {",
-        '  prompt "something"',
-        "}",
-        "",
-      ].join("\n"),
-    );
-    writeFileSync(
-      join(root, "w.test.jh"),
-      [
-        'import "w.jh" as w',
-        "",
-        'test "no else fallback" {',
-        "  mock prompt {",
-        '    if $1 contains "match" ; then',
-        '      respond "found"',
-        "    fi",
-        "  }",
-        "  w.default",
-        "}",
-        "",
-      ].join("\n"),
-    );
-    const bash = transpileTestFile(join(root, "w.test.jh"), root);
-    const normalized = normalize(bash);
-    // When no else, should emit error fallback
-    assert.match(normalized, /no mock matched prompt/);
-    assert.match(normalized, /exit 1/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
 
 test("compiler golden: workflow-level config emits per-workflow with_metadata_scope with _LOCKED", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-golden-wfconfig-"));

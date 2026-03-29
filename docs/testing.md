@@ -9,7 +9,7 @@ redirect_from:
 
 ## Overview
 
-Jaiph ships a small **native test runner** for workflow modules. You write `*.test.jh` files that import workflows under test, optionally replace prompts and other symbols with mocks, run workflows through the **same** CLI launcher, Bash stdlib, and **JS kernel** stack as **`jaiph run`** (prompt execution, managed `run` / `ensure` / nested steps, inbox and event emission), and assert on captured output or return values. The runtime turns on **`JAIPH_TEST_MODE`** for those runs so **mock dispatch**, **assertion builtins**, and **capture** for `name = alias.workflow` follow the same contracts as before prompts and managed steps moved behind the kernel; you do not set this variable in test sources.
+Jaiph ships a **native test runner** for workflow modules. You write `*.test.jh` files that import workflows under test, optionally replace prompts and other symbols with mocks, run workflows through the **Node workflow runtime** (`NodeWorkflowRuntime`) — the same AST interpreter used by **`jaiph run`** — and assert on captured output or return values. The test runner (`node-test-runner.ts`) executes entirely in Node: mock dispatch, assertion evaluation, and workflow execution all happen in TypeScript with no Bash transpilation. The runtime sets **`JAIPH_TEST_MODE`** so mock dispatch, assertions, and capture for `name = alias.workflow` follow the same contracts; you do not set this variable in test sources.
 
 **Why mocks matter.** Real workflows call LLMs, shell, and other workflows. That output is non-deterministic and environment-dependent. The test harness records mock prompt responses and can substitute shell bodies for workflows, rules, and Jaiph scripts so runs stay fast, repeatable, and offline-friendly.
 
@@ -23,7 +23,7 @@ Jaiph ships a small **native test runner** for workflow modules. You write `*.te
 ## File naming and layout
 
 - Use the `.test.jh` suffix (for example `workflow_greeting.test.jh`).
-- **Content:** Use imports and `test` blocks only. The parser may accept other top-level declarations in a `*.test.jh` file, but `*.test.jh` modules are **skipped when the workspace is compiled** to `.sh`, so workflows or rules defined only in a test file are never emitted as runnable shell modules. Keeping tests to imports + `test` blocks avoids dead code and matches how the runner is meant to be used.
+- **Content:** Use imports and `test` blocks only. The parser may accept other top-level declarations in a `*.test.jh` file, but the test runner only processes `import` and `test` blocks. Keeping tests to imports + `test` blocks avoids dead code and matches how the runner is meant to be used.
 - **Imports:** Paths in `import "..." as alias` resolve **relative to the directory of the test file**, with the same extension handling as ordinary modules (appends `.jh` when omitted). See [Grammar — Import path](grammar.md#lexical-notes).
 - **Discovery:** `jaiph test` walks the given directory recursively (or the workspace root when no path is passed). The workspace root is found by walking up from the current directory until a `.jaiph` or `.git` directory exists; if neither is found, the current directory is used. On macOS temp checkouts under **`TMPDIR`**, ancestor markers inside the shared **`/var/folders/.../T/`** tree are ignored so the project directory you are in wins (same rule as **`jaiph run`**).
 
@@ -144,7 +144,7 @@ Shell harnesses and CI expectations for the full repo are described in [Contribu
 ## Limitations (v1)
 
 - Prompt mocks are **only** inline in the test file (queue of `mock prompt "..."` or a single `mock prompt { ... }` dispatcher). Older external mock config formats are not supported.
-- **Do not combine** `mock prompt { ... }` with `mock prompt "..."` in the same test block; only the block path is active and inline queue steps are ignored in generated bash.
+- **Do not combine** `mock prompt { ... }` with `mock prompt "..."` in the same test block; only the block path is active and inline queue steps are ignored.
 - Capture vs combined output: explicit `return` wins over stdout/stderr aggregation (with internal event lines stripped from the latter).
 - Assertions only support **double-quoted** expected strings on the `expect*` lines.
 - Extra arguments after `jaiph test <file>` are currently unused by the runner.

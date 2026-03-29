@@ -28,7 +28,6 @@ test("NodeWorkflowRuntime: workflow step .out accumulates Command:/Prompt: and l
       ...process.env,
       JAIPH_TEST_MODE: "1",
       JAIPH_MOCK_RESPONSES_FILE: mockFile,
-      JAIPH_NODE_ORCHESTRATOR: "1",
       JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
     };
     const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });
@@ -109,7 +108,6 @@ test("NodeWorkflowRuntime: ensure recover receives failure payload in $1", async
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       JAIPH_TEST_MODE: "1",
-      JAIPH_NODE_ORCHESTRATOR: "1",
       JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
       JAIPH_SCRIPTS: scriptsDir,
     };
@@ -184,7 +182,6 @@ test("NodeWorkflowRuntime: nested workflow inherits caller metadata scope (calle
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       JAIPH_TEST_MODE: "1",
-      JAIPH_NODE_ORCHESTRATOR: "1",
       JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
       JAIPH_SCRIPTS: scriptsDir,
       JAIPH_META_SCOPE_FILE: metaFile,
@@ -260,7 +257,6 @@ test("NodeWorkflowRuntime: nested cross-module preserves locked JAIPH_AGENT_BACK
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       JAIPH_TEST_MODE: "1",
-      JAIPH_NODE_ORCHESTRATOR: "1",
       JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
       JAIPH_SCRIPTS: scriptsDir,
       JAIPH_META_SCOPE_FILE: metaFile,

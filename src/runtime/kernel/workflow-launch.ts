@@ -2,9 +2,8 @@ import { spawn, ChildProcess } from "node:child_process";
 import { join } from "node:path";
 
 /**
- * Build argv/env for directly executing a transpiled workflow module.
- * Positional args keep the existing launch contract:
- * [meta_file, built_script, workflow_symbol, ...run_args]
+ * Build argv/env for executing a workflow via the Node runtime.
+ * Positional args: [meta_file, built_script, workflow_symbol, ...run_args]
  */
 export function buildRunModuleLaunch(
   positionalArgs: string[],
@@ -14,21 +13,14 @@ export function buildRunModuleLaunch(
   if (!metaFile || !builtScript) {
     throw new Error("jaiph run launch requires meta_file and built_script");
   }
-  if (env.JAIPH_NODE_ORCHESTRATOR === "1") {
-    const sourceAbs = env.JAIPH_SOURCE_ABS;
-    if (!sourceAbs) {
-      throw new Error("JAIPH_SOURCE_ABS is required when JAIPH_NODE_ORCHESTRATOR=1");
-    }
-    const runnerPath = join(__dirname, "node-workflow-runner.js");
-    return {
-      command: process.execPath,
-      args: [runnerPath, metaFile, sourceAbs, builtScript, "default", ...runArgs],
-      env: { ...env, JAIPH_META_FILE: metaFile },
-    };
+  const sourceAbs = env.JAIPH_SOURCE_ABS;
+  if (!sourceAbs) {
+    throw new Error("JAIPH_SOURCE_ABS is required for workflow launch");
   }
+  const runnerPath = join(__dirname, "node-workflow-runner.js");
   return {
-    command: builtScript,
-    args: ["__jaiph_workflow", "default", ...runArgs],
+    command: process.execPath,
+    args: [runnerPath, metaFile, sourceAbs, builtScript, "default", ...runArgs],
     env: { ...env, JAIPH_META_FILE: metaFile },
   };
 }

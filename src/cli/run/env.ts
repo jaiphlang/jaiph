@@ -108,11 +108,6 @@ export function resolveRuntimeEnv(
   // Same for the workflow module path: a parent shell or nested tool may export this; the emitted
   // module only sets JAIPH_RUN_STEP_MODULE when unset, so a stale path would break run-step-exec.
   delete env.JAIPH_RUN_STEP_MODULE;
-  // Hard cutover: Node orchestration runtime is the default execution path.
-  // (Only explicit script execution and prompt backends should touch OS shell level.)
-  if (env.JAIPH_NODE_ORCHESTRATOR !== "0") {
-    env.JAIPH_NODE_ORCHESTRATOR = "1";
-  }
 
   return env;
 }
