@@ -81,6 +81,7 @@ export function collectWorkflowChildren(
   const stepToItems = (s: WorkflowStepDef): Array<{ label: string; nested?: string; stepFunc?: string }> => {
     if (s.type === "run") {
       const wf = s.workflow.value;
+      const asyncPrefix = s.async ? "async " : "";
       const stepFunc =
         symbols && wf.includes(".")
           ? (() => {
@@ -92,7 +93,7 @@ export function collectWorkflowChildren(
           : currentSymbol
             ? `${currentSymbol}::${wf}`
             : undefined;
-      return [{ label: `workflow ${wf}`, nested: wf, stepFunc }];
+      return [{ label: `${asyncPrefix}workflow ${wf}`, nested: wf, stepFunc }];
     }
     if (s.type === "ensure") {
       const ref = s.ref.value;
@@ -168,6 +169,7 @@ export function collectWorkflowChildren(
     }
     if (step.type === "run") {
       const wf = step.workflow.value;
+      const asyncPrefix = step.async ? "async " : "";
       const stepFunc =
         symbols && wf.includes(".")
           ? (() => {
@@ -179,7 +181,7 @@ export function collectWorkflowChildren(
           : currentSymbol
             ? `${currentSymbol}::${wf}`
             : undefined;
-      items.push({ label: `workflow ${wf}`, nested: wf, stepFunc });
+      items.push({ label: `${asyncPrefix}workflow ${wf}`, nested: wf, stepFunc });
       continue;
     }
     if (step.type === "if") {

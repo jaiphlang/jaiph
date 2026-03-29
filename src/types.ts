@@ -102,6 +102,8 @@ export type WorkflowStepDef =
       args?: string;
       /** When set, capture step stdout into this variable name. */
       captureName?: string;
+      /** When set, execute asynchronously with implicit join before workflow completes. */
+      async?: boolean;
     }
   | {
       type: "prompt";

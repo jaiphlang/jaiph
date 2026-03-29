@@ -365,7 +365,7 @@ Jaiph: Running agent_inbox.jh
                 <div class="code-tab-panel" data-panel="async-jh">
                     <p>This sample runs two prompt workflows in parallel: one with Cursor and one with Claude.</p>
                     <p>Each workflow sets its own <code>agent.backend</code>, captures the prompt response, and logs it.
-                        The default workflow starts both in background and waits for completion.</p>
+                        The default workflow uses <code>run async</code> to fan out both workflows concurrently, with an implicit join before completion.</p>
                     <pre><code class="language-jaiph">#!/usr/bin/env jaiph
 
 const prompt_text = 'Say: "Greetings! I am [model name]."'
@@ -387,9 +387,8 @@ workflow claude_say_hello {
 }
 
 workflow default {
-  run cursor_say_hello "$1" &
-  run claude_say_hello "$1" &
-  wait
+  run async cursor_say_hello "$1"
+  run async claude_say_hello "$1"
 }</code></pre>
                     <p>Running the workflow:</p>
                     <pre><code class="jaiph-run"><span class="run-command">➜  ./async.jh</span>
@@ -397,8 +396,8 @@ workflow default {
 Jaiph: Running async.jh
 
 <span class="run-keyword">workflow</span> default
-  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> claude_say_hello
-  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> cursor_say_hello
+  <span class="run-marker">▸</span> <span class="run-keyword">async workflow</span> claude_say_hello
+  <span class="run-marker">▸</span> <span class="run-keyword">async workflow</span> cursor_say_hello
   <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> "$prompt_text" <span class="run-params">(prompt_text="Say: \"Greetings! I am [model nam...")</span>
   <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> "$prompt_text" <span class="run-params">(prompt_text="Say: \"Greetings! I am [model nam...")</span>
   <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">prompt prompt (4s)</span>
@@ -448,7 +447,7 @@ Jaiph: Running async.jh
                     shebang
                     (e.g. <code>#!/usr/bin/env python3</code>) to write scripts in other languages. For async managed
                     work, use
-                    <code>run wf &amp;</code> and a <code>wait</code> step.
+                    <code>run async wf</code> (implicit join before workflow completes).
                 </p>
                 <p><strong>Agent inbox pattern (channels).</strong> Use inbox channels as a way to pass messages between
                     workflows. Declare channels once at top level with <code>channel &lt;name&gt;</code>, then use
@@ -563,10 +562,15 @@ Jaiph: Running async.jh
                         <a href="grammar#step-output-contract">Step output contract</a>.
                     </dd>
 
-                    <dt><code>fail "reason"</code> &middot; <code>wait</code></dt>
-                    <dd><code>fail</code> aborts with stderr + non-zero exit. <code>wait</code> joins async
-                        <code>run … &amp;</code> jobs.
+                    <dt><code>run async ref [args...]</code></dt>
+                    <dd>Run a workflow or script concurrently. All async steps are implicitly joined
+                        before the workflow completes; failures are aggregated. Workflows only &mdash;
+                        capture (<code>const x = run async ...</code>) is not supported.
+                        See <a href="grammar">Grammar</a>.
                     </dd>
+
+                    <dt><code>fail "reason"</code></dt>
+                    <dd><code>fail</code> aborts with stderr + non-zero exit.</dd>
 
                     <dt><code>if [not] ensure ref { }</code> &middot; <code>if [not] run ref { }</code></dt>
                     <dd>Brace conditionals only, with optional <code>else if</code> / <code>else</code> chains. Use

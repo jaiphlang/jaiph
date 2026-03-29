@@ -12,47 +12,34 @@ Process rules:
 
 ---
 
-## Add workflow-scoped `run async` primitive <!-- dev-ready -->
+## Fix progress tree depth for concurrent `run async` workflows <!-- dev-ready -->
 
 **Goal**  
-Introduce `run async <script_ref> [args...]` as the only supported async orchestration primitive.
+When multiple `run async` workflows run in parallel under the same parent, the CLI progress tree must show them as **siblings** at the same indentation (each prefixed with `async workflow …`), not nested as if one workflow were a child of the other. Inner steps (`prompt`, `log`, etc.) should align under their respective async branch, matching the documented `async.jh` sample transcript.
 
 **Context**
 
-- Shell-level `&`/`wait` is not the language direction. The runtime centers on Node orchestration; async should be explicit and managed.
-- No `run async` support exists anywhere in the codebase currently (confirmed by grep).
+- **`NodeWorkflowRuntime`** uses a single `this.stack` array when executing managed steps (`executeManagedStep` in `src/runtime/kernel/node-workflow-runtime.ts`, ~1076–1144). `depth` sent on `STEP_START` / `STEP_END` is derived from `this.stack.length` before/after push/pop.
+- For **`run async`**, `executeSteps` fires `executeRunRef(…)` without awaiting (`pendingAsync`, ~715–719) so two async workflows **interleave** on the same stack: the first child’s frame stays pushed while the second child’s `executeManagedStep` runs and pushes again. Events therefore report **inflated depth** for the second branch — the tree looks nested even though the branches are logically parallel.
+- **Expected shape** (from docs / product expectation): under `workflow default`, lines like `▸ async workflow claude_say_hello` and `▸ async workflow cursor_say_hello` at the **same** indent; prompts and completions for each branch sit one level deeper, interleaved by completion order, without implying a parent/child relationship between the two async workflows.
 
-**Key files to modify:**
-- Parser: `src/parse/steps.ts` — add `run async` step parsing
-- AST types: `src/types.ts` — add async flag to run step type
-- Validator: `src/transpile/validate.ts` — reject `run async` in rules/scripts/tests
-- Runtime: `src/runtime/kernel/node-workflow-runtime.ts` — implement async execution + implicit join
-- Progress: `src/cli/run/progress.ts` — render async steps in tree
-- Sample: `docs/index.html` and `e2e/async.jh` - rework legacy async samples to match new pattern
+**Key files**
 
-**Scope**
+- `src/runtime/kernel/node-workflow-runtime.ts` — `executeManagedStep`, `executeSteps` (`run async` + implicit join), `this.stack` / frame lifecycle.
+- `src/cli/run/stderr-handler.ts` — consumes `depth` from events for TTY and non-TTY trees (`"  · ".repeat(depth)`, etc.); likely no change if runtime emits correct depths.
+- `src/cli/run/progress.ts` — static planned tree uses `async ` label prefix; verify consistency with runtime fix.
 
-1. Grammar + parser:
-   - Add `run async ...` in workflow steps only.
-   - Reject in rules/scripts/tests with explicit compile-time errors.
-2. Runtime semantics:
-   - Start async managed step immediately (Promise-based).
-   - Implicit join before workflow completes (await all pending async steps).
-   - Aggregate failures across async branches.
-3. Validation:
-   - Reject capture forms like `const x = run async ...` in v1.
-4. Coverage:
-   - Parser/validator tests.
-   - Runtime and e2e fanout/join tests.
-   - Multi-failure aggregation test.
-5. Remove shell-parallel examples from docs/samples in same change.
+**Testing**
+
+- **`e2e/tests/104_run_async.sh`**: Reproducible without real prompts — extend **`fanout.jh`** (or add a new subsection) with two `run async` workflows whose bodies only use `script`/`log` so stdout/stderr is deterministic, then assert the **tree** contains both `async workflow` lines at the same leading pattern (e.g. same number of leading spaces/`·` segments before `▸`), and that neither async workflow’s header is over-indented under the other. Avoid full golden snapshots that include variable timings unless you strip durations or use fixed mocks.
+- Alternatively or additionally: unit/integration tests that feed synthetic `STEP_*` event sequences into the display layer are weak for this bug — the fix belongs in **runtime depth**; prefer a small e2e or runtime-level test that runs two async workflows and inspects stderr lines.
+- **`docs/index.html`** / samples showing `async.jh` expected tree should be refreshed after the fix if wording/whitespace changes.
 
 **Acceptance criteria**
 
-- `run async ...` works in workflows and joins before completion.
-- Invalid forms fail with deterministic, actionable diagnostics.
-- Async failures are aggregated and surfaced clearly.
-- Docs/examples use `run async` (not shell parallel syntax).
+- Two or more `run async` sibling workflows under one parent render as **parallel siblings** in the progress tree (correct `async workflow` labels and indent).
+- No regression for sequential `run` (non-async) nesting depth.
+- Covered by **`e2e/tests/104_run_async.sh`** (or adjacent deterministic case) asserting sibling indentation / structure, not only functional success (`a.txt` / `b.txt`).
 
 ---
 

@@ -194,6 +194,15 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         return;
       }
       if (s.type === "run") {
+        if (s.async) {
+          throw jaiphError(
+            ast.filePath,
+            s.workflow.loc.line,
+            s.workflow.loc.col,
+            "E_VALIDATE",
+            "run async is not allowed in rules; use it in workflows only",
+          );
+        }
         validateRef(s.workflow, ast, refCtx, expectRunInRuleRef);
         return;
       }
