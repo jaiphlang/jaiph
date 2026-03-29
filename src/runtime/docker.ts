@@ -376,7 +376,7 @@ export function buildDockerArgs(opts: DockerSpawnOptions, generatedDir: string):
 
   // Forward JAIPH_* env vars (except overridden keys)
   for (const [key, value] of Object.entries(containerEnv)) {
-    if (key.startsWith("JAIPH_") && key !== "JAIPH_STDLIB" && key !== "JAIPH_META_FILE" && key !== "JAIPH_SCRIPTS" && value !== undefined) {
+    if (key.startsWith("JAIPH_") && key !== "JAIPH_META_FILE" && key !== "JAIPH_SCRIPTS" && value !== undefined) {
       args.push("-e", `${key}=${value}`);
     }
   }

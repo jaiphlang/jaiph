@@ -13,23 +13,7 @@ exports[`fixture build snapshots build output matches snapshot 1`] = `
     "bootstrap_project.sh": "#!/usr/bin/env bash
 
 set -euo pipefail
-jaiph_stdlib_path="\${JAIPH_STDLIB:-$HOME/.local/bin/jaiph_stdlib.sh}"
-if [[ ! -f "$jaiph_stdlib_path" ]]; then
-  echo "jaiph: stdlib not found at $jaiph_stdlib_path (set JAIPH_STDLIB or reinstall jaiph)" >&2
-  exit 1
-fi
-source "$jaiph_stdlib_path"
-if [[ -z "\${JAIPH_RUN_STEP_MODULE:-}" ]]; then
-  export JAIPH_RUN_STEP_MODULE="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)/$(basename "\${BASH_SOURCE[0]}")"
-fi
-export JAIPH_LIB="\${JAIPH_LIB:-\${JAIPH_WORKSPACE:-.}/.jaiph/lib}"
 export JAIPH_SCRIPTS="\${JAIPH_SCRIPTS:-$(cd "$(dirname "\${BASH_SOURCE[0]}")/scripts" && pwd)}"
-if [[ "$(jaiph__runtime_api)" != "1" ]]; then
-  echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2
-  exit 1
-fi
-exec 7>&1
-export JAIPH_STDOUT_SAVED=1
 
 bootstrap_project::nodejs_impl() {
   jaiph::run_step bootstrap_project::nodejs_impl script "$JAIPH_SCRIPTS/nodejs_impl" "$@"
@@ -49,83 +33,11 @@ bootstrap_project::nodejs::impl() {
 
 bootstrap_project::nodejs() {
   jaiph::run_step bootstrap_project::nodejs workflow bootstrap_project::nodejs::impl "$@"
-}
-
-if [[ "\${BASH_SOURCE[0]}" == "$0" ]]; then
-  __jaiph_status=0
-  __jaiph_write_meta() {
-    local status_value="$1"
-    if [[ -n "\${JAIPH_META_FILE:-}" ]]; then
-      printf "status=%s\\n" "$status_value" > "$JAIPH_META_FILE"
-      printf "run_dir=%s\\n" "\${JAIPH_RUN_DIR:-}" >> "$JAIPH_META_FILE"
-      printf "summary_file=%s\\n" "\${JAIPH_RUN_SUMMARY_FILE:-}" >> "$JAIPH_META_FILE"
-    fi
-  }
-  trap '__jaiph_status=$?; __jaiph_write_meta "$__jaiph_status"' EXIT
-  if [[ "\${JAIPH_DEBUG:-}" == "true" ]]; then
-    set -x
-  fi
-  __jaiph_mode="\${1:-__jaiph_workflow}"
-  case "$__jaiph_mode" in
-    __jaiph_dispatch)
-      shift
-      __jaiph_target="\${1:-}"
-      shift
-      if [[ -z "$__jaiph_target" ]]; then
-        echo "jaiph inbox: missing dispatch target" >&2
-        exit 1
-      fi
-      if ! declare -F "$__jaiph_target" >/dev/null; then
-        echo "jaiph inbox: unknown dispatch target: $__jaiph_target" >&2
-        exit 1
-      fi
-      "$__jaiph_target" "$@"
-      ;;
-    __jaiph_workflow)
-      shift
-      __jaiph_workflow_name="\${1:-default}"
-      shift
-      __jaiph_entrypoint="bootstrap_project::$__jaiph_workflow_name"
-      if ! declare -F "$__jaiph_entrypoint" >/dev/null; then
-        if [[ "$__jaiph_workflow_name" == "default" ]]; then
-          echo "jaiph run requires workflow 'default' in the input file" >&2
-        else
-          echo "jaiph run requires workflow '$__jaiph_workflow_name' in the input file" >&2
-        fi
-        exit 1
-      fi
-      "$__jaiph_entrypoint" "$@"
-      ;;
-    *)
-      __jaiph_entrypoint="bootstrap_project::default"
-      if ! declare -F "$__jaiph_entrypoint" >/dev/null; then
-        echo "jaiph run requires workflow 'default' in the input file" >&2
-        exit 1
-      fi
-      "$__jaiph_entrypoint" "$@"
-      ;;
-  esac
-fi",
+}",
     "inbox.sh": "#!/usr/bin/env bash
 
 set -euo pipefail
-jaiph_stdlib_path="\${JAIPH_STDLIB:-$HOME/.local/bin/jaiph_stdlib.sh}"
-if [[ ! -f "$jaiph_stdlib_path" ]]; then
-  echo "jaiph: stdlib not found at $jaiph_stdlib_path (set JAIPH_STDLIB or reinstall jaiph)" >&2
-  exit 1
-fi
-source "$jaiph_stdlib_path"
-if [[ -z "\${JAIPH_RUN_STEP_MODULE:-}" ]]; then
-  export JAIPH_RUN_STEP_MODULE="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)/$(basename "\${BASH_SOURCE[0]}")"
-fi
-export JAIPH_LIB="\${JAIPH_LIB:-\${JAIPH_WORKSPACE:-.}/.jaiph/lib}"
 export JAIPH_SCRIPTS="\${JAIPH_SCRIPTS:-$(cd "$(dirname "\${BASH_SOURCE[0]}")/scripts" && pwd)}"
-if [[ "$(jaiph__runtime_api)" != "1" ]]; then
-  echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2
-  exit 1
-fi
-exec 7>&1
-export JAIPH_STDOUT_SAVED=1
 
 inbox::emit_findings() {
   jaiph::run_step inbox::emit_findings script "$JAIPH_SCRIPTS/emit_findings" "$@"
@@ -223,83 +135,11 @@ inbox::default::impl() {
 
 inbox::default() {
   jaiph::run_step inbox::default workflow inbox::default::impl "$@"
-}
-
-if [[ "\${BASH_SOURCE[0]}" == "$0" ]]; then
-  __jaiph_status=0
-  __jaiph_write_meta() {
-    local status_value="$1"
-    if [[ -n "\${JAIPH_META_FILE:-}" ]]; then
-      printf "status=%s\\n" "$status_value" > "$JAIPH_META_FILE"
-      printf "run_dir=%s\\n" "\${JAIPH_RUN_DIR:-}" >> "$JAIPH_META_FILE"
-      printf "summary_file=%s\\n" "\${JAIPH_RUN_SUMMARY_FILE:-}" >> "$JAIPH_META_FILE"
-    fi
-  }
-  trap '__jaiph_status=$?; __jaiph_write_meta "$__jaiph_status"' EXIT
-  if [[ "\${JAIPH_DEBUG:-}" == "true" ]]; then
-    set -x
-  fi
-  __jaiph_mode="\${1:-__jaiph_workflow}"
-  case "$__jaiph_mode" in
-    __jaiph_dispatch)
-      shift
-      __jaiph_target="\${1:-}"
-      shift
-      if [[ -z "$__jaiph_target" ]]; then
-        echo "jaiph inbox: missing dispatch target" >&2
-        exit 1
-      fi
-      if ! declare -F "$__jaiph_target" >/dev/null; then
-        echo "jaiph inbox: unknown dispatch target: $__jaiph_target" >&2
-        exit 1
-      fi
-      "$__jaiph_target" "$@"
-      ;;
-    __jaiph_workflow)
-      shift
-      __jaiph_workflow_name="\${1:-default}"
-      shift
-      __jaiph_entrypoint="inbox::$__jaiph_workflow_name"
-      if ! declare -F "$__jaiph_entrypoint" >/dev/null; then
-        if [[ "$__jaiph_workflow_name" == "default" ]]; then
-          echo "jaiph run requires workflow 'default' in the input file" >&2
-        else
-          echo "jaiph run requires workflow '$__jaiph_workflow_name' in the input file" >&2
-        fi
-        exit 1
-      fi
-      "$__jaiph_entrypoint" "$@"
-      ;;
-    *)
-      __jaiph_entrypoint="inbox::default"
-      if ! declare -F "$__jaiph_entrypoint" >/dev/null; then
-        echo "jaiph run requires workflow 'default' in the input file" >&2
-        exit 1
-      fi
-      "$__jaiph_entrypoint" "$@"
-      ;;
-  esac
-fi",
+}",
     "lang_redesign_smoke.sh": "#!/usr/bin/env bash
 
 set -euo pipefail
-jaiph_stdlib_path="\${JAIPH_STDLIB:-$HOME/.local/bin/jaiph_stdlib.sh}"
-if [[ ! -f "$jaiph_stdlib_path" ]]; then
-  echo "jaiph: stdlib not found at $jaiph_stdlib_path (set JAIPH_STDLIB or reinstall jaiph)" >&2
-  exit 1
-fi
-source "$jaiph_stdlib_path"
-if [[ -z "\${JAIPH_RUN_STEP_MODULE:-}" ]]; then
-  export JAIPH_RUN_STEP_MODULE="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)/$(basename "\${BASH_SOURCE[0]}")"
-fi
-export JAIPH_LIB="\${JAIPH_LIB:-\${JAIPH_WORKSPACE:-.}/.jaiph/lib}"
 export JAIPH_SCRIPTS="\${JAIPH_SCRIPTS:-$(cd "$(dirname "\${BASH_SOURCE[0]}")/scripts" && pwd)}"
-if [[ "$(jaiph__runtime_api)" != "1" ]]; then
-  echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2
-  exit 1
-fi
-exec 7>&1
-export JAIPH_STDOUT_SAVED=1
 
 lang_redesign_smoke::always_ok::impl() {
   set -eo pipefail
@@ -408,83 +248,11 @@ lang_redesign_smoke::default::impl() {
 
 lang_redesign_smoke::default() {
   jaiph::run_step lang_redesign_smoke::default workflow lang_redesign_smoke::default::impl "$@"
-}
-
-if [[ "\${BASH_SOURCE[0]}" == "$0" ]]; then
-  __jaiph_status=0
-  __jaiph_write_meta() {
-    local status_value="$1"
-    if [[ -n "\${JAIPH_META_FILE:-}" ]]; then
-      printf "status=%s\\n" "$status_value" > "$JAIPH_META_FILE"
-      printf "run_dir=%s\\n" "\${JAIPH_RUN_DIR:-}" >> "$JAIPH_META_FILE"
-      printf "summary_file=%s\\n" "\${JAIPH_RUN_SUMMARY_FILE:-}" >> "$JAIPH_META_FILE"
-    fi
-  }
-  trap '__jaiph_status=$?; __jaiph_write_meta "$__jaiph_status"' EXIT
-  if [[ "\${JAIPH_DEBUG:-}" == "true" ]]; then
-    set -x
-  fi
-  __jaiph_mode="\${1:-__jaiph_workflow}"
-  case "$__jaiph_mode" in
-    __jaiph_dispatch)
-      shift
-      __jaiph_target="\${1:-}"
-      shift
-      if [[ -z "$__jaiph_target" ]]; then
-        echo "jaiph inbox: missing dispatch target" >&2
-        exit 1
-      fi
-      if ! declare -F "$__jaiph_target" >/dev/null; then
-        echo "jaiph inbox: unknown dispatch target: $__jaiph_target" >&2
-        exit 1
-      fi
-      "$__jaiph_target" "$@"
-      ;;
-    __jaiph_workflow)
-      shift
-      __jaiph_workflow_name="\${1:-default}"
-      shift
-      __jaiph_entrypoint="lang_redesign_smoke::$__jaiph_workflow_name"
-      if ! declare -F "$__jaiph_entrypoint" >/dev/null; then
-        if [[ "$__jaiph_workflow_name" == "default" ]]; then
-          echo "jaiph run requires workflow 'default' in the input file" >&2
-        else
-          echo "jaiph run requires workflow '$__jaiph_workflow_name' in the input file" >&2
-        fi
-        exit 1
-      fi
-      "$__jaiph_entrypoint" "$@"
-      ;;
-    *)
-      __jaiph_entrypoint="lang_redesign_smoke::default"
-      if ! declare -F "$__jaiph_entrypoint" >/dev/null; then
-        echo "jaiph run requires workflow 'default' in the input file" >&2
-        exit 1
-      fi
-      "$__jaiph_entrypoint" "$@"
-      ;;
-  esac
-fi",
+}",
     "main.sh": "#!/usr/bin/env bash
 
 set -euo pipefail
-jaiph_stdlib_path="\${JAIPH_STDLIB:-$HOME/.local/bin/jaiph_stdlib.sh}"
-if [[ ! -f "$jaiph_stdlib_path" ]]; then
-  echo "jaiph: stdlib not found at $jaiph_stdlib_path (set JAIPH_STDLIB or reinstall jaiph)" >&2
-  exit 1
-fi
-source "$jaiph_stdlib_path"
-if [[ -z "\${JAIPH_RUN_STEP_MODULE:-}" ]]; then
-  export JAIPH_RUN_STEP_MODULE="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)/$(basename "\${BASH_SOURCE[0]}")"
-fi
-export JAIPH_LIB="\${JAIPH_LIB:-\${JAIPH_WORKSPACE:-.}/.jaiph/lib}"
 export JAIPH_SCRIPTS="\${JAIPH_SCRIPTS:-$(cd "$(dirname "\${BASH_SOURCE[0]}")/scripts" && pwd)}"
-if [[ "$(jaiph__runtime_api)" != "1" ]]; then
-  echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2
-  exit 1
-fi
-exec 7>&1
-export JAIPH_STDOUT_SAVED=1
 source "$(dirname "\${BASH_SOURCE[0]}")/bootstrap_project.sh"
 source "$(dirname "\${BASH_SOURCE[0]}")/tools/security.sh"
 
@@ -569,83 +337,11 @@ __JAIPH_PROMPT_46__
 
 main::update_docs() {
   jaiph::run_step main::update_docs workflow main::update_docs::impl "$@"
-}
-
-if [[ "\${BASH_SOURCE[0]}" == "$0" ]]; then
-  __jaiph_status=0
-  __jaiph_write_meta() {
-    local status_value="$1"
-    if [[ -n "\${JAIPH_META_FILE:-}" ]]; then
-      printf "status=%s\\n" "$status_value" > "$JAIPH_META_FILE"
-      printf "run_dir=%s\\n" "\${JAIPH_RUN_DIR:-}" >> "$JAIPH_META_FILE"
-      printf "summary_file=%s\\n" "\${JAIPH_RUN_SUMMARY_FILE:-}" >> "$JAIPH_META_FILE"
-    fi
-  }
-  trap '__jaiph_status=$?; __jaiph_write_meta "$__jaiph_status"' EXIT
-  if [[ "\${JAIPH_DEBUG:-}" == "true" ]]; then
-    set -x
-  fi
-  __jaiph_mode="\${1:-__jaiph_workflow}"
-  case "$__jaiph_mode" in
-    __jaiph_dispatch)
-      shift
-      __jaiph_target="\${1:-}"
-      shift
-      if [[ -z "$__jaiph_target" ]]; then
-        echo "jaiph inbox: missing dispatch target" >&2
-        exit 1
-      fi
-      if ! declare -F "$__jaiph_target" >/dev/null; then
-        echo "jaiph inbox: unknown dispatch target: $__jaiph_target" >&2
-        exit 1
-      fi
-      "$__jaiph_target" "$@"
-      ;;
-    __jaiph_workflow)
-      shift
-      __jaiph_workflow_name="\${1:-default}"
-      shift
-      __jaiph_entrypoint="main::$__jaiph_workflow_name"
-      if ! declare -F "$__jaiph_entrypoint" >/dev/null; then
-        if [[ "$__jaiph_workflow_name" == "default" ]]; then
-          echo "jaiph run requires workflow 'default' in the input file" >&2
-        else
-          echo "jaiph run requires workflow '$__jaiph_workflow_name' in the input file" >&2
-        fi
-        exit 1
-      fi
-      "$__jaiph_entrypoint" "$@"
-      ;;
-    *)
-      __jaiph_entrypoint="main::default"
-      if ! declare -F "$__jaiph_entrypoint" >/dev/null; then
-        echo "jaiph run requires workflow 'default' in the input file" >&2
-        exit 1
-      fi
-      "$__jaiph_entrypoint" "$@"
-      ;;
-  esac
-fi",
+}",
     "tools/security.sh": "#!/usr/bin/env bash
 
 set -euo pipefail
-jaiph_stdlib_path="\${JAIPH_STDLIB:-$HOME/.local/bin/jaiph_stdlib.sh}"
-if [[ ! -f "$jaiph_stdlib_path" ]]; then
-  echo "jaiph: stdlib not found at $jaiph_stdlib_path (set JAIPH_STDLIB or reinstall jaiph)" >&2
-  exit 1
-fi
-source "$jaiph_stdlib_path"
-if [[ -z "\${JAIPH_RUN_STEP_MODULE:-}" ]]; then
-  export JAIPH_RUN_STEP_MODULE="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)/$(basename "\${BASH_SOURCE[0]}")"
-fi
-export JAIPH_LIB="\${JAIPH_LIB:-\${JAIPH_WORKSPACE:-.}/.jaiph/lib}"
 export JAIPH_SCRIPTS="\${JAIPH_SCRIPTS:-$(cd "$(dirname "\${BASH_SOURCE[0]}")/../scripts" && pwd)}"
-if [[ "$(jaiph__runtime_api)" != "1" ]]; then
-  echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2
-  exit 1
-fi
-exec 7>&1
-export JAIPH_STDOUT_SAVED=1
 
 tools::security::scan_passes::impl() {
   set -eo pipefail
@@ -663,63 +359,7 @@ tools::security::scan_passes_impl() {
 
 scan_passes_impl() {
   tools::security::scan_passes_impl "$@"
-}
-
-if [[ "\${BASH_SOURCE[0]}" == "$0" ]]; then
-  __jaiph_status=0
-  __jaiph_write_meta() {
-    local status_value="$1"
-    if [[ -n "\${JAIPH_META_FILE:-}" ]]; then
-      printf "status=%s\\n" "$status_value" > "$JAIPH_META_FILE"
-      printf "run_dir=%s\\n" "\${JAIPH_RUN_DIR:-}" >> "$JAIPH_META_FILE"
-      printf "summary_file=%s\\n" "\${JAIPH_RUN_SUMMARY_FILE:-}" >> "$JAIPH_META_FILE"
-    fi
-  }
-  trap '__jaiph_status=$?; __jaiph_write_meta "$__jaiph_status"' EXIT
-  if [[ "\${JAIPH_DEBUG:-}" == "true" ]]; then
-    set -x
-  fi
-  __jaiph_mode="\${1:-__jaiph_workflow}"
-  case "$__jaiph_mode" in
-    __jaiph_dispatch)
-      shift
-      __jaiph_target="\${1:-}"
-      shift
-      if [[ -z "$__jaiph_target" ]]; then
-        echo "jaiph inbox: missing dispatch target" >&2
-        exit 1
-      fi
-      if ! declare -F "$__jaiph_target" >/dev/null; then
-        echo "jaiph inbox: unknown dispatch target: $__jaiph_target" >&2
-        exit 1
-      fi
-      "$__jaiph_target" "$@"
-      ;;
-    __jaiph_workflow)
-      shift
-      __jaiph_workflow_name="\${1:-default}"
-      shift
-      __jaiph_entrypoint="tools::security::$__jaiph_workflow_name"
-      if ! declare -F "$__jaiph_entrypoint" >/dev/null; then
-        if [[ "$__jaiph_workflow_name" == "default" ]]; then
-          echo "jaiph run requires workflow 'default' in the input file" >&2
-        else
-          echo "jaiph run requires workflow '$__jaiph_workflow_name' in the input file" >&2
-        fi
-        exit 1
-      fi
-      "$__jaiph_entrypoint" "$@"
-      ;;
-    *)
-      __jaiph_entrypoint="tools::security::default"
-      if ! declare -F "$__jaiph_entrypoint" >/dev/null; then
-        echo "jaiph run requires workflow 'default' in the input file" >&2
-        exit 1
-      fi
-      "$__jaiph_entrypoint" "$@"
-      ;;
-  esac
-fi",
+}",
   },
 }
 `;

@@ -309,7 +309,6 @@ test("buildDockerArgs: forwards JAIPH_ env vars except overridden keys", () => {
     runArgs: [],
     env: {
       JAIPH_DEBUG: "true",
-      JAIPH_STDLIB: "/host/path/stdlib.sh",
       OTHER_VAR: "ignored",
     },
     isTTY: false,
@@ -317,8 +316,6 @@ test("buildDockerArgs: forwards JAIPH_ env vars except overridden keys", () => {
   const args = buildDockerArgs(opts, "/tmp/gen");
   // JAIPH_DEBUG should be forwarded
   assert.ok(args.includes("JAIPH_DEBUG=true"));
-  // JAIPH_STDLIB should NOT be forwarded (overridden to container path)
-  assert.ok(!args.includes("JAIPH_STDLIB=/host/path/stdlib.sh"));
   // Non-JAIPH vars should not be forwarded
   assert.ok(!args.some((a) => a.includes("OTHER_VAR")));
 });

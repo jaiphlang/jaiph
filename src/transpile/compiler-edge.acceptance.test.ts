@@ -495,13 +495,11 @@ test("ACCEPTANCE: jaiph test typed prompt — valid JSON passes and raw result i
       ].join("\n"),
     );
     const cliPath = join(process.cwd(), "dist/src/cli.js");
-    const stdlibPath = join(process.cwd(), "dist/src/jaiph_stdlib.sh");
     const nodeDir = dirname(process.execPath);
     const r = spawnSync("node", [cliPath, "test", join(root, "flow.test.jh")], {
       encoding: "utf8",
       env: {
         ...process.env,
-        JAIPH_STDLIB: stdlibPath,
         PATH: `${nodeDir}:${process.env.PATH ?? ""}`,
       },
     });
@@ -536,13 +534,11 @@ test("ACCEPTANCE: jaiph test typed prompt — invalid JSON fails with parse erro
       ].join("\n"),
     );
     const cliPath = join(process.cwd(), "dist/src/cli.js");
-    const stdlibPath = join(process.cwd(), "dist/src/jaiph_stdlib.sh");
     const nodeDir = dirname(process.execPath);
     const r = spawnSync("node", [cliPath, "test", join(root, "flow.test.jh")], {
       encoding: "utf8",
       env: {
         ...process.env,
-        JAIPH_STDLIB: stdlibPath,
         PATH: `${nodeDir}:${process.env.PATH ?? ""}`,
       },
     });
@@ -578,13 +574,11 @@ test("ACCEPTANCE: jaiph test typed prompt — missing field fails with schema er
       ].join("\n"),
     );
     const cliPath = join(process.cwd(), "dist/src/cli.js");
-    const stdlibPath = join(process.cwd(), "dist/src/jaiph_stdlib.sh");
     const nodeDir = dirname(process.execPath);
     const r = spawnSync("node", [cliPath, "test", join(root, "flow.test.jh")], {
       encoding: "utf8",
       env: {
         ...process.env,
-        JAIPH_STDLIB: stdlibPath,
         PATH: `${nodeDir}:${process.env.PATH ?? ""}`,
       },
     });
@@ -621,13 +615,11 @@ test("ACCEPTANCE: jaiph test typed prompt — wrong type fails", () => {
       ].join("\n"),
     );
     const cliPath = join(process.cwd(), "dist/src/cli.js");
-    const stdlibPath = join(process.cwd(), "dist/src/jaiph_stdlib.sh");
     const nodeDir = dirname(process.execPath);
     const r = spawnSync("node", [cliPath, "test", join(root, "flow.test.jh")], {
       encoding: "utf8",
       env: {
         ...process.env,
-        JAIPH_STDLIB: stdlibPath,
         PATH: `${nodeDir}:${process.env.PATH ?? ""}`,
       },
     });

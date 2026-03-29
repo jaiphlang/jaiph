@@ -1,6 +1,6 @@
 /**
  * Subprocess execution for managed Jaiph steps (script / workflow / rule).
- * Invoked from jaiph::run_step (jaiph_stdlib.sh); tracking, stack, and STEP_* events stay in Bash.
+ * Managed subprocess execution for script steps.
  */
 import { spawnSync } from "node:child_process";
 import { closeSync, existsSync, fstatSync, openSync, writeFileSync } from "node:fs";

@@ -1,4 +1,4 @@
-// JS kernel: prompt execution (replaces jaiph::prompt_impl in jaiph_stdlib.sh).
+// JS kernel: prompt execution.
 // Called from bash: echo "$prompt_text" | node kernel/prompt.js [preview] [named_args...]
 // Env vars: JAIPH_AGENT_BACKEND, JAIPH_AGENT_COMMAND, JAIPH_AGENT_MODEL,
 //   JAIPH_AGENT_TRUSTED_WORKSPACE, JAIPH_AGENT_CURSOR_FLAGS, JAIPH_AGENT_CLAUDE_FLAGS,

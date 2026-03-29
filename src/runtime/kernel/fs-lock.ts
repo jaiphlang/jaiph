@@ -1,5 +1,5 @@
 /**
- * Portable mkdir-based locks (matches jaiph::_lock / jaiph::_unlock in jaiph_stdlib.sh).
+ * Portable mkdir-based locks.
  */
 import { existsSync, mkdirSync, readFileSync, rmdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

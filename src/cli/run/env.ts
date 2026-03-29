@@ -1,25 +1,4 @@
-import { existsSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
-
-/**
- * Resolve `jaiph_stdlib.sh` for `node dist/src/cli.js` (tsc layout) and for Bun `--compile`
- * binaries shipped beside `jaiph_stdlib.sh` + `runtime/` (see `npm run build:standalone`).
- */
-export function resolveBundledStdlibPath(): string {
-  const fromModule = resolve(join(__dirname, "..", "..", "jaiph_stdlib.sh"));
-  if (existsSync(fromModule)) {
-    return fromModule;
-  }
-  const nextToExec = resolve(join(dirname(process.execPath), "jaiph_stdlib.sh"));
-  if (existsSync(nextToExec)) {
-    return nextToExec;
-  }
-  const execDistSrc = resolve(join(dirname(process.execPath), "src", "jaiph_stdlib.sh"));
-  if (existsSync(execDistSrc)) {
-    return execDistSrc;
-  }
-  return fromModule;
-}
+import { basename, resolve } from "node:path";
 import type { JaiphConfig } from "../../config";
 
 const LOCKED_ENV_KEYS = [
@@ -85,15 +64,9 @@ export function resolveRuntimeEnv(
   if (env.JAIPH_INBOX_PARALLEL === undefined && effectiveConfig.run?.inboxParallel === true) {
     env.JAIPH_INBOX_PARALLEL = "true";
   }
-  // Always use the stdlib shipped next to this CLI unless explicitly opting into a custom path
-  // (tests, advanced installs). A shell-level JAIPH_STDLIB pointing at an older global install
-  // would otherwise break newly transpiled workflows that call new runtime entry points.
-  if (process.env.JAIPH_USE_CUSTOM_STDLIB === "1" && process.env.JAIPH_STDLIB) {
-    env.JAIPH_STDLIB = process.env.JAIPH_STDLIB;
-  } else {
-    env.JAIPH_STDLIB = resolveBundledStdlibPath();
-  }
   env.JAIPH_SOURCE_FILE = basename(inputAbs);
+  // JAIPH_STDLIB is no longer used; clean it from inherited env.
+  delete env.JAIPH_STDLIB;
 
   // Clean transient keys that must not leak across runs.
   delete env.BASH_ENV;

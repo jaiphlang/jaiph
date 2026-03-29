@@ -65,28 +65,8 @@ export function emitWorkflow(
   out.push("#!/usr/bin/env bash");
   out.push("");
   out.push("set -euo pipefail");
-  out.push('jaiph_stdlib_path="${JAIPH_STDLIB:-$HOME/.local/bin/jaiph_stdlib.sh}"');
-  out.push('if [[ ! -f "$jaiph_stdlib_path" ]]; then');
-  out.push('  echo "jaiph: stdlib not found at $jaiph_stdlib_path (set JAIPH_STDLIB or reinstall jaiph)" >&2');
-  out.push("  exit 1");
-  out.push("fi");
-  out.push('source "$jaiph_stdlib_path"');
-  out.push('if [[ -z "${JAIPH_RUN_STEP_MODULE:-}" ]]; then');
-  out.push(
-    '  export JAIPH_RUN_STEP_MODULE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"',
-  );
-  out.push("fi");
-  out.push(
-    'export JAIPH_LIB="${JAIPH_LIB:-${JAIPH_WORKSPACE:-.}/.jaiph/lib}"',
-  );
   const scriptsPathExpr = `$(cd "$(dirname "\${BASH_SOURCE[0]}")/${jaiphScriptsRelFromModuleDir}" && pwd)`;
   out.push(`export JAIPH_SCRIPTS="\${JAIPH_SCRIPTS:-${scriptsPathExpr}}"`);
-  out.push('if [[ "$(jaiph__runtime_api)" != "1" ]]; then');
-  out.push('  echo "jaiph: incompatible jaiph stdlib runtime (required api=1)" >&2');
-  out.push("  exit 1");
-  out.push("fi");
-  out.push("exec 7>&1");
-  out.push("export JAIPH_STDOUT_SAVED=1");
   if (ast.metadata) {
     if (ast.metadata.agent?.defaultModel !== undefined) {
       const v = ast.metadata.agent.defaultModel.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
@@ -242,62 +222,6 @@ export function emitWorkflow(
     out.push("}");
     out.push("");
   }
-
-  out.push('if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then');
-  out.push("  __jaiph_status=0");
-  out.push("  __jaiph_write_meta() {");
-  out.push('    local status_value="$1"');
-  out.push('    if [[ -n "${JAIPH_META_FILE:-}" ]]; then');
-  out.push('      printf "status=%s\\n" "$status_value" > "$JAIPH_META_FILE"');
-  out.push('      printf "run_dir=%s\\n" "${JAIPH_RUN_DIR:-}" >> "$JAIPH_META_FILE"');
-  out.push('      printf "summary_file=%s\\n" "${JAIPH_RUN_SUMMARY_FILE:-}" >> "$JAIPH_META_FILE"');
-  out.push("    fi");
-  out.push("  }");
-  out.push('  trap \'__jaiph_status=$?; __jaiph_write_meta "$__jaiph_status"\' EXIT');
-  out.push('  if [[ "${JAIPH_DEBUG:-}" == "true" ]]; then');
-  out.push("    set -x");
-  out.push("  fi");
-  out.push('  __jaiph_mode="${1:-__jaiph_workflow}"');
-  out.push("  case \"$__jaiph_mode\" in");
-  out.push("    __jaiph_dispatch)");
-  out.push("      shift");
-  out.push('      __jaiph_target="${1:-}"');
-  out.push("      shift");
-  out.push('      if [[ -z "$__jaiph_target" ]]; then');
-  out.push('        echo "jaiph inbox: missing dispatch target" >&2');
-  out.push("        exit 1");
-  out.push("      fi");
-  out.push('      if ! declare -F "$__jaiph_target" >/dev/null; then');
-  out.push('        echo "jaiph inbox: unknown dispatch target: $__jaiph_target" >&2');
-  out.push("        exit 1");
-  out.push("      fi");
-  out.push('      "$__jaiph_target" "$@"');
-  out.push("      ;;");
-  out.push("    __jaiph_workflow)");
-  out.push("      shift");
-  out.push('      __jaiph_workflow_name="${1:-default}"');
-  out.push("      shift");
-  out.push(`      __jaiph_entrypoint="${workflowSymbol}::\$__jaiph_workflow_name"`);
-  out.push('      if ! declare -F "$__jaiph_entrypoint" >/dev/null; then');
-  out.push('        if [[ "$__jaiph_workflow_name" == "default" ]]; then');
-  out.push('          echo "jaiph run requires workflow \'default\' in the input file" >&2');
-  out.push("        else");
-  out.push('          echo "jaiph run requires workflow \'$__jaiph_workflow_name\' in the input file" >&2');
-  out.push("        fi");
-  out.push("        exit 1");
-  out.push("      fi");
-  out.push('      "$__jaiph_entrypoint" "$@"');
-  out.push("      ;;");
-  out.push("    *)");
-  out.push(`      __jaiph_entrypoint="${workflowSymbol}::default"`);
-  out.push('      if ! declare -F "$__jaiph_entrypoint" >/dev/null; then');
-  out.push('        echo "jaiph run requires workflow \'default\' in the input file" >&2');
-  out.push("        exit 1");
-  out.push("      fi");
-  out.push('      "$__jaiph_entrypoint" "$@"');
-  out.push("      ;;");
-  out.push("  esac");
-  out.push("fi");
 
   const scripts = buildScriptFiles(ast, importedWorkflowSymbols, workflowSymbol);
   return {
