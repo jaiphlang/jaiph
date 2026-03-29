@@ -6,30 +6,30 @@ The first `##` task in the file is always the current task.
 
 ---
 
-## Post-migration hardening: move sequence allocation into JS runtime for atomicity <!-- dev-ready -->
+## Decommission Bash transpilation/runtime path after Node parity <!-- dev-ready -->
 
 **Goal**  
-Eliminate async artifact/step-id collisions by making JS runtime the single owner of step sequence allocation.
+Remove the Bash orchestration/transpilation execution path, so Jaiph has one runtime source of truth.
 
 **Problem statement**
 
-- Current Bash-side sequencing can race under managed async (`run ... &`), producing duplicate `seq` values and colliding artifact paths (for example prompt `.out` files).
-- A known repro exists in `e2e/tests/20_rule_and_prompt.sh` (`async_prompt_artifacts.jh` block): concurrent branches currently collapse into one prompt artifact and duplicate workflow `seq`.
+- The codebase currently carries dual execution surfaces (Bash + Node orchestration), which increases maintenance cost and causes parity drift regressions.
+- Recent failures showed features can be correct in transpiled Bash while broken in Node runtime behavior.
+- Without a planned decommission sequence, dual-path complexity will continue to absorb engineering time and raise regression risk.
 
 **Scope**
 
-1. Introduce a JS runtime sequence allocator that is shared by all concurrent step executions in a run.
-2. Ensure allocation is atomic across async branches/process boundaries.
-3. Make Bash runtime consume JS-assigned seq values (or remove Bash-side seq mutation entirely once migration phase allows).
-4. Preserve existing artifact naming contract (`%06d-<safe_name>.out|.err`) and run summary `seq` semantics.
-5. Replace/remove the known-bug repro assertions once fixed and add positive parity assertions (`2 prompt artifacts`, unique seqs).
+1. Migrate remaining Bash-owned runtime responsibilities to Node (or mark as removed non-goals with docs updates).
+2. Remove Bash orchestration/transpilation code paths.
+3. Keep script-step execution support (`script { ... }`) with clear boundaries if shell subprocess execution remains part of product behavior.
+4. Update docs to make Node runtime the only supported orchestration engine.
 
 **Acceptance criteria**
 
-- Under concurrent async workflows, each step gets a unique monotonic `seq`.
-- Prompt artifacts from parallel branches are emitted as distinct files (no overwrite/interleaving).
-- `run_summary.jsonl` contains no duplicate `seq` per run for `STEP_START`/`STEP_END`.
-- Existing e2e suite remains green, and the async prompt repro is converted to a correctness assertion.
+- Jaiph orchestration (`run`, `ensure`, `prompt`, channels/inbox, events/artifacts) is implemented and validated solely via Node runtime.
+- No user-facing command path relies on Bash orchestration/transpiled workflow execution.
+- CI/e2e suites pass with Bash orchestration path removed/disabled.
+- Architecture docs clearly describe single-runtime design and and don't mention bash runtime.
 
 ---
 
@@ -345,38 +345,6 @@ Include model/backend context directly in prompt step lines in live run output, 
 - Label is rendered gray/dim in TTY mode and plain text in non-TTY mode.
 - Async mixed-backend workflows show different prompt labels per branch.
 - Docs samples are updated to reflect final prompt line format.
-
----
-
-## Decommission Bash transpilation/runtime path after Node parity <!-- dev-ready -->
-
-**Goal**  
-Remove the Bash orchestration/transpilation execution path once Node runtime reaches full behavior parity, so Jaiph has one runtime source of truth.
-
-**Problem statement**
-
-- The codebase currently carries dual execution surfaces (Bash + Node orchestration), which increases maintenance cost and causes parity drift regressions.
-- Recent failures showed features can be correct in transpiled Bash while broken in Node runtime behavior.
-- Without a planned decommission sequence, dual-path complexity will continue to absorb engineering time and raise regression risk.
-
-**Scope**
-
-1. Define and document "parity complete" gates required before decommission:
-   - all runtime/e2e behavior contracts green under Node path,
-   - no remaining production-critical workflows depending on Bash-only semantics.
-2. Add an explicit compatibility matrix (`feature -> Node status -> Bash dependency`) and resolve open gaps.
-3. Migrate remaining Bash-owned runtime responsibilities to Node (or mark as removed non-goals with docs updates).
-4. Remove or freeze Bash orchestration/transpilation code paths that are no longer needed for execution.
-5. Keep script-step execution support (`script { ... }`) with clear boundaries if shell subprocess execution remains part of product behavior.
-6. Update docs to make Node runtime the only supported orchestration engine.
-7. Add regression coverage that fails if removed Bash execution entrypoints are accidentally reintroduced.
-
-**Acceptance criteria**
-
-- Jaiph orchestration (`run`, `ensure`, `prompt`, channels/inbox, events/artifacts) is implemented and validated solely via Node runtime.
-- No user-facing command path relies on Bash orchestration/transpiled workflow execution.
-- CI/e2e suites pass with Bash orchestration path removed/disabled.
-- Architecture docs clearly describe single-runtime design and migration rationale.
 
 ---
 

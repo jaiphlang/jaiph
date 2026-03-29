@@ -88,7 +88,7 @@ workflow update_docs {
 }
 ```
 
-Transpiled output is standard bash and sources the installed global Jaiph runtime stdlib (`$JAIPH_STDLIB`, default `~/.local/bin/jaiph_stdlib.sh`). The same install bundles the kernel scripts (`kernel/prompt.js`, `kernel/run-step-exec.js`, `kernel/inbox.js`, `kernel/emit.js`, …) next to the stdlib so managed prompts, step subprocesses, inbox transport, and progress/summary event emission stay version-locked with the CLI.
+Transpiled output is standard bash and sources the installed global Jaiph runtime stdlib (`$JAIPH_STDLIB`, default `~/.local/bin/jaiph_stdlib.sh`). The same install bundles the kernel scripts (`kernel/prompt.js`, `kernel/run-step-exec.js`, `kernel/inbox.js`, `kernel/emit.js`, `kernel/seq-alloc.js`, …) next to the stdlib so managed prompts, step subprocesses, inbox transport, progress/summary event emission, and atomic step-sequence allocation stay version-locked with the CLI.
 
 ## Getting Started
 

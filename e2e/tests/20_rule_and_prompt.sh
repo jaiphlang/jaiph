@@ -192,9 +192,8 @@ prompt_vars_run_dir="$(e2e::run_dir "prompt_with_vars.jh")"
 prompt_vars_out_file="$(<"${prompt_vars_run_dir}000001-workflow__default.out")"
 e2e::assert_contains "${prompt_vars_out_file}" "engineer does Fix bugs" "prompt_with_vars transcript includes rendered prompt text"
 
-# Known issue repro: async prompt branches currently collide on sequence/artifact ids.
-# This test intentionally documents existing broken behavior so we can remove it
-# after sequence allocation is moved into the JS runtime.
+# Async prompt branches produce distinct artifacts and unique seq values
+# (fixed: JS kernel seq-alloc.ts provides atomic allocation across branches).
 e2e::file "async_prompt_artifacts.jh" <<'EOF'
 #!/usr/bin/env jaiph
 workflow left {
@@ -210,24 +209,30 @@ workflow default {
 }
 EOF
 
-repro_found=0
-for _attempt in $(seq 1 12); do
+async_ok=1
+for _attempt in $(seq 1 5); do
   e2e::run "async_prompt_artifacts.jh" >/dev/null || true
   async_run_dir="$(e2e::latest_run_dir_at "${TEST_DIR}/.jaiph/runs" "async_prompt_artifacts.jh")"
   shopt -s nullglob
-  prompt_outs=( "${async_run_dir}"*jaiph__prompt.out )
+  prompt_outs=( "${async_run_dir}"*prompt__prompt.out )
   shopt -u nullglob
+  if [[ ${#prompt_outs[@]} -ne 2 ]]; then
+    async_ok=0
+    break
+  fi
+  # Assert no duplicate seq in STEP_START events
   summary_content="$(<"${async_run_dir}run_summary.jsonl")"
-  seq2_count="$(printf '%s' "${summary_content}" | grep -c '"func":"async_prompt_artifacts::.*","kind":"workflow".*"seq":2' || true)"
-  if [[ ${#prompt_outs[@]} -eq 1 || "${seq2_count}" -ge 2 ]]; then
-    repro_found=1
+  step_start_seqs="$(printf '%s' "${summary_content}" | grep '"type":"STEP_START"' | sed -E 's/.*"seq":([0-9]+).*/\1/' | sort)"
+  step_start_unique="$(printf '%s' "${step_start_seqs}" | sort -u)"
+  if [[ "${step_start_seqs}" != "${step_start_unique}" ]]; then
+    async_ok=0
     break
   fi
 done
-if [[ "${repro_found}" -eq 1 ]]; then
-  e2e::pass "known async seq/artifact collision was reproduced"
+if [[ "${async_ok}" -eq 1 ]]; then
+  e2e::pass "async prompt branches produce 2 distinct artifacts with unique seqs"
 else
-  e2e::skip "could not reproduce async seq/artifact collision in 12 attempts"
+  e2e::fail "async prompt branches still collide on seq/artifacts"
 fi
 
 # Multi-line prompt is displayed as single line (newlines stripped from preview)
