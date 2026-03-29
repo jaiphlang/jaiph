@@ -1,7 +1,6 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { printUsage } from "./shared/usage";
-import { runBuild } from "./commands/build";
 import { runWorkflow } from "./commands/run";
 import { runTest } from "./commands/test";
 import { runInit } from "./commands/init";
@@ -24,9 +23,6 @@ export async function main(argv: string[]): Promise<number> {
     }
     if (cmd.endsWith(".jh") && existsSync(resolve(cmd))) {
       return runWorkflow([cmd, ...rest]);
-    }
-    if (cmd === "build") {
-      return runBuild(rest);
     }
     if (cmd === "run") {
       return runWorkflow(rest);

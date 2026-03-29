@@ -7,7 +7,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, extname } from "node:path";
 import { basename } from "node:path";
-import { build, walkTestFiles } from "../../transpiler";
+import { buildScripts, walkTestFiles } from "../../transpiler";
 import { parsejaiph } from "../../parser";
 import { jaiphError } from "../../errors";
 import { detectWorkspaceRoot } from "../shared/paths";
@@ -84,8 +84,7 @@ export async function runSingleTestFile(
   // Build imported modules to extract scripts (needed for script steps)
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-test-"));
   try {
-    build(workspaceRoot, outDir);
-    const scriptsDir = join(outDir, "scripts");
+    const { scriptsDir } = buildScripts(workspaceRoot, outDir);
     return await runTestFile(testFileAbs, workspaceRoot, scriptsDir, ast.tests);
   } finally {
     rmSync(outDir, { recursive: true, force: true });

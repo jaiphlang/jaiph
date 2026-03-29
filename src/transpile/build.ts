@@ -140,3 +140,35 @@ export function build(
 
   return results;
 }
+
+/**
+ * Scripts-only build used by Node runtime paths.
+ * Writes emitted top-level scripts to <targetDir>/scripts without emitting workflow .sh modules.
+ */
+export function buildScripts(
+  inputPath: string,
+  targetDir: string | undefined,
+  transpileFileFn: (file: string, root: string) => EmittedModule,
+): { scriptsDir: string } {
+  const absInput = resolve(inputPath);
+  const inputStat = statSync(absInput);
+  const rootDir = inputStat.isDirectory() ? absInput : dirname(absInput);
+  const outRoot = resolve(targetDir ?? rootDir);
+  ensureDir(outRoot);
+
+  const entrypointFile = inputStat.isFile() ? absInput : null;
+  const files = entrypointFile ? collectFileWithImports(entrypointFile) : walkjhFiles(rootDir);
+  const scriptsRoot = join(outRoot, "scripts");
+  ensureDir(scriptsRoot);
+
+  for (const file of files) {
+    const { scripts } = transpileFileFn(file, rootDir);
+    for (const s of scripts) {
+      const scriptPath = join(scriptsRoot, s.name);
+      writeFileSync(scriptPath, s.content, "utf8");
+      chmodSync(scriptPath, 0o755);
+    }
+  }
+
+  return { scriptsDir: scriptsRoot };
+}
