@@ -123,7 +123,9 @@ workflow default {
 }
 ```
 
-Workflow-level values apply to all steps in that workflow, including `ensure`d rules and scripts called from it. When the workflow finishes, the previous environment is restored. Other workflows in the same file are unaffected.
+Workflow-level values apply to all steps in that workflow, including `ensure`d rules and scripts called from it. When the workflow finishes, the previous environment is restored.
+
+**Sibling isolation:** Each workflow receives its own clone of the parent environment before its `config` is applied. Sibling workflows in the same `run` never see each other's metadata — even when they execute sequentially under a shared parent. For example, if workflow `alpha` sets `agent.backend = "claude"` and workflow `beta` sets `agent.default_model = "beta-model"` without overriding `backend`, `beta` still sees the module-level backend (e.g. `"cursor"`), not `alpha`'s `"claude"`.
 
 **Precedence inside a workflow (highest wins):**
 
@@ -138,7 +140,7 @@ When a workflow calls `run` into another workflow, the metadata scope that appli
 
 | Call type | What happens |
 |-----------|-------------|
-| **Same-module** `run` (workflow in the same `.jh` file) | Callee’s **workflow-level** `config` is layered on top of the caller’s effective env. Module-level config is **not** re-applied. |
+| **Same-module** `run` (workflow in the same `.jh` file) | Callee’s **workflow-level** `config` is layered on top of the caller’s effective env. Module-level config is **not** re-applied. Same-module rules also inherit the caller’s effective env directly, so workflow-level overrides are not lost. |
 | **Cross-module** `run` (e.g. `run alias.default`) | The caller’s effective env is carried as-is — **neither** the callee’s module-level nor workflow-level config is applied. The callee inherits the caller’s scope wholesale. |
 | **Root entry** (`jaiph run file.jh`) | Full module + workflow metadata from the entry file is applied (normal precedence). |
 
