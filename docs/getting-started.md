@@ -9,7 +9,7 @@ redirect_from:
 
 This page walks you through installing Jaiph, running your first workflow, and mapping the core language to deeper reference pages.
 
-You will: install the CLI and stdlib, run a workflow (from the shell or as an executable `.jh` file), optionally scaffold `.jaiph/` in a repository, then use the language overview below as an index into [Grammar](grammar.md), [CLI Reference](cli.md), and the other guides.
+You will: install the CLI, run a workflow (from the shell or as an executable `.jh` file), optionally scaffold `.jaiph/` in a repository, then use the language overview below as an index into [Grammar](grammar.md), [CLI Reference](cli.md), and the other guides.
 
 If you are hacking on the **compiler or CLI** in this repository, read [Contributing](contributing.md) for build commands, tests, and review expectations.
 

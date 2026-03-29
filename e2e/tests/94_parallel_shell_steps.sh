@@ -8,7 +8,6 @@ trap e2e::cleanup EXIT
 
 e2e::prepare_test_env "parallel_shell_steps"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
-unset JAIPH_STDLIB
 
 e2e::section "Parallel shell-step semantics"
 e2e::skip "Inline background shell-step semantics are not supported under strict script-only Node runtime"

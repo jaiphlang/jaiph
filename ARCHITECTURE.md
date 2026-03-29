@@ -34,7 +34,7 @@ All orchestration — local `jaiph run`, `jaiph test`, and **Docker `jaiph run`*
 
 - **Transpiler (`src/transpiler.ts`, `src/transpile/*`)**
   - `transpileFile()` drives validation; **`buildScripts()`** — the path for all `jaiph run` / `jaiph test` execution — **persists only atomic `script` files** under `scripts/`.
-  - `emitWorkflow` still computes a module bash string internally (used by `build()` for golden/snapshot tests only). No workflow `.sh` is written for production execution.
+  - `emitWorkflow` computes a module bash string containing function definitions (used by `build()` for golden/snapshot tests only). The emitted module has no stdlib preamble or entrypoint — it is not a runnable standalone bash program. No workflow `.sh` is written for production execution.
 
 - **Node Workflow Runtime (`src/runtime/kernel/node-workflow-runtime.ts`)**
   - `NodeWorkflowRuntime` interprets the AST directly: walks workflow steps, manages scope/variables, delegates prompt and script execution to kernel helpers, handles channels/inbox/dispatch, emits events, and writes run artifacts.
@@ -45,9 +45,6 @@ All orchestration — local `jaiph run`, `jaiph test`, and **Docker `jaiph run`*
 
 - **JS kernel (`src/runtime/kernel/`)**
   - Prompt execution (`prompt.ts`), managed subprocess execution, streaming parse, schema, mocks, **`emit.ts`** (live `__JAIPH_EVENT__` + `run_summary.jsonl`), **`inbox.ts`** (file-backed inbox), **`workflow-launch.ts`** (spawn contract).
-
-- **Runtime shell stdlib (`src/jaiph_stdlib.sh`)**
-  - Legacy shell runtime library. No longer required for any production orchestration path (`jaiph run`, `jaiph test`, Docker). Retained for compiler golden tests and potential future script-level helpers.
 
 - **Reporting (`src/reporting/*`)**
   - Reads `.jaiph/runs` and `run_summary.jsonl`; `jaiph report` serves the local UI. Standalone binaries resolve static assets from `reporting/public` next to the executable when bundled.
@@ -144,7 +141,7 @@ flowchart TD
     HK --> HPROC[Hook shell commands]
 ```
 
-**Emit artifacts:** `buildScripts()` persists **only** extracted **`script`** bodies under `scripts/`. No workflow-level `.sh` files are produced for any production execution path. `build()` remains available for compiler golden/snapshot tests only.
+**Emit artifacts:** `buildScripts()` persists **only** extracted **`script`** bodies under `scripts/`. No workflow-level `.sh` files are produced for any production execution path. `build()` remains available for compiler golden/snapshot tests only. No `jaiph_stdlib.sh` exists; the emitted module string is not a runnable bash program.
 
 ## Sequence diagram: regular flow (`*.jh`)
 
@@ -226,5 +223,5 @@ sequenceDiagram
 - `.jh` / `*.test.jh` share parser/AST; **compile-time** validation runs in `transpileFile` during **`buildScripts`**. **`buildRuntimeGraph`** loads modules with **parse-only** imports.
 - **Node-only runtime:** all execution — local `jaiph run`, Docker `jaiph run`, and `jaiph test` — goes through `NodeWorkflowRuntime`. Docker containers run `node-workflow-runner` with the compiled JS tree and scripts mounted, using the same semantics as local execution.
 - **CLI** owns launch, observation, hooks, and runtime preparation (`buildScripts`). Workflow execution runs in **`NodeWorkflowRuntime`**, with **script steps** as managed subprocesses.
-- No workflow-level `.sh` files are produced for production use. `build()` remains internal for compiler golden tests only.
+- No workflow-level `.sh` files or `jaiph_stdlib.sh` are produced or required. `build()` remains internal for compiler golden tests only.
 - Contracts: `__JAIPH_EVENT__`, `.jaiph/runs`, `run_summary.jsonl`, hook payloads.

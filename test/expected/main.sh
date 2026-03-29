@@ -1,5 +1,5 @@
 set -euo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/jaiph_stdlib.sh"
+export JAIPH_SCRIPTS="${JAIPH_SCRIPTS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/scripts" && pwd)}"
 source "$(dirname "${BASH_SOURCE[0]}")/bootstrap_project.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/tools/security.sh"
 

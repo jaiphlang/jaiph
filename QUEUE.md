@@ -12,49 +12,6 @@ Process rules:
 
 ---
 
-## Remove `jaiph_stdlib.sh` and workflow module bash emission <!-- dev-ready -->
-
-**Goal**  
-Delete **`src/jaiph_stdlib.sh`** and **stop generating the workflow-level bash module string** entirely. The **only** persisted transpile outputs for execution should be **atomic `script` artifacts** (and whatever maps/metadata you still need for diagnostics). **No** `source "$JAIPH_STDLIB"` preamble, **no** per-module **`.sh` workflow** files, **no** `JAIPH_STDLIB` in the default runtime env.
-
-**Context**
-
-- **Node-only orchestration** is already the product path; **`buildScripts()`** only writes **`scripts/`**. **`build()`** and **`emit-workflow.ts`** still **compute** a full **`EmittedModule.module`** bash program for **compiler goldens** and **`test/sample-build.test.ts`**-style coverage.
-- **`jaiph_stdlib.sh`** is the bash façade that delegated to **`kernel/*.js`** when workflow modules were executed; it remains **copied in `package.json` builds**, referenced in **`src/cli/run/env.ts`**, and embedded in **golden expectations** (`compiler-golden.test.ts`, Jest snapshots, etc.).
-- **`emit-workflow.ts`** still emits the stdlib bootstrap lines at the top of **`module`** (`jaiph_stdlib_path=…`, `source "$jaiph_stdlib_path"`).
-
-This task is **cleanup after** Node-only orchestration: remove dead shell surface, shrink the transpiler to **validate + extract scripts** (or a clearly named split), and drop distribution of the stdlib file unless a non-obvious consumer remains.
-
-**Key files**
-
-- `src/jaiph_stdlib.sh` — delete after porting any still-needed one-liners (likely none on Node path)
-- `src/transpile/emit-workflow.ts` — module bash emission, stdlib preamble
-- `src/transpiler.ts` — `transpileFile` / **`EmittedModule`** shape (`module` field may disappear or become empty string only for migration)
-- `src/transpile/build.ts` — **`build()`**: remove or reduce to scripts-only; **delete** workflow `.sh` writes
-- `src/cli/run/env.ts` — **`JAIPH_STDLIB`**, `resolveBundledStdlibPath`
-- `package.json` — **`copyFileSync('src/jaiph_stdlib.sh', …)`** in `build` / `build:standalone`
-- `src/transpile/compiler-golden.test.ts`, `compiler-edge.acceptance.test.ts`, `validate-managed-calls.test.ts`, `test/sample-build.test.ts`, `test/__snapshots__/fixtures-build.jest.test.js.snap`
-- `e2e/lib/common.sh`, `e2e/tests/40_nested_and_native_tests.sh` — stdlib copy / `JAIPH_STDLIB`
-- `docs/grammar.md`, `ARCHITECTURE.md`, any install docs mentioning `~/.local/bin/jaiph_stdlib.sh`
-
-**Scope**
-
-1. **Transpiler split or trim**: Make **`transpileFile`** (or successor) produce **scripts + validation + optional line maps** without building a runnable **workflow bash module**. If **`build()`** remains for tests, redefine it so it **never** writes **`*.sh`** workflow modules — or delete **`build()`** and migrate assertions to **`transpileFile` + scripts** / AST-only expectations.
-2. **Remove file**: Delete **`jaiph_stdlib.sh`**; remove all **`grep`-able references (`JAIPH_STDLIB`, `jaiph_stdlib`, `jaiph::` call sites in TS docs if any).
-3. **CLI / packaging**: Drop **`JAIPH_STDLIB`** from default **`resolveRuntimeEnv`**; remove stdlib copy from **`npm run build`** / standalone layout unless something still requires it (should not).
-4. **Tests**: Rewrite goldens and snapshots to match **scripts-only** or **structured AST** expectations; remove tests that execute generated **workflow `.sh`** as orchestration.
-5. **Docs**: Update grammar and architecture so “build emits bash that sources stdlib” is **gone**.
-
-**Acceptance criteria**
-
-- **`src/jaiph_stdlib.sh` does not exist** in the repo (or is reduced to an explicit no-op deprecated stub only if absolutely required — default is **full removal**).
-- **`package.json` build scripts** do not copy **`jaiph_stdlib.sh`**.
-- No production code path sets or requires **`JAIPH_STDLIB`** for **`jaiph run` / `jaiph test` / Docker**.
-- **`emit-workflow`** (or replacement) does not emit a **`source …stdlib`** preamble or a complete workflow orchestration bash program intended to be run as **`jaiph run`** entrypoint.
-- **`npm test`**, **`npm run test:e2e`**, and builds pass.
-
----
-
 ## Cache `buildRuntimeGraph` in `jaiph test` <!-- dev-ready -->
 
 **Goal**  

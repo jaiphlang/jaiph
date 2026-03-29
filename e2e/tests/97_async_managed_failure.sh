@@ -8,7 +8,6 @@ trap e2e::cleanup EXIT
 
 e2e::prepare_test_env "async_managed_failure"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
-unset JAIPH_STDLIB
 
 e2e::section "wait fails when any async managed run fails"
 

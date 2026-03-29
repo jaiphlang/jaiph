@@ -1,5 +1,5 @@
 // JS kernel: test-mode mock helpers.
-// Ports jaiph::read_next_mock_response and jaiph::mock_dispatch from jaiph_stdlib.sh.
+// Test-mode mock response and dispatch helpers.
 
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";

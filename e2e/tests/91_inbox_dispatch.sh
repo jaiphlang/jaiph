@@ -8,8 +8,6 @@ trap e2e::cleanup EXIT
 
 e2e::prepare_test_env "inbox_dispatch"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
-# Ensure the e2e-installed stdlib is used, not a system-wide override.
-unset JAIPH_STDLIB
 
 e2e::section "Basic send + route"
 
