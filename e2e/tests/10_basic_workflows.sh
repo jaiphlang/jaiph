@@ -18,7 +18,7 @@ script hello_impl() {
 }
 workflow default {
   msg = run hello_impl
-  return "$msg"
+  return "${msg}"
 }
 EOF
 
@@ -46,7 +46,7 @@ script ready_impl() {
 }
 rule ready {
   result = run ready_impl
-  return "$result"
+  return "${result}"
 }
 EOF
 
@@ -58,7 +58,7 @@ script mixed_ok_impl() {
 workflow default {
   ensure lib.ready
   msg = run mixed_ok_impl
-  return "$msg"
+  return "${msg}"
 }
 EOF
 
@@ -101,11 +101,11 @@ script current_branch_impl() {
   fi
 }
 rule current_branch {
-  run current_branch_impl "$1"
+  run current_branch_impl "${arg1}"
 }
 
 workflow default {
-  ensure current_branch "$1"
+  ensure current_branch "${arg1}"
 }
 EOF
 

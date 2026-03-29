@@ -28,8 +28,8 @@ script write_greeting() {
 }
 
 workflow default {
-  run write_role "$role"
-  run write_greeting "$greeting"
+  run write_role "${role}"
+  run write_greeting "${greeting}"
 }
 EOF
 
@@ -64,7 +64,7 @@ script check_msg_impl() {
 }
 
 rule check_msg {
-  run check_msg_impl "$msg"
+  run check_msg_impl "${msg}"
 }
 
 script write_msg() {
@@ -78,7 +78,7 @@ script write_wf_msg() {
 workflow default {
   ensure check_msg
   run write_msg
-  run write_wf_msg "$msg"
+  run write_wf_msg "${msg}"
 }
 EOF
 

@@ -14,6 +14,6 @@ workflow default {
   ensure check_ready
   run helper
   dataset="testdata"
-  log "Processing results for $dataset"
+  log "Processing results for ${dataset}"
   echo "done"
 }

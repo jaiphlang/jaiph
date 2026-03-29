@@ -91,12 +91,12 @@ inbox::analyst::impl() {
   set -eo pipefail
   set +u
   jaiph::emit_workflow_summary_event WORKFLOW_START 'analyst'
-  jaiph::run_step inbox::write_findings_file script "$JAIPH_SCRIPTS/write_findings_file" "$1"
+  jaiph::run_step inbox::write_findings_file script "$JAIPH_SCRIPTS/write_findings_file" "\${arg1}"
   local _jaiph_rv_summary; _jaiph_rv_summary=$(mktemp)
   JAIPH_RETURN_VALUE_FILE="$_jaiph_rv_summary" jaiph::run_step inbox::summarize_findings script "$JAIPH_SCRIPTS/summarize_findings"
   summary=""; [[ -s "$_jaiph_rv_summary" ]] && summary=$(<"$_jaiph_rv_summary")
   rm -f "$_jaiph_rv_summary"
-  jaiph::send 'summary' "$summary" 'analyst'
+  jaiph::send 'summary' "\${summary}" 'analyst'
   jaiph::emit_workflow_summary_event WORKFLOW_END 'analyst'
 }
 
@@ -109,7 +109,7 @@ inbox::reviewer::impl() {
   set +u
   jaiph::emit_workflow_summary_event WORKFLOW_START 'reviewer'
   local _jaiph_send_rv_2; _jaiph_send_rv_2=$(mktemp)
-  JAIPH_RETURN_VALUE_FILE="$_jaiph_send_rv_2" jaiph::run_step inbox::review_summary script "$JAIPH_SCRIPTS/review_summary" "$1"
+  JAIPH_RETURN_VALUE_FILE="$_jaiph_send_rv_2" jaiph::run_step inbox::review_summary script "$JAIPH_SCRIPTS/review_summary" "\${arg1}"
   local _jaiph_send_msg; _jaiph_send_msg=""; [[ -s "$_jaiph_send_rv_2" ]] && _jaiph_send_msg=$(<"$_jaiph_send_rv_2")
   rm -f "$_jaiph_send_rv_2"
   jaiph::send 'final_summary' "$_jaiph_send_msg" 'reviewer'
@@ -185,7 +185,7 @@ lang_redesign_smoke::wf_const::impl() {
   set +u
   jaiph::emit_workflow_summary_event WORKFLOW_START 'wf_const'
   local msg; msg="hello"
-  jaiph::log "$msg"
+  jaiph::log "\${msg}"
   jaiph::emit_workflow_summary_event WORKFLOW_END 'wf_const'
 }
 
@@ -289,13 +289,13 @@ main::default::impl() {
   if ! main::project_ready; then
     jaiph::run_step bootstrap_project::nodejs workflow bootstrap_project::nodejs::impl
   fi
-  export JAIPH_STEP_PARAM_KEYS='__prompt_impl,__preview,1'
+  export JAIPH_STEP_PARAM_KEYS='__prompt_impl,__preview,arg1'
   export JAIPH_PROMPT_PREVIEW='
     Build the applicati'
-  jaiph::prompt "$JAIPH_PROMPT_PREVIEW" "1=$1" <<__JAIPH_PROMPT_33__
+  jaiph::prompt "$JAIPH_PROMPT_PREVIEW" "arg1=$arg1" <<__JAIPH_PROMPT_33__
 
     Build the application using best practices.
-    Follow requirements: $1
+    Follow requirements: \${arg1}
   
 __JAIPH_PROMPT_33__
   main::build_passes

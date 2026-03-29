@@ -12,35 +12,29 @@ Process rules:
 
 ---
 
-## String interpolation: canonical `${argN}` / `${name}` only (remove `$1`, `$2`, bare `$name`) <!-- dev-ready -->
+## Braced definitions only for `rule` / `script` / `workflow` <!-- dev-ready -->
 
 **Goal**  
-Drop legacy Jaiph orchestration-string interpolation: **`$1`**, **`$2`**, bare **`$named`**, and **`${1}`**-style numeric braced forms. **Author-facing** strings (e.g. `log`, `logerr`, `fail`, `prompt`, `return "…"`, double-quoted send RHS, and any other path that uses the Node kernel `interpolate()` / compile-time string validation) must use **only** braced forms: **`${arg1}`**, **`${arg2}`**, … for positional args and **`${paramName}`** for named parameters (and **`${ENV_VAR}`** where env expansion is intentionally supported — keep behavior explicit in code and docs). **No backward compatibility** for the old forms in those contexts.
+Require **always** the braced form with an explicit parameter list and body: **`rule name() { … }`**, **`script name() { … }`**, **`workflow name() { … }`**. Reject any definition syntax that omits **`{`** immediately after the **`()`** (or otherwise allows a body without wrapping braces). This locks in a single convention before **named parameters** and richer signatures land elsewhere in this queue.
 
 **Context**
 
-- `src/runtime/kernel/node-workflow-runtime.ts` — `interpolate()` (currently applies both `\$\{…\}` and bare `\$ident` / `\$N`); positional values are also bound under numeric keys `"1"`, `"2"` alongside `arg1`, `arg2` (`newScopeVars` / child scopes).
-- `src/transpile/emit-prompt.ts` — `extractShellVarRefs()` documents/implements the old pattern set.
-- `src/transpile/validate-string.ts` (+ call sites) — does not yet reject bare `$` interpolation in Jaiph strings.
-- Docs still describe **`$varName`** as a convenience shorthand and mixed positional styles; `docs/grammar.md`, `docs/cli.md`, `docs/inbox.md`, `docs/getting-started.md`, `docs/jaiph-skill.md`, `docs/index.html`, and any README/CHANGELOG samples need a single consistent story.
-- **Out of scope for “legacy removal”:** bash **`script`** bodies, **`run`/`ensure` argument tails** passed through to the shell as raw argv (e.g. `"$1"` meaning shell positional when the emitted script runs), **`mock prompt { if $1 contains … }`** (mock DSL), and **inbox trigger contract** phrasing ($1=message as *bash* / emitted shell semantics) — those remain shell idioms; only Jaiph **orchestration** double-quoted string semantics change.
-- **Regression risk (params in output):** Progress / CLI / `STEP_START` / run-summary payloads should list **all** workflow call parameters for each step, as they used to. There is a suspected regression for **prompts** (e.g. `emitPromptStepStart` only adds an extra `arg1` entry when `scopeVars.get("1")` is non-empty, so named-only or multi-arg visibility may be wrong). Fixing interpolation keys must **not** further shrink what operators see; verify and restore full param display (prompts first, then audit `run` / `ensure` / other step kinds for parity).
+- The grammar may still allow legacy or alternate shapes (e.g. single-statement bodies, colon forms, or newline-started bodies without braces — verify in `src/parse/` and grammar docs).
+- Enforcing braces upfront avoids ambiguous parses when parameter lists evolve (e.g. `workflow w(a, b) { }`).
+- **Breaking change:** existing modules using non-braced definitions must be migrated; no compatibility shim.
 
 **Scope**
 
-1. **Runtime:** Restrict `interpolate()` (and `parseArgsRaw` if it shares the same rules) so only `\$\{[^}]+\}` is expanded; implement clear rules for **positional** (`argN` only, not numeric `${1}` / `$1`) and **named** bindings. Remove or stop relying on numeric `"1"` keys in scope maps for **string** interpolation if nothing else needs them (audit `scope.vars.get("1")`, inbox fake argv, recover, `emitPromptStepStart`, etc.).
-2. **Compile-time:** Extend `validateJaiphStringContent` (or equivalent) so invalid legacy forms in Jaiph strings produce **`E_PARSE`** with actionable hints (point to `${arg1}` / `${name}`).
-3. **Transpile:** Update `extractShellVarRefs` and any golden/compiler tests that assume bare `$` in prompts.
-4. **Tests:** Unit tests (`validate-string.test.ts`, runtime tests touching `interpolate`, compiler golden/edge, e2e fixtures under `.jaiph/` and `e2e/` if any sample uses legacy forms in orchestration strings).
-5. **Docs & samples:** Grammar table, CLI, inbox, getting-started, skill doc, `docs/index.html` — replace orchestration examples with `${arg1}` / `${named}`; keep script-body bash examples as `$1` where appropriate; update `CHANGELOG.md` with a breaking-change note.
-6. **Observability:** Ensure **all** parameters for each invocation appear in user-visible output (terminal progress tree, `STEP_START` / summary JSON `params`, and any related preview fields) **matching prior behavior**, not a subset. Add or extend tests that assert multi-arg and named-arg workflows still print every bound parameter for **`prompt`** (and spot-check other step kinds).
+1. **Parser:** Accept only the braced form for top-level **`rule`**, **`script`**, and **`workflow`** declarations after the name and `()`; emit **`E_PARSE`** (or a dedicated code) with a short fix hint (`add { … }`) for disallowed forms.
+2. **Tests:** Parser/compiler tests for rejected forms and accepted minimal/empty bodies `{}`.
+3. **Corpus:** Update all `.jh` fixtures under the repo (including `.jaiph/`, `e2e/`, examples) to the braced style.
+4. **Docs:** `docs/grammar.md`, CLI/skill/getting-started, `docs/index.html`, README/CHANGELOG — one canonical definition shape; remove documentation of alternate syntax.
 
 **Acceptance criteria**
 
-- Legacy forms in Jaiph orchestration strings are rejected at compile time (preferred) and/or do not expand at runtime.
-- Canonical `${arg1}`, `${arg2}`, `${paramName}` work everywhere orchestration interpolation applies.
-- Docs and bundled samples contain no contradictory “shorthand `$var`” / “`$1` in Jaiph strings” guidance; script vs orchestration boundary is explicit.
-- **Parameters:** Full argument lists are visible in outputs again (at minimum no regression vs pre-change behavior for prompts; align other steps if gaps are found).
+- Non-braced definitions are rejected with a clear diagnostic.
+- Braced definitions behave as today.
+- Docs and repo samples consistently show only the braced form.
 - Test suite green.
 
 ---

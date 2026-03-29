@@ -70,9 +70,7 @@ function nowIso(): string {
 
 function interpolate(input: string, vars: Map<string, string>, env?: NodeJS.ProcessEnv): string {
   const lookup = (key: string): string => vars.get(key) ?? env?.[key] ?? "";
-  return input
-    .replace(/\$\{([a-zA-Z_][a-zA-Z0-9_]*|[0-9]+)\}/g, (_m, key) => lookup(String(key)))
-    .replace(/\$([a-zA-Z_][a-zA-Z0-9_]*|[0-9]+)/g, (_m, key) => lookup(String(key)));
+  return input.replace(/\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g, (_m, key) => lookup(String(key)));
 }
 
 function parseArgsRaw(raw: string, vars: Map<string, string>, env?: NodeJS.ProcessEnv): string[] {
@@ -199,7 +197,6 @@ export class NodeWorkflowRuntime {
       env: { ...this.env },
     };
     args.forEach((v, i) => {
-      rootScope.vars.set(String(i + 1), v);
       rootScope.vars.set(`arg${i + 1}`, v);
     });
     const resolved = resolveWorkflowRef(this.graph, this.graph.entryFile, {
@@ -223,7 +220,6 @@ export class NodeWorkflowRuntime {
       env: { ...this.env },
     };
     args.forEach((v, i) => {
-      rootScope.vars.set(String(i + 1), v);
       rootScope.vars.set(`arg${i + 1}`, v);
     });
     const resolved = resolveWorkflowRef(this.graph, this.graph.entryFile, {
@@ -285,6 +281,7 @@ export class NodeWorkflowRuntime {
     promptText: string,
     backend: string,
     scopeVars: Map<string, string>,
+    rawPromptSource: string,
   ): PromptStepHandle {
     this.promptSeq += 1;
     this.stepSeq += 1;
@@ -299,9 +296,23 @@ export class NodeWorkflowRuntime {
     writeFileSync(errFile, "");
     const preview = stripOuterQuotes(promptText).replace(/\s+/g, " ").trim();
     const params: Array<[string, string]> = [["prompt_text", preview]];
-    const arg1 = scopeVars.get("1") ?? "";
-    if (arg1.length > 0) {
-      params.push(["arg1", arg1]);
+    const seen = new Set<string>(["prompt_text"]);
+    for (const [k, v] of scopeVars) {
+      if (/^arg\d+$/.test(k) && v.length > 0) {
+        params.push([k, v]);
+        seen.add(k);
+      }
+    }
+    // Include named vars referenced in the prompt text.
+    const refRe = /\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g;
+    let m: RegExpExecArray | null;
+    while ((m = refRe.exec(rawPromptSource)) !== null) {
+      const name = m[1];
+      if (!seen.has(name)) {
+        seen.add(name);
+        const val = scopeVars.get(name) ?? "";
+        if (val.length > 0) params.push([name, val]);
+      }
     }
     this.emitStep({
       type: "STEP_START",
@@ -407,7 +418,6 @@ export class NodeWorkflowRuntime {
         env: workflowEnv,
       };
       args.forEach((v, i) => {
-        childScope.vars.set(String(i + 1), v);
         childScope.vars.set(`arg${i + 1}`, v);
       });
       const ctx: WorkflowContext = {
@@ -451,7 +461,6 @@ export class NodeWorkflowRuntime {
       const ruleEnv = this.applyMetadataScope(scope.env, moduleMeta);
       const ruleVars = new Map(scope.vars);
       args.forEach((v, i) => {
-        ruleVars.set(String(i + 1), v);
         ruleVars.set(`arg${i + 1}`, v);
       });
       return this.executeSteps({ filePath: resolved.filePath, vars: ruleVars, env: ruleEnv }, resolved.rule.steps, io);
@@ -528,7 +537,7 @@ export class NodeWorkflowRuntime {
           if (runValue.status !== 0) return this.mergeStepResult(accOut, accErr, runValue);
           payload = runValue.returnValue ?? runValue.output.trim();
         } else if (step.rhs.kind === "forward") {
-          payload = scope.vars.get("1") ?? "";
+          payload = scope.vars.get("arg1") ?? "";
         } else {
           return this.mergeStepResult(accOut, accErr, {
             status: 1,
@@ -575,7 +584,7 @@ export class NodeWorkflowRuntime {
         let promptText = interpolate(step.raw, scope.vars, scope.env);
         const promptConfig = resolveConfig(scope.env);
         const backend = promptConfig.backend || "cursor";
-        const promptStep = this.emitPromptStepStart(promptText, backend, scope.vars);
+        const promptStep = this.emitPromptStepStart(promptText, backend, scope.vars, step.raw);
         this.emitPromptEvent("PROMPT_START", {
           backend,
           preview: promptText.slice(0, 120),
@@ -662,7 +671,7 @@ export class NodeWorkflowRuntime {
           let promptText = interpolate(step.value.raw, scope.vars, scope.env);
           const promptConfig = resolveConfig(scope.env);
           const backend = promptConfig.backend || "cursor";
-          const promptStep = this.emitPromptStepStart(promptText, backend, scope.vars);
+          const promptStep = this.emitPromptStepStart(promptText, backend, scope.vars, step.value.raw);
           this.emitPromptEvent("PROMPT_START", {
             backend,
             preview: promptText.slice(0, 120),
@@ -838,7 +847,7 @@ export class NodeWorkflowRuntime {
             const result = await this.executeRunRef(
               {
                 filePath: scope.filePath,
-                vars: new Map([...scope.vars, ["1", msg.content], ["2", msg.channel], ["3", msg.sender]]),
+                vars: new Map([...scope.vars, ["arg1", msg.content], ["arg2", msg.channel], ["arg3", msg.sender]]),
                 env: scope.env,
               },
               target,
@@ -882,7 +891,7 @@ export class NodeWorkflowRuntime {
           const dispatch = await this.executeRunRef(
             {
               filePath: scope.filePath,
-              vars: new Map([...scope.vars, ["1", msg.content], ["2", msg.channel], ["3", msg.sender]]),
+              vars: new Map([...scope.vars, ["arg1", msg.content], ["arg2", msg.channel], ["arg3", msg.sender]]),
               env: scope.env,
             },
             target,
@@ -964,11 +973,10 @@ export class NodeWorkflowRuntime {
       const res = await attempt();
       if (res.status === 0) return res;
       const recoverSteps = "single" in recover ? [recover.single] : recover.block;
-      // Recover blocks receive the failed ensure output in $1 while preserving
-      // existing positional args ($2, $3, ...), which orchestration flows use.
+      // Recover blocks receive the failed ensure output in ${arg1} while preserving
+      // existing positional args (${arg2}, ${arg3}, ...), which orchestration flows use.
       const recoverVars = new Map(scope.vars);
       const recoverPayload = `${res.output}${res.error}`;
-      recoverVars.set("1", recoverPayload);
       recoverVars.set("arg1", recoverPayload);
       const recoverScope: Scope = {
         ...scope,

@@ -31,13 +31,13 @@ rule ci_passes {
 }
 
 workflow implement {
-  const task = "$1"
+  const task = "${arg1}"
   ensure ci_passes recover {
-    const ci_failure_log = "$1"
+    const ci_failure_log = "${arg1}"
     const ci_log_file = ".jaiph/tmp/ensure_ci_passes.last.log"
     run mkdir_p_simple ".jaiph/tmp"
-    run save_string_to_file "$ci_failure_log" "$ci_log_file"
-    run save_string_to_file "$2" ".jaiph/tmp/recover.role"
+    run save_string_to_file "${ci_failure_log}" "${ci_log_file}"
+    run save_string_to_file "${arg2}" ".jaiph/tmp/recover.role"
   }
 }
 

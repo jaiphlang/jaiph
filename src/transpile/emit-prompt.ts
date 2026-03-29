@@ -49,14 +49,14 @@ function parsePromptSchema(
   return fields;
 }
 
-/** Extract shell variable references ($name, ${name}, $1, etc.) from prompt text for tree display. */
+/** Extract ${name} variable references from prompt text for tree display. */
 function extractShellVarRefs(promptText: string): string[] {
   const seen = new Set<string>();
   const refs: string[] = [];
-  const regex = /\$\{([a-zA-Z_][a-zA-Z0-9_]*|[1-9][0-9]*)\}|\$([a-zA-Z_][a-zA-Z0-9_]*|[1-9][0-9]*)/g;
+  const regex = /\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g;
   let match;
   while ((match = regex.exec(promptText)) !== null) {
-    const name = match[1] ?? match[2];
+    const name = match[1];
     if (!seen.has(name)) {
       seen.add(name);
       refs.push(name);

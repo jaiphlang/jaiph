@@ -120,7 +120,7 @@ workflow s10 {
 }
 
 workflow sink {
-  echo "$1" >> sink_all.txt
+  echo "${arg1}" >> sink_all.txt
 }
 
 workflow default {
@@ -180,15 +180,15 @@ workflow producer_c {
 }
 
 workflow target_x {
-  echo "x:$1" >> fanout_log.txt
+  echo "x:${arg1}" >> fanout_log.txt
 }
 
 workflow target_y {
-  echo "y:$1" >> fanout_log.txt
+  echo "y:${arg1}" >> fanout_log.txt
 }
 
 workflow target_z {
-  echo "z:$1" >> fanout_log.txt
+  echo "z:${arg1}" >> fanout_log.txt
 }
 
 workflow default {
@@ -248,11 +248,11 @@ workflow sender {
 }
 
 workflow processor {
-  ch_processed <- echo "processed:$1"
+  ch_processed <- echo "processed:${arg1}"
 }
 
 workflow sink {
-  echo "$1" > nested_result.txt
+  echo "${arg1}" > nested_result.txt
 }
 
 workflow default {
@@ -356,11 +356,11 @@ workflow s5 {
 }
 
 workflow t1 {
-  echo "t1:$1" >> artifact_log.txt
+  echo "t1:${arg1}" >> artifact_log.txt
 }
 
 workflow t2 {
-  echo "t2:$1" >> artifact_log.txt
+  echo "t2:${arg1}" >> artifact_log.txt
 }
 
 workflow default {
@@ -431,11 +431,11 @@ workflow s3 {
 }
 
 workflow t1 {
-  echo "t1:$1" >> soak_log.txt
+  echo "t1:${arg1}" >> soak_log.txt
 }
 
 workflow t2 {
-  echo "t2:$1" >> soak_log.txt
+  echo "t2:${arg1}" >> soak_log.txt
 }
 
 workflow default {
@@ -536,7 +536,7 @@ workflow s10 {
 }
 
 workflow sink {
-  echo "$1" >> seq_sink_all.txt
+  echo "${arg1}" >> seq_sink_all.txt
 }
 
 workflow default {

@@ -62,9 +62,9 @@ script write_workflow_args() {
 }
 
 workflow called {
-  ensure expect_args "$1" "$2"
-  run write_args "$1" "$2"
-  run write_workflow_args "$1" "$2"
+  ensure expect_args "${arg1}" "${arg2}"
+  run write_args "${arg1}" "${arg2}"
+  run write_workflow_args "${arg1}" "${arg2}"
 }
 
 workflow default {

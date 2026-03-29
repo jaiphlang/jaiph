@@ -189,12 +189,12 @@ script echo_response() {
   echo "$1"
 }
 rule check_arg {
-  run check_arg_impl "$1"
+  run check_arg_impl "${arg1}"
 }
 workflow default {
-  ensure check_arg "$1"
+  ensure check_arg "${arg1}"
   response = prompt "e2e-param-prompt-text"
-  run echo_response "$response"
+  run echo_response "${response}"
 }
 EOF
 
@@ -229,10 +229,10 @@ script param_done_impl() {
   echo "e2e-param-done"
 }
 rule need_one {
-  run need_one_impl "$1"
+  run need_one_impl "${arg1}"
 }
 workflow default {
-  ensure need_one "$1"
+  ensure need_one "${arg1}"
   run param_done_impl
 }
 EOF

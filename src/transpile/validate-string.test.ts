@@ -33,17 +33,6 @@ test("valid: ${name} interpolation in log", () => {
   });
 });
 
-test("valid: $x shorthand interpolation in log", () => {
-  withTempDir("jaiph-str-ok-dollar-", (root) => {
-    writeJh(root, "m.jh", [
-      "workflow default {",
-      '  log "value is $x"',
-      "}",
-    ]);
-    build(join(root, "m.jh"), join(root, "out"));
-  });
-});
-
 test("valid: ${arg1} positional in log", () => {
   withTempDir("jaiph-str-ok-arg1-", (root) => {
     writeJh(root, "m.jh", [
@@ -66,7 +55,7 @@ test("valid: escaped backtick in prompt", () => {
   });
 });
 
-test("valid: $1 in script body (legacy shell)", () => {
+test("valid: $1 in script body (shell context)", () => {
   withTempDir("jaiph-str-ok-script-dollar1-", (root) => {
     writeJh(root, "m.jh", [
       "script greet() {",
@@ -77,6 +66,94 @@ test("valid: $1 in script body (legacy shell)", () => {
       "}",
     ]);
     build(join(root, "m.jh"), join(root, "out"));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Invalid: bare $name interpolation (must use ${name})
+// ---------------------------------------------------------------------------
+
+test("reject bare $name in log message", () => {
+  withTempDir("jaiph-str-bad-bare-name-log-", (root) => {
+    writeJh(root, "m.jh", [
+      "workflow default {",
+      '  log "value is $x"',
+      "}",
+    ]);
+    assert.throws(
+      () => build(join(root, "m.jh"), join(root, "out")),
+      /E_PARSE.*bare interpolation.*\$\{x\}/,
+    );
+  });
+});
+
+test("reject bare $name in prompt", () => {
+  withTempDir("jaiph-str-bad-bare-name-prompt-", (root) => {
+    writeJh(root, "m.jh", [
+      "workflow default {",
+      '  prompt "hello $user"',
+      "}",
+    ]);
+    assert.throws(
+      () => build(join(root, "m.jh"), join(root, "out")),
+      /E_PARSE.*bare interpolation.*\$\{user\}/,
+    );
+  });
+});
+
+test("reject bare $1 in log message", () => {
+  withTempDir("jaiph-str-bad-bare-1-log-", (root) => {
+    writeJh(root, "m.jh", [
+      "workflow default {",
+      '  log "arg: $1"',
+      "}",
+    ]);
+    assert.throws(
+      () => build(join(root, "m.jh"), join(root, "out")),
+      /E_PARSE.*bare interpolation.*\$\{arg1\}/,
+    );
+  });
+});
+
+test("reject braced numeric ${1} in log message", () => {
+  withTempDir("jaiph-str-bad-braced-1-log-", (root) => {
+    writeJh(root, "m.jh", [
+      "workflow default {",
+      '  log "arg: ${1}"',
+      "}",
+    ]);
+    assert.throws(
+      () => build(join(root, "m.jh"), join(root, "out")),
+      /E_PARSE.*numeric interpolation.*\$\{arg1\}/,
+    );
+  });
+});
+
+test("reject bare $name in fail message", () => {
+  withTempDir("jaiph-str-bad-bare-fail-", (root) => {
+    writeJh(root, "m.jh", [
+      "workflow default {",
+      '  fail "error: $reason"',
+      "}",
+    ]);
+    assert.throws(
+      () => build(join(root, "m.jh"), join(root, "out")),
+      /E_PARSE.*bare interpolation.*\$\{reason\}/,
+    );
+  });
+});
+
+test("reject bare $name in return string", () => {
+  withTempDir("jaiph-str-bad-bare-return-", (root) => {
+    writeJh(root, "m.jh", [
+      "workflow default {",
+      '  return "$result"',
+      "}",
+    ]);
+    assert.throws(
+      () => build(join(root, "m.jh"), join(root, "out")),
+      /E_PARSE.*bare interpolation.*\$\{result\}/,
+    );
   });
 });
 

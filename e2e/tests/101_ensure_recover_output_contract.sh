@@ -31,7 +31,7 @@ rule simple_echo_rule {
 
 workflow default {
   ensure simple_echo_rule recover {
-    run save_string_to_file "$1" "recover_simple.txt"
+    run save_string_to_file "${arg1}" "recover_simple.txt"
   }
 }
 EOF
@@ -72,7 +72,7 @@ rule outer {
 
 workflow default {
   ensure outer recover {
-    run save_string_to_file "$1" "recover_nested.log"
+    run save_string_to_file "${arg1}" "recover_nested.log"
   }
 }
 EOF
@@ -111,7 +111,7 @@ rule ci_passes {
 
 workflow default {
   ensure ci_passes recover {
-    run save_string_to_file "$1" "ci_failure.log"
+    run save_string_to_file "${arg1}" "ci_failure.log"
   }
 }
 EOF
@@ -162,7 +162,7 @@ rule check_rule {
 
 workflow default {
   ensure check_rule recover {
-    run save_string_to_file "$1" "payload_attempt_${_jaiph_retry}.txt"
+    run save_string_to_file "${arg1}" "payload_attempt_${_jaiph_retry}.txt"
   }
 }
 EOF
@@ -196,7 +196,7 @@ rule passes_first_try {
 
 workflow default {
   ensure passes_first_try recover {
-    run save_string_to_file "$1" "false_payload.txt"
+    run save_string_to_file "${arg1}" "false_payload.txt"
   }
 }
 EOF

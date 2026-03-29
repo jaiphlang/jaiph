@@ -56,7 +56,7 @@ e2e::section "ensure rule: captures return value only, stdout to artifacts"
 e2e::file "contract_ensure.jh" <<'EOF'
 rule compute {
   echo "rule-stdout-goes-to-artifacts"
-  return "$1-processed"
+  return "${arg1}-processed"
 }
 workflow default {
   val = ensure compute "input"

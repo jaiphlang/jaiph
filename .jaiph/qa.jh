@@ -57,7 +57,7 @@ workflow analyze_gaps {
     You are a QA engineer analyzing the Jaiph codebase for test coverage gaps.
 
     <testing_philosophy>
-    $testing_philosophy
+    ${testing_philosophy}
 
     <task>
     Your task:
@@ -96,7 +96,7 @@ workflow analyze_gaps {
     </role>
   "
 
-  run save_gap_report "$gap_report"
+  run save_gap_report "${gap_report}"
   log "Gap report saved to .jaiph/tmp/qa_gap_report.md"
 }
 
@@ -111,7 +111,7 @@ workflow write_tests {
     You are a test engineer for the Jaiph codebase.
 
     <testing_philosophy>
-    $testing_philosophy
+    ${testing_philosophy}
 
     <task>
     Below is a gap report listing untested code paths, sorted by priority.
@@ -139,7 +139,7 @@ workflow write_tests {
       or skip with a clear comment.
 
     Gap report:
-    $gap_report
+    ${gap_report}
     </task>
     </testing_philosophy>
     </role>

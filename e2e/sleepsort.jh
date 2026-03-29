@@ -5,8 +5,8 @@ script sleep {
 }
 
 workflow delayed_log {
-  run sleep $1
-  log "$1"
+  run sleep ${arg1}
+  log "${arg1}"
 }
 
 workflow default {

@@ -32,7 +32,7 @@ workflow default {
   
   prompt "
     Build the application using best practices.
-    Follow requirements: $1
+    Follow requirements: ${arg1}
   "
   
   ensure build_passes

@@ -8,7 +8,7 @@ script ensure_is_number_impl() {
 }
 
 rule ensure_is_number {
-  run ensure_is_number_impl "$1"
+  run ensure_is_number_impl "${arg1}"
 }
 
 script fib() {
@@ -32,8 +32,8 @@ script fib() {
 }
 
 workflow default {
-  const n = "$1"
-  ensure ensure_is_number "$n"
-  result = run fib "$n"
-  log "$result"
+  const n = "${arg1}"
+  ensure ensure_is_number "${n}"
+  result = run fib "${n}"
+  log "${result}"
 }

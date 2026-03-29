@@ -26,7 +26,7 @@ script write_received() {
   echo "$1" > received.txt
 }
 workflow receiver {
-  run write_received "$1"
+  run write_received "${arg1}"
 }
 
 workflow default {
@@ -59,14 +59,14 @@ script write_consumer_a() {
   echo "A got: $1" > consumer_a.txt
 }
 workflow consumer_a {
-  run write_consumer_a "$1"
+  run write_consumer_a "${arg1}"
 }
 
 script write_consumer_b() {
   echo "B got: $1" > consumer_b.txt
 }
 workflow consumer_b {
-  run write_consumer_b "$1"
+  run write_consumer_b "${arg1}"
 }
 
 workflow default {
@@ -142,7 +142,7 @@ script write_audited() {
   echo "$1" > audited.txt
 }
 workflow auditor {
-  run write_audited "$1"
+  run write_audited "${arg1}"
 }
 
 workflow default {
@@ -180,14 +180,14 @@ script emit_summary() {
   echo "Summary: $1"
 }
 workflow analyst {
-  report <- run emit_summary "$1"
+  report <- run emit_summary "${arg1}"
 }
 
 script print_reviewed() {
   echo "[reviewed] $1"
 }
 workflow reviewer {
-  run print_reviewed "$1"
+  run print_reviewed "${arg1}"
 }
 
 workflow default {
@@ -229,7 +229,7 @@ script write_receiver_args() {
   echo "sender=$3" >> args.txt
 }
 workflow consumer {
-  run write_receiver_args "$1" "$2" "$3"
+  run write_receiver_args "${arg1}" "${arg2}" "${arg3}"
 }
 
 workflow default {
@@ -268,14 +268,14 @@ script write_consumer_a_par() {
   echo "A got: $1" > consumer_a_par.txt
 }
 workflow consumer_a {
-  run write_consumer_a_par "$1"
+  run write_consumer_a_par "${arg1}"
 }
 
 script write_consumer_b_par() {
   echo "B got: $1" > consumer_b_par.txt
 }
 workflow consumer_b {
-  run write_consumer_b_par "$1"
+  run write_consumer_b_par "${arg1}"
 }
 
 workflow default {
@@ -321,7 +321,7 @@ script append_sink_log() {
   echo "$1" >> sink_log.txt
 }
 workflow sink {
-  run append_sink_log "$1"
+  run append_sink_log "${arg1}"
 }
 
 workflow default {
@@ -469,14 +469,14 @@ script write_env_a() {
   echo "A: $1" > env_a.txt
 }
 workflow consumer_a {
-  run write_env_a "$1"
+  run write_env_a "${arg1}"
 }
 
 script write_env_b() {
   echo "B: $1" > env_b.txt
 }
 workflow consumer_b {
-  run write_env_b "$1"
+  run write_env_b "${arg1}"
 }
 
 workflow default {

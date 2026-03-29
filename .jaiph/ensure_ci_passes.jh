@@ -27,11 +27,11 @@ script assert_nonempty_file_or_fail() {
 workflow ensure_ci_passes {
   const ci_log_dir = ".jaiph/tmp"
   const ci_log_file = "${ci_log_dir}/ensure_ci_passes.last.log"
-  run mkdir_p_simple "$ci_log_dir"
+  run mkdir_p_simple "${ci_log_dir}"
 
   ensure ci_passes recover {
-    run save_string_to_file "$1" "$ci_log_file"
-    run assert_nonempty_file_or_fail "$ci_log_file"
+    run save_string_to_file "${arg1}" "${ci_log_file}"
+    run assert_nonempty_file_or_fail "${ci_log_file}"
 
     prompt "
       <role>
@@ -40,8 +40,8 @@ workflow ensure_ci_passes {
 
       <task>
       Fix failing CI so npm run test:ci passes. Failure output was
-      saved to: $ci_log_file. Start by inspecting the tail of the log
-      (for example: tail -n 200 '$ci_log_file') and then apply the smallest
+      saved to: ${ci_log_file}. Start by inspecting the tail of the log
+      (for example: tail -n 200 '${ci_log_file}') and then apply the smallest
       safe fix.
 
       Constraints:
@@ -56,7 +56,7 @@ workflow ensure_ci_passes {
     "
   }
 
-  run rm_file_simple "$ci_log_file"
+  run rm_file_simple "${ci_log_file}"
 }
 
 script mkdir_p_simple() {

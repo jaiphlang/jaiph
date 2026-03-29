@@ -19,5 +19,5 @@ rule echo_line {
 workflow default {
   response = ensure echo_line
   out = run shell_capture
-  run format_output "$response" "$out"
+  run format_output "${response}" "${out}"
 }

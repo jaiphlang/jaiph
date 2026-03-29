@@ -59,7 +59,7 @@ rule project_ready {
   if not run file_exists "package.json" {
     fail "expected package.json"
   }
-  if not run non_empty "$NODE_ENV" {
+  if not run non_empty "${NODE_ENV}" {
     fail "NODE_ENV must be set"
   }
 }
@@ -110,7 +110,7 @@ Run a sample workflow without installing anything first — the script installs 
 curl -fsSL https://jaiph.org/run | bash -s '
 workflow default {
   const response = prompt "Say: Hello I'\''m [model name]!"
-  log "$response"
+  log "${response}"
 }'
 ```
 
@@ -183,7 +183,7 @@ Jaiph source files use the **`.jh`** extension. A file contains **rules**, **wor
 
 - `config { ... }` — Optional block setting runtime options (agent backend, model, Docker sandbox, etc.). Allowed at the top level (module-wide) and inside individual workflows for per-workflow overrides (`agent.*` and `run.*` keys only). See [Configuration](configuration.md).
 - `import "path" as alias` — Import rules, workflows, and scripts from another module. The path may include a `.jh` suffix or omit it (the compiler appends `.jh`). Verified at compile time.
-- `local name = value` / `const name = value` — Module-scoped variable, accessible as `$name` in rules and workflows within the module (scripts are isolated and do not inherit these — pass data as arguments or use shared libraries). Prefer **`const`** in new orchestration code.
+- `local name = value` / `const name = value` — Module-scoped variable, accessible as `${name}` in rules and workflows within the module (scripts are isolated and do not inherit these — pass data as arguments or use shared libraries). Prefer **`const`** in new orchestration code.
 - `rule name { ... }` — Reusable check: **Jaiph structured steps only** (subset: `ensure` for rules, `run` for **scripts**, `const`, brace `if`, `fail`, `log`/`logerr`, `return "…"`). Rules run in an isolated child shell; on Linux, a read-only mount namespace is used when `unshare` and passwordless `sudo` are available, otherwise the same child-shell fallback as on other platforms. Optional `export` for cross-module access.
 - `workflow name { ... }` — Orchestration entrypoint: **Jaiph steps only** (no raw shell — extract bash to `script` + `run`). Can change system state. Optional `export` for cross-module access.
 - `script name { ... }` — Bash helper (no `run`/`ensure`/routes; no Jaiph `fail`/`const`/`log`/`logerr`/`return "…"`). From a **workflow** or **rule**, call with **`run name`**; string capture uses **stdout**. The `()` after the name is optional (`script name() { ... }` also works). **Isolation:** Scripts run in a clean environment — they receive only positional arguments and essential system / Jaiph variables (`JAIPH_LIB`, `JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`); module-scoped `local` / `const` are **not** inherited. Use `source "$JAIPH_LIB/…"` for shared utilities. Scripts cannot call other Jaiph scripts (compose in a workflow instead). **Polyglot scripts:** if the first body line is a shebang (e.g. `#!/usr/bin/env node`), the script is emitted with that interpreter and Jaiph keyword validation is skipped. Without a shebang, `#!/usr/bin/env bash` is used. Scripts are compiled as separate executable files under `build/scripts/`.
@@ -193,7 +193,7 @@ Jaiph source files use the **`.jh`** extension. A file contains **rules**, **wor
 - `name = <step>` / `const name = <step>` — Capture or bind: for **`ensure`** and **`run` to a workflow**, the callee’s explicit **`return "…"`**; for **`run` to a script**, **stdout**; for **`prompt`**, the final answer; **`const`** RHS allows only simple value forms (no `$(...)` — use `run` to a script). To capture from a script or workflow in a **`const`**, write **`const x = run ref [args…]`** (or **`ensure`** for rules) — a bare **`const x = ref [args…]`** is a compile error with a hint to add **`run`**. See [Grammar](grammar.md#step-output-contract).
 - `fail "reason"` — Abort the workflow or fail the rule with a message on stderr (non-zero exit).
 - `log "message"` / `logerr "message"` — Display a message in the progress tree and on stdout/stderr; terminal output interprets backslash escapes like **`echo -e`** (`\n`, `\t`, …). Event and summary JSON still record the raw message string.
-- `channel <- …` / `channel -> workflow` — Send (RHS: literal, `$var`, or `run fn`) and route messages between workflows. See [Inbox & Dispatch](inbox.md).
+- `channel <- …` / `channel -> workflow` — Send (RHS: literal, `${var}`, or `run fn`) and route messages between workflows. See [Inbox & Dispatch](inbox.md).
 - `run async ref [args...]` — Run a workflow or script concurrently; all async steps are implicitly joined before the workflow completes. Failures are aggregated. Allowed in workflows only. Use **`script`** + **`run`** for bash background jobs. See [Grammar](grammar.md).
 - `if [not] ensure ref { ... }` / `if [not] run ref { ... }` — **Brace-only** conditionals (`else if`, `else` supported). Use **`run`** to a script for command-style tests.
 
@@ -231,14 +231,14 @@ Imported symbols use **dot notation**: `alias.name` (e.g. `ensure security.scan_
 `run` and `ensure` can appear inline in binding and send expressions — not only as standalone steps:
 
 ```jaiph
-const result = run helper "$arg"       # capture script stdout into const
-check = ensure validator "$input"      # capture rule return value
+const result = run helper "${arg}"       # capture script stdout into const
+check = ensure validator "${input}"      # capture rule return value
 answer = prompt "Summarize" returns '{ summary: string }'
 
-channel <- run build_message "$data"   # send script output to channel
+channel <- run build_message "${data}"   # send script output to channel
 ```
 
-For **typed prompts** (`returns '{ field: type }'`), the runtime validates the agent's JSON and exposes per-field variables: `$answer_summary` in the example above. See [Grammar — Step output contract](grammar.md#step-output-contract).
+For **typed prompts** (`returns '{ field: type }'`), the runtime validates the agent's JSON and exposes per-field variables: `${answer_summary}` in the example above. See [Grammar — Step output contract](grammar.md#step-output-contract).
 
 ### Script naming
 

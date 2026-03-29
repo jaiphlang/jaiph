@@ -29,7 +29,7 @@ script done_impl() {
 workflow default {
   ensure check_passes
   msg = run done_impl
-  return "$msg"
+  return "${msg}"
 }
 EOF
 
@@ -172,7 +172,7 @@ e2e::file "prompt_with_vars.jh" <<'EOF'
 const role = "engineer"
 const task = "Fix bugs"
 workflow default {
-  prompt "$role does $task"
+  prompt "${role} does ${task}"
 }
 EOF
 
@@ -183,7 +183,7 @@ e2e::expect_stdout "${prompt_vars_out}" <<'EOF'
 Jaiph: Running prompt_with_vars.jh
 
 workflow default
-  ▸ prompt "engineer does Fix bugs"
+  ▸ prompt "engineer does Fix bugs" (role="engineer", task="Fix bugs")
   ✓ prompt prompt (<time>)
 ✓ PASS workflow default (<time>)
 EOF
@@ -269,7 +269,7 @@ e2e::file "prompt_unmatched.jh" <<'EOF'
 #!/usr/bin/env jaiph
 workflow default {
   result = prompt "e2e-unmatched-prompt-never-mocked"
-  return "$result"
+  return "${result}"
 }
 EOF
 

@@ -65,7 +65,7 @@ test("build accepts run with local function and capture", () => {
         "}",
         "workflow default {",
         "  x = run f",
-        '  return "$x"',
+        '  return "${x}"',
         "}",
         "",
       ].join("\n"),

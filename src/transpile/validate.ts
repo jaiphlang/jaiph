@@ -21,6 +21,7 @@ import {
   validateLogString,
   validateFailString,
   validateReturnString,
+  validateJaiphStringContent,
 } from "./validate-string";
 
 export interface ValidateContext {
@@ -376,6 +377,10 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         if (s.rhs.kind === "run") {
           validateNoShellRedirection(ast.filePath, s.rhs.ref.loc, "run", s.rhs.args);
           validateRef(s.rhs.ref, ast, refCtx, expectRunTargetRef);
+        } else if (s.rhs.kind === "literal") {
+          const inner = s.rhs.token.startsWith('"') && s.rhs.token.endsWith('"')
+            ? s.rhs.token.slice(1, -1) : s.rhs.token;
+          validateJaiphStringContent(inner, ast.filePath, s.loc.line, s.loc.col, "send");
         } else if (s.rhs.kind === "bare_ref") {
           validateRef(s.rhs.ref, ast, refCtx, bareSendRefSpec);
         } else if (s.rhs.kind === "shell") {

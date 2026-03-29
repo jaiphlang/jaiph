@@ -181,7 +181,7 @@ script mark_ready3() {
 workflow default {
   ensure check_ready recover {
     prompt "The CI build failed.
-Please inspect the log file at $ci_log_file
+Please inspect the log file at ${ci_log_file}
 and suggest a fix."
     run mark_ready3
   }

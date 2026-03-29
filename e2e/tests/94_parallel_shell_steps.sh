@@ -160,7 +160,7 @@ workflow sender {
 }
 
 workflow handler {
-  echo "handled: $1" >> handled_log.txt
+  echo "handled: ${arg1}" >> handled_log.txt
 }
 
 workflow default {
