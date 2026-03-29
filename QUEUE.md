@@ -12,41 +12,6 @@ Process rules:
 
 ---
 
-## Isolate workflow metadata env (no cross-workflow bleed) <!-- dev-ready -->
-
-**Goal**  
-Ensure `agent.*` metadata applies only to the active workflow scope.
-
-**Context**
-
-- `applyMetadataScope` in `src/runtime/kernel/node-workflow-runtime.ts` (line ~933) takes `parentEnv`, `moduleMeta`, and `workflowMeta`, then merges config fields into a cloned env. It's called at:
-  - Workflow execution (line ~385–391): creates `workflowEnv` from scope env + module/workflow metadata.
-  - Rule execution (line ~435): creates `ruleEnv` from scope env + module metadata.
-- The risk: sibling workflows in a single run share a parent env. If workflow A sets `agent.model = "gpt-5"` in its metadata, and workflow B doesn't, B could inherit A's model setting if the parent env was mutated rather than cloned.
-- `JAIPH_*_LOCKED` guards in `src/cli/run/env.ts` (lines 25–35) protect CLI-provided overrides but do NOT protect against sibling workflow bleed within the runtime.
-- The `LOCKED_ENV_KEYS` list: `JAIPH_AGENT_MODEL`, `JAIPH_AGENT_COMMAND`, `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_AGENT_CURSOR_FLAGS`, `JAIPH_AGENT_CLAUDE_FLAGS`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, `JAIPH_INBOX_PARALLEL`.
-
-**Key files:**
-- `src/runtime/kernel/node-workflow-runtime.ts` — `applyMetadataScope` (~line 933), workflow execution (~line 380)
-- `src/cli/run/env.ts` — `LOCKED_ENV_KEYS`, `resolveRuntimeEnv`
-
-**Scope**
-
-1. Implement explicit metadata scope isolation in `NodeWorkflowRuntime`:
-   - Option A: immutable per-workflow env derivation (clone parent env → apply metadata → pass to child scope, never mutate parent).
-   - Option B: push/pop override stack keyed by workflow depth.
-   - Prefer Option A (simpler, less stateful).
-2. Write a regression test: two sibling workflows in one run, each with different `agent.*` metadata. Assert that workflow B does not see workflow A's metadata and vice versa.
-3. Verify existing lock semantics from `src/cli/run/env.ts` remain intact (CLI-level env overrides still win).
-
-**Acceptance criteria**
-
-- Sibling workflows do not inherit each other's metadata-derived agent settings.
-- Existing lock semantics remain intact.
-- Regression test proves isolation (both unit and e2e).
-
----
-
 ## Add workflow-scoped `run async` primitive <!-- dev-ready -->
 
 **Goal**  
@@ -63,6 +28,7 @@ Introduce `run async <script_ref> [args...]` as the only supported async orchest
 - Validator: `src/transpile/validate.ts` — reject `run async` in rules/scripts/tests
 - Runtime: `src/runtime/kernel/node-workflow-runtime.ts` — implement async execution + implicit join
 - Progress: `src/cli/run/progress.ts` — render async steps in tree
+- Sample: `docs/index.html` and `e2e/async.jh` - rework legacy async samples to match new pattern
 
 **Scope**
 

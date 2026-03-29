@@ -433,7 +433,11 @@ export class NodeWorkflowRuntime {
       return { status: 1, output: "", error: `Unknown rule: ${ruleName}` };
     }
     return this.executeManagedStep("rule", `${ruleName}`, args, async (io) => {
-      const moduleMeta = this.graph.modules.get(resolved.filePath)?.ast.metadata;
+      // Same-module rules inherit the calling scope's effective env (which already
+      // includes module + workflow metadata).  Only apply callee module metadata
+      // for cross-module rule references so we don't overwrite workflow-level overrides.
+      const sameModule = resolvePath(scope.filePath) === resolvePath(resolved.filePath);
+      const moduleMeta = sameModule ? undefined : this.graph.modules.get(resolved.filePath)?.ast.metadata;
       const ruleEnv = this.applyMetadataScope(scope.env, moduleMeta);
       const ruleVars = new Map(scope.vars);
       args.forEach((v, i) => {
