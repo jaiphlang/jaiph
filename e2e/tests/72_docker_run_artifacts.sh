@@ -55,7 +55,7 @@ shopt -u nullglob
 e2e::pass "docker: at least one .out file exists on host"
 
 # Verify the greet step output
-e2e::expect_run_file "docker_artifacts.jh" "000003-docker_artifacts__greet_impl.out" "hello from docker"
+e2e::expect_run_file "docker_artifacts.jh" "000003-script__greet_impl.out" "hello from docker"
 
 e2e::section "docker run artifacts — relative JAIPH_RUNS_DIR"
 
@@ -82,7 +82,7 @@ rm -rf "${TEST_DIR}/custom_runs"
 rel_run_dir="$(e2e::run_dir_at "${TEST_DIR}/custom_runs" "docker_rel_runs.jh")"
 rel_summary="${rel_run_dir}run_summary.jsonl"
 e2e::assert_file_exists "${rel_summary}" "docker: relative JAIPH_RUNS_DIR summary exists"
-e2e::expect_run_file_at "${TEST_DIR}/custom_runs" "docker_rel_runs.jh" "000003-docker_rel_runs__greet_impl.out" "hello relative"
+e2e::expect_run_file_at "${TEST_DIR}/custom_runs" "docker_rel_runs.jh" "000003-script__greet_impl.out" "hello relative"
 
 e2e::section "docker run artifacts — absolute JAIPH_RUNS_DIR inside workspace"
 
@@ -110,7 +110,7 @@ JAIPH_DOCKER_ENABLED=true JAIPH_RUNS_DIR="${abs_runs_dir}" jaiph run "${TEST_DIR
 abs_run_dir="$(e2e::run_dir_at "${abs_runs_dir}" "docker_abs_runs.jh")"
 abs_summary="${abs_run_dir}run_summary.jsonl"
 e2e::assert_file_exists "${abs_summary}" "docker: absolute JAIPH_RUNS_DIR inside workspace summary exists"
-e2e::expect_run_file_at "${abs_runs_dir}" "docker_abs_runs.jh" "000003-docker_abs_runs__greet_impl.out" "hello absolute"
+e2e::expect_run_file_at "${abs_runs_dir}" "docker_abs_runs.jh" "000003-script__greet_impl.out" "hello absolute"
 
 e2e::section "docker run artifacts — absolute JAIPH_RUNS_DIR outside workspace fails"
 

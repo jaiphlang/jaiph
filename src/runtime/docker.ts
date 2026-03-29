@@ -228,55 +228,49 @@ function copyExecutableScriptsDir(scriptsSrc: string, generatedDir: string): voi
 }
 
 /**
- * Create a temp directory with the transpiled script(s) and jaiph_stdlib.sh,
+ * Resolve the compiled dist/src root directory.
+ * Works for both `node dist/src/cli.js` (tsc layout, __dirname = dist/src/runtime)
+ * and Bun standalone (executable next to dist/).
+ */
+function resolveDistSrcRoot(): string {
+  // __dirname is dist/src/runtime when running from tsc output
+  const fromModule = join(__dirname, "..");
+  if (existsSync(join(fromModule, "runtime", "kernel", "node-workflow-runner.js"))) return fromModule;
+  const nextToExec = join(dirname(process.execPath), "src");
+  if (existsSync(join(nextToExec, "runtime", "kernel", "node-workflow-runner.js"))) return nextToExec;
+  return fromModule;
+}
+
+function copyDirRecursive(src: string, dest: string): void {
+  mkdirSync(dest, { recursive: true });
+  for (const entry of readdirSync(src, { withFileTypes: true })) {
+    const srcPath = join(src, entry.name);
+    const destPath = join(dest, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === "reporting" || entry.name === "cli") continue;
+      copyDirRecursive(srcPath, destPath);
+    } else if (entry.isFile() && entry.name.endsWith(".js")) {
+      copyFileSync(srcPath, destPath);
+    }
+  }
+}
+
+/**
+ * Create a temp directory with scripts + compiled JS source tree,
  * to be mounted read-only at /jaiph/generated/ inside the container.
- * When buildOutDir is set, copies all *.sh from that directory (for workflows with imports).
+ * Node-orchestrated: no workflow .sh or jaiph_stdlib.sh needed.
  */
 export function prepareGeneratedDir(
-  builtScriptPath: string,
-  stdlibPath: string,
-  buildOutDir?: string,
+  scriptsDir: string,
 ): string {
   const generatedDir = mkdtempSync(join(tmpdir(), "jaiph-docker-gen-"));
-  if (buildOutDir && existsSync(buildOutDir)) {
-    for (const entry of readdirSync(buildOutDir, { recursive: true })) {
-      const rel = typeof entry === "string" ? entry : "";
-      if (!rel.endsWith(".sh")) continue;
-      const full = join(buildOutDir, rel);
-      if (statSync(full).isFile()) {
-        const dest = join(generatedDir, rel);
-        mkdirSync(dirname(dest), { recursive: true });
-        copyFileSync(full, dest);
-      }
-    }
-    copyExecutableScriptsDir(join(buildOutDir, "scripts"), generatedDir);
-  } else {
-    copyFileSync(builtScriptPath, join(generatedDir, basename(builtScriptPath)));
-    copyExecutableScriptsDir(join(dirname(builtScriptPath), "scripts"), generatedDir);
-  }
 
-  // Copy jaiph_stdlib.sh
-  copyFileSync(stdlibPath, join(generatedDir, "jaiph_stdlib.sh"));
+  // Copy extracted script step files
+  copyExecutableScriptsDir(scriptsDir, generatedDir);
 
-  // Copy JS runtime kernel alongside stdlib
-  const stdlibDir = dirname(stdlibPath);
-  const runtimeSrcDir = join(stdlibDir, "runtime");
-  if (existsSync(runtimeSrcDir)) {
-    const runtimeDestDir = join(generatedDir, "runtime");
-    mkdirSync(runtimeDestDir, { recursive: true });
-    const kernelSrc = join(runtimeSrcDir, "kernel");
-    if (existsSync(kernelSrc)) {
-      const kernelDest = join(runtimeDestDir, "kernel");
-      mkdirSync(kernelDest, { recursive: true });
-      for (const name of readdirSync(kernelSrc)) {
-        if (!name.endsWith(".js")) continue;
-        const kf = join(kernelSrc, name);
-        if (statSync(kf).isFile()) {
-          copyFileSync(kf, join(kernelDest, name));
-        }
-      }
-    }
-  }
+  // Copy compiled JS source tree (parser, types, transpile, runtime kernel)
+  const distSrc = resolveDistSrcRoot();
+  copyDirRecursive(distSrc, join(generatedDir, "src"));
 
   return generatedDir;
 }
@@ -287,10 +281,8 @@ export function prepareGeneratedDir(
 
 export interface DockerSpawnOptions {
   config: DockerRunConfig;
-  builtScriptPath: string;
-  stdlibPath: string;
-  /** When set, all *.sh under this dir are copied into generated (for workflows with imports). */
-  buildOutDir?: string;
+  scriptsDir: string;
+  sourceAbs: string;
   workspaceRoot: string;
   metaFile: string;
   runArgs: string[];
@@ -379,12 +371,12 @@ export function buildDockerArgs(opts: DockerSpawnOptions, generatedDir: string):
 
   // Environment variables — remap workspace-related paths for the container
   const containerEnv = remapDockerEnv(opts.env, opts.workspaceRoot);
-  args.push("-e", `JAIPH_STDLIB=/jaiph/generated/jaiph_stdlib.sh`);
   args.push("-e", `JAIPH_META_FILE=${containerMetaDir}/${metaBase}`);
+  args.push("-e", `JAIPH_SCRIPTS=/jaiph/generated/scripts`);
 
-  // Forward JAIPH_* env vars (except JAIPH_STDLIB which we override)
+  // Forward JAIPH_* env vars (except overridden keys)
   for (const [key, value] of Object.entries(containerEnv)) {
-    if (key.startsWith("JAIPH_") && key !== "JAIPH_STDLIB" && key !== "JAIPH_META_FILE" && value !== undefined) {
+    if (key.startsWith("JAIPH_") && key !== "JAIPH_STDLIB" && key !== "JAIPH_META_FILE" && key !== "JAIPH_SCRIPTS" && value !== undefined) {
       args.push("-e", `${key}=${value}`);
     }
   }
@@ -403,11 +395,16 @@ export function buildDockerArgs(opts: DockerSpawnOptions, generatedDir: string):
   // Image
   args.push(opts.config.image);
 
-  // Command: execute transpiled workflow module directly.
-  const scriptName = basename(opts.builtScriptPath);
+  // Command: Node-orchestrated workflow runner.
+  // Source file path inside the container (workspace is mounted at /jaiph/workspace).
+  const relSource = relative(opts.workspaceRoot, opts.sourceAbs);
+  const containerSourcePath = `${CONTAINER_WORKSPACE}/${relSource}`;
   args.push(
-    `/jaiph/generated/${scriptName}`,
-    "__jaiph_workflow",
+    "node",
+    "/jaiph/generated/src/runtime/kernel/node-workflow-runner.js",
+    `${containerMetaDir}/${metaBase}`,
+    containerSourcePath,
+    "/jaiph/generated/scripts",
     "default",
     ...opts.runArgs,
   );
@@ -434,11 +431,7 @@ export function spawnDockerProcess(opts: DockerSpawnOptions): DockerSpawnResult 
   const resolvedImage = resolveImage(opts.config, opts.workspaceRoot);
   opts = { ...opts, config: { ...opts.config, image: resolvedImage } };
 
-  const generatedDir = prepareGeneratedDir(
-    opts.builtScriptPath,
-    opts.stdlibPath,
-    opts.buildOutDir,
-  );
+  const generatedDir = prepareGeneratedDir(opts.scriptsDir);
   const dockerArgs = buildDockerArgs(opts, generatedDir);
 
   const child = spawn("docker", dockerArgs, {

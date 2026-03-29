@@ -137,9 +137,13 @@ When adding a new source module or extending an existing one, create or extend t
 
 After parse, the transpiler checks that `ensure` and `run` targets (and related refs, such as send right-hand sides) resolve to symbols of the right kind in the current or imported module. That logic lives in **`src/transpile/validate.ts`** (`validateReferences` and friends), with the shared **local vs `alias.name` resolution**, **wrong-kind** messages, and **`lookupKind`** extracted to **`src/transpile/validate-ref-resolution.ts`** (`validateRef` plus small message bundles per call site). If you change validation behavior, treat **exact `E_VALIDATE` strings** as part of the public contract unless you are deliberately shipping a breaking change — verify with `npm test`, compiler golden tests, and `npm run test:e2e`.
 
-### Workflow module emission
+### Workflow module emission (golden tests only)
 
-After validation, each compiled workflow module becomes one bash script. Ownership is split so no single file grows into an unmaintainable monolith (see **Short files** under [Code philosophy](#code-philosophy) and Implementation Plan **0b** in `.jaiph/language_redesign_spec.md`).
+The transpiler can still produce a full bash module string per compiled workflow module — but this path is **not used for production execution**. All `jaiph run`, `jaiph test`, and Docker runs go through the Node workflow runtime (`NodeWorkflowRuntime`), which interprets the AST directly. The bash emission exists for **compiler golden/snapshot tests** that lock the emitter's output against regressions.
+
+`buildScripts()` — the production preparation path — persists **only** extracted per-step `script` files under `scripts/`. No workflow-level `.sh` is written for any execution path.
+
+The emission modules remain in the codebase for the golden test contract:
 
 | Source module | Responsibility |
 |---------------|----------------|

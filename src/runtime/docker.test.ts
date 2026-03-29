@@ -173,40 +173,18 @@ test("resolveDockerConfig: workspace from in-file", () => {
 // prepareGeneratedDir
 // ---------------------------------------------------------------------------
 
-test("prepareGeneratedDir: copies script and stdlib", () => {
+test("prepareGeneratedDir: copies scripts and kernel", () => {
   const srcDir = mkdtempSync(join(tmpdir(), "jaiph-docker-test-src-"));
   try {
-    writeFileSync(join(srcDir, "main.sh"), "#!/bin/bash\necho hello");
-    writeFileSync(join(srcDir, "jaiph_stdlib.sh"), "# stdlib");
-    mkdirSync(join(srcDir, "runtime", "kernel"), { recursive: true });
-    writeFileSync(join(srcDir, "runtime", "kernel", "emit.js"), "console.log('emit')");
-
-    const genDir = prepareGeneratedDir(join(srcDir, "main.sh"), join(srcDir, "jaiph_stdlib.sh"));
-    try {
-      assert.ok(existsSync(join(genDir, "main.sh")));
-      assert.ok(existsSync(join(genDir, "jaiph_stdlib.sh")));
-      assert.ok(existsSync(join(genDir, "runtime", "kernel", "emit.js")));
-      assert.equal(readFileSync(join(genDir, "jaiph_stdlib.sh"), "utf8"), "# stdlib");
-    } finally {
-      rmSync(genDir, { recursive: true, force: true });
-    }
-  } finally {
-    rmSync(srcDir, { recursive: true, force: true });
-  }
-});
-
-test("prepareGeneratedDir: copies adjacent scripts/ for single-file layout", () => {
-  const srcDir = mkdtempSync(join(tmpdir(), "jaiph-docker-test-src-"));
-  try {
-    writeFileSync(join(srcDir, "main.sh"), "#!/bin/bash\necho hello");
     mkdirSync(join(srcDir, "scripts"));
     writeFileSync(join(srcDir, "scripts", "foo"), "#!/usr/bin/env bash\necho foo");
-    writeFileSync(join(srcDir, "jaiph_stdlib.sh"), "# stdlib");
 
-    const genDir = prepareGeneratedDir(join(srcDir, "main.sh"), join(srcDir, "jaiph_stdlib.sh"));
+    const genDir = prepareGeneratedDir(join(srcDir, "scripts"));
     try {
       assert.ok(existsSync(join(genDir, "scripts", "foo")));
       assert.equal(readFileSync(join(genDir, "scripts", "foo"), "utf8"), "#!/usr/bin/env bash\necho foo");
+      // No jaiph_stdlib.sh or workflow .sh expected
+      assert.ok(!existsSync(join(genDir, "jaiph_stdlib.sh")));
     } finally {
       rmSync(genDir, { recursive: true, force: true });
     }
@@ -230,8 +208,8 @@ test("buildDockerArgs: includes basic docker run flags", () => {
       timeout: 300,
       mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
     },
-    builtScriptPath: "/tmp/out/main.sh",
-    stdlibPath: "/usr/lib/jaiph_stdlib.sh",
+    scriptsDir: "/tmp/out/scripts",
+    sourceAbs: "/home/user/project/main.jh",
     workspaceRoot: "/home/user/project",
     metaFile: "/tmp/out/.jaiph-run-meta.txt",
     runArgs: ["arg1"],
@@ -252,9 +230,8 @@ test("buildDockerArgs: includes basic docker run flags", () => {
   const genMountIdx = args.indexOf(`${genDir}:/jaiph/generated:ro`);
   assert.ok(genMountIdx > 0);
 
-  // JAIPH_STDLIB env
-  const stdlibEnvIdx = args.indexOf("JAIPH_STDLIB=/jaiph/generated/jaiph_stdlib.sh");
-  assert.ok(stdlibEnvIdx > 0);
+  // JAIPH_SCRIPTS env
+  assert.ok(args.includes("JAIPH_SCRIPTS=/jaiph/generated/scripts"));
   const metaEnvIdx = args.indexOf("JAIPH_META_FILE=/jaiph/meta/.jaiph-run-meta.txt");
   assert.ok(metaEnvIdx > 0);
 
@@ -262,8 +239,10 @@ test("buildDockerArgs: includes basic docker run flags", () => {
   const metaMountIdx = args.indexOf("/tmp/out:/jaiph/meta:rw");
   assert.ok(metaMountIdx > 0);
 
-  // Script path in command
-  assert.ok(args.includes("/jaiph/generated/main.sh"));
+  // Node runner command
+  assert.ok(args.includes("node"));
+  assert.ok(args.includes("/jaiph/generated/src/runtime/kernel/node-workflow-runner.js"));
+  assert.ok(args.includes("/jaiph/workspace/main.jh"));
   assert.ok(args.includes("arg1"));
 });
 
@@ -277,8 +256,8 @@ test("buildDockerArgs: TTY flag when isTTY is true", () => {
       timeout: 300,
       mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
     },
-    builtScriptPath: "/tmp/out/main.sh",
-    stdlibPath: "/usr/lib/jaiph_stdlib.sh",
+    scriptsDir: "/tmp/out/scripts",
+    sourceAbs: "/home/user/project/main.jh",
     workspaceRoot: "/home/user/project",
     metaFile: "/tmp/out/.jaiph-run-meta.txt",
     runArgs: [],
@@ -299,8 +278,8 @@ test("buildDockerArgs: --network flag for non-default network", () => {
       timeout: 300,
       mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
     },
-    builtScriptPath: "/tmp/out/main.sh",
-    stdlibPath: "/usr/lib/jaiph_stdlib.sh",
+    scriptsDir: "/tmp/out/scripts",
+    sourceAbs: "/home/user/project/main.jh",
     workspaceRoot: "/home/user/project",
     metaFile: "/tmp/out/.jaiph-run-meta.txt",
     runArgs: [],
@@ -313,7 +292,7 @@ test("buildDockerArgs: --network flag for non-default network", () => {
   assert.equal(args[netIdx + 1], "none");
 });
 
-test("buildDockerArgs: forwards JAIPH_ env vars except JAIPH_STDLIB", () => {
+test("buildDockerArgs: forwards JAIPH_ env vars except overridden keys", () => {
   const opts: DockerSpawnOptions = {
     config: {
       enabled: true,
@@ -323,8 +302,8 @@ test("buildDockerArgs: forwards JAIPH_ env vars except JAIPH_STDLIB", () => {
       timeout: 300,
       mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
     },
-    builtScriptPath: "/tmp/out/main.sh",
-    stdlibPath: "/usr/lib/jaiph_stdlib.sh",
+    scriptsDir: "/tmp/out/scripts",
+    sourceAbs: "/home/user/project/main.jh",
     workspaceRoot: "/home/user/project",
     metaFile: "/tmp/out/.jaiph-run-meta.txt",
     runArgs: [],
@@ -357,8 +336,8 @@ test("buildDockerArgs: multiple mounts produce multiple -v flags", () => {
         { hostPath: "config", containerPath: "/jaiph/workspace/config", mode: "ro" },
       ],
     },
-    builtScriptPath: "/tmp/out/main.sh",
-    stdlibPath: "/usr/lib/jaiph_stdlib.sh",
+    scriptsDir: "/tmp/out/scripts",
+    sourceAbs: "/home/user/project/main.jh",
     workspaceRoot: "/home/user/project",
     metaFile: "/tmp/out/.jaiph-run-meta.txt",
     runArgs: [],
@@ -381,8 +360,8 @@ test("buildDockerArgs: overrides JAIPH_WORKSPACE to container path", () => {
       timeout: 300,
       mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
     },
-    builtScriptPath: "/tmp/out/main.sh",
-    stdlibPath: "/usr/lib/jaiph_stdlib.sh",
+    scriptsDir: "/tmp/out/scripts",
+    sourceAbs: "/home/user/project/main.jh",
     workspaceRoot: "/home/user/project",
     metaFile: "/tmp/out/.jaiph-run-meta.txt",
     runArgs: [],
@@ -404,8 +383,8 @@ test("buildDockerArgs: remaps absolute JAIPH_RUNS_DIR inside workspace", () => {
       timeout: 300,
       mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
     },
-    builtScriptPath: "/tmp/out/main.sh",
-    stdlibPath: "/usr/lib/jaiph_stdlib.sh",
+    scriptsDir: "/tmp/out/scripts",
+    sourceAbs: "/home/user/project/main.jh",
     workspaceRoot: "/home/user/project",
     metaFile: "/tmp/out/.jaiph-run-meta.txt",
     runArgs: [],
@@ -426,8 +405,8 @@ test("buildDockerArgs: passes through relative JAIPH_RUNS_DIR unchanged", () => 
       timeout: 300,
       mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
     },
-    builtScriptPath: "/tmp/out/main.sh",
-    stdlibPath: "/usr/lib/jaiph_stdlib.sh",
+    scriptsDir: "/tmp/out/scripts",
+    sourceAbs: "/home/user/project/main.jh",
     workspaceRoot: "/home/user/project",
     metaFile: "/tmp/out/.jaiph-run-meta.txt",
     runArgs: [],
@@ -448,8 +427,8 @@ test("buildDockerArgs: throws for absolute JAIPH_RUNS_DIR outside workspace", ()
       timeout: 300,
       mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
     },
-    builtScriptPath: "/tmp/out/main.sh",
-    stdlibPath: "/usr/lib/jaiph_stdlib.sh",
+    scriptsDir: "/tmp/out/scripts",
+    sourceAbs: "/home/user/project/main.jh",
     workspaceRoot: "/home/user/project",
     metaFile: "/tmp/out/.jaiph-run-meta.txt",
     runArgs: [],
@@ -528,8 +507,8 @@ test("buildDockerArgs: forwards ANTHROPIC_* env vars", () => {
       timeout: 300,
       mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
     },
-    builtScriptPath: "/tmp/out/main.sh",
-    stdlibPath: "/usr/lib/jaiph_stdlib.sh",
+    scriptsDir: "/tmp/out/scripts",
+    sourceAbs: "/home/user/project/main.jh",
     workspaceRoot: "/home/user/project",
     metaFile: "/tmp/out/.jaiph-run-meta.txt",
     runArgs: [],
@@ -554,8 +533,8 @@ test("buildDockerArgs: forwards CURSOR_* env vars", () => {
       timeout: 300,
       mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
     },
-    builtScriptPath: "/tmp/out/main.sh",
-    stdlibPath: "/usr/lib/jaiph_stdlib.sh",
+    scriptsDir: "/tmp/out/scripts",
+    sourceAbs: "/home/user/project/main.jh",
     workspaceRoot: "/home/user/project",
     metaFile: "/tmp/out/.jaiph-run-meta.txt",
     runArgs: [],
@@ -582,8 +561,8 @@ test("buildDockerArgs: forwards CLAUDE_* env vars", () => {
       timeout: 300,
       mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
     },
-    builtScriptPath: "/tmp/out/main.sh",
-    stdlibPath: "/usr/lib/jaiph_stdlib.sh",
+    scriptsDir: "/tmp/out/scripts",
+    sourceAbs: "/home/user/project/main.jh",
     workspaceRoot: "/home/user/project",
     metaFile: "/tmp/out/.jaiph-run-meta.txt",
     runArgs: [],
@@ -608,8 +587,8 @@ test("buildDockerArgs: does not forward undefined agent env vars", () => {
       timeout: 300,
       mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
     },
-    builtScriptPath: "/tmp/out/main.sh",
-    stdlibPath: "/usr/lib/jaiph_stdlib.sh",
+    scriptsDir: "/tmp/out/scripts",
+    sourceAbs: "/home/user/project/main.jh",
     workspaceRoot: "/home/user/project",
     metaFile: "/tmp/out/.jaiph-run-meta.txt",
     runArgs: [],

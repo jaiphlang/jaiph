@@ -43,7 +43,7 @@ JAIPH_DOCKER_ENABLED=true jaiph run "${TEST_DIR}/dockerfile_detect.jh" >/dev/nul
 
 # Then: the workflow should succeed (marker file present = custom image was used)
 run_dir="$(e2e::run_dir "dockerfile_detect.jh")"
-e2e::expect_run_file "dockerfile_detect.jh" "000003-dockerfile_detect__check_marker_impl.out" "marker found"
+e2e::expect_run_file "dockerfile_detect.jh" "000003-script__check_marker_impl.out" "marker found"
 e2e::pass "docker: .jaiph/Dockerfile detected and image built"
 
 e2e::section "docker dockerfile detection — explicit image skips Dockerfile"
@@ -70,7 +70,7 @@ EOF
 JAIPH_DOCKER_ENABLED=true JAIPH_DOCKER_IMAGE=node:20-bookworm jaiph run "${TEST_DIR}/dockerfile_skip.jh" >/dev/null 2>&1
 
 # Then: the marker file should NOT exist (stock pulled image, not custom build)
-e2e::expect_run_file "dockerfile_skip.jh" "000003-dockerfile_skip__check_no_marker_impl.out" "no marker"
+e2e::expect_run_file "dockerfile_skip.jh" "000003-script__check_no_marker_impl.out" "no marker"
 e2e::pass "docker: explicit image skips .jaiph/Dockerfile"
 
 e2e::section "docker dockerfile detection — fallback without Dockerfile"
@@ -99,7 +99,7 @@ fallback_summary="${fallback_run_dir}run_summary.jsonl"
 e2e::assert_file_exists "${fallback_summary}" "docker: fallback run_summary.jsonl exists"
 e2e::pass "docker: falls back to default image without .jaiph/Dockerfile"
 
-e2e::section "docker dockerfile detection — agent env vars are sanitized"
+e2e::section "docker dockerfile detection — agent env vars are forwarded"
 
 # Given: a workflow that checks visibility of agent env vars
 e2e::file "envforward.jh" <<'EOF'
@@ -122,10 +122,10 @@ JAIPH_DOCKER_ENABLED=true \
   CURSOR_SESSION="test-session-456" \
   jaiph run "${TEST_DIR}/envforward.jh" >/dev/null 2>&1
 
-# Then: sensitive agent env vars are sanitized in container runtime
+# Then: agent env vars are forwarded to the container (ANTHROPIC_*, CURSOR_* prefixes)
 run_dir="$(e2e::run_dir "envforward.jh")"
-out_content="$(<"${run_dir}000003-envforward__check_env_impl.out")"
-e2e::assert_contains "${out_content}" "ANTHROPIC_API_KEY=unset" "docker: ANTHROPIC_API_KEY not forwarded"
-e2e::assert_contains "${out_content}" "CURSOR_SESSION=unset" "docker: CURSOR_SESSION not forwarded"
+out_content="$(<"${run_dir}000003-script__check_env_impl.out")"
+e2e::assert_contains "${out_content}" "ANTHROPIC_API_KEY=test-key-123" "docker: ANTHROPIC_API_KEY forwarded"
+e2e::assert_contains "${out_content}" "CURSOR_SESSION=test-session-456" "docker: CURSOR_SESSION forwarded"
 
 rm -rf "${fallback_dir}"
