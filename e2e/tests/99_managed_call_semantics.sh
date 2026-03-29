@@ -62,8 +62,8 @@ workflow default {
 }
 EOF
 
-if jaiph build "${TEST_DIR}/direct_fn.jh" >/dev/null 2>&1; then
-  e2e::fail "expected build to fail on direct function call"
+if jaiph run "${TEST_DIR}/direct_fn.jh" >/dev/null 2>&1; then
+  e2e::fail "expected run to fail on direct function call"
 fi
 e2e::pass "direct function invocation rejected"
 
@@ -78,8 +78,8 @@ workflow default {
 }
 EOF
 
-if jaiph build "${TEST_DIR}/sub_fn.jh" >/dev/null 2>&1; then
-  e2e::fail "expected build to fail on \$(f)"
+if jaiph run "${TEST_DIR}/sub_fn.jh" >/dev/null 2>&1; then
+  e2e::fail "expected run to fail on \$(f)"
 fi
 e2e::pass "command substitution with Jaiph function rejected"
 
@@ -102,5 +102,5 @@ workflow default {
 }
 EOF
 
-jaiph build "${TEST_DIR}/ensure_run_smoke.jh" >/dev/null
+smoke_out="$(jaiph run "${TEST_DIR}/ensure_run_smoke.jh" 2>&1)"
 e2e::pass "ensure and run regression smoke"

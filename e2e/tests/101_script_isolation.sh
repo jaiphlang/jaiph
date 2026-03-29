@@ -118,10 +118,10 @@ workflow default {
 }
 EOF
 
-if jaiph build "${TEST_DIR}/cross_call.jh" >/dev/null 2>&1; then
-  e2e::fail "expected build to fail on cross-script call"
+if jaiph run "${TEST_DIR}/cross_call.jh" >/dev/null 2>&1; then
+  e2e::fail "expected run to fail on cross-script call"
 fi
-err_out="$(jaiph build "${TEST_DIR}/cross_call.jh" 2>&1 || true)"
+err_out="$(jaiph run "${TEST_DIR}/cross_call.jh" 2>&1 || true)"
 e2e::assert_contains "${err_out}" "scripts cannot call other Jaiph scripts" "cross-script call error message"
 
 e2e::pass "cross-script call rejected at compile time"

@@ -34,9 +34,6 @@ WORKFLOW
 
 rm -rf "${TEST_DIR}/live_runs"
 
-# Build first, then run in background
-jaiph build "${TEST_DIR}/live_out.jh" >/dev/null
-
 # When: run the workflow in the background, poll .out/.err files mid-execution
 run_err="$(mktemp)"
 JAIPH_RUNS_DIR="${TEST_DIR}/live_runs" jaiph run "${TEST_DIR}/live_out.jh" 2>"${run_err}" &

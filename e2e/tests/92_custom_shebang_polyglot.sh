@@ -35,33 +35,6 @@ workflow default {
 }
 EOF
 
-# When — build writes module + scripts with +x
-jaiph build "${TEST_DIR}/polyglot.jh" >/dev/null
-
-expected_module="${TEST_DIR}/polyglot.sh"
-expected_py="${TEST_DIR}/scripts/py_echo_ok"
-expected_bash="${TEST_DIR}/scripts/bash_marker"
-
-e2e::assert_file_exists "${expected_module}" "built module polyglot.sh exists"
-e2e::assert_file_exists "${expected_py}" "built scripts/py_echo_ok exists"
-e2e::assert_file_exists "${expected_bash}" "built scripts/bash_marker exists"
-
-e2e::assert_file_executable "${expected_module}" "module .sh is executable"
-e2e::assert_file_executable "${expected_py}" "python script is executable"
-e2e::assert_file_executable "${expected_bash}" "bash script is executable"
-
-py_first="$(head -n 1 "${expected_py}")"
-e2e::assert_equals "${py_first}" "#!/usr/bin/env python3" "python script shebang line"
-
-bash_first="$(head -n 1 "${expected_bash}")"
-e2e::assert_equals "${bash_first}" "#!/usr/bin/env bash" "default bash shebang when omitted in source"
-
-e2e::assert_contains "$(<"${expected_py}")" "import sys" "python body preserved in script file"
-e2e::assert_contains "$(<"${expected_bash}")" "bash-script-ran" "bash script body emitted"
-
-e2e::assert_contains "$(<"${expected_module}")" 'export JAIPH_SCRIPTS=' "module exports JAIPH_SCRIPTS"
-e2e::assert_contains "$(<"${expected_module}")" '"$JAIPH_SCRIPTS/py_echo_ok"' "module invokes python script by path"
-
 # When / Then — end-to-end run (full tree: banner, both script steps, PASS)
 run_out="$(e2e::run "polyglot.jh")"
 e2e::expect_stdout "${run_out}" <<'EOF'
