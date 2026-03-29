@@ -45,6 +45,7 @@ type InboxMsg = {
 };
 
 type WorkflowContext = {
+  workflowName: string;
   routes: Map<string, string[]>;
   queue: InboxMsg[];
 };
@@ -400,6 +401,7 @@ export class NodeWorkflowRuntime {
         childScope.vars.set(`arg${i + 1}`, v);
       });
       const ctx: WorkflowContext = {
+        workflowName,
         routes: new Map(),
         queue: [],
       };
@@ -521,13 +523,26 @@ export class NodeWorkflowRuntime {
         }
         this.inboxSeq += 1;
         const seqPadded = String(this.inboxSeq).padStart(3, "0");
+        const senderName = ctx.workflowName;
         const msg: InboxMsg = {
           channel: step.channel,
           content: payload,
-          sender: basename(scope.filePath, ".jh"),
+          sender: senderName,
           seqPadded,
         };
-        ctx.queue.push(msg);
+        // Route to the nearest ancestor context that has a route for this channel.
+        let targetCtx = ctx;
+        for (let i = this.workflowCtxStack.length - 1; i >= 0; i -= 1) {
+          if (this.workflowCtxStack[i]!.routes.has(step.channel)) {
+            targetCtx = this.workflowCtxStack[i]!;
+            break;
+          }
+        }
+        targetCtx.queue.push(msg);
+        // Persist inbox file to run directory.
+        const inboxFileDir = join(this.runDir, "inbox");
+        mkdirSync(inboxFileDir, { recursive: true });
+        writeFileSync(join(inboxFileDir, `${seqPadded}-${step.channel}.txt`), payload, "utf8");
         appendRunSummaryLine(
           JSON.stringify({
             type: "INBOX_ENQUEUE",
@@ -751,47 +766,98 @@ export class NodeWorkflowRuntime {
   }
 
   private async drainWorkflowQueue(scope: Scope, ctx: WorkflowContext): Promise<StepResult> {
+    const parallel = scope.env.JAIPH_INBOX_PARALLEL === "true";
     let cursor = 0;
     while (cursor < ctx.queue.length) {
       const msg = ctx.queue[cursor]!;
       cursor += 1;
       const targets = ctx.routes.get(msg.channel) ?? [];
-      for (const target of targets) {
-        appendRunSummaryLine(
-          JSON.stringify({
-            type: "INBOX_DISPATCH_START",
-            ts: nowIso(),
-            run_id: this.runId,
-            channel: msg.channel,
-            sender: msg.sender,
-            inbox_seq: msg.seqPadded,
-            target,
-            event_version: 1,
+      if (targets.length === 0) continue;
+      if (parallel) {
+        const dispatches = await Promise.all(
+          targets.map(async (target) => {
+            appendRunSummaryLine(
+              JSON.stringify({
+                type: "INBOX_DISPATCH_START",
+                ts: nowIso(),
+                run_id: this.runId,
+                channel: msg.channel,
+                sender: msg.sender,
+                inbox_seq: msg.seqPadded,
+                target,
+                event_version: 1,
+              }),
+            );
+            const t0 = Date.now();
+            const result = await this.executeRunRef(
+              {
+                filePath: scope.filePath,
+                vars: new Map([...scope.vars, ["1", msg.content], ["2", msg.channel], ["3", msg.sender]]),
+                env: scope.env,
+              },
+              target,
+              "",
+            );
+            appendRunSummaryLine(
+              JSON.stringify({
+                type: "INBOX_DISPATCH_COMPLETE",
+                ts: nowIso(),
+                run_id: this.runId,
+                channel: msg.channel,
+                sender: msg.sender,
+                inbox_seq: msg.seqPadded,
+                target,
+                status: result.status,
+                elapsed_ms: Date.now() - t0,
+                event_version: 1,
+              }),
+            );
+            return result;
           }),
         );
-        const dispatch = await this.executeRunRef(
-          {
-            filePath: scope.filePath,
-            vars: new Map([...scope.vars, ["1", msg.content], ["2", msg.channel], ["3", msg.sender]]),
-            env: scope.env,
-          },
-          target,
-          "",
-        );
-        appendRunSummaryLine(
-          JSON.stringify({
-            type: "INBOX_DISPATCH_COMPLETE",
-            ts: nowIso(),
-            run_id: this.runId,
-            channel: msg.channel,
-            sender: msg.sender,
-            inbox_seq: msg.seqPadded,
+        for (const d of dispatches) {
+          if (d.status !== 0) return d;
+        }
+      } else {
+        for (const target of targets) {
+          appendRunSummaryLine(
+            JSON.stringify({
+              type: "INBOX_DISPATCH_START",
+              ts: nowIso(),
+              run_id: this.runId,
+              channel: msg.channel,
+              sender: msg.sender,
+              inbox_seq: msg.seqPadded,
+              target,
+              event_version: 1,
+            }),
+          );
+          const t0 = Date.now();
+          const dispatch = await this.executeRunRef(
+            {
+              filePath: scope.filePath,
+              vars: new Map([...scope.vars, ["1", msg.content], ["2", msg.channel], ["3", msg.sender]]),
+              env: scope.env,
+            },
             target,
-            status: dispatch.status,
-            event_version: 1,
-          }),
-        );
-        if (dispatch.status !== 0) return dispatch;
+            "",
+          );
+          appendRunSummaryLine(
+            JSON.stringify({
+              type: "INBOX_DISPATCH_COMPLETE",
+              ts: nowIso(),
+              run_id: this.runId,
+              channel: msg.channel,
+              sender: msg.sender,
+              inbox_seq: msg.seqPadded,
+              target,
+              status: dispatch.status,
+              elapsed_ms: Date.now() - t0,
+              event_version: 1,
+            }),
+          );
+          if (dispatch.status !== 0) return dispatch;
+        }
       }
     }
     return { status: 0, output: "", error: "" };

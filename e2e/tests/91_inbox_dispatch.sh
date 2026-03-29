@@ -12,8 +12,6 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 unset JAIPH_STDLIB
 
 e2e::section "Basic send + route"
-e2e::skip "Node inbox route dispatch parity is not implemented yet; suite temporarily skipped"
-exit 0
 
 # Given
 e2e::file "basic_inbox.jh" <<'EOF'
