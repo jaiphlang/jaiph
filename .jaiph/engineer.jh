@@ -40,6 +40,8 @@ const code_philosophy = "
      codebase already provides it. If not, explain why.
   8. E2E bash tests should compare full CLI tree output and file contents, not 
      just substrings.
+  9. Source code and ARCHITECTURE.md are the single source of truth. Don't trust
+     documentation blindly.
 "
 
 script select_role() {
