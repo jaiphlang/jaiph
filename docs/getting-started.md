@@ -151,7 +151,6 @@ Entrypoint resolution: the entry file must define a workflow named **`default`**
 Other useful CLI commands:
 
 ```bash
-jaiph build [--target <dir>] [path]   # compile .jh files to bash for Docker/CI
 jaiph test [path]                     # run tests (see below)
 jaiph report --workspace .            # browse .jaiph/runs in a local dashboard
 ```

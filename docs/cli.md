@@ -11,19 +11,18 @@ redirect_from:
 
 Jaiph workflow sources (`.jh`) are programs: the CLI parses them, validates references, and executes them through the **Node workflow runtime** (`NodeWorkflowRuntime`), which interprets the AST directly — no Bash transpilation on the runtime path. **`jaiph run`** builds a runtime graph from the parsed AST, then spawns the Node workflow runner as a detached process. Signals and process groups are handled from the CLI so interrupts reach nested work. **Prompt** steps, **managed step child processes** (each `run` / `ensure` target — workflows, rules, and `script` executables), **file-backed inbox**, and **stderr / `run_summary.jsonl` events** are all handled by the **JS kernel** under **`runtime/kernel/`**. **`jaiph test`** uses the same `NodeWorkflowRuntime` with a pure-Node test runner for mocks and assertions. Optional [Sandboxing](sandboxing.md) runs workflows inside Docker.
 
-The same `jaiph` executable drives execution (`run`), testing (`test`), compilation (`build` — for Docker/CI Bash artifacts only), workspace scaffolding (`init`), reinstalling from a Git ref (`use`), and a read-only local UI over run logs (`report`). Language syntax and semantics are documented separately (for example [Grammar](grammar.md)); this page is the command-line contract.
+The same `jaiph` executable drives execution (`run`), testing (`test`), workspace scaffolding (`init`), reinstalling from a Git ref (`use`), and a read-only local UI over run logs (`report`). Language syntax and semantics are documented separately (for example [Grammar](grammar.md)); this page is the command-line contract.
 
 **Typical tasks:**
 
 - **Run a workflow** — `jaiph run <file.jh>` or pass the file as the first argument: `jaiph <file.jh> [args...]`. Requires a `workflow default` in that file.
 - **Run tests** — `jaiph test` discovers and runs all `*.test.jh` under the workspace; or pass a directory or a single test file.
-- **Compile only** — `jaiph build [--target <dir>] [path]` compiles `.jh` files into Bash scripts for Docker/CI distribution. Not used by `jaiph run` or `jaiph test`.
 - **Setup** — `jaiph init [workspace-path]` creates `.jaiph/` with a bootstrap workflow and synced skill guide; `jaiph use <version|nightly>` reinstalls the global Jaiph binary.
 - **Reporting** — `jaiph report` serves a read-only local dashboard over `.jaiph/runs` (see [Reporting server](reporting.md)).
 
-**Commands:** `build`, `run`, `test`, `init`, `use`, `report`.
+**Commands:** `run`, `test`, `init`, `use`, `report`.
 
-**Global options:** `-h` / `--help` and `-v` / `--version` are only recognized when they are the **first** argument (for example `jaiph --help`). They do not apply after a subcommand (`jaiph build --help` is not supported). The reporting subcommand documents its own flags: `jaiph report --help`.
+**Global options:** `-h` / `--help` and `-v` / `--version` are only recognized when they are the **first** argument (for example `jaiph --help`). They do not apply after a subcommand. The reporting subcommand documents its own flags: `jaiph report --help`.
 
 ---
 
@@ -45,31 +44,6 @@ jaiph ./e2e/say_hello.test.jh
 # equivalent to: jaiph test ./e2e/say_hello.test.jh
 ```
 
-## `jaiph build`
-
-Compile `.jh` files into Bash scripts for Docker/CI distribution. This command is **not** on the runtime execution path — `jaiph run` and `jaiph test` interpret the AST directly via the Node workflow runtime.
-
-```bash
-jaiph build [--target <dir>] [path]
-```
-
-If `path` is omitted, the current directory (`./`) is used. Without `--target`, compiled `.sh` scripts are written alongside the source files. Use `--target` to redirect output to a specific directory.
-
-- **Directory mode** (`jaiph build ./` or `jaiph build ./flows`) — compiles every `.jh` file in the directory tree (test files `*.test.jh` are excluded). The command stops on the first parse or validation error in any file.
-- **Single-file mode** (`jaiph build file.jh`) — compiles only the specified file and its transitive imports. Parse errors in sibling files are ignored.
-
-Scripts declared in workflow modules are emitted as **separate executable files** under `<target>/scripts/<name>` with `chmod +x`. Each script file starts with a shebang (custom or default `#!/usr/bin/env bash`) followed by the script body. The compiled module `.sh` invokes scripts via `"$JAIPH_SCRIPTS/<name>"`.
-
-For each emitted module shell script **`foo.sh`**, the build also writes **`foo.jaiph.map`** in the same directory (source map for CLI diagnostics). Commit or ignore maps according to your workflow; runs work without them, but **`.jh`**-anchored stderr rewriting is skipped when a map is missing.
-
-Examples:
-
-```bash
-jaiph build ./
-jaiph build --target ./build ./flows
-jaiph build ./flows/review.jh
-```
-
 ## `jaiph run`
 
 Parse, validate, and run a Jaiph workflow file via the Node workflow runtime.
@@ -79,7 +53,7 @@ Parse, validate, and run a Jaiph workflow file via the Node workflow runtime.
 jaiph run [--target <dir>] <file.jh> [--] [args...]
 ```
 
-Only the specified file and its transitive imports are parsed. Parse errors in sibling `.jh` files do not affect the run. Use `--target` to keep compiled build artifacts in a specific directory (useful for debugging transpiler output); without it, build artifacts are written to a temp directory and cleaned up after the run. Use `--` to separate Jaiph flags from workflow arguments (e.g. `jaiph run file.jh -- --verbose`).
+Only the specified file and its transitive imports are parsed. Parse errors in sibling `.jh` files do not affect the run. Use `--target` to keep intermediate script files in a specific directory (useful for debugging); without it, they are written to a temp directory and cleaned up after the run. Use `--` to separate Jaiph flags from workflow arguments (e.g. `jaiph run file.jh -- --verbose`).
 
 **Process model:** the CLI builds a runtime graph from the parsed AST, then spawns the Node workflow runner as a detached child process. The runtime interprets workflow steps directly from the AST — prompt execution, managed step subprocesses, inbox dispatch, and event emission are all handled by the JS kernel. The CLI attaches to stdout/stderr, parses **`__JAIPH_EVENT__`** JSON, and forwards other stderr lines.
 
@@ -332,7 +306,7 @@ jaiph report [start|stop|status] [--host <addr>] [--port <n>] [--poll-ms <n>] [-
 
 ## File extension
 
-**`.jh`** is the file extension for Jaiph source files. Use it for entrypoints, imports, and all CLI commands (`build`, `run`, `test`). Import resolution appends `.jh` when the path omits the extension.
+**`.jh`** is the file extension for Jaiph source files. Use it for entrypoints, imports, and all CLI commands (`run`, `test`). Import resolution appends `.jh` when the path omits the extension.
 
 ## Environment variables
 

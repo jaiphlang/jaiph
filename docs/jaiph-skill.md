@@ -9,7 +9,7 @@ redirect_from:
 
 ## Overview
 
-**Jaiph** is a small language for describing workflows: **orchestration steps** (rules, prompts, managed calls) and **bash in `script` blocks**. The **Node workflow runtime** (`NodeWorkflowRuntime`) interprets the parsed AST directly — no Bash transpilation on the runtime path. **`jaiph run`** / **`jaiph test`** parse `.jh` sources, build a runtime graph, and execute through the Node runtime. The **JS kernel** (`src/runtime/kernel/`) handles **prompt** execution, **managed step subprocesses**, **file-backed inbox**, and **event emission** (`__JAIPH_EVENT__` / `run_summary.jsonl`). User **`script`** bodies execute as separate OS processes (bash or polyglot via custom shebangs). `jaiph build` can produce Bash artifacts for Docker/CI distribution.
+**Jaiph** is a small language for describing workflows: **orchestration steps** (rules, prompts, managed calls) and **bash in `script` blocks**. The **Node workflow runtime** (`NodeWorkflowRuntime`) interprets the parsed AST directly — no Bash transpilation on the runtime path. **`jaiph run`** / **`jaiph test`** parse `.jh` sources, build a runtime graph, and execute through the Node runtime. The **JS kernel** (`src/runtime/kernel/`) handles **prompt** execution, **managed step subprocesses**, **file-backed inbox**, and **event emission** (`__JAIPH_EVENT__` / `run_summary.jsonl`). User **`script`** bodies execute as separate OS processes (bash or polyglot via custom shebangs).
 
 This page is an **agent skill**: it tells an AI assistant how to **author** those workflows correctly and what a healthy project layout looks like. It is not a full language specification — use [Grammar](grammar.md) for syntax and validation details, [Configuration](configuration.md) for `config` keys, [Inbox & Dispatch](inbox.md) for channels, and [Sandboxing](sandboxing.md) for how rules are isolated.
 
@@ -33,7 +33,7 @@ This page is an **agent skill**: it tells an AI assistant how to **author** thos
 
 Use this loop whenever you add or change Jaiph workflows so failures surface before work is handed back:
 
-1. **Preflight** — Run the project’s readiness checks if they exist (often `jaiph run .jaiph/readiness.jh` or a named preflight workflow). Compile-check sources with `jaiph build` on the relevant path (for example `jaiph build .jaiph`). When the repo ships native tests (`*.test.jh`), run `jaiph test` before large edits when practical.
+1. **Preflight** — Run the project’s readiness checks if they exist (often `jaiph run .jaiph/readiness.jh` or a named preflight workflow). When the repo ships native tests (`*.test.jh`), run `jaiph test` before large edits when practical.
 2. **Implement** — Edit `.jh` modules using only constructs described in [Grammar](grammar.md); keep managed-call rules (`ensure` for rules, `run` for workflows and scripts); keep bash inside **`script`** bodies only (no raw shell in workflow/rule bodies).
 3. **Verify** — Run `jaiph test` (whole workspace or a focused path) and any verification workflow the repo defines (commonly `jaiph run .jaiph/verification.jh`). Fix failures you introduce.
 4. **Inspect (optional)** — Use `jaiph report --workspace .` to browse `.jaiph/runs` when you need the reporting UI or raw step logs instead of only the terminal tree.
@@ -122,7 +122,6 @@ After scaffolding workflows, print the exact commands the developer should run. 
 Include a compile check and, when the repository has native tests (`*.test.jh`), `jaiph test` (see [Testing](testing.md)); skip `jaiph test` if there are no test files, since discovery mode exits with an error when nothing matches.
 
 ```bash
-jaiph build .jaiph
 jaiph test
 jaiph run .jaiph/main.jh "implement feature X"
 # Or run verification only:

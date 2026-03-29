@@ -9,53 +9,6 @@ trap e2e::cleanup EXIT
 e2e::prepare_test_env "log_logerr"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
-e2e::section "log writes to stdout, logerr writes to stderr"
-
-# Given — a workflow using both log and logerr
-e2e::file "log_split.jh" <<'EOF'
-script done_impl() {
-  echo "done"
-}
-workflow default {
-  log "stdout-msg"
-  logerr "stderr-msg"
-  run done_impl
-}
-EOF
-
-# Build and run the compiled script to verify fd routing.
-# Source stdlib from the E2E install, then call impl directly
-# (outside run_step, so stdout/stderr aren't captured to artifact files).
-jaiph build "${TEST_DIR}/log_split.jh" >/dev/null
-compiled="${TEST_DIR}/log_split.sh"
-
-stdout_file="$(mktemp)"
-stderr_file="$(mktemp)"
-(
-  export JAIPH_STDLIB="${JAIPH_E2E_BIN_DIR}/jaiph_stdlib.sh"
-  source "${compiled}"
-  log_split::default::impl
-) >"${stdout_file}" 2>"${stderr_file}" || true
-run_stdout="$(<"${stdout_file}")"
-# Strip event marker lines from stderr for assertion purposes — events are
-# metadata routed via fd 3 (or fd 2 fallback) and may contain message text.
-run_stderr="$(grep -v "^__JAIPH_EVENT__" "${stderr_file}" || true)"
-rm -f "${stdout_file}" "${stderr_file}"
-
-# Then — log message on stdout, not on stderr (excluding event metadata)
-e2e::assert_contains "${run_stdout}" "stdout-msg" "log message appears on stdout"
-if [[ "${run_stderr}" == *"stdout-msg"* ]]; then
-  e2e::fail "log message must not appear on stderr"
-fi
-e2e::pass "log message does not appear on stderr"
-
-# Then — logerr message on stderr, not on stdout
-e2e::assert_contains "${run_stderr}" "stderr-msg" "logerr message appears on stderr"
-if [[ "${run_stdout}" == *"stderr-msg"* ]]; then
-  e2e::fail "logerr message must not appear on stdout"
-fi
-e2e::pass "logerr message does not appear on stdout"
-
 e2e::section "log/logerr run artifacts"
 
 # Given

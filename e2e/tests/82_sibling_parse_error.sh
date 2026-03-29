@@ -39,15 +39,5 @@ EOF
 e2e::expect_out_files "valid.jh" 1
 e2e::expect_out "valid.jh" "default" "valid-ok"
 
-# When
-build_err_file="$(mktemp)"
-if jaiph build "${TEST_DIR}" 2>"${build_err_file}"; then
-  cat "${build_err_file}" >&2
-  rm -f "${build_err_file}"
-  e2e::fail "directory build should fail when a file has parse errors"
-fi
-build_err="$(cat "${build_err_file}")"
-rm -f "${build_err_file}"
-
-# Then
-e2e::assert_contains "${build_err}" "broken.jh" "directory build reports error in broken.jh"
+# Note: jaiph build (directory mode) is no longer a user-facing CLI command.
+# Single-file jaiph run already ignores sibling parse errors (tested above).

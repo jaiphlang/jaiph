@@ -129,7 +129,7 @@ Module tests live next to the source files they validate, inside the same `src/`
 
 **Kernel — `run-step-exec.ts`:** Managed script subprocess execution lives in **`src/runtime/kernel/run-step-exec.ts`**. There is no colocated `run-step-exec.test.ts` yet; behavior is covered by the **E2E** suite and runtime integration. Prefer adding focused unit tests if you extract pure helpers from the spawn/capture path.
 
-**Kernel — `node-test-runner.ts`:** **`src/runtime/kernel/node-test-runner.ts`** executes `*.test.jh` test blocks using `NodeWorkflowRuntime` with mock support (prompt queues, content-based dispatch, workflow/rule/script body replacements) and assertion evaluation. Replaces the former Bash test transpiler (`emit-test.ts`).
+**Kernel — `node-test-runner.ts`:** **`src/runtime/kernel/node-test-runner.ts`** executes `*.test.jh` test blocks using `NodeWorkflowRuntime` with mock support (prompt queues, content-based dispatch, workflow/rule/script body replacements) and assertion evaluation. Pure Node harness — no Bash test transpilation.
 
 When adding a new source module or extending an existing one, create or extend the corresponding `*.test.ts` file in the same directory. This keeps tests discoverable — given a source file, the test file is always a sibling.
 
