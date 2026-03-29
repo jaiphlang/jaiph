@@ -38,8 +38,11 @@ const code_philosophy = "
      that works now.
   7. Red flag: >100 lines of new code. Check if the library or existing
      codebase already provides it. If not, explain why.
-  8. E2E bash tests should compare full CLI tree output and file contents, not 
-     just substrings.
+  8. E2E bash tests must compare full CLI tree output and full artifact file
+     contents by default (e2e::expect_stdout, e2e::expect_out, e2e::expect_file,
+     e2e::expect_run_file, or e2e::assert_equals). Use e2e::assert_contains
+     only when full equality is not feasible (nondeterministic output, unbounded
+     logs, or platform-dependent text) and add an inline comment explaining why.
   9. Source code and ARCHITECTURE.md are the single source of truth. Don't trust
      documentation blindly.
 "

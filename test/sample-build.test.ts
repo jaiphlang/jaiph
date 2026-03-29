@@ -4,7 +4,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { build, walkTestFiles } from "../src/transpiler";
+import { buildScripts, walkTestFiles } from "../src/transpiler";
 import { parsejaiph } from "../src/parser";
 import { buildRunTreeRows } from "../src/cli";
 import { formatRunningBottomLine } from "../src/cli/run/progress";
@@ -39,18 +39,13 @@ function readCombinedRunLogs(runDir: string): { out: string; err: string } {
   return { out, err };
 }
 
-test("build transpiles fixture corpus with strict shell guards", () => {
+test("buildScripts extracts scripts for fixture corpus", () => {
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-build-"));
   try {
-    const results = build(join(process.cwd(), "test/fixtures"), outDir);
-    assert.ok(results.length > 0);
-    const generatedPath = join(outDir, "main.sh");
-    const generated = readFileSync(generatedPath, "utf8");
-    assert.match(generated, /^#!\/usr\/bin\/env bash/m);
-    assert.match(generated, /set -euo pipefail/);
-    assert.doesNotMatch(generated, /jaiph_stdlib_path/);
-    assert.match(generated, /main::default::impl\(\) \{/);
-    assert.match(generated, /jaiph::run_step main::default workflow main::default::impl "\$@"/);
+    buildScripts(join(process.cwd(), "test/fixtures"), outDir);
+    const scriptsDir = join(outDir, "scripts");
+    assert.ok(existsSync(scriptsDir));
+    assert.ok(readdirSync(scriptsDir).length > 0);
   } finally {
     rmSync(outDir, { recursive: true, force: true });
   }
@@ -94,7 +89,7 @@ test("build validates imported rule references with deterministic errors", () =>
       ].join("\n"),
     );
 
-    assert.throws(() => build(root), /E_VALIDATE imported rule "mod\.missing" does not exist/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE imported rule "mod\.missing" does not exist/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -121,7 +116,7 @@ test("build fails on missing import file", () => {
       ].join("\n"),
     );
 
-    assert.throws(() => build(root), /E_IMPORT_NOT_FOUND import "mod" resolves to missing file/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /E_IMPORT_NOT_FOUND import "mod" resolves to missing file/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -129,7 +124,7 @@ test("build fails on missing import file", () => {
 
 // Regression: .jaiph/main.jh once imported implement_from_queue.jh which had been
 // renamed to engineer.jh, causing E_IMPORT_NOT_FOUND for every `jaiph test` run
-// in the workspace (build() compiles all .jh files, not just the test target).
+// in the workspace (buildScripts walks all .jh files, not just the test target).
 test(".jaiph/main.jh imports only existing modules", () => {
   const jaiphDir = join(process.cwd(), ".jaiph");
   const mainJh = join(jaiphDir, "main.jh");
@@ -142,7 +137,7 @@ test(".jaiph/main.jh imports only existing modules", () => {
   }
 
   // During hard-cut migration, .jaiph fixtures still include inline shell steps.
-  assert.throws(() => build(jaiphDir), /inline shell steps are forbidden/);
+  assert.throws(() => buildScripts(jaiphDir, join(jaiphDir, ".tmp-build-out")), /inline shell steps are forbidden/);
 });
 
 test("jaiph run compiles and executes workflow with args", () => {
@@ -606,11 +601,11 @@ test("build rejects command substitution in prompt text", () => {
       ].join("\n"),
     );
     assert.throws(
-      () => build(rootBackticks, join(rootBackticks, "out")),
+      () => buildScripts(rootBackticks, join(rootBackticks, "out")),
       /E_PARSE prompt cannot contain backticks/,
     );
     assert.throws(
-      () => build(rootSubshell, join(rootSubshell, "out")),
+      () => buildScripts(rootSubshell, join(rootSubshell, "out")),
       /E_PARSE prompt cannot contain command substitution/,
     );
   } finally {
@@ -1184,7 +1179,7 @@ test("jaiph use maps nightly and version refs for reinstallation", () => {
   }
 });
 
-test("build accepts files with no workflows", () => {
+test("buildScripts accepts files with no workflows", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-no-workflows-"));
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-no-workflows-out-"));
   try {
@@ -1202,17 +1197,15 @@ test("build accepts files with no workflows", () => {
       ].join("\n"),
     );
 
-    const results = build(filePath, outDir);
-    assert.equal(results.length, 1);
-    assert.match(results[0].bash, /rules-only::only_rule/);
-    assert.doesNotMatch(results[0].bash, /__workflow_/);
+    buildScripts(filePath, outDir);
+    assert.ok(existsSync(join(outDir, "scripts", "only_rule_impl")));
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(outDir, { recursive: true, force: true });
   }
 });
 
-test("build transpiles ensure statements with arguments", () => {
+test("buildScripts extracts scripts for ensure-with-args workflow", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-ensure-args-"));
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-ensure-args-out-"));
   try {
@@ -1234,20 +1227,15 @@ test("build transpiles ensure statements with arguments", () => {
       ].join("\n"),
     );
 
-    const results = build(filePath, outDir);
-    assert.equal(results.length, 1);
-    assert.match(
-      results[0].bash,
-      /jaiph::run_step entry::check_branch rule jaiph::execute_readonly entry::check_branch::impl "\$@"/,
-    );
-    assert.match(results[0].bash, /entry::check_branch "\$\{arg1\}"/);
+    buildScripts(filePath, outDir);
+    assert.ok(readFileSync(join(outDir, "scripts", "check_branch_impl"), "utf8").includes("test "));
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(outDir, { recursive: true, force: true });
   }
 });
 
-test("build supports top-level functions with namespaced wrappers", () => {
+test("buildScripts writes multiple script stubs", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-functions-"));
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-functions-out-"));
   try {
@@ -1270,15 +1258,9 @@ test("build supports top-level functions with namespaced wrappers", () => {
       ].join("\n"),
     );
 
-    const results = build(filePath, outDir);
-    assert.equal(results.length, 1);
-    assert.match(results[0].bash, /entry::changed_files\(\) \{/);
-    assert.match(
-      results[0].bash,
-      /jaiph::run_step entry::changed_files script "\$JAIPH_SCRIPTS\/changed_files" "\$@"/,
-    );
-    assert.match(results[0].bash, /changed_files\(\) \{/);
-    assert.match(results[0].bash, /entry::changed_files "\$@"/);
+    buildScripts(filePath, outDir);
+    const names = readdirSync(join(outDir, "scripts")).sort();
+    assert.deepEqual(names, ["changed_files", "print_value"]);
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(outDir, { recursive: true, force: true });
@@ -1652,7 +1634,7 @@ test("build fails when run in rule references unknown symbol", () => {
     );
 
     assert.throws(
-      () => build(filePath, outDir),
+      () => buildScripts(filePath, outDir),
       /unknown local script reference.*run in rules must target a script/,
     );
   } finally {
@@ -1685,7 +1667,7 @@ test("build fails when run in rule targets a workflow", () => {
     );
 
     assert.throws(
-      () => build(filePath, outDir),
+      () => buildScripts(filePath, outDir),
       /run inside a rule must target a script, not workflow/,
     );
   } finally {
@@ -1694,7 +1676,7 @@ test("build fails when run in rule targets a workflow", () => {
   }
 });
 
-test("build accepts ensure inside a rule block", () => {
+test("buildScripts accepts ensure inside a rule block", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-ensure-in-rule-"));
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-ensure-in-rule-out-"));
   try {
@@ -1720,17 +1702,15 @@ test("build accepts ensure inside a rule block", () => {
       ].join("\n"),
     );
 
-    const results = build(filePath, outDir);
-    assert.equal(results.length, 1);
-    assert.match(results[0].bash, /entry::dep/);
-    assert.match(results[0].bash, /entry::main/);
+    buildScripts(filePath, outDir);
+    assert.ok(existsSync(join(outDir, "scripts", "dep_impl")));
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(outDir, { recursive: true, force: true });
   }
 });
 
-test("build transpiles ensure ... recover to bounded retry loop", () => {
+test("buildScripts extracts scripts for ensure ... recover workflow", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-ensure-recover-"));
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-ensure-recover-out-"));
   try {
@@ -1760,21 +1740,8 @@ test("build transpiles ensure ... recover to bounded retry loop", () => {
       ].join("\n"),
     );
 
-    const results = build(filePath, outDir);
-    assert.equal(results.length, 1);
-    const bash = results[0].bash;
-    assert.match(bash, /for _jaiph_retry in \$\(seq 1/);
-    assert.match(bash, /JAIPH_ENSURE_MAX_RETRIES/);
-    assert.match(bash, /local _jaiph_ensure_rv_file/);
-    assert.match(bash, /JAIPH_RETURN_VALUE_FILE="\$_jaiph_ensure_rv_file"/);
-    assert.match(bash, /local _jaiph_ensure_passed=0/);
-    assert.match(bash, /_jaiph_ensure_passed=1/);
-    assert.match(bash, /set -- "\$_jaiph_ensure_output"/);
-    assert.match(bash, /entry::dep/);
-    assert.match(bash, /entry::install_deps "\$@"/);
-    assert.match(bash, /\bdone\b/);
-    assert.match(bash, /if \[\[ "\$_jaiph_ensure_passed" -ne 1 \]\]; then/);
-    assert.match(bash, /ensure condition did not pass after/);
+    buildScripts(filePath, outDir);
+    assert.ok(readdirSync(join(outDir, "scripts")).includes("install_deps_impl"));
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(outDir, { recursive: true, force: true });
@@ -1804,7 +1771,7 @@ test("build rejects ensure recover inline shell block under strict shell-step ba
     );
 
     assert.throws(
-      () => build(filePath, outDir),
+      () => buildScripts(filePath, outDir),
       /inline shell steps are forbidden in workflows; use explicit script blocks/,
     );
   } finally {
@@ -1813,133 +1780,7 @@ test("build rejects ensure recover inline shell block under strict shell-step ba
   }
 });
 
-test("build emits prompt capture as name=$(jaiph::prompt_capture ...) for name = prompt \"...\"", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-prompt-capture-build-"));
-  const outDir = mkdtempSync(join(tmpdir(), "jaiph-prompt-capture-out-"));
-  try {
-    const filePath = join(root, "entry.jh");
-    writeFileSync(
-      filePath,
-      [
-        "workflow default() {",
-        '  result = prompt "Summarize the changes made"',
-        "}",
-        "",
-      ].join("\n"),
-    );
-
-    const results = build(filePath, outDir);
-    assert.equal(results.length, 1);
-    assert.match(results[0].bash, /result=\$\(jaiph::prompt_capture "\$JAIPH_PROMPT_PREVIEW" <<__JAIPH_PROMPT_/);
-    assert.match(results[0].bash, /Summarize the changes made/);
-    assert.match(results[0].bash, /\s*\)\s*$/m);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-    rmSync(outDir, { recursive: true, force: true });
-  }
-});
-
-test("build emits JAIPH_STEP_PARAM_KEYS and named args for prompt with variable references", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-prompt-named-params-"));
-  const outDir = mkdtempSync(join(tmpdir(), "jaiph-prompt-named-out-"));
-  try {
-    const filePath = join(root, "entry.jh");
-    writeFileSync(
-      filePath,
-      [
-        "workflow default() {",
-        '  prompt "${role} does ${task}"',
-        "}",
-        "",
-      ].join("\n"),
-    );
-
-    const results = build(filePath, outDir);
-    assert.equal(results.length, 1);
-    const bash = results[0].bash;
-    // Should emit JAIPH_STEP_PARAM_KEYS with __prompt_impl, __preview, and the var refs
-    assert.match(bash, /export JAIPH_STEP_PARAM_KEYS='__prompt_impl,__preview,role,task'/);
-    // Should pass named args instead of "$@"
-    assert.match(bash, /jaiph::prompt "\$JAIPH_PROMPT_PREVIEW" "role=\$role" "task=\$task" <</);
-    // Should NOT contain "$@" in prompt call
-    assert.doesNotMatch(bash, /jaiph::prompt.*"\$@"/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-    rmSync(outDir, { recursive: true, force: true });
-  }
-});
-
-test("build emits no named args for prompt without variable references", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-prompt-no-vars-"));
-  const outDir = mkdtempSync(join(tmpdir(), "jaiph-prompt-no-vars-out-"));
-  try {
-    const filePath = join(root, "entry.jh");
-    writeFileSync(
-      filePath,
-      [
-        "workflow default() {",
-        '  prompt "Hello world"',
-        "}",
-        "",
-      ].join("\n"),
-    );
-
-    const results = build(filePath, outDir);
-    assert.equal(results.length, 1);
-    const bash = results[0].bash;
-    // Should NOT emit JAIPH_STEP_PARAM_KEYS for prompt without vars
-    assert.doesNotMatch(bash, /JAIPH_STEP_PARAM_KEYS/);
-    // Should NOT pass "$@"
-    assert.doesNotMatch(bash, /jaiph::prompt.*"\$@"/);
-    // Should only pass preview
-    assert.match(bash, /jaiph::prompt "\$JAIPH_PROMPT_PREVIEW" <</);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-    rmSync(outDir, { recursive: true, force: true });
-  }
-});
-
-test("build emits assignment capture for ensure and shell", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-assign-capture-build-"));
-  const outDir = mkdtempSync(join(tmpdir(), "jaiph-assign-capture-out-"));
-  try {
-    const filePath = join(root, "entry.jh");
-    writeFileSync(
-      filePath,
-      [
-        "script echo_ok_impl() {",
-        "  echo stdout-here",
-        "}",
-        "script echo_hello() {",
-        "  echo hello",
-        "}",
-        "script print_both() {",
-        "  printf '%s\\n' \"$1\" \"$2\"",
-        "}",
-        "rule echo_ok() {",
-        "  run echo_ok_impl",
-        "}",
-        "workflow default() {",
-        "  response = ensure echo_ok",
-        "  out = run echo_hello",
-        '  run print_both "${response}" "${out}"',
-        "}",
-        "",
-      ].join("\n"),
-    );
-
-    const results = build(filePath, outDir);
-    assert.equal(results.length, 1);
-    const bash = results[0].bash;
-    assert.match(bash, /JAIPH_RETURN_VALUE_FILE="\$_jaiph_rv_response" entry::echo_ok/);
-    assert.match(bash, /JAIPH_RETURN_VALUE_FILE="\$_jaiph_rv_out" jaiph::run_step entry::echo_hello script "\$JAIPH_SCRIPTS\/echo_hello"/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-    rmSync(outDir, { recursive: true, force: true });
-  }
-});
-
-test("build rejects shell assignment capture under strict shell-step ban", () => {
+test("buildScripts rejects shell assignment capture under strict shell-step ban", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-assign-fail-"));
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-assign-fail-out-"));
   try {
@@ -1955,7 +1796,7 @@ test("build rejects shell assignment capture under strict shell-step ban", () =>
       ].join("\n"),
     );
     assert.throws(
-      () => build(filePath, outDir),
+      () => buildScripts(filePath, outDir),
       /inline shell steps are forbidden in workflows; use explicit script blocks/,
     );
   } finally {

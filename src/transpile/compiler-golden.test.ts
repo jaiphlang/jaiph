@@ -3,15 +3,11 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { build, transpileFile } from "../transpiler";
+import { buildScripts, emitScriptsForModule } from "../transpiler";
 import { parsejaiph } from "../parser";
 
-function normalize(text: string): string {
-  return text.replace(/\r\n/g, "\n").trimEnd();
-}
-
-test("compiler golden: transpileFile emits stable workflow shell", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-transpile-"));
+test("compiler: extracts script bodies for a simple module", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-scripts-"));
   try {
     const input = join(root, "entry.jh");
     writeFileSync(
@@ -32,58 +28,16 @@ test("compiler golden: transpileFile emits stable workflow shell", () => {
         "",
       ].join("\n"),
     );
-
-    // Expected must match emit-workflow.ts output exactly (no config, no imports).
-    // To refresh after emitter changes: npm run build && node scripts/dump-golden-output.js
-    const lines = [
-      "#!/usr/bin/env bash",
-      "",
-      "set -euo pipefail",
-      'export JAIPH_SCRIPTS="${JAIPH_SCRIPTS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/scripts" && pwd)}"',
-      "",
-      "entry::ok::impl() {",
-      "  set -eo pipefail",
-      "  set +u",
-      '  jaiph::run_step entry::f_ok script "$JAIPH_SCRIPTS/f_ok"',
-      "}",
-      "",
-      "entry::ok() {",
-      '  jaiph::run_step entry::ok rule jaiph::execute_readonly entry::ok::impl "$@"',
-      "}",
-      "",
-      "entry::f_ok() {",
-      '  jaiph::run_step entry::f_ok script "$JAIPH_SCRIPTS/f_ok" "$@"',
-      "}",
-      "",
-      "f_ok() {",
-      "  entry::f_ok \"$@\"",
-      "}",
-      "",
-      "entry::default::impl() {",
-      "  set -eo pipefail",
-      "  set +u",
-      "  jaiph::emit_workflow_summary_event WORKFLOW_START 'default'",
-      "  entry::ok",
-      "  jaiph::log \"done\"",
-      "  jaiph::emit_workflow_summary_event WORKFLOW_END 'default'",
-      "}",
-      "",
-      "entry::default() {",
-      '  jaiph::run_step entry::default workflow entry::default::impl "$@"',
-      "}",
-    ];
-    const expected = normalize(lines.join("\n"));
-    const emitted = transpileFile(input, root);
-    const actual = normalize(emitted.module);
-    assert.equal(actual, expected);
-    const fOkScript = emitted.scripts.find((s) => s.name === "f_ok");
-    assert.ok(fOkScript, "expected transpiled script file for f_ok");
-    assert.match(fOkScript.content, /set -euo pipefail/);
-    assert.doesNotMatch(fOkScript.content, /set \+u/);
+    const scripts = emitScriptsForModule(input, root);
+    const fOk = scripts.find((s) => s.name === "f_ok");
+    assert.ok(fOk);
+    assert.match(fOk.content, /set -euo pipefail/);
+    assert.doesNotMatch(fOk.content, /set \+u/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
 
 test("compiler golden: parser error message is deterministic", () => {
   assert.throws(
@@ -107,7 +61,7 @@ test("compiler golden: prompt substitution guard reports E_PARSE", () => {
     );
 
     assert.throws(
-      () => build(input, join(root, "out")),
+      () => buildScripts(input, join(root, "out")),
       new RegExp(`${input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:2:\\d+ E_PARSE prompt cannot contain command substitution`),
     );
   } finally {
@@ -118,7 +72,7 @@ test("compiler golden: prompt substitution guard reports E_PARSE", () => {
 test("compiler corpus: fixtures compile", () => {
   const outA = mkdtempSync(join(tmpdir(), "jaiph-corpus-a-"));
   try {
-    assert.equal(build(join(process.cwd(), "test/fixtures"), outA).length > 0, true);
+    buildScripts(join(process.cwd(), "test/fixtures"), outA);
   } finally {
     rmSync(outA, { recursive: true, force: true });
   }
@@ -133,7 +87,7 @@ test("compiler corpus: representative e2e workflows compile", () => {
       join(process.cwd(), "e2e/prompt_returns_run_capture.jh"),
     ];
     for (const file of e2eFiles) {
-      assert.equal(build(file, outB).length, 1);
+      buildScripts(file, outB);
     }
   } finally {
     rmSync(outB, { recursive: true, force: true });
@@ -713,384 +667,6 @@ test("parser: brace-style if parses not, else if, and else", () => {
   assert.equal(step.elseSteps!.length, 1);
 });
 
-test("compiler golden: fail step transpiles to stderr echo and exit 1", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-fail-"));
-  try {
-    const input = join(root, "entry.jh");
-    writeFileSync(
-      input,
-      [
-        "workflow default() {",
-        '  fail "stop here"',
-        "}",
-        "",
-      ].join("\n"),
-    );
-    const actual = normalize(transpileFile(input, root).module);
-    assert.match(actual, /echo "stop here" >&2/);
-    assert.match(actual, /exit 1/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("compiler golden: const string transpiles to local assignment", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-const-"));
-  try {
-    const input = join(root, "entry.jh");
-    writeFileSync(
-      input,
-      [
-        "workflow default() {",
-        '  const x = "abc"',
-        "}",
-        "",
-      ].join("\n"),
-    );
-    const actual = normalize(transpileFile(input, root).module);
-    assert.match(actual, /local x; x="abc"/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("compiler golden: wait step emits bare wait", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-wait-"));
-  try {
-    const input = join(root, "entry.jh");
-    writeFileSync(
-      input,
-      [
-        "workflow default() {",
-        "  wait",
-        "}",
-        "",
-      ].join("\n"),
-    );
-    const actual = normalize(transpileFile(input, root).module);
-    assert.match(actual, /\n  wait\n/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("compiler golden: brace if transpiles to if elif else fi", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-brace-if-"));
-  try {
-    const input = join(root, "entry.jh");
-    writeFileSync(
-      input,
-      [
-        "rule r1() {",
-        "  return \"ok\"",
-        "}",
-        "rule r2() {",
-        "  fail \"no\"",
-        "}",
-        "workflow default() {",
-        "  if ensure r1 {",
-        '    log "then"',
-        "  }",
-        "  else if not ensure r2 {",
-        '    log "mid"',
-        "  }",
-        "  else {",
-        '    log "last"',
-        "  }",
-        "}",
-        "",
-      ].join("\n"),
-    );
-    const actual = normalize(transpileFile(input, root).module);
-    assert.match(actual, /if entry::r1; then/);
-    assert.match(actual, /elif ! entry::r2; then/);
-    assert.match(actual, /\n  else\n/);
-    assert.match(actual, /\n  fi\n/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("compiler golden: positive if ensure with args transpiles correctly", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-if-ensure-pos-"));
-  try {
-    const input = join(root, "entry.jh");
-    writeFileSync(
-      input,
-      [
-        "rule ready() {",
-        "  return \"ok\"",
-        "}",
-        "workflow default() {",
-        "  if ensure ready foo=bar {",
-        "    log \"success\"",
-        "  }",
-        "}",
-        "",
-      ].join("\n"),
-    );
-    const actual = normalize(transpileFile(input, root).module);
-    assert.match(actual, /if entry::ready foo=bar; then/);
-    assert.match(actual, /jaiph::log "success"/);
-    assert.match(actual, /fi/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("compiler golden: positive if ensure with else transpiles correctly", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-if-ensure-else-"));
-  try {
-    const input = join(root, "entry.jh");
-    writeFileSync(
-      input,
-      [
-        "rule ready() {",
-        "  return \"ok\"",
-        "}",
-        "workflow fallback() {",
-        "  log \"fallback\"",
-        "}",
-        "workflow default() {",
-        "  if ensure ready {",
-        "    log \"yes\"",
-        "  } else {",
-        "    run fallback",
-        "  }",
-        "}",
-        "",
-      ].join("\n"),
-    );
-    const actual = normalize(transpileFile(input, root).module);
-    assert.match(actual, /if entry::ready; then/);
-    assert.match(actual, /jaiph::log "yes"/);
-    assert.match(actual, /else/);
-    assert.match(actual, /entry::fallback/);
-    assert.match(actual, /fi/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("compiler golden: negated if ensure with args transpiles correctly", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-if-not-ensure-args-"));
-  try {
-    const input = join(root, "entry.jh");
-    writeFileSync(
-      input,
-      [
-        "rule check() {",
-        "  return \"ok\"",
-        "}",
-        "workflow default() {",
-        "  if not ensure check myarg {",
-        "    log \"fallback\"",
-        "  }",
-        "}",
-        "",
-      ].join("\n"),
-    );
-    const actual = normalize(transpileFile(input, root).module);
-    assert.match(actual, /if ! entry::check myarg; then/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("compiler golden: negated if-run transpiles workflow ref, not raw DSL tokens", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-if-not-run-"));
-  try {
-    const input = join(root, "entry.jh");
-    writeFileSync(
-      input,
-      [
-        "workflow check() {",
-        "  log \"ok\"",
-        "}",
-        "workflow recovery() {",
-        "  log \"recovering\"",
-        "}",
-        "workflow default() {",
-        "  if not run check {",
-        '    prompt "fix things"',
-        "    run recovery",
-        "  }",
-        "}",
-        "",
-      ].join("\n"),
-    );
-    const actual = normalize(transpileFile(input, root).module);
-    assert.match(actual, /if ! entry::check; then/);
-    assert.match(actual, /entry::recovery/);
-    assert.doesNotMatch(actual, /\brun check\b/);
-    assert.doesNotMatch(actual, /\brun recovery\b/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("compiler golden: positive if-run transpiles workflow ref", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-if-pos-run-"));
-  try {
-    const input = join(root, "entry.jh");
-    writeFileSync(
-      input,
-      [
-        "workflow check() {",
-        "  log \"ok\"",
-        "}",
-        "workflow default() {",
-        "  if run check {",
-        "    log \"passed\"",
-        "  }",
-        "}",
-        "",
-      ].join("\n"),
-    );
-    const actual = normalize(transpileFile(input, root).module);
-    assert.match(actual, /if entry::check; then/);
-    assert.match(actual, /jaiph::log "passed"/);
-    assert.doesNotMatch(actual, /\brun check\b/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("compiler golden: if-run with imported workflow ref", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-if-run-import-"));
-  try {
-    const libFile = join(root, "lib.jh");
-    writeFileSync(
-      libFile,
-      [
-        "workflow healthcheck() {",
-        "  log \"ok\"",
-        "}",
-        "",
-      ].join("\n"),
-    );
-    const input = join(root, "entry.jh");
-    writeFileSync(
-      input,
-      [
-        'import "lib.jh" as lib',
-        "workflow default() {",
-        "  if not run lib.healthcheck {",
-        "    log \"service down\"",
-        "  }",
-        "}",
-        "",
-      ].join("\n"),
-    );
-    const actual = normalize(transpileFile(input, root).module);
-    assert.match(actual, /if ! jaiph::run_step [a-z0-9_]+::healthcheck workflow [a-z0-9_]+::healthcheck::impl; then/);
-    assert.match(actual, /jaiph::log "service down"/);
-    assert.doesNotMatch(actual, /\brun lib\.healthcheck\b/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("compiler golden: if-run with args transpiles correctly", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-if-run-args-"));
-  try {
-    const input = join(root, "entry.jh");
-    writeFileSync(
-      input,
-      [
-        "workflow check() {",
-        "  log \"ok\"",
-        "}",
-        "workflow default() {",
-        "  if not run check foo=bar {",
-        "    log \"fallback\"",
-        "  }",
-        "}",
-        "",
-      ].join("\n"),
-    );
-    const actual = normalize(transpileFile(input, root).module);
-    assert.match(actual, /if ! entry::check foo=bar; then/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("compiler golden: if-run with else branch transpiles correctly", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-if-run-else-"));
-  try {
-    const input = join(root, "entry.jh");
-    writeFileSync(
-      input,
-      [
-        "workflow check() {",
-        "  log \"ok\"",
-        "}",
-        "workflow default() {",
-        "  if run check {",
-        "    log \"success\"",
-        "  } else {",
-        "    log \"failure\"",
-        "  }",
-        "}",
-        "",
-      ].join("\n"),
-    );
-    const actual = normalize(transpileFile(input, root).module);
-    assert.match(actual, /if entry::check; then/);
-    assert.match(actual, /jaiph::log "success"/);
-    assert.match(actual, /else/);
-    assert.match(actual, /jaiph::log "failure"/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("compiler golden: workflow with config emits JAIPH export defaults", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-metadata-"));
-  try {
-    const input = join(root, "entry.jh");
-    writeFileSync(
-      input,
-      [
-        "config {",
-        '  agent.default_model = "gpt-4"',
-        '  agent.backend = "claude"',
-        '  agent.trusted_workspace = ".jaiph/.."',
-        '  agent.cursor_flags = "--force"',
-        '  agent.claude_flags = "--model sonnet-4"',
-        '  run.logs_dir = ".jaiph/runs"',
-        "}",
-        "script f_ok() {",
-        "  echo ok",
-        "}",
-        "",
-        "rule ok() {",
-        "  run f_ok",
-        "}",
-        "workflow default() {",
-        "  ensure ok",
-        "}",
-        "",
-      ].join("\n"),
-    );
-
-    const actual = normalize(transpileFile(input, root).module);
-    assert.ok(actual.includes('export JAIPH_AGENT_MODEL="${JAIPH_AGENT_MODEL:-gpt-4}"'));
-    assert.ok(actual.includes('export JAIPH_AGENT_BACKEND="${JAIPH_AGENT_BACKEND:-claude}"'));
-    assert.ok(actual.includes('export JAIPH_AGENT_TRUSTED_WORKSPACE="${JAIPH_AGENT_TRUSTED_WORKSPACE:-.jaiph/..}"'));
-    assert.ok(actual.includes('export JAIPH_AGENT_CURSOR_FLAGS="${JAIPH_AGENT_CURSOR_FLAGS:---force}"'));
-    assert.ok(actual.includes('export JAIPH_AGENT_CLAUDE_FLAGS="${JAIPH_AGENT_CLAUDE_FLAGS:---model sonnet-4}"'));
-    assert.ok(actual.includes('export JAIPH_RUNS_DIR="${JAIPH_RUNS_DIR:-.jaiph/runs}"'));
-    assert.ok(actual.includes("entry::ok"));
-    assert.ok(actual.includes("entry::default"));
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-// === Inbox / send operator / on route tests ===
-
 test("parser: send operator parses channel <- \"literal\"", () => {
   const source = [
     "workflow default() {",
@@ -1159,7 +735,7 @@ test("validator: unknown local channel fails with required message", () => {
       ].join("\n"),
     );
     assert.throws(
-      () => transpileFile(input, root),
+      () => emitScriptsForModule(input, root),
       /E_VALIDATE Channel "typo" is not defined/,
     );
   } finally {
@@ -1193,7 +769,7 @@ test("validator: missing channel import fails with required message", () => {
       ].join("\n"),
     );
     assert.throws(
-      () => transpileFile(input, root),
+      () => emitScriptsForModule(input, root),
       /E_VALIDATE Channel "shared\.typo" is not defined/,
     );
   } finally {
@@ -1275,199 +851,6 @@ test("parser: capture + send is E_PARSE", () => {
     () => parsejaiph(source, "/fake/entry.jh"),
     /capture and send cannot be combined/,
   );
-});
-
-test("compiler golden: send operator transpiles to jaiph::send", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-send-"));
-  try {
-    const input = join(root, "entry.jh");
-    writeFileSync(
-      input,
-      [
-        "channel channel",
-        "workflow default() {",
-        `  channel <- "foo"`,
-        "}",
-        "",
-      ].join("\n"),
-    );
-    const actual = normalize(transpileFile(input, root).module);
-    assert.match(actual, /jaiph::send 'channel' "foo"/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("compiler golden: standalone send transpiles to jaiph::send with $1", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-send-standalone-"));
-  try {
-    const input = join(root, "entry.jh");
-    writeFileSync(
-      input,
-      [
-        "channel channel",
-        "workflow default() {",
-        "  channel <-",
-        "}",
-        "",
-      ].join("\n"),
-    );
-    const actual = normalize(transpileFile(input, root).module);
-    assert.match(actual, /jaiph::send 'channel' "\$1"/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("compiler golden: imported channel ref transpiles as channel key", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-send-imported-channel-"));
-  try {
-    const shared = join(root, "shared.jh");
-    writeFileSync(
-      shared,
-      [
-        "channel findings",
-        "workflow analyst() {",
-        "  log \"ok\"",
-        "}",
-        "",
-      ].join("\n"),
-    );
-    const input = join(root, "entry.jh");
-    writeFileSync(
-      input,
-      [
-        'import "shared.jh" as shared',
-        "workflow default() {",
-        `  shared.findings <- "foo"`,
-        "  shared.findings -> shared.analyst",
-        "}",
-        "",
-      ].join("\n"),
-    );
-    const actual = normalize(transpileFile(input, root).module);
-    assert.match(actual, /jaiph::send 'shared\.findings' "foo"/);
-    assert.match(actual, /jaiph::register_route 'shared\.findings' 'shared::analyst'/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("compiler golden: route emits register_route and drain_queue", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-route-"));
-  try {
-    const input = join(root, "entry.jh");
-    writeFileSync(
-      input,
-      [
-        "channel findings",
-        "workflow analyst() {",
-        "  log \"ok\"",
-        "}",
-        "workflow default() {",
-        "  findings -> analyst",
-        "}",
-        "",
-      ].join("\n"),
-    );
-    const actual = normalize(transpileFile(input, root).module);
-    assert.match(actual, /jaiph::inbox_init/);
-    assert.match(actual, /jaiph::register_route 'findings' 'entry::analyst'/);
-    assert.match(actual, /jaiph::drain_queue/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("compiler golden: multi-target route emits multiple funcs in register_route", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-route-multi-"));
-  try {
-    const input = join(root, "entry.jh");
-    writeFileSync(
-      input,
-      [
-        "channel findings",
-        "workflow a() {",
-        "  log \"ok\"",
-        "}",
-        "workflow b() {",
-        "  log \"ok\"",
-        "}",
-        "workflow default() {",
-        "  findings -> a, b",
-        "}",
-        "",
-      ].join("\n"),
-    );
-    const actual = normalize(transpileFile(input, root).module);
-    assert.match(actual, /jaiph::register_route 'findings' 'entry::a' 'entry::b'/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("compiler golden: inbox.jh fixture compiles successfully", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-inbox-fixture-"));
-  try {
-    const input = join(root, "inbox.jh");
-    writeFileSync(
-      input,
-      [
-        "channel findings",
-        "channel summary",
-        "channel final_summary",
-        "",
-        "script emit_findings() {",
-        "  echo '## findings'",
-        "}",
-        "",
-        "script write_findings_file() {",
-        '  printf "%s\\n" "$1" > findings_file.md',
-        "}",
-        "",
-        "script emit_reviewed() {",
-        '  printf "[reviewed] %s\\n" "$1"',
-        "}",
-        "",
-        "workflow researcher() {",
-        "  findings <- run emit_findings",
-        "}",
-        "",
-        "workflow analyst() {",
-        "  run write_findings_file \"${arg1}\"",
-        '  const summary = "Summary of findings"',
-        "  summary <- ${summary}",
-        "}",
-        "",
-        "workflow reviewer() {",
-        "  final_summary <- run emit_reviewed \"${arg1}\"",
-        "}",
-        "",
-        "workflow default() {",
-        "  run researcher",
-        "  findings -> analyst",
-        "  summary -> reviewer",
-        "}",
-        "",
-      ].join("\n"),
-    );
-    const actual = normalize(transpileFile(input, root).module);
-    // researcher workflow sends to findings
-    assert.match(actual, /jaiph::send 'findings'/);
-    // analyst workflow sends to summary
-    assert.match(actual, /jaiph::send 'summary'/);
-    // reviewer workflow sends to final_summary
-    assert.match(actual, /jaiph::send 'final_summary'/);
-    // default workflow registers routes and drains
-    assert.match(actual, /jaiph::inbox_init/);
-    assert.match(actual, /jaiph::register_route 'findings' 'inbox::analyst'/);
-    assert.match(actual, /jaiph::register_route 'summary' 'inbox::reviewer'/);
-    assert.match(actual, /jaiph::drain_queue/);
-    // default workflow runs researcher
-    assert.match(actual, /inbox::researcher/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
 });
 
 // === Top-level const (env declaration) tests ===
@@ -1574,74 +957,6 @@ test("parser: top-level const name collision with script is E_PARSE", () => {
   );
 });
 
-test("compiler golden: top-level const emits prefixed variable and shims", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-env-"));
-  try {
-    const input = join(root, "entry.jh");
-    writeFileSync(
-      input,
-      [
-        'const greeting = "hello world"',
-        "",
-        "rule check() {",
-        "  log \"${greeting}\"",
-        "}",
-        "",
-        "script helper() {",
-        "  echo $greeting",
-        "}",
-        "",
-        "workflow default() {",
-        "  ensure check",
-        "  run helper",
-        "  log \"${greeting}\"",
-        "}",
-        "",
-      ].join("\n"),
-    );
-
-    const actual = normalize(transpileFile(input, root).module);
-    // Exported prefixed variable at top (export needed for child-shell rule sandbox)
-    assert.match(actual, /export entry__greeting="hello world"/);
-    // Local shims in rule impl
-    assert.match(actual, /entry::check::impl\(\) \{[\s\S]*?local greeting="\$entry__greeting"/);
-    // Script wrapper runs via run_step + JAIPH_SCRIPTS (body is external file)
-    assert.match(
-      actual,
-      /entry::helper\(\) \{[\s\S]*?jaiph::run_step entry::helper script "\$JAIPH_SCRIPTS\/helper" "\$@"/,
-    );
-    // Local shims in workflow impl
-    assert.match(actual, /entry::default::impl\(\) \{[\s\S]*?local greeting="\$entry__greeting"/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("compiler golden: top-level const $sibling is expanded in export (set -u safe)", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-env-cross-"));
-  try {
-    const input = join(root, "entry.jh");
-    writeFileSync(
-      input,
-      [
-        'const shared = "MIDDLE"',
-        'const combined = "before ${shared} after"',
-        "",
-        "workflow default() {",
-        "  log \"${combined}\"",
-        "}",
-        "",
-      ].join("\n"),
-    );
-
-    const actual = normalize(transpileFile(input, root).module);
-    assert.match(actual, /export entry__shared="MIDDLE"/);
-    assert.match(actual, /export entry__combined="before MIDDLE after"/);
-    assert.ok(!/export entry__combined="[^"]*\$shared/.test(actual));
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
 
 // === script isolation golden tests ===
 
@@ -1665,9 +980,9 @@ test("compiler golden: standalone script file has no env shims (isolation)", () 
       ].join("\n"),
     );
 
-    const result = transpileFile(input, root);
-    assert.equal(result.scripts.length, 1);
-    const scriptContent = result.scripts[0].content;
+    const scripts = emitScriptsForModule(input, root);
+    assert.equal(scripts.length, 1);
+    const scriptContent = scripts[0].content;
     // Script file must NOT contain env shim lines
     assert.ok(!/local greeting="\$entry__greeting"/.test(scriptContent), "script file should not contain env shim for greeting");
     assert.ok(!/entry__/.test(scriptContent), "script file should not reference prefixed module variables");
@@ -1700,7 +1015,7 @@ test("compiler golden: cross-script call is rejected", () => {
       ].join("\n"),
     );
     assert.throws(
-      () => transpileFile(input, root),
+      () => emitScriptsForModule(input, root),
       /scripts cannot call other Jaiph scripts/,
     );
   } finally {
@@ -1726,295 +1041,8 @@ test("compiler golden: script calling itself is allowed", () => {
       ].join("\n"),
     );
     // Self-reference should not throw (a script calling itself is recursion, not cross-script)
-    const result = transpileFile(input, root);
-    assert.equal(result.scripts.length, 1);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-// === ensure...recover golden tests ===
-
-test("compiler golden: ensure...recover single statement emits retry loop", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-recover-single-"));
-  try {
-    const input = join(root, "entry.jh");
-    writeFileSync(
-      input,
-      [
-        "script has_results_txt() {",
-        "  test -f results.txt",
-        "}",
-        "",
-        "rule tests_pass() {",
-        "  run has_results_txt",
-        "}",
-        "",
-        "workflow fix_tests() {",
-        "  log \"fixing\"",
-        "}",
-        "",
-        "workflow default() {",
-        "  ensure tests_pass recover run fix_tests",
-        "}",
-        "",
-      ].join("\n"),
-    );
-
-    const actual = normalize(transpileFile(input, root).module);
-    // Retry loop structure
-    assert.match(actual, /local _jaiph_ensure_passed=0/);
-    assert.match(actual, /for _jaiph_retry in \$\(seq 1/);
-    assert.match(actual, /JAIPH_RETURN_VALUE_FILE="\$_jaiph_ensure_rv_file" JAIPH_ENSURE_OUTPUT_FILE="\$_jaiph_ensure_output_file" entry::tests_pass; then/);
-    assert.match(actual, /_jaiph_ensure_passed=1/);
-    assert.match(actual, /break/);
-    // Recover payload read from ensure output file (merged stdout+stderr)
-    assert.match(actual, /\$_jaiph_ensure_output_file/);
-    // Recover step calls the workflow
-    assert.match(actual, /entry::fix_tests/);
-    // Failure message after max retries
-    assert.match(actual, /ensure condition did not pass after/);
-    assert.match(actual, /exit 1/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("compiler golden: ensure...recover block emits retry loop with multiple steps", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-recover-block-"));
-  try {
-    const input = join(root, "entry.jh");
-    writeFileSync(
-      input,
-      [
-        "script has_ci_ok() {",
-        "  test -f ci_ok.txt",
-        "}",
-        "",
-        "rule ci_pass() {",
-        "  run has_ci_ok",
-        "}",
-        "",
-        "workflow fix_ci() {",
-        "  log \"fixing ci\"",
-        "}",
-        "",
-        "workflow default() {",
-        "  ensure ci_pass recover {",
-        "    run fix_ci",
-        "    log \"retrying\"",
-        "  }",
-        "}",
-        "",
-      ].join("\n"),
-    );
-
-    const actual = normalize(transpileFile(input, root).module);
-    // Retry loop
-    assert.match(actual, /for _jaiph_retry in \$\(seq 1/);
-    assert.match(actual, /JAIPH_RETURN_VALUE_FILE="\$_jaiph_ensure_rv_file" JAIPH_ENSURE_OUTPUT_FILE="\$_jaiph_ensure_output_file" entry::ci_pass; then/);
-    // Both recover steps present
-    assert.match(actual, /entry::fix_ci/);
-    assert.match(actual, /jaiph::log "retrying"/);
-    // Loop end + failure guard
-    assert.match(actual, /done/);
-    assert.match(actual, /if \[{2} "\$_jaiph_ensure_passed" -ne 1 \]{2}; then/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-// === brace if + function replaces legacy shell-condition if ===
-
-test("compiler golden: if not run <fn> emits bash conditional on workflow call", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-if-not-run-fn-"));
-  try {
-    const input = join(root, "entry.jh");
-    writeFileSync(
-      input,
-      [
-        "script config_yml_exists() {",
-        "  test -f config.yml",
-        "}",
-        "",
-        "workflow setup() {",
-        "  log \"setting up\"",
-        "}",
-        "",
-        "workflow default() {",
-        "  if not run config_yml_exists {",
-        "    log \"creating config\"",
-        "    run setup",
-        "  }",
-        "}",
-        "",
-      ].join("\n"),
-    );
-
-    const actual = normalize(transpileFile(input, root).module);
-    assert.match(
-      actual,
-      /if ! jaiph::run_step entry::config_yml_exists script "\$JAIPH_SCRIPTS\/config_yml_exists"; then/,
-    );
-    assert.match(actual, /jaiph::log "creating config"/);
-    assert.match(actual, /entry::setup/);
-    assert.match(actual, /fi/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("compiler golden: if not ensure with run steps in branch emits expected bash", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-if-not-ensure-run-"));
-  try {
-    const input = join(root, "entry.jh");
-    writeFileSync(
-      input,
-      [
-        "script has_config_yml() {",
-        "  test -f config.yml",
-        "}",
-        "",
-        "script touch_config_yml() {",
-        "  touch config.yml",
-        "}",
-        "",
-        "rule config_exists() {",
-        "  run has_config_yml",
-        "}",
-        "",
-        "workflow default() {",
-        "  if not ensure config_exists {",
-        "    log \"creating default config\"",
-        "    run touch_config_yml",
-        "  }",
-        "}",
-        "",
-      ].join("\n"),
-    );
-
-    const actual = normalize(transpileFile(input, root).module);
-    assert.match(actual, /if ! entry::config_exists; then/);
-    assert.match(actual, /jaiph::log "creating default config"/);
-    assert.match(
-      actual,
-      /jaiph::run_step entry::touch_config_yml script "\$JAIPH_SCRIPTS\/touch_config_yml"/,
-    );
-    assert.match(actual, /fi/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-// === prompt with returns golden test ===
-
-test("compiler golden: prompt with returns schema emits prompt_capture_with_schema and schema env vars", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-prompt-returns-"));
-  try {
-    const input = join(root, "entry.jh");
-    writeFileSync(
-      input,
-      [
-        "workflow default() {",
-        "  result = prompt \"Analyse the diff\" returns '{ category: string, risk: boolean }'",
-        "  log \"done\"",
-        "}",
-        "",
-      ].join("\n"),
-    );
-
-    const actual = normalize(transpileFile(input, root).module);
-    // Schema-specific capture function
-    assert.match(actual, /jaiph::prompt_capture_with_schema/);
-    // Schema exported as env var
-    assert.match(actual, /JAIPH_PROMPT_SCHEMA/);
-    // Capture name exported
-    assert.match(actual, /JAIPH_PROMPT_CAPTURE_NAME='result'/);
-    // Preview exported
-    assert.match(actual, /JAIPH_PROMPT_PREVIEW/);
-    // Heredoc delimiter
-    assert.match(actual, /<<__JAIPH_PROMPT_/);
-    // Schema suffix appended to prompt body
-    assert.match(actual, /Respond with exactly one line of valid JSON/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-// === test_mock_prompt_block dispatch script golden test ===
-
-test("compiler golden: workflow-level config emits per-workflow with_metadata_scope with _LOCKED", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-wfconfig-"));
-  try {
-    const input = join(root, "entry.jh");
-    writeFileSync(
-      input,
-      [
-        "config {",
-        '  agent.backend = "cursor"',
-        "}",
-        "",
-        "rule check() {",
-        "  return \"ok\"",
-        "}",
-        "",
-        "workflow fast() {",
-        "  config {",
-        '    agent.backend = "claude"',
-        '    agent.default_model = "gpt-4"',
-        "  }",
-        "  ensure check",
-        "}",
-        "",
-        "workflow default() {",
-        "  ensure check",
-        "}",
-        "",
-      ].join("\n"),
-    );
-    const bash = normalize(transpileFile(input, root).module);
-    // Module-level scope function exists.
-    assert.match(bash, /entry::with_metadata_scope\(\)/);
-    // Workflow-level scope function for 'fast' exists.
-    assert.match(bash, /entry::fast::with_metadata_scope\(\)/);
-    // Workflow 'fast' wrapper uses its own scope, not the module one.
-    assert.match(bash, /entry::fast::with_metadata_scope jaiph::run_step entry::fast workflow/);
-    // Workflow 'default' wrapper uses the module scope (no workflow config).
-    assert.match(bash, /entry::with_metadata_scope jaiph::run_step entry::default workflow/);
-    // Workflow scope sets _LOCKED to prevent inner module scope from overriding.
-    assert.match(bash, /export JAIPH_AGENT_BACKEND_LOCKED="1"/);
-    assert.match(bash, /export JAIPH_AGENT_MODEL_LOCKED="1"/);
-    // Workflow scope also restores _LOCKED state.
-    assert.match(bash, /unset JAIPH_AGENT_BACKEND_LOCKED/);
-    assert.match(bash, /unset JAIPH_AGENT_MODEL_LOCKED/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("compiler golden: workflow-level config without module config uses workflow scope only", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-wfconfig2-"));
-  try {
-    const input = join(root, "entry.jh");
-    writeFileSync(
-      input,
-      [
-        "workflow default() {",
-        "  config {",
-        '    agent.backend = "claude"',
-        "  }",
-        '  log "hello"',
-        "}",
-        "",
-      ].join("\n"),
-    );
-    const bash = normalize(transpileFile(input, root).module);
-    // No module-level scope function (no module config).
-    assert.doesNotMatch(bash, /entry::with_metadata_scope\(\)/);
-    // Workflow-level scope function exists.
-    assert.match(bash, /entry::default::with_metadata_scope\(\)/);
-    // Wrapper uses workflow scope.
-    assert.match(bash, /entry::default::with_metadata_scope jaiph::run_step entry::default/);
+    const scripts = emitScriptsForModule(input, root);
+    assert.equal(scripts.length, 1);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

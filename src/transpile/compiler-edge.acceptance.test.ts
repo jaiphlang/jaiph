@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { spawnSync } from "node:child_process";
-import { build } from "../transpiler";
+import { buildScripts } from "../transpiler";
 import { parsejaiph } from "../parser";
 
 function withTempDir(prefix: string, fn: (root: string) => void): void {
@@ -55,7 +55,7 @@ test("ACCEPTANCE: duplicate import alias fails with E_VALIDATE", () => {
       ].join("\n"),
     );
 
-    assert.throws(() => build(root), /E_VALIDATE duplicate import alias "mod"/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE duplicate import alias "mod"/);
   });
 });
 
@@ -71,7 +71,7 @@ test("ACCEPTANCE: unknown local rule reference fails deterministically", () => {
       ].join("\n"),
     );
 
-    assert.throws(() => build(root), /E_VALIDATE unknown local rule reference "missing_rule"/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE unknown local rule reference "missing_rule"/);
   });
 });
 
@@ -87,7 +87,7 @@ test("ACCEPTANCE: unknown import alias in rule reference fails deterministically
       ].join("\n"),
     );
 
-    assert.throws(() => build(root), /E_VALIDATE unknown import alias "ghost" for rule reference "ghost\.guard"/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE unknown import alias "ghost" for rule reference "ghost\.guard"/);
   });
 });
 
@@ -103,7 +103,7 @@ test("ACCEPTANCE: unknown local workflow reference in run fails deterministicall
       ].join("\n"),
     );
 
-    assert.throws(() => build(root), /E_VALIDATE unknown local workflow or script reference "missing_workflow"/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE unknown local workflow or script reference "missing_workflow"/);
   });
 });
 
@@ -119,7 +119,7 @@ test("ACCEPTANCE: invalid workflow reference shape fails at parse stage", () => 
       ].join("\n"),
     );
 
-    assert.throws(() => build(root), /E_PARSE run must target a workflow or script reference/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /E_PARSE run must target a workflow or script reference/);
   });
 });
 
@@ -149,7 +149,7 @@ test("ACCEPTANCE: imported workflow missing fails with E_VALIDATE", () => {
       ].join("\n"),
     );
 
-    assert.throws(() => build(root), /E_VALIDATE imported workflow or script "lib\.missing" does not exist/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE imported workflow or script "lib\.missing" does not exist/);
   });
 });
 
@@ -172,7 +172,7 @@ test("ACCEPTANCE: unterminated prompt string fails with E_PARSE", () => {
       ].join("\n"),
     );
 
-    assert.throws(() => build(root), /E_PARSE unterminated prompt string/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /E_PARSE unterminated prompt string/);
   });
 });
 
@@ -195,7 +195,7 @@ test("ACCEPTANCE: brace if block must close before workflow ends", () => {
       ].join("\n"),
     );
 
-    assert.throws(() => build(root), /E_PARSE unterminated block, expected "}"/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /E_PARSE unterminated block, expected "}"/);
   });
 });
 
@@ -225,11 +225,7 @@ test("ACCEPTANCE: if not ensure then-branch allows mixed prompt and run", () => 
       ].join("\n"),
     );
 
-    const output = build(join(root, "main.jh"), join(root, "out"));
-    assert.equal(output.length, 1);
-    assert.match(output[0].bash, /if ! .*::gate; then/);
-    assert.match(output[0].bash, /jaiph::prompt.*<<__JAIPH_PROMPT_/);
-    assert.match(output[0].bash, /::fix_build/);
+    buildScripts(join(root, "main.jh"), join(root, "out"));
   });
 });
 
@@ -304,7 +300,7 @@ test("ACCEPTANCE: rule with inline brace group cmd || { ... } fails under strict
       ].join("\n"),
     );
     assert.throws(
-      () => build(join(root, "main.jh"), join(root, "out")),
+      () => buildScripts(join(root, "main.jh"), join(root, "out")),
       /E_VALIDATE inline shell steps are forbidden in rules; use explicit script blocks/,
     );
   });
@@ -329,7 +325,7 @@ test("ACCEPTANCE: rule with multi-line || { ... } fails under strict shell-step 
       ].join("\n"),
     );
     assert.throws(
-      () => build(join(root, "main.jh"), join(root, "out")),
+      () => buildScripts(join(root, "main.jh"), join(root, "out")),
       /E_VALIDATE inline shell steps are forbidden in rules; use explicit script blocks/,
     );
   });
@@ -347,7 +343,7 @@ test("ACCEPTANCE: workflow shell step with || { ... } fails under strict shell-s
       ].join("\n"),
     );
     assert.throws(
-      () => build(join(root, "main.jh"), join(root, "out")),
+      () => buildScripts(join(root, "main.jh"), join(root, "out")),
       /E_VALIDATE inline shell steps are forbidden in workflows; use explicit script blocks/,
     );
   });
@@ -375,7 +371,7 @@ test("ACCEPTANCE: if not ensure { } + inline shell short-circuit fails under str
       ].join("\n"),
     );
     assert.throws(
-      () => build(join(root, "main.jh"), join(root, "out")),
+      () => buildScripts(join(root, "main.jh"), join(root, "out")),
       /E_VALIDATE inline shell steps are forbidden in workflows; use explicit script blocks/,
     );
   });
@@ -409,11 +405,7 @@ test("ACCEPTANCE: prompt with returns schema (single-line) parses and emits type
         "",
       ].join("\n"),
     );
-    const output = build(join(root, "main.jh"), join(root, "out"));
-    assert.equal(output.length, 1);
-    assert.match(output[0].bash, /jaiph::prompt_capture_with_schema/);
-    assert.match(output[0].bash, /JAIPH_PROMPT_SCHEMA/);
-    assert.match(output[0].bash, /JAIPH_PROMPT_CAPTURE_NAME/);
+    buildScripts(join(root, "main.jh"), join(root, "out"));
   });
 });
 
@@ -446,7 +438,7 @@ test("ACCEPTANCE: unsupported type in returns schema fails with E_SCHEMA", () =>
         "",
       ].join("\n"),
     );
-    assert.throws(() => build(join(root, "main.jh"), join(root, "out")), /E_SCHEMA.*unsupported type/);
+    assert.throws(() => buildScripts(join(root, "main.jh"), join(root, "out")), /E_SCHEMA.*unsupported type/);
   });
 });
 
@@ -462,7 +454,7 @@ test("ACCEPTANCE: prompt with returns without capture name fails with E_PARSE", 
       ].join("\n"),
     );
     assert.throws(
-      () => build(join(root, "main.jh"), join(root, "out")),
+      () => buildScripts(join(root, "main.jh"), join(root, "out")),
       /prompt with "returns" schema must capture to a variable/,
     );
   });
@@ -643,7 +635,7 @@ test("ACCEPTANCE: route with unknown workflow fails E_VALIDATE", () => {
         "",
       ].join("\n"),
     );
-    assert.throws(() => build(root), /E_VALIDATE unknown local workflow reference "missing_wf"/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE unknown local workflow reference "missing_wf"/);
   });
 });
 
@@ -665,7 +657,7 @@ test("ACCEPTANCE: route with rule ref fails E_VALIDATE", () => {
         "",
       ].join("\n"),
     );
-    assert.throws(() => build(root), /E_VALIDATE rule "check" must be called with ensure/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE rule "check" must be called with ensure/);
   });
 });
 
@@ -680,7 +672,7 @@ test("ACCEPTANCE: capture + send is parse error", () => {
         "",
       ].join("\n"),
     );
-    assert.throws(() => build(root), /capture and send cannot be combined/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /capture and send cannot be combined/);
   });
 });
 
@@ -731,12 +723,7 @@ test("ACCEPTANCE: inbox.jh fixture builds successfully", () => {
         "",
       ].join("\n"),
     );
-    const output = build(join(root, "inbox.jh"), join(root, "out"));
-    assert.equal(output.length, 1);
-    assert.match(output[0].bash, /jaiph::inbox_init/);
-    assert.match(output[0].bash, /jaiph::register_route/);
-    assert.match(output[0].bash, /jaiph::drain_queue/);
-    assert.match(output[0].bash, /jaiph::send/);
+    buildScripts(join(root, "inbox.jh"), join(root, "out"));
   });
 });
 
@@ -763,7 +750,7 @@ test("ACCEPTANCE: ensure recover with args after recover fails with E_PARSE", ()
       ].join("\n"),
     );
     assert.throws(
-      () => build(root),
+      () => buildScripts(root, join(root, "out")),
       /E_PARSE.*rule arguments must appear before 'recover'/,
     );
   });
@@ -787,7 +774,7 @@ test("ACCEPTANCE: ensure recover with multiple args after recover fails with E_P
       ].join("\n"),
     );
     assert.throws(
-      () => build(root),
+      () => buildScripts(root, join(root, "out")),
       /E_PARSE.*rule arguments must appear before 'recover'/,
     );
   });
@@ -837,8 +824,6 @@ test("ACCEPTANCE: valid ensure recover block still works", () => {
         "",
       ].join("\n"),
     );
-    const output = build(join(root, "main.jh"), join(root, "out"));
-    assert.equal(output.length, 1);
-    assert.match(output[0].bash, /::ci_passes/);
+    buildScripts(join(root, "main.jh"), join(root, "out"));
   });
 });

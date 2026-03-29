@@ -23,6 +23,7 @@ import {
   validateReturnString,
   validateJaiphStringContent,
 } from "./validate-string";
+import { validatePromptStepReturns } from "./validate-prompt-schema";
 
 export interface ValidateContext {
   resolveImportPath: (fromFile: string, importPath: string) => string;
@@ -431,6 +432,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
       }
       if (s.type === "prompt") {
         validatePromptString(s.raw, ast.filePath, s.loc.line, s.loc.col);
+        validatePromptStepReturns(s, ast.filePath);
         return;
       }
       if (s.type === "log") {

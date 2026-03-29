@@ -141,7 +141,7 @@ For the full language reference, CLI commands, configuration, testing, Docker sa
 
 ## Contributing
 
-See [Contributing](docs/contributing.md) for branch strategy, pull requests, the Node/Jest and bash E2E test layers, and code style expectations. Use [GitHub Issues](https://github.com/jaiphlang/jaiph/issues) for bugs and feature discussion.
+See [Contributing](docs/contributing.md) for branch strategy, pull requests, the Node and bash E2E test layers, and code style expectations. Use [GitHub Issues](https://github.com/jaiphlang/jaiph/issues) for bugs and feature discussion.
 
 ## License
 

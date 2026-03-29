@@ -220,11 +220,6 @@ export interface WorkflowMetadata {
   runtime?: RuntimeConfig;
 }
 
-export interface CompileResult {
-  outputPath: string;
-  bash: string;
-}
-
 /** Step inside a test block. Only present when module is a test file (*.test.jh). */
 export type TestStepDef =
   | { type: "test_shell"; command: string; loc: SourceLoc }

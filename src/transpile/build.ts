@@ -1,8 +1,7 @@
 import { chmodSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, extname, join, parse, relative, resolve } from "node:path";
+import { dirname, extname, join, parse, relative, resolve } from "node:path";
 import { parsejaiph } from "../parser";
-import type { CompileResult } from "../types";
-import type { EmittedModule } from "./emit-workflow";
+import type { ScriptArtifact } from "./emit-script";
 import { JAIPH_EXT_REGEX, resolveImportPath } from "./resolve";
 
 function ensureDir(path: string): void {
@@ -90,65 +89,12 @@ function collectFileWithImports(entrypoint: string): string[] {
 }
 
 /**
- * Directory walking and output writes. Receives transpileFile from the caller
- * to avoid circular dependency with the main transpiler.
- */
-export function build(
-  inputPath: string,
-  targetDir: string | undefined,
-  transpileFileFn: (file: string, root: string) => EmittedModule,
-): CompileResult[] {
-  const absInput = resolve(inputPath);
-  const inputStat = statSync(absInput);
-  const rootDir = inputStat.isDirectory() ? absInput : dirname(absInput);
-  const outRoot = resolve(targetDir ?? rootDir);
-  ensureDir(outRoot);
-
-  const entrypointFile = inputStat.isFile() ? absInput : null;
-  const files = entrypointFile ? collectFileWithImports(entrypointFile) : walkjhFiles(rootDir);
-  const results: CompileResult[] = [];
-  for (const file of files) {
-    const { module, scripts, sourceLineMap } = transpileFileFn(file, rootDir);
-    const rel = relative(rootDir, file).replace(JAIPH_EXT_REGEX, ".sh");
-    const outPath = join(outRoot, rel);
-    ensureDir(dirname(outPath));
-    writeFileSync(outPath, module, "utf8");
-    chmodSync(outPath, 0o755);
-    if (sourceLineMap && sourceLineMap.length > 0) {
-      const mapPath = join(dirname(outPath), `${basename(outPath, ".sh")}.jaiph.map`);
-      writeFileSync(
-        mapPath,
-        `${JSON.stringify(
-          { version: 1, shFile: outPath, mappings: sourceLineMap },
-          null,
-          2,
-        )}\n`,
-        "utf8",
-      );
-    }
-    const scriptsRoot = join(outRoot, "scripts");
-    ensureDir(scriptsRoot);
-    for (const s of scripts) {
-      const scriptPath = join(scriptsRoot, s.name);
-      writeFileSync(scriptPath, s.content, "utf8");
-      chmodSync(scriptPath, 0o755);
-    }
-    if (entrypointFile === null || file === entrypointFile) {
-      results.push({ outputPath: outPath, bash: module });
-    }
-  }
-
-  return results;
-}
-
-/**
- * Scripts-only build used by Node runtime paths.
- * Writes emitted top-level scripts to <targetDir>/scripts without emitting workflow .sh modules.
+ * Writes extracted `script` bodies to `<targetDir>/scripts`.
  */
 export function buildScripts(
   inputPath: string,
   targetDir: string | undefined,
-  transpileFileFn: (file: string, root: string) => EmittedModule,
+  emitScriptsFn: (file: string, root: string) => ScriptArtifact[],
 ): { scriptsDir: string } {
   const absInput = resolve(inputPath);
   const inputStat = statSync(absInput);
@@ -162,7 +108,7 @@ export function buildScripts(
   ensureDir(scriptsRoot);
 
   for (const file of files) {
-    const { scripts } = transpileFileFn(file, rootDir);
+    const scripts = emitScriptsFn(file, rootDir);
     for (const s of scripts) {
       const scriptPath = join(scriptsRoot, s.name);
       writeFileSync(scriptPath, s.content, "utf8");

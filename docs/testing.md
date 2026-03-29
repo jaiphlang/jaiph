@@ -143,6 +143,8 @@ Examples: `e2e/tests/91_inbox_dispatch.sh` (11 sections covering basic send + ro
 
 Shell harnesses and CI expectations for the full repo are described in [Contributing — E2E testing](contributing.md#e2e-testing).
 
+**Default contract:** E2E tests compare **full** CLI output and **full** artifact file contents, not substrings. Use `e2e::expect_stdout` (heredoc), `e2e::expect_out`, `e2e::expect_file`, `e2e::expect_run_file`, or `e2e::assert_equals`. Substring checks (`e2e::assert_contains`) require an inline comment justifying the exception (nondeterministic output, unbounded logs, or platform-dependent text). For the full policy and artifact layout, see [ARCHITECTURE.md — E2E test philosophy](../ARCHITECTURE.md#e2e-test-philosophy-and-artifact-layout).
+
 ## Limitations (v1)
 
 - Prompt mocks are **only** inline in the test file (queue of `mock prompt "..."` or a single `mock prompt { ... }` dispatcher). Older external mock config formats are not supported.

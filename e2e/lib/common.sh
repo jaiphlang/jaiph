@@ -1,4 +1,19 @@
 #!/usr/bin/env bash
+#
+# E2E test helpers for Jaiph.
+#
+# Default contract: every assertion should compare FULL expected text (stdout
+# heredoc, artifact file contents, JSONL lines), not substrings. Use
+# e2e::expect_stdout, e2e::expect_out, e2e::expect_file, e2e::expect_run_file,
+# or e2e::assert_equals / e2e::assert_output_equals.
+#
+# e2e::assert_contains is the EXCEPTION. Every use must have an inline comment
+# explaining why full equality is not feasible (nondeterministic output,
+# unbounded logs, or platform-dependent text).
+#
+# Full policy: ARCHITECTURE.md — "E2E test philosophy and artifact layout"
+# Helper reference: docs/contributing.md — "E2E testing"
+#
 
 set -euo pipefail
 

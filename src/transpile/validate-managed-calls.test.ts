@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { build } from "../transpiler";
+import { buildScripts } from "../transpiler";
 
 test("E_VALIDATE: inline shell step is forbidden in workflow", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-sub-fn-"));
@@ -21,7 +21,7 @@ test("E_VALIDATE: inline shell step is forbidden in workflow", () => {
       ].join("\n"),
     );
     assert.throws(
-      () => build(join(root, "m.jh"), join(root, "out")),
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
       /inline shell steps are forbidden in workflows; use explicit script blocks/,
     );
   } finally {
@@ -45,7 +45,7 @@ test("E_VALIDATE: direct inline shell step is forbidden in workflow", () => {
       ].join("\n"),
     );
     assert.throws(
-      () => build(join(root, "m.jh"), join(root, "out")),
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
       /inline shell steps are forbidden in workflows; use explicit script blocks/,
     );
   } finally {
@@ -53,7 +53,7 @@ test("E_VALIDATE: direct inline shell step is forbidden in workflow", () => {
   }
 });
 
-test("build accepts run with local function and capture", () => {
+test("buildScripts extracts script for run with capture workflow", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-run-fn-"));
   const out = join(root, "out");
   try {
@@ -70,10 +70,10 @@ test("build accepts run with local function and capture", () => {
         "",
       ].join("\n"),
     );
-    const r = build(join(root, "m.jh"), out);
-    assert.equal(r.length, 1);
-    assert.match(r[0].bash, /JAIPH_RETURN_VALUE_FILE/);
-    assert.match(r[0].bash, /::f/);
+    buildScripts(join(root, "m.jh"), out);
+    const names = readdirSync(join(out, "scripts"));
+    assert.ok(names.includes("f"));
+    assert.match(readFileSync(join(out, "scripts", "f"), "utf8"), /printf/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -98,7 +98,7 @@ test("E_VALIDATE: inline shell line with workflow ref is forbidden", () => {
       ].join("\n"),
     );
     assert.throws(
-      () => build(join(root, "m.jh"), join(root, "out")),
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
       /inline shell steps are forbidden in workflows; use explicit script blocks/,
     );
   } finally {
@@ -125,7 +125,7 @@ test("E_VALIDATE: send RHS cannot invoke Jaiph workflow via shell", () => {
         "",
       ].join("\n"),
     );
-    assert.throws(() => build(join(root, "m.jh"), join(root, "out")), /workflow "w"/);
+    assert.throws(() => buildScripts(join(root, "m.jh"), join(root, "out")), /workflow "w"/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
