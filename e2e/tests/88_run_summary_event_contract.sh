@@ -8,7 +8,6 @@ trap e2e::cleanup EXIT
 
 e2e::prepare_test_env "run_summary_event_contract"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
-unset JAIPH_STDLIB
 
 e2e::section "run_summary.jsonl contract under parallel inbox dispatch"
 

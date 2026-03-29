@@ -147,7 +147,7 @@ The emission modules remain in the codebase for the golden test contract:
 
 | Source module | Responsibility |
 |---------------|----------------|
-| `emit-workflow.ts` | `emitWorkflow(...)` → `EmittedModule` (`{ module: string; scripts: Array<{ name: string; content: string }> }`) — shebang and stdlib bootstrap, `JAIPH_SCRIPTS` export, metadata exports, env shims, inbox routes, orchestrates emission, then the main workflow `::impl` and entry dispatcher |
+| `emit-workflow.ts` | `emitWorkflow(...)` → `EmittedModule` (`{ module: string; scripts: Array<{ name: string; content: string }> }`) — function definitions (no stdlib preamble or entrypoint), `JAIPH_SCRIPTS` export, metadata exports, env shims, inbox routes, orchestrates emission, then the main workflow `::impl` and entry dispatcher |
 | `emit-rule.ts` | `emitRuleFunctions(...)` — iterates `ast.rules`, emits each rule's `::impl` and readonly wrapper |
 | `emit-script.ts` | `emitScriptFunctions(...)` — iterates `ast.scripts`, emits wrapper functions that invoke scripts via `$JAIPH_SCRIPTS/<name>`. `buildScriptFiles(...)` produces standalone executable file content for each script (shebang + body) |
 | `emit-workflow-helpers.ts` | Metadata-to-env assignment helpers, scoped-metadata `push`/`pop`, `bashSingleQuotedSegment`, top-level env reference expansion |

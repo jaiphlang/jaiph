@@ -9,21 +9,16 @@ test("resolveRuntimeEnv: sets JAIPH_WORKSPACE from workspaceRoot", () => {
   assert.equal(env.JAIPH_WORKSPACE, "/workspace");
 });
 
-test("resolveRuntimeEnv: defaults JAIPH_STDLIB to bundled path (ignores shell JAIPH_STDLIB)", () => {
+test("resolveRuntimeEnv: does not set JAIPH_STDLIB (removed)", () => {
   const saved = process.env.JAIPH_STDLIB;
-  const savedOverride = process.env.JAIPH_USE_CUSTOM_STDLIB;
-  process.env.JAIPH_STDLIB = "/tmp/should-not-be-used";
-  delete process.env.JAIPH_USE_CUSTOM_STDLIB;
+  process.env.JAIPH_STDLIB = "/tmp/should-be-cleaned";
   try {
     const config: JaiphConfig = {};
     const env = resolveRuntimeEnv(config, "/ws", "/ws/main.sh");
-    assert.match(env.JAIPH_STDLIB ?? "", /jaiph_stdlib\.sh$/);
-    assert.notEqual(env.JAIPH_STDLIB, "/tmp/should-not-be-used");
+    assert.equal(env.JAIPH_STDLIB, undefined);
   } finally {
     if (saved !== undefined) process.env.JAIPH_STDLIB = saved;
     else delete process.env.JAIPH_STDLIB;
-    if (savedOverride !== undefined) process.env.JAIPH_USE_CUSTOM_STDLIB = savedOverride;
-    else delete process.env.JAIPH_USE_CUSTOM_STDLIB;
   }
 });
 

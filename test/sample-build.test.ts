@@ -48,7 +48,7 @@ test("build transpiles fixture corpus with strict shell guards", () => {
     const generated = readFileSync(generatedPath, "utf8");
     assert.match(generated, /^#!\/usr\/bin\/env bash/m);
     assert.match(generated, /set -euo pipefail/);
-    assert.match(generated, /source "\$jaiph_stdlib_path"/);
+    assert.doesNotMatch(generated, /jaiph_stdlib_path/);
     assert.match(generated, /main::default::impl\(\) \{/);
     assert.match(generated, /jaiph::run_step main::default workflow main::default::impl "\$@"/);
   } finally {
@@ -324,39 +324,12 @@ test("jaiph run fails when runtime emits non-xtrace stderr", () => {
       ].join("\n"),
     );
 
-    const stdlibPath = join(root, "jaiph_stdlib.sh");
-    writeFileSync(
-      stdlibPath,
-      [
-        "#!/usr/bin/env bash",
-        "jaiph__runtime_api() { echo 1; }",
-        "jaiph::run_step() {",
-        "  local _name=\"$1\"",
-        "  local _kind=\"$2\"",
-        "  shift 2 || shift || true",
-        "  \"$@\"",
-        "}",
-        "jaiph::execute_readonly() {",
-        "  shift || true",
-        "  \"$@\"",
-        "}",
-        "jaiph::prompt() {",
-        "  :",
-        "}",
-        "echo runtime-broken >&2",
-        "",
-      ].join("\n"),
-    );
-    chmodSync(stdlibPath, 0o755);
-
     const cliPath = join(process.cwd(), "dist/src/cli.js");
     const runResult = spawnSync("node", [cliPath, "run", filePath], {
       encoding: "utf8",
       cwd: root,
       env: {
         ...process.env,
-        JAIPH_USE_CUSTOM_STDLIB: "1",
-        JAIPH_STDLIB: stdlibPath,
         JAIPH_DOCKER_ENABLED: "false",
       },
     });
@@ -1126,62 +1099,6 @@ test("jaiph run JAIPH_AGENT_TRUSTED_WORKSPACE env overrides metadata", () => {
   }
 });
 
-test("jaiph run uses JAIPH_STDLIB global runtime path", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-global-stdlib-"));
-  try {
-    const stdlibPath = join(root, "jaiph_stdlib.sh");
-    writeFileSync(
-      stdlibPath,
-      [
-        "#!/usr/bin/env bash",
-        "jaiph__runtime_api() { echo 1; }",
-        "jaiph::run_step() {",
-        "  local _name=\"$1\"",
-        "  local _kind=\"$2\"",
-        "  shift 2 || shift || true",
-        "  \"$@\"",
-        "}",
-        "jaiph::execute_readonly() {",
-        "  shift || true",
-        "  \"$@\"",
-        "}",
-        "jaiph::prompt() {",
-        "  :",
-        "}",
-        "jaiph::emit_workflow_summary_event() {",
-        "  :",
-        "}",
-        "",
-      ].join("\n"),
-    );
-    chmodSync(stdlibPath, 0o755);
-
-    const filePath = join(root, "echo.jh");
-    writeFileSync(
-      filePath,
-      [
-        "script echo_global_stdlib_ok() {",
-        "  echo global-stdlib-ok",
-        "}",
-        "workflow default {",
-        "  run echo_global_stdlib_ok",
-        "}",
-        "",
-      ].join("\n"),
-    );
-
-    const cliPath = join(process.cwd(), "dist/src/cli.js");
-    const runResult = spawnSync("node", [cliPath, "run", filePath], {
-      encoding: "utf8",
-      cwd: root,
-      env: { ...process.env, JAIPH_USE_CUSTOM_STDLIB: "1", JAIPH_STDLIB: stdlibPath },
-    });
-
-    assert.equal(runResult.status, 0, runResult.stderr);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
 
 test("jaiph init creates workspace structure and guidance", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-init-"));
@@ -2676,112 +2593,3 @@ test("walkTestFiles discovers *.test.jh in directory", () => {
   }
 });
 
-test("stream_json_to_text deduplicates repeated assistant and result events", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-stream-dedup-"));
-  try {
-    const finalFile = join(root, "final.txt");
-    const stdlibPath = join(process.cwd(), "dist/src/jaiph_stdlib.sh");
-    // Simulate --include-partial-messages output: two assistant messages + result, all with same content.
-    const events = [
-      JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "Hello, World!" }] } }),
-      JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "Hello, World!" }] } }),
-      JSON.stringify({ type: "result", result: "Hello, World!" }),
-    ].join("\n");
-    const result = spawnSync("bash", ["-c", `source "${stdlibPath}" && printf '%s\\n' '${events.replace(/'/g, "'\\''")}' | JAIPH_PROMPT_FINAL_FILE="${finalFile}" jaiph::stream_json_to_text`], {
-      encoding: "utf8",
-      timeout: 10_000,
-    });
-    assert.equal(result.status, 0, "stream_json_to_text should exit 0: " + result.stderr);
-    // Final file should contain the response exactly once.
-    const finalContent = readFileSync(finalFile, "utf8");
-    assert.equal(finalContent, "Hello, World!", "JAIPH_PROMPT_FINAL_FILE should contain the response once, got: " + JSON.stringify(finalContent));
-    // Stdout should contain the response exactly once (inside "Final answer:" section).
-    const stdout = result.stdout;
-    const occurrences = stdout.split("Hello, World!").length - 1;
-    assert.equal(occurrences, 1, "stdout should contain the response once, got " + occurrences + " times: " + JSON.stringify(stdout));
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("run_step prompt does not forward transcript to stdout when fd 1 is a pipe", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-prompt-pipe-"));
-  try {
-    const stdlib = join(process.cwd(), "dist/src/jaiph_stdlib.sh");
-    const ws = join(root, "ws");
-    mkdirSync(join(ws, ".jaiph"), { recursive: true });
-    const runsDir = join(root, "runs");
-    mkdirSync(runsDir, { recursive: true });
-    const q = (s: string) => s.replace(/'/g, `'\\''`);
-    const script = `set -euo pipefail
-export JAIPH_WORKSPACE='${q(ws)}'
-export JAIPH_RUNS_DIR='${q(runsDir)}'
-export JAIPH_SOURCE_FILE='pipe-test'
-source '${q(stdlib)}'
-jaiph::init_run_tracking
-noisy_prompt_impl() {
-  printf 'Command:\\nfake\\n\\nPrompt:\\nhi\\n\\nFinal answer:\\n'
-  printf 'transcript-noise\\n'
-}
-captured=$( jaiph::run_step jaiph::prompt prompt noisy_prompt_impl "ignored" )
-if [[ -n "$captured" ]]; then
-  printf 'expected empty command-substitution capture, got: %q\\n' "$captured" >&2
-  exit 1
-fi
-`;
-    const result = spawnSync("bash", ["-c", script], { encoding: "utf8", timeout: 10_000 });
-    assert.equal(result.status, 0, result.stderr + result.stdout);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("stream_json_to_text deduplicates when stream deltas are followed by assistant message", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-stream-dedup2-"));
-  try {
-    const finalFile = join(root, "final.txt");
-    const stdlibPath = join(process.cwd(), "dist/src/jaiph_stdlib.sh");
-    // Simulate streaming: text_delta events, then assistant message, then result.
-    const events = [
-      JSON.stringify({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: "Hello" } } }),
-      JSON.stringify({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: ", World!" } } }),
-      JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "Hello, World!" }] } }),
-      JSON.stringify({ type: "result", result: "Hello, World!" }),
-    ].join("\n");
-    const result = spawnSync("bash", ["-c", `source "${stdlibPath}" && printf '%s\\n' '${events.replace(/'/g, "'\\''")}' | JAIPH_PROMPT_FINAL_FILE="${finalFile}" jaiph::stream_json_to_text`], {
-      encoding: "utf8",
-      timeout: 10_000,
-    });
-    assert.equal(result.status, 0, "stream_json_to_text should exit 0: " + result.stderr);
-    const finalContent = readFileSync(finalFile, "utf8");
-    assert.equal(finalContent, "Hello, World!", "JAIPH_PROMPT_FINAL_FILE should contain streamed response once");
-    const stdout = result.stdout;
-    const occurrences = stdout.split("Hello, World!").length - 1;
-    assert.equal(occurrences, 1, "stdout should contain the response once, got " + occurrences + " times");
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("stream_json_to_text trims leading blank lines from final answer", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-stream-leading-newline-"));
-  try {
-    const finalFile = join(root, "final.txt");
-    const stdlibPath = join(process.cwd(), "dist/src/jaiph_stdlib.sh");
-    const events = [
-      JSON.stringify({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: "\n" } } }),
-      JSON.stringify({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: "\nHello, World!" } } }),
-    ].join("\n");
-    const result = spawnSync("bash", ["-c", `source "${stdlibPath}" && printf '%s\\n' '${events.replace(/'/g, "'\\''")}' | JAIPH_PROMPT_FINAL_FILE="${finalFile}" jaiph::stream_json_to_text`], {
-      encoding: "utf8",
-      timeout: 10_000,
-    });
-    assert.equal(result.status, 0, "stream_json_to_text should exit 0: " + result.stderr);
-    const finalContent = readFileSync(finalFile, "utf8");
-    assert.equal(finalContent, "Hello, World!", "JAIPH_PROMPT_FINAL_FILE should not start with a blank line");
-    assert.match(result.stdout, /Final answer:\nHello, World!/);
-    assert.doesNotMatch(result.stdout, /Final answer:\n\nHello, World!/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});

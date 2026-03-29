@@ -1,5 +1,5 @@
 set -euo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/../jaiph_stdlib.sh"
+export JAIPH_SCRIPTS="${JAIPH_SCRIPTS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../scripts" && pwd)}"
 
 tools::security::scan_passes::impl() {
   echo "Security scan placeholder here"

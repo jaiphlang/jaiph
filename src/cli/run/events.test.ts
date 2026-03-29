@@ -1,14 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { parseLogEvent, parseStepEvent } from "./events";
-
-function bashSingleQuoted(path: string): string {
-  return `'${path.replace(/'/g, `'\"'\"'`)}'`;
-}
 
 // === parseLogEvent ===
 
@@ -223,52 +215,3 @@ test("parseStepEvent: STEP_END with tabs and ANSI in out_content via JS kernel e
   assert.equal(parsed!.out_content, "a\tb\x1b[0mc");
 });
 
-// log / logerr use echo -e for TTY output; JSON payloads still carry the raw message (no echo -e on json_escape input).
-test("jaiph::log and jaiph::logerr: echo -e for stdout/stderr; LOG JSON message stays literal backslash escapes", () => {
-  const stdlibSh = join(process.cwd(), "src/jaiph_stdlib.sh");
-  const dir = mkdtempSync(join(tmpdir(), "jaiph-log-escape-"));
-  const stdoutPath = join(dir, "stdout.txt");
-  const stderrPath = join(dir, "stderr.txt");
-  const eventsPath = join(dir, "events.txt");
-  try {
-    const bundledStdlib = join(process.cwd(), "dist/src/jaiph_stdlib.sh");
-    const script = [
-      `export JAIPH_STDLIB=${bashSingleQuoted(bundledStdlib)}`,
-      `exec 3>${bashSingleQuoted(eventsPath)}`,
-      `source ${bashSingleQuoted(stdlibSh)}`,
-      `jaiph::log "line1\\nline2" >${bashSingleQuoted(stdoutPath)}`,
-      `jaiph::logerr "err1\\terr2" 2>${bashSingleQuoted(stderrPath)}`,
-    ].join("\n");
-    const r = spawnSync("bash", ["-c", script], { encoding: "utf8" });
-    assert.equal(r.status, 0, r.stderr);
-    const out = readFileSync(stdoutPath, "utf8");
-    assert.equal(out, "line1\nline2\n");
-    const err = readFileSync(stderrPath, "utf8");
-    assert.equal(err, "err1\terr2\n");
-    const evLines = readFileSync(eventsPath, "utf8").trimEnd().split("\n");
-    assert.equal(evLines.length, 2);
-    const logParsed = parseLogEvent(evLines[0]!);
-    const logerrParsed = parseLogEvent(evLines[1]!);
-    assert.ok(logParsed);
-    assert.ok(logerrParsed);
-    assert.equal(logParsed!.message, "line1\\nline2");
-    assert.equal(logerrParsed!.message, "err1\\terr2");
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-// Regression: rules run under jaiph::execute_readonly use bash -c without re-sourcing stdlib;
-// emit path must be in the environment, not only in an unexported shell variable.
-test("JAIPH_EMIT_JS is exported for child bash (readonly rule subshell)", () => {
-  const stdlibSh = join(process.cwd(), "src/jaiph_stdlib.sh");
-  const bundledStdlib = join(process.cwd(), "dist/src/jaiph_stdlib.sh");
-  const script = [
-    `export JAIPH_STDLIB=${bashSingleQuoted(bundledStdlib)}`,
-    `source ${bashSingleQuoted(stdlibSh)}`,
-    `bash -c 'test -f "$JAIPH_EMIT_JS" && node "$JAIPH_EMIT_JS" 2>&1 | head -1'`,
-  ].join("\n");
-  const r = spawnSync("bash", ["-c", script], { encoding: "utf8" });
-  assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /unknown mode/);
-});

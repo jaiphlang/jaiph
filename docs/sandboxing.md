@@ -33,7 +33,7 @@ sudo env JAIPH_PRECEDING_FILES="$JAIPH_PRECEDING_FILES" JAIPH_EMIT_JS="$JAIPH_EM
 '
 ```
 
-The mount namespace makes the filesystem read-only for the duration of the rule: reads work; creating, modifying, or deleting files on mounted filesystems should fail. `JAIPH_PRECEDING_FILES` is forwarded so agent-related behavior that depends on it still works under `sudo`. **`JAIPH_EMIT_JS`** is forwarded so `log` / `logerr`, step markers, and **`run_summary.jsonl`** appends still reach **`kernel/emit.js`** inside the child shell (that environment does not re-source the stdlib).
+The mount namespace makes the filesystem read-only for the duration of the rule: reads work; creating, modifying, or deleting files on mounted filesystems should fail. `JAIPH_PRECEDING_FILES` is forwarded so agent-related behavior that depends on it still works under `sudo`. **`JAIPH_EMIT_JS`** is forwarded so `log` / `logerr`, step markers, and **`run_summary.jsonl`** appends still reach **`kernel/emit.js`** inside the child shell.
 
 **Otherwise** (typical macOS install, containers without usable namespaces, or missing passwordless sudo): the implementation falls back to a child `bash` that invokes the same function. Process boundaries remain (e.g. `exit` in a rule does not kill the workflow runner), but **the filesystem is not forced read-only**. Treat rules as non-mutating checks in your design; rely on Linux + the prerequisites above for enforcement.
 

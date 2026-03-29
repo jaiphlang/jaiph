@@ -132,9 +132,6 @@ EOF
 
 # When
 set +e
-if [[ -f "${ROOT_DIR}/dist/src/jaiph_stdlib.sh" ]]; then
-  export JAIPH_STDLIB="${ROOT_DIR}/dist/src/jaiph_stdlib.sh"
-fi
 unmatched_out="$(jaiph test "${TEST_DIR}/unmatched_mock_block.test.jh" 2>&1)"
 unmatched_exit=$?
 set -e
