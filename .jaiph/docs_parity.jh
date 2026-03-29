@@ -16,7 +16,9 @@ const role = "You are an expert technical writer for this project.
        problem.
     6. You write problem explanation and goals in a human approachable way,
        while keeping details dense in separate sections, so both human and AI
-       can easily follow the reasoning."
+    7. Source code and ARCHITECTURE.md are the single source of truth. You don't
+       trust the existing documentation blindly.
+    "
 
 script assert_newline_paths_are_files() {
   while IFS= read -r f; do
