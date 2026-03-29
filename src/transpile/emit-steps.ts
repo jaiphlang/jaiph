@@ -519,8 +519,8 @@ export function emitStep(
   if (step.type === "prompt") { emitPromptStepToOut(out, indent, step, ctx); return; }
   if (step.type === "comment") { emitCommentStep(out, indent, step); return; }
   if (step.type === "return") { out.push(`${indent}jaiph::set_return_value ${step.value}`); out.push(`${indent}return 0`); return; }
-  if (step.type === "log") { out.push(`${indent}jaiph::log ${step.message}`); return; }
-  if (step.type === "logerr") { out.push(`${indent}jaiph::logerr ${step.message}`); return; }
+  if (step.type === "log") { out.push(`${indent}jaiph::log "${step.message}"`); return; }
+  if (step.type === "logerr") { out.push(`${indent}jaiph::logerr "${step.message}"`); return; }
   if (step.type === "send") { emitSendStep(out, indent, step, ctx); return; }
   if (step.type === "if") { emitIfStep(out, indent, step, ctx); return; }
   if (step.type === "fail") { emitFailStep(out, indent, step, ctx); return; }

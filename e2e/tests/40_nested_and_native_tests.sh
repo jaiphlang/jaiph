@@ -164,7 +164,7 @@ workflow default (1="3")
   ✓ rule ensure_is_number (<time>)
   ▸ script fib (1="3")
   ✓ script fib (<time>)
-  ℹ "2"
+  ℹ 2
 ✓ PASS workflow default (<time>)
 EOF
 
