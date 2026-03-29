@@ -1,20 +1,18 @@
 import {
   mkdtempSync,
-  mkdirSync,
   readFileSync,
   rmSync,
-  writeFileSync,
-  chmodSync,
   statSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve, extname } from "node:path";
+import { dirname, join, resolve, extname } from "node:path";
 import { basename } from "node:path";
-import { spawnSync } from "node:child_process";
-import { build, transpileTestFile, walkTestFiles } from "../../transpiler";
-import { resolveBundledStdlibPath } from "../run/env";
+import { build, walkTestFiles } from "../../transpiler";
+import { parsejaiph } from "../../parser";
+import { jaiphError } from "../../errors";
 import { detectWorkspaceRoot } from "../shared/paths";
 import { parseArgs } from "../shared/usage";
+import { runTestFile } from "../../runtime/kernel/node-test-runner";
 
 export async function runTest(rest: string[]): Promise<number> {
   const { positional } = parseArgs(rest);
@@ -78,44 +76,17 @@ export async function runSingleTestFile(
   workspaceRoot: string,
   _runArgs: string[],
 ): Promise<number> {
+  const ast = parsejaiph(readFileSync(testFileAbs, "utf8"), testFileAbs);
+  if (!ast.tests || ast.tests.length === 0) {
+    throw jaiphError(ast.filePath, 1, 1, "E_PARSE", "test file must contain at least one test block");
+  }
+
+  // Build imported modules to extract scripts (needed for script steps)
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-test-"));
   try {
     build(workspaceRoot, outDir);
-    const testBash = transpileTestFile(testFileAbs, workspaceRoot);
-    const rel = relative(workspaceRoot, testFileAbs).replace(/\.test\.jh$/, ".test.sh");
-    const testScriptPath = join(outDir, rel);
-    mkdirSync(dirname(testScriptPath), { recursive: true });
-    writeFileSync(testScriptPath, testBash, "utf8");
-    chmodSync(testScriptPath, 0o755);
-
-    const runtimeEnv = { ...process.env, JAIPH_WORKSPACE: workspaceRoot } as Record<string, string | undefined>;
-    runtimeEnv.JAIPH_TEST_MODE = "1";
-    runtimeEnv.JAIPH_TEST_FILE = basename(testFileAbs);
-    if (process.env.JAIPH_USE_CUSTOM_STDLIB === "1" && process.env.JAIPH_STDLIB) {
-      runtimeEnv.JAIPH_STDLIB = process.env.JAIPH_STDLIB;
-    } else {
-      runtimeEnv.JAIPH_STDLIB = resolveBundledStdlibPath();
-    }
-    delete runtimeEnv.BASH_ENV;
-    delete runtimeEnv.JAIPH_RUN_DIR;
-    delete runtimeEnv.JAIPH_RUN_SUMMARY_FILE;
-    delete runtimeEnv.JAIPH_PRECEDING_FILES;
-    delete runtimeEnv.JAIPH_SCRIPTS;
-    // Same as jaiph run: a parent-exported module path would shadow the test script's preamble
-    // (emit-test only defaulted when unset) and break run-step-exec sourcing.
-    delete runtimeEnv.JAIPH_RUN_STEP_MODULE;
-
-    const result = spawnSync("bash", [testScriptPath], {
-      encoding: "utf8",
-      cwd: workspaceRoot,
-      env: runtimeEnv,
-    });
-    process.stdout.write(result.stdout ?? "");
-    process.stderr.write(result.stderr ?? "");
-    if (result.status !== 0) {
-      return result.status ?? 1;
-    }
-    return 0;
+    const scriptsDir = join(outDir, "scripts");
+    return await runTestFile(testFileAbs, workspaceRoot, scriptsDir, ast.tests);
   } finally {
     rmSync(outDir, { recursive: true, force: true });
   }

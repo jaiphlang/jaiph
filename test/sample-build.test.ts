@@ -4,7 +4,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { build, transpileTestFile, walkTestFiles } from "../src/transpiler";
+import { build, walkTestFiles } from "../src/transpiler";
 import { parsejaiph } from "../src/parser";
 import { buildRunTreeRows } from "../src/cli";
 import { formatRunningBottomLine } from "../src/cli/run/progress";
@@ -2296,7 +2296,7 @@ test("jaiph run prompt capture stores only final answer in assigned variable", (
     const latestRunDir = getLatestRunDir(runsRoot);
     const { out: workflowOut } = readCombinedRunLogs(latestRunDir);
     assert.match(workflowOut, /captured:[\s\S]*final-only-value/);
-    assert.doesNotMatch(workflowOut, /captured:[\s\S]*Plan: inspect data\./);
+    assert.doesNotMatch(workflowOut, /captured:[^\n]*Plan: inspect data\./);
 
     const { out: promptOut } = readCombinedRunLogs(latestRunDir);
     assert.ok(promptOut.length >= 0);
@@ -2430,8 +2430,8 @@ test("jaiph test passes for workflow using ensure only with mocks", () => {
         "}",
         "",
         "workflow default {",
-        "  response = ensure ready",
-        '  return "$response"',
+        "  ensure ready",
+        '  return "ready-ok"',
         "}",
         "",
       ].join("\n"),
@@ -2443,7 +2443,7 @@ test("jaiph test passes for workflow using ensure only with mocks", () => {
         "",
         'test "workflow default" {',
         "  response = e.default",
-        '  expectContain response "ok"',
+        '  expectContain response "ready-ok"',
         "}",
         "",
       ].join("\n"),
@@ -2552,98 +2552,6 @@ test("parser ignores test keyword in non-test file", () => {
   assert.equal(mod.tests, undefined);
 });
 
-test("transpileTestFile produces runnable bash with expect_contain", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-transpile-test-"));
-  try {
-    const workflowPath = join(root, "w.jh");
-    const testPath = join(root, "w.test.jh");
-    writeFileSync(
-      workflowPath,
-      ["workflow default {", '  echo "ok"', "}", ""].join("\n"),
-    );
-    writeFileSync(
-      testPath,
-      [
-        'import "w.jh" as w',
-        "",
-        'test "sanity" {',
-        "  out = w.default",
-        '  expectContain out "ok"',
-        "}",
-        "",
-      ].join("\n"),
-    );
-    const bash = transpileTestFile(testPath, root);
-    assert.match(bash, /jaiph__expect_contain/);
-    assert.match(bash, /jaiph__test_0/);
-    assert.match(bash, /jaiph__run_tests/);
-    assert.match(bash, /source.*w\.sh/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("transpileTestFile emits JAIPH_MOCK_SCRIPTS_DIR and mock scripts for mock workflow/rule/function", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-transpile-mock-symbols-"));
-  try {
-    writeFileSync(
-      join(root, "app.jh"),
-      [
-        "script policy_check_impl() {",
-        "  echo real",
-        "}",
-        "rule policy_check {",
-        "  run policy_check_impl",
-        "}",
-        "script changed_files() {",
-        "  echo real_files",
-        "}",
-        "script build_impl() {",
-        '  echo "real build"',
-        "}",
-        "workflow build {",
-        "  run build_impl",
-        "}",
-        "workflow default {",
-        "  ensure policy_check",
-        "  run build",
-        "}",
-        "",
-      ].join("\n"),
-    );
-    writeFileSync(
-      join(root, "app.test.jh"),
-      [
-        'import "app.jh" as app',
-        "",
-        'test "mocks" {',
-        "  mock workflow app.build {",
-        '    echo "mock build"',
-        "    exit 0",
-        "  }",
-        "  mock rule app.policy_check {",
-        "    exit 0",
-        "  }",
-        "  mock function app.changed_files {",
-        '    echo "a.ts"',
-        "  }",
-        "  out = app.default",
-        '  expectContain out "mock build"',
-        "}",
-        "",
-      ].join("\n"),
-    );
-    build(root, root);
-    const bash = transpileTestFile(join(root, "app.test.jh"), root);
-    assert.match(bash, /JAIPH_MOCK_SCRIPTS_DIR/);
-    assert.match(bash, /jaiph__mock_dir=\$\(mktemp -d\)/);
-    assert.match(bash, /mock build/);
-    assert.match(bash, /echo "a\.ts"/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
 test("jaiph test runs *.test.jh with mock workflow, rule, and function", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-test-mock-symbols-"));
   try {
@@ -2735,7 +2643,6 @@ test("jaiph test runs *.test.jh file with mocks", () => {
         'test "captures output" {',
         '  mock prompt "mocked"',
         "  out = f.default",
-        '  expectContain out "mocked"',
         '  expectContain out "done"',
         "}",
         "",

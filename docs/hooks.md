@@ -43,7 +43,7 @@ An empty array (or omitting the key) means “no commands from this file for thi
 
 | Event | When it runs |
 |-------|----------------|
-| `workflow_start` | After transpile/build succeeded and **before** the CLI spawns the workflow subprocess (local or Docker). If build fails, this event does not run. |
+| `workflow_start` | After parse/validation succeeded and **before** the CLI spawns the workflow subprocess (local or Docker). If parse or validation fails, this event does not run. |
 | `workflow_end` | After the workflow subprocess has exited (any status). Runs before the CLI prints its final PASS/FAIL line. |
 | `step_start` | When the runtime reports that a step (workflow, rule, script, or prompt) has started. |
 | `step_end` | When the runtime reports that a step has finished. |

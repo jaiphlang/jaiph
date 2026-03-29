@@ -17,7 +17,7 @@ If you are hacking on the **compiler or CLI** in this repository, read [Contribu
 
 **Jaiph** is a composable scripting language and runtime for defining and orchestrating AI agent workflows.
 
-It combines declarative workflow structure with bash, then compiles to bash that sources the Jaiph runtime stdlib. **`jaiph run`** and **`jaiph test`** **launch** that world from the **CLI** (TypeScript `workflow-launch`): the CLI spawns the generated workflow module directly as a detached process (no `bash -c` wrapper), running it in `__jaiph_workflow default` mode and passing run metadata through `JAIPH_META_FILE`; the CLI owns signals and the child process group. **Prompt** handling, **managed step subprocesses** (each `run` / `ensure` child, including **`script`** files under `build/scripts/`), **inbox** file I/O (`kernel/inbox.js`), and **stderr / `run_summary.jsonl` event emission** (`kernel/emit.js`) go through the **JS kernel** shipped under **`runtime/kernel/`** (invoked from the stdlib with **`node`**). Step bookkeeping and bash entrypoints (`jaiph::send`, drain, …) stay in **`jaiph_stdlib.sh`** — there is **no legacy path** where a separate bash-only launcher replaces that stack for normal CLI runs. Builds emit **`.jaiph.map`** next to each **`.sh`** so the CLI can rewrite **`.sh:line`** diagnostics to **`.jh`**. Your **`script`** bodies still run as ordinary processes (default bash or a custom shebang).
+It combines declarative workflow structure with script execution, and the **Node workflow runtime** (`NodeWorkflowRuntime`) interprets the AST directly — no Bash transpilation on the runtime path. **`jaiph run`** and **`jaiph test`** parse `.jh` sources, build a runtime graph, and execute through the Node workflow runtime. The CLI spawns the workflow runner as a detached process and owns signals and the child process group. **Prompt** handling, **managed step subprocesses** (each `run` / `ensure` child, including **`script`** blocks), **inbox** file I/O, and **event emission** (`__JAIPH_EVENT__` / `run_summary.jsonl`) are all handled by the **JS kernel** under **`runtime/kernel/`**. Your **`script`** bodies still run as ordinary processes (default bash or a custom shebang).
 
 **Core concepts:**
 
@@ -26,7 +26,7 @@ It combines declarative workflow structure with bash, then compiles to bash that
 - **Agent prompts** — `prompt "..."` sends text to a configured agent (e.g. Cursor or Claude CLI); workflows orchestrate when the agent runs.
 - **Composability** — Import other `.jh` modules and call their rules, workflows, and scripts by alias (e.g. `ensure security.scan_passes`, `run bootstrap.nodejs`). Use **`ensure` only for rules** and **`run` for workflows and scripts** so every managed call is keyword-led.
 - **Step capture** — Assign results with `x = ensure …` / `x = run …` / `x = prompt …`, or **`const x = …`** with the same RHS forms (see [Grammar](grammar.md)). For **rules and workflows**, capture uses explicit `return "…"` / `return "$var"`. For **`run` to a script**, capture follows **script stdout** (use `echo` / `printf` — not Jaiph `return "…"` inside the script body). With **`const`**, use **`run`** / **`ensure`** explicitly for call-like RHSs (**`const x = run fn "$arg"`**, not **`const x = fn "$arg"`**).
-- **Shell-native** — Transpiled output is bash. Shared bash helpers can live in `.jaiph/lib/` and be loaded from scripts with `source "$JAIPH_LIB/…"`. Emitted scripts export a default `JAIPH_LIB` under the workspace (`JAIPH_WORKSPACE`, or `.` if unset); see [CLI — Environment variables](cli.md#environment-variables).
+- **Shell-native scripts** — `script` blocks hold bash (or any language via a custom shebang) and execute as managed subprocesses. Shared bash helpers can live in `.jaiph/lib/` and be loaded from scripts with `source "$JAIPH_LIB/…"`. The runtime sets `JAIPH_LIB` under the workspace; see [CLI — Environment variables](cli.md#environment-variables).
 
 > [!WARNING]
 > Jaiph is still in an early stage. Expect breaking changes.
@@ -98,7 +98,7 @@ workflow update_docs {
 }
 ```
 
-Transpiled output is standard bash. The generated script sources the runtime stdlib by reading **`JAIPH_STDLIB`** if set, otherwise defaulting to **`~/.local/bin/jaiph_stdlib.sh`** (the path used by the install script). When you run a workflow via **`jaiph run`**, **`jaiph ./file.jh`**, or a `#!/usr/bin/env jaiph` shebang, the CLI sets **`JAIPH_STDLIB`** to the `jaiph_stdlib.sh` bundled next to that `jaiph` binary so you always match the compiler version; **`runtime/kernel/*.js`** under that install root (resolved from the stdlib path) includes **`emit.js`**, **`inbox.js`**, **`prompt.js`**, **`run-step-exec.js`**, and related helpers. Advanced overrides are documented under [Environment variables](cli.md#environment-variables).
+When you run a workflow via **`jaiph run`**, **`jaiph ./file.jh`**, or a `#!/usr/bin/env jaiph` shebang, the Node workflow runtime interprets the parsed AST directly. Script steps execute as managed subprocesses. The **`runtime/kernel/`** modules handle prompt execution, inbox transport, event emission, and step management. Advanced overrides are documented under [Environment variables](cli.md#environment-variables).
 
 A runnable copy of this example lives in the Jaiph repository under `test/fixtures/` (with stub modules `bootstrap_project.jh` and `tools/security.jh`).
 
@@ -136,7 +136,7 @@ jaiph use 0.5.0     # installs tag v0.5.0
 ```
 
 If that fails, check that `~/.local/bin` is in your `PATH` (default install directory).
-Installation places both the `jaiph` CLI and the global runtime stdlib (`jaiph_stdlib.sh`) in `~/.local/bin/`.
+Installation places the `jaiph` CLI in `~/.local/bin/`.
 
 ## Running a workflow
 
@@ -151,7 +151,7 @@ Entrypoint resolution: the entry file must define a workflow named **`default`**
 Other useful CLI commands:
 
 ```bash
-jaiph build [--target <dir>] [path]   # compile .jh files to bash without running
+jaiph build [--target <dir>] [path]   # compile .jh files to bash for Docker/CI
 jaiph test [path]                     # run tests (see below)
 jaiph report --workspace .            # browse .jaiph/runs in a local dashboard
 ```
@@ -180,7 +180,7 @@ Tip: add `.jaiph/` to your `.gitignore`.
 
 ## Language overview
 
-Jaiph source files use the **`.jh`** extension. A file contains **rules**, **workflows**, **scripts**, and optional **config** blocks. All primitives interoperate with standard bash. For the full grammar, validation rules, and transpilation details, see [Grammar](grammar.md).
+Jaiph source files use the **`.jh`** extension. A file contains **rules**, **workflows**, **scripts**, and optional **config** blocks. All primitives interoperate with standard bash via `script` blocks. For the full grammar and validation rules, see [Grammar](grammar.md).
 
 - `config { ... }` — Optional block setting runtime options (agent backend, model, Docker sandbox, etc.). Allowed at the top level (module-wide) and inside individual workflows for per-workflow overrides (`agent.*` and `run.*` keys only). See [Configuration](configuration.md).
 - `import "path" as alias` — Import rules, workflows, and scripts from another module. The path may include a `.jh` suffix or omit it (the compiler appends `.jh`). Verified at compile time.
@@ -207,7 +207,7 @@ script check_hash(file_path, expected_hash) { ... }
 workflow deploy(env, version, dry_run = "false") { ... }
 ```
 
-Named params transpile to `local` assignments at the top of the body (e.g. `local file_path="$1"`). Default values use bash expansion (`"${3:-false}"`). Parentheses are optional when no params exist. See [Grammar — Named parameters](grammar.md#named-parameters).
+Named params map to positional arguments at runtime (e.g. `file_path` binds to `$1`). Default values use fallback expansion (`"${3:-false}"`). Parentheses are optional when no params exist. See [Grammar — Named parameters](grammar.md#named-parameters).
 
 ### Polyglot scripts
 
