@@ -35,8 +35,34 @@ export function parseWorkflowBlock(
   const rawDecl = lines[startIndex];
   const lineDecl = rawDecl.trim();
 
-  const match = lineDecl.match(/^(export\s+)?workflow\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{$/);
+  const match = lineDecl.match(/^(export\s+)?workflow\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*\)\s*\{$/);
   if (!match) {
+    const braceNoParens = lineDecl.match(/^(export\s+)?workflow\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{/);
+    if (braceNoParens) {
+      fail(
+        filePath,
+        `workflow declarations require parentheses: workflow ${braceNoParens[2]}() { … }`,
+        lineNo,
+      );
+    }
+    const parensNoBrace = lineDecl.match(
+      /^(export\s+)?workflow\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*\)\s*$/,
+    );
+    if (parensNoBrace) {
+      fail(
+        filePath,
+        `workflow declarations require braces: workflow ${parensNoBrace[2]}() { … }`,
+        lineNo,
+      );
+    }
+    const loose = lineDecl.match(/^(export\s+)?workflow\s+([A-Za-z_][A-Za-z0-9_]*)/);
+    if (loose) {
+      fail(
+        filePath,
+        `workflow declarations require parentheses and braces: workflow ${loose[2]}() { … }`,
+        lineNo,
+      );
+    }
     fail(filePath, "invalid workflow declaration", lineNo);
   }
   const isExported = Boolean(match[1]);

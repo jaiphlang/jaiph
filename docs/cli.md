@@ -73,11 +73,11 @@ script check_branch() {
   test "$(git branch --show-current)" = "$1"
 }
 
-rule current_branch {
+rule current_branch() {
   run check_branch "${arg1}"
 }
 
-workflow default {
+workflow default() {
   ensure current_branch "main"
 }
 ```

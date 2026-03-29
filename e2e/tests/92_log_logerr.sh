@@ -16,7 +16,7 @@ e2e::file "log_artifacts.jh" <<'EOF'
 script done_impl() {
   echo "done"
 }
-workflow default {
+workflow default() {
   log "artifact-stdout"
   logerr "artifact-stderr"
   run done_impl

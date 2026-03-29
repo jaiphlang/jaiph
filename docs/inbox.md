@@ -37,15 +37,15 @@ The **right-hand side** of `<-` may be only a double-quoted literal, `${var}`,
 ```jh
 channel findings
 
-workflow researcher {
+workflow researcher() {
   findings <- "## analysis results"
 }
 
-workflow analyst {
+workflow analyst() {
   log "Received: ${arg1}"
 }
 
-workflow default {
+workflow default() {
   run researcher
   findings -> analyst
 }
@@ -77,7 +77,7 @@ Declare channels at top level, one per line:
 channel findings
 channel report
 
-workflow default { ... }
+workflow default() { ... }
 ```
 
 Every channel used by `send` (`<-`) or route declarations (`->`) must be
@@ -101,7 +101,7 @@ and signals the runtime to dispatch.
 ```jh
 channel findings
 
-workflow researcher {
+workflow researcher() {
   findings <- "## findings"
 }
 ```
@@ -111,7 +111,7 @@ If no command follows `<-`, the workflow's `${arg1}` argument is forwarded:
 ```jh
 channel findings
 
-workflow forwarder {
+workflow forwarder() {
   findings <-
 }
 ```
@@ -147,7 +147,7 @@ A name that is not a valid `alias.name` / `name` pattern fails at parse time as
 channel findings
 channel summary
 
-workflow default {
+workflow default() {
   run researcher
   findings -> analyst
   summary -> reviewer
@@ -267,7 +267,7 @@ config {
   run.inbox_parallel = true
 }
 
-workflow default {
+workflow default() {
   run producer
   findings -> analyst, reviewer   # analyst and reviewer run in parallel
 }

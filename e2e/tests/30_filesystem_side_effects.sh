@@ -17,7 +17,7 @@ e2e::file "fs_write_workflow.jh" <<'EOF'
 script write_workflow_file() {
   echo "abc" > workflow_wrote.txt
 }
-workflow default {
+workflow default() {
   run write_workflow_file
 }
 EOF
@@ -48,11 +48,11 @@ e2e::file "fs_write_rule.jh" <<'EOF'
 script write_attempt_impl() {
   echo "abc" > rule_wrote.txt
 }
-rule write_attempt {
+rule write_attempt() {
   run write_attempt_impl
 }
 
-workflow default {
+workflow default() {
   ensure write_attempt
 }
 EOF

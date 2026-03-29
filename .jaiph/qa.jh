@@ -51,7 +51,7 @@ script save_gap_report() {
   printf '%s\n' "$1" > .jaiph/tmp/qa_gap_report.md
 }
 
-workflow analyze_gaps {
+workflow analyze_gaps() {
   const gap_report = prompt "
     <role>
     You are a QA engineer analyzing the Jaiph codebase for test coverage gaps.
@@ -100,7 +100,7 @@ workflow analyze_gaps {
   log "Gap report saved to .jaiph/tmp/qa_gap_report.md"
 }
 
-workflow write_tests {
+workflow write_tests() {
   if not run gap_report_nonempty {
     fail "No gap report found at .jaiph/tmp/qa_gap_report.md. Run analyze_gaps first."
   }
@@ -150,7 +150,7 @@ script mkdir_tmp_jaiph_qa() {
   mkdir -p .jaiph/tmp
 }
 
-workflow default {
+workflow default() {
   ensure git.is_clean
   run mkdir_tmp_jaiph_qa
   run analyze_gaps

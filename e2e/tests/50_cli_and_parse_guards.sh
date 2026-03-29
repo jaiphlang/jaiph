@@ -16,7 +16,7 @@ e2e::file "ok_a.jh" <<'EOF'
 script a_impl() {
   echo "A"
 }
-workflow default {
+workflow default() {
   run a_impl
 }
 EOF
@@ -34,7 +34,7 @@ e2e::file "ok_b.jh" <<'EOF'
 script b_impl() {
   echo "B"
 }
-workflow default {
+workflow default() {
   run b_impl
 }
 EOF
@@ -84,7 +84,7 @@ e2e::file "no_default.jh" <<'EOF'
 script no_default_impl() {
   echo "no default here"
 }
-workflow docs {
+workflow docs() {
   run no_default_impl
 }
 EOF
@@ -106,13 +106,13 @@ e2e::section "prompt parse guards reject shell substitution"
 
 # Given
 e2e::file "bad_prompt_subshell.jh" <<'EOF'
-workflow default {
+workflow default() {
   prompt "show host $(uname)"
 }
 EOF
 
 e2e::file "bad_prompt_backticks.jh" <<'EOF'
-workflow default {
+workflow default() {
   prompt "show host `uname`"
 }
 EOF
@@ -152,7 +152,7 @@ e2e::file "run_redirect.jh" <<'EOF'
 script greet() {
   echo "hello"
 }
-workflow default {
+workflow default() {
   run greet > out.txt
 }
 EOF
@@ -177,7 +177,7 @@ e2e::file "run_pipe.jh" <<'EOF'
 script greet() {
   echo "hello"
 }
-workflow default {
+workflow default() {
   run greet | tr a-z A-Z
 }
 EOF
@@ -201,7 +201,7 @@ e2e::file "run_bg.jh" <<'EOF'
 script greet() {
   echo "hello"
 }
-workflow default {
+workflow default() {
   run greet &
 }
 EOF

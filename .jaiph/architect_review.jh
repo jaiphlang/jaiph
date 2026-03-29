@@ -48,7 +48,7 @@ script queue_has_any_task_not_dev_ready() {
   ' "$qf"
 }
 
-workflow review_task {
+workflow review_task() {
   const result = prompt "
     You are a software architect reviewing a task from the Jaiph
     improvement queue. Jaiph is a TypeScript compiler and runtime
@@ -103,7 +103,7 @@ workflow review_task {
   return "${result_verdict}"
 }
 
-workflow review_one_header {
+workflow review_one_header() {
   const header = "${arg1}"
   if not run arg_nonempty "${header}" {
     return
@@ -123,7 +123,7 @@ workflow review_one_header {
   }
 }
 
-workflow process_headers_recursive {
+workflow process_headers_recursive() {
   const header = "${arg1}"
   const remaining = "${arg2}"
   run review_one_header "${header}"
@@ -134,7 +134,7 @@ workflow process_headers_recursive {
   }
 }
 
-workflow default {
+workflow default() {
   const headers = run queue.get_all_task_headers
   const first = run first_line_str "${headers}"
   const rest = run rest_lines_str "${headers}"

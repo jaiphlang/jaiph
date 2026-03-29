@@ -27,7 +27,7 @@ script write_greeting() {
   echo "$1" > greeting_out.txt
 }
 
-workflow default {
+workflow default() {
   run write_role "${role}"
   run write_greeting "${greeting}"
 }
@@ -63,7 +63,7 @@ script check_msg_impl() {
   test -n "$1"
 }
 
-rule check_msg {
+rule check_msg() {
   run check_msg_impl "${msg}"
 }
 
@@ -75,7 +75,7 @@ script write_wf_msg() {
   echo "$1" > wf_msg.txt
 }
 
-workflow default {
+workflow default() {
   ensure check_msg
   run write_msg
   run write_wf_msg "${msg}"

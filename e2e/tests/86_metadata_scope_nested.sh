@@ -21,7 +21,7 @@ config {
 script log_backend() {
   printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_META_SCOPE_FILE"
 }
-workflow default {
+workflow default() {
   run log_backend "child"
 }
 EOF
@@ -35,7 +35,7 @@ config {
 script log_backend() {
   printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_META_SCOPE_FILE"
 }
-workflow default {
+workflow default() {
   run log_backend "parent_before"
   run child.default
   run log_backend "parent_after"

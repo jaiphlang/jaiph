@@ -4,14 +4,14 @@ config {
   agent.backend = "claude"
 }
 
-rule name_was_provided {
+rule name_was_provided() {
   if [ -z "$1" ]; then
     logerr "You didn't provide your name :("
     exit 1
   fi
 }
 
-workflow default {
+workflow default() {
   ensure name_was_provided "${arg1}"
 
   response = prompt "

@@ -18,18 +18,18 @@ channel greetings
 script emit_hello() {
   echo "hello from sender"
 }
-workflow sender {
+workflow sender() {
   greetings <- run emit_hello
 }
 
 script write_received() {
   echo "$1" > received.txt
 }
-workflow receiver {
+workflow receiver() {
   run write_received "${arg1}"
 }
 
-workflow default {
+workflow default() {
   run sender
   greetings -> receiver
 }
@@ -51,25 +51,25 @@ channel results
 script emit_payload() {
   echo "data-payload"
 }
-workflow producer {
+workflow producer() {
   results <- run emit_payload
 }
 
 script write_consumer_a() {
   echo "A got: $1" > consumer_a.txt
 }
-workflow consumer_a {
+workflow consumer_a() {
   run write_consumer_a "${arg1}"
 }
 
 script write_consumer_b() {
   echo "B got: $1" > consumer_b.txt
 }
-workflow consumer_b {
+workflow consumer_b() {
   run write_consumer_b "${arg1}"
 }
 
-workflow default {
+workflow default() {
   run producer
   results -> consumer_a, consumer_b
 }
@@ -93,18 +93,18 @@ channel some_channel
 script emit_dropped() {
   echo "dropped"
 }
-workflow sender {
+workflow sender() {
   unknown_channel <- run emit_dropped
 }
 
 script never_called_impl() {
   echo "never called" > dummy.txt
 }
-workflow dummy {
+workflow dummy() {
   run never_called_impl
 }
 
-workflow default {
+workflow default() {
   run sender
   some_channel -> dummy
 }
@@ -134,18 +134,18 @@ channel audit
 script emit_inbox_content() {
   echo "inbox-content-check"
 }
-workflow writer {
+workflow writer() {
   audit <- run emit_inbox_content
 }
 
 script write_audited() {
   echo "$1" > audited.txt
 }
-workflow auditor {
+workflow auditor() {
   run write_audited "${arg1}"
 }
 
-workflow default {
+workflow default() {
   run writer
   audit -> auditor
 }
@@ -172,25 +172,25 @@ channel report
 script emit_findings() {
   echo "Found 3 issues in auth module"
 }
-workflow scanner {
+workflow scanner() {
   findings <- run emit_findings
 }
 
 script emit_summary() {
   echo "Summary: $1"
 }
-workflow analyst {
+workflow analyst() {
   report <- run emit_summary "${arg1}"
 }
 
 script print_reviewed() {
   echo "[reviewed] $1"
 }
-workflow reviewer {
+workflow reviewer() {
   run print_reviewed "${arg1}"
 }
 
-workflow default {
+workflow default() {
   run scanner
   findings -> analyst
   report -> reviewer
@@ -219,7 +219,7 @@ channel events
 script emit_payload() {
   echo "payload-data"
 }
-workflow producer {
+workflow producer() {
   events <- run emit_payload
 }
 
@@ -228,11 +228,11 @@ script write_receiver_args() {
   echo "channel=$2" >> args.txt
   echo "sender=$3" >> args.txt
 }
-workflow consumer {
+workflow consumer() {
   run write_receiver_args "${arg1}" "${arg2}" "${arg3}"
 }
 
-workflow default {
+workflow default() {
   run producer
   events -> consumer
 }
@@ -260,25 +260,25 @@ channel results
 script emit_parallel_payload() {
   echo "parallel-payload"
 }
-workflow producer {
+workflow producer() {
   results <- run emit_parallel_payload
 }
 
 script write_consumer_a_par() {
   echo "A got: $1" > consumer_a_par.txt
 }
-workflow consumer_a {
+workflow consumer_a() {
   run write_consumer_a_par "${arg1}"
 }
 
 script write_consumer_b_par() {
   echo "B got: $1" > consumer_b_par.txt
 }
-workflow consumer_b {
+workflow consumer_b() {
   run write_consumer_b_par "${arg1}"
 }
 
-workflow default {
+workflow default() {
   run producer
   results -> consumer_a, consumer_b
 }
@@ -306,25 +306,25 @@ channel data
 script emit_from_a() {
   echo "from-a"
 }
-workflow sender_a {
+workflow sender_a() {
   data <- run emit_from_a
 }
 
 script emit_from_b() {
   echo "from-b"
 }
-workflow sender_b {
+workflow sender_b() {
   data <- run emit_from_b
 }
 
 script append_sink_log() {
   echo "$1" >> sink_log.txt
 }
-workflow sink {
+workflow sink() {
   run append_sink_log "${arg1}"
 }
 
-workflow default {
+workflow default() {
   run sender_a
   run sender_b
   data -> sink
@@ -363,25 +363,25 @@ channel ch
 script emit_msg() {
   echo "msg"
 }
-workflow producer {
+workflow producer() {
   ch <- run emit_msg
 }
 
 script fail_target_impl() {
   exit 1
 }
-workflow bad_target {
+workflow bad_target() {
   run fail_target_impl
 }
 
 script write_good_par() {
   echo "ok" > good_par.txt
 }
-workflow good_target {
+workflow good_target() {
   run write_good_par
 }
 
-workflow default {
+workflow default() {
   run producer
   ch -> good_target, bad_target
 }
@@ -410,25 +410,25 @@ channel events
 script emit_e1() {
   echo "e1"
 }
-workflow sender {
+workflow sender() {
   events <- run emit_e1
 }
 
 script handle_a_impl() {
   echo "handled-a"
 }
-workflow handler_a {
+workflow handler_a() {
   run handle_a_impl
 }
 
 script handle_b_impl() {
   echo "handled-b"
 }
-workflow handler_b {
+workflow handler_b() {
   run handle_b_impl
 }
 
-workflow default {
+workflow default() {
   run sender
   events -> handler_a, handler_b
 }
@@ -461,25 +461,25 @@ channel results
 script emit_env_parallel() {
   echo "env-parallel"
 }
-workflow producer {
+workflow producer() {
   results <- run emit_env_parallel
 }
 
 script write_env_a() {
   echo "A: $1" > env_a.txt
 }
-workflow consumer_a {
+workflow consumer_a() {
   run write_env_a "${arg1}"
 }
 
 script write_env_b() {
   echo "B: $1" > env_b.txt
 }
-workflow consumer_b {
+workflow consumer_b() {
   run write_env_b "${arg1}"
 }
 
-workflow default {
+workflow default() {
   run producer
   results -> consumer_a, consumer_b
 }

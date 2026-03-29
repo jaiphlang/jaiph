@@ -16,7 +16,7 @@ e2e::file "hello.jh" <<'EOF'
 script hello_impl() {
   echo "hello-jh"
 }
-workflow default {
+workflow default() {
   msg = run hello_impl
   return "${msg}"
 }
@@ -44,7 +44,7 @@ e2e::file "lib.jh" <<'EOF'
 script ready_impl() {
   echo "from-lib"
 }
-rule ready {
+rule ready() {
   result = run ready_impl
   return "${result}"
 }
@@ -55,7 +55,7 @@ import "lib.jh" as lib
 script mixed_ok_impl() {
   echo "mixed-ok"
 }
-workflow default {
+workflow default() {
   ensure lib.ready
   msg = run mixed_ok_impl
   return "${msg}"
@@ -100,11 +100,11 @@ script current_branch_impl() {
     exit 1
   fi
 }
-rule current_branch {
+rule current_branch() {
   run current_branch_impl "${arg1}"
 }
 
-workflow default {
+workflow default() {
   ensure current_branch "${arg1}"
 }
 EOF

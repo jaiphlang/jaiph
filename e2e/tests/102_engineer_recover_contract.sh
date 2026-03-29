@@ -26,11 +26,11 @@ script failing_ci_impl() {
   exit 1
 }
 
-rule ci_passes {
+rule ci_passes() {
   run failing_ci_impl
 }
 
-workflow implement {
+workflow implement() {
   const task = "${arg1}"
   ensure ci_passes recover {
     const ci_failure_log = "${arg1}"
@@ -41,7 +41,7 @@ workflow implement {
   }
 }
 
-workflow default {
+workflow default() {
   run implement "original-task" "surgical"
 }
 EOF

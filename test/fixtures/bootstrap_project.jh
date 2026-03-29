@@ -1,6 +1,6 @@
 #!/usr/bin/env jaiph
 
-workflow nodejs {
+workflow nodejs() {
   run nodejs_impl
 }
 

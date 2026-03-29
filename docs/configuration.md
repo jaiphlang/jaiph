@@ -61,11 +61,11 @@ config {
   ]
 }
 
-rule some_rule {
+rule some_rule() {
   true
 }
 
-workflow default {
+workflow default() {
   ensure some_rule
 }
 ```
@@ -109,7 +109,7 @@ config {
   agent.default_model = "gpt-3.5"
 }
 
-workflow fast_check {
+workflow fast_check() {
   config {
     agent.backend = "claude"
     agent.default_model = "gpt-4"
@@ -117,7 +117,7 @@ workflow fast_check {
   ensure some_rule
 }
 
-workflow default {
+workflow default() {
   # Uses module-level config (cursor / gpt-3.5).
   ensure some_rule
 }
@@ -212,7 +212,7 @@ For `runtime.*`, the `jaiph run` driver merges **`JAIPH_DOCKER_*` environment** 
 Inside workflows, rules, and scripts, **agent** and **run** settings are visible as the usual `JAIPH_*` variables, for example `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_MODEL`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, and `JAIPH_INBOX_PARALLEL`.
 
 ```jh
-workflow default {
+workflow default() {
   printf 'backend=%s\n' "$JAIPH_AGENT_BACKEND" >> ".jaiph/meta-debug.log"
   printf 'trusted_workspace=%s\n' "$JAIPH_AGENT_TRUSTED_WORKSPACE" >> ".jaiph/meta-debug.log"
 }

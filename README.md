@@ -50,7 +50,7 @@ script non_empty() {
   test -n "$1"
 }
 
-rule project_ready {
+rule project_ready() {
   if not run file_exists "package.json" {
     fail "expected package.json"
   }
@@ -63,11 +63,11 @@ script npm_run_build() {
   npm run build
 }
 
-rule build_passes {
+rule build_passes() {
   run npm_run_build
 }
 
-workflow default {
+workflow default() {
   if not ensure project_ready {
     run bootstrap.nodejs
   }
@@ -83,7 +83,7 @@ workflow default {
   run update_docs
 }
 
-workflow update_docs {
+workflow update_docs() {
   prompt "Update docs"
 }
 ```
@@ -98,7 +98,7 @@ Run a sample workflow without installing anything first:
 
 ```bash
 curl -fsSL https://jaiph.org/run | bash -s '
-workflow default {
+workflow default() {
   const response = prompt "Say: Hello I'\''m [model name]!"
   log "$response"
 }'

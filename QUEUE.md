@@ -12,30 +12,44 @@ Process rules:
 
 ---
 
-## Braced definitions only for `rule` / `script` / `workflow` <!-- dev-ready -->
+## E2E tests: full-output and full-artifact contracts <!-- dev-ready -->
 
 **Goal**  
-Require **always** the braced form with an explicit parameter list and body: **`rule name() { … }`**, **`script name() { … }`**, **`workflow name() { … }`**. Reject any definition syntax that omits **`{`** immediately after the **`()`** (or otherwise allows a body without wrapping braces). This locks in a single convention before **named parameters** and richer signatures land elsewhere in this queue.
+Rework the E2E suite so that, wherever feasible, each test compares the **full** CLI output of the workflow run (stdout and stderr as appropriate) and the **full** contents of every **relevant** file under `.jaiph/runs/` for that scenario, plus **inbox** files under the run directory when the feature touches inbox behavior. Treat substring-only checks (`e2e::assert_contains`) as **exceptions** that must be justified in a comment (inherently nondeterministic output, unbounded logs, or platform-dependent text).
 
 **Context**
 
-- The grammar may still allow legacy or alternate shapes (e.g. single-statement bodies, colon forms, or newline-started bodies without braces — verify in `src/parse/` and grammar docs).
-- Enforcing braces upfront avoids ambiguous parses when parameter lists evolve (e.g. `workflow w(a, b) { }`).
-- **Breaking change:** existing modules using non-braced definitions must be migrated; no compatibility shim.
+- **Why:** Partial assertions let regressions slip through (correct banner line, wrong `.out` body, or vice versa). Full golden contracts make refactors and runtime changes safe to land with confidence.
+- **Today:** Many tests use `e2e::assert_contains` or partial file checks. `e2e/lib/common.sh` already provides `e2e::expect_stdout`, `e2e::expect_out`, `e2e::expect_run_file`, `e2e::expect_file`, `e2e::assert_equals`, etc.; contributing docs describe Given/When/Then — but practice is inconsistent.
+- **Normalization:** Reuse existing helpers that strip ANSI and normalize timing placeholders (`<time>`) so full comparisons stay stable. For features that cannot be fully deterministic (e.g. real agent backends), document the exception and keep the narrowest possible substring or structured assert, or gate behind mocks / `JAIPH_TEST_MODE` where the contract is still the runtime.
+
+**Key files**
+
+- `e2e/tests/*.sh` — migrate tests incrementally; prioritize high-traffic and kernel-adjacent scripts first.
+- `e2e/lib/common.sh` — add helpers if needed (e.g. assert entire run directory listing + per-file contents, or `expect_stderr` mirroring `expect_stdout`) without duplicating logic.
+- `docs/contributing.md` — E2E section: state the **default contract** (full stdout/stderr + full relevant artifacts + inbox when applicable); list allowed exceptions.
+- `ARCHITECTURE.md` — short subsection on E2E philosophy and artifact layout (`.jaiph/runs/<date>/...`, `inbox/*.txt`, `run_summary.jsonl` when relevant).
+- `docs/testing.md` (and `docs/cli.md` if E2E is referenced there) — one consistent paragraph pointing to the same policy.
+- `e2e/test_all.sh` or top-of-file comment in `e2e/lib/common.sh` — pointer to the policy for contributors.
+
+**Orchestration workflows**
+
+- **`.jaiph/engineer.jh`** — Update `code_philosophy` (and any task prompts that mention testing) so the engineer loop explicitly follows the full-output / full-artifact rule and knows when documented exceptions apply.
+- **`.jaiph/qa.jh`** — Align `testing_philosophy` with the same wording: E2E default = full equality on captured CLI output + persisted files; `assert_contains` only with an inline rationale.
 
 **Scope**
 
-1. **Parser:** Accept only the braced form for top-level **`rule`**, **`script`**, and **`workflow`** declarations after the name and `()`; emit **`E_PARSE`** (or a dedicated code) with a short fix hint (`add { … }`) for disallowed forms.
-2. **Tests:** Parser/compiler tests for rejected forms and accepted minimal/empty bodies `{}`.
-3. **Corpus:** Update all `.jh` fixtures under the repo (including `.jaiph/`, `e2e/`, examples) to the braced style.
-4. **Docs:** `docs/grammar.md`, CLI/skill/getting-started, `docs/index.html`, README/CHANGELOG — one canonical definition shape; remove documentation of alternate syntax.
+1. Inventory `e2e/tests/*.sh` for `assert_contains` / partial reads; categorize by feasibility of full conversion.
+2. Convert tests in batches; for each converted test, capture expected output in heredocs or fixture files under `e2e/` if that keeps scripts readable.
+3. Where a test must assert on `run_summary.jsonl` or inbox sequence files, compare full file contents or full JSONL lines for the run, not single-field substrings, unless the file is intentionally unbounded.
+4. Update docs listed above and sync `engineer.jh` + `qa.jh` const strings so humans and agents see one policy.
+5. Optionally add a short `docs/e2e-contracts.md` if the contributing page becomes too long; link from ARCHITECTURE and contributing.
 
 **Acceptance criteria**
 
-- Non-braced definitions are rejected with a clear diagnostic.
-- Braced definitions behave as today.
-- Docs and repo samples consistently show only the braced form.
-- Test suite green.
+- Policy is documented in **ARCHITECTURE.md**, **docs/contributing.md**, and at least one of **docs/testing.md** / **docs/cli.md** as appropriate, with cross-links.
+- **`.jaiph/engineer.jh`** and **`.jaiph/qa.jh`** reflect the same policy in their philosophy strings.
+- A clear migration path exists: either a majority of E2E tests converted to full contracts, or a documented checklist of remaining exceptions with owners/reasons.
 
 ---
 
@@ -97,47 +111,6 @@ Allow inline managed captures in interpolation expressions.
 
 - Inline run/ensure interpolation works and failure propagates correctly.
 - Invalid forms fail with clear diagnostics.
-
----
-
-## E2E tests: full-output and full-artifact contracts <!-- dev-ready -->
-
-**Goal**  
-Rework the E2E suite so that, wherever feasible, each test compares the **full** CLI output of the workflow run (stdout and stderr as appropriate) and the **full** contents of every **relevant** file under `.jaiph/runs/` for that scenario, plus **inbox** files under the run directory when the feature touches inbox behavior. Treat substring-only checks (`e2e::assert_contains`) as **exceptions** that must be justified in a comment (inherently nondeterministic output, unbounded logs, or platform-dependent text).
-
-**Context**
-
-- **Why:** Partial assertions let regressions slip through (correct banner line, wrong `.out` body, or vice versa). Full golden contracts make refactors and runtime changes safe to land with confidence.
-- **Today:** Many tests use `e2e::assert_contains` or partial file checks. `e2e/lib/common.sh` already provides `e2e::expect_stdout`, `e2e::expect_out`, `e2e::expect_run_file`, `e2e::expect_file`, `e2e::assert_equals`, etc.; contributing docs describe Given/When/Then — but practice is inconsistent.
-- **Normalization:** Reuse existing helpers that strip ANSI and normalize timing placeholders (`<time>`) so full comparisons stay stable. For features that cannot be fully deterministic (e.g. real agent backends), document the exception and keep the narrowest possible substring or structured assert, or gate behind mocks / `JAIPH_TEST_MODE` where the contract is still the runtime.
-
-**Key files**
-
-- `e2e/tests/*.sh` — migrate tests incrementally; prioritize high-traffic and kernel-adjacent scripts first.
-- `e2e/lib/common.sh` — add helpers if needed (e.g. assert entire run directory listing + per-file contents, or `expect_stderr` mirroring `expect_stdout`) without duplicating logic.
-- `docs/contributing.md` — E2E section: state the **default contract** (full stdout/stderr + full relevant artifacts + inbox when applicable); list allowed exceptions.
-- `ARCHITECTURE.md` — short subsection on E2E philosophy and artifact layout (`.jaiph/runs/<date>/...`, `inbox/*.txt`, `run_summary.jsonl` when relevant).
-- `docs/testing.md` (and `docs/cli.md` if E2E is referenced there) — one consistent paragraph pointing to the same policy.
-- `e2e/test_all.sh` or top-of-file comment in `e2e/lib/common.sh` — pointer to the policy for contributors.
-
-**Orchestration workflows**
-
-- **`.jaiph/engineer.jh`** — Update `code_philosophy` (and any task prompts that mention testing) so the engineer loop explicitly follows the full-output / full-artifact rule and knows when documented exceptions apply.
-- **`.jaiph/qa.jh`** — Align `testing_philosophy` with the same wording: E2E default = full equality on captured CLI output + persisted files; `assert_contains` only with an inline rationale.
-
-**Scope**
-
-1. Inventory `e2e/tests/*.sh` for `assert_contains` / partial reads; categorize by feasibility of full conversion.
-2. Convert tests in batches; for each converted test, capture expected output in heredocs or fixture files under `e2e/` if that keeps scripts readable.
-3. Where a test must assert on `run_summary.jsonl` or inbox sequence files, compare full file contents or full JSONL lines for the run, not single-field substrings, unless the file is intentionally unbounded.
-4. Update docs listed above and sync `engineer.jh` + `qa.jh` const strings so humans and agents see one policy.
-5. Optionally add a short `docs/e2e-contracts.md` if the contributing page becomes too long; link from ARCHITECTURE and contributing.
-
-**Acceptance criteria**
-
-- Policy is documented in **ARCHITECTURE.md**, **docs/contributing.md**, and at least one of **docs/testing.md** / **docs/cli.md** as appropriate, with cross-links.
-- **`.jaiph/engineer.jh`** and **`.jaiph/qa.jh`** reflect the same policy in their philosophy strings.
-- A clear migration path exists: either a majority of E2E tests converted to full contracts, or a documented checklist of remaining exceptions with owners/reasons.
 
 ---
 
@@ -501,11 +474,11 @@ Allow `script "..."` inline steps for trivial commands.
 - Named scripts are verbose for one-off operations:
   ```
   script do_thing() { echo "done" }
-  workflow default { run do_thing }
+  workflow default() { run do_thing }
   ```
 - With inline scripts:
   ```
-  workflow default { script "echo done" }
+  workflow default() { script "echo done" }
   ```
 
 **Key files:**

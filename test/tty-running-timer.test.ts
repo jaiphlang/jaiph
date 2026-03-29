@@ -81,7 +81,7 @@ test("ACCEPTANCE: TTY running timer updates and ends with PASS", () => {
       "  sleep 3",
       '  echo "tty-output-ok"',
       "}",
-      "workflow default {",
+      "workflow default() {",
       "  run sleep_impl",
       "}",
     ].join("\n"),

@@ -12,8 +12,32 @@ export function parseRuleBlock(
   const raw = lines[startIndex];
   const line = raw.trim();
 
-  const match = line.match(/^(export\s+)?rule\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{$/);
+  const match = line.match(/^(export\s+)?rule\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*\)\s*\{$/);
   if (!match) {
+    const braceNoParens = line.match(/^(export\s+)?rule\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{/);
+    if (braceNoParens) {
+      fail(
+        filePath,
+        `rule declarations require parentheses: rule ${braceNoParens[2]}() { … }`,
+        lineNo,
+      );
+    }
+    const parensNoBrace = line.match(/^(export\s+)?rule\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*\)\s*$/);
+    if (parensNoBrace) {
+      fail(
+        filePath,
+        `rule declarations require braces: rule ${parensNoBrace[2]}() { … }`,
+        lineNo,
+      );
+    }
+    const loose = line.match(/^(export\s+)?rule\s+([A-Za-z_][A-Za-z0-9_]*)/);
+    if (loose) {
+      fail(
+        filePath,
+        `rule declarations require parentheses and braces: rule ${loose[2]}() { … }`,
+        lineNo,
+      );
+    }
     fail(filePath, "invalid rule declaration", lineNo);
   }
   const isExported = Boolean(match[1]);

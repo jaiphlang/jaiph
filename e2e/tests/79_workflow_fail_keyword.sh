@@ -12,7 +12,7 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::section "workflow fail keyword exits non-zero and prints message on stderr"
 
 e2e::file "failme.jh" <<'EOF'
-workflow default {
+workflow default() {
   fail "contract-break"
 }
 EOF
