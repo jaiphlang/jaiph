@@ -12,43 +12,46 @@ Process rules:
 
 ---
 
-## Remove bash workflow modules — Node-only orchestration <!-- dev-ready -->
+## Remove `jaiph_stdlib.sh` and workflow module bash emission <!-- dev-ready -->
 
 **Goal**  
-Eliminate **workflow-level** bash emission entirely. The only shell artifacts should be **atomic `script` step** executables under `scripts/` (plus whatever tiny helpers remain, if any). **`jaiph run`** (including Docker) should use the **same** `NodeWorkflowRuntime` / `node-workflow-runner` path as local runs.
+Delete **`src/jaiph_stdlib.sh`** and **stop generating the workflow-level bash module string** entirely. The **only** persisted transpile outputs for execution should be **atomic `script` artifacts** (and whatever maps/metadata you still need for diagnostics). **No** `source "$JAIPH_STDLIB"` preamble, **no** per-module **`.sh` workflow** files, **no** `JAIPH_STDLIB` in the default runtime env.
 
 **Context**
 
-- Today **`transpileFile()`** (via `emitWorkflow`) still produces a **full module bash string** (`EmittedModule.module`) and **`build()`** in `src/transpile/build.ts` writes that to **`.sh` files** mirroring the `.jh` tree (`writeFileSync(outPath, module, ...)`).
-- **`buildScripts()`** already skips module `.sh` and only writes **per-step script files** — that is the intended product direction.
-- **Docker `jaiph run`** (`src/cli/commands/run.ts`, `src/runtime/docker.ts`) uses **`build()`** and mounted **`jaiph_stdlib.sh`** so the container **executes the generated module `.sh`** as the workflow orchestrator — a **second orchestration implementation** beside the Node AST interpreter.
-- That split is what earlier reviews called **“Node AST vs emitted bash”**: the **bash** is the **`module` string** from **`emit-workflow.ts`** (workflow rules, `run`, `if`, prompts-as-shell, etc.), not the small extracted **script** bodies.
+- **Node-only orchestration** is already the product path; **`buildScripts()`** only writes **`scripts/`**. **`build()`** and **`emit-workflow.ts`** still **compute** a full **`EmittedModule.module`** bash program for **compiler goldens** and **`test/sample-build.test.ts`**-style coverage.
+- **`jaiph_stdlib.sh`** is the bash façade that delegated to **`kernel/*.js`** when workflow modules were executed; it remains **copied in `package.json` builds**, referenced in **`src/cli/run/env.ts`**, and embedded in **golden expectations** (`compiler-golden.test.ts`, Jest snapshots, etc.).
+- **`emit-workflow.ts`** still emits the stdlib bootstrap lines at the top of **`module`** (`jaiph_stdlib_path=…`, `source "$jaiph_stdlib_path"`).
 
-**This task subsumes (directionally)** the earlier architecture notes on: (1) one validated AST/graph story across tools, (3) unifying Docker with Node semantics, (4) a single prepare→launch abstraction — once bash workflows are gone, Docker is “run the same runner in the container” instead of a parallel shell stack.
+This task is **cleanup after** Node-only orchestration: remove dead shell surface, shrink the transpiler to **validate + extract scripts** (or a clearly named split), and drop distribution of the stdlib file unless a non-obvious consumer remains.
 
 **Key files**
 
-- `src/transpile/build.ts` — `build()` vs `buildScripts()`
-- `src/transpiler.ts` — `transpileFile()`, `build()` export
-- `src/transpile/emit-workflow.ts` — module `.sh` emission source
-- `src/cli/commands/run.ts` — Docker vs non-Docker prep and spawn
-- `src/runtime/docker.ts` — container command line, mounts, generated layout
-- `src/jaiph_stdlib.sh` — only needed if module `.sh` orchestration remains; scope removal or shrinking with this task
-- `src/transpile/compiler-golden.test.ts` and any fixtures asserting on generated **workflow** `.sh`
-- `ARCHITECTURE.md` — diagrams and Docker wording
+- `src/jaiph_stdlib.sh` — delete after porting any still-needed one-liners (likely none on Node path)
+- `src/transpile/emit-workflow.ts` — module bash emission, stdlib preamble
+- `src/transpiler.ts` — `transpileFile` / **`EmittedModule`** shape (`module` field may disappear or become empty string only for migration)
+- `src/transpile/build.ts` — **`build()`**: remove or reduce to scripts-only; **delete** workflow `.sh` writes
+- `src/cli/run/env.ts` — **`JAIPH_STDLIB`**, `resolveBundledStdlibPath`
+- `package.json` — **`copyFileSync('src/jaiph_stdlib.sh', …)`** in `build` / `build:standalone`
+- `src/transpile/compiler-golden.test.ts`, `compiler-edge.acceptance.test.ts`, `validate-managed-calls.test.ts`, `test/sample-build.test.ts`, `test/__snapshots__/fixtures-build.jest.test.js.snap`
+- `e2e/lib/common.sh`, `e2e/tests/40_nested_and_native_tests.sh` — stdlib copy / `JAIPH_STDLIB`
+- `docs/grammar.md`, `ARCHITECTURE.md`, any install docs mentioning `~/.local/bin/jaiph_stdlib.sh`
 
 **Scope**
 
-1. **Docker**: change container entry to **`node-workflow-runner`** (or equivalent single binary + args), with the same env/meta contract as local `jaiph run`. Mount/copy **kernel + dist** (or compile a runner-only image) so no **workflow** `.sh` is required. Keep workspace mount semantics.
-2. **Remove product use of `build()`** for workflow modules: CLI paths should use **`buildScripts()`**-class output only; delete or gate **`build()`**’s module `.sh` writes behind tests if still needed briefly for golden diffs.
-3. **Transpiler**: stop producing **`EmittedModule.module`** for production code paths, or reduce `emitWorkflow` so validation + script extraction do not depend on synthesizing a full bash workflow (refactor `transpileFile` accordingly; golden tests migrate to scripts-only or Node-level expectations).
-4. **Cleanup**: remove dead bash runtime paths, update e2e/docker tests, and document the single orchestration model.
+1. **Transpiler split or trim**: Make **`transpileFile`** (or successor) produce **scripts + validation + optional line maps** without building a runnable **workflow bash module**. If **`build()`** remains for tests, redefine it so it **never** writes **`*.sh`** workflow modules — or delete **`build()`** and migrate assertions to **`transpileFile` + scripts** / AST-only expectations.
+2. **Remove file**: Delete **`jaiph_stdlib.sh`**; remove all **`grep`-able references (`JAIPH_STDLIB`, `jaiph_stdlib`, `jaiph::` call sites in TS docs if any).
+3. **CLI / packaging**: Drop **`JAIPH_STDLIB`** from default **`resolveRuntimeEnv`**; remove stdlib copy from **`npm run build`** / standalone layout unless something still requires it (should not).
+4. **Tests**: Rewrite goldens and snapshots to match **scripts-only** or **structured AST** expectations; remove tests that execute generated **workflow `.sh`** as orchestration.
+5. **Docs**: Update grammar and architecture so “build emits bash that sources stdlib” is **gone**.
 
 **Acceptance criteria**
 
-- No **workflow** `.sh` files are written for **`jaiph run`** / **`jaiph test`** / Docker in normal operation.
-- Docker runs behave as **Node-orchestrated** workflows with the same semantics as local (modulo intentional isolation); `jaiph_stdlib.sh` is not required for **workflow** control flow.
-- Tests and docs reflect **scripts-only** artifacts + Node runtime only.
+- **`src/jaiph_stdlib.sh` does not exist** in the repo (or is reduced to an explicit no-op deprecated stub only if absolutely required — default is **full removal**).
+- **`package.json` build scripts** do not copy **`jaiph_stdlib.sh`**.
+- No production code path sets or requires **`JAIPH_STDLIB`** for **`jaiph run` / `jaiph test` / Docker**.
+- **`emit-workflow`** (or replacement) does not emit a **`source …stdlib`** preamble or a complete workflow orchestration bash program intended to be run as **`jaiph run`** entrypoint.
+- **`npm test`**, **`npm run test:e2e`**, and builds pass.
 
 ---
 
