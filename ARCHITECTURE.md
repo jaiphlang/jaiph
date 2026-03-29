@@ -78,7 +78,7 @@ Channel transport remains file/queue based in runtime inbox logic.
 
 ## Jaiph runtime testing (`*.test.jh`)
 
-`*.test.jh` files are parsed in the CLI; `runTestFile()` drives blocks in-process. Each **`test_run_workflow`** step **`buildRuntimeGraph(testFile)`**, resolves mocks against that graph, then constructs `NodeWorkflowRuntime` with `mockBodies` / mock prompt env. Mock prompts, workflows, rules, and functions are supported through the runtime's mock infrastructure.
+`*.test.jh` files are parsed in the CLI; `runTestFile()` drives blocks in-process. **`buildRuntimeGraph(testFile)`** is called **once per `runTestFile` invocation** and the resulting graph is reused across all blocks and `test_run_workflow` steps (the import closure is constant for a given test file within a single process run). Each `test_run_workflow` step resolves mocks against that cached graph, then constructs `NodeWorkflowRuntime` with `mockBodies` / mock prompt env. Mock prompts, workflows, rules, and functions are supported through the runtime's mock infrastructure.
 Before that, the CLI prepares script executables via **`buildScripts(workspace)`** so imported workflow modules have concrete script paths under `JAIPH_SCRIPTS` (workspace `*.jh` files only; `*.test.jh` is not part of that walk).
 
 ## CLI progress reporting pipeline
@@ -199,12 +199,12 @@ sequenceDiagram
     CLI->>Prep: buildScripts(workspace) workspace .jh only
     Prep-->>CLI: scriptsDir
     CLI->>TestRunner: runTestFile(test path workspace scriptsDir blocks)
+    TestRunner->>Graph: buildRuntimeGraph(test file) once per file
+    Graph-->>TestRunner: RuntimeGraph cached
     loop each test block
         TestRunner->>TestRunner: mocks / shell steps / expectations
         opt test_run_workflow step
-            TestRunner->>Graph: buildRuntimeGraph(test file) parse-only
-            Graph-->>TestRunner: RuntimeGraph
-            TestRunner->>Runtime: new runtime mockBodies from block
+            TestRunner->>Runtime: new runtime mockBodies from block (reuses cached graph)
             Runtime->>Runtime: runNamedWorkflow(ref args)
             Runtime-->>TestRunner: status output returnValue error
         end
