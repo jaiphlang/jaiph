@@ -665,11 +665,16 @@
                     return;
                 }
 
-                document.querySelectorAll(".code-tab-button").forEach(function (btn) {
+                const root = button.closest(".card");
+                if (!root) {
+                    return;
+                }
+
+                root.querySelectorAll(".code-tab-button").forEach(function (btn) {
                     btn.classList.toggle("is-active", btn === button);
                 });
 
-                document.querySelectorAll(".code-tab-panel").forEach(function (panel) {
+                root.querySelectorAll(".code-tab-panel").forEach(function (panel) {
                     panel.classList.toggle("is-active", panel.getAttribute("data-panel") === target);
                 });
             });
