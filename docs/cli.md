@@ -55,7 +55,7 @@ jaiph run [--target <dir>] <file.jh> [--] [args...]
 
 Only the specified file and its transitive imports are parsed. Parse errors in sibling `.jh` files do not affect the run. Use `--target` to keep intermediate script files in a specific directory (useful for debugging); without it, they are written to a temp directory and cleaned up after the run. Use `--` to separate Jaiph flags from workflow arguments (e.g. `jaiph run file.jh -- --verbose`).
 
-**Process model:** the CLI builds a runtime graph from the parsed AST, then spawns the Node workflow runner as a detached child process. The runtime interprets workflow steps directly from the AST — prompt execution, managed step subprocesses, inbox dispatch, and event emission are all handled by the JS kernel. The CLI attaches to stdout/stderr, parses **`__JAIPH_EVENT__`** JSON, and forwards other stderr lines.
+**Process model:** the CLI builds a runtime graph from the parsed AST, then spawns the Node workflow runner as a detached child process. The runtime interprets workflow steps directly from the AST — prompt execution, managed step subprocesses, inbox dispatch, and event emission are all handled by the JS kernel. The CLI listens on **stderr only** for **`__JAIPH_EVENT__`** JSON lines — the single event channel for all execution modes (local and Docker). Stdout carries only plain script output, forwarded to the terminal as-is.
 
 Examples:
 
