@@ -70,6 +70,7 @@ async function runTestBlock(
   testFileAbs: string,
   workspaceRoot: string,
   scriptsDir: string,
+  graph: RuntimeGraph,
 ): Promise<TestResult> {
   const tmpDir = mkdtempSync(join(tmpdir(), "jaiph-test-block-"));
   try {
@@ -119,7 +120,6 @@ async function runTestBlock(
       }
 
       if (step.type === "test_run_workflow") {
-        const graph = buildRuntimeGraph(testFileAbs);
         const mockBodies = resolveMockBodies(graph, testFileAbs, mockRefs);
         const env: NodeJS.ProcessEnv = {
           ...process.env,
@@ -226,6 +226,13 @@ export async function runTestFile(
 
   process.stdout.write(`${bold}testing${reset} ${displayName}\n`);
 
+  // Build the runtime graph once for the entire test file.
+  // The graph depends only on testFileAbs and its import closure, which are
+  // constant across all blocks and steps within a single runTestFile call.
+  // If a future test step mutates imported files on disk mid-run, a manual
+  // rebuild would be needed — but that is not a supported pattern today.
+  const graph = buildRuntimeGraph(testFileAbs);
+
   let total = 0;
   let failed = 0;
   const failedNames: string[] = [];
@@ -233,7 +240,7 @@ export async function runTestFile(
   for (const block of blocks) {
     total += 1;
     const start = Date.now();
-    const result = await runTestBlock(block, testFileAbs, workspaceRoot, scriptsDir);
+    const result = await runTestBlock(block, testFileAbs, workspaceRoot, scriptsDir, graph);
     const elapsed = Math.floor((Date.now() - start) / 1000);
 
     process.stdout.write(`  \u25b8 ${block.description}\n`);

@@ -12,33 +12,6 @@ Process rules:
 
 ---
 
-## Cache `buildRuntimeGraph` in `jaiph test` <!-- dev-ready -->
-
-**Goal**  
-Avoid repeated **`buildRuntimeGraph(testFileAbs)`** work when a single test file runs **multiple** `test_run_workflow` steps.
-
-**Context**
-
-- `src/runtime/kernel/node-test-runner.ts` builds the graph **inside** the loop over steps, for each **`test_run_workflow`** (`buildRuntimeGraph(testFileAbs)` per step).
-- The graph for a given test file is identical across those steps in a block; only **`mockBodies`** / env differ.
-
-**Key files**
-
-- `src/runtime/kernel/node-test-runner.ts` — `runTestBlock`, `runTestFile`
-
-**Scope**
-
-1. Build **`RuntimeGraph` once per test block** (or once per `runTestFile` if safe across blocks) and reuse for every **`test_run_workflow`** in that scope.
-2. Confirm invalidation rules if future steps mutate imports on disk (document “same process, same file” assumption).
-3. Add a small unit test or timing assertion that multiple workflow steps do not re-parse the full import closure (cache hit), if easy.
-
-**Acceptance criteria**
-
-- Multiple **`test_run_workflow`** steps in one block share one graph build unless a documented edge case requires refresh.
-- Behavior and fail semantics unchanged.
-
----
-
 ## Strict live events on stderr (__JAIPH_EVENT__) <!-- dev-ready -->
 
 **Goal**  
