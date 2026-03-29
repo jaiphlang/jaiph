@@ -12,37 +12,6 @@ Process rules:
 
 ---
 
-## Fix progress tree depth for concurrent `run async` workflows <!-- dev-ready -->
-
-**Goal**  
-When multiple `run async` workflows run in parallel under the same parent, the CLI progress tree must show them as **siblings** at the same indentation (each prefixed with `async workflow …`), not nested as if one workflow were a child of the other. Inner steps (`prompt`, `log`, etc.) should align under their respective async branch, matching the documented `async.jh` sample transcript.
-
-**Context**
-
-- **`NodeWorkflowRuntime`** uses a single `this.stack` array when executing managed steps (`executeManagedStep` in `src/runtime/kernel/node-workflow-runtime.ts`, ~1076–1144). `depth` sent on `STEP_START` / `STEP_END` is derived from `this.stack.length` before/after push/pop.
-- For **`run async`**, `executeSteps` fires `executeRunRef(…)` without awaiting (`pendingAsync`, ~715–719) so two async workflows **interleave** on the same stack: the first child’s frame stays pushed while the second child’s `executeManagedStep` runs and pushes again. Events therefore report **inflated depth** for the second branch — the tree looks nested even though the branches are logically parallel.
-- **Expected shape** (from docs / product expectation): under `workflow default`, lines like `▸ async workflow claude_say_hello` and `▸ async workflow cursor_say_hello` at the **same** indent; prompts and completions for each branch sit one level deeper, interleaved by completion order, without implying a parent/child relationship between the two async workflows.
-
-**Key files**
-
-- `src/runtime/kernel/node-workflow-runtime.ts` — `executeManagedStep`, `executeSteps` (`run async` + implicit join), `this.stack` / frame lifecycle.
-- `src/cli/run/stderr-handler.ts` — consumes `depth` from events for TTY and non-TTY trees (`"  · ".repeat(depth)`, etc.); likely no change if runtime emits correct depths.
-- `src/cli/run/progress.ts` — static planned tree uses `async ` label prefix; verify consistency with runtime fix.
-
-**Testing**
-
-- **`e2e/tests/104_run_async.sh`**: Reproducible without real prompts — extend **`fanout.jh`** (or add a new subsection) with two `run async` workflows whose bodies only use `script`/`log` so stdout/stderr is deterministic, then assert the **tree** contains both `async workflow` lines at the same leading pattern (e.g. same number of leading spaces/`·` segments before `▸`), and that neither async workflow’s header is over-indented under the other. Avoid full golden snapshots that include variable timings unless you strip durations or use fixed mocks.
-- Alternatively or additionally: unit/integration tests that feed synthetic `STEP_*` event sequences into the display layer are weak for this bug — the fix belongs in **runtime depth**; prefer a small e2e or runtime-level test that runs two async workflows and inspects stderr lines.
-- **`docs/index.html`** / samples showing `async.jh` expected tree should be refreshed after the fix if wording/whitespace changes.
-
-**Acceptance criteria**
-
-- Two or more `run async` sibling workflows under one parent render as **parallel siblings** in the progress tree (correct `async workflow` labels and indent).
-- No regression for sequential `run` (non-async) nesting depth.
-- Covered by **`e2e/tests/104_run_async.sh`** (or adjacent deterministic case) asserting sibling indentation / structure, not only functional success (`a.txt` / `b.txt`).
-
----
-
 ## Remove shell redirection syntax and add compiler error (e2e 96) <!-- dev-ready -->
 
 **Goal**  
@@ -158,40 +127,6 @@ Adopt JavaScript template literal semantics as the single interpolation model. E
 
 ---
 
-## Show prompt backend/model in run tree <!-- dev-ready -->
-
-**Goal**  
-Render prompt backend/model inline in tree output (`prompt <backend> "<preview>"`).
-
-**Context**
-
-- Mixed-backend runs are hard to debug from live tree alone.
-- Prompt step start is emitted in `node-workflow-runtime.ts` via `emitPromptStepStart` (~line 291) which already has access to `backend` and the prompt text.
-- The tree label is constructed in `src/cli/run/progress.ts` via `formatPromptLabel` (line ~122).
-- Live TTY rendering is in `src/cli/run/stderr-handler.ts`.
-- Non-TTY rendering is also in progress/display paths.
-
-**Key files:**
-- `src/cli/run/progress.ts` — `formatPromptLabel`, prompt step rendering (line ~122)
-- `src/cli/run/stderr-handler.ts` — live TTY prompt display
-- `src/runtime/kernel/node-workflow-runtime.ts` — `emitPromptStepStart` (~line 291), prompt event emission
-- `src/cli/run/events.ts` — event parsing
-
-**Scope**
-
-1. Extend prompt step rendering to include backend/model: `prompt cursor/gpt-5 "summarize the..."` format.
-2. Pass backend/model info through the event pipeline (if not already in `PROMPT_START` event payload).
-3. Apply the same format in both TTY and non-TTY modes.
-4. Add tests in CLI display/event parsing paths.
-5. Update docs/examples to match exact rendered format.
-
-**Acceptance criteria**
-
-- Prompt lines include backend/model in live output.
-- Display is readable and consistent in TTY/non-TTY.
-
----
-
 ## Inline construct interpolation `${run ...}` / `${ensure ...}` <!-- dev-ready -->
 
 **Goal**  
@@ -228,6 +163,40 @@ Allow inline managed captures in interpolation expressions.
 
 - Inline run/ensure interpolation works and failure propagates correctly.
 - Invalid forms fail with clear diagnostics.
+
+---
+
+## Show prompt backend/model in run tree <!-- dev-ready -->
+
+**Goal**  
+Render prompt backend/model inline in tree output (`prompt <backend> "<preview>"`).
+
+**Context**
+
+- Mixed-backend runs are hard to debug from live tree alone.
+- Prompt step start is emitted in `node-workflow-runtime.ts` via `emitPromptStepStart` (~line 291) which already has access to `backend` and the prompt text.
+- The tree label is constructed in `src/cli/run/progress.ts` via `formatPromptLabel` (line ~122).
+- Live TTY rendering is in `src/cli/run/stderr-handler.ts`.
+- Non-TTY rendering is also in progress/display paths.
+
+**Key files:**
+- `src/cli/run/progress.ts` — `formatPromptLabel`, prompt step rendering (line ~122)
+- `src/cli/run/stderr-handler.ts` — live TTY prompt display
+- `src/runtime/kernel/node-workflow-runtime.ts` — `emitPromptStepStart` (~line 291), prompt event emission
+- `src/cli/run/events.ts` — event parsing
+
+**Scope**
+
+1. Extend prompt step rendering to include backend/model: `prompt cursor/gpt-5 "summarize the..."` format.
+2. Pass backend/model info through the event pipeline (if not already in `PROMPT_START` event payload).
+3. Apply the same format in both TTY and non-TTY modes.
+4. Add tests in CLI display/event parsing paths.
+5. Update docs/examples to match exact rendered format.
+
+**Acceptance criteria**
+
+- Prompt lines include backend/model in live output.
+- Display is readable and consistent in TTY/non-TTY.
 
 ---
 
