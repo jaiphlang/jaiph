@@ -18,7 +18,7 @@ workflow wf_fail {
 
 workflow wf_const {
   const msg = "hello"
-  log "$msg"
+  log "${msg}"
 }
 
 workflow wf_async {

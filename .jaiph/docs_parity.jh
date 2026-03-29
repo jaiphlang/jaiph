@@ -28,7 +28,7 @@ script assert_newline_paths_are_files() {
 }
 
 rule docs_files_present {
-  run assert_newline_paths_are_files "$1"
+  run assert_newline_paths_are_files "${arg1}"
 }
 
 script assert_worktree_clean_for_docs() {
@@ -63,7 +63,7 @@ script assert_only_allowed_changed() {
 }
 
 rule only_expected_docs_changed_after_prompt {
-  run assert_only_allowed_changed "$1"
+  run assert_only_allowed_changed "${arg1}"
 }
 
 script arg_nonempty() {
@@ -111,7 +111,7 @@ script join_newline_args() {
 workflow update_from_task {
   prompt "
     <role>
-    $role
+    ${role}
     </role>
     <task>
     Update relevant docs/*.md files and -- if needed -- README.md
@@ -126,7 +126,7 @@ workflow update_from_task {
       Do NOT add manual navigation blocks to individual markdown pages.
 
     The task description is:
-    $1
+    ${arg1}
     </task>
   "
 }
@@ -134,7 +134,7 @@ workflow update_from_task {
 workflow changelog {
   prompt "
     <role>
-    $role
+    ${role}
     </role>
     <task>
     Ensure there is a CHANGELOG.md file with a list of all features that are
@@ -162,10 +162,10 @@ workflow changelog {
 workflow docs_page {
   prompt "
     <role>
-    $role
+    ${role}
     </role>
     <task>
-    Double check the content of $1, which describes a given concept of the
+    Double check the content of ${arg1}, which describes a given concept of the
     language, runtime or a set of features:
     0. Use ARCHITECTURE.md as the source of truth for architecture boundaries,
        contracts, and execution flow. Keep docs consistent with it.
@@ -193,10 +193,10 @@ workflow docs_page {
 workflow docs_overview {
   prompt "
     <role>
-    $role
+    ${role}
     </role>
     <task>
-    Read all $1, they contain all the documentation for the
+    Read all ${arg1}, they contain all the documentation for the
     project. Also read ARCHITECTURE.md and treat it as architecture source of
     truth. Please update docs in the following way:
     1. Ensure they are consistent with each other.
@@ -239,27 +239,27 @@ workflow docs_overview {
 }
 
 workflow process_docs_md_recursive {
-  const file = "$1"
-  const remaining = "$2"
-  run docs_page "$file"
-  if run arg_nonempty "$remaining" {
-    const next = run first_line_str "$remaining"
-    const rest = run rest_lines_str "$remaining"
-    run process_docs_md_recursive "$next" "$rest"
+  const file = "${arg1}"
+  const remaining = "${arg2}"
+  run docs_page "${file}"
+  if run arg_nonempty "${remaining}" {
+    const next = run first_line_str "${remaining}"
+    const rest = run rest_lines_str "${remaining}"
+    run process_docs_md_recursive "${next}" "${rest}"
   }
 }
 
 workflow default {
   ensure worktree_is_clean
   const allowed_list = run build_allowed_paths_block
-  ensure docs_files_present "$allowed_list"
+  ensure docs_files_present "${allowed_list}"
   const docs_md_list = run list_docs_md_paths
-  const first_doc = run first_line_str "$docs_md_list"
-  const rest_docs = run rest_lines_str "$docs_md_list"
-  if run arg_nonempty "$first_doc" {
-    run process_docs_md_recursive "$first_doc" "$rest_docs"
+  const first_doc = run first_line_str "${docs_md_list}"
+  const rest_docs = run rest_lines_str "${docs_md_list}"
+  if run arg_nonempty "${first_doc}" {
+    run process_docs_md_recursive "${first_doc}" "${rest_docs}"
   }
   run changelog
-  run docs_overview "$docs_md_list"
-  ensure only_expected_docs_changed_after_prompt "$allowed_list"
+  run docs_overview "${docs_md_list}"
+  ensure only_expected_docs_changed_after_prompt "${allowed_list}"
 }

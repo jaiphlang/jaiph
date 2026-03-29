@@ -65,7 +65,7 @@ rule analyze {
 
 workflow default {
   ensure analyze recover {
-    echo "$1" > recover_received.txt
+    echo "${arg1}" > recover_received.txt
     touch ready2.txt
   }
 }

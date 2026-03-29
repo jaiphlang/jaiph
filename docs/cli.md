@@ -64,17 +64,17 @@ jaiph run ./.jaiph/bootstrap.jh
 jaiph run ./flows/review.jh "review this diff"
 ```
 
-Argument passing matches standard bash script behavior:
-
-- first argument -> `$1`
-- second argument -> `$2`
-- all arguments -> `"$@"`
+Argument passing: positional arguments are available inside **`script`** bodies as standard bash `$1`, `$2`, `"$@"`. In Jaiph orchestration strings (`log`, `prompt`, `fail`, `return`, `send`, `run`/`ensure` args), use **`${arg1}`**, **`${arg2}`** (JS template literal style). Only `${identifier}` interpolation is supported in orchestration strings.
 
 Rules also receive forwarded arguments through `ensure`, for example:
 
 ```jaiph
-rule current_branch {
+script check_branch() {
   test "$(git branch --show-current)" = "$1"
+}
+
+rule current_branch {
+  run check_branch "${arg1}"
 }
 
 workflow default {
@@ -82,8 +82,7 @@ workflow default {
 }
 ```
 
-`prompt` text follows bash-style variable expansion (for example `$1`, `${HOME}`, `${FILES[@]}`).
-For safety, command substitution is not allowed in prompt text: `$(...)` and backticks are rejected with `E_PARSE`.
+`prompt` text follows **JS template literal interpolation semantics**: use `${arg1}`, `${arg2}` for positional arguments and `${varName}` for named variables. Only `${identifier}` interpolation is supported in orchestration strings. Shell-style `${var:-fallback}`, `$(...)`, and unescaped backticks are rejected with `E_PARSE`.
 
 Workflow and rule bodies contain structured Jaiph steps only — use **`run`** to call a **`script`** for shell execution. In bash-bearing contexts (mainly **`script`** bodies, and restricted `const` / send RHS forms), `$(...)` and the first command word are validated: they must not invoke Jaiph rules, workflows, or scripts, contain inbox send (`<-`), or use `run` / `ensure` as shell commands (`E_VALIDATE`). See [Grammar](grammar.md#managed-calls-vs-command-substitution).
 
@@ -116,7 +115,7 @@ On stderr, the runtime emits **`__JAIPH_EVENT__` lines** (each followed by JSON)
 For **parameterized** invocations—when you pass arguments to a workflow, prompt, script, or rule—the tree shows those argument **values** inline in gray immediately after the step name. Format:
 
 - All parameters use a uniform **`key="value"`** format in parentheses. Internal refs such as `::impl` and empty or whitespace-only values are omitted.
-- **Positional parameters** (`$1`, `$2`, or `argN`) display as `1="value"`, `2="value"`, etc. **Named parameters** display as `name="value"`.
+- **Positional parameters** (`${arg1}`, `${arg2}`, or `argN`) display as `1="value"`, `2="value"`, etc. **Named parameters** display as `name="value"`.
 - **Whitespace normalization:** Newlines, tabs, and consecutive spaces inside parameter values are collapsed to a single space before display. This keeps multi-line prompt bodies, roles, and similar values readable on a single tree line.
 - Values are truncated to 32 visible characters; longer values end with `...`.
 - **Prompt steps:** The line shows a **prompt preview** (first 24 characters of the prompt text, then `...` if longer) in quotes, followed by parameters. The parameter list is capped at 96 characters total (truncated with `...` if longer).
@@ -126,7 +125,7 @@ Example lines:
 
 - `▸ workflow docs_page (1="docs/cli.md", 2="strict")`
 - `· prompt prompt (running 60s)` — non-TTY only, after the quiet threshold; entire line dim/gray; same `prompt prompt` label as the eventual `✓ prompt prompt (…)` line
-- `·   ▸ prompt "$role does $task" (role="engineer", task="Fix bugs")`
+- `·   ▸ prompt "${role} does ${task}" (role="engineer", task="Fix bugs")`
 - `·   ▸ prompt "Say hello to ${arg1} and..." (arg1="greeting")`
 - `·   ▸ script fib (1="3")`
 - `·   ▸ rule check_arg (1="Alice")`
@@ -141,7 +140,7 @@ To surface the agent answer as an inline **`ℹ`** line in the tree at the right
 
 ```jaiph
 response = prompt "Summarize the report"
-log "$response"
+log "${response}"
 ```
 
 The `log` line renders inline as `ℹ <message>` (dim/gray) and writes to **stdout**. The `logerr` variant renders as `! <message>` in red and writes to **stderr**. (As above, the displayed/streamed text uses **`echo -e`**; event JSON keeps the raw string.) The step's `.out` file in `.jaiph/runs/` remains the full agent transcript for debugging and reporting.

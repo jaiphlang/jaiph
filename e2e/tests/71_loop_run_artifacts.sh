@@ -20,7 +20,7 @@ e2e::file "loop_prompts.jh" <<'EOF'
 #!/usr/bin/env jaiph
 
 workflow review {
-  prompt "$1"
+  prompt "${arg1}"
 }
 
 workflow default {

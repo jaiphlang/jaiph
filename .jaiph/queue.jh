@@ -94,19 +94,19 @@ script arg_nonempty() {
 
 workflow get_first_task {
   const qf = run queue_file_path
-  if not run file_exists "$qf" {
+  if not run file_exists "${qf}" {
     fail "missing queue file"
   }
-  const first_header = run first_header_line "$qf"
-  if not run arg_nonempty "$first_header" {
+  const first_header = run first_header_line "${qf}"
+  if not run arg_nonempty "${first_header}" {
     fail "no tasks found in queue"
   }
-  const task = run get_task_by_header "$first_header"
-  return "$task"
+  const task = run get_task_by_header "${first_header}"
+  return "${task}"
 }
 
 rule task_is_dev_ready {
-  run task_contains_dev_ready_marker "$1"
+  run task_contains_dev_ready_marker "${arg1}"
 }
 
 script mark_task_dev_ready() {
@@ -179,11 +179,11 @@ script squeeze_consecutive_blanks_queue() {
 }
 
 workflow remove_completed_task {
-  const h = "$1"
-  if not run arg_nonempty "$h" {
+  const h = "${arg1}"
+  if not run arg_nonempty "${h}" {
     fail "header required"
   }
   const qf = run queue_file_path
-  run remove_task_block_by_header "$h" "$qf"
-  run squeeze_consecutive_blanks_queue "$qf"
+  run remove_task_block_by_header "${h}" "${qf}"
+  run squeeze_consecutive_blanks_queue "${qf}"
 }

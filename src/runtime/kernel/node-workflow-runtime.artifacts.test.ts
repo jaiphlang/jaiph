@@ -15,7 +15,7 @@ test("NodeWorkflowRuntime: workflow step .out accumulates Command:/Prompt: and l
       [
         "workflow default {",
         '  response = prompt "hello-mock"',
-        '  log "$response"',
+        '  log "${response}"',
         "}",
         "",
       ].join("\n"),
@@ -48,7 +48,7 @@ test("NodeWorkflowRuntime: workflow step .out accumulates Command:/Prompt: and l
   }
 });
 
-test("NodeWorkflowRuntime: ensure recover receives failure payload in $1", async () => {
+test("NodeWorkflowRuntime: ensure recover receives failure payload in recover scope (arg1)", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-node-wf-ensure-recover-"));
   try {
     const jh = join(root, "ensure_recover_payload.jh");
@@ -79,8 +79,8 @@ test("NodeWorkflowRuntime: ensure recover receives failure payload in $1", async
         "",
         "workflow default {",
         "  ensure check_ready recover {",
-        '    run write_recover_received "$1"',
-        '    run write_recover_arg2 "$2"',
+        '    run write_recover_received "${arg1}"',
+        '    run write_recover_arg2 "${arg2}"',
         "    run mark_ready",
         "  }",
         "}",
@@ -347,6 +347,61 @@ test("NodeWorkflowRuntime: sibling workflows do not inherit each other's metadat
     const actual = readFileSync(metaFile, "utf8");
     const expected = "alpha:model=alpha-model,backend=claude\nbeta:model=beta-model,backend=cursor\n";
     assert.equal(actual, expected);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("NodeWorkflowRuntime: prompt STEP_START params include named vars referenced in prompt text", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-node-prompt-params-"));
+  try {
+    const jh = join(root, "prompt_named.jh");
+    writeFileSync(
+      jh,
+      [
+        "workflow default {",
+        '  const dataset = "users"',
+        '  response = prompt "Analyze the ${dataset} table"',
+        '  log "${response}"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const mockFile = join(root, "mocks.txt");
+    writeFileSync(mockFile, "analysis-done\n");
+
+    const runsDir = join(root, ".jaiph", "runs");
+    const graph = buildRuntimeGraph(jh);
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      JAIPH_TEST_MODE: "1",
+      JAIPH_MOCK_RESPONSES_FILE: mockFile,
+      JAIPH_RUNS_DIR: runsDir,
+    };
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });
+    // Bridge env so appendRunSummaryLine (reads process.env) writes the summary.
+    const prevSummaryEnv = process.env.JAIPH_RUN_SUMMARY_FILE;
+    process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
+    try {
+      const status = await runtime.runDefault([]);
+      assert.equal(status, 0);
+    } finally {
+      if (prevSummaryEnv === undefined) delete process.env.JAIPH_RUN_SUMMARY_FILE;
+      else process.env.JAIPH_RUN_SUMMARY_FILE = prevSummaryEnv;
+    }
+
+    const runDir = runtime.getRunDir();
+    const summaryPath = join(runDir, "run_summary.jsonl");
+    const summaryLines = readFileSync(summaryPath, "utf8").trim().split("\n").filter((l) => l.length > 0);
+    const events = summaryLines.map((l) => JSON.parse(l));
+    const promptStart = events.find(
+      (e: Record<string, unknown>) => e.type === "STEP_START" && e.kind === "prompt",
+    );
+    assert.ok(promptStart, "expected a STEP_START event for prompt");
+    const params = promptStart.params as Array<[string, string]>;
+    const paramMap = new Map(params);
+    assert.ok(paramMap.has("dataset"), `expected 'dataset' in params, got keys: ${[...paramMap.keys()].join(", ")}`);
+    assert.equal(paramMap.get("dataset"), "users");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

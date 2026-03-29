@@ -13,5 +13,5 @@ rule current_branch {
 }
 
 workflow default {
-  ensure current_branch "$1"
+  ensure current_branch "${arg1}"
 }

@@ -17,7 +17,7 @@ e2e::section "const with string value"
 e2e::file "const_string.jh" <<'EOF'
 workflow default {
   const msg = "hello-world"
-  log "$msg"
+  log "${msg}"
 }
 EOF
 
@@ -34,7 +34,7 @@ script greet() {
 
 workflow default {
   const val = run greet
-  log "$val"
+  log "${val}"
 }
 EOF
 
@@ -51,7 +51,7 @@ rule always_pass {
 
 workflow default {
   const r = ensure always_pass
-  log "$r"
+  log "${r}"
 }
 EOF
 
@@ -64,7 +64,7 @@ e2e::section "const rejects command substitution"
 e2e::file "const_bad_subst.jh" <<'EOF'
 workflow default {
   const x = "$(echo bad)"
-  log "$x"
+  log "${x}"
 }
 EOF
 
@@ -286,7 +286,7 @@ e2e::file "module_const.jh" <<'EOF'
 const greeting = "module-const-works"
 
 workflow default {
-  log "$greeting"
+  log "${greeting}"
 }
 EOF
 

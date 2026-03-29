@@ -75,7 +75,7 @@ layout: null
                 </div>
 
                 <div class="code-tab-panel is-active" data-panel="try-run-sample">
-                    <pre><code class="language-bash static-highlight"><span class="code-line">curl -fsSL https://jaiph.org/run | bash -s '</span><span class="code-line"><span class="ralph-keyword">workflow</span> <span class="ralph-definition">default</span> {</span><span class="code-line">  <span class="ralph-keyword">const</span> <span class="ralph-variable">response</span> <span class="ralph-operator">=</span> <span class="ralph-keyword">prompt</span> <span class="ralph-string">"Say: Hello, I am [model name]!"</span></span><span class="code-line">  <span class="ralph-keyword">log</span> <span class="ralph-string">"$response"</span></span><span class="code-line">}'</span></code></pre>
+                    <pre><code class="language-bash static-highlight"><span class="code-line">curl -fsSL https://jaiph.org/run | bash -s '</span><span class="code-line"><span class="ralph-keyword">workflow</span> <span class="ralph-definition">default</span> {</span><span class="code-line">  <span class="ralph-keyword">const</span> <span class="ralph-variable">response</span> <span class="ralph-operator">=</span> <span class="ralph-keyword">prompt</span> <span class="ralph-string">"Say: Hello, I am [model name]!"</span></span><span class="code-line">  <span class="ralph-keyword">log</span> <span class="ralph-string">"${response}"</span></span><span class="code-line">}'</span></code></pre>
                     <p class="small">Installs Jaiph <strong>v0.5.0</strong> to <strong>~/.local/bin</strong> (if not already
                         installed), and runs the sample workflow. See <a href="#samples">more samples</a>!</p>
                 </div>
@@ -158,21 +158,21 @@ script arg_is_non_empty() {
 }
 
 rule name_was_provided {
-  if not run arg_is_non_empty "$1" {
+  if not run arg_is_non_empty "${arg1}" {
     logerr "You didn't provide your name :("
     fail "You didn't provide your name"
   }
 }
 
 workflow default {
-  ensure name_was_provided "$1"
+  ensure name_was_provided "${arg1}"
 
   const response = prompt "
     Say hello to ${arg1} and provide a fun fact about a person with the same name.
     Respond with a single line. Do not inspect files or run tools.
   "
 
-  log "$response"
+  log "${response}"
 }</code></pre>
                     <p>Running the workflow:</p>
                     <pre><code class="jaiph-run"><span class="run-command">➜  ./say_hello.jh Jakub</span>
@@ -209,7 +209,7 @@ Jaiph: Running say_hello.jh
                         object with the fields <code>hello</code> and <code>fact</code>, and it will parse the response
                         and set the capture variable to the raw JSON string. The parser tolerates text before the JSON
                         object (e.g. when the agent writes preamble before <code>{...}</code>). You can access the
-                        fields with <code>$response_hello</code> and <code>$response_fact</code>.
+                        fields with <code>${response_hello}</code> and <code>${response_fact}</code>.
                     </p>
                 </div>
 
@@ -255,9 +255,9 @@ testing say_hello.test.jh
                 <div class="code-tab-panel" data-panel="ensure-ci-passes-jh">
                     <p>This workflow uses Jaiph's <code>ensure ... recover</code> pattern to keep retrying a failing CI
                         command after an agent-assisted fix.
-                        Inside a recover block, <code>$1</code> is the full merged stdout+stderr from the failed rule
+                        Inside a recover block, <code>${arg1}</code> is the full merged stdout+stderr from the failed rule
                         execution — including output from nested scripts and rules. The payload refreshes on each retry
-                        attempt. Persist <code>$1</code> to a stable path (here under <code>.jaiph/tmp/</code>) and
+                        attempt. Persist <code>${arg1}</code> to a stable path (here under <code>.jaiph/tmp/</code>) and
                         assert it is non-empty before the prompt, so the message about "inspect the log file" matches
                         what is on disk.</p>
                     <p>The workflow uses custom <code>config</code> to enable agent YOLO mode. Otherwise the agent
@@ -288,7 +288,7 @@ script save_string_to_file() {
 
 workflow default {
   ensure ci_passes recover {
-    run save_string_to_file "$1" ".jaiph/tmp/ci_failure.log"
+    run save_string_to_file "${arg1}" ".jaiph/tmp/ci_failure.log"
     prompt "The CI check failed. Failure output is in .jaiph/tmp/ci_failure.log — fix the code so npm run test:ci passes."
   }
 }</code></pre>
@@ -315,7 +315,7 @@ Jaiph: Running ensure_ci_passes.jh
 
                 <div class="code-tab-panel" data-panel="inbox-pipeline-jh">
                     <p>The <strong>inbox</strong> system lets workflows communicate through named channels.
-                        A workflow sends a message with <code>&lt;-</code> (RHS: quoted literal, <code>$var</code>, or
+                        A workflow sends a message with <code>&lt;-</code> (RHS: quoted literal, <code>${var}</code>, or
                         <code>run</code> to a script) and a route declaration (<code>-&gt;</code>) dispatches it to
                         receivers with
                         <code>${arg1}=message</code>, <code>${arg2}=channel</code>, <code>${arg3}=sender</code>.
@@ -338,7 +338,7 @@ script print_reviewed() {
 }
 
 workflow reviewer {
-  run print_reviewed "$1"
+  run print_reviewed "${arg1}"
 }
 
 workflow default {
@@ -374,21 +374,21 @@ workflow cursor_say_hello {
   config {
     agent.backend = "cursor"
   }
-  const response = prompt "$prompt_text"
-  log "$response"
+  const response = prompt "${prompt_text}"
+  log "${response}"
 }
 
 workflow claude_say_hello {
   config {
     agent.backend = "claude"
   }
-  const response = prompt "$prompt_text"
-  log "$response"
+  const response = prompt "${prompt_text}"
+  log "${response}"
 }
 
 workflow default {
-  run async cursor_say_hello "$1"
-  run async claude_say_hello "$1"
+  run async cursor_say_hello "${arg1}"
+  run async claude_say_hello "${arg1}"
 }</code></pre>
                     <p>Running the workflow:</p>
                     <pre><code class="jaiph-run"><span class="run-command">➜  ./async.jh</span>
@@ -398,8 +398,8 @@ Jaiph: Running async.jh
 <span class="run-keyword">workflow</span> default
   <span class="run-marker">▸</span> <span class="run-keyword">async workflow</span> claude_say_hello
   <span class="run-marker">▸</span> <span class="run-keyword">async workflow</span> cursor_say_hello
-  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> "$prompt_text" <span class="run-params">(prompt_text="Say: \"Greetings! I am [model nam...")</span>
-  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> "$prompt_text" <span class="run-params">(prompt_text="Say: \"Greetings! I am [model nam...")</span>
+  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> "${prompt_text}" <span class="run-params">(prompt_text="Say: \"Greetings! I am [model nam...")</span>
+  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> "${prompt_text}" <span class="run-params">(prompt_text="Say: \"Greetings! I am [model nam...")</span>
   <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">prompt prompt (4s)</span>
   <span class="run-marker">·</span>   <span class="run-marker">ℹ</span> Greetings! I am Claude Opus 4.6.
   <span class="run-pass">✓</span> <span class="run-time">workflow claude_say_hello (4s)</span>
@@ -558,9 +558,9 @@ Jaiph: Running async.jh
                         <code>run</code>
                         to a script). A
                         call-like RHS must use the keyword explicitly &mdash; e.g.
-                        <code>const x = run helper "$arg"</code>,
+                        <code>const x = run helper "${arg}"</code>,
                         not
-                        <code>const x = helper "$arg"</code> (compile error with a correction hint). See
+                        <code>const x = helper "${arg}"</code> (compile error with a correction hint). See
                         <a href="grammar#step-output-contract">Step output contract</a>.
                     </dd>
 

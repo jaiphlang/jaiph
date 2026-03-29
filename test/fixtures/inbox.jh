@@ -23,13 +23,13 @@ script review_summary() {
 }
 
 workflow analyst {
-  run write_findings_file "$1"
+  run write_findings_file "${arg1}"
   summary = run summarize_findings
-  summary <- "$summary"
+  summary <- "${summary}"
 }
 
 workflow reviewer {
-  final_summary <- run review_summary "$1"
+  final_summary <- run review_summary "${arg1}"
 }
 
 # Orchestration / entrypoint workflow

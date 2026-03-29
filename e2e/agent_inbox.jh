@@ -12,7 +12,7 @@ workflow analyst {
 }
 
 workflow reviewer {
-  log "[reviewed] $1"
+  log "[reviewed] ${arg1}"
 }
 
 workflow default {

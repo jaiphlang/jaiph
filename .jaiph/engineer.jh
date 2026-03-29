@@ -192,12 +192,12 @@ workflow classify_role {
       Keywords: test, coverage, harden, validate, assert, detect.
 
     Task:
-    $1
+    ${arg1}
 
     Respond with exactly one role name.
   " returns '{ role: string }'
 
-  return "$result_role"
+  return "${result_role}"
 }
 
 script save_string_to_file() {
@@ -209,15 +209,15 @@ script mkdir_p_simple() {
 }
 
 workflow implement {
-  const task = "$1"
-  const role_name = "$2"
-  if not run task_text_has_header "$task" {
+  const task = "${arg1}"
+  const role_name = "${arg2}"
+  if not run task_text_has_header "${task}" {
     fail "Provided task does not contain a '## [text]' header"
   }
-  const role = run select_role "$role_name"
+  const role = run select_role "${role_name}"
 
   prompt "
-    $role
+    ${role}
 
     <context>
     You are working on the Jaiph codebase (https://github.com/jaiphlang/jaiph),
@@ -226,7 +226,7 @@ workflow implement {
     </context>
 
     <code_philosophy>
-    $code_philosophy
+    ${code_philosophy}
     </code_philosophy>
 
     <task>
@@ -276,7 +276,7 @@ workflow implement {
     - *.test.jh is a Jaiph runtime testing lane executed by jaiph test.
 
     Task description:
-    $task
+    ${task}
     </task>
   "
 }
@@ -291,28 +291,28 @@ workflow print_commit_message {
     3. Write a body paragraph with more details about the change.
   " returns '{ message: string }'
 
-  log "Suggested commit message:\n\n$response_message\n"
+  log "Suggested commit message:\n\n${response_message}\n"
 }
 
 workflow default {
-  const role_arg = "$1"
+  const role_arg = "${arg1}"
   # ensure git.is_clean
   const task = run queue.get_first_task
-  const task_header = run first_line_task "$task"
-  ensure queue.task_is_dev_ready "$task"
-  log "Implementing task: $task_header"
+  const task_header = run first_line_task "${task}"
+  ensure queue.task_is_dev_ready "${task}"
+  log "Implementing task: ${task_header}"
 
-  if not run arg_nonempty "$role_arg" {
-    const role_name = run classify_role "$task"
-    log "Auto-selected role: $role_name"
-    run implement "$task" "$role_name"
+  if not run arg_nonempty "${role_arg}" {
+    const role_name = run classify_role "${task}"
+    log "Auto-selected role: ${role_name}"
+    run implement "${task}" "${role_name}"
   }
   else {
-    run implement "$task" "$role_arg"
+    run implement "${task}" "${role_arg}"
   }
 
   run ci.ensure_ci_passes
-  run docs.update_from_task "$task"
-  run queue.remove_completed_task "$task_header"
+  run docs.update_from_task "${task}"
+  run queue.remove_completed_task "${task_header}"
   run print_commit_message
 }

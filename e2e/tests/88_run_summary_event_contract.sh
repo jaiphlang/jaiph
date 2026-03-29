@@ -54,14 +54,14 @@ script write_a() {
   echo "a:$1" > contract_a.txt
 }
 workflow receiver_a {
-  run write_a "$1"
+  run write_a "${arg1}"
 }
 
 script write_b() {
   echo "b:$1" > contract_b.txt
 }
 workflow receiver_b {
-  run write_b "$1"
+  run write_b "${arg1}"
 }
 
 workflow default {

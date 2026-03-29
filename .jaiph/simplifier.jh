@@ -65,7 +65,7 @@ workflow find_simplifications {
     follow-up apply step).
 
     <principles>
-    $simplifier_principles
+    ${simplifier_principles}
     </principles>
 
     <task>
@@ -92,7 +92,7 @@ workflow find_simplifications {
     </role>
   "
 
-  run save_simplifier_report "$report"
+  run save_simplifier_report "${report}"
   log "Simplification report saved to .jaiph/tmp/simplifier_report.md"
   ensure no_test_or_e2e_paths_changed
 }
@@ -117,7 +117,7 @@ workflow apply_simplifications {
     </role>
 
     <principles>
-    $simplifier_principles
+    ${simplifier_principles}
     </principles>
 
     <task>
@@ -133,7 +133,7 @@ workflow apply_simplifications {
     - If you defer work, append a brief note to .jaiph/tmp/simplifier_deferred.md
 
     Report:
-    $report
+    ${report}
     </task>
   "
 

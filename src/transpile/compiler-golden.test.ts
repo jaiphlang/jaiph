@@ -615,7 +615,7 @@ test("parser: const rejects bare call-like rhs without run", () => {
     "  echo \"$1\"",
     "}",
     "workflow default {",
-    '  const x = some_script "$arg"',
+    '  const x = some_script "${arg}"',
     "}",
   ].join("\n");
   assert.throws(
@@ -630,7 +630,7 @@ test("parser: const allows run-wrapped script call with args", () => {
     "  echo \"$1\"",
     "}",
     "workflow default {",
-    '  const x = run some_script "$arg"',
+    '  const x = run some_script "${arg}"',
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -643,7 +643,7 @@ test("parser: const allows run-wrapped script call with args", () => {
   assert.equal(step.name, "x");
   assert.equal(step.value.kind, "run_capture");
   assert.equal(step.value.ref?.value, "some_script");
-  assert.equal(step.value.args, '"$arg"');
+  assert.equal(step.value.args, '"${arg}"');
 });
 
 test("parser: const prompt capture parses", () => {
@@ -1434,13 +1434,13 @@ test("compiler golden: inbox.jh fixture compiles successfully", () => {
         "}",
         "",
         "workflow analyst {",
-        "  run write_findings_file \"$1\"",
+        "  run write_findings_file \"${arg1}\"",
         '  const summary = "Summary of findings"',
-        "  summary <- $summary",
+        "  summary <- ${summary}",
         "}",
         "",
         "workflow reviewer {",
-        "  final_summary <- run emit_reviewed \"$1\"",
+        "  final_summary <- run emit_reviewed \"${arg1}\"",
         "}",
         "",
         "workflow default {",
@@ -1476,7 +1476,7 @@ test("parser: top-level const declaration parses single-line string", () => {
   const source = [
     'const greeting = "hello world"',
     "workflow default {",
-    "  log \"$greeting\"",
+    "  log \"${greeting}\"",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -1492,7 +1492,7 @@ test("parser: top-level const declaration parses multi-line string", () => {
     "    1. You write clearly",
     '    2. You are concise"',
     "workflow default {",
-    "  log \"$role\"",
+    "  log \"${role}\"",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -1507,7 +1507,7 @@ test("parser: top-level const declaration parses bare value", () => {
   const source = [
     "const count = 42",
     "workflow default {",
-    "  log \"$count\"",
+    "  log \"${count}\"",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -1520,7 +1520,7 @@ test("parser: top-level local keyword is rejected", () => {
   const source = [
     'local greeting = "hello world"',
     "workflow default {",
-    "  log \"$greeting\"",
+    "  log \"${greeting}\"",
     "}",
   ].join("\n");
   assert.throws(
@@ -1584,7 +1584,7 @@ test("compiler golden: top-level const emits prefixed variable and shims", () =>
         'const greeting = "hello world"',
         "",
         "rule check {",
-        "  log \"$greeting\"",
+        "  log \"${greeting}\"",
         "}",
         "",
         "script helper() {",
@@ -1594,7 +1594,7 @@ test("compiler golden: top-level const emits prefixed variable and shims", () =>
         "workflow default {",
         "  ensure check",
         "  run helper",
-        "  log \"$greeting\"",
+        "  log \"${greeting}\"",
         "}",
         "",
       ].join("\n"),
@@ -1625,10 +1625,10 @@ test("compiler golden: top-level const $sibling is expanded in export (set -u sa
       input,
       [
         'const shared = "MIDDLE"',
-        'const combined = "before $shared after"',
+        'const combined = "before ${shared} after"',
         "",
         "workflow default {",
-        "  log \"$combined\"",
+        "  log \"${combined}\"",
         "}",
         "",
       ].join("\n"),

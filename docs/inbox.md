@@ -30,8 +30,8 @@ dispatch — no file watchers, no polling, no external message brokers.
 
 Send (`<-`), routes (`->`), and related parsing rules are specified in
 [Grammar — Parse and runtime semantics](grammar.md#parse-and-runtime-semantics).
-The **right-hand side** of `<-` may be only a double-quoted literal, `$var` / `${…}`,
-`run ref [args]`, or empty (forward `$1`) — not a raw shell command; see
+The **right-hand side** of `<-` may be only a double-quoted literal, `${var}`,
+`run ref [args]`, or empty (forward `${arg1}`) — not a raw shell command; see
 [Grammar — Managed calls vs command substitution](grammar.md#managed-calls-vs-command-substitution).
 
 ```jh
@@ -95,7 +95,7 @@ Valid forms:
 - imported channel: `shared.findings`
 
 The send step resolves the message from the **RHS** (literal, variable expansion,
-`run` to a script, or forwarded `$1`), writes it to the next inbox slot,
+`run` to a script, or forwarded `${arg1}`), writes it to the next inbox slot,
 and signals the runtime to dispatch.
 
 ```jh
@@ -106,7 +106,7 @@ workflow researcher {
 }
 ```
 
-If no command follows `<-`, the workflow's `$1` argument is forwarded:
+If no command follows `<-`, the workflow's `${arg1}` argument is forwarded:
 
 ```jh
 channel findings
@@ -126,7 +126,7 @@ misread as send syntax.
 |-----------------------|----------------------------------------------------|
 | `ch <- "foo"`         | `jaiph::send 'ch' "$(… literal …)" '<workflow>'`   |
 | `ch <- run fmt`       | `jaiph::send` with managed `run` to `fmt`        |
-| `ch <-`               | `jaiph::send 'ch' "$1" '<workflow>'`              |
+| `ch <-`               | `jaiph::send 'ch' "${arg1}" '<workflow>'`         |
 
 (`<workflow>` is the name of the workflow that contains the send step.)
 
@@ -183,7 +183,7 @@ Use two steps instead:
 
 ```jh
 const payload = run build_message
-channel <- "$payload"
+channel <- "${payload}"
 ```
 
 ## Inbox layout
@@ -215,7 +215,7 @@ workflow needing its own route declarations.
 The inbox logic lives in the JS kernel (`runtime/kernel/inbox.ts`). The kernel mutates the run’s **`inbox/`** directory,
 appends **`INBOX_*`** lines to **`run_summary.jsonl`** when applicable, and
 (for each routed target) dispatches the workflow through the Node runtime, preserving the usual
-`$1` / `$2` / `$3` contract.
+`${arg1}` / `${arg2}` / `${arg3}` contract.
 
 ```
 1. On workflow entry, the runtime initializes a WorkflowContext (route map, message queue).
@@ -228,7 +228,7 @@ appends **`INBOX_*`** lines to **`run_summary.jsonl`** when applicable, and
    a. Walk the queue from the current cursor; if no new messages, stop.
    b. For each message, look up routes on the workflow context.
    c. If there is no route, skip (message file remains on disk).
-   d. If there is a route, invoke each target with $1=message, $2=channel, $3=sender —
+   d. If there is a route, invoke each target with ${arg1}=message, ${arg2}=channel, ${arg3}=sender —
       **sequentially** in target-list order by default, or **all targets concurrently
       via Promise.all** when `JAIPH_INBOX_PARALLEL=true`
       (see [Ordering guarantees](#ordering-guarantees)).
@@ -361,7 +361,7 @@ Routed receivers get three positional arguments:
   lines and ordering together with the rest of the persisted event contract under
   parallel dispatch.
 - Workflows remain directly callable: `jaiph run analyst "some content"`.
-  When called directly, `$2` and `$3` are unset.
+  When called directly, `${arg2}` and `${arg3}` are unset.
 
 ## Progress tree integration
 
