@@ -106,7 +106,6 @@ e2e::run() {
   local file="$1"
   shift || true
 
-  jaiph build "${JAIPH_E2E_TEST_DIR}/${file}" >/dev/null
   jaiph run "${JAIPH_E2E_TEST_DIR}/${file}" "$@"
 }
 

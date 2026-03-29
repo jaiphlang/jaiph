@@ -88,7 +88,7 @@ workflow update_docs {
 }
 ```
 
-The Node workflow runtime interprets the AST directly — there is no Bash transpilation on the `jaiph run` or `jaiph test` execution path. Script steps execute as managed subprocesses. `jaiph build` can produce Bash build artifacts for Docker/CI distribution when needed.
+The Node workflow runtime interprets the AST directly — there is no Bash transpilation on the `jaiph run` or `jaiph test` execution path. Script steps execute as managed subprocesses.
 
 ## Getting Started
 

@@ -139,7 +139,6 @@ test "prompt returns mock response" {
 EOF
 
 # When
-jaiph build "${TEST_DIR}/prompt_flow.jh" >/dev/null
 prompt_ok_out="$(jaiph test "${TEST_DIR}/prompt_flow.test.jh")"
 
 # Then
