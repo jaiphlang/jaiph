@@ -1,4 +1,3 @@
-import { rewriteJaiphDiagnosticsLine, type SourceMapCache } from "../shared/jaiph-source-map";
 import { parseStepEvent, parseLogEvent } from "./events";
 import {
   colorize,
@@ -80,18 +79,9 @@ function handleLine(
   }
 }
 
-export type StderrParserOptions = {
-  /** Rewrite human-facing stderr (e.g. map generated `.sh` line numbers to `.jh` via `.jaiph.map`). */
-  sourceMapCache?: SourceMapCache;
-};
-
 /** Create a line handler that parses stderr lines and emits events through the emitter. */
-export function createStderrParser(emitter: RunEmitter, opts?: StderrParserOptions): (line: string) => void {
-  const cache = opts?.sourceMapCache;
-  const formatDiagnosticLine =
-    cache !== undefined
-      ? (ln: string) => rewriteJaiphDiagnosticsLine(ln, cache)
-      : (ln: string) => ln;
+export function createStderrParser(emitter: RunEmitter): (line: string) => void {
+  const formatDiagnosticLine = (ln: string) => ln;
   const state: StderrParserState = {
     runtimeStack: [], legacyStack: [], legacyCounter: 0, rootStepId: null,
   };

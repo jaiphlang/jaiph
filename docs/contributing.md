@@ -45,10 +45,10 @@ For day-to-day work on the compiler and CLI you usually stay inside the clone: i
 
 | Command | What it runs |
 |---------|----------------|
-| `npm install` | Installs TypeScript, Jest, and types (dev dependencies). |
+| `npm install` | Installs TypeScript and types (dev dependencies). |
 | `npm run build` | Compiles TypeScript to `dist/` and copies runtime assets (`runtime/kernel`, reporting static files). |
 | `npm run build:standalone` | `npm run build`, then copies `runtime/kernel` and `reporting/public` into `dist/` and runs **`bun build --compile`** on `src/cli.ts` → **`dist/jaiph`**. Requires [Bun](https://bun.sh) installed; ship the **`dist/`** directory (binary + sibling files) for a self-contained CLI layout. |
-| `npm test` | `npm run build`, then the Node.js built-in test runner (with **`--enable-source-maps`**) on cross-cutting tests in `dist/test/*.test.js` and all colocated module tests under `dist/src/**/*.test.js` (including `*.acceptance.test.js`), then Jest on `test/fixtures-build.jest.test.js` (fixture build snapshot). |
+| `npm test` | `npm run build`, then the Node.js built-in test runner (with **`--enable-source-maps`**) on cross-cutting tests in `dist/test/*.test.js` and all colocated module tests under `dist/src/**/*.test.js` (including `*.acceptance.test.js`). |
 | `npm run test:e2e` | Build plus `bash ./e2e/test_all.sh` (same as `test:acceptance:runtime`). |
 | `npm run test:ci` | `npm test` followed by `npm run test:e2e` — useful before pushing when you want the full local picture. |
 
@@ -75,17 +75,16 @@ Jaiph uses several test layers. Each layer catches a different class of bug. Use
 | Layer | Location | What it catches | When to use |
 |-------|----------|-----------------|-------------|
 | **Module tests** | `src/**/*.test.ts` (colocated) | Bugs in pure functions (event parsing, param formatting, path resolution, config merging) | The function is self-contained, takes input and returns output, no I/O |
-| **Compiler acceptance tests** | `src/transpile/*.acceptance.test.ts` (colocated) | Cross-module compiler behavior: validation errors, resolution, and other cases that need a temp project tree or subprocess | You need a deterministic error string, multi-file `build()`, or behavior that does not fit a tiny golden snippet |
-| **Compiler golden tests** | `src/transpile/compiler-golden.test.ts` (colocated) | Regressions in the transpiler and parser — many cases use **inline** expected `.sh` strings in the test file itself | You changed the emitter or parser and need to lock an exact emitted script or parse result (refresh the canonical workflow snippet with `scripts/dump-golden-output.js` when that embedded expectation changes) |
+| **Compiler acceptance tests** | `src/transpile/*.acceptance.test.ts` (colocated) | Cross-module compiler behavior: validation errors, resolution, and other cases that need a temp project tree or subprocess | You need a deterministic error string, multi-file `buildScripts`, or behavior that does not fit a tiny golden snippet |
+| **Compiler golden tests** | `src/transpile/compiler-golden.test.ts` (colocated) | Regressions in the parser and scripts-only extraction (`buildScriptFiles`) — expectations are inline snippets in the test file | You changed the parser, validator, or script emitter and need to lock an exact parse result or extracted script shape |
 | **Cross-cutting tests** | `test/*.test.ts` | Process-level integration behavior: signal handling, TTY rendering, run summary structure, sample builds | The test spans multiple modules or requires subprocess/PTY harnesses |
-| **Fixture build snapshots** | `test/fixtures-build.jest.test.js`, `test/fixtures/*.jh`, `test/__snapshots__/fixtures-build.jest.test.js.snap` | The **whole** fixture set still builds and the generated `.sh` tree matches the Jest snapshot | You changed emission globally and need to catch drift across multiple real-world-ish `.jh` files — update the snapshot intentionally when output is meant to change |
 | **E2E tests** | `e2e/tests/*.sh` | Runtime behavior — does the workflow actually execute correctly end-to-end? | The behavior involves the CLI launcher, Node runtime, process lifecycle, or file artifacts |
 
 ### Key principles
 
 1. **Tests are behavior contracts.** E2E tests and acceptance tests define what the product does. Default approach: change production code to satisfy tests, not the other way around.
 2. **Modify existing tests only with a strong reason:** intentional product behavior change, incorrect test expectation, or removal of an obsolete feature. Any such change should be minimal and paired with a clear rationale.
-3. **Golden and snapshot tests are the compiler's safety net.** After transpiler changes, run `npm test`. Failures in `src/transpile/compiler-golden.test.ts` usually mean updating an explicit expected string in that file; for the main minimal workflow golden, run `npm run build && node scripts/dump-golden-output.js` and reconcile with the test source (see the comment above that case in `compiler-golden.test.ts`). If Jest reports a fixture snapshot mismatch, refresh it only when the new emitted `.sh` tree is correct, e.g. `npm run test:jest -- -u`.
+3. **Golden tests are the compiler's safety net.** After transpiler changes, run `npm test`. Failures in `src/transpile/compiler-golden.test.ts` usually mean updating an explicit expected string in that file; for the main minimal workflow golden, run `npm run build && node scripts/dump-golden-output.js` and reconcile with the test source (see the comment above that case in `compiler-golden.test.ts`).
 4. **E2E tests assert two things independently:** what the user sees (CLI tree output via `e2e::expect_stdout`) and what the runtime persists (artifact files via `e2e::expect_out`, `e2e::expect_file`). A bug could break one without the other.
 5. **Prefer the narrowest test layer.** A pure function bug should be caught by a unit test, not an E2E test. E2E tests are expensive to run and hard to debug — reserve them for integration-level behavior.
 
@@ -139,7 +138,7 @@ After parse, the transpiler checks that `ensure` and `run` targets (and related 
 
 ### Workflow module emission (golden tests only)
 
-The transpiler can still produce a full bash module string per compiled workflow module — but this path is **not used for production execution**. All `jaiph run`, `jaiph test`, and Docker runs go through the Node workflow runtime (`NodeWorkflowRuntime`), which interprets the AST directly. The bash emission exists for **compiler golden/snapshot tests** that lock the emitter's output against regressions.
+The transpiler can still produce a full bash module string per compiled workflow module — but this path is **not used for production execution**. All `jaiph run`, `jaiph test`, and Docker runs go through the Node workflow runtime (`NodeWorkflowRuntime`), which interprets the AST directly. The bash emission exists for **compiler golden tests** that lock the emitter's output against regressions.
 
 `buildScripts()` — the production preparation path — persists **only** extracted per-step `script` files under `scripts/`. No workflow-level `.sh` is written for any execution path.
 
@@ -153,7 +152,7 @@ The emission modules remain in the codebase for the golden test contract:
 | `emit-workflow-helpers.ts` | Metadata-to-env assignment helpers, scoped-metadata `push`/`pop`, `bashSingleQuotedSegment`, top-level env reference expansion |
 | `emit-steps.ts` | `emitStep` and related helpers — individual Jaiph steps inside workflows and rules |
 
-Moving logic between these modules is an internal refactor: **generated bash should stay byte-identical** unless you intend to change the transpiler contract. Use `npm test` (including `compiler-golden.test.ts` and fixture snapshots) and `npm run test:e2e` the same way as for any other emitter edit.
+Moving logic between these modules is an internal refactor: **generated bash should stay byte-identical** unless you intend to change the transpiler contract. Use `npm test` (including `compiler-golden.test.ts`) and `npm run test:e2e` the same way as for any other emitter edit.
 
 ### Cross-cutting tests in `test/`
 
@@ -165,9 +164,8 @@ Tests that span multiple modules, require subprocess/PTY harnesses, or exercise 
 | `run-summary-jsonl.test.ts` | Integration | Runs the CLI on a small workflow and asserts structure and fields of `run_summary.jsonl` under `.jaiph/runs/` |
 | `signal-lifecycle.test.ts` | Acceptance | After SIGINT/SIGTERM, verifies `jaiph run` exits within a time bound and leaves no stale child processes |
 | `tty-running-timer.test.ts` | Acceptance | In a TTY, verifies the “RUNNING workflow” line updates over time (requires Python 3 PTY harness) |
-| `fixtures-build.jest.test.js` | Snapshot | Builds everything under `test/fixtures/` and compares file list + contents to Jest snapshot |
 
-Shared test data (`test/fixtures/`, `test/expected/`, `test/__snapshots__/`) also remains in `test/`.
+Shared test data (`test/fixtures/`, `test/expected/`) also remains in `test/`.
 
 ## E2E testing
 
@@ -277,6 +275,67 @@ After a workflow runs, its step outputs are written as files under `.jaiph/runs/
 | `e2e::pass "label"` | Print a `[PASS]` line. |
 | `e2e::fail "label"` | Print a `[FAIL]` line to stderr and exit. |
 | `e2e::skip "label"` | Print a `[SKIP]` line (for platform-dependent tests). |
+
+### Default contract: full equality
+
+Every E2E assertion should compare the **full** expected text — CLI stdout via heredoc, artifact file contents, JSONL lines — not substrings. Use `e2e::expect_stdout`, `e2e::expect_out`, `e2e::expect_file`, `e2e::expect_run_file`, or `e2e::assert_equals` / `e2e::assert_output_equals`.
+
+`e2e::assert_contains` (substring check) is the **exception**, not the default. Every use must include an inline comment explaining why full equality is not feasible. Allowed reasons:
+
+- **Nondeterministic output** — prompt transcripts with real agent backends, timestamps not covered by `<time>` normalization.
+- **Unbounded or variable-length logs** — `run_summary.jsonl` with platform-dependent event counts, live step output where line count varies.
+- **Platform-dependent text** — OS-specific error messages, paths that differ across CI.
+
+For the full E2E philosophy, artifact layout, and normalization details, see [ARCHITECTURE.md — E2E test philosophy](../ARCHITECTURE.md#e2e-test-philosophy-and-artifact-layout).
+
+### Migration checklist: remaining `assert_contains` usages
+
+The following tests still use `e2e::assert_contains`. Each entry is categorized as **convertible** (can be migrated to full equality) or **justified exception** (substring check is appropriate).
+
+#### Convertible to full equality
+
+These check deterministic artifact files or side-effect files that could use `e2e::assert_equals` or `e2e::expect_run_file`:
+
+| File | Lines | What's checked | Notes |
+|------|-------|---------------|-------|
+| `97_step_output_contract.sh` | 40–218 | `.out`/`.err` artifacts, return values | 13 calls; deterministic shell/rule/workflow output |
+| `92_log_logerr.sh` | 41, 50, 56 | `.out`/`.err` artifacts, script stdout | 3 calls; deterministic log messages |
+| `74_live_step_output.sh` | 110–116 | Final `.out`/`.err` artifact content | 6 calls; deterministic once step completes |
+| `91_inbox_dispatch.sh` | 43, 83–85, 163, 246–248, 292–294 | Side-effect files (`received.txt`, `args.txt`, etc.) | 9 calls; user-written files |
+| `101_ensure_recover_output_contract.sh` | 44–45, 85–87, 124–127, 179–180 | Side-effect files (recover witness files) | 8 calls; deterministic payload content |
+| `101_script_isolation.sh` | 99, 125 | Script stdout and error messages | 2 calls |
+| `30_filesystem_side_effects.sh` | 31 | `workflow_wrote.txt` side-effect | 1 call |
+| `94_parallel_shell_steps.sh` | 36–37, 104–105 | Side-effect files and `.out` content | 4 calls |
+| `93_inbox_stress.sh` | 268 | Nested processing result file | 1 call |
+| `98_ensure_recover_value.sh` | 45, 80, 95 | Recover capture and `.out` artifacts | 3 calls |
+| `99_managed_call_semantics.sh` | 50 | Function stdout in step artifact | 1 call |
+
+#### Justified exceptions (substring check appropriate)
+
+| File | Lines | Reason |
+|------|-------|--------|
+| `70_run_artifacts.sh` | 53–59, 95–98 | CLI failure stderr (variable paths), `run_summary.jsonl` (variable-length), prompt transcripts (nondeterministic agent format) |
+| `92_log_logerr.sh` | 61–64 | `run_summary.jsonl` — variable-length, timestamps |
+| `72_docker_run_artifacts.sh` | 48 | `run_summary.jsonl` inside Docker — variable event count |
+| `78_lang_redesign_constructs.sh` | 25–294 | CLI stdout with progress tree formatting — timing, indentation varies |
+| `50_cli_and_parse_guards.sh` | 78–221 | Parser/validator error messages — checking diagnostic keywords |
+| `91_inbox_dispatch.sh` | 126, 204–207 | Error message content, CLI progress tree with timing |
+| `80_cli_behavior.sh` | 18, 34–55 | CLI version banner, error help text — format may evolve |
+| `104_run_async.sh` | 47, 78–79, 129 | Async progress tree, failure messages — timing-dependent |
+| `81_tty_progress_tree.sh` | 95 | TTY live render — inherently nondeterministic |
+| `20_rule_and_prompt.sh` | 86, 120, 165–167, 192, 265 | Prompt transcripts (agent format), rule failure stderr |
+| `71_loop_run_artifacts.sh` | 51–53 | Prompt transcripts — agent output format |
+| `61_ensure_recover.sh` | 100, 156, 196 | Side-effect file, CLI failure stderr, prompt output |
+| `79_workflow_fail_keyword.sh` | 26 | CLI stderr fail message |
+| `89_reporting_server.sh` | 59, 91, 94 | Reporting API JSON and raw log — format may include extra fields |
+| `93_ensure_recover_payload.sh` | 74–80 | CLI progress tree with timing |
+| `97_async_managed_failure.sh` | 44 | Async failure message in progress output |
+| `100_ensure_recover_invalid.sh` | 38–97 | Parser error diagnostics — checking keywords |
+| `102_engineer_recover_contract.sh` | 57–58 | Recover payload contains rule stdout+stderr — variable format |
+| `103_run_dir_source_name.sh` | 29, 35 | Run dir path — contains dynamic date component |
+| `00_install_and_init.sh` | 18 | CLI help output — format may evolve |
+| `05_jaiph_use_pinned_version.sh` | 21, 29 | Version output — dynamic version string |
+| `91_top_level_local.sh` | 44–45 | Multi-line const value — checking partial lines of large value |
 
 ### Why both tree output and artifact assertions?
 

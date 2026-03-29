@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { build } from "../transpiler";
+import { buildScripts } from "../transpiler";
 
 test("E_VALIDATE: run async is rejected in rules", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-async-rule-"));
@@ -24,7 +24,7 @@ test("E_VALIDATE: run async is rejected in rules", () => {
       ].join("\n"),
     );
     assert.throws(
-      () => build(join(root, "m.jh"), join(root, "out")),
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
       /run async is not allowed in rules/,
     );
   } finally {
@@ -48,7 +48,7 @@ test("E_VALIDATE: run async is accepted in workflows", () => {
       ].join("\n"),
     );
     // Should not throw
-    build(join(root, "m.jh"), join(root, "out"));
+    buildScripts(join(root, "m.jh"), join(root, "out"));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

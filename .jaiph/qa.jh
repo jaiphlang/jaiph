@@ -26,13 +26,17 @@ const testing_philosophy = "
   - Tests are behavior contracts. Change production code to satisfy tests,
     not vice versa.
   - E2E tests assert two things independently: CLI tree output and runtime
-    artifacts. Prefer full-output contracts: e2e::expect_stdout (heredoc
-    expected), e2e::expect_out, e2e::expect_rule_out, e2e::expect_file, or
-    e2e::assert_equals / e2e::assert_output_equals on captured stdout/stderr
-    and file contents. Do not use e2e::assert_contains for whole messages or
-    whole files unless the output is inherently nondeterministic or unbounded;
-    if you must use substring checks, add a short comment explaining why full
-    equality is not feasible.
+    artifacts. Default contract is full equality: use e2e::expect_stdout
+    (heredoc), e2e::expect_out, e2e::expect_rule_out, e2e::expect_file,
+    e2e::expect_run_file, or e2e::assert_equals / e2e::assert_output_equals
+    on captured stdout/stderr and file contents. e2e::assert_contains
+    (substring check) is the exception, not the default — every use must
+    have an inline comment explaining why full equality is not feasible.
+    Allowed reasons: nondeterministic output (real agent backends, timestamps
+    not covered by <time> normalization), unbounded or variable-length logs
+    (run_summary.jsonl with platform-dependent event counts), or
+    platform-dependent text (OS-specific error messages, differing paths).
+    See ARCHITECTURE.md — E2E test philosophy for the full policy.
   - Prefer the narrowest test layer. A pure function bug = unit test.
     A runtime integration bug = e2e test.
   - Modify existing tests only for intentional behavior changes, incorrect

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { build } from "../transpiler";
+import { buildScripts } from "../transpiler";
 
 function withTempDir(prefix: string, fn: (root: string) => void): void {
   const root = mkdtempSync(join(tmpdir(), prefix));
@@ -29,7 +29,7 @@ test("valid: ${name} interpolation in log", () => {
       '  log "hello ${name}"',
       "}",
     ]);
-    build(join(root, "m.jh"), join(root, "out"));
+    buildScripts(join(root, "m.jh"), join(root, "out"));
   });
 });
 
@@ -40,7 +40,7 @@ test("valid: ${arg1} positional in log", () => {
       '  log "arg is ${arg1}"',
       "}",
     ]);
-    build(join(root, "m.jh"), join(root, "out"));
+    buildScripts(join(root, "m.jh"), join(root, "out"));
   });
 });
 
@@ -51,7 +51,7 @@ test("valid: escaped backtick in prompt", () => {
       '  prompt "escaped backtick: \\`cmd\\`"',
       "}",
     ]);
-    build(join(root, "m.jh"), join(root, "out"));
+    buildScripts(join(root, "m.jh"), join(root, "out"));
   });
 });
 
@@ -65,7 +65,7 @@ test("valid: $1 in script body (shell context)", () => {
       '  run greet "world"',
       "}",
     ]);
-    build(join(root, "m.jh"), join(root, "out"));
+    buildScripts(join(root, "m.jh"), join(root, "out"));
   });
 });
 
@@ -81,7 +81,7 @@ test("reject bare $name in log message", () => {
       "}",
     ]);
     assert.throws(
-      () => build(join(root, "m.jh"), join(root, "out")),
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
       /E_PARSE.*bare interpolation.*\$\{x\}/,
     );
   });
@@ -95,7 +95,7 @@ test("reject bare $name in prompt", () => {
       "}",
     ]);
     assert.throws(
-      () => build(join(root, "m.jh"), join(root, "out")),
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
       /E_PARSE.*bare interpolation.*\$\{user\}/,
     );
   });
@@ -109,7 +109,7 @@ test("reject bare $1 in log message", () => {
       "}",
     ]);
     assert.throws(
-      () => build(join(root, "m.jh"), join(root, "out")),
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
       /E_PARSE.*bare interpolation.*\$\{arg1\}/,
     );
   });
@@ -123,7 +123,7 @@ test("reject braced numeric ${1} in log message", () => {
       "}",
     ]);
     assert.throws(
-      () => build(join(root, "m.jh"), join(root, "out")),
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
       /E_PARSE.*numeric interpolation.*\$\{arg1\}/,
     );
   });
@@ -137,7 +137,7 @@ test("reject bare $name in fail message", () => {
       "}",
     ]);
     assert.throws(
-      () => build(join(root, "m.jh"), join(root, "out")),
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
       /E_PARSE.*bare interpolation.*\$\{reason\}/,
     );
   });
@@ -151,7 +151,7 @@ test("reject bare $name in return string", () => {
       "}",
     ]);
     assert.throws(
-      () => build(join(root, "m.jh"), join(root, "out")),
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
       /E_PARSE.*bare interpolation.*\$\{result\}/,
     );
   });
@@ -169,7 +169,7 @@ test("reject ${var:-fallback} in log message", () => {
       "}",
     ]);
     assert.throws(
-      () => build(join(root, "m.jh"), join(root, "out")),
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
       /E_PARSE.*shell fallback syntax/,
     );
   });
@@ -183,7 +183,7 @@ test("reject ${var:-fallback} in fail message", () => {
       "}",
     ]);
     assert.throws(
-      () => build(join(root, "m.jh"), join(root, "out")),
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
       /E_PARSE.*shell fallback syntax/,
     );
   });
@@ -197,7 +197,7 @@ test("reject ${var:-fallback} in prompt string", () => {
       "}",
     ]);
     assert.throws(
-      () => build(join(root, "m.jh"), join(root, "out")),
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
       /E_PARSE.*shell fallback syntax/,
     );
   });
@@ -211,7 +211,7 @@ test("reject ${var:-fallback} in const RHS expression", () => {
       "}",
     ]);
     assert.throws(
-      () => build(join(root, "m.jh"), join(root, "out")),
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
       /shell fallback syntax/,
     );
   });
@@ -225,7 +225,7 @@ test("reject ${var:+alt} shell expansion in log", () => {
       "}",
     ]);
     assert.throws(
-      () => build(join(root, "m.jh"), join(root, "out")),
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
       /E_PARSE.*shell fallback syntax/,
     );
   });
@@ -243,7 +243,7 @@ test("reject unescaped backtick in log message", () => {
       "}",
     ]);
     assert.throws(
-      () => build(join(root, "m.jh"), join(root, "out")),
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
       /E_PARSE.*log cannot contain backticks/,
     );
   });
@@ -257,7 +257,7 @@ test("reject unescaped backtick in fail message", () => {
       "}",
     ]);
     assert.throws(
-      () => build(join(root, "m.jh"), join(root, "out")),
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
       /E_PARSE.*fail cannot contain backticks/,
     );
   });
@@ -271,7 +271,7 @@ test("reject unescaped backtick in prompt", () => {
       "}",
     ]);
     assert.throws(
-      () => build(join(root, "m.jh"), join(root, "out")),
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
       /E_PARSE.*prompt cannot contain backticks/,
     );
   });
@@ -289,7 +289,7 @@ test("reject $(...) in log message", () => {
       "}",
     ]);
     assert.throws(
-      () => build(join(root, "m.jh"), join(root, "out")),
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
       /E_PARSE.*log cannot contain command substitution/,
     );
   });
@@ -303,7 +303,7 @@ test("reject $(...) in logerr message", () => {
       "}",
     ]);
     assert.throws(
-      () => build(join(root, "m.jh"), join(root, "out")),
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
       /E_PARSE.*logerr cannot contain command substitution/,
     );
   });
@@ -327,7 +327,7 @@ test("reject ${var:-fallback} in rule log", () => {
       "}",
     ]);
     assert.throws(
-      () => build(join(root, "m.jh"), join(root, "out")),
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
       /E_PARSE.*shell fallback syntax/,
     );
   });
@@ -347,7 +347,7 @@ test("reject unescaped backtick in rule fail", () => {
       "}",
     ]);
     assert.throws(
-      () => build(join(root, "m.jh"), join(root, "out")),
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
       /E_PARSE.*fail cannot contain backticks/,
     );
   });

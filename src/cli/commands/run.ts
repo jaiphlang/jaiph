@@ -20,7 +20,6 @@ import {
   failedStepArtifactPaths,
 } from "../shared/errors";
 import { detectWorkspaceRoot } from "../shared/paths";
-import type { SourceMapCache } from "../shared/jaiph-source-map";
 import { parseArgs } from "../shared/usage";
 import {
   spawnRunProcess,
@@ -129,8 +128,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       }, hbMs);
     }
 
-    const sourceMapCache: SourceMapCache = new Map();
-    const onLine = createStderrParser(emitter, { sourceMapCache });
+    const onLine = createStderrParser(emitter);
     const buf: StreamBuffers = { stdout: "", stderr: "" };
 
     wireStreams(execResult, onLine, buf, ttyCtx);

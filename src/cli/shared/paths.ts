@@ -31,7 +31,7 @@ function startDirIsUnderAncestorJaiphTmp(absStartDir: string, candidateRoot: str
 
 /**
  * `/tmp` (and similar) often contains stray `.git` / `.jaiph` markers. Treating that directory as the
- * workspace makes `build()` walk the entire temp tree and pick up unrelated `.jh` files.
+ * workspace makes script preparation walk the entire temp tree and pick up unrelated `.jh` files.
  */
 function skipWorkspaceMarkerOnSharedTmpRoot(candidateRoot: string, absStartDir: string): boolean {
   // macOS often uses `/private/tmp` as the canonical path while `/tmp` is a symlink; `dirname` walks

@@ -20,7 +20,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run core test suite (unit, acceptance, fixture snapshots)
+      - name: Run core test suite (unit and acceptance)
         run: npm test
 
       - name: Verify public install URL (jaiph use default path)

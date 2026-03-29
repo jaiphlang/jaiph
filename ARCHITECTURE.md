@@ -10,7 +10,7 @@ This document describes how Jaiph is structured and how execution flows through 
 Jaiph is a workflow system with a **TypeScript CLI**. The default orchestration path uses a **Node.js kernel** that interprets the AST directly:
 
 1. Parse source into AST (quick parse on the CLI for `jaiph run` metadata; full graph loads use the same parser).
-2. **Compile-time** validation (`validateReferences` inside `transpileFile`) runs during **`buildScripts()`**, not inside `buildRuntimeGraph()` (the graph loader only parses modules and follows imports).
+2. **Compile-time** validation (`validateReferences`, invoked from **`emitScriptsForModule`** / **`buildScripts()`**) runs before script extraction, not inside `buildRuntimeGraph()` (the graph loader only parses modules and follows imports).
 3. **CLI** (Node from `dist/src/cli.js`, or a **Bun-compiled** `jaiph` binary) prepares script executables (scripts-only), spawns the **`node-workflow-runner`** child, **which** builds `RuntimeGraph` and runs **`NodeWorkflowRuntime`**. Script steps execute as managed subprocesses; prompt, inbox I/O, and event/summary emission are handled by the JS kernel under `src/runtime/kernel/`.
 4. Stream live events to CLI and persist durable run artifacts.
 
@@ -33,8 +33,7 @@ All orchestration — local `jaiph run`, `jaiph test`, and **Docker `jaiph run`*
   - Resolves imports and symbol references; emits deterministic compile-time errors.
 
 - **Transpiler (`src/transpiler.ts`, `src/transpile/*`)**
-  - `transpileFile()` drives validation; **`buildScripts()`** — the path for all `jaiph run` / `jaiph test` execution — **persists only atomic `script` files** under `scripts/`.
-  - `emitWorkflow` computes a module bash string containing function definitions (used by `build()` for golden/snapshot tests only). The emitted module has no stdlib preamble or entrypoint — it is not a runnable standalone bash program. No workflow `.sh` is written for production execution.
+  - **`emitScriptsForModule`** parses, runs **`validateReferences`**, and **`buildScriptFiles`** — the only compile path for `jaiph run` / `jaiph test` — **persists only atomic `script` files** under `scripts/`. There is no workflow-level bash emission.
 
 - **Node Workflow Runtime (`src/runtime/kernel/node-workflow-runtime.ts`)**
   - `NodeWorkflowRuntime` interprets the AST directly: walks workflow steps, manages scope/variables, delegates prompt and script execution to kernel helpers, handles channels/inbox/dispatch, emits events, and writes run artifacts.
@@ -96,7 +95,7 @@ Static tree from AST (`progress.ts`); runtime events (`events.ts`, `stderr-handl
 flowchart TD
     U[User / CI] --> CLI[CLI: Node or Bun jaiph]
 
-    subgraph Transpile["Per-module transpile: transpileFile()"]
+    subgraph Transpile["Per-module: emitScriptsForModule()"]
         PARSE[parsejaiph]
         VAL[validateReferences]
         EMIT[Emit atomic script files under scripts/]
@@ -141,7 +140,7 @@ flowchart TD
     HK --> HPROC[Hook shell commands]
 ```
 
-**Emit artifacts:** `buildScripts()` persists **only** extracted **`script`** bodies under `scripts/`. No workflow-level `.sh` files are produced for any production execution path. `build()` remains available for compiler golden/snapshot tests only. No `jaiph_stdlib.sh` exists; the emitted module string is not a runnable bash program.
+**Emit artifacts:** `buildScripts()` persists **only** extracted **`script`** bodies under `scripts/`. No workflow-level shell modules or `jaiph_stdlib.sh` are produced.
 
 ## Sequence diagram: regular flow (`*.jh`)
 
@@ -150,7 +149,7 @@ sequenceDiagram
     participant User
     participant CLI as CLI jaiph run
     participant Prep as buildScripts
-    participant TF as transpileFile per module
+    participant TF as emitScriptsForModule per module
     participant Runner as node-workflow-runner
     participant Graph as buildRuntimeGraph
     participant Runtime as NodeWorkflowRuntime
@@ -214,14 +213,56 @@ sequenceDiagram
     CLI-->>User: exit code
 ```
 
+## E2E test philosophy and artifact layout
+
+E2E tests (`e2e/tests/*.sh`) are the outermost behavior contracts for the CLI and runtime. They exercise the full build-and-run pipeline and assert on two independent surfaces:
+
+1. **CLI tree output** — what the user sees (`e2e::expect_stdout` with a heredoc).
+2. **Run artifacts** — what the runtime persists under `.jaiph/runs/<date>/<source>/` (`e2e::expect_out`, `e2e::expect_file`, `e2e::expect_run_file`). Inbox files live under the run directory when the feature touches inbox behavior.
+
+### Default contract: full equality
+
+Every E2E assertion should compare the **full** expected text (stdout heredoc, artifact file contents, JSONL lines) unless there is a documented exception. Use `e2e::expect_stdout`, `e2e::expect_out`, `e2e::expect_file`, `e2e::expect_run_file`, or `e2e::assert_equals` / `e2e::assert_output_equals` for full comparisons.
+
+`e2e::assert_contains` (substring check) is allowed **only** when full equality is not feasible. Every such use must have an inline comment explaining why. Valid reasons:
+
+- **Nondeterministic output** — e.g. prompt transcripts with real agent backends, timestamps not covered by `<time>` normalization.
+- **Unbounded or variable-length logs** — e.g. `run_summary.jsonl` with platform-dependent event counts, or live step output where line count varies.
+- **Platform-dependent text** — e.g. OS-specific error messages, paths that differ across CI environments.
+
+### Artifact layout
+
+```
+.jaiph/runs/
+  <YYYY-MM-DD>/
+    <source.jh>/
+      000001-module__step.out    # stdout capture per step (seq-prefixed)
+      000001-module__step.err    # stderr capture (when non-empty)
+      inbox/                     # inbox message files (when channels are used)
+      .seq                       # step-sequence counter (kernel/seq-alloc.ts)
+      run_summary.jsonl          # durable event timeline
+```
+
+Sequence prefixes are monotonic and unique per run (allocated by `kernel/seq-alloc.ts`), making artifact file names deterministic and ordered.
+
+### Normalization
+
+`e2e::normalize_output` (in `e2e/lib/common.sh`) strips ANSI codes and replaces timing values with `<time>`, agent commands with `<agent-command>`, and script paths with `<script-path>`. This keeps full-equality heredocs stable across machines.
+
+### Cross-references
+
+- Helper reference and test structure: [Contributing — E2E testing](docs/contributing.md#e2e-testing).
+- Runtime testing with `*.test.jh`: [Testing](docs/testing.md).
+- `run_summary.jsonl` contract: `e2e/tests/88_run_summary_event_contract.sh`.
+
 ## TypeScript test organization
 
 (Module tests in `src/**`, cross-cutting in `test/**`, e2e in `e2e/tests/*.sh` — unchanged.)
 
 ## Summary
 
-- `.jh` / `*.test.jh` share parser/AST; **compile-time** validation runs in `transpileFile` during **`buildScripts`**. **`buildRuntimeGraph`** loads modules with **parse-only** imports.
+- `.jh` / `*.test.jh` share parser/AST; **compile-time** validation runs in **`emitScriptsForModule`** during **`buildScripts`**. **`buildRuntimeGraph`** loads modules with **parse-only** imports.
 - **Node-only runtime:** all execution — local `jaiph run`, Docker `jaiph run`, and `jaiph test` — goes through `NodeWorkflowRuntime`. Docker containers run `node-workflow-runner` with the compiled JS tree and scripts mounted, using the same semantics as local execution.
 - **CLI** owns launch, observation, hooks, and runtime preparation (`buildScripts`). Workflow execution runs in **`NodeWorkflowRuntime`**, with **script steps** as managed subprocesses.
-- No workflow-level `.sh` files or `jaiph_stdlib.sh` are produced or required. `build()` remains internal for compiler golden tests only.
+- No workflow-level `.sh` files or `jaiph_stdlib.sh` are produced or required.
 - Contracts: `__JAIPH_EVENT__`, `.jaiph/runs`, `run_summary.jsonl`, hook payloads.

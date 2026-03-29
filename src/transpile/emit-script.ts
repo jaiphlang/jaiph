@@ -1,7 +1,31 @@
 import type { jaiphModule } from "../types";
 import { scriptShebangIsBash } from "../parse/script-bash";
-import { normalizeShellLocalExport, resolveShellRefs } from "./emit-steps";
 
+/**
+ * Replace `alias.name` patterns in shell commands with
+ * the fully-qualified symbol (`symbol::name`) used in generated script bodies.
+ */
+export function resolveShellRefs(
+  command: string,
+  importedWorkflowSymbols: Map<string, string>,
+): string {
+  for (const [alias, symbol] of importedWorkflowSymbols) {
+    const pattern = new RegExp(
+      `(?<![A-Za-z0-9_])${alias}\\.([A-Za-z_][A-Za-z0-9_]*)`,
+      "g",
+    );
+    command = command.replace(pattern, `${symbol}::$1`);
+  }
+  return command;
+}
+
+/** Bash requires no space around = in local/export/readonly. */
+export function normalizeShellLocalExport(command: string): string {
+  return command.replace(
+    /\b(local|export|readonly)\s+([A-Za-z_][A-Za-z0-9_]*)\s+=\s+/g,
+    "$1 $2=",
+  );
+}
 
 function emitScriptBodyLine(cmd: string, importedWorkflowSymbols: Map<string, string>): string {
   const t = cmd.trim();
@@ -43,12 +67,14 @@ function wrapBashStandaloneScriptBody(body: string, envPreamble: string): string
   ].join("\n");
 }
 
+export type ScriptArtifact = { name: string; content: string };
+
 export function buildScriptFiles(
   ast: jaiphModule,
   importedWorkflowSymbols: Map<string, string>,
   _workflowSymbol: string,
-): Array<{ name: string; content: string }> {
-  const out: Array<{ name: string; content: string }> = [];
+): ScriptArtifact[] {
+  const out: ScriptArtifact[] = [];
   for (const sc of ast.scripts) {
     const shebang = sc.shebang ?? "#!/usr/bin/env bash";
     const rawBody = scriptShebangIsBash(sc.shebang)
@@ -61,32 +87,4 @@ export function buildScriptFiles(
     out.push({ name: sc.name, content });
   }
   return out;
-}
-
-export function emitScriptFunctions(
-  out: string[],
-  ast: jaiphModule,
-  workflowSymbol: string,
-  hasModuleMetadataScope: boolean,
-): void {
-  for (const sc of ast.scripts) {
-    const scriptSymbol = `${workflowSymbol}::${sc.name}`;
-    for (const comment of sc.comments) {
-      out.push(comment);
-    }
-    out.push(`${scriptSymbol}() {`);
-    if (hasModuleMetadataScope) {
-      out.push(
-        `  ${workflowSymbol}::with_metadata_scope jaiph::run_step ${scriptSymbol} script "$JAIPH_SCRIPTS/${sc.name}" "$@"`,
-      );
-    } else {
-      out.push(`  jaiph::run_step ${scriptSymbol} script "$JAIPH_SCRIPTS/${sc.name}" "$@"`);
-    }
-    out.push("}");
-    out.push("");
-    out.push(`${sc.name}() {`);
-    out.push(`  ${scriptSymbol} "$@"`);
-    out.push("}");
-    out.push("");
-  }
 }
