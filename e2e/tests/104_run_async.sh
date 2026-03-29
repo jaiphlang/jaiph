@@ -127,3 +127,54 @@ if [[ "$capture_status" -eq 0 ]]; then
   e2e::fail "expected parse error for capture + run async"
 fi
 e2e::assert_contains "$capture_output" "capture is not supported with run async" "capture + run async diagnostic"
+
+# --- run async sibling depth in progress tree ---
+
+e2e::section "run async sibling workflows have same tree depth"
+
+e2e::file "sibling_depth.jh" <<'EOF'
+script write_x() {
+  echo "x" > x.txt
+}
+
+script write_y() {
+  echo "y" > y.txt
+}
+
+workflow branch_x {
+  run write_x
+}
+
+workflow branch_y {
+  run write_y
+}
+
+workflow default {
+  run async branch_x
+  run async branch_y
+}
+EOF
+
+depth_output="$(NO_COLOR=1 e2e::run "sibling_depth.jh" 2>&1)"
+
+# Extract the first "▸ workflow branch_x/y" start lines from the progress output.
+# Both sibling async workflows should have the same leading whitespace (same depth).
+branch_x_line="$(echo "$depth_output" | grep '▸ workflow branch_x' | head -1)"
+branch_y_line="$(echo "$depth_output" | grep '▸ workflow branch_y' | head -1)"
+
+if [[ -z "$branch_x_line" ]] || [[ -z "$branch_y_line" ]]; then
+  printf "Output was:\n%s\n" "$depth_output" >&2
+  e2e::fail "expected both workflow start lines in progress output"
+fi
+
+# Extract leading whitespace before the ▸ marker.
+indent_x="${branch_x_line%%▸*}"
+indent_y="${branch_y_line%%▸*}"
+
+if [[ "$indent_x" != "$indent_y" ]]; then
+  printf "branch_x indent: [%s]\n" "$indent_x" >&2
+  printf "branch_y indent: [%s]\n" "$indent_y" >&2
+  printf "Output was:\n%s\n" "$depth_output" >&2
+  e2e::fail "async sibling workflows should have same indentation"
+fi
+e2e::pass "async sibling workflows render at same tree depth"

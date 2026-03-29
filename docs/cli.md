@@ -133,6 +133,8 @@ Example lines:
 
 If no parameters are passed, the line is unchanged (e.g. `▸ workflow default`). Color can be disabled with `NO_COLOR=1`.
 
+**Async sibling depth.** When a workflow contains multiple `run async` steps, all async branches render as **siblings at the same indentation level** — they do not nest under each other regardless of interleaving order. Inner steps (`prompt`, `script`, `log`) within each branch appear one level deeper under their respective `async workflow` header. The runtime achieves this by isolating each async branch's frame stack, so the `depth` field on `STEP_START` / `STEP_END` / `LOG` events is always relative to the branch's own call depth, not the global stack.
+
 **Prompt steps do not add extra tree nodes for the transcript.** The progress renderer still shows only the usual ▸ / ✓ lines for a `prompt` step — not a nested Command / Prompt / Final answer subtree. **On terminal stdout (non-test runs),** after the step completes, when that step’s stdout was **not** already streamed live (no tee path for that managed step), the runtime **replays** the step’s `.out` artifact so the full transcript appears **after** the ✓ line. That ordering matches patterns such as inbox dispatch (step completion before routed output). **Prompt** replay is skipped when stdout is a pipe (so shell capture is not polluted) or when the prompt path already streamed via tee. **`jaiph test`** runs under **`JAIPH_TEST_MODE`** and **does not** use this replay path, so assignment capture (`response = alias.workflow`) and assertions stay the same as before the kernel split.
 
 To surface the agent answer as an inline **`ℹ`** line in the tree at the right depth, use **`log`** explicitly:

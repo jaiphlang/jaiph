@@ -3,6 +3,7 @@ import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve as resolvePath } from "node:path";
 import { PassThrough } from "node:stream";
 import { randomUUID } from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { WorkflowStepDef } from "../../types";
 import { executePrompt, resolveConfig } from "./prompt";
 import { appendRunSummaryLine, formatUtcTimestamp } from "./emit";
@@ -152,10 +153,15 @@ export class NodeWorkflowRuntime {
   private readonly summaryFile: string;
   private stepSeq = 0;
   private stack: Frame[] = [];
+  private asyncFrameStack = new AsyncLocalStorage<Frame[]>();
   private inboxSeq = 0;
   private promptSeq = 0;
   private workflowCtxStack: WorkflowContext[] = [];
   private readonly mockBodies: Map<string, string>;
+
+  private getFrameStack(): Frame[] {
+    return this.asyncFrameStack.getStore() ?? this.stack;
+  }
 
   constructor(graph: RuntimeGraph, opts: { env?: NodeJS.ProcessEnv; cwd?: string; mockBodies?: Map<string, string> }) {
     this.graph = graph;
@@ -257,13 +263,14 @@ export class NodeWorkflowRuntime {
     type: "PROMPT_START" | "PROMPT_END",
     payload: { backend: string; status?: number; preview?: string },
   ): void {
-    const current = this.stack.length > 0 ? this.stack[this.stack.length - 1] : null;
+    const stack = this.getFrameStack();
+    const current = stack.length > 0 ? stack[stack.length - 1] : null;
     appendRunSummaryLine(
       JSON.stringify({
         type,
         ts: nowIso(),
         run_id: this.runId,
-        depth: this.stack.length,
+        depth: stack.length,
         step_id: current?.id ?? null,
         step_name: current?.name ?? null,
         backend: payload.backend,
@@ -281,7 +288,8 @@ export class NodeWorkflowRuntime {
   ): PromptStepHandle {
     this.promptSeq += 1;
     this.stepSeq += 1;
-    const current = this.stack.length > 0 ? this.stack[this.stack.length - 1] : null;
+    const stack = this.getFrameStack();
+    const current = stack.length > 0 ? stack[stack.length - 1] : null;
     const id = `${this.runId}:${process.pid}:prompt:${this.promptSeq}`;
     const seq = this.stepSeq;
     const safe = sanitizeName("prompt__prompt");
@@ -308,7 +316,7 @@ export class NodeWorkflowRuntime {
       id,
       parent_id: current?.id ?? null,
       seq,
-      depth: this.stack.length,
+      depth: stack.length,
       run_id: this.runId,
       params,
     });
@@ -316,7 +324,8 @@ export class NodeWorkflowRuntime {
   }
 
   private emitPromptStepEnd(prompt: PromptStepHandle, status: number, outContent: string, errContent: string): void {
-    const current = this.stack.length > 0 ? this.stack[this.stack.length - 1] : null;
+    const stack = this.getFrameStack();
+    const current = stack.length > 0 ? stack[stack.length - 1] : null;
     if (errContent.length > 0) {
       writeFileSync(prompt.errFile, errContent);
     }
@@ -333,7 +342,7 @@ export class NodeWorkflowRuntime {
       id: prompt.id,
       parent_id: current?.id ?? null,
       seq: prompt.seq,
-      depth: this.stack.length,
+      depth: stack.length,
       run_id: this.runId,
       params: [],
       out_content: outContent.slice(0, MAX_EMBED),
@@ -342,16 +351,17 @@ export class NodeWorkflowRuntime {
   }
 
   private emitLog(type: "LOG" | "LOGERR", message: string): void {
+    const depth = this.getFrameStack().length;
     const payload = {
       type,
       message,
-      depth: this.stack.length,
+      depth,
       ts: nowIso(),
       run_id: this.runId,
       event_version: 1,
     };
     if (this.env.JAIPH_TEST_MODE !== "1") {
-      process.stderr.write(`__JAIPH_EVENT__ ${JSON.stringify({ type, message, depth: this.stack.length })}\n`);
+      process.stderr.write(`__JAIPH_EVENT__ ${JSON.stringify({ type, message, depth })}\n`);
     }
     appendRunSummaryLine(JSON.stringify(payload));
   }
@@ -714,7 +724,10 @@ export class NodeWorkflowRuntime {
       }
       if (step.type === "run") {
         if (step.async) {
-          const promise = this.executeRunRef(scope, step.workflow.value, step.args ?? "");
+          const branchStack = [...this.getFrameStack()];
+          const promise = this.asyncFrameStack.run(branchStack, () =>
+            this.executeRunRef(scope, step.workflow.value, step.args ?? ""),
+          );
           pendingAsync.push({ ref: step.workflow.value, promise });
           continue;
         }
@@ -1084,11 +1097,12 @@ export class NodeWorkflowRuntime {
     const safe = sanitizeName(`${kind}__${name}`);
     const outFile = join(this.runDir, `${String(seq).padStart(6, "0")}-${safe}.out`);
     const errFile = join(this.runDir, `${String(seq).padStart(6, "0")}-${safe}.err`);
-    const parentId = this.stack.length > 0 ? this.stack[this.stack.length - 1]!.id : null;
+    const stack = this.getFrameStack();
+    const parentId = stack.length > 0 ? stack[stack.length - 1]!.id : null;
     const id = `${this.runId}:${process.pid}:${seq}`;
-    const depth = this.stack.length;
+    const depth = stack.length;
     const frame: Frame = { id, kind, name };
-    this.stack.push(frame);
+    stack.push(frame);
     writeFileSync(outFile, "");
     writeFileSync(errFile, "");
     const io: StepIO = {
@@ -1140,7 +1154,7 @@ export class NodeWorkflowRuntime {
       out_content: (result.output ?? "").slice(0, MAX_EMBED),
       err_content: result.status !== 0 ? (result.error ?? "").slice(0, MAX_EMBED) : "",
     });
-    this.stack.pop();
+    stack.pop();
     return result;
   }
 
