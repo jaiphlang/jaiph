@@ -193,31 +193,16 @@ lang_redesign_smoke::wf_const() {
   jaiph::run_step lang_redesign_smoke::wf_const workflow lang_redesign_smoke::wf_const::impl "$@"
 }
 
-lang_redesign_smoke::wf_wait::impl() {
+lang_redesign_smoke::wf_async::impl() {
   set -eo pipefail
   set +u
-  local -a _jaiph_async_run_pids=()
-  jaiph::emit_workflow_summary_event WORKFLOW_START 'wf_wait'
-  jaiph::run_step lang_redesign_smoke::noop script "$JAIPH_SCRIPTS/noop" &
-  _jaiph_async_run_pids+=($!)
-  if [[ "\${#_jaiph_async_run_pids[@]}" -eq 0 ]]; then
-    wait
-  else
-    local _jaiph_wait_status=0
-    local _jaiph_pid
-    for _jaiph_pid in "\${_jaiph_async_run_pids[@]}"; do
-      if ! wait "$_jaiph_pid"; then _jaiph_wait_status=1; fi
-    done
-    # Reap any non-managed background jobs started by raw shell steps.
-    if ! wait; then _jaiph_wait_status=1; fi
-    _jaiph_async_run_pids=()
-    if [[ "$_jaiph_wait_status" -ne 0 ]]; then return 1; fi
-  fi
-  jaiph::emit_workflow_summary_event WORKFLOW_END 'wf_wait'
+  jaiph::emit_workflow_summary_event WORKFLOW_START 'wf_async'
+  jaiph::run_step lang_redesign_smoke::noop script "$JAIPH_SCRIPTS/noop"
+  jaiph::emit_workflow_summary_event WORKFLOW_END 'wf_async'
 }
 
-lang_redesign_smoke::wf_wait() {
-  jaiph::run_step lang_redesign_smoke::wf_wait workflow lang_redesign_smoke::wf_wait::impl "$@"
+lang_redesign_smoke::wf_async() {
+  jaiph::run_step lang_redesign_smoke::wf_async workflow lang_redesign_smoke::wf_async::impl "$@"
 }
 
 lang_redesign_smoke::wf_brace_if::impl() {

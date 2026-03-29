@@ -91,8 +91,7 @@ workflow bg_job {
 }
 
 workflow default {
-  run bg_job &
-  wait
+  run async bg_job
   log "wait-done"
 }
 EOF
