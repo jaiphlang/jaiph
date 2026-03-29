@@ -12,35 +12,6 @@ Process rules:
 
 ---
 
-## Strict live events on stderr (__JAIPH_EVENT__) <!-- dev-ready -->
-
-**Goal**  
-Make **`__JAIPH_EVENT__`** JSONL appear on **stderr only** for all **`jaiph run`** modes, so the CLI does not need **dual stdout/stderr** parsing.
-
-**Context**
-
-- Default local runs already stream events on **stderr**.
-- **`jaiph run` with Docker** (`src/cli/commands/run.ts`) parses **both** stdout and stderr for step/log events because the **bash** workflow in the container may interleave streams differently.
-
-**Key files**
-
-- `src/cli/commands/run.ts` — `wireStreams`, `drainBuffers`, Docker branch
-- `src/runtime/docker.ts` — if stream routing is influenced by how the process is launched
-- After **Remove bash workflow modules**, container orchestration becomes Node-based; routing events to **stderr only** should be straightforward in **`emit.ts`** / kernel.
-
-**Scope**
-
-1. Ensure runtime (including any in-container orchestrator) writes **`__JAIPH_EVENT__`** lines **only to stderr** (or to the fd the CLI treats as “events”; document one channel).
-2. Remove stdout event sniffing from the CLI **once** the runtime guarantees stderr-only contract.
-3. Extend e2e contract tests if needed so regressions fail if events appear only on stdout.
-
-**Acceptance criteria**
-
-- CLI listens on **one** stream for structured events (stderr), or a single agreed pipe — not stdout+stdout for Docker and stderr for local.
-- Documentation (**`ARCHITECTURE.md`**, contracts section) states one channel.
-
----
-
 ## Verify argument forwarding in managed calls (e2e 90) <!-- dev-ready -->
 
 **Goal**  
