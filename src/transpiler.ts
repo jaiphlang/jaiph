@@ -3,7 +3,7 @@ import { dirname, join, relative, sep } from "node:path";
 import { jaiphError } from "./errors";
 import { parsejaiph } from "./parser";
 import type { CompileResult } from "./types";
-import { build as buildImpl, walkTestFiles } from "./transpile/build";
+import { build as buildImpl, buildScripts as buildScriptsImpl, walkTestFiles } from "./transpile/build";
 import { emitWorkflow, type EmittedModule, type JaiphSourceLineMapEntry } from "./transpile/emit-workflow";
 import {
   JAIPH_EXT_REGEX,
@@ -63,4 +63,8 @@ export { walkTestFiles };
 
 export function build(inputPath: string, targetDir?: string): CompileResult[] {
   return buildImpl(inputPath, targetDir, transpileFile);
+}
+
+export function buildScripts(inputPath: string, targetDir?: string): { scriptsDir: string } {
+  return buildScriptsImpl(inputPath, targetDir, transpileFile);
 }
