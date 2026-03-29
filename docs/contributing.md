@@ -117,10 +117,13 @@ Module tests live next to the source files they validate, inside the same `src/`
 | `src/runtime/kernel/stream-parser.test.ts` | `src/runtime/kernel/stream-parser.ts` | Stream JSON parser: reasoning/final extraction, section headers, fallback handling |
 | `src/runtime/kernel/schema.test.ts` | `src/runtime/kernel/schema.ts` | Typed prompt schema validation: JSON extraction strategies, field presence/type checks, eval-line generation |
 | `src/runtime/kernel/mock.test.ts` | `src/runtime/kernel/mock.ts` | Test-mode mock helpers: sequential mock responses, dispatch script invocation |
+| `src/runtime/kernel/seq-alloc.test.ts` | `src/runtime/kernel/seq-alloc.ts` | Atomic step-sequence allocator: monotonic unique values, resume from existing `.seq` file |
 | `src/runtime/kernel/emit.test.ts` | `src/runtime/kernel/emit.ts` | **`live`** stderr `__JAIPH_EVENT__` JSON and **`summary-line`** stdin → `run_summary.jsonl` append (fd routing, JSON shape) |
 | `src/reporting/reporting-server.test.ts` | `src/reporting/*` | Safe paths, summary JSONL parsing, run registry polling, derived run status |
 
 **Kernel — `emit.ts`:** **`src/runtime/kernel/emit.ts`** (built to **`kernel/emit.js`**) is invoked from stdlib helpers for **`live`** (progress JSON to the event fd / stderr) and **`summary-line`** (one JSONL object per stdin line). **`JAIPH_STDLIB`** selects the install’s **`emit.js`** when the CLI sets it; **`JAIPH_EMIT_JS`** is exported for child **`bash`** (e.g. read-only rule subshells) that do not re-source the stdlib. **`appendRunSummaryLine`** uses shared **`mkdir`-style locking** from **`fs-lock.ts`**.
+
+**Kernel — `seq-alloc.ts`:** **`src/runtime/kernel/seq-alloc.ts`** (built to **`kernel/seq-alloc.js`**) is the single owner of step-sequence allocation across all concurrent Bash branches in a run. The stdlib's **`jaiph::next_step_id`** calls `node "$JAIPH_SEQ_JS"` which reads, increments, and writes the `.seq` file under **`$JAIPH_RUN_DIR`** atomically using `mkdir`-style locking from **`fs-lock.ts`** (same mechanism as `emit.ts` and `inbox.ts`). This eliminates `seq` collisions that were possible under Bash-side file locking with `run … &` concurrency. **`JAIPH_SEQ_JS`** is exported alongside **`JAIPH_EMIT_JS`** so child shells resolve the same binary. Colocated test: `seq-alloc.test.ts`.
 
 **Kernel — `inbox.ts`:** **`src/runtime/kernel/inbox.ts`** (built to **`kernel/inbox.js`**) implements file-backed **init**, **send**, **register-route**, and **drain** under **`$JAIPH_RUN_DIR/inbox/`**, including **`INBOX_*` `run_summary.jsonl`** lines and parallel **`inbox/.seq.lock`** behavior. Stdlib helpers set **`JAIPH_INBOX_JS`** and shell out to **`node`**. There is no colocated `inbox.test.ts` yet; behavior is covered by **E2E** (e.g. inbox dispatch and run-summary contract tests).
 
@@ -243,7 +246,7 @@ All helpers are defined in `e2e/lib/common.sh`.
 
 #### Run artifact assertions
 
-After a workflow runs, its step outputs are written as files under `.jaiph/runs/`. Each artifact file is named with a zero-padded sequence prefix reflecting step execution order (e.g. `000001-module__step.out`, `000002-module__step.err`). The sequence counter is file-backed and shared across subshells, so steps inside looped `run` calls each receive a distinct prefix. This makes file names predictable and monotonically ordered, so tests can assert on exact file names without glob matching. These helpers verify the content of those files, catching bugs in the runtime's output-capture pipeline independently from what the CLI displays.
+After a workflow runs, its step outputs are written as files under `.jaiph/runs/`. Each artifact file is named with a zero-padded sequence prefix reflecting step execution order (e.g. `000001-module__step.out`, `000002-module__step.err`). The sequence counter is file-backed (`.seq` under the run directory) and allocated atomically by the JS kernel (`kernel/seq-alloc.js`) so concurrent async branches (`run … &`) each receive a unique monotonic prefix — no two steps share a `seq` within the same run. This makes file names predictable and ordered, so tests can assert on exact file names without glob matching. These helpers verify the content of those files, catching bugs in the runtime's output-capture pipeline independently from what the CLI displays.
 
 | Helper | Description |
 |--------|-------------|

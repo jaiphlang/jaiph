@@ -131,6 +131,7 @@ unset _emit_js_candidate
 # Exported for child shells (e.g. jaiph::execute_readonly bash -c): they do not re-source stdlib,
 # so unexported _jaiph_emit_kernel_dir would expand empty and break node "${dir}/emit.js".
 export JAIPH_EMIT_JS="${_jaiph_emit_kernel_dir}/emit.js"
+export JAIPH_SEQ_JS="${_jaiph_emit_kernel_dir}/seq-alloc.js"
 
 jaiph::timestamp_utc() {
   date -u +"%Y-%m-%dT%H-%M-%SZ"
@@ -367,24 +368,14 @@ jaiph::step_stack_pop() {
 }
 
 jaiph::next_step_id() {
-  local seq_file="${JAIPH_RUN_DIR:+${JAIPH_RUN_DIR}/.seq}"
-  local _locked=0
-  if [[ "${JAIPH_INBOX_PARALLEL:-}" == "true" && -n "$seq_file" ]]; then
-    if ! jaiph::_lock "${seq_file}.lock"; then
+  # Delegate to JS kernel for atomic seq allocation across async branches.
+  if [[ -n "${JAIPH_RUN_DIR:-}" ]]; then
+    JAIPH_STEP_SEQ="$(node "${JAIPH_SEQ_JS}")" || {
+      echo "jaiph: seq-alloc failed" >&2
       return 1
-    fi
-    _locked=1
-  fi
-  if [[ -n "$seq_file" && -f "$seq_file" ]]; then
-    JAIPH_STEP_SEQ="$(( $(<"$seq_file") + 1 ))"
+    }
   else
     JAIPH_STEP_SEQ="$(( ${JAIPH_STEP_SEQ:-0} + 1 ))"
-  fi
-  if [[ -n "$seq_file" ]]; then
-    printf '%s' "$JAIPH_STEP_SEQ" >"$seq_file"
-  fi
-  if [[ "$_locked" -eq 1 ]]; then
-    jaiph::_unlock "${seq_file}.lock"
   fi
   JAIPH_LAST_STEP_ID="${JAIPH_RUN_ID:-run}:${BASHPID:-$$}:${JAIPH_STEP_SEQ}"
   export JAIPH_LAST_STEP_ID
