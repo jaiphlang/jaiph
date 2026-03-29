@@ -12,6 +12,102 @@ Process rules:
 
 ---
 
+## Remove bash workflow modules — Node-only orchestration <!-- dev-ready -->
+
+**Goal**  
+Eliminate **workflow-level** bash emission entirely. The only shell artifacts should be **atomic `script` step** executables under `scripts/` (plus whatever tiny helpers remain, if any). **`jaiph run`** (including Docker) should use the **same** `NodeWorkflowRuntime` / `node-workflow-runner` path as local runs.
+
+**Context**
+
+- Today **`transpileFile()`** (via `emitWorkflow`) still produces a **full module bash string** (`EmittedModule.module`) and **`build()`** in `src/transpile/build.ts` writes that to **`.sh` files** mirroring the `.jh` tree (`writeFileSync(outPath, module, ...)`).
+- **`buildScripts()`** already skips module `.sh` and only writes **per-step script files** — that is the intended product direction.
+- **Docker `jaiph run`** (`src/cli/commands/run.ts`, `src/runtime/docker.ts`) uses **`build()`** and mounted **`jaiph_stdlib.sh`** so the container **executes the generated module `.sh`** as the workflow orchestrator — a **second orchestration implementation** beside the Node AST interpreter.
+- That split is what earlier reviews called **“Node AST vs emitted bash”**: the **bash** is the **`module` string** from **`emit-workflow.ts`** (workflow rules, `run`, `if`, prompts-as-shell, etc.), not the small extracted **script** bodies.
+
+**This task subsumes (directionally)** the earlier architecture notes on: (1) one validated AST/graph story across tools, (3) unifying Docker with Node semantics, (4) a single prepare→launch abstraction — once bash workflows are gone, Docker is “run the same runner in the container” instead of a parallel shell stack.
+
+**Key files**
+
+- `src/transpile/build.ts` — `build()` vs `buildScripts()`
+- `src/transpiler.ts` — `transpileFile()`, `build()` export
+- `src/transpile/emit-workflow.ts` — module `.sh` emission source
+- `src/cli/commands/run.ts` — Docker vs non-Docker prep and spawn
+- `src/runtime/docker.ts` — container command line, mounts, generated layout
+- `src/jaiph_stdlib.sh` — only needed if module `.sh` orchestration remains; scope removal or shrinking with this task
+- `src/transpile/compiler-golden.test.ts` and any fixtures asserting on generated **workflow** `.sh`
+- `ARCHITECTURE.md` — diagrams and Docker wording
+
+**Scope**
+
+1. **Docker**: change container entry to **`node-workflow-runner`** (or equivalent single binary + args), with the same env/meta contract as local `jaiph run`. Mount/copy **kernel + dist** (or compile a runner-only image) so no **workflow** `.sh` is required. Keep workspace mount semantics.
+2. **Remove product use of `build()`** for workflow modules: CLI paths should use **`buildScripts()`**-class output only; delete or gate **`build()`**’s module `.sh` writes behind tests if still needed briefly for golden diffs.
+3. **Transpiler**: stop producing **`EmittedModule.module`** for production code paths, or reduce `emitWorkflow` so validation + script extraction do not depend on synthesizing a full bash workflow (refactor `transpileFile` accordingly; golden tests migrate to scripts-only or Node-level expectations).
+4. **Cleanup**: remove dead bash runtime paths, update e2e/docker tests, and document the single orchestration model.
+
+**Acceptance criteria**
+
+- No **workflow** `.sh` files are written for **`jaiph run`** / **`jaiph test`** / Docker in normal operation.
+- Docker runs behave as **Node-orchestrated** workflows with the same semantics as local (modulo intentional isolation); `jaiph_stdlib.sh` is not required for **workflow** control flow.
+- Tests and docs reflect **scripts-only** artifacts + Node runtime only.
+
+---
+
+## Cache `buildRuntimeGraph` in `jaiph test` <!-- dev-ready -->
+
+**Goal**  
+Avoid repeated **`buildRuntimeGraph(testFileAbs)`** work when a single test file runs **multiple** `test_run_workflow` steps.
+
+**Context**
+
+- `src/runtime/kernel/node-test-runner.ts` builds the graph **inside** the loop over steps, for each **`test_run_workflow`** (`buildRuntimeGraph(testFileAbs)` per step).
+- The graph for a given test file is identical across those steps in a block; only **`mockBodies`** / env differ.
+
+**Key files**
+
+- `src/runtime/kernel/node-test-runner.ts` — `runTestBlock`, `runTestFile`
+
+**Scope**
+
+1. Build **`RuntimeGraph` once per test block** (or once per `runTestFile` if safe across blocks) and reuse for every **`test_run_workflow`** in that scope.
+2. Confirm invalidation rules if future steps mutate imports on disk (document “same process, same file” assumption).
+3. Add a small unit test or timing assertion that multiple workflow steps do not re-parse the full import closure (cache hit), if easy.
+
+**Acceptance criteria**
+
+- Multiple **`test_run_workflow`** steps in one block share one graph build unless a documented edge case requires refresh.
+- Behavior and fail semantics unchanged.
+
+---
+
+## Strict live events on stderr (__JAIPH_EVENT__) <!-- dev-ready -->
+
+**Goal**  
+Make **`__JAIPH_EVENT__`** JSONL appear on **stderr only** for all **`jaiph run`** modes, so the CLI does not need **dual stdout/stderr** parsing.
+
+**Context**
+
+- Default local runs already stream events on **stderr**.
+- **`jaiph run` with Docker** (`src/cli/commands/run.ts`) parses **both** stdout and stderr for step/log events because the **bash** workflow in the container may interleave streams differently.
+
+**Key files**
+
+- `src/cli/commands/run.ts` — `wireStreams`, `drainBuffers`, Docker branch
+- `src/runtime/docker.ts` — if stream routing is influenced by how the process is launched
+- After **Remove bash workflow modules**, container orchestration becomes Node-based; routing events to **stderr only** should be straightforward in **`emit.ts`** / kernel.
+
+**Scope**
+
+1. Ensure runtime (including any in-container orchestrator) writes **`__JAIPH_EVENT__`** lines **only to stderr** (or to the fd the CLI treats as “events”; document one channel).
+2. Remove stdout event sniffing from the CLI **once** the runtime guarantees stderr-only contract.
+3. Extend e2e contract tests if needed so regressions fail if events appear only on stdout.
+
+**Acceptance criteria**
+
+- CLI listens on **one** stream for structured events (stderr), or a single agreed pipe — not stdout+stdout for Docker and stderr for local.
+- Documentation (**`ARCHITECTURE.md`**, contracts section) states one channel.
+
+---
+
 ## Restore strict run-summary contract assertions (e2e 88) <!-- dev-ready -->
 
 **Goal**  
