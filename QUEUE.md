@@ -12,41 +12,6 @@ Process rules:
 
 ---
 
-## Verify argument forwarding in managed calls (e2e 90) <!-- dev-ready -->
-
-**Goal**  
-Verify exact positional argument forwarding works end-to-end. Rename leftover `function` references to `script` in the test.
-
-**Context**
-
-- `e2e/tests/90_function_steps.sh` currently asserts exact `one|two words` values and correct tree output with `(1="one", 2="two words")`. The assertions appear hardened.
-- The test file name and internal wording still use the old `function` terminology (e.g., "function calls in workflow tree", "function step command executed", `function_called.txt`, `function_args.txt`).
-- The keyword was renamed from `function` to `script` in the language.
-
-**Key files:**
-- `e2e/tests/90_function_steps.sh` — the test
-- `src/runtime/kernel/node-workflow-runtime.ts` — `executeRunRef` and argument mapping logic
-
-**Scope**
-
-1. Run the test to verify argument forwarding actually works end-to-end. If it fails, trace argument mapping in:
-   - `executeRunRef` in `node-workflow-runtime.ts`
-   - `executeRule` in `node-workflow-runtime.ts`
-   - Nested workflow calls
-   - Script invocation subprocess argument passing
-2. Fix any propagation issues so quoted/space-containing args survive end-to-end.
-3. Rename the test file from `90_function_steps.sh` to `90_script_steps.sh`.
-4. Update all internal references: section titles, assertion messages, file names (`function_called.txt` → `script_called.txt`, `function_args.txt` → `script_args.txt`), and `.jh` fixture content.
-5. Re-harden e2e assertions to exact expected output if any were weakened.
-
-**Acceptance criteria**
-
-- e2e 90 passes with exact `one|two words` checks.
-- Tree display params match actual forwarded runtime args.
-- No references to `function` remain in the test (all renamed to `script`).
-
----
-
 ## Isolate workflow metadata env (no cross-workflow bleed) <!-- dev-ready -->
 
 **Goal**  
