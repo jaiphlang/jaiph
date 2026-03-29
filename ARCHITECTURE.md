@@ -7,20 +7,20 @@ This document describes how Jaiph is structured and how execution flows through 
 
 ## System overview
 
-Jaiph is a single-runtime workflow system with a **TypeScript CLI** and a **Node.js orchestration kernel** that interprets the AST directly:
+Jaiph is a workflow system with a **TypeScript CLI**. The default orchestration path uses a **Node.js kernel** that interprets the AST directly:
 
-1. Parse source into AST.
-2. Validate references and language constraints.
-3. **CLI** (Node from `dist/src/cli.js`, or a **Bun-compiled** `jaiph` binary) parses/validates sources, prepares script executables (scripts-only compile path for normal `run`/`test`), builds the runtime graph, and launches the **Node workflow runtime** (`NodeWorkflowRuntime`) which interprets workflow steps from the AST. Script steps execute as managed subprocesses; prompt, inbox I/O, and event/summary emission are handled by the JS kernel under `src/runtime/kernel/`.
+1. Parse source into AST (quick parse on the CLI for `jaiph run` metadata; full graph loads use the same parser).
+2. **Compile-time** validation (`validateReferences` inside `transpileFile`) runs during **`buildScripts()` / `build()`**, not inside `buildRuntimeGraph()` (the graph loader only parses modules and follows imports).
+3. **CLI** (Node from `dist/src/cli.js`, or a **Bun-compiled** `jaiph` binary) prepares script executables (scripts-only for normal `run`/`test`), spawns the **`node-workflow-runner`** child (non-Docker), **which** builds `RuntimeGraph` and runs **`NodeWorkflowRuntime`**. Script steps execute as managed subprocesses; prompt, inbox I/O, and event/summary emission are handled by the JS kernel under `src/runtime/kernel/`.
 4. Stream live events to CLI and persist durable run artifacts.
 
-There is **one runtime**: the Node workflow runtime. All orchestration (`jaiph run`, `jaiph test`) goes through the AST interpreter — there is no Bash orchestration path.
+**Default** local `jaiph run` and all `jaiph test` orchestration use the **Node workflow runtime** (AST interpreter). **`jaiph run` with Docker enabled** is a compatibility path: the CLI emits a full module `.sh` and the container runs that shell entrypoint instead of `node-workflow-runner`.
 
 ## Core components
 
 - **CLI (`src/cli`)**
   - Entry point (`run`, `test`, `init`, `use`, `report`).
-  - **Workflow launch** is owned in TypeScript (`src/runtime/kernel/workflow-launch.ts` + `src/cli/run/lifecycle.ts`): builds the runtime graph and spawns the Node workflow runner process.
+  - **Workflow launch** is owned in TypeScript (`src/runtime/kernel/workflow-launch.ts` + `src/cli/run/lifecycle.ts`): spawns the **Node workflow runner** (`node-workflow-runner.ts`), which calls `buildRuntimeGraph()` then `NodeWorkflowRuntime`.
   - Parses runtime events and renders progress; dispatches hooks.
 
 - **Parser (`src/parser.ts`, `src/parse/*`)**
@@ -39,7 +39,7 @@ There is **one runtime**: the Node workflow runtime. All orchestration (`jaiph r
 
 - **Node Workflow Runtime (`src/runtime/kernel/node-workflow-runtime.ts`)**
   - `NodeWorkflowRuntime` interprets the AST directly: walks workflow steps, manages scope/variables, delegates prompt and script execution to kernel helpers, handles channels/inbox/dispatch, emits events, and writes run artifacts.
-  - `buildRuntimeGraph()` (`graph.ts`) builds a module dependency graph by following imports and resolving cross-module references.
+  - `buildRuntimeGraph()` (`graph.ts`) loads reachable modules with **`parsejaiph` only** (import closure); it does **not** run `validateReferences`. Cross-module refs are resolved from that graph at runtime.
 
 - **Node Test Runner (`src/runtime/kernel/node-test-runner.ts`)**
   - Executes `*.test.jh` test blocks using `NodeWorkflowRuntime` with mock support (mock prompts, mock workflow/rule/script bodies). Pure Node harness — no Bash test transpilation.
@@ -71,7 +71,7 @@ There is **one runtime**: the Node workflow runtime. All orchestration (`jaiph r
 
 ## Contracts
 
-- **Live contract (runtime -> CLI):** `__JAIPH_EVENT__` JSON lines on stderr (and related step metadata).
+- **Live contract (runtime -> CLI):** `__JAIPH_EVENT__` JSON lines on **stderr** by default; **`jaiph run` in Docker** also scans container **stdout** for the same event shapes (see `src/cli/commands/run.ts`).
 - **Durable contract:** `.jaiph/runs/...` + `run_summary.jsonl`.
 
 Channel transport remains file/queue based in runtime inbox logic.
@@ -82,8 +82,8 @@ Channel transport remains file/queue based in runtime inbox logic.
 
 ## Jaiph runtime testing (`*.test.jh`)
 
-`*.test.jh` files use the same parser/AST pipeline. `jaiph test` builds the runtime graph, constructs a `NodeWorkflowRuntime` with mock bodies resolved via the graph, and executes test blocks directly in Node. Mock prompts, workflows, rules, and functions are supported through the runtime's mock infrastructure.
-Before execution, the CLI prepares script executables via `buildScripts()` so script-step calls still resolve to concrete subprocess targets.
+`*.test.jh` files are parsed in the CLI; `runTestFile()` drives blocks in-process. Each **`test_run_workflow`** step **`buildRuntimeGraph(testFile)`**, resolves mocks against that graph, then constructs `NodeWorkflowRuntime` with `mockBodies` / mock prompt env. Mock prompts, workflows, rules, and functions are supported through the runtime's mock infrastructure.
+Before that, the CLI prepares script executables via **`buildScripts(workspace)`** so imported workflow modules have concrete script paths under `JAIPH_SCRIPTS` (workspace `*.jh` files only; `*.test.jh` is not part of that walk).
 
 ## CLI progress reporting pipeline
 
@@ -100,37 +100,47 @@ Static tree from AST (`progress.ts`); runtime events (`events.ts`, `stderr-handl
 flowchart TD
     U[User / CI] --> CLI[CLI: Node or Bun jaiph]
 
-    CLI --> P[Parser]
-    P --> AST[jaiphModule AST]
-    AST --> V[Validator]
-    V -->|compile errors| ERR[Deterministic Compile Errors]
+    subgraph Transpile["Per-module transpile: transpileFile()"]
+        PARSE[parsejaiph]
+        VAL[validateReferences]
+        EMIT[Emit script files and optional workflow .sh]
+        PARSE --> VAL
+        VAL -->|compile errors| ERR[Deterministic compile errors]
+        VAL --> EMIT
+    end
 
-    V --> G[Runtime Graph Builder]
-    G --> GRAPH[Module Dependency Graph]
+    CLI -->|jaiph run| BS1[buildScripts or full build when Docker]
+    BS1 --> Transpile
 
-    CLI -->|jaiph run| BS1[Scripts-only build (buildScripts)]
-    BS1 --> RT[Node Workflow Runtime: AST interpreter]
+    CLI -->|jaiph test| BS2[buildScripts workspace]
+    BS2 --> Transpile
+    BS2 --> TR[Node Test Runner in-process]
+
+    Transpile -->|default jaiph run| RW[Node workflow runner child]
+    Transpile -->|Docker jaiph run| DC[Container runs generated module .sh + stdlib]
+
+    RW --> G[buildRuntimeGraph parse-only + imports]
+    G --> GRAPH[RuntimeGraph]
+    RW --> RT[NodeWorkflowRuntime]
     RT --> GRAPH
-    CLI -->|jaiph test| BS2[Scripts-only build (buildScripts)]
-    BS2 --> TR[Node Test Runner + mocks]
+
+    TR -->|test_run_workflow| G
     TR --> RT
 
     RT -->|script steps| SCRIPT[Managed script subprocesses]
     RT -->|prompt steps| KERNEL[JS kernel: prompt / emit / inbox / stream / schema / mock]
 
-    RT -->|live events| EV["__JAIPH_EVENT__ stream"]
+    RT -->|live events| EV["__JAIPH_EVENT__ stderr or stdout in Docker"]
+    DC -->|bridged streams| EV
     EV --> CLI
-    CLI --> PR[Progress Rendering]
+    CLI --> PR[Progress rendering]
 
-    RT -->|channels queue/files| INBOX[Inbox state under .jaiph/runs]
+    RT -->|channels files / queues| INBOX[Inbox under .jaiph/runs]
     RT -->|durable artifacts| SUM[.jaiph/runs + run_summary.jsonl]
-    SUM --> REP[Reporting Server/UI]
+    SUM --> REP[Reporting server / UI]
 
-    CLI --> HK[Hook Dispatcher]
-    HK --> HPROC[Hook Commands]
-
-    CLI -->|docker compatibility path| T1[Full build() emission (.sh + scripts)]
-    T1 --> B1[Generated artifacts for docker/legacy compatibility]
+    CLI --> HK[Hook dispatcher via event stream]
+    HK --> HPROC[Hook shell commands]
 ```
 
 ## Sequence diagram: regular flow (`*.jh`)
@@ -139,28 +149,34 @@ flowchart TD
 sequenceDiagram
     participant User
     participant CLI as CLI jaiph run
-    participant Parser as Parser
-    participant Validator as Validator
-    participant Prep as Scripts-only build
-    participant Graph as Runtime Graph
+    participant Prep as buildScripts or build
+    participant TF as transpileFile per module
+    participant Runner as node-workflow-runner
+    participant Graph as buildRuntimeGraph
     participant Runtime as NodeWorkflowRuntime
     participant Kernel as JS kernel
     participant Report as Artifacts (.jaiph/runs)
 
     User->>CLI: jaiph run main.jh args...
-    CLI->>Parser: parse source
-    Parser-->>CLI: jaiphModule AST
-    CLI->>Validator: validate
-    Validator-->>CLI: ok or compile error
-    CLI->>Prep: buildScripts(input)
-    Prep-->>CLI: scripts/ path
-    CLI->>Graph: build module graph
-    Graph-->>CLI: RuntimeGraph
-    CLI->>Runtime: runDefault(args)
-    Runtime->>Kernel: prompt / managed scripts / emit / inbox
-    Runtime-->>CLI: __JAIPH_EVENT__ on stderr
+    Note over CLI: parse once for metadata config only
+    CLI->>Prep: buildScripts(input) or build() if Docker
+    Prep->>TF: loop: parse + validateReferences + emit
+    TF-->>Prep: scripts/ and optional module .sh
+    Prep-->>CLI: output dir paths + env JAIPH_SCRIPTS
+    alt default non-Docker
+        CLI->>Runner: spawn detached node-workflow-runner
+        Runner->>Graph: buildRuntimeGraph(sourceAbs) parse-only
+        Graph-->>Runner: RuntimeGraph
+        Runner->>Runtime: runDefault(run args)
+        Runtime->>Kernel: prompt / managed scripts / emit / inbox
+        Runtime-->>CLI: __JAIPH_EVENT__ on stderr
+        Runtime->>Report: run_summary.jsonl + step artifacts
+        Runner-->>CLI: exit + meta file with run_dir paths
+    else Docker
+        CLI->>CLI: spawn container with generated module .sh entrypoint
+        Note over CLI: bash orchestration in container CLI parses events on stderr and stdout
+    end
     CLI-->>User: live progress
-    Runtime->>Report: run_summary.jsonl + artifacts
     CLI-->>User: PASS/FAIL
 ```
 
@@ -170,26 +186,32 @@ sequenceDiagram
 sequenceDiagram
     participant User
     participant CLI as CLI jaiph test
-    participant Parser as Parser
-    participant Prep as Scripts-only build
-    participant Graph as Runtime Graph
-    participant TestRunner as Node Test Runner
+    participant Parser as parsejaiph
+    participant Prep as buildScripts workspace
+    participant TestRunner as runTestFile / runTestBlock
+    participant Graph as buildRuntimeGraph
     participant Runtime as NodeWorkflowRuntime
     participant Report as Artifacts
 
     User->>CLI: jaiph test flow.test.jh
-    CLI->>Parser: parse test AST
-    Parser-->>CLI: test blocks
-    CLI->>Prep: buildScripts(workspace)
-    Prep-->>CLI: scripts/ path
-    CLI->>Graph: build module graph
-    Graph-->>CLI: RuntimeGraph
-    CLI->>TestRunner: runTestFile(blocks, graph, mocks)
-    TestRunner->>Runtime: runNamedWorkflow(ref, args)
-    Runtime-->>TestRunner: output + returnValue
-    TestRunner-->>CLI: PASS/FAIL per block
-    Runtime->>Report: artifacts
-    CLI-->>User: PASS/FAIL
+    CLI->>Parser: parse test file
+    Parser-->>CLI: jaiphModule + tests[] blocks
+    CLI->>Prep: buildScripts(workspace) workspace .jh only
+    Prep-->>CLI: scriptsDir
+    CLI->>TestRunner: runTestFile(test path workspace scriptsDir blocks)
+    loop each test block
+        TestRunner->>TestRunner: mocks / shell steps / expectations
+        opt test_run_workflow step
+            TestRunner->>Graph: buildRuntimeGraph(test file) parse-only
+            Graph-->>TestRunner: RuntimeGraph
+            TestRunner->>Runtime: new runtime mockBodies from block
+            Runtime->>Runtime: runNamedWorkflow(ref args)
+            Runtime-->>TestRunner: status output returnValue error
+        end
+    end
+    Runtime->>Report: artifacts when workflows ran
+    TestRunner-->>CLI: aggregate PASS/FAIL
+    CLI-->>User: exit code
 ```
 
 ## TypeScript test organization
@@ -198,8 +220,8 @@ sequenceDiagram
 
 ## Summary
 
-- `.jh` / `*.test.jh` share parser/AST/validation; the **Node runtime interprets the AST directly** for all orchestration.
-- **Single runtime:** `jaiph run` and `jaiph test` both execute through `NodeWorkflowRuntime` — there is no Bash orchestration path.
-- **CLI** owns launch, observation, hooks, and scripts-only runtime preparation; **workflow execution** runs in the **Node workflow runtime**, with **script steps** as managed subprocesses.
+- `.jh` / `*.test.jh` share parser/AST; **compile-time** validation runs in `transpileFile` during **`buildScripts` / `build`**. **`buildRuntimeGraph`** loads modules with **parse-only** imports.
+- **Default Node runtime:** local `jaiph run` (non-Docker) and `jaiph test` execute through `NodeWorkflowRuntime`. Docker `jaiph run` executes the generated bash module inside the container.
+- **CLI** owns launch, observation, hooks, and runtime preparation (`buildScripts` or full `build`). **Default** workflow execution runs in **`NodeWorkflowRuntime`**, with **script steps** as managed subprocesses.
 - User-facing CLI no longer exposes a `build` subcommand; full `.sh` emission remains an internal compatibility path only.
 - Contracts: `__JAIPH_EVENT__`, `.jaiph/runs`, `run_summary.jsonl`, hook payloads.

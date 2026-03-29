@@ -12,52 +12,6 @@ Process rules:
 
 ---
 
-## Re-enable inbox dispatch parity coverage (e2e 91) <!-- dev-ready -->
-
-**Goal**  
-Unskip `e2e/tests/91_inbox_dispatch.sh` and restore strict coverage for channel dispatch behavior and events.
-
-**Context**
-
-- Current test is skipped at line 15 with `e2e::skip "Node inbox route dispatch parity is not implemented yet"` followed by `exit 0`.
-- The test defines 10 sections of inbox behavior that are never executed:
-  1. Basic send + route
-  2. Multi-target route
-  3. Undefined channel fails validation
-  4. Inbox file written
-  5. Dispatched step CLI output
-  6. Receiver positional args ($1=message, $2=channel, $3=sender)
-  7. Parallel dispatch: multi-target route
-  8. Parallel dispatch: no duplicate/skipped sequence IDs
-  9. Parallel dispatch: failed target causes workflow failure
-  10. Parallel dispatch: run summary valid under concurrent activity
-  11. Parallel dispatch via `JAIPH_INBOX_PARALLEL` env var
-
-**Key runtime files** (where dispatch logic lives):
-- `src/runtime/kernel/node-workflow-runtime.ts` — `executeRunRef`, dispatch loop (~line 750+), emits `INBOX_DISPATCH_START`/`INBOX_DISPATCH_COMPLETE`
-- `src/runtime/kernel/inbox.ts` — inbox operations, `emitDispatchStart`/`emitDispatchComplete`
-- `src/runtime/kernel/emit.ts` — event emission helpers
-
-**Scope**
-
-1. Read the skipped test sections to understand what runtime behaviors they expect.
-2. Implement or fix missing runtime behavior for channel dispatch parity in the Node runtime:
-   - `send` routing to one/many workflow targets,
-   - receiver argument forwarding ($1=message, $2=channel, $3=sender),
-   - deterministic fanout semantics,
-   - parallel dispatch support (config `run.inbox_parallel = true` and `JAIPH_INBOX_PARALLEL` env var).
-3. Remove the `e2e::skip` + `exit 0` at the top of the test.
-4. Run the test and fix any failures.
-
-**Acceptance criteria**
-
-- e2e 91 is not skipped and passes.
-- Receiver files and payload assertions pass in all 10+ sections.
-- Dispatch lifecycle events (`INBOX_DISPATCH_START`, `INBOX_DISPATCH_COMPLETE`) are emitted correctly.
-- Parallel dispatch works via both `config` and env var.
-
----
-
 ## Restore strict run-summary contract assertions (e2e 88) <!-- dev-ready -->
 
 **Goal**  
