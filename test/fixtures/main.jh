@@ -4,7 +4,7 @@ import "bootstrap_project.jh" as bootstrap
 import "tools/security.jh" as security
 
 # Validates local build prerequisites.
-rule project_ready {
+rule project_ready() {
   run project_ready_impl
 }
 
@@ -14,7 +14,7 @@ script project_ready_impl() {
 }
 
 # Verifies the project compiles successfully.
-rule build_passes {
+rule build_passes() {
   run build_passes_impl
 }
 
@@ -25,7 +25,7 @@ script build_passes_impl() {
 # Orchestrates checks, prompt execution, and docs refresh.
 # Arguments:
 #   $1: Feature requirements passed to the prompt.
-workflow default {
+workflow default() {
   if not ensure project_ready {
     run bootstrap.nodejs
   }
@@ -42,6 +42,6 @@ workflow default {
 }
 
 # Refreshes documentation after a successful build.
-workflow update_docs {
+workflow update_docs() {
   prompt "Update docs"
 }

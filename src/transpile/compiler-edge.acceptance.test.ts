@@ -24,7 +24,7 @@ test("ACCEPTANCE: duplicate import alias fails with E_VALIDATE", () => {
         "script one_impl() {",
         "  echo one",
         "}",
-        "rule one {",
+        "rule one() {",
         "  run one_impl",
         "}",
         "",
@@ -36,7 +36,7 @@ test("ACCEPTANCE: duplicate import alias fails with E_VALIDATE", () => {
         "script two_impl() {",
         "  echo two",
         "}",
-        "rule two {",
+        "rule two() {",
         "  run two_impl",
         "}",
         "",
@@ -48,7 +48,7 @@ test("ACCEPTANCE: duplicate import alias fails with E_VALIDATE", () => {
         'import "a.jh" as mod',
         'import "b.jh" as mod',
         "",
-        "workflow default {",
+        "workflow default() {",
         "  ensure mod.one",
         "}",
         "",
@@ -64,7 +64,7 @@ test("ACCEPTANCE: unknown local rule reference fails deterministically", () => {
     writeFileSync(
       join(root, "main.jh"),
       [
-        "workflow default {",
+        "workflow default() {",
         "  ensure missing_rule",
         "}",
         "",
@@ -80,7 +80,7 @@ test("ACCEPTANCE: unknown import alias in rule reference fails deterministically
     writeFileSync(
       join(root, "main.jh"),
       [
-        "workflow default {",
+        "workflow default() {",
         "  ensure ghost.guard",
         "}",
         "",
@@ -96,7 +96,7 @@ test("ACCEPTANCE: unknown local workflow reference in run fails deterministicall
     writeFileSync(
       join(root, "main.jh"),
       [
-        "workflow default {",
+        "workflow default() {",
         "  run missing_workflow",
         "}",
         "",
@@ -112,7 +112,7 @@ test("ACCEPTANCE: invalid workflow reference shape fails at parse stage", () => 
     writeFileSync(
       join(root, "main.jh"),
       [
-        "workflow default {",
+        "workflow default() {",
         "  run bad.ref.shape",
         "}",
         "",
@@ -131,7 +131,7 @@ test("ACCEPTANCE: imported workflow missing fails with E_VALIDATE", () => {
         "script existing_impl() {",
         "  echo ok",
         "}",
-        "workflow existing {",
+        "workflow existing() {",
         "  run existing_impl",
         "}",
         "",
@@ -142,7 +142,7 @@ test("ACCEPTANCE: imported workflow missing fails with E_VALIDATE", () => {
       [
         'import "lib.jh" as lib',
         "",
-        "workflow default {",
+        "workflow default() {",
         "  run lib.missing",
         "}",
         "",
@@ -155,7 +155,7 @@ test("ACCEPTANCE: imported workflow missing fails with E_VALIDATE", () => {
 
 test("ACCEPTANCE: unterminated rule block reports parse location and code", () => {
   assert.throws(
-    () => parsejaiph("rule bad {\n  echo x\n", "/fake/main.jh"),
+    () => parsejaiph("rule bad() {\n  echo x\n", "/fake/main.jh"),
     /\/fake\/main\.jh:1:1 E_PARSE unterminated rule block: bad/,
   );
 });
@@ -165,7 +165,7 @@ test("ACCEPTANCE: unterminated prompt string fails with E_PARSE", () => {
     writeFileSync(
       join(root, "main.jh"),
       [
-        "workflow default {",
+        "workflow default() {",
         '  prompt "this never closes',
         "}",
         "",
@@ -181,14 +181,14 @@ test("ACCEPTANCE: brace if block must close before workflow ends", () => {
     writeFileSync(
       join(root, "main.jh"),
       [
-        "rule gate {",
+        "rule gate() {",
         "  run gate_impl",
         "}",
         "script gate_impl() {",
         "  false",
         "}",
         "",
-        "workflow default {",
+        "workflow default() {",
         "  if not ensure gate {",
         "    echo fallback",
         "",
@@ -204,18 +204,18 @@ test("ACCEPTANCE: if not ensure then-branch allows mixed prompt and run", () => 
     writeFileSync(
       join(root, "main.jh"),
       [
-        "rule gate {",
+        "rule gate() {",
         "  run gate_impl",
         "}",
         "script gate_impl() {",
         "  false",
         "}",
         "",
-        "workflow fix_build {",
+        "workflow fix_build() {",
         '  prompt "fix build"',
         "}",
         "",
-        "workflow default {",
+        "workflow default() {",
         "  if not ensure gate {",
         '    prompt "recover"',
         "    run fix_build",
@@ -235,14 +235,14 @@ test("ACCEPTANCE: if not ensure then-branch allows mixed prompt and run", () => 
 
 test("ACCEPTANCE: malformed import syntax fails with E_PARSE", () => {
   assert.throws(
-    () => parsejaiph('import "lib.jh"\nworkflow default {\n  echo ok\n}\n', "/fake/main.jh"),
+    () => parsejaiph('import "lib.jh"\nworkflow default() {\n  echo ok\n}\n', "/fake/main.jh"),
     /\/fake\/main\.jh:1:1 E_PARSE import must match: import "<path>" as <alias>/,
   );
 });
 
 test("ACCEPTANCE: unsupported top-level statement fails with E_PARSE", () => {
   assert.throws(
-    () => parsejaiph('echo "not allowed at top level"\nworkflow default {\n  echo ok\n}\n', "/fake/main.jh"),
+    () => parsejaiph('echo "not allowed at top level"\nworkflow default() {\n  echo ok\n}\n', "/fake/main.jh"),
     /\/fake\/main\.jh:1:1 E_PARSE unsupported top-level statement/,
   );
 });
@@ -293,11 +293,11 @@ test("ACCEPTANCE: rule with inline brace group cmd || { ... } fails under strict
     writeFileSync(
       join(root, "main.jh"),
       [
-        "rule example {",
+        "rule example() {",
         '  check_something || { echo "failed"; exit 1; }',
         "}",
         "",
-        "workflow default {",
+        "workflow default() {",
         "  ensure example",
         "}",
         "",
@@ -315,14 +315,14 @@ test("ACCEPTANCE: rule with multi-line || { ... } fails under strict shell-step 
     writeFileSync(
       join(root, "main.jh"),
       [
-        "rule example {",
+        "rule example() {",
         "  check_something || {",
         '    echo "failed"',
         "    exit 1",
         "  }",
         "}",
         "",
-        "workflow default {",
+        "workflow default() {",
         "  ensure example",
         "}",
         "",
@@ -340,7 +340,7 @@ test("ACCEPTANCE: workflow shell step with || { ... } fails under strict shell-s
     writeFileSync(
       join(root, "main.jh"),
       [
-        "workflow default {",
+        "workflow default() {",
         '  cmd || { echo "failed"; exit 1; }',
         "}",
         "",
@@ -358,14 +358,14 @@ test("ACCEPTANCE: if not ensure { } + inline shell short-circuit fails under str
     writeFileSync(
       join(root, "main.jh"),
       [
-        "rule gate {",
+        "rule gate() {",
         "  run gate_impl",
         "}",
         "script gate_impl() {",
         "  true",
         "}",
         "",
-        "workflow default {",
+        "workflow default() {",
         "  if not ensure gate {",
         "    echo fallback",
         "  }",
@@ -384,7 +384,7 @@ test("ACCEPTANCE: if not ensure { } + inline shell short-circuit fails under str
 test("ACCEPTANCE: prompt with returns schema (single-line) parses and emits typed capture", () => {
   const mod = parsejaiph(
     [
-      "workflow default {",
+      "workflow default() {",
       '  result = prompt "Analyse the diff" returns \'{ type: string, risk: string }\'',
       "}",
       "",
@@ -402,7 +402,7 @@ test("ACCEPTANCE: prompt with returns schema (single-line) parses and emits type
     writeFileSync(
       join(root, "main.jh"),
       [
-        "workflow default {",
+        "workflow default() {",
         '  result = prompt "Analyse" returns \'{ type: string, risk: string }\'',
         '  return "${result}"',
         "}",
@@ -420,7 +420,7 @@ test("ACCEPTANCE: prompt with returns schema (single-line) parses and emits type
 // Multiline returns: continuation with \ then returns '{ ... }' on next line. Skip: parser line continuation needs debugging.
 test("ACCEPTANCE: prompt with returns schema (multiline continuation) parses", () => {
   const src = [
-    "workflow default {",
+    "workflow default() {",
     '  result = prompt "Analyse" \\',
     "    returns '{ type: string, risk: string }'",
     "}",
@@ -440,7 +440,7 @@ test("ACCEPTANCE: unsupported type in returns schema fails with E_SCHEMA", () =>
     writeFileSync(
       join(root, "main.jh"),
       [
-        "workflow default {",
+        "workflow default() {",
         '  result = prompt "x" returns \'{ foo: array }\'',
         "}",
         "",
@@ -455,7 +455,7 @@ test("ACCEPTANCE: prompt with returns without capture name fails with E_PARSE", 
     writeFileSync(
       join(root, "main.jh"),
       [
-        "workflow default {",
+        "workflow default() {",
         '  prompt "x" returns \'{ a: string }\'',
         "}",
         "",
@@ -474,7 +474,7 @@ test("ACCEPTANCE: jaiph test typed prompt — valid JSON passes and raw result i
     writeFileSync(
       join(root, "flow.jh"),
       [
-        "workflow default {",
+        "workflow default() {",
         '  result = prompt "classify" returns \'{ type: string, risk: string }\'',
         '  return "raw=${result}"',
         "}",
@@ -513,7 +513,7 @@ test("ACCEPTANCE: jaiph test typed prompt — invalid JSON fails with parse erro
     writeFileSync(
       join(root, "flow.jh"),
       [
-        "workflow default {",
+        "workflow default() {",
         '  result = prompt "classify" returns \'{ type: string }\'',
         '  log "done"',
         "}",
@@ -553,7 +553,7 @@ test("ACCEPTANCE: jaiph test typed prompt — missing field fails with schema er
     writeFileSync(
       join(root, "flow.jh"),
       [
-        "workflow default {",
+        "workflow default() {",
         '  result = prompt "classify" returns \'{ type: string, risk: string }\'',
         '  log "done"',
         "}",
@@ -594,7 +594,7 @@ test("ACCEPTANCE: jaiph test typed prompt — wrong type fails", () => {
     writeFileSync(
       join(root, "flow.jh"),
       [
-        "workflow default {",
+        "workflow default() {",
         '  result = prompt "classify" returns \'{ type: string, risk: string }\'',
         '  log "done"',
         "}",
@@ -637,7 +637,7 @@ test("ACCEPTANCE: route with unknown workflow fails E_VALIDATE", () => {
       join(root, "main.jh"),
       [
         "channel findings",
-        "workflow default {",
+        "workflow default() {",
         "  findings -> missing_wf",
         "}",
         "",
@@ -653,13 +653,13 @@ test("ACCEPTANCE: route with rule ref fails E_VALIDATE", () => {
       join(root, "main.jh"),
       [
         "channel findings",
-        "rule check {",
+        "rule check() {",
         "  run check_impl",
         "}",
         "script check_impl() {",
         "  true",
         "}",
-        "workflow default {",
+        "workflow default() {",
         "  findings -> check",
         "}",
         "",
@@ -674,7 +674,7 @@ test("ACCEPTANCE: capture + send is parse error", () => {
     writeFileSync(
       join(root, "main.jh"),
       [
-        "workflow default {",
+        "workflow default() {",
         "  name = channel <- echo hello",
         "}",
         "",
@@ -705,7 +705,7 @@ test("ACCEPTANCE: inbox.jh fixture builds successfully", () => {
         '  echo "[reviewed] $1"',
         "}",
         "",
-        "workflow researcher {",
+        "workflow researcher() {",
         "  findings <- run emit_findings",
         "}",
         "",
@@ -713,17 +713,17 @@ test("ACCEPTANCE: inbox.jh fixture builds successfully", () => {
         '  echo "$1" > findings_file.md',
         "}",
         "",
-        "workflow analyst {",
+        "workflow analyst() {",
         '  run write_findings_file "${arg1}"',
         '  summary = run summarize_findings',
         '  summary <- "${summary}"',
         "}",
         "",
-        "workflow reviewer {",
+        "workflow reviewer() {",
         '  final_summary <- run review_summary "${arg1}"',
         "}",
         "",
-        "workflow default {",
+        "workflow default() {",
         "  run researcher",
         "  findings -> analyst",
         "  summary -> reviewer",
@@ -747,14 +747,14 @@ test("ACCEPTANCE: ensure recover with args after recover fails with E_PARSE", ()
     writeFileSync(
       join(root, "main.jh"),
       [
-        "rule ci_passes {",
+        "rule ci_passes() {",
         "  run ci_passes_impl",
         "}",
         "script ci_passes_impl() {",
         "  true",
         "}",
         "",
-        "workflow default {",
+        "workflow default() {",
         '  ensure ci_passes recover "$repo_dir" {',
         '    prompt "Apply the smallest safe fix."',
         "  }",
@@ -774,11 +774,11 @@ test("ACCEPTANCE: ensure recover with multiple args after recover fails with E_P
     writeFileSync(
       join(root, "main.jh"),
       [
-        "rule some_rule {",
+        "rule some_rule() {",
         "  true",
         "}",
         "",
-        "workflow default {",
+        "workflow default() {",
         '  ensure some_rule "a" recover "b" {',
         '    log "should not parse"',
         "  }",
@@ -798,11 +798,11 @@ test("ACCEPTANCE: ensure recover without block fails with E_PARSE", () => {
     () =>
       parsejaiph(
         [
-          "rule ci_passes {",
+          "rule ci_passes() {",
           "  true",
           "}",
           "",
-          "workflow default {",
+          "workflow default() {",
           '  ensure ci_passes "$repo_dir" recover',
           "}",
           "",
@@ -818,18 +818,18 @@ test("ACCEPTANCE: valid ensure recover block still works", () => {
     writeFileSync(
       join(root, "main.jh"),
       [
-        "rule ci_passes {",
+        "rule ci_passes() {",
         "  run ci_passes_impl",
         "}",
         "script ci_passes_impl() {",
         "  true",
         "}",
         "",
-        "workflow fix_it {",
+        "workflow fix_it() {",
         '  prompt "fix"',
         "}",
         "",
-        "workflow default {",
+        "workflow default() {",
         '  ensure ci_passes "$repo_dir" recover {',
         "    run fix_it",
         "  }",

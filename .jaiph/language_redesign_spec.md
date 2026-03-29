@@ -107,7 +107,7 @@ script check_hash(file_path, expected_hash) { ... }
   - `run implement "$task" "$role_name"` — positional, mapped by declaration order.
   - `run implement task="$task" role_name="$role_name"` — named (already partially supported via `parseParamKeysFromArgs`).
 - **Arity validation**: the validator can check call sites against the declaration. `run implement` with zero args when `implement` declares two required params is a validation error.
-- **Parentheses are optional**: `workflow default { ... }` (no params) remains valid. Constructs with params use `name(params) { ... }`.
+- **Parentheses are optional**: `workflow default() { ... }` (no params) remains valid. Constructs with params use `name(params) { ... }`.
 
 ## Script Isolation and Transpilation Model
 
@@ -213,7 +213,7 @@ A rule that completes without hitting `fail` passes.
 Before:
 
 ```
-rule ensure_is_number {
+rule ensure_is_number() {
   if ! [[ "$1" =~ ^[0-9]+$ ]]; then
     echo "Expected a non-negative integer, got: $1" >&2
     exit 1
@@ -240,7 +240,7 @@ rule ensure_is_number(value) {
 Before:
 
 ```
-workflow default {
+workflow default() {
   n="${1:-10}"
   ensure ensure_is_number "$n"
   result = run fib "$n"
@@ -308,7 +308,7 @@ script validate_json_schema(schema_path, data_path) {
   }
 }
 
-workflow validate_config {
+workflow validate_config() {
   ensure config_file_exists
   const result = run validate_json_schema "schema.json" "config.json"
   log "Config validated successfully"
@@ -323,7 +323,7 @@ Before:
 local role_surgical = "<role>...</role>"
 local role_reductionist = "<role>...</role>"
 
-workflow implement {
+workflow implement() {
   local role_name="$2"
   local role
   if [ "$role_name" = "surgical" ]; then
@@ -371,7 +371,7 @@ Role data is internal to the script. Orchestration only passes the role name and
 Before:
 
 ```
-workflow scanner {
+workflow scanner() {
   findings <- echo "Found 3 issues in auth module"
 }
 ```
@@ -379,7 +379,7 @@ workflow scanner {
 After:
 
 ```
-workflow scanner {
+workflow scanner() {
   findings <- "Found 3 issues in auth module"
 }
 ```
@@ -389,7 +389,7 @@ workflow scanner {
 Before:
 
 ```
-rule echo_line {
+rule echo_line() {
   echo "this goes to logs only"
   return "captured-value"
 }
@@ -402,7 +402,7 @@ script echo_impl() {
   echo "this goes to logs only" >&2
 }
 
-rule echo_line {
+rule echo_line() {
   run echo_impl
   return "captured-value"
 }
@@ -451,7 +451,7 @@ workflow process_docs_recursive(file, remaining) {
   }
 }
 
-workflow default {
+workflow default() {
   const docs_files = run list_docs_files
   const first = run first_line "$docs_files"
   const rest = run rest_lines "$docs_files"
@@ -497,7 +497,7 @@ workflow review_single_task(header) {
   }
 }
 
-workflow default {
+workflow default() {
   const headers = run queue.get_all_task_headers
   # recurse over headers (or use `each` when available)
   ...
@@ -573,7 +573,7 @@ script ci_log_exists(path) {
   [ -s "$path" ]
 }
 
-workflow ensure_ci_passes {
+workflow ensure_ci_passes() {
   const ci_log_file = ".jaiph/tmp/ensure_ci_passes.last.log"
   run mkdir_p ".jaiph/tmp"
 
@@ -702,7 +702,7 @@ script check_only_expected_changed(allowed, changed) {
 - Transpiler: for workflows/rules, emit `local param1="$1"; local param2="$2"` (or `"${2:-default}"` for defaults) at the top of the function body. For bash scripts, prepend the same to the script file. For non-bash scripts, params are documentary only.
 - Validator: check call-site arity against declared params. Missing required args = validation error. Extra args beyond declared params = validation warning.
 - Update all first-party `.jh` files to use named params where applicable
-- Parentheses optional when no params: `workflow default { ... }` remains valid
+- Parentheses optional when no params: `workflow default() { ... }` remains valid
 
 ### Phase 4: Script isolation
 

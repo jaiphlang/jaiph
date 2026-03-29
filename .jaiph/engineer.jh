@@ -177,7 +177,7 @@ script first_line_task() {
   printf '%s\n' "$line"
 }
 
-workflow classify_role {
+workflow classify_role() {
   const result = prompt "
     Classify this task into the single best-fit engineer role.
 
@@ -208,7 +208,7 @@ script mkdir_p_simple() {
   mkdir -p "$1"
 }
 
-workflow implement {
+workflow implement() {
   const task = "${arg1}"
   const role_name = "${arg2}"
   if not run task_text_has_header "${task}" {
@@ -281,7 +281,7 @@ workflow implement {
   "
 }
 
-workflow print_commit_message {
+workflow print_commit_message() {
   const response = prompt "
     Provide me with a suggested commit message for the current changes.
 
@@ -294,7 +294,7 @@ workflow print_commit_message {
   log "Suggested commit message:\n\n${response_message}\n"
 }
 
-workflow default {
+workflow default() {
   const role_arg = "${arg1}"
   # ensure git.is_clean
   const task = run queue.get_first_task

@@ -22,15 +22,15 @@ script write_b() {
   echo "b" > b.txt
 }
 
-workflow do_a {
+workflow do_a() {
   run write_a
 }
 
-workflow do_b {
+workflow do_b() {
   run write_b
 }
 
-workflow default {
+workflow default() {
   run async do_a
   run async do_b
   log "done"
@@ -51,15 +51,15 @@ e2e::assert_contains "$run_output" "done" "log after async steps runs when all s
 e2e::section "run async multi-failure aggregation"
 
 e2e::file "multi_fail.jh" <<'EOF'
-workflow fail_a {
+workflow fail_a() {
   fail "error-a"
 }
 
-workflow fail_b {
+workflow fail_b() {
   fail "error-b"
 }
 
-workflow default {
+workflow default() {
   run async fail_a
   run async fail_b
 }
@@ -87,11 +87,11 @@ script write_marker() {
   echo "ran" > sync_marker.txt
 }
 
-workflow slow {
+workflow slow() {
   log "slow-done"
 }
 
-workflow default {
+workflow default() {
   run async slow
   run write_marker
 }
@@ -109,11 +109,11 @@ e2e::pass "sync steps run before implicit join"
 e2e::section "capture + run async parse error"
 
 e2e::file "capture_async.jh" <<'EOF'
-workflow helper {
+workflow helper() {
   log "hi"
 }
 
-workflow default {
+workflow default() {
   x = run async helper
 }
 EOF
@@ -141,15 +141,15 @@ script write_y() {
   echo "y" > y.txt
 }
 
-workflow branch_x {
+workflow branch_x() {
   run write_x
 }
 
-workflow branch_y {
+workflow branch_y() {
   run write_y
 }
 
-workflow default {
+workflow default() {
   run async branch_x
   run async branch_y
 }

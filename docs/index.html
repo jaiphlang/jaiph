@@ -157,14 +157,14 @@ script arg_is_non_empty() {
   test -n "$1"
 }
 
-rule name_was_provided {
+rule name_was_provided() {
   if not run arg_is_non_empty "${arg1}" {
     logerr "You didn't provide your name :("
     fail "You didn't provide your name"
   }
 }
 
-workflow default {
+workflow default() {
   ensure name_was_provided "${arg1}"
 
   const response = prompt "
@@ -278,7 +278,7 @@ script npm_run_test_ci() {
   npm run test:ci
 }
 
-rule ci_passes {
+rule ci_passes() {
   run npm_run_test_ci
 }
 
@@ -286,7 +286,7 @@ script save_string_to_file() {
   printf '%s' "$1" > "$2"
 }
 
-workflow default {
+workflow default() {
   ensure ci_passes recover {
     run save_string_to_file "${arg1}" ".jaiph/tmp/ci_failure.log"
     prompt "The CI check failed. Failure output is in .jaiph/tmp/ci_failure.log — fix the code so npm run test:ci passes."
@@ -325,11 +325,11 @@ Jaiph: Running ensure_ci_passes.jh
 channel findings
 channel report
 
-workflow scanner {
+workflow scanner() {
   findings <- "Found 3 issues in auth module"
 }
 
-workflow analyst {
+workflow analyst() {
   report <- "Summary: ${arg1}"
 }
 
@@ -337,11 +337,11 @@ script print_reviewed() {
   echo "[reviewed] $1"
 }
 
-workflow reviewer {
+workflow reviewer() {
   run print_reviewed "${arg1}"
 }
 
-workflow default {
+workflow default() {
   run scanner
   findings -> analyst
   report -> reviewer
@@ -370,7 +370,7 @@ Jaiph: Running agent_inbox.jh
 
 const prompt_text = 'Say: "Greetings! I am [model name]."'
 
-workflow cursor_say_hello {
+workflow cursor_say_hello() {
   config {
     agent.backend = "cursor"
   }
@@ -378,7 +378,7 @@ workflow cursor_say_hello {
   log "${response}"
 }
 
-workflow claude_say_hello {
+workflow claude_say_hello() {
   config {
     agent.backend = "claude"
   }
@@ -386,7 +386,7 @@ workflow claude_say_hello {
   log "${response}"
 }
 
-workflow default {
+workflow default() {
   run async cursor_say_hello "${arg1}"
   run async claude_say_hello "${arg1}"
 }</code></pre>
@@ -519,7 +519,7 @@ Jaiph: Running async.jh
                         shared by
                         rules, scripts, and workflows in the same file.</dd>
 
-                    <dt><code>rule name { ... }</code> &middot; <code>workflow name { ... }</code> &middot;
+                    <dt><code>rule name() { ... }</code> &middot; <code>workflow name() { ... }</code> &middot;
                         <code>script name() { ... }</code>
                     </dt>
                     <dd><code>rule</code> is for reusable checks (Jaiph structured steps; used with

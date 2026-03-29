@@ -16,7 +16,7 @@ e2e::file "artifacts_fail.jh" <<'EOF'
 script ok_step_impl() {
   echo "ok-out"
 }
-rule ok_step {
+rule ok_step() {
   run ok_step_impl
 }
 
@@ -25,11 +25,11 @@ script failing_step_impl() {
   echo "bad-err" >&2
   exit 1
 }
-rule failing_step {
+rule failing_step() {
   run failing_step_impl
 }
 
-workflow default {
+workflow default() {
   ensure ok_step
   ensure failing_step
 }
@@ -69,7 +69,7 @@ e2e::file "prompt_then_script.jh" <<'EOF'
 script echo_line_impl() {
   echo "script-step-out"
 }
-workflow default {
+workflow default() {
   _ = prompt "e2e-artifacts-prompt-line"
   run echo_line_impl
 }

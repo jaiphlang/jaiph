@@ -187,7 +187,7 @@ config {
   ]
 }
 
-workflow default {
+workflow default() {
   echo "Running inside Docker"
 }
 ```

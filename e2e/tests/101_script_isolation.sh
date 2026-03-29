@@ -20,7 +20,7 @@ script leak_check() {
   echo "secret=${secret:-EMPTY}"
 }
 
-workflow default {
+workflow default() {
   run leak_check
 }
 EOF
@@ -47,7 +47,7 @@ script check_lib() {
   echo "lib=${JAIPH_LIB:-UNSET}"
 }
 
-workflow default {
+workflow default() {
   run check_lib
 }
 EOF
@@ -82,7 +82,7 @@ script use_lib() {
   test_util_greeting
 }
 
-workflow default {
+workflow default() {
   run use_lib
 }
 EOF
@@ -113,7 +113,7 @@ script caller() {
   helper
 }
 
-workflow default {
+workflow default() {
   run caller
 }
 EOF

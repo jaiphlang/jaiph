@@ -23,11 +23,11 @@ script slow_writer_impl() {
   echo "line-3"
   echo "err-3" >&2
 }
-rule slow_writer {
+rule slow_writer() {
   run slow_writer_impl
 }
 
-workflow default {
+workflow default() {
   ensure slow_writer
 }
 WORKFLOW

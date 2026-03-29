@@ -55,7 +55,7 @@ script non_empty() {
 }
 
 # Validates local build prerequisites.
-rule project_ready {
+rule project_ready() {
   if not run file_exists "package.json" {
     fail "expected package.json"
   }
@@ -69,14 +69,14 @@ script npm_run_build() {
 }
 
 # Verifies the project compiles successfully.
-rule build_passes {
+rule build_passes() {
   run npm_run_build
 }
 
 # Orchestrates checks, prompt execution, and docs refresh.
 # Arguments:
 #   ${arg1}: Feature requirements passed to the prompt.
-workflow default {
+workflow default() {
   if not ensure project_ready {
     run bootstrap.nodejs
   }
@@ -93,7 +93,7 @@ workflow default {
 }
 
 # Refreshes documentation after a successful build.
-workflow update_docs {
+workflow update_docs() {
   prompt "Update docs"
 }
 ```
@@ -108,7 +108,7 @@ Run a sample workflow without installing anything first — the script installs 
 
 ```bash
 curl -fsSL https://jaiph.org/run | bash -s '
-workflow default {
+workflow default() {
   const response = prompt "Say: Hello I'\''m [model name]!"
   log "${response}"
 }'
@@ -184,9 +184,9 @@ Jaiph source files use the **`.jh`** extension. A file contains **rules**, **wor
 - `config { ... }` — Optional block setting runtime options (agent backend, model, Docker sandbox, etc.). Allowed at the top level (module-wide) and inside individual workflows for per-workflow overrides (`agent.*` and `run.*` keys only). See [Configuration](configuration.md).
 - `import "path" as alias` — Import rules, workflows, and scripts from another module. The path may include a `.jh` suffix or omit it (the compiler appends `.jh`). Verified at compile time.
 - `local name = value` / `const name = value` — Module-scoped variable, accessible as `${name}` in rules and workflows within the module (scripts are isolated and do not inherit these — pass data as arguments or use shared libraries). Prefer **`const`** in new orchestration code.
-- `rule name { ... }` — Reusable check: **Jaiph structured steps only** (subset: `ensure` for rules, `run` for **scripts**, `const`, brace `if`, `fail`, `log`/`logerr`, `return "…"`). Rules run in an isolated child shell; on Linux, a read-only mount namespace is used when `unshare` and passwordless `sudo` are available, otherwise the same child-shell fallback as on other platforms. Optional `export` for cross-module access.
-- `workflow name { ... }` — Orchestration entrypoint: **Jaiph steps only** (no raw shell — extract bash to `script` + `run`). Can change system state. Optional `export` for cross-module access.
-- `script name { ... }` — Bash helper (no `run`/`ensure`/routes; no Jaiph `fail`/`const`/`log`/`logerr`/`return "…"`). From a **workflow** or **rule**, call with **`run name`**; string capture uses **stdout**. The `()` after the name is optional (`script name() { ... }` also works). **Isolation:** Scripts run in a clean environment — they receive only positional arguments and essential system / Jaiph variables (`JAIPH_LIB`, `JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`); module-scoped `local` / `const` are **not** inherited. Use `source "$JAIPH_LIB/…"` for shared utilities. Scripts cannot call other Jaiph scripts (compose in a workflow instead). **Polyglot scripts:** if the first body line is a shebang (e.g. `#!/usr/bin/env node`), the script is emitted with that interpreter and Jaiph keyword validation is skipped. Without a shebang, `#!/usr/bin/env bash` is used. Scripts are compiled as separate executable files under `build/scripts/`.
+- `rule name() { ... }` — Reusable check: **Jaiph structured steps only** (subset: `ensure` for rules, `run` for **scripts**, `const`, brace `if`, `fail`, `log`/`logerr`, `return "…"`). Rules run in an isolated child shell; on Linux, a read-only mount namespace is used when `unshare` and passwordless `sudo` are available, otherwise the same child-shell fallback as on other platforms. Optional `export` for cross-module access.
+- `workflow name() { ... }` — Orchestration entrypoint: **Jaiph steps only** (no raw shell — extract bash to `script` + `run`). Can change system state. Optional `export` for cross-module access.
+- `script name() { ... }` — Bash helper (no `run`/`ensure`/routes; no Jaiph `fail`/`const`/`log`/`logerr`/`return "…"`). From a **workflow** or **rule**, call with **`run name`**; string capture uses **stdout**. The `()` after the name is optional (`script name() { ... }` also works). **Isolation:** Scripts run in a clean environment — they receive only positional arguments and essential system / Jaiph variables (`JAIPH_LIB`, `JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`); module-scoped `local` / `const` are **not** inherited. Use `source "$JAIPH_LIB/…"` for shared utilities. Scripts cannot call other Jaiph scripts (compose in a workflow instead). **Polyglot scripts:** if the first body line is a shebang (e.g. `#!/usr/bin/env node`), the script is emitted with that interpreter and Jaiph keyword validation is skipped. Without a shebang, `#!/usr/bin/env bash` is used. Scripts are compiled as separate executable files under `build/scripts/`.
 - `ensure ref [args...]` — Execute a rule; optional `recover` for bounded retry loops (default max retries **10**, overridable with **`JAIPH_ENSURE_MAX_RETRIES`**). See [Grammar](grammar.md).
 - `run ref [args...]` — In a **workflow**, run another workflow or a script. In a **rule**, run a **script** only.
 - `prompt "..."` — Send text to the configured agent. Optional `returns '{ field: type }'` for validated JSON responses. See [Grammar](grammar.md).
@@ -246,7 +246,7 @@ Every `script` block requires an explicit name — anonymous (unnamed) script bl
 
 ```jaiph
 script check_port() { nc -z localhost "$1"; }
-workflow default { if not run check_port "8080" { fail "port closed" } }
+workflow default() { if not run check_port "8080" { fail "port closed" } }
 ```
 
 Runtime behavior (progress tree, step output, run logs) is documented in [CLI Reference](cli.md). To browse past and in-progress runs in a browser, use [Reporting server](reporting.md). For agent backend configuration, see [Configuration](configuration.md). For Docker sandboxing (beta), see [Sandboxing](sandboxing.md). For testing workflows with mocks and assertions, see [Testing](testing.md). For lifecycle hooks, see [Hooks](hooks.md).

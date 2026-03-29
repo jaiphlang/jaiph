@@ -19,11 +19,11 @@ export PATH="${E2E_MOCK_BIN}:${PATH}"
 e2e::file "loop_prompts.jh" <<'EOF'
 #!/usr/bin/env jaiph
 
-workflow review {
+workflow review() {
   prompt "${arg1}"
 }
 
-workflow default {
+workflow default() {
   first = run review "alpha"
   second = run review "beta"
   third = run review "gamma"

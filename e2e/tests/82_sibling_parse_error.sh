@@ -13,13 +13,13 @@ e2e::section "Single-file run ignores sibling parse errors"
 
 # Given
 e2e::file "valid.jh" <<'EOF'
-workflow default {
+workflow default() {
   echo "valid-ok"
 }
 EOF
 
 e2e::file "broken.jh" <<'EOF'
-workflow broken {
+workflow broken() {
   name = echo "oops" -> bad
 }
 EOF

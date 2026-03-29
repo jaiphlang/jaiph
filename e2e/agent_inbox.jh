@@ -3,19 +3,19 @@
 channel findings
 channel report
 
-workflow scanner {
+workflow scanner() {
   findings <- echo "Found 3 issues in auth module"
 }
 
-workflow analyst {
+workflow analyst() {
   report <- echo "Summary: $1"
 }
 
-workflow reviewer {
+workflow reviewer() {
   log "[reviewed] ${arg1}"
 }
 
-workflow default {
+workflow default() {
   run scanner
   findings -> analyst
   report -> reviewer

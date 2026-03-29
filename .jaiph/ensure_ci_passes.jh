@@ -5,7 +5,7 @@ config {
   agent.cursor_flags = "--force"
 }
 
-rule ci_passes {
+rule ci_passes() {
   run npm_run_test_ci
 }
 
@@ -24,7 +24,7 @@ script assert_nonempty_file_or_fail() {
   }
 }
 
-workflow ensure_ci_passes {
+workflow ensure_ci_passes() {
   const ci_log_dir = ".jaiph/tmp"
   const ci_log_file = "${ci_log_dir}/ensure_ci_passes.last.log"
   run mkdir_p_simple "${ci_log_dir}"
@@ -67,6 +67,6 @@ script rm_file_simple() {
   rm -f "$1"
 }
 
-workflow default {
+workflow default() {
   run ensure_ci_passes
 }

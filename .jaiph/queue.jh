@@ -92,7 +92,7 @@ script arg_nonempty() {
   [ -n "${1:-}" ]
 }
 
-workflow get_first_task {
+workflow get_first_task() {
   const qf = run queue_file_path
   if not run file_exists "${qf}" {
     fail "missing queue file"
@@ -105,7 +105,7 @@ workflow get_first_task {
   return "${task}"
 }
 
-rule task_is_dev_ready {
+rule task_is_dev_ready() {
   run task_contains_dev_ready_marker "${arg1}"
 }
 
@@ -178,7 +178,7 @@ script squeeze_consecutive_blanks_queue() {
   rm -f "${qf}.bak"
 }
 
-workflow remove_completed_task {
+workflow remove_completed_task() {
   const h = "${arg1}"
   if not run arg_nonempty "${h}" {
     fail "header required"

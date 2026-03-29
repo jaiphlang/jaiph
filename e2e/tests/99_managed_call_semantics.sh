@@ -21,7 +21,7 @@ script print_capture() {
   echo "out=x=$1"
 }
 
-workflow default {
+workflow default() {
   x = run give
   run print_capture "$x"
 }
@@ -57,7 +57,7 @@ e2e::file "direct_fn.jh" <<'EOF'
 script f() {
   return "x"
 }
-workflow default {
+workflow default() {
   f
 }
 EOF
@@ -73,7 +73,7 @@ e2e::file "sub_fn.jh" <<'EOF'
 script f() {
   return "x"
 }
-workflow default {
+workflow default() {
   x="$(f)"
 }
 EOF
@@ -90,13 +90,13 @@ script ok_impl() {
   true
 }
 
-rule ok {
+rule ok() {
   run ok_impl
 }
-workflow child {
+workflow child() {
   ensure ok
 }
-workflow default {
+workflow default() {
   ensure ok
   run child
 }

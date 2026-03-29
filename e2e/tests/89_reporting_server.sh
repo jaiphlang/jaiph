@@ -27,7 +27,7 @@ e2e::file "reporting_probe.jh" <<'EOF'
 script agg_line_impl() {
   echo "agg-line"
 }
-workflow default {
+workflow default() {
   run agg_line_impl
 }
 EOF

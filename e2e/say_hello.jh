@@ -7,11 +7,11 @@ script name_was_provided_impl() {
   fi
 }
 
-rule name_was_provided {
+rule name_was_provided() {
   run name_was_provided_impl "${arg1}"
 }
 
-workflow default {
+workflow default() {
   ensure name_was_provided "${arg1}"
 
   response = prompt "

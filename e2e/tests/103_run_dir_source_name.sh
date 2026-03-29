@@ -16,7 +16,7 @@ e2e::file "source_named.jh" <<'EOF'
 script done_impl() {
   echo done
 }
-workflow default {
+workflow default() {
   run done_impl
 }
 EOF

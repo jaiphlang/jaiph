@@ -22,10 +22,10 @@ config {
 script ok_impl() {
   echo ok
 }
-rule ok {
+rule ok() {
   run ok_impl
 }
-workflow default {
+workflow default() {
   ensure ok
 }
 EOF
@@ -52,10 +52,10 @@ config {
 script ok_impl() {
   echo ok
 }
-rule ok {
+rule ok() {
   run ok_impl
 }
-workflow default {
+workflow default() {
   ensure ok
 }
 EOF

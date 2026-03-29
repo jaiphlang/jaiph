@@ -17,7 +17,7 @@ test("multiple test blocks with test_run_workflow share a single graph build", a
     const testFile = join(dir, "multi.test.jh");
     writeFileSync(
       testFile,
-      `workflow greet {
+      `workflow greet() {
   log "hello"
 }
 

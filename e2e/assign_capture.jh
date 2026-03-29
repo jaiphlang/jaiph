@@ -12,11 +12,11 @@ script format_output() {
   printf '%s\n' "response=$1" "out=$2"
 }
 
-rule echo_line {
+rule echo_line() {
   run echo_line_impl
   return "captured-value"
 }
-workflow default {
+workflow default() {
   response = ensure echo_line
   out = run shell_capture
   run format_output "${response}" "${out}"
