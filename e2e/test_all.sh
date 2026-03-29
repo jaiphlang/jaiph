@@ -48,6 +48,7 @@ TEST_SCRIPTS=(
   "e2e/tests/101_script_isolation.sh"
   "e2e/tests/102_engineer_recover_contract.sh"
   "e2e/tests/103_run_dir_source_name.sh"
+  "e2e/tests/104_run_async.sh"
 )
 
 PASS_COUNT=0

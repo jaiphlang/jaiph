@@ -19,7 +19,6 @@ workflow claude_say_hello {
 }
 
 workflow default {
-  run cursor_say_hello "$1" &
-  run claude_say_hello "$1" &
-  wait
+  run async cursor_say_hello "$1"
+  run async claude_say_hello "$1"
 }

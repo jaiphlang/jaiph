@@ -291,7 +291,7 @@ workflow print_commit_message {
     3. Write a body paragraph with more details about the change.
   " returns '{ message: string }'
 
-  log "Suggested commit message:\\n\\n$response_message\\n"
+  log "Suggested commit message:\n\n$response_message\n"
 }
 
 workflow default {
@@ -300,7 +300,7 @@ workflow default {
   const task = run queue.get_first_task
   const task_header = run first_line_task "$task"
   ensure queue.task_is_dev_ready "$task"
-  log "Task: $task"
+  log "Implementing task: $task_header"
 
   if not run arg_nonempty "$role_arg" {
     const role_name = run classify_role "$task"
