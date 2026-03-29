@@ -67,7 +67,7 @@ All orchestration — local `jaiph run`, `jaiph test`, and **Docker `jaiph run`*
 
 ## Contracts
 
-- **Live contract (runtime -> CLI):** `__JAIPH_EVENT__` JSON lines on **stderr** by default; **`jaiph run` in Docker** also scans container **stdout** for the same event shapes (see `src/cli/commands/run.ts`).
+- **Live contract (runtime -> CLI):** `__JAIPH_EVENT__` JSON lines on **stderr only** — the single event channel for all modes (local and Docker). The CLI listens on stderr exclusively; stdout carries only plain script output.
 - **Durable contract:** `.jaiph/runs/...` + `run_summary.jsonl`.
 
 Channel transport remains file/queue based in runtime inbox logic.
@@ -129,7 +129,7 @@ flowchart TD
     RT -->|script steps| SCRIPT[Managed script subprocesses]
     RT -->|prompt steps| KERNEL[JS kernel: prompt / emit / inbox / stream / schema / mock]
 
-    RT -->|live events| EV["__JAIPH_EVENT__ stderr or stdout in Docker"]
+    RT -->|live events| EV["__JAIPH_EVENT__ stderr only"]
     EV --> CLI
     CLI --> PR[Progress rendering]
 
@@ -167,7 +167,7 @@ sequenceDiagram
         CLI->>Runner: spawn detached node-workflow-runner
     else Docker
         CLI->>Runner: spawn container running node-workflow-runner
-        Note over CLI: CLI parses events on stderr and stdout
+        Note over CLI: CLI parses events on stderr only
     end
     Runner->>Graph: buildRuntimeGraph(sourceAbs) parse-only
     Graph-->>Runner: RuntimeGraph

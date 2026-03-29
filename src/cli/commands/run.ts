@@ -22,7 +22,6 @@ import {
 import { detectWorkspaceRoot } from "../shared/paths";
 import type { SourceMapCache } from "../shared/jaiph-source-map";
 import { parseArgs } from "../shared/usage";
-import { parseLogEvent, parseStepEvent } from "../run/events";
 import {
   spawnRunProcess,
   setupRunSignalHandlers,
@@ -134,9 +133,9 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     const onLine = createStderrParser(emitter, { sourceMapCache });
     const buf: StreamBuffers = { stdout: "", stderr: "" };
 
-    wireStreams(execResult, activeDockerConfig.enabled, onLine, buf, ttyCtx);
+    wireStreams(execResult, onLine, buf, ttyCtx);
     const childExit = await waitForRunExit(execResult, () => signalHandlers.remove());
-    drainBuffers(activeDockerConfig.enabled, onLine, buf, ttyCtx);
+    drainBuffers(onLine, buf, ttyCtx);
 
     if (dockerResult) {
       const timedOut = dockerResult.timeoutTimer === undefined && activeDockerConfig.timeout > 0
@@ -228,7 +227,6 @@ type StreamBuffers = { stdout: string; stderr: string };
 
 function wireStreams(
   execResult: ReturnType<typeof spawnRunProcess>,
-  isDocker: boolean,
   onLine: (line: string) => void,
   buf: StreamBuffers,
   ttyCtx: TTYContext,
@@ -236,26 +234,9 @@ function wireStreams(
   execResult.stdout?.setEncoding("utf8");
   execResult.stderr?.setEncoding("utf8");
 
-  if (isDocker) {
-    execResult.stdout?.on("data", (chunk: string) => {
-      buf.stdout += chunk;
-      let idx = buf.stdout.indexOf("\n");
-      while (idx !== -1) {
-        const line = buf.stdout.slice(0, idx).replace(/\r$/, "");
-        buf.stdout = buf.stdout.slice(idx + 1);
-        if (parseLogEvent(line) || parseStepEvent(line)) {
-          onLine(line);
-        } else {
-          writePlainStdout(`${line}\n`, ttyCtx);
-        }
-        idx = buf.stdout.indexOf("\n");
-      }
-    });
-  } else {
-    execResult.stdout?.on("data", (chunk: string) => {
-      writePlainStdout(chunk, ttyCtx);
-    });
-  }
+  execResult.stdout?.on("data", (chunk: string) => {
+    writePlainStdout(chunk, ttyCtx);
+  });
 
   execResult.stderr?.on("data", (chunk: string) => {
     buf.stderr += chunk;
@@ -270,7 +251,6 @@ function wireStreams(
 }
 
 function drainBuffers(
-  isDocker: boolean,
   onLine: (line: string) => void,
   buf: StreamBuffers,
   ttyCtx: TTYContext,
@@ -279,11 +259,7 @@ function drainBuffers(
     const remaining = buf.stdout.replace(/\r$/, "").split(/\r?\n/);
     for (const line of remaining) {
       if (line.length > 0) {
-        if (isDocker && (parseLogEvent(line) || parseStepEvent(line))) {
-          onLine(line);
-        } else {
-          writePlainStdout(`${line}\n`, ttyCtx);
-        }
+        writePlainStdout(`${line}\n`, ttyCtx);
       }
     }
     buf.stdout = "";
