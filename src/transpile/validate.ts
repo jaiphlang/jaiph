@@ -24,6 +24,38 @@ export interface ValidateContext {
   parse: (content: string, filePath: string) => jaiphModule;
 }
 
+/** Check if args contain unquoted shell redirection operators (>, >>, |, &). */
+function hasShellRedirection(args: string): boolean {
+  let inQuote = false;
+  for (let i = 0; i < args.length; i++) {
+    const ch = args[i];
+    if (ch === '"' && (i === 0 || args[i - 1] !== "\\")) {
+      inQuote = !inQuote;
+      continue;
+    }
+    if (!inQuote && (ch === ">" || ch === "|" || ch === "&")) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function validateNoShellRedirection(
+  filePath: string,
+  loc: { line: number; col: number },
+  keyword: string,
+  args: string | undefined,
+): void {
+  if (!args || !hasShellRedirection(args)) return;
+  throw jaiphError(
+    filePath,
+    loc.line,
+    loc.col,
+    "E_VALIDATE",
+    `shell redirection (>, >>, |, &) is not supported with ${keyword}; use a script block for shell operations`,
+  );
+}
+
 export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void {
   const localChannels = new Set(ast.channels.map((c) => c.name));
   const localRules = new Set(ast.rules.map((r) => r.name));
@@ -181,6 +213,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         return;
       }
       if (s.type === "ensure") {
+        validateNoShellRedirection(ast.filePath, s.ref.loc, "ensure", s.args);
         validateRef(s.ref, ast, refCtx, expectRuleRef);
         if (s.recover) {
           throw jaiphError(
@@ -194,6 +227,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         return;
       }
       if (s.type === "run") {
+        validateNoShellRedirection(ast.filePath, s.workflow.loc, "run", s.args);
         if (s.async) {
           throw jaiphError(
             ast.filePath,
@@ -207,6 +241,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         return;
       }
       if (s.type === "if") {
+        validateNoShellRedirection(ast.filePath, s.condition.ref.loc, s.condition.kind, s.condition.args);
         if (s.condition.kind === "ensure") {
           validateRef(s.condition.ref, ast, refCtx, expectRuleRef);
         } else {
@@ -215,6 +250,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         for (const ts of s.thenSteps) validateRuleStep(ts);
         if (s.elseIfBranches) {
           for (const br of s.elseIfBranches) {
+            validateNoShellRedirection(ast.filePath, br.condition.ref.loc, br.condition.kind, br.condition.args);
             if (br.condition.kind === "ensure") {
               validateRef(br.condition.ref, ast, refCtx, expectRuleRef);
             } else {
@@ -234,8 +270,10 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
       if (s.type === "const") {
         const v = s.value;
         if (v.kind === "run_capture") {
+          validateNoShellRedirection(ast.filePath, v.ref.loc, "run", v.args);
           validateRef(v.ref, ast, refCtx, expectRunInRuleRef);
         } else if (v.kind === "ensure_capture") {
+          validateNoShellRedirection(ast.filePath, v.ref.loc, "ensure", v.args);
           validateRef(v.ref, ast, refCtx, expectRuleRef);
         } else if (v.kind === "prompt_capture") {
           throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", "const ... = prompt is not allowed in rules");
@@ -317,6 +355,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
       if (s.type === "send") {
         validateChannelRef(s.channel, s.loc);
         if (s.rhs.kind === "run") {
+          validateNoShellRedirection(ast.filePath, s.rhs.ref.loc, "run", s.rhs.args);
           validateRef(s.rhs.ref, ast, refCtx, expectRunTargetRef);
         } else if (s.rhs.kind === "bare_ref") {
           validateRef(s.rhs.ref, ast, refCtx, bareSendRefSpec);
@@ -329,6 +368,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         return;
       }
       if (s.type === "ensure") {
+        validateNoShellRedirection(ast.filePath, s.ref.loc, "ensure", s.args);
         validateRef(s.ref, ast, refCtx, expectRuleRef);
         if (s.recover) {
           const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
@@ -337,10 +377,12 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         return;
       }
       if (s.type === "run") {
+        validateNoShellRedirection(ast.filePath, s.workflow.loc, "run", s.args);
         validateRef(s.workflow, ast, refCtx, expectRunTargetRef);
         return;
       }
       if (s.type === "if") {
+        validateNoShellRedirection(ast.filePath, s.condition.ref.loc, s.condition.kind, s.condition.args);
         if (s.condition.kind === "ensure") {
           validateRef(s.condition.ref, ast, refCtx, expectRuleRef);
         } else {
@@ -349,6 +391,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         for (const ts of s.thenSteps) validateStep(ts);
         if (s.elseIfBranches) {
           for (const br of s.elseIfBranches) {
+            validateNoShellRedirection(ast.filePath, br.condition.ref.loc, br.condition.kind, br.condition.args);
             if (br.condition.kind === "ensure") {
               validateRef(br.condition.ref, ast, refCtx, expectRuleRef);
             } else {
@@ -371,8 +414,10 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
       if (s.type === "const") {
         const v = s.value;
         if (v.kind === "run_capture") {
+          validateNoShellRedirection(ast.filePath, v.ref.loc, "run", v.args);
           validateRef(v.ref, ast, refCtx, expectRunTargetRef);
         } else if (v.kind === "ensure_capture") {
+          validateNoShellRedirection(ast.filePath, v.ref.loc, "ensure", v.args);
           validateRef(v.ref, ast, refCtx, expectRuleRef);
         }
         return;

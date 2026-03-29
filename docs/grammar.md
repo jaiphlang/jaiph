@@ -329,6 +329,7 @@ Jaiph separates **managed** invocations (step records under `.jaiph/runs`, deter
 - Wrapping Jaiph calls in command substitution, e.g. `x="$(my_fn ...)"`, `x="$(my_wf ...)"`, `x="$(my_rule ...)"` — use `x = run ...` / `x = ensure ...` instead.
 - Calling a script as a bare workflow step or via `x = fn …` — use `run fn …` / `x = run fn …`.
 - Using `ensure` on a workflow or script, or `run` on a rule — swap to the correct keyword (diagnostic names the expected form).
+- Shell redirection or pipeline syntax around `run` or `ensure` steps: `run foo > file`, `run foo | cmd`, `run foo &` — these are shell-level constructs incompatible with the Node AST-interpreter runtime. Use a **`script`** block for shell operations (`&`, `|`, `>`, `>>`) and call it with `run`.
 
 **Correction path:** Use **`run callee`** from a workflow or rule. For a **string value** back: from a **workflow/rule** callee use **`return "…"`**; from a **script** callee use **stdout** (`echo`).
 
@@ -380,7 +381,7 @@ After parsing, the compiler validates references and config. (In this repository
 
 - **E_PARSE:** Invalid syntax, duplicate config block, invalid config key/value, invalid prompt content (e.g. command substitution in prompt), `prompt "..." returns '...'` without a capture variable, invalid `const` RHS (e.g. command substitution, disallowed `${...}` forms, or **call-like** `ref [args…]` without **`run`** / **`ensure`** / **`prompt`** — use **`const x = run ref [args…]`**), a circular reference among top-level `local` / `const` initializers, a workflow/rule line that is not a recognized Jaiph step, an invalid send RHS, or invalid `ensure … recover` syntax (arguments after `recover`, or `recover` without a `{ … }` block).
 - **E_SCHEMA:** Invalid or unsupported `returns` schema: empty schema, non-flat shape (e.g. arrays or union types), invalid entry (not `fieldName: type`), or unsupported type (only `string`, `number`, `boolean` allowed).
-- **E_VALIDATE:** Reference or alias error (unknown rule/workflow, duplicate alias, etc.), forbidden Jaiph usage inside `$(...)` or as a bare shell call where a managed step is required, or invalid constructs inside script bodies.
+- **E_VALIDATE:** Reference or alias error (unknown rule/workflow, duplicate alias, etc.), forbidden Jaiph usage inside `$(...)` or as a bare shell call where a managed step is required, invalid constructs inside script bodies, or shell redirection/pipeline syntax (`>`, `>>`, `|`, `&`) around `run`/`ensure` steps.
 - **E_IMPORT_NOT_FOUND:** The file resolved from an `import` path does not exist.
 
 Rules:

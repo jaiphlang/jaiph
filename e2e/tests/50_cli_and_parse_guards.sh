@@ -144,3 +144,78 @@ rm -f "${backticks_err}"
 # Then
 e2e::assert_contains "${backticks_out}" "E_PARSE" "prompt backticks emits E_PARSE"
 e2e::assert_contains "${backticks_out}" "backticks" "prompt backticks message is explicit"
+
+e2e::section "shell redirection around run/ensure is rejected"
+
+# Given — run with stdout redirect
+e2e::file "run_redirect.jh" <<'EOF'
+script greet() {
+  echo "hello"
+}
+workflow default {
+  run greet > out.txt
+}
+EOF
+
+# When
+redirect_err="$(mktemp)"
+if jaiph run "${TEST_DIR}/run_redirect.jh" 2>"${redirect_err}"; then
+  cat "${redirect_err}" >&2
+  rm -f "${redirect_err}"
+  e2e::fail "jaiph run should fail for run with stdout redirect"
+fi
+redirect_out="$(cat "${redirect_err}")"
+rm -f "${redirect_err}"
+
+# Then
+e2e::assert_contains "${redirect_out}" "E_VALIDATE" "run redirect emits E_VALIDATE"
+e2e::assert_contains "${redirect_out}" "shell redirection" "run redirect error mentions shell redirection"
+e2e::assert_contains "${redirect_out}" "script block" "run redirect error suggests script block"
+
+# Given — run with pipe
+e2e::file "run_pipe.jh" <<'EOF'
+script greet() {
+  echo "hello"
+}
+workflow default {
+  run greet | tr a-z A-Z
+}
+EOF
+
+# When
+pipe_err="$(mktemp)"
+if jaiph run "${TEST_DIR}/run_pipe.jh" 2>"${pipe_err}"; then
+  cat "${pipe_err}" >&2
+  rm -f "${pipe_err}"
+  e2e::fail "jaiph run should fail for run with pipe"
+fi
+pipe_out="$(cat "${pipe_err}")"
+rm -f "${pipe_err}"
+
+# Then
+e2e::assert_contains "${pipe_out}" "E_VALIDATE" "run pipe emits E_VALIDATE"
+e2e::assert_contains "${pipe_out}" "shell redirection" "run pipe error mentions shell redirection"
+
+# Given — run with background &
+e2e::file "run_bg.jh" <<'EOF'
+script greet() {
+  echo "hello"
+}
+workflow default {
+  run greet &
+}
+EOF
+
+# When
+bg_err="$(mktemp)"
+if jaiph run "${TEST_DIR}/run_bg.jh" 2>"${bg_err}"; then
+  cat "${bg_err}" >&2
+  rm -f "${bg_err}"
+  e2e::fail "jaiph run should fail for run with background &"
+fi
+bg_out="$(cat "${bg_err}")"
+rm -f "${bg_err}"
+
+# Then
+e2e::assert_contains "${bg_out}" "E_VALIDATE" "run background emits E_VALIDATE"
+e2e::assert_contains "${bg_out}" "shell redirection" "run background error mentions shell redirection"

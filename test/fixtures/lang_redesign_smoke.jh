@@ -21,9 +21,8 @@ workflow wf_const {
   log "$msg"
 }
 
-workflow wf_wait {
-  run noop &
-  wait
+workflow wf_async {
+  run async noop
 }
 
 workflow wf_brace_if {

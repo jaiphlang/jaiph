@@ -202,9 +202,8 @@ workflow right {
   prompt "async-right"
 }
 workflow default {
-  run left &
-  run right &
-  wait
+  run async left
+  run async right
 }
 EOF
 
