@@ -419,3 +419,29 @@ Add `match` on string values with **string literals** and **JavaScript regex lit
 - Only string and `/.../` regex patterns allowed; invalid forms have clear errors.
 - **`return x match { ... }`** (and other expression positions) type-check / parse and return the matched arm’s value.
 - **`contains` does not appear** in mock prompt syntax or test parser; prompt mocks use pattern `match` only.
+
+---
+
+## Unify string quoting across Jaiph <!-- policy TBD — not dev-ready -->
+
+**Goal**  
+One clear, documented rule for **single-quoted** vs **double-quoted** strings everywhere they appear (orchestration strings, `fail` / `log` / `logerr`, `mock prompt`, `const` / `local` RHS, test blocks, metadata, etc.), with parser and runtime aligned.
+
+**Context**
+
+- Today behavior is **inconsistent**: e.g. `fail` accepts only double-quoted reasons, while `mock prompt` accepts both; other forms differ. Authors cannot rely on a single mental model.
+- **Approach is undecided** — options include: double-only for orchestration, symmetric single+double with identical semantics, reserved use (e.g. double = interpolate, single = literal), or something else. Product + grammar trade-offs need an explicit decision before implementation.
+
+**Key files (once policy is chosen):**  
+`src/parse/*`, `docs/grammar.md`, user-facing docs, fixtures, e2e.
+
+**Scope**
+
+1. Decide and document the quoting policy (short ADR or grammar section).
+2. Align parsers, validators, and error messages.
+3. Update tests and docs; accept breaking changes per queue rules.
+
+**Acceptance criteria**
+
+- Policy is written down; a reader can predict which quotes to use in any construct.
+- Parser and runtime match that policy; no ad-hoc per-keyword exceptions unless explicitly documented as such.
