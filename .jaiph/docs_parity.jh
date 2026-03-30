@@ -92,7 +92,6 @@ script list_docs_md_paths {
 
 script build_allowed_paths_block {
   local out="README.md
-CHANGELOG.md
 docs/index.html
 docs/_layouts/docs.html
 src/cli/shared/usage.ts"
@@ -127,34 +126,6 @@ workflow update_from_task {
 
     The task description is:
     ${arg1}
-    </task>
-  "
-}
-
-workflow changelog {
-  prompt "
-    <role>
-    ${role}
-    </role>
-    <task>
-    Ensure there is a CHANGELOG.md file with a list of all features that are
-    supported by the current version. It should be in the following format:
-
-      # VERSION
-      - Feature 1
-      - Feature 2
-
-      # VERSION
-      - Feature 3
-
-    Don't modify changes from previous versions. Check for current Jaiph version
-    in package.json and use git tags to find the previous version.
-    Don't duplicate features from previous versions.
-
-    Typically, every commit delivering a new feature should have a corresponding
-    entry in the CHANGELOG.md file. But this is not a strict rule, you need to
-    use your best judgment to determine if a commit should have a corresponding
-    entry in the CHANGELOG.md file.
     </task>
   "
 }
@@ -259,7 +230,6 @@ workflow default {
   if run arg_nonempty("${first_doc}") {
     run process_docs_md_recursive("${first_doc}", "${rest_docs}")
   }
-  run changelog()
   run docs_overview("${docs_md_list}")
   ensure only_expected_docs_changed_after_prompt("${allowed_list}")
 }

@@ -22,10 +22,11 @@ routing and ordering.
 **How this maps to the implementation:** `jaiph run` executes workflows in the
 **Node workflow runtime** (`NodeWorkflowRuntime` in `src/runtime/kernel/node-workflow-runtime.ts`)
 — see [Architecture](../ARCHITECTURE.md). Send/route semantics live in the AST;
-the runtime keeps an **in-memory** queue and route map per workflow. Message
-bodies are still written to **`inbox/NNN-<channel>.txt`** under the current run
-directory for audit and tooling. There are no directory watchers, no polling
-loops on the filesystem, and no third-party brokers.
+the runtime keeps an **in-memory** queue and route map per entered workflow.
+Each send also writes **`inbox/NNN-<channel>.txt`** under the run directory (a
+durable copy for audit and reporting; channel transport in the runtime is
+queue-based, not filesystem-driven). There are no directory watchers, no
+polling loops on the filesystem, and no third-party brokers.
 
 A separate **file-backed helper** (`src/runtime/kernel/inbox.ts`, runnable as
 `node …/inbox.js`) implements `init` / `send` / `register-route` / `drain` with
@@ -106,9 +107,10 @@ forms:
 - imported channel: `shared.findings`
 
 The send step resolves the message from the **RHS** (literal, variable expansion,
-`run` to a script, or forwarded `${arg1}`), writes it to the next inbox slot on
-disk, and appends to the **in-memory** queue of the nearest ancestor workflow
-that has a route for that channel (see [Runtime dispatch](#runtime-dispatch)).
+`run` to a script, or forwarded `${arg1}`), writes the payload to the next inbox
+file on disk, and appends to the **in-memory** queue of the workflow context
+selected by the routing rule (innermost matching route on the stack, or the
+sender’s queue if none match—see [Runtime dispatch](#runtime-dispatch)).
 
 ```jh
 channel findings
@@ -215,14 +217,19 @@ and `.routes` beside those files when you use that CLI directly — not used by
 
 Every entered workflow gets a **`WorkflowContext`**: a route map (from `->`
 lines) and a message queue. **Route declarations are registered when the
-workflow starts.** After the workflow’s **steps** finish, the runtime runs
-**`drainWorkflowQueue`** for that context.
+workflow starts.** After the workflow’s **steps** finish (including the implicit
+join for **`run async`** branches), the runtime runs **`drainWorkflowQueue`**
+for that context.
 
-Nested workflows invoked with **`run`** participate in the same stack: a **send**
-walks **up** the workflow context stack and appends the message to the **nearest
-ancestor** that declares a route for that channel. A deeply nested workflow can
-thus produce messages that are routed by an outer orchestrator without declaring
-its own routes.
+Nested workflows invoked with **`run`** share a **workflow context stack**. On
+**send**, the runtime looks for a route for that channel starting at the
+**sending workflow** (innermost on the stack) and moving **outward** toward the
+entry workflow. The **first** context that declares a route for the channel gets
+the enqueue—so a **nested** workflow’s own `channel -> …` lines take precedence
+over an **outer** orchestrator’s routes for the same channel. If **no**
+workflow on the stack declares a route, the message is queued on the **sender’s**
+context; when that context is drained, there are no targets and the message is
+**skipped** (see [Error semantics](#error-semantics)).
 
 ### Dispatch loop (`NodeWorkflowRuntime`)
 
@@ -234,8 +241,10 @@ handling and `drainWorkflowQueue`).
    channel wins if the same channel appears on multiple lines — see above).
 3. Execute workflow steps top to bottom.
 4. On **`<-`**: resolve payload, allocate the next sequence id, append
-   **`InboxMsg`** to the target ancestor’s queue, write **`inbox/NNN-<channel>.txt`**,
-   append **`INBOX_ENQUEUE`** to `run_summary.jsonl`.
+   **`InboxMsg`** to the selected context’s queue, write **`inbox/NNN-<channel>.txt`**,
+   append **`INBOX_ENQUEUE`** to `run_summary.jsonl` (same locked append path as
+   other summary lines; implemented in **`node-workflow-runtime.ts`**, not only
+   in `inbox.ts`).
 5. After all steps (and implicit **`run async`** joins) complete, **`drainWorkflowQueue`**:
    - **`while (cursor < queue.length)`** — new sends during dispatch append to
      the same queue and are processed in subsequent iterations.
@@ -352,14 +361,15 @@ are **not** set by `NodeWorkflowRuntime`; they are set when dispatch runs
 through the subprocess-based path in **`src/runtime/kernel/inbox.ts`**
 (`dispatchEnv` for spawned `__jaiph_dispatch`).
 
-- **`run_summary.jsonl`:** The runtime appends **`INBOX_ENQUEUE`**,
-  **`INBOX_DISPATCH_START`**, and **`INBOX_DISPATCH_COMPLETE`** lines (see
-  [CLI — Run summary](cli.md#run-summary-jsonl)). `INBOX_DISPATCH_COMPLETE`
-  includes **`elapsed_ms`**. For **`INBOX_ENQUEUE`**, `NodeWorkflowRuntime`
-  records **`channel`**, **`sender`**, and **`inbox_seq`**; the full body is
-  always available on disk at **`inbox/NNN-<channel>.txt`**. The standalone
-  **`inbox.js send`** path may also emit **`payload_preview`** /
-  **`payload_ref`** for large bodies.
+- **`run_summary.jsonl`:** `NodeWorkflowRuntime` appends **`INBOX_ENQUEUE`**,
+  **`INBOX_DISPATCH_START`**, and **`INBOX_DISPATCH_COMPLETE`** via
+  **`appendRunSummaryLine`** (see [CLI — Run summary](cli.md#run-summary-jsonl)).
+  `INBOX_DISPATCH_COMPLETE` includes **`elapsed_ms`**. For **`INBOX_ENQUEUE`**
+  from **`jaiph run`**, the line includes **`channel`**, **`sender`**, and
+  **`inbox_seq`** (no **`payload_preview`** / **`payload_ref`**—those appear on
+  the standalone **`inbox.js send`** path when the helper truncates large
+  payloads). The full body is always available on disk at
+  **`inbox/NNN-<channel>.txt`**.
 - Workflows remain directly callable: `jaiph run analyst "some content"`. When
   called directly, `${arg2}` and `${arg3}` are unset.
 
@@ -382,11 +392,14 @@ through the subprocess-based path in **`src/runtime/kernel/inbox.ts`**
 
 ### Example output
 
+Illustrative progress tree for a pipeline where `researcher` sends on
+`findings`, `analyst` sends on `report`, and `default` routes both channels:
+
 ```
 workflow default
-  ▸ workflow scanner
-  ✓ workflow scanner (0s)
-  ▸ workflow analyst (1="Found 3 issues in auth module", 2="findings", 3="scanner")
+  ▸ workflow researcher
+  ✓ workflow researcher (0s)
+  ▸ workflow analyst (1="Found 3 issues in auth module", 2="findings", 3="researcher")
   ✓ workflow analyst (0s)
   ▸ workflow reviewer (1="Summary: Found 3 issues in auth ...", 2="report", 3="analyst")
   ✓ workflow reviewer (0s)

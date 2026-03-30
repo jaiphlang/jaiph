@@ -9,11 +9,17 @@ redirect_from:
 
 ## Overview
 
-Workflow runs leave behind files: each run is a directory with **`run_summary.jsonl`** (append-only JSON lines) and per-step **`.out`** / **`.err`** captures. That layout is easy to automate (`tail`, scripts, CI artifacts) but hard to skim when you want history, a live view of an in-flight run, and quick access to step output.
+### Problem and goals
 
-**`jaiph report`** addresses that by starting a **read-only** HTTP server with a small browser UI over the **same** tree the Node workflow runtime already writes under your runs root (see [Architecture — Core components](../ARCHITECTURE.md#core-components)). There is no separate database and no second log format: the server indexes the directory tree, tails each `run_summary.jsonl`, and serves static assets from `src/reporting/public` (bundled next to the CLI or standalone binary as described in [Architecture — Distribution](../ARCHITECTURE.md#distribution-node-vs-bun-standalone)).
+Long-running workflows produce **a lot** of structured output: step boundaries, logs, and other **`run_summary.jsonl`** events are all persisted as files. That is ideal for automation (Unix tools, CI uploads, custom scripts) but awkward when you want a **human-friendly** view of history, in-flight progress, and per-step stdout/stderr without opening many paths by hand.
 
-While a workflow is still running, the server incrementally reads new summary lines using a byte offset plus **device and inode** so it can detect replacement, truncation, or rotation and resync safely.
+### What Jaiph does
+
+Each run is a directory under the **runs root** (see [Architecture — Artifact layout](../ARCHITECTURE.md#artifact-layout)): **`run_summary.jsonl`** (append-only JSON lines) plus per-step **`.out`** / **`.err`** captures. **`jaiph report`** starts a **read-only** HTTP server with a small browser UI over that **same** tree—no separate database and no second log format. Implementation lives in **`src/reporting/*`** (see [Architecture — Core components](../ARCHITECTURE.md#core-components)): the server rescans for `run_summary.jsonl`, tails each file, exposes JSON under **`/api/…`**, and serves static HTML/CSS/JS for the UI.
+
+Static files for the UI live under **`src/reporting/public`** in the repo. At runtime the process loads **`public`** next to the compiled reporting code (for example **`dist/src/reporting/public`** when you run `node dist/src/cli.js`) or, for the standalone binary, **`reporting/public`** next to the executable—see [Architecture — Distribution](../ARCHITECTURE.md#distribution-node-vs-bun-standalone).
+
+While a workflow is still running, the server incrementally reads newly appended summary bytes. The tail state stores a **byte offset** and file identity (**`dev`** / **`ino`** from `stat`). If the identity changes or the file **shrinks** below the stored offset (truncation or replacement), the reader **clears** incremental state and reloads from the beginning so parsed run state stays consistent.
 
 For command-line flags and environment variables, see [CLI Reference — `jaiph report`](cli.md#jaiph-report). Event shapes in `run_summary.jsonl` are specified in [CLI — Run summary (`run_summary.jsonl`)](cli.md#run-summary-jsonl). The on-disk layout under the runs root matches [CLI — Run artifacts and live output](cli.md#run-artifacts-and-live-output).
 
@@ -51,7 +57,7 @@ jaiph report --pid-file /path/to/report.pid
 ```
 
 - **`--workspace`** — Project directory used to resolve the default runs root as `<workspace>/.jaiph/runs` (default: current working directory).
-- **`--runs-dir`** — Override the runs root: the tree of `<YYYY-MM-DD>/<run>/run_summary.jsonl` directories. Point this at the **same** directory `jaiph run` writes to. By default that is `<workspace>/.jaiph/runs`; if you override where runs go (for example with **`JAIPH_RUNS_DIR`** or `run.logs_dir` in config for workflows), set **`--runs-dir`** or **`JAIPH_REPORT_RUNS_DIR`** to that path — the reporting server does **not** read `JAIPH_RUNS_DIR` on its own. The server only reads.
+- **`--runs-dir`** — Override the runs root: the tree of `<YYYY-MM-DD>/<run>/run_summary.jsonl` directories. Point this at the **same** directory `jaiph run` writes to. By default that is `<workspace>/.jaiph/runs`. If you override where runs go (for example with **`JAIPH_RUNS_DIR`** or `run.logs_dir` in workflow config), pass the **same** path here or via **`JAIPH_REPORT_RUNS_DIR`**: **`jaiph report` does not load `jaiph` config** or inherit `JAIPH_RUNS_DIR` from the workflow process—it only reads the filesystem tree you point it at.
 - **`--host` / `--port`** — Listen address and port (defaults favor **local-only** use: `127.0.0.1` and `8787`).
 - **`--poll-ms`** — Interval in milliseconds for a **server timer** that tails every known `run_summary.jsonl` and may refresh the run-directory listing. Minimum **50**; invalid values are rejected. Full directory rescans are still **rate-limited** to roughly **every two seconds** even when this interval is shorter.
 - **`--pid-file`** — PID file path for `status` / `stop` (default: `<workspace>/.jaiph/report.pid`).
@@ -93,9 +99,9 @@ Static assets live under `/assets/…`; HTML entry points are `/` and `/run.html
 
 ## Behavior notes
 
-**Indexing** — New run directories are picked up when the server rescans the `<YYYY-MM-DD>/<run>/run_summary.jsonl` tree. Rescans are **rate-limited** (about **two seconds** minimum between full scans). Between rescans, known files are still **tailed** on the timer interval and on each **`GET /api/…`** request.
+**Indexing** — New run directories are picked up when the server rescans the `<YYYY-MM-DD>/<run>/run_summary.jsonl` tree. Rescans are **rate-limited** (about **two seconds** minimum between full scans; `DIR_SCAN_MIN_MS` in `src/reporting/run-registry.ts`). Between rescans, known files are still **tailed** on the timer interval (`--poll-ms`) and on each **`GET /api/…`** request (see table above).
 
-**Live updates** — For each summary file, the tail reader keeps an append offset and file identity (**`dev`** / **`ino`**). If the file is replaced, truncated, or rotated, the reader **resets** and rebuilds parser state from the beginning so stale incremental state is not reused.
+**Tail and resync** — Incremental summary parsing follows the **Overview**: offset plus **`dev`/`ino`**, full reload on identity change or truncation. Implementation: `src/reporting/jsonl-tail.ts`.
 
 **Safety** — Binds to **loopback by default**; serves only run artifacts under the resolved runs root, with path resolution that rejects directory traversal. Starting or stopping the reporting server does **not** affect workflow execution.
 

@@ -725,6 +725,15 @@ pre code .code-line::before {
     color: var(--muted);
 }
 
+.footer-links {
+    margin: 0 0 0.75rem;
+    font-size: 0.95rem;
+}
+
+.footer-links a {
+    color: var(--link);
+}
+
 /* ── Section subtitle ── */
 
 .section-subtitle {
