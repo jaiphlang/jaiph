@@ -12,6 +12,239 @@ Process rules:
 
 ---
 
+## Definition/call syntax: no parens on defs, call parens required <!-- dev-ready -->
+
+**Goal**  
+Drop parameter lists from **definitions** of `workflow`, `rule`, and `script`. Require **call** syntax to use parentheses: either **empty** `()` for zero-argument calls or **comma-separated** arguments inside `(...)` — the same shape for every managed call (`run`, `ensure`, workflow-to-workflow invocations, etc., as applicable).
+
+**Context**
+
+- Empty `()` on definitions (e.g. `workflow foo() {}`) is misleading when bodies still use `${arg1}` / `$1` and does not declare real parameters.
+- Moving structure to **call sites** makes arity visible and avoids the fake “function signature” on defs.
+- Example shape:
+  ```
+  script save_string_to_file {
+    printf '%s' "$1" > "$2"
+  }
+
+  workflow default {
+    run save_string_to_file("aaaa", "bbb")
+    run other_workflow()
+  }
+  ```
+
+**Key files:**
+- `src/parse/workflows.ts`, `src/parse/rules.ts`, `src/parse/scripts.ts` — definition parsing (no `(` after name)
+- `src/parse/steps.ts` — `run` / `ensure` / call expressions: require `()` or `(...)` on the callee
+- `src/types.ts` — AST for calls and definitions
+- `src/runtime/kernel/node-workflow-runtime.ts` — wire call arity to existing arg plumbing
+- `src/transpile/validate.ts` — arity and ref validation for new call form
+
+**Scope**
+
+1. Parse definitions as `keyword name {` (no `( )` after `name`).
+2. Parse calls as `callee()` or `callee(arg1, arg2, ...)` consistently for workflows, rules, and scripts.
+3. Migrate internal `.jh` sources, fixtures, e2e tests, and docs (including `docs/index.html`).
+4. Update tests + error messages for invalid/missing parens.
+
+**Acceptance criteria**
+
+- Definitions never use `(` `)` after the identifier; calls always use `(` `)` (empty or with args).
+- Arity errors are deterministic at validate or runtime.
+- Migration completes across internal/e2e fixtures and published samples.
+
+---
+
+## Unified mock syntax: rename `mock function` to `mock script` <!-- dev-ready -->
+
+**Goal**  
+Hard-rename `mock function` to `mock script` across parser, AST, runtime, tests, and docs.
+
+**Context**
+
+- The top-level keyword was already renamed from `function` to `script` in the language, but the mock keyword in `*.test.jh` files was not updated.
+- **Decision**: Hard rework. `mock function` must produce a **compiler error**, not a silent migration.
+
+**Current code using `mock function`:**
+- `src/types.ts` (line ~249): AST type `test_mock_function` — rename to `test_mock_script`.
+- `src/parse/tests.ts` (line ~221): regex `mock\s+function\s+...` — change to `mock\s+script\s+...`.
+- `src/parse/tests.ts` (line ~225): error message `"mock function ref must be..."` — update.
+- `src/parse/tests.ts` (line ~228): pushes `{ type: "test_mock_function" }` — rename type.
+- `src/runtime/kernel/node-test-runner.ts` — dispatches on `test_mock_function` type.
+- `test/sample-build.test.ts` — fixture tests using `mock function`.
+- `e2e/tests/45_mock_workflow_rule_function.sh` — e2e test using `mock function` syntax.
+- `docs/testing.md` — docs showing `mock function`.
+- `docs/index.html` — mentions `mock function`.
+
+**Scope**
+
+1. Rename `test_mock_function` → `test_mock_script` in `src/types.ts`.
+2. Change parser regex from `mock\s+function` to `mock\s+script` in `src/parse/tests.ts`.
+3. Add explicit rejection: if the parser sees `mock function`, emit a compile-time error: `"mock function" is no longer supported; use "mock script"`.
+4. Update dispatch in `src/runtime/kernel/node-test-runner.ts`.
+5. Update all test fixtures: `e2e/tests/45_mock_workflow_rule_function.sh`, `test/sample-build.test.ts`, and any `.test.jh` fixtures.
+6. Rename `e2e/tests/45_mock_workflow_rule_function.sh` → `45_mock_workflow_rule_script.sh`.
+7. Update docs: `docs/testing.md`, `docs/index.html`.
+
+**Acceptance criteria**
+
+- `mock script` parses and executes correctly.
+- `mock function` produces a compiler error with migration guidance.
+- All tests pass with the new syntax.
+- No references to `mock function` remain (except in error message text).
+
+---
+
+## Verify `*.test.jh` testing end-to-end <!-- dev-ready -->
+
+**Goal**  
+Add or extend automated verification that **testing** with `*.test.jh` files works as documented (`jaiph test`, mocks, imports, assertions).
+
+**Context**
+
+- The mock-syntax task renames `mock function` → `mock script`; testing behavior should remain correct but deserves an explicit regression gate.
+- Coverage should include at least one **e2e** path that runs `jaiph test` on a `.test.jh` file and checks pass/fail outcomes, plus sanity on fixture layout.
+
+**Key files:**
+- `src/runtime/kernel/node-test-runner.ts` — test execution
+- `src/cli/commands/test.ts` — CLI entry
+- `e2e/tests/` — add or extend shell test targeting `*.test.jh`
+- `docs/testing.md`, `docs/index.html` — align with verified behavior
+
+**Scope**
+
+1. Inventory existing unit/e2e coverage for `jaiph test`; fill gaps for realistic `.test.jh` workflows (import, mock, expect).
+2. Add an e2e test that runs the CLI against a committed `.test.jh` and asserts exit code / key output.
+3. Document any prerequisites (env, paths) in `docs/testing.md`.
+
+**Acceptance criteria**
+
+- CI runs a dedicated check that `jaiph test` succeeds on a representative `.test.jh` and fails predictably when a test should fail.
+- No silent breakage of the test runner contract after mock-syntax changes.
+
+---
+
+## `examples/` — landing-page samples as runnable files <!-- dev-ready -->
+
+**Goal**  
+Add an `examples/` directory (repo root or under `docs/`, pick one convention) containing **every** code sample from `docs/index.html` as real `.jh` (and related) files that can be executed.
+
+**Context**
+
+- Samples on the site are copy-pasted; drift between docs and actual behavior is likely without checked-in sources of truth.
+- Each tab / block in **Samples** (e.g. `say_hello`, tests, `ensure_ci_passes`, inbox, async) should map to files under `examples/` with stable names.
+
+**Key files:**
+- `docs/index.html` — source list of samples to mirror
+- `examples/` — new tree (structure documented in README or `docs/`)
+- `e2e/tests/` — invoke `jaiph run` / `jaiph test` against `examples/` paths
+
+**Scope**
+
+1. Create `examples/` and add one file per landing-page sample (or minimal file set with imports), matching semantics of the HTML snippets.
+2. Wire **e2e** tests that call Jaiph against these paths (non-interactive; mock prompts where needed so CI is deterministic).
+3. Cross-link from `docs/index.html` or getting-started docs to `examples/` on GitHub.
+
+**Acceptance criteria**
+
+- Every major sample block on the landing page has a corresponding file under `examples/`.
+- E2E exercises the examples tree; failures indicate doc/runtime drift.
+
+---
+
+## CI: Getting started (local Jekyll, no matrix) <!-- dev-ready -->
+
+**Goal**  
+Add a CI job **Getting started (local)** that mirrors **E2E install and CLI workflow** intent (install CLI, smoke workflow) but **without** an OS matrix, and **without** hitting `jaiph.org` — instead **start Jekyll locally** and use **`http://localhost:4000`** (or configured port) as the base URL.
+
+**Context**
+
+- Existing E2E uses `npm run test:e2e` on multiple OSes; this job is a **single-platform** smoke that validates the **docs site** can be served locally and prepares for **sample verification** against the live HTML.
+- Future tasks will curl/fetch the served site; this job establishes Jekyll up + local URL.
+
+**Key files:**
+- `.github/workflows/ci.yml` — new job
+- `docs/` — Jekyll config and Gemfile if needed
+- `package.json` — optional script to `bundle exec jekyll serve` in CI (background) + health check
+
+**Scope**
+
+1. Add job **Getting started (local)** (e.g. `ubuntu-latest` only, no `strategy.matrix`).
+2. Install Ruby/Jekyll deps, build or serve site, wait until `localhost:4000` responds.
+3. Optional minimal check: fetch `/` or `/index.html` with `curl` and assert 200 (or Playwright smoke).
+4. Document port and command in `docs/` or contributor notes.
+
+**Acceptance criteria**
+
+- CI runs the new job on each push; it passes when Jekyll serves locally.
+- No dependency on `jaiph.org` in this job (local URL only).
+
+---
+
+## Verify landing-page samples (Playwright + local Jekyll) <!-- dev-ready -->
+
+**Goal**  
+Automatically verify that **samples shown on the site** match **real execution**: serve the site locally, reproduce **Try it out**, then for each sample **fetch** snippet/output from the page, **run** the corresponding workflow locally, and **compare** stdout (and stable fragments of stderr / tree output) to the **expected output embedded** in the page.
+
+**Context**
+
+- Checked-in **`.jh`** sources under `examples/` should mirror the page (see **`examples/`** queue item); this task may add `data-*` attributes to `docs/index.html` for stable extraction.
+- Flow (single script or Playwright test suite):
+  1. Start local Jekyll; base URL `http://localhost:4000` (or configured port).
+  2. Run the **Try it out** inline workflow the same way the landing page documents (e.g. `curl ... | bash -s '...'` or equivalent) and assert success.
+  3. For **sample 1, sample 2, …**: open the landing page, **extract** each sample’s code and **expected run output** from the DOM (e.g. **Playwright** + selectors / `data-sample` ids).
+  4. Run the corresponding file from `examples/` with deterministic mocks/env; capture CLI output.
+  5. **Match** captured output to the expected block from the page (normalize whitespace, strip volatile timestamps/paths where documented).
+
+**Key files:**
+- `e2e/` or `tests/e2e-samples/` — Playwright spec + helpers
+- `package.json` — `@playwright/test` (or project choice), scripts
+- `examples/` — files under test
+- `docs/index.html` — selectors / structure stable enough for extraction (add `data-sample` attributes if needed)
+
+**Scope**
+
+1. Add Playwright (or agreed browser automation) to dev/CI deps.
+2. Implement extraction of per-tab sample source and **expected run output** from the served HTML (prefer stable `data-*` hooks on sections).
+3. For each sample: run Jaiph with deterministic mocks/env so outputs match embedded expectations (same strategy as other e2e).
+4. Integrate into CI: same workflow file may add a job or extend **Getting started (local)**; document a one-command local run (`npm run test:samples` or similar).
+
+**Acceptance criteria**
+
+- Automated test fails if a landing-page sample output drifts from actual CLI behavior (within defined normalization).
+- Uses localhost + Playwright (or documented equivalent) to fetch page content; no `jaiph.org` dependency for this verification step.
+
+---
+
+## Dot notation for typed prompt fields `${var.field}` <!-- dev-ready -->
+
+**Goal**  
+Support field access syntax for typed prompt captures.
+
+**Context**
+
+- Underscore-concatenated names (`$response_message`) are ambiguous and non-obvious.
+- The `interpolate()` function in `node-workflow-runtime.ts` (line ~69) currently matches `${identifier}` and `$identifier` — no dot notation.
+
+**Key files:**
+- `src/runtime/kernel/node-workflow-runtime.ts` — `interpolate()` (line ~69)
+- `src/parse/steps.ts` — string parsing
+- `src/transpile/validate.ts` — validation (check field against prompt schema)
+
+**Scope**
+
+1. Parse `${identifier.field}` in interpolation.
+2. Validate `field` against prompt schema for `identifier`.
+3. Implement deterministic runtime mapping to existing storage format.
+4. Update docs and tests.
+
+**Acceptance criteria**
+
+- `${response.message}` works in all interpolation contexts.
+- Invalid field names fail at validation time with actionable errors.
+
+---
+
 ## Auto-detect model for selected backend <!-- dev-ready -->
 
 **Goal**  
@@ -253,115 +486,6 @@ Add an opinionated formatter for `.jh` files with in-place and check modes.
 
 ---
 
-## Unified mock syntax: rename `mock function` to `mock script` <!-- dev-ready -->
-
-**Goal**  
-Hard-rename `mock function` to `mock script` across parser, AST, runtime, tests, and docs.
-
-**Context**
-
-- The top-level keyword was already renamed from `function` to `script` in the language, but the mock keyword in `*.test.jh` files was not updated.
-- **Decision**: Hard rework. `mock function` must produce a **compiler error**, not a silent migration.
-
-**Current code using `mock function`:**
-- `src/types.ts` (line ~249): AST type `test_mock_function` — rename to `test_mock_script`.
-- `src/parse/tests.ts` (line ~221): regex `mock\s+function\s+...` — change to `mock\s+script\s+...`.
-- `src/parse/tests.ts` (line ~225): error message `"mock function ref must be..."` — update.
-- `src/parse/tests.ts` (line ~228): pushes `{ type: "test_mock_function" }` — rename type.
-- `src/runtime/kernel/node-test-runner.ts` — dispatches on `test_mock_function` type.
-- `test/sample-build.test.ts` — fixture tests using `mock function`.
-- `e2e/tests/45_mock_workflow_rule_function.sh` — e2e test using `mock function` syntax.
-- `docs/testing.md` — docs showing `mock function`.
-- `docs/index.html` — mentions `mock function`.
-
-**Scope**
-
-1. Rename `test_mock_function` → `test_mock_script` in `src/types.ts`.
-2. Change parser regex from `mock\s+function` to `mock\s+script` in `src/parse/tests.ts`.
-3. Add explicit rejection: if the parser sees `mock function`, emit a compile-time error: `"mock function" is no longer supported; use "mock script"`.
-4. Update dispatch in `src/runtime/kernel/node-test-runner.ts`.
-5. Update all test fixtures: `e2e/tests/45_mock_workflow_rule_function.sh`, `test/sample-build.test.ts`, and any `.test.jh` fixtures.
-6. Rename `e2e/tests/45_mock_workflow_rule_function.sh` → `45_mock_workflow_rule_script.sh`.
-7. Update docs: `docs/testing.md`, `docs/index.html`.
-
-**Acceptance criteria**
-
-- `mock script` parses and executes correctly.
-- `mock function` produces a compiler error with migration guidance.
-- All tests pass with the new syntax.
-- No references to `mock function` remain (except in error message text).
-
----
-
-## Named parameters for workflows/rules/scripts <!-- dev-ready -->
-
-**Goal**  
-Replace positional parameter ergonomics with named declaration parameters.
-
-**Context**
-
-- Existing `$1`, `$2` style is error-prone and unreadable in larger flows.
-- Named params would look like:
-  ```
-  workflow greet(name, greeting = "hello") {
-    log "$greeting $name"
-  }
-  ```
-
-**Key files:**
-- `src/parse/workflows.ts` — workflow parsing (add param list)
-- `src/parse/rules.ts` — rule parsing (add param list)
-- `src/parse/scripts.ts` — script parsing (add param list)
-- `src/types.ts` — AST types (add `params` field to workflow/rule/script defs)
-- `src/runtime/kernel/node-workflow-runtime.ts` — materialize params as locals
-- `src/transpile/validate.ts` — arity validation at call sites
-
-**Scope**
-
-1. Add `params` to AST for workflows/rules/scripts.
-2. Parse declaration params with optional defaults.
-3. Materialize params as locals/variables in runtime path.
-4. Enforce arity validation at call sites.
-5. Migrate internal `.jh` sources and fixtures.
-6. Update tests + docs.
-
-**Acceptance criteria**
-
-- Declared params are available by name in bodies.
-- Missing required args fail fast with deterministic errors.
-- Migration completes across internal/e2e fixtures.
-
----
-
-## Dot notation for typed prompt fields `${var.field}` <!-- dev-ready -->
-
-**Goal**  
-Support field access syntax for typed prompt captures.
-
-**Context**
-
-- Underscore-concatenated names (`$response_message`) are ambiguous and non-obvious.
-- The `interpolate()` function in `node-workflow-runtime.ts` (line ~69) currently matches `${identifier}` and `$identifier` — no dot notation.
-
-**Key files:**
-- `src/runtime/kernel/node-workflow-runtime.ts` — `interpolate()` (line ~69)
-- `src/parse/steps.ts` — string parsing
-- `src/transpile/validate.ts` — validation (check field against prompt schema)
-
-**Scope**
-
-1. Parse `${identifier.field}` in interpolation.
-2. Validate `field` against prompt schema for `identifier`.
-3. Implement deterministic runtime mapping to existing storage format.
-4. Update docs and tests.
-
-**Acceptance criteria**
-
-- `${response.message}` works in all interpolation contexts.
-- Invalid field names fail at validation time with actionable errors.
-
----
-
 ## Anonymous inline scripts in workflows/rules <!-- dev-ready -->
 
 **Goal**  
@@ -371,12 +495,12 @@ Allow `script "..."` inline steps for trivial commands.
 
 - Named scripts are verbose for one-off operations:
   ```
-  script do_thing() { echo "done" }
-  workflow default() { run do_thing }
+  script do_thing { echo "done" }
+  workflow default { run do_thing() }
   ```
 - With inline scripts:
   ```
-  workflow default() { script "echo done" }
+  workflow default { script "echo done" }
   ```
 
 **Key files:**
@@ -397,3 +521,69 @@ Allow `script "..."` inline steps for trivial commands.
 
 - Inline script steps execute with same isolation contract as named scripts.
 - Generated script artifacts are deterministic.
+
+---
+
+## `script:node` / `script:python3` / … — interpreter syntax sugar <!-- dev-ready -->
+
+**Goal**  
+Allow optional `script:<tag>` forms that expand to a fixed shebang (e.g. `#!/usr/bin/env node`) so authors do not hand-write shebang lines for common interpreters.
+
+**Context**
+
+- Custom shebang in script bodies remains supported for arbitrary tooling.
+- Sugar examples: `script:node name { ... }`, `script:python3 name { ... }` → appropriate `#!/usr/bin/env <runtime>` (exact mapping documented and tested).
+- Lays groundwork for future first-class tags such as PowerShell (`script:pwsh` or similar) and Windows-friendly workflows.
+
+**Key files:**
+- `src/parse/scripts.ts` — parse `script:<identifier>` prefix before script name
+- `src/transpile/build.ts` — emit generated script with implied shebang when tag present
+- `src/types.ts` — AST: store interpreter tag on script def if needed
+- `docs/` — document supported tags and escape hatch (raw shebang)
+
+**Scope**
+
+1. Define grammar: `script:<tag> <name> { ... }` alongside plain `script <name> { ... }`.
+2. Maintain a small built-in map tag → shebang line (node, python3, …); reject unknown tags with a clear error or document extension point.
+3. Tests: parse, emitted artifact shebang, execution smoke for at least node + one other.
+4. Update docs and any samples that currently use manual shebang for those interpreters.
+
+**Acceptance criteria**
+
+- `script:node` (and agreed set of tags) produces correct shebang in generated artifacts.
+- Plain `script` + manual shebang behavior unchanged.
+- Unknown `script:foo` fails with an actionable diagnostic (or is explicitly extensible per product choice).
+
+---
+
+## Pattern matching on strings (Rust-style `match`) <!-- dev-ready -->
+
+**Goal**  
+Add `match` on string values with **string literals** and **JavaScript regex literals** as patterns, Rust-like syntax: `match <expr> { <pattern> => <body>, ... }`.
+
+**Context**
+
+- Only two pattern kinds: **string literals** and **regex literals** (e.g. `/[a-z]+/` — same as JS regex).
+- **Exhaustiveness:** every `match` must include exactly **one** default arm using `_` (wildcard). Duplicate `_` arms are a compile-time error.
+- **Evaluation order:** arms are processed **top to bottom**; the **first** matching arm runs and **only that arm** applies (no fall-through to later arms).
+- No other pattern kinds (no numbers, destructuring, etc.) in this task.
+
+**Key files:**
+- `src/parse/*` — new statement/expression form for `match`
+- `src/types.ts` — AST for match arms
+- `src/runtime/kernel/node-workflow-runtime.ts` — evaluate subject, test patterns top-to-bottom, run selected arm only
+- `src/transpile/validate.ts` — ensure exactly one `_`; validate regex literals
+
+**Scope**
+
+1. Parse `match x { "lit" => ..., /re/ => ..., _ => ... }`.
+2. Validate: exactly one `_` arm; reject `match` with zero or multiple `_` at compile time.
+3. Runtime: string equality for literal arms; `RegExp` test for regex arms; evaluate arms in source order, first match wins, no further arms run.
+4. Tests: literals, regex, default arm, missing `_` / duplicate `_` rejected at compile time.
+5. Docs: grammar + examples (ordering semantics).
+
+**Acceptance criteria**
+
+- Valid `match` runs with correct branch selection; only one arm executes.
+- Missing `_` or more than one `_` is a compile-time error.
+- Only string and `/.../` regex patterns allowed; invalid forms have clear errors.
