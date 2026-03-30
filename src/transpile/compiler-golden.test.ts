@@ -993,6 +993,38 @@ test("compiler golden: standalone script file has no env shims (isolation)", () 
   }
 });
 
+test("compiler golden: multiline double-quoted strings are not corrupted by emit indent", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-golden-script-multiline-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        "script multiline_str {",
+        '  local x="a',
+        'b"',
+        "}",
+        "",
+        "workflow default {",
+        "  run multiline_str()",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const scripts = emitScriptsForModule(input, root);
+    assert.equal(scripts.length, 1);
+    const scriptContent = scripts[0].content;
+    assert.ok(
+      /local x="a\nb"/.test(scriptContent),
+      "multiline string must stay a\\nb without injected spaces on continuation lines",
+    );
+    assert.ok(!scriptContent.includes("a\n  b"), "emit must not prefix continuation lines inside strings");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("compiler golden: cross-script call is rejected", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-golden-cross-script-"));
   try {

@@ -53,15 +53,13 @@ function wrapBashStandaloneScriptBody(body: string, envPreamble: string): string
       "\n",
     );
   }
-  const indented = body
-    .split("\n")
-    .map((line) => (line.length > 0 ? `  ${line}` : ""))
-    .join("\n");
+  // Do not indent body lines inside the function: prefixing each line with spaces
+  // corrupts multiline double-quoted strings and here-doc-style continuations.
   return [
     "set -euo pipefail",
     "__jaiph_script_entry() {",
     preamble,
-    indented,
+    body,
     "}",
     '__jaiph_script_entry "$@"',
   ].join("\n");
