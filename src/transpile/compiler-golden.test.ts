@@ -1025,7 +1025,7 @@ test("compiler golden: multiline double-quoted strings are not corrupted by emit
   }
 });
 
-test("compiler golden: cross-script call is rejected", () => {
+test("compiler golden: script bodies are opaque bash (cross-script name compiles)", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-golden-cross-script-"));
   try {
     const input = join(root, "entry.jh");
@@ -1046,10 +1046,10 @@ test("compiler golden: cross-script call is rejected", () => {
         "",
       ].join("\n"),
     );
-    assert.throws(
-      () => emitScriptsForModule(input, root),
-      /scripts cannot call other Jaiph scripts/,
-    );
+    const scripts = emitScriptsForModule(input, root);
+    const caller = scripts.find((s) => s.name === "caller");
+    assert.ok(caller, "caller script emitted");
+    assert.ok(caller!.content.includes("helper"), "opaque body preserves shell line");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
