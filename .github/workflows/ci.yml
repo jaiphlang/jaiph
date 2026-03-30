@@ -53,6 +53,44 @@ jobs:
           npm ci
           npm run test:e2e
 
+  docs-local:
+    name: Getting started (local)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+          working-directory: docs
+
+      - name: Serve Jekyll in background
+        working-directory: docs
+        run: |
+          bundle exec jekyll serve --host 127.0.0.1 --port 4000 &
+          JEKYLL_PID=$!
+          echo "JEKYLL_PID=$JEKYLL_PID" >> "$GITHUB_ENV"
+
+      - name: Wait for Jekyll to respond
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS -o /dev/null http://127.0.0.1:4000/; then
+              echo "Jekyll is up after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Jekyll failed to start within 30s"
+          exit 1
+
+      - name: Smoke-check local site
+        run: |
+          curl -fsS -o /dev/null -w "HTTP %{http_code} for /\n" http://127.0.0.1:4000/
+          curl -fsS -o /dev/null -w "HTTP %{http_code} for /getting-started\n" http://127.0.0.1:4000/getting-started
+
   e2e-wsl:
     name: E2E install and CLI workflow (windows-latest + wsl)
     runs-on: windows-latest

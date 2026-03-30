@@ -167,6 +167,33 @@ Tests that span multiple modules, require subprocess/PTY harnesses, or exercise 
 
 Shared test data (`test/fixtures/`, `test/expected/`) also remains in `test/`.
 
+## CI pipeline
+
+The project uses GitHub Actions (`.github/workflows/ci.yml`). Every push triggers four jobs:
+
+| Job | Runner | Purpose |
+|-----|--------|---------|
+| **Compiler and unit tests** | `ubuntu-latest` | `npm test` (TypeScript unit + acceptance + golden tests), plus a `curl` check that the public install URL responds and a git-tag verification on `main`. |
+| **E2E install and CLI workflow** | `ubuntu-latest`, `macos-latest` (matrix) | `npm run test:e2e` — full build-and-run E2E suite on each OS. |
+| **Getting started (local)** | `ubuntu-latest` | Builds and serves the Jekyll documentation site locally (`bundle exec jekyll serve` on `127.0.0.1:4000`), waits for it to respond, then smoke-checks key pages (`/` and `/getting-started`) with `curl`. No dependency on `jaiph.org` — validates the docs site from the repository alone. |
+| **E2E install and CLI workflow (WSL)** | `windows-latest` | Detects an available WSL distro, installs Node inside it, and runs `npm run test:e2e` under WSL. Skipped when no distro is present on the runner image. |
+
+### Local docs site (Jekyll)
+
+The **Getting started (local)** CI job validates that the documentation site under `docs/` can be built and served from source. It uses Ruby 3.2 with `bundler-cache`, runs `bundle exec jekyll serve --host 127.0.0.1 --port 4000` in the background, and polls `http://127.0.0.1:4000/` for up to 30 seconds before asserting HTTP 200 on `/` and `/getting-started`.
+
+To run the same check locally:
+
+```bash
+cd docs
+bundle install          # first time only
+bundle exec jekyll serve --host 127.0.0.1 --port 4000
+# In another terminal:
+curl -fsSL http://127.0.0.1:4000/
+```
+
+The Jekyll project lives entirely inside `docs/` — `Gemfile`, `_config.yml`, layouts, and all Markdown pages. The CI job does not install or run Jaiph itself; it only validates that the static site builds and serves correctly.
+
 ## E2E testing
 
 The E2E test suite (`e2e/tests/*.sh`) exercises the full build-and-run pipeline from the outside: compile a workflow, run it, and assert on both the CLI tree output and the run artifact files (`.out`, `.err`) written to `.jaiph/runs/`.
