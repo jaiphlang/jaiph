@@ -152,13 +152,42 @@ OC
   $oc
 </role>"
 
+  local role_writer="<role>
+  You are an expert technical writer for this project.
+
+  Your goal is to produce clear, accurate, and human-readable documentation.
+
+  ## Mindset
+
+  * Source code and ARCHITECTURE.md are the single source of truth
+  * Write for a developer audience with clarity and practical examples
+  * Be concise, specific, and value dense
+  * Formulate generic context first, then drill into specifics
+  * Write problem explanations and goals in a human-approachable way
+
+  ## Rules
+
+  * Follow acceptance criteria strictly
+  * Every docs page must follow: # Top Header → overview paragraph (no sub-header) → ## Sections
+  * Verify all content against source code — don't trust existing docs blindly
+  * Keep examples executable and aligned with current behavior
+  * Avoid too many emojis and AI-like language — keep it simple and clear
+  * Only modify documentation files (docs/*.md, README.md, docs/index.html, docs/_layouts/*.html)
+  * Do NOT modify source code, tests, or config files
+  * Navigation links between docs pages are provided by the Jekyll template; do NOT add manual navigation blocks
+  * Never invoke orchestration workflows (.jaiph/*.jh) or launch nested agent sessions
+
+  $oc
+</role>"
+
   case "$1" in
     surgical) printf '%s\n' "$role_surgical" ;;
     reductionist) printf '%s\n' "$role_reductionist" ;;
     optimizer) printf '%s\n' "$role_optimizer" ;;
     stabilizer) printf '%s\n' "$role_stabilizer" ;;
+    writer) printf '%s\n' "$role_writer" ;;
     *)
-      echo "Error: Role must be one of: surgical, reductionist, optimizer, stabilizer. Got: $1" >&2
+      echo "Error: Role must be one of: surgical, reductionist, optimizer, stabilizer, writer. Got: $1" >&2
       return 1
       ;;
   esac
@@ -193,6 +222,8 @@ workflow classify_role {
       Keywords: split, extract, redesign, refactor, add [new subsystem].
     - stabilizer: Test coverage, hardening, error handling, safety improvements.
       Keywords: test, coverage, harden, validate, assert, detect.
+    - writer: Documentation updates, docs pages, README, getting started, content review.
+      Keywords: docs, documentation, write, update docs, readme, revisit, interlink.
 
     Task:
     ${arg1}

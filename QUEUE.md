@@ -12,6 +12,424 @@ Process rules:
 
 ---
 
+## Docs: Recreate `docs/getting-started.md` <!-- dev-ready -->
+
+**Goal**  
+Recreate the Getting Started page as the primary onboarding entry point.
+
+**Context**
+
+- File was deleted — needs recreation from source code truth.
+- Target of the "Docs" link in site nav (`docs/index.html` line 36, `docs/_layouts/docs.html` line 46).
+- Covers the "Running a workflow" section from Core Features (`docs/index.html` lines 438-453).
+
+**Key files:**
+- `docs/getting-started.md` — recreate
+- `docs/index.html` — reference for content
+- `README.md` — getting started section reference
+- `src/cli/*` — source of truth for CLI behavior
+
+**Scope**
+
+1. Create with Jekyll front matter (`title: Getting started`, `permalink: /getting-started`, `redirect_from: /getting-started.md`).
+2. Content: install, quick try (curl one-liner), running a workflow (arguments, workspace convention, run artifacts), `jaiph init`, language overview with links to grammar/CLI/config docs.
+3. Structure rule: `# Getting Started` → overview paragraph (no sub-header) → `## Sections`.
+4. Verify all CLI commands against source code.
+5. Use `writer` role.
+
+**Acceptance criteria**
+
+- File exists with correct Jekyll front matter.
+- Covers install, first run, workspace setup, and language overview.
+- Follows structure: `# Header` → overview (no sub-header) → `## Sections`.
+- All CLI examples verified against source code.
+
+---
+
+## Docs: Revisit `docs/grammar.md` — language concepts <!-- dev-ready -->
+
+**Goal**  
+Make grammar.md human-readable and structurally consistent — covers prompts, rules, scripts, async calls, and ensure/recover.
+
+**Context**
+
+- Currently starts with `## Overview` sub-header — should be headerless overview paragraph.
+- Corresponds to the "Language" paragraphs in Core Features (`docs/index.html` lines 455-482): prompts with strict checks, bash/polyglot scripts, async calls, ensure/recover.
+- Source code (`src/parse/*`, `src/runtime/kernel/node-workflow-runtime.ts`) is truth for language semantics.
+
+**Key files:**
+- `docs/grammar.md` — target
+- `src/parse/*` — parser source of truth
+- `src/runtime/kernel/node-workflow-runtime.ts` — runtime semantics
+- `src/types.ts` — AST types
+- `src/transpile/validate.ts` — validation rules
+
+**Scope**
+
+1. Fix structure: remove `## Overview` header, make overview a headerless paragraph after `# Grammar`.
+2. Verify all language constructs against source code.
+3. Ensure async calls, ensure/recover, and script isolation are clearly documented.
+4. Make examples executable and aligned with current behavior.
+5. Improve readability: reduce density, add section transitions, keep approachable.
+6. Use `writer` role.
+
+**Acceptance criteria**
+
+- Follows structure: `# Header` → overview (no sub-header) → `## Sections`.
+- All language constructs verified against parser and runtime source code.
+- Readable by a developer new to the project.
+
+---
+
+## Docs: Revisit `docs/inbox.md` — agent inbox pattern <!-- dev-ready -->
+
+**Goal**  
+Make inbox.md human-readable and accurate — covers channels and dispatch.
+
+**Context**
+
+- Corresponds to "Agent inbox pattern (channels)" in Core Features (`docs/index.html` lines 473-478).
+- Source code in `src/runtime/kernel/inbox.ts` and channel validation in `src/transpile/validate.ts`.
+
+**Key files:**
+- `docs/inbox.md` — target
+- `src/runtime/kernel/inbox.ts` — inbox runtime
+- `src/runtime/kernel/node-workflow-runtime.ts` — channel dispatch
+- `src/transpile/validate.ts` — channel validation
+
+**Scope**
+
+1. Fix structure if needed: `# Header` → overview (no sub-header) → `## Sections`.
+2. Verify channel declaration, send (`<-`), route (`->`), and dispatch semantics against source code.
+3. Improve readability and examples.
+4. Use `writer` role.
+
+**Acceptance criteria**
+
+- Follows structure rule.
+- All inbox/channel semantics verified against source code.
+- Readable and approachable.
+
+---
+
+## Docs: Revisit `docs/testing.md` <!-- dev-ready -->
+
+**Goal**  
+Make testing.md human-readable and accurate.
+
+**Context**
+
+- Corresponds to "Testing Jaiph workflows" in Core Features (`docs/index.html` lines 502-504).
+- Currently starts with `## Overview` sub-header — should be headerless overview.
+- Source code in `src/runtime/kernel/node-test-runner.ts`.
+
+**Key files:**
+- `docs/testing.md` — target
+- `src/runtime/kernel/node-test-runner.ts` — test runner
+- `src/parse/tests.ts` — test parsing
+- `src/types.ts` — test AST types
+
+**Scope**
+
+1. Fix structure: remove `## Overview` header, make overview headerless.
+2. Verify mock prompt, mock workflow/rule/script, assertions, and test execution against source code.
+3. Improve readability and examples.
+4. Use `writer` role.
+
+**Acceptance criteria**
+
+- Follows structure: `# Header` → overview (no sub-header) → `## Sections`.
+- All test constructs verified against source code.
+- Readable and approachable.
+
+---
+
+## Docs: Revisit `docs/configuration.md` <!-- dev-ready -->
+
+**Goal**  
+Make configuration.md human-readable and accurate.
+
+**Context**
+
+- Corresponds to "Configuration" in Core Features (`docs/index.html` lines 497-500).
+- Currently well-structured but dense — needs readability improvement.
+
+**Key files:**
+- `docs/configuration.md` — target
+- `src/runtime/kernel/node-workflow-runtime.ts` — config resolution
+- `src/cli/run/lifecycle.ts` — CLI config handling
+
+**Scope**
+
+1. Verify structure follows rule (currently OK — has headerless overview).
+2. Verify all config keys, precedence, and env variable mappings against source code.
+3. Improve readability: reduce density where possible, add practical guidance.
+4. Use `writer` role.
+
+**Acceptance criteria**
+
+- Follows structure rule.
+- All config keys and precedence verified against source code.
+- Readable and approachable.
+
+---
+
+## Docs: Revisit `docs/hooks.md` <!-- dev-ready -->
+
+**Goal**  
+Make hooks.md human-readable and accurate.
+
+**Context**
+
+- Corresponds to "Hooks" in Core Features (`docs/index.html` lines 493-496).
+- Currently well-structured with headerless overview.
+
+**Key files:**
+- `docs/hooks.md` — target
+- `src/cli/run/hooks.ts` or wherever hooks are implemented
+- `src/types.ts` — hook payload types
+
+**Scope**
+
+1. Verify structure follows rule (currently OK).
+2. Verify all hook events, payload fields, and behavior against source code.
+3. Improve readability where needed.
+4. Use `writer` role.
+
+**Acceptance criteria**
+
+- Follows structure rule.
+- All hook behavior verified against source code.
+- Readable and approachable.
+
+---
+
+## Docs: Revisit `docs/reporting.md` <!-- dev-ready -->
+
+**Goal**  
+Make reporting.md human-readable and accurate.
+
+**Context**
+
+- Corresponds to "Reporting server" in Core Features (`docs/index.html` lines 485-489).
+- Currently starts with `## Overview` with nested `### Problem and goals` — needs flattening.
+
+**Key files:**
+- `docs/reporting.md` — target
+- `src/reporting/*` — reporting implementation
+- `src/cli/commands/report.ts` — CLI report command
+
+**Scope**
+
+1. Fix structure: flatten overview, remove nested sub-headers under overview.
+2. Verify reporting server features and CLI usage against source code.
+3. Improve readability.
+4. Use `writer` role.
+
+**Acceptance criteria**
+
+- Follows structure: `# Header` → overview (no sub-header) → `## Sections`.
+- All reporting features verified against source code.
+- Readable and approachable.
+
+---
+
+## Docs: Revisit `docs/sandboxing.md` <!-- dev-ready -->
+
+**Goal**  
+Make sandboxing.md human-readable and accurate.
+
+**Context**
+
+- Corresponds to "Docker sandboxing" in Core Features (`docs/index.html` lines 490-492).
+- Currently starts with `## Overview` sub-header — should be headerless overview.
+
+**Key files:**
+- `docs/sandboxing.md` — target
+- `src/cli/run/` — Docker sandboxing implementation
+- `docs/configuration.md` — `runtime.*` config keys
+
+**Scope**
+
+1. Fix structure: remove `## Overview` header, make overview headerless.
+2. Verify Docker setup, mounts, env forwarding, and container behavior against source code.
+3. Improve readability.
+4. Use `writer` role.
+
+**Acceptance criteria**
+
+- Follows structure: `# Header` → overview (no sub-header) → `## Sections`.
+- All sandboxing behavior verified against source code.
+- Readable and approachable.
+
+---
+
+## Docs: Revisit `docs/cli.md` <!-- dev-ready -->
+
+**Goal**  
+Make cli.md human-readable and accurate.
+
+**Context**
+
+- Covers CLI commands, env variables, run progress, and tree output.
+- Currently starts with `## Overview` sub-header — should be headerless overview.
+- Also covers the "Running a workflow" section from Core Features (`docs/index.html` lines 438-453).
+
+**Key files:**
+- `docs/cli.md` — target
+- `src/cli/*` — CLI implementation
+- `src/cli/shared/usage.ts` — CLI usage text
+
+**Scope**
+
+1. Fix structure: remove `## Overview` header, make overview headerless.
+2. Verify all CLI commands, flags, env variables, and tree output against source code.
+3. Ensure consistency with `src/cli/shared/usage.ts`.
+4. Improve readability.
+5. Use `writer` role.
+
+**Acceptance criteria**
+
+- Follows structure: `# Header` → overview (no sub-header) → `## Sections`.
+- All CLI behavior verified against source code and usage.ts.
+- Readable and approachable.
+
+---
+
+## Docs: Revisit `docs/contributing.md` <!-- dev-ready -->
+
+**Goal**  
+Make contributing.md human-readable, without duplicating architecture content.
+
+**Context**
+
+- Currently well-structured with headerless overview.
+- Should not duplicate content from `ARCHITECTURE.md` (being moved to `docs/architecture.md`).
+
+**Key files:**
+- `docs/contributing.md` — target
+- `ARCHITECTURE.md` — architecture reference (being moved to docs/)
+- `package.json` — build/test commands
+
+**Scope**
+
+1. Verify structure follows rule (currently OK).
+2. Remove duplicated architecture content — link to architecture page instead.
+3. Verify build commands, test instructions, and branch strategy against current repo state.
+4. Improve readability where needed.
+5. Use `writer` role.
+
+**Acceptance criteria**
+
+- Follows structure rule.
+- No duplicated architecture content — links to architecture page.
+- All build/test instructions verified and working.
+
+---
+
+## Docs: Move `ARCHITECTURE.md` to `docs/architecture.md` <!-- dev-ready -->
+
+**Goal**  
+Move architecture documentation into the docs site.
+
+**Context**
+
+- `ARCHITECTURE.md` lives at repo root — should be part of the docs site.
+- Content should be generic architecture overview — remove anything that duplicates `docs/contributing.md`.
+- Many docs pages reference `../ARCHITECTURE.md` — all need updating.
+
+**Key files:**
+- `ARCHITECTURE.md` — source (move to `docs/architecture.md`)
+- `docs/_layouts/docs.html` — add to navigation
+- `docs/contributing.md`, `docs/hooks.md`, `docs/configuration.md`, `docs/grammar.md`, `docs/cli.md`, `docs/sandboxing.md` — update `../ARCHITECTURE.md` references to `architecture.md`
+- `README.md` — update reference
+
+**Scope**
+
+1. Move `ARCHITECTURE.md` to `docs/architecture.md`.
+2. Add Jekyll front matter (`title: Architecture`, `permalink: /architecture`, `redirect_from: /architecture.md`).
+3. Fix structure: `# Architecture` → overview (no sub-header) → `## Sections`.
+4. Remove content duplicating `contributing.md` — keep only architectural concepts.
+5. Add to navigation in `docs/_layouts/docs.html`.
+6. Update all cross-references across docs and README.
+7. Use `writer` role.
+
+**Acceptance criteria**
+
+- File at `docs/architecture.md` with correct Jekyll front matter.
+- Added to site navigation.
+- No duplicated content with `contributing.md`.
+- All cross-references updated and working.
+- Follows structure rule.
+
+---
+
+## Docs: Shorten and refocus `README.md` <!-- dev-ready -->
+
+**Goal**  
+Make README shorter, more general, and contribution/overview focused.
+
+**Context**
+
+- README is currently ~150 lines with detailed technical content that belongs in `docs/`.
+- Should be an overview: what Jaiph is, quick install, one example, links to docs, contribution pointers.
+
+**Key files:**
+- `README.md` — target
+- `docs/getting-started.md` — detailed getting started content
+- `docs/` — all detailed docs
+
+**Scope**
+
+1. Keep: project description, badges, one concise example, install, quick try.
+2. Remove: detailed feature descriptions, architecture details, long usage sections.
+3. Add: clear links to docs/ for details (getting started, grammar, CLI, contributing).
+4. Keep contributing section brief — link to `docs/contributing.md`.
+5. Target: roughly half its current length.
+6. Use `writer` role.
+
+**Acceptance criteria**
+
+- README is noticeably shorter and focused on overview + getting started.
+- All detailed content linked to docs/ rather than duplicated.
+- One clear example remains.
+- Links to all important docs pages.
+
+---
+
+## Docs: Interlink all pages and add ToC with "you are here" <!-- dev-ready -->
+
+**Goal**  
+Add consistent navigation with active-page highlighting across all docs pages.
+
+**Context**
+
+- Docs pages are loosely connected — some have contextual links but no consistent ToC or active-page indicator.
+- `docs/_layouts/docs.html` has a nav panel with page links but no "you are here" highlighting.
+- Jekyll provides `page.url` / `page.permalink` which can be matched against link hrefs for active state.
+
+**Key files:**
+- `docs/_layouts/docs.html` — docs template with navigation
+- `docs/assets/css/style.css` — navigation styles
+- `docs/assets/js/main.js` — navigation behavior
+- All `docs/*.md` — ensure consistent cross-links
+
+**Scope**
+
+1. Add active-page CSS class to current page link in `docs/_layouts/docs.html` (use Jekyll `page.permalink` matching).
+2. Ensure all doc pages are in nav panel in logical order (Getting Started → Grammar → CLI → Configuration → Testing → Inbox → Hooks → Reporting → Sandboxing → Architecture → Contributing).
+3. Style the active link distinctly ("you are here").
+4. Verify all cross-references between docs pages are consistent.
+5. Use `writer` role.
+
+**Acceptance criteria**
+
+- Current page is visually highlighted in navigation.
+- All docs pages appear in navigation in logical order.
+- Cross-references between pages are consistent and working.
+
+---
+
 ## `examples/` — landing-page samples as runnable files <!-- dev-ready -->
 
 **Goal**  

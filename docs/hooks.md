@@ -7,8 +7,6 @@ redirect_from:
 
 # Jaiph Hooks
 
-## Overview
-
 When you run a workflow, you often want **side effects**—notifications, structured logging, CI integration—without putting that logic in `.jh` sources. **Hooks** are optional shell commands the **CLI** runs at fixed points in the run lifecycle so you can wire those integrations in one place (`hooks.json`) instead of editing workflows.
 
 Concretely: `jaiph run` follows a predictable path—prepare scripts, start the workflow runner (locally or in Docker), stream **`__JAIPH_EVENT__`** JSON lines from the runner’s **stderr**, then print PASS/FAIL. Hooks plug into that path: the CLI uses the **same parsed stderr events** that drive the progress tree and builds JSON payloads for your commands (see [Architecture — Runtime vs CLI responsibilities](../ARCHITECTURE.md#runtime-vs-cli-responsibilities)). This is **not** part of the Node workflow runtime; channel send/receive and inbox dispatch are separate mechanisms ([Inbox & Dispatch](inbox.md)).
