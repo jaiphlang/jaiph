@@ -71,7 +71,7 @@ test("parseTestBlock: parses mock prompt block with if/else/fi", () => {
   const lines = [
     'test "t1" {',
     '  mock prompt {',
-    '    if $1 contains "hello" ; then',
+    '    if ${arg1} contains "hello" ; then',
     '    respond "world"',
     '    else',
     '    respond "default"',
@@ -94,9 +94,9 @@ test("parseTestBlock: parses mock prompt block with elif", () => {
   const lines = [
     'test "t1" {',
     '  mock prompt {',
-    '    if $1 contains "a" ; then',
+    '    if ${arg1} contains "a" ; then',
     '    respond "ra"',
-    '    elif $1 contains "b" ; then',
+    '    elif ${arg1} contains "b" ; then',
     '    respond "rb"',
     '    fi',
     '  }',

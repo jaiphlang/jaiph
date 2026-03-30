@@ -124,7 +124,7 @@ Switch installed version:
 
 ```bash
 jaiph use nightly   # tracks main branch
-jaiph use 0.5.0     # installs tag v0.5.0
+jaiph use 0.6.0     # installs tag v0.6.0
 ```
 
 If that fails, check that `~/.local/bin` is in your `PATH` (default install directory).

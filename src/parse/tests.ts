@@ -46,7 +46,7 @@ function parseMockPromptBlock(
         nextIndex: i + 1,
       };
     }
-    const ifMatch = line.match(/^if\s+\$1\s+contains\s+"((?:[^"\\]|\\.)*)"\s*;\s*then\s*$/);
+    const ifMatch = line.match(/^if\s+\$\{arg1\}\s+contains\s+"((?:[^"\\]|\\.)*)"\s*;\s*then\s*$/);
     if (ifMatch) {
       if (inElse) {
         fail(filePath, "elif after else not allowed in mock prompt block", lineNo);
@@ -56,7 +56,7 @@ function parseMockPromptBlock(
       i += 1;
       continue;
     }
-    const elifMatch = line.match(/^elif\s+\$1\s+contains\s+"((?:[^"\\]|\\.)*)"\s*;\s*then\s*$/);
+    const elifMatch = line.match(/^elif\s+\$\{arg1\}\s+contains\s+"((?:[^"\\]|\\.)*)"\s*;\s*then\s*$/);
     if (elifMatch) {
       if (inElse) {
         fail(filePath, "elif after else not allowed in mock prompt block", lineNo);
@@ -103,7 +103,7 @@ function parseMockPromptBlock(
     }
     fail(
       filePath,
-      'mock prompt block allows only: if $1 contains "..." ; then, elif ..., else, respond "...", fi, }',
+      'mock prompt block allows only: if ${arg1} contains "..." ; then, elif ..., else, respond "...", fi, }',
       lineNo,
     );
   }
@@ -187,7 +187,7 @@ export function parseTestBlock(
       const isDoubleQuoted = arg.startsWith('"') && hasUnescapedClosingQuote(arg, 1);
       const isSingleQuoted = /^'(?:[^'\\]|\\.)*'$/.test(arg);
       if (!isDoubleQuoted && !isSingleQuoted) {
-        fail(filePath, 'mock prompt must be: mock prompt "<response>" or mock prompt { if $1 contains "..." ; then respond "..." ; fi }', innerNo, innerRaw.indexOf("mock"));
+        fail(filePath, 'mock prompt must be: mock prompt "<response>" or mock prompt { if ${arg1} contains "..." ; then respond "..." ; fi }', innerNo, innerRaw.indexOf("mock"));
       }
       testBlock.steps.push({
         type: "test_mock_prompt",

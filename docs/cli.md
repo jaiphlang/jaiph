@@ -281,7 +281,7 @@ Examples:
 
 ```bash
 jaiph use nightly
-jaiph use 0.5.0
+jaiph use 0.6.0
 ```
 
 ## `jaiph report` {#jaiph-report}

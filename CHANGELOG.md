@@ -1,5 +1,16 @@
 # Nightly
 
+- _Unreleased — changes for the next version accumulate here._
+
+# 0.6.0
+
+## Summary
+
+- **Runtime:** `jaiph run` and `jaiph test` execute through the Node workflow runtime (`NodeWorkflowRuntime`) only — no bash workflow transpilation on the execution path; Docker uses the same Node runner; `jaiph build` is no longer a user-facing command; `jaiph test` uses a pure Node test runner. Legacy `jaiph_stdlib.sh` workflow orchestration and user-facing workflow `.sh` output are gone from the runtime path.
+- **Scripts vs orchestration:** Bash, polyglot shebangs, and arbitrary shell live only in top-level `script { }` blocks (opaque bodies; the compiler does not parse them as Jaiph steps). Workflow and rule bodies are Jaiph steps only — no raw shell lines; rules may `run` scripts only (not workflows).
+- **Breaking changes:** Call sites require parentheses; definitions use `rule` / `script` / `workflow` **without** empty `()` before `{`; orchestration strings allow only `${identifier}` interpolation; `mock function` → `mock script`; `.jph` removed — see the detailed entries below.
+- **Tests & CI:** E2E suite tightened toward full stdout/artifact contracts; Playwright checks landing-page samples; docs site smoke-served in CI.
+
 - **Fix: Treat script bodies as opaque bash** — The compiler no longer parses `script { … }` bodies as Jaiph steps, rejects keywords like `const` or `fail`, strips outer quotes from commands, or validates cross-script calls line-by-line. All script bodies — bash and polyglot — are now opaque text to the compiler, which means embedded `node -e` heredocs, inline Python, `const` assignments in JS, and any other valid shell construct compile without interference. For bash scripts (no shebang or `#!/usr/bin/env bash`), the emitter still applies lightweight transforms: `return` normalization, `local`/`export`/`readonly` spacing, and import alias resolution (`alias.name` → `symbol::name`). Non-bash scripts (custom shebang) emit the body verbatim. Previously, line-based rules such as "`const` is not allowed in script bodies" caused false positives for real scripts where a line began with `const` inside embedded JS/Python.
 - **CI: Verify landing-page samples (Playwright)** — The `docs-local` CI job now builds Jaiph, installs Playwright (Chromium), and runs `npx playwright test` against the locally served Jekyll site. The Playwright suite (`tests/e2e-samples/landing-page.spec.ts`) extracts sample source and expected output from the landing page using `data-sample` DOM attributes, compares source blocks against checked-in `examples/*.jh` files, and runs deterministic samples through the CLI to verify that displayed output matches actual behavior. A new `npm run test:samples` script provides the same check locally. The landing page (`docs/index.html`) now carries stable `data-sample`, `data-sample-file`, `data-sample-source`, and `data-sample-output` attributes on each tab panel for reliable extraction.
 - **CI: Getting started (local) — Jekyll smoke-check job** — New CI job `docs-local` ("Getting started (local)") builds and serves the Jekyll documentation site locally on `127.0.0.1:4000` using Ruby 3.2 with `bundler-cache`, waits up to 30 seconds for the server to respond, then asserts HTTP 200 on `/` and `/getting-started` via `curl`. Runs on `ubuntu-latest` only (no OS matrix). The job has no dependency on `jaiph.org` — it validates the docs site entirely from the repository `docs/` directory. Future tasks will extend this job with sample verification against the served HTML.
@@ -199,7 +210,7 @@
 - Nested workflows and step functions in run tree; `run` disallowed inside `rule` blocks (use `ensure` or move to workflow)
 - Prompt capture fixes (assignments as final answer); improved test failure output
 - Documentation and docs site updates (getting started, testing, styling, mobile)
-- `jaiph test` runs `*.test.jh` / `*.test.jph` with inline prompt mocks (`mock prompt "..."` or `mock prompt { if $1 contains "..." ; then respond "..." ; fi }`). No external `.test.toml` files.
+- `jaiph test` runs `*.test.jh` / `*.test.jph` with inline prompt mocks (`mock prompt "..."` or `mock prompt { if ${arg1} contains "..." ; then respond "..." ; fi }`). No external `.test.toml` files.
 - Runtime config is env vars and in-file metadata only; `.jaiph/config.toml` and global config files are no longer read.
 - `jaiph init` no longer creates `.jaiph/config.toml`.
 - `.jh` extension recommended for new files; `.jph` supported but deprecated (CLI shows migration hint when running `.jph` files)

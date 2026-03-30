@@ -14,7 +14,7 @@ export async function main(argv: string[]): Promise<number> {
     return 0;
   }
   if (cmd === "--version" || cmd === "-v") {
-    process.stdout.write("jaiph 0.5.0\n");
+    process.stdout.write("jaiph 0.6.0\n");
     return 0;
   }
   try {

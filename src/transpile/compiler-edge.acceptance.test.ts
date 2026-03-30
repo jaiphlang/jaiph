@@ -272,7 +272,7 @@ test("ACCEPTANCE: unterminated mock prompt block (missing fi and }) fails with E
           "",
           'test "unterminated" {',
           "  mock prompt {",
-          '    if $1 contains "x" ; then',
+          '    if ${arg1} contains "x" ; then',
           '      respond "y"',
           "  }",
           "}",

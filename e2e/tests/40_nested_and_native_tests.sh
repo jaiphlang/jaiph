@@ -121,7 +121,7 @@ import "unmatched_mock_block.jh" as p
 
 test "unmatched prompt never mocked" {
   mock prompt {
-    if $1 contains "other" ; then
+    if ${arg1} contains "other" ; then
       respond "x"
     fi
   }
