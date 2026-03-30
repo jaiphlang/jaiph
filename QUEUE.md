@@ -12,63 +12,6 @@ Process rules:
 
 ---
 
-## Verify `*.test.jh` testing end-to-end <!-- dev-ready -->
-
-**Goal**  
-Add or extend automated verification that **testing** with `*.test.jh` files works as documented (`jaiph test`, mocks, imports, assertions).
-
-**Context**
-
-- The mock-syntax task renames `mock function` → `mock script`; testing behavior should remain correct but deserves an explicit regression gate.
-- Coverage should include at least one **e2e** path that runs `jaiph test` on a `.test.jh` file and checks pass/fail outcomes, plus sanity on fixture layout.
-
-**Key files:**
-- `src/runtime/kernel/node-test-runner.ts` — test execution
-- `src/cli/commands/test.ts` — CLI entry
-- `e2e/tests/` — add or extend shell test targeting `*.test.jh`
-- `docs/testing.md`, `docs/index.html` — align with verified behavior
-
-**Scope**
-
-1. Inventory existing unit/e2e coverage for `jaiph test`; fill gaps for realistic `.test.jh` workflows (import, mock, expect).
-2. Add an e2e test that runs the CLI against a committed `.test.jh` and asserts exit code / key output.
-3. Document any prerequisites (env, paths) in `docs/testing.md`.
-
-**Acceptance criteria**
-
-- CI runs a dedicated check that `jaiph test` succeeds on a representative `.test.jh` and fails predictably when a test should fail.
-- No silent breakage of the test runner contract after mock-syntax changes.
-
----
-
-## `examples/` — landing-page samples as runnable files <!-- dev-ready -->
-
-**Goal**  
-Add an `examples/` directory (repo root or under `docs/`, pick one convention) containing **every** code sample from `docs/index.html` as real `.jh` (and related) files that can be executed.
-
-**Context**
-
-- Samples on the site are copy-pasted; drift between docs and actual behavior is likely without checked-in sources of truth.
-- Each tab / block in **Samples** (e.g. `say_hello`, tests, `ensure_ci_passes`, inbox, async) should map to files under `examples/` with stable names.
-
-**Key files:**
-- `docs/index.html` — source list of samples to mirror
-- `examples/` — new tree (structure documented in README or `docs/`)
-- `e2e/tests/` — invoke `jaiph run` / `jaiph test` against `examples/` paths
-
-**Scope**
-
-1. Create `examples/` and add one file per landing-page sample (or minimal file set with imports), matching semantics of the HTML snippets.
-2. Wire **e2e** tests that call Jaiph against these paths (non-interactive; mock prompts where needed so CI is deterministic).
-3. Cross-link from `docs/index.html` or getting-started docs to `examples/` on GitHub.
-
-**Acceptance criteria**
-
-- Every major sample block on the landing page has a corresponding file under `examples/`.
-- E2E exercises the examples tree; failures indicate doc/runtime drift.
-
----
-
 ## CI: Getting started (local Jekyll, no matrix) <!-- dev-ready -->
 
 **Goal**  
@@ -130,6 +73,34 @@ Automatically verify that **samples shown on the site** match **real execution**
 
 - Automated test fails if a landing-page sample output drifts from actual CLI behavior (within defined normalization).
 - Uses localhost + Playwright (or documented equivalent) to fetch page content; no `jaiph.org` dependency for this verification step.
+
+---
+
+## `examples/` — landing-page samples as runnable files <!-- dev-ready -->
+
+**Goal**  
+Add an `examples/` directory (repo root or under `docs/`, pick one convention) containing **every** code sample from `docs/index.html` as real `.jh` (and related) files that can be executed.
+
+**Context**
+
+- Samples on the site are copy-pasted; drift between docs and actual behavior is likely without checked-in sources of truth.
+- Each tab / block in **Samples** (e.g. `say_hello`, tests, `ensure_ci_passes`, inbox, async) should map to files under `examples/` with stable names.
+
+**Key files:**
+- `docs/index.html` — source list of samples to mirror
+- `examples/` — new tree (structure documented in README or `docs/`)
+- `e2e/tests/` — invoke `jaiph run` / `jaiph test` against `examples/` paths
+
+**Scope**
+
+1. Create `examples/` and add one file per landing-page sample (or minimal file set with imports), matching semantics of the HTML snippets.
+2. Wire **e2e** tests that call Jaiph against these paths (non-interactive; mock prompts where needed so CI is deterministic).
+3. Cross-link from `docs/index.html` or getting-started docs to `examples/` on GitHub.
+
+**Acceptance criteria**
+
+- Every major sample block on the landing page has a corresponding file under `examples/`.
+- E2E exercises the examples tree; failures indicate doc/runtime drift.
 
 ---
 
