@@ -16,12 +16,12 @@ e2e::section "script cannot access parent scope variables"
 e2e::file "isolation.jh" <<'EOF'
 const secret = "parent-secret-value"
 
-script leak_check() {
+script leak_check {
   echo "secret=${secret:-EMPTY}"
 }
 
-workflow default() {
-  run leak_check
+workflow default {
+  run leak_check()
 }
 EOF
 
@@ -43,12 +43,12 @@ e2e::section "JAIPH_LIB is unset by default in isolated scripts"
 # ---------------------------------------------------------------------------
 
 e2e::file "lib_check.jh" <<'EOF'
-script check_lib() {
+script check_lib {
   echo "lib=${JAIPH_LIB:-UNSET}"
 }
 
-workflow default() {
-  run check_lib
+workflow default {
+  run check_lib()
 }
 EOF
 
@@ -77,13 +77,13 @@ test_util_greeting() {
 LIBEOF
 
 e2e::file "source_lib.jh" <<'EOF'
-script use_lib() {
+script use_lib {
   source "$JAIPH_LIB/test_util.sh"
   test_util_greeting
 }
 
-workflow default() {
-  run use_lib
+workflow default {
+  run use_lib()
 }
 EOF
 
@@ -105,16 +105,16 @@ e2e::section "cross-script call detected at compile time"
 # ---------------------------------------------------------------------------
 
 e2e::file "cross_call.jh" <<'EOF'
-script helper() {
+script helper {
   echo "helper-ran"
 }
 
-script caller() {
+script caller {
   helper
 }
 
-workflow default() {
-  run caller
+workflow default {
+  run caller()
 }
 EOF
 

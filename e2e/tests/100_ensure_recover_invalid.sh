@@ -13,12 +13,12 @@ e2e::section "ensure recover with args after recover fails at parse time"
 
 # Given
 e2e::file "args_after_recover.jh" <<'EOF'
-rule ci_passes() {
+rule ci_passes {
   true
 }
 
-workflow default() {
-  ensure ci_passes recover "$repo_dir" {
+workflow default {
+  ensure ci_passes() recover "$repo_dir" {
     echo "should not parse"
   }
 }
@@ -43,12 +43,12 @@ e2e::section "ensure recover with multiple args after recover fails at parse tim
 
 # Given
 e2e::file "multi_args_after_recover.jh" <<'EOF'
-rule some_rule() {
+rule some_rule {
   true
 }
 
-workflow default() {
-  ensure some_rule "a" recover "b" {
+workflow default {
+  ensure some_rule("a") recover "b" {
     echo "should not parse"
   }
 }
@@ -73,12 +73,12 @@ e2e::section "ensure recover without block fails at parse time"
 
 # Given
 e2e::file "recover_no_block.jh" <<'EOF'
-rule ci_passes() {
+rule ci_passes {
   true
 }
 
-workflow default() {
-  ensure ci_passes "$repo_dir" recover
+workflow default {
+  ensure ci_passes("$repo_dir") recover
 }
 EOF
 

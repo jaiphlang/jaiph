@@ -13,61 +13,61 @@ e2e::section "brace if not ensure branch behavior"
 
 # Given
 e2e::file "ensure_run_branch.jh" <<'EOF'
-script always_fail_impl() {
+script always_fail_impl {
   false
 }
-rule always_fail() {
-  run always_fail_impl
+rule always_fail {
+  run always_fail_impl()
 }
 
-script recovery_impl() {
+script recovery_impl {
   echo "recovery-ran" > recovery_ran.txt
 }
-workflow recovery() {
-  run recovery_impl
+workflow recovery {
+  run recovery_impl()
 }
 
-workflow default() {
-  if not ensure always_fail {
-    run recovery
+workflow default {
+  if not ensure always_fail() {
+    run recovery()
   }
 }
 EOF
 
 e2e::file "ensure_shell_branch.jh" <<'EOF'
-script always_fail_impl() {
+script always_fail_impl {
   false
 }
-rule always_fail() {
-  run always_fail_impl
+rule always_fail {
+  run always_fail_impl()
 }
 
-script shell_ran_impl() {
+script shell_ran_impl {
   echo "shell-ran" > shell_ran.txt
 }
 
-workflow default() {
-  if not ensure always_fail {
-    run shell_ran_impl
+workflow default {
+  if not ensure always_fail() {
+    run shell_ran_impl()
   }
 }
 EOF
 
 e2e::file "ensure_pass_branch.jh" <<'EOF'
-script always_ok_impl() {
+script always_ok_impl {
   true
 }
-rule always_ok() {
-  run always_ok_impl
+rule always_ok {
+  run always_ok_impl()
 }
 
-script should_not_run_impl() {
+script should_not_run_impl {
   echo "should-not-run" > should_not_run.txt
 }
 
-workflow default() {
-  if not ensure always_ok {
-    run should_not_run_impl
+workflow default {
+  if not ensure always_ok() {
+    run should_not_run_impl()
   }
 }
 EOF

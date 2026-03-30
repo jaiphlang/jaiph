@@ -31,22 +31,22 @@ dispatch — no file watchers, no polling, no external message brokers.
 Send (`<-`), routes (`->`), and related parsing rules are specified in
 [Grammar — Parse and runtime semantics](grammar.md#parse-and-runtime-semantics).
 The **right-hand side** of `<-` may be only a double-quoted literal, `${var}`,
-`run ref [args]`, or empty (forward `${arg1}`) — not a raw shell command; see
+`run ref(args)`, or empty (forward `${arg1}`) — not a raw shell command; see
 [Grammar — Managed calls vs command substitution](grammar.md#managed-calls-vs-command-substitution).
 
 ```jh
 channel findings
 
-workflow researcher() {
+workflow researcher {
   findings <- "## analysis results"
 }
 
-workflow analyst() {
+workflow analyst {
   log "Received: ${arg1}"
 }
 
-workflow default() {
-  run researcher
+workflow default {
+  run researcher()
   findings -> analyst
 }
 ```
@@ -77,7 +77,7 @@ Declare channels at top level, one per line:
 channel findings
 channel report
 
-workflow default() { ... }
+workflow default { ... }
 ```
 
 Every channel used by `send` (`<-`) or route declarations (`->`) must be
@@ -101,7 +101,7 @@ and signals the runtime to dispatch.
 ```jh
 channel findings
 
-workflow researcher() {
+workflow researcher {
   findings <- "## findings"
 }
 ```
@@ -111,7 +111,7 @@ If no command follows `<-`, the workflow's `${arg1}` argument is forwarded:
 ```jh
 channel findings
 
-workflow forwarder() {
+workflow forwarder {
   findings <-
 }
 ```
@@ -125,7 +125,7 @@ misread as send syntax.
 | Jaiph                 | Bash (generated in the workflow `::impl`)          |
 |-----------------------|----------------------------------------------------|
 | `ch <- "foo"`         | `jaiph::send 'ch' "$(… literal …)" '<workflow>'`   |
-| `ch <- run fmt`       | `jaiph::send` with managed `run` to `fmt`        |
+| `ch <- run fmt()`     | `jaiph::send` with managed `run` to `fmt`        |
 | `ch <-`               | `jaiph::send 'ch' "${arg1}" '<workflow>'`         |
 
 (`<workflow>` is the name of the workflow that contains the send step.)
@@ -147,8 +147,8 @@ A name that is not a valid `alias.name` / `name` pattern fails at parse time as
 channel findings
 channel summary
 
-workflow default() {
-  run researcher
+workflow default {
+  run researcher()
   findings -> analyst
   summary -> reviewer
 }
@@ -182,7 +182,7 @@ name = channel <- cmd
 Use two steps instead:
 
 ```jh
-const payload = run build_message
+const payload = run build_message()
 channel <- "${payload}"
 ```
 
@@ -267,8 +267,8 @@ config {
   run.inbox_parallel = true
 }
 
-workflow default() {
-  run producer
+workflow default {
+  run producer()
   findings -> analyst, reviewer   # analyst and reviewer run in parallel
 }
 ```

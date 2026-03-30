@@ -1,5 +1,17 @@
 import type { SendRhsDef, WorkflowRefDef } from "../types";
-import { fail, indexOfClosingDoubleQuote, isRef } from "./core";
+import { fail, indexOfClosingDoubleQuote, isRef, parseCallRef } from "./core";
+
+/** Reject non-empty trailing content after a call expression (e.g. shell redirection). */
+function rejectTrailingContent(
+  filePath: string,
+  lineNo: number,
+  keyword: string,
+  rest: string,
+): void {
+  const trimmed = rest.trim();
+  if (!trimmed) return;
+  fail(filePath, `unexpected content after ${keyword} call: '${trimmed}'; shell redirection (>, |, &) is not supported — use a script block`, lineNo);
+}
 
 const SEND_RHS_HINT =
   'send right-hand side must be a quoted string ("..."), a variable ($name or ${...}), or "run <ref> [args]" — not raw shell; use a script or use const';
@@ -25,16 +37,13 @@ export function parseSendRhs(
     }
     return { kind: "literal", token: t.slice(0, close + 1) };
   }
-  const runM = t.match(
-    /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
-  );
-  if (runM && isRef(runM[1])) {
-    let args = runM[2]?.trim();
-    if (args?.endsWith(" &")) {
-      args = args.slice(0, -2).trimEnd();
+  if (t.startsWith("run ")) {
+    const call = parseCallRef(t.slice("run ".length).trim());
+    if (call) {
+      rejectTrailingContent(filePath, lineNo, "run", call.rest);
+      const ref: WorkflowRefDef = { value: call.ref, loc: { line: lineNo, col } };
+      return { kind: "run", ref, ...(call.args ? { args: call.args } : {}) };
     }
-    const ref: WorkflowRefDef = { value: runM[1], loc: { line: lineNo, col } };
-    return { kind: "run", ref, ...(args ? { args } : {}) };
   }
   if (/^\$[A-Za-z_][A-Za-z0-9_]*$/.test(t)) {
     return { kind: "var", bash: t };

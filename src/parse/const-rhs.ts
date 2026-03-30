@@ -1,6 +1,18 @@
 import type { ConstRhs, RuleRefDef, WorkflowRefDef } from "../types";
-import { fail, isRef } from "./core";
+import { fail, isRef, parseCallRef } from "./core";
 import { parsePromptStep } from "./prompt";
+
+/** Reject non-empty trailing content after a call expression (e.g. shell redirection). */
+function rejectTrailingContent(
+  filePath: string,
+  lineNo: number,
+  keyword: string,
+  rest: string,
+): void {
+  const trimmed = rest.trim();
+  if (!trimmed) return;
+  fail(filePath, `unexpected content after ${keyword} call: '${trimmed}'; shell redirection (>, |, &) is not supported — use a script block`, lineNo);
+}
 
 /**
  * Reject P10 disallowed forms: command substitution and bash string ops in const RHS.
@@ -75,43 +87,37 @@ export function parseConstRhs(
   }
   if (head.startsWith("run ")) {
     const rest = head.slice("run ".length).trim();
-    const runMatch = rest.match(
-      /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
-    );
-    if (!runMatch || !isRef(runMatch[1])) {
-      fail(filePath, "const ... = run must target a workflow or script reference", lineNo, col);
+    const call = parseCallRef(rest);
+    if (!call) {
+      fail(filePath, "calls require parentheses: const name = run ref() or run ref(args)", lineNo, col);
     }
-    const ref: WorkflowRefDef = { value: runMatch[1], loc: { line: lineNo, col } };
+    rejectTrailingContent(filePath, lineNo, "run", call.rest);
+    const ref: WorkflowRefDef = { value: call.ref, loc: { line: lineNo, col } };
     return {
-      value: { kind: "run_capture", ref, args: runMatch[2]?.trim() },
+      value: { kind: "run_capture", ref, args: call.args },
       nextLineIdx: lineIdx,
     };
   }
   if (head.startsWith("ensure ")) {
     const rest = head.slice("ensure ".length).trim();
-    const ensureMatch = rest.match(
-      /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
-    );
-    if (!ensureMatch || !isRef(ensureMatch[1])) {
-      fail(filePath, "const ... = ensure must target a rule reference", lineNo, col);
+    const call = parseCallRef(rest);
+    if (!call) {
+      fail(filePath, "calls require parentheses: const name = ensure ref() or ensure ref(args)", lineNo, col);
     }
-    if (/\brecover\b/.test(rest)) {
+    if (call.rest.trim()) {
       fail(filePath, "const ... = ensure cannot use recover", lineNo, col);
     }
-    const ref: RuleRefDef = { value: ensureMatch[1], loc: { line: lineNo, col } };
+    const ref: RuleRefDef = { value: call.ref, loc: { line: lineNo, col } };
     return {
-      value: { kind: "ensure_capture", ref, args: ensureMatch[2]?.trim() },
+      value: { kind: "ensure_capture", ref, args: call.args },
       nextLineIdx: lineIdx,
     };
   }
-  const callLike = head.trimEnd().match(
-    /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s+(.+)$/,
-  );
-  if (callLike && isRef(callLike[1])) {
-    const bare = head.trimEnd();
+  const callLike = parseCallRef(head.trimEnd());
+  if (callLike) {
     fail(
       filePath,
-      `Script calls in const assignments must use run. Use: const ${constName} = run ${bare}`,
+      `Script calls in const assignments must use run. Use: const ${constName} = run ${head.trimEnd()}`,
       lineNo,
       col,
     );

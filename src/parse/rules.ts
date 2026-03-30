@@ -12,21 +12,13 @@ export function parseRuleBlock(
   const raw = lines[startIndex];
   const line = raw.trim();
 
-  const match = line.match(/^(export\s+)?rule\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*\)\s*\{$/);
+  const match = line.match(/^(export\s+)?rule\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{$/);
   if (!match) {
-    const braceNoParens = line.match(/^(export\s+)?rule\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{/);
-    if (braceNoParens) {
+    const parensMatch = line.match(/^(export\s+)?rule\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
+    if (parensMatch) {
       fail(
         filePath,
-        `rule declarations require parentheses: rule ${braceNoParens[2]}() { … }`,
-        lineNo,
-      );
-    }
-    const parensNoBrace = line.match(/^(export\s+)?rule\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*\)\s*$/);
-    if (parensNoBrace) {
-      fail(
-        filePath,
-        `rule declarations require braces: rule ${parensNoBrace[2]}() { … }`,
+        `definitions must not use parentheses: rule ${parensMatch[2]} { … }`,
         lineNo,
       );
     }
@@ -34,7 +26,7 @@ export function parseRuleBlock(
     if (loose) {
       fail(
         filePath,
-        `rule declarations require parentheses and braces: rule ${loose[2]}() { … }`,
+        `rule declarations require braces: rule ${loose[2]} { … }`,
         lineNo,
       );
     }

@@ -24,11 +24,11 @@ trap 'cleanup_report; e2e::cleanup' EXIT
 e2e::section "reporting server: discovery, tree, logs, aggregate, live polling"
 
 e2e::file "reporting_probe.jh" <<'EOF'
-script agg_line_impl() {
+script agg_line_impl {
   echo "agg-line"
 }
-workflow default() {
-  run agg_line_impl
+workflow default {
+  run agg_line_impl()
 }
 EOF
 

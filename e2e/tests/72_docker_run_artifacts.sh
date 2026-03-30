@@ -20,15 +20,15 @@ e2e::section "docker run artifacts — happy path"
 
 # Given: a simple workflow that produces stdout artifacts
 e2e::file "docker_artifacts.jh" <<'EOF'
-script greet_impl() {
+script greet_impl {
   echo "hello from docker"
 }
-rule greet() {
-  run greet_impl
+rule greet {
+  run greet_impl()
 }
 
-workflow default() {
-  ensure greet
+workflow default {
+  ensure greet()
 }
 EOF
 
@@ -61,15 +61,15 @@ e2e::section "docker run artifacts — relative JAIPH_RUNS_DIR"
 
 # Given: same workflow but with relative runs dir
 e2e::file "docker_rel_runs.jh" <<'EOF'
-script greet_impl() {
+script greet_impl {
   echo "hello relative"
 }
-rule greet() {
-  run greet_impl
+rule greet {
+  run greet_impl()
 }
 
-workflow default() {
-  ensure greet
+workflow default {
+  ensure greet()
 }
 EOF
 
@@ -88,15 +88,15 @@ e2e::section "docker run artifacts — absolute JAIPH_RUNS_DIR inside workspace"
 
 # Given
 e2e::file "docker_abs_runs.jh" <<'EOF'
-script greet_impl() {
+script greet_impl {
   echo "hello absolute"
 }
-rule greet() {
-  run greet_impl
+rule greet {
+  run greet_impl()
 }
 
-workflow default() {
-  ensure greet
+workflow default {
+  ensure greet()
 }
 EOF
 
@@ -116,15 +116,15 @@ e2e::section "docker run artifacts — absolute JAIPH_RUNS_DIR outside workspace
 
 # Given
 e2e::file "docker_outside.jh" <<'EOF'
-script greet_impl() {
+script greet_impl {
   echo "should not run"
 }
-rule greet() {
-  run greet_impl
+rule greet {
+  run greet_impl()
 }
 
-workflow default() {
-  ensure greet
+workflow default {
+  ensure greet()
 }
 EOF
 

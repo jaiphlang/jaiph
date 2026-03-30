@@ -1,35 +1,35 @@
 #!/usr/bin/env jaiph
 
-rule always_ok() {
-  run always_ok_impl
+rule always_ok {
+  run always_ok_impl()
 }
 
-script always_ok_impl() {
+script always_ok_impl {
   echo ok
 }
 
-script noop() {
+script noop {
   :
 }
 
-workflow wf_fail() {
+workflow wf_fail {
   fail "expected failure"
 }
 
-workflow wf_const() {
+workflow wf_const {
   const msg = "hello"
   log "${msg}"
 }
 
-workflow wf_async() {
-  run async noop
+workflow wf_async {
+  run async noop()
 }
 
-workflow wf_brace_if() {
-  if ensure always_ok {
+workflow wf_brace_if {
+  if ensure always_ok() {
     log "then"
   }
-  else if not ensure always_ok {
+  else if not ensure always_ok() {
     log "elif"
   }
   else {
@@ -37,6 +37,6 @@ workflow wf_brace_if() {
   }
 }
 
-workflow default() {
-  ensure always_ok
+workflow default {
+  ensure always_ok()
 }

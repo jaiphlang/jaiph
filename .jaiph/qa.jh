@@ -43,19 +43,19 @@ const testing_philosophy = "
     expectations, or obsolete feature removal. Keep changes minimal.
 "
 
-script gap_report_nonempty() {
+script gap_report_nonempty {
   test -s ".jaiph/tmp/qa_gap_report.md"
 }
 
-script read_gap_report() {
+script read_gap_report {
   cat .jaiph/tmp/qa_gap_report.md
 }
 
-script save_gap_report() {
+script save_gap_report {
   printf '%s\n' "$1" > .jaiph/tmp/qa_gap_report.md
 }
 
-workflow analyze_gaps() {
+workflow analyze_gaps {
   const gap_report = prompt "
     <role>
     You are a QA engineer analyzing the Jaiph codebase for test coverage gaps.
@@ -100,15 +100,15 @@ workflow analyze_gaps() {
     </role>
   "
 
-  run save_gap_report "${gap_report}"
+  run save_gap_report("${gap_report}")
   log "Gap report saved to .jaiph/tmp/qa_gap_report.md"
 }
 
-workflow write_tests() {
-  if not run gap_report_nonempty {
+workflow write_tests {
+  if not run gap_report_nonempty() {
     fail "No gap report found at .jaiph/tmp/qa_gap_report.md. Run analyze_gaps first."
   }
-  const gap_report = run read_gap_report
+  const gap_report = run read_gap_report()
 
   prompt "
     <role>
@@ -150,14 +150,14 @@ workflow write_tests() {
   "
 }
 
-script mkdir_tmp_jaiph_qa() {
+script mkdir_tmp_jaiph_qa {
   mkdir -p .jaiph/tmp
 }
 
-workflow default() {
-  ensure git.is_clean
-  run mkdir_tmp_jaiph_qa
-  run analyze_gaps
-  run write_tests
-  run ci.ensure_ci_passes
+workflow default {
+  ensure git.is_clean()
+  run mkdir_tmp_jaiph_qa()
+  run analyze_gaps()
+  run write_tests()
+  run ci.ensure_ci_passes()
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env jaiph
 # E2E fixture: workflow used by workflow_greeting.test.jh (Given/When/Then with mocked prompt).
-workflow default() {
+workflow default {
   prompt "e2e-greeting-prompt"
   echo "done"
 }

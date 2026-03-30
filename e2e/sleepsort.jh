@@ -1,16 +1,16 @@
 #! /usr/bin/env jaiph
 
-script sleep() {
+script sleep {
   sleep $1 && echo "$1"
 }
 
-workflow delayed_log() {
-  run sleep ${arg1}
+workflow delayed_log {
+  run sleep(${arg1})
   log "${arg1}"
 }
 
-workflow default() {
-  run async delayed_log 3
-  run async delayed_log 1
-  run async delayed_log 2
+workflow default {
+  run async delayed_log(3)
+  run async delayed_log(1)
+  run async delayed_log(2)
 }

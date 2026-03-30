@@ -5,6 +5,7 @@ import {
   indexOfClosingDoubleQuote,
   isRef,
   matchSendOperator,
+  parseCallRef,
 } from "./core";
 import { parseConstRhs } from "./const-rhs";
 import { parseConfigBlock } from "./metadata";
@@ -12,6 +13,18 @@ import { parsePromptStep } from "./prompt";
 import { parseSendRhs } from "./send-rhs";
 import { parseEnsureStep } from "./steps";
 import { tryParseBraceIfChain } from "./workflow-brace";
+
+/** Reject non-empty trailing content after a call expression (e.g. shell redirection). */
+function rejectTrailingContent(
+  filePath: string,
+  lineNo: number,
+  keyword: string,
+  rest: string,
+): void {
+  const trimmed = rest.trim();
+  if (!trimmed) return;
+  fail(filePath, `unexpected content after ${keyword} call: '${trimmed}'; shell redirection (>, |, &) is not supported — use a script block`, lineNo);
+}
 
 /**
  * Detect Jaiph value-return syntax vs bash exit-code return.
@@ -35,23 +48,13 @@ export function parseWorkflowBlock(
   const rawDecl = lines[startIndex];
   const lineDecl = rawDecl.trim();
 
-  const match = lineDecl.match(/^(export\s+)?workflow\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*\)\s*\{$/);
+  const match = lineDecl.match(/^(export\s+)?workflow\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{$/);
   if (!match) {
-    const braceNoParens = lineDecl.match(/^(export\s+)?workflow\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{/);
-    if (braceNoParens) {
+    const parensMatch = lineDecl.match(/^(export\s+)?workflow\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
+    if (parensMatch) {
       fail(
         filePath,
-        `workflow declarations require parentheses: workflow ${braceNoParens[2]}() { … }`,
-        lineNo,
-      );
-    }
-    const parensNoBrace = lineDecl.match(
-      /^(export\s+)?workflow\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*\)\s*$/,
-    );
-    if (parensNoBrace) {
-      fail(
-        filePath,
-        `workflow declarations require braces: workflow ${parensNoBrace[2]}() { … }`,
+        `definitions must not use parentheses: workflow ${parensMatch[2]} { … }`,
         lineNo,
       );
     }
@@ -59,7 +62,7 @@ export function parseWorkflowBlock(
     if (loose) {
       fail(
         filePath,
-        `workflow declarations require parentheses and braces: workflow ${loose[2]}() { … }`,
+        `workflow declarations require braces: workflow ${loose[2]} { … }`,
         lineNo,
       );
     }
@@ -215,19 +218,18 @@ export function parseWorkflowBlock(
       }
       if (rest.startsWith("run ")) {
         const runBody = rest.slice("run ".length).trim();
-        const runMatch = runBody.match(
-          /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
-        );
-        if (!runMatch || !isRef(runMatch[1])) {
-          fail(filePath, "run must target a workflow or script reference", innerNo);
+        const call = parseCallRef(runBody);
+        if (!call) {
+          fail(filePath, "calls require parentheses: run ref() or run ref(args)", innerNo);
         }
+        rejectTrailingContent(filePath, innerNo, "run", call.rest);
         workflow.steps.push({
           type: "run",
           workflow: {
-            value: runMatch[1],
+            value: call.ref,
             loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
           },
-          args: runMatch[2]?.trim(),
+          args: call.args,
           captureName,
         });
         continue;
@@ -253,19 +255,18 @@ export function parseWorkflowBlock(
 
     if (inner.startsWith("run async ")) {
       const runBody = inner.slice("run async ".length).trim();
-      const runMatch = runBody.match(
-        /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
-      );
-      if (!runMatch || !isRef(runMatch[1])) {
-        fail(filePath, "run async must target a workflow or script reference", innerNo);
+      const call = parseCallRef(runBody);
+      if (!call) {
+        fail(filePath, "calls require parentheses: run async ref() or run async ref(args)", innerNo);
       }
+      rejectTrailingContent(filePath, innerNo, "run async", call.rest);
       workflow.steps.push({
         type: "run",
         workflow: {
-          value: runMatch[1],
+          value: call.ref,
           loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
         },
-        args: runMatch[2]?.trim(),
+        args: call.args,
         async: true,
       });
       continue;
@@ -273,19 +274,18 @@ export function parseWorkflowBlock(
 
     if (inner.startsWith("run ")) {
       const runBody = inner.slice("run ".length).trim();
-      const runMatch = runBody.match(
-        /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
-      );
-      if (!runMatch || !isRef(runMatch[1])) {
-        fail(filePath, "run must target a workflow or script reference", innerNo);
+      const call = parseCallRef(runBody);
+      if (!call) {
+        fail(filePath, "calls require parentheses: run ref() or run ref(args)", innerNo);
       }
+      rejectTrailingContent(filePath, innerNo, "run", call.rest);
       workflow.steps.push({
         type: "run",
         workflow: {
-          value: runMatch[1],
+          value: call.ref,
           loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
         },
-        args: runMatch[2]?.trim(),
+        args: call.args,
       });
       continue;
     }

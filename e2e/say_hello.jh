@@ -1,18 +1,18 @@
 #!/usr/bin/env jaiph
 
-script name_was_provided_impl() {
+script name_was_provided_impl {
   if [ -z "$1" ]; then
     echo "You didn't provide your name :(" >&2
     exit 1
   fi
 }
 
-rule name_was_provided() {
-  run name_was_provided_impl "${arg1}"
+rule name_was_provided {
+  run name_was_provided_impl("${arg1}")
 }
 
-workflow default() {
-  ensure name_was_provided "${arg1}"
+workflow default {
+  ensure name_was_provided("${arg1}")
 
   response = prompt "
     Say hello to ${arg1} and provide your model name, and then a fun fact about a person with the same name.

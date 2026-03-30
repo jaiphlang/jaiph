@@ -1,6 +1,18 @@
 import type { WorkflowStepDef } from "../types";
 import { parseConstRhs } from "./const-rhs";
-import { fail, indexOfClosingDoubleQuote, isRef } from "./core";
+import { fail, indexOfClosingDoubleQuote, isRef, parseCallRef } from "./core";
+
+/** Reject non-empty trailing content after a call expression (e.g. shell redirection). */
+function rejectTrailingContent(
+  filePath: string,
+  lineNo: number,
+  keyword: string,
+  rest: string,
+): void {
+  const trimmed = rest.trim();
+  if (!trimmed) return;
+  fail(filePath, `unexpected content after ${keyword} call: '${trimmed}'; shell redirection (>, |, &) is not supported — use a script block`, lineNo);
+}
 import { parsePromptStep } from "./prompt";
 
 /** Split recover block content into statements on `;` or `\n`, but not inside double-quoted strings. */
@@ -76,27 +88,29 @@ function parseRecoverStatement(
   ) {
     const captureName = genericAssignMatch[1];
     const rest = genericAssignMatch[2].trim();
-    const runMatch = rest.match(
-      /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
-    );
-    if (runMatch && isRef(runMatch[1])) {
-      return {
-        type: "run",
-        workflow: { value: runMatch[1], loc: { line: lineNo, col } },
-        args: runMatch[2]?.trim(),
-        captureName,
-      };
+    if (rest.startsWith("run ")) {
+      const call = parseCallRef(rest.slice("run ".length).trim());
+      if (call) {
+        rejectTrailingContent(filePath, lineNo, "run", call.rest);
+        return {
+          type: "run",
+          workflow: { value: call.ref, loc: { line: lineNo, col } },
+          args: call.args,
+          captureName,
+        };
+      }
     }
-    const ensureMatch = rest.match(
-      /^ensure\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
-    );
-    if (ensureMatch && isRef(ensureMatch[1])) {
-      return {
-        type: "ensure",
-        ref: { value: ensureMatch[1], loc: { line: lineNo, col } },
-        args: ensureMatch[2]?.trim(),
-        captureName,
-      };
+    if (rest.startsWith("ensure ")) {
+      const call = parseCallRef(rest.slice("ensure ".length).trim());
+      if (call) {
+        rejectTrailingContent(filePath, lineNo, "ensure", call.rest);
+        return {
+          type: "ensure",
+          ref: { value: call.ref, loc: { line: lineNo, col } },
+          args: call.args,
+          captureName,
+        };
+      }
     }
     return {
       type: "shell",
@@ -105,25 +119,27 @@ function parseRecoverStatement(
       captureName,
     };
   }
-  const runMatch = t.match(
-    /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
-  );
-  if (runMatch && isRef(runMatch[1])) {
-    return {
-      type: "run",
-      workflow: { value: runMatch[1], loc: { line: lineNo, col } },
-      args: runMatch[2]?.trim(),
-    };
+  if (t.startsWith("run ")) {
+    const call = parseCallRef(t.slice("run ".length).trim());
+    if (call) {
+      rejectTrailingContent(filePath, lineNo, "run", call.rest);
+      return {
+        type: "run",
+        workflow: { value: call.ref, loc: { line: lineNo, col } },
+        args: call.args,
+      };
+    }
   }
-  const ensureMatch = t.match(
-    /^ensure\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
-  );
-  if (ensureMatch && isRef(ensureMatch[1])) {
-    return {
-      type: "ensure",
-      ref: { value: ensureMatch[1], loc: { line: lineNo, col } },
-      args: ensureMatch[2]?.trim(),
-    };
+  if (t.startsWith("ensure ")) {
+    const call = parseCallRef(t.slice("ensure ".length).trim());
+    if (call) {
+      rejectTrailingContent(filePath, lineNo, "ensure", call.rest);
+      return {
+        type: "ensure",
+        ref: { value: call.ref, loc: { line: lineNo, col } },
+        args: call.args,
+      };
+    }
   }
   const promptAssignMatch = t.match(
     /^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*prompt\s+(.+)$/s,
@@ -197,17 +213,16 @@ export function parseEnsureStep(
   }
 
   if (recoverIdx === -1) {
-    const ensureMatch = ensureBody.match(
-      /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
-    );
-    if (!ensureMatch || !isRef(ensureMatch[1])) {
-      fail(filePath, "invalid ensure statement", innerNo);
+    const call = parseCallRef(ensureBody);
+    if (!call) {
+      fail(filePath, "calls require parentheses: ensure ref() or ensure ref(args)", innerNo);
     }
+    rejectTrailingContent(filePath, innerNo, "ensure", call.rest);
     return {
       step: {
         type: "ensure",
-        ref: { value: ensureMatch[1], loc: { line: innerNo, col: ensureCol } },
-        args: ensureMatch[2]?.trim(),
+        ref: { value: call.ref, loc: { line: innerNo, col: ensureCol } },
+        args: call.args,
         ...(captureName ? { captureName } : {}),
       },
       nextIdx: idx,
@@ -215,14 +230,13 @@ export function parseEnsureStep(
   }
   const left = ensureBody.slice(0, recoverIdx).trim();
   const right = ensureBody.slice(recoverIdx + " recover ".length).trim();
-  const ensureMatch = left.match(
-    /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
-  );
-  if (!ensureMatch || !isRef(ensureMatch[1])) {
-    fail(filePath, "invalid ensure statement", innerNo);
+  const call = parseCallRef(left);
+  if (!call) {
+    fail(filePath, "calls require parentheses: ensure ref() or ensure ref(args)", innerNo);
   }
-  const ref = ensureMatch[1];
-  const args = ensureMatch[2]?.trim();
+  rejectTrailingContent(filePath, innerNo, "ensure", call.rest);
+  const ref = call.ref;
+  const args = call.args;
   const recoverCol = innerRaw.indexOf("recover") + 1;
 
   // Arguments between `recover` and `{` → error

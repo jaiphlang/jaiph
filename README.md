@@ -18,10 +18,10 @@ You write **`.jh`**; the CLI parses source into an AST, validates references, an
 
 **Features:**
 
-- **Workflows** — Ordered **Jaiph-only** steps (`ensure`, `run`, `prompt`, `const`, brace `if`, `fail`, `return`, `log` / `logerr`, inbox `send` / `route`, `run async`). Anything that is not a recognized step is a parse error: move bash into a **`script`** and call it with **`run`**. Conditionals use **brace form only** (`if [not] ensure|run ref { … }`).
+- **Workflows** — Ordered **Jaiph-only** steps (`ensure`, `run`, `prompt`, `const`, brace `if`, `fail`, `return`, `log` / `logerr`, inbox `send` / `route`, `run async`). Anything that is not a recognized step is a parse error: move bash into a **`script`** and call it with **`run`**. Conditionals use **brace form only** (`if [not] ensure|run ref() { … }`).
 - **Rules** — Reusable checks as **structured steps** (same keyword style, restricted set): `ensure` for other rules, **`run` for scripts only**, `const`, brace `if`, `fail`, `log` / `logerr`, `return "…"`. No `prompt`, inbox, `wait`, or `ensure … recover`. Used with `ensure` and in conditionals.
 - **Agent prompts** — `prompt "..."` sends text to a configured agent (e.g. Cursor or Claude CLI). Supports validated JSON responses via `returns '{ field: type }'`.
-- **Composability** — Import other `.jh` modules and call their rules, workflows, and scripts by alias. **Managed calls only:** `ensure` for rules, `run` for workflows and scripts. Assignment capture (`x = ensure …`, `x = run …`, or `const x = …`) uses each callee’s **value channel** (explicit `return "…"` in rules/workflows; **scripts** pass data via **stdout**). In **`const`** bindings, call-like capture must use the keyword explicitly (**`const x = run script "$arg"`**, not **`const x = script "$arg"`**). Do not wrap Jaiph callees in `$(...)` or invoke them as bare bash commands.
+- **Composability** — Import other `.jh` modules and call their rules, workflows, and scripts by alias. **Managed calls only:** `ensure` for rules, `run` for workflows and scripts. Assignment capture (`x = ensure …`, `x = run …`, or `const x = …`) uses each callee’s **value channel** (explicit `return "…"` in rules/workflows; **scripts** pass data via **stdout**). In **`const`** bindings, call-like capture must use the keyword explicitly (**`const x = run script("$arg")`**, not **`const x = script("$arg")`**). Do not wrap Jaiph callees in `$(...)` or invoke them as bare bash commands.
 - **Shell-native (and polyglot)** — Use **`script`** blocks for command pipelines, tests, and helpers (bash `return` / `exit` only — not Jaiph `return "…"` or `fail` / `log` / `logerr` / `const` inside those bodies). **Script isolation:** scripts execute in a clean process environment — only positional arguments, essential system variables, and Jaiph variables (`JAIPH_LIB`, `JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`) are inherited. Module-scoped `const` / `local` values are visible in rules and workflows but **not** in scripts; pass data as arguments or use shared libraries (`source "$JAIPH_LIB/…"`). Scripts cannot call other Jaiph scripts — compose through workflows instead. **Polyglot scripts:** add a custom shebang (e.g. `#!/usr/bin/env node` or `#!/usr/bin/env python3`) as the first body line to write scripts in other languages — Jaiph keyword validation is skipped for non-bash shebangs. The runtime defaults **`JAIPH_LIB`** to `<workspace>/.jaiph/lib` (via `JAIPH_WORKSPACE`) so `source "$JAIPH_LIB/…"` resolves predictably. See [Grammar](docs/grammar.md), [CLI environment variables](docs/cli.md#environment-variables), and `.jaiph/language_redesign_spec.md` for the orchestration vs execution boundary.
 
 > [!WARNING]
@@ -42,34 +42,34 @@ You write **`.jh`**; the CLI parses source into an AST, validates references, an
 import "bootstrap_project.jh" as bootstrap
 import "tools/security.jh" as security
 
-script file_exists() {
+script file_exists {
   test -f "$1"
 }
 
-script non_empty() {
+script non_empty {
   test -n "$1"
 }
 
-rule project_ready() {
-  if not run file_exists "package.json" {
+rule project_ready {
+  if not run file_exists("package.json") {
     fail "expected package.json"
   }
-  if not run non_empty "$NODE_ENV" {
+  if not run non_empty("${NODE_ENV}") {
     fail "NODE_ENV must be set"
   }
 }
 
-script npm_run_build() {
+script npm_run_build {
   npm run build
 }
 
-rule build_passes() {
-  run npm_run_build
+rule build_passes {
+  run npm_run_build()
 }
 
-workflow default() {
-  if not ensure project_ready {
-    run bootstrap.nodejs
+workflow default {
+  if not ensure project_ready() {
+    run bootstrap.nodejs()
   }
 
   prompt "
@@ -77,13 +77,13 @@ workflow default() {
     Follow requirements: ${arg1}
   "
 
-  ensure build_passes
-  ensure security.scan_passes
+  ensure build_passes()
+  ensure security.scan_passes()
 
-  run update_docs
+  run update_docs()
 }
 
-workflow update_docs() {
+workflow update_docs {
   prompt "Update docs"
 }
 ```
@@ -98,9 +98,9 @@ Run a sample workflow without installing anything first:
 
 ```bash
 curl -fsSL https://jaiph.org/run | bash -s '
-workflow default() {
+workflow default {
   const response = prompt "Say: Hello I'\''m [model name]!"
-  log "$response"
+  log "${response}"
 }'
 ```
 
@@ -123,7 +123,7 @@ If that fails, check that `~/.local/bin` is in your `PATH` (default install dire
 # or: jaiph run ./path/to/main.jh "feature request or task"
 ```
 
-Arguments are passed positionally. In Jaiph strings (log, prompt, fail, send), use `${arg1}`, `${arg2}` (JS template literal style); inline capture interpolation (`${run ref}`, `${ensure ref}`) executes a managed call and inlines the result. In script bodies, `$1`, `$2`, `"$@"` remain valid. The file must define a `workflow default`.
+Arguments are passed positionally. In Jaiph strings (log, prompt, fail, send), use `${arg1}`, `${arg2}` (JS template literal style); inline capture interpolation (`${run ref()}`, `${ensure ref()}`) executes a managed call and inlines the result. In script bodies, `$1`, `$2`, `"$@"` remain valid. The file must define a `workflow default`.
 
 When stdout is not a terminal (for example in CI), long-running steps can print periodic gray **heartbeat** lines between the start and completion markers so logs show the run is still active. See [CLI Reference — Run progress and tree output](docs/cli.md#run-progress-and-tree-output) for heartbeats, tree formatting, and **`log` / `logerr`** (terminal output uses **`echo -e`**-style escapes; `LOG` / `LOGERR` JSON keeps the raw message string).
 

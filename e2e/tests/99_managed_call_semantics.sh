@@ -12,18 +12,18 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::section "run script: stdout capture and step artifacts"
 
 e2e::file "run_fn_ok.jh" <<'EOF'
-script give() {
+script give {
   echo "log-to-artifacts"
   echo "captured-value"
 }
 
-script print_capture() {
+script print_capture {
   echo "out=x=$1"
 }
 
-workflow default() {
-  x = run give
-  run print_capture "$x"
+workflow default {
+  x = run give()
+  run print_capture("$x")
 }
 EOF
 
@@ -55,10 +55,10 @@ e2e::pass "run script success path"
 e2e::section "compiler rejects direct function call in workflow"
 
 e2e::file "direct_fn.jh" <<'EOF'
-script f() {
+script f {
   return "x"
 }
-workflow default() {
+workflow default {
   f
 }
 EOF
@@ -71,10 +71,10 @@ e2e::pass "direct function invocation rejected"
 e2e::section "compiler rejects Jaiph function inside command substitution"
 
 e2e::file "sub_fn.jh" <<'EOF'
-script f() {
+script f {
   return "x"
 }
-workflow default() {
+workflow default {
   x="$(f)"
 }
 EOF
@@ -87,19 +87,19 @@ e2e::pass "command substitution with Jaiph function rejected"
 e2e::section "ensure and run workflows still build"
 
 e2e::file "ensure_run_smoke.jh" <<'EOF'
-script ok_impl() {
+script ok_impl {
   true
 }
 
-rule ok() {
-  run ok_impl
+rule ok {
+  run ok_impl()
 }
-workflow child() {
-  ensure ok
+workflow child {
+  ensure ok()
 }
-workflow default() {
-  ensure ok
-  run child
+workflow default {
+  ensure ok()
+  run child()
 }
 EOF
 

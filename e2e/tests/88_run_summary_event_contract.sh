@@ -41,32 +41,32 @@ config {
 
 channel ch
 
-script emit_payload() {
+script emit_payload {
   echo "contract-payload"
 }
 
-workflow sender() {
+workflow sender {
   log "contract-sender-log"
-  ch <- run emit_payload
+  ch <- run emit_payload()
 }
 
-script write_a() {
+script write_a {
   echo "a:$1" > contract_a.txt
 }
-workflow receiver_a() {
-  run write_a "${arg1}"
+workflow receiver_a {
+  run write_a("${arg1}")
 }
 
-script write_b() {
+script write_b {
   echo "b:$1" > contract_b.txt
 }
-workflow receiver_b() {
-  run write_b "${arg1}"
+workflow receiver_b {
+  run write_b("${arg1}")
 }
 
-workflow default() {
+workflow default {
   log "contract-root-log"
-  run sender
+  run sender()
   ch -> receiver_a, receiver_b
 }
 EOF

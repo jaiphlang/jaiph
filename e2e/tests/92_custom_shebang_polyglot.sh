@@ -23,20 +23,20 @@ else
   TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
   e2e::file "polyglot.jh" <<'EOF'
-script py_echo_ok() {
+script py_echo_ok {
   #!/usr/bin/env python3
   import sys
   sys.stdout.write("polyglot-ok\n")
   sys.exit(0)
 }
 
-script bash_marker() {
+script bash_marker {
   echo bash-script-ran
 }
 
-workflow default() {
-  run py_echo_ok
-  run bash_marker
+workflow default {
+  run py_echo_ok()
+  run bash_marker()
 }
 EOF
 
@@ -70,19 +70,19 @@ else
   TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
   e2e::file "polyglot_node.jh" <<'EOF'
-script node_echo_ok() {
+script node_echo_ok {
   #!/usr/bin/env node
   process.stdout.write("node-polyglot-ok\n");
   process.exit(0);
 }
 
-script bash_marker() {
+script bash_marker {
   echo bash-script-ran
 }
 
-workflow default() {
-  run node_echo_ok
-  run bash_marker
+workflow default {
+  run node_echo_ok()
+  run bash_marker()
 }
 EOF
 

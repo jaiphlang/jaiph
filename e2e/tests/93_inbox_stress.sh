@@ -79,61 +79,61 @@ config {
 
 channel data
 
-workflow s1() {
+workflow s1 {
   data <- echo "m1"
 }
 
-workflow s2() {
+workflow s2 {
   data <- echo "m2"
 }
 
-workflow s3() {
+workflow s3 {
   data <- echo "m3"
 }
 
-workflow s4() {
+workflow s4 {
   data <- echo "m4"
 }
 
-workflow s5() {
+workflow s5 {
   data <- echo "m5"
 }
 
-workflow s6() {
+workflow s6 {
   data <- echo "m6"
 }
 
-workflow s7() {
+workflow s7 {
   data <- echo "m7"
 }
 
-workflow s8() {
+workflow s8 {
   data <- echo "m8"
 }
 
-workflow s9() {
+workflow s9 {
   data <- echo "m9"
 }
 
-workflow s10() {
+workflow s10 {
   data <- echo "m10"
 }
 
-workflow sink() {
+workflow sink {
   echo "${arg1}" >> sink_all.txt
 }
 
-workflow default() {
-  run s1
-  run s2
-  run s3
-  run s4
-  run s5
-  run s6
-  run s7
-  run s8
-  run s9
-  run s10
+workflow default {
+  run s1()
+  run s2()
+  run s3()
+  run s4()
+  run s5()
+  run s6()
+  run s7()
+  run s8()
+  run s9()
+  run s10()
   data -> sink
 }
 EOF
@@ -167,34 +167,34 @@ config {
 
 channel ch
 
-workflow producer_a() {
+workflow producer_a {
   ch <- echo "pa"
 }
 
-workflow producer_b() {
+workflow producer_b {
   ch <- echo "pb"
 }
 
-workflow producer_c() {
+workflow producer_c {
   ch <- echo "pc"
 }
 
-workflow target_x() {
+workflow target_x {
   echo "x:${arg1}" >> fanout_log.txt
 }
 
-workflow target_y() {
+workflow target_y {
   echo "y:${arg1}" >> fanout_log.txt
 }
 
-workflow target_z() {
+workflow target_z {
   echo "z:${arg1}" >> fanout_log.txt
 }
 
-workflow default() {
-  run producer_a
-  run producer_b
-  run producer_c
+workflow default {
+  run producer_a()
+  run producer_b()
+  run producer_c()
   ch -> target_x, target_y, target_z
 }
 EOF
@@ -243,20 +243,20 @@ config {
 channel ch_raw
 channel ch_processed
 
-workflow sender() {
+workflow sender {
   ch_raw <- echo "raw-data"
 }
 
-workflow processor() {
+workflow processor {
   ch_processed <- echo "processed:${arg1}"
 }
 
-workflow sink() {
+workflow sink {
   echo "${arg1}" > nested_result.txt
 }
 
-workflow default() {
-  run sender
+workflow default {
+  run sender()
   ch_raw -> processor
   ch_processed -> sink
 }
@@ -287,26 +287,26 @@ config {
 
 channel ch
 
-workflow producer() {
+workflow producer {
   ch <- echo "msg"
 }
 
-workflow fail_a() {
+workflow fail_a {
   echo "a ran" > fail_a_ran.txt
   exit 1
 }
 
-workflow fail_b() {
+workflow fail_b {
   echo "b ran" > fail_b_ran.txt
   exit 1
 }
 
-workflow good() {
+workflow good {
   echo "ok" > fail_good_ran.txt
 }
 
-workflow default() {
-  run producer
+workflow default {
+  run producer()
   ch -> fail_a, fail_b, good
 }
 EOF
@@ -335,40 +335,40 @@ config {
 
 channel ev
 
-workflow s1() {
+workflow s1 {
   ev <- echo "e1"
 }
 
-workflow s2() {
+workflow s2 {
   ev <- echo "e2"
 }
 
-workflow s3() {
+workflow s3 {
   ev <- echo "e3"
 }
 
-workflow s4() {
+workflow s4 {
   ev <- echo "e4"
 }
 
-workflow s5() {
+workflow s5 {
   ev <- echo "e5"
 }
 
-workflow t1() {
+workflow t1 {
   echo "t1:${arg1}" >> artifact_log.txt
 }
 
-workflow t2() {
+workflow t2 {
   echo "t2:${arg1}" >> artifact_log.txt
 }
 
-workflow default() {
-  run s1
-  run s2
-  run s3
-  run s4
-  run s5
+workflow default {
+  run s1()
+  run s2()
+  run s3()
+  run s4()
+  run s5()
   ev -> t1, t2
 }
 EOF
@@ -418,30 +418,30 @@ config {
 
 channel ch
 
-workflow s1() {
+workflow s1 {
   ch <- echo "i1"
 }
 
-workflow s2() {
+workflow s2 {
   ch <- echo "i2"
 }
 
-workflow s3() {
+workflow s3 {
   ch <- echo "i3"
 }
 
-workflow t1() {
+workflow t1 {
   echo "t1:${arg1}" >> soak_log.txt
 }
 
-workflow t2() {
+workflow t2 {
   echo "t2:${arg1}" >> soak_log.txt
 }
 
-workflow default() {
-  run s1
-  run s2
-  run s3
+workflow default {
+  run s1()
+  run s2()
+  run s3()
   ch -> t1, t2
 }
 EOF
@@ -495,61 +495,61 @@ e2e::section "Sequential mode: same high-volume scenario produces identical resu
 e2e::file "stress_seq_mode.jh" <<'EOF'
 channel data
 
-workflow s1() {
+workflow s1 {
   data <- echo "m1"
 }
 
-workflow s2() {
+workflow s2 {
   data <- echo "m2"
 }
 
-workflow s3() {
+workflow s3 {
   data <- echo "m3"
 }
 
-workflow s4() {
+workflow s4 {
   data <- echo "m4"
 }
 
-workflow s5() {
+workflow s5 {
   data <- echo "m5"
 }
 
-workflow s6() {
+workflow s6 {
   data <- echo "m6"
 }
 
-workflow s7() {
+workflow s7 {
   data <- echo "m7"
 }
 
-workflow s8() {
+workflow s8 {
   data <- echo "m8"
 }
 
-workflow s9() {
+workflow s9 {
   data <- echo "m9"
 }
 
-workflow s10() {
+workflow s10 {
   data <- echo "m10"
 }
 
-workflow sink() {
+workflow sink {
   echo "${arg1}" >> seq_sink_all.txt
 }
 
-workflow default() {
-  run s1
-  run s2
-  run s3
-  run s4
-  run s5
-  run s6
-  run s7
-  run s8
-  run s9
-  run s10
+workflow default {
+  run s1()
+  run s2()
+  run s3()
+  run s4()
+  run s5()
+  run s6()
+  run s7()
+  run s8()
+  run s9()
+  run s10()
   data -> sink
 }
 EOF
