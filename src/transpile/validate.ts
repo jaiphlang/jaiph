@@ -22,6 +22,7 @@ import {
   validateFailString,
   validateReturnString,
   validateJaiphStringContent,
+  extractInlineCaptures,
 } from "./validate-string";
 import { validatePromptStepReturns } from "./validate-prompt-schema";
 
@@ -206,6 +207,33 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
     }
   }
 
+  const stripDQ = (s: string): string =>
+    s.length >= 2 && s[0] === '"' && s[s.length - 1] === '"' ? s.slice(1, -1) : s;
+
+  const validateWorkflowStringCaptures = (content: string, loc: { line: number; col: number }): void => {
+    for (const cap of extractInlineCaptures(content)) {
+      if (cap.kind === "run") {
+        validateNoShellRedirection(ast.filePath, loc, "run", cap.args);
+        validateRef({ value: cap.ref, loc }, ast, refCtx, expectRunTargetRef);
+      } else {
+        validateNoShellRedirection(ast.filePath, loc, "ensure", cap.args);
+        validateRef({ value: cap.ref, loc }, ast, refCtx, expectRuleRef);
+      }
+    }
+  };
+
+  const validateRuleStringCaptures = (content: string, loc: { line: number; col: number }): void => {
+    for (const cap of extractInlineCaptures(content)) {
+      if (cap.kind === "run") {
+        validateNoShellRedirection(ast.filePath, loc, "run", cap.args);
+        validateRef({ value: cap.ref, loc }, ast, refCtx, expectRunInRuleRef);
+      } else {
+        validateNoShellRedirection(ast.filePath, loc, "ensure", cap.args);
+        validateRef({ value: cap.ref, loc }, ast, refCtx, expectRuleRef);
+      }
+    }
+  };
+
   for (const rule of ast.rules) {
     const validateRuleStep = (s: WorkflowStepDef): void => {
       if (s.type === "prompt" || s.type === "send" || s.type === "wait") {
@@ -274,18 +302,22 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
       }
       if (s.type === "fail") {
         validateFailString(s.message, ast.filePath, s.loc.line, s.loc.col);
+        validateRuleStringCaptures(stripDQ(s.message), s.loc);
         return;
       }
       if (s.type === "log") {
         validateLogString(s.message, ast.filePath, s.loc.line, s.loc.col, "log");
+        validateRuleStringCaptures(s.message, s.loc);
         return;
       }
       if (s.type === "logerr") {
         validateLogString(s.message, ast.filePath, s.loc.line, s.loc.col, "logerr");
+        validateRuleStringCaptures(s.message, s.loc);
         return;
       }
       if (s.type === "return") {
         validateReturnString(s.value, ast.filePath, s.loc.line, s.loc.col);
+        if (s.value.startsWith('"')) validateRuleStringCaptures(stripDQ(s.value), s.loc);
         return;
       }
       if (s.type === "const") {
@@ -298,6 +330,8 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           validateRef(v.ref, ast, refCtx, expectRuleRef);
         } else if (v.kind === "prompt_capture") {
           throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", "const ... = prompt is not allowed in rules");
+        } else if (v.kind === "expr") {
+          validateRuleStringCaptures(stripDQ(v.bashRhs), s.loc);
         }
         return;
       }
@@ -382,6 +416,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           const inner = s.rhs.token.startsWith('"') && s.rhs.token.endsWith('"')
             ? s.rhs.token.slice(1, -1) : s.rhs.token;
           validateJaiphStringContent(inner, ast.filePath, s.loc.line, s.loc.col, "send");
+          validateWorkflowStringCaptures(inner, s.loc);
         } else if (s.rhs.kind === "bare_ref") {
           validateRef(s.rhs.ref, ast, refCtx, bareSendRefSpec);
         } else if (s.rhs.kind === "shell") {
@@ -433,22 +468,27 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
       if (s.type === "prompt") {
         validatePromptString(s.raw, ast.filePath, s.loc.line, s.loc.col);
         validatePromptStepReturns(s, ast.filePath);
+        validateWorkflowStringCaptures(stripDQ(s.raw), s.loc);
         return;
       }
       if (s.type === "log") {
         validateLogString(s.message, ast.filePath, s.loc.line, s.loc.col, "log");
+        validateWorkflowStringCaptures(s.message, s.loc);
         return;
       }
       if (s.type === "logerr") {
         validateLogString(s.message, ast.filePath, s.loc.line, s.loc.col, "logerr");
+        validateWorkflowStringCaptures(s.message, s.loc);
         return;
       }
       if (s.type === "return") {
         validateReturnString(s.value, ast.filePath, s.loc.line, s.loc.col);
+        if (s.value.startsWith('"')) validateWorkflowStringCaptures(stripDQ(s.value), s.loc);
         return;
       }
       if (s.type === "fail") {
         validateFailString(s.message, ast.filePath, s.loc.line, s.loc.col);
+        validateWorkflowStringCaptures(stripDQ(s.message), s.loc);
         return;
       }
       if (s.type === "wait") {
@@ -462,6 +502,8 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         } else if (v.kind === "ensure_capture") {
           validateNoShellRedirection(ast.filePath, v.ref.loc, "ensure", v.args);
           validateRef(v.ref, ast, refCtx, expectRuleRef);
+        } else if (v.kind === "expr") {
+          validateWorkflowStringCaptures(stripDQ(v.bashRhs), s.loc);
         }
         return;
       }

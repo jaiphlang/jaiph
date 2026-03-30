@@ -43,6 +43,36 @@ Jaiph strings follow **JS template literal semantics**. Only **`${identifier}`**
 | `${var:-fallback}` | **Rejected** (`E_PARSE`) | Shell syntax; use conditional logic or named params |
 | `` ` `` (unescaped backtick) | **Rejected** (`E_PARSE`) | Must escape with `` \` `` |
 | `$(...)` | **Rejected** in orchestration strings (`E_PARSE`) | Use a `script` and `run` |
+| `${run ref [args]}` | **Inline capture** — executes managed call, inlines output | All Jaiph strings (see below) |
+| `${ensure ref [args]}` | **Inline capture** — executes rule, inlines return value | All Jaiph strings (see below) |
+
+**Inline capture interpolation (`${run ...}` / `${ensure ...}`):**
+
+Orchestration strings (`log`, `logerr`, `fail`, `prompt`, `return`, send literals, `const` RHS expressions) support **inline managed captures**. Instead of extracting a one-time value into a temporary variable, you can execute a managed call directly inside the string:
+
+```jaiph
+# Without inline capture (still valid):
+const result = run some_script
+log "Got: ${result}"
+
+# With inline capture:
+log "Got: ${run some_script}"
+log "Status: ${ensure check_ok}"
+
+# With arguments:
+log "Greeting: ${run greet world}"
+
+# Mixed with regular interpolation:
+const name = "world"
+log "${run greet} ${name}"
+
+# In return statements:
+return "${run some_script}"
+```
+
+**Semantics:** At runtime, each `${run ref [args]}` or `${ensure ref [args]}` is executed as a managed call (same as a standalone `run` or `ensure` step). The call's output (stdout for scripts, explicit `return` for rules/workflows) replaces the interpolation expression. Regular `${var}` interpolation is applied after all inline captures resolve. If any inline capture fails (non-zero exit), the enclosing step fails immediately — the error propagates to the parent workflow.
+
+**Validation:** Inline capture references are validated with the **same rules** as standalone `run` / `ensure` steps: in workflows, `run` targets workflows or scripts and `ensure` targets rules; in rules, `run` targets scripts only and `ensure` targets rules. Shell redirection around the reference is rejected. **Nested inline captures** (e.g. `${run foo ${run bar}}`) are rejected at compile time with `E_PARSE` — extract the inner call to a `const` variable instead.
 
 **Examples:**
 
@@ -55,6 +85,12 @@ channel <- "Result: ${arg1}"
 
 # Named variable
 log "Processing ${name}"
+
+# Inline capture in log
+log "Build output: ${run build_project}"
+
+# Inline ensure in prompt
+prompt "Fix the issue: ${ensure get_diagnostics}"
 
 # Escaped backtick (allowed)
 log "Use \`command\` syntax"
@@ -179,7 +215,7 @@ Informal symbols used below:
 
 - `string` — Quoted string (single or double quotes).
 - `args_tail` — Rest of the line after a REF; passed through (e.g. `"${arg1}"` or `arg1 arg2`).
-- `quoted_or_multiline_string` — A double-quoted string; may span multiple lines. Supports `\$`, `\"`, `\\`, and `` \` `` escapes; a trailing `\` on a line acts as line continuation. Variable expansion uses **JS template literal semantics** with only `${identifier}` forms (`${var}`, `${arg1}`). Backticks must be escaped (`` \` ``); `$(...)` and `${var:-fallback}` are rejected (`E_PARSE`). See [String interpolation](#string-interpolation).
+- `quoted_or_multiline_string` — A double-quoted string; may span multiple lines. Supports `\$`, `\"`, `\\`, and `` \` `` escapes; a trailing `\` on a line acts as line continuation. Variable expansion uses **JS template literal semantics** with only `${identifier}` forms (`${var}`, `${arg1}`). **Inline capture interpolation** is also supported: `${run ref [args]}` and `${ensure ref [args]}` execute a managed call and inline the result at runtime. Backticks must be escaped (`` \` ``); `$(...)` and `${var:-fallback}` are rejected (`E_PARSE`). Nested inline captures are rejected (`E_PARSE`). See [String interpolation](#string-interpolation).
 
 ```ebnf
 file            = { top_level } ;
@@ -395,7 +431,7 @@ Jaiph separates **managed** invocations (step records under `.jaiph/runs`, deter
    - `name = prompt "..."` — Captures the agent's final answer; transcript goes to step artifacts.
    - **`return "value"`** / **`return "${var}"`** set the managed return value in **rules and workflows** only (not in **scripts**).
    - **Exit semantics:** Failed managed steps abort the workflow under `set -e` unless you structure recovery (`ensure … recover`) or bash control flow inside a **script**.
-13. **log:** `log "message"` displays a message in the progress tree at the current indentation depth. The argument must be a double-quoted string (same quoting rules as `prompt`). Variable interpolation uses `${identifier}` forms (`${var}`, `${arg1}`) at runtime. `log` is not a step — it has no pending/running/done states, no timing, and no spinner. At runtime, the Node kernel emits a `LOG` event and prints to stdout with **`echo -e`**-style escapes (backslash escapes in the final string are interpreted for terminal output, e.g. `\n` → newline). The event **`message`** field is still the string **before** that expansion, JSON-encoded in the payload. Parse error if `log` is used without a quoted string.
+13. **log:** `log "message"` displays a message in the progress tree at the current indentation depth. The argument must be a double-quoted string (same quoting rules as `prompt`). Variable interpolation uses `${identifier}` forms (`${var}`, `${arg1}`) at runtime. **Inline capture interpolation** (`${run ref [args]}`, `${ensure ref [args]}`) is also supported — inline captures execute before regular variable interpolation and the result is inlined (see [String interpolation](#string-interpolation)). `log` is not a step — it has no pending/running/done states, no timing, and no spinner. At runtime, the Node kernel emits a `LOG` event and prints to stdout with **`echo -e`**-style escapes (backslash escapes in the final string are interpreted for terminal output, e.g. `\n` → newline). The event **`message`** field is still the string **before** that expansion, JSON-encoded in the payload. Parse error if `log` is used without a quoted string.
 14. **logerr:** `logerr "message"` is identical to `log` except the message is written to stderr instead of stdout. At runtime, the Node kernel emits a `LOGERR` event and prints to stderr with **`echo -e`**-style escapes. In the progress tree, `logerr` lines are shown with a red `!` marker (instead of the dim info marker used by `log`). Parse error if `logerr` is used without a quoted string.
 15. **Send operator (`<-`):** The RHS must be **empty** (forward `${arg1}`), a **double-quoted literal**, **`${var}`**, or **`run ref [args]`** — not an arbitrary shell command (`E_PARSE` with a hint to use `const` + variable or `run`). The channel identifier is always on the left of `<-`. Combining capture and send (`name = channel <- …`) is `E_PARSE`. See [Inbox & Dispatch](inbox.md).
 16. **Route declaration:** `channel -> workflow` registers a static routing rule: when a message arrives on `channel`, the runtime calls `workflow` with positional args `${arg1}=message`, `${arg2}=channel`, `${arg3}=sender` (see [Trigger contract](inbox.md#trigger-contract)). Multiple targets are supported: `channel -> wf1, wf2` dispatches sequentially in declaration order; each target receives the same message. Route declarations are stored in `WorkflowDef.routes`, not in `steps`; they are not executable statements. The Node runtime registers routes at the start of the workflow and drains the queue at the end. See [Inbox & Dispatch](inbox.md).
@@ -415,7 +451,7 @@ Jaiph separates **managed** invocations (step records under `.jaiph/runs`, deter
 
 After parsing, the compiler validates references and config. (In this repository, reference checks live in `src/transpile/validate.ts` with shared resolution in `validate-ref-resolution.ts`; contributors can read **Reference validation** in [Contributing](contributing.md) for where validation lives in `src/transpile/`.) Violations produce the following error codes:
 
-- **E_PARSE:** Invalid syntax, duplicate config block, invalid config key/value, invalid string content (unescaped backticks, `${var:-fallback}` shell expansion, or `$(...)` command substitution in Jaiph strings), `prompt "..." returns '...'` without a capture variable, invalid `const` RHS (e.g. command substitution, disallowed `${...}` forms, or **call-like** `ref [args…]` without **`run`** / **`ensure`** / **`prompt`** — use **`const x = run ref [args…]`**), a circular reference among top-level `local` / `const` initializers, a workflow/rule line that is not a recognized Jaiph step, an invalid send RHS, invalid `ensure … recover` syntax (arguments after `recover`, or `recover` without a `{ … }` block), or an **ill-formed definition** — `rule`, `script`, and `workflow` declarations require `()` and `{` on the declaration line (e.g. `rule name() { … }`); omitting either yields `E_PARSE` with a fix hint (e.g. `rule declarations require parentheses: rule foo() { … }` or `… require braces: …`).
+- **E_PARSE:** Invalid syntax, duplicate config block, invalid config key/value, invalid string content (unescaped backticks, `${var:-fallback}` shell expansion, or `$(...)` command substitution in Jaiph strings), `prompt "..." returns '...'` without a capture variable, invalid `const` RHS (e.g. command substitution, disallowed `${...}` forms, or **call-like** `ref [args…]` without **`run`** / **`ensure`** / **`prompt`** — use **`const x = run ref [args…]`**), a circular reference among top-level `local` / `const` initializers, a workflow/rule line that is not a recognized Jaiph step, an invalid send RHS, invalid `ensure … recover` syntax (arguments after `recover`, or `recover` without a `{ … }` block), an **invalid inline capture reference** (e.g. `${run 123bad}` where the ref is not a valid identifier), **nested inline captures** (e.g. `${run foo ${run bar}}` — extract inner calls to `const` variables), or an **ill-formed definition** — `rule`, `script`, and `workflow` declarations require `()` and `{` on the declaration line (e.g. `rule name() { … }`); omitting either yields `E_PARSE` with a fix hint (e.g. `rule declarations require parentheses: rule foo() { … }` or `… require braces: …`).
 - **E_SCHEMA:** Invalid or unsupported `returns` schema: empty schema, non-flat shape (e.g. arrays or union types), invalid entry (not `fieldName: type`), or unsupported type (only `string`, `number`, `boolean` allowed).
 - **E_VALIDATE:** Reference or alias error (unknown rule/workflow, duplicate alias, etc.), forbidden Jaiph usage inside `$(...)` or as a bare shell call where a managed step is required, invalid constructs inside script bodies, or shell redirection/pipeline syntax (`>`, `>>`, `|`, `&`) around `run`/`ensure` steps.
 - **E_IMPORT_NOT_FOUND:** The file resolved from an `import` path does not exist.

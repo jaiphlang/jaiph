@@ -104,6 +104,30 @@ function findBracedNumeric(s: string): { index: number; match: string; hint: str
   return null;
 }
 
+const INLINE_CAPTURE_RE = /\$\{(run|ensure)\s+([^}]+)\}/g;
+
+export interface InlineCapture {
+  kind: "run" | "ensure";
+  ref: string;
+  args?: string;
+}
+
+/** Extract ${run ref [args]} and ${ensure ref [args]} from string content (unquoted). */
+export function extractInlineCaptures(content: string): InlineCapture[] {
+  const captures: InlineCapture[] = [];
+  const re = new RegExp(INLINE_CAPTURE_RE.source, "g");
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(content)) !== null) {
+    const kind = m[1] as "run" | "ensure";
+    const body = m[2].trim();
+    const spaceIdx = body.indexOf(" ");
+    const ref = spaceIdx === -1 ? body : body.slice(0, spaceIdx);
+    const args = spaceIdx === -1 ? undefined : body.slice(spaceIdx + 1).trim() || undefined;
+    captures.push({ kind, ref, args });
+  }
+  return captures;
+}
+
 /**
  * Strip outer double quotes from a string if present.
  */
@@ -178,6 +202,31 @@ export function validateJaiphStringContent(
       "E_PARSE",
       `${context} cannot use bare interpolation; ${bare.hint}`,
     );
+  }
+
+  // Validate inline captures: ${run ref [args]} / ${ensure ref [args]}
+  const inlineRe = new RegExp(INLINE_CAPTURE_RE.source, "g");
+  let icm: RegExpExecArray | null;
+  while ((icm = inlineRe.exec(content)) !== null) {
+    const kind = icm[1];
+    const body = icm[2].trim();
+    const spaceIdx = body.indexOf(" ");
+    const ref = spaceIdx === -1 ? body : body.slice(0, spaceIdx);
+    const args = spaceIdx === -1 ? "" : body.slice(spaceIdx + 1);
+
+    if (!/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?$/.test(ref)) {
+      throw jaiphError(
+        filePath, line, col, "E_PARSE",
+        `${context} contains invalid inline ${kind} reference "${ref}"`,
+      );
+    }
+
+    if (/\$\{(?:run|ensure)\s/.test(args)) {
+      throw jaiphError(
+        filePath, line, col, "E_PARSE",
+        `${context} cannot contain nested inline captures; extract to a const variable`,
+      );
+    }
   }
 }
 

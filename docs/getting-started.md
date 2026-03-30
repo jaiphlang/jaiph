@@ -240,6 +240,24 @@ channel <- run build_message "${data}"   # send script output to channel
 
 For **typed prompts** (`returns '{ field: type }'`), the runtime validates the agent's JSON and exposes per-field variables: `${answer_summary}` in the example above. See [Grammar — Step output contract](grammar.md#step-output-contract).
 
+### Inline capture interpolation
+
+`run` and `ensure` can also appear **inside interpolation expressions** within any Jaiph string (`log`, `logerr`, `fail`, `prompt`, `return`, send literals, `const` RHS). This eliminates temporary variables for one-time values:
+
+```jaiph
+# Before: temporary variable needed
+const result = run some_script
+log "Got: ${result}"
+
+# After: inline capture interpolation
+log "Got: ${run some_script}"
+log "Status: ${ensure check_ok}"
+log "Greeting: ${run greet world}"        # with arguments
+return "${run compute_value}"
+```
+
+At runtime, each `${run ref}` or `${ensure ref}` executes the managed call, replaces the expression with the output, then applies regular `${var}` interpolation. If any inline capture fails, the enclosing step fails immediately. Nested inline captures (e.g. `${run foo ${run bar}}`) are rejected at compile time — extract the inner call to a `const`. See [Grammar — String interpolation](grammar.md#string-interpolation).
+
 ### Script naming
 
 Every `script` block requires an explicit name — anonymous (unnamed) script blocks are not supported. Extract reusable bash into named scripts and call them with `run`:

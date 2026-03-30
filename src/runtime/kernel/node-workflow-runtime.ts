@@ -476,6 +476,42 @@ export class NodeWorkflowRuntime {
     };
   }
 
+  private static readonly INLINE_CAPTURE_RE = /\$\{(run|ensure)\s+([^}]+)\}/g;
+
+  /**
+   * Interpolate string with inline captures: ${run ref [args]} / ${ensure ref [args]}.
+   * Executes each capture, replaces with output, then does regular ${var} interpolation.
+   * Returns { ok: true, value } on success or { ok: false, result } on failure.
+   */
+  private async interpolateWithCaptures(
+    input: string,
+    scope: Scope,
+  ): Promise<{ ok: true; value: string } | { ok: false; result: StepResult }> {
+    const re = new RegExp(NodeWorkflowRuntime.INLINE_CAPTURE_RE.source, "g");
+    if (!re.test(input)) {
+      return { ok: true, value: interpolate(input, scope.vars, scope.env) };
+    }
+    re.lastIndex = 0;
+    let result = "";
+    let lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(input)) !== null) {
+      result += input.slice(lastIndex, m.index);
+      const body = m[2].trim();
+      const spaceIdx = body.indexOf(" ");
+      const ref = spaceIdx === -1 ? body : body.slice(0, spaceIdx);
+      const argsRaw = spaceIdx === -1 ? "" : body.slice(spaceIdx + 1).trim();
+      const r = m[1] === "run"
+        ? await this.executeRunRef(scope, ref, argsRaw)
+        : await this.executeEnsureRef(scope, ref, argsRaw, undefined);
+      if (r.status !== 0) return { ok: false, result: r };
+      result += r.returnValue ?? r.output.trim();
+      lastIndex = m.index + m[0].length;
+    }
+    result += input.slice(lastIndex);
+    return { ok: true, value: interpolate(result, scope.vars, scope.env) };
+  }
+
   private async executeSteps(scope: Scope, steps: WorkflowStepDef[], io?: StepIO): Promise<StepResult> {
     let accOut = "";
     let accErr = "";
@@ -484,7 +520,9 @@ export class NodeWorkflowRuntime {
     for (const step of steps) {
       if (step.type === "comment") continue;
       if (step.type === "log") {
-        const message = interpolate(step.message, scope.vars, scope.env);
+        const logIr = await this.interpolateWithCaptures(step.message, scope);
+        if (!logIr.ok) return this.mergeStepResult(accOut, accErr, logIr.result);
+        const message = logIr.value;
         this.emitLog("LOG", message);
         const chunk = `${message}\n`;
         accOut += chunk;
@@ -492,7 +530,9 @@ export class NodeWorkflowRuntime {
         continue;
       }
       if (step.type === "logerr") {
-        const message = interpolate(step.message, scope.vars, scope.env);
+        const logErrIr = await this.interpolateWithCaptures(step.message, scope);
+        if (!logErrIr.ok) return this.mergeStepResult(accOut, accErr, logErrIr.result);
+        const message = logErrIr.value;
         this.emitLog("LOGERR", message);
         const chunk = `${message}\n`;
         accErr += chunk;
@@ -500,7 +540,9 @@ export class NodeWorkflowRuntime {
         continue;
       }
       if (step.type === "fail") {
-        const message = interpolate(step.message, scope.vars, scope.env);
+        const failIr = await this.interpolateWithCaptures(step.message, scope);
+        if (!failIr.ok) return this.mergeStepResult(accOut, accErr, failIr.result);
+        const message = failIr.value;
         return this.mergeStepResult(accOut, accErr, { status: 1, output: "", error: message });
       }
       if (step.type === "wait") {
@@ -515,7 +557,9 @@ export class NodeWorkflowRuntime {
       }
       if (step.type === "return") {
         // Match Bash semantics: return "$var" should return var value, not literal quotes.
-        returnValue = stripOuterQuotes(interpolate(step.value, scope.vars, scope.env));
+        const retIr = await this.interpolateWithCaptures(step.value, scope);
+        if (!retIr.ok) return this.mergeStepResult(accOut, accErr, retIr.result);
+        returnValue = stripOuterQuotes(retIr.value);
         return this.mergeStepResult(accOut, accErr, { status: 0, output: "", error: "", returnValue });
       }
       if (step.type === "send") {
@@ -529,7 +573,9 @@ export class NodeWorkflowRuntime {
         }
         let payload = "";
         if (step.rhs.kind === "literal") {
-          payload = interpolate(step.rhs.token, scope.vars, scope.env);
+          const sendIr = await this.interpolateWithCaptures(step.rhs.token, scope);
+          if (!sendIr.ok) return this.mergeStepResult(accOut, accErr, sendIr.result);
+          payload = sendIr.value;
         } else if (step.rhs.kind === "var") {
           payload = interpolate(step.rhs.bash, scope.vars, scope.env);
         } else if (step.rhs.kind === "run") {
@@ -581,7 +627,9 @@ export class NodeWorkflowRuntime {
         continue;
       }
       if (step.type === "prompt") {
-        let promptText = interpolate(step.raw, scope.vars, scope.env);
+        const promptIr = await this.interpolateWithCaptures(step.raw, scope);
+        if (!promptIr.ok) return this.mergeStepResult(accOut, accErr, promptIr.result);
+        let promptText = promptIr.value;
         const promptConfig = resolveConfig(scope.env);
         const backend = promptConfig.backend || "cursor";
         const promptStep = this.emitPromptStepStart(promptText, backend, scope.vars, step.raw);
@@ -652,7 +700,9 @@ export class NodeWorkflowRuntime {
       }
       if (step.type === "const") {
         if (step.value.kind === "expr") {
-          scope.vars.set(step.name, stripOuterQuotes(interpolate(step.value.bashRhs, scope.vars, scope.env)));
+          const exprIr = await this.interpolateWithCaptures(step.value.bashRhs, scope);
+          if (!exprIr.ok) return this.mergeStepResult(accOut, accErr, exprIr.result);
+          scope.vars.set(step.name, stripOuterQuotes(exprIr.value));
           continue;
         }
         if (step.value.kind === "run_capture") {
@@ -668,7 +718,9 @@ export class NodeWorkflowRuntime {
           continue;
         }
         if (step.value.kind === "prompt_capture") {
-          let promptText = interpolate(step.value.raw, scope.vars, scope.env);
+          const pcIr = await this.interpolateWithCaptures(step.value.raw, scope);
+          if (!pcIr.ok) return this.mergeStepResult(accOut, accErr, pcIr.result);
+          let promptText = pcIr.value;
           const promptConfig = resolveConfig(scope.env);
           const backend = promptConfig.backend || "cursor";
           const promptStep = this.emitPromptStepStart(promptText, backend, scope.vars, step.value.raw);

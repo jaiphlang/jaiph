@@ -12,42 +12,37 @@ Process rules:
 
 ---
 
-## Inline construct interpolation `${run ...}` / `${ensure ...}` <!-- dev-ready -->
+## Auto-detect model for selected backend <!-- dev-ready -->
 
 **Goal**  
-Allow inline managed captures in interpolation expressions.
+Auto-select a usable model when explicit model is missing/unavailable.
 
 **Context**
 
-- Current pattern requires temporary vars for one-time values:
-  ```
-  const result = run some_script
-  log "Got: $result"
-  ```
-- With inline interpolation:
-  ```
-  log "Got: ${run some_script}"
-  ```
-- The `interpolate()` function in `node-workflow-runtime.ts` (line ~69) currently only handles `${varName}` and `$varName` — no `${run ...}` or `${ensure ...}`.
+- Hard failures on unavailable model names reduce usability and increase support burden.
+- Model selection currently happens in `src/runtime/kernel/prompt.ts` and config resolution.
 
 **Key files:**
-- `src/runtime/kernel/node-workflow-runtime.ts` — `interpolate()` (line ~69), must be extended
-- `src/parse/steps.ts` — string parsing, detect `${run ...}` / `${ensure ...}` forms
-- `src/transpile/validate.ts` — validate refs inside inline captures
-- `src/types.ts` — possibly extend AST step types for inline captures
+- `src/runtime/kernel/prompt.ts` — prompt execution, model selection
+- `src/runtime/kernel/node-workflow-runtime.ts` — config resolution
+- `docs/configuration.md` — model configuration docs
 
 **Scope**
 
-1. Add parser support for `${run ...}` and `${ensure ...}` inside string interpolation.
-2. Validate refs with same rules as standalone steps.
-3. Implement runtime interpolation behavior: execute the managed call, capture output, inline it.
-4. Reject nested inline managed captures (`${run "${run ...}"}`).
-5. Add tests and doc updates.
+1. Implement provider-specific model discovery policy.
+2. Selection order:
+   - explicit and available → use,
+   - explicit but unavailable → fallback by policy,
+   - missing → choose default compatible model.
+3. Emit diagnostics showing selected model and why.
+4. Add tests for all selection paths.
+5. Update docs with override + fallback behavior.
 
 **Acceptance criteria**
 
-- Inline run/ensure interpolation works and failure propagates correctly.
-- Invalid forms fail with clear diagnostics.
+- Run/test succeeds without explicit model when compatible model exists.
+- Selection/fallback decisions are visible in diagnostics.
+- No-compatible-model path is actionable.
 
 ---
 
@@ -83,6 +78,105 @@ Render prompt backend/model inline in tree output (`prompt <backend> "<preview>"
 
 - Prompt lines include backend/model in live output.
 - Display is readable and consistent in TTY/non-TTY.
+
+---
+
+## Add Codex backend support <!-- dev-ready -->
+
+**Goal**  
+Support `codex` as a first-class prompt backend via the OpenAI Codex API.
+
+**Context**
+
+- Current runtime supports `cursor` and `claude` backend paths. Backend selection happens via `agent.backend` config.
+- Prompt execution lives in `src/runtime/kernel/prompt.ts`.
+- Backend config resolution uses `resolveConfig` in the runtime.
+- The Codex backend should use the OpenAI Codex API (default endpoint). Agent should discover the current API surface and implement accordingly.
+
+**Key files:**
+- `src/runtime/kernel/prompt.ts` — prompt execution, backend dispatch
+- `src/runtime/kernel/node-workflow-runtime.ts` — `resolveConfig`, prompt step handling
+- `src/types.ts` — config types, backend enum
+- `docs/configuration.md` — backend configuration docs
+
+**Scope**
+
+1. Add backend config validation for `codex`.
+2. Implement runtime adapter for prompt + schema-return flows using the OpenAI Codex API.
+3. Match existing streaming/error/logging contract used by cursor/claude backends.
+4. Add tests (unit + integration with mocks).
+5. Update docs with setup + minimal example.
+
+**Acceptance criteria**
+
+- `agent.backend = "codex"` routes prompt execution correctly.
+- Missing config (API key, etc.) fails with actionable errors.
+- Structured `returns` works with codex.
+
+---
+
+## Direct `return run` / `return ensure` support <!-- dev-ready -->
+
+**Goal**  
+Allow `return run ...` and `return ensure ...` directly in workflows/rules.
+
+**Context**
+
+- Current syntax requires boilerplate capture then return:
+  ```
+  const result = run some_script
+  return "$result"
+  ```
+- With direct return:
+  ```
+  return run some_script
+  ```
+
+**Key files:**
+- `src/parse/steps.ts` — return step parsing
+- `src/types.ts` — return step AST type (extend for managed call)
+- `src/runtime/kernel/node-workflow-runtime.ts` — return step execution (~line 490)
+- `src/transpile/validate.ts` — validate refs in return expressions
+
+**Scope**
+
+1. Extend parser/AST return expression forms to accept `run` and `ensure` as return value sources.
+2. Reuse managed-call validation for ref resolution.
+3. Implement runtime behavior equivalent to capture + return.
+4. Add unit/acceptance/e2e tests.
+
+**Acceptance criteria**
+
+- Direct return forms execute correctly.
+- Unknown ref errors remain deterministic.
+
+---
+
+## Reporting: detect SIGKILL-stalled runs <!-- dev-ready -->
+
+**Goal**  
+Mark runs as terminated when `WORKFLOW_END` never arrives due to hard kill.
+
+**Context**
+
+- Reporting server can leave killed runs in active state forever.
+- Reporting code lives in `src/reporting/*`.
+- Run state is tracked via `run_summary.jsonl` and `.jaiph/runs/` artifacts.
+
+**Key files:**
+- `src/reporting/` — reporting server and state management
+- `src/runtime/kernel/emit.ts` — event emission (WORKFLOW_START/END)
+
+**Scope**
+
+1. Implement stale run detection using timeout + liveness signal.
+2. Mark stale entries as terminated/failed in API/UI.
+3. Add integration/e2e test: start run, SIGKILL, verify terminal state.
+
+**Acceptance criteria**
+
+- SIGKILL run transitions to terminal state automatically.
+- Normal completed runs unaffected.
 
 ---
 
@@ -159,74 +253,6 @@ Add an opinionated formatter for `.jh` files with in-place and check modes.
 
 ---
 
-## Add Codex backend support <!-- dev-ready -->
-
-**Goal**  
-Support `codex` as a first-class prompt backend via the OpenAI Codex API.
-
-**Context**
-
-- Current runtime supports `cursor` and `claude` backend paths. Backend selection happens via `agent.backend` config.
-- Prompt execution lives in `src/runtime/kernel/prompt.ts`.
-- Backend config resolution uses `resolveConfig` in the runtime.
-- The Codex backend should use the OpenAI Codex API (default endpoint). Agent should discover the current API surface and implement accordingly.
-
-**Key files:**
-- `src/runtime/kernel/prompt.ts` — prompt execution, backend dispatch
-- `src/runtime/kernel/node-workflow-runtime.ts` — `resolveConfig`, prompt step handling
-- `src/types.ts` — config types, backend enum
-- `docs/configuration.md` — backend configuration docs
-
-**Scope**
-
-1. Add backend config validation for `codex`.
-2. Implement runtime adapter for prompt + schema-return flows using the OpenAI Codex API.
-3. Match existing streaming/error/logging contract used by cursor/claude backends.
-4. Add tests (unit + integration with mocks).
-5. Update docs with setup + minimal example.
-
-**Acceptance criteria**
-
-- `agent.backend = "codex"` routes prompt execution correctly.
-- Missing config (API key, etc.) fails with actionable errors.
-- Structured `returns` works with codex.
-
----
-
-## Auto-detect model for selected backend <!-- dev-ready -->
-
-**Goal**  
-Auto-select a usable model when explicit model is missing/unavailable.
-
-**Context**
-
-- Hard failures on unavailable model names reduce usability and increase support burden.
-- Model selection currently happens in `src/runtime/kernel/prompt.ts` and config resolution.
-
-**Key files:**
-- `src/runtime/kernel/prompt.ts` — prompt execution, model selection
-- `src/runtime/kernel/node-workflow-runtime.ts` — config resolution
-- `docs/configuration.md` — model configuration docs
-
-**Scope**
-
-1. Implement provider-specific model discovery policy.
-2. Selection order:
-   - explicit and available → use,
-   - explicit but unavailable → fallback by policy,
-   - missing → choose default compatible model.
-3. Emit diagnostics showing selected model and why.
-4. Add tests for all selection paths.
-5. Update docs with override + fallback behavior.
-
-**Acceptance criteria**
-
-- Run/test succeeds without explicit model when compatible model exists.
-- Selection/fallback decisions are visible in diagnostics.
-- No-compatible-model path is actionable.
-
----
-
 ## Unified mock syntax: rename `mock function` to `mock script` <!-- dev-ready -->
 
 **Goal**  
@@ -264,71 +290,6 @@ Hard-rename `mock function` to `mock script` across parser, AST, runtime, tests,
 - `mock function` produces a compiler error with migration guidance.
 - All tests pass with the new syntax.
 - No references to `mock function` remain (except in error message text).
-
----
-
-## Reporting: detect SIGKILL-stalled runs <!-- dev-ready -->
-
-**Goal**  
-Mark runs as terminated when `WORKFLOW_END` never arrives due to hard kill.
-
-**Context**
-
-- Reporting server can leave killed runs in active state forever.
-- Reporting code lives in `src/reporting/*`.
-- Run state is tracked via `run_summary.jsonl` and `.jaiph/runs/` artifacts.
-
-**Key files:**
-- `src/reporting/` — reporting server and state management
-- `src/runtime/kernel/emit.ts` — event emission (WORKFLOW_START/END)
-
-**Scope**
-
-1. Implement stale run detection using timeout + liveness signal.
-2. Mark stale entries as terminated/failed in API/UI.
-3. Add integration/e2e test: start run, SIGKILL, verify terminal state.
-
-**Acceptance criteria**
-
-- SIGKILL run transitions to terminal state automatically.
-- Normal completed runs unaffected.
-
----
-
-## Direct `return run` / `return ensure` support <!-- dev-ready -->
-
-**Goal**  
-Allow `return run ...` and `return ensure ...` directly in workflows/rules.
-
-**Context**
-
-- Current syntax requires boilerplate capture then return:
-  ```
-  const result = run some_script
-  return "$result"
-  ```
-- With direct return:
-  ```
-  return run some_script
-  ```
-
-**Key files:**
-- `src/parse/steps.ts` — return step parsing
-- `src/types.ts` — return step AST type (extend for managed call)
-- `src/runtime/kernel/node-workflow-runtime.ts` — return step execution (~line 490)
-- `src/transpile/validate.ts` — validate refs in return expressions
-
-**Scope**
-
-1. Extend parser/AST return expression forms to accept `run` and `ensure` as return value sources.
-2. Reuse managed-call validation for ref resolution.
-3. Implement runtime behavior equivalent to capture + return.
-4. Add unit/acceptance/e2e tests.
-
-**Acceptance criteria**
-
-- Direct return forms execute correctly.
-- Unknown ref errors remain deterministic.
 
 ---
 
