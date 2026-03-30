@@ -8,72 +8,73 @@ config {
   agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
-const testing_philosophy = "
-  Jaiph has four test layers. Use the narrowest layer that covers the behavior.
+script read_contributing_docs {
+  test -f docs/contributing.md || {
+    echo "docs/contributing.md not found (run from repo root)" >&2
+    return 1
+  }
+  awk '
+/^---$/ {
+  if (sec == 0) { sec = 1; next }
+  if (sec == 1) { sec = 2; next }
+}
+sec == 1 { next }
+sec == 2 { print }
+' docs/contributing.md
+}
 
-  1. Unit tests (test/*.test.ts) — pure functions: event parsing, param
-     formatting, path resolution, config merging. Input in, output out, no I/O.
-  2. Compiler acceptance tests (test/acceptance/*.test.ts) — parser/transpiler
-     edge cases: malformed input, error messages, boundary conditions.
-  3. Golden output tests (test/fixtures/ + test/expected/) — compiler
-     regressions: verifies .jh input produces exact .sh output. Update
-     test/expected/ when a change is intentional.
-  4. E2E tests (e2e/tests/*.sh) — runtime behavior: does the built workflow
-     actually execute correctly? Uses helpers from e2e/lib/common.sh with
-     Given/When/Then structure.
+script new_qa_gap_report_path {
+  echo ".jaiph/tmp/qa_gap_report_$(date +%Y-%m-%d_%H-%M-%S).md"
+}
 
-  Key rules:
-  - Tests are behavior contracts. Change production code to satisfy tests,
-    not vice versa.
-  - E2E tests assert two things independently: CLI tree output and runtime
-    artifacts. Default contract is full equality: use e2e::expect_stdout
-    (heredoc), e2e::expect_out, e2e::expect_rule_out, e2e::expect_file,
-    e2e::expect_run_file, or e2e::assert_equals / e2e::assert_output_equals
-    on captured stdout/stderr and file contents. e2e::assert_contains
-    (substring check) is the exception, not the default — every use must
-    have an inline comment explaining why full equality is not feasible.
-    Allowed reasons: nondeterministic output (real agent backends, timestamps
-    not covered by <time> normalization), unbounded or variable-length logs
-    (run_summary.jsonl with platform-dependent event counts), or
-    platform-dependent text (OS-specific error messages, differing paths).
-    See ARCHITECTURE.md — E2E test philosophy for the full policy.
-  - Prefer the narrowest test layer. A pure function bug = unit test.
-    A runtime integration bug = e2e test.
-  - Modify existing tests only for intentional behavior changes, incorrect
-    expectations, or obsolete feature removal. Keep changes minimal.
-"
+script write_gap_report_pointer {
+  printf '%s\n' "$1" > .jaiph/tmp/qa_gap_report_active.txt
+}
 
 script gap_report_nonempty {
-  test -s ".jaiph/tmp/qa_gap_report.md"
+  p="$(cat .jaiph/tmp/qa_gap_report_active.txt 2>/dev/null)" || return 1
+  [ -z "$p" ] && return 1
+  test -s "$p"
 }
 
 script read_gap_report {
-  cat .jaiph/tmp/qa_gap_report.md
+  p="$(cat .jaiph/tmp/qa_gap_report_active.txt)"
+  cat "$p"
 }
 
-script save_gap_report {
-  printf '%s\n' "$1" > .jaiph/tmp/qa_gap_report.md
+script save_gap_report_file {
+  printf '%s\n' "$1" > "$2"
 }
 
 workflow analyze_gaps {
+  const report_path = run new_qa_gap_report_path()
+  const contributing_docs = run read_contributing_docs()
   const gap_report = prompt "
     <role>
     You are a QA engineer analyzing the Jaiph codebase for test coverage gaps.
 
-    <testing_philosophy>
-    ${testing_philosophy}
+    <contributing_docs>
+    ${contributing_docs}
+    </contributing_docs>
+
+    Use the testing philosophy and layer locations from contributing_docs above
+    (module tests colocated under src/, compiler golden/acceptance under
+    src/transpile/, cross-cutting tests and shared fixtures under test/, e2e under
+    e2e/tests/). Do not invent old layouts (e.g. a root test/acceptance/ tree for the
+    compiler); follow the tables in contributing_docs.
 
     <task>
     Your task:
     1. Read every source file in src/parse/*.ts and list each parser branch
        (rule, workflow, script, env, import, config, test blocks, conditionals,
-       recover, prompt, send, routes). For each branch, check if test/acceptance/
-       or test/fixtures/ has a corresponding test case. List branches with no test.
+       recover, prompt, send, routes). For each branch, check coverage per
+       contributing_docs (colocated parse tests, transpile acceptance/golden, etc.).
+       List branches with no test.
 
     2. Read src/transpile/emit-workflow.ts and src/transpile/emit-test.ts.
        For each emission branch (ensure, run, prompt, shell, if-variants, send,
-       log, logerr, recover loops, metadata scope), check if test/expected/
-       has a golden fixture covering it. List branches with no golden coverage.
+       log, logerr, recover loops, metadata scope), check compiler golden and
+       acceptance coverage as described in contributing_docs. List gaps.
 
     3. Read e2e/tests/*.sh file names and compare against the feature list in
        docs/grammar.md and docs/cli.md. List features with no e2e test.
@@ -81,8 +82,9 @@ workflow analyze_gaps {
     4. Read src/cli/commands/*.ts and src/cli/run/*.ts. List error paths,
        edge cases, and config-resolution branches that have no test coverage.
 
-    5. Read test/*.test.ts. List pure utility functions in src/ that have no
-       unit test.
+    5. Scan src/ for pure helpers or modules without colocated *.test.ts or
+       *.acceptance.test.ts and not covered by cross-cutting tests in test/.
+       List gaps.
 
     Output a structured gap report in this format, one entry per gap:
 
@@ -90,49 +92,47 @@ workflow analyze_gaps {
     - File: [source file with untested code path]
     - Code path: [specific branch/function/line range]
     - Why it matters: [what bug this could hide]
-    - Test type: [unit | acceptance | golden | e2e]
+    - Test type: [unit | acceptance | golden | e2e] (per contributing_docs)
     - Priority: [high | medium | low]
 
     Sort by priority descending. Be thorough but skip trivial paths (like
     simple re-exports or type definitions).
     </task>
-    </testing_philosophy>
     </role>
   "
 
-  run save_gap_report("${gap_report}")
-  log "Gap report saved to .jaiph/tmp/qa_gap_report.md"
+  run save_gap_report_file("${gap_report}", "${report_path}")
+  run write_gap_report_pointer("${report_path}")
+  log "Gap report saved to ${report_path}"
 }
 
 workflow write_tests {
   if not run gap_report_nonempty() {
-    fail "No gap report found at .jaiph/tmp/qa_gap_report.md. Run analyze_gaps first."
+    fail "No gap report found (see .jaiph/tmp/qa_gap_report_active.txt). Run analyze_gaps first."
   }
   const gap_report = run read_gap_report()
+  const contributing_docs = run read_contributing_docs()
 
   prompt "
     <role>
     You are a test engineer for the Jaiph codebase.
 
-    <testing_philosophy>
-    ${testing_philosophy}
+    <contributing_docs>
+    ${contributing_docs}
+    </contributing_docs>
+
+    Follow contributing_docs for test layer choice, file locations, npm commands,
+    and E2E helpers (e2e/lib/common.sh). CI expectations are summarized there
+    (.github/workflows/ci.yml is the machine-readable source).
 
     <task>
     Below is a gap report listing untested code paths, sorted by priority.
     Your task: write the missing tests, starting with high-priority gaps.
 
     Rules:
-    - For golden output tests: add .jh fixture in test/fixtures/ and expected
-      .sh output in test/expected/; align expected files with transpiler
-      output and verify before committing.
-    - For acceptance tests: add to test/acceptance/ using Node test runner
-      (import test from 'node:test' and assert from 'node:assert').
-    - For unit tests: add to test/ using Node test runner.
-    - For e2e tests: add to e2e/tests/ following the Given/When/Then pattern
-      with helpers from e2e/lib/common.sh (see docs/contributing.md for
-      reference). Assert complete stdout/stderr and artifact text with
-      expect_stdout, expect_out, expect_file, or assert_equals — not partial
-      substring matches unless unavoidable and commented.
+    - Place tests where contributing_docs says (colocated under src/, golden/
+      acceptance under src/transpile/, cross-cutting under test/, e2e under
+      e2e/tests/).
     - Do NOT modify existing tests.
     - Do NOT modify production code.
     - After writing tests, run: npm run build && npm test && npm run test:e2e
@@ -145,7 +145,6 @@ workflow write_tests {
     Gap report:
     ${gap_report}
     </task>
-    </testing_philosophy>
     </role>
   "
 }
@@ -155,7 +154,7 @@ script mkdir_tmp_jaiph_qa {
 }
 
 workflow default {
-  ensure git.is_clean()
+  # ensure git.is_clean()
   run mkdir_tmp_jaiph_qa()
   run analyze_gaps()
   run write_tests()
