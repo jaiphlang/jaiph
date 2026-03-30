@@ -106,7 +106,7 @@ jobs:
       - name: Verify landing-page samples
         run: |
           export PATH="${GITHUB_WORKSPACE}/node_modules/.bin:${PATH}"
-          SITE_URL=http://127.0.0.1:4000 npx playwright test
+          npx playwright test
 
   e2e-wsl:
     name: E2E install and CLI workflow (windows-latest + wsl)
