@@ -53,7 +53,7 @@ For day-to-day work on the compiler and CLI you usually stay inside the clone: i
 | `npm run test:acceptance:runtime` | **`bash ./e2e/test_all.sh`** only — same E2E driver as below **without** an implicit rebuild; ensure `dist/` is up to date before running. |
 | `npm run test:acceptance` | **`npm run test:acceptance:compiler`** then **`npm run test:acceptance:runtime`**. |
 | `npm run test:e2e` | **`npm run build`**, then **`bash ./e2e/test_all.sh`**. Prefer this when you want a fresh `dist/` before E2E. |
-| `npm run test:samples` | **`npm run build`**, then **`npx playwright test`** — Playwright suite that serves the Jekyll docs site locally, extracts sample source and expected output from the landing page, compares source to `examples/*.jh`, and runs deterministic samples through the CLI. Requires Playwright (`npx playwright install chromium` once). Set `SITE_URL` to skip the built-in Jekyll server (e.g. `SITE_URL=http://127.0.0.1:4000 npm run test:samples`). |
+| `npm run test:samples` | **`npx playwright test`** — Playwright suite for the docs landing page (`tests/e2e-samples/`). Uses `http://127.0.0.1:4000` (see `playwright.config.ts`); starts Jekyll via `webServer` or reuses one already on that port. Requires Playwright (`npx playwright install chromium` once). |
 | `npm run test:ci` | `npm test` followed by `npm run test:e2e` — useful before pushing when you want the full local picture. |
 
 Run a single Node test file after a build with e.g. `node --test dist/src/parse/parse-core.test.js`. The `dist/` paths mirror the source layout under `src/`.
@@ -216,13 +216,9 @@ To run locally:
 npm run test:samples
 ```
 
-Or, if a Jekyll server is already running:
+If a Jekyll server is already running on **`http://127.0.0.1:4000`**, Playwright reuses it (`reuseExistingServer` in `playwright.config.ts`). Otherwise it starts one.
 
-```bash
-SITE_URL=http://127.0.0.1:4000 npx playwright test
-```
-
-The Playwright config (`playwright.config.ts`) auto-starts Jekyll when `SITE_URL` is not set. Samples that require live agent backends (e.g. `async.jh`, `ensure_ci_passes.jh`) are verified for source parity only — output verification is limited to fully deterministic workflows.
+Samples that require live agent backends (e.g. `async.jh`, `ensure_ci_passes.jh`) are verified for source parity only — output verification is limited to fully deterministic workflows.
 
 ## E2E testing
 

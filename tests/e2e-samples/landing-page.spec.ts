@@ -3,6 +3,7 @@ import { chmodSync, copyFileSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os';
 import { delimiter, join } from 'path';
 import { spawnSync } from 'child_process';
+import { LOCAL_DOCS_SITE } from './docs-site';
 
 const ROOT = join(__dirname, '../..');
 const EXAMPLES = join(ROOT, 'examples');
@@ -107,20 +108,22 @@ test.describe.serial('docs landing page', () => {
     test('run script from page (localhost) installs Jaiph and workflow output matches', async ({ page }) => {
       test.setTimeout(600_000);
 
-      const siteUrl = (process.env.SITE_URL || 'http://127.0.0.1:4000').replace(/\/$/, '');
       await page.goto('/');
 
       const codeEl = page.locator('section.try-it-out [data-panel="try-run-sample"] pre code');
       await expect(codeEl).toBeVisible();
       let script = (await codeEl.innerText()).trim();
-      script = script.replace(/https:\/\/jaiph\.org/g, siteUrl);
+      script = script.replace(/https:\/\/jaiph\.org/g, LOCAL_DOCS_SITE);
       console.log('script', script);
 
+      // docs/run uses JAIPH_SITE for the *inner* curl …/install (defaults to jaiph.org if unset).
+      // Replacing the outer URL only is not enough — without this, CI would fetch production install.
       const r = spawnSync('bash', ['-c', script], {
         encoding: 'utf-8',
         env: {
           ...process.env,
           JAIPH_REPO_URL: JAIPH_REPO_ROOT,
+          JAIPH_SITE: LOCAL_DOCS_SITE,
         },
         maxBuffer: 50 * 1024 * 1024,
         timeout: 600_000,
