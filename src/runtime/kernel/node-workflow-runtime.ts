@@ -179,6 +179,10 @@ export class NodeWorkflowRuntime {
     this.env.JAIPH_RUN_SUMMARY_FILE = this.summaryFile;
     this.env.JAIPH_RUN_ID = this.runId;
     this.env.JAIPH_RUN_DIR = this.runDir;
+    const workspaceForLib = this.env.JAIPH_WORKSPACE ?? this.cwd;
+    if (this.env.JAIPH_LIB === undefined || this.env.JAIPH_LIB === "") {
+      this.env.JAIPH_LIB = join(workspaceForLib, ".jaiph", "lib");
+    }
   }
 
   getRunDir(): string {
