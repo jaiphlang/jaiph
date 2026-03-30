@@ -40,7 +40,7 @@ e2e::run "basic_inbox.jh" >/dev/null
 
 # Then
 e2e::assert_file_exists "${TEST_DIR}/received.txt" "receiver was invoked by inbox dispatch"
-e2e::assert_contains "$(cat "${TEST_DIR}/received.txt")" "hello from sender" "receiver gets message content via inbox route"
+e2e::assert_equals "$(cat "${TEST_DIR}/received.txt")" "hello from sender" "receiver gets message content via inbox route"
 
 e2e::section "Multi-target route"
 
@@ -80,9 +80,9 @@ e2e::run "multi_target.jh" >/dev/null
 
 # Then
 e2e::assert_file_exists "${TEST_DIR}/consumer_a.txt" "consumer_a was dispatched"
-e2e::assert_contains "$(cat "${TEST_DIR}/consumer_a.txt")" "A got: data-payload" "consumer_a receives dispatched message"
+e2e::assert_equals "$(cat "${TEST_DIR}/consumer_a.txt")" "A got: data-payload" "consumer_a receives dispatched message"
 e2e::assert_file_exists "${TEST_DIR}/consumer_b.txt" "consumer_b was dispatched"
-e2e::assert_contains "$(cat "${TEST_DIR}/consumer_b.txt")" "B got: data-payload" "consumer_b receives dispatched message"
+e2e::assert_equals "$(cat "${TEST_DIR}/consumer_b.txt")" "B got: data-payload" "consumer_b receives dispatched message"
 
 e2e::section "Undefined channel fails validation"
 
@@ -123,6 +123,7 @@ rm -f "${drop_stderr}"
 if [[ ${drop_exit} -eq 0 ]]; then
   e2e::fail "undefined channel should fail validation"
 fi
+# assert_contains: compiler error stderr includes file paths and line numbers that vary
 e2e::assert_contains "${drop_err}" 'Channel "unknown_channel" is not defined' "undefined channel error is explicit"
 
 e2e::section "Inbox file written"
@@ -160,7 +161,7 @@ if [[ -z "${inbox_file}" ]]; then
   e2e::fail "001-audit.txt not found in any inbox directory"
 fi
 e2e::assert_file_exists "${inbox_file}" "inbox file 001-audit.txt exists after send"
-e2e::assert_contains "$(cat "${inbox_file}")" "inbox-content-check" "inbox file contains sent message"
+e2e::assert_equals "$(cat "${inbox_file}")" "inbox-content-check" "inbox file contains sent message"
 
 e2e::section "Dispatched step CLI output shows \$1,\$2,\$3 via standard positional param display"
 
@@ -201,6 +202,7 @@ EOF
 display_out="$(e2e::run "display_inbox.jh" 2>/dev/null)"
 
 # Then
+# assert_contains: CLI progress tree includes dispatch timing and indentation that varies
 e2e::assert_contains "${display_out}" "workflow default" "display workflow ran"
 e2e::assert_contains "${display_out}" "workflow analyst" "analyst dispatch is visible"
 e2e::assert_contains "${display_out}" "workflow reviewer" "reviewer dispatch is visible"
@@ -243,9 +245,8 @@ e2e::run "receiver_args.jh" >/dev/null
 
 # Then
 e2e::assert_file_exists "${TEST_DIR}/args.txt" "receiver wrote args file"
-e2e::assert_contains "$(cat "${TEST_DIR}/args.txt")" "msg=payload-data" "receiver \$1 is message payload"
-e2e::assert_contains "$(cat "${TEST_DIR}/args.txt")" "channel=events" "receiver \$2 is channel name"
-e2e::assert_contains "$(cat "${TEST_DIR}/args.txt")" "sender=producer" "receiver \$3 is sender workflow name"
+expected_args="$(printf 'msg=payload-data\nchannel=events\nsender=producer')"
+e2e::assert_equals "$(cat "${TEST_DIR}/args.txt")" "${expected_args}" "receiver positional args (\$1=message, \$2=channel, \$3=sender)"
 
 e2e::section "Parallel dispatch: multi-target route executes all targets"
 
@@ -289,9 +290,9 @@ e2e::run "parallel_multi.jh" >/dev/null
 
 # Then
 e2e::assert_file_exists "${TEST_DIR}/consumer_a_par.txt" "parallel: consumer_a was dispatched"
-e2e::assert_contains "$(cat "${TEST_DIR}/consumer_a_par.txt")" "A got: parallel-payload" "parallel: consumer_a receives message"
+e2e::assert_equals "$(cat "${TEST_DIR}/consumer_a_par.txt")" "A got: parallel-payload" "parallel: consumer_a receives message"
 e2e::assert_file_exists "${TEST_DIR}/consumer_b_par.txt" "parallel: consumer_b was dispatched"
-e2e::assert_contains "$(cat "${TEST_DIR}/consumer_b_par.txt")" "B got: parallel-payload" "parallel: consumer_b receives message"
+e2e::assert_equals "$(cat "${TEST_DIR}/consumer_b_par.txt")" "B got: parallel-payload" "parallel: consumer_b receives message"
 
 e2e::section "Parallel dispatch: no duplicate/skipped sequence IDs under concurrent sends"
 

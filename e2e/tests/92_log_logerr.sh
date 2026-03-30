@@ -38,7 +38,7 @@ shopt -u nullglob
 
 [[ ${#out_files[@]} -ge 1 ]] || e2e::fail "expected at least one .out file for default workflow"
 out_content="$(<"${out_files[0]}")"
-e2e::assert_contains "${out_content}" "artifact-stdout" "default .out aggregates inline log stdout text"
+e2e::assert_equals "${out_content}" "artifact-stdout" "default .out aggregates inline log stdout text"
 if [[ "${out_content}" == *"script"* ]] || [[ "${out_content}" == *"done"* ]]; then
   e2e::fail "default .out must not include script stdout (script has its own step .out)"
 fi
@@ -47,17 +47,18 @@ e2e::pass "default .out excludes script stdout"
 # Check .err file for logerr content
 if [[ ${#err_files[@]} -ge 1 ]]; then
   err_content="$(<"${err_files[0]}")"
-  e2e::assert_contains "${err_content}" "artifact-stderr" "default .err aggregates inline logerr text"
+  e2e::assert_equals "${err_content}" "artifact-stderr" "default .err aggregates inline logerr text"
 else
   e2e::fail "expected at least one .err file for default workflow (logerr output)"
 fi
 
 [[ ${#step_out_files[@]} -ge 1 ]] || e2e::fail "expected script .out artifact for done_impl"
-e2e::assert_contains "$(<"${step_out_files[0]}")" "done" "script output remains captured in step .out"
+e2e::assert_equals "$(<"${step_out_files[0]}")" "done" "script output remains captured in step .out"
 
 summary_file="${run_dir}run_summary.jsonl"
 e2e::assert_file_exists "${summary_file}" "run summary exists for log/logerr contract"
 summary_content="$(<"${summary_file}")"
+# assert_contains: run_summary.jsonl is variable-length with timestamps and event fields
 e2e::assert_contains "${summary_content}" "\"type\":\"LOG\"" "summary includes LOG event"
 e2e::assert_contains "${summary_content}" "artifact-stdout" "summary captures log message text"
 e2e::assert_contains "${summary_content}" "\"type\":\"LOGERR\"" "summary includes LOGERR event"

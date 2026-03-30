@@ -37,6 +37,7 @@ shopt -u nullglob
 [[ ${#out_files[@]} -ge 1 ]] || e2e::fail "expected at least one .out artifact"
 out_content="$(<"${out_files[0]}")"
 
+# assert_contains: workflow .out aggregates multiple shell step outputs; exact ordering depends on runtime
 e2e::assert_contains "${out_content}" "captured=shell-value" "shell capture = full stdout"
 e2e::assert_contains "${out_content}" "stdout-log" "shell stdout in artifacts"
 
@@ -45,6 +46,7 @@ err_files=( "${run_dir}"*default.err )
 shopt -u nullglob
 if [[ ${#err_files[@]} -ge 1 ]]; then
   err_content="$(<"${err_files[0]}")"
+  # assert_contains: .err may include runtime-injected stderr alongside user output
   e2e::assert_contains "${err_content}" "stderr-log" "shell stderr in artifacts"
 fi
 e2e::pass "shell step output contract"
@@ -75,7 +77,7 @@ rule_outs=( "${run_dir}"*compute.out )
 shopt -u nullglob
 [[ ${#rule_outs[@]} -ge 1 ]] || e2e::fail "expected rule .out artifact"
 rule_out_content="$(<"${rule_outs[0]}")"
-e2e::assert_contains "${rule_out_content}" "rule-stdout-goes-to-artifacts" "rule stdout in artifact"
+e2e::assert_equals "${rule_out_content}" "rule-stdout-goes-to-artifacts" "rule stdout in artifact"
 
 # Capture variable gets only return value
 shopt -s nullglob
@@ -83,7 +85,7 @@ wf_outs=( "${run_dir}"*default.out )
 shopt -u nullglob
 [[ ${#wf_outs[@]} -ge 1 ]] || e2e::fail "expected workflow .out artifact"
 wf_out_content="$(<"${wf_outs[0]}")"
-e2e::assert_contains "${wf_out_content}" "captured=input-processed" "ensure capture = return value only"
+e2e::assert_equals "${wf_out_content}" "captured=input-processed" "ensure capture = return value only"
 if [[ "${wf_out_content}" == *"rule-stdout-goes-to-artifacts"* ]]; then
   e2e::fail "rule stdout must NOT leak into capture variable"
 fi
@@ -115,7 +117,7 @@ greeter_outs=( "${run_dir}"*greeter.out )
 shopt -u nullglob
 [[ ${#greeter_outs[@]} -ge 1 ]] || e2e::fail "expected greeter .out artifact"
 greeter_out="$(<"${greeter_outs[0]}")"
-e2e::assert_contains "${greeter_out}" "workflow-stdout-goes-to-artifacts" "workflow stdout in artifact"
+e2e::assert_equals "${greeter_out}" "workflow-stdout-goes-to-artifacts" "workflow stdout in artifact"
 
 # Capture variable gets only return value
 shopt -s nullglob
@@ -123,7 +125,7 @@ wf_outs=( "${run_dir}"*default.out )
 shopt -u nullglob
 [[ ${#wf_outs[@]} -ge 1 ]] || e2e::fail "expected default .out artifact"
 default_out="$(<"${wf_outs[0]}")"
-e2e::assert_contains "${default_out}" "captured=hello-from-workflow" "run capture = return value only"
+e2e::assert_equals "${default_out}" "captured=hello-from-workflow" "run capture = return value only"
 if [[ "${default_out}" == *"workflow-stdout-goes-to-artifacts"* ]]; then
   e2e::fail "workflow stdout must NOT leak into capture variable"
 fi
@@ -154,7 +156,7 @@ wf_outs=( "${run_dir}"*default.out )
 shopt -u nullglob
 [[ ${#wf_outs[@]} -ge 1 ]] || e2e::fail "expected default .out artifact"
 default_out="$(<"${wf_outs[0]}")"
-e2e::assert_contains "${default_out}" "captured=hash-abc123" "function capture = return value only"
+e2e::assert_equals "${default_out}" "captured=hash-abc123" "function capture = return value only"
 if [[ "${default_out}" == *"fn-stdout-goes-to-artifacts"* ]]; then
   e2e::fail "function stdout must NOT leak into capture variable"
 fi
@@ -189,6 +191,7 @@ wf_outs=( "${run_dir}"*default.out )
 shopt -u nullglob
 [[ ${#wf_outs[@]} -ge 1 ]] || e2e::fail "expected default .out artifact"
 default_out="$(<"${wf_outs[0]}")"
+# assert_contains: prompt capture value depends on mock cursor-agent output format (nondeterministic)
 e2e::assert_contains "${default_out}" "captured=" "prompt capture produces a value"
 e2e::pass "prompt output contract"
 
@@ -214,6 +217,7 @@ wf_outs=( "${run_dir}"*default.out )
 shopt -u nullglob
 [[ ${#wf_outs[@]} -ge 1 ]] || e2e::fail "expected default .out artifact"
 wf_out="$(<"${wf_outs[0]}")"
+# assert_contains: workflow .out aggregates log + shell step output; exact aggregation depends on runtime
 e2e::assert_contains "${wf_out}" "info-message" "log message in .out artifact"
 e2e::assert_contains "${wf_out}" "done" "workflow stdout in .out artifact"
 
@@ -222,6 +226,7 @@ wf_errs=( "${run_dir}"*default.err )
 shopt -u nullglob
 if [[ ${#wf_errs[@]} -ge 1 ]]; then
   wf_err="$(<"${wf_errs[0]}")"
+  # assert_contains: .err may include runtime-injected stderr alongside logerr text
   e2e::assert_contains "${wf_err}" "error-message" "logerr message in .err artifact"
 fi
 e2e::pass "log/logerr output contract"

@@ -290,27 +290,32 @@ For the full E2E philosophy, artifact layout, and normalization details, see [AR
 
 ### Migration checklist: remaining `assert_contains` usages
 
-The following tests still use `e2e::assert_contains`. Each entry is categorized as **convertible** (can be migrated to full equality) or **justified exception** (substring check is appropriate).
+The following tests still use `e2e::assert_contains`. Each entry is categorized as **converted** (migrated to full equality), **convertible** (can be migrated), or **justified exception** (substring check is appropriate with inline comment).
+
+#### Converted to full equality
+
+These were migrated from `assert_contains` to `assert_equals` / full-equality helpers:
+
+| File | What was converted | Notes |
+|------|--------------------|-------|
+| `30_filesystem_side_effects.sh` | `workflow_wrote.txt` side-effect file | 1 call → `assert_equals` |
+| `74_live_step_output.sh` | Final `.out`/`.err` artifact content | 6 calls → 2 `assert_equals` with full multi-line content |
+| `91_inbox_dispatch.sh` | Side-effect files (`received.txt`, `consumer_*.txt`, `args.txt`, inbox file) | 9 calls → `assert_equals` (args.txt consolidated to 1 multi-line check) |
+| `92_log_logerr.sh` | `.out`/`.err` artifacts and script stdout | 3 calls → `assert_equals` |
+| `93_inbox_stress.sh` | Nested processing result file | 1 call → `assert_equals` |
+| `97_step_output_contract.sh` | Rule `.out`, workflow `.out`, function `.out` return value artifacts | 5 calls → `assert_equals` |
+| `98_ensure_recover_value.sh` | Capture variable `.out` and rule `.out` artifact | 2 calls → `assert_equals` |
+| `101_script_isolation.sh` | Shared library script `.out` | 1 call → `assert_equals` |
 
 #### Convertible to full equality
 
-These check deterministic artifact files or side-effect files that could use `e2e::assert_equals` or `e2e::expect_run_file`:
+These remain as `assert_contains` but could be migrated once exact artifact content is verified:
 
 | File | Lines | What's checked | Notes |
 |------|-------|---------------|-------|
-| `97_step_output_contract.sh` | 40–218 | `.out`/`.err` artifacts, return values | 13 calls; deterministic shell/rule/workflow output |
-| `92_log_logerr.sh` | 41, 50, 56 | `.out`/`.err` artifacts, script stdout | 3 calls; deterministic log messages |
-| `74_live_step_output.sh` | 110–116 | Final `.out`/`.err` artifact content | 6 calls; deterministic once step completes |
-| `91_inbox_dispatch.sh` | 43, 83–85, 163, 246–248, 292–294 | Side-effect files (`received.txt`, `args.txt`, etc.) | 9 calls; user-written files |
-| `101_ensure_recover_output_contract.sh` | 44–45, 85–87, 124–127, 179–180 | Side-effect files (recover witness files) | 8 calls; deterministic payload content |
-| `101_script_isolation.sh` | 99, 125 | Script stdout and error messages | 2 calls |
-| `30_filesystem_side_effects.sh` | 31 | `workflow_wrote.txt` side-effect | 1 call |
-| `94_parallel_shell_steps.sh` | 36–37, 104–105 | Side-effect files and `.out` content | 4 calls |
-| `93_inbox_stress.sh` | 268 | Nested processing result file | 1 call |
-| `98_ensure_recover_value.sh` | 45, 80, 95 | Recover capture and `.out` artifacts | 3 calls |
-| `99_managed_call_semantics.sh` | 50 | Function stdout in step artifact | 1 call |
+| `94_parallel_shell_steps.sh` | 36–37, 104–105 | Side-effect files and `.out` content | 4 calls; test is skipped (unsupported semantics) |
 
-#### Justified exceptions (substring check appropriate)
+#### Justified exceptions (substring check appropriate, with inline comments)
 
 | File | Lines | Reason |
 |------|-------|--------|
@@ -319,7 +324,7 @@ These check deterministic artifact files or side-effect files that could use `e2
 | `72_docker_run_artifacts.sh` | 48 | `run_summary.jsonl` inside Docker — variable event count |
 | `78_lang_redesign_constructs.sh` | 25–294 | CLI stdout with progress tree formatting — timing, indentation varies |
 | `50_cli_and_parse_guards.sh` | 78–221 | Parser/validator error messages — checking diagnostic keywords |
-| `91_inbox_dispatch.sh` | 126, 204–207 | Error message content, CLI progress tree with timing |
+| `91_inbox_dispatch.sh` | 126, 204–207 | Compiler error stderr (variable paths), CLI progress tree with timing |
 | `80_cli_behavior.sh` | 18, 34–55 | CLI version banner, error help text — format may evolve |
 | `104_run_async.sh` | 47, 78–79, 129 | Async progress tree, failure messages — timing-dependent |
 | `81_tty_progress_tree.sh` | 95 | TTY live render — inherently nondeterministic |
@@ -329,8 +334,13 @@ These check deterministic artifact files or side-effect files that could use `e2
 | `79_workflow_fail_keyword.sh` | 26 | CLI stderr fail message |
 | `89_reporting_server.sh` | 59, 91, 94 | Reporting API JSON and raw log — format may include extra fields |
 | `93_ensure_recover_payload.sh` | 74–80 | CLI progress tree with timing |
+| `97_step_output_contract.sh` | 40–41, 48, 192, 217–218, 225 | Aggregated workflow `.out`/`.err` with multiple step outputs; prompt capture (nondeterministic) |
 | `97_async_managed_failure.sh` | 44 | Async failure message in progress output |
+| `98_ensure_recover_value.sh` | 80 | Recover `$1` merged stdout+stderr — variable aggregation format |
+| `99_managed_call_semantics.sh` | 50 | Script `.out` aggregates multiple echo lines; capture semantics vary |
 | `100_ensure_recover_invalid.sh` | 38–97 | Parser error diagnostics — checking keywords |
+| `101_ensure_recover_output_contract.sh` | 44–45, 85–87, 124–127, 179–180 | Recover payload is merged stdout+stderr; exact aggregation format varies |
+| `101_script_isolation.sh` | 125 | Compiler error stderr includes file paths and line numbers |
 | `102_engineer_recover_contract.sh` | 57–58 | Recover payload contains rule stdout+stderr — variable format |
 | `103_run_dir_source_name.sh` | 29, 35 | Run dir path — contains dynamic date component |
 | `00_install_and_init.sh` | 18 | CLI help output — format may evolve |

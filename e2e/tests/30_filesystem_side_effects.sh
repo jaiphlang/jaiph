@@ -28,7 +28,7 @@ workflow_write_out="$(e2e::run "fs_write_workflow.jh")"
 
 # Then
 e2e::assert_file_exists "${TEST_DIR}/workflow_wrote.txt" "workflow shell step created workflow_wrote.txt"
-e2e::assert_contains "$(cat "${TEST_DIR}/workflow_wrote.txt")" "abc" "workflow_wrote.txt has expected content"
+e2e::assert_equals "$(cat "${TEST_DIR}/workflow_wrote.txt")" "abc" "workflow_wrote.txt has expected content"
 
 e2e::expect_stdout "${workflow_write_out}" <<'EOF'
 
