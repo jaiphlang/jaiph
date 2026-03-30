@@ -102,28 +102,31 @@ e2e::assert_equals "${srclib_out}" "hello-from-lib" "source JAIPH_LIB works in i
 e2e::pass "shared library sourcing works under isolation"
 
 # ---------------------------------------------------------------------------
-e2e::section "cross-script call detected at compile time"
+e2e::section "opaque script body: embedded JS line starting with const"
 # ---------------------------------------------------------------------------
 
-e2e::file "cross_call.jh" <<'EOF'
-script helper {
-  echo "helper-ran"
-}
-
-script caller {
-  helper
+e2e::file "node_const.jh" <<'EOF'
+script use_node {
+  node -e "
+const fs = require('fs');
+process.stdout.write('node-ok');
+"
 }
 
 workflow default {
-  run caller()
+  run use_node()
 }
 EOF
 
-if jaiph run "${TEST_DIR}/cross_call.jh" >/dev/null 2>&1; then
-  e2e::fail "expected run to fail on cross-script call"
-fi
-err_out="$(jaiph run "${TEST_DIR}/cross_call.jh" 2>&1 || true)"
-# assert_contains: compiler error stderr includes file paths and line numbers that vary
-e2e::assert_contains "${err_out}" "scripts cannot call other Jaiph scripts" "cross-script call error message"
+rm -rf "${TEST_DIR}/runs_nodeconst"
+JAIPH_RUNS_DIR="runs_nodeconst" e2e::run "node_const.jh" >/dev/null
 
-e2e::pass "cross-script call rejected at compile time"
+run_dir="$(e2e::run_dir_at "${TEST_DIR}/runs_nodeconst" "node_const.jh")"
+shopt -s nullglob
+nc_files=( "${run_dir}"*use_node.out )
+shopt -u nullglob
+[[ ${#nc_files[@]} -ge 1 ]] || e2e::fail "expected use_node .out artifact"
+nc_out="$(<"${nc_files[0]}")"
+e2e::assert_equals "${nc_out}" "node-ok" "multiline node -e with const line runs"
+
+e2e::pass "opaque script allows embedded const in node -e"

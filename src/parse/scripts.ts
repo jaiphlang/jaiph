@@ -1,43 +1,6 @@
 import type { ScriptDef } from "../types";
-import { braceDepthDelta, fail, stripQuotes } from "./core";
-import { scriptShebangIsBash } from "./script-bash";
-
-function assertAllowedScriptLine(filePath: string, lineNo: number, cmd: string): void {
-  const t = cmd.trim();
-  if (!t || t.startsWith("#")) return;
-  const ret = t.match(/^return\s+(.+)$/s);
-  if (ret) {
-    const arg = ret[1].trim();
-    const isBashExitCode =
-      /^[0-9]+$/.test(arg) ||
-      arg === "$?" ||
-      /^\$[A-Za-z_][A-Za-z0-9_]*$/.test(arg);
-    if (!isBashExitCode) {
-      fail(filePath, 'return "value" is not allowed in script bodies; use stdout (echo) for values', lineNo);
-    }
-  }
-  if (/^\s*(run|ensure)\s/.test(t)) {
-    fail(
-      filePath,
-      "script body cannot use run or ensure (move orchestration to a workflow)",
-      lineNo,
-    );
-  }
-  if (/^\s*fail\s/.test(t)) {
-    fail(filePath, 'fail is not allowed in script bodies; use return 1 or exit 1', lineNo);
-  }
-  if (/^\s*const\s/.test(t)) {
-    fail(filePath, 'const is not allowed in script bodies; use bash local', lineNo);
-  }
-  if (/^\s*log\s/.test(t) || /^\s*logerr\s/.test(t)) {
-    fail(filePath, "log/logerr are not allowed in script bodies; use echo or echo >&2", lineNo);
-  }
-  if (/^\s*prompt(\s|$)/.test(t)) {
-    fail(filePath, "prompt is not allowed in script bodies", lineNo);
-  }
-}
-
-function finalizeScriptBody(filePath: string, scriptDef: ScriptDef): void {
+import { braceDepthDelta, fail } from "./core";
+function finalizeScriptBody(scriptDef: ScriptDef): void {
   while (scriptDef.commands.length > 0 && scriptDef.commands[0].trim() === "") {
     scriptDef.commands.shift();
   }
@@ -53,14 +16,6 @@ function finalizeScriptBody(filePath: string, scriptDef: ScriptDef): void {
         scriptDef.commands.unshift(rest.trimEnd());
       }
     }
-  }
-  const bash = scriptShebangIsBash(scriptDef.shebang);
-  if (!bash) return;
-  scriptDef.commands = scriptDef.commands.map((c) => stripQuotes(c));
-  const lineNo = scriptDef.loc.line;
-  for (const cmd of scriptDef.commands) {
-    if (!cmd.trim()) continue;
-    assertAllowedScriptLine(filePath, lineNo, cmd);
   }
 }
 
@@ -166,6 +121,6 @@ export function parseScriptBlock(
   if (i >= lines.length) {
     fail(filePath, `unterminated script block: ${scriptDef.name}`, lineNo);
   }
-  finalizeScriptBody(filePath, scriptDef);
+  finalizeScriptBody(scriptDef);
   return { scriptDef, nextIndex: i + 1 };
 }

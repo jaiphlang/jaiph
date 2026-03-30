@@ -1,11 +1,7 @@
 import { jaiphError } from "../errors";
 import type { jaiphModule, WorkflowStepDef } from "../types";
 import type { SubstitutionValidateEnv } from "./validate-substitution";
-import {
-  validateManagedWorkflowShell,
-  validateNoJaiphCommandSubstitution,
-} from "./validate-substitution";
-import { classifyJaiphShellRefToken } from "./shell-jaiph-guard";
+import { validateManagedWorkflowShell } from "./validate-substitution";
 import type { RefResolutionContext, RefTargetKind } from "./validate-ref-resolution";
 import {
   BARE_SEND_REF_MSG,
@@ -132,80 +128,6 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
     importsByAlias,
     lookupImported: lookupImportedKind,
   });
-
-  for (const sc of ast.scripts) {
-    const env = makeSubEnv(sc.loc);
-    for (const cmd of sc.commands) {
-      const t = cmd.trim();
-      if (!t || t.startsWith("#")) continue;
-      if (/^(run|ensure)\s/.test(t)) {
-        throw jaiphError(
-          ast.filePath,
-          sc.loc.line,
-          sc.loc.col,
-          "E_VALIDATE",
-          "script body cannot use run or ensure (move orchestration to a workflow)",
-        );
-      }
-      if (/^\s*config\s*\{/.test(t)) {
-        throw jaiphError(
-          ast.filePath,
-          sc.loc.line,
-          sc.loc.col,
-          "E_VALIDATE",
-          "script body cannot contain config blocks",
-        );
-      }
-      if (/^\s*(export\s+)?workflow\s/.test(t)) {
-        throw jaiphError(
-          ast.filePath,
-          sc.loc.line,
-          sc.loc.col,
-          "E_VALIDATE",
-          "script body cannot declare workflows",
-        );
-      }
-      if (/^\s*(export\s+)?rule\s/.test(t)) {
-        throw jaiphError(
-          ast.filePath,
-          sc.loc.line,
-          sc.loc.col,
-          "E_VALIDATE",
-          "script body cannot declare rules",
-        );
-      }
-      if (/^\s*script\s/.test(t)) {
-        throw jaiphError(
-          ast.filePath,
-          sc.loc.line,
-          sc.loc.col,
-          "E_VALIDATE",
-          "script body cannot declare nested scripts",
-        );
-      }
-      if (/^[A-Za-z_][A-Za-z0-9_.]*\s+->\s+/.test(t)) {
-        throw jaiphError(
-          ast.filePath,
-          sc.loc.line,
-          sc.loc.col,
-          "E_VALIDATE",
-          "script body cannot declare channel routes (->)",
-        );
-      }
-      validateNoJaiphCommandSubstitution(cmd, env);
-      // Detect cross-script calls: a script body must not invoke another Jaiph script.
-      const leadWord = t.match(/^([A-Za-z_][A-Za-z0-9_.]*)/)?.[1];
-      if (leadWord && classifyJaiphShellRefToken(leadWord, env) === "script" && leadWord !== sc.name) {
-        throw jaiphError(
-          ast.filePath,
-          sc.loc.line,
-          sc.loc.col,
-          "E_VALIDATE",
-          `scripts cannot call other Jaiph scripts; use a shared library or compose in a workflow`,
-        );
-      }
-    }
-  }
 
   const stripDQ = (s: string): string =>
     s.length >= 2 && s[0] === '"' && s[s.length - 1] === '"' ? s.slice(1, -1) : s;
