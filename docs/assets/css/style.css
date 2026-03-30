@@ -539,7 +539,7 @@ code:not(pre code) {
     background: var(--inline-code-bg);
     border: 1px solid var(--inline-code-border);
     border-radius: 6px;
-    padding: 0.15rem 0.5rem;
+    padding: 0 0.5rem;
     display: inline-block;
 }
 
