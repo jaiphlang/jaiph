@@ -265,7 +265,7 @@ EOF
 e2e::run "stress_nested.jh" >/dev/null
 
 e2e::assert_file_exists "${TEST_DIR}/nested_result.txt" "nested: sink received message"
-e2e::assert_contains "$(cat "${TEST_DIR}/nested_result.txt")" "processed:raw-data" "nested: message passed through processing chain"
+e2e::assert_equals "$(cat "${TEST_DIR}/nested_result.txt")" "processed:raw-data" "nested: message passed through processing chain"
 
 nd_run_dir="$(e2e::run_dir "stress_nested.jh")"
 nd_inbox="${nd_run_dir}/inbox"

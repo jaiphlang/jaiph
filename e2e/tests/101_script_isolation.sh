@@ -96,7 +96,7 @@ srclib_files=( "${run_dir}"*use_lib.out )
 shopt -u nullglob
 [[ ${#srclib_files[@]} -ge 1 ]] || e2e::fail "expected use_lib .out artifact"
 srclib_out="$(<"${srclib_files[0]}")"
-e2e::assert_contains "${srclib_out}" "hello-from-lib" "source JAIPH_LIB works in isolated script"
+e2e::assert_equals "${srclib_out}" "hello-from-lib" "source JAIPH_LIB works in isolated script"
 
 e2e::pass "shared library sourcing works under isolation"
 
@@ -122,6 +122,7 @@ if jaiph run "${TEST_DIR}/cross_call.jh" >/dev/null 2>&1; then
   e2e::fail "expected run to fail on cross-script call"
 fi
 err_out="$(jaiph run "${TEST_DIR}/cross_call.jh" 2>&1 || true)"
+# assert_contains: compiler error stderr includes file paths and line numbers that vary
 e2e::assert_contains "${err_out}" "scripts cannot call other Jaiph scripts" "cross-script call error message"
 
 e2e::pass "cross-script call rejected at compile time"

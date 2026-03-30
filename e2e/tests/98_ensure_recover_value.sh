@@ -42,7 +42,7 @@ wf_outs=( "${run_dir}"*default.out )
 shopt -u nullglob
 [[ ${#wf_outs[@]} -ge 1 ]] || e2e::fail "expected default .out artifact"
 default_out="$(<"${wf_outs[0]}")"
-e2e::assert_contains "${default_out}" "captured=ready-value" "ensure...recover capture = return value from successful rule"
+e2e::assert_equals "${default_out}" "captured=ready-value" "ensure...recover capture = return value from successful rule"
 
 # Rule stdout goes to artifacts, not into capture
 if [[ "${default_out}" == *"rule-stdout-check"* ]]; then
@@ -77,6 +77,7 @@ JAIPH_RUNS_DIR="runs_rrv" e2e::run "recover_receives_output.jh" >/dev/null 2>&1
 # The recover block should receive the merged stdout+stderr from the failed rule
 e2e::assert_file_exists "${TEST_DIR}/recover_received.txt" "recover block ran"
 recover_content="$(<"${TEST_DIR}/recover_received.txt")"
+# assert_contains: recover $1 contains merged stdout+stderr from failed rule; may include extra runtime text
 e2e::assert_contains "${recover_content}" "analysis-stdout-log" "recover block receives rule stdout in \$1"
 e2e::pass "ensure...recover: recover block output semantics"
 
@@ -92,5 +93,5 @@ rule_outs=( "${run_dir}"*analyze.out )
 shopt -u nullglob
 [[ ${#rule_outs[@]} -ge 1 ]] || e2e::fail "expected analyze .out artifact"
 rule_out="$(<"${rule_outs[0]}")"
-e2e::assert_contains "${rule_out}" "analysis-stdout-log" "rule stdout in .out artifact"
+e2e::assert_equals "${rule_out}" "analysis-stdout-log" "rule stdout in .out artifact"
 e2e::pass "ensure...recover: rule stdout in artifacts"

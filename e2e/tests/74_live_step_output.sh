@@ -105,12 +105,10 @@ else
   e2e::fail "err file did not grow (mid=${mid_err_size}B final=${final_err_size}B)"
 fi
 
-# Also verify final content is correct
+# Verify final content is correct — full equality on deterministic script output
 final_content="$(<"$out_file")"
-e2e::assert_contains "${final_content}" "line-1" "final output contains line-1"
-e2e::assert_contains "${final_content}" "line-2" "final output contains line-2"
-e2e::assert_contains "${final_content}" "line-3" "final output contains line-3"
+expected_out="$(printf 'line-1\nline-2\nline-3')"
+e2e::assert_equals "${final_content}" "${expected_out}" "final .out content"
 final_err_content="$(<"$err_file")"
-e2e::assert_contains "${final_err_content}" "err-1" "final error contains err-1"
-e2e::assert_contains "${final_err_content}" "err-2" "final error contains err-2"
-e2e::assert_contains "${final_err_content}" "err-3" "final error contains err-3"
+expected_err="$(printf 'err-1\nerr-2\nerr-3')"
+e2e::assert_equals "${final_err_content}" "${expected_err}" "final .err content"

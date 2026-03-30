@@ -47,6 +47,7 @@ for f in "${run_dir}"/*.out; do
 done
 shopt -u nullglob
 [[ -n "$fn_log_file" ]] || e2e::fail "expected a non-default step .out containing function stdout"
+# assert_contains: script .out aggregates all stdout lines; exact multi-line content depends on capture semantics
 e2e::assert_contains "$(<"$fn_log_file")" "log-to-artifacts" "function stdout in step artifact"
 
 e2e::pass "run script success path"
