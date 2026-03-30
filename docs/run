@@ -5,6 +5,11 @@ set -euo pipefail
 # Usage: curl -fsSL https://jaiph.org/run | bash -s '<workflow source>'
 #
 # Installs Jaiph (if not already installed) and runs the provided workflow.
+#
+# JAIPH_SITE — base URL for the install script (default https://jaiph.org).
+#   Use http://127.0.0.1:4000 with JAIPH_REPO_URL for local docs/CI without cloning GitHub.
+
+JAIPH_SITE="${JAIPH_SITE:-https://jaiph.org}"
 
 TMPFILE=""
 
@@ -25,7 +30,7 @@ fi
 
 if ! command -v jaiph >/dev/null 2>&1; then
   echo "Jaiph not found — installing..."
-  curl -fsSL https://jaiph.org/install | bash
+  curl -fsSL "${JAIPH_SITE}/install" | bash
   # Re-check after install
   export PATH="$HOME/.local/bin:$PATH"
   if ! command -v jaiph >/dev/null 2>&1; then
