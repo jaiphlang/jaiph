@@ -1198,15 +1198,12 @@ pre code .code-line::before {
 
     .top-nav-logo img {
         width: 10rem;
+        height: auto;
         margin: 0;
-        margin-left: -2.5rem;
     }
-
-    .top-nav-logo-with-brand img {
-        width: 7.5rem;
-        margin: 0;
-        margin-left: -2.5rem;
-        margin-bottom: -0.15em;
+    
+    .top-nav-logo-landing {
+        margin-left: -3rem;
     }
 
     .top-nav-brand {
