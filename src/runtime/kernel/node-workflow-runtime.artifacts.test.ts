@@ -110,6 +110,7 @@ test("NodeWorkflowRuntime: ensure recover receives failure payload in recover sc
       JAIPH_TEST_MODE: "1",
       JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
       JAIPH_SCRIPTS: scriptsDir,
+      JAIPH_WORKSPACE: root,
     };
     const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });
     const status = await runtime.runDefault(["original-arg1", "preserved-arg2"]);

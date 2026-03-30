@@ -149,6 +149,17 @@ Shell harnesses and CI expectations for the full repo are described in [Contribu
 
 **Default contract:** E2E tests compare **full** CLI output and **full** artifact file contents, not substrings. Use `e2e::expect_stdout` (heredoc), `e2e::expect_out`, `e2e::expect_file`, `e2e::expect_run_file`, or `e2e::assert_equals`. Substring checks (`e2e::assert_contains`) require an inline comment justifying the exception (nondeterministic output, unbounded logs, or platform-dependent text). For the full policy and artifact layout, see [ARCHITECTURE.md — E2E test philosophy](../ARCHITECTURE.md#e2e-test-philosophy-and-artifact-layout).
 
+**`*.test.jh` verification gate:** `e2e/tests/105_test_jh_verification.sh` is a dedicated regression test for the `jaiph test` command itself. It covers four areas: (1) a representative passing test file that exercises `import`, `mock prompt`, `mock rule`, `mock workflow`, `mock script`, and `expectContain` assertions with full output verification; (2) a deliberately failing test that asserts non-zero exit and the expected failure report format; (3) rejection of the deprecated `mock function` syntax with a migration error message; (4) directory discovery mode (`jaiph test <dir>`) finding and running multiple `*.test.jh` files. This test acts as a regression gate after any changes to the test runner, mock dispatch, or the `mock function` → `mock script` migration.
+
+## Environment prerequisites
+
+The test runner inherits the same environment contract as `jaiph run`. Two variables are particularly relevant:
+
+- **`JAIPH_WORKSPACE`** — Must point to the project root so workspace-relative paths (imports, `.jaiph/` discovery) resolve correctly. The CLI sets this automatically; unit tests that construct `NodeWorkflowRuntime` directly must include it in their env map.
+- **`JAIPH_LIB`** — Derived at runtime from `JAIPH_WORKSPACE` (defaults to `<workspace>/.jaiph/lib`). The CLI deletes any inherited `JAIPH_LIB` from the parent shell so scripts always resolve library paths against the **current** workspace, not a stale value from a parent process. You do not need to set this manually.
+
+Both variables are managed by `resolveRuntimeEnv` in `src/cli/run/env.ts`.
+
 ## Limitations (v1)
 
 - Prompt mocks are **only** inline in the test file (queue of `mock prompt "..."` or a single `mock prompt { ... }` dispatcher). Older external mock config formats are not supported.

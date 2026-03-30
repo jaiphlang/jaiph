@@ -16,10 +16,10 @@ e2e::file "live_out.jh" <<'WORKFLOW'
 script slow_writer_impl {
   echo "line-1"
   echo "err-1" >&2
-  sleep 0.3
+  sleep 1
   echo "line-2"
   echo "err-2" >&2
-  sleep 0.3
+  sleep 1
   echo "line-3"
   echo "err-3" >&2
 }
@@ -56,7 +56,7 @@ for _ in $(seq 1 50); do
 done
 
 # Sample while process is still running to prove live writes.
-sleep 0.2
+sleep 1
 if ! kill -0 "$run_pid" 2>/dev/null; then
   e2e::fail "run finished before live sample; increase slow_writer duration"
 fi
