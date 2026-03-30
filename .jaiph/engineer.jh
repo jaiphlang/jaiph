@@ -47,7 +47,7 @@ const code_philosophy = "
      documentation blindly.
 "
 
-script select_role() {
+script select_role {
   local oc
   oc="$(cat <<'OC'
   ## Output
@@ -164,15 +164,15 @@ OC
   esac
 }
 
-script arg_nonempty() {
+script arg_nonempty {
   [ -n "${1:-}" ]
 }
 
-script task_text_has_header() {
+script task_text_has_header {
   printf '%s\n' "$1" | grep -q '^## '
 }
 
-script first_line_task() {
+script first_line_task {
   local line
   line="$(printf '%s\n' "$1" | awk 'NR==1 { print; exit }')"
   line="${line#\#\# }"
@@ -180,7 +180,7 @@ script first_line_task() {
   printf '%s\n' "$line"
 }
 
-workflow classify_role() {
+workflow classify_role {
   const result = prompt "
     Classify this task into the single best-fit engineer role.
 
@@ -203,21 +203,21 @@ workflow classify_role() {
   return "${result_role}"
 }
 
-script save_string_to_file() {
+script save_string_to_file {
   echo "$1" > "$2"
 }
 
-script mkdir_p_simple() {
+script mkdir_p_simple {
   mkdir -p "$1"
 }
 
-workflow implement() {
+workflow implement {
   const task = "${arg1}"
   const role_name = "${arg2}"
-  if not run task_text_has_header "${task}" {
+  if not run task_text_has_header("${task}") {
     fail "Provided task does not contain a '## [text]' header"
   }
-  const role = run select_role "${role_name}"
+  const role = run select_role("${role_name}")
 
   prompt "
     ${role}
@@ -284,7 +284,7 @@ workflow implement() {
   "
 }
 
-workflow print_commit_message() {
+workflow print_commit_message {
   const response = prompt "
     Provide me with a suggested commit message for the current changes.
 
@@ -297,25 +297,25 @@ workflow print_commit_message() {
   log "Suggested commit message:\n\n${response_message}\n"
 }
 
-workflow default() {
+workflow default {
   const role_arg = "${arg1}"
   # ensure git.is_clean
-  const task = run queue.get_first_task
-  const task_header = run first_line_task "${task}"
-  ensure queue.task_is_dev_ready "${task}"
+  const task = run queue.get_first_task()
+  const task_header = run first_line_task("${task}")
+  ensure queue.task_is_dev_ready("${task}")
   log "Implementing task: ${task_header}"
 
-  if not run arg_nonempty "${role_arg}" {
-    const role_name = run classify_role "${task}"
+  if not run arg_nonempty("${role_arg}") {
+    const role_name = run classify_role("${task}")
     log "Auto-selected role: ${role_name}"
-    run implement "${task}" "${role_name}"
+    run implement("${task}", "${role_name}")
   }
   else {
-    run implement "${task}" "${role_arg}"
+    run implement("${task}", "${role_arg}")
   }
 
-  run ci.ensure_ci_passes
-  run docs.update_from_task "${task}"
-  run queue.remove_completed_task "${task_header}"
-  run print_commit_message
+  run ci.ensure_ci_passes()
+  run docs.update_from_task("${task}")
+  run queue.remove_completed_task("${task_header}")
+  run print_commit_message()
 }

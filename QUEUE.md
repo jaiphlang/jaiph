@@ -12,49 +12,6 @@ Process rules:
 
 ---
 
-## Definition/call syntax: no parens on defs, call parens required <!-- dev-ready -->
-
-**Goal**  
-Drop parameter lists from **definitions** of `workflow`, `rule`, and `script`. Require **call** syntax to use parentheses: either **empty** `()` for zero-argument calls or **comma-separated** arguments inside `(...)` — the same shape for every managed call (`run`, `ensure`, workflow-to-workflow invocations, etc., as applicable).
-
-**Context**
-
-- Empty `()` on definitions (e.g. `workflow foo() {}`) is misleading when bodies still use `${arg1}` / `$1` and does not declare real parameters.
-- Moving structure to **call sites** makes arity visible and avoids the fake “function signature” on defs.
-- Example shape:
-  ```
-  script save_string_to_file {
-    printf '%s' "$1" > "$2"
-  }
-
-  workflow default {
-    run save_string_to_file("aaaa", "bbb")
-    run other_workflow()
-  }
-  ```
-
-**Key files:**
-- `src/parse/workflows.ts`, `src/parse/rules.ts`, `src/parse/scripts.ts` — definition parsing (no `(` after name)
-- `src/parse/steps.ts` — `run` / `ensure` / call expressions: require `()` or `(...)` on the callee
-- `src/types.ts` — AST for calls and definitions
-- `src/runtime/kernel/node-workflow-runtime.ts` — wire call arity to existing arg plumbing
-- `src/transpile/validate.ts` — arity and ref validation for new call form
-
-**Scope**
-
-1. Parse definitions as `keyword name {` (no `( )` after `name`).
-2. Parse calls as `callee()` or `callee(arg1, arg2, ...)` consistently for workflows, rules, and scripts.
-3. Migrate internal `.jh` sources, fixtures, e2e tests, and docs (including `docs/index.html`).
-4. Update tests + error messages for invalid/missing parens.
-
-**Acceptance criteria**
-
-- Definitions never use `(` `)` after the identifier; calls always use `(` `)` (empty or with args).
-- Arity errors are deterministic at validate or runtime.
-- Migration completes across internal/e2e fixtures and published samples.
-
----
-
 ## Unified mock syntax: rename `mock function` to `mock script` <!-- dev-ready -->
 
 **Goal**  

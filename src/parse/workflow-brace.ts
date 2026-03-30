@@ -5,6 +5,7 @@ import {
   indexOfClosingDoubleQuote,
   isRef,
   matchSendOperator,
+  parseCallRef,
 } from "./core";
 import { parseConstRhs } from "./const-rhs";
 import { parseEnsureStep } from "./steps";
@@ -12,8 +13,8 @@ import { parsePromptStep } from "./prompt";
 import { parseSendRhs } from "./send-rhs";
 
 type BraceIfHead =
-  | { kind: "ensure"; negated: boolean; ref: string; args?: string }
-  | { kind: "run"; negated: boolean; ref: string; args?: string };
+  | { kind: "ensure"; negated: boolean; ref: string; args?: string; rest: string }
+  | { kind: "run"; negated: boolean; ref: string; args?: string; rest: string };
 
 function parseIfBraceHead(inner: string): BraceIfHead | null {
   let s = inner.trim();
@@ -30,11 +31,9 @@ function parseIfBraceHead(inner: string): BraceIfHead | null {
     if (lb === -1) return null;
     if (s.slice(lb + 1).trim() !== "") return null;
     const before = s.slice(0, lb).trim();
-    const refMatch = before.match(
-      /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.*))?$/,
-    );
-    if (!refMatch || !isRef(refMatch[1])) return null;
-    return { kind: "ensure", negated, ref: refMatch[1], args: refMatch[2]?.trim() };
+    const call = parseCallRef(before);
+    if (!call) return null;
+    return { kind: "ensure", negated, ref: call.ref, args: call.args, rest: call.rest };
   }
   if (s.startsWith("run ")) {
     s = s.slice("run ".length).trimStart();
@@ -42,11 +41,9 @@ function parseIfBraceHead(inner: string): BraceIfHead | null {
     if (lb === -1) return null;
     if (s.slice(lb + 1).trim() !== "") return null;
     const before = s.slice(0, lb).trim();
-    const refMatch = before.match(
-      /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.*))?$/,
-    );
-    if (!refMatch || !isRef(refMatch[1])) return null;
-    return { kind: "run", negated, ref: refMatch[1], args: refMatch[2]?.trim() };
+    const call = parseCallRef(before);
+    if (!call) return null;
+    return { kind: "run", negated, ref: call.ref, args: call.args, rest: call.rest };
   }
   return null;
 }
@@ -66,11 +63,9 @@ function parseElseIfBraceHead(inner: string): BraceIfHead | null {
     if (lb === -1) return null;
     if (s.slice(lb + 1).trim() !== "") return null;
     const before = s.slice(0, lb).trim();
-    const refMatch = before.match(
-      /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.*))?$/,
-    );
-    if (!refMatch || !isRef(refMatch[1])) return null;
-    return { kind: "ensure", negated, ref: refMatch[1], args: refMatch[2]?.trim() };
+    const call = parseCallRef(before);
+    if (!call) return null;
+    return { kind: "ensure", negated, ref: call.ref, args: call.args, rest: call.rest };
   }
   if (s.startsWith("run ")) {
     s = s.slice("run ".length).trimStart();
@@ -78,16 +73,27 @@ function parseElseIfBraceHead(inner: string): BraceIfHead | null {
     if (lb === -1) return null;
     if (s.slice(lb + 1).trim() !== "") return null;
     const before = s.slice(0, lb).trim();
-    const refMatch = before.match(
-      /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.*))?$/,
-    );
-    if (!refMatch || !isRef(refMatch[1])) return null;
-    return { kind: "run", negated, ref: refMatch[1], args: refMatch[2]?.trim() };
+    const call = parseCallRef(before);
+    if (!call) return null;
+    return { kind: "run", negated, ref: call.ref, args: call.args, rest: call.rest };
   }
   return null;
 }
 
-function headToCondition(h: BraceIfHead, lineNo: number, innerRaw: string): IfConditionDef {
+/** Reject non-empty trailing content after a call expression (e.g. shell redirection). */
+function rejectTrailingContent(
+  filePath: string,
+  lineNo: number,
+  keyword: string,
+  rest: string,
+): void {
+  const trimmed = rest.trim();
+  if (!trimmed) return;
+  fail(filePath, `unexpected content after ${keyword} call: '${trimmed}'; shell redirection (>, |, &) is not supported — use a script block`, lineNo);
+}
+
+function headToCondition(filePath: string, h: BraceIfHead, lineNo: number, innerRaw: string): IfConditionDef {
+  rejectTrailingContent(filePath, lineNo, h.kind === "ensure" ? "ensure" : "run", h.rest);
   if (h.kind === "ensure") {
     return {
       kind: "ensure",
@@ -281,20 +287,19 @@ export function parseBlockStatement(
 
   if (inner.startsWith("run async ")) {
     const runBody = inner.slice("run async ".length).trim();
-    const runMatch = runBody.match(
-      /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
-    );
-    if (!runMatch || !isRef(runMatch[1])) {
-      fail(filePath, "run async must target a workflow or script reference", innerNo);
+    const call = parseCallRef(runBody);
+    if (!call) {
+      fail(filePath, "run async must target a workflow or script reference with parenthesized arguments", innerNo);
     }
+    rejectTrailingContent(filePath, innerNo, "run async", call.rest);
     return {
       step: {
         type: "run",
         workflow: {
-          value: runMatch[1],
+          value: call.ref,
           loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
         },
-        args: runMatch[2]?.trim(),
+        args: call.args,
         async: true,
       },
       nextIdx: idx + 1,
@@ -303,20 +308,19 @@ export function parseBlockStatement(
 
   if (inner.startsWith("run ")) {
     const runBody = inner.slice("run ".length).trim();
-    const runMatch = runBody.match(
-      /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
-    );
-    if (!runMatch || !isRef(runMatch[1])) {
-      fail(filePath, "run must target a workflow or script reference", innerNo);
+    const call = parseCallRef(runBody);
+    if (!call) {
+      fail(filePath, "run must target a workflow or script reference with parenthesized arguments", innerNo);
     }
+    rejectTrailingContent(filePath, innerNo, "run", call.rest);
     return {
       step: {
         type: "run",
         workflow: {
-          value: runMatch[1],
+          value: call.ref,
           loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
         },
-        args: runMatch[2]?.trim(),
+        args: call.args,
       },
       nextIdx: idx + 1,
     };
@@ -367,20 +371,19 @@ export function parseBlockStatement(
     }
     if (rest.startsWith("run ")) {
       const runBody = rest.slice("run ".length).trim();
-      const runMatch = runBody.match(
-        /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+(.+))?$/,
-      );
-      if (!runMatch || !isRef(runMatch[1])) {
-        fail(filePath, "run must target a workflow or script reference", innerNo);
+      const call = parseCallRef(runBody);
+      if (!call) {
+        fail(filePath, "run must target a workflow or script reference with parenthesized arguments", innerNo);
       }
+      rejectTrailingContent(filePath, innerNo, "run", call.rest);
       return {
         step: {
           type: "run",
           workflow: {
-            value: runMatch[1],
+            value: call.ref,
             loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
           },
-          args: runMatch[2]?.trim(),
+          args: call.args,
           captureName,
         },
         nextIdx: idx + 1,
@@ -485,7 +488,7 @@ export function tryParseBraceIfChain(
   const head = parseIfBraceHead(inner);
   if (!head) return null;
 
-  const condition = headToCondition(head, innerNo, innerRaw);
+  const condition = headToCondition(filePath, head, innerNo, innerRaw);
   let linesEff = lines;
   const { steps: thenSteps, nextIdx: afterThen } = parseBraceBlockBody(filePath, linesEff, idx + 1, innerNo, opts);
   linesEff = peelCloseBraceBeforeElse(linesEff, afterThen);
@@ -505,7 +508,7 @@ export function tryParseBraceIfChain(
       }
       const eifNo = cursor + 1;
       const eifRaw = linesEff[cursor];
-      const cond = headToCondition(eif, eifNo, eifRaw);
+      const cond = headToCondition(filePath, eif, eifNo, eifRaw);
       const { steps: branchSteps, nextIdx: afterBranch } = parseBraceBlockBody(
         filePath, linesEff, cursor + 1, eifNo, opts,
       );

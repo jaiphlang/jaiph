@@ -13,13 +13,13 @@ e2e::section "log/logerr run artifacts"
 
 # Given
 e2e::file "log_artifacts.jh" <<'EOF'
-script done_impl() {
+script done_impl {
   echo "done"
 }
-workflow default() {
+workflow default {
   log "artifact-stdout"
   logerr "artifact-stderr"
-  run done_impl
+  run done_impl()
 }
 EOF
 rm -rf "${TEST_DIR}/runs_log"

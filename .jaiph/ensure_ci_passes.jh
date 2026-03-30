@@ -5,33 +5,33 @@ config {
   agent.cursor_flags = "--force"
 }
 
-rule ci_passes() {
-  run npm_run_test_ci
+rule ci_passes {
+  run npm_run_test_ci()
 }
 
-script npm_run_test_ci() {
+script npm_run_test_ci {
   npm run test:ci
 }
 
-script save_string_to_file() {
+script save_string_to_file {
   echo "$1" > "$2"
 }
 
-script assert_nonempty_file_or_fail() {
+script assert_nonempty_file_or_fail {
   test -s "$1" || {
     echo "jaiph: ci failure log is empty at $1" >&2
     exit 1
   }
 }
 
-workflow ensure_ci_passes() {
+workflow ensure_ci_passes {
   const ci_log_dir = ".jaiph/tmp"
   const ci_log_file = "${ci_log_dir}/ensure_ci_passes.last.log"
-  run mkdir_p_simple "${ci_log_dir}"
+  run mkdir_p_simple("${ci_log_dir}")
 
-  ensure ci_passes recover {
-    run save_string_to_file "${arg1}" "${ci_log_file}"
-    run assert_nonempty_file_or_fail "${ci_log_file}"
+  ensure ci_passes() recover {
+    run save_string_to_file("${arg1}", "${ci_log_file}")
+    run assert_nonempty_file_or_fail("${ci_log_file}")
 
     prompt "
       <role>
@@ -56,17 +56,17 @@ workflow ensure_ci_passes() {
     "
   }
 
-  run rm_file_simple "${ci_log_file}"
+  run rm_file_simple("${ci_log_file}")
 }
 
-script mkdir_p_simple() {
+script mkdir_p_simple {
   mkdir -p "$1"
 }
 
-script rm_file_simple() {
+script rm_file_simple {
   rm -f "$1"
 }
 
-workflow default() {
-  run ensure_ci_passes
+workflow default {
+  run ensure_ci_passes()
 }

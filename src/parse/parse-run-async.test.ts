@@ -4,8 +4,8 @@ import { parsejaiph } from "../parser";
 
 test("parse: run async produces run step with async flag", () => {
   const src = [
-    "workflow default() {",
-    "  run async some_wf",
+    "workflow default {",
+    "  run async some_wf()",
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
@@ -19,8 +19,8 @@ test("parse: run async produces run step with async flag", () => {
 
 test("parse: run async with args", () => {
   const src = [
-    "workflow default() {",
-    '  run async other_wf "hello" "$x"',
+    "workflow default {",
+    '  run async other_wf("hello" "$x")',
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
@@ -35,8 +35,8 @@ test("parse: run async with args", () => {
 
 test("parse: run async with qualified ref", () => {
   const src = [
-    "workflow default() {",
-    "  run async mod.some_wf",
+    "workflow default {",
+    "  run async mod.some_wf()",
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
@@ -50,8 +50,8 @@ test("parse: run async with qualified ref", () => {
 
 test("parse: regular run does not have async flag", () => {
   const src = [
-    "workflow default() {",
-    "  run some_wf",
+    "workflow default {",
+    "  run some_wf()",
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
@@ -64,8 +64,8 @@ test("parse: regular run does not have async flag", () => {
 
 test("parse: capture + run async is rejected", () => {
   const src = [
-    "workflow default() {",
-    "  x = run async some_wf",
+    "workflow default {",
+    "  x = run async some_wf()",
     "}",
   ].join("\n");
   assert.throws(

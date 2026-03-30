@@ -1,18 +1,18 @@
 #!/usr/bin/env jaiph
 
-rule check_ready() {
+rule check_ready {
   true
 }
 
-workflow helper() {
+workflow helper {
   log "Inside helper workflow"
   echo "helper done"
 }
 
-workflow default() {
+workflow default {
   log "Starting analysis phase"
-  ensure check_ready
-  run helper
+  ensure check_ready()
+  run helper()
   dataset="testdata"
   log "Processing results for ${dataset}"
   echo "done"

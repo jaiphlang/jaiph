@@ -16,12 +16,12 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::section "inline run capture in log"
 
 e2e::file "ic_run_log.jh" <<'EOF'
-script greet() {
+script greet {
   echo "hello"
 }
 
-workflow default() {
-  log "got: ${run greet}"
+workflow default {
+  log "got: ${run greet()}"
 }
 EOF
 
@@ -43,12 +43,12 @@ e2e::assert_contains "${summary_content}" "got: hello" "inline run capture resol
 e2e::section "inline ensure capture in log"
 
 e2e::file "ic_ensure_log.jh" <<'EOF'
-rule check() {
+rule check {
   return "ok"
 }
 
-workflow default() {
-  log "status: ${ensure check}"
+workflow default {
+  log "status: ${ensure check()}"
 }
 EOF
 
@@ -67,12 +67,12 @@ e2e::assert_contains "${summary2}" "status: ok" "inline ensure capture resolved 
 e2e::section "inline run capture with args"
 
 e2e::file "ic_run_args.jh" <<'EOF'
-script greet() {
+script greet {
   echo "hi $1"
 }
 
-workflow default() {
-  log "said: ${run greet world}"
+workflow default {
+  log "said: ${run greet(world)}"
 }
 EOF
 
@@ -91,16 +91,16 @@ e2e::assert_contains "${summary3}" "said: hi world" "inline run capture with arg
 e2e::section "inline capture in return value"
 
 e2e::file "ic_return.jh" <<'EOF'
-script greet() {
+script greet {
   echo "hello"
 }
 
-workflow helper() {
-  return "${run greet}"
+workflow helper {
+  return "${run greet()}"
 }
 
-workflow default() {
-  const r = run helper
+workflow default {
+  const r = run helper()
   log "returned: ${r}"
 }
 EOF
@@ -120,13 +120,13 @@ e2e::assert_contains "${summary4}" "returned: hello" "inline capture in return p
 e2e::section "inline capture failure propagation"
 
 e2e::file "ic_fail_prop.jh" <<'EOF'
-script bad() {
+script bad {
   echo "err" >&2
   exit 1
 }
 
-workflow default() {
-  log "got: ${run bad}"
+workflow default {
+  log "got: ${run bad()}"
   log "should not reach"
 }
 EOF
@@ -144,13 +144,13 @@ e2e::pass "inline capture failure propagates to parent workflow"
 e2e::section "mixed inline captures and variable interpolation"
 
 e2e::file "ic_mixed.jh" <<'EOF'
-script greet() {
+script greet {
   echo "hello"
 }
 
-workflow default() {
+workflow default {
   const name = "world"
-  log "${run greet} ${name}"
+  log "${run greet()} ${name}"
 }
 EOF
 
@@ -169,14 +169,14 @@ e2e::assert_contains "${summary6}" "hello world" "mixed inline capture and varia
 e2e::section "compile rejects nested inline captures"
 
 e2e::file "ic_nested.jh" <<'EOF'
-script foo() {
+script foo {
   echo "a"
 }
-script bar() {
+script bar {
   echo "b"
 }
-workflow default() {
-  log "got: ${run foo ${run bar}}"
+workflow default {
+  log "got: ${run foo(${run bar()})}"
 }
 EOF
 
@@ -192,8 +192,8 @@ e2e::pass "compile rejects nested inline captures"
 e2e::section "compile rejects unknown inline capture ref"
 
 e2e::file "ic_unknown.jh" <<'EOF'
-workflow default() {
-  log "got: ${run nonexistent}"
+workflow default {
+  log "got: ${run nonexistent()}"
 }
 EOF
 
@@ -212,36 +212,36 @@ e2e::section "jaiph test with inline captures"
 rm -f "${TEST_DIR}/ic_nested.jh" "${TEST_DIR}/ic_unknown.jh"
 
 e2e::file "ic_lib.jh" <<'EOF'
-script greet() {
+script greet {
   echo "hello"
 }
 
-rule check_ok() {
+rule check_ok {
   return "ok"
 }
 
-workflow run_capture_log() {
-  log "got: ${run greet}"
+workflow run_capture_log {
+  log "got: ${run greet()}"
 }
 
-workflow ensure_capture_log() {
-  log "status: ${ensure check_ok}"
+workflow ensure_capture_log {
+  log "status: ${ensure check_ok()}"
 }
 
-workflow capture_return() {
-  return "${run greet}"
+workflow capture_return {
+  return "${run greet()}"
 }
 EOF
 
 e2e::file "ic_lib.test.jh" <<'EOF'
 import "ic_lib.jh" as ic
 
-test "inline run capture in log" {
+test "inline run capture(in, log") {
   out = ic.run_capture_log
   expectContain out "got: hello"
 }
 
-test "inline ensure capture in log" {
+test "inline ensure capture(in, log") {
   out = ic.ensure_capture_log
   expectContain out "status: ok"
 }

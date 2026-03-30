@@ -20,16 +20,16 @@ test("ACCEPTANCE: non-TTY long step emits gray heartbeat before completion", () 
   writeFileSync(
     workflowPath,
     [
-      "script sleep_impl() {",
+      "script sleep_impl {",
       "  sleep 3",
       "}",
       "",
-      "workflow inner() {",
-      "  run sleep_impl",
+      "workflow inner {",
+      "  run sleep_impl()",
       "}",
       "",
-      "workflow default() {",
-      "  run inner",
+      "workflow default {",
+      "  run inner()",
       "}",
     ].join("\n"),
   );

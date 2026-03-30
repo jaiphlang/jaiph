@@ -17,16 +17,16 @@ fi
 
 # Given
 e2e::file "tty_tree.jh" <<'EOF'
-script leaf_fn() {
+script leaf_fn {
   sleep 4
 }
 
-workflow leaf() {
-  run leaf_fn
+workflow leaf {
+  run leaf_fn()
 }
 
-workflow default() {
-  run leaf
+workflow default {
+  run leaf()
 }
 EOF
 

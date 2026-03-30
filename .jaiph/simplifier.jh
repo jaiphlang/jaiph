@@ -35,7 +35,7 @@ const simplifier_principles = "
     existing tests unchanged.
 "
 
-script assert_no_test_or_e2e_in_changed() {
+script assert_no_test_or_e2e_in_changed {
   source "${JAIPH_LIB}/git_paths.sh"
   local bad=0
   while IFS= read -r f; do
@@ -48,15 +48,15 @@ script assert_no_test_or_e2e_in_changed() {
   return $bad
 }
 
-rule no_test_or_e2e_paths_changed() {
-  run assert_no_test_or_e2e_in_changed
+rule no_test_or_e2e_paths_changed {
+  run assert_no_test_or_e2e_in_changed()
 }
 
-script report_file_nonempty() {
+script report_file_nonempty {
   test -s ".jaiph/tmp/simplifier_report.md"
 }
 
-workflow find_simplifications() {
+workflow find_simplifications {
   const report = prompt "
     <role>
     You are a senior engineer focused on codebase simplification for the Jaiph
@@ -92,24 +92,24 @@ workflow find_simplifications() {
     </role>
   "
 
-  run save_simplifier_report "${report}"
+  run save_simplifier_report("${report}")
   log "Simplification report saved to .jaiph/tmp/simplifier_report.md"
-  ensure no_test_or_e2e_paths_changed
+  ensure no_test_or_e2e_paths_changed()
 }
 
-script save_simplifier_report() {
+script save_simplifier_report {
   printf '%s\n' "$1" > .jaiph/tmp/simplifier_report.md
 }
 
-script read_simplifier_report() {
+script read_simplifier_report {
   cat .jaiph/tmp/simplifier_report.md
 }
 
-workflow apply_simplifications() {
-  if not run report_file_nonempty {
+workflow apply_simplifications {
+  if not run report_file_nonempty() {
     fail "No report at .jaiph/tmp/simplifier_report.md. Run find_simplifications first."
   }
-  const report = run read_simplifier_report
+  const report = run read_simplifier_report()
 
   prompt "
     <role>
@@ -137,18 +137,18 @@ workflow apply_simplifications() {
     </task>
   "
 
-  ensure no_test_or_e2e_paths_changed
+  ensure no_test_or_e2e_paths_changed()
 }
 
-script mkdir_tmp_jaiph() {
+script mkdir_tmp_jaiph {
   mkdir -p .jaiph/tmp
 }
 
-workflow default() {
-  ensure git.is_clean
-  run mkdir_tmp_jaiph
-  run find_simplifications
-  run apply_simplifications
-  run ci.ensure_ci_passes
-  ensure no_test_or_e2e_paths_changed
+workflow default {
+  ensure git.is_clean()
+  run mkdir_tmp_jaiph()
+  run find_simplifications()
+  run apply_simplifications()
+  run ci.ensure_ci_passes()
+  ensure no_test_or_e2e_paths_changed()
 }

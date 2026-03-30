@@ -1,17 +1,17 @@
 #!/usr/bin/env jaiph
 
-script ensure_is_number_impl() {
+script ensure_is_number_impl {
   if ! [[ "$1" =~ ^[0-9]+$ ]]; then
     echo "Expected a non-negative integer, got: $1" >&2
     exit 1
   fi
 }
 
-rule ensure_is_number() {
-  run ensure_is_number_impl "${arg1}"
+rule ensure_is_number {
+  run ensure_is_number_impl("${arg1}")
 }
 
-script fib() {
+script fib {
   local n="$1"
   fib_impl() {
     local x="$1"
@@ -31,9 +31,9 @@ script fib() {
   echo "$result"
 }
 
-workflow default() {
+workflow default {
   const n = "${arg1}"
-  ensure ensure_is_number "${n}"
-  result = run fib "${n}"
+  ensure ensure_is_number("${n}")
+  result = run fib("${n}")
   log "${result}"
 }

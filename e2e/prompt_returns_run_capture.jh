@@ -1,6 +1,6 @@
 #!/usr/bin/env jaiph
 # Fixture: typed prompt + printf field, same pattern as engineer classify_role.
-workflow classify_like() {
+workflow classify_like {
   const task = "${arg1}"
   result = prompt "
     Classify task \"${task}\" into a single engineer role name (JSON only).
@@ -10,14 +10,14 @@ workflow classify_like() {
 }
 
 # Same pattern as engineer.jh default: capture role from nested workflow.
-workflow pick_role() {
+workflow pick_role {
   const task = "${arg1}"
-  role_name = run classify_like "${task}"
+  role_name = run classify_like("${task}")
   return "${role_name}"
 }
 
-workflow default() {
+workflow default {
   const subject = "${arg1}"
-  chosen = run classify_like "${subject}"
+  chosen = run classify_like("${subject}")
   log "chosen=${chosen}"
 }

@@ -23,19 +23,19 @@ config {
   agent.backend = "cursor"
 }
 
-script save_string_to_file() {
+script save_string_to_file {
   printf '%s' "$1" > "$2"
 }
 
-script emit_root_step() {
+script emit_root_step {
   printf '%s\n' "PAYLOAD_ROOT_SCRIPT"
 }
 
-script emit_nested_step() {
+script emit_nested_step {
   printf '%s\n' "PAYLOAD_NESTED_SCRIPT"
 }
 
-script emit_deep_step_then_fail_until_recovered() {
+script emit_deep_step_then_fail_until_recovered {
   printf '%s\n' "PAYLOAD_DEEP_SCRIPT"
   if [ -f .jaiph/tmp/recovered ]; then
     exit 0
@@ -43,28 +43,28 @@ script emit_deep_step_then_fail_until_recovered() {
   exit 1
 }
 
-script mark_recovered() {
+script mark_recovered {
   touch .jaiph/tmp/recovered
 }
 
-rule deep_rule() {
-  run emit_deep_step_then_fail_until_recovered
+rule deep_rule {
+  run emit_deep_step_then_fail_until_recovered()
 }
 
-rule nested_rule() {
-  run emit_nested_step
-  ensure deep_rule
+rule nested_rule {
+  run emit_nested_step()
+  ensure deep_rule()
 }
 
-rule top_rule() {
-  run emit_root_step
-  ensure nested_rule
+rule top_rule {
+  run emit_root_step()
+  ensure nested_rule()
 }
 
-workflow default() {
-  ensure top_rule recover {
-    run save_string_to_file "recovered-on-retry" witness_failed_payload.txt
-    run mark_recovered
+workflow default {
+  ensure top_rule() recover {
+    run save_string_to_file("recovered-on-retry", witness_failed_payload.txt)
+    run mark_recovered()
   }
 }
 EOF

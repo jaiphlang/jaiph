@@ -192,7 +192,7 @@ e2e::section "Feature under test"
 
 # Given — create the workflow file inline
 e2e::file "hello.jh" <<'EOF'
-workflow default() {
+workflow default {
   echo "hello-jh"
 }
 EOF

@@ -19,14 +19,14 @@ e2e::file "meta_workflow.jh" <<'EOF'
 config {
   run.logs_dir = "meta_runs"
 }
-script ok_impl() {
+script ok_impl {
   echo ok
 }
-rule ok() {
-  run ok_impl
+rule ok {
+  run ok_impl()
 }
-workflow default() {
-  ensure ok
+workflow default {
+  ensure ok()
 }
 EOF
 
@@ -49,14 +49,14 @@ e2e::file "override.jh" <<'EOF'
 config {
   run.logs_dir = "config_wins"
 }
-script ok_impl() {
+script ok_impl {
   echo ok
 }
-rule ok() {
-  run ok_impl
+rule ok {
+  run ok_impl()
 }
-workflow default() {
-  ensure ok
+workflow default {
+  ensure ok()
 }
 EOF
 

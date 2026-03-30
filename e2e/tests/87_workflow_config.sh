@@ -22,24 +22,24 @@ config {
   agent.backend = "cursor"
 }
 
-script log_scope_backend() {
+script log_scope_backend {
   printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_SCOPE_LOG"
 }
 
-workflow first() {
+workflow first {
   config {
     agent.backend = "claude"
   }
-  run log_scope_backend "first"
+  run log_scope_backend("first")
 }
 
-workflow second() {
-  run log_scope_backend "second"
+workflow second {
+  run log_scope_backend("second")
 }
 
-workflow default() {
-  run first
-  run second
+workflow default {
+  run first()
+  run second()
 }
 EOF
 
@@ -65,29 +65,29 @@ config {
   agent.backend = "cursor"
 }
 
-script log_rule_config() {
+script log_rule_config {
   printf 'rule_model:%s\n' "$JAIPH_AGENT_MODEL" >> "$JAIPH_OVERRIDE_LOG"
   printf 'rule_backend:%s\n' "$JAIPH_AGENT_BACKEND" >> "$JAIPH_OVERRIDE_LOG"
 }
 
-rule check_config() {
-  run log_rule_config
+rule check_config {
+  run log_rule_config()
 }
 
-workflow with_override() {
+workflow with_override {
   config {
     agent.default_model = "workflow-model"
   }
-  ensure check_config
+  ensure check_config()
 }
 
-workflow without_override() {
-  ensure check_config
+workflow without_override {
+  ensure check_config()
 }
 
-workflow default() {
-  run with_override
-  run without_override
+workflow default {
+  run with_override()
+  run without_override()
 }
 EOF
 
@@ -117,12 +117,12 @@ config {
   agent.backend = "cursor"
 }
 
-script log_nested_backend() {
+script log_nested_backend {
   printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_NESTED_LOG"
 }
 
-workflow default() {
-  run log_nested_backend "child_backend"
+workflow default {
+  run log_nested_backend("child_backend")
 }
 EOF
 
@@ -133,21 +133,21 @@ config {
   agent.backend = "cursor"
 }
 
-script log_nested_backend() {
+script log_nested_backend {
   printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_NESTED_LOG"
 }
 
-workflow caller() {
+workflow caller {
   config {
     agent.backend = "claude"
   }
-  run log_nested_backend "parent_before"
-  run child.default
-  run log_nested_backend "parent_after"
+  run log_nested_backend("parent_before")
+  run child.default()
+  run log_nested_backend("parent_after")
 }
 
-workflow default() {
-  run caller
+workflow default {
+  run caller()
 }
 EOF
 
@@ -171,15 +171,15 @@ ENV_LOG="${TEST_DIR}/env.log"
 export JAIPH_ENV_LOG="${ENV_LOG}"
 
 e2e::file "env_wins.jh" <<'EOF'
-script log_env_backend() {
+script log_env_backend {
   printf 'backend:%s\n' "$JAIPH_AGENT_BACKEND" >> "$JAIPH_ENV_LOG"
 }
 
-workflow default() {
+workflow default {
   config {
     agent.backend = "claude"
   }
-  run log_env_backend
+  run log_env_backend()
 }
 EOF
 
@@ -205,28 +205,28 @@ config {
   agent.backend = "cursor"
 }
 
-script log_sibling_env() {
+script log_sibling_env {
   printf '%s:model=%s,backend=%s\n' "$1" "$JAIPH_AGENT_MODEL" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_SIBLING_LOG"
 }
 
-workflow alpha() {
+workflow alpha {
   config {
     agent.default_model = "alpha-model"
     agent.backend = "claude"
   }
-  run log_sibling_env "alpha"
+  run log_sibling_env("alpha")
 }
 
-workflow beta() {
+workflow beta {
   config {
     agent.default_model = "beta-model"
   }
-  run log_sibling_env "beta"
+  run log_sibling_env("beta")
 }
 
-workflow default() {
-  run alpha
-  run beta
+workflow default {
+  run alpha()
+  run beta()
 }
 EOF
 

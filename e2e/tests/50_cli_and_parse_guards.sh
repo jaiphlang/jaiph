@@ -13,11 +13,11 @@ e2e::section "jaiph test discovery and empty-directory failure"
 
 # Given
 e2e::file "ok_a.jh" <<'EOF'
-script a_impl() {
+script a_impl {
   echo "A"
 }
-workflow default() {
-  run a_impl
+workflow default {
+  run a_impl()
 }
 EOF
 
@@ -31,11 +31,11 @@ test "A passes" {
 EOF
 
 e2e::file "ok_b.jh" <<'EOF'
-script b_impl() {
+script b_impl {
   echo "B"
 }
-workflow default() {
-  run b_impl
+workflow default {
+  run b_impl()
 }
 EOF
 
@@ -81,11 +81,11 @@ e2e::section "jaiph run requires workflow default"
 
 # Given
 e2e::file "no_default.jh" <<'EOF'
-script no_default_impl() {
+script no_default_impl {
   echo "no default here"
 }
-workflow docs() {
-  run no_default_impl
+workflow docs {
+  run no_default_impl()
 }
 EOF
 
@@ -106,13 +106,13 @@ e2e::section "prompt parse guards reject shell substitution"
 
 # Given
 e2e::file "bad_prompt_subshell.jh" <<'EOF'
-workflow default() {
+workflow default {
   prompt "show host $(uname)"
 }
 EOF
 
 e2e::file "bad_prompt_backticks.jh" <<'EOF'
-workflow default() {
+workflow default {
   prompt "show host `uname`"
 }
 EOF
@@ -149,11 +149,11 @@ e2e::section "shell redirection around run/ensure is rejected"
 
 # Given — run with stdout redirect
 e2e::file "run_redirect.jh" <<'EOF'
-script greet() {
+script greet {
   echo "hello"
 }
-workflow default() {
-  run greet > out.txt
+workflow default {
+  run greet() > out.txt
 }
 EOF
 
@@ -168,17 +168,17 @@ redirect_out="$(cat "${redirect_err}")"
 rm -f "${redirect_err}"
 
 # Then
-e2e::assert_contains "${redirect_out}" "E_VALIDATE" "run redirect emits E_VALIDATE"
+e2e::assert_contains "${redirect_out}" "E_PARSE" "run redirect emits E_PARSE"
 e2e::assert_contains "${redirect_out}" "shell redirection" "run redirect error mentions shell redirection"
 e2e::assert_contains "${redirect_out}" "script block" "run redirect error suggests script block"
 
 # Given — run with pipe
 e2e::file "run_pipe.jh" <<'EOF'
-script greet() {
+script greet {
   echo "hello"
 }
-workflow default() {
-  run greet | tr a-z A-Z
+workflow default {
+  run greet() | tr a-z A-Z
 }
 EOF
 
@@ -193,16 +193,16 @@ pipe_out="$(cat "${pipe_err}")"
 rm -f "${pipe_err}"
 
 # Then
-e2e::assert_contains "${pipe_out}" "E_VALIDATE" "run pipe emits E_VALIDATE"
+e2e::assert_contains "${pipe_out}" "E_PARSE" "run pipe emits E_PARSE"
 e2e::assert_contains "${pipe_out}" "shell redirection" "run pipe error mentions shell redirection"
 
 # Given — run with background &
 e2e::file "run_bg.jh" <<'EOF'
-script greet() {
+script greet {
   echo "hello"
 }
-workflow default() {
-  run greet &
+workflow default {
+  run greet() &
 }
 EOF
 
@@ -217,5 +217,5 @@ bg_out="$(cat "${bg_err}")"
 rm -f "${bg_err}"
 
 # Then
-e2e::assert_contains "${bg_out}" "E_VALIDATE" "run background emits E_VALIDATE"
+e2e::assert_contains "${bg_out}" "E_PARSE" "run background emits E_PARSE"
 e2e::assert_contains "${bg_out}" "shell redirection" "run background error mentions shell redirection"

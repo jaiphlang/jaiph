@@ -15,7 +15,7 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::section "const with string value"
 
 e2e::file "const_string.jh" <<'EOF'
-workflow default() {
+workflow default {
   const msg = "hello-world"
   log "${msg}"
 }
@@ -28,12 +28,12 @@ e2e::assert_contains "${out}" "hello-world" "const string value logged"
 e2e::section "const with run capture"
 
 e2e::file "const_run.jh" <<'EOF'
-script greet() {
+script greet {
   echo "hi from fn"
 }
 
-workflow default() {
-  const val = run greet
+workflow default {
+  const val = run greet()
   log "${val}"
 }
 EOF
@@ -45,12 +45,12 @@ e2e::assert_contains "${out}" "hi from fn" "const captured run stdout value"
 e2e::section "const with ensure capture"
 
 e2e::file "const_ensure.jh" <<'EOF'
-rule always_pass() {
+rule always_pass {
   return "rule-val"
 }
 
-workflow default() {
-  const r = ensure always_pass
+workflow default {
+  const r = ensure always_pass()
   log "${r}"
 }
 EOF
@@ -62,7 +62,7 @@ e2e::assert_contains "${out}" "rule-val" "const captured ensure return value"
 e2e::section "const rejects command substitution"
 
 e2e::file "const_bad_subst.jh" <<'EOF'
-workflow default() {
+workflow default {
   const x = "$(echo bad)"
   log "${x}"
 }
@@ -82,16 +82,16 @@ e2e::assert_contains "${bad_out}" 'command substitution' "error mentions command
 e2e::section "wait step joins async run"
 
 e2e::file "wait_step.jh" <<'EOF'
-script write_marker() {
+script write_marker {
   echo "waited" > waited.txt
 }
 
-workflow bg_job() {
-  run write_marker
+workflow bg_job {
+  run write_marker()
 }
 
-workflow default() {
-  run async bg_job
+workflow default {
+  run async bg_job()
   log "wait-done"
 }
 EOF
@@ -106,15 +106,15 @@ e2e::assert_file_exists "${TEST_DIR}/waited.txt" "async job wrote marker file"
 e2e::section "brace if with ensure (positive)"
 
 e2e::file "brace_if_ensure.jh" <<'EOF'
-script always_ok_impl() {
+script always_ok_impl {
   true
 }
-rule always_ok() {
-  run always_ok_impl
+rule always_ok {
+  run always_ok_impl()
 }
 
-workflow default() {
-  if ensure always_ok {
+workflow default {
+  if ensure always_ok() {
     log "then-branch"
   }
 }
@@ -127,15 +127,15 @@ e2e::assert_contains "${out}" "then-branch" "brace if ensure then-branch ran"
 e2e::section "brace if not ensure (negated)"
 
 e2e::file "brace_if_not.jh" <<'EOF'
-script always_fail_impl() {
+script always_fail_impl {
   false
 }
-rule always_fail() {
-  run always_fail_impl
+rule always_fail {
+  run always_fail_impl()
 }
 
-workflow default() {
-  if not ensure always_fail {
+workflow default {
+  if not ensure always_fail() {
     log "negated-branch"
   }
 }
@@ -148,12 +148,12 @@ e2e::assert_contains "${out}" "negated-branch" "brace if not ensure ran"
 e2e::section "brace if with run + else"
 
 e2e::file "brace_if_run_else.jh" <<'EOF'
-script returns_false() {
+script returns_false {
   return 1
 }
 
-workflow default() {
-  if run returns_false {
+workflow default {
+  if run returns_false() {
     log "should-not-run"
   }
   else {
@@ -173,22 +173,22 @@ e2e::pass "then-branch correctly skipped"
 e2e::section "brace if with else if chain"
 
 e2e::file "brace_if_chain.jh" <<'EOF'
-script always_fail_impl() {
+script always_fail_impl {
   false
 }
-rule always_fail() {
-  run always_fail_impl
+rule always_fail {
+  run always_fail_impl()
 }
 
-script returns_ok() {
+script returns_ok {
   true
 }
 
-workflow default() {
-  if ensure always_fail {
+workflow default {
+  if ensure always_fail() {
     log "first"
   }
-  else if run returns_ok {
+  else if run returns_ok() {
     log "second-branch"
   }
   else {
@@ -206,18 +206,18 @@ e2e::assert_contains "${out}" "second-branch" "else if chain selected correct br
 e2e::section "structured rule with run and fail"
 
 e2e::file "structured_rule.jh" <<'EOF'
-script check_ok() {
+script check_ok {
   return 0
 }
 
-rule require_name() {
-  if not run check_ok {
+rule require_name {
+  if not run check_ok() {
     fail "name is required"
   }
 }
 
-workflow default() {
-  ensure require_name
+workflow default {
+  ensure require_name()
   log "passed"
 }
 EOF
@@ -229,18 +229,18 @@ e2e::assert_contains "${out}" "passed" "structured rule passed with valid arg"
 e2e::section "structured rule fails correctly"
 
 e2e::file "structured_rule_fail.jh" <<'EOF'
-script check_fail() {
+script check_fail {
   return 1
 }
 
-rule require_name() {
-  if not run check_fail {
+rule require_name {
+  if not run check_fail() {
     fail "name is required"
   }
 }
 
-workflow default() {
-  ensure require_name
+workflow default {
+  ensure require_name()
 }
 EOF
 
@@ -256,16 +256,16 @@ e2e::assert_contains "${out}" "Workflow execution failed." "structured rule fail
 e2e::section "run targeting workflow inside rule is rejected"
 
 e2e::file "run_wf_in_rule.jh" <<'EOF'
-workflow helper() {
+workflow helper {
   log "nope"
 }
 
-rule bad() {
-  run helper
+rule bad {
+  run helper()
 }
 
-workflow default() {
-  ensure bad
+workflow default {
+  ensure bad()
 }
 EOF
 
@@ -285,7 +285,7 @@ e2e::section "module-level const"
 e2e::file "module_const.jh" <<'EOF'
 const greeting = "module-const-works"
 
-workflow default() {
+workflow default {
   log "${greeting}"
 }
 EOF

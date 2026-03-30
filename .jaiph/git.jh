@@ -1,40 +1,40 @@
 #!/usr/bin/env jaiph
 
-script git_inside_worktree() {
+script git_inside_worktree {
   git rev-parse --is-inside-work-tree >/dev/null 2>&1
 }
 
-script git_porcelain_empty() {
+script git_porcelain_empty {
   test -z "$(git status --porcelain)"
 }
 
-script git_porcelain_nonempty() {
+script git_porcelain_nonempty {
   test -n "$(git status --porcelain)"
 }
 
-rule in_git_repo() {
-  if not run git_inside_worktree {
+rule in_git_repo {
+  if not run git_inside_worktree() {
     fail "not inside a git repository"
   }
 }
 
-rule branch_clean() {
-  run git_porcelain_empty
+rule branch_clean {
+  run git_porcelain_empty()
 }
 
-rule has_changes() {
-  run git_porcelain_nonempty
+rule has_changes {
+  run git_porcelain_nonempty()
 }
 
-rule is_clean() {
-  ensure in_git_repo
-  ensure branch_clean
+rule is_clean {
+  ensure in_git_repo()
+  ensure branch_clean()
 }
 
-workflow commit() {
-  ensure in_git_repo
+workflow commit {
+  ensure in_git_repo()
 
-  if not ensure has_changes {
+  if not ensure has_changes() {
     log "No changes to commit — skipping."
     return ""
   }

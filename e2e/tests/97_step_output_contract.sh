@@ -18,7 +18,7 @@ e2e::section "shell: captures full stdout, stdout/stderr to artifacts"
 # ===================================================================
 
 e2e::file "contract_shell.jh" <<'EOF'
-workflow default() {
+workflow default {
   out = echo "shell-value"
   echo "stdout-log"
   echo "stderr-log" >&2
@@ -56,12 +56,12 @@ e2e::section "ensure rule: captures return value only, stdout to artifacts"
 # ===================================================================
 
 e2e::file "contract_ensure.jh" <<'EOF'
-rule compute() {
+rule compute {
   echo "rule-stdout-goes-to-artifacts"
   return "${arg1}-processed"
 }
-workflow default() {
-  val = ensure compute "input"
+workflow default {
+  val = ensure compute("input")
   echo "captured=$val"
 }
 EOF
@@ -96,12 +96,12 @@ e2e::section "run workflow: captures return value only, stdout to artifacts"
 # ===================================================================
 
 e2e::file "contract_run.jh" <<'EOF'
-workflow greeter() {
+workflow greeter {
   echo "workflow-stdout-goes-to-artifacts"
   return "hello-from-workflow"
 }
-workflow default() {
-  val = run greeter
+workflow default {
+  val = run greeter()
   echo "captured=$val"
 }
 EOF
@@ -136,12 +136,12 @@ e2e::section "function call: captures return value only, stdout to artifacts"
 # ===================================================================
 
 e2e::file "contract_fn.jh" <<'EOF'
-script compute_hash() {
+script compute_hash {
   echo "fn-stdout-goes-to-artifacts"
   return "hash-abc123"
 }
-workflow default() {
-  val = run compute_hash
+workflow default {
+  val = run compute_hash()
   echo "captured=$val"
 }
 EOF
@@ -167,7 +167,7 @@ e2e::section "prompt: captures final answer, transcript to artifacts"
 # ===================================================================
 
 e2e::file "contract_prompt.jh" <<'EOF'
-workflow default() {
+workflow default {
   answer = prompt "What is 2+2?"
   echo "captured=$answer"
 }
@@ -200,7 +200,7 @@ e2e::section "log/logerr: no value, messages as events"
 # ===================================================================
 
 e2e::file "contract_log.jh" <<'EOF'
-workflow default() {
+workflow default {
   log "info-message"
   logerr "error-message"
   echo "done"

@@ -12,37 +12,37 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::section "engineer-style recover writes CI log and preserves role arg"
 
 e2e::file "engineer_recover_contract.jh" <<'EOF'
-script save_string_to_file() {
+script save_string_to_file {
   echo "$1" > "$2"
 }
 
-script mkdir_p_simple() {
+script mkdir_p_simple {
   mkdir -p "$1"
 }
 
-script failing_ci_impl() {
+script failing_ci_impl {
   echo "ci failure: tests failed"
   echo "details: expected 0 but got 1" >&2
   exit 1
 }
 
-rule ci_passes() {
-  run failing_ci_impl
+rule ci_passes {
+  run failing_ci_impl()
 }
 
-workflow implement() {
+workflow implement {
   const task = "${arg1}"
-  ensure ci_passes recover {
+  ensure ci_passes() recover {
     const ci_failure_log = "${arg1}"
     const ci_log_file = ".jaiph/tmp/ensure_ci_passes.last.log"
-    run mkdir_p_simple ".jaiph/tmp"
-    run save_string_to_file "${ci_failure_log}" "${ci_log_file}"
-    run save_string_to_file "${arg2}" ".jaiph/tmp/recover.role"
+    run mkdir_p_simple(".jaiph/tmp")
+    run save_string_to_file("${ci_failure_log}", "${ci_log_file}")
+    run save_string_to_file("${arg2}", ".jaiph/tmp/recover.role")
   }
 }
 
-workflow default() {
-  run implement "original-task" "surgical"
+workflow default {
+  run implement("original-task", "surgical")
 }
 EOF
 

@@ -6,7 +6,7 @@
 # always the one in the workspace root, regardless of cwd.
 #
 
-script get_all_task_headers() {
+script get_all_task_headers {
   local qf="${JAIPH_WORKSPACE:-.}/QUEUE.md"
   if ! test -f "$qf"; then
     echo "missing $qf" >&2
@@ -21,7 +21,7 @@ script get_all_task_headers() {
   printf '%s\n' "$headers"
 }
 
-script get_task_by_header() {
+script get_task_by_header {
   test -n "${1:-}" || { echo "get_task_by_header: header required" >&2; return 1; }
 
   local qf="${JAIPH_WORKSPACE:-.}/QUEUE.md"
@@ -65,19 +65,19 @@ script get_task_by_header() {
   printf '%s\n' "$task"
 }
 
-script task_contains_dev_ready_marker() {
+script task_contains_dev_ready_marker {
   printf '%s\n' "$1" | grep -q '<!-- dev-ready -->'
 }
 
-script file_exists() {
+script file_exists {
   test -f "$1"
 }
 
-script queue_file_path() {
+script queue_file_path {
   printf '%s\n' "${JAIPH_WORKSPACE:-.}/QUEUE.md"
 }
 
-script first_header_line() {
+script first_header_line {
   local header
   header="$(awk '/^## /{
     sub(/^## /, "")
@@ -88,28 +88,28 @@ script first_header_line() {
   printf '%s\n' "$header"
 }
 
-script arg_nonempty() {
+script arg_nonempty {
   [ -n "${1:-}" ]
 }
 
-workflow get_first_task() {
-  const qf = run queue_file_path
-  if not run file_exists "${qf}" {
+workflow get_first_task {
+  const qf = run queue_file_path()
+  if not run file_exists("${qf}") {
     fail "missing queue file"
   }
-  const first_header = run first_header_line "${qf}"
-  if not run arg_nonempty "${first_header}" {
+  const first_header = run first_header_line("${qf}")
+  if not run arg_nonempty("${first_header}") {
     fail "no tasks found in queue"
   }
-  const task = run get_task_by_header "${first_header}"
+  const task = run get_task_by_header("${first_header}")
   return "${task}"
 }
 
-rule task_is_dev_ready() {
-  run task_contains_dev_ready_marker "${arg1}"
+rule task_is_dev_ready {
+  run task_contains_dev_ready_marker("${arg1}")
 }
 
-script mark_task_dev_ready() {
+script mark_task_dev_ready {
   test -n "${1:-}" || { echo "mark_task_dev_ready: header required" >&2; return 1; }
   local header="$1"
   case "$header" in
@@ -145,7 +145,7 @@ script mark_task_dev_ready() {
   mv "$tmp_file" "$qf"
 }
 
-script remove_task_block_by_header() {
+script remove_task_block_by_header {
   local header="$1"
   case "$header" in
     "## "*) ;;
@@ -172,18 +172,18 @@ script remove_task_block_by_header() {
   mv "$tmp_file" "$qf"
 }
 
-script squeeze_consecutive_blanks_queue() {
+script squeeze_consecutive_blanks_queue {
   local qf="$1"
   sed -i.bak -E '/^[[:space:]]*$/N;/^\n$/D' "$qf"
   rm -f "${qf}.bak"
 }
 
-workflow remove_completed_task() {
+workflow remove_completed_task {
   const h = "${arg1}"
-  if not run arg_nonempty "${h}" {
+  if not run arg_nonempty("${h}") {
     fail "header required"
   }
-  const qf = run queue_file_path
-  run remove_task_block_by_header "${h}" "${qf}"
-  run squeeze_consecutive_blanks_queue "${qf}"
+  const qf = run queue_file_path()
+  run remove_task_block_by_header("${h}", "${qf}")
+  run squeeze_consecutive_blanks_queue("${qf}")
 }

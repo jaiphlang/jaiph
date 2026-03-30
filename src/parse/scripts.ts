@@ -74,21 +74,13 @@ export function parseScriptBlock(
   const raw = lines[startIndex];
   const line = raw.trim();
 
-  const match = line.match(/^script\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*\)\s*\{$/);
+  const match = line.match(/^script\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{$/);
   if (!match) {
-    const braceNoParens = line.match(/^script\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{/);
-    if (braceNoParens) {
+    const parensMatch = line.match(/^script\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
+    if (parensMatch) {
       fail(
         filePath,
-        `script declarations require parentheses: script ${braceNoParens[1]}() { … }`,
-        lineNo,
-      );
-    }
-    const parensNoBrace = line.match(/^script\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*\)\s*$/);
-    if (parensNoBrace) {
-      fail(
-        filePath,
-        `script declarations require braces: script ${parensNoBrace[1]}() { … }`,
+        `definitions must not use parentheses: script ${parensMatch[1]} { … }`,
         lineNo,
       );
     }
@@ -96,7 +88,7 @@ export function parseScriptBlock(
     if (loose) {
       fail(
         filePath,
-        `script declarations require parentheses and braces: script ${loose[1]}() { … }`,
+        `script declarations require braces: script ${loose[1]} { … }`,
         lineNo,
       );
     }

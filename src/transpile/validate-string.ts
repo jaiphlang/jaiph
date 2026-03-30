@@ -10,6 +10,7 @@
  */
 
 import { jaiphError } from "../errors";
+import { parseCallRef } from "../parse/core";
 
 /**
  * Check for shell fallback/expansion syntax inside ${...} blocks.
@@ -120,10 +121,9 @@ export function extractInlineCaptures(content: string): InlineCapture[] {
   while ((m = re.exec(content)) !== null) {
     const kind = m[1] as "run" | "ensure";
     const body = m[2].trim();
-    const spaceIdx = body.indexOf(" ");
-    const ref = spaceIdx === -1 ? body : body.slice(0, spaceIdx);
-    const args = spaceIdx === -1 ? undefined : body.slice(spaceIdx + 1).trim() || undefined;
-    captures.push({ kind, ref, args });
+    const call = parseCallRef(body);
+    if (!call) continue;
+    captures.push({ kind, ref: call.ref, args: call.args });
   }
   return captures;
 }
@@ -204,24 +204,22 @@ export function validateJaiphStringContent(
     );
   }
 
-  // Validate inline captures: ${run ref [args]} / ${ensure ref [args]}
+  // Validate inline captures: ${run ref()} / ${ensure ref(args)}
   const inlineRe = new RegExp(INLINE_CAPTURE_RE.source, "g");
   let icm: RegExpExecArray | null;
   while ((icm = inlineRe.exec(content)) !== null) {
     const kind = icm[1];
     const body = icm[2].trim();
-    const spaceIdx = body.indexOf(" ");
-    const ref = spaceIdx === -1 ? body : body.slice(0, spaceIdx);
-    const args = spaceIdx === -1 ? "" : body.slice(spaceIdx + 1);
+    const call = parseCallRef(body);
 
-    if (!/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?$/.test(ref)) {
+    if (!call) {
       throw jaiphError(
         filePath, line, col, "E_PARSE",
-        `${context} contains invalid inline ${kind} reference "${ref}"`,
+        `${context} contains invalid inline ${kind} reference "${body}"`,
       );
     }
 
-    if (/\$\{(?:run|ensure)\s/.test(args)) {
+    if (call.args && /\$\{(?:run|ensure)\s/.test(call.args)) {
       throw jaiphError(
         filePath, line, col, "E_PARSE",
         `${context} cannot contain nested inline captures; extract to a const variable`,

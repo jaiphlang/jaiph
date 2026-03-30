@@ -14,23 +14,23 @@ rm -f "${TEST_DIR}/ready.txt"
 
 # Given
 e2e::file "retry_single.jh" <<'EOF'
-script dep_impl() {
+script dep_impl {
   echo "ready.txt"
   test -f "ready.txt"
 }
-rule dep() {
-  run dep_impl
+rule dep {
+  run dep_impl()
 }
 
-script install_deps_impl() {
+script install_deps_impl {
   touch "ready.txt"
 }
-workflow install_deps() {
-  run install_deps_impl
+workflow install_deps {
+  run install_deps_impl()
 }
 
-workflow default() {
-  ensure dep recover run install_deps
+workflow default {
+  ensure dep() recover run install_deps()
 }
 EOF
 
@@ -69,24 +69,24 @@ rm -f "${TEST_DIR}/ready2.txt" "${TEST_DIR}/recover_ran.txt"
 
 # Given
 e2e::file "retry_block.jh" <<'EOF'
-script ready_impl() {
+script ready_impl {
   test -f ready2.txt
 }
-rule ready() {
-  run ready_impl
+rule ready {
+  run ready_impl()
 }
 
-script recover_echo() {
+script recover_echo {
   echo "recovering" > recover_ran.txt
 }
-script recover_touch() {
+script recover_touch {
   touch ready2.txt
 }
 
-workflow default() {
-  ensure ready recover {
-    run recover_echo
-    run recover_touch
+workflow default {
+  ensure ready() recover {
+    run recover_echo()
+    run recover_touch()
   }
 }
 EOF
@@ -126,22 +126,22 @@ e2e::section "ensure ... recover exits 1 when max retries exceeded"
 
 # Given
 e2e::file "retry_fail.jh" <<'EOF'
-script never_ok_impl() {
+script never_ok_impl {
   test -f never_created.txt
 }
-rule never_ok() {
-  run never_ok_impl
+rule never_ok {
+  run never_ok_impl()
 }
 
-script install_deps_impl() {
+script install_deps_impl {
   touch ready.txt
 }
-workflow install_deps() {
-  run install_deps_impl
+workflow install_deps {
+  run install_deps_impl()
 }
 
-workflow default() {
-  ensure never_ok recover run install_deps
+workflow default {
+  ensure never_ok() recover run install_deps()
 }
 EOF
 
@@ -167,23 +167,23 @@ rm -f "${TEST_DIR}/ready3.txt"
 e2e::file "recover_multiline_prompt.jh" <<'EOF'
 const ci_log_file = "/tmp/ci.log"
 
-script check_ready_impl() {
+script check_ready_impl {
   test -f ready3.txt
 }
-rule check_ready() {
-  run check_ready_impl
+rule check_ready {
+  run check_ready_impl()
 }
 
-script mark_ready3() {
+script mark_ready3 {
   touch ready3.txt
 }
 
-workflow default() {
-  ensure check_ready recover {
+workflow default {
+  ensure check_ready() recover {
     prompt "The CI build failed.
 Please inspect the log file at ${ci_log_file}
 and suggest a fix."
-    run mark_ready3
+    run mark_ready3()
   }
 }
 EOF

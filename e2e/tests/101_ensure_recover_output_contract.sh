@@ -15,23 +15,23 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::section "recover payload includes script stdout and stderr"
 
 e2e::file "simple_echo.jh" <<'EOF'
-script simple_echo() {
+script simple_echo {
   echo "Hello"
   echo "Oops" >&2
   exit 1
 }
 
-script save_string_to_file() {
+script save_string_to_file {
   printf '%s' "$1" > "$2"
 }
 
-rule simple_echo_rule() {
-  run simple_echo
+rule simple_echo_rule {
+  run simple_echo()
 }
 
-workflow default() {
-  ensure simple_echo_rule recover {
-    run save_string_to_file "${arg1}" "recover_simple.txt"
+workflow default {
+  ensure simple_echo_rule() recover {
+    run save_string_to_file("${arg1}", "recover_simple.txt")
   }
 }
 EOF
@@ -52,28 +52,28 @@ e2e::pass "simple script failure: stdout + stderr in recover payload"
 e2e::section "recover payload aggregates nested rule log + script output"
 
 e2e::file "nested_payload.jh" <<'EOF'
-script failing_script() {
+script failing_script {
   echo "nested-stdout"
   echo "nested-stderr" >&2
   exit 1
 }
 
-script save_string_to_file() {
+script save_string_to_file {
   printf '%s' "$1" > "$2"
 }
 
-rule inner() {
-  run failing_script
+rule inner {
+  run failing_script()
 }
 
-rule outer() {
+rule outer {
   log "outer start"
-  ensure inner
+  ensure inner()
 }
 
-workflow default() {
-  ensure outer recover {
-    run save_string_to_file "${arg1}" "recover_nested.log"
+workflow default {
+  ensure outer() recover {
+    run save_string_to_file("${arg1}", "recover_nested.log")
   }
 }
 EOF
@@ -95,7 +95,7 @@ e2e::pass "nested rule+script failure: aggregated payload in recover"
 e2e::section "recover payload captures multi-line CI failure output"
 
 e2e::file "ci_payload.jh" <<'EOF'
-script npm_run_test_ci() {
+script npm_run_test_ci {
   echo "FAIL src/app.test.ts"
   echo "  Expected: 200"
   echo "  Received: 500"
@@ -103,17 +103,17 @@ script npm_run_test_ci() {
   exit 1
 }
 
-script save_string_to_file() {
+script save_string_to_file {
   printf '%s' "$1" > "$2"
 }
 
-rule ci_passes() {
-  run npm_run_test_ci
+rule ci_passes {
+  run npm_run_test_ci()
 }
 
-workflow default() {
-  ensure ci_passes recover {
-    run save_string_to_file "${arg1}" "ci_failure.log"
+workflow default {
+  ensure ci_passes() recover {
+    run save_string_to_file("${arg1}", "ci_failure.log")
   }
 }
 EOF
@@ -140,7 +140,7 @@ e2e::pass "CI-style failure: multi-line payload captured"
 e2e::section "recover payload refreshes per attempt (not stale)"
 
 e2e::file "retry_updates.jh" <<'EOF'
-script emit_attempt() {
+script emit_attempt {
   local attempt_file=".jaiph/tmp/attempt_counter"
   if [ ! -f "$attempt_file" ]; then
     printf "1" > "$attempt_file"
@@ -155,17 +155,17 @@ script emit_attempt() {
   exit 1
 }
 
-script save_string_to_file() {
+script save_string_to_file {
   printf '%s' "$1" > "$2"
 }
 
-rule check_rule() {
-  run emit_attempt
+rule check_rule {
+  run emit_attempt()
 }
 
-workflow default() {
-  ensure check_rule recover {
-    run save_string_to_file "${arg1}" "payload_attempt_${_jaiph_retry}.txt"
+workflow default {
+  ensure check_rule() recover {
+    run save_string_to_file("${arg1}", "payload_attempt_${_jaiph_retry}.txt")
   }
 }
 EOF
@@ -190,17 +190,17 @@ e2e::pass "retry payload updates per attempt"
 e2e::section "no recover payload when rule succeeds"
 
 e2e::file "success_no_payload.jh" <<'EOF'
-script save_string_to_file() {
+script save_string_to_file {
   printf '%s' "$1" > "$2"
 }
 
-rule passes_first_try() {
+rule passes_first_try {
   echo "all good"
 }
 
-workflow default() {
-  ensure passes_first_try recover {
-    run save_string_to_file "${arg1}" "false_payload.txt"
+workflow default {
+  ensure passes_first_try() recover {
+    run save_string_to_file("${arg1}", "false_payload.txt")
   }
 }
 EOF

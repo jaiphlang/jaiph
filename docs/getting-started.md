@@ -21,11 +21,11 @@ It combines declarative workflow structure with script execution, and the **Node
 
 **Core concepts:**
 
-- **Workflows** — Ordered **Jaiph-only** steps (`ensure`, `run`, `prompt`, `const`, brace `if`, `fail`, `return`, logging, inbox, `run async`). Unrecognized lines are parse errors — put bash in **`script`** blocks and call them with **`run`**. Conditionals use **brace form** only (`if [not] ensure|run ref { … }`).
+- **Workflows** — Ordered **Jaiph-only** steps (`ensure`, `run`, `prompt`, `const`, brace `if`, `fail`, `return`, logging, inbox, `run async`). Unrecognized lines are parse errors — put bash in **`script`** blocks and call them with **`run`**. Conditionals use **brace form** only (`if [not] ensure|run ref() { … }`).
 - **Rules** — Structured checks with the same keyword style (restricted set): `ensure` for rules, **`run` for scripts only**, `const`, brace `if`, `fail`, `log` / `logerr`, `return "…"`; no `prompt`, inbox, `wait`, or `ensure … recover`.
 - **Agent prompts** — `prompt "..."` sends text to a configured agent (e.g. Cursor or Claude CLI); workflows orchestrate when the agent runs.
-- **Composability** — Import other `.jh` modules and call their rules, workflows, and scripts by alias (e.g. `ensure security.scan_passes`, `run bootstrap.nodejs`). Use **`ensure` only for rules** and **`run` for workflows and scripts** so every managed call is keyword-led.
-- **Step capture** — Assign results with `x = ensure …` / `x = run …` / `x = prompt …`, or **`const x = …`** with the same RHS forms (see [Grammar](grammar.md)). For **rules and workflows**, capture uses explicit `return "…"` / `return "$var"`. For **`run` to a script**, capture follows **script stdout** (use `echo` / `printf` — not Jaiph `return "…"` inside the script body). With **`const`**, use **`run`** / **`ensure`** explicitly for call-like RHSs (**`const x = run fn "$arg"`**, not **`const x = fn "$arg"`**).
+- **Composability** — Import other `.jh` modules and call their rules, workflows, and scripts by alias (e.g. `ensure security.scan_passes()`, `run bootstrap.nodejs()`). Use **`ensure` only for rules** and **`run` for workflows and scripts** so every managed call is keyword-led.
+- **Step capture** — Assign results with `x = ensure …` / `x = run …` / `x = prompt …`, or **`const x = …`** with the same RHS forms (see [Grammar](grammar.md)). For **rules and workflows**, capture uses explicit `return "…"` / `return "$var"`. For **`run` to a script**, capture follows **script stdout** (use `echo` / `printf` — not Jaiph `return "…"` inside the script body). With **`const`**, use **`run`** / **`ensure`** explicitly for call-like RHSs (**`const x = run fn("$arg")`**, not **`const x = fn("$arg")`**).
 - **Shell-native scripts** — `script` blocks hold bash (or any language via a custom shebang) and execute as managed subprocesses. Shared bash helpers can live in `.jaiph/lib/` and be loaded from scripts with `source "$JAIPH_LIB/…"`. The runtime sets `JAIPH_LIB` under the workspace; see [CLI — Environment variables](cli.md#environment-variables).
 
 > [!WARNING]
@@ -46,39 +46,39 @@ It combines declarative workflow structure with script execution, and the **Node
 import "bootstrap_project.jh" as bootstrap
 import "tools/security.jh" as security
 
-script file_exists() {
+script file_exists {
   test -f "$1"
 }
 
-script non_empty() {
+script non_empty {
   test -n "$1"
 }
 
 # Validates local build prerequisites.
-rule project_ready() {
-  if not run file_exists "package.json" {
+rule project_ready {
+  if not run file_exists("package.json") {
     fail "expected package.json"
   }
-  if not run non_empty "${NODE_ENV}" {
+  if not run non_empty("${NODE_ENV}") {
     fail "NODE_ENV must be set"
   }
 }
 
-script npm_run_build() {
+script npm_run_build {
   npm run build
 }
 
 # Verifies the project compiles successfully.
-rule build_passes() {
-  run npm_run_build
+rule build_passes {
+  run npm_run_build()
 }
 
 # Orchestrates checks, prompt execution, and docs refresh.
 # Arguments:
 #   ${arg1}: Feature requirements passed to the prompt.
-workflow default() {
-  if not ensure project_ready {
-    run bootstrap.nodejs
+workflow default {
+  if not ensure project_ready() {
+    run bootstrap.nodejs()
   }
 
   prompt "
@@ -86,14 +86,14 @@ workflow default() {
     Follow requirements: ${arg1}
   "
 
-  ensure build_passes
-  ensure security.scan_passes
+  ensure build_passes()
+  ensure security.scan_passes()
 
-  run update_docs
+  run update_docs()
 }
 
 # Refreshes documentation after a successful build.
-workflow update_docs() {
+workflow update_docs {
   prompt "Update docs"
 }
 ```
@@ -108,7 +108,7 @@ Run a sample workflow without installing anything first — the script installs 
 
 ```bash
 curl -fsSL https://jaiph.org/run | bash -s '
-workflow default() {
+workflow default {
   const response = prompt "Say: Hello I'\''m [model name]!"
   log "${response}"
 }'
@@ -184,18 +184,18 @@ Jaiph source files use the **`.jh`** extension. A file contains **rules**, **wor
 - `config { ... }` — Optional block setting runtime options (agent backend, model, Docker sandbox, etc.). Allowed at the top level (module-wide) and inside individual workflows for per-workflow overrides (`agent.*` and `run.*` keys only). See [Configuration](configuration.md).
 - `import "path" as alias` — Import rules, workflows, and scripts from another module. The path may include a `.jh` suffix or omit it (the compiler appends `.jh`). Verified at compile time.
 - `local name = value` / `const name = value` — Module-scoped variable, accessible as `${name}` in rules and workflows within the module (scripts are isolated and do not inherit these — pass data as arguments or use shared libraries). Prefer **`const`** in new orchestration code.
-- `rule name() { ... }` — Reusable check: **Jaiph structured steps only** (subset: `ensure` for rules, `run` for **scripts**, `const`, brace `if`, `fail`, `log`/`logerr`, `return "…"`). Rules run in an isolated child shell; on Linux, a read-only mount namespace is used when `unshare` and passwordless `sudo` are available, otherwise the same child-shell fallback as on other platforms. Optional `export` for cross-module access.
-- `workflow name() { ... }` — Orchestration entrypoint: **Jaiph steps only** (no raw shell — extract bash to `script` + `run`). Can change system state. Optional `export` for cross-module access.
-- `script name() { ... }` — Bash helper (no `run`/`ensure`/routes; no Jaiph `fail`/`const`/`log`/`logerr`/`return "…"`). From a **workflow** or **rule**, call with **`run name`**; string capture uses **stdout**. The `()` after the name is optional (`script name() { ... }` also works). **Isolation:** Scripts run in a clean environment — they receive only positional arguments and essential system / Jaiph variables (`JAIPH_LIB`, `JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`); module-scoped `local` / `const` are **not** inherited. Use `source "$JAIPH_LIB/…"` for shared utilities. Scripts cannot call other Jaiph scripts (compose in a workflow instead). **Polyglot scripts:** if the first body line is a shebang (e.g. `#!/usr/bin/env node`), the script is emitted with that interpreter and Jaiph keyword validation is skipped. Without a shebang, `#!/usr/bin/env bash` is used. Scripts are compiled as separate executable files under `build/scripts/`.
-- `ensure ref [args...]` — Execute a rule; optional `recover` for bounded retry loops (default max retries **10**, overridable with **`JAIPH_ENSURE_MAX_RETRIES`**). See [Grammar](grammar.md).
-- `run ref [args...]` — In a **workflow**, run another workflow or a script. In a **rule**, run a **script** only.
+- `rule name { ... }` — Reusable check: **Jaiph structured steps only** (subset: `ensure` for rules, `run` for **scripts**, `const`, brace `if`, `fail`, `log`/`logerr`, `return "…"`). Rules run in an isolated child shell; on Linux, a read-only mount namespace is used when `unshare` and passwordless `sudo` are available, otherwise the same child-shell fallback as on other platforms. Optional `export` for cross-module access.
+- `workflow name { ... }` — Orchestration entrypoint: **Jaiph steps only** (no raw shell — extract bash to `script` + `run`). Can change system state. Optional `export` for cross-module access.
+- `script name { ... }` — Bash helper (no `run`/`ensure`/routes; no Jaiph `fail`/`const`/`log`/`logerr`/`return "…"`). From a **workflow** or **rule**, call with **`run name()`**; string capture uses **stdout**. **Isolation:** Scripts run in a clean environment — they receive only positional arguments and essential system / Jaiph variables (`JAIPH_LIB`, `JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`); module-scoped `local` / `const` are **not** inherited. Use `source "$JAIPH_LIB/…"` for shared utilities. Scripts cannot call other Jaiph scripts (compose in a workflow instead). **Polyglot scripts:** if the first body line is a shebang (e.g. `#!/usr/bin/env node`), the script is emitted with that interpreter and Jaiph keyword validation is skipped. Without a shebang, `#!/usr/bin/env bash` is used. Scripts are compiled as separate executable files under `build/scripts/`.
+- `ensure ref([args...])` — Execute a rule; optional `recover` for bounded retry loops (default max retries **10**, overridable with **`JAIPH_ENSURE_MAX_RETRIES`**). See [Grammar](grammar.md).
+- `run ref([args...])` — In a **workflow**, run another workflow or a script. In a **rule**, run a **script** only.
 - `prompt "..."` — Send text to the configured agent. Optional `returns '{ field: type }'` for validated JSON responses. See [Grammar](grammar.md).
-- `name = <step>` / `const name = <step>` — Capture or bind: for **`ensure`** and **`run` to a workflow**, the callee’s explicit **`return "…"`**; for **`run` to a script**, **stdout**; for **`prompt`**, the final answer; **`const`** RHS allows only simple value forms (no `$(...)` — use `run` to a script). To capture from a script or workflow in a **`const`**, write **`const x = run ref [args…]`** (or **`ensure`** for rules) — a bare **`const x = ref [args…]`** is a compile error with a hint to add **`run`**. See [Grammar](grammar.md#step-output-contract).
+- `name = <step>` / `const name = <step>` — Capture or bind: for **`ensure`** and **`run` to a workflow**, the callee’s explicit **`return "…"`**; for **`run` to a script**, **stdout**; for **`prompt`**, the final answer; **`const`** RHS allows only simple value forms (no `$(...)` — use `run` to a script). To capture from a script or workflow in a **`const`**, write **`const x = run ref([args…])`** (or **`ensure`** for rules) — a bare **`const x = ref([args…])`** is a compile error with a hint to add **`run`**. See [Grammar](grammar.md#step-output-contract).
 - `fail "reason"` — Abort the workflow or fail the rule with a message on stderr (non-zero exit).
 - `log "message"` / `logerr "message"` — Display a message in the progress tree and on stdout/stderr; terminal output interprets backslash escapes like **`echo -e`** (`\n`, `\t`, …). Event and summary JSON still record the raw message string.
-- `channel <- …` / `channel -> workflow` — Send (RHS: literal, `${var}`, or `run fn`) and route messages between workflows. See [Inbox & Dispatch](inbox.md).
-- `run async ref [args...]` — Run a workflow or script concurrently; all async steps are implicitly joined before the workflow completes. Failures are aggregated. Allowed in workflows only. Use **`script`** + **`run`** for bash background jobs. See [Grammar](grammar.md).
-- `if [not] ensure ref { ... }` / `if [not] run ref { ... }` — **Brace-only** conditionals (`else if`, `else` supported). Use **`run`** to a script for command-style tests.
+- `channel <- …` / `channel -> workflow` — Send (RHS: literal, `${var}`, or `run fn()`) and route messages between workflows. See [Inbox & Dispatch](inbox.md).
+- `run async ref([args...])` — Run a workflow or script concurrently; all async steps are implicitly joined before the workflow completes. Failures are aggregated. Allowed in workflows only. Use **`script`** + **`run`** for bash background jobs. See [Grammar](grammar.md).
+- `if [not] ensure ref() { ... }` / `if [not] run ref() { ... }` — **Brace-only** conditionals (`else if`, `else` supported). Use **`run`** to a script for command-style tests.
 
 ### Named parameters
 
@@ -206,14 +206,14 @@ script check_hash(file_path, expected_hash) { ... }
 workflow deploy(env, version, dry_run = "false") { ... }
 ```
 
-Named params map to positional arguments at runtime (e.g. `file_path` binds to `${arg1}` in Jaiph strings, `$1` in script bodies). Parentheses are optional when no params exist. See [Grammar — Named parameters](grammar.md#named-parameters).
+Named params map to positional arguments at runtime (e.g. `file_path` binds to `${arg1}` in Jaiph strings, `$1` in script bodies). Parentheses are required only when declaring named parameters. See [Grammar — Named parameters](grammar.md#named-parameters).
 
 ### Polyglot scripts
 
 Scripts default to bash. Add a custom shebang as the first body line to use another language:
 
 ```jaiph
-script analyze() {
+script analyze {
   #!/usr/bin/env python3
   import sys
   print(f"Result: {sys.argv[1]}")
@@ -224,18 +224,18 @@ Non-bash scripts skip Jaiph keyword validation. See [Grammar — Polyglot script
 
 ### Module-qualified references
 
-Imported symbols use **dot notation**: `alias.name` (e.g. `ensure security.scan_passes`, `run bootstrap.nodejs`). The compiler validates that the target exists and matches the calling keyword.
+Imported symbols use **dot notation**: `alias.name` (e.g. `ensure security.scan_passes()`, `run bootstrap.nodejs()`). The compiler validates that the target exists and matches the calling keyword.
 
 ### Inline capture
 
 `run` and `ensure` can appear inline in binding and send expressions — not only as standalone steps:
 
 ```jaiph
-const result = run helper "${arg}"       # capture script stdout into const
-check = ensure validator "${input}"      # capture rule return value
+const result = run helper("${arg}")       # capture script stdout into const
+check = ensure validator("${input}")      # capture rule return value
 answer = prompt "Summarize" returns '{ summary: string }'
 
-channel <- run build_message "${data}"   # send script output to channel
+channel <- run build_message("${data}")   # send script output to channel
 ```
 
 For **typed prompts** (`returns '{ field: type }'`), the runtime validates the agent's JSON and exposes per-field variables: `${answer_summary}` in the example above. See [Grammar — Step output contract](grammar.md#step-output-contract).
@@ -246,25 +246,25 @@ For **typed prompts** (`returns '{ field: type }'`), the runtime validates the a
 
 ```jaiph
 # Before: temporary variable needed
-const result = run some_script
+const result = run some_script()
 log "Got: ${result}"
 
 # After: inline capture interpolation
-log "Got: ${run some_script}"
-log "Status: ${ensure check_ok}"
-log "Greeting: ${run greet world}"        # with arguments
-return "${run compute_value}"
+log "Got: ${run some_script()}"
+log "Status: ${ensure check_ok()}"
+log "Greeting: ${run greet("world")}"        # with arguments
+return "${run compute_value()}"
 ```
 
-At runtime, each `${run ref}` or `${ensure ref}` executes the managed call, replaces the expression with the output, then applies regular `${var}` interpolation. If any inline capture fails, the enclosing step fails immediately. Nested inline captures (e.g. `${run foo ${run bar}}`) are rejected at compile time — extract the inner call to a `const`. See [Grammar — String interpolation](grammar.md#string-interpolation).
+At runtime, each `${run ref()}` or `${ensure ref()}` executes the managed call, replaces the expression with the output, then applies regular `${var}` interpolation. If any inline capture fails, the enclosing step fails immediately. Nested inline captures (e.g. `${run foo(${run bar()})}`) are rejected at compile time — extract the inner call to a `const`. See [Grammar — String interpolation](grammar.md#string-interpolation).
 
 ### Script naming
 
-Every `script` block requires an explicit name — anonymous (unnamed) script blocks are not supported. Extract reusable bash into named scripts and call them with `run`:
+Every `script` block requires an explicit name — anonymous (unnamed) script blocks are not supported. Extract reusable bash into named scripts and call them with `run name()`:
 
 ```jaiph
-script check_port() { nc -z localhost "$1"; }
-workflow default() { if not run check_port "8080" { fail "port closed" } }
+script check_port { nc -z localhost "$1"; }
+workflow default { if not run check_port("8080") { fail "port closed" } }
 ```
 
 Runtime behavior (progress tree, step output, run logs) is documented in [CLI Reference](cli.md). To browse past and in-progress runs in a browser, use [Reporting server](reporting.md). For agent backend configuration, see [Configuration](configuration.md). For Docker sandboxing (beta), see [Sandboxing](sandboxing.md). For testing workflows with mocks and assertions, see [Testing](testing.md). For lifecycle hooks, see [Hooks](hooks.md).

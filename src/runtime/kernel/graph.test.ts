@@ -16,21 +16,21 @@ test("buildRuntimeGraph loads entry module and imports", () => {
     const lib = join(dir, "lib.jh");
     write(
       lib,
-      `rule check() {
+      `rule check {
   echo ok
 }
-script helper() {
+script helper {
   echo hi
 }
-workflow inner() {
+workflow inner {
   echo ok
 }`,
     );
     write(
       main,
       `import "./lib.jh" as lib
-workflow default() {
-  run lib.inner
+workflow default {
+  run lib.inner()
 }`,
     );
     const g = buildRuntimeGraph(main);
@@ -49,27 +49,27 @@ test("lookup helpers resolve local and imported symbols", () => {
     const lib = join(dir, "lib.jh");
     write(
       lib,
-      `rule check() {
+      `rule check {
   echo ok
 }
-script helper() {
+script helper {
   echo hi
 }
-workflow inner() {
+workflow inner {
   echo ok
 }`,
     );
     write(
       main,
       `import "./lib.jh" as lib
-rule local_check() {
+rule local_check {
   echo local
 }
-script local_script() {
+script local_script {
   echo local
 }
-workflow default() {
-  run lib.inner
+workflow default {
+  run lib.inner()
 }`,
     );
     const g = buildRuntimeGraph(main);
