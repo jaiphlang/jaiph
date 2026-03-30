@@ -30,6 +30,7 @@ You write **`.jh`**; the CLI parses source into an AST, validates references, an
 - **Documentation:** [Getting started (site)](https://jaiph.org/getting-started) · [Getting started (repo)](docs/getting-started.md) — install, first run, language map. Other guides are linked from the site and from the links at the top of this file.
 - **Agent skill (for AI assistants authoring `.jh` workflows):** <https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md>
 - **Samples:** <https://github.com/jaiphlang/jaiph/tree/main/samples>
+- **Landing-page examples:** `examples/` — checked-in `.jh` files matching the [landing page](https://jaiph.org) samples, verified by Playwright in CI (`npm run test:samples`).
 - **Contributing:** <https://github.com/jaiphlang/jaiph/issues>
 
 ## Example

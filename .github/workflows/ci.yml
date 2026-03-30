@@ -67,6 +67,21 @@ jobs:
           bundler-cache: true
           working-directory: docs
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Jaiph
+        run: npm run build
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
       - name: Serve Jekyll in background
         working-directory: docs
         run: |
@@ -90,6 +105,11 @@ jobs:
         run: |
           curl -fsS -o /dev/null -w "HTTP %{http_code} for /\n" http://127.0.0.1:4000/
           curl -fsS -o /dev/null -w "HTTP %{http_code} for /getting-started\n" http://127.0.0.1:4000/getting-started
+
+      - name: Verify landing-page samples
+        run: |
+          export PATH="${GITHUB_WORKSPACE}/node_modules/.bin:${PATH}"
+          SITE_URL=http://127.0.0.1:4000 npx playwright test
 
   e2e-wsl:
     name: E2E install and CLI workflow (windows-latest + wsl)

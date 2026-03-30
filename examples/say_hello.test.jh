@@ -1,0 +1,19 @@
+#!/usr/bin/env jaiph
+
+import "say_hello.jh" as hello
+
+test "without name, workflow fails with validation message" {
+  # When
+  response = hello.default allow_failure
+
+  # Then
+  expectEqual response "You didn't provide your name"
+}
+
+test "with name, returns greeting and logs response" {
+  # Given
+  mock prompt "Hello Alice! Fun fact: Alice in Wonderland was written by Lewis Carroll."
+
+  # When
+  hello.default "Alice"
+}

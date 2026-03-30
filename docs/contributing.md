@@ -53,6 +53,7 @@ For day-to-day work on the compiler and CLI you usually stay inside the clone: i
 | `npm run test:acceptance:runtime` | **`bash ./e2e/test_all.sh`** only — same E2E driver as below **without** an implicit rebuild; ensure `dist/` is up to date before running. |
 | `npm run test:acceptance` | **`npm run test:acceptance:compiler`** then **`npm run test:acceptance:runtime`**. |
 | `npm run test:e2e` | **`npm run build`**, then **`bash ./e2e/test_all.sh`**. Prefer this when you want a fresh `dist/` before E2E. |
+| `npm run test:samples` | **`npm run build`**, then **`npx playwright test`** — Playwright suite that serves the Jekyll docs site locally, extracts sample source and expected output from the landing page, compares source to `examples/*.jh`, and runs deterministic samples through the CLI. Requires Playwright (`npx playwright install chromium` once). Set `SITE_URL` to skip the built-in Jekyll server (e.g. `SITE_URL=http://127.0.0.1:4000 npm run test:samples`). |
 | `npm run test:ci` | `npm test` followed by `npm run test:e2e` — useful before pushing when you want the full local picture. |
 
 Run a single Node test file after a build with e.g. `node --test dist/src/parse/parse-core.test.js`. The `dist/` paths mirror the source layout under `src/`.
@@ -181,7 +182,7 @@ The project uses GitHub Actions (`.github/workflows/ci.yml`). Every push trigger
 |-----|--------|---------|
 | **Compiler and unit tests** | `ubuntu-latest` | `npm test` (TypeScript unit + acceptance + golden tests), plus a `curl` check that the public install URL responds and a git-tag verification on `main`. |
 | **E2E install and CLI workflow** | `ubuntu-latest`, `macos-latest` (matrix) | `npm run test:e2e` — full build-and-run E2E suite on each OS. |
-| **Getting started (local)** | `ubuntu-latest` | Builds and serves the Jekyll documentation site locally (`bundle exec jekyll serve` on `127.0.0.1:4000`), waits for it to respond, then smoke-checks key pages (`/` and `/getting-started`) with `curl`. No dependency on `jaiph.org` — validates the docs site from the repository alone. |
+| **Getting started (local)** | `ubuntu-latest` | Builds and serves the Jekyll documentation site locally (`bundle exec jekyll serve` on `127.0.0.1:4000`), waits for it to respond, smoke-checks key pages with `curl`, then runs the **Playwright landing-page sample verification** (`npx playwright test`). The Playwright step builds Jaiph, extracts sample source and expected output from the served HTML, verifies source parity with `examples/*.jh`, and runs deterministic samples through the CLI. No dependency on `jaiph.org`. |
 | **E2E install and CLI workflow (windows-latest + wsl)** | `windows-latest` | Detects an available WSL distro, installs Node inside it, and runs `npm run test:e2e` under WSL. Skipped when no distro is present on the runner image. |
 
 ### Local docs site (Jekyll)
@@ -198,7 +199,30 @@ bundle exec jekyll serve --host 127.0.0.1 --port 4000
 curl -fsSL http://127.0.0.1:4000/
 ```
 
-The Jekyll project lives entirely inside `docs/` — `Gemfile`, `_config.yml`, layouts, and all Markdown pages. The CI job does not install or run Jaiph itself; it only validates that the static site builds and serves correctly.
+The Jekyll project lives entirely inside `docs/` — `Gemfile`, `_config.yml`, layouts, and all Markdown pages.
+
+### Landing-page sample verification (Playwright)
+
+After the Jekyll smoke-check, the CI job also verifies that code samples shown on the landing page match real CLI behavior. This uses Playwright (Chromium) with a test suite in `tests/e2e-samples/landing-page.spec.ts`.
+
+The test does two things:
+
+1. **Source parity** — extracts each sample's source code from the DOM (`[data-sample-source]` elements inside `[data-sample]` tab panels) and compares it byte-for-byte against the corresponding file in `examples/` (identified by `data-sample-file`).
+2. **Output verification** — for deterministic samples (currently `say_hello.jh` failure path and `agent_inbox.jh`), runs the workflow via `node dist/src/cli.js run` and asserts that key output lines match what the page displays (`[data-sample-output]` blocks), after normalizing ANSI codes, timestamps, and trailing whitespace.
+
+To run locally:
+
+```bash
+npm run test:samples
+```
+
+Or, if a Jekyll server is already running:
+
+```bash
+SITE_URL=http://127.0.0.1:4000 npx playwright test
+```
+
+The Playwright config (`playwright.config.ts`) auto-starts Jekyll when `SITE_URL` is not set. Samples that require live agent backends (e.g. `async.jh`, `ensure_ci_passes.jh`) are verified for source parity only — output verification is limited to fully deterministic workflows.
 
 ## E2E testing
 

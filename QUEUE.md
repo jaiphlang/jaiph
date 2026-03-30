@@ -12,41 +12,6 @@ Process rules:
 
 ---
 
-## Verify landing-page samples (Playwright + local Jekyll) <!-- dev-ready -->
-
-**Goal**  
-Automatically verify that **samples shown on the site** match **real execution**: serve the site locally, reproduce **Try it out**, then for each sample **fetch** snippet/output from the page, **run** the corresponding workflow locally, and **compare** stdout (and stable fragments of stderr / tree output) to the **expected output embedded** in the page.
-
-**Context**
-
-- Checked-in **`.jh`** sources under `examples/` should mirror the page (see **`examples/`** queue item); this task may add `data-*` attributes to `docs/index.html` for stable extraction.
-- Flow (single script or Playwright test suite):
-  1. Start local Jekyll; base URL `http://localhost:4000` (or configured port).
-  2. Run the **Try it out** inline workflow the same way the landing page documents (e.g. `curl ... | bash -s '...'` or equivalent) and assert success.
-  3. For **sample 1, sample 2, …**: open the landing page, **extract** each sample’s code and **expected run output** from the DOM (e.g. **Playwright** + selectors / `data-sample` ids).
-  4. Run the corresponding file from `examples/` with deterministic mocks/env; capture CLI output.
-  5. **Match** captured output to the expected block from the page (normalize whitespace, strip volatile timestamps/paths where documented).
-
-**Key files:**
-- `e2e/` or `tests/e2e-samples/` — Playwright spec + helpers
-- `package.json` — `@playwright/test` (or project choice), scripts
-- `examples/` — files under test
-- `docs/index.html` — selectors / structure stable enough for extraction (add `data-sample` attributes if needed)
-
-**Scope**
-
-1. Add Playwright (or agreed browser automation) to dev/CI deps.
-2. Implement extraction of per-tab sample source and **expected run output** from the served HTML (prefer stable `data-*` hooks on sections).
-3. For each sample: run Jaiph with deterministic mocks/env so outputs match embedded expectations (same strategy as other e2e).
-4. Integrate into CI: same workflow file may add a job or extend **Getting started (local)**; document a one-command local run (`npm run test:samples` or similar).
-
-**Acceptance criteria**
-
-- Automated test fails if a landing-page sample output drifts from actual CLI behavior (within defined normalization).
-- Uses localhost + Playwright (or documented equivalent) to fetch page content; no `jaiph.org` dependency for this verification step.
-
----
-
 ## Script bodies: opaque bash (no Jaiph line validation / quote stripping) <!-- dev-ready -->
 
 **Goal**  

@@ -1,0 +1,28 @@
+#!/usr/bin/env jaiph
+
+config {
+  agent.backend = "cursor"
+  agent.cursor_flags = "--force"
+  # for Claude you can use:
+  # agent.backend = "claude"
+  # agent.claude_flags = "--permission-mode bypassPermissions"
+}
+
+script npm_run_test_ci {
+  npm run test:ci
+}
+
+rule ci_passes {
+  run npm_run_test_ci()
+}
+
+script save_string_to_file {
+  printf '%s' "$1" > "$2"
+}
+
+workflow default {
+  ensure ci_passes() recover {
+    run save_string_to_file("${arg1}", ".jaiph/tmp/ci_failure.log")
+    prompt "The CI check failed. Failure output is in .jaiph/tmp/ci_failure.log — fix the code so npm run test:ci passes."
+  }
+}
