@@ -12,46 +12,6 @@ Process rules:
 
 ---
 
-## Unified mock syntax: rename `mock function` to `mock script` <!-- dev-ready -->
-
-**Goal**  
-Hard-rename `mock function` to `mock script` across parser, AST, runtime, tests, and docs.
-
-**Context**
-
-- The top-level keyword was already renamed from `function` to `script` in the language, but the mock keyword in `*.test.jh` files was not updated.
-- **Decision**: Hard rework. `mock function` must produce a **compiler error**, not a silent migration.
-
-**Current code using `mock function`:**
-- `src/types.ts` (line ~249): AST type `test_mock_function` — rename to `test_mock_script`.
-- `src/parse/tests.ts` (line ~221): regex `mock\s+function\s+...` — change to `mock\s+script\s+...`.
-- `src/parse/tests.ts` (line ~225): error message `"mock function ref must be..."` — update.
-- `src/parse/tests.ts` (line ~228): pushes `{ type: "test_mock_function" }` — rename type.
-- `src/runtime/kernel/node-test-runner.ts` — dispatches on `test_mock_function` type.
-- `test/sample-build.test.ts` — fixture tests using `mock function`.
-- `e2e/tests/45_mock_workflow_rule_function.sh` — e2e test using `mock function` syntax.
-- `docs/testing.md` — docs showing `mock function`.
-- `docs/index.html` — mentions `mock function`.
-
-**Scope**
-
-1. Rename `test_mock_function` → `test_mock_script` in `src/types.ts`.
-2. Change parser regex from `mock\s+function` to `mock\s+script` in `src/parse/tests.ts`.
-3. Add explicit rejection: if the parser sees `mock function`, emit a compile-time error: `"mock function" is no longer supported; use "mock script"`.
-4. Update dispatch in `src/runtime/kernel/node-test-runner.ts`.
-5. Update all test fixtures: `e2e/tests/45_mock_workflow_rule_function.sh`, `test/sample-build.test.ts`, and any `.test.jh` fixtures.
-6. Rename `e2e/tests/45_mock_workflow_rule_function.sh` → `45_mock_workflow_rule_script.sh`.
-7. Update docs: `docs/testing.md`, `docs/index.html`.
-
-**Acceptance criteria**
-
-- `mock script` parses and executes correctly.
-- `mock function` produces a compiler error with migration guidance.
-- All tests pass with the new syntax.
-- No references to `mock function` remain (except in error message text).
-
----
-
 ## Verify `*.test.jh` testing end-to-end <!-- dev-ready -->
 
 **Goal**  

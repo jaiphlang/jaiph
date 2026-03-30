@@ -218,16 +218,19 @@ export function parseTestBlock(
       i = nextIndex - 1;
       continue;
     }
-    const mockFunctionMatch = inner.match(/^mock\s+function\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*\{\s*$/);
-    if (mockFunctionMatch) {
-      const ref = mockFunctionMatch[1];
+    const mockScriptMatch = inner.match(/^mock\s+script\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*\{\s*$/);
+    if (mockScriptMatch) {
+      const ref = mockScriptMatch[1];
       if (!isRef(ref)) {
-        fail(filePath, "mock function ref must be <name> or <alias>.<name>", innerNo, col);
+        fail(filePath, "mock script ref must be <name> or <alias>.<name>", innerNo, col);
       }
       const { body, nextIndex } = parseMockSymbolBlock(filePath, lines, i);
-      testBlock.steps.push({ type: "test_mock_function", ref, body, loc });
+      testBlock.steps.push({ type: "test_mock_script", ref, body, loc });
       i = nextIndex - 1;
       continue;
+    }
+    if (/^mock\s+function\s+/.test(inner)) {
+      fail(filePath, '"mock function" is no longer supported; use "mock script"', innerNo, col);
     }
     const expectContainMatch = inner.match(/^expectContain\s+([A-Za-z_][A-Za-z0-9_]*)\s+"((?:[^"\\]|\\.)*)"\s*$/);
     if (expectContainMatch) {

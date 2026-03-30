@@ -2264,7 +2264,7 @@ test("parser parses mock workflow, rule, and function in test block", () => {
     "    exit 1",
     "  }",
     "",
-    "  mock function app.changed_files {",
+    "  mock script app.changed_files {",
     '    echo "a.ts"',
     '    echo "b.ts"',
     "  }",
@@ -2290,8 +2290,8 @@ test("parser parses mock workflow, rule, and function in test block", () => {
     assert.equal(steps[1].ref, "app.policy_check");
     assert.ok(steps[1].body.includes("exit 1"));
   }
-  assert.equal(steps[2].type, "test_mock_function");
-  if (steps[2].type === "test_mock_function") {
+  assert.equal(steps[2].type, "test_mock_script");
+  if (steps[2].type === "test_mock_script") {
     assert.equal(steps[2].ref, "app.changed_files");
     assert.ok(steps[2].body.includes('echo "a.ts"'));
   }
@@ -2310,7 +2310,7 @@ test("parser ignores test keyword in non-test file", () => {
   assert.equal(mod.tests, undefined);
 });
 
-test("jaiph test runs *.test.jh with mock workflow, rule, and function", () => {
+test("jaiph test runs *.test.jh with mock workflow, rule, and script", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-test-mock-symbols-"));
   try {
     writeFileSync(
@@ -2354,7 +2354,7 @@ test("jaiph test runs *.test.jh with mock workflow, rule, and function", () => {
         "    exit 0",
         "  }",
         "",
-        "  mock function app.changed_files {",
+        "  mock script app.changed_files {",
         '    echo "a.ts"',
         '    echo "b.ts"',
         "  }",

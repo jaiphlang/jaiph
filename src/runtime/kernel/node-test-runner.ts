@@ -7,7 +7,7 @@ import type { TestBlockDef, TestStepDef } from "../../types";
 
 type TestResult = { pass: boolean; error?: string };
 
-type MockRefStep = Extract<TestStepDef, { type: "test_mock_workflow" | "test_mock_rule" | "test_mock_function" }>;
+type MockRefStep = Extract<TestStepDef, { type: "test_mock_workflow" | "test_mock_rule" | "test_mock_script" }>;
 
 function resolveMockBodies(
   graph: RuntimeGraph,
@@ -25,7 +25,7 @@ function resolveMockBodies(
     } else if (step.type === "test_mock_rule") {
       const resolved = resolveRuleRef(graph, entryFile, { value: ref, loc });
       if (resolved) key = `${resolved.filePath}::${resolved.rule.name}`;
-    } else if (step.type === "test_mock_function") {
+    } else if (step.type === "test_mock_script") {
       const resolved = resolveScriptRef(graph, entryFile, ref);
       if (resolved) key = `${resolved.filePath}::${resolved.script.name}`;
     }
@@ -76,7 +76,7 @@ async function runTestBlock(
   try {
     const mockResponses: string[] = [];
     let mockDispatchPath = "";
-    const mockRefs: Array<Extract<TestStepDef, { type: "test_mock_workflow" | "test_mock_rule" | "test_mock_function" }>> = [];
+    const mockRefs: Array<Extract<TestStepDef, { type: "test_mock_workflow" | "test_mock_rule" | "test_mock_script" }>> = [];
     const vars = new Map<string, string>();
 
     // Collect mock setup
@@ -87,7 +87,7 @@ async function runTestBlock(
       if (step.type === "test_mock_prompt_block") {
         mockDispatchPath = writeMockDispatchScript(step, tmpDir);
       }
-      if (step.type === "test_mock_workflow" || step.type === "test_mock_rule" || step.type === "test_mock_function") {
+      if (step.type === "test_mock_workflow" || step.type === "test_mock_rule" || step.type === "test_mock_script") {
         mockRefs.push(step);
       }
     }
@@ -103,7 +103,7 @@ async function runTestBlock(
     for (const step of block.steps) {
       if (step.type === "test_mock_prompt" || step.type === "test_mock_prompt_block" ||
           step.type === "test_mock_workflow" || step.type === "test_mock_rule" ||
-          step.type === "test_mock_function") {
+          step.type === "test_mock_script") {
         continue; // Already processed above
       }
 
