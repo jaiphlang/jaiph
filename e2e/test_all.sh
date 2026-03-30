@@ -15,7 +15,7 @@ TEST_SCRIPTS=(
   "e2e/tests/23_prompt_returns_run_capture.sh"
   "e2e/tests/30_filesystem_side_effects.sh"
   "e2e/tests/40_nested_and_native_tests.sh"
-  "e2e/tests/45_mock_workflow_rule_function.sh"
+  "e2e/tests/45_mock_workflow_rule_script.sh"
   "e2e/tests/50_cli_and_parse_guards.sh"
   "e2e/tests/60_ensure_conditionals.sh"
   "e2e/tests/61_ensure_recover.sh"

@@ -6,10 +6,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "${ROOT_DIR}/e2e/lib/common.sh"
 trap e2e::cleanup EXIT
 
-e2e::prepare_test_env "mock_workflow_rule_function"
+e2e::prepare_test_env "mock_workflow_rule_script"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
-e2e::section "Mock workflow, rule, and function in *.test.jh"
+e2e::section "Mock workflow, rule, and script in *.test.jh"
 
 # Given
 e2e::file "app.jh" <<'EOF'
@@ -50,7 +50,7 @@ test "isolated orchestration" {
     exit 0
   }
 
-  mock function app.changed_files {
+  mock script app.changed_files {
     echo "a.ts"
     echo "b.ts"
   }
@@ -73,4 +73,4 @@ if [[ "${test_out}" != *"isolated orchestration"* ]]; then
   printf "%s\n" "${test_out}" >&2
   e2e::fail "expected test case name in output"
 fi
-e2e::pass "mock workflow, rule, and function tests pass"
+e2e::pass "mock workflow, rule, and script tests pass"

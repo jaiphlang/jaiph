@@ -243,7 +243,7 @@ export type TestStepDef =
   | { type: "test_expect_equal"; variable: string; expected: string; loc: SourceLoc }
   | { type: "test_mock_workflow"; ref: string; body: string; loc: SourceLoc }
   | { type: "test_mock_rule"; ref: string; body: string; loc: SourceLoc }
-  | { type: "test_mock_function"; ref: string; body: string; loc: SourceLoc };
+  | { type: "test_mock_script"; ref: string; body: string; loc: SourceLoc };
 
 export interface TestBlockDef {
   description: string;
