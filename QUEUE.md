@@ -12,28 +12,6 @@ Process rules:
 
 ---
 
-## E2E: verify custom shebang polyglot scripts (Python and Node) <!-- dev-ready -->
-
-**Goal**  
-Confirm end-to-end that `script` blocks with custom shebangs run correctly for **both** Python and Node interpreters (not only one).
-
-**Context**
-
-- Grammar and docs describe polyglot scripts (`#!` as first non-empty body line); `e2e/tests/92_custom_shebang_polyglot.sh` currently exercises **Python only** (`#!/usr/bin/env python3`).
-- Node (`#!/usr/bin/env node`) should be covered the same way so regressions in emission, `chmod +x`, or `run_step` do not only surface for one interpreter.
-
-**Scope**
-
-1. Extend `92_custom_shebang_polyglot.sh` (or add a sibling test) so a **`script`** with `#!/usr/bin/env node` runs in the workflow and its stdout is asserted like the Python case.
-2. If Node or python3 are not in the path => fail the test. We should be strict there.
-3. Keep the existing Python coverage.
-
-**Acceptance criteria**
-
-- E2E run proves both interpreters when available; CI/local runs without one interpreter still pass via skip.
-
----
-
 ## Inline construct interpolation `${run ...}` / `${ensure ...}` <!-- dev-ready -->
 
 **Goal**  
