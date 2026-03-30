@@ -1056,9 +1056,11 @@ export class NodeWorkflowRuntime {
       return { status: 1, output: "", error: "JAIPH_SCRIPTS not set for script execution" };
     }
     const scriptPath = join(scriptsDir, scriptName);
+    const scriptCwd =
+      env.JAIPH_WORKSPACE && env.JAIPH_WORKSPACE.length > 0 ? env.JAIPH_WORKSPACE : dirname(filePath);
     return await new Promise((resolve) => {
       const child = spawn(scriptPath, args, {
-        cwd: dirname(filePath),
+        cwd: scriptCwd,
         env,
         stdio: ["ignore", "pipe", "pipe"],
       });
