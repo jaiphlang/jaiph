@@ -734,6 +734,20 @@ pre code .code-line::before {
     color: var(--link);
 }
 
+.footer-meta {
+    margin: 0 0 0.5rem;
+}
+
+.footer-credit {
+    margin: 0;
+    font-size: 0.85rem;
+    opacity: 0.92;
+}
+
+.footer-credit a {
+    color: var(--link);
+}
+
 /* ── Section subtitle ── */
 
 .section-subtitle {

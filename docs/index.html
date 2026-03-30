@@ -462,12 +462,13 @@ Jaiph: Running async.jh
                         rel="noopener noreferrer">jaiph.org/getting-started</a>).
                 </p>
                 <p><strong>Use Bash (or any language) in scripts.</strong> Command pipelines, checks, and background
-                    jobs belong in
-                    <code>script</code> blocks; workflows and rules call them with <code>run</code>. Add a custom
-                    shebang
-                    (e.g. <code>#!/usr/bin/env python3</code>) to write scripts in other languages. For async managed
-                    work, use
-                    <code>run async wf()</code> (implicit join before workflow completes).
+                    jobs
+                    belong in <code>script</code> blocks; workflows and rules call them with <code>run</code>. Add a
+                    custom shebang (e.g. <code>#!/usr/bin/env python3</code>) to write scripts in other languages.
+                </p>
+                <p><strong>Async calls.</strong> For async managed work, use <code>run async wf()</code> — Jaiph fans
+                    out the workflows concurrently and <strong>implicitly joins</strong> them before the parent workflow
+                    completes.
                 </p>
                 <p><strong>Agent inbox pattern (channels).</strong> Use inbox channels as a way to pass messages between
                     workflows. Declare channels once at top level with <code>channel &lt;name&gt;</code>, then use
@@ -509,11 +510,7 @@ Jaiph: Running async.jh
                     workflow runs documentation maintenance checks, changelog updates, and cross-doc consistency guards.
                     The <a href="https://github.com/jaiphlang/jaiph/blob/main/.jaiph/engineer.jh">.jaiph/engineer.jh</a>
                     workflow implements a queue-driven engineering loop that picks work, implements changes, verifies
-                    CI, and updates queue state. Shared bash helpers for those flows live under
-                    <a href="https://github.com/jaiphlang/jaiph/tree/main/.jaiph/lib">.jaiph/lib/</a> and load via
-                    <code>source "$JAIPH_LIB/…"</code> inside scripts. Extracted <code>script</code> executables default
-                    <code>JAIPH_LIB</code> to <code>${JAIPH_WORKSPACE:-.}/.jaiph/lib</code> so paths stay tied to the
-                    project workspace, not the ephemeral <code>scripts/</code> output directory.
+                    CI, and updates queue state.
                 </p>
             </div>
         </section>
@@ -654,11 +651,16 @@ Jaiph: Running async.jh
 
     <div class="footer">
         <p class="footer-links"><a href="/getting-started">Getting started</a>
-            &middot; <a href="https://jaiph.org/getting-started" target="_blank"
-                rel="noopener noreferrer">jaiph.org/getting-started</a>
+            &middot; <a href="https://github.com/jaiphlang/jaiph" target="_blank" rel="noopener noreferrer">GitHub</a>
+            &middot; <a href="https://marketplace.visualstudio.com/items?itemName=jaiph.jaiph-syntax-vscode"
+                target="_blank" rel="noopener noreferrer">VSCode</a>
             &middot; <a href="https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md"
                 target="_blank" rel="noopener noreferrer">Agent skill</a></p>
-        &copy; 2026 Jaiph &mdash; Open Source &middot; Powerful &middot; Friendly!
+        <p class="footer-meta">&copy; 2026 Jaiph &mdash; Open Source &middot; Powerful &middot; Friendly! &mdash;
+            Built by <a href="https://www.dzikowski.online" target="_blank" rel="noopener noreferrer">@dzikowski</a> in
+            <span aria-label="Poland">&#x1F1F5;&#x1F1F1;</span>
+            <span aria-label="European Union">&#x1F1EA;&#x1F1FA;</span>
+        </p>
     </div>
 
     <script src="assets/js/main.js"></script>
