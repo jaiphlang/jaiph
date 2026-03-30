@@ -12,21 +12,6 @@ Process rules:
 
 ---
 
-## Script bodies: opaque bash (no Jaiph line validation / quote stripping) <!-- dev-ready -->
-
-**Goal**  
-Treat `script { … }` bodies as **opaque shell text**: store and emit them **as written** (aside from any intentional, documented import resolution like `alias.name` → `symbol::name` if we keep that). **Do not** parse script lines as Jaiph steps, **do not** reject valid bash (e.g. `const` inside `node -e` heredocs), **do not** strip outer quotes from commands, and **do not** apply Jaiph keyword rules line-by-line at parse time. Optional **shellcheck** later; not required for this item.
-
-**Context**  
-Line-based rules such as “`const` is not allowed in script bodies” break real scripts where a line begins with `const` inside embedded JS/Python/etc. The compiler should not second-guess the interpreter.
-
-**Acceptance criteria**  
-- Multiline bash including `node -e` / `node - <<'EOF'` blocks with lines starting with `const` (or other non-Jaiph tokens) compiles and emits.  
-- Document in grammar or contributing notes that script bodies are **bash (or shebang interpreter) source**, not Jaiph orchestration.  
-- Remove or narrow any remaining parse/validate passes that treat script lines as Jaiph (unless they are clearly intentional: e.g. cross-script call policy, if retained).
-
----
-
 ## `examples/` — landing-page samples as runnable files <!-- dev-ready -->
 
 **Goal**  
