@@ -1113,7 +1113,7 @@ test("jaiph init creates workspace structure and guidance", () => {
     assert.equal(existsSync(join(root, ".jaiph/jaiph-skill.md")), true);
     const bootstrap = readFileSync(join(root, ".jaiph/bootstrap.jh"), "utf8");
     assert.match(bootstrap, /^#!\/usr\/bin\/env jaiph\n\n/);
-    assert.match(bootstrap, /workflow default\(\) \{/);
+    assert.match(bootstrap, /workflow default \{/);
     assert.match(bootstrap, /\.jaiph\/jaiph-skill\.md/);
     assert.match(bootstrap, /Analyze repository structure/);
     assert.match(bootstrap, /Create or update Jaiph workflows under \.jaiph\//);

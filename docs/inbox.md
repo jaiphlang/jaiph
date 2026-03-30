@@ -10,28 +10,40 @@ redirect_from:
 ## What this is for
 
 Multi-step automation often splits work across several workflows: one stage
-produces a result, another stage should run only after that result exists.
-You could glue stages together with temporary files and shell glue, but
-that is easy to get wrong (races, stale paths, unclear ownership).
+produces a result, another should run only after that result exists. You could
+glue stages together with temporary files and shell glue, but that is easy to
+get wrong (races, stale paths, unclear ownership).
 
-Jaiph instead offers a first-class **inbox**: a logical channel between
-workflows (no external message broker). One workflow **sends** a message (`<-`);
-another is **dispatched** when the orchestrator drains the queue (`->`). The
-runtime owns routing and ordering. Implementation-wise, the queue, sequence
-counter, route table, and message bodies live **under the current run directory**
-on disk so sends survive subshell boundaries; there are still no directory
-watchers, no polling loops waiting on the filesystem, and no third-party brokers.
+Jaiph offers a first-class **inbox**: a logical channel between workflows (no
+external message broker). One workflow **sends** a message (`<-`); another is
+**dispatched** when the orchestrator drains the queue (`->`). The runtime owns
+routing and ordering.
+
+**How this maps to the implementation:** `jaiph run` executes workflows in the
+**Node workflow runtime** (`NodeWorkflowRuntime` in `src/runtime/kernel/node-workflow-runtime.ts`)
+— see [Architecture](../ARCHITECTURE.md). Send/route semantics live in the AST;
+the runtime keeps an **in-memory** queue and route map per workflow. Message
+bodies are still written to **`inbox/NNN-<channel>.txt`** under the current run
+directory for audit and tooling. There are no directory watchers, no polling
+loops on the filesystem, and no third-party brokers.
+
+A separate **file-backed helper** (`src/runtime/kernel/inbox.ts`, runnable as
+`node …/inbox.js`) implements `init` / `send` / `register-route` / `drain` with
+a `.queue` file on disk. That path is **not** what `jaiph run` uses for
+orchestration; it remains useful as a reference implementation and for low-level
+experiments.
 
 ## At a glance
 
-One workflow produces output with the **send operator** (`<-`), another
-reacts to it via a **route declaration** (`->`). The runtime handles
-dispatch — no file watchers, no polling, no external message brokers.
+One workflow produces output with the **send operator** (`<-`), another reacts
+via a **route declaration** (`->`). The runtime handles dispatch — no file
+watchers, no polling, no external message brokers.
 
 Send (`<-`), routes (`->`), and related parsing rules are specified in
 [Grammar — Parse and runtime semantics](grammar.md#parse-and-runtime-semantics).
-The **right-hand side** of `<-` may be only a double-quoted literal, `${var}`,
-`run ref(args)`, or empty (forward `${arg1}`) — not a raw shell command; see
+The **left-hand** side of `<-` is the channel name; the **right-hand side** may
+be only a double-quoted literal, `${var}`, `run ref(args)`, or empty (forward
+`${arg1}`) — not a raw shell command; see
 [Grammar — Managed calls vs command substitution](grammar.md#managed-calls-vs-command-substitution).
 
 ```jh
@@ -51,21 +63,20 @@ workflow default {
 }
 ```
 
-In this example, `researcher` sends data to the `findings` channel.
-The `default` workflow routes `findings` messages to `analyst`, which
-receives `${arg1}=message`, `${arg2}=channel`, `${arg3}=sender` (see [Trigger contract](#trigger-contract)).
+In this example, `researcher` sends data to the `findings` channel. The
+`default` workflow routes `findings` messages to `analyst`, which receives
+`${arg1}` = message, `${arg2}` = channel, `${arg3}` = sender (see [Trigger contract](#trigger-contract)).
 
 ## Design principles
 
-- **Inbox is an event bus, not a filesystem watcher.** Delivery is driven by
-  explicit **drain** at the end of the orchestrator workflow — no `inotifywait`,
-  no `fswatch`, no polling for new files.
-- **Sequential by default, parallel opt-in.** Dispatch is sequential
-  unless `run.inbox_parallel = true` or `JAIPH_INBOX_PARALLEL=true` (see
-  [Parallel dispatch](#parallel-dispatch) below).
-- **Inbox is scoped per run.** Message files and queue state live under that
-  run’s **`inbox/`** directory for ordering, audit, and tooling; they are not
-  a separate productized mailbox outside `.jaiph/runs`.
+- **Inbox is an event bus, not a filesystem watcher.** Delivery is driven by an
+  explicit **drain** after the orchestrator workflow’s steps finish — no
+  `inotifywait`, no `fswatch`, no polling for new files.
+- **Sequential by default, parallel opt-in.** For each queued message, route
+  targets run **in list order** unless `run.inbox_parallel = true` or
+  `JAIPH_INBOX_PARALLEL=true` (see [Parallel dispatch](#parallel-dispatch)).
+- **Inbox is scoped per run.** Message files live under that run’s **`inbox/`**
+  directory; they are not a separate mailbox outside `.jaiph/runs`.
 
 ## Syntax
 
@@ -80,23 +91,24 @@ channel report
 workflow default { ... }
 ```
 
-Every channel used by `send` (`<-`) or route declarations (`->`) must be
-defined in the current module or imported from another module (e.g.
-`shared.findings`). Undefined channels fail validation with:
+Every channel used by send (`<-`) or route declarations (`->`) must be defined
+in the current module or imported from another module (e.g. `shared.findings`).
+Undefined channels fail validation with:
 
 - `Channel "<name>" is not defined`
 
-### Send operator: `<channel_ref> <- <command>`
+### Send operator: `<channel_ref> <- <rhs>`
 
-The channel reference is always on the left side of the `<-` operator.
-Valid forms:
+The channel reference is always on the left side of the `<-` operator. Valid
+forms:
 
 - local channel: `findings`
 - imported channel: `shared.findings`
 
 The send step resolves the message from the **RHS** (literal, variable expansion,
-`run` to a script, or forwarded `${arg1}`), writes it to the next inbox slot,
-and signals the runtime to dispatch.
+`run` to a script, or forwarded `${arg1}`), writes it to the next inbox slot on
+disk, and appends to the **in-memory** queue of the nearest ancestor workflow
+that has a route for that channel (see [Runtime dispatch](#runtime-dispatch)).
 
 ```jh
 channel findings
@@ -106,7 +118,7 @@ workflow researcher {
 }
 ```
 
-If no command follows `<-`, the workflow's `${arg1}` argument is forwarded:
+If no RHS follows `<-`, the workflow’s `${arg1}` argument is forwarded:
 
 ```jh
 channel findings
@@ -116,24 +128,15 @@ workflow forwarder {
 }
 ```
 
-The `<-` operator is only recognized when it appears outside of quoted
-strings in the surrounding line so channel names and literals are not
-misread as send syntax.
-
-**Transpilation:**
-
-| Jaiph                 | Bash (generated in the workflow `::impl`)          |
-|-----------------------|----------------------------------------------------|
-| `ch <- "foo"`         | `jaiph::send 'ch' "$(… literal …)" '<workflow>'`   |
-| `ch <- run fmt()`     | `jaiph::send` with managed `run` to `fmt`        |
-| `ch <-`               | `jaiph::send 'ch' "${arg1}" '<workflow>'`         |
-
-(`<workflow>` is the name of the workflow that contains the send step.)
+The `<-` operator is only recognized when it appears outside of quoted strings
+on the surrounding line so channel names and literals are not misread as send
+syntax.
 
 ### Route declaration: `<channel_ref> -> <workflow>`
 
 Tells the runtime: when a message arrives on that channel, call each listed
-**workflow** with positional args `${arg1}=message`, `${arg2}=channel`, `${arg3}=sender`.
+**workflow** with positional args `${arg1}=message`, `${arg2}=channel`,
+`${arg3}=sender`.
 
 Targets must be **workflows** (local or imported as `alias.name`). **Rules**
 and **scripts** are not valid route targets — the compiler uses workflow-only
@@ -154,23 +157,23 @@ workflow default {
 }
 ```
 
-Multiple targets are supported (comma-separated). **Sequential dispatch
-(default):** each target runs in list order for that message. **Parallel
-dispatch** (`run.inbox_parallel` / `JAIPH_INBOX_PARALLEL`): all targets for
-the messages being drained in the current loop iteration may run concurrently;
-see [Parallel dispatch](#parallel-dispatch).
+**Multiple targets on one line** are comma-separated — they share one route and
+dispatch in **declaration order** (or concurrently when parallel dispatch is on):
 
 ```jh
 findings -> analyst, reviewer
 ```
 
-If you declare the same channel more than once (several `findings -> …`
-lines), `jaiph::register_route` **merges** targets onto that channel in
-source order.
+**Repeated `channel ->` lines for the same channel:** the parser records each
+line as a separate route entry. In **`NodeWorkflowRuntime`**, route entries are
+folded into a `Map` keyed by channel; **the last route line for a given channel
+wins** (later lines replace the target list for that key). To attach several
+targets, prefer **`channel -> wf1, wf2, …`** on a single line rather than
+multiple lines for the same channel.
 
-Route declarations are static routing rules, not executable statements.
-They are stored in `routes` on the workflow definition, not in `steps`.
-The compiler validates that all target workflow references exist (see above).
+Route declarations are static routing rules, not executable statements. They are
+stored in `routes` on the workflow definition, not in `steps`. The compiler
+validates that all target workflow references exist (see above).
 
 ### Capture + send is a parse error
 
@@ -186,78 +189,82 @@ const payload = run build_message()
 channel <- "${payload}"
 ```
 
-## Inbox layout
+## Inbox layout (`jaiph run`)
+
+Under the run directory (see [Architecture — Artifact layout](../ARCHITECTURE.md#artifact-layout)):
 
 ```
-.jaiph/runs/<YYYY-MM-DD>/<HH-MM-SS>-<source-file>/inbox/
+.jaiph/runs/<YYYY-MM-DD>/<HH-MM-SS>-<source-basename>/inbox/
   001-findings.txt
   002-summary.txt
   003-findings.txt
   ...
 ```
 
-Each message is a file named `NNN-<channel>.txt` where `NNN` is a
-zero-padded monotonic counter scoped to the run.
+Each message is a file named `NNN-<channel>.txt` where `NNN` is a zero-padded
+sequence **for that run** (monotonic on the runtime instance). The orchestration
+queue itself is **in memory**; these files are the durable copy of the payload.
 
-## Runtime dispatch loop
+The standalone **`inbox.js`** helper additionally maintains `.queue`, `.seq`,
+and `.routes` beside those files when you use that CLI directly — not used by
+`NodeWorkflowRuntime` for `jaiph run`.
 
-Only the workflow that declares route rules gets the inbox infrastructure.
-Routes are registered when entering the workflow; the queue is drained
-after all steps complete. Any child workflow called via `run` (or via
-dispatch) inherits the inbox environment and can call `send`.
+## Runtime dispatch
 
-When a child workflow sends to a channel, the runtime walks **up** the
-workflow context stack to find the **nearest ancestor** that declares a
-route for that channel. This means a deeply nested workflow can produce
-messages that are routed by an outer orchestrator without the inner
-workflow needing its own route declarations.
+### Who registers routes and who drains
 
-The inbox logic lives in the JS kernel (`runtime/kernel/inbox.ts`). The kernel mutates the run’s **`inbox/`** directory,
-appends **`INBOX_*`** lines to **`run_summary.jsonl`** when applicable, and
-(for each routed target) dispatches the workflow through the Node runtime, preserving the usual
-`${arg1}` / `${arg2}` / `${arg3}` contract.
+Every entered workflow gets a **`WorkflowContext`**: a route map (from `->`
+lines) and a message queue. **Route declarations are registered when the
+workflow starts.** After the workflow’s **steps** finish, the runtime runs
+**`drainWorkflowQueue`** for that context.
 
-```
-1. On workflow entry, the runtime initializes a WorkflowContext (route map, message queue).
-2. Route declarations (`->`) register targets on the context's route map.
-3. Execute the workflow steps top-to-bottom.
-4. When `<-` is executed: the runtime writes the message file to `inbox/NNN-<channel>.txt`,
-   pushes the message onto the queue of the nearest ancestor context with a matching route,
-   and appends an INBOX_ENQUEUE summary event.
-5. After all steps complete, drainWorkflowQueue runs the dispatch loop:
-   a. Walk the queue from the current cursor; if no new messages, stop.
-   b. For each message, look up routes on the workflow context.
-   c. If there is no route, skip (message file remains on disk).
-   d. If there is a route, invoke each target with ${arg1}=message, ${arg2}=channel, ${arg3}=sender —
-      **sequentially** in target-list order by default, or **all targets concurrently
-      via Promise.all** when `JAIPH_INBOX_PARALLEL=true`
-      (see [Ordering guarantees](#ordering-guarantees)).
-   e. Targets may call send, appending new messages after the cursor;
-      the next loop iteration processes them.
-   f. Repeat from (a) until no new messages, or until the dispatch depth limit
-      is exceeded (`E_DISPATCH_DEPTH`).
-6. Run ends.
-```
+Nested workflows invoked with **`run`** participate in the same stack: a **send**
+walks **up** the workflow context stack and appends the message to the **nearest
+ancestor** that declares a route for that channel. A deeply nested workflow can
+thus produce messages that are routed by an outer orchestrator without declaring
+its own routes.
+
+### Dispatch loop (`NodeWorkflowRuntime`)
+
+Implementation: `src/runtime/kernel/node-workflow-runtime.ts` (`send` step
+handling and `drainWorkflowQueue`).
+
+1. On workflow entry, push a `WorkflowContext` (route map, empty queue).
+2. Route declarations (`->`) populate the context’s route map (last entry per
+   channel wins if the same channel appears on multiple lines — see above).
+3. Execute workflow steps top to bottom.
+4. On **`<-`**: resolve payload, allocate the next sequence id, append
+   **`InboxMsg`** to the target ancestor’s queue, write **`inbox/NNN-<channel>.txt`**,
+   append **`INBOX_ENQUEUE`** to `run_summary.jsonl`.
+5. After all steps (and implicit **`run async`** joins) complete, **`drainWorkflowQueue`**:
+   - **`while (cursor < queue.length)`** — new sends during dispatch append to
+     the same queue and are processed in subsequent iterations.
+   - For each message, look up targets for `channel` on **that** workflow’s
+     context. If there is no route, **skip** (silent drop).
+   - If there are targets, invoke each target with `${arg1}` / `${arg2}` /
+     `${arg3}` — **sequentially** in target-list order by default, or **all
+     targets concurrently** via `Promise.all` when `JAIPH_INBOX_PARALLEL=true`
+     (see [Ordering guarantees](#ordering-guarantees)).
+6. Pop the workflow context and return.
+
+There is **no** `E_DISPATCH_DEPTH` / `JAIPH_INBOX_MAX_DISPATCH_DEPTH` check in
+`NodeWorkflowRuntime`’s drain loop; those limits apply to the standalone
+**`inbox.js drain`** command (`src/runtime/kernel/inbox.ts`). Avoid unbounded
+circular sends in orchestration.
 
 ### Implementation notes
 
-In the Node runtime, routes and queue are **in-memory** on the
-`WorkflowContext` (a per-workflow `Map<channel, targets[]>` and
-`InboxMsg[]` array). The inbox sequence counter is a simple
-incrementing integer on the runtime instance. Message files are
-written to `<run_dir>/inbox/NNN-<channel>.txt` on send for
-durability and audit; routing and dispatch operate on the in-memory
-queue.
-
-Sender identity is the **workflow name** (e.g. `researcher`), not the
-file basename — this stays stable across cross-module calls.
+- Routes and the pending queue are **in-memory** on `WorkflowContext`. Message
+  files under **`inbox/`** are written on send for audit; routing uses the queue.
+- **Sender identity** is the **current workflow name** from the context that
+  performed the send (e.g. `researcher`), stable across modules.
 
 ## Parallel dispatch
 
-When `run.inbox_parallel = true` is set in a `config` block (module or
-workflow scope) or the environment sets `JAIPH_INBOX_PARALLEL=true`, route
-targets are dispatched concurrently (via **`Promise.all`**) instead of
-strictly one-at-a-time calls.
+When `run.inbox_parallel = true` is set in a `config` block (module or workflow
+scope) or the environment sets `JAIPH_INBOX_PARALLEL=true`, **all targets listed
+for a single message** are dispatched concurrently (via **`Promise.all`** in
+`drainWorkflowQueue`) instead of awaiting each target in order.
 
 **Precedence** matches the rest of Jaiph agent/run settings: an explicit
 environment value wins over in-file config. See [Configuration — Defaults and precedence](configuration.md#defaults-and-precedence).
@@ -273,113 +280,105 @@ workflow default {
 }
 ```
 
-### Ordering guarantees
+### Ordering guarantees (`jaiph run`)
 
-`jaiph::drain_queue` runs in a loop. Each iteration reads **every queue line
-from the current cursor through the end of the file** (one snapshot), drains
-that snapshot, then repeats if new lines were appended while dispatch ran.
+In **`NodeWorkflowRuntime`**, messages are handled **one at a time** in queue
+order (FIFO). **Parallel mode** only parallelizes **targets for the same
+message**; the next message is not started until the current message’s targets
+have all finished (`Promise.all` completes). Within **sequential** mode,
+targets for that message run strictly in list order.
 
-- **Sequential mode:** within that snapshot, lines are handled **FIFO**; for
-  each line, route targets run **in list order**.
-- **Parallel mode:** for **all lines in that snapshot**, **every** routed
-  target is started before the runtime waits on all of them together.
-  Order of execution is therefore **non-deterministic** across targets and
-  across messages in the same snapshot — only the iteration boundaries
-  (finish one snapshot, then read what was appended next) preserve coarse
-  ordering over time.
-- **Sequence IDs are never duplicated or skipped.** File-based locks
-  (`mkdir`-based, portable across macOS and Linux) protect the inbox
-  sequence counter (`.seq`) and the step sequence counter so that
-  concurrent sends and step registrations remain correct.
+- **Non-determinism:** With `JAIPH_INBOX_PARALLEL=true`, the order in which
+  concurrent targets finish is undefined; only the per-message barrier is
+  guaranteed before the next message runs.
+- **Sequence ids:** Monotonic per run in the runtime (`inboxSeq`); message
+  filenames use the same padded counter.
+
+This differs from the standalone **`inbox.js drain`** implementation, which
+reads a `.queue` file and, in parallel mode, may start work for **multiple queue
+lines** in one batch.
 
 ### Lock behavior
 
-In the Node runtime, the inbox queue and routes are in-memory, so
-parallel dispatch does not need filesystem locks for queue or route
-state. The step sequence counter (`seq-alloc.ts`) and
-`run_summary.jsonl` appends still use `mkdir`-based file locks
-(via `fs-lock.ts`) to protect against concurrent writes from
-parallel script subprocesses.
+**`NodeWorkflowRuntime`** does not take filesystem locks for inbox queue or
+sequence state — that state lives in memory. **`run_summary.jsonl`** appends and
+the **step** sequence allocator (`seq-alloc.ts`) still use `mkdir`-based file
+locks (`fs-lock.ts`) so concurrent writers to artifacts stay safe.
+
+The **`inbox.js send`** path uses **`inbox/.seq.lock`** when
+`JAIPH_INBOX_PARALLEL=true` while updating `.seq` and `.queue` on disk.
 
 ### Failure propagation
 
-All targets in a parallel batch are awaited via `Promise.all`. If any
-target exits non-zero, the runtime collects all results first, then
-propagates the failure. The owning workflow still fails when any
-dispatched target fails; only the moment of exit differs from strict
-sequential fail-fast.
+In parallel mode, all targets for a message are awaited together. If any target
+exits non-zero, the owning workflow fails after all concurrent targets complete
+(analogous to `Promise.all` failure semantics vs sequential fail-fast).
 
 ### Rollback
 
-To revert to sequential dispatch, remove `run.inbox_parallel = true`
-from config or set `JAIPH_INBOX_PARALLEL=false` in the environment.
-Sequential mode is the default and requires no locks.
+To revert to sequential dispatch, remove `run.inbox_parallel = true` from config
+or set `JAIPH_INBOX_PARALLEL=false` in the environment. Sequential mode is the
+default.
 
 ## Error semantics
 
-- **Undefined channel reference:** validation error
-  `Channel "<name>" is not defined`.
+- **Undefined channel reference:** validation error `Channel "<name>" is not defined`.
 - **Dispatched workflow exits non-zero:** the owning workflow fails. In
-  **sequential** mode this stops dispatch immediately on the first
-  failure. In **parallel** mode the runtime waits for all concurrent
-  targets to complete, then exits non-zero — same overall rule
-  (any failed target fails the run), slightly different timing.
-- **No route for a channel:** the message file and queue entry still exist,
-  but `drain_queue` **skips** that line (silent drop). This is intentional
-  for optional subscribers; use a dedicated workflow if missing handlers
-  should be an error.
-- **Circular sends:** allowed — the queue grows naturally. A max dispatch
-  depth guards against infinite loops (`E_DISPATCH_DEPTH`). The default
-  limit is 100 and can be overridden with `JAIPH_INBOX_MAX_DISPATCH_DEPTH`.
+  **sequential** mode the first failing target stops further targets for that
+  message. In **parallel** mode all targets for that message are awaited, then
+  the run fails if any failed.
+- **No route for a channel:** the message file and queue entry still exist, but
+  dispatch **skips** that message (silent drop). This is intentional for optional
+  subscribers; use a dedicated workflow if missing handlers should be an error.
+- **Circular sends:** the in-memory queue can grow without a built-in iteration
+  cap in `NodeWorkflowRuntime`. The **`inbox.js drain`** helper enforces
+  **`JAIPH_INBOX_MAX_DISPATCH_DEPTH`** (default **100**) and emits **`E_DISPATCH_DEPTH`**
+  when exceeded.
 
 ## Trigger contract
 
 Routed receivers get three positional arguments:
 
-| Arg  | Value                                           |
-|------|-------------------------------------------------|
-| `${arg1}` | Message payload (content sent to the channel)   |
-| `${arg2}` | Channel name (e.g. `findings`)                  |
-| `${arg3}` | Sender name (the **workflow name** that called `send`) |
+| Arg       | Value                                                         |
+|-----------|---------------------------------------------------------------|
+| `${arg1}` | Message payload (content sent to the channel)                 |
+| `${arg2}` | Channel name (e.g. `findings`)                              |
+| `${arg3}` | Sender name (the **workflow name** that performed the send) |
 
-- The channel name and sender are also available via `JAIPH_DISPATCH_CHANNEL`
-  and `JAIPH_DISPATCH_SENDER` environment variables respectively.
-- The three positional arguments (`${arg1}`, `${arg2}`, `${arg3}`) are passed through
-  `jaiph::run_step` like any other workflow invocation, so the progress
-  tree shows them with the usual numbered keys (e.g.
-  `workflow analyst (1="…", 2="findings", 3="scanner")`).
-- `JAIPH_DISPATCH_CHANNEL` is also used by the event system to tag JSONL
-  events with `"dispatched":true`, `"channel":"…"`, and `"sender":"…"` metadata.
-- **Run summary:** In addition to those step events, the runtime appends
-  **`INBOX_ENQUEUE`**, **`INBOX_DISPATCH_START`**, and **`INBOX_DISPATCH_COMPLETE`**
-  lines to `run_summary.jsonl` (see [CLI — Run summary](cli.md#run-summary-jsonl)).
-  `INBOX_DISPATCH_COMPLETE` includes an **`elapsed_ms`** field with the
-  wall-clock time for that target's execution. Large message bodies appear
-  as a safe **`payload_preview`** plus **`payload_ref`** pointing at the
-  `inbox/NNN-<channel>.txt` file under the run directory.
-  E2E `e2e/tests/88_run_summary_event_contract.sh` locks inbox-related summary
-  lines and ordering together with the rest of the persisted event contract under
-  parallel dispatch.
-- Workflows remain directly callable: `jaiph run analyst "some content"`.
-  When called directly, `${arg2}` and `${arg3}` are unset.
+Under **`jaiph run`**, channel and sender are passed as **`${arg2}`** and
+**`${arg3}`** (and appear in the progress tree as numbered parameters). The
+environment variables **`JAIPH_DISPATCH_CHANNEL`** and **`JAIPH_DISPATCH_SENDER`**
+are **not** set by `NodeWorkflowRuntime`; they are set when dispatch runs
+through the subprocess-based path in **`src/runtime/kernel/inbox.ts`**
+(`dispatchEnv` for spawned `__jaiph_dispatch`).
+
+- **`run_summary.jsonl`:** The runtime appends **`INBOX_ENQUEUE`**,
+  **`INBOX_DISPATCH_START`**, and **`INBOX_DISPATCH_COMPLETE`** lines (see
+  [CLI — Run summary](cli.md#run-summary-jsonl)). `INBOX_DISPATCH_COMPLETE`
+  includes **`elapsed_ms`**. For **`INBOX_ENQUEUE`**, `NodeWorkflowRuntime`
+  records **`channel`**, **`sender`**, and **`inbox_seq`**; the full body is
+  always available on disk at **`inbox/NNN-<channel>.txt`**. The standalone
+  **`inbox.js send`** path may also emit **`payload_preview`** /
+  **`payload_ref`** for large bodies.
+- Workflows remain directly callable: `jaiph run analyst "some content"`. When
+  called directly, `${arg2}` and `${arg3}` are unset.
 
 ## Progress tree integration
 
-- Route declarations appear as nodes in the progress tree.
-- Dispatched workflow calls emit `STEP_START`/`STEP_END` events with
-  `dispatched: true` and `channel: "<channel>"` metadata.
-- Dispatched receivers show message, channel, and sender as positional
-  parameters in the tree, same as other workflows with three args:
-  `▸ workflow analyst (1="…", 2="findings", 3="scanner")`.
-- Dispatched step output is not displayed in the tree. Use `log` within
-  the dispatched workflow to show output in the tree. The runtime embeds
-  stdout content in the `STEP_END` event (`out_content` field) for error
-  reporting, with the same RFC 8259 JSON string escaping as other runs so
-  embedded logs (tabs, ANSI, control bytes) cannot break event parsing.
-  `.out` files under `.jaiph/runs/` contain the full output for debugging.
-- Route declarations also appear as nodes in the live progress tree during
-  [`jaiph run`](cli.md). For a browsable history of past runs and step trees,
-  use [`jaiph report`](cli.md#jaiph-report) (see [Reporting server](reporting.md)).
+- Route declarations appear as nodes in the progress tree where the static tree
+  is derived from the AST.
+- Dispatched workflows appear like other **`run` steps**, with **`arg1`–`arg3`**
+  shown as positional parameters (e.g.
+  `▸ workflow analyst (1="…", 2="findings", 3="scanner")`). The Node runtime does
+  not add a separate `dispatched` flag to **`STEP_START`/`STEP_END`** payloads
+  for inbox routing (contrast with tooling that keys off **`JAIPH_DISPATCH_*`**
+  in **`emit.ts`** when those env vars are present).
+- Dispatched step output follows the same artifact rules as other managed steps.
+  Use **`log`** inside the receiver to surface lines in the tree. The runtime
+  embeds stdout in **`STEP_END`** (`out_content`) with the same JSON escaping
+  rules as other steps.
+- For a browsable history of past runs, use [`jaiph report`](cli.md#jaiph-report)
+  (see [Reporting server](reporting.md)).
 
 ### Example output
 

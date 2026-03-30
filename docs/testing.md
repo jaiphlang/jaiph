@@ -9,11 +9,13 @@ redirect_from:
 
 ## Overview
 
-Jaiph ships a **native test runner** for workflow modules. You write `*.test.jh` files that import workflows under test, optionally replace prompts and other symbols with mocks, run workflows through the **Node workflow runtime** (`NodeWorkflowRuntime`) — the same AST interpreter used by **`jaiph run`** — and assert on captured output or return values. The test runner (`node-test-runner.ts`) executes entirely in Node: mock dispatch, assertion evaluation, and workflow execution all happen in TypeScript with no Bash transpilation. The runtime sets **`JAIPH_TEST_MODE`** so mock dispatch, assertions, and capture for `name = alias.workflow` follow the same contracts; you do not set this variable in test sources.
+Workflows orchestrate prompts, scripts, and other steps; left unchecked, behavior depends on live models, timing, and machine state. **Native tests** (`*.test.jh`) pin that behavior: you import modules, stub prompts and symbols, run workflows in-process, and assert on what came back—without hand-written harness scripts for each case.
 
-**Why mocks matter.** Real workflows call LLMs, shell, and other workflows. That output is non-deterministic and environment-dependent. The test harness records mock prompt responses and can substitute shell bodies for workflows, rules, and Jaiph scripts so runs stay fast, repeatable, and offline-friendly.
+Jaiph ships a **native test runner** for workflow modules. You write `*.test.jh` files that import workflows under test, optionally replace prompts and other symbols with mocks, run workflows through the **Node workflow runtime** (`NodeWorkflowRuntime`) — the same AST interpreter used by **`jaiph run`** — and assert on captured output or return values. The test runner (`node-test-runner.ts`) executes entirely in Node: mock dispatch, assertion evaluation, and workflow execution all happen in TypeScript with no Bash transpilation. The runtime sets **`JAIPH_TEST_MODE`** so mock dispatch, assertions, and capture for assignments like `name = alias.workflow` follow the same contracts; you do not set this variable in test sources.
 
-**Graph caching.** The runtime graph (`buildRuntimeGraph`) for each test file is built **once per `runTestFile` invocation** and reused across all blocks and `test_run_workflow` steps. The graph depends only on the test file and its import closure, which are constant within a single run. This avoids redundant parsing when a file contains multiple test blocks that each invoke workflows. If a future test step were to mutate imported files on disk mid-run, a manual rebuild would be needed — but that is not a supported pattern today.
+**Why mocks matter.** Real workflows call LLMs, shell, and other workflows. That output is non-deterministic and environment-dependent. The test harness records mock prompt responses and can substitute bodies for workflows, rules, and `script` blocks so runs stay fast, repeatable, and offline-friendly.
+
+**Graph caching.** The runtime graph (`buildRuntimeGraph`) for each test file is built **once per `runTestFile` invocation** and reused across all blocks and workflow run steps. The graph depends only on the test file and its import closure, which are constant within a single run. This avoids redundant parsing when a file contains multiple test blocks that each invoke workflows. If a future test step were to mutate imported files on disk mid-run, a manual rebuild would be needed — but that is not a supported pattern today.
 
 **Core concepts**
 
@@ -44,6 +46,8 @@ jaiph test ./e2e
 jaiph test ./e2e/workflow_greeting.test.jh
 ```
 
+If discovery finds **no** `*.test.jh` files (workspace-wide or under the given directory), the command prints an error and exits with status **1**.
+
 ## Test blocks
 
 Inside a `*.test.jh` file you may use:
@@ -51,7 +55,7 @@ Inside a `*.test.jh` file you may use:
 1. **Imports** — Same syntax as workflow files: `import "<path>" as <alias>`.
 2. **Test blocks** — `test "description" { ... }` with one or more steps.
 
-**Workflow references** in run steps must be exactly `<alias>.<workflow>` (import alias and workflow name). The compiler validates that the alias exists and the imported module defines that workflow.
+**Workflow references** in run steps must be exactly `<alias>.<workflow>` (import alias and workflow name). Test files are not passed through the same **`validateReferences`** pass as ordinary `*.jh` modules; refs are resolved when the graph is built and when the step runs. A bad reference fails at **runtime** (for example `Unknown workflow: …` from `runNamedWorkflow`).
 
 Optional **shebang** (`#!` on line 1) and **full-line `#` comments** at the top level are ignored like in other Jaiph files.
 
@@ -62,7 +66,7 @@ The following matches the repo fixture `e2e/workflow_greeting.test.jh` (run from
 ```jaiph
 import "workflow_greeting.jh" as w
 
-test "runs happy path and output contains expected mock" {
+test "runs happy path and prints PASS" {
   mock prompt "e2e-greeting-mock"
   response = w.default
   expectContain response "e2e-greeting-mock"
@@ -79,14 +83,14 @@ test "runs happy path and output contains expected mock" {
   - After each `if` / `elif` / `else`, a single `respond "..."` line is **required** before the next branch keyword or `fi`
   - Close with `fi` then the closing `}` of `mock prompt`
   Matching uses **substring** match on the prompt text (same idea as “contains”). The first matching branch wins. Without `else`, an unmatched prompt fails the test with a short preview of the prompt text.
-- **`mock workflow <ref> { ... }`** — Replace that workflow for this test with the given shell body (e.g. `echo ok`). `<ref>` is `<alias>` or `<alias>.<workflow>`; a single-segment ref is resolved against the first import’s module symbol (prefer the two-part form for clarity).
-- **`mock rule <ref> { ... }`** — Same for a rule.
-- **`mock script <ref> { ... }`** — Stubs a module **`script`** in tests; `<ref>` is `<name>` or `<alias>.<name>`. (The former `mock function` syntax is no longer accepted — the compiler emits an error with migration guidance.)
-- **Workflow run (capture)** — `name = <alias>.<workflow>` runs the workflow like `jaiph run`. Capture prefers the workflow’s explicit **`return`** value when the callee wrote one; otherwise the harness stores **combined stdout and stderr** with lines starting with `__JAIPH_EVENT__` removed. The test fails on non-zero exit unless you add `allow_failure`. Variants: optional one string argument (`name = w.default "arg"`), and/or `allow_failure` (`name = w.default allow_failure`, `name = w.default "arg" allow_failure`). This is the test form of managed invocation—do not wrap the workflow call in `$(…)`; see [Grammar — Managed calls vs command substitution](grammar.md#managed-calls-vs-command-substitution). **Alternate** allow-failure capture form: `name=$( { alias.workflow 2>&1; } || true )` (equivalent to `allow_failure` on an assignment capture).
+- **`mock workflow <ref> { ... }`** — Replace that workflow for this test with the given shell body (e.g. `echo ok`). `<ref>` is `<name>` or `<alias>.<workflow>`. A **single-segment** ref is resolved from the **test file**’s module (same as `resolveWorkflowRef` on the graph entry); typical test files only import others and define no workflows, so **prefer `<alias>.<workflow>`** so the mock key matches the imported file’s workflow.
+- **`mock rule <ref> { ... }`** — Same for a rule (single-segment refs resolve from the test file; prefer `<alias>.<rule>` when the rule is in an import).
+- **`mock script <ref> { ... }`** — Stubs a module **`script`** in tests; `<ref>` is `<name>` or `<alias>.<name>` (same resolution note as workflow/rule). The former `mock function` syntax is no longer accepted — the parser emits an error with migration guidance.
+- **Workflow run (capture)** — `name = <alias>.<workflow>` runs the workflow like `jaiph run`. Capture semantics match production-style capture: if the workflow exits **0** and ends with an explicit **`return`**, that return value is stored. If the workflow **fails** (`status ≠ 0`), the harness stores the runtime **error** string when present. Otherwise (success without `return`), it concatenates per-step **stdout** artifacts: all `*.out` files in the run directory, sorted by filename (same idea as reading step captures from disk). If those files are unavailable, it falls back to the runtime’s aggregated output. The test fails on non-zero exit unless you add `allow_failure`. Variants: optional one string argument (`name = w.default "arg"`), and/or `allow_failure` (`name = w.default allow_failure`, `name = w.default "arg" allow_failure`). This is the test form of managed invocation—do not wrap the workflow call in `$(…)` except for the supported alternate below; see [Grammar — Managed calls vs command substitution](grammar.md#managed-calls-vs-command-substitution). **Alternate** allow-failure capture form: `name=$( { alias.workflow 2>&1; } || true )` (parsed as `allow_failure` on an assignment capture; spacing must match the grammar).
 - **Workflow run (no capture)** — `<alias>.<workflow>` or `<alias>.<workflow> "arg"` runs without storing output; still fails on non-zero exit unless `allow_failure` is appended (same optional argument patterns as above).
 - **`expectContain` / `expectNotContain` / `expectEqual`** — `expectContain <var> "substring"`, etc. The expected string must be **double-quoted** (escape `"` inside the string with `\"` if needed). Failures print expected vs actual previews where applicable.
 
-Typed prompts (`returns '{ ... }'`): mock text must be one line of JSON that satisfies the schema so parsing and field variables behave like a real agent response (see `e2e/prompt_returns_run_capture.test.jh`).
+Typed prompts (`returns '{ ... }'`): mock text must be one line of JSON that satisfies the schema so parsing and field variables behave like a real agent response (see `e2e/prompt_returns_run_capture.test.jh` with `prompt_returns_run_capture.jh`).
 
 ## Pass/fail reporting
 
@@ -97,10 +101,10 @@ The runner prints:
 ```
 testing <file name>
   ▸ <description>
-  ✓ <elapsed>s                          # success: checkmark line follows the ▸ line
+  ✓ <elapsed>s
   ▸ <description>
-  ✗ <first error line> <elapsed>s       # failure
-    <further stderr lines, indented>
+  ✗ <first error line> <elapsed>s
+<optional extra lines from a multi-line error, each on its own line>
 
 ✗ 1 / 2 test(s) failed
   - <failed test description>
@@ -149,6 +153,6 @@ Shell harnesses and CI expectations for the full repo are described in [Contribu
 
 - Prompt mocks are **only** inline in the test file (queue of `mock prompt "..."` or a single `mock prompt { ... }` dispatcher). Older external mock config formats are not supported.
 - **Do not combine** `mock prompt { ... }` with `mock prompt "..."` in the same test block; only the block path is active and inline queue steps are ignored.
-- Capture vs combined output: explicit `return` wins over stdout/stderr aggregation (with internal event lines stripped from the latter).
+- Capture without explicit `return`: the harness reads **stdout** step artifacts (`*.out` in the run directory) or falls back to aggregated runtime output—not a special “stderr plus events stripped” pipeline.
 - Assertions only support **double-quoted** expected strings on the `expect*` lines.
-- Extra arguments after `jaiph test <file>` are currently unused by the runner.
+- Positional arguments after the test path (`jaiph test <path> [extra...]`) are accepted by the CLI but **ignored** by the test runner (reserved for future use).
