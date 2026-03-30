@@ -76,17 +76,19 @@ layout: null
 
                 <div class="code-tab-panel is-active" data-panel="try-run-sample">
                     <pre><code class="language-bash static-highlight"><span class="code-line">curl -fsSL https://jaiph.org/run | bash -s '</span><span class="code-line"><span class="ralph-keyword">workflow</span> <span class="ralph-definition">default</span> {</span><span class="code-line">  <span class="ralph-keyword">const</span> <span class="ralph-variable">response</span> <span class="ralph-operator">=</span> <span class="ralph-keyword">prompt</span> <span class="ralph-string">"Say: Hello, I am [model name]!"</span></span><span class="code-line">  <span class="ralph-keyword">log</span> <span class="ralph-string">"${response}"</span></span><span class="code-line">}'</span></code></pre>
-                    <p class="small">Installs Jaiph <strong>v0.5.0</strong> to <strong>~/.local/bin</strong> (if not already
+                    <p class="small">Installs Jaiph <strong>v0.6.0</strong> to <strong>~/.local/bin</strong> (if not
+                        already
                         installed), and runs the sample workflow. See <a href="#samples">more samples</a>!</p>
                 </div>
 
                 <div class="code-tab-panel" data-panel="try-install-only">
                     <pre><code class="language-bash">curl -fsSL https://jaiph.org/install | bash</code></pre>
-                    <p class="small">The installer will install the version <strong>0.5.0</strong> of Jaiph to
+                    <p class="small">The installer will install the version <strong>0.6.0</strong> of Jaiph to
                         <strong>~/.local/bin</strong>. Check out the <a
                             href="https://github.com/jaiphlang/jaiph/blob/nightly/CHANGELOG.md">CHANGELOG</a> to see
                         what&rsquo;s new in the <strong>nightly</strong> branch and use <code>jaiph use nightly</code>
-                        or <code>jaiph use &lt;version&gt;</code> to switch.</p>
+                        or <code>jaiph use &lt;version&gt;</code> to switch.
+                    </p>
                 </div>
             </div>
         </section>
@@ -134,7 +136,8 @@ layout: null
                     <button type="button" class="code-tab-button" data-target="async-jh">async.jh</button>
                 </div>
 
-                <div class="code-tab-panel is-active" data-panel="say-hello-jh" data-sample="say-hello" data-sample-file="say_hello.jh">
+                <div class="code-tab-panel is-active" data-panel="say-hello-jh" data-sample="say-hello"
+                    data-sample-file="say_hello.jh">
                     <p><strong>Jaiph</strong> workflows are typically executable <code>.jh</code> files with a shebang.
                     </p>
                     <p>The core primitives are <strong>rule</strong>, <strong>prompt</strong>, <strong>script</strong>
@@ -221,7 +224,8 @@ Jaiph: Running say_hello.jh
                     </p>
                 </div>
 
-                <div class="code-tab-panel" data-panel="say-hello-test-jh" data-sample="say-hello-test" data-sample-file="say_hello.test.jh">
+                <div class="code-tab-panel" data-panel="say-hello-test-jh" data-sample="say-hello-test"
+                    data-sample-file="say_hello.test.jh">
                     <p><strong>Jaiph</strong> has native support for testing. All files that end with
                         <code>*.test.jh</code> are treated as tests.
                     </p>
@@ -261,10 +265,12 @@ testing say_hello.test.jh
   - without name, workflow fails with validation message</code></pre>
                 </div>
 
-                <div class="code-tab-panel" data-panel="ensure-ci-passes-jh" data-sample="ensure-ci-passes" data-sample-file="ensure_ci_passes.jh">
+                <div class="code-tab-panel" data-panel="ensure-ci-passes-jh" data-sample="ensure-ci-passes"
+                    data-sample-file="ensure_ci_passes.jh">
                     <p>This workflow uses Jaiph's <code>ensure ... recover</code> pattern to keep retrying a failing CI
                         command after an agent-assisted fix.
-                        Inside a recover block, <code>${arg1}</code> is the full merged stdout+stderr from the failed rule
+                        Inside a recover block, <code>${arg1}</code> is the full merged stdout+stderr from the failed
+                        rule
                         execution — including output from nested scripts and rules. The payload refreshes on each retry
                         attempt. Persist <code>${arg1}</code> to a stable path (here under <code>.jaiph/tmp/</code>) and
                         assert it is non-empty before the prompt, so the message about "inspect the log file" matches
@@ -322,7 +328,8 @@ Jaiph: Running ensure_ci_passes.jh
 <span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(45.1s)</span></code></pre>
                 </div>
 
-                <div class="code-tab-panel" data-panel="inbox-pipeline-jh" data-sample="agent-inbox" data-sample-file="agent_inbox.jh">
+                <div class="code-tab-panel" data-panel="inbox-pipeline-jh" data-sample="agent-inbox"
+                    data-sample-file="agent_inbox.jh">
                     <p>The <strong>inbox</strong> system lets workflows communicate through named channels.
                         A workflow sends a message with <code>&lt;-</code> (RHS: quoted literal, <code>${var}</code>, or
                         <code>run</code> to a script) and a route declaration (<code>-&gt;</code>) dispatches it to
@@ -375,7 +382,8 @@ Jaiph: Running agent_inbox.jh
                 <div class="code-tab-panel" data-panel="async-jh" data-sample="async" data-sample-file="async.jh">
                     <p>This sample runs two prompt workflows in parallel: one with Cursor and one with Claude.</p>
                     <p>Each workflow sets its own <code>agent.backend</code>, captures the prompt response, and logs it.
-                        The default workflow uses <code>run async</code> to fan out both workflows concurrently, with an implicit join before completion.</p>
+                        The default workflow uses <code>run async</code> to fan out both workflows concurrently, with an
+                        implicit join before completion.</p>
                     <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
 const prompt_text = 'Say: "Greetings! I am [model name]."'
@@ -430,9 +438,9 @@ Jaiph: Running async.jh
                 <h3>Running a workflow</h3>
                 <pre><code class="language-bash">./path/to/main.jh "arg1" "arg2" "arg3"</code></pre>
                 <p>Arguments are passed positionally. In Jaiph strings (log, prompt, fail, send), use
-                    <code>${arg1}</code>, <code>${arg2}</code> (JS template literal style). In script bodies,
-                    <code>$1</code>, <code>$2</code>, <code>"$@"</code> remain valid.
-                    When you call a workflow, it executes the <code>workflow default</code> entrypoint.</p>
+                    <code>${arg1}</code>, <code>${arg2}</code>.
+                    When you call a workflow, it executes the <code>workflow default</code> entrypoint.
+                </p>
                 <p>By convention, keep Jaiph workflow files in <code>&lt;project_root&gt;/.jaiph/</code> so
                     workspace-root detection and agent setup stay predictable.
                     Jaiph stores run artifacts in <code>.jaiph/runs/</code> (step <code>.out</code>/<code>.err</code>
@@ -540,7 +548,8 @@ Jaiph: Running async.jh
                         and essential Jaiph variables (<code>JAIPH_LIB</code>, <code>JAIPH_SCRIPTS</code>,
                         <code>JAIPH_WORKSPACE</code>) are inherited; module-scoped variables are not visible.
                         Use <code>source "$JAIPH_LIB/…"</code> for shared utilities. Scripts are emitted as
-                        separate executable files under <code>scripts/</code> (within the run build output tree; see <a href="cli">CLI reference</a>).
+                        separate executable files under <code>scripts/</code> (within the run build output tree; see <a
+                            href="cli">CLI reference</a>).
                     </dd>
 
                     <dt><code>ensure ref()</code> &middot; <code>ensure ref(args) recover { ... }</code> &middot;
@@ -614,14 +623,15 @@ Jaiph: Running async.jh
                             href="testing">Testing</a>.</dd>
 
                     <dt><code>mock prompt "..."</code> &middot;
-                        <code>mock prompt { if $1 contains "..." ; then respond "..." ; fi }</code>
+                        <code>mock prompt { if ${arg1} contains "..." ; then respond "..." ; fi }</code>
                     </dt>
                     <dd>Stub prompt calls with fixed responses or content-based branching so tests stay deterministic.
                     </dd>
 
                     <dt><code>mock workflow</code> &middot; <code>mock rule</code> &middot; <code>mock script</code>
                     </dt>
-                    <dd>Replace workflow, rule, or script implementations in tests for isolation and targeted assertions.
+                    <dd>Replace workflow, rule, or script implementations in tests for isolation and targeted
+                        assertions.
                     </dd>
 
                     <dt><code>name = alias.workflow</code> &middot; <code>allow_failure</code></dt>
@@ -644,7 +654,8 @@ Jaiph: Running async.jh
 
     <div class="footer">
         <p class="footer-links"><a href="/getting-started">Getting started</a>
-            &middot; <a href="https://jaiph.org/getting-started" target="_blank" rel="noopener noreferrer">jaiph.org/getting-started</a>
+            &middot; <a href="https://jaiph.org/getting-started" target="_blank"
+                rel="noopener noreferrer">jaiph.org/getting-started</a>
             &middot; <a href="https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md"
                 target="_blank" rel="noopener noreferrer">Agent skill</a></p>
         &copy; 2026 Jaiph &mdash; Open Source &middot; Powerful &middot; Friendly!

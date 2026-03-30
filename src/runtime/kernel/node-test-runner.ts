@@ -43,6 +43,7 @@ function writeMockDispatchScript(
   step: Extract<TestStepDef, { type: "test_mock_prompt_block" }>,
   dir: string,
 ): string {
+  // Test DSL uses `if ${arg1} contains` for the prompt text; the dispatch script receives it as bash $1.
   const lines: string[] = ["#!/usr/bin/env bash", "set -euo pipefail", 'prompt="${1:-}"'];
   for (let i = 0; i < step.branches.length; i += 1) {
     const { pattern, response } = step.branches[i];

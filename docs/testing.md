@@ -83,10 +83,11 @@ test "runs happy path and prints PASS" {
 - **Shell** — Any bash line that is not another step form is emitted as shell (for setup, `mkdir`, etc.). Lines whose trimmed form starts with `#` are comments and are skipped (not emitted as shell).
 - **`mock prompt "<response>"`** — Queues one response for the next `prompt` in the workflow under test. Single-quoted responses are allowed. Multiple `mock prompt` lines queue **in order** (one consumption per `prompt` call). **Do not mix** with a `mock prompt { ... }` block in the same test: if a block mock is present, inline `mock prompt "..."` steps are **not** emitted and have no effect (see [Limitations](#limitations-v1)).
 - **`mock prompt { ... }`** — Content-based dispatch. The body must follow this shape only:
-  - `if $1 contains "pattern" ; then` / `elif $1 contains "pattern" ; then` / optional `else`
+  - `if ${arg1} contains "pattern" ; then` / `elif ${arg1} contains "pattern" ; then` / optional `else`
   - After each `if` / `elif` / `else`, a single `respond "..."` line is **required** before the next branch keyword or `fi`
   - Close with `fi` then the closing `}` of `mock prompt`
-  Matching uses **substring** match on the prompt text (same idea as “contains”). The first matching branch wins. Without `else`, an unmatched prompt fails the test with a short preview of the prompt text.
+  `${arg1}` is the prompt text under test (same positional role as in workflow strings). Matching uses **substring** match on that text. The first matching branch wins. Without `else`, an unmatched prompt fails the test with a short preview of the prompt text.
+  **`contains` is only recognized here** (inside `mock prompt { }` in `*.test.jh`). It is not a workflow keyword and does not appear in general `.jh` orchestration—use normal string logic in **`script`** blocks or other supported forms elsewhere.
 - **`mock workflow <ref> { ... }`** — Replace that workflow for this test with the given shell body (e.g. `echo ok`). `<ref>` is `<name>` or `<alias>.<workflow>`. A **single-segment** ref is resolved from the **test file**’s module (same as `resolveWorkflowRef` on the graph entry); typical test files only import others and define no workflows, so **prefer `<alias>.<workflow>`** so the mock key matches the imported file’s workflow.
 - **`mock rule <ref> { ... }`** — Same for a rule (single-segment refs resolve from the test file; prefer `<alias>.<rule>` when the rule is in an import).
 - **`mock script <ref> { ... }`** — Stubs a module **`script`** in tests; `<ref>` is `<name>` or `<alias>.<name>` (same resolution note as workflow/rule). The former `mock function` syntax is no longer accepted — the parser emits an error with migration guidance.

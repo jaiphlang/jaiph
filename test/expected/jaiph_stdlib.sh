@@ -2,7 +2,7 @@
 # Standard helpers shared by transpiled Jaiph modules.
 
 jaiph__version() {
-  echo "jaiph 0.5.0"
+  echo "jaiph 0.6.0"
 }
 
 jaiph__die() {
