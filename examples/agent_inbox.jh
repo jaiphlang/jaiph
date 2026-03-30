@@ -1,0 +1,26 @@
+#!/usr/bin/env jaiph
+
+channel findings
+channel report
+
+workflow scanner {
+  findings <- "Found 3 issues in auth module"
+}
+
+workflow analyst {
+  report <- "Summary: ${arg1}"
+}
+
+script print_reviewed {
+  echo "[reviewed] $1"
+}
+
+workflow reviewer {
+  run print_reviewed("${arg1}")
+}
+
+workflow default {
+  run scanner()
+  findings -> analyst
+  report -> reviewer
+}
