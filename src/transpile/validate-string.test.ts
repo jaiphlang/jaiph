@@ -352,3 +352,146 @@ test("reject unescaped backtick in rule fail", () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Inline capture interpolation: ${run ref} / ${ensure ref}
+// ---------------------------------------------------------------------------
+
+test("valid: ${run ref} inline capture in log", () => {
+  withTempDir("jaiph-str-ic-run-", (root) => {
+    writeJh(root, "m.jh", [
+      'script greet() {',
+      '  echo "hello"',
+      '}',
+      "workflow default() {",
+      '  log "got: ${run greet}"',
+      "}",
+    ]);
+    buildScripts(join(root, "m.jh"), join(root, "out"));
+  });
+});
+
+test("valid: ${ensure ref} inline capture in log", () => {
+  withTempDir("jaiph-str-ic-ensure-", (root) => {
+    writeJh(root, "m.jh", [
+      "rule check() {",
+      '  return "ok"',
+      "}",
+      "workflow default() {",
+      '  log "status: ${ensure check}"',
+      "}",
+    ]);
+    buildScripts(join(root, "m.jh"), join(root, "out"));
+  });
+});
+
+test("valid: ${run ref args} inline capture with args", () => {
+  withTempDir("jaiph-str-ic-run-args-", (root) => {
+    writeJh(root, "m.jh", [
+      'script greet() {',
+      '  echo "hello $1"',
+      '}',
+      "workflow default() {",
+      '  log "got: ${run greet world}"',
+      "}",
+    ]);
+    buildScripts(join(root, "m.jh"), join(root, "out"));
+  });
+});
+
+test("valid: ${run ref} inline capture in return", () => {
+  withTempDir("jaiph-str-ic-return-", (root) => {
+    writeJh(root, "m.jh", [
+      'script greet() {',
+      '  echo "hello"',
+      '}',
+      "workflow helper() {",
+      '  return "${run greet}"',
+      "}",
+      "workflow default() {",
+      "  run helper",
+      "}",
+    ]);
+    buildScripts(join(root, "m.jh"), join(root, "out"));
+  });
+});
+
+test("valid: ${run ref} inline capture in rule log", () => {
+  withTempDir("jaiph-str-ic-rule-", (root) => {
+    writeJh(root, "m.jh", [
+      'script greet() {',
+      '  echo "hello"',
+      '}',
+      "rule check() {",
+      '  log "got: ${run greet}"',
+      "}",
+      "workflow default() {",
+      "  ensure check",
+      "}",
+    ]);
+    buildScripts(join(root, "m.jh"), join(root, "out"));
+  });
+});
+
+test("rejected: nested inline capture ${run ... ${run ...}}", () => {
+  withTempDir("jaiph-str-ic-nested-", (root) => {
+    writeJh(root, "m.jh", [
+      'script foo() {',
+      '  echo "a"',
+      '}',
+      'script bar() {',
+      '  echo "b"',
+      '}',
+      "workflow default() {",
+      '  log "got: ${run foo ${run bar}}"',
+      "}",
+    ]);
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      /E_PARSE.*nested inline captures/,
+    );
+  });
+});
+
+test("rejected: ${run invalid-ref} in log", () => {
+  withTempDir("jaiph-str-ic-bad-ref-", (root) => {
+    writeJh(root, "m.jh", [
+      "workflow default() {",
+      '  log "got: ${run 123bad}"',
+      "}",
+    ]);
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      /E_PARSE.*invalid inline run reference/,
+    );
+  });
+});
+
+test("rejected: ${run ref} with unknown ref in workflow", () => {
+  withTempDir("jaiph-str-ic-unknown-", (root) => {
+    writeJh(root, "m.jh", [
+      "workflow default() {",
+      '  log "got: ${run nonexistent}"',
+      "}",
+    ]);
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      /E_VALIDATE/,
+    );
+  });
+});
+
+test("extractInlineCaptures extracts run and ensure with args", () => {
+  const { extractInlineCaptures } = require("./validate-string");
+  const result = extractInlineCaptures('prefix ${run greet world} middle ${ensure check} suffix');
+  assert.deepEqual(result, [
+    { kind: "run", ref: "greet", args: "world" },
+    { kind: "ensure", ref: "check", args: undefined },
+  ]);
+});
+
+test("extractInlineCaptures returns empty for plain string", () => {
+  const { extractInlineCaptures } = require("./validate-string");
+  const result = extractInlineCaptures('hello ${name} world');
+  assert.deepEqual(result, []);
+});
