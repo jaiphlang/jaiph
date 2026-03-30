@@ -496,10 +496,9 @@ Jaiph: Running async.jh
                     workflow implements a queue-driven engineering loop that picks work, implements changes, verifies
                     CI, and updates queue state. Shared bash helpers for those flows live under
                     <a href="https://github.com/jaiphlang/jaiph/tree/main/.jaiph/lib">.jaiph/lib/</a> and load via
-                    <code>source "$JAIPH_LIB/…"</code> inside scripts. Generated workflow scripts export a default
-                    <code>JAIPH_LIB</code> rooted at <code>${JAIPH_WORKSPACE:-.}/.jaiph/lib</code> so paths stay tied to
-                    the
-                    project workspace, not the build output directory.
+                    <code>source "$JAIPH_LIB/…"</code> inside scripts. Extracted <code>script</code> executables default
+                    <code>JAIPH_LIB</code> to <code>${JAIPH_WORKSPACE:-.}/.jaiph/lib</code> so paths stay tied to the
+                    project workspace, not the ephemeral <code>scripts/</code> output directory.
                 </p>
             </div>
         </section>
@@ -534,7 +533,7 @@ Jaiph: Running async.jh
                         and essential Jaiph variables (<code>JAIPH_LIB</code>, <code>JAIPH_SCRIPTS</code>,
                         <code>JAIPH_WORKSPACE</code>) are inherited; module-scoped variables are not visible.
                         Use <code>source "$JAIPH_LIB/…"</code> for shared utilities. Scripts are emitted as
-                        separate executable files under <code>build/scripts/</code>.
+                        separate executable files under <code>scripts/</code> (within the run build output tree; see <a href="cli">CLI reference</a>).
                     </dd>
 
                     <dt><code>ensure ref()</code> &middot; <code>ensure ref(args) recover { ... }</code> &middot;
@@ -632,32 +631,6 @@ Jaiph: Running async.jh
                     </dt>
                     <dd>Core assertion helpers for exact matches and substring checks.</dd>
                 </dl>
-
-                <hr />
-                <p>
-                    <a href="getting-started">Getting started</a>
-                    &middot;
-                    <a href="https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md">Agent
-                        skill</a>
-                    &middot;
-                    <a href="grammar">Grammar</a>
-                    &middot;
-                    <a href="testing">Testing</a>
-                    &middot;
-                    <a href="contributing">Contributing</a>
-                    &middot;
-                    <a href="configuration">Configuration</a>
-                    &middot;
-                    <a href="sandboxing">Sandboxing</a>
-                    &middot;
-                    <a href="cli">CLI reference</a>
-                    &middot;
-                    <a href="reporting">Reporting server</a>
-                    &middot;
-                    <a href="hooks">Hooks</a>
-                    &middot;
-                    <a href="inbox">Inbox &amp; Dispatch</a>
-                </p>
             </div>
         </section>
 

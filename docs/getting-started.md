@@ -17,7 +17,7 @@ If you are hacking on the **compiler or CLI** in this repository, read [Contribu
 
 **Jaiph** is a composable scripting language and runtime for defining and orchestrating AI agent workflows.
 
-It combines declarative workflow structure with script execution, and the **Node workflow runtime** (`NodeWorkflowRuntime`) interprets the AST directly — no Bash transpilation on the runtime path. **`jaiph run`** and **`jaiph test`** parse `.jh` sources, build a runtime graph, and execute through the Node workflow runtime. The CLI spawns the workflow runner as a detached process and owns signals and the child process group. **Prompt** handling, **managed step subprocesses** (each `run` / `ensure` child, including **`script`** blocks), **inbox** file I/O, and **event emission** (`__JAIPH_EVENT__` / `run_summary.jsonl`) are all handled by the **JS kernel** under **`runtime/kernel/`**. Your **`script`** bodies still run as ordinary processes (default bash or a custom shebang).
+It combines declarative workflow structure with script execution, and the **Node workflow runtime** (`NodeWorkflowRuntime`) interprets the AST directly — no Bash transpilation on the orchestration path. **`jaiph run`** uses **`buildScripts()`**, then spawns the **Node workflow runner** as a detached child; the CLI owns process groups and reads **`__JAIPH_EVENT__`** lines on **stderr only**. **`jaiph test`** runs **`buildScripts(workspace)`** for workspace `*.jh`, then executes test files **in-process** (same runtime + mocks; graph built once per test file). **Prompt** handling, **managed step subprocesses** (each `run` / `ensure` child, including **`script`** blocks), **inbox** I/O, and durable **`run_summary.jsonl`** are handled by the **JS kernel** in **`src/runtime/kernel/`** (bundled next to the CLI in releases). Your **`script`** bodies still run as ordinary processes (default bash or a custom shebang).
 
 **Core concepts:**
 
@@ -38,7 +38,7 @@ It combines declarative workflow structure with script execution, and the **Node
 
 ## Example
 
-`main.jh`:
+`main.jh` (same layout as the copy under `test/fixtures/` in this repository, with stub imports `bootstrap_project.jh` and `tools/security.jh`):
 
 ```jaiph
 #!/usr/bin/env jaiph
@@ -46,31 +46,23 @@ It combines declarative workflow structure with script execution, and the **Node
 import "bootstrap_project.jh" as bootstrap
 import "tools/security.jh" as security
 
-script file_exists {
-  test -f "$1"
-}
-
-script non_empty {
-  test -n "$1"
-}
-
 # Validates local build prerequisites.
 rule project_ready {
-  if not run file_exists("package.json") {
-    fail "expected package.json"
-  }
-  if not run non_empty("${NODE_ENV}") {
-    fail "NODE_ENV must be set"
-  }
+  run project_ready_impl()
 }
 
-script npm_run_build {
-  npm run build
+script project_ready_impl {
+  test -f "package.json"
+  test -n "$NODE_ENV"
 }
 
 # Verifies the project compiles successfully.
 rule build_passes {
-  run npm_run_build()
+  run build_passes_impl()
+}
+
+script build_passes_impl {
+  npm run build
 }
 
 # Orchestrates checks, prompt execution, and docs refresh.
@@ -98,9 +90,7 @@ workflow update_docs {
 }
 ```
 
-When you run a workflow via **`jaiph run`**, **`jaiph ./file.jh`**, or a `#!/usr/bin/env jaiph` shebang, the Node workflow runtime interprets the parsed AST directly. Script steps execute as managed subprocesses. The **`runtime/kernel/`** modules handle prompt execution, inbox transport, event emission, and step management. Advanced overrides are documented under [Environment variables](cli.md#environment-variables).
-
-A runnable copy of this example lives in the Jaiph repository under `test/fixtures/` (with stub modules `bootstrap_project.jh` and `tools/security.jh`).
+When you run a workflow via **`jaiph run`**, **`jaiph ./file.jh`**, or a `#!/usr/bin/env jaiph` shebang, the Node workflow runtime interprets the parsed AST directly. Script steps execute as managed subprocesses. The JS kernel under **`src/runtime/kernel/`** handles prompt execution, inbox transport, event emission, and step management. Advanced overrides are documented under [Environment variables](cli.md#environment-variables).
 
 ## Quick try
 
@@ -144,7 +134,7 @@ Installation places the `jaiph` CLI in `~/.local/bin/`.
 ./path/to/main.jh "feature request or task"
 ```
 
-Arguments are passed positionally. In Jaiph strings (log, prompt, fail, send), use `${arg1}`, `${arg2}` (JS template literal style). In script bodies, `$1`, `$2`, `"$@"` remain valid.
+Arguments are passed positionally. In Jaiph strings (`log`, `prompt`, `fail`, `return`, channel send literals), use `${arg1}`, `${arg2}` (JS template literal style). In script bodies, `$1`, `$2`, `"$@"` remain valid.
 
 Entrypoint resolution: the entry file must define a workflow named **`default`**. Executable `.jh` files with `#!/usr/bin/env jaiph` run that workflow when invoked as `./file.jh` (the `jaiph` binary must be on your **`PATH`**). The same applies to **`jaiph run path/to/file.jh`** and the shorthand **`jaiph path/to/file.jh`** when the path exists.
 
@@ -155,7 +145,7 @@ jaiph test [path]                     # run tests (see below)
 jaiph report --workspace .            # browse .jaiph/runs in a local dashboard
 ```
 
-**`jaiph test`:** With no path, Jaiph discovers every `*.test.jh` under the workspace root: walk **up** from the current working directory until a directory containing `.jaiph` or `.git` is found; if neither exists on that path, the root is the resolved cwd. Pass a directory to run all tests under it (workspace root is detected the same way, starting from that path). Pass a single `*.test.jh` file to run one suite. See [Testing](testing.md).
+**`jaiph test`:** With no path, Jaiph discovers every `*.test.jh` under the workspace root. The workspace root is found by walking **up** from the **current working directory** until a directory containing `.jaiph` or `.git` is found (with the same edge-case guards as **`detectWorkspaceRoot`** — see [CLI — Environment variables](cli.md#environment-variables)); if no marker is found, the root is the resolved cwd. Pass a directory to run all tests under it (detection starts from that directory). Pass a single `*.test.jh` file to run one suite (detection starts from that file’s directory). This differs from **`jaiph run`**, which resolves the workspace from the **entry `.jh` file’s** directory. See [Testing](testing.md).
 
 For all CLI commands, flags, and environment variables, see [CLI Reference](cli.md). For the run history UI and HTTP API, see [Reporting server](reporting.md).
 
@@ -165,7 +155,7 @@ For all CLI commands, flags, and environment variables, see [CLI Reference](cli.
 jaiph init
 ```
 
-This creates `.jaiph/bootstrap.jh` (executable) and writes `.jaiph/jaiph-skill.md` when the installer ships a skill file next to the `jaiph` binary; if that file is missing, sync is skipped and a note is printed.
+This creates `.jaiph/bootstrap.jh` (executable). It also copies `jaiph-skill.md` into `.jaiph/jaiph-skill.md` when a skill file can be resolved (bundled paths next to the CLI, `JAIPH_SKILL_PATH`, or `docs/jaiph-skill.md` in a checkout); otherwise sync is skipped and a note is printed.
 
 Then run:
 
@@ -184,10 +174,10 @@ Jaiph source files use the **`.jh`** extension. A file contains **rules**, **wor
 - `config { ... }` — Optional block setting runtime options (agent backend, model, Docker sandbox, etc.). Allowed at the top level (module-wide) and inside individual workflows for per-workflow overrides (`agent.*` and `run.*` keys only). See [Configuration](configuration.md).
 - `import "path" as alias` — Import rules, workflows, and scripts from another module. The path may include a `.jh` suffix or omit it (the compiler appends `.jh`). Verified at compile time.
 - `local name = value` / `const name = value` — Module-scoped variable, accessible as `${name}` in rules and workflows within the module (scripts are isolated and do not inherit these — pass data as arguments or use shared libraries). Prefer **`const`** in new orchestration code.
-- `rule name { ... }` — Reusable check: **Jaiph structured steps only** (subset: `ensure` for rules, `run` for **scripts**, `const`, brace `if`, `fail`, `log`/`logerr`, `return "…"`). Rules run in an isolated child shell; on Linux, a read-only mount namespace is used when `unshare` and passwordless `sudo` are available, otherwise the same child-shell fallback as on other platforms. Optional `export` for cross-module access.
+- `rule name { ... }` — Reusable check: **Jaiph structured steps only** (subset: `ensure` for rules, `run` for **scripts**, `const`, brace `if`, `fail`, `log`/`logerr`, `return "…"`). The Node runtime walks rule bodies in-process; scripts invoked from rules run as normal managed subprocesses (see [Sandboxing](sandboxing.md)). Optional `export` for cross-module access.
 - `workflow name { ... }` — Orchestration entrypoint: **Jaiph steps only** (no raw shell — extract bash to `script` + `run`). Can change system state. Optional `export` for cross-module access.
-- `script name { ... }` — Bash helper (no `run`/`ensure`/routes; no Jaiph `fail`/`const`/`log`/`logerr`/`return "…"`). From a **workflow** or **rule**, call with **`run name()`**; string capture uses **stdout**. **Isolation:** Scripts run in a clean environment — they receive only positional arguments and essential system / Jaiph variables (`JAIPH_LIB`, `JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`); module-scoped `local` / `const` are **not** inherited. Use `source "$JAIPH_LIB/…"` for shared utilities. Scripts cannot call other Jaiph scripts (compose in a workflow instead). **Polyglot scripts:** if the first body line is a shebang (e.g. `#!/usr/bin/env node`), the script is emitted with that interpreter and Jaiph keyword validation is skipped. Without a shebang, `#!/usr/bin/env bash` is used. Scripts are compiled as separate executable files under `build/scripts/`.
-- `ensure ref([args...])` — Execute a rule; optional `recover` for bounded retry loops (default max retries **10**, overridable with **`JAIPH_ENSURE_MAX_RETRIES`**). See [Grammar](grammar.md).
+- `script name { ... }` — Bash helper (no `run`/`ensure`/routes; no Jaiph `fail`/`const`/`log`/`logerr`/`return "…"`). From a **workflow** or **rule**, call with **`run name()`**; string capture uses **stdout**. **Isolation:** Scripts run in a clean environment — they receive only positional arguments and essential system / Jaiph variables (`JAIPH_LIB`, `JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`); module-scoped `local` / `const` are **not** inherited. Use `source "$JAIPH_LIB/…"` for shared utilities. Scripts cannot call other Jaiph scripts (compose in a workflow instead). **Polyglot scripts:** if the **first non-empty line** of the body is a shebang (e.g. `#!/usr/bin/env node`), the script is emitted with that interpreter and Jaiph keyword validation is skipped. Without a shebang, `#!/usr/bin/env bash` is used. The CLI writes each extracted script as its own executable under **`<output-dir>/scripts`** (default `output-dir` is a temp directory; **`jaiph run --target <dir>`** pins it). **`JAIPH_SCRIPTS`** points at that directory.
+- `ensure ref([args...])` — Execute a rule. Optional **`recover`** (workflows only — not inside rule bodies) runs a bounded retry loop: default max retries **3**, overridable with **`JAIPH_ENSURE_MAX_RETRIES`**. See [Grammar](grammar.md).
 - `run ref([args...])` — In a **workflow**, run another workflow or a script. In a **rule**, run a **script** only.
 - `prompt "..."` — Send text to the configured agent. Optional `returns '{ field: type }'` for validated JSON responses. See [Grammar](grammar.md).
 - `name = <step>` / `const name = <step>` — Capture or bind: for **`ensure`** and **`run` to a workflow**, the callee’s explicit **`return "…"`**; for **`run` to a script**, **stdout**; for **`prompt`**, the final answer; **`const`** RHS allows only simple value forms (no `$(...)` — use `run` to a script). To capture from a script or workflow in a **`const`**, write **`const x = run ref([args…])`** (or **`ensure`** for rules) — a bare **`const x = ref([args…])`** is a compile error with a hint to add **`run`**. See [Grammar](grammar.md#step-output-contract).
@@ -197,20 +187,15 @@ Jaiph source files use the **`.jh`** extension. A file contains **rules**, **wor
 - `run async ref([args...])` — Run a workflow or script concurrently; all async steps are implicitly joined before the workflow completes. Failures are aggregated. Allowed in workflows only. Use **`script`** + **`run`** for bash background jobs. See [Grammar](grammar.md).
 - `if [not] ensure ref() { ... }` / `if [not] run ref() { ... }` — **Brace-only** conditionals (`else if`, `else` supported). Use **`run`** to a script for command-style tests.
 
-### Named parameters
+### Positional arguments
 
-Workflows, rules, and scripts support named parameters with optional defaults:
+Call sites pass **comma-separated arguments** inside parentheses (e.g. `run helper("a", "b")`, `ensure my_rule("${arg1}")`). At runtime those map to **`${arg1}`**, **`${arg2}`**, … in Jaiph strings and **`$1`**, **`$2`**, … in **`script`** bodies.
 
-```jaiph
-script check_hash(file_path, expected_hash) { ... }
-workflow deploy(env, version, dry_run = "false") { ... }
-```
-
-Named params map to positional arguments at runtime (e.g. `file_path` binds to `${arg1}` in Jaiph strings, `$1` in script bodies). Parentheses are required only when declaring named parameters. See [Grammar — Named parameters](grammar.md#named-parameters).
+Top-level declarations use **`rule name { … }`**, **`workflow name { … }`**, and **`script name { … }`** — **no parameter lists** on the declaration line (the parser rejects parentheses there). For full syntax, see [Grammar](grammar.md); when docs and the compiler disagree, trust the compiler.
 
 ### Polyglot scripts
 
-Scripts default to bash. Add a custom shebang as the first body line to use another language:
+Scripts default to bash. Add a custom shebang as the **first non-empty line** of the body to use another language:
 
 ```jaiph
 script analyze {
@@ -231,7 +216,7 @@ Imported symbols use **dot notation**: `alias.name` (e.g. `ensure security.scan_
 `run` and `ensure` can appear inline in binding and send expressions — not only as standalone steps:
 
 ```jaiph
-const result = run helper("${arg}")       # capture script stdout into const
+const result = run helper("${arg1}")      # capture script stdout into const
 check = ensure validator("${input}")      # capture rule return value
 answer = prompt "Summarize" returns '{ summary: string }'
 

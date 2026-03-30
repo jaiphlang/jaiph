@@ -9,11 +9,13 @@ redirect_from:
 
 ## Overview
 
-When you run workflows, Jaiph writes a structured paper trail under the workspace: each run is a directory with **`run_summary.jsonl`** (append-only JSON lines) and per-step **`.out`** / **`.err`** files. That layout is ideal for scripts and `tail`, but awkward for humans who want a single place to browse history, follow an in-flight run, and open step output.
+Workflow runs leave behind files: each run is a directory with **`run_summary.jsonl`** (append-only JSON lines) and per-step **`.out`** / **`.err`** captures. That layout is easy to automate (`tail`, scripts, CI artifacts) but hard to skim when you want history, a live view of an in-flight run, and quick access to step output.
 
-**`jaiph report`** starts a small **read-only** HTTP server and ships a minimal browser UI on top of the same tree **`jaiph run`** already uses. There is no separate database and no second log format—the server indexes and tails the files on disk. While a workflow is still running, the server incrementally reads new lines from each summary file (byte offset plus **device and inode** so it can detect rotation or truncation and resync safely).
+**`jaiph report`** addresses that by starting a **read-only** HTTP server with a small browser UI over the **same** tree the Node workflow runtime already writes under your runs root (see [Architecture — Core components](../ARCHITECTURE.md#core-components)). There is no separate database and no second log format: the server indexes the directory tree, tails each `run_summary.jsonl`, and serves static assets from `src/reporting/public` (bundled next to the CLI or standalone binary as described in [Architecture — Distribution](../ARCHITECTURE.md#distribution-node-vs-bun-standalone)).
 
-The stack is intentionally plain Node (`http` + static HTML/CSS/JS). It may eventually live in a standalone repository; behavior and flags here match the in-repo implementation. For the full `jaiph report` invocation (including environment variables), see [CLI Reference — `jaiph report`](cli.md#jaiph-report). Event shapes in `run_summary.jsonl` are specified in [CLI — Run summary (`run_summary.jsonl`)](cli.md#run-summary-jsonl).
+While a workflow is still running, the server incrementally reads new summary lines using a byte offset plus **device and inode** so it can detect replacement, truncation, or rotation and resync safely.
+
+For command-line flags and environment variables, see [CLI Reference — `jaiph report`](cli.md#jaiph-report). Event shapes in `run_summary.jsonl` are specified in [CLI — Run summary (`run_summary.jsonl`)](cli.md#run-summary-jsonl). The on-disk layout under the runs root matches [CLI — Run artifacts and live output](cli.md#run-artifacts-and-live-output).
 
 ---
 
@@ -37,6 +39,8 @@ jaiph report status
 jaiph report stop
 ```
 
+The PID file is JSON (pid, host, port, resolved `runsRoot`, `started_at`) so you can inspect it manually if needed.
+
 Common options (also available on `start`):
 
 ```bash
@@ -47,7 +51,7 @@ jaiph report --pid-file /path/to/report.pid
 ```
 
 - **`--workspace`** — Project directory used to resolve the default runs root as `<workspace>/.jaiph/runs` (default: current working directory).
-- **`--runs-dir`** — Override the runs root: the tree of `<YYYY-MM-DD>/<run>/run_summary.jsonl` directories. Point this at the same folder `jaiph run` writes to (by default `<workspace>/.jaiph/runs`, or your `JAIPH_RUNS_DIR` if you use that for runs). The reporting server only reads.
+- **`--runs-dir`** — Override the runs root: the tree of `<YYYY-MM-DD>/<run>/run_summary.jsonl` directories. Point this at the **same** directory `jaiph run` writes to. By default that is `<workspace>/.jaiph/runs`; if you override where runs go (for example with **`JAIPH_RUNS_DIR`** or `run.logs_dir` in config for workflows), set **`--runs-dir`** or **`JAIPH_REPORT_RUNS_DIR`** to that path — the reporting server does **not** read `JAIPH_RUNS_DIR` on its own. The server only reads.
 - **`--host` / `--port`** — Listen address and port (defaults favor **local-only** use: `127.0.0.1` and `8787`).
 - **`--poll-ms`** — Interval in milliseconds for a **server timer** that tails every known `run_summary.jsonl` and may refresh the run-directory listing. Minimum **50**; invalid values are rejected. Full directory rescans are still **rate-limited** to roughly **every two seconds** even when this interval is shorter.
 - **`--pid-file`** — PID file path for `status` / `stop` (default: `<workspace>/.jaiph/report.pid`).
@@ -60,11 +64,11 @@ If the runs directory does not exist yet, the process still starts; stderr notes
 
 ## What you see in the browser
 
-Open the URL printed on stderr (default **`http://127.0.0.1:8787`**).
+Open the URL printed on stderr when the server binds (default **`http://127.0.0.1:8787`**).
 
 **Runs list (`/`)** — Table of discovered runs (path, source basename, start time, duration, status, step counts). Sort column headers, filter by **date** prefix (`YYYY-MM-DD`), **status** (`running`, `completed`, or `failed`), and free-text **search** (`q`) over path, source, and `run_id`. An **active runs** strip at the top summarizes workflows still in progress (step counts and a short **current** label when the summary shows a running step, as `kind:name`).
 
-**Run detail (`/run.html?run=…`)** — Left: expandable **step tree** rebuilt from `STEP_START` / `STEP_END` metadata (`id`, `parent_id`, `seq`, `depth`, `kind`, `name`, status, `elapsed_ms`). Right: tabs for **Response** (embedded `out_content` / `err_content` from the summary, preview-capped on the server), **Raw logs** (full `.out` or `.err` from disk), and **Aggregate** (plain text: each step’s **stdout** in `seq` order—reads the `.out` file when present, otherwise embedded `out_content`—with section headers). The pages **poll** JSON endpoints on a fixed cadence (for example the run list about every **3** seconds, active runs about **1.5** seconds, the step tree on the detail page about **2** seconds), independent of `--poll-ms`.
+**Run detail (`/run.html?run=…`)** — Left: expandable **step tree** rebuilt from `STEP_START` / `STEP_END` metadata (`id`, `parent_id`, `seq`, `depth`, `kind`, `name`, status, `elapsed_ms`). Right: tabs for **Response** (embedded `out_content` / `err_content` from the summary, preview-capped on the server), **Raw logs** (full `.out` or `.err` from disk), and **Aggregate** (plain text: each step’s **stdout** in `seq` order—reads the `.out` file when present, otherwise embedded `out_content`—with section headers). The pages **poll** JSON endpoints on a fixed cadence (the run list about every **3** seconds, active runs about **1.5** seconds, the step tree on the detail page about **2** seconds), independent of `--poll-ms`.
 
 ---
 
@@ -78,7 +82,7 @@ Run keys in URLs are **`encodeURIComponent(relativePath)`** where `relativePath`
 |----------|---------|
 | `GET /api/runs` | Paginated list. Query: `page` (default **1**), `limit` (default **50**, max **200**), optional `date`, `status`, `q`. Response includes `runs` (rows with an `id` field equal to the URL-safe run key), `total`, `page`, `page_size`. |
 | `GET /api/runs/:run/tree` | JSON: `run_id`, `path`, and `steps` (nested step tree roots). |
-| `GET /api/runs/:run/steps/:stepId/output` | JSON: embedded stdout/stderr preview (each capped at **64,000** JavaScript string characters, with `out_truncated` / `err_truncated`), plus `out_file` / `err_file` paths from the summary. |
+| `GET /api/runs/:run/steps/:stepId/output` | JSON: embedded stdout/stderr preview (each capped at **65,536** characters — `64 * 1024` in code), with `out_truncated` / `err_truncated`, plus `out_file` / `err_file` paths from the summary. |
 | `GET /api/runs/:run/steps/:stepId/logs?stream=out\|err` | Raw artifact stream (`text/plain`, chunked). **`stream`** defaults to **`out`**. **404** with an empty body if that artifact path is missing. |
 | `GET /api/runs/:run/aggregate` | Plain text: each step’s stdout in `seq` order with separators (file preferred over embedded content, same rule as the UI). |
 | `GET /api/active` | JSON object `{ "runs": [ … ] }` of runs whose derived status is **running** (progress fields mirror the UI strip). |

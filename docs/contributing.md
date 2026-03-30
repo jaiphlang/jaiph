@@ -7,7 +7,7 @@ redirect_from:
 
 # Contributing to Jaiph
 
-Contributions are welcome. This page is about **how we work in the repo**: branch strategy, installing the CLI from a clone, coding and testing conventions, and the E2E shell harness. It does not teach the Jaiph language — start with [Getting Started](getting-started.md), then use [Grammar](grammar.md) and the rest of the guides for language and runtime behavior.
+Open-source projects depend on clear repo conventions: how to build, test, and propose changes. **This page is that map for Jaiph** — branches, installing from a clone, TypeScript layout and philosophy, the layered test strategy, and the bash E2E harness. It does **not** teach the language or runtime semantics; for that, use [Getting Started](getting-started.md), [Grammar](grammar.md), and [Architecture](../ARCHITECTURE.md) for execution flow and contracts.
 
 ## Branching and pull requests
 
@@ -46,10 +46,10 @@ For day-to-day work on the compiler and CLI you usually stay inside the clone: i
 | Command | What it runs |
 |---------|----------------|
 | `npm install` | Installs TypeScript and types (dev dependencies). |
-| `npm run build` | Compiles TypeScript to `dist/` and copies runtime assets (`runtime/kernel`, reporting static files). |
-| `npm run build:standalone` | `npm run build`, then copies `runtime/kernel` and `reporting/public` into `dist/` and runs **`bun build --compile`** on `src/cli.ts` → **`dist/jaiph`**. Requires [Bun](https://bun.sh) installed; ship the **`dist/`** directory (binary + sibling files) for a self-contained CLI layout. |
-| `npm test` | `npm run build`, then the Node.js built-in test runner (with **`--enable-source-maps`**) on cross-cutting tests in `dist/test/*.test.js` and all colocated module tests under `dist/src/**/*.test.js` (including `*.acceptance.test.js`). |
-| `npm run test:e2e` | Build plus `bash ./e2e/test_all.sh` (same as `test:acceptance:runtime`). |
+| `npm run build` | Runs `tsc`, then copies **`src/runtime`** → **`dist/src/runtime`** and **`src/reporting/public`** → **`dist/src/reporting/public`** (kernel JS and reporting assets for the compiled CLI). |
+| `npm run build:standalone` | `npm run build`, then copies **`dist/src/runtime`** → **`dist/runtime`** and **`dist/src/reporting/public`** → **`dist/reporting/public`**, and runs **`bun build --compile`** on `src/cli.ts` → **`dist/jaiph`**. Requires [Bun](https://bun.sh). Ship the **`dist/`** tree (binary plus those sibling directories) for a self-contained layout. |
+| `npm test` | **`npm run clean`**, then **`npm run build`**, then the Node.js test runner with **`NODE_OPTIONS`** including **`--enable-source-maps`** (and a large heap limit) on `dist/test/*.test.js` and all colocated tests under `dist/src/**/*.test.js` and `dist/src/**/*.acceptance.test.js`. |
+| `npm run test:e2e` | **`npm run build`**, then **`bash ./e2e/test_all.sh`**. (The **`test:acceptance:runtime`** script runs the same shell driver **without** an implicit rebuild — use `test:e2e` when you want a fresh `dist/` first.) |
 | `npm run test:ci` | `npm test` followed by `npm run test:e2e` — useful before pushing when you want the full local picture. |
 
 Run a single Node test file after a build with e.g. `node --test dist/src/parse/parse-core.test.js`. The `dist/` paths mirror the source layout under `src/`.
@@ -84,7 +84,7 @@ Jaiph uses several test layers. Each layer catches a different class of bug. Use
 
 1. **Tests are behavior contracts.** E2E tests and acceptance tests define what the product does. Default approach: change production code to satisfy tests, not the other way around.
 2. **Modify existing tests only with a strong reason:** intentional product behavior change, incorrect test expectation, or removal of an obsolete feature. Any such change should be minimal and paired with a clear rationale.
-3. **Golden tests are the compiler's safety net.** After transpiler changes, run `npm test`. Failures in `src/transpile/compiler-golden.test.ts` usually mean updating an explicit expected string in that file; for the main minimal workflow golden, run `npm run build && node scripts/dump-golden-output.js` and reconcile with the test source (see the comment above that case in `compiler-golden.test.ts`).
+3. **Golden tests are the compiler's safety net.** After transpiler changes, run `npm test`. Failures in `src/transpile/compiler-golden.test.ts` usually mean updating an explicit expected string or fixture in that file — there is no separate dump script; align expectations with intentional emitter changes and re-run `npm test`.
 4. **E2E tests assert two things independently:** what the user sees (CLI tree output via `e2e::expect_stdout`) and what the runtime persists (artifact files via `e2e::expect_out`, `e2e::expect_file`). A bug could break one without the other.
 5. **Prefer the narrowest test layer.** A pure function bug should be caught by a unit test, not an E2E test. E2E tests are expensive to run and hard to debug — reserve them for integration-level behavior.
 
@@ -134,7 +134,7 @@ When adding a new source module or extending an existing one, create or extend t
 
 ### Reference validation: ensure, run, and send RHS
 
-After parse, the transpiler checks that `ensure` and `run` targets (and related refs, such as send right-hand sides) resolve to symbols of the right kind in the current or imported module. That logic lives in **`src/transpile/validate.ts`** (`validateReferences` and friends), with the shared **local vs `alias.name` resolution**, **wrong-kind** messages, and **`lookupKind`** extracted to **`src/transpile/validate-ref-resolution.ts`** (`validateRef` plus small message bundles per call site). If you change validation behavior, treat **exact `E_VALIDATE` strings** as part of the public contract unless you are deliberately shipping a breaking change — verify with `npm test`, compiler golden tests, and `npm run test:e2e`.
+After parse, **`validateReferences`** runs inside **`emitScriptsForModule`** (invoked from **`buildScripts()`**), before script files are written — the runtime graph loader does **not** re-run it (see [Architecture](../ARCHITECTURE.md)). The transpiler checks that `ensure` and `run` targets (and related refs, such as send right-hand sides) resolve to symbols of the right kind in the current or imported module. Implementation: **`src/transpile/validate.ts`**, with **local vs `alias.name` resolution**, **wrong-kind** messages, and **`lookupKind`** in **`src/transpile/validate-ref-resolution.ts`**. If you change validation behavior, treat **exact `E_VALIDATE` strings** as part of the public contract unless you are deliberately shipping a breaking change — verify with `npm test`, compiler golden tests, and `npm run test:e2e`.
 
 ### Workflow module emission (golden tests only)
 
@@ -190,10 +190,14 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
 e2e::section "Feature under test"
 
-# Given — create the workflow file inline
+# Given — create the workflow file inline (script + workflow; same shape as e2e/tests/10_basic_workflows.sh)
 e2e::file "hello.jh" <<'EOF'
-workflow default {
+script hello_impl {
   echo "hello-jh"
+}
+workflow default {
+  msg = run hello_impl()
+  return "${msg}"
 }
 EOF
 
@@ -206,12 +210,14 @@ e2e::expect_stdout "${hello_out}" <<'EOF'
 Jaiph: Running hello.jh
 
 workflow default
+  ▸ script hello_impl
+  ✓ script hello_impl (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
-# Then — assert on run artifacts (matches e2e/tests/10_basic_workflows.sh)
-e2e::expect_out_files "hello.jh" 1
-e2e::expect_out "hello.jh" "default" "hello-jh"
+# Then — assert on run artifacts
+e2e::expect_out_files "hello.jh" 2
+e2e::expect_out "hello.jh" "hello_impl" "hello-jh"
 ```
 
 When you need a **specific** sequence-prefixed filename (e.g. `000002-module__step.out`), use `e2e::expect_run_file` — see `e2e/tests/72_docker_run_artifacts.sh` and similar.
@@ -250,12 +256,12 @@ All helpers are defined in `e2e/lib/common.sh`.
 
 #### Run artifact assertions
 
-After a workflow runs, its step outputs are written as files under `.jaiph/runs/`. Each artifact file is named with a zero-padded sequence prefix reflecting step execution order (e.g. `000001-module__step.out`, `000002-module__step.err`). The sequence counter is file-backed (`.seq` under the run directory) and allocated atomically by the JS kernel (`kernel/seq-alloc.js`) so concurrent async branches (`run async`) each receive a unique monotonic prefix — no two steps share a `seq` within the same run. This makes file names predictable and ordered, so tests can assert on exact file names without glob matching. These helpers verify the content of those files, catching bugs in the runtime's output-capture pipeline independently from what the CLI displays.
+After a workflow runs, its step outputs are written as files under `.jaiph/runs/`. Each artifact file is named with a zero-padded sequence prefix reflecting step execution order (e.g. `000001-module__step.out`, `000002-module__step.err`). The sequence counter is file-backed (`.seq` under the run directory) and allocated atomically by **`src/runtime/kernel/seq-alloc.ts`** (compiled into the kernel shipped with the CLI) so concurrent async branches (`run async`) each receive a unique monotonic prefix — no two steps share a `seq` within the same run. This makes file names predictable and ordered, so tests can assert on exact file names without glob matching. These helpers verify the content of those files, catching bugs in the runtime's output-capture pipeline independently from what the CLI displays.
 
 | Helper | Description |
 |--------|-------------|
 | `e2e::expect_out_files "file" N` | Assert that the run directory for `file` contains exactly `N` `.out` files. Use `0` for steps with no stdout (e.g. `touch`, `test`, redirected output). |
-| `e2e::expect_out "file" "workflow" "expected"` | Assert that the `.out` file for a workflow step matches `expected` exactly. |
+| `e2e::expect_out "file" "step" "expected"` | Assert that the `.out` file for the named step (script, rule, or `default` workflow bucket) matches `expected` exactly. |
 | `e2e::expect_rule_out "file" "rule" "expected"` | Assert that the `.out` file for a rule step matches `expected` exactly. Dot-separated rule names are normalized (e.g. `lib.ready` → `lib__ready`). |
 | `e2e::expect_run_file "file" "name" "expected"` | Assert that a specific named file (e.g. `000002-module__step.out`) in the run directory for `file` matches `expected` exactly. Use when you need to assert on a file by its sequence-prefixed name. |
 | `e2e::expect_run_file_at "base" "file" "name" "expected"` | Same as `e2e::expect_run_file` but searches under a custom base directory instead of `.jaiph/runs/`. Use for tests with custom `run.logs_dir` or `JAIPH_RUNS_DIR`. |
@@ -288,64 +294,15 @@ Every E2E assertion should compare the **full** expected text — CLI stdout via
 
 For the full E2E philosophy, artifact layout, and normalization details, see [ARCHITECTURE.md — E2E test philosophy](../ARCHITECTURE.md#e2e-test-philosophy-and-artifact-layout).
 
-### Migration checklist: remaining `assert_contains` usages
+### Auditing `e2e::assert_contains`
 
-The following tests still use `e2e::assert_contains`. Each entry is categorized as **converted** (migrated to full equality), **convertible** (can be migrated), or **justified exception** (substring check is appropriate with inline comment).
+Some tests still use **`e2e::assert_contains`** when full equality is impractical (nondeterministic or platform-dependent output, variable-length logs, or evolving CLI text). That is allowed **only** with an **inline comment** next to the call explaining why — same policy as [Architecture](../ARCHITECTURE.md#e2e-test-philosophy-and-artifact-layout). The list of files and line numbers changes often; **do not** treat a frozen table in this doc as authoritative. To see current usages from the repo root:
 
-#### Converted to full equality
+```bash
+rg 'e2e::assert_contains' e2e/tests -n
+```
 
-These were migrated from `assert_contains` to `assert_equals` / full-equality helpers:
-
-| File | What was converted | Notes |
-|------|--------------------|-------|
-| `30_filesystem_side_effects.sh` | `workflow_wrote.txt` side-effect file | 1 call → `assert_equals` |
-| `74_live_step_output.sh` | Final `.out`/`.err` artifact content | 6 calls → 2 `assert_equals` with full multi-line content |
-| `91_inbox_dispatch.sh` | Side-effect files (`received.txt`, `consumer_*.txt`, `args.txt`, inbox file) | 9 calls → `assert_equals` (args.txt consolidated to 1 multi-line check) |
-| `92_log_logerr.sh` | `.out`/`.err` artifacts and script stdout | 3 calls → `assert_equals` |
-| `93_inbox_stress.sh` | Nested processing result file | 1 call → `assert_equals` |
-| `97_step_output_contract.sh` | Rule `.out`, workflow `.out`, function `.out` return value artifacts | 5 calls → `assert_equals` |
-| `98_ensure_recover_value.sh` | Capture variable `.out` and rule `.out` artifact | 2 calls → `assert_equals` |
-| `101_script_isolation.sh` | Shared library script `.out` | 1 call → `assert_equals` |
-
-#### Convertible to full equality
-
-These remain as `assert_contains` but could be migrated once exact artifact content is verified:
-
-| File | Lines | What's checked | Notes |
-|------|-------|---------------|-------|
-| `94_parallel_shell_steps.sh` | 36–37, 104–105 | Side-effect files and `.out` content | 4 calls; test is skipped (unsupported semantics) |
-
-#### Justified exceptions (substring check appropriate, with inline comments)
-
-| File | Lines | Reason |
-|------|-------|--------|
-| `70_run_artifacts.sh` | 53–59, 95–98 | CLI failure stderr (variable paths), `run_summary.jsonl` (variable-length), prompt transcripts (nondeterministic agent format) |
-| `92_log_logerr.sh` | 61–64 | `run_summary.jsonl` — variable-length, timestamps |
-| `72_docker_run_artifacts.sh` | 48 | `run_summary.jsonl` inside Docker — variable event count |
-| `78_lang_redesign_constructs.sh` | 25–294 | CLI stdout with progress tree formatting — timing, indentation varies |
-| `50_cli_and_parse_guards.sh` | 78–221 | Parser/validator error messages — checking diagnostic keywords |
-| `91_inbox_dispatch.sh` | 126, 204–207 | Compiler error stderr (variable paths), CLI progress tree with timing |
-| `80_cli_behavior.sh` | 18, 34–55 | CLI version banner, error help text — format may evolve |
-| `104_run_async.sh` | 47, 78–79, 129 | Async progress tree, failure messages — timing-dependent |
-| `81_tty_progress_tree.sh` | 95 | TTY live render — inherently nondeterministic |
-| `20_rule_and_prompt.sh` | 86, 120, 165–167, 192, 265 | Prompt transcripts (agent format), rule failure stderr |
-| `71_loop_run_artifacts.sh` | 51–53 | Prompt transcripts — agent output format |
-| `61_ensure_recover.sh` | 100, 156, 196 | Side-effect file, CLI failure stderr, prompt output |
-| `79_workflow_fail_keyword.sh` | 26 | CLI stderr fail message |
-| `89_reporting_server.sh` | 59, 91, 94 | Reporting API JSON and raw log — format may include extra fields |
-| `93_ensure_recover_payload.sh` | 74–80 | CLI progress tree with timing |
-| `97_step_output_contract.sh` | 40–41, 48, 192, 217–218, 225 | Aggregated workflow `.out`/`.err` with multiple step outputs; prompt capture (nondeterministic) |
-| `97_async_managed_failure.sh` | 44 | Async failure message in progress output |
-| `98_ensure_recover_value.sh` | 80 | Recover `$1` merged stdout+stderr — variable aggregation format |
-| `99_managed_call_semantics.sh` | 50 | Script `.out` aggregates multiple echo lines; capture semantics vary |
-| `100_ensure_recover_invalid.sh` | 38–97 | Parser error diagnostics — checking keywords |
-| `101_ensure_recover_output_contract.sh` | 44–45, 85–87, 124–127, 179–180 | Recover payload is merged stdout+stderr; exact aggregation format varies |
-| `101_script_isolation.sh` | 125 | Compiler error stderr includes file paths and line numbers |
-| `102_engineer_recover_contract.sh` | 57–58 | Recover payload contains rule stdout+stderr — variable format |
-| `103_run_dir_source_name.sh` | 29, 35 | Run dir path — contains dynamic date component |
-| `00_install_and_init.sh` | 18 | CLI help output — format may evolve |
-| `05_jaiph_use_pinned_version.sh` | 21, 29 | Version output — dynamic version string |
-| `91_top_level_local.sh` | 44–45 | Multi-line const value — checking partial lines of large value |
+When you add or tighten a test, prefer **full-equality** helpers first; add substring checks only when one of the documented exceptions applies.
 
 ### Why both tree output and artifact assertions?
 

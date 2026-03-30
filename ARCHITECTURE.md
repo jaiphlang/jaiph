@@ -73,11 +73,11 @@ Channel transport remains file/queue based in runtime inbox logic.
 
 ## Channels and hooks in context
 
-(Unchanged semantics; see previous docs.) Channels are AST → validated → executed via queue/dispatch in the Node runtime. Hooks load from `hooks.json` and run as shell commands with JSON on stdin.
+Channels are validated at compile time (`validateReferences` / send RHS rules) and executed via in-memory queue and dispatch in the Node runtime; durable inbox files under the run directory are for audit and reporting. See [Inbox & Dispatch](docs/inbox.md). Hooks are CLI-only: they load from `hooks.json` and run as shell commands with JSON on stdin, driven by the same `__JAIPH_EVENT__` stream as the progress UI — see [Hooks](docs/hooks.md).
 
 ## Jaiph runtime testing (`*.test.jh`)
 
-`*.test.jh` files are parsed in the CLI; `runTestFile()` drives blocks in-process. **`buildRuntimeGraph(testFile)`** is called **once per `runTestFile` invocation** and the resulting graph is reused across all blocks and `test_run_workflow` steps (the import closure is constant for a given test file within a single process run). Each `test_run_workflow` step resolves mocks against that cached graph, then constructs `NodeWorkflowRuntime` with `mockBodies` / mock prompt env. Mock prompts, workflows, rules, and functions are supported through the runtime's mock infrastructure.
+`*.test.jh` files are parsed in the CLI; `runTestFile()` drives blocks in-process. **`buildRuntimeGraph(testFile)`** is called **once per `runTestFile` invocation** and the resulting graph is reused across all blocks and `test_run_workflow` steps (the import closure is constant for a given test file within a single process run). Each `test_run_workflow` step resolves mocks against that cached graph, then constructs `NodeWorkflowRuntime` with `mockBodies` / mock prompt env. Mock prompts, workflows, rules, and scripts are supported through the runtime's mock infrastructure.
 Before that, the CLI prepares script executables via **`buildScripts(workspace)`** so imported workflow modules have concrete script paths under `JAIPH_SCRIPTS` (workspace `*.jh` files only; `*.test.jh` is not part of that walk).
 
 ## CLI progress reporting pipeline
@@ -234,13 +234,13 @@ Every E2E assertion should compare the **full** expected text (stdout heredoc, a
 
 ```
 .jaiph/runs/
-  <YYYY-MM-DD>/
-    <source.jh>/
-      000001-module__step.out    # stdout capture per step (seq-prefixed)
-      000001-module__step.err    # stderr capture (when non-empty)
-      inbox/                     # inbox message files (when channels are used)
-      .seq                       # step-sequence counter (kernel/seq-alloc.ts)
-      run_summary.jsonl          # durable event timeline
+  <YYYY-MM-DD>/                       # UTC date (see NodeWorkflowRuntime)
+    <HH-MM-SS>-<source-basename>/       # UTC time + JAIPH_SOURCE_FILE or entry basename
+      000001-module__step.out          # stdout capture per step (seq-prefixed)
+      000001-module__step.err          # stderr capture (when non-empty)
+      inbox/                           # inbox message files (when channels are used)
+      .seq                             # step-sequence counter (kernel/seq-alloc.ts)
+      run_summary.jsonl                # durable event timeline
 ```
 
 Sequence prefixes are monotonic and unique per run (allocated by `kernel/seq-alloc.ts`), making artifact file names deterministic and ordered.
