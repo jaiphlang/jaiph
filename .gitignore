@@ -4,8 +4,6 @@ docs/vendor/
 docs/_site/
 docs/.jekyll-cache/
 docs/.bundle/
-docs/Gemfile.lock
-docs/Gemfile
 
 # build artifacts
 dist/
