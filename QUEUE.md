@@ -12,35 +12,6 @@ Process rules:
 
 ---
 
-## CI: Getting started (local Jekyll, no matrix) <!-- dev-ready -->
-
-**Goal**  
-Add a CI job **Getting started (local)** that mirrors **E2E install and CLI workflow** intent (install CLI, smoke workflow) but **without** an OS matrix, and **without** hitting `jaiph.org` — instead **start Jekyll locally** and use **`http://localhost:4000`** (or configured port) as the base URL.
-
-**Context**
-
-- Existing E2E uses `npm run test:e2e` on multiple OSes; this job is a **single-platform** smoke that validates the **docs site** can be served locally and prepares for **sample verification** against the live HTML.
-- Future tasks will curl/fetch the served site; this job establishes Jekyll up + local URL.
-
-**Key files:**
-- `.github/workflows/ci.yml` — new job
-- `docs/` — Jekyll config and Gemfile if needed
-- `package.json` — optional script to `bundle exec jekyll serve` in CI (background) + health check
-
-**Scope**
-
-1. Add job **Getting started (local)** (e.g. `ubuntu-latest` only, no `strategy.matrix`).
-2. Install Ruby/Jekyll deps, build or serve site, wait until `localhost:4000` responds.
-3. Optional minimal check: fetch `/` or `/index.html` with `curl` and assert 200 (or Playwright smoke).
-4. Document port and command in `docs/` or contributor notes.
-
-**Acceptance criteria**
-
-- CI runs the new job on each push; it passes when Jekyll serves locally.
-- No dependency on `jaiph.org` in this job (local URL only).
-
----
-
 ## Verify landing-page samples (Playwright + local Jekyll) <!-- dev-ready -->
 
 **Goal**  
