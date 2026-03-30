@@ -7,11 +7,11 @@ redirect_from:
 
 # Jaiph Configuration
 
-## Why configuration exists
+Workflow engines need a way to separate **what runs** (your `.jh` graphs) from **how the host runs it** (models, paths, sandboxes, logging). Jaiph keeps orchestration in the language and pushes operational knobs into **configuration** so you can reuse the same sources across machines and CI.
 
-Jaiph runs workflows through the **Node workflow runtime** (`NodeWorkflowRuntime`): it interprets the AST, executes `prompt` and `script` steps via the JS kernel, and handles channels, inbox dispatch, and artifacts (see [Architecture](../ARCHITECTURE.md)). **Configuration** is how you tune that runtime—which agent backend to use, where logs go, whether the Docker sandbox is on, how inbox dispatch behaves—**without** changing control flow in your `.jh` sources.
+**In this project:** execution is always through the **Node workflow runtime** (`NodeWorkflowRuntime`): it interprets the AST, runs `prompt` and `script` steps via the JS kernel, and handles channels, inbox dispatch, and artifacts (see [Architecture](../ARCHITECTURE.md)). Configuration tunes that stack—agent backend, runs directory, Docker sandbox, inbox parallelism—**without** changing control flow in `.jh` files.
 
-You typically set options once per project or per workflow, then reuse the same sources across environments (CLI flags and env vars supply the rest).
+You typically set options once per project or per workflow, then supply the rest with environment variables (and CLI behavior described in [CLI](cli.md)).
 
 ## What you can configure (overview)
 
@@ -29,10 +29,10 @@ Three mechanisms apply to **agent** and **run** settings (model, backend, logs d
 
 In the **entry** workflow file (the path you pass to `jaiph run`), you can declare a single **module-level** `config { ... }` block. It is optional. If it is present:
 
-- The opening line must be exactly `config {` (whitespace allowed before `{`).
-- Only **one** module-level config block per file; a second one is `E_PARSE` (`duplicate config block`).
+- The opening line (trimmed) must be **`config {`** only—optional spaces around `config` and `{`, nothing else on that line.
+- Only **one** module-level config block per file; a second one is `E_PARSE` with message **`duplicate config block (only one allowed per file)`**.
 - The block may appear at any position among other **top-level** constructs (e.g. before or after `import` lines); convention is near the top, after an optional shebang.
-- **Unknown keys** are `E_PARSE`; the error lists allowed keys. **Wrong value types** (e.g. a string for `runtime.docker_timeout`) are also `E_PARSE`. For `agent.backend`, only `"cursor"` and `"claude"` are allowed.
+- **Unknown keys** are `E_PARSE` and list allowed keys. **Wrong value types** (e.g. a string for `runtime.docker_timeout`) are also `E_PARSE`. For `agent.backend`, only `"cursor"` and `"claude"` are allowed (`agent.backend must be "cursor" or "claude"` if invalid).
 
 Inside the block, each non-comment line is `key = value`. Empty lines and lines starting with `#` are ignored.
 
@@ -61,8 +61,12 @@ config {
   ]
 }
 
-rule some_rule {
+script noop {
   true
+}
+
+rule some_rule {
+  run noop()
 }
 
 workflow default {
@@ -100,10 +104,18 @@ A `config { ... }` block may appear **inside** a `workflow { ... }` body to over
 
 Rules:
 
-- At most one such block per workflow; it must be the first content in the body (only comments may appear before it).
+- At most one such block per workflow; it must be the first **non-comment** step in the body (only comments may appear before it). A duplicate is `E_PARSE`: **`duplicate config block inside workflow (only one allowed per workflow)`**.
 - Allowed keys: **`agent.*` and `run.*` only**. Any `runtime.*` key is `E_PARSE` (Docker stays module-level / env).
 
 ```jh
+script noop {
+  true
+}
+
+rule some_rule {
+  run noop()
+}
+
 config {
   agent.backend = "cursor"
   agent.default_model = "gpt-3.5"
@@ -129,7 +141,7 @@ Workflow-level values apply to all steps in that workflow, including `ensure`d r
 
 **Precedence inside a workflow (highest wins):**
 
-1. **Environment** — `JAIPH_*` values present when `jaiph run` starts win and set the corresponding `*_LOCKED` markers so in-file metadata cannot replace them for that process.
+1. **Environment** — values already set for the merged agent/run keys (`JAIPH_AGENT_*`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, `JAIPH_INBOX_PARALLEL`; see [Config to env mapping](#config-to-env-mapping)) when `jaiph run` builds the runner environment win and set the corresponding `*_LOCKED` markers so in-file metadata cannot replace them for that process.
 2. **Workflow-level `config`** — overrides module in-file values for the duration of that workflow’s steps (and nested calls that inherit that scope; see below).
 3. **Module-level `config`** — fills in values for workflows that do not define their own workflow-level block (and is combined with workflow-level when entering the entry workflow).
 4. **Defaults** — see below.
@@ -152,7 +164,7 @@ After a nested call returns, the caller’s scope is restored exactly as it was 
 
 Nested `run` is not the only way execution crosses files. When you `ensure` a rule defined in **another** module, the runtime merges that file’s **module-level** `config` (`agent.*` / `run.*`) on top of the current environment for that rule (respecting `*_LOCKED`). It does **not** apply the callee’s **workflow-level** `config` (rules are not workflows). **Same-module** `ensure` keeps the caller’s environment as-is—the callee’s module-level metadata is not applied again—so the caller workflow’s effective settings (including its workflow-level overrides) stay in place.
 
-**Locked variables** (`JAIPH_*_LOCKED`) are set only when the corresponding `JAIPH_*` variable is already present in the process environment **before** the CLI builds the runner environment. Those flags remain authoritative across nesting—neither module nor workflow metadata overrides a locked value.
+**Locked variables:** when **`jaiph run`** builds the initial runner environment, any of **`JAIPH_AGENT_MODEL`**, **`JAIPH_AGENT_COMMAND`**, **`JAIPH_AGENT_BACKEND`**, **`JAIPH_AGENT_TRUSTED_WORKSPACE`**, **`JAIPH_AGENT_CURSOR_FLAGS`**, **`JAIPH_AGENT_CLAUDE_FLAGS`**, **`JAIPH_RUNS_DIR`**, **`JAIPH_DEBUG`**, or **`JAIPH_INBOX_PARALLEL`** is already set in `process.env`, the merge sets a matching **`${NAME}_LOCKED`** flag (for example `JAIPH_AGENT_BACKEND_LOCKED=1`). Those locks stay authoritative across nesting—neither module nor workflow metadata overrides a locked value.
 
 ## Backend selection
 
@@ -161,7 +173,9 @@ Nested `run` is not the only way execution crosses files. When you `ensure` a ru
 - **cursor**: Runs `agent.command` (default `cursor-agent`) with stream-json output.
 - **claude**: Runs `claude` on `PATH`. If the backend is `claude` but the executable is missing, Jaiph reports an error and exits.
 
-Backend-specific flags come from `agent.cursor_flags` / `agent.claude_flags` (or the matching env vars). There is no per-`prompt` backend override; the effective backend is whatever the config/env stack resolves to when the step runs. In `jaiph test`, mocked prompts skip real backend execution; unmocked prompts use the resolved backend. The **`jaiph test`** harness does not run the same initial environment merge as **`jaiph run`** (it starts from `process.env` plus test variables such as `JAIPH_TEST_MODE`). For predictable agent settings in tests, set `JAIPH_AGENT_*` in the environment or rely on in-file `config` on the workflow’s module as applied by the runtime when the workflow executes.
+Backend-specific flags come from `agent.cursor_flags` / `agent.claude_flags` (or the matching env vars). There is no per-`prompt` backend override; the effective backend is whatever the config/env stack resolves to when the step runs. In `jaiph test`, mocked prompts skip real backend execution; unmocked prompts use the resolved backend.
+
+The **`jaiph test`** harness does **not** call **`resolveRuntimeEnv`**: it constructs a minimal env (`process.env` plus `JAIPH_TEST_MODE`, `JAIPH_WORKSPACE`, `JAIPH_RUNS_DIR`, `JAIPH_SCRIPTS`, and mock-related variables when used). You do not get the same **CLI-side** defaults and lock flags as `jaiph run`. When a **`test_run_workflow`** step runs, `NodeWorkflowRuntime` still applies module and workflow metadata from the AST via **`applyMetadataScope`** (same merge rules as production for non-locked keys). For predictable agent settings in tests, set `JAIPH_AGENT_*` / `JAIPH_RUNS_DIR` / etc. in the environment, or rely on in-file `config` in the module that defines the workflow under test.
 
 ## Defaults and precedence
 
@@ -213,12 +227,11 @@ For `runtime.*`, the `jaiph run` driver merges **`JAIPH_DOCKER_*` environment** 
 
 ## Inspect effective config at runtime
 
-Inside workflows, rules, and scripts, **agent** and **run** settings are visible as the usual `JAIPH_*` variables, for example `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_MODEL`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, and `JAIPH_INBOX_PARALLEL`.
+Inside workflows, rules, and scripts, **agent** and **run** settings are visible as the usual `JAIPH_*` variables, for example `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_MODEL`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, and `JAIPH_INBOX_PARALLEL`. In orchestration strings, `${IDENTIFIER}` interpolation resolves identifiers from workflow variables first, then from the process environment.
 
 ```jh
 workflow default {
-  printf 'backend=%s\n' "$JAIPH_AGENT_BACKEND" >> ".jaiph/meta-debug.log"
-  printf 'trusted_workspace=%s\n' "$JAIPH_AGENT_TRUSTED_WORKSPACE" >> ".jaiph/meta-debug.log"
+  log "backend=${JAIPH_AGENT_BACKEND} trusted_workspace=${JAIPH_AGENT_TRUSTED_WORKSPACE}"
 }
 ```
 

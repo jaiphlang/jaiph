@@ -7,15 +7,20 @@ redirect_from:
 
 # Sandboxing
 
-Workflows combine shell scripts, agent calls, and inbox routing. That mix makes it easy to depend on mutable global state or to run tools with broader host access than you intended. **Sandboxing** in Jaiph is about narrowing those risks in two **independent** places: how **rules** are meant to be used (language + design), and optionally how the **whole run** is placed (Docker). Both are optional layers in different senses—rules are always subject to grammar constraints; Docker is opt-in.
+## Overview
 
-Execution details below match the **Node workflow runtime** described in [Architecture](../ARCHITECTURE.md): `jaiph run` loads the AST, runs `NodeWorkflowRuntime`, and streams `__JAIPH_EVENT__` on stderr—the same for local and Docker launches.
+Workflow orchestration often mixes shell scripts, agent calls, and file or inbox I/O. Without discipline, that mix encourages hidden dependencies on mutable global state and tools with more host access than you meant to grant. **Sandboxing** in Jaiph addresses that in two **independent** ways:
 
-For general `config` syntax, allowed keys, and precedence with environment variables, see [Configuration](configuration.md). Docker-related keys are documented in detail here.
+1. **Rules (language + convention)** — The grammar restricts what can appear in a **rule** so bodies stay small and reviewable. That is a *static* boundary, not an OS-level sandbox.
+2. **Docker (optional)** — You can run the **entire** `jaiph run` workflow inside a container so filesystem and process isolation match Docker’s model. This is opt-in via `runtime.*` config and env overrides.
+
+The allowed-step set for **rule** bodies applies whenever you define a rule; Docker isolation applies only when you enable it. Execution details below match the **Node workflow runtime** in [Architecture](../ARCHITECTURE.md): `jaiph run` uses `NodeWorkflowRuntime` and streams `__JAIPH_EVENT__` on stderr for both local and Docker launches. [Hooks](hooks.md) still run on the **host** CLI; they consume the same event stream from the runner (including when the runner is inside a container).
+
+For general `config` syntax, allowed keys, and precedence, see [Configuration](configuration.md). This page focuses on rules-as-discipline and Docker; the [Grammar](grammar.md) page has the full orchestration vs script matrix.
 
 ## Rules: checks, not mutating work
 
-**Rules** are for structured validation: the grammar allows only a subset of step types (`ensure` other rules, `run` scripts, `const`, braced `if`, `fail`, `log` / `logerr`, `return`). There is no raw shell, `prompt`, inbox `send`, and so on. That keeps rule bodies small and reviewable compared to full workflows.
+**Rules** are for structured validation. Only a subset of step types is allowed: `ensure` (other **rules**), `run` (**scripts** only — not workflows), `const` (script/rule captures or bash RHS — not `prompt`), braced `if` with `ensure`/`run` conditions, `fail`, `log` / `logerr`, and `return`. There is no raw shell, `prompt`, `send` / `route` / `wait`, `run async`, or `ensure … recover` inside rule bodies. See [Grammar — High-level concepts](grammar.md#high-level-concepts) for the authoritative list.
 
 Under **`jaiph run`**, the runtime implements rules by walking the AST **in-process** in Node (`NodeWorkflowRuntime.executeRule` → `executeSteps`). There is **no** extra per-rule OS sandbox: no Linux mount namespace, no automatic read-only filesystem for the rule body.
 
@@ -78,6 +83,7 @@ Mount strings in `runtime.workspace` use these forms:
 - **Full form** (3 segments): `"host_path:container_path:mode"` — mounts `host_path` at `container_path` with mode `ro` or `rw`.
 - **Shorthand** (2 segments): `"host_path:mode"` — mounts at `/jaiph/workspace/<host_path>` (relative segment; may contain further path components) with the given mode.
 - **1 segment** — invalid (`E_PARSE` from mount parsing when Docker config is resolved).
+- **More than 3 segments** (e.g. too many `:` in a single spec) — invalid (`E_PARSE`); use the 3-segment form if you need an explicit container path.
 - Mode must be `ro` or `rw` — otherwise `E_PARSE`.
 - Exactly one mount must target `/jaiph/workspace` — `E_VALIDATE` if zero or more than one. Omitting `runtime.workspace` uses the default `[".:/jaiph/workspace:rw"]`, which satisfies this.
 
@@ -109,7 +115,7 @@ Host paths are resolved relative to the workspace root when building `docker run
 - **Working directory** — `/jaiph/workspace`.
 - **What is shipped** — The compiled JS tree (no TypeScript or `node_modules` in the generated mount) and per-step script executables. No workflow-level `.sh` or `jaiph_stdlib.sh` is required. `.jh` source files are read from the workspace mount.
 
-The CLI also mounts the host directory containing the run meta file read-write at the same path inside the container so the workflow module entrypoint can record exit status and paths (`JAIPH_META_FILE`).
+The CLI mounts the host **directory** that contains the run meta file read-write at **`/jaiph/meta`** in the container and sets **`JAIPH_META_FILE`** to **`/jaiph/meta/<meta-basename>`**. The runner writes status and run-directory paths there; the host CLI reads the same file after the container exits (host temp paths are not reused as in-container paths).
 
 ### Docker behavior
 

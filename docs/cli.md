@@ -11,26 +11,26 @@ redirect_from:
 
 Jaiph ships as a **command-line tool**: you point it at `.jh` sources (or test files), and it prepares scripts, launches the workflow runtime, streams progress, and writes run artifacts under `.jaiph/runs`. This page is the **CLI contract** — flags, environment, and how the tool behaves on your machine. Language syntax and step semantics live in [Grammar](grammar.md) and related docs.
 
-Under the hood, workflow sources are programs: the CLI runs **compile-time** validation and script extraction (`buildScripts()` / **`validateReferences`** plus per-`script` files — no workflow-level shell modules), then executes workflows through the **Node workflow runtime** (`NodeWorkflowRuntime`), which interprets the AST directly — there is **no** Bash transpilation on the orchestration path (only per-`script` bash files are emitted). **`jaiph run`** spawns the **Node workflow runner** (`node-workflow-runner`), which calls `buildRuntimeGraph()` then `NodeWorkflowRuntime`. Signals and process groups are owned by the CLI so interrupts reach nested work. **Prompt** steps, **managed step subprocesses** (each `run` / `ensure` target — workflows, rules, and `script` executables), **file-backed inbox**, and **`__JAIPH_EVENT__` / `run_summary.jsonl`** are implemented in the **JS kernel** under **`src/runtime/kernel/`**. **`jaiph test`** loads `*.test.jh` in-process via **`node-test-runner.ts`** (same runtime + mocks; no Bash test transpilation). Optional [Sandboxing](sandboxing.md) runs workflows inside Docker with the same runner inside the container.
+**What you use it for**
 
-The same `jaiph` executable drives **`run`**, **`test`**, **`init`**, **`use`**, and **`report`** (read-only UI over run logs).
-
-**Typical tasks:**
-
-- **Run a workflow** — `jaiph run <file.jh>` or pass the file as the first argument: `jaiph <file.jh> [args...]`. Requires a `workflow default` in that file.
-- **Run tests** — `jaiph test` discovers and runs all `*.test.jh` under the workspace; or pass a directory or a single test file.
-- **Setup** — `jaiph init [workspace-path]` creates `.jaiph/` with a bootstrap workflow and synced skill guide; `jaiph use <version|nightly>` reinstalls the global Jaiph binary.
-- **Reporting** — `jaiph report` serves a read-only local dashboard over `.jaiph/runs` (see [Reporting server](reporting.md)).
+- **Run a workflow** — `jaiph run <file.jh>` or shorthand `jaiph <file.jh> [args...]`. The entry file must define **`workflow default`**.
+- **Run tests** — `jaiph test` discovers `*.test.jh` under the workspace, or you pass a directory or one test file.
+- **Set up a project** — `jaiph init [workspace-path]` creates `.jaiph/` with a bootstrap workflow and synced skill guide; `jaiph use <version|nightly>` reinstalls the global Jaiph binary via the install script.
+- **Inspect runs** — `jaiph report` serves a read-only local dashboard over `.jaiph/runs` (see [Reporting server](reporting.md)).
 
 **Commands:** `run`, `test`, `init`, `use`, `report`.
 
-**Global options:** `-h` / `--help` and `-v` / `--version` are handled only when they appear as the **first argument after the program name** (for example `jaiph --help`, or `node dist/src/cli.js --help` when developing). They are not parsed as global flags after a subcommand or file path (`jaiph run --help` is **not** treated as global help — use `jaiph --help` for the top-level usage text). **`jaiph report`** accepts `-h` / `--help` in its own argv: `jaiph report --help`.
+**How this fits the architecture**
+
+The CLI is the **entry and orchestration shell**: it runs **compile-time** validation and script extraction (`buildScripts()` → **`validateReferences`** → per-`script` files only; no workflow-level shell modules), then executes workflows through the **Node workflow runtime** (`NodeWorkflowRuntime`), which **interprets the AST** — there is no Bash transpilation of workflows on the runtime path (only extracted **`script`** bodies are emitted as shell). **`jaiph run`** spawns the **Node workflow runner** (`node-workflow-runner`), which calls `buildRuntimeGraph()` (parse-only imports; validation is not repeated there) then `NodeWorkflowRuntime`. The CLI owns process **spawn** and **signal propagation** to the runner; **`prompt`** and **`script`** execution (subprocesses for **`script`** steps), **file-backed inbox**, and **`__JAIPH_EVENT__` on stderr** / **`run_summary.jsonl`** live in the **JS kernel** under **`src/runtime/kernel/`**. **`jaiph test`** loads `*.test.jh` in-process via **`node-test-runner.ts`** (same runtime + mocks). Optional [Sandboxing](sandboxing.md) runs the same runner inside Docker. For boundaries, contracts, and diagrams, see [Architecture](../ARCHITECTURE.md).
+
+**Global options:** `-h` / `--help` and `-v` / `--version` are handled only when they appear as the **first argument after the program name** (for example `jaiph --help`, or `node dist/src/cli.js --help` when developing). They are not parsed as global flags after a subcommand or file path (`jaiph run --help` is **not** global help — use `jaiph --help` for the top-level usage text). **`jaiph report`** accepts `-h` / `--help` in its own argv: `jaiph report --help`.
 
 ---
 
 ## `jaiph <file.jh>` and `jaiph <file.test.jh>` (shorthand)
 
-If the first argument is a path to an existing file whose name ends with `.jh`, Jaiph treats it as a workflow and runs it (same as `jaiph run <file>`). If the first argument ends with `.test.jh` and the file exists, Jaiph runs that test file (same as `jaiph test <file>`).
+If the first argument is an existing file whose name ends with **`.test.jh`**, Jaiph runs it as tests (same as `jaiph test <file>`). Otherwise, if it is an existing file whose name ends with **`.jh`**, Jaiph runs it as a workflow (same as `jaiph run <file>`). The **`*.test.jh`** branch is checked first so test files are never mistaken for workflows.
 
 Workflow shorthand:
 
@@ -55,9 +55,11 @@ Parse, validate, and run a Jaiph workflow file via the Node workflow runtime.
 jaiph run [--target <dir>] <file.jh> [--] [args...]
 ```
 
-**Compile-time scope:** `buildScripts()` walks the entry file and its **import closure**. Each reachable module is parsed and **`validateReferences`** runs before script files are written. Unrelated `.jh` files on disk are not read. Use `--target` to keep emitted **script** files (and related build output) in a specific directory (useful for debugging); without it, they are written to a temp directory and cleaned up after the run. Use `--` to separate Jaiph flags from workflow arguments (e.g. `jaiph run file.jh -- --verbose`).
+Paths ending in **`.jh`** are accepted (including **`*.test.jh`**, since the extension is still `.jh`). For files that only contain test blocks, use **`jaiph test`** instead — that is the supported path for `*.test.jh`.
 
-**Process model:** the CLI runs **`buildScripts()`** (validation + script extraction), then spawns the **Node workflow runner** as a detached child. The runner loads the graph with **`buildRuntimeGraph()`** (parse-only imports; no `validateReferences` here) and executes **`NodeWorkflowRuntime`**. Prompt execution, managed step subprocesses, inbox dispatch, and event emission are handled in **`src/runtime/kernel/`**. The CLI listens on **stderr only** for **`__JAIPH_EVENT__`** JSON lines — the single event channel for all execution modes (local and Docker). Stdout carries only plain script output, forwarded to the terminal as-is.
+**Compile-time scope:** `buildScripts()` walks the entry file and its **import closure**. Each reachable module is parsed and **`validateReferences`** runs before script files are written. Unrelated `.jh` files on disk are not read. Use `--target` to keep emitted **script** files (and the run metadata file next to them) in a specific directory (useful for debugging); without it, they are written to a temp directory and cleaned up after the run. Use `--` to separate Jaiph flags from workflow arguments (e.g. `jaiph run file.jh -- --verbose`).
+
+**Process model:** the CLI runs **`buildScripts()`** (validation + script extraction), then spawns the **Node workflow runner** as a detached child. The runner loads the graph with **`buildRuntimeGraph()`** (parse-only imports; no `validateReferences` here) and executes **`NodeWorkflowRuntime`**. **`prompt`** steps, **`script`** subprocesses, inbox dispatch, and event emission are handled in **`src/runtime/kernel/`** (workflows and rules are interpreted in-process; only **`script`** steps spawn a managed shell). The CLI listens on **stderr only** for **`__JAIPH_EVENT__`** JSON lines — the single event channel for all execution modes (local and Docker). Stdout carries only plain script output, forwarded to the terminal as-is.
 
 Examples:
 
@@ -233,12 +235,12 @@ Execution uses the **Node workflow runtime** (`NodeWorkflowRuntime`) with a pure
 **Usage:**
 
 - `jaiph test` — discover and run all `*.test.jh` under the workspace root. The workspace root is the first directory found when walking **up** from the current working directory that contains `.jaiph` or `.git`. If neither marker exists on that path, the root is the resolved current working directory.
-- `jaiph test <dir>` — run all test files under the given directory (workspace root is detected the same way, starting from `<dir>`).
+- `jaiph test <dir>` — run all `*.test.jh` files **recursively** under the given directory (workspace root is detected the same way, starting from `<dir>`).
 - `jaiph test <file.test.jh>` — run a single test file.
 
 With no arguments, or with a directory that contains no test files, the command exits with status **1** and prints an error.
 
-You must pass a test file (e.g. `say_hello.test.jh`) or a directory. Passing a plain workflow file (e.g. `say_hello.jh`) is not supported; the test file imports the workflow and declares mocks. See [Testing](testing.md) for test block syntax and `expectContain` / `expectEqual`.
+You must pass a test file (e.g. `say_hello.test.jh`) or a directory. Passing a plain workflow file (e.g. `say_hello.jh`) is not supported; the test file imports the workflow and declares mocks. Extra arguments after the test file path are **not** forwarded into test blocks (they are ignored today). See [Testing](testing.md) for test block syntax and `expectContain` / `expectEqual` / `expectNotContain`.
 
 Examples:
 
@@ -315,7 +317,7 @@ jaiph report [start|stop|status] [--host <addr>] [--port <n>] [--poll-ms <n>] [-
 
 **Runtime and config overrides** (for `jaiph run` and workflow execution):
 
-- `JAIPH_META_FILE` — **internal:** path to the small metadata file the CLI creates under the build temp dir; the workflow runner reads it (paths to source, scripts, workflow name). Set in the child environment when launching `node-workflow-runner` (host and Docker). Do not set manually; the CLI clears a stale `JAIPH_META_FILE` from the parent env when resolving run environment (`src/cli/run/env.ts`).
+- `JAIPH_META_FILE` — **internal:** path to the metadata file the CLI writes under the build output directory; the workflow runner reads it after exit (status, `run_dir`, `summary_file`). The launcher sets this **on the child process** when spawning `node-workflow-runner`. Do not set it yourself; **`resolveRuntimeEnv`** removes any inherited `JAIPH_META_FILE` from the parent so a stale value cannot leak into runs (`src/cli/run/env.ts`, `src/runtime/kernel/workflow-launch.ts`).
 - `JAIPH_RUN_DIR`, `JAIPH_RUN_ID`, `JAIPH_RUN_SUMMARY_FILE` — **internal:** set by `NodeWorkflowRuntime` to the run directory, stable run UUID, and `run_summary.jsonl` path. Do not rely on setting these from outside.
 - `JAIPH_WORKSPACE` — set by the CLI to the workspace root: walk **up** from the directory that contains the entry `.jh` file until a directory with `.jaiph` or `.git` is found; if the walk hits the filesystem root first, the root used is that entry directory (absolute path). **Guards** in `detectWorkspaceRoot` (see `src/cli/shared/paths.ts`) also skip misleading markers when the start directory lives under **shared system temp** (`/tmp`, `/var/tmp`, …), under **macOS** **`/var/folders/.../T/...`** (stray `.jaiph` / `.git` on parents of a nested temp project), or under another repo’s **`.jaiph/tmp`** tree, so nested sandboxes do not pick the wrong root. Used by the Node runtime and script execution; you rarely set this yourself. In Docker sandbox mode the runtime remaps it inside the container (see [Sandboxing](sandboxing.md)).
 - `JAIPH_LIB` — directory for project-local shared bash libraries (conventionally `<workspace>/.jaiph/lib`). The runtime sets `JAIPH_LIB` to `${JAIPH_WORKSPACE:-.}/.jaiph/lib` when executing **script** steps so `source "$JAIPH_LIB/…"` resolves predictably. Override `JAIPH_LIB` when libraries live elsewhere. See [Grammar — script bodies and shared libraries](grammar.md#step-output-contract).

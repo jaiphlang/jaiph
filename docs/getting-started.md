@@ -17,11 +17,11 @@ If you are hacking on the **compiler or CLI** in this repository, read [Contribu
 
 **Jaiph** is a composable scripting language and runtime for defining and orchestrating AI agent workflows.
 
-It combines declarative workflow structure with script execution, and the **Node workflow runtime** (`NodeWorkflowRuntime`) interprets the AST directly — no Bash transpilation on the orchestration path. **`jaiph run`** uses **`buildScripts()`**, then spawns the **Node workflow runner** as a detached child; the CLI owns process groups and reads **`__JAIPH_EVENT__`** lines on **stderr only**. **`jaiph test`** runs **`buildScripts(workspace)`** for workspace `*.jh`, then executes test files **in-process** (same runtime + mocks; graph built once per test file). **Prompt** handling, **managed step subprocesses** (each `run` / `ensure` child, including **`script`** blocks), **inbox** I/O, and durable **`run_summary.jsonl`** are handled by the **JS kernel** in **`src/runtime/kernel/`** (bundled next to the CLI in releases). Your **`script`** bodies still run as ordinary processes (default bash or a custom shebang).
+It combines declarative workflow structure with script execution, and the **Node workflow runtime** (`NodeWorkflowRuntime`) interprets the AST directly — no Bash transpilation on the orchestration path. **`jaiph run`** uses **`buildScripts()`**, then spawns the **Node workflow runner** as a detached child; the CLI owns process groups and reads **`__JAIPH_EVENT__`** lines on **stderr only** (the live event channel; durable history is **`run_summary.jsonl`** under `.jaiph/runs`). **`jaiph test`** runs **`buildScripts(workspace)`** over workspace **`*.jh`** only, then executes **`*.test.jh`** blocks **in-process** (same runtime + mocks; **`buildRuntimeGraph(testFile)`** once per test file). The **JS kernel** under **`src/runtime/kernel/`** implements **prompt** execution, **managed `script` subprocesses**, **inbox** queues and dispatch, and event/summary emission; **rule** and **workflow** steps are interpreted in-process. Your **`script`** bodies still run as ordinary OS processes (default bash or a custom shebang). Optional **Docker** runs use the same **`node-workflow-runner`** and semantics as local execution (see [Sandboxing](sandboxing.md)).
 
 **Core concepts:**
 
-- **Workflows** — Ordered **Jaiph-only** steps (`ensure`, `run`, `prompt`, `const`, brace `if`, `fail`, `return`, logging, inbox, `run async`). Unrecognized lines are parse errors — put bash in **`script`** blocks and call them with **`run`**. Conditionals use **brace form** only (`if [not] ensure|run ref() { … }`).
+- **Workflows** — Ordered **Jaiph-only** steps (`ensure`, `run`, `prompt`, `const`, brace `if`, `fail`, `return`, logging, inbox, `wait`, `run async`). Unrecognized lines are parse errors — put bash in **`script`** blocks and call them with **`run`**. Conditionals use **brace form** only (`if [not] ensure|run ref() { … }`).
 - **Rules** — Structured checks with the same keyword style (restricted set): `ensure` for rules, **`run` for scripts only**, `const`, brace `if`, `fail`, `log` / `logerr`, `return "…"`; no `prompt`, inbox, `wait`, or `ensure … recover`.
 - **Agent prompts** — `prompt "..."` sends text to a configured agent (e.g. Cursor or Claude CLI); workflows orchestrate when the agent runs.
 - **Composability** — Import other `.jh` modules and call their rules, workflows, and scripts by alias (e.g. `ensure security.scan_passes()`, `run bootstrap.nodejs()`). Use **`ensure` only for rules** and **`run` for workflows and scripts** so every managed call is keyword-led.
@@ -38,7 +38,7 @@ It combines declarative workflow structure with script execution, and the **Node
 
 ## Example
 
-`main.jh` (same layout as the copy under `test/fixtures/` in this repository, with stub imports `bootstrap_project.jh` and `tools/security.jh`):
+`main.jh` (matches `test/fixtures/main.jh` in this repository, with imports `bootstrap_project.jh` and `tools/security.jh`):
 
 ```jaiph
 #!/usr/bin/env jaiph
@@ -67,7 +67,7 @@ script build_passes_impl {
 
 # Orchestrates checks, prompt execution, and docs refresh.
 # Arguments:
-#   ${arg1}: Feature requirements passed to the prompt.
+#   $1: Feature requirements passed to the prompt.
 workflow default {
   if not ensure project_ready() {
     run bootstrap.nodejs()
@@ -118,6 +118,8 @@ Verify installation:
 jaiph --version
 ```
 
+Running workflows needs **Node.js** (the JS runtime kernel) and **bash** by default for **`script`** steps (or another interpreter if you use a custom shebang). Standalone and npm installs are described in [Architecture — Distribution](../ARCHITECTURE.md#distribution-node-vs-bun-standalone).
+
 Switch installed version:
 
 ```bash
@@ -145,7 +147,7 @@ jaiph test [path]                     # run tests (see below)
 jaiph report --workspace .            # browse .jaiph/runs in a local dashboard
 ```
 
-**`jaiph test`:** With no path, Jaiph discovers every `*.test.jh` under the workspace root. The workspace root is found by walking **up** from the **current working directory** until a directory containing `.jaiph` or `.git` is found (with the same edge-case guards as **`detectWorkspaceRoot`** — see [CLI — Environment variables](cli.md#environment-variables)); if no marker is found, the root is the resolved cwd. Pass a directory to run all tests under it (detection starts from that directory). Pass a single `*.test.jh` file to run one suite (detection starts from that file’s directory). This differs from **`jaiph run`**, which resolves the workspace from the **entry `.jh` file’s** directory. See [Testing](testing.md).
+**`jaiph test`:** With no path, Jaiph walks the workspace root recursively and runs every `*.test.jh` file found. The workspace root is found by walking **up** from the **current working directory** until a directory containing `.jaiph` or `.git` is found (with the same edge-case guards as **`detectWorkspaceRoot`** — see [CLI — Environment variables](cli.md#environment-variables)); if no marker is found, the root is the resolved cwd. Pass a directory to run all `*.test.jh` files under it recursively (workspace root is detected from that directory). Pass a single `*.test.jh` file to run one suite (workspace root is the file’s parent directory). This differs from **`jaiph run`**, which resolves the workspace from the **entry `.jh` file’s** directory. See [Testing](testing.md).
 
 For all CLI commands, flags, and environment variables, see [CLI Reference](cli.md). For the run history UI and HTTP API, see [Reporting server](reporting.md).
 
@@ -155,7 +157,7 @@ For all CLI commands, flags, and environment variables, see [CLI Reference](cli.
 jaiph init
 ```
 
-This creates `.jaiph/bootstrap.jh` (executable). It also copies `jaiph-skill.md` into `.jaiph/jaiph-skill.md` when a skill file can be resolved (bundled paths next to the CLI, `JAIPH_SKILL_PATH`, or `docs/jaiph-skill.md` in a checkout); otherwise sync is skipped and a note is printed.
+This writes `.jaiph/bootstrap.jh` when it is missing (and always ensures it is executable); an existing bootstrap file is left unchanged. It also copies `jaiph-skill.md` into `.jaiph/jaiph-skill.md` when a skill file can be resolved (bundled paths next to the CLI, `JAIPH_SKILL_PATH`, or `docs/jaiph-skill.md` in a checkout); otherwise sync is skipped and a note is printed.
 
 Then run:
 
@@ -180,11 +182,12 @@ Jaiph source files use the **`.jh`** extension. A file contains **rules**, **wor
 - `ensure ref([args...])` — Execute a rule. Optional **`recover`** (workflows only — not inside rule bodies) runs a bounded retry loop: default max retries **3**, overridable with **`JAIPH_ENSURE_MAX_RETRIES`**. See [Grammar](grammar.md).
 - `run ref([args...])` — In a **workflow**, run another workflow or a script. In a **rule**, run a **script** only.
 - `prompt "..."` — Send text to the configured agent. Optional `returns '{ field: type }'` for validated JSON responses. See [Grammar](grammar.md).
+- `wait` — Allowed in workflows only; in the Node runtime it is a **no-op** (legacy placeholder). Managed parallelism uses **`run async`** (implicit join before the workflow returns). See [Grammar](grammar.md).
 - `name = <step>` / `const name = <step>` — Capture or bind: for **`ensure`** and **`run` to a workflow**, the callee’s explicit **`return "…"`**; for **`run` to a script**, **stdout**; for **`prompt`**, the final answer; **`const`** RHS allows only simple value forms (no `$(...)` — use `run` to a script). To capture from a script or workflow in a **`const`**, write **`const x = run ref([args…])`** (or **`ensure`** for rules) — a bare **`const x = ref([args…])`** is a compile error with a hint to add **`run`**. See [Grammar](grammar.md#step-output-contract).
 - `fail "reason"` — Abort the workflow or fail the rule with a message on stderr (non-zero exit).
 - `log "message"` / `logerr "message"` — Display a message in the progress tree and on stdout/stderr; terminal output interprets backslash escapes like **`echo -e`** (`\n`, `\t`, …). Event and summary JSON still record the raw message string.
 - `channel <- …` / `channel -> workflow` — Send (RHS: literal, `${var}`, or `run fn()`) and route messages between workflows. See [Inbox & Dispatch](inbox.md).
-- `run async ref([args...])` — Run a workflow or script concurrently; all async steps are implicitly joined before the workflow completes. Failures are aggregated. Allowed in workflows only. Use **`script`** + **`run`** for bash background jobs. See [Grammar](grammar.md).
+- `run async ref([args...])` — Run a workflow or script concurrently; all async steps are implicitly joined before the workflow completes. Failures are aggregated. **Capture is not supported** (`x = run async …` is invalid — use separate steps). Allowed in workflows only. Use **`script`** + **`run`** for bash background jobs. See [Grammar](grammar.md).
 - `if [not] ensure ref() { ... }` / `if [not] run ref() { ... }` — **Brace-only** conditionals (`else if`, `else` supported). Use **`run`** to a script for command-style tests.
 
 ### Positional arguments
