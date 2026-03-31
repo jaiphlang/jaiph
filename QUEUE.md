@@ -12,43 +12,6 @@ Process rules:
 
 ---
 
-## Direct `return run` / `return ensure` support <!-- dev-ready -->
-
-**Goal**  
-Allow `return run ...` and `return ensure ...` directly in workflows/rules.
-
-**Context**
-
-- Current syntax requires boilerplate capture then return:
-  ```
-  const result = run some_script
-  return "$result"
-  ```
-- With direct return:
-  ```
-  return run some_script
-  ```
-
-**Key files:**
-- `src/parse/steps.ts` — return step parsing
-- `src/types.ts` — return step AST type (extend for managed call)
-- `src/runtime/kernel/node-workflow-runtime.ts` — return step execution (~line 490)
-- `src/transpile/validate.ts` — validate refs in return expressions
-
-**Scope**
-
-1. Extend parser/AST return expression forms to accept `run` and `ensure` as return value sources.
-2. Reuse managed-call validation for ref resolution.
-3. Implement runtime behavior equivalent to capture + return.
-4. Add unit/acceptance/e2e tests.
-
-**Acceptance criteria**
-
-- Direct return forms execute correctly.
-- Unknown ref errors remain deterministic.
-
----
-
 ## Show prompt backend/model in run tree <!-- dev-ready -->
 
 **Goal**  

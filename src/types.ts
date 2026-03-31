@@ -167,6 +167,10 @@ export type WorkflowStepDef =
       type: "return";
       value: string;
       loc: SourceLoc;
+      /** When set, return value comes from a managed run/ensure call instead of the literal `value`. */
+      managed?:
+        | { kind: "run"; ref: WorkflowRefDef; args?: string }
+        | { kind: "ensure"; ref: RuleRefDef; args?: string };
     }
   | {
       type: "shell";

@@ -119,6 +119,7 @@ Jaiph source files combine a small orchestration language with scripts in any la
 - `run workflow()` / `run script()` — call a workflow or script
 - `run async workflow()` — concurrent execution with implicit join
 - `const x = prompt "..." returns '{ field: type }'` — structured capture with `${x.field}` access
+- `return run workflow()` / `return ensure rule()` — direct return from a managed call
 - `ensure rule() recover { ... }` — bounded self-healing retries
 - `channel name` / `ch <- "msg"` / `ch -> workflow` — inter-workflow messaging
 - `import "file.jh" as alias` — module composition

@@ -305,8 +305,18 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         return;
       }
       if (s.type === "return") {
-        validateReturnString(s.value, ast.filePath, s.loc.line, s.loc.col);
-        if (s.value.startsWith('"')) validateRuleStringCaptures(stripDQ(s.value), s.loc);
+        if (s.managed) {
+          if (s.managed.kind === "run") {
+            validateNoShellRedirection(ast.filePath, s.managed.ref.loc, "run", s.managed.args);
+            validateRef(s.managed.ref, ast, refCtx, expectRunInRuleRef);
+          } else {
+            validateNoShellRedirection(ast.filePath, s.managed.ref.loc, "ensure", s.managed.args);
+            validateRef(s.managed.ref, ast, refCtx, expectRuleRef);
+          }
+        } else {
+          validateReturnString(s.value, ast.filePath, s.loc.line, s.loc.col);
+          if (s.value.startsWith('"')) validateRuleStringCaptures(stripDQ(s.value), s.loc);
+        }
         return;
       }
       if (s.type === "const") {
@@ -477,6 +487,16 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         return;
       }
       if (s.type === "return") {
+        if (s.managed) {
+          if (s.managed.kind === "run") {
+            validateNoShellRedirection(ast.filePath, s.managed.ref.loc, "run", s.managed.args);
+            validateRef(s.managed.ref, ast, refCtx, expectRunTargetRef);
+          } else {
+            validateNoShellRedirection(ast.filePath, s.managed.ref.loc, "ensure", s.managed.args);
+            validateRef(s.managed.ref, ast, refCtx, expectRuleRef);
+          }
+          return;
+        }
         validateReturnString(s.value, ast.filePath, s.loc.line, s.loc.col);
         if (s.value.startsWith('"')) {
           validateWorkflowStringCaptures(stripDQ(s.value), s.loc);

@@ -251,9 +251,24 @@ Aborts the workflow or rule with a message on stderr and non-zero exit.
 ```jaiph
 return "success"
 return "${result}"
+return run helper()
+return ensure check("${input}")
 ```
 
-Sets the managed return value in rules and workflows. A bare integer (`return 0`) or `return $?` is a bash exit code, not a Jaiph value return. `return "…"` is not allowed in script bodies — use `echo`/`printf`.
+Sets the managed return value in rules and workflows. The value can be a quoted string, a variable reference, or a **direct managed call** using `return run ref(args)` or `return ensure ref(args)`. A direct managed call executes the target and uses its result as the return value — equivalent to capturing into a variable and returning it, but without the boilerplate:
+
+```jaiph
+# Before: capture then return
+const result = run helper()
+return "${result}"
+
+# After: direct return
+return run helper()
+```
+
+In workflows, `return run` targets a workflow or script; `return ensure` targets a rule. In rules, `return run` targets a script only; `return ensure` targets another rule. The same validation rules that apply to standalone `run`/`ensure` steps apply here — unknown refs, type mismatches, and shell redirection are all rejected at compile time.
+
+A bare integer (`return 0`) or `return $?` is a bash exit code, not a Jaiph value return. `return "…"` is not allowed in script bodies — use `echo`/`printf`.
 
 ### `wait`
 
@@ -366,9 +381,9 @@ Every step produces three distinct outputs — status, value, and logs:
 | `const` | same as RHS step | empty (binds local) | n/a |
 
 Key rules:
-- For `ensure`/`run` to a rule or workflow, assignment captures only the callee's explicit `return "…"`.
+- For `ensure`/`run` to a rule or workflow, assignment captures only the callee's explicit `return "…"` (or `return run …` / `return ensure …`).
 - For `run` to a script, assignment captures **stdout**. Use `echo`/`printf` to pass data back.
-- `return "value"` / `return "${var}"` are valid in rules and workflows only, not in scripts.
+- `return "value"` / `return "${var}"` / `return run ref()` / `return ensure ref()` are valid in rules and workflows only, not in scripts.
 
 ## Lexical Notes
 
@@ -433,7 +448,8 @@ fail_stmt       = "fail" double_quoted_string ;
 wait_stmt       = "wait" ;
 run_async_stmt  = "run" "async" call_ref ;
 return_stmt     = "return" return_value ;
-return_value    = double_quoted_string | single_quoted_string | "$" IDENT | "${" IDENT "}" ;
+return_value    = double_quoted_string | single_quoted_string | "$" IDENT | "${" IDENT "}"
+                | "run" call_ref | "ensure" call_ref ;
 
 send_stmt       = IDENT "<-" [ send_rhs ] ;
 send_rhs        = double_quoted_string | "${" IDENT "}" | "run" call_ref | REF ;
@@ -478,7 +494,7 @@ Validation rules:
 2. Config values must match expected types. `agent.backend` must be `"cursor"` or `"claude"`.
 3. Import aliases must be unique (`E_VALIDATE`). Import targets must exist (`E_IMPORT_NOT_FOUND`).
 4. **Unified namespace:** channels, rules, workflows, scripts, and top-level `const` share one namespace per module.
-5. `ensure` must target a rule. `run` in a workflow targets a workflow or script. `run` in a rule targets a script only.
+5. `ensure` must target a rule. `run` in a workflow targets a workflow or script. `run` in a rule targets a script only. These rules also apply to `return run` and `return ensure` forms.
 6. Channel references in `send`/`route` must resolve to declared channels. Route targets must be workflows.
 7. `ensure … recover` argument ordering: all arguments inside parentheses before `recover`.
 8. Shell redirection (`>`, `|`, `&`) after `run`/`ensure` is rejected — use a script.
