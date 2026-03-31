@@ -135,7 +135,7 @@ body {
 }
 
 [data-theme="dark"] .top-nav {
-    background: rgba(13, 17, 23, 0.95);
+    background: rgba(31, 42, 55, 0.95);
     border-bottom-color: var(--pre-border);
 }
 
@@ -279,7 +279,7 @@ body {
 }
 
 [data-theme="dark"] .docs-nav-panel {
-    background: rgba(13, 17, 23, 0.98);
+    background: rgba(31, 42, 55, 0.98);
     border-bottom-color: var(--pre-border);
 }
 
@@ -1190,8 +1190,13 @@ pre code .code-line::before {
         display: none;
     }
 
-    html:not([data-theme="dark"]) {
+    html {
         background: linear-gradient(to bottom, var(--muted) 0%, var(--bg) 320px, var(--bg) 100%);
+        background-attachment: fixed;
+    }
+
+    html[data-theme="dark"] {
+        background: var(--bg);
     }
 
     body {
