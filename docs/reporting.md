@@ -96,6 +96,21 @@ Static assets: `/assets/…`. HTML entry points: `/` and `/run.html`.
 
 ---
 
+## Stale run detection (SIGKILL)
+
+When a workflow process is killed with `SIGKILL` (or any signal that prevents it from writing `WORKFLOW_END`), the run stays in "running" state forever because the summary file simply stops being updated. The reporting server detects this automatically.
+
+On each poll cycle, the server checks every run that appears to be running. If the `run_summary.jsonl` file has not been modified for longer than 60 seconds (`STALE_RUN_THRESHOLD_MS` in `src/reporting/run-registry.ts`), the run is marked as stale. A stale run with open steps or an unfinished workflow transitions to `failed` status in the API and UI — the same terminal state as an explicit failure. Completed runs (those with a `WORKFLOW_END` event) are never affected by stale detection, regardless of file age.
+
+The detection works in two phases:
+
+1. **First poll after file activity stops** — the server notes that the summary file mtime has not advanced and begins tracking a "stale since" timestamp for that run.
+2. **Subsequent poll past the threshold** — if the gap between `now` and the file's last modification exceeds the threshold, the run's `is_stale` flag is set and `deriveStatus()` returns `failed` instead of `running`.
+
+If the file is updated again (e.g. the process was only paused), the stale tracking resets and the run returns to normal `running` status.
+
+---
+
 ## Behavior notes
 
 **Indexing** — New run directories are picked up when the server rescans the `<YYYY-MM-DD>/<run>/run_summary.jsonl` tree. Rescans are rate-limited (about two seconds minimum between full scans; `DIR_SCAN_MIN_MS` in `src/reporting/run-registry.ts`). Between rescans, known files are still tailed on the timer interval (`--poll-ms`) and on each `GET /api/…` request.

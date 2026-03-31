@@ -12,34 +12,6 @@ Process rules:
 
 ---
 
-## Reporting: detect SIGKILL-stalled runs <!-- dev-ready -->
-
-**Goal**  
-Mark runs as terminated when `WORKFLOW_END` never arrives due to hard kill.
-
-**Context**
-
-- Reporting server can leave killed runs in active state forever.
-- Reporting code lives in `src/reporting/*`.
-- Run state is tracked via `run_summary.jsonl` and `.jaiph/runs/` artifacts.
-
-**Key files:**
-- `src/reporting/` — reporting server and state management
-- `src/runtime/kernel/emit.ts` — event emission (WORKFLOW_START/END)
-
-**Scope**
-
-1. Implement stale run detection using timeout + liveness signal.
-2. Mark stale entries as terminated/failed in API/UI.
-3. Add integration/e2e test: start run, SIGKILL, verify terminal state.
-
-**Acceptance criteria**
-
-- SIGKILL run transitions to terminal state automatically.
-- Normal completed runs unaffected.
-
----
-
 ## Add `jaiph format` command <!-- dev-ready -->
 
 **Goal**  

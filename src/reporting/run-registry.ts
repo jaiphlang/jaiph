@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { readAppendWindow, readFullFile, type TailAccumulator } from "./jsonl-tail";
-import { applySummaryLine, emptyRunState, toActiveRunInfo, toRunListEntry, type RunSummaryState } from "./summary-parser";
+import { applySummaryLine, deriveStatus, emptyRunState, toActiveRunInfo, toRunListEntry, type RunSummaryState } from "./summary-parser";
 import { runDirFromRel } from "./path-utils";
 import type { ActiveRunInfo, RunListEntry } from "./types";
 
@@ -10,6 +10,8 @@ export type RunSlot = {
   summaryPath: string;
   tail: TailAccumulator;
   state: RunSummaryState;
+  /** Epoch ms when we first noticed no file updates while the run appeared active. */
+  staleSinceMs: number | null;
 };
 
 export type RunRegistry = {
@@ -19,6 +21,8 @@ export type RunRegistry = {
 };
 
 const DIR_SCAN_MIN_MS = 2000;
+/** How long a "running" run can go without file updates before it is marked stale (SIGKILL). */
+export const STALE_RUN_THRESHOLD_MS = 60_000;
 
 export function createRunRegistry(runsRoot: string): RunRegistry {
   return {
@@ -82,6 +86,7 @@ function ensureSlot(reg: RunRegistry, relPath: string): RunSlot {
     summaryPath,
     tail: { partial: "" },
     state: emptyRunState(),
+    staleSinceMs: null,
   };
   reg.slots.set(relPath, slot);
   return slot;
@@ -152,12 +157,41 @@ function maybeRescanDirs(reg: RunRegistry, now: number, force: boolean): void {
 
 export type PollOptions = {
   forceScan?: boolean;
+  /** Override the stale-run threshold (ms) for testing. 0 disables detection. */
+  staleThresholdMs?: number;
 };
 
 export function pollRunRegistry(reg: RunRegistry, nowMs: number, opts?: PollOptions): void {
   maybeRescanDirs(reg, nowMs, opts?.forceScan ?? false);
   for (const slot of reg.slots.values()) {
     tailSlot(slot);
+  }
+  const threshold = opts?.staleThresholdMs ?? STALE_RUN_THRESHOLD_MS;
+  if (threshold > 0) {
+    markStaleRuns(reg, nowMs, threshold);
+  }
+}
+
+function markStaleRuns(reg: RunRegistry, nowMs: number, thresholdMs: number): void {
+  for (const slot of reg.slots.values()) {
+    const status = deriveStatus(slot.state);
+    if (status !== "running") {
+      // Run is terminal — clear any stale tracking.
+      slot.staleSinceMs = null;
+      slot.state.is_stale = false;
+      continue;
+    }
+    // Running run: check if the summary file has been updated recently.
+    const mtimeMs = slot.tail.cursor?.mtimeMs;
+    if (mtimeMs !== undefined && nowMs - mtimeMs > thresholdMs) {
+      // File hasn't been touched for longer than the threshold → stale.
+      slot.staleSinceMs = slot.staleSinceMs ?? nowMs;
+      slot.state.is_stale = true;
+    } else {
+      // File was recently updated — reset stale tracking.
+      slot.staleSinceMs = null;
+      slot.state.is_stale = false;
+    }
   }
 }
 
