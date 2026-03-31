@@ -1,5 +1,6 @@
 import type { ConstRhs, RuleRefDef, WorkflowRefDef } from "../types";
 import { fail, isRef, parseCallRef } from "./core";
+import { parseInlineScript } from "./inline-script";
 import { parsePromptStep } from "./prompt";
 
 /** Reject non-empty trailing content after a call expression (e.g. shell redirection). */
@@ -87,6 +88,19 @@ export function parseConstRhs(
   }
   if (head.startsWith("run ")) {
     const rest = head.slice("run ".length).trim();
+    if (rest.startsWith("script(") || rest.startsWith("script (")) {
+      const scriptRest = rest.slice("script".length).trimStart();
+      const parsed = parseInlineScript(filePath, scriptRest, lineNo, col);
+      return {
+        value: {
+          kind: "run_inline_script_capture",
+          body: parsed.body,
+          ...(parsed.shebang ? { shebang: parsed.shebang } : {}),
+          args: parsed.args,
+        },
+        nextLineIdx: lineIdx,
+      };
+    }
     const call = parseCallRef(rest);
     if (!call) {
       fail(filePath, "calls require parentheses: const name = run ref() or run ref(args)", lineNo, col);

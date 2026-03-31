@@ -56,6 +56,7 @@ rule deps_exist {
 
 workflow default {
   ensure deps_exist()
+  const ts = run script("date +%s")
   prompt "Build the application: ${arg1}"
   ensure security.scan_passes()
 }

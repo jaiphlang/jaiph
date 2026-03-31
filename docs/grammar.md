@@ -21,7 +21,7 @@ Jaiph enforces a strict boundary between orchestration and execution. Workflows 
 
 - **Rules** — Named blocks of structured Jaiph steps: `ensure` (other rules), `run` (scripts only — not workflows), `const`, brace `if`, `fail`, `log`/`logerr`, `return "…"`. Rules cannot use `prompt`, inbox send/route, `wait`, `run async`, or `ensure … recover`.
 
-- **Scripts** — Top-level `script` blocks emitted as separate executable files under the workspace `scripts/` directory. Called from workflows or rules with `run`. Bodies are opaque to the compiler — the parser does not check Jaiph keywords inside them. Use `echo`/`printf` for data output and `return N`/`return $?` for exit status. Polyglot support: a `#!` shebang as the first line selects the interpreter; otherwise `#!/usr/bin/env bash` is used.
+- **Scripts** — Top-level `script` blocks emitted as separate executable files under the workspace `scripts/` directory. Called from workflows or rules with `run`. Bodies are opaque to the compiler — the parser does not check Jaiph keywords inside them. Use `echo`/`printf` for data output and `return N`/`return $?` for exit status. Polyglot support: a `#!` shebang as the first line selects the interpreter; otherwise `#!/usr/bin/env bash` is used. For trivial one-off commands, **inline scripts** (`run script("body")`) let you embed a script body directly in a step without a named definition — see [`run` — Inline Scripts](#inline-scripts).
 
 - **Channels** — Named message queues declared with `channel name`. Workflows send messages with `<-` and register route handlers with `->`. See [Inbox & Dispatch](inbox.md).
 
@@ -107,6 +107,39 @@ const output = run transform()
 Shell redirection or pipelines after `run` (`>`, `|`, `&`) are rejected — use a script for shell I/O.
 
 **Capture:** For a workflow callee, capture gets the explicit `return "…"` value. For a script callee, capture gets stdout.
+
+#### Inline Scripts
+
+`run script("body")` embeds a shell command directly in a workflow or rule step without declaring a named `script` block. This is useful for trivial one-off commands where a full `script` definition would be verbose.
+
+```jaiph
+workflow default {
+  run script("echo hello")
+  x = run script("echo captured")
+  const y = run script("date +%s")
+  log "got: ${x}, time: ${y}"
+}
+```
+
+The body must be a double-quoted string. Optional arguments are passed as comma-separated strings after the body and are available as `$1`, `$2`, … inside the script:
+
+```jaiph
+run script("echo $1-$2", "hello", "world")   # prints: hello-world
+```
+
+**Polyglot support:** If the body starts with `#!`, the first line (up to the first `\n`) becomes the shebang and the rest becomes the body:
+
+```jaiph
+run script("#!/usr/bin/env python3\nprint('hello from python')")
+```
+
+**Deterministic naming:** Inline script bodies are emitted as executable files under `scripts/` with names of the form `__inline_<hash>` (12-character SHA-256 prefix of body + shebang). The same body and shebang always produce the same artifact name across runs.
+
+**Isolation:** Inline scripts run with the same subprocess isolation as named scripts — no parent scope variables are visible. Only positional arguments and essential Jaiph variables (`JAIPH_LIB`, `JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`) are inherited.
+
+**Restrictions:**
+- `run async script(…)` is not supported — inline scripts cannot be used with `run async`.
+- The body must be a double-quoted string (single quotes are not accepted).
 
 ### `run async` — Concurrent Execution
 
@@ -372,7 +405,8 @@ Every step produces three distinct outputs — status, value, and logs:
 | --- | --- | --- | --- |
 | `ensure rule` | rule exit code | explicit `return` value | rule body logs to artifacts |
 | `run workflow` | workflow exit code | explicit `return` value | workflow step logs to artifacts |
-| `run script` | script exit code | **stdout** of script body | script stdout/stderr to artifacts |
+| `run script` (named) | script exit code | **stdout** of script body | script stdout/stderr to artifacts |
+| `run script("…")` (inline) | script exit code | **stdout** of script body | script stdout/stderr to artifacts |
 | `prompt` | prompt exit code | final assistant answer | transcript to artifacts |
 | `log` / `logerr` | always 0 | empty | event + stdout/stderr |
 | `fail` | non-zero (abort) | empty | message to stderr |
@@ -441,7 +475,7 @@ workflow_step   = ensure_stmt | run_stmt | run_async_stmt | prompt_stmt | prompt
 
 const_decl_step = "const" IDENT "=" const_rhs ;
 const_rhs       = quoted_or_multiline_string | single_quoted_string | bash_value_expr
-                | "run" call_ref | "ensure" call_ref
+                | "run" ( call_ref | inline_script ) | "ensure" call_ref
                 | "prompt" quoted_or_multiline_string [ returns_schema ] ;
 
 fail_stmt       = "fail" double_quoted_string ;
@@ -461,8 +495,9 @@ logerr_stmt     = "logerr" double_quoted_string ;
 
 ensure_stmt     = "ensure" call_ref [ "recover" recover_body ] ;
 ensure_capture_stmt = IDENT "=" "ensure" call_ref [ "recover" recover_body ] ;
-run_capture_stmt   = IDENT "=" "run" call_ref ;
-run_stmt        = "run" call_ref ;
+run_capture_stmt   = IDENT "=" "run" ( call_ref | inline_script ) ;
+run_stmt        = "run" ( call_ref | inline_script ) ;
+inline_script   = "script" "(" string { "," string } ")" ;
 prompt_stmt     = "prompt" quoted_or_multiline_string [ returns_schema ] ;
 prompt_capture_stmt = IDENT "=" "prompt" quoted_or_multiline_string [ returns_schema ] ;
 returns_schema  = "returns" ( single_quoted_string | double_quoted_string ) ;
@@ -503,7 +538,7 @@ Validation rules:
 
 `jaiph run` and `jaiph test` do **not** transpile workflows to shell. The CLI calls `buildScripts()`, which emits only per-`script` executable files under `scripts/`. Workflows, rules, prompts, channels, and control flow are interpreted by `NodeWorkflowRuntime` from the AST.
 
-Each `script name { … }` becomes `scripts/<name>` with `chmod +x`: shebang (custom or default `#!/usr/bin/env bash`) plus the body. At runtime, script steps run these files with a minimal environment.
+Each `script name { … }` becomes `scripts/<name>` with `chmod +x`: shebang (custom or default `#!/usr/bin/env bash`) plus the body. Inline scripts (`run script("body")`) are emitted as `scripts/__inline_<hash>` with deterministic hash-based names. At runtime, script steps run these files with a minimal environment.
 
 ## Runtime Execution
 

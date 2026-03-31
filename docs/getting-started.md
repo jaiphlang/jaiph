@@ -121,7 +121,7 @@ Jaiph source files combine a small orchestration language with scripts in any la
 
 **rule** — Reusable checks composed of structured steps (`ensure`, `run`, `const`, `if`, `fail`, `return`, `log`). Called with `ensure` from workflows.
 
-**script** — Shell (or polyglot via custom shebang) code blocks that execute as isolated subprocesses. Called with `run` from workflows and rules. Scripts receive only positional arguments and essential Jaiph variables (`JAIPH_LIB`, `JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`).
+**script** — Shell (or polyglot via custom shebang) code blocks that execute as isolated subprocesses. Called with `run` from workflows and rules. Scripts receive only positional arguments and essential Jaiph variables (`JAIPH_LIB`, `JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`). For trivial one-off commands, use **inline scripts**: `run script("echo ok")` — no named `script` block needed.
 
 **prompt** — Sends text to a configured AI agent. Supports structured JSON responses via `returns '{ field: type }'`.
 
@@ -129,6 +129,7 @@ Jaiph source files combine a small orchestration language with scripts in any la
 
 - `ensure rule()` — run a rule as a check
 - `run workflow()` / `run script()` — call a workflow or script
+- `run script("echo ok")` — inline script for trivial one-off commands
 - `run async workflow()` — concurrent execution with implicit join
 - `const x = prompt "..." returns '{ field: type }'` — structured capture with `${x.field}` access
 - `return run workflow()` / `return ensure rule()` — direct return from a managed call

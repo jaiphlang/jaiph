@@ -146,6 +146,9 @@ export function collectWorkflowChildren(
     if (s.type === "comment") {
       return [];
     }
+    if (s.type === "run_inline_script") {
+      return [{ label: "script (inline)" }];
+    }
     if (s.type === "shell") {
       const t = s.command.trim();
       const label = t.length > 56 ? `${t.slice(0, 53)}...` : t;
@@ -182,6 +185,10 @@ export function collectWorkflowChildren(
             ? `${currentSymbol}::${wf}`
             : undefined;
       items.push({ label: `${asyncPrefix}workflow ${wf}`, nested: wf, stepFunc });
+      continue;
+    }
+    if (step.type === "run_inline_script") {
+      items.push({ label: "script (inline)" });
       continue;
     }
     if (step.type === "if") {

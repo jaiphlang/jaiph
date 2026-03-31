@@ -233,6 +233,14 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
       break;
     }
 
+    case "run_inline_script": {
+      const capture = step.captureName ? `${step.captureName} = ` : "";
+      const args = step.args ? `, ${step.args.split(" ").map((a) => `"${a}"`).join(", ")}` : "";
+      const body = step.shebang ? `${step.shebang}\\n${step.body}` : step.body;
+      lines.push(`${ci}${capture}run script("${body}"${args})`);
+      break;
+    }
+
     case "prompt": {
       const capture = step.captureName ? `${step.captureName} = ` : "";
       const returns = step.returns ? ` returns '${step.returns}'` : "";
@@ -318,6 +326,11 @@ function emitConstStep(name: string, value: ConstRhs): string {
     case "prompt_capture": {
       const returns = value.returns ? ` returns '${value.returns}'` : "";
       return `const ${name} = prompt "${value.raw}"${returns}`;
+    }
+    case "run_inline_script_capture": {
+      const args = value.args ? `, ${value.args.split(" ").map((a) => `"${a}"`).join(", ")}` : "";
+      const body = value.shebang ? `${value.shebang}\\n${value.body}` : value.body;
+      return `const ${name} = run script("${body}"${args})`;
     }
   }
 }

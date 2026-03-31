@@ -12,44 +12,6 @@ Process rules:
 
 ---
 
-## Anonymous inline scripts in workflows/rules <!-- dev-ready -->
-
-**Goal**  
-Allow `script "..."` inline steps for trivial commands.
-
-**Context**
-
-- Named scripts are verbose for one-off operations:
-  ```
-  script do_thing { echo "done" }
-  workflow default { run do_thing() }
-  ```
-- With inline scripts:
-  ```
-  workflow default { run script("echo $1", "arg1", "arg2) }
-  ```
-
-**Key files:**
-- `src/parse/steps.ts` — add inline script step parsing
-- `src/types.ts` — add inline script step AST type
-- `src/runtime/kernel/node-workflow-runtime.ts` — execute inline script
-- `src/transpile/build.ts` — generate deterministic script artifacts
-
-**Scope**
-
-1. Add AST/parser step for inline script body.
-2. Generate deterministic script artifact names.
-3. Support capture form (`const x = run script "..."`).
-4. Preserve shebang behavior for custom interpreters.
-5. Add tests (unit + e2e).
-
-**Acceptance criteria**
-
-- Inline script steps execute with same isolation contract as named scripts.
-- Generated script artifacts are deterministic.
-
----
-
 ## `script:node` / `script:python3` / … — interpreter syntax sugar <!-- dev-ready -->
 
 **Goal**  

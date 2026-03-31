@@ -329,9 +329,14 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           validateRef(v.ref, ast, refCtx, expectRuleRef);
         } else if (v.kind === "prompt_capture") {
           throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", "const ... = prompt is not allowed in rules");
+        } else if (v.kind === "run_inline_script_capture") {
+          // inline script capture — no ref to validate
         } else if (v.kind === "expr") {
           validateRuleStringCaptures(stripDQ(v.bashRhs), s.loc);
         }
+        return;
+      }
+      if (s.type === "run_inline_script") {
         return;
       }
       if (s.type === "shell") {
@@ -521,10 +526,15 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         } else if (v.kind === "ensure_capture") {
           validateNoShellRedirection(ast.filePath, v.ref.loc, "ensure", v.args);
           validateRef(v.ref, ast, refCtx, expectRuleRef);
+        } else if (v.kind === "run_inline_script_capture") {
+          // inline script capture — no ref to validate
         } else if (v.kind === "expr") {
           validateWorkflowStringCaptures(stripDQ(v.bashRhs), s.loc);
           validateDotFieldRefs(stripDQ(v.bashRhs), s.loc, promptSchemas);
         }
+        return;
+      }
+      if (s.type === "run_inline_script") {
         return;
       }
       if (s.type === "shell") {
