@@ -563,6 +563,14 @@ export class NodeWorkflowRuntime {
         });
       }
       if (step.type === "return") {
+        if (step.managed) {
+          const result = step.managed.kind === "run"
+            ? await this.executeRunRef(scope, step.managed.ref.value, step.managed.args ?? "")
+            : await this.executeEnsureRef(scope, step.managed.ref.value, step.managed.args ?? "", undefined);
+          if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
+          returnValue = result.returnValue ?? result.output.trim();
+          return this.mergeStepResult(accOut, accErr, { status: 0, output: "", error: "", returnValue });
+        }
         // Match Bash semantics: return "$var" should return var value, not literal quotes.
         const retIr = await this.interpolateWithCaptures(step.value, scope);
         if (!retIr.ok) return this.mergeStepResult(accOut, accErr, retIr.result);

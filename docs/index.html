@@ -560,7 +560,8 @@ Jaiph: Running async.jh
                     </dt>
                     <dd>Bind or capture step values. For <code>ensure</code> / <code>run</code> to rules and workflows,
                         explicit
-                        <code>return "value"</code> feeds the variable; for <code>run</code> to a
+                        <code>return "value"</code> (or <code>return run ref()</code> /
+                        <code>return ensure ref()</code>) feeds the variable; for <code>run</code> to a
                         <strong>script</strong>, capture follows
                         stdout. <code>const</code> RHS has stricter rules (no <code>$(...)</code> &mdash; use
                         <code>run</code>

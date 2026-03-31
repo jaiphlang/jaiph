@@ -442,6 +442,37 @@ export function parseBlockStatement(
   const returnMatch = inner.match(/^return\s+(.+)$/s);
   if (returnMatch) {
     const returnValue = returnMatch[1].trim();
+    const retLoc = { line: innerNo, col: innerRaw.indexOf("return") + 1 };
+    if (returnValue.startsWith("run ")) {
+      const call = parseCallRef(returnValue.slice("run ".length).trim());
+      if (call) {
+        rejectTrailingContent(filePath, innerNo, "run", call.rest);
+        return {
+          step: {
+            type: "return",
+            value: `run ${call.ref}(${call.args ?? ""})`,
+            loc: retLoc,
+            managed: { kind: "run", ref: { value: call.ref, loc: retLoc }, args: call.args },
+          },
+          nextIdx: idx + 1,
+        };
+      }
+    }
+    if (returnValue.startsWith("ensure ")) {
+      const call = parseCallRef(returnValue.slice("ensure ".length).trim());
+      if (call) {
+        rejectTrailingContent(filePath, innerNo, "ensure", call.rest);
+        return {
+          step: {
+            type: "return",
+            value: `ensure ${call.ref}(${call.args ?? ""})`,
+            loc: retLoc,
+            managed: { kind: "ensure", ref: { value: call.ref, loc: retLoc }, args: call.args },
+          },
+          nextIdx: idx + 1,
+        };
+      }
+    }
     if (
       !(/^[0-9]+$/.test(returnValue) || returnValue === "$?") &&
       (returnValue.startsWith('"') || returnValue.startsWith("'") || returnValue.startsWith("$"))
@@ -450,7 +481,7 @@ export function parseBlockStatement(
         step: {
           type: "return",
           value: returnValue,
-          loc: { line: innerNo, col: innerRaw.indexOf("return") + 1 },
+          loc: retLoc,
         },
         nextIdx: idx + 1,
       };
