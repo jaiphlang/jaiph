@@ -428,6 +428,17 @@ export function parseBlockStatement(
     return { step: { type: "logerr", message, loc: { line: innerNo, col: logerrCol } }, nextIdx: idx + 1 };
   }
 
+  if (inner.trim() === "return") {
+    return {
+      step: {
+        type: "return",
+        value: '""',
+        loc: { line: innerNo, col: innerRaw.indexOf("return") + 1 },
+      },
+      nextIdx: idx + 1,
+    };
+  }
+
   const returnMatch = inner.match(/^return\s+(.+)$/s);
   if (returnMatch) {
     const returnValue = returnMatch[1].trim();

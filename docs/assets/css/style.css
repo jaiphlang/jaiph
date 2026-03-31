@@ -306,12 +306,18 @@ body {
     text-decoration: none;
     font-size: 0.95rem;
     font-weight: 500;
-    border-radius: 4px;
     transition: color 0.15s ease;
 }
 
 .docs-nav-list a:hover {
     color: var(--orange);
+}
+
+.docs-nav-list a.docs-nav-active {
+    color: var(--orange);
+    border-left: 3px solid var(--orange);
+    padding-left: 0.6rem;
+    font-weight: 700;
 }
 
 /* ── Hero header ── */

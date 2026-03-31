@@ -48,6 +48,8 @@ function normalize(text: string): string {
     .replace(/^    out: .+$/gm, '    out: <path>')
     .replace(/^    err: .+$/gm, '    err: <path>')
     .replace(/expectEqual failed: \d+(\.\d+)?s/g, 'expectEqual failed: <time>')
+    /** Docs may show an extra blank line before ✓ PASS; CLI does not. */
+    .replace(/\n\n+(?=✓ PASS)/g, '\n')
     .replace(/[ \t]+$/gm, '')
     .trim();
 }

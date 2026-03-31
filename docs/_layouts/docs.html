@@ -43,16 +43,17 @@
         <div id="docs-nav-panel" class="docs-nav-panel" role="region" aria-labelledby="docs-nav-toggle" hidden>
             <ul class="docs-nav-list">
                 <li><a href="{{ '/' | relative_url }}">jaiph.org</a></li>
-                <li><a href="{{ '/getting-started' | relative_url }}">Getting started</a></li>
-                <li><a href="{{ '/cli' | relative_url }}">CLI</a></li>
-                <li><a href="{{ '/configuration' | relative_url }}">Configuration</a></li>
-                <li><a href="{{ '/grammar' | relative_url }}">Grammar</a></li>
-                <li><a href="{{ '/testing' | relative_url }}">Testing</a></li>
-                <li><a href="{{ '/reporting' | relative_url }}">Reporting</a></li>
-                <li><a href="{{ '/contributing' | relative_url }}">Contributing</a></li>
-                <li><a href="{{ '/hooks' | relative_url }}">Hooks</a></li>
-                <li><a href="{{ '/inbox' | relative_url }}">Inbox</a></li>
-                <li><a href="{{ '/sandboxing' | relative_url }}">Sandboxing</a></li>
+                <li><a href="{{ '/getting-started' | relative_url }}"{% if page.permalink == '/getting-started' %} class="docs-nav-active" aria-current="page"{% endif %}>Getting started</a></li>
+                <li><a href="{{ '/grammar' | relative_url }}"{% if page.permalink == '/grammar' %} class="docs-nav-active" aria-current="page"{% endif %}>Grammar</a></li>
+                <li><a href="{{ '/cli' | relative_url }}"{% if page.permalink == '/cli' %} class="docs-nav-active" aria-current="page"{% endif %}>CLI</a></li>
+                <li><a href="{{ '/configuration' | relative_url }}"{% if page.permalink == '/configuration' %} class="docs-nav-active" aria-current="page"{% endif %}>Configuration</a></li>
+                <li><a href="{{ '/testing' | relative_url }}"{% if page.permalink == '/testing' %} class="docs-nav-active" aria-current="page"{% endif %}>Testing</a></li>
+                <li><a href="{{ '/inbox' | relative_url }}"{% if page.permalink == '/inbox' %} class="docs-nav-active" aria-current="page"{% endif %}>Inbox</a></li>
+                <li><a href="{{ '/hooks' | relative_url }}"{% if page.permalink == '/hooks' %} class="docs-nav-active" aria-current="page"{% endif %}>Hooks</a></li>
+                <li><a href="{{ '/reporting' | relative_url }}"{% if page.permalink == '/reporting' %} class="docs-nav-active" aria-current="page"{% endif %}>Reporting</a></li>
+                <li><a href="{{ '/sandboxing' | relative_url }}"{% if page.permalink == '/sandboxing' %} class="docs-nav-active" aria-current="page"{% endif %}>Sandboxing</a></li>
+                <li><a href="{{ '/architecture' | relative_url }}"{% if page.permalink == '/architecture' %} class="docs-nav-active" aria-current="page"{% endif %}>Architecture</a></li>
+                <li><a href="{{ '/contributing' | relative_url }}"{% if page.permalink == '/contributing' %} class="docs-nav-active" aria-current="page"{% endif %}>Contributing</a></li>
                 <li><a href="https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md"
                         target="_blank" rel="noopener noreferrer">Agent Skill</a></li>
             </ul>

@@ -49,6 +49,7 @@ TEST_SCRIPTS=(
   "e2e/tests/103_run_dir_source_name.sh"
   "e2e/tests/104_run_async.sh"
   "e2e/tests/105_test_jh_verification.sh"
+  "e2e/tests/110_examples.sh"
 )
 
 PASS_COUNT=0
