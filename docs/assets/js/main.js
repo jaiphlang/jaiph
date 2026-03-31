@@ -822,8 +822,8 @@
 
         var metaLight = document.querySelector('meta[name="theme-color"]:not([media])');
         var metaDark = document.querySelector('meta[name="theme-color"][media]');
-        if (metaLight) metaLight.setAttribute("content", theme === "dark" ? "#0d1117" : "#6b7280");
-        if (metaDark) metaDark.setAttribute("content", theme === "dark" ? "#0d1117" : "#1f2a37");
+        if (metaLight) metaLight.setAttribute("content", theme === "dark" ? "#1f2a37" : "#6b7280");
+        if (metaDark) metaDark.setAttribute("content", theme === "dark" ? "#1f2a37" : "#1f2a37");
     }
 
     function attachDocsNavToggle() {
