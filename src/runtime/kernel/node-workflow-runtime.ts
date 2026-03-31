@@ -70,7 +70,10 @@ function nowIso(): string {
 
 function interpolate(input: string, vars: Map<string, string>, env?: NodeJS.ProcessEnv): string {
   const lookup = (key: string): string => vars.get(key) ?? env?.[key] ?? "";
-  return input.replace(/\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g, (_m, key) => lookup(String(key)));
+  return input.replace(/\$\{([a-zA-Z_][a-zA-Z0-9_]*)(?:\.([a-zA-Z_][a-zA-Z0-9_]*))?\}/g, (_m, base, field) => {
+    const key = field ? `${base}_${field}` : String(base);
+    return lookup(key);
+  });
 }
 
 function parseArgsRaw(raw: string, vars: Map<string, string>, env?: NodeJS.ProcessEnv): string[] {

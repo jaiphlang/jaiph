@@ -19,6 +19,7 @@ import {
   validateReturnString,
   validateJaiphStringContent,
   extractInlineCaptures,
+  extractDotFieldRefs,
 } from "./validate-string";
 import { validatePromptStepReturns } from "./validate-prompt-schema";
 
@@ -131,6 +132,72 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
 
   const stripDQ = (s: string): string =>
     s.length >= 2 && s[0] === '"' && s[s.length - 1] === '"' ? s.slice(1, -1) : s;
+
+  /** Parse field names from a returns schema string like '{ name: string, age: number }'. */
+  const parseSchemaFieldNames = (rawSchema: string): string[] => {
+    const inner = rawSchema.trim().replace(/^\s*\{\s*/, "").replace(/\s*\}\s*$/, "").trim();
+    if (!inner) return [];
+    const names: string[] = [];
+    for (const part of inner.split(",")) {
+      const m = part.trim().match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*\S+\s*$/);
+      if (m) names.push(m[1]);
+    }
+    return names;
+  };
+
+  /** Collect prompt capture schemas from all steps in a workflow (pre-pass). */
+  const collectPromptSchemas = (steps: WorkflowStepDef[]): Map<string, string[]> => {
+    const schemas = new Map<string, string[]>();
+    for (const s of steps) {
+      if (s.type === "prompt" && s.captureName && s.returns !== undefined) {
+        schemas.set(s.captureName, parseSchemaFieldNames(s.returns));
+      }
+      if (s.type === "const" && s.value.kind === "prompt_capture" && s.value.returns !== undefined) {
+        schemas.set(s.name, parseSchemaFieldNames(s.value.returns));
+      }
+      if (s.type === "if") {
+        for (const [k, v] of collectPromptSchemas(s.thenSteps)) schemas.set(k, v);
+        if (s.elseIfBranches) {
+          for (const br of s.elseIfBranches) {
+            for (const [k, v] of collectPromptSchemas(br.thenSteps)) schemas.set(k, v);
+          }
+        }
+        if (s.elseSteps) {
+          for (const [k, v] of collectPromptSchemas(s.elseSteps)) schemas.set(k, v);
+        }
+      }
+    }
+    return schemas;
+  };
+
+  /** Validate ${var.field} references against known prompt schemas. */
+  const validateDotFieldRefs = (
+    content: string,
+    loc: { line: number; col: number },
+    promptSchemas: Map<string, string[]>,
+  ): void => {
+    for (const ref of extractDotFieldRefs(content)) {
+      const fields = promptSchemas.get(ref.varName);
+      if (!fields) {
+        throw jaiphError(
+          ast.filePath,
+          loc.line,
+          loc.col,
+          "E_VALIDATE",
+          `\${${ref.varName}.${ref.fieldName}}: "${ref.varName}" is not a typed prompt capture; dot notation requires a prompt with "returns" schema`,
+        );
+      }
+      if (!fields.includes(ref.fieldName)) {
+        throw jaiphError(
+          ast.filePath,
+          loc.line,
+          loc.col,
+          "E_VALIDATE",
+          `\${${ref.varName}.${ref.fieldName}}: field "${ref.fieldName}" is not defined in the returns schema for "${ref.varName}"; available fields: ${fields.join(", ")}`,
+        );
+      }
+    }
+  };
 
   const validateWorkflowStringCaptures = (content: string, loc: { line: number; col: number }): void => {
     for (const cap of extractInlineCaptures(content)) {
@@ -325,6 +392,8 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
   };
 
   for (const workflow of ast.workflows) {
+    const promptSchemas = collectPromptSchemas(workflow.steps);
+
     const validateStep = (s: WorkflowStepDef): void => {
       if (s.type === "comment") {
         return;
@@ -339,6 +408,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
             ? s.rhs.token.slice(1, -1) : s.rhs.token;
           validateJaiphStringContent(inner, ast.filePath, s.loc.line, s.loc.col, "send");
           validateWorkflowStringCaptures(inner, s.loc);
+          validateDotFieldRefs(inner, s.loc, promptSchemas);
         } else if (s.rhs.kind === "bare_ref") {
           validateRef(s.rhs.ref, ast, refCtx, bareSendRefSpec);
         } else if (s.rhs.kind === "shell") {
@@ -391,26 +461,33 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         validatePromptString(s.raw, ast.filePath, s.loc.line, s.loc.col);
         validatePromptStepReturns(s, ast.filePath);
         validateWorkflowStringCaptures(stripDQ(s.raw), s.loc);
+        validateDotFieldRefs(stripDQ(s.raw), s.loc, promptSchemas);
         return;
       }
       if (s.type === "log") {
         validateLogString(s.message, ast.filePath, s.loc.line, s.loc.col, "log");
         validateWorkflowStringCaptures(s.message, s.loc);
+        validateDotFieldRefs(s.message, s.loc, promptSchemas);
         return;
       }
       if (s.type === "logerr") {
         validateLogString(s.message, ast.filePath, s.loc.line, s.loc.col, "logerr");
         validateWorkflowStringCaptures(s.message, s.loc);
+        validateDotFieldRefs(s.message, s.loc, promptSchemas);
         return;
       }
       if (s.type === "return") {
         validateReturnString(s.value, ast.filePath, s.loc.line, s.loc.col);
-        if (s.value.startsWith('"')) validateWorkflowStringCaptures(stripDQ(s.value), s.loc);
+        if (s.value.startsWith('"')) {
+          validateWorkflowStringCaptures(stripDQ(s.value), s.loc);
+          validateDotFieldRefs(stripDQ(s.value), s.loc, promptSchemas);
+        }
         return;
       }
       if (s.type === "fail") {
         validateFailString(s.message, ast.filePath, s.loc.line, s.loc.col);
         validateWorkflowStringCaptures(stripDQ(s.message), s.loc);
+        validateDotFieldRefs(stripDQ(s.message), s.loc, promptSchemas);
         return;
       }
       if (s.type === "wait") {
@@ -426,6 +503,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           validateRef(v.ref, ast, refCtx, expectRuleRef);
         } else if (v.kind === "expr") {
           validateWorkflowStringCaptures(stripDQ(v.bashRhs), s.loc);
+          validateDotFieldRefs(stripDQ(v.bashRhs), s.loc, promptSchemas);
         }
         return;
       }
