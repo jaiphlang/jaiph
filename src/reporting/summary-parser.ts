@@ -11,6 +11,8 @@ export type RunSummaryState = {
   /** Canonical step rows (STEP_START + optional STEP_END merge). */
   steps: Map<string, StepRow>;
   has_failure: boolean;
+  /** Set by the registry when the run appears stuck (no file updates). */
+  is_stale: boolean;
 };
 
 export function emptyRunState(): RunSummaryState {
@@ -23,6 +25,7 @@ export function emptyRunState(): RunSummaryState {
     open_step_ids: new Set(),
     steps: new Map(),
     has_failure: false,
+    is_stale: false,
   };
 }
 
@@ -146,12 +149,20 @@ export function applySummaryLine(state: RunSummaryState, line: string): void {
 
 export function deriveStatus(state: RunSummaryState): RunDerivedStatus {
   if (state.open_step_ids.size > 0) {
+    // SIGKILL / stale: process is gone, open steps will never close.
+    if (state.is_stale) {
+      return "failed";
+    }
     return "running";
   }
   // Cancellation can leave unmatched WORKFLOW_START without WORKFLOW_END.
   // If no step is currently running, treat this as a terminated run.
   if (state.workflow_depth > 0) {
     if (state.steps.size === 0) {
+      // Stale with WORKFLOW_START but no steps: process died before any step ran.
+      if (state.is_stale) {
+        return "failed";
+      }
       return "running";
     }
     return "failed";

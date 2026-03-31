@@ -111,6 +111,68 @@ test("runDirFromRel resolves posix rel path", () => {
   }
 });
 
+test("run-registry marks stale running run as failed (SIGKILL detection)", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-rpt-stale-"));
+  try {
+    const runsRoot = join(root, "runs");
+    const day = join(runsRoot, "2099-01-01", "killed-run");
+    mkdirSync(day, { recursive: true });
+    const summary = join(day, "run_summary.jsonl");
+    // Simulate a run that started a step but never finished (SIGKILL scenario).
+    writeFileSync(
+      summary,
+      [
+        '{"type":"WORKFLOW_START","workflow":"default","source":"/t.jh","ts":"2099-01-01T00:00:00Z","run_id":"rk","event_version":1}',
+        '{"type":"STEP_START","func":"f","kind":"shell","name":"s","ts":"2099-01-01T00:00:01Z","status":null,"elapsed_ms":null,"out_file":"","err_file":"","id":"s1","parent_id":null,"seq":1,"depth":0,"run_id":"rk","params":[],"event_version":1}',
+        "",
+      ].join("\n"),
+    );
+    const reg = createRunRegistry(resolveRunsRoot(root, "runs"));
+    // First poll: run is detected as running.
+    pollRunRegistry(reg, Date.now(), { forceScan: true, staleThresholdMs: 1 });
+    let entries = listRunEntries(reg);
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0].status, "running");
+
+    // Second poll: simulate time passing beyond the stale threshold.
+    // The file mtime stays the same, and now - mtime > threshold.
+    const farFuture = Date.now() + 120_000;
+    pollRunRegistry(reg, farFuture, { forceScan: false, staleThresholdMs: 1 });
+    entries = listRunEntries(reg);
+    assert.equal(entries[0].status, "failed");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("run-registry does not mark completed runs as stale", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-rpt-nostale-"));
+  try {
+    const runsRoot = join(root, "runs");
+    const day = join(runsRoot, "2099-01-01", "good-run");
+    mkdirSync(day, { recursive: true });
+    const summary = join(day, "run_summary.jsonl");
+    writeFileSync(
+      summary,
+      [
+        '{"type":"WORKFLOW_START","workflow":"default","source":"/t.jh","ts":"2099-01-01T00:00:00Z","run_id":"rg","event_version":1}',
+        '{"type":"STEP_START","func":"f","kind":"shell","name":"s","ts":"2099-01-01T00:00:01Z","status":null,"elapsed_ms":null,"out_file":"","err_file":"","id":"s1","parent_id":null,"seq":1,"depth":0,"run_id":"rg","params":[],"event_version":1}',
+        '{"type":"STEP_END","func":"f","kind":"shell","name":"s","ts":"2099-01-01T00:00:02Z","status":0,"elapsed_ms":1,"out_file":"","err_file":"","id":"s1","parent_id":null,"seq":1,"depth":0,"run_id":"rg","params":[],"out_content":"ok","event_version":1}',
+        '{"type":"WORKFLOW_END","workflow":"default","source":"/t.jh","ts":"2099-01-01T00:00:03Z","run_id":"rg","event_version":1}',
+        "",
+      ].join("\n"),
+    );
+    const reg = createRunRegistry(resolveRunsRoot(root, "runs"));
+    const farFuture = Date.now() + 120_000;
+    pollRunRegistry(reg, farFuture, { forceScan: true, staleThresholdMs: 1 });
+    const entries = listRunEntries(reg);
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0].status, "completed");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("deriveStatus marks incomplete workflow without open steps as failed", () => {
   const st = emptyRunState();
   applySummaryLine(

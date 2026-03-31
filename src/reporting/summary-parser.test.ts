@@ -167,6 +167,26 @@ test("deriveStatus: completed when no open steps, depth 0, no failures", () => {
   assert.equal(deriveStatus(s), "completed");
 });
 
+test("deriveStatus: failed when stale with open steps (SIGKILL)", () => {
+  const s = emptyRunState();
+  s.open_step_ids.add("s1");
+  s.is_stale = true;
+  assert.equal(deriveStatus(s), "failed");
+});
+
+test("deriveStatus: failed when stale with workflow_depth > 0 and no steps", () => {
+  const s = emptyRunState();
+  s.workflow_depth = 1;
+  s.is_stale = true;
+  assert.equal(deriveStatus(s), "failed");
+});
+
+test("deriveStatus: stale does not affect already-completed runs", () => {
+  const s = emptyRunState();
+  s.is_stale = true;
+  assert.equal(deriveStatus(s), "completed");
+});
+
 // --- toRunListEntry ---
 
 test("toRunListEntry: builds entry with correct fields", () => {
