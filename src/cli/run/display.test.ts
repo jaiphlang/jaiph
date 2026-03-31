@@ -117,6 +117,24 @@ test("formatStartLine: shows prompt preview from params", () => {
   assert.ok(result.includes("prompt"));
 });
 
+test("formatStartLine: shows backend name in prompt label when name differs from kind", () => {
+  const params: Array<[string, string]> = [
+    ["prompt_text", "Summarize the changes"],
+  ];
+  const result = formatStartLine("  ", "prompt", "cursor", false, params);
+  assert.ok(result.includes("prompt cursor"));
+  assert.ok(result.includes('"Summarize the changes"'));
+});
+
+test("formatStartLine: omits backend in prompt label when name equals kind", () => {
+  const params: Array<[string, string]> = [
+    ["prompt_text", "Summarize the changes"],
+  ];
+  const result = formatStartLine("  ", "prompt", "prompt", false, params);
+  // Should not have "prompt prompt"
+  assert.ok(!result.includes("prompt prompt"));
+});
+
 test("sanitizeMultilineLogForTerminal: normalizes CR and strips embedded SGR", () => {
   assert.equal(
     sanitizeMultilineLogForTerminal('"Hi"\r\nMore'),

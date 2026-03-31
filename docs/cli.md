@@ -118,13 +118,13 @@ The root PASS/FAIL summary uses the format `✓ PASS workflow default (0.2s)`. C
 - All parameters use `key="value"` format in parentheses. Internal refs (`::impl`) and empty values are omitted.
 - Positional parameters display as `1="value"`, `2="value"`. Named parameters display as `name="value"`.
 - Whitespace in values is collapsed to a single space. Values are truncated to 32 characters (with `...`).
-- Prompt steps show a preview (first 24 characters of prompt text) in quotes, followed by parameters (capped at 96 characters total).
+- Prompt steps show the backend name and a preview (first 24 characters of prompt text) in quotes: `prompt cursor "summarize the..."`, followed by parameters (capped at 96 characters total).
 
 Example lines:
 
 - `▸ workflow docs_page (1="docs/cli.md", 2="strict")`
-- `· prompt prompt (running 60s)`
-- `·   ▸ prompt "${role} does ${task}" (role="engineer", task="Fix bugs")`
+- `· prompt cursor (running 60s)`
+- `·   ▸ prompt cursor "${role} does ${task}" (role="engineer", task="Fix bugs")`
 - `·   ▸ script fib (1="3")`
 - `·   ▸ rule check_arg (1="Alice")`
 

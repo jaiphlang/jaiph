@@ -156,8 +156,8 @@ e2e::expect_stdout "${prompt_run_out}" <<'EOF'
 Jaiph: Running prompt_flow.jh
 
 workflow default
-  ▸ prompt "e2e-prompt-please-return..."
-  ✓ prompt prompt (<time>)
+  ▸ prompt cursor "e2e-prompt-please-return..."
+  ✓ prompt cursor (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 prompt_flow_run_dir="$(e2e::run_dir "prompt_flow.jh")"
@@ -183,8 +183,8 @@ e2e::expect_stdout "${prompt_vars_out}" <<'EOF'
 Jaiph: Running prompt_with_vars.jh
 
 workflow default
-  ▸ prompt "engineer does Fix bugs" (role="engineer", task="Fix bugs")
-  ✓ prompt prompt (<time>)
+  ▸ prompt cursor "engineer does Fix bugs" (role="engineer", task="Fix bugs")
+  ✓ prompt cursor (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 prompt_vars_run_dir="$(e2e::run_dir "prompt_with_vars.jh")"
@@ -254,8 +254,8 @@ e2e::expect_stdout "${multiline_out}" <<'EOF'
 Jaiph: Running multiline_prompt.jh
 
 workflow default
-  ▸ prompt "Line one and line two."
-  ✓ prompt prompt (<time>)
+  ▸ prompt cursor "Line one and line two."
+  ✓ prompt cursor (<time>)
   ▸ script done_impl
   ✓ script done_impl (<time>)
 ✓ PASS workflow default (<time>)
