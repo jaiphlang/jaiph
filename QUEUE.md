@@ -12,41 +12,6 @@ Process rules:
 
 ---
 
-## Add `jaiph format` command <!-- dev-ready -->
-
-**Goal**  
-Add an opinionated formatter for `.jh` files with in-place and check modes.
-
-**Context**
-
-- No built-in formatting command exists; style drifts and noisy diffs are common.
-- CLI commands live in `src/cli/commands/`.
-- The parser (`src/parser.ts`, `src/parse/*`) already produces a full AST that can be re-emitted.
-
-**Key files:**
-- `src/cli/commands/` — add `format.ts`
-- `src/cli/shared/usage.ts` — add `format` to help output
-- `src/parser.ts`, `src/parse/*` — parser used for formatting input
-- `src/types.ts` — AST types for re-emission
-
-**Scope**
-
-1. Add `format` subcommand (`src/cli/commands/format.ts`) and CLI dispatch.
-2. Parse → re-emit stable source formatting from AST.
-3. Support:
-   - `--indent <n>` (default `2`),
-   - `--check` (non-zero when changes needed).
-4. Preserve comments and fail fast on parse errors.
-5. Add unit + e2e coverage.
-
-**Acceptance criteria**
-
-- `jaiph format file.jh` rewrites in place.
-- `jaiph format --check` is CI-safe.
-- Formatting is idempotent.
-
----
-
 ## Anonymous inline scripts in workflows/rules <!-- dev-ready -->
 
 **Goal**  

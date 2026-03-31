@@ -78,6 +78,18 @@ jaiph report --workspace .
 
 See [Reporting](reporting.md) for details.
 
+### Formatting
+
+Enforce consistent style across `.jh` files:
+
+```bash
+jaiph format flow.jh           # rewrite in place
+jaiph format --check *.jh      # CI-safe: exits 1 when changes needed
+jaiph format --indent 4 flow.jh
+```
+
+See [CLI — `jaiph format`](cli.md#jaiph-format) for all options.
+
 ## Workspace setup
 
 ### Initialize with `jaiph init`
