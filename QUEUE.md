@@ -12,40 +12,6 @@ Process rules:
 
 ---
 
-## Auto-detect model for selected backend <!-- dev-ready -->
-
-**Goal**  
-Auto-select a usable model when explicit model is missing/unavailable.
-
-**Context**
-
-- Hard failures on unavailable model names reduce usability and increase support burden.
-- Model selection currently happens in `src/runtime/kernel/prompt.ts` and config resolution.
-
-**Key files:**
-- `src/runtime/kernel/prompt.ts` — prompt execution, model selection
-- `src/runtime/kernel/node-workflow-runtime.ts` — config resolution
-- `docs/configuration.md` — model configuration docs
-
-**Scope**
-
-1. Implement provider-specific model discovery policy.
-2. Selection order:
-   - explicit and available → use,
-   - explicit but unavailable → fallback by policy,
-   - missing → choose default compatible model.
-3. Emit diagnostics showing selected model and why.
-4. Add tests for all selection paths.
-5. Update docs with override + fallback behavior.
-
-**Acceptance criteria**
-
-- Run/test succeeds without explicit model when compatible model exists.
-- Selection/fallback decisions are visible in diagnostics.
-- No-compatible-model path is actionable.
-
----
-
 ## Reporting: detect SIGKILL-stalled runs <!-- dev-ready -->
 
 **Goal**  

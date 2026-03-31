@@ -201,6 +201,26 @@ When you `ensure` a rule from **another** module, the runtime merges that module
 
 Backend-specific flags come from `agent.cursor_flags` / `agent.claude_flags` (or the matching env vars). There is no per-`prompt` backend override; the effective backend is whatever the config stack resolves to when the step runs.
 
+### Model resolution
+
+When a `prompt` step runs, Jaiph resolves the effective model using this order:
+
+1. **Explicit model** — `agent.default_model` / `JAIPH_AGENT_MODEL` is set and non-empty → use it.
+2. **Flags model** — `--model <name>` is found inside the backend-specific flags (`agent.cursor_flags` or `agent.claude_flags`) → use it.
+3. **Backend default** — no model specified anywhere → the backend CLI auto-selects its own default model.
+
+`agent.default_model` works for **both** backends. For the Claude backend, when `agent.default_model` is set and `agent.claude_flags` does not already contain `--model`, Jaiph passes `--model <value>` to the Claude CLI automatically. If both are set, the value in `agent.claude_flags` takes precedence (it is appended last).
+
+**Diagnostics.** Every prompt step records the resolved model in `PROMPT_START` and `PROMPT_END` events in `run_summary.jsonl`:
+
+```jsonl
+{"type":"PROMPT_START","backend":"cursor","model":"gpt-4","model_reason":"explicit",...}
+```
+
+The `model_reason` field is one of: `explicit` (from `agent.default_model`), `flags` (extracted from backend flags), or `backend-default` (no model configured — the backend picks its own). Inspect these events via `jaiph report` or directly in the run summary file.
+
+**No-model troubleshooting.** If the backend rejects the auto-selected default, set `agent.default_model` explicitly or pass `--model <name>` in the backend-specific flags.
+
 ## Testing with `jaiph test`
 
 The test harness does **not** call `resolveRuntimeEnv` — it constructs a minimal env (`process.env` plus `JAIPH_TEST_MODE`, `JAIPH_WORKSPACE`, `JAIPH_RUNS_DIR`, `JAIPH_SCRIPTS`, and mock variables). CLI-side defaults and lock flags are not available in tests.

@@ -9,8 +9,10 @@ import {
   parseEtimeToSeconds,
   prepareClaudeEnv,
   resolveConfig,
+  resolveModel,
   selectTailToKill,
   type ProcNode,
+  type PromptConfig,
 } from "./prompt";
 
 describe("resolveConfig", () => {
@@ -99,6 +101,82 @@ describe("buildBackendArgs", () => {
     assert.ok(args.includes("-p"));
     assert.ok(args.includes("--verbose"));
     assert.ok(args.includes("--max-tokens"));
+  });
+});
+
+function makeConfig(overrides: Partial<PromptConfig> = {}): PromptConfig {
+  return {
+    backend: "cursor",
+    agentCommand: "cursor-agent",
+    model: "",
+    workspaceRoot: "/ws",
+    trustedWorkspace: "/ws",
+    cursorFlags: [],
+    claudeFlags: [],
+    promptFinalFile: "",
+    ...overrides,
+  };
+}
+
+describe("resolveModel", () => {
+  it("returns explicit when model is set", () => {
+    const res = resolveModel(makeConfig({ model: "gpt-4" }));
+    assert.equal(res.model, "gpt-4");
+    assert.equal(res.reason, "explicit");
+  });
+
+  it("extracts model from cursor flags when model is empty", () => {
+    const res = resolveModel(makeConfig({ backend: "cursor", cursorFlags: ["--model", "gpt-3.5"] }));
+    assert.equal(res.model, "gpt-3.5");
+    assert.equal(res.reason, "flags");
+  });
+
+  it("extracts model from claude flags when model is empty", () => {
+    const res = resolveModel(makeConfig({ backend: "claude", claudeFlags: ["--model", "sonnet-4"] }));
+    assert.equal(res.model, "sonnet-4");
+    assert.equal(res.reason, "flags");
+  });
+
+  it("returns backend-default when no model anywhere", () => {
+    const res = resolveModel(makeConfig({ backend: "cursor" }));
+    assert.equal(res.model, "");
+    assert.equal(res.reason, "backend-default");
+  });
+
+  it("returns backend-default for claude with no model", () => {
+    const res = resolveModel(makeConfig({ backend: "claude" }));
+    assert.equal(res.model, "");
+    assert.equal(res.reason, "backend-default");
+  });
+
+  it("prefers explicit model over flags model", () => {
+    const res = resolveModel(makeConfig({ model: "explicit-model", cursorFlags: ["--model", "flags-model"] }));
+    assert.equal(res.model, "explicit-model");
+    assert.equal(res.reason, "explicit");
+  });
+});
+
+describe("buildBackendArgs — claude model", () => {
+  it("passes --model for claude when model is set and not in flags", () => {
+    const { args } = buildBackendArgs(makeConfig({ backend: "claude", model: "sonnet-4" }), "test");
+    const idx = args.indexOf("--model");
+    assert.ok(idx !== -1, "--model should be present");
+    assert.equal(args[idx + 1], "sonnet-4");
+  });
+
+  it("does not duplicate --model for claude when already in flags", () => {
+    const { args } = buildBackendArgs(
+      makeConfig({ backend: "claude", model: "sonnet-4", claudeFlags: ["--model", "opus-4"] }),
+      "test",
+    );
+    const indices = args.reduce<number[]>((acc, v, i) => (v === "--model" ? [...acc, i] : acc), []);
+    assert.equal(indices.length, 1, "should have exactly one --model");
+    assert.equal(args[indices[0] + 1], "opus-4", "flags value wins (appended last)");
+  });
+
+  it("omits --model for claude when model is empty", () => {
+    const { args } = buildBackendArgs(makeConfig({ backend: "claude" }), "test");
+    assert.ok(!args.includes("--model"));
   });
 });
 

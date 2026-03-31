@@ -5,7 +5,7 @@ import { PassThrough } from "node:stream";
 import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { WorkflowStepDef } from "../../types";
-import { executePrompt, resolveConfig } from "./prompt";
+import { executePrompt, resolveConfig, resolveModel } from "./prompt";
 import { appendRunSummaryLine, formatUtcTimestamp } from "./emit";
 import { resolveRuleRef, resolveScriptRef, resolveWorkflowRef, type RuntimeGraph } from "./graph";
 import type { WorkflowMetadata } from "../../types";
@@ -265,7 +265,7 @@ export class NodeWorkflowRuntime {
 
   private emitPromptEvent(
     type: "PROMPT_START" | "PROMPT_END",
-    payload: { backend: string; status?: number; preview?: string },
+    payload: { backend: string; model?: string; model_reason?: string; status?: number; preview?: string },
   ): void {
     const stack = this.getFrameStack();
     const current = stack.length > 0 ? stack[stack.length - 1] : null;
@@ -278,6 +278,8 @@ export class NodeWorkflowRuntime {
         step_id: current?.id ?? null,
         step_name: current?.name ?? null,
         backend: payload.backend,
+        model: payload.model ?? null,
+        model_reason: payload.model_reason ?? null,
         status: payload.status ?? null,
         preview: payload.preview ?? null,
         event_version: 1,
@@ -648,9 +650,12 @@ export class NodeWorkflowRuntime {
         let promptText = promptIr.value;
         const promptConfig = resolveConfig(scope.env);
         const backend = promptConfig.backend || "cursor";
+        const modelRes = resolveModel(promptConfig);
         const promptStep = this.emitPromptStepStart(promptText, backend, scope.vars, step.raw);
         this.emitPromptEvent("PROMPT_START", {
           backend,
+          model: modelRes.model || undefined,
+          model_reason: modelRes.reason,
           preview: promptText.slice(0, 120),
         });
         let schemaFields: PromptSchemaField[] | undefined;
@@ -671,7 +676,7 @@ export class NodeWorkflowRuntime {
         });
         const result = await executePrompt(promptText, promptConfig, out, scope.env);
         this.emitPromptStepEnd(promptStep, result.status, chunks.join(""), "");
-        this.emitPromptEvent("PROMPT_END", { backend, status: result.status });
+        this.emitPromptEvent("PROMPT_END", { backend, model: modelRes.model || undefined, model_reason: modelRes.reason, status: result.status });
         const output = chunks.join("");
         accOut += output;
         if (result.status !== 0) {
@@ -739,9 +744,12 @@ export class NodeWorkflowRuntime {
           let promptText = pcIr.value;
           const promptConfig = resolveConfig(scope.env);
           const backend = promptConfig.backend || "cursor";
+          const modelRes = resolveModel(promptConfig);
           const promptStep = this.emitPromptStepStart(promptText, backend, scope.vars, step.value.raw);
           this.emitPromptEvent("PROMPT_START", {
             backend,
+            model: modelRes.model || undefined,
+            model_reason: modelRes.reason,
             preview: promptText.slice(0, 120),
           });
           let schemaFields: PromptSchemaField[] | undefined;
@@ -762,7 +770,7 @@ export class NodeWorkflowRuntime {
           });
           const result = await executePrompt(promptText, promptConfig, out, scope.env);
           this.emitPromptStepEnd(promptStep, result.status, chunks.join(""), "");
-          this.emitPromptEvent("PROMPT_END", { backend, status: result.status });
+          this.emitPromptEvent("PROMPT_END", { backend, model: modelRes.model || undefined, model_reason: modelRes.reason, status: result.status });
           const pcOut = chunks.join("");
           accOut += pcOut;
           if (result.status !== 0) {

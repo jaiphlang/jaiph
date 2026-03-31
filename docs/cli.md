@@ -200,7 +200,7 @@ Each run directory also contains `run_summary.jsonl`: one JSON object per line, 
 | `target` | — | — | — | — | — | — | — | required | required |
 | `status`, `elapsed_ms` (dispatch) | — | — | — | — | — | — | — | — | required (exit code and ms) |
 
-`PROMPT_START` / `PROMPT_END` (not in the table): include `backend`, optional `status`, optional `preview`, `depth`, and optional `step_id` / `step_name` tying the prompt to the enclosing step frame.
+`PROMPT_START` / `PROMPT_END` (not in the table): include `backend`, optional `model`, optional `model_reason`, optional `status`, optional `preview`, `depth`, and optional `step_id` / `step_name` tying the prompt to the enclosing step frame. `model` is the resolved model name (or `null` when the backend auto-selects). `model_reason` is one of `explicit`, `flags`, or `backend-default` — see [Configuration — Model resolution](configuration.md#model-resolution).
 
 **Event semantics:**
 
