@@ -41,37 +41,40 @@ Support field access syntax for typed prompt captures.
 
 ---
 
-## Auto-detect model for selected backend <!-- dev-ready -->
+## Direct `return run` / `return ensure` support <!-- dev-ready -->
 
 **Goal**  
-Auto-select a usable model when explicit model is missing/unavailable.
+Allow `return run ...` and `return ensure ...` directly in workflows/rules.
 
 **Context**
 
-- Hard failures on unavailable model names reduce usability and increase support burden.
-- Model selection currently happens in `src/runtime/kernel/prompt.ts` and config resolution.
+- Current syntax requires boilerplate capture then return:
+  ```
+  const result = run some_script
+  return "$result"
+  ```
+- With direct return:
+  ```
+  return run some_script
+  ```
 
 **Key files:**
-- `src/runtime/kernel/prompt.ts` — prompt execution, model selection
-- `src/runtime/kernel/node-workflow-runtime.ts` — config resolution
-- `docs/configuration.md` — model configuration docs
+- `src/parse/steps.ts` — return step parsing
+- `src/types.ts` — return step AST type (extend for managed call)
+- `src/runtime/kernel/node-workflow-runtime.ts` — return step execution (~line 490)
+- `src/transpile/validate.ts` — validate refs in return expressions
 
 **Scope**
 
-1. Implement provider-specific model discovery policy.
-2. Selection order:
-   - explicit and available → use,
-   - explicit but unavailable → fallback by policy,
-   - missing → choose default compatible model.
-3. Emit diagnostics showing selected model and why.
-4. Add tests for all selection paths.
-5. Update docs with override + fallback behavior.
+1. Extend parser/AST return expression forms to accept `run` and `ensure` as return value sources.
+2. Reuse managed-call validation for ref resolution.
+3. Implement runtime behavior equivalent to capture + return.
+4. Add unit/acceptance/e2e tests.
 
 **Acceptance criteria**
 
-- Run/test succeeds without explicit model when compatible model exists.
-- Selection/fallback decisions are visible in diagnostics.
-- No-compatible-model path is actionable.
+- Direct return forms execute correctly.
+- Unknown ref errors remain deterministic.
 
 ---
 
@@ -110,74 +113,37 @@ Render prompt backend/model inline in tree output (`prompt <backend> "<preview>"
 
 ---
 
-## Add Codex backend support <!-- dev-ready -->
+## Auto-detect model for selected backend <!-- dev-ready -->
 
 **Goal**  
-Support `codex` as a first-class prompt backend via the OpenAI Codex API.
+Auto-select a usable model when explicit model is missing/unavailable.
 
 **Context**
 
-- Current runtime supports `cursor` and `claude` backend paths. Backend selection happens via `agent.backend` config.
-- Prompt execution lives in `src/runtime/kernel/prompt.ts`.
-- Backend config resolution uses `resolveConfig` in the runtime.
-- The Codex backend should use the OpenAI Codex API (default endpoint). Agent should discover the current API surface and implement accordingly.
+- Hard failures on unavailable model names reduce usability and increase support burden.
+- Model selection currently happens in `src/runtime/kernel/prompt.ts` and config resolution.
 
 **Key files:**
-- `src/runtime/kernel/prompt.ts` — prompt execution, backend dispatch
-- `src/runtime/kernel/node-workflow-runtime.ts` — `resolveConfig`, prompt step handling
-- `src/types.ts` — config types, backend enum
-- `docs/configuration.md` — backend configuration docs
+- `src/runtime/kernel/prompt.ts` — prompt execution, model selection
+- `src/runtime/kernel/node-workflow-runtime.ts` — config resolution
+- `docs/configuration.md` — model configuration docs
 
 **Scope**
 
-1. Add backend config validation for `codex`.
-2. Implement runtime adapter for prompt + schema-return flows using the OpenAI Codex API.
-3. Match existing streaming/error/logging contract used by cursor/claude backends.
-4. Add tests (unit + integration with mocks).
-5. Update docs with setup + minimal example.
+1. Implement provider-specific model discovery policy.
+2. Selection order:
+   - explicit and available → use,
+   - explicit but unavailable → fallback by policy,
+   - missing → choose default compatible model.
+3. Emit diagnostics showing selected model and why.
+4. Add tests for all selection paths.
+5. Update docs with override + fallback behavior.
 
 **Acceptance criteria**
 
-- `agent.backend = "codex"` routes prompt execution correctly.
-- Missing config (API key, etc.) fails with actionable errors.
-- Structured `returns` works with codex.
-
----
-
-## Direct `return run` / `return ensure` support <!-- dev-ready -->
-
-**Goal**  
-Allow `return run ...` and `return ensure ...` directly in workflows/rules.
-
-**Context**
-
-- Current syntax requires boilerplate capture then return:
-  ```
-  const result = run some_script
-  return "$result"
-  ```
-- With direct return:
-  ```
-  return run some_script
-  ```
-
-**Key files:**
-- `src/parse/steps.ts` — return step parsing
-- `src/types.ts` — return step AST type (extend for managed call)
-- `src/runtime/kernel/node-workflow-runtime.ts` — return step execution (~line 490)
-- `src/transpile/validate.ts` — validate refs in return expressions
-
-**Scope**
-
-1. Extend parser/AST return expression forms to accept `run` and `ensure` as return value sources.
-2. Reuse managed-call validation for ref resolution.
-3. Implement runtime behavior equivalent to capture + return.
-4. Add unit/acceptance/e2e tests.
-
-**Acceptance criteria**
-
-- Direct return forms execute correctly.
-- Unknown ref errors remain deterministic.
+- Run/test succeeds without explicit model when compatible model exists.
+- Selection/fallback decisions are visible in diagnostics.
+- No-compatible-model path is actionable.
 
 ---
 
@@ -206,44 +172,6 @@ Mark runs as terminated when `WORKFLOW_END` never arrives due to hard kill.
 
 - SIGKILL run transitions to terminal state automatically.
 - Normal completed runs unaffected.
-
----
-
-## Add `jaiph build` command (standalone binary) <!-- dev-ready -->
-
-**Goal**  
-Add a `jaiph build [file|path]` CLI command that builds a standalone Bun executable from a `.jh` project.
-
-**Context**
-
-- `npm run build:standalone` in `package.json` already works: it runs `tsc`, copies runtime assets, then `bun build --compile ./src/cli.ts --outfile ./dist/jaiph`.
-- The user-facing command set is `run`, `test`, `init`, `use`, `report` — `build` is not yet exposed as a CLI subcommand.
-- The old `jaiph build` (transpile `.jh` → `.sh`) was removed from user-facing CLI. The new `jaiph build` is a different command — it builds a standalone distributable binary.
-- CLI commands live in `src/cli/commands/` — existing: `run.ts`, `test.ts`, `init.ts`, `use.ts`, `report.ts`.
-- CLI usage/help is in `src/cli/shared/usage.ts`.
-
-**Key files:**
-- `src/cli/commands/` — add `build.ts`
-- `src/cli/shared/usage.ts` — add `build` to help output
-- `src/cli.ts` (or wherever CLI dispatch lives) — add `build` subcommand dispatch
-- `package.json` — reference existing `build:standalone` script logic
-
-**Scope**
-
-1. Add `build` subcommand (`src/cli/commands/build.ts`) and CLI dispatch.
-2. Default behavior: `jaiph build` (no args) builds from current directory (`./`).
-3. Accept optional `[file|path]` argument to specify input.
-4. Under the hood: reuse the existing standalone build logic (tsc + copy assets + bun compile).
-5. Update `src/cli/shared/usage.ts` with the new command.
-6. Add an e2e test that runs `jaiph build`, verifies the output binary exists and is executable.
-
-**Acceptance criteria**
-
-- `jaiph build` produces a standalone binary.
-- `jaiph build path/to/project` works.
-- Binary runs without Node installed.
-- e2e test covers the build command and verifies the output binary.
-- `jaiph --help` lists the `build` command.
 
 ---
 
@@ -296,7 +224,7 @@ Allow `script "..."` inline steps for trivial commands.
   ```
 - With inline scripts:
   ```
-  workflow default { script "echo done" }
+  workflow default { run script("echo $1", "arg1", "arg2) }
   ```
 
 **Key files:**
@@ -309,7 +237,7 @@ Allow `script "..."` inline steps for trivial commands.
 
 1. Add AST/parser step for inline script body.
 2. Generate deterministic script artifact names.
-3. Support capture form (`const x = script "..."`).
+3. Support capture form (`const x = run script "..."`).
 4. Preserve shebang behavior for custom interpreters.
 5. Add tests (unit + e2e).
 
@@ -394,26 +322,107 @@ Add `match` on string values with **string literals** and **JavaScript regex lit
 
 ---
 
-## Unify string quoting across Jaiph <!-- policy TBD — not dev-ready -->
+## Unify string quoting across Jaiph <!-- dev-ready -->
 
 **Goal**  
-One clear, documented rule for **single-quoted** vs **double-quoted** strings everywhere they appear (orchestration strings, `fail` / `log` / `logerr`, `mock prompt`, `const` / `local` RHS, test blocks, metadata, etc.), with parser and runtime aligned.
+**Policy is fixed:** Jaiph string literals use **double quotes only** (`"..."`). **No** single-quoted string literals (`'...'`) and **no** backtick-delimited string literals (`` `...` ``) anywhere in Jaiph surface syntax. One rule for orchestration strings, `fail` / `log` / `logerr`, `mock prompt`, `const` / `local` RHS, test blocks, metadata, etc.
 
 **Context**
 
-- Today behavior is **inconsistent**: e.g. `fail` accepts only double-quoted reasons, while `mock prompt` accepts both; other forms differ. Authors cannot rely on a single mental model.
-- **Approach is undecided** — options include: double-only for orchestration, symmetric single+double with identical semantics, reserved use (e.g. double = interpolate, single = literal), or something else. Product + grammar trade-offs need an explicit decision before implementation.
+- **Hard rewrite:** This is an intentional **breaking change**. **No backward compatibility** — existing `.jh` / tests / docs that use `'...'` or `` `...` `` as Jaiph string delimiters must be migrated wholesale (mechanical find/replace is not always enough; escaping inside `"` must be correct).
+- Today behavior is **inconsistent** (e.g. `fail` vs `mock prompt`); this task **removes** alternate quote forms instead of unifying semantics across them.
+- **Exception (unchanged):** `script { ... }` bodies remain **opaque shell**; authors may still use normal shell quoting (single quotes, command substitution, etc.) **inside** the script text. The policy applies to **Jaiph** tokens, not to arbitrary characters inside opaque script bodies.
+- Escaping: document how `"` and newlines appear inside `"..."` (e.g. `\"`); interpolation rules for `${...}` stay as today inside double-quoted strings.
 
-**Key files (once policy is chosen):**  
-`src/parse/*`, `docs/grammar.md`, user-facing docs, fixtures, e2e.
+**Key files:**  
+`src/parse/*`, `docs/grammar.md`, user-facing docs, fixtures, e2e, `.jaiph/*.jh` and examples.
 
 **Scope**
 
-1. Decide and document the quoting policy (short ADR or grammar section).
-2. Align parsers, validators, and error messages.
-3. Update tests and docs; accept breaking changes per queue rules.
+1. Document the policy in grammar (and a short note on script-body exception).
+2. Remove single-quoted and backtick string forms from all Jaiph parsers; align validators and error messages (“use `\"...\"` only”).
+3. Migrate repo sources, tests, and docs; **no** compatibility shims or deprecation period unless this task is explicitly split.
 
 **Acceptance criteria**
 
-- Policy is written down; a reader can predict which quotes to use in any construct.
-- Parser and runtime match that policy; no ad-hoc per-keyword exceptions unless explicitly documented as such.
+- Only `"..."` is accepted for Jaiph string literals in every covered construct; `'` / `` ` `` as delimiters are **parse errors** with clear fixes.
+- Script opaque bodies are explicitly out of scope for quoting rules (documented).
+- **No backward compat:** old forms do not parse; migration path is “rewrite sources to `"` + escapes.”
+
+---
+
+## Bare identifiers as `run` / `ensure` arguments <!-- dev-ready -->
+
+**Goal**  
+Allow capture variables and other in-scope names as **bare identifiers** in `run` / `ensure` argument lists, equivalent to passing their string values without wrapping in a quoted orchestration string.
+
+**Context**
+
+- Today, passing a value from a prior step often requires a quoted interpolation:
+  ```
+  run docs.update_from_task("${task}")
+  run queue.remove_completed_task("${task_header}")
+  run git.commit("${task}")
+  ```
+- Authors want the same semantics with less noise:
+  ```
+  run docs.update_from_task(task)
+  run queue.remove_completed_task(task_header)
+  run git.commit(task)
+  ```
+- This is distinct from full expression syntax; scope is **identifier → string coercion** for managed-call args only (exact resolution rules TBD: captures vs workspace symbols).
+
+**Key files**
+
+- `src/parse/*` — `run` / `ensure` argument parsing (extend atom forms beyond string literals)
+- `src/transpile/validate.ts` — ref/identifier resolution for new forms
+- `src/runtime/kernel/node-workflow-runtime.ts` — if argument normalization happens at runtime
+- `docs/grammar.md` — document allowed bare identifiers and equivalence to `"${name}"`
+
+**Scope**
+
+1. Parse bare identifiers in `run` / `ensure` argument positions where strings are currently allowed.
+2. Define and validate which identifiers are permitted (e.g. `const` / step captures in scope; reject unknown names with clear errors).
+3. Implement behavior equivalent to the corresponding `"${identifier}"` orchestration string for the same binding.
+4. Add parser, validator, and e2e coverage; keep existing quoted forms working unchanged.
+
+**Acceptance criteria**
+
+- Forms like `run git.commit(task)` work when `task` is an in-scope capture with the expected string value.
+- Invalid or ambiguous identifiers fail at compile/validation with actionable errors.
+- Documented equivalence: bare `name` vs `"${name}"` where both are supported.
+
+## Add Codex backend support <!-- dev-ready -->
+
+**Goal**  
+Support `codex` as a first-class prompt backend via the OpenAI Codex API.
+
+**Context**
+
+- Current runtime supports `cursor` and `claude` backend paths. Backend selection happens via `agent.backend` config.
+- Prompt execution lives in `src/runtime/kernel/prompt.ts`.
+- Backend config resolution uses `resolveConfig` in the runtime.
+- The Codex backend should use the OpenAI Codex API (default endpoint). Agent should discover the current API surface and implement accordingly.
+
+**Key files:**
+- `src/runtime/kernel/prompt.ts` — prompt execution, backend dispatch
+- `src/runtime/kernel/node-workflow-runtime.ts` — `resolveConfig`, prompt step handling
+- `src/types.ts` — config types, backend enum
+- `docs/configuration.md` — backend configuration docs
+
+**Scope**
+
+1. Add backend config validation for `codex`.
+2. Implement runtime adapter for prompt + schema-return flows using the OpenAI Codex API.
+3. Match existing streaming/error/logging contract used by cursor/claude backends.
+4. Add tests (unit + integration with mocks).
+5. Update docs with setup + minimal example.
+
+**Acceptance criteria**
+
+- `agent.backend = "codex"` routes prompt execution correctly.
+- Missing config (API key, etc.) fails with actionable errors.
+- Structured `returns` works with codex.
+
+---
+

@@ -315,19 +315,6 @@ workflow implement {
   "
 }
 
-workflow print_commit_message {
-  const response = prompt "
-    Provide me with a suggested commit message for the current changes.
-
-    Requirements:
-    1. Write a commit message - first line in imperative mood, under 72 chars.
-    2. Start with the common prefix like 'Feat:', 'Fix:', 'Refactor:' etc.
-    3. Write a body paragraph with more details about the change.
-  " returns '{ message: string }'
-
-  log "Suggested commit message:\n\n${response_message}\n"
-}
-
 workflow default {
   const role_arg = "${arg1}"
   # ensure git.is_clean
@@ -348,5 +335,5 @@ workflow default {
   run ci.ensure_ci_passes()
   run docs.update_from_task("${task}")
   run queue.remove_completed_task("${task_header}")
-  run print_commit_message()
+  run git.commit("${task}")
 }

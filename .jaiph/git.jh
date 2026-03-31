@@ -39,17 +39,24 @@ workflow commit {
     return ""
   }
 
+  const task = "${arg1}"
+
   prompt "
     Commit the current repository changes now.
 
-    Requirements:
+    Requirements for commit message:
+    1. Write a commit message - first line in imperative mood, under 72 chars.
+    2. Start with the common prefix like 'Feat:', 'Fix:', 'Refactor:' etc.
+    3. Write a body paragraph with more details about the change.
+
+    Requirements for commit:
     1. Review current git changes (git diff --stat, git status).
     2. Stage all relevant changes with git add.
-    3. Write a commit message in imperative mood, subject under 72 chars.
-       Add a body paragraph only if the change is non-obvious.
-    4. Do NOT include files that contain secrets (.env, credentials, tokens).
-    5. Create exactly one commit.
-    6. Do not push.
-    7. Print the created commit hash.
+    3. Create exactly one commit.
+    4. Do not push.
+    5. Remove files that are not relevant to the commit and not git ignored.
+
+    Changes were made for the following task:
+    ${task}
   "
 }
