@@ -1,4 +1,5 @@
-import type { jaiphModule } from "../types";
+import { inlineScriptName } from "../inline-script-name";
+import type { jaiphModule, WorkflowStepDef } from "../types";
 import { scriptShebangIsBash } from "../parse/script-bash";
 
 /**
@@ -67,6 +68,48 @@ function wrapBashStandaloneScriptBody(body: string, envPreamble: string): string
 
 export type ScriptArtifact = { name: string; content: string };
 
+/** Collect all inline script steps from a step tree (handles if/else/recover nesting). */
+function collectInlineScripts(
+  steps: WorkflowStepDef[],
+  seen: Set<string>,
+  out: ScriptArtifact[],
+): void {
+  for (const s of steps) {
+    if (s.type === "run_inline_script") {
+      emitInlineScriptArtifact(s.body, s.shebang, seen, out);
+    } else if (s.type === "const" && s.value.kind === "run_inline_script_capture") {
+      emitInlineScriptArtifact(s.value.body, s.value.shebang, seen, out);
+    } else if (s.type === "if") {
+      collectInlineScripts(s.thenSteps, seen, out);
+      if (s.elseIfBranches) {
+        for (const br of s.elseIfBranches) collectInlineScripts(br.thenSteps, seen, out);
+      }
+      if (s.elseSteps) collectInlineScripts(s.elseSteps, seen, out);
+    } else if (s.type === "ensure" && s.recover) {
+      const recoverSteps = "single" in s.recover ? [s.recover.single] : s.recover.block;
+      collectInlineScripts(recoverSteps, seen, out);
+    }
+  }
+}
+
+function emitInlineScriptArtifact(
+  body: string,
+  shebang: string | undefined,
+  seen: Set<string>,
+  out: ScriptArtifact[],
+): void {
+  const name = inlineScriptName(body, shebang);
+  if (seen.has(name)) return;
+  seen.add(name);
+  const resolvedShebang = shebang ?? "#!/usr/bin/env bash";
+  const isBash = scriptShebangIsBash(shebang);
+  // Inline script body uses \n as newline escape in the DSL string
+  const expandedBody = body.replace(/\\n/g, "\n");
+  const wrapped = isBash ? wrapBashStandaloneScriptBody(expandedBody, "") : expandedBody;
+  const content = wrapped.length > 0 ? `${resolvedShebang}\n${wrapped}\n` : `${resolvedShebang}\n`;
+  out.push({ name, content });
+}
+
 export function buildScriptFiles(
   ast: jaiphModule,
   importedWorkflowSymbols: Map<string, string>,
@@ -84,5 +127,11 @@ export function buildScriptFiles(
     const content = body.length > 0 ? `${shebang}\n${body}\n` : `${shebang}\n`;
     out.push({ name: sc.name, content });
   }
+
+  // Emit inline script artifacts from workflow/rule steps
+  const seen = new Set<string>();
+  for (const w of ast.workflows) collectInlineScripts(w.steps, seen, out);
+  for (const r of ast.rules) collectInlineScripts(r.steps, seen, out);
+
   return out;
 }

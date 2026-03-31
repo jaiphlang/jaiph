@@ -4,6 +4,7 @@ import { basename, dirname, join, resolve as resolvePath } from "node:path";
 import { PassThrough } from "node:stream";
 import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
+import { inlineScriptName } from "../../inline-script-name";
 import type { WorkflowStepDef } from "../../types";
 import { executePrompt, resolveConfig, resolveModel } from "./prompt";
 import { appendRunSummaryLine, formatUtcTimestamp } from "./emit";
@@ -732,6 +733,12 @@ export class NodeWorkflowRuntime {
           scope.vars.set(step.name, runResult.returnValue ?? runResult.output.trim());
           continue;
         }
+        if (step.value.kind === "run_inline_script_capture") {
+          const result = await this.executeInlineScript(scope, step.value.body, step.value.shebang, step.value.args ?? "");
+          if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
+          scope.vars.set(step.name, result.returnValue ?? result.output.trim());
+          continue;
+        }
         if (step.value.kind === "ensure_capture") {
           const ensureResult = await this.executeEnsureRef(scope, step.value.ref.value, step.value.args ?? "", undefined);
           if (ensureResult.status !== 0) return this.mergeStepResult(accOut, accErr, ensureResult);
@@ -821,6 +828,14 @@ export class NodeWorkflowRuntime {
           scope.vars.set(step.captureName, runResult.returnValue ?? runResult.output.trim());
         }
         if (runResult.status !== 0) return this.mergeStepResult(accOut, accErr, runResult);
+        continue;
+      }
+      if (step.type === "run_inline_script") {
+        const result = await this.executeInlineScript(scope, step.body, step.shebang, step.args ?? "");
+        if (step.captureName && result.status === 0) {
+          scope.vars.set(step.captureName, result.returnValue ?? result.output.trim());
+        }
+        if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
         continue;
       }
       if (step.type === "ensure") {
@@ -1116,6 +1131,22 @@ export class NodeWorkflowRuntime {
         });
       });
     });
+  }
+
+  private async executeInlineScript(
+    scope: Scope,
+    body: string,
+    shebang: string | undefined,
+    argsRaw: string,
+  ): Promise<StepResult> {
+    const args = parseArgsRaw(argsRaw, scope.vars, scope.env);
+    const scriptName = inlineScriptName(body, shebang);
+    return this.executeManagedStep(
+      "script",
+      scriptName,
+      args,
+      async (io) => this.executeScript(scope.filePath, scriptName, args, scope.env, io),
+    );
   }
 
   private newScopeVars(filePath: string, parent?: Map<string, string>, env?: NodeJS.ProcessEnv): Map<string, string> {

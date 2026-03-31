@@ -457,6 +457,8 @@ Jaiph: Running async.jh
                     jobs
                     belong in <code>script</code> blocks; workflows and rules call them with <code>run</code>. Add a
                     custom shebang (e.g. <code>#!/usr/bin/env python3</code>) to write scripts in other languages.
+                    For trivial one-off commands, use <strong>inline scripts</strong>:
+                    <code>run script("echo ok")</code> &mdash; no named block needed.
                 </p>
                 <p><strong>Async calls.</strong> For async managed work, use <code>run async wf()</code> — Jaiph fans
                     out the workflows concurrently and <strong>implicitly joins</strong> them before the parent workflow
@@ -542,12 +544,14 @@ Jaiph: Running async.jh
                     </dd>
 
                     <dt><code>ensure ref()</code> &middot; <code>ensure ref(args) recover { ... }</code> &middot;
-                        <code>run ref()</code>
+                        <code>run ref()</code> &middot; <code>run script("body")</code>
                     </dt>
                     <dd><code>ensure</code> executes a rule (with optional args); <code>recover</code> adds bounded
                         retry repair logic; <code>run</code> calls another workflow or module script from a workflow
                         (managed step &mdash; same value/log contract as <code>ensure</code>). All calls require
-                        parentheses.</dd>
+                        parentheses. <code>run script("body")</code> embeds a one-off shell command directly
+                        without a named <code>script</code> block &mdash; supports arguments, capture, and custom
+                        shebangs.</dd>
 
                     <dt><code>prompt "..."</code> &middot;
                         <code>const name = prompt "..." returns '{ field: type }'</code>

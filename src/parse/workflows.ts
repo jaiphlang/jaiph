@@ -11,6 +11,7 @@ import { parseConstRhs } from "./const-rhs";
 import { parseConfigBlock } from "./metadata";
 import { parsePromptStep } from "./prompt";
 import { parseSendRhs } from "./send-rhs";
+import { parseInlineScript } from "./inline-script";
 import { parseEnsureStep } from "./steps";
 import { tryParseBraceIfChain } from "./workflow-brace";
 
@@ -219,6 +220,19 @@ export function parseWorkflowBlock(
       }
       if (rest.startsWith("run ")) {
         const runBody = rest.slice("run ".length).trim();
+        if (runBody.startsWith("script(") || runBody.startsWith("script (")) {
+          const scriptRest = runBody.slice("script".length).trimStart();
+          const parsed = parseInlineScript(filePath, scriptRest, innerNo, innerRaw.indexOf("script") + 1);
+          workflow.steps.push({
+            type: "run_inline_script",
+            body: parsed.body,
+            ...(parsed.shebang ? { shebang: parsed.shebang } : {}),
+            args: parsed.args,
+            captureName,
+            loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
+          });
+          continue;
+        }
         const call = parseCallRef(runBody);
         if (!call) {
           fail(filePath, "calls require parentheses: run ref() or run ref(args)", innerNo);
@@ -256,6 +270,9 @@ export function parseWorkflowBlock(
 
     if (inner.startsWith("run async ")) {
       const runBody = inner.slice("run async ".length).trim();
+      if (runBody.startsWith("script(") || runBody.startsWith("script (")) {
+        fail(filePath, "run async is not supported with inline scripts", innerNo, innerRaw.indexOf("run") + 1);
+      }
       const call = parseCallRef(runBody);
       if (!call) {
         fail(filePath, "calls require parentheses: run async ref() or run async ref(args)", innerNo);
@@ -275,6 +292,18 @@ export function parseWorkflowBlock(
 
     if (inner.startsWith("run ")) {
       const runBody = inner.slice("run ".length).trim();
+      if (runBody.startsWith("script(") || runBody.startsWith("script (")) {
+        const scriptRest = runBody.slice("script".length).trimStart();
+        const parsed = parseInlineScript(filePath, scriptRest, innerNo, innerRaw.indexOf("script") + 1);
+        workflow.steps.push({
+          type: "run_inline_script",
+          body: parsed.body,
+          ...(parsed.shebang ? { shebang: parsed.shebang } : {}),
+          args: parsed.args,
+          loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
+        });
+        continue;
+      }
       const call = parseCallRef(runBody);
       if (!call) {
         fail(filePath, "calls require parentheses: run ref() or run ref(args)", innerNo);

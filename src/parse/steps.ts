@@ -1,6 +1,7 @@
 import type { WorkflowStepDef } from "../types";
 import { parseConstRhs } from "./const-rhs";
 import { fail, indexOfClosingDoubleQuote, isRef, parseCallRef } from "./core";
+import { parseInlineScript } from "./inline-script";
 
 /** Reject non-empty trailing content after a call expression (e.g. shell redirection). */
 function rejectTrailingContent(
@@ -89,7 +90,20 @@ function parseRecoverStatement(
     const captureName = genericAssignMatch[1];
     const rest = genericAssignMatch[2].trim();
     if (rest.startsWith("run ")) {
-      const call = parseCallRef(rest.slice("run ".length).trim());
+      const runBody = rest.slice("run ".length).trim();
+      if (runBody.startsWith("script(") || runBody.startsWith("script (")) {
+        const scriptRest = runBody.slice("script".length).trimStart();
+        const parsed = parseInlineScript(filePath, scriptRest, lineNo, col);
+        return {
+          type: "run_inline_script",
+          body: parsed.body,
+          ...(parsed.shebang ? { shebang: parsed.shebang } : {}),
+          args: parsed.args,
+          captureName,
+          loc: { line: lineNo, col },
+        };
+      }
+      const call = parseCallRef(runBody);
       if (call) {
         rejectTrailingContent(filePath, lineNo, "run", call.rest);
         return {
@@ -120,7 +134,19 @@ function parseRecoverStatement(
     };
   }
   if (t.startsWith("run ")) {
-    const call = parseCallRef(t.slice("run ".length).trim());
+    const runBody = t.slice("run ".length).trim();
+    if (runBody.startsWith("script(") || runBody.startsWith("script (")) {
+      const scriptRest = runBody.slice("script".length).trimStart();
+      const parsed = parseInlineScript(filePath, scriptRest, lineNo, col);
+      return {
+        type: "run_inline_script",
+        body: parsed.body,
+        ...(parsed.shebang ? { shebang: parsed.shebang } : {}),
+        args: parsed.args,
+        loc: { line: lineNo, col },
+      };
+    }
+    const call = parseCallRef(runBody);
     if (call) {
       rejectTrailingContent(filePath, lineNo, "run", call.rest);
       return {

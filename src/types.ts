@@ -29,7 +29,8 @@ export type ConstRhs =
       raw: string;
       loc: SourceLoc;
       returns?: string;
-    };
+    }
+  | { kind: "run_inline_script_capture"; body: string; shebang?: string; args?: string };
 
 export type IfConditionDef =
   | { kind: "ensure"; ref: RuleRefDef; args?: string }
@@ -171,6 +172,14 @@ export type WorkflowStepDef =
       managed?:
         | { kind: "run"; ref: WorkflowRefDef; args?: string }
         | { kind: "ensure"; ref: RuleRefDef; args?: string };
+    }
+  | {
+      type: "run_inline_script";
+      body: string;
+      shebang?: string;
+      args?: string;
+      captureName?: string;
+      loc: SourceLoc;
     }
   | {
       type: "shell";
