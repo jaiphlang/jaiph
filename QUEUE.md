@@ -12,41 +12,6 @@ Process rules:
 
 ---
 
-## Show prompt backend/model in run tree <!-- dev-ready -->
-
-**Goal**  
-Render prompt backend/model inline in tree output (`prompt <backend> "<preview>"`).
-
-**Context**
-
-- Mixed-backend runs are hard to debug from live tree alone.
-- Prompt step start is emitted in `node-workflow-runtime.ts` via `emitPromptStepStart` (~line 291) which already has access to `backend` and the prompt text.
-- The tree label is constructed in `src/cli/run/progress.ts` via `formatPromptLabel` (line ~122).
-- Live TTY rendering is in `src/cli/run/stderr-handler.ts`.
-- Non-TTY rendering is also in progress/display paths.
-
-**Key files:**
-- `src/cli/run/progress.ts` — `formatPromptLabel`, prompt step rendering (line ~122)
-- `src/cli/run/stderr-handler.ts` — live TTY prompt display
-- `src/runtime/kernel/node-workflow-runtime.ts` — `emitPromptStepStart` (~line 291), prompt event emission
-- `src/cli/run/events.ts` — event parsing
-
-**Scope**
-
-1. Extend prompt step rendering to include backend/model: `prompt cursor/gpt-5 "summarize the..."` format.
-2. Pass backend/model info through the event pipeline (if not already in `PROMPT_START` event payload).
-3. Apply the same format in both TTY and non-TTY modes.
-4. Add tests in CLI display/event parsing paths.
-5. Update docs/examples to match exact rendered format.
-6. Update sample outputs in `docs/index.html`
-
-**Acceptance criteria**
-
-- Prompt lines include backend/model in live output.
-- Display is readable and consistent in TTY/non-TTY.
-
----
-
 ## Auto-detect model for selected backend <!-- dev-ready -->
 
 **Goal**  

@@ -176,8 +176,8 @@ Jaiph: Running say_hello.jh
   <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">script</span> name_was_provided_check <span class="run-params">(1="Jakub")</span>
   <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">script name_was_provided_check (0s)</span>
   <span class="run-pass">✓</span> <span class="run-time">rule name_was_provided (0s)</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> "Say hello to Jakub and p..." <span class="run-params">(1="Jakub")</span>
-  <span class="run-pass">✓</span> <span class="run-time">prompt prompt (10s)</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> cursor "Say hello to Jakub and p..." <span class="run-params">(1="Jakub")</span>
+  <span class="run-pass">✓</span> <span class="run-time">prompt cursor (10s)</span>
   <span class="run-marker">ℹ</span> Hi Jakub — fun fact: Jakub Marian is a Czech linguist and polyglot who speaks over a dozen languages.
 
 <span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(11.1s)</span></code></pre>
@@ -308,8 +308,8 @@ Jaiph: Running ensure_ci_passes.jh
   <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> ensure_ci_passes
   <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> ci_passes
   <span class="run-marker">·</span>   <span class="run-fail">✗ rule ci_passes (11s)</span>
-  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> "Fix failing CI so n..."
-  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">prompt prompt (24s)</span>
+  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> cursor "Fix failing CI so n..."
+  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">prompt cursor (24s)</span>
   <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> ci_passes
   <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">rule ci_passes (10s)</span>
   <span class="run-pass">✓</span> <span class="run-time">workflow ensure_ci_passes (45s)</span>
@@ -408,12 +408,12 @@ Jaiph: Running async.jh
 <span class="run-keyword">workflow</span> default
   <span class="run-marker">▸</span> <span class="run-keyword">async workflow</span> claude_say_hello
   <span class="run-marker">▸</span> <span class="run-keyword">async workflow</span> cursor_say_hello
-  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> "${prompt_text}" <span class="run-params">(prompt_text="Say: \"Greetings! I am [model nam...")</span>
-  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> "${prompt_text}" <span class="run-params">(prompt_text="Say: \"Greetings! I am [model nam...")</span>
-  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">prompt prompt (4s)</span>
+  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> claude "${prompt_text}" <span class="run-params">(prompt_text="Say: \"Greetings! I am [model nam...")</span>
+  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> cursor "${prompt_text}" <span class="run-params">(prompt_text="Say: \"Greetings! I am [model nam...")</span>
+  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">prompt claude (4s)</span>
   <span class="run-marker">·</span>   <span class="run-marker">ℹ</span> Greetings! I am Claude Opus 4.6.
   <span class="run-pass">✓</span> <span class="run-time">workflow claude_say_hello (4s)</span>
-  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">prompt prompt (5s)</span>
+  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">prompt cursor (5s)</span>
   <span class="run-marker">·</span>   <span class="run-marker">ℹ</span> Greetings! I am Composer.
   <span class="run-pass">✓</span> <span class="run-time">workflow cursor_say_hello (5s)</span>
 

@@ -50,7 +50,8 @@ export function formatStartLine(
         ? `${oneLine.slice(0, PROMPT_PREVIEW_MAX)}...`
         : oneLine;
     const escaped = previewDisplay.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-    namePart = previewDisplay.length > 0 ? `${kindLabel} "${escaped}"` : `${kindLabel} ${name}`;
+    const backendPart = name !== kind ? ` ${name}` : "";
+    namePart = previewDisplay.length > 0 ? `${kindLabel}${backendPart} "${escaped}"` : `${kindLabel}${backendPart}`;
     const restParams = params.filter(([, v]) => !isInternalParamValue(v));
     const skipFirst = restParams.length > 0 && restParams[0][1] === previewValue ? 1 : 0;
     const restForSuffix = restParams.slice(skipFirst);

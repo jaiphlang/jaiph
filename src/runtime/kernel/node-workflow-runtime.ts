@@ -57,6 +57,7 @@ type PromptStepHandle = {
   seq: number;
   outFile: string;
   errFile: string;
+  backend: string;
   startedAtMs: number;
 };
 
@@ -325,7 +326,7 @@ export class NodeWorkflowRuntime {
       type: "STEP_START",
       func: "prompt",
       kind: "prompt",
-      name: "prompt",
+      name: backend,
       ts: nowIso(),
       status: null,
       elapsed_ms: null,
@@ -338,7 +339,7 @@ export class NodeWorkflowRuntime {
       run_id: this.runId,
       params,
     });
-    return { id, seq, outFile, errFile, startedAtMs: Date.now() };
+    return { id, seq, outFile, errFile, backend, startedAtMs: Date.now() };
   }
 
   private emitPromptStepEnd(prompt: PromptStepHandle, status: number, outContent: string, errContent: string): void {
@@ -351,7 +352,7 @@ export class NodeWorkflowRuntime {
       type: "STEP_END",
       func: "prompt",
       kind: "prompt",
-      name: "prompt",
+      name: prompt.backend,
       ts: nowIso(),
       status,
       elapsed_ms: Date.now() - prompt.startedAtMs,
