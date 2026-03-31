@@ -124,7 +124,8 @@ test("build fails on missing import file", () => {
 
 // Regression: .jaiph/main.jh once imported implement_from_queue.jh which had been
 // renamed to engineer.jh, causing E_IMPORT_NOT_FOUND for every `jaiph test` run
-// in the workspace (buildScripts walks all .jh files, not just the test target).
+// in the workspace. `jaiph test` now builds from the test file entrypoint only;
+// this still checks main.jh imports and that the whole `.jaiph` graph builds.
 test(".jaiph/main.jh imports only existing modules", () => {
   const jaiphDir = join(process.cwd(), ".jaiph");
   const mainJh = join(jaiphDir, "main.jh");
@@ -136,8 +137,12 @@ test(".jaiph/main.jh imports only existing modules", () => {
     assert.ok(existsSync(resolved), `import "${imp.alias}" resolves to missing file "${resolved}"`);
   }
 
-  // During hard-cut migration, .jaiph fixtures still include inline shell steps.
-  assert.throws(() => buildScripts(jaiphDir, join(jaiphDir, ".tmp-build-out")), /inline shell steps are forbidden/);
+  const outDir = join(jaiphDir, ".tmp-build-out");
+  try {
+    assert.doesNotThrow(() => buildScripts(jaiphDir, outDir));
+  } finally {
+    rmSync(outDir, { recursive: true, force: true });
+  }
 });
 
 test("jaiph run compiles and executes workflow with args", () => {

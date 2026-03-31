@@ -1,13 +1,15 @@
-# Jaiph Architecture
+---
+title: Architecture
+permalink: /architecture
+redirect_from:
+  - /architecture.md
+---
 
-This document describes how Jaiph is structured and how execution flows through the system for both:
+# Architecture
 
-- regular workflows (`*.jh`),
-- Jaiph runtime tests (`*.test.jh`).
+Jaiph is a workflow system with a **TypeScript CLI** and a **Node.js kernel** that interprets the AST directly. This page describes how the system is structured and how execution flows through it for both regular workflows (`*.jh`) and Jaiph runtime tests (`*.test.jh`). For contributing guidelines, code philosophy, and the test strategy, see [Contributing](contributing.md).
 
 ## System overview
-
-Jaiph is a workflow system with a **TypeScript CLI**. The default orchestration path uses a **Node.js kernel** that interprets the AST directly:
 
 1. Parse source into AST (quick parse on the CLI for `jaiph run` metadata; full graph loads use the same parser).
 2. **Compile-time** validation (`validateReferences`, invoked from **`emitScriptsForModule`** / **`buildScripts()`**) runs before script extraction, not inside `buildRuntimeGraph()` (the graph loader only parses modules and follows imports).
@@ -73,7 +75,7 @@ Channel transport remains file/queue based in runtime inbox logic.
 
 ## Channels and hooks in context
 
-Channels are validated at compile time (`validateReferences` / send RHS rules) and executed via in-memory queue and dispatch in the Node runtime; durable inbox files under the run directory are for audit and reporting. See [Inbox & Dispatch](docs/inbox.md). Hooks are CLI-only: they load from `hooks.json` and run as shell commands with JSON on stdin, driven by the same `__JAIPH_EVENT__` stream as the progress UI — see [Hooks](docs/hooks.md).
+Channels are validated at compile time (`validateReferences` / send RHS rules) and executed via in-memory queue and dispatch in the Node runtime; durable inbox files under the run directory are for audit and reporting. See [Inbox & Dispatch](inbox.md). Hooks are CLI-only: they load from `hooks.json` and run as shell commands with JSON on stdin, driven by the same `__JAIPH_EVENT__` stream as the progress UI — see [Hooks](hooks.md).
 
 ## Jaiph runtime testing (`*.test.jh`)
 
@@ -213,24 +215,7 @@ sequenceDiagram
     CLI-->>User: exit code
 ```
 
-## E2E test philosophy and artifact layout
-
-E2E tests (`e2e/tests/*.sh`) are the outermost behavior contracts for the CLI and runtime. They exercise the full build-and-run pipeline and assert on two independent surfaces:
-
-1. **CLI tree output** — what the user sees (`e2e::expect_stdout` with a heredoc).
-2. **Run artifacts** — what the runtime persists under `.jaiph/runs/<date>/<source>/` (`e2e::expect_out`, `e2e::expect_file`, `e2e::expect_run_file`). Inbox files live under the run directory when the feature touches inbox behavior.
-
-### Default contract: full equality
-
-Every E2E assertion should compare the **full** expected text (stdout heredoc, artifact file contents, JSONL lines) unless there is a documented exception. Use `e2e::expect_stdout`, `e2e::expect_out`, `e2e::expect_file`, `e2e::expect_run_file`, or `e2e::assert_equals` / `e2e::assert_output_equals` for full comparisons.
-
-`e2e::assert_contains` (substring check) is allowed **only** when full equality is not feasible. Every such use must have an inline comment explaining why. Valid reasons:
-
-- **Nondeterministic output** — e.g. prompt transcripts with real agent backends, timestamps not covered by `<time>` normalization.
-- **Unbounded or variable-length logs** — e.g. `run_summary.jsonl` with platform-dependent event counts, or live step output where line count varies.
-- **Platform-dependent text** — e.g. OS-specific error messages, paths that differ across CI environments.
-
-### Artifact layout
+## Artifact layout
 
 ```
 .jaiph/runs/
@@ -244,20 +229,6 @@ Every E2E assertion should compare the **full** expected text (stdout heredoc, a
 ```
 
 Sequence prefixes are monotonic and unique per run (allocated by `kernel/seq-alloc.ts`), making artifact file names deterministic and ordered.
-
-### Normalization
-
-`e2e::normalize_output` (in `e2e/lib/common.sh`) strips ANSI codes and replaces timing values with `<time>`, agent commands with `<agent-command>`, and script paths with `<script-path>`. This keeps full-equality heredocs stable across machines.
-
-### Cross-references
-
-- Helper reference and test structure: [Contributing — E2E testing](docs/contributing.md#e2e-testing).
-- Runtime testing with `*.test.jh`: [Testing](docs/testing.md).
-- `run_summary.jsonl` contract: `e2e/tests/88_run_summary_event_contract.sh`.
-
-## TypeScript test organization
-
-(Module tests in `src/**`, cross-cutting in `test/**`, e2e in `e2e/tests/*.sh` — unchanged.)
 
 ## Summary
 

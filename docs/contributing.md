@@ -7,7 +7,7 @@ redirect_from:
 
 # Contributing to Jaiph
 
-Open-source projects depend on clear repo conventions: how to build, test, and propose changes. **This page is that map for Jaiph** — branches, installing from a clone, TypeScript layout and philosophy, the layered test strategy, and the bash E2E harness. It does **not** teach the language or runtime semantics; for that, use [Getting Started](getting-started.md), [Grammar](grammar.md), and [Architecture](../ARCHITECTURE.md) for execution flow and contracts.
+Open-source projects depend on clear repo conventions: how to build, test, and propose changes. **This page is that map for Jaiph** — branches, installing from a clone, TypeScript layout and philosophy, the layered test strategy, and the bash E2E harness. It does **not** teach the language or runtime semantics; for that, use [Getting Started](getting-started.md), [Grammar](grammar.md), and [Architecture](architecture) for execution flow and contracts.
 
 ## Branching and pull requests
 
@@ -139,27 +139,9 @@ The table below is the inventory as of this writing; after large refactors, pref
 | `src/transpile/validate-run-async.test.ts` | Validation — `run async` restrictions |
 | `src/transpile/validate-string.test.ts` | `validate-string.ts` / `buildScripts` — string interpolation and related errors |
 
-**Kernel — `emit.ts`:** **`src/runtime/kernel/emit.ts`** handles **`live`** progress JSON to stderr and **`summary-line`** appends to `run_summary.jsonl`. **`appendRunSummaryLine`** uses shared **`mkdir`-style locking** from **`fs-lock.ts`**.
-
-**Kernel — `seq-alloc.ts`:** **`src/runtime/kernel/seq-alloc.ts`** is the single owner of step-sequence allocation. It reads, increments, and writes the `.seq` file under the run directory atomically using `mkdir`-style locking from **`fs-lock.ts`** (same mechanism as `emit.ts` and `inbox.ts`). Colocated test: `seq-alloc.test.ts`.
-
-**Kernel — `inbox.ts`:** **`src/runtime/kernel/inbox.ts`** implements file-backed **init**, **send**, **register-route**, and **drain** under the run directory’s `inbox/` subdirectory, including **`INBOX_*` `run_summary.jsonl`** lines and parallel **`inbox/.seq.lock`** behavior. There is no colocated `inbox.test.ts` yet; behavior is covered by **E2E** (e.g. inbox dispatch and run-summary contract tests).
-
-**Kernel — `run-step-exec.ts`:** Managed script subprocess execution lives in **`src/runtime/kernel/run-step-exec.ts`**. There is no colocated `run-step-exec.test.ts` yet; behavior is covered by the **E2E** suite and runtime integration. Prefer adding focused unit tests if you extract pure helpers from the spawn/capture path.
-
-**Kernel — `node-test-runner.ts`:** **`src/runtime/kernel/node-test-runner.ts`** executes `*.test.jh` test blocks using `NodeWorkflowRuntime` with mock support (prompt queues, content-based dispatch, workflow/rule/script body replacements) and assertion evaluation. Pure Node harness — no Bash test transpilation. Language-level semantics: [Testing](testing.md).
-
 When adding a new source module or extending an existing one, create or extend the corresponding `*.test.ts` file in the same directory. This keeps tests discoverable — given a source file, the test file is always a sibling.
 
-### Reference validation: ensure, run, and send RHS
-
-After parse, **`validateReferences`** runs inside **`emitScriptsForModule`** (invoked from **`buildScripts()`**), before script files are written — the runtime graph loader does **not** re-run it (see [Architecture](../ARCHITECTURE.md)). The transpiler checks that `ensure` and `run` targets (and related refs, such as send right-hand sides) resolve to symbols of the right kind in the current or imported module. Implementation: **`src/transpile/validate.ts`**, with **local vs `alias.name` resolution**, **wrong-kind** messages, and **`lookupKind`** in **`src/transpile/validate-ref-resolution.ts`**. If you change validation behavior, treat **exact `E_VALIDATE` strings** as part of the public contract unless you are deliberately shipping a breaking change — verify with `npm test`, compiler golden tests, and `npm run test:e2e`.
-
-### Script extraction only (no workflow bash modules)
-
-The **production compile path** matches [Architecture](../ARCHITECTURE.md): for each module, **`emitScriptsForModule`** runs **`parsejaiph`**, **`validateReferences`**, then **`buildScriptFiles`** in **`src/transpile/emit-script.ts`**. That writes **only** standalone bash files for each **`script` block** (shebang, `set -euo pipefail`, body with `resolveShellRefs` / `normalizeShellLocalExport`). There is **no** workflow-level shell module, no per-workflow `.sh` orchestration layer, and **no** bash emitter for rules or workflow steps — **`NodeWorkflowRuntime`** interprets the AST for all execution.
-
-**Compiler golden tests** (`src/transpile/compiler-golden.test.ts`) lock **parser** and **validation** errors, **`buildScriptFiles`** output, fixture corpus builds, and related regressions — not a legacy “full emitted workflow module” string. If you change extraction or validation, treat expected strings and regexes as contracts; run `npm test` and `npm run test:e2e`.
+For details on kernel module internals (`emit.ts`, `seq-alloc.ts`, `run-step-exec.ts`, `node-test-runner.ts`), the compile pipeline, and validation contracts, see [Architecture](architecture).
 
 ### Cross-cutting tests in `test/`
 
@@ -309,7 +291,7 @@ All helpers are defined in `e2e/lib/common.sh`.
 
 #### Run artifact assertions
 
-After a workflow runs, its step outputs are written as files under `.jaiph/runs/`. Each artifact file is named with a zero-padded sequence prefix reflecting step execution order (e.g. `000001-module__step.out`, `000002-module__step.err`). The sequence counter is file-backed (`.seq` under the run directory) and allocated atomically by **`src/runtime/kernel/seq-alloc.ts`** (compiled into the kernel shipped with the CLI) so concurrent async branches (`run async`) each receive a unique monotonic prefix — no two steps share a `seq` within the same run. This makes file names predictable and ordered, so tests can assert on exact file names without glob matching. These helpers verify the content of those files, catching bugs in the runtime's output-capture pipeline independently from what the CLI displays.
+After a workflow runs, its step outputs are written as sequenced artifact files under `.jaiph/runs/`. These helpers verify artifact content independently from CLI display output. For the full artifact layout and naming scheme, see [Architecture — Artifact layout](architecture#artifact-layout).
 
 | Helper | Description |
 |--------|-------------|
@@ -335,28 +317,14 @@ After a workflow runs, its step outputs are written as files under `.jaiph/runs/
 | `e2e::fail "label"` | Print a `[FAIL]` line to stderr and exit. |
 | `e2e::skip "label"` | Print a `[SKIP]` line (for platform-dependent tests). |
 
-### Default contract: full equality
+### Assertion policy
 
-Every E2E assertion should compare the **full** expected text — CLI stdout via heredoc, artifact file contents, JSONL lines — not substrings. Use `e2e::expect_stdout`, `e2e::expect_out`, `e2e::expect_file`, `e2e::expect_run_file`, or `e2e::assert_equals` / `e2e::assert_output_equals`.
+E2E tests default to **full-equality** comparisons — CLI stdout via heredoc, artifact file contents, JSONL lines. Prefer `e2e::expect_stdout`, `e2e::expect_out`, `e2e::expect_file`, `e2e::expect_run_file`, or `e2e::assert_equals`.
 
-`e2e::assert_contains` (substring check) is the **exception**, not the default. Every use must include an inline comment explaining why full equality is not feasible. Allowed reasons:
-
-- **Nondeterministic output** — prompt transcripts with real agent backends, timestamps not covered by `<time>` normalization.
-- **Unbounded or variable-length logs** — `run_summary.jsonl` with platform-dependent event counts, live step output where line count varies.
-- **Platform-dependent text** — OS-specific error messages, paths that differ across CI.
-
-For the full E2E philosophy, artifact layout, and normalization details, see [ARCHITECTURE.md — E2E test philosophy](../ARCHITECTURE.md#e2e-test-philosophy-and-artifact-layout).
-
-### Auditing `e2e::assert_contains`
-
-Some tests still use **`e2e::assert_contains`** when full equality is impractical (nondeterministic or platform-dependent output, variable-length logs, or evolving CLI text). That is allowed **only** with an **inline comment** next to the call explaining why — same policy as [Architecture](../ARCHITECTURE.md#e2e-test-philosophy-and-artifact-layout). The list of files and line numbers changes often; **do not** treat a frozen table in this doc as authoritative. To see current usages from the repo root:
+`e2e::assert_contains` (substring check) is the exception — every use requires an inline comment explaining why full equality is not feasible. To audit current usages:
 
 ```bash
 rg 'e2e::assert_contains' e2e/tests -n
 ```
 
-When you add or tighten a test, prefer **full-equality** helpers first; add substring checks only when one of the documented exceptions applies.
-
-### Why both tree output and artifact assertions?
-
-Tree output assertions (`e2e::expect_stdout`) verify what the **user sees** in the terminal. Artifact assertions (`e2e::expect_out`, `e2e::expect_file`) verify what the **runtime persists** to disk. A bug could break one without affecting the other — for example, the CLI could display correct output while the runtime silently fails to write the `.out` file, or vice versa.
+When adding or tightening a test, prefer full-equality helpers first. For the artifact layout and naming scheme, see [Architecture — Artifact layout](architecture#artifact-layout).

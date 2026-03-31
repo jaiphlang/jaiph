@@ -4,23 +4,23 @@ channel findings
 channel report
 
 workflow scanner {
+  log "Scanning for issues..."
   findings <- "Found 3 issues in auth module"
 }
 
 workflow analyst {
+  log "Analyzing message from ${arg3} on channel ${arg2}..."
   report <- "Summary: ${arg1}"
 }
 
-script print_reviewed {
-  echo "[reviewed] $1"
-}
-
 workflow reviewer {
-  run print_reviewed("${arg1}")
+  log "Reviewing message from ${arg3} on channel ${arg2}..."
+  logerr "Critical issue: ${arg1}"
 }
 
 workflow default {
-  run scanner()
   findings -> analyst
   report -> reviewer
+
+  run scanner()
 }

@@ -11,6 +11,7 @@
         "import",
         "as",
         "config",
+        "const",
         "export",
         "channel",
         "local",
@@ -648,7 +649,7 @@
             const button = document.createElement("button");
             button.type = "button";
             button.className = "copy-code-button";
-            button.textContent = "Copy to clipboard";
+            button.textContent = "Copy";
             button.addEventListener("click", function () {
                 copyCodeFromBlock(button, block);
             });

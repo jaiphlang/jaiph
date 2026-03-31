@@ -1,20 +1,21 @@
 #!/usr/bin/env jaiph
 
-script arg_is_non_empty {
-  test -n "$1"
+script name_was_provided_check {
+  # by default it's bash but you can provide your own shebang
+  if [ -z "$1" ]; then
+    echo "You didn't provide your name :(" >&2
+    exit 1
+  fi
 }
 
 rule name_was_provided {
-  if not run arg_is_non_empty("${arg1}") {
-    logerr "You didn't provide your name :("
-    fail "You didn't provide your name"
-  }
+  run name_was_provided_check("${arg1}")
 }
 
 workflow default {
   ensure name_was_provided("${arg1}")
 
-  const response = prompt "
+  response = prompt "
     Say hello to ${arg1} and provide a fun fact about a person with the same name.
     Respond with a single line. Do not inspect files or run tools.
   "

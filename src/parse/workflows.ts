@@ -28,7 +28,8 @@ function rejectTrailingContent(
 
 /**
  * Detect Jaiph value-return syntax vs bash exit-code return.
- * Jaiph value-return: return "..." | return '...' | return $var
+ * Jaiph value-return: return | return "..." | return '...' | return $var
+ * (`return` alone is empty string; see bare-return handling before this matcher.)
  * Bash return: return 0 | return 1 | return $?
  */
 function isJaiphValueReturn(expr: string): boolean {
@@ -324,6 +325,16 @@ export function parseWorkflowBlock(
         type: "logerr",
         message,
         loc: { line: innerNo, col: logerrCol },
+      });
+      continue;
+    }
+
+    /** Bare `return` exits the workflow with an empty string (not a Bash `return` shell step). */
+    if (inner.trim() === "return") {
+      workflow.steps.push({
+        type: "return",
+        value: '""',
+        loc: { line: innerNo, col: innerRaw.indexOf("return") + 1 },
       });
       continue;
     }

@@ -78,15 +78,13 @@ layout: null
                     <pre><code class="language-bash static-highlight"><span class="code-line">curl -fsSL https://jaiph.org/run | bash -s '</span><span class="code-line"><span class="ralph-keyword">workflow</span> <span class="ralph-definition">default</span> {</span><span class="code-line">  <span class="ralph-keyword">const</span> <span class="ralph-variable">response</span> <span class="ralph-operator">=</span> <span class="ralph-keyword">prompt</span> <span class="ralph-string">"Say: Hello, I am [model name]!"</span></span><span class="code-line">  <span class="ralph-keyword">log</span> <span class="ralph-string">"${response}"</span></span><span class="code-line">}'</span></code></pre>
                     <p class="small">Installs Jaiph <strong>v0.6.0</strong> to <strong>~/.local/bin</strong> (if not
                         already
-                        installed), and runs the sample workflow. See <a href="#samples">more samples</a>!</p>
+                        installed), and runs the sample workflow with <a href="https://cursor.com/docs/cli/installation" target="_blank" rel="noopener noreferrer">Cursor CLI</a> agent backend (the default one). See <a href="#samples">more samples</a>!</p>
                 </div>
 
                 <div class="code-tab-panel" data-panel="try-install-only">
                     <pre><code class="language-bash">curl -fsSL https://jaiph.org/install | bash</code></pre>
                     <p class="small">The installer will install the version <strong>0.6.0</strong> of Jaiph to
-                        <strong>~/.local/bin</strong>. Check out the <a
-                            href="https://github.com/jaiphlang/jaiph/blob/nightly/CHANGELOG.md">CHANGELOG</a> to see
-                        what&rsquo;s new in the <strong>nightly</strong> branch and use <code>jaiph use nightly</code>
+                        <strong>~/.local/bin</strong>. To switch versions, use <code>jaiph use nightly</code>
                         or <code>jaiph use &lt;version&gt;</code> to switch.
                     </p>
                 </div>
@@ -140,40 +138,28 @@ layout: null
                     data-sample-file="say_hello.jh">
                     <p><strong>Jaiph</strong> workflows are typically executable <code>.jh</code> files with a shebang.
                     </p>
-                    <p>The core primitives are <strong>rule</strong>, <strong>prompt</strong>, <strong>script</strong>
-                        and <strong>workflow</strong>. <strong>Workflows and rules</strong> are Jaiph-only:
-                        <code>ensure</code>,
-                        <code>run</code>, <code>const</code>, brace <code>if</code>, <code>fail</code>,
-                        <code>return</code>, inbox
-                        <code>&lt;-</code> / <code>-&gt;</code>, &hellip; &mdash; not arbitrary bash lines.
-                        <strong>Bash</strong>
-                        belongs in
-                        <code>script</code> blocks (and shared <code>.jaiph/lib</code> loaded from there). Workflows
-                        call rules with
-                        <code>ensure</code> and call workflows or scripts with <code>run</code>. In Jaiph
-                        strings, use JS template literal style: <code>${arg1}</code>, <code>${arg2}</code>
-                        (positional) or <code>${varName}</code> (named). You can also use
-                        <strong>inline capture interpolation</strong>: <code>${run ref}</code> /
-                        <code>${ensure ref}</code> to execute a managed call and inline the result
-                        (e.g. <code>log "Got: ${run greet()}"</code>).
+                    <p>The core primitives are <strong>rule</strong> (read-only checks), <strong>prompt</strong>
+                        (calling agents), <strong>script</strong> (custom code or shell commands)
+                        and <strong>workflow</strong> (the main unit of orchestration).
                     </p>
                     <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
-script arg_is_non_empty {
-  test -n "$1"
+script name_was_provided_check {
+  # by default it's bash but you can provide your own shebang here
+  if [ -z "$1" ]; then
+    echo "You didn't provide your name :(" >&2
+    exit 1
+  fi
 }
 
 rule name_was_provided {
-  if not run arg_is_non_empty("${arg1}") {
-    logerr "You didn't provide your name :("
-    fail "You didn't provide your name"
-  }
+  run name_was_provided_check("${arg1}")
 }
 
 workflow default {
   ensure name_was_provided("${arg1}")
 
-  const response = prompt "
+  response = prompt "
     Say hello to ${arg1} and provide a fun fact about a person with the same name.
     Respond with a single line. Do not inspect files or run tools.
   "
@@ -187,12 +173,14 @@ Jaiph: Running say_hello.jh
 
 <span class="run-keyword">workflow</span> default <span class="run-params">(1="Jakub")</span>
   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> name_was_provided <span class="run-params">(1="Jakub")</span>
+  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">script</span> name_was_provided_check <span class="run-params">(1="Jakub")</span>
+  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">script name_was_provided_check (0s)</span>
   <span class="run-pass">✓</span> <span class="run-time">rule name_was_provided (0s)</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> "Say hello to ${arg1} and" <span class="run-params">(arg1="Jakub")</span>
-  <span class="run-pass">✓</span> <span class="run-time">prompt prompt (9s)</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> "Say hello to Jakub and p..." <span class="run-params">(1="Jakub")</span>
+  <span class="run-pass">✓</span> <span class="run-time">prompt prompt (10s)</span>
   <span class="run-marker">ℹ</span> Hi Jakub — fun fact: Jakub Marian is a Czech linguist and polyglot who speaks over a dozen languages.
 
-<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(8.9s)</span></code></pre>
+<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(11.1s)</span></code></pre>
                     <p>When you don't provide the name parameter, the workflow fails:</p>
                     <pre><code class="jaiph-run" data-sample-output="failure"><span class="run-command">➜  ./say_hello.jh</span>
 
@@ -200,17 +188,18 @@ Jaiph: Running say_hello.jh
 
 <span class="run-keyword">workflow</span> default
   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> name_was_provided
-  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">script</span> arg_is_non_empty
-  <span class="run-marker">·</span>   <span class="run-fail">✗ script arg_is_non_empty</span> <span class="run-time">(0s)</span>
-  <span class="run-marker">·</span>   <span class="run-fail">! You didn't provide your name :(</span>
+  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">script</span> name_was_provided_check
+  <span class="run-marker">·</span>   <span class="run-fail">✗ script name_was_provided_check</span> <span class="run-time">(0s)</span>
   <span class="run-fail">✗ rule name_was_provided</span> <span class="run-time">(0s)</span>
 
-<span class="run-fail">✗ FAIL</span> <span class="run-keyword">workflow</span> default <span class="run-time">(0.2s)</span>
-  Workflow execution failed.
+<span class="run-fail">✗ FAIL</span> <span class="run-keyword">workflow</span> default <span class="run-time">(0.3s)</span>
   Logs: &lt;path&gt;
   Summary: &lt;path&gt;
     out: &lt;path&gt;
-    err: &lt;path&gt;</code></pre>
+    err: &lt;path&gt;
+
+  Output of failed step:
+    You didn't provide your name :(</code></pre>
                     <p>
                         Jaiph also supports structured output. You can use the following syntax:
                     </p>
@@ -256,7 +245,6 @@ testing say_hello.test.jh
   <span class="run-fail">✗</span> expectEqual failed: <span class="run-time">0s</span>
     <span class="run-diff-minus">- You didn't provide your name</span>
     <span class="run-diff-plus">+ You didn't provide your name :(</span>
-"You didn't provide your name"
 
   <span class="run-marker">▸</span> with name, returns greeting and logs response
   <span class="run-pass">✓</span> <span class="run-time">0s</span>
@@ -342,25 +330,25 @@ channel findings
 channel report
 
 workflow scanner {
+  log "Scanning for issues..."
   findings <- "Found 3 issues in auth module"
 }
 
 workflow analyst {
+  log "Analyzing message from ${arg3} on channel ${arg2}..."
   report <- "Summary: ${arg1}"
 }
 
-script print_reviewed {
-  echo "[reviewed] $1"
-}
-
 workflow reviewer {
-  run print_reviewed("${arg1}")
+  log "Reviewing message from ${arg3} on channel ${arg2}..."
+  logerr "Critical issue: ${arg1}"
 }
 
 workflow default {
-  run scanner()
   findings -> analyst
   report -> reviewer
+
+  run scanner()
 }</code></pre>
                     <p>Running the workflow:</p>
                     <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  ./agent_inbox.jh</span>
@@ -369,14 +357,17 @@ Jaiph: Running agent_inbox.jh
 
 <span class="run-keyword">workflow</span> default
   <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> scanner
+  <span class="run-marker">·</span>   <span class="run-marker">ℹ</span> Scanning for issues...
   <span class="run-pass">✓</span> <span class="run-time">workflow scanner (0s)</span>
   <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> analyst
+  <span class="run-marker">·</span>   <span class="run-marker">ℹ</span> Analyzing message from scanner on channel findings...
   <span class="run-pass">✓</span> <span class="run-time">workflow analyst (0s)</span>
   <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> reviewer
-  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">script</span> print_reviewed <span class="run-params">(1="\"Summary: \"Found 3 issues in aut...")</span>
-  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">script print_reviewed (0s)</span>
+  <span class="run-marker">·</span>   <span class="run-marker">ℹ</span> Reviewing message from analyst on channel report...
+  <span class="run-marker">·</span>   <span class="run-fail">! Critical issue: "Summary: "Found 3 issues in auth module""</span>
   <span class="run-pass">✓</span> <span class="run-time">workflow reviewer (0s)</span>
-<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(0.2s)</span></code></pre>
+
+<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(0s)</span></code></pre>
                 </div>
 
                 <div class="code-tab-panel" data-panel="async-jh" data-sample="async" data-sample-file="async.jh">
@@ -664,7 +655,9 @@ Jaiph: Running async.jh
     </div>
 
     <script src="assets/js/main.js"></script>
-    <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "562e85f871544db4a71520a1b6ac317a"}'></script><!-- End Cloudflare Web Analytics -->
+    <!-- Cloudflare Web Analytics -->
+    <script defer src='https://static.cloudflareinsights.com/beacon.min.js'
+        data-cf-beacon='{"token": "562e85f871544db4a71520a1b6ac317a"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 
 </html>
