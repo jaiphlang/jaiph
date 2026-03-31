@@ -172,7 +172,9 @@ result = prompt "Analyze this code" \
   returns '{ type: string, risk: string }'
 ```
 
-When `returns` is present, capture is required. The schema is flat only — allowed types are `string`, `number`, `boolean`. The runtime validates the response: it searches for valid JSON (last non-empty line, fenced code blocks, standalone `{…}`, embedded JSON). On success, the capture variable holds the raw JSON string and each field is exported as `${result_type}`, `${result_risk}`, etc. On failure, the step fails with a parse, missing-field, or type error.
+When `returns` is present, capture is required. The schema is flat only — allowed types are `string`, `number`, `boolean`. The runtime validates the response: it searches for valid JSON (last non-empty line, fenced code blocks, standalone `{…}`, embedded JSON). On success, the capture variable holds the raw JSON string and each field is accessible via **dot notation** — `${result.type}`, `${result.risk}`. The underscore form (`${result_type}`) also works but dot notation is preferred for clarity. On failure, the step fails with a parse, missing-field, or type error.
+
+**Dot notation validation:** The compiler validates `${var.field}` references at compile time. If `var` is not a typed prompt capture, the compiler reports an error. If `field` is not defined in the `returns` schema, the error lists available fields. At runtime, `${result.type}` resolves to the same storage slot as `${result_type}` — both forms are interchangeable.
 
 Prompts are not allowed in rules.
 
@@ -324,6 +326,7 @@ Jaiph orchestration strings support `${identifier}` interpolation:
 | Form | Status | Where |
 |---|---|---|
 | `${varName}` | Primary | All Jaiph strings |
+| `${var.field}` | Dot notation — typed prompt field access | All Jaiph strings |
 | `${arg1}`, `${arg2}`, … | Positional arguments | All Jaiph strings |
 | `${run ref(args)}` | Inline capture — executes call, inlines output | All Jaiph strings |
 | `${ensure ref(args)}` | Inline capture — executes rule, inlines result | All Jaiph strings |
@@ -332,6 +335,8 @@ Jaiph orchestration strings support `${identifier}` interpolation:
 | `${var:-fallback}` | Rejected (`E_PARSE`) | — |
 | `$(…)` | Rejected (`E_PARSE`) | — |
 | `` ` `` (unescaped backtick) | Rejected (`E_PARSE`) — escape with `` \` `` | — |
+
+**Dot notation** (`${var.field}`) accesses a single field from a typed prompt capture. The variable must be bound to a `prompt … returns` step, and the field must exist in the schema. Both constraints are checked at compile time. See [prompt — Typed prompt](#prompt--agent-interaction) for details.
 
 **Inline captures** execute a managed call directly inside the string:
 
@@ -464,7 +469,7 @@ After parsing, the compiler validates references and config (`src/transpile/vali
 
 - **E_PARSE:** Invalid syntax — duplicate config, invalid keys/values, unescaped backticks, `$(…)` or `${var:-fallback}` in orchestration strings, `prompt … returns` without capture, bare `ref(args)` in const RHS (use `run`/`ensure`/`prompt`), `local` at top level, unrecognized workflow/rule line, invalid send RHS, arguments after `recover`, bare `recover` with no recovery step, nested inline captures, shell redirection after `run`/`ensure`, parentheses on definitions, or missing `{` on definition line.
 - **E_SCHEMA:** Invalid `returns` schema — empty, non-flat, unsupported type (only `string`, `number`, `boolean`).
-- **E_VALIDATE:** Reference errors — unknown rule/workflow, duplicate alias, `ensure` on non-rule, `run` on rule, `run` to workflow inside rule, `run async` in rule, forbidden Jaiph usage inside `$(…)`.
+- **E_VALIDATE:** Reference errors — unknown rule/workflow, duplicate alias, `ensure` on non-rule, `run` on rule, `run` to workflow inside rule, `run async` in rule, forbidden Jaiph usage inside `$(…)`, dot notation on non-prompt variable or invalid field name.
 - **E_IMPORT_NOT_FOUND:** Import target file does not exist.
 
 Validation rules:

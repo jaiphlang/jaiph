@@ -128,6 +128,24 @@ export function extractInlineCaptures(content: string): InlineCapture[] {
   return captures;
 }
 
+export interface DotFieldRef {
+  varName: string;
+  fieldName: string;
+}
+
+const DOT_FIELD_RE = /\$\{([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\}/g;
+
+/** Extract ${var.field} dot-notation references from string content (unquoted). */
+export function extractDotFieldRefs(content: string): DotFieldRef[] {
+  const refs: DotFieldRef[] = [];
+  const re = new RegExp(DOT_FIELD_RE.source, "g");
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(content)) !== null) {
+    refs.push({ varName: m[1], fieldName: m[2] });
+  }
+  return refs;
+}
+
 /**
  * Strip outer double quotes from a string if present.
  */

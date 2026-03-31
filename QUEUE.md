@@ -12,35 +12,6 @@ Process rules:
 
 ---
 
-## Dot notation for typed prompt fields `${var.field}` <!-- dev-ready -->
-
-**Goal**  
-Support field access syntax for typed prompt captures.
-
-**Context**
-
-- Underscore-concatenated names (`$response_message`) are ambiguous and non-obvious.
-- The `interpolate()` function in `node-workflow-runtime.ts` (line ~69) currently matches `${identifier}` and `$identifier` — no dot notation.
-
-**Key files:**
-- `src/runtime/kernel/node-workflow-runtime.ts` — `interpolate()` (line ~69)
-- `src/parse/steps.ts` — string parsing
-- `src/transpile/validate.ts` — validation (check field against prompt schema)
-
-**Scope**
-
-1. Parse `${identifier.field}` in interpolation.
-2. Validate `field` against prompt schema for `identifier`.
-3. Implement deterministic runtime mapping to existing storage format.
-4. Update docs and tests.
-
-**Acceptance criteria**
-
-- `${response.message}` works in all interpolation contexts.
-- Invalid field names fail at validation time with actionable errors.
-
----
-
 ## Direct `return run` / `return ensure` support <!-- dev-ready -->
 
 **Goal**  
@@ -425,4 +396,3 @@ Support `codex` as a first-class prompt backend via the OpenAI Codex API.
 - Structured `returns` works with codex.
 
 ---
-

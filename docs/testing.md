@@ -185,7 +185,7 @@ Expected strings must be double-quoted. Escape `"` inside the string with `\"`. 
 
 ## Typed prompts
 
-When a workflow uses typed prompts (`returns '{ ... }'`), mock text must be a single line of valid JSON matching the schema so that parsing and field variables work correctly. See `e2e/prompt_returns_run_capture.test.jh` for an example.
+When a workflow uses typed prompts (`returns '{ ... }'`), mock text must be a single line of valid JSON matching the schema so that parsing and field variables work correctly. Fields are accessed with dot notation — `${result.field}` — in `log`, `return`, and other interpolation contexts. See `e2e/prompt_returns_run_capture.test.jh` and `e2e/dot_notation.test.jh` for examples.
 
 ## Pass/fail reporting
 

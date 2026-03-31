@@ -209,7 +209,8 @@ Jaiph: Running say_hello.jh
                         object with the fields <code>hello</code> and <code>fact</code>, and it will parse the response
                         and set the capture variable to the raw JSON string. The parser tolerates text before the JSON
                         object (e.g. when the agent writes preamble before <code>{...}</code>). You can access the
-                        fields with <code>${response_hello}</code> and <code>${response_fact}</code>.
+                        fields with dot notation: <code>${response.hello}</code> and <code>${response.fact}</code>.
+                        The underscore form (<code>${response_hello}</code>) also works but dot notation is preferred.
                     </p>
                 </div>
 

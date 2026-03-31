@@ -495,3 +495,75 @@ test("extractInlineCaptures returns empty for plain string", () => {
   const result = extractInlineCaptures('hello ${name} world');
   assert.deepEqual(result, []);
 });
+
+// ---------------------------------------------------------------------------
+// extractDotFieldRefs
+// ---------------------------------------------------------------------------
+
+test("extractDotFieldRefs extracts single dot-notation ref", () => {
+  const { extractDotFieldRefs } = require("./validate-string");
+  const result = extractDotFieldRefs('hello ${response.message} world');
+  assert.deepEqual(result, [{ varName: "response", fieldName: "message" }]);
+});
+
+test("extractDotFieldRefs extracts multiple dot-notation refs", () => {
+  const { extractDotFieldRefs } = require("./validate-string");
+  const result = extractDotFieldRefs('${a.x} and ${b.y}');
+  assert.deepEqual(result, [
+    { varName: "a", fieldName: "x" },
+    { varName: "b", fieldName: "y" },
+  ]);
+});
+
+test("extractDotFieldRefs returns empty for plain ${var}", () => {
+  const { extractDotFieldRefs } = require("./validate-string");
+  const result = extractDotFieldRefs('hello ${name} world');
+  assert.deepEqual(result, []);
+});
+
+test("extractDotFieldRefs ignores underscore-style ${var_field}", () => {
+  const { extractDotFieldRefs } = require("./validate-string");
+  const result = extractDotFieldRefs('${response_message}');
+  assert.deepEqual(result, []);
+});
+
+test("valid: ${response.field} dot notation in log compiles", () => {
+  withTempDir("jaiph-str-dot-ok-", (root) => {
+    writeJh(root, "m.jh", [
+      "workflow default {",
+      '  result = prompt "Analyse" returns \'{ type: string, risk: string }\'',
+      '  log "type is ${result.type}"',
+      "}",
+    ]);
+    buildScripts(join(root, "m.jh"), join(root, "out"));
+  });
+});
+
+test("invalid: ${x.field} where x has no schema fails at compile time", () => {
+  withTempDir("jaiph-str-dot-noscema-", (root) => {
+    writeJh(root, "m.jh", [
+      "workflow default {",
+      '  log "value ${x.field}"',
+      "}",
+    ]);
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      /not a typed prompt capture/,
+    );
+  });
+});
+
+test("invalid: ${result.bogus} where bogus is not in schema fails at compile time", () => {
+  withTempDir("jaiph-str-dot-badfield-", (root) => {
+    writeJh(root, "m.jh", [
+      "workflow default {",
+      '  result = prompt "Analyse" returns \'{ type: string, risk: string }\'',
+      '  log "bad field ${result.bogus}"',
+      "}",
+    ]);
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      /field "bogus" is not defined in the returns schema/,
+    );
+  });
+});
