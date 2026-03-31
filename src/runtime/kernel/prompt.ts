@@ -22,6 +22,33 @@ export type PromptConfig = {
   promptFinalFile: string;
 };
 
+export type ModelResolution = {
+  model: string;
+  reason: "explicit" | "flags" | "backend-default";
+};
+
+/**
+ * Resolve the effective model for the current backend.
+ *
+ * Selection order:
+ * 1. Explicit model (agent.default_model / JAIPH_AGENT_MODEL) → use it.
+ * 2. Model embedded in backend flags (--model in claude_flags/cursor_flags) → use it.
+ * 3. No model → backend auto-selects (both cursor-agent and claude CLI pick defaults).
+ */
+export function resolveModel(config: PromptConfig): ModelResolution {
+  if (config.model) {
+    return { model: config.model, reason: "explicit" };
+  }
+  // Check if --model is embedded in backend-specific flags.
+  const flags = config.backend === "claude" ? config.claudeFlags : config.cursorFlags;
+  const modelIdx = flags.indexOf("--model");
+  if (modelIdx !== -1 && modelIdx + 1 < flags.length) {
+    return { model: flags[modelIdx + 1], reason: "flags" };
+  }
+  // Both cursor-agent and claude CLI auto-select a model when none is provided.
+  return { model: "", reason: "backend-default" };
+}
+
 export function resolveConfig(env: NodeJS.ProcessEnv = process.env): PromptConfig {
   const workspaceRoot = env.JAIPH_WORKSPACE || process.cwd();
   return {
@@ -65,10 +92,13 @@ function formatShellCommand(parts: string[]): string {
 /** Build the command args for the selected backend. */
 export function buildBackendArgs(config: PromptConfig, promptText: string): { command: string; args: string[] } {
   if (config.backend === "claude") {
-    return {
-      command: "claude",
-      args: ["-p", "--verbose", "--output-format", "stream-json", "--include-partial-messages", ...config.claudeFlags],
-    };
+    const args = ["-p", "--verbose", "--output-format", "stream-json", "--include-partial-messages"];
+    // Pass --model from agent.default_model when set and not already in claude_flags.
+    if (config.model && !config.claudeFlags.includes("--model")) {
+      args.push("--model", config.model);
+    }
+    args.push(...config.claudeFlags);
+    return { command: "claude", args };
   }
   // cursor backend
   const commandParts = config.agentCommand.split(/\s+/).filter(Boolean);
