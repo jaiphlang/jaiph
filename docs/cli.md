@@ -11,7 +11,7 @@ Jaiph ships as a command-line tool. You point it at `.jh` source files, and it v
 
 Before execution, the CLI runs compile-time validation and script extraction. It then hands off to the Node workflow runtime, which interprets the parsed AST directly — there is no Bash transpilation of workflows; only extracted `script` bodies are emitted as shell. The CLI owns process spawn and signal propagation; the runtime kernel owns prompt and script execution, file-backed inbox, the `__JAIPH_EVENT__` stream on stderr, and `run_summary.jsonl`. For full architecture details, see [Architecture](architecture).
 
-**Commands:** `run`, `test`, `init`, `use`, `report`.
+**Commands:** `run`, `test`, `format`, `init`, `use`, `report`.
 
 **Global options:** `-h` / `--help` and `-v` / `--version` are recognized only as the **first argument** (e.g. `jaiph --help`). They are not parsed after a subcommand or file path. `jaiph report` has its own `--help`.
 
@@ -239,6 +239,34 @@ jaiph test
 jaiph test ./e2e
 jaiph test e2e/workflow_greeting.test.jh
 jaiph test e2e/say_hello.test.jh
+```
+
+## `jaiph format`
+
+Reformat `.jh` source files to a canonical style. The formatter parses each file into an AST and re-emits it with consistent whitespace and indentation. Formatting is idempotent — running it twice produces the same output. Comments and shebangs are preserved.
+
+```bash
+jaiph format [--check] [--indent <n>] <file.jh ...>
+```
+
+One or more `.jh` file paths are required. Non-`.jh` files are rejected. If a file cannot be parsed, the command exits immediately with status 1 and a parse error on stderr.
+
+**Flags:**
+
+- **`--indent <n>`** — spaces per indent level (default: `2`).
+- **`--check`** — verify formatting without writing. Exits 0 when all files are already formatted; exits 1 when any file needs changes, printing the file name to stderr. No files are modified in check mode.
+
+**Examples:**
+
+```bash
+# Rewrite files in place
+jaiph format flow.jh utils.jh
+
+# Check formatting in CI (non-zero exit on drift)
+jaiph format --check src/**/*.jh
+
+# Use 4-space indentation
+jaiph format --indent 4 flow.jh
 ```
 
 ## `jaiph init`

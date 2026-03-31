@@ -6,6 +6,7 @@ import { runTest } from "./commands/test";
 import { runInit } from "./commands/init";
 import { runUse } from "./commands/use";
 import { runReportCommand } from "./commands/report";
+import { runFormat } from "./commands/format";
 
 export async function main(argv: string[]): Promise<number> {
   const [, , cmd, ...rest] = argv;
@@ -35,6 +36,9 @@ export async function main(argv: string[]): Promise<number> {
     }
     if (cmd === "use") {
       return runUse(rest);
+    }
+    if (cmd === "format") {
+      return runFormat(rest);
     }
     if (cmd === "report") {
       return runReportCommand(rest);
