@@ -13,7 +13,7 @@ rule name_was_provided(name) {
 }
 
 workflow default() {
-  ensure name_was_provided("${arg1}")
+  ensure name_was_provided(arg1)
 
   response = prompt ```
     Say hello to ${arg1} and provide a fun fact about a person with the same name.

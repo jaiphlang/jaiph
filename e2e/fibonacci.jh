@@ -8,7 +8,7 @@ fi
 ```
 
 rule ensure_is_number(value) {
-  run ensure_is_number_impl("${value}")
+  run ensure_is_number_impl(value)
 }
 
 script fib = ```
@@ -32,7 +32,7 @@ echo "$result"
 ```
 
 workflow default(n) {
-  ensure ensure_is_number("${n}")
-  result = run fib("${n}")
+  ensure ensure_is_number(n)
+  result = run fib(n)
   log "${result}"
 }

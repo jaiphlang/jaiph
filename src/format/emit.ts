@@ -178,9 +178,38 @@ function emitSteps(steps: WorkflowStepDef[], pad: string, currentIndent: string)
   return lines;
 }
 
-function emitRef(ref: { value: string }, args?: string): string {
+/** Convert space-separated args back to comma-separated format with bare identifiers. */
+function formatArgs(args: string, bareIdentifierArgs?: string[]): string {
+  const bare = new Set(bareIdentifierArgs ?? []);
+  const tokens: string[] = [];
+  let i = 0;
+  while (i < args.length) {
+    while (i < args.length && (args[i] === " " || args[i] === "\t")) i++;
+    if (i >= args.length) break;
+    if (args[i] === '"') {
+      let j = i + 1;
+      while (j < args.length && !(args[j] === '"' && args[j - 1] !== "\\")) j++;
+      tokens.push(args.slice(i, j + 1));
+      i = j + 1;
+    } else {
+      let j = i;
+      while (j < args.length && args[j] !== " " && args[j] !== "\t") j++;
+      const token = args.slice(i, j);
+      const m = token.match(/^\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}$/);
+      if (m && bare.has(m[1])) {
+        tokens.push(m[1]);
+      } else {
+        tokens.push(token);
+      }
+      i = j;
+    }
+  }
+  return tokens.join(", ");
+}
+
+function emitRef(ref: { value: string }, args?: string, bareIdentifierArgs?: string[]): string {
   if (args !== undefined) {
-    return `${ref.value}(${args})`;
+    return `${ref.value}(${formatArgs(args, bareIdentifierArgs)})`;
   }
   return `${ref.value}()`;
 }
@@ -188,9 +217,9 @@ function emitRef(ref: { value: string }, args?: string): string {
 function emitCondition(cond: IfConditionDef, negated: boolean): string {
   const neg = negated ? "not " : "";
   if (cond.kind === "ensure") {
-    return `${neg}ensure ${emitRef(cond.ref, cond.args)}`;
+    return `${neg}ensure ${emitRef(cond.ref, cond.args, cond.bareIdentifierArgs)}`;
   }
-  return `${neg}run ${emitRef(cond.ref, cond.args)}`;
+  return `${neg}run ${emitRef(cond.ref, cond.args, cond.bareIdentifierArgs)}`;
 }
 
 function emitMatchPattern(p: import("../types").MatchPatternDef): string {
@@ -218,7 +247,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
     }
 
     case "ensure": {
-      const ref = emitRef(step.ref, step.args);
+      const ref = emitRef(step.ref, step.args, step.bareIdentifierArgs);
       const capture = step.captureName ? `${step.captureName} = ` : "";
       if (step.recover) {
         if ("single" in step.recover) {
@@ -237,7 +266,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
     }
 
     case "run": {
-      const ref = emitRef(step.workflow, step.args);
+      const ref = emitRef(step.workflow, step.args, step.bareIdentifierArgs);
       const capture = step.captureName ? `${step.captureName} = ` : "";
       const asyncPrefix = step.async ? "async " : "";
       lines.push(`${ci}${capture}run ${asyncPrefix}${ref}`);
@@ -305,9 +334,9 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
     case "return": {
       if (step.managed) {
         if (step.managed.kind === "run") {
-          lines.push(`${ci}return run ${emitRef(step.managed.ref, step.managed.args)}`);
+          lines.push(`${ci}return run ${emitRef(step.managed.ref, step.managed.args, step.managed.bareIdentifierArgs)}`);
         } else if (step.managed.kind === "ensure") {
-          lines.push(`${ci}return ensure ${emitRef(step.managed.ref, step.managed.args)}`);
+          lines.push(`${ci}return ensure ${emitRef(step.managed.ref, step.managed.args, step.managed.bareIdentifierArgs)}`);
         } else if (step.managed.kind === "match") {
           lines.push(`${ci}return ${step.managed.match.subject} match {`);
           for (const arm of step.managed.match.arms) {
@@ -368,9 +397,9 @@ function emitConstStep(name: string, value: ConstRhs): string {
     case "expr":
       return `const ${name} = ${value.bashRhs}`;
     case "run_capture":
-      return `const ${name} = run ${emitRef(value.ref, value.args)}`;
+      return `const ${name} = run ${emitRef(value.ref, value.args, value.bareIdentifierArgs)}`;
     case "ensure_capture":
-      return `const ${name} = ensure ${emitRef(value.ref, value.args)}`;
+      return `const ${name} = ensure ${emitRef(value.ref, value.args, value.bareIdentifierArgs)}`;
     case "prompt_capture": {
       const returns = value.returns ? ` returns "${value.returns}"` : "";
       if (value.bodyKind === "identifier" && value.bodyIdentifier) {
@@ -406,7 +435,7 @@ function emitSendRhs(rhs: SendRhsDef): string {
     case "var":
       return rhs.bash;
     case "run":
-      return `run ${emitRef(rhs.ref, rhs.args)}`;
+      return `run ${emitRef(rhs.ref, rhs.args, rhs.bareIdentifierArgs)}`;
     case "bare_ref":
       return rhs.ref.value;
     case "shell":

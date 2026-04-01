@@ -574,7 +574,7 @@ test("parser: const allows run-wrapped script call with args", () => {
   const source = [
     'script some_script = "echo \\"$1\\""',
     "workflow default() {",
-    '  const x = run some_script("${arg}")',
+    '  const x = run some_script(arg1)',
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
@@ -587,7 +587,7 @@ test("parser: const allows run-wrapped script call with args", () => {
   assert.equal(step.name, "x");
   assert.equal(step.value.kind, "run_capture");
   assert.equal(step.value.ref?.value, "some_script");
-  assert.equal(step.value.args, '"${arg}"');
+  assert.equal(step.value.args, '${arg1}');
 });
 
 test("parser: const prompt capture parses", () => {

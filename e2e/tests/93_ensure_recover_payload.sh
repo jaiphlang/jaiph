@@ -39,21 +39,21 @@ exit 1
 
 script mark_recovered = "touch .jaiph/tmp/recovered"
 
-rule deep_rule {
+rule deep_rule() {
   run emit_deep_step_then_fail_until_recovered()
 }
 
-rule nested_rule {
+rule nested_rule() {
   run emit_nested_step()
   ensure deep_rule()
 }
 
-rule top_rule {
+rule top_rule() {
   run emit_root_step()
   ensure nested_rule()
 }
 
-workflow default {
+workflow default() {
   ensure top_rule() recover {
     run save_string_to_file("recovered-on-retry", witness_failed_payload.txt)
     run mark_recovered()

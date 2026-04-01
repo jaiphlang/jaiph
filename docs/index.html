@@ -154,11 +154,11 @@ script name_was_provided_check = ```
 ```
 
 rule name_was_provided(name) {
-  run name_was_provided_check("${name}")
+  run name_was_provided_check(name)
 }
 
 workflow default(name) {
-  ensure name_was_provided("${name}")
+  ensure name_was_provided(name)
 
   response = prompt ```
     Say hello to ${name} and provide a fun fact about a person with the same name.
@@ -289,7 +289,7 @@ script save_string_to_file = "printf '%s' \"$1\" > \"$2\""
 
 workflow default {
   ensure ci_passes() recover {
-    run save_string_to_file("${arg1}", ".jaiph/tmp/ci_failure.log")
+    run save_string_to_file(arg1, ".jaiph/tmp/ci_failure.log")
     prompt "The CI check failed. Failure output is in .jaiph/tmp/ci_failure.log — fix the code so npm run test:ci passes."
   }
 }</code></pre>
@@ -394,8 +394,8 @@ workflow claude_say_hello {
 }
 
 workflow default {
-  run async cursor_say_hello("${arg1}")
-  run async claude_say_hello("${arg1}")
+  run async cursor_say_hello(arg1)
+  run async claude_say_hello(arg1)
 }</code></pre>
                     <p>Running the workflow:</p>
                     <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  ./async.jh</span>
@@ -590,9 +590,9 @@ Jaiph: Running async.jh
                         <code>run</code>
                         to a script). A
                         call-like RHS must use the keyword explicitly &mdash; e.g.
-                        <code>const x = run helper("${arg}")</code>,
+                        <code>const x = run helper(arg)</code>,
                         not
-                        <code>const x = helper("${arg}")</code> (compile error with a correction hint). See
+                        <code>const x = helper(arg)</code> (compile error with a correction hint). See
                         <a href="grammar#step-output-contract">Step output contract</a>.
                     </dd>
 

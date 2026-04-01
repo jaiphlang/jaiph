@@ -22,22 +22,22 @@ echo "details: expected 0 but got 1" >&2
 exit 1
 ```
 
-rule ci_passes {
+rule ci_passes() {
   run failing_ci_impl()
 }
 
-workflow implement {
+workflow implement(task, role) {
   const task = "${arg1}"
   ensure ci_passes() recover {
     const ci_failure_log = "${arg1}"
     const ci_log_file = ".jaiph/tmp/ensure_ci_passes.last.log"
     run mkdir_p_simple(".jaiph/tmp")
-    run save_string_to_file("${ci_failure_log}", "${ci_log_file}")
-    run save_string_to_file("${arg2}", ".jaiph/tmp/recover.role")
+    run save_string_to_file(ci_failure_log, ci_log_file)
+    run save_string_to_file(arg2, ".jaiph/tmp/recover.role")
   }
 }
 
-workflow default {
+workflow default() {
   run implement("original-task", "surgical")
 }
 EOF

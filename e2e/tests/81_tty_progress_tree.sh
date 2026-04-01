@@ -19,11 +19,11 @@ fi
 e2e::file "tty_tree.jh" <<'EOF'
 script leaf_fn = "sleep 4"
 
-workflow leaf {
+workflow leaf() {
   run leaf_fn()
 }
 
-workflow default {
+workflow default() {
   run leaf()
 }
 EOF

@@ -18,13 +18,13 @@ export PATH="${E2E_MOCK_BIN}:${PATH}"
 e2e::file "rule_pass.jh" <<'EOF'
 #!/usr/bin/env jaiph
 script check_passes_impl = "mock_ok"
-rule check_passes {
+rule check_passes() {
   run check_passes_impl()
 }
 script done_impl = ```
 echo "e2e-rule-pass-done"
 ```
-workflow default {
+workflow default() {
   ensure check_passes()
   msg = run done_impl()
   return "${msg}"
@@ -59,10 +59,10 @@ script check_fails_impl = "mock_fail"
 script unreachable_impl = ```
 echo "unreachable"
 ```
-rule check_fails {
+rule check_fails() {
   run check_fails_impl()
 }
-workflow default {
+workflow default() {
   ensure check_fails()
   run unreachable_impl()
 }
@@ -86,13 +86,13 @@ e2e::file "ensure_fail.jh" <<'EOF'
 #!/usr/bin/env jaiph
 script step_ok_impl = "mock_ok"
 script step_fail_impl = "mock_fail"
-rule step_ok {
+rule step_ok() {
   run step_ok_impl()
 }
-rule step_fail {
+rule step_fail() {
   run step_fail_impl()
 }
-workflow default {
+workflow default() {
   ensure step_ok()
   ensure step_fail()
 }
@@ -114,7 +114,7 @@ e2e::assert_contains "${ensure_fail_err}" "e2e-rule-fail-message" "ensure failur
 # Given
 e2e::file "prompt_flow.jh" <<'EOF'
 #!/usr/bin/env jaiph
-workflow default {
+workflow default() {
   prompt "e2e-prompt-please-return-mock"
 }
 EOF
@@ -163,7 +163,7 @@ e2e::file "prompt_with_vars.jh" <<'EOF'
 #!/usr/bin/env jaiph
 const role = "engineer"
 const task = "Fix bugs"
-workflow default {
+workflow default() {
   prompt "${role} does ${task}"
 }
 EOF
@@ -187,13 +187,13 @@ e2e::assert_contains "${prompt_vars_out_file}" "engineer does Fix bugs" "prompt_
 # (fixed: JS kernel seq-alloc.ts provides atomic allocation across branches).
 e2e::file "async_prompt_artifacts.jh" <<'EOF'
 #!/usr/bin/env jaiph
-workflow left {
+workflow left() {
   prompt "async-left"
 }
-workflow right {
+workflow right() {
   prompt "async-right"
 }
-workflow default {
+workflow default() {
   run async left()
   run async right()
 }
@@ -229,7 +229,7 @@ fi
 e2e::file "multiline_prompt.jh" <<'EOF'
 #!/usr/bin/env jaiph
 script done_impl = "echo done"
-workflow default {
+workflow default() {
   prompt ```
     Line one and line two.
 ```
@@ -257,7 +257,7 @@ e2e::assert_contains "${multiline_default_out}" "Line one and line two." "fenced
 # Given: workflow with prompt but test does not mock it -> selected backend runs (cursor by default).
 e2e::file "prompt_unmatched.jh" <<'EOF'
 #!/usr/bin/env jaiph
-workflow default {
+workflow default() {
   result = prompt "e2e-unmatched-prompt-never-mocked"
   return "${result}"
 }

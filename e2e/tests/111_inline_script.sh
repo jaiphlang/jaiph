@@ -14,7 +14,7 @@ e2e::section "basic inline script execution"
 # ---------------------------------------------------------------------------
 
 e2e::file "inline_basic.jh" <<'EOF'
-workflow default {
+workflow default() {
   run script() "echo inline-ok"
 }
 EOF
@@ -45,7 +45,7 @@ e2e::section "inline script with arguments"
 # ---------------------------------------------------------------------------
 
 e2e::file "inline_args.jh" <<'EOF'
-workflow default {
+workflow default() {
   run script("hello", "world") "echo $1-$2"
 }
 EOF
@@ -72,9 +72,9 @@ script show = ```
 echo "got: $1"
 ```
 
-workflow default {
+workflow default() {
   x = run script() "echo captured-value"
-  run show("${x}")
+  run show(x)
 }
 EOF
 
@@ -100,9 +100,9 @@ script show_const = ```
 echo "const: $1"
 ```
 
-workflow default {
+workflow default() {
   const val = run script() "echo const-value"
-  run show_const("${val}")
+  run show_const(val)
 }
 EOF
 
@@ -147,7 +147,7 @@ e2e::section "inline script isolation (no parent scope)"
 e2e::file "inline_iso.jh" <<'EOF'
 const secret = "parent-secret"
 
-workflow default {
+workflow default() {
   run script() "echo secret=${secret:-EMPTY}"
 }
 EOF

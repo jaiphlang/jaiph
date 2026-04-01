@@ -17,7 +17,7 @@ script changed_files = ```
 echo "fn-called" > script_called.txt
 ```
 
-workflow default {
+workflow default() {
   run changed_files()
 }
 EOF
@@ -47,7 +47,7 @@ e2e::section "run, ensure, and script argument forwarding"
 e2e::file "args_forwarding.jh" <<'EOF'
 script expect_args_impl = "return 0"
 
-rule expect_args {
+rule expect_args(a, b) {
   run expect_args_impl()
 }
 
@@ -59,13 +59,13 @@ script write_workflow_args = ```
 printf "%s|%s\n" "$1" "$2" > workflow_args.txt
 ```
 
-workflow called {
-  ensure expect_args("${arg1}", "${arg2}")
-  run write_args("${arg1}", "${arg2}")
-  run write_workflow_args("${arg1}", "${arg2}")
+workflow called(a, b) {
+  ensure expect_args(arg1, arg2)
+  run write_args(arg1, arg2)
+  run write_workflow_args(arg1, arg2)
 }
 
-workflow default {
+workflow default() {
   run called("one", "two words")
 }
 EOF

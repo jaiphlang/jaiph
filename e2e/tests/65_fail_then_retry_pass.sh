@@ -19,26 +19,26 @@ rm -f "${TEST_DIR}/.gate1_passed" "${TEST_DIR}/.gate2_passed"
 # Given
 e2e::file "make_pass.jh" <<'EOF'
 script gate1_impl = "test -f .gate1_passed"
-rule gate1 {
+rule gate1() {
   run gate1_impl()
 }
 
 script gate2_impl = "test -f .gate2_passed"
-rule gate2 {
+rule gate2() {
   run gate2_impl()
 }
 
 script remediate1_impl = "touch .gate1_passed"
-workflow remediate1 {
+workflow remediate1() {
   run remediate1_impl()
 }
 
 script remediate2_impl = "touch .gate2_passed"
-workflow remediate2 {
+workflow remediate2() {
   run remediate2_impl()
 }
 
-workflow make_pass {
+workflow make_pass() {
   if not ensure gate1() {
     run remediate1()
     run make_pass()
@@ -49,7 +49,7 @@ workflow make_pass {
   }
 }
 
-workflow default {
+workflow default() {
   run make_pass()
 }
 EOF
@@ -114,19 +114,19 @@ rm -f "${TEST_DIR}/.gate_passed"
 
 # Given
 e2e::file "make_pass_bash.jh" <<'EOF'
-rule gate {
+rule gate() {
   run check_gate()
 }
 script check_gate = "test -f .gate_passed"
 script mark_gate = "touch .gate_passed"
-workflow make_pass {
+workflow make_pass() {
   if not ensure gate() {
     run mark_gate()
     run make_pass()
   }
 }
 
-workflow default {
+workflow default() {
   run make_pass()
 }
 EOF

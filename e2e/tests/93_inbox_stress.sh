@@ -90,53 +90,53 @@ script emit_m8 = "echo \"m8\""
 script emit_m9 = "echo \"m9\""
 script emit_m10 = "echo \"m10\""
 
-workflow s1 {
+workflow s1() {
   data <- run emit_m1()
 }
 
-workflow s2 {
+workflow s2() {
   data <- run emit_m2()
 }
 
-workflow s3 {
+workflow s3() {
   data <- run emit_m3()
 }
 
-workflow s4 {
+workflow s4() {
   data <- run emit_m4()
 }
 
-workflow s5 {
+workflow s5() {
   data <- run emit_m5()
 }
 
-workflow s6 {
+workflow s6() {
   data <- run emit_m6()
 }
 
-workflow s7 {
+workflow s7() {
   data <- run emit_m7()
 }
 
-workflow s8 {
+workflow s8() {
   data <- run emit_m8()
 }
 
-workflow s9 {
+workflow s9() {
   data <- run emit_m9()
 }
 
-workflow s10 {
+workflow s10() {
   data <- run emit_m10()
 }
 
 script sink_impl = "echo \"$1\" >> sink_all.txt"
 
-workflow sink {
-  run sink_impl("${arg1}")
+workflow sink() {
+  run sink_impl(arg1)
 }
 
-workflow default {
+workflow default() {
   run s1()
   run s2()
   run s3()
@@ -184,37 +184,37 @@ script emit_pa = "echo \"pa\""
 script emit_pb = "echo \"pb\""
 script emit_pc = "echo \"pc\""
 
-workflow producer_a {
+workflow producer_a() {
   ch <- run emit_pa()
 }
 
-workflow producer_b {
+workflow producer_b() {
   ch <- run emit_pb()
 }
 
-workflow producer_c {
+workflow producer_c() {
   ch <- run emit_pc()
 }
 
 script target_x_impl = "echo \"x:$1\" >> fanout_log.txt"
 
-workflow target_x {
-  run target_x_impl("${arg1}")
+workflow target_x() {
+  run target_x_impl(arg1)
 }
 
 script target_y_impl = "echo \"y:$1\" >> fanout_log.txt"
 
-workflow target_y {
-  run target_y_impl("${arg1}")
+workflow target_y() {
+  run target_y_impl(arg1)
 }
 
 script target_z_impl = "echo \"z:$1\" >> fanout_log.txt"
 
-workflow target_z {
-  run target_z_impl("${arg1}")
+workflow target_z() {
+  run target_z_impl(arg1)
 }
 
-workflow default {
+workflow default() {
   run producer_a()
   run producer_b()
   run producer_c()
@@ -269,21 +269,21 @@ channel ch_processed
 script emit_raw = "echo \"raw-data\""
 script emit_processed = "echo \"processed:$1\""
 
-workflow sender {
+workflow sender() {
   ch_raw <- run emit_raw()
 }
 
-workflow processor {
-  ch_processed <- run emit_processed("${arg1}")
+workflow processor() {
+  ch_processed <- run emit_processed(arg1)
 }
 
 script nested_sink_impl = "echo \"$1\" > nested_result.txt"
 
-workflow sink {
-  run nested_sink_impl("${arg1}")
+workflow sink() {
+  run nested_sink_impl(arg1)
 }
 
-workflow default {
+workflow default() {
   run sender()
   ch_raw -> processor
   ch_processed -> sink
@@ -317,7 +317,7 @@ channel ch
 
 script emit_msg = "echo \"msg\""
 
-workflow producer {
+workflow producer() {
   ch <- run emit_msg()
 }
 
@@ -326,7 +326,7 @@ echo "a ran" > fail_a_ran.txt
 exit 1
 ```
 
-workflow fail_a {
+workflow fail_a() {
   run fail_a_impl()
 }
 
@@ -335,17 +335,17 @@ echo "b ran" > fail_b_ran.txt
 exit 1
 ```
 
-workflow fail_b {
+workflow fail_b() {
   run fail_b_impl()
 }
 
 script good_impl = "echo \"ok\" > fail_good_ran.txt"
 
-workflow good {
+workflow good() {
   run good_impl()
 }
 
-workflow default {
+workflow default() {
   run producer()
   ch -> fail_a, fail_b, good
 }
@@ -381,39 +381,39 @@ script emit_e3 = "echo \"e3\""
 script emit_e4 = "echo \"e4\""
 script emit_e5 = "echo \"e5\""
 
-workflow s1 {
+workflow s1() {
   ev <- run emit_e1()
 }
 
-workflow s2 {
+workflow s2() {
   ev <- run emit_e2()
 }
 
-workflow s3 {
+workflow s3() {
   ev <- run emit_e3()
 }
 
-workflow s4 {
+workflow s4() {
   ev <- run emit_e4()
 }
 
-workflow s5 {
+workflow s5() {
   ev <- run emit_e5()
 }
 
 script t1_impl = "echo \"t1:$1\" >> artifact_log.txt"
 
-workflow t1 {
-  run t1_impl("${arg1}")
+workflow t1() {
+  run t1_impl(arg1)
 }
 
 script t2_impl = "echo \"t2:$1\" >> artifact_log.txt"
 
-workflow t2 {
-  run t2_impl("${arg1}")
+workflow t2() {
+  run t2_impl(arg1)
 }
 
-workflow default {
+workflow default() {
   run s1()
   run s2()
   run s3()
@@ -462,31 +462,31 @@ script soak_emit_i1 = "echo \"i1\""
 script soak_emit_i2 = "echo \"i2\""
 script soak_emit_i3 = "echo \"i3\""
 
-workflow s1 {
+workflow s1() {
   ch <- run soak_emit_i1()
 }
 
-workflow s2 {
+workflow s2() {
   ch <- run soak_emit_i2()
 }
 
-workflow s3 {
+workflow s3() {
   ch <- run soak_emit_i3()
 }
 
 script soak_t1_impl = "echo \"t1:$1\" >> soak_log.txt"
 
-workflow t1 {
-  run soak_t1_impl("${arg1}")
+workflow t1() {
+  run soak_t1_impl(arg1)
 }
 
 script soak_t2_impl = "echo \"t2:$1\" >> soak_log.txt"
 
-workflow t2 {
-  run soak_t2_impl("${arg1}")
+workflow t2() {
+  run soak_t2_impl(arg1)
 }
 
-workflow default {
+workflow default() {
   run s1()
   run s2()
   run s3()
@@ -554,53 +554,53 @@ script seq_emit_m8 = "echo \"m8\""
 script seq_emit_m9 = "echo \"m9\""
 script seq_emit_m10 = "echo \"m10\""
 
-workflow s1 {
+workflow s1() {
   data <- run seq_emit_m1()
 }
 
-workflow s2 {
+workflow s2() {
   data <- run seq_emit_m2()
 }
 
-workflow s3 {
+workflow s3() {
   data <- run seq_emit_m3()
 }
 
-workflow s4 {
+workflow s4() {
   data <- run seq_emit_m4()
 }
 
-workflow s5 {
+workflow s5() {
   data <- run seq_emit_m5()
 }
 
-workflow s6 {
+workflow s6() {
   data <- run seq_emit_m6()
 }
 
-workflow s7 {
+workflow s7() {
   data <- run seq_emit_m7()
 }
 
-workflow s8 {
+workflow s8() {
   data <- run seq_emit_m8()
 }
 
-workflow s9 {
+workflow s9() {
   data <- run seq_emit_m9()
 }
 
-workflow s10 {
+workflow s10() {
   data <- run seq_emit_m10()
 }
 
 script seq_sink_impl = "echo \"$1\" >> seq_sink_all.txt"
 
-workflow sink {
-  run seq_sink_impl("${arg1}")
+workflow sink() {
+  run seq_sink_impl(arg1)
 }
 
-workflow default {
+workflow default() {
   run s1()
   run s2()
   run s3()

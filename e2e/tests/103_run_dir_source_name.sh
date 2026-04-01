@@ -14,7 +14,7 @@ e2e::section "run directory uses source file name (jaiph run + shebang exec)"
 e2e::file "source_named.jh" <<'EOF'
 #!/usr/bin/env jaiph
 script done_impl = "echo done"
-workflow default {
+workflow default() {
   run done_impl()
 }
 EOF

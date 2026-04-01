@@ -37,7 +37,7 @@ describe("emitModule", () => {
     const source = [
       "# Validates prerequisites.",
       "rule project_ready() {",
-      '  run check("${arg1}")',
+      '  run check(arg1)',
       "}",
       "",
     ].join("\n");
@@ -80,7 +80,7 @@ describe("emitModule", () => {
     const source = [
       "workflow default() {",
       '  const n = "${arg1}"',
-      '  const out = run helper("${n}")',
+      '  const out = run helper(n)',
       "  log \"${out}\"",
       "}",
       "",

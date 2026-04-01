@@ -23,13 +23,13 @@ exit 1
 
 script save_string_to_file = "printf '%s' \"$1\" > \"$2\""
 
-rule simple_echo_rule {
+rule simple_echo_rule() {
   run simple_echo()
 }
 
-workflow default {
+workflow default() {
   ensure simple_echo_rule() recover {
-    run save_string_to_file("${arg1}", "recover_simple.txt")
+    run save_string_to_file(arg1, "recover_simple.txt")
   }
 }
 EOF
@@ -58,18 +58,18 @@ exit 1
 
 script save_string_to_file = "printf '%s' \"$1\" > \"$2\""
 
-rule inner {
+rule inner() {
   run failing_script()
 }
 
-rule outer {
+rule outer() {
   log "outer start"
   ensure inner()
 }
 
-workflow default {
+workflow default() {
   ensure outer() recover {
-    run save_string_to_file("${arg1}", "recover_nested.log")
+    run save_string_to_file(arg1, "recover_nested.log")
   }
 }
 EOF
@@ -101,13 +101,13 @@ exit 1
 
 script save_string_to_file = "printf '%s' \"$1\" > \"$2\""
 
-rule ci_passes {
+rule ci_passes() {
   run npm_run_test_ci()
 }
 
-workflow default {
+workflow default() {
   ensure ci_passes() recover {
-    run save_string_to_file("${arg1}", "ci_failure.log")
+    run save_string_to_file(arg1, "ci_failure.log")
   }
 }
 EOF
@@ -151,13 +151,13 @@ exit 1
 
 script save_string_to_file = "printf '%s' \"$1\" > \"$2\""
 
-rule check_rule {
+rule check_rule() {
   run emit_attempt()
 }
 
-workflow default {
+workflow default() {
   ensure check_rule() recover {
-    run save_string_to_file("${arg1}", "payload_attempt_${_jaiph_retry}.txt")
+    run save_string_to_file(arg1, "payload_attempt_${_jaiph_retry}.txt")
   }
 }
 EOF
@@ -186,13 +186,13 @@ script say_ok = "echo \"all good\""
 
 script save_string_to_file = "printf '%s' \"$1\" > \"$2\""
 
-rule passes_first_try {
+rule passes_first_try() {
   run say_ok()
 }
 
-workflow default {
+workflow default() {
   ensure passes_first_try() recover {
-    run save_string_to_file("${arg1}", "false_payload.txt")
+    run save_string_to_file(arg1, "false_payload.txt")
   }
 }
 EOF

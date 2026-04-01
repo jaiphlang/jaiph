@@ -14,7 +14,7 @@ e2e::section "run script with bare identifier arg (const)"
 e2e::file "bare_const.jh" <<'EOF'
 script greet = "echo \"hello $1\""
 
-workflow default {
+workflow default() {
   const name = "world"
   run greet(name)
 }
@@ -29,11 +29,11 @@ e2e::section "ensure rule with bare identifier arg"
 e2e::file "bare_ensure.jh" <<'EOF'
 script check_impl = "true"
 
-rule check {
+rule check(value) {
   run check_impl($1)
 }
 
-workflow default {
+workflow default() {
   const status = "ok"
   ensure check(status)
 }
@@ -47,7 +47,7 @@ e2e::section "mixed bare and quoted args"
 e2e::file "bare_mixed.jh" <<'EOF'
 script combine = "echo \"$1 $2\""
 
-workflow default {
+workflow default() {
   const tag = "v1"
   run combine(tag, "release")
 }
@@ -61,7 +61,7 @@ e2e::section "unknown bare identifier fails validation"
 e2e::file "bare_unknown.jh" <<'EOF'
 script greet = "echo \"hello $1\""
 
-workflow default {
+workflow default() {
   run greet(unknown_var)
 }
 EOF

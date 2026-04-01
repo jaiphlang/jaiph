@@ -18,7 +18,7 @@ script save_string_to_file = "printf '%s' \"$1\" > \"$2\""
 
 workflow default() {
   ensure ci_passes() recover {
-    run save_string_to_file("${arg1}", ".jaiph/tmp/ci_failure.log")
+    run save_string_to_file(arg1, ".jaiph/tmp/ci_failure.log")
     prompt "The CI check failed. Failure output is in .jaiph/tmp/ci_failure.log — fix the code so npm run test:ci passes."
   }
 }

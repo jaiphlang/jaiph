@@ -18,7 +18,7 @@ e2e::section "inline run capture in log"
 e2e::file "ic_run_log.jh" <<'EOF'
 script greet = "echo \"hello\""
 
-workflow default {
+workflow default() {
   log "got: ${run greet()}"
 }
 EOF
@@ -41,11 +41,11 @@ e2e::assert_contains "${summary_content}" "got: hello" "inline run capture resol
 e2e::section "inline ensure capture in log"
 
 e2e::file "ic_ensure_log.jh" <<'EOF'
-rule check {
+rule check() {
   return "ok"
 }
 
-workflow default {
+workflow default() {
   log "status: ${ensure check()}"
 }
 EOF
@@ -67,7 +67,7 @@ e2e::section "inline run capture with args"
 e2e::file "ic_run_args.jh" <<'EOF'
 script greet = "echo \"hi $1\""
 
-workflow default {
+workflow default() {
   log "said: ${run greet(world)}"
 }
 EOF
@@ -89,11 +89,11 @@ e2e::section "inline capture in return value"
 e2e::file "ic_return.jh" <<'EOF'
 script greet = "echo \"hello\""
 
-workflow helper {
+workflow helper() {
   return "${run greet()}"
 }
 
-workflow default {
+workflow default() {
   const r = run helper()
   log "returned: ${r}"
 }
@@ -119,7 +119,7 @@ echo "err" >&2
 exit 1
 ```
 
-workflow default {
+workflow default() {
   log "got: ${run bad()}"
   log "should not reach"
 }
@@ -140,7 +140,7 @@ e2e::section "mixed inline captures and variable interpolation"
 e2e::file "ic_mixed.jh" <<'EOF'
 script greet = "echo \"hello\""
 
-workflow default {
+workflow default() {
   const name = "world"
   log "${run greet()} ${name}"
 }
@@ -163,7 +163,7 @@ e2e::section "compile rejects nested inline captures"
 e2e::file "ic_nested.jh" <<'EOF'
 script foo = "echo \"a\""
 script bar = "echo \"b\""
-workflow default {
+workflow default() {
   log "got: ${run foo(${run bar()})}"
 }
 EOF
@@ -180,7 +180,7 @@ e2e::pass "compile rejects nested inline captures"
 e2e::section "compile rejects unknown inline capture ref"
 
 e2e::file "ic_unknown.jh" <<'EOF'
-workflow default {
+workflow default() {
   log "got: ${run nonexistent()}"
 }
 EOF
@@ -202,19 +202,19 @@ rm -f "${TEST_DIR}/ic_nested.jh" "${TEST_DIR}/ic_unknown.jh"
 e2e::file "ic_lib.jh" <<'EOF'
 script greet = "echo \"hello\""
 
-rule check_ok {
+rule check_ok() {
   return "ok"
 }
 
-workflow run_capture_log {
+workflow run_capture_log() {
   log "got: ${run greet()}"
 }
 
-workflow ensure_capture_log {
+workflow ensure_capture_log() {
   log "status: ${ensure check_ok()}"
 }
 
-workflow capture_return {
+workflow capture_return() {
   return "${run greet()}"
 }
 EOF

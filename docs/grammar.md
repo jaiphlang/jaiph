@@ -96,7 +96,7 @@ workflow implement(task, role) {
 }
 
 rule gate(path) {
-  run check_exists("${path}")
+  run check_exists(path)
 }
 ```
 
@@ -110,17 +110,20 @@ Call sites pass arguments in parentheses with comma-separated expressions:
 
 ```jaiph
 run implement("my-task", "my-role")
-ensure gate("${path}")
+ensure gate(path)
 ```
 
-**Bare identifier arguments:** In-scope variable names can be passed as bare identifiers without quoting. A bare identifier `name` is equivalent to `"${name}"` — the variable's value is passed as the argument:
+**Bare identifier arguments:** In-scope variable names must be passed as bare identifiers without quoting. A bare identifier `name` is equivalent to `"${name}"` — the variable's value is passed as the argument. Using `"${name}"` as a standalone call argument is rejected at compile time with an `E_VALIDATE` error — use the bare form instead:
 
 ```jaiph
 const task = run get_next_task()
-run docs.update_from_task(task)          # equivalent to: run docs.update_from_task("${task}")
-run queue.remove(task, "completed")      # mixed bare + quoted args
+run docs.update_from_task(task)          # correct: bare identifier
+run queue.remove(task, "completed")      # mixed bare + quoted literal
 ensure check_branch(branch_name)         # works with ensure too
+# run docs.update_from_task("${task}")   — E_VALIDATE: use bare identifier: ...(task)
 ```
+
+This rule applies to all call sites: `run`, `ensure`, `if` conditions, `return run`/`return ensure`, `send … <- run`, and `const x = run …`. Quoted strings with additional text around the interpolation (e.g. `"prefix_${name}"`) are allowed since they cannot be expressed as bare identifiers.
 
 Bare identifiers must reference a known variable (`const`, capture, named parameter, or positional `arg1`–`arg9`). Unknown names produce an `E_VALIDATE` error at compile time. Jaiph keywords (`run`, `ensure`, `if`, `const`, etc.) cannot be used as bare identifier arguments.
 
@@ -131,7 +134,7 @@ When the callee declares named parameters, the compiler validates that the numbe
 ```jaiph
 workflow greet(name) { log "Hello ${name}" }
 
-workflow default {
+workflow default() {
   run greet("Alice")              # OK: 1 arg, 1 param
   # run greet("Alice", "Bob")    — E_VALIDATE: expects 1 argument(s) (name), but got 2
   # run greet()                  — E_VALIDATE: expects 1 argument(s) (name), but got 0
@@ -150,8 +153,8 @@ In a **workflow**, `run` targets a workflow or script. In a **rule**, `run` targ
 
 ```jaiph
 run setup_env()
-run lib.build_project("${arg1}")
-result = run helper("${arg}")
+run lib.build_project(arg1)
+result = run helper(arg)
 const output = run transform()
 ```
 
@@ -242,7 +245,7 @@ Constraints:
 
 ```jaiph
 ensure check_deps()
-result = ensure lib.validate("${input}")
+result = ensure lib.validate(input)
 ```
 
 ### `ensure … recover` — Retry with Recovery
@@ -254,7 +257,7 @@ When `ensure` includes a `recover` block, failure triggers a retry loop: run the
 ensure install_deps() recover run fix_deps()
 
 # Block recovery
-ensure ci_passes("${repo}") recover {
+ensure ci_passes(repo) recover {
   log "CI failed, attempting fix"
   run auto_fix()
 }
@@ -336,8 +339,8 @@ Prompts are not allowed in rules.
 
 ```jaiph
 const tag = "v1.0"
-const result = run helper("${arg}")
-const check = ensure validator("${input}")
+const result = run helper(arg)
+const check = ensure validator(input)
 const answer = prompt "Summarize the report"
 const reply = prompt myVar
 const analysis = prompt ```
@@ -356,7 +359,7 @@ Only brace form with `ensure` or `run` conditions:
 ```jaiph
 if ensure lib.check_input() {
   run process()
-} else if not run file_exists("${path}") {
+} else if not run file_exists(path) {
   fail "missing file"
 } else {
   log "skipping"
@@ -370,7 +373,7 @@ if ensure lib.check_input() {
 ```jaiph
 alerts <- "Build started"
 reports <- ${output}
-results <- run build_message("${data}")
+results <- run build_message(data)
 inbox <-                                    # forward: sends ${arg1}
 ```
 
@@ -390,9 +393,13 @@ Registers a static routing rule. When a message arrives on the channel, the runt
 ```jaiph
 log "Processing ${arg1}"
 logerr "Warning: ${name} not found"
+log status                              # bare identifier — same as log "${status}"
+logerr err_msg                          # bare identifier form works with logerr too
 ```
 
 `log` writes to stdout; `logerr` writes to stderr (shown with a red `!` marker in the progress tree). Both support `${identifier}` interpolation and inline captures. At runtime, backslash escapes in the final string are interpreted (`\n` → newline).
+
+**Bare identifier form:** When `log` or `logerr` is followed by a single bare identifier (no quotes), it expands to `"${identifier}"` — the variable's value is logged. The identifier must reference a known binding (`const`, capture, named parameter, or positional `arg1`–`arg9`).
 
 ### `fail`
 
@@ -408,7 +415,7 @@ Aborts the workflow or rule with a message on stderr and non-zero exit.
 return "success"
 return "${result}"
 return run helper()
-return ensure check("${input}")
+return ensure check(input)
 ```
 
 Sets the managed return value in rules and workflows. The value can be a quoted string, a variable reference, or a **direct managed call** using `return run ref(args)` or `return ensure ref(args)`. A direct managed call executes the target and uses its result as the return value — equivalent to capturing into a variable and returning it, but without the boilerplate:
@@ -471,8 +478,8 @@ Legacy no-op kept for backwards compatibility. Use `run async` for managed paral
 `name = <step>` captures a value without `const`:
 
 ```jaiph
-result = run helper("${arg}")
-check = ensure validator("${input}")
+result = run helper(arg)
+check = ensure validator(input)
 answer = prompt "Summarize the report"
 reply = prompt myVar
 ```
@@ -704,8 +711,8 @@ send_rhs        = double_quoted_string | "${" IDENT "}" | "run" call_ref | REF ;
 
 route_decl      = REF "->" REF { "," REF } ;
 
-log_stmt        = "log" double_quoted_string ;
-logerr_stmt     = "logerr" double_quoted_string ;
+log_stmt        = "log" ( double_quoted_string | IDENT ) ;
+logerr_stmt     = "logerr" ( double_quoted_string | IDENT ) ;
 
 ensure_stmt     = "ensure" call_ref [ "recover" recover_body ] ;
 ensure_capture_stmt = IDENT "=" "ensure" call_ref [ "recover" recover_body ] ;
@@ -736,7 +743,7 @@ After parsing, the compiler validates references and config (`src/transpile/vali
 
 - **E_PARSE:** Invalid syntax — duplicate config, invalid keys/values, unescaped backticks, `$(…)` or `${var:-fallback}` in orchestration strings, `prompt … returns` without capture, bare `ref(args)` in const RHS (use `run`/`ensure`/`prompt`), `local` at top level, unrecognized workflow/rule line, invalid send RHS, arguments after `recover`, bare `recover` with no recovery step, nested inline captures, shell redirection after `run`/`ensure`, invalid parameter names (non-identifier, duplicate, or reserved keyword), or missing `{` on definition line.
 - **E_SCHEMA:** Invalid `returns` schema — empty, non-flat, unsupported type (only `string`, `number`, `boolean`).
-- **E_VALIDATE:** Reference errors — unknown rule/workflow, duplicate alias, `ensure` on non-rule, `run` on rule, `run` to workflow inside rule, `run async` in rule, forbidden Jaiph usage inside `$(…)`, dot notation on non-prompt variable or invalid field name, bare identifier argument referencing an unknown variable, arity mismatch (call-site argument count differs from callee's declared parameter count).
+- **E_VALIDATE:** Reference errors — unknown rule/workflow, duplicate alias, `ensure` on non-rule, `run` on rule, `run` to workflow inside rule, `run async` in rule, forbidden Jaiph usage inside `$(…)`, dot notation on non-prompt variable or invalid field name, bare identifier argument referencing an unknown variable, standalone `"${identifier}"` in call arguments (use bare identifier instead), arity mismatch (call-site argument count differs from callee's declared parameter count).
 - **E_IMPORT_NOT_FOUND:** Import target file does not exist.
 
 Validation rules:
