@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { inlineScriptName } from "../../inline-script-name";
 import type { MatchExprDef, WorkflowStepDef } from "../../types";
-import { executePrompt, resolveConfig, resolveModel } from "./prompt";
+import { executePrompt, resolveConfig, resolveModel, resolvePromptStepName } from "./prompt";
 import { appendRunSummaryLine, formatUtcTimestamp } from "./emit";
 import { resolveRuleRef, resolveScriptRef, resolveWorkflowRef, type RuntimeGraph } from "./graph";
 import type { WorkflowMetadata } from "../../types";
@@ -694,8 +694,9 @@ export class NodeWorkflowRuntime {
         let promptText = promptIr.value;
         const promptConfig = resolveConfig(scope.env);
         const backend = promptConfig.backend || "cursor";
+        const stepName = resolvePromptStepName(promptConfig);
         const modelRes = resolveModel(promptConfig);
-        const promptStep = this.emitPromptStepStart(promptText, backend, scope.vars, step.raw);
+        const promptStep = this.emitPromptStepStart(promptText, stepName, scope.vars, step.raw);
         this.emitPromptEvent("PROMPT_START", {
           backend,
           model: modelRes.model || undefined,
@@ -800,8 +801,9 @@ export class NodeWorkflowRuntime {
           let promptText = pcIr.value;
           const promptConfig = resolveConfig(scope.env);
           const backend = promptConfig.backend || "cursor";
+          const stepName = resolvePromptStepName(promptConfig);
           const modelRes = resolveModel(promptConfig);
-          const promptStep = this.emitPromptStepStart(promptText, backend, scope.vars, step.value.raw);
+          const promptStep = this.emitPromptStepStart(promptText, stepName, scope.vars, step.value.raw);
           this.emitPromptEvent("PROMPT_START", {
             backend,
             model: modelRes.model || undefined,

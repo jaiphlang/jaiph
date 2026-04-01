@@ -118,7 +118,7 @@ The root PASS/FAIL summary uses the format `✓ PASS workflow default (0.2s)`. C
 - All parameters use `key="value"` format in parentheses. Internal refs (`::impl`) and empty values are omitted.
 - Positional parameters display as `1="value"`, `2="value"`. Named parameters display as `name="value"`.
 - Whitespace in values is collapsed to a single space. Values are truncated to 32 characters (with `...`).
-- Prompt steps show the backend name and a preview (first 24 characters of prompt text) in quotes: `prompt cursor "summarize the..."`, followed by parameters (capped at 96 characters total).
+- Prompt steps show the backend name (or custom command basename) and a preview (first 24 characters of prompt text) in quotes: `prompt cursor "summarize the..."` or `prompt my-agent.sh "summarize the..."`, followed by parameters (capped at 96 characters total).
 
 Example lines:
 

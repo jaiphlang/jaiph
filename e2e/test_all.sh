@@ -65,6 +65,7 @@ TEST_SCRIPTS=(
   "e2e/tests/112_interpreter_tags.sh"
   "e2e/tests/113_match_expression.sh"
   "e2e/tests/114_if_else_chains.sh"
+  "e2e/tests/115_custom_agent_command.sh"
 )
 
 PASS_COUNT=0

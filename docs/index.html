@@ -491,6 +491,10 @@ Jaiph: Running async.jh
                     <code>~/.jaiph/hooks.json</code> or <code>&lt;project&gt;/.jaiph/hooks.json</code>. See <a
                         href="hooks">Hooks</a>.
                 </p>
+                <p><strong>Custom agent backends.</strong> Point <code>agent.command</code> to any
+                    executable — a shell script, a Python wrapper, or your own CLI tool — and Jaiph will
+                    pipe the prompt via stdin and capture raw stdout as the response. No JSON stream
+                    protocol required; just read stdin and print your answer.</p>
                 <p><strong>Configuration.</strong> Control behavior with <code>config { ... }</code> blocks
                     at the module level or inside individual workflows for per-workflow overrides, plus environment
                     variables (env wins precedence). See <a href="configuration">Configuration</a> and
