@@ -75,3 +75,516 @@ workflow default {
 workflow default {
   prompt "Show host $(uname)"
 }
+
+=== rule without braces
+# @expect error E_PARSE "rule declarations require braces"
+--- input.jh
+rule foo
+
+=== rule with parentheses
+# @expect error E_PARSE "definitions must not use parentheses"
+--- input.jh
+rule foo() {
+
+=== rule with colon instead of braces
+# @expect error E_PARSE "rule declarations require braces"
+--- input.jh
+rule foo:
+
+=== export rule without braces
+# @expect error E_PARSE "rule declarations require braces"
+--- input.jh
+export rule bar
+
+=== rule with parentheses but no brace
+# @expect error E_PARSE "definitions must not use parentheses"
+--- input.jh
+rule gate()
+
+=== script without braces
+# @expect error E_PARSE "script declarations require braces"
+--- input.jh
+script greet
+
+=== script with parentheses
+# @expect error E_PARSE "definitions must not use parentheses"
+--- input.jh
+script greet() {
+
+=== script with parens but no braces
+# @expect error E_PARSE "definitions must not use parentheses"
+--- input.jh
+script greet()
+
+=== workflow without braces
+# @expect error E_PARSE "workflow declarations require braces"
+--- input.jh
+workflow default
+
+=== workflow with parentheses
+# @expect error E_PARSE "definitions must not use parentheses"
+--- input.jh
+workflow default() {
+
+=== export workflow without braces
+# @expect error E_PARSE "workflow declarations require braces"
+--- input.jh
+export workflow main
+
+=== workflow with parentheses but no brace
+# @expect error E_PARSE "definitions must not use parentheses"
+--- input.jh
+workflow main()
+
+=== duplicate config in same workflow
+# @expect error E_PARSE "duplicate config block inside workflow"
+--- input.jh
+workflow default {
+  config {
+    agent.backend = "claude"
+  }
+  config {
+    agent.backend = "cursor"
+  }
+}
+
+=== config after steps in workflow
+# @expect error E_PARSE "config block inside workflow must appear before any steps"
+--- input.jh
+workflow default {
+  echo "step"
+  config {
+    agent.backend = "claude"
+  }
+}
+
+=== runtime keys in workflow config
+# @expect error E_PARSE "runtime.* keys are not allowed in workflow-level config"
+--- input.jh
+workflow default {
+  config {
+    runtime.docker_enabled = true
+  }
+}
+
+=== unknown interpreter tag
+# @expect error E_PARSE "unknown interpreter tag"
+--- input.jh
+script:foo my_script {
+  body
+}
+
+=== script tag with manual shebang conflict
+# @expect error E_PARSE "script:node already sets the shebang"
+--- input.jh
+script:node transform {
+  #!/usr/bin/env node
+  console.log('hi');
+}
+
+=== script tag with parentheses
+# @expect error E_PARSE "definitions must not use parentheses"
+--- input.jh
+script:node transform() {
+
+=== script tag without braces
+# @expect error E_PARSE "script declarations require braces"
+--- input.jh
+script:node transform
+
+=== capture with run async rejected
+# @expect error E_PARSE "capture is not supported with run async"
+--- input.jh
+workflow default {
+  x = run async some_wf()
+}
+
+=== run async with inline script rejected
+# @expect error E_PARSE "not supported with inline scripts"
+--- input.jh
+workflow default {
+  run async script("echo hello")
+}
+
+=== inline script body must be double-quoted
+# @expect error E_PARSE "double-quoted string"
+--- input.jh
+workflow default {
+  run script('echo hello')
+}
+
+=== invalid agent.backend value
+# @expect error E_PARSE "agent.backend must be"
+--- input.jh
+config {
+  agent.backend = "foo"
+}
+workflow default {
+  log "ok"
+}
+
+=== invalid config value not quoted
+# @expect error E_PARSE "config value must be a quoted string or true/false"
+--- input.jh
+config {
+  run.debug = yes
+}
+workflow default {
+  log "ok"
+}
+
+=== config integer key rejects string value
+# @expect error E_PARSE "runtime.docker_timeout must be an integer"
+--- input.jh
+config {
+  runtime.docker_timeout = "fast"
+}
+workflow default {
+  log "ok"
+}
+
+=== config array key rejects non-array value
+# @expect error E_PARSE "runtime.workspace must be an array of strings"
+--- input.jh
+config {
+  runtime.workspace = "not-an-array"
+}
+workflow default {
+  log "ok"
+}
+
+=== unknown runtime config key
+# @expect error E_PARSE "unknown config key: runtime.unknown_key"
+--- input.jh
+config {
+  runtime.unknown_key = "x"
+}
+workflow default {
+  log "ok"
+}
+
+=== malformed if ensure with then/fi syntax
+# @expect error E_PARSE "then/fi syntax is not supported"
+--- input.jh
+workflow default {
+  if ensure; then
+    log "x"
+  fi
+}
+
+=== channel declaration must be single per line
+# @expect error E_PARSE "invalid channel declaration; expected exactly: channel <name>"
+--- input.jh
+channel findings, report
+workflow default {
+  findings <- "hi"
+}
+
+=== capture and send cannot be combined
+# @expect error E_PARSE "capture and send cannot be combined"
+--- input.jh
+workflow default {
+  name = channel <- "hello"
+}
+
+=== top-level local keyword is rejected
+# @expect error E_PARSE "unknown top-level keyword"
+--- input.jh
+local greeting = "hello world"
+workflow default {
+  log "${greeting}"
+}
+
+=== top-level const name collision with rule
+# @expect error E_PARSE "variable name collides with rule"
+--- input.jh
+const foo = "bar"
+rule foo {
+  return "ok"
+}
+workflow default {
+  ensure foo()
+}
+
+=== top-level const name collision with workflow
+# @expect error E_PARSE "variable name collides with workflow"
+--- input.jh
+const default = "val"
+workflow default {
+  log "ok"
+}
+
+=== top-level const name collision with script
+# @expect error E_PARSE "variable name collides with script"
+--- input.jh
+const helper = "val"
+script helper {
+  echo ok
+}
+workflow default {
+  run helper()
+}
+
+=== const rejects bare call-like rhs without run
+# @expect error E_PARSE "Script calls in const assignments must use run"
+--- input.jh
+script some_script {
+  echo "$1"
+}
+workflow default {
+  const x = some_script("${arg}")
+}
+
+=== unterminated rule block
+# @expect error E_PARSE "unterminated rule block"
+--- input.jh
+rule bad {
+  echo x
+
+=== unsupported top-level statement
+# @expect error E_PARSE "unsupported top-level statement"
+--- input.jh
+echo "not allowed at top level"
+workflow default {
+  echo ok
+}
+
+=== unterminated prompt string
+# @expect error E_PARSE "unterminated prompt string"
+--- input.jh
+workflow default {
+  prompt "this never closes
+}
+
+=== unterminated brace if block
+# @expect error E_PARSE "unterminated block"
+--- input.jh
+rule gate {
+  run gate_impl()
+}
+script gate_impl {
+  false
+}
+
+workflow default {
+  if not ensure gate() {
+    echo fallback
+
+=== invalid workflow reference shape with extra dots
+# @expect error E_PARSE "calls require parentheses"
+--- input.jh
+workflow default {
+  run bad.ref.shape()
+}
+
+=== prompt with returns without capture name
+# @expect error E_PARSE "must capture to a variable"
+--- input.jh
+workflow default {
+  prompt "x" returns "{ a: string }"
+}
+
+=== ensure recover with args after recover
+# @expect error E_PARSE "rule arguments must appear before 'recover'"
+--- input.jh
+rule ci_passes {
+  run ci_passes_impl()
+}
+script ci_passes_impl {
+  true
+}
+
+workflow default {
+  ensure ci_passes() recover "$repo_dir" {
+    prompt "Apply the smallest safe fix."
+  }
+}
+
+=== ensure recover with multiple args after recover
+# @expect error E_PARSE "rule arguments must appear before 'recover'"
+--- input.jh
+rule some_rule {
+  true
+}
+
+workflow default {
+  ensure some_rule("a") recover "b" {
+    log "should not parse"
+  }
+}
+
+=== ensure recover without block
+# @expect error E_PARSE "recover requires a { ... } block"
+--- input.jh
+rule ci_passes {
+  true
+}
+
+workflow default {
+  ensure ci_passes("$repo_dir") recover
+}
+
+=== capture and send combined alt form
+# @expect error E_PARSE "capture and send cannot be combined"
+--- input.jh
+workflow default {
+  name = channel <- echo hello
+}
+
+=== reject bare $name in log message
+# @expect error E_PARSE "bare interpolation"
+--- input.jh
+workflow default {
+  log "value is $x"
+}
+
+=== reject bare $name in prompt
+# @expect error E_PARSE "bare interpolation"
+--- input.jh
+workflow default {
+  prompt "hello $user"
+}
+
+=== reject bare $1 in log message
+# @expect error E_PARSE "bare interpolation"
+--- input.jh
+workflow default {
+  log "arg: $1"
+}
+
+=== reject braced numeric ${1} in log message
+# @expect error E_PARSE "numeric interpolation"
+--- input.jh
+workflow default {
+  log "arg: ${1}"
+}
+
+=== reject bare $name in fail message
+# @expect error E_PARSE "bare interpolation"
+--- input.jh
+workflow default {
+  fail "error: $reason"
+}
+
+=== reject bare $name in return string
+# @expect error E_PARSE "bare interpolation"
+--- input.jh
+workflow default {
+  return "$result"
+}
+
+=== reject shell fallback ${var:-fallback} in log
+# @expect error E_PARSE "shell fallback syntax"
+--- input.jh
+workflow default {
+  log "${name:-anonymous}"
+}
+
+=== reject shell fallback ${var:-fallback} in fail
+# @expect error E_PARSE "shell fallback syntax"
+--- input.jh
+workflow default {
+  fail "${name:-unknown}"
+}
+
+=== reject shell fallback ${var:-fallback} in prompt
+# @expect error E_PARSE "shell fallback syntax"
+--- input.jh
+workflow default {
+  prompt "Hello ${user:-default}"
+}
+
+=== reject shell fallback ${var:-fallback} in const RHS
+# @expect error E_PARSE "shell fallback syntax"
+--- input.jh
+workflow default {
+  const x = ${name:-default}
+}
+
+=== reject shell expansion ${var:+alt} in log
+# @expect error E_PARSE "shell fallback syntax"
+--- input.jh
+workflow default {
+  log "${debug:+verbose mode}"
+}
+
+=== reject unescaped backtick in log
+# @expect error E_PARSE "log cannot contain backticks"
+--- input.jh
+workflow default {
+  log "output: `uname`"
+}
+
+=== reject unescaped backtick in fail
+# @expect error E_PARSE "fail cannot contain backticks"
+--- input.jh
+workflow default {
+  fail "error: `whoami`"
+}
+
+=== reject unescaped backtick in prompt
+# @expect error E_PARSE "prompt cannot contain backticks"
+--- input.jh
+workflow default {
+  prompt "run `uname` and tell me"
+}
+
+=== reject command substitution in log
+# @expect error E_PARSE "log cannot contain command substitution"
+--- input.jh
+workflow default {
+  log "host is $(uname)"
+}
+
+=== reject command substitution in logerr
+# @expect error E_PARSE "logerr cannot contain command substitution"
+--- input.jh
+workflow default {
+  logerr "host is $(uname)"
+}
+
+=== reject shell fallback in rule log
+# @expect error E_PARSE "shell fallback syntax"
+--- input.jh
+script noop {
+  true
+}
+rule check {
+  log "${x:-fallback}"
+}
+workflow default {
+  ensure check()
+}
+
+=== reject unescaped backtick in rule fail
+# @expect error E_PARSE "fail cannot contain backticks"
+--- input.jh
+script noop {
+  true
+}
+rule check {
+  fail "error: `cmd`"
+}
+workflow default {
+  ensure check()
+}
+
+=== nested inline capture rejected
+# @expect error E_PARSE "invalid inline run reference"
+--- input.jh
+script foo {
+  echo "a"
+}
+script bar {
+  echo "b"
+}
+workflow default {
+  log "got: ${run foo(${run bar()})}"
+}
+
+=== invalid inline run reference bad identifier
+# @expect error E_PARSE "invalid inline run reference"
+--- input.jh
+workflow default {
+  log "got: ${run 123bad()}"
+}

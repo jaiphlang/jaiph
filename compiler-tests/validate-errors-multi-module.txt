@@ -1,0 +1,52 @@
+=== duplicate import alias
+# @expect error E_VALIDATE "duplicate import alias"
+--- main.jh
+import "a.jh" as mod
+import "b.jh" as mod
+
+workflow default {
+  ensure mod.one()
+}
+--- a.jh
+script one_impl {
+  echo one
+}
+rule one {
+  run one_impl()
+}
+--- b.jh
+script two_impl {
+  echo two
+}
+rule two {
+  run two_impl()
+}
+
+=== imported workflow missing
+# @expect error E_VALIDATE "does not exist"
+--- main.jh
+import "lib.jh" as lib
+
+workflow default {
+  run lib.missing()
+}
+--- lib.jh
+script existing_impl {
+  echo ok
+}
+workflow existing {
+  run existing_impl()
+}
+
+=== missing channel import fails
+# @expect error E_VALIDATE "is not defined"
+--- main.jh
+import "shared.jh" as shared
+workflow default {
+  shared.typo <- "x"
+}
+--- shared.jh
+channel findings
+workflow analyst {
+  log "ok"
+}
