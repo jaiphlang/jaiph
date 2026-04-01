@@ -160,10 +160,10 @@ rule name_was_provided {
 workflow default {
   ensure name_was_provided("${arg1}")
 
-  response = prompt "
+  response = prompt ```
     Say hello to ${arg1} and provide a fun fact about a person with the same name.
     Respond with a single line. Do not inspect files or run tools.
-  "
+```
 
   log "${response}"
 }</code></pre>
@@ -568,11 +568,13 @@ Jaiph: Running async.jh
                         without a named <code>script</code> block &mdash; supports arguments, capture, and custom
                         shebangs.</dd>
 
-                    <dt><code>prompt "..."</code> &middot;
+                    <dt><code>prompt "..."</code> &middot; <code>prompt myVar</code> &middot;
+                        <code>prompt ``` ... ```</code> &middot;
                         <code>const name = prompt "..." returns "{ field: type }"</code>
                     </dt>
-                    <dd>Sends a prompt to the configured agent, optionally validates structured JSON output, and exposes
-                        captured variables.</dd>
+                    <dd>Sends a prompt to the configured agent. The body can be a single-line string, a bare identifier,
+                        or a fenced <code>```</code> block for multiline text. Optionally validates structured JSON
+                        output and exposes captured variables.</dd>
 
                     <dt><code>const name = …</code> &middot; <code>name = ensure ref()</code> &middot;
                         <code>name = run ref()</code>

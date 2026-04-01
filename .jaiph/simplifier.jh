@@ -57,7 +57,7 @@ script report_file_nonempty {
 }
 
 workflow find_simplifications {
-  const report = prompt "
+  const report = prompt ```
     <role>
     You are a senior engineer focused on codebase simplification for the Jaiph
     repository (TypeScript under src/ and supporting scripts). You may read
@@ -90,7 +90,7 @@ workflow find_simplifications {
     Sort by (risk ascending, then impact descending). Skip cosmetic-only edits.
     </task>
     </role>
-  "
+```
 
   run save_simplifier_report("${report}")
   log "Simplification report saved to .jaiph/tmp/simplifier_report.md"
@@ -111,7 +111,7 @@ workflow apply_simplifications {
   }
   const report = run read_simplifier_report()
 
-  prompt "
+  prompt ```
     <role>
     You are a senior engineer implementing simplifications in the Jaiph repo.
     </role>
@@ -135,7 +135,7 @@ workflow apply_simplifications {
     Report:
     ${report}
     </task>
-  "
+```
 
   ensure no_test_or_e2e_paths_changed()
 }

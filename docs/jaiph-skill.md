@@ -29,7 +29,7 @@ The **JS kernel** (`src/runtime/kernel/`) handles **prompt** execution, **manage
 - **Channels** — Top-level `channel <name>` declarations; **send** uses `channel_ref <- …`, **route** uses `channel_ref -> workflow` (see [Inbox & Dispatch](inbox.md)). Channel names share the per-module namespace with rules, workflows, scripts, and module-scoped `local` / `const` variables.
 - **ensure** — Runs a rule; succeeds if exit code is 0. In **workflows only**, optional `recover` is a bounded retry loop (default **3** rounds, overridable with **`JAIPH_ENSURE_MAX_RETRIES`**). **`ensure … recover` is not allowed in rule bodies** (`E_VALIDATE`). When `recover` is used, all rule arguments must appear **before** `recover` (e.g. `ensure rule("${arg}") recover { … }`, **not** `ensure rule() recover("${arg}") { … }`). A bare `recover` without a body is a parse error.
 - **run** — Invokes a workflow or script (local or `alias.name`). Must not target a rule or arbitrary shell command. **Does not forward positional args implicitly** — pass them explicitly (e.g. `run wf("${arg1}")`, `run helper_fn("${arg1}")`).
-- **prompt** — Sends a string to the configured agent. Optional `returns` schema validates one line of JSON from the agent.
+- **prompt** — Sends text to the configured agent. The body can be a single-line `"string"`, a bare identifier referencing an existing binding, or a fenced `` ``` ... ``` `` block for multiline text. Optional `returns` schema validates one line of JSON from the agent. Multiline double-quoted strings are no longer supported — use a fenced block instead.
 
 **Audience:** Agents that produce or edit `.jh` files.
 
@@ -90,7 +90,7 @@ Prefer composable modules over one large file.
   - **fail** — `fail "reason"` aborts with stderr message and non-zero exit (workflows; fails the rule when used inside a rule).
   - **wait** — `wait` is a no-op step in the Node runtime (advances control flow without doing work). **Workflows only** — `wait` in a rule is a parse-time error.
   - **run async** — `run async ref([args...])` starts a workflow or script concurrently. All pending async steps are implicitly joined before the workflow completes; failures are aggregated. Capture (`name = run async ...`) is not supported. Workflows only — rejected in rules.
-- **Prompts:** `prompt "..."` — quoted string, may be multiline. Uses **JS template literal semantics**: only `${identifier}` forms are supported (`${varName}`, `${arg1}`). **Inline capture interpolation** is also supported: `${run ref([args])}` and `${ensure ref([args])}` inside the prompt string (e.g. `prompt "Fix: ${ensure get_diagnostics()}"`). Nested inline captures are rejected. Bare `$varName` is not valid in orchestration strings. Unescaped backticks, `$(...)`, and `${var:-fallback}` are rejected. Capture: `name = prompt "..."`. Optional **typed prompt:** `name = prompt "..." returns "{ field: type, ... }"` (flat schema; types `string`, `number`, `boolean`) validates the agent's JSON and sets `${name}` plus per-field variables accessible via **dot notation** — `${name.field}` (preferred) or the underscore form `${name_field}`. Dot notation is validated at compile time: the variable must be a typed prompt capture and the field must exist in the schema. See [Grammar](grammar.md).
+- **Prompts:** Three body forms: (1) **single-line string** `prompt "..."` — double-quoted, single line only; (2) **identifier** `prompt myVar` — uses the value of an existing binding; (3) **fenced block** `prompt ``` ... ``` ` — for multiline text, opening `` ``` `` on the same line as `prompt`. Multiline double-quoted strings are rejected — use a fenced block instead. All forms support `${identifier}` interpolation (`${varName}`, `${arg1}`). **Inline capture interpolation** is also supported: `${run ref([args])}` and `${ensure ref([args])}` inside the prompt string or fenced body (e.g. `prompt "Fix: ${ensure get_diagnostics()}"`). Nested inline captures are rejected. Bare `$varName` is not valid in orchestration strings. `$(...)` and `${var:-fallback}` are rejected. Capture: `name = prompt "..."`, `const x = prompt myVar`, `const y = prompt ``` ... ``` `. Optional **typed prompt:** `name = prompt "..." returns "{ field: type, ... }"` or `name = prompt myVar returns "..."` (flat schema; types `string`, `number`, `boolean`) validates the agent's JSON and sets `${name}` plus per-field variables accessible via **dot notation** — `${name.field}` (preferred) or the underscore form `${name_field}`. Dot notation is validated at compile time: the variable must be a typed prompt capture and the field must exist in the schema. See [Grammar](grammar.md).
 - **Conditionals:** Only **brace form** in workflows:
   - `if [not] ensure some_rule([args]) { ... } [ else if [not] ensure|run ref([args]) { ... } ] [ else { ... } ]`
   - `if [not] run some_ref([args]) { ... }` with the same `else if` / `else` chaining. Use **`not`** instead of `!` before `ensure`/`run`. Express “shell conditions” with `run` to a **script** that performs the test. Short-circuit brace groups remain valid **inside `script`** bodies: `cmd || { ... }`.
@@ -207,13 +207,13 @@ import "readiness.jh" as readiness
 import "verification.jh" as verification
 
 workflow implement {
-  prompt "
-    Implement the requested feature or fix with minimal, reviewable changes.
-    Keep edits consistent with existing architecture and style.
-    Add or update tests for behavior changes.
+  prompt ```
+Implement the requested feature or fix with minimal, reviewable changes.
+Keep edits consistent with existing architecture and style.
+Add or update tests for behavior changes.
 
-    User asks for: ${arg1}
-  "
+User asks for: ${arg1}
+```
 }
 
 workflow default {

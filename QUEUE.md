@@ -12,71 +12,6 @@ Process rules:
 
 ---
 
-## Prompt: single-line vs fenced multiline <!-- dev-ready -->
-
-**Goal**  
-Two ways to supply prompt text: compact single-line forms, and fenced bodies for multiline / markdown-style editing. Drop multiline double-quoted prompt strings (the current parser scans subsequent lines until a closing `"` — remove that path entirely).
-
-**1. Single-line (string literal or identifier)**
-
-```text
-const text = "aaa"
-prompt text
-
-prompt "aaa"
-
-prompt "aaa ${some_var}"
-```
-
-- **`prompt <identifier>`** — prompt text is the string value of the referenced binding (which may itself be a string or multiline template). The parser greedily takes the first token after `prompt` as the body — no keyword reservation needed. `returns` is only recognized as a keyword when it appears **after** a complete body form.
-- **`prompt "..."`** — single-line only; `${...}` interpolation inside the quotes as today.
-- **`returns "..."` / schema** — still allowed after either single-line form: `prompt "text" returns "schema"` or `prompt myVar returns "schema"`.
-
-**2. Multiline template (fenced block)**
-
-Uses `parseFencedBlock` from the fence parser task. Body supports `${...}` interpolation.
-
-```text
-prompt
-```
-You are a helpful assistant.
-Analyze the following: ${input}
-```
-```
-
-Or with `prompt` on the same line as the opening fence:
-
-```text
-prompt ```
-You are a helpful assistant.
-```
-```
-
-Formatter picks one canonical form. Parser accepts both.
-
-**Const capture**
-
-All three body forms must work in const-capture position: `const x = prompt "..."`, `const x = prompt myVar`, and `const x = prompt ``` ... ``` `. Update `ConstRhs` `kind: "prompt_capture"` accordingly.
-
-**Context**
-
-- Prompt parsing: `src/parse/prompt.ts` (`parsePromptStep`), call sites in `workflows.ts`, `workflow-brace.ts`, `const-rhs.ts`, `steps.ts`.
-- Tests: `src/parse/parse-prompt.test.ts`, `compiler-tests/`, E2E under `e2e/`.
-
-**Scope**
-
-1. **Parser**: single-line identifier + single-line quoted string + fenced multiline (via `parseFencedBlock`). Remove the multiline `"..."` scan path (lines 96–110 of current `prompt.ts`). When a prompt starts with `"` and has no closing quote on the same line, emit an error like `"multiline prompt strings are no longer supported; use a fenced block instead"`.
-2. **AST types**: update `WorkflowStepDef` for `type: "prompt"` to distinguish body source (string literal, identifier ref, fenced body). Update `ConstRhs` `kind: "prompt_capture"` to support all three body forms.
-3. **Formatter**: keep single-line on one line; emit multiline as a fence block.
-4. **Compiler tests + E2E**: migrate fixtures; cover identifier vs string vs fence; error cases (unterminated fence, unterminated single-line string, multiline `"..."` rejection).
-
-**Acceptance criteria**
-
-- `npm run test:compiler && npm test && npm run test:e2e` pass.
-- Documented behavior matches the two cases above.
-
----
-
 ## Scripts and `run`: braces out; strings or fences in <!-- dev-ready -->
 
 **Goal**  
@@ -92,11 +27,10 @@ Replace `{ ... }` script bodies with the **same split as prompts**: single-line 
 
 - `script name = "..."` — single-line source, default runtime (shell).
 - `script name = identifier` — RHS is a binding whose string value is the script body. E.g. `const body = "echo hi"; script foo = body`.
-- Fenced (uses `parseFencedBlock` from the fence parser task):
+- Fenced — the opening `` ``` `` **must** be on the same line as `script name =` (uses `parseFencedBlock` from the fence parser task):
 
 ```text
-script demo =
-```python3
+script demo = ```python3
 import sys
 print(sys.argv)
 ```
@@ -109,11 +43,10 @@ print(sys.argv)
 **After — anonymous inline scripts** (no `=`; reads like a step, not a definition)
 
 - `run script() "script code"` — single-line body, default runtime. Empty `()` required to make the no-args call explicit.
-- Fenced with optional lang and args:
+- Fenced — the opening `` ``` `` **must** be on the same line as `run script(...)`:
 
 ```text
-run script(a, b)
-```node
+run script(a, b) ```node
 console.log(process.argv)
 ```
 ```

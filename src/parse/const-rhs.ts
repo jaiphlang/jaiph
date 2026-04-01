@@ -83,6 +83,8 @@ export function parseConstRhs(
         raw: st.raw,
         loc: st.loc,
         returns: st.returns,
+        ...(st.bodyKind ? { bodyKind: st.bodyKind } : {}),
+        ...(st.bodyIdentifier ? { bodyIdentifier: st.bodyIdentifier } : {}),
       },
       nextLineIdx: result.nextLineIdx,
     };

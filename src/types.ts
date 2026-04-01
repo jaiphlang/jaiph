@@ -43,6 +43,10 @@ export type ConstRhs =
   | {
       kind: "prompt_capture";
       raw: string;
+      /** Body source: "string" (quoted literal), "identifier" (bare var ref), "fenced" (``` block). */
+      bodyKind?: "string" | "identifier" | "fenced";
+      /** Original identifier name when bodyKind is "identifier". */
+      bodyIdentifier?: string;
       loc: SourceLoc;
       returns?: string;
     }
@@ -130,6 +134,10 @@ export type WorkflowStepDef =
   | {
       type: "prompt";
       raw: string;
+      /** Body source: "string" (quoted literal), "identifier" (bare var ref), "fenced" (``` block). */
+      bodyKind?: "string" | "identifier" | "fenced";
+      /** Original identifier name when bodyKind is "identifier". */
+      bodyIdentifier?: string;
       loc: SourceLoc;
       /** When set, capture prompt stdout into this variable name. */
       captureName?: string;

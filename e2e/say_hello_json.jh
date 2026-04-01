@@ -14,9 +14,7 @@ rule name_was_provided {
 workflow default {
   ensure name_was_provided("${arg1}")
 
-  response = prompt "
-    Say hello to ${arg1} and provide a fun fact about a person with the same name.
-  " returns "{ hello: string, fact: string }"
+  response = prompt "Say hello to ${arg1} and provide a fun fact about a person with the same name." returns "{ hello: string, fact: string }"
 
   log "${response_fact}"
 }

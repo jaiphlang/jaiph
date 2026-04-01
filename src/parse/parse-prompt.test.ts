@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { parsePromptStep } from "./prompt";
 
-// === parsePromptStep: single-line ===
+// === parsePromptStep: single-line string literal ===
 
 test("parsePromptStep: parses simple single-line prompt", () => {
   const lines = ['  prompt "Hello world"'];
@@ -13,6 +13,9 @@ test("parsePromptStep: parses simple single-line prompt", () => {
   assert.equal(result.step.loc.col, 3);
   assert.equal(result.step.captureName, undefined);
   assert.equal(result.step.returns, undefined);
+  if (result.step.type === "prompt") {
+    assert.equal(result.step.bodyKind, "string");
+  }
 });
 
 test("parsePromptStep: parses captured prompt", () => {
@@ -21,6 +24,9 @@ test("parsePromptStep: parses captured prompt", () => {
   assert.equal(result.step.type, "prompt");
   assert.equal(result.step.raw, '"What?"');
   assert.equal(result.step.captureName, "answer");
+  if (result.step.type === "prompt") {
+    assert.equal(result.step.bodyKind, "string");
+  }
 });
 
 test("parsePromptStep: parses prompt with returns schema (double-quoted)", () => {
@@ -39,48 +45,109 @@ test("parsePromptStep: rejects single-quoted returns schema", () => {
   );
 });
 
-// === parsePromptStep: multiline ===
+// === parsePromptStep: multiline quoted strings are rejected ===
 
-test("parsePromptStep: parses multiline prompt", () => {
+test("parsePromptStep: multiline quoted prompt throws with clear error", () => {
   const lines = [
     '  prompt "Hello',
     '  world"',
   ];
-  const result = parsePromptStep("test.jh", lines, 0, '"Hello', 3);
-  assert.equal(result.step.type, "prompt");
-  assert.equal(result.step.raw, '"Hello\n  world"');
-});
-
-test("parsePromptStep: unterminated multiline prompt throws", () => {
-  const lines = [
-    '  prompt "Hello',
-    '  world',
-  ];
   assert.throws(
     () => parsePromptStep("test.jh", lines, 0, '"Hello', 3),
-    /unterminated prompt string/,
+    /multiline prompt strings are no longer supported; use a fenced block instead/,
+  );
+});
+
+// === parsePromptStep: identifier body ===
+
+test("parsePromptStep: parses bare identifier prompt", () => {
+  const lines = ['  prompt myVar'];
+  const result = parsePromptStep("test.jh", lines, 0, "myVar", 3);
+  assert.equal(result.step.type, "prompt");
+  if (result.step.type === "prompt") {
+    assert.equal(result.step.bodyKind, "identifier");
+    assert.equal(result.step.bodyIdentifier, "myVar");
+    assert.equal(result.step.raw, '"${myVar}"');
+    assert.equal(result.step.returns, undefined);
+  }
+});
+
+test("parsePromptStep: parses identifier prompt with returns", () => {
+  const lines = ['  prompt myVar returns "{ type: string }"'];
+  const result = parsePromptStep("test.jh", lines, 0, 'myVar returns "{ type: string }"', 3);
+  assert.equal(result.step.type, "prompt");
+  if (result.step.type === "prompt") {
+    assert.equal(result.step.bodyKind, "identifier");
+    assert.equal(result.step.bodyIdentifier, "myVar");
+    assert.equal(result.step.returns, "{ type: string }");
+  }
+});
+
+test("parsePromptStep: parses captured identifier prompt", () => {
+  const lines = ['  answer = prompt text'];
+  const result = parsePromptStep("test.jh", lines, 0, "text", 3, "answer");
+  assert.equal(result.step.type, "prompt");
+  assert.equal(result.step.captureName, "answer");
+  if (result.step.type === "prompt") {
+    assert.equal(result.step.bodyKind, "identifier");
+    assert.equal(result.step.bodyIdentifier, "text");
+  }
+});
+
+// === parsePromptStep: fenced block ===
+
+test("parsePromptStep: parses fenced block prompt", () => {
+  const lines = [
+    '  prompt ```',
+    'You are a helpful assistant.',
+    'Analyze the following: ${input}',
+    '```',
+  ];
+  const result = parsePromptStep("test.jh", lines, 0, "```", 3);
+  assert.equal(result.step.type, "prompt");
+  if (result.step.type === "prompt") {
+    assert.equal(result.step.bodyKind, "fenced");
+    // raw contains the body wrapped in quotes for runtime interpolation
+    assert.ok(result.step.raw.includes("You are a helpful assistant."));
+    assert.ok(result.step.raw.includes("${input}"));
+  }
+});
+
+test("parsePromptStep: parses captured fenced block prompt", () => {
+  const lines = [
+    '  answer = prompt ```',
+    'Hello multiline',
+    '```',
+  ];
+  const result = parsePromptStep("test.jh", lines, 0, "```", 3, "answer");
+  assert.equal(result.step.type, "prompt");
+  assert.equal(result.step.captureName, "answer");
+  if (result.step.type === "prompt") {
+    assert.equal(result.step.bodyKind, "fenced");
+  }
+});
+
+test("parsePromptStep: unterminated fenced block throws", () => {
+  const lines = [
+    '  prompt ```',
+    'Hello multiline',
+    'no closing fence',
+  ];
+  assert.throws(
+    () => parsePromptStep("test.jh", lines, 0, "```", 3),
+    /unterminated fenced block/,
   );
 });
 
 // === parsePromptStep: errors ===
 
-test("parsePromptStep: prompt not starting with quote throws (uncaptured)", () => {
-  const lines = ['  prompt hello'];
+test("parsePromptStep: unterminated single-line string throws", () => {
+  const lines = ['  prompt "Hello'];
   assert.throws(
-    () => parsePromptStep("test.jh", lines, 0, "hello", 3),
-    (err: any) => err.message.includes("E_PARSE") && err.message.includes('prompt must match: prompt "<text>"'),
+    () => parsePromptStep("test.jh", lines, 0, '"Hello', 3),
+    /multiline prompt strings are no longer supported/,
   );
 });
-
-test("parsePromptStep: prompt not starting with quote throws (captured)", () => {
-  const lines = ['  answer = prompt hello'];
-  assert.throws(
-    () => parsePromptStep("test.jh", lines, 0, "hello", 3, "answer"),
-    (err: any) => err.message.includes("E_PARSE") && err.message.includes('prompt must match: name = prompt "<text>"'),
-  );
-});
-
-// === parsePromptStep: returns schema edge cases ===
 
 test("parsePromptStep: invalid text after prompt string throws", () => {
   const lines = ['  prompt "Hello" garbage'];
