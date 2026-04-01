@@ -13,16 +13,16 @@ e2e::section "non-prompt step .out/.err files grow live during execution"
 
 # Given: a workflow with a script-backed step that writes output incrementally
 e2e::file "live_out.jh" <<'WORKFLOW'
-script slow_writer_impl {
-  echo "line-1"
-  echo "err-1" >&2
-  sleep 1
-  echo "line-2"
-  echo "err-2" >&2
-  sleep 1
-  echo "line-3"
-  echo "err-3" >&2
-}
+script slow_writer_impl = ```
+echo "line-1"
+echo "err-1" >&2
+sleep 1
+echo "line-2"
+echo "err-2" >&2
+sleep 1
+echo "line-3"
+echo "err-3" >&2
+```
 rule slow_writer {
   run slow_writer_impl()
 }

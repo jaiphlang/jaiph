@@ -17,9 +17,7 @@ fi
 
 # Given
 e2e::file "tty_tree.jh" <<'EOF'
-script leaf_fn {
-  sleep 4
-}
+script leaf_fn = "sleep 4"
 
 workflow leaf {
   run leaf_fn()

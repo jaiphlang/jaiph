@@ -51,9 +51,7 @@ Verify: `jaiph --version`. Switch versions: `jaiph use nightly` or `jaiph use 0.
 
 import "tools/security.jh" as security
 
-script check_deps {
-  test -f "package.json"
-}
+script check_deps = "test -f \"package.json\""
 
 rule deps_exist {
   if not run check_deps() {
@@ -63,7 +61,7 @@ rule deps_exist {
 
 workflow default {
   ensure deps_exist()
-  const ts = run script("date +%s")
+  const ts = run script() "date +%s"
   prompt "Build the application: ${arg1}"
   ensure security.scan_passes()
 }

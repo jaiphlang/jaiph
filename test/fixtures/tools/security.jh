@@ -4,6 +4,4 @@ rule scan_passes {
   run scan_passes_impl()
 }
 
-script scan_passes_impl {
-  echo "Security scan placeholder here"
-}
+script scan_passes_impl = "echo \"Security scan placeholder here\""

@@ -16,9 +16,9 @@ e2e::section "script cannot access parent scope variables"
 e2e::file "isolation.jh" <<'EOF'
 const secret = "parent-secret-value"
 
-script leak_check {
-  echo "secret=${secret:-EMPTY}"
-}
+script leak_check = ```
+echo "secret=${secret:-EMPTY}"
+```
 
 workflow default {
   run leak_check()
@@ -43,9 +43,9 @@ e2e::section "JAIPH_LIB defaults to workspace .jaiph/lib (Node runtime)"
 # ---------------------------------------------------------------------------
 
 e2e::file "lib_check.jh" <<'EOF'
-script check_lib {
-  echo "lib=${JAIPH_LIB:-UNSET}"
-}
+script check_lib = ```
+echo "lib=${JAIPH_LIB:-UNSET}"
+```
 
 workflow default {
   run check_lib()
@@ -78,10 +78,10 @@ test_util_greeting() {
 LIBEOF
 
 e2e::file "source_lib.jh" <<'EOF'
-script use_lib {
-  source "$JAIPH_LIB/test_util.sh"
-  test_util_greeting
-}
+script use_lib = ```
+source "$JAIPH_LIB/test_util.sh"
+test_util_greeting
+```
 
 workflow default {
   run use_lib()
@@ -106,12 +106,12 @@ e2e::section "opaque script body: embedded JS line starting with const"
 # ---------------------------------------------------------------------------
 
 e2e::file "node_const.jh" <<'EOF'
-script use_node {
-  node -e "
+script use_node = ```
+node -e "
 const fs = require('fs');
 process.stdout.write('node-ok');
 "
-}
+```
 
 workflow default {
   run use_node()

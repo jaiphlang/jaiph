@@ -36,7 +36,7 @@ All orchestration — local `jaiph run`, `jaiph test`, and **Docker `jaiph run`*
   - Resolves imports and symbol references; emits deterministic compile-time errors.
 
 - **Transpiler (`src/transpiler.ts`, `src/transpile/*`)**
-  - **`emitScriptsForModule`** parses, runs **`validateReferences`**, and **`buildScriptFiles`** — the only compile path for `jaiph run` / `jaiph test` — **persists only atomic `script` files** under `scripts/`. Inline scripts (`run script("body")`) are also emitted as `scripts/__inline_<hash>` with deterministic hash-based names. There is no workflow-level bash emission.
+  - **`emitScriptsForModule`** parses, runs **`validateReferences`**, and **`buildScriptFiles`** — the only compile path for `jaiph run` / `jaiph test` — **persists only atomic `script` files** under `scripts/`. Inline scripts (`run script() "body"`) are also emitted as `scripts/__inline_<hash>` with deterministic hash-based names. There is no workflow-level bash emission.
 
 - **Node Workflow Runtime (`src/runtime/kernel/node-workflow-runtime.ts`)**
   - `NodeWorkflowRuntime` interprets the AST directly: walks workflow steps, manages scope/variables, delegates prompt and script execution to kernel helpers, handles channels/inbox/dispatch, emits events, and writes run artifacts.

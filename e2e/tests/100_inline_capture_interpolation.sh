@@ -16,9 +16,7 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::section "inline run capture in log"
 
 e2e::file "ic_run_log.jh" <<'EOF'
-script greet {
-  echo "hello"
-}
+script greet = "echo \"hello\""
 
 workflow default {
   log "got: ${run greet()}"
@@ -67,9 +65,7 @@ e2e::assert_contains "${summary2}" "status: ok" "inline ensure capture resolved 
 e2e::section "inline run capture with args"
 
 e2e::file "ic_run_args.jh" <<'EOF'
-script greet {
-  echo "hi $1"
-}
+script greet = "echo \"hi $1\""
 
 workflow default {
   log "said: ${run greet(world)}"
@@ -91,9 +87,7 @@ e2e::assert_contains "${summary3}" "said: hi world" "inline run capture with arg
 e2e::section "inline capture in return value"
 
 e2e::file "ic_return.jh" <<'EOF'
-script greet {
-  echo "hello"
-}
+script greet = "echo \"hello\""
 
 workflow helper {
   return "${run greet()}"
@@ -120,10 +114,10 @@ e2e::assert_contains "${summary4}" "returned: hello" "inline capture in return p
 e2e::section "inline capture failure propagation"
 
 e2e::file "ic_fail_prop.jh" <<'EOF'
-script bad {
-  echo "err" >&2
-  exit 1
-}
+script bad = ```
+echo "err" >&2
+exit 1
+```
 
 workflow default {
   log "got: ${run bad()}"
@@ -144,9 +138,7 @@ e2e::pass "inline capture failure propagates to parent workflow"
 e2e::section "mixed inline captures and variable interpolation"
 
 e2e::file "ic_mixed.jh" <<'EOF'
-script greet {
-  echo "hello"
-}
+script greet = "echo \"hello\""
 
 workflow default {
   const name = "world"
@@ -169,12 +161,8 @@ e2e::assert_contains "${summary6}" "hello world" "mixed inline capture and varia
 e2e::section "compile rejects nested inline captures"
 
 e2e::file "ic_nested.jh" <<'EOF'
-script foo {
-  echo "a"
-}
-script bar {
-  echo "b"
-}
+script foo = "echo \"a\""
+script bar = "echo \"b\""
 workflow default {
   log "got: ${run foo(${run bar()})}"
 }
@@ -212,9 +200,7 @@ e2e::section "jaiph test with inline captures"
 rm -f "${TEST_DIR}/ic_nested.jh" "${TEST_DIR}/ic_unknown.jh"
 
 e2e::file "ic_lib.jh" <<'EOF'
-script greet {
-  echo "hello"
-}
+script greet = "echo \"hello\""
 
 rule check_ok {
   return "ok"

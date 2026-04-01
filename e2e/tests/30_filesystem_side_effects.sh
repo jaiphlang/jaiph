@@ -14,9 +14,9 @@ e2e::section "Blackbox filesystem side effects"
 # Given
 e2e::file "fs_write_workflow.jh" <<'EOF'
 #!/usr/bin/env jaiph
-script write_workflow_file {
-  echo "abc" > workflow_wrote.txt
-}
+script write_workflow_file = ```
+echo "abc" > workflow_wrote.txt
+```
 workflow default {
   run write_workflow_file()
 }
@@ -45,9 +45,9 @@ e2e::expect_out_files "fs_write_workflow.jh" 2
 # Given
 e2e::file "fs_write_rule.jh" <<'EOF'
 #!/usr/bin/env jaiph
-script write_attempt_impl {
-  echo "abc" > rule_wrote.txt
-}
+script write_attempt_impl = ```
+echo "abc" > rule_wrote.txt
+```
 rule write_attempt {
   run write_attempt_impl()
 }

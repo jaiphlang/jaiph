@@ -1,12 +1,12 @@
 #!/usr/bin/env jaiph
 
-script name_was_provided_check {
-  # by default it's bash but you can provide your own shebang
-  if [ -z "$1" ]; then
-    echo "You didn't provide your name :(" >&2
-    exit 1
-  fi
-}
+script name_was_provided_check = ```
+# by default it's bash but you can provide your own shebang
+if [ -z "$1" ]; then
+  echo "You didn't provide your name :(" >&2
+  exit 1
+fi
+```
 
 rule name_was_provided {
   run name_was_provided_check("${arg1}")

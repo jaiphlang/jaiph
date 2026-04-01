@@ -22,9 +22,7 @@ config {
   agent.backend = "cursor"
 }
 
-script log_scope_backend {
-  printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_SCOPE_LOG"
-}
+script log_scope_backend = "printf '%s:%s\n' \"$1\" \"$JAIPH_AGENT_BACKEND\" >> \"$JAIPH_SCOPE_LOG\""
 
 workflow first {
   config {
@@ -65,10 +63,10 @@ config {
   agent.backend = "cursor"
 }
 
-script log_rule_config {
-  printf 'rule_model:%s\n' "$JAIPH_AGENT_MODEL" >> "$JAIPH_OVERRIDE_LOG"
-  printf 'rule_backend:%s\n' "$JAIPH_AGENT_BACKEND" >> "$JAIPH_OVERRIDE_LOG"
-}
+script log_rule_config = ```
+printf 'rule_model:%s\n' "$JAIPH_AGENT_MODEL" >> "$JAIPH_OVERRIDE_LOG"
+printf 'rule_backend:%s\n' "$JAIPH_AGENT_BACKEND" >> "$JAIPH_OVERRIDE_LOG"
+```
 
 rule check_config {
   run log_rule_config()
@@ -117,9 +115,7 @@ config {
   agent.backend = "cursor"
 }
 
-script log_nested_backend {
-  printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_NESTED_LOG"
-}
+script log_nested_backend = "printf '%s:%s\n' \"$1\" \"$JAIPH_AGENT_BACKEND\" >> \"$JAIPH_NESTED_LOG\""
 
 workflow default {
   run log_nested_backend("child_backend")
@@ -133,9 +129,7 @@ config {
   agent.backend = "cursor"
 }
 
-script log_nested_backend {
-  printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_NESTED_LOG"
-}
+script log_nested_backend = "printf '%s:%s\n' \"$1\" \"$JAIPH_AGENT_BACKEND\" >> \"$JAIPH_NESTED_LOG\""
 
 workflow caller {
   config {
@@ -171,9 +165,7 @@ ENV_LOG="${TEST_DIR}/env.log"
 export JAIPH_ENV_LOG="${ENV_LOG}"
 
 e2e::file "env_wins.jh" <<'EOF'
-script log_env_backend {
-  printf 'backend:%s\n' "$JAIPH_AGENT_BACKEND" >> "$JAIPH_ENV_LOG"
-}
+script log_env_backend = "printf 'backend:%s\n' \"$JAIPH_AGENT_BACKEND\" >> \"$JAIPH_ENV_LOG\""
 
 workflow default {
   config {
@@ -205,9 +197,7 @@ config {
   agent.backend = "cursor"
 }
 
-script log_sibling_env {
-  printf '%s:model=%s,backend=%s\n' "$1" "$JAIPH_AGENT_MODEL" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_SIBLING_LOG"
-}
+script log_sibling_env = "printf '%s:model=%s,backend=%s\n' \"$1\" \"$JAIPH_AGENT_MODEL\" \"$JAIPH_AGENT_BACKEND\" >> \"$JAIPH_SIBLING_LOG\""
 
 workflow alpha {
   config {

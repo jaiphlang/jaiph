@@ -14,9 +14,9 @@ e2e::section "Output tree and nested workflow visibility"
 # Given
 e2e::file "nested_inner.jh" <<'EOF'
 #!/usr/bin/env jaiph
-script nested_inner_impl {
-  echo "e2e-nested-inner"
-}
+script nested_inner_impl = ```
+echo "e2e-nested-inner"
+```
 workflow default {
   run nested_inner_impl()
 }
@@ -25,9 +25,9 @@ EOF
 e2e::file "nested_run.jh" <<'EOF'
 #!/usr/bin/env jaiph
 import "nested_inner.jh" as inner
-script nested_outer_impl {
-  echo "e2e-nested-outer"
-}
+script nested_outer_impl = ```
+echo "e2e-nested-outer"
+```
 workflow default {
   run inner.default()
   run nested_outer_impl()
@@ -65,9 +65,9 @@ e2e::section "Native *.test.jh flow"
 # Given
 e2e::file "workflow_greeting.jh" <<'EOF'
 #!/usr/bin/env jaiph
-script done_impl {
-  echo "done"
-}
+script done_impl = ```
+echo "done"
+```
 workflow default {
   prompt "e2e-greeting-prompt"
   run done_impl()
@@ -106,9 +106,9 @@ e2e::section "Mock prompt block with no wildcard: unmatched prompt fails with cl
 # Given
 e2e::file "unmatched_mock_block.jh" <<'EOF'
 #!/usr/bin/env jaiph
-script print_result {
-  printf '%s' "$1"
-}
+script print_result = ```
+printf '%s' "$1"
+```
 workflow default {
   result = prompt "e2e-unmatched-prompt-never-mocked"
   run print_result("$result")
@@ -180,12 +180,12 @@ e2e::section "Parametrized workflow, rule, and prompt: params in tree (exact out
 # Given
 e2e::file "param_demo.jh" <<'EOF'
 #!/usr/bin/env jaiph
-script check_arg_impl {
-  [ -n "$1" ]
-}
-script echo_response {
-  echo "$1"
-}
+script check_arg_impl = ```
+[ -n "$1" ]
+```
+script echo_response = ```
+echo "$1"
+```
 rule check_arg {
   run check_arg_impl("${arg1}")
 }
@@ -220,12 +220,12 @@ e2e::pass "parametrized workflow/rule/prompt show params in tree"
 # Exact output: run workflow with args, no prompt (so no agent needed)
 e2e::file "param_run_only.jh" <<'EOF'
 #!/usr/bin/env jaiph
-script need_one_impl {
-  [ -n "$1" ]
-}
-script param_done_impl {
-  echo "e2e-param-done"
-}
+script need_one_impl = ```
+[ -n "$1" ]
+```
+script param_done_impl = ```
+echo "e2e-param-done"
+```
 rule need_one {
   run need_one_impl("${arg1}")
 }

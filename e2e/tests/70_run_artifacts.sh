@@ -13,18 +13,18 @@ e2e::section "run artifacts on workflow failure"
 
 # Given
 e2e::file "artifacts_fail.jh" <<'EOF'
-script ok_step_impl {
-  echo "ok-out"
-}
+script ok_step_impl = ```
+echo "ok-out"
+```
 rule ok_step {
   run ok_step_impl()
 }
 
-script failing_step_impl {
-  echo "bad-out"
-  echo "bad-err" >&2
-  exit 1
-}
+script failing_step_impl = ```
+echo "bad-out"
+echo "bad-err" >&2
+exit 1
+```
 rule failing_step {
   run failing_step_impl()
 }
@@ -66,9 +66,9 @@ e2e::expect_run_file_at "${TEST_DIR}/runs_out" "artifacts_fail.jh" "000005-scrip
 e2e::section "mocked prompt transcript in workflow .out; script stdout on script step .out"
 
 e2e::file "prompt_then_script.jh" <<'EOF'
-script echo_line_impl {
-  echo "script-step-out"
-}
+script echo_line_impl = ```
+echo "script-step-out"
+```
 workflow default {
   _ = prompt "e2e-artifacts-prompt-line"
   run echo_line_impl()

@@ -4,7 +4,7 @@ workflow nodejs {
   run nodejs_impl()
 }
 
-script nodejs_impl {
-  echo "Sorry, I cannot setup nodejs yet"
-  exit 1
-}
+script nodejs_impl = ```
+echo "Sorry, I cannot setup nodejs yet"
+exit 1
+```

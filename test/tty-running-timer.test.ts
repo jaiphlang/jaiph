@@ -77,10 +77,10 @@ test("ACCEPTANCE: TTY running timer updates and ends with PASS", () => {
   writeFileSync(
     workflowPath,
     [
-      "script sleep_impl {",
-      "  sleep 3",
-      '  echo "tty-output-ok"',
-      "}",
+      "script sleep_impl = ```",
+      "sleep 3",
+      'echo "tty-output-ok"',
+      "```",
       "workflow default {",
       "  run sleep_impl()",
       "}",

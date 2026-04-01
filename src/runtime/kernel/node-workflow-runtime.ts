@@ -778,7 +778,8 @@ export class NodeWorkflowRuntime {
           continue;
         }
         if (step.value.kind === "run_inline_script_capture") {
-          const result = await this.executeInlineScript(scope, step.value.body, step.value.shebang, step.value.args ?? "");
+          const shebang = step.value.lang ? `#!/usr/bin/env ${step.value.lang}` : undefined;
+          const result = await this.executeInlineScript(scope, step.value.body, shebang, step.value.args ?? "");
           if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
           scope.vars.set(step.name, result.returnValue ?? result.output.trim());
           continue;
@@ -882,7 +883,8 @@ export class NodeWorkflowRuntime {
         continue;
       }
       if (step.type === "run_inline_script") {
-        const result = await this.executeInlineScript(scope, step.body, step.shebang, step.args ?? "");
+        const shebang = step.lang ? `#!/usr/bin/env ${step.lang}` : undefined;
+        const result = await this.executeInlineScript(scope, step.body, shebang, step.args ?? "");
         if (step.captureName && result.status === 0) {
           scope.vars.set(step.captureName, result.returnValue ?? result.output.trim());
         }

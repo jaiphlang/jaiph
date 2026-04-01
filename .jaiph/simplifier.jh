@@ -35,26 +35,24 @@ const simplifier_principles = "
     existing tests unchanged.
 "
 
-script assert_no_test_or_e2e_in_changed {
-  source "${JAIPH_LIB}/git_paths.sh"
-  local bad=0
-  while IFS= read -r f; do
-    [ -z "$f" ] && continue
-    if [[ "$f" == test/* ]] || [[ "$f" == e2e/* ]]; then
-      echo "Simplifier workflow must not modify tests or e2e: $f" >&2
-      bad=1
-    fi
-  done < <(git_changed_paths_sorted)
-  return $bad
-}
+script assert_no_test_or_e2e_in_changed = ```
+source "${JAIPH_LIB}/git_paths.sh"
+local bad=0
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  if [[ "$f" == test/* ]] || [[ "$f" == e2e/* ]]; then
+    echo "Simplifier workflow must not modify tests or e2e: $f" >&2
+    bad=1
+  fi
+done < <(git_changed_paths_sorted)
+return $bad
+```
 
 rule no_test_or_e2e_paths_changed {
   run assert_no_test_or_e2e_in_changed()
 }
 
-script report_file_nonempty {
-  test -s ".jaiph/tmp/simplifier_report.md"
-}
+script report_file_nonempty = "test -s \".jaiph/tmp/simplifier_report.md\""
 
 workflow find_simplifications {
   const report = prompt ```
@@ -97,13 +95,9 @@ workflow find_simplifications {
   ensure no_test_or_e2e_paths_changed()
 }
 
-script save_simplifier_report {
-  printf '%s\n' "$1" > .jaiph/tmp/simplifier_report.md
-}
+script save_simplifier_report = "printf '%s\\n' \"$1\" > .jaiph/tmp/simplifier_report.md"
 
-script read_simplifier_report {
-  cat .jaiph/tmp/simplifier_report.md
-}
+script read_simplifier_report = "cat .jaiph/tmp/simplifier_report.md"
 
 workflow apply_simplifications {
   if not run report_file_nonempty() {
@@ -140,9 +134,7 @@ workflow apply_simplifications {
   ensure no_test_or_e2e_paths_changed()
 }
 
-script mkdir_tmp_jaiph {
-  mkdir -p .jaiph/tmp
-}
+script mkdir_tmp_jaiph = "mkdir -p .jaiph/tmp"
 
 workflow default {
   ensure git.is_clean()

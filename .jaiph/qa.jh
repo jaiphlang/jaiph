@@ -8,12 +8,12 @@ config {
   agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
-script read_contributing_docs {
-  test -f docs/contributing.md || {
-    echo "docs/contributing.md not found (run from repo root)" >&2
-    return 1
-  }
-  awk '
+script read_contributing_docs = ```
+test -f docs/contributing.md || {
+  echo "docs/contributing.md not found (run from repo root)" >&2
+  return 1
+}
+awk '
 /^---$/ {
   if (sec == 0) { sec = 1; next }
   if (sec == 1) { sec = 2; next }
@@ -21,49 +21,41 @@ script read_contributing_docs {
 sec == 1 { next }
 sec == 2 { print }
 ' docs/contributing.md
-}
+```
 
-script read_txtar_format_spec {
-  cat compiler-tests/README.md
-}
+script read_txtar_format_spec = "cat compiler-tests/README.md"
 
-script read_txtar_fixture_names {
-  for f in compiler-tests/*.txt; do
-    echo "=== FILE: $f ==="
-    grep '^=== ' "$f" | sed 's/^=== /  /'
-  done
-}
+script read_txtar_fixture_names = ```
+for f in compiler-tests/*.txt; do
+  echo "=== FILE: $f ==="
+  grep '^=== ' "$f" | sed 's/^=== /  /'
+done
+```
 
-script read_txtar_fixtures {
-  for f in compiler-tests/*.txt; do
-    echo "========== $f =========="
-    cat "$f"
-    echo ""
-  done
-}
+script read_txtar_fixtures = ```
+for f in compiler-tests/*.txt; do
+  echo "========== $f =========="
+  cat "$f"
+  echo ""
+done
+```
 
-script new_qa_gap_report_path {
-  echo ".jaiph/tmp/qa_gap_report_$(date +%Y-%m-%d_%H-%M-%S).md"
-}
+script new_qa_gap_report_path = "echo \".jaiph/tmp/qa_gap_report_$(date +%Y-%m-%d_%H-%M-%S).md\""
 
-script write_gap_report_pointer {
-  printf '%s\n' "$1" > .jaiph/tmp/qa_gap_report_active.txt
-}
+script write_gap_report_pointer = "printf '%s\\n' \"$1\" > .jaiph/tmp/qa_gap_report_active.txt"
 
-script gap_report_nonempty {
-  p="$(cat .jaiph/tmp/qa_gap_report_active.txt 2>/dev/null)" || return 1
-  [ -z "$p" ] && return 1
-  test -s "$p"
-}
+script gap_report_nonempty = ```
+p="$(cat .jaiph/tmp/qa_gap_report_active.txt 2>/dev/null)" || return 1
+[ -z "$p" ] && return 1
+test -s "$p"
+```
 
-script read_gap_report {
-  p="$(cat .jaiph/tmp/qa_gap_report_active.txt)"
-  cat "$p"
-}
+script read_gap_report = ```
+p="$(cat .jaiph/tmp/qa_gap_report_active.txt)"
+cat "$p"
+```
 
-script save_gap_report_file {
-  printf '%s\n' "$1" > "$2"
-}
+script save_gap_report_file = "printf '%s\\n' \"$1\" > \"$2\""
 
 const analyze_gaps_prompt = "
     <role>
@@ -231,9 +223,7 @@ workflow write_tests {
 ```
 }
 
-script mkdir_tmp_jaiph_qa {
-  mkdir -p .jaiph/tmp
-}
+script mkdir_tmp_jaiph_qa = "mkdir -p .jaiph/tmp"
 
 workflow default {
   # ensure git.is_clean()

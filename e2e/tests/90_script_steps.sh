@@ -13,9 +13,9 @@ e2e::section "script calls in workflow tree and side effects"
 
 # Given
 e2e::file "scripts.jh" <<'EOF'
-script changed_files {
-  echo "fn-called" > script_called.txt
-}
+script changed_files = ```
+echo "fn-called" > script_called.txt
+```
 
 workflow default {
   run changed_files()
@@ -45,21 +45,19 @@ e2e::section "run, ensure, and script argument forwarding"
 
 # Given
 e2e::file "args_forwarding.jh" <<'EOF'
-script expect_args_impl {
-  return 0
-}
+script expect_args_impl = "return 0"
 
 rule expect_args {
   run expect_args_impl()
 }
 
-script write_args {
-  printf "%s|%s\n" "$1" "$2" > script_args.txt
-}
+script write_args = ```
+printf "%s|%s\n" "$1" "$2" > script_args.txt
+```
 
-script write_workflow_args {
-  printf "%s|%s\n" "$1" "$2" > workflow_args.txt
-}
+script write_workflow_args = ```
+printf "%s|%s\n" "$1" "$2" > workflow_args.txt
+```
 
 workflow called {
   ensure expect_args("${arg1}", "${arg2}")

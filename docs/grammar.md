@@ -21,7 +21,7 @@ Jaiph enforces a strict boundary between orchestration and execution. Workflows 
 
 - **Rules** — Named blocks of structured Jaiph steps: `ensure` (other rules), `run` (scripts only — not workflows), `const`, brace `if`, `match`, `fail`, `log`/`logerr`, `return "…"`. Rules cannot use `prompt`, inbox send/route, `wait`, `run async`, or `ensure … recover`.
 
-- **Scripts** — Top-level `script` blocks emitted as separate executable files under the workspace `scripts/` directory. Called from workflows or rules with `run`. Bodies are opaque to the compiler — the parser does not check Jaiph keywords inside them. Use `echo`/`printf` for data output and `return N`/`return $?` for exit status. Polyglot support: a `#!` shebang as the first line selects the interpreter; otherwise `#!/usr/bin/env bash` is used. For trivial one-off commands, **inline scripts** (`run script("body")`) let you embed a script body directly in a step without a named definition — see [`run` — Inline Scripts](#inline-scripts).
+- **Scripts** — Top-level `script` definitions emitted as separate executable files under the workspace `scripts/` directory. Called from workflows or rules with `run`. Bodies are opaque to the compiler — the parser does not check Jaiph keywords inside them. Use `echo`/`printf` for data output and `return N`/`return $?` for exit status. Polyglot support: a fence lang tag (`` ```<tag> ``) maps to `#!/usr/bin/env <tag>` — any tag is valid (no hardcoded allowlist). Alternatively, a manual `#!` shebang as the first line of the body selects the interpreter; if both a fence tag and a `#!` first line are present, it is an error. Without either, `#!/usr/bin/env bash` is used. For trivial one-off commands, **inline scripts** (`run script() "body"` or `` run script() ``` ... ``` ``) let you embed a script body directly in a step without a named definition — see [`run` — Inline Scripts](#inline-scripts).
 
 - **Channels** — Named message queues declared with `channel name`. Workflows send messages with `<-` and register route handlers with `->`. See [Inbox & Dispatch](inbox.md).
 
@@ -71,12 +71,15 @@ One channel per line. Channels are used with `send` (`<-`) and `route` (`->`) in
 
 ## Definitions
 
-All three definition forms — `rule`, `workflow`, `script` — require braces on the declaration line. Definitions must **not** use parentheses (parentheses are reserved for call sites).
+Rules and workflows use braces on the declaration line. Scripts use `=` with a quoted string, bare identifier, or fenced block body. Definitions must **not** use parentheses (parentheses are reserved for call sites).
 
 ```jaiph
 rule check_status { … }        # correct
 workflow default { … }          # correct
-script setup { … }              # correct
+script setup = "echo ok"        # correct (single-line)
+script setup = ```              # correct (fenced block)
+echo ok
+```
 # workflow default() { … }      — E_PARSE: definitions must not use parentheses
 ```
 
@@ -121,28 +124,55 @@ Shell redirection or pipelines after `run` (`>`, `|`, `&`) are rejected — use 
 
 #### Inline Scripts
 
-`run script("body")` embeds a shell command directly in a workflow or rule step without declaring a named `script` block. This is useful for trivial one-off commands where a full `script` definition would be verbose.
+`run script()` followed by a body embeds a shell command directly in a workflow or rule step without declaring a named `script` definition. This is useful for trivial one-off commands where a full `script` definition would be verbose.
 
 ```jaiph
 workflow default {
-  run script("echo hello")
-  x = run script("echo captured")
-  const y = run script("date +%s")
+  run script() "echo hello"
+  x = run script() "echo captured"
+  const y = run script() "date +%s"
   log "got: ${x}, time: ${y}"
 }
 ```
 
-The body must be a double-quoted string. Optional arguments are passed as comma-separated strings after the body and are available as `$1`, `$2`, … inside the script:
+The body follows the `script(...)` call and can be a **double-quoted string** or a **fenced block**. Optional arguments are passed as comma-separated strings inside the parentheses and are available as `$1`, `$2`, … inside the script:
 
 ```jaiph
-run script("echo $1-$2", "hello", "world")   # prints: hello-world
+run script("hello", "world") "echo $1-$2"   # prints: hello-world
 ```
 
-**Polyglot support:** If the body starts with `#!`, the first line (up to the first `\n`) becomes the shebang and the rest becomes the body:
+**Fenced block form:** For multiline inline scripts or polyglot one-liners, use a fenced block after the call. The opening `` ``` `` must be on the same line as `script(...)`. An optional lang tag selects the interpreter — same rules as named scripts (`` ```<tag> `` → `#!/usr/bin/env <tag>`):
+
+```text
+run script() ```
+echo "line one"
+echo "line two"
+```
+```
+
+```text
+run script() ```python3
+import sys
+print(f"args: {sys.argv[1:]}")
+```
+```
+
+Both body forms work with capture:
 
 ```jaiph
-run script("#!/usr/bin/env python3\nprint('hello from python')")
+x = run script() "echo captured"
+const y = run script() ```
+date +%s
 ```
+```
+
+**Polyglot support (quoted strings):** If a quoted-string body starts with `#!`, the first line (up to the first `\n`) becomes the shebang and the rest becomes the body:
+
+```jaiph
+run script() "#!/usr/bin/env python3\nprint('hello from python')"
+```
+
+For other languages, prefer the fenced form with a lang tag — even for a single line of Python, wrap it in a fenced block with `` ```python3 ``.
 
 **Deterministic naming:** Inline script bodies are emitted as executable files under `scripts/` with names of the form `__inline_<hash>` (12-character SHA-256 prefix of body + shebang). The same body and shebang always produce the same artifact name across runs.
 
@@ -150,7 +180,7 @@ run script("#!/usr/bin/env python3\nprint('hello from python')")
 
 **Restrictions:**
 - `run async script(…)` is not supported — inline scripts cannot be used with `run async`.
-- The body must be a double-quoted string (single quotes are not accepted).
+- The body must be a double-quoted string or a fenced block after the call (single quotes are not accepted).
 
 ### `run async` — Concurrent Execution
 
@@ -414,59 +444,77 @@ Prefer `const name = …` for new code.
 
 ## Scripts
 
-### Bash Scripts
+### Bash Scripts (single-line)
 
 ```jaiph
-script setup_env {
-  export BASE_DIR=$(pwd)
-  mkdir -p "$BASE_DIR/output"
-  echo "Environment initialized"
-}
+script setup_env = "export BASE_DIR=$(pwd) && mkdir -p \"$BASE_DIR/output\" && echo \"Environment initialized\""
 ```
+
+### Bash Scripts (fenced block)
+
+```jaiph
+script setup_env = ```
+export BASE_DIR=$(pwd)
+mkdir -p "$BASE_DIR/output"
+echo "Environment initialized"
+```
+```
+
+### Identifier binding
+
+The RHS of a named script can be a bare identifier referencing an existing `const` binding whose string value becomes the script body:
+
+```jaiph
+const MY_CMD = "echo hello"
+script greet = MY_CMD
+```
+
+Quoted-string and identifier RHS always use the default runtime (shell). For other languages, use a fenced block with a lang tag.
 
 Script bodies are opaque bash — the compiler does not parse them as Jaiph steps. For bash scripts, the emitter applies only lightweight transforms: `return` normalization, `local`/`export`/`readonly` spacing, and import alias resolution.
 
 ### Polyglot Scripts
 
-#### Interpreter tags (recommended)
+#### Fence lang tags (recommended)
 
-Use `script:<tag>` to select a common interpreter without writing a shebang line:
+Use a fence lang tag (`` ```<tag> ``) to select an interpreter without writing a shebang line. The tag maps directly to a shebang: `` ```<tag> `` becomes `#!/usr/bin/env <tag>`. Any tag is valid — there is no hardcoded allowlist.
 
 ```jaiph
-script:python3 analyze {
-  import sys
-  print(f"Analyzing {sys.argv[1]}")
-}
-
-script:node transform {
-  const data = process.argv[2];
-  console.log(JSON.stringify({ result: data }));
-}
+script analyze = ```python3
+import sys
+print(f"Analyzing {sys.argv[1]}")
 ```
 
-Supported tags and their shebangs:
+script transform = ```node
+const data = process.argv[2];
+console.log(JSON.stringify({ result: data }));
+```
+```
 
-| Tag | Shebang |
+Examples of tag-to-shebang mapping:
+
+| Fence tag | Shebang |
 |---|---|
-| `node` | `#!/usr/bin/env node` |
-| `python3` | `#!/usr/bin/env python3` |
-| `ruby` | `#!/usr/bin/env ruby` |
-| `perl` | `#!/usr/bin/env perl` |
-| `pwsh` | `#!/usr/bin/env pwsh` |
-| `deno` | `#!/usr/bin/env deno run` |
-| `bash` | `#!/usr/bin/env bash` |
+| `` ```node `` | `#!/usr/bin/env node` |
+| `` ```python3 `` | `#!/usr/bin/env python3` |
+| `` ```ruby `` | `#!/usr/bin/env ruby` |
+| `` ```perl `` | `#!/usr/bin/env perl` |
+| `` ```pwsh `` | `#!/usr/bin/env pwsh` |
+| `` ```deno `` | `#!/usr/bin/env deno` |
+| `` ```bash `` | `#!/usr/bin/env bash` |
+| `` ```lua `` | `#!/usr/bin/env lua` |
 
-Unknown tags are rejected at parse time with an actionable error listing valid tags. Combining a tag with a manual shebang in the body is also rejected — choose one or the other.
+Combining a fence lang tag with a manual `#!` shebang in the body is an error — choose one or the other.
 
 #### Manual shebang (escape hatch)
 
-Add a shebang as the first line to use any interpreter not covered by a built-in tag:
+If no fence tag is present, the user may provide a manual `#!` shebang as the first line of the body:
 
 ```jaiph
-script run_lua {
-  #!/usr/bin/env lua
-  print("hello from lua")
-}
+script run_lua = ```
+#!/usr/bin/env lua
+print("hello from lua")
+```
 ```
 
 Non-bash scripts skip Jaiph keyword validation and emit the body verbatim.
@@ -520,7 +568,7 @@ Every step produces three distinct outputs — status, value, and logs:
 | `ensure rule` | rule exit code | explicit `return` value | rule body logs to artifacts |
 | `run workflow` | workflow exit code | explicit `return` value | workflow step logs to artifacts |
 | `run script` (named) | script exit code | **stdout** of script body | script stdout/stderr to artifacts |
-| `run script("…")` (inline) | script exit code | **stdout** of script body | script stdout/stderr to artifacts |
+| `run script() "…"` (inline) | script exit code | **stdout** of script body | script stdout/stderr to artifacts |
 | `prompt` | prompt exit code | final assistant answer | transcript to artifacts |
 | `log` / `logerr` | always 0 | empty | event + stdout/stderr |
 | `fail` | non-zero (abort) | empty | message to stderr |
@@ -540,7 +588,7 @@ Key rules:
 - **Comments:** Full-line `#` comments. Empty lines are ignored.
 - **Shebang:** A `#!` first line of the file is ignored by the parser.
 - **Import path:** Quoted string in `import "path" as alias`. Missing `.jh` extension is appended automatically.
-- **String quoting:** Jaiph string literals use **double quotes only** (`"..."`). Single-quoted (`'...'`) and backtick-delimited (`` `...` ``) strings are parse errors. Use `\"` for literal double quotes inside strings and `\\` for literal backslashes. **Exception:** `script { ... }` bodies are opaque shell text; normal shell quoting (single quotes, backticks, etc.) is allowed inside them.
+- **String quoting:** Jaiph string literals use **double quotes only** (`"..."`). Single-quoted (`'...'`) and backtick-delimited (`` `...` ``) strings are parse errors. Use `\"` for literal double quotes inside strings and `\\` for literal backslashes. **Exception:** script bodies (fenced blocks) are opaque shell text; normal shell quoting (single quotes, backticks, etc.) is allowed inside them.
 - **Top-level ordering:** The parser accepts top-level definitions in any order. `jaiph format` normalizes them to a canonical order: imports → config → channels → const declarations → rules → scripts → workflows → tests. See [CLI — `jaiph format`](cli.md#jaiph-format).
 
 ## EBNF (Practical Form)
@@ -575,9 +623,11 @@ rule_body_step  = comment_line | workflow_step ;
   (* validation rejects prompt, send, wait, ensure…recover, const…=prompt, run async,
      and run targets that are not scripts *)
 
-script_decl     = ( "script" | "script:" INTERPRETER_TAG ) IDENT "{" [ shebang_line ] { script_line } "}" ;
-INTERPRETER_TAG = "node" | "python3" | "ruby" | "perl" | "pwsh" | "deno" | "bash" ;
-shebang_line    = "#!" rest_of_line ;  (* rejected when INTERPRETER_TAG is present *)
+script_decl     = "script" IDENT "=" script_rhs ;
+script_rhs      = quoted_or_multiline_string | IDENT | fenced_script_block ;
+fenced_script_block = "```" [ LANG_TAG ] newline { script_line newline } "```" ;
+LANG_TAG        = IDENT ;  (* any identifier — maps to #!/usr/bin/env <tag>; rejected when body starts with #! *)
+shebang_line    = "#!" rest_of_line ;  (* rejected when LANG_TAG is present *)
 script_line     = comment_line | command_line ;
 
 workflow_decl   = [ "export" ] "workflow" IDENT "{" [ workflow_config ] { workflow_step } "}" ;
@@ -622,7 +672,7 @@ ensure_stmt     = "ensure" call_ref [ "recover" recover_body ] ;
 ensure_capture_stmt = IDENT "=" "ensure" call_ref [ "recover" recover_body ] ;
 run_capture_stmt   = IDENT "=" "run" ( call_ref | inline_script ) ;
 run_stmt        = "run" ( call_ref | inline_script ) ;
-inline_script   = "script" "(" string { "," string } ")" ;
+inline_script   = "script" "(" [ string { "," string } ] ")" ( string | fenced_script_block ) ;
 prompt_body     = double_quoted_string | IDENT | fenced_block ;
 fenced_block    = "```" newline { body_line newline } "```" ;
 prompt_stmt     = "prompt" prompt_body [ returns_schema ] ;
@@ -665,7 +715,7 @@ Validation rules:
 
 `jaiph run` and `jaiph test` do **not** transpile workflows to shell. The CLI calls `buildScripts()`, which emits only per-`script` executable files under `scripts/`. Workflows, rules, prompts, channels, and control flow are interpreted by `NodeWorkflowRuntime` from the AST.
 
-Each `script name { … }` becomes `scripts/<name>` with `chmod +x`: shebang (custom or default `#!/usr/bin/env bash`) plus the body. Inline scripts (`run script("body")`) are emitted as `scripts/__inline_<hash>` with deterministic hash-based names. At runtime, script steps run these files with a minimal environment.
+Each `script name = …` becomes `scripts/<name>` with `chmod +x`: shebang (from fence lang tag, manual `#!`, or default `#!/usr/bin/env bash`) plus the body. Inline scripts (`run script() "body"` or `` run script() ``` ... ``` ``) are emitted as `scripts/__inline_<hash>` with deterministic hash-based names. At runtime, script steps run these files with a minimal environment.
 
 ## Runtime Execution
 

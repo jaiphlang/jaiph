@@ -79,7 +79,7 @@ test("return ensure parses managed ensure call with args", () => {
 
 test("return run in rule parses managed run call", () => {
   const mod = parsejaiph(
-    `script helper {\n  echo "ok"\n}\nrule my_rule {\n  return run helper()\n}`,
+    `script helper = "echo \\"ok\\""\nrule my_rule {\n  return run helper()\n}`,
     "test.jh",
   );
   const step = mod.rules[0].steps[0];
@@ -137,9 +137,7 @@ test("bare return has no managed field", () => {
 test("return run in brace-if then branch", () => {
   const mod = parsejaiph(
     [
-      "script helper {",
-      '  echo "ok"',
-      "}",
+      'script helper = "echo \\"ok\\""',
       "rule check {",
       '  return "yes"',
       "}",

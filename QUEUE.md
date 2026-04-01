@@ -12,74 +12,27 @@ Process rules:
 
 ---
 
-## Scripts and `run`: braces out; strings or fences in <!-- dev-ready -->
+## Named workflow and rule parameters (breaking)
 
 **Goal**  
-Replace `{ ... }` script bodies with the **same split as prompts**: single-line double-quoted string or identifier binding, or multiline fenced block. Drop all `script:lang` prefix forms and the body-inside-parens inline syntax.
+Replace implicit positional `arg1`…`arg9` with **declared parameter names** on definitions, e.g. `workflow implement(task, role) { ... }` and `rule gate(path) { ... }`, so parameters are **known symbols** inside the body (compile-time resolution, arity checks, clearer docs). Call sites stay `run implement(expr, expr)` but names document intent and enable tooling.
 
-**Before (remove entirely)**  
+**Motivation**  
+Orchestration values are strings; reading a parameter must stay explicit (`"${arg1}"` today). Bare `const x = arg1` does not interpolate and is a footgun. Named params align the **definition** with symbols used in the block and are a better long-term fix than special-casing bare identifiers in `const` RHS.
 
-- `script name { ... }`, `script:lang name { ... }` (and any `script:lang` form)
-- `run script { ... }`, `run script(arg) { ... }`
-- `run script("body", "arg1")` (body-inside-parens form)
+**Scope (sketch)**
 
-**After — named scripts** (use **`=`** so the RHS reads like a binding: string, identifier, or fence)
-
-- `script name = "..."` — single-line source, default runtime (shell).
-- `script name = identifier` — RHS is a binding whose string value is the script body. E.g. `const body = "echo hi"; script foo = body`.
-- Fenced — the opening `` ``` `` **must** be on the same line as `script name =` (uses `parseFencedBlock` from the fence parser task):
-
-```text
-script demo = ```python3
-import sys
-print(sys.argv)
-```
-```
-
-**After — `run` named script**
-
-- `run name(args)` — unchanged.
-
-**After — anonymous inline scripts** (no `=`; reads like a step, not a definition)
-
-- `run script() "script code"` — single-line body, default runtime. Empty `()` required to make the no-args call explicit.
-- Fenced — the opening `` ``` `` **must** be on the same line as `run script(...)`:
-
-```text
-run script(a, b) ```node
-console.log(process.argv)
-```
-```
-
-**Language / shebang resolution**
-
-The fence `lang` tag maps directly to a shebang: `` ```<tag> `` → `#!/usr/bin/env <tag>`. Any tag is valid — no hardcoded allowlist. This replaces the current `INTERPRETER_TAGS` map.
-
-If the tag is empty (plain `` ``` ``), no automatic shebang is set. The user may provide a manual `#!` line as the first line of the body. If both a fence tag and a `#!` first line are present, that's an error.
-
-Quoted-string and identifier RHS always use the default runtime (shell). For other languages, use a fenced block — even for a single line of Python, wrap it in a fenced block with `` ```python3 ``.
-
-**Const capture**
-
-`const x = run script() "..."` and `` const x = run script() ``` ... ``` `` must work. Update `ConstRhs` `kind: "run_inline_script_capture"` to accept the new body forms (body follows parens, not inside them).
-
-**Context**
-
-- Script parsing: `src/parse/scripts.ts` and `run` handling in `src/parse/steps.ts`, `const-rhs.ts`, `workflows.ts`, `workflow-brace.ts`.
-- Formatter, compiler tests, E2E: full-repo search for `script` / `run script` / `script:`.
-
-**Scope**
-
-1. **Parser**: drop brace bodies, `script:lang`, and body-inside-parens inline scripts. Named scripts require `script name =` + RHS (string, identifier, or fence). Anonymous: `run script(...)` + body after parens (string or fence).
-2. **Language**: fence `lang` → `#!/usr/bin/env <lang>`. Remove `INTERPRETER_TAGS` map. Error if both fence tag and manual `#!` present.
-3. **AST types**: update `ScriptDef` — replace `commands: string[]` with single `body: string` + optional `lang?: string`. Update `ConstRhs` inline script capture variant for new body position.
-4. **Formatter**: emit `script name =` for definitions; emit `run script(...) "..."` / fenced form for anonymous (no `=`).
-5. **Tests**: migrate every fixture; parse errors for unterminated fences, text after opening `` ``` ``, remaining `script:lang`, body-inside-parens.
+1. **Parser / AST** — Optional parameter list on `workflow` and `rule`: `workflow name ( ident [, ident]… ) {`, same for `rule`. Reject duplicates; reserve or map `argN` during migration if needed.
+2. **Validation** — Inside the body, `task` / `role` / etc. refer to parameters; `run callee(a, b)` arity vs callee signature. Error messages name parameters.
+3. **Runtime** — Bind call arguments to declared names (same as today’s `arg1`… map, but keyed by declared order).
+4. **Formatter** — Emit declared parameter lists.
+5. **Migration** — Breaking change: repo-wide update of `.jh` files, docs (`grammar.md`, `jaiph-skill.md`), compiler tests, E2E. Deprecation window optional; this queue assumes hard rewrite unless you add a compatibility shim task.
 
 **Acceptance criteria**
 
-- No script `{ ... }`, no `script:lang`, no `run script("body")` in grammar, formatter, docs, or tests.
-- `npm run test:compiler && npm test && npm run test:e2e` pass.
+- Workflows and rules can declare named parameters; bodies reference them without relying on positional `arg1` for new code.
+- Invalid arity or unknown symbol fails at compile time with clear errors.
+- `npm run test:compiler && npm test && npm run test:e2e` pass after full migration.
 
 ---
 

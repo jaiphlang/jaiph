@@ -11,9 +11,7 @@ test("E_VALIDATE: inline shell step is forbidden in workflow", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "script f {",
-        "  printf '%s' 'x'",
-        "}",
+        "script f = \"printf '%s' 'x'\"",
         "workflow default {",
         '  x="$(f)"',
         "}",
@@ -35,9 +33,7 @@ test("E_VALIDATE: direct inline shell step is forbidden in workflow", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "script f {",
-        "  printf '%s' 'x'",
-        "}",
+        "script f = \"printf '%s' 'x'\"",
         "workflow default {",
         "  f",
         "}",
@@ -80,9 +76,7 @@ test("buildScripts extracts script for run with capture workflow", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "script f {",
-        "  printf '%s' 'ok'",
-        "}",
+        "script f = \"printf '%s' 'ok'\"",
         "workflow default {",
         "  x = run f()",
         '  return "${x}"',
@@ -105,9 +99,7 @@ test("E_VALIDATE: inline shell line with workflow ref is forbidden", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "script w_impl {",
-        "  echo x",
-        "}",
+        'script w_impl = "echo x"',
         "workflow w {",
         "  run w_impl()",
         "}",
@@ -133,9 +125,7 @@ test("E_VALIDATE: send RHS cannot invoke Jaiph workflow via shell", () => {
       join(root, "m.jh"),
       [
         "channel c",
-        "script w_impl {",
-        "  echo x",
-        "}",
+        'script w_impl = "echo x"',
         "workflow w {",
         "  run w_impl()",
         "}",
@@ -158,9 +148,7 @@ test("bare identifier arg: known const passes validation", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "script greet {",
-        '  echo "hello $1"',
-        "}",
+        'script greet = "echo \\"hello $1\\""',
         "workflow default {",
         '  const name = "world"',
         "  run greet(name)",
@@ -180,9 +168,7 @@ test("bare identifier arg: unknown name fails E_VALIDATE", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "script greet {",
-        '  echo "hello $1"',
-        "}",
+        'script greet = "echo \\"hello $1\\""',
         "workflow default {",
         "  run greet(unknown_var)",
         "}",
@@ -205,12 +191,8 @@ test("bare identifier arg: capture variable passes validation", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "script get_name {",
-        '  echo "world"',
-        "}",
-        "script greet {",
-        '  echo "hello $1"',
-        "}",
+        'script get_name = "echo \\"world\\""',
+        'script greet = "echo \\"hello $1\\""',
         "workflow default {",
         "  result = run get_name()",
         "  run greet(result)",
@@ -231,9 +213,7 @@ test("bare identifier arg: argN always valid", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "script greet {",
-        '  echo "hello $1"',
-        "}",
+        'script greet = "echo \\"hello $1\\""',
         "workflow default {",
         "  run greet(arg1)",
         "}",
@@ -254,9 +234,7 @@ test("bare identifier arg: top-level const passes validation", () => {
       join(root, "m.jh"),
       [
         'const REPO = "my-project"',
-        "script greet {",
-        '  echo "hello $1"',
-        "}",
+        'script greet = "echo \\"hello $1\\""',
         "workflow default {",
         "  run greet(REPO)",
         "}",

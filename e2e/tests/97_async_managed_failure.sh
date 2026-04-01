@@ -12,10 +12,10 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::section "run async fails when any async managed run fails"
 
 e2e::file "async_managed_failure.jh" <<'EOF'
-script good_impl {
-  sleep 0.05
-  echo "good" > good.txt
-}
+script good_impl = ```
+sleep 0.05
+echo "good" > good.txt
+```
 
 workflow good {
   run good_impl()

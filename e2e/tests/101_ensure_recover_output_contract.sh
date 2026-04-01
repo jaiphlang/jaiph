@@ -15,15 +15,13 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::section "recover payload includes script stdout and stderr"
 
 e2e::file "simple_echo.jh" <<'EOF'
-script simple_echo {
-  echo "Hello"
-  echo "Oops" >&2
-  exit 1
-}
+script simple_echo = ```
+echo "Hello"
+echo "Oops" >&2
+exit 1
+```
 
-script save_string_to_file {
-  printf '%s' "$1" > "$2"
-}
+script save_string_to_file = "printf '%s' \"$1\" > \"$2\""
 
 rule simple_echo_rule {
   run simple_echo()
@@ -52,15 +50,13 @@ e2e::pass "simple script failure: stdout + stderr in recover payload"
 e2e::section "recover payload aggregates nested rule log + script output"
 
 e2e::file "nested_payload.jh" <<'EOF'
-script failing_script {
-  echo "nested-stdout"
-  echo "nested-stderr" >&2
-  exit 1
-}
+script failing_script = ```
+echo "nested-stdout"
+echo "nested-stderr" >&2
+exit 1
+```
 
-script save_string_to_file {
-  printf '%s' "$1" > "$2"
-}
+script save_string_to_file = "printf '%s' \"$1\" > \"$2\""
 
 rule inner {
   run failing_script()
@@ -95,17 +91,15 @@ e2e::pass "nested rule+script failure: aggregated payload in recover"
 e2e::section "recover payload captures multi-line CI failure output"
 
 e2e::file "ci_payload.jh" <<'EOF'
-script npm_run_test_ci {
-  echo "FAIL src/app.test.ts"
-  echo "  Expected: 200"
-  echo "  Received: 500"
-  echo "Tests: 1 failed, 3 passed, 4 total" >&2
-  exit 1
-}
+script npm_run_test_ci = ```
+echo "FAIL src/app.test.ts"
+echo "  Expected: 200"
+echo "  Received: 500"
+echo "Tests: 1 failed, 3 passed, 4 total" >&2
+exit 1
+```
 
-script save_string_to_file {
-  printf '%s' "$1" > "$2"
-}
+script save_string_to_file = "printf '%s' \"$1\" > \"$2\""
 
 rule ci_passes {
   run npm_run_test_ci()
@@ -140,24 +134,22 @@ e2e::pass "CI-style failure: multi-line payload captured"
 e2e::section "recover payload refreshes per attempt (not stale)"
 
 e2e::file "retry_updates.jh" <<'EOF'
-script emit_attempt {
-  local attempt_file=".jaiph/tmp/attempt_counter"
-  if [ ! -f "$attempt_file" ]; then
-    printf "1" > "$attempt_file"
-    echo "attempt-1"
-    exit 1
-  fi
-  local n
-  n=$(<"$attempt_file")
-  n=$((n + 1))
-  printf "%s" "$n" > "$attempt_file"
-  echo "attempt-${n}"
+script emit_attempt = ```
+local attempt_file=".jaiph/tmp/attempt_counter"
+if [ ! -f "$attempt_file" ]; then
+  printf "1" > "$attempt_file"
+  echo "attempt-1"
   exit 1
-}
+fi
+local n
+n=$(<"$attempt_file")
+n=$((n + 1))
+printf "%s" "$n" > "$attempt_file"
+echo "attempt-${n}"
+exit 1
+```
 
-script save_string_to_file {
-  printf '%s' "$1" > "$2"
-}
+script save_string_to_file = "printf '%s' \"$1\" > \"$2\""
 
 rule check_rule {
   run emit_attempt()
@@ -190,13 +182,9 @@ e2e::pass "retry payload updates per attempt"
 e2e::section "no recover payload when rule succeeds"
 
 e2e::file "success_no_payload.jh" <<'EOF'
-script say_ok {
-  echo "all good"
-}
+script say_ok = "echo \"all good\""
 
-script save_string_to_file {
-  printf '%s' "$1" > "$2"
-}
+script save_string_to_file = "printf '%s' \"$1\" > \"$2\""
 
 rule passes_first_try {
   run say_ok()

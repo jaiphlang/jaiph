@@ -1,44 +1,13 @@
 import type { ScriptDef } from "../types";
-import { braceDepthDelta, fail } from "./core";
+import { fail, indexOfClosingDoubleQuote } from "./core";
+import { parseFencedBlock } from "./fence";
 
-/** Built-in interpreter tags for `script:<tag>` sugar. Tag → shebang line. */
-export const INTERPRETER_TAGS: Record<string, string> = {
-  node: "#!/usr/bin/env node",
-  python3: "#!/usr/bin/env python3",
-  ruby: "#!/usr/bin/env ruby",
-  perl: "#!/usr/bin/env perl",
-  pwsh: "#!/usr/bin/env pwsh",
-  deno: "#!/usr/bin/env deno run",
-  bash: "#!/usr/bin/env bash",
-};
-function finalizeScriptBody(scriptDef: ScriptDef, filePath: string): void {
-  while (scriptDef.commands.length > 0 && scriptDef.commands[0].trim() === "") {
-    scriptDef.commands.shift();
-  }
-  if (scriptDef.commands.length > 0) {
-    const first = scriptDef.commands[0];
-    const firstLine = first.split("\n")[0].trim();
-    if (firstLine.startsWith("#!")) {
-      if (scriptDef.interpreterTag) {
-        fail(
-          filePath,
-          `script:${scriptDef.interpreterTag} already sets the shebang — remove the manual "#!" line`,
-          scriptDef.loc.line,
-        );
-      }
-      scriptDef.shebang = firstLine;
-      const nl = first.indexOf("\n");
-      const rest = nl === -1 ? "" : first.slice(nl + 1);
-      scriptDef.commands.shift();
-      if (rest.trim()) {
-        scriptDef.commands.unshift(rest.trimEnd());
-      }
-    }
-  }
-  // Apply interpreter tag shebang
-  if (scriptDef.interpreterTag) {
-    scriptDef.shebang = INTERPRETER_TAGS[scriptDef.interpreterTag];
-  }
+/**
+ * Convert a fence language tag to a shebang line.
+ * Any tag is valid — no hardcoded allowlist.
+ */
+export function langToShebang(lang: string): string {
+  return `#!/usr/bin/env ${lang}`;
 }
 
 export function parseScriptBlock(
@@ -51,131 +20,122 @@ export function parseScriptBlock(
   const raw = lines[startIndex];
   const line = raw.trim();
 
-  // Match `script name {` or `script:tag name {`
-  const taggedMatch = line.match(/^script:([a-zA-Z0-9_]+)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{$/);
-  const plainMatch = line.match(/^script\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{$/);
-  const match = taggedMatch ?? plainMatch;
+  // Reject old script:lang syntax
+  if (/^script:/.test(line)) {
+    fail(
+      filePath,
+      "script:lang syntax is no longer supported; use a fenced block with a lang tag: script name = ```lang",
+      lineNo,
+    );
+  }
+
+  // Match: script name = ...
+  const match = line.match(/^script\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
   if (!match) {
-    // Check for tagged form with bad syntax
-    const taggedParens = line.match(/^script:([a-zA-Z0-9_]+)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
-    const parensMatch = taggedParens ?? line.match(/^script\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
-    if (parensMatch) {
-      const name = taggedParens ? parensMatch[2] : parensMatch[1];
+    // Check for old brace syntax
+    if (/^script\s+[A-Za-z_][A-Za-z0-9_]*\s*\{/.test(line)) {
       fail(
         filePath,
-        `definitions must not use parentheses: script ${name} { … }`,
+        'brace-style script bodies are no longer supported; use: script name = "..." or script name = ```...```',
         lineNo,
       );
     }
-    // Check for unknown tag
-    const unknownTag = line.match(/^script:([a-zA-Z0-9_]+)\s/);
-    if (unknownTag && !(unknownTag[1] in INTERPRETER_TAGS)) {
-      const validTags = Object.keys(INTERPRETER_TAGS).join(", ");
+    if (/^script\s+[A-Za-z_][A-Za-z0-9_]*\s*\(/.test(line)) {
+      const nameM = line.match(/^script\s+([A-Za-z_][A-Za-z0-9_]*)/);
       fail(
         filePath,
-        `unknown interpreter tag "script:${unknownTag[1]}" — supported tags: ${validTags}`,
+        `definitions must not use parentheses: script ${nameM?.[1] ?? "name"} = "..."`,
         lineNo,
       );
     }
-    const taggedLoose = line.match(/^script:([a-zA-Z0-9_]+)\s+([A-Za-z_][A-Za-z0-9_]*)/);
-    const loose = taggedLoose ?? line.match(/^script\s+([A-Za-z_][A-Za-z0-9_]*)/);
-    if (loose) {
-      const name = taggedLoose ? loose[2] : loose[1];
+    if (/^script\s+[A-Za-z_][A-Za-z0-9_]*/.test(line)) {
+      const nameM = line.match(/^script\s+([A-Za-z_][A-Za-z0-9_]*)/);
       fail(
         filePath,
-        `script declarations require braces: script ${name} { … }`,
+        `script definitions require = after the name: script ${nameM?.[1] ?? "name"} = "..."`,
         lineNo,
       );
     }
     fail(filePath, "invalid script declaration", lineNo);
   }
 
-  const interpreterTag = taggedMatch ? taggedMatch[1] : undefined;
-  const scriptName = taggedMatch ? taggedMatch[2] : match[1];
+  const scriptName = match[1];
+  const rhs = match[2].trimStart();
 
-  // Validate interpreter tag
-  if (interpreterTag && !(interpreterTag in INTERPRETER_TAGS)) {
-    const validTags = Object.keys(INTERPRETER_TAGS).join(", ");
-    fail(
-      filePath,
-      `unknown interpreter tag "script:${interpreterTag}" — supported tags: ${validTags}`,
-      lineNo,
-    );
+  // Case 1: Fenced block — opening ``` must be on the same line as script name =
+  if (rhs.startsWith("```")) {
+    const fenceLines = [...lines];
+    fenceLines[startIndex] = rhs;
+    const { body, lang, nextIdx, returns } = parseFencedBlock(filePath, fenceLines, startIndex);
+
+    if (returns) {
+      fail(filePath, 'script definitions do not support "returns" on the closing fence', lineNo);
+    }
+
+    // Check for both fence tag and manual shebang
+    if (lang && body.trimStart().startsWith("#!")) {
+      fail(
+        filePath,
+        `fence tag "${lang}" already sets the shebang — remove the manual "#!" line`,
+        lineNo,
+      );
+    }
+
+    return {
+      scriptDef: {
+        name: scriptName,
+        comments: pendingComments,
+        body,
+        ...(lang ? { lang } : {}),
+        bodyKind: "fenced",
+        loc: { line: lineNo, col: 1 },
+      },
+      nextIndex: nextIdx,
+    };
   }
 
-  const scriptDef: ScriptDef = {
-    name: scriptName,
-    comments: pendingComments,
-    commands: [],
-    loc: { line: lineNo, col: 1 },
-    ...(interpreterTag ? { interpreterTag } : {}),
-  };
-
-  let i = startIndex + 1;
-  let braceDepth = 0;
-  let currentCommandLines: string[] = [];
-  let pendingCmdStartLine = lineNo;
-
-  const pushCmdLine = (s: string, startLine: number): void => {
-    if (currentCommandLines.length === 0) pendingCmdStartLine = startLine;
-    currentCommandLines.push(s);
-  };
-
-  const flushCommand = (): void => {
-    if (currentCommandLines.length === 0) return;
-    const cmd = currentCommandLines.join("\n").trim();
-    currentCommandLines = [];
-    if (!cmd) return;
-    scriptDef.commands.push(cmd);
-  };
-
-  for (; i < lines.length; i += 1) {
-    const innerNo = i + 1;
-    const innerRaw = lines[i];
-    const inner = innerRaw.trim();
-    if (!inner) {
-      if (braceDepth > 0) pushCmdLine(innerRaw, innerNo);
-      else flushCommand();
-      continue;
+  // Case 2: Quoted string — single-line, default runtime (shell)
+  if (rhs.startsWith('"')) {
+    const closeIdx = indexOfClosingDoubleQuote(rhs, 1);
+    if (closeIdx === -1) {
+      fail(filePath, "unterminated script body string", lineNo);
     }
-    if (inner.startsWith("#")) {
-      if (braceDepth > 0) pushCmdLine(innerRaw, innerNo);
-      else {
-        flushCommand();
-        scriptDef.commands.push(innerRaw.trim());
-      }
-      continue;
+    const body = rhs.slice(1, closeIdx).replace(/\\"/g, '"');
+    const trailing = rhs.slice(closeIdx + 1).trim();
+    if (trailing) {
+      fail(filePath, `unexpected content after script body string: '${trailing}'`, lineNo);
     }
-    if (inner === "}") {
-      if (braceDepth === 0) break;
-      braceDepth -= 1;
-      pushCmdLine(innerRaw.trim(), innerNo);
-      if (braceDepth === 0) flushCommand();
-      continue;
-    }
-    if (braceDepth > 0) {
-      pushCmdLine(innerRaw.trim(), innerNo);
-      braceDepth += braceDepthDelta(inner);
-      if (braceDepth === 0) flushCommand();
-      continue;
-    }
-    const delta = braceDepthDelta(inner);
-    if (delta > 0) {
-      pushCmdLine(innerRaw.trim(), innerNo);
-      braceDepth = delta;
-      if (braceDepth === 0) flushCommand();
-      continue;
-    }
-    const cmd = inner;
-    if (!cmd) {
-      fail(filePath, "script command is required", innerNo);
-    }
-    scriptDef.commands.push(cmd);
+    return {
+      scriptDef: {
+        name: scriptName,
+        comments: pendingComments,
+        body,
+        bodyKind: "string",
+        loc: { line: lineNo, col: 1 },
+      },
+      nextIndex: startIndex + 1,
+    };
   }
-  flushCommand();
-  if (i >= lines.length) {
-    fail(filePath, `unterminated script block: ${scriptDef.name}`, lineNo);
+
+  // Case 3: Bare identifier — RHS is a binding whose string value is the script body
+  const identMatch = rhs.match(/^([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (identMatch) {
+    return {
+      scriptDef: {
+        name: scriptName,
+        comments: pendingComments,
+        body: "", // resolved at compile time from envDecl
+        bodyKind: "identifier",
+        bodyIdentifier: identMatch[1],
+        loc: { line: lineNo, col: 1 },
+      },
+      nextIndex: startIndex + 1,
+    };
   }
-  finalizeScriptBody(scriptDef, filePath);
-  return { scriptDef, nextIndex: i + 1 };
+
+  fail(
+    filePath,
+    'script body must be a quoted string, identifier, or fenced block: script name = "..." | script name = myVar | script name = ```...```',
+    lineNo,
+  );
 }

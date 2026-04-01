@@ -13,9 +13,7 @@ test("compiler: extracts script bodies for a simple module", () => {
     writeFileSync(
       input,
       [
-        "script f_ok {",
-        "  echo ok",
-        "}",
+        'script f_ok = "echo ok"',
         "",
         "rule ok {",
         "  run f_ok()",
@@ -41,7 +39,7 @@ test("compiler: extracts script bodies for a simple module", () => {
 
 test("compiler golden: parser error message is deterministic", () => {
   assert.throws(
-    () => parsejaiph("script 123bad {\n  echo x\n}\n", "/fake/main.jh"),
+    () => parsejaiph('script 123bad = "echo x"\n', "/fake/main.jh"),
     /\/fake\/main\.jh:1:1 E_PARSE invalid script declaration/,
   );
 });
@@ -96,9 +94,7 @@ test("compiler corpus: representative e2e workflows compile", () => {
 
 test("parser: assignment capture parses for ensure, run, and const run capture", () => {
   const source = [
-    "script say_hello {",
-    "  echo hello",
-    "}",
+    'script say_hello = "echo hello"',
     "",
     "rule tests_pass {",
     "  return \"ok\"",
@@ -541,9 +537,7 @@ test("parser: fail step parses quoted message", () => {
 
 test("parser: const string expr and const run capture parse", () => {
   const source = [
-    "script noop {",
-    "  :",
-    "}",
+    'script noop = ":"',
     "workflow default {",
     '  const msg = "hi"',
     "  const out = run noop()",
@@ -565,9 +559,7 @@ test("parser: const string expr and const run capture parse", () => {
 
 test("parser: const rejects bare call-like rhs without run", () => {
   const source = [
-    "script some_script {",
-    '  echo "$1"',
-    "}",
+    'script some_script = "echo \\"$1\\""',
     "workflow default {",
     '  const x = some_script("${arg}")',
     "}",
@@ -580,9 +572,7 @@ test("parser: const rejects bare call-like rhs without run", () => {
 
 test("parser: const allows run-wrapped script call with args", () => {
   const source = [
-    "script some_script {",
-    "  echo \"$1\"",
-    "}",
+    'script some_script = "echo \\"$1\\""',
     "workflow default {",
     '  const x = run some_script("${arg}")',
     "}",
@@ -635,9 +625,7 @@ test("parser: brace-style if parses not, else if, and else", () => {
     "rule bad {",
     "  fail \"no\"",
     "}",
-    "script check {",
-    "  true",
-    "}",
+    'script check = "true"',
     "workflow default {",
     "  if not ensure bad() {",
     "    log \"neg\"",
@@ -944,9 +932,7 @@ test("parser: top-level const name collision with workflow is E_PARSE", () => {
 test("parser: top-level const name collision with script is E_PARSE", () => {
   const source = [
     'const helper = "val"',
-    "script helper {",
-    "  echo ok",
-    "}",
+    'script helper = "echo ok"',
     "workflow default {",
     "  run helper()",
     "}",
@@ -969,9 +955,7 @@ test("compiler golden: standalone script file has no env shims (isolation)", () 
       [
         'const greeting = "hello world"',
         "",
-        "script helper {",
-        "  echo $greeting",
-        "}",
+        'script helper = "echo $greeting"',
         "",
         "workflow default {",
         "  run helper()",
@@ -1000,10 +984,10 @@ test("compiler golden: multiline double-quoted strings are not corrupted by emit
     writeFileSync(
       input,
       [
-        "script multiline_str {",
-        '  local x="a',
+        "script multiline_str = ```",
+        'local x="a',
         'b"',
-        "}",
+        "```",
         "",
         "workflow default {",
         "  run multiline_str()",
@@ -1032,13 +1016,9 @@ test("compiler golden: script bodies are opaque bash (cross-script name compiles
     writeFileSync(
       input,
       [
-        "script helper {",
-        "  echo ok",
-        "}",
+        'script helper = "echo ok"',
         "",
-        "script caller {",
-        "  helper",
-        "}",
+        'script caller = "helper"',
         "",
         "workflow default {",
         "  run caller()",
@@ -1062,9 +1042,7 @@ test("compiler golden: script calling itself is allowed", () => {
     writeFileSync(
       input,
       [
-        "script recurse {",
-        "  recurse",
-        "}",
+        'script recurse = "recurse"',
         "",
         "workflow default {",
         "  run recurse()",
