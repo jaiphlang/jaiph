@@ -22,11 +22,11 @@ test("ACCEPTANCE: non-TTY long step emits gray heartbeat before completion", () 
     [
       'script sleep_impl = "sleep 3"',
       "",
-      "workflow inner {",
+      "workflow inner() {",
       "  run sleep_impl()",
       "}",
       "",
-      "workflow default {",
+      "workflow default() {",
       "  run inner()",
       "}",
     ].join("\n"),

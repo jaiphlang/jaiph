@@ -140,7 +140,7 @@ async function runInterruptTest(
   const workflowPath = join(root, "long.jh");
   writeFileSync(
     workflowPath,
-    ['script sleep_impl = "sleep 120"', "workflow default {", "  run sleep_impl()", "}"].join("\n"),
+    ['script sleep_impl = "sleep 120"', "workflow default() {", "  run sleep_impl()", "}"].join("\n"),
   );
 
   const child = spawn("node", [cliPath, "run", workflowPath], {

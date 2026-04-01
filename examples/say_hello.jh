@@ -8,11 +8,11 @@ if [ -z "$1" ]; then
 fi
 ```
 
-rule name_was_provided {
-  run name_was_provided_check("${arg1}")
+rule name_was_provided(name) {
+  run name_was_provided_check(name)
 }
 
-workflow default {
+workflow default() {
   ensure name_was_provided("${arg1}")
 
   response = prompt ```

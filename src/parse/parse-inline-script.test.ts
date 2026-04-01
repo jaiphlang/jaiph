@@ -4,7 +4,7 @@ import { parsejaiph } from "../parser";
 
 test("parser: run script() with quoted body", () => {
   const src = `
-workflow default {
+workflow default() {
   run script() "echo hello"
 }
 `;
@@ -22,7 +22,7 @@ workflow default {
 
 test("parser: run script() with args and body", () => {
   const src = `
-workflow default {
+workflow default() {
   run script("arg1", "arg2") "echo $1"
 }
 `;
@@ -37,7 +37,7 @@ workflow default {
 
 test("parser: capture form — x = run script() body", () => {
   const src = `
-workflow default {
+workflow default() {
   x = run script() "echo hello"
 }
 `;
@@ -52,7 +52,7 @@ workflow default {
 
 test("parser: const capture form — const x = run script() body", () => {
   const src = `
-workflow default {
+workflow default() {
   const x = run script() "echo hello"
 }
 `;
@@ -69,7 +69,7 @@ workflow default {
 
 test("parser: run script() with fenced block and lang tag", () => {
   const src = [
-    "workflow default {",
+    "workflow default() {",
     "  run script() ```python3",
     "print('hello')",
     "```",
@@ -86,7 +86,7 @@ test("parser: run script() with fenced block and lang tag", () => {
 
 test("parser: run async script() is rejected", () => {
   const src = `
-workflow default {
+workflow default() {
   run async script() "echo hello"
 }
 `;
@@ -95,7 +95,7 @@ workflow default {
 
 test("parser: run script() requires body after parens", () => {
   const src = `
-workflow default {
+workflow default() {
   run script()
 }
 `;

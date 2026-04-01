@@ -11,7 +11,7 @@ function roundTrip(source: string, filePath = "test.jh"): string {
 describe("emitModule", () => {
   it("formats a minimal workflow", () => {
     const source = [
-      "workflow default {",
+      "workflow default() {",
       "  log \"hello\"",
       "}",
       "",
@@ -25,7 +25,7 @@ describe("emitModule", () => {
       "",
       "channel findings",
       "",
-      "workflow default {",
+      "workflow default() {",
       "  log \"ok\"",
       "}",
       "",
@@ -36,7 +36,7 @@ describe("emitModule", () => {
   it("formats rules with comments", () => {
     const source = [
       "# Validates prerequisites.",
-      "rule project_ready {",
+      "rule project_ready() {",
       '  run check("${arg1}")',
       "}",
       "",
@@ -57,7 +57,7 @@ describe("emitModule", () => {
 
   it("formats if/else if/else", () => {
     const source = [
-      "workflow default {",
+      "workflow default() {",
       "  if ensure ok() {",
       '    log "then"',
       "  }",
@@ -78,7 +78,7 @@ describe("emitModule", () => {
 
   it("formats const with different RHS types", () => {
     const source = [
-      "workflow default {",
+      "workflow default() {",
       '  const n = "${arg1}"',
       '  const out = run helper("${n}")',
       "  log \"${out}\"",
@@ -90,7 +90,7 @@ describe("emitModule", () => {
 
   it("formats ensure with recover block", () => {
     const source = [
-      "workflow default {",
+      "workflow default() {",
       "  ensure ci_passes() recover {",
       '    prompt "fix it"',
       "  }",
@@ -102,7 +102,7 @@ describe("emitModule", () => {
 
   it("formats async run", () => {
     const source = [
-      "workflow default {",
+      "workflow default() {",
       "  run async worker()",
       "}",
       "",
@@ -112,7 +112,7 @@ describe("emitModule", () => {
 
   it("formats return statement", () => {
     const source = [
-      "workflow default {",
+      "workflow default() {",
       '  return "${result}"',
       "}",
       "",
@@ -124,7 +124,7 @@ describe("emitModule", () => {
     const source = [
       "channel findings",
       "",
-      "workflow default {",
+      "workflow default() {",
       '  findings <- echo "hello"',
       "}",
       "",
@@ -138,7 +138,7 @@ describe("emitModule", () => {
       '  agent.backend = "claude"',
       "}",
       "",
-      "workflow default {",
+      "workflow default() {",
       '  log "ok"',
       "}",
       "",
@@ -148,13 +148,13 @@ describe("emitModule", () => {
 
   it("respects custom indent", () => {
     const input = [
-      "workflow default {",
+      "workflow default() {",
       "  log \"hello\"",
       "}",
       "",
     ].join("\n");
     const expected = [
-      "workflow default {",
+      "workflow default() {",
       "    log \"hello\"",
       "}",
       "",
@@ -173,7 +173,7 @@ describe("emitModule", () => {
       "",
       "channel findings",
       "",
-      "workflow default {",
+      "workflow default() {",
       '  log "ok"',
       "}",
       "",
@@ -187,7 +187,7 @@ describe("emitModule", () => {
       "",
       "channel findings",
       "",
-      "workflow default {",
+      "workflow default() {",
       '  log "ok"',
       "}",
       "",
@@ -198,11 +198,11 @@ describe("emitModule", () => {
   it("is idempotent", () => {
     const source = [
       "# A comment",
-      "rule check {",
+      "rule check() {",
       "  run impl()",
       "}",
       "",
-      "workflow default {",
+      "workflow default() {",
       "  ensure check()",
       '  log "done"',
       "}",
@@ -215,7 +215,7 @@ describe("emitModule", () => {
 
   it("formats fail step", () => {
     const source = [
-      "workflow default {",
+      "workflow default() {",
       '  fail "something went wrong"',
       "}",
       "",
@@ -227,7 +227,7 @@ describe("emitModule", () => {
     const source = [
       "channel findings",
       "",
-      "workflow default {",
+      "workflow default() {",
       "  run scanner()",
       "  findings -> analyst",
       "}",
@@ -238,7 +238,7 @@ describe("emitModule", () => {
 
   it("formats prompt with returns", () => {
     const source = [
-      "workflow default {",
+      "workflow default() {",
       "  result = prompt \"classify\" returns \"{ role: string }\"",
       "  log \"${result}\"",
       "}",
@@ -249,7 +249,7 @@ describe("emitModule", () => {
 
   it("formats assignment captures", () => {
     const source = [
-      "workflow default {",
+      "workflow default() {",
       "  response = ensure check()",
       "  out = run helper()",
       "  log \"${response}\"",

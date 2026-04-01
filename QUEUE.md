@@ -12,6 +12,28 @@ Process rules:
 
 ---
 
+## Language: bare identifiers in `run` / `log` vs `${param}` for workflow parameters <!-- dev-ready -->
+
+**Goal**  
+When a workflow or rule declares parameters, call sites must pass them as **bare identifiers** inside parentheses (e.g. `run sleep(seconds)`), not as braced interpolation in the argument string (e.g. `run sleep("${seconds}")`). The compiler should reject the latter with a clear `E_VALIDATE` message. Allow **`log foo`** when `foo` is a single identifier (equivalent to logging the interpolated value), alongside existing `log "…"` forms.
+
+**Acceptance criteria**  
+- Validation covers `run`, `ensure`, `if` conditions, `return run` / `return ensure`, `send … <- run`, and `const x = run …` where applicable.  
+- Document the rule in `docs/grammar.md` / `docs/jaiph-skill.md` when this ships.
+
+---
+
+## Language: require `()` on every `workflow` / `rule` definition (even when parameterless) <!-- dev-ready -->
+
+**Goal**  
+Definitions must look like `workflow default() { … }` and `rule check() { … }`, not `workflow default { … }`. Empty parentheses make zero-parameter definitions visually consistent with parameterized ones and simplify parsing/docs.
+
+**Acceptance criteria**  
+- Parser rejects definitions without `()` before `{` with a fix hint.  
+- Repo `.jh` sources, fixtures, and tests migrated; formatter emits `()` for empty parameter lists.
+
+---
+
 ## `jaiph serve` — expose workflows as an MCP server <!-- dev-ready -->
 
 **Goal**  

@@ -8,11 +8,11 @@ workflow classify_like(task) {
 
 # Same pattern as engineer.jh default: capture role from nested workflow.
 workflow pick_role(task) {
-  role_name = run classify_like("${task}")
+  role_name = run classify_like(task)
   return "${role_name}"
 }
 
 workflow default(subject) {
-  chosen = run classify_like("${subject}")
+  chosen = run classify_like(subject)
   log "chosen=${chosen}"
 }

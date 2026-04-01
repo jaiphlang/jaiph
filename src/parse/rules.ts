@@ -12,24 +12,33 @@ export function parseRuleBlock(
   const raw = lines[startIndex];
   const line = raw.trim();
 
-  // Match: [export] rule name { OR [export] rule name(params) {
-  const match = line.match(/^(export\s+)?rule\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\(([^)]*)\)\s*)?\{$/);
+  const parensNoBrace = line.match(/^(export\s+)?rule\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*$/);
+  if (parensNoBrace) {
+    fail(
+      filePath,
+      `rule declarations require braces: rule ${parensNoBrace[2]}() { … } or rule ${parensNoBrace[2]}(params) { … }`,
+      lineNo,
+    );
+  }
+
+  // Match: [export] rule name() { OR [export] rule name(params) {
+  const match = line.match(/^(export\s+)?rule\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*\{$/);
   if (!match) {
     const loose = line.match(/^(export\s+)?rule\s+([A-Za-z_][A-Za-z0-9_]*)/);
     if (loose) {
       fail(
         filePath,
-        `rule declarations require braces: rule ${loose[2]} { … } or rule ${loose[2]}(params) { … }`,
+        `rule declarations require parentheses: rule ${loose[2]}() { … } or rule ${loose[2]}(params) { … }`,
         lineNo,
       );
     }
     fail(filePath, "invalid rule declaration", lineNo);
   }
   const isExported = Boolean(match[1]);
-  const params = match[3] !== undefined ? parseParamList(filePath, match[3], lineNo) : undefined;
+  const params = parseParamList(filePath, match[3], lineNo);
   const rule: RuleDef = {
     name: match[2],
-    ...(params && params.length > 0 ? { params } : {}),
+    params,
     comments: pendingComments,
     steps: [],
     loc: { line: lineNo, col: 1 },

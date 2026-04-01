@@ -4,7 +4,7 @@ import { parsejaiph } from "../parser";
 
 test("return run parses managed run call", () => {
   const mod = parsejaiph(
-    `workflow default {\n  return run helper()\n}`,
+    `workflow default() {\n  return run helper()\n}`,
     "test.jh",
   );
   const step = mod.workflows[0].steps[0];
@@ -20,7 +20,7 @@ test("return run parses managed run call", () => {
 
 test("return run parses managed run call with args", () => {
   const mod = parsejaiph(
-    `workflow default {\n  return run helper("a", "b")\n}`,
+    `workflow default() {\n  return run helper("a", "b")\n}`,
     "test.jh",
   );
   const step = mod.workflows[0].steps[0];
@@ -35,7 +35,7 @@ test("return run parses managed run call with args", () => {
 
 test("return run parses dotted ref", () => {
   const mod = parsejaiph(
-    `workflow default {\n  return run lib.helper()\n}`,
+    `workflow default() {\n  return run lib.helper()\n}`,
     "test.jh",
   );
   const step = mod.workflows[0].steps[0];
@@ -49,7 +49,7 @@ test("return run parses dotted ref", () => {
 
 test("return ensure parses managed ensure call", () => {
   const mod = parsejaiph(
-    `workflow default {\n  return ensure check()\n}`,
+    `workflow default() {\n  return ensure check()\n}`,
     "test.jh",
   );
   const step = mod.workflows[0].steps[0];
@@ -65,7 +65,7 @@ test("return ensure parses managed ensure call", () => {
 
 test("return ensure parses managed ensure call with args", () => {
   const mod = parsejaiph(
-    `workflow default {\n  return ensure check("x")\n}`,
+    `workflow default() {\n  return ensure check("x")\n}`,
     "test.jh",
   );
   const step = mod.workflows[0].steps[0];
@@ -79,7 +79,7 @@ test("return ensure parses managed ensure call with args", () => {
 
 test("return run in rule parses managed run call", () => {
   const mod = parsejaiph(
-    `script helper = "echo \\"ok\\""\nrule my_rule {\n  return run helper()\n}`,
+    `script helper = "echo \\"ok\\""\nrule my_rule() {\n  return run helper()\n}`,
     "test.jh",
   );
   const step = mod.rules[0].steps[0];
@@ -93,7 +93,7 @@ test("return run in rule parses managed run call", () => {
 
 test("return ensure in rule parses managed ensure call", () => {
   const mod = parsejaiph(
-    `rule sub_rule {\n  return "ok"\n}\nrule my_rule {\n  return ensure sub_rule()\n}`,
+    `rule sub_rule() {\n  return "ok"\n}\nrule my_rule() {\n  return ensure sub_rule()\n}`,
     "test.jh",
   );
   const step = mod.rules[0].steps[1];
@@ -110,7 +110,7 @@ test("return ensure in rule parses managed ensure call", () => {
 
 test("return with string value has no managed field", () => {
   const mod = parsejaiph(
-    `workflow default {\n  return "hello"\n}`,
+    `workflow default() {\n  return "hello"\n}`,
     "test.jh",
   );
   const step = mod.workflows[0].steps[0];
@@ -123,7 +123,7 @@ test("return with string value has no managed field", () => {
 
 test("bare return has no managed field", () => {
   const mod = parsejaiph(
-    `workflow default {\n  return\n}`,
+    `workflow default() {\n  return\n}`,
     "test.jh",
   );
   const step = mod.workflows[0].steps[0];
@@ -138,10 +138,10 @@ test("return run in brace-if then branch", () => {
   const mod = parsejaiph(
     [
       'script helper = "echo \\"ok\\""',
-      "rule check {",
+      "rule check() {",
       '  return "yes"',
       "}",
-      "workflow default {",
+      "workflow default() {",
       "  if ensure check() {",
       "    return run helper()",
       "  }",

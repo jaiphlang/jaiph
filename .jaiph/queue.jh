@@ -84,7 +84,7 @@ printf '%s\n' "$header"
 
 script arg_nonempty = "[ -n \"${1:-}\" ]"
 
-workflow get_first_task {
+workflow get_first_task() {
   const qf = run queue_file_path()
   if not run file_exists("${qf}") {
     fail "missing queue file"
@@ -97,8 +97,8 @@ workflow get_first_task {
   return "${task}"
 }
 
-rule task_is_dev_ready {
-  run task_contains_dev_ready_marker("${arg1}")
+rule task_is_dev_ready(task) {
+  run task_contains_dev_ready_marker(task)
 }
 
 script mark_task_dev_ready = ```
@@ -170,12 +170,11 @@ sed -i.bak -E '/^[[:space:]]*$/N;/^\n$/D' "$qf"
 rm -f "${qf}.bak"
 ```
 
-workflow remove_completed_task {
-  const h = "${arg1}"
-  if not run arg_nonempty("${h}") {
+workflow remove_completed_task(header) {
+  if not run arg_nonempty(header) {
     fail "header required"
   }
   const qf = run queue_file_path()
-  run remove_task_block_by_header("${h}", "${qf}")
-  run squeeze_consecutive_blanks_queue("${qf}")
+  run remove_task_block_by_header(header, qf)
+  run squeeze_consecutive_blanks_queue(qf)
 }

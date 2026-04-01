@@ -7,7 +7,7 @@ workflow delayed_log(seconds) {
   log "${seconds}"
 }
 
-workflow default {
+workflow default() {
   run async delayed_log(3)
   run async delayed_log(1)
   run async delayed_log(2)

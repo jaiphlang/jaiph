@@ -42,7 +42,7 @@ awk '
 ' "$qf"
 ```
 
-workflow review_task {
+workflow review_task(task) {
   const result = prompt ```
     You are a software architect reviewing a task from the Jaiph
     improvement queue. Jaiph is a TypeScript compiler and runtime
@@ -91,25 +91,24 @@ workflow review_task {
     evaluation.
 
     Task to review:
-    ${arg1}
+    ${task}
 ```
 
   return "${result_verdict}"
 }
 
-workflow review_one_header {
-  const header = "${arg1}"
-  if not run arg_nonempty("${header}") {
+workflow review_one_header(header) {
+  if not run arg_nonempty(header) {
     return
   }
-  const task = run queue.get_task_by_header("${header}")
-  if run task_has_dev_ready_marker("${task}") {
+  const task = run queue.get_task_by_header(header)
+  if run task_has_dev_ready_marker(task) {
     log "Already dev-ready: ${header}"
     return
   }
-  const verdict = run review_task("${task}")
-  if run str_equals("${verdict}", "dev-ready") {
-    run queue.mark_task_dev_ready("${header}")
+  const verdict = run review_task(task)
+  if run str_equals(verdict, "dev-ready") {
+    run queue.mark_task_dev_ready(header)
     log "Marked dev-ready: ${header}"
   }
   else {
@@ -117,23 +116,21 @@ workflow review_one_header {
   }
 }
 
-workflow process_headers_recursive {
-  const header = "${arg1}"
-  const remaining = "${arg2}"
-  run review_one_header("${header}")
-  if run arg_nonempty("${remaining}") {
-    const next = run first_line_str("${remaining}")
-    const rest = run rest_lines_str("${remaining}")
-    run process_headers_recursive("${next}", "${rest}")
+workflow process_headers_recursive(header, remaining) {
+  run review_one_header(header)
+  if run arg_nonempty(remaining) {
+    const next = run first_line_str(remaining)
+    const rest = run rest_lines_str(remaining)
+    run process_headers_recursive(next, rest)
   }
 }
 
-workflow default {
+workflow default() {
   const headers = run queue.get_all_task_headers()
-  const first = run first_line_str("${headers}")
-  const rest = run rest_lines_str("${headers}")
-  if run arg_nonempty("${first}") {
-    run process_headers_recursive("${first}", "${rest}")
+  const first = run first_line_str(headers)
+  const rest = run rest_lines_str(headers)
+  if run arg_nonempty(first) {
+    run process_headers_recursive(first, rest)
   }
   if run queue_has_any_task_not_dev_ready() {
     fail "One or more tasks need work. Review the agent output above."

@@ -11,13 +11,13 @@ test("E_VALIDATE: run async is rejected in rules", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "workflow helper {",
+        "workflow helper() {",
         '  log "hi"',
         "}",
-        "rule check {",
+        "rule check() {",
         "  run async helper()",
         "}",
-        "workflow default {",
+        "workflow default() {",
         "  ensure check()",
         "}",
         "",
@@ -38,10 +38,10 @@ test("E_VALIDATE: run async is accepted in workflows", () => {
     writeFileSync(
       join(root, "m.jh"),
       [
-        "workflow helper {",
+        "workflow helper() {",
         '  log "hi"',
         "}",
-        "workflow default {",
+        "workflow default() {",
         "  run async helper()",
         "}",
         "",

@@ -6,6 +6,7 @@ import {
   isRef,
   matchSendOperator,
   parseCallRef,
+  parseLogMessageRhs,
   parseParamList,
 } from "./core";
 import { parseConstRhs } from "./const-rhs";
@@ -53,24 +54,33 @@ export function parseWorkflowBlock(
   const rawDecl = lines[startIndex];
   const lineDecl = rawDecl.trim();
 
-  // Match: [export] workflow name { OR [export] workflow name(params) {
-  const match = lineDecl.match(/^(export\s+)?workflow\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\(([^)]*)\)\s*)?\{$/);
+  const parensNoBrace = lineDecl.match(/^(export\s+)?workflow\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*$/);
+  if (parensNoBrace) {
+    fail(
+      filePath,
+      `workflow declarations require braces: workflow ${parensNoBrace[2]}() { … } or workflow ${parensNoBrace[2]}(params) { … }`,
+      lineNo,
+    );
+  }
+
+  // Match: [export] workflow name() { OR [export] workflow name(params) {
+  const match = lineDecl.match(/^(export\s+)?workflow\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*\{$/);
   if (!match) {
     const loose = lineDecl.match(/^(export\s+)?workflow\s+([A-Za-z_][A-Za-z0-9_]*)/);
     if (loose) {
       fail(
         filePath,
-        `workflow declarations require braces: workflow ${loose[2]} { … } or workflow ${loose[2]}(params) { … }`,
+        `workflow declarations require parentheses: workflow ${loose[2]}() { … } or workflow ${loose[2]}(params) { … }`,
         lineNo,
       );
     }
     fail(filePath, "invalid workflow declaration", lineNo);
   }
   const isExported = Boolean(match[1]);
-  const params = match[3] !== undefined ? parseParamList(filePath, match[3], lineNo) : undefined;
+  const params = parseParamList(filePath, match[3], lineNo);
   const workflow: WorkflowDef = {
     name: match[2],
-    ...(params && params.length > 0 ? { params } : {}),
+    params,
     comments: pendingComments,
     steps: [],
     loc: { line: lineNo, col: 1 },
@@ -332,14 +342,7 @@ export function parseWorkflowBlock(
     if (inner.startsWith("log ") || inner === "log") {
       const logArg = inner.slice("log".length).trimStart();
       const logCol = innerRaw.indexOf("log") + 1;
-      if (!logArg.startsWith('"')) {
-        fail(filePath, 'log must match: log "<message>"', innerNo, logCol);
-      }
-      const closeIdx = indexOfClosingDoubleQuote(logArg, 1);
-      if (closeIdx === -1) {
-        fail(filePath, "unterminated log string", innerNo, logCol);
-      }
-      const message = logArg.slice(1, closeIdx);
+      const message = parseLogMessageRhs(filePath, innerNo, logCol, logArg, "log");
       workflow.steps.push({
         type: "log",
         message,
@@ -351,14 +354,7 @@ export function parseWorkflowBlock(
     if (inner.startsWith("logerr ") || inner === "logerr") {
       const logerrArg = inner.slice("logerr".length).trimStart();
       const logerrCol = innerRaw.indexOf("logerr") + 1;
-      if (!logerrArg.startsWith('"')) {
-        fail(filePath, 'logerr must match: logerr "<message>"', innerNo, logerrCol);
-      }
-      const closeIdx = indexOfClosingDoubleQuote(logerrArg, 1);
-      if (closeIdx === -1) {
-        fail(filePath, "unterminated logerr string", innerNo, logerrCol);
-      }
-      const message = logerrArg.slice(1, closeIdx);
+      const message = parseLogMessageRhs(filePath, innerNo, logerrCol, logerrArg, "logerr");
       workflow.steps.push({
         type: "logerr",
         message,

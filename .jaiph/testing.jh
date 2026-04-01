@@ -5,6 +5,6 @@ cd "${JAIPH_WORKSPACE:?}"
 bash e2e/tests/72_docker_run_artifacts.sh
 ```
 
-workflow default {
+workflow default() {
   run test_runner()
 }

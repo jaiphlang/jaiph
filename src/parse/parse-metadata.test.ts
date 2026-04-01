@@ -201,7 +201,7 @@ test("parseConfigBlock: fails on type mismatch (number where string expected)", 
 
 test("workflow config: parses config inside workflow", () => {
   const src = [
-    "workflow default {",
+    "workflow default() {",
     "  config {",
     '    agent.backend = "claude"',
     "  }",
@@ -216,7 +216,7 @@ test("workflow config: parses config inside workflow", () => {
 
 test("workflow config: allows comments before config", () => {
   const src = [
-    "workflow default {",
+    "workflow default() {",
     "  # a comment",
     "  config {",
     '    agent.default_model = "gpt-4"',
@@ -230,7 +230,7 @@ test("workflow config: allows comments before config", () => {
 
 test("workflow config: rejects duplicate config in same workflow", () => {
   const src = [
-    "workflow default {",
+    "workflow default() {",
     "  config {",
     '    agent.backend = "claude"',
     "  }",
@@ -247,7 +247,7 @@ test("workflow config: rejects duplicate config in same workflow", () => {
 
 test("workflow config: rejects config after steps", () => {
   const src = [
-    "workflow default {",
+    "workflow default() {",
     '  echo "step"',
     "  config {",
     '    agent.backend = "claude"',
@@ -262,7 +262,7 @@ test("workflow config: rejects config after steps", () => {
 
 test("workflow config: rejects runtime.* keys", () => {
   const src = [
-    "workflow default {",
+    "workflow default() {",
     "  config {",
     "    runtime.docker_enabled = true",
     "  }",
@@ -279,13 +279,13 @@ test("workflow config: coexists with module-level config", () => {
     "config {",
     '  agent.backend = "cursor"',
     "}",
-    "workflow a {",
+    "workflow a() {",
     "  config {",
     '    agent.backend = "claude"',
     "  }",
     '  echo "a"',
     "}",
-    "workflow b {",
+    "workflow b() {",
     '  echo "b"',
     "}",
   ].join("\n");
