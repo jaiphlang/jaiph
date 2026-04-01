@@ -8,15 +8,15 @@ if [ -z "$1" ]; then
 fi
 ```
 
-rule name_was_provided {
-  run name_was_provided_check("${arg1}")
+rule name_was_provided(name) {
+  run name_was_provided_check("${name}")
 }
 
-workflow default {
-  ensure name_was_provided("${arg1}")
+workflow default(name) {
+  ensure name_was_provided("${name}")
 
   response = prompt ```
-    Say hello to ${arg1} and provide a fun fact about a person with the same name.
+    Say hello to ${name} and provide a fun fact about a person with the same name.
     Respond with a single line. Do not inspect files or run tools.
 ```
 

@@ -93,11 +93,14 @@ function validateMatchExpr(filePath: string, expr: MatchExprDef): void {
   }
 }
 
-/** Collect all variable names defined in a step list (consts, captures). Flat walk — includes nested if/else blocks. */
-function collectKnownVars(steps: WorkflowStepDef[], envDecls?: { name: string }[]): Set<string> {
+/** Collect all variable names defined in a step list (consts, captures, params). Flat walk — includes nested if/else blocks. */
+function collectKnownVars(steps: WorkflowStepDef[], envDecls?: { name: string }[], params?: string[]): Set<string> {
   const vars = new Set<string>();
   if (envDecls) {
     for (const d of envDecls) vars.add(d.name);
+  }
+  if (params) {
+    for (const p of params) vars.add(p);
   }
   const walk = (ss: WorkflowStepDef[]): void => {
     for (const s of ss) {
@@ -120,6 +123,87 @@ function collectKnownVars(steps: WorkflowStepDef[], envDecls?: { name: string }[
   };
   walk(steps);
   return vars;
+}
+
+/** Count the number of call arguments from a space-separated args string (respects quotes). */
+function countCallArgs(argsStr: string | undefined): number {
+  if (!argsStr || !argsStr.trim()) return 0;
+  let count = 0;
+  let inQuote: string | null = null;
+  let hasContent = false;
+  for (let i = 0; i < argsStr.length; i++) {
+    const ch = argsStr[i];
+    if (inQuote) {
+      hasContent = true;
+      if (ch === inQuote && argsStr[i - 1] !== "\\") inQuote = null;
+    } else if (ch === '"' || ch === "'") {
+      hasContent = true;
+      inQuote = ch;
+    } else if (ch === " " || ch === "\t") {
+      if (hasContent) { count++; hasContent = false; }
+    } else {
+      hasContent = true;
+    }
+  }
+  if (hasContent) count++;
+  return count;
+}
+
+/** Look up declared params for a workflow or rule target. Returns undefined if target has no declared params. */
+function lookupCalleeParams(
+  ref: string,
+  targetKind: "workflow" | "rule",
+  ast: jaiphModule,
+  refCtx: RefResolutionContext,
+): string[] | undefined {
+  const parts = ref.split(".");
+  if (parts.length === 1) {
+    const name = parts[0];
+    if (targetKind === "workflow") {
+      const wf = ast.workflows.find((w) => w.name === name);
+      return wf?.params;
+    }
+    const rl = ast.rules.find((r) => r.name === name);
+    return rl?.params;
+  }
+  if (parts.length === 2) {
+    const [alias, name] = parts;
+    const importedFile = refCtx.importsByAlias.get(alias);
+    if (!importedFile) return undefined;
+    const importedAst = refCtx.importedAstCache.get(importedFile);
+    if (!importedAst) return undefined;
+    if (targetKind === "workflow") {
+      const wf = importedAst.workflows.find((w) => w.name === name);
+      return wf?.params;
+    }
+    const rl = importedAst.rules.find((r) => r.name === name);
+    return rl?.params;
+  }
+  return undefined;
+}
+
+/** Validate arity: if the callee declares named params, the call must supply exactly that many args. */
+function validateArity(
+  filePath: string,
+  loc: { line: number; col: number },
+  ref: string,
+  args: string | undefined,
+  targetKind: "workflow" | "rule",
+  ast: jaiphModule,
+  refCtx: RefResolutionContext,
+): void {
+  const params = lookupCalleeParams(ref, targetKind, ast, refCtx);
+  if (!params) return; // no declared params — skip arity check
+  const argCount = countCallArgs(args);
+  if (argCount !== params.length) {
+    throw jaiphError(
+      filePath,
+      loc.line,
+      loc.col,
+      "E_VALIDATE",
+      `${targetKind} "${ref}" expects ${params.length} argument(s) (${params.join(", ")}), but got ${argCount}`,
+    );
+  }
 }
 
 /** Validate bare identifier args against known variables. */
@@ -306,7 +390,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
   };
 
   for (const rule of ast.rules) {
-    const ruleKnownVars = collectKnownVars(rule.steps, ast.envDecls);
+    const ruleKnownVars = collectKnownVars(rule.steps, ast.envDecls, rule.params);
     const validateRuleStep = (s: WorkflowStepDef): void => {
       if (s.type === "prompt" || s.type === "send" || s.type === "wait") {
         throw jaiphError(
@@ -323,6 +407,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
       if (s.type === "ensure") {
         validateNoShellRedirection(ast.filePath, s.ref.loc, "ensure", s.args);
         validateRef(s.ref, ast, refCtx, expectRuleRef);
+        validateArity(ast.filePath, s.ref.loc, s.ref.value, s.args, "rule", ast, refCtx);
         validateBareIdentifierArgs(ast.filePath, s.ref.loc, s.bareIdentifierArgs, ruleKnownVars);
         if (s.recover) {
           throw jaiphError(
@@ -355,6 +440,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         validateBareIdentifierArgs(ast.filePath, s.condition.ref.loc, s.condition.bareIdentifierArgs, ruleKnownVars);
         if (s.condition.kind === "ensure") {
           validateRef(s.condition.ref, ast, refCtx, expectRuleRef);
+          validateArity(ast.filePath, s.condition.ref.loc, s.condition.ref.value, s.condition.args, "rule", ast, refCtx);
         } else {
           validateRef(s.condition.ref, ast, refCtx, expectRunInRuleRef);
         }
@@ -365,6 +451,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
             validateBareIdentifierArgs(ast.filePath, br.condition.ref.loc, br.condition.bareIdentifierArgs, ruleKnownVars);
             if (br.condition.kind === "ensure") {
               validateRef(br.condition.ref, ast, refCtx, expectRuleRef);
+              validateArity(ast.filePath, br.condition.ref.loc, br.condition.ref.value, br.condition.args, "rule", ast, refCtx);
             } else {
               validateRef(br.condition.ref, ast, refCtx, expectRunInRuleRef);
             }
@@ -400,6 +487,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           } else if (s.managed.kind === "ensure") {
             validateNoShellRedirection(ast.filePath, s.managed.ref.loc, "ensure", s.managed.args);
             validateRef(s.managed.ref, ast, refCtx, expectRuleRef);
+            validateArity(ast.filePath, s.managed.ref.loc, s.managed.ref.value, s.managed.args, "rule", ast, refCtx);
             validateBareIdentifierArgs(ast.filePath, s.managed.ref.loc, s.managed.bareIdentifierArgs, ruleKnownVars);
           } else if (s.managed.kind === "match") {
             validateMatchExpr(ast.filePath, s.managed.match);
@@ -419,6 +507,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         } else if (v.kind === "ensure_capture") {
           validateNoShellRedirection(ast.filePath, v.ref.loc, "ensure", v.args);
           validateRef(v.ref, ast, refCtx, expectRuleRef);
+          validateArity(ast.filePath, v.ref.loc, v.ref.value, v.args, "rule", ast, refCtx);
           validateBareIdentifierArgs(ast.filePath, v.ref.loc, v.bareIdentifierArgs, ruleKnownVars);
         } else if (v.kind === "prompt_capture") {
           throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", "const ... = prompt is not allowed in rules");
@@ -507,7 +596,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
 
   for (const workflow of ast.workflows) {
     const promptSchemas = collectPromptSchemas(workflow.steps);
-    const wfKnownVars = collectKnownVars(workflow.steps, ast.envDecls);
+    const wfKnownVars = collectKnownVars(workflow.steps, ast.envDecls, workflow.params);
 
     const validateStep = (s: WorkflowStepDef): void => {
       if (s.type === "comment") {
@@ -518,6 +607,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         if (s.rhs.kind === "run") {
           validateNoShellRedirection(ast.filePath, s.rhs.ref.loc, "run", s.rhs.args);
           validateRef(s.rhs.ref, ast, refCtx, expectRunTargetRef);
+          validateArity(ast.filePath, s.rhs.ref.loc, s.rhs.ref.value, s.rhs.args, "workflow", ast, refCtx);
           validateBareIdentifierArgs(ast.filePath, s.rhs.ref.loc, s.rhs.bareIdentifierArgs, wfKnownVars);
         } else if (s.rhs.kind === "literal") {
           const inner = s.rhs.token.startsWith('"') && s.rhs.token.endsWith('"')
@@ -538,6 +628,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
       if (s.type === "ensure") {
         validateNoShellRedirection(ast.filePath, s.ref.loc, "ensure", s.args);
         validateRef(s.ref, ast, refCtx, expectRuleRef);
+        validateArity(ast.filePath, s.ref.loc, s.ref.value, s.args, "rule", ast, refCtx);
         validateBareIdentifierArgs(ast.filePath, s.ref.loc, s.bareIdentifierArgs, wfKnownVars);
         if (s.recover) {
           const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
@@ -548,6 +639,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
       if (s.type === "run") {
         validateNoShellRedirection(ast.filePath, s.workflow.loc, "run", s.args);
         validateRef(s.workflow, ast, refCtx, expectRunTargetRef);
+        validateArity(ast.filePath, s.workflow.loc, s.workflow.value, s.args, "workflow", ast, refCtx);
         validateBareIdentifierArgs(ast.filePath, s.workflow.loc, s.bareIdentifierArgs, wfKnownVars);
         return;
       }
@@ -556,8 +648,10 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         validateBareIdentifierArgs(ast.filePath, s.condition.ref.loc, s.condition.bareIdentifierArgs, wfKnownVars);
         if (s.condition.kind === "ensure") {
           validateRef(s.condition.ref, ast, refCtx, expectRuleRef);
+          validateArity(ast.filePath, s.condition.ref.loc, s.condition.ref.value, s.condition.args, "rule", ast, refCtx);
         } else {
           validateRef(s.condition.ref, ast, refCtx, expectRunTargetRef);
+          validateArity(ast.filePath, s.condition.ref.loc, s.condition.ref.value, s.condition.args, "workflow", ast, refCtx);
         }
         for (const ts of s.thenSteps) validateStep(ts);
         if (s.elseIfBranches) {
@@ -566,8 +660,10 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
             validateBareIdentifierArgs(ast.filePath, br.condition.ref.loc, br.condition.bareIdentifierArgs, wfKnownVars);
             if (br.condition.kind === "ensure") {
               validateRef(br.condition.ref, ast, refCtx, expectRuleRef);
+              validateArity(ast.filePath, br.condition.ref.loc, br.condition.ref.value, br.condition.args, "rule", ast, refCtx);
             } else {
               validateRef(br.condition.ref, ast, refCtx, expectRunTargetRef);
+              validateArity(ast.filePath, br.condition.ref.loc, br.condition.ref.value, br.condition.args, "workflow", ast, refCtx);
             }
             for (const ts of br.thenSteps) validateStep(ts);
           }
@@ -601,10 +697,12 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           if (s.managed.kind === "run") {
             validateNoShellRedirection(ast.filePath, s.managed.ref.loc, "run", s.managed.args);
             validateRef(s.managed.ref, ast, refCtx, expectRunTargetRef);
+            validateArity(ast.filePath, s.managed.ref.loc, s.managed.ref.value, s.managed.args, "workflow", ast, refCtx);
             validateBareIdentifierArgs(ast.filePath, s.managed.ref.loc, s.managed.bareIdentifierArgs, wfKnownVars);
           } else if (s.managed.kind === "ensure") {
             validateNoShellRedirection(ast.filePath, s.managed.ref.loc, "ensure", s.managed.args);
             validateRef(s.managed.ref, ast, refCtx, expectRuleRef);
+            validateArity(ast.filePath, s.managed.ref.loc, s.managed.ref.value, s.managed.args, "rule", ast, refCtx);
             validateBareIdentifierArgs(ast.filePath, s.managed.ref.loc, s.managed.bareIdentifierArgs, wfKnownVars);
           } else if (s.managed.kind === "match") {
             validateMatchExpr(ast.filePath, s.managed.match);
@@ -632,10 +730,12 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         if (v.kind === "run_capture") {
           validateNoShellRedirection(ast.filePath, v.ref.loc, "run", v.args);
           validateRef(v.ref, ast, refCtx, expectRunTargetRef);
+          validateArity(ast.filePath, v.ref.loc, v.ref.value, v.args, "workflow", ast, refCtx);
           validateBareIdentifierArgs(ast.filePath, v.ref.loc, v.bareIdentifierArgs, wfKnownVars);
         } else if (v.kind === "ensure_capture") {
           validateNoShellRedirection(ast.filePath, v.ref.loc, "ensure", v.args);
           validateRef(v.ref, ast, refCtx, expectRuleRef);
+          validateArity(ast.filePath, v.ref.loc, v.ref.value, v.args, "rule", ast, refCtx);
           validateBareIdentifierArgs(ast.filePath, v.ref.loc, v.bareIdentifierArgs, wfKnownVars);
         } else if (v.kind === "run_inline_script_capture") {
           // inline script capture — no ref to validate

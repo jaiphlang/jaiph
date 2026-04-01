@@ -445,6 +445,11 @@ export class NodeWorkflowRuntime {
       args.forEach((v, i) => {
         childScope.vars.set(`arg${i + 1}`, v);
       });
+      if (resolved.workflow.params) {
+        resolved.workflow.params.forEach((name, i) => {
+          if (i < args.length) childScope.vars.set(name, args[i]);
+        });
+      }
       const ctx: WorkflowContext = {
         workflowName,
         routes: new Map(),
@@ -488,6 +493,11 @@ export class NodeWorkflowRuntime {
       args.forEach((v, i) => {
         ruleVars.set(`arg${i + 1}`, v);
       });
+      if (resolved.rule.params) {
+        resolved.rule.params.forEach((name, i) => {
+          if (i < args.length) ruleVars.set(name, args[i]);
+        });
+      }
       return this.executeSteps({ filePath: resolved.filePath, vars: ruleVars, env: ruleEnv }, resolved.rule.steps, io);
     });
   }
