@@ -260,14 +260,14 @@ Test fixture files live in `compiler-tests/` as `.txt` files. Each file contains
 === test name here
 # @expect ok
 --- input.jh
-workflow default {
+workflow default() {
   log "hello"
 }
 
 === another test
 # @expect error E_PARSE "unterminated workflow block"
 --- input.jh
-workflow default {
+workflow default() {
   log "hello"
 ```
 

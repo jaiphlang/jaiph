@@ -44,11 +44,11 @@ config {
 
 script noop = "true"
 
-rule some_rule {
+rule some_rule() {
   run noop()
 }
 
-workflow default {
+workflow default() {
   ensure some_rule()
 }
 ```
@@ -70,7 +70,7 @@ config {
   agent.default_model = "gpt-3.5"
 }
 
-workflow fast_check {
+workflow fast_check() {
   config {
     agent.backend = "claude"
     agent.default_model = "gpt-4"
@@ -78,7 +78,7 @@ workflow fast_check {
   ensure some_rule()
 }
 
-workflow default {
+workflow default() {
   # Uses module-level config (cursor / gpt-3.5).
   ensure some_rule()
 }
@@ -218,7 +218,7 @@ config {
   agent.command = "./agents/my-agent.sh"
 }
 
-workflow default {
+workflow default() {
   answer = prompt "Summarize this codebase"
   log "${answer}"
 }
@@ -243,7 +243,7 @@ config {
   agent.default_model = "gpt-4o"
 }
 
-workflow default {
+workflow default() {
   prompt "Explain this codebase"
 }
 ```
@@ -309,7 +309,7 @@ Quick reference for all in-file keys and their environment variable equivalents:
 Inside workflows, rules, and scripts, agent and run settings are visible as `JAIPH_*` environment variables. In orchestration strings, `${IDENTIFIER}` resolves from workflow variables first, then from the process environment.
 
 ```jh
-workflow default {
+workflow default() {
   log "backend=${JAIPH_AGENT_BACKEND} trusted_workspace=${JAIPH_AGENT_TRUSTED_WORKSPACE}"
 }
 ```

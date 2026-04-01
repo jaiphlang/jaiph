@@ -42,7 +42,7 @@ Run a sample workflow without installing first:
 
 ```bash
 curl -fsSL https://jaiph.org/run | bash -s '
-workflow default {
+workflow default() {
   const response = prompt "Say: Hello I'\''m [model name]!"
   log "${response}"
 }'
@@ -151,7 +151,7 @@ Jaiph source files combine a small orchestration language with scripts in any la
 
 script check_deps = "test -f \"package.json\""
 
-rule deps_exist {
+rule deps_exist() {
   if not run check_deps() {
     fail "Missing package.json"
   }

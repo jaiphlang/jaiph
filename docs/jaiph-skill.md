@@ -76,7 +76,7 @@ Prefer composable modules over one large file.
 ## Language Rules You Must Respect
 
 - **Imports:** `import "path.jh" as alias`. Path must be double-quoted. Path is relative to the importing file. If the path has no extension, the compiler appends `.jh`.
-- **Definitions:** `channel name` (inbox endpoint); `rule name { ... }` or `rule name(params) { ... }`, `workflow name { ... }` or `workflow name(params) { ... }`, `script name = "body"` or `script name = ``` ... ``` `. Rules and workflows may declare **named parameters** in parentheses before the opening brace — e.g. `workflow implement(task, role) { ... }`, `rule gate(path) { ... }`. At runtime, named params are bound alongside positional `arg1`…`arg9`. The compiler validates call-site arity when the callee declares params. Named scripts require a name at the definition site; for anonymous one-off commands use inline scripts: `run script() "body"`. Omitting the body is `E_PARSE`. Optional `export` before `rule` or `workflow` marks it as public (see [Grammar](grammar.md)). Optional `config { ... }` at the top of a file sets agent, run, and runtime options. An optional `config { ... }` block can also appear inside a `workflow { ... }` body (before any steps) to override module-level settings for that workflow only — only `agent.*` and `run.*` keys are allowed; `runtime.*` yields `E_PARSE` (see [Configuration](configuration.md#workflow-level-config)). Config values can be quoted strings, booleans (`true`/`false`), bare integers, or bracket-delimited arrays of strings (see [Grammar](grammar.md) and [Configuration](configuration.md)).
+- **Definitions:** `channel name` (inbox endpoint); `rule name() { ... }` or `rule name(params) { ... }`, `workflow name() { ... }` or `workflow name(params) { ... }`, `script name = "body"` or `script name = ``` ... ``` `. **Parentheses are required on all rule and workflow definitions** — even when parameterless (e.g. `workflow default() { ... }`, `rule check() { ... }`). Omitting `()` before `{` is a parse error with a fix hint. Named parameters go inside the parentheses — e.g. `workflow implement(task, role) { ... }`, `rule gate(path) { ... }`. At runtime, named params are bound alongside positional `arg1`…`arg9`. The compiler validates call-site arity when the callee declares params. Named scripts require a name at the definition site; for anonymous one-off commands use inline scripts: `run script() "body"`. Omitting the body is `E_PARSE`. Optional `export` before `rule` or `workflow` marks it as public (see [Grammar](grammar.md)). Optional `config { ... }` at the top of a file sets agent, run, and runtime options. An optional `config { ... }` block can also appear inside a `workflow { ... }` body (before any steps) to override module-level settings for that workflow only — only `agent.*` and `run.*` keys are allowed; `runtime.*` yields `E_PARSE` (see [Configuration](configuration.md#workflow-level-config)). Config values can be quoted strings, booleans (`true`/`false`), bare integers, or bracket-delimited arrays of strings (see [Grammar](grammar.md) and [Configuration](configuration.md)).
 - **Module-scoped variables:** `local name = value` or `const name = value` (same value forms). Prefer **`const`** for new files. Accessible as `${name}` inside orchestration strings in the same module. Names share the unified namespace with channels, rules, workflows, and scripts — duplicates are `E_PARSE`. Not exportable; module-scoped only.
 - **Steps:**
   - **ensure** — `ensure ref([args...])` runs a rule (local or `alias.rule_name`); args are comma-separated inside parentheses. **Bare identifier arguments** are supported and preferred: `ensure check(status)` is equivalent to `ensure check("${status}")` — the identifier must reference a known variable (`const`, capture, or `arg1`–`arg9`); unknown names fail with `E_VALIDATE`. **Standalone `"${identifier}"` in call arguments is rejected** — use the bare form instead. In **workflows only**, optionally `ensure ref([args]) recover <body>`: bounded retry loop (run rule; on failure run recover body; repeat until the rule passes or max attempt rounds, then exit 1). Default **3** rounds (`JAIPH_ENSURE_MAX_RETRIES`). Inside a recover body, **`${arg1}`** is the full merged stdout+stderr produced by the failed rule execution, including output from nested scripts and rules. The payload refreshes per retry attempt. Full output still lives in step **`.out` / `.err`** artifacts. If **`${arg1}`** is empty for your rule, persist diagnostics before prompting or assert non-empty.
@@ -151,7 +151,7 @@ Use this as a shape to adapt. Paths and prompts should match the target reposito
 ```jaiph
 script git_is_clean = "test -z \"$(git status --porcelain)\""
 
-rule git_clean {
+rule git_clean() {
   if not run git_is_clean() {
     fail "git working tree is not clean"
   }
@@ -163,11 +163,11 @@ command -v node
 command -v npm
 ```
 
-rule required_tools {
+rule required_tools() {
   run require_git_node_npm()
 }
 
-workflow default {
+workflow default() {
   ensure required_tools()
   ensure git_clean()
 }
@@ -178,17 +178,17 @@ workflow default {
 ```jaiph
 script npm_test_ci = "npm test"
 
-rule unit_tests_pass {
+rule unit_tests_pass() {
   run npm_test_ci()
 }
 
 script run_build = "npm run build"
 
-rule build_passes {
+rule build_passes() {
   run run_build()
 }
 
-workflow default {
+workflow default() {
   ensure unit_tests_pass()
   ensure build_passes()
 }

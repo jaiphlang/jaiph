@@ -22,7 +22,7 @@ Run a sample workflow without installing anything first:
 
 ```bash
 curl -fsSL https://jaiph.org/run | bash -s '
-workflow default {
+workflow default() {
   const response = prompt "Say: Hello I'\''m [model name]!"
   log "${response}"
 }'
@@ -53,7 +53,7 @@ import "tools/security.jh" as security
 
 script check_deps = "test -f \"package.json\""
 
-rule deps_exist {
+rule deps_exist() {
   if not run check_deps() {
     fail "Missing package.json"
   }

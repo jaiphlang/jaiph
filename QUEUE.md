@@ -12,17 +12,6 @@ Process rules:
 
 ---
 
-## Language: require `()` on every `workflow` / `rule` definition (even when parameterless) <!-- dev-ready -->
-
-**Goal**  
-Definitions must look like `workflow default() { … }` and `rule check() { … }`, not `workflow default { … }`. Empty parentheses make zero-parameter definitions visually consistent with parameterized ones and simplify parsing/docs.
-
-**Acceptance criteria**  
-- Parser rejects definitions without `()` before `{` with a fix hint.  
-- Repo `.jh` sources, fixtures, and tests migrated; formatter emits `()` for empty parameter lists.
-
----
-
 ## Testing: golden AST (or stable AST dump) for successful parses <!-- dev-ready -->
 
 **Goal**  
