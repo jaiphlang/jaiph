@@ -2,6 +2,7 @@ import type { ConstRhs, RuleRefDef, WorkflowRefDef } from "../types";
 import { fail, isRef, parseCallRef } from "./core";
 import { parseInlineScript } from "./inline-script";
 import { parsePromptStep } from "./prompt";
+import { extractPostfixMatchSubject, parseMatchExpr } from "./match";
 
 /** Reject non-empty trailing content after a call expression (e.g. shell redirection). */
 function rejectTrailingContent(
@@ -126,6 +127,12 @@ export function parseConstRhs(
       value: { kind: "ensure_capture", ref, args: call.args },
       nextLineIdx: lineIdx,
     };
+  }
+  // const name = <subject> match { ... }
+  const matchSubject = extractPostfixMatchSubject(head);
+  if (matchSubject) {
+    const { expr, nextIndex } = parseMatchExpr(filePath, lines, lineIdx, matchSubject, { line: lineNo, col });
+    return { value: { kind: "match_expr", match: expr }, nextLineIdx: nextIndex - 1 };
   }
   const callLike = parseCallRef(head.trimEnd());
   if (callLike) {

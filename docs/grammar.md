@@ -17,9 +17,9 @@ Jaiph source files (`.jh`) combine a small orchestration language with shell exe
 
 Jaiph enforces a strict boundary between orchestration and execution. Workflows and rules contain only Jaiph steps. Bash lives in `script` bodies.
 
-- **Workflows** — Named sequences of Jaiph steps: `ensure`, `run`, `prompt`, `const`, `fail`, `return`, `log`/`logerr`, inbox `send` (`channel <- …`) and `route` (`channel -> workflow`), brace `if`, and `run async`. Any line that is not a recognized step is a parse error — extract bash to a `script` and call it with `run`.
+- **Workflows** — Named sequences of Jaiph steps: `ensure`, `run`, `prompt`, `const`, `fail`, `return`, `log`/`logerr`, inbox `send` (`channel <- …`) and `route` (`channel -> workflow`), brace `if`, `match`, and `run async`. Any line that is not a recognized step is a parse error — extract bash to a `script` and call it with `run`.
 
-- **Rules** — Named blocks of structured Jaiph steps: `ensure` (other rules), `run` (scripts only — not workflows), `const`, brace `if`, `fail`, `log`/`logerr`, `return "…"`. Rules cannot use `prompt`, inbox send/route, `wait`, `run async`, or `ensure … recover`.
+- **Rules** — Named blocks of structured Jaiph steps: `ensure` (other rules), `run` (scripts only — not workflows), `const`, brace `if`, `match`, `fail`, `log`/`logerr`, `return "…"`. Rules cannot use `prompt`, inbox send/route, `wait`, `run async`, or `ensure … recover`.
 
 - **Scripts** — Top-level `script` blocks emitted as separate executable files under the workspace `scripts/` directory. Called from workflows or rules with `run`. Bodies are opaque to the compiler — the parser does not check Jaiph keywords inside them. Use `echo`/`printf` for data output and `return N`/`return $?` for exit status. Polyglot support: a `#!` shebang as the first line selects the interpreter; otherwise `#!/usr/bin/env bash` is used. For trivial one-off commands, **inline scripts** (`run script("body")`) let you embed a script body directly in a step without a named definition — see [`run` — Inline Scripts](#inline-scripts).
 
@@ -303,6 +303,38 @@ In workflows, `return run` targets a workflow or script; `return ensure` targets
 
 A bare integer (`return 0`) or `return $?` is a bash exit code, not a Jaiph value return. `return "…"` is not allowed in script bodies — use `echo`/`printf`.
 
+### `match`
+
+```jaiph
+match ${status} {
+  "ok" => "all good"
+  /err/ => "something went wrong"
+  _ => "unknown"
+}
+```
+
+Pattern match on a string value. Arms are tested top-to-bottom; the first match wins. Patterns can be:
+
+- **String literal** (`"ok"`) — exact equality against the subject
+- **Regex** (`/err/`) — tested against the subject
+- **Wildcard** (`_`) — matches anything
+
+Exactly one `_` wildcard arm is required.
+
+**Expression form:** `match` works as an expression with `const` and `return`:
+
+```jaiph
+const label = ${status} match {
+  "ok" => "success"
+  _ => "failure"
+}
+
+return ${status} match {
+  "ok" => "pass"
+  _ => "fail"
+}
+```
+
 ### `wait`
 
 ```jaiph
@@ -497,19 +529,27 @@ workflow_config = config_block ;
 workflow_step   = ensure_stmt | run_stmt | run_async_stmt | prompt_stmt | prompt_capture_stmt
                 | const_decl_step | ensure_capture_stmt | run_capture_stmt | return_stmt
                 | fail_stmt | wait_stmt | log_stmt | logerr_stmt | send_stmt | route_decl
-                | if_brace_stmt | comment_line ;
+                | if_brace_stmt | match_stmt | comment_line ;
 
 const_decl_step = "const" IDENT "=" const_rhs ;
 const_rhs       = quoted_or_multiline_string | single_quoted_string | bash_value_expr
                 | "run" ( call_ref | inline_script ) | "ensure" call_ref
-                | "prompt" quoted_or_multiline_string [ returns_schema ] ;
+                | "prompt" quoted_or_multiline_string [ returns_schema ]
+                | match_expr ;
 
 fail_stmt       = "fail" double_quoted_string ;
 wait_stmt       = "wait" ;
 run_async_stmt  = "run" "async" call_ref ;
 return_stmt     = "return" return_value ;
 return_value    = double_quoted_string | single_quoted_string | "$" IDENT | "${" IDENT "}"
-                | "run" call_ref | "ensure" call_ref ;
+                | "run" call_ref | "ensure" call_ref | match_expr ;
+
+match_stmt      = "match" match_subject "{" { match_arm } "}" ;
+match_expr      = match_subject "match" "{" { match_arm } "}" ;
+match_subject   = "$" IDENT | "${" IDENT "}" | double_quoted_string ;
+match_arm       = match_pattern "=>" arm_body ;
+match_pattern   = double_quoted_string | single_quoted_string | "/" regex_source "/" | "_" ;
+arm_body        = double_quoted_string | single_quoted_string | "$" IDENT | "${" IDENT "}" ;
 
 send_stmt       = IDENT "<-" [ send_rhs ] ;
 send_rhs        = double_quoted_string | "${" IDENT "}" | "run" call_ref | REF ;

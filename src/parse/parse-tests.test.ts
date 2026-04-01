@@ -65,17 +65,14 @@ test("parseTestBlock: parses mock prompt with single-quoted string", () => {
   }
 });
 
-// === parseTestBlock: mock prompt block (if/elif/else/fi) ===
+// === parseTestBlock: mock prompt block (match arms) ===
 
-test("parseTestBlock: parses mock prompt block with if/else/fi", () => {
+test("parseTestBlock: parses mock prompt block with string literal and wildcard", () => {
   const lines = [
     'test "t1" {',
     '  mock prompt {',
-    '    if ${arg1} contains "hello" ; then',
-    '    respond "world"',
-    '    else',
-    '    respond "default"',
-    '    fi',
+    '    "hello" => "world"',
+    '    _ => "default"',
     '  }',
     '}',
   ];
@@ -83,31 +80,31 @@ test("parseTestBlock: parses mock prompt block with if/else/fi", () => {
   assert.equal(testBlock.steps.length, 1);
   assert.equal(testBlock.steps[0].type, "test_mock_prompt_block");
   if (testBlock.steps[0].type === "test_mock_prompt_block") {
-    assert.equal(testBlock.steps[0].branches.length, 1);
-    assert.equal(testBlock.steps[0].branches[0].pattern, "hello");
-    assert.equal(testBlock.steps[0].branches[0].response, "world");
-    assert.equal(testBlock.steps[0].elseResponse, "default");
+    assert.equal(testBlock.steps[0].arms.length, 2);
+    assert.deepEqual(testBlock.steps[0].arms[0].pattern, { kind: "string_literal", value: "hello" });
+    assert.equal(testBlock.steps[0].arms[0].body, '"world"');
+    assert.deepEqual(testBlock.steps[0].arms[1].pattern, { kind: "wildcard" });
+    assert.equal(testBlock.steps[0].arms[1].body, '"default"');
   }
 });
 
-test("parseTestBlock: parses mock prompt block with elif", () => {
+test("parseTestBlock: parses mock prompt block with regex and multiple arms", () => {
   const lines = [
     'test "t1" {',
     '  mock prompt {',
-    '    if ${arg1} contains "a" ; then',
-    '    respond "ra"',
-    '    elif ${arg1} contains "b" ; then',
-    '    respond "rb"',
-    '    fi',
+    '    "a" => "ra"',
+    '    /b+/ => "rb"',
+    '    _ => "default"',
     '  }',
     '}',
   ];
   const { testBlock } = parseTestBlock("test.jh", lines, 0);
   assert.equal(testBlock.steps[0].type, "test_mock_prompt_block");
   if (testBlock.steps[0].type === "test_mock_prompt_block") {
-    assert.equal(testBlock.steps[0].branches.length, 2);
-    assert.equal(testBlock.steps[0].branches[0].pattern, "a");
-    assert.equal(testBlock.steps[0].branches[1].pattern, "b");
+    assert.equal(testBlock.steps[0].arms.length, 3);
+    assert.deepEqual(testBlock.steps[0].arms[0].pattern, { kind: "string_literal", value: "a" });
+    assert.deepEqual(testBlock.steps[0].arms[1].pattern, { kind: "regex", source: "b+" });
+    assert.deepEqual(testBlock.steps[0].arms[2].pattern, { kind: "wildcard" });
   }
 });
 

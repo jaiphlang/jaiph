@@ -188,6 +188,12 @@ function emitCondition(cond: IfConditionDef, negated: boolean): string {
   return `${neg}run ${emitRef(cond.ref, cond.args)}`;
 }
 
+function emitMatchPattern(p: import("../types").MatchPatternDef): string {
+  if (p.kind === "string_literal") return `"${p.value}"`;
+  if (p.kind === "regex") return `/${p.source}/`;
+  return "_";
+}
+
 function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): string[] {
   const lines: string[] = [];
   const ci = currentIndent;
@@ -273,8 +279,14 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
       if (step.managed) {
         if (step.managed.kind === "run") {
           lines.push(`${ci}return run ${emitRef(step.managed.ref, step.managed.args)}`);
-        } else {
+        } else if (step.managed.kind === "ensure") {
           lines.push(`${ci}return ensure ${emitRef(step.managed.ref, step.managed.args)}`);
+        } else if (step.managed.kind === "match") {
+          lines.push(`${ci}return ${step.managed.match.subject} match {`);
+          for (const arm of step.managed.match.arms) {
+            lines.push(`${ci}${pad}${emitMatchPattern(arm.pattern)} => ${arm.body}`);
+          }
+          lines.push(`${ci}}`);
         }
       } else {
         lines.push(`${ci}return ${step.value}`);
@@ -310,6 +322,15 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
       }
       break;
     }
+
+    case "match": {
+      lines.push(`${ci}match ${step.expr.subject} {`);
+      for (const arm of step.expr.arms) {
+        lines.push(`${ci}${pad}${emitMatchPattern(arm.pattern)} => ${arm.body}`);
+      }
+      lines.push(`${ci}}`);
+      break;
+    }
   }
 
   return lines;
@@ -326,6 +347,10 @@ function emitConstStep(name: string, value: ConstRhs): string {
     case "prompt_capture": {
       const returns = value.returns ? ` returns '${value.returns}'` : "";
       return `const ${name} = prompt "${value.raw}"${returns}`;
+    }
+    case "match_expr": {
+      // Multi-line format; return first line (const assignment opens the block)
+      return `const ${name} = ${value.match.subject} match {`;
     }
     case "run_inline_script_capture": {
       const args = value.args ? `, ${value.args.split(" ").map((a) => `"${a}"`).join(", ")}` : "";
@@ -369,12 +394,9 @@ function emitTestStep(step: TestStepDef, pad: string): string[] {
     case "test_mock_prompt":
       return [`${pad}mock_prompt "${step.response}"`];
     case "test_mock_prompt_block": {
-      const lines = [`${pad}mock_prompt {`];
-      for (const b of step.branches) {
-        lines.push(`${pad}${pad}when "${b.pattern}" respond "${b.response}"`);
-      }
-      if (step.elseResponse !== undefined) {
-        lines.push(`${pad}${pad}else respond "${step.elseResponse}"`);
+      const lines = [`${pad}mock prompt {`];
+      for (const arm of step.arms) {
+        lines.push(`${pad}${pad}${emitMatchPattern(arm.pattern)} => ${arm.body}`);
       }
       lines.push(`${pad}}`);
       return lines;

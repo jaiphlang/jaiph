@@ -11,6 +11,7 @@ import { parseConstRhs } from "./const-rhs";
 import { parseEnsureStep } from "./steps";
 import { parsePromptStep } from "./prompt";
 import { parseSendRhs } from "./send-rhs";
+import { parseMatchExpr, extractPostfixMatchSubject } from "./match";
 
 type BraceIfHead =
   | { kind: "ensure"; negated: boolean; ref: string; args?: string; rest: string }
@@ -443,6 +444,20 @@ export function parseBlockStatement(
   if (returnMatch) {
     const returnValue = returnMatch[1].trim();
     const retLoc = { line: innerNo, col: innerRaw.indexOf("return") + 1 };
+    // return <subject> match { ... }
+    const returnMatchSubject = extractPostfixMatchSubject(returnValue);
+    if (returnMatchSubject) {
+      const { expr, nextIndex } = parseMatchExpr(filePath, lines, idx, returnMatchSubject, retLoc);
+      return {
+        step: {
+          type: "return",
+          value: `__match__`,
+          loc: retLoc,
+          managed: { kind: "match", match: expr },
+        },
+        nextIdx: nextIndex,
+      };
+    }
     if (returnValue.startsWith("run ")) {
       const call = parseCallRef(returnValue.slice("run ".length).trim());
       if (call) {
@@ -486,6 +501,18 @@ export function parseBlockStatement(
         nextIdx: idx + 1,
       };
     }
+  }
+
+  // Standalone match statement: match <subject> { ... }
+  const standaloneMatchHead = inner.match(/^match\s+(.+?)\s*\{\s*$/);
+  if (standaloneMatchHead) {
+    const subject = standaloneMatchHead[1].trim();
+    const matchLoc = { line: innerNo, col: innerRaw.indexOf("match") + 1 };
+    const { expr, nextIndex } = parseMatchExpr(filePath, lines, idx, subject, matchLoc);
+    return {
+      step: { type: "match", expr },
+      nextIdx: nextIndex,
+    };
   }
 
   const sendMatch = matchSendOperator(inner);

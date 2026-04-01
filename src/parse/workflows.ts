@@ -14,6 +14,7 @@ import { parseSendRhs } from "./send-rhs";
 import { parseInlineScript } from "./inline-script";
 import { parseEnsureStep } from "./steps";
 import { tryParseBraceIfChain } from "./workflow-brace";
+import { parseMatchExpr, extractPostfixMatchSubject } from "./match";
 
 /** Reject non-empty trailing content after a call expression (e.g. shell redirection). */
 function rejectTrailingContent(
@@ -372,6 +373,19 @@ export function parseWorkflowBlock(
     if (returnMatch) {
       const returnValue = returnMatch[1].trim();
       const retLoc = { line: innerNo, col: innerRaw.indexOf("return") + 1 };
+      // return <subject> match { ... }
+      const returnMatchSubject = extractPostfixMatchSubject(returnValue);
+      if (returnMatchSubject) {
+        const { expr, nextIndex } = parseMatchExpr(filePath, lines, idx, returnMatchSubject, retLoc);
+        workflow.steps.push({
+          type: "return",
+          value: `__match__`,
+          loc: retLoc,
+          managed: { kind: "match", match: expr },
+        });
+        idx = nextIndex - 1;
+        continue;
+      }
       if (returnValue.startsWith("run ")) {
         const call = parseCallRef(returnValue.slice("run ".length).trim());
         if (call) {
@@ -429,6 +443,17 @@ export function parseWorkflowBlock(
         command: inner,
         loc: { line: innerNo, col: colFromRaw(innerRaw) },
       });
+      continue;
+    }
+
+    // Standalone match statement: match <subject> { ... }
+    const standaloneMatchHead = inner.match(/^match\s+(.+?)\s*\{\s*$/);
+    if (standaloneMatchHead) {
+      const subject = standaloneMatchHead[1].trim();
+      const matchLoc = { line: innerNo, col: innerRaw.indexOf("match") + 1 };
+      const { expr, nextIndex } = parseMatchExpr(filePath, lines, idx, subject, matchLoc);
+      workflow.steps.push({ type: "match", expr });
+      idx = nextIndex - 1;
       continue;
     }
 

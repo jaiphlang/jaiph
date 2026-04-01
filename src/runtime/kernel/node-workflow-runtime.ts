@@ -5,7 +5,7 @@ import { PassThrough } from "node:stream";
 import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { inlineScriptName } from "../../inline-script-name";
-import type { WorkflowStepDef } from "../../types";
+import type { MatchExprDef, WorkflowStepDef } from "../../types";
 import { executePrompt, resolveConfig, resolveModel } from "./prompt";
 import { appendRunSummaryLine, formatUtcTimestamp } from "./emit";
 import { resolveRuleRef, resolveScriptRef, resolveWorkflowRef, type RuntimeGraph } from "./graph";
@@ -523,6 +523,32 @@ export class NodeWorkflowRuntime {
     return { ok: true, value: interpolate(result, scope.vars, scope.env) };
   }
 
+  private async evaluateMatch(
+    scope: Scope,
+    expr: MatchExprDef,
+  ): Promise<{ ok: true; value: string } | { ok: false; result: StepResult }> {
+    const subjectIr = await this.interpolateWithCaptures(expr.subject, scope);
+    if (!subjectIr.ok) return subjectIr;
+    const subject = stripOuterQuotes(subjectIr.value);
+    for (const arm of expr.arms) {
+      let matched = false;
+      if (arm.pattern.kind === "wildcard") {
+        matched = true;
+      } else if (arm.pattern.kind === "string_literal") {
+        matched = subject === arm.pattern.value;
+      } else if (arm.pattern.kind === "regex") {
+        matched = new RegExp(arm.pattern.source).test(subject);
+      }
+      if (matched) {
+        const bodyIr = await this.interpolateWithCaptures(arm.body, scope);
+        if (!bodyIr.ok) return bodyIr;
+        return { ok: true, value: stripOuterQuotes(bodyIr.value) };
+      }
+    }
+    // Should not reach here if validation ensures a wildcard arm exists.
+    return { ok: false, result: { status: 1, output: "", error: "match: no arm matched" } };
+  }
+
   private async executeSteps(scope: Scope, steps: WorkflowStepDef[], io?: StepIO): Promise<StepResult> {
     let accOut = "";
     let accErr = "";
@@ -568,6 +594,12 @@ export class NodeWorkflowRuntime {
       }
       if (step.type === "return") {
         if (step.managed) {
+          if (step.managed.kind === "match") {
+            const matchResult = await this.evaluateMatch(scope, step.managed.match);
+            if (!matchResult.ok) return this.mergeStepResult(accOut, accErr, matchResult.result);
+            returnValue = matchResult.value;
+            return this.mergeStepResult(accOut, accErr, { status: 0, output: "", error: "", returnValue });
+          }
           const result = step.managed.kind === "run"
             ? await this.executeRunRef(scope, step.managed.ref.value, step.managed.args ?? "")
             : await this.executeEnsureRef(scope, step.managed.ref.value, step.managed.args ?? "", undefined);
@@ -745,6 +777,12 @@ export class NodeWorkflowRuntime {
           scope.vars.set(step.name, ensureResult.returnValue ?? ensureResult.output.trim());
           continue;
         }
+        if (step.value.kind === "match_expr") {
+          const matchResult = await this.evaluateMatch(scope, step.value.match);
+          if (!matchResult.ok) return this.mergeStepResult(accOut, accErr, matchResult.result);
+          scope.vars.set(step.name, matchResult.value);
+          continue;
+        }
         if (step.value.kind === "prompt_capture") {
           const pcIr = await this.interpolateWithCaptures(step.value.raw, scope);
           if (!pcIr.ok) return this.mergeStepResult(accOut, accErr, pcIr.result);
@@ -882,6 +920,12 @@ export class NodeWorkflowRuntime {
           accOut += r.output;
           accErr += r.error;
         }
+        continue;
+      }
+      if (step.type === "match") {
+        const matchResult = await this.evaluateMatch(scope, step.expr);
+        if (!matchResult.ok) return this.mergeStepResult(accOut, accErr, matchResult.result);
+        // Standalone match: value is discarded
         continue;
       }
     }

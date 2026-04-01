@@ -101,7 +101,7 @@ if [[ "${native_test_out}" != *"passed"* ]] && [[ "${native_test_out}" != *"PASS
 fi
 e2e::pass "workflow_greeting.test.jh passes"
 
-e2e::section "Mock prompt block with no else: unmatched prompt fails with clear message"
+e2e::section "Mock prompt block with no wildcard: unmatched prompt fails with clear message"
 
 # Given
 e2e::file "unmatched_mock_block.jh" <<'EOF'
@@ -121,9 +121,7 @@ import "unmatched_mock_block.jh" as p
 
 test "unmatched prompt never mocked" {
   mock prompt {
-    if ${arg1} contains "other" ; then
-      respond "x"
-    fi
+    /other/ => "x"
   }
   response = p.default
   expectContain response "x"
@@ -145,7 +143,7 @@ if [[ "${unmatched_out}" != *"workflow exited with status"* ]] && [[ "${unmatche
   printf "%s\n" "${unmatched_out}" >&2
   e2e::fail "unmatched prompt should report workflow failure or expectContain failure"
 fi
-e2e::pass "mock prompt block without else fails when prompt never matched"
+e2e::pass "mock prompt block without wildcard fails when prompt never matched"
 
 e2e::section "Fibonacci workflow: managed run function (iterative impl, single step in tree)"
 
