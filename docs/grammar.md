@@ -35,7 +35,7 @@ Jaiph enforces a strict boundary between orchestration and execution. Workflows 
 import "tools/security.jh" as security
 import "bootstrap.jh" as bootstrap
 
-export workflow default {
+export workflow default() {
   ensure security.scan_passes()
   run bootstrap.nodejs()
 }
@@ -71,11 +71,11 @@ One channel per line. Channels are used with `send` (`<-`) and `route` (`->`) in
 
 ## Definitions
 
-Rules and workflows use braces on the declaration line. Scripts use `=` with a quoted string, bare identifier, or fenced block body. Rules and workflows may declare **named parameters** in parentheses before the opening brace.
+Rules and workflows use braces on the declaration line and **must include parentheses** — even when parameterless (e.g. `rule check()`, `workflow default()`). The parser rejects definitions without `()` before `{` with a fix hint. Scripts use `=` with a quoted string, bare identifier, or fenced block body. Rules and workflows may declare **named parameters** inside the parentheses.
 
 ```jaiph
-rule check_status { … }               # no params
-workflow default { … }                 # no params
+rule check_status() { … }              # no params — () required
+workflow default() { … }               # no params — () required
 rule gate(path) { … }                 # one named param
 workflow implement(task, role) { … }  # two named params
 script setup = "echo ok"               # correct (single-line)
@@ -88,7 +88,7 @@ echo ok
 
 ### Named Parameters on Definitions
 
-Workflows and rules can declare named parameters in parentheses on the definition line:
+All workflow and rule definitions require parentheses. Named parameters go inside the parentheses; empty `()` is used when there are no parameters:
 
 ```jaiph
 workflow implement(task, role) {
@@ -100,7 +100,7 @@ rule gate(path) {
 }
 ```
 
-Parameter names follow identifier rules (`[A-Za-z_][A-Za-z0-9_]*`), must not be reserved keywords, and must be unique within the parameter list. An empty parameter list `()` is valid and equivalent to omitting parentheses.
+Parameter names follow identifier rules (`[A-Za-z_][A-Za-z0-9_]*`), must not be reserved keywords, and must be unique within the parameter list. Empty parentheses `()` are required even when there are no parameters — omitting them is a parse error.
 
 At runtime, named parameters are bound alongside positional `arg1`…`arg9`: if `workflow implement(task, role)` is called with `run implement("build docs", "writer")`, then `${task}` = `"build docs"`, `${role}` = `"writer"`, and `${arg1}` = `"build docs"`, `${arg2}` = `"writer"` are all available. Named parameters are the preferred style for new code.
 
@@ -167,7 +167,7 @@ Shell redirection or pipelines after `run` (`>`, `|`, `&`) are rejected — use 
 `run script()` followed by a body embeds a shell command directly in a workflow or rule step without declaring a named `script` definition. This is useful for trivial one-off commands where a full `script` definition would be verbose.
 
 ```jaiph
-workflow default {
+workflow default() {
   run script() "echo hello"
   x = run script() "echo captured"
   const y = run script() "date +%s"
@@ -227,7 +227,7 @@ For other languages, prefer the fenced form with a lang tag — even for a singl
 `run async ref(args)` starts a workflow or script concurrently. All pending async steps are implicitly joined before the enclosing workflow returns. If any fail, the workflow fails with an aggregated error.
 
 ```jaiph
-workflow default {
+workflow default() {
   run async lib.task_a()
   run async lib.task_b()
   # both joined automatically before workflow returns

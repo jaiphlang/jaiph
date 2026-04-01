@@ -64,7 +64,7 @@ rule current_branch(expected) {
   run check_branch("${expected}")
 }
 
-workflow default {
+workflow default() {
   ensure current_branch("main")
 }
 ```

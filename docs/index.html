@@ -75,7 +75,7 @@ layout: null
                 </div>
 
                 <div class="code-tab-panel is-active" data-panel="try-run-sample">
-                    <pre><code class="language-bash static-highlight"><span class="code-line">curl -fsSL https://jaiph.org/run | bash -s '</span><span class="code-line"><span class="ralph-keyword">workflow</span> <span class="ralph-definition">default</span> {</span><span class="code-line">  <span class="ralph-keyword">const</span> <span class="ralph-variable">response</span> <span class="ralph-operator">=</span> <span class="ralph-keyword">prompt</span> <span class="ralph-string">"Say: Hello, I am [model name]!"</span></span><span class="code-line">  <span class="ralph-keyword">log</span> <span class="ralph-string">"${response}"</span></span><span class="code-line">}'</span></code></pre>
+                    <pre><code class="language-bash static-highlight"><span class="code-line">curl -fsSL https://jaiph.org/run | bash -s '</span><span class="code-line"><span class="ralph-keyword">workflow</span> <span class="ralph-definition">default</span>() {</span><span class="code-line">  <span class="ralph-keyword">const</span> <span class="ralph-variable">response</span> <span class="ralph-operator">=</span> <span class="ralph-keyword">prompt</span> <span class="ralph-string">"Say: Hello, I am [model name]!"</span></span><span class="code-line">  <span class="ralph-keyword">log</span> <span class="ralph-string">"${response}"</span></span><span class="code-line">}'</span></code></pre>
                     <p class="small">Installs Jaiph <strong>v0.6.0</strong> to <strong>~/.local/bin</strong> (if not
                         already
                         installed), and runs the sample workflow with <a href="https://cursor.com/docs/cli/installation" target="_blank" rel="noopener noreferrer">Cursor CLI</a> agent backend (the default one). See <a href="#samples">more samples</a>!</p>
@@ -281,13 +281,13 @@ config {
 
 script npm_run_test_ci = "npm run test:ci"
 
-rule ci_passes {
+rule ci_passes() {
   run npm_run_test_ci()
 }
 
 script save_string_to_file = "printf '%s' \"$1\" > \"$2\""
 
-workflow default {
+workflow default() {
   ensure ci_passes() recover {
     run save_string_to_file(arg1, ".jaiph/tmp/ci_failure.log")
     prompt "The CI check failed. Failure output is in .jaiph/tmp/ci_failure.log — fix the code so npm run test:ci passes."
@@ -327,22 +327,22 @@ Jaiph: Running ensure_ci_passes.jh
 channel findings
 channel report
 
-workflow scanner {
+workflow scanner() {
   log "Scanning for issues..."
   findings <- "Found 3 issues in auth module"
 }
 
-workflow analyst {
+workflow analyst() {
   log "Analyzing message from ${arg3} on channel ${arg2}..."
   report <- "Summary: ${arg1}"
 }
 
-workflow reviewer {
+workflow reviewer() {
   log "Reviewing message from ${arg3} on channel ${arg2}..."
   logerr "Critical issue: ${arg1}"
 }
 
-workflow default {
+workflow default() {
   findings -> analyst
   report -> reviewer
 
@@ -377,7 +377,7 @@ Jaiph: Running agent_inbox.jh
 
 const prompt_text = "Say: \"Greetings! I am [model name].\""
 
-workflow cursor_say_hello {
+workflow cursor_say_hello() {
   config {
     agent.backend = "cursor"
   }
@@ -385,7 +385,7 @@ workflow cursor_say_hello {
   log "${response}"
 }
 
-workflow claude_say_hello {
+workflow claude_say_hello() {
   config {
     agent.backend = "claude"
   }
@@ -393,7 +393,7 @@ workflow claude_say_hello {
   log "${response}"
 }
 
-workflow default {
+workflow default() {
   run async cursor_say_hello(arg1)
   run async claude_say_hello(arg1)
 }</code></pre>
@@ -538,16 +538,17 @@ Jaiph: Running async.jh
                         shared by
                         rules, scripts, and workflows in the same file.</dd>
 
-                    <dt><code>rule name { ... }</code> &middot; <code>rule name(params) { ... }</code> &middot;
-                        <code>workflow name { ... }</code> &middot; <code>workflow name(params) { ... }</code> &middot;
+                    <dt><code>rule name() { ... }</code> &middot; <code>rule name(params) { ... }</code> &middot;
+                        <code>workflow name() { ... }</code> &middot; <code>workflow name(params) { ... }</code> &middot;
                         <code>script name = "cmd"</code> &middot; <code>script name = ```[lang] ... ```</code>
                     </dt>
                     <dd><code>rule</code> is for reusable checks (Jaiph structured steps; used with
                         <code>ensure</code>),
                         <code>workflow</code> orchestrates Jaiph steps only, and <code>script</code> holds bash (or any
                         language via a fence lang tag like <code>```node</code>, <code>```python3</code>, or a custom
-                        shebang) invoked with <code>run</code>. Rules and workflows may declare <strong>named
-                        parameters</strong> in parentheses before the opening brace &mdash; the compiler validates
+                        shebang) invoked with <code>run</code>. Rules and workflows <strong>require parentheses</strong>
+                        on every definition &mdash; even when parameterless (e.g. <code>workflow default() { &hellip; }</code>).
+                        Named parameters go inside the parentheses; the compiler validates
                         call-site arity when the callee declares params. Any fence tag is valid &mdash; it maps directly to
                         <code>#!/usr/bin/env &lt;tag&gt;</code>. Scripts run in <strong>full isolation</strong>
                         &mdash; only positional arguments
