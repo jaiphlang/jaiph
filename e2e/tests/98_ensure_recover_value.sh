@@ -14,25 +14,21 @@ e2e::section "ensure...recover: assignment returns the last successful rule retu
 # ===================================================================
 
 e2e::file "recover_capture.jh" <<'EOF'
-script check_ready_impl {
-  echo "rule-stdout-check"
-  test -f ready.txt
-}
+script check_ready_impl = ```
+echo "rule-stdout-check"
+test -f ready.txt
+```
 rule check_ready {
   run check_ready_impl()
   return "ready-value"
 }
 
-script fix_it_impl {
-  touch ready.txt
-}
+script fix_it_impl = "touch ready.txt"
 workflow fix_it {
   run fix_it_impl()
 }
 
-script echo_captured {
-  echo "captured=$1"
-}
+script echo_captured = "echo \"captured=$1\""
 workflow default {
   val = ensure check_ready() recover run fix_it()
   run echo_captured("${val}")
@@ -67,18 +63,18 @@ rm -f "${TEST_DIR}/ready2.txt"
 rm -f "${TEST_DIR}/recover_received.txt"
 
 e2e::file "recover_receives_output.jh" <<'EOF'
-script analyze_impl {
-  echo "analysis-stdout-log"
-  test -f ready2.txt
-}
+script analyze_impl = ```
+echo "analysis-stdout-log"
+test -f ready2.txt
+```
 rule analyze {
   run analyze_impl()
 }
 
-script recover_handler {
-  echo "$1" > recover_received.txt
-  touch ready2.txt
-}
+script recover_handler = ```
+echo "$1" > recover_received.txt
+touch ready2.txt
+```
 workflow default {
   ensure analyze() recover {
     run recover_handler("${arg1}")

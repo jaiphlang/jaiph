@@ -1,6 +1,7 @@
 import { inlineScriptName } from "../inline-script-name";
 import type { jaiphModule, WorkflowStepDef } from "../types";
 import { scriptShebangIsBash } from "../parse/script-bash";
+import { langToShebang } from "../parse/scripts";
 
 /**
  * Replace `alias.name` patterns in shell commands with
@@ -76,9 +77,11 @@ function collectInlineScripts(
 ): void {
   for (const s of steps) {
     if (s.type === "run_inline_script") {
-      emitInlineScriptArtifact(s.body, s.shebang, seen, out);
+      const shebang = s.lang ? langToShebang(s.lang) : undefined;
+      emitInlineScriptArtifact(s.body, shebang, seen, out);
     } else if (s.type === "const" && s.value.kind === "run_inline_script_capture") {
-      emitInlineScriptArtifact(s.value.body, s.value.shebang, seen, out);
+      const shebang = s.value.lang ? langToShebang(s.value.lang) : undefined;
+      emitInlineScriptArtifact(s.value.body, shebang, seen, out);
     } else if (s.type === "if") {
       collectInlineScripts(s.thenSteps, seen, out);
       if (s.elseIfBranches) {
@@ -110,6 +113,28 @@ function emitInlineScriptArtifact(
   out.push({ name, content });
 }
 
+/** Resolve the actual body for a ScriptDef, handling the identifier case by looking up envDecls. */
+function resolveScriptBody(sc: jaiphModule["scripts"][0], ast: jaiphModule): string {
+  if (sc.bodyKind === "identifier" && sc.bodyIdentifier) {
+    const envDecl = ast.envDecls?.find((e) => e.name === sc.bodyIdentifier);
+    return envDecl ? envDecl.value : sc.body;
+  }
+  return sc.body;
+}
+
+/** Resolve shebang for a script: from lang tag, manual #! in body, or default bash. */
+function resolveScriptShebang(body: string, lang?: string): { shebang: string; cleanBody: string } {
+  if (lang) {
+    return { shebang: langToShebang(lang), cleanBody: body };
+  }
+  const firstLine = body.split("\n")[0]?.trim() ?? "";
+  if (firstLine.startsWith("#!")) {
+    const rest = body.slice(body.indexOf("\n") + 1);
+    return { shebang: firstLine, cleanBody: body.indexOf("\n") === -1 ? "" : rest };
+  }
+  return { shebang: "#!/usr/bin/env bash", cleanBody: body };
+}
+
 export function buildScriptFiles(
   ast: jaiphModule,
   importedWorkflowSymbols: Map<string, string>,
@@ -117,13 +142,15 @@ export function buildScriptFiles(
 ): ScriptArtifact[] {
   const out: ScriptArtifact[] = [];
   for (const sc of ast.scripts) {
-    const shebang = sc.shebang ?? "#!/usr/bin/env bash";
-    const rawBody = scriptShebangIsBash(sc.shebang)
-      ? sc.commands.map((c) => emitScriptBodyLine(c, importedWorkflowSymbols)).join("\n")
-      : sc.commands.join("\n");
-    const body = scriptShebangIsBash(sc.shebang)
-      ? wrapBashStandaloneScriptBody(rawBody, "")
-      : rawBody;
+    const rawBody = resolveScriptBody(sc, ast);
+    const { shebang, cleanBody } = resolveScriptShebang(rawBody, sc.lang);
+    const isBash = scriptShebangIsBash(shebang === "#!/usr/bin/env bash" ? undefined : shebang);
+    const processedBody = isBash
+      ? cleanBody.split("\n").map((c) => emitScriptBodyLine(c, importedWorkflowSymbols)).join("\n")
+      : cleanBody;
+    const body = isBash
+      ? wrapBashStandaloneScriptBody(processedBody, "")
+      : processedBody;
     const content = body.length > 0 ? `${shebang}\n${body}\n` : `${shebang}\n`;
     out.push({ name: sc.name, content });
   }

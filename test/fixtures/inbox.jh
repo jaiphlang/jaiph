@@ -6,21 +6,13 @@ workflow researcher {
   findings <- run emit_findings()
 }
 
-script emit_findings {
-  echo '## findings'
-}
+script emit_findings = "echo '## findings'"
 
-script write_findings_file {
-  echo "$1" > findings_file.md
-}
+script write_findings_file = "echo \"$1\" > findings_file.md"
 
-script summarize_findings {
-  echo "Summary of findings"
-}
+script summarize_findings = "echo \"Summary of findings\""
 
-script review_summary {
-  echo "[reviewed] $1"
-}
+script review_summary = "echo \"[reviewed] $1\""
 
 workflow analyst {
   run write_findings_file("${arg1}")

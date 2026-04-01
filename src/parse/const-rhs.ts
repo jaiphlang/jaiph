@@ -1,6 +1,6 @@
 import type { ConstRhs, RuleRefDef, WorkflowRefDef } from "../types";
 import { fail, isRef, parseCallRef } from "./core";
-import { parseInlineScript } from "./inline-script";
+import { parseInlineScriptBody } from "./inline-script";
 import { parsePromptStep } from "./prompt";
 import { extractPostfixMatchSubject, parseMatchExpr } from "./match";
 
@@ -92,16 +92,19 @@ export function parseConstRhs(
   if (head.startsWith("run ")) {
     const rest = head.slice("run ".length).trim();
     if (rest.startsWith("script(") || rest.startsWith("script (")) {
-      const scriptRest = rest.slice("script".length).trimStart();
-      const parsed = parseInlineScript(filePath, scriptRest, lineNo, col);
+      const call = parseCallRef(rest);
+      if (!call) {
+        fail(filePath, 'inline script requires parentheses: const name = run script() "body"', lineNo, col);
+      }
+      const result = parseInlineScriptBody(filePath, lines, lineIdx, call.rest, lineNo, col);
       return {
         value: {
           kind: "run_inline_script_capture",
-          body: parsed.body,
-          ...(parsed.shebang ? { shebang: parsed.shebang } : {}),
-          args: parsed.args,
+          body: result.body,
+          ...(result.lang ? { lang: result.lang } : {}),
+          args: call.args,
         },
-        nextLineIdx: lineIdx,
+        nextLineIdx: result.nextLineIdx - 1,
       };
     }
     const call = parseCallRef(rest);

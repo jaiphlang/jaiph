@@ -20,92 +20,88 @@ const role = "You are an expert technical writer for this project.
        trust the existing documentation blindly.
     "
 
-script assert_newline_paths_are_files {
-  while IFS= read -r f; do
-    [ -z "$f" ] && continue
-    test -f "$f" || return 1
-  done <<< "$1"
-}
+script assert_newline_paths_are_files = ```
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  test -f "$f" || return 1
+done <<< "$1"
+```
 
 rule docs_files_present {
   run assert_newline_paths_are_files("${arg1}")
 }
 
-script assert_worktree_clean_for_docs {
-  source "${JAIPH_LIB}/git_paths.sh"
-  local current_changed_files
-  current_changed_files="$(git_changed_paths_sorted)"
-  if [ -n "$current_changed_files" ]; then
-    echo "Refusing to run docs parity workflow on a dirty worktree." >&2
-    echo "Please commit, stash, or discard these files first:" >&2
-    echo "$current_changed_files" >&2
-    return 1
-  fi
-}
+script assert_worktree_clean_for_docs = ```
+source "${JAIPH_LIB}/git_paths.sh"
+local current_changed_files
+current_changed_files="$(git_changed_paths_sorted)"
+if [ -n "$current_changed_files" ]; then
+  echo "Refusing to run docs parity workflow on a dirty worktree." >&2
+  echo "Please commit, stash, or discard these files first:" >&2
+  echo "$current_changed_files" >&2
+  return 1
+fi
+```
 
 rule worktree_is_clean {
   run assert_worktree_clean_for_docs()
 }
 
-script assert_only_allowed_changed {
-  local allowed="$1"
-  source "${JAIPH_LIB}/git_paths.sh"
-  local after_changed_files
-  after_changed_files="$(git_changed_paths_sorted)"
-  while IFS= read -r changed_file; do
-    [ -z "$changed_file" ] && continue
-    if [[ $'\n'"$allowed"$'\n' == *$'\n'"$changed_file"$'\n'* ]]; then
-      continue
-    fi
-    echo "Unexpected file changed by docs prompt: $changed_file" >&2
-    return 1
-  done <<< "$after_changed_files"
-}
+script assert_only_allowed_changed = ```
+local allowed="$1"
+source "${JAIPH_LIB}/git_paths.sh"
+local after_changed_files
+after_changed_files="$(git_changed_paths_sorted)"
+while IFS= read -r changed_file; do
+  [ -z "$changed_file" ] && continue
+  if [[ $'\n'"$allowed"$'\n' == *$'\n'"$changed_file"$'\n'* ]]; then
+    continue
+  fi
+  echo "Unexpected file changed by docs prompt: $changed_file" >&2
+  return 1
+done <<< "$after_changed_files"
+```
 
 rule only_expected_docs_changed_after_prompt {
   run assert_only_allowed_changed("${arg1}")
 }
 
-script arg_nonempty {
-  [ -n "${1:-}" ]
-}
+script arg_nonempty = "[ -n \"${1:-}\" ]"
 
-script first_line_str {
-  source "${JAIPH_LIB}/strings.sh"
-  first_line "$1"
-}
+script first_line_str = ```
+source "${JAIPH_LIB}/strings.sh"
+first_line "$1"
+```
 
-script rest_lines_str {
-  source "${JAIPH_LIB}/strings.sh"
-  rest_lines "$1"
-}
+script rest_lines_str = ```
+source "${JAIPH_LIB}/strings.sh"
+rest_lines "$1"
+```
 
-script list_docs_md_paths {
-  local out=""
-  local f
-  for f in docs/*.md; do
-    out="${out:+${out}
+script list_docs_md_paths = ```
+local out=""
+local f
+for f in docs/*.md; do
+  out="${out:+${out}
 }${f}"
-  done
-  printf '%s\n' "$out"
-}
+done
+printf '%s\n' "$out"
+```
 
-script build_allowed_paths_block {
-  local out="README.md
+script build_allowed_paths_block = ```
+local out="README.md
 docs/index.html
 docs/_layouts/docs.html
 src/cli/shared/usage.ts"
-  local f
-  for f in docs/*.md; do
-    out="${out}
+local f
+for f in docs/*.md; do
+  out="${out}
 ${f}"
-  done
-  printf '%s\n' "$out"
-}
+done
+printf '%s\n' "$out"
+```
 
-script join_newline_args {
-  printf '%s\n' "$@"
-}
+script join_newline_args = "printf '%s\\n' \"$@\""
 
 workflow update_from_task {
   prompt ```

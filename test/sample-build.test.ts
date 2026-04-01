@@ -59,9 +59,7 @@ test("build validates imported rule references with deterministic errors", () =>
       [
         'import "./mod.jh" as mod',
         "",
-        "script local_impl {",
-        "  echo ok",
-        "}",
+        "script local_impl = \"echo ok\"",
         "rule local {",
         "  run local_impl()",
         "}",
@@ -75,9 +73,7 @@ test("build validates imported rule references with deterministic errors", () =>
     writeFileSync(
       join(root, "mod.jh"),
       [
-        "script existing_impl {",
-        "  echo hi",
-        "}",
+        "script existing_impl = \"echo hi\"",
         "rule existing {",
         "  run existing_impl()",
         "}",
@@ -152,9 +148,9 @@ test("jaiph run compiles and executes workflow with args", () => {
     writeFileSync(
       filePath,
       [
-        "script print_arg {",
-        "  printf '%s\\n' \"$1\"",
-        "}",
+        "script print_arg = \`\`\`",
+        "printf '%s\\n' \"$1\"",
+        "\`\`\`",
         "workflow default {",
         "  run print_arg(\"${arg1}\")",
         "}",
@@ -186,9 +182,9 @@ test("executable .jh invokes jaiph run semantics", () => {
       [
         "#!/usr/bin/env jaiph",
         "",
-        "script print_exec_arg {",
-        "  printf 'exec-arg:%s\\n' \"$1\"",
-        "}",
+        "script print_exec_arg = \`\`\`",
+        "printf 'exec-arg:%s\\n' \"$1\"",
+        "\`\`\`",
         "workflow default {",
         "  run print_exec_arg(\"${arg1}\")",
         "}",
@@ -217,9 +213,9 @@ test("jaiph run enables xtrace when JAIPH_DEBUG=true", () => {
     writeFileSync(
       filePath,
       [
-        "script print_debug_arg {",
-        "  printf 'debug-run:%s\\n' \"$1\"",
-        "}",
+        "script print_debug_arg = \`\`\`",
+        "printf 'debug-run:%s\\n' \"$1\"",
+        "\`\`\`",
         "workflow default {",
         "  run print_debug_arg(\"${arg1}\")",
         "}",
@@ -248,9 +244,9 @@ test("jaiph run fails when workflow default is missing", () => {
     writeFileSync(
       filePath,
       [
-        "script print_fallback {",
-        "  printf 'fallback:%s\\n' \"$1\"",
-        "}",
+        "script print_fallback = \`\`\`",
+        "printf 'fallback:%s\\n' \"$1\"",
+        "\`\`\`",
         "workflow main {",
         "  run print_fallback(\"${arg1}\")",
         "}",
@@ -279,12 +275,8 @@ test("jaiph run fails fast on command errors inside workflow", () => {
     writeFileSync(
       filePath,
       [
-        "script always_fail {",
-        "  false",
-        "}",
-        "script should_not_run {",
-        "  echo after-false",
-        "}",
+        "script always_fail = \"false\"",
+        "script should_not_run = \"echo after-false\"",
         "workflow default {",
         "  run always_fail()",
         "  run should_not_run()",
@@ -347,12 +339,12 @@ test("jaiph run fails when required arg is missing and rule handles it", () => {
     writeFileSync(
       filePath,
       [
-        "script require_name {",
-        "  if [ -z \"$1\" ]; then",
-        "    echo \"missing-name\" >&2",
-        "    exit 1",
-        "  fi",
-        "}",
+        "script require_name = \`\`\`",
+        "if [ -z \"$1\" ]; then",
+        "  echo \"missing-name\" >&2",
+        "  exit 1",
+        "fi",
+        "\`\`\`",
         "rule name_provided {",
         "  run require_name(\"${arg1}\")",
         "}",
@@ -389,12 +381,10 @@ test("jaiph run allows rules to call top-level helper functions in readonly mode
     writeFileSync(
       filePath,
       [
-        "script helper_value {",
-        "  echo ok",
-        "}",
-        "script helper_is_ok_impl {",
-        '  test "ok" = "ok"',
-        "}",
+        "script helper_value = \"echo ok\"",
+        "script helper_is_ok_impl = \`\`\`",
+        'test "ok" = "ok"',
+        "\`\`\`",
         "",
         "rule helper_is_ok {",
         "  run helper_is_ok_impl()",
@@ -428,10 +418,10 @@ test("jaiph run prints rule tree and fail summary", () => {
     writeFileSync(
       filePath,
       [
-        "script current_branch_impl {",
-        "  echo \"Current branch is not 'main'.\" >&2",
-        "  exit 1",
-        "}",
+        "script current_branch_impl = \`\`\`",
+        "echo \"Current branch is not 'main'.\" >&2",
+        "exit 1",
+        "\`\`\`",
         "rule current_branch {",
         "  run current_branch_impl()",
         "}",
@@ -850,9 +840,9 @@ test("jaiph run agent.backend = claude uses Claude CLI and captures output", () 
     writeFileSync(
       filePath,
       [
-        "script print_captured {",
-        "  printf 'captured:%s\\n' \"$1\"",
-        "}",
+        "script print_captured = \`\`\`",
+        "printf 'captured:%s\\n' \"$1\"",
+        "\`\`\`",
         "config {",
         '  agent.backend = "claude"',
         '  agent.claude_flags = "--model sonnet-4"',
@@ -951,9 +941,9 @@ test("jaiph run JAIPH_AGENT_BACKEND env overrides file default", () => {
     writeFileSync(
       filePath,
       [
-        "script print_out {",
-        "  printf 'out:%s\\n' \"$1\"",
-        "}",
+        "script print_out = \`\`\`",
+        "printf 'out:%s\\n' \"$1\"",
+        "\`\`\`",
         "config {",
         '  agent.backend = "claude"',
         "}",
@@ -1008,9 +998,9 @@ test("jaiph run defaults Cursor trusted workspace to project root", () => {
     writeFileSync(
       filePath,
       [
-        "script print_out {",
-        "  printf 'out:%s\\n' \"$1\"",
-        "}",
+        "script print_out = \`\`\`",
+        "printf 'out:%s\\n' \"$1\"",
+        "\`\`\`",
         "workflow default {",
         '  result = prompt "hi"',
         '  run print_out("${result}")',
@@ -1062,9 +1052,9 @@ test("jaiph run JAIPH_AGENT_TRUSTED_WORKSPACE env overrides metadata", () => {
     writeFileSync(
       filePath,
       [
-        "script print_out {",
-        "  printf 'out:%s\\n' \"$1\"",
-        "}",
+        "script print_out = \`\`\`",
+        "printf 'out:%s\\n' \"$1\"",
+        "\`\`\`",
         "config {",
         '  agent.trusted_workspace = ".jaiph/.."',
         "}",
@@ -1192,9 +1182,7 @@ test("buildScripts accepts files with no workflows", () => {
     writeFileSync(
       filePath,
       [
-        "script only_rule_impl {",
-        "  echo ok",
-        "}",
+        "script only_rule_impl = \"echo ok\"",
         "rule only_rule {",
         "  run only_rule_impl()",
         "}",
@@ -1218,9 +1206,9 @@ test("buildScripts extracts scripts for ensure-with-args workflow", () => {
     writeFileSync(
       filePath,
       [
-        "script check_branch_impl {",
-        "  test \"$1\" = \"main\"",
-        "}",
+        "script check_branch_impl = \`\`\`",
+        "test \"$1\" = \"main\"",
+        "\`\`\`",
         "rule check_branch {",
         "  run check_branch_impl(\"${arg1}\")",
         "}",
@@ -1248,12 +1236,10 @@ test("buildScripts writes multiple script stubs", () => {
     writeFileSync(
       filePath,
       [
-        "script changed_files {",
-        "  printf '%s' 'from-function'",
-        "}",
-        "script print_value {",
-        "  printf '%s\\n' \"$1\"",
-        "}",
+        "script changed_files = \"printf '%s' 'from-function'\"",
+        "script print_value = \`\`\`",
+        "printf '%s\\n' \"$1\"",
+        "\`\`\`",
         "",
         "workflow default {",
         "  VALUE = run changed_files()",
@@ -1279,12 +1265,10 @@ test("jaiph run tree includes function calls from workflow shell steps", () => {
     writeFileSync(
       filePath,
       [
-        "script changed_files {",
-        "  printf '%s' 'from-function'",
-        "}",
-        "script print_value {",
-        "  printf '%s\\n' \"$1\"",
-        "}",
+        "script changed_files = \"printf '%s' 'from-function'\"",
+        "script print_value = \`\`\`",
+        "printf '%s\\n' \"$1\"",
+        "\`\`\`",
         "",
         "workflow default {",
         "  VALUE = run changed_files()",
@@ -1342,7 +1326,7 @@ test("jaiph run tree shows workflow params inline when run has key=value args", 
   try {
     writeFileSync(
       join(root, "sub.jh"),
-      ["script done_impl {", "  echo done", "}", "workflow default {", "  run done_impl()", "}", ""].join("\n"),
+      ["script done_impl = \"echo done\"", "workflow default {", "  run done_impl()", "}", ""].join("\n"),
     );
     writeFileSync(
       join(root, "main.jh"),
@@ -1375,9 +1359,9 @@ test("jaiph run tree shows function step; params shown when runtime includes the
     writeFileSync(
       join(root, "main.jh"),
       [
-        "script echo_args {",
-        "  printf '%s %s\\n' \"$1\" \"$2\"",
-        "}",
+        "script echo_args = \`\`\`",
+        "printf '%s %s\\n' \"$1\" \"$2\"",
+        "\`\`\`",
         "workflow default {",
         '  run echo_args("first" "second")',
         "}",
@@ -1403,7 +1387,7 @@ test("jaiph run tree truncates param values over 32 chars when params present", 
     const longValue = "a".repeat(40);
     writeFileSync(
       join(root, "sub.jh"),
-      ["script done_impl {", "  echo done", "}", "workflow default {", "  run done_impl()", "}", ""].join("\n"),
+      ["script done_impl = \"echo done\"", "workflow default {", "  run done_impl()", "}", ""].join("\n"),
     );
     writeFileSync(
       join(root, "main.jh"),
@@ -1689,9 +1673,7 @@ test("buildScripts accepts ensure inside a rule block", () => {
     writeFileSync(
       filePath,
       [
-        "script dep_impl {",
-        "  echo dep",
-        "}",
+        "script dep_impl = \"echo dep\"",
         "rule dep {",
         "  run dep_impl()",
         "}",
@@ -1723,16 +1705,12 @@ test("buildScripts extracts scripts for ensure ... recover workflow", () => {
     writeFileSync(
       filePath,
       [
-        "script dep_impl {",
-        "  test -f ready.txt",
-        "}",
+        "script dep_impl = \"test -f ready.txt\"",
         "rule dep {",
         "  run dep_impl()",
         "}",
         "",
-        "script install_deps_impl {",
-        "  touch ready.txt",
-        "}",
+        "script install_deps_impl = \"touch ready.txt\"",
         "",
         "workflow install_deps {",
         "  run install_deps_impl()",
@@ -1761,9 +1739,7 @@ test("build rejects ensure recover inline shell block under strict shell-step ba
     writeFileSync(
       filePath,
       [
-        "script ready_impl {",
-        "  test -f ready.txt",
-        "}",
+        "script ready_impl = \"test -f ready.txt\"",
         "rule ready {",
         "  run ready_impl()",
         "}",
@@ -1970,9 +1946,9 @@ test("jaiph run prompt capture: variable accessible in subsequent shell step", (
     writeFileSync(
       filePath,
       [
-        "script print_captured {",
-        "  printf 'captured:%s\\n' \"$1\"",
-        "}",
+        "script print_captured = \`\`\`",
+        "printf 'captured:%s\\n' \"$1\"",
+        "\`\`\`",
         "workflow default {",
         '  result = prompt "Summarize"',
         '  run print_captured("${result}")',
@@ -2025,9 +2001,9 @@ test("jaiph run prompt capture stores only final answer in assigned variable", (
     writeFileSync(
       filePath,
       [
-        "script print_captured {",
-        "  printf 'captured:%s\\n' \"$1\"",
-        "}",
+        "script print_captured = \`\`\`",
+        "printf 'captured:%s\\n' \"$1\"",
+        "\`\`\`",
         "workflow default {",
         '  result = prompt "Summarize"',
         '  run print_captured("${result}")',
@@ -2068,9 +2044,9 @@ test("jaiph test with agent.backend = claude uses mock and does not invoke claud
     writeFileSync(
       join(root, "flow.jh"),
       [
-        "script print_got {",
-        "  printf 'got:%s\\n' \"$1\"",
-        "}",
+        "script print_got = \`\`\`",
+        "printf 'got:%s\\n' \"$1\"",
+        "\`\`\`",
         "config {",
         '  agent.backend = "claude"',
         "}",
@@ -2129,9 +2105,9 @@ test("jaiph test when prompt is not mocked runs selected backend", () => {
     writeFileSync(
       join(root, "flow.jh"),
       [
-        "script print_got {",
-        "  printf 'got:%s\\n' \"$1\"",
-        "}",
+        "script print_got = \`\`\`",
+        "printf 'got:%s\\n' \"$1\"",
+        "\`\`\`",
         "config {",
         '  agent.backend = "cursor"',
         "}",
@@ -2179,9 +2155,7 @@ test("jaiph test passes for workflow using ensure only with mocks", () => {
     writeFileSync(
       join(root, "ensure_only.jh"),
       [
-        "script ready_impl {",
-        "  echo ok",
-        "}",
+        "script ready_impl = \"echo ok\"",
         "rule ready {",
         "  run ready_impl()",
         "}",
@@ -2315,18 +2289,14 @@ test("jaiph test runs *.test.jh with mock workflow, rule, and script", () => {
     writeFileSync(
       join(root, "app.jh"),
       [
-        "script policy_check_impl {",
-        "  echo real-policy",
-        "}",
+        "script policy_check_impl = \"echo real-policy\"",
         "rule policy_check {",
         "  run policy_check_impl()",
         "}",
-        "script changed_files {",
-        "  echo real_files",
-        "}",
-        "script build_impl {",
-        '  echo "real build"',
-        "}",
+        "script changed_files = \"echo real_files\"",
+        "script build_impl = \`\`\`",
+        'echo "real build"',
+        "\`\`\`",
         "workflow build {",
         "  run build_impl()",
         "}",

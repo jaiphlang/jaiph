@@ -1,9 +1,9 @@
 #! /usr/bin/env jaiph
 
-script test_runner {
-  cd "${JAIPH_WORKSPACE:?}"
-  bash e2e/tests/72_docker_run_artifacts.sh
-}
+script test_runner = ```
+cd "${JAIPH_WORKSPACE:?}"
+bash e2e/tests/72_docker_run_artifacts.sh
+```
 
 workflow default {
   run test_runner()

@@ -46,10 +46,10 @@ describe("emitModule", () => {
 
   it("formats scripts with shebang", () => {
     const source = [
-      "script my_script {",
-      "  #!/usr/bin/env python3",
-      '  print("hello")',
-      "}",
+      "script my_script = ```",
+      "#!/usr/bin/env python3",
+      'print("hello")',
+      "```",
       "",
     ].join("\n");
     assert.equal(roundTrip(source), source);

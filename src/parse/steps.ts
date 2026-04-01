@@ -1,7 +1,7 @@
 import type { WorkflowStepDef } from "../types";
 import { parseConstRhs } from "./const-rhs";
 import { fail, indexOfClosingDoubleQuote, isRef, parseCallRef } from "./core";
-import { parseInlineScript } from "./inline-script";
+import { parseInlineScriptBody } from "./inline-script";
 
 /** Reject non-empty trailing content after a call expression (e.g. shell redirection). */
 function rejectTrailingContent(
@@ -92,13 +92,16 @@ function parseRecoverStatement(
     if (rest.startsWith("run ")) {
       const runBody = rest.slice("run ".length).trim();
       if (runBody.startsWith("script(") || runBody.startsWith("script (")) {
-        const scriptRest = runBody.slice("script".length).trimStart();
-        const parsed = parseInlineScript(filePath, scriptRest, lineNo, col);
+        const scriptCall = parseCallRef(runBody);
+        if (!scriptCall) {
+          fail(filePath, 'inline script requires parentheses: run script() "body"', lineNo, col);
+        }
+        const result = parseInlineScriptBody(filePath, [], lineNo - 1, scriptCall.rest, lineNo, col);
         return {
           type: "run_inline_script",
-          body: parsed.body,
-          ...(parsed.shebang ? { shebang: parsed.shebang } : {}),
-          args: parsed.args,
+          body: result.body,
+          ...(result.lang ? { lang: result.lang } : {}),
+          args: scriptCall.args,
           captureName,
           loc: { line: lineNo, col },
         };
@@ -138,13 +141,16 @@ function parseRecoverStatement(
   if (t.startsWith("run ")) {
     const runBody = t.slice("run ".length).trim();
     if (runBody.startsWith("script(") || runBody.startsWith("script (")) {
-      const scriptRest = runBody.slice("script".length).trimStart();
-      const parsed = parseInlineScript(filePath, scriptRest, lineNo, col);
+      const scriptCall = parseCallRef(runBody);
+      if (!scriptCall) {
+        fail(filePath, 'inline script requires parentheses: run script() "body"', lineNo, col);
+      }
+      const result = parseInlineScriptBody(filePath, [], lineNo - 1, scriptCall.rest, lineNo, col);
       return {
         type: "run_inline_script",
-        body: parsed.body,
-        ...(parsed.shebang ? { shebang: parsed.shebang } : {}),
-        args: parsed.args,
+        body: result.body,
+        ...(result.lang ? { lang: result.lang } : {}),
+        args: scriptCall.args,
         loc: { line: lineNo, col },
       };
     }

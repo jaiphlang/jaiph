@@ -1,95 +1,81 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { parsejaiph } from "../parser";
-import { INTERPRETER_TAGS } from "./scripts";
 
-// === Accepted: script:<tag> syntax ===
+// === Accepted: fenced block with lang tag ===
 
-test("script:node parses with interpreterTag and correct shebang", () => {
-  const mod = parsejaiph("script:node transform {\n  console.log('hi');\n}", "test.jh");
+test("fenced block with python3 lang tag parses correctly", () => {
+  const mod = parsejaiph('script transform = ```python3\nprint("hi")\n```', "test.jh");
   assert.equal(mod.scripts.length, 1);
   assert.equal(mod.scripts[0].name, "transform");
-  assert.equal(mod.scripts[0].interpreterTag, "node");
-  assert.equal(mod.scripts[0].shebang, "#!/usr/bin/env node");
-  assert.deepEqual(mod.scripts[0].commands, ["console.log('hi');"]);
+  assert.equal(mod.scripts[0].lang, "python3");
+  assert.equal(mod.scripts[0].body, 'print("hi")');
+  assert.equal(mod.scripts[0].bodyKind, "fenced");
 });
 
-test("script:python3 parses with interpreterTag and correct shebang", () => {
-  const mod = parsejaiph("script:python3 analyze {\n  print('hello')\n}", "test.jh");
+test("fenced block with node lang tag parses correctly", () => {
+  const mod = parsejaiph("script transform = ```node\nconsole.log('hi');\n```", "test.jh");
   assert.equal(mod.scripts.length, 1);
-  assert.equal(mod.scripts[0].name, "analyze");
-  assert.equal(mod.scripts[0].interpreterTag, "python3");
-  assert.equal(mod.scripts[0].shebang, "#!/usr/bin/env python3");
-  assert.deepEqual(mod.scripts[0].commands, ["print('hello')"]);
+  assert.equal(mod.scripts[0].name, "transform");
+  assert.equal(mod.scripts[0].lang, "node");
+  assert.equal(mod.scripts[0].body, "console.log('hi');");
+  assert.equal(mod.scripts[0].bodyKind, "fenced");
 });
 
-test("script:bash sets bash shebang via tag", () => {
-  const mod = parsejaiph("script:bash setup {\n  echo hello\n}", "test.jh");
-  assert.equal(mod.scripts[0].interpreterTag, "bash");
-  assert.equal(mod.scripts[0].shebang, "#!/usr/bin/env bash");
+test("any arbitrary lang tag is valid (no allowlist)", () => {
+  const mod = parsejaiph("script run_deno = ```deno\nconsole.log('hi');\n```", "test.jh");
+  assert.equal(mod.scripts.length, 1);
+  assert.equal(mod.scripts[0].lang, "deno");
+  assert.equal(mod.scripts[0].bodyKind, "fenced");
 });
 
-test("all supported tags produce correct shebangs", () => {
-  for (const [tag, shebang] of Object.entries(INTERPRETER_TAGS)) {
-    const mod = parsejaiph(`script:${tag} test_${tag} {\n  body\n}`, "test.jh");
-    assert.equal(mod.scripts[0].shebang, shebang, `tag ${tag}`);
-    assert.equal(mod.scripts[0].interpreterTag, tag);
-  }
+// === Accepted: plain script without lang tag ===
+
+test("plain script without lang tag has no lang", () => {
+  const mod = parsejaiph('script setup = "echo hello"', "test.jh");
+  assert.equal(mod.scripts[0].lang, undefined);
+  assert.equal(mod.scripts[0].body, "echo hello");
+  assert.equal(mod.scripts[0].bodyKind, "string");
 });
 
-test("plain script without tag has no interpreterTag", () => {
-  const mod = parsejaiph("script setup {\n  echo hello\n}", "test.jh");
-  assert.equal(mod.scripts[0].interpreterTag, undefined);
-  assert.equal(mod.scripts[0].shebang, undefined);
+// === Accepted: manual shebang in fenced body (no lang tag) ===
+
+test("manual shebang in fenced body without lang tag works", () => {
+  const mod = parsejaiph('script analyze = ```\n#!/usr/bin/env ruby\nputs "hi"\n```', "test.jh");
+  assert.equal(mod.scripts[0].lang, undefined);
+  assert.equal(mod.scripts[0].body, '#!/usr/bin/env ruby\nputs "hi"');
+  assert.equal(mod.scripts[0].bodyKind, "fenced");
 });
 
-test("plain script with manual shebang still works", () => {
-  const mod = parsejaiph("script analyze {\n  #!/usr/bin/env python3\n  print('hi')\n}", "test.jh");
-  assert.equal(mod.scripts[0].interpreterTag, undefined);
-  assert.equal(mod.scripts[0].shebang, "#!/usr/bin/env python3");
-});
+// === Rejected: both fence tag and manual shebang ===
 
-// === Rejected: unknown tag ===
-
-test("unknown script:foo tag is rejected with actionable error", () => {
+test("fence tag with manual shebang is rejected", () => {
   assert.throws(
-    () => parsejaiph("script:foo my_script {\n  body\n}", "test.jh"),
+    () => parsejaiph("script transform = ```node\n#!/usr/bin/env node\nconsole.log('hi');\n```", "test.jh"),
     (err: any) =>
       err.message.includes("E_PARSE") &&
-      err.message.includes('unknown interpreter tag "script:foo"') &&
-      err.message.includes("supported tags:"),
+      err.message.includes("already sets the shebang"),
   );
 });
 
-// === Rejected: script:tag with manual shebang in body ===
+// === Rejected: old script:lang syntax ===
 
-test("script:node with manual shebang is rejected", () => {
+test("old script:lang syntax is rejected with actionable error", () => {
   assert.throws(
-    () => parsejaiph("script:node transform {\n  #!/usr/bin/env node\n  console.log('hi');\n}", "test.jh"),
+    () => parsejaiph("script:node transform = ```\nconsole.log('hi');\n```", "test.jh"),
     (err: any) =>
       err.message.includes("E_PARSE") &&
-      err.message.includes("script:node already sets the shebang"),
+      err.message.includes("script:lang syntax is no longer supported"),
   );
 });
 
 // === Rejected: script:tag with parentheses ===
 
-test("script:node with parentheses is rejected", () => {
+test("script with parentheses is rejected", () => {
   assert.throws(
-    () => parsejaiph("script:node transform() {", "test.jh"),
+    () => parsejaiph('script transform() = "body"', "test.jh"),
     (err: any) =>
       err.message.includes("E_PARSE") &&
       err.message.includes("definitions must not use parentheses"),
-  );
-});
-
-// === Rejected: script:tag without braces ===
-
-test("script:node without braces is rejected", () => {
-  assert.throws(
-    () => parsejaiph("script:node transform", "test.jh"),
-    (err: any) =>
-      err.message.includes("E_PARSE") &&
-      err.message.includes("script declarations require braces"),
   );
 });

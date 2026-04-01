@@ -58,9 +58,7 @@ Positional arguments are available inside `script` bodies as standard bash `$1`,
 Rules receive forwarded arguments through `ensure`:
 
 ```jaiph
-script check_branch {
-  test "$(git branch --show-current)" = "$1"
-}
+script check_branch = "test \"$(git branch --show-current)\" = \"$1\""
 
 rule current_branch {
   run check_branch("${arg1}")

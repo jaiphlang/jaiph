@@ -26,9 +26,9 @@ RUN touch /jaiph-runtime-marker
 DOCKERFILE
 
 e2e::file "dockerfile_detect.jh" <<'EOF'
-script check_marker_impl {
-  test -f /jaiph-runtime-marker && echo "marker found"
-}
+script check_marker_impl = ```
+test -f /jaiph-runtime-marker && echo "marker found"
+```
 rule check_marker {
   run check_marker_impl()
 }
@@ -50,13 +50,13 @@ e2e::section "docker dockerfile detection — explicit image skips Dockerfile"
 
 # Given: same workspace with .jaiph/Dockerfile, but explicit image set
 e2e::file "dockerfile_skip.jh" <<'EOF'
-script check_no_marker_impl {
-  if test -f /jaiph-runtime-marker; then
-    echo "marker unexpectedly found"
-    exit 1
-  fi
-  echo "no marker"
-}
+script check_no_marker_impl = ```
+if test -f /jaiph-runtime-marker; then
+  echo "marker unexpectedly found"
+  exit 1
+fi
+echo "no marker"
+```
 rule check_no_marker {
   run check_no_marker_impl()
 }
@@ -78,9 +78,9 @@ e2e::section "docker dockerfile detection — fallback without Dockerfile"
 # Given: a separate test dir without .jaiph/Dockerfile
 fallback_dir="$(mktemp -d "${JAIPH_E2E_WORK_DIR}/docker_fallback.XXXXXX")"
 cat > "${fallback_dir}/fallback.jh" <<'EOF'
-script greet_impl {
-  echo "hello fallback"
-}
+script greet_impl = ```
+echo "hello fallback"
+```
 rule greet {
   run greet_impl()
 }
@@ -103,10 +103,10 @@ e2e::section "docker dockerfile detection — agent env vars are forwarded"
 
 # Given: a workflow that checks visibility of agent env vars
 e2e::file "envforward.jh" <<'EOF'
-script check_env_impl {
-  echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-unset}"
-  echo "CURSOR_SESSION=${CURSOR_SESSION:-unset}"
-}
+script check_env_impl = ```
+echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-unset}"
+echo "CURSOR_SESSION=${CURSOR_SESSION:-unset}"
+```
 rule check_env {
   run check_env_impl()
 }

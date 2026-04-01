@@ -9,20 +9,16 @@ rule ci_passes {
   run npm_run_test_ci()
 }
 
-script npm_run_test_ci {
-  npm run test:ci
-}
+script npm_run_test_ci = "npm run test:ci"
 
-script save_string_to_file {
-  echo "$1" > "$2"
-}
+script save_string_to_file = "echo \"$1\" > \"$2\""
 
-script assert_nonempty_file_or_fail {
-  test -s "$1" || {
-    echo "jaiph: ci failure log is empty at $1" >&2
-    exit 1
-  }
+script assert_nonempty_file_or_fail = ```
+test -s "$1" || {
+  echo "jaiph: ci failure log is empty at $1" >&2
+  exit 1
 }
+```
 
 workflow ensure_ci_passes {
   const ci_log_dir = ".jaiph/tmp"
@@ -39,13 +35,9 @@ workflow ensure_ci_passes {
   run rm_file_simple("${ci_log_file}")
 }
 
-script mkdir_p_simple {
-  mkdir -p "$1"
-}
+script mkdir_p_simple = "mkdir -p \"$1\""
 
-script rm_file_simple {
-  rm -f "$1"
-}
+script rm_file_simple = "rm -f \"$1\""
 
 workflow default {
   run ensure_ci_passes()

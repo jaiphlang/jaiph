@@ -41,25 +41,19 @@ config {
 
 channel ch
 
-script emit_payload {
-  echo "contract-payload"
-}
+script emit_payload = "echo \"contract-payload\""
 
 workflow sender {
   log "contract-sender-log"
   ch <- run emit_payload()
 }
 
-script write_a {
-  echo "a:$1" > contract_a.txt
-}
+script write_a = "echo \"a:$1\" > contract_a.txt"
 workflow receiver_a {
   run write_a("${arg1}")
 }
 
-script write_b {
-  echo "b:$1" > contract_b.txt
-}
+script write_b = "echo \"b:$1\" > contract_b.txt"
 workflow receiver_b {
   run write_b("${arg1}")
 }

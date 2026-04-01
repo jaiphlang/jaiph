@@ -13,9 +13,7 @@ e2e::section "Single-file run ignores sibling parse errors"
 
 # Given
 e2e::file "valid.jh" <<'EOF'
-script say_ok {
-  echo "valid-ok"
-}
+script say_ok = "echo \"valid-ok\""
 workflow default {
   run say_ok()
 }

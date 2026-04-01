@@ -145,13 +145,13 @@ layout: null
                     </p>
                     <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
-script name_was_provided_check {
-  # bash by default; use script:node, script:python3, etc. for other languages
+script name_was_provided_check = ```
+  # bash by default; use ```node, ```python3, etc. for other languages
   if [ -z "$1" ]; then
     echo "You didn't provide your name :(" >&2
     exit 1
   fi
-}
+```
 
 rule name_was_provided {
   run name_was_provided_check("${arg1}")
@@ -279,17 +279,13 @@ config {
   # agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
-script npm_run_test_ci {
-  npm run test:ci
-}
+script npm_run_test_ci = "npm run test:ci"
 
 rule ci_passes {
   run npm_run_test_ci()
 }
 
-script save_string_to_file {
-  printf '%s' "$1" > "$2"
-}
+script save_string_to_file = "printf '%s' \"$1\" > \"$2\""
 
 workflow default {
   ensure ci_passes() recover {
@@ -456,12 +452,13 @@ Jaiph: Running async.jh
                 </p>
                 <p><strong>Use Bash (or any language) in scripts.</strong> Command pipelines, checks, and background
                     jobs
-                    belong in <code>script</code> blocks; workflows and rules call them with <code>run</code>. Use
-                    <code>script:node</code>, <code>script:python3</code>, <code>script:ruby</code>, etc. to select a
-                    common interpreter without writing a shebang line. For unlisted interpreters, add a manual
+                    belong in <code>script</code> definitions; workflows and rules call them with <code>run</code>. Use
+                    fence lang tags (<code>```node</code>, <code>```python3</code>, <code>```ruby</code>, etc.) to select
+                    an interpreter without writing a shebang line &mdash; any tag is valid, mapping directly to
+                    <code>#!/usr/bin/env &lt;tag&gt;</code>. If no tag is present, add a manual
                     <code>#!</code> shebang as the first body line.
                     For trivial one-off commands, use <strong>inline scripts</strong>:
-                    <code>run script("echo ok")</code> &mdash; no named block needed.
+                    <code>run script() "echo ok"</code> &mdash; no named block needed.
                 </p>
                 <p><strong>Async calls.</strong> For async managed work, use <code>run async wf()</code> — Jaiph fans
                     out the workflows concurrently and <strong>implicitly joins</strong> them before the parent workflow
@@ -541,14 +538,15 @@ Jaiph: Running async.jh
                         rules, scripts, and workflows in the same file.</dd>
 
                     <dt><code>rule name { ... }</code> &middot; <code>workflow name { ... }</code> &middot;
-                        <code>script name { ... }</code> &middot; <code>script:tag name { ... }</code>
+                        <code>script name = "cmd"</code> &middot; <code>script name = ```[lang] ... ```</code>
                     </dt>
                     <dd><code>rule</code> is for reusable checks (Jaiph structured steps; used with
                         <code>ensure</code>),
                         <code>workflow</code> orchestrates Jaiph steps only, and <code>script</code> holds bash (or any
-                        language via <code>script:&lt;tag&gt;</code> or a custom shebang) invoked with
-                        <code>run</code>. Scripts run in <strong>full isolation</strong> &mdash; only positional
-                        arguments
+                        language via a fence lang tag like <code>```node</code>, <code>```python3</code>, or a custom
+                        shebang) invoked with <code>run</code>. Any fence tag is valid &mdash; it maps directly to
+                        <code>#!/usr/bin/env &lt;tag&gt;</code>. Scripts run in <strong>full isolation</strong>
+                        &mdash; only positional arguments
                         and essential Jaiph variables (<code>JAIPH_LIB</code>, <code>JAIPH_SCRIPTS</code>,
                         <code>JAIPH_WORKSPACE</code>) are inherited; module-scoped variables are not visible.
                         Use <code>source "$JAIPH_LIB/…"</code> for shared utilities. Scripts are emitted as
@@ -557,15 +555,15 @@ Jaiph: Running async.jh
                     </dd>
 
                     <dt><code>ensure ref()</code> &middot; <code>ensure ref(args) recover { ... }</code> &middot;
-                        <code>run ref()</code> &middot; <code>run script("body")</code>
+                        <code>run ref()</code> &middot; <code>run script() "body"</code>
                     </dt>
                     <dd><code>ensure</code> executes a rule (with optional args); <code>recover</code> adds bounded
                         retry repair logic; <code>run</code> calls another workflow or module script from a workflow
                         (managed step &mdash; same value/log contract as <code>ensure</code>). All calls require
                         parentheses. Arguments can be quoted strings or <strong>bare identifiers</strong>:
                         <code>run greet(name)</code> is equivalent to <code>run greet("${name}")</code>.
-                        <code>run script("body")</code> embeds a one-off shell command directly
-                        without a named <code>script</code> block &mdash; supports arguments, capture, and custom
+                        <code>run script() "body"</code> embeds a one-off shell command directly
+                        without a named <code>script</code> definition &mdash; supports arguments, capture, and custom
                         shebangs.</dd>
 
                     <dt><code>prompt "..."</code> &middot; <code>prompt myVar</code> &middot;

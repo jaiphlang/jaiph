@@ -14,13 +14,9 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::section "run async fanout with implicit join"
 
 e2e::file "fanout.jh" <<'EOF'
-script write_a {
-  echo "a" > a.txt
-}
+script write_a = "echo \"a\" > a.txt"
 
-script write_b {
-  echo "b" > b.txt
-}
+script write_b = "echo \"b\" > b.txt"
 
 workflow do_a {
   run write_a()
@@ -83,9 +79,7 @@ e2e::assert_contains "$fail_output" "fail_b" "second async branch shown failing 
 e2e::section "run async with interleaved sync steps"
 
 e2e::file "async_interleave.jh" <<'EOF'
-script write_marker {
-  echo "ran" > sync_marker.txt
-}
+script write_marker = "echo \"ran\" > sync_marker.txt"
 
 workflow slow {
   log "slow-done"
@@ -133,13 +127,9 @@ e2e::assert_contains "$capture_output" "capture is not supported with run async"
 e2e::section "run async sibling workflows have same tree depth"
 
 e2e::file "sibling_depth.jh" <<'EOF'
-script write_x {
-  echo "x" > x.txt
-}
+script write_x = "echo \"x\" > x.txt"
 
-script write_y {
-  echo "y" > y.txt
-}
+script write_y = "echo \"y\" > y.txt"
 
 workflow branch_x {
   run write_x()

@@ -127,7 +127,7 @@ Jaiph source files combine a small orchestration language with scripts in any la
 
 **rule** — Reusable checks composed of structured steps (`ensure`, `run`, `const`, `if`, `fail`, `return`, `log`). Called with `ensure` from workflows.
 
-**script** — Shell (or polyglot) code blocks that execute as isolated subprocesses. Called with `run` from workflows and rules. Use `script:<tag>` for common interpreters (`script:node`, `script:python3`, `script:ruby`, …) — the tag expands to the correct shebang automatically. For unlisted interpreters, add a manual `#!` shebang as the first body line. Scripts receive only positional arguments and essential Jaiph variables (`JAIPH_LIB`, `JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`). For trivial one-off commands, use **inline scripts**: `run script("echo ok")` — no named `script` block needed.
+**script** — Shell (or polyglot) code definitions that execute as isolated subprocesses. Called with `run` from workflows and rules. Use fence lang tags (`` ```node ``, `` ```python3 ``, `` ```ruby ``, etc.) to select an interpreter — the tag maps directly to `#!/usr/bin/env <tag>` (any tag is valid, no hardcoded allowlist). If no tag is present, add a manual `#!` shebang as the first body line. Scripts receive only positional arguments and essential Jaiph variables (`JAIPH_LIB`, `JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`). For trivial one-off commands, use **inline scripts**: `run script() "echo ok"` or fenced blocks (`` run script() ``` ... ``` ``) — no named `script` definition needed.
 
 **prompt** — Sends text to a configured AI agent. The body can be a single-line `"string"`, a bare identifier (`prompt myVar`), or a fenced `` ``` `` block for multiline text. Supports structured JSON responses via `returns "{ field: type }"`.
 
@@ -136,7 +136,7 @@ Jaiph source files combine a small orchestration language with scripts in any la
 - `ensure rule()` — run a rule as a check
 - `run workflow()` / `run script()` — call a workflow or script
 - `run greet(name)` — bare identifier arg, equivalent to `run greet("${name}")`
-- `run script("echo ok")` — inline script for trivial one-off commands
+- `run script() "echo ok"` — inline script for trivial one-off commands
 - `run async workflow()` — concurrent execution with implicit join
 - `const x = prompt "..." returns "{ field: type }"` — structured capture with `${x.field}` access; `number` / `boolean` in the schema validate JSON but each field is **stored as a string** in workflow scope (orchestration is text-only)
 - `return run workflow()` / `return ensure rule()` — direct return from a managed call
@@ -149,9 +149,7 @@ Jaiph source files combine a small orchestration language with scripts in any la
 ```jaiph
 #!/usr/bin/env jaiph
 
-script check_deps {
-  test -f "package.json"
-}
+script check_deps = "test -f \"package.json\""
 
 rule deps_exist {
   if not run check_deps() {

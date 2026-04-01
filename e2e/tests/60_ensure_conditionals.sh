@@ -13,16 +13,14 @@ e2e::section "brace if not ensure branch behavior"
 
 # Given
 e2e::file "ensure_run_branch.jh" <<'EOF'
-script always_fail_impl {
-  false
-}
+script always_fail_impl = "false"
 rule always_fail {
   run always_fail_impl()
 }
 
-script recovery_impl {
-  echo "recovery-ran" > recovery_ran.txt
-}
+script recovery_impl = ```
+echo "recovery-ran" > recovery_ran.txt
+```
 workflow recovery {
   run recovery_impl()
 }
@@ -35,16 +33,14 @@ workflow default {
 EOF
 
 e2e::file "ensure_shell_branch.jh" <<'EOF'
-script always_fail_impl {
-  false
-}
+script always_fail_impl = "false"
 rule always_fail {
   run always_fail_impl()
 }
 
-script shell_ran_impl {
-  echo "shell-ran" > shell_ran.txt
-}
+script shell_ran_impl = ```
+echo "shell-ran" > shell_ran.txt
+```
 
 workflow default {
   if not ensure always_fail() {
@@ -54,16 +50,14 @@ workflow default {
 EOF
 
 e2e::file "ensure_pass_branch.jh" <<'EOF'
-script always_ok_impl {
-  true
-}
+script always_ok_impl = "true"
 rule always_ok {
   run always_ok_impl()
 }
 
-script should_not_run_impl {
-  echo "should-not-run" > should_not_run.txt
-}
+script should_not_run_impl = ```
+echo "should-not-run" > should_not_run.txt
+```
 
 workflow default {
   if not ensure always_ok() {

@@ -1,35 +1,35 @@
 #!/usr/bin/env jaiph
 
-script ensure_is_number_impl {
-  if ! [[ "$1" =~ ^[0-9]+$ ]]; then
-    echo "Expected a non-negative integer, got: $1" >&2
-    exit 1
-  fi
-}
+script ensure_is_number_impl = ```
+if ! [[ "$1" =~ ^[0-9]+$ ]]; then
+  echo "Expected a non-negative integer, got: $1" >&2
+  exit 1
+fi
+```
 
 rule ensure_is_number {
   run ensure_is_number_impl("${arg1}")
 }
 
-script fib {
-  local n="$1"
-  fib_impl() {
-    local x="$1"
-    if [ "$x" -le 1 ]; then
-      echo "$x"
-      return 0
-    fi
+script fib = ```
+local n="$1"
+fib_impl() {
+  local x="$1"
+  if [ "$x" -le 1 ]; then
+    echo "$x"
+    return 0
+  fi
 
-    local a b
-    a="$(fib_impl "$((x - 1))")"
-    b="$(fib_impl "$((x - 2))")"
-    echo "$((a + b))"
-  }
-
-  local result
-  result="$(fib_impl "$n")"
-  echo "$result"
+  local a b
+  a="$(fib_impl "$((x - 1))")"
+  b="$(fib_impl "$((x - 2))")"
+  echo "$((a + b))"
 }
+
+local result
+result="$(fib_impl "$n")"
+echo "$result"
+```
 
 workflow default {
   const n = "${arg1}"

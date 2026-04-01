@@ -8,16 +8,12 @@ workflow default {
   ensure mod.one()
 }
 --- a.jh
-script one_impl {
-  echo one
-}
+script one_impl = "echo one"
 rule one {
   run one_impl()
 }
 --- b.jh
-script two_impl {
-  echo two
-}
+script two_impl = "echo two"
 rule two {
   run two_impl()
 }
@@ -31,9 +27,7 @@ workflow default {
   run lib.missing()
 }
 --- lib.jh
-script existing_impl {
-  echo ok
-}
+script existing_impl = "echo ok"
 workflow existing {
   run existing_impl()
 }
@@ -79,9 +73,7 @@ workflow default {
   run lib.nonexistent()
 }
 --- lib.jh
-script existing {
-  echo "ok"
-}
+script existing = "echo \"ok\""
 workflow dummy {
   log "ok"
 }

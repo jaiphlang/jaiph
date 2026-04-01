@@ -23,29 +23,21 @@ config {
   agent.backend = "cursor"
 }
 
-script save_string_to_file {
-  printf '%s' "$1" > "$2"
-}
+script save_string_to_file = "printf '%s' \"$1\" > \"$2\""
 
-script emit_root_step {
-  printf '%s\n' "PAYLOAD_ROOT_SCRIPT"
-}
+script emit_root_step = "printf '%s\n' \"PAYLOAD_ROOT_SCRIPT\""
 
-script emit_nested_step {
-  printf '%s\n' "PAYLOAD_NESTED_SCRIPT"
-}
+script emit_nested_step = "printf '%s\n' \"PAYLOAD_NESTED_SCRIPT\""
 
-script emit_deep_step_then_fail_until_recovered {
-  printf '%s\n' "PAYLOAD_DEEP_SCRIPT"
-  if [ -f .jaiph/tmp/recovered ]; then
-    exit 0
-  fi
-  exit 1
-}
+script emit_deep_step_then_fail_until_recovered = ```
+printf '%s\n' "PAYLOAD_DEEP_SCRIPT"
+if [ -f .jaiph/tmp/recovered ]; then
+  exit 0
+fi
+exit 1
+```
 
-script mark_recovered {
-  touch .jaiph/tmp/recovered
-}
+script mark_recovered = "touch .jaiph/tmp/recovered"
 
 rule deep_rule {
   run emit_deep_step_then_fail_until_recovered()

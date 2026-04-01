@@ -13,9 +13,7 @@ e2e::section "return run: direct return of workflow result"
 
 # Given
 e2e::file "return_run.jh" <<'EOF'
-script greet {
-  echo "hello-direct"
-}
+script greet = "echo \"hello-direct\""
 
 workflow helper {
   return run greet()
@@ -50,9 +48,7 @@ e2e::section "return ensure: direct return of rule result"
 
 # Given
 e2e::file "return_ensure.jh" <<'EOF'
-script check_impl {
-  echo "rule-ok"
-}
+script check_impl = "echo \"rule-ok\""
 
 rule check {
   return run check_impl()
@@ -87,9 +83,7 @@ e2e::section "return run with args"
 
 # Given
 e2e::file "return_run_args.jh" <<'EOF'
-script echo_arg {
-  echo "$1"
-}
+script echo_arg = "echo \"$1\""
 
 workflow helper {
   return run echo_arg("passed-arg")

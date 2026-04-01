@@ -13,9 +13,9 @@ e2e::section "jaiph test discovery and empty-directory failure"
 
 # Given
 e2e::file "ok_a.jh" <<'EOF'
-script a_impl {
-  echo "A"
-}
+script a_impl = ```
+echo "A"
+```
 workflow default {
   run a_impl()
 }
@@ -31,9 +31,9 @@ test "A passes" {
 EOF
 
 e2e::file "ok_b.jh" <<'EOF'
-script b_impl {
-  echo "B"
-}
+script b_impl = ```
+echo "B"
+```
 workflow default {
   run b_impl()
 }
@@ -81,9 +81,9 @@ e2e::section "jaiph run requires workflow default"
 
 # Given
 e2e::file "no_default.jh" <<'EOF'
-script no_default_impl {
-  echo "no default here"
-}
+script no_default_impl = ```
+echo "no default here"
+```
 workflow docs {
   run no_default_impl()
 }
@@ -149,9 +149,9 @@ e2e::section "shell redirection around run/ensure is rejected"
 
 # Given — run with stdout redirect
 e2e::file "run_redirect.jh" <<'EOF'
-script greet {
-  echo "hello"
-}
+script greet = ```
+echo "hello"
+```
 workflow default {
   run greet() > out.txt
 }
@@ -174,9 +174,9 @@ e2e::assert_contains "${redirect_out}" "script block" "run redirect error sugges
 
 # Given — run with pipe
 e2e::file "run_pipe.jh" <<'EOF'
-script greet {
-  echo "hello"
-}
+script greet = ```
+echo "hello"
+```
 workflow default {
   run greet() | tr a-z A-Z
 }
@@ -198,9 +198,9 @@ e2e::assert_contains "${pipe_out}" "shell redirection" "run pipe error mentions 
 
 # Given — run with background &
 e2e::file "run_bg.jh" <<'EOF'
-script greet {
-  echo "hello"
-}
+script greet = ```
+echo "hello"
+```
 workflow default {
   run greet() &
 }

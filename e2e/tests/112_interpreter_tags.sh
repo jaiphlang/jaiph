@@ -21,13 +21,11 @@ else
   e2e::prepare_test_env "interpreter_tag_node"
 
   e2e::file "tag_node.jh" <<'EOF'
-script:node greet {
-  process.stdout.write("hello-from-node\n");
-}
+script greet = ```node
+process.stdout.write("hello-from-node\n");
+```
 
-script plain_bash {
-  echo bash-ok
-}
+script plain_bash = "echo bash-ok"
 
 workflow default {
   run greet()
@@ -63,11 +61,11 @@ else
   e2e::prepare_test_env "interpreter_tag_python3"
 
   e2e::file "tag_python.jh" <<'EOF'
-script:python3 py_greet {
-  import sys
-  sys.stdout.write("hello-from-python\n")
-  sys.exit(0)
-}
+script py_greet = ```python3
+import sys
+sys.stdout.write("hello-from-python\n")
+sys.exit(0)
+```
 
 workflow default {
   run py_greet()
@@ -110,8 +108,7 @@ if run_out="$(e2e::run "bad_tag.jh" 2>&1)"; then
   e2e::fail "expected compile error for unknown tag, but run succeeded"
 else
   # nondeterministic: error includes absolute file path prefix which varies
-  e2e::assert_contains "${run_out}" 'unknown interpreter tag "script:golang"' "unknown tag produces actionable error"
-  e2e::assert_contains "${run_out}" "supported tags:" "error lists valid tags"
+  e2e::assert_contains "${run_out}" 'script:lang syntax is no longer supported' "unknown tag produces actionable error"
 fi
 
 # ---------- script:node with manual shebang: compile error ----------
@@ -121,10 +118,10 @@ e2e::section "Interpreter tag: duplicate shebang rejected"
 e2e::prepare_test_env "interpreter_tag_dup_shebang"
 
 e2e::file "dup_shebang.jh" <<'EOF'
-script:node my_script {
-  #!/usr/bin/env node
-  console.log("hi");
-}
+script my_script = ```node
+#!/usr/bin/env node
+console.log("hi");
+```
 
 workflow default {
   run my_script()
@@ -135,5 +132,5 @@ if run_out="$(e2e::run "dup_shebang.jh" 2>&1)"; then
   e2e::fail "expected compile error for duplicate shebang, but run succeeded"
 else
   # nondeterministic: error includes absolute file path prefix which varies
-  e2e::assert_contains "${run_out}" 'script:node already sets the shebang' "duplicate shebang produces actionable error"
+  e2e::assert_contains "${run_out}" 'fence tag "node" already sets the shebang' "duplicate shebang produces actionable error"
 fi

@@ -4,13 +4,9 @@ rule always_ok {
   run always_ok_impl()
 }
 
-script always_ok_impl {
-  echo ok
-}
+script always_ok_impl = "echo ok"
 
-script noop {
-  :
-}
+script noop = ":"
 
 workflow wf_fail {
   fail "expected failure"

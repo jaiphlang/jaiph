@@ -55,27 +55,25 @@ test("rule with parentheses but no brace is rejected", () => {
 
 // === Rejected: incomplete script definitions ===
 
-test("script without braces is rejected with fix hint", () => {
+test("script without = is rejected with fix hint", () => {
   assert.throws(
     () => parsejaiph("script greet", "test.jh"),
     (err: any) =>
       err.message.includes("E_PARSE") &&
-      err.message.includes("script declarations require braces") &&
-      err.message.includes("script greet { … }"),
+      err.message.includes("script definitions require = after the name"),
   );
 });
 
 test("script with parentheses is rejected", () => {
   assert.throws(
-    () => parsejaiph("script greet() {", "test.jh"),
+    () => parsejaiph("script greet()", "test.jh"),
     (err: any) =>
       err.message.includes("E_PARSE") &&
-      err.message.includes("definitions must not use parentheses") &&
-      err.message.includes("script greet { … }"),
+      err.message.includes("definitions must not use parentheses"),
   );
 });
 
-test("script with parens but no braces is rejected", () => {
+test("script with parens but no body is rejected", () => {
   assert.throws(
     () => parsejaiph("script greet()", "test.jh"),
     (err: any) =>
@@ -135,8 +133,8 @@ test("rule with empty braced body is accepted", () => {
   assert.equal(mod.rules[0].steps.length, 0);
 });
 
-test("script with empty braced body is accepted", () => {
-  const mod = parsejaiph("script noop {\n}", "test.jh");
+test("script with empty string body is accepted", () => {
+  const mod = parsejaiph('script noop = ""', "test.jh");
   assert.equal(mod.scripts.length, 1);
   assert.equal(mod.scripts[0].name, "noop");
 });

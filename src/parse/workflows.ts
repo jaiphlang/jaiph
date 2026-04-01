@@ -11,7 +11,7 @@ import { parseConstRhs } from "./const-rhs";
 import { parseConfigBlock } from "./metadata";
 import { parsePromptStep } from "./prompt";
 import { parseSendRhs } from "./send-rhs";
-import { parseInlineScript } from "./inline-script";
+import { parseInlineScriptBody } from "./inline-script";
 import { parseEnsureStep } from "./steps";
 import { tryParseBraceIfChain } from "./workflow-brace";
 import { dottedReturnToQuotedString, isBareDottedIdentifierReturn } from "./workflow-return-dotted";
@@ -223,16 +223,20 @@ export function parseWorkflowBlock(
       if (rest.startsWith("run ")) {
         const runBody = rest.slice("run ".length).trim();
         if (runBody.startsWith("script(") || runBody.startsWith("script (")) {
-          const scriptRest = runBody.slice("script".length).trimStart();
-          const parsed = parseInlineScript(filePath, scriptRest, innerNo, innerRaw.indexOf("script") + 1);
+          const call = parseCallRef(runBody);
+          if (!call) {
+            fail(filePath, 'inline script requires parentheses: run script() "body"', innerNo);
+          }
+          const result = parseInlineScriptBody(filePath, lines, idx, call.rest, innerNo, innerRaw.indexOf("script") + 1);
           workflow.steps.push({
             type: "run_inline_script",
-            body: parsed.body,
-            ...(parsed.shebang ? { shebang: parsed.shebang } : {}),
-            args: parsed.args,
+            body: result.body,
+            ...(result.lang ? { lang: result.lang } : {}),
+            args: call.args,
             captureName,
             loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
           });
+          idx = result.nextLineIdx - 1;
           continue;
         }
         const call = parseCallRef(runBody);
@@ -297,15 +301,19 @@ export function parseWorkflowBlock(
     if (inner.startsWith("run ")) {
       const runBody = inner.slice("run ".length).trim();
       if (runBody.startsWith("script(") || runBody.startsWith("script (")) {
-        const scriptRest = runBody.slice("script".length).trimStart();
-        const parsed = parseInlineScript(filePath, scriptRest, innerNo, innerRaw.indexOf("script") + 1);
+        const call = parseCallRef(runBody);
+        if (!call) {
+          fail(filePath, 'inline script requires parentheses: run script() "body"', innerNo);
+        }
+        const result = parseInlineScriptBody(filePath, lines, idx, call.rest, innerNo, innerRaw.indexOf("script") + 1);
         workflow.steps.push({
           type: "run_inline_script",
-          body: parsed.body,
-          ...(parsed.shebang ? { shebang: parsed.shebang } : {}),
-          args: parsed.args,
+          body: result.body,
+          ...(result.lang ? { lang: result.lang } : {}),
+          args: call.args,
           loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
         });
+        idx = result.nextLineIdx - 1;
         continue;
       }
       const call = parseCallRef(runBody);

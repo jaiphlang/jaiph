@@ -2,10 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { parsejaiph } from "../parser";
 
-test("parser: run script inline step in workflow", () => {
+test("parser: run script() with quoted body", () => {
   const src = `
 workflow default {
-  run script("echo hello")
+  run script() "echo hello"
 }
 `;
   const ast = parsejaiph(src, "test.jh");
@@ -14,16 +14,16 @@ workflow default {
   assert.equal(step.type, "run_inline_script");
   if (step.type === "run_inline_script") {
     assert.equal(step.body, "echo hello");
-    assert.equal(step.shebang, undefined);
+    assert.equal(step.lang, undefined);
     assert.equal(step.args, undefined);
     assert.equal(step.captureName, undefined);
   }
 });
 
-test("parser: run script inline with args", () => {
+test("parser: run script() with args and body", () => {
   const src = `
 workflow default {
-  run script("echo $1", "arg1", "arg2")
+  run script("arg1", "arg2") "echo $1"
 }
 `;
   const ast = parsejaiph(src, "test.jh");
@@ -35,10 +35,10 @@ workflow default {
   }
 });
 
-test("parser: capture form — varName = run script(...)", () => {
+test("parser: capture form — x = run script() body", () => {
   const src = `
 workflow default {
-  x = run script("echo hello")
+  x = run script() "echo hello"
 }
 `;
   const ast = parsejaiph(src, "test.jh");
@@ -50,10 +50,10 @@ workflow default {
   }
 });
 
-test("parser: const capture form — const x = run script(...)", () => {
+test("parser: const capture form — const x = run script() body", () => {
   const src = `
 workflow default {
-  const x = run script("echo hello")
+  const x = run script() "echo hello"
 }
 `;
   const ast = parsejaiph(src, "test.jh");
@@ -67,35 +67,37 @@ workflow default {
   }
 });
 
-test("parser: inline script with shebang", () => {
-  const src = `
-workflow default {
-  run script("#!/usr/bin/env python3\\nprint('hello')")
-}
-`;
+test("parser: run script() with fenced block and lang tag", () => {
+  const src = [
+    "workflow default {",
+    "  run script() ```python3",
+    "print('hello')",
+    "```",
+    "}",
+  ].join("\n");
   const ast = parsejaiph(src, "test.jh");
   const step = ast.workflows[0].steps[0];
   assert.equal(step.type, "run_inline_script");
   if (step.type === "run_inline_script") {
-    assert.equal(step.shebang, "#!/usr/bin/env python3");
+    assert.equal(step.lang, "python3");
     assert.equal(step.body, "print('hello')");
   }
 });
 
-test("parser: run async script(...) is rejected", () => {
+test("parser: run async script() is rejected", () => {
   const src = `
 workflow default {
-  run async script("echo hello")
+  run async script() "echo hello"
 }
 `;
   assert.throws(() => parsejaiph(src, "test.jh"), /not supported with inline scripts/);
 });
 
-test("parser: inline script body must be double-quoted", () => {
+test("parser: run script() requires body after parens", () => {
   const src = `
 workflow default {
-  run script('echo hello')
+  run script()
 }
 `;
-  assert.throws(() => parsejaiph(src, "test.jh"), /double-quoted string/);
+  assert.throws(() => parsejaiph(src, "test.jh"), /inline script body is required/);
 });

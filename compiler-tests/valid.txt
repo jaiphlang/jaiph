@@ -12,9 +12,7 @@ rule check {
   run checker()
 }
 
-script checker {
-  echo ok
-}
+script checker = "echo ok"
 
 workflow default {
   ensure check()
@@ -36,9 +34,7 @@ rule ok {
   run ok_impl()
 }
 
-script ok_impl {
-  true
-}
+script ok_impl = "true"
 
 workflow default {
   if ensure ok() {
@@ -80,16 +76,12 @@ rule check {
   run check_impl()
 }
 
-script check_impl {
-  true
-}
+script check_impl = "true"
 
 === workflow with async run
 # @expect ok
 --- input.jh
-script noop {
-  :
-}
+script noop = ":"
 
 workflow default {
   run async noop()
@@ -110,7 +102,7 @@ workflow helper {
 # @expect ok
 --- input.jh
 workflow default {
-  run script("echo hello")
+  run script() "echo hello"
 }
 
 === rule with empty braced body
@@ -122,8 +114,7 @@ rule check {
 === script with empty braced body
 # @expect ok
 --- input.jh
-script noop {
-}
+script noop = ""
 
 === workflow with empty braced body
 # @expect ok
@@ -183,38 +174,36 @@ workflow b {
 === script:node interpreter tag
 # @expect ok
 --- input.jh
-script:node transform {
-  console.log('hi');
-}
+script transform = ```node
+console.log('hi');
+```
 
 === script:python3 interpreter tag
 # @expect ok
 --- input.jh
-script:python3 analyze {
-  print('hello')
-}
+script analyze = ```python3
+print('hello')
+```
 
 === script:bash interpreter tag
 # @expect ok
 --- input.jh
-script:bash setup {
-  echo hello
-}
+script setup = ```bash
+echo hello
+```
 
 === plain script without interpreter tag
 # @expect ok
 --- input.jh
-script setup {
-  echo hello
-}
+script setup = "echo hello"
 
 === plain script with manual shebang
 # @expect ok
 --- input.jh
-script analyze {
-  #!/usr/bin/env python3
-  print('hi')
-}
+script analyze = ```
+#!/usr/bin/env python3
+print('hi')
+```
 
 === return run in workflow
 # @expect ok
@@ -271,9 +260,7 @@ workflow default {
 === return run in rule
 # @expect ok
 --- input.jh
-script helper {
-  echo "ok"
-}
+script helper = "echo \"ok\""
 rule my_rule {
   return run helper()
 }
@@ -305,9 +292,7 @@ workflow default {
 === return run in brace-if then branch
 # @expect ok
 --- input.jh
-script helper {
-  echo "ok"
-}
+script helper = "echo \"ok\""
 rule check {
   return "yes"
 }
@@ -363,36 +348,36 @@ workflow default {
 # @expect ok
 --- input.jh
 workflow default {
-  run script("echo $1", "arg1", "arg2")
+  run script("arg1", "arg2") "echo $1"
 }
 
 === inline script with capture form
 # @expect ok
 --- input.jh
 workflow default {
-  x = run script("echo hello")
+  x = run script() "echo hello"
 }
 
 === inline script const capture form
 # @expect ok
 --- input.jh
 workflow default {
-  const x = run script("echo hello")
+  const x = run script() "echo hello"
 }
 
 === inline script with shebang
 # @expect ok
 --- input.jh
 workflow default {
-  run script("#!/usr/bin/env python3\nprint('hello')")
+  run script() ```python3
+print('hello')
+```
 }
 
 === assignment capture parses for ensure and const run
 # @expect ok
 --- input.jh
-script say_hello {
-  echo hello
-}
+script say_hello = "echo hello"
 
 rule tests_pass {
   return "ok"
@@ -593,9 +578,7 @@ workflow default {
 === const string expr and const run capture
 # @expect ok
 --- input.jh
-script noop {
-  :
-}
+script noop = ":"
 workflow default {
   const msg = "hi"
   const out = run noop()
@@ -604,9 +587,7 @@ workflow default {
 === const allows run-wrapped script call with args
 # @expect ok
 --- input.jh
-script some_script {
-  echo "$1"
-}
+script some_script = "echo \"$1\""
 workflow default {
   const x = run some_script("${arg}")
 }
@@ -634,9 +615,7 @@ rule ok {
 rule bad {
   fail "no"
 }
-script check {
-  true
-}
+script check = "true"
 workflow default {
   if not ensure bad() {
     log "neg"
@@ -739,9 +718,7 @@ workflow default {
 === script extracts bodies for simple module
 # @expect ok
 --- input.jh
-script f_ok {
-  echo ok
-}
+script f_ok = "echo ok"
 
 rule ok {
   run f_ok()
@@ -755,13 +732,9 @@ workflow default {
 === script bodies are opaque bash
 # @expect ok
 --- input.jh
-script helper {
-  echo ok
-}
+script helper = "echo ok"
 
-script caller {
-  helper
-}
+script caller = "helper"
 
 workflow default {
   run caller()
@@ -770,9 +743,7 @@ workflow default {
 === script calling itself is allowed
 # @expect ok
 --- input.jh
-script recurse {
-  recurse
-}
+script recurse = "recurse"
 
 workflow default {
   run recurse()
@@ -783,9 +754,7 @@ workflow default {
 --- input.jh
 const greeting = "hello world"
 
-script helper {
-  echo $greeting
-}
+script helper = "echo $greeting"
 
 workflow default {
   run helper()
@@ -794,10 +763,10 @@ workflow default {
 === multiline double-quoted strings in scripts
 # @expect ok
 --- input.jh
-script multiline_str {
-  local x="a
+script multiline_str = ```
+local x="a
 b"
-}
+```
 
 workflow default {
   run multiline_str()
@@ -809,9 +778,7 @@ workflow default {
 rule gate {
   run gate_impl()
 }
-script gate_impl {
-  false
-}
+script gate_impl = "false"
 
 workflow fix_build {
   prompt "fix build"
@@ -846,9 +813,7 @@ workflow default {
 rule ci_passes {
   run ci_passes_impl()
 }
-script ci_passes_impl {
-  true
-}
+script ci_passes_impl = "true"
 
 workflow fix_it {
   prompt "fix"
@@ -884,9 +849,7 @@ workflow default {
 === valid $1 in script body shell context
 # @expect ok
 --- input.jh
-script greet {
-  echo "Hello $1"
-}
+script greet = "echo \"Hello $1\""
 workflow default {
   run greet("world")
 }
@@ -894,9 +857,7 @@ workflow default {
 === valid inline run capture in log
 # @expect ok
 --- input.jh
-script greet {
-  echo "hello"
-}
+script greet = "echo \"hello\""
 workflow default {
   log "got: ${run greet()}"
 }
@@ -914,9 +875,7 @@ workflow default {
 === valid inline run capture with args
 # @expect ok
 --- input.jh
-script greet {
-  echo "hello $1"
-}
+script greet = "echo \"hello $1\""
 workflow default {
   log "got: ${run greet(world)}"
 }
@@ -924,9 +883,7 @@ workflow default {
 === valid inline run capture in return
 # @expect ok
 --- input.jh
-script greet {
-  echo "hello"
-}
+script greet = "echo \"hello\""
 workflow helper {
   return "${run greet()}"
 }
@@ -937,9 +894,7 @@ workflow default {
 === valid inline run capture in rule log
 # @expect ok
 --- input.jh
-script greet {
-  echo "hello"
-}
+script greet = "echo \"hello\""
 rule check {
   log "got: ${run greet()}"
 }
@@ -958,9 +913,7 @@ workflow default {
 === buildScripts extracts script for run with capture
 # @expect ok
 --- input.jh
-script f {
-  printf '%s' 'ok'
-}
+script f = "printf '%s' 'ok'"
 workflow default {
   x = run f()
   return "${x}"
@@ -969,9 +922,7 @@ workflow default {
 === bare identifier arg known const passes
 # @expect ok
 --- input.jh
-script greet {
-  echo "hello $1"
-}
+script greet = "echo \"hello $1\""
 workflow default {
   const name = "world"
   run greet(name)
@@ -980,12 +931,8 @@ workflow default {
 === bare identifier arg capture variable passes
 # @expect ok
 --- input.jh
-script get_name {
-  echo "world"
-}
-script greet {
-  echo "hello $1"
-}
+script get_name = "echo \"world\""
+script greet = "echo \"hello $1\""
 workflow default {
   result = run get_name()
   run greet(result)
@@ -994,9 +941,7 @@ workflow default {
 === bare identifier arg argN always valid
 # @expect ok
 --- input.jh
-script greet {
-  echo "hello $1"
-}
+script greet = "echo \"hello $1\""
 workflow default {
   run greet(arg1)
 }
@@ -1005,9 +950,7 @@ workflow default {
 # @expect ok
 --- input.jh
 const REPO = "my-project"
-script greet {
-  echo "hello $1"
-}
+script greet = "echo \"hello $1\""
 workflow default {
   run greet(REPO)
 }
@@ -1042,12 +985,8 @@ workflow default {
 === rule with multiple steps
 # @expect ok
 --- input.jh
-script check_a {
-  true
-}
-script check_b {
-  true
-}
+script check_a = "true"
+script check_b = "true"
 rule validate {
   run check_a()
   run check_b()
@@ -1078,25 +1017,17 @@ channel findings
 channel summary
 channel final_summary
 
-script emit_findings {
-  echo '## findings'
-}
+script emit_findings = "echo '## findings'"
 
-script summarize_findings {
-  echo "Summary of findings"
-}
+script summarize_findings = "echo \"Summary of findings\""
 
-script review_summary {
-  echo "[reviewed] $1"
-}
+script review_summary = "echo \"[reviewed] $1\""
 
 workflow researcher {
   findings <- run emit_findings()
 }
 
-script write_findings_file {
-  echo "$1" > findings_file.md
-}
+script write_findings_file = "echo \"$1\" > findings_file.md"
 
 workflow analyst {
   run write_findings_file("${arg1}")
