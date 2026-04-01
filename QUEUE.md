@@ -12,47 +12,6 @@ Process rules:
 
 ---
 
-## Bare identifiers as `run` / `ensure` arguments <!-- dev-ready -->
-
-**Goal**  
-Allow capture variables and other in-scope names as **bare identifiers** in `run` / `ensure` argument lists, equivalent to passing their string values without wrapping in a quoted orchestration string.
-
-**Context**
-
-- Today, passing a value from a prior step often requires a quoted interpolation:
-  ```
-  run docs.update_from_task("${task}")
-  run queue.remove_completed_task("${task_header}")
-  run git.commit("${task}")
-  ```
-- Authors want the same semantics with less noise:
-  ```
-  run docs.update_from_task(task)
-  run queue.remove_completed_task(task_header)
-  run git.commit(task)
-  ```
-- This is distinct from full expression syntax; scope is **identifier → string coercion** for managed-call args only (exact resolution rules TBD: captures vs workspace symbols).
-
-**Key files**
-
-- `src/parse/*` — `run` / `ensure` argument parsing (extend atom forms beyond string literals)
-- `src/transpile/validate.ts` — ref/identifier resolution for new forms
-- `src/runtime/kernel/node-workflow-runtime.ts` — if argument normalization happens at runtime
-- `docs/grammar.md` — document allowed bare identifiers and equivalence to `"${name}"`
-
-**Scope**
-
-1. Parse bare identifiers in `run` / `ensure` argument positions where strings are currently allowed.
-2. Define and validate which identifiers are permitted (e.g. `const` / step captures in scope; reject unknown names with clear errors).
-3. Implement behavior equivalent to the corresponding `"${identifier}"` orchestration string for the same binding.
-4. Add parser, validator, and e2e coverage; keep existing quoted forms working unchanged.
-
-**Acceptance criteria**
-
-- Forms like `run git.commit(task)` work when `task` is an in-scope capture with the expected string value.
-- Invalid or ambiguous identifiers fail at compile/validation with actionable errors.
-- Documented equivalence: bare `name` vs `"${name}"` where both are supported.
-
 ## Add Codex backend support <!-- dev-ready -->
 
 **Goal**  

@@ -130,3 +130,121 @@ test("E_VALIDATE: send RHS cannot invoke Jaiph workflow via shell", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("bare identifier arg: known const passes validation", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-bare-ok-"));
+  const out = join(root, "out");
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        "script greet {",
+        '  echo "hello $1"',
+        "}",
+        "workflow default {",
+        '  const name = "world"',
+        "  run greet(name)",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    buildScripts(join(root, "m.jh"), out);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("bare identifier arg: unknown name fails E_VALIDATE", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-bare-err-"));
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        "script greet {",
+        '  echo "hello $1"',
+        "}",
+        "workflow default {",
+        "  run greet(unknown_var)",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      /unknown identifier "unknown_var" used as bare argument/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("bare identifier arg: capture variable passes validation", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-bare-cap-"));
+  const out = join(root, "out");
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        "script get_name {",
+        '  echo "world"',
+        "}",
+        "script greet {",
+        '  echo "hello $1"',
+        "}",
+        "workflow default {",
+        "  result = run get_name()",
+        "  run greet(result)",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    buildScripts(join(root, "m.jh"), out);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("bare identifier arg: argN always valid", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-bare-argn-"));
+  const out = join(root, "out");
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        "script greet {",
+        '  echo "hello $1"',
+        "}",
+        "workflow default {",
+        "  run greet(arg1)",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    buildScripts(join(root, "m.jh"), out);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("bare identifier arg: top-level const passes validation", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-bare-env-"));
+  const out = join(root, "out");
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        'const REPO = "my-project"',
+        "script greet {",
+        '  echo "hello $1"',
+        "}",
+        "workflow default {",
+        "  run greet(REPO)",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    buildScripts(join(root, "m.jh"), out);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

@@ -42,7 +42,11 @@ export function parseSendRhs(
     if (call) {
       rejectTrailingContent(filePath, lineNo, "run", call.rest);
       const ref: WorkflowRefDef = { value: call.ref, loc: { line: lineNo, col } };
-      return { kind: "run", ref, ...(call.args ? { args: call.args } : {}) };
+      return {
+        kind: "run", ref,
+        ...(call.args ? { args: call.args } : {}),
+        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
+      };
     }
   }
   if (/^\$[A-Za-z_][A-Za-z0-9_]*$/.test(t)) {

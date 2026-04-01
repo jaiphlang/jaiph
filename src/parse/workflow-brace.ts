@@ -14,8 +14,8 @@ import { parseSendRhs } from "./send-rhs";
 import { parseMatchExpr, extractPostfixMatchSubject } from "./match";
 
 type BraceIfHead =
-  | { kind: "ensure"; negated: boolean; ref: string; args?: string; rest: string }
-  | { kind: "run"; negated: boolean; ref: string; args?: string; rest: string };
+  | { kind: "ensure"; negated: boolean; ref: string; args?: string; bareIdentifierArgs?: string[]; rest: string }
+  | { kind: "run"; negated: boolean; ref: string; args?: string; bareIdentifierArgs?: string[]; rest: string };
 
 function parseIfBraceHead(inner: string): BraceIfHead | null {
   let s = inner.trim();
@@ -34,7 +34,7 @@ function parseIfBraceHead(inner: string): BraceIfHead | null {
     const before = s.slice(0, lb).trim();
     const call = parseCallRef(before);
     if (!call) return null;
-    return { kind: "ensure", negated, ref: call.ref, args: call.args, rest: call.rest };
+    return { kind: "ensure", negated, ref: call.ref, args: call.args, bareIdentifierArgs: call.bareIdentifierArgs, rest: call.rest };
   }
   if (s.startsWith("run ")) {
     s = s.slice("run ".length).trimStart();
@@ -44,7 +44,7 @@ function parseIfBraceHead(inner: string): BraceIfHead | null {
     const before = s.slice(0, lb).trim();
     const call = parseCallRef(before);
     if (!call) return null;
-    return { kind: "run", negated, ref: call.ref, args: call.args, rest: call.rest };
+    return { kind: "run", negated, ref: call.ref, args: call.args, bareIdentifierArgs: call.bareIdentifierArgs, rest: call.rest };
   }
   return null;
 }
@@ -66,7 +66,7 @@ function parseElseIfBraceHead(inner: string): BraceIfHead | null {
     const before = s.slice(0, lb).trim();
     const call = parseCallRef(before);
     if (!call) return null;
-    return { kind: "ensure", negated, ref: call.ref, args: call.args, rest: call.rest };
+    return { kind: "ensure", negated, ref: call.ref, args: call.args, bareIdentifierArgs: call.bareIdentifierArgs, rest: call.rest };
   }
   if (s.startsWith("run ")) {
     s = s.slice("run ".length).trimStart();
@@ -76,7 +76,7 @@ function parseElseIfBraceHead(inner: string): BraceIfHead | null {
     const before = s.slice(0, lb).trim();
     const call = parseCallRef(before);
     if (!call) return null;
-    return { kind: "run", negated, ref: call.ref, args: call.args, rest: call.rest };
+    return { kind: "run", negated, ref: call.ref, args: call.args, bareIdentifierArgs: call.bareIdentifierArgs, rest: call.rest };
   }
   return null;
 }
@@ -100,12 +100,14 @@ function headToCondition(filePath: string, h: BraceIfHead, lineNo: number, inner
       kind: "ensure",
       ref: { value: h.ref, loc: { line: lineNo, col: innerRaw.indexOf("ensure") + 1 } },
       args: h.args,
+      ...(h.bareIdentifierArgs ? { bareIdentifierArgs: h.bareIdentifierArgs } : {}),
     };
   }
   return {
     kind: "run",
     ref: { value: h.ref, loc: { line: lineNo, col: innerRaw.indexOf("run") + 1 } },
     args: h.args,
+    ...(h.bareIdentifierArgs ? { bareIdentifierArgs: h.bareIdentifierArgs } : {}),
   };
 }
 
@@ -301,6 +303,7 @@ export function parseBlockStatement(
           loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
         },
         args: call.args,
+        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
         async: true,
       },
       nextIdx: idx + 1,
@@ -322,6 +325,7 @@ export function parseBlockStatement(
           loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
         },
         args: call.args,
+        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
       },
       nextIdx: idx + 1,
     };
@@ -384,6 +388,7 @@ export function parseBlockStatement(
             loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
           },
           args: call.args,
+          ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
           captureName,
         },
         nextIdx: idx + 1,
@@ -466,7 +471,10 @@ export function parseBlockStatement(
             type: "return",
             value: `run ${call.ref}(${call.args ?? ""})`,
             loc: retLoc,
-            managed: { kind: "run", ref: { value: call.ref, loc: retLoc }, args: call.args },
+            managed: {
+              kind: "run", ref: { value: call.ref, loc: retLoc }, args: call.args,
+              ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
+            },
           },
           nextIdx: idx + 1,
         };
@@ -481,7 +489,10 @@ export function parseBlockStatement(
             type: "return",
             value: `ensure ${call.ref}(${call.args ?? ""})`,
             loc: retLoc,
-            managed: { kind: "ensure", ref: { value: call.ref, loc: retLoc }, args: call.args },
+            managed: {
+              kind: "ensure", ref: { value: call.ref, loc: retLoc }, args: call.args,
+              ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
+            },
           },
           nextIdx: idx + 1,
         };

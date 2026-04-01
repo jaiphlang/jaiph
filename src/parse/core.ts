@@ -53,12 +53,27 @@ export function braceDepthDelta(line: string): number {
   return delta;
 }
 
+/** Jaiph keywords that cannot be used as bare identifier arguments. */
+const JAIPH_KEYWORDS = new Set([
+  "run", "ensure", "prompt", "return", "fail", "wait", "log", "logerr",
+  "if", "else", "not", "const", "local", "match", "import", "export",
+  "workflow", "rule", "script", "channel", "config", "recover", "async",
+  "returns", "send", "true", "false",
+]);
+
+/** Check if a token is a bare identifier (valid identifier, not a keyword). */
+export function isBareIdentifier(token: string): boolean {
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(token) && !JAIPH_KEYWORDS.has(token);
+}
+
 /**
  * Convert comma-separated call arguments to space-separated form for runtime.
  * Respects quoted strings so commas inside quotes are preserved.
+ * Bare identifiers (valid names, not keywords) are converted to ${name} form.
  */
-function commaArgsToSpaced(content: string): string {
+function commaArgsToSpaced(content: string): { spaced: string; bareIdentifiers: string[] } {
   const parts: string[] = [];
+  const bareIdentifiers: string[] = [];
   let current = "";
   let inQuote: string | null = null;
   for (let j = 0; j < content.length; j++) {
@@ -67,23 +82,39 @@ function commaArgsToSpaced(content: string): string {
       current += ch;
       if (ch === inQuote && content[j - 1] !== "\\") inQuote = null;
     } else if (ch === ",") {
-      parts.push(current.trim());
+      const trimmed = current.trim();
+      if (trimmed) {
+        if (isBareIdentifier(trimmed)) {
+          bareIdentifiers.push(trimmed);
+          parts.push(`\${${trimmed}}`);
+        } else {
+          parts.push(trimmed);
+        }
+      }
       current = "";
     } else {
       if (ch === '"' || ch === "'") inQuote = ch;
       current += ch;
     }
   }
-  if (current.trim()) parts.push(current.trim());
-  return parts.filter((p) => p).join(" ");
+  const trimmed = current.trim();
+  if (trimmed) {
+    if (isBareIdentifier(trimmed)) {
+      bareIdentifiers.push(trimmed);
+      parts.push(`\${${trimmed}}`);
+    } else {
+      parts.push(trimmed);
+    }
+  }
+  return { spaced: parts.filter((p) => p).join(" "), bareIdentifiers };
 }
 
 /**
  * Parse a call expression `ref(args)` or `ref()` from a string.
- * Returns the ref, optional args (space-separated), and the rest of the string after `)`.
+ * Returns the ref, optional args (space-separated), bare identifier names, and the rest of the string after `)`.
  * Returns null if the string doesn't start with a valid call expression.
  */
-export function parseCallRef(s: string): { ref: string; args?: string; rest: string } | null {
+export function parseCallRef(s: string): { ref: string; args?: string; bareIdentifierArgs?: string[]; rest: string } | null {
   const t = s.trimStart();
   const refMatch = t.match(/^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\(/);
   if (!refMatch || !isRef(refMatch[1])) return null;
@@ -107,8 +138,13 @@ export function parseCallRef(s: string): { ref: string; args?: string; rest: str
   const argsContent = t.slice(parenStart, i - 1).trim();
   const rest = t.slice(i);
   if (!argsContent) return { ref, rest };
-  const args = commaArgsToSpaced(argsContent);
-  return { ref, args: args || undefined, rest };
+  const { spaced, bareIdentifiers } = commaArgsToSpaced(argsContent);
+  return {
+    ref,
+    args: spaced || undefined,
+    ...(bareIdentifiers.length > 0 ? { bareIdentifierArgs: bareIdentifiers } : {}),
+    rest,
+  };
 }
 
 /**
