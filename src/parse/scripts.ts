@@ -1,6 +1,17 @@
 import type { ScriptDef } from "../types";
 import { braceDepthDelta, fail } from "./core";
-function finalizeScriptBody(scriptDef: ScriptDef): void {
+
+/** Built-in interpreter tags for `script:<tag>` sugar. Tag → shebang line. */
+export const INTERPRETER_TAGS: Record<string, string> = {
+  node: "#!/usr/bin/env node",
+  python3: "#!/usr/bin/env python3",
+  ruby: "#!/usr/bin/env ruby",
+  perl: "#!/usr/bin/env perl",
+  pwsh: "#!/usr/bin/env pwsh",
+  deno: "#!/usr/bin/env deno run",
+  bash: "#!/usr/bin/env bash",
+};
+function finalizeScriptBody(scriptDef: ScriptDef, filePath: string): void {
   while (scriptDef.commands.length > 0 && scriptDef.commands[0].trim() === "") {
     scriptDef.commands.shift();
   }
@@ -8,6 +19,13 @@ function finalizeScriptBody(scriptDef: ScriptDef): void {
     const first = scriptDef.commands[0];
     const firstLine = first.split("\n")[0].trim();
     if (firstLine.startsWith("#!")) {
+      if (scriptDef.interpreterTag) {
+        fail(
+          filePath,
+          `script:${scriptDef.interpreterTag} already sets the shebang — remove the manual "#!" line`,
+          scriptDef.loc.line,
+        );
+      }
       scriptDef.shebang = firstLine;
       const nl = first.indexOf("\n");
       const rest = nl === -1 ? "" : first.slice(nl + 1);
@@ -16,6 +34,10 @@ function finalizeScriptBody(scriptDef: ScriptDef): void {
         scriptDef.commands.unshift(rest.trimEnd());
       }
     }
+  }
+  // Apply interpreter tag shebang
+  if (scriptDef.interpreterTag) {
+    scriptDef.shebang = INTERPRETER_TAGS[scriptDef.interpreterTag];
   }
 }
 
@@ -29,31 +51,64 @@ export function parseScriptBlock(
   const raw = lines[startIndex];
   const line = raw.trim();
 
-  const match = line.match(/^script\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{$/);
+  // Match `script name {` or `script:tag name {`
+  const taggedMatch = line.match(/^script:([a-zA-Z0-9_]+)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{$/);
+  const plainMatch = line.match(/^script\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{$/);
+  const match = taggedMatch ?? plainMatch;
   if (!match) {
-    const parensMatch = line.match(/^script\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
+    // Check for tagged form with bad syntax
+    const taggedParens = line.match(/^script:([a-zA-Z0-9_]+)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
+    const parensMatch = taggedParens ?? line.match(/^script\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
     if (parensMatch) {
+      const name = taggedParens ? parensMatch[2] : parensMatch[1];
       fail(
         filePath,
-        `definitions must not use parentheses: script ${parensMatch[1]} { … }`,
+        `definitions must not use parentheses: script ${name} { … }`,
         lineNo,
       );
     }
-    const loose = line.match(/^script\s+([A-Za-z_][A-Za-z0-9_]*)/);
-    if (loose) {
+    // Check for unknown tag
+    const unknownTag = line.match(/^script:([a-zA-Z0-9_]+)\s/);
+    if (unknownTag && !(unknownTag[1] in INTERPRETER_TAGS)) {
+      const validTags = Object.keys(INTERPRETER_TAGS).join(", ");
       fail(
         filePath,
-        `script declarations require braces: script ${loose[1]} { … }`,
+        `unknown interpreter tag "script:${unknownTag[1]}" — supported tags: ${validTags}`,
+        lineNo,
+      );
+    }
+    const taggedLoose = line.match(/^script:([a-zA-Z0-9_]+)\s+([A-Za-z_][A-Za-z0-9_]*)/);
+    const loose = taggedLoose ?? line.match(/^script\s+([A-Za-z_][A-Za-z0-9_]*)/);
+    if (loose) {
+      const name = taggedLoose ? loose[2] : loose[1];
+      fail(
+        filePath,
+        `script declarations require braces: script ${name} { … }`,
         lineNo,
       );
     }
     fail(filePath, "invalid script declaration", lineNo);
   }
+
+  const interpreterTag = taggedMatch ? taggedMatch[1] : undefined;
+  const scriptName = taggedMatch ? taggedMatch[2] : match[1];
+
+  // Validate interpreter tag
+  if (interpreterTag && !(interpreterTag in INTERPRETER_TAGS)) {
+    const validTags = Object.keys(INTERPRETER_TAGS).join(", ");
+    fail(
+      filePath,
+      `unknown interpreter tag "script:${interpreterTag}" — supported tags: ${validTags}`,
+      lineNo,
+    );
+  }
+
   const scriptDef: ScriptDef = {
-    name: match[1],
+    name: scriptName,
     comments: pendingComments,
     commands: [],
     loc: { line: lineNo, col: 1 },
+    ...(interpreterTag ? { interpreterTag } : {}),
   };
 
   let i = startIndex + 1;
@@ -121,6 +176,6 @@ export function parseScriptBlock(
   if (i >= lines.length) {
     fail(filePath, `unterminated script block: ${scriptDef.name}`, lineNo);
   }
-  finalizeScriptBody(scriptDef);
+  finalizeScriptBody(scriptDef, filePath);
   return { scriptDef, nextIndex: i + 1 };
 }

@@ -95,7 +95,7 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
       continue;
     }
 
-    if (line.includes("script ")) {
+    if (line.includes("script ") || line.startsWith("script:")) {
       const { scriptDef, nextIndex } = parseScriptBlock(filePath, lines, i - 1, pendingTopLevelComments);
       pendingTopLevelComments = [];
       mod.scripts.push(scriptDef);

@@ -81,6 +81,8 @@ export interface ScriptDef {
   comments: string[];
   /** First body line `#!…` when present; omitted from `commands`. */
   shebang?: string;
+  /** Interpreter tag from `script:<tag>` syntax (e.g. "node", "python3"). Sets shebang automatically. */
+  interpreterTag?: string;
   commands: string[];
   loc: SourceLoc;
 }

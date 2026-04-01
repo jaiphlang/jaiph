@@ -12,38 +12,6 @@ Process rules:
 
 ---
 
-## `script:node` / `script:python3` / … — interpreter syntax sugar <!-- dev-ready -->
-
-**Goal**  
-Allow optional `script:<tag>` forms that expand to a fixed shebang (e.g. `#!/usr/bin/env node`) so authors do not hand-write shebang lines for common interpreters.
-
-**Context**
-
-- Custom shebang in script bodies remains supported for arbitrary tooling.
-- Sugar examples: `script:node name { ... }`, `script:python3 name { ... }` → appropriate `#!/usr/bin/env <runtime>` (exact mapping documented and tested).
-- Lays groundwork for future first-class tags such as PowerShell (`script:pwsh` or similar) and Windows-friendly workflows.
-
-**Key files:**
-- `src/parse/scripts.ts` — parse `script:<identifier>` prefix before script name
-- `src/transpile/build.ts` — emit generated script with implied shebang when tag present
-- `src/types.ts` — AST: store interpreter tag on script def if needed
-- `docs/` — document supported tags and escape hatch (raw shebang)
-
-**Scope**
-
-1. Define grammar: `script:<tag> <name> { ... }` alongside plain `script <name> { ... }`.
-2. Maintain a small built-in map tag → shebang line (node, python3, …); reject unknown tags with a clear error or document extension point.
-3. Tests: parse, emitted artifact shebang, execution smoke for at least node + one other.
-4. Update docs and any samples that currently use manual shebang for those interpreters.
-
-**Acceptance criteria**
-
-- `script:node` (and agreed set of tags) produces correct shebang in generated artifacts.
-- Plain `script` + manual shebang behavior unchanged.
-- Unknown `script:foo` fails with an actionable diagnostic (or is explicitly extensible per product choice).
-
----
-
 ## Pattern matching on strings (Rust-style `match`) <!-- dev-ready -->
 
 **Goal**  

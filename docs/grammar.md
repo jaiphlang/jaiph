@@ -339,19 +339,44 @@ Script bodies are opaque bash — the compiler does not parse them as Jaiph step
 
 ### Polyglot Scripts
 
-Add a shebang as the first line to use another interpreter:
+#### Interpreter tags (recommended)
+
+Use `script:<tag>` to select a common interpreter without writing a shebang line:
 
 ```jaiph
-script analyze {
-  #!/usr/bin/env python3
+script:python3 analyze {
   import sys
   print(f"Analyzing {sys.argv[1]}")
 }
 
-script transform {
-  #!/usr/bin/env node
+script:node transform {
   const data = process.argv[2];
   console.log(JSON.stringify({ result: data }));
+}
+```
+
+Supported tags and their shebangs:
+
+| Tag | Shebang |
+|---|---|
+| `node` | `#!/usr/bin/env node` |
+| `python3` | `#!/usr/bin/env python3` |
+| `ruby` | `#!/usr/bin/env ruby` |
+| `perl` | `#!/usr/bin/env perl` |
+| `pwsh` | `#!/usr/bin/env pwsh` |
+| `deno` | `#!/usr/bin/env deno run` |
+| `bash` | `#!/usr/bin/env bash` |
+
+Unknown tags are rejected at parse time with an actionable error listing valid tags. Combining a tag with a manual shebang in the body is also rejected — choose one or the other.
+
+#### Manual shebang (escape hatch)
+
+Add a shebang as the first line to use any interpreter not covered by a built-in tag:
+
+```jaiph
+script run_lua {
+  #!/usr/bin/env lua
+  print("hello from lua")
 }
 ```
 
@@ -459,8 +484,9 @@ rule_body_step  = comment_line | workflow_step ;
   (* validation rejects prompt, send, wait, ensure…recover, const…=prompt, run async,
      and run targets that are not scripts *)
 
-script_decl     = "script" IDENT "{" [ shebang_line ] { script_line } "}" ;
-shebang_line    = "#!" rest_of_line ;
+script_decl     = ( "script" | "script:" INTERPRETER_TAG ) IDENT "{" [ shebang_line ] { script_line } "}" ;
+INTERPRETER_TAG = "node" | "python3" | "ruby" | "perl" | "pwsh" | "deno" | "bash" ;
+shebang_line    = "#!" rest_of_line ;  (* rejected when INTERPRETER_TAG is present *)
 script_line     = comment_line | command_line ;
 
 workflow_decl   = [ "export" ] "workflow" IDENT "{" [ workflow_config ] { workflow_step } "}" ;
