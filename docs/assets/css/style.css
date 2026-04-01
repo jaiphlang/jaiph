@@ -541,7 +541,7 @@ code {
 }
 
 code:not(pre code) {
-    font-size: 0.9rem;
+    font-size: 0.8em;
     background: var(--inline-code-bg);
     border: 1px solid var(--inline-code-border);
     border-radius: 6px;

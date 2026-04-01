@@ -498,6 +498,12 @@ Jaiph: Running async.jh
                 <p><strong>Testing Jaiph workflows.</strong> Test workflows with executable <code>*.test.jh</code>
                     suites, mocks, and assertions to cover deterministic and agent-assisted paths. See <a
                         href="testing">Testing</a>.</p>
+                <p><strong>Formatting.</strong> <code>jaiph format</code> rewrites <code>.jh</code> files to a
+                    canonical style — consistent whitespace, indentation, and definition order (imports → config →
+                    channels → const → rules → scripts → workflows → tests). Use <code>--check</code> in CI to
+                    catch drift without modifying files, and <code>--indent &lt;n&gt;</code> to set spaces per level.
+                    Formatting is idempotent; comments and shebangs are preserved. See <a href="cli#jaiph-format">CLI
+                        reference</a>.</p>
 
                 <h3>Samples</h3>
                 <p>Jaiph source code is built mostly with real Jaiph workflows. The
