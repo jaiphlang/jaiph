@@ -11,7 +11,9 @@ import { resolveImportPath } from "./transpile/resolve";
 
 interface TxtarTestCase {
   name: string;
-  expect: { kind: "ok" } | { kind: "error"; code: string; substring: string };
+  expect:
+    | { kind: "ok" }
+    | { kind: "error"; code: string; substring: string; line?: number; col?: number };
   files: Map<string, string>;
 }
 
@@ -56,13 +58,19 @@ function parseTxtar(content: string): TxtarTestCase[] {
 function parseExpectDirective(
   testName: string,
   line: string,
-): { kind: "ok" } | { kind: "error"; code: string; substring: string } {
+):
+  | { kind: "ok" }
+  | { kind: "error"; code: string; substring: string; line?: number; col?: number } {
   const after = line.slice("# @expect ".length).trim();
   if (after === "ok") return { kind: "ok" };
 
-  const errorMatch = after.match(/^error\s+(\S+)\s+"(.+)"$/);
+  const errorMatch = after.match(/^error\s+(\S+)\s+"(.+)"(?:\s+@(\d+)(?::(\d+))?)?$/);
   if (errorMatch) {
-    return { kind: "error", code: errorMatch[1], substring: errorMatch[2] };
+    const result: { kind: "error"; code: string; substring: string; line?: number; col?: number } =
+      { kind: "error", code: errorMatch[1], substring: errorMatch[2] };
+    if (errorMatch[3] !== undefined) result.line = parseInt(errorMatch[3], 10);
+    if (errorMatch[4] !== undefined) result.col = parseInt(errorMatch[4], 10);
+    return result;
   }
   throw new Error(`Test case "${testName}": invalid @expect directive: ${line}`);
 }
@@ -143,6 +151,22 @@ function runTestCase(tc: TxtarTestCase): void {
         msg.includes(tc.expect.substring),
         `Error message should contain "${tc.expect.substring}", got: ${msg}`,
       );
+      if (tc.expect.line !== undefined) {
+        const locMatch = msg.match(/:(\d+):(\d+)\s/);
+        assert.ok(locMatch, `Error message should contain :line:col prefix, got: ${msg}`);
+        assert.equal(
+          parseInt(locMatch![1], 10),
+          tc.expect.line,
+          `Expected error at line ${tc.expect.line} but got line ${locMatch![1]}, msg: ${msg}`,
+        );
+        if (tc.expect.col !== undefined) {
+          assert.equal(
+            parseInt(locMatch![2], 10),
+            tc.expect.col,
+            `Expected error at col ${tc.expect.col} but got col ${locMatch![2]}, msg: ${msg}`,
+          );
+        }
+      }
     }
   } finally {
     rmSync(tmpDir, { recursive: true, force: true });
@@ -191,6 +215,30 @@ test("meta: wrong expectation is detected as failure", () => {
   assert.ok(
     expectFailure(wrongCase),
     "A valid program with an error expectation should be detected as a test failure",
+  );
+});
+
+test("meta: wrong @line is detected as failure", () => {
+  const wrongLine: TxtarTestCase = {
+    name: "meta-wrong-line",
+    expect: { kind: "error", code: "E_PARSE", substring: "unterminated workflow block", line: 999 },
+    files: new Map([["input.jh", "workflow default {\n  log \"hello\"\n"]]),
+  };
+  assert.ok(
+    expectFailure(wrongLine),
+    "A wrong @line expectation should be detected as a test failure",
+  );
+});
+
+test("meta: wrong @col is detected as failure", () => {
+  const wrongCol: TxtarTestCase = {
+    name: "meta-wrong-col",
+    expect: { kind: "error", code: "E_PARSE", substring: "unterminated workflow block", line: 1, col: 999 },
+    files: new Map([["input.jh", "workflow default {\n  log \"hello\"\n"]]),
+  };
+  assert.ok(
+    expectFailure(wrongCol),
+    "A wrong @col expectation should be detected as a test failure",
   );
 });
 

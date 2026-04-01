@@ -32,6 +32,8 @@ workflow default {
 |-----------|---------|
 | `# @expect ok` | Parse + validate succeed with no errors |
 | `# @expect error E_CODE "substring"` | An error is thrown whose message contains both `E_CODE` and `substring` |
+| `# @expect error E_CODE "substring" @L` | Same, and the error must be reported at line `L` (any column) |
+| `# @expect error E_CODE "substring" @L:C` | Same, and the error must be reported at line `L`, column `C` |
 
 ### Single-file vs multi-file tests
 

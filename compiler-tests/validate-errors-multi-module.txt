@@ -1,5 +1,5 @@
 === duplicate import alias
-# @expect error E_VALIDATE "duplicate import alias"
+# @expect error E_VALIDATE "duplicate import alias" @2:1
 --- main.jh
 import "a.jh" as mod
 import "b.jh" as mod
@@ -23,7 +23,7 @@ rule two {
 }
 
 === imported workflow missing
-# @expect error E_VALIDATE "does not exist"
+# @expect error E_VALIDATE "does not exist" @4:3
 --- main.jh
 import "lib.jh" as lib
 
@@ -39,7 +39,7 @@ workflow existing {
 }
 
 === send RHS with unknown imported symbol
-# @expect error E_VALIDATE "unknown symbol"
+# @expect error E_VALIDATE "unknown symbol" @4:5
 --- main.jh
 import "lib.jh" as lib
 channel c
@@ -52,7 +52,7 @@ workflow dummy {
 }
 
 === missing channel import fails
-# @expect error E_VALIDATE "is not defined"
+# @expect error E_VALIDATE "is not defined" @3:1
 --- main.jh
 import "shared.jh" as shared
 workflow default {
@@ -65,14 +65,14 @@ workflow analyst {
 }
 
 === unknown import alias in run reference
-# @expect error E_VALIDATE "unknown import alias"
+# @expect error E_VALIDATE "unknown import alias" @2:3
 --- main.jh
 workflow default {
   run ghost.deploy()
 }
 
 === imported script does not exist
-# @expect error E_VALIDATE "does not exist"
+# @expect error E_VALIDATE "does not exist" @3:3
 --- main.jh
 import "lib.jh" as lib
 workflow default {
@@ -87,7 +87,7 @@ workflow dummy {
 }
 
 === run in rule targeting imported rule rejected
-# @expect error E_VALIDATE "must be called with ensure, not run"
+# @expect error E_VALIDATE "must be called with ensure, not run" @3:3
 --- main.jh
 import "lib.jh" as lib
 rule local_check {

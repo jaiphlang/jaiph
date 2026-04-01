@@ -1,19 +1,19 @@
 === unknown local rule reference
-# @expect error E_VALIDATE "unknown local rule reference"
+# @expect error E_VALIDATE "unknown local rule reference" @2:3
 --- input.jh
 workflow default {
   ensure missing_rule()
 }
 
 === unknown local workflow or script reference in run
-# @expect error E_VALIDATE "unknown local workflow or script reference"
+# @expect error E_VALIDATE "unknown local workflow or script reference" @2:3
 --- input.jh
 workflow default {
   run missing_workflow()
 }
 
 === unknown local channel in send
-# @expect error E_VALIDATE "is not defined"
+# @expect error E_VALIDATE "is not defined" @6:1
 --- input.jh
 workflow analyst {
   log "ok"
@@ -24,7 +24,7 @@ workflow default {
 }
 
 === rule with inline brace group fails shell-step ban
-# @expect error E_VALIDATE "inline shell steps are forbidden in rules"
+# @expect error E_VALIDATE "inline shell steps are forbidden in rules" @2:3
 --- input.jh
 rule example {
   check_something || { echo "failed"; exit 1; }
@@ -35,7 +35,7 @@ workflow default {
 }
 
 === rule with multi-line brace group fails shell-step ban
-# @expect error E_VALIDATE "inline shell steps are forbidden in rules"
+# @expect error E_VALIDATE "inline shell steps are forbidden in rules" @2:3
 --- input.jh
 rule example {
   check_something || {
@@ -49,14 +49,14 @@ workflow default {
 }
 
 === workflow shell step with brace group fails shell-step ban
-# @expect error E_VALIDATE "inline shell steps are forbidden in workflows"
+# @expect error E_VALIDATE "inline shell steps are forbidden in workflows" @2:3
 --- input.jh
 workflow default {
   cmd || { echo "failed"; exit 1; }
 }
 
 === if not ensure plus inline shell short-circuit fails shell-step ban
-# @expect error E_VALIDATE "inline shell steps are forbidden in workflows"
+# @expect error E_VALIDATE "inline shell steps are forbidden in workflows" @10:5
 --- input.jh
 rule gate {
   run gate_impl()
@@ -73,14 +73,14 @@ workflow default {
 }
 
 === unsupported type in returns schema
-# @expect error E_SCHEMA "unsupported type"
+# @expect error E_SCHEMA "unsupported type" @2:12
 --- input.jh
 workflow default {
   result = prompt "x" returns "{ foo: array }"
 }
 
 === inline shell step subshell capture forbidden in workflow
-# @expect error E_VALIDATE "inline shell steps are forbidden in workflows"
+# @expect error E_VALIDATE "inline shell steps are forbidden in workflows" @5:3
 --- input.jh
 script f {
   printf '%s' 'x'
@@ -90,7 +90,7 @@ workflow default {
 }
 
 === direct inline shell step forbidden in workflow
-# @expect error E_VALIDATE "inline shell steps are forbidden in workflows"
+# @expect error E_VALIDATE "inline shell steps are forbidden in workflows" @5:3
 --- input.jh
 script f {
   printf '%s' 'x'
@@ -100,7 +100,7 @@ workflow default {
 }
 
 === inline shell line with workflow ref is forbidden
-# @expect error E_VALIDATE "inline shell steps are forbidden in workflows"
+# @expect error E_VALIDATE "inline shell steps are forbidden in workflows" @8:3
 --- input.jh
 script w_impl {
   echo x
@@ -113,7 +113,7 @@ workflow default {
 }
 
 === send RHS cannot invoke workflow via shell
-# @expect error E_VALIDATE "workflow"
+# @expect error E_VALIDATE "workflow" @9:5
 --- input.jh
 channel c
 script w_impl {
@@ -127,7 +127,7 @@ workflow default {
 }
 
 === bare identifier arg unknown name fails
-# @expect error E_VALIDATE "unknown identifier"
+# @expect error E_VALIDATE "unknown identifier" @5:3
 --- input.jh
 script greet {
   echo "hello $1"
@@ -137,7 +137,7 @@ workflow default {
 }
 
 === run async is rejected in rules
-# @expect error E_VALIDATE "run async is not allowed in rules"
+# @expect error E_VALIDATE "run async is not allowed in rules" @5:3
 --- input.jh
 workflow helper {
   log "hi"
@@ -150,7 +150,7 @@ workflow default {
 }
 
 === route with unknown workflow
-# @expect error E_VALIDATE "unknown local workflow reference"
+# @expect error E_VALIDATE "unknown local workflow reference" @3:15
 --- input.jh
 channel findings
 workflow default {
@@ -158,7 +158,7 @@ workflow default {
 }
 
 === route with rule ref
-# @expect error E_VALIDATE "must be called with ensure"
+# @expect error E_VALIDATE "must be called with ensure" @9:15
 --- input.jh
 channel findings
 rule check {
@@ -172,21 +172,21 @@ workflow default {
 }
 
 === inline run ref with unknown script
-# @expect error E_VALIDATE "unknown local workflow or script reference"
+# @expect error E_VALIDATE "unknown local workflow or script reference" @2:3
 --- input.jh
 workflow default {
   log "got: ${run nonexistent()}"
 }
 
 === dot field ref where var has no schema
-# @expect error E_VALIDATE "not a typed prompt capture"
+# @expect error E_VALIDATE "not a typed prompt capture" @2:3
 --- input.jh
 workflow default {
   log "value ${x.field}"
 }
 
 === dot field ref with nonexistent field in schema
-# @expect error E_VALIDATE "is not defined in the returns schema"
+# @expect error E_VALIDATE "is not defined in the returns schema" @3:3
 --- input.jh
 workflow default {
   result = prompt "Analyse" returns "{ type: string, risk: string }"
@@ -194,14 +194,14 @@ workflow default {
 }
 
 === unknown import alias in rule reference
-# @expect error E_VALIDATE "unknown import alias"
+# @expect error E_VALIDATE "unknown import alias" @2:3
 --- input.jh
 workflow default {
   ensure ghost.guard()
 }
 
 === match: missing wildcard arm
-# @expect error E_VALIDATE "match must have exactly one wildcard (_) arm"
+# @expect error E_VALIDATE "match must have exactly one wildcard (_) arm" @3:3
 --- input.jh
 workflow default {
   const x = "hello"
@@ -212,7 +212,7 @@ workflow default {
 }
 
 === match: multiple wildcard arms
-# @expect error E_VALIDATE "match must have exactly one wildcard (_) arm, found multiple"
+# @expect error E_VALIDATE "match must have exactly one wildcard (_) arm, found multiple" @3:3
 --- input.jh
 workflow default {
   const x = "hello"
@@ -224,7 +224,7 @@ workflow default {
 }
 
 === shell redirection in ensure args rejected
-# @expect error E_PARSE "shell redirection"
+# @expect error E_PARSE "shell redirection" @5:1
 --- input.jh
 rule check {
   return "ok"
@@ -234,7 +234,7 @@ workflow default {
 }
 
 === run in workflow targeting a rule is rejected
-# @expect error E_VALIDATE "must be called with ensure, not run"
+# @expect error E_VALIDATE "must be called with ensure, not run" @5:3
 --- input.jh
 rule check {
   return "ok"
@@ -244,7 +244,7 @@ workflow default {
 }
 
 === run in rule targeting a rule is rejected
-# @expect error E_VALIDATE "must be called with ensure, not run"
+# @expect error E_VALIDATE "must be called with ensure, not run" @5:3
 --- input.jh
 rule other_rule {
   return "ok"
@@ -257,7 +257,7 @@ workflow default {
 }
 
 === ensure rejects local script reference
-# @expect error E_VALIDATE "cannot be called with ensure"
+# @expect error E_VALIDATE "cannot be called with ensure" @5:3
 --- input.jh
 script my_script {
   echo ok
@@ -267,7 +267,7 @@ workflow default {
 }
 
 === run async is rejected in rules
-# @expect error E_VALIDATE "run async is not allowed in rules"
+# @expect error E_VALIDATE "run async is not allowed in rules" @5:3
 --- input.jh
 workflow helper {
   log "hi"
@@ -282,7 +282,7 @@ workflow default {
 === ensure recover in rules (caught at parse time)
 # NOTE: unreachable at validate layer — parser (workflow-brace.ts) catches this first as E_PARSE.
 # Covered by parse-errors.txt "brace-if: ensure recover in rules".
-# @expect error E_PARSE "ensure ... recover is not allowed in rules"
+# @expect error E_PARSE "ensure ... recover is not allowed in rules" @5:3
 --- input.jh
 rule sub_rule {
   return "ok"
@@ -299,7 +299,7 @@ workflow default {
 === const prompt in rules (caught at parse time)
 # NOTE: unreachable at validate layer — parser (workflow-brace.ts) catches this first as E_PARSE.
 # Covered by parse-errors.txt "brace-if: const prompt in rules".
-# @expect error E_PARSE "prompt is not allowed in rules"
+# @expect error E_PARSE "prompt is not allowed in rules" @2:13
 --- input.jh
 rule check {
   const x = prompt "ask"
@@ -309,42 +309,42 @@ workflow default {
 }
 
 === returns schema cannot be empty
-# @expect error E_SCHEMA "returns schema cannot be empty"
+# @expect error E_SCHEMA "returns schema cannot be empty" @2:12
 --- input.jh
 workflow default {
   result = prompt "classify" returns ""
 }
 
 === returns schema rejects array types
-# @expect error E_SCHEMA "returns schema must be flat"
+# @expect error E_SCHEMA "returns schema must be flat" @2:12
 --- input.jh
 workflow default {
   result = prompt "classify" returns "{ items: [string] }"
 }
 
 === returns schema rejects union types
-# @expect error E_SCHEMA "returns schema must be flat"
+# @expect error E_SCHEMA "returns schema must be flat" @2:12
 --- input.jh
 workflow default {
   result = prompt "classify" returns "{ status: string | number }"
 }
 
 === returns schema rejects malformed entry
-# @expect error E_SCHEMA "invalid returns schema entry"
+# @expect error E_SCHEMA "invalid returns schema entry" @2:12
 --- input.jh
 workflow default {
   result = prompt "classify" returns "{ badentry }"
 }
 
 === returns schema rejects unsupported type
-# @expect error E_SCHEMA "unsupported type"
+# @expect error E_SCHEMA "unsupported type" @2:12
 --- input.jh
 workflow default {
   result = prompt "classify" returns "{ foo: array }"
 }
 
 === run in workflow targeting a rule via import
-# @expect error E_VALIDATE "must be called with ensure, not run"
+# @expect error E_VALIDATE "must be called with ensure, not run" @3:3
 --- main.jh
 import "lib.jh" as lib
 workflow default {
@@ -356,7 +356,7 @@ export rule check {
 }
 
 === ensure imported workflow requires run
-# @expect error E_VALIDATE "must be called with run"
+# @expect error E_VALIDATE "must be called with run" @3:3
 --- main.jh
 import "lib.jh" as lib
 workflow default {
@@ -368,7 +368,7 @@ export workflow deploy {
 }
 
 === ensure rejects imported script
-# @expect error E_VALIDATE "cannot be called with ensure"
+# @expect error E_VALIDATE "cannot be called with ensure" @3:3
 --- main.jh
 import "lib.jh" as lib
 workflow default {
@@ -383,7 +383,7 @@ workflow dummy {
 }
 
 === run inside rule must target script not imported workflow
-# @expect error E_VALIDATE "run inside a rule must target a script"
+# @expect error E_VALIDATE "run inside a rule must target a script" @3:3
 --- main.jh
 import "lib.jh" as lib
 rule check {
@@ -398,7 +398,7 @@ export workflow deploy {
 }
 
 === route with imported rule ref rejected
-# @expect error E_VALIDATE "must be called with ensure"
+# @expect error E_VALIDATE "must be called with ensure" @4:15
 --- main.jh
 import "lib.jh" as lib
 channel findings

@@ -12,46 +12,6 @@ Process rules:
 
 ---
 
-## Assert error locations in txtar compiler tests <!-- dev-ready -->
-
-**Goal**  
-Extend the txtar `# @expect error` directive and test runner to verify the line and column reported by compiler errors — not just the error code and message substring.
-
-**Context**
-
-- `jaiphError()` in `src/errors.ts` already formats errors as `filePath:line:col E_CODE message`. Line and column are present in every compiler error.
-- The test runner (`src/compiler-test-runner.ts`) currently only checks `msg.includes(code)` and `msg.includes(substring)`. It ignores the `filePath:line:col` prefix entirely — a test passes even if the error points at the wrong line.
-- Since virtual files are written to a tmpdir, the filePath portion varies per run and cannot be asserted directly. But the `line:col` portion is deterministic.
-
-**Directive extension**
-
-Add an optional `@line:col` suffix to the `# @expect error` directive:
-
-```
-# @expect error E_PARSE "unterminated workflow block"           ← existing (no location check)
-# @expect error E_PARSE "unterminated workflow block" @2:1      ← new (asserts line 2, col 1)
-# @expect error E_PARSE "unterminated workflow block" @2        ← new (asserts line 2, any col)
-```
-
-When `@line` or `@line:col` is present, the runner extracts `:<line>:<col>` from the error message and verifies it matches.
-
-**Scope**
-
-1. **Directive parser** (`parseExpectDirective` in `src/compiler-test-runner.ts`): extend the regex to capture an optional trailing `@<line>` or `@<line>:<col>`. Add `line?: number; col?: number` to the error expectation type.
-2. **Assertion** (`runTestCase`): when `expect.line` is set, extract the `:line:col` from the error message (regex on the `filePath:L:C` prefix) and assert they match. If `expect.col` is also set, assert col too.
-3. **README update** (`compiler-tests/README.md`): document the `@line` / `@line:col` suffix in the expect directives table.
-4. **Backfill existing error tests**: update all existing `# @expect error` lines in `compiler-tests/parse-errors.txt` (and `validate-errors.txt` if it exists) to include `@line:col`. This verifies the compiler currently reports correct locations.
-5. **Meta-test**: add a meta-test case in the runner that verifies a wrong `@line` is detected as a failure.
-
-**Acceptance criteria**
-
-- All existing error test cases include `@line:col` and pass — confirming current error locations are correct.
-- A deliberately wrong `@line` causes the test to fail (meta-test).
-- `npm run test:compiler` passes.
-- README documents the new directive syntax.
-
----
-
 ## Custom agent command: display name + raw output support <!-- dev-ready -->
 
 **Goal**  
