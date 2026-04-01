@@ -551,7 +551,9 @@ Jaiph: Running async.jh
                     <dd><code>ensure</code> executes a rule (with optional args); <code>recover</code> adds bounded
                         retry repair logic; <code>run</code> calls another workflow or module script from a workflow
                         (managed step &mdash; same value/log contract as <code>ensure</code>). All calls require
-                        parentheses. <code>run script("body")</code> embeds a one-off shell command directly
+                        parentheses. Arguments can be quoted strings or <strong>bare identifiers</strong>:
+                        <code>run greet(name)</code> is equivalent to <code>run greet("${name}")</code>.
+                        <code>run script("body")</code> embeds a one-off shell command directly
                         without a named <code>script</code> block &mdash; supports arguments, capture, and custom
                         shebangs.</dd>
 

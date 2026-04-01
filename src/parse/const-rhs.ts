@@ -109,7 +109,10 @@ export function parseConstRhs(
     rejectTrailingContent(filePath, lineNo, "run", call.rest);
     const ref: WorkflowRefDef = { value: call.ref, loc: { line: lineNo, col } };
     return {
-      value: { kind: "run_capture", ref, args: call.args },
+      value: {
+        kind: "run_capture", ref, args: call.args,
+        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
+      },
       nextLineIdx: lineIdx,
     };
   }
@@ -124,7 +127,10 @@ export function parseConstRhs(
     }
     const ref: RuleRefDef = { value: call.ref, loc: { line: lineNo, col } };
     return {
-      value: { kind: "ensure_capture", ref, args: call.args },
+      value: {
+        kind: "ensure_capture", ref, args: call.args,
+        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
+      },
       nextLineIdx: lineIdx,
     };
   }

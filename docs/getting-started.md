@@ -129,6 +129,7 @@ Jaiph source files combine a small orchestration language with scripts in any la
 
 - `ensure rule()` — run a rule as a check
 - `run workflow()` / `run script()` — call a workflow or script
+- `run greet(name)` — bare identifier arg, equivalent to `run greet("${name}")`
 - `run script("echo ok")` — inline script for trivial one-off commands
 - `run async workflow()` — concurrent execution with implicit join
 - `const x = prompt "..." returns "{ field: type }"` — structured capture with `${x.field}` access

@@ -485,7 +485,7 @@ test("extractInlineCaptures extracts run and ensure with args", () => {
   const { extractInlineCaptures } = require("./validate-string");
   const result = extractInlineCaptures('prefix ${run greet(world)} middle ${ensure check()} suffix');
   assert.deepEqual(result, [
-    { kind: "run", ref: "greet", args: "world" },
+    { kind: "run", ref: "greet", args: "${world}" },
     { kind: "ensure", ref: "check", args: undefined },
   ]);
 });

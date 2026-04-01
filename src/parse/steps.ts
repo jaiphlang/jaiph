@@ -110,6 +110,7 @@ function parseRecoverStatement(
           type: "run",
           workflow: { value: call.ref, loc: { line: lineNo, col } },
           args: call.args,
+          ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
           captureName,
         };
       }
@@ -122,6 +123,7 @@ function parseRecoverStatement(
           type: "ensure",
           ref: { value: call.ref, loc: { line: lineNo, col } },
           args: call.args,
+          ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
           captureName,
         };
       }
@@ -153,6 +155,7 @@ function parseRecoverStatement(
         type: "run",
         workflow: { value: call.ref, loc: { line: lineNo, col } },
         args: call.args,
+        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
       };
     }
   }
@@ -164,6 +167,7 @@ function parseRecoverStatement(
         type: "ensure",
         ref: { value: call.ref, loc: { line: lineNo, col } },
         args: call.args,
+        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
       };
     }
   }
@@ -249,6 +253,7 @@ export function parseEnsureStep(
         type: "ensure",
         ref: { value: call.ref, loc: { line: innerNo, col: ensureCol } },
         args: call.args,
+        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
         ...(captureName ? { captureName } : {}),
       },
       nextIdx: idx,
@@ -276,7 +281,11 @@ export function parseEnsureStep(
   }
 
   const refLoc = { value: ref, loc: { line: innerNo, col: ensureCol } };
-  const base = { type: "ensure" as const, ref: refLoc, args, ...(captureName ? { captureName } : {}) };
+  const base = {
+    type: "ensure" as const, ref: refLoc, args,
+    ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
+    ...(captureName ? { captureName } : {}),
+  };
 
   if (right === "{") {
     let blockLines: string[] = [];

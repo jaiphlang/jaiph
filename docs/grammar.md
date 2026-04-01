@@ -89,6 +89,17 @@ run show_args("my-task", "my-role")
 ensure check_branch("${arg1}")
 ```
 
+**Bare identifier arguments:** In-scope variable names can be passed as bare identifiers without quoting. A bare identifier `name` is equivalent to `"${name}"` — the variable's value is passed as the argument:
+
+```jaiph
+const task = run get_next_task()
+run docs.update_from_task(task)          # equivalent to: run docs.update_from_task("${task}")
+run queue.remove(task, "completed")      # mixed bare + quoted args
+ensure check_branch(branch_name)         # works with ensure too
+```
+
+Bare identifiers must reference a known variable (`const`, capture, or positional `arg1`–`arg9`). Unknown names produce an `E_VALIDATE` error at compile time. Jaiph keywords (`run`, `ensure`, `if`, `const`, etc.) cannot be used as bare identifier arguments.
+
 There is no declaration-time parameter list, no default values, and no compile-time arity checking. The runtime exposes arguments as `${arg1}`, `${arg2}`, … in orchestration strings (rules and workflows) and `$1`, `$2`, … in script bodies.
 
 ## Workflow Steps
@@ -487,7 +498,7 @@ Key rules:
 
 ## EBNF (Practical Form)
 
-Informal symbols: `string` = quoted string; `call_ref` = `REF "(" [args] ")"` with comma-separated arguments; `quoted_or_multiline_string` = double-quoted string supporting `\$`, `\"`, `\\`, `` \` `` escapes, line continuation with trailing `\`, and `${identifier}` / `${run …}` / `${ensure …}` interpolation.
+Informal symbols: `string` = quoted string; `call_ref` = `REF "(" [args] ")"` with comma-separated arguments (each argument may be a quoted string, `${var}`, or a **bare identifier** — see [Call Arguments](#call-arguments-and-positional-parameters)); `quoted_or_multiline_string` = double-quoted string supporting `\$`, `\"`, `\\`, `` \` `` escapes, line continuation with trailing `\`, and `${identifier}` / `${run …}` / `${ensure …}` interpolation.
 
 ```ebnf
 file            = { top_level } ;
@@ -587,7 +598,7 @@ After parsing, the compiler validates references and config (`src/transpile/vali
 
 - **E_PARSE:** Invalid syntax — duplicate config, invalid keys/values, unescaped backticks, `$(…)` or `${var:-fallback}` in orchestration strings, `prompt … returns` without capture, bare `ref(args)` in const RHS (use `run`/`ensure`/`prompt`), `local` at top level, unrecognized workflow/rule line, invalid send RHS, arguments after `recover`, bare `recover` with no recovery step, nested inline captures, shell redirection after `run`/`ensure`, parentheses on definitions, or missing `{` on definition line.
 - **E_SCHEMA:** Invalid `returns` schema — empty, non-flat, unsupported type (only `string`, `number`, `boolean`).
-- **E_VALIDATE:** Reference errors — unknown rule/workflow, duplicate alias, `ensure` on non-rule, `run` on rule, `run` to workflow inside rule, `run async` in rule, forbidden Jaiph usage inside `$(…)`, dot notation on non-prompt variable or invalid field name.
+- **E_VALIDATE:** Reference errors — unknown rule/workflow, duplicate alias, `ensure` on non-rule, `run` on rule, `run` to workflow inside rule, `run async` in rule, forbidden Jaiph usage inside `$(…)`, dot notation on non-prompt variable or invalid field name, bare identifier argument referencing an unknown variable.
 - **E_IMPORT_NOT_FOUND:** Import target file does not exist.
 
 Validation rules:

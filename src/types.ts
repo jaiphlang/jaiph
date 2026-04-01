@@ -38,8 +38,8 @@ export interface MatchExprDef {
 
 export type ConstRhs =
   | { kind: "expr"; bashRhs: string }
-  | { kind: "run_capture"; ref: WorkflowRefDef; args?: string }
-  | { kind: "ensure_capture"; ref: RuleRefDef; args?: string }
+  | { kind: "run_capture"; ref: WorkflowRefDef; args?: string; bareIdentifierArgs?: string[] }
+  | { kind: "ensure_capture"; ref: RuleRefDef; args?: string; bareIdentifierArgs?: string[] }
   | {
       kind: "prompt_capture";
       raw: string;
@@ -50,15 +50,15 @@ export type ConstRhs =
   | { kind: "match_expr"; match: MatchExprDef };
 
 export type IfConditionDef =
-  | { kind: "ensure"; ref: RuleRefDef; args?: string }
-  | { kind: "run"; ref: WorkflowRefDef; args?: string };
+  | { kind: "ensure"; ref: RuleRefDef; args?: string; bareIdentifierArgs?: string[] }
+  | { kind: "run"; ref: WorkflowRefDef; args?: string; bareIdentifierArgs?: string[] };
 
 /** RHS of `channel <- …` */
 export type SendRhsDef =
   | { kind: "forward" }
   | { kind: "literal"; token: string }
   | { kind: "var"; bash: string }
-  | { kind: "run"; ref: WorkflowRefDef; args?: string }
+  | { kind: "run"; ref: WorkflowRefDef; args?: string; bareIdentifierArgs?: string[] }
   /** Parsed then rejected in validation (use `run ref` to capture a return value). */
   | { kind: "bare_ref"; ref: WorkflowRefDef }
   /** Shell fragment emitted as `"$(...)"` for inbox send. */
@@ -109,6 +109,7 @@ export type WorkflowStepDef =
       type: "ensure";
       ref: RuleRefDef;
       args?: string;
+      bareIdentifierArgs?: string[];
       /** When set, capture step stdout into this variable name. */
       captureName?: string;
       /** When set, transpiles to for/seq bounded retry loop (break on success, exit 1 after max). */
@@ -120,6 +121,7 @@ export type WorkflowStepDef =
       type: "run";
       workflow: WorkflowRefDef;
       args?: string;
+      bareIdentifierArgs?: string[];
       /** When set, capture step stdout into this variable name. */
       captureName?: string;
       /** When set, execute asynchronously with implicit join before workflow completes. */
@@ -189,8 +191,8 @@ export type WorkflowStepDef =
       loc: SourceLoc;
       /** When set, return value comes from a managed run/ensure/match instead of the literal `value`. */
       managed?:
-        | { kind: "run"; ref: WorkflowRefDef; args?: string }
-        | { kind: "ensure"; ref: RuleRefDef; args?: string }
+        | { kind: "run"; ref: WorkflowRefDef; args?: string; bareIdentifierArgs?: string[] }
+        | { kind: "ensure"; ref: RuleRefDef; args?: string; bareIdentifierArgs?: string[] }
         | { kind: "match"; match: MatchExprDef };
     }
   | {

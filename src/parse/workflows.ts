@@ -246,6 +246,7 @@ export function parseWorkflowBlock(
             loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
           },
           args: call.args,
+          ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
           captureName,
         });
         continue;
@@ -286,6 +287,7 @@ export function parseWorkflowBlock(
           loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
         },
         args: call.args,
+        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
         async: true,
       });
       continue;
@@ -317,6 +319,7 @@ export function parseWorkflowBlock(
           loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
         },
         args: call.args,
+        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
       });
       continue;
     }
@@ -394,7 +397,10 @@ export function parseWorkflowBlock(
             type: "return",
             value: `run ${call.ref}(${call.args ?? ""})`,
             loc: retLoc,
-            managed: { kind: "run", ref: { value: call.ref, loc: retLoc }, args: call.args },
+            managed: {
+              kind: "run", ref: { value: call.ref, loc: retLoc }, args: call.args,
+              ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
+            },
           });
           continue;
         }
@@ -407,7 +413,10 @@ export function parseWorkflowBlock(
             type: "return",
             value: `ensure ${call.ref}(${call.args ?? ""})`,
             loc: retLoc,
-            managed: { kind: "ensure", ref: { value: call.ref, loc: retLoc }, args: call.args },
+            managed: {
+              kind: "ensure", ref: { value: call.ref, loc: retLoc }, args: call.args,
+              ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
+            },
           });
           continue;
         }
