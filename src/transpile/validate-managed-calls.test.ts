@@ -53,6 +53,26 @@ test("E_VALIDATE: direct inline shell step is forbidden in workflow", () => {
   }
 });
 
+test("buildScripts accepts return base.field as sugar for quoted ${base.field}", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-dotted-ret-"));
+  const out = join(root, "out");
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        "workflow w {",
+        '  const result = prompt "x" returns "{ role: string }"',
+        "  return result.role",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    buildScripts(join(root, "m.jh"), out);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("buildScripts extracts script for run with capture workflow", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-run-fn-"));
   const out = join(root, "out");

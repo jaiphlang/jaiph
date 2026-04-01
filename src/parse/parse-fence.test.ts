@@ -68,12 +68,28 @@ test("fence: error on text after opening backticks that isn't single token", () 
   );
 });
 
-test("fence: error on content on closing fence line", () => {
+test("fence: error on invalid content on closing fence line", () => {
   const lines = ["```", "body", "``` extra"];
   assert.throws(
     () => parseFencedBlock("test.jh", lines, 0),
     /closing fence must be exactly/,
   );
+});
+
+test("fence: closing line may include returns schema on same line as ```", () => {
+  const lines = ['```', "body", '``` returns "{ role: string }"'];
+  const result = parseFencedBlock("test.jh", lines, 0);
+  assert.equal(result.body, "body");
+  assert.equal(result.returns, "{ role: string }");
+  assert.equal(result.nextIdx, 3);
+});
+
+test("fence: same-line returns with lang on opening fence", () => {
+  const lines = ["```text", "x", '``` returns "{ n: number }"'];
+  const result = parseFencedBlock("test.jh", lines, 0);
+  assert.equal(result.body, "x");
+  assert.equal(result.lang, "text");
+  assert.equal(result.returns, "{ n: number }");
 });
 
 test("fence: closing fence with surrounding whitespace is accepted", () => {

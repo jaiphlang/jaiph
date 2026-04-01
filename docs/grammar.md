@@ -246,14 +246,18 @@ Analyze this input in detail.
 ```
 ```
 
-**Typed prompt (returns schema):** Ask the agent for structured JSON output. `returns` is allowed after single-line string and identifier body forms:
+**Typed prompt (returns schema):** Ask the agent for structured JSON output. `returns "…"` may follow a single-line string or identifier body on the same line, or appear on the **line after** the closing `` ``` `` of a fenced block.
 
 ```jaiph
 result = prompt "Analyze this code" returns "{ type: string, risk: string }"
 result = prompt text returns "{ type: string, risk: string }"
 ```
 
+For a **fenced** prompt, either put `returns "…"` on the line **immediately after** the closing `` ``` ``, or on the **same line** as the closing fence: `` ``` returns "{ … }" `` (nothing else may follow the schema string on that line).
+
 When `returns` is present, capture is required. The schema is flat only — allowed types are `string`, `number`, `boolean`. The runtime validates the response: it searches for valid JSON (last non-empty line, fenced code blocks, standalone `{…}`, embedded JSON). On success, the capture variable holds the raw JSON string and each field is accessible via **dot notation** — `${result.type}`, `${result.risk}`. The underscore form (`${result_type}`) also works but dot notation is preferred for clarity. On failure, the step fails with a parse, missing-field, or type error.
+
+**String values in orchestration:** Bindings in workflows and rules are **strings** end-to-end (including capture, `return`, and `${…}` interpolation). For typed prompts, schema types only constrain the **parsed JSON** from the agent: after validation, each field is coerced with string conversion for storage. For example, `returns "{ n: number }"` with `{"n":42}` stores `42` as the **text** `"42"` in `${x.n}` / `x_n`, not a numeric type. The same applies to `boolean`. Bare `return x.field` in a workflow is sugar for `return "${x.field}"`.
 
 **Dot notation validation:** The compiler validates `${var.field}` references at compile time. If `var` is not a typed prompt capture, the compiler reports an error. If `field` is not defined in the `returns` schema, the error lists available fields. At runtime, `${result.type}` resolves to the same storage slot as `${result_type}` — both forms are interchangeable.
 
