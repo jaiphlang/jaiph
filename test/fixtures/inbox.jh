@@ -2,7 +2,7 @@ channel findings
 channel summary
 channel final_summary
 
-workflow researcher {
+workflow researcher() {
   findings <- run emit_findings()
 }
 
@@ -14,18 +14,18 @@ script summarize_findings = "echo \"Summary of findings\""
 
 script review_summary = "echo \"[reviewed] $1\""
 
-workflow analyst {
+workflow analyst() {
   run write_findings_file("${arg1}")
   summary = run summarize_findings()
   summary <- "${summary}"
 }
 
-workflow reviewer {
+workflow reviewer() {
   final_summary <- run review_summary("${arg1}")
 }
 
 # Orchestration / entrypoint workflow
-workflow default {
+workflow default() {
   run researcher()
   findings -> analyst
   summary -> reviewer

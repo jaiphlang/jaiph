@@ -6,6 +6,7 @@ import {
   isRef,
   matchSendOperator,
   parseCallRef,
+  parseLogMessageRhs,
 } from "./core";
 import { parseConstRhs } from "./const-rhs";
 import { parseEnsureStep } from "./steps";
@@ -409,28 +410,14 @@ export function parseBlockStatement(
   if (inner.startsWith("log ") || inner === "log") {
     const logArg = inner.slice("log".length).trimStart();
     const logCol = innerRaw.indexOf("log") + 1;
-    if (!logArg.startsWith('"')) {
-      fail(filePath, 'log must match: log "<message>"', innerNo, logCol);
-    }
-    const closeIdx = indexOfClosingDoubleQuote(logArg, 1);
-    if (closeIdx === -1) {
-      fail(filePath, "unterminated log string", innerNo, logCol);
-    }
-    const message = logArg.slice(1, closeIdx);
+    const message = parseLogMessageRhs(filePath, innerNo, logCol, logArg, "log");
     return { step: { type: "log", message, loc: { line: innerNo, col: logCol } }, nextIdx: idx + 1 };
   }
 
   if (inner.startsWith("logerr ") || inner === "logerr") {
     const logerrArg = inner.slice("logerr".length).trimStart();
     const logerrCol = innerRaw.indexOf("logerr") + 1;
-    if (!logerrArg.startsWith('"')) {
-      fail(filePath, 'logerr must match: logerr "<message>"', innerNo, logerrCol);
-    }
-    const closeIdx = indexOfClosingDoubleQuote(logerrArg, 1);
-    if (closeIdx === -1) {
-      fail(filePath, "unterminated logerr string", innerNo, logerrCol);
-    }
-    const message = logerrArg.slice(1, closeIdx);
+    const message = parseLogMessageRhs(filePath, innerNo, logerrCol, logerrArg, "logerr");
     return { step: { type: "logerr", message, loc: { line: innerNo, col: logerrCol } }, nextIdx: idx + 1 };
   }
 

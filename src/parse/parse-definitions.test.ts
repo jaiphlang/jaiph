@@ -9,8 +9,8 @@ test("rule without braces is rejected with fix hint", () => {
     () => parsejaiph("rule foo", "test.jh"),
     (err: any) =>
       err.message.includes("E_PARSE") &&
-      err.message.includes("rule declarations require braces") &&
-      err.message.includes("rule foo { … }"),
+      err.message.includes("rule declarations require parentheses") &&
+      err.message.includes("rule foo() { … }"),
   );
 });
 
@@ -18,7 +18,7 @@ test("rule with empty parentheses is accepted", () => {
   const mod = parsejaiph("rule foo() {\n}", "test.jh");
   assert.equal(mod.rules.length, 1);
   assert.equal(mod.rules[0].name, "foo");
-  assert.deepEqual(mod.rules[0].params, undefined);
+  assert.deepEqual(mod.rules[0].params, []);
 });
 
 test("rule with colon instead of braces is rejected", () => {
@@ -26,7 +26,7 @@ test("rule with colon instead of braces is rejected", () => {
     () => parsejaiph("rule foo:", "test.jh"),
     (err: any) =>
       err.message.includes("E_PARSE") &&
-      err.message.includes("rule declarations require braces"),
+      err.message.includes("rule declarations require parentheses"),
   );
 });
 
@@ -35,8 +35,8 @@ test("export rule without braces is rejected with fix hint", () => {
     () => parsejaiph("export rule bar", "test.jh"),
     (err: any) =>
       err.message.includes("E_PARSE") &&
-      err.message.includes("rule declarations require braces") &&
-      err.message.includes("rule bar { … }"),
+      err.message.includes("rule declarations require parentheses") &&
+      err.message.includes("rule bar() { … }"),
   );
 });
 
@@ -45,7 +45,8 @@ test("rule with parentheses but no brace is rejected", () => {
     () => parsejaiph("rule gate()", "test.jh"),
     (err: any) =>
       err.message.includes("E_PARSE") &&
-      err.message.includes("rule declarations require braces"),
+      err.message.includes("rule declarations require braces") &&
+      err.message.includes("rule gate()"),
   );
 });
 
@@ -85,8 +86,8 @@ test("workflow without braces is rejected with fix hint", () => {
     () => parsejaiph("workflow default", "test.jh"),
     (err: any) =>
       err.message.includes("E_PARSE") &&
-      err.message.includes("workflow declarations require braces") &&
-      err.message.includes("workflow default { … }"),
+      err.message.includes("workflow declarations require parentheses") &&
+      err.message.includes("workflow default() { … }"),
   );
 });
 
@@ -94,7 +95,7 @@ test("workflow with empty parentheses is accepted", () => {
   const mod = parsejaiph("workflow default() {\n}", "test.jh");
   assert.equal(mod.workflows.length, 1);
   assert.equal(mod.workflows[0].name, "default");
-  assert.deepEqual(mod.workflows[0].params, undefined);
+  assert.deepEqual(mod.workflows[0].params, []);
 });
 
 test("export workflow without braces is rejected with fix hint", () => {
@@ -102,8 +103,8 @@ test("export workflow without braces is rejected with fix hint", () => {
     () => parsejaiph("export workflow main", "test.jh"),
     (err: any) =>
       err.message.includes("E_PARSE") &&
-      err.message.includes("workflow declarations require braces") &&
-      err.message.includes("workflow main { … }"),
+      err.message.includes("workflow declarations require parentheses") &&
+      err.message.includes("workflow main() { … }"),
   );
 });
 
@@ -112,14 +113,24 @@ test("workflow with parentheses but no brace is rejected", () => {
     () => parsejaiph("workflow main()", "test.jh"),
     (err: any) =>
       err.message.includes("E_PARSE") &&
-      err.message.includes("workflow declarations require braces"),
+      err.message.includes("workflow declarations require braces") &&
+      err.message.includes("workflow main()"),
+  );
+});
+
+test("workflow without parentheses before opening brace is rejected", () => {
+  assert.throws(
+    () => parsejaiph("workflow default {\n}", "test.jh"),
+    (err: any) =>
+      err.message.includes("E_PARSE") &&
+      err.message.includes("workflow declarations require parentheses"),
   );
 });
 
 // === Accepted: minimal/empty braced bodies ===
 
 test("rule with empty braced body is accepted", () => {
-  const mod = parsejaiph("rule check {\n}", "test.jh");
+  const mod = parsejaiph("rule check() {\n}", "test.jh");
   assert.equal(mod.rules.length, 1);
   assert.equal(mod.rules[0].name, "check");
   assert.equal(mod.rules[0].steps.length, 0);
@@ -132,21 +143,21 @@ test("script with empty string body is accepted", () => {
 });
 
 test("workflow with empty braced body is accepted", () => {
-  const mod = parsejaiph("workflow default {\n}", "test.jh");
+  const mod = parsejaiph("workflow default() {\n}", "test.jh");
   assert.equal(mod.workflows.length, 1);
   assert.equal(mod.workflows[0].name, "default");
   assert.equal(mod.workflows[0].steps.length, 0);
 });
 
 test("export workflow with empty braced body is accepted", () => {
-  const mod = parsejaiph("export workflow main {\n}", "test.jh");
+  const mod = parsejaiph("export workflow main() {\n}", "test.jh");
   assert.equal(mod.workflows.length, 1);
   assert.equal(mod.workflows[0].name, "main");
   assert.deepEqual(mod.exports, ["main"]);
 });
 
 test("export rule with empty braced body is accepted", () => {
-  const mod = parsejaiph("export rule check {\n}", "test.jh");
+  const mod = parsejaiph("export rule check() {\n}", "test.jh");
   assert.equal(mod.rules.length, 1);
   assert.equal(mod.rules[0].name, "check");
   assert.deepEqual(mod.exports, ["check"]);
@@ -192,4 +203,13 @@ test("reserved keyword as parameter name is rejected", () => {
       err.message.includes("E_PARSE") &&
       err.message.includes('parameter name "run" is a reserved keyword'),
   );
+});
+
+test("log accepts a bare identifier (stored as interpolation)", () => {
+  const mod = parsejaiph(
+    ["workflow w() {", "  log msg", "}", ""].join("\n"),
+    "test.jh",
+  );
+  assert.equal(mod.workflows[0].steps[0].type, "log");
+  assert.equal((mod.workflows[0].steps[0] as { message: string }).message, "${msg}");
 });

@@ -44,14 +44,14 @@ function ref(value: string) {
 
 test("lookupKind: finds rule", () => {
   const mod = minimalModule({
-    rules: [{ name: "check", comments: [], steps: [], loc: { line: 1, col: 1 } }],
+    rules: [{ name: "check", comments: [], params: [], steps: [], loc: { line: 1, col: 1 } }],
   });
   assert.equal(lookupKind(mod, "check"), "rule");
 });
 
 test("lookupKind: finds workflow", () => {
   const mod = minimalModule({
-    workflows: [{ name: "deploy", comments: [], steps: [], loc: { line: 1, col: 1 } }],
+    workflows: [{ name: "deploy", comments: [], params: [], steps: [], loc: { line: 1, col: 1 } }],
   });
   assert.equal(lookupKind(mod, "deploy"), "workflow");
 });
@@ -124,7 +124,7 @@ test("validateRef: rejects local rule with WORKFLOW_REF_EXPECT", () => {
 test("validateRef: accepts imported rule with RULE_REF_EXPECT", () => {
   const importedMod = minimalModule({
     filePath: "lib.jh",
-    rules: [{ name: "ready", comments: [], steps: [], loc: { line: 1, col: 1 } }],
+    rules: [{ name: "ready", comments: [], params: [], steps: [], loc: { line: 1, col: 1 } }],
   });
   const mod = minimalModule();
   const ctx = makeCtx({
@@ -159,7 +159,7 @@ test("validateRef: rejects missing imported symbol", () => {
 test("validateRef: rejects wrong kind for imported symbol", () => {
   const importedMod = minimalModule({
     filePath: "lib.jh",
-    workflows: [{ name: "deploy", comments: [], steps: [], loc: { line: 1, col: 1 } }],
+    workflows: [{ name: "deploy", comments: [], params: [], steps: [], loc: { line: 1, col: 1 } }],
   });
   const mod = minimalModule();
   const ctx = makeCtx({
@@ -225,7 +225,7 @@ test("validateRef: rejects local workflow with RUN_IN_RULE_REF_EXPECT", () => {
 
 test("validateRef: bare_send_rhs rejects local workflow", () => {
   const mod = minimalModule({
-    workflows: [{ name: "deploy", comments: [], steps: [], loc: { line: 1, col: 1 } }],
+    workflows: [{ name: "deploy", comments: [], params: [], steps: [], loc: { line: 1, col: 1 } }],
   });
   const ctx = makeCtx();
   assert.throws(
@@ -257,7 +257,7 @@ test("validateRef: bare_send_rhs rejects local script", () => {
 
 test("validateRef: bare_send_rhs rejects local rule", () => {
   const mod = minimalModule({
-    rules: [{ name: "check", comments: [], steps: [], loc: { line: 1, col: 1 } }],
+    rules: [{ name: "check", comments: [], params: [], steps: [], loc: { line: 1, col: 1 } }],
   });
   const ctx = makeCtx();
   assert.throws(

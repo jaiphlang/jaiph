@@ -12,7 +12,7 @@ test("E_VALIDATE: inline shell step is forbidden in workflow", () => {
       join(root, "m.jh"),
       [
         "script f = \"printf '%s' 'x'\"",
-        "workflow default {",
+        "workflow default() {",
         '  x="$(f)"',
         "}",
         "",
@@ -34,7 +34,7 @@ test("E_VALIDATE: direct inline shell step is forbidden in workflow", () => {
       join(root, "m.jh"),
       [
         "script f = \"printf '%s' 'x'\"",
-        "workflow default {",
+        "workflow default() {",
         "  f",
         "}",
         "",
@@ -56,7 +56,7 @@ test("buildScripts accepts return base.field as sugar for quoted ${base.field}",
     writeFileSync(
       join(root, "m.jh"),
       [
-        "workflow w {",
+        "workflow w() {",
         '  const result = prompt "x" returns "{ role: string }"',
         "  return result.role",
         "}",
@@ -77,7 +77,7 @@ test("buildScripts extracts script for run with capture workflow", () => {
       join(root, "m.jh"),
       [
         "script f = \"printf '%s' 'ok'\"",
-        "workflow default {",
+        "workflow default() {",
         "  x = run f()",
         '  return "${x}"',
         "}",
@@ -100,10 +100,10 @@ test("E_VALIDATE: inline shell line with workflow ref is forbidden", () => {
       join(root, "m.jh"),
       [
         'script w_impl = "echo x"',
-        "workflow w {",
+        "workflow w() {",
         "  run w_impl()",
         "}",
-        "workflow default {",
+        "workflow default() {",
         "  w $(true)",
         "}",
         "",
@@ -126,10 +126,10 @@ test("E_VALIDATE: send RHS cannot invoke Jaiph workflow via shell", () => {
       [
         "channel c",
         'script w_impl = "echo x"',
-        "workflow w {",
+        "workflow w() {",
         "  run w_impl()",
         "}",
-        "workflow default {",
+        "workflow default() {",
         "  c <- w",
         "}",
         "",
@@ -149,7 +149,7 @@ test("bare identifier arg: known const passes validation", () => {
       join(root, "m.jh"),
       [
         'script greet = "echo \\"hello $1\\""',
-        "workflow default {",
+        "workflow default() {",
         '  const name = "world"',
         "  run greet(name)",
         "}",
@@ -169,7 +169,7 @@ test("bare identifier arg: unknown name fails E_VALIDATE", () => {
       join(root, "m.jh"),
       [
         'script greet = "echo \\"hello $1\\""',
-        "workflow default {",
+        "workflow default() {",
         "  run greet(unknown_var)",
         "}",
         "",
@@ -193,7 +193,7 @@ test("bare identifier arg: capture variable passes validation", () => {
       [
         'script get_name = "echo \\"world\\""',
         'script greet = "echo \\"hello $1\\""',
-        "workflow default {",
+        "workflow default() {",
         "  result = run get_name()",
         "  run greet(result)",
         "}",
@@ -214,7 +214,7 @@ test("bare identifier arg: argN always valid", () => {
       join(root, "m.jh"),
       [
         'script greet = "echo \\"hello $1\\""',
-        "workflow default {",
+        "workflow default() {",
         "  run greet(arg1)",
         "}",
         "",
@@ -235,8 +235,50 @@ test("bare identifier arg: top-level const passes validation", () => {
       [
         'const REPO = "my-project"',
         'script greet = "echo \\"hello $1\\""',
-        "workflow default {",
+        "workflow default() {",
         "  run greet(REPO)",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    buildScripts(join(root, "m.jh"), out);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("E_VALIDATE: braced parameter name in run args is rejected (use bare identifier)", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-braced-wf-param-"));
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        'script delay = "sleep \\"$1\\""',
+        "workflow w(seconds) {",
+        '  run delay("${seconds}")',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      /do not use "\$\{seconds\}"/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("buildScripts accepts run delay(seconds) with bare workflow parameter", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-bare-wf-param-"));
+  const out = join(root, "out");
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        'script delay = "sleep \\"$1\\""',
+        "workflow w(seconds) {",
+        "  run delay(seconds)",
         "}",
         "",
       ].join("\n"),

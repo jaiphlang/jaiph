@@ -1,6 +1,6 @@
 import type { WorkflowStepDef } from "../types";
 import { parseConstRhs } from "./const-rhs";
-import { fail, indexOfClosingDoubleQuote, isRef, parseCallRef } from "./core";
+import { fail, indexOfClosingDoubleQuote, isRef, parseCallRef, parseLogMessageRhs } from "./core";
 import { parseInlineScriptBody } from "./inline-script";
 
 /** Reject non-empty trailing content after a call expression (e.g. shell redirection). */
@@ -195,27 +195,13 @@ function parseRecoverStatement(
   if (t.startsWith("log ") || t === "log") {
     const logArg = t.slice("log".length).trimStart();
     const logCol = col + Math.max(0, t.indexOf("log"));
-    if (!logArg.startsWith('"')) {
-      fail(filePath, 'log must match: log "<message>"', lineNo, logCol);
-    }
-    const closeIdx = indexOfClosingDoubleQuote(logArg, 1);
-    if (closeIdx === -1) {
-      fail(filePath, "unterminated log string", lineNo, logCol);
-    }
-    const message = logArg.slice(1, closeIdx);
+    const message = parseLogMessageRhs(filePath, lineNo, logCol, logArg, "log");
     return { type: "log", message, loc: { line: lineNo, col: logCol } };
   }
   if (t.startsWith("logerr ") || t === "logerr") {
     const logerrArg = t.slice("logerr".length).trimStart();
     const logerrCol = col + Math.max(0, t.indexOf("logerr"));
-    if (!logerrArg.startsWith('"')) {
-      fail(filePath, 'logerr must match: logerr "<message>"', lineNo, logerrCol);
-    }
-    const closeIdx = indexOfClosingDoubleQuote(logerrArg, 1);
-    if (closeIdx === -1) {
-      fail(filePath, "unterminated logerr string", lineNo, logerrCol);
-    }
-    const message = logerrArg.slice(1, closeIdx);
+    const message = parseLogMessageRhs(filePath, lineNo, logerrCol, logerrArg, "logerr");
     return { type: "logerr", message, loc: { line: lineNo, col: logerrCol } };
   }
   return { type: "shell", command: t, loc: { line: lineNo, col } };

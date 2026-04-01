@@ -27,8 +27,8 @@ while IFS= read -r f; do
 done <<< "$1"
 ```
 
-rule docs_files_present {
-  run assert_newline_paths_are_files("${arg1}")
+rule docs_files_present(list) {
+  run assert_newline_paths_are_files(list)
 }
 
 script assert_worktree_clean_for_docs = ```
@@ -43,7 +43,7 @@ if [ -n "$current_changed_files" ]; then
 fi
 ```
 
-rule worktree_is_clean {
+rule worktree_is_clean() {
   run assert_worktree_clean_for_docs()
 }
 
@@ -62,8 +62,8 @@ while IFS= read -r changed_file; do
 done <<< "$after_changed_files"
 ```
 
-rule only_expected_docs_changed_after_prompt {
-  run assert_only_allowed_changed("${arg1}")
+rule only_expected_docs_changed_after_prompt(allowed) {
+  run assert_only_allowed_changed(allowed)
 }
 
 script arg_nonempty = "[ -n \"${1:-}\" ]"
@@ -103,7 +103,7 @@ printf '%s\n' "$out"
 
 script join_newline_args = "printf '%s\n' \"$@\""
 
-workflow update_from_task {
+workflow update_from_task(taskDesc) {
   prompt ```
     <role>
     ${role}
@@ -121,18 +121,18 @@ workflow update_from_task {
       Do NOT add manual navigation blocks to individual markdown pages.
 
     The task description is:
-    ${arg1}
+    ${taskDesc}
     </task>
 ```
 }
 
-workflow docs_page {
+workflow docs_page(path) {
   prompt ```
     <role>
     ${role}
     </role>
     <task>
-    Double check the content of ${arg1}, which describes a given concept of the
+    Double check the content of ${path}, which describes a given concept of the
     language, runtime or a set of features:
     0. Use ARCHITECTURE.md as the source of truth for architecture boundaries,
        contracts, and execution flow. Keep docs consistent with it.
@@ -157,13 +157,13 @@ workflow docs_page {
 ```
 }
 
-workflow docs_overview {
+workflow docs_overview(docPaths) {
   prompt ```
     <role>
     ${role}
     </role>
     <task>
-    Read all ${arg1}, they contain all the documentation for the
+    Read all ${docPaths}, they contain all the documentation for the
     project. Also read ARCHITECTURE.md and treat it as architecture source of
     truth. Please update docs in the following way:
     1. Ensure they are consistent with each other.
@@ -205,27 +205,25 @@ workflow docs_overview {
 ```
 }
 
-workflow process_docs_md_recursive {
-  const file = "${arg1}"
-  const remaining = "${arg2}"
-  run docs_page("${file}")
-  if run arg_nonempty("${remaining}") {
-    const next = run first_line_str("${remaining}")
-    const rest = run rest_lines_str("${remaining}")
-    run process_docs_md_recursive("${next}", "${rest}")
+workflow process_docs_md_recursive(file, remaining) {
+  run docs_page(file)
+  if run arg_nonempty(remaining) {
+    const next = run first_line_str(remaining)
+    const rest = run rest_lines_str(remaining)
+    run process_docs_md_recursive(next, rest)
   }
 }
 
-workflow default {
+workflow default() {
   ensure worktree_is_clean()
   const allowed_list = run build_allowed_paths_block()
-  ensure docs_files_present("${allowed_list}")
+  ensure docs_files_present(allowed_list)
   const docs_md_list = run list_docs_md_paths()
-  const first_doc = run first_line_str("${docs_md_list}")
-  const rest_docs = run rest_lines_str("${docs_md_list}")
-  if run arg_nonempty("${first_doc}") {
-    run process_docs_md_recursive("${first_doc}", "${rest_docs}")
+  const first_doc = run first_line_str(docs_md_list)
+  const rest_docs = run rest_lines_str(docs_md_list)
+  if run arg_nonempty(first_doc) {
+    run process_docs_md_recursive(first_doc, rest_docs)
   }
-  run docs_overview("${docs_md_list}")
-  ensure only_expected_docs_changed_after_prompt("${allowed_list}")
+  run docs_overview(docs_md_list)
+  ensure only_expected_docs_changed_after_prompt(allowed_list)
 }

@@ -9,11 +9,11 @@ fi
 ```
 
 rule name_was_provided(name) {
-  run name_was_provided_check("${name}")
+  run name_was_provided_check(name)
 }
 
 workflow default(name) {
-  ensure name_was_provided("${name}")
+  ensure name_was_provided(name)
 
   response = prompt ```
     Say hello to ${name} and provide a fun fact about a person with the same name.

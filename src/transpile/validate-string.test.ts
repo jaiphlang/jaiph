@@ -25,7 +25,7 @@ function writeJh(root: string, name: string, lines: string[]): void {
 test("valid: ${name} interpolation in log", () => {
   withTempDir("jaiph-str-ok-braced-", (root) => {
     writeJh(root, "m.jh", [
-      "workflow default {",
+      "workflow default() {",
       '  log "hello ${name}"',
       "}",
     ]);
@@ -36,7 +36,7 @@ test("valid: ${name} interpolation in log", () => {
 test("valid: ${arg1} positional in log", () => {
   withTempDir("jaiph-str-ok-arg1-", (root) => {
     writeJh(root, "m.jh", [
-      "workflow default {",
+      "workflow default() {",
       '  log "arg is ${arg1}"',
       "}",
     ]);
@@ -47,7 +47,7 @@ test("valid: ${arg1} positional in log", () => {
 test("valid: escaped backtick in prompt", () => {
   withTempDir("jaiph-str-ok-esc-bt-", (root) => {
     writeJh(root, "m.jh", [
-      "workflow default {",
+      "workflow default() {",
       '  prompt "escaped backtick: \\`cmd\\`"',
       "}",
     ]);
@@ -59,7 +59,7 @@ test("valid: $1 in script body (shell context)", () => {
   withTempDir("jaiph-str-ok-script-dollar1-", (root) => {
     writeJh(root, "m.jh", [
       'script greet = "echo \\"Hello $1\\""',
-      "workflow default {",
+      "workflow default() {",
       '  run greet("world")',
       "}",
     ]);
@@ -74,7 +74,7 @@ test("valid: $1 in script body (shell context)", () => {
 test("reject bare $name in log message", () => {
   withTempDir("jaiph-str-bad-bare-name-log-", (root) => {
     writeJh(root, "m.jh", [
-      "workflow default {",
+      "workflow default() {",
       '  log "value is $x"',
       "}",
     ]);
@@ -88,7 +88,7 @@ test("reject bare $name in log message", () => {
 test("reject bare $name in prompt", () => {
   withTempDir("jaiph-str-bad-bare-name-prompt-", (root) => {
     writeJh(root, "m.jh", [
-      "workflow default {",
+      "workflow default() {",
       '  prompt "hello $user"',
       "}",
     ]);
@@ -102,7 +102,7 @@ test("reject bare $name in prompt", () => {
 test("reject bare $1 in log message", () => {
   withTempDir("jaiph-str-bad-bare-1-log-", (root) => {
     writeJh(root, "m.jh", [
-      "workflow default {",
+      "workflow default() {",
       '  log "arg: $1"',
       "}",
     ]);
@@ -116,7 +116,7 @@ test("reject bare $1 in log message", () => {
 test("reject braced numeric ${1} in log message", () => {
   withTempDir("jaiph-str-bad-braced-1-log-", (root) => {
     writeJh(root, "m.jh", [
-      "workflow default {",
+      "workflow default() {",
       '  log "arg: ${1}"',
       "}",
     ]);
@@ -130,7 +130,7 @@ test("reject braced numeric ${1} in log message", () => {
 test("reject bare $name in fail message", () => {
   withTempDir("jaiph-str-bad-bare-fail-", (root) => {
     writeJh(root, "m.jh", [
-      "workflow default {",
+      "workflow default() {",
       '  fail "error: $reason"',
       "}",
     ]);
@@ -144,7 +144,7 @@ test("reject bare $name in fail message", () => {
 test("reject bare $name in return string", () => {
   withTempDir("jaiph-str-bad-bare-return-", (root) => {
     writeJh(root, "m.jh", [
-      "workflow default {",
+      "workflow default() {",
       '  return "$result"',
       "}",
     ]);
@@ -162,7 +162,7 @@ test("reject bare $name in return string", () => {
 test("reject ${var:-fallback} in log message", () => {
   withTempDir("jaiph-str-bad-fallback-log-", (root) => {
     writeJh(root, "m.jh", [
-      "workflow default {",
+      "workflow default() {",
       '  log "${name:-anonymous}"',
       "}",
     ]);
@@ -176,7 +176,7 @@ test("reject ${var:-fallback} in log message", () => {
 test("reject ${var:-fallback} in fail message", () => {
   withTempDir("jaiph-str-bad-fallback-fail-", (root) => {
     writeJh(root, "m.jh", [
-      "workflow default {",
+      "workflow default() {",
       '  fail "${name:-unknown}"',
       "}",
     ]);
@@ -190,7 +190,7 @@ test("reject ${var:-fallback} in fail message", () => {
 test("reject ${var:-fallback} in prompt string", () => {
   withTempDir("jaiph-str-bad-fallback-prompt-", (root) => {
     writeJh(root, "m.jh", [
-      "workflow default {",
+      "workflow default() {",
       '  prompt "Hello ${user:-default}"',
       "}",
     ]);
@@ -204,7 +204,7 @@ test("reject ${var:-fallback} in prompt string", () => {
 test("reject ${var:-fallback} in const RHS expression", () => {
   withTempDir("jaiph-str-bad-fallback-const-", (root) => {
     writeJh(root, "m.jh", [
-      "workflow default {",
+      "workflow default() {",
       '  const x = ${name:-default}',
       "}",
     ]);
@@ -218,7 +218,7 @@ test("reject ${var:-fallback} in const RHS expression", () => {
 test("reject ${var:+alt} shell expansion in log", () => {
   withTempDir("jaiph-str-bad-alt-log-", (root) => {
     writeJh(root, "m.jh", [
-      "workflow default {",
+      "workflow default() {",
       '  log "${debug:+verbose mode}"',
       "}",
     ]);
@@ -236,7 +236,7 @@ test("reject ${var:+alt} shell expansion in log", () => {
 test("reject unescaped backtick in log message", () => {
   withTempDir("jaiph-str-bad-bt-log-", (root) => {
     writeJh(root, "m.jh", [
-      "workflow default {",
+      "workflow default() {",
       '  log "output: `uname`"',
       "}",
     ]);
@@ -250,7 +250,7 @@ test("reject unescaped backtick in log message", () => {
 test("reject unescaped backtick in fail message", () => {
   withTempDir("jaiph-str-bad-bt-fail-", (root) => {
     writeJh(root, "m.jh", [
-      "workflow default {",
+      "workflow default() {",
       '  fail "error: `whoami`"',
       "}",
     ]);
@@ -264,7 +264,7 @@ test("reject unescaped backtick in fail message", () => {
 test("reject unescaped backtick in prompt", () => {
   withTempDir("jaiph-str-bad-bt-prompt-", (root) => {
     writeJh(root, "m.jh", [
-      "workflow default {",
+      "workflow default() {",
       '  prompt "run `uname` and tell me"',
       "}",
     ]);
@@ -282,7 +282,7 @@ test("reject unescaped backtick in prompt", () => {
 test("reject $(...) in log message", () => {
   withTempDir("jaiph-str-bad-cmdsub-log-", (root) => {
     writeJh(root, "m.jh", [
-      "workflow default {",
+      "workflow default() {",
       '  log "host is $(uname)"',
       "}",
     ]);
@@ -296,7 +296,7 @@ test("reject $(...) in log message", () => {
 test("reject $(...) in logerr message", () => {
   withTempDir("jaiph-str-bad-cmdsub-logerr-", (root) => {
     writeJh(root, "m.jh", [
-      "workflow default {",
+      "workflow default() {",
       '  logerr "host is $(uname)"',
       "}",
     ]);
@@ -315,10 +315,10 @@ test("reject ${var:-fallback} in rule log", () => {
   withTempDir("jaiph-str-bad-fallback-rule-", (root) => {
     writeJh(root, "m.jh", [
       'script noop = "true"',
-      "rule check {",
+      "rule check() {",
       '  log "${x:-fallback}"',
       "}",
-      "workflow default {",
+      "workflow default() {",
       "  ensure check()",
       "}",
     ]);
@@ -333,10 +333,10 @@ test("reject unescaped backtick in rule fail", () => {
   withTempDir("jaiph-str-bad-bt-rule-fail-", (root) => {
     writeJh(root, "m.jh", [
       'script noop = "true"',
-      "rule check {",
+      "rule check() {",
       '  fail "error: `cmd`"',
       "}",
-      "workflow default {",
+      "workflow default() {",
       "  ensure check()",
       "}",
     ]);
@@ -355,7 +355,7 @@ test("valid: ${run ref} inline capture in log", () => {
   withTempDir("jaiph-str-ic-run-", (root) => {
     writeJh(root, "m.jh", [
       'script greet = "echo \\"hello\\""',
-      "workflow default {",
+      "workflow default() {",
       '  log "got: ${run greet()}"',
       "}",
     ]);
@@ -366,10 +366,10 @@ test("valid: ${run ref} inline capture in log", () => {
 test("valid: ${ensure ref} inline capture in log", () => {
   withTempDir("jaiph-str-ic-ensure-", (root) => {
     writeJh(root, "m.jh", [
-      "rule check {",
+      "rule check() {",
       '  return "ok"',
       "}",
-      "workflow default {",
+      "workflow default() {",
       '  log "status: ${ensure check()}"',
       "}",
     ]);
@@ -381,7 +381,7 @@ test("valid: ${run ref args} inline capture with args", () => {
   withTempDir("jaiph-str-ic-run-args-", (root) => {
     writeJh(root, "m.jh", [
       'script greet = "echo \\"hello $1\\""',
-      "workflow default {",
+      "workflow default() {",
       '  log "got: ${run greet(world)}"',
       "}",
     ]);
@@ -393,10 +393,10 @@ test("valid: ${run ref} inline capture in return", () => {
   withTempDir("jaiph-str-ic-return-", (root) => {
     writeJh(root, "m.jh", [
       'script greet = "echo \\"hello\\""',
-      "workflow helper {",
+      "workflow helper() {",
       '  return "${run greet()}"',
       "}",
-      "workflow default {",
+      "workflow default() {",
       "  run helper()",
       "}",
     ]);
@@ -408,10 +408,10 @@ test("valid: ${run ref} inline capture in rule log", () => {
   withTempDir("jaiph-str-ic-rule-", (root) => {
     writeJh(root, "m.jh", [
       'script greet = "echo \\"hello\\""',
-      "rule check {",
+      "rule check() {",
       '  log "got: ${run greet()}"',
       "}",
-      "workflow default {",
+      "workflow default() {",
       "  ensure check()",
       "}",
     ]);
@@ -424,7 +424,7 @@ test("rejected: nested inline capture ${run ... ${run ...}}", () => {
     writeJh(root, "m.jh", [
       'script foo = "echo \\"a\\""',
       'script bar = "echo \\"b\\""',
-      "workflow default {",
+      "workflow default() {",
       '  log "got: ${run foo(${run bar()})}"',
       "}",
     ]);
@@ -438,7 +438,7 @@ test("rejected: nested inline capture ${run ... ${run ...}}", () => {
 test("rejected: ${run invalid-ref} in log", () => {
   withTempDir("jaiph-str-ic-bad-ref-", (root) => {
     writeJh(root, "m.jh", [
-      "workflow default {",
+      "workflow default() {",
       '  log "got: ${run 123bad()}"',
       "}",
     ]);
@@ -452,7 +452,7 @@ test("rejected: ${run invalid-ref} in log", () => {
 test("rejected: ${run ref} with unknown ref in workflow", () => {
   withTempDir("jaiph-str-ic-unknown-", (root) => {
     writeJh(root, "m.jh", [
-      "workflow default {",
+      "workflow default() {",
       '  log "got: ${run nonexistent()}"',
       "}",
     ]);
@@ -512,7 +512,7 @@ test("extractDotFieldRefs ignores underscore-style ${var_field}", () => {
 test("valid: ${response.field} dot notation in log compiles", () => {
   withTempDir("jaiph-str-dot-ok-", (root) => {
     writeJh(root, "m.jh", [
-      "workflow default {",
+      "workflow default() {",
       '  result = prompt "Analyse" returns "{ type: string, risk: string }"',
       '  log "type is ${result.type}"',
       "}",
@@ -524,7 +524,7 @@ test("valid: ${response.field} dot notation in log compiles", () => {
 test("invalid: ${x.field} where x has no schema fails at compile time", () => {
   withTempDir("jaiph-str-dot-noscema-", (root) => {
     writeJh(root, "m.jh", [
-      "workflow default {",
+      "workflow default() {",
       '  log "value ${x.field}"',
       "}",
     ]);
@@ -538,7 +538,7 @@ test("invalid: ${x.field} where x has no schema fails at compile time", () => {
 test("invalid: ${result.bogus} where bogus is not in schema fails at compile time", () => {
   withTempDir("jaiph-str-dot-badfield-", (root) => {
     writeJh(root, "m.jh", [
-      "workflow default {",
+      "workflow default() {",
       '  result = prompt "Analyse" returns "{ type: string, risk: string }"',
       '  log "bad field ${result.bogus}"',
       "}",

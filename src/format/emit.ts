@@ -113,7 +113,7 @@ function emitComments(comments: string[]): string[] {
 function emitRule(rule: RuleDef, pad: string): string {
   const lines: string[] = [];
   lines.push(...emitComments(rule.comments));
-  const paramStr = rule.params ? `(${rule.params.join(", ")})` : "";
+  const paramStr = `(${rule.params.join(", ")})`;
   lines.push(`rule ${rule.name}${paramStr} {`);
   lines.push(...emitSteps(rule.steps, pad, pad));
   lines.push("}");
@@ -142,7 +142,7 @@ function emitWorkflow(wf: WorkflowDef, pad: string): string {
   const lines: string[] = [];
   lines.push(...emitComments(wf.comments));
 
-  const paramStr = wf.params ? `(${wf.params.join(", ")})` : "";
+  const paramStr = `(${wf.params.join(", ")})`;
   lines.push(`workflow ${wf.name}${paramStr} {`);
 
   if (wf.metadata) {

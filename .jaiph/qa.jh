@@ -144,7 +144,7 @@ const analyze_gaps_prompt = "
     </role>
     "
 
-workflow analyze_gaps {
+workflow analyze_gaps() {
   const report_path = run new_qa_gap_report_path()
   const contributing_docs = run read_contributing_docs()
   const txtar_format = run read_txtar_format_spec()
@@ -157,7 +157,7 @@ workflow analyze_gaps {
   log "Gap report saved to ${report_path}"
 }
 
-workflow write_tests {
+workflow write_tests() {
   if not run gap_report_nonempty() {
     fail "No gap report found (see .jaiph/tmp/qa_gap_report_active.txt). Run analyze_gaps first."
   }
@@ -225,7 +225,7 @@ workflow write_tests {
 
 script mkdir_tmp_jaiph_qa = "mkdir -p .jaiph/tmp"
 
-workflow default {
+workflow default() {
   # ensure git.is_clean()
   run mkdir_tmp_jaiph_qa()
   run analyze_gaps()

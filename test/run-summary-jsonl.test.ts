@@ -55,7 +55,7 @@ test("run_summary.jsonl: workflow, steps, log, inbox dispatch stream", () => {
         "",
         'script emit_greeting = "echo \\"hello-inbox\\""',
         "",
-        "workflow sender {",
+        "workflow sender() {",
         "  log \"sending\"",
         "  logerr \"warn-line\"",
         "  greetings <- run emit_greeting()",
@@ -63,11 +63,11 @@ test("run_summary.jsonl: workflow, steps, log, inbox dispatch stream", () => {
         "",
         'script write_received_file = "echo \\"$1\\" > received.txt"',
         "",
-        "workflow receiver {",
+        "workflow receiver() {",
         "  run write_received_file(\"$1\")",
         "}",
         "",
-        "workflow default {",
+        "workflow default() {",
         "  run sender()",
         "  greetings -> receiver",
         "}",
@@ -155,7 +155,7 @@ test("run_summary.jsonl: STEP_END remains parseable for legacy consumers (event_
     const jh = join(root, "t.jh");
     writeFileSync(
       jh,
-      ['script emit_x = "echo \\"x\\""', "workflow default {", "  run emit_x()", "}", ""].join("\n"),
+      ['script emit_x = "echo \\"x\\""', "workflow default() {", "  run emit_x()", "}", ""].join("\n"),
     );
     const runResult = spawnSync("node", [cliPath, "run", jh], {
       encoding: "utf8",

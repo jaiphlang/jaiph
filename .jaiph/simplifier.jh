@@ -48,13 +48,13 @@ done < <(git_changed_paths_sorted)
 return $bad
 ```
 
-rule no_test_or_e2e_paths_changed {
+rule no_test_or_e2e_paths_changed() {
   run assert_no_test_or_e2e_in_changed()
 }
 
 script report_file_nonempty = "test -s \".jaiph/tmp/simplifier_report.md\""
 
-workflow find_simplifications {
+workflow find_simplifications() {
   const report = prompt ```
     <role>
     You are a senior engineer focused on codebase simplification for the Jaiph
@@ -99,7 +99,7 @@ script save_simplifier_report = "printf '%s\n' \"$1\" > .jaiph/tmp/simplifier_re
 
 script read_simplifier_report = "cat .jaiph/tmp/simplifier_report.md"
 
-workflow apply_simplifications {
+workflow apply_simplifications() {
   if not run report_file_nonempty() {
     fail "No report at .jaiph/tmp/simplifier_report.md. Run find_simplifications first."
   }
@@ -136,7 +136,7 @@ workflow apply_simplifications {
 
 script mkdir_tmp_jaiph = "mkdir -p .jaiph/tmp"
 
-workflow default {
+workflow default() {
   ensure git.is_clean()
   run mkdir_tmp_jaiph()
   run find_simplifications()

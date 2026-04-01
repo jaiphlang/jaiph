@@ -76,6 +76,7 @@ test("collectWorkflowChildren: collects run steps", () => {
     workflows: [{
       name: "default",
       comments: [],
+      params: [],
       steps: [
         { type: "run", workflow: { value: "deploy", loc: { line: 2, col: 3 } } },
       ],
@@ -93,6 +94,7 @@ test("collectWorkflowChildren: collects async run with prefix", () => {
     workflows: [{
       name: "default",
       comments: [],
+      params: [],
       steps: [
         { type: "run", workflow: { value: "bg_task", loc: { line: 2, col: 3 } }, async: true },
       ],
@@ -108,6 +110,7 @@ test("collectWorkflowChildren: collects ensure steps", () => {
     workflows: [{
       name: "default",
       comments: [],
+      params: [],
       steps: [
         { type: "ensure", ref: { value: "check_passes", loc: { line: 2, col: 3 } } },
       ],
@@ -124,6 +127,7 @@ test("collectWorkflowChildren: collects prompt steps", () => {
     workflows: [{
       name: "default",
       comments: [],
+      params: [],
       steps: [
         { type: "prompt", raw: 'prompt "hello world"', loc: { line: 2, col: 3 } },
       ],
@@ -140,6 +144,7 @@ test("collectWorkflowChildren: collects log steps", () => {
     workflows: [{
       name: "default",
       comments: [],
+      params: [],
       steps: [
         { type: "log", message: "starting", loc: { line: 2, col: 3 } },
       ],
@@ -155,6 +160,7 @@ test("collectWorkflowChildren: collects logerr steps", () => {
     workflows: [{
       name: "default",
       comments: [],
+      params: [],
       steps: [
         { type: "logerr", message: "bad thing", loc: { line: 2, col: 3 } },
       ],
@@ -170,6 +176,7 @@ test("collectWorkflowChildren: collects send steps", () => {
     workflows: [{
       name: "default",
       comments: [],
+      params: [],
       steps: [
         { type: "send", channel: "notify", rhs: { kind: "literal", token: "hello" }, loc: { line: 2, col: 3 } },
       ],
@@ -185,6 +192,7 @@ test("collectWorkflowChildren: collects fail steps", () => {
     workflows: [{
       name: "default",
       comments: [],
+      params: [],
       steps: [
         { type: "fail", message: "broken", loc: { line: 2, col: 3 } },
       ],
@@ -200,6 +208,7 @@ test("collectWorkflowChildren: collects const steps", () => {
     workflows: [{
       name: "default",
       comments: [],
+      params: [],
       steps: [
         { type: "const", name: "x", value: { kind: "expr", bashRhs: "1" }, loc: { line: 2, col: 3 } },
       ],
@@ -215,6 +224,7 @@ test("collectWorkflowChildren: collects wait steps", () => {
     workflows: [{
       name: "default",
       comments: [],
+      params: [],
       steps: [
         { type: "wait", loc: { line: 2, col: 3 } },
       ],
@@ -230,6 +240,7 @@ test("collectWorkflowChildren: collects return steps", () => {
     workflows: [{
       name: "default",
       comments: [],
+      params: [],
       steps: [
         { type: "return", value: '"done"', loc: { line: 2, col: 3 } },
       ],
@@ -246,6 +257,7 @@ test("collectWorkflowChildren: collects shell steps with truncation", () => {
     workflows: [{
       name: "default",
       comments: [],
+      params: [],
       steps: [
         { type: "shell", command: longCmd, loc: { line: 2, col: 3 } },
       ],
@@ -261,6 +273,7 @@ test("collectWorkflowChildren: skips comment steps", () => {
     workflows: [{
       name: "default",
       comments: [],
+      params: [],
       steps: [
         { type: "comment", text: "# note", loc: { line: 2, col: 3 } },
       ],
@@ -276,6 +289,7 @@ test("collectWorkflowChildren: collects route declarations", () => {
     workflows: [{
       name: "default",
       comments: [],
+      params: [],
       steps: [],
       routes: [{
         channel: "events",
@@ -297,7 +311,7 @@ test("collectWorkflowChildren: collects route declarations", () => {
 
 test("buildRunTreeRows: root row is first", () => {
   const mod = minimalModule({
-    workflows: [{ name: "default", comments: [], steps: [], loc: { line: 1, col: 1 } }],
+    workflows: [{ name: "default", comments: [], params: [], steps: [], loc: { line: 1, col: 1 } }],
   });
   const rows = buildRunTreeRows(mod);
   assert.equal(rows.length, 1);
@@ -311,6 +325,7 @@ test("buildRunTreeRows: includes nested steps", () => {
       {
         name: "default",
         comments: [],
+        params: [],
         steps: [
           { type: "run", workflow: { value: "sub", loc: { line: 2, col: 3 } } },
         ],
@@ -319,6 +334,7 @@ test("buildRunTreeRows: includes nested steps", () => {
       {
         name: "sub",
         comments: [],
+        params: [],
         steps: [
           { type: "log", message: "hello", loc: { line: 5, col: 3 } },
         ],
@@ -339,6 +355,7 @@ test("buildRunTreeRows: does not re-expand visited workflows", () => {
       {
         name: "default",
         comments: [],
+        params: [],
         steps: [
           { type: "run", workflow: { value: "shared", loc: { line: 2, col: 3 } } },
           { type: "run", workflow: { value: "other", loc: { line: 3, col: 3 } } },
@@ -348,6 +365,7 @@ test("buildRunTreeRows: does not re-expand visited workflows", () => {
       {
         name: "shared",
         comments: [],
+        params: [],
         steps: [
           { type: "log", message: "in shared", loc: { line: 6, col: 3 } },
         ],
@@ -356,6 +374,7 @@ test("buildRunTreeRows: does not re-expand visited workflows", () => {
       {
         name: "other",
         comments: [],
+        params: [],
         steps: [
           { type: "run", workflow: { value: "shared", loc: { line: 9, col: 3 } } },
         ],

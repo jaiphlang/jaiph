@@ -4,17 +4,17 @@
 import "a.jh" as mod
 import "b.jh" as mod
 
-workflow default {
+workflow default() {
   ensure mod.one()
 }
 --- a.jh
 script one_impl = "echo one"
-rule one {
+rule one() {
   run one_impl()
 }
 --- b.jh
 script two_impl = "echo two"
-rule two {
+rule two() {
   run two_impl()
 }
 
@@ -23,12 +23,12 @@ rule two {
 --- main.jh
 import "lib.jh" as lib
 
-workflow default {
+workflow default() {
   run lib.missing()
 }
 --- lib.jh
 script existing_impl = "echo ok"
-workflow existing {
+workflow existing() {
   run existing_impl()
 }
 
@@ -37,11 +37,11 @@ workflow existing {
 --- main.jh
 import "lib.jh" as lib
 channel c
-workflow default {
+workflow default() {
   c <- lib.nonexistent
 }
 --- lib.jh
-workflow dummy {
+workflow dummy() {
   log "ok"
 }
 
@@ -49,19 +49,19 @@ workflow dummy {
 # @expect error E_VALIDATE "is not defined" @3:1
 --- main.jh
 import "shared.jh" as shared
-workflow default {
+workflow default() {
   shared.typo <- "x"
 }
 --- shared.jh
 channel findings
-workflow analyst {
+workflow analyst() {
   log "ok"
 }
 
 === unknown import alias in run reference
 # @expect error E_VALIDATE "unknown import alias" @2:3
 --- main.jh
-workflow default {
+workflow default() {
   run ghost.deploy()
 }
 
@@ -69,12 +69,12 @@ workflow default {
 # @expect error E_VALIDATE "does not exist" @3:3
 --- main.jh
 import "lib.jh" as lib
-workflow default {
+workflow default() {
   run lib.nonexistent()
 }
 --- lib.jh
 script existing = "echo \"ok\""
-workflow dummy {
+workflow dummy() {
   log "ok"
 }
 
@@ -82,13 +82,13 @@ workflow dummy {
 # @expect error E_VALIDATE "must be called with ensure, not run" @3:3
 --- main.jh
 import "lib.jh" as lib
-rule local_check {
+rule local_check() {
   run lib.other_rule()
 }
-workflow default {
+workflow default() {
   ensure local_check()
 }
 --- lib.jh
-export rule other_rule {
+export rule other_rule() {
   return "ok"
 }

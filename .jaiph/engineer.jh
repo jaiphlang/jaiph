@@ -205,7 +205,7 @@ line="${line%% <!--*}"
 printf '%s\n' "$line"
 ```
 
-workflow classify_role {
+workflow classify_role(task) {
   const result = prompt ```
     Classify this task into the single best-fit engineer role.
 
@@ -222,7 +222,7 @@ workflow classify_role {
       Keywords: docs, documentation, write, update docs, readme, revisit, interlink.
 
     Task:
-    ${arg1}
+    ${task}
 
     Respond with exactly one role name.
   ``` returns "{ role: string }"
@@ -234,9 +234,7 @@ script save_string_to_file = "echo \"$1\" > \"$2\""
 
 script mkdir_p_simple = "mkdir -p \"$1\""
 
-workflow implement {
-  const task = "${arg1}"
-  const role_name = "${arg2}"
+workflow implement(task, role_name) {
   if not run task_text_has_header(task) {
     fail "Provided task does not contain a '## [text]' header"
   }
@@ -307,7 +305,7 @@ workflow implement {
 ```
 }
 
-workflow default {
+workflow default() {
   const role_arg = "${arg1}"
   # ensure git.is_clean
   const task = run queue.get_first_task()

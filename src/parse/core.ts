@@ -67,6 +67,40 @@ export function isBareIdentifier(token: string): boolean {
 }
 
 /**
+ * Parse `log` / `logerr` RHS: either a double-quoted string or a single bare identifier
+ * (stored as `${name}` for downstream interpolation).
+ */
+export function parseLogMessageRhs(
+  filePath: string,
+  lineNo: number,
+  keywordCol: number,
+  logArg: string,
+  keyword: "log" | "logerr",
+): string {
+  const trimmed = logArg.trim();
+  if (trimmed.startsWith('"')) {
+    const closeIdx = indexOfClosingDoubleQuote(logArg, 1);
+    if (closeIdx === -1) {
+      fail(filePath, `unterminated ${keyword} string`, lineNo, keywordCol);
+    }
+    const trailing = logArg.slice(closeIdx + 1).trim();
+    if (trailing) {
+      fail(filePath, `unexpected content after ${keyword} string: '${trailing}'`, lineNo, keywordCol);
+    }
+    return logArg.slice(1, closeIdx);
+  }
+  if (isBareIdentifier(trimmed) && trimmed === logArg.trim()) {
+    return `\${${trimmed}}`;
+  }
+  fail(
+    filePath,
+    `${keyword} must match: ${keyword} "<message>" or ${keyword} <identifier>`,
+    lineNo,
+    keywordCol,
+  );
+}
+
+/**
  * Parse a parenthesised parameter list from a definition header.
  * Input: the content between '(' and ')' (exclusive).
  * Returns validated, deduplicated parameter names.
