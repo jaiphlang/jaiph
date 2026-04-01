@@ -250,7 +250,18 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
     case "prompt": {
       const capture = step.captureName ? `${step.captureName} = ` : "";
       const returns = step.returns ? ` returns "${step.returns}"` : "";
-      lines.push(`${ci}${capture}prompt ${step.raw}${returns}`);
+      if (step.bodyKind === "identifier" && step.bodyIdentifier) {
+        lines.push(`${ci}${capture}prompt ${step.bodyIdentifier}${returns}`);
+      } else if (step.bodyKind === "fenced") {
+        const inner = step.raw.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+        lines.push(`${ci}${capture}prompt \`\`\``);
+        for (const bl of inner.split("\n")) {
+          lines.push(`${ci}${bl}`);
+        }
+        lines.push(`${ci}\`\`\``);
+      } else {
+        lines.push(`${ci}${capture}prompt ${step.raw}${returns}`);
+      }
       break;
     }
 
@@ -346,7 +357,14 @@ function emitConstStep(name: string, value: ConstRhs): string {
       return `const ${name} = ensure ${emitRef(value.ref, value.args)}`;
     case "prompt_capture": {
       const returns = value.returns ? ` returns "${value.returns}"` : "";
-      return `const ${name} = prompt "${value.raw}"${returns}`;
+      if (value.bodyKind === "identifier" && value.bodyIdentifier) {
+        return `const ${name} = prompt ${value.bodyIdentifier}${returns}`;
+      }
+      if (value.bodyKind === "fenced") {
+        // Multi-line: caller handles remaining lines
+        return `const ${name} = prompt \`\`\``;
+      }
+      return `const ${name} = prompt ${value.raw}${returns}`;
     }
     case "match_expr": {
       // Multi-line format; return first line (const assignment opens the block)

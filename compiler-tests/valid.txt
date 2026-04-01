@@ -1113,3 +1113,58 @@ workflow default {
   findings -> analyst
   summary -> reviewer
 }
+
+=== prompt with identifier body
+# @expect ok
+--- input.jh
+workflow default {
+  const text = "Hello world"
+  prompt text
+}
+
+=== prompt with identifier body and returns
+# @expect ok
+--- input.jh
+workflow default {
+  const text = "Analyse this"
+  result = prompt text returns "{ type: string }"
+  return "${result}"
+}
+
+=== const prompt capture with identifier body
+# @expect ok
+--- input.jh
+workflow default {
+  const text = "Hello world"
+  const ans = prompt text
+}
+
+=== prompt with fenced block body
+# @expect ok
+--- input.jh
+workflow default {
+  prompt ```
+You are a helpful assistant.
+Analyze the following.
+```
+}
+
+=== const prompt capture with fenced block
+# @expect ok
+--- input.jh
+workflow default {
+  const ans = prompt ```
+Analyze this input.
+```
+}
+
+=== prompt with fenced block and interpolation
+# @expect ok
+--- input.jh
+workflow default {
+  const input = "data"
+  prompt ```
+You are a helpful assistant.
+Analyze: ${input}
+```
+}

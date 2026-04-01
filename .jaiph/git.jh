@@ -41,7 +41,7 @@ workflow commit {
 
   const task = "${arg1}"
 
-  prompt "
+  prompt ```
     Commit the current repository changes now.
 
     Requirements for commit message:
@@ -58,5 +58,5 @@ workflow commit {
 
     Changes were made for the following task:
     ${task}
-  "
+```
 }

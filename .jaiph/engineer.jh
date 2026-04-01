@@ -210,7 +210,7 @@ script first_line_task {
 }
 
 workflow classify_role {
-  const result = prompt "
+  const result = prompt ```
     Classify this task into the single best-fit engineer role.
 
     Roles:
@@ -229,7 +229,7 @@ workflow classify_role {
     ${arg1}
 
     Respond with exactly one role name.
-  " returns "{ role: string }"
+```
 
   return "${result_role}"
 }
@@ -250,7 +250,7 @@ workflow implement {
   }
   const role = run select_role("${role_name}")
 
-  prompt "
+  prompt ```
     ${role}
 
     <context>
@@ -312,7 +312,7 @@ workflow implement {
     Task description:
     ${task}
     </task>
-  "
+```
 }
 
 workflow default {

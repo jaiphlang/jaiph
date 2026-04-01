@@ -349,8 +349,8 @@ workflow default {
   echo ok
 }
 
-=== unterminated prompt string
-# @expect error E_PARSE "unterminated prompt string" @2:3
+=== multiline prompt string rejected
+# @expect error E_PARSE "multiline prompt strings are no longer supported" @2:3
 --- input.jh
 workflow default {
   prompt "this never closes
@@ -1332,4 +1332,12 @@ rule check {
 }
 workflow default {
   const x = ensure check
+}
+
+=== unterminated fenced prompt block
+# @expect error E_PARSE "unterminated fenced block" @2:1
+--- input.jh
+workflow default {
+  prompt ```
+  Hello multiline
 }

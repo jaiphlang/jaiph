@@ -233,16 +233,16 @@ else
   e2e::fail "async prompt branches still collide on seq/artifacts"
 fi
 
-# Multi-line prompt is displayed as single line (newlines stripped from preview)
+# Fenced-block prompt is displayed as single line (newlines stripped from preview)
 e2e::file "multiline_prompt.jh" <<'EOF'
 #!/usr/bin/env jaiph
 script done_impl {
   echo done
 }
 workflow default {
-  prompt "
+  prompt ```
     Line one and line two.
-  "
+```
   run done_impl()
 }
 EOF
@@ -262,7 +262,7 @@ workflow default
 EOF
 multiline_run_dir="$(e2e::run_dir "multiline_prompt.jh")"
 multiline_default_out="$(<"${multiline_run_dir}000001-workflow__default.out")"
-e2e::assert_contains "${multiline_default_out}" "Line one and line two." "multiline prompt transcript is captured in workflow .out"
+e2e::assert_contains "${multiline_default_out}" "Line one and line two." "fenced prompt transcript is captured in workflow .out"
 
 # Given: workflow with prompt but test does not mock it -> selected backend runs (cursor by default).
 e2e::file "prompt_unmatched.jh" <<'EOF'

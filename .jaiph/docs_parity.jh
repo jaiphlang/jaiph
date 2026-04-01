@@ -108,7 +108,7 @@ script join_newline_args {
 }
 
 workflow update_from_task {
-  prompt "
+  prompt ```
     <role>
     ${role}
     </role>
@@ -127,11 +127,11 @@ workflow update_from_task {
     The task description is:
     ${arg1}
     </task>
-  "
+```
 }
 
 workflow docs_page {
-  prompt "
+  prompt ```
     <role>
     ${role}
     </role>
@@ -158,11 +158,11 @@ workflow docs_page {
        individual markdown pages. Inline contextual links to other docs are
        fine.
     </task>
-  "
+```
 }
 
 workflow docs_overview {
-  prompt "
+  prompt ```
     <role>
     ${role}
     </role>
@@ -206,7 +206,7 @@ workflow docs_overview {
     10.Ensure src/cli/shared/usage.ts is up to date with the latest CLI commands
        and options. It should be a single source of truth for the CLI usage.
     </task>
-  "
+```
 }
 
 workflow process_docs_md_recursive {

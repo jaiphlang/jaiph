@@ -172,7 +172,7 @@ test("ACCEPTANCE: unterminated prompt string fails with E_PARSE", () => {
       ].join("\n"),
     );
 
-    assert.throws(() => buildScripts(root, join(root, "out")), /E_PARSE unterminated prompt string/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /E_PARSE multiline prompt strings are no longer supported/);
   });
 });
 

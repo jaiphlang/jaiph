@@ -202,18 +202,55 @@ Syntax rules:
 
 ### `prompt` — Agent Interaction
 
-Sends a double-quoted string to the configured agent backend.
+Sends text to the configured agent backend. The prompt body can be supplied in three forms: a single-line string literal, a bare identifier referencing an existing binding, or a fenced multiline block.
+
+**1. Single-line string literal**
+
+A double-quoted string on one line. `${...}` interpolation works inside the quotes.
 
 ```jaiph
 prompt "Review the following code for security issues"
 answer = prompt "Summarize the report"
 ```
 
-**Typed prompt (returns schema):** Ask the agent for structured JSON output:
+If a `"` string has no closing quote on the same line, the parser rejects it with: `multiline prompt strings are no longer supported; use a fenced block instead`.
+
+**2. Identifier reference**
+
+A bare identifier after `prompt` uses the string value of an existing binding (e.g. a `const`). The parser greedily takes the first token after `prompt` as the body — `returns` is only recognized as a keyword when it appears **after** a complete body form.
 
 ```jaiph
-result = prompt "Analyze this code" \
-  returns "{ type: string, risk: string }"
+const text = "Analyze this code for security issues"
+prompt text
+result = prompt text returns "{ type: string, risk: string }"
+```
+
+**3. Fenced block (multiline)**
+
+For multiline prompt text, use triple-backtick fences. The opening `` ``` `` must be on the same line as `prompt`. The body supports `${...}` interpolation.
+
+```text
+prompt ```
+You are a helpful assistant.
+Analyze the following: ${input}
+```
+```
+
+All three forms work in capture and `const` capture positions:
+
+```jaiph
+answer = prompt "Summarize the report"
+const x = prompt myVar
+const y = prompt ```
+Analyze this input in detail.
+```
+```
+
+**Typed prompt (returns schema):** Ask the agent for structured JSON output. `returns` is allowed after single-line string and identifier body forms:
+
+```jaiph
+result = prompt "Analyze this code" returns "{ type: string, risk: string }"
+result = prompt text returns "{ type: string, risk: string }"
 ```
 
 When `returns` is present, capture is required. The schema is flat only — allowed types are `string`, `number`, `boolean`. The runtime validates the response: it searches for valid JSON (last non-empty line, fenced code blocks, standalone `{…}`, embedded JSON). On success, the capture variable holds the raw JSON string and each field is accessible via **dot notation** — `${result.type}`, `${result.risk}`. The underscore form (`${result_type}`) also works but dot notation is preferred for clarity. On failure, the step fails with a parse, missing-field, or type error.
@@ -231,9 +268,13 @@ const tag = "v1.0"
 const result = run helper("${arg}")
 const check = ensure validator("${input}")
 const answer = prompt "Summarize the report"
+const reply = prompt myVar
+const analysis = prompt ```
+Analyze this input in detail.
+```
 ```
 
-RHS forms: value expressions (`${var}`, quoted strings), or explicit `run`/`ensure`/`prompt` capture. A bare reference like `const x = ref(args)` is rejected — use `const x = run ref(args)`.
+RHS forms: value expressions (`${var}`, quoted strings), or explicit `run`/`ensure`/`prompt` capture. Prompt capture supports all three body forms: string literal, identifier, and fenced block. A bare reference like `const x = ref(args)` is rejected — use `const x = run ref(args)`.
 
 Restrictions on const RHS: `$(…)`, `${var:-fallback}`, `${var%%…}`, `${var//…}`, and `${#var}` are all rejected.
 
@@ -362,6 +403,7 @@ Legacy no-op kept for backwards compatibility. Use `run async` for managed paral
 result = run helper("${arg}")
 check = ensure validator("${input}")
 answer = prompt "Summarize the report"
+reply = prompt myVar
 ```
 
 Prefer `const name = …` for new code.
@@ -499,7 +541,7 @@ Key rules:
 
 ## EBNF (Practical Form)
 
-Informal symbols: `string` = quoted string; `call_ref` = `REF "(" [args] ")"` with comma-separated arguments (each argument may be a quoted string, `${var}`, or a **bare identifier** — see [Call Arguments](#call-arguments-and-positional-parameters)); `quoted_or_multiline_string` = double-quoted string supporting `\$`, `\"`, `\\`, `` \` `` escapes, line continuation with trailing `\`, and `${identifier}` / `${run …}` / `${ensure …}` interpolation.
+Informal symbols: `string` = quoted string; `call_ref` = `REF "(" [args] ")"` with comma-separated arguments (each argument may be a quoted string, `${var}`, or a **bare identifier** — see [Call Arguments](#call-arguments-and-positional-parameters)); `quoted_or_multiline_string` = double-quoted string supporting `\$`, `\"`, `\\`, `` \` `` escapes, line continuation with trailing `\`, and `${identifier}` / `${run …}` / `${ensure …}` interpolation; `prompt_body` = single-line double-quoted string | bare `IDENT` (reference to an existing binding) | fenced block (`` ``` … ``` ``).
 
 ```ebnf
 file            = { top_level } ;
@@ -547,7 +589,7 @@ workflow_step   = ensure_stmt | run_stmt | run_async_stmt | prompt_stmt | prompt
 const_decl_step = "const" IDENT "=" const_rhs ;
 const_rhs       = quoted_or_multiline_string | bash_value_expr
                 | "run" ( call_ref | inline_script ) | "ensure" call_ref
-                | "prompt" quoted_or_multiline_string [ returns_schema ]
+                | "prompt" prompt_body [ returns_schema ]
                 | match_expr ;
 
 fail_stmt       = "fail" double_quoted_string ;
@@ -577,8 +619,10 @@ ensure_capture_stmt = IDENT "=" "ensure" call_ref [ "recover" recover_body ] ;
 run_capture_stmt   = IDENT "=" "run" ( call_ref | inline_script ) ;
 run_stmt        = "run" ( call_ref | inline_script ) ;
 inline_script   = "script" "(" string { "," string } ")" ;
-prompt_stmt     = "prompt" quoted_or_multiline_string [ returns_schema ] ;
-prompt_capture_stmt = IDENT "=" "prompt" quoted_or_multiline_string [ returns_schema ] ;
+prompt_body     = double_quoted_string | IDENT | fenced_block ;
+fenced_block    = "```" newline { body_line newline } "```" ;
+prompt_stmt     = "prompt" prompt_body [ returns_schema ] ;
+prompt_capture_stmt = IDENT "=" "prompt" prompt_body [ returns_schema ] ;
 returns_schema  = "returns" double_quoted_string ;
 
 recover_body    = single_workflow_stmt | "{" { workflow_step } "}" ;

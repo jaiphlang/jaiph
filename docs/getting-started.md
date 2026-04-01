@@ -129,7 +129,7 @@ Jaiph source files combine a small orchestration language with scripts in any la
 
 **script** — Shell (or polyglot) code blocks that execute as isolated subprocesses. Called with `run` from workflows and rules. Use `script:<tag>` for common interpreters (`script:node`, `script:python3`, `script:ruby`, …) — the tag expands to the correct shebang automatically. For unlisted interpreters, add a manual `#!` shebang as the first body line. Scripts receive only positional arguments and essential Jaiph variables (`JAIPH_LIB`, `JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`). For trivial one-off commands, use **inline scripts**: `run script("echo ok")` — no named `script` block needed.
 
-**prompt** — Sends text to a configured AI agent. Supports structured JSON responses via `returns "{ field: type }"`.
+**prompt** — Sends text to a configured AI agent. The body can be a single-line `"string"`, a bare identifier (`prompt myVar`), or a fenced `` ``` `` block for multiline text. Supports structured JSON responses via `returns "{ field: type }"`.
 
 ### Key patterns
 

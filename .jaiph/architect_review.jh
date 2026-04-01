@@ -49,7 +49,7 @@ script queue_has_any_task_not_dev_ready {
 }
 
 workflow review_task {
-  const result = prompt "
+  const result = prompt ```
     You are a software architect reviewing a task from the Jaiph
     improvement queue. Jaiph is a TypeScript compiler and runtime
     for a DSL that transpiles to Bash.
@@ -64,7 +64,7 @@ workflow review_task {
        source files and docs to verify.
     3. **Code philosophy** — The proposed approach follows codebase
        principles: plain functions with explicit arguments, flat control
-       flow, short files (<400 lines where possible), no speculative 
+       flow, short files (<400 lines where possible), no speculative
        abstractions, minimal touch surface (≤3 files per feature preferably).
        Flag tasks whose scope or approach would violate these.
     4. **No conflicts** — Does not conflict with documented features
@@ -98,7 +98,7 @@ workflow review_task {
 
     Task to review:
     ${arg1}
-  " returns "{ verdict: string }"
+```
 
   return "${result_verdict}"
 }
