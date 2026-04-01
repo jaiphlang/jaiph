@@ -14,19 +14,28 @@ e2e::section "ensure...recover: assignment returns the last successful rule retu
 # ===================================================================
 
 e2e::file "recover_capture.jh" <<'EOF'
-rule check_ready {
+script check_ready_impl {
   echo "rule-stdout-check"
   test -f ready.txt
+}
+rule check_ready {
+  run check_ready_impl()
   return "ready-value"
 }
 
-workflow fix_it {
+script fix_it_impl {
   touch ready.txt
 }
+workflow fix_it {
+  run fix_it_impl()
+}
 
+script echo_captured {
+  echo "captured=$1"
+}
 workflow default {
   val = ensure check_ready() recover run fix_it()
-  echo "captured=$val"
+  run echo_captured("${val}")
 }
 EOF
 rm -f "${TEST_DIR}/ready.txt"
@@ -38,14 +47,14 @@ run_dir="$(e2e::run_dir_at "${TEST_DIR}/runs_rcap" "recover_capture.jh")"
 
 # Assignment variable gets the return value from the successful rule call
 shopt -s nullglob
-wf_outs=( "${run_dir}"*default.out )
+cap_outs=( "${run_dir}"/*echo_captured.out )
 shopt -u nullglob
-[[ ${#wf_outs[@]} -ge 1 ]] || e2e::fail "expected default .out artifact"
-default_out="$(<"${wf_outs[0]}")"
-e2e::assert_equals "${default_out}" "captured=ready-value" "ensure...recover capture = return value from successful rule"
+[[ ${#cap_outs[@]} -ge 1 ]] || e2e::fail "expected echo_captured .out artifact"
+cap_content="$(<"${cap_outs[0]}")"
+e2e::assert_equals "${cap_content}" "captured=ready-value" "ensure...recover capture = return value from successful rule"
 
 # Rule stdout goes to artifacts, not into capture
-if [[ "${default_out}" == *"rule-stdout-check"* ]]; then
+if [[ "${cap_content}" == *"rule-stdout-check"* ]]; then
   e2e::fail "rule stdout must NOT leak into capture variable"
 fi
 e2e::pass "ensure...recover capture: return value only"
@@ -58,15 +67,21 @@ rm -f "${TEST_DIR}/ready2.txt"
 rm -f "${TEST_DIR}/recover_received.txt"
 
 e2e::file "recover_receives_output.jh" <<'EOF'
-rule analyze {
+script analyze_impl {
   echo "analysis-stdout-log"
   test -f ready2.txt
 }
+rule analyze {
+  run analyze_impl()
+}
 
+script recover_handler {
+  echo "$1" > recover_received.txt
+  touch ready2.txt
+}
 workflow default {
   ensure analyze() recover {
-    echo "${arg1}" > recover_received.txt
-    touch ready2.txt
+    run recover_handler("${arg1}")
   }
 }
 EOF
@@ -87,11 +102,11 @@ e2e::section "ensure...recover: rule stdout goes to artifacts"
 
 run_dir="$(e2e::run_dir_at "${TEST_DIR}/runs_rrv" "recover_receives_output.jh")"
 
-# Rule stdout goes to .out artifacts
+# Rule's script stdout goes to .out artifacts
 shopt -s nullglob
-rule_outs=( "${run_dir}"*analyze.out )
+rule_outs=( "${run_dir}"/*analyze_impl.out )
 shopt -u nullglob
-[[ ${#rule_outs[@]} -ge 1 ]] || e2e::fail "expected analyze .out artifact"
+[[ ${#rule_outs[@]} -ge 1 ]] || e2e::fail "expected analyze_impl .out artifact"
 rule_out="$(<"${rule_outs[0]}")"
-e2e::assert_equals "${rule_out}" "analysis-stdout-log" "rule stdout in .out artifact"
+e2e::assert_equals "${rule_out}" "analysis-stdout-log" "rule script stdout in .out artifact"
 e2e::pass "ensure...recover: rule stdout in artifacts"

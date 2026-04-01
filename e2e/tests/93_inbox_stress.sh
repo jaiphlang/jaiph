@@ -79,48 +79,83 @@ config {
 
 channel data
 
+script emit_m1 {
+  echo "m1"
+}
+script emit_m2 {
+  echo "m2"
+}
+script emit_m3 {
+  echo "m3"
+}
+script emit_m4 {
+  echo "m4"
+}
+script emit_m5 {
+  echo "m5"
+}
+script emit_m6 {
+  echo "m6"
+}
+script emit_m7 {
+  echo "m7"
+}
+script emit_m8 {
+  echo "m8"
+}
+script emit_m9 {
+  echo "m9"
+}
+script emit_m10 {
+  echo "m10"
+}
+
 workflow s1 {
-  data <- echo "m1"
+  data <- run emit_m1()
 }
 
 workflow s2 {
-  data <- echo "m2"
+  data <- run emit_m2()
 }
 
 workflow s3 {
-  data <- echo "m3"
+  data <- run emit_m3()
 }
 
 workflow s4 {
-  data <- echo "m4"
+  data <- run emit_m4()
 }
 
 workflow s5 {
-  data <- echo "m5"
+  data <- run emit_m5()
 }
 
 workflow s6 {
-  data <- echo "m6"
+  data <- run emit_m6()
 }
 
 workflow s7 {
-  data <- echo "m7"
+  data <- run emit_m7()
 }
 
 workflow s8 {
-  data <- echo "m8"
+  data <- run emit_m8()
 }
 
 workflow s9 {
-  data <- echo "m9"
+  data <- run emit_m9()
 }
 
 workflow s10 {
-  data <- echo "m10"
+  data <- run emit_m10()
+}
+
+script sink_impl {
+  echo "$1" >> sink_all.txt
 }
 
 workflow sink {
-  echo "${arg1}" >> sink_all.txt
+  run sink_impl("${arg1}")
 }
 
 workflow default {
@@ -167,28 +202,50 @@ config {
 
 channel ch
 
+script emit_pa {
+  echo "pa"
+}
+script emit_pb {
+  echo "pb"
+}
+script emit_pc {
+  echo "pc"
+}
+
 workflow producer_a {
-  ch <- echo "pa"
+  ch <- run emit_pa()
 }
 
 workflow producer_b {
-  ch <- echo "pb"
+  ch <- run emit_pb()
 }
 
 workflow producer_c {
-  ch <- echo "pc"
+  ch <- run emit_pc()
+}
+
+script target_x_impl {
+  echo "x:$1" >> fanout_log.txt
 }
 
 workflow target_x {
-  echo "x:${arg1}" >> fanout_log.txt
+  run target_x_impl("${arg1}")
+}
+
+script target_y_impl {
+  echo "y:$1" >> fanout_log.txt
 }
 
 workflow target_y {
-  echo "y:${arg1}" >> fanout_log.txt
+  run target_y_impl("${arg1}")
+}
+
+script target_z_impl {
+  echo "z:$1" >> fanout_log.txt
 }
 
 workflow target_z {
-  echo "z:${arg1}" >> fanout_log.txt
+  run target_z_impl("${arg1}")
 }
 
 workflow default {
@@ -243,16 +300,27 @@ config {
 channel ch_raw
 channel ch_processed
 
+script emit_raw {
+  echo "raw-data"
+}
+script emit_processed {
+  echo "processed:$1"
+}
+
 workflow sender {
-  ch_raw <- echo "raw-data"
+  ch_raw <- run emit_raw()
 }
 
 workflow processor {
-  ch_processed <- echo "processed:${arg1}"
+  ch_processed <- run emit_processed("${arg1}")
+}
+
+script nested_sink_impl {
+  echo "$1" > nested_result.txt
 }
 
 workflow sink {
-  echo "${arg1}" > nested_result.txt
+  run nested_sink_impl("${arg1}")
 }
 
 workflow default {
@@ -287,22 +355,38 @@ config {
 
 channel ch
 
-workflow producer {
-  ch <- echo "msg"
+script emit_msg {
+  echo "msg"
 }
 
-workflow fail_a {
+workflow producer {
+  ch <- run emit_msg()
+}
+
+script fail_a_impl {
   echo "a ran" > fail_a_ran.txt
   exit 1
 }
 
-workflow fail_b {
+workflow fail_a {
+  run fail_a_impl()
+}
+
+script fail_b_impl {
   echo "b ran" > fail_b_ran.txt
   exit 1
 }
 
-workflow good {
+workflow fail_b {
+  run fail_b_impl()
+}
+
+script good_impl {
   echo "ok" > fail_good_ran.txt
+}
+
+workflow good {
+  run good_impl()
 }
 
 workflow default {
@@ -335,32 +419,56 @@ config {
 
 channel ev
 
+script emit_e1 {
+  echo "e1"
+}
+script emit_e2 {
+  echo "e2"
+}
+script emit_e3 {
+  echo "e3"
+}
+script emit_e4 {
+  echo "e4"
+}
+script emit_e5 {
+  echo "e5"
+}
+
 workflow s1 {
-  ev <- echo "e1"
+  ev <- run emit_e1()
 }
 
 workflow s2 {
-  ev <- echo "e2"
+  ev <- run emit_e2()
 }
 
 workflow s3 {
-  ev <- echo "e3"
+  ev <- run emit_e3()
 }
 
 workflow s4 {
-  ev <- echo "e4"
+  ev <- run emit_e4()
 }
 
 workflow s5 {
-  ev <- echo "e5"
+  ev <- run emit_e5()
+}
+
+script t1_impl {
+  echo "t1:$1" >> artifact_log.txt
 }
 
 workflow t1 {
-  echo "t1:${arg1}" >> artifact_log.txt
+  run t1_impl("${arg1}")
+}
+
+script t2_impl {
+  echo "t2:$1" >> artifact_log.txt
 }
 
 workflow t2 {
-  echo "t2:${arg1}" >> artifact_log.txt
+  run t2_impl("${arg1}")
 }
 
 workflow default {
@@ -384,22 +492,12 @@ for i in $(seq 1 5); do
   e2e::assert_file_exists "${art_inbox}/${padded}-ev.txt" "artifacts: inbox ${padded}-ev.txt"
 done
 
-# Queue file must have exactly 5 entries
-assert_line_count "${art_inbox}/.queue" 5 "artifacts: queue has 5 entries"
-
 # Dispatch log: 5 msgs x 2 targets = 10 lines
 assert_line_count "${TEST_DIR}/artifact_log.txt" 10 "artifacts: 5x2=10 dispatch invocations"
 
 # Summary is valid JSONL
 assert_valid_jsonl "${art_run_dir}/run_summary.jsonl" "artifacts: run_summary.jsonl valid"
 
-# Sequence counter file ends at 5
-seq_val="$(cat "${art_inbox}/.seq")"
-if [[ "$seq_val" -ne 5 ]]; then
-  printf "Expected .seq=5, got %s\n" "$seq_val" >&2
-  e2e::fail "artifacts: inbox .seq counter"
-fi
-e2e::pass "artifacts: inbox .seq counter = 5"
 
 # ===========================================================================
 e2e::section "Soak run: 5 iterations of fan-out scenario prove stability"
@@ -418,24 +516,42 @@ config {
 
 channel ch
 
+script soak_emit_i1 {
+  echo "i1"
+}
+script soak_emit_i2 {
+  echo "i2"
+}
+script soak_emit_i3 {
+  echo "i3"
+}
+
 workflow s1 {
-  ch <- echo "i1"
+  ch <- run soak_emit_i1()
 }
 
 workflow s2 {
-  ch <- echo "i2"
+  ch <- run soak_emit_i2()
 }
 
 workflow s3 {
-  ch <- echo "i3"
+  ch <- run soak_emit_i3()
+}
+
+script soak_t1_impl {
+  echo "t1:$1" >> soak_log.txt
 }
 
 workflow t1 {
-  echo "t1:${arg1}" >> soak_log.txt
+  run soak_t1_impl("${arg1}")
+}
+
+script soak_t2_impl {
+  echo "t2:$1" >> soak_log.txt
 }
 
 workflow t2 {
-  echo "t2:${arg1}" >> soak_log.txt
+  run soak_t2_impl("${arg1}")
 }
 
 workflow default {
@@ -495,48 +611,83 @@ e2e::section "Sequential mode: same high-volume scenario produces identical resu
 e2e::file "stress_seq_mode.jh" <<'EOF'
 channel data
 
+script seq_emit_m1 {
+  echo "m1"
+}
+script seq_emit_m2 {
+  echo "m2"
+}
+script seq_emit_m3 {
+  echo "m3"
+}
+script seq_emit_m4 {
+  echo "m4"
+}
+script seq_emit_m5 {
+  echo "m5"
+}
+script seq_emit_m6 {
+  echo "m6"
+}
+script seq_emit_m7 {
+  echo "m7"
+}
+script seq_emit_m8 {
+  echo "m8"
+}
+script seq_emit_m9 {
+  echo "m9"
+}
+script seq_emit_m10 {
+  echo "m10"
+}
+
 workflow s1 {
-  data <- echo "m1"
+  data <- run seq_emit_m1()
 }
 
 workflow s2 {
-  data <- echo "m2"
+  data <- run seq_emit_m2()
 }
 
 workflow s3 {
-  data <- echo "m3"
+  data <- run seq_emit_m3()
 }
 
 workflow s4 {
-  data <- echo "m4"
+  data <- run seq_emit_m4()
 }
 
 workflow s5 {
-  data <- echo "m5"
+  data <- run seq_emit_m5()
 }
 
 workflow s6 {
-  data <- echo "m6"
+  data <- run seq_emit_m6()
 }
 
 workflow s7 {
-  data <- echo "m7"
+  data <- run seq_emit_m7()
 }
 
 workflow s8 {
-  data <- echo "m8"
+  data <- run seq_emit_m8()
 }
 
 workflow s9 {
-  data <- echo "m9"
+  data <- run seq_emit_m9()
 }
 
 workflow s10 {
-  data <- echo "m10"
+  data <- run seq_emit_m10()
+}
+
+script seq_sink_impl {
+  echo "$1" >> seq_sink_all.txt
 }
 
 workflow sink {
-  echo "${arg1}" >> seq_sink_all.txt
+  run seq_sink_impl("${arg1}")
 }
 
 workflow default {

@@ -78,6 +78,20 @@ function interpolate(input: string, vars: Map<string, string>, env?: NodeJS.Proc
   });
 }
 
+/** Body after "run" / "ensure" in ${run ...} / ${ensure ...} (e.g. greet(), greet(x), or greet x). */
+function parseInlineCaptureCall(body: string): { ref: string; argsRaw: string } {
+  const trimmed = body.trim();
+  const paren = trimmed.match(/^([\w.]+)\s*\(([^)]*)\)\s*$/);
+  if (paren) {
+    return { ref: paren[1], argsRaw: paren[2].trim() };
+  }
+  const spaceIdx = trimmed.indexOf(" ");
+  if (spaceIdx === -1) {
+    return { ref: trimmed, argsRaw: "" };
+  }
+  return { ref: trimmed.slice(0, spaceIdx), argsRaw: trimmed.slice(spaceIdx + 1).trim() };
+}
+
 function parseArgsRaw(raw: string, vars: Map<string, string>, env?: NodeJS.ProcessEnv): string[] {
   if (!raw.trim()) return [];
   const out: string[] = [];
@@ -508,10 +522,7 @@ export class NodeWorkflowRuntime {
     let m: RegExpExecArray | null;
     while ((m = re.exec(input)) !== null) {
       result += input.slice(lastIndex, m.index);
-      const body = m[2].trim();
-      const spaceIdx = body.indexOf(" ");
-      const ref = spaceIdx === -1 ? body : body.slice(0, spaceIdx);
-      const argsRaw = spaceIdx === -1 ? "" : body.slice(spaceIdx + 1).trim();
+      const { ref, argsRaw } = parseInlineCaptureCall(m[2]);
       const r = m[1] === "run"
         ? await this.executeRunRef(scope, ref, argsRaw)
         : await this.executeEnsureRef(scope, ref, argsRaw, undefined);
@@ -1113,6 +1124,7 @@ export class NodeWorkflowRuntime {
       const recoverVars = new Map(scope.vars);
       const recoverPayload = `${res.output}${res.error}`;
       recoverVars.set("arg1", recoverPayload);
+      recoverVars.set("_jaiph_retry", String(i + 1));
       const recoverScope: Scope = {
         ...scope,
         vars: recoverVars,

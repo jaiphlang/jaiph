@@ -944,3 +944,392 @@ workflow default {
 workflow default {
   run script("echo hello"
 }
+
+=== inline script without parentheses
+# @expect error E_PARSE "calls require parentheses"
+--- input.jh
+workflow default {
+  run script "echo hello"
+}
+
+=== inline script with empty body
+# @expect error E_PARSE "inline script requires a body string"
+--- input.jh
+workflow default {
+  run script()
+}
+
+=== inline script unterminated body string
+# @expect error E_PARSE "unterminated inline script parentheses"
+--- input.jh
+workflow default {
+  run script("echo hello)
+}
+
+=== match: invalid pattern type
+# @expect error E_PARSE "match pattern must be"
+--- input.jh
+workflow default {
+  const x = "hello"
+  return x match {
+    123 => "yes"
+    _ => "no"
+  }
+}
+
+=== match: unterminated match block
+# @expect error E_PARSE "unterminated match block"
+--- input.jh
+workflow default {
+  const x = "hello"
+  return x match {
+    "hello" => "yes"
+
+=== match: empty match block
+# @expect error E_PARSE "match must have at least one arm"
+--- input.jh
+workflow default {
+  const x = "hello"
+  return x match {
+  }
+}
+
+=== recover: fail without double quote
+# @expect error E_PARSE "fail must match"
+--- input.jh
+rule check {
+  return "ok"
+}
+workflow default {
+  ensure check() recover {
+    fail reason
+  }
+}
+
+=== recover: unterminated fail string
+# @expect error E_PARSE "unterminated fail string"
+--- input.jh
+rule check {
+  return "ok"
+}
+workflow default {
+  ensure check() recover {
+    fail "reason
+  }
+}
+
+=== recover: log without double quote
+# @expect error E_PARSE "log must match"
+--- input.jh
+rule check {
+  return "ok"
+}
+workflow default {
+  ensure check() recover {
+    log reason
+  }
+}
+
+=== recover: unterminated log string
+# @expect error E_PARSE "unterminated log string"
+--- input.jh
+rule check {
+  return "ok"
+}
+workflow default {
+  ensure check() recover {
+    log "reason
+  }
+}
+
+=== recover: logerr without double quote
+# @expect error E_PARSE "logerr must match"
+--- input.jh
+rule check {
+  return "ok"
+}
+workflow default {
+  ensure check() recover {
+    logerr reason
+  }
+}
+
+=== recover: unterminated logerr string
+# @expect error E_PARSE "unterminated logerr string"
+--- input.jh
+rule check {
+  return "ok"
+}
+workflow default {
+  ensure check() recover {
+    logerr "reason
+  }
+}
+
+=== test: empty mock prompt block
+# @expect error E_PARSE "mock prompt block must have at least one arm"
+--- input.test.jh
+import "lib.jh" as lib
+
+test "bad mock" {
+  mock prompt {
+  }
+  out = lib.default
+}
+--- lib.jh
+workflow default {
+  log "ok"
+}
+
+=== test: unterminated mock block
+# @expect error E_PARSE "unterminated mock block"
+--- input.test.jh
+import "lib.jh" as lib
+
+test "bad mock" {
+  mock workflow lib.default {
+    echo mocked
+--- lib.jh
+workflow default {
+  log "ok"
+}
+
+=== test: mock prompt invalid format
+# @expect error E_PARSE "mock prompt must be"
+--- input.test.jh
+import "lib.jh" as lib
+
+test "bad mock" {
+  mock prompt not_quoted
+  out = lib.default
+}
+--- lib.jh
+workflow default {
+  log "ok"
+}
+
+=== test: mock workflow with invalid ref
+# @expect error E_PARSE "unsupported top-level statement"
+--- input.test.jh
+import "lib.jh" as lib
+
+test "bad ref" {
+  mock workflow a.b.c {
+    echo mocked
+  }
+  out = lib.default
+}
+--- lib.jh
+workflow default {
+  log "ok"
+}
+
+=== test: mock rule with invalid ref
+# @expect error E_PARSE "unsupported top-level statement"
+--- input.test.jh
+import "lib.jh" as lib
+
+test "bad ref" {
+  mock rule a.b.c {
+    echo mocked
+  }
+  out = lib.default
+}
+--- lib.jh
+workflow default {
+  log "ok"
+}
+
+=== test: mock script with invalid ref
+# @expect error E_PARSE "unsupported top-level statement"
+--- input.test.jh
+import "lib.jh" as lib
+
+test "bad ref" {
+  mock script a.b.c {
+    echo mocked
+  }
+  out = lib.default
+}
+--- lib.jh
+workflow default {
+  log "ok"
+}
+
+
+=== brace-if: run async without parens in block
+# @expect error E_PARSE "run async must target"
+--- input.jh
+rule gate {
+  return "ok"
+}
+workflow helper {
+  log "hi"
+}
+workflow default {
+  if ensure gate() {
+    run async helper
+  }
+}
+
+
+=== config block with content on same line as opening
+# @expect error E_PARSE "config block must be exactly"
+--- input.jh
+config { agent.backend = "claude" }
+workflow default {
+  log "ok"
+}
+
+=== unterminated string in top-level const
+# @expect error E_PARSE "unterminated string in const declaration"
+--- input.jh
+const MSG = "hello world
+
+=== top-level const with trailing content after quote
+# @expect error E_PARSE "unexpected content after closing quote"
+--- input.jh
+const X = "hello" world
+workflow default {
+  log "${X}"
+}
+
+=== top-level const single-quoted string
+# @expect error E_PARSE "single-quoted strings are not supported"
+--- input.jh
+const X = 'hello'
+workflow default {
+  log "${X}"
+}
+
+=== workflow const with command substitution
+# @expect error E_PARSE "const value cannot use command substitution"
+--- input.jh
+workflow default {
+  const x = $(echo hello)
+}
+
+=== workflow const with bash percent expansion
+# @expect error E_PARSE "const value cannot use"
+--- input.jh
+workflow default {
+  const x = ${var%%pattern}
+}
+
+=== workflow const with bash replace expansion
+# @expect error E_PARSE "const value cannot use"
+--- input.jh
+workflow default {
+  const x = ${var//old/new}
+}
+
+=== workflow const with bash length expansion
+# @expect error E_PARSE "const value cannot use"
+--- input.jh
+workflow default {
+  const x = ${#var}
+}
+
+=== workflow const with shell fallback
+# @expect error E_PARSE "shell fallback syntax"
+--- input.jh
+workflow default {
+  const x = ${var:-default}
+}
+
+=== brace-if: run without parentheses in block
+# @expect error E_PARSE "run must target a workflow or script reference with parenthesized arguments"
+--- input.jh
+script helper {
+  echo "hi"
+}
+rule gate {
+  return "ok"
+}
+workflow default {
+  if ensure gate() {
+    run helper
+  }
+}
+
+=== brace-if: return with single-quoted string
+# @expect error E_PARSE "single-quoted strings are not supported"
+--- input.jh
+rule gate {
+  return "ok"
+}
+workflow default {
+  if ensure gate() {
+    return 'hello'
+  }
+}
+
+=== brace-if: capture and send combined in block
+# @expect error E_PARSE "capture and send cannot be combined"
+--- input.jh
+rule gate {
+  return "ok"
+}
+channel findings
+workflow default {
+  if ensure gate() {
+    x = findings <- "hello"
+  }
+}
+
+=== brace-if: then/fi syntax nested in block
+# @expect error E_PARSE "then/fi syntax is not supported"
+--- input.jh
+rule gate {
+  return "ok"
+}
+rule inner {
+  return "ok"
+}
+workflow default {
+  if ensure gate() {
+    if ensure inner(); then
+      log "x"
+    fi
+  }
+}
+
+=== run without parentheses in workflow
+# @expect error E_PARSE "calls require parentheses"
+--- input.jh
+script helper {
+  echo "hi"
+}
+workflow default {
+  run helper
+}
+
+=== capture run without parentheses in workflow
+# @expect error E_PARSE "calls require parentheses"
+--- input.jh
+script helper {
+  echo "hi"
+}
+workflow default {
+  x = run helper
+}
+
+=== const run without parentheses
+# @expect error E_PARSE "calls require parentheses"
+--- input.jh
+script helper {
+  echo "hi"
+}
+workflow default {
+  const x = run helper
+}
+
+=== const ensure without parentheses
+# @expect error E_PARSE "calls require parentheses"
+--- input.jh
+rule check {
+  return "ok"
+}
+workflow default {
+  const x = ensure check
+}

@@ -12,6 +12,40 @@ Process rules:
 
 ---
 
+## npm publish on tag via trusted publishing + post-publish global install smoke <!-- dev-ready -->
+
+**Goal**  
+Add a CI job that publishes the package to npm when a version tag is pushed, using **trusted publishers** (OIDC to npm — no long-lived `NPM_TOKEN` or other repo secrets for publish auth). Immediately after a successful publish, run a smoke step that installs the package globally and confirms the CLI matches the normal install path (same binary name and basic `jaiph --help` / `jaiph` entry behavior as documented for `npm install jaiph` / installer flows).
+
+**Context**
+
+- npm supports **Trusted Publishing** (OpenID Connect) so GitHub Actions can publish without storing npm credentials in GitHub secrets.
+- The package already defines the `jaiph` CLI in `package.json` `bin`; global install must expose that same command name and behavior.
+- Today, release may be manual; this task automates tag-driven release and catches broken publishes before users do.
+
+**Scope**
+
+1. **npm account / package setup** (manual, documented in task notes or `docs/contributing.md` briefly): enable Trusted Publishing for the `jaiph` package on npmjs.com, linked to this GitHub repo and the workflow file that will call `npm publish`.
+2. **GitHub Actions workflow** (new job or extend `.github/workflows/ci.yml` / dedicated `release.yml`):
+   - Trigger on `push` of tags matching `v*` (or the project’s tag convention — align with existing `package.json` version / git tag checks already in CI).
+   - Permissions: `id-token: write` (required for OIDC).
+   - Steps: checkout, `npm ci`, `npm run build` (if needed for a clean publish), then `npm publish --provenance` (or current best practice for trusted publishing).
+   - Do **not** add `NODE_AUTH_TOKEN` from a classic npm token for publish; use the trusted-publisher flow npm documents for GitHub Actions.
+3. **Post-publish verification step** (same workflow, must run only after publish succeeds):
+   - Install globally, e.g. `npm install -g jaiph@<exact-published-version>` (use the version from the tag or from `package.json` after publish).
+   - Assert the CLI on `PATH` is the published one: e.g. `jaiph --version` matches expected version, and `command -v jaiph` resolves.
+   - Smoke: `jaiph --help` (or minimal subcommand) exits 0 and output matches expectations for **global** install — same UX as a local/project install (no duplicate or differently named binary).
+   - Optionally compare `jaiph` shim behavior to `npx jaiph` in the same job for parity (lightweight check).
+4. **Documentation**: one short paragraph in contributor or release docs: tags trigger CI publish; no npm token in repo secrets for this path.
+
+**Acceptance criteria**
+
+- Pushing a release tag runs publish via trusted publishing (no classic NPM publish secret committed or required for that job).
+- The job fails if publish fails or if the post-step global install does not expose `jaiph` with the same CLI contract as documented for normal installs.
+- `npm i -g` verification runs automatically in CI after publish, not only manually.
+
+---
+
 ## Assert error locations in txtar compiler tests <!-- dev-ready -->
 
 **Goal**  
@@ -127,5 +161,59 @@ This is equivalent to `result = prompt "You are a helpful assistant.\nAnalyze...
 - Txtar compiler tests cover valid and error cases.
 - E2E test verifies runtime behavior.
 - `npm run test:compiler && npm test && npm run test:e2e` all pass.
+
+---
+
+## `jaiph serve` — expose workflows as an MCP server <!-- dev-ready -->
+
+**Goal**  
+Add a `jaiph serve <file.jh>` command that starts a stdio MCP server. Each top-level workflow in the file becomes a callable MCP tool. This lets any MCP client (Cursor, Claude Desktop, custom agents) invoke Jaiph workflows directly.
+
+**Context**
+
+- MCP (Model Context Protocol) uses JSON-RPC 2.0 over stdio. A server must handle `initialize`, `tools/list`, and `tools/call`.
+- Jaiph already has a runtime (`src/runtime/kernel/node-workflow-runtime.ts`) that can execute workflows and capture output.
+- The `@modelcontextprotocol/sdk` npm package provides a Node.js server implementation, but the protocol is simple enough to implement directly (~200 lines for stdio JSON-RPC + the three methods).
+
+**Phase 1 — single text input (this task)**
+
+Each workflow becomes a tool with a single `input` string parameter:
+
+```json
+{
+  "name": "analyze_gaps",
+  "description": "workflow analyze_gaps from qa.jh",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "input": { "type": "string", "description": "Text input passed to the workflow" }
+    }
+  }
+}
+```
+
+The `input` value is injected into the workflow environment as `JAIPH_MCP_INPUT` (accessible via `${input}` interpolation or `$JAIPH_MCP_INPUT` in scripts). The tool response is the workflow's captured output (log messages + prompt results).
+
+**Phase 2 — typed parameters (future task)**
+
+Extend the language with workflow parameters: `workflow analyze(file: string, depth: number) { ... }`. These map directly to the tool's `inputSchema`. Not in scope for this task.
+
+**Scope**
+
+1. **CLI command** (`src/cli/commands/serve.ts`): add `jaiph serve <file.jh>` that parses the file, starts a stdio JSON-RPC server, and handles `initialize`, `tools/list`, `tools/call`.
+2. **Tool listing**: read the parsed module's `workflows` array. Each workflow becomes a tool entry with `name` = workflow name, `description` = `"workflow <name> from <filename>"`, `inputSchema` = single `input` string.
+3. **Tool execution**: on `tools/call`, run the named workflow using the existing runtime. Capture all output (logs, prompt results). Return as `content: [{ type: "text", text: output }]`.
+4. **Error handling**: if the workflow fails, return `isError: true` with the error message.
+5. **Config inheritance**: the `.jh` file's `config { ... }` block applies normally (backend, model, etc.).
+6. **E2E test**: a test that starts `jaiph serve` with a simple workflow, sends JSON-RPC messages via stdin, and verifies the tool list and a tool call response.
+7. **Docs**: add a section to `docs/index.html` and `docs/jaiph-skill.md` about MCP server mode.
+
+**Acceptance criteria**
+
+- `jaiph serve examples/greeting.jh` starts a stdio MCP server.
+- `tools/list` returns one tool per workflow.
+- `tools/call` executes the workflow and returns its output.
+- Errors produce `isError: true` responses (no server crash).
+- E2E test passes.
 
 ---

@@ -38,6 +38,19 @@ workflow existing {
   run existing_impl()
 }
 
+=== send RHS with unknown imported symbol
+# @expect error E_VALIDATE "unknown symbol"
+--- main.jh
+import "lib.jh" as lib
+channel c
+workflow default {
+  c <- lib.nonexistent
+}
+--- lib.jh
+workflow dummy {
+  log "ok"
+}
+
 === missing channel import fails
 # @expect error E_VALIDATE "is not defined"
 --- main.jh
@@ -49,4 +62,41 @@ workflow default {
 channel findings
 workflow analyst {
   log "ok"
+}
+
+=== unknown import alias in run reference
+# @expect error E_VALIDATE "unknown import alias"
+--- main.jh
+workflow default {
+  run ghost.deploy()
+}
+
+=== imported script does not exist
+# @expect error E_VALIDATE "does not exist"
+--- main.jh
+import "lib.jh" as lib
+workflow default {
+  run lib.nonexistent()
+}
+--- lib.jh
+script existing {
+  echo "ok"
+}
+workflow dummy {
+  log "ok"
+}
+
+=== run in rule targeting imported rule rejected
+# @expect error E_VALIDATE "must be called with ensure, not run"
+--- main.jh
+import "lib.jh" as lib
+rule local_check {
+  run lib.other_rule()
+}
+workflow default {
+  ensure local_check()
+}
+--- lib.jh
+export rule other_rule {
+  return "ok"
 }
