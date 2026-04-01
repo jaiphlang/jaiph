@@ -27,12 +27,12 @@ export function emitModule(mod: jaiphModule, opts: EmitOptions = DEFAULT_OPTIONS
   // Shebang — we don't store it in the AST, so the caller must prepend it if needed.
   // (handled by the format command reading the first line of the original source)
 
-  if (mod.metadata) {
-    sections.push(emitConfig(mod.metadata, pad));
-  }
-
   for (const imp of mod.imports) {
     sections.push(`import "${imp.path}" as ${imp.alias}`);
+  }
+
+  if (mod.metadata) {
+    sections.push(emitConfig(mod.metadata, pad));
   }
 
   for (const ch of mod.channels) {

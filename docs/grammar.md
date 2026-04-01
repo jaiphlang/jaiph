@@ -495,6 +495,7 @@ Key rules:
 - **Shebang:** A `#!` first line of the file is ignored by the parser.
 - **Import path:** Quoted string in `import "path" as alias`. Missing `.jh` extension is appended automatically.
 - **String quoting:** Jaiph string literals use **double quotes only** (`"..."`). Single-quoted (`'...'`) and backtick-delimited (`` `...` ``) strings are parse errors. Use `\"` for literal double quotes inside strings and `\\` for literal backslashes. **Exception:** `script { ... }` bodies are opaque shell text; normal shell quoting (single quotes, backticks, etc.) is allowed inside them.
+- **Top-level ordering:** The parser accepts top-level definitions in any order. `jaiph format` normalizes them to a canonical order: imports → config → channels → const declarations → rules → scripts → workflows → tests. See [CLI — `jaiph format`](cli.md#jaiph-format).
 
 ## EBNF (Practical Form)
 
