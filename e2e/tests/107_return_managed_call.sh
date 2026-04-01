@@ -15,11 +15,11 @@ e2e::section "return run: direct return of workflow result"
 e2e::file "return_run.jh" <<'EOF'
 script greet = "echo \"hello-direct\""
 
-workflow helper {
+workflow helper() {
   return run greet()
 }
 
-workflow default {
+workflow default() {
   const r = run helper()
   log "got: ${r}"
 }
@@ -50,11 +50,11 @@ e2e::section "return ensure: direct return of rule result"
 e2e::file "return_ensure.jh" <<'EOF'
 script check_impl = "echo \"rule-ok\""
 
-rule check {
+rule check() {
   return run check_impl()
 }
 
-workflow default {
+workflow default() {
   const r = ensure check()
   log "got: ${r}"
 }
@@ -85,11 +85,11 @@ e2e::section "return run with args"
 e2e::file "return_run_args.jh" <<'EOF'
 script echo_arg = "echo \"$1\""
 
-workflow helper {
+workflow helper() {
   return run echo_arg("passed-arg")
 }
 
-workflow default {
+workflow default() {
   const r = run helper()
   log "got: ${r}"
 }
@@ -118,15 +118,15 @@ e2e::section "return ensure in rule"
 
 # Given
 e2e::file "return_ensure_rule.jh" <<'EOF'
-rule inner {
+rule inner() {
   return "inner-val"
 }
 
-rule outer {
+rule outer() {
   return ensure inner()
 }
 
-workflow default {
+workflow default() {
   const r = ensure outer()
   log "got: ${r}"
 }
@@ -153,7 +153,7 @@ e2e::section "return run with unknown ref fails at compile time"
 
 # Given
 e2e::file "return_run_unknown.jh" <<'EOF'
-workflow default {
+workflow default() {
   return run nonexistent()
 }
 EOF

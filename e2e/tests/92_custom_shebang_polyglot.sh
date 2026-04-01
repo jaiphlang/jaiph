@@ -32,7 +32,7 @@ sys.exit(0)
 
 script bash_marker = "echo bash-script-ran"
 
-workflow default {
+workflow default() {
   run py_echo_ok()
   run bash_marker()
 }
@@ -76,7 +76,7 @@ process.exit(0);
 
 script bash_marker = "echo bash-script-ran"
 
-workflow default {
+workflow default() {
   run node_echo_ok()
   run bash_marker()
 }

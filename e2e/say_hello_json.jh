@@ -4,7 +4,7 @@ config {
   agent.backend = "claude"
 }
 
-rule name_was_provided() {
+rule name_was_provided(name) {
   if [ -z "$1" ]; then
     logerr "You didn't provide your name :("
     exit 1
@@ -12,7 +12,7 @@ rule name_was_provided() {
 }
 
 workflow default(name) {
-  ensure name_was_provided("${name}")
+  ensure name_was_provided(name)
 
   response = prompt "Say hello to ${name} and provide a fun fact about a person with the same name." returns "{ hello: string, fact: string }"
 

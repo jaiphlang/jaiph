@@ -288,3 +288,69 @@ test("buildScripts accepts run delay(seconds) with bare workflow parameter", () 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("E_VALIDATE: braced const name in run args is rejected (use bare identifier)", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-braced-const-"));
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        'script greet = "echo \\"hello $1\\""',
+        "workflow default() {",
+        '  const name = "world"',
+        '  run greet("${name}")',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      /do not use "\$\{name\}" in call arguments; use a bare identifier/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("E_VALIDATE: braced argN in run args is rejected (use bare identifier)", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-braced-argn-"));
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        'script greet = "echo \\"hello $1\\""',
+        "workflow default() {",
+        '  run greet("${arg1}")',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      /do not use "\$\{arg1\}" in call arguments; use a bare identifier/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("quoted string with extra text around interpolation is allowed in args", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-mixed-interp-"));
+  const out = join(root, "out");
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        'script greet = "echo \\"hello $1\\""',
+        "workflow default() {",
+        '  const name = "world"',
+        '  run greet("hello_${name}")',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    buildScripts(join(root, "m.jh"), out);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

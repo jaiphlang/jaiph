@@ -21,18 +21,18 @@ e2e::file "lib.jh" <<'EOF'
 #!/usr/bin/env jaiph
 script validate_impl = "[ -n \"$1\" ] && echo \"valid\""
 
-rule validate {
-  run validate_impl("${arg1}")
+rule validate(input) {
+  run validate_impl(arg1)
 }
 
 script deploy_impl = "echo \"deployed\""
 
-workflow deploy {
+workflow deploy() {
   run deploy_impl()
 }
 
-workflow default {
-  ensure validate("${arg1}")
+workflow default() {
+  ensure validate(arg1)
   response = prompt "summarize deployment"
   run deploy()
 }
@@ -93,7 +93,7 @@ e2e::file "fail_lib.jh" <<'EOF'
 #!/usr/bin/env jaiph
 script greet_impl = "echo \"hello world\""
 
-workflow default {
+workflow default() {
   run greet_impl()
 }
 EOF
@@ -150,7 +150,7 @@ e2e::file "old_syntax.jh" <<'EOF'
 #!/usr/bin/env jaiph
 script helper = "echo \"real\""
 
-workflow default {
+workflow default() {
   run helper()
 }
 EOF

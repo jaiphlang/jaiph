@@ -152,8 +152,8 @@ workflow analyze_gaps() {
 
   const gap_report = prompt analyze_gaps_prompt
 
-  run save_gap_report_file("${gap_report}", "${report_path}")
-  run write_gap_report_pointer("${report_path}")
+  run save_gap_report_file(gap_report, report_path)
+  run write_gap_report_pointer(report_path)
   log "Gap report saved to ${report_path}"
 }
 

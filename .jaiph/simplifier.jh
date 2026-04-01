@@ -90,7 +90,7 @@ workflow find_simplifications() {
     </role>
 ```
 
-  run save_simplifier_report("${report}")
+  run save_simplifier_report(report)
   log "Simplification report saved to .jaiph/tmp/simplifier_report.md"
   ensure no_test_or_e2e_paths_changed()
 }

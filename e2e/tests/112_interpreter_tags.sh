@@ -27,7 +27,7 @@ process.stdout.write("hello-from-node\n");
 
 script plain_bash = "echo bash-ok"
 
-workflow default {
+workflow default() {
   run greet()
   run plain_bash()
 }
@@ -67,7 +67,7 @@ sys.stdout.write("hello-from-python\n")
 sys.exit(0)
 ```
 
-workflow default {
+workflow default() {
   run py_greet()
 }
 EOF
@@ -99,7 +99,7 @@ script:golang my_script {
   body
 }
 
-workflow default {
+workflow default() {
   run my_script()
 }
 EOF
@@ -123,7 +123,7 @@ script my_script = ```node
 console.log("hi");
 ```
 
-workflow default {
+workflow default() {
   run my_script()
 }
 EOF

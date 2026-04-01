@@ -17,15 +17,15 @@ sleep 0.05
 echo "good" > good.txt
 ```
 
-workflow good {
+workflow good() {
   run good_impl()
 }
 
-workflow bad {
+workflow bad() {
   fail "bad-run"
 }
 
-workflow default {
+workflow default() {
   run async good()
   run async bad()
 }

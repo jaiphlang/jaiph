@@ -18,7 +18,7 @@ e2e::section "Basic background jobs with wait"
 # ---------------------------------------------------------------------------
 
 e2e::file "bg_basic.jh" <<'EOF'
-workflow default {
+workflow default() {
   echo "before" > before.txt
   sleep 0.05 && echo "job1" > job1.txt &
   sleep 0.05 && echo "job2" > job2.txt &
@@ -41,7 +41,7 @@ e2e::section "Failure propagation with wait \$pid"
 # ---------------------------------------------------------------------------
 
 e2e::file "bg_fail_pid.jh" <<'EOF'
-workflow default {
+workflow default() {
   false & pid=$!
   wait $pid || exit $?
 }
@@ -60,7 +60,7 @@ e2e::section "Bare wait succeeds even when background job fails (bash semantics)
 # ---------------------------------------------------------------------------
 
 e2e::file "bg_bare_wait.jh" <<'EOF'
-workflow default {
+workflow default() {
   false &
   true &
   wait
@@ -77,7 +77,7 @@ e2e::section "Concurrent stdout captured in step artifact"
 # ---------------------------------------------------------------------------
 
 e2e::file "bg_output.jh" <<'EOF'
-workflow default {
+workflow default() {
   for i in $(seq 1 5); do echo "A-$i"; done &
   for i in $(seq 1 5); do echo "B-$i"; done &
   wait
@@ -153,17 +153,17 @@ e2e::section "Background jobs with inbox send do not corrupt state"
 e2e::file "bg_inbox.jh" <<'EOF'
 channel ch
 
-workflow sender {
+workflow sender() {
   ch <- echo "msg1"
   ch <- echo "msg2"
   ch <- echo "msg3"
 }
 
-workflow handler {
+workflow handler() {
   echo "handled: ${arg1}" >> handled_log.txt
 }
 
-workflow default {
+workflow default() {
   run sender()
   ch -> handler
 }
@@ -196,7 +196,7 @@ e2e::section "Multiple wait pattern with explicit PID tracking"
 # ---------------------------------------------------------------------------
 
 e2e::file "bg_multi_pid.jh" <<'EOF'
-workflow default {
+workflow default() {
   sleep 0.05 && echo "first" > first.txt & pid1=$!
   sleep 0.05 && echo "second" > second.txt & pid2=$!
   wait $pid1

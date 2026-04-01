@@ -12,17 +12,6 @@ Process rules:
 
 ---
 
-## Language: bare identifiers in `run` / `log` vs `${param}` for workflow parameters <!-- dev-ready -->
-
-**Goal**  
-When a workflow or rule declares parameters, call sites must pass them as **bare identifiers** inside parentheses (e.g. `run sleep(seconds)`), not as braced interpolation in the argument string (e.g. `run sleep("${seconds}")`). The compiler should reject the latter with a clear `E_VALIDATE` message. Allow **`log foo`** when `foo` is a single identifier (equivalent to logging the interpolated value), alongside existing `log "…"` forms.
-
-**Acceptance criteria**  
-- Validation covers `run`, `ensure`, `if` conditions, `return run` / `return ensure`, `send … <- run`, and `const x = run …` where applicable.  
-- Document the rule in `docs/grammar.md` / `docs/jaiph-skill.md` when this ships.
-
----
-
 ## Language: require `()` on every `workflow` / `rule` definition (even when parameterless) <!-- dev-ready -->
 
 **Goal**  
@@ -31,6 +20,22 @@ Definitions must look like `workflow default() { … }` and `rule check() { … 
 **Acceptance criteria**  
 - Parser rejects definitions without `()` before `{` with a fix hint.  
 - Repo `.jh` sources, fixtures, and tests migrated; formatter emits `()` for empty parameter lists.
+
+---
+
+## Testing: golden AST (or stable AST dump) for successful parses <!-- dev-ready -->
+
+**Goal**  
+Compiler txtar fixtures excel at expected errors and “this builds.” They do not lock in **what** the parser produced. Add a small, maintainable way to assert that successful samples map to the intended AST (or a stable serialization of it), so refactors cannot silently change tree shape.
+
+**Approach (pick and document one)**  
+- A test-only `serializeAstForTest(mod)` (or similar) that outputs deterministic JSON/text: stable key order, normalized arrays, and **locations stripped or optional** so line churn does not rewrite goldens on every edit.  
+- One golden file per focused `.jh` fixture (small, one concern each: params, `run`/`ensure` args, `log`, brace-if, prompt capture, imports).  
+- Optionally combine with a few **targeted** `assert.deepEqual` tests for hot paths if goldens feel heavy.
+
+**Acceptance criteria**  
+- At least a handful of fixtures with checked-in goldens; `npm test` fails when AST shape changes without updating goldens.  
+- Short note in `docs/` or contributor-facing text: txtar = errors/behavior; golden AST = parse tree shape.
 
 ---
 

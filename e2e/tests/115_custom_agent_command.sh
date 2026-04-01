@@ -24,7 +24,7 @@ config {
   agent.command = "./agents/echo-wc.sh"
 }
 
-workflow default {
+workflow default() {
   const response = prompt "one two three four five"
   log "${response}"
 }

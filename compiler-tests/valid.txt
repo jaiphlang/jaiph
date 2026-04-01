@@ -589,7 +589,7 @@ workflow default() {
 --- input.jh
 script some_script = "echo \"$1\""
 workflow default() {
-  const x = run some_script("${arg}")
+  const x = run some_script(arg1)
 }
 
 === const prompt capture
@@ -1030,13 +1030,13 @@ workflow researcher() {
 script write_findings_file = "echo \"$1\" > findings_file.md"
 
 workflow analyst() {
-  run write_findings_file("${arg1}")
+  run write_findings_file(arg1)
   summary = run summarize_findings()
   summary <- "${summary}"
 }
 
 workflow reviewer() {
-  final_summary <- run review_summary("${arg1}")
+  final_summary <- run review_summary(arg1)
 }
 
 workflow default() {

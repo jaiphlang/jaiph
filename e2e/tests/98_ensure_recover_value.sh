@@ -18,20 +18,20 @@ script check_ready_impl = ```
 echo "rule-stdout-check"
 test -f ready.txt
 ```
-rule check_ready {
+rule check_ready() {
   run check_ready_impl()
   return "ready-value"
 }
 
 script fix_it_impl = "touch ready.txt"
-workflow fix_it {
+workflow fix_it() {
   run fix_it_impl()
 }
 
 script echo_captured = "echo \"captured=$1\""
-workflow default {
+workflow default() {
   val = ensure check_ready() recover run fix_it()
-  run echo_captured("${val}")
+  run echo_captured(val)
 }
 EOF
 rm -f "${TEST_DIR}/ready.txt"
@@ -67,7 +67,7 @@ script analyze_impl = ```
 echo "analysis-stdout-log"
 test -f ready2.txt
 ```
-rule analyze {
+rule analyze() {
   run analyze_impl()
 }
 
@@ -75,9 +75,9 @@ script recover_handler = ```
 echo "$1" > recover_received.txt
 touch ready2.txt
 ```
-workflow default {
+workflow default() {
   ensure analyze() recover {
-    run recover_handler("${arg1}")
+    run recover_handler(arg1)
   }
 }
 EOF

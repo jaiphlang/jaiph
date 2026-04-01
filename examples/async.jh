@@ -2,7 +2,7 @@
 
 const prompt_text = "Say: \"Greetings! I am [model name].\""
 
-workflow cursor_say_hello() {
+workflow cursor_say_hello(name) {
   config {
     agent.backend = "cursor"
   }
@@ -10,7 +10,7 @@ workflow cursor_say_hello() {
   log "${response}"
 }
 
-workflow claude_say_hello() {
+workflow claude_say_hello(name) {
   config {
     agent.backend = "claude"
   }
@@ -19,6 +19,6 @@ workflow claude_say_hello() {
 }
 
 workflow default() {
-  run async cursor_say_hello("${arg1}")
-  run async claude_say_hello("${arg1}")
+  run async cursor_say_hello(arg1)
+  run async claude_say_hello(arg1)
 }

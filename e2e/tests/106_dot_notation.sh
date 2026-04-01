@@ -33,7 +33,7 @@ e2e::pass "dot_notation.test.jh passes with dot notation"
 e2e::section "Compile-time rejection: invalid field in dot notation"
 
 cat > "${TEST_DIR}/bad_field.jh" <<'EOF'
-workflow default {
+workflow default() {
   result = prompt "Analyse" returns "{ type: string }"
   log "bad ${result.bogus}"
 }
@@ -51,7 +51,7 @@ e2e::assert_contains "${out}" 'field "bogus" is not defined' "invalid field reje
 e2e::section "Compile-time rejection: dot notation on non-prompt variable"
 
 cat > "${TEST_DIR}/not_prompt.jh" <<'EOF'
-workflow default {
+workflow default() {
   log "bad ${x.field}"
 }
 EOF

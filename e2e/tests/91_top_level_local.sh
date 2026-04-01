@@ -23,9 +23,9 @@ script write_role = "echo \"$1\" > role_out.txt"
 
 script write_greeting = "echo \"$1\" > greeting_out.txt"
 
-workflow default {
-  run write_role("${role}")
-  run write_greeting("${greeting}")
+workflow default() {
+  run write_role(role)
+  run write_greeting(greeting)
 }
 EOF
 
@@ -59,18 +59,18 @@ echo "$1" > rule_msg.txt
 test -n "$1"
 ```
 
-rule check_msg {
-  run check_msg_impl("${msg}")
+rule check_msg() {
+  run check_msg_impl(msg)
 }
 
 script write_msg = "echo \"${msg:-}\" > func_msg.txt"
 
 script write_wf_msg = "echo \"$1\" > wf_msg.txt"
 
-workflow default {
+workflow default() {
   ensure check_msg()
   run write_msg()
-  run write_wf_msg("${msg}")
+  run write_wf_msg(msg)
 }
 EOF
 

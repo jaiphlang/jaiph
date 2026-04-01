@@ -9,14 +9,14 @@ Each `.txt` file in this directory contains multiple test cases in txtar format.
 === test name here
 # @expect ok
 --- input.jh
-workflow default {
+workflow default() {
   log "hello"
 }
 
 === another test
 # @expect error E_PARSE "unterminated workflow block"
 --- input.jh
-workflow default {
+workflow default() {
   log "hello"
 ```
 

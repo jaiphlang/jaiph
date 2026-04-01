@@ -17,7 +17,7 @@ e2e::file "nested_inner.jh" <<'EOF'
 script nested_inner_impl = ```
 echo "e2e-nested-inner"
 ```
-workflow default {
+workflow default() {
   run nested_inner_impl()
 }
 EOF
@@ -28,7 +28,7 @@ import "nested_inner.jh" as inner
 script nested_outer_impl = ```
 echo "e2e-nested-outer"
 ```
-workflow default {
+workflow default() {
   run inner.default()
   run nested_outer_impl()
 }
@@ -68,7 +68,7 @@ e2e::file "workflow_greeting.jh" <<'EOF'
 script done_impl = ```
 echo "done"
 ```
-workflow default {
+workflow default() {
   prompt "e2e-greeting-prompt"
   run done_impl()
 }
@@ -109,7 +109,7 @@ e2e::file "unmatched_mock_block.jh" <<'EOF'
 script print_result = ```
 printf '%s' "$1"
 ```
-workflow default {
+workflow default() {
   result = prompt "e2e-unmatched-prompt-never-mocked"
   run print_result("$result")
 }
@@ -186,13 +186,13 @@ script check_arg_impl = ```
 script echo_response = ```
 echo "$1"
 ```
-rule check_arg {
-  run check_arg_impl("${arg1}")
+rule check_arg(name) {
+  run check_arg_impl(arg1)
 }
-workflow default {
-  ensure check_arg("${arg1}")
+workflow default() {
+  ensure check_arg(arg1)
   response = prompt "e2e-param-prompt-text"
-  run echo_response("${response}")
+  run echo_response(response)
 }
 EOF
 
@@ -226,11 +226,11 @@ script need_one_impl = ```
 script param_done_impl = ```
 echo "e2e-param-done"
 ```
-rule need_one {
-  run need_one_impl("${arg1}")
+rule need_one(name) {
+  run need_one_impl(arg1)
 }
-workflow default {
-  ensure need_one("${arg1}")
+workflow default() {
+  ensure need_one(arg1)
   run param_done_impl()
 }
 EOF
