@@ -9,10 +9,11 @@ test("parseImportLine: parses valid double-quoted import", () => {
   assert.equal(result.loc.line, 1);
 });
 
-test("parseImportLine: parses valid single-quoted import", () => {
-  const result = parseImportLine("test.jh", "import 'other.jh' as other", "import 'other.jh' as other", 2);
-  assert.equal(result.path, "other.jh");
-  assert.equal(result.alias, "other");
+test("parseImportLine: rejects single-quoted import path", () => {
+  assert.throws(
+    () => parseImportLine("test.jh", "import 'other.jh' as other", "import 'other.jh' as other", 2),
+    /single-quoted strings are not supported/,
+  );
 });
 
 test("parseImportLine: fails on missing alias", () => {

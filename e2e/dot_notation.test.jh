@@ -2,7 +2,7 @@
 import "dot_notation.jh" as dn
 
 test "dot notation resolves typed prompt field" {
-  mock prompt '{"category":"bugfix","confidence":42}'
+  mock prompt "{\"category\":\"bugfix\",\"confidence\":42}"
   got = dn.classify
   expectEqual got "bugfix"
 }

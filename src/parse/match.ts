@@ -21,13 +21,7 @@ function parsePattern(filePath: string, text: string, lineNo: number): { pattern
     return { pattern: { kind: "string_literal", value }, rest };
   }
   if (t.startsWith("'")) {
-    const closeIdx = t.indexOf("'", 1);
-    if (closeIdx === -1) {
-      fail(filePath, "unterminated string in match pattern", lineNo);
-    }
-    const value = t.slice(1, closeIdx).replace(/\\'/g, "'").replace(/\\n/g, "\n").replace(/\\\\/g, "\\");
-    const rest = t.slice(closeIdx + 1).trimStart();
-    return { pattern: { kind: "string_literal", value }, rest };
+    fail(filePath, 'single-quoted strings are not supported; use double quotes ("...") instead', lineNo);
   }
   if (t.startsWith("/")) {
     // Find closing / (not escaped)
@@ -66,7 +60,6 @@ function parseArmBody(filePath: string, text: string, lineNo: number): string {
   if (!t) {
     fail(filePath, "match arm body cannot be empty", lineNo);
   }
-  // The body is a value expression: "quoted", 'quoted', or $var / ${var}
   if (t.startsWith('"')) {
     const closeIdx = indexOfClosingDoubleQuote(t, 1);
     if (closeIdx === -1) {
@@ -75,11 +68,7 @@ function parseArmBody(filePath: string, text: string, lineNo: number): string {
     return t.slice(0, closeIdx + 1);
   }
   if (t.startsWith("'")) {
-    const closeIdx = t.indexOf("'", 1);
-    if (closeIdx === -1) {
-      fail(filePath, "unterminated string in match arm body", lineNo);
-    }
-    return t.slice(0, closeIdx + 1);
+    fail(filePath, 'single-quoted strings are not supported; use double quotes ("...") instead', lineNo);
   }
   // Allow $var, ${var}, ${var.field}, or bare words up to end of line
   return t;

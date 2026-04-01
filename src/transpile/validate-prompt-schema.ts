@@ -3,7 +3,7 @@ import type { WorkflowStepDef } from "../types";
 
 const SUPPORTED_SCHEMA_TYPES = new Set<string>(["string", "number", "boolean"]);
 
-/** Compile-time validation for `prompt ... returns '{ ... }'` (formerly part of bash emit). */
+/** Compile-time validation for `prompt ... returns "{ ... }"`. */
 export function validatePromptReturnsSchema(
   rawSchema: string,
   filePath: string,
@@ -62,7 +62,7 @@ export function validatePromptStepReturns(
         step.loc.line,
         step.loc.col,
         "E_PARSE",
-        'prompt with "returns" schema must capture to a variable (e.g. result = prompt "..." returns \'{ ... }\')',
+        'prompt with "returns" schema must capture to a variable (e.g. result = prompt "..." returns "{ ... }")',
       );
     }
     validatePromptReturnsSchema(step.returns, filePath, step.loc.line, step.loc.col);

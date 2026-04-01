@@ -229,7 +229,7 @@ workflow classify_role {
     ${arg1}
 
     Respond with exactly one role name.
-  " returns '{ role: string }'
+  " returns "{ role: string }"
 
   return "${result_role}"
 }

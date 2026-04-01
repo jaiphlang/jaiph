@@ -203,7 +203,7 @@ Jaiph: Running say_hello.jh
                     <p>
                         Jaiph also supports structured output. You can use the following syntax:
                     </p>
-                    <pre><code class="language-jaiph">const response = prompt "..." returns '{ hello: string, fact: string }'</code></pre>
+                    <pre><code class="language-jaiph">const response = prompt "..." returns "{ hello: string, fact: string }"</code></pre>
                     <p>
                         Then, Jaiph will add at runtime instructions to the prompt asking the agent to return a JSON
                         object with the fields <code>hello</code> and <code>fact</code>, and it will parse the response
@@ -378,7 +378,7 @@ Jaiph: Running agent_inbox.jh
                         implicit join before completion.</p>
                     <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
-const prompt_text = 'Say: "Greetings! I am [model name]."'
+const prompt_text = "Say: \"Greetings! I am [model name].\""
 
 workflow cursor_say_hello {
   config {
@@ -556,7 +556,7 @@ Jaiph: Running async.jh
                         shebangs.</dd>
 
                     <dt><code>prompt "..."</code> &middot;
-                        <code>const name = prompt "..." returns '{ field: type }'</code>
+                        <code>const name = prompt "..." returns "{ field: type }"</code>
                     </dt>
                     <dd>Sends a prompt to the configured agent, optionally validates structured JSON output, and exposes
                         captured variables.</dd>

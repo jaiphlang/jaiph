@@ -378,7 +378,7 @@ test("ACCEPTANCE: prompt with returns schema (single-line) parses and emits type
   const mod = parsejaiph(
     [
       "workflow default {",
-      '  result = prompt "Analyse the diff" returns \'{ type: string, risk: string }\'',
+      '  result = prompt "Analyse the diff" returns "{ type: string, risk: string }"',
       "}",
       "",
     ].join("\n"),
@@ -396,7 +396,7 @@ test("ACCEPTANCE: prompt with returns schema (single-line) parses and emits type
       join(root, "main.jh"),
       [
         "workflow default {",
-        '  result = prompt "Analyse" returns \'{ type: string, risk: string }\'',
+        '  result = prompt "Analyse" returns "{ type: string, risk: string }"',
         '  return "${result}"',
         "}",
         "",
@@ -406,12 +406,12 @@ test("ACCEPTANCE: prompt with returns schema (single-line) parses and emits type
   });
 });
 
-// Multiline returns: continuation with \ then returns '{ ... }' on next line. Skip: parser line continuation needs debugging.
+// Multiline returns: continuation with \ then returns "{ ... }" on next line.
 test("ACCEPTANCE: prompt with returns schema (multiline continuation) parses", () => {
   const src = [
     "workflow default {",
     '  result = prompt "Analyse" \\',
-    "    returns '{ type: string, risk: string }'",
+    '    returns "{ type: string, risk: string }"',
     "}",
     "",
   ].join("\n");
@@ -430,7 +430,7 @@ test("ACCEPTANCE: unsupported type in returns schema fails with E_SCHEMA", () =>
       join(root, "main.jh"),
       [
         "workflow default {",
-        '  result = prompt "x" returns \'{ foo: array }\'',
+        '  result = prompt "x" returns "{ foo: array }"',
         "}",
         "",
       ].join("\n"),
@@ -445,7 +445,7 @@ test("ACCEPTANCE: prompt with returns without capture name fails with E_PARSE", 
       join(root, "main.jh"),
       [
         "workflow default {",
-        '  prompt "x" returns \'{ a: string }\'',
+        '  prompt "x" returns "{ a: string }"',
         "}",
         "",
       ].join("\n"),
@@ -464,7 +464,7 @@ test("ACCEPTANCE: jaiph test typed prompt — valid JSON passes and raw result i
       join(root, "flow.jh"),
       [
         "workflow default {",
-        '  result = prompt "classify" returns \'{ type: string, risk: string }\'',
+        '  result = prompt "classify" returns "{ type: string, risk: string }"',
         '  return "raw=${result}"',
         "}",
         "",
@@ -503,7 +503,7 @@ test("ACCEPTANCE: jaiph test typed prompt — invalid JSON fails with parse erro
       join(root, "flow.jh"),
       [
         "workflow default {",
-        '  result = prompt "classify" returns \'{ type: string }\'',
+        '  result = prompt "classify" returns "{ type: string }"',
         '  log "done"',
         "}",
         "",
@@ -543,7 +543,7 @@ test("ACCEPTANCE: jaiph test typed prompt — missing field fails with schema er
       join(root, "flow.jh"),
       [
         "workflow default {",
-        '  result = prompt "classify" returns \'{ type: string, risk: string }\'',
+        '  result = prompt "classify" returns "{ type: string, risk: string }"',
         '  log "done"',
         "}",
         "",
@@ -584,7 +584,7 @@ test("ACCEPTANCE: jaiph test typed prompt — wrong type fails", () => {
       join(root, "flow.jh"),
       [
         "workflow default {",
-        '  result = prompt "classify" returns \'{ type: string, risk: string }\'',
+        '  result = prompt "classify" returns "{ type: string, risk: string }"',
         '  log "done"',
         "}",
         "",

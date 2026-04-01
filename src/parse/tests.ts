@@ -50,12 +50,9 @@ function parseMockSymbolBlock(
   fail(filePath, "unterminated mock block", startLineIndex + 2);
 }
 
-function decodeQuotedTestString(arg: string, isDoubleQuoted: boolean): string {
+function decodeQuotedTestString(arg: string): string {
   const inner = stripQuotes(arg);
-  if (isDoubleQuoted) {
-    return inner.replace(/\\"/g, '"').replace(/\\n/g, "\n").replace(/\\\\/g, "\\");
-  }
-  return inner.replace(/\\'/g, "'").replace(/\\n/g, "\n").replace(/\\\\/g, "\\");
+  return inner.replace(/\\"/g, '"').replace(/\\n/g, "\n").replace(/\\\\/g, "\\");
 }
 
 export function parseTestBlock(
@@ -103,14 +100,16 @@ export function parseTestBlock(
         i = nextIndex - 1;
         continue;
       }
+      if (arg.startsWith("'")) {
+        fail(filePath, 'single-quoted strings are not supported; use double quotes ("...") instead', innerNo, innerRaw.indexOf("mock"));
+      }
       const isDoubleQuoted = arg.startsWith('"') && hasUnescapedClosingQuote(arg, 1);
-      const isSingleQuoted = /^'(?:[^'\\]|\\.)*'$/.test(arg);
-      if (!isDoubleQuoted && !isSingleQuoted) {
+      if (!isDoubleQuoted) {
         fail(filePath, 'mock prompt must be: mock prompt "<response>" or mock prompt { "pattern" => "response", _ => "default" }', innerNo, innerRaw.indexOf("mock"));
       }
       testBlock.steps.push({
         type: "test_mock_prompt",
-        response: decodeQuotedTestString(arg, isDoubleQuoted),
+        response: decodeQuotedTestString(arg),
         loc,
       });
       continue;

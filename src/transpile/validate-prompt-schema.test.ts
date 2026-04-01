@@ -76,7 +76,7 @@ test("validatePromptStepReturns: no error when no returns", () => {
 test("validatePromptStepReturns: no error when returns with capture", () => {
   const step = {
     type: "prompt" as const,
-    raw: 'result = prompt "hello" returns \'{ name: string }\'',
+    raw: 'result = prompt "hello" returns "{ name: string }"',
     loc: { line: 1, col: 1 },
     captureName: "result",
     returns: "{ name: string }",
@@ -87,7 +87,7 @@ test("validatePromptStepReturns: no error when returns with capture", () => {
 test("validatePromptStepReturns: rejects returns without capture", () => {
   const step = {
     type: "prompt" as const,
-    raw: 'prompt "hello" returns \'{ name: string }\'',
+    raw: 'prompt "hello" returns "{ name: string }"',
     loc: { line: 1, col: 1 },
     returns: "{ name: string }",
   };

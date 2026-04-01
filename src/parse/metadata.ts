@@ -50,7 +50,10 @@ function parseMetadataValue(filePath: string, rawLine: string, valuePart: string
   if (trimmed === "[]") {
     return [];
   }
-  if ((trimmed.startsWith(`"`) && trimmed.endsWith(`"`)) || (trimmed.startsWith(`'`) && trimmed.endsWith(`'`))) {
+  if (trimmed.startsWith(`'`)) {
+    return fail(filePath, 'single-quoted strings are not supported; use double quotes ("...") instead', lineNo, colFromRaw(rawLine));
+  }
+  if (trimmed.startsWith(`"`) && trimmed.endsWith(`"`)) {
     return trimmed.slice(1, -1).replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, `"`).replace(/\\\\/g, `\\`);
   }
   const col = rawLine.indexOf(valuePart) >= 0 ? colFromRaw(rawLine) : 1;
@@ -114,10 +117,10 @@ function parseArrayValue(
       element = element.slice(0, -1).trimEnd();
     }
 
-    if (
-      (element.startsWith(`"`) && element.endsWith(`"`)) ||
-      (element.startsWith(`'`) && element.endsWith(`'`))
-    ) {
+    if (element.startsWith(`'`)) {
+      return fail(filePath, 'single-quoted strings are not supported; use double quotes ("...") instead', lineNo, colFromRaw(raw));
+    }
+    if (element.startsWith(`"`) && element.endsWith(`"`)) {
       result.push(
         element.slice(1, -1).replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, `"`).replace(/\\\\/g, `\\`),
       );

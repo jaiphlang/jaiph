@@ -12,35 +12,6 @@ Process rules:
 
 ---
 
-## Unify string quoting across Jaiph <!-- dev-ready -->
-
-**Goal**  
-**Policy is fixed:** Jaiph string literals use **double quotes only** (`"..."`). **No** single-quoted string literals (`'...'`) and **no** backtick-delimited string literals (`` `...` ``) anywhere in Jaiph surface syntax. One rule for orchestration strings, `fail` / `log` / `logerr`, `mock prompt`, `const` / `local` RHS, test blocks, metadata, etc.
-
-**Context**
-
-- **Hard rewrite:** This is an intentional **breaking change**. **No backward compatibility** — existing `.jh` / tests / docs that use `'...'` or `` `...` `` as Jaiph string delimiters must be migrated wholesale (mechanical find/replace is not always enough; escaping inside `"` must be correct).
-- Today behavior is **inconsistent** (e.g. `fail` vs `mock prompt`); this task **removes** alternate quote forms instead of unifying semantics across them.
-- **Exception (unchanged):** `script { ... }` bodies remain **opaque shell**; authors may still use normal shell quoting (single quotes, command substitution, etc.) **inside** the script text. The policy applies to **Jaiph** tokens, not to arbitrary characters inside opaque script bodies.
-- Escaping: document how `"` and newlines appear inside `"..."` (e.g. `\"`); interpolation rules for `${...}` stay as today inside double-quoted strings.
-
-**Key files:**  
-`src/parse/*`, `docs/grammar.md`, user-facing docs, fixtures, e2e, `.jaiph/*.jh` and examples.
-
-**Scope**
-
-1. Document the policy in grammar (and a short note on script-body exception).
-2. Remove single-quoted and backtick string forms from all Jaiph parsers; align validators and error messages (“use `\"...\"` only”).
-3. Migrate repo sources, tests, and docs; **no** compatibility shims or deprecation period unless this task is explicitly split.
-
-**Acceptance criteria**
-
-- Only `"..."` is accepted for Jaiph string literals in every covered construct; `'` / `` ` `` as delimiters are **parse errors** with clear fixes.
-- Script opaque bodies are explicitly out of scope for quoting rules (documented).
-- **No backward compat:** old forms do not parse; migration path is “rewrite sources to `"` + escapes.”
-
----
-
 ## Bare identifiers as `run` / `ensure` arguments <!-- dev-ready -->
 
 **Goal**  

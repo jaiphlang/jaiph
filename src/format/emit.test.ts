@@ -207,7 +207,7 @@ describe("emitModule", () => {
   it("formats prompt with returns", () => {
     const source = [
       "workflow default {",
-      "  result = prompt \"classify\" returns '{ role: string }'",
+      "  result = prompt \"classify\" returns \"{ role: string }\"",
       "  log \"${result}\"",
       "}",
       "",

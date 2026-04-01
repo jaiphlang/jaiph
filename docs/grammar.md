@@ -47,7 +47,7 @@ Imported symbols use **dot notation**: `alias.name`. A reference is either a bar
 
 ### Top-Level `const`
 
-`const name = value` declares a module-scoped variable. Values can be double-quoted strings (including multiline), single-quoted strings, or bare tokens like numbers.
+`const name = value` declares a module-scoped variable. Values can be double-quoted strings (including multiline) or bare tokens like numbers.
 
 ```jaiph
 const REPO = "my-project"
@@ -202,7 +202,7 @@ answer = prompt "Summarize the report"
 
 ```jaiph
 result = prompt "Analyze this code" \
-  returns '{ type: string, risk: string }'
+  returns "{ type: string, risk: string }"
 ```
 
 When `returns` is present, capture is required. The schema is flat only — allowed types are `string`, `number`, `boolean`. The runtime validates the response: it searches for valid JSON (last non-empty line, fenced code blocks, standalone `{…}`, embedded JSON). On success, the capture variable holds the raw JSON string and each field is accessible via **dot notation** — `${result.type}`, `${result.risk}`. The underscore form (`${result_type}`) also works but dot notation is preferred for clarity. On failure, the step fails with a parse, missing-field, or type error.
@@ -483,6 +483,7 @@ Key rules:
 - **Comments:** Full-line `#` comments. Empty lines are ignored.
 - **Shebang:** A `#!` first line of the file is ignored by the parser.
 - **Import path:** Quoted string in `import "path" as alias`. Missing `.jh` extension is appended automatically.
+- **String quoting:** Jaiph string literals use **double quotes only** (`"..."`). Single-quoted (`'...'`) and backtick-delimited (`` `...` ``) strings are parse errors. Use `\"` for literal double quotes inside strings and `\\` for literal backslashes. **Exception:** `script { ... }` bodies are opaque shell text; normal shell quoting (single quotes, backticks, etc.) is allowed inside them.
 
 ## EBNF (Practical Form)
 
@@ -509,7 +510,7 @@ import_stmt     = "import" string "as" IDENT ;
 channel_decl    = "channel" IDENT ;
 
 env_decl        = "const" IDENT "=" env_value ;
-env_value       = quoted_or_multiline_string | single_quoted_string | bare_value ;
+env_value       = quoted_or_multiline_string | bare_value ;
 
 rule_decl       = [ "export" ] "rule" IDENT "{" { rule_body_step } "}" ;
 rule_body_step  = comment_line | workflow_step ;
@@ -532,7 +533,7 @@ workflow_step   = ensure_stmt | run_stmt | run_async_stmt | prompt_stmt | prompt
                 | if_brace_stmt | match_stmt | comment_line ;
 
 const_decl_step = "const" IDENT "=" const_rhs ;
-const_rhs       = quoted_or_multiline_string | single_quoted_string | bash_value_expr
+const_rhs       = quoted_or_multiline_string | bash_value_expr
                 | "run" ( call_ref | inline_script ) | "ensure" call_ref
                 | "prompt" quoted_or_multiline_string [ returns_schema ]
                 | match_expr ;
@@ -541,15 +542,15 @@ fail_stmt       = "fail" double_quoted_string ;
 wait_stmt       = "wait" ;
 run_async_stmt  = "run" "async" call_ref ;
 return_stmt     = "return" return_value ;
-return_value    = double_quoted_string | single_quoted_string | "$" IDENT | "${" IDENT "}"
+return_value    = double_quoted_string | "$" IDENT | "${" IDENT "}"
                 | "run" call_ref | "ensure" call_ref | match_expr ;
 
 match_stmt      = "match" match_subject "{" { match_arm } "}" ;
 match_expr      = match_subject "match" "{" { match_arm } "}" ;
 match_subject   = "$" IDENT | "${" IDENT "}" | double_quoted_string ;
 match_arm       = match_pattern "=>" arm_body ;
-match_pattern   = double_quoted_string | single_quoted_string | "/" regex_source "/" | "_" ;
-arm_body        = double_quoted_string | single_quoted_string | "$" IDENT | "${" IDENT "}" ;
+match_pattern   = double_quoted_string | "/" regex_source "/" | "_" ;
+arm_body        = double_quoted_string | "$" IDENT | "${" IDENT "}" ;
 
 send_stmt       = IDENT "<-" [ send_rhs ] ;
 send_rhs        = double_quoted_string | "${" IDENT "}" | "run" call_ref | REF ;
@@ -566,7 +567,7 @@ run_stmt        = "run" ( call_ref | inline_script ) ;
 inline_script   = "script" "(" string { "," string } ")" ;
 prompt_stmt     = "prompt" quoted_or_multiline_string [ returns_schema ] ;
 prompt_capture_stmt = IDENT "=" "prompt" quoted_or_multiline_string [ returns_schema ] ;
-returns_schema  = "returns" ( single_quoted_string | double_quoted_string ) ;
+returns_schema  = "returns" double_quoted_string ;
 
 recover_body    = single_workflow_stmt | "{" { workflow_step } "}" ;
 single_workflow_stmt = ensure_stmt | run_stmt | prompt_stmt | prompt_capture_stmt

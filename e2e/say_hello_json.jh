@@ -16,7 +16,7 @@ workflow default {
 
   response = prompt "
     Say hello to ${arg1} and provide a fun fact about a person with the same name.
-  " returns '{ hello: string, fact: string }'
+  " returns "{ hello: string, fact: string }"
 
   log "${response_fact}"
 }

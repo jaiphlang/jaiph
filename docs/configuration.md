@@ -98,7 +98,7 @@ workflow default {
 
 | Type | Format | Example |
 |------|--------|---------|
-| String | Double- or single-quoted | `"gpt-4"` |
+| String | Double-quoted | `"gpt-4"` |
 | Boolean | Unquoted `true` / `false` | `true` |
 | Integer | Unsigned decimal digits only | `300` |
 | String array | `[` on the `=` line, one quoted string per line, then `]` | See below |
