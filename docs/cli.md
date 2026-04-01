@@ -245,6 +245,8 @@ jaiph test e2e/say_hello.test.jh
 
 Reformat `.jh` source files to a canonical style. The formatter parses each file into an AST and re-emits it with consistent whitespace and indentation. Formatting is idempotent — running it twice produces the same output. Comments and shebangs are preserved.
 
+**Canonical definition order:** The formatter reorders top-level definitions to a fixed order: imports → config → channels → const declarations → rules → scripts → workflows → tests. Source files may declare these in any order; `jaiph format` normalizes them.
+
 ```bash
 jaiph format [--check] [--indent <n>] <file.jh ...>
 ```

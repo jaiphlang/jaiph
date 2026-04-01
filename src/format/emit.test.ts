@@ -163,6 +163,38 @@ describe("emitModule", () => {
     assert.equal(emitModule(mod, { indent: 4 }), expected);
   });
 
+  it("reorders out-of-order definitions to canonical order", () => {
+    const input = [
+      "config {",
+      '  agent.backend = "claude"',
+      "}",
+      "",
+      'import "lib.jh" as lib',
+      "",
+      "channel findings",
+      "",
+      "workflow default {",
+      '  log "ok"',
+      "}",
+      "",
+    ].join("\n");
+    const expected = [
+      'import "lib.jh" as lib',
+      "",
+      "config {",
+      '  agent.backend = "claude"',
+      "}",
+      "",
+      "channel findings",
+      "",
+      "workflow default {",
+      '  log "ok"',
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(input), expected);
+  });
+
   it("is idempotent", () => {
     const source = [
       "# A comment",
