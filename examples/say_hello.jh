@@ -18,7 +18,7 @@ workflow default {
   response = prompt ```
     Say hello to ${arg1} and provide a fun fact about a person with the same name.
     Respond with a single line. Do not inspect files or run tools.
-```
+  ```
 
   log "${response}"
 }

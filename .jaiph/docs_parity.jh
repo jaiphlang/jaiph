@@ -101,7 +101,7 @@ done
 printf '%s\n' "$out"
 ```
 
-script join_newline_args = "printf '%s\\n' \"$@\""
+script join_newline_args = "printf '%s\n' \"$@\""
 
 workflow update_from_task {
   prompt ```

@@ -65,11 +65,11 @@ fi
 printf '%s\n' "$task"
 ```
 
-script task_contains_dev_ready_marker = "printf '%s\\n' \"$1\" | grep -q '<!-- dev-ready -->'"
+script task_contains_dev_ready_marker = "printf '%s\n' \"$1\" | grep -q '<!-- dev-ready -->'"
 
 script file_exists = "test -f \"$1\""
 
-script queue_file_path = "printf '%s\\n' \"${JAIPH_WORKSPACE:-.}/QUEUE.md\""
+script queue_file_path = "printf '%s\n' \"${JAIPH_WORKSPACE:-.}/QUEUE.md\""
 
 script first_header_line = ```
 local header

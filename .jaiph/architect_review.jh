@@ -21,7 +21,7 @@ script arg_nonempty = "[ -n \"${1:-}\" ]"
 
 script str_equals = "[ \"$1\" = \"$2\" ]"
 
-script task_has_dev_ready_marker = "printf '%s\\n' \"$1\" | grep -q '<!-- dev-ready -->'"
+script task_has_dev_ready_marker = "printf '%s\n' \"$1\" | grep -q '<!-- dev-ready -->'"
 
 script queue_has_any_task_not_dev_ready = ```
 local qf

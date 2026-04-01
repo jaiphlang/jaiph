@@ -195,7 +195,7 @@ esac
 
 script arg_nonempty = "[ -n \"${1:-}\" ]"
 
-script task_text_has_header = "printf '%s\\n' \"$1\" | grep -q '^## '"
+script task_text_has_header = "printf '%s\n' \"$1\" | grep -q '^## '"
 
 script first_line_task = ```
 local line
