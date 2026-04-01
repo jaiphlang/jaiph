@@ -12,49 +12,6 @@ Process rules:
 
 ---
 
-## Fenced-block parser utility <!-- dev-ready -->
-
-**Goal**  
-Extract a reusable `parseFencedBlock()` function for parsing multiline fenced bodies (`` ``` ... ``` ``), shared by both prompt and script parsers.
-
-**Fence rules**
-
-- **Opening fence line**: only `` ``` `` or `` ```lang `` — no other characters after the backticks on that line.
-- **Closing fence line**: only `` ``` `` (optional surrounding whitespace) — no other tokens on that line.
-- `lang` is the optional token immediately after the opening backticks (e.g. `python3`, `node`, `bash`). Any single token is accepted — no hardcoded allowlist.
-- Body is all lines between opening and closing fences, joined with `\n`.
-
-**Error cases**
-
-- Unterminated fence: no closing `` ``` `` before EOF.
-- Text after the opening `` ``` `` that isn't a single lang token.
-- Content on the same line as closing `` ``` ``.
-
-**API**
-
-```ts
-parseFencedBlock(filePath: string, lines: string[], fenceLineIdx: number): {
-  body: string;
-  lang?: string;
-  nextIdx: number;
-}
-```
-
-`fenceLineIdx` points to the line containing the opening `` ``` ``. Returns `nextIdx` as the first line index after the closing fence.
-
-**Scope**
-
-1. **New file**: `src/parse/fence.ts` with `parseFencedBlock`.
-2. **Unit tests**: `src/parse/parse-fence.test.ts` — basic body extraction, lang extraction, all error cases above.
-3. **Compiler tests**: fence-specific error cases in `compiler-tests/parse-errors.txt`.
-
-**Acceptance criteria**
-
-- `npm test` passes with fence parser tests.
-- No downstream consumers yet — prompt and script tasks wire it in.
-
----
-
 ## Prompt: single-line vs fenced multiline <!-- dev-ready -->
 
 **Goal**  
