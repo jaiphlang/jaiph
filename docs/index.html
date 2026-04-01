@@ -145,7 +145,7 @@ layout: null
                     <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
 script name_was_provided_check {
-  # by default it's bash but you can provide your own shebang here
+  # bash by default; use script:node, script:python3, etc. for other languages
   if [ -z "$1" ]; then
     echo "You didn't provide your name :(" >&2
     exit 1
@@ -455,8 +455,10 @@ Jaiph: Running async.jh
                 </p>
                 <p><strong>Use Bash (or any language) in scripts.</strong> Command pipelines, checks, and background
                     jobs
-                    belong in <code>script</code> blocks; workflows and rules call them with <code>run</code>. Add a
-                    custom shebang (e.g. <code>#!/usr/bin/env python3</code>) to write scripts in other languages.
+                    belong in <code>script</code> blocks; workflows and rules call them with <code>run</code>. Use
+                    <code>script:node</code>, <code>script:python3</code>, <code>script:ruby</code>, etc. to select a
+                    common interpreter without writing a shebang line. For unlisted interpreters, add a manual
+                    <code>#!</code> shebang as the first body line.
                     For trivial one-off commands, use <strong>inline scripts</strong>:
                     <code>run script("echo ok")</code> &mdash; no named block needed.
                 </p>
@@ -528,12 +530,12 @@ Jaiph: Running async.jh
                         rules, scripts, and workflows in the same file.</dd>
 
                     <dt><code>rule name { ... }</code> &middot; <code>workflow name { ... }</code> &middot;
-                        <code>script name { ... }</code>
+                        <code>script name { ... }</code> &middot; <code>script:tag name { ... }</code>
                     </dt>
                     <dd><code>rule</code> is for reusable checks (Jaiph structured steps; used with
                         <code>ensure</code>),
                         <code>workflow</code> orchestrates Jaiph steps only, and <code>script</code> holds bash (or any
-                        language via a custom shebang, e.g. <code>#!/usr/bin/env node</code>) invoked with
+                        language via <code>script:&lt;tag&gt;</code> or a custom shebang) invoked with
                         <code>run</code>. Scripts run in <strong>full isolation</strong> &mdash; only positional
                         arguments
                         and essential Jaiph variables (<code>JAIPH_LIB</code>, <code>JAIPH_SCRIPTS</code>,

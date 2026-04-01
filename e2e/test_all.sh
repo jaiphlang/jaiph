@@ -51,6 +51,7 @@ TEST_SCRIPTS=(
   "e2e/tests/105_test_jh_verification.sh"
   "e2e/tests/110_examples.sh"
   "e2e/tests/111_inline_script.sh"
+  "e2e/tests/112_interpreter_tags.sh"
 )
 
 PASS_COUNT=0
