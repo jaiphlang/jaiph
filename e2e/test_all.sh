@@ -44,15 +44,18 @@ TEST_SCRIPTS=(
   "e2e/tests/97_async_managed_failure.sh"
   "e2e/tests/99_managed_call_semantics.sh"
   "e2e/tests/100_ensure_recover_invalid.sh"
+  "e2e/tests/100_format_command.sh"
+  "e2e/tests/100_bare_identifier_args.sh"
   "e2e/tests/101_script_isolation.sh"
   "e2e/tests/102_engineer_recover_contract.sh"
   "e2e/tests/103_run_dir_source_name.sh"
   "e2e/tests/104_run_async.sh"
   "e2e/tests/105_test_jh_verification.sh"
+  "e2e/tests/106_dot_notation.sh"
+  "e2e/tests/107_return_managed_call.sh"
   "e2e/tests/110_examples.sh"
   "e2e/tests/111_inline_script.sh"
   "e2e/tests/112_interpreter_tags.sh"
-  "e2e/tests/100_bare_identifier_args.sh"
 )
 
 PASS_COUNT=0
