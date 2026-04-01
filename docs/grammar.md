@@ -71,25 +71,46 @@ One channel per line. Channels are used with `send` (`<-`) and `route` (`->`) in
 
 ## Definitions
 
-Rules and workflows use braces on the declaration line. Scripts use `=` with a quoted string, bare identifier, or fenced block body. Definitions must **not** use parentheses (parentheses are reserved for call sites).
+Rules and workflows use braces on the declaration line. Scripts use `=` with a quoted string, bare identifier, or fenced block body. Rules and workflows may declare **named parameters** in parentheses before the opening brace.
 
 ```jaiph
-rule check_status { … }        # correct
-workflow default { … }          # correct
-script setup = "echo ok"        # correct (single-line)
-script setup = ```              # correct (fenced block)
+rule check_status { … }               # no params
+workflow default { … }                 # no params
+rule gate(path) { … }                 # one named param
+workflow implement(task, role) { … }  # two named params
+script setup = "echo ok"               # correct (single-line)
+script setup = ```                     # correct (fenced block)
 echo ok
 ```
-# workflow default() { … }      — E_PARSE: definitions must not use parentheses
 ```
 
-## Call Arguments and Positional Parameters
+## Call Arguments and Named Parameters
+
+### Named Parameters on Definitions
+
+Workflows and rules can declare named parameters in parentheses on the definition line:
+
+```jaiph
+workflow implement(task, role) {
+  log "Implementing ${task} as ${role}"
+}
+
+rule gate(path) {
+  run check_exists("${path}")
+}
+```
+
+Parameter names follow identifier rules (`[A-Za-z_][A-Za-z0-9_]*`), must not be reserved keywords, and must be unique within the parameter list. An empty parameter list `()` is valid and equivalent to omitting parentheses.
+
+At runtime, named parameters are bound alongside positional `arg1`…`arg9`: if `workflow implement(task, role)` is called with `run implement("build docs", "writer")`, then `${task}` = `"build docs"`, `${role}` = `"writer"`, and `${arg1}` = `"build docs"`, `${arg2}` = `"writer"` are all available. Named parameters are the preferred style for new code.
+
+### Call-Site Arguments
 
 Call sites pass arguments in parentheses with comma-separated expressions:
 
 ```jaiph
-run show_args("my-task", "my-role")
-ensure check_branch("${arg1}")
+run implement("my-task", "my-role")
+ensure gate("${path}")
 ```
 
 **Bare identifier arguments:** In-scope variable names can be passed as bare identifiers without quoting. A bare identifier `name` is equivalent to `"${name}"` — the variable's value is passed as the argument:
@@ -101,9 +122,25 @@ run queue.remove(task, "completed")      # mixed bare + quoted args
 ensure check_branch(branch_name)         # works with ensure too
 ```
 
-Bare identifiers must reference a known variable (`const`, capture, or positional `arg1`–`arg9`). Unknown names produce an `E_VALIDATE` error at compile time. Jaiph keywords (`run`, `ensure`, `if`, `const`, etc.) cannot be used as bare identifier arguments.
+Bare identifiers must reference a known variable (`const`, capture, named parameter, or positional `arg1`–`arg9`). Unknown names produce an `E_VALIDATE` error at compile time. Jaiph keywords (`run`, `ensure`, `if`, `const`, etc.) cannot be used as bare identifier arguments.
 
-There is no declaration-time parameter list, no default values, and no compile-time arity checking. The runtime exposes arguments as `${arg1}`, `${arg2}`, … in orchestration strings (rules and workflows) and `$1`, `$2`, … in script bodies.
+### Arity Checking
+
+When the callee declares named parameters, the compiler validates that the number of arguments at the call site matches the number of declared parameters. A mismatch produces an `E_VALIDATE` error:
+
+```jaiph
+workflow greet(name) { log "Hello ${name}" }
+
+workflow default {
+  run greet("Alice")              # OK: 1 arg, 1 param
+  # run greet("Alice", "Bob")    — E_VALIDATE: expects 1 argument(s) (name), but got 2
+  # run greet()                  — E_VALIDATE: expects 1 argument(s) (name), but got 0
+}
+```
+
+Arity checking applies to all `run` and `ensure` call sites (steps, captures, `if` conditions, `return run`/`return ensure`, and `send` RHS). When the callee has no declared parameters (legacy style), no arity check is performed — any number of arguments is accepted.
+
+The runtime exposes arguments as `${arg1}`, `${arg2}`, … in orchestration strings (rules and workflows) and `$1`, `$2`, … in script bodies.
 
 ## Workflow Steps
 
@@ -537,7 +574,8 @@ Jaiph orchestration strings support `${identifier}` interpolation:
 |---|---|---|
 | `${varName}` | Primary | All Jaiph strings |
 | `${var.field}` | Dot notation — typed prompt field access | All Jaiph strings |
-| `${arg1}`, `${arg2}`, … | Positional arguments | All Jaiph strings |
+| `${paramName}` | Named parameter access | All Jaiph strings |
+| `${arg1}`, `${arg2}`, … | Positional arguments (also set alongside named params) | All Jaiph strings |
 | `${run ref(args)}` | Inline capture — executes call, inlines output | All Jaiph strings |
 | `${ensure ref(args)}` | Inline capture — executes rule, inlines result | All Jaiph strings |
 | `$varName` | Rejected — use `${varName}` | — |
@@ -618,7 +656,7 @@ channel_decl    = "channel" IDENT ;
 env_decl        = "const" IDENT "=" env_value ;
 env_value       = quoted_or_multiline_string | bare_value ;
 
-rule_decl       = [ "export" ] "rule" IDENT "{" { rule_body_step } "}" ;
+rule_decl       = [ "export" ] "rule" IDENT [ "(" param_list ")" ] "{" { rule_body_step } "}" ;
 rule_body_step  = comment_line | workflow_step ;
   (* validation rejects prompt, send, wait, ensure…recover, const…=prompt, run async,
      and run targets that are not scripts *)
@@ -630,7 +668,8 @@ LANG_TAG        = IDENT ;  (* any identifier — maps to #!/usr/bin/env <tag>; r
 shebang_line    = "#!" rest_of_line ;  (* rejected when LANG_TAG is present *)
 script_line     = comment_line | command_line ;
 
-workflow_decl   = [ "export" ] "workflow" IDENT "{" [ workflow_config ] { workflow_step } "}" ;
+workflow_decl   = [ "export" ] "workflow" IDENT [ "(" param_list ")" ] "{" [ workflow_config ] { workflow_step } "}" ;
+param_list      = IDENT { "," IDENT } ;  (* identifiers; no duplicates; no reserved keywords *)
 workflow_config = config_block ;
   (* optional per-workflow override; must appear before steps;
      only agent.* and run.* keys allowed; runtime.* yields E_PARSE *)
@@ -695,9 +734,9 @@ brace_if_head   = "ensure" call_ref | "run" call_ref ;
 
 After parsing, the compiler validates references and config (`src/transpile/validate.ts`). Error codes:
 
-- **E_PARSE:** Invalid syntax — duplicate config, invalid keys/values, unescaped backticks, `$(…)` or `${var:-fallback}` in orchestration strings, `prompt … returns` without capture, bare `ref(args)` in const RHS (use `run`/`ensure`/`prompt`), `local` at top level, unrecognized workflow/rule line, invalid send RHS, arguments after `recover`, bare `recover` with no recovery step, nested inline captures, shell redirection after `run`/`ensure`, parentheses on definitions, or missing `{` on definition line.
+- **E_PARSE:** Invalid syntax — duplicate config, invalid keys/values, unescaped backticks, `$(…)` or `${var:-fallback}` in orchestration strings, `prompt … returns` without capture, bare `ref(args)` in const RHS (use `run`/`ensure`/`prompt`), `local` at top level, unrecognized workflow/rule line, invalid send RHS, arguments after `recover`, bare `recover` with no recovery step, nested inline captures, shell redirection after `run`/`ensure`, invalid parameter names (non-identifier, duplicate, or reserved keyword), or missing `{` on definition line.
 - **E_SCHEMA:** Invalid `returns` schema — empty, non-flat, unsupported type (only `string`, `number`, `boolean`).
-- **E_VALIDATE:** Reference errors — unknown rule/workflow, duplicate alias, `ensure` on non-rule, `run` on rule, `run` to workflow inside rule, `run async` in rule, forbidden Jaiph usage inside `$(…)`, dot notation on non-prompt variable or invalid field name, bare identifier argument referencing an unknown variable.
+- **E_VALIDATE:** Reference errors — unknown rule/workflow, duplicate alias, `ensure` on non-rule, `run` on rule, `run` to workflow inside rule, `run async` in rule, forbidden Jaiph usage inside `$(…)`, dot notation on non-prompt variable or invalid field name, bare identifier argument referencing an unknown variable, arity mismatch (call-site argument count differs from callee's declared parameter count).
 - **E_IMPORT_NOT_FOUND:** Import target file does not exist.
 
 Validation rules:

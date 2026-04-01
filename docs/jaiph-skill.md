@@ -76,7 +76,7 @@ Prefer composable modules over one large file.
 ## Language Rules You Must Respect
 
 - **Imports:** `import "path.jh" as alias`. Path must be double-quoted. Path is relative to the importing file. If the path has no extension, the compiler appends `.jh`.
-- **Definitions:** `channel name` (inbox endpoint); `rule name { ... }`, `workflow name { ... }`, `script name = "body"` or `script name = ``` ... ``` ` — no parentheses on the declaration line; named scripts require a name at the definition site; for anonymous one-off commands use inline scripts: `run script() "body"`. Omitting the body is `E_PARSE`. Optional `export` before `rule` or `workflow` marks it as public (see [Grammar](grammar.md)). Optional `config { ... }` at the top of a file sets agent, run, and runtime options. An optional `config { ... }` block can also appear inside a `workflow { ... }` body (before any steps) to override module-level settings for that workflow only — only `agent.*` and `run.*` keys are allowed; `runtime.*` yields `E_PARSE` (see [Configuration](configuration.md#workflow-level-config)). Config values can be quoted strings, booleans (`true`/`false`), bare integers, or bracket-delimited arrays of strings (see [Grammar](grammar.md) and [Configuration](configuration.md)).
+- **Definitions:** `channel name` (inbox endpoint); `rule name { ... }` or `rule name(params) { ... }`, `workflow name { ... }` or `workflow name(params) { ... }`, `script name = "body"` or `script name = ``` ... ``` `. Rules and workflows may declare **named parameters** in parentheses before the opening brace — e.g. `workflow implement(task, role) { ... }`, `rule gate(path) { ... }`. At runtime, named params are bound alongside positional `arg1`…`arg9`. The compiler validates call-site arity when the callee declares params. Named scripts require a name at the definition site; for anonymous one-off commands use inline scripts: `run script() "body"`. Omitting the body is `E_PARSE`. Optional `export` before `rule` or `workflow` marks it as public (see [Grammar](grammar.md)). Optional `config { ... }` at the top of a file sets agent, run, and runtime options. An optional `config { ... }` block can also appear inside a `workflow { ... }` body (before any steps) to override module-level settings for that workflow only — only `agent.*` and `run.*` keys are allowed; `runtime.*` yields `E_PARSE` (see [Configuration](configuration.md#workflow-level-config)). Config values can be quoted strings, booleans (`true`/`false`), bare integers, or bracket-delimited arrays of strings (see [Grammar](grammar.md) and [Configuration](configuration.md)).
 - **Module-scoped variables:** `local name = value` or `const name = value` (same value forms). Prefer **`const`** for new files. Accessible as `${name}` inside orchestration strings in the same module. Names share the unified namespace with channels, rules, workflows, and scripts — duplicates are `E_PARSE`. Not exportable; module-scoped only.
 - **Steps:**
   - **ensure** — `ensure ref([args...])` runs a rule (local or `alias.rule_name`); args are comma-separated inside parentheses. **Bare identifier arguments** are supported: `ensure check(status)` is equivalent to `ensure check("${status}")` — the identifier must reference a known variable (`const`, capture, or `arg1`–`arg9`); unknown names fail with `E_VALIDATE`. In **workflows only**, optionally `ensure ref([args]) recover <body>`: bounded retry loop (run rule; on failure run recover body; repeat until the rule passes or max attempt rounds, then exit 1). Default **3** rounds (`JAIPH_ENSURE_MAX_RETRIES`). Inside a recover body, **`${arg1}`** is the full merged stdout+stderr produced by the failed rule execution, including output from nested scripts and rules. The payload refreshes per retry attempt. Full output still lives in step **`.out` / `.err`** artifacts. If **`${arg1}`** is empty for your rule, persist diagnostics before prompting or assert non-empty.
@@ -140,11 +140,11 @@ jaiph run .jaiph/main.jh "implement feature X"
 jaiph run .jaiph/verification.jh
 ```
 
-Arguments after the file path are passed to `workflow default` as positional parameters (`${arg1}`, `${arg2}`, ... in orchestration strings; `$1`, `$2` in script bodies).
+Arguments after the file path are passed to `workflow default` as named parameters (when declared) and positional parameters (`${arg1}`, `${arg2}`, ... in orchestration strings; `$1`, `$2` in script bodies).
 
 ## Minimal Sample (Agent Reference)
 
-Use this as a shape to adapt. Paths and prompts should match the target repository. All three files live under `.jaiph/`. Imports in `main.jh` are relative to that file (e.g. `"readiness.jh"` resolves to `.jaiph/readiness.jh`). When you run `jaiph run .jaiph/main.jh "implement feature X"`, the default workflow receives `"implement feature X"` as `${arg1}`. Note that `run` does not forward args implicitly, so the default workflow passes `"${arg1}"` explicitly to `run implement("${arg1}")` so the implement workflow's prompt can use `${arg1}`.
+Use this as a shape to adapt. Paths and prompts should match the target repository. All three files live under `.jaiph/`. Imports in `main.jh` are relative to that file (e.g. `"readiness.jh"` resolves to `.jaiph/readiness.jh`). When you run `jaiph run .jaiph/main.jh "implement feature X"`, the default workflow receives `"implement feature X"` as `${task}` (named parameter) and `${arg1}` (positional). Note that `run` does not forward args implicitly, so the default workflow passes `"${task}"` explicitly to `run implement("${task}")` so the implement workflow's prompt can use `${task}`.
 
 **File: .jaiph/readiness.jh**
 
@@ -200,19 +200,19 @@ workflow default {
 import "readiness.jh" as readiness
 import "verification.jh" as verification
 
-workflow implement {
+workflow implement(task) {
   prompt ```
 Implement the requested feature or fix with minimal, reviewable changes.
 Keep edits consistent with existing architecture and style.
 Add or update tests for behavior changes.
 
-User asks for: ${arg1}
+User asks for: ${task}
 ```
 }
 
-workflow default {
+workflow default(task) {
   run readiness.default()
-  run implement("${arg1}")
+  run implement("${task}")
   run verification.default()
 }
 ```

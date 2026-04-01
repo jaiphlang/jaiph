@@ -11,10 +11,10 @@ rule name_was_provided {
   fi
 }
 
-workflow default {
-  ensure name_was_provided("${arg1}")
+workflow default(name) {
+  ensure name_was_provided("${name}")
 
-  response = prompt "Say hello to ${arg1} and provide a fun fact about a person with the same name." returns "{ hello: string, fact: string }"
+  response = prompt "Say hello to ${name} and provide a fun fact about a person with the same name." returns "{ hello: string, fact: string }"
 
   log "${response_fact}"
 }

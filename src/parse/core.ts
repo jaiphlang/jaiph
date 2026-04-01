@@ -67,6 +67,33 @@ export function isBareIdentifier(token: string): boolean {
 }
 
 /**
+ * Parse a parenthesised parameter list from a definition header.
+ * Input: the content between '(' and ')' (exclusive).
+ * Returns validated, deduplicated parameter names.
+ */
+export function parseParamList(filePath: string, content: string, lineNo: number): string[] {
+  if (!content.trim()) return [];
+  const names = content.split(",").map((s) => s.trim());
+  const seen = new Set<string>();
+  for (const name of names) {
+    if (!name) {
+      fail(filePath, "empty parameter name in parameter list", lineNo);
+    }
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+      fail(filePath, `invalid parameter name "${name}"; must be an identifier`, lineNo);
+    }
+    if (JAIPH_KEYWORDS.has(name)) {
+      fail(filePath, `parameter name "${name}" is a reserved keyword`, lineNo);
+    }
+    if (seen.has(name)) {
+      fail(filePath, `duplicate parameter name "${name}"`, lineNo);
+    }
+    seen.add(name);
+  }
+  return names;
+}
+
+/**
  * Convert comma-separated call arguments to space-separated form for runtime.
  * Respects quoted strings so commas inside quotes are preserved.
  * Bare identifiers (valid names, not keywords) are converted to ${name} form.

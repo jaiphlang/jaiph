@@ -2,9 +2,9 @@
 
 script sleep = "sleep $1 && echo \"$1\""
 
-workflow delayed_log {
-  run sleep(${arg1})
-  log "${arg1}"
+workflow delayed_log(seconds) {
+  run sleep(${seconds})
+  log "${seconds}"
 }
 
 workflow default {

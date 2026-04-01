@@ -6,6 +6,7 @@ import {
   isRef,
   matchSendOperator,
   parseCallRef,
+  parseParamList,
 } from "./core";
 import { parseConstRhs } from "./const-rhs";
 import { parseConfigBlock } from "./metadata";
@@ -52,29 +53,24 @@ export function parseWorkflowBlock(
   const rawDecl = lines[startIndex];
   const lineDecl = rawDecl.trim();
 
-  const match = lineDecl.match(/^(export\s+)?workflow\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{$/);
+  // Match: [export] workflow name { OR [export] workflow name(params) {
+  const match = lineDecl.match(/^(export\s+)?workflow\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\(([^)]*)\)\s*)?\{$/);
   if (!match) {
-    const parensMatch = lineDecl.match(/^(export\s+)?workflow\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
-    if (parensMatch) {
-      fail(
-        filePath,
-        `definitions must not use parentheses: workflow ${parensMatch[2]} { … }`,
-        lineNo,
-      );
-    }
     const loose = lineDecl.match(/^(export\s+)?workflow\s+([A-Za-z_][A-Za-z0-9_]*)/);
     if (loose) {
       fail(
         filePath,
-        `workflow declarations require braces: workflow ${loose[2]} { … }`,
+        `workflow declarations require braces: workflow ${loose[2]} { … } or workflow ${loose[2]}(params) { … }`,
         lineNo,
       );
     }
     fail(filePath, "invalid workflow declaration", lineNo);
   }
   const isExported = Boolean(match[1]);
+  const params = match[3] !== undefined ? parseParamList(filePath, match[3], lineNo) : undefined;
   const workflow: WorkflowDef = {
     name: match[2],
+    ...(params && params.length > 0 ? { params } : {}),
     comments: pendingComments,
     steps: [],
     loc: { line: lineNo, col: 1 },

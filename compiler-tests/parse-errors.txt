@@ -79,8 +79,8 @@ workflow default {
 --- input.jh
 rule foo
 
-=== rule with parentheses
-# @expect error E_PARSE "definitions must not use parentheses" @1:1
+=== rule with parentheses (unterminated)
+# @expect error E_PARSE "unterminated rule block" @1:1
 --- input.jh
 rule foo() {
 
@@ -95,7 +95,7 @@ rule foo:
 export rule bar
 
 === rule with parentheses but no brace
-# @expect error E_PARSE "definitions must not use parentheses" @1:1
+# @expect error E_PARSE "rule declarations require braces" @1:1
 --- input.jh
 rule gate()
 
@@ -119,8 +119,8 @@ script greet()
 --- input.jh
 workflow default
 
-=== workflow with parentheses
-# @expect error E_PARSE "definitions must not use parentheses" @1:1
+=== workflow with parentheses (unterminated)
+# @expect error E_PARSE "unterminated workflow block" @1:1
 --- input.jh
 workflow default() {
 
@@ -130,7 +130,7 @@ workflow default() {
 export workflow main
 
 === workflow with parentheses but no brace
-# @expect error E_PARSE "definitions must not use parentheses" @1:1
+# @expect error E_PARSE "workflow declarations require braces" @1:1
 --- input.jh
 workflow main()
 

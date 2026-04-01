@@ -153,15 +153,15 @@ script name_was_provided_check = ```
   fi
 ```
 
-rule name_was_provided {
-  run name_was_provided_check("${arg1}")
+rule name_was_provided(name) {
+  run name_was_provided_check("${name}")
 }
 
-workflow default {
-  ensure name_was_provided("${arg1}")
+workflow default(name) {
+  ensure name_was_provided("${name}")
 
   response = prompt ```
-    Say hello to ${arg1} and provide a fun fact about a person with the same name.
+    Say hello to ${name} and provide a fun fact about a person with the same name.
     Respond with a single line. Do not inspect files or run tools.
   ```
 
@@ -426,8 +426,9 @@ Jaiph: Running async.jh
             <div class="card doc-content">
                 <h3>Running a workflow</h3>
                 <pre><code class="language-bash">./path/to/main.jh "arg1" "arg2" "arg3"</code></pre>
-                <p>Arguments are passed positionally. In Jaiph strings (log, prompt, fail, send), use
-                    <code>${arg1}</code>, <code>${arg2}</code>.
+                <p>Arguments are bound to <strong>named parameters</strong> when declared
+                    (e.g. <code>workflow default(task)</code> &rarr; <code>${task}</code>)
+                    and to positional <code>${arg1}</code>, <code>${arg2}</code>, etc.
                     When you call a workflow, it executes the <code>workflow default</code> entrypoint.
                 </p>
                 <p>By convention, keep Jaiph workflow files in <code>&lt;project_root&gt;/.jaiph/</code> so
@@ -537,14 +538,17 @@ Jaiph: Running async.jh
                         shared by
                         rules, scripts, and workflows in the same file.</dd>
 
-                    <dt><code>rule name { ... }</code> &middot; <code>workflow name { ... }</code> &middot;
+                    <dt><code>rule name { ... }</code> &middot; <code>rule name(params) { ... }</code> &middot;
+                        <code>workflow name { ... }</code> &middot; <code>workflow name(params) { ... }</code> &middot;
                         <code>script name = "cmd"</code> &middot; <code>script name = ```[lang] ... ```</code>
                     </dt>
                     <dd><code>rule</code> is for reusable checks (Jaiph structured steps; used with
                         <code>ensure</code>),
                         <code>workflow</code> orchestrates Jaiph steps only, and <code>script</code> holds bash (or any
                         language via a fence lang tag like <code>```node</code>, <code>```python3</code>, or a custom
-                        shebang) invoked with <code>run</code>. Any fence tag is valid &mdash; it maps directly to
+                        shebang) invoked with <code>run</code>. Rules and workflows may declare <strong>named
+                        parameters</strong> in parentheses before the opening brace &mdash; the compiler validates
+                        call-site arity when the callee declares params. Any fence tag is valid &mdash; it maps directly to
                         <code>#!/usr/bin/env &lt;tag&gt;</code>. Scripts run in <strong>full isolation</strong>
                         &mdash; only positional arguments
                         and essential Jaiph variables (<code>JAIPH_LIB</code>, <code>JAIPH_SCRIPTS</code>,

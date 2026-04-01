@@ -1,5 +1,5 @@
 import type { RuleDef } from "../types";
-import { braceDepthDelta, colFromRaw, fail, stripQuotes } from "./core";
+import { braceDepthDelta, colFromRaw, fail, parseParamList, stripQuotes } from "./core";
 import { parseBlockStatement } from "./workflow-brace";
 
 export function parseRuleBlock(
@@ -12,29 +12,24 @@ export function parseRuleBlock(
   const raw = lines[startIndex];
   const line = raw.trim();
 
-  const match = line.match(/^(export\s+)?rule\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{$/);
+  // Match: [export] rule name { OR [export] rule name(params) {
+  const match = line.match(/^(export\s+)?rule\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\(([^)]*)\)\s*)?\{$/);
   if (!match) {
-    const parensMatch = line.match(/^(export\s+)?rule\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
-    if (parensMatch) {
-      fail(
-        filePath,
-        `definitions must not use parentheses: rule ${parensMatch[2]} { … }`,
-        lineNo,
-      );
-    }
     const loose = line.match(/^(export\s+)?rule\s+([A-Za-z_][A-Za-z0-9_]*)/);
     if (loose) {
       fail(
         filePath,
-        `rule declarations require braces: rule ${loose[2]} { … }`,
+        `rule declarations require braces: rule ${loose[2]} { … } or rule ${loose[2]}(params) { … }`,
         lineNo,
       );
     }
     fail(filePath, "invalid rule declaration", lineNo);
   }
   const isExported = Boolean(match[1]);
+  const params = match[3] !== undefined ? parseParamList(filePath, match[3], lineNo) : undefined;
   const rule: RuleDef = {
     name: match[2],
+    ...(params && params.length > 0 ? { params } : {}),
     comments: pendingComments,
     steps: [],
     loc: { line: lineNo, col: 1 },

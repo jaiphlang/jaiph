@@ -70,6 +70,8 @@ export type SendRhsDef =
 
 export interface RuleDef {
   name: string;
+  /** Named parameters declared on the rule definition. */
+  params?: string[];
   comments: string[];
   /** Rule body: Jaiph keywords plus shell fragments. */
   steps: WorkflowStepDef[];
@@ -89,6 +91,8 @@ export interface ChannelDef {
 
 export interface WorkflowDef {
   name: string;
+  /** Named parameters declared on the workflow definition. */
+  params?: string[];
   comments: string[];
   steps: WorkflowStepDef[];
   routes?: WorkflowRouteDef[];
