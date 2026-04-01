@@ -8,7 +8,7 @@
 
 import { spawn as nodeSpawn } from "node:child_process";
 import { writeFileSync, readFileSync, existsSync, accessSync, mkdirSync, cpSync, constants as fsConstants } from "node:fs";
-import { delimiter, join } from "node:path";
+import { basename, delimiter, join } from "node:path";
 import { parseStream, type StreamWriter } from "./stream-parser";
 import { readNextMockResponse, mockDispatch } from "./mock";
 
@@ -72,6 +72,21 @@ export function resolveConfig(env: NodeJS.ProcessEnv = process.env): PromptConfi
   };
 }
 
+/** True when the cursor backend uses a custom command (not cursor-agent). */
+export function isCustomCommand(config: PromptConfig): boolean {
+  if (config.backend !== "cursor") return false;
+  const command = config.agentCommand.split(/\s+/)[0];
+  return basename(command) !== "cursor-agent";
+}
+
+/** Resolve the display name for a prompt step (backend name or custom command basename). */
+export function resolvePromptStepName(config: PromptConfig): string {
+  if (isCustomCommand(config)) {
+    return basename(config.agentCommand.split(/\s+/)[0]);
+  }
+  return config.backend || "cursor";
+}
+
 function isTestMode(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.JAIPH_TEST_MODE === "1";
 }
@@ -113,9 +128,13 @@ export function buildBackendArgs(config: PromptConfig, promptText: string): { co
     args.push(...config.claudeFlags);
     return { command: "claude", args };
   }
-  // cursor backend
+  // cursor backend (or custom command)
   const commandParts = config.agentCommand.split(/\s+/).filter(Boolean);
   const command = commandParts[0];
+  if (isCustomCommand(config)) {
+    // Custom commands: no cursor-specific flags; prompt piped via stdin.
+    return { command, args: commandParts.slice(1) };
+  }
   const baseArgs = [...commandParts.slice(1), "--print", "--output-format", "stream-json", "--stream-partial-output"];
   baseArgs.push("--workspace", config.workspaceRoot);
   if (config.model) baseArgs.push("--model", config.model);
@@ -484,6 +503,7 @@ function runBackend(
   return new Promise((resolve) => {
     const { command, args } = buildBackendArgs(config, promptText);
     const isClaude = config.backend === "claude";
+    const isCustom = isCustomCommand(config);
     let childEnv: NodeJS.ProcessEnv = execEnv;
     if (isClaude) {
       const prepared = prepareClaudeEnv(execEnv, config.workspaceRoot);
@@ -498,9 +518,10 @@ function runBackend(
       childEnv = prepared.env;
     }
     // Cursor: stdin is not used (prompt is passed as arg), stderr passes through to caller.
-    // Claude: stdin receives prompt, stdout+stderr are merged for parsing (matches `2>&1 |`).
+    // Claude / custom: stdin receives prompt, stdout is parsed or collected raw.
+    const useStdin = isClaude || isCustom;
     const child = nodeSpawn(command, args, {
-      stdio: isClaude ? ["pipe", "pipe", "pipe"] : ["ignore", "pipe", "pipe"],
+      stdio: useStdin ? ["pipe", "pipe", "pipe"] : ["ignore", "pipe", "pipe"],
       env: childEnv,
     });
     const stopTailWatchdog = startTailWatchdog(child.pid ?? -1, process.stderr, childEnv);
@@ -511,9 +532,30 @@ function runBackend(
       resolve({ final: "", status: 1 });
     });
 
-    if (isClaude && child.stdin) {
+    if (useStdin && child.stdin) {
       child.stdin.write(promptText);
       child.stdin.end();
+    }
+
+    // Custom commands: collect raw stdout without JSON stream parsing.
+    if (isCustom) {
+      let final = "";
+      let wroteHeader = false;
+      child.stderr?.pipe(process.stderr);
+      child.stdout?.on("data", (chunk: Buffer) => {
+        const text = chunk.toString();
+        if (!wroteHeader) {
+          writer.writeFinal("Final answer:\n");
+          wroteHeader = true;
+        }
+        writer.writeFinal(text);
+        final += text;
+      });
+      child.on("close", (code) => {
+        stopTailWatchdog();
+        resolve({ final, status: code ?? 0 });
+      });
+      return;
     }
 
     let parseInput: import("node:stream").Readable;
@@ -570,7 +612,8 @@ function writePromptTranscriptHeader(
   let commandLog: string;
   if (config.backend === "codex") {
     commandLog = formatShellCommand([command, ...args]);
-  } else if (config.backend === "claude") {
+  } else if (config.backend === "claude" || isCustomCommand(config)) {
+    // Claude and custom commands: prompt piped via stdin.
     commandLog = `printf %s ${shellQuote(promptText)} \\| ${formatShellCommand([command, ...args])}`;
   } else {
     commandLog = formatShellCommand([command, ...args]);

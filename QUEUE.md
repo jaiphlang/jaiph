@@ -12,38 +12,6 @@ Process rules:
 
 ---
 
-## Custom agent command: display name + raw output support <!-- dev-ready -->
-
-**Goal**  
-When `agent.command` points to a custom script (not `cursor-agent` or `claude`), display the command name in the run tree output (e.g., `prompt my-agent.sh "You are ..."`). Support raw stdout capture (no JSON stream parsing) for custom commands, since they won't speak the `stream-json` protocol.
-
-**Context**
-
-- `agent.command` is already parsed and propagated via `JAIPH_AGENT_COMMAND` env var — see `src/parse/metadata.ts`, `src/cli/run/env.ts`, `src/runtime/kernel/node-workflow-runtime.ts`.
-- `buildBackendArgs()` in `src/runtime/kernel/prompt.ts` (line ~102) currently appends `--print --output-format stream-json --stream-partial-output` to **all** non-claude, non-codex backends — including custom commands that don't understand those flags.
-- `runBackend()` feeds stdout through `parseStream()` which expects JSON stream events. A custom script that just prints text will produce garbled output or silent failure.
-- The display layer (`src/cli/run/display.ts`) already shows `prompt <name>` when the step `name` differs from `kind`. The runtime emits the backend name (`cursor`, `claude`, `codex`) as the step name — it should emit the custom command basename instead (e.g., `my-agent.sh`).
-
-**Scope**
-
-1. **`buildBackendArgs()`**: when `config.agentCommand` is NOT `cursor-agent`, don't append `--output-format stream-json` / `--stream-partial-output`. Just pass `[command, ...extraArgs, promptText]` or pipe prompt to stdin — choose whichever is simpler.
-2. **`runBackend()`**: for custom commands, skip `parseStream()`. Collect raw stdout as the final response text. Stream lines to the writer as they arrive (writer.writeDelta for each chunk).
-3. **Display**: emit the command basename (e.g., `wc.sh`) as the step name so the run tree shows `prompt wc.sh "..."`.
-4. **E2E test**: write a custom agent script (e.g., `e2e/agents/echo-wc.sh`) that reads stdin, prints `<thinking>`, sleeps 1s, then outputs `wc -w` of the input. Wire it via `agent.command = "./agents/echo-wc.sh"` in a test workflow. Verify:
-   - The run tree output shows `prompt echo-wc.sh "..."`.
-   - The captured prompt response equals the expected word count.
-   - No JSON parse errors in stderr.
-5. **Landing page**: add a brief mention in `docs/index.html` features section that Jaiph supports custom agent backends via `agent.command`.
-
-**Acceptance criteria**
-
-- Custom commands receive prompt text and return raw output without JSON stream framing.
-- Run tree shows the command name (not `cursor`).
-- E2E test passes (`npm run test:e2e`).
-- Landing page updated.
-
----
-
 ## Fenced-block parser utility <!-- dev-ready -->
 
 **Goal**  

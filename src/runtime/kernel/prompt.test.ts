@@ -159,7 +159,7 @@ describe("executePrompt", () => {
   it("cursor backend trims surrounding blank lines from captured final", async () => {
     const root = mkdtempSync(join(tmpdir(), "jaiph-prompt-cursor-trim-"));
     try {
-      const fakeAgent = join(root, "fake-cursor-agent");
+      const fakeAgent = join(root, "cursor-agent");
       writeFileSync(
         fakeAgent,
         [

@@ -605,7 +605,7 @@ After parsing, the compiler validates references and config (`src/transpile/vali
 Validation rules:
 
 1. At most one `config` block per file and per workflow. Workflow config must appear before steps. Only `agent.*` and `run.*` keys in workflow config.
-2. Config values must match expected types. `agent.backend` must be `"cursor"` or `"claude"`.
+2. Config values must match expected types. `agent.backend` must be `"cursor"`, `"claude"`, or `"codex"`.
 3. Import aliases must be unique (`E_VALIDATE`). Import targets must exist (`E_IMPORT_NOT_FOUND`).
 4. **Unified namespace:** channels, rules, workflows, scripts, and top-level `const` share one namespace per module.
 5. `ensure` must target a rule. `run` in a workflow targets a workflow or script. `run` in a rule targets a script only. These rules also apply to `return run` and `return ensure` forms.

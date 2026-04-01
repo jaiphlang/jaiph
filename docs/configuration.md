@@ -123,7 +123,7 @@ These control how `prompt` steps reach the LLM.
 | Key | Type | Default | Env variable | Description |
 |-----|------|---------|--------------|-------------|
 | `agent.default_model` | string | _(unset)_ | `JAIPH_AGENT_MODEL` | Default model for `prompt` steps. |
-| `agent.command` | string | `cursor-agent` | `JAIPH_AGENT_COMMAND` | Command line for the cursor backend. First token is the executable; the rest are leading arguments. |
+| `agent.command` | string | `cursor-agent` | `JAIPH_AGENT_COMMAND` | Command line for the cursor backend. First token is the executable; the rest are leading arguments. When the command is not `cursor-agent`, Jaiph treats it as a [custom agent command](#custom-agent-commands) — prompt text is piped via stdin and raw stdout is captured. |
 | `agent.backend` | string | `cursor` | `JAIPH_AGENT_BACKEND` | `"cursor"`, `"claude"`, or `"codex"`. See [Backend selection](#backend-selection). |
 | `agent.trusted_workspace` | string | workspace root | `JAIPH_AGENT_TRUSTED_WORKSPACE` | Directory passed to Cursor (`--trust`). Relative paths are resolved against the workspace root at CLI launch. |
 | `agent.cursor_flags` | string | _(unset)_ | `JAIPH_AGENT_CURSOR_FLAGS` | Extra flags appended for the cursor backend (split on whitespace). |
@@ -201,6 +201,41 @@ When you `ensure` a rule from **another** module, the runtime merges that module
 - **codex** — calls the OpenAI Chat Completions API directly via HTTP. Requires `OPENAI_API_KEY` in the environment. If the key is missing, Jaiph reports an actionable error and exits.
 
 Backend-specific flags come from `agent.cursor_flags` / `agent.claude_flags` (or the matching env vars). The codex backend has no CLI flags; configure it with `OPENAI_API_KEY` and optionally `JAIPH_CODEX_API_URL` (defaults to `https://api.openai.com/v1/chat/completions`). There is no per-`prompt` backend override; the effective backend is whatever the config stack resolves to when the step runs.
+
+### Custom agent commands
+
+When `agent.command` points to an executable other than `cursor-agent`, Jaiph treats it as a **custom agent command**. This lets you use any shell script, Python wrapper, or CLI tool as a prompt backend — no need to implement the `stream-json` protocol.
+
+**How it works:**
+
+1. Jaiph pipes the prompt text to the command's **stdin**.
+2. The command's **stdout** is captured as the prompt response (raw text, no JSON framing).
+3. **stderr** passes through to the terminal.
+4. No cursor-specific flags (`--output-format`, `--stream-partial-output`, `--workspace`, etc.) are appended.
+
+**Display:** The run tree shows the command's basename as the step name — e.g., `prompt echo-wc.sh "..."` instead of `prompt cursor "..."`.
+
+```jh
+config {
+  agent.command = "./agents/my-agent.sh"
+}
+
+workflow default {
+  answer = prompt "Summarize this codebase"
+  log "${answer}"
+}
+```
+
+The custom agent script just reads stdin and prints its answer:
+
+```bash
+#!/usr/bin/env bash
+input=$(cat)
+# ... process the input ...
+echo "Here is my summary: ..."
+```
+
+Custom commands still participate in the normal prompt lifecycle — `PROMPT_START` / `PROMPT_END` events are emitted, artifacts are written, and `returns` schema validation applies to the captured output.
 
 ### Codex setup
 
