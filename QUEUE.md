@@ -84,49 +84,184 @@ When `agent.command` points to a custom script (not `cursor-agent` or `claude`),
 
 ---
 
-## Support `prompt { <multiline> }` brace syntax <!-- dev-ready -->
+## Fenced-block parser utility <!-- dev-ready -->
 
 **Goal**  
-Allow prompt text to be written in a brace block, similar to how `script` blocks work:
+Extract a reusable `parseFencedBlock()` function for parsing multiline fenced bodies (`` ``` ... ``` ``), shared by both prompt and script parsers.
 
-```
-workflow default {
-  result = prompt {
-    You are a helpful assistant.
-    Analyze the following code and provide feedback.
-  }
+**Fence rules**
+
+- **Opening fence line**: only `` ``` `` or `` ```lang `` — no other characters after the backticks on that line.
+- **Closing fence line**: only `` ``` `` (optional surrounding whitespace) — no other tokens on that line.
+- `lang` is the optional token immediately after the opening backticks (e.g. `python3`, `node`, `bash`). Any single token is accepted — no hardcoded allowlist.
+- Body is all lines between opening and closing fences, joined with `\n`.
+
+**Error cases**
+
+- Unterminated fence: no closing `` ``` `` before EOF.
+- Text after the opening `` ``` `` that isn't a single lang token.
+- Content on the same line as closing `` ``` ``.
+
+**API**
+
+```ts
+parseFencedBlock(filePath: string, lines: string[], fenceLineIdx: number): {
+  body: string;
+  lang?: string;
+  nextIdx: number;
 }
 ```
 
-This is equivalent to `result = prompt "You are a helpful assistant.\nAnalyze..."` but avoids quote escaping and makes long prompts more readable in source.
-
-**Context**
-
-- Script blocks already use brace syntax: `script name { body }` — parsed in `src/parse/scripts.ts`.
-- Prompt parsing lives in `src/parse/prompt.ts` (`parsePromptStep`). Currently it requires a `"..."` string literal after the `prompt` keyword.
-- The brace form should support:
-  - `prompt { ... }` (uncaptured)
-  - `name = prompt { ... }` (captured)
-  - `prompt { ... } returns "{ schema }"` (with schema)
-  - Leading/trailing blank lines inside braces are trimmed (like heredoc).
-  - Interpolation `${var}` works inside the brace body (same as in quoted strings).
-  - The closing `}` must be on its own line (indentation-independent), matching the pattern used by script blocks.
+`fenceLineIdx` points to the line containing the opening `` ``` ``. Returns `nextIdx` as the first line index after the closing fence.
 
 **Scope**
 
-1. **Parser** (`src/parse/prompt.ts`): extend `parsePromptStep` — if the argument starts with `{` instead of `"`, switch to brace-body parsing. Collect lines until a matching `}` on its own line. Produce the same `WorkflowStepDef` with `type: "prompt"` and `raw` set to the brace body wrapped in quotes (so downstream emit/transpile doesn't change).
-2. **Brace-style parser sites**: `src/parse/workflows.ts`, `src/parse/workflow-brace.ts`, `src/parse/const-rhs.ts`, `src/parse/steps.ts` — these all call `parsePromptStep`. No changes needed if `parsePromptStep` handles the `{` case internally.
-3. **Formatter** (`src/format/emit.ts`): emit prompt steps with brace syntax when the raw text contains newlines (heuristic: if `raw` has `\n`, emit as `prompt { ... }` instead of `prompt "..."`).
-4. **Txtar tests**: add valid cases (`prompt { ... }`, captured, with returns) and error cases (unterminated brace, empty brace body) to `compiler-tests/valid.txt` and `compiler-tests/parse-errors.txt`.
-5. **E2E test**: add a workflow that uses `prompt { ... }` with a mock, verify the prompt text is passed correctly to the backend.
+1. **New file**: `src/parse/fence.ts` with `parseFencedBlock`.
+2. **Unit tests**: `src/parse/parse-fence.test.ts` — basic body extraction, lang extraction, all error cases above.
+3. **Compiler tests**: fence-specific error cases in `compiler-tests/parse-errors.txt`.
 
 **Acceptance criteria**
 
-- `prompt { ... }` parses and compiles identically to the equivalent quoted form.
-- Formatter round-trips: `jaiph format` on a brace prompt preserves the brace syntax.
-- Txtar compiler tests cover valid and error cases.
-- E2E test verifies runtime behavior.
-- `npm run test:compiler && npm test && npm run test:e2e` all pass.
+- `npm test` passes with fence parser tests.
+- No downstream consumers yet — prompt and script tasks wire it in.
+
+---
+
+## Prompt: single-line vs fenced multiline <!-- dev-ready -->
+
+**Goal**  
+Two ways to supply prompt text: compact single-line forms, and fenced bodies for multiline / markdown-style editing. Drop multiline double-quoted prompt strings (the current parser scans subsequent lines until a closing `"` — remove that path entirely).
+
+**1. Single-line (string literal or identifier)**
+
+```text
+const text = "aaa"
+prompt text
+
+prompt "aaa"
+
+prompt "aaa ${some_var}"
+```
+
+- **`prompt <identifier>`** — prompt text is the string value of the referenced binding (which may itself be a string or multiline template). The parser greedily takes the first token after `prompt` as the body — no keyword reservation needed. `returns` is only recognized as a keyword when it appears **after** a complete body form.
+- **`prompt "..."`** — single-line only; `${...}` interpolation inside the quotes as today.
+- **`returns "..."` / schema** — still allowed after either single-line form: `prompt "text" returns "schema"` or `prompt myVar returns "schema"`.
+
+**2. Multiline template (fenced block)**
+
+Uses `parseFencedBlock` from the fence parser task. Body supports `${...}` interpolation.
+
+```text
+prompt
+```
+You are a helpful assistant.
+Analyze the following: ${input}
+```
+```
+
+Or with `prompt` on the same line as the opening fence:
+
+```text
+prompt ```
+You are a helpful assistant.
+```
+```
+
+Formatter picks one canonical form. Parser accepts both.
+
+**Const capture**
+
+All three body forms must work in const-capture position: `const x = prompt "..."`, `const x = prompt myVar`, and `const x = prompt ``` ... ``` `. Update `ConstRhs` `kind: "prompt_capture"` accordingly.
+
+**Context**
+
+- Prompt parsing: `src/parse/prompt.ts` (`parsePromptStep`), call sites in `workflows.ts`, `workflow-brace.ts`, `const-rhs.ts`, `steps.ts`.
+- Tests: `src/parse/parse-prompt.test.ts`, `compiler-tests/`, E2E under `e2e/`.
+
+**Scope**
+
+1. **Parser**: single-line identifier + single-line quoted string + fenced multiline (via `parseFencedBlock`). Remove the multiline `"..."` scan path (lines 96–110 of current `prompt.ts`). When a prompt starts with `"` and has no closing quote on the same line, emit an error like `"multiline prompt strings are no longer supported; use a fenced block instead"`.
+2. **AST types**: update `WorkflowStepDef` for `type: "prompt"` to distinguish body source (string literal, identifier ref, fenced body). Update `ConstRhs` `kind: "prompt_capture"` to support all three body forms.
+3. **Formatter**: keep single-line on one line; emit multiline as a fence block.
+4. **Compiler tests + E2E**: migrate fixtures; cover identifier vs string vs fence; error cases (unterminated fence, unterminated single-line string, multiline `"..."` rejection).
+
+**Acceptance criteria**
+
+- `npm run test:compiler && npm test && npm run test:e2e` pass.
+- Documented behavior matches the two cases above.
+
+---
+
+## Scripts and `run`: braces out; strings or fences in <!-- dev-ready -->
+
+**Goal**  
+Replace `{ ... }` script bodies with the **same split as prompts**: single-line double-quoted string or identifier binding, or multiline fenced block. Drop all `script:lang` prefix forms and the body-inside-parens inline syntax.
+
+**Before (remove entirely)**  
+
+- `script name { ... }`, `script:lang name { ... }` (and any `script:lang` form)
+- `run script { ... }`, `run script(arg) { ... }`
+- `run script("body", "arg1")` (body-inside-parens form)
+
+**After — named scripts** (use **`=`** so the RHS reads like a binding: string, identifier, or fence)
+
+- `script name = "..."` — single-line source, default runtime (shell).
+- `script name = identifier` — RHS is a binding whose string value is the script body. E.g. `const body = "echo hi"; script foo = body`.
+- Fenced (uses `parseFencedBlock` from the fence parser task):
+
+```text
+script demo =
+```python3
+import sys
+print(sys.argv)
+```
+```
+
+**After — `run` named script**
+
+- `run name(args)` — unchanged.
+
+**After — anonymous inline scripts** (no `=`; reads like a step, not a definition)
+
+- `run script() "script code"` — single-line body, default runtime. Empty `()` required to make the no-args call explicit.
+- Fenced with optional lang and args:
+
+```text
+run script(a, b)
+```node
+console.log(process.argv)
+```
+```
+
+**Language / shebang resolution**
+
+The fence `lang` tag maps directly to a shebang: `` ```<tag> `` → `#!/usr/bin/env <tag>`. Any tag is valid — no hardcoded allowlist. This replaces the current `INTERPRETER_TAGS` map.
+
+If the tag is empty (plain `` ``` ``), no automatic shebang is set. The user may provide a manual `#!` line as the first line of the body. If both a fence tag and a `#!` first line are present, that's an error.
+
+Quoted-string and identifier RHS always use the default runtime (shell). For other languages, use a fenced block — even for a single line of Python, wrap it in a fenced block with `` ```python3 ``.
+
+**Const capture**
+
+`const x = run script() "..."` and `` const x = run script() ``` ... ``` `` must work. Update `ConstRhs` `kind: "run_inline_script_capture"` to accept the new body forms (body follows parens, not inside them).
+
+**Context**
+
+- Script parsing: `src/parse/scripts.ts` and `run` handling in `src/parse/steps.ts`, `const-rhs.ts`, `workflows.ts`, `workflow-brace.ts`.
+- Formatter, compiler tests, E2E: full-repo search for `script` / `run script` / `script:`.
+
+**Scope**
+
+1. **Parser**: drop brace bodies, `script:lang`, and body-inside-parens inline scripts. Named scripts require `script name =` + RHS (string, identifier, or fence). Anonymous: `run script(...)` + body after parens (string or fence).
+2. **Language**: fence `lang` → `#!/usr/bin/env <lang>`. Remove `INTERPRETER_TAGS` map. Error if both fence tag and manual `#!` present.
+3. **AST types**: update `ScriptDef` — replace `commands: string[]` with single `body: string` + optional `lang?: string`. Update `ConstRhs` inline script capture variant for new body position.
+4. **Formatter**: emit `script name =` for definitions; emit `run script(...) "..."` / fenced form for anonymous (no `=`).
+5. **Tests**: migrate every fixture; parse errors for unterminated fences, text after opening `` ``` ``, remaining `script:lang`, body-inside-parens.
+
+**Acceptance criteria**
+
+- No script `{ ... }`, no `script:lang`, no `run script("body")` in grammar, formatter, docs, or tests.
+- `npm run test:compiler && npm test && npm run test:e2e` pass.
 
 ---
 
