@@ -138,7 +138,7 @@ Jaiph source files combine a small orchestration language with scripts in any la
 - `run greet(name)` — bare identifier arg, equivalent to `run greet("${name}")`
 - `run script("echo ok")` — inline script for trivial one-off commands
 - `run async workflow()` — concurrent execution with implicit join
-- `const x = prompt "..." returns "{ field: type }"` — structured capture with `${x.field}` access
+- `const x = prompt "..." returns "{ field: type }"` — structured capture with `${x.field}` access; `number` / `boolean` in the schema validate JSON but each field is **stored as a string** in workflow scope (orchestration is text-only)
 - `return run workflow()` / `return ensure rule()` — direct return from a managed call
 - `ensure rule() recover { ... }` — bounded self-healing retries
 - `channel name` / `ch <- "msg"` / `ch -> workflow` — inter-workflow messaging

@@ -229,9 +229,9 @@ workflow classify_role {
     ${arg1}
 
     Respond with exactly one role name.
-```
+  ``` returns "{ role: string }"
 
-  return "${result_role}"
+  return result.role
 }
 
 script save_string_to_file {
@@ -243,12 +243,12 @@ script mkdir_p_simple {
 }
 
 workflow implement {
-  const task = "${arg1}"
-  const role_name = "${arg2}"
-  if not run task_text_has_header("${task}") {
+  const task = arg1
+  const role_name = arg2
+  if not run task_text_has_header(task) {
     fail "Provided task does not contain a '## [text]' header"
   }
-  const role = run select_role("${role_name}")
+  const role = run select_role(role_name)
 
   prompt ```
     ${role}
@@ -316,24 +316,24 @@ workflow implement {
 }
 
 workflow default {
-  const role_arg = "${arg1}"
+  const role_arg = arg1
   # ensure git.is_clean
   const task = run queue.get_first_task()
-  const task_header = run first_line_task("${task}")
-  ensure queue.task_is_dev_ready("${task}")
+  const task_header = run first_line_task(task)
+  ensure queue.task_is_dev_ready(task)
   log "Implementing task: ${task_header}"
 
-  if not run arg_nonempty("${role_arg}") {
-    const role_name = run classify_role("${task}")
+  if not run arg_nonempty(role_arg) {
+    const role_name = run classify_role(task)
     log "Auto-selected role: ${role_name}"
-    run implement("${task}", "${role_name}")
+    run implement(task, role_name)
   }
   else {
-    run implement("${task}", "${role_arg}")
+    run implement(task, role_arg)
   }
 
   run ci.ensure_ci_passes()
-  run docs.update_from_task("${task}")
-  run queue.remove_completed_task("${task_header}")
-  run git.commit("${task}")
+  run docs.update_from_task(task)
+  run queue.remove_completed_task(task_header)
+  run git.commit(task)
 }

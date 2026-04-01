@@ -259,6 +259,9 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
           lines.push(`${ci}${bl}`);
         }
         lines.push(`${ci}\`\`\``);
+        if (step.returns) {
+          lines.push(`${ci}returns "${step.returns}"`);
+        }
       } else {
         lines.push(`${ci}${capture}prompt ${step.raw}${returns}`);
       }

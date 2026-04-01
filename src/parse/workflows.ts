@@ -14,6 +14,7 @@ import { parseSendRhs } from "./send-rhs";
 import { parseInlineScript } from "./inline-script";
 import { parseEnsureStep } from "./steps";
 import { tryParseBraceIfChain } from "./workflow-brace";
+import { dottedReturnToQuotedString, isBareDottedIdentifierReturn } from "./workflow-return-dotted";
 import { parseMatchExpr, extractPostfixMatchSubject } from "./match";
 
 /** Reject non-empty trailing content after a call expression (e.g. shell redirection). */
@@ -421,10 +422,13 @@ export function parseWorkflowBlock(
           continue;
         }
       }
-      if (isJaiphValueReturn(returnValue)) {
+      if (isJaiphValueReturn(returnValue) || isBareDottedIdentifierReturn(returnValue)) {
+        const value = isBareDottedIdentifierReturn(returnValue)
+          ? dottedReturnToQuotedString(returnValue)
+          : returnValue;
         workflow.steps.push({
           type: "return",
-          value: returnValue,
+          value,
           loc: retLoc,
         });
         continue;

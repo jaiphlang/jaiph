@@ -12,6 +12,7 @@ import { parseEnsureStep } from "./steps";
 import { parsePromptStep } from "./prompt";
 import { parseSendRhs } from "./send-rhs";
 import { parseMatchExpr, extractPostfixMatchSubject } from "./match";
+import { dottedReturnToQuotedString, isBareDottedIdentifierReturn } from "./workflow-return-dotted";
 
 type BraceIfHead =
   | { kind: "ensure"; negated: boolean; ref: string; args?: string; bareIdentifierArgs?: string[]; rest: string }
@@ -503,12 +504,17 @@ export function parseBlockStatement(
     }
     if (
       !(/^[0-9]+$/.test(returnValue) || returnValue === "$?") &&
-      (returnValue.startsWith('"') || returnValue.startsWith("$"))
+      (returnValue.startsWith('"') ||
+        returnValue.startsWith("$") ||
+        isBareDottedIdentifierReturn(returnValue))
     ) {
+      const value = isBareDottedIdentifierReturn(returnValue)
+        ? dottedReturnToQuotedString(returnValue)
+        : returnValue;
       return {
         step: {
           type: "return",
-          value: returnValue,
+          value,
           loc: retLoc,
         },
         nextIdx: idx + 1,

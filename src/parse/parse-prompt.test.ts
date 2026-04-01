@@ -127,6 +127,37 @@ test("parsePromptStep: parses captured fenced block prompt", () => {
   }
 });
 
+test("parsePromptStep: fenced block may be followed by returns on the next line", () => {
+  const lines = [
+    '  answer = prompt ```',
+    "Hello",
+    "```",
+    'returns "{ role: string }"',
+  ];
+  const result = parsePromptStep("test.jh", lines, 0, "```", 3, "answer");
+  assert.equal(result.step.type, "prompt");
+  if (result.step.type === "prompt") {
+    assert.equal(result.step.bodyKind, "fenced");
+    assert.equal(result.step.returns, "{ role: string }");
+  }
+  assert.equal(result.nextLineIdx, 3);
+});
+
+test("parsePromptStep: fenced block may close with ``` returns on same line", () => {
+  const lines = [
+    '  answer = prompt ```',
+    "Hello",
+    '``` returns "{ role: string }"',
+  ];
+  const result = parsePromptStep("test.jh", lines, 0, "```", 3, "answer");
+  assert.equal(result.step.type, "prompt");
+  if (result.step.type === "prompt") {
+    assert.equal(result.step.bodyKind, "fenced");
+    assert.equal(result.step.returns, "{ role: string }");
+  }
+  assert.equal(result.nextLineIdx, 2);
+});
+
 test("parsePromptStep: unterminated fenced block throws", () => {
   const lines = [
     '  prompt ```',

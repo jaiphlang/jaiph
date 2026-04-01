@@ -85,7 +85,7 @@ function splitPromptAndReturns(
  * Parse optional `returns "..."` after any prompt body form.
  * `rest` is the remaining text on the line after the body, `lines[nextIdx]` is the next unprocessed line.
  */
-function parseReturnsClause(
+export function parseReturnsClause(
   filePath: string,
   lineNo: number,
   rest: string,
@@ -167,10 +167,32 @@ export function parsePromptStep(
     // so that parseFencedBlock reports correct line numbers on errors.
     const fenceLines = [...lines];
     fenceLines[lineIdx] = promptArg;
-    const { body, nextIdx: realNextIdx } = parseFencedBlock(filePath, fenceLines, lineIdx);
+    const { body, nextIdx: realNextIdx, returns: returnsOnFenceLine } = parseFencedBlock(
+      filePath,
+      fenceLines,
+      lineIdx,
+    );
 
     // Wrap body in quotes so the runtime's interpolateWithCaptures can process ${} vars
     const raw = `"${body.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+
+    let returnsSchema: string | undefined = returnsOnFenceLine;
+    let consumeEndIdx = realNextIdx;
+    if (returnsSchema === undefined) {
+      const lineAfterFence = (lines[realNextIdx] ?? "").trim();
+      if (lineAfterFence.startsWith("returns ")) {
+        const pr = parseReturnsClause(
+          filePath,
+          realNextIdx + 1,
+          lineAfterFence,
+          lines,
+          realNextIdx,
+        );
+        returnsSchema = pr.returns;
+        consumeEndIdx = pr.nextIndex;
+      }
+    }
+
     return {
       step: {
         type: "prompt",
@@ -178,8 +200,9 @@ export function parsePromptStep(
         bodyKind: "fenced",
         loc: { line: lineNo, col: promptCol },
         ...(captureName ? { captureName } : {}),
+        ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
       },
-      nextLineIdx: realNextIdx - 1,
+      nextLineIdx: consumeEndIdx - 1,
     };
   }
 
