@@ -1,7 +1,7 @@
 #!/usr/bin/env jaiph
 # Fixture: dot notation for typed prompt field access.
 workflow classify {
-  result = prompt "Classify this" returns '{ category: string, confidence: number }'
+  result = prompt "Classify this" returns "{ category: string, confidence: number }"
   log "category=${result.category}"
   log "confidence=${result.confidence}"
   return "${result.category}"

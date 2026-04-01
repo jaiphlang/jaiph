@@ -4,7 +4,7 @@ workflow classify_like {
   const task = "${arg1}"
   result = prompt "
     Classify task \"${task}\" into a single engineer role name (JSON only).
-  " returns '{ role: string }'
+  " returns "{ role: string }"
 
   return "${result_role}"
 }

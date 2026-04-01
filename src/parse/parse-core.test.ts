@@ -16,8 +16,8 @@ test("stripQuotes: removes double quotes from a quoted string", () => {
   assert.equal(stripQuotes('"hello"'), "hello");
 });
 
-test("stripQuotes: removes single quotes from a quoted string", () => {
-  assert.equal(stripQuotes("'hello'"), "hello");
+test("stripQuotes: does not strip single quotes (double quotes only)", () => {
+  assert.equal(stripQuotes("'hello'"), "'hello'");
 });
 
 test("stripQuotes: trims whitespace before checking quotes", () => {

@@ -23,12 +23,20 @@ test("parsePromptStep: parses captured prompt", () => {
   assert.equal(result.step.captureName, "answer");
 });
 
-test("parsePromptStep: parses prompt with returns schema", () => {
-  const lines = ["  prompt \"Classify\" returns '{ type: string }'"];
-  const result = parsePromptStep("test.jh", lines, 0, "\"Classify\" returns '{ type: string }'", 3);
+test("parsePromptStep: parses prompt with returns schema (double-quoted)", () => {
+  const lines = ['  prompt "Classify" returns "{ type: string }"'];
+  const result = parsePromptStep("test.jh", lines, 0, '"Classify" returns "{ type: string }"', 3);
   assert.equal(result.step.type, "prompt");
   assert.equal(result.step.raw, '"Classify"');
   assert.equal(result.step.returns, "{ type: string }");
+});
+
+test("parsePromptStep: rejects single-quoted returns schema", () => {
+  const lines = ["  prompt \"Classify\" returns '{ type: string }'"];
+  assert.throws(
+    () => parsePromptStep("test.jh", lines, 0, "\"Classify\" returns '{ type: string }'", 3),
+    /single-quoted strings are not supported/,
+  );
 });
 
 // === parsePromptStep: multiline ===
@@ -83,9 +91,9 @@ test("parsePromptStep: invalid text after prompt string throws", () => {
 });
 
 test("parsePromptStep: unterminated returns schema throws", () => {
-  const lines = ["  prompt \"Hello\" returns '{ type: string"];
+  const lines = ['  prompt "Hello" returns "{ type: string'];
   assert.throws(
-    () => parsePromptStep("test.jh", lines, 0, "\"Hello\" returns '{ type: string", 3),
+    () => parsePromptStep("test.jh", lines, 0, '"Hello" returns "{ type: string', 3),
     /unterminated returns schema/,
   );
 });

@@ -249,7 +249,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
 
     case "prompt": {
       const capture = step.captureName ? `${step.captureName} = ` : "";
-      const returns = step.returns ? ` returns '${step.returns}'` : "";
+      const returns = step.returns ? ` returns "${step.returns}"` : "";
       lines.push(`${ci}${capture}prompt ${step.raw}${returns}`);
       break;
     }
@@ -345,7 +345,7 @@ function emitConstStep(name: string, value: ConstRhs): string {
     case "ensure_capture":
       return `const ${name} = ensure ${emitRef(value.ref, value.args)}`;
     case "prompt_capture": {
-      const returns = value.returns ? ` returns '${value.returns}'` : "";
+      const returns = value.returns ? ` returns "${value.returns}"` : "";
       return `const ${name} = prompt "${value.raw}"${returns}`;
     }
     case "match_expr": {

@@ -11,8 +11,12 @@ export function parseImportLine(
   if (!match) {
     fail(filePath, 'import must match: import "<path>" as <alias>', lineNo);
   }
+  const pathRaw = match[1].trim();
+  if (pathRaw.startsWith("'")) {
+    fail(filePath, 'single-quoted strings are not supported; use double quotes ("...") instead', lineNo);
+  }
   return {
-    path: stripQuotes(match[1]),
+    path: stripQuotes(pathRaw),
     alias: match[2],
     loc: { line: lineNo, col: raw.indexOf("import") + 1 },
   };

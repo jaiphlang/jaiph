@@ -531,7 +531,7 @@ test("valid: ${response.field} dot notation in log compiles", () => {
   withTempDir("jaiph-str-dot-ok-", (root) => {
     writeJh(root, "m.jh", [
       "workflow default {",
-      '  result = prompt "Analyse" returns \'{ type: string, risk: string }\'',
+      '  result = prompt "Analyse" returns "{ type: string, risk: string }"',
       '  log "type is ${result.type}"',
       "}",
     ]);
@@ -557,7 +557,7 @@ test("invalid: ${result.bogus} where bogus is not in schema fails at compile tim
   withTempDir("jaiph-str-dot-badfield-", (root) => {
     writeJh(root, "m.jh", [
       "workflow default {",
-      '  result = prompt "Analyse" returns \'{ type: string, risk: string }\'',
+      '  result = prompt "Analyse" returns "{ type: string, risk: string }"',
       '  log "bad field ${result.bogus}"',
       "}",
     ]);

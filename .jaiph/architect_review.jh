@@ -98,7 +98,7 @@ workflow review_task {
 
     Task to review:
     ${arg1}
-  " returns '{ verdict: string }'
+  " returns "{ verdict: string }"
 
   return "${result_verdict}"
 }

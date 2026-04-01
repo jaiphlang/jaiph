@@ -9,11 +9,11 @@ test("parseEnvDecl: parses double-quoted single-line value", () => {
   assert.equal(nextIndex, 1);
 });
 
-test("parseEnvDecl: parses single-quoted value", () => {
-  const { envDecl, nextIndex } = parseEnvDecl("test.jh", ["const NAME = 'hello'"], 0);
-  assert.equal(envDecl.name, "NAME");
-  assert.equal(envDecl.value, "hello");
-  assert.equal(nextIndex, 1);
+test("parseEnvDecl: rejects single-quoted value", () => {
+  assert.throws(
+    () => parseEnvDecl("test.jh", ["const NAME = 'hello'"], 0),
+    /single-quoted strings are not supported/,
+  );
 });
 
 test("parseEnvDecl: parses bare value", () => {
@@ -40,10 +40,10 @@ test("parseEnvDecl: fails on unterminated double-quoted string", () => {
   );
 });
 
-test("parseEnvDecl: fails on unterminated single-quoted string", () => {
+test("parseEnvDecl: rejects single-quoted string even if unterminated", () => {
   assert.throws(
     () => parseEnvDecl("test.jh", ["const X = 'no close"], 0),
-    /unterminated string/,
+    /single-quoted strings are not supported/,
   );
 });
 
@@ -54,10 +54,10 @@ test("parseEnvDecl: fails on content after closing double quote", () => {
   );
 });
 
-test("parseEnvDecl: fails on content after closing single quote", () => {
+test("parseEnvDecl: rejects single-quoted string with trailing content", () => {
   assert.throws(
     () => parseEnvDecl("test.jh", ["const X = 'val' extra"], 0),
-    /unexpected content after closing quote/,
+    /single-quoted strings are not supported/,
   );
 });
 

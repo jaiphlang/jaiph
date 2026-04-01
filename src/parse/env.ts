@@ -10,7 +10,7 @@ export function parseEnvDecl(
   const raw = lines[startIndex];
   const line = raw.trim();
 
-  // Match: const NAME = "value" or ... = 'value' or ... = barevalue
+  // Match: const NAME = "value" or ... = barevalue
   const match = line.match(/^const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)/);
   if (!match) {
     fail(filePath, 'invalid declaration — expected: const NAME = VALUE', lineNo);
@@ -51,21 +51,8 @@ export function parseEnvDecl(
     };
   }
 
-  // Single-quoted string (single-line only for now)
   if (valuePart.startsWith("'")) {
-    const closeIdx = valuePart.indexOf("'", 1);
-    if (closeIdx === -1) {
-      fail(filePath, "unterminated string in const declaration", lineNo);
-    }
-    const afterClose = valuePart.slice(closeIdx + 1).trim();
-    if (afterClose.length > 0) {
-      fail(filePath, "unexpected content after closing quote in const declaration", lineNo);
-    }
-    const value = valuePart.slice(1, closeIdx);
-    return {
-      envDecl: { name, value, loc: { line: lineNo, col: 1 } },
-      nextIndex: startIndex + 1,
-    };
+    fail(filePath, 'single-quoted strings are not supported; use double quotes ("...") instead', lineNo);
   }
 
   // Bare value (rest of line)

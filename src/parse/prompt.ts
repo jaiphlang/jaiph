@@ -2,7 +2,7 @@ import type { WorkflowStepDef } from "../types";
 import { fail, hasUnescapedClosingQuote, indexOfClosingDoubleQuote } from "./core";
 
 /**
- * Split raw prompt literal (opening " to closing ") and optional `returns '...'` / `returns "..."`.
+ * Split raw prompt literal (opening " to closing ") and optional `returns "..."`.
  * Consumes line continuation (trailing \) after the closing quote.
  * Returns promptRaw (including quotes), optional returns schema string, and next line index.
  */
@@ -32,21 +32,28 @@ function splitPromptAndReturns(
   if (trimmed.length === 0) {
     return { promptRaw, nextIndex: nextIdx + 1 };
   }
-  const returnsMatch = trimmed.match(/^returns\s+([\'"])/);
+  const returnsMatch = trimmed.match(/^returns\s+"/);
   if (!returnsMatch) {
+    if (/^returns\s+'/.test(trimmed)) {
+      fail(
+        filePath,
+        'single-quoted strings are not supported; use double quotes ("...") instead',
+        lineNo,
+        1,
+      );
+    }
     fail(
       filePath,
-      'after prompt string expected keyword "returns" with quoted schema (e.g. returns \'{ type: string }\') or end of line',
+      'after prompt string expected keyword "returns" with quoted schema (e.g. returns "{ type: string }") or end of line',
       lineNo,
       1,
     );
   }
-  const quoteChar = returnsMatch[1];
-  let contentStart = trimmed.indexOf(quoteChar) + 1;
+  let contentStart = trimmed.indexOf('"', trimmed.indexOf("returns")) + 1;
   let contentEnd = -1;
   while (true) {
     for (let i = contentStart; i < trimmed.length; i += 1) {
-      if (trimmed[i] === quoteChar && trimmed[i - 1] !== "\\") {
+      if (trimmed[i] === '"' && trimmed[i - 1] !== "\\") {
         contentEnd = i;
         break;
       }
@@ -56,12 +63,12 @@ function splitPromptAndReturns(
     rest += "\n" + lines[nextIdx + 1];
     nextIdx += 1;
     trimmed = rest.trim();
-    contentStart = trimmed.indexOf(quoteChar) + 1;
+    contentStart = trimmed.indexOf('"', trimmed.indexOf("returns")) + 1;
   }
   if (contentEnd === -1) {
     fail(filePath, "unterminated returns schema string", lineNo, 1);
   }
-  const returnsContent = trimmed.slice(contentStart, contentEnd).replace(/\\'/g, "'").replace(/\\"/g, '"');
+  const returnsContent = trimmed.slice(contentStart, contentEnd).replace(/\\"/g, '"');
   return { promptRaw, returns: returnsContent, nextIndex: nextIdx + 1 };
 }
 

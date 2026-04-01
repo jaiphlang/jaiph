@@ -51,18 +51,16 @@ test("parseTestBlock: parses mock prompt with double-quoted string", () => {
   }
 });
 
-test("parseTestBlock: parses mock prompt with single-quoted string", () => {
+test("parseTestBlock: rejects mock prompt with single-quoted string", () => {
   const lines = [
     'test "t1" {',
     "  mock prompt 'response text'",
     '}',
   ];
-  const { testBlock } = parseTestBlock("test.jh", lines, 0);
-  assert.equal(testBlock.steps.length, 1);
-  assert.equal(testBlock.steps[0].type, "test_mock_prompt");
-  if (testBlock.steps[0].type === "test_mock_prompt") {
-    assert.equal(testBlock.steps[0].response, "response text");
-  }
+  assert.throws(
+    () => parseTestBlock("test.jh", lines, 0),
+    /single-quoted strings are not supported/,
+  );
 });
 
 // === parseTestBlock: mock prompt block (match arms) ===

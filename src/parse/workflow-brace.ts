@@ -352,7 +352,6 @@ export function parseBlockStatement(
     genericAssignMatch &&
     !genericAssignMatch[2].trimStart().startsWith("prompt ") &&
     !genericAssignMatch[2].trimStart().startsWith('"') &&
-    !genericAssignMatch[2].trimStart().startsWith("'") &&
     !genericAssignMatch[2].trimStart().startsWith("$")
   ) {
     const captureName = genericAssignMatch[1];
@@ -488,9 +487,12 @@ export function parseBlockStatement(
         };
       }
     }
+    if (returnValue.startsWith("'")) {
+      fail(filePath, 'single-quoted strings are not supported; use double quotes ("...") instead', innerNo, retLoc.col);
+    }
     if (
       !(/^[0-9]+$/.test(returnValue) || returnValue === "$?") &&
-      (returnValue.startsWith('"') || returnValue.startsWith("'") || returnValue.startsWith("$"))
+      (returnValue.startsWith('"') || returnValue.startsWith("$"))
     ) {
       return {
         step: {
