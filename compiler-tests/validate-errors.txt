@@ -1,0 +1,201 @@
+=== unknown local rule reference
+# @expect error E_VALIDATE "unknown local rule reference"
+--- input.jh
+workflow default {
+  ensure missing_rule()
+}
+
+=== unknown local workflow or script reference in run
+# @expect error E_VALIDATE "unknown local workflow or script reference"
+--- input.jh
+workflow default {
+  run missing_workflow()
+}
+
+=== unknown local channel in send
+# @expect error E_VALIDATE "is not defined"
+--- input.jh
+workflow analyst {
+  log "ok"
+}
+workflow default {
+  typo <- "x"
+  typo -> analyst
+}
+
+=== rule with inline brace group fails shell-step ban
+# @expect error E_VALIDATE "inline shell steps are forbidden in rules"
+--- input.jh
+rule example {
+  check_something || { echo "failed"; exit 1; }
+}
+
+workflow default {
+  ensure example()
+}
+
+=== rule with multi-line brace group fails shell-step ban
+# @expect error E_VALIDATE "inline shell steps are forbidden in rules"
+--- input.jh
+rule example {
+  check_something || {
+    echo "failed"
+    exit 1
+  }
+}
+
+workflow default {
+  ensure example()
+}
+
+=== workflow shell step with brace group fails shell-step ban
+# @expect error E_VALIDATE "inline shell steps are forbidden in workflows"
+--- input.jh
+workflow default {
+  cmd || { echo "failed"; exit 1; }
+}
+
+=== if not ensure plus inline shell short-circuit fails shell-step ban
+# @expect error E_VALIDATE "inline shell steps are forbidden in workflows"
+--- input.jh
+rule gate {
+  run gate_impl()
+}
+script gate_impl {
+  true
+}
+
+workflow default {
+  if not ensure gate() {
+    echo fallback
+  }
+  other || { echo "err"; exit 1; }
+}
+
+=== unsupported type in returns schema
+# @expect error E_SCHEMA "unsupported type"
+--- input.jh
+workflow default {
+  result = prompt "x" returns "{ foo: array }"
+}
+
+=== inline shell step subshell capture forbidden in workflow
+# @expect error E_VALIDATE "inline shell steps are forbidden in workflows"
+--- input.jh
+script f {
+  printf '%s' 'x'
+}
+workflow default {
+  x="$(f)"
+}
+
+=== direct inline shell step forbidden in workflow
+# @expect error E_VALIDATE "inline shell steps are forbidden in workflows"
+--- input.jh
+script f {
+  printf '%s' 'x'
+}
+workflow default {
+  f
+}
+
+=== inline shell line with workflow ref is forbidden
+# @expect error E_VALIDATE "inline shell steps are forbidden in workflows"
+--- input.jh
+script w_impl {
+  echo x
+}
+workflow w {
+  run w_impl()
+}
+workflow default {
+  w $(true)
+}
+
+=== send RHS cannot invoke workflow via shell
+# @expect error E_VALIDATE "workflow"
+--- input.jh
+channel c
+script w_impl {
+  echo x
+}
+workflow w {
+  run w_impl()
+}
+workflow default {
+  c <- w
+}
+
+=== bare identifier arg unknown name fails
+# @expect error E_VALIDATE "unknown identifier"
+--- input.jh
+script greet {
+  echo "hello $1"
+}
+workflow default {
+  run greet(unknown_var)
+}
+
+=== run async is rejected in rules
+# @expect error E_VALIDATE "run async is not allowed in rules"
+--- input.jh
+workflow helper {
+  log "hi"
+}
+rule check {
+  run async helper()
+}
+workflow default {
+  ensure check()
+}
+
+=== route with unknown workflow
+# @expect error E_VALIDATE "unknown local workflow reference"
+--- input.jh
+channel findings
+workflow default {
+  findings -> missing_wf
+}
+
+=== route with rule ref
+# @expect error E_VALIDATE "must be called with ensure"
+--- input.jh
+channel findings
+rule check {
+  run check_impl()
+}
+script check_impl {
+  true
+}
+workflow default {
+  findings -> check
+}
+
+=== inline run ref with unknown script
+# @expect error E_VALIDATE "unknown local workflow or script reference"
+--- input.jh
+workflow default {
+  log "got: ${run nonexistent()}"
+}
+
+=== dot field ref where var has no schema
+# @expect error E_VALIDATE "not a typed prompt capture"
+--- input.jh
+workflow default {
+  log "value ${x.field}"
+}
+
+=== dot field ref with nonexistent field in schema
+# @expect error E_VALIDATE "is not defined in the returns schema"
+--- input.jh
+workflow default {
+  result = prompt "Analyse" returns "{ type: string, risk: string }"
+  log "bad field ${result.bogus}"
+}
+
+=== unknown import alias in rule reference
+# @expect error E_VALIDATE "unknown import alias"
+--- input.jh
+workflow default {
+  ensure ghost.guard()
+}

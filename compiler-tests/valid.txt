@@ -112,3 +112,1004 @@ workflow helper {
 workflow default {
   run script("echo hello")
 }
+
+=== rule with empty braced body
+# @expect ok
+--- input.jh
+rule check {
+}
+
+=== script with empty braced body
+# @expect ok
+--- input.jh
+script noop {
+}
+
+=== workflow with empty braced body
+# @expect ok
+--- input.jh
+workflow default {
+}
+
+=== export workflow with empty braced body
+# @expect ok
+--- input.jh
+export workflow main {
+}
+
+=== export rule with empty braced body
+# @expect ok
+--- input.jh
+export rule check {
+}
+
+=== workflow config inside workflow
+# @expect ok
+--- input.jh
+workflow default {
+  config {
+    agent.backend = "claude"
+  }
+  log "hello"
+}
+
+=== workflow config with comment before config
+# @expect ok
+--- input.jh
+workflow default {
+  # a comment
+  config {
+    agent.default_model = "gpt-4"
+  }
+  log "done"
+}
+
+=== workflow config coexists with module config
+# @expect ok
+--- input.jh
+config {
+  agent.backend = "cursor"
+}
+workflow a {
+  config {
+    agent.backend = "claude"
+  }
+  log "a"
+}
+workflow b {
+  log "b"
+}
+
+=== script:node interpreter tag
+# @expect ok
+--- input.jh
+script:node transform {
+  console.log('hi');
+}
+
+=== script:python3 interpreter tag
+# @expect ok
+--- input.jh
+script:python3 analyze {
+  print('hello')
+}
+
+=== script:bash interpreter tag
+# @expect ok
+--- input.jh
+script:bash setup {
+  echo hello
+}
+
+=== plain script without interpreter tag
+# @expect ok
+--- input.jh
+script setup {
+  echo hello
+}
+
+=== plain script with manual shebang
+# @expect ok
+--- input.jh
+script analyze {
+  #!/usr/bin/env python3
+  print('hi')
+}
+
+=== return run in workflow
+# @expect ok
+--- input.jh
+workflow helper {
+  log "ok"
+}
+workflow default {
+  return run helper()
+}
+
+=== return run with args
+# @expect ok
+--- input.jh
+workflow helper {
+  log "ok"
+}
+workflow default {
+  return run helper("a", "b")
+}
+
+=== return run with dotted ref
+# @expect ok
+--- main.jh
+import "lib.jh" as lib
+workflow default {
+  return run lib.helper()
+}
+--- lib.jh
+export workflow helper {
+  log "ok"
+}
+
+=== return ensure in workflow
+# @expect ok
+--- input.jh
+rule check {
+  return "ok"
+}
+workflow default {
+  return ensure check()
+}
+
+=== return ensure with args
+# @expect ok
+--- input.jh
+rule check {
+  return "ok"
+}
+workflow default {
+  return ensure check("x")
+}
+
+=== return run in rule
+# @expect ok
+--- input.jh
+script helper {
+  echo "ok"
+}
+rule my_rule {
+  return run helper()
+}
+
+=== return ensure in rule
+# @expect ok
+--- input.jh
+rule sub_rule {
+  return "ok"
+}
+rule my_rule {
+  return ensure sub_rule()
+}
+
+=== return with string value
+# @expect ok
+--- input.jh
+workflow default {
+  return "hello"
+}
+
+=== bare return
+# @expect ok
+--- input.jh
+workflow default {
+  return
+}
+
+=== return run in brace-if then branch
+# @expect ok
+--- input.jh
+script helper {
+  echo "ok"
+}
+rule check {
+  return "yes"
+}
+workflow default {
+  if ensure check() {
+    return run helper()
+  }
+}
+
+=== run async in workflow
+# @expect ok
+--- input.jh
+workflow some_wf {
+  log "ok"
+}
+workflow default {
+  run async some_wf()
+}
+
+=== run async with args
+# @expect ok
+--- input.jh
+workflow other_wf {
+  log "ok"
+}
+workflow default {
+  run async other_wf("hello" "$x")
+}
+
+=== run async with qualified ref
+# @expect ok
+--- main.jh
+import "mod.jh" as mod
+workflow default {
+  run async mod.some_wf()
+}
+--- mod.jh
+export workflow some_wf {
+  log "ok"
+}
+
+=== regular run without async
+# @expect ok
+--- input.jh
+workflow some_wf {
+  log "ok"
+}
+workflow default {
+  run some_wf()
+}
+
+=== inline script with args
+# @expect ok
+--- input.jh
+workflow default {
+  run script("echo $1", "arg1", "arg2")
+}
+
+=== inline script with capture form
+# @expect ok
+--- input.jh
+workflow default {
+  x = run script("echo hello")
+}
+
+=== inline script const capture form
+# @expect ok
+--- input.jh
+workflow default {
+  const x = run script("echo hello")
+}
+
+=== inline script with shebang
+# @expect ok
+--- input.jh
+workflow default {
+  run script("#!/usr/bin/env python3\nprint('hello')")
+}
+
+=== assignment capture parses for ensure and const run
+# @expect ok
+--- input.jh
+script say_hello {
+  echo hello
+}
+
+rule tests_pass {
+  return "ok"
+}
+workflow default {
+  response = ensure tests_pass()
+  const out = run say_hello()
+}
+
+=== config block parses metadata
+# @expect ok
+--- input.jh
+config {
+  agent.default_model = "gpt-4"
+  run.logs_dir = ".jaiph/runs"
+}
+workflow default {
+  log "ok"
+}
+
+=== config agent.backend cursor
+# @expect ok
+--- input.jh
+config {
+  agent.backend = "cursor"
+}
+workflow default {
+  log "ok"
+}
+
+=== config agent.backend claude
+# @expect ok
+--- input.jh
+config {
+  agent.backend = "claude"
+}
+workflow default {
+  log "ok"
+}
+
+=== config agent.trusted_workspace
+# @expect ok
+--- input.jh
+config {
+  agent.trusted_workspace = ".jaiph/.."
+}
+workflow default {
+  log "ok"
+}
+
+=== config backend flag strings
+# @expect ok
+--- input.jh
+config {
+  agent.cursor_flags = "--force --sandbox enabled"
+  agent.claude_flags = "--model sonnet-4"
+}
+workflow default {
+  log "ok"
+}
+
+=== config integer value parses as number
+# @expect ok
+--- input.jh
+config {
+  runtime.docker_timeout = 300
+}
+workflow default {
+  log "ok"
+}
+
+=== config array value parses multi-line array
+# @expect ok
+--- input.jh
+config {
+  runtime.workspace = [
+    ".:/jaiph/workspace:rw",
+    "config:config:ro"
+  ]
+}
+workflow default {
+  log "ok"
+}
+
+=== config empty array
+# @expect ok
+--- input.jh
+config {
+  runtime.workspace = []
+}
+workflow default {
+  log "ok"
+}
+
+=== config array with trailing commas and comments
+# @expect ok
+--- input.jh
+config {
+  runtime.workspace = [
+    ".:/jaiph/workspace:rw",
+    "config:config:ro",
+  ]
+}
+workflow default {
+  log "ok"
+}
+
+=== all runtime config keys
+# @expect ok
+--- input.jh
+config {
+  runtime.docker_enabled = true
+  runtime.docker_image = "ubuntu:24.04"
+  runtime.docker_network = "host"
+  runtime.docker_timeout = 600
+  runtime.workspace = [
+    ".:/jaiph/workspace:rw"
+  ]
+}
+workflow default {
+  log "ok"
+}
+
+=== positive if ensure
+# @expect ok
+--- input.jh
+rule ready {
+  return "ok"
+}
+workflow default {
+  if ensure ready() {
+    log "success"
+  }
+}
+
+=== positive if ensure with args
+# @expect ok
+--- input.jh
+rule check {
+  return "ok"
+}
+workflow default {
+  if ensure check(foo=bar baz) {
+    log "ok"
+  }
+}
+
+=== negated if ensure with args
+# @expect ok
+--- input.jh
+rule check {
+  return "ok"
+}
+workflow fix {
+  log "fix"
+}
+workflow default {
+  if not ensure check(foo=bar) {
+    run fix()
+  }
+}
+
+=== if ensure with else branch
+# @expect ok
+--- input.jh
+rule ready {
+  return "ok"
+}
+workflow default {
+  if ensure ready() {
+    log "yes"
+  } else {
+    log "no"
+  }
+}
+
+=== negated if ensure with else branch
+# @expect ok
+--- input.jh
+rule ready {
+  return "ok"
+}
+workflow default {
+  if not ensure ready() {
+    log "fail"
+  } else {
+    log "pass"
+  }
+}
+
+=== fail step parses quoted message
+# @expect ok
+--- input.jh
+workflow default {
+  fail "expected reason"
+}
+
+=== const string expr and const run capture
+# @expect ok
+--- input.jh
+script noop {
+  :
+}
+workflow default {
+  const msg = "hi"
+  const out = run noop()
+}
+
+=== const allows run-wrapped script call with args
+# @expect ok
+--- input.jh
+script some_script {
+  echo "$1"
+}
+workflow default {
+  const x = run some_script("${arg}")
+}
+
+=== const prompt capture
+# @expect ok
+--- input.jh
+workflow default {
+  const ans = prompt "type here"
+}
+
+=== wait parses as workflow step
+# @expect ok
+--- input.jh
+workflow default {
+  wait
+}
+
+=== brace-style if with not, else if, and else
+# @expect ok
+--- input.jh
+rule ok {
+  return "ok"
+}
+rule bad {
+  fail "no"
+}
+script check {
+  true
+}
+workflow default {
+  if not ensure bad() {
+    log "neg"
+  }
+  else if run check() {
+    log "elif"
+  }
+  else {
+    log "final"
+  }
+}
+
+=== send operator parses channel <- literal
+# @expect ok
+--- input.jh
+channel findings
+workflow default {
+  findings <- "hello"
+}
+
+=== top-level channel declarations parse
+# @expect ok
+--- input.jh
+channel findings
+channel report
+workflow analyst {
+  log "ok"
+}
+workflow default {
+  findings <- "hi"
+  report -> analyst
+}
+
+=== standalone channel <- forwards
+# @expect ok
+--- input.jh
+channel findings
+workflow default {
+  findings <-
+}
+
+=== arrow inside quotes is not a send
+# @expect ok
+--- input.jh
+workflow default {
+  log "a <- b"
+}
+
+=== route declaration parses
+# @expect ok
+--- input.jh
+channel findings
+workflow analyst {
+  log "ok"
+}
+workflow default {
+  findings -> analyst
+}
+
+=== route with multiple targets
+# @expect ok
+--- input.jh
+channel findings
+workflow a {
+  log "ok"
+}
+workflow b {
+  log "ok"
+}
+workflow default {
+  findings -> a, b
+}
+
+=== top-level const single-line string
+# @expect ok
+--- input.jh
+const greeting = "hello world"
+workflow default {
+  log "${greeting}"
+}
+
+=== top-level const multi-line string
+# @expect ok
+--- input.jh
+const role = "You are an expert.
+    1. You write clearly
+    2. You are concise"
+workflow default {
+  log "${role}"
+}
+
+=== top-level const bare value
+# @expect ok
+--- input.jh
+const count = 42
+workflow default {
+  log "${count}"
+}
+
+=== script extracts bodies for simple module
+# @expect ok
+--- input.jh
+script f_ok {
+  echo ok
+}
+
+rule ok {
+  run f_ok()
+}
+
+workflow default {
+  ensure ok()
+  log "done"
+}
+
+=== script bodies are opaque bash
+# @expect ok
+--- input.jh
+script helper {
+  echo ok
+}
+
+script caller {
+  helper
+}
+
+workflow default {
+  run caller()
+}
+
+=== script calling itself is allowed
+# @expect ok
+--- input.jh
+script recurse {
+  recurse
+}
+
+workflow default {
+  run recurse()
+}
+
+=== top-level const with env shim isolation
+# @expect ok
+--- input.jh
+const greeting = "hello world"
+
+script helper {
+  echo $greeting
+}
+
+workflow default {
+  run helper()
+}
+
+=== multiline double-quoted strings in scripts
+# @expect ok
+--- input.jh
+script multiline_str {
+  local x="a
+b"
+}
+
+workflow default {
+  run multiline_str()
+}
+
+=== if not ensure then-branch allows mixed prompt and run
+# @expect ok
+--- input.jh
+rule gate {
+  run gate_impl()
+}
+script gate_impl {
+  false
+}
+
+workflow fix_build {
+  prompt "fix build"
+}
+
+workflow default {
+  if not ensure gate() {
+    prompt "recover"
+    run fix_build()
+  }
+}
+
+=== prompt with returns schema single-line
+# @expect ok
+--- input.jh
+workflow default {
+  result = prompt "Analyse" returns "{ type: string, risk: string }"
+  return "${result}"
+}
+
+=== prompt with returns schema multiline continuation
+# @expect ok
+--- input.jh
+workflow default {
+  result = prompt "Analyse" \
+    returns "{ type: string, risk: string }"
+}
+
+=== valid ensure recover block
+# @expect ok
+--- input.jh
+rule ci_passes {
+  run ci_passes_impl()
+}
+script ci_passes_impl {
+  true
+}
+
+workflow fix_it {
+  prompt "fix"
+}
+
+workflow default {
+  ensure ci_passes("$repo_dir") recover {
+    run fix_it()
+  }
+}
+
+=== valid ${name} interpolation in log
+# @expect ok
+--- input.jh
+workflow default {
+  log "hello ${name}"
+}
+
+=== valid ${arg1} positional in log
+# @expect ok
+--- input.jh
+workflow default {
+  log "arg is ${arg1}"
+}
+
+=== valid escaped backtick in prompt
+# @expect ok
+--- input.jh
+workflow default {
+  prompt "escaped backtick: \`cmd\`"
+}
+
+=== valid $1 in script body shell context
+# @expect ok
+--- input.jh
+script greet {
+  echo "Hello $1"
+}
+workflow default {
+  run greet("world")
+}
+
+=== valid inline run capture in log
+# @expect ok
+--- input.jh
+script greet {
+  echo "hello"
+}
+workflow default {
+  log "got: ${run greet()}"
+}
+
+=== valid inline ensure capture in log
+# @expect ok
+--- input.jh
+rule check {
+  return "ok"
+}
+workflow default {
+  log "status: ${ensure check()}"
+}
+
+=== valid inline run capture with args
+# @expect ok
+--- input.jh
+script greet {
+  echo "hello $1"
+}
+workflow default {
+  log "got: ${run greet(world)}"
+}
+
+=== valid inline run capture in return
+# @expect ok
+--- input.jh
+script greet {
+  echo "hello"
+}
+workflow helper {
+  return "${run greet()}"
+}
+workflow default {
+  run helper()
+}
+
+=== valid inline run capture in rule log
+# @expect ok
+--- input.jh
+script greet {
+  echo "hello"
+}
+rule check {
+  log "got: ${run greet()}"
+}
+workflow default {
+  ensure check()
+}
+
+=== valid dot field ref in log compiles
+# @expect ok
+--- input.jh
+workflow default {
+  result = prompt "Analyse" returns "{ type: string, risk: string }"
+  log "type is ${result.type}"
+}
+
+=== buildScripts extracts script for run with capture
+# @expect ok
+--- input.jh
+script f {
+  printf '%s' 'ok'
+}
+workflow default {
+  x = run f()
+  return "${x}"
+}
+
+=== bare identifier arg known const passes
+# @expect ok
+--- input.jh
+script greet {
+  echo "hello $1"
+}
+workflow default {
+  const name = "world"
+  run greet(name)
+}
+
+=== bare identifier arg capture variable passes
+# @expect ok
+--- input.jh
+script get_name {
+  echo "world"
+}
+script greet {
+  echo "hello $1"
+}
+workflow default {
+  result = run get_name()
+  run greet(result)
+}
+
+=== bare identifier arg argN always valid
+# @expect ok
+--- input.jh
+script greet {
+  echo "hello $1"
+}
+workflow default {
+  run greet(arg1)
+}
+
+=== bare identifier arg top-level const passes
+# @expect ok
+--- input.jh
+const REPO = "my-project"
+script greet {
+  echo "hello $1"
+}
+workflow default {
+  run greet(REPO)
+}
+
+=== run async is accepted in workflows
+# @expect ok
+--- input.jh
+workflow helper {
+  log "hi"
+}
+workflow default {
+  run async helper()
+}
+
+=== logerr step in workflow
+# @expect ok
+--- input.jh
+workflow default {
+  logerr "something went wrong"
+}
+
+=== workflow calling another workflow via run
+# @expect ok
+--- input.jh
+workflow helper {
+  log "helping"
+}
+workflow default {
+  run helper()
+}
+
+=== rule with multiple steps
+# @expect ok
+--- input.jh
+script check_a {
+  true
+}
+script check_b {
+  true
+}
+rule validate {
+  run check_a()
+  run check_b()
+}
+workflow default {
+  ensure validate()
+}
+
+=== prompt step in workflow
+# @expect ok
+--- input.jh
+workflow default {
+  prompt "What should I do?"
+}
+
+=== prompt with capture variable
+# @expect ok
+--- input.jh
+workflow default {
+  answer = prompt "Tell me something"
+  log "${answer}"
+}
+
+=== inbox fixture builds successfully
+# @expect ok
+--- input.jh
+channel findings
+channel summary
+channel final_summary
+
+script emit_findings {
+  echo '## findings'
+}
+
+script summarize_findings {
+  echo "Summary of findings"
+}
+
+script review_summary {
+  echo "[reviewed] $1"
+}
+
+workflow researcher {
+  findings <- run emit_findings()
+}
+
+script write_findings_file {
+  echo "$1" > findings_file.md
+}
+
+workflow analyst {
+  run write_findings_file("${arg1}")
+  summary = run summarize_findings()
+  summary <- "${summary}"
+}
+
+workflow reviewer {
+  final_summary <- run review_summary("${arg1}")
+}
+
+workflow default {
+  run researcher()
+  findings -> analyst
+  summary -> reviewer
+}

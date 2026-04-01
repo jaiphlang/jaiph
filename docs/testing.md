@@ -299,9 +299,22 @@ npm run test:compiler
 
 The runner discovers all `.txt` files in `compiler-tests/`, parses them, writes virtual files to a temp directory per case, runs `parsejaiph` + `validateReferences`, and asserts the expected outcome. Results are reported per test case via `node:test`. Compiler tests are also included in `npm test`.
 
+### Fixture files
+
+Test cases are organized by error type and single-vs-multi-module:
+
+| File | Cases | What it covers |
+|------|-------|----------------|
+| `compiler-tests/valid.txt` | 103 | Success cases — source compiles without error (single-module) |
+| `compiler-tests/parse-errors.txt` | 74 | `E_PARSE` error cases — syntax and grammar violations |
+| `compiler-tests/validate-errors.txt` | 20 | `E_VALIDATE`, `E_IMPORT_NOT_FOUND`, `E_SCHEMA` error cases (single-module) |
+| `compiler-tests/validate-errors-multi-module.txt` | 3 | Validation errors requiring imports (multi-file) |
+
+Cases were extracted from TypeScript test files across `src/parse/*.test.ts` and `src/transpile/*.test.ts`. Only tests that verify "source in, pass/fail out" qualify — tests that check AST structure or internal APIs remain in TypeScript.
+
 ### Conventions
 
-- One `.txt` file per category (e.g. `valid.txt`, `parse-errors.txt`, `validate-errors.txt`).
+- One `.txt` file per category.
 - Test names should be descriptive and unique within a file.
 - Keep test cases minimal — only include what is necessary to trigger the expected outcome.
 

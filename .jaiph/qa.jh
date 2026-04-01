@@ -23,6 +23,25 @@ sec == 2 { print }
 ' docs/contributing.md
 }
 
+script read_txtar_format_spec {
+  cat compiler-tests/README.md
+}
+
+script read_txtar_fixture_names {
+  for f in compiler-tests/*.txt; do
+    echo "=== FILE: $f ==="
+    grep '^=== ' "$f" | sed 's/^=== /  /'
+  done
+}
+
+script read_txtar_fixtures {
+  for f in compiler-tests/*.txt; do
+    echo "========== $f =========="
+    cat "$f"
+    echo ""
+  done
+}
+
 script new_qa_gap_report_path {
   echo ".jaiph/tmp/qa_gap_report_$(date +%Y-%m-%d_%H-%M-%S).md"
 }
@@ -49,6 +68,9 @@ script save_gap_report_file {
 workflow analyze_gaps {
   const report_path = run new_qa_gap_report_path()
   const contributing_docs = run read_contributing_docs()
+  const txtar_format = run read_txtar_format_spec()
+  const txtar_names = run read_txtar_fixture_names()
+
   const gap_report = prompt "
     <role>
     You are a QA engineer analyzing the Jaiph codebase for test coverage gaps.
@@ -57,46 +79,81 @@ workflow analyze_gaps {
     ${contributing_docs}
     </contributing_docs>
 
-    Use the testing philosophy and layer locations from contributing_docs above
-    (module tests colocated under src/, compiler golden/acceptance under
-    src/transpile/, cross-cutting tests and shared fixtures under test/, e2e under
-    e2e/tests/). Do not invent old layouts (e.g. a root test/acceptance/ tree for the
-    compiler); follow the tables in contributing_docs.
+    <txtar_format>
+    ${txtar_format}
+    </txtar_format>
+
+    <existing_txtar_tests>
+    ${txtar_names}
+    </existing_txtar_tests>
+
+    Use the testing philosophy and layer locations from contributing_docs above.
+    The test layers are:
+
+    1. **Compiler tests (txtar)** — language-agnostic fixtures in compiler-tests/*.txt.
+       Each test case is a .jh source with an expected outcome (ok or error).
+       These test parse + validate without execution. This is the PRIMARY layer
+       for compiler error paths and valid-source acceptance.
+
+    2. **Module unit tests** — colocated src/**/*.test.ts for internal API testing
+       (AST structure, helper functions, display formatting).
+
+    3. **Compiler acceptance** — src/transpile/*.acceptance.test.ts for cross-module
+       and integration scenarios.
+
+    4. **Runtime e2e** — e2e/tests/*.sh for full execution (compile + run + verify output).
+
+    5. **CLI display** — src/cli/run/display.test.ts and progress tree rendering tests.
 
     <task>
     Your task:
-    1. Read every source file in src/parse/*.ts and list each parser branch
-       (rule, workflow, script, env, import, config, test blocks, conditionals,
-       recover, prompt, send, routes). For each branch, check coverage per
-       contributing_docs (colocated parse tests, transpile acceptance/golden, etc.).
-       List branches with no test.
 
-    2. Read src/transpile/emit-workflow.ts and src/transpile/emit-test.ts.
-       For each emission branch (ensure, run, prompt, shell, if-variants, send,
-       log, logerr, recover loops, metadata scope), check compiler golden and
-       acceptance coverage as described in contributing_docs. List gaps.
+    1. Read every source file in src/parse/*.ts. For each fail() call, check if
+       the error is covered by either:
+       - A txtar test case in compiler-tests/*.txt (check existing_txtar_tests above)
+       - A colocated TS test in src/parse/*.test.ts
+       List fail() calls with no coverage in either layer. These are COMPILER gaps —
+       they should be fixed with txtar test cases.
+
+    2. Read src/transpile/validate.ts, src/transpile/validate-ref-resolution.ts,
+       src/transpile/validate-string.ts, src/transpile/validate-prompt-schema.ts,
+       and src/transpile/shell-jaiph-guard.ts. For each jaiphError() call, check
+       coverage in txtar fixtures and TS tests. List uncovered paths.
+       These are COMPILER gaps — txtar test cases.
 
     3. Read e2e/tests/*.sh file names and compare against the feature list in
-       docs/grammar.md and docs/cli.md. List features with no e2e test.
+       docs/grammar.md and docs/cli.md. List features with no runtime e2e test.
+       Also check if all e2e test files are registered in e2e/test_all.sh.
+       These are RUNTIME gaps — e2e bash tests.
 
-    4. Read src/cli/commands/*.ts and src/cli/run/*.ts. List error paths,
-       edge cases, and config-resolution branches that have no test coverage.
+    4. Read src/cli/run/display.ts and src/cli/run/progress.ts. For each
+       formatting branch (start line, end line, prompt label, async label,
+       depth indentation, TTY vs non-TTY), check test coverage in
+       display.test.ts. List gaps. Focus on response tree rendering edge cases.
+       These are DISPLAY gaps — TS unit tests.
 
-    5. Scan src/ for pure helpers or modules without colocated *.test.ts or
-       *.acceptance.test.ts and not covered by cross-cutting tests in test/.
-       List gaps.
+    5. Read src/cli/commands/*.ts. List error paths and edge cases with no
+       test coverage. These are CLI gaps — TS unit tests or e2e tests.
 
-    Output a structured gap report in this format, one entry per gap:
+    Output a structured gap report. For each gap, specify which test layer
+    should be used:
 
     ## Gap: [short description]
     - File: [source file with untested code path]
     - Code path: [specific branch/function/line range]
     - Why it matters: [what bug this could hide]
-    - Test type: [unit | acceptance | golden | e2e] (per contributing_docs)
+    - Test layer: **txtar** | **unit** | **acceptance** | **e2e**
     - Priority: [high | medium | low]
 
-    Sort by priority descending. Be thorough but skip trivial paths (like
-    simple re-exports or type definitions).
+    For **txtar** gaps, also include the suggested test case in txtar format:
+    ```
+    === suggested test name
+    # @expect error E_CODE \"substring\"
+    --- input.jh
+    <minimal source to trigger the error>
+    ```
+
+    Sort by priority descending. Be thorough but skip trivial paths.
     </task>
     </role>
   "
@@ -112,6 +169,8 @@ workflow write_tests {
   }
   const gap_report = run read_gap_report()
   const contributing_docs = run read_contributing_docs()
+  const txtar_format = run read_txtar_format_spec()
+  const txtar_fixtures = run read_txtar_fixtures()
 
   prompt "
     <role>
@@ -121,26 +180,47 @@ workflow write_tests {
     ${contributing_docs}
     </contributing_docs>
 
-    Follow contributing_docs for test layer choice, file locations, npm commands,
-    and E2E helpers (e2e/lib/common.sh). CI expectations are summarized there
-    (.github/workflows/ci.yml is the machine-readable source).
+    <txtar_format>
+    ${txtar_format}
+    </txtar_format>
+
+    <existing_txtar_fixtures>
+    ${txtar_fixtures}
+    </existing_txtar_fixtures>
 
     <task>
     Below is a gap report listing untested code paths, sorted by priority.
     Your task: write the missing tests, starting with high-priority gaps.
 
-    Rules:
-    - Place tests where contributing_docs says (colocated under src/, golden/
-      acceptance under src/transpile/, cross-cutting under test/, e2e under
-      e2e/tests/).
+    Rules by test layer:
+
+    **txtar (compiler tests):**
+    - Append new test cases to the appropriate file in compiler-tests/:
+      - compiler-tests/parse-errors.txt for E_PARSE errors
+      - compiler-tests/validate-errors.txt for E_VALIDATE errors (create if missing)
+      - compiler-tests/valid.txt for success cases
+    - Use the txtar format shown in txtar_format above.
+    - Do NOT duplicate test names already in existing_txtar_fixtures.
+    - Each test case must be minimal — only include what triggers the error.
+    - Verify: npm run test:compiler
+
+    **unit (TypeScript tests):**
+    - Place in colocated *.test.ts files per contributing_docs.
     - Do NOT modify existing tests.
+    - Verify: npm test
+
+    **e2e (runtime tests):**
+    - Place in e2e/tests/ per contributing_docs.
+    - Register new files in e2e/test_all.sh (TEST_SCRIPTS array).
+    - Verify: npm run test:e2e
+
+    General rules:
     - Do NOT modify production code.
     - After writing tests, run: npm run build && npm test && npm run test:e2e
-    - Fix any test failures that come from your new tests (wrong expectations,
-      typos, etc). If a new test exposes a production bug, do NOT leave an
-      intentionally failing test in the suite; instead document the bug in
-      .jaiph/tmp/qa_bug_report.md with repro steps and mark the test as TODO
-      or skip with a clear comment.
+    - Fix any test failures from your new tests (wrong expectations, typos).
+    - If a new test exposes a production bug, document the bug in
+      .jaiph/tmp/qa_bug_report.md with repro steps and skip the test with
+      a clear comment.
 
     Gap report:
     ${gap_report}
