@@ -1,0 +1,22 @@
+rule ok() {
+  run ok_impl()
+}
+
+rule maybe() {
+  run maybe_impl()
+}
+
+script ok_impl = "true"
+script maybe_impl = "test -f /tmp/flag"
+
+workflow default() {
+  if ensure ok() {
+    log "yes"
+  }
+  else if ensure maybe() {
+    log "maybe"
+  }
+  else {
+    log "no"
+  }
+}

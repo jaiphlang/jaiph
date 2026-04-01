@@ -1,0 +1,9 @@
+workflow greet(name, greeting) {
+  log "${greeting}, ${name}!"
+}
+
+rule validate(input) {
+  run checker()
+}
+
+script checker = "echo ok"

@@ -1,0 +1,4 @@
+workflow default() {
+  const answer = prompt "What is your name?"
+  log "${answer}"
+}

@@ -1,0 +1,60 @@
+{
+  "channels": [],
+  "exports": [],
+  "imports": [],
+  "rules": [
+    {
+      "comments": [],
+      "name": "check",
+      "params": [],
+      "steps": [
+        {
+          "type": "run",
+          "workflow": {
+            "value": "validator"
+          }
+        }
+      ]
+    }
+  ],
+  "scripts": [
+    {
+      "body": "true",
+      "bodyKind": "string",
+      "comments": [],
+      "name": "validator"
+    }
+  ],
+  "workflows": [
+    {
+      "comments": [],
+      "name": "default",
+      "params": [],
+      "steps": [
+        {
+          "ref": {
+            "value": "check"
+          },
+          "type": "ensure"
+        },
+        {
+          "type": "run",
+          "workflow": {
+            "value": "helper"
+          }
+        }
+      ]
+    },
+    {
+      "comments": [],
+      "name": "helper",
+      "params": [],
+      "steps": [
+        {
+          "message": "helping",
+          "type": "log"
+        }
+      ]
+    }
+  ]
+}

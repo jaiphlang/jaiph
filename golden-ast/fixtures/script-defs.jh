@@ -1,0 +1,11 @@
+script greet = "echo hello"
+
+script multiline = ```
+echo "line 1"
+echo "line 2"
+```
+
+workflow default() {
+  run greet()
+  run multiline()
+}

@@ -323,6 +323,42 @@ The initial cases were extracted from TypeScript test files across `src/parse/*.
 
 The format is documented in detail in `compiler-tests/README.md`.
 
+## Golden AST tests
+
+Golden AST tests verify that the parser produces the expected tree shape for successful parses. While compiler tests (txtar) cover pass/fail outcomes and E2E tests cover runtime behavior, golden AST tests lock in **what** the parser actually produced — so refactors cannot silently change tree structure.
+
+### How it works
+
+Each `.jh` fixture in `golden-ast/fixtures/` is parsed and serialized to deterministic JSON (locations and file paths stripped, keys sorted). The result is compared against a checked-in `.json` golden file in `golden-ast/expected/`.
+
+- **Txtar tests** = error messages and "this compiles."
+- **Golden AST tests** = parse tree shape for successful parses.
+- **E2E tests** = full CLI + runtime behavior.
+
+### Running golden AST tests
+
+```bash
+npm run test:golden-ast
+```
+
+Golden AST tests are also included in `npm test`.
+
+### Updating goldens
+
+When an intentional parser change alters AST shape, regenerate the golden files:
+
+```bash
+UPDATE_GOLDEN=1 npm run test:golden-ast
+```
+
+Review the diff to confirm the changes are expected, then commit the updated `.json` files.
+
+### Adding a new fixture
+
+1. Create a small, focused `.jh` file in `golden-ast/fixtures/` (one concern per file).
+2. Run `UPDATE_GOLDEN=1 npm run test:golden-ast` to generate `golden-ast/expected/<name>.json`.
+3. Review the generated JSON and commit both files.
+
 ## Stress and soak testing
 
 For concurrency-sensitive behavior (for example parallel inbox dispatch), the repository includes shell-based E2E scenarios that go beyond single native tests:

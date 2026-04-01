@@ -1,0 +1,41 @@
+{
+  "channels": [],
+  "exports": [],
+  "imports": [],
+  "rules": [],
+  "scripts": [
+    {
+      "body": "echo hello",
+      "bodyKind": "string",
+      "comments": [],
+      "name": "greet"
+    },
+    {
+      "body": "echo \"line 1\"\necho \"line 2\"",
+      "bodyKind": "fenced",
+      "comments": [],
+      "name": "multiline"
+    }
+  ],
+  "workflows": [
+    {
+      "comments": [],
+      "name": "default",
+      "params": [],
+      "steps": [
+        {
+          "type": "run",
+          "workflow": {
+            "value": "greet"
+          }
+        },
+        {
+          "type": "run",
+          "workflow": {
+            "value": "multiline"
+          }
+        }
+      ]
+    }
+  ]
+}

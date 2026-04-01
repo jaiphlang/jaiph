@@ -1,0 +1,33 @@
+{
+  "channels": [],
+  "exports": [],
+  "imports": [
+    {
+      "alias": "lib",
+      "path": "lib.jh"
+    }
+  ],
+  "rules": [],
+  "scripts": [],
+  "workflows": [
+    {
+      "comments": [],
+      "name": "default",
+      "params": [],
+      "steps": [
+        {
+          "type": "run",
+          "workflow": {
+            "value": "lib.setup"
+          }
+        },
+        {
+          "ref": {
+            "value": "lib.check"
+          },
+          "type": "ensure"
+        }
+      ]
+    }
+  ]
+}

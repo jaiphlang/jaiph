@@ -1,0 +1,46 @@
+{
+  "channels": [],
+  "exports": [],
+  "imports": [],
+  "rules": [
+    {
+      "comments": [],
+      "name": "validate",
+      "params": [
+        "input"
+      ],
+      "steps": [
+        {
+          "type": "run",
+          "workflow": {
+            "value": "checker"
+          }
+        }
+      ]
+    }
+  ],
+  "scripts": [
+    {
+      "body": "echo ok",
+      "bodyKind": "string",
+      "comments": [],
+      "name": "checker"
+    }
+  ],
+  "workflows": [
+    {
+      "comments": [],
+      "name": "greet",
+      "params": [
+        "name",
+        "greeting"
+      ],
+      "steps": [
+        {
+          "message": "${greeting}, ${name}!",
+          "type": "log"
+        }
+      ]
+    }
+  ]
+}

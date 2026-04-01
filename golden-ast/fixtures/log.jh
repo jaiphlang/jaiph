@@ -1,0 +1,5 @@
+workflow default() {
+  log "hello world"
+  log "${USER} logged in"
+  logerr "something went wrong"
+}
