@@ -1,0 +1,77 @@
+=== unterminated workflow block
+# @expect error E_PARSE "unterminated workflow block"
+--- input.jh
+workflow default {
+  log "hello"
+
+=== invalid script declaration
+# @expect error E_PARSE "invalid script declaration"
+--- input.jh
+script 123bad {
+  echo x
+}
+
+=== invalid rule declaration
+# @expect error E_PARSE "invalid rule declaration"
+--- input.jh
+rule 123bad {
+  run foo()
+}
+
+=== invalid workflow declaration
+# @expect error E_PARSE "invalid workflow declaration"
+--- input.jh
+workflow 123bad {
+  log "hello"
+}
+
+=== duplicate config block
+# @expect error E_PARSE "duplicate config block"
+--- input.jh
+config {
+  agent.backend = "codex"
+}
+
+config {
+  agent.backend = "claude"
+}
+
+workflow default {
+  log "hello"
+}
+
+=== unknown config key
+# @expect error E_PARSE "unknown config key"
+--- input.jh
+config {
+  invalid.key = "value"
+}
+
+workflow default {
+  log "hello"
+}
+
+=== single-quoted import path
+# @expect error E_PARSE "use double quotes"
+--- input.jh
+import 'lib.jh' as lib
+
+workflow default {
+  log "hello"
+}
+
+=== import missing alias
+# @expect error E_PARSE "import must match"
+--- input.jh
+import "lib.jh"
+
+workflow default {
+  log "hello"
+}
+
+=== command substitution in prompt
+# @expect error E_PARSE "prompt cannot contain command substitution"
+--- input.jh
+workflow default {
+  prompt "Show host $(uname)"
+}

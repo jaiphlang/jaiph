@@ -1,0 +1,114 @@
+=== minimal workflow
+# @expect ok
+--- input.jh
+workflow default {
+  log "hello"
+}
+
+=== workflow with rule and script
+# @expect ok
+--- input.jh
+rule check {
+  run checker()
+}
+
+script checker {
+  echo ok
+}
+
+workflow default {
+  ensure check()
+  log "done"
+}
+
+=== workflow with const
+# @expect ok
+--- input.jh
+workflow default {
+  const msg = "hello"
+  log "${msg}"
+}
+
+=== workflow with if-else
+# @expect ok
+--- input.jh
+rule ok {
+  run ok_impl()
+}
+
+script ok_impl {
+  true
+}
+
+workflow default {
+  if ensure ok() {
+    log "yes"
+  }
+  else {
+    log "no"
+  }
+}
+
+=== workflow with fail
+# @expect ok
+--- input.jh
+workflow default {
+  fail "something broke"
+}
+
+=== config block
+# @expect ok
+--- input.jh
+config {
+  agent.backend = "codex"
+}
+
+workflow default {
+  log "configured"
+}
+
+=== import between files
+# @expect ok
+--- main.jh
+import "lib.jh" as lib
+
+workflow default {
+  ensure lib.check()
+}
+--- lib.jh
+rule check {
+  run check_impl()
+}
+
+script check_impl {
+  true
+}
+
+=== workflow with async run
+# @expect ok
+--- input.jh
+script noop {
+  :
+}
+
+workflow default {
+  run async noop()
+}
+
+=== multiple workflows
+# @expect ok
+--- input.jh
+workflow default {
+  log "main"
+}
+
+workflow helper {
+  log "helper"
+}
+
+=== inline script
+# @expect ok
+--- input.jh
+workflow default {
+  run script("echo hello")
+}
