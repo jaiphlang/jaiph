@@ -2,6 +2,7 @@
 // Called from bash: echo "$prompt_text" | node kernel/prompt.js [preview] [named_args...]
 // Env vars: JAIPH_AGENT_BACKEND, JAIPH_AGENT_COMMAND, JAIPH_AGENT_MODEL,
 //   JAIPH_AGENT_TRUSTED_WORKSPACE, JAIPH_AGENT_CURSOR_FLAGS, JAIPH_AGENT_CLAUDE_FLAGS,
+//   OPENAI_API_KEY, JAIPH_CODEX_API_URL,
 //   JAIPH_WORKSPACE, JAIPH_TEST_MODE, JAIPH_MOCK_DISPATCH_SCRIPT,
 //   JAIPH_MOCK_RESPONSES_FILE, JAIPH_PROMPT_FINAL_FILE
 
@@ -19,6 +20,8 @@ export type PromptConfig = {
   trustedWorkspace: string;
   cursorFlags: string[];
   claudeFlags: string[];
+  codexApiKey: string;
+  codexApiUrl: string;
   promptFinalFile: string;
 };
 
@@ -38,6 +41,10 @@ export type ModelResolution = {
 export function resolveModel(config: PromptConfig): ModelResolution {
   if (config.model) {
     return { model: config.model, reason: "explicit" };
+  }
+  // Codex has no CLI flags; model comes from explicit config or backend default only.
+  if (config.backend === "codex") {
+    return { model: "", reason: "backend-default" };
   }
   // Check if --model is embedded in backend-specific flags.
   const flags = config.backend === "claude" ? config.claudeFlags : config.cursorFlags;
@@ -59,6 +66,8 @@ export function resolveConfig(env: NodeJS.ProcessEnv = process.env): PromptConfi
     trustedWorkspace: env.JAIPH_AGENT_TRUSTED_WORKSPACE || workspaceRoot,
     cursorFlags: env.JAIPH_AGENT_CURSOR_FLAGS ? env.JAIPH_AGENT_CURSOR_FLAGS.split(/\s+/).filter(Boolean) : [],
     claudeFlags: env.JAIPH_AGENT_CLAUDE_FLAGS ? env.JAIPH_AGENT_CLAUDE_FLAGS.split(/\s+/).filter(Boolean) : [],
+    codexApiKey: env.OPENAI_API_KEY || "",
+    codexApiUrl: env.JAIPH_CODEX_API_URL || "https://api.openai.com/v1/chat/completions",
     promptFinalFile: env.JAIPH_PROMPT_FINAL_FILE || "",
   };
 }
@@ -91,6 +100,10 @@ function formatShellCommand(parts: string[]): string {
 
 /** Build the command args for the selected backend. */
 export function buildBackendArgs(config: PromptConfig, promptText: string): { command: string; args: string[] } {
+  if (config.backend === "codex") {
+    const model = config.model || "gpt-4o";
+    return { command: "codex-api", args: ["--model", model, "--url", config.codexApiUrl] };
+  }
   if (config.backend === "claude") {
     const args = ["-p", "--verbose", "--output-format", "stream-json", "--include-partial-messages"];
     // Pass --model from agent.default_model when set and not already in claude_flags.
@@ -333,6 +346,120 @@ function startTailWatchdog(rootPid: number, stderr: NodeJS.WritableStream, env: 
   return () => clearInterval(timer);
 }
 
+const CODEX_DEFAULT_MODEL = "gpt-4o";
+
+/** Run a prompt against the OpenAI Chat Completions API with streaming. */
+function runCodexBackend(
+  config: PromptConfig,
+  promptText: string,
+  writer: StreamWriter,
+): Promise<{ final: string; status: number }> {
+  if (!config.codexApiKey) {
+    process.stderr.write(
+      'jaiph: agent.backend is "codex" but OPENAI_API_KEY is not set. ' +
+      "Set the OPENAI_API_KEY environment variable to your OpenAI API key.\n",
+    );
+    return Promise.resolve({ final: "", status: 1 });
+  }
+
+  const model = config.model || CODEX_DEFAULT_MODEL;
+  const body = JSON.stringify({
+    model,
+    messages: [{ role: "user", content: promptText }],
+    stream: true,
+  });
+
+  const url = new URL(config.codexApiUrl);
+  const isHttps = url.protocol === "https:";
+  const httpMod = isHttps
+    ? (require("node:https") as typeof import("node:https"))
+    : (require("node:http") as typeof import("node:http"));
+
+  return new Promise((resolve) => {
+    const req = httpMod.request(
+      {
+        hostname: url.hostname,
+        port: url.port || (isHttps ? 443 : 80),
+        path: url.pathname + url.search,
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${config.codexApiKey}`,
+        },
+      },
+      (res) => {
+        if (res.statusCode !== 200) {
+          let errBody = "";
+          res.on("data", (chunk: Buffer) => {
+            errBody += chunk.toString();
+          });
+          res.on("end", () => {
+            let msg = `HTTP ${res.statusCode}`;
+            try {
+              const parsed = JSON.parse(errBody) as Record<string, unknown>;
+              const errObj = parsed.error as Record<string, unknown> | undefined;
+              if (errObj && typeof errObj.message === "string") msg += `: ${errObj.message}`;
+            } catch {
+              // Use raw status code only.
+            }
+            process.stderr.write(`jaiph: codex API error: ${msg}\n`);
+            resolve({ final: "", status: 1 });
+          });
+          return;
+        }
+
+        let final = "";
+        let wroteFinalHeader = false;
+        let buffer = "";
+
+        res.on("data", (chunk: Buffer) => {
+          buffer += chunk.toString();
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            const data = line.slice(6);
+            if (data === "[DONE]") continue;
+            try {
+              const obj = JSON.parse(data) as Record<string, unknown>;
+              const choices = obj.choices as Array<Record<string, unknown>> | undefined;
+              const delta = choices?.[0]?.delta as Record<string, unknown> | undefined;
+              const content = delta?.content;
+              if (typeof content === "string" && content.length > 0) {
+                if (!wroteFinalHeader) {
+                  writer.writeFinal("Final answer:\n");
+                  wroteFinalHeader = true;
+                }
+                writer.writeFinal(content);
+                final += content;
+              }
+            } catch {
+              // Skip malformed SSE line.
+            }
+          }
+        });
+
+        res.on("end", () => {
+          resolve({ final, status: 0 });
+        });
+
+        res.on("error", (err: Error) => {
+          process.stderr.write(`jaiph: codex stream error: ${err.message}\n`);
+          resolve({ final, status: 1 });
+        });
+      },
+    );
+
+    req.on("error", (err: Error) => {
+      process.stderr.write(`jaiph: codex API request failed: ${err.message}\n`);
+      resolve({ final: "", status: 1 });
+    });
+
+    req.write(body);
+    req.end();
+  });
+}
+
 /** Run the backend process and parse its streaming output. */
 function runBackend(
   config: PromptConfig,
@@ -340,6 +467,11 @@ function runBackend(
   writer: StreamWriter,
   execEnv: NodeJS.ProcessEnv = process.env,
 ): Promise<{ final: string; status: number }> {
+  // Codex uses HTTP API, not a CLI subprocess.
+  if (config.backend === "codex") {
+    return runCodexBackend(config, promptText, writer);
+  }
+
   // Pre-flight check for claude backend
   if (config.backend === "claude" && !commandExists("claude")) {
     process.stderr.write(
@@ -436,7 +568,9 @@ function writePromptTranscriptHeader(
   if (!promptText) return;
   const { command, args } = buildBackendArgs(config, promptText);
   let commandLog: string;
-  if (config.backend === "claude") {
+  if (config.backend === "codex") {
+    commandLog = formatShellCommand([command, ...args]);
+  } else if (config.backend === "claude") {
     commandLog = `printf %s ${shellQuote(promptText)} \\| ${formatShellCommand([command, ...args])}`;
   } else {
     commandLog = formatShellCommand([command, ...args]);

@@ -208,11 +208,11 @@ export function parseConfigBlock(
       }
       out.agent.command = value as string;
     } else if (key === "agent.backend") {
-      const backend = value === "cursor" || value === "claude" ? value : undefined;
+      const backend = value === "cursor" || value === "claude" || value === "codex" ? value : undefined;
       if (!backend) {
         return fail(
           filePath,
-          'agent.backend must be "cursor" or "claude"',
+          'agent.backend must be "cursor", "claude", or "codex"',
           lineNo,
           colFromRaw(raw),
         );

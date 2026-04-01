@@ -199,7 +199,7 @@ test("parser: invalid agent.backend value throws E_PARSE", () => {
   ].join("\n");
   assert.throws(
     () => parsejaiph(source, "/fake/entry.jh"),
-    /agent\.backend must be "cursor" or "claude"/,
+    /agent\.backend must be "cursor", "claude", or "codex"/,
   );
 });
 

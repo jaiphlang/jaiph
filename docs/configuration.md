@@ -124,7 +124,7 @@ These control how `prompt` steps reach the LLM.
 |-----|------|---------|--------------|-------------|
 | `agent.default_model` | string | _(unset)_ | `JAIPH_AGENT_MODEL` | Default model for `prompt` steps. |
 | `agent.command` | string | `cursor-agent` | `JAIPH_AGENT_COMMAND` | Command line for the cursor backend. First token is the executable; the rest are leading arguments. |
-| `agent.backend` | string | `cursor` | `JAIPH_AGENT_BACKEND` | `"cursor"` or `"claude"`. See [Backend selection](#backend-selection). |
+| `agent.backend` | string | `cursor` | `JAIPH_AGENT_BACKEND` | `"cursor"`, `"claude"`, or `"codex"`. See [Backend selection](#backend-selection). |
 | `agent.trusted_workspace` | string | workspace root | `JAIPH_AGENT_TRUSTED_WORKSPACE` | Directory passed to Cursor (`--trust`). Relative paths are resolved against the workspace root at CLI launch. |
 | `agent.cursor_flags` | string | _(unset)_ | `JAIPH_AGENT_CURSOR_FLAGS` | Extra flags appended for the cursor backend (split on whitespace). |
 | `agent.claude_flags` | string | _(unset)_ | `JAIPH_AGENT_CLAUDE_FLAGS` | Extra flags appended for the claude backend (split on whitespace). |
@@ -194,12 +194,35 @@ When you `ensure` a rule from **another** module, the runtime merges that module
 
 ## Backend selection
 
-`prompt` steps use either the **cursor** backend (default) or the **Claude CLI**:
+`prompt` steps use one of three backends:
 
-- **cursor** — runs `agent.command` (default `cursor-agent`) with stream-json output.
+- **cursor** (default) — runs `agent.command` (default `cursor-agent`) with stream-json output.
 - **claude** — runs `claude` on `PATH`. If the executable is missing, Jaiph reports an error and exits.
+- **codex** — calls the OpenAI Chat Completions API directly via HTTP. Requires `OPENAI_API_KEY` in the environment. If the key is missing, Jaiph reports an actionable error and exits.
 
-Backend-specific flags come from `agent.cursor_flags` / `agent.claude_flags` (or the matching env vars). There is no per-`prompt` backend override; the effective backend is whatever the config stack resolves to when the step runs.
+Backend-specific flags come from `agent.cursor_flags` / `agent.claude_flags` (or the matching env vars). The codex backend has no CLI flags; configure it with `OPENAI_API_KEY` and optionally `JAIPH_CODEX_API_URL` (defaults to `https://api.openai.com/v1/chat/completions`). There is no per-`prompt` backend override; the effective backend is whatever the config stack resolves to when the step runs.
+
+### Codex setup
+
+```jh
+config {
+  agent.backend = "codex"
+  agent.default_model = "gpt-4o"
+}
+
+workflow default {
+  prompt "Explain this codebase"
+}
+```
+
+Set the API key in your environment:
+
+```bash
+export OPENAI_API_KEY="sk-..."
+jaiph run main.jh
+```
+
+The codex backend streams responses from the OpenAI API and supports structured `returns` schemas like the other backends. The default model is `gpt-4o` when `agent.default_model` is not set. To use a custom-compatible endpoint, set `JAIPH_CODEX_API_URL`.
 
 ### Model resolution
 

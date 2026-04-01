@@ -81,7 +81,7 @@ test("parseConfigBlock: fails on invalid backend value", () => {
   ];
   assert.throws(
     () => parseConfigBlock("test.jh", lines, 0),
-    /agent\.backend must be "cursor" or "claude"/,
+    /agent\.backend must be "cursor", "claude", or "codex"/,
   );
 });
 
@@ -103,6 +103,16 @@ test("parseConfigBlock: accepts claude as backend", () => {
   ];
   const { metadata } = parseConfigBlock("test.jh", lines, 0);
   assert.equal(metadata.agent?.backend, "claude");
+});
+
+test("parseConfigBlock: accepts codex as backend", () => {
+  const lines = [
+    "config {",
+    '  agent.backend = "codex"',
+    "}",
+  ];
+  const { metadata } = parseConfigBlock("test.jh", lines, 0);
+  assert.equal(metadata.agent?.backend, "codex");
 });
 
 test("parseConfigBlock: fails on unclosed config block", () => {
