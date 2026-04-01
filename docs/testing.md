@@ -287,9 +287,10 @@ workflow default {
 ### Single-file vs multi-file tests
 
 - **Single-file:** use `--- input.jh`. The runner compiles `input.jh`.
+- **Single test file:** use `--- input.test.jh` for test-specific fixtures.
 - **Multi-file:** use `--- main.jh` as the entry file plus additional `--- lib.jh` etc. The runner compiles `main.jh`.
 
-The entry file is determined by priority: `main.jh` if present, otherwise `input.jh`, otherwise the first file.
+The entry file is determined by priority: `main.jh` if present, otherwise `input.jh`, otherwise `input.test.jh`, otherwise the first file.
 
 ### Running compiler tests
 
@@ -306,11 +307,11 @@ Test cases are organized by error type and single-vs-multi-module:
 | File | Cases | What it covers |
 |------|-------|----------------|
 | `compiler-tests/valid.txt` | 103 | Success cases — source compiles without error (single-module) |
-| `compiler-tests/parse-errors.txt` | 74 | `E_PARSE` error cases — syntax and grammar violations |
-| `compiler-tests/validate-errors.txt` | 20 | `E_VALIDATE`, `E_IMPORT_NOT_FOUND`, `E_SCHEMA` error cases (single-module) |
+| `compiler-tests/parse-errors.txt` | 108 | `E_PARSE` error cases — syntax and grammar violations |
+| `compiler-tests/validate-errors.txt` | 24 | `E_VALIDATE`, `E_IMPORT_NOT_FOUND`, `E_SCHEMA` error cases (single-module) |
 | `compiler-tests/validate-errors-multi-module.txt` | 3 | Validation errors requiring imports (multi-file) |
 
-Cases were extracted from TypeScript test files across `src/parse/*.test.ts` and `src/transpile/*.test.ts`. Only tests that verify "source in, pass/fail out" qualify — tests that check AST structure or internal APIs remain in TypeScript.
+The initial cases were extracted from TypeScript test files across `src/parse/*.test.ts` and `src/transpile/*.test.ts`. Additional cases were written directly as txtar fixtures to cover compiler error paths that had no prior test coverage. Only tests that verify "source in, pass/fail out" qualify — tests that check AST structure or internal APIs remain in TypeScript.
 
 ### Conventions
 

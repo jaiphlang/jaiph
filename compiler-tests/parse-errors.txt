@@ -588,3 +588,359 @@ workflow default {
 workflow default {
   log "got: ${run 123bad()}"
 }
+
+=== match: unterminated string in pattern
+# @expect error E_PARSE "unterminated string in match pattern"
+--- input.jh
+workflow default {
+  const x = "hello"
+  return x match {
+    "unclosed
+    _ => "no"
+  }
+}
+
+=== match: unterminated regex in pattern
+# @expect error E_PARSE "unterminated regex in match pattern"
+--- input.jh
+workflow default {
+  const x = "hello"
+  return x match {
+    /unclosed => "yes"
+    _ => "no"
+  }
+}
+
+=== match: empty regex in pattern
+# @expect error E_PARSE "empty regex in match pattern"
+--- input.jh
+workflow default {
+  const x = "hello"
+  return x match {
+    // => "yes"
+    _ => "no"
+  }
+}
+
+=== match: invalid regex in pattern
+# @expect error E_PARSE "invalid regex in match pattern"
+--- input.jh
+workflow default {
+  const x = "hello"
+  return x match {
+    /[invalid/ => "yes"
+    _ => "no"
+  }
+}
+
+=== match: empty arm body
+# @expect error E_PARSE "match arm body cannot be empty"
+--- input.jh
+workflow default {
+  const x = "hello"
+  return x match {
+    "hello" =>
+    _ => "no"
+  }
+}
+
+=== match: unterminated string in arm body
+# @expect error E_PARSE "unterminated string in match arm body"
+--- input.jh
+workflow default {
+  const x = "hello"
+  return x match {
+    "hello" => "unclosed
+    _ => "no"
+  }
+}
+
+=== match: single-quoted pattern
+# @expect error E_PARSE "single-quoted strings are not supported"
+--- input.jh
+workflow default {
+  const x = "hello"
+  return x match {
+    'hello' => "yes"
+    _ => "no"
+  }
+}
+
+=== match: single-quoted arm body
+# @expect error E_PARSE "single-quoted strings are not supported"
+--- input.jh
+workflow default {
+  const x = "hello"
+  return x match {
+    "hello" => 'yes'
+    _ => "no"
+  }
+}
+
+=== match: missing arrow after pattern
+# @expect error E_PARSE "after match pattern"
+--- input.jh
+workflow default {
+  const x = "hello"
+  return x match {
+    "hello" "yes"
+    _ => "no"
+  }
+}
+
+=== run async without parentheses
+# @expect error E_PARSE "calls require parentheses"
+--- input.jh
+workflow helper {
+  log "hi"
+}
+workflow default {
+  run async helper
+}
+
+=== log format not double-quoted
+# @expect error E_PARSE "log must match"
+--- input.jh
+workflow default {
+  log hello
+}
+
+=== unterminated log string
+# @expect error E_PARSE "unterminated log string"
+--- input.jh
+workflow default {
+  log "hello
+}
+
+=== logerr format not double-quoted
+# @expect error E_PARSE "logerr must match"
+--- input.jh
+workflow default {
+  logerr hello
+}
+
+=== unterminated logerr string
+# @expect error E_PARSE "unterminated logerr string"
+--- input.jh
+workflow default {
+  logerr "hello
+}
+
+=== invalid workflow reference in route
+# @expect error E_PARSE "invalid workflow reference in route"
+--- input.jh
+channel findings
+workflow default {
+  findings -> 123bad
+}
+
+=== brace-if: expected else brace after if-chain
+# @expect error E_PARSE "after if-chain"
+--- input.jh
+rule gate {
+  return "ok"
+}
+workflow default {
+  if ensure gate() {
+    log "yes"
+  }
+  else
+    log "no"
+}
+
+=== brace-if: else body on same line
+# @expect error E_PARSE "else branch body must not be on the same line"
+--- input.jh
+rule gate {
+  return "ok"
+}
+workflow default {
+  if ensure gate() {
+    log "yes"
+  }
+  else { log "no" }
+}
+
+=== brace-if: wait in rules
+# @expect error E_PARSE "wait is not allowed in rules"
+--- input.jh
+rule check {
+  wait
+}
+workflow default {
+  ensure check()
+}
+
+=== brace-if: prompt in rules
+# @expect error E_PARSE "prompt is not allowed in rules"
+--- input.jh
+rule check {
+  prompt "ask something"
+}
+workflow default {
+  ensure check()
+}
+
+=== brace-if: send in rules
+# @expect error E_PARSE "send operator is not allowed in rules"
+--- input.jh
+channel findings
+rule check {
+  findings <- "data"
+}
+workflow default {
+  ensure check()
+}
+
+=== brace-if: run async capture in brace block
+# @expect error E_PARSE "capture is not supported with run async"
+--- input.jh
+workflow helper {
+  log "hi"
+}
+rule gate {
+  return "ok"
+}
+workflow default {
+  if ensure gate() {
+    x = run async helper()
+  }
+}
+
+=== brace-if: malformed else if
+# @expect error E_PARSE "malformed else if"
+--- input.jh
+rule gate {
+  return "ok"
+}
+workflow default {
+  if ensure gate() {
+    log "yes"
+  }
+  else if badcondition {
+    log "no"
+  }
+}
+
+=== brace-if: ensure recover in rules
+# @expect error E_PARSE "ensure ... recover is not allowed in rules"
+--- input.jh
+rule sub_rule {
+  return "ok"
+}
+rule check {
+  ensure sub_rule() recover {
+    log "recovering"
+  }
+}
+workflow default {
+  ensure check()
+}
+
+=== brace-if: const prompt in rules
+# @expect error E_PARSE "prompt is not allowed in rules"
+--- input.jh
+rule check {
+  const x = prompt "ask"
+}
+workflow default {
+  ensure check()
+}
+
+=== unterminated script block
+# @expect error E_PARSE "unterminated script block"
+--- input.jh
+script broken {
+  echo hello
+
+=== metadata: single-quoted array element
+# @expect error E_PARSE "single-quoted strings are not supported"
+--- input.jh
+config {
+  runtime.workspace = [
+    '.:/jaiph/workspace:rw'
+  ]
+}
+workflow default {
+  log "ok"
+}
+
+=== metadata: unquoted array element
+# @expect error E_PARSE "array elements must be quoted strings"
+--- input.jh
+config {
+  runtime.workspace = [
+    unquoted_value
+  ]
+}
+workflow default {
+  log "ok"
+}
+
+=== metadata: unclosed array
+# @expect error E_PARSE "array not closed"
+--- input.jh
+config {
+  runtime.workspace = [
+    ".:/jaiph/workspace:rw"
+
+=== unterminated test block
+# @expect error E_PARSE "unterminated test block"
+--- input.test.jh
+import "lib.jh" as lib
+
+test "broken test" {
+  out = lib.default
+--- lib.jh
+workflow default {
+  log "ok"
+}
+
+=== mock function deprecated
+# @expect error E_PARSE "mock function"
+--- input.test.jh
+import "lib.jh" as lib
+
+test "deprecated mock" {
+  mock function some_func {
+    echo "mocked"
+  }
+  out = lib.default
+}
+--- lib.jh
+script some_func {
+  echo "real"
+}
+workflow default {
+  run some_func()
+}
+
+=== send rhs: unterminated braced interpolation
+# @expect error E_PARSE "unterminated ${...} in send right-hand side"
+--- input.jh
+channel findings
+workflow default {
+  findings <- ${unclosed
+}
+
+=== send rhs: command substitution inside braced interpolation
+# @expect error E_PARSE "send right-hand side must be"
+--- input.jh
+channel findings
+workflow default {
+  findings <- ${val$(cmd)}
+}
+
+=== inline script: unexpected content after
+# @expect error E_PARSE "unexpected content after inline script"
+--- input.jh
+workflow default {
+  run script("echo hello") extra_stuff
+}
+
+=== inline script: unterminated parentheses
+# @expect error E_PARSE "unterminated inline script parentheses"
+--- input.jh
+workflow default {
+  run script("echo hello"
+}

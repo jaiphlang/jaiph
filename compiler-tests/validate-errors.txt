@@ -199,3 +199,55 @@ workflow default {
 workflow default {
   ensure ghost.guard()
 }
+
+=== match: missing wildcard arm
+# @expect error E_VALIDATE "match must have exactly one wildcard (_) arm"
+--- input.jh
+workflow default {
+  const x = "hello"
+  return x match {
+    "hello" => "yes"
+    "world" => "no"
+  }
+}
+
+=== match: multiple wildcard arms
+# @expect error E_VALIDATE "match must have exactly one wildcard (_) arm, found multiple"
+--- input.jh
+workflow default {
+  const x = "hello"
+  return x match {
+    "hello" => "yes"
+    _ => "maybe"
+    _ => "no"
+  }
+}
+
+=== ensure recover in rules (caught at parse time)
+# NOTE: unreachable at validate layer — parser (workflow-brace.ts) catches this first as E_PARSE.
+# Covered by parse-errors.txt "brace-if: ensure recover in rules".
+# @expect error E_PARSE "ensure ... recover is not allowed in rules"
+--- input.jh
+rule sub_rule {
+  return "ok"
+}
+rule check {
+  ensure sub_rule() recover {
+    log "recovering"
+  }
+}
+workflow default {
+  ensure check()
+}
+
+=== const prompt in rules (caught at parse time)
+# NOTE: unreachable at validate layer — parser (workflow-brace.ts) catches this first as E_PARSE.
+# Covered by parse-errors.txt "brace-if: const prompt in rules".
+# @expect error E_PARSE "prompt is not allowed in rules"
+--- input.jh
+rule check {
+  const x = prompt "ask"
+}
+workflow default {
+  ensure check()
+}
