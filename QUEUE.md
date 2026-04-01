@@ -12,40 +12,6 @@ Process rules:
 
 ---
 
-## npm publish on tag via trusted publishing + post-publish global install smoke <!-- dev-ready -->
-
-**Goal**  
-Add a CI job that publishes the package to npm when a version tag is pushed, using **trusted publishers** (OIDC to npm — no long-lived `NPM_TOKEN` or other repo secrets for publish auth). Immediately after a successful publish, run a smoke step that installs the package globally and confirms the CLI matches the normal install path (same binary name and basic `jaiph --help` / `jaiph` entry behavior as documented for `npm install jaiph` / installer flows).
-
-**Context**
-
-- npm supports **Trusted Publishing** (OpenID Connect) so GitHub Actions can publish without storing npm credentials in GitHub secrets.
-- The package already defines the `jaiph` CLI in `package.json` `bin`; global install must expose that same command name and behavior.
-- Today, release may be manual; this task automates tag-driven release and catches broken publishes before users do.
-
-**Scope**
-
-1. **npm account / package setup** (manual, documented in task notes or `docs/contributing.md` briefly): enable Trusted Publishing for the `jaiph` package on npmjs.com, linked to this GitHub repo and the workflow file that will call `npm publish`.
-2. **GitHub Actions workflow** (new job or extend `.github/workflows/ci.yml` / dedicated `release.yml`):
-   - Trigger on `push` of tags matching `v*` (or the project’s tag convention — align with existing `package.json` version / git tag checks already in CI).
-   - Permissions: `id-token: write` (required for OIDC).
-   - Steps: checkout, `npm ci`, `npm run build` (if needed for a clean publish), then `npm publish --provenance` (or current best practice for trusted publishing).
-   - Do **not** add `NODE_AUTH_TOKEN` from a classic npm token for publish; use the trusted-publisher flow npm documents for GitHub Actions.
-3. **Post-publish verification step** (same workflow, must run only after publish succeeds):
-   - Install globally, e.g. `npm install -g jaiph@<exact-published-version>` (use the version from the tag or from `package.json` after publish).
-   - Assert the CLI on `PATH` is the published one: e.g. `jaiph --version` matches expected version, and `command -v jaiph` resolves.
-   - Smoke: `jaiph --help` (or minimal subcommand) exits 0 and output matches expectations for **global** install — same UX as a local/project install (no duplicate or differently named binary).
-   - Optionally compare `jaiph` shim behavior to `npx jaiph` in the same job for parity (lightweight check).
-4. **Documentation**: one short paragraph in contributor or release docs: tags trigger CI publish; no npm token in repo secrets for this path.
-
-**Acceptance criteria**
-
-- Pushing a release tag runs publish via trusted publishing (no classic NPM publish secret committed or required for that job).
-- The job fails if publish fails or if the post-step global install does not expose `jaiph` with the same CLI contract as documented for normal installs.
-- `npm i -g` verification runs automatically in CI after publish, not only manually.
-
----
-
 ## Assert error locations in txtar compiler tests <!-- dev-ready -->
 
 **Goal**  

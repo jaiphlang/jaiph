@@ -169,6 +169,10 @@ The project uses GitHub Actions (`.github/workflows/ci.yml`). Every push trigger
 | **Getting started (local)** | `ubuntu-latest` | Builds and serves the Jekyll documentation site locally (`bundle exec jekyll serve` on `127.0.0.1:4000`), waits for it to respond, smoke-checks key pages with `curl`, then runs the **Playwright landing-page sample verification** (`npx playwright test`). The Playwright step builds Jaiph, extracts sample source and expected output from the served HTML, verifies source parity with `examples/*.jh`, and runs deterministic samples through the CLI. No dependency on `jaiph.org`. |
 | **E2E install and CLI workflow (windows-latest + wsl)** | `windows-latest` | Detects an available WSL distro, installs Node inside it, and runs `npm run test:e2e` under WSL. Skipped when no distro is present on the runner image. |
 
+### npm publish on tag (trusted publishing)
+
+Pushing a version tag (`v*`) triggers `.github/workflows/release.yml`, which publishes to npm using **trusted publishing** (OIDC). No classic `NPM_TOKEN` secret is stored in the repo. After a successful publish, a smoke job installs `jaiph` globally and verifies `--version` and `--help` match expectations. The npm package must have trusted publishing enabled for the `jaiphlang/jaiph` repo and `release.yml` workflow on npmjs.com.
+
 ### Local docs site (Jekyll)
 
 The **Getting started (local)** CI job validates that the documentation site under `docs/` can be built and served from source. It uses Ruby 3.2 with `bundler-cache`, runs `bundle exec jekyll serve --host 127.0.0.1 --port 4000` in the background, and polls `http://127.0.0.1:4000/` for up to 30 seconds before asserting HTTP 200 on `/` and `/getting-started`.

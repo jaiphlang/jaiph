@@ -1,8 +1,10 @@
 {
   "name": "jaiph",
   "version": "0.6.0",
-  "private": true,
   "description": "jaiph compiler/transpiler",
+  "files": [
+    "dist/src/"
+  ],
   "type": "commonjs",
   "bin": {
     "jaiph": "dist/src/cli.js"
