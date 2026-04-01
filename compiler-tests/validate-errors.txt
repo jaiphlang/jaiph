@@ -223,6 +223,62 @@ workflow default {
   }
 }
 
+=== shell redirection in ensure args rejected
+# @expect error E_PARSE "shell redirection"
+--- input.jh
+rule check {
+  return "ok"
+}
+workflow default {
+  ensure check() | grep ok
+}
+
+=== run in workflow targeting a rule is rejected
+# @expect error E_VALIDATE "must be called with ensure, not run"
+--- input.jh
+rule check {
+  return "ok"
+}
+workflow default {
+  run check()
+}
+
+=== run in rule targeting a rule is rejected
+# @expect error E_VALIDATE "must be called with ensure, not run"
+--- input.jh
+rule other_rule {
+  return "ok"
+}
+rule check {
+  run other_rule()
+}
+workflow default {
+  ensure check()
+}
+
+=== ensure rejects local script reference
+# @expect error E_VALIDATE "cannot be called with ensure"
+--- input.jh
+script my_script {
+  echo ok
+}
+workflow default {
+  ensure my_script()
+}
+
+=== run async is rejected in rules
+# @expect error E_VALIDATE "run async is not allowed in rules"
+--- input.jh
+workflow helper {
+  log "hi"
+}
+rule check {
+  run async helper()
+}
+workflow default {
+  ensure check()
+}
+
 === ensure recover in rules (caught at parse time)
 # NOTE: unreachable at validate layer — parser (workflow-brace.ts) catches this first as E_PARSE.
 # Covered by parse-errors.txt "brace-if: ensure recover in rules".
@@ -251,3 +307,106 @@ rule check {
 workflow default {
   ensure check()
 }
+
+=== returns schema cannot be empty
+# @expect error E_SCHEMA "returns schema cannot be empty"
+--- input.jh
+workflow default {
+  result = prompt "classify" returns ""
+}
+
+=== returns schema rejects array types
+# @expect error E_SCHEMA "returns schema must be flat"
+--- input.jh
+workflow default {
+  result = prompt "classify" returns "{ items: [string] }"
+}
+
+=== returns schema rejects union types
+# @expect error E_SCHEMA "returns schema must be flat"
+--- input.jh
+workflow default {
+  result = prompt "classify" returns "{ status: string | number }"
+}
+
+=== returns schema rejects malformed entry
+# @expect error E_SCHEMA "invalid returns schema entry"
+--- input.jh
+workflow default {
+  result = prompt "classify" returns "{ badentry }"
+}
+
+=== returns schema rejects unsupported type
+# @expect error E_SCHEMA "unsupported type"
+--- input.jh
+workflow default {
+  result = prompt "classify" returns "{ foo: array }"
+}
+
+=== run in workflow targeting a rule via import
+# @expect error E_VALIDATE "must be called with ensure, not run"
+--- main.jh
+import "lib.jh" as lib
+workflow default {
+  run lib.check()
+}
+--- lib.jh
+export rule check {
+  return "ok"
+}
+
+=== ensure imported workflow requires run
+# @expect error E_VALIDATE "must be called with run"
+--- main.jh
+import "lib.jh" as lib
+workflow default {
+  ensure lib.deploy()
+}
+--- lib.jh
+export workflow deploy {
+  log "deploying"
+}
+
+=== ensure rejects imported script
+# @expect error E_VALIDATE "cannot be called with ensure"
+--- main.jh
+import "lib.jh" as lib
+workflow default {
+  ensure lib.helper()
+}
+--- lib.jh
+script helper {
+  echo "ok"
+}
+workflow dummy {
+  log "ok"
+}
+
+=== run inside rule must target script not imported workflow
+# @expect error E_VALIDATE "run inside a rule must target a script"
+--- main.jh
+import "lib.jh" as lib
+rule check {
+  run lib.deploy()
+}
+workflow default {
+  ensure check()
+}
+--- lib.jh
+export workflow deploy {
+  log "deploying"
+}
+
+=== route with imported rule ref rejected
+# @expect error E_VALIDATE "must be called with ensure"
+--- main.jh
+import "lib.jh" as lib
+channel findings
+workflow default {
+  findings -> lib.check
+}
+--- lib.jh
+export rule check {
+  return "ok"
+}
+

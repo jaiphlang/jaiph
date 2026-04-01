@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   parseLabel,
   formatElapsedDuration,
+  formatRunningBottomLine,
   collectWorkflowChildren,
   buildRunTreeRows,
 } from "./progress";
@@ -369,4 +370,31 @@ test("buildRunTreeRows: does not re-expand visited workflows", () => {
   // But "in shared" log only appears once (not re-expanded from "other")
   const logRows = rows.filter((r) => r.rawLabel === "ℹ in shared");
   assert.equal(logRows.length, 1);
+});
+
+// --- formatElapsedDuration (additional) ---
+
+test("formatElapsedDuration: zero milliseconds", () => {
+  assert.equal(formatElapsedDuration(0), "0s");
+});
+
+test("formatElapsedDuration: sub-second precision", () => {
+  assert.equal(formatElapsedDuration(50), "0.1s");
+  assert.equal(formatElapsedDuration(999), "1s");
+});
+
+// --- formatRunningBottomLine ---
+
+test("formatRunningBottomLine: contains RUNNING and workflow name", () => {
+  // In non-TTY test env, style functions return plain text
+  const result = formatRunningBottomLine("default", 1.5);
+  assert.ok(result.includes("RUNNING"), "should contain RUNNING");
+  assert.ok(result.includes("workflow"), "should contain 'workflow'");
+  assert.ok(result.includes("default"), "should contain workflow name");
+  assert.ok(result.includes("1.5s"), "should contain elapsed time");
+});
+
+test("formatRunningBottomLine: formats elapsed with one decimal", () => {
+  const result = formatRunningBottomLine("deploy", 10.0);
+  assert.ok(result.includes("10.0s"), "should show one decimal place");
 });

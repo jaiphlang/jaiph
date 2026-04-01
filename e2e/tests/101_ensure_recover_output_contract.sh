@@ -190,12 +190,16 @@ e2e::pass "retry payload updates per attempt"
 e2e::section "no recover payload when rule succeeds"
 
 e2e::file "success_no_payload.jh" <<'EOF'
+script say_ok {
+  echo "all good"
+}
+
 script save_string_to_file {
   printf '%s' "$1" > "$2"
 }
 
 rule passes_first_try {
-  echo "all good"
+  run say_ok()
 }
 
 workflow default {

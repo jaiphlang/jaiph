@@ -13,8 +13,11 @@ e2e::section "Single-file run ignores sibling parse errors"
 
 # Given
 e2e::file "valid.jh" <<'EOF'
-workflow default {
+script say_ok {
   echo "valid-ok"
+}
+workflow default {
+  run say_ok()
 }
 EOF
 
@@ -33,11 +36,13 @@ e2e::expect_stdout "${run_out}" <<'EOF'
 Jaiph: Running valid.jh
 
 workflow default
+  ▸ script say_ok
+  ✓ script say_ok (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
-e2e::expect_out_files "valid.jh" 1
-e2e::expect_out "valid.jh" "default" "valid-ok"
+e2e::expect_out_files "valid.jh" 2
+e2e::expect_out "valid.jh" "say_ok" "valid-ok"
 
 # Note: jaiph build (directory mode) is no longer a user-facing CLI command.
 # Single-file jaiph run already ignores sibling parse errors (tested above).

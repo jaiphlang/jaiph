@@ -236,12 +236,12 @@ EOF
 e2e::file "ic_lib.test.jh" <<'EOF'
 import "ic_lib.jh" as ic
 
-test "inline run capture(in, log") {
+test "inline run capture in log" {
   out = ic.run_capture_log
   expectContain out "got: hello"
 }
 
-test "inline ensure capture(in, log") {
+test "inline ensure capture in log" {
   out = ic.ensure_capture_log
   expectContain out "status: ok"
 }
