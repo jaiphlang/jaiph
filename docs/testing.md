@@ -250,6 +250,63 @@ test "default workflow prints greeting" {
 }
 ```
 
+## Compiler tests (txtar format)
+
+Compiler tests verify parse and validate outcomes using a language-agnostic txtar format. Unlike the TypeScript-embedded tests in `src/`, these fixtures are plain text files that can be reused by alternative implementations (e.g. a Rust compiler).
+
+Test fixture files live in `compiler-tests/` as `.txt` files. Each file contains multiple test cases separated by `===` delimiters:
+
+```
+=== test name here
+# @expect ok
+--- input.jh
+workflow default {
+  log "hello"
+}
+
+=== another test
+# @expect error E_PARSE "unterminated workflow block"
+--- input.jh
+workflow default {
+  log "hello"
+```
+
+### Format rules
+
+- `=== <name>` starts a new test case. Everything until the next `===` (or EOF) belongs to that case.
+- `--- <filename>` starts a virtual file within the test case. Filenames must end in `.jh`.
+- `# @expect <directive>` declares the expected outcome and must appear before the first `---` marker.
+
+### Expect directives
+
+| Directive | Meaning |
+|-----------|---------|
+| `# @expect ok` | Parse + validate succeed with no errors |
+| `# @expect error E_CODE "substring"` | An error is thrown whose message contains both `E_CODE` and `substring` |
+
+### Single-file vs multi-file tests
+
+- **Single-file:** use `--- input.jh`. The runner compiles `input.jh`.
+- **Multi-file:** use `--- main.jh` as the entry file plus additional `--- lib.jh` etc. The runner compiles `main.jh`.
+
+The entry file is determined by priority: `main.jh` if present, otherwise `input.jh`, otherwise the first file.
+
+### Running compiler tests
+
+```bash
+npm run test:compiler
+```
+
+The runner discovers all `.txt` files in `compiler-tests/`, parses them, writes virtual files to a temp directory per case, runs `parsejaiph` + `validateReferences`, and asserts the expected outcome. Results are reported per test case via `node:test`. Compiler tests are also included in `npm test`.
+
+### Conventions
+
+- One `.txt` file per category (e.g. `valid.txt`, `parse-errors.txt`, `validate-errors.txt`).
+- Test names should be descriptive and unique within a file.
+- Keep test cases minimal — only include what is necessary to trigger the expected outcome.
+
+The format is documented in detail in `compiler-tests/README.md`.
+
 ## Stress and soak testing
 
 For concurrency-sensitive behavior (for example parallel inbox dispatch), the repository includes shell-based E2E scenarios that go beyond single native tests:
