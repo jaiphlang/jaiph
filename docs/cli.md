@@ -349,12 +349,14 @@ These variables apply to `jaiph run` and workflow execution. Variables marked **
 
 **Agent and prompt configuration:**
 
-- `JAIPH_AGENT_BACKEND` — prompt backend: `cursor` (default) or `claude`. Overrides in-file `agent.backend`. When set to `claude`, the Anthropic Claude CLI must be on PATH. See [Configuration](configuration.md).
+- `JAIPH_AGENT_BACKEND` — prompt backend: `cursor` (default), `claude`, or `codex`. Overrides in-file `agent.backend`. When set to `claude`, the Anthropic Claude CLI must be on PATH. When set to `codex`, `OPENAI_API_KEY` must be set. See [Configuration](configuration.md).
 - `JAIPH_AGENT_MODEL` — default model for `prompt` steps (overrides in-file `agent.default_model`).
 - `JAIPH_AGENT_COMMAND` — command for the Cursor backend (e.g. `cursor-agent`; overrides in-file `agent.command`).
 - `JAIPH_AGENT_TRUSTED_WORKSPACE` — trusted workspace directory for Cursor backend `--trust`. Defaults to project root.
 - `JAIPH_AGENT_CURSOR_FLAGS` — extra flags for Cursor backend (string, split on whitespace).
 - `JAIPH_AGENT_CLAUDE_FLAGS` — extra flags for Claude backend (string, split on whitespace).
+- `OPENAI_API_KEY` — API key for the codex backend. Required when `agent.backend` is `"codex"`.
+- `JAIPH_CODEX_API_URL` — endpoint URL for the codex backend (default: `https://api.openai.com/v1/chat/completions`). Use this to point at a compatible proxy or self-hosted endpoint.
 
 **Execution behavior:**
 

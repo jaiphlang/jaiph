@@ -4,7 +4,7 @@ export type JaiphConfig = {
   agent?: {
     defaultModel?: string;
     command?: string;
-    backend?: "cursor" | "claude";
+    backend?: "cursor" | "claude" | "codex";
     trustedWorkspace?: string;
     cursorFlags?: string;
     claudeFlags?: string;

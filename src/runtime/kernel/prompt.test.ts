@@ -48,18 +48,25 @@ describe("resolveConfig", () => {
   });
 });
 
+function makeConfig(overrides: Partial<PromptConfig> = {}): PromptConfig {
+  return {
+    backend: "cursor",
+    agentCommand: "cursor-agent",
+    model: "",
+    workspaceRoot: "/ws",
+    trustedWorkspace: "/ws",
+    cursorFlags: [],
+    claudeFlags: [],
+    codexApiKey: "",
+    codexApiUrl: "https://api.openai.com/v1/chat/completions",
+    promptFinalFile: "",
+    ...overrides,
+  };
+}
+
 describe("buildBackendArgs", () => {
   it("builds cursor args without model", () => {
-    const config = {
-      backend: "cursor",
-      agentCommand: "cursor-agent",
-      model: "",
-      workspaceRoot: "/ws",
-      trustedWorkspace: "/ws",
-      cursorFlags: [] as string[],
-      claudeFlags: [] as string[],
-      promptFinalFile: "",
-    };
+    const config = makeConfig();
     const { command, args } = buildBackendArgs(config, "test prompt");
     assert.equal(command, "cursor-agent");
     assert.ok(args.includes("--print"));
@@ -70,32 +77,14 @@ describe("buildBackendArgs", () => {
   });
 
   it("builds cursor args with model", () => {
-    const config = {
-      backend: "cursor",
-      agentCommand: "cursor-agent",
-      model: "gpt-4",
-      workspaceRoot: "/ws",
-      trustedWorkspace: "/ws",
-      cursorFlags: [] as string[],
-      claudeFlags: [] as string[],
-      promptFinalFile: "",
-    };
+    const config = makeConfig({ model: "gpt-4" });
     const { args } = buildBackendArgs(config, "test");
     assert.ok(args.includes("--model"));
     assert.ok(args.includes("gpt-4"));
   });
 
   it("builds claude args", () => {
-    const config = {
-      backend: "claude",
-      agentCommand: "cursor-agent",
-      model: "",
-      workspaceRoot: "/ws",
-      trustedWorkspace: "/ws",
-      cursorFlags: [] as string[],
-      claudeFlags: ["--max-tokens", "1000"] as string[],
-      promptFinalFile: "",
-    };
+    const config = makeConfig({ backend: "claude", claudeFlags: ["--max-tokens", "1000"] });
     const { command, args } = buildBackendArgs(config, "test");
     assert.equal(command, "claude");
     assert.ok(args.includes("-p"));
@@ -103,20 +92,6 @@ describe("buildBackendArgs", () => {
     assert.ok(args.includes("--max-tokens"));
   });
 });
-
-function makeConfig(overrides: Partial<PromptConfig> = {}): PromptConfig {
-  return {
-    backend: "cursor",
-    agentCommand: "cursor-agent",
-    model: "",
-    workspaceRoot: "/ws",
-    trustedWorkspace: "/ws",
-    cursorFlags: [],
-    claudeFlags: [],
-    promptFinalFile: "",
-    ...overrides,
-  };
-}
 
 describe("resolveModel", () => {
   it("returns explicit when model is set", () => {
@@ -206,16 +181,7 @@ describe("executePrompt", () => {
       } as NodeJS.WritableStream;
       const result = await executePrompt(
         "ignored",
-        {
-          backend: "cursor",
-          agentCommand: fakeAgent,
-          model: "",
-          workspaceRoot: root,
-          trustedWorkspace: root,
-          cursorFlags: [],
-          claudeFlags: [],
-          promptFinalFile: "",
-        },
+        makeConfig({ agentCommand: fakeAgent, workspaceRoot: root, trustedWorkspace: root }),
         stdout,
       );
       assert.equal(result.status, 0);
@@ -277,5 +243,145 @@ describe("tail watchdog helpers", () => {
     const selected = selectTailToKill(nodes, 100, 600);
     assert.ok(selected);
     assert.equal(selected?.pid, 320);
+  });
+});
+
+describe("codex backend", () => {
+  it("resolveConfig reads OPENAI_API_KEY and JAIPH_CODEX_API_URL", () => {
+    const config = resolveConfig({
+      JAIPH_AGENT_BACKEND: "codex",
+      OPENAI_API_KEY: "sk-test-key",
+      JAIPH_CODEX_API_URL: "https://custom.api/v1/chat/completions",
+    });
+    assert.equal(config.backend, "codex");
+    assert.equal(config.codexApiKey, "sk-test-key");
+    assert.equal(config.codexApiUrl, "https://custom.api/v1/chat/completions");
+  });
+
+  it("resolveConfig uses default codex API URL when env not set", () => {
+    const config = resolveConfig({
+      JAIPH_AGENT_BACKEND: "codex",
+      OPENAI_API_KEY: "sk-test",
+    });
+    assert.equal(config.codexApiUrl, "https://api.openai.com/v1/chat/completions");
+  });
+
+  it("buildBackendArgs returns codex-api command with model and url", () => {
+    const config = makeConfig({ backend: "codex", model: "o3" });
+    const { command, args } = buildBackendArgs(config, "test prompt");
+    assert.equal(command, "codex-api");
+    assert.ok(args.includes("--model"));
+    assert.ok(args.includes("o3"));
+    assert.ok(args.includes("--url"));
+  });
+
+  it("buildBackendArgs uses default model gpt-4o when model is empty", () => {
+    const config = makeConfig({ backend: "codex" });
+    const { args } = buildBackendArgs(config, "test");
+    assert.ok(args.includes("gpt-4o"));
+  });
+
+  it("resolveModel returns backend-default for codex without model", () => {
+    const res = resolveModel(makeConfig({ backend: "codex" }));
+    assert.equal(res.model, "");
+    assert.equal(res.reason, "backend-default");
+  });
+
+  it("resolveModel returns explicit for codex with model", () => {
+    const res = resolveModel(makeConfig({ backend: "codex", model: "o3" }));
+    assert.equal(res.model, "o3");
+    assert.equal(res.reason, "explicit");
+  });
+
+  it("executePrompt fails with actionable error when OPENAI_API_KEY is missing", async () => {
+    const stderrChunks: string[] = [];
+    const origWrite = process.stderr.write;
+    process.stderr.write = ((chunk: unknown) => {
+      stderrChunks.push(String(chunk));
+      return true;
+    }) as typeof process.stderr.write;
+    try {
+      const stdout = { write: () => true } as unknown as NodeJS.WritableStream;
+      const result = await executePrompt(
+        "test prompt",
+        makeConfig({ backend: "codex", codexApiKey: "" }),
+        stdout,
+      );
+      assert.equal(result.status, 1);
+      const errOutput = stderrChunks.join("");
+      assert.ok(errOutput.includes("OPENAI_API_KEY"), "error should mention OPENAI_API_KEY");
+    } finally {
+      process.stderr.write = origWrite;
+    }
+  });
+
+  it("executePrompt succeeds with mock HTTP server", async () => {
+    const http = require("node:http") as typeof import("node:http");
+    const server = http.createServer((req, res) => {
+      res.writeHead(200, { "Content-Type": "text/event-stream" });
+      res.write('data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n');
+      res.write('data: {"choices":[{"delta":{"content":" world"}}]}\n\n');
+      res.write("data: [DONE]\n\n");
+      res.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const port = (server.address() as { port: number }).port;
+    try {
+      const chunks: string[] = [];
+      const stdout = {
+        write: (chunk: unknown) => { chunks.push(String(chunk)); return true; },
+      } as unknown as NodeJS.WritableStream;
+      const result = await executePrompt(
+        "say hello",
+        makeConfig({
+          backend: "codex",
+          codexApiKey: "sk-test",
+          codexApiUrl: `http://localhost:${port}/v1/chat/completions`,
+        }),
+        stdout,
+      );
+      assert.equal(result.status, 0);
+      assert.equal(result.final, "Hello world");
+      const output = chunks.join("");
+      assert.ok(output.includes("Final answer:"), "should write Final answer header");
+      assert.ok(output.includes("Hello world"), "should contain streamed text");
+    } finally {
+      server.close();
+    }
+  });
+
+  it("executePrompt returns error on HTTP failure", async () => {
+    const http = require("node:http") as typeof import("node:http");
+    const server = http.createServer((_req, res) => {
+      res.writeHead(401, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: { message: "Invalid API key" } }));
+    });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const port = (server.address() as { port: number }).port;
+    const stderrChunks: string[] = [];
+    const origWrite = process.stderr.write;
+    process.stderr.write = ((chunk: unknown) => {
+      stderrChunks.push(String(chunk));
+      return true;
+    }) as typeof process.stderr.write;
+    try {
+      const stdout = { write: () => true } as unknown as NodeJS.WritableStream;
+      const result = await executePrompt(
+        "test",
+        makeConfig({
+          backend: "codex",
+          codexApiKey: "sk-bad",
+          codexApiUrl: `http://localhost:${port}/v1/chat/completions`,
+        }),
+        stdout,
+      );
+      assert.equal(result.status, 1);
+      const errOutput = stderrChunks.join("");
+      assert.ok(errOutput.includes("401"), "error should include status code");
+      assert.ok(errOutput.includes("Invalid API key"), "error should include API message");
+    } finally {
+      process.stderr.write = origWrite;
+      server.close();
+    }
   });
 });
