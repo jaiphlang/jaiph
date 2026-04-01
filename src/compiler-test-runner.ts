@@ -94,6 +94,7 @@ function parseVirtualFiles(lines: string[]): Map<string, string> {
 function entryFile(files: Map<string, string>): string {
   if (files.has("main.jh")) return "main.jh";
   if (files.has("input.jh")) return "input.jh";
+  if (files.has("input.test.jh")) return "input.test.jh";
   const first = files.keys().next().value;
   if (!first) throw new Error("No virtual files in test case");
   return first;
