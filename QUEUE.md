@@ -12,22 +12,6 @@ Process rules:
 
 ---
 
-## Testing: golden AST (or stable AST dump) for successful parses <!-- dev-ready -->
-
-**Goal**  
-Compiler txtar fixtures excel at expected errors and “this builds.” They do not lock in **what** the parser produced. Add a small, maintainable way to assert that successful samples map to the intended AST (or a stable serialization of it), so refactors cannot silently change tree shape.
-
-**Approach (pick and document one)**  
-- A test-only `serializeAstForTest(mod)` (or similar) that outputs deterministic JSON/text: stable key order, normalized arrays, and **locations stripped or optional** so line churn does not rewrite goldens on every edit.  
-- One golden file per focused `.jh` fixture (small, one concern each: params, `run`/`ensure` args, `log`, brace-if, prompt capture, imports).  
-- Optionally combine with a few **targeted** `assert.deepEqual` tests for hot paths if goldens feel heavy.
-
-**Acceptance criteria**  
-- At least a handful of fixtures with checked-in goldens; `npm test` fails when AST shape changes without updating goldens.  
-- Short note in `docs/` or contributor-facing text: txtar = errors/behavior; golden AST = parse tree shape.
-
----
-
 ## `jaiph serve` — expose workflows as an MCP server <!-- dev-ready -->
 
 **Goal**  

@@ -1,0 +1,6 @@
+import "lib.jh" as lib
+
+workflow default() {
+  run lib.setup()
+  ensure lib.check()
+}

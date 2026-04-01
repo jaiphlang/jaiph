@@ -1,0 +1,56 @@
+{
+  "channels": [],
+  "exports": [],
+  "imports": [],
+  "rules": [],
+  "scripts": [],
+  "workflows": [
+    {
+      "comments": [],
+      "name": "default",
+      "params": [],
+      "steps": [
+        {
+          "name": "input",
+          "type": "const",
+          "value": {
+            "bashRhs": "\"hello\"",
+            "kind": "expr"
+          }
+        },
+        {
+          "managed": {
+            "kind": "match",
+            "match": {
+              "arms": [
+                {
+                  "body": "\"greeting\"",
+                  "pattern": {
+                    "kind": "string_literal",
+                    "value": "hello"
+                  }
+                },
+                {
+                  "body": "\"farewell\"",
+                  "pattern": {
+                    "kind": "regex",
+                    "source": "^bye"
+                  }
+                },
+                {
+                  "body": "\"unknown\"",
+                  "pattern": {
+                    "kind": "wildcard"
+                  }
+                }
+              ],
+              "subject": "input"
+            }
+          },
+          "type": "return",
+          "value": "__match__"
+        }
+      ]
+    }
+  ]
+}

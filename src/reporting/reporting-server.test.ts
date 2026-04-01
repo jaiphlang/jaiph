@@ -129,7 +129,7 @@ test("run-registry marks stale running run as failed (SIGKILL detection)", () =>
     );
     const reg = createRunRegistry(resolveRunsRoot(root, "runs"));
     // First poll: run is detected as running.
-    pollRunRegistry(reg, Date.now(), { forceScan: true, staleThresholdMs: 1 });
+    pollRunRegistry(reg, Date.now(), { forceScan: true, staleThresholdMs: 60_000 });
     let entries = listRunEntries(reg);
     assert.equal(entries.length, 1);
     assert.equal(entries[0].status, "running");
@@ -137,7 +137,7 @@ test("run-registry marks stale running run as failed (SIGKILL detection)", () =>
     // Second poll: simulate time passing beyond the stale threshold.
     // The file mtime stays the same, and now - mtime > threshold.
     const farFuture = Date.now() + 120_000;
-    pollRunRegistry(reg, farFuture, { forceScan: false, staleThresholdMs: 1 });
+    pollRunRegistry(reg, farFuture, { forceScan: false, staleThresholdMs: 60_000 });
     entries = listRunEntries(reg);
     assert.equal(entries[0].status, "failed");
   } finally {

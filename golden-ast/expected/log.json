@@ -1,0 +1,28 @@
+{
+  "channels": [],
+  "exports": [],
+  "imports": [],
+  "rules": [],
+  "scripts": [],
+  "workflows": [
+    {
+      "comments": [],
+      "name": "default",
+      "params": [],
+      "steps": [
+        {
+          "message": "hello world",
+          "type": "log"
+        },
+        {
+          "message": "${USER} logged in",
+          "type": "log"
+        },
+        {
+          "message": "something went wrong",
+          "type": "logerr"
+        }
+      ]
+    }
+  ]
+}

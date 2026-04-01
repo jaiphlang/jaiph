@@ -1,0 +1,29 @@
+{
+  "channels": [],
+  "exports": [],
+  "imports": [],
+  "rules": [],
+  "scripts": [],
+  "workflows": [
+    {
+      "comments": [],
+      "name": "default",
+      "params": [],
+      "steps": [
+        {
+          "name": "answer",
+          "type": "const",
+          "value": {
+            "bodyKind": "string",
+            "kind": "prompt_capture",
+            "raw": "\"What is your name?\""
+          }
+        },
+        {
+          "message": "${answer}",
+          "type": "log"
+        }
+      ]
+    }
+  ]
+}

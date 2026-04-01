@@ -1,0 +1,95 @@
+{
+  "channels": [],
+  "exports": [],
+  "imports": [],
+  "rules": [
+    {
+      "comments": [],
+      "name": "ok",
+      "params": [],
+      "steps": [
+        {
+          "type": "run",
+          "workflow": {
+            "value": "ok_impl"
+          }
+        }
+      ]
+    },
+    {
+      "comments": [],
+      "name": "maybe",
+      "params": [],
+      "steps": [
+        {
+          "type": "run",
+          "workflow": {
+            "value": "maybe_impl"
+          }
+        }
+      ]
+    }
+  ],
+  "scripts": [
+    {
+      "body": "true",
+      "bodyKind": "string",
+      "comments": [],
+      "name": "ok_impl"
+    },
+    {
+      "body": "test -f /tmp/flag",
+      "bodyKind": "string",
+      "comments": [],
+      "name": "maybe_impl"
+    }
+  ],
+  "workflows": [
+    {
+      "comments": [],
+      "name": "default",
+      "params": [],
+      "steps": [
+        {
+          "condition": {
+            "kind": "ensure",
+            "ref": {
+              "value": "ok"
+            }
+          },
+          "elseIfBranches": [
+            {
+              "condition": {
+                "kind": "ensure",
+                "ref": {
+                  "value": "maybe"
+                }
+              },
+              "negated": false,
+              "thenSteps": [
+                {
+                  "message": "maybe",
+                  "type": "log"
+                }
+              ]
+            }
+          ],
+          "elseSteps": [
+            {
+              "message": "no",
+              "type": "log"
+            }
+          ],
+          "negated": false,
+          "thenSteps": [
+            {
+              "message": "yes",
+              "type": "log"
+            }
+          ],
+          "type": "if"
+        }
+      ]
+    }
+  ]
+}
