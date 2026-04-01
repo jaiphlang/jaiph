@@ -15,13 +15,19 @@ Jaiph is a composable scripting language and runtime for AI agent workflows. You
 curl -fsSL https://jaiph.org/install | bash
 ```
 
-This installs Jaiph to `~/.local/bin`. Verify with:
+This installs Jaiph to `~/.local/bin`. Alternatively, install from npm:
+
+```bash
+npm install -g jaiph
+```
+
+Verify with:
 
 ```bash
 jaiph --version
 ```
 
-If the command is not found, ensure `~/.local/bin` is in your `PATH`.
+If the command is not found, ensure `~/.local/bin` (installer) or the npm global bin directory is in your `PATH`.
 
 Switch versions at any time:
 

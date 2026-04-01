@@ -1,0 +1,80 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify tag matches package.json version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "Tag version ($TAG_VERSION) does not match package.json version ($PKG_VERSION)"
+            exit 1
+          fi
+
+      - name: Publish with provenance
+        run: npm publish --provenance --access public
+
+  smoke:
+    name: Post-publish global install smoke
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (for version reference)
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Determine published version
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Install globally
+        run: npm install -g "jaiph@${{ steps.version.outputs.version }}"
+
+      - name: Verify jaiph is on PATH
+        run: command -v jaiph
+
+      - name: Verify --version matches
+        run: |
+          ACTUAL="$(jaiph --version)"
+          EXPECTED="${{ steps.version.outputs.version }}"
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "Version mismatch: got '$ACTUAL', expected '$EXPECTED'"
+            exit 1
+          fi
+
+      - name: Smoke test --help
+        run: jaiph --help

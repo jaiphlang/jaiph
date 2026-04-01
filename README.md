@@ -7,6 +7,7 @@
 **Open Source · Powerful · Friendly**
 
 [![CI](https://github.com/jaiphlang/jaiph/actions/workflows/ci.yml/badge.svg)](https://github.com/jaiphlang/jaiph/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/jaiph)](https://www.npmjs.com/package/jaiph)
 
 ## What is Jaiph?
 
@@ -33,6 +34,12 @@ Requires `node` and `curl`. The script installs Jaiph automatically if needed.
 
 ```bash
 curl -fsSL https://jaiph.org/install | bash
+```
+
+Or install from npm:
+
+```bash
+npm install -g jaiph
 ```
 
 Verify: `jaiph --version`. Switch versions: `jaiph use nightly` or `jaiph use 0.6.0`.
