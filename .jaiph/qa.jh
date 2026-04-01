@@ -42,7 +42,7 @@ done
 
 script new_qa_gap_report_path = "echo \".jaiph/tmp/qa_gap_report_$(date +%Y-%m-%d_%H-%M-%S).md\""
 
-script write_gap_report_pointer = "printf '%s\\n' \"$1\" > .jaiph/tmp/qa_gap_report_active.txt"
+script write_gap_report_pointer = "printf '%s\n' \"$1\" > .jaiph/tmp/qa_gap_report_active.txt"
 
 script gap_report_nonempty = ```
 p="$(cat .jaiph/tmp/qa_gap_report_active.txt 2>/dev/null)" || return 1
@@ -55,7 +55,7 @@ p="$(cat .jaiph/tmp/qa_gap_report_active.txt)"
 cat "$p"
 ```
 
-script save_gap_report_file = "printf '%s\\n' \"$1\" > \"$2\""
+script save_gap_report_file = "printf '%s\n' \"$1\" > \"$2\""
 
 const analyze_gaps_prompt = "
     <role>

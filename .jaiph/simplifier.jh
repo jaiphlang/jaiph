@@ -95,7 +95,7 @@ workflow find_simplifications {
   ensure no_test_or_e2e_paths_changed()
 }
 
-script save_simplifier_report = "printf '%s\\n' \"$1\" > .jaiph/tmp/simplifier_report.md"
+script save_simplifier_report = "printf '%s\n' \"$1\" > .jaiph/tmp/simplifier_report.md"
 
 script read_simplifier_report = "cat .jaiph/tmp/simplifier_report.md"
 

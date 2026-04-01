@@ -12,7 +12,7 @@ Process rules:
 
 ---
 
-## Named workflow and rule parameters (breaking)
+## Named workflow and rule parameters (breaking) <!-- dev-ready -->
 
 **Goal**  
 Replace implicit positional `arg1`…`arg9` with **declared parameter names** on definitions, e.g. `workflow implement(task, role) { ... }` and `rule gate(path) { ... }`, so parameters are **known symbols** inside the body (compile-time resolution, arity checks, clearer docs). Call sites stay `run implement(expr, expr)` but names document intent and enable tooling.
@@ -27,6 +27,20 @@ Orchestration values are strings; reading a parameter must stay explicit (`"${ar
 3. **Runtime** — Bind call arguments to declared names (same as today’s `arg1`… map, but keyed by declared order).
 4. **Formatter** — Emit declared parameter lists.
 5. **Migration** — Breaking change: repo-wide update of `.jh` files, docs (`grammar.md`, `jaiph-skill.md`), compiler tests, E2E. Deprecation window optional; this queue assumes hard rewrite unless you add a compatibility shim task.
+
+Additionally samples like:
+
+workflow default {
+  const response = prompt "Say: Hello, I am [model name]!"
+  log "${response}"
+}
+
+may become:
+
+workflow default {
+  const response = prompt "Say: Hello, I am [model name]!"
+  log response
+}
 
 **Acceptance criteria**
 
