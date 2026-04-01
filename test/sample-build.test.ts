@@ -1872,13 +1872,9 @@ test("jaiph test inline mock prompt block with if/elif/else and first-match", ()
         "",
         'test "mock block first-match" {',
         "  mock prompt {",
-        '    if ${arg1} contains "greet" ; then',
-        '      respond "hello"',
-        '    elif ${arg1} contains "bye" ; then',
-        '      respond "goodbye"',
-        "    else",
-        '      respond "default"',
-        "    fi",
+        '    /greet/ => "hello"',
+        '    /bye/ => "goodbye"',
+        '    _ => "default"',
         "  }",
         "  out = m.default",
         '  expectContain out "hello"',
@@ -1902,7 +1898,7 @@ test("jaiph test inline mock prompt block with if/elif/else and first-match", ()
   }
 });
 
-test("jaiph test fails when no mock branch matches and no else", () => {
+test("jaiph test fails when no mock branch matches and no wildcard", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-test-mock-no-else-"));
   try {
     writeFileSync(
@@ -1920,11 +1916,9 @@ test("jaiph test fails when no mock branch matches and no else", () => {
       [
         'import "single.jh" as s',
         "",
-        'test "no else branch" {',
+        'test "no wildcard arm" {',
         "  mock prompt {",
-        '    if ${arg1} contains "other" ; then',
-        '      respond "never"',
-        "    fi",
+        '    /other/ => "never"',
         "  }",
         "  out = s.default",
         '  expectContain out "x"',
@@ -1943,7 +1937,7 @@ test("jaiph test fails when no mock branch matches and no else", () => {
       },
     });
 
-    assert.equal(testResult.status, 1, "expected test to fail when no branch matches, no else, and no backend in PATH");
+    assert.equal(testResult.status, 1, "expected test to fail when no branch matches, no wildcard, and no backend in PATH");
     assert.match(
       testResult.stderr + testResult.stdout,
       /workflow exited with status|no mock matched|no branch matched|expectContain failed|FAIL|not found|command not found/,

@@ -1,5 +1,5 @@
 import { jaiphError } from "../errors";
-import type { jaiphModule, WorkflowStepDef } from "../types";
+import type { jaiphModule, MatchExprDef, WorkflowStepDef } from "../types";
 import type { SubstitutionValidateEnv } from "./validate-substitution";
 import { validateManagedWorkflowShell } from "./validate-substitution";
 import type { RefResolutionContext, RefTargetKind } from "./validate-ref-resolution";
@@ -60,6 +60,37 @@ function validateNoShellRedirection(
     "E_VALIDATE",
     `shell redirection (>, >>, |, &) is not supported with ${keyword}; use a script block for shell operations`,
   );
+}
+
+function validateMatchExpr(filePath: string, expr: MatchExprDef): void {
+  if (expr.arms.length === 0) {
+    throw jaiphError(filePath, expr.loc.line, expr.loc.col, "E_VALIDATE", "match must have at least one arm");
+  }
+  let wildcardCount = 0;
+  for (const arm of expr.arms) {
+    if (arm.pattern.kind === "wildcard") {
+      wildcardCount += 1;
+    }
+    if (arm.pattern.kind === "regex") {
+      try {
+        new RegExp(arm.pattern.source);
+      } catch {
+        throw jaiphError(
+          filePath,
+          expr.loc.line,
+          expr.loc.col,
+          "E_VALIDATE",
+          `invalid regex in match pattern: /${arm.pattern.source}/`,
+        );
+      }
+    }
+  }
+  if (wildcardCount === 0) {
+    throw jaiphError(filePath, expr.loc.line, expr.loc.col, "E_VALIDATE", "match must have exactly one wildcard (_) arm");
+  }
+  if (wildcardCount > 1) {
+    throw jaiphError(filePath, expr.loc.line, expr.loc.col, "E_VALIDATE", "match must have exactly one wildcard (_) arm, found multiple");
+  }
 }
 
 export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void {
@@ -309,9 +340,11 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           if (s.managed.kind === "run") {
             validateNoShellRedirection(ast.filePath, s.managed.ref.loc, "run", s.managed.args);
             validateRef(s.managed.ref, ast, refCtx, expectRunInRuleRef);
-          } else {
+          } else if (s.managed.kind === "ensure") {
             validateNoShellRedirection(ast.filePath, s.managed.ref.loc, "ensure", s.managed.args);
             validateRef(s.managed.ref, ast, refCtx, expectRuleRef);
+          } else if (s.managed.kind === "match") {
+            validateMatchExpr(ast.filePath, s.managed.match);
           }
         } else {
           validateReturnString(s.value, ast.filePath, s.loc.line, s.loc.col);
@@ -331,9 +364,15 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", "const ... = prompt is not allowed in rules");
         } else if (v.kind === "run_inline_script_capture") {
           // inline script capture — no ref to validate
+        } else if (v.kind === "match_expr") {
+          validateMatchExpr(ast.filePath, v.match);
         } else if (v.kind === "expr") {
           validateRuleStringCaptures(stripDQ(v.bashRhs), s.loc);
         }
+        return;
+      }
+      if (s.type === "match") {
+        validateMatchExpr(ast.filePath, s.expr);
         return;
       }
       if (s.type === "run_inline_script") {
@@ -496,9 +535,11 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           if (s.managed.kind === "run") {
             validateNoShellRedirection(ast.filePath, s.managed.ref.loc, "run", s.managed.args);
             validateRef(s.managed.ref, ast, refCtx, expectRunTargetRef);
-          } else {
+          } else if (s.managed.kind === "ensure") {
             validateNoShellRedirection(ast.filePath, s.managed.ref.loc, "ensure", s.managed.args);
             validateRef(s.managed.ref, ast, refCtx, expectRuleRef);
+          } else if (s.managed.kind === "match") {
+            validateMatchExpr(ast.filePath, s.managed.match);
           }
           return;
         }
@@ -528,10 +569,16 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           validateRef(v.ref, ast, refCtx, expectRuleRef);
         } else if (v.kind === "run_inline_script_capture") {
           // inline script capture — no ref to validate
+        } else if (v.kind === "match_expr") {
+          validateMatchExpr(ast.filePath, v.match);
         } else if (v.kind === "expr") {
           validateWorkflowStringCaptures(stripDQ(v.bashRhs), s.loc);
           validateDotFieldRefs(stripDQ(v.bashRhs), s.loc, promptSchemas);
         }
+        return;
+      }
+      if (s.type === "match") {
+        validateMatchExpr(ast.filePath, s.expr);
         return;
       }
       if (s.type === "run_inline_script") {

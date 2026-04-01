@@ -243,7 +243,7 @@ test("ACCEPTANCE: unsupported top-level statement fails with E_PARSE", () => {
   );
 });
 
-test("ACCEPTANCE: malformed mock prompt block (respond without if) fails with E_PARSE", () => {
+test("ACCEPTANCE: malformed mock prompt block (invalid pattern) fails with E_PARSE", () => {
   assert.throws(
     () =>
       parsejaiph(
@@ -259,11 +259,11 @@ test("ACCEPTANCE: malformed mock prompt block (respond without if) fails with E_
         ].join("\n"),
         "/fake/t.test.jh",
       ),
-    /E_PARSE.*respond must follow if\/elif/,
+    /E_PARSE.*match pattern must be/,
   );
 });
 
-test("ACCEPTANCE: unterminated mock prompt block (missing fi and }) fails with E_PARSE", () => {
+test("ACCEPTANCE: unterminated mock prompt block fails with E_PARSE", () => {
   assert.throws(
     () =>
       parsejaiph(
@@ -272,15 +272,12 @@ test("ACCEPTANCE: unterminated mock prompt block (missing fi and }) fails with E
           "",
           'test "unterminated" {',
           "  mock prompt {",
-          '    if ${arg1} contains "x" ; then',
-          '      respond "y"',
-          "  }",
-          "}",
+          '    "x" => "y"',
           "",
         ].join("\n"),
         "/fake/t.test.jh",
       ),
-    /E_PARSE.*mock prompt block/,
+    /E_PARSE.*unterminated match block/,
   );
 });
 

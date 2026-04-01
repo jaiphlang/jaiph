@@ -20,6 +20,22 @@ export interface WorkflowRefDef {
 }
 
 /** RHS of `const name = ...` in workflows/rules (P10). */
+export type MatchPatternDef =
+  | { kind: "string_literal"; value: string }
+  | { kind: "regex"; source: string }
+  | { kind: "wildcard" };
+
+export interface MatchArmDef {
+  pattern: MatchPatternDef;
+  body: string;
+}
+
+export interface MatchExprDef {
+  subject: string;
+  arms: MatchArmDef[];
+  loc: SourceLoc;
+}
+
 export type ConstRhs =
   | { kind: "expr"; bashRhs: string }
   | { kind: "run_capture"; ref: WorkflowRefDef; args?: string }
@@ -30,7 +46,8 @@ export type ConstRhs =
       loc: SourceLoc;
       returns?: string;
     }
-  | { kind: "run_inline_script_capture"; body: string; shebang?: string; args?: string };
+  | { kind: "run_inline_script_capture"; body: string; shebang?: string; args?: string }
+  | { kind: "match_expr"; match: MatchExprDef };
 
 export type IfConditionDef =
   | { kind: "ensure"; ref: RuleRefDef; args?: string }
@@ -170,10 +187,11 @@ export type WorkflowStepDef =
       type: "return";
       value: string;
       loc: SourceLoc;
-      /** When set, return value comes from a managed run/ensure call instead of the literal `value`. */
+      /** When set, return value comes from a managed run/ensure/match instead of the literal `value`. */
       managed?:
         | { kind: "run"; ref: WorkflowRefDef; args?: string }
-        | { kind: "ensure"; ref: RuleRefDef; args?: string };
+        | { kind: "ensure"; ref: RuleRefDef; args?: string }
+        | { kind: "match"; match: MatchExprDef };
     }
   | {
       type: "run_inline_script";
@@ -188,6 +206,10 @@ export type WorkflowStepDef =
       command: string;
       loc: SourceLoc;
       captureName?: string;
+    }
+  | {
+      type: "match";
+      expr: MatchExprDef;
     };
 
 export interface EnvDeclDef {
@@ -241,8 +263,7 @@ export type TestStepDef =
   | { type: "test_mock_prompt"; response: string; loc: SourceLoc }
   | {
       type: "test_mock_prompt_block";
-      branches: Array<{ pattern: string; response: string }>;
-      elseResponse?: string;
+      arms: MatchArmDef[];
       loc: SourceLoc;
     }
   | {

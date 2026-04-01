@@ -43,18 +43,25 @@ function writeMockDispatchScript(
   step: Extract<TestStepDef, { type: "test_mock_prompt_block" }>,
   dir: string,
 ): string {
-  // Test DSL uses `if ${arg1} contains` for the prompt text; the dispatch script receives it as bash $1.
+  const escSh = (s: string): string => s.replace(/'/g, "'\\''");
   const lines: string[] = ["#!/usr/bin/env bash", "set -euo pipefail", 'prompt="${1:-}"'];
-  for (let i = 0; i < step.branches.length; i += 1) {
-    const { pattern, response } = step.branches[i];
-    const cond = i === 0 ? "if" : "elif";
-    lines.push(`${cond} [[ "$prompt" == *'${pattern.replace(/'/g, "'\\''")}'* ]]; then`);
-    lines.push(`  printf '%s' '${response.replace(/'/g, "'\\''")}'`);
+  let first = true;
+  for (const arm of step.arms) {
+    const cond = first ? "if" : "elif";
+    first = false;
+    if (arm.pattern.kind === "string_literal") {
+      lines.push(`${cond} [[ "$prompt" == '${escSh(arm.pattern.value)}' ]]; then`);
+    } else if (arm.pattern.kind === "regex") {
+      lines.push(`${cond} [[ "$prompt" =~ ${arm.pattern.source} ]]; then`);
+    } else {
+      // wildcard — always matches; emit as else
+      lines.push("else");
+    }
+    const response = arm.body.replace(/^["']|["']$/g, "").replace(/\\"/g, '"').replace(/\\n/g, "\n").replace(/\\\\/g, "\\");
+    lines.push(`  printf '%s' '${escSh(response)}'`);
   }
-  if (step.elseResponse !== undefined) {
-    lines.push("else");
-    lines.push(`  printf '%s' '${step.elseResponse.replace(/'/g, "'\\''")}'`);
-  } else {
+  // If no wildcard arm, add a fallback that errors
+  if (!step.arms.some((a) => a.pattern.kind === "wildcard")) {
     lines.push("else");
     lines.push('  echo "jaiph: no mock matched prompt (no branch matched). Prompt preview: ${prompt:0:80}..." >&2');
     lines.push("  exit 1");

@@ -12,48 +12,6 @@ Process rules:
 
 ---
 
-## Pattern matching on strings (Rust-style `match`) <!-- dev-ready -->
-
-**Goal**  
-Add `match` on string values with **string literals** and **JavaScript regex literals** as patterns, Rust-like syntax: `match <expr> { <pattern> => <body>, ... }`.
-
-**Context**
-
-- Only two pattern kinds: **string literals** and **regex literals** (e.g. `/[a-z]+/` — same as JS regex).
-- **Exhaustiveness:** every `match` must include exactly **one** default arm using `_` (wildcard). Duplicate `_` arms are a compile-time error.
-- **Evaluation order:** arms are processed **top to bottom**; the **first** matching arm runs and **only that arm** applies (no fall-through to later arms).
-- No other pattern kinds (no numbers, destructuring, etc.) in this task.
-- **Expression form:** `match` must be a valid **expression**, not only a standalone statement, so the value of the chosen arm is the value of the whole `match` — e.g. `return x match { ... }` (subject `x`, then `match { ... }` as the return value).
-- **Mocks:** **Hard-remove** the `contains` keyword from `mock prompt { }` (no deprecation window). Prompt dispatch in `*.test.jh` should use the same **pattern matching** model (literals + regex + `_`) as workflows — no parallel substring / `contains` mini-language.
-
-**Key files:**
-- `src/parse/*` — new statement/expression form for `match`
-- `src/types.ts` — AST for match arms
-- `src/runtime/kernel/node-workflow-runtime.ts` — evaluate subject, test patterns top-to-bottom, run selected arm only
-- `src/transpile/validate.ts` — ensure exactly one `_`; validate regex literals
-- `src/parse/tests.ts`, `src/runtime/kernel/node-test-runner.ts` — delete `contains`-based mock prompt parsing/generation; replace with `match`-driven mock dispatch
-- `docs/testing.md`, `docs/index.html` — mock prompt docs after migration
-
-**Scope**
-
-1. Parse `match x { "lit" => ..., /re/ => ..., _ => ... }`.
-2. Validate: exactly one `_` arm; reject `match` with zero or multiple `_` at compile time.
-3. Runtime: string equality for literal arms; `RegExp` test for regex arms; evaluate arms in source order, first match wins, no further arms run.
-4. Implement **`match` as an expression**: each arm body produces a value; the `match` expression evaluates to the selected arm’s value (so `return x match { ... }` and assigning `y = z match { ... }` work).
-5. **Mocks:** remove `if ${arg1} contains` / `elif ... contains` / `respond` (or equivalent) entirely; re-express `mock prompt { ... }` using pattern `match` on the prompt text (same pattern rules as workflow `match`), updating parser, generated dispatch, fixtures, and docs.
-6. Tests: literals, regex, default arm, missing `_` / duplicate `_` rejected at compile time; returnable `match`; migrated mock tests with no `contains`.
-7. Docs: grammar + examples (ordering semantics, expression form, mock prompt shape).
-
-**Acceptance criteria**
-
-- Valid `match` runs with correct branch selection; only one arm executes.
-- Missing `_` or more than one `_` is a compile-time error.
-- Only string and `/.../` regex patterns allowed; invalid forms have clear errors.
-- **`return x match { ... }`** (and other expression positions) type-check / parse and return the matched arm’s value.
-- **`contains` does not appear** in mock prompt syntax or test parser; prompt mocks use pattern `match` only.
-
----
-
 ## Unify string quoting across Jaiph <!-- dev-ready -->
 
 **Goal**  

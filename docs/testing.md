@@ -71,25 +71,25 @@ Both double-quoted and single-quoted strings are accepted. Standard escape seque
 
 ### Mock prompt (content-based dispatch)
 
-Dispatches different responses based on the prompt text. `${arg1}` is the prompt text; matching uses substring match and the first matching branch wins.
+Dispatches different responses based on the prompt text using pattern matching. Arms are tested top-to-bottom; the first match wins.
 
 ```jaiph
 mock prompt {
-  if ${arg1} contains "greeting" ; then
-    respond "hello"
-  elif ${arg1} contains "farewell" ; then
-    respond "goodbye"
-  else
-    respond "default response"
-  fi
+  /greeting/ => "hello"
+  /farewell/ => "goodbye"
+  _ => "default response"
 }
 ```
 
-Each branch requires exactly one `respond "..."` line (double-quoted only). Without an `else` branch, an unmatched prompt fails the test.
+Each arm is `pattern => "response"`. Patterns can be:
+
+- **String literal** (`"greeting"`) — exact match against the prompt text
+- **Regex** (`/greeting/`) — tested against the prompt text
+- **Wildcard** (`_`) — matches anything (like a default/else branch)
+
+Without a `_` wildcard arm, an unmatched prompt fails the test.
 
 Do not combine `mock prompt { ... }` with inline `mock prompt "..."` in the same test block — when a block mock is present, inline queue entries are ignored.
-
-The `contains` keyword is only recognized inside `mock prompt { }` blocks in test files. It is not a general Jaiph keyword.
 
 ### Mock workflow
 

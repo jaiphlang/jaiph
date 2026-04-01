@@ -595,6 +595,14 @@ Jaiph: Running async.jh
                         script to express command-based tests.
                     </dd>
 
+                    <dt><code>match $var { "lit" =&gt; …, /re/ =&gt; …, _ =&gt; … }</code></dt>
+                    <dd>Pattern match on a string value. Arms are tested top-to-bottom; first match wins.
+                        Patterns: string literal (exact), regex, or <code>_</code> wildcard.
+                        Usable as a statement, expression (<code>const x = $var match { … }</code>),
+                        or with <code>return</code> (<code>return $var match { … }</code>).
+                        Exactly one <code>_</code> wildcard arm is required.
+                    </dd>
+
                     <dt><code>log "message"</code> &middot; <code>logerr "message"</code></dt>
                     <dd>Emit informational or error output to the run tree while keeping workflow execution explicit and
                         auditable. Terminal and tree text use <code>echo -e</code>-style backslash escapes; structured
@@ -619,9 +627,9 @@ Jaiph: Running async.jh
                             href="testing">Testing</a>.</dd>
 
                     <dt><code>mock prompt "..."</code> &middot;
-                        <code>mock prompt { if ${arg1} contains "..." ; then respond "..." ; fi }</code>
+                        <code>mock prompt { /pattern/ =&gt; "response", _ =&gt; "default" }</code>
                     </dt>
-                    <dd>Stub prompt calls with fixed responses or content-based branching so tests stay deterministic.
+                    <dd>Stub prompt calls with fixed responses or pattern-based dispatch so tests stay deterministic.
                     </dd>
 
                     <dt><code>mock workflow</code> &middot; <code>mock rule</code> &middot; <code>mock script</code>
