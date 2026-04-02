@@ -33,7 +33,7 @@ Switch versions at any time:
 
 ```bash
 jaiph use nightly
-jaiph use 0.6.0
+jaiph use 0.7.0
 ```
 
 ## Quick try

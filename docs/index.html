@@ -76,14 +76,14 @@ layout: null
 
                 <div class="code-tab-panel is-active" data-panel="try-run-sample">
                     <pre><code class="language-bash static-highlight"><span class="code-line">curl -fsSL https://jaiph.org/run | bash -s '</span><span class="code-line"><span class="ralph-keyword">workflow</span> <span class="ralph-definition">default</span>() {</span><span class="code-line">  <span class="ralph-keyword">const</span> <span class="ralph-variable">response</span> <span class="ralph-operator">=</span> <span class="ralph-keyword">prompt</span> <span class="ralph-string">"Say: Hello, I am [model name]!"</span></span><span class="code-line">  <span class="ralph-keyword">log</span> <span class="ralph-string">"${response}"</span></span><span class="code-line">}'</span></code></pre>
-                    <p class="small">Installs Jaiph <strong>v0.6.0</strong> to <strong>~/.local/bin</strong> (if not
+                    <p class="small">Installs Jaiph <strong>v0.7.0</strong> to <strong>~/.local/bin</strong> (if not
                         already
                         installed), and runs the sample workflow with <a href="https://cursor.com/docs/cli/installation" target="_blank" rel="noopener noreferrer">Cursor CLI</a> agent backend (the default one). See <a href="#samples">more samples</a>!</p>
                 </div>
 
                 <div class="code-tab-panel" data-panel="try-install-only">
                     <pre><code class="language-bash">curl -fsSL https://jaiph.org/install | bash</code></pre>
-                    <p class="small">The installer will install the version <strong>0.6.0</strong> of Jaiph to
+                    <p class="small">The installer will install the version <strong>0.7.0</strong> of Jaiph to
                         <strong>~/.local/bin</strong>. To switch versions, use <code>jaiph use nightly</code>
                         or <code>jaiph use &lt;version&gt;</code> to switch.
                     </p>
