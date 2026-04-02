@@ -375,6 +375,8 @@ Shell harnesses and CI expectations for the full repo are described in [Contribu
 
 E2E tests compare full CLI output and full artifact file contents by default. Use `e2e::expect_stdout`, `e2e::expect_out`, `e2e::expect_file`, `e2e::expect_run_file`, or `e2e::assert_equals`. Substring checks (`e2e::assert_contains`) require an inline comment justifying the exception. For the full policy (two surfaces, full equality, `assert_contains` exceptions, normalization), see [Contributing — E2E testing](contributing.md#e2e-testing). For the on-disk tree under `.jaiph/runs/`, see [Architecture — Durable artifact layout](architecture#durable-artifact-layout).
 
+Every `.jh` sample under `e2e/` must be wired into at least one test. Run `bash e2e/check_orphan_samples.sh` to detect unreferenced fixtures. See [Contributing — Orphan sample guard](contributing.md#orphan-sample-guard) for details.
+
 ## Landing-page sample verification
 
 The project includes a Playwright-based test (`tests/e2e-samples/landing-page.spec.ts`) that verifies landing-page code samples stay in sync with real CLI behavior. Run it with `npm run test:samples`. See [Contributing — Landing-page sample verification](contributing.md#landing-page-sample-verification-playwright) for details.
