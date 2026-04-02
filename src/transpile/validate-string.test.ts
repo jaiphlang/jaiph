@@ -535,6 +535,26 @@ test("invalid: ${x.field} where x has no schema fails at compile time", () => {
   });
 });
 
+test("invalid: ${undeclared} in log rejected with strict scope error", () => {
+  withTempDir("jaiph-str-unknown-interp-", (root) => {
+    writeJh(root, "m.jh", [
+      "workflow default() {",
+      '  log "value is ${ghost}"',
+      "}",
+    ]);
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      (err: Error) => {
+        assert.match(err.message, /unknown identifier "ghost" in log/);
+        assert.match(err.message, /declare it with `const`, use a capture, or add a workflow parameter/);
+        // Must not suggest ${ghost} as a workaround (it is already the ${} form and still rejected)
+        assert.doesNotMatch(err.message, /explicit interpolation/);
+        return true;
+      },
+    );
+  });
+});
+
 test("invalid: ${result.bogus} where bogus is not in schema fails at compile time", () => {
   withTempDir("jaiph-str-dot-badfield-", (root) => {
     writeJh(root, "m.jh", [

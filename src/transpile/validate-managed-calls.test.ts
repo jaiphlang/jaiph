@@ -398,6 +398,32 @@ test("E_PARSE: prompt capture requires const", () => {
   }
 });
 
+test("bare identifier arg: unknown name error does not suggest interpolation workaround", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-bare-no-hint-"));
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        'script greet = "echo \\"hello $1\\""',
+        "workflow default() {",
+        "  run greet(ghost)",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      (err: Error) => {
+        assert.match(err.message, /unknown identifier "ghost" used as bare argument/);
+        assert.doesNotMatch(err.message, /\$\{ghost\}/);
+        return true;
+      },
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("E_VALIDATE: ${arg1} in log requires a workflow parameter", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-arg1-interp-"));
   try {
