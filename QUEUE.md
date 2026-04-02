@@ -12,49 +12,6 @@ Process rules:
 
 ---
 
-## String and Script are distinct primitive types — AST + type checking <!-- dev-ready -->
-
-**Goal**  
-`string` and `script` are fundamentally different primitive types with non-overlapping operations. This distinction must be enforced as separate AST node types so that type checking at each call site is structural.
-
-A **string** can be interpolated, passed as an argument, and sent to an agent:
-```jaiph
-const greeting = "Say hello to ${name}."
-prompt greeting       # valid
-prompt "Say hello."   # valid — inline string literal
-run greeting          # compile error — strings are not executable
-```
-
-A **script** is an executable unit invoked with `run`:
-```jaiph
-script save = `printf '%s' "$1" > "$2"`
-run save(content, path)   # valid
-prompt save               # compile error — scripts are not promptable
-const x = save            # compile error — scripts are not values
-```
-
-**What needs fixing**
-
-1. **AST** (`src/types.ts`): Ensure `ScriptDef` and string bindings (`const` / env decl) are structurally distinct. The validator must track which names are scripts vs. strings in the symbol table.
-2. **Validator** (`src/transpile/validate.ts`): At every `prompt` call site (string body, identifier body), verify the referenced name is a string binding, not a script. Emit `E_VALIDATE: scripts are not promptable; use a string const instead`.
-3. **Validator** (`src/transpile/validate.ts`): At every `run` call site, verify the referenced name is a workflow or script, not a string const. Emit `E_VALIDATE: strings are not executable; use a script instead`.
-4. **Validator**: `const x = scriptName` where `scriptName` is a `ScriptDef` should be `E_VALIDATE: scripts are not values`.
-5. **Validator**: `${scriptName}` interpolation where `scriptName` is a `ScriptDef` should be `E_VALIDATE: scripts cannot be interpolated`.
-6. **Validator** (`src/transpile/validate-ref-resolution.ts`): Update ref resolution to distinguish script refs from string refs.
-7. **Docs** (`docs/grammar.md`): Add a "Types" section before syntax sections explaining the string/script distinction as the conceptual foundation.
-8. **Tests**: Add compiler tests for each invalid crossing (prompt a script, run a string, assign a script, interpolate a script).
-
-**Acceptance criteria**
-
-- `prompt scriptName` where `scriptName` is a `script` → `E_VALIDATE`.
-- `run constName` where `constName` is a `const` string → `E_VALIDATE`.
-- `const x = scriptName` → `E_VALIDATE`.
-- `log "${scriptName}"` → `E_VALIDATE`.
-- Valid usage (`prompt stringName`, `run scriptName`) works unchanged.
-- Error messages are clear and actionable.
-
----
-
 ## Optional parentheses at call sites when no arguments <!-- dev-ready -->
 
 **Goal**  
