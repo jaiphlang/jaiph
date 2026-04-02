@@ -98,8 +98,8 @@ rule current_branch(branch) {
   run current_branch_impl(branch)
 }
 
-workflow default() {
-  ensure current_branch(arg1)
+workflow default(branch) {
+  ensure current_branch(branch)
 }
 EOF
 

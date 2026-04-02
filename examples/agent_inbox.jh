@@ -8,12 +8,12 @@ workflow scanner() {
   findings <- "Found 3 issues in auth module"
 }
 
-workflow analyst() {
+workflow analyst(message, chan, sender) {
   log "Analyzing message from ${arg3} on channel ${arg2}..."
   report <- "Summary: ${arg1}"
 }
 
-workflow reviewer() {
+workflow reviewer(message, chan, sender) {
   log "Reviewing message from ${arg3} on channel ${arg2}..."
   logerr "Critical issue: ${arg1}"
 }

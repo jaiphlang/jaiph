@@ -49,12 +49,12 @@ workflow sender() {
 }
 
 script write_a = "echo \"a:$1\" > contract_a.txt"
-workflow receiver_a() {
+workflow receiver_a(message) {
   run write_a(arg1)
 }
 
 script write_b = "echo \"b:$1\" > contract_b.txt"
-workflow receiver_b() {
+workflow receiver_b(message) {
   run write_b(arg1)
 }
 

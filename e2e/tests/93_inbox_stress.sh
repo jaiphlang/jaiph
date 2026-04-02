@@ -132,7 +132,7 @@ workflow s10() {
 
 script sink_impl = "echo \"$1\" >> sink_all.txt"
 
-workflow sink() {
+workflow sink(message) {
   run sink_impl(arg1)
 }
 
@@ -198,19 +198,19 @@ workflow producer_c() {
 
 script target_x_impl = "echo \"x:$1\" >> fanout_log.txt"
 
-workflow target_x() {
+workflow target_x(message) {
   run target_x_impl(arg1)
 }
 
 script target_y_impl = "echo \"y:$1\" >> fanout_log.txt"
 
-workflow target_y() {
+workflow target_y(message) {
   run target_y_impl(arg1)
 }
 
 script target_z_impl = "echo \"z:$1\" >> fanout_log.txt"
 
-workflow target_z() {
+workflow target_z(message) {
   run target_z_impl(arg1)
 }
 
@@ -273,13 +273,13 @@ workflow sender() {
   ch_raw <- run emit_raw()
 }
 
-workflow processor() {
+workflow processor(message) {
   ch_processed <- run emit_processed(arg1)
 }
 
 script nested_sink_impl = "echo \"$1\" > nested_result.txt"
 
-workflow sink() {
+workflow sink(message) {
   run nested_sink_impl(arg1)
 }
 
@@ -403,13 +403,13 @@ workflow s5() {
 
 script t1_impl = "echo \"t1:$1\" >> artifact_log.txt"
 
-workflow t1() {
+workflow t1(message) {
   run t1_impl(arg1)
 }
 
 script t2_impl = "echo \"t2:$1\" >> artifact_log.txt"
 
-workflow t2() {
+workflow t2(message) {
   run t2_impl(arg1)
 }
 
@@ -476,13 +476,13 @@ workflow s3() {
 
 script soak_t1_impl = "echo \"t1:$1\" >> soak_log.txt"
 
-workflow t1() {
+workflow t1(message) {
   run soak_t1_impl(arg1)
 }
 
 script soak_t2_impl = "echo \"t2:$1\" >> soak_log.txt"
 
-workflow t2() {
+workflow t2(message) {
   run soak_t2_impl(arg1)
 }
 
@@ -596,7 +596,7 @@ workflow s10() {
 
 script seq_sink_impl = "echo \"$1\" >> seq_sink_all.txt"
 
-workflow sink() {
+workflow sink(message) {
   run seq_sink_impl(arg1)
 }
 

@@ -371,3 +371,19 @@ bash e2e/check_orphan_samples.sh
 On success the script prints `OK: no orphan e2e samples detected.` and exits 0. On failure it lists the unreferenced filenames and exits 1, with guidance to either wire them into a test, move them to `examples/`, or delete them.
 
 When adding a new `.jh` fixture to `e2e/`, make sure it is exercised by a test in `e2e/tests/` or imported by a file that is. If a sample exists purely for documentation or demonstration purposes, it belongs in `examples/` instead.
+
+### Example matrix guard
+
+Every `.jh` and `.test.jh` file under `examples/` must be accounted for in `e2e/tests/110_examples.sh`. The script maintains three arrays that together form the example matrix:
+
+| Array | Purpose |
+|-------|---------|
+| `COVERED_RUN` | Examples exercised via `jaiph run` with strict `e2e::expect_stdout` assertions. |
+| `COVERED_TEST` | Test companions (`*.test.jh`) exercised via `jaiph test`. |
+| `EXCLUDED` | Files that cannot run in E2E (e.g. CI-specific, require real agent backends). Each entry must have an inline comment explaining why. |
+
+An orphan guard at the bottom of the script fails CI if any example file is not listed in one of the three arrays. To add a new example:
+
+1. Place the `.jh` file in `examples/`.
+2. Add it to `COVERED_RUN`, `COVERED_TEST`, or `EXCLUDED` (with a comment).
+3. If covered, add a test section with strict `e2e::expect_stdout` and artifact assertions.

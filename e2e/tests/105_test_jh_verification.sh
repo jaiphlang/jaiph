@@ -31,8 +31,8 @@ workflow deploy() {
   run deploy_impl()
 }
 
-workflow default() {
-  ensure validate(arg1)
+workflow default(input) {
+  ensure validate(input)
   const response = prompt "summarize deployment"
   run deploy()
 }

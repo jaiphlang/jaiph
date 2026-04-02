@@ -21,7 +21,7 @@ workflow sender() {
 }
 
 script write_received = "echo \"$1\" > received.txt"
-workflow receiver() {
+workflow receiver(message) {
   run write_received(arg1)
 }
 
@@ -50,12 +50,12 @@ workflow producer() {
 }
 
 script write_consumer_a = "echo \"A got: $1\" > consumer_a.txt"
-workflow consumer_a() {
+workflow consumer_a(message) {
   run write_consumer_a(arg1)
 }
 
 script write_consumer_b = "echo \"B got: $1\" > consumer_b.txt"
-workflow consumer_b() {
+workflow consumer_b(message) {
   run write_consumer_b(arg1)
 }
 
@@ -124,7 +124,7 @@ workflow writer() {
 }
 
 script write_audited = "echo \"$1\" > audited.txt"
-workflow auditor() {
+workflow auditor(message) {
   run write_audited(arg1)
 }
 
@@ -158,12 +158,12 @@ workflow scanner() {
 }
 
 script emit_summary = "echo \"Summary: $1\""
-workflow analyst() {
+workflow analyst(message) {
   report <- run emit_summary(arg1)
 }
 
 script print_reviewed = "echo \"[reviewed] $1\""
-workflow reviewer() {
+workflow reviewer(message) {
   run print_reviewed(arg1)
 }
 
@@ -204,7 +204,7 @@ echo "msg=$1" > args.txt
 echo "channel=$2" >> args.txt
 echo "sender=$3" >> args.txt
 ```
-workflow consumer() {
+workflow consumer(message, chan, sender) {
   run write_receiver_args(arg1, arg2, arg3)
 }
 
@@ -238,12 +238,12 @@ workflow producer() {
 }
 
 script write_consumer_a_par = "echo \"A got: $1\" > consumer_a_par.txt"
-workflow consumer_a() {
+workflow consumer_a(message) {
   run write_consumer_a_par(arg1)
 }
 
 script write_consumer_b_par = "echo \"B got: $1\" > consumer_b_par.txt"
-workflow consumer_b() {
+workflow consumer_b(message) {
   run write_consumer_b_par(arg1)
 }
 
@@ -283,7 +283,7 @@ workflow sender_b() {
 }
 
 script append_sink_log = "echo \"$1\" >> sink_log.txt"
-workflow sink() {
+workflow sink(message) {
   run append_sink_log(arg1)
 }
 
@@ -415,12 +415,12 @@ workflow producer() {
 }
 
 script write_env_a = "echo \"A: $1\" > env_a.txt"
-workflow consumer_a() {
+workflow consumer_a(message) {
   run write_env_a(arg1)
 }
 
 script write_env_b = "echo \"B: $1\" > env_b.txt"
-workflow consumer_b() {
+workflow consumer_b(message) {
   run write_env_b(arg1)
 }
 
