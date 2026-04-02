@@ -184,7 +184,7 @@ channel <- "${payload}"
 
 ## Inbox layout
 
-Under the run directory (see [Architecture — Artifact layout](architecture#artifact-layout)):
+Under the run directory (see [Architecture — Durable artifact layout](architecture#durable-artifact-layout)):
 
 ```
 .jaiph/runs/<YYYY-MM-DD>/<HH-MM-SS>-<source-basename>/inbox/

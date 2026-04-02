@@ -373,7 +373,7 @@ See `e2e/tests/91_inbox_dispatch.sh`, `e2e/tests/93_inbox_stress.sh`, and `e2e/t
 
 Shell harnesses and CI expectations for the full repo are described in [Contributing — E2E testing](contributing.md#e2e-testing).
 
-E2E tests compare full CLI output and full artifact file contents by default. Use `e2e::expect_stdout`, `e2e::expect_out`, `e2e::expect_file`, `e2e::expect_run_file`, or `e2e::assert_equals`. Substring checks (`e2e::assert_contains`) require an inline comment justifying the exception. For the full policy and artifact layout, see [Architecture — E2E test philosophy](architecture#e2e-test-philosophy-and-artifact-layout).
+E2E tests compare full CLI output and full artifact file contents by default. Use `e2e::expect_stdout`, `e2e::expect_out`, `e2e::expect_file`, `e2e::expect_run_file`, or `e2e::assert_equals`. Substring checks (`e2e::assert_contains`) require an inline comment justifying the exception. For the full policy (two surfaces, full equality, `assert_contains` exceptions, normalization), see [Contributing — E2E testing](contributing.md#e2e-testing). For the on-disk tree under `.jaiph/runs/`, see [Architecture — Durable artifact layout](architecture#durable-artifact-layout).
 
 ## Landing-page sample verification
 

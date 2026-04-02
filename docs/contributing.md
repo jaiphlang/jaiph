@@ -7,7 +7,7 @@ redirect_from:
 
 # Contributing to Jaiph
 
-Open-source projects depend on clear repo conventions: how to build, test, and propose changes. **This page is that map for Jaiph** — branches, installing from a clone, TypeScript layout and philosophy, the layered test strategy, and the bash E2E harness. It does **not** teach the language or runtime semantics; for that, use [Getting Started](getting-started.md), [Grammar](grammar.md), and [Architecture](architecture) for execution flow and contracts.
+Open-source projects depend on clear repo conventions: how to build, test, and propose changes. **This page is that map for Jaiph** — branches, installing from a clone, code philosophy, **test strategy** (layers, TypeScript layout, E2E philosophy, bash harness), and CI. It does **not** teach the language; for that, use [Getting Started](getting-started.md) and [Grammar](grammar.md). For **how the implementation is structured** (components, build pipeline, runtime contracts, artifact paths on disk), see [Architecture](architecture).
 
 ## Branching and pull requests
 
@@ -95,6 +95,13 @@ Jaiph uses several test layers. Each layer catches a different class of bug. Use
 3. **Golden tests are the compiler's safety net.** After transpiler changes, run `npm test`. Failures in `src/transpile/compiler-golden.test.ts` usually mean updating an explicit expected string or fixture in that file — there is no separate dump script; align expectations with intentional emitter changes and re-run `npm test`. **Golden AST tests** (`golden-ast/`) complement this by locking in the parse tree shape — if those fail, regenerate with `UPDATE_GOLDEN=1 npm run test:golden-ast` and review the diff.
 4. **E2E tests assert two things independently:** what the user sees (CLI tree output via `e2e::expect_stdout`) and what the runtime persists (artifact files via `e2e::expect_out`, `e2e::expect_file`). A bug could break one without the other.
 5. **Prefer the narrowest test layer.** A pure function bug should be caught by a unit test, not an E2E test. E2E tests are expensive to run and hard to debug — reserve them for integration-level behavior.
+
+### TypeScript test layout
+
+- **Module tests** — live next to the source they validate under `src/` (e.g. `src/parse/parse-core.test.ts`, `src/cli/run/display.test.ts`, `src/transpile/compiler-golden.test.ts`). Names are `*.test.ts` or `*.acceptance.test.ts`.
+- **Cross-cutting tests** — span multiple modules or need subprocess/PTY harnesses; they stay in `test/` (see [Cross-cutting tests in `test/`](#cross-cutting-tests-in-test)).
+- **E2E** — bash scripts in `e2e/tests/*.sh`, driven by `e2e/test_all.sh`.
+- **`npm test`** discovers colocated files under `src/` and everything in `test/`; see the [Developing in the repository](#developing-in-the-repository) table for the exact command.
 
 ### Module test layout (colocated)
 
@@ -216,6 +223,25 @@ The E2E test suite (`e2e/tests/*.sh`) exercises the full build-and-run pipeline 
 
 Some scripts are **contract** tests: they validate persisted machine-readable output (for example `e2e/tests/88_run_summary_event_contract.sh` and `run_summary.jsonl`) in addition to or instead of golden CLI trees.
 
+### E2E philosophy: two surfaces and full equality
+
+E2E tests are the outermost **behavior contracts** for the CLI and runtime. Each test should exercise the real pipeline and assert on **two independent surfaces**:
+
+1. **CLI tree output** — what the user sees (`e2e::expect_stdout` with a heredoc).
+2. **Run artifacts** — what the runtime persists under `.jaiph/runs/<date>/<source>/` (`e2e::expect_out`, `e2e::expect_file`, `e2e::expect_run_file`). Inbox files live under the run directory when the feature touches inbox behavior.
+
+**Default contract:** every assertion should compare the **full** expected text (stdout heredoc, artifact file contents, JSONL lines) unless there is a documented exception. Use `e2e::expect_stdout`, `e2e::expect_out`, `e2e::expect_file`, `e2e::expect_run_file`, or `e2e::assert_equals` / `e2e::assert_output_equals` for full comparisons.
+
+`e2e::assert_contains` (substring check) is allowed **only** when full equality is not feasible. Every such use must have an inline comment explaining why. Valid reasons:
+
+- **Nondeterministic output** — e.g. prompt transcripts with real agent backends, timestamps not covered by `<time>` normalization.
+- **Unbounded or variable-length logs** — e.g. `run_summary.jsonl` with platform-dependent event counts, or live step output where line count varies.
+- **Platform-dependent text** — e.g. OS-specific error messages, paths that differ across CI environments.
+
+**Normalization:** `e2e::normalize_output` (in `e2e/lib/common.sh`) strips ANSI codes and replaces timing values with `<time>`, agent commands with `<agent-command>`, and script paths with `<script-path>`. This keeps full-equality heredocs stable across machines.
+
+**Where files land on disk** (directory tree, sequence prefixes): [Architecture — Durable artifact layout](architecture#durable-artifact-layout). Runtime testing with `*.test.jh` is covered in [Testing](testing.md). The `run_summary.jsonl` event contract is exercised in `e2e/tests/88_run_summary_event_contract.sh`.
+
 ### Test structure
 
 Every E2E test follows a **Given / When / Then** pattern using helper functions from `e2e/lib/common.sh`. The helpers eliminate boilerplate so each test reads like a specification:
@@ -297,7 +323,7 @@ All helpers are defined in `e2e/lib/common.sh`.
 
 #### Run artifact assertions
 
-After a workflow runs, its step outputs are written as sequenced artifact files under `.jaiph/runs/`. These helpers verify artifact content independently from CLI display output. For the full artifact layout and naming scheme, see [Architecture — Artifact layout](architecture#artifact-layout).
+After a workflow runs, its step outputs are written as sequenced artifact files under `.jaiph/runs/`. These helpers verify artifact content independently from CLI display output. For the on-disk layout and naming scheme, see [Architecture — Durable artifact layout](architecture#durable-artifact-layout).
 
 | Helper | Description |
 |--------|-------------|
@@ -325,12 +351,8 @@ After a workflow runs, its step outputs are written as sequenced artifact files 
 
 ### Assertion policy
 
-E2E tests default to **full-equality** comparisons — CLI stdout via heredoc, artifact file contents, JSONL lines. Prefer `e2e::expect_stdout`, `e2e::expect_out`, `e2e::expect_file`, `e2e::expect_run_file`, or `e2e::assert_equals`.
-
-`e2e::assert_contains` (substring check) is the exception — every use requires an inline comment explaining why full equality is not feasible. To audit current usages:
+Quick reference: default to **full-equality** helpers (`e2e::expect_stdout`, `e2e::expect_out`, `e2e::expect_file`, `e2e::expect_run_file`, `e2e::assert_equals`). `e2e::assert_contains` is the exception — every use needs an inline comment; rationale list in **E2E philosophy** above. Audit substring usage:
 
 ```bash
 rg 'e2e::assert_contains' e2e/tests -n
 ```
-
-When adding or tightening a test, prefer full-equality helpers first. For the artifact layout and naming scheme, see [Architecture — Artifact layout](architecture#artifact-layout).

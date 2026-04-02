@@ -12,6 +12,40 @@ Process rules:
 
 ---
 
+## Detect stale samples in `e2e` <!-- dev-ready -->
+
+**Goal**  
+Find and fix or remove `.jh` / `.test.jh` / shell fixtures under `e2e/` that are no longer referenced by any test (`e2e/tests/*.sh`, `e2e/test_all.sh`, or other runners). Stale samples confuse contributors and hide drift from the real `examples/` corpus.
+
+**Scope**
+
+1. Inventory which `e2e/*.jh` (and related `.sh`) files are actually exercised.
+2. Either wire orphaned files into a test, move them to `examples/` if they are documentation-only, or delete them with a clear rationale.
+3. Optionally add a lightweight guard (script or CI check) that fails when new unreferenced samples appear.
+
+**Acceptance criteria**
+
+- No intentionally kept `.jh` sample under `e2e/` is unreferenced without an explicit comment or README note explaining why it exists.
+
+---
+
+## Revisit `docs/jaiph-skill.md` <!-- dev-ready -->
+
+**Goal**  
+Bring the Cursor skill doc in line with current CLI commands, workflow semantics, and any new surfaces (e.g. MCP `jaiph serve` once shipped). The skill is what agents copy into `.cursor` / skills; drift here causes bad automation.
+
+**Scope**
+
+1. Read `docs/jaiph-skill.md` against `docs/index.html`, `docs/architecture.md`, and the actual CLI help / `src/cli`.
+2. Update frontmatter, command examples, and constraints so they match the repo today.
+3. Cross-check with `.jaiph/engineer.jh` or other internal prompts if they embed skill fragments.
+
+**Acceptance criteria**
+
+- `docs/jaiph-skill.md` accurately describes supported commands and patterns; nothing contradicts the shipped CLI or parser.
+
+---
+
 ## `jaiph serve` — expose workflows as an MCP server <!-- dev-ready -->
 
 **Goal**  

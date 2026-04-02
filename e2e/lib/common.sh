@@ -11,7 +11,7 @@
 # explaining why full equality is not feasible (nondeterministic output,
 # unbounded logs, or platform-dependent text).
 #
-# Full policy: ARCHITECTURE.md — "E2E test philosophy and artifact layout"
+# Full policy: docs/contributing.md — "E2E testing" / "E2E philosophy"; on-disk layout: docs/architecture.md — "Durable artifact layout"
 # Helper reference: docs/contributing.md — "E2E testing"
 #
 

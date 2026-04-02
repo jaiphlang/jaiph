@@ -7,7 +7,11 @@ redirect_from:
 
 # Architecture
 
-Jaiph is a workflow system with a **TypeScript CLI** and a **Node.js kernel** that interprets the AST directly. This page describes how the system is structured and how execution flows through it for both regular workflows (`*.jh`) and Jaiph runtime tests (`*.test.jh`). For contributing guidelines, code philosophy, and the test strategy, see [Contributing](contributing.md).
+Jaiph is a workflow system with a **TypeScript CLI** and a **Node.js kernel** that interprets the AST directly.
+
+This page describes **how Jaiph is built**: repository layout of major subsystems, **core components**, compile and run pipelines, and **runtime contracts** (events, artifacts on disk, distribution). It is the map of the implementation.
+
+For **how to contribute** — branches, test layers, E2E assertion policy, and bash harness details — see [Contributing](contributing.md). For the `*.test.jh` **language** and test blocks, see [Testing](testing.md).
 
 ## System overview
 
@@ -21,7 +25,7 @@ All orchestration — local `jaiph run`, `jaiph test`, and **Docker `jaiph run`*
 ## Core components
 
 - **CLI (`src/cli`)**
-  - Entry point (`run`, `test`, `init`, `use`, `report`).
+  - Entry point (`run`, `test`, `init`, `use`, `format`, `report`).
   - **Workflow launch** is owned in TypeScript (`src/runtime/kernel/workflow-launch.ts` + `src/cli/run/lifecycle.ts`): spawns the **Node workflow runner** (`node-workflow-runner.ts`), which calls `buildRuntimeGraph()` then `NodeWorkflowRuntime`.
   - Parses runtime events and renders progress; dispatches hooks.
 
@@ -46,7 +50,13 @@ All orchestration — local `jaiph run`, `jaiph test`, and **Docker `jaiph run`*
   - Executes `*.test.jh` test blocks using `NodeWorkflowRuntime` with mock support (mock prompts, mock workflow/rule/script bodies). Pure Node harness — no Bash test transpilation.
 
 - **JS kernel (`src/runtime/kernel/`)**
-  - Prompt execution (`prompt.ts`), managed subprocess execution, streaming parse, schema, mocks, **`emit.ts`** (live `__JAIPH_EVENT__` + `run_summary.jsonl`), **`workflow-launch.ts`** (spawn contract).
+  - Prompt execution (`prompt.ts`), managed subprocess execution (`run-step-exec.ts`), streaming parse (`stream-parser.ts`), schema (`schema.ts`), mocks (`mock.ts`), **`emit.ts`** (live `__JAIPH_EVENT__` + `run_summary.jsonl`), **`workflow-launch.ts`** (spawn contract).
+
+- **Formatter (`src/format/emit.ts`)**
+  - `jaiph format` rewrites `.jh` / `.test.jh` files into canonical style. Pure AST→text emitter; no side-effects beyond file writes.
+
+- **Docker runtime helper (`src/runtime/docker.ts`)**
+  - Parses mount specs, resolves Docker config (image, network, timeout), and builds the `docker run` invocation used by `jaiph run --docker`. The container runs the same `node-workflow-runner` process as local execution.
 
 - **Reporting (`src/reporting/*`)**
   - Reads `.jaiph/runs` and `run_summary.jsonl`; `jaiph report` serves the local UI. Standalone binaries resolve static assets from `reporting/public` next to the executable when bundled.
@@ -70,18 +80,37 @@ All orchestration — local `jaiph run`, `jaiph test`, and **Docker `jaiph run`*
 ## Contracts
 
 - **Live contract (runtime -> CLI):** `__JAIPH_EVENT__` JSON lines on **stderr only** — the single event channel for all modes (local and Docker). The CLI listens on stderr exclusively; stdout carries only plain script output.
-- **Durable contract:** `.jaiph/runs/...` + `run_summary.jsonl`.
+- **Durable contract:** `.jaiph/runs/...` + `run_summary.jsonl` (layout below).
 
 Channel transport remains file/queue based in runtime inbox logic.
+
+### Durable artifact layout
+
+The runtime persists step captures and the event timeline under a UTC-dated hierarchy:
+
+```
+.jaiph/runs/
+  <YYYY-MM-DD>/                       # UTC date (see NodeWorkflowRuntime)
+    <HH-MM-SS>-<source-basename>/       # UTC time + JAIPH_SOURCE_FILE or entry basename
+      000001-module__step.out          # stdout capture per step (seq-prefixed)
+      000001-module__step.err          # stderr capture (when non-empty)
+      inbox/                           # inbox message files (when channels are used)
+      .seq                             # step-sequence counter (kernel/seq-alloc.ts)
+      run_summary.jsonl                # durable event timeline
+```
+
+Sequence prefixes are monotonic and unique per run (allocated by `kernel/seq-alloc.ts`), making artifact file names deterministic and ordered.
 
 ## Channels and hooks in context
 
 Channels are validated at compile time (`validateReferences` / send RHS rules) and executed via in-memory queue and dispatch in the Node runtime; durable inbox files under the run directory are for audit and reporting. See [Inbox & Dispatch](inbox.md). Hooks are CLI-only: they load from `hooks.json` and run as shell commands with JSON on stdin, driven by the same `__JAIPH_EVENT__` stream as the progress UI — see [Hooks](hooks.md).
 
-## Jaiph runtime testing (`*.test.jh`)
+## Test runner integration (`*.test.jh` in the kernel)
 
-`*.test.jh` files are parsed in the CLI; `runTestFile()` drives blocks in-process. **`buildRuntimeGraph(testFile)`** is called **once per `runTestFile` invocation** and the resulting graph is reused across all blocks and `test_run_workflow` steps (the import closure is constant for a given test file within a single process run). Each `test_run_workflow` step resolves mocks against that cached graph, then constructs `NodeWorkflowRuntime` with `mockBodies` / mock prompt env. Mock prompts, workflows, rules, and scripts are supported through the runtime's mock infrastructure.
+**How** `jaiph test` wires into the same stack as `jaiph run`: `*.test.jh` files are parsed in the CLI; `runTestFile()` drives blocks in-process. **`buildRuntimeGraph(testFile)`** is called **once per `runTestFile` invocation** and the resulting graph is reused across all blocks and `test_run_workflow` steps (the import closure is constant for a given test file within a single process run). Each `test_run_workflow` step resolves mocks against that cached graph, then constructs `NodeWorkflowRuntime` with `mockBodies` / mock prompt env. Mock prompts, workflows, rules, and scripts are supported through the runtime's mock infrastructure.
 Before that, the CLI prepares script executables via **`buildScripts(workspace)`** so imported workflow modules have concrete script paths under `JAIPH_SCRIPTS` (workspace `*.jh` files only; `*.test.jh` is not part of that walk).
+
+Authoring rules, fixtures, and mock syntax for `*.test.jh` are documented in [Testing](testing.md), not here.
 
 ## CLI progress reporting pipeline
 
@@ -182,7 +211,7 @@ sequenceDiagram
     CLI-->>User: PASS/FAIL
 ```
 
-## Sequence diagram: test flow (`*.test.jh`)
+## Sequence diagram: `jaiph test` flow
 
 ```mermaid
 sequenceDiagram
@@ -215,21 +244,6 @@ sequenceDiagram
     TestRunner-->>CLI: aggregate PASS/FAIL
     CLI-->>User: exit code
 ```
-
-## Artifact layout
-
-```
-.jaiph/runs/
-  <YYYY-MM-DD>/                       # UTC date (see NodeWorkflowRuntime)
-    <HH-MM-SS>-<source-basename>/       # UTC time + JAIPH_SOURCE_FILE or entry basename
-      000001-module__step.out          # stdout capture per step (seq-prefixed)
-      000001-module__step.err          # stderr capture (when non-empty)
-      inbox/                           # inbox message files (when channels are used)
-      .seq                             # step-sequence counter (kernel/seq-alloc.ts)
-      run_summary.jsonl                # durable event timeline
-```
-
-Sequence prefixes are monotonic and unique per run (allocated by `kernel/seq-alloc.ts`), making artifact file names deterministic and ordered.
 
 ## Summary
 
