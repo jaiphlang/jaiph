@@ -12,23 +12,6 @@ Process rules:
 
 ---
 
-## Revisit `docs/jaiph-skill.md` <!-- dev-ready -->
-
-**Goal**  
-Bring the Cursor skill doc in line with current CLI commands, workflow semantics, and any new surfaces (e.g. MCP `jaiph serve` once shipped). The skill is what agents copy into `.cursor` / skills; drift here causes bad automation.
-
-**Scope**
-
-1. Read `docs/jaiph-skill.md` against `docs/index.html`, `docs/architecture.md`, and the actual CLI help / `src/cli`.
-2. Update frontmatter, command examples, and constraints so they match the repo today.
-3. Cross-check with `.jaiph/engineer.jh` or other internal prompts if they embed skill fragments.
-
-**Acceptance criteria**
-
-- `docs/jaiph-skill.md` accurately describes supported commands and patterns; nothing contradicts the shipped CLI or parser.
-
----
-
 ## `jaiph serve` — expose workflows as an MCP server <!-- dev-ready -->
 
 **Goal**  
