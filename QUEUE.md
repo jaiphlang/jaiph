@@ -12,17 +12,35 @@ Process rules:
 
 ---
 
-## Validation hints vs strict interpolation <!-- spec -->
+## E2E: exercise `examples/*.jh` (exclude `ensure_ci_passes.jh`) <!-- spec -->
 
 **Goal**  
-Bare-argument validation errors must not suggest “use `${name}` for explicit interpolation” when `name` is not a known variable, capture, or declared parameter — that hint implies a loophole that strict orchestration rules do not allow. Align copy and behavior: interpolation is only valid for identifiers already in scope (workflow/rule params, `const`, typed prompt captures, positional `argN` when declared, recover payload rules, etc.).
+Add an end-to-end test (shell under `e2e/tests/`, following existing patterns) that runs every Jaiph file in `examples/` that is meant to be executed as a workflow, **except** `examples/ensure_ci_passes.jh` (CI-heavy / environment-specific). The run should succeed or be explicitly mocked/skipped per file where a real agent or external tools are required.
 
 **Context**  
-Example: `workflow default() { ensure name_was_provided(name) … }` with `name` undeclared currently surfaces a message that partially suggests `${name}`; the fix is to remove or rewrite that branch of the hint so it stays accurate under strict `${…}` rules.
+- Today `examples/` includes e.g. `say_hello.jh`, `async.jh`, `agent_inbox.jh`, plus `ensure_ci_passes.jh` and `*.test.jh` companions. Exclude **`ensure_ci_passes.jh`** from the matrix; decide whether `*.test.jh` files are covered via `jaiph test` instead of `jaiph run`.  
+- Some examples need CLI arguments (e.g. a name) or mock prompts — mirror what `examples/say_hello.test.jh` or existing e2e fixtures already do.
 
 **Done when**  
-- Error text and any related docs/tests no longer imply that arbitrary `${ident}` works without being in scope.  
-- Optional: add or adjust a small compiler test that locks the intended wording.
+- One e2e script lists runnable example paths (or globs) and fails CI if a listed example breaks.  
+- `ensure_ci_passes.jh` is not in that list; rationale is noted in a short comment in the script.  
+- Document in the script (or `e2e/README` only if needed) how to add a new example to the matrix.
+
+---
+
+## Validation hints vs strict interpolation <!-- dev-ready -->
+
+**Goal**  
+(1) **Enforce strict checks everywhere they apply:** bare call arguments and `${…}` interpolation must only allow identifiers that are actually in scope (workflow/rule params, `const`, typed prompt captures, positional `argN` when declared, recover-payload `arg1` where applicable, etc.). Audit validation paths so there are no gaps or inconsistent rules between “bare” and “braced” forms.  
+(2) **Align error copy with those rules:** bare-argument errors must not suggest “use `${name}` for explicit interpolation” when `name` is not already a known binding — that hint falsely implies a workaround that strict interpolation does not permit.
+
+**Context**  
+Example: `workflow default() { ensure name_was_provided(name) … }` with `name` undeclared surfaces a message that partially suggests `${name}`; both the hint and any missing strict checks should be fixed together.
+
+**Done when**  
+- Validation coverage is reviewed; bare args and `${ident}` reject unknown names consistently.  
+- Error text and related docs/tests no longer imply that arbitrary `${ident}` works without being in scope.  
+- Compiler tests cover at least one unknown-bare-arg case and one unknown-`${ident}` case with wording that matches strict semantics.
 
 ---
 

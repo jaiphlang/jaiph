@@ -11,7 +11,7 @@ rule name_was_provided(name) {
   ```
 }
 
-workflow default() {
+workflow default(name) {
   ensure name_was_provided(name)
 
   const response = prompt ```
