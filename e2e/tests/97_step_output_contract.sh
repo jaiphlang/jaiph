@@ -187,7 +187,7 @@ config {
 }
 script echo_captured_prompt = "echo \"captured=$1\""
 workflow default() {
-  answer = prompt "What is 2+2?"
+  const answer = prompt "What is 2+2?"
   run echo_captured_prompt(answer)
 }
 EOF

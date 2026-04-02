@@ -258,7 +258,7 @@ e2e::assert_contains "${multiline_default_out}" "Line one and line two." "fenced
 e2e::file "prompt_unmatched.jh" <<'EOF'
 #!/usr/bin/env jaiph
 workflow default() {
-  result = prompt "e2e-unmatched-prompt-never-mocked"
+  const result = prompt "e2e-unmatched-prompt-never-mocked"
   return "${result}"
 }
 EOF

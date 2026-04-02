@@ -12,6 +12,20 @@ Process rules:
 
 ---
 
+## Validation hints vs strict interpolation <!-- spec -->
+
+**Goal**  
+Bare-argument validation errors must not suggest “use `${name}` for explicit interpolation” when `name` is not a known variable, capture, or declared parameter — that hint implies a loophole that strict orchestration rules do not allow. Align copy and behavior: interpolation is only valid for identifiers already in scope (workflow/rule params, `const`, typed prompt captures, positional `argN` when declared, recover payload rules, etc.).
+
+**Context**  
+Example: `workflow default() { ensure name_was_provided(name) … }` with `name` undeclared currently surfaces a message that partially suggests `${name}`; the fix is to remove or rewrite that branch of the hint so it stays accurate under strict `${…}` rules.
+
+**Done when**  
+- Error text and any related docs/tests no longer imply that arbitrary `${ident}` works without being in scope.  
+- Optional: add or adjust a small compiler test that locks the intended wording.
+
+---
+
 ## `jaiph serve` — expose workflows as an MCP server <!-- dev-ready -->
 
 **Goal**  

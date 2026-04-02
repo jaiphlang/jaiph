@@ -145,22 +145,21 @@ layout: null
                     </p>
                     <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
-script name_was_provided_check = ```
-  # bash by default; use ```node, ```python3, etc. for other languages
-  if [ -z "$1" ]; then
-    echo "You didn't provide your name :(" >&2
-    exit 1
-  fi
-```
-
 rule name_was_provided(name) {
-  run name_was_provided_check(name)
+  # bash is used by default for scripts
+  # use ```node, ```python3, etc. for other languages
+  run script(name) ```
+    if [ -z "$1" ]; then
+      echo "You didn't provide your name :(" >&2
+      exit 1
+    fi
+  ```
 }
 
 workflow default(name) {
   ensure name_was_provided(name)
 
-  response = prompt ```
+  const response = prompt ```
     Say hello to ${name} and provide a fun fact about a person with the same name.
     Respond with a single line. Do not inspect files or run tools.
   ```
@@ -168,29 +167,29 @@ workflow default(name) {
   log "${response}"
 }</code></pre>
                     <p>Running the workflow:</p>
-                    <pre><code class="jaiph-run" data-sample-output="success"><span class="run-command">➜  ./say_hello.jh Jakub</span>
+                    <pre><code class="jaiph-run" data-sample-output="success"><span class="run-command">./say_hello.jh Jakub</span>
 
 Jaiph: Running say_hello.jh
 
 <span class="run-keyword">workflow</span> default <span class="run-params">(1="Jakub")</span>
   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> name_was_provided <span class="run-params">(1="Jakub")</span>
-  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">script</span> name_was_provided_check <span class="run-params">(1="Jakub")</span>
-  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">script name_was_provided_check (0s)</span>
+  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">script</span> __inline_65a8c336a46d <span class="run-params">(1="Jakub")</span>
+  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">script __inline_65a8c336a46d (0s)</span>
   <span class="run-pass">✓</span> <span class="run-time">rule name_was_provided (0s)</span>
   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> cursor "Say hello to Jakub and p..." <span class="run-params">(1="Jakub")</span>
-  <span class="run-pass">✓</span> <span class="run-time">prompt cursor (10s)</span>
-  <span class="run-marker">ℹ</span> Hi Jakub — fun fact: Jakub Marian is a Czech linguist and polyglot who speaks over a dozen languages.
+  <span class="run-pass">✓</span> <span class="run-time">prompt cursor (5s)</span>
+  <span class="run-marker">ℹ</span> Hello Jakub — Czech conductor Jakub Hrůša has led major orchestras including the Bamberg Symphony and often appears at the BBC Proms.
 
-<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(11.1s)</span></code></pre>
+<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(6.1s)</span></code></pre>
                     <p>When you don't provide the name parameter, the workflow fails:</p>
-                    <pre><code class="jaiph-run" data-sample-output="failure"><span class="run-command">➜  ./say_hello.jh</span>
+                    <pre><code class="jaiph-run" data-sample-output="failure"><span class="run-command">./say_hello.jh</span>
 
 Jaiph: Running say_hello.jh
 
-<span class="run-keyword">workflow</span> default
-  <span class="run-marker">▸</span> <span class="run-keyword">rule</span> name_was_provided
-  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">script</span> name_was_provided_check
-  <span class="run-marker">·</span>   <span class="run-fail">✗ script name_was_provided_check</span> <span class="run-time">(0s)</span>
+<span class="run-keyword">workflow</span> default <span class="run-params">(1="")</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">rule</span> name_was_provided <span class="run-params">(1="")</span>
+  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">script</span> __inline_65a8c336a46d <span class="run-params">(1="")</span>
+  <span class="run-marker">·</span>   <span class="run-fail">✗ script __inline_65a8c336a46d</span> <span class="run-time">(0s)</span>
   <span class="run-fail">✗ rule name_was_provided</span> <span class="run-time">(0s)</span>
 
 <span class="run-fail">✗ FAIL</span> <span class="run-keyword">workflow</span> default <span class="run-time">(0.3s)</span>

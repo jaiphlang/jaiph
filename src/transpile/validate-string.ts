@@ -135,6 +135,80 @@ export interface DotFieldRef {
 
 const DOT_FIELD_RE = /\$\{([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\}/g;
 
+const SIMPLE_BRACED_IDENT = /\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g;
+
+/**
+ * Ensure `${name}` references are defined: named bindings in `knownVars`, or `arg1`..`arg9`
+ * when `maxPositionalSlots` allows (each declared workflow/rule parameter exposes one slot).
+ */
+export function validateSimpleInterpolationIdentifiers(
+  content: string,
+  filePath: string,
+  line: number,
+  col: number,
+  context: string,
+  knownVars: Set<string>,
+  maxPositionalSlots: number,
+  scopeLabel: "workflow" | "rule",
+  /** Typed prompt captures: map capture name → returns schema field names (for `${base}` / `${base_field}`). */
+  promptFieldSchemas?: Map<string, string[]>,
+  /** `ensure … recover` body receives failure output as `${arg1}`. */
+  recoverPayloadArg1?: boolean,
+): void {
+  const re = new RegExp(SIMPLE_BRACED_IDENT.source, "g");
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(content)) !== null) {
+    const name = m[1]!;
+    const slot = /^arg([1-9])$/.exec(name);
+    if (slot) {
+      const n = Number(slot[1]);
+      if (recoverPayloadArg1 && n === 1) {
+        continue;
+      }
+      if (n > maxPositionalSlots) {
+        const hint =
+          scopeLabel === "workflow"
+            ? `declare parameters on the workflow (e.g. workflow default(name) { ... }); \`${name}\` matches the nth parameter`
+            : `declare parameters on the rule (e.g. rule check(name) { ... }); \`${name}\` matches the nth parameter`;
+        throw jaiphError(
+          filePath,
+          line,
+          col,
+          "E_VALIDATE",
+          `${context} references \`\${${name}}\` but this ${scopeLabel} does not declare that many parameters — ${hint}`,
+        );
+      }
+      continue;
+    }
+    if (knownVars.has(name)) {
+      continue;
+    }
+    if (promptFieldSchemas) {
+      let okUnderscore = false;
+      for (const [captureName, fields] of promptFieldSchemas) {
+        const prefix = `${captureName}_`;
+        if (name.startsWith(prefix)) {
+          const fieldName = name.slice(prefix.length);
+          if (fieldName && fields.includes(fieldName)) {
+            okUnderscore = true;
+            break;
+          }
+        }
+      }
+      if (okUnderscore) {
+        continue;
+      }
+    }
+    throw jaiphError(
+      filePath,
+      line,
+      col,
+      "E_VALIDATE",
+      `unknown identifier "${name}" in ${context}; declare it with \`const\`, use a capture, or add a ${scopeLabel} parameter`,
+    );
+  }
+}
+
 /** Extract ${var.field} dot-notation references from string content (unquoted). */
 export function extractDotFieldRefs(content: string): DotFieldRef[] {
   const refs: DotFieldRef[] = [];

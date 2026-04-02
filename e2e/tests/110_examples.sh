@@ -56,24 +56,21 @@ test_out="$(jaiph test "${TEST_DIR}/say_hello.test.jh" 2>&1)"
 test_exit=$?
 set -e
 
-# Then — first test intentionally fails (error message mismatch), second passes
-if [[ ${test_exit} -eq 0 ]]; then
+# Then — both tests pass
+if [[ ${test_exit} -ne 0 ]]; then
   printf "%s\n" "${test_out}" >&2
-  e2e::fail "say_hello.test.jh should fail (intentional mismatch)"
+  e2e::fail "say_hello.test.jh should pass both tests"
 fi
 
 e2e::expect_stdout "${test_out}" <<'EOF'
 testing say_hello.test.jh
   ▸ without name, workflow fails with validation message
-  ✗ expectEqual failed: <time>
-    - You didn't provide your name
-    + You didn't provide your name :(
+  ✓ <time>
 
   ▸ with name, returns greeting and logs response
   ✓ <time>
 
-✗ 1 / 2 test(s) failed
-  - without name, workflow fails with validation message
+✓ 2 / 2 test(s) passed
 EOF
 
 # ── ensure_ci_passes.test.jh ────────────────────────────────────────────────

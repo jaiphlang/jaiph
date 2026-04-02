@@ -13,5 +13,5 @@ workflow default() {
   ensure git.is_clean()
 
   run architect.default()
-  run implement.default()
+  run implement.default("queue")
 }

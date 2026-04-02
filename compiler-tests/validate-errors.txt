@@ -70,10 +70,10 @@ workflow default() {
 }
 
 === unsupported type in returns schema
-# @expect error E_SCHEMA "unsupported type" @2:12
+# @expect error E_SCHEMA "unsupported type" @2:3
 --- input.jh
 workflow default() {
-  result = prompt "x" returns "{ foo: array }"
+  const result = prompt "x" returns "{ foo: array }"
 }
 
 === inline shell step subshell capture forbidden in workflow
@@ -174,7 +174,7 @@ workflow default() {
 # @expect error E_VALIDATE "is not defined in the returns schema" @3:3
 --- input.jh
 workflow default() {
-  result = prompt "Analyse" returns "{ type: string, risk: string }"
+  const result = prompt "Analyse" returns "{ type: string, risk: string }"
   log "bad field ${result.bogus}"
 }
 
@@ -292,38 +292,38 @@ workflow default() {
 }
 
 === returns schema cannot be empty
-# @expect error E_SCHEMA "returns schema cannot be empty" @2:12
+# @expect error E_SCHEMA "returns schema cannot be empty" @2:3
 --- input.jh
 workflow default() {
-  result = prompt "classify" returns ""
+  const result = prompt "classify" returns ""
 }
 
 === returns schema rejects array types
-# @expect error E_SCHEMA "returns schema must be flat" @2:12
+# @expect error E_SCHEMA "returns schema must be flat" @2:3
 --- input.jh
 workflow default() {
-  result = prompt "classify" returns "{ items: [string] }"
+  const result = prompt "classify" returns "{ items: [string] }"
 }
 
 === returns schema rejects union types
-# @expect error E_SCHEMA "returns schema must be flat" @2:12
+# @expect error E_SCHEMA "returns schema must be flat" @2:3
 --- input.jh
 workflow default() {
-  result = prompt "classify" returns "{ status: string | number }"
+  const result = prompt "classify" returns "{ status: string | number }"
 }
 
 === returns schema rejects malformed entry
-# @expect error E_SCHEMA "invalid returns schema entry" @2:12
+# @expect error E_SCHEMA "invalid returns schema entry" @2:3
 --- input.jh
 workflow default() {
-  result = prompt "classify" returns "{ badentry }"
+  const result = prompt "classify" returns "{ badentry }"
 }
 
 === returns schema rejects unsupported type
-# @expect error E_SCHEMA "unsupported type" @2:12
+# @expect error E_SCHEMA "unsupported type" @2:3
 --- input.jh
 workflow default() {
-  result = prompt "classify" returns "{ foo: array }"
+  const result = prompt "classify" returns "{ foo: array }"
 }
 
 === run in workflow targeting a rule via import

@@ -355,7 +355,7 @@ workflow default() {
 # @expect ok
 --- input.jh
 workflow default() {
-  x = run script() "echo hello"
+  const x = run script() "echo hello"
 }
 
 === inline script const capture form
@@ -383,7 +383,7 @@ rule tests_pass() {
   return "ok"
 }
 workflow default() {
-  response = ensure tests_pass()
+  const response = ensure tests_pass()
   const out = run say_hello()
 }
 
@@ -588,7 +588,7 @@ workflow default() {
 # @expect ok
 --- input.jh
 script some_script = "echo \"$1\""
-workflow default() {
+workflow default(arg1) {
   const x = run some_script(arg1)
 }
 
@@ -781,12 +781,12 @@ rule gate() {
 script gate_impl = "false"
 
 workflow fix_build() {
-  prompt "fix build"
+  const _ = prompt "fix build"
 }
 
 workflow default() {
   if not ensure gate() {
-    prompt "recover"
+    const _ = prompt "recover"
     run fix_build()
   }
 }
@@ -795,7 +795,7 @@ workflow default() {
 # @expect ok
 --- input.jh
 workflow default() {
-  result = prompt "Analyse" returns "{ type: string, risk: string }"
+  const result = prompt "Analyse" returns "{ type: string, risk: string }"
   return "${result}"
 }
 
@@ -803,7 +803,7 @@ workflow default() {
 # @expect ok
 --- input.jh
 workflow default() {
-  result = prompt "Analyse" \
+  const result = prompt "Analyse" \
     returns "{ type: string, risk: string }"
 }
 
@@ -828,14 +828,14 @@ workflow default() {
 === valid ${name} interpolation in log
 # @expect ok
 --- input.jh
-workflow default() {
+workflow default(name) {
   log "hello ${name}"
 }
 
 === valid ${arg1} positional in log
 # @expect ok
 --- input.jh
-workflow default() {
+workflow default(arg1) {
   log "arg is ${arg1}"
 }
 
@@ -843,7 +843,7 @@ workflow default() {
 # @expect ok
 --- input.jh
 workflow default() {
-  prompt "escaped backtick: \`cmd\`"
+  const _ = prompt "escaped backtick: \`cmd\`"
 }
 
 === valid $1 in script body shell context
@@ -906,7 +906,7 @@ workflow default() {
 # @expect ok
 --- input.jh
 workflow default() {
-  result = prompt "Analyse" returns "{ type: string, risk: string }"
+  const result = prompt "Analyse" returns "{ type: string, risk: string }"
   log "type is ${result.type}"
 }
 
@@ -915,7 +915,7 @@ workflow default() {
 --- input.jh
 script f = "printf '%s' 'ok'"
 workflow default() {
-  x = run f()
+  const x = run f()
   return "${x}"
 }
 
@@ -934,15 +934,15 @@ workflow default() {
 script get_name = "echo \"world\""
 script greet = "echo \"hello $1\""
 workflow default() {
-  result = run get_name()
+  const result = run get_name()
   run greet(result)
 }
 
-=== bare identifier arg argN always valid
+=== bare identifier arg argN matches positional param
 # @expect ok
 --- input.jh
 script greet = "echo \"hello $1\""
-workflow default() {
+workflow default(arg1) {
   run greet(arg1)
 }
 
@@ -999,14 +999,14 @@ workflow default() {
 # @expect ok
 --- input.jh
 workflow default() {
-  prompt "What should I do?"
+  const _ = prompt "What should I do?"
 }
 
 === prompt with capture variable
 # @expect ok
 --- input.jh
 workflow default() {
-  answer = prompt "Tell me something"
+  const answer = prompt "Tell me something"
   log "${answer}"
 }
 
@@ -1029,13 +1029,13 @@ workflow researcher() {
 
 script write_findings_file = "echo \"$1\" > findings_file.md"
 
-workflow analyst() {
+workflow analyst(arg1) {
   run write_findings_file(arg1)
-  summary = run summarize_findings()
+  const summary = run summarize_findings()
   summary <- "${summary}"
 }
 
-workflow reviewer() {
+workflow reviewer(arg1) {
   final_summary <- run review_summary(arg1)
 }
 
@@ -1050,7 +1050,7 @@ workflow default() {
 --- input.jh
 workflow default() {
   const text = "Hello world"
-  prompt text
+  const _ = prompt text
 }
 
 === prompt with identifier body and returns
@@ -1058,7 +1058,7 @@ workflow default() {
 --- input.jh
 workflow default() {
   const text = "Analyse this"
-  result = prompt text returns "{ type: string }"
+  const result = prompt text returns "{ type: string }"
   return "${result}"
 }
 
@@ -1074,7 +1074,7 @@ workflow default() {
 # @expect ok
 --- input.jh
 workflow default() {
-  prompt ```
+  const _ = prompt ```
 You are a helpful assistant.
 Analyze the following.
 ```
@@ -1094,7 +1094,7 @@ Analyze this input.
 --- input.jh
 workflow default() {
   const input = "data"
-  prompt ```
+  const _ = prompt ```
 You are a helpful assistant.
 Analyze: ${input}
 ```

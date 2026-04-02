@@ -1,7 +1,7 @@
 #!/usr/bin/env jaiph
 # Fixture: typed prompt + printf field, same pattern as engineer classify_role.
 workflow classify_like(task) {
-  result = prompt "Classify task \"${task}\" into a single engineer role name (JSON only)." returns "{ role: string }"
+  const result = prompt "Classify task \"${task}\" into a single engineer role name (JSON only)." returns "{ role: string }"
 
   return "${result_role}"
 }

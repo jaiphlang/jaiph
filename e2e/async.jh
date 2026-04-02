@@ -6,7 +6,7 @@ workflow cursor_say_hello(name) {
   config {
     agent.backend = "cursor"
   }
-  response = prompt "${prompt_text}"
+  const response = prompt "${prompt_text}"
   log "${response}"
 }
 
@@ -14,7 +14,7 @@ workflow claude_say_hello(name) {
   config {
     agent.backend = "claude"
   }
-  response = prompt "${prompt_text}"
+  const response = prompt "${prompt_text}"
   log "${response}"
 }
 

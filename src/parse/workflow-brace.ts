@@ -367,12 +367,12 @@ export function parseBlockStatement(
 
   const promptAssignMatch = inner.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*prompt\s+(.+)$/s);
   if (promptAssignMatch) {
-    const promptCol = innerRaw.indexOf("prompt") + 1;
-    const result = parsePromptStep(
-      filePath, lines, idx, promptAssignMatch[2].trimStart(),
-      promptCol, promptAssignMatch[1],
+    fail(
+      filePath,
+      'use "const name = prompt ..." to capture the prompt result (e.g. const answer = prompt "..." )',
+      innerNo,
+      innerRaw.indexOf(promptAssignMatch[1]) + 1,
     );
-    return { step: result.step, nextIdx: result.nextLineIdx + 1 };
   }
   if (inner.startsWith("prompt ")) {
     const promptCol = innerRaw.indexOf("prompt") + 1;

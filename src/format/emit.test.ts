@@ -36,7 +36,7 @@ describe("emitModule", () => {
   it("formats rules with comments", () => {
     const source = [
       "# Validates prerequisites.",
-      "rule project_ready() {",
+      "rule project_ready(name) {",
       '  run check(arg1)',
       "}",
       "",
@@ -78,7 +78,7 @@ describe("emitModule", () => {
 
   it("formats const with different RHS types", () => {
     const source = [
-      "workflow default() {",
+      "workflow default(name) {",
       '  const n = "${arg1}"',
       '  const out = run helper(n)',
       "  log \"${out}\"",
@@ -239,7 +239,7 @@ describe("emitModule", () => {
   it("formats prompt with returns", () => {
     const source = [
       "workflow default() {",
-      "  result = prompt \"classify\" returns \"{ role: string }\"",
+      "  const result = prompt \"classify\" returns \"{ role: string }\"",
       "  log \"${result}\"",
       "}",
       "",

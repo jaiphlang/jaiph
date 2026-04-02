@@ -23,14 +23,14 @@ script build_passes_impl = "npm run build"
 # Orchestrates checks, prompt execution, and docs refresh.
 # Arguments:
 #   $1: Feature requirements passed to the prompt.
-workflow default() {
+workflow default(requirements) {
   if not ensure project_ready() {
     run bootstrap.nodejs()
   }
   
-  prompt ```
+  const _ = prompt ```
     Build the application using best practices.
-    Follow requirements: ${arg1}
+    Follow requirements: ${requirements}
 ```
   
   ensure build_passes()
@@ -41,5 +41,5 @@ workflow default() {
 
 # Refreshes documentation after a successful build.
 workflow update_docs() {
-  prompt "Update docs"
+  const _ = prompt "Update docs"
 }

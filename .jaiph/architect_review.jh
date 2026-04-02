@@ -92,7 +92,7 @@ workflow review_task(task) {
 
     Task to review:
     ${task}
-```
+  ``` returns "{ verdict: string }"
 
   return "${result_verdict}"
 }
