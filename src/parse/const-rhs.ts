@@ -1,5 +1,6 @@
 import type { ConstRhs, RuleRefDef, WorkflowRefDef } from "../types";
 import { fail, isRef, parseCallRef } from "./core";
+import { parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 import { parseAnonymousInlineScript } from "./inline-script";
 import { parsePromptStep } from "./prompt";
 import { extractPostfixMatchSubject, parseMatchExpr } from "./match";
@@ -144,6 +145,14 @@ export function parseConstRhs(
   if (matchSubject) {
     const { expr, nextIndex } = parseMatchExpr(filePath, lines, lineIdx, matchSubject, { line: lineNo, col });
     return { value: { kind: "match_expr", match: expr }, nextLineIdx: nextIndex - 1 };
+  }
+  // const name = """..."""
+  if (head.startsWith('"""')) {
+    const tqLines = [...lines];
+    tqLines[lineIdx] = head;
+    const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, lineIdx);
+    if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
+    return { value: { kind: "expr", bashRhs: tripleQuoteBodyToRaw(body) }, nextLineIdx: nextIdx - 1 };
   }
   const callLike = parseCallRef(head.trimEnd());
   if (callLike) {

@@ -647,7 +647,7 @@ workflow default() {
 }
 
 === unterminated log string
-# @expect error E_PARSE "unterminated log string" @2:3
+# @expect error E_PARSE "multiline strings use triple quotes" @2:3
 --- input.jh
 workflow default() {
   log "hello
@@ -661,7 +661,7 @@ workflow default() {
 }
 
 === unterminated logerr string
-# @expect error E_PARSE "unterminated logerr string" @2:3
+# @expect error E_PARSE "multiline strings use triple quotes" @2:3
 --- input.jh
 workflow default() {
   logerr "hello
@@ -1121,7 +1121,7 @@ workflow default() {
 }
 
 === unterminated string in top-level const
-# @expect error E_PARSE "unterminated string in const declaration" @1:1
+# @expect error E_PARSE "multiline strings use triple quotes" @1:1
 --- input.jh
 const MSG = "hello world
 

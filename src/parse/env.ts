@@ -1,5 +1,6 @@
 import type { EnvDeclDef } from "../types";
 import { fail, hasUnescapedClosingQuote, indexOfClosingDoubleQuote } from "./core";
+import { parseTripleQuoteBlock } from "./triple-quote";
 
 export function parseEnvDecl(
   filePath: string,
@@ -18,36 +19,37 @@ export function parseEnvDecl(
   const name = match[1];
   let valuePart = match[2].trim();
 
-  // Double-quoted string (may be multi-line)
-  if (valuePart.startsWith('"')) {
-    let rawValue = valuePart;
-    let nextIndex = startIndex + 1;
-    if (!hasUnescapedClosingQuote(valuePart, 1)) {
-      let closed = false;
-      for (let lookahead = startIndex + 1; lookahead < lines.length; lookahead += 1) {
-        rawValue += `\n${lines[lookahead]}`;
-        if (hasUnescapedClosingQuote(lines[lookahead], 0)) {
-          nextIndex = lookahead + 1;
-          closed = true;
-          break;
-        }
-      }
-      if (!closed) {
-        fail(filePath, "unterminated string in const declaration", lineNo);
-      }
+  // Triple-quoted multiline string
+  if (valuePart.startsWith('"""')) {
+    const tqLines = [...lines];
+    tqLines[startIndex] = valuePart;
+    const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, startIndex);
+    if (afterClose.length > 0) {
+      fail(filePath, 'unexpected content after closing """ in const declaration', nextIdx);
     }
-    const closeIdx = indexOfClosingDoubleQuote(rawValue, 1);
+    return {
+      envDecl: { name, value: body, loc: { line: lineNo, col: 1 } },
+      nextIndex: nextIdx,
+    };
+  }
+
+  // Double-quoted string (single-line only)
+  if (valuePart.startsWith('"')) {
+    if (!hasUnescapedClosingQuote(valuePart, 1)) {
+      fail(filePath, 'multiline strings use triple quotes: const name = """...""""', lineNo);
+    }
+    const closeIdx = indexOfClosingDoubleQuote(valuePart, 1);
     if (closeIdx === -1) {
       fail(filePath, "unterminated string in const declaration", lineNo);
     }
-    const afterClose = rawValue.slice(closeIdx + 1).trim();
+    const afterClose = valuePart.slice(closeIdx + 1).trim();
     if (afterClose.length > 0) {
       fail(filePath, "unexpected content after closing quote in const declaration", lineNo);
     }
-    const value = rawValue.slice(1, closeIdx);
+    const value = valuePart.slice(1, closeIdx);
     return {
       envDecl: { name, value, loc: { line: lineNo, col: 1 } },
-      nextIndex,
+      nextIndex: startIndex + 1,
     };
   }
 

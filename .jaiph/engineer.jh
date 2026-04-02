@@ -17,7 +17,7 @@ config {
   agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
-const code_philosophy = "
+const code_philosophy = """
   This codebase is maintained by both humans and AI agents. All code you write
   must follow these principles strictly:
 
@@ -27,7 +27,7 @@ const code_philosophy = "
      injection. Pass plain objects for shared context.
   2. Flat control flow. If/else chains and switch statements. A function
      should be readable top-to-bottom without jumping to 3 other files.
-  3. Short files. Prefer no source file over ~400 lines if possible. Split into 
+  3. Short files. Prefer no source file over ~400 lines if possible. Split into
      sibling files in the same directory, not a deeper module tree.
   4. No duplication across files. Same logic in two places = extract into
      one plain function called from both.
@@ -45,7 +45,7 @@ const code_philosophy = "
      logs, or platform-dependent text) and add an inline comment explaining why.
   9. Source code and docs/architecture.md are the single source of truth. Don't trust
      documentation blindly.
-"
+"""
 
 script select_role = ```
 local oc

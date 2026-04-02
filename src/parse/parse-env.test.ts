@@ -22,21 +22,45 @@ test("parseEnvDecl: parses bare value", () => {
   assert.equal(envDecl.value, "42");
 });
 
-test("parseEnvDecl: parses multiline double-quoted value", () => {
+test("parseEnvDecl: rejects multiline double-quoted value", () => {
   const lines = [
     'const MSG = "hello',
     'world"',
   ];
+  assert.throws(
+    () => parseEnvDecl("test.jh", lines, 0),
+    /multiline strings use triple quotes/,
+  );
+});
+
+test("parseEnvDecl: parses triple-quoted multiline value", () => {
+  const lines = [
+    'const MSG = """',
+    "hello",
+    "world",
+    '"""',
+  ];
   const { envDecl, nextIndex } = parseEnvDecl("test.jh", lines, 0);
   assert.equal(envDecl.name, "MSG");
   assert.equal(envDecl.value, "hello\nworld");
-  assert.equal(nextIndex, 2);
+  assert.equal(nextIndex, 4);
 });
 
-test("parseEnvDecl: fails on unterminated double-quoted string", () => {
+test("parseEnvDecl: triple-quoted with interpolation", () => {
+  const lines = [
+    'const MSG = """',
+    "  Hello ${name}",
+    "  Done",
+    '"""',
+  ];
+  const { envDecl } = parseEnvDecl("test.jh", lines, 0);
+  assert.equal(envDecl.value, "  Hello ${name}\n  Done");
+});
+
+test("parseEnvDecl: rejects unclosed double-quoted string as multiline error", () => {
   assert.throws(
     () => parseEnvDecl("test.jh", ['const X = "no close'], 0),
-    /unterminated string/,
+    /multiline strings use triple quotes/,
   );
 });
 

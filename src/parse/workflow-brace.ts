@@ -2,12 +2,14 @@ import type { IfConditionDef, WorkflowStepDef } from "../types";
 import {
   colFromRaw,
   fail,
+  hasUnescapedClosingQuote,
   indexOfClosingDoubleQuote,
   isRef,
   matchSendOperator,
   parseCallRef,
   parseLogMessageRhs,
 } from "./core";
+import { parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 import { parseConstRhs } from "./const-rhs";
 import { parseAnonymousInlineScript } from "./inline-script";
 import { parseEnsureStep } from "./steps";
@@ -243,8 +245,7 @@ export function parseBlockStatement(
     const { value, nextLineIdx } = parseConstRhs(
       filePath, lines, idx, rhs, innerNo, innerRaw.indexOf(rhs) + 1, forRule, name,
     );
-    const nextLine =
-      value.kind === "prompt_capture" ? nextLineIdx + 1 : idx + 1;
+    const nextLine = nextLineIdx > idx ? nextLineIdx + 1 : idx + 1;
     return {
       step: { type: "const", name, value, loc: { line: innerNo, col: innerRaw.indexOf("const") + 1 } },
       nextIdx: nextLine,
@@ -254,20 +255,31 @@ export function parseBlockStatement(
   const failMatch = inner.match(/^fail\s+/);
   if (failMatch) {
     const arg = inner.slice("fail".length).trimStart();
+    const failCol = innerRaw.indexOf("fail") + 1;
+    if (arg.startsWith('"""')) {
+      const tqLines = [...lines];
+      tqLines[idx] = arg;
+      const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, idx);
+      if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
+      const message = tripleQuoteBodyToRaw(body);
+      return {
+        step: { type: "fail", message, loc: { line: innerNo, col: failCol } },
+        nextIdx,
+      };
+    }
     if (!arg.startsWith('"')) {
-      fail(filePath, 'fail must match: fail "<reason>"', innerNo, innerRaw.indexOf("fail") + 1);
+      fail(filePath, 'fail must match: fail "<reason>" or fail """..."""', innerNo, failCol);
+    }
+    if (!hasUnescapedClosingQuote(arg, 1)) {
+      fail(filePath, 'multiline strings use triple quotes: fail """..."""', innerNo, failCol);
     }
     const closeIdx = indexOfClosingDoubleQuote(arg, 1);
     if (closeIdx === -1) {
-      fail(filePath, "unterminated fail string", innerNo, innerRaw.indexOf("fail") + 1);
+      fail(filePath, "unterminated fail string", innerNo, failCol);
     }
     const message = arg.slice(0, closeIdx + 1);
     return {
-      step: {
-        type: "fail",
-        message,
-        loc: { line: innerNo, col: innerRaw.indexOf("fail") + 1 },
-      },
+      step: { type: "fail", message, loc: { line: innerNo, col: failCol } },
       nextIdx: idx + 1,
     };
   }
@@ -449,6 +461,16 @@ export function parseBlockStatement(
   if (inner.startsWith("log ") || inner === "log") {
     const logArg = inner.slice("log".length).trimStart();
     const logCol = innerRaw.indexOf("log") + 1;
+    if (logArg.startsWith('"""')) {
+      const tqLines = [...lines];
+      tqLines[idx] = logArg;
+      const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, idx);
+      if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
+      return { step: { type: "log", message: body, loc: { line: innerNo, col: logCol } }, nextIdx };
+    }
+    if (logArg.startsWith('"') && !hasUnescapedClosingQuote(logArg, 1)) {
+      fail(filePath, 'multiline strings use triple quotes: log """..."""', innerNo, logCol);
+    }
     const message = parseLogMessageRhs(filePath, innerNo, logCol, logArg, "log");
     return { step: { type: "log", message, loc: { line: innerNo, col: logCol } }, nextIdx: idx + 1 };
   }
@@ -456,6 +478,16 @@ export function parseBlockStatement(
   if (inner.startsWith("logerr ") || inner === "logerr") {
     const logerrArg = inner.slice("logerr".length).trimStart();
     const logerrCol = innerRaw.indexOf("logerr") + 1;
+    if (logerrArg.startsWith('"""')) {
+      const tqLines = [...lines];
+      tqLines[idx] = logerrArg;
+      const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, idx);
+      if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
+      return { step: { type: "logerr", message: body, loc: { line: innerNo, col: logerrCol } }, nextIdx };
+    }
+    if (logerrArg.startsWith('"') && !hasUnescapedClosingQuote(logerrArg, 1)) {
+      fail(filePath, 'multiline strings use triple quotes: logerr """..."""', innerNo, logerrCol);
+    }
     const message = parseLogMessageRhs(filePath, innerNo, logerrCol, logerrArg, "logerr");
     return { step: { type: "logerr", message, loc: { line: innerNo, col: logerrCol } }, nextIdx: idx + 1 };
   }
@@ -475,6 +507,17 @@ export function parseBlockStatement(
   if (returnMatch) {
     const returnValue = returnMatch[1].trim();
     const retLoc = { line: innerNo, col: innerRaw.indexOf("return") + 1 };
+    // return """..."""
+    if (returnValue.startsWith('"""')) {
+      const tqLines = [...lines];
+      tqLines[idx] = returnValue;
+      const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, idx);
+      if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
+      return {
+        step: { type: "return", value: tripleQuoteBodyToRaw(body), loc: retLoc },
+        nextIdx,
+      };
+    }
     // return <subject> match { ... }
     const returnMatchSubject = extractPostfixMatchSubject(returnValue);
     if (returnMatchSubject) {
@@ -534,6 +577,10 @@ export function parseBlockStatement(
         returnValue.startsWith("$") ||
         isBareDottedIdentifierReturn(returnValue))
     ) {
+      // Reject multiline "..."
+      if (returnValue.startsWith('"') && !hasUnescapedClosingQuote(returnValue, 1)) {
+        fail(filePath, 'multiline strings use triple quotes: return """..."""', innerNo, retLoc.col);
+      }
       const value = isBareDottedIdentifierReturn(returnValue)
         ? dottedReturnToQuotedString(returnValue)
         : returnValue;
@@ -567,7 +614,7 @@ export function parseBlockStatement(
     }
     const arrowIdx = inner.indexOf("<-");
     const rhsCol = arrowIdx >= 0 ? arrowIdx + 3 : 1;
-    const rhs = parseSendRhs(filePath, sendMatch.rhsText, innerNo, rhsCol);
+    const { rhs, nextIdx: sendNextIdx } = parseSendRhs(filePath, sendMatch.rhsText, innerNo, rhsCol, lines, idx);
     return {
       step: {
         type: "send",
@@ -575,7 +622,7 @@ export function parseBlockStatement(
         rhs,
         loc: { line: innerNo, col: 1 },
       },
-      nextIdx: idx + 1,
+      nextIdx: sendNextIdx,
     };
   }
 

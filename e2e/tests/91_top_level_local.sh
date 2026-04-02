@@ -13,9 +13,11 @@ e2e::section "top-level const with multi-line string value"
 
 # Given
 e2e::file "env_demo.jh" <<'EOF'
-const role = "You are an expert.
+const role = """
+You are an expert.
     1. You write clearly
-    2. You are concise"
+    2. You are concise
+"""
 
 const greeting = "hello world"
 

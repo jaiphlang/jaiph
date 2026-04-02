@@ -700,9 +700,11 @@ workflow default() {
 === top-level const multi-line string
 # @expect ok
 --- input.jh
-const role = "You are an expert.
+const role = """
+You are an expert.
     1. You write clearly
-    2. You are concise"
+    2. You are concise
+"""
 workflow default() {
   log "${role}"
 }

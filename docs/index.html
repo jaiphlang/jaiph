@@ -535,7 +535,9 @@ Jaiph: Running async.jh
                     </dt>
                     <dd>Import other modules and define module-scoped variables (prefer <code>const</code> for new code)
                         shared by
-                        rules, scripts, and workflows in the same file.</dd>
+                        rules, scripts, and workflows in the same file. Values can be single-line
+                        <code>"..."</code> strings, triple-quoted <code>"""..."""</code> multiline strings,
+                        or bare tokens.</dd>
 
                     <dt><code>rule name() { ... }</code> &middot; <code>rule name(params) { ... }</code> &middot;
                         <code>workflow name() { ... }</code> &middot; <code>workflow name(params) { ... }</code> &middot;
@@ -603,8 +605,8 @@ Jaiph: Running async.jh
                         See <a href="grammar">Grammar</a>.
                     </dd>
 
-                    <dt><code>fail "reason"</code></dt>
-                    <dd><code>fail</code> aborts with stderr + non-zero exit.</dd>
+                    <dt><code>fail "reason"</code> &middot; <code>fail """..."""</code></dt>
+                    <dd><code>fail</code> aborts with stderr + non-zero exit. Use triple quotes for multiline messages.</dd>
 
                     <dt><code>if [not] ensure ref() { }</code> &middot; <code>if [not] run ref() { }</code></dt>
                     <dd>Brace conditionals only, with optional <code>else if</code> / <code>else</code> chains. Use
@@ -620,9 +622,12 @@ Jaiph: Running async.jh
                         Exactly one <code>_</code> wildcard arm is required.
                     </dd>
 
-                    <dt><code>log "message"</code> &middot; <code>logerr "message"</code></dt>
+                    <dt><code>log "message"</code> &middot; <code>log """..."""</code> &middot;
+                        <code>logerr "message"</code>
+                    </dt>
                     <dd>Emit informational or error output to the run tree while keeping workflow execution explicit and
-                        auditable. Terminal and tree text use <code>echo -e</code>-style backslash escapes; structured
+                        auditable. Use triple quotes for multiline messages. Terminal and tree text use
+                        <code>echo -e</code>-style backslash escapes; structured
                         <code>LOG</code> / <code>LOGERR</code> payloads keep the raw message string.
                     </dd>
 

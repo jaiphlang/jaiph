@@ -859,9 +859,11 @@ test("parser: top-level const declaration parses single-line string", () => {
 
 test("parser: top-level const declaration parses multi-line string", () => {
   const source = [
-    'const role = "You are an expert.',
+    'const role = """',
+    "You are an expert.",
     "    1. You write clearly",
-    '    2. You are concise"',
+    "    2. You are concise",
+    '"""',
     "workflow default() {",
     "  log \"${role}\"",
     "}",
