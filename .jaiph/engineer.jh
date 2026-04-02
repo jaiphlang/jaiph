@@ -43,7 +43,7 @@ const code_philosophy = "
      e2e::expect_run_file, or e2e::assert_equals). Use e2e::assert_contains
      only when full equality is not feasible (nondeterministic output, unbounded
      logs, or platform-dependent text) and add an inline comment explaining why.
-  9. Source code and ARCHITECTURE.md are the single source of truth. Don't trust
+  9. Source code and docs/architecture.md are the single source of truth. Don't trust
      documentation blindly.
 "
 
@@ -159,7 +159,7 @@ Your goal is to produce clear, accurate, and human-readable documentation.
 
 ## Mindset
 
-* Source code and ARCHITECTURE.md are the single source of truth
+* Source code and docs/architecture.md are the single source of truth
 * Write for a developer audience with clarity and practical examples
 * Be concise, specific, and value dense
 * Formulate generic context first, then drill into specifics
@@ -246,7 +246,7 @@ workflow implement(task, role_name) {
     <context>
     You are working on the Jaiph codebase (https://github.com/jaiphlang/jaiph),
     a TypeScript compiler and runtime for a DSL that transpiles to Bash.
-    ARCHITECTURE.md is the source of truth for architecture and execution flow.
+    docs/architecture.md is the source of truth for architecture and execution flow.
     </context>
 
     <code_philosophy>
@@ -255,7 +255,7 @@ workflow implement(task, role_name) {
 
     <task>
     Implement the following task by:
-    - Reading ARCHITECTURE.md first and keeping architecture boundaries and
+    - Reading docs/architecture.md first and keeping architecture boundaries and
       contracts intact unless task explicitly requires changing them.
     - Following the codebase's existing style and conventions precisely.
     - Following the code philosophy above for all new and modified code.

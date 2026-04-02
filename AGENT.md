@@ -4,8 +4,8 @@ This document defines how coding agents should work in this repository.
 
 ## Architecture Source of Truth
 
-- `ARCHITECTURE.md` is the source of truth for system architecture and execution flow.
-- Before changing parser/transpiler/runtime/CLI boundaries, read `ARCHITECTURE.md` and keep changes aligned.
+- `docs/architecture.md` is the source of truth for system architecture and execution flow.
+- Before changing parser/transpiler/runtime/CLI boundaries, read `docs/architecture.md` and keep changes aligned.
 - Preserve the documented contracts:
   - runtime -> CLI live events via `__JAIPH_EVENT__`,
   - runtime -> durable artifacts via `.jaiph/runs` and `run_summary.jsonl`,
