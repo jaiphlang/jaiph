@@ -1,4 +1,4 @@
-script greet = "echo hello"
+script greet = `echo hello`
 
 script multiline = ```
 echo "line 1"

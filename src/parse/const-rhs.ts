@@ -1,6 +1,6 @@
 import type { ConstRhs, RuleRefDef, WorkflowRefDef } from "../types";
 import { fail, isRef, parseCallRef } from "./core";
-import { parseInlineScriptBody } from "./inline-script";
+import { parseAnonymousInlineScript } from "./inline-script";
 import { parsePromptStep } from "./prompt";
 import { extractPostfixMatchSubject, parseMatchExpr } from "./match";
 
@@ -91,21 +91,21 @@ export function parseConstRhs(
   }
   if (head.startsWith("run ")) {
     const rest = head.slice("run ".length).trim();
-    if (rest.startsWith("script(") || rest.startsWith("script (")) {
-      const call = parseCallRef(rest);
-      if (!call) {
-        fail(filePath, 'inline script requires parentheses: const name = run script() "body"', lineNo, col);
-      }
-      const result = parseInlineScriptBody(filePath, lines, lineIdx, call.rest, lineNo, col);
+    if (rest.startsWith("`")) {
+      const result = parseAnonymousInlineScript(filePath, lines, lineIdx, rest, lineNo, col);
       return {
         value: {
           kind: "run_inline_script_capture",
           body: result.body,
           ...(result.lang ? { lang: result.lang } : {}),
-          args: call.args,
+          args: result.args,
+          ...(result.bareIdentifierArgs ? { bareIdentifierArgs: result.bareIdentifierArgs } : {}),
         },
         nextLineIdx: result.nextLineIdx - 1,
       };
+    }
+    if (rest.startsWith("script(") || rest.startsWith("script (")) {
+      fail(filePath, 'inline script syntax has changed: use const name = run `body`(args) instead of run script(args) "body"', lineNo, col);
     }
     const call = parseCallRef(rest);
     if (!call) {

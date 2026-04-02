@@ -137,7 +137,7 @@ test("rule with empty braced body is accepted", () => {
 });
 
 test("script with empty string body is accepted", () => {
-  const mod = parsejaiph('script noop = ""', "test.jh");
+  const mod = parsejaiph('script noop = ``', "test.jh");
   assert.equal(mod.scripts.length, 1);
   assert.equal(mod.scripts[0].name, "noop");
 });

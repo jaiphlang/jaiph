@@ -50,7 +50,7 @@ export type ConstRhs =
       loc: SourceLoc;
       returns?: string;
     }
-  | { kind: "run_inline_script_capture"; body: string; lang?: string; args?: string }
+  | { kind: "run_inline_script_capture"; body: string; lang?: string; args?: string; bareIdentifierArgs?: string[] }
   | { kind: "match_expr"; match: MatchExprDef };
 
 export type IfConditionDef =
@@ -108,10 +108,8 @@ export interface ScriptDef {
   body: string;
   /** Fence language tag (e.g. "python3", "node"). Maps to `#!/usr/bin/env <lang>`. */
   lang?: string;
-  /** How the body was provided: "string" (quoted), "identifier" (bare var ref), "fenced" (``` block). */
-  bodyKind: "string" | "identifier" | "fenced";
-  /** Original identifier name when bodyKind is "identifier". */
-  bodyIdentifier?: string;
+  /** How the body was provided: "backtick" (single `), "fenced" (``` block). */
+  bodyKind: "backtick" | "fenced";
   loc: SourceLoc;
 }
 
@@ -216,6 +214,7 @@ export type WorkflowStepDef =
       /** Fence language tag (e.g. "node", "python3"). Maps to `#!/usr/bin/env <lang>`. */
       lang?: string;
       args?: string;
+      bareIdentifierArgs?: string[];
       captureName?: string;
       loc: SourceLoc;
     }

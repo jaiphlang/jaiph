@@ -33,13 +33,13 @@
   "scripts": [
     {
       "body": "true",
-      "bodyKind": "string",
+      "bodyKind": "backtick",
       "comments": [],
       "name": "ok_impl"
     },
     {
       "body": "test -f /tmp/flag",
-      "bodyKind": "string",
+      "bodyKind": "backtick",
       "comments": [],
       "name": "maybe_impl"
     }

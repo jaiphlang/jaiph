@@ -6,8 +6,8 @@ rule maybe() {
   run maybe_impl()
 }
 
-script ok_impl = "true"
-script maybe_impl = "test -f /tmp/flag"
+script ok_impl = `true`
+script maybe_impl = `test -f /tmp/flag`
 
 workflow default() {
   if ensure ok() {

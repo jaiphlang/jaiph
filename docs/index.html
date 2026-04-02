@@ -148,12 +148,12 @@ layout: null
 rule name_was_provided(name) {
   # bash is used by default for scripts
   # use ```node, ```python3, etc. for other languages
-  run script(name) ```
+  run ```
     if [ -z "$1" ]; then
       echo "You didn't provide your name :(" >&2
       exit 1
     fi
-  ```
+  ```(name)
 }
 
 workflow default(name) {
@@ -278,13 +278,13 @@ config {
   # agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
-script npm_run_test_ci = "npm run test:ci"
+script npm_run_test_ci = `npm run test:ci`
 
 rule ci_passes() {
   run npm_run_test_ci()
 }
 
-script save_string_to_file = "printf '%s' \"$1\" > \"$2\""
+script save_string_to_file = `printf '%s' "$1" > "$2"`
 
 workflow default() {
   ensure ci_passes() recover {
@@ -458,7 +458,7 @@ Jaiph: Running async.jh
                     <code>#!/usr/bin/env &lt;tag&gt;</code>. If no tag is present, add a manual
                     <code>#!</code> shebang as the first body line.
                     For trivial one-off commands, use <strong>inline scripts</strong>:
-                    <code>run script() "echo ok"</code> &mdash; no named block needed.
+                    <code>run `echo ok`()</code> &mdash; no named block needed.
                 </p>
                 <p><strong>Async calls.</strong> For async managed work, use <code>run async wf()</code> — Jaiph fans
                     out the workflows concurrently and <strong>implicitly joins</strong> them before the parent workflow
@@ -539,7 +539,7 @@ Jaiph: Running async.jh
 
                     <dt><code>rule name() { ... }</code> &middot; <code>rule name(params) { ... }</code> &middot;
                         <code>workflow name() { ... }</code> &middot; <code>workflow name(params) { ... }</code> &middot;
-                        <code>script name = "cmd"</code> &middot; <code>script name = ```[lang] ... ```</code>
+                        <code>script name = `cmd`</code> &middot; <code>script name = ```[lang] ... ```</code>
                     </dt>
                     <dd><code>rule</code> is for reusable checks (Jaiph structured steps; used with
                         <code>ensure</code>),
@@ -559,16 +559,16 @@ Jaiph: Running async.jh
                     </dd>
 
                     <dt><code>ensure ref()</code> &middot; <code>ensure ref(args) recover { ... }</code> &middot;
-                        <code>run ref()</code> &middot; <code>run script() "body"</code>
+                        <code>run ref()</code> &middot; <code>run `body`(args)</code>
                     </dt>
                     <dd><code>ensure</code> executes a rule (with optional args); <code>recover</code> adds bounded
                         retry repair logic; <code>run</code> calls another workflow or module script from a workflow
                         (managed step &mdash; same value/log contract as <code>ensure</code>). All calls require
                         parentheses. Arguments can be quoted strings or <strong>bare identifiers</strong>:
                         <code>run greet(name)</code> is equivalent to <code>run greet("${name}")</code>.
-                        <code>run script() "body"</code> embeds a one-off shell command directly
-                        without a named <code>script</code> definition &mdash; supports arguments, capture, and custom
-                        shebangs.</dd>
+                        <code>run `body`(args)</code> embeds a one-off shell command directly
+                        without a named <code>script</code> definition &mdash; supports arguments and capture.
+                        Use triple backticks for multiline: <code>run ```...```(args)</code>.</dd>
 
                     <dt><code>prompt "..."</code> &middot; <code>prompt myVar</code> &middot;
                         <code>prompt ``` ... ```</code> &middot;

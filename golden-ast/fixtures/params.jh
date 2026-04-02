@@ -6,4 +6,4 @@ rule validate(input) {
   run checker()
 }
 
-script checker = "echo ok"
+script checker = `echo ok`

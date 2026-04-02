@@ -18,7 +18,7 @@ e2e::file "child.jh" <<'EOF'
 config {
   agent.backend = "claude"
 }
-script log_backend = "printf '%s:%s\n' \"$1\" \"$JAIPH_AGENT_BACKEND\" >> \"$JAIPH_META_SCOPE_FILE\""
+script log_backend = `printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_META_SCOPE_FILE"`
 workflow default() {
   run log_backend("child")
 }
@@ -30,7 +30,7 @@ import "child.jh" as child
 config {
   agent.backend = "cursor"
 }
-script log_backend = "printf '%s:%s\n' \"$1\" \"$JAIPH_AGENT_BACKEND\" >> \"$JAIPH_META_SCOPE_FILE\""
+script log_backend = `printf '%s:%s\n' "$1" "$JAIPH_AGENT_BACKEND" >> "$JAIPH_META_SCOPE_FILE"`
 workflow default() {
   run log_backend("parent_before")
   run child.default()

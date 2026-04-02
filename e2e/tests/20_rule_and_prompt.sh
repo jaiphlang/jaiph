@@ -17,7 +17,7 @@ export PATH="${E2E_MOCK_BIN}:${PATH}"
 # Given
 e2e::file "rule_pass.jh" <<'EOF'
 #!/usr/bin/env jaiph
-script check_passes_impl = "mock_ok"
+script check_passes_impl = `mock_ok`
 rule check_passes() {
   run check_passes_impl()
 }
@@ -55,7 +55,7 @@ e2e::expect_out "rule_pass.jh" "done_impl" "e2e-rule-pass-done"
 # Given
 e2e::file "rule_fail.jh" <<'EOF'
 #!/usr/bin/env jaiph
-script check_fails_impl = "mock_fail"
+script check_fails_impl = `mock_fail`
 script unreachable_impl = ```
 echo "unreachable"
 ```
@@ -84,8 +84,8 @@ e2e::assert_contains "${rule_fail_err}" "e2e-rule-fail-message" "rule_fail.jh em
 # Given
 e2e::file "ensure_fail.jh" <<'EOF'
 #!/usr/bin/env jaiph
-script step_ok_impl = "mock_ok"
-script step_fail_impl = "mock_fail"
+script step_ok_impl = `mock_ok`
+script step_fail_impl = `mock_fail`
 rule step_ok() {
   run step_ok_impl()
 }
@@ -228,7 +228,7 @@ fi
 # Fenced-block prompt is displayed as single line (newlines stripped from preview)
 e2e::file "multiline_prompt.jh" <<'EOF'
 #!/usr/bin/env jaiph
-script done_impl = "echo done"
+script done_impl = `echo done`
 workflow default() {
   prompt ```
     Line one and line two.

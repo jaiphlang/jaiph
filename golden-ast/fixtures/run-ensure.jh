@@ -2,7 +2,7 @@ rule check() {
   run validator()
 }
 
-script validator = "true"
+script validator = `true`
 
 workflow default() {
   ensure check()

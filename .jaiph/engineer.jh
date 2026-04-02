@@ -193,9 +193,9 @@ case "$1" in
 esac
 ```
 
-script arg_nonempty = "[ -n \"${1:-}\" ]"
+script arg_nonempty = `[ -n "${1:-}" ]`
 
-script task_text_has_header = "printf '%s\n' \"$1\" | grep -q '^## '"
+script task_text_has_header = `printf '%s\n' "$1" | grep -q '^## '`
 
 script first_line_task = ```
 local line
@@ -230,9 +230,9 @@ workflow classify_role(task) {
   return result.role
 }
 
-script save_string_to_file = "echo \"$1\" > \"$2\""
+script save_string_to_file = `echo "$1" > "$2"`
 
-script mkdir_p_simple = "mkdir -p \"$1\""
+script mkdir_p_simple = `mkdir -p "$1"`
 
 workflow implement(task, role_name) {
   if not run task_text_has_header(task) {

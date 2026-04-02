@@ -59,7 +59,7 @@ test("build validates imported rule references with deterministic errors", () =>
       [
         'import "./mod.jh" as mod',
         "",
-        "script local_impl = \"echo ok\"",
+        "script local_impl = `echo ok`",
         "rule local() {",
         "  run local_impl()",
         "}",
@@ -73,7 +73,7 @@ test("build validates imported rule references with deterministic errors", () =>
     writeFileSync(
       join(root, "mod.jh"),
       [
-        "script existing_impl = \"echo hi\"",
+        "script existing_impl = `echo hi`",
         "rule existing() {",
         "  run existing_impl()",
         "}",
@@ -275,8 +275,8 @@ test("jaiph run fails fast on command errors inside workflow", () => {
     writeFileSync(
       filePath,
       [
-        "script always_fail = \"false\"",
-        "script should_not_run = \"echo after-false\"",
+        "script always_fail = `false`",
+        "script should_not_run = `echo after-false`",
         "workflow default() {",
         "  run always_fail()",
         "  run should_not_run()",
@@ -381,7 +381,7 @@ test("jaiph run allows rules to call top-level helper functions in readonly mode
     writeFileSync(
       filePath,
       [
-        "script helper_value = \"echo ok\"",
+        "script helper_value = `echo ok`",
         "script helper_is_ok_impl = \`\`\`",
         'test "ok" = "ok"',
         "\`\`\`",
@@ -574,18 +574,8 @@ test("jaiph run stores both reasoning and final answer from stream-json", () => 
 });
 
 test("build rejects command substitution in prompt text", () => {
-  const rootBackticks = mkdtempSync(join(tmpdir(), "jaiph-build-prompt-backticks-"));
   const rootSubshell = mkdtempSync(join(tmpdir(), "jaiph-build-prompt-subshell-"));
   try {
-    writeFileSync(
-      join(rootBackticks, "main.jh"),
-      [
-        "workflow default() {",
-        '  prompt "literal backticks: `uname`"',
-        "}",
-        "",
-      ].join("\n"),
-    );
     writeFileSync(
       join(rootSubshell, "main.jh"),
       [
@@ -596,15 +586,10 @@ test("build rejects command substitution in prompt text", () => {
       ].join("\n"),
     );
     assert.throws(
-      () => buildScripts(rootBackticks, join(rootBackticks, "out")),
-      /E_PARSE prompt cannot contain backticks/,
-    );
-    assert.throws(
       () => buildScripts(rootSubshell, join(rootSubshell, "out")),
       /E_PARSE prompt cannot contain command substitution/,
     );
   } finally {
-    rmSync(rootBackticks, { recursive: true, force: true });
     rmSync(rootSubshell, { recursive: true, force: true });
   }
 });
@@ -1182,7 +1167,7 @@ test("buildScripts accepts files with no workflows", () => {
     writeFileSync(
       filePath,
       [
-        "script only_rule_impl = \"echo ok\"",
+        "script only_rule_impl = `echo ok`",
         "rule only_rule() {",
         "  run only_rule_impl()",
         "}",
@@ -1236,7 +1221,7 @@ test("buildScripts writes multiple script stubs", () => {
     writeFileSync(
       filePath,
       [
-        "script changed_files = \"printf '%s' 'from-function'\"",
+        "script changed_files = `printf '%s' 'from-function'`",
         "script print_value = \`\`\`",
         "printf '%s\\n' \"$1\"",
         "\`\`\`",
@@ -1265,7 +1250,7 @@ test("jaiph run tree includes function calls from workflow shell steps", () => {
     writeFileSync(
       filePath,
       [
-        "script changed_files = \"printf '%s' 'from-function'\"",
+        "script changed_files = `printf '%s' 'from-function'`",
         "script print_value = \`\`\`",
         "printf '%s\\n' \"$1\"",
         "\`\`\`",
@@ -1326,7 +1311,7 @@ test("jaiph run tree shows workflow params inline when run has key=value args", 
   try {
     writeFileSync(
       join(root, "sub.jh"),
-      ["script done_impl = \"echo done\"", "workflow default(path, mode) {", "  run done_impl()", "}", ""].join("\n"),
+      ["script done_impl = `echo done`", "workflow default(path, mode) {", "  run done_impl()", "}", ""].join("\n"),
     );
     writeFileSync(
       join(root, "main.jh"),
@@ -1387,7 +1372,7 @@ test("jaiph run tree truncates param values over 32 chars when params present", 
     const longValue = "a".repeat(40);
     writeFileSync(
       join(root, "sub.jh"),
-      ["script done_impl = \"echo done\"", "workflow default(longparam) {", "  run done_impl()", "}", ""].join("\n"),
+      ["script done_impl = `echo done`", "workflow default(longparam) {", "  run done_impl()", "}", ""].join("\n"),
     );
     writeFileSync(
       join(root, "main.jh"),
@@ -1673,7 +1658,7 @@ test("buildScripts accepts ensure inside a rule block", () => {
     writeFileSync(
       filePath,
       [
-        "script dep_impl = \"echo dep\"",
+        "script dep_impl = `echo dep`",
         "rule dep() {",
         "  run dep_impl()",
         "}",
@@ -1705,12 +1690,12 @@ test("buildScripts extracts scripts for ensure ... recover workflow", () => {
     writeFileSync(
       filePath,
       [
-        "script dep_impl = \"test -f ready.txt\"",
+        "script dep_impl = `test -f ready.txt`",
         "rule dep() {",
         "  run dep_impl()",
         "}",
         "",
-        "script install_deps_impl = \"touch ready.txt\"",
+        "script install_deps_impl = `touch ready.txt`",
         "",
         "workflow install_deps() {",
         "  run install_deps_impl()",
@@ -1739,7 +1724,7 @@ test("build rejects ensure recover inline shell block under strict shell-step ba
     writeFileSync(
       filePath,
       [
-        "script ready_impl = \"test -f ready.txt\"",
+        "script ready_impl = `test -f ready.txt`",
         "rule ready() {",
         "  run ready_impl()",
         "}",
@@ -2155,7 +2140,7 @@ test("jaiph test passes for workflow using ensure only with mocks", () => {
     writeFileSync(
       join(root, "ensure_only.jh"),
       [
-        "script ready_impl = \"echo ok\"",
+        "script ready_impl = `echo ok`",
         "rule ready() {",
         "  run ready_impl()",
         "}",
@@ -2289,11 +2274,11 @@ test("jaiph test runs *.test.jh with mock workflow, rule, and script", () => {
     writeFileSync(
       join(root, "app.jh"),
       [
-        "script policy_check_impl = \"echo real-policy\"",
+        "script policy_check_impl = `echo real-policy`",
         "rule policy_check() {",
         "  run policy_check_impl()",
         "}",
-        "script changed_files = \"echo real_files\"",
+        "script changed_files = `echo real_files`",
         "script build_impl = \`\`\`",
         'echo "real build"',
         "\`\`\`",

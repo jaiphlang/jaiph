@@ -25,7 +25,7 @@ script greet = ```node
 process.stdout.write("hello-from-node\n");
 ```
 
-script plain_bash = "echo bash-ok"
+script plain_bash = `echo bash-ok`
 
 workflow default() {
   run greet()

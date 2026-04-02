@@ -123,9 +123,7 @@ function emitRule(rule: RuleDef, pad: string): string {
 function emitScript(script: ScriptDef, _pad: string): string {
   const lines: string[] = [];
   lines.push(...emitComments(script.comments));
-  if (script.bodyKind === "identifier" && script.bodyIdentifier) {
-    lines.push(`script ${script.name} = ${script.bodyIdentifier}`);
-  } else if (script.bodyKind === "fenced" || script.lang || script.body.includes("\n")) {
+  if (script.bodyKind === "fenced" || script.lang || script.body.includes("\n")) {
     const langTag = script.lang ?? "";
     lines.push(`script ${script.name} = \`\`\`${langTag}`);
     for (const bl of script.body.split("\n")) {
@@ -133,7 +131,7 @@ function emitScript(script: ScriptDef, _pad: string): string {
     }
     lines.push("```");
   } else {
-    lines.push(`script ${script.name} = "${script.body.replace(/"/g, '\\"')}"`);
+    lines.push(`script ${script.name} = \`${script.body}\``);
   }
   return lines.join("\n");
 }
@@ -275,16 +273,16 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
 
     case "run_inline_script": {
       const capture = step.captureName ? `${step.captureName} = ` : "";
-      const argsStr = step.args !== undefined ? step.args : "";
+      const argsStr = formatArgs(step.args ?? "", step.bareIdentifierArgs);
       if (step.lang || step.body.includes("\n")) {
         const langTag = step.lang ?? "";
-        lines.push(`${ci}${capture}run script(${argsStr}) \`\`\`${langTag}`);
+        lines.push(`${ci}${capture}run \`\`\`${langTag}`);
         for (const bl of step.body.split("\n")) {
           lines.push(`${ci}${bl}`);
         }
-        lines.push(`${ci}\`\`\``);
+        lines.push(`${ci}\`\`\`(${argsStr})`);
       } else {
-        lines.push(`${ci}${capture}run script(${argsStr}) "${step.body.replace(/"/g, '\\"')}"`);
+        lines.push(`${ci}${capture}run \`${step.body}\`(${argsStr})`);
       }
       break;
     }
@@ -312,6 +310,15 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
 
     case "const": {
       lines.push(`${ci}${emitConstStep(step.name, step.value)}`);
+      // Handle multi-line inline script capture body
+      if (step.value.kind === "run_inline_script_capture" &&
+          (step.value.lang || step.value.body.includes("\n"))) {
+        for (const bl of step.value.body.split("\n")) {
+          lines.push(`${ci}${bl}`);
+        }
+        const argsStr = formatArgs(step.value.args ?? "", step.value.bareIdentifierArgs);
+        lines.push(`${ci}\`\`\`(${argsStr})`);
+      }
       break;
     }
 
@@ -416,12 +423,12 @@ function emitConstStep(name: string, value: ConstRhs): string {
       return `const ${name} = ${value.match.subject} match {`;
     }
     case "run_inline_script_capture": {
-      const argsStr = value.args !== undefined ? value.args : "";
+      const argsStr = formatArgs(value.args ?? "", value.bareIdentifierArgs);
       if (value.lang || value.body.includes("\n")) {
         const langTag = value.lang ?? "";
-        return `const ${name} = run script(${argsStr}) \`\`\`${langTag}`;
+        return `const ${name} = run \`\`\`${langTag}`;
       }
-      return `const ${name} = run script(${argsStr}) "${value.body.replace(/"/g, '\\"')}"`;
+      return `const ${name} = run \`${value.body}\`(${argsStr})`;
     }
   }
 }

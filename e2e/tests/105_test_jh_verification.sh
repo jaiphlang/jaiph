@@ -19,13 +19,13 @@ e2e::section "jaiph test: representative passing .test.jh"
 # Given
 e2e::file "lib.jh" <<'EOF'
 #!/usr/bin/env jaiph
-script validate_impl = "[ -n \"$1\" ] && echo \"valid\""
+script validate_impl = `[ -n "$1" ] && echo "valid"`
 
 rule validate(input) {
   run validate_impl(arg1)
 }
 
-script deploy_impl = "echo \"deployed\""
+script deploy_impl = `echo "deployed"`
 
 workflow deploy() {
   run deploy_impl()
@@ -91,7 +91,7 @@ e2e::section "jaiph test: predictable failure output"
 
 e2e::file "fail_lib.jh" <<'EOF'
 #!/usr/bin/env jaiph
-script greet_impl = "echo \"hello world\""
+script greet_impl = `echo "hello world"`
 
 workflow default() {
   run greet_impl()
@@ -148,7 +148,7 @@ e2e::section "jaiph test: mock function syntax rejected"
 
 e2e::file "old_syntax.jh" <<'EOF'
 #!/usr/bin/env jaiph
-script helper = "echo \"real\""
+script helper = `echo "real"`
 
 workflow default() {
   run helper()

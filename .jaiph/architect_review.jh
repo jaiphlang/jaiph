@@ -8,24 +8,24 @@ config {
 }
 
 script first_line_str = ```
-source "${JAIPH_LIB}/strings.sh"
+source "$JAIPH_LIB/strings.sh"
 first_line "$1"
 ```
 
 script rest_lines_str = ```
-source "${JAIPH_LIB}/strings.sh"
+source "$JAIPH_LIB/strings.sh"
 rest_lines "$1"
 ```
 
-script arg_nonempty = "[ -n \"${1:-}\" ]"
+script arg_nonempty = `[ -n "$1" ]`
 
-script str_equals = "[ \"$1\" = \"$2\" ]"
+script str_equals = `[ "$1" = "$2" ]`
 
-script task_has_dev_ready_marker = "printf '%s\n' \"$1\" | grep -q '<!-- dev-ready -->'"
+script task_has_dev_ready_marker = `printf '%s\n' "$1" | grep -q '<!-- dev-ready -->'`
 
 script queue_has_any_task_not_dev_ready = ```
 local qf
-qf="${JAIPH_WORKSPACE:-.}/QUEUE.md"
+qf="$JAIPH_WORKSPACE/QUEUE.md"
 awk '
   BEGIN { bad=0 }
   /^## / {

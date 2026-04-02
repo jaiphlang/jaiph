@@ -20,7 +20,7 @@
   "scripts": [
     {
       "body": "true",
-      "bodyKind": "string",
+      "bodyKind": "backtick",
       "comments": [],
       "name": "validator"
     }

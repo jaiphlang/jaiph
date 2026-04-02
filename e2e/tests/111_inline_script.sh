@@ -15,7 +15,7 @@ e2e::section "basic inline script execution"
 
 e2e::file "inline_basic.jh" <<'EOF'
 workflow default() {
-  run script() "echo inline-ok"
+  run `echo inline-ok`()
 }
 EOF
 
@@ -46,7 +46,7 @@ e2e::section "inline script with arguments"
 
 e2e::file "inline_args.jh" <<'EOF'
 workflow default() {
-  run script("hello", "world") "echo $1-$2"
+  run `echo $1-$2`("hello", "world")
 }
 EOF
 
@@ -73,7 +73,7 @@ echo "got: $1"
 ```
 
 workflow default() {
-  x = run script() "echo captured-value"
+  x = run `echo captured-value`()
   run show(x)
 }
 EOF
@@ -101,7 +101,7 @@ echo "const: $1"
 ```
 
 workflow default() {
-  const val = run script() "echo const-value"
+  const val = run `echo const-value`()
   run show_const(val)
 }
 EOF
@@ -148,7 +148,7 @@ e2e::file "inline_iso.jh" <<'EOF'
 const secret = "parent-secret"
 
 workflow default() {
-  run script() "echo secret=${secret:-EMPTY}"
+  run `echo "secret=${secret:-}"`()
 }
 EOF
 
@@ -161,6 +161,6 @@ iso_files=( "${run_dir}"*__inline_*.out )
 shopt -u nullglob
 [[ ${#iso_files[@]} -ge 1 ]] || e2e::fail "expected inline script .out artifact"
 iso_out="$(<"${iso_files[0]}")"
-e2e::assert_equals "${iso_out}" "secret=EMPTY" "inline script cannot access parent scope"
+e2e::assert_equals "${iso_out}" "secret=" "inline script cannot access parent scope"
 
 e2e::pass "inline script isolation"

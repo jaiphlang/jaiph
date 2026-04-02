@@ -23,12 +23,12 @@ rule check_ready() {
   return "ready-value"
 }
 
-script fix_it_impl = "touch ready.txt"
+script fix_it_impl = `touch ready.txt`
 workflow fix_it() {
   run fix_it_impl()
 }
 
-script echo_captured = "echo \"captured=$1\""
+script echo_captured = `echo "captured=$1"`
 workflow default() {
   val = ensure check_ready() recover run fix_it()
   run echo_captured(val)

@@ -45,7 +45,7 @@ e2e::section "run, ensure, and script argument forwarding"
 
 # Given
 e2e::file "args_forwarding.jh" <<'EOF'
-script expect_args_impl = "return 0"
+script expect_args_impl = `return 0`
 
 rule expect_args(a, b) {
   run expect_args_impl()

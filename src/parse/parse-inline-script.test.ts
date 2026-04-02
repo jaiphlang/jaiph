@@ -2,10 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { parsejaiph } from "../parser";
 
-test("parser: run script() with quoted body", () => {
+test("parser: run with backtick inline script", () => {
   const src = `
 workflow default() {
-  run script() "echo hello"
+  run \`echo hello\`()
 }
 `;
   const ast = parsejaiph(src, "test.jh");
@@ -20,10 +20,10 @@ workflow default() {
   }
 });
 
-test("parser: run script() with args and body", () => {
+test("parser: run with backtick inline script and args", () => {
   const src = `
 workflow default() {
-  run script("arg1", "arg2") "echo $1"
+  run \`echo $1\`("arg1", "arg2")
 }
 `;
   const ast = parsejaiph(src, "test.jh");
@@ -35,10 +35,10 @@ workflow default() {
   }
 });
 
-test("parser: capture form — x = run script() body", () => {
+test("parser: capture form — x = run `body`()", () => {
   const src = `
 workflow default() {
-  x = run script() "echo hello"
+  x = run \`echo hello\`()
 }
 `;
   const ast = parsejaiph(src, "test.jh");
@@ -50,10 +50,10 @@ workflow default() {
   }
 });
 
-test("parser: const capture form — const x = run script() body", () => {
+test("parser: const capture form — const x = run `body`()", () => {
   const src = `
 workflow default() {
-  const x = run script() "echo hello"
+  const x = run \`echo hello\`()
 }
 `;
   const ast = parsejaiph(src, "test.jh");
@@ -70,9 +70,9 @@ workflow default() {
 test("parser: run script() with fenced block and lang tag", () => {
   const src = [
     "workflow default() {",
-    "  run script() ```python3",
+    "  run ```python3",
     "print('hello')",
-    "```",
+    "```()",
     "}",
   ].join("\n");
   const ast = parsejaiph(src, "test.jh");
@@ -84,24 +84,24 @@ test("parser: run script() with fenced block and lang tag", () => {
   }
 });
 
-test("parser: run async script() is rejected", () => {
+test("parser: run async with backtick inline script is rejected", () => {
   const src = `
 workflow default() {
-  run async script() "echo hello"
+  run async \`echo hello\`()
 }
 `;
   assert.throws(() => parsejaiph(src, "test.jh"), /not supported with inline scripts/);
 });
 
-test("parser: rule body supports multiline fenced run script()", () => {
+test("parser: rule body supports multiline fenced run ```", () => {
   const src = [
     "rule check(name) {",
-    "  run script(name) ```",
+    "  run ```",
     "    if [ -z \"$1\" ]; then",
     "      echo fail >&2",
     "      exit 1",
     "    fi",
-    "  ```",
+    "  ```(name)",
     "}",
     "workflow default() {",
     "  ensure check()",
@@ -114,17 +114,18 @@ test("parser: rule body supports multiline fenced run script()", () => {
   if (step.type === "run_inline_script") {
     assert.ok(step.body.includes('if [ -z "$1" ]'));
     assert.equal(step.args, "${name}");
+    assert.deepEqual(step.bareIdentifierArgs, ["name"]);
   }
 });
 
-test("parser: rule brace-if body supports fenced run script()", () => {
+test("parser: rule brace-if body supports fenced run ```", () => {
   const src = [
-    "script ok = \"true\"",
+    'script ok = `true`',
     "rule r() {",
     "  if run ok() {",
-    "    run script() ```",
+    "    run ```",
     "echo in-branch",
-    "```",
+    "```()",
     "  }",
     "}",
     "workflow default() {",
@@ -143,11 +144,11 @@ test("parser: rule brace-if body supports fenced run script()", () => {
   }
 });
 
-test("parser: run script() requires body after parens", () => {
+test("parser: old run script() syntax is rejected", () => {
   const src = `
 workflow default() {
   run script()
 }
 `;
-  assert.throws(() => parsejaiph(src, "test.jh"), /inline script body is required/);
+  assert.throws(() => parsejaiph(src, "test.jh"), /inline script syntax has changed/);
 });

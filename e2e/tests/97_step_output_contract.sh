@@ -18,10 +18,10 @@ e2e::section "script: captures stdout, stderr to artifacts"
 # ===================================================================
 
 e2e::file "contract_shell.jh" <<'EOF'
-script emit_value = "echo \"shell-value\""
-script emit_stdout = "echo \"stdout-log\""
-script emit_stderr = "echo \"stderr-log\" >&2"
-script emit_captured = "echo \"captured=$1\""
+script emit_value = `echo "shell-value"`
+script emit_stdout = `echo "stdout-log"`
+script emit_stderr = `echo "stderr-log" >&2`
+script emit_captured = `echo "captured=$1"`
 workflow default() {
   out = run emit_value()
   run emit_stdout()
@@ -66,12 +66,12 @@ e2e::section "ensure rule: captures return value only, stdout to artifacts"
 # ===================================================================
 
 e2e::file "contract_ensure.jh" <<'EOF'
-script compute_echo = "echo \"rule-stdout-goes-to-artifacts\""
+script compute_echo = `echo "rule-stdout-goes-to-artifacts"`
 rule compute(input) {
   run compute_echo()
   return "${arg1}-processed"
 }
-script echo_captured_ensure = "echo \"captured=$1\""
+script echo_captured_ensure = `echo "captured=$1"`
 workflow default() {
   val = ensure compute("input")
   run echo_captured_ensure(val)
@@ -108,12 +108,12 @@ e2e::section "run workflow: captures return value only, stdout to artifacts"
 # ===================================================================
 
 e2e::file "contract_run.jh" <<'EOF'
-script greeter_impl = "echo \"workflow-stdout-goes-to-artifacts\""
+script greeter_impl = `echo "workflow-stdout-goes-to-artifacts"`
 workflow greeter() {
   run greeter_impl()
   return "hello-from-workflow"
 }
-script echo_captured_run = "echo \"captured=$1\""
+script echo_captured_run = `echo "captured=$1"`
 workflow default() {
   val = run greeter()
   run echo_captured_run(val)
@@ -154,7 +154,7 @@ script compute_hash = ```
 echo "fn-stderr-goes-to-artifacts" >&2
 echo "hash-abc123"
 ```
-script echo_captured_fn = "echo \"captured=$1\""
+script echo_captured_fn = `echo "captured=$1"`
 workflow default() {
   val = run compute_hash()
   run echo_captured_fn(val)
@@ -185,7 +185,7 @@ e2e::file "contract_prompt.jh" <<'EOF'
 config {
   agent.backend = "cursor"
 }
-script echo_captured_prompt = "echo \"captured=$1\""
+script echo_captured_prompt = `echo "captured=$1"`
 workflow default() {
   const answer = prompt "What is 2+2?"
   run echo_captured_prompt(answer)
@@ -219,7 +219,7 @@ e2e::section "log/logerr: messages to workflow artifacts"
 # ===================================================================
 
 e2e::file "contract_log.jh" <<'EOF'
-script echo_done = "echo \"done\""
+script echo_done = `echo "done"`
 workflow default() {
   log "info-message"
   logerr "error-message"
