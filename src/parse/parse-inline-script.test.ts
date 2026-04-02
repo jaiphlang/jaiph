@@ -93,6 +93,56 @@ workflow default() {
   assert.throws(() => parsejaiph(src, "test.jh"), /not supported with inline scripts/);
 });
 
+test("parser: rule body supports multiline fenced run script()", () => {
+  const src = [
+    "rule check(name) {",
+    "  run script(name) ```",
+    "    if [ -z \"$1\" ]; then",
+    "      echo fail >&2",
+    "      exit 1",
+    "    fi",
+    "  ```",
+    "}",
+    "workflow default() {",
+    "  ensure check()",
+    "}",
+  ].join("\n");
+  const ast = parsejaiph(src, "test.jh");
+  assert.equal(ast.rules.length, 1);
+  const step = ast.rules[0].steps[0];
+  assert.equal(step.type, "run_inline_script");
+  if (step.type === "run_inline_script") {
+    assert.ok(step.body.includes('if [ -z "$1" ]'));
+    assert.equal(step.args, "${name}");
+  }
+});
+
+test("parser: rule brace-if body supports fenced run script()", () => {
+  const src = [
+    "script ok = \"true\"",
+    "rule r() {",
+    "  if run ok() {",
+    "    run script() ```",
+    "echo in-branch",
+    "```",
+    "  }",
+    "}",
+    "workflow default() {",
+    "  ensure r()",
+    "}",
+  ].join("\n");
+  const ast = parsejaiph(src, "test.jh");
+  const ifStep = ast.rules[0].steps[0];
+  assert.equal(ifStep.type, "if");
+  if (ifStep.type === "if") {
+    const inner = ifStep.thenSteps[0];
+    assert.equal(inner.type, "run_inline_script");
+    if (inner.type === "run_inline_script") {
+      assert.equal(inner.body.trim(), "echo in-branch");
+    }
+  }
+});
+
 test("parser: run script() requires body after parens", () => {
   const src = `
 workflow default() {
