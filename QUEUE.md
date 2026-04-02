@@ -12,22 +12,6 @@ Process rules:
 
 ---
 
-## Validation hints vs strict interpolation <!-- dev-ready -->
-
-**Goal**  
-(1) **Enforce strict checks everywhere they apply:** bare call arguments and `${…}` interpolation must only allow identifiers that are actually in scope (workflow/rule params, `const`, typed prompt captures, positional `argN` when declared, recover-payload `arg1` where applicable, etc.). Audit validation paths so there are no gaps or inconsistent rules between “bare” and “braced” forms.  
-(2) **Align error copy with those rules:** bare-argument errors must not suggest “use `${name}` for explicit interpolation” when `name` is not already a known binding — that hint falsely implies a workaround that strict interpolation does not permit.
-
-**Context**  
-Example: `workflow default() { ensure name_was_provided(name) … }` with `name` undeclared surfaces a message that partially suggests `${name}`; both the hint and any missing strict checks should be fixed together.
-
-**Done when**  
-- Validation coverage is reviewed; bare args and `${ident}` reject unknown names consistently.  
-- Error text and related docs/tests no longer imply that arbitrary `${ident}` works without being in scope.  
-- Compiler tests cover at least one unknown-bare-arg case and one unknown-`${ident}` case with wording that matches strict semantics.
-
----
-
 ## `jaiph serve` — expose workflows as an MCP server <!-- dev-ready -->
 
 **Goal**  

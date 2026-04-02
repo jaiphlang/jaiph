@@ -280,7 +280,7 @@ function validateBareIdentifierArgs(
         loc.line,
         loc.col,
         "E_VALIDATE",
-        `unknown identifier "${name}" used as bare argument; declare it with "const" or a capture, or use "\${${name}}" for explicit interpolation`,
+        `unknown identifier "${name}" used as bare argument; declare it with "const", use a capture, or add a workflow/rule parameter`,
       );
     }
   }

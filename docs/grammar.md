@@ -575,7 +575,7 @@ Module-scoped `const` variables are **not** visible. Use shared libraries (`sour
 
 ## String Interpolation {#string-interpolation}
 
-Jaiph orchestration strings support `${identifier}` interpolation:
+Jaiph orchestration strings support `${identifier}` interpolation. Every identifier — whether in a bare argument (`run greet(name)`) or in braced form (`log "hello ${name}"`) — must reference a binding that is in scope: `const`, capture, named parameter, or positional `arg1`–`arg9`. Unknown names are rejected at compile time with an `E_VALIDATE` error in both forms; `${name}` is **not** a workaround for an undeclared bare identifier.
 
 | Form | Status | Where |
 |---|---|---|
@@ -743,7 +743,7 @@ After parsing, the compiler validates references and config (`src/transpile/vali
 
 - **E_PARSE:** Invalid syntax — duplicate config, invalid keys/values, unescaped backticks, `$(…)` or `${var:-fallback}` in orchestration strings, `prompt … returns` without capture, bare `ref(args)` in const RHS (use `run`/`ensure`/`prompt`), `local` at top level, unrecognized workflow/rule line, invalid send RHS, arguments after `recover`, bare `recover` with no recovery step, nested inline captures, shell redirection after `run`/`ensure`, invalid parameter names (non-identifier, duplicate, or reserved keyword), or missing `{` on definition line.
 - **E_SCHEMA:** Invalid `returns` schema — empty, non-flat, unsupported type (only `string`, `number`, `boolean`).
-- **E_VALIDATE:** Reference errors — unknown rule/workflow, duplicate alias, `ensure` on non-rule, `run` on rule, `run` to workflow inside rule, `run async` in rule, forbidden Jaiph usage inside `$(…)`, dot notation on non-prompt variable or invalid field name, bare identifier argument referencing an unknown variable, standalone `"${identifier}"` in call arguments (use bare identifier instead), arity mismatch (call-site argument count differs from callee's declared parameter count).
+- **E_VALIDATE:** Reference errors — unknown rule/workflow, duplicate alias, `ensure` on non-rule, `run` on rule, `run` to workflow inside rule, `run async` in rule, forbidden Jaiph usage inside `$(…)`, dot notation on non-prompt variable or invalid field name, bare identifier argument referencing an unknown variable, `${identifier}` in strings referencing an unknown variable, standalone `"${identifier}"` in call arguments (use bare identifier instead), arity mismatch (call-site argument count differs from callee's declared parameter count).
 - **E_IMPORT_NOT_FOUND:** Import target file does not exist.
 
 Validation rules:
