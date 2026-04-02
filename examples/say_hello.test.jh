@@ -2,6 +2,10 @@
 
 import "say_hello.jh" as hello
 
+# We expect this test to fail due to mismatch in error message
+# between the prompt and the error message in the test file.
+# We use it to verify the test works and the error message output
+# is correct.
 test "without name, workflow fails with validation message" {
   # When
   response = hello.default allow_failure

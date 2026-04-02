@@ -106,25 +106,32 @@ EOF
 
 e2e::section "examples/say_hello.test.jh — native test execution"
 
-# When
+# When — examples/say_hello.test.jh intentionally fails the first test
+# (expectEqual mismatch vs say_hello.jh stderr) to demonstrate failure output;
+# the second test passes with a mocked prompt.
 set +e
 test_out="$(jaiph test "${TEST_DIR}/say_hello.test.jh" 2>&1)"
 test_exit=$?
 set -e
 
-# Then — both tests pass
-if [[ ${test_exit} -ne 0 ]]; then
+# Then
+if [[ ${test_exit} -eq 0 ]]; then
   printf "%s\n" "${test_out}" >&2
-  e2e::fail "say_hello.test.jh should pass both tests"
+  e2e::fail "say_hello.test.jh should exit non-zero (first test fails on purpose)"
 fi
 
 e2e::expect_stdout "${test_out}" <<'EOF'
 testing say_hello.test.jh
   ▸ without name, workflow fails with validation message
-  ✓ <time>
+  ✗ expectEqual failed: <time>
+    - You didn't provide your name
+    + You didn't provide your name :(
+
   ▸ with name, returns greeting and logs response
   ✓ <time>
-✓ 2 test(s) passed
+
+✗ 1 / 2 test(s) failed
+  - without name, workflow fails with validation message
 EOF
 
 # ── ensure_ci_passes.test.jh ────────────────────────────────────────────────
