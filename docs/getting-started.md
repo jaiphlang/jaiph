@@ -131,6 +131,8 @@ Jaiph source files combine a small orchestration language with scripts in any la
 
 **prompt** — Sends text to a configured AI agent. The body can be a single-line `"string"`, a bare identifier (`prompt myVar`), or a triple-quoted `"""` block for multiline text. Triple backticks are reserved for scripts and rejected in prompt context. Supports structured JSON responses via `returns "{ field: type }"`.
 
+**Type distinction** — `string` and `script` are separate primitive types enforced at compile time. Strings are promptable and interpolatable; scripts are executable with `run`. Crossing these boundaries (e.g. `prompt scriptName`, `run stringConst()`, `const x = scriptName`, `${scriptName}`) produces an `E_VALIDATE` error. See [Grammar — Types](grammar.md#types).
+
 **String quoting** — Jaiph uses a four-delimiter system. `"..."` is the single-line string form; `"""..."""` is the multiline string form. Both support `${...}` interpolation. A double-quoted string that spans multiple lines is rejected — use triple quotes instead. Script bodies use backtick (`` ` ``) for single-line and triple backtick (`` ``` ``) for multi-line.
 
 ### Key patterns

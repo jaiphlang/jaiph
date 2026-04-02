@@ -491,6 +491,9 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
             "run async is not allowed in rules; use it in workflows only",
           );
         }
+        if (!s.workflow.value.includes(".") && ruleKnownVars.has(s.workflow.value) && !localScripts.has(s.workflow.value)) {
+          throw jaiphError(ast.filePath, s.workflow.loc.line, s.workflow.loc.col, "E_VALIDATE", `strings are not executable; "${s.workflow.value}" is a string — use a script instead`);
+        }
         validateRef(s.workflow, ast, refCtx, expectRunInRuleRef);
         validateArity(ast.filePath, s.workflow.loc, s.workflow.value, s.args, "workflow", ast, refCtx);
         validateNoQuotedSingleInterpolation(ast.filePath, s.workflow.loc, s.args);
@@ -543,6 +546,9 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           ruleKnownVars,
           ruleSlots,
           "rule",
+          undefined,
+          undefined,
+          localScripts,
         );
         return;
       }
@@ -558,6 +564,9 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           ruleKnownVars,
           ruleSlots,
           "rule",
+          undefined,
+          undefined,
+          localScripts,
         );
         return;
       }
@@ -573,6 +582,9 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           ruleKnownVars,
           ruleSlots,
           "rule",
+          undefined,
+          undefined,
+          localScripts,
         );
         return;
       }
@@ -606,6 +618,9 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
               ruleKnownVars,
               ruleSlots,
               "rule",
+              undefined,
+              undefined,
+              localScripts,
             );
           }
         }
@@ -615,6 +630,9 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         const v = s.value;
         if (v.kind === "run_capture") {
           validateNoShellRedirection(ast.filePath, v.ref.loc, "run", v.args);
+          if (!v.ref.value.includes(".") && ruleKnownVars.has(v.ref.value) && !localScripts.has(v.ref.value)) {
+            throw jaiphError(ast.filePath, v.ref.loc.line, v.ref.loc.col, "E_VALIDATE", `strings are not executable; "${v.ref.value}" is a string — use a script instead`);
+          }
           validateRef(v.ref, ast, refCtx, expectRunInRuleRef);
           validateArity(ast.filePath, v.ref.loc, v.ref.value, v.args, "workflow", ast, refCtx);
           validateNoQuotedSingleInterpolation(ast.filePath, v.ref.loc, v.args);
@@ -632,6 +650,10 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         } else if (v.kind === "match_expr") {
           validateMatchExpr(ast.filePath, v.match);
         } else if (v.kind === "expr") {
+          const bareRhs = v.bashRhs.trim();
+          if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(bareRhs) && localScripts.has(bareRhs)) {
+            throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `scripts are not values; "${bareRhs}" is a script definition`);
+          }
           validateRuleStringCaptures(stripDQ(v.bashRhs), s.loc);
           validateSimpleInterpolationIdentifiers(
             stripDQ(v.bashRhs),
@@ -642,6 +664,9 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
             ruleKnownVars,
             ruleSlots,
             "rule",
+            undefined,
+            undefined,
+            localScripts,
           );
         }
         return;
@@ -754,6 +779,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
             "workflow",
             promptSchemas,
             recoverPayloadArg1,
+            localScripts,
           );
         } else if (s.rhs.kind === "bare_ref") {
           validateRef(s.rhs.ref, ast, refCtx, bareSendRefSpec);
@@ -779,6 +805,9 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
       }
       if (s.type === "run") {
         validateNoShellRedirection(ast.filePath, s.workflow.loc, "run", s.args);
+        if (!s.workflow.value.includes(".") && wfKnownVars.has(s.workflow.value) && !localScripts.has(s.workflow.value) && !localWorkflows.has(s.workflow.value)) {
+          throw jaiphError(ast.filePath, s.workflow.loc.line, s.workflow.loc.col, "E_VALIDATE", `strings are not executable; "${s.workflow.value}" is a string — use a script instead`);
+        }
         validateRef(s.workflow, ast, refCtx, expectRunTargetRef);
         validateArity(ast.filePath, s.workflow.loc, s.workflow.value, s.args, "workflow", ast, refCtx);
         validateNoQuotedSingleInterpolation(ast.filePath, s.workflow.loc, s.args);
@@ -820,6 +849,9 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         return;
       }
       if (s.type === "prompt") {
+        if (s.bodyKind === "identifier" && s.bodyIdentifier && localScripts.has(s.bodyIdentifier)) {
+          throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `scripts are not promptable; "${s.bodyIdentifier}" is a script — use a string const instead`);
+        }
         validatePromptString(s.raw, ast.filePath, s.loc.line, s.loc.col);
         validatePromptStepReturns(s, ast.filePath);
         validateWorkflowStringCaptures(stripDQ(s.raw), s.loc);
@@ -835,6 +867,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           "workflow",
           promptSchemas,
           recoverPayloadArg1,
+          localScripts,
         );
         return;
       }
@@ -853,6 +886,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           "workflow",
           promptSchemas,
           recoverPayloadArg1,
+          localScripts,
         );
         return;
       }
@@ -871,6 +905,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           "workflow",
           promptSchemas,
           recoverPayloadArg1,
+          localScripts,
         );
         return;
       }
@@ -908,6 +943,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
             "workflow",
             promptSchemas,
             recoverPayloadArg1,
+            localScripts,
           );
         }
         return;
@@ -927,6 +963,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           "workflow",
           promptSchemas,
           recoverPayloadArg1,
+          localScripts,
         );
         return;
       }
@@ -937,6 +974,9 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         const v = s.value;
         if (v.kind === "run_capture") {
           validateNoShellRedirection(ast.filePath, v.ref.loc, "run", v.args);
+          if (!v.ref.value.includes(".") && wfKnownVars.has(v.ref.value) && !localScripts.has(v.ref.value) && !localWorkflows.has(v.ref.value)) {
+            throw jaiphError(ast.filePath, v.ref.loc.line, v.ref.loc.col, "E_VALIDATE", `strings are not executable; "${v.ref.value}" is a string — use a script instead`);
+          }
           validateRef(v.ref, ast, refCtx, expectRunTargetRef);
           validateArity(ast.filePath, v.ref.loc, v.ref.value, v.args, "workflow", ast, refCtx);
           validateNoQuotedSingleInterpolation(ast.filePath, v.ref.loc, v.args);
@@ -948,6 +988,9 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           validateNoQuotedSingleInterpolation(ast.filePath, v.ref.loc, v.args);
           validateBareIdentifierArgs(ast.filePath, v.ref.loc, v.bareIdentifierArgs, wfKnownVars, wfSlots, recoverPayloadArg1);
         } else if (v.kind === "prompt_capture") {
+          if (v.bodyKind === "identifier" && v.bodyIdentifier && localScripts.has(v.bodyIdentifier)) {
+            throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `scripts are not promptable; "${v.bodyIdentifier}" is a script — use a string const instead`);
+          }
           validatePromptString(v.raw, ast.filePath, s.loc.line, s.loc.col);
           if (v.returns !== undefined) {
             validatePromptReturnsSchema(v.returns, ast.filePath, s.loc.line, s.loc.col);
@@ -965,12 +1008,17 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
             "workflow",
             promptSchemas,
             recoverPayloadArg1,
+            localScripts,
           );
         } else if (v.kind === "run_inline_script_capture") {
           // inline script capture — no ref to validate
         } else if (v.kind === "match_expr") {
           validateMatchExpr(ast.filePath, v.match);
         } else if (v.kind === "expr") {
+          const bareRhs = v.bashRhs.trim();
+          if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(bareRhs) && localScripts.has(bareRhs)) {
+            throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `scripts are not values; "${bareRhs}" is a script definition`);
+          }
           validateWorkflowStringCaptures(stripDQ(v.bashRhs), s.loc);
           validateDotFieldRefs(stripDQ(v.bashRhs), s.loc, promptSchemas);
           validateSimpleInterpolationIdentifiers(
@@ -984,6 +1032,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
             "workflow",
             promptSchemas,
             recoverPayloadArg1,
+            localScripts,
           );
         }
         return;

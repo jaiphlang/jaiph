@@ -13,6 +13,31 @@ Jaiph source files (`.jh`) combine a small orchestration language with shell exe
 
 **Source of truth:** When this document and the compiler disagree, treat the implementation as authoritative.
 
+## Types
+
+Jaiph has two primitive value types — **string** and **script** — that are structurally distinct and non-interchangeable.
+
+**String** is the general-purpose value type. Strings can be interpolated (`${name}`), passed as arguments, assigned to `const` bindings, and sent to an agent via `prompt`. All `const` declarations, `env` declarations, captures, and named parameters produce string values.
+
+```jaiph
+const greeting = "Say hello to ${name}."
+prompt greeting       # valid — strings are promptable
+prompt "Say hello."   # valid — inline string literal
+# run greeting()     — E_VALIDATE: strings are not executable
+```
+
+**Script** is an executable unit. Scripts are invoked with `run` and execute as isolated subprocesses. They cannot be interpolated, assigned to variables, or used as prompt bodies — they are definitions, not values.
+
+```jaiph
+script save = `printf '%s' "$1" > "$2"`
+run save(content, path)   # valid — scripts are executable
+# prompt save             — E_VALIDATE: scripts are not promptable
+# const x = save          — E_VALIDATE: scripts are not values
+# log "${save}"           — E_VALIDATE: scripts cannot be interpolated
+```
+
+The compiler enforces these boundaries at every call site. Using a script where a string is expected (or vice versa) produces an `E_VALIDATE` error with a clear, actionable message.
+
 ## Language Concepts
 
 Jaiph enforces a strict boundary between orchestration and execution. Workflows and rules contain only Jaiph steps. Bash lives in `script` bodies.
@@ -747,7 +772,7 @@ After parsing, the compiler validates references and config (`src/transpile/vali
 
 - **E_PARSE:** Invalid syntax — duplicate config, invalid keys/values, `$(…)` or `${var:-fallback}` in orchestration strings, `${...}` interpolation in script bodies, `prompt … returns` without capture, bare `ref(args)` in const RHS (use `run`/`ensure`/`prompt`), `local` at top level, unrecognized workflow/rule line, invalid send RHS, arguments after `recover`, bare `recover` with no recovery step, nested inline captures, shell redirection after `run`/`ensure`, invalid parameter names (non-identifier, duplicate, or reserved keyword), or missing `{` on definition line.
 - **E_SCHEMA:** Invalid `returns` schema — empty, non-flat, unsupported type (only `string`, `number`, `boolean`).
-- **E_VALIDATE:** Reference errors — unknown rule/workflow, duplicate alias, `ensure` on non-rule, `run` on rule, `run` to workflow inside rule, `run async` in rule, forbidden Jaiph usage inside `$(…)`, dot notation on non-prompt variable or invalid field name, bare identifier argument referencing an unknown variable, `${identifier}` in strings referencing an unknown variable, standalone `"${identifier}"` in call arguments (use bare identifier instead), arity mismatch (call-site argument count differs from callee's declared parameter count).
+- **E_VALIDATE:** Reference errors — unknown rule/workflow, duplicate alias, `ensure` on non-rule, `run` on rule, `run` to workflow inside rule, `run async` in rule, forbidden Jaiph usage inside `$(…)`, dot notation on non-prompt variable or invalid field name, bare identifier argument referencing an unknown variable, `${identifier}` in strings referencing an unknown variable, standalone `"${identifier}"` in call arguments (use bare identifier instead), arity mismatch (call-site argument count differs from callee's declared parameter count), **type crossing** — `prompt` with a script name (`scripts are not promptable`), `run` with a string const (`strings are not executable`), `const x = scriptName` (`scripts are not values`), `${scriptName}` interpolation (`scripts cannot be interpolated`).
 - **E_IMPORT_NOT_FOUND:** Import target file does not exist.
 
 Validation rules:
@@ -760,6 +785,7 @@ Validation rules:
 6. Channel references in `send`/`route` must resolve to declared channels. Route targets must be workflows.
 7. `ensure … recover` argument ordering: all arguments inside parentheses before `recover`.
 8. Shell redirection (`>`, `|`, `&`) after `run`/`ensure` is rejected — use a script.
+9. **Type crossing:** `string` and `script` are non-interchangeable primitive types (see [Types](#types)). `prompt` rejects script names; `run` rejects string consts; assigning a script to a `const` or interpolating a script name with `${…}` is rejected. Each crossing produces an actionable `E_VALIDATE` message.
 
 ## Build Artifacts {#build-artifacts}
 

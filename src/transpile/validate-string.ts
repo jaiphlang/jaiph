@@ -142,6 +142,8 @@ export function validateSimpleInterpolationIdentifiers(
   promptFieldSchemas?: Map<string, string[]>,
   /** `ensure … recover` body receives failure output as `${arg1}`. */
   recoverPayloadArg1?: boolean,
+  /** Script names in the current module — `${scriptName}` is rejected because scripts cannot be interpolated. */
+  localScripts?: Set<string>,
 ): void {
   const re = new RegExp(SIMPLE_BRACED_IDENT.source, "g");
   let m: RegExpExecArray | null;
@@ -186,6 +188,15 @@ export function validateSimpleInterpolationIdentifiers(
       if (okUnderscore) {
         continue;
       }
+    }
+    if (localScripts?.has(name)) {
+      throw jaiphError(
+        filePath,
+        line,
+        col,
+        "E_VALIDATE",
+        `scripts cannot be interpolated; "${name}" is a script definition`,
+      );
     }
     throw jaiphError(
       filePath,
