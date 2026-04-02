@@ -83,7 +83,8 @@ e2e::normalize_output() {
     | sed -E 's/✗ (.*) ([0-9]+)(\.[0-9]+)?s$/✗ \1 <time>/g' \
     | sed -E 's/^( *)(cursor-agent|printf %s) .*$/\1<agent-command>/g' \
     | sed -E 's/\(1="\/[^"]*"/(1="<script-path>"/g' \
-    | sed -E 's/[[:space:]]+$//g'
+    | sed -E 's/[[:space:]]+$//g' \
+    | perl -0777 -pe 's/([^\n])\n(✓ PASS)/$1\n\n$2/g'
 }
 
 e2e::assert_output_equals() {

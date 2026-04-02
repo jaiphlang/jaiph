@@ -348,8 +348,10 @@ function reportResult(
 
   const palette = colorPalette();
   if (resolvedStatus === 0) {
+    // Match TTY spacing: tree lines use double newlines between rows; non-TTY uses single `\n` per row.
+    const passPrefix = process.stdout.isTTY ? "" : "\n";
     process.stdout.write(
-      `${palette.green}\u2713 PASS${palette.reset} workflow default ${palette.dim}(${elapsedLabel})${palette.reset}\n`,
+      `${passPrefix}${palette.green}\u2713 PASS${palette.reset} workflow default ${palette.dim}(${elapsedLabel})${palette.reset}\n`,
     );
     return 0;
   }

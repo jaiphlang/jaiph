@@ -48,21 +48,18 @@ function normalize(text: string): string {
     .replace(/^    out: .+$/gm, '    out: <path>')
     .replace(/^    err: .+$/gm, '    err: <path>')
     .replace(/expectEqual failed: \d+(\.\d+)?s/g, 'expectEqual failed: <time>')
-    /** Docs may show an extra blank line before ✓ PASS; CLI does not. */
+    /** Collapse multiple blank lines before ✓ PASS (TTY vs non-TTY spacing). */
     .replace(/\n\n+(?=✓ PASS)/g, '\n')
     .replace(/[ \t]+$/gm, '')
     .trim();
 }
 
-/** Try it out: isolate workflow run block and normalize variable ℹ / prompt truncation. */
+/** Try it out: isolate workflow run block; only ℹ is non-deterministic. */
 function normalizeTryItOutForAssert(combined: string): string {
   const n = normalize(combined);
   const idx = n.indexOf('workflow default');
   const fromWorkflow = idx >= 0 ? n.slice(idx) : n;
-  return fromWorkflow
-    .replace(/\n  ▸ prompt "[^\n]+/g, '\n  ▸ prompt "<try-it-out-prompt>"')
-    .replace(/^  ℹ .+$/gm, '  ℹ <model-response>')
-    .trim();
+  return fromWorkflow.replace(/^  ℹ .+$/gm, '  ℹ <model-response>').trim();
 }
 
 /** Remove the first line (➜ command) from a sample output block. */
@@ -137,8 +134,8 @@ test.describe.serial('docs landing page', () => {
       const expected = normalizeTryItOutForAssert(
         [
           'workflow default',
-          '  ▸ prompt "Say: Hello, I am [model name]!"',
-          '  ✓ prompt prompt (<time>)',
+          '  ▸ prompt cursor "Say: Hello, I am [model ..."',
+          '  ✓ prompt cursor (<time>)',
           '  ℹ Hello, I am Composer!',
           '✓ PASS workflow default (<time>)',
         ].join('\n'),

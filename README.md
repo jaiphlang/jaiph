@@ -37,7 +37,7 @@ Run a sample workflow without installing anything first:
 curl -fsSL https://jaiph.org/run | bash -s '
 workflow default() {
   const response = prompt "Say: Hello I'\''m [model name]!"
-  log "${response}"
+  log response
 }'
 ```
 

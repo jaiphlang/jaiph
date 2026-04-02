@@ -19,5 +19,5 @@ workflow default(name) {
     Respond with a single line. Do not inspect files or run tools.
   ```
 
-  log "${response}"
+  log response
 }
