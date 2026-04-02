@@ -159,10 +159,10 @@ rule name_was_provided(name) {
 workflow default(name) {
   ensure name_was_provided(name)
 
-  const response = prompt ```
+  const response = prompt """
     Say hello to ${name} and provide a fun fact about a person with the same name.
     Respond with a single line. Do not inspect files or run tools.
-  ```
+  """
 
   log response
 }</code></pre>
@@ -571,12 +571,12 @@ Jaiph: Running async.jh
                         Use triple backticks for multiline: <code>run ```...```(args)</code>.</dd>
 
                     <dt><code>prompt "..."</code> &middot; <code>prompt myVar</code> &middot;
-                        <code>prompt ``` ... ```</code> &middot;
+                        <code>prompt """ ... """</code> &middot;
                         <code>const name = prompt "..." returns "{ field: type }"</code>
                     </dt>
                     <dd>Sends a prompt to the configured agent. The body can be a single-line string, a bare identifier,
-                        or a fenced <code>```</code> block for multiline text. Optionally validates structured JSON
-                        output and exposes captured variables.</dd>
+                        or a triple-quoted <code>"""</code> block for multiline text. Triple backticks are reserved for
+                        scripts. Optionally validates structured JSON output and exposes captured variables.</dd>
 
                     <dt><code>const name = …</code> &middot; <code>name = ensure ref()</code> &middot;
                         <code>name = run ref()</code>

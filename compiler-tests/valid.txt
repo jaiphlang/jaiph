@@ -1070,32 +1070,32 @@ workflow default() {
   const ans = prompt text
 }
 
-=== prompt with fenced block body
+=== prompt with triple-quoted block body
 # @expect ok
 --- input.jh
 workflow default() {
-  const _ = prompt ```
+  const _ = prompt """
 You are a helpful assistant.
 Analyze the following.
-```
+"""
 }
 
-=== const prompt capture with fenced block
+=== const prompt capture with triple-quoted block
 # @expect ok
 --- input.jh
 workflow default() {
-  const ans = prompt ```
+  const ans = prompt """
 Analyze this input.
-```
+"""
 }
 
-=== prompt with fenced block and interpolation
+=== prompt with triple-quoted block and interpolation
 # @expect ok
 --- input.jh
 workflow default() {
   const input = "data"
-  const _ = prompt ```
+  const _ = prompt """
 You are a helpful assistant.
 Analyze: ${input}
-```
+"""
 }

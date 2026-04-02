@@ -104,7 +104,7 @@ printf '%s\n' "$out"
 script join_newline_args = `printf '%s\n' "$@"`
 
 workflow update_from_task(taskDesc) {
-  prompt ```
+  prompt """
     <role>
     ${role}
     </role>
@@ -123,11 +123,11 @@ workflow update_from_task(taskDesc) {
     The task description is:
     ${taskDesc}
     </task>
-```
+"""
 }
 
 workflow docs_page(path) {
-  prompt ```
+  prompt """
     <role>
     ${role}
     </role>
@@ -154,11 +154,11 @@ workflow docs_page(path) {
        individual markdown pages. Inline contextual links to other docs are
        fine.
     </task>
-```
+"""
 }
 
 workflow docs_overview(docPaths) {
-  prompt ```
+  prompt """
     <role>
     ${role}
     </role>
@@ -202,7 +202,7 @@ workflow docs_overview(docPaths) {
     10.Ensure src/cli/shared/usage.ts is up to date with the latest CLI commands
        and options. It should be a single source of truth for the CLI usage.
     </task>
-```
+"""
 }
 
 workflow process_docs_md_recursive(file, remaining) {

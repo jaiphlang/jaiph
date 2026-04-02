@@ -206,7 +206,7 @@ printf '%s\n' "$line"
 ```
 
 workflow classify_role(task) {
-  const result = prompt ```
+  const result = prompt """
     Classify this task into the single best-fit engineer role.
 
     Roles:
@@ -225,7 +225,7 @@ workflow classify_role(task) {
     ${task}
 
     Respond with exactly one role name.
-  ``` returns "{ role: string }"
+  """ returns "{ role: string }"
 
   return result.role
 }
@@ -240,7 +240,7 @@ workflow implement(task, role_name) {
   }
   const role = run select_role(role_name)
 
-  prompt ```
+  prompt """
     ${role}
 
     <context>
@@ -302,7 +302,7 @@ workflow implement(task, role_name) {
     Task description:
     ${task}
     </task>
-```
+"""
 }
 
 workflow default(name) {

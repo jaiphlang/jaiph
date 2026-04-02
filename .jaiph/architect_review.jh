@@ -43,7 +43,7 @@ awk '
 ```
 
 workflow review_task(task) {
-  const result = prompt ```
+  const result = prompt """
     You are a software architect reviewing a task from the Jaiph
     improvement queue. Jaiph is a TypeScript compiler and runtime
     for a DSL that transpiles to Bash.
@@ -92,7 +92,7 @@ workflow review_task(task) {
 
     Task to review:
     ${task}
-  ``` returns "{ verdict: string }"
+  """ returns "{ verdict: string }"
 
   return "${result_verdict}"
 }

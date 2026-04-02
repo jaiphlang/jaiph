@@ -166,7 +166,7 @@ workflow write_tests() {
   const txtar_format = run read_txtar_format_spec()
   const txtar_fixtures = run read_txtar_fixtures()
 
-  prompt ```
+  prompt """
     <role>
     You are a test engineer for the Jaiph codebase.
 
@@ -220,7 +220,7 @@ workflow write_tests() {
     ${gap_report}
     </task>
     </role>
-```
+"""
 }
 
 script mkdir_tmp_jaiph_qa = `mkdir -p .jaiph/tmp`

@@ -54,7 +54,7 @@ test("parsePromptStep: multiline quoted prompt throws with clear error", () => {
   ];
   assert.throws(
     () => parsePromptStep("test.jh", lines, 0, '"Hello', 3),
-    /multiline prompt strings are no longer supported; use a fenced block instead/,
+    /multiline prompt strings are no longer supported/,
   );
 });
 
@@ -94,79 +94,93 @@ test("parsePromptStep: parses captured identifier prompt", () => {
   }
 });
 
-// === parsePromptStep: fenced block ===
+// === parsePromptStep: triple-quoted block ===
 
-test("parsePromptStep: parses fenced block prompt", () => {
+test("parsePromptStep: parses triple-quoted block prompt", () => {
   const lines = [
-    '  prompt ```',
+    '  prompt """',
     'You are a helpful assistant.',
     'Analyze the following: ${input}',
-    '```',
+    '"""',
   ];
-  const result = parsePromptStep("test.jh", lines, 0, "```", 3);
+  const result = parsePromptStep("test.jh", lines, 0, '"""', 3);
   assert.equal(result.step.type, "prompt");
   if (result.step.type === "prompt") {
-    assert.equal(result.step.bodyKind, "fenced");
+    assert.equal(result.step.bodyKind, "triple_quoted");
     // raw contains the body wrapped in quotes for runtime interpolation
     assert.ok(result.step.raw.includes("You are a helpful assistant."));
     assert.ok(result.step.raw.includes("${input}"));
   }
 });
 
-test("parsePromptStep: parses captured fenced block prompt", () => {
+test("parsePromptStep: parses captured triple-quoted block prompt", () => {
   const lines = [
-    '  answer = prompt ```',
+    '  answer = prompt """',
     'Hello multiline',
-    '```',
+    '"""',
   ];
-  const result = parsePromptStep("test.jh", lines, 0, "```", 3, "answer");
+  const result = parsePromptStep("test.jh", lines, 0, '"""', 3, "answer");
   assert.equal(result.step.type, "prompt");
   assert.equal(result.step.captureName, "answer");
   if (result.step.type === "prompt") {
-    assert.equal(result.step.bodyKind, "fenced");
+    assert.equal(result.step.bodyKind, "triple_quoted");
   }
 });
 
-test("parsePromptStep: fenced block may be followed by returns on the next line", () => {
+test("parsePromptStep: triple-quoted block may be followed by returns on the next line", () => {
   const lines = [
-    '  answer = prompt ```',
+    '  answer = prompt """',
     "Hello",
-    "```",
+    '"""',
     'returns "{ role: string }"',
   ];
-  const result = parsePromptStep("test.jh", lines, 0, "```", 3, "answer");
+  const result = parsePromptStep("test.jh", lines, 0, '"""', 3, "answer");
   assert.equal(result.step.type, "prompt");
   if (result.step.type === "prompt") {
-    assert.equal(result.step.bodyKind, "fenced");
+    assert.equal(result.step.bodyKind, "triple_quoted");
     assert.equal(result.step.returns, "{ role: string }");
   }
   assert.equal(result.nextLineIdx, 3);
 });
 
-test("parsePromptStep: fenced block may close with ``` returns on same line", () => {
+test("parsePromptStep: triple-quoted block may close with returns on same line", () => {
   const lines = [
-    '  answer = prompt ```',
+    '  answer = prompt """',
     "Hello",
-    '``` returns "{ role: string }"',
+    '""" returns "{ role: string }"',
   ];
-  const result = parsePromptStep("test.jh", lines, 0, "```", 3, "answer");
+  const result = parsePromptStep("test.jh", lines, 0, '"""', 3, "answer");
   assert.equal(result.step.type, "prompt");
   if (result.step.type === "prompt") {
-    assert.equal(result.step.bodyKind, "fenced");
+    assert.equal(result.step.bodyKind, "triple_quoted");
     assert.equal(result.step.returns, "{ role: string }");
   }
   assert.equal(result.nextLineIdx, 2);
 });
 
-test("parsePromptStep: unterminated fenced block throws", () => {
+test("parsePromptStep: unterminated triple-quoted block throws", () => {
+  const lines = [
+    '  prompt """',
+    'Hello multiline',
+    'no closing triple-quote',
+  ];
+  assert.throws(
+    () => parsePromptStep("test.jh", lines, 0, '"""', 3),
+    /unterminated triple-quoted block/,
+  );
+});
+
+// === parsePromptStep: triple-backtick fences are rejected for prompts ===
+
+test("parsePromptStep: triple-backtick fence is rejected with guidance", () => {
   const lines = [
     '  prompt ```',
     'Hello multiline',
-    'no closing fence',
+    '```',
   ];
   assert.throws(
     () => parsePromptStep("test.jh", lines, 0, "```", 3),
-    /unterminated fenced block/,
+    /prompt blocks use triple quotes.*triple backticks are for scripts/,
   );
 });
 

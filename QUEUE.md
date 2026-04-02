@@ -12,53 +12,6 @@ Process rules:
 
 ---
 
-## Prompt block form — triple quotes instead of triple backticks <!-- dev-ready -->
-
-**Goal**  
-Prompt bodies use `"..."` for single-line and `"""..."""` for multi-line. Triple backtick fences are reserved exclusively for scripts. The delimiter structurally identifies content type: natural language (quotes) vs. executable code (backticks).
-
-**Current state**
-
-Prompts use single-line `"..."` or fenced ` ```...``` ` blocks:
-```jaiph
-prompt "Say hello to ${name}."
-const response = prompt ```
-  Say hello to ${name} and provide a fun fact.
-```
-```
-
-**After**
-
-```jaiph
-prompt "Say hello to ${name}."
-const response = prompt """
-  Say hello to ${name} and provide a fun fact.
-"""
-```
-
-Bare identifier form is unchanged: `prompt txt`.
-
-**What needs fixing**
-
-1. **Parser** (`src/parse/prompt.ts`): Accept `"""..."""` as the block prompt delimiter. The opening `"""` must be on the same line as `prompt`. Body continues until a line containing only `"""`.
-2. **Parser** (`src/parse/prompt.ts`): Remove triple backtick as a valid prompt body. Reject with error: `prompt blocks use triple quotes: prompt """..."""; triple backticks are for scripts`.
-3. **Parser** (`src/parse/fence.ts`): `parseFencedBlock` is currently shared between scripts and prompts. Either split it or add a new `parseTripleQuoteBlock` for prompts. The triple-quote block does NOT support lang tags (it's always natural language).
-4. **AST** (`src/types.ts`): Update `bodyKind` — replace `"fenced"` with `"triple_quoted"` for prompt steps. Script `bodyKind` keeps `"fenced"`.
-5. **Formatter** (`src/format/emit.ts`): Update prompt emission to use `"""` delimiters.
-6. **Docs** (`docs/grammar.md`): Update prompt syntax, EBNF, and examples.
-7. **Tests**: Update golden AST fixtures, compiler tests, and e2e tests.
-
-**Acceptance criteria**
-
-- `prompt """..."""` parses as a block prompt with `bodyKind: "triple_quoted"`.
-- `prompt \`\`\`...\`\`\`` is a hard parse error with guidance.
-- `${...}` interpolation works inside triple-quoted blocks.
-- `returns "{ ... }"` works after the closing `"""` (same line or next line).
-- Single-line `prompt "text"` and bare identifier `prompt myVar` are unchanged.
-- All existing e2e and golden AST tests pass with updated fixtures.
-
----
-
 ## Triple-quoted strings — `"""..."""` as the only multiline string form <!-- dev-ready -->
 
 **Goal**  

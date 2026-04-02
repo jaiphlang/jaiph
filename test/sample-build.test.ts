@@ -665,10 +665,10 @@ test("jaiph run interpolates named array placeholders in prompt text", () => {
       [
         "const DOCS = \"README.md docs/cli.md\"",
         "workflow default() {",
-        "  prompt ```",
+        '  prompt """',
         "Files to keep in sync:",
         "${DOCS}",
-        "```",
+        '"""',
         "}",
         "",
       ].join("\n"),
