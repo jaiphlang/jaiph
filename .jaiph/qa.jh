@@ -57,7 +57,7 @@ cat "$p"
 
 script save_gap_report_file = `printf '%s\n' "$1" > "$2"`
 
-const analyze_gaps_prompt = "
+const analyze_gaps_prompt = """
     <role>
     You are a QA engineer analyzing the Jaiph codebase for test coverage gaps.
 
@@ -134,7 +134,7 @@ const analyze_gaps_prompt = "
     For **txtar** gaps, also include the suggested test case in txtar format:
     \`\`\`
     === suggested test name
-    # @expect error E_CODE \"substring\"
+    # @expect error E_CODE "substring"
     --- input.jh
     <minimal source to trigger the error>
     \`\`\`
@@ -142,7 +142,7 @@ const analyze_gaps_prompt = "
     Sort by priority descending. Be thorough but skip trivial paths.
     </task>
     </role>
-    "
+"""
 
 workflow analyze_gaps() {
   const report_path = run new_qa_gap_report_path()

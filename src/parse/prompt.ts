@@ -1,5 +1,6 @@
 import type { WorkflowStepDef } from "../types";
 import { fail, hasUnescapedClosingQuote, indexOfClosingDoubleQuote } from "./core";
+import { parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 
 /**
  * Prompt body source tag stored in the AST.
@@ -140,49 +141,27 @@ export function parseReturnsClause(
 }
 
 /**
- * Parse a triple-quoted block (`"""..."""`) starting at tripleQuoteLineIdx.
- * Returns the body between delimiters, optional returns schema, and next line index.
+ * Parse a prompt triple-quoted block, allowing optional `returns "..."` on the closing `"""` line.
  */
-function parseTripleQuoteBlock(
+function parsePromptTripleQuoteBlock(
   filePath: string,
   lines: string[],
   tripleQuoteLineIdx: number,
 ): { body: string; nextIdx: number; returns?: string } {
-  const lineNo = tripleQuoteLineIdx + 1;
-  const openLine = lines[tripleQuoteLineIdx].trim();
-
-  if (!openLine.startsWith('"""')) {
-    fail(filePath, 'expected opening triple-quote """', lineNo);
+  const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, lines, tripleQuoteLineIdx);
+  if (afterClose.length === 0) {
+    return { body, nextIdx };
   }
-  const afterOpen = openLine.slice(3);
-  if (afterOpen.trim().length > 0) {
-    fail(filePath, 'opening """ must not have content on the same line', lineNo);
+  const m = afterClose.match(/^returns\s+"((?:[^"\\]|\\.)*)"\s*$/);
+  if (m) {
+    const content = m[1].replace(/\\"/g, '"');
+    return { body, returns: content, nextIdx };
   }
-
-  const bodyLines: string[] = [];
-  let i = tripleQuoteLineIdx + 1;
-  for (; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
-    if (trimmed.startsWith('"""')) {
-      const afterClose = trimmed.slice(3).trim();
-      if (afterClose.length === 0) {
-        return { body: bodyLines.join("\n"), nextIdx: i + 1 };
-      }
-      const m = afterClose.match(/^returns\s+"((?:[^"\\]|\\.)*)"\s*$/);
-      if (m) {
-        const content = m[1].replace(/\\"/g, '"');
-        return { body: bodyLines.join("\n"), returns: content, nextIdx: i + 1 };
-      }
-      fail(
-        filePath,
-        'closing """ must be alone, or followed by returns "{ ... }" (same line)',
-        i + 1,
-      );
-    }
-    bodyLines.push(lines[i]);
-  }
-
-  fail(filePath, 'unterminated triple-quoted block: no closing """ before end of file', lineNo);
+  fail(
+    filePath,
+    'closing """ must be alone, or followed by returns "{ ... }" (same line)',
+    nextIdx,
+  );
 }
 
 /**
@@ -221,14 +200,14 @@ export function parsePromptStep(
     // so that parseTripleQuoteBlock reports correct line numbers on errors.
     const tqLines = [...lines];
     tqLines[lineIdx] = promptArg;
-    const { body, nextIdx: realNextIdx, returns: returnsOnClosingLine } = parseTripleQuoteBlock(
+    const { body, nextIdx: realNextIdx, returns: returnsOnClosingLine } = parsePromptTripleQuoteBlock(
       filePath,
       tqLines,
       lineIdx,
     );
 
     // Wrap body in quotes so the runtime's interpolateWithCaptures can process ${} vars
-    const raw = `"${body.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+    const raw = tripleQuoteBodyToRaw(body);
 
     let returnsSchema: string | undefined = returnsOnClosingLine;
     let consumeEndIdx = realNextIdx;

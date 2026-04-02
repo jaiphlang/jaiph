@@ -1,5 +1,6 @@
 import type { SendRhsDef, WorkflowRefDef } from "../types";
-import { fail, indexOfClosingDoubleQuote, isRef, parseCallRef } from "./core";
+import { fail, hasUnescapedClosingQuote, indexOfClosingDoubleQuote, isRef, parseCallRef } from "./core";
+import { parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 
 /** Reject non-empty trailing content after a call expression (e.g. shell redirection). */
 function rejectTrailingContent(
@@ -16,18 +17,31 @@ function rejectTrailingContent(
 const SEND_RHS_HINT =
   'send right-hand side must be a quoted string ("..."), a variable ($name or ${...}), or "run <ref> [args]" — not raw shell; use a script or use const';
 
-/** Parse RHS after `<-` for the send operator. */
+/** Parse RHS after `<-` for the send operator. Returns the parsed RHS and next line index. */
 export function parseSendRhs(
   filePath: string,
   rhs: string,
   lineNo: number,
   col: number,
-): SendRhsDef {
+  lines?: string[],
+  idx?: number,
+): { rhs: SendRhsDef; nextIdx: number } {
   const t = rhs.trim();
+  const defaultNext = (idx ?? lineNo - 1) + 1;
   if (t === "") {
-    return { kind: "forward" };
+    return { rhs: { kind: "forward" }, nextIdx: defaultNext };
+  }
+  if (t.startsWith('"""') && lines && idx !== undefined) {
+    const tqLines = [...lines];
+    tqLines[idx] = t;
+    const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, idx);
+    if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
+    return { rhs: { kind: "literal", token: tripleQuoteBodyToRaw(body) }, nextIdx };
   }
   if (t.startsWith('"')) {
+    if (!hasUnescapedClosingQuote(t, 1)) {
+      fail(filePath, 'multiline strings use triple quotes: channel <- """..."""', lineNo, col);
+    }
     const close = indexOfClosingDoubleQuote(t, 1);
     if (close === -1) {
       fail(filePath, "unterminated string in send right-hand side", lineNo, col);
@@ -35,7 +49,7 @@ export function parseSendRhs(
     if (t.slice(close + 1).trim() !== "") {
       fail(filePath, SEND_RHS_HINT, lineNo, col);
     }
-    return { kind: "literal", token: t.slice(0, close + 1) };
+    return { rhs: { kind: "literal", token: t.slice(0, close + 1) }, nextIdx: defaultNext };
   }
   if (t.startsWith("run ")) {
     const call = parseCallRef(t.slice("run ".length).trim());
@@ -43,14 +57,17 @@ export function parseSendRhs(
       rejectTrailingContent(filePath, lineNo, "run", call.rest);
       const ref: WorkflowRefDef = { value: call.ref, loc: { line: lineNo, col } };
       return {
-        kind: "run", ref,
-        ...(call.args ? { args: call.args } : {}),
-        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
+        rhs: {
+          kind: "run", ref,
+          ...(call.args ? { args: call.args } : {}),
+          ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
+        },
+        nextIdx: defaultNext,
       };
     }
   }
   if (/^\$[A-Za-z_][A-Za-z0-9_]*$/.test(t)) {
-    return { kind: "var", bash: t };
+    return { rhs: { kind: "var", bash: t }, nextIdx: defaultNext };
   }
   if (t.startsWith("${")) {
     let depth = 1;
@@ -79,18 +96,17 @@ export function parseSendRhs(
     if (braced.includes("$(")) {
       fail(filePath, SEND_RHS_HINT, lineNo, col);
     }
-    return { kind: "var", bash: braced };
+    return { rhs: { kind: "var", bash: braced }, nextIdx: defaultNext };
   }
   const bareWord = t.match(/^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)$/);
   if (bareWord && isRef(bareWord[1])) {
     return {
-      kind: "bare_ref",
-      ref: { value: bareWord[1], loc: { line: lineNo, col } },
+      rhs: { kind: "bare_ref", ref: { value: bareWord[1], loc: { line: lineNo, col } } },
+      nextIdx: defaultNext,
     };
   }
   return {
-    kind: "shell",
-    command: t,
-    loc: { line: lineNo, col },
+    rhs: { kind: "shell", command: t, loc: { line: lineNo, col } },
+    nextIdx: defaultNext,
   };
 }

@@ -31,7 +31,7 @@ All orchestration — local `jaiph run`, `jaiph test`, and **Docker `jaiph run`*
 
 - **Parser (`src/parser.ts`, `src/parse/*`)**
   - Converts `.jh`/`.test.jh` into `jaiphModule` AST.
-  - Reusable primitives: `parseFencedBlock()` (`src/parse/fence.ts`) handles triple-backtick fenced bodies with optional lang tokens for scripts and inline scripts. Prompts use `parseTripleQuoteBlock()` (`src/parse/prompt.ts`) for `"""..."""` blocks.
+  - Reusable primitives: `parseFencedBlock()` (`src/parse/fence.ts`) handles triple-backtick fenced bodies with optional lang tokens for scripts and inline scripts. `parseTripleQuoteBlock()` (`src/parse/triple-quote.ts`) handles `"""..."""` blocks for prompts, `const`, `log`, `logerr`, `fail`, `return`, and `send` — all positions where multiline strings appear.
 
 - **AST / Types (`src/types.ts`)**
   - Shared compile-time schema (`jaiphModule`, step defs, test defs, hook payload types).

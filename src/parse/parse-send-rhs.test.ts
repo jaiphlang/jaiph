@@ -5,37 +5,37 @@ import { parseSendRhs } from "./send-rhs";
 // === parseSendRhs: forward ===
 
 test("parseSendRhs: empty RHS returns forward kind", () => {
-  const result = parseSendRhs("test.jh", "", 1, 1);
-  assert.equal(result.kind, "forward");
+  const { rhs } = parseSendRhs("test.jh", "", 1, 1);
+  assert.equal(rhs.kind, "forward");
 });
 
 test("parseSendRhs: whitespace-only RHS returns forward kind", () => {
-  const result = parseSendRhs("test.jh", "   ", 1, 1);
-  assert.equal(result.kind, "forward");
+  const { rhs } = parseSendRhs("test.jh", "   ", 1, 1);
+  assert.equal(rhs.kind, "forward");
 });
 
 // === parseSendRhs: literal ===
 
 test("parseSendRhs: quoted string returns literal kind", () => {
-  const result = parseSendRhs("test.jh", '"hello world"', 1, 1);
-  assert.equal(result.kind, "literal");
-  if (result.kind === "literal") {
-    assert.equal(result.token, '"hello world"');
+  const { rhs } = parseSendRhs("test.jh", '"hello world"', 1, 1);
+  assert.equal(rhs.kind, "literal");
+  if (rhs.kind === "literal") {
+    assert.equal(rhs.token, '"hello world"');
   }
 });
 
 test("parseSendRhs: quoted string with escaped quote", () => {
-  const result = parseSendRhs("test.jh", '"say \\"hi\\""', 1, 1);
-  assert.equal(result.kind, "literal");
-  if (result.kind === "literal") {
-    assert.equal(result.token, '"say \\"hi\\""');
+  const { rhs } = parseSendRhs("test.jh", '"say \\"hi\\""', 1, 1);
+  assert.equal(rhs.kind, "literal");
+  if (rhs.kind === "literal") {
+    assert.equal(rhs.token, '"say \\"hi\\""');
   }
 });
 
 test("parseSendRhs: unterminated string throws", () => {
   assert.throws(
     () => parseSendRhs("test.jh", '"unterminated', 1, 1),
-    /unterminated string/,
+    /multiline strings use triple quotes/,
   );
 });
 
@@ -49,65 +49,65 @@ test("parseSendRhs: trailing content after quoted string throws", () => {
 // === parseSendRhs: run ===
 
 test("parseSendRhs: run call returns run kind", () => {
-  const result = parseSendRhs("test.jh", "run my_script()", 1, 5);
-  assert.equal(result.kind, "run");
-  if (result.kind === "run") {
-    assert.equal(result.ref.value, "my_script");
-    assert.equal(result.ref.loc.line, 1);
-    assert.equal(result.ref.loc.col, 5);
+  const { rhs } = parseSendRhs("test.jh", "run my_script()", 1, 5);
+  assert.equal(rhs.kind, "run");
+  if (rhs.kind === "run") {
+    assert.equal(rhs.ref.value, "my_script");
+    assert.equal(rhs.ref.loc.line, 1);
+    assert.equal(rhs.ref.loc.col, 5);
   }
 });
 
 test("parseSendRhs: run call with args", () => {
-  const result = parseSendRhs("test.jh", 'run my_script("arg1")', 1, 1);
-  assert.equal(result.kind, "run");
-  if (result.kind === "run") {
-    assert.equal(result.ref.value, "my_script");
-    assert.equal(result.args, '"arg1"');
+  const { rhs } = parseSendRhs("test.jh", 'run my_script("arg1")', 1, 1);
+  assert.equal(rhs.kind, "run");
+  if (rhs.kind === "run") {
+    assert.equal(rhs.ref.value, "my_script");
+    assert.equal(rhs.args, '"arg1"');
   }
 });
 
 test("parseSendRhs: run call with dotted ref", () => {
-  const result = parseSendRhs("test.jh", "run lib.process()", 1, 1);
-  assert.equal(result.kind, "run");
-  if (result.kind === "run") {
-    assert.equal(result.ref.value, "lib.process");
+  const { rhs } = parseSendRhs("test.jh", "run lib.process()", 1, 1);
+  assert.equal(rhs.kind, "run");
+  if (rhs.kind === "run") {
+    assert.equal(rhs.ref.value, "lib.process");
   }
 });
 
 // === parseSendRhs: var ===
 
 test("parseSendRhs: simple variable returns var kind", () => {
-  const result = parseSendRhs("test.jh", "$myVar", 1, 1);
-  assert.equal(result.kind, "var");
-  if (result.kind === "var") {
-    assert.equal(result.bash, "$myVar");
+  const { rhs } = parseSendRhs("test.jh", "$myVar", 1, 1);
+  assert.equal(rhs.kind, "var");
+  if (rhs.kind === "var") {
+    assert.equal(rhs.bash, "$myVar");
   }
 });
 
 test("parseSendRhs: underscore variable", () => {
-  const result = parseSendRhs("test.jh", "$_name", 1, 1);
-  assert.equal(result.kind, "var");
-  if (result.kind === "var") {
-    assert.equal(result.bash, "$_name");
+  const { rhs } = parseSendRhs("test.jh", "$_name", 1, 1);
+  assert.equal(rhs.kind, "var");
+  if (rhs.kind === "var") {
+    assert.equal(rhs.bash, "$_name");
   }
 });
 
 // === parseSendRhs: braced variable ===
 
 test("parseSendRhs: braced variable returns var kind", () => {
-  const result = parseSendRhs("test.jh", "${myVar}", 1, 1);
-  assert.equal(result.kind, "var");
-  if (result.kind === "var") {
-    assert.equal(result.bash, "${myVar}");
+  const { rhs } = parseSendRhs("test.jh", "${myVar}", 1, 1);
+  assert.equal(rhs.kind, "var");
+  if (rhs.kind === "var") {
+    assert.equal(rhs.bash, "${myVar}");
   }
 });
 
 test("parseSendRhs: nested braced variable", () => {
-  const result = parseSendRhs("test.jh", "${outer_${inner}}", 1, 1);
-  assert.equal(result.kind, "var");
-  if (result.kind === "var") {
-    assert.equal(result.bash, "${outer_${inner}}");
+  const { rhs } = parseSendRhs("test.jh", "${outer_${inner}}", 1, 1);
+  assert.equal(rhs.kind, "var");
+  if (rhs.kind === "var") {
+    assert.equal(rhs.bash, "${outer_${inner}}");
   }
 });
 
@@ -135,23 +135,36 @@ test("parseSendRhs: braced variable with command substitution throws", () => {
 // === parseSendRhs: bare_ref ===
 
 test("parseSendRhs: bare dotted ref returns bare_ref kind", () => {
-  const result = parseSendRhs("test.jh", "lib.handler", 1, 3);
-  assert.equal(result.kind, "bare_ref");
-  if (result.kind === "bare_ref") {
-    assert.equal(result.ref.value, "lib.handler");
-    assert.equal(result.ref.loc.line, 1);
-    assert.equal(result.ref.loc.col, 3);
+  const { rhs } = parseSendRhs("test.jh", "lib.handler", 1, 3);
+  assert.equal(rhs.kind, "bare_ref");
+  if (rhs.kind === "bare_ref") {
+    assert.equal(rhs.ref.value, "lib.handler");
+    assert.equal(rhs.ref.loc.line, 1);
+    assert.equal(rhs.ref.loc.col, 3);
   }
 });
 
 // === parseSendRhs: shell ===
 
 test("parseSendRhs: unrecognized expression returns shell kind", () => {
-  const result = parseSendRhs("test.jh", "echo hello | grep h", 1, 1);
-  assert.equal(result.kind, "shell");
-  if (result.kind === "shell") {
-    assert.equal(result.command, "echo hello | grep h");
-    assert.equal(result.loc.line, 1);
-    assert.equal(result.loc.col, 1);
+  const { rhs } = parseSendRhs("test.jh", "echo hello | grep h", 1, 1);
+  assert.equal(rhs.kind, "shell");
+  if (rhs.kind === "shell") {
+    assert.equal(rhs.command, "echo hello | grep h");
+    assert.equal(rhs.loc.line, 1);
+    assert.equal(rhs.loc.col, 1);
   }
+});
+
+// === parseSendRhs: triple-quoted literal ===
+
+test("parseSendRhs: triple-quoted string returns literal kind", () => {
+  const lines = ['ch <- """', "  hello", "  world", '"""'];
+  const { rhs, nextIdx } = parseSendRhs("test.jh", '"""', 1, 6, lines, 0);
+  assert.equal(rhs.kind, "literal");
+  if (rhs.kind === "literal") {
+    assert.ok(rhs.token.includes("hello"));
+    assert.ok(rhs.token.includes("world"));
+  }
+  assert.equal(nextIdx, 4);
 });

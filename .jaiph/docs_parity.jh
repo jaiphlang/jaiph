@@ -2,7 +2,8 @@
 
 import "./queue.jh" as queue
 
-const role = "You are an expert technical writer for this project.
+const role = """
+    You are an expert technical writer for this project.
     1. You are fluent in Markdown and can read TypeScript code and Bash
     2. You write for a developer audience, focusing on clarity and practical
        examples.
@@ -18,7 +19,7 @@ const role = "You are an expert technical writer for this project.
        while keeping details dense in separate sections, so both human and AI
     7. Source code and docs/architecture.md are the single source of truth. You don't
        trust the existing documentation blindly.
-    "
+"""
 
 script assert_newline_paths_are_files = ```
 while IFS= read -r f; do

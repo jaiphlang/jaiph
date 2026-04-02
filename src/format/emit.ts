@@ -41,7 +41,7 @@ export function emitModule(mod: jaiphModule, opts: EmitOptions = DEFAULT_OPTIONS
 
   if (mod.envDecls) {
     for (const env of mod.envDecls) {
-      sections.push(emitEnvDecl(env));
+      sections.push(emitEnvDecl(env).join("\n"));
     }
   }
 
@@ -102,8 +102,16 @@ function emitConfig(meta: WorkflowMetadata, pad: string): string {
   return lines.join("\n");
 }
 
-function emitEnvDecl(env: EnvDeclDef): string {
-  return `const ${env.name} = ${env.value}`;
+function emitEnvDecl(env: EnvDeclDef): string[] {
+  if (env.value.includes("\n")) {
+    const lines = [`const ${env.name} = """`];
+    for (const bl of env.value.split("\n")) {
+      lines.push(bl);
+    }
+    lines.push('"""');
+    return lines;
+  }
+  return [`const ${env.name} = ${env.value}`];
 }
 
 function emitComments(comments: string[]): string[] {
@@ -330,23 +338,58 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
           lines.push(`${ci}returns "${step.value.returns}"`);
         }
       }
+      // Handle multi-line triple-quoted expr (const name = """...""")
+      if (step.value.kind === "expr" && step.value.bashRhs.startsWith('"') &&
+          step.value.bashRhs.endsWith('"') && step.value.bashRhs.includes("\n")) {
+        const inner = step.value.bashRhs.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+        for (const bl of inner.split("\n")) {
+          lines.push(`${ci}${bl}`);
+        }
+        lines.push(`${ci}"""`);
+      }
       break;
     }
 
-    case "fail":
-      lines.push(`${ci}fail ${step.message}`);
+    case "fail": {
+      if (step.message.includes("\n")) {
+        const inner = step.message.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+        lines.push(`${ci}fail """`);
+        for (const bl of inner.split("\n")) {
+          lines.push(`${ci}${bl}`);
+        }
+        lines.push(`${ci}"""`);
+      } else {
+        lines.push(`${ci}fail ${step.message}`);
+      }
       break;
+    }
 
     case "wait":
       lines.push(`${ci}wait`);
       break;
 
     case "log":
-      lines.push(`${ci}log "${step.message}"`);
+      if (step.message.includes("\n")) {
+        lines.push(`${ci}log """`);
+        for (const bl of step.message.split("\n")) {
+          lines.push(`${ci}${bl}`);
+        }
+        lines.push(`${ci}"""`);
+      } else {
+        lines.push(`${ci}log "${step.message}"`);
+      }
       break;
 
     case "logerr":
-      lines.push(`${ci}logerr "${step.message}"`);
+      if (step.message.includes("\n")) {
+        lines.push(`${ci}logerr """`);
+        for (const bl of step.message.split("\n")) {
+          lines.push(`${ci}${bl}`);
+        }
+        lines.push(`${ci}"""`);
+      } else {
+        lines.push(`${ci}logerr "${step.message}"`);
+      }
       break;
 
     case "return": {
@@ -362,6 +405,13 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
           }
           lines.push(`${ci}}`);
         }
+      } else if (step.value.includes("\n")) {
+        const inner = step.value.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+        lines.push(`${ci}return """`);
+        for (const bl of inner.split("\n")) {
+          lines.push(`${ci}${bl}`);
+        }
+        lines.push(`${ci}"""`);
       } else {
         lines.push(`${ci}return ${step.value}`);
       }
@@ -369,8 +419,17 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
     }
 
     case "send": {
-      const rhs = emitSendRhs(step.rhs);
-      lines.push(`${ci}${step.channel} <- ${rhs}`);
+      if (step.rhs.kind === "literal" && step.rhs.token.includes("\n")) {
+        const inner = step.rhs.token.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+        lines.push(`${ci}${step.channel} <- """`);
+        for (const bl of inner.split("\n")) {
+          lines.push(`${ci}${bl}`);
+        }
+        lines.push(`${ci}"""`);
+      } else {
+        const rhs = emitSendRhs(step.rhs);
+        lines.push(`${ci}${step.channel} <- ${rhs}`);
+      }
       break;
     }
 
@@ -413,6 +472,10 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
 function emitConstStep(name: string, value: ConstRhs): string {
   switch (value.kind) {
     case "expr":
+      if (value.bashRhs.startsWith('"') && value.bashRhs.endsWith('"') && value.bashRhs.includes("\n")) {
+        // Multi-line: caller handles remaining lines
+        return `const ${name} = """`;
+      }
       return `const ${name} = ${value.bashRhs}`;
     case "run_capture":
       return `const ${name} = run ${emitRef(value.ref, value.args, value.bareIdentifierArgs)}`;

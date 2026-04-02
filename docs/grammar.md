@@ -47,13 +47,15 @@ Imported symbols use **dot notation**: `alias.name`. A reference is either a bar
 
 ### Top-Level `const`
 
-`const name = value` declares a module-scoped variable. Values can be double-quoted strings (including multiline) or bare tokens like numbers.
+`const name = value` declares a module-scoped variable. Values can be double-quoted strings (single-line only), triple-quoted strings (multiline), or bare tokens like numbers. A double-quoted string that spans multiple lines is rejected — use `"""..."""` instead.
 
 ```jaiph
 const REPO = "my-project"
 const MAX_RETRIES = 3
-const GREETING = "Hello,
-world"
+const GREETING = """
+Hello,
+world
+"""
 ```
 
 Variables are accessible as `${name}` inside that module's rules and workflows. They are **not** passed to script subprocesses — use arguments or shared libraries instead. Declaration order matters: `${name}` in a value only expands variables already bound above. Names share the unified namespace with channels, rules, workflows, and scripts.
@@ -331,6 +333,10 @@ Prompts are not allowed in rules.
 
 ```jaiph
 const tag = "v1.0"
+const message = """
+  Hello ${name},
+  Welcome to the project.
+"""
 const result = run helper(arg)
 const check = ensure validator(input)
 const answer = prompt "Summarize the report"
@@ -340,7 +346,7 @@ Analyze this input in detail.
 """
 ```
 
-RHS forms: value expressions (`${var}`, quoted strings), or explicit `run`/`ensure`/`prompt` capture. Prompt capture supports all three body forms: string literal, identifier, and triple-quoted block. A bare reference like `const x = ref(args)` is rejected — use `const x = run ref(args)`.
+RHS forms: value expressions (`${var}`, quoted strings, triple-quoted `"""..."""` multiline blocks), or explicit `run`/`ensure`/`prompt` capture. Prompt capture supports all three body forms: string literal, identifier, and triple-quoted block. A bare reference like `const x = ref(args)` is rejected — use `const x = run ref(args)`.
 
 Restrictions on const RHS: `$(…)`, `${var:-fallback}`, `${var%%…}`, `${var//…}`, and `${#var}` are all rejected.
 
@@ -367,9 +373,13 @@ alerts <- "Build started"
 reports <- ${output}
 results <- run build_message(data)
 inbox <-                                    # forward: sends ${arg1}
+alerts <- """
+  Build report for ${project}:
+  Status: ${status}
+"""
 ```
 
-RHS must be empty (forward), a double-quoted literal, `${var}`, or `run ref(args)`. Arbitrary shell on the RHS is `E_PARSE`. Combining capture and send (`name = channel <- …`) is `E_PARSE`.
+RHS must be empty (forward), a double-quoted literal, a triple-quoted `"""..."""` multiline block, `${var}`, or `run ref(args)`. Arbitrary shell on the RHS is `E_PARSE`. Combining capture and send (`name = channel <- …`) is `E_PARSE`.
 
 ### `route` — Channel Routing
 
@@ -387,9 +397,13 @@ log "Processing ${arg1}"
 logerr "Warning: ${name} not found"
 log status                              # bare identifier — same as log "${status}"
 logerr err_msg                          # bare identifier form works with logerr too
+log """
+  Build started at ${timestamp}
+  Target: ${env}
+"""
 ```
 
-`log` writes to stdout; `logerr` writes to stderr (shown with a red `!` marker in the progress tree). Both support `${identifier}` interpolation and inline captures. At runtime, backslash escapes in the final string are interpreted (`\n` → newline).
+`log` writes to stdout; `logerr` writes to stderr (shown with a red `!` marker in the progress tree). Both accept single-line `"..."` strings, triple-quoted `"""..."""` multiline blocks, or bare identifiers. `${identifier}` interpolation works in all forms. At runtime, backslash escapes in the final string are interpreted (`\n` → newline).
 
 **Bare identifier form:** When `log` or `logerr` is followed by a single bare identifier (no quotes), it expands to `"${identifier}"` — the variable's value is logged. The identifier must reference a known binding (`const`, capture, named parameter, or positional `arg1`–`arg9`).
 
@@ -397,20 +411,29 @@ logerr err_msg                          # bare identifier form works with logerr
 
 ```jaiph
 fail "Missing required configuration"
+fail """
+  Multiple issues found:
+  - ${issue1}
+  - ${issue2}
+"""
 ```
 
-Aborts the workflow or rule with a message on stderr and non-zero exit.
+Aborts the workflow or rule with a message on stderr and non-zero exit. Accepts a single-line `"..."` string or a triple-quoted `"""..."""` multiline block.
 
 ### `return`
 
 ```jaiph
 return "success"
 return "${result}"
+return """
+  Report for ${name}:
+  Status: ${status}
+"""
 return run helper()
 return ensure check(input)
 ```
 
-Sets the managed return value in rules and workflows. The value can be a quoted string, a variable reference, or a **direct managed call** using `return run ref(args)` or `return ensure ref(args)`. A direct managed call executes the target and uses its result as the return value — equivalent to capturing into a variable and returning it, but without the boilerplate:
+Sets the managed return value in rules and workflows. The value can be a single-line `"..."` string, a triple-quoted `"""..."""` multiline block, a variable reference, or a **direct managed call** using `return run ref(args)` or `return ensure ref(args)`. A direct managed call executes the target and uses its result as the return value — equivalent to capturing into a variable and returning it, but without the boilerplate:
 
 ```jaiph
 # Before: capture then return
@@ -613,12 +636,12 @@ Key rules:
 - **Comments:** Full-line `#` comments. Empty lines are ignored.
 - **Shebang:** A `#!` first line of the file is ignored by the parser.
 - **Import path:** Quoted string in `import "path" as alias`. Missing `.jh` extension is appended automatically.
-- **String quoting:** Jaiph orchestration strings use **double quotes only** (`"..."`). Single-quoted (`'...'`) strings are parse errors. Use `\"` for literal double quotes inside strings and `\\` for literal backslashes. Script bodies use single backtick (`` `...` ``) for single-line or triple backtick (`` ```...``` ``) for multi-line — normal shell quoting (single quotes, double quotes, etc.) is allowed inside script bodies. Prompt multiline blocks use triple quotes (`"""..."""`); triple backticks in prompt context are rejected.
+- **String quoting:** Jaiph has a four-delimiter system. `"..."` is the single-line string form (double quotes only — single-quoted strings are parse errors). `"""..."""` is the multiline string form; the opening `"""` must end the line, and the closing `"""` must be on its own line. A double-quoted string that spans multiple lines is rejected with a guidance error pointing to triple quotes. Use `\"` for literal double quotes and `\\` for literal backslashes. `${...}` interpolation works in both forms. Script bodies use single backtick (`` `...` ``) for single-line or triple backtick (`` ```...``` ``) for multi-line — normal shell quoting is allowed inside script bodies. Triple backticks in prompt/string context are rejected.
 - **Top-level ordering:** The parser accepts top-level definitions in any order. `jaiph format` normalizes them to a canonical order: imports → config → channels → const declarations → rules → scripts → workflows → tests. See [CLI — `jaiph format`](cli.md#jaiph-format).
 
 ## EBNF (Practical Form)
 
-Informal symbols: `string` = quoted string; `call_ref` = `REF "(" [args] ")"` with comma-separated arguments (each argument may be a quoted string, `${var}`, or a **bare identifier** — see [Call Arguments](#call-arguments-and-positional-parameters)); `quoted_or_multiline_string` = double-quoted string supporting `\$`, `\"`, `\\`, `` \` `` escapes, line continuation with trailing `\`, and `${identifier}` / `${run …}` / `${ensure …}` interpolation; `prompt_body` = single-line double-quoted string | bare `IDENT` (reference to an existing binding) | triple-quoted block (`""" … """`).
+Informal symbols: `string` = quoted string; `call_ref` = `REF "(" [args] ")"` with comma-separated arguments (each argument may be a quoted string, `${var}`, or a **bare identifier** — see [Call Arguments](#call-arguments-and-positional-parameters)); `double_quoted_string` = single-line double-quoted string supporting `\$`, `\"`, `\\`, `` \` `` escapes and `${identifier}` / `${run …}` / `${ensure …}` interpolation; `triple_quoted_block` = multiline string delimited by `"""` on opening and closing lines, supporting the same interpolation; `prompt_body` = single-line double-quoted string | bare `IDENT` (reference to an existing binding) | triple-quoted block (`""" … """`).
 
 ```ebnf
 file            = { top_level } ;
@@ -641,7 +664,7 @@ import_stmt     = "import" string "as" IDENT ;
 channel_decl    = "channel" IDENT ;
 
 env_decl        = "const" IDENT "=" env_value ;
-env_value       = quoted_or_multiline_string | bare_value ;
+env_value       = double_quoted_string | triple_quoted_block | bare_value ;
 
 rule_decl       = [ "export" ] "rule" IDENT [ "(" param_list ")" ] "{" { rule_body_step } "}" ;
 rule_body_step  = comment_line | workflow_step ;
@@ -668,16 +691,16 @@ workflow_step   = ensure_stmt | run_stmt | run_async_stmt | prompt_stmt | prompt
                 | if_brace_stmt | match_stmt | comment_line ;
 
 const_decl_step = "const" IDENT "=" const_rhs ;
-const_rhs       = quoted_or_multiline_string | bash_value_expr
+const_rhs       = double_quoted_string | triple_quoted_block | bash_value_expr
                 | "run" ( call_ref | inline_script ) | "ensure" call_ref
                 | "prompt" prompt_body [ returns_schema ]
                 | match_expr ;
 
-fail_stmt       = "fail" double_quoted_string ;
+fail_stmt       = "fail" ( double_quoted_string | triple_quoted_block ) ;
 wait_stmt       = "wait" ;
 run_async_stmt  = "run" "async" call_ref ;
 return_stmt     = "return" return_value ;
-return_value    = double_quoted_string | "$" IDENT | "${" IDENT "}"
+return_value    = double_quoted_string | triple_quoted_block | "$" IDENT | "${" IDENT "}"
                 | "run" call_ref | "ensure" call_ref | match_expr ;
 
 match_stmt      = "match" match_subject "{" { match_arm } "}" ;
@@ -688,12 +711,12 @@ match_pattern   = double_quoted_string | "/" regex_source "/" | "_" ;
 arm_body        = double_quoted_string | "$" IDENT | "${" IDENT "}" ;
 
 send_stmt       = IDENT "<-" [ send_rhs ] ;
-send_rhs        = double_quoted_string | "${" IDENT "}" | "run" call_ref | REF ;
+send_rhs        = double_quoted_string | triple_quoted_block | "${" IDENT "}" | "run" call_ref | REF ;
 
 route_decl      = REF "->" REF { "," REF } ;
 
-log_stmt        = "log" ( double_quoted_string | IDENT ) ;
-logerr_stmt     = "logerr" ( double_quoted_string | IDENT ) ;
+log_stmt        = "log" ( double_quoted_string | triple_quoted_block | IDENT ) ;
+logerr_stmt     = "logerr" ( double_quoted_string | triple_quoted_block | IDENT ) ;
 
 ensure_stmt     = "ensure" call_ref [ "recover" recover_body ] ;
 ensure_capture_stmt = IDENT "=" "ensure" call_ref [ "recover" recover_body ] ;

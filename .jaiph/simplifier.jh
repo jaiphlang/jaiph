@@ -8,7 +8,7 @@ config {
   agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
-const simplifier_principles = "
+const simplifier_principles = """
   Goal: fewer lines and clearer structure while preserving behavior.
 
   Allowed moves:
@@ -33,7 +33,7 @@ const simplifier_principles = "
   - Do not modify any file under test/ or e2e/ (including fixtures, golden
     expected output, and e2e helpers). Production code must stay compatible with
     existing tests unchanged.
-"
+"""
 
 script assert_no_test_or_e2e_in_changed = ```
 source "$JAIPH_LIB/git_paths.sh"
