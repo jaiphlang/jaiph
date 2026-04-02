@@ -20,9 +20,14 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           registry-url: "https://registry.npmjs.org"
+
+      # Trusted publishing (OIDC) requires npm >= 11.5.1; Node's bundled npm can be older and
+      # surfaces misleading E404 on publish — see https://github.com/npm/cli/issues/9088
+      - name: Use npm with trusted publishing support
+        run: npm install -g npm@^11.6.0
 
       - name: Install dependencies
         run: npm ci
@@ -53,7 +58,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Determine published version
         id: version

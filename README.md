@@ -7,6 +7,7 @@
 **Open Source · Powerful · Friendly**
 
 [![CI](https://github.com/jaiphlang/jaiph/actions/workflows/ci.yml/badge.svg)](https://github.com/jaiphlang/jaiph/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/jaiph)](https://www.npmjs.com/package/jaiph)
 
 ## What is Jaiph?
 

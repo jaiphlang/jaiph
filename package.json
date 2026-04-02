@@ -2,6 +2,10 @@
   "name": "jaiph",
   "version": "0.7.0",
   "description": "jaiph compiler/transpiler",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jaiphlang/jaiph.git"
+  },
   "files": [
     "dist/src/"
   ],
