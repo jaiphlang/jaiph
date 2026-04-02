@@ -28,10 +28,10 @@ workflow default(requirements) {
     run bootstrap.nodejs()
   }
   
-  const _ = prompt ```
+  const _ = prompt """
     Build the application using best practices.
     Follow requirements: ${requirements}
-```
+"""
   
   ensure build_passes()
   ensure security.scan_passes()

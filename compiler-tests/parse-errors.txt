@@ -1265,10 +1265,19 @@ workflow default() {
   const x = ensure check
 }
 
-=== unterminated fenced prompt block
-# @expect error E_PARSE "unterminated fenced block" @2:1
+=== triple-backtick prompt is rejected
+# @expect error E_PARSE "prompt blocks use triple quotes" @2:3
 --- input.jh
 workflow default() {
   prompt ```
+  Hello multiline
+```
+}
+
+=== unterminated triple-quoted prompt block
+# @expect error E_PARSE "unterminated triple-quoted block" @2:1
+--- input.jh
+workflow default() {
+  prompt """
   Hello multiline
 }

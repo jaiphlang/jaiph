@@ -1,14 +1,13 @@
 import type { WorkflowStepDef } from "../types";
 import { fail, hasUnescapedClosingQuote, indexOfClosingDoubleQuote } from "./core";
-import { parseFencedBlock } from "./fence";
 
 /**
  * Prompt body source tag stored in the AST.
- * - "string"     → single-line `"..."`
- * - "identifier"  → bare identifier after `prompt`
- * - "fenced"      → fenced ``` block
+ * - "string"        → single-line `"..."`
+ * - "identifier"    → bare identifier after `prompt`
+ * - "triple_quoted" → triple-quote `"""..."""` block
  */
-export type PromptBodyKind = "string" | "identifier" | "fenced";
+export type PromptBodyKind = "string" | "identifier" | "triple_quoted";
 
 /**
  * Split raw prompt literal (opening " to closing ") and optional `returns "..."`.
@@ -141,11 +140,57 @@ export function parseReturnsClause(
 }
 
 /**
+ * Parse a triple-quoted block (`"""..."""`) starting at tripleQuoteLineIdx.
+ * Returns the body between delimiters, optional returns schema, and next line index.
+ */
+function parseTripleQuoteBlock(
+  filePath: string,
+  lines: string[],
+  tripleQuoteLineIdx: number,
+): { body: string; nextIdx: number; returns?: string } {
+  const lineNo = tripleQuoteLineIdx + 1;
+  const openLine = lines[tripleQuoteLineIdx].trim();
+
+  if (!openLine.startsWith('"""')) {
+    fail(filePath, 'expected opening triple-quote """', lineNo);
+  }
+  const afterOpen = openLine.slice(3);
+  if (afterOpen.trim().length > 0) {
+    fail(filePath, 'opening """ must not have content on the same line', lineNo);
+  }
+
+  const bodyLines: string[] = [];
+  let i = tripleQuoteLineIdx + 1;
+  for (; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (trimmed.startsWith('"""')) {
+      const afterClose = trimmed.slice(3).trim();
+      if (afterClose.length === 0) {
+        return { body: bodyLines.join("\n"), nextIdx: i + 1 };
+      }
+      const m = afterClose.match(/^returns\s+"((?:[^"\\]|\\.)*)"\s*$/);
+      if (m) {
+        const content = m[1].replace(/\\"/g, '"');
+        return { body: bodyLines.join("\n"), returns: content, nextIdx: i + 1 };
+      }
+      fail(
+        filePath,
+        'closing """ must be alone, or followed by returns "{ ... }" (same line)',
+        i + 1,
+      );
+    }
+    bodyLines.push(lines[i]);
+  }
+
+  fail(filePath, 'unterminated triple-quoted block: no closing """ before end of file', lineNo);
+}
+
+/**
  * Parse a prompt step (captured or uncaptured).
  * Supports three body forms:
  *   1. Single-line string literal: prompt "text"
  *   2. Bare identifier: prompt myVar
- *   3. Fenced block: prompt ``` ... ```
+ *   3. Triple-quoted block: prompt """ ... """
  *
  * Returns the parsed step and the 0-based line index to continue from.
  * For recover statements where multiline scanning is unnecessary, pass `[]` for lines.
@@ -160,31 +205,40 @@ export function parsePromptStep(
 ): { step: WorkflowStepDef; nextLineIdx: number } {
   const lineNo = lineIdx + 1;
 
-  // --- Case 1: Fenced block ---
+  // --- Reject triple-backtick fences for prompts ---
   if (promptArg.startsWith("```")) {
-    // The opening fence content is on the same line as `prompt`
-    // Build a lines array where the opening fence sits at the real lineIdx
-    // so that parseFencedBlock reports correct line numbers on errors.
-    const fenceLines = [...lines];
-    fenceLines[lineIdx] = promptArg;
-    const { body, nextIdx: realNextIdx, returns: returnsOnFenceLine } = parseFencedBlock(
+    fail(
       filePath,
-      fenceLines,
+      'prompt blocks use triple quotes: prompt """..."""; triple backticks are for scripts',
+      lineNo,
+      promptCol,
+    );
+  }
+
+  // --- Case 1: Triple-quoted block ---
+  if (promptArg.startsWith('"""')) {
+    // Build a lines array where the opening """ sits at the real lineIdx
+    // so that parseTripleQuoteBlock reports correct line numbers on errors.
+    const tqLines = [...lines];
+    tqLines[lineIdx] = promptArg;
+    const { body, nextIdx: realNextIdx, returns: returnsOnClosingLine } = parseTripleQuoteBlock(
+      filePath,
+      tqLines,
       lineIdx,
     );
 
     // Wrap body in quotes so the runtime's interpolateWithCaptures can process ${} vars
     const raw = `"${body.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 
-    let returnsSchema: string | undefined = returnsOnFenceLine;
+    let returnsSchema: string | undefined = returnsOnClosingLine;
     let consumeEndIdx = realNextIdx;
     if (returnsSchema === undefined) {
-      const lineAfterFence = (lines[realNextIdx] ?? "").trim();
-      if (lineAfterFence.startsWith("returns ")) {
+      const lineAfterClose = (lines[realNextIdx] ?? "").trim();
+      if (lineAfterClose.startsWith("returns ")) {
         const pr = parseReturnsClause(
           filePath,
           realNextIdx + 1,
-          lineAfterFence,
+          lineAfterClose,
           lines,
           realNextIdx,
         );
@@ -197,7 +251,7 @@ export function parsePromptStep(
       step: {
         type: "prompt",
         raw,
-        bodyKind: "fenced",
+        bodyKind: "triple_quoted",
         loc: { line: lineNo, col: promptCol },
         ...(captureName ? { captureName } : {}),
         ...(returnsSchema !== undefined ? { returns: returnsSchema } : {}),
@@ -208,9 +262,11 @@ export function parsePromptStep(
 
   // --- Case 2: String literal ---
   if (promptArg.startsWith('"')) {
+    // Check for triple-quote opening: "\"\" (three quotes) — handle as triple-quoted block
+    // This won't match since we check for """ above first.
     // Check for multiline quoted string (no closing quote on same line) — reject it
     if (!hasUnescapedClosingQuote(promptArg, 1)) {
-      fail(filePath, "multiline prompt strings are no longer supported; use a fenced block instead", lineNo, promptCol);
+      fail(filePath, 'multiline prompt strings are no longer supported; use a triple-quoted block instead: prompt """...""""', lineNo, promptCol);
     }
     const { promptRaw, returns: returnsSchema, nextIndex } = splitPromptAndReturns(
       filePath,
@@ -237,8 +293,8 @@ export function parsePromptStep(
   const identMatch = promptArg.match(/^([A-Za-z_][A-Za-z0-9_]*)/);
   if (!identMatch) {
     const msg = captureName
-      ? 'prompt body must be a quoted string, identifier, or fenced block: const name = prompt "text" | prompt myVar | prompt ``` ... ```'
-      : 'prompt body must be a quoted string, identifier, or fenced block: prompt "text" | prompt myVar | prompt ``` ... ```';
+      ? 'prompt body must be a quoted string, identifier, or triple-quoted block: const name = prompt "text" | prompt myVar | prompt """ ... """'
+      : 'prompt body must be a quoted string, identifier, or triple-quoted block: prompt "text" | prompt myVar | prompt """ ... """';
     fail(filePath, msg, lineNo, promptCol);
   }
   const identifier = identMatch[1];

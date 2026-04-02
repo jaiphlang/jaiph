@@ -129,7 +129,7 @@ Jaiph source files combine a small orchestration language with scripts in any la
 
 **script** — Shell (or polyglot) code definitions that execute as isolated subprocesses. Called with `run` from workflows and rules. Named scripts use backtick delimiters: `` script name = `body` `` for single-line or `` script name = ```lang ... ``` `` for multi-line. Use fence lang tags (`` ```node ``, `` ```python3 ``, `` ```ruby ``, etc.) to select an interpreter — the tag maps directly to `#!/usr/bin/env <tag>` (any tag is valid, no hardcoded allowlist). If no tag is present, add a manual `#!` shebang as the first body line. Scripts receive only positional arguments (`$1`, `$2`, …) and essential Jaiph variables (`JAIPH_LIB`, `JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`). Jaiph interpolation (`${...}`) is forbidden in script bodies. For trivial one-off commands, use **inline scripts**: `` run `echo ok`() `` or fenced blocks (`` run ```...```(args) ``) — no named `script` definition needed.
 
-**prompt** — Sends text to a configured AI agent. The body can be a single-line `"string"`, a bare identifier (`prompt myVar`), or a fenced `` ``` `` block for multiline text. Supports structured JSON responses via `returns "{ field: type }"`.
+**prompt** — Sends text to a configured AI agent. The body can be a single-line `"string"`, a bare identifier (`prompt myVar`), or a triple-quoted `"""` block for multiline text. Triple backticks are reserved for scripts and rejected in prompt context. Supports structured JSON responses via `returns "{ field: type }"`.
 
 ### Key patterns
 

@@ -33,7 +33,7 @@ workflow commit(task) {
     return ""
   }
 
-  prompt ```
+  prompt """
     Commit the current repository changes now.
 
     Requirements for commit message:
@@ -50,5 +50,5 @@ workflow commit(task) {
 
     Changes were made for the following task:
     ${task}
-```
+"""
 }

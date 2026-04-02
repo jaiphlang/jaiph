@@ -292,13 +292,13 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
       const returns = step.returns ? ` returns "${step.returns}"` : "";
       if (step.bodyKind === "identifier" && step.bodyIdentifier) {
         lines.push(`${ci}${capture}prompt ${step.bodyIdentifier}${returns}`);
-      } else if (step.bodyKind === "fenced") {
+      } else if (step.bodyKind === "triple_quoted") {
         const inner = step.raw.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
-        lines.push(`${ci}${capture}prompt \`\`\``);
+        lines.push(`${ci}${capture}prompt """`);
         for (const bl of inner.split("\n")) {
           lines.push(`${ci}${bl}`);
         }
-        lines.push(`${ci}\`\`\``);
+        lines.push(`${ci}"""`);
         if (step.returns) {
           lines.push(`${ci}returns "${step.returns}"`);
         }
@@ -318,6 +318,17 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
         }
         const argsStr = formatArgs(step.value.args ?? "", step.value.bareIdentifierArgs);
         lines.push(`${ci}\`\`\`(${argsStr})`);
+      }
+      // Handle multi-line triple-quoted prompt capture body
+      if (step.value.kind === "prompt_capture" && step.value.bodyKind === "triple_quoted") {
+        const inner = step.value.raw.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+        for (const bl of inner.split("\n")) {
+          lines.push(`${ci}${bl}`);
+        }
+        lines.push(`${ci}"""`);
+        if (step.value.returns) {
+          lines.push(`${ci}returns "${step.value.returns}"`);
+        }
       }
       break;
     }
@@ -412,9 +423,9 @@ function emitConstStep(name: string, value: ConstRhs): string {
       if (value.bodyKind === "identifier" && value.bodyIdentifier) {
         return `const ${name} = prompt ${value.bodyIdentifier}${returns}`;
       }
-      if (value.bodyKind === "fenced") {
+      if (value.bodyKind === "triple_quoted") {
         // Multi-line: caller handles remaining lines
-        return `const ${name} = prompt \`\`\``;
+        return `const ${name} = prompt """`;
       }
       return `const ${name} = prompt ${value.raw}${returns}`;
     }

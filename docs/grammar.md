@@ -264,7 +264,7 @@ Syntax rules:
 
 ### `prompt` — Agent Interaction
 
-Sends text to the configured agent backend. The prompt body can be supplied in three forms: a single-line string literal, a bare identifier referencing an existing binding, or a fenced multiline block.
+Sends text to the configured agent backend. The prompt body can be supplied in three forms: a single-line string literal, a bare identifier referencing an existing binding, or a triple-quoted multiline block.
 
 **1. Single-line string literal**
 
@@ -275,7 +275,7 @@ prompt "Review the following code for security issues"
 answer = prompt "Summarize the report"
 ```
 
-If a `"` string has no closing quote on the same line, the parser rejects it with: `multiline prompt strings are no longer supported; use a fenced block instead`.
+If a `"` string has no closing quote on the same line, the parser rejects it with: `multiline prompt strings are no longer supported; use a triple-quoted block instead`.
 
 **2. Identifier reference**
 
@@ -287,15 +287,15 @@ prompt text
 result = prompt text returns "{ type: string, risk: string }"
 ```
 
-**3. Fenced block (multiline)**
+**3. Triple-quoted block (multiline)**
 
-For multiline prompt text, use triple-backtick fences. The opening `` ``` `` must be on the same line as `prompt`. The body supports `${...}` interpolation.
+For multiline prompt text, use triple-quote delimiters (`"""`). The opening `"""` must be on the same line as `prompt`. The body supports `${...}` interpolation. Triple backticks (`` ``` ``) are reserved for scripts and rejected in prompt context with a guidance message.
 
-```text
-prompt ```
+```jaiph
+prompt """
 You are a helpful assistant.
 Analyze the following: ${input}
-```
+"""
 ```
 
 All three forms work in capture and `const` capture positions:
@@ -303,19 +303,19 @@ All three forms work in capture and `const` capture positions:
 ```jaiph
 answer = prompt "Summarize the report"
 const x = prompt myVar
-const y = prompt ```
+const y = prompt """
 Analyze this input in detail.
-```
+"""
 ```
 
-**Typed prompt (returns schema):** Ask the agent for structured JSON output. `returns "…"` may follow a single-line string or identifier body on the same line, or appear on the **line after** the closing `` ``` `` of a fenced block.
+**Typed prompt (returns schema):** Ask the agent for structured JSON output. `returns "…"` may follow a single-line string or identifier body on the same line, or appear on the **line after** the closing `"""` of a triple-quoted block.
 
 ```jaiph
 result = prompt "Analyze this code" returns "{ type: string, risk: string }"
 result = prompt text returns "{ type: string, risk: string }"
 ```
 
-For a **fenced** prompt, either put `returns "…"` on the line **immediately after** the closing `` ``` ``, or on the **same line** as the closing fence: `` ``` returns "{ … }" `` (nothing else may follow the schema string on that line).
+For a **triple-quoted** prompt, either put `returns "…"` on the line **immediately after** the closing `"""`, or on the **same line** as the closing delimiter: `""" returns "{ … }"` (nothing else may follow the schema string on that line).
 
 When `returns` is present, capture is required. The schema is flat only — allowed types are `string`, `number`, `boolean`. The runtime validates the response: it searches for valid JSON (last non-empty line, fenced code blocks, standalone `{…}`, embedded JSON). On success, the capture variable holds the raw JSON string and each field is accessible via **dot notation** — `${result.type}`, `${result.risk}`. The underscore form (`${result_type}`) also works but dot notation is preferred for clarity. On failure, the step fails with a parse, missing-field, or type error.
 
@@ -335,12 +335,12 @@ const result = run helper(arg)
 const check = ensure validator(input)
 const answer = prompt "Summarize the report"
 const reply = prompt myVar
-const analysis = prompt ```
+const analysis = prompt """
 Analyze this input in detail.
-```
+"""
 ```
 
-RHS forms: value expressions (`${var}`, quoted strings), or explicit `run`/`ensure`/`prompt` capture. Prompt capture supports all three body forms: string literal, identifier, and fenced block. A bare reference like `const x = ref(args)` is rejected — use `const x = run ref(args)`.
+RHS forms: value expressions (`${var}`, quoted strings), or explicit `run`/`ensure`/`prompt` capture. Prompt capture supports all three body forms: string literal, identifier, and triple-quoted block. A bare reference like `const x = ref(args)` is rejected — use `const x = run ref(args)`.
 
 Restrictions on const RHS: `$(…)`, `${var:-fallback}`, `${var%%…}`, `${var//…}`, and `${#var}` are all rejected.
 
@@ -613,12 +613,12 @@ Key rules:
 - **Comments:** Full-line `#` comments. Empty lines are ignored.
 - **Shebang:** A `#!` first line of the file is ignored by the parser.
 - **Import path:** Quoted string in `import "path" as alias`. Missing `.jh` extension is appended automatically.
-- **String quoting:** Jaiph orchestration strings use **double quotes only** (`"..."`). Single-quoted (`'...'`) strings are parse errors. Use `\"` for literal double quotes inside strings and `\\` for literal backslashes. Script bodies use single backtick (`` `...` ``) for single-line or triple backtick (`` ```...``` ``) for multi-line — normal shell quoting (single quotes, double quotes, etc.) is allowed inside script bodies.
+- **String quoting:** Jaiph orchestration strings use **double quotes only** (`"..."`). Single-quoted (`'...'`) strings are parse errors. Use `\"` for literal double quotes inside strings and `\\` for literal backslashes. Script bodies use single backtick (`` `...` ``) for single-line or triple backtick (`` ```...``` ``) for multi-line — normal shell quoting (single quotes, double quotes, etc.) is allowed inside script bodies. Prompt multiline blocks use triple quotes (`"""..."""`); triple backticks in prompt context are rejected.
 - **Top-level ordering:** The parser accepts top-level definitions in any order. `jaiph format` normalizes them to a canonical order: imports → config → channels → const declarations → rules → scripts → workflows → tests. See [CLI — `jaiph format`](cli.md#jaiph-format).
 
 ## EBNF (Practical Form)
 
-Informal symbols: `string` = quoted string; `call_ref` = `REF "(" [args] ")"` with comma-separated arguments (each argument may be a quoted string, `${var}`, or a **bare identifier** — see [Call Arguments](#call-arguments-and-positional-parameters)); `quoted_or_multiline_string` = double-quoted string supporting `\$`, `\"`, `\\`, `` \` `` escapes, line continuation with trailing `\`, and `${identifier}` / `${run …}` / `${ensure …}` interpolation; `prompt_body` = single-line double-quoted string | bare `IDENT` (reference to an existing binding) | fenced block (`` ``` … ``` ``).
+Informal symbols: `string` = quoted string; `call_ref` = `REF "(" [args] ")"` with comma-separated arguments (each argument may be a quoted string, `${var}`, or a **bare identifier** — see [Call Arguments](#call-arguments-and-positional-parameters)); `quoted_or_multiline_string` = double-quoted string supporting `\$`, `\"`, `\\`, `` \` `` escapes, line continuation with trailing `\`, and `${identifier}` / `${run …}` / `${ensure …}` interpolation; `prompt_body` = single-line double-quoted string | bare `IDENT` (reference to an existing binding) | triple-quoted block (`""" … """`).
 
 ```ebnf
 file            = { top_level } ;
@@ -700,8 +700,8 @@ ensure_capture_stmt = IDENT "=" "ensure" call_ref [ "recover" recover_body ] ;
 run_capture_stmt   = IDENT "=" "run" ( call_ref | inline_script ) ;
 run_stmt        = "run" ( call_ref | inline_script ) ;
 inline_script   = backtick_script_body "(" [ call_args ] ")" | fenced_script_block "(" [ call_args ] ")" ;
-prompt_body     = double_quoted_string | IDENT | fenced_block ;
-fenced_block    = "```" newline { body_line newline } "```" ;
+prompt_body     = double_quoted_string | IDENT | triple_quoted_block ;
+triple_quoted_block = "\"\"\"" newline { body_line newline } "\"\"\"" ;
 prompt_stmt     = "prompt" prompt_body [ returns_schema ] ;
 prompt_capture_stmt = IDENT "=" "prompt" prompt_body [ returns_schema ] ;
 returns_schema  = "returns" double_quoted_string ;
