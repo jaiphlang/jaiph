@@ -1,6 +1,6 @@
 {
   "name": "jaiph",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "jaiph compiler/transpiler",
   "files": [
     "dist/src/"

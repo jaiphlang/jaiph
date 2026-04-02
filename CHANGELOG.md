@@ -1,6 +1,9 @@
 # Nightly
 
 - _Unreleased — changes for the next version accumulate here._
+
+# 0.7.0
+
 - **Language:** Strict scope enforcement for bare args and `${…}` interpolation — both bare identifier arguments (`run greet(name)`) and braced interpolation (`log "hello ${name}"`) now enforce the same scope rules: the identifier must be a known `const`, capture, named parameter, or positional `arg1`–`arg9`. Unknown names are rejected at compile time in both forms. The bare-argument error message no longer suggests `${name}` as a workaround, since braced interpolation applies the same strict check. Compiler tests cover both unknown-bare-arg and unknown-`${ident}` cases.
 - **E2E:** Exercise `examples/*.jh` with strict assertions — `e2e/tests/110_examples.sh` now runs every example file through the full CLI pipeline with strict `e2e::expect_stdout` and artifact assertions, replacing the previous substring checks. Examples are tracked via three arrays (`COVERED_RUN`, `COVERED_TEST`, `EXCLUDED`) forming an example matrix; an orphan guard at the bottom fails CI if any `examples/*.jh` or `examples/*.test.jh` file is unaccounted for. `ensure_ci_passes.jh` is excluded (requires real `npm run test:ci`); `async.jh` is excluded (requires real agent backends). New coverage: `ensure_ci_passes.test.jh` via `jaiph test`. See [Contributing — Example matrix guard](docs/contributing.md#example-matrix-guard).
 - **Docs:** Revisit `docs/jaiph-skill.md` — add `match` to the Concepts bullets (Rules and Workflows) and to the Steps reference section so the agent skill accurately describes all supported constructs. Cross-checked against `docs/grammar.md`, `docs/architecture.md`, `docs/index.html`, and `src/cli/shared/usage.ts`; no other drift found.
