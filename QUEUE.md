@@ -12,23 +12,6 @@ Process rules:
 
 ---
 
-## Detect stale samples in `e2e` <!-- dev-ready -->
-
-**Goal**  
-Find and fix or remove `.jh` / `.test.jh` / shell fixtures under `e2e/` that are no longer referenced by any test (`e2e/tests/*.sh`, `e2e/test_all.sh`, or other runners). Stale samples confuse contributors and hide drift from the real `examples/` corpus.
-
-**Scope**
-
-1. Inventory which `e2e/*.jh` (and related `.sh`) files are actually exercised.
-2. Either wire orphaned files into a test, move them to `examples/` if they are documentation-only, or delete them with a clear rationale.
-3. Optionally add a lightweight guard (script or CI check) that fails when new unreferenced samples appear.
-
-**Acceptance criteria**
-
-- No intentionally kept `.jh` sample under `e2e/` is unreferenced without an explicit comment or README note explaining why it exists.
-
----
-
 ## Revisit `docs/jaiph-skill.md` <!-- dev-ready -->
 
 **Goal**  

@@ -356,3 +356,18 @@ Quick reference: default to **full-equality** helpers (`e2e::expect_stdout`, `e2
 ```bash
 rg 'e2e::assert_contains' e2e/tests -n
 ```
+
+### Orphan sample guard
+
+Every `.jh` and `.test.jh` file under `e2e/` must be referenced by at least one test script (`e2e/tests/*.sh`, `e2e/test_all.sh`, or `e2e/lib/`). Unreferenced samples confuse contributors, hide drift from the canonical `examples/` corpus, and make it unclear which fixtures are load-bearing.
+
+The guard script `e2e/check_orphan_samples.sh` detects orphans automatically. It scans every `.jh` and `.test.jh` file under `e2e/`, checks whether its basename appears in any test runner or helper, and also resolves indirect references (a file imported by another `.jh` that is itself referenced counts as covered). Any file that is neither directly nor indirectly referenced is reported as an orphan.
+
+```bash
+# Run manually from the repo root
+bash e2e/check_orphan_samples.sh
+```
+
+On success the script prints `OK: no orphan e2e samples detected.` and exits 0. On failure it lists the unreferenced filenames and exits 1, with guidance to either wire them into a test, move them to `examples/`, or delete them.
+
+When adding a new `.jh` fixture to `e2e/`, make sure it is exercised by a test in `e2e/tests/` or imported by a file that is. If a sample exists purely for documentation or demonstration purposes, it belongs in `examples/` instead.
