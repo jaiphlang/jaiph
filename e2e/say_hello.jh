@@ -3,12 +3,12 @@
 rule name_was_provided(name) {
   # bash is used by default for scripts
   # use ```node, ```python3, etc. for other languages
-  run script(name) ```
+  run ```
     if [ -z "$1" ]; then
       echo "You didn't provide your name :(" >&2
       exit 1
     fi
-  ```
+  ```(name)
 }
 
 workflow default(name) {

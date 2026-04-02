@@ -22,7 +22,7 @@
   "scripts": [
     {
       "body": "echo ok",
-      "bodyKind": "string",
+      "bodyKind": "backtick",
       "comments": [],
       "name": "checker"
     }

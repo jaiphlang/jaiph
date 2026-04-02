@@ -6,7 +6,7 @@
   "scripts": [
     {
       "body": "echo hello",
-      "bodyKind": "string",
+      "bodyKind": "backtick",
       "comments": [],
       "name": "greet"
     },

@@ -42,7 +42,7 @@ config {
   run.debug = false
 }
 
-script noop = "true"
+script noop = `true`
 
 rule some_rule() {
   run noop()

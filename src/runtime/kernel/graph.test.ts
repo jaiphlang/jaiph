@@ -19,7 +19,7 @@ test("buildRuntimeGraph loads entry module and imports", () => {
       `rule check() {
   echo ok
 }
-script helper = "echo hi"
+script helper = \`echo hi\`
 workflow inner() {
   echo ok
 }`,
@@ -50,7 +50,7 @@ test("lookup helpers resolve local and imported symbols", () => {
       `rule check() {
   echo ok
 }
-script helper = "echo hi"
+script helper = \`echo hi\`
 workflow inner() {
   echo ok
 }`,
@@ -61,7 +61,7 @@ workflow inner() {
 rule local_check() {
   echo local
 }
-script local_script = "echo local"
+script local_script = \`echo local\`
 workflow default() {
   run lib.inner()
 }`,

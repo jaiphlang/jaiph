@@ -32,7 +32,7 @@ rule docs_files_present(list) {
 }
 
 script assert_worktree_clean_for_docs = ```
-source "${JAIPH_LIB}/git_paths.sh"
+source "$JAIPH_LIB/git_paths.sh"
 local current_changed_files
 current_changed_files="$(git_changed_paths_sorted)"
 if [ -n "$current_changed_files" ]; then
@@ -49,7 +49,7 @@ rule worktree_is_clean() {
 
 script assert_only_allowed_changed = ```
 local allowed="$1"
-source "${JAIPH_LIB}/git_paths.sh"
+source "$JAIPH_LIB/git_paths.sh"
 local after_changed_files
 after_changed_files="$(git_changed_paths_sorted)"
 while IFS= read -r changed_file; do
@@ -66,15 +66,15 @@ rule only_expected_docs_changed_after_prompt(allowed) {
   run assert_only_allowed_changed(allowed)
 }
 
-script arg_nonempty = "[ -n \"${1:-}\" ]"
+script arg_nonempty = `[ -n "${1:-}" ]`
 
 script first_line_str = ```
-source "${JAIPH_LIB}/strings.sh"
+source "$JAIPH_LIB/strings.sh"
 first_line "$1"
 ```
 
 script rest_lines_str = ```
-source "${JAIPH_LIB}/strings.sh"
+source "$JAIPH_LIB/strings.sh"
 rest_lines "$1"
 ```
 
@@ -82,8 +82,8 @@ script list_docs_md_paths = ```
 local out=""
 local f
 for f in docs/*.md; do
-  out="${out:+${out}
-}${f}"
+  out="${out:+$out
+}$f"
 done
 printf '%s\n' "$out"
 ```
@@ -95,13 +95,13 @@ docs/_layouts/docs.html
 src/cli/shared/usage.ts"
 local f
 for f in docs/*.md; do
-  out="${out}
-${f}"
+  out="$out
+$f"
 done
 printf '%s\n' "$out"
 ```
 
-script join_newline_args = "printf '%s\n' \"$@\""
+script join_newline_args = `printf '%s\n' "$@"`
 
 workflow update_from_task(taskDesc) {
   prompt ```

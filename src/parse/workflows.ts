@@ -13,7 +13,7 @@ import { parseConstRhs } from "./const-rhs";
 import { parseConfigBlock } from "./metadata";
 import { parsePromptStep } from "./prompt";
 import { parseSendRhs } from "./send-rhs";
-import { parseInlineScriptBody } from "./inline-script";
+import { parseAnonymousInlineScript } from "./inline-script";
 import { parseEnsureStep } from "./steps";
 import { tryParseBraceIfChain } from "./workflow-brace";
 import { dottedReturnToQuotedString, isBareDottedIdentifierReturn } from "./workflow-return-dotted";
@@ -226,22 +226,22 @@ export function parseWorkflowBlock(
       }
       if (rest.startsWith("run ")) {
         const runBody = rest.slice("run ".length).trim();
-        if (runBody.startsWith("script(") || runBody.startsWith("script (")) {
-          const call = parseCallRef(runBody);
-          if (!call) {
-            fail(filePath, 'inline script requires parentheses: run script() "body"', innerNo);
-          }
-          const result = parseInlineScriptBody(filePath, lines, idx, call.rest, innerNo, innerRaw.indexOf("script") + 1);
+        if (runBody.startsWith("`")) {
+          const result = parseAnonymousInlineScript(filePath, lines, idx, runBody, innerNo, innerRaw.indexOf("run") + 1);
           workflow.steps.push({
             type: "run_inline_script",
             body: result.body,
             ...(result.lang ? { lang: result.lang } : {}),
-            args: call.args,
+            args: result.args,
+            ...(result.bareIdentifierArgs ? { bareIdentifierArgs: result.bareIdentifierArgs } : {}),
             captureName,
             loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
           });
           idx = result.nextLineIdx - 1;
           continue;
+        }
+        if (runBody.startsWith("script(") || runBody.startsWith("script (")) {
+          fail(filePath, 'inline script syntax has changed: use run `body`(args) instead of run script(args) "body"', innerNo);
         }
         const call = parseCallRef(runBody);
         if (!call) {
@@ -281,7 +281,7 @@ export function parseWorkflowBlock(
 
     if (inner.startsWith("run async ")) {
       const runBody = inner.slice("run async ".length).trim();
-      if (runBody.startsWith("script(") || runBody.startsWith("script (")) {
+      if (runBody.startsWith("`")) {
         fail(filePath, "run async is not supported with inline scripts", innerNo, innerRaw.indexOf("run") + 1);
       }
       const call = parseCallRef(runBody);
@@ -304,21 +304,21 @@ export function parseWorkflowBlock(
 
     if (inner.startsWith("run ")) {
       const runBody = inner.slice("run ".length).trim();
-      if (runBody.startsWith("script(") || runBody.startsWith("script (")) {
-        const call = parseCallRef(runBody);
-        if (!call) {
-          fail(filePath, 'inline script requires parentheses: run script() "body"', innerNo);
-        }
-        const result = parseInlineScriptBody(filePath, lines, idx, call.rest, innerNo, innerRaw.indexOf("script") + 1);
+      if (runBody.startsWith("`")) {
+        const result = parseAnonymousInlineScript(filePath, lines, idx, runBody, innerNo, innerRaw.indexOf("run") + 1);
         workflow.steps.push({
           type: "run_inline_script",
           body: result.body,
           ...(result.lang ? { lang: result.lang } : {}),
-          args: call.args,
+          args: result.args,
+          ...(result.bareIdentifierArgs ? { bareIdentifierArgs: result.bareIdentifierArgs } : {}),
           loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
         });
         idx = result.nextLineIdx - 1;
         continue;
+      }
+      if (runBody.startsWith("script(") || runBody.startsWith("script (")) {
+        fail(filePath, 'inline script syntax has changed: use run `body`(args) instead of run script(args) "body"', innerNo);
       }
       const call = parseCallRef(runBody);
       if (!call) {

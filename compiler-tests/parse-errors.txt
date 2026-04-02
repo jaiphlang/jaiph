@@ -7,7 +7,7 @@ workflow default() {
 === invalid script declaration
 # @expect error E_PARSE "invalid script declaration" @1:1
 --- input.jh
-script 123bad = "echo x"
+script 123bad = `echo x`
 
 === invalid rule declaration
 # @expect error E_PARSE "invalid rule declaration" @1:1
@@ -194,14 +194,14 @@ workflow default() {
 # @expect error E_PARSE "not supported with inline scripts" @2:3
 --- input.jh
 workflow default() {
-  run async script() "echo hello"
+  run async `echo hello`()
 }
 
-=== inline script body must be double-quoted
-# @expect error E_PARSE "inline script body must be a quoted string or fenced block" @2:7
+=== old inline script syntax rejected
+# @expect error E_PARSE "inline script syntax has changed" @2:1
 --- input.jh
 workflow default() {
-  run script() 'echo hello'
+  run script() "echo hello"
 }
 
 === invalid agent.backend value
@@ -309,7 +309,7 @@ workflow default() {
 # @expect error E_PARSE "variable name collides with script" @1:1
 --- input.jh
 const helper = "val"
-script helper = "echo ok"
+script helper = `echo ok`
 workflow default() {
   run helper()
 }
@@ -317,7 +317,7 @@ workflow default() {
 === const rejects bare call-like rhs without run
 # @expect error E_PARSE "Script calls in const assignments must use run" @3:13
 --- input.jh
-script some_script = "echo \"$1\""
+script some_script = `echo "$1"`
 workflow default() {
   const x = some_script("${arg}")
 }
@@ -349,7 +349,7 @@ workflow default() {
 rule gate() {
   run gate_impl()
 }
-script gate_impl = "false"
+script gate_impl = `false`
 workflow default() {
   if not ensure gate() {
     echo fallback
@@ -374,7 +374,7 @@ workflow default() {
 rule ci_passes() {
   run ci_passes_impl()
 }
-script ci_passes_impl = "true"
+script ci_passes_impl = `true`
 workflow default() {
   ensure ci_passes() recover "$repo_dir" {
     prompt "Apply the smallest safe fix."
@@ -489,27 +489,6 @@ workflow default() {
   log "${debug:+verbose mode}"
 }
 
-=== reject unescaped backtick in log
-# @expect error E_PARSE "log cannot contain backticks" @2:3
---- input.jh
-workflow default() {
-  log "output: `uname`"
-}
-
-=== reject unescaped backtick in fail
-# @expect error E_PARSE "fail cannot contain backticks" @2:3
---- input.jh
-workflow default() {
-  fail "error: `whoami`"
-}
-
-=== reject unescaped backtick in prompt
-# @expect error E_PARSE "prompt cannot contain backticks" @2:3
---- input.jh
-workflow default() {
-  prompt "run `uname` and tell me"
-}
-
 === reject command substitution in log
 # @expect error E_PARSE "log cannot contain command substitution" @2:3
 --- input.jh
@@ -527,20 +506,9 @@ workflow default() {
 === reject shell fallback in rule log
 # @expect error E_PARSE "shell fallback syntax" @3:3
 --- input.jh
-script noop = "true"
+script noop = `true`
 rule check() {
   log "${x:-fallback}"
-}
-workflow default() {
-  ensure check()
-}
-
-=== reject unescaped backtick in rule fail
-# @expect error E_PARSE "fail cannot contain backticks" @3:3
---- input.jh
-script noop = "true"
-rule check() {
-  fail "error: `cmd`"
 }
 workflow default() {
   ensure check()
@@ -549,8 +517,8 @@ workflow default() {
 === nested inline capture rejected
 # @expect error E_PARSE "invalid inline run reference" @4:3
 --- input.jh
-script foo = "echo \"a\""
-script bar = "echo \"b\""
+script foo = `echo "a"`
+script bar = `echo "b"`
 workflow default() {
   log "got: ${run foo(${run bar()})}"
 }
@@ -881,7 +849,7 @@ test "deprecated mock" {
   out = lib.default
 }
 --- lib.jh
-script some_func = "echo \"real\""
+script some_func = `echo "real"`
 workflow default() {
   run some_func()
 }
@@ -903,10 +871,10 @@ workflow default() {
 }
 
 === inline script: unexpected content after
-# @expect error E_PARSE "unexpected content after inline script body" @2:7
+# @expect error E_PARSE "unexpected content after anonymous inline script" @2:3
 --- input.jh
 workflow default() {
-  run script() "echo hello" extra_stuff
+  run `echo hello`() extra_stuff
 }
 
 === inline script: unterminated parentheses
@@ -923,18 +891,18 @@ workflow default() {
   run script "echo hello"
 }
 
-=== inline script with empty body
-# @expect error E_PARSE "inline script body is required after script()" @2:7
+=== old inline script empty body rejected
+# @expect error E_PARSE "inline script syntax has changed" @2:1
 --- input.jh
 workflow default() {
   run script()
 }
 
-=== inline script unterminated body string
-# @expect error E_PARSE "unterminated inline script body string" @2:7
+=== inline script unterminated backtick
+# @expect error E_PARSE "unterminated inline script backtick" @2:3
 --- input.jh
 workflow default() {
-  run script() "echo hello
+  run `echo hello
 }
 
 === match: invalid pattern type
@@ -1211,7 +1179,7 @@ workflow default() {
 === brace-if: run without parentheses in block
 # @expect error E_PARSE "run must target a workflow or script reference with parenthesized arguments" @7:1
 --- input.jh
-script helper = "echo \"hi\""
+script helper = `echo "hi"`
 rule gate() {
   return "ok"
 }
@@ -1266,7 +1234,7 @@ workflow default() {
 === run without parentheses in workflow
 # @expect error E_PARSE "calls require parentheses" @3:1
 --- input.jh
-script helper = "echo \"hi\""
+script helper = `echo "hi"`
 workflow default() {
   run helper
 }
@@ -1274,7 +1242,7 @@ workflow default() {
 === capture run without parentheses in workflow
 # @expect error E_PARSE "calls require parentheses" @3:1
 --- input.jh
-script helper = "echo \"hi\""
+script helper = `echo "hi"`
 workflow default() {
   x = run helper
 }
@@ -1282,7 +1250,7 @@ workflow default() {
 === const run without parentheses
 # @expect error E_PARSE "calls require parentheses" @3:13
 --- input.jh
-script helper = "echo \"hi\""
+script helper = `echo "hi"`
 workflow default() {
   const x = run helper
 }

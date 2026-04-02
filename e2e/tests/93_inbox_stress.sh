@@ -79,16 +79,16 @@ config {
 
 channel data
 
-script emit_m1 = "echo \"m1\""
-script emit_m2 = "echo \"m2\""
-script emit_m3 = "echo \"m3\""
-script emit_m4 = "echo \"m4\""
-script emit_m5 = "echo \"m5\""
-script emit_m6 = "echo \"m6\""
-script emit_m7 = "echo \"m7\""
-script emit_m8 = "echo \"m8\""
-script emit_m9 = "echo \"m9\""
-script emit_m10 = "echo \"m10\""
+script emit_m1 = `echo "m1"`
+script emit_m2 = `echo "m2"`
+script emit_m3 = `echo "m3"`
+script emit_m4 = `echo "m4"`
+script emit_m5 = `echo "m5"`
+script emit_m6 = `echo "m6"`
+script emit_m7 = `echo "m7"`
+script emit_m8 = `echo "m8"`
+script emit_m9 = `echo "m9"`
+script emit_m10 = `echo "m10"`
 
 workflow s1() {
   data <- run emit_m1()
@@ -130,7 +130,7 @@ workflow s10() {
   data <- run emit_m10()
 }
 
-script sink_impl = "echo \"$1\" >> sink_all.txt"
+script sink_impl = `echo "$1" >> sink_all.txt`
 
 workflow sink(message) {
   run sink_impl(arg1)
@@ -180,9 +180,9 @@ config {
 
 channel ch
 
-script emit_pa = "echo \"pa\""
-script emit_pb = "echo \"pb\""
-script emit_pc = "echo \"pc\""
+script emit_pa = `echo "pa"`
+script emit_pb = `echo "pb"`
+script emit_pc = `echo "pc"`
 
 workflow producer_a() {
   ch <- run emit_pa()
@@ -196,19 +196,19 @@ workflow producer_c() {
   ch <- run emit_pc()
 }
 
-script target_x_impl = "echo \"x:$1\" >> fanout_log.txt"
+script target_x_impl = `echo "x:$1" >> fanout_log.txt`
 
 workflow target_x(message) {
   run target_x_impl(arg1)
 }
 
-script target_y_impl = "echo \"y:$1\" >> fanout_log.txt"
+script target_y_impl = `echo "y:$1" >> fanout_log.txt`
 
 workflow target_y(message) {
   run target_y_impl(arg1)
 }
 
-script target_z_impl = "echo \"z:$1\" >> fanout_log.txt"
+script target_z_impl = `echo "z:$1" >> fanout_log.txt`
 
 workflow target_z(message) {
   run target_z_impl(arg1)
@@ -266,8 +266,8 @@ config {
 channel ch_raw
 channel ch_processed
 
-script emit_raw = "echo \"raw-data\""
-script emit_processed = "echo \"processed:$1\""
+script emit_raw = `echo "raw-data"`
+script emit_processed = `echo "processed:$1"`
 
 workflow sender() {
   ch_raw <- run emit_raw()
@@ -277,7 +277,7 @@ workflow processor(message) {
   ch_processed <- run emit_processed(arg1)
 }
 
-script nested_sink_impl = "echo \"$1\" > nested_result.txt"
+script nested_sink_impl = `echo "$1" > nested_result.txt`
 
 workflow sink(message) {
   run nested_sink_impl(arg1)
@@ -315,7 +315,7 @@ config {
 
 channel ch
 
-script emit_msg = "echo \"msg\""
+script emit_msg = `echo "msg"`
 
 workflow producer() {
   ch <- run emit_msg()
@@ -339,7 +339,7 @@ workflow fail_b() {
   run fail_b_impl()
 }
 
-script good_impl = "echo \"ok\" > fail_good_ran.txt"
+script good_impl = `echo "ok" > fail_good_ran.txt`
 
 workflow good() {
   run good_impl()
@@ -375,11 +375,11 @@ config {
 
 channel ev
 
-script emit_e1 = "echo \"e1\""
-script emit_e2 = "echo \"e2\""
-script emit_e3 = "echo \"e3\""
-script emit_e4 = "echo \"e4\""
-script emit_e5 = "echo \"e5\""
+script emit_e1 = `echo "e1"`
+script emit_e2 = `echo "e2"`
+script emit_e3 = `echo "e3"`
+script emit_e4 = `echo "e4"`
+script emit_e5 = `echo "e5"`
 
 workflow s1() {
   ev <- run emit_e1()
@@ -401,13 +401,13 @@ workflow s5() {
   ev <- run emit_e5()
 }
 
-script t1_impl = "echo \"t1:$1\" >> artifact_log.txt"
+script t1_impl = `echo "t1:$1" >> artifact_log.txt`
 
 workflow t1(message) {
   run t1_impl(arg1)
 }
 
-script t2_impl = "echo \"t2:$1\" >> artifact_log.txt"
+script t2_impl = `echo "t2:$1" >> artifact_log.txt`
 
 workflow t2(message) {
   run t2_impl(arg1)
@@ -458,9 +458,9 @@ config {
 
 channel ch
 
-script soak_emit_i1 = "echo \"i1\""
-script soak_emit_i2 = "echo \"i2\""
-script soak_emit_i3 = "echo \"i3\""
+script soak_emit_i1 = `echo "i1"`
+script soak_emit_i2 = `echo "i2"`
+script soak_emit_i3 = `echo "i3"`
 
 workflow s1() {
   ch <- run soak_emit_i1()
@@ -474,13 +474,13 @@ workflow s3() {
   ch <- run soak_emit_i3()
 }
 
-script soak_t1_impl = "echo \"t1:$1\" >> soak_log.txt"
+script soak_t1_impl = `echo "t1:$1" >> soak_log.txt`
 
 workflow t1(message) {
   run soak_t1_impl(arg1)
 }
 
-script soak_t2_impl = "echo \"t2:$1\" >> soak_log.txt"
+script soak_t2_impl = `echo "t2:$1" >> soak_log.txt`
 
 workflow t2(message) {
   run soak_t2_impl(arg1)
@@ -543,16 +543,16 @@ e2e::section "Sequential mode: same high-volume scenario produces identical resu
 e2e::file "stress_seq_mode.jh" <<'EOF'
 channel data
 
-script seq_emit_m1 = "echo \"m1\""
-script seq_emit_m2 = "echo \"m2\""
-script seq_emit_m3 = "echo \"m3\""
-script seq_emit_m4 = "echo \"m4\""
-script seq_emit_m5 = "echo \"m5\""
-script seq_emit_m6 = "echo \"m6\""
-script seq_emit_m7 = "echo \"m7\""
-script seq_emit_m8 = "echo \"m8\""
-script seq_emit_m9 = "echo \"m9\""
-script seq_emit_m10 = "echo \"m10\""
+script seq_emit_m1 = `echo "m1"`
+script seq_emit_m2 = `echo "m2"`
+script seq_emit_m3 = `echo "m3"`
+script seq_emit_m4 = `echo "m4"`
+script seq_emit_m5 = `echo "m5"`
+script seq_emit_m6 = `echo "m6"`
+script seq_emit_m7 = `echo "m7"`
+script seq_emit_m8 = `echo "m8"`
+script seq_emit_m9 = `echo "m9"`
+script seq_emit_m10 = `echo "m10"`
 
 workflow s1() {
   data <- run seq_emit_m1()
@@ -594,7 +594,7 @@ workflow s10() {
   data <- run seq_emit_m10()
 }
 
-script seq_sink_impl = "echo \"$1\" >> seq_sink_all.txt"
+script seq_sink_impl = `echo "$1" >> seq_sink_all.txt`
 
 workflow sink(message) {
   run seq_sink_impl(arg1)

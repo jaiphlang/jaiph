@@ -25,18 +25,6 @@ function findShellExpansion(s: string): { index: number; match: string } | null 
   return null;
 }
 
-/**
- * Check for unescaped backticks in string content.
- * Content is the string AFTER quote removal (inner content).
- */
-function findUnescapedBacktick(s: string): number {
-  for (let i = 0; i < s.length; i++) {
-    if (s[i] === "`" && (i === 0 || s[i - 1] !== "\\")) {
-      return i;
-    }
-  }
-  return -1;
-}
 
 /**
  * Check for $(...) command substitution in string content.
@@ -241,17 +229,6 @@ export function validateJaiphStringContent(
   col: number,
   context: string,
 ): void {
-  const backtickIdx = findUnescapedBacktick(content);
-  if (backtickIdx >= 0) {
-    throw jaiphError(
-      filePath,
-      line,
-      col,
-      "E_PARSE",
-      `${context} cannot contain backticks (\`...\`); escape with \\\` or use variable expansion`,
-    );
-  }
-
   const shellExp = findShellExpansion(content);
   if (shellExp) {
     throw jaiphError(

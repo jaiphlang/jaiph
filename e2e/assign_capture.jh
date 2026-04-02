@@ -1,10 +1,10 @@
 #!/usr/bin/env jaiph
 # E2E fixture: assignment capture for ensure and shell.
-script echo_line_impl = "echo \"this goes to logs only\""
+script echo_line_impl = `echo "this goes to logs only"`
 
-script shell_capture = "echo shell-capture"
+script shell_capture = `echo shell-capture`
 
-script format_output = "printf '%s\n' \"response=$1\" \"out=$2\""
+script format_output = `printf '%s\n' "response=$1" "out=$2"`
 
 rule echo_line() {
   run echo_line_impl()

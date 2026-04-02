@@ -15,12 +15,12 @@ e2e::section "Basic send + route"
 e2e::file "basic_inbox.jh" <<'EOF'
 channel greetings
 
-script emit_hello = "echo \"hello from sender\""
+script emit_hello = `echo "hello from sender"`
 workflow sender() {
   greetings <- run emit_hello()
 }
 
-script write_received = "echo \"$1\" > received.txt"
+script write_received = `echo "$1" > received.txt`
 workflow receiver(message) {
   run write_received(arg1)
 }
@@ -44,17 +44,17 @@ e2e::section "Multi-target route"
 e2e::file "multi_target.jh" <<'EOF'
 channel results
 
-script emit_payload = "echo \"data-payload\""
+script emit_payload = `echo "data-payload"`
 workflow producer() {
   results <- run emit_payload()
 }
 
-script write_consumer_a = "echo \"A got: $1\" > consumer_a.txt"
+script write_consumer_a = `echo "A got: $1" > consumer_a.txt`
 workflow consumer_a(message) {
   run write_consumer_a(arg1)
 }
 
-script write_consumer_b = "echo \"B got: $1\" > consumer_b.txt"
+script write_consumer_b = `echo "B got: $1" > consumer_b.txt`
 workflow consumer_b(message) {
   run write_consumer_b(arg1)
 }
@@ -80,12 +80,12 @@ e2e::section "Undefined channel fails validation"
 e2e::file "undefined_channel.jh" <<'EOF'
 channel some_channel
 
-script emit_dropped = "echo \"dropped\""
+script emit_dropped = `echo "dropped"`
 workflow sender() {
   unknown_channel <- run emit_dropped()
 }
 
-script never_called_impl = "echo \"never called\" > dummy.txt"
+script never_called_impl = `echo "never called" > dummy.txt`
 workflow dummy() {
   run never_called_impl()
 }
@@ -118,12 +118,12 @@ e2e::section "Inbox file written"
 e2e::file "inbox_file.jh" <<'EOF'
 channel audit
 
-script emit_inbox_content = "echo \"inbox-content-check\""
+script emit_inbox_content = `echo "inbox-content-check"`
 workflow writer() {
   audit <- run emit_inbox_content()
 }
 
-script write_audited = "echo \"$1\" > audited.txt"
+script write_audited = `echo "$1" > audited.txt`
 workflow auditor(message) {
   run write_audited(arg1)
 }
@@ -152,17 +152,17 @@ e2e::file "display_inbox.jh" <<'EOF'
 channel findings
 channel report
 
-script emit_findings = "echo \"Found 3 issues in auth module\""
+script emit_findings = `echo "Found 3 issues in auth module"`
 workflow scanner() {
   findings <- run emit_findings()
 }
 
-script emit_summary = "echo \"Summary: $1\""
+script emit_summary = `echo "Summary: $1"`
 workflow analyst(message) {
   report <- run emit_summary(arg1)
 }
 
-script print_reviewed = "echo \"[reviewed] $1\""
+script print_reviewed = `echo "[reviewed] $1"`
 workflow reviewer(message) {
   run print_reviewed(arg1)
 }
@@ -194,7 +194,7 @@ e2e::section "Receiver positional args: \$1=message, \$2=channel, \$3=sender"
 e2e::file "receiver_args.jh" <<'EOF'
 channel events
 
-script emit_payload = "echo \"payload-data\""
+script emit_payload = `echo "payload-data"`
 workflow producer() {
   events <- run emit_payload()
 }
@@ -232,17 +232,17 @@ config {
 
 channel results
 
-script emit_parallel_payload = "echo \"parallel-payload\""
+script emit_parallel_payload = `echo "parallel-payload"`
 workflow producer() {
   results <- run emit_parallel_payload()
 }
 
-script write_consumer_a_par = "echo \"A got: $1\" > consumer_a_par.txt"
+script write_consumer_a_par = `echo "A got: $1" > consumer_a_par.txt`
 workflow consumer_a(message) {
   run write_consumer_a_par(arg1)
 }
 
-script write_consumer_b_par = "echo \"B got: $1\" > consumer_b_par.txt"
+script write_consumer_b_par = `echo "B got: $1" > consumer_b_par.txt`
 workflow consumer_b(message) {
   run write_consumer_b_par(arg1)
 }
@@ -272,17 +272,17 @@ config {
 
 channel data
 
-script emit_from_a = "echo \"from-a\""
+script emit_from_a = `echo "from-a"`
 workflow sender_a() {
   data <- run emit_from_a()
 }
 
-script emit_from_b = "echo \"from-b\""
+script emit_from_b = `echo "from-b"`
 workflow sender_b() {
   data <- run emit_from_b()
 }
 
-script append_sink_log = "echo \"$1\" >> sink_log.txt"
+script append_sink_log = `echo "$1" >> sink_log.txt`
 workflow sink(message) {
   run append_sink_log(arg1)
 }
@@ -323,17 +323,17 @@ config {
 
 channel ch
 
-script emit_msg = "echo \"msg\""
+script emit_msg = `echo "msg"`
 workflow producer() {
   ch <- run emit_msg()
 }
 
-script fail_target_impl = "exit 1"
+script fail_target_impl = `exit 1`
 workflow bad_target() {
   run fail_target_impl()
 }
 
-script write_good_par = "echo \"ok\" > good_par.txt"
+script write_good_par = `echo "ok" > good_par.txt`
 workflow good_target() {
   run write_good_par()
 }
@@ -364,17 +364,17 @@ config {
 
 channel events
 
-script emit_e1 = "echo \"e1\""
+script emit_e1 = `echo "e1"`
 workflow sender() {
   events <- run emit_e1()
 }
 
-script handle_a_impl = "echo \"handled-a\""
+script handle_a_impl = `echo "handled-a"`
 workflow handler_a() {
   run handle_a_impl()
 }
 
-script handle_b_impl = "echo \"handled-b\""
+script handle_b_impl = `echo "handled-b"`
 workflow handler_b() {
   run handle_b_impl()
 }
@@ -409,17 +409,17 @@ e2e::section "Parallel dispatch via JAIPH_INBOX_PARALLEL env var"
 e2e::file "env_parallel.jh" <<'EOF'
 channel results
 
-script emit_env_parallel = "echo \"env-parallel\""
+script emit_env_parallel = `echo "env-parallel"`
 workflow producer() {
   results <- run emit_env_parallel()
 }
 
-script write_env_a = "echo \"A: $1\" > env_a.txt"
+script write_env_a = `echo "A: $1" > env_a.txt`
 workflow consumer_a(message) {
   run write_env_a(arg1)
 }
 
-script write_env_b = "echo \"B: $1\" > env_b.txt"
+script write_env_b = `echo "B: $1" > env_b.txt`
 workflow consumer_b(message) {
   run write_env_b(arg1)
 }

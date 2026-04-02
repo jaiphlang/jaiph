@@ -58,7 +58,7 @@ test("valid: escaped backtick in prompt", () => {
 test("valid: $1 in script body (shell context)", () => {
   withTempDir("jaiph-str-ok-script-dollar1-", (root) => {
     writeJh(root, "m.jh", [
-      'script greet = "echo \\"Hello $1\\""',
+      'script greet = `echo "Hello $1"`',
       "workflow default() {",
       '  run greet("world")',
       "}",
@@ -230,52 +230,6 @@ test("reject ${var:+alt} shell expansion in log", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Invalid: unescaped backticks
-// ---------------------------------------------------------------------------
-
-test("reject unescaped backtick in log message", () => {
-  withTempDir("jaiph-str-bad-bt-log-", (root) => {
-    writeJh(root, "m.jh", [
-      "workflow default() {",
-      '  log "output: `uname`"',
-      "}",
-    ]);
-    assert.throws(
-      () => buildScripts(join(root, "m.jh"), join(root, "out")),
-      /E_PARSE.*log cannot contain backticks/,
-    );
-  });
-});
-
-test("reject unescaped backtick in fail message", () => {
-  withTempDir("jaiph-str-bad-bt-fail-", (root) => {
-    writeJh(root, "m.jh", [
-      "workflow default() {",
-      '  fail "error: `whoami`"',
-      "}",
-    ]);
-    assert.throws(
-      () => buildScripts(join(root, "m.jh"), join(root, "out")),
-      /E_PARSE.*fail cannot contain backticks/,
-    );
-  });
-});
-
-test("reject unescaped backtick in prompt", () => {
-  withTempDir("jaiph-str-bad-bt-prompt-", (root) => {
-    writeJh(root, "m.jh", [
-      "workflow default() {",
-      '  prompt "run `uname` and tell me"',
-      "}",
-    ]);
-    assert.throws(
-      () => buildScripts(join(root, "m.jh"), join(root, "out")),
-      /E_PARSE.*prompt cannot contain backticks/,
-    );
-  });
-});
-
-// ---------------------------------------------------------------------------
 // Invalid: $(...) command substitution in orchestration strings
 // ---------------------------------------------------------------------------
 
@@ -314,7 +268,7 @@ test("reject $(...) in logerr message", () => {
 test("reject ${var:-fallback} in rule log", () => {
   withTempDir("jaiph-str-bad-fallback-rule-", (root) => {
     writeJh(root, "m.jh", [
-      'script noop = "true"',
+      'script noop = `true`',
       "rule check() {",
       '  log "${x:-fallback}"',
       "}",
@@ -329,24 +283,6 @@ test("reject ${var:-fallback} in rule log", () => {
   });
 });
 
-test("reject unescaped backtick in rule fail", () => {
-  withTempDir("jaiph-str-bad-bt-rule-fail-", (root) => {
-    writeJh(root, "m.jh", [
-      'script noop = "true"',
-      "rule check() {",
-      '  fail "error: `cmd`"',
-      "}",
-      "workflow default() {",
-      "  ensure check()",
-      "}",
-    ]);
-    assert.throws(
-      () => buildScripts(join(root, "m.jh"), join(root, "out")),
-      /E_PARSE.*fail cannot contain backticks/,
-    );
-  });
-});
-
 // ---------------------------------------------------------------------------
 // Inline capture interpolation: ${run ref} / ${ensure ref}
 // ---------------------------------------------------------------------------
@@ -354,7 +290,7 @@ test("reject unescaped backtick in rule fail", () => {
 test("valid: ${run ref} inline capture in log", () => {
   withTempDir("jaiph-str-ic-run-", (root) => {
     writeJh(root, "m.jh", [
-      'script greet = "echo \\"hello\\""',
+      'script greet = `echo "hello"`',
       "workflow default() {",
       '  log "got: ${run greet()}"',
       "}",
@@ -380,7 +316,7 @@ test("valid: ${ensure ref} inline capture in log", () => {
 test("valid: ${run ref args} inline capture with args", () => {
   withTempDir("jaiph-str-ic-run-args-", (root) => {
     writeJh(root, "m.jh", [
-      'script greet = "echo \\"hello $1\\""',
+      'script greet = `echo "hello $1"`',
       "workflow default() {",
       '  log "got: ${run greet(world)}"',
       "}",
@@ -392,7 +328,7 @@ test("valid: ${run ref args} inline capture with args", () => {
 test("valid: ${run ref} inline capture in return", () => {
   withTempDir("jaiph-str-ic-return-", (root) => {
     writeJh(root, "m.jh", [
-      'script greet = "echo \\"hello\\""',
+      'script greet = `echo "hello"`',
       "workflow helper() {",
       '  return "${run greet()}"',
       "}",
@@ -407,7 +343,7 @@ test("valid: ${run ref} inline capture in return", () => {
 test("valid: ${run ref} inline capture in rule log", () => {
   withTempDir("jaiph-str-ic-rule-", (root) => {
     writeJh(root, "m.jh", [
-      'script greet = "echo \\"hello\\""',
+      'script greet = `echo "hello"`',
       "rule check() {",
       '  log "got: ${run greet()}"',
       "}",
@@ -422,8 +358,8 @@ test("valid: ${run ref} inline capture in rule log", () => {
 test("rejected: nested inline capture ${run ... ${run ...}}", () => {
   withTempDir("jaiph-str-ic-nested-", (root) => {
     writeJh(root, "m.jh", [
-      'script foo = "echo \\"a\\""',
-      'script bar = "echo \\"b\\""',
+      'script foo = `echo "a"`',
+      'script bar = `echo "b"`',
       "workflow default() {",
       '  log "got: ${run foo(${run bar()})}"',
       "}",

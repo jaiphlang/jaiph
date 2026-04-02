@@ -8,13 +8,13 @@ config {
   # agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
-script npm_run_test_ci = "npm run test:ci"
+script npm_run_test_ci = `npm run test:ci`
 
 rule ci_passes() {
   run npm_run_test_ci()
 }
 
-script save_string_to_file = "printf '%s' \"$1\" > \"$2\""
+script save_string_to_file = `printf '%s' "$1" > "$2"`
 
 workflow default() {
   ensure ci_passes() recover {

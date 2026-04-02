@@ -1,7 +1,7 @@
 import type { WorkflowStepDef } from "../types";
 import { parseConstRhs } from "./const-rhs";
 import { fail, indexOfClosingDoubleQuote, isRef, parseCallRef, parseLogMessageRhs } from "./core";
-import { parseInlineScriptBody } from "./inline-script";
+import { parseAnonymousInlineScript } from "./inline-script";
 
 /** Reject non-empty trailing content after a call expression (e.g. shell redirection). */
 function rejectTrailingContent(
@@ -91,17 +91,14 @@ function parseRecoverStatement(
     const rest = genericAssignMatch[2].trim();
     if (rest.startsWith("run ")) {
       const runBody = rest.slice("run ".length).trim();
-      if (runBody.startsWith("script(") || runBody.startsWith("script (")) {
-        const scriptCall = parseCallRef(runBody);
-        if (!scriptCall) {
-          fail(filePath, 'inline script requires parentheses: run script() "body"', lineNo, col);
-        }
-        const result = parseInlineScriptBody(filePath, [], lineNo - 1, scriptCall.rest, lineNo, col);
+      if (runBody.startsWith("`")) {
+        const result = parseAnonymousInlineScript(filePath, [], lineNo - 1, runBody, lineNo, col);
         return {
           type: "run_inline_script",
           body: result.body,
           ...(result.lang ? { lang: result.lang } : {}),
-          args: scriptCall.args,
+          args: result.args,
+          ...(result.bareIdentifierArgs ? { bareIdentifierArgs: result.bareIdentifierArgs } : {}),
           captureName,
           loc: { line: lineNo, col },
         };
@@ -140,17 +137,14 @@ function parseRecoverStatement(
   }
   if (t.startsWith("run ")) {
     const runBody = t.slice("run ".length).trim();
-    if (runBody.startsWith("script(") || runBody.startsWith("script (")) {
-      const scriptCall = parseCallRef(runBody);
-      if (!scriptCall) {
-        fail(filePath, 'inline script requires parentheses: run script() "body"', lineNo, col);
-      }
-      const result = parseInlineScriptBody(filePath, [], lineNo - 1, scriptCall.rest, lineNo, col);
+    if (runBody.startsWith("`")) {
+      const result = parseAnonymousInlineScript(filePath, [], lineNo - 1, runBody, lineNo, col);
       return {
         type: "run_inline_script",
         body: result.body,
         ...(result.lang ? { lang: result.lang } : {}),
-        args: scriptCall.args,
+        args: result.args,
+        ...(result.bareIdentifierArgs ? { bareIdentifierArgs: result.bareIdentifierArgs } : {}),
         loc: { line: lineNo, col },
       };
     }

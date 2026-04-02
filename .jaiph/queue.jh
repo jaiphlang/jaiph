@@ -57,7 +57,7 @@ if ! task="$(awk -v header="$header" '
   return 1
 fi
 
-if ! test -n "${task}"; then
+if ! test -n "$task"; then
   echo "task is empty: $header" >&2
   return 1
 fi
@@ -65,11 +65,11 @@ fi
 printf '%s\n' "$task"
 ```
 
-script task_contains_dev_ready_marker = "printf '%s\n' \"$1\" | grep -q '<!-- dev-ready -->'"
+script task_contains_dev_ready_marker = `printf '%s\n' "$1" | grep -q '<!-- dev-ready -->'`
 
-script file_exists = "test -f \"$1\""
+script file_exists = `test -f "$1"`
 
-script queue_file_path = "printf '%s\n' \"${JAIPH_WORKSPACE:-.}/QUEUE.md\""
+script queue_file_path = `printf '%s\n' "${JAIPH_WORKSPACE:-.}/QUEUE.md"`
 
 script first_header_line = ```
 local header
@@ -82,7 +82,7 @@ header="$(awk '/^## /{
 printf '%s\n' "$header"
 ```
 
-script arg_nonempty = "[ -n \"${1:-}\" ]"
+script arg_nonempty = `[ -n "${1:-}" ]`
 
 workflow get_first_task() {
   const qf = run queue_file_path()
@@ -109,7 +109,7 @@ case "$header" in
   *) header="## $header" ;;
 esac
 local qf="${JAIPH_WORKSPACE:-.}/QUEUE.md"
-local tmp_file="${qf}.tmp.$$"
+local tmp_file="$qf.tmp.$$"
 
 if ! awk -v header="$header" '
   BEGIN {
@@ -144,8 +144,8 @@ case "$header" in
   *) header="## $header" ;;
 esac
 local qf="$2"
-local tmp_file="${qf}.tmp.$$"
-awk -v header="${header}" '
+local tmp_file="$qf.tmp.$$"
+awk -v header="$header" '
   BEGIN {
     skipping=0
     removed=0
@@ -167,7 +167,7 @@ mv "$tmp_file" "$qf"
 script squeeze_consecutive_blanks_queue = ```
 local qf="$1"
 sed -i.bak -E '/^[[:space:]]*$/N;/^\n$/D' "$qf"
-rm -f "${qf}.bak"
+rm -f "$qf.bak"
 ```
 
 workflow remove_completed_task(header) {

@@ -32,10 +32,10 @@ test("any arbitrary lang tag is valid (no allowlist)", () => {
 // === Accepted: plain script without lang tag ===
 
 test("plain script without lang tag has no lang", () => {
-  const mod = parsejaiph('script setup = "echo hello"', "test.jh");
+  const mod = parsejaiph('script setup = `echo hello`', "test.jh");
   assert.equal(mod.scripts[0].lang, undefined);
   assert.equal(mod.scripts[0].body, "echo hello");
-  assert.equal(mod.scripts[0].bodyKind, "string");
+  assert.equal(mod.scripts[0].bodyKind, "backtick");
 });
 
 // === Accepted: manual shebang in fenced body (no lang tag) ===

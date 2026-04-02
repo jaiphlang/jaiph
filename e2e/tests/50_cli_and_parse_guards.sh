@@ -111,12 +111,6 @@ workflow default() {
 }
 EOF
 
-e2e::file "bad_prompt_backticks.jh" <<'EOF'
-workflow default() {
-  prompt "show host `uname`"
-}
-EOF
-
 # When
 subshell_err="$(mktemp)"
 if jaiph run "${TEST_DIR}/bad_prompt_subshell.jh" 2>"${subshell_err}"; then
@@ -130,20 +124,6 @@ rm -f "${subshell_err}"
 # Then
 e2e::assert_contains "${subshell_out}" "E_PARSE" "prompt command substitution emits E_PARSE"
 e2e::assert_contains "${subshell_out}" "prompt cannot contain" "prompt command substitution is rejected with explicit guard"
-
-# When
-backticks_err="$(mktemp)"
-if jaiph run "${TEST_DIR}/bad_prompt_backticks.jh" 2>"${backticks_err}"; then
-  cat "${backticks_err}" >&2
-  rm -f "${backticks_err}"
-  e2e::fail "jaiph run should fail for prompt with backticks"
-fi
-backticks_out="$(cat "${backticks_err}")"
-rm -f "${backticks_err}"
-
-# Then
-e2e::assert_contains "${backticks_out}" "E_PARSE" "prompt backticks emits E_PARSE"
-e2e::assert_contains "${backticks_out}" "backticks" "prompt backticks message is explicit"
 
 e2e::section "shell redirection around run/ensure is rejected"
 

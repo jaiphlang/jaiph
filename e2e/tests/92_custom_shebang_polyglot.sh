@@ -30,7 +30,7 @@ sys.stdout.write("polyglot-ok\n")
 sys.exit(0)
 ```
 
-script bash_marker = "echo bash-script-ran"
+script bash_marker = `echo bash-script-ran`
 
 workflow default() {
   run py_echo_ok()
@@ -74,7 +74,7 @@ process.stdout.write("node-polyglot-ok\n");
 process.exit(0);
 ```
 
-script bash_marker = "echo bash-script-ran"
+script bash_marker = `echo bash-script-ran`
 
 workflow default() {
   run node_echo_ok()

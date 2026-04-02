@@ -18,7 +18,7 @@ rule build_passes() {
   run build_passes_impl()
 }
 
-script build_passes_impl = "npm run build"
+script build_passes_impl = `npm run build`
 
 # Orchestrates checks, prompt execution, and docs refresh.
 # Arguments:

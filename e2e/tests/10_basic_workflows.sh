@@ -13,7 +13,7 @@ e2e::section "Basic workflow execution"
 
 # Given
 e2e::file "hello.jh" <<'EOF'
-script hello_impl = "echo \"hello-jh\""
+script hello_impl = `echo "hello-jh"`
 workflow default() {
   msg = run hello_impl()
   return "${msg}"
@@ -39,7 +39,7 @@ e2e::expect_out "hello.jh" "hello_impl" "hello-jh"
 
 # Given
 e2e::file "lib.jh" <<'EOF'
-script ready_impl = "echo \"from-lib\""
+script ready_impl = `echo "from-lib"`
 rule ready() {
   result = run ready_impl()
   return "${result}"
@@ -48,7 +48,7 @@ EOF
 
 e2e::file "app.jh" <<'EOF'
 import "lib.jh" as lib
-script mixed_ok_impl = "echo \"mixed-ok\""
+script mixed_ok_impl = `echo "mixed-ok"`
 workflow default() {
   ensure lib.ready()
   msg = run mixed_ok_impl()

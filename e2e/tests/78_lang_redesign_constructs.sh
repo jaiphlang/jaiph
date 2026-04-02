@@ -28,7 +28,7 @@ e2e::assert_contains "${out}" "hello-world" "const string value logged"
 e2e::section "const with run capture"
 
 e2e::file "const_run.jh" <<'EOF'
-script greet = "echo \"hi from fn\""
+script greet = `echo "hi from fn"`
 
 workflow default() {
   const val = run greet()
@@ -80,7 +80,7 @@ e2e::assert_contains "${bad_out}" 'command substitution' "error mentions command
 e2e::section "wait step joins async run"
 
 e2e::file "wait_step.jh" <<'EOF'
-script write_marker = "echo \"waited\" > waited.txt"
+script write_marker = `echo "waited" > waited.txt`
 
 workflow bg_job() {
   run write_marker()
@@ -102,7 +102,7 @@ e2e::assert_file_exists "${TEST_DIR}/waited.txt" "async job wrote marker file"
 e2e::section "brace if with ensure (positive)"
 
 e2e::file "brace_if_ensure.jh" <<'EOF'
-script always_ok_impl = "true"
+script always_ok_impl = `true`
 rule always_ok() {
   run always_ok_impl()
 }
@@ -121,7 +121,7 @@ e2e::assert_contains "${out}" "then-branch" "brace if ensure then-branch ran"
 e2e::section "brace if not ensure (negated)"
 
 e2e::file "brace_if_not.jh" <<'EOF'
-script always_fail_impl = "false"
+script always_fail_impl = `false`
 rule always_fail() {
   run always_fail_impl()
 }
@@ -140,7 +140,7 @@ e2e::assert_contains "${out}" "negated-branch" "brace if not ensure ran"
 e2e::section "brace if with run + else"
 
 e2e::file "brace_if_run_else.jh" <<'EOF'
-script returns_false = "return 1"
+script returns_false = `return 1`
 
 workflow default() {
   if run returns_false() {
@@ -163,12 +163,12 @@ e2e::pass "then-branch correctly skipped"
 e2e::section "brace if with else if chain"
 
 e2e::file "brace_if_chain.jh" <<'EOF'
-script always_fail_impl = "false"
+script always_fail_impl = `false`
 rule always_fail() {
   run always_fail_impl()
 }
 
-script returns_ok = "true"
+script returns_ok = `true`
 
 workflow default() {
   if ensure always_fail() {
@@ -192,7 +192,7 @@ e2e::assert_contains "${out}" "second-branch" "else if chain selected correct br
 e2e::section "structured rule with run and fail"
 
 e2e::file "structured_rule.jh" <<'EOF'
-script check_ok = "return 0"
+script check_ok = `return 0`
 
 rule require_name() {
   if not run check_ok() {
@@ -213,7 +213,7 @@ e2e::assert_contains "${out}" "passed" "structured rule passed with valid arg"
 e2e::section "structured rule fails correctly"
 
 e2e::file "structured_rule_fail.jh" <<'EOF'
-script check_fail = "return 1"
+script check_fail = `return 1`
 
 rule require_name() {
   if not run check_fail() {

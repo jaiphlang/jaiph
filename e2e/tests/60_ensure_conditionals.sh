@@ -13,7 +13,7 @@ e2e::section "brace if not ensure branch behavior"
 
 # Given
 e2e::file "ensure_run_branch.jh" <<'EOF'
-script always_fail_impl = "false"
+script always_fail_impl = `false`
 rule always_fail() {
   run always_fail_impl()
 }
@@ -33,7 +33,7 @@ workflow default() {
 EOF
 
 e2e::file "ensure_shell_branch.jh" <<'EOF'
-script always_fail_impl = "false"
+script always_fail_impl = `false`
 rule always_fail() {
   run always_fail_impl()
 }
@@ -50,7 +50,7 @@ workflow default() {
 EOF
 
 e2e::file "ensure_pass_branch.jh" <<'EOF'
-script always_ok_impl = "true"
+script always_ok_impl = `true`
 rule always_ok() {
   run always_ok_impl()
 }

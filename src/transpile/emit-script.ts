@@ -113,12 +113,8 @@ function emitInlineScriptArtifact(
   out.push({ name, content });
 }
 
-/** Resolve the actual body for a ScriptDef, handling the identifier case by looking up envDecls. */
-function resolveScriptBody(sc: jaiphModule["scripts"][0], ast: jaiphModule): string {
-  if (sc.bodyKind === "identifier" && sc.bodyIdentifier) {
-    const envDecl = ast.envDecls?.find((e) => e.name === sc.bodyIdentifier);
-    return envDecl ? envDecl.value : sc.body;
-  }
+/** Resolve the actual body for a ScriptDef. */
+function resolveScriptBody(sc: jaiphModule["scripts"][0], _ast: jaiphModule): string {
   return sc.body;
 }
 

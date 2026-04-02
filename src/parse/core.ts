@@ -209,6 +209,17 @@ export function parseCallRef(s: string): { ref: string; args?: string; bareIdent
 }
 
 /**
+ * Parse a parenthesized argument list `(args)` or `()` at the start of a string.
+ * Returns args (space-separated), bare identifier names, and remaining text after `)`.
+ * Returns null if the string doesn't start with `(`.
+ */
+export function parseParenArgs(s: string): { args?: string; bareIdentifierArgs?: string[]; rest: string } | null {
+  const result = parseCallRef(`__anon${s.trimStart()}`);
+  if (!result) return null;
+  return { args: result.args, bareIdentifierArgs: result.bareIdentifierArgs, rest: result.rest };
+}
+
+/**
  * Match `channel <- command` when `<-` appears outside quoted strings.
  */
 export function matchSendOperator(line: string): { rhsText: string; channel: string } | null {

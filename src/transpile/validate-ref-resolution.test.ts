@@ -58,7 +58,7 @@ test("lookupKind: finds workflow", () => {
 
 test("lookupKind: finds script", () => {
   const mod = minimalModule({
-    scripts: [{ name: "build_it", comments: [], body: "", bodyKind: "string" as const, loc: { line: 1, col: 1 } }],
+    scripts: [{ name: "build_it", comments: [], body: "", bodyKind: "backtick" as const, loc: { line: 1, col: 1 } }],
   });
   assert.equal(lookupKind(mod, "build_it"), "script");
 });
@@ -241,7 +241,7 @@ test("validateRef: bare_send_rhs rejects local workflow", () => {
 
 test("validateRef: bare_send_rhs rejects local script", () => {
   const mod = minimalModule({
-    scripts: [{ name: "build", comments: [], body: "", bodyKind: "string" as const, loc: { line: 1, col: 1 } }],
+    scripts: [{ name: "build", comments: [], body: "", bodyKind: "backtick" as const, loc: { line: 1, col: 1 } }],
   });
   const ctx = makeCtx();
   assert.throws(

@@ -21,7 +21,7 @@ Jaiph enforces a strict boundary between orchestration and execution. Workflows 
 
 - **Rules** — Named blocks of structured Jaiph steps: `ensure` (other rules), `run` (scripts only — not workflows), `const`, brace `if`, `match`, `fail`, `log`/`logerr`, `return "…"`. Rules cannot use `prompt`, inbox send/route, `wait`, `run async`, or `ensure … recover`.
 
-- **Scripts** — Top-level `script` definitions emitted as separate executable files under the workspace `scripts/` directory. Called from workflows or rules with `run`. Bodies are opaque to the compiler — the parser does not check Jaiph keywords inside them. Use `echo`/`printf` for data output and `return N`/`return $?` for exit status. Polyglot support: a fence lang tag (`` ```<tag> ``) maps to `#!/usr/bin/env <tag>` — any tag is valid (no hardcoded allowlist). Alternatively, a manual `#!` shebang as the first line of the body selects the interpreter; if both a fence tag and a `#!` first line are present, it is an error. Without either, `#!/usr/bin/env bash` is used. For trivial one-off commands, **inline scripts** (`run script() "body"` or `` run script() ``` ... ``` ``) let you embed a script body directly in a step without a named definition — see [`run` — Inline Scripts](#inline-scripts).
+- **Scripts** — Top-level `script` definitions emitted as separate executable files under the workspace `scripts/` directory. Called from workflows or rules with `run`. Bodies are opaque to the compiler — the parser does not check Jaiph keywords inside them. Use `echo`/`printf` for data output and `return N`/`return $?` for exit status. Jaiph interpolation (`${...}`) is forbidden in script bodies — use `$1`, `$2` positional arguments instead. Polyglot support: a fence lang tag (`` ```<tag> ``) maps to `#!/usr/bin/env <tag>` — any tag is valid (no hardcoded allowlist). Alternatively, a manual `#!` shebang as the first line of the body selects the interpreter; if both a fence tag and a `#!` first line are present, it is an error. Without either, `#!/usr/bin/env bash` is used. For trivial one-off commands, **inline scripts** (`` run `body`(args) `` or `` run ```lang...body...```(args) ``) let you embed a script body directly in a step without a named definition — see [`run` — Inline Scripts](#inline-scripts).
 
 - **Channels** — Named message queues declared with `channel name`. Workflows send messages with `<-` and register route handlers with `->`. See [Inbox & Dispatch](inbox.md).
 
@@ -71,14 +71,14 @@ One channel per line. Channels are used with `send` (`<-`) and `route` (`->`) in
 
 ## Definitions
 
-Rules and workflows use braces on the declaration line and **must include parentheses** — even when parameterless (e.g. `rule check()`, `workflow default()`). The parser rejects definitions without `()` before `{` with a fix hint. Scripts use `=` with a quoted string, bare identifier, or fenced block body. Rules and workflows may declare **named parameters** inside the parentheses.
+Rules and workflows use braces on the declaration line and **must include parentheses** — even when parameterless (e.g. `rule check()`, `workflow default()`). The parser rejects definitions without `()` before `{` with a fix hint. Scripts use `=` with a backtick body (single-line) or fenced block (multi-line). Rules and workflows may declare **named parameters** inside the parentheses.
 
 ```jaiph
 rule check_status() { … }              # no params — () required
 workflow default() { … }               # no params — () required
 rule gate(path) { … }                 # one named param
 workflow implement(task, role) { … }  # two named params
-script setup = "echo ok"               # correct (single-line)
+script setup = `echo ok`               # correct (single-line backtick)
 script setup = ```                     # correct (fenced block)
 echo ok
 ```
@@ -164,63 +164,55 @@ Shell redirection or pipelines after `run` (`>`, `|`, `&`) are rejected — use 
 
 #### Inline Scripts
 
-`run script()` followed by a body embeds a shell command directly in a workflow or rule step without declaring a named `script` definition. This is useful for trivial one-off commands where a full `script` definition would be verbose.
+Inline scripts embed a shell command directly in a workflow or rule step without declaring a named `script` definition. Use single backticks for one-liners or triple backticks for multiline bodies. Arguments go in parentheses after the closing backtick(s).
 
 ```jaiph
 workflow default() {
-  run script() "echo hello"
-  x = run script() "echo captured"
-  const y = run script() "date +%s"
+  run `echo hello`()
+  x = run `echo captured`()
+  const y = run `date +%s`()
   log "got: ${x}, time: ${y}"
 }
 ```
 
-The body follows the `script(...)` call and can be a **double-quoted string** or a **fenced block**. Optional arguments are passed as comma-separated strings inside the parentheses and are available as `$1`, `$2`, … inside the script:
+Optional arguments are passed as comma-separated expressions inside the parentheses after the closing backtick and are available as `$1`, `$2`, … inside the script:
 
 ```jaiph
-run script("hello", "world") "echo $1-$2"   # prints: hello-world
+run `echo $1-$2`("hello", "world")   # prints: hello-world
 ```
 
-**Fenced block form:** For multiline inline scripts or polyglot one-liners, use a fenced block after the call. The opening `` ``` `` must be on the same line as `script(...)`. An optional lang tag selects the interpreter — same rules as named scripts (`` ```<tag> `` → `#!/usr/bin/env <tag>`):
+**Fenced block form:** For multiline inline scripts or polyglot one-liners, use triple-backtick fences. An optional lang tag selects the interpreter — same rules as named scripts (`` ```<tag> `` → `#!/usr/bin/env <tag>`). Arguments go in parentheses after the closing fence:
 
 ```text
-run script() ```
+run ```
 echo "line one"
 echo "line two"
-```
+```()
 ```
 
 ```text
-run script() ```python3
+run ```python3
 import sys
 print(f"args: {sys.argv[1:]}")
-```
+```()
 ```
 
 Both body forms work with capture:
 
 ```jaiph
-x = run script() "echo captured"
-const y = run script() ```
+x = run `echo captured`()
+const y = run ```
 date +%s
+```()
 ```
-```
-
-**Polyglot support (quoted strings):** If a quoted-string body starts with `#!`, the first line (up to the first `\n`) becomes the shebang and the rest becomes the body:
-
-```jaiph
-run script() "#!/usr/bin/env python3\nprint('hello from python')"
-```
-
-For other languages, prefer the fenced form with a lang tag — even for a single line of Python, wrap it in a fenced block with `` ```python3 ``.
 
 **Deterministic naming:** Inline script bodies are emitted as executable files under `scripts/` with names of the form `__inline_<hash>` (12-character SHA-256 prefix of body + shebang). The same body and shebang always produce the same artifact name across runs.
 
 **Isolation:** Inline scripts run with the same subprocess isolation as named scripts — no parent scope variables are visible. Only positional arguments and essential Jaiph variables (`JAIPH_LIB`, `JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`) are inherited.
 
 **Restrictions:**
-- `run async script(…)` is not supported — inline scripts cannot be used with `run async`.
-- The body must be a double-quoted string or a fenced block after the call (single quotes are not accepted).
+- `run async` with inline scripts is not supported — inline scripts cannot be used with `run async`.
+- Jaiph interpolation (`${...}`) is forbidden inside script bodies — use `$1`, `$2` positional arguments instead.
 
 ### `run async` — Concurrent Execution
 
@@ -491,7 +483,7 @@ Prefer `const name = …` for new code.
 ### Bash Scripts (single-line)
 
 ```jaiph
-script setup_env = "export BASE_DIR=$(pwd) && mkdir -p \"$BASE_DIR/output\" && echo \"Environment initialized\""
+script setup_env = `export BASE_DIR=$(pwd) && mkdir -p "$BASE_DIR/output" && echo "Environment initialized"`
 ```
 
 ### Bash Scripts (fenced block)
@@ -504,18 +496,7 @@ echo "Environment initialized"
 ```
 ```
 
-### Identifier binding
-
-The RHS of a named script can be a bare identifier referencing an existing `const` binding whose string value becomes the script body:
-
-```jaiph
-const MY_CMD = "echo hello"
-script greet = MY_CMD
-```
-
-Quoted-string and identifier RHS always use the default runtime (shell). For other languages, use a fenced block with a lang tag.
-
-Script bodies are opaque bash — the compiler does not parse them as Jaiph steps. For bash scripts, the emitter applies only lightweight transforms: `return` normalization, `local`/`export`/`readonly` spacing, and import alias resolution.
+Script bodies are opaque bash — the compiler does not parse them as Jaiph steps. For bash scripts, the emitter applies only lightweight transforms: `return` normalization, `local`/`export`/`readonly` spacing, and import alias resolution. Jaiph interpolation (`${...}`) is forbidden in all script bodies — use `$1`, `$2` positional arguments to pass data from orchestration to scripts.
 
 ### Polyglot Scripts
 
@@ -589,7 +570,6 @@ Jaiph orchestration strings support `${identifier}` interpolation. Every identif
 | `$1`, `$2` | Not supported — use `${arg1}`, `${arg2}` | `script` bodies only |
 | `${var:-fallback}` | Rejected (`E_PARSE`) | — |
 | `$(…)` | Rejected (`E_PARSE`) | — |
-| `` ` `` (unescaped backtick) | Rejected (`E_PARSE`) — escape with `` \` `` | — |
 
 **Dot notation** (`${var.field}`) accesses a single field from a typed prompt capture. The variable must be bound to a `prompt … returns` step, and the field must exist in the schema. Both constraints are checked at compile time. See [prompt — Typed prompt](#prompt--agent-interaction) for details.
 
@@ -613,7 +593,7 @@ Every step produces three distinct outputs — status, value, and logs:
 | `ensure rule` | rule exit code | explicit `return` value | rule body logs to artifacts |
 | `run workflow` | workflow exit code | explicit `return` value | workflow step logs to artifacts |
 | `run script` (named) | script exit code | **stdout** of script body | script stdout/stderr to artifacts |
-| `run script() "…"` (inline) | script exit code | **stdout** of script body | script stdout/stderr to artifacts |
+| `` run `…`() `` (inline) | script exit code | **stdout** of script body | script stdout/stderr to artifacts |
 | `prompt` | prompt exit code | final assistant answer | transcript to artifacts |
 | `log` / `logerr` | always 0 | empty | event + stdout/stderr |
 | `fail` | non-zero (abort) | empty | message to stderr |
@@ -633,7 +613,7 @@ Key rules:
 - **Comments:** Full-line `#` comments. Empty lines are ignored.
 - **Shebang:** A `#!` first line of the file is ignored by the parser.
 - **Import path:** Quoted string in `import "path" as alias`. Missing `.jh` extension is appended automatically.
-- **String quoting:** Jaiph string literals use **double quotes only** (`"..."`). Single-quoted (`'...'`) and backtick-delimited (`` `...` ``) strings are parse errors. Use `\"` for literal double quotes inside strings and `\\` for literal backslashes. **Exception:** script bodies (fenced blocks) are opaque shell text; normal shell quoting (single quotes, backticks, etc.) is allowed inside them.
+- **String quoting:** Jaiph orchestration strings use **double quotes only** (`"..."`). Single-quoted (`'...'`) strings are parse errors. Use `\"` for literal double quotes inside strings and `\\` for literal backslashes. Script bodies use single backtick (`` `...` ``) for single-line or triple backtick (`` ```...``` ``) for multi-line — normal shell quoting (single quotes, double quotes, etc.) is allowed inside script bodies.
 - **Top-level ordering:** The parser accepts top-level definitions in any order. `jaiph format` normalizes them to a canonical order: imports → config → channels → const declarations → rules → scripts → workflows → tests. See [CLI — `jaiph format`](cli.md#jaiph-format).
 
 ## EBNF (Practical Form)
@@ -669,7 +649,8 @@ rule_body_step  = comment_line | workflow_step ;
      and run targets that are not scripts *)
 
 script_decl     = "script" IDENT "=" script_rhs ;
-script_rhs      = quoted_or_multiline_string | IDENT | fenced_script_block ;
+script_rhs      = backtick_script_body | fenced_script_block ;
+backtick_script_body = "`" script_text "`" ;  (* single-line; no newlines; no ${...} interpolation *)
 fenced_script_block = "```" [ LANG_TAG ] newline { script_line newline } "```" ;
 LANG_TAG        = IDENT ;  (* any identifier — maps to #!/usr/bin/env <tag>; rejected when body starts with #! *)
 shebang_line    = "#!" rest_of_line ;  (* rejected when LANG_TAG is present *)
@@ -718,7 +699,7 @@ ensure_stmt     = "ensure" call_ref [ "recover" recover_body ] ;
 ensure_capture_stmt = IDENT "=" "ensure" call_ref [ "recover" recover_body ] ;
 run_capture_stmt   = IDENT "=" "run" ( call_ref | inline_script ) ;
 run_stmt        = "run" ( call_ref | inline_script ) ;
-inline_script   = "script" "(" [ string { "," string } ] ")" ( string | fenced_script_block ) ;
+inline_script   = backtick_script_body "(" [ call_args ] ")" | fenced_script_block "(" [ call_args ] ")" ;
 prompt_body     = double_quoted_string | IDENT | fenced_block ;
 fenced_block    = "```" newline { body_line newline } "```" ;
 prompt_stmt     = "prompt" prompt_body [ returns_schema ] ;
@@ -741,7 +722,7 @@ brace_if_head   = "ensure" call_ref | "run" call_ref ;
 
 After parsing, the compiler validates references and config (`src/transpile/validate.ts`). Error codes:
 
-- **E_PARSE:** Invalid syntax — duplicate config, invalid keys/values, unescaped backticks, `$(…)` or `${var:-fallback}` in orchestration strings, `prompt … returns` without capture, bare `ref(args)` in const RHS (use `run`/`ensure`/`prompt`), `local` at top level, unrecognized workflow/rule line, invalid send RHS, arguments after `recover`, bare `recover` with no recovery step, nested inline captures, shell redirection after `run`/`ensure`, invalid parameter names (non-identifier, duplicate, or reserved keyword), or missing `{` on definition line.
+- **E_PARSE:** Invalid syntax — duplicate config, invalid keys/values, `$(…)` or `${var:-fallback}` in orchestration strings, `${...}` interpolation in script bodies, `prompt … returns` without capture, bare `ref(args)` in const RHS (use `run`/`ensure`/`prompt`), `local` at top level, unrecognized workflow/rule line, invalid send RHS, arguments after `recover`, bare `recover` with no recovery step, nested inline captures, shell redirection after `run`/`ensure`, invalid parameter names (non-identifier, duplicate, or reserved keyword), or missing `{` on definition line.
 - **E_SCHEMA:** Invalid `returns` schema — empty, non-flat, unsupported type (only `string`, `number`, `boolean`).
 - **E_VALIDATE:** Reference errors — unknown rule/workflow, duplicate alias, `ensure` on non-rule, `run` on rule, `run` to workflow inside rule, `run async` in rule, forbidden Jaiph usage inside `$(…)`, dot notation on non-prompt variable or invalid field name, bare identifier argument referencing an unknown variable, `${identifier}` in strings referencing an unknown variable, standalone `"${identifier}"` in call arguments (use bare identifier instead), arity mismatch (call-site argument count differs from callee's declared parameter count).
 - **E_IMPORT_NOT_FOUND:** Import target file does not exist.
@@ -761,7 +742,7 @@ Validation rules:
 
 `jaiph run` and `jaiph test` do **not** transpile workflows to shell. The CLI calls `buildScripts()`, which emits only per-`script` executable files under `scripts/`. Workflows, rules, prompts, channels, and control flow are interpreted by `NodeWorkflowRuntime` from the AST.
 
-Each `script name = …` becomes `scripts/<name>` with `chmod +x`: shebang (from fence lang tag, manual `#!`, or default `#!/usr/bin/env bash`) plus the body. Inline scripts (`run script() "body"` or `` run script() ``` ... ``` ``) are emitted as `scripts/__inline_<hash>` with deterministic hash-based names. At runtime, script steps run these files with a minimal environment.
+Each `script name = …` becomes `scripts/<name>` with `chmod +x`: shebang (from fence lang tag, manual `#!`, or default `#!/usr/bin/env bash`) plus the body. Inline scripts (`` run `body`(args) `` or `` run ```lang...body...```(args) ``) are emitted as `scripts/__inline_<hash>` with deterministic hash-based names. At runtime, script steps run these files with a minimal environment.
 
 ## Runtime Execution
 

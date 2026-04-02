@@ -61,7 +61,7 @@ workflow default() {
 rule gate() {
   run gate_impl()
 }
-script gate_impl = "true"
+script gate_impl = `true`
 workflow default() {
   if not ensure gate() {
     echo fallback
@@ -79,7 +79,7 @@ workflow default() {
 === inline shell step subshell capture forbidden in workflow
 # @expect error E_VALIDATE "inline shell steps are forbidden in workflows" @3:3
 --- input.jh
-script f = "printf '%s' 'x'"
+script f = `printf '%s' 'x'`
 workflow default() {
   x="$(f)"
 }
@@ -87,7 +87,7 @@ workflow default() {
 === direct inline shell step forbidden in workflow
 # @expect error E_VALIDATE "inline shell steps are forbidden in workflows" @3:3
 --- input.jh
-script f = "printf '%s' 'x'"
+script f = `printf '%s' 'x'`
 workflow default() {
   f
 }
@@ -95,7 +95,7 @@ workflow default() {
 === inline shell line with workflow ref is forbidden
 # @expect error E_VALIDATE "inline shell steps are forbidden in workflows" @6:3
 --- input.jh
-script w_impl = "echo x"
+script w_impl = `echo x`
 workflow w() {
   run w_impl()
 }
@@ -107,7 +107,7 @@ workflow default() {
 # @expect error E_VALIDATE "workflow" @7:5
 --- input.jh
 channel c
-script w_impl = "echo x"
+script w_impl = `echo x`
 workflow w() {
   run w_impl()
 }
@@ -118,7 +118,7 @@ workflow default() {
 === bare identifier arg unknown name fails
 # @expect error E_VALIDATE "unknown identifier" @3:3
 --- input.jh
-script greet = "echo \"hello $1\""
+script greet = `echo "hello $1"`
 workflow default() {
   run greet(unknown_var)
 }
@@ -151,7 +151,7 @@ channel findings
 rule check() {
   run check_impl()
 }
-script check_impl = "true"
+script check_impl = `true`
 workflow default() {
   findings -> check
 }
@@ -244,7 +244,7 @@ workflow default() {
 === ensure rejects local script reference
 # @expect error E_VALIDATE "cannot be called with ensure" @3:3
 --- input.jh
-script my_script = "echo ok"
+script my_script = `echo ok`
 workflow default() {
   ensure my_script()
 }
@@ -358,7 +358,7 @@ workflow default() {
   ensure lib.helper()
 }
 --- lib.jh
-script helper = "echo \"ok\""
+script helper = `echo "ok"`
 workflow dummy() {
   log "ok"
 }

@@ -19,9 +19,9 @@ const role = "You are an expert.
 
 const greeting = "hello world"
 
-script write_role = "echo \"$1\" > role_out.txt"
+script write_role = `echo "$1" > role_out.txt`
 
-script write_greeting = "echo \"$1\" > greeting_out.txt"
+script write_greeting = `echo "$1" > greeting_out.txt`
 
 workflow default() {
   run write_role(role)
@@ -63,9 +63,9 @@ rule check_msg() {
   run check_msg_impl(msg)
 }
 
-script write_msg = "echo \"${msg:-}\" > func_msg.txt"
+script write_msg = `echo "${msg:-}" > func_msg.txt`
 
-script write_wf_msg = "echo \"$1\" > wf_msg.txt"
+script write_wf_msg = `echo "$1" > wf_msg.txt`
 
 workflow default() {
   ensure check_msg()

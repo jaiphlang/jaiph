@@ -14,12 +14,12 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 e2e::section "if not ensure: rule passes → else branch taken"
 
 e2e::file "not_ensure_else.jh" <<'EOF'
-script ok_impl = "true"
+script ok_impl = `true`
 rule ok_rule() {
   run ok_impl()
 }
 
-script else_action = "echo \"else-ran\" > else_ran.txt"
+script else_action = `echo "else-ran" > else_ran.txt`
 
 workflow default() {
   if not ensure ok_rule() {
@@ -56,12 +56,12 @@ e2e::pass "if not ensure with else: ensure passes → else branch"
 e2e::section "if not ensure: rule fails → then branch taken"
 
 e2e::file "not_ensure_then.jh" <<'EOF'
-script fail_impl = "false"
+script fail_impl = `false`
 rule fail_rule() {
   run fail_impl()
 }
 
-script then_action = "echo \"then-ran\" > then_ran.txt"
+script then_action = `echo "then-ran" > then_ran.txt`
 
 workflow default() {
   if not ensure fail_rule() {
@@ -98,17 +98,17 @@ e2e::pass "if not ensure with else: ensure fails → then branch"
 e2e::section "if ensure with else-if chain: first fails, second passes"
 
 e2e::file "else_if_chain.jh" <<'EOF'
-script fail_impl = "false"
+script fail_impl = `false`
 rule first_check() {
   run fail_impl()
 }
 
-script ok_impl = "true"
+script ok_impl = `true`
 rule second_check() {
   run ok_impl()
 }
 
-script second_action = "echo \"second-ran\" > second_ran.txt"
+script second_action = `echo "second-ran" > second_ran.txt`
 
 workflow default() {
   if ensure first_check() {

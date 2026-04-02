@@ -21,7 +21,7 @@ echo "Oops" >&2
 exit 1
 ```
 
-script save_string_to_file = "printf '%s' \"$1\" > \"$2\""
+script save_string_to_file = `printf '%s' "$1" > "$2"`
 
 rule simple_echo_rule() {
   run simple_echo()
@@ -56,7 +56,7 @@ echo "nested-stderr" >&2
 exit 1
 ```
 
-script save_string_to_file = "printf '%s' \"$1\" > \"$2\""
+script save_string_to_file = `printf '%s' "$1" > "$2"`
 
 rule inner() {
   run failing_script()
@@ -99,7 +99,7 @@ echo "Tests: 1 failed, 3 passed, 4 total" >&2
 exit 1
 ```
 
-script save_string_to_file = "printf '%s' \"$1\" > \"$2\""
+script save_string_to_file = `printf '%s' "$1" > "$2"`
 
 rule ci_passes() {
   run npm_run_test_ci()
@@ -145,11 +145,11 @@ local n
 n=$(<"$attempt_file")
 n=$((n + 1))
 printf "%s" "$n" > "$attempt_file"
-echo "attempt-${n}"
+echo "attempt-$n"
 exit 1
 ```
 
-script save_string_to_file = "printf '%s' \"$1\" > \"$2\""
+script save_string_to_file = `printf '%s' "$1" > "$2"`
 
 rule check_rule() {
   run emit_attempt()
@@ -182,9 +182,9 @@ e2e::pass "retry payload updates per attempt"
 e2e::section "no recover payload when rule succeeds"
 
 e2e::file "success_no_payload.jh" <<'EOF'
-script say_ok = "echo \"all good\""
+script say_ok = `echo "all good"`
 
-script save_string_to_file = "printf '%s' \"$1\" > \"$2\""
+script save_string_to_file = `printf '%s' "$1" > "$2"`
 
 rule passes_first_try() {
   run say_ok()
