@@ -237,7 +237,7 @@ export function parsePromptStep(
   const identMatch = promptArg.match(/^([A-Za-z_][A-Za-z0-9_]*)/);
   if (!identMatch) {
     const msg = captureName
-      ? 'prompt body must be a quoted string, identifier, or fenced block: name = prompt "text" | prompt myVar | prompt ``` ... ```'
+      ? 'prompt body must be a quoted string, identifier, or fenced block: const name = prompt "text" | prompt myVar | prompt ``` ... ```'
       : 'prompt body must be a quoted string, identifier, or fenced block: prompt "text" | prompt myVar | prompt ``` ... ```';
     fail(filePath, msg, lineNo, promptCol);
   }

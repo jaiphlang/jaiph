@@ -181,10 +181,12 @@ function parseRecoverStatement(
     /^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*prompt\s+(.+)$/s,
   );
   if (promptAssignMatch) {
-    return parsePromptStep(
-      filePath, [], lineNo - 1, promptAssignMatch[2].trimStart(),
-      col + t.indexOf("prompt"), promptAssignMatch[1],
-    ).step;
+    fail(
+      filePath,
+      'use "const name = prompt ..." in recover blocks (e.g. const x = prompt "...")',
+      lineNo,
+      col + t.indexOf(promptAssignMatch[1]),
+    );
   }
   if (t.startsWith("prompt ")) {
     return parsePromptStep(

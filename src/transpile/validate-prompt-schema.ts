@@ -62,7 +62,7 @@ export function validatePromptStepReturns(
         step.loc.line,
         step.loc.col,
         "E_PARSE",
-        'prompt with "returns" schema must capture to a variable (e.g. result = prompt "..." returns "{ ... }")',
+        'prompt with "returns" schema must capture to a variable (e.g. const result = prompt "..." returns "{ ... }")',
       );
     }
     validatePromptReturnsSchema(step.returns, filePath, step.loc.line, step.loc.col);

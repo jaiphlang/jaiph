@@ -14,7 +14,7 @@ test("NodeWorkflowRuntime: workflow step .out accumulates Command:/Prompt: and l
       jh,
       [
         "workflow default() {",
-        '  response = prompt "hello-mock"',
+        '  const response = prompt "hello-mock"',
         '  log "${response}"',
         "}",
         "",
@@ -71,7 +71,7 @@ test("NodeWorkflowRuntime: ensure recover receives failure payload in recover sc
         "",
         'script mark_ready = "touch ready.txt"',
         "",
-        "workflow default() {",
+        "workflow default(name, extra) {",
         "  ensure check_ready() recover {",
         '    run write_recover_received(arg1)',
         '    run write_recover_arg2(arg2)',
@@ -346,7 +346,7 @@ test("NodeWorkflowRuntime: prompt STEP_START params include named vars reference
       [
         "workflow default() {",
         '  const dataset = "users"',
-        '  response = prompt "Analyze the ${dataset} table"',
+        '  const response = prompt "Analyze the ${dataset} table"',
         '  log "${response}"',
         "}",
         "",

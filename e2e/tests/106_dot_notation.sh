@@ -34,7 +34,7 @@ e2e::section "Compile-time rejection: invalid field in dot notation"
 
 cat > "${TEST_DIR}/bad_field.jh" <<'EOF'
 workflow default() {
-  result = prompt "Analyse" returns "{ type: string }"
+  const result = prompt "Analyse" returns "{ type: string }"
   log "bad ${result.bogus}"
 }
 EOF

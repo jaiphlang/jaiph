@@ -33,7 +33,7 @@ workflow deploy() {
 
 workflow default() {
   ensure validate(arg1)
-  response = prompt "summarize deployment"
+  const response = prompt "summarize deployment"
   run deploy()
 }
 EOF

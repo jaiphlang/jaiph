@@ -70,7 +70,7 @@ script echo_line_impl = ```
 echo "script-step-out"
 ```
 workflow default() {
-  _ = prompt "e2e-artifacts-prompt-line"
+  const _ = prompt "e2e-artifacts-prompt-line"
   run echo_line_impl()
 }
 EOF

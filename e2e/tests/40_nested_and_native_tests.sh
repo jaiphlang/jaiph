@@ -110,7 +110,7 @@ script print_result = ```
 printf '%s' "$1"
 ```
 workflow default() {
-  result = prompt "e2e-unmatched-prompt-never-mocked"
+  const result = prompt "e2e-unmatched-prompt-never-mocked"
   run print_result("$result")
 }
 EOF
@@ -191,7 +191,7 @@ rule check_arg(name) {
 }
 workflow default() {
   ensure check_arg(arg1)
-  response = prompt "e2e-param-prompt-text"
+  const response = prompt "e2e-param-prompt-text"
   run echo_response(response)
 }
 EOF

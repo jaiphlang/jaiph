@@ -206,7 +206,7 @@ test("bare identifier arg: capture variable passes validation", () => {
   }
 });
 
-test("bare identifier arg: argN always valid", () => {
+test("bare identifier arg: arg1 valid when workflow declares a parameter", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-bare-argn-"));
   const out = join(root, "out");
   try {
@@ -214,7 +214,7 @@ test("bare identifier arg: argN always valid", () => {
       join(root, "m.jh"),
       [
         'script greet = "echo \\"hello $1\\""',
-        "workflow default() {",
+        "workflow default(name) {",
         "  run greet(arg1)",
         "}",
         "",
@@ -350,6 +350,70 @@ test("quoted string with extra text around interpolation is allowed in args", ()
       ].join("\n"),
     );
     buildScripts(join(root, "m.jh"), out);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("E_VALIDATE: arg1 bare argument requires a workflow parameter", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-arg1-slot-"));
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        'script noop = ":"',
+        "workflow default() {",
+        "  run noop(arg1)",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      /unknown identifier "arg1" used as bare argument/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("E_PARSE: prompt capture requires const", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-prompt-const-"));
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        "workflow default() {",
+        '  x = prompt "hi"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      /use "const name = prompt/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("E_VALIDATE: ${arg1} in log requires a workflow parameter", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-arg1-interp-"));
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        "workflow default() {",
+        '  log "x=${arg1}"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      /this workflow does not declare that many parameters/,
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

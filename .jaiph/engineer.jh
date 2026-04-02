@@ -305,8 +305,8 @@ workflow implement(task, role_name) {
 ```
 }
 
-workflow default() {
-  const role_arg = "${arg1}"
+workflow default(name) {
+  const role_arg = "${name}"
   # ensure git.is_clean
   const task = run queue.get_first_task()
   const task_header = run first_line_task(task)

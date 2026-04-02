@@ -7,7 +7,7 @@ test "without name, workflow fails with validation message" {
   response = hello.default allow_failure
 
   # Then
-  expectEqual response "You didn't provide your name"
+  expectEqual response "You didn't provide your name :("
 }
 
 test "with name, returns greeting and logs response" {

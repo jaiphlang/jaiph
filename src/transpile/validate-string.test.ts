@@ -25,7 +25,7 @@ function writeJh(root: string, name: string, lines: string[]): void {
 test("valid: ${name} interpolation in log", () => {
   withTempDir("jaiph-str-ok-braced-", (root) => {
     writeJh(root, "m.jh", [
-      "workflow default() {",
+      "workflow default(name) {",
       '  log "hello ${name}"',
       "}",
     ]);
@@ -33,10 +33,10 @@ test("valid: ${name} interpolation in log", () => {
   });
 });
 
-test("valid: ${arg1} positional in log", () => {
+test("valid: ${arg1} positional in log when workflow declares a parameter", () => {
   withTempDir("jaiph-str-ok-arg1-", (root) => {
     writeJh(root, "m.jh", [
-      "workflow default() {",
+      "workflow default(arg1) {",
       '  log "arg is ${arg1}"',
       "}",
     ]);
@@ -48,7 +48,7 @@ test("valid: escaped backtick in prompt", () => {
   withTempDir("jaiph-str-ok-esc-bt-", (root) => {
     writeJh(root, "m.jh", [
       "workflow default() {",
-      '  prompt "escaped backtick: \\`cmd\\`"',
+      '  const _ = prompt "escaped backtick: \\`cmd\\`"',
       "}",
     ]);
     buildScripts(join(root, "m.jh"), join(root, "out"));
@@ -513,7 +513,7 @@ test("valid: ${response.field} dot notation in log compiles", () => {
   withTempDir("jaiph-str-dot-ok-", (root) => {
     writeJh(root, "m.jh", [
       "workflow default() {",
-      '  result = prompt "Analyse" returns "{ type: string, risk: string }"',
+      '  const result = prompt "Analyse" returns "{ type: string, risk: string }"',
       '  log "type is ${result.type}"',
       "}",
     ]);
@@ -539,7 +539,7 @@ test("invalid: ${result.bogus} where bogus is not in schema fails at compile tim
   withTempDir("jaiph-str-dot-badfield-", (root) => {
     writeJh(root, "m.jh", [
       "workflow default() {",
-      '  result = prompt "Analyse" returns "{ type: string, risk: string }"',
+      '  const result = prompt "Analyse" returns "{ type: string, risk: string }"',
       '  log "bad field ${result.bogus}"',
       "}",
     ]);
