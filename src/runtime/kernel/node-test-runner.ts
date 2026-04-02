@@ -265,6 +265,7 @@ export async function runTestFile(
   let total = 0;
   let failed = 0;
   const failedNames: string[] = [];
+  let lastFailureHadDetailLines = false;
 
   for (const block of blocks) {
     total += 1;
@@ -274,6 +275,7 @@ export async function runTestFile(
 
     process.stdout.write(`  \u25b8 ${block.description}\n`);
     if (result.pass) {
+      lastFailureHadDetailLines = false;
       process.stdout.write(`  ${green}\u2713${reset} ${dim}${elapsed}s${reset}\n`);
     } else {
       failed += 1;
@@ -284,6 +286,7 @@ export async function runTestFile(
         if (dl.length === 0) continue;
         writeExpectEqualDetailLine(dl);
       }
+      lastFailureHadDetailLines = detailLines.length > 0;
       if (detailLines.length > 0) {
         process.stdout.write("\n");
       }
@@ -291,6 +294,9 @@ export async function runTestFile(
   }
 
   if (failed > 0) {
+    if (lastFailureHadDetailLines) {
+      process.stdout.write("\n");
+    }
     process.stdout.write(`\n${bold}${red}\u2717 ${failed} / ${total} test(s) failed${reset}\n`);
     for (const name of failedNames) {
       process.stdout.write(`  - ${name}\n`);
