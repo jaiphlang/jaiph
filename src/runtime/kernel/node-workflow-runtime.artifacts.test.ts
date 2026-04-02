@@ -15,7 +15,7 @@ test("NodeWorkflowRuntime: workflow step .out accumulates Command:/Prompt: and l
       [
         "workflow default() {",
         '  const response = prompt "hello-mock"',
-        '  log "${response}"',
+        '  log response',
         "}",
         "",
       ].join("\n"),
@@ -347,7 +347,7 @@ test("NodeWorkflowRuntime: prompt STEP_START params include named vars reference
         "workflow default() {",
         '  const dataset = "users"',
         '  const response = prompt "Analyze the ${dataset} table"',
-        '  log "${response}"',
+        '  log response',
         "}",
         "",
       ].join("\n"),

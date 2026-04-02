@@ -164,10 +164,10 @@ workflow default(name) {
     Respond with a single line. Do not inspect files or run tools.
   ```
 
-  log "${response}"
+  log response
 }</code></pre>
                     <p>Running the workflow:</p>
-                    <pre><code class="jaiph-run" data-sample-output="success"><span class="run-command">./say_hello.jh Jakub</span>
+                    <pre><code class="jaiph-run" data-sample-output="success"><span class="run-command">➜  ./say_hello.jh Jakub</span>
 
 Jaiph: Running say_hello.jh
 
@@ -180,9 +180,9 @@ Jaiph: Running say_hello.jh
   <span class="run-pass">✓</span> <span class="run-time">prompt cursor (5s)</span>
   <span class="run-marker">ℹ</span> Hello Jakub — Czech conductor Jakub Hrůša has led major orchestras including the Bamberg Symphony and often appears at the BBC Proms.
 
-<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(6.1s)</span></code></pre>
+<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(5.5s)</span></code></pre>
                     <p>When you don't provide the name parameter, the workflow fails:</p>
-                    <pre><code class="jaiph-run" data-sample-output="failure"><span class="run-command">./say_hello.jh</span>
+                    <pre><code class="jaiph-run" data-sample-output="failure"><span class="run-command">➜  ./say_hello.jh</span>
 
 Jaiph: Running say_hello.jh
 
@@ -192,7 +192,7 @@ Jaiph: Running say_hello.jh
   <span class="run-marker">·</span>   <span class="run-fail">✗ script __inline_65a8c336a46d</span> <span class="run-time">(0s)</span>
   <span class="run-fail">✗ rule name_was_provided</span> <span class="run-time">(0s)</span>
 
-<span class="run-fail">✗ FAIL</span> <span class="run-keyword">workflow</span> default <span class="run-time">(0.3s)</span>
+<span class="run-fail">✗ FAIL</span> <span class="run-keyword">workflow</span> default <span class="run-time">(0.4s)</span>
   Logs: &lt;path&gt;
   Summary: &lt;path&gt;
     out: &lt;path&gt;
@@ -239,7 +239,7 @@ test "with name, returns greeting and logs response" {
   # When
   hello.default "Alice"
 }</code></pre>
-                    <p>Example failing run output:</p>
+                    <p>Example failing test run output (expected string omits the trailing <code>:(</code> from stderr):</p>
                     <pre><code class="jaiph-run" data-sample-output="failing-run"><span class="run-command">➜  ./say_hello.test.jh</span>
 testing say_hello.test.jh
   <span class="run-marker">▸</span> without name, workflow fails with validation message
@@ -331,12 +331,12 @@ workflow scanner() {
   findings <- "Found 3 issues in auth module"
 }
 
-workflow analyst() {
+workflow analyst(message, chan, sender) {
   log "Analyzing message from ${arg3} on channel ${arg2}..."
   report <- "Summary: ${arg1}"
 }
 
-workflow reviewer() {
+workflow reviewer(message, chan, sender) {
   log "Reviewing message from ${arg3} on channel ${arg2}..."
   logerr "Critical issue: ${arg1}"
 }
@@ -381,7 +381,7 @@ workflow cursor_say_hello() {
     agent.backend = "cursor"
   }
   const response = prompt "${prompt_text}"
-  log "${response}"
+  log response
 }
 
 workflow claude_say_hello() {
@@ -389,7 +389,7 @@ workflow claude_say_hello() {
     agent.backend = "claude"
   }
   const response = prompt "${prompt_text}"
-  log "${response}"
+  log response
 }
 
 workflow default() {

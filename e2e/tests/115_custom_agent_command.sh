@@ -26,7 +26,7 @@ config {
 
 workflow default() {
   const response = prompt "one two three four five"
-  log "${response}"
+  log response
 }
 EOF
 

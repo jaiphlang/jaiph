@@ -230,7 +230,28 @@ export async function runTestFile(
   const red = "\x1b[31m";
   const green = "\x1b[32m";
   const dim = "\x1b[2m";
+  const colorEnabled = process.env.NO_COLOR === undefined;
   const displayName = basename(testFileAbs);
+
+  const writeExpectEqualDetailLine = (line: string): void => {
+    if (!colorEnabled) {
+      process.stdout.write(`${line}\n`);
+      return;
+    }
+    const minus = /^(\s*)- (.*)$/;
+    const plus = /^(\s*)\+ (.*)$/;
+    const m = minus.exec(line);
+    if (m) {
+      process.stdout.write(`${m[1]}${dim}- ${m[2]}${reset}\n`);
+      return;
+    }
+    const p = plus.exec(line);
+    if (p) {
+      process.stdout.write(`${p[1]}${red}+ ${p[2]}${reset}\n`);
+      return;
+    }
+    process.stdout.write(`${line}\n`);
+  };
 
   process.stdout.write(`${bold}testing${reset} ${displayName}\n`);
 
@@ -260,7 +281,8 @@ export async function runTestFile(
       const [errorLine, ...detailLines] = (result.error ?? "unknown error").split("\n");
       process.stdout.write(`  ${red}\u2717${reset} ${errorLine} ${dim}${elapsed}s${reset}\n`);
       for (const dl of detailLines) {
-        process.stdout.write(`${dl}\n`);
+        if (dl.length === 0) continue;
+        writeExpectEqualDetailLine(dl);
       }
       if (detailLines.length > 0) {
         process.stdout.write("\n");

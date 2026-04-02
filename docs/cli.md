@@ -136,7 +136,7 @@ To surface the agent answer inline in the tree, use `log` explicitly:
 
 ```jaiph
 response = prompt "Summarize the report"
-log "${response}"
+log response
 ```
 
 ### Failed run summary (stderr)
