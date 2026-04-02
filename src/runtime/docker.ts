@@ -247,7 +247,7 @@ function copyDirRecursive(src: string, dest: string): void {
     const srcPath = join(src, entry.name);
     const destPath = join(dest, entry.name);
     if (entry.isDirectory()) {
-      if (entry.name === "reporting" || entry.name === "cli") continue;
+      if (entry.name === "reporting") continue;
       copyDirRecursive(srcPath, destPath);
     } else if (entry.isFile() && entry.name.endsWith(".js")) {
       copyFileSync(srcPath, destPath);

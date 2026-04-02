@@ -183,6 +183,10 @@ test("prepareGeneratedDir: copies scripts and kernel", () => {
     try {
       assert.ok(existsSync(join(genDir, "scripts", "foo")));
       assert.equal(readFileSync(join(genDir, "scripts", "foo"), "utf8"), "#!/usr/bin/env bash\necho foo");
+      assert.ok(
+        existsSync(join(genDir, "src", "cli", "commands", "format-params.js")),
+        "kernel requires cli/commands/format-params.js in the Docker generated tree",
+      );
       // No jaiph_stdlib.sh or workflow .sh expected
       assert.ok(!existsSync(join(genDir, "jaiph_stdlib.sh")));
     } finally {
