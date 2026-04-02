@@ -11,7 +11,7 @@ import { basename } from "node:path";
 import { parsejaiph } from "../../parser";
 import { buildScripts } from "../../transpiler";
 import { metadataToConfig } from "../../config";
-import { formatNamedParamsForDisplay } from "./format-params.js";
+import { buildStepDisplayParamPairs, formatNamedParamsForDisplay } from "./format-params.js";
 import {
   colorPalette,
   resolveFailureDetails,
@@ -78,7 +78,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     const isTTY = !!process.stdout.isTTY;
     const startedAt = Date.now();
 
-    writeBanner(inputAbs, runArgs, colorEnabled, isTTY, startedAt);
+    writeBanner(mod, inputAbs, runArgs, colorEnabled, isTTY, startedAt);
 
     const runtimeEnv = resolveRuntimeEnv(effectiveConfig, workspaceRoot, inputAbs);
     runtimeEnv.JAIPH_SOURCE_ABS = inputAbs;
@@ -171,13 +171,25 @@ export async function runWorkflow(rest: string[]): Promise<number> {
 }
 
 function writeBanner(
-  inputAbs: string, runArgs: string[], colorEnabled: boolean, isTTY: boolean, startedAt: number,
+  mod: ReturnType<typeof parsejaiph>,
+  inputAbs: string,
+  runArgs: string[],
+  colorEnabled: boolean,
+  isTTY: boolean,
+  startedAt: number,
 ): void {
   const rootLabel = "workflow default";
   process.stdout.write(`\nJaiph: Running ${basename(inputAbs)}\n\n`);
+  const defaultWf = mod.workflows.find((w) => w.name === "default");
   const rootParamsSuffix =
     runArgs.length > 0
-      ? colorize(formatNamedParamsForDisplay(runArgs.map((a, i) => [String(i + 1), a] as [string, string])), "dim", colorEnabled)
+      ? colorize(
+          formatNamedParamsForDisplay(
+            buildStepDisplayParamPairs(runArgs, defaultWf?.params, { positionalStyle: "numeric" }),
+          ),
+          "dim",
+          colorEnabled,
+        )
       : "";
   process.stdout.write(`${styleKeywordLabel(rootLabel)}${rootParamsSuffix}\n`);
   if (isTTY) {

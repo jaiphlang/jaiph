@@ -171,12 +171,12 @@ workflow default(name) {
 
 Jaiph: Running say_hello.jh
 
-<span class="run-keyword">workflow</span> default <span class="run-params">(1="Jakub")</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">rule</span> name_was_provided <span class="run-params">(1="Jakub")</span>
+<span class="run-keyword">workflow</span> default <span class="run-params">(name="Jakub")</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">rule</span> name_was_provided <span class="run-params">(name="Jakub")</span>
   <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">script</span> __inline_65a8c336a46d <span class="run-params">(1="Jakub")</span>
   <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">script __inline_65a8c336a46d (0s)</span>
   <span class="run-pass">✓</span> <span class="run-time">rule name_was_provided (0s)</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> cursor "Say hello to Jakub and p..." <span class="run-params">(1="Jakub")</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> cursor "Say hello to Jakub and p..." <span class="run-params">(name="Jakub")</span>
   <span class="run-pass">✓</span> <span class="run-time">prompt cursor (5s)</span>
   <span class="run-marker">ℹ</span> Hello Jakub — Czech conductor Jakub Hrůša has led major orchestras including the Bamberg Symphony and often appears at the BBC Proms.
 
@@ -186,9 +186,9 @@ Jaiph: Running say_hello.jh
 
 Jaiph: Running say_hello.jh
 
-<span class="run-keyword">workflow</span> default <span class="run-params">(1="")</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">rule</span> name_was_provided <span class="run-params">(1="")</span>
-  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">script</span> __inline_65a8c336a46d <span class="run-params">(1="")</span>
+<span class="run-keyword">workflow</span> default
+  <span class="run-marker">▸</span> <span class="run-keyword">rule</span> name_was_provided
+  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">script</span> __inline_65a8c336a46d
   <span class="run-marker">·</span>   <span class="run-fail">✗ script __inline_65a8c336a46d</span> <span class="run-time">(0s)</span>
   <span class="run-fail">✗ rule name_was_provided</span> <span class="run-time">(0s)</span>
 

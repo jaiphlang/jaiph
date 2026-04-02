@@ -8,6 +8,7 @@ import { inlineScriptName } from "../../inline-script-name";
 import type { MatchExprDef, WorkflowStepDef } from "../../types";
 import { executePrompt, resolveConfig, resolveModel, resolvePromptStepName } from "./prompt";
 import { appendRunSummaryLine, formatUtcTimestamp } from "./emit";
+import { buildStepDisplayParamPairs } from "../../cli/commands/format-params.js";
 import { resolveRuleRef, resolveScriptRef, resolveWorkflowRef, type RuntimeGraph } from "./graph";
 import type { WorkflowMetadata } from "../../types";
 import { extractJson, validateFields } from "./schema";
@@ -19,6 +20,8 @@ type Scope = {
   filePath: string;
   vars: Map<string, string>;
   env: NodeJS.ProcessEnv;
+  /** Declared positional parameter names for the active workflow or rule (`arg1` ↔ `[0]`). */
+  declaredParamNames?: string[];
 };
 
 type Frame = {
@@ -307,6 +310,7 @@ export class NodeWorkflowRuntime {
     backend: string,
     scopeVars: Map<string, string>,
     rawPromptSource: string,
+    declaredParamNames?: string[],
   ): PromptStepHandle {
     this.promptSeq += 1;
     this.stepSeq += 1;
@@ -323,10 +327,13 @@ export class NodeWorkflowRuntime {
     const params: Array<[string, string]> = [["prompt_text", preview]];
     const seen = new Set<string>(["prompt_text"]);
     for (const [k, v] of scopeVars) {
-      if (/^arg\d+$/.test(k) && v.length > 0) {
-        params.push([k, v]);
-        seen.add(k);
-      }
+      if (!/^arg\d+$/.test(k) || v.length === 0) continue;
+      const n = Number(k.slice(3));
+      const slotName = declaredParamNames?.[n - 1];
+      // Skip argN when the slot has a declared name — show that name only (via ${…} or tail loop).
+      if (slotName) continue;
+      params.push([k, v]);
+      seen.add(k);
     }
     // Include named vars referenced in the prompt text.
     const refRe = /\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g;
@@ -337,6 +344,17 @@ export class NodeWorkflowRuntime {
         seen.add(name);
         const val = scopeVars.get(name) ?? "";
         if (val.length > 0) params.push([name, val]);
+      }
+    }
+    if (declaredParamNames) {
+      for (const pn of declaredParamNames) {
+        if (!seen.has(pn)) {
+          const val = scopeVars.get(pn) ?? "";
+          if (val.length > 0) {
+            seen.add(pn);
+            params.push([pn, val]);
+          }
+        }
       }
     }
     this.emitStep({
@@ -441,6 +459,7 @@ export class NodeWorkflowRuntime {
         filePath: resolved.filePath,
         vars: this.newScopeVars(resolved.filePath, scope.vars, workflowEnv),
         env: workflowEnv,
+        declaredParamNames: resolved.workflow.params,
       };
       args.forEach((v, i) => {
         childScope.vars.set(`arg${i + 1}`, v);
@@ -469,7 +488,7 @@ export class NodeWorkflowRuntime {
       } finally {
         this.workflowCtxStack.pop();
       }
-    });
+    }, resolved.workflow.params);
   }
 
   private async executeRule(filePath: string, ruleName: string, scope: Scope, args: string[]): Promise<StepResult> {
@@ -494,8 +513,17 @@ export class NodeWorkflowRuntime {
       resolved.rule.params.forEach((name, i) => {
         if (i < args.length) ruleVars.set(name, args[i]);
       });
-      return this.executeSteps({ filePath: resolved.filePath, vars: ruleVars, env: ruleEnv }, resolved.rule.steps, io);
-    });
+      return this.executeSteps(
+        {
+          filePath: resolved.filePath,
+          vars: ruleVars,
+          env: ruleEnv,
+          declaredParamNames: resolved.rule.params,
+        },
+        resolved.rule.steps,
+        io,
+      );
+    }, resolved.rule.params);
   }
 
   private mergeStepResult(accOut: string, accErr: string, r: StepResult): StepResult {
@@ -702,7 +730,7 @@ export class NodeWorkflowRuntime {
         const backend = promptConfig.backend || "cursor";
         const stepName = resolvePromptStepName(promptConfig);
         const modelRes = resolveModel(promptConfig);
-        const promptStep = this.emitPromptStepStart(promptText, stepName, scope.vars, step.raw);
+        const promptStep = this.emitPromptStepStart(promptText, stepName, scope.vars, step.raw, scope.declaredParamNames);
         this.emitPromptEvent("PROMPT_START", {
           backend,
           model: modelRes.model || undefined,
@@ -810,7 +838,13 @@ export class NodeWorkflowRuntime {
           const backend = promptConfig.backend || "cursor";
           const stepName = resolvePromptStepName(promptConfig);
           const modelRes = resolveModel(promptConfig);
-          const promptStep = this.emitPromptStepStart(promptText, stepName, scope.vars, step.value.raw);
+          const promptStep = this.emitPromptStepStart(
+            promptText,
+            stepName,
+            scope.vars,
+            step.value.raw,
+            scope.declaredParamNames,
+          );
           this.emitPromptEvent("PROMPT_START", {
             backend,
             model: modelRes.model || undefined,
@@ -1085,7 +1119,13 @@ export class NodeWorkflowRuntime {
       const mk = this.mockKey(resolvedWorkflow.filePath, resolvedWorkflow.workflow.name);
       const mockBody = this.mockBodies.get(mk);
       if (mockBody !== undefined) {
-        return this.executeManagedStep("workflow", ref, args, async () => this.executeMockBody(ref, mockBody, args));
+        return this.executeManagedStep(
+          "workflow",
+          ref,
+          args,
+          async () => this.executeMockBody(ref, mockBody, args),
+          resolvedWorkflow.workflow.params,
+        );
       }
       return this.executeWorkflow(resolvedWorkflow.filePath, resolvedWorkflow.workflow.name, scope, args, true);
     }
@@ -1119,7 +1159,13 @@ export class NodeWorkflowRuntime {
       const mk = this.mockKey(resolvedRule.filePath, resolvedRule.rule.name);
       const mockBody = this.mockBodies.get(mk);
       if (mockBody !== undefined) {
-        return this.executeManagedStep("rule", ref, args, async () => this.executeMockBody(ref, mockBody, args));
+        return this.executeManagedStep(
+          "rule",
+          ref,
+          args,
+          async () => this.executeMockBody(ref, mockBody, args),
+          resolvedRule.rule.params,
+        );
       }
       return this.executeRule(resolvedRule.filePath, resolvedRule.rule.name, scope, args);
     };
@@ -1274,6 +1320,7 @@ export class NodeWorkflowRuntime {
     name: string,
     args: string[],
     fn: (io: StepIO) => Promise<StepResult>,
+    declaredParamNames?: string[],
   ): Promise<StepResult> {
     this.stepSeq += 1;
     const seq = this.stepSeq;
@@ -1311,7 +1358,7 @@ export class NodeWorkflowRuntime {
       seq,
       depth,
       run_id: this.runId,
-      params: args.map((v, i) => [`arg${i + 1}`, v]),
+      params: buildStepDisplayParamPairs(args, declaredParamNames, { positionalStyle: "argN" }),
     });
     const started = Date.now();
     const result = await fn(io);
@@ -1333,7 +1380,7 @@ export class NodeWorkflowRuntime {
       seq,
       depth,
       run_id: this.runId,
-      params: args.map((v, i) => [`arg${i + 1}`, v]),
+      params: buildStepDisplayParamPairs(args, declaredParamNames, { positionalStyle: "argN" }),
       out_content: (result.output ?? "").slice(0, MAX_EMBED),
       err_content: result.status !== 0 ? (result.error ?? "").slice(0, MAX_EMBED) : "",
     });

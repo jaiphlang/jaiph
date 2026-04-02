@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { formatParamsForDisplay, formatNamedParamsForDisplay, normalizeParamValue } from "./format-params.js";
+import {
+  buildStepDisplayParamPairs,
+  formatParamsForDisplay,
+  formatNamedParamsForDisplay,
+  normalizeParamValue,
+} from "./format-params.js";
 
 test("formatParamsForDisplay filters empty and whitespace-only params", () => {
   const params: Array<[string, string]> = [
@@ -110,4 +115,18 @@ test("normalizeParamValue collapses whitespace and trims", () => {
   assert.equal(normalizeParamValue("  a  b  "), "a b");
   assert.equal(normalizeParamValue("\n\n\n"), "");
   assert.equal(normalizeParamValue("simple"), "simple");
+});
+
+test("buildStepDisplayParamPairs uses declared names when arity matches", () => {
+  assert.deepEqual(buildStepDisplayParamPairs(["x"], ["name"]), [["name", "x"]]);
+  assert.deepEqual(buildStepDisplayParamPairs(["a", "b"], ["u", "v"]), [
+    ["u", "a"],
+    ["v", "b"],
+  ]);
+});
+
+test("buildStepDisplayParamPairs falls back to numeric or argN positional keys", () => {
+  assert.deepEqual(buildStepDisplayParamPairs(["x"], undefined, { positionalStyle: "numeric" }), [["1", "x"]]);
+  assert.deepEqual(buildStepDisplayParamPairs(["x"], [], { positionalStyle: "numeric" }), [["1", "x"]]);
+  assert.deepEqual(buildStepDisplayParamPairs(["x"], undefined, { positionalStyle: "argN" }), [["arg1", "x"]]);
 });

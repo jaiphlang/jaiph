@@ -155,8 +155,8 @@ e2e::expect_stdout "${fib_out}" <<'EOF'
 
 Jaiph: Running fibonacci.jh
 
-workflow default (1="3")
-  ▸ rule ensure_is_number (1="3")
+workflow default (n="3")
+  ▸ rule ensure_is_number (value="3")
   ·   ▸ script ensure_is_number_impl (1="3")
   ·   ✓ script ensure_is_number_impl (<time>)
   ✓ rule ensure_is_number (<time>)
@@ -189,8 +189,8 @@ echo "$1"
 rule check_arg(name) {
   run check_arg_impl(arg1)
 }
-workflow default() {
-  ensure check_arg(arg1)
+workflow default(name) {
+  ensure check_arg(name)
   const response = prompt "e2e-param-prompt-text"
   run echo_response(response)
 }
@@ -229,8 +229,8 @@ echo "e2e-param-done"
 rule need_one(name) {
   run need_one_impl(arg1)
 }
-workflow default() {
-  ensure need_one(arg1)
+workflow default(name) {
+  ensure need_one(name)
   run param_done_impl()
 }
 EOF
@@ -243,8 +243,8 @@ e2e::expect_stdout "${param_run_out}" <<'EOF'
 
 Jaiph: Running param_run_only.jh
 
-workflow default (1="Bob")
-  ▸ rule need_one (1="Bob")
+workflow default (name="Bob")
+  ▸ rule need_one (name="Bob")
   ·   ▸ script need_one_impl (1="Bob")
   ·   ✓ script need_one_impl (<time>)
   ✓ rule need_one (<time>)

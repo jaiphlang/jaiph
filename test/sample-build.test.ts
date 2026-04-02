@@ -1409,7 +1409,7 @@ test("jaiph run tree truncates param values over 32 chars when params present", 
     assert.match(runResult.stdout, /workflow default/);
     // When params are shown, long values are truncated to 32 chars + "..."
     if (/longparam=/.test(runResult.stdout)) {
-      assert.match(runResult.stdout, /longparam=aaaaaaaa[^)]*\.\.\./);
+      assert.match(runResult.stdout, /longparam="a{32}\.\.\./);
     }
   } finally {
     rmSync(root, { recursive: true, force: true });
