@@ -12,22 +12,6 @@ Process rules:
 
 ---
 
-## E2E: exercise `examples/*.jh` (exclude `ensure_ci_passes.jh`) <!-- spec -->
-
-**Goal**  
-Add an end-to-end test (shell under `e2e/tests/`, following existing patterns) that runs every Jaiph file in `examples/` that is meant to be executed as a workflow, **except** `examples/ensure_ci_passes.jh` (CI-heavy / environment-specific). The run should succeed or be explicitly mocked/skipped per file where a real agent or external tools are required.
-
-**Context**  
-- Today `examples/` includes e.g. `say_hello.jh`, `async.jh`, `agent_inbox.jh`, plus `ensure_ci_passes.jh` and `*.test.jh` companions. Exclude **`ensure_ci_passes.jh`** from the matrix; decide whether `*.test.jh` files are covered via `jaiph test` instead of `jaiph run`.  
-- Some examples need CLI arguments (e.g. a name) or mock prompts — mirror what `examples/say_hello.test.jh` or existing e2e fixtures already do.
-
-**Done when**  
-- One e2e script lists runnable example paths (or globs) and fails CI if a listed example breaks.  
-- `ensure_ci_passes.jh` is not in that list; rationale is noted in a short comment in the script.  
-- Document in the script (or `e2e/README` only if needed) how to add a new example to the matrix.
-
----
-
 ## Validation hints vs strict interpolation <!-- dev-ready -->
 
 **Goal**  

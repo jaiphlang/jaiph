@@ -377,6 +377,8 @@ E2E tests compare full CLI output and full artifact file contents by default. Us
 
 Every `.jh` sample under `e2e/` must be wired into at least one test. Run `bash e2e/check_orphan_samples.sh` to detect unreferenced fixtures. See [Contributing — Orphan sample guard](contributing.md#orphan-sample-guard) for details.
 
+Similarly, every `.jh` and `.test.jh` file under `examples/` must be accounted for in `e2e/tests/110_examples.sh` — either exercised with strict assertions or explicitly excluded with a rationale. An orphan guard in that script enforces this. See [Contributing — Example matrix guard](contributing.md#example-matrix-guard) for details.
+
 ## Landing-page sample verification
 
 The project includes a Playwright-based test (`tests/e2e-samples/landing-page.spec.ts`) that verifies landing-page code samples stay in sync with real CLI behavior. Run it with `npm run test:samples`. See [Contributing — Landing-page sample verification](contributing.md#landing-page-sample-verification-playwright) for details.
