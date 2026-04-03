@@ -18,7 +18,7 @@ import { parseAnonymousInlineScript } from "./inline-script";
 import { parseEnsureStep } from "./steps";
 import { tryParseBraceIfChain } from "./workflow-brace";
 import { dottedReturnToQuotedString, isBareDottedIdentifierReturn } from "./workflow-return-dotted";
-import { parseMatchExpr, extractPostfixMatchSubject } from "./match";
+import { parseMatchExpr } from "./match";
 
 /** Reject non-empty trailing content after a call expression (e.g. shell redirection). */
 function rejectTrailingContent(
@@ -419,10 +419,11 @@ export function parseWorkflowBlock(
         idx = nextIdx - 1;
         continue;
       }
-      // return <subject> match { ... }
-      const returnMatchSubject = extractPostfixMatchSubject(returnValue);
-      if (returnMatchSubject) {
-        const { expr, nextIndex } = parseMatchExpr(filePath, lines, idx, returnMatchSubject, retLoc);
+      // return match var { ... }
+      const returnMatchHead = returnValue.match(/^match\s+(.+?)\s*\{\s*$/);
+      if (returnMatchHead) {
+        const subject = returnMatchHead[1].trim();
+        const { expr, nextIndex } = parseMatchExpr(filePath, lines, idx, subject, retLoc);
         workflow.steps.push({
           type: "return",
           value: `__match__`,

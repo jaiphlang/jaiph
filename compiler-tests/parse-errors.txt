@@ -535,7 +535,7 @@ workflow default() {
 --- input.jh
 workflow default() {
   const x = "hello"
-  return x match {
+  return match x {
     "unclosed
     _ => "no"
   }
@@ -546,7 +546,7 @@ workflow default() {
 --- input.jh
 workflow default() {
   const x = "hello"
-  return x match {
+  return match x {
     /unclosed => "yes"
     _ => "no"
   }
@@ -557,7 +557,7 @@ workflow default() {
 --- input.jh
 workflow default() {
   const x = "hello"
-  return x match {
+  return match x {
     // => "yes"
     _ => "no"
   }
@@ -568,7 +568,7 @@ workflow default() {
 --- input.jh
 workflow default() {
   const x = "hello"
-  return x match {
+  return match x {
     /[invalid/ => "yes"
     _ => "no"
   }
@@ -579,7 +579,7 @@ workflow default() {
 --- input.jh
 workflow default() {
   const x = "hello"
-  return x match {
+  return match x {
     "hello" =>
     _ => "no"
   }
@@ -590,7 +590,7 @@ workflow default() {
 --- input.jh
 workflow default() {
   const x = "hello"
-  return x match {
+  return match x {
     "hello" => "unclosed
     _ => "no"
   }
@@ -601,7 +601,7 @@ workflow default() {
 --- input.jh
 workflow default() {
   const x = "hello"
-  return x match {
+  return match x {
     'hello' => "yes"
     _ => "no"
   }
@@ -612,7 +612,7 @@ workflow default() {
 --- input.jh
 workflow default() {
   const x = "hello"
-  return x match {
+  return match x {
     "hello" => 'yes'
     _ => "no"
   }
@@ -623,7 +623,7 @@ workflow default() {
 --- input.jh
 workflow default() {
   const x = "hello"
-  return x match {
+  return match x {
     "hello" "yes"
     _ => "no"
   }
@@ -917,7 +917,7 @@ workflow default() {
 --- input.jh
 workflow default() {
   const x = "hello"
-  return x match {
+  return match x {
     123 => "yes"
     _ => "no"
   }
@@ -928,7 +928,7 @@ workflow default() {
 --- input.jh
 workflow default() {
   const x = "hello"
-  return x match {
+  return match x {
     "hello" => "yes"
 
 === match: empty match block
@@ -936,7 +936,7 @@ workflow default() {
 --- input.jh
 workflow default() {
   const x = "hello"
-  return x match {
+  return match x {
   }
 }
 

@@ -613,11 +613,12 @@ Jaiph: Running async.jh
                         Use <code>run</code> to a script to express command-based tests.
                     </dd>
 
-                    <dt><code>match $var { "lit" =&gt; …, /re/ =&gt; …, _ =&gt; … }</code></dt>
-                    <dd>Pattern match on a string value. Arms are tested top-to-bottom; first match wins.
+                    <dt><code>match var { "lit" =&gt; …, /re/ =&gt; …, _ =&gt; … }</code></dt>
+                    <dd>Pattern match on a string value. The subject is a bare identifier (no
+                        <code>$</code> or <code>${}</code>). Arms are tested top-to-bottom; first match wins.
                         Patterns: string literal (exact), regex, or <code>_</code> wildcard.
-                        Usable as a statement, expression (<code>const x = $var match { … }</code>),
-                        or with <code>return</code> (<code>return $var match { … }</code>).
+                        Usable as a statement, expression (<code>const x = match var { … }</code>),
+                        or with <code>return</code> (<code>return match var { … }</code>).
                         Exactly one <code>_</code> wildcard arm is required.
                     </dd>
 

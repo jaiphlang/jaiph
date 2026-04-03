@@ -3,7 +3,7 @@ import { fail, isRef, parseCallRef } from "./core";
 import { parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 import { parseAnonymousInlineScript } from "./inline-script";
 import { parsePromptStep } from "./prompt";
-import { extractPostfixMatchSubject, parseMatchExpr } from "./match";
+import { parseMatchExpr } from "./match";
 
 /** Reject non-empty trailing content after a call expression (e.g. shell redirection). */
 function rejectTrailingContent(
@@ -140,10 +140,11 @@ export function parseConstRhs(
       nextLineIdx: lineIdx,
     };
   }
-  // const name = <subject> match { ... }
-  const matchSubject = extractPostfixMatchSubject(head);
-  if (matchSubject) {
-    const { expr, nextIndex } = parseMatchExpr(filePath, lines, lineIdx, matchSubject, { line: lineNo, col });
+  // const name = match var { ... }
+  const constMatchHead = head.match(/^match\s+(.+?)\s*\{\s*$/);
+  if (constMatchHead) {
+    const subject = constMatchHead[1].trim();
+    const { expr, nextIndex } = parseMatchExpr(filePath, lines, lineIdx, subject, { line: lineNo, col });
     return { value: { kind: "match_expr", match: expr }, nextLineIdx: nextIndex - 1 };
   }
   // const name = """..."""

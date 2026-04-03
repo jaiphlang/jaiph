@@ -196,7 +196,7 @@ workflow default() {
 --- input.jh
 workflow default() {
   const x = "hello"
-  return x match {
+  return match x {
     "hello" => "yes"
     "world" => "no"
   }
@@ -207,7 +207,7 @@ workflow default() {
 --- input.jh
 workflow default() {
   const x = "hello"
-  return x match {
+  return match x {
     "hello" => "yes"
     _ => "maybe"
     _ => "no"

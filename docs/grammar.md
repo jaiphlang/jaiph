@@ -488,14 +488,14 @@ A bare integer (`return 0`) or `return $?` is a bash exit code, not a Jaiph valu
 ### `match`
 
 ```jaiph
-match ${status} {
+match status {
   "ok" => "all good"
   /err/ => "something went wrong"
   _ => "unknown"
 }
 ```
 
-Pattern match on a string value. Arms are tested top-to-bottom; the first match wins. Patterns can be:
+Pattern match on a string value. The subject is always a **bare identifier** (variable name without `$` or `${}`). Arms are tested top-to-bottom; the first match wins. Patterns can be:
 
 - **String literal** (`"ok"`) — exact equality against the subject
 - **Regex** (`/err/`) — tested against the subject
@@ -503,15 +503,17 @@ Pattern match on a string value. Arms are tested top-to-bottom; the first match 
 
 Exactly one `_` wildcard arm is required.
 
+Using `$var` or `${var}` as the match subject is a parse error — use the bare name: `match varName { ... }`.
+
 **Expression form:** `match` works as an expression with `const` and `return`:
 
 ```jaiph
-const label = ${status} match {
+const label = match status {
   "ok" => "success"
   _ => "failure"
 }
 
-return ${status} match {
+return match status {
   "ok" => "pass"
   _ => "fail"
 }
@@ -733,18 +735,17 @@ const_decl_step = "const" IDENT "=" const_rhs ;
 const_rhs       = double_quoted_string | triple_quoted_block | bash_value_expr
                 | "run" ( call_ref | inline_script ) | "ensure" call_ref
                 | "prompt" prompt_body [ returns_schema ]
-                | match_expr ;
+                | "match" IDENT "{" { match_arm } "}" ;
 
 fail_stmt       = "fail" ( double_quoted_string | triple_quoted_block ) ;
 wait_stmt       = "wait" ;
 run_async_stmt  = "run" "async" call_ref ;
 return_stmt     = "return" return_value ;
 return_value    = double_quoted_string | triple_quoted_block | "$" IDENT | "${" IDENT "}"
-                | "run" call_ref | "ensure" call_ref | match_expr ;
+                | "run" call_ref | "ensure" call_ref | "match" IDENT "{" { match_arm } "}" ;
 
-match_stmt      = "match" match_subject "{" { match_arm } "}" ;
-match_expr      = match_subject "match" "{" { match_arm } "}" ;
-match_subject   = "$" IDENT | "${" IDENT "}" | double_quoted_string ;
+match_stmt      = "match" IDENT "{" { match_arm } "}" ;
+match_expr      = "match" IDENT "{" { match_arm } "}" ;
 match_arm       = match_pattern "=>" arm_body ;
 match_pattern   = double_quoted_string | "/" regex_source "/" | "_" ;
 arm_body        = double_quoted_string | "$" IDENT | "${" IDENT "}" ;
