@@ -310,7 +310,7 @@ export function parseBlockStatement(
     }
     const call = parseCallRef(runBody);
     if (!call) {
-      fail(filePath, "run async must target a workflow or script reference with parenthesized arguments", innerNo);
+      fail(filePath, "run async must target a valid reference: run async ref or run async ref(args)", innerNo);
     }
     rejectTrailingContent(filePath, innerNo, "run async", call.rest);
     return {
@@ -349,7 +349,7 @@ export function parseBlockStatement(
     }
     const call = parseCallRef(runBody);
     if (!call) {
-      fail(filePath, "run must target a workflow or script reference with parenthesized arguments", innerNo);
+      fail(filePath, "run must target a valid reference: run ref or run ref(args)", innerNo);
     }
     rejectTrailingContent(filePath, innerNo, "run", call.rest);
     return {
@@ -430,7 +430,7 @@ export function parseBlockStatement(
       }
       const call = parseCallRef(runBody);
       if (!call) {
-        fail(filePath, "run must target a workflow or script reference with parenthesized arguments", innerNo);
+        fail(filePath, "run must target a valid reference: run ref or run ref(args)", innerNo);
       }
       rejectTrailingContent(filePath, innerNo, "run", call.rest);
       return {

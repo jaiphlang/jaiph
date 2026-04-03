@@ -177,35 +177,47 @@ function commaArgsToSpaced(content: string): { spaced: string; bareIdentifiers: 
  */
 export function parseCallRef(s: string): { ref: string; args?: string; bareIdentifierArgs?: string[]; rest: string } | null {
   const t = s.trimStart();
+  // Parenthesized form: ref(args) or ref()
   const refMatch = t.match(/^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\(/);
-  if (!refMatch || !isRef(refMatch[1])) return null;
-  const ref = refMatch[1];
-  const parenStart = refMatch[0].length;
-  let depth = 1;
-  let inQuote: string | null = null;
-  let i = parenStart;
-  while (i < t.length && depth > 0) {
-    const ch = t[i];
-    if (inQuote) {
-      if (ch === inQuote && t[i - 1] !== "\\") inQuote = null;
-    } else {
-      if (ch === '"' || ch === "'") inQuote = ch;
-      else if (ch === "(") depth++;
-      else if (ch === ")") depth--;
+  if (refMatch && isRef(refMatch[1])) {
+    const ref = refMatch[1];
+    const parenStart = refMatch[0].length;
+    let depth = 1;
+    let inQuote: string | null = null;
+    let i = parenStart;
+    while (i < t.length && depth > 0) {
+      const ch = t[i];
+      if (inQuote) {
+        if (ch === inQuote && t[i - 1] !== "\\") inQuote = null;
+      } else {
+        if (ch === '"' || ch === "'") inQuote = ch;
+        else if (ch === "(") depth++;
+        else if (ch === ")") depth--;
+      }
+      i++;
     }
-    i++;
+    if (depth !== 0) return null;
+    const argsContent = t.slice(parenStart, i - 1).trim();
+    const rest = t.slice(i);
+    if (!argsContent) return { ref, rest };
+    const { spaced, bareIdentifiers } = commaArgsToSpaced(argsContent);
+    return {
+      ref,
+      args: spaced || undefined,
+      ...(bareIdentifiers.length > 0 ? { bareIdentifierArgs: bareIdentifiers } : {}),
+      rest,
+    };
   }
-  if (depth !== 0) return null;
-  const argsContent = t.slice(parenStart, i - 1).trim();
-  const rest = t.slice(i);
-  if (!argsContent) return { ref, rest };
-  const { spaced, bareIdentifiers } = commaArgsToSpaced(argsContent);
-  return {
-    ref,
-    args: spaced || undefined,
-    ...(bareIdentifiers.length > 0 ? { bareIdentifierArgs: bareIdentifiers } : {}),
-    rest,
-  };
+  // Bare identifier form: ref (no parens, zero args)
+  // Must not match when followed by { (that's a definition, not a call)
+  const bareMatch = t.match(/^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)/);
+  if (bareMatch && isRef(bareMatch[1])) {
+    const ref = bareMatch[1];
+    const rest = t.slice(ref.length);
+    if (rest.trimStart().startsWith("{")) return null;
+    return { ref, rest };
+  }
+  return null;
 }
 
 /**
@@ -214,6 +226,7 @@ export function parseCallRef(s: string): { ref: string; args?: string; bareIdent
  * Returns null if the string doesn't start with `(`.
  */
 export function parseParenArgs(s: string): { args?: string; bareIdentifierArgs?: string[]; rest: string } | null {
+  if (!s.trimStart().startsWith("(")) return null;
   const result = parseCallRef(`__anon${s.trimStart()}`);
   if (!result) return null;
   return { args: result.args, bareIdentifierArgs: result.bareIdentifierArgs, rest: result.rest };

@@ -117,11 +117,13 @@ test("parseConstRhs: parses run capture with args", () => {
   }
 });
 
-test("parseConstRhs: run without parens throws", () => {
-  assert.throws(
-    () => parseConstRhs("test.jh", ["const x = run my_script"], 0, "run my_script", 1, 1, false, "x"),
-    /calls require parentheses/,
-  );
+test("parseConstRhs: run without parens parses as zero-arg run capture", () => {
+  const result = parseConstRhs("test.jh", ["const x = run my_script"], 0, "run my_script", 1, 1, false, "x");
+  assert.equal(result.value.kind, "run_capture");
+  if (result.value.kind === "run_capture") {
+    assert.equal(result.value.ref.value, "my_script");
+    assert.equal(result.value.args, undefined);
+  }
 });
 
 test("parseConstRhs: parses ensure capture", () => {
@@ -132,11 +134,13 @@ test("parseConstRhs: parses ensure capture", () => {
   }
 });
 
-test("parseConstRhs: ensure without parens throws", () => {
-  assert.throws(
-    () => parseConstRhs("test.jh", ["const x = ensure my_rule"], 0, "ensure my_rule", 1, 1, false, "x"),
-    /calls require parentheses/,
-  );
+test("parseConstRhs: ensure without parens parses as zero-arg ensure capture", () => {
+  const result = parseConstRhs("test.jh", ["const x = ensure my_rule"], 0, "ensure my_rule", 1, 1, false, "x");
+  assert.equal(result.value.kind, "ensure_capture");
+  if (result.value.kind === "ensure_capture") {
+    assert.equal(result.value.ref.value, "my_rule");
+    assert.equal(result.value.args, undefined);
+  }
 });
 
 test("parseConstRhs: ensure with recover throws", () => {

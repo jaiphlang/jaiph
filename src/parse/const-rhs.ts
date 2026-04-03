@@ -110,7 +110,7 @@ export function parseConstRhs(
     }
     const call = parseCallRef(rest);
     if (!call) {
-      fail(filePath, "calls require parentheses: const name = run ref() or run ref(args)", lineNo, col);
+      fail(filePath, "const ... = run must target a valid reference", lineNo, col);
     }
     rejectTrailingContent(filePath, lineNo, "run", call.rest);
     const ref: WorkflowRefDef = { value: call.ref, loc: { line: lineNo, col } };
@@ -126,7 +126,7 @@ export function parseConstRhs(
     const rest = head.slice("ensure ".length).trim();
     const call = parseCallRef(rest);
     if (!call) {
-      fail(filePath, "calls require parentheses: const name = ensure ref() or ensure ref(args)", lineNo, col);
+      fail(filePath, "const ... = ensure must target a valid reference", lineNo, col);
     }
     if (call.rest.trim()) {
       fail(filePath, "const ... = ensure cannot use recover", lineNo, col);
@@ -154,7 +154,7 @@ export function parseConstRhs(
     if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
     return { value: { kind: "expr", bashRhs: tripleQuoteBodyToRaw(body) }, nextLineIdx: nextIdx - 1 };
   }
-  const callLike = parseCallRef(head.trimEnd());
+  const callLike = head.includes("(") ? parseCallRef(head.trimEnd()) : null;
   if (callLike) {
     fail(
       filePath,

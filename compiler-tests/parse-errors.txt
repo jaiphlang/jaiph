@@ -355,7 +355,7 @@ workflow default() {
     echo fallback
 
 === invalid workflow reference shape with extra dots
-# @expect error E_PARSE "calls require parentheses" @2:1
+# @expect error E_PARSE "unexpected content after run call" @2:1
 --- input.jh
 workflow default() {
   run bad.ref.shape()
@@ -629,8 +629,8 @@ workflow default() {
   }
 }
 
-=== run async without parentheses
-# @expect error E_PARSE "calls require parentheses" @5:1
+=== run async without parentheses is valid
+# @expect ok
 --- input.jh
 workflow helper() {
   log "hi"
@@ -878,14 +878,14 @@ workflow default() {
 }
 
 === inline script: unterminated parentheses
-# @expect error E_PARSE "calls require parentheses" @2:1
+# @expect error E_PARSE "unexpected content after run call" @2:1
 --- input.jh
 workflow default() {
   run script "echo hello"
 }
 
 === inline script without parentheses
-# @expect error E_PARSE "calls require parentheses" @2:1
+# @expect error E_PARSE "unexpected content after run call" @2:1
 --- input.jh
 workflow default() {
   run script "echo hello"
@@ -1096,8 +1096,8 @@ workflow default() {
 }
 
 
-=== brace-if: run async without parens in block
-# @expect error E_PARSE "run async must target" @9:1
+=== brace-if: run async without parens in block is valid
+# @expect ok
 --- input.jh
 rule gate() {
   return "ok"
@@ -1176,8 +1176,8 @@ workflow default() {
   const x = ${var:-default}
 }
 
-=== brace-if: run without parentheses in block
-# @expect error E_PARSE "run must target a workflow or script reference with parenthesized arguments" @7:1
+=== brace-if: run without parentheses in block is valid
+# @expect ok
 --- input.jh
 script helper = `echo "hi"`
 rule gate() {
@@ -1231,32 +1231,32 @@ workflow default() {
   }
 }
 
-=== run without parentheses in workflow
-# @expect error E_PARSE "calls require parentheses" @3:1
+=== run without parentheses in workflow is valid
+# @expect ok
 --- input.jh
 script helper = `echo "hi"`
 workflow default() {
   run helper
 }
 
-=== capture run without parentheses in workflow
-# @expect error E_PARSE "calls require parentheses" @3:1
+=== capture run without parentheses in workflow is valid
+# @expect ok
 --- input.jh
 script helper = `echo "hi"`
 workflow default() {
   x = run helper
 }
 
-=== const run without parentheses
-# @expect error E_PARSE "calls require parentheses" @3:13
+=== const run without parentheses is valid
+# @expect ok
 --- input.jh
 script helper = `echo "hi"`
 workflow default() {
   const x = run helper
 }
 
-=== const ensure without parentheses
-# @expect error E_PARSE "calls require parentheses" @5:13
+=== const ensure without parentheses is valid
+# @expect ok
 --- input.jh
 rule check() {
   return "ok"
