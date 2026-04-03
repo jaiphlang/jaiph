@@ -51,7 +51,7 @@ test("run_summary.jsonl: workflow, steps, log, inbox dispatch stream", () => {
     writeFileSync(
       jh,
       [
-        "channel greetings",
+        "channel greetings -> receiver",
         "",
         'script emit_greeting = `echo "hello-inbox"`',
         "",
@@ -69,7 +69,6 @@ test("run_summary.jsonl: workflow, steps, log, inbox dispatch stream", () => {
         "",
         "workflow default() {",
         "  run sender()",
-        "  greetings -> receiver",
         "}",
         "",
       ].join("\n"),

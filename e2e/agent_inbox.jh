@@ -1,7 +1,7 @@
 #!/usr/bin/env jaiph
 
-channel findings
-channel report
+channel findings -> analyst
+channel report -> reviewer
 
 script emit_findings = `echo "Found 3 issues in auth module"`
 script emit_summary = `echo "Summary: $1"`
@@ -20,6 +20,4 @@ workflow reviewer(message, chan, sender) {
 
 workflow default() {
   run scanner()
-  findings -> analyst
-  report -> reviewer
 }

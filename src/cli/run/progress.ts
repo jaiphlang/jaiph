@@ -157,11 +157,11 @@ export function collectWorkflowChildren(
     return [];
   };
 
-  // Add route declarations as tree nodes.
-  if (workflow.routes) {
-    for (const route of workflow.routes) {
-      const targetNames = route.workflows.map((w) => w.value).join(", ");
-      items.push({ label: `${route.channel} -> ${targetNames}` });
+  // Add channel-level route declarations as tree nodes.
+  for (const ch of mod.channels) {
+    if (ch.routes && ch.routes.length > 0) {
+      const targetNames = ch.routes.map((r) => r.value).join(", ");
+      items.push({ label: `${ch.name} -> ${targetNames}` });
     }
   }
 

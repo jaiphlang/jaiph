@@ -78,14 +78,9 @@ export interface RuleDef {
   loc: SourceLoc;
 }
 
-export interface WorkflowRouteDef {
-  channel: string;
-  workflows: WorkflowRefDef[];
-  loc: SourceLoc;
-}
-
 export interface ChannelDef {
   name: string;
+  routes?: WorkflowRefDef[];
   loc: SourceLoc;
 }
 
@@ -95,7 +90,6 @@ export interface WorkflowDef {
   params: string[];
   comments: string[];
   steps: WorkflowStepDef[];
-  routes?: WorkflowRouteDef[];
   /** Optional workflow-scoped config (overrides module-level config for steps inside this workflow). */
   metadata?: WorkflowMetadata;
   loc: SourceLoc;

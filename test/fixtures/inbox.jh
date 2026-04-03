@@ -1,5 +1,5 @@
-channel findings
-channel summary
+channel findings -> analyst
+channel summary -> reviewer
 channel final_summary
 
 workflow researcher() {
@@ -27,6 +27,4 @@ workflow reviewer(message, chan, sender) {
 # Orchestration / entrypoint workflow
 workflow default() {
   run researcher()
-  findings -> analyst
-  summary -> reviewer
 }

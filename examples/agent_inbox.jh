@@ -1,7 +1,7 @@
 #!/usr/bin/env jaiph
 
-channel findings
-channel report
+channel findings -> analyst
+channel report -> reviewer
 
 workflow scanner() {
   log "Scanning for issues..."
@@ -19,8 +19,5 @@ workflow reviewer(message, chan, sender) {
 }
 
 workflow default() {
-  findings -> analyst
-  report -> reviewer
-
   run scanner()
 }

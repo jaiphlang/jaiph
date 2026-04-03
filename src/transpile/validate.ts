@@ -746,6 +746,25 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
     }
   };
 
+  // Validate channel-level route declarations.
+  for (const ch of ast.channels) {
+    if (ch.routes) {
+      for (const wfRef of ch.routes) {
+        validateRef(wfRef, ast, refCtx, expectWorkflowRef);
+        const targetParams = resolveRouteTargetParams(wfRef.value, ast, refCtx);
+        if (targetParams !== undefined && targetParams !== 3) {
+          throw jaiphError(
+            ast.filePath,
+            wfRef.loc.line,
+            wfRef.loc.col,
+            "E_VALIDATE",
+            `inbox route target "${wfRef.value}" must declare exactly 3 parameters (message, channel, sender), but declares ${targetParams}`,
+          );
+        }
+      }
+    }
+  }
+
   for (const workflow of ast.workflows) {
     const promptSchemas = collectPromptSchemas(workflow.steps);
     const wfKnownVars = collectKnownVars(workflow.steps, ast.envDecls, workflow.params);
@@ -1050,26 +1069,6 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
       return _never;
     };
 
-    // Validate route declarations.
-    if (workflow.routes) {
-      for (const route of workflow.routes) {
-        validateChannelRef(route.channel, route.loc);
-        for (const wfRef of route.workflows) {
-          validateRef(wfRef, ast, refCtx, expectWorkflowRef);
-          // Inbox route targets must declare exactly 3 parameters (message, channel, sender).
-          const targetParams = resolveRouteTargetParams(wfRef.value, ast, refCtx);
-          if (targetParams !== undefined && targetParams !== 3) {
-            throw jaiphError(
-              ast.filePath,
-              wfRef.loc.line,
-              wfRef.loc.col,
-              "E_VALIDATE",
-              `inbox route target "${wfRef.value}" must declare exactly 3 parameters (message, channel, sender), but declares ${targetParams}`,
-            );
-          }
-        }
-      }
-    }
 
     for (const step of workflow.steps) {
       validateStep(step);

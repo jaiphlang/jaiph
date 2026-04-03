@@ -24,7 +24,7 @@ watchers, no polling loops, and no third-party brokers.
 ## At a glance
 
 ```jh
-channel findings
+channel findings -> analyst
 
 workflow researcher() {
   findings <- "## analysis results"
@@ -36,14 +36,13 @@ workflow analyst(message, chan, sender) {
 
 workflow default() {
   run researcher()
-  findings -> analyst
 }
 ```
 
-`researcher` sends data to the `findings` channel. The `default` workflow
-routes `findings` messages to `analyst`, which receives the message, channel
-name, and sender bound to its declared parameters `message`, `chan`, and `sender`
-(see [Trigger contract](#trigger-contract)).
+`researcher` sends data to the `findings` channel. The `channel findings -> analyst`
+declaration routes `findings` messages to `analyst`, which receives the message,
+channel name, and sender bound to its declared parameters `message`, `chan`, and
+`sender` (see [Trigger contract](#trigger-contract)).
 
 ## Design principles
 
@@ -58,20 +57,22 @@ name, and sender bound to its declared parameters `message`, `chan`, and `sender
 
 ## Syntax
 
-### Channel declarations: `channel <name>`
+### Channel declarations: `channel <name> [-> <workflow>, ...]`
 
-Declare channels at top level, one per line:
+Declare channels at top level, one per line. Optionally declare inline routes
+with `->`:
 
 ```jh
-channel findings
+channel findings -> analyst
 channel report
+channel events -> handler_a, handler_b
 
 workflow default() { ... }
 ```
 
-Every channel used by send (`<-`) or route declarations (`->`) must be defined
-in the current module or imported from another module (e.g. `shared.findings`).
-Undefined channels fail validation with:
+Every channel used by send (`<-`) must be defined in the current module or
+imported from another module (e.g. `shared.findings`). Undefined channels fail
+validation with:
 
 - `Channel "<name>" is not defined`
 
@@ -126,11 +127,13 @@ syntax.
 Send and route parsing rules are specified in
 [Grammar — Parse and runtime semantics](grammar.md#parse-and-runtime-semantics).
 
-### Route declaration: `<channel_ref> -> <workflow>`
+### Route declaration: `channel <name> -> <workflow>`
 
-Tells the runtime: when a message arrives on that channel, call each listed
-**workflow** that must declare exactly 3 parameters. The runtime binds the
-dispatch values (message, channel, sender) to whatever names the target declares.
+Routes are declared **inline on channel declarations** at the top level, not
+inside workflow bodies. When a message arrives on that channel, the runtime calls
+each listed **workflow** that must declare exactly 3 parameters. The runtime
+binds the dispatch values (message, channel, sender) to whatever names the
+target declares.
 
 Targets must be **workflows** (local or imported as `alias.name`). **Rules**
 and **scripts** are not valid route targets — the compiler uses workflow-only
@@ -138,36 +141,31 @@ reference checks, so a bad target is **`E_VALIDATE`** with messages such as
 `unknown local workflow reference "…"`, `imported workflow "…" does not exist`,
 `rule "…" must be called with ensure`, or `script "…" cannot be called with run`.
 A name that is not a valid `alias.name` / `name` pattern fails at parse time as
-**`E_PARSE`** `invalid workflow reference in route: "…"`.
+**`E_PARSE`** `invalid workflow reference in channel route: "…"`.
 
 ```jh
-channel findings
-channel summary
+channel findings -> analyst
+channel summary -> reviewer
 
 workflow default() {
   run researcher()
-  findings -> analyst
-  summary -> reviewer
 }
 ```
 
-**Multiple targets on one line** are comma-separated — they share one route and
-dispatch in **declaration order** (or concurrently when parallel dispatch is on):
+**Multiple targets on one declaration** are comma-separated — they share one
+route and dispatch in **declaration order** (or concurrently when parallel
+dispatch is on):
 
 ```jh
-findings -> analyst, reviewer
+channel findings -> analyst, reviewer
 ```
 
-**Repeated `channel ->` lines for the same channel:** in `NodeWorkflowRuntime`,
-route entries are stored in a `Map` keyed by channel. The runtime calls
-`routes.set(channel, targets)` for each route declaration, so **the last route
-line for a given channel wins** (later lines replace the target list for that
-key). To attach several targets, prefer `channel -> wf1, wf2, …` on a single
-line rather than multiple lines for the same channel.
+Route declarations are static routing rules stored on `ChannelDef`, not on
+workflow definitions or steps. The compiler validates that all target workflow
+references exist and declare exactly 3 parameters.
 
-Route declarations are static routing rules, not executable statements. They are
-stored in `routes` on the workflow definition, not in `steps`. The compiler
-validates that all target workflow references exist.
+A `->` route inside a workflow body is a **parse error** with guidance:
+`route declarations belong at the top level: channel <name> -> <targets>`.
 
 ### Capture + send is a parse error
 
@@ -204,20 +202,21 @@ of the payload.
 
 ### Who registers routes and who drains
 
-Every entered workflow gets a **`WorkflowContext`**: a route map (from `->` lines)
-and a message queue. **Route declarations are registered when the workflow
-starts.** After the workflow's **steps** finish (including the implicit join for
-`run async` branches), the runtime runs `drainWorkflowQueue` for that context.
+Every entered workflow gets a **`WorkflowContext`**: a route map and a message
+queue. **Channel-level route declarations are registered on the entry workflow**
+(the outermost workflow invoked by `jaiph run`). After the workflow's **steps**
+finish (including the implicit join for `run async` branches), the runtime runs
+`drainWorkflowQueue` for that context.
 
 Nested workflows invoked with `run` share a **workflow context stack**. On
 **send**, the runtime looks for a route for that channel starting at the
 **sending workflow** (innermost on the stack) and moving **outward** toward the
-entry workflow. The **first** context that declares a route for the channel gets
-the enqueue — so a **nested** workflow's own `channel -> …` lines take
-precedence over an **outer** orchestrator's routes for the same channel. If
-**no** workflow on the stack declares a route, the message is queued on the
-**sender's** context; when that context is drained, there are no targets and the
-message is **skipped** (see [Error semantics](#error-semantics)).
+entry workflow. Since channel-level routes are registered only on the entry
+workflow, sends from nested workflows bubble up to the orchestrator for dispatch,
+preserving the expected progress tree nesting. If **no** workflow on the stack
+declares a route, the message is queued on the **sender's** context; when that
+context is drained, there are no targets and the message is **skipped** (see
+[Error semantics](#error-semantics)).
 
 ### Dispatch loop
 
@@ -225,8 +224,8 @@ Implementation: `src/runtime/kernel/node-workflow-runtime.ts` — `send` step
 handling and `drainWorkflowQueue`.
 
 1. On workflow entry, push a `WorkflowContext` (route map, empty queue).
-2. Route declarations (`->`) populate the context's route map (last entry per
-   channel wins if the same channel appears on multiple lines — see above).
+2. For the entry workflow, channel-level route declarations populate the
+   context's route map.
 3. Execute workflow steps top to bottom.
 4. On `<-`: resolve payload, allocate the next sequence id from `inboxSeq`,
    append `InboxMsg` to the selected context's queue, write
@@ -249,8 +248,9 @@ There is no `E_DISPATCH_DEPTH` / `JAIPH_INBOX_MAX_DISPATCH_DEPTH` check in
 
 ### Implementation notes
 
-- Routes and the pending queue are **in-memory** on `WorkflowContext`. Message
-  files under `inbox/` are written on send for audit; routing uses the queue.
+- Routes (from channel-level `->` declarations) and the pending queue are
+  **in-memory** on `WorkflowContext`. Message files under `inbox/` are written
+  on send for audit; routing uses the queue.
 - **Sender identity** is the **current workflow name** from the context that
   performed the send (e.g. `researcher`), stable across modules.
 
@@ -269,9 +269,10 @@ config {
   run.inbox_parallel = true
 }
 
+channel findings -> analyst, reviewer   # analyst and reviewer run in parallel
+
 workflow default() {
   run producer()
-  findings -> analyst, reviewer   # analyst and reviewer run in parallel
 }
 ```
 
@@ -340,8 +341,8 @@ their declared parameter names.
 
 ## Progress tree integration
 
-- Route declarations appear as nodes in the progress tree where the static tree
-  is derived from the AST.
+- Channel-level route declarations appear as nodes in the progress tree where
+  the static tree is derived from the AST.
 - Dispatched workflows appear like other `run` steps, with dispatch values
   shown as named parameters (e.g.
   `workflow analyst (message="…", chan="findings", sender="scanner")`). The Node runtime does

@@ -7,7 +7,7 @@ import type {
   WorkflowDef,
   RuleDef,
   ScriptDef,
-  WorkflowRouteDef,
+  ChannelDef,
   TestBlockDef,
   TestStepDef,
   EnvDeclDef,
@@ -36,7 +36,7 @@ export function emitModule(mod: jaiphModule, opts: EmitOptions = DEFAULT_OPTIONS
   }
 
   for (const ch of mod.channels) {
-    sections.push(`channel ${ch.name}`);
+    sections.push(emitChannel(ch));
   }
 
   if (mod.envDecls) {
@@ -161,19 +161,16 @@ function emitWorkflow(wf: WorkflowDef, pad: string): string {
 
   lines.push(...emitSteps(wf.steps, pad, pad));
 
-  if (wf.routes) {
-    for (const route of wf.routes) {
-      lines.push(emitRoute(route, pad));
-    }
-  }
-
   lines.push("}");
   return lines.join("\n");
 }
 
-function emitRoute(route: WorkflowRouteDef, pad: string): string {
-  const targets = route.workflows.map((w) => w.value).join(", ");
-  return `${pad}${route.channel} -> ${targets}`;
+function emitChannel(ch: ChannelDef): string {
+  if (ch.routes && ch.routes.length > 0) {
+    const targets = ch.routes.map((r) => r.value).join(", ");
+    return `channel ${ch.name} -> ${targets}`;
+  }
+  return `channel ${ch.name}`;
 }
 
 function emitSteps(steps: WorkflowStepDef[], pad: string, currentIndent: string): string[] {

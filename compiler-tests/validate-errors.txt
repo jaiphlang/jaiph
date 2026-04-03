@@ -13,14 +13,13 @@ workflow default() {
 }
 
 === unknown local channel in send
-# @expect error E_VALIDATE "is not defined" @6:1
+# @expect error E_VALIDATE "is not defined" @5:1
 --- input.jh
 workflow analyst() {
   log "ok"
 }
 workflow default() {
   typo <- "x"
-  typo -> analyst
 }
 
 === rule with inline brace group fails shell-step ban
@@ -137,23 +136,30 @@ workflow default() {
 }
 
 === route with unknown workflow
-# @expect error E_VALIDATE "unknown local workflow reference" @3:15
+# @expect error E_VALIDATE "unknown local workflow reference" @1:21
 --- input.jh
-channel findings
+channel findings -> missing_wf
 workflow default() {
-  findings -> missing_wf
+  log "ok"
 }
 
 === route with rule ref
-# @expect error E_VALIDATE "must be called with ensure" @7:15
+# @expect error E_VALIDATE "must be called with ensure" @1:21
 --- input.jh
-channel findings
+channel findings -> check
 rule check() {
   run check_impl()
 }
 script check_impl = `true`
 workflow default() {
-  findings -> check
+  log "ok"
+}
+
+=== route inside workflow body is parse error
+# @expect error E_PARSE "route declarations belong at the top level" @2:1
+--- input.jh
+workflow default() {
+  findings -> analyst
 }
 
 === inline run ref with unknown script
@@ -379,12 +385,12 @@ export workflow deploy() {
 }
 
 === route with imported rule ref rejected
-# @expect error E_VALIDATE "must be called with ensure" @4:15
+# @expect error E_VALIDATE "must be called with ensure" @2:21
 --- main.jh
 import "lib.jh" as lib
-channel findings
+channel findings -> lib.check
 workflow default() {
-  findings -> lib.check
+  log "ok"
 }
 --- lib.jh
 export rule check() {

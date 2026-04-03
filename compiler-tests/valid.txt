@@ -640,13 +640,12 @@ workflow default() {
 # @expect ok
 --- input.jh
 channel findings
-channel report
+channel report -> analyst
 workflow analyst(message, chan, sender) {
   log "ok"
 }
 workflow default() {
   findings <- "hi"
-  report -> analyst
 }
 
 === standalone channel <- forwards
@@ -664,21 +663,21 @@ workflow default() {
   log "a <- b"
 }
 
-=== route declaration parses
+=== channel route declaration parses
 # @expect ok
 --- input.jh
-channel findings
+channel findings -> analyst
 workflow analyst(message, chan, sender) {
   log "ok"
 }
 workflow default() {
-  findings -> analyst
+  log "ok"
 }
 
-=== route with multiple targets
+=== channel route with multiple targets
 # @expect ok
 --- input.jh
-channel findings
+channel findings -> a, b
 workflow a(message, chan, sender) {
   log "ok"
 }
@@ -686,7 +685,7 @@ workflow b(message, chan, sender) {
   log "ok"
 }
 workflow default() {
-  findings -> a, b
+  log "ok"
 }
 
 === top-level const single-line string
@@ -1015,8 +1014,8 @@ workflow default() {
 === inbox fixture builds successfully
 # @expect ok
 --- input.jh
-channel findings
-channel summary
+channel findings -> analyst
+channel summary -> reviewer
 channel final_summary
 
 script emit_findings = `echo '## findings'`
@@ -1043,8 +1042,6 @@ workflow reviewer(message, chan, sender) {
 
 workflow default() {
   run researcher()
-  findings -> analyst
-  summary -> reviewer
 }
 
 === prompt with identifier body

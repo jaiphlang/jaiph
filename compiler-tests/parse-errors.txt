@@ -264,7 +264,7 @@ workflow default() {
 }
 
 === channel declaration must be single per line
-# @expect error E_PARSE "invalid channel declaration; expected exactly: channel <name>" @1:1
+# @expect error E_PARSE "invalid channel declaration" @1:1
 --- input.jh
 channel findings, report
 workflow default() {
@@ -667,12 +667,19 @@ workflow default() {
   logerr "hello
 }
 
-=== invalid workflow reference in route
-# @expect error E_PARSE "invalid workflow reference in route" @3:1
+=== invalid workflow reference in channel route
+# @expect error E_PARSE "invalid workflow reference in channel route" @1:1
 --- input.jh
-channel findings
+channel findings -> 123bad
 workflow default() {
-  findings -> 123bad
+  log "ok"
+}
+
+=== route inside workflow body is parse error
+# @expect error E_PARSE "route declarations belong at the top level" @2:1
+--- input.jh
+workflow default() {
+  findings -> analyst
 }
 
 === brace-if: expected else brace after if-chain

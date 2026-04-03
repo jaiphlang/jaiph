@@ -4,7 +4,6 @@ import {
   fail,
   hasUnescapedClosingQuote,
   indexOfClosingDoubleQuote,
-  isRef,
   matchSendOperator,
   parseCallRef,
   parseLogMessageRhs,
@@ -522,24 +521,12 @@ export function parseWorkflowBlock(
     );
     if (routeMatch) {
       const channel = routeMatch[1];
-      const targetsStr = routeMatch[2].trim();
-      const targetNames = targetsStr.split(/\s*,\s*/);
-      const workflows = targetNames.map((name) => {
-        const trimmedName = name.trim();
-        if (!isRef(trimmedName)) {
-          fail(filePath, `invalid workflow reference in route: "${trimmedName}"`, innerNo);
-        }
-        return { value: trimmedName, loc: { line: innerNo, col: innerRaw.indexOf(trimmedName) + 1 } };
-      });
-      if (!workflow.routes) {
-        workflow.routes = [];
-      }
-      workflow.routes.push({
-        channel,
-        workflows,
-        loc: { line: innerNo, col: 1 },
-      });
-      continue;
+      const targets = routeMatch[2].trim();
+      fail(
+        filePath,
+        `route declarations belong at the top level: channel ${channel} -> ${targets}`,
+        innerNo,
+      );
     }
 
     const sendMatch = matchSendOperator(inner);

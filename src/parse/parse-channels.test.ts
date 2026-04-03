@@ -9,6 +9,7 @@ test("parseChannelLine: parses valid channel declaration", () => {
   assert.equal(result.name, "inbox");
   assert.equal(result.loc.line, 5);
   assert.equal(result.loc.col, 11);
+  assert.equal(result.routes, undefined);
 });
 
 test("parseChannelLine: parses channel with underscore name", () => {
@@ -21,6 +22,31 @@ test("parseChannelLine: parses channel with underscore name", () => {
 test("parseChannelLine: parses channel with alphanumeric name", () => {
   const result = parseChannelLine("test.jh", "channel ch2", "channel ch2", 3);
   assert.equal(result.name, "ch2");
+});
+
+test("parseChannelLine: parses channel with single route target", () => {
+  const result = parseChannelLine("test.jh", "channel findings -> analyst", "channel findings -> analyst", 1);
+  assert.equal(result.name, "findings");
+  assert.ok(result.routes);
+  assert.equal(result.routes!.length, 1);
+  assert.equal(result.routes![0].value, "analyst");
+});
+
+test("parseChannelLine: parses channel with multiple route targets", () => {
+  const result = parseChannelLine("test.jh", "channel findings -> analyst, auditor", "channel findings -> analyst, auditor", 1);
+  assert.equal(result.name, "findings");
+  assert.ok(result.routes);
+  assert.equal(result.routes!.length, 2);
+  assert.equal(result.routes![0].value, "analyst");
+  assert.equal(result.routes![1].value, "auditor");
+});
+
+test("parseChannelLine: parses channel with module-qualified route target", () => {
+  const result = parseChannelLine("test.jh", "channel findings -> lib.analyst", "channel findings -> lib.analyst", 1);
+  assert.equal(result.name, "findings");
+  assert.ok(result.routes);
+  assert.equal(result.routes!.length, 1);
+  assert.equal(result.routes![0].value, "lib.analyst");
 });
 
 test("parseChannelLine: rejects missing channel name", () => {

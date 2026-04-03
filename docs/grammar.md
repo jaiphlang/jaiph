@@ -42,13 +42,13 @@ The compiler enforces these boundaries at every call site. Using a script where 
 
 Jaiph enforces a strict boundary between orchestration and execution. Workflows and rules contain only Jaiph steps. Bash lives in `script` bodies.
 
-- **Workflows** — Named sequences of Jaiph steps: `ensure`, `run`, `prompt`, `const`, `fail`, `return`, `log`/`logerr`, inbox `send` (`channel <- …`) and `route` (`channel -> workflow`), brace `if`, `match`, and `run async`. Any line that is not a recognized step is a parse error — extract bash to a `script` and call it with `run`.
+- **Workflows** — Named sequences of Jaiph steps: `ensure`, `run`, `prompt`, `const`, `fail`, `return`, `log`/`logerr`, inbox `send` (`channel <- …`), brace `if`, `match`, and `run async`. Any line that is not a recognized step is a parse error — extract bash to a `script` and call it with `run`.
 
 - **Rules** — Named blocks of structured Jaiph steps: `ensure` (other rules), `run` (scripts only — not workflows), `const`, brace `if`, `match`, `fail`, `log`/`logerr`, `return "…"`. Rules cannot use `prompt`, inbox send/route, `wait`, `run async`, or `ensure … recover`.
 
 - **Scripts** — Top-level `script` definitions emitted as separate executable files under the workspace `scripts/` directory. Called from workflows or rules with `run`. Bodies are opaque to the compiler — the parser does not check Jaiph keywords inside them. Use `echo`/`printf` for data output and `return N`/`return $?` for exit status. Jaiph interpolation (`${...}`) is forbidden in script bodies — use `$1`, `$2` positional arguments instead. Polyglot support: a fence lang tag (`` ```<tag> ``) maps to `#!/usr/bin/env <tag>` — any tag is valid (no hardcoded allowlist). Alternatively, a manual `#!` shebang as the first line of the body selects the interpreter; if both a fence tag and a `#!` first line are present, it is an error. Without either, `#!/usr/bin/env bash` is used. For trivial one-off commands, **inline scripts** (`` run `body`(args) `` or `` run ```lang...body...```(args) ``) let you embed a script body directly in a step without a named definition — see [`run` — Inline Scripts](#inline-scripts).
 
-- **Channels** — Named message queues declared with `channel name`. Workflows send messages with `<-` and register route handlers with `->`. See [Inbox & Dispatch](inbox.md).
+- **Channels** — Named message queues declared at top level with `channel name`. Optionally declare inline routes with `channel name -> workflow` or `channel name -> wf1, wf2`. Workflows send messages with `<-`. See [Inbox & Dispatch](inbox.md).
 
 - **Config** — Optional block setting agent and run options. Allowed at module level and inside individual workflow bodies. See [Configuration](configuration.md).
 
@@ -92,9 +92,11 @@ Top-level `local` is rejected — use `const`.
 ```jaiph
 channel alerts
 channel reports
+channel findings -> analyst
+channel events -> handler_a, handler_b
 ```
 
-One channel per line. Channels are used with `send` (`<-`) and `route` (`->`) inside workflows.
+One channel per line. Channels are used with `send` (`<-`) inside workflows. Routes (`->`) are declared inline on the channel declaration — when a message arrives on the channel, the runtime calls each target workflow. See [Inbox & Dispatch](inbox.md).
 
 ## Definitions
 
@@ -411,14 +413,18 @@ alerts <- """
 
 RHS must be empty (forward), a double-quoted literal, a triple-quoted `"""..."""` multiline block, `${var}`, or `run ref(args)`. Arbitrary shell on the RHS is `E_PARSE`. Combining capture and send (`name = channel <- …`) is `E_PARSE`.
 
-### `route` — Channel Routing
+### Channel Routing
+
+Routes are declared at the top level on `channel` declarations, not inside workflow bodies:
 
 ```jaiph
-alerts -> handle_alert
-events -> handler_a, handler_b
+channel alerts -> handle_alert
+channel events -> handler_a, handler_b
 ```
 
-Registers a static routing rule. When a message arrives on the channel, the runtime calls each target workflow, binding the three dispatch values (message, channel, sender) to whatever parameter names the target declares. Route targets must declare exactly 3 parameters. Multiple targets dispatch sequentially. Routes are stored in `WorkflowDef.routes`, not in steps. See [Inbox & Dispatch](inbox.md).
+When a message arrives on the channel, the runtime calls each target workflow, binding the three dispatch values (message, channel, sender) to whatever parameter names the target declares. Route targets must declare exactly 3 parameters. Multiple targets dispatch sequentially. Routes are stored on `ChannelDef`, not on workflow definitions or steps. See [Inbox & Dispatch](inbox.md).
+
+A `->` route declaration inside a workflow body is a **parse error** with guidance to move it to the top-level `channel` declaration.
 
 ### `log` and `logerr`
 
@@ -692,7 +698,7 @@ array_element   = string [ "," ] ;
 
 import_stmt     = "import" string "as" IDENT ;
 
-channel_decl    = "channel" IDENT ;
+channel_decl    = "channel" IDENT [ "->" REF { "," REF } ] ;
 
 env_decl        = "const" IDENT "=" env_value ;
 env_value       = double_quoted_string | triple_quoted_block | bare_value ;
@@ -718,8 +724,10 @@ workflow_config = config_block ;
 
 workflow_step   = ensure_stmt | run_stmt | run_async_stmt | prompt_stmt | prompt_capture_stmt
                 | const_decl_step | ensure_capture_stmt | run_capture_stmt | return_stmt
-                | fail_stmt | wait_stmt | log_stmt | logerr_stmt | send_stmt | route_decl
+                | fail_stmt | wait_stmt | log_stmt | logerr_stmt | send_stmt
                 | if_brace_stmt | match_stmt | comment_line ;
+  (* route declarations (-> workflow) belong at the top level in channel_decl,
+     not inside workflow bodies; a -> inside a body is E_PARSE *)
 
 const_decl_step = "const" IDENT "=" const_rhs ;
 const_rhs       = double_quoted_string | triple_quoted_block | bash_value_expr
@@ -743,8 +751,6 @@ arm_body        = double_quoted_string | "$" IDENT | "${" IDENT "}" ;
 
 send_stmt       = IDENT "<-" [ send_rhs ] ;
 send_rhs        = double_quoted_string | triple_quoted_block | "${" IDENT "}" | "run" call_ref | REF ;
-
-route_decl      = REF "->" REF { "," REF } ;
 
 log_stmt        = "log" ( double_quoted_string | triple_quoted_block | IDENT ) ;
 logerr_stmt     = "logerr" ( double_quoted_string | triple_quoted_block | IDENT ) ;
@@ -789,7 +795,7 @@ Validation rules:
 3. Import aliases must be unique (`E_VALIDATE`). Import targets must exist (`E_IMPORT_NOT_FOUND`).
 4. **Unified namespace:** channels, rules, workflows, scripts, and top-level `const` share one namespace per module.
 5. `ensure` must target a rule. `run` in a workflow targets a workflow or script. `run` in a rule targets a script only. These rules also apply to `return run` and `return ensure` forms.
-6. Channel references in `send`/`route` must resolve to declared channels. Route targets must be workflows.
+6. Channel references in `send` must resolve to declared channels. Route targets on channel declarations must be workflows with exactly 3 parameters. Route declarations inside workflow bodies are rejected at parse time.
 7. `ensure … recover` argument ordering: all arguments inside parentheses before `recover`.
 8. Shell redirection (`>`, `|`, `&`) after `run`/`ensure` is rejected — use a script.
 9. **Type crossing:** `string` and `script` are non-interchangeable primitive types (see [Types](#types)). `prompt` rejects script names; `run` rejects string consts; assigning a script to a `const` or interpolating a script name with `${…}` is rejected. Each crossing produces an actionable `E_VALIDATE` message.

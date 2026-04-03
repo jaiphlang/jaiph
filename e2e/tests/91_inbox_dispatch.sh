@@ -13,7 +13,7 @@ e2e::section "Basic send + route"
 
 # Given
 e2e::file "basic_inbox.jh" <<'EOF'
-channel greetings
+channel greetings -> receiver
 
 script emit_hello = `echo "hello from sender"`
 workflow sender() {
@@ -27,7 +27,6 @@ workflow receiver(message, chan, sender) {
 
 workflow default() {
   run sender()
-  greetings -> receiver
 }
 EOF
 
@@ -42,7 +41,7 @@ e2e::section "Multi-target route"
 
 # Given
 e2e::file "multi_target.jh" <<'EOF'
-channel results
+channel results -> consumer_a, consumer_b
 
 script emit_payload = `echo "data-payload"`
 workflow producer() {
@@ -61,7 +60,6 @@ workflow consumer_b(message, chan, sender) {
 
 workflow default() {
   run producer()
-  results -> consumer_a, consumer_b
 }
 EOF
 
@@ -78,7 +76,7 @@ e2e::section "Undefined channel fails validation"
 
 # Given
 e2e::file "undefined_channel.jh" <<'EOF'
-channel some_channel
+channel some_channel -> dummy
 
 script emit_dropped = `echo "dropped"`
 workflow sender() {
@@ -92,7 +90,6 @@ workflow dummy(message, chan, sender) {
 
 workflow default() {
   run sender()
-  some_channel -> dummy
 }
 EOF
 
@@ -116,7 +113,7 @@ e2e::section "Inbox file written"
 
 # Given
 e2e::file "inbox_file.jh" <<'EOF'
-channel audit
+channel audit -> auditor
 
 script emit_inbox_content = `echo "inbox-content-check"`
 workflow writer() {
@@ -130,7 +127,6 @@ workflow auditor(message, chan, sender) {
 
 workflow default() {
   run writer()
-  audit -> auditor
 }
 EOF
 
@@ -149,8 +145,8 @@ e2e::section "Dispatched step CLI output shows \$1,\$2,\$3 via standard position
 
 # Given
 e2e::file "display_inbox.jh" <<'EOF'
-channel findings
-channel report
+channel findings -> analyst
+channel report -> reviewer
 
 script emit_findings = `echo "Found 3 issues in auth module"`
 workflow scanner() {
@@ -169,8 +165,6 @@ workflow reviewer(message, chan, sender) {
 
 workflow default() {
   run scanner()
-  findings -> analyst
-  report -> reviewer
 }
 EOF
 
@@ -192,7 +186,7 @@ e2e::section "Receiver positional args: \$1=message, \$2=channel, \$3=sender"
 
 # Given
 e2e::file "receiver_args.jh" <<'EOF'
-channel events
+channel events -> consumer
 
 script emit_payload = `echo "payload-data"`
 workflow producer() {
@@ -210,7 +204,6 @@ workflow consumer(message, chan, sender) {
 
 workflow default() {
   run producer()
-  events -> consumer
 }
 EOF
 
@@ -230,7 +223,7 @@ config {
   run.inbox_parallel = true
 }
 
-channel results
+channel results -> consumer_a, consumer_b
 
 script emit_parallel_payload = `echo "parallel-payload"`
 workflow producer() {
@@ -249,7 +242,6 @@ workflow consumer_b(message, chan, sender) {
 
 workflow default() {
   run producer()
-  results -> consumer_a, consumer_b
 }
 EOF
 
@@ -270,7 +262,7 @@ config {
   run.inbox_parallel = true
 }
 
-channel data
+channel data -> sink
 
 script emit_from_a = `echo "from-a"`
 workflow sender_a() {
@@ -290,7 +282,6 @@ workflow sink(message, chan, sender) {
 workflow default() {
   run sender_a()
   run sender_b()
-  data -> sink
 }
 EOF
 
@@ -321,7 +312,7 @@ config {
   run.inbox_parallel = true
 }
 
-channel ch
+channel ch -> good_target, bad_target
 
 script emit_msg = `echo "msg"`
 workflow producer() {
@@ -340,7 +331,6 @@ workflow good_target(message, chan, sender) {
 
 workflow default() {
   run producer()
-  ch -> good_target, bad_target
 }
 EOF
 
@@ -362,7 +352,7 @@ config {
   run.inbox_parallel = true
 }
 
-channel events
+channel events -> handler_a, handler_b
 
 script emit_e1 = `echo "e1"`
 workflow sender() {
@@ -381,7 +371,6 @@ workflow handler_b(message, chan, sender) {
 
 workflow default() {
   run sender()
-  events -> handler_a, handler_b
 }
 EOF
 
@@ -407,7 +396,7 @@ e2e::section "Parallel dispatch via JAIPH_INBOX_PARALLEL env var"
 
 # Given — same workflow as basic multi-target, but parallel enabled via env
 e2e::file "env_parallel.jh" <<'EOF'
-channel results
+channel results -> consumer_a, consumer_b
 
 script emit_env_parallel = `echo "env-parallel"`
 workflow producer() {
@@ -426,7 +415,6 @@ workflow consumer_b(message, chan, sender) {
 
 workflow default() {
   run producer()
-  results -> consumer_a, consumer_b
 }
 EOF
 
