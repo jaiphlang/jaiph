@@ -264,7 +264,7 @@ export function parseWorkflowBlock(
         }
         const call = parseCallRef(runBody);
         if (!call) {
-          fail(filePath, "calls require parentheses: run ref() or run ref(args)", innerNo);
+          fail(filePath, "run must target a valid reference: run ref or run ref(args)", innerNo);
         }
         rejectTrailingContent(filePath, innerNo, "run", call.rest);
         workflow.steps.push({
@@ -305,7 +305,7 @@ export function parseWorkflowBlock(
       }
       const call = parseCallRef(runBody);
       if (!call) {
-        fail(filePath, "calls require parentheses: run async ref() or run async ref(args)", innerNo);
+        fail(filePath, "run async must target a valid reference: run async ref or run async ref(args)", innerNo);
       }
       rejectTrailingContent(filePath, innerNo, "run async", call.rest);
       workflow.steps.push({
@@ -341,7 +341,7 @@ export function parseWorkflowBlock(
       }
       const call = parseCallRef(runBody);
       if (!call) {
-        fail(filePath, "calls require parentheses: run ref() or run ref(args)", innerNo);
+        fail(filePath, "run must target a valid reference: run ref or run ref(args)", innerNo);
       }
       rejectTrailingContent(filePath, innerNo, "run", call.rest);
       workflow.steps.push({

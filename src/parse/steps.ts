@@ -233,7 +233,7 @@ export function parseEnsureStep(
   if (recoverIdx === -1) {
     const call = parseCallRef(ensureBody);
     if (!call) {
-      fail(filePath, "calls require parentheses: ensure ref() or ensure ref(args)", innerNo);
+      fail(filePath, "ensure must target a valid reference: ensure ref or ensure ref(args)", innerNo);
     }
     rejectTrailingContent(filePath, innerNo, "ensure", call.rest);
     return {
@@ -251,7 +251,7 @@ export function parseEnsureStep(
   const right = ensureBody.slice(recoverIdx + " recover ".length).trim();
   const call = parseCallRef(left);
   if (!call) {
-    fail(filePath, "calls require parentheses: ensure ref() or ensure ref(args)", innerNo);
+    fail(filePath, "ensure must target a valid reference: ensure ref or ensure ref(args)", innerNo);
   }
   rejectTrailingContent(filePath, innerNo, "ensure", call.rest);
   const ref = call.ref;

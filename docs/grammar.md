@@ -98,7 +98,7 @@ One channel per line. Channels are used with `send` (`<-`) and `route` (`->`) in
 
 ## Definitions
 
-Rules and workflows use braces on the declaration line and **must include parentheses** — even when parameterless (e.g. `rule check()`, `workflow default()`). The parser rejects definitions without `()` before `{` with a fix hint. Scripts use `=` with a backtick body (single-line) or fenced block (multi-line). Rules and workflows may declare **named parameters** inside the parentheses.
+Rules and workflows use braces on the declaration line and **must include parentheses** — even when parameterless (e.g. `rule check()`, `workflow default()`). The parser rejects definitions without `()` before `{` with a fix hint. Call sites, in contrast, allow omitting parentheses when passing zero arguments (`run setup` = `run setup()`). Scripts use `=` with a backtick body (single-line) or fenced block (multi-line). Rules and workflows may declare **named parameters** inside the parentheses.
 
 ```jaiph
 rule check_status() { … }              # no params — () required
@@ -127,17 +127,19 @@ rule gate(path) {
 }
 ```
 
-Parameter names follow identifier rules (`[A-Za-z_][A-Za-z0-9_]*`), must not be reserved keywords, and must be unique within the parameter list. Empty parentheses `()` are required even when there are no parameters — omitting them is a parse error.
+Parameter names follow identifier rules (`[A-Za-z_][A-Za-z0-9_]*`), must not be reserved keywords, and must be unique within the parameter list. Empty parentheses `()` are required on **definitions** even when there are no parameters — omitting them is a parse error. At **call sites**, parentheses are optional for zero-arg calls.
 
 At runtime, named parameters are bound alongside positional `arg1`…`arg9`: if `workflow implement(task, role)` is called with `run implement("build docs", "writer")`, then `${task}` = `"build docs"`, `${role}` = `"writer"`, and `${arg1}` = `"build docs"`, `${arg2}` = `"writer"` are all available. Named parameters are the preferred style for new code.
 
 ### Call-Site Arguments
 
-Call sites pass arguments in parentheses with comma-separated expressions:
+Parentheses are **optional** when passing zero arguments — `run setup` is equivalent to `run setup()`. When arguments are present, parentheses are required with comma-separated expressions:
 
 ```jaiph
-run implement("my-task", "my-role")
-ensure gate(path)
+run setup                              # zero args — parens optional
+run setup()                            # zero args — explicit parens also valid
+run implement("my-task", "my-role")    # with args — parens required
+ensure gate(path)                      # with args — parens required
 ```
 
 **Bare identifier arguments:** In-scope variable names must be passed as bare identifiers without quoting. A bare identifier `name` is equivalent to `"${name}"` — the variable's value is passed as the argument. Using `"${name}"` as a standalone call argument is rejected at compile time with an `E_VALIDATE` error — use the bare form instead:
@@ -168,7 +170,7 @@ workflow default() {
 }
 ```
 
-Arity checking applies to all `run` and `ensure` call sites (steps, captures, `if` conditions, `return run`/`return ensure`, and `send` RHS). When the callee has no declared parameters (legacy style), no arity check is performed — any number of arguments is accepted.
+Arity checking applies to all `run` and `ensure` call sites (steps, captures, `if` conditions, `return run`/`return ensure`, and `send` RHS), including the bare form (`run ref` = zero arguments). When the callee has no declared parameters (legacy style), no arity check is performed — any number of arguments is accepted.
 
 The runtime exposes arguments as `${arg1}`, `${arg2}`, … in orchestration strings (rules and workflows) and `$1`, `$2`, … in script bodies.
 
@@ -179,10 +181,11 @@ The runtime exposes arguments as `${arg1}`, `${arg2}`, … in orchestration stri
 In a **workflow**, `run` targets a workflow or script. In a **rule**, `run` targets a script only.
 
 ```jaiph
-run setup_env()
+run setup_env                          # bare form — same as run setup_env()
+run setup_env()                        # explicit parens — also valid
 run lib.build_project(arg1)
 result = run helper(arg)
-const output = run transform()
+const output = run transform
 ```
 
 Shell redirection or pipelines after `run` (`>`, `|`, `&`) are rejected — use a script for shell I/O.
@@ -263,7 +266,8 @@ Constraints:
 `ensure` runs a rule and succeeds if its exit code is 0.
 
 ```jaiph
-ensure check_deps()
+ensure check_deps                      # bare form — same as ensure check_deps()
+ensure check_deps()                    # explicit parens — also valid
 result = ensure lib.validate(input)
 ```
 
@@ -380,8 +384,8 @@ Restrictions on const RHS: `$(…)`, `${var:-fallback}`, `${var%%…}`, `${var//
 Only brace form with `ensure` or `run` conditions:
 
 ```jaiph
-if ensure lib.check_input() {
-  run process()
+if ensure lib.check_input {
+  run process
 } else if not run file_exists(path) {
   fail "missing file"
 } else {
@@ -397,6 +401,7 @@ if ensure lib.check_input() {
 alerts <- "Build started"
 reports <- ${output}
 results <- run build_message(data)
+results <- run get_summary                  # bare form
 inbox <-                                    # forward: sends ${arg1}
 alerts <- """
   Build report for ${project}:
@@ -454,6 +459,7 @@ return """
   Report for ${name}:
   Status: ${status}
 """
+return run helper                      # bare form — same as return run helper()
 return run helper()
 return ensure check(input)
 ```
@@ -662,11 +668,12 @@ Key rules:
 - **Shebang:** A `#!` first line of the file is ignored by the parser.
 - **Import path:** Quoted string in `import "path" as alias`. Missing `.jh` extension is appended automatically.
 - **String quoting:** Jaiph has a four-delimiter system. `"..."` is the single-line string form (double quotes only — single-quoted strings are parse errors). `"""..."""` is the multiline string form; the opening `"""` must end the line, and the closing `"""` must be on its own line. A double-quoted string that spans multiple lines is rejected with a guidance error pointing to triple quotes. Use `\"` for literal double quotes and `\\` for literal backslashes. `${...}` interpolation works in both forms. Script bodies use single backtick (`` `...` ``) for single-line or triple backtick (`` ```...``` ``) for multi-line — normal shell quoting is allowed inside script bodies. Triple backticks in prompt/string context are rejected.
+- **Optional call-site parentheses:** `run ref` and `run ref()` are equivalent at call sites (zero-arg calls). `jaiph format` normalizes to the parenthesized form (`ref()`) for unambiguous output.
 - **Top-level ordering:** The parser accepts top-level definitions in any order. `jaiph format` normalizes them to a canonical order: imports → config → channels → const declarations → rules → scripts → workflows → tests. See [CLI — `jaiph format`](cli.md#jaiph-format).
 
 ## EBNF (Practical Form)
 
-Informal symbols: `string` = quoted string; `call_ref` = `REF "(" [args] ")"` with comma-separated arguments (each argument may be a quoted string, `${var}`, or a **bare identifier** — see [Call Arguments](#call-arguments-and-positional-parameters)); `double_quoted_string` = single-line double-quoted string supporting `\$`, `\"`, `\\`, `` \` `` escapes and `${identifier}` / `${run …}` / `${ensure …}` interpolation; `triple_quoted_block` = multiline string delimited by `"""` on opening and closing lines, supporting the same interpolation; `prompt_body` = single-line double-quoted string | bare `IDENT` (reference to an existing binding) | triple-quoted block (`""" … """`).
+Informal symbols: `string` = quoted string; `call_ref` = `REF [ "(" [args] ")" ]` — parentheses are optional when passing zero arguments (bare `REF` is equivalent to `REF "(" ")"`); when arguments are present, parentheses are required with comma-separated expressions (each argument may be a quoted string, `${var}`, or a **bare identifier** — see [Call Arguments](#call-arguments-and-positional-parameters)); `double_quoted_string` = single-line double-quoted string supporting `\$`, `\"`, `\\`, `` \` `` escapes and `${identifier}` / `${run …}` / `${ensure …}` interpolation; `triple_quoted_block` = multiline string delimited by `"""` on opening and closing lines, supporting the same interpolation; `prompt_body` = single-line double-quoted string | bare `IDENT` (reference to an existing binding) | triple-quoted block (`""" … """`).
 
 ```ebnf
 file            = { top_level } ;
@@ -747,6 +754,7 @@ ensure_stmt     = "ensure" call_ref [ "recover" recover_body ] ;
 ensure_capture_stmt = IDENT "=" "ensure" call_ref [ "recover" recover_body ] ;
 run_capture_stmt   = IDENT "=" "run" ( call_ref | inline_script ) ;
 run_stmt        = "run" ( call_ref | inline_script ) ;
+call_ref        = REF "(" [ call_args ] ")" | REF ;  (* bare REF = zero-arg call; parens required when args present *)
 inline_script   = backtick_script_body "(" [ call_args ] ")" | fenced_script_block "(" [ call_args ] ")" ;
 prompt_body     = double_quoted_string | IDENT | triple_quoted_block ;
 triple_quoted_block = "\"\"\"" newline { body_line newline } "\"\"\"" ;

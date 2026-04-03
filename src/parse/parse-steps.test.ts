@@ -40,12 +40,14 @@ test("parseEnsureStep: parses ensure with captureName", () => {
   }
 });
 
-test("parseEnsureStep: ensure without parens throws", () => {
+test("parseEnsureStep: ensure without parens parses as zero-arg call", () => {
   const lines = ["  ensure my_rule"];
-  assert.throws(
-    () => parseEnsureStep("test.jh", lines, 0, 1, lines[0], "my_rule"),
-    /calls require parentheses/,
-  );
+  const { step } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], "my_rule");
+  assert.equal(step.type, "ensure");
+  if (step.type === "ensure") {
+    assert.equal(step.ref.value, "my_rule");
+    assert.equal(step.args, undefined);
+  }
 });
 
 // === parseEnsureStep: recover with single statement ===

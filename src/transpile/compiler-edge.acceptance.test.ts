@@ -115,7 +115,7 @@ test("ACCEPTANCE: invalid workflow reference shape fails at parse stage", () => 
       ].join("\n"),
     );
 
-    assert.throws(() => buildScripts(root, join(root, "out")), /E_PARSE calls require parentheses/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /E_PARSE unexpected content after run call/);
   });
 });
 
