@@ -49,13 +49,13 @@ workflow sender() {
 }
 
 script write_a = `echo "a:$1" > contract_a.txt`
-workflow receiver_a(message) {
-  run write_a(arg1)
+workflow receiver_a(message, chan, sender) {
+  run write_a(message)
 }
 
 script write_b = `echo "b:$1" > contract_b.txt`
-workflow receiver_b(message) {
-  run write_b(arg1)
+workflow receiver_b(message, chan, sender) {
+  run write_b(message)
 }
 
 workflow default() {

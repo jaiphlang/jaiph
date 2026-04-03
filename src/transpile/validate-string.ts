@@ -2,7 +2,7 @@
  * Validate Jaiph string content (log, logerr, fail, prompt, return, send literal).
  *
  * Enforces canonical interpolation:
- * - ${varName} and ${argN} are the only supported forms.
+ * - ${varName} is the only supported form (named parameters, const, captures).
  * - Bare $varName, $N, and braced numeric ${1} are rejected.
  * - ${var:-fallback} and other shell parameter expansion forms are rejected.
  * - Unescaped backticks are rejected.
@@ -126,8 +126,8 @@ const DOT_FIELD_RE = /\$\{([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\}/g
 const SIMPLE_BRACED_IDENT = /\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g;
 
 /**
- * Ensure `${name}` references are defined: named bindings in `knownVars`, or `arg1`..`arg9`
- * when `maxPositionalSlots` allows (each declared workflow/rule parameter exposes one slot).
+ * Ensure `${name}` references are defined: named bindings in `knownVars`.
+ * Positional `${argN}` access is not supported — use declared parameter names.
  */
 export function validateSimpleInterpolationIdentifiers(
   content: string,
@@ -136,7 +136,6 @@ export function validateSimpleInterpolationIdentifiers(
   col: number,
   context: string,
   knownVars: Set<string>,
-  maxPositionalSlots: number,
   scopeLabel: "workflow" | "rule",
   /** Typed prompt captures: map capture name → returns schema field names (for `${base}` / `${base_field}`). */
   promptFieldSchemas?: Map<string, string[]>,
@@ -149,25 +148,7 @@ export function validateSimpleInterpolationIdentifiers(
   let m: RegExpExecArray | null;
   while ((m = re.exec(content)) !== null) {
     const name = m[1]!;
-    const slot = /^arg([1-9])$/.exec(name);
-    if (slot) {
-      const n = Number(slot[1]);
-      if (recoverPayloadArg1 && n === 1) {
-        continue;
-      }
-      if (n > maxPositionalSlots) {
-        const hint =
-          scopeLabel === "workflow"
-            ? `declare parameters on the workflow (e.g. workflow default(name) { ... }); \`${name}\` matches the nth parameter`
-            : `declare parameters on the rule (e.g. rule check(name) { ... }); \`${name}\` matches the nth parameter`;
-        throw jaiphError(
-          filePath,
-          line,
-          col,
-          "E_VALIDATE",
-          `${context} references \`\${${name}}\` but this ${scopeLabel} does not declare that many parameters — ${hint}`,
-        );
-      }
+    if (recoverPayloadArg1 && name === "arg1") {
       continue;
     }
     if (knownVars.has(name)) {

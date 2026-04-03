@@ -20,7 +20,7 @@ type Scope = {
   filePath: string;
   vars: Map<string, string>;
   env: NodeJS.ProcessEnv;
-  /** Declared positional parameter names for the active workflow or rule (`arg1` ↔ `[0]`). */
+  /** Declared parameter names for the active workflow or rule. */
   declaredParamNames?: string[];
 };
 
@@ -222,9 +222,6 @@ export class NodeWorkflowRuntime {
       vars: this.newScopeVars(this.graph.entryFile, undefined, this.env),
       env: { ...this.env },
     };
-    args.forEach((v, i) => {
-      rootScope.vars.set(`arg${i + 1}`, v);
-    });
     const resolved = resolveWorkflowRef(this.graph, this.graph.entryFile, {
       value: "default",
       loc: { line: 1, col: 1 },
@@ -234,6 +231,10 @@ export class NodeWorkflowRuntime {
       this.emitWorkflow("WORKFLOW_END", "default");
       return 1;
     }
+    // Bind CLI args to declared parameter names by position.
+    resolved.workflow.params.forEach((name, i) => {
+      if (i < args.length) rootScope.vars.set(name, args[i]);
+    });
     const result = await this.executeWorkflow(resolved.filePath, resolved.workflow.name, rootScope, args, false);
     this.emitWorkflow("WORKFLOW_END", "default");
     return result.status;
@@ -245,9 +246,6 @@ export class NodeWorkflowRuntime {
       vars: this.newScopeVars(this.graph.entryFile, undefined, this.env),
       env: { ...this.env },
     };
-    args.forEach((v, i) => {
-      rootScope.vars.set(`arg${i + 1}`, v);
-    });
     const resolved = resolveWorkflowRef(this.graph, this.graph.entryFile, {
       value: ref,
       loc: { line: 1, col: 1 },
@@ -255,6 +253,10 @@ export class NodeWorkflowRuntime {
     if (!resolved) {
       return { status: 1, output: `Unknown workflow: ${ref}` };
     }
+    // Bind args to declared parameter names by position.
+    resolved.workflow.params.forEach((name, i) => {
+      if (i < args.length) rootScope.vars.set(name, args[i]);
+    });
     const result = await this.executeWorkflow(resolved.filePath, resolved.workflow.name, rootScope, args, false);
     return { status: result.status, output: result.output, error: result.error, returnValue: result.returnValue };
   }
@@ -326,15 +328,6 @@ export class NodeWorkflowRuntime {
     const preview = stripOuterQuotes(promptText).replace(/\s+/g, " ").trim();
     const params: Array<[string, string]> = [["prompt_text", preview]];
     const seen = new Set<string>(["prompt_text"]);
-    for (const [k, v] of scopeVars) {
-      if (!/^arg\d+$/.test(k) || v.length === 0) continue;
-      const n = Number(k.slice(3));
-      const slotName = declaredParamNames?.[n - 1];
-      // Skip argN when the slot has a declared name — show that name only (via ${…} or tail loop).
-      if (slotName) continue;
-      params.push([k, v]);
-      seen.add(k);
-    }
     // Include named vars referenced in the prompt text.
     const refRe = /\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g;
     let m: RegExpExecArray | null;
@@ -461,9 +454,6 @@ export class NodeWorkflowRuntime {
         env: workflowEnv,
         declaredParamNames: resolved.workflow.params,
       };
-      args.forEach((v, i) => {
-        childScope.vars.set(`arg${i + 1}`, v);
-      });
       resolved.workflow.params.forEach((name, i) => {
         if (i < args.length) childScope.vars.set(name, args[i]);
       });
@@ -507,9 +497,6 @@ export class NodeWorkflowRuntime {
       const moduleMeta = sameModule ? undefined : this.graph.modules.get(resolved.filePath)?.ast.metadata;
       const ruleEnv = this.applyMetadataScope(scope.env, moduleMeta);
       const ruleVars = new Map(scope.vars);
-      args.forEach((v, i) => {
-        ruleVars.set(`arg${i + 1}`, v);
-      });
       resolved.rule.params.forEach((name, i) => {
         if (i < args.length) ruleVars.set(name, args[i]);
       });
@@ -679,7 +666,9 @@ export class NodeWorkflowRuntime {
           if (runValue.status !== 0) return this.mergeStepResult(accOut, accErr, runValue);
           payload = runValue.returnValue ?? runValue.output.trim();
         } else if (step.rhs.kind === "forward") {
-          payload = scope.vars.get("arg1") ?? "";
+          // Forward sends the first declared parameter value (the message content in inbox dispatch).
+          const firstParam = scope.declaredParamNames?.[0];
+          payload = (firstParam ? scope.vars.get(firstParam) : undefined) ?? "";
         } else {
           return this.mergeStepResult(accOut, accErr, {
             status: 1,
@@ -1010,6 +999,18 @@ export class NodeWorkflowRuntime {
     return { status: 0, output: accOut, error: accErr, returnValue };
   }
 
+  /** Build dispatch scope that binds message/channel/sender to the target workflow's declared param names. */
+  private buildInboxDispatchScope(scope: Scope, target: string, msg: InboxMsg): Scope {
+    const dispatchVars = new Map(scope.vars);
+    const resolved = resolveWorkflowRef(this.graph, scope.filePath, { value: target, loc: { line: 1, col: 1 } });
+    const params = resolved?.workflow.params ?? [];
+    const values = [msg.content, msg.channel, msg.sender];
+    params.forEach((name, i) => {
+      if (i < values.length) dispatchVars.set(name, values[i]);
+    });
+    return { filePath: scope.filePath, vars: dispatchVars, env: scope.env };
+  }
+
   private async drainWorkflowQueue(scope: Scope, ctx: WorkflowContext): Promise<StepResult> {
     const parallel = scope.env.JAIPH_INBOX_PARALLEL === "true";
     let cursor = 0;
@@ -1035,11 +1036,7 @@ export class NodeWorkflowRuntime {
             );
             const t0 = Date.now();
             const result = await this.executeRunRef(
-              {
-                filePath: scope.filePath,
-                vars: new Map([...scope.vars, ["arg1", msg.content], ["arg2", msg.channel], ["arg3", msg.sender]]),
-                env: scope.env,
-              },
+              this.buildInboxDispatchScope(scope, target, msg),
               target,
               "",
             );
@@ -1079,11 +1076,7 @@ export class NodeWorkflowRuntime {
           );
           const t0 = Date.now();
           const dispatch = await this.executeRunRef(
-            {
-              filePath: scope.filePath,
-              vars: new Map([...scope.vars, ["arg1", msg.content], ["arg2", msg.channel], ["arg3", msg.sender]]),
-              env: scope.env,
-            },
+            this.buildInboxDispatchScope(scope, target, msg),
             target,
             "",
           );
@@ -1175,8 +1168,7 @@ export class NodeWorkflowRuntime {
       const res = await attempt();
       if (res.status === 0) return res;
       const recoverSteps = "single" in recover ? [recover.single] : recover.block;
-      // Recover blocks receive the failed ensure output in ${arg1} while preserving
-      // existing positional args (${arg2}, ${arg3}, ...), which orchestration flows use.
+      // Recover blocks receive the failed ensure output in ${arg1}.
       const recoverVars = new Map(scope.vars);
       const recoverPayload = `${res.output}${res.error}`;
       recoverVars.set("arg1", recoverPayload);

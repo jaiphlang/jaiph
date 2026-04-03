@@ -641,7 +641,7 @@ workflow default() {
 --- input.jh
 channel findings
 channel report
-workflow analyst() {
+workflow analyst(message, chan, sender) {
   log "ok"
 }
 workflow default() {
@@ -668,7 +668,7 @@ workflow default() {
 # @expect ok
 --- input.jh
 channel findings
-workflow analyst() {
+workflow analyst(message, chan, sender) {
   log "ok"
 }
 workflow default() {
@@ -679,10 +679,10 @@ workflow default() {
 # @expect ok
 --- input.jh
 channel findings
-workflow a() {
+workflow a(message, chan, sender) {
   log "ok"
 }
-workflow b() {
+workflow b(message, chan, sender) {
   log "ok"
 }
 workflow default() {
@@ -1031,14 +1031,14 @@ workflow researcher() {
 
 script write_findings_file = `echo "$1" > findings_file.md`
 
-workflow analyst(arg1) {
-  run write_findings_file(arg1)
+workflow analyst(message, chan, sender) {
+  run write_findings_file(message)
   const summary = run summarize_findings()
   summary <- "${summary}"
 }
 
-workflow reviewer(arg1) {
-  final_summary <- run review_summary(arg1)
+workflow reviewer(message, chan, sender) {
+  final_summary <- run review_summary(message)
 }
 
 workflow default() {

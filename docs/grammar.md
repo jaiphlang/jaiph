@@ -129,7 +129,7 @@ rule gate(path) {
 
 Parameter names follow identifier rules (`[A-Za-z_][A-Za-z0-9_]*`), must not be reserved keywords, and must be unique within the parameter list. Empty parentheses `()` are required on **definitions** even when there are no parameters — omitting them is a parse error. At **call sites**, parentheses are optional for zero-arg calls.
 
-At runtime, named parameters are bound alongside positional `arg1`…`arg9`: if `workflow implement(task, role)` is called with `run implement("build docs", "writer")`, then `${task}` = `"build docs"`, `${role}` = `"writer"`, and `${arg1}` = `"build docs"`, `${arg2}` = `"writer"` are all available. Named parameters are the preferred style for new code.
+At runtime, named parameters are the only way to access arguments: if `workflow implement(task, role)` is called with `run implement("build docs", "writer")`, then `${task}` = `"build docs"` and `${role}` = `"writer"`.
 
 ### Call-Site Arguments
 
@@ -154,7 +154,7 @@ ensure check_branch(branch_name)         # works with ensure too
 
 This rule applies to all call sites: `run`, `ensure`, `if` conditions, `return run`/`return ensure`, `send … <- run`, and `const x = run …`. Quoted strings with additional text around the interpolation (e.g. `"prefix_${name}"`) are allowed since they cannot be expressed as bare identifiers.
 
-Bare identifiers must reference a known variable (`const`, capture, named parameter, or positional `arg1`–`arg9`). Unknown names produce an `E_VALIDATE` error at compile time. Jaiph keywords (`run`, `ensure`, `if`, `const`, etc.) cannot be used as bare identifier arguments.
+Bare identifiers must reference a known variable (`const`, capture, or named parameter). Unknown names produce an `E_VALIDATE` error at compile time. Jaiph keywords (`run`, `ensure`, `if`, `const`, etc.) cannot be used as bare identifier arguments.
 
 ### Arity Checking
 
@@ -172,7 +172,7 @@ workflow default() {
 
 Arity checking applies to all `run` and `ensure` call sites (steps, captures, `if` conditions, `return run`/`return ensure`, and `send` RHS), including the bare form (`run ref` = zero arguments). When the callee has no declared parameters (legacy style), no arity check is performed — any number of arguments is accepted.
 
-The runtime exposes arguments as `${arg1}`, `${arg2}`, … in orchestration strings (rules and workflows) and `$1`, `$2`, … in script bodies.
+Arguments are available as `${paramName}` in orchestration strings (rules and workflows) and `$1`, `$2`, … in script bodies.
 
 ## Workflow Steps
 
@@ -183,7 +183,7 @@ In a **workflow**, `run` targets a workflow or script. In a **rule**, `run` targ
 ```jaiph
 run setup_env                          # bare form — same as run setup_env()
 run setup_env()                        # explicit parens — also valid
-run lib.build_project(arg1)
+run lib.build_project(task)
 result = run helper(arg)
 const output = run transform
 ```
@@ -402,7 +402,7 @@ alerts <- "Build started"
 reports <- ${output}
 results <- run build_message(data)
 results <- run get_summary                  # bare form
-inbox <-                                    # forward: sends ${arg1}
+inbox <-                                    # forward: sends first declared parameter
 alerts <- """
   Build report for ${project}:
   Status: ${status}
@@ -418,12 +418,12 @@ alerts -> handle_alert
 events -> handler_a, handler_b
 ```
 
-Registers a static routing rule. When a message arrives on the channel, the runtime calls each target workflow with `${arg1}=message`, `${arg2}=channel`, `${arg3}=sender`. Multiple targets dispatch sequentially. Routes are stored in `WorkflowDef.routes`, not in steps. See [Inbox & Dispatch](inbox.md).
+Registers a static routing rule. When a message arrives on the channel, the runtime calls each target workflow, binding the three dispatch values (message, channel, sender) to whatever parameter names the target declares. Route targets must declare exactly 3 parameters. Multiple targets dispatch sequentially. Routes are stored in `WorkflowDef.routes`, not in steps. See [Inbox & Dispatch](inbox.md).
 
 ### `log` and `logerr`
 
 ```jaiph
-log "Processing ${arg1}"
+log "Processing ${message}"
 logerr "Warning: ${name} not found"
 log status                              # bare identifier — same as log "${status}"
 logerr err_msg                          # bare identifier form works with logerr too
@@ -435,7 +435,7 @@ log """
 
 `log` writes to stdout; `logerr` writes to stderr (shown with a red `!` marker in the progress tree). Both accept single-line `"..."` strings, triple-quoted `"""..."""` multiline blocks, or bare identifiers. `${identifier}` interpolation works in all forms. At runtime, backslash escapes in the final string are interpreted (`\n` → newline).
 
-**Bare identifier form:** When `log` or `logerr` is followed by a single bare identifier (no quotes), it expands to `"${identifier}"` — the variable's value is logged. The identifier must reference a known binding (`const`, capture, named parameter, or positional `arg1`–`arg9`).
+**Bare identifier form:** When `log` or `logerr` is followed by a single bare identifier (no quotes), it expands to `"${identifier}"` — the variable's value is logged. The identifier must reference a known binding (`const`, capture, or named parameter).
 
 ### `fail`
 
@@ -610,18 +610,17 @@ Module-scoped `const` variables are **not** visible. Use shared libraries (`sour
 
 ## String Interpolation {#string-interpolation}
 
-Jaiph orchestration strings support `${identifier}` interpolation. Every identifier — whether in a bare argument (`run greet(name)`) or in braced form (`log "hello ${name}"`) — must reference a binding that is in scope: `const`, capture, named parameter, or positional `arg1`–`arg9`. Unknown names are rejected at compile time with an `E_VALIDATE` error in both forms; `${name}` is **not** a workaround for an undeclared bare identifier.
+Jaiph orchestration strings support `${identifier}` interpolation. Every identifier — whether in a bare argument (`run greet(name)`) or in braced form (`log "hello ${name}"`) — must reference a binding that is in scope: `const`, capture, or named parameter. Unknown names are rejected at compile time with an `E_VALIDATE` error in both forms; `${name}` is **not** a workaround for an undeclared bare identifier.
 
 | Form | Status | Where |
 |---|---|---|
 | `${varName}` | Primary | All Jaiph strings |
 | `${var.field}` | Dot notation — typed prompt field access | All Jaiph strings |
 | `${paramName}` | Named parameter access | All Jaiph strings |
-| `${arg1}`, `${arg2}`, … | Positional arguments (also set alongside named params) | All Jaiph strings |
 | `${run ref(args)}` | Inline capture — executes call, inlines output | All Jaiph strings |
 | `${ensure ref(args)}` | Inline capture — executes rule, inlines result | All Jaiph strings |
 | `$varName` | Rejected — use `${varName}` | — |
-| `$1`, `$2` | Not supported — use `${arg1}`, `${arg2}` | `script` bodies only |
+| `$1`, `$2` | Positional shell args — only in `script` bodies | `script` bodies only |
 | `${var:-fallback}` | Rejected (`E_PARSE`) | — |
 | `$(…)` | Rejected (`E_PARSE`) | — |
 
@@ -811,4 +810,4 @@ At runtime, the Node workflow runtime interprets the AST directly:
 - **ensure … recover:** Bounded retry loop (default 3 rounds, `JAIPH_ENSURE_MAX_RETRIES`). Recovery body's `${arg1}` gets fresh merged stdout+stderr per attempt.
 - **Assignment capture:** Rules and workflows use explicit `return "…"`. Scripts use stdout.
 - **`run async`:** Promise-based concurrency. Implicit join via `Promise.allSettled` before workflow returns. Failures aggregated.
-- **Channels:** Messages enqueued via `send`, dispatched to route targets at workflow end. Each target receives `${arg1}=message`, `${arg2}=channel`, `${arg3}=sender`.
+- **Channels:** Messages enqueued via `send`, dispatched to route targets at workflow end. Each target must declare exactly 3 parameters; the runtime binds message, channel, and sender to the declared names.

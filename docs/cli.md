@@ -53,7 +53,7 @@ jaiph run ./flows/review.jh "review this diff"
 
 ### Argument passing
 
-Positional arguments are available inside `script` bodies as standard bash `$1`, `$2`, `"$@"`. In Jaiph orchestration strings (`log`, `prompt`, `fail`, `return`, `send`, `run`/`ensure` args), use **named parameters** when declared (e.g. `workflow default(task)` → `${task}`) or positional `${arg1}`, `${arg2}` — only `${identifier}` forms are supported (no shell parameter expansion). Named and positional forms are both set at runtime; named parameters are preferred for new code. The same rule applies to `prompt` text and to `const` RHS strings where orchestration applies.
+Positional arguments are available inside `script` bodies as standard bash `$1`, `$2`, `"$@"`. In Jaiph orchestration strings (`log`, `prompt`, `fail`, `return`, `send`, `run`/`ensure` args), use **named parameters** (e.g. `workflow default(task)` → `${task}`) — only `${identifier}` forms are supported (no shell parameter expansion). The same rule applies to `prompt` text and to `const` RHS strings where orchestration applies.
 
 Rules receive forwarded arguments through `ensure`:
 

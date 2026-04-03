@@ -62,7 +62,7 @@ Jaiph workflows are `.jh` files. Every workflow file needs a `workflow default` 
 jaiph run ./path/to/main.jh "feature request or task"
 ```
 
-Arguments are bound to **named parameters** when the default workflow declares them (e.g. `workflow default(task)` → `${task}`), and are always available as positional `${arg1}`, `${arg2}`, etc. In script bodies, standard shell positional parameters apply (`$1`, `$2`, `"$@"`).
+Arguments are bound to **named parameters** declared on the default workflow (e.g. `workflow default(task)` → `${task}`). In script bodies, standard shell positional parameters apply (`$1`, `$2`, `"$@"`).
 
 ### Run artifacts
 

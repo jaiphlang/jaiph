@@ -159,8 +159,8 @@ workflow sender() {
   ch <- echo "msg3"
 }
 
-workflow handler() {
-  echo "handled: ${arg1}" >> handled_log.txt
+workflow handler(message, chan, sender) {
+  echo "handled: ${message}" >> handled_log.txt
 }
 
 workflow default() {

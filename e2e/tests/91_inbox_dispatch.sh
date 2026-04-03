@@ -21,8 +21,8 @@ workflow sender() {
 }
 
 script write_received = `echo "$1" > received.txt`
-workflow receiver(message) {
-  run write_received(arg1)
+workflow receiver(message, chan, sender) {
+  run write_received(message)
 }
 
 workflow default() {
@@ -50,13 +50,13 @@ workflow producer() {
 }
 
 script write_consumer_a = `echo "A got: $1" > consumer_a.txt`
-workflow consumer_a(message) {
-  run write_consumer_a(arg1)
+workflow consumer_a(message, chan, sender) {
+  run write_consumer_a(message)
 }
 
 script write_consumer_b = `echo "B got: $1" > consumer_b.txt`
-workflow consumer_b(message) {
-  run write_consumer_b(arg1)
+workflow consumer_b(message, chan, sender) {
+  run write_consumer_b(message)
 }
 
 workflow default() {
@@ -86,7 +86,7 @@ workflow sender() {
 }
 
 script never_called_impl = `echo "never called" > dummy.txt`
-workflow dummy() {
+workflow dummy(message, chan, sender) {
   run never_called_impl()
 }
 
@@ -124,8 +124,8 @@ workflow writer() {
 }
 
 script write_audited = `echo "$1" > audited.txt`
-workflow auditor(message) {
-  run write_audited(arg1)
+workflow auditor(message, chan, sender) {
+  run write_audited(message)
 }
 
 workflow default() {
@@ -158,13 +158,13 @@ workflow scanner() {
 }
 
 script emit_summary = `echo "Summary: $1"`
-workflow analyst(message) {
-  report <- run emit_summary(arg1)
+workflow analyst(message, chan, sender) {
+  report <- run emit_summary(message)
 }
 
 script print_reviewed = `echo "[reviewed] $1"`
-workflow reviewer(message) {
-  run print_reviewed(arg1)
+workflow reviewer(message, chan, sender) {
+  run print_reviewed(message)
 }
 
 workflow default() {
@@ -205,7 +205,7 @@ echo "channel=$2" >> args.txt
 echo "sender=$3" >> args.txt
 ```
 workflow consumer(message, chan, sender) {
-  run write_receiver_args(arg1, arg2, arg3)
+  run write_receiver_args(message, chan, sender)
 }
 
 workflow default() {
@@ -238,13 +238,13 @@ workflow producer() {
 }
 
 script write_consumer_a_par = `echo "A got: $1" > consumer_a_par.txt`
-workflow consumer_a(message) {
-  run write_consumer_a_par(arg1)
+workflow consumer_a(message, chan, sender) {
+  run write_consumer_a_par(message)
 }
 
 script write_consumer_b_par = `echo "B got: $1" > consumer_b_par.txt`
-workflow consumer_b(message) {
-  run write_consumer_b_par(arg1)
+workflow consumer_b(message, chan, sender) {
+  run write_consumer_b_par(message)
 }
 
 workflow default() {
@@ -283,8 +283,8 @@ workflow sender_b() {
 }
 
 script append_sink_log = `echo "$1" >> sink_log.txt`
-workflow sink(message) {
-  run append_sink_log(arg1)
+workflow sink(message, chan, sender) {
+  run append_sink_log(message)
 }
 
 workflow default() {
@@ -329,12 +329,12 @@ workflow producer() {
 }
 
 script fail_target_impl = `exit 1`
-workflow bad_target() {
+workflow bad_target(message, chan, sender) {
   run fail_target_impl()
 }
 
 script write_good_par = `echo "ok" > good_par.txt`
-workflow good_target() {
+workflow good_target(message, chan, sender) {
   run write_good_par()
 }
 
@@ -370,12 +370,12 @@ workflow sender() {
 }
 
 script handle_a_impl = `echo "handled-a"`
-workflow handler_a() {
+workflow handler_a(message, chan, sender) {
   run handle_a_impl()
 }
 
 script handle_b_impl = `echo "handled-b"`
-workflow handler_b() {
+workflow handler_b(message, chan, sender) {
   run handle_b_impl()
 }
 
@@ -415,13 +415,13 @@ workflow producer() {
 }
 
 script write_env_a = `echo "A: $1" > env_a.txt`
-workflow consumer_a(message) {
-  run write_env_a(arg1)
+workflow consumer_a(message, chan, sender) {
+  run write_env_a(message)
 }
 
 script write_env_b = `echo "B: $1" > env_b.txt`
-workflow consumer_b(message) {
-  run write_env_b(arg1)
+workflow consumer_b(message, chan, sender) {
+  run write_env_b(message)
 }
 
 workflow default() {

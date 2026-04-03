@@ -3,16 +3,19 @@
 channel findings
 channel report
 
+script emit_findings = `echo "Found 3 issues in auth module"`
+script emit_summary = `echo "Summary: $1"`
+
 workflow scanner() {
-  findings <- echo "Found 3 issues in auth module"
+  findings <- run emit_findings()
 }
 
-workflow analyst() {
-  report <- echo "Summary: $1"
+workflow analyst(message, chan, sender) {
+  report <- run emit_summary(message)
 }
 
-workflow reviewer() {
-  log "[reviewed] ${arg1}"
+workflow reviewer(message, chan, sender) {
+  log "[reviewed] ${message}"
 }
 
 workflow default() {

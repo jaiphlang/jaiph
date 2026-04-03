@@ -69,7 +69,7 @@ e2e::file "contract_ensure.jh" <<'EOF'
 script compute_echo = `echo "rule-stdout-goes-to-artifacts"`
 rule compute(input) {
   run compute_echo()
-  return "${arg1}-processed"
+  return "${input}-processed"
 }
 script echo_captured_ensure = `echo "captured=$1"`
 workflow default() {
