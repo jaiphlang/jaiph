@@ -1,5 +1,6 @@
 import type { WorkflowMetadata } from "../types";
 import { colFromRaw, fail } from "./core";
+import { findClosingBraceIndex, splitStatementsOnSemicolons } from "./statement-split";
 
 const ALLOWED_KEYS = new Set([
   "agent.default_model",
@@ -132,6 +133,98 @@ function parseArrayValue(
   return fail(filePath, "array not closed with ']'", startIdx, 1);
 }
 
+function assignConfigKey(
+  filePath: string,
+  out: WorkflowMetadata,
+  key: string,
+  value: string | boolean | number | string[],
+  lineNo: number,
+  raw: string,
+): void {
+  validateKeyType(filePath, key, value, lineNo, raw);
+
+  if (key === "agent.default_model") {
+    if (!out.agent) {
+      out.agent = {};
+    }
+    out.agent.defaultModel = value as string;
+  } else if (key === "agent.command") {
+    if (!out.agent) {
+      out.agent = {};
+    }
+    out.agent.command = value as string;
+  } else if (key === "agent.backend") {
+    const backend = value === "cursor" || value === "claude" || value === "codex" ? value : undefined;
+    if (!backend) {
+      fail(
+        filePath,
+        'agent.backend must be "cursor", "claude", or "codex"',
+        lineNo,
+        colFromRaw(raw),
+      );
+    }
+    if (!out.agent) {
+      out.agent = {};
+    }
+    out.agent.backend = backend;
+  } else if (key === "agent.trusted_workspace") {
+    if (!out.agent) {
+      out.agent = {};
+    }
+    out.agent.trustedWorkspace = value as string;
+  } else if (key === "agent.cursor_flags") {
+    if (!out.agent) {
+      out.agent = {};
+    }
+    out.agent.cursorFlags = value as string;
+  } else if (key === "agent.claude_flags") {
+    if (!out.agent) {
+      out.agent = {};
+    }
+    out.agent.claudeFlags = value as string;
+  } else if (key === "run.logs_dir") {
+    if (!out.run) {
+      out.run = {};
+    }
+    out.run.logsDir = value as string;
+  } else if (key === "run.debug") {
+    if (!out.run) {
+      out.run = {};
+    }
+    out.run.debug = value as boolean;
+  } else if (key === "run.inbox_parallel") {
+    if (!out.run) {
+      out.run = {};
+    }
+    out.run.inboxParallel = value as boolean;
+  } else if (key === "runtime.docker_enabled") {
+    if (!out.runtime) {
+      out.runtime = {};
+    }
+    out.runtime.dockerEnabled = value as boolean;
+  } else if (key === "runtime.docker_image") {
+    if (!out.runtime) {
+      out.runtime = {};
+    }
+    out.runtime.dockerImage = value as string;
+  } else if (key === "runtime.docker_network") {
+    if (!out.runtime) {
+      out.runtime = {};
+    }
+    out.runtime.dockerNetwork = value as string;
+  } else if (key === "runtime.docker_timeout") {
+    if (!out.runtime) {
+      out.runtime = {};
+    }
+    out.runtime.dockerTimeout = value as number;
+  } else if (key === "runtime.workspace") {
+    if (!out.runtime) {
+      out.runtime = {};
+    }
+    out.runtime.workspace = value as string[];
+  }
+}
+
 export function parseConfigBlock(
   filePath: string,
   lines: string[],
@@ -144,6 +237,62 @@ export function parseConfigBlock(
   if (!lineOpen.startsWith("config") || !lineOpen.includes("{")) {
     return fail(filePath, "expected config block: config {", openLineNo, colFromRaw(rawOpen));
   }
+
+  const openBraceIdx = rawOpen.indexOf("{");
+  const closeIdx = findClosingBraceIndex(rawOpen, openBraceIdx);
+  if (closeIdx !== -1) {
+    const tail = rawOpen.slice(closeIdx + 1).trim();
+    if (tail !== "") {
+      return fail(filePath, "unexpected content after closing '}' of config block", openLineNo, colFromRaw(rawOpen));
+    }
+    const inner = rawOpen.slice(openBraceIdx + 1, closeIdx);
+    const out: WorkflowMetadata = {};
+    const assignmentLines = splitStatementsOnSemicolons(inner);
+    for (const assignRaw of assignmentLines) {
+      const line = assignRaw.trim();
+      if (!line || line.startsWith("#")) {
+        continue;
+      }
+      const eq = line.indexOf("=");
+      if (eq === -1) {
+        return fail(filePath, `config line must be key = value: ${line}`, openLineNo, colFromRaw(rawOpen));
+      }
+      const key = line.slice(0, eq).trim();
+      const valuePart = line.slice(eq + 1);
+
+      if (!ALLOWED_KEYS.has(key)) {
+        return fail(
+          filePath,
+          `unknown config key: ${key}. Allowed: ${[...ALLOWED_KEYS].join(", ")}`,
+          openLineNo,
+          colFromRaw(rawOpen),
+        );
+      }
+
+      let value: string | boolean | number | string[];
+      const trimmedValue = valuePart.trim();
+      if (trimmedValue === "[") {
+        return fail(
+          filePath,
+          "multiline config arrays require a multiline config { … } block (opening 'config {' alone on its own line)",
+          openLineNo,
+          colFromRaw(rawOpen),
+        );
+      }
+      if (key === "runtime.workspace" && trimmedValue.startsWith("[") && trimmedValue !== "[]") {
+        return fail(
+          filePath,
+          "runtime.workspace arrays with elements require a multiline config { … } block",
+          openLineNo,
+          colFromRaw(rawOpen),
+        );
+      }
+      value = parseMetadataValue(filePath, rawOpen, valuePart, openLineNo);
+      assignConfigKey(filePath, out, key, value, openLineNo, rawOpen);
+    }
+    return { metadata: out, nextIndex: startIndex + 1 };
+  }
+
   if (!/^config\s*\{\s*$/.test(lineOpen)) {
     return fail(filePath, "config block must be exactly 'config {' on its own line", openLineNo, colFromRaw(rawOpen));
   }
@@ -195,88 +344,7 @@ export function parseConfigBlock(
       value = parseMetadataValue(filePath, raw, valuePart, lineNo);
     }
 
-    validateKeyType(filePath, key, value, lineNo, raw);
-
-    if (key === "agent.default_model") {
-      if (!out.agent) {
-        out.agent = {};
-      }
-      out.agent.defaultModel = value as string;
-    } else if (key === "agent.command") {
-      if (!out.agent) {
-        out.agent = {};
-      }
-      out.agent.command = value as string;
-    } else if (key === "agent.backend") {
-      const backend = value === "cursor" || value === "claude" || value === "codex" ? value : undefined;
-      if (!backend) {
-        return fail(
-          filePath,
-          'agent.backend must be "cursor", "claude", or "codex"',
-          lineNo,
-          colFromRaw(raw),
-        );
-      }
-      if (!out.agent) {
-        out.agent = {};
-      }
-      out.agent.backend = backend;
-    } else if (key === "agent.trusted_workspace") {
-      if (!out.agent) {
-        out.agent = {};
-      }
-      out.agent.trustedWorkspace = value as string;
-    } else if (key === "agent.cursor_flags") {
-      if (!out.agent) {
-        out.agent = {};
-      }
-      out.agent.cursorFlags = value as string;
-    } else if (key === "agent.claude_flags") {
-      if (!out.agent) {
-        out.agent = {};
-      }
-      out.agent.claudeFlags = value as string;
-    } else if (key === "run.logs_dir") {
-      if (!out.run) {
-        out.run = {};
-      }
-      out.run.logsDir = value as string;
-    } else if (key === "run.debug") {
-      if (!out.run) {
-        out.run = {};
-      }
-      out.run.debug = value as boolean;
-    } else if (key === "run.inbox_parallel") {
-      if (!out.run) {
-        out.run = {};
-      }
-      out.run.inboxParallel = value as boolean;
-    } else if (key === "runtime.docker_enabled") {
-      if (!out.runtime) {
-        out.runtime = {};
-      }
-      out.runtime.dockerEnabled = value as boolean;
-    } else if (key === "runtime.docker_image") {
-      if (!out.runtime) {
-        out.runtime = {};
-      }
-      out.runtime.dockerImage = value as string;
-    } else if (key === "runtime.docker_network") {
-      if (!out.runtime) {
-        out.runtime = {};
-      }
-      out.runtime.dockerNetwork = value as string;
-    } else if (key === "runtime.docker_timeout") {
-      if (!out.runtime) {
-        out.runtime = {};
-      }
-      out.runtime.dockerTimeout = value as number;
-    } else if (key === "runtime.workspace") {
-      if (!out.runtime) {
-        out.runtime = {};
-      }
-      out.runtime.workspace = value as string[];
-    }
+    assignConfigKey(filePath, out, key, value, lineNo, raw);
   }
 
   return fail(filePath, "config block not closed with '}'", startIndex + 1, 1);

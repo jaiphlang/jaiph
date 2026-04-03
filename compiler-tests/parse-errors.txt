@@ -1120,7 +1120,7 @@ workflow default() {
 
 
 === config block with content on same line as opening
-# @expect error E_PARSE "config block must be exactly" @1:1
+# @expect ok
 --- input.jh
 config { agent.backend = "claude" }
 workflow default() {

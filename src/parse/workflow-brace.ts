@@ -17,12 +17,22 @@ import { parsePromptStep } from "./prompt";
 import { parseSendRhs } from "./send-rhs";
 import { parseMatchExpr } from "./match";
 import { dottedReturnToQuotedString, isBareDottedIdentifierReturn } from "./workflow-return-dotted";
+import {
+  expandBlockLineStatements,
+  findClosingBraceIndex,
+  shouldApplySemicolonStatementSplit,
+  shouldSkipSemicolonSplitForLine,
+} from "./statement-split";
 
 type BraceIfHead =
   | { kind: "ensure"; negated: boolean; ref: string; args?: string; bareIdentifierArgs?: string[]; rest: string }
   | { kind: "run"; negated: boolean; ref: string; args?: string; bareIdentifierArgs?: string[]; rest: string };
 
-function parseIfBraceHead(inner: string): BraceIfHead | null {
+function parseIfBraceHead(
+  filePath: string,
+  inner: string,
+  lineNo: number,
+): { head: BraceIfHead; inlineBody: string | null } | null {
   let s = inner.trim();
   if (!s.startsWith("if ")) return null;
   s = s.slice(3).trimStart();
@@ -35,26 +45,68 @@ function parseIfBraceHead(inner: string): BraceIfHead | null {
     s = s.slice("ensure ".length).trimStart();
     const lb = s.lastIndexOf("{");
     if (lb === -1) return null;
-    if (s.slice(lb + 1).trim() !== "") return null;
     const before = s.slice(0, lb).trim();
     const call = parseCallRef(before);
     if (!call) return null;
-    return { kind: "ensure", negated, ref: call.ref, args: call.args, bareIdentifierArgs: call.bareIdentifierArgs, rest: call.rest };
+    const head: BraceIfHead = {
+      kind: "ensure",
+      negated,
+      ref: call.ref,
+      args: call.args,
+      bareIdentifierArgs: call.bareIdentifierArgs,
+      rest: call.rest,
+    };
+    const afterOpen = s.slice(lb + 1);
+    if (afterOpen.trim() === "") {
+      return { head, inlineBody: null };
+    }
+    const closeIdx = findClosingBraceIndex(s, lb);
+    if (closeIdx === -1) {
+      fail(filePath, "unterminated '{' in if condition", lineNo);
+    }
+    const tail = s.slice(closeIdx + 1).trim();
+    if (tail !== "") {
+      fail(filePath, "inline if body must end the line; put 'else' on a new line", lineNo);
+    }
+    return { head, inlineBody: s.slice(lb + 1, closeIdx) };
   }
   if (s.startsWith("run ")) {
     s = s.slice("run ".length).trimStart();
     const lb = s.lastIndexOf("{");
     if (lb === -1) return null;
-    if (s.slice(lb + 1).trim() !== "") return null;
     const before = s.slice(0, lb).trim();
     const call = parseCallRef(before);
     if (!call) return null;
-    return { kind: "run", negated, ref: call.ref, args: call.args, bareIdentifierArgs: call.bareIdentifierArgs, rest: call.rest };
+    const head: BraceIfHead = {
+      kind: "run",
+      negated,
+      ref: call.ref,
+      args: call.args,
+      bareIdentifierArgs: call.bareIdentifierArgs,
+      rest: call.rest,
+    };
+    const afterOpen = s.slice(lb + 1);
+    if (afterOpen.trim() === "") {
+      return { head, inlineBody: null };
+    }
+    const closeIdx = findClosingBraceIndex(s, lb);
+    if (closeIdx === -1) {
+      fail(filePath, "unterminated '{' in if condition", lineNo);
+    }
+    const tail = s.slice(closeIdx + 1).trim();
+    if (tail !== "") {
+      fail(filePath, "inline if body must end the line; put 'else' on a new line", lineNo);
+    }
+    return { head, inlineBody: s.slice(lb + 1, closeIdx) };
   }
   return null;
 }
 
-function parseElseIfBraceHead(inner: string): BraceIfHead | null {
+function parseElseIfBraceHead(
+  filePath: string,
+  inner: string,
+  lineNo: number,
+): { head: BraceIfHead; inlineBody: string | null } | null {
   let s = inner.trim();
   if (!s.startsWith("else if ")) return null;
   s = s.slice("else if ".length).trimStart();
@@ -67,21 +119,59 @@ function parseElseIfBraceHead(inner: string): BraceIfHead | null {
     s = s.slice("ensure ".length).trimStart();
     const lb = s.lastIndexOf("{");
     if (lb === -1) return null;
-    if (s.slice(lb + 1).trim() !== "") return null;
     const before = s.slice(0, lb).trim();
     const call = parseCallRef(before);
     if (!call) return null;
-    return { kind: "ensure", negated, ref: call.ref, args: call.args, bareIdentifierArgs: call.bareIdentifierArgs, rest: call.rest };
+    const head: BraceIfHead = {
+      kind: "ensure",
+      negated,
+      ref: call.ref,
+      args: call.args,
+      bareIdentifierArgs: call.bareIdentifierArgs,
+      rest: call.rest,
+    };
+    const afterOpen = s.slice(lb + 1);
+    if (afterOpen.trim() === "") {
+      return { head, inlineBody: null };
+    }
+    const closeIdx = findClosingBraceIndex(s, lb);
+    if (closeIdx === -1) {
+      fail(filePath, "unterminated '{' in else if condition", lineNo);
+    }
+    const tail = s.slice(closeIdx + 1).trim();
+    if (tail !== "") {
+      fail(filePath, "inline else if body must end the line; put 'else' on a new line", lineNo);
+    }
+    return { head, inlineBody: s.slice(lb + 1, closeIdx) };
   }
   if (s.startsWith("run ")) {
     s = s.slice("run ".length).trimStart();
     const lb = s.lastIndexOf("{");
     if (lb === -1) return null;
-    if (s.slice(lb + 1).trim() !== "") return null;
     const before = s.slice(0, lb).trim();
     const call = parseCallRef(before);
     if (!call) return null;
-    return { kind: "run", negated, ref: call.ref, args: call.args, bareIdentifierArgs: call.bareIdentifierArgs, rest: call.rest };
+    const head: BraceIfHead = {
+      kind: "run",
+      negated,
+      ref: call.ref,
+      args: call.args,
+      bareIdentifierArgs: call.bareIdentifierArgs,
+      rest: call.rest,
+    };
+    const afterOpen = s.slice(lb + 1);
+    if (afterOpen.trim() === "") {
+      return { head, inlineBody: null };
+    }
+    const closeIdx = findClosingBraceIndex(s, lb);
+    if (closeIdx === -1) {
+      fail(filePath, "unterminated '{' in else if condition", lineNo);
+    }
+    const tail = s.slice(closeIdx + 1).trim();
+    if (tail !== "") {
+      fail(filePath, "inline else if body must end the line; put 'else' on a new line", lineNo);
+    }
+    return { head, inlineBody: s.slice(lb + 1, closeIdx) };
   }
   return null;
 }
@@ -161,6 +251,19 @@ export function parseBraceBlockBody(
     }
     if (inner === "}") {
       return { steps, nextIdx: idx + 1 };
+    }
+    if (!shouldSkipSemicolonSplitForLine(innerRaw)) {
+      const expanded = expandBlockLineStatements(innerRaw);
+      if (shouldApplySemicolonStatementSplit(expanded) && expanded.length > 1) {
+        for (const chunk of expanded) {
+          const t = chunk.trim();
+          if (!t) continue;
+          const one = parseBlockStatement(filePath, [t], 0, opts);
+          steps.push(one.step);
+        }
+        idx += 1;
+        continue;
+      }
     }
     const one = parseBlockStatement(filePath, lines, idx, opts);
     steps.push(one.step);
@@ -647,12 +750,23 @@ export function tryParseBraceIfChain(
   const innerRaw = lines[idx];
   const inner = innerRaw.trim();
   const innerNo = idx + 1;
-  const head = parseIfBraceHead(inner);
-  if (!head) return null;
+  const parsedHead = parseIfBraceHead(filePath, inner, innerNo);
+  if (!parsedHead) return null;
 
+  const { head, inlineBody } = parsedHead;
   const condition = headToCondition(filePath, head, innerNo, innerRaw);
   let linesEff = lines;
-  const { steps: thenSteps, nextIdx: afterThen } = parseBraceBlockBody(filePath, linesEff, idx + 1, innerNo, opts);
+  let thenSteps: WorkflowStepDef[];
+  let afterThen: number;
+  if (inlineBody !== null) {
+    const r = parseBraceBlockBody(filePath, [inlineBody], 0, innerNo, opts);
+    thenSteps = r.steps;
+    afterThen = idx + 1;
+  } else {
+    const r = parseBraceBlockBody(filePath, linesEff, idx + 1, innerNo, opts);
+    thenSteps = r.steps;
+    afterThen = r.nextIdx;
+  }
   linesEff = peelCloseBraceBeforeElse(linesEff, afterThen);
   let cursor = afterThen;
   const elseIfBranches: NonNullable<Extract<WorkflowStepDef, { type: "if" }>["elseIfBranches"]> = [];
@@ -664,17 +778,26 @@ export function tryParseBraceIfChain(
       continue;
     }
     if (t.startsWith("else if ")) {
-      const eif = parseElseIfBraceHead(linesEff[cursor]);
-      if (!eif) {
+      const eifParsed = parseElseIfBraceHead(filePath, linesEff[cursor], cursor + 1);
+      if (!eifParsed) {
         fail(filePath, "malformed else if (expected else if [not] ensure|run … {)", cursor + 1);
       }
+      const { head: eifHead, inlineBody: eifInline } = eifParsed;
       const eifNo = cursor + 1;
       const eifRaw = linesEff[cursor];
-      const cond = headToCondition(filePath, eif, eifNo, eifRaw);
-      const { steps: branchSteps, nextIdx: afterBranch } = parseBraceBlockBody(
-        filePath, linesEff, cursor + 1, eifNo, opts,
-      );
-      elseIfBranches.push({ negated: eif.negated, condition: cond, thenSteps: branchSteps });
+      const cond = headToCondition(filePath, eifHead, eifNo, eifRaw);
+      let branchSteps: WorkflowStepDef[];
+      let afterBranch: number;
+      if (eifInline !== null) {
+        const r = parseBraceBlockBody(filePath, [eifInline], 0, eifNo, opts);
+        branchSteps = r.steps;
+        afterBranch = cursor + 1;
+      } else {
+        const r = parseBraceBlockBody(filePath, linesEff, cursor + 1, eifNo, opts);
+        branchSteps = r.steps;
+        afterBranch = r.nextIdx;
+      }
+      elseIfBranches.push({ negated: eifHead.negated, condition: cond, thenSteps: branchSteps });
       linesEff = peelCloseBraceBeforeElse(linesEff, afterBranch);
       cursor = afterBranch;
       continue;
