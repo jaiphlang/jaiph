@@ -297,7 +297,7 @@ jaiph use <version|nightly>
 
 ```bash
 jaiph use nightly
-jaiph use 0.7.0
+jaiph use 0.8.0
 ```
 
 ## `jaiph report` {#jaiph-report}

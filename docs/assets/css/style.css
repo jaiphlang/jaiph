@@ -102,7 +102,8 @@ html {
 }
 
 html[data-theme="dark"] {
-    background: var(--bg);
+    background: linear-gradient(to bottom right, var(--bg) 0%, rgba(31, 42, 55, 0.95) 100%);
+    background-attachment: fixed;
 }
 
 * {
@@ -1196,7 +1197,8 @@ pre code .code-line::before {
     }
 
     html[data-theme="dark"] {
-        background: var(--bg);
+        background: linear-gradient(to bottom, var(--bg) 0%, var(--bg) 240px, rgba(31, 42, 55, 0.95) 100%);
+        background-attachment: fixed;
     }
 
     body {
