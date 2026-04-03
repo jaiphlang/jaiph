@@ -1,6 +1,20 @@
 import type { MatchArmDef, MatchExprDef, MatchPatternDef } from "../types";
 import { fail, indexOfClosingDoubleQuote } from "./core";
 
+const IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * Validate that a match subject is a bare identifier (no `$` or `${}`).
+ */
+export function validateMatchSubject(filePath: string, subject: string, lineNo: number): void {
+  if (subject.startsWith("${") || subject.startsWith("$")) {
+    fail(filePath, `match subject should be a bare identifier: match varName { ... }`, lineNo);
+  }
+  if (!IDENT_RE.test(subject)) {
+    fail(filePath, `match subject must be a valid identifier, got: ${subject}`, lineNo);
+  }
+}
+
 /**
  * Parse a single match arm pattern: "literal", /regex/, or _
  * Returns the pattern and the rest of the string after the pattern.
@@ -111,7 +125,7 @@ export function parseMatchArms(
 }
 
 /**
- * Parse a match expression: `match <subject> { ... }` or `<subject> match { ... }`
+ * Parse a match expression: `match <subject> { ... }`
  * Given the subject string and the lines starting from the `{` line.
  */
 export function parseMatchExpr(
@@ -121,6 +135,7 @@ export function parseMatchExpr(
   subject: string,
   loc: { line: number; col: number },
 ): { expr: MatchExprDef; nextIndex: number } {
+  validateMatchSubject(filePath, subject, loc.line);
   const { arms, nextIndex } = parseMatchArms(filePath, lines, braceLineIndex + 1, loc.line);
   if (arms.length === 0) {
     fail(filePath, "match must have at least one arm", loc.line);
@@ -129,14 +144,4 @@ export function parseMatchExpr(
     expr: { subject, arms, loc },
     nextIndex,
   };
-}
-
-/**
- * Try to detect `<subject> match {` at end of a string.
- * Returns the subject if found, null otherwise.
- */
-export function extractPostfixMatchSubject(text: string): string | null {
-  const m = text.match(/^(.+?)\s+match\s*\{\s*$/);
-  if (!m) return null;
-  return m[1].trim();
 }

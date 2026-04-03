@@ -15,7 +15,7 @@ import { parseAnonymousInlineScript } from "./inline-script";
 import { parseEnsureStep } from "./steps";
 import { parsePromptStep } from "./prompt";
 import { parseSendRhs } from "./send-rhs";
-import { parseMatchExpr, extractPostfixMatchSubject } from "./match";
+import { parseMatchExpr } from "./match";
 import { dottedReturnToQuotedString, isBareDottedIdentifierReturn } from "./workflow-return-dotted";
 
 type BraceIfHead =
@@ -518,10 +518,11 @@ export function parseBlockStatement(
         nextIdx,
       };
     }
-    // return <subject> match { ... }
-    const returnMatchSubject = extractPostfixMatchSubject(returnValue);
-    if (returnMatchSubject) {
-      const { expr, nextIndex } = parseMatchExpr(filePath, lines, idx, returnMatchSubject, retLoc);
+    // return match var { ... }
+    const returnMatchHead = returnValue.match(/^match\s+(.+?)\s*\{\s*$/);
+    if (returnMatchHead) {
+      const subject = returnMatchHead[1].trim();
+      const { expr, nextIndex } = parseMatchExpr(filePath, lines, idx, subject, retLoc);
       return {
         step: {
           type: "return",

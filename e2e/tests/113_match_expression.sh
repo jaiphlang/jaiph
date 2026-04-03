@@ -18,7 +18,7 @@ script get_status = `echo "error"`
 
 workflow default() {
   const status = run get_status()
-  return status match {
+  return match status {
     "ok" => "all good"
     "error" => "something broke"
     _ => "unknown"
@@ -50,7 +50,7 @@ script get_mode = `echo "unknown-mode"`
 
 workflow default() {
   const mode = run get_mode()
-  return mode match {
+  return match mode {
     "fast" => "speed"
     "safe" => "safety"
     _ => "default"
@@ -82,7 +82,7 @@ script get_input = `echo "ERROR: something failed"`
 
 workflow default() {
   const msg = run get_input()
-  return msg match {
+  return match msg {
     /^ERROR/ => "error"
     /^WARN/ => "warning"
     _ => "info"
@@ -114,7 +114,7 @@ script get_code = `echo "200"`
 
 workflow default() {
   const code = run get_code()
-  return code match {
+  return match code {
     "200" => "success"
     "404" => "not found"
     _ => "other"

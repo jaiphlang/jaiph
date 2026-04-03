@@ -396,7 +396,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
         } else if (step.managed.kind === "ensure") {
           lines.push(`${ci}return ensure ${emitRef(step.managed.ref, step.managed.args, step.managed.bareIdentifierArgs)}`);
         } else if (step.managed.kind === "match") {
-          lines.push(`${ci}return ${step.managed.match.subject} match {`);
+          lines.push(`${ci}return match ${step.managed.match.subject} {`);
           for (const arm of step.managed.match.arms) {
             lines.push(`${ci}${pad}${emitMatchPattern(arm.pattern)} => ${arm.body}`);
           }
@@ -491,7 +491,7 @@ function emitConstStep(name: string, value: ConstRhs): string {
     }
     case "match_expr": {
       // Multi-line format; return first line (const assignment opens the block)
-      return `const ${name} = ${value.match.subject} match {`;
+      return `const ${name} = match ${value.match.subject} {`;
     }
     case "run_inline_script_capture": {
       const argsStr = formatArgs(value.args ?? "", value.bareIdentifierArgs);

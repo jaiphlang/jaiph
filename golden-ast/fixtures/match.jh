@@ -1,6 +1,6 @@
 workflow default() {
   const input = "hello"
-  return input match {
+  return match input {
     "hello" => "greeting"
     /^bye/ => "farewell"
     _ => "unknown"

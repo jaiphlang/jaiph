@@ -12,48 +12,6 @@ Process rules:
 
 ---
 
-## Match — keyword always first, no dollar prefix <!-- dev-ready -->
-
-**Goal**  
-`match` always precedes the variable in both statement and expression positions. No `$` prefix on the matched variable — consistent with how params and `const` names are referenced without `$`.
-
-**Current state**
-
-Statement form: `match $var { ... }` or `match ${var} { ... }`.  
-Expression form: `$var match { ... }` or `${var} match { ... }` (postfix).
-
-**After**
-
-```jaiph
-# statement
-match var { "lit" => ..., /re/ => ..., _ => ... }
-
-# expression
-const x = match var { "lit" => ..., _ => ... }
-```
-
-**What needs fixing**
-
-1. **Parser** (`src/parse/match.ts`): Update `parseMatchExpr` to accept bare identifier as subject (no `$` or `${}`). The subject is just an `IDENT`.
-2. **Parser** (`src/parse/match.ts`): Remove `extractPostfixMatchSubject` — delete the `<subject> match { }` postfix form entirely.
-3. **Parser** (`src/parse/const-rhs.ts`, `src/parse/steps.ts`): Update expression-position match parsing to use prefix `match var { }` instead of postfix `$var match { }`. `const x = match var { ... }` and `return match var { ... }`.
-4. **Parser**: Reject `$var` and `${var}` as match subjects with error: `match subject should be a bare identifier: match varName { ... }`.
-5. **AST** (`src/types.ts`): `MatchExprDef.subject` changes from a bash-style string (`$var`, `${var}`) to a plain identifier string.
-6. **Runtime**: Update match evaluation to resolve bare identifier subjects against the variable scope.
-7. **Docs** (`docs/grammar.md`): Update match syntax, EBNF, and examples.
-8. **Tests**: Update golden AST fixtures (`golden-ast/fixtures/match.jh`), compiler tests, e2e tests.
-
-**Acceptance criteria**
-
-- `match status { "ok" => ... _ => ... }` parses with `subject: "status"`.
-- `const x = match status { ... }` parses as expression form.
-- `$status match { ... }` is a hard parse error.
-- `match $status { ... }` is a hard parse error with guidance.
-- `return match var { ... }` works.
-- All tests pass with updated fixtures.
-
----
-
 ## `jaiph serve` — expose workflows as an MCP server <!-- dev-ready -->
 
 **Goal**  

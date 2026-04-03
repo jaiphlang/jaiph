@@ -567,9 +567,8 @@ export class NodeWorkflowRuntime {
     scope: Scope,
     expr: MatchExprDef,
   ): Promise<{ ok: true; value: string } | { ok: false; result: StepResult }> {
-    const subjectIr = await this.interpolateWithCaptures(expr.subject, scope);
-    if (!subjectIr.ok) return subjectIr;
-    const subject = stripOuterQuotes(subjectIr.value);
+    // Subject is a bare identifier — resolve against scope variables
+    const subject = scope.vars.get(expr.subject) ?? scope.env?.[expr.subject] ?? "";
     for (const arm of expr.arms) {
       let matched = false;
       if (arm.pattern.kind === "wildcard") {
