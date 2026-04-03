@@ -1,19 +1,24 @@
 #!/usr/bin/env jaiph
 
+# scripts are defined in fenced blocks or single line backticks
+# by default it's bash, but it cany be any env: ```node, ```python3, etc.
+script validate_name = ```
+  if [ -z "$1" ]; then
+    echo "You didn't provide your name :(" >&2
+    exit 1
+  fi
+```
+
+# rules are always executed on readonly filesystem
 rule name_was_provided(name) {
-  # bash is used by default for scripts
-  # use ```node, ```python3, etc. for other languages
-  run ```
-    if [ -z "$1" ]; then
-      echo "You didn't provide your name :(" >&2
-      exit 1
-    fi
-  ```(name)
+  run validate_name(name)
 }
 
+# workflows are main unit of orchestration
 workflow default(name) {
   ensure name_was_provided(name)
 
+  # prompts call agents - cursor by default, but it's configurable
   const response = prompt """
     Say hello to ${name} and provide a fun fact about a person with the same name.
     Respond with a single line. Do not inspect files or run tools.

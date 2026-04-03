@@ -75,7 +75,7 @@ layout: null
                 </div>
 
                 <div class="code-tab-panel is-active" data-panel="try-run-sample">
-                    <pre><code class="language-bash static-highlight"><span class="code-line">curl -fsSL https://jaiph.org/run | bash -s '</span><span class="code-line"><span class="ralph-keyword">workflow</span> <span class="ralph-definition">default</span>() {</span><span class="code-line">  <span class="ralph-keyword">const</span> <span class="ralph-variable">response</span> <span class="ralph-operator">=</span> <span class="ralph-keyword">prompt</span> <span class="ralph-string">"Say: Hello, I am [model name]!"</span></span><span class="code-line">  <span class="ralph-keyword">log</span> <span class="ralph-string">"${response}"</span></span><span class="code-line">}'</span></code></pre>
+                    <pre><code class="language-bash static-highlight"><span class="code-line">curl -fsSL https://jaiph.org/run | bash -s '</span><span class="code-line"><span class="ralph-keyword">workflow</span> <span class="ralph-definition">default</span>() {</span><span class="code-line">  <span class="ralph-keyword">const</span> <span class="ralph-variable">response</span> <span class="ralph-operator">=</span> <span class="ralph-keyword">prompt</span> <span class="ralph-string">"Say: Hello, I am [model name]!"</span></span><span class="code-line">  <span class="ralph-keyword">log</span> response</span><span class="code-line">}'</span></code></pre>
                     <p class="small">Installs Jaiph <strong>v0.7.0</strong> to <strong>~/.local/bin</strong> (if not
                         already
                         installed), and runs the sample workflow with <a href="https://cursor.com/docs/cli/installation" target="_blank" rel="noopener noreferrer">Cursor CLI</a> agent backend (the default one). See <a href="#samples">more samples</a>!</p>
@@ -145,20 +145,25 @@ layout: null
                     </p>
                     <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
+# scripts are defined in fenced blocks or single line backticks
+# by default it's bash, but it cany be any env: ```node, ```python3, etc.
+script validate_name = ```
+  if [ -z "$1" ]; then
+    echo "You didn't provide your name :(" >&2
+    exit 1
+  fi
+```
+
+# rules are always executed on readonly filesystem
 rule name_was_provided(name) {
-  # bash is used by default for scripts
-  # use ```node, ```python3, etc. for other languages
-  run ```
-    if [ -z "$1" ]; then
-      echo "You didn't provide your name :(" >&2
-      exit 1
-    fi
-  ```(name)
+  run validate_name(name)
 }
 
+# workflows are main unit of orchestration
 workflow default(name) {
   ensure name_was_provided(name)
 
+  # prompts call agents - cursor by default, but it's configurable
   const response = prompt """
     Say hello to ${name} and provide a fun fact about a person with the same name.
     Respond with a single line. Do not inspect files or run tools.
@@ -173,14 +178,14 @@ Jaiph: Running say_hello.jh
 
 <span class="run-keyword">workflow</span> default <span class="run-params">(name="Jakub")</span>
   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> name_was_provided <span class="run-params">(name="Jakub")</span>
-  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">script</span> __inline_65a8c336a46d <span class="run-params">(1="Jakub")</span>
-  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">script __inline_65a8c336a46d (0s)</span>
+  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">script</span> validate_name <span class="run-params">(1="Jakub")</span>
+  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">script validate_name (0s)</span>
   <span class="run-pass">✓</span> <span class="run-time">rule name_was_provided (0s)</span>
   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> cursor "Say hello to Jakub and p..." <span class="run-params">(name="Jakub")</span>
-  <span class="run-pass">✓</span> <span class="run-time">prompt cursor (5s)</span>
+  <span class="run-pass">✓</span> <span class="run-time">prompt cursor (3s)</span>
   <span class="run-marker">ℹ</span> Hello Jakub — Czech conductor Jakub Hrůša has led major orchestras including the Bamberg Symphony and often appears at the BBC Proms.
 
-<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(5.5s)</span></code></pre>
+<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(4.1s)</span></code></pre>
                     <p>When you don't provide the name parameter, the workflow fails:</p>
                     <pre><code class="jaiph-run" data-sample-output="failure"><span class="run-command">➜  ./say_hello.jh</span>
 
@@ -188,8 +193,8 @@ Jaiph: Running say_hello.jh
 
 <span class="run-keyword">workflow</span> default
   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> name_was_provided
-  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">script</span> __inline_65a8c336a46d
-  <span class="run-marker">·</span>   <span class="run-fail">✗ script __inline_65a8c336a46d</span> <span class="run-time">(0s)</span>
+  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">script</span> validate_name
+  <span class="run-marker">·</span>   <span class="run-fail">✗ script validate_name</span> <span class="run-time">(0s)</span>
   <span class="run-fail">✗ rule name_was_provided</span> <span class="run-time">(0s)</span>
 
 <span class="run-fail">✗ FAIL</span> <span class="run-keyword">workflow</span> default <span class="run-time">(0.4s)</span>
@@ -371,25 +376,22 @@ Jaiph: Running agent_inbox.jh
                         implicit join before completion.</p>
                     <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
-const prompt_text = "Say: \"Greetings! I am [model name].\""
+const prompt_text = "Say: Greetings! I am [model name]."
 
-workflow cursor_say_hello() {
-  config {
-    agent.backend = "cursor"
-  }
+workflow cursor_say_hello(name) {
+  config { agent.backend = "cursor" }
   const response = prompt "${prompt_text}"
   log response
 }
 
-workflow claude_say_hello() {
-  config {
-    agent.backend = "claude"
-  }
+workflow claude_say_hello(name) {
+  config { agent.backend = "claude" }
   const response = prompt "${prompt_text}"
   log response
 }
 
-workflow default() {
+# surrounding workflow waits for all to complete
+workflow default(name) {
   run async cursor_say_hello(name)
   run async claude_say_hello(name)
 }</code></pre>
@@ -399,19 +401,19 @@ workflow default() {
 Jaiph: Running async.jh
 
 <span class="run-keyword">workflow</span> default
-  <span class="run-marker">▸</span> <span class="run-keyword">async workflow</span> claude_say_hello
-  <span class="run-marker">▸</span> <span class="run-keyword">async workflow</span> cursor_say_hello
-  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> claude "${prompt_text}" <span class="run-params">(prompt_text="Say: \"Greetings! I am [model nam...")</span>
-  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> cursor "${prompt_text}" <span class="run-params">(prompt_text="Say: \"Greetings! I am [model nam...")</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> cursor_say_hello
+  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> claude_say_hello
+  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> cursor "Say: Greetings! I am [mo..."
+  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> claude "Say: Greetings! I am [mo..."
+  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">prompt cursor (3s)</span>
+  <span class="run-marker">·</span>   <span class="run-marker">ℹ</span> Greetings! I am **Composer**, a language model trained by Cursor.
+  <span class="run-pass">✓</span> <span class="run-time">workflow cursor_say_hello (3s)</span>
   <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">prompt claude (4s)</span>
   <span class="run-marker">·</span>   <span class="run-marker">ℹ</span> Greetings! I am Claude Opus 4.6.
   <span class="run-pass">✓</span> <span class="run-time">workflow claude_say_hello (4s)</span>
-  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">prompt cursor (5s)</span>
-  <span class="run-marker">·</span>   <span class="run-marker">ℹ</span> Greetings! I am Composer.
-  <span class="run-pass">✓</span> <span class="run-time">workflow cursor_say_hello (5s)</span>
 
-<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(5.2s)</span></code></pre>
-                    <p>Both workflows run in parallel, and in this case Claude was faster than Cursor.</p>
+<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(4.6s)</span></code></pre>
+                    <p>Both workflows run in parallel, and in this case Cursor was faster than Claude.</p>
                 </div>
 
             </div>

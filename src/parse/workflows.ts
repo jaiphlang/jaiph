@@ -16,9 +16,15 @@ import { parsePromptStep } from "./prompt";
 import { parseSendRhs } from "./send-rhs";
 import { parseAnonymousInlineScript } from "./inline-script";
 import { parseEnsureStep } from "./steps";
-import { tryParseBraceIfChain } from "./workflow-brace";
+import { parseBlockStatement, tryParseBraceIfChain } from "./workflow-brace";
 import { dottedReturnToQuotedString, isBareDottedIdentifierReturn } from "./workflow-return-dotted";
 import { parseMatchExpr } from "./match";
+import {
+  expandBlockLineStatements,
+  findClosingBraceIndex,
+  shouldApplySemicolonStatementSplit,
+  shouldSkipSemicolonSplitForLine,
+} from "./statement-split";
 
 /** Reject non-empty trailing content after a call expression (e.g. shell redirection). */
 function rejectTrailingContent(
@@ -65,7 +71,7 @@ export function parseWorkflowBlock(
   }
 
   // Match: [export] workflow name() { OR [export] workflow name(params) {
-  const match = lineDecl.match(/^(export\s+)?workflow\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*\{$/);
+  const match = lineDecl.match(/^(export\s+)?workflow\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*\{/);
   if (!match) {
     const loose = lineDecl.match(/^(export\s+)?workflow\s+([A-Za-z_][A-Za-z0-9_]*)/);
     if (loose) {
@@ -86,6 +92,81 @@ export function parseWorkflowBlock(
     steps: [],
     loc: { line: lineNo, col: 1 },
   };
+
+  const braceIdx = match[0].length - 1;
+  if (lineDecl[braceIdx] !== "{") {
+    fail(filePath, "expected '{' after workflow header", lineNo);
+  }
+  const closeIdx = findClosingBraceIndex(lineDecl, braceIdx);
+  const isInlineBody = closeIdx !== -1 && lineDecl.slice(closeIdx + 1).trim() === "";
+
+  if (isInlineBody) {
+    const bodyInner = lineDecl.slice(braceIdx + 1, closeIdx);
+    const bodyLines = bodyInner.split(/\n/).map((l) => l.trim()).filter(Boolean);
+    const chunks: string[] = [];
+    for (const bl of bodyLines) {
+      if (shouldSkipSemicolonSplitForLine(bl)) {
+        chunks.push(bl);
+        continue;
+      }
+      const ex = expandBlockLineStatements(bl);
+      if (shouldApplySemicolonStatementSplit(ex)) {
+        chunks.push(...ex);
+      } else {
+        chunks.push(bl);
+      }
+    }
+    let hadNonCommentStepInline = false;
+    for (const chunk of chunks) {
+      const t = chunk.trim();
+      if (!t) continue;
+      if (t.startsWith("#")) {
+        workflow.steps.push({
+          type: "comment",
+          text: t,
+          loc: { line: lineNo, col: 1 },
+        });
+        continue;
+      }
+      if (/^config\s*\{/.test(t)) {
+        if (workflow.metadata !== undefined) {
+          fail(filePath, "duplicate config block inside workflow (only one allowed per workflow)", lineNo);
+        }
+        if (hadNonCommentStepInline) {
+          fail(filePath, "config block inside workflow must appear before any steps", lineNo);
+        }
+        const { metadata, nextIndex } = parseConfigBlock(filePath, [t], 0);
+        if (nextIndex !== 1) {
+          fail(filePath, "internal parse error: inline config expected on one line", lineNo);
+        }
+        if (metadata.runtime) {
+          fail(filePath, "runtime.* keys are not allowed in workflow-level config (only agent.* and run.* keys)", lineNo);
+        }
+        workflow.metadata = metadata;
+        continue;
+      }
+      hadNonCommentStepInline = true;
+      const braceIfCh = tryParseBraceIfChain(filePath, [t], 0);
+      if (braceIfCh) {
+        workflow.steps.push(braceIfCh.step);
+        continue;
+      }
+      const st = parseBlockStatement(filePath, [t], 0, { forRule: false });
+      workflow.steps.push(st.step);
+    }
+    return { workflow, nextIndex: startIndex + 1, exported: isExported };
+  }
+
+  if (closeIdx === -1) {
+    const afterBrace = lineDecl.slice(braceIdx + 1).trim();
+    if (afterBrace !== "") {
+      fail(
+        filePath,
+        "expected newline after '{' or a complete inline workflow body ending with '}' on the same line",
+        lineNo,
+      );
+    }
+  }
 
   let idx = startIndex + 1;
   /** Track whether a non-comment step has been seen (config must come first). */
@@ -123,6 +204,40 @@ export function parseWorkflowBlock(
       workflow.metadata = metadata;
       idx = nextIndex - 1;
       continue;
+    }
+
+    if (!shouldSkipSemicolonSplitForLine(innerRaw)) {
+      const expanded = expandBlockLineStatements(innerRaw);
+      if (shouldApplySemicolonStatementSplit(expanded) && expanded.length > 1) {
+        for (const chunk of expanded) {
+          const t = chunk.trim();
+          if (!t) continue;
+          if (t.startsWith("#")) {
+            workflow.steps.push({
+              type: "comment",
+              text: t,
+              loc: { line: innerNo, col: 1 },
+            });
+            continue;
+          }
+          if (/^config\s*\{/.test(t)) {
+            fail(
+              filePath,
+              "config must be the first workflow step; it cannot appear after semicolon-separated steps on the same line",
+              innerNo,
+            );
+          }
+          hadNonCommentStep = true;
+          const braceIfCh = tryParseBraceIfChain(filePath, [t], 0);
+          if (braceIfCh) {
+            workflow.steps.push(braceIfCh.step);
+            continue;
+          }
+          const st = parseBlockStatement(filePath, [t], 0, { forRule: false });
+          workflow.steps.push(st.step);
+        }
+        continue;
+      }
     }
 
     hadNonCommentStep = true;

@@ -1,5 +1,6 @@
 import type { MatchArmDef, MatchExprDef, MatchPatternDef } from "../types";
 import { fail, indexOfClosingDoubleQuote } from "./core";
+import { splitStatementsOnSemicolons } from "./statement-split";
 
 const IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -112,13 +113,20 @@ export function parseMatchArms(
     if (line === "}") {
       return { arms, nextIndex: i + 1 };
     }
-    const { pattern, rest } = parsePattern(filePath, line, lineNo);
-    if (!rest.startsWith("=>")) {
-      fail(filePath, 'expected "=>" after match pattern', lineNo);
+    const armSegments = splitStatementsOnSemicolons(line, { allowRegexLiteral: true });
+    for (const seg of armSegments) {
+      const segLine = seg.trim();
+      if (!segLine || segLine.startsWith("#")) {
+        continue;
+      }
+      const { pattern, rest } = parsePattern(filePath, segLine, lineNo);
+      if (!rest.startsWith("=>")) {
+        fail(filePath, 'expected "=>" after match pattern', lineNo);
+      }
+      const afterArrow = rest.slice(2).trimStart();
+      const body = parseArmBody(filePath, afterArrow, lineNo);
+      arms.push({ pattern, body });
     }
-    const afterArrow = rest.slice(2).trimStart();
-    const body = parseArmBody(filePath, afterArrow, lineNo);
-    arms.push({ pattern, body });
     i += 1;
   }
   fail(filePath, "unterminated match block", openerLineNo);

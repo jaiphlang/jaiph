@@ -1,6 +1,12 @@
 import type { RuleDef } from "../types";
 import { braceDepthDelta, colFromRaw, fail, parseParamList, stripQuotes } from "./core";
 import { parseBlockStatement } from "./workflow-brace";
+import {
+  expandBlockLineStatements,
+  findClosingBraceIndex,
+  shouldApplySemicolonStatementSplit,
+  shouldSkipSemicolonSplitForLine,
+} from "./statement-split";
 
 export function parseRuleBlock(
   filePath: string,
@@ -22,7 +28,7 @@ export function parseRuleBlock(
   }
 
   // Match: [export] rule name() { OR [export] rule name(params) {
-  const match = line.match(/^(export\s+)?rule\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*\{$/);
+  const match = line.match(/^(export\s+)?rule\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*\{/);
   if (!match) {
     const loose = line.match(/^(export\s+)?rule\s+([A-Za-z_][A-Za-z0-9_]*)/);
     if (loose) {
@@ -43,6 +49,57 @@ export function parseRuleBlock(
     steps: [],
     loc: { line: lineNo, col: 1 },
   };
+
+  const braceIdx = match[0].length - 1;
+  if (line[braceIdx] !== "{") {
+    fail(filePath, "expected '{' after rule header", lineNo);
+  }
+  const closeIdx = findClosingBraceIndex(line, braceIdx);
+  const isInlineBody = closeIdx !== -1 && line.slice(closeIdx + 1).trim() === "";
+
+  if (isInlineBody) {
+    const bodyInner = line.slice(braceIdx + 1, closeIdx);
+    const bodyLines = bodyInner.split(/\n/).map((l) => l.trim()).filter(Boolean);
+    const chunks: string[] = [];
+    for (const bl of bodyLines) {
+      if (shouldSkipSemicolonSplitForLine(bl)) {
+        chunks.push(bl);
+        continue;
+      }
+      const ex = expandBlockLineStatements(bl);
+      if (shouldApplySemicolonStatementSplit(ex)) {
+        chunks.push(...ex);
+      } else {
+        chunks.push(bl);
+      }
+    }
+    for (const chunk of chunks) {
+      const t = chunk.trim();
+      if (!t) continue;
+      if (t.startsWith("#")) {
+        rule.steps.push({
+          type: "comment",
+          text: t,
+          loc: { line: lineNo, col: 1 },
+        });
+        continue;
+      }
+      const st = parseBlockStatement(filePath, [t], 0, { forRule: true });
+      rule.steps.push(st.step);
+    }
+    return { rule, nextIndex: startIndex + 1, exported: isExported };
+  }
+
+  if (closeIdx === -1) {
+    const afterBrace = line.slice(braceIdx + 1).trim();
+    if (afterBrace !== "") {
+      fail(
+        filePath,
+        "expected newline after '{' or a complete inline rule body ending with '}' on the same line",
+        lineNo,
+      );
+    }
+  }
 
   let i = startIndex + 1;
   let braceDepth = 0;
@@ -117,6 +174,27 @@ export function parseRuleBlock(
         flushCommand();
       }
       continue;
+    }
+    if (!shouldSkipSemicolonSplitForLine(innerRaw)) {
+      const expanded = expandBlockLineStatements(innerRaw);
+      if (shouldApplySemicolonStatementSplit(expanded) && expanded.length > 1) {
+        flushCommand();
+        for (const chunk of expanded) {
+          const t = chunk.trim();
+          if (!t) continue;
+          if (t.startsWith("#")) {
+            rule.steps.push({
+              type: "comment",
+              text: t,
+              loc: { line: innerNo, col: 1 },
+            });
+            continue;
+          }
+          const st = parseBlockStatement(filePath, [t], 0, { forRule: true });
+          rule.steps.push(st.step);
+        }
+        continue;
+      }
     }
     const st = parseBlockStatement(filePath, lines, i, { forRule: true });
     if (st.step.type !== "shell") {
