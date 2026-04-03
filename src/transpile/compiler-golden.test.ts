@@ -674,22 +674,23 @@ test("parser: send operator parses channel <- \"literal\"", () => {
 test("parser: top-level channel declarations parse and are stored", () => {
   const source = [
     "channel findings",
-    "channel report",
+    "channel report -> analyst",
     "workflow analyst() {",
     "  log \"ok\"",
     "}",
     "workflow default() {",
     `  findings <- "hi"`,
-    "  report -> analyst",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
   assert.deepStrictEqual(mod.channels.map((c) => c.name), ["findings", "report"]);
+  const reportCh = mod.channels.find((c) => c.name === "report")!;
+  assert.ok(reportCh.routes);
+  assert.equal(reportCh.routes!.length, 1);
+  assert.equal(reportCh.routes![0].value, "analyst");
   const defaultWf = mod.workflows.find((w) => w.name === "default")!;
   assert.equal(defaultWf.steps.length, 1);
   assert.equal(defaultWf.steps[0].type, "send");
-  assert.ok(defaultWf.routes);
-  assert.equal(defaultWf.routes![0].channel, "report");
 });
 
 test("parser: channel declaration must be single per line", () => {
@@ -701,7 +702,7 @@ test("parser: channel declaration must be single per line", () => {
   ].join("\n");
   assert.throws(
     () => parsejaiph(source, "/fake/entry.jh"),
-    /invalid channel declaration; expected exactly: channel <name>/,
+    /invalid channel declaration/,
   );
 });
 
@@ -717,7 +718,6 @@ test("validator: unknown local channel fails with required message", () => {
         "}",
         "workflow default() {",
         `  typo <- "x"`,
-        "  typo -> analyst",
         "}",
         "",
       ].join("\n"),
@@ -790,27 +790,26 @@ test("parser: <- inside quotes is not a send", () => {
   assert.equal(mod.workflows[0].steps[0].type, "log");
 });
 
-test("parser: route declaration parses into routes", () => {
+test("parser: channel route declaration parses into ChannelDef.routes", () => {
   const source = [
+    "channel findings -> analyst",
     "workflow analyst() {",
     "  log \"ok\"",
     "}",
     "workflow default() {",
-    "  findings -> analyst",
+    "  log \"ok\"",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
-  const defaultWf = mod.workflows.find((w) => w.name === "default")!;
-  assert.equal(defaultWf.steps.length, 0);
-  assert.ok(defaultWf.routes);
-  assert.equal(defaultWf.routes!.length, 1);
-  assert.equal(defaultWf.routes![0].channel, "findings");
-  assert.equal(defaultWf.routes![0].workflows.length, 1);
-  assert.equal(defaultWf.routes![0].workflows[0].value, "analyst");
+  const ch = mod.channels.find((c) => c.name === "findings")!;
+  assert.ok(ch.routes);
+  assert.equal(ch.routes!.length, 1);
+  assert.equal(ch.routes![0].value, "analyst");
 });
 
-test("parser: route with multiple targets", () => {
+test("parser: channel route with multiple targets", () => {
   const source = [
+    "channel findings -> a, b",
     "workflow a() {",
     "  log \"ok\"",
     "}",
@@ -818,15 +817,27 @@ test("parser: route with multiple targets", () => {
     "  log \"ok\"",
     "}",
     "workflow default() {",
-    "  findings -> a, b",
+    "  log \"ok\"",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
-  const defaultWf = mod.workflows.find((w) => w.name === "default")!;
-  assert.ok(defaultWf.routes);
-  assert.equal(defaultWf.routes![0].workflows.length, 2);
-  assert.equal(defaultWf.routes![0].workflows[0].value, "a");
-  assert.equal(defaultWf.routes![0].workflows[1].value, "b");
+  const ch = mod.channels.find((c) => c.name === "findings")!;
+  assert.ok(ch.routes);
+  assert.equal(ch.routes!.length, 2);
+  assert.equal(ch.routes![0].value, "a");
+  assert.equal(ch.routes![1].value, "b");
+});
+
+test("parser: route inside workflow body is a hard parse error", () => {
+  const source = [
+    "workflow default() {",
+    "  findings -> analyst",
+    "}",
+  ].join("\n");
+  assert.throws(
+    () => parsejaiph(source, "/fake/entry.jh"),
+    /route declarations belong at the top level/,
+  );
 });
 
 test("parser: capture + send is E_PARSE", () => {

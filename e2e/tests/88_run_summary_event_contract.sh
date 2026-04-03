@@ -39,7 +39,7 @@ config {
   run.inbox_parallel = true
 }
 
-channel ch
+channel ch -> receiver_a, receiver_b
 
 script emit_payload = `echo "contract-payload"`
 
@@ -61,7 +61,6 @@ workflow receiver_b(message, chan, sender) {
 workflow default() {
   log "contract-root-log"
   run sender()
-  ch -> receiver_a, receiver_b
 }
 EOF
 

@@ -77,7 +77,7 @@ config {
   run.inbox_parallel = true
 }
 
-channel data
+channel data -> sink
 
 script emit_m1 = `echo "m1"`
 script emit_m2 = `echo "m2"`
@@ -147,7 +147,6 @@ workflow default() {
   run s8()
   run s9()
   run s10()
-  data -> sink
 }
 EOF
 
@@ -178,7 +177,7 @@ config {
   run.inbox_parallel = true
 }
 
-channel ch
+channel ch -> target_x, target_y, target_z
 
 script emit_pa = `echo "pa"`
 script emit_pb = `echo "pb"`
@@ -218,7 +217,6 @@ workflow default() {
   run producer_a()
   run producer_b()
   run producer_c()
-  ch -> target_x, target_y, target_z
 }
 EOF
 
@@ -263,8 +261,8 @@ config {
   run.inbox_parallel = true
 }
 
-channel ch_raw
-channel ch_processed
+channel ch_raw -> processor
+channel ch_processed -> sink
 
 script emit_raw = `echo "raw-data"`
 script emit_processed = `echo "processed:$1"`
@@ -285,8 +283,6 @@ workflow sink(message, chan, sender) {
 
 workflow default() {
   run sender()
-  ch_raw -> processor
-  ch_processed -> sink
 }
 EOF
 
@@ -313,7 +309,7 @@ config {
   run.inbox_parallel = true
 }
 
-channel ch
+channel ch -> fail_a, fail_b, good
 
 script emit_msg = `echo "msg"`
 
@@ -347,7 +343,6 @@ workflow good(message, chan, sender) {
 
 workflow default() {
   run producer()
-  ch -> fail_a, fail_b, good
 }
 EOF
 
@@ -373,7 +368,7 @@ config {
   run.inbox_parallel = true
 }
 
-channel ev
+channel ev -> t1, t2
 
 script emit_e1 = `echo "e1"`
 script emit_e2 = `echo "e2"`
@@ -419,7 +414,6 @@ workflow default() {
   run s3()
   run s4()
   run s5()
-  ev -> t1, t2
 }
 EOF
 
@@ -456,7 +450,7 @@ config {
   run.inbox_parallel = true
 }
 
-channel ch
+channel ch -> t1, t2
 
 script soak_emit_i1 = `echo "i1"`
 script soak_emit_i2 = `echo "i2"`
@@ -490,7 +484,6 @@ workflow default() {
   run s1()
   run s2()
   run s3()
-  ch -> t1, t2
 }
 EOF
 
@@ -541,7 +534,7 @@ e2e::section "Sequential mode: same high-volume scenario produces identical resu
 # This confirms sequential path is not regressed by parallel-mode changes.
 
 e2e::file "stress_seq_mode.jh" <<'EOF'
-channel data
+channel data -> sink
 
 script seq_emit_m1 = `echo "m1"`
 script seq_emit_m2 = `echo "m2"`
@@ -611,7 +604,6 @@ workflow default() {
   run s8()
   run s9()
   run s10()
-  data -> sink
 }
 EOF
 

@@ -615,9 +615,9 @@ test("ACCEPTANCE: route with unknown workflow fails E_VALIDATE", () => {
     writeFileSync(
       join(root, "main.jh"),
       [
-        "channel findings",
+        "channel findings -> missing_wf",
         "workflow default() {",
-        "  findings -> missing_wf",
+        "  log \"ok\"",
         "}",
         "",
       ].join("\n"),
@@ -631,18 +631,34 @@ test("ACCEPTANCE: route with rule ref fails E_VALIDATE", () => {
     writeFileSync(
       join(root, "main.jh"),
       [
-        "channel findings",
+        "channel findings -> check",
         "rule check() {",
         "  run check_impl()",
         "}",
         'script check_impl = `true`',
         "workflow default() {",
-        "  findings -> check",
+        "  log \"ok\"",
         "}",
         "",
       ].join("\n"),
     );
     assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE rule "check" must be called with ensure/);
+  });
+});
+
+test("ACCEPTANCE: route inside workflow body is E_PARSE", () => {
+  withTempDir("jaiph-acc-route-in-body-", (root) => {
+    writeFileSync(
+      join(root, "main.jh"),
+      [
+        "channel findings",
+        "workflow default() {",
+        "  findings -> analyst",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(() => buildScripts(root, join(root, "out")), /route declarations belong at the top level/);
   });
 });
 
@@ -666,8 +682,8 @@ test("ACCEPTANCE: inbox.jh fixture builds successfully", () => {
     writeFileSync(
       join(root, "inbox.jh"),
       [
-        "channel findings",
-        "channel summary",
+        "channel findings -> analyst",
+        "channel summary -> reviewer",
         "channel final_summary",
         "",
         "script emit_findings = `echo '## findings'`",
@@ -694,8 +710,6 @@ test("ACCEPTANCE: inbox.jh fixture builds successfully", () => {
         "",
         "workflow default() {",
         "  run researcher()",
-        "  findings -> analyst",
-        "  summary -> reviewer",
         "}",
         "",
       ].join("\n"),

@@ -284,22 +284,22 @@ test("collectWorkflowChildren: skips comment steps", () => {
   assert.equal(items.length, 0);
 });
 
-test("collectWorkflowChildren: collects route declarations", () => {
+test("collectWorkflowChildren: collects channel-level route declarations", () => {
   const mod = minimalModule({
+    channels: [{
+      name: "events",
+      routes: [
+        { value: "handler1", loc: { line: 1, col: 20 } },
+        { value: "handler2", loc: { line: 1, col: 30 } },
+      ],
+      loc: { line: 1, col: 9 },
+    }],
     workflows: [{
       name: "default",
       comments: [],
       params: [],
       steps: [],
-      routes: [{
-        channel: "events",
-        workflows: [
-          { value: "handler1", loc: { line: 2, col: 3 } },
-          { value: "handler2", loc: { line: 2, col: 15 } },
-        ],
-        loc: { line: 2, col: 1 },
-      }],
-      loc: { line: 1, col: 1 },
+      loc: { line: 3, col: 1 },
     }],
   });
   const items = collectWorkflowChildren(mod, "default");

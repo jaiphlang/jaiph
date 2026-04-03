@@ -462,11 +462,19 @@ export class NodeWorkflowRuntime {
         routes: new Map(),
         queue: [],
       };
-      for (const route of resolved.workflow.routes ?? []) {
-        ctx.routes.set(
-          route.channel,
-          route.workflows.map((w) => w.value),
-        );
+      // Build route map from channel-level route declarations in the module.
+      // Only register on the entry workflow (not nested calls) so that sends from
+      // nested workflows bubble up to the orchestrator for dispatch, preserving
+      // the expected progress tree nesting.
+      if (!inheritCallerMetadataScope) {
+        const moduleAst = this.graph.modules.get(resolved.filePath)?.ast;
+        if (moduleAst) {
+          for (const ch of moduleAst.channels) {
+            if (ch.routes && ch.routes.length > 0) {
+              ctx.routes.set(ch.name, ch.routes.map((r) => r.value));
+            }
+          }
+        }
       }
       this.workflowCtxStack.push(ctx);
       try {

@@ -151,7 +151,7 @@ e2e::section "Background jobs with inbox send do not corrupt state"
 # ---------------------------------------------------------------------------
 
 e2e::file "bg_inbox.jh" <<'EOF'
-channel ch
+channel ch -> handler
 
 workflow sender() {
   ch <- echo "msg1"
@@ -165,7 +165,6 @@ workflow handler(message, chan, sender) {
 
 workflow default() {
   run sender()
-  ch -> handler
 }
 EOF
 

@@ -317,14 +317,14 @@ Jaiph: Running ensure_ci_passes.jh
                     data-sample-file="agent_inbox.jh">
                     <p>The <strong>inbox</strong> system lets workflows communicate through named channels.
                         A workflow sends a message with <code>&lt;-</code> (RHS: quoted literal, <code>${var}</code>, or
-                        <code>run</code> to a script) and a route declaration (<code>-&gt;</code>) dispatches it to
-                        receivers with
+                        <code>run</code> to a script) and an inline route on the channel declaration
+                        (<code>channel name -&gt; workflow</code>) dispatches it to receivers with
                         the dispatch values (message, channel, sender) bound to the target's declared parameters.
                     </p>
                     <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
-channel findings
-channel report
+channel findings -> analyst
+channel report -> reviewer
 
 workflow scanner() {
   log "Scanning for issues..."
@@ -342,9 +342,6 @@ workflow reviewer(message, chan, sender) {
 }
 
 workflow default() {
-  findings -> analyst
-  report -> reviewer
-
   run scanner()
 }</code></pre>
                     <p>Running the workflow:</p>
@@ -464,8 +461,9 @@ Jaiph: Running async.jh
                     completes.
                 </p>
                 <p><strong>Agent inbox pattern (channels).</strong> Use inbox channels as a way to pass messages between
-                    workflows. Declare channels once at top level with <code>channel &lt;name&gt;</code>, then use
-                    <code>channel_ref &lt;- ...</code> and <code>channel_ref -&gt; workflow</code>
+                    workflows. Declare channels at top level with <code>channel &lt;name&gt; [-&gt; workflow]</code>
+                    &mdash; routes are declared inline on the channel, not inside workflow bodies. Send with
+                    <code>channel_ref &lt;- ...</code>
                     (<code>channel_ref</code> can be local or imported, e.g. <code>shared.findings</code>).
                     See <a href="inbox">Inbox &amp; Dispatch</a>.
                 </p>
@@ -632,10 +630,12 @@ Jaiph: Running async.jh
                         <code>LOG</code> / <code>LOGERR</code> payloads keep the raw message string.
                     </dd>
 
-                    <dt><code>channel &lt;name&gt;</code> &middot; <code>channel_ref &lt;- ...</code> &middot;
-                        <code>channel_ref -&gt; workflow</code>
+                    <dt><code>channel &lt;name&gt; [-&gt; workflow]</code> &middot;
+                        <code>channel_ref &lt;- ...</code>
                     </dt>
-                    <dd>Declare channels at top level and then send/route messages between workflows.
+                    <dd>Declare channels at top level with optional inline routing
+                        (<code>channel findings -&gt; analyst</code>) and send messages between workflows.
+                        Routes belong on the channel declaration, not inside workflow bodies.
                         <code>channel_ref</code> supports local and imported refs (for example
                         <code>findings</code>, <code>shared.findings</code>). Undefined refs fail validation.
                         See <a href="inbox">Inbox &amp;

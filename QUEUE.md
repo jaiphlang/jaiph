@@ -12,57 +12,6 @@ Process rules:
 
 ---
 
-## Channel declarations with inline routing <!-- dev-ready -->
-
-**Goal**  
-Route declarations (`->`) belong at the top level alongside channel declarations, not inside workflow bodies. A channel declaration and its routing target are the same concern.
-
-**Current state**
-
-Channels are declared at top level, routes are inside workflow bodies:
-```jaiph
-channel findings
-channel report
-
-workflow default() {
-  findings -> analyst
-  report -> reviewer
-  run scanner()
-}
-```
-
-**After**
-
-```jaiph
-channel findings -> analyst
-channel report -> reviewer
-
-workflow default() {
-  run scanner()
-}
-```
-
-**What needs fixing**
-
-1. **AST** (`src/types.ts`): Extend `ChannelDef` with optional `routes?: WorkflowRefDef[]` to hold `-> target` declarations.
-2. **Parser** (`src/parse/channels.ts`): Extend `parseChannelLine` to accept optional `-> workflow` (or `-> w1, w2`) after the channel name.
-3. **Parser** (`src/parse/workflows.ts`): Remove `->` as a valid statement inside workflow bodies. Reject with error: `route declarations belong at the top level: channel name -> workflow`.
-4. **Runtime** (`src/runtime/kernel/node-workflow-runtime.ts`): Read routes from `ChannelDef.routes` instead of (or in addition to) `WorkflowDef.routes`. Build the route map from channel-level declarations.
-5. **Validator** (`src/transpile/validate.ts`): Validate that every channel route target points to an existing workflow. Validate that route targets are not rules or scripts.
-6. **Formatter** (`src/format/emit.ts`): Emit `channel name -> target` in formatted output.
-7. **Docs** (`docs/grammar.md`, `docs/inbox.md`): Update channel and routing syntax.
-8. **Tests**: Update golden AST fixtures, compiler tests, e2e inbox tests.
-
-**Acceptance criteria**
-
-- `channel findings -> analyst` parses with route stored in `ChannelDef`.
-- `channel findings -> analyst, auditor` parses with multiple route targets.
-- `findings -> analyst` inside a workflow body is a hard parse error with guidance.
-- Routes from channel declarations dispatch correctly at runtime.
-- All inbox e2e tests pass with updated fixtures.
-
----
-
 ## Match — keyword always first, no dollar prefix <!-- dev-ready -->
 
 **Goal**  

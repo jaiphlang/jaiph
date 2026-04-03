@@ -225,11 +225,10 @@ describe("emitModule", () => {
 
   it("formats channel routing", () => {
     const source = [
-      "channel findings",
+      "channel findings -> analyst",
       "",
       "workflow default() {",
       "  run scanner()",
-      "  findings -> analyst",
       "}",
       "",
     ].join("\n");
