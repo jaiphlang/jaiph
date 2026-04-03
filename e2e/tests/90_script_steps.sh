@@ -60,9 +60,9 @@ printf "%s|%s\n" "$1" "$2" > workflow_args.txt
 ```
 
 workflow called(a, b) {
-  ensure expect_args(arg1, arg2)
-  run write_args(arg1, arg2)
-  run write_workflow_args(arg1, arg2)
+  ensure expect_args(a, b)
+  run write_args(a, b)
+  run write_workflow_args(a, b)
 }
 
 workflow default() {

@@ -30,8 +30,8 @@ workflow researcher() {
   findings <- "## analysis results"
 }
 
-workflow analyst() {
-  log "Received: ${arg1}"
+workflow analyst(message, chan, sender) {
+  log "Received: ${message}"
 }
 
 workflow default() {
@@ -41,8 +41,9 @@ workflow default() {
 ```
 
 `researcher` sends data to the `findings` channel. The `default` workflow
-routes `findings` messages to `analyst`, which receives `${arg1}` = message,
-`${arg2}` = channel, `${arg3}` = sender (see [Trigger contract](#trigger-contract)).
+routes `findings` messages to `analyst`, which receives the message, channel
+name, and sender bound to its declared parameters `message`, `chan`, and `sender`
+(see [Trigger contract](#trigger-contract)).
 
 ## Design principles
 
@@ -95,7 +96,7 @@ Valid RHS forms:
 | Double-quoted literal | `findings <- "## results"` | Interpolated string |
 | Variable expansion | `findings <- ${var}` | Value of the variable |
 | `run` capture | `findings <- run build_msg()` | Return value or trimmed stdout of the workflow/script |
-| Empty (forward) | `findings <-` | Forwards the workflow's `${arg1}` |
+| Empty (forward) | `findings <-` | Forwards the workflow's first declared parameter |
 
 The RHS does **not** accept raw shell commands — see
 [Grammar — Managed calls vs command substitution](grammar.md#managed-calls-vs-command-substitution).
@@ -108,7 +109,7 @@ workflow researcher() {
 }
 ```
 
-If no RHS follows `<-`, the workflow's `${arg1}` argument is forwarded:
+If no RHS follows `<-`, the workflow's first declared parameter is forwarded:
 
 ```jh
 channel findings
@@ -128,8 +129,8 @@ Send and route parsing rules are specified in
 ### Route declaration: `<channel_ref> -> <workflow>`
 
 Tells the runtime: when a message arrives on that channel, call each listed
-**workflow** with positional args `${arg1}=message`, `${arg2}=channel`,
-`${arg3}=sender`.
+**workflow** that must declare exactly 3 parameters. The runtime binds the
+dispatch values (message, channel, sender) to whatever names the target declares.
 
 Targets must be **workflows** (local or imported as `alias.name`). **Rules**
 and **scripts** are not valid route targets — the compiler uses workflow-only
@@ -236,9 +237,10 @@ handling and `drainWorkflowQueue`.
      same queue and are processed in subsequent iterations.
    - For each message, look up targets for `channel` on **that** workflow's
      context. If there is no route, **skip** (silent drop).
-   - If there are targets, invoke each target with `${arg1}` / `${arg2}` /
-     `${arg3}` — **sequentially** in target-list order by default, or **all
-     targets concurrently** via `Promise.all` when `JAIPH_INBOX_PARALLEL=true`
+   - If there are targets, invoke each target, binding message, channel, and
+     sender to the target's 3 declared parameters — **sequentially** in
+     target-list order by default, or **all targets concurrently** via
+     `Promise.all` when `JAIPH_INBOX_PARALLEL=true`
      (see [Ordering guarantees](#ordering-guarantees)).
 6. Pop the workflow context and return.
 
@@ -314,17 +316,17 @@ default.
 
 ## Trigger contract
 
-Routed receivers get three positional arguments:
+Routed receivers get three dispatch values bound to their declared parameters:
 
-| Arg       | Value                                                         |
-|-----------|---------------------------------------------------------------|
-| `${arg1}` | Message payload (content sent to the channel)                 |
-| `${arg2}` | Channel name (e.g. `findings`)                              |
-| `${arg3}` | Sender name (the **workflow name** that performed the send) |
+| Param position | Dispatch value |
+|---|---|
+| 1st declared parameter | Message payload (content sent to the channel) |
+| 2nd declared parameter | Channel name (e.g. `findings`) |
+| 3rd declared parameter | Sender name (the **workflow name** that performed the send) |
 
 The environment variables `JAIPH_DISPATCH_CHANNEL` and `JAIPH_DISPATCH_SENDER`
 are **not** set by `NodeWorkflowRuntime`; receivers get channel and sender via
-`${arg2}` and `${arg3}`.
+their declared parameter names.
 
 - **`run_summary.jsonl`:** `NodeWorkflowRuntime` appends `INBOX_ENQUEUE`,
   `INBOX_DISPATCH_START`, and `INBOX_DISPATCH_COMPLETE` via
@@ -333,16 +335,16 @@ are **not** set by `NodeWorkflowRuntime`; receivers get channel and sender via
   from `jaiph run`, the line includes `channel`, `sender`, and
   `inbox_seq`. The full message body is always available on disk at
   `inbox/NNN-<channel>.txt`.
-- Workflows remain directly callable: `jaiph run analyst "some content"`. When
-  called directly, `${arg2}` and `${arg3}` are unset.
+- Workflows remain directly callable: `jaiph run analyst "some content" "findings" "researcher"`. When
+  called directly, the parameters are bound from CLI arguments.
 
 ## Progress tree integration
 
 - Route declarations appear as nodes in the progress tree where the static tree
   is derived from the AST.
-- Dispatched workflows appear like other `run` steps, with `arg1`–`arg3`
-  shown as positional parameters (e.g.
-  `workflow analyst (1="…", 2="findings", 3="scanner")`). The Node runtime does
+- Dispatched workflows appear like other `run` steps, with dispatch values
+  shown as named parameters (e.g.
+  `workflow analyst (message="…", chan="findings", sender="scanner")`). The Node runtime does
   not add a separate `dispatched` flag to `STEP_START`/`STEP_END` payloads
   for inbox routing.
 - Dispatched step output follows the same artifact rules as other managed steps.
@@ -361,9 +363,9 @@ Illustrative progress tree for a pipeline where `researcher` sends on
 workflow default
   ▸ workflow researcher
   ✓ workflow researcher (0s)
-  ▸ workflow analyst (1="Found 3 issues in auth module", 2="findings", 3="researcher")
+  ▸ workflow analyst (message="Found 3 issues in auth module", chan="findings", sender="researcher")
   ✓ workflow analyst (0s)
-  ▸ workflow reviewer (1="Summary: Found 3 issues in auth ...", 2="report", 3="analyst")
+  ▸ workflow reviewer (message="Summary: Found 3 issues in auth ...", chan="report", sender="analyst")
   ✓ workflow reviewer (0s)
 ✓ PASS workflow default (0.1s)
 ```

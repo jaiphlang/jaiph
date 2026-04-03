@@ -9,13 +9,13 @@ workflow scanner() {
 }
 
 workflow analyst(message, chan, sender) {
-  log "Analyzing message from ${arg3} on channel ${arg2}..."
-  report <- "Summary: ${arg1}"
+  log "Analyzing message from ${sender} on channel ${chan}..."
+  report <- "Summary: ${message}"
 }
 
 workflow reviewer(message, chan, sender) {
-  log "Reviewing message from ${arg3} on channel ${arg2}..."
-  logerr "Critical issue: ${arg1}"
+  log "Reviewing message from ${sender} on channel ${chan}..."
+  logerr "Critical issue: ${message}"
 }
 
 workflow default() {

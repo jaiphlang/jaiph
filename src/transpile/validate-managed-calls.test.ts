@@ -206,7 +206,7 @@ test("bare identifier arg: capture variable passes validation", () => {
   }
 });
 
-test("bare identifier arg: arg1 valid when workflow declares a parameter", () => {
+test("bare identifier arg: named param valid when workflow declares a parameter", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-bare-argn-"));
   const out = join(root, "out");
   try {
@@ -215,7 +215,7 @@ test("bare identifier arg: arg1 valid when workflow declares a parameter", () =>
       [
         'script greet = `echo "hello $1"`',
         "workflow default(name) {",
-        "  run greet(arg1)",
+        "  run greet(name)",
         "}",
         "",
       ].join("\n"),
@@ -424,7 +424,7 @@ test("bare identifier arg: unknown name error does not suggest interpolation wor
   }
 });
 
-test("E_VALIDATE: ${arg1} in log requires a workflow parameter", () => {
+test("E_VALIDATE: ${arg1} in log is unknown identifier", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-arg1-interp-"));
   try {
     writeFileSync(
@@ -438,7 +438,7 @@ test("E_VALIDATE: ${arg1} in log requires a workflow parameter", () => {
     );
     assert.throws(
       () => buildScripts(join(root, "m.jh"), join(root, "out")),
-      /this workflow does not declare that many parameters/,
+      /unknown identifier "arg1"/,
     );
   } finally {
     rmSync(root, { recursive: true, force: true });

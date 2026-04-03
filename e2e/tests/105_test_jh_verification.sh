@@ -22,7 +22,7 @@ e2e::file "lib.jh" <<'EOF'
 script validate_impl = `[ -n "$1" ] && echo "valid"`
 
 rule validate(input) {
-  run validate_impl(arg1)
+  run validate_impl(input)
 }
 
 script deploy_impl = `echo "deployed"`

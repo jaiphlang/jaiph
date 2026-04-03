@@ -187,7 +187,7 @@ script echo_response = ```
 echo "$1"
 ```
 rule check_arg(name) {
-  run check_arg_impl(arg1)
+  run check_arg_impl(name)
 }
 workflow default(name) {
   ensure check_arg(name)
@@ -227,7 +227,7 @@ script param_done_impl = ```
 echo "e2e-param-done"
 ```
 rule need_one(name) {
-  run need_one_impl(arg1)
+  run need_one_impl(name)
 }
 workflow default(name) {
   ensure need_one(name)

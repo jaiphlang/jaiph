@@ -12,51 +12,6 @@ Process rules:
 
 ---
 
-## Remove `${argN}` positional parameter access <!-- dev-ready -->
-
-**Goal**  
-Named workflow/rule parameters are the only way to access argument values. `${arg1}`, `${arg2}`, etc. are removed. If a workflow declares named params, those names are the only bindings. Undeclared params cannot be accessed at all.
-
-**Current state**
-
-Both named params and positional `${argN}` are available:
-```jaiph
-workflow analyst(message, chan, sender) {
-  log "From ${arg3} on ${arg2}: ${arg1}"   # works today
-  log "From ${sender} on ${chan}: ${message}"  # also works
-}
-```
-
-**After**
-
-```jaiph
-workflow analyst(message, chan, sender) {
-  log "From ${sender} on ${chan}: ${message}"  # only way
-  # log "From ${arg3}..."  — E_VALIDATE: unknown identifier "arg3"
-}
-```
-
-**What needs fixing**
-
-1. **Validator** (`src/transpile/validate-string.ts`): Remove the `${argN}` slot logic from `validateSimpleInterpolationIdentifiers`. The `/^arg([1-9])$/` check and `maxPositionalSlots` parameter should be removed. `${arg1}` becomes an unknown identifier error like any other undeclared name.
-2. **Runtime** (`src/runtime/kernel/node-workflow-runtime.ts`): Remove `arg1`…`arg9` injection into the orchestration variable scope. Only inject named parameter names.
-3. **Runtime** (`src/runtime/kernel/workflow-launch.ts`): Update CLI arg injection — args from command line must map to declared parameter names, not `arg1`/`arg2`.
-4. **Inbox dispatch**: Currently dispatches with `arg1=message`, `arg2=channel`, `arg3=sender`. Switch to positional binding against the target workflow's declared parameter names. If the target declares `(m, ch, s)`, bind `m=message`, `ch=channel`, `s=sender` (positional, names are free). The target **must** declare exactly 3 parameters — this is a hard compile-time check on channel route targets. Fewer or more is `E_VALIDATE`.
-5. **Docs** (`docs/grammar.md`): Remove all `${argN}` references. Update string interpolation table. Update inbox dispatch docs.
-6. **Tests**: Update all tests that use `${argN}`. Update e2e inbox tests.
-7. **First-party `.jh` files**: Audit and update any remaining `${argN}` usage.
-
-**Acceptance criteria**
-
-- `${arg1}` in a workflow/rule body is `E_VALIDATE: unknown identifier`.
-- Named params (`${paramName}`) work as before.
-- CLI positional args map to declared param names by position.
-- Inbox route targets must declare exactly 3 params — fewer or more is `E_VALIDATE`.
-- Inbox dispatch binds message/channel/sender positionally to whatever names the target declares.
-- All tests pass with updated fixtures.
-
----
-
 ## Channel declarations with inline routing <!-- dev-ready -->
 
 **Goal**  

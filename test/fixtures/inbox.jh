@@ -14,14 +14,14 @@ script summarize_findings = `echo "Summary of findings"`
 
 script review_summary = `echo "[reviewed] $1"`
 
-workflow analyst(name) {
-  run write_findings_file(arg1)
+workflow analyst(message, chan, sender) {
+  run write_findings_file(message)
   summary = run summarize_findings()
   summary <- "${summary}"
 }
 
-workflow reviewer(name) {
-  final_summary <- run review_summary(arg1)
+workflow reviewer(message, chan, sender) {
+  final_summary <- run review_summary(message)
 }
 
 # Orchestration / entrypoint workflow

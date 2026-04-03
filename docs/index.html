@@ -319,7 +319,7 @@ Jaiph: Running ensure_ci_passes.jh
                         A workflow sends a message with <code>&lt;-</code> (RHS: quoted literal, <code>${var}</code>, or
                         <code>run</code> to a script) and a route declaration (<code>-&gt;</code>) dispatches it to
                         receivers with
-                        <code>${arg1}=message</code>, <code>${arg2}=channel</code>, <code>${arg3}=sender</code>.
+                        the dispatch values (message, channel, sender) bound to the target's declared parameters.
                     </p>
                     <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
@@ -332,13 +332,13 @@ workflow scanner() {
 }
 
 workflow analyst(message, chan, sender) {
-  log "Analyzing message from ${arg3} on channel ${arg2}..."
-  report <- "Summary: ${arg1}"
+  log "Analyzing message from ${sender} on channel ${chan}..."
+  report <- "Summary: ${message}"
 }
 
 workflow reviewer(message, chan, sender) {
-  log "Reviewing message from ${arg3} on channel ${arg2}..."
-  logerr "Critical issue: ${arg1}"
+  log "Reviewing message from ${sender} on channel ${chan}..."
+  logerr "Critical issue: ${message}"
 }
 
 workflow default() {
@@ -393,8 +393,8 @@ workflow claude_say_hello() {
 }
 
 workflow default() {
-  run async cursor_say_hello(arg1)
-  run async claude_say_hello(arg1)
+  run async cursor_say_hello(name)
+  run async claude_say_hello(name)
 }</code></pre>
                     <p>Running the workflow:</p>
                     <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  ./async.jh</span>
@@ -424,10 +424,9 @@ Jaiph: Running async.jh
             <h2>Core features</h2>
             <div class="card doc-content">
                 <h3>Running a workflow</h3>
-                <pre><code class="language-bash">./path/to/main.jh "arg1" "arg2" "arg3"</code></pre>
-                <p>Arguments are bound to <strong>named parameters</strong> when declared
-                    (e.g. <code>workflow default(task)</code> &rarr; <code>${task}</code>)
-                    and to positional <code>${arg1}</code>, <code>${arg2}</code>, etc.
+                <pre><code class="language-bash">./path/to/main.jh "first" "second" "third"</code></pre>
+                <p>Arguments are bound to <strong>named parameters</strong> declared on the default workflow
+                    (e.g. <code>workflow default(task)</code> &rarr; <code>${task}</code>).
                     When you call a workflow, it executes the <code>workflow default</code> entrypoint.
                 </p>
                 <p>By convention, keep Jaiph workflow files in <code>&lt;project_root&gt;/.jaiph/</code> so

@@ -132,8 +132,8 @@ workflow s10() {
 
 script sink_impl = `echo "$1" >> sink_all.txt`
 
-workflow sink(message) {
-  run sink_impl(arg1)
+workflow sink(message, chan, sender) {
+  run sink_impl(message)
 }
 
 workflow default() {
@@ -198,20 +198,20 @@ workflow producer_c() {
 
 script target_x_impl = `echo "x:$1" >> fanout_log.txt`
 
-workflow target_x(message) {
-  run target_x_impl(arg1)
+workflow target_x(message, chan, sender) {
+  run target_x_impl(message)
 }
 
 script target_y_impl = `echo "y:$1" >> fanout_log.txt`
 
-workflow target_y(message) {
-  run target_y_impl(arg1)
+workflow target_y(message, chan, sender) {
+  run target_y_impl(message)
 }
 
 script target_z_impl = `echo "z:$1" >> fanout_log.txt`
 
-workflow target_z(message) {
-  run target_z_impl(arg1)
+workflow target_z(message, chan, sender) {
+  run target_z_impl(message)
 }
 
 workflow default() {
@@ -273,14 +273,14 @@ workflow sender() {
   ch_raw <- run emit_raw()
 }
 
-workflow processor(message) {
-  ch_processed <- run emit_processed(arg1)
+workflow processor(message, chan, sender) {
+  ch_processed <- run emit_processed(message)
 }
 
 script nested_sink_impl = `echo "$1" > nested_result.txt`
 
-workflow sink(message) {
-  run nested_sink_impl(arg1)
+workflow sink(message, chan, sender) {
+  run nested_sink_impl(message)
 }
 
 workflow default() {
@@ -326,7 +326,7 @@ echo "a ran" > fail_a_ran.txt
 exit 1
 ```
 
-workflow fail_a() {
+workflow fail_a(message, chan, sender) {
   run fail_a_impl()
 }
 
@@ -335,13 +335,13 @@ echo "b ran" > fail_b_ran.txt
 exit 1
 ```
 
-workflow fail_b() {
+workflow fail_b(message, chan, sender) {
   run fail_b_impl()
 }
 
 script good_impl = `echo "ok" > fail_good_ran.txt`
 
-workflow good() {
+workflow good(message, chan, sender) {
   run good_impl()
 }
 
@@ -403,14 +403,14 @@ workflow s5() {
 
 script t1_impl = `echo "t1:$1" >> artifact_log.txt`
 
-workflow t1(message) {
-  run t1_impl(arg1)
+workflow t1(message, chan, sender) {
+  run t1_impl(message)
 }
 
 script t2_impl = `echo "t2:$1" >> artifact_log.txt`
 
-workflow t2(message) {
-  run t2_impl(arg1)
+workflow t2(message, chan, sender) {
+  run t2_impl(message)
 }
 
 workflow default() {
@@ -476,14 +476,14 @@ workflow s3() {
 
 script soak_t1_impl = `echo "t1:$1" >> soak_log.txt`
 
-workflow t1(message) {
-  run soak_t1_impl(arg1)
+workflow t1(message, chan, sender) {
+  run soak_t1_impl(message)
 }
 
 script soak_t2_impl = `echo "t2:$1" >> soak_log.txt`
 
-workflow t2(message) {
-  run soak_t2_impl(arg1)
+workflow t2(message, chan, sender) {
+  run soak_t2_impl(message)
 }
 
 workflow default() {
@@ -596,8 +596,8 @@ workflow s10() {
 
 script seq_sink_impl = `echo "$1" >> seq_sink_all.txt`
 
-workflow sink(message) {
-  run seq_sink_impl(arg1)
+workflow sink(message, chan, sender) {
+  run seq_sink_impl(message)
 }
 
 workflow default() {

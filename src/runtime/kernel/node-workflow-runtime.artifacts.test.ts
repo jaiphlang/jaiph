@@ -74,7 +74,7 @@ test("NodeWorkflowRuntime: ensure recover receives failure payload in recover sc
         "workflow default(name, extra) {",
         "  ensure check_ready() recover {",
         '    run write_recover_received(arg1)',
-        '    run write_recover_arg2(arg2)',
+        '    run write_recover_arg2(extra)',
         "    run mark_ready()",
         "  }",
         "}",
