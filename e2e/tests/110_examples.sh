@@ -93,12 +93,12 @@ Jaiph: Running say_hello.jh
 
 workflow default
   ▸ rule name_was_provided
-  ·   ▸ script __inline_65a8c336a46d
-  ·   ✗ script __inline_65a8c336a46d (<time>)
+  ·   ▸ script validate_name
+  ·   ✗ script validate_name (<time>)
   ✗ rule name_was_provided (<time>)
 EOF
 
-e2e::expect_file "*script____inline_65a8c336a46d.err" <<'EOF'
+e2e::expect_file "*script__validate_name.err" <<'EOF'
 You didn't provide your name :(
 EOF
 
