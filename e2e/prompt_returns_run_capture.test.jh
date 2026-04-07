@@ -3,12 +3,12 @@ import "prompt_returns_run_capture.jh" as pr
 
 test "run capture is only the typed JSON string field" {
   mock prompt "{\"role\":\"surgical\"}"
-  got = pr.pick_role "task-a"
-  expectEqual got "surgical"
+  const got = run pr.pick_role("task-a")
+  expect_equal got "surgical"
 }
 
 test "JSON line with trailing text still parses" {
   mock prompt "{\"role\":\"optimizer\"}garbage"
-  got = pr.pick_role "x"
-  expectEqual got "optimizer"
+  const got = run pr.pick_role("x")
+  expect_equal got "optimizer"
 }

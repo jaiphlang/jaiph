@@ -50,9 +50,9 @@ import "workflow_greeting.jh" as w
 
 test "runs happy path and prints PASS" {
   mock prompt "e2e-greeting-mock"
-  response = w.default
-  expectContain response "e2e-greeting-mock"
-  expectContain response "done"
+  const response = run w.default()
+  expect_contain response "e2e-greeting-mock"
+  expect_contain response "done"
 }
 ```
 
@@ -93,11 +93,11 @@ Do not combine `mock prompt { ... }` with inline `mock prompt "..."` in the same
 
 ### Mock workflow
 
-Replaces a workflow body for this test case with the given shell commands:
+Replaces a workflow body for this test case with Jaiph steps:
 
 ```jaiph
-mock workflow w.greet {
-  echo "stubbed greeting"
+mock workflow w.greet() {
+  return "stubbed greeting"
 }
 ```
 
@@ -105,11 +105,11 @@ The reference format is `<alias>.<workflow>` (preferred) or `<name>` for a workf
 
 ### Mock rule
 
-Same as mock workflow, but for rules:
+Same as mock workflow, but for rules (body uses Jaiph steps, not shell):
 
 ```jaiph
-mock rule w.validate {
-  echo "stubbed validation"
+mock rule w.validate() {
+  return "stubbed validation"
 }
 ```
 
@@ -118,7 +118,7 @@ mock rule w.validate {
 Stubs a module `script` block:
 
 ```jaiph
-mock script w.helper {
+mock script w.helper() {
   echo "stubbed script"
 }
 ```
@@ -130,7 +130,7 @@ The former `mock function` syntax is no longer accepted — the parser emits an 
 Runs a workflow and captures its output into a variable:
 
 ```jaiph
-response = w.default
+const response = run w.default()
 ```
 
 **Capture semantics** match production behavior:
@@ -145,16 +145,13 @@ The test fails on non-zero exit unless `allow_failure` is specified.
 
 ```jaiph
 # With an argument
-response = w.default "my input"
+const response = run w.default("my input")
 
 # Allow failure
-response = w.default allow_failure
+const response = run w.default() allow_failure
 
 # With argument and allow failure
-response = w.default "my input" allow_failure
-
-# Alternate allow-failure form (spacing must match)
-response=$( { w.default 2>&1; } || true )
+const response = run w.default("my input") allow_failure
 ```
 
 ### Workflow run (no capture)
@@ -162,23 +159,19 @@ response=$( { w.default 2>&1; } || true )
 Runs a workflow without storing output. Still fails on non-zero exit unless `allow_failure` is appended:
 
 ```jaiph
-w.setup
-w.setup "arg"
-w.setup allow_failure
+run w.setup()
+run w.setup("arg")
+run w.setup() allow_failure
 ```
-
-### Shell steps
-
-Any line that is not a recognized step form is emitted as a shell command (useful for setup like `mkdir`, environment prep, etc.). Lines starting with `#` are comments and are skipped.
 
 ### Assertions
 
 After capturing workflow output, use these to check the result:
 
 ```jaiph
-expectContain response "expected substring"
-expectNotContain response "unwanted text"
-expectEqual response "exact expected value"
+expect_contain response "expected substring"
+expect_not_contain response "unwanted text"
+expect_equal response "exact expected value"
 ```
 
 Expected strings must be double-quoted. Escape `"` inside the string with `\"`. Failures print expected vs. actual previews.
@@ -198,7 +191,7 @@ testing workflow_greeting.test.jh
   ▸ runs happy path
   ✓ 0s
   ▸ handles error case
-  ✗ expectContain failed: "out" does not contain "expected" 1s
+  ✗ expect_contain failed: "out" does not contain "expected" 1s
 
 ✗ 1 / 2 test(s) failed
   - handles error case
@@ -243,10 +236,10 @@ test "default workflow prints greeting" {
   mock prompt "hello"
 
   # When
-  out = app.default
+  const out = run app.default()
 
   # Then
-  expectContain out "hello"
+  expect_contain out "hello"
 }
 ```
 

@@ -125,8 +125,8 @@ import "prompt_flow.jh" as p
 
 test "prompt returns mock response" {
   mock prompt "e2e-prompt-mock-response"
-  response = p.default
-  expectContain response "e2e-prompt-mock-response"
+  const response = run p.default()
+  expect_contain response "e2e-prompt-mock-response"
 }
 EOF
 
@@ -268,8 +268,8 @@ e2e::file "prompt_unmatched.test.jh" <<'EOF'
 import "prompt_unmatched.jh" as p
 
 test "when no mock, backend runs" {
-  response = p.default
-  expectContain response "e2e-backend-no-mock-output"
+  const response = run p.default()
+  expect_contain response "e2e-backend-no-mock-output"
 }
 EOF
 

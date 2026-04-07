@@ -232,10 +232,10 @@ import "say_hello.jh" as hello
 
 test "without name, workflow fails with validation message" {
   # When
-  response = hello.default allow_failure
+  const response = run hello.default() allow_failure
 
   # Then
-  expectEqual response "You didn't provide your name"
+  expect_equal response "You didn't provide your name"
 }
 
 test "with name, returns greeting and logs response" {
@@ -243,13 +243,13 @@ test "with name, returns greeting and logs response" {
   mock prompt "Hello Alice! Fun fact: Alice in Wonderland was written by Lewis Carroll."
 
   # When
-  hello.default "Alice"
+  run hello.default("Alice")
 }</code></pre>
                     <p>Example failing test run output (expected string omits the trailing <code>:(</code> from stderr):</p>
                     <pre><code class="jaiph-run" data-sample-output="failing-run"><span class="run-command">➜  ./say_hello.test.jh</span>
 testing say_hello.test.jh
   <span class="run-marker">▸</span> without name, workflow fails with validation message
-  <span class="run-fail">✗</span> expectEqual failed: <span class="run-time">0s</span>
+  <span class="run-fail">✗</span> expect_equal failed: <span class="run-time">0s</span>
     <span class="run-diff-minus">- You didn't provide your name</span>
     <span class="run-diff-plus">+ You didn't provide your name :(</span>
 
@@ -667,19 +667,19 @@ Jaiph: Running async.jh
                         assertions.
                     </dd>
 
-                    <dt><code>name = alias.workflow</code> &middot; <code>allow_failure</code></dt>
-                    <dd>Runs an imported workflow through the test harness (same managed semantics as <code>run</code>
-                        in
-                        <code>.jh</code> files): capture prefers an explicit <code>return</code> from the callee,
-                        otherwise
-                        combined output with internal event lines stripped. Add <code>allow_failure</code> when the test
-                        expects a non-zero exit. See <a href="testing">Testing</a>.
+                    <dt><code>const name = run alias.workflow()</code> &middot; <code>run alias.workflow()</code>
+                        &middot; <code>allow_failure</code></dt>
+                    <dd>Runs an imported workflow through the test harness with explicit <code>run</code> and
+                        optional <code>const</code> capture (same managed semantics as <code>run</code>
+                        in <code>.jh</code> files): capture prefers an explicit <code>return</code> from the callee,
+                        otherwise combined output with internal event lines stripped. Add <code>allow_failure</code>
+                        when the test expects a non-zero exit. See <a href="testing">Testing</a>.
                     </dd>
 
-                    <dt><code>expectEqual</code> &middot; <code>expectContain</code> &middot;
-                        <code>expectNotContain</code>
+                    <dt><code>expect_equal</code> &middot; <code>expect_contain</code> &middot;
+                        <code>expect_not_contain</code>
                     </dt>
-                    <dd>Core assertion helpers for exact matches and substring checks.</dd>
+                    <dd>Core assertion helpers for exact matches and substring checks (snake_case).</dd>
                 </dl>
             </div>
         </section>

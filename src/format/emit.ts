@@ -539,10 +539,8 @@ function emitTestBlock(test: TestBlockDef, pad: string): string {
 
 function emitTestStep(step: TestStepDef, pad: string): string[] {
   switch (step.type) {
-    case "test_shell":
-      return [`${pad}${step.command}`];
     case "test_mock_prompt":
-      return [`${pad}mock_prompt "${step.response}"`];
+      return [`${pad}mock prompt "${step.response}"`];
     case "test_mock_prompt_block": {
       const lines = [`${pad}mock prompt {`];
       for (const arm of step.arms) {
@@ -552,22 +550,39 @@ function emitTestStep(step: TestStepDef, pad: string): string[] {
       return lines;
     }
     case "test_run_workflow": {
-      const capture = step.captureName ? `${step.captureName} = ` : "";
-      const args = step.args && step.args.length > 0 ? ` ${step.args.map((a) => `"${a}"`).join(" ")}` : "";
+      const capture = step.captureName ? `const ${step.captureName} = ` : "";
+      const args = step.args && step.args.length > 0 ? step.args.map((a) => `"${a}"`).join(", ") : "";
       const allow = step.allowFailure ? " allow_failure" : "";
-      return [`${pad}${capture}${step.workflowRef}${args}${allow}`];
+      return [`${pad}${capture}run ${step.workflowRef}(${args})${allow}`];
     }
     case "test_expect_contain":
-      return [`${pad}expectContain ${step.variable} "${step.substring}"`];
+      return [`${pad}expect_contain ${step.variable} "${step.substring}"`];
     case "test_expect_not_contain":
-      return [`${pad}expectNotContain ${step.variable} "${step.substring}"`];
+      return [`${pad}expect_not_contain ${step.variable} "${step.substring}"`];
     case "test_expect_equal":
-      return [`${pad}expectEqual ${step.variable} "${step.expected}"`];
-    case "test_mock_workflow":
-      return [`${pad}mock_workflow ${step.ref} {`, `${pad}${pad}${step.body}`, `${pad}}`];
-    case "test_mock_rule":
-      return [`${pad}mock_rule ${step.ref} {`, `${pad}${pad}${step.body}`, `${pad}}`];
-    case "test_mock_script":
-      return [`${pad}mock_script ${step.ref} {`, `${pad}${pad}${step.body}`, `${pad}}`];
+      return [`${pad}expect_equal ${step.variable} "${step.expected}"`];
+    case "test_mock_workflow": {
+      const paramStr = `(${step.params.join(", ")})`;
+      const lines = [`${pad}mock workflow ${step.ref}${paramStr} {`];
+      lines.push(...emitSteps(step.steps, pad, pad + pad));
+      lines.push(`${pad}}`);
+      return lines;
+    }
+    case "test_mock_rule": {
+      const paramStr = `(${step.params.join(", ")})`;
+      const lines = [`${pad}mock rule ${step.ref}${paramStr} {`];
+      lines.push(...emitSteps(step.steps, pad, pad + pad));
+      lines.push(`${pad}}`);
+      return lines;
+    }
+    case "test_mock_script": {
+      const paramStr = `(${step.params.join(", ")})`;
+      const lines = [`${pad}mock script ${step.ref}${paramStr} {`];
+      for (const bodyLine of step.body.split("\n")) {
+        lines.push(bodyLine);
+      }
+      lines.push(`${pad}}`);
+      return lines;
+    }
   }
 }

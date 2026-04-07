@@ -7,7 +7,7 @@ import { parseTestBlock } from "./tests";
 test("parseTestBlock: parses basic test block header", () => {
   const lines = [
     'test "my test" {',
-    '  echo hello',
+    '  run lib.greet()',
     '}',
   ];
   const { testBlock, nextIndex } = parseTestBlock("test.jh", lines, 0);
@@ -27,7 +27,7 @@ test("parseTestBlock: rejects malformed header", () => {
 test("parseTestBlock: unterminated block throws", () => {
   const lines = [
     'test "open" {',
-    '  echo hello',
+    '  run lib.greet()',
   ];
   assert.throws(
     () => parseTestBlock("test.jh", lines, 0),
@@ -108,11 +108,11 @@ test("parseTestBlock: parses mock prompt block with regex and multiple arms", ()
 
 // === parseTestBlock: mock symbol blocks ===
 
-test("parseTestBlock: parses mock workflow block", () => {
+test("parseTestBlock: parses mock workflow block with parens", () => {
   const lines = [
     'test "t1" {',
-    '  mock workflow lib.greet {',
-    '    echo mocked',
+    '  mock workflow lib.greet() {',
+    '    return "mocked"',
     '  }',
     '}',
   ];
@@ -121,25 +121,46 @@ test("parseTestBlock: parses mock workflow block", () => {
   assert.equal(testBlock.steps[0].type, "test_mock_workflow");
   if (testBlock.steps[0].type === "test_mock_workflow") {
     assert.equal(testBlock.steps[0].ref, "lib.greet");
+    assert.deepEqual(testBlock.steps[0].params, []);
+    assert.equal(testBlock.steps[0].steps.length, 1);
   }
 });
 
-test("parseTestBlock: parses mock rule block", () => {
+test("parseTestBlock: parses mock workflow with named params", () => {
   const lines = [
     'test "t1" {',
-    '  mock rule lib.check {',
-    '    exit 0',
+    '  mock workflow lib.deploy(target, version) {',
+    '    log "mock deploy"',
+    '    return "deployed"',
+    '  }',
+    '}',
+  ];
+  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  if (testBlock.steps[0].type === "test_mock_workflow") {
+    assert.deepEqual(testBlock.steps[0].params, ["target", "version"]);
+    assert.equal(testBlock.steps[0].steps.length, 2);
+  }
+});
+
+test("parseTestBlock: parses mock rule block with parens", () => {
+  const lines = [
+    'test "t1" {',
+    '  mock rule lib.check() {',
+    '    return "ok"',
     '  }',
     '}',
   ];
   const { testBlock } = parseTestBlock("test.jh", lines, 0);
   assert.equal(testBlock.steps[0].type, "test_mock_rule");
+  if (testBlock.steps[0].type === "test_mock_rule") {
+    assert.deepEqual(testBlock.steps[0].params, []);
+  }
 });
 
-test("parseTestBlock: parses mock script block", () => {
+test("parseTestBlock: parses mock script block with parens", () => {
   const lines = [
     'test "t1" {',
-    '  mock script my_script {',
+    '  mock script my_script() {',
     '    echo hi',
     '  }',
     '}',
@@ -148,6 +169,21 @@ test("parseTestBlock: parses mock script block", () => {
   assert.equal(testBlock.steps[0].type, "test_mock_script");
   if (testBlock.steps[0].type === "test_mock_script") {
     assert.equal(testBlock.steps[0].ref, "my_script");
+    assert.deepEqual(testBlock.steps[0].params, []);
+  }
+});
+
+test("parseTestBlock: mock script with named params", () => {
+  const lines = [
+    'test "t1" {',
+    '  mock script lib.helper(dir) {',
+    '    echo "a.ts"',
+    '  }',
+    '}',
+  ];
+  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  if (testBlock.steps[0].type === "test_mock_script") {
+    assert.deepEqual(testBlock.steps[0].params, ["dir"]);
   }
 });
 
@@ -164,12 +200,54 @@ test("parseTestBlock: rejects mock function (legacy)", () => {
   );
 });
 
-// === parseTestBlock: assertions ===
-
-test("parseTestBlock: parses expectContain", () => {
+test("parseTestBlock: rejects mock workflow without parens", () => {
   const lines = [
     'test "t1" {',
-    '  expectContain result "expected text"',
+    '  mock workflow lib.greet {',
+    '    return "mocked"',
+    '  }',
+    '}',
+  ];
+  assert.throws(
+    () => parseTestBlock("test.jh", lines, 0),
+    /mock workflow requires parentheses/,
+  );
+});
+
+test("parseTestBlock: rejects mock rule without parens", () => {
+  const lines = [
+    'test "t1" {',
+    '  mock rule lib.check {',
+    '    return "ok"',
+    '  }',
+    '}',
+  ];
+  assert.throws(
+    () => parseTestBlock("test.jh", lines, 0),
+    /mock rule requires parentheses/,
+  );
+});
+
+test("parseTestBlock: rejects mock script without parens", () => {
+  const lines = [
+    'test "t1" {',
+    '  mock script lib.helper {',
+    '    echo hi',
+    '  }',
+    '}',
+  ];
+  assert.throws(
+    () => parseTestBlock("test.jh", lines, 0),
+    /mock script requires parentheses/,
+  );
+});
+
+// === parseTestBlock: assertions (snake_case) ===
+
+test("parseTestBlock: parses expect_contain", () => {
+  const lines = [
+    'test "t1" {',
+    '  expect_contain result "expected text"',
     '}',
   ];
   const { testBlock } = parseTestBlock("test.jh", lines, 0);
@@ -180,10 +258,10 @@ test("parseTestBlock: parses expectContain", () => {
   }
 });
 
-test("parseTestBlock: parses expectNotContain", () => {
+test("parseTestBlock: parses expect_not_contain", () => {
   const lines = [
     'test "t1" {',
-    '  expectNotContain result "bad text"',
+    '  expect_not_contain result "bad text"',
     '}',
   ];
   const { testBlock } = parseTestBlock("test.jh", lines, 0);
@@ -194,10 +272,10 @@ test("parseTestBlock: parses expectNotContain", () => {
   }
 });
 
-test("parseTestBlock: parses expectEqual", () => {
+test("parseTestBlock: parses expect_equal", () => {
   const lines = [
     'test "t1" {',
-    '  expectEqual result "exact value"',
+    '  expect_equal result "exact value"',
     '}',
   ];
   const { testBlock } = parseTestBlock("test.jh", lines, 0);
@@ -208,12 +286,36 @@ test("parseTestBlock: parses expectEqual", () => {
   }
 });
 
-// === parseTestBlock: workflow execution ===
-
-test("parseTestBlock: parses assignment with workflow ref", () => {
+test("parseTestBlock: rejects old camelCase expectContain", () => {
   const lines = [
     'test "t1" {',
-    '  result = lib.greet',
+    '  expectContain result "text"',
+    '}',
+  ];
+  assert.throws(
+    () => parseTestBlock("test.jh", lines, 0),
+    /camelCase assertions are no longer supported/,
+  );
+});
+
+test("parseTestBlock: rejects old camelCase expectEqual", () => {
+  const lines = [
+    'test "t1" {',
+    '  expectEqual result "text"',
+    '}',
+  ];
+  assert.throws(
+    () => parseTestBlock("test.jh", lines, 0),
+    /camelCase assertions are no longer supported/,
+  );
+});
+
+// === parseTestBlock: workflow execution (new syntax) ===
+
+test("parseTestBlock: parses const capture with run", () => {
+  const lines = [
+    'test "t1" {',
+    '  const result = run lib.greet()',
     '}',
   ];
   const { testBlock } = parseTestBlock("test.jh", lines, 0);
@@ -224,10 +326,10 @@ test("parseTestBlock: parses assignment with workflow ref", () => {
   }
 });
 
-test("parseTestBlock: parses assignment with args", () => {
+test("parseTestBlock: parses const capture with run and args", () => {
   const lines = [
     'test "t1" {',
-    '  result = lib.greet "world"',
+    '  const result = run lib.greet("world")',
     '}',
   ];
   const { testBlock } = parseTestBlock("test.jh", lines, 0);
@@ -236,10 +338,10 @@ test("parseTestBlock: parses assignment with args", () => {
   }
 });
 
-test("parseTestBlock: parses assignment with allow_failure", () => {
+test("parseTestBlock: parses const capture with allow_failure", () => {
   const lines = [
     'test "t1" {',
-    '  result = lib.greet allow_failure',
+    '  const result = run lib.greet() allow_failure',
     '}',
   ];
   const { testBlock } = parseTestBlock("test.jh", lines, 0);
@@ -248,10 +350,10 @@ test("parseTestBlock: parses assignment with allow_failure", () => {
   }
 });
 
-test("parseTestBlock: parses direct workflow call", () => {
+test("parseTestBlock: parses run without capture", () => {
   const lines = [
     'test "t1" {',
-    '  lib.greet',
+    '  run lib.greet()',
     '}',
   ];
   const { testBlock } = parseTestBlock("test.jh", lines, 0);
@@ -262,34 +364,66 @@ test("parseTestBlock: parses direct workflow call", () => {
   }
 });
 
-test("parseTestBlock: parses capture with ignore failure pattern", () => {
+test("parseTestBlock: parses run with args", () => {
   const lines = [
     'test "t1" {',
-    '  out=$({ lib.greet 2>&1; } || true )',
+    '  run lib.greet("Alice")',
     '}',
   ];
   const { testBlock } = parseTestBlock("test.jh", lines, 0);
-  assert.equal(testBlock.steps[0].type, "test_run_workflow");
   if (testBlock.steps[0].type === "test_run_workflow") {
-    assert.equal(testBlock.steps[0].captureName, "out");
-    assert.equal(testBlock.steps[0].workflowRef, "lib.greet");
-    assert.equal(testBlock.steps[0].allowFailure, true);
+    assert.deepEqual(testBlock.steps[0].args, ["Alice"]);
   }
 });
 
-// === parseTestBlock: shell fallback ===
+test("parseTestBlock: parses run with multiple args", () => {
+  const lines = [
+    'test "t1" {',
+    '  run lib.deploy("prod", "v2")',
+    '}',
+  ];
+  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  if (testBlock.steps[0].type === "test_run_workflow") {
+    assert.deepEqual(testBlock.steps[0].args, ["prod", "v2"]);
+  }
+});
 
-test("parseTestBlock: unrecognized line becomes shell step", () => {
+// === parseTestBlock: old syntax rejection ===
+
+test("parseTestBlock: rejects bare assignment without const/run", () => {
+  const lines = [
+    'test "t1" {',
+    '  result = lib.greet',
+    '}',
+  ];
+  assert.throws(
+    () => parseTestBlock("test.jh", lines, 0),
+    /use "const/,
+  );
+});
+
+test("parseTestBlock: rejects bare workflow call without run", () => {
+  const lines = [
+    'test "t1" {',
+    '  lib.greet',
+    '}',
+  ];
+  assert.throws(
+    () => parseTestBlock("test.jh", lines, 0),
+    /use "run/,
+  );
+});
+
+test("parseTestBlock: unrecognized line is E_PARSE", () => {
   const lines = [
     'test "t1" {',
     '  echo "hello world"',
     '}',
   ];
-  const { testBlock } = parseTestBlock("test.jh", lines, 0);
-  assert.equal(testBlock.steps[0].type, "test_shell");
-  if (testBlock.steps[0].type === "test_shell") {
-    assert.equal(testBlock.steps[0].command, '  echo "hello world"');
-  }
+  assert.throws(
+    () => parseTestBlock("test.jh", lines, 0),
+    /unrecognized test step/,
+  );
 });
 
 // === parseTestBlock: comments and empty lines ===
@@ -299,13 +433,13 @@ test("parseTestBlock: skips comments and empty lines", () => {
     'test "t1" {',
     '',
     '  # this is a comment',
-    '  echo hello',
+    '  run lib.greet()',
     '',
     '}',
   ];
   const { testBlock } = parseTestBlock("test.jh", lines, 0);
   assert.equal(testBlock.steps.length, 1);
-  assert.equal(testBlock.steps[0].type, "test_shell");
+  assert.equal(testBlock.steps[0].type, "test_run_workflow");
 });
 
 // === parseTestBlock: multiple steps ===
@@ -314,8 +448,8 @@ test("parseTestBlock: parses multiple steps", () => {
   const lines = [
     'test "multi" {',
     '  mock prompt "yes"',
-    '  result = lib.ask',
-    '  expectContain result "yes"',
+    '  const result = run lib.ask()',
+    '  expect_contain result "yes"',
     '}',
   ];
   const { testBlock, nextIndex } = parseTestBlock("test.jh", lines, 0);

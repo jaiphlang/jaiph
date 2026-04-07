@@ -4,6 +4,6 @@ import "prompt_flow.jh" as p
 
 test "prompt returns mock response" {
   mock prompt "e2e-prompt-mock-response"
-  response = p.default
-  expectContain response "e2e-prompt-mock-response"
+  const response = run p.default()
+  expect_contain response "e2e-prompt-mock-response"
 }

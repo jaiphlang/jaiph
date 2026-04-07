@@ -850,7 +850,7 @@ config {
 import "lib.jh" as lib
 
 test "broken test" {
-  out = lib.default
+  const out = run lib.default()
 --- lib.jh
 workflow default() {
   log "ok"
@@ -865,7 +865,7 @@ test "deprecated mock" {
   mock function some_func {
     echo "mocked"
   }
-  out = lib.default
+  const out = run lib.default()
 }
 --- lib.jh
 script some_func = `echo "real"`
@@ -1032,7 +1032,7 @@ import "lib.jh" as lib
 test "bad mock" {
   mock prompt {
   }
-  out = lib.default
+  const out = run lib.default()
 }
 --- lib.jh
 workflow default() {
@@ -1045,9 +1045,10 @@ workflow default() {
 import "lib.jh" as lib
 
 test "bad mock" {
-  mock workflow lib.default {
+  mock script lib.helper() {
     echo mocked
 --- lib.jh
+script helper = `echo real`
 workflow default() {
   log "ok"
 }
@@ -1059,47 +1060,47 @@ import "lib.jh" as lib
 
 test "bad mock" {
   mock prompt not_quoted
-  out = lib.default
+  const out = run lib.default()
 }
 --- lib.jh
 workflow default() {
   log "ok"
 }
 
-=== test: mock workflow with invalid ref
-# @expect error E_PARSE "unsupported top-level statement" @7:1
+=== test: mock workflow with invalid ref (no parens)
+# @expect error E_PARSE "unrecognized test step" @4:3
 --- input.test.jh
 import "lib.jh" as lib
 
 test "bad ref" {
   mock workflow a.b.c {
-    echo mocked
+    return "mocked"
   }
-  out = lib.default
+  const out = run lib.default()
 }
 --- lib.jh
 workflow default() {
   log "ok"
 }
 
-=== test: mock rule with invalid ref
-# @expect error E_PARSE "unsupported top-level statement" @7:1
+=== test: mock rule with invalid ref (no parens)
+# @expect error E_PARSE "unrecognized test step" @4:3
 --- input.test.jh
 import "lib.jh" as lib
 
 test "bad ref" {
   mock rule a.b.c {
-    echo mocked
+    return "mocked"
   }
-  out = lib.default
+  const out = run lib.default()
 }
 --- lib.jh
 workflow default() {
   log "ok"
 }
 
-=== test: mock script with invalid ref
-# @expect error E_PARSE "unsupported top-level statement" @7:1
+=== test: mock script with invalid ref (no parens)
+# @expect error E_PARSE "unrecognized test step" @4:3
 --- input.test.jh
 import "lib.jh" as lib
 
@@ -1107,7 +1108,7 @@ test "bad ref" {
   mock script a.b.c {
     echo mocked
   }
-  out = lib.default
+  const out = run lib.default()
 }
 --- lib.jh
 workflow default() {
@@ -1713,4 +1714,131 @@ rule check() {
 }
 workflow default() {
   ensure check() recover (failure) { }
+}
+
+=== test: old camelCase expectContain rejected
+# @expect error E_PARSE "camelCase assertions are no longer supported" @4:3
+--- input.test.jh
+import "lib.jh" as lib
+
+test "old syntax" {
+  expectContain out "hello"
+}
+--- lib.jh
+workflow default() {
+  log "ok"
+}
+
+=== test: old camelCase expectNotContain rejected
+# @expect error E_PARSE "camelCase assertions are no longer supported" @4:3
+--- input.test.jh
+import "lib.jh" as lib
+
+test "old syntax" {
+  expectNotContain out "hello"
+}
+--- lib.jh
+workflow default() {
+  log "ok"
+}
+
+=== test: old camelCase expectEqual rejected
+# @expect error E_PARSE "camelCase assertions are no longer supported" @4:3
+--- input.test.jh
+import "lib.jh" as lib
+
+test "old syntax" {
+  expectEqual out "hello"
+}
+--- lib.jh
+workflow default() {
+  log "ok"
+}
+
+=== test: bare assignment without const/run rejected
+# @expect error E_PARSE "to capture workflow output" @4:3
+--- input.test.jh
+import "lib.jh" as lib
+
+test "old syntax" {
+  out = lib.default
+}
+--- lib.jh
+workflow default() {
+  log "ok"
+}
+
+=== test: bare workflow call without run rejected
+# @expect error E_PARSE "to call a workflow in tests" @4:3
+--- input.test.jh
+import "lib.jh" as lib
+
+test "old syntax" {
+  lib.default
+}
+--- lib.jh
+workflow default() {
+  log "ok"
+}
+
+=== test: mock workflow without parens rejected
+# @expect error E_PARSE "mock workflow requires parentheses" @4:3
+--- input.test.jh
+import "lib.jh" as lib
+
+test "old syntax" {
+  mock workflow lib.default {
+    return "mocked"
+  }
+}
+--- lib.jh
+workflow default() {
+  log "ok"
+}
+
+=== test: mock rule without parens rejected
+# @expect error E_PARSE "mock rule requires parentheses" @4:3
+--- input.test.jh
+import "lib.jh" as lib
+
+test "old syntax" {
+  mock rule lib.check {
+    return "mocked"
+  }
+}
+--- lib.jh
+rule check() {
+  return "ok"
+}
+workflow default() {
+  log "ok"
+}
+
+=== test: mock script without parens rejected
+# @expect error E_PARSE "mock script requires parentheses" @4:3
+--- input.test.jh
+import "lib.jh" as lib
+
+test "old syntax" {
+  mock script lib.helper {
+    echo "mocked"
+  }
+}
+--- lib.jh
+script helper = `echo real`
+workflow default() {
+  log "ok"
+}
+
+=== test: unrecognized line is E_PARSE
+# @expect error E_PARSE "unrecognized test step" @4:3
+--- input.test.jh
+import "lib.jh" as lib
+
+test "bad step" {
+  echo "not valid"
+}
+--- lib.jh
+workflow default() {
+  log "ok"
 }

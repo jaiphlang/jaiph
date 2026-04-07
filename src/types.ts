@@ -274,7 +274,6 @@ export interface WorkflowMetadata {
 
 /** Step inside a test block. Only present when module is a test file (*.test.jh). */
 export type TestStepDef =
-  | { type: "test_shell"; command: string; loc: SourceLoc }
   | { type: "test_mock_prompt"; response: string; loc: SourceLoc }
   | {
       type: "test_mock_prompt_block";
@@ -292,9 +291,9 @@ export type TestStepDef =
   | { type: "test_expect_contain"; variable: string; substring: string; loc: SourceLoc }
   | { type: "test_expect_not_contain"; variable: string; substring: string; loc: SourceLoc }
   | { type: "test_expect_equal"; variable: string; expected: string; loc: SourceLoc }
-  | { type: "test_mock_workflow"; ref: string; body: string; loc: SourceLoc }
-  | { type: "test_mock_rule"; ref: string; body: string; loc: SourceLoc }
-  | { type: "test_mock_script"; ref: string; body: string; loc: SourceLoc };
+  | { type: "test_mock_workflow"; ref: string; params: string[]; steps: WorkflowStepDef[]; loc: SourceLoc }
+  | { type: "test_mock_rule"; ref: string; params: string[]; steps: WorkflowStepDef[]; loc: SourceLoc }
+  | { type: "test_mock_script"; ref: string; params: string[]; body: string; loc: SourceLoc };
 
 export interface TestBlockDef {
   description: string;
