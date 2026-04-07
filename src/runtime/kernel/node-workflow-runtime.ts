@@ -1043,6 +1043,7 @@ export class NodeWorkflowRuntime {
       const targets = ctx.routes.get(msg.channel) ?? [];
       if (targets.length === 0) continue;
       if (parallel) {
+        const inboxArgs = [msg.content, msg.channel, msg.sender];
         const dispatches = await Promise.all(
           targets.map(async (target) => {
             appendRunSummaryLine(
@@ -1061,7 +1062,7 @@ export class NodeWorkflowRuntime {
             const result = await this.executeRunRef(
               this.buildInboxDispatchScope(scope, target, msg),
               target,
-              "",
+              inboxArgs,
             );
             appendRunSummaryLine(
               JSON.stringify({
@@ -1084,6 +1085,7 @@ export class NodeWorkflowRuntime {
           if (d.status !== 0) return d;
         }
       } else {
+        const inboxArgs = [msg.content, msg.channel, msg.sender];
         for (const target of targets) {
           appendRunSummaryLine(
             JSON.stringify({
@@ -1101,7 +1103,7 @@ export class NodeWorkflowRuntime {
           const dispatch = await this.executeRunRef(
             this.buildInboxDispatchScope(scope, target, msg),
             target,
-            "",
+            inboxArgs,
           );
           appendRunSummaryLine(
             JSON.stringify({
@@ -1128,8 +1130,8 @@ export class NodeWorkflowRuntime {
     return `${filePath}::${name}`;
   }
 
-  private async executeRunRef(scope: Scope, ref: string, argsRaw: string): Promise<StepResult> {
-    const args = parseArgsRaw(argsRaw, scope.vars, scope.env);
+  private async executeRunRef(scope: Scope, ref: string, argsRaw: string | string[]): Promise<StepResult> {
+    const args = Array.isArray(argsRaw) ? argsRaw : parseArgsRaw(argsRaw, scope.vars, scope.env);
     const resolvedWorkflow = resolveWorkflowRef(this.graph, scope.filePath, { value: ref, loc: { line: 1, col: 1 } });
     if (resolvedWorkflow) {
       const mk = this.mockKey(resolvedWorkflow.filePath, resolvedWorkflow.workflow.name);

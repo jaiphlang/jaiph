@@ -175,7 +175,12 @@ display_out="$(e2e::run "display_inbox.jh" 2>/dev/null)"
 # assert_contains: CLI progress tree includes dispatch timing and indentation that varies
 e2e::assert_contains "${display_out}" "workflow default" "display workflow ran"
 e2e::assert_contains "${display_out}" "workflow analyst" "analyst dispatch is visible"
+# assert_contains: param values include dynamic message content and timing varies
+e2e::assert_contains "${display_out}" 'chan="findings"' "analyst dispatch shows channel param"
+e2e::assert_contains "${display_out}" 'sender="scanner"' "analyst dispatch shows sender param"
 e2e::assert_contains "${display_out}" "workflow reviewer" "reviewer dispatch is visible"
+e2e::assert_contains "${display_out}" 'chan="report"' "reviewer dispatch shows channel param"
+e2e::assert_contains "${display_out}" 'sender="analyst"' "reviewer dispatch shows sender param"
 e2e::assert_contains "${display_out}" "✓ PASS workflow default" "display workflow succeeds"
 e2e::expect_out_files "display_inbox.jh" 7
 e2e::expect_file "*script__print_reviewed.out" <<'EOF'

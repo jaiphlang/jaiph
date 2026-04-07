@@ -56,10 +56,10 @@ workflow default
   ▸ workflow scanner
   ·   ℹ Scanning for issues...
   ✓ workflow scanner (<time>)
-  ▸ workflow analyst
+  ▸ workflow analyst (message="\"Found 3 issues in auth module\"", chan="findings", sender="scanner")
   ·   ℹ Analyzing message from scanner on channel findings...
   ✓ workflow analyst (<time>)
-  ▸ workflow reviewer
+  ▸ workflow reviewer (message="\"Summary: \"Found 3 issues in aut...", chan="report", sender="analyst")
   ·   ℹ Reviewing message from analyst on channel report...
   ·   ! Critical issue: "Summary: "Found 3 issues in auth module""
   ✓ workflow reviewer (<time>)
