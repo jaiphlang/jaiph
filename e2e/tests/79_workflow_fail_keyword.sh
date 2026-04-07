@@ -23,4 +23,5 @@ code=$?
 set -e
 
 [[ ${code} -ne 0 ]] || e2e::fail "expected non-zero exit from fail step"
+# assert_contains: FAIL output includes absolute run-dir paths and timestamps which vary per invocation
 e2e::assert_contains "${out}" "contract-break" "stderr contains fail message"

@@ -125,7 +125,9 @@ JAIPH_DOCKER_ENABLED=true \
 # Then: agent env vars are forwarded to the container (ANTHROPIC_*, CURSOR_* prefixes)
 run_dir="$(e2e::run_dir "envforward.jh")"
 out_content="$(<"${run_dir}000003-script__check_env_impl.out")"
+# assert_contains: script .out may include additional env vars or runtime-injected lines
 e2e::assert_contains "${out_content}" "ANTHROPIC_API_KEY=test-key-123" "docker: ANTHROPIC_API_KEY forwarded"
+# assert_contains: script .out may include additional env vars or runtime-injected lines
 e2e::assert_contains "${out_content}" "CURSOR_SESSION=test-session-456" "docker: CURSOR_SESSION forwarded"
 
 rm -rf "${fallback_dir}"

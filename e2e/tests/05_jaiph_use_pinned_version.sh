@@ -18,6 +18,7 @@ e2e::section "jaiph use <package.json version> reinstalls via installer"
 
 export JAIPH_INSTALL_COMMAND="bash \"${E2E_REPO_ROOT}/docs/install\" \"${E2E_REPO_ROOT}\""
 use_combined="$(jaiph use "${VERSION}" 2>&1)"
+# assert_contains: installer output includes dynamic paths and progress text that vary per environment
 e2e::assert_contains "${use_combined}" "Reinstalling Jaiph from ref 'v${VERSION}'" \
   "jaiph use prints expected git ref for pinned version"
 
@@ -26,6 +27,7 @@ if [[ ! -x "${USE_BIN}/jaiph" ]]; then
 fi
 
 ver_out="$("${USE_BIN}/jaiph" --version 2>&1)"
+# assert_contains: version banner may include build metadata or git hash suffix
 e2e::assert_contains "${ver_out}" "jaiph ${VERSION}" \
   "reinstalled jaiph --version matches package.json"
 

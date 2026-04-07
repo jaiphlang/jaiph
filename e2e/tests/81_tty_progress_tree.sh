@@ -90,6 +90,7 @@ e2e::assert_equals "${tty_status}" "0" "jaiph run exits 0 in PTY"
 
 normalized_input="${tty_out//$'\r'/$'\n'}"
 normalized="$(e2e::normalize_output "${normalized_input}")"
+# assert_contains: PTY output includes ANSI escape sequences and redraw frames that make exact match infeasible
 e2e::assert_contains "${normalized}" "__JAIPH_TTY_RUNNING_SEEN__=1" "TTY stream observed RUNNING frame during live render"
 
 # Canonicalize dynamic TTY refreshes and keep stable tree lines only.

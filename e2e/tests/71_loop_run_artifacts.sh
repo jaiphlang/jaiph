@@ -48,7 +48,10 @@ for review_out_file in "${review_out_files[@]}"; do
   review_label="$(basename "${review_out_file}")"
   e2e::assert_file_exists "${review_out_file}" "${review_label} exists"
   review_out="$(<"${review_out_file}")"
+  # assert_contains: prompt transcript includes dynamic agent command output and timestamps
   e2e::assert_contains "${review_out}" "Command:" "${review_label} contains prompt command transcript"
+  # assert_contains: prompt transcript includes dynamic agent command output and timestamps
   e2e::assert_contains "${review_out}" "Prompt:" "${review_label} contains prompt section"
+  # assert_contains: prompt transcript includes dynamic agent command output and timestamps
   e2e::assert_contains "${review_out}" "Final answer:" "${review_label} contains prompt final section"
 done

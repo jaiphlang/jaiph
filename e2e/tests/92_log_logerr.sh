@@ -58,6 +58,9 @@ e2e::assert_file_exists "${summary_file}" "run summary exists for log/logerr con
 summary_content="$(<"${summary_file}")"
 # assert_contains: run_summary.jsonl is variable-length with timestamps and event fields
 e2e::assert_contains "${summary_content}" "\"type\":\"LOG\"" "summary includes LOG event"
+# assert_contains: run_summary.jsonl contains timestamps, UUIDs, and paths that vary per invocation
 e2e::assert_contains "${summary_content}" "artifact-stdout" "summary captures log message text"
+# assert_contains: run_summary.jsonl contains timestamps, UUIDs, and paths that vary per invocation
 e2e::assert_contains "${summary_content}" "\"type\":\"LOGERR\"" "summary includes LOGERR event"
+# assert_contains: run_summary.jsonl contains timestamps, UUIDs, and paths that vary per invocation
 e2e::assert_contains "${summary_content}" "artifact-stderr" "summary captures logerr message text"

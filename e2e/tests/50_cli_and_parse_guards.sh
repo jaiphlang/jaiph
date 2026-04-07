@@ -75,6 +75,7 @@ empty_out="$(cat "${empty_err}")"
 rm -f "${empty_err}"
 
 # Then
+# assert_contains: error message includes absolute directory path which varies per machine
 e2e::assert_contains "${empty_out}" "no *.test.jh files" "jaiph test reports no tests in directory"
 
 e2e::section "jaiph run requires workflow default"
@@ -100,6 +101,7 @@ no_default_out="$(cat "${no_default_err}")"
 rm -f "${no_default_err}"
 
 # Then
+# assert_contains: error message includes absolute source file path which varies per machine
 e2e::assert_contains "${no_default_out}" "requires workflow 'default'" "jaiph run explains missing default workflow"
 
 e2e::section "prompt parse guards reject shell substitution"
@@ -122,7 +124,9 @@ subshell_out="$(cat "${subshell_err}")"
 rm -f "${subshell_err}"
 
 # Then
+# assert_contains: compile error includes absolute source path which varies per machine
 e2e::assert_contains "${subshell_out}" "E_PARSE" "prompt command substitution emits E_PARSE"
+# assert_contains: compile error includes absolute source path which varies per machine
 e2e::assert_contains "${subshell_out}" "prompt cannot contain" "prompt command substitution is rejected with explicit guard"
 
 e2e::section "shell redirection around run/ensure is rejected"
@@ -148,8 +152,11 @@ redirect_out="$(cat "${redirect_err}")"
 rm -f "${redirect_err}"
 
 # Then
+# assert_contains: compile error includes absolute source path which varies per machine
 e2e::assert_contains "${redirect_out}" "E_PARSE" "run redirect emits E_PARSE"
+# assert_contains: compile error includes absolute source path which varies per machine
 e2e::assert_contains "${redirect_out}" "shell redirection" "run redirect error mentions shell redirection"
+# assert_contains: compile error includes absolute source path which varies per machine
 e2e::assert_contains "${redirect_out}" "script block" "run redirect error suggests script block"
 
 # Given — run with pipe
@@ -173,7 +180,9 @@ pipe_out="$(cat "${pipe_err}")"
 rm -f "${pipe_err}"
 
 # Then
+# assert_contains: compile error includes absolute source path which varies per machine
 e2e::assert_contains "${pipe_out}" "E_PARSE" "run pipe emits E_PARSE"
+# assert_contains: compile error includes absolute source path which varies per machine
 e2e::assert_contains "${pipe_out}" "shell redirection" "run pipe error mentions shell redirection"
 
 # Given — run with background &
@@ -197,5 +206,7 @@ bg_out="$(cat "${bg_err}")"
 rm -f "${bg_err}"
 
 # Then
+# assert_contains: compile error includes absolute source path which varies per machine
 e2e::assert_contains "${bg_out}" "E_PARSE" "run background emits E_PARSE"
+# assert_contains: compile error includes absolute source path which varies per machine
 e2e::assert_contains "${bg_out}" "shell redirection" "run background error mentions shell redirection"

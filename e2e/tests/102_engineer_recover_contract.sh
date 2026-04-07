@@ -50,7 +50,9 @@ e2e::assert_file_exists "${TEST_DIR}/.jaiph/tmp/recover.role" "recover keeps sec
 
 ci_log="$(<"${TEST_DIR}/.jaiph/tmp/ensure_ci_passes.last.log")"
 role="$(<"${TEST_DIR}/.jaiph/tmp/recover.role")"
+# assert_contains: recover payload aggregates stdout+stderr; exact merge format varies
 e2e::assert_contains "${ci_log}" "ci failure: tests failed" "recover \$1 contains failed rule stdout"
+# assert_contains: recover payload aggregates stdout+stderr; exact merge format varies
 e2e::assert_contains "${ci_log}" "expected 0 but got 1" "recover \$1 contains failed rule stderr"
 if [[ "${role}" != "surgical" ]]; then
   e2e::fail "recover \$2 preserves role argument"

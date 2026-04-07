@@ -24,10 +24,12 @@ chmod +x "${TEST_DIR}/source_named.jh"
 rm -rf "${TEST_DIR}/runs_cli"
 JAIPH_RUNS_DIR="${TEST_DIR}/runs_cli" jaiph run "${TEST_DIR}/source_named.jh" >/dev/null
 cli_run_dir="$(e2e::run_dir_at "${TEST_DIR}/runs_cli" "source_named.jh")"
+# assert_contains: run directory path includes absolute prefix and timestamp that vary per invocation
 e2e::assert_contains "${cli_run_dir}" "source_named.jh/" "jaiph run uses source file in run dir"
 
 # Direct shebang execution should follow the same naming contract.
 rm -rf "${TEST_DIR}/runs_direct"
 JAIPH_RUNS_DIR="${TEST_DIR}/runs_direct" "${TEST_DIR}/source_named.jh" >/dev/null
 direct_run_dir="$(e2e::run_dir_at "${TEST_DIR}/runs_direct" "source_named.jh")"
+# assert_contains: run directory path includes absolute prefix and timestamp that vary per invocation
 e2e::assert_contains "${direct_run_dir}" "source_named.jh/" "shebang execution uses source file in run dir"

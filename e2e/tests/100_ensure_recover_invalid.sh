@@ -35,7 +35,9 @@ err_out="$(cat "${err_file}")"
 rm -f "${err_file}"
 
 # Then
+# assert_contains: compile error includes absolute source path which varies per machine
 e2e::assert_contains "${err_out}" "E_PARSE" "args after recover emits E_PARSE"
+# assert_contains: compile error includes absolute source path which varies per machine
 e2e::assert_contains "${err_out}" "recover requires explicit bindings" "args after recover has clear error message"
 e2e::pass "ensure recover with args after recover fails with clear error"
 
@@ -65,7 +67,9 @@ err_out="$(cat "${err_file}")"
 rm -f "${err_file}"
 
 # Then
+# assert_contains: compile error includes absolute source path which varies per machine
 e2e::assert_contains "${err_out}" "E_PARSE" "multiple args after recover emits E_PARSE"
+# assert_contains: compile error includes absolute source path which varies per machine
 e2e::assert_contains "${err_out}" "recover requires explicit bindings" "multiple args after recover has clear error message"
 e2e::pass "ensure recover with multiple args after recover fails with clear error"
 
@@ -93,6 +97,8 @@ err_out="$(cat "${err_file}")"
 rm -f "${err_file}"
 
 # Then
+# assert_contains: compile error includes absolute source path which varies per machine
 e2e::assert_contains "${err_out}" "E_PARSE" "recover without block emits E_PARSE"
+# assert_contains: compile error includes absolute source path which varies per machine
 e2e::assert_contains "${err_out}" "recover requires explicit bindings" "recover without block has clear error message"
 e2e::pass "ensure recover without block fails with clear error"

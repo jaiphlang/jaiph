@@ -39,9 +39,8 @@ JAIPH_ENSURE_MAX_RETRIES=1 e2e::run "simple_echo.jh" >/dev/null 2>&1 || true
 
 e2e::assert_file_exists "${TEST_DIR}/recover_simple.txt" "recover wrote payload file"
 witness="$(<"${TEST_DIR}/recover_simple.txt")"
-# assert_contains: recover payload is merged stdout+stderr from failed rule; exact format varies
-e2e::assert_contains "${witness}" "Hello" "recover binding contains script stdout"
-e2e::assert_contains "${witness}" "Oops" "recover binding contains script stderr"
+expected_witness="$(printf 'Hello\nOops')"
+e2e::assert_equals "${witness}" "${expected_witness}" "recover binding contains script stdout+stderr"
 e2e::pass "simple script failure: stdout + stderr in recover payload"
 
 # ===================================================================
@@ -79,10 +78,8 @@ JAIPH_ENSURE_MAX_RETRIES=1 e2e::run "nested_payload.jh" >/dev/null 2>&1 || true
 
 e2e::assert_file_exists "${TEST_DIR}/recover_nested.log" "recover wrote nested payload"
 witness="$(<"${TEST_DIR}/recover_nested.log")"
-# assert_contains: recover payload aggregates nested rule log + script stdout + stderr; exact format varies
-e2e::assert_contains "${witness}" "outer start" "recover binding includes rule log output"
-e2e::assert_contains "${witness}" "nested-stdout" "recover binding includes nested script stdout"
-e2e::assert_contains "${witness}" "nested-stderr" "recover binding includes nested script stderr"
+expected_witness="$(printf 'outer start\nnested-stdout\nnested-stderr')"
+e2e::assert_equals "${witness}" "${expected_witness}" "recover binding aggregates rule log + script stdout + stderr"
 e2e::pass "nested rule+script failure: aggregated payload in recover"
 
 # ===================================================================
@@ -117,15 +114,8 @@ JAIPH_ENSURE_MAX_RETRIES=1 e2e::run "ci_payload.jh" >/dev/null 2>&1 || true
 
 e2e::assert_file_exists "${TEST_DIR}/ci_failure.log" "recover wrote CI failure payload"
 witness="$(<"${TEST_DIR}/ci_failure.log")"
-# assert_contains: recover payload is merged stdout+stderr from CI script; exact aggregation varies
-e2e::assert_contains "${witness}" "FAIL src/app.test.ts" "payload contains test failure header"
-e2e::assert_contains "${witness}" "Expected: 200" "payload contains expected value"
-e2e::assert_contains "${witness}" "Received: 500" "payload contains received value"
-e2e::assert_contains "${witness}" "Tests: 1 failed" "payload contains test summary"
-# Non-empty check
-if [[ -z "${witness}" ]]; then
-  e2e::fail "CI failure payload must be non-empty"
-fi
+expected_witness="$(printf 'FAIL src/app.test.ts\n  Expected: 200\n  Received: 500\nTests: 1 failed, 3 passed, 4 total')"
+e2e::assert_equals "${witness}" "${expected_witness}" "CI failure payload matches full expected content"
 e2e::pass "CI-style failure: multi-line payload captured"
 
 # ===================================================================
@@ -171,9 +161,8 @@ e2e::assert_file_exists "${TEST_DIR}/payload_attempt_1.txt" "first attempt paylo
 e2e::assert_file_exists "${TEST_DIR}/payload_attempt_2.txt" "second attempt payload written"
 attempt1="$(<"${TEST_DIR}/payload_attempt_1.txt")"
 attempt2="$(<"${TEST_DIR}/payload_attempt_2.txt")"
-# assert_contains: recover payload is merged stdout+stderr per attempt; exact aggregation varies
-e2e::assert_contains "${attempt1}" "attempt-1" "first recover gets attempt-1 output"
-e2e::assert_contains "${attempt2}" "attempt-2" "second recover gets attempt-2 output"
+e2e::assert_equals "${attempt1}" "attempt-1" "first recover gets attempt-1 output"
+e2e::assert_equals "${attempt2}" "attempt-2" "second recover gets attempt-2 output"
 e2e::pass "retry payload updates per attempt"
 
 # ===================================================================
