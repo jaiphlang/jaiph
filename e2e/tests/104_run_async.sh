@@ -45,15 +45,15 @@ e2e::expect_stdout "$run_output" <<'EXPECTED'
 Jaiph: Running fanout.jh
 
 workflow default
-① ▸ workflow do_a
-① ·   ▸ script write_a
-② ▸ workflow do_b
-② ·   ▸ script write_b
+ ₁▸ workflow do_a
+ ₁·   ▸ script write_a
+ ₂▸ workflow do_b
+ ₂·   ▸ script write_b
   ℹ done
-① ·   ✓ script write_a (<time>)
-① ✓ workflow do_a (<time>)
-② ·   ✓ script write_b (<time>)
-② ✓ workflow do_b (<time>)
+ ₁·   ✓ script write_a (<time>)
+ ₁✓ workflow do_a (<time>)
+ ₂·   ✓ script write_b (<time>)
+ ₂✓ workflow do_b (<time>)
 
 ✓ PASS workflow default (<time>)
 EXPECTED
@@ -127,10 +127,10 @@ e2e::expect_stdout "$interleave_output" <<'EXPECTED'
 Jaiph: Running async_interleave.jh
 
 workflow default
-① ▸ workflow slow
+ ₁▸ workflow slow
   ▸ script write_marker
-① ·   ℹ slow-done
-① ✓ workflow slow (<time>)
+ ₁·   ℹ slow-done
+ ₁✓ workflow slow (<time>)
   ✓ script write_marker (<time>)
 
 ✓ PASS workflow default (<time>)
@@ -194,14 +194,14 @@ e2e::expect_stdout "$depth_output" <<'EXPECTED'
 Jaiph: Running sibling_depth.jh
 
 workflow default
-① ▸ workflow branch_x
-① ·   ▸ script write_x
-② ▸ workflow branch_y
-② ·   ▸ script write_y
-① ·   ✓ script write_x (<time>)
-① ✓ workflow branch_x (<time>)
-② ·   ✓ script write_y (<time>)
-② ✓ workflow branch_y (<time>)
+ ₁▸ workflow branch_x
+ ₁·   ▸ script write_x
+ ₂▸ workflow branch_y
+ ₂·   ▸ script write_y
+ ₁·   ✓ script write_x (<time>)
+ ₁✓ workflow branch_x (<time>)
+ ₂·   ✓ script write_y (<time>)
+ ₂✓ workflow branch_y (<time>)
 
 ✓ PASS workflow default (<time>)
 EXPECTED
@@ -232,12 +232,12 @@ e2e::expect_stdout "$circled_output" <<'EXPECTED'
 Jaiph: Running circled.jh
 
 workflow default
-① ▸ workflow alpha
-② ▸ workflow beta
-① ·   ℹ alpha-done
-② ·   ℹ beta-done
-① ✓ workflow alpha (<time>)
-② ✓ workflow beta (<time>)
+ ₁▸ workflow alpha
+ ₂▸ workflow beta
+ ₁·   ℹ alpha-done
+ ₂·   ℹ beta-done
+ ₁✓ workflow alpha (<time>)
+ ₂✓ workflow beta (<time>)
 
 ✓ PASS workflow default (<time>)
 EXPECTED
@@ -282,17 +282,17 @@ e2e::expect_stdout "$nested_output" <<'EXPECTED'
 Jaiph: Running nested_async.jh
 
 workflow default
-① ▸ workflow outer
-① · ① ▸ workflow inner_a
-① · ② ▸ workflow inner_b
-② ▸ workflow side
-① · ① ·   ℹ inner-a
-① · ② ·   ℹ inner-b
-② ·   ℹ side-done
-① · ① ✓ workflow inner_a (<time>)
-① · ② ✓ workflow inner_b (<time>)
-② ✓ workflow side (<time>)
-① ✓ workflow outer (<time>)
+ ₁▸ workflow outer
+ ₁·  ₁▸ workflow inner_a
+ ₁·  ₂▸ workflow inner_b
+ ₂▸ workflow side
+ ₁·  ₁·   ℹ inner-a
+ ₁·  ₂·   ℹ inner-b
+ ₂·   ℹ side-done
+ ₁·  ₁✓ workflow inner_a (<time>)
+ ₁·  ₂✓ workflow inner_b (<time>)
+ ₂✓ workflow side (<time>)
+ ₁✓ workflow outer (<time>)
 
 ✓ PASS workflow default (<time>)
 EXPECTED
