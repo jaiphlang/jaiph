@@ -10,7 +10,7 @@ e2e::prepare_test_env "ensure_recover_output_contract"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
 # ===================================================================
-# 1. Simple script failure through rule: stdout + stderr in $1
+# 1. Simple script failure through rule: stdout + stderr in recover binding
 # ===================================================================
 e2e::section "recover payload includes script stdout and stderr"
 
@@ -28,8 +28,8 @@ rule simple_echo_rule() {
 }
 
 workflow default() {
-  ensure simple_echo_rule() recover {
-    run save_string_to_file(arg1, "recover_simple.txt")
+  ensure simple_echo_rule() recover (failure) {
+    run save_string_to_file(failure, "recover_simple.txt")
   }
 }
 EOF
@@ -40,8 +40,8 @@ JAIPH_ENSURE_MAX_RETRIES=1 e2e::run "simple_echo.jh" >/dev/null 2>&1 || true
 e2e::assert_file_exists "${TEST_DIR}/recover_simple.txt" "recover wrote payload file"
 witness="$(<"${TEST_DIR}/recover_simple.txt")"
 # assert_contains: recover payload is merged stdout+stderr from failed rule; exact format varies
-e2e::assert_contains "${witness}" "Hello" "recover \$1 contains script stdout"
-e2e::assert_contains "${witness}" "Oops" "recover \$1 contains script stderr"
+e2e::assert_contains "${witness}" "Hello" "recover binding contains script stdout"
+e2e::assert_contains "${witness}" "Oops" "recover binding contains script stderr"
 e2e::pass "simple script failure: stdout + stderr in recover payload"
 
 # ===================================================================
@@ -68,8 +68,8 @@ rule outer() {
 }
 
 workflow default() {
-  ensure outer() recover {
-    run save_string_to_file(arg1, "recover_nested.log")
+  ensure outer() recover (failure) {
+    run save_string_to_file(failure, "recover_nested.log")
   }
 }
 EOF
@@ -80,9 +80,9 @@ JAIPH_ENSURE_MAX_RETRIES=1 e2e::run "nested_payload.jh" >/dev/null 2>&1 || true
 e2e::assert_file_exists "${TEST_DIR}/recover_nested.log" "recover wrote nested payload"
 witness="$(<"${TEST_DIR}/recover_nested.log")"
 # assert_contains: recover payload aggregates nested rule log + script stdout + stderr; exact format varies
-e2e::assert_contains "${witness}" "outer start" "recover \$1 includes rule log output"
-e2e::assert_contains "${witness}" "nested-stdout" "recover \$1 includes nested script stdout"
-e2e::assert_contains "${witness}" "nested-stderr" "recover \$1 includes nested script stderr"
+e2e::assert_contains "${witness}" "outer start" "recover binding includes rule log output"
+e2e::assert_contains "${witness}" "nested-stdout" "recover binding includes nested script stdout"
+e2e::assert_contains "${witness}" "nested-stderr" "recover binding includes nested script stderr"
 e2e::pass "nested rule+script failure: aggregated payload in recover"
 
 # ===================================================================
@@ -106,8 +106,8 @@ rule ci_passes() {
 }
 
 workflow default() {
-  ensure ci_passes() recover {
-    run save_string_to_file(arg1, "ci_failure.log")
+  ensure ci_passes() recover (failure) {
+    run save_string_to_file(failure, "ci_failure.log")
   }
 }
 EOF
@@ -156,8 +156,8 @@ rule check_rule() {
 }
 
 workflow default() {
-  ensure check_rule() recover {
-    run save_string_to_file(arg1, "payload_attempt_${_jaiph_retry}.txt")
+  ensure check_rule() recover (failure, attempt) {
+    run save_string_to_file(failure, "payload_attempt_${attempt}.txt")
   }
 }
 EOF
@@ -191,8 +191,8 @@ rule passes_first_try() {
 }
 
 workflow default() {
-  ensure passes_first_try() recover {
-    run save_string_to_file(arg1, "false_payload.txt")
+  ensure passes_first_try() recover (failure) {
+    run save_string_to_file(failure, "false_payload.txt")
   }
 }
 EOF

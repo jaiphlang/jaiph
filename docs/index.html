@@ -264,12 +264,12 @@ testing say_hello.test.jh
                     data-sample-file="ensure_ci_passes.jh">
                     <p>This workflow uses Jaiph's <code>ensure ... recover</code> pattern to keep retrying a failing CI
                         command after an agent-assisted fix.
-                        Inside a recover block, <code>${arg1}</code> is the full merged stdout+stderr from the failed
-                        rule
-                        execution — including output from nested scripts and rules. The payload refreshes on each retry
-                        attempt. Persist <code>${arg1}</code> to a stable path (here under <code>.jaiph/tmp/</code>) and
-                        assert it is non-empty before the prompt, so the message about "inspect the log file" matches
-                        what is on disk.</p>
+                        The <code>recover (failure)</code> binding receives the full merged stdout+stderr from the failed
+                        rule execution — including output from nested scripts and rules. The payload refreshes on each
+                        retry attempt. An optional second binding (<code>recover (failure, attempt)</code>) provides the
+                        1-based attempt number. Persist the failure payload to a stable path (here under
+                        <code>.jaiph/tmp/</code>) and assert it is non-empty before the prompt, so the message about
+                        "inspect the log file" matches what is on disk.</p>
                     <p>The workflow uses custom <code>config</code> to enable agent YOLO mode. Otherwise the agent
                         cannot
                         run some commands (for example <code>npm test</code>). By default Jaiph runs agents in their
@@ -293,8 +293,8 @@ rule ci_passes() {
 script save_string_to_file = `printf '%s' "$1" > "$2"`
 
 workflow default() {
-  ensure ci_passes() recover {
-    run save_string_to_file(arg1, ".jaiph/tmp/ci_failure.log")
+  ensure ci_passes() recover (failure) {
+    run save_string_to_file(failure, ".jaiph/tmp/ci_failure.log")
     prompt "The CI check failed. Failure output is in .jaiph/tmp/ci_failure.log — fix the code so npm run test:ci passes."
   }
 }</code></pre>
@@ -562,11 +562,11 @@ Jaiph: Running async.jh
                             href="cli">CLI reference</a>).
                     </dd>
 
-                    <dt><code>ensure ref</code> &middot; <code>ensure ref(args) recover { ... }</code> &middot;
+                    <dt><code>ensure ref</code> &middot; <code>ensure ref(args) recover (name) { ... }</code> &middot;
                         <code>run ref</code> &middot; <code>run `body`(args)</code>
                     </dt>
                     <dd><code>ensure</code> executes a rule (with optional args); <code>recover</code> adds bounded
-                        retry repair logic; <code>run</code> calls another workflow or module script from a workflow
+                        retry repair logic with explicit bindings; <code>run</code> calls another workflow or module script from a workflow
                         (managed step &mdash; same value/log contract as <code>ensure</code>). Parentheses are
                         <strong>optional</strong> when passing zero arguments &mdash; <code>run setup</code> is
                         equivalent to <code>run setup()</code>. When arguments are present, parentheses are required.

@@ -224,7 +224,7 @@ export function parseEnsureStep(
     const recoverCol = innerRaw.indexOf("recover") + 1;
     fail(
       filePath,
-      'recover requires a { ... } block. Valid syntax: ensure <rule> [args] recover { ... }',
+      'recover requires explicit bindings and a body: recover (<name>) { ... } or recover (<name>, <attempt>) { ... }',
       innerNo,
       recoverCol,
     );
@@ -258,15 +258,36 @@ export function parseEnsureStep(
   const args = call.args;
   const recoverCol = innerRaw.indexOf("recover") + 1;
 
-  // Arguments between `recover` and `{` → error
-  if (right && !right.startsWith("{") && right.includes("{")) {
+  // Recover requires explicit bindings: recover (<name>) or recover (<name>, <attempt>)
+  if (!right.startsWith("(")) {
     fail(
       filePath,
-      'invalid ensure syntax: rule arguments must appear before \'recover\'. Valid syntax: ensure <rule> [args] recover { ... }',
+      'recover requires explicit bindings: recover (<name>) { ... } or recover (<name>, <attempt>) { ... }',
       innerNo,
       recoverCol,
     );
   }
+
+  const closeParen = right.indexOf(")");
+  if (closeParen === -1) {
+    fail(filePath, 'unterminated recover bindings: expected ")"', innerNo, recoverCol);
+  }
+  const bindingsStr = right.slice(1, closeParen).trim();
+  const bindingParts = bindingsStr.split(",").map((s) => s.trim()).filter(Boolean);
+  if (bindingParts.length === 0) {
+    fail(filePath, "recover requires at least one binding: recover (<name>) or recover (<name>, <attempt>)", innerNo, recoverCol);
+  }
+  if (bindingParts.length > 2) {
+    fail(filePath, "recover accepts at most two bindings: recover (<failure>, <attempt>)", innerNo, recoverCol);
+  }
+  for (const p of bindingParts) {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(p)) {
+      fail(filePath, `invalid recover binding name: "${p}" — must be a valid identifier`, innerNo, recoverCol);
+    }
+  }
+  const bindings = { failure: bindingParts[0], ...(bindingParts.length > 1 ? { attempt: bindingParts[1] } : {}) };
+
+  const afterBindings = right.slice(closeParen + 1).trim();
 
   const refLoc = { value: ref, loc: { line: innerNo, col: ensureCol } };
   const base = {
@@ -275,7 +296,7 @@ export function parseEnsureStep(
     ...(captureName ? { captureName } : {}),
   };
 
-  if (right === "{") {
+  if (afterBindings === "{") {
     let blockLines: string[] = [];
     let closeLineIdx = -1;
     for (let look = idx + 1; look < lines.length; look += 1) {
@@ -290,23 +311,27 @@ export function parseEnsureStep(
       fail(filePath, "recover block must contain at least one statement", innerNo, recoverCol);
     }
     const blockSteps = statements.map((s) => parseRecoverStatement(filePath, innerNo, 1, s));
-    return { step: { ...base, recover: { block: blockSteps } }, nextIdx: closeLineIdx };
+    return { step: { ...base, recover: { block: blockSteps, bindings } }, nextIdx: closeLineIdx };
   }
 
-  if (right.startsWith("{")) {
-    const closeBrace = right.indexOf("}");
+  if (afterBindings.startsWith("{")) {
+    const closeBrace = afterBindings.indexOf("}");
     if (closeBrace === -1) {
       fail(filePath, 'unterminated recover block, expected "}"', innerNo, recoverCol);
     }
-    const blockContent = right.slice(1, closeBrace).trim();
+    const blockContent = afterBindings.slice(1, closeBrace).trim();
     const statements = splitRecoverStatements(blockContent);
     if (statements.length === 0) {
       fail(filePath, "recover block must contain at least one statement", innerNo, recoverCol);
     }
     const blockSteps = statements.map((s) => parseRecoverStatement(filePath, innerNo, recoverCol, s));
-    return { step: { ...base, recover: { block: blockSteps } }, nextIdx: idx };
+    return { step: { ...base, recover: { block: blockSteps, bindings } }, nextIdx: idx };
   }
 
-  const singleStep = parseRecoverStatement(filePath, innerNo, recoverCol, right);
-  return { step: { ...base, recover: { single: singleStep } }, nextIdx: idx };
+  if (!afterBindings) {
+    fail(filePath, "recover requires a body after bindings", innerNo, recoverCol);
+  }
+
+  const singleStep = parseRecoverStatement(filePath, innerNo, recoverCol, afterBindings);
+  return { step: { ...base, recover: { single: singleStep, bindings } }, nextIdx: idx };
 }

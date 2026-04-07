@@ -30,7 +30,7 @@ workflow fix_it() {
 
 script echo_captured = `echo "captured=$1"`
 workflow default() {
-  val = ensure check_ready() recover run fix_it()
+  val = ensure check_ready() recover (failure) run fix_it()
   run echo_captured(val)
 }
 EOF
@@ -76,8 +76,8 @@ echo "$1" > recover_received.txt
 touch ready2.txt
 ```
 workflow default() {
-  ensure analyze() recover {
-    run recover_handler(arg1)
+  ensure analyze() recover (failure) {
+    run recover_handler(failure)
   }
 }
 EOF

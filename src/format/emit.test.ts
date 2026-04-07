@@ -91,7 +91,7 @@ describe("emitModule", () => {
   it("formats ensure with recover block", () => {
     const source = [
       "workflow default() {",
-      "  ensure ci_passes() recover {",
+      "  ensure ci_passes() recover (failure) {",
       '    prompt "fix it"',
       "  }",
       "}",

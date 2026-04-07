@@ -53,10 +53,11 @@ test("parseEnsureStep: ensure without parens parses as zero-arg call", () => {
 // === parseEnsureStep: recover with single statement ===
 
 test("parseEnsureStep: parses ensure with single recover statement", () => {
-  const lines = ['  ensure my_rule() recover log "failed"'];
-  const { step } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], 'my_rule() recover log "failed"');
+  const lines = ['  ensure my_rule() recover (failure) log "failed"'];
+  const { step } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], 'my_rule() recover (failure) log "failed"');
   if (step.type === "ensure") {
     assert.ok(step.recover);
+    assert.equal(step.recover.bindings.failure, "failure");
     if ("single" in step.recover) {
       assert.equal(step.recover.single.type, "log");
     }
@@ -64,10 +65,11 @@ test("parseEnsureStep: parses ensure with single recover statement", () => {
 });
 
 test("parseEnsureStep: parses ensure with recover run statement", () => {
-  const lines = ["  ensure my_rule() recover run fallback()"];
-  const { step } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], "my_rule() recover run fallback()");
+  const lines = ["  ensure my_rule() recover (err) run fallback()"];
+  const { step } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], "my_rule() recover (err) run fallback()");
   if (step.type === "ensure") {
     assert.ok(step.recover);
+    assert.equal(step.recover.bindings.failure, "err");
     if ("single" in step.recover) {
       assert.equal(step.recover.single.type, "run");
     }
@@ -75,8 +77,8 @@ test("parseEnsureStep: parses ensure with recover run statement", () => {
 });
 
 test("parseEnsureStep: parses ensure with recover wait statement", () => {
-  const lines = ["  ensure my_rule() recover wait"];
-  const { step } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], "my_rule() recover wait");
+  const lines = ["  ensure my_rule() recover (failure) wait"];
+  const { step } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], "my_rule() recover (failure) wait");
   if (step.type === "ensure") {
     assert.ok(step.recover);
     if ("single" in step.recover) {
@@ -86,8 +88,8 @@ test("parseEnsureStep: parses ensure with recover wait statement", () => {
 });
 
 test("parseEnsureStep: parses ensure with recover fail statement", () => {
-  const lines = ['  ensure my_rule() recover fail "reason"'];
-  const { step } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], 'my_rule() recover fail "reason"');
+  const lines = ['  ensure my_rule() recover (failure) fail "reason"'];
+  const { step } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], 'my_rule() recover (failure) fail "reason"');
   if (step.type === "ensure") {
     assert.ok(step.recover);
     if ("single" in step.recover) {
@@ -99,8 +101,8 @@ test("parseEnsureStep: parses ensure with recover fail statement", () => {
 // === parseEnsureStep: recover with inline block ===
 
 test("parseEnsureStep: parses ensure with inline recover block", () => {
-  const lines = ['  ensure my_rule() recover { log "a"; log "b" }'];
-  const { step } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], 'my_rule() recover { log "a"; log "b" }');
+  const lines = ['  ensure my_rule() recover (failure) { log "a"; log "b" }'];
+  const { step } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], 'my_rule() recover (failure) { log "a"; log "b" }');
   if (step.type === "ensure") {
     assert.ok(step.recover);
     if ("block" in step.recover) {
@@ -115,12 +117,12 @@ test("parseEnsureStep: parses ensure with inline recover block", () => {
 
 test("parseEnsureStep: parses ensure with multiline recover block", () => {
   const lines = [
-    "  ensure my_rule() recover {",
+    "  ensure my_rule() recover (failure) {",
     '    log "recovering"',
     "    run fallback()",
     "  }",
   ];
-  const { step, nextIdx } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], "my_rule() recover {");
+  const { step, nextIdx } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], "my_rule() recover (failure) {");
   if (step.type === "ensure") {
     assert.ok(step.recover);
     if ("block" in step.recover) {
@@ -132,42 +134,62 @@ test("parseEnsureStep: parses ensure with multiline recover block", () => {
   assert.equal(nextIdx, 3);
 });
 
+// === parseEnsureStep: recover bindings ===
+
+test("parseEnsureStep: parses recover with two bindings", () => {
+  const lines = ['  ensure my_rule() recover (failure, attempt) { log "retry" }'];
+  const { step } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], 'my_rule() recover (failure, attempt) { log "retry" }');
+  if (step.type === "ensure") {
+    assert.ok(step.recover);
+    assert.equal(step.recover.bindings.failure, "failure");
+    assert.equal(step.recover.bindings.attempt, "attempt");
+  }
+});
+
 // === parseEnsureStep: recover errors ===
 
 test("parseEnsureStep: recover at EOL without block throws", () => {
   const lines = ["  ensure my_rule() recover"];
   assert.throws(
     () => parseEnsureStep("test.jh", lines, 0, 1, lines[0], "my_rule() recover"),
-    /recover requires a \{ \.\.\. \} block/,
+    /recover requires explicit bindings/,
+  );
+});
+
+test("parseEnsureStep: recover without bindings throws", () => {
+  const lines = ["  ensure my_rule() recover {"];
+  assert.throws(
+    () => parseEnsureStep("test.jh", lines, 0, 1, lines[0], "my_rule() recover {"),
+    /recover requires explicit bindings/,
   );
 });
 
 test("parseEnsureStep: unterminated multiline recover block throws", () => {
   const lines = [
-    "  ensure my_rule() recover {",
+    "  ensure my_rule() recover (failure) {",
     '    log "recovering"',
   ];
   assert.throws(
-    () => parseEnsureStep("test.jh", lines, 0, 1, lines[0], "my_rule() recover {"),
+    () => parseEnsureStep("test.jh", lines, 0, 1, lines[0], "my_rule() recover (failure) {"),
     /unterminated recover block/,
   );
 });
 
 test("parseEnsureStep: empty recover block throws", () => {
   const lines = [
-    "  ensure my_rule() recover {",
+    "  ensure my_rule() recover (failure) {",
     "  }",
   ];
   assert.throws(
-    () => parseEnsureStep("test.jh", lines, 0, 1, lines[0], "my_rule() recover {"),
+    () => parseEnsureStep("test.jh", lines, 0, 1, lines[0], "my_rule() recover (failure) {"),
     /recover block must contain at least one statement/,
   );
 });
 
 test("parseEnsureStep: empty inline recover block throws", () => {
-  const lines = ["  ensure my_rule() recover { }"];
+  const lines = ["  ensure my_rule() recover (failure) { }"];
   assert.throws(
-    () => parseEnsureStep("test.jh", lines, 0, 1, lines[0], "my_rule() recover { }"),
+    () => parseEnsureStep("test.jh", lines, 0, 1, lines[0], "my_rule() recover (failure) { }"),
     /recover block must contain at least one statement/,
   );
 });
@@ -175,8 +197,8 @@ test("parseEnsureStep: empty inline recover block throws", () => {
 // === parseEnsureStep: recover statement types ===
 
 test("parseEnsureStep: recover with shell command", () => {
-  const lines = ["  ensure my_rule() recover echo fallback"];
-  const { step } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], "my_rule() recover echo fallback");
+  const lines = ["  ensure my_rule() recover (failure) echo fallback"];
+  const { step } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], "my_rule() recover (failure) echo fallback");
   if (step.type === "ensure") {
     assert.ok(step.recover);
     if ("single" in step.recover) {
@@ -186,8 +208,8 @@ test("parseEnsureStep: recover with shell command", () => {
 });
 
 test("parseEnsureStep: recover with logerr statement", () => {
-  const lines = ['  ensure my_rule() recover logerr "error msg"'];
-  const { step } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], 'my_rule() recover logerr "error msg"');
+  const lines = ['  ensure my_rule() recover (failure) logerr "error msg"'];
+  const { step } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], 'my_rule() recover (failure) logerr "error msg"');
   if (step.type === "ensure") {
     assert.ok(step.recover);
     if ("single" in step.recover) {

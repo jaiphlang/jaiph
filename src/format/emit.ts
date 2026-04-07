@@ -257,12 +257,14 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
       const ref = emitRef(step.ref, step.args, step.bareIdentifierArgs);
       const capture = step.captureName ? `${step.captureName} = ` : "";
       if (step.recover) {
+        const b = step.recover.bindings;
+        const bindStr = b.attempt ? `(${b.failure}, ${b.attempt})` : `(${b.failure})`;
         if ("single" in step.recover) {
           const recoverLines = emitStep(step.recover.single, pad, "");
           const recoverText = recoverLines.map((l) => l.trim()).join("\n");
-          lines.push(`${ci}${capture}ensure ${ref} recover ${recoverText}`);
+          lines.push(`${ci}${capture}ensure ${ref} recover ${bindStr} ${recoverText}`);
         } else {
-          lines.push(`${ci}${capture}ensure ${ref} recover {`);
+          lines.push(`${ci}${capture}ensure ${ref} recover ${bindStr} {`);
           lines.push(...emitSteps(step.recover.block, pad, ci + pad));
           lines.push(`${ci}}`);
         }
