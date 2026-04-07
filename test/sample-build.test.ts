@@ -1420,8 +1420,8 @@ test("jaiph test runs workflow with mocked prompts", () => {
         "",
         'test "workflow default" {',
         '  mock prompt "Mocked greeting output"',
-        "  response = h.default",
-        '  expectContain response "Mocked greeting output"',
+        "  const response = run h.default()",
+        '  expect_contain response "Mocked greeting output"',
         "}",
         "",
       ].join("\n"),
@@ -1500,8 +1500,8 @@ test("jaiph run shows nested workflow subtree and step timing", () => {
         "",
         'test "nested workflow" {',
         '  mock prompt "mocked"',
-        "  response = m.default",
-        '  expectContain response "mocked"',
+        "  const response = run m.default()",
+        '  expect_contain response "mocked"',
         "}",
         "",
       ].join("\n"),
@@ -1539,8 +1539,8 @@ test("jaiph test fails when no mock matches prompt", () => {
         'import "hello.jh" as h',
         "",
         'test "no mock for prompt" {',
-        "  response = h.default",
-        '  expectContain response "no mock"',
+        "  const response = run h.default()",
+        '  expect_contain response "no mock"',
         "}",
         "",
       ].join("\n"),
@@ -1557,7 +1557,7 @@ test("jaiph test fails when no mock matches prompt", () => {
     });
 
     assert.equal(testResult.status, 1, "expected test run to fail when prompt has no mock");
-    assert.match(testResult.stderr + testResult.stdout, /expectContain failed|FAIL|no mock|not found|command not found/);
+    assert.match(testResult.stderr + testResult.stdout, /expect_contain failed|FAIL|no mock|not found|command not found/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -1791,8 +1791,8 @@ test("jaiph test captures mock response into variable and variable is available 
         "",
         'test "capture mock" {',
         '  mock prompt "CAPTURED_MOCK_OUTPUT"',
-        "  response = c.default",
-        '  expectContain response "CAPTURED_MOCK_OUTPUT"',
+        "  const response = run c.default()",
+        '  expect_contain response "CAPTURED_MOCK_OUTPUT"',
         "}",
         "",
       ].join("\n"),
@@ -1837,9 +1837,9 @@ test("jaiph test inline mock prompt block with if/elif/else and first-match", ()
         '    /bye/ => "goodbye"',
         '    _ => "default"',
         "  }",
-        "  out = m.default",
-        '  expectContain out "hello"',
-        '  expectContain out "goodbye"',
+        "  const out = run m.default()",
+        '  expect_contain out "hello"',
+        '  expect_contain out "goodbye"',
         "}",
         "",
       ].join("\n"),
@@ -1881,8 +1881,8 @@ test("jaiph test fails when no mock branch matches and no wildcard", () => {
         "  mock prompt {",
         '    /other/ => "never"',
         "  }",
-        "  out = s.default",
-        '  expectContain out "x"',
+        "  const out = run s.default()",
+        '  expect_contain out "x"',
         "}",
         "",
       ].join("\n"),
@@ -1901,7 +1901,7 @@ test("jaiph test fails when no mock branch matches and no wildcard", () => {
     assert.equal(testResult.status, 1, "expected test to fail when no branch matches, no wildcard, and no backend in PATH");
     assert.match(
       testResult.stderr + testResult.stdout,
-      /workflow exited with status|no mock matched|no branch matched|expectContain failed|FAIL|not found|command not found/,
+      /workflow exited with status|no mock matched|no branch matched|expect_contain failed|FAIL|not found|command not found/,
     );
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -2049,9 +2049,9 @@ test("jaiph test with agent.backend = claude uses mock and does not invoke claud
         "",
         'test "mock overrides backend" {',
         '  mock prompt "mock-response"',
-        "  out = w.default",
-        '  expectContain out "mock-response"',
-        '  expectContain out "got:"',
+        "  const out = run w.default()",
+        '  expect_contain out "mock-response"',
+        '  expect_contain out "got:"',
         "}",
         "",
       ].join("\n"),
@@ -2109,9 +2109,9 @@ test("jaiph test when prompt is not mocked runs selected backend", () => {
         'import "flow.jh" as w',
         "",
         'test "no mock uses backend" {',
-        "  out = w.default",
-        '  expectContain out "backend-ran"',
-        '  expectContain out "got:"',
+        "  const out = run w.default()",
+        '  expect_contain out "backend-ran"',
+        '  expect_contain out "got:"',
         "}",
         "",
       ].join("\n"),
@@ -2158,8 +2158,8 @@ test("jaiph test passes for workflow using ensure only with mocks", () => {
         'import "ensure_only.jh" as e',
         "",
         'test "workflow default" {',
-        "  response = e.default",
-        '  expectContain response "ready-ok"',
+        "  const response = run e.default()",
+        '  expect_contain response "ready-ok"',
         "}",
         "",
       ].join("\n"),
@@ -2185,8 +2185,8 @@ test("parser parses test blocks in *.test.jh file", () => {
     'import "workflow.jh" as w',
     '',
     'test "runs default" {',
-    '  response = w.default',
-    '  expectContain response "PASS"',
+    '  const response = run w.default()',
+    '  expect_contain response "PASS"',
     "}",
     "",
   ].join("\n");
@@ -2207,28 +2207,27 @@ test("parser parses test blocks in *.test.jh file", () => {
   }
 });
 
-test("parser parses mock workflow, rule, and function in test block", () => {
+test("parser parses mock workflow, rule, and script in test block", () => {
   const source = [
     'import "app.jh" as app',
     "",
     'test "isolated orchestration" {',
-    "  mock workflow app.build {",
-    '    echo "build ok"',
-    "    exit 0",
+    "  mock workflow app.build() {",
+    '    log "build ok"',
+    '    return "done"',
     "  }",
     "",
-    "  mock rule app.policy_check {",
-    '    echo "policy blocked" >&2',
-    "    exit 1",
+    "  mock rule app.policy_check() {",
+    '    return "blocked"',
     "  }",
     "",
-    "  mock script app.changed_files {",
+    "  mock script app.changed_files() {",
     '    echo "a.ts"',
     '    echo "b.ts"',
     "  }",
     "",
-    "  out = app.default",
-    '  expectContain out "policy blocked"',
+    "  const out = run app.default()",
+    '  expect_contain out "blocked"',
     "}",
     "",
   ].join("\n");
@@ -2240,13 +2239,14 @@ test("parser parses mock workflow, rule, and function in test block", () => {
   assert.equal(steps[0].type, "test_mock_workflow");
   if (steps[0].type === "test_mock_workflow") {
     assert.equal(steps[0].ref, "app.build");
-    assert.ok(steps[0].body.includes('echo "build ok"'));
-    assert.ok(steps[0].body.includes("exit 0"));
+    assert.deepEqual(steps[0].params, []);
+    assert.equal(steps[0].steps.length, 2);
   }
   assert.equal(steps[1].type, "test_mock_rule");
   if (steps[1].type === "test_mock_rule") {
     assert.equal(steps[1].ref, "app.policy_check");
-    assert.ok(steps[1].body.includes("exit 1"));
+    assert.deepEqual(steps[1].params, []);
+    assert.equal(steps[1].steps.length, 1);
   }
   assert.equal(steps[2].type, "test_mock_script");
   if (steps[2].type === "test_mock_script") {
@@ -2298,24 +2298,22 @@ test("jaiph test runs *.test.jh with mock workflow, rule, and script", () => {
         'import "app.jh" as app',
         "",
         'test "isolated orchestration" {',
-        "  mock workflow app.build {",
-        '    echo "build ok"',
-        "    exit 0",
+        "  mock workflow app.build() {",
+        '    log "build ok"',
+        '    return "build ok"',
         "  }",
         "",
-        "  mock rule app.policy_check {",
-        '    echo "policy ok"',
-        "    exit 0",
+        "  mock rule app.policy_check() {",
+        '    return "policy ok"',
         "  }",
         "",
-        "  mock script app.changed_files {",
+        "  mock script app.changed_files() {",
         '    echo "a.ts"',
         '    echo "b.ts"',
         "  }",
         "",
-        "  out = app.default",
-        '  expectContain out "policy ok"',
-        '  expectContain out "build ok"',
+        "  const out = run app.default()",
+        '  expect_contain out "build ok"',
         "}",
         "",
       ].join("\n"),
@@ -2354,8 +2352,8 @@ test("jaiph test runs *.test.jh file with mocks", () => {
         "",
         'test "captures output" {',
         '  mock prompt "mocked"',
-        "  out = f.default",
-        '  expectContain out "done"',
+        "  const out = run f.default()",
+        '  expect_contain out "done"',
         "}",
         "",
       ].join("\n"),

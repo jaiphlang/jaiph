@@ -7,9 +7,9 @@ test "runs happy path and prints PASS" {
   mock prompt "e2e-greeting-mock"
 
   # When
-  response = w.default
+  const response = run w.default()
 
   # Then
-  expectContain response "e2e-greeting-mock"
-  expectContain response "done"
+  expect_contain response "e2e-greeting-mock"
+  expect_contain response "done"
 }

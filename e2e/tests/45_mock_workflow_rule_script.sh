@@ -36,24 +36,24 @@ e2e::file "app.test.jh" <<'EOF'
 import "app.jh" as app
 
 test "isolated orchestration" {
-  mock workflow app.build {
-    echo "build ok"
-    exit 0
+  mock workflow app.build() {
+    log "build ok"
+    return "build ok"
   }
 
-  mock rule app.policy_check {
-    echo "policy ok"
-    exit 0
+  mock rule app.policy_check() {
+    log "policy ok"
+    return "policy ok"
   }
 
-  mock script app.changed_files {
+  mock script app.changed_files() {
     echo "a.ts"
     echo "b.ts"
   }
 
-  out = app.default
-  expectContain out "policy ok"
-  expectContain out "build ok"
+  const out = run app.default()
+  expect_contain out "policy ok"
+  expect_contain out "build ok"
 }
 EOF
 

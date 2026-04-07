@@ -1,6 +1,7 @@
-import type { MatchArmDef, TestBlockDef } from "../types";
-import { colFromRaw, fail, hasUnescapedClosingQuote, isRef, stripQuotes } from "./core";
+import type { MatchArmDef, TestBlockDef, WorkflowStepDef } from "../types";
+import { colFromRaw, fail, hasUnescapedClosingQuote, isRef, parseParamList, stripQuotes } from "./core";
 import { parseMatchArms } from "./match";
+import { parseBraceBlockBody } from "./workflow-brace";
 
 function parseMockPromptBlock(
   filePath: string,
@@ -31,7 +32,7 @@ function parseMockPromptBlock(
 }
 
 /** Reads lines until "}" and returns body (trimmed lines joined) and nextIndex. */
-function parseMockSymbolBlock(
+function parseMockScriptBlock(
   filePath: string,
   lines: string[],
   startLineIndex: number,
@@ -53,6 +54,45 @@ function parseMockSymbolBlock(
 function decodeQuotedTestString(arg: string): string {
   const inner = stripQuotes(arg);
   return inner.replace(/\\"/g, '"').replace(/\\n/g, "\n").replace(/\\\\/g, "\\");
+}
+
+/** Parse mock params: "()" or "(a, b)" from a string like "alias.name(a, b) {" */
+function parseMockHeader(
+  filePath: string,
+  inner: string,
+  prefix: string,
+  lineNo: number,
+  col: number,
+): { ref: string; params: string[]; hasBlock: boolean } | null {
+  if (!inner.startsWith(prefix)) return null;
+  const after = inner.slice(prefix.length).trim();
+  // Match: ref(params) { or ref() {
+  const m = after.match(/^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*\(([^)]*)\)\s*\{\s*$/);
+  if (!m) return null;
+  const ref = m[1];
+  if (!isRef(ref)) {
+    fail(filePath, `mock ${prefix.split(/\s+/).pop()} ref must be <alias> or <alias>.<name>`, lineNo, col);
+  }
+  const params = m[2].trim() ? parseParamList(filePath, m[2], lineNo) : [];
+  return { ref, params, hasBlock: true };
+}
+
+/** Reject old mock syntax without parens: `mock workflow ref {` */
+function rejectOldMockSyntax(
+  filePath: string,
+  inner: string,
+  keyword: string,
+  lineNo: number,
+  col: number,
+): void {
+  const prefix = `mock ${keyword} `;
+  if (!inner.startsWith(prefix)) return;
+  const after = inner.slice(prefix.length).trim();
+  // Old syntax: ref { (no parens)
+  const oldMatch = after.match(/^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*\{\s*$/);
+  if (oldMatch) {
+    fail(filePath, `mock ${keyword} requires parentheses: mock ${keyword} ${oldMatch[1]}() { … }`, lineNo, col);
+  }
 }
 
 export function parseTestBlock(
@@ -92,6 +132,7 @@ export function parseTestBlock(
     const col = colFromRaw(innerRaw);
     const loc = { line: innerNo, col };
 
+    // --- mock prompt ---
     if (inner.startsWith("mock prompt ")) {
       const arg = inner.slice("mock prompt ".length).trim();
       if (arg === "{") {
@@ -114,43 +155,44 @@ export function parseTestBlock(
       });
       continue;
     }
-    const mockWorkflowMatch = inner.match(/^mock\s+workflow\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*\{\s*$/);
-    if (mockWorkflowMatch) {
-      const ref = mockWorkflowMatch[1];
-      if (!isRef(ref)) {
-        fail(filePath, "mock workflow ref must be <alias> or <alias>.<name>", innerNo, col);
-      }
-      const { body, nextIndex } = parseMockSymbolBlock(filePath, lines, i);
-      testBlock.steps.push({ type: "test_mock_workflow", ref, body, loc });
+
+    // --- mock workflow (new: requires parens, body is Jaiph steps) ---
+    rejectOldMockSyntax(filePath, inner, "workflow", innerNo, col);
+    const mockWfHeader = parseMockHeader(filePath, inner, "mock workflow ", innerNo, col);
+    if (mockWfHeader) {
+      const { steps, nextIdx } = parseBraceBlockBody(filePath, lines, i + 1, innerNo, { forRule: false });
+      testBlock.steps.push({ type: "test_mock_workflow", ref: mockWfHeader.ref, params: mockWfHeader.params, steps, loc });
+      i = nextIdx - 1;
+      continue;
+    }
+
+    // --- mock rule (new: requires parens, body is Jaiph steps) ---
+    rejectOldMockSyntax(filePath, inner, "rule", innerNo, col);
+    const mockRuleHeader = parseMockHeader(filePath, inner, "mock rule ", innerNo, col);
+    if (mockRuleHeader) {
+      const { steps, nextIdx } = parseBraceBlockBody(filePath, lines, i + 1, innerNo, { forRule: true });
+      testBlock.steps.push({ type: "test_mock_rule", ref: mockRuleHeader.ref, params: mockRuleHeader.params, steps, loc });
+      i = nextIdx - 1;
+      continue;
+    }
+
+    // --- mock script (new: requires parens, body stays shell) ---
+    rejectOldMockSyntax(filePath, inner, "script", innerNo, col);
+    const mockScriptHeader = parseMockHeader(filePath, inner, "mock script ", innerNo, col);
+    if (mockScriptHeader) {
+      const { body, nextIndex } = parseMockScriptBlock(filePath, lines, i);
+      testBlock.steps.push({ type: "test_mock_script", ref: mockScriptHeader.ref, params: mockScriptHeader.params, body, loc });
       i = nextIndex - 1;
       continue;
     }
-    const mockRuleMatch = inner.match(/^mock\s+rule\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*\{\s*$/);
-    if (mockRuleMatch) {
-      const ref = mockRuleMatch[1];
-      if (!isRef(ref)) {
-        fail(filePath, "mock rule ref must be <alias> or <alias>.<name>", innerNo, col);
-      }
-      const { body, nextIndex } = parseMockSymbolBlock(filePath, lines, i);
-      testBlock.steps.push({ type: "test_mock_rule", ref, body, loc });
-      i = nextIndex - 1;
-      continue;
-    }
-    const mockScriptMatch = inner.match(/^mock\s+script\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*\{\s*$/);
-    if (mockScriptMatch) {
-      const ref = mockScriptMatch[1];
-      if (!isRef(ref)) {
-        fail(filePath, "mock script ref must be <name> or <alias>.<name>", innerNo, col);
-      }
-      const { body, nextIndex } = parseMockSymbolBlock(filePath, lines, i);
-      testBlock.steps.push({ type: "test_mock_script", ref, body, loc });
-      i = nextIndex - 1;
-      continue;
-    }
+
+    // --- mock function (deprecated) ---
     if (/^mock\s+function\s+/.test(inner)) {
       fail(filePath, '"mock function" is no longer supported; use "mock script"', innerNo, col);
     }
-    const expectContainMatch = inner.match(/^expectContain\s+([A-Za-z_][A-Za-z0-9_]*)\s+"((?:[^"\\]|\\.)*)"\s*$/);
+
+    // --- expect_contain (snake_case) ---
+    const expectContainMatch = inner.match(/^expect_contain\s+([A-Za-z_][A-Za-z0-9_]*)\s+"((?:[^"\\]|\\.)*)"\s*$/);
     if (expectContainMatch) {
       testBlock.steps.push({
         type: "test_expect_contain",
@@ -160,7 +202,9 @@ export function parseTestBlock(
       });
       continue;
     }
-    const expectNotContainMatch = inner.match(/^expectNotContain\s+([A-Za-z_][A-Za-z0-9_]*)\s+"((?:[^"\\]|\\.)*)"\s*$/);
+
+    // --- expect_not_contain (snake_case) ---
+    const expectNotContainMatch = inner.match(/^expect_not_contain\s+([A-Za-z_][A-Za-z0-9_]*)\s+"((?:[^"\\]|\\.)*)"\s*$/);
     if (expectNotContainMatch) {
       testBlock.steps.push({
         type: "test_expect_not_contain",
@@ -170,7 +214,9 @@ export function parseTestBlock(
       });
       continue;
     }
-    const expectEqualMatch = inner.match(/^expectEqual\s+([A-Za-z_][A-Za-z0-9_]*)\s+"((?:[^"\\]|\\.)*)"\s*$/);
+
+    // --- expect_equal (snake_case) ---
+    const expectEqualMatch = inner.match(/^expect_equal\s+([A-Za-z_][A-Za-z0-9_]*)\s+"((?:[^"\\]|\\.)*)"\s*$/);
     if (expectEqualMatch) {
       testBlock.steps.push({
         type: "test_expect_equal",
@@ -180,31 +226,31 @@ export function parseTestBlock(
       });
       continue;
     }
-    const captureWithIgnoreFailureMatch = inner.match(
-      /^([A-Za-z_][A-Za-z0-9_]*)=\$\(\{\s*([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*)\s+2>&1;\s*\}\s*\|\|\s*true\s*\)\s*(?:#.*)?$/,
-    );
-    if (captureWithIgnoreFailureMatch) {
-      const captureName = captureWithIgnoreFailureMatch[1];
-      const workflowRef = captureWithIgnoreFailureMatch[2];
-      testBlock.steps.push({
-        type: "test_run_workflow",
-        captureName,
-        workflowRef,
-        allowFailure: true,
-        loc,
-      });
-      continue;
+
+    // --- Reject old camelCase assertions ---
+    if (/^expectContain\s/.test(inner)) {
+      fail(filePath, 'camelCase assertions are no longer supported; use "expect_contain"', innerNo, col);
     }
-    const assignMatch = inner.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s+"((?:[^"\\]|\\.)*)")?(?:\s+(allow_failure))?\s*$/);
-    if (assignMatch) {
-      const captureName = assignMatch[1];
-      const workflowRef = assignMatch[2];
-      const arg1 = assignMatch[3];
-      const allowFailure = assignMatch[4] === "allow_failure";
+    if (/^expectNotContain\s/.test(inner)) {
+      fail(filePath, 'camelCase assertions are no longer supported; use "expect_not_contain"', innerNo, col);
+    }
+    if (/^expectEqual\s/.test(inner)) {
+      fail(filePath, 'camelCase assertions are no longer supported; use "expect_equal"', innerNo, col);
+    }
+
+    // --- const capture = run ref("args") [allow_failure] ---
+    const constRunMatch = inner.match(
+      /^const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*\(([^)]*)\)(?:\s+(allow_failure))?\s*$/,
+    );
+    if (constRunMatch) {
+      const captureName = constRunMatch[1];
+      const workflowRef = constRunMatch[2];
       if (!isRef(workflowRef)) {
-        fail(filePath, "assignment in test must be: name = <workflow_ref> or name = <workflow_ref> \"arg\" or name = <workflow_ref> allow_failure", innerNo, col);
+        fail(filePath, "const ... = run must target a valid reference: const name = run ref(args)", innerNo, col);
       }
-      const args: string[] = arg1 !== undefined ? [arg1.replace(/\\"/g, '"').replace(/\\n/g, "\n")] : [];
+      const argsRaw = constRunMatch[3].trim();
+      const args: string[] = argsRaw ? parseTestCallArgs(argsRaw) : [];
+      const allowFailure = constRunMatch[4] === "allow_failure";
       testBlock.steps.push({
         type: "test_run_workflow",
         captureName,
@@ -215,17 +261,19 @@ export function parseTestBlock(
       });
       continue;
     }
-    const runWorkflowMatch = inner.match(
-      /^([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*)(?:\s+"((?:[^"\\]|\\.)*)")?(?:\s+(allow_failure))?\s*$/,
+
+    // --- run ref("args") [allow_failure] (no capture) ---
+    const runMatch = inner.match(
+      /^run\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*\(([^)]*)\)(?:\s+(allow_failure))?\s*$/,
     );
-    if (runWorkflowMatch) {
-      const workflowRef = runWorkflowMatch[1];
-      const arg1 = runWorkflowMatch[2];
-      const allowFailure = runWorkflowMatch[3] === "allow_failure";
+    if (runMatch) {
+      const workflowRef = runMatch[1];
       if (!isRef(workflowRef)) {
-        fail(filePath, "workflow run in test must be <alias>.<workflow>", innerNo, col);
+        fail(filePath, "run in test must target a valid reference: run ref(args)", innerNo, col);
       }
-      const args: string[] = arg1 !== undefined ? [arg1.replace(/\\"/g, '"').replace(/\\n/g, "\n")] : [];
+      const argsRaw = runMatch[2].trim();
+      const args: string[] = argsRaw ? parseTestCallArgs(argsRaw) : [];
+      const allowFailure = runMatch[3] === "allow_failure";
       testBlock.steps.push({
         type: "test_run_workflow",
         workflowRef,
@@ -235,15 +283,57 @@ export function parseTestBlock(
       });
       continue;
     }
-    testBlock.steps.push({
-      type: "test_shell",
-      command: innerRaw,
-      loc,
-    });
+
+    // --- Reject old syntax: bare assignment without const/run ---
+    const oldAssignMatch = inner.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)(?:\s|$)/);
+    if (oldAssignMatch) {
+      fail(filePath, `use "const ${oldAssignMatch[1]} = run ${oldAssignMatch[2]}(…)" to capture workflow output`, innerNo, col);
+    }
+
+    // --- Reject old syntax: bare workflow call without run ---
+    const oldBareCallMatch = inner.match(/^([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*)(?:\s|$)/);
+    if (oldBareCallMatch) {
+      fail(filePath, `use "run ${oldBareCallMatch[1]}(…)" to call a workflow in tests`, innerNo, col);
+    }
+
+    // --- No fallback: reject unrecognized lines ---
+    fail(filePath, `unrecognized test step: ${inner}`, innerNo, col);
   }
 
   if (i >= lines.length) {
     fail(filePath, `unterminated test block: ${description}`, lineNo);
   }
   return { testBlock, nextIndex: i + 1 };
+}
+
+/** Parse comma-separated args from inside parentheses: "arg1", "arg2" */
+function parseTestCallArgs(argsRaw: string): string[] {
+  const args: string[] = [];
+  let current = "";
+  let inQuote = false;
+  for (let j = 0; j < argsRaw.length; j += 1) {
+    const ch = argsRaw[j];
+    if (ch === '"' && (j === 0 || argsRaw[j - 1] !== "\\")) {
+      inQuote = !inQuote;
+      current += ch;
+      continue;
+    }
+    if (ch === "," && !inQuote) {
+      const trimmed = current.trim();
+      if (trimmed) args.push(decodeTestArg(trimmed));
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  const trimmed = current.trim();
+  if (trimmed) args.push(decodeTestArg(trimmed));
+  return args;
+}
+
+function decodeTestArg(token: string): string {
+  if (token.startsWith('"') && token.endsWith('"')) {
+    return token.slice(1, -1).replace(/\\"/g, '"').replace(/\\n/g, "\n").replace(/\\\\/g, "\\");
+  }
+  return token;
 }

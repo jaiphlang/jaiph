@@ -4,10 +4,10 @@ import "ensure_ci_passes.jh" as ci
 
 test "ci passes on first attempt skips recover" {
   # Given
-  mock script ci.npm_run_test_ci {
+  mock script ci.npm_run_test_ci() {
     echo "all tests passed"
   }
 
   # When / Then — workflow completes without prompt
-  ci.default
+  run ci.default()
 }

@@ -83,11 +83,11 @@ test "runs happy path and prints PASS" {
   mock prompt "e2e-greeting-mock"
 
   # When
-  response = w.default
+  const response = run w.default()
 
   # Then
-  expectContain response "e2e-greeting-mock"
-  expectContain response "done"
+  expect_contain response "e2e-greeting-mock"
+  expect_contain response "done"
 }
 EOF
 
@@ -123,8 +123,8 @@ test "unmatched prompt never mocked" {
   mock prompt {
     /other/ => "x"
   }
-  response = p.default
-  expectContain response "x"
+  const response = run p.default()
+  expect_contain response "x"
 }
 EOF
 
@@ -139,9 +139,9 @@ if [[ $unmatched_exit -eq 0 ]]; then
   printf "%s\n" "${unmatched_out}" >&2
   e2e::fail "unmatched_mock_block.test.jh should exit 1 when no branch matches"
 fi
-if [[ "${unmatched_out}" != *"workflow exited with status"* ]] && [[ "${unmatched_out}" != *"expectContain failed"*"0 chars"* ]]; then
+if [[ "${unmatched_out}" != *"workflow exited with status"* ]] && [[ "${unmatched_out}" != *"expect_contain failed"*"0 chars"* ]]; then
   printf "%s\n" "${unmatched_out}" >&2
-  e2e::fail "unmatched prompt should report workflow failure or expectContain failure"
+  e2e::fail "unmatched prompt should report workflow failure or expect_contain failure"
 fi
 e2e::pass "mock prompt block without wildcard fails when prompt never matched"
 
@@ -202,8 +202,8 @@ import "param_demo.jh" as w
 
 test "parametrized workflow and rule show params in tree; prompt shows value only" {
   mock prompt "e2e-param-mock-response"
-  response = w.default "Alice"
-  expectContain response "e2e-param-mock-response"
+  const response = run w.default("Alice")
+  expect_contain response "e2e-param-mock-response"
 }
 EOF
 

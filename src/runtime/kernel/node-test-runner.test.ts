@@ -22,11 +22,11 @@ test("multiple test blocks with test_run_workflow share a single graph build", a
 }
 
 test "block A" {
-  greet
+  run greet()
 }
 
 test "block B" {
-  greet
+  run greet()
 }
 `,
     );

@@ -16,6 +16,11 @@ import { extractJson, validateFields } from "./schema";
 const MAX_EMBED = 1024 * 1024;
 type EnsureRecover = Extract<WorkflowStepDef, { type: "ensure" }>["recover"];
 
+/** Mock body definition: shell for script mocks, Jaiph steps for workflow/rule mocks. */
+export type MockBodyDef =
+  | { kind: "shell"; body: string; params: string[] }
+  | { kind: "steps"; steps: WorkflowStepDef[]; params: string[] };
+
 type Scope = {
   filePath: string;
   vars: Map<string, string>;
@@ -177,13 +182,13 @@ export class NodeWorkflowRuntime {
   private inboxSeq = 0;
   private promptSeq = 0;
   private workflowCtxStack: WorkflowContext[] = [];
-  private readonly mockBodies: Map<string, string>;
+  private readonly mockBodies: Map<string, MockBodyDef>;
 
   private getFrameStack(): Frame[] {
     return this.asyncFrameStack.getStore() ?? this.stack;
   }
 
-  constructor(graph: RuntimeGraph, opts: { env?: NodeJS.ProcessEnv; cwd?: string; mockBodies?: Map<string, string> }) {
+  constructor(graph: RuntimeGraph, opts: { env?: NodeJS.ProcessEnv; cwd?: string; mockBodies?: Map<string, MockBodyDef> }) {
     this.graph = graph;
     this.env = opts.env ?? process.env;
     this.cwd = opts.cwd ?? process.cwd();
@@ -1123,7 +1128,7 @@ export class NodeWorkflowRuntime {
           "workflow",
           ref,
           args,
-          async () => this.executeMockBody(ref, mockBody, args),
+          async () => this.executeMockBodyDef(ref, mockBody, args),
           resolvedWorkflow.workflow.params,
         );
       }
@@ -1134,7 +1139,7 @@ export class NodeWorkflowRuntime {
       const mk = this.mockKey(resolvedScript.filePath, resolvedScript.script.name);
       const mockBody = this.mockBodies.get(mk);
       if (mockBody !== undefined) {
-        return this.executeManagedStep("script", ref, args, async () => this.executeMockBody(ref, mockBody, args));
+        return this.executeManagedStep("script", ref, args, async () => this.executeMockBodyDef(ref, mockBody, args));
       }
       return this.executeManagedStep(
         "script",
@@ -1163,7 +1168,7 @@ export class NodeWorkflowRuntime {
           "rule",
           ref,
           args,
-          async () => this.executeMockBody(ref, mockBody, args),
+          async () => this.executeMockBodyDef(ref, mockBody, args),
           resolvedRule.rule.params,
         );
       }
@@ -1396,7 +1401,24 @@ export class NodeWorkflowRuntime {
     appendRunSummaryLine(JSON.stringify({ ...payload, event_version: 1 }));
   }
 
-  private executeMockBody(ref: string, body: string, args: string[]): StepResult {
+  private async executeMockBodyDef(ref: string, mockDef: MockBodyDef, args: string[]): Promise<StepResult> {
+    if (mockDef.kind === "shell") {
+      return this.executeMockShellBody(ref, mockDef.body, args, mockDef.params);
+    }
+    // Jaiph step-based mock (workflow/rule)
+    const scope: Scope = {
+      filePath: this.graph.entryFile,
+      vars: new Map<string, string>(),
+      env: { ...this.env },
+      declaredParamNames: mockDef.params,
+    };
+    mockDef.params.forEach((name, i) => {
+      if (i < args.length) scope.vars.set(name, args[i]);
+    });
+    return this.executeSteps(scope, mockDef.steps);
+  }
+
+  private executeMockShellBody(_ref: string, body: string, args: string[], params: string[]): StepResult {
     const { spawnSync } = require("node:child_process") as typeof import("node:child_process");
     const { mkdtempSync, writeFileSync: wf, chmodSync } = require("node:fs") as typeof import("node:fs");
     const { join: pjoin } = require("node:path") as typeof import("node:path");
@@ -1404,10 +1426,15 @@ export class NodeWorkflowRuntime {
     const scriptPath = pjoin(tmpDir, "mock.sh");
     wf(scriptPath, `#!/usr/bin/env bash\nset -euo pipefail\n${body}\n`);
     chmodSync(scriptPath, 0o755);
+    // Inject named params as env vars
+    const env = { ...this.env };
+    params.forEach((name, i) => {
+      if (i < args.length) env[name] = args[i];
+    });
     const r = spawnSync(scriptPath, args, {
       encoding: "utf8",
       cwd: this.cwd,
-      env: this.env,
+      env,
     });
     try { require("node:fs").rmSync(tmpDir, { recursive: true, force: true }); } catch {}
     return {

@@ -115,7 +115,7 @@ Rules:
 - Include clear prompts with concrete acceptance criteria.
 - Reuse rules via `ensure`; reuse workflows and scripts via `run`.
 - **Always run `jaiph format` on `.jh` files you create or modify before committing.** This ensures canonical whitespace, indentation, and definition order. In CI, use `jaiph format --check` to gate on formatting.
-- Use only syntax described in [jaiph.org](https://jaiph.org) and [Grammar](grammar.md). For advanced constructs (e.g. `config` block, `export`, prompt capture), see the grammar. For testing workflows, see [Testing](testing.md) (`expectContain`, `expectNotContain`, `expectEqual`, mocks).
+- Use only syntax described in [jaiph.org](https://jaiph.org) and [Grammar](grammar.md). For advanced constructs (e.g. `config` block, `export`, prompt capture), see the grammar. For testing workflows, see [Testing](testing.md) (`expect_contain`, `expect_not_contain`, `expect_equal`, mocks).
 
 ## Suggested Starter Layout
 

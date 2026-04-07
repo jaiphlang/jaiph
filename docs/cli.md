@@ -218,7 +218,7 @@ You can run custom commands at workflow/step lifecycle events via hooks. Config 
 
 Run tests from `*.test.jh` files that contain `test "..." { ... }` blocks. Test files can import workflows and use `mock prompt` to simulate agent responses without calling the real backend.
 
-The test runner uses the same Node workflow runtime as `jaiph run`. For each test file, the CLI compiles workspace `*.jh` modules (not `*.test.jh`) so imported modules have emitted scripts, then builds the runtime graph once and reuses it across all test blocks. Each block runs through the AST interpreter with mock support and assertion evaluation (`expectContain`, `expectEqual`, `expectNotContain`).
+The test runner uses the same Node workflow runtime as `jaiph run`. For each test file, the CLI compiles workspace `*.jh` modules (not `*.test.jh`) so imported modules have emitted scripts, then builds the runtime graph once and reuses it across all test blocks. Each block runs through the AST interpreter with mock support and assertion evaluation (`expect_contain`, `expect_equal`, `expect_not_contain`).
 
 **Usage:**
 

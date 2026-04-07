@@ -25,8 +25,8 @@ e2e::file "ok_a.test.jh" <<'EOF'
 import "ok_a.jh" as w
 
 test "A passes" {
-  out = w.default
-  expectContain out "A"
+  const out = run w.default()
+  expect_contain out "A"
 }
 EOF
 
@@ -43,8 +43,8 @@ e2e::file "ok_b.test.jh" <<'EOF'
 import "ok_b.jh" as w
 
 test "B passes" {
-  out = w.default
-  expectContain out "B"
+  const out = run w.default()
+  expect_contain out "B"
 }
 EOF
 mkdir -p "${TEST_DIR}/empty_tests"

@@ -223,18 +223,18 @@ e2e::file "ic_lib.test.jh" <<'EOF'
 import "ic_lib.jh" as ic
 
 test "inline run capture in log" {
-  out = ic.run_capture_log
-  expectContain out "got: hello"
+  const out = run ic.run_capture_log()
+  expect_contain out "got: hello"
 }
 
 test "inline ensure capture in log" {
-  out = ic.ensure_capture_log
-  expectContain out "status: ok"
+  const out = run ic.ensure_capture_log()
+  expect_contain out "status: ok"
 }
 
 test "inline capture in return value" {
-  out = ic.capture_return
-  expectEqual out "hello"
+  const out = run ic.capture_return()
+  expect_equal out "hello"
 }
 EOF
 

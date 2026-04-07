@@ -44,29 +44,29 @@ import "lib.jh" as lib
 test "full orchestration with all mock types" {
   mock prompt "deployment summary"
 
-  mock rule lib.validate {
-    echo "mock-valid"
-    exit 0
+  mock rule lib.validate(input) {
+    return "mock-valid"
   }
 
-  mock workflow lib.deploy {
-    echo "mock-deployed"
+  mock workflow lib.deploy() {
+    log "mock-deployed"
+    return "mock-deployed"
   }
 
-  out = lib.default "prod"
-  expectContain out "deployment summary"
-  expectContain out "mock-deployed"
+  const out = run lib.default("prod")
+  expect_contain out "deployment summary"
+  expect_contain out "mock-deployed"
 }
 
 test "mock script replaces script body" {
   mock prompt "ok"
 
-  mock script lib.validate_impl {
+  mock script lib.validate_impl() {
     echo "stubbed-validate"
   }
 
-  out = lib.default "prod"
-  expectContain out "stubbed-validate"
+  const out = run lib.default("prod")
+  expect_contain out "stubbed-validate"
 }
 EOF
 
@@ -102,13 +102,13 @@ e2e::file "fail_lib.test.jh" <<'EOF'
 import "fail_lib.jh" as f
 
 test "passes when output matches" {
-  out = f.default
-  expectContain out "hello world"
+  const out = run f.default()
+  expect_contain out "hello world"
 }
 
 test "fails on wrong expectation" {
-  out = f.default
-  expectEqual out "goodbye world"
+  const out = run f.default()
+  expect_equal out "goodbye world"
 }
 EOF
 
@@ -130,7 +130,7 @@ testing fail_lib.test.jh
   ▸ passes when output matches
   ✓ <time>
   ▸ fails on wrong expectation
-  ✗ expectEqual failed: <time>
+  ✗ expect_equal failed: <time>
     - goodbye world
     + hello world
 
@@ -163,8 +163,8 @@ test "uses deprecated mock function" {
     echo "stubbed"
   }
 
-  out = app.default
-  expectContain out "stubbed"
+  const out = run app.default()
+  expect_contain out "stubbed"
 }
 EOF
 

@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync, chmodSync, rmSync, readdirSync, readFileSyn
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { buildRuntimeGraph, resolveWorkflowRef, resolveRuleRef, resolveScriptRef, type RuntimeGraph } from "./graph";
-import { NodeWorkflowRuntime } from "./node-workflow-runtime";
+import { NodeWorkflowRuntime, type MockBodyDef } from "./node-workflow-runtime";
 import type { TestBlockDef, TestStepDef } from "../../types";
 
 type TestResult = { pass: boolean; error?: string };
@@ -13,8 +13,8 @@ function resolveMockBodies(
   graph: RuntimeGraph,
   entryFile: string,
   mockSteps: MockRefStep[],
-): Map<string, string> {
-  const bodies = new Map<string, string>();
+): Map<string, MockBodyDef> {
+  const bodies = new Map<string, MockBodyDef>();
   for (const step of mockSteps) {
     const ref = step.ref;
     const loc = { line: 1, col: 1 };
@@ -29,11 +29,17 @@ function resolveMockBodies(
       const resolved = resolveScriptRef(graph, entryFile, ref);
       if (resolved) key = `${resolved.filePath}::${resolved.script.name}`;
     }
+    let mockDef: MockBodyDef;
+    if (step.type === "test_mock_script") {
+      mockDef = { kind: "shell", body: step.body, params: step.params };
+    } else {
+      mockDef = { kind: "steps", steps: step.steps, params: step.params };
+    }
     if (key) {
-      bodies.set(key, step.body);
+      bodies.set(key, mockDef);
     } else {
       // Fallback: use raw ref (for local refs within the same file)
-      bodies.set(ref, step.body);
+      bodies.set(ref, mockDef);
     }
   }
   return bodies;
@@ -115,18 +121,6 @@ async function runTestBlock(
         continue; // Already processed above
       }
 
-      if (step.type === "test_shell") {
-        const { spawnSync } = require("node:child_process") as typeof import("node:child_process");
-        const r = spawnSync("bash", ["-c", step.command], {
-          encoding: "utf8",
-          cwd: workspaceRoot,
-        });
-        if (r.status !== 0) {
-          return { pass: false, error: `shell command failed: ${step.command}` };
-        }
-        continue;
-      }
-
       if (step.type === "test_run_workflow") {
         const mockBodies = resolveMockBodies(graph, testFileAbs, mockRefs);
         const env: NodeJS.ProcessEnv = {
@@ -184,7 +178,7 @@ async function runTestBlock(
         if (!value.includes(step.substring)) {
           return {
             pass: false,
-            error: `expectContain failed: "${step.variable}" (${value.length} chars) does not contain "${step.substring}"`,
+            error: `expect_contain failed: "${step.variable}" (${value.length} chars) does not contain "${step.substring}"`,
           };
         }
         continue;
@@ -195,7 +189,7 @@ async function runTestBlock(
         if (value.includes(step.substring)) {
           return {
             pass: false,
-            error: `expectNotContain failed: "${step.variable}" contains "${step.substring}"`,
+            error: `expect_not_contain failed: "${step.variable}" contains "${step.substring}"`,
           };
         }
         continue;
@@ -206,7 +200,7 @@ async function runTestBlock(
         if (value !== step.expected) {
           return {
             pass: false,
-            error: `expectEqual failed:\n    - ${step.expected}\n    + ${value}`,
+            error: `expect_equal failed:\n    - ${step.expected}\n    + ${value}`,
           };
         }
         continue;
