@@ -677,7 +677,8 @@ Key rules:
 
 - **Identifiers:** `[A-Za-z_][A-Za-z0-9_]*`
 - **References:** `IDENT` or `IDENT.IDENT` (module-qualified)
-- **Comments:** Full-line `#` comments. Empty lines are ignored.
+- **Comments:** Full-line `#` comments.
+- **Blank lines:** Empty lines between steps inside workflow and rule bodies are preserved in the AST as visual grouping markers. A single blank line between steps survives `jaiph format` unchanged; consecutive blank lines are collapsed to one; trailing blank lines before `}` are removed. Outside block bodies (between top-level declarations), blank lines are normalized by the formatter.
 - **Shebang:** A `#!` first line of the file is ignored by the parser.
 - **Import path:** Quoted string in `import "path" as alias`. Missing `.jh` extension is appended automatically.
 - **String quoting:** Jaiph has a four-delimiter system. `"..."` is the single-line string form (double quotes only — single-quoted strings are parse errors). `"""..."""` is the multiline string form; the opening `"""` must end the line, and the closing `"""` must be on its own line. A double-quoted string that spans multiple lines is rejected with a guidance error pointing to triple quotes. Use `\"` for literal double quotes and `\\` for literal backslashes. `${...}` interpolation works in both forms. Script bodies use single backtick (`` `...` ``) for single-line or triple backtick (`` ```...``` ``) for multi-line — normal shell quoting is allowed inside script bodies. Triple backticks in prompt/string context are rejected.

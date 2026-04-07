@@ -177,6 +177,11 @@ export function parseWorkflowBlock(
     const innerRaw = lines[idx];
     const inner = innerRaw.trim();
     if (!inner) {
+      // Preserve a single blank line between steps for the formatter.
+      const lastStep = workflow.steps[workflow.steps.length - 1];
+      if (lastStep && lastStep.type !== "blank_line") {
+        workflow.steps.push({ type: "blank_line" });
+      }
       continue;
     }
     if (inner === "}") {
@@ -669,6 +674,10 @@ export function parseWorkflowBlock(
 
   if (idx >= lines.length) {
     fail(filePath, `unterminated workflow block: ${workflow.name}`, lineNo);
+  }
+  // Strip trailing blank_line (whitespace before closing brace).
+  while (workflow.steps.length > 0 && workflow.steps[workflow.steps.length - 1].type === "blank_line") {
+    workflow.steps.pop();
   }
   return { workflow, nextIndex: idx + 1, exported: isExported };
 }

@@ -12,24 +12,6 @@ Process rules:
 
 ---
 
-## Tooling — `jaiph format` preserves intentional blank lines between calls <!-- dev-ready -->
-
-**Goal**  
-`jaiph format` currently collapses or removes empty lines between adjacent calls, which makes dense workflows harder to read. Users should be able to insert **a single** blank line between calls (or other statements) for visual grouping; the formatter must **preserve** that spacing instead of stripping it.
-
-**Context**
-
-- Formatter source: `src/format/emit.ts` — the emitter joins steps/definitions without tracking whether the original source had blank lines between them. The AST likely doesn't preserve inter-statement whitespace.
-- Fix approach: either preserve blank-line info in the AST (e.g. `leadingBlankLine: boolean` on step defs), or track it during emit by comparing source line numbers between adjacent steps.
-- E2E format tests: `e2e/tests/100_format_command.sh` — add a case showing a blank line between calls survives formatting.
-
-**Acceptance criteria**
-
-- A single blank line between consecutive top-level or block-level calls (same scope) survives `jaiph format` unchanged.
-- Formatter tests / golden updates document the intended behavior (e.g. no collapse of one intentional blank line into none).
-
----
-
 ## Language — redesign `ensure` / `recover` implicit parameter <!-- dev-ready -->
 
 **Goal**  
@@ -254,6 +236,92 @@ test "full orchestration with all mock types" {
 - Written proposal or inline rationale in PR: what changes, what breaks, migration for existing `*.test.jh`.
 - Parser / AST / formatter / validator / test runner updated; docs (`docs/testing.md`, `docs/cli.md`, `docs/grammar.md` as needed) and examples/e2e fixtures migrated.
 - Regression coverage for `jaiph test` behavior (discovery, mocks, assertions, failure reports).
+
+---
+
+## CLI — async thread numbers in progress tree <!-- dev-ready -->
+
+**Goal**  
+When a workflow uses `run async`, the progress tree should show a **circled number** prefix on every output line belonging to that async branch. This makes interleaved async output scannable at a glance — you can tell which branch produced which line without tracing indentation.
+
+**Numbering**  
+Circled numbers use Unicode starting at U+2460: ① ② ③ ④ ⑤ … Numbering is **global order of `run async` dispatch** within the parent workflow (first async call = ①, second = ②, etc.). The number appears at the **same indentation level as the async call site** — if a nested workflow fires its own `run async`, those get their own numbering at the nested indent level.
+
+**Color**  
+Circled numbers are rendered in **dim/grey** (ANSI `\u001b[2m`) — same style as the `·` continuation markers. When `NO_COLOR` is set or output is non-TTY, the circled number is emitted without ANSI codes.
+
+**Before → After**
+
+Before:
+```text
+workflow default
+  ▸ workflow cursor_say_hello
+  ▸ workflow claude_say_hello
+  ·   ▸ prompt cursor "Say: Greetings! I am [mo..."
+  ·   ▸ prompt claude "Say: Greetings! I am [mo..."
+  ·   ✓ prompt cursor (3s)
+  ·   ℹ Greetings! I am **Composer**, a language model trained by Cursor.
+  ✓ workflow cursor_say_hello (3s)
+  ·   ✓ prompt claude (4s)
+  ·   ℹ Greetings! I am Claude Opus 4.6.
+  ✓ workflow claude_say_hello (4s)
+
+✓ PASS workflow default (4.6s)
+```
+
+After:
+```text
+workflow default
+① ▸ workflow cursor_say_hello
+② ▸ workflow claude_say_hello
+① ·   ▸ prompt cursor "Say: Greetings! I am [mo..."
+② ·   ▸ prompt claude "Say: Greetings! I am [mo..."
+① ·   ✓ prompt cursor (3s)
+① ·   ℹ Greetings! I am **Composer**, a language model trained by Cursor.
+① ✓ workflow cursor_say_hello (3s)
+② ·   ✓ prompt claude (4s)
+② ·   ℹ Greetings! I am Claude Opus 4.6.
+② ✓ workflow claude_say_hello (4s)
+
+✓ PASS workflow default (4.6s)
+```
+
+Non-async steps (the root workflow line, `✓ PASS`) have **no** circled number — only lines within an async branch get one.
+
+**Nested async example**
+
+If a nested workflow also uses `run async`, those branches get their own numbering at the nested indentation:
+```text
+workflow default
+① ▸ workflow parallel_suite
+② ▸ workflow lint_check
+① · ① ▸ workflow test_unit
+① · ② ▸ workflow test_integration
+① · ① ✓ workflow test_unit (2s)
+① · ② ✓ workflow test_integration (5s)
+① ✓ workflow parallel_suite (5s)
+② ✓ workflow lint_check (1s)
+
+✓ PASS workflow default (5s)
+```
+
+**Context**
+
+- Progress tree builder: `src/cli/run/progress.ts` — `buildRunTreeRows()` / `collectWorkflowChildren()`. The `asyncPrefix` is already tracked (`step.async ? "async " : ""`); extend with a numeric index.
+- Display renderer: `src/cli/run/display.ts` — `formatStartLine()`, `formatCompletedLine()`, `formatHeartbeatLine()`. These take `indent` and render `·` prefixes. The circled number needs to be prepended at the indent level of the async call site.
+- Runtime event pipeline: `src/runtime/kernel/node-workflow-runtime.ts` — `executeSteps()` dispatches async branches via `asyncFrameStack.run()`. The async branch index needs to propagate through `STEP_START`/`STEP_END`/`LOG` events so the display layer can map lines to branches.
+- Stderr handler: `src/cli/run/stderr-handler.ts` — parses `run_summary.jsonl` events and renders lines; needs to read the async branch index from events.
+- E2E tests: `e2e/tests/104_run_async.sh` — existing async tests; add a case with nested workflows calling `run async` to verify nested circled numbers.
+- Docs: `docs/index.html` — update the async workflow output sample to show circled numbers.
+
+**Acceptance criteria**
+
+- `run async` branches display circled numbers (①②③…) at the async call site's indentation level in both TTY and non-TTY output.
+- Numbers are dim/grey in TTY mode; plain text in non-TTY / `NO_COLOR`.
+- Nested `run async` inside a child workflow gets its own numbering scope at the child's indent level.
+- Non-async lines have no circled number prefix.
+- E2E test with nested async workflows verifies correct numbering and indentation.
+- `docs/index.html` async sample updated.
 
 ---
 

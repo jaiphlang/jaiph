@@ -236,6 +236,10 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
   const ci = currentIndent;
 
   switch (step.type) {
+    case "blank_line":
+      lines.push("");
+      break;
+
     case "comment":
       lines.push(`${ci}${step.text}`);
       break;

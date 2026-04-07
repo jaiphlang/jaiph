@@ -221,6 +221,10 @@ export type WorkflowStepDef =
   | {
       type: "match";
       expr: MatchExprDef;
+    }
+  | {
+      /** Preserved intentional blank line between steps (formatter only). */
+      type: "blank_line";
     };
 
 export interface EnvDeclDef {
