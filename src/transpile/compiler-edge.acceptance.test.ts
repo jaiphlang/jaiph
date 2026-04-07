@@ -740,7 +740,7 @@ test("ACCEPTANCE: ensure recover with args after recover fails with E_PARSE", ()
     );
     assert.throws(
       () => buildScripts(root, join(root, "out")),
-      /E_PARSE.*rule arguments must appear before 'recover'/,
+      /E_PARSE.*recover requires explicit bindings/,
     );
   });
 });
@@ -764,7 +764,7 @@ test("ACCEPTANCE: ensure recover with multiple args after recover fails with E_P
     );
     assert.throws(
       () => buildScripts(root, join(root, "out")),
-      /E_PARSE.*rule arguments must appear before 'recover'/,
+      /E_PARSE.*recover requires explicit bindings/,
     );
   });
 });
@@ -785,7 +785,7 @@ test("ACCEPTANCE: ensure recover without block fails with E_PARSE", () => {
         ].join("\n"),
         "/fake/main.jh",
       ),
-    /E_PARSE.*recover requires a \{ \.\.\. \} block/,
+    /E_PARSE.*recover requires explicit bindings/,
   );
 });
 
@@ -804,7 +804,7 @@ test("ACCEPTANCE: valid ensure recover block still works", () => {
         "}",
         "",
         "workflow default() {",
-        '  ensure ci_passes("$repo_dir") recover {',
+        '  ensure ci_passes("$repo_dir") recover (failure) {',
         "    run fix_it()",
         "  }",
         "}",

@@ -139,8 +139,8 @@ export function validateSimpleInterpolationIdentifiers(
   scopeLabel: "workflow" | "rule",
   /** Typed prompt captures: map capture name → returns schema field names (for `${base}` / `${base_field}`). */
   promptFieldSchemas?: Map<string, string[]>,
-  /** `ensure … recover` body receives failure output as `${arg1}`. */
-  recoverPayloadArg1?: boolean,
+  /** Extra variable names from `ensure … recover` bindings. */
+  recoverBindings?: Set<string>,
   /** Script names in the current module — `${scriptName}` is rejected because scripts cannot be interpolated. */
   localScripts?: Set<string>,
 ): void {
@@ -148,7 +148,7 @@ export function validateSimpleInterpolationIdentifiers(
   let m: RegExpExecArray | null;
   while ((m = re.exec(content)) !== null) {
     const name = m[1]!;
-    if (recoverPayloadArg1 && name === "arg1") {
+    if (recoverBindings?.has(name)) {
       continue;
     }
     if (knownVars.has(name)) {

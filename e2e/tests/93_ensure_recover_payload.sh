@@ -54,7 +54,7 @@ rule top_rule() {
 }
 
 workflow default() {
-  ensure top_rule() recover {
+  ensure top_rule() recover (failure) {
     run save_string_to_file("recovered-on-retry", witness_failed_payload.txt)
     run mark_recovered()
   }

@@ -144,7 +144,7 @@ Jaiph source files combine a small orchestration language with scripts in any la
 - `run async workflow()` — concurrent execution with implicit join
 - `const x = prompt "..." returns "{ field: type }"` — structured capture with `${x.field}` access; `number` / `boolean` in the schema validate JSON but each field is **stored as a string** in workflow scope (orchestration is text-only)
 - `return run workflow` / `return ensure rule` — direct return from a managed call (parens optional)
-- `ensure rule() recover { ... }` — bounded self-healing retries
+- `ensure rule() recover (failure) { ... }` — bounded self-healing retries with explicit bindings
 - `channel name [-> workflow]` / `ch <- "msg"` — inter-workflow messaging (routes declared inline on channel)
 - `import "file.jh" as alias` — module composition
 

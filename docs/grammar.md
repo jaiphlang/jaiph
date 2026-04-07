@@ -276,24 +276,36 @@ result = ensure lib.validate(input)
 
 ### `ensure … recover` — Retry with Recovery
 
-When `ensure` includes a `recover` block, failure triggers a retry loop: run the rule, on failure run the recovery body, repeat until the rule passes or the maximum attempt rounds are reached (default 3, overridable with `JAIPH_ENSURE_MAX_RETRIES`).
+When `ensure` includes a `recover` clause, failure triggers a retry loop: run the rule, on failure run the recovery body, repeat until the rule passes or the maximum attempt rounds are reached (default 3, overridable with `JAIPH_ENSURE_MAX_RETRIES`).
+
+`recover` requires **explicit bindings** in parentheses — bare `recover` without bindings is `E_PARSE`:
 
 ```jaiph
-# Single-statement recovery
-ensure install_deps() recover run fix_deps()
+# Single-statement recovery — one binding
+ensure install_deps() recover (failure) run fix_deps()
 
-# Block recovery
-ensure ci_passes(repo) recover {
+# Block recovery — one binding
+ensure ci_passes(repo) recover (failure) {
   log "CI failed, attempting fix"
   run auto_fix()
 }
+
+# Two bindings — failure payload + attempt number (1-based)
+ensure ci_passes() recover (failure, attempt) {
+  run save_string_to_file(failure, "ci_failure.log")
+  prompt "CI failed (attempt ${attempt}). Log is in ci_failure.log — fix the code."
+}
 ```
 
-The recovery body receives `${arg1}` as the merged stdout+stderr from the failed rule execution. Each retry gets fresh output from the current attempt.
+**Bindings:**
+- The first binding (e.g. `failure`) receives the merged stdout+stderr from the failed rule execution, including output from nested scripts and rules. The payload refreshes per retry attempt.
+- The optional second binding (e.g. `attempt`) receives the 1-based attempt number as a string.
+- Binding names must be valid identifiers. At most two bindings are allowed.
 
 Syntax rules:
+- `recover` must be followed by `(<name>)` or `(<name>, <attempt>)` — bare `recover` or `recover {` without bindings is `E_PARSE`.
 - All rule arguments must appear inside the call parentheses **before** `recover`.
-- `recover` must be followed by at least one recovery step (bare `recover` at end of line is `E_PARSE`).
+- `recover` must be followed by at least one recovery step after the bindings.
 - `ensure … recover` is workflow-only — not allowed in rule bodies.
 
 ### `prompt` — Agent Interaction
@@ -763,8 +775,8 @@ send_rhs        = double_quoted_string | triple_quoted_block | "${" IDENT "}" | 
 log_stmt        = "log" ( double_quoted_string | triple_quoted_block | IDENT ) ;
 logerr_stmt     = "logerr" ( double_quoted_string | triple_quoted_block | IDENT ) ;
 
-ensure_stmt     = "ensure" call_ref [ "recover" recover_body ] ;
-ensure_capture_stmt = IDENT "=" "ensure" call_ref [ "recover" recover_body ] ;
+ensure_stmt     = "ensure" call_ref [ "recover" recover_bindings recover_body ] ;
+ensure_capture_stmt = IDENT "=" "ensure" call_ref [ "recover" recover_bindings recover_body ] ;
 run_capture_stmt   = IDENT "=" "run" ( call_ref | inline_script ) ;
 run_stmt        = "run" ( call_ref | inline_script ) ;
 call_ref        = REF "(" [ call_args ] ")" | REF ;  (* bare REF = zero-arg call; parens required when args present *)
@@ -775,6 +787,7 @@ prompt_stmt     = "prompt" prompt_body [ returns_schema ] ;
 prompt_capture_stmt = IDENT "=" "prompt" prompt_body [ returns_schema ] ;
 returns_schema  = "returns" double_quoted_string ;
 
+recover_bindings = "(" IDENT [ "," IDENT ] ")" ;  (* 1st = failure payload, optional 2nd = attempt number *)
 recover_body    = single_workflow_stmt | "{" { workflow_step } "}" ;
 single_workflow_stmt = ensure_stmt | run_stmt | prompt_stmt | prompt_capture_stmt
                 | const_decl_step | run_capture_stmt | ensure_capture_stmt
@@ -821,7 +834,7 @@ At runtime, the Node workflow runtime interprets the AST directly:
 - **Config:** Precedence chain: environment → workflow-level → module-level → defaults.
 - **Script isolation:** Managed subprocesses with only essential variables. Module-scoped variables not visible.
 - **Prompt + schema:** JSON extraction and schema validation via the JS kernel. Exit codes: 0=ok, 1=parse error, 2=missing field, 3=type mismatch.
-- **ensure … recover:** Bounded retry loop (default 3 rounds, `JAIPH_ENSURE_MAX_RETRIES`). Recovery body's `${arg1}` gets fresh merged stdout+stderr per attempt.
+- **ensure … recover:** Bounded retry loop (default 3 rounds, `JAIPH_ENSURE_MAX_RETRIES`). Requires explicit bindings: `recover (failure) { … }` or `recover (failure, attempt) { … }`. The first binding gets fresh merged stdout+stderr per attempt; the optional second binding gets the 1-based attempt number.
 - **Assignment capture:** Rules and workflows use explicit `return "…"`. Scripts use stdout.
 - **`run async`:** Promise-based concurrency. Implicit join via `Promise.allSettled` before workflow returns. Failures aggregated.
 - **Channels:** Messages enqueued via `send`, dispatched to route targets at workflow end. Each target must declare exactly 3 parameters; the runtime binds message, channel, and sender to the declared names.

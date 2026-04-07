@@ -48,7 +48,7 @@ test("NodeWorkflowRuntime: workflow step .out accumulates Command:/Prompt: and l
   }
 });
 
-test("NodeWorkflowRuntime: ensure recover receives failure payload in recover scope (arg1)", async () => {
+test("NodeWorkflowRuntime: ensure recover receives failure payload in recover scope (explicit binding)", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-node-wf-ensure-recover-"));
   try {
     const jh = join(root, "ensure_recover_payload.jh");
@@ -72,8 +72,8 @@ test("NodeWorkflowRuntime: ensure recover receives failure payload in recover sc
         'script mark_ready = `touch ready.txt`',
         "",
         "workflow default(name, extra) {",
-        "  ensure check_ready() recover {",
-        '    run write_recover_received(arg1)',
+        "  ensure check_ready() recover (failure) {",
+        '    run write_recover_received(failure)',
         '    run write_recover_arg2(extra)',
         "    run mark_ready()",
         "  }",

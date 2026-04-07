@@ -30,7 +30,7 @@ workflow install_deps() {
 }
 
 workflow default() {
-  ensure dep() recover run install_deps()
+  ensure dep() recover (failure) run install_deps()
 }
 EOF
 
@@ -80,7 +80,7 @@ echo "recovering" > recover_ran.txt
 script recover_touch = `touch ready2.txt`
 
 workflow default() {
-  ensure ready() recover {
+  ensure ready() recover (failure) {
     run recover_echo()
     run recover_touch()
   }
@@ -133,7 +133,7 @@ workflow install_deps() {
 }
 
 workflow default() {
-  ensure never_ok() recover run install_deps()
+  ensure never_ok() recover (failure) run install_deps()
 }
 EOF
 
@@ -167,7 +167,7 @@ rule check_ready() {
 script mark_ready3 = `touch ready3.txt`
 
 workflow default() {
-  ensure check_ready() recover {
+  ensure check_ready() recover (failure) {
     prompt "The CI build failed. Please inspect the log file at ${ci_log_file} and suggest a fix."
     run mark_ready3()
   }

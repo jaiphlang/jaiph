@@ -12,49 +12,6 @@ Process rules:
 
 ---
 
-## Language — redesign `ensure` / `recover` implicit parameter <!-- dev-ready -->
-
-**Goal**  
-In `ensure ... recover { ... }`, the failure payload is injected as `arg1` — the only implicit parameter in the language. Replace that with an **explicit binding** after `recover`, before `{`.
-
-**Context**
-
-- Parser: `src/parse/workflows.ts` — recover block parsing; currently expects `recover {` or `recover "arg" {`.
-- Types: `src/types.ts` — `EnsureRecoverDef` or the recover step AST; needs new fields for bound identifiers.
-- Validator: `src/transpile/validate.ts` and `src/transpile/validate-string.ts` — `recoverPayloadArg1` logic; references to magic `arg1` in recover scope.
-- Runtime: `src/runtime/kernel/node-workflow-runtime.ts` — where `arg1` (merged stdout+stderr) and `_jaiph_retry` are injected into the recover scope.
-- E2E: `e2e/tests/101_ensure_recover_output_contract.sh`, `e2e/tests/93_ensure_recover_payload.sh`, `e2e/tests/98_ensure_recover_value.sh`.
-- Compiler tests: `compiler-tests/parse-errors.txt` — existing `ensure recover` error cases to update.
-
-**Syntax (target)**
-
-- Single binding (failure text = merged stdout + stderr, same value as today's `arg1`):
-
-  ```text
-  ensure ci_passes() recover (failure) {
-    run save_string_to_file(failure, ".jaiph/tmp/ci_failure.log")
-  }
-  ```
-
-- Optional second binding for the retry index (same semantics as today's `_jaiph_retry`); remove `_jaiph_retry` once this exists:
-
-  ```text
-  ensure ci_passes() recover (failure, attempt) {
-    log "retry ${attempt}"
-  }
-  ```
-
-- Bare `recover {` without parentheses is invalid; error should suggest `recover (<name>)` / `recover (<name>, <attempt>)`.
-
-**Acceptance criteria**
-
-- Parser and AST represent the bound identifier(s); runtime injects values under those names in the recover scope (no implicit `arg1` for the payload).
-- Validator / bare-identifier rules use the explicit bindings instead of `recoverPayloadArg1` + magic `arg1`.
-- Compiler golden + AST tests for the new forms; remove or update tests that assume implicit `arg1`.
-- Examples (`examples/ensure_ci_passes.jh`, `examples/ensure_ci_passes.test.jh`), formatter round-trip, and docs updated (`docs/grammar.md`, `docs/jaiph-skill.md`, `docs/index.html` — has inline `ensure … recover` samples); `CHANGELOG` notes the breaking change.
-
----
-
 ## Language / tooling — rework `*.test.jh` syntax <!-- dev-ready -->
 
 **Goal**  

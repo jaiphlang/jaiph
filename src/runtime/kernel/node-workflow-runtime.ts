@@ -1175,11 +1175,13 @@ export class NodeWorkflowRuntime {
       const res = await attempt();
       if (res.status === 0) return res;
       const recoverSteps = "single" in recover ? [recover.single] : recover.block;
-      // Recover blocks receive the failed ensure output in ${arg1}.
+      // Recover blocks receive the failed ensure output under the explicit binding name.
       const recoverVars = new Map(scope.vars);
       const recoverPayload = `${res.output}${res.error}`;
-      recoverVars.set("arg1", recoverPayload);
-      recoverVars.set("_jaiph_retry", String(i + 1));
+      recoverVars.set(recover.bindings.failure, recoverPayload);
+      if (recover.bindings.attempt) {
+        recoverVars.set(recover.bindings.attempt, String(i + 1));
+      }
       const recoverScope: Scope = {
         ...scope,
         vars: recoverVars,

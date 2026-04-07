@@ -28,8 +28,8 @@ rule ci_passes() {
 
 workflow implement(task, role) {
   const the_task = "${task}"
-  ensure ci_passes() recover {
-    const ci_failure_log = "${arg1}"
+  ensure ci_passes() recover (failure) {
+    const ci_failure_log = "${failure}"
     const ci_log_file = ".jaiph/tmp/ensure_ci_passes.last.log"
     run mkdir_p_simple(".jaiph/tmp")
     run save_string_to_file(ci_failure_log, ci_log_file)

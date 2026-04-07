@@ -311,7 +311,7 @@ test("ensure bare identifier with recover block parses correctly", () => {
       '  return "ok"',
       "}",
       "workflow default() {",
-      '  ensure check recover { log "retrying" }',
+      '  ensure check recover (failure) { log "retrying" }',
       "}",
     ].join("\n"),
     "test.jh",

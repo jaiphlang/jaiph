@@ -821,7 +821,7 @@ workflow fix_it() {
 }
 
 workflow default() {
-  ensure ci_passes("$repo_dir") recover {
+  ensure ci_passes("$repo_dir") recover (failure) {
     run fix_it()
   }
 }

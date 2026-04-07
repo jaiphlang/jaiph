@@ -369,7 +369,7 @@ workflow default() {
 }
 
 === ensure recover with args after recover
-# @expect error E_PARSE "rule arguments must appear before 'recover'" @6:22
+# @expect error E_PARSE "recover requires explicit bindings" @6:22
 --- input.jh
 rule ci_passes() {
   run ci_passes_impl()
@@ -382,7 +382,7 @@ workflow default() {
 }
 
 === ensure recover with multiple args after recover
-# @expect error E_PARSE "rule arguments must appear before 'recover'" @6:25
+# @expect error E_PARSE "recover requires explicit bindings" @6:25
 --- input.jh
 rule some_rule() {
   true
@@ -395,7 +395,7 @@ workflow default() {
 }
 
 === ensure recover without block
-# @expect error E_PARSE "recover requires a { ... } block" @6:33
+# @expect error E_PARSE "recover requires explicit bindings" @6:33
 --- input.jh
 rule ci_passes() {
   true
@@ -403,6 +403,18 @@ rule ci_passes() {
 
 workflow default() {
   ensure ci_passes("$repo_dir") recover
+}
+
+=== ensure recover without bindings (bare recover block)
+# @expect error E_PARSE "recover requires explicit bindings" @5:18
+--- input.jh
+rule check() {
+  return "ok"
+}
+workflow default() {
+  ensure check() recover {
+    log "recovering"
+  }
 }
 
 === capture and send combined alt form
@@ -947,7 +959,7 @@ rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover {
+  ensure check() recover (failure) {
     fail reason
   }
 }
@@ -959,7 +971,7 @@ rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover {
+  ensure check() recover (failure) {
     fail "reason
   }
 }
@@ -971,7 +983,7 @@ rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover {
+  ensure check() recover (failure) {
     log reason why
   }
 }
@@ -983,7 +995,7 @@ rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover {
+  ensure check() recover (failure) {
     log "reason
   }
 }
@@ -995,7 +1007,7 @@ rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover {
+  ensure check() recover (failure) {
     logerr reason why
   }
 }
@@ -1007,7 +1019,7 @@ rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover {
+  ensure check() recover (failure) {
     logerr "reason
   }
 }
@@ -1493,7 +1505,7 @@ rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover {
+  ensure check() recover (failure) {
     x = prompt "fix"
   }
 }
@@ -1560,7 +1572,7 @@ rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover {
+  ensure check() recover (failure) {
     log "recovering"
 
 === duplicate name: rule and workflow
@@ -1613,7 +1625,7 @@ rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover {
+  ensure check() recover (failure) {
   }
 }
 
@@ -1700,5 +1712,5 @@ rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover { }
+  ensure check() recover (failure) { }
 }
