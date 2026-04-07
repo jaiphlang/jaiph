@@ -22,7 +22,16 @@ workflow default() {
 EOF
 
 out="$(e2e::run "const_string.jh")"
-e2e::assert_contains "${out}" "hello-world" "const string value logged"
+
+e2e::expect_stdout "${out}" <<'EXPECTED'
+
+Jaiph: Running const_string.jh
+
+workflow default
+  ℹ hello-world
+
+✓ PASS workflow default (<time>)
+EXPECTED
 
 # ---------------------------------------------------------------------------
 e2e::section "const with run capture"
@@ -37,7 +46,18 @@ workflow default() {
 EOF
 
 out="$(e2e::run "const_run.jh")"
-e2e::assert_contains "${out}" "hi from fn" "const captured run stdout value"
+
+e2e::expect_stdout "${out}" <<'EXPECTED'
+
+Jaiph: Running const_run.jh
+
+workflow default
+  ▸ script greet
+  ✓ script greet (<time>)
+  ℹ hi from fn
+
+✓ PASS workflow default (<time>)
+EXPECTED
 
 # ---------------------------------------------------------------------------
 e2e::section "const with ensure capture"
@@ -54,7 +74,18 @@ workflow default() {
 EOF
 
 out="$(e2e::run "const_ensure.jh")"
-e2e::assert_contains "${out}" "rule-val" "const captured ensure return value"
+
+e2e::expect_stdout "${out}" <<'EXPECTED'
+
+Jaiph: Running const_ensure.jh
+
+workflow default
+  ▸ rule always_pass
+  ✓ rule always_pass (<time>)
+  ℹ rule-val
+
+✓ PASS workflow default (<time>)
+EXPECTED
 
 # ---------------------------------------------------------------------------
 e2e::section "const rejects command substitution"
@@ -72,6 +103,7 @@ bad_code=$?
 set -e
 
 [[ ${bad_code} -ne 0 ]] || e2e::fail "const with \$(...) should fail to build"
+# assert_contains: compile error includes absolute source path which varies per invocation
 e2e::assert_contains "${bad_out}" 'command substitution' "error mentions command substitution"
 
 # ---------------------------------------------------------------------------
@@ -93,7 +125,20 @@ workflow default() {
 EOF
 
 out="$(e2e::run "wait_step.jh")"
-e2e::assert_contains "${out}" "wait-done" "wait step completed"
+
+e2e::expect_stdout "${out}" <<'EXPECTED'
+
+Jaiph: Running wait_step.jh
+
+workflow default
+① ▸ workflow bg_job
+① ·   ▸ script write_marker
+  ℹ wait-done
+① ·   ✓ script write_marker (<time>)
+① ✓ workflow bg_job (<time>)
+
+✓ PASS workflow default (<time>)
+EXPECTED
 e2e::assert_file_exists "${TEST_DIR}/waited.txt" "async job wrote marker file"
 
 # ---------------------------------------------------------------------------
@@ -115,7 +160,20 @@ workflow default() {
 EOF
 
 out="$(e2e::run "brace_if_ensure.jh")"
-e2e::assert_contains "${out}" "then-branch" "brace if ensure then-branch ran"
+
+e2e::expect_stdout "${out}" <<'EXPECTED'
+
+Jaiph: Running brace_if_ensure.jh
+
+workflow default
+  ▸ rule always_ok
+  ·   ▸ script always_ok_impl
+  ·   ✓ script always_ok_impl (<time>)
+  ✓ rule always_ok (<time>)
+  ℹ then-branch
+
+✓ PASS workflow default (<time>)
+EXPECTED
 
 # ---------------------------------------------------------------------------
 e2e::section "brace if not ensure (negated)"
@@ -134,7 +192,20 @@ workflow default() {
 EOF
 
 out="$(e2e::run "brace_if_not.jh")"
-e2e::assert_contains "${out}" "negated-branch" "brace if not ensure ran"
+
+e2e::expect_stdout "${out}" <<'EXPECTED'
+
+Jaiph: Running brace_if_not.jh
+
+workflow default
+  ▸ rule always_fail
+  ·   ▸ script always_fail_impl
+  ·   ✗ script always_fail_impl (<time>)
+  ✗ rule always_fail (<time>)
+  ℹ negated-branch
+
+✓ PASS workflow default (<time>)
+EXPECTED
 
 # ---------------------------------------------------------------------------
 e2e::section "brace if with run + else"
@@ -153,11 +224,18 @@ workflow default() {
 EOF
 
 out="$(e2e::run "brace_if_run_else.jh")"
-e2e::assert_contains "${out}" "else-branch-ok" "brace if run else-branch ran"
-if echo "${out}" | grep -q "should-not-run"; then
-  e2e::fail "then-branch should not have run"
-fi
-e2e::pass "then-branch correctly skipped"
+
+e2e::expect_stdout "${out}" <<'EXPECTED'
+
+Jaiph: Running brace_if_run_else.jh
+
+workflow default
+  ▸ script returns_false
+  ✗ script returns_false (<time>)
+  ℹ else-branch-ok
+
+✓ PASS workflow default (<time>)
+EXPECTED
 
 # ---------------------------------------------------------------------------
 e2e::section "brace if with else if chain"
@@ -184,7 +262,22 @@ workflow default() {
 EOF
 
 out="$(e2e::run "brace_if_chain.jh")"
-e2e::assert_contains "${out}" "second-branch" "else if chain selected correct branch"
+
+e2e::expect_stdout "${out}" <<'EXPECTED'
+
+Jaiph: Running brace_if_chain.jh
+
+workflow default
+  ▸ rule always_fail
+  ·   ▸ script always_fail_impl
+  ·   ✗ script always_fail_impl (<time>)
+  ✗ rule always_fail (<time>)
+  ▸ script returns_ok
+  ✓ script returns_ok (<time>)
+  ℹ second-branch
+
+✓ PASS workflow default (<time>)
+EXPECTED
 
 # ---------------------------------------------------------------------------
 # structured rules: run + if + fail inside rules
@@ -207,7 +300,20 @@ workflow default() {
 EOF
 
 out="$(e2e::run "structured_rule.jh")"
-e2e::assert_contains "${out}" "passed" "structured rule passed with valid arg"
+
+e2e::expect_stdout "${out}" <<'EXPECTED'
+
+Jaiph: Running structured_rule.jh
+
+workflow default
+  ▸ rule require_name
+  ·   ▸ script check_ok
+  ·   ✓ script check_ok (<time>)
+  ✓ rule require_name (<time>)
+  ℹ passed
+
+✓ PASS workflow default (<time>)
+EXPECTED
 
 # ---------------------------------------------------------------------------
 e2e::section "structured rule fails correctly"
@@ -232,6 +338,7 @@ code=$?
 set -e
 
 [[ ${code} -ne 0 ]] || e2e::fail "structured rule should have failed"
+# assert_contains: FAIL output includes absolute run-dir paths which vary per invocation
 e2e::assert_contains "${out}" "Workflow execution failed." "structured rule failure is reported"
 
 # ---------------------------------------------------------------------------
@@ -257,6 +364,7 @@ code=$?
 set -e
 
 [[ ${code} -ne 0 ]] || e2e::fail "run workflow inside rule should be rejected"
+# assert_contains: runtime validation error includes absolute source path which varies per invocation
 e2e::assert_contains "${out}" "script" "error guides toward script"
 
 # ---------------------------------------------------------------------------
@@ -273,4 +381,13 @@ workflow default() {
 EOF
 
 out="$(e2e::run "module_const.jh")"
-e2e::assert_contains "${out}" "module-const-works" "module-level const accessible"
+
+e2e::expect_stdout "${out}" <<'EXPECTED'
+
+Jaiph: Running module_const.jh
+
+workflow default
+  ℹ module-const-works
+
+✓ PASS workflow default (<time>)
+EXPECTED

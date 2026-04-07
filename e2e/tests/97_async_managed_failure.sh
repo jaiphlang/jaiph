@@ -41,5 +41,6 @@ if [[ "$run_status" -eq 0 ]]; then
 fi
 e2e::pass "workflow exits non-zero when async managed run fails"
 
+# assert_contains: FAIL output includes absolute run-dir paths and timestamps which vary per invocation
 e2e::assert_contains "$run_output" "bad-run" "failed async run reason is surfaced to caller"
 

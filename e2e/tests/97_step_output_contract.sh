@@ -41,7 +41,7 @@ cap_files=( "${run_dir}"/*emit_captured.out )
 shopt -u nullglob
 [[ ${#cap_files[@]} -ge 1 ]] || e2e::fail "expected emit_captured .out artifact"
 cap_content="$(<"${cap_files[0]}")"
-e2e::assert_contains "${cap_content}" "captured=shell-value" "script capture = full stdout"
+e2e::assert_equals "${cap_content}" "captured=shell-value" "script capture = full stdout"
 
 # Script stdout goes to script .out artifact
 shopt -s nullglob
@@ -49,7 +49,7 @@ stdout_files=( "${run_dir}"/*emit_stdout.out )
 shopt -u nullglob
 [[ ${#stdout_files[@]} -ge 1 ]] || e2e::fail "expected emit_stdout .out artifact"
 stdout_content="$(<"${stdout_files[0]}")"
-e2e::assert_contains "${stdout_content}" "stdout-log" "script stdout in artifacts"
+e2e::assert_equals "${stdout_content}" "stdout-log" "script stdout in artifacts"
 
 # Script stderr goes to script .err artifact
 shopt -s nullglob
@@ -57,7 +57,7 @@ err_files=( "${run_dir}"/*emit_stderr.err )
 shopt -u nullglob
 if [[ ${#err_files[@]} -ge 1 ]]; then
   err_content="$(<"${err_files[0]}")"
-  e2e::assert_contains "${err_content}" "stderr-log" "script stderr in artifacts"
+  e2e::assert_equals "${err_content}" "stderr-log" "script stderr in artifacts"
 fi
 e2e::pass "script step output contract"
 
@@ -237,7 +237,7 @@ wf_outs=( "${run_dir}"/*default.out )
 shopt -u nullglob
 [[ ${#wf_outs[@]} -ge 1 ]] || e2e::fail "expected default .out artifact"
 wf_out="$(<"${wf_outs[0]}")"
-e2e::assert_contains "${wf_out}" "info-message" "log message in .out artifact"
+e2e::assert_equals "${wf_out}" "info-message" "log message in .out artifact"
 
 # Script stdout goes to script .out
 shopt -s nullglob
@@ -245,14 +245,13 @@ done_outs=( "${run_dir}"/*echo_done.out )
 shopt -u nullglob
 [[ ${#done_outs[@]} -ge 1 ]] || e2e::fail "expected echo_done .out artifact"
 done_content="$(<"${done_outs[0]}")"
-e2e::assert_contains "${done_content}" "done" "script stdout in .out artifact"
+e2e::assert_equals "${done_content}" "done" "script stdout in .out artifact"
 
 shopt -s nullglob
 wf_errs=( "${run_dir}"/*default.err )
 shopt -u nullglob
 if [[ ${#wf_errs[@]} -ge 1 ]]; then
   wf_err="$(<"${wf_errs[0]}")"
-  # assert_contains: .err may include runtime-injected stderr alongside logerr text
-  e2e::assert_contains "${wf_err}" "error-message" "logerr message in .err artifact"
+  e2e::assert_equals "${wf_err}" "error-message" "logerr message in .err artifact"
 fi
 e2e::pass "log/logerr output contract"

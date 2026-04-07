@@ -54,6 +54,7 @@ TREE="$(curl -fsS "http://127.0.0.1:${REPORT_PORT}/api/runs/${ENC}/tree")"
 echo "${TREE}" | node -e 'const j=JSON.parse(require("fs").readFileSync(0,"utf8")); if (!(j.steps&&j.steps.length)) process.exit(1);'
 
 AGG="$(curl -fsS "http://127.0.0.1:${REPORT_PORT}/api/runs/${ENC}/aggregate")"
+# assert_contains: aggregate JSON response includes dynamic server-generated metadata and run paths
 e2e::assert_contains "${AGG}" "agg-line" "aggregate includes step stdout"
 
 STEP_ID="$(echo "${TREE}" | node -e '
@@ -86,9 +87,11 @@ walk(j.steps);
 [[ -f "${OUT_FILE}" ]] || e2e::fail "out file missing"
 
 OUT_JSON="$(curl -fsS "http://127.0.0.1:${REPORT_PORT}/api/runs/${ENC}/steps/${STEP_ID}/output")"
+# assert_contains: HTTP response body includes dynamic server-generated content
 e2e::assert_contains "${OUT_JSON}" "agg-line" "embedded output API includes stdout text"
 
 RAW="$(curl -fsS "http://127.0.0.1:${REPORT_PORT}/api/runs/${ENC}/steps/${STEP_ID}/logs?stream=out")"
+# assert_contains: HTTP response body includes dynamic server-generated content
 e2e::assert_contains "${RAW}" "agg-line" "raw log stream returns .out body"
 
 e2e::section "reporting server: active run updates when summary is appended"

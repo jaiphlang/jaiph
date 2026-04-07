@@ -39,7 +39,9 @@ e2e::assert_file_exists "${TEST_DIR}/role_out.txt" "role variable written to fil
 e2e::assert_file_exists "${TEST_DIR}/greeting_out.txt" "greeting variable written to file"
 
 role_content="$(cat "${TEST_DIR}/role_out.txt")"
+# assert_contains: multi-line triple-quoted string includes indentation and newlines that make exact match fragile
 e2e::assert_contains "${role_content}" "You are an expert." "multi-line role value contains first line"
+# assert_contains: multi-line triple-quoted string includes indentation and newlines that make exact match fragile
 e2e::assert_contains "${role_content}" "You are concise" "multi-line role value contains last line"
 
 greeting_content="$(cat "${TEST_DIR}/greeting_out.txt")"

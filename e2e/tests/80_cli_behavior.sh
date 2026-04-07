@@ -15,6 +15,7 @@ e2e::section "CLI version and unknown command behavior"
 version_out="$(jaiph --version)"
 
 # Then
+# assert_contains: version string includes dynamic version number and optional build metadata
 e2e::assert_contains "${version_out}" "jaiph " "jaiph --version prints version banner"
 
 # When
@@ -31,7 +32,9 @@ unknown_out="$(cat "${unknown_out_file}")"
 rm -f "${unknown_out_file}" "${unknown_err_file}"
 
 # Then
+# assert_contains: error output includes dynamic usage text and available command list
 e2e::assert_contains "${unknown_err}" "Unknown command: definitely-not-a-command" "unknown command includes command name"
+# assert_contains: usage help text includes dynamic command list that may change across versions
 e2e::assert_contains "${unknown_out}" "Usage:" "unknown command prints usage help"
 
 e2e::section "CLI file extension guard for run"
@@ -52,4 +55,5 @@ bad_ext_err="$(cat "${bad_ext_err_file}")"
 rm -f "${bad_ext_err_file}"
 
 # Then
+# assert_contains: error message includes the absolute file path which varies per machine
 e2e::assert_contains "${bad_ext_err}" "expects a single .jh file" "run rejects unsupported file extension"

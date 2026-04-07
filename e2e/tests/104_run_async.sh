@@ -40,7 +40,27 @@ if [[ ! -f "${TEST_DIR}/a.txt" ]] || [[ ! -f "${TEST_DIR}/b.txt" ]]; then
 fi
 e2e::pass "both async branches executed"
 
-e2e::assert_contains "$run_output" "done" "log after async steps runs when all succeed"
+e2e::expect_stdout "$run_output" <<'EXPECTED'
+
+Jaiph: Running fanout.jh
+
+workflow default
+① ▸ workflow do_a
+① ·   ▸ script write_a
+② ▸ workflow do_b
+② ·   ▸ script write_b
+  ℹ done
+① ·   ✓ script write_a (<time>)
+① ✓ workflow do_a (<time>)
+② ·   ✓ script write_b (<time>)
+② ✓ workflow do_b (<time>)
+
+✓ PASS workflow default (<time>)
+EXPECTED
+
+e2e::expect_out "fanout.jh" "default" "done"
+e2e::expect_out "fanout.jh" "do_a" ""
+e2e::expect_out "fanout.jh" "do_b" ""
 
 # --- run async failure aggregation ---
 
@@ -71,8 +91,12 @@ if [[ "$fail_status" -eq 0 ]]; then
 fi
 e2e::pass "workflow exits non-zero on async failure"
 
+# FAIL output includes absolute run-dir paths which vary per invocation
 e2e::assert_contains "$fail_output" "error-a" "first failure message is surfaced"
 e2e::assert_contains "$fail_output" "fail_b" "second async branch shown failing in progress tree"
+
+e2e::expect_out "multi_fail.jh" "fail_a" ""
+e2e::expect_out "multi_fail.jh" "fail_b" ""
 
 # --- run async with sync steps: sync steps run before implicit join ---
 
@@ -91,12 +115,29 @@ workflow default() {
 }
 EOF
 
-e2e::run "async_interleave.jh" >/dev/null 2>&1
+interleave_output="$(e2e::run "async_interleave.jh" 2>&1)"
 
 if [[ ! -f "${TEST_DIR}/sync_marker.txt" ]]; then
   e2e::fail "sync step should execute while async steps are pending"
 fi
 e2e::pass "sync steps run before implicit join"
+
+e2e::expect_stdout "$interleave_output" <<'EXPECTED'
+
+Jaiph: Running async_interleave.jh
+
+workflow default
+① ▸ workflow slow
+  ▸ script write_marker
+① ·   ℹ slow-done
+① ✓ workflow slow (<time>)
+  ✓ script write_marker (<time>)
+
+✓ PASS workflow default (<time>)
+EXPECTED
+
+e2e::expect_out "async_interleave.jh" "default" "slow-done"
+e2e::expect_out "async_interleave.jh" "slow" "slow-done"
 
 # --- capture + run async is rejected at parse time ---
 
@@ -120,6 +161,7 @@ set -e
 if [[ "$capture_status" -eq 0 ]]; then
   e2e::fail "expected parse error for capture + run async"
 fi
+# Error line includes absolute source path which varies per invocation
 e2e::assert_contains "$capture_output" "capture is not supported with run async" "capture + run async diagnostic"
 
 # --- run async sibling depth in progress tree ---
@@ -147,28 +189,22 @@ EOF
 
 depth_output="$(NO_COLOR=1 e2e::run "sibling_depth.jh" 2>&1)"
 
-# Extract the first "▸ workflow branch_x/y" start lines from the progress output.
-# Both sibling async workflows should have the same leading whitespace (same depth).
-branch_x_line="$(echo "$depth_output" | grep '▸ workflow branch_x' | head -1)"
-branch_y_line="$(echo "$depth_output" | grep '▸ workflow branch_y' | head -1)"
+e2e::expect_stdout "$depth_output" <<'EXPECTED'
 
-if [[ -z "$branch_x_line" ]] || [[ -z "$branch_y_line" ]]; then
-  printf "Output was:\n%s\n" "$depth_output" >&2
-  e2e::fail "expected both workflow start lines in progress output"
-fi
+Jaiph: Running sibling_depth.jh
 
-# Extract leading text before the ▸ marker. With circled async numbers the
-# prefixes differ (① vs ②) but their *length* must be equal (same depth).
-indent_x="${branch_x_line%%▸*}"
-indent_y="${branch_y_line%%▸*}"
+workflow default
+① ▸ workflow branch_x
+① ·   ▸ script write_x
+② ▸ workflow branch_y
+② ·   ▸ script write_y
+① ·   ✓ script write_x (<time>)
+① ✓ workflow branch_x (<time>)
+② ·   ✓ script write_y (<time>)
+② ✓ workflow branch_y (<time>)
 
-if [[ "${#indent_x}" -ne "${#indent_y}" ]]; then
-  printf "branch_x indent: [%s]\n" "$indent_x" >&2
-  printf "branch_y indent: [%s]\n" "$indent_y" >&2
-  printf "Output was:\n%s\n" "$depth_output" >&2
-  e2e::fail "async sibling workflows should have same indentation depth"
-fi
-e2e::pass "async sibling workflows render at same tree depth"
+✓ PASS workflow default (<time>)
+EXPECTED
 
 # --- circled numbers on async branches ---
 
@@ -191,17 +227,25 @@ EOF
 
 circled_output="$(NO_COLOR=1 e2e::run "circled.jh" 2>&1)"
 
-# ① should prefix the first async branch (alpha)
-# non-deterministic interleaving: assert_contains is required
-e2e::assert_contains "$circled_output" "①" "circled ① appears for first async branch"
-# ② should prefix the second async branch (beta)
-e2e::assert_contains "$circled_output" "②" "circled ② appears for second async branch"
-# Non-async lines (root workflow, PASS line) must NOT have circled numbers
-pass_line="$(echo "$circled_output" | grep 'PASS')"
-if echo "$pass_line" | LC_ALL=en_US.UTF-8 grep -q '[①②③④⑤⑥⑦⑧⑨⑩]'; then
-  e2e::fail "PASS line should not have circled number prefix"
-fi
-e2e::pass "non-async lines have no circled number"
+e2e::expect_stdout "$circled_output" <<'EXPECTED'
+
+Jaiph: Running circled.jh
+
+workflow default
+① ▸ workflow alpha
+② ▸ workflow beta
+① ·   ℹ alpha-done
+② ·   ℹ beta-done
+① ✓ workflow alpha (<time>)
+② ✓ workflow beta (<time>)
+
+✓ PASS workflow default (<time>)
+EXPECTED
+
+e2e::expect_out "circled.jh" "default" "alpha-done
+beta-done"
+e2e::expect_out "circled.jh" "alpha" "alpha-done"
+e2e::expect_out "circled.jh" "beta" "beta-done"
 
 # --- nested async with circled numbers ---
 
@@ -233,17 +277,29 @@ EOF
 
 nested_output="$(NO_COLOR=1 e2e::run "nested_async.jh" 2>&1)"
 
-# Outer async branches get ① and ②
-e2e::assert_contains "$nested_output" "①" "outer ① present"
-e2e::assert_contains "$nested_output" "②" "outer ② present"
+e2e::expect_stdout "$nested_output" <<'EXPECTED'
 
-# Nested async inside outer() should produce lines with two circled numbers.
-# The inner branches of outer() get their own ① ② at the nested indent level.
-# Look for a line containing two circled-number characters (① · ① or ① · ②).
-# non-deterministic interleaving: assert_contains is required
-nested_line="$(echo "$nested_output" | LC_ALL=en_US.UTF-8 grep '①.*·.*①\|①.*·.*②' | head -1)"
-if [[ -z "$nested_line" ]]; then
-  printf "Output was:\n%s\n" "$nested_output" >&2
-  e2e::fail "expected nested async lines with two circled numbers (e.g. ① · ① ...)"
-fi
-e2e::pass "nested async branches show two levels of circled numbers"
+Jaiph: Running nested_async.jh
+
+workflow default
+① ▸ workflow outer
+① · ① ▸ workflow inner_a
+① · ② ▸ workflow inner_b
+② ▸ workflow side
+① · ① ·   ℹ inner-a
+① · ② ·   ℹ inner-b
+② ·   ℹ side-done
+① · ① ✓ workflow inner_a (<time>)
+① · ② ✓ workflow inner_b (<time>)
+② ✓ workflow side (<time>)
+① ✓ workflow outer (<time>)
+
+✓ PASS workflow default (<time>)
+EXPECTED
+
+e2e::expect_out "nested_async.jh" "default" "inner-a
+inner-b
+side-done"
+e2e::expect_out "nested_async.jh" "inner_a" "inner-a"
+e2e::expect_out "nested_async.jh" "inner_b" "inner-b"
+e2e::expect_out "nested_async.jh" "side" "side-done"

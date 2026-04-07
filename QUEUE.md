@@ -12,40 +12,91 @@ Process rules:
 
 ---
 
-## Testing — upgrade e2e tests to full output comparison <!-- dev-ready -->
+## CLI — async branch numbers in progress tree <!-- dev-ready -->
 
 **Goal**  
-Async step ordering is deterministic. Many e2e tests use `e2e::assert_contains` for output that is fully predictable. Replace these with `e2e::expect_stdout` (full normalized output comparison) and `e2e::expect_out` / `e2e::expect_run_file` (full artifact comparison). `assert_contains` should only survive where output is genuinely nondeterministic (platform-dependent text, unbounded logs, timing-dependent ordering) — and each surviving use must have an inline comment explaining why.
+When a workflow uses `run async`, the progress tree should show a **subscript number** prefix on every output line belonging to that async branch. This makes interleaved async output scannable — you can tell which branch produced which line without tracing indentation.
 
-**Primary target: `e2e/tests/104_run_async.sh`**  
-Currently uses `assert_contains` 10 times, `expect_stdout` 0 times. Async output ordering is deterministic (dispatch order = print order). Every section should use `e2e::expect_stdout` for the full CLI tree output and `e2e::expect_out` / `e2e::expect_run_file` for run artifacts.
+**Numbering**  
+Subscript numbers use Unicode U+2080-U+2089: ₀ ₁ ₂ ₃ ₄ ₅ ₆ ₇ ₈ ₉. Numbering is **global order of `run async` dispatch** within the parent workflow (first async call = ₁, second = ₂, etc.). Two-digit support: `₁₀`, `₁₁`, etc. The number is always rendered with a leading space (` ₁`, ` ₂`, ` ₁₂`) to maintain alignment with non-async lines.
 
-**Secondary: audit all e2e tests**  
-34 e2e test files use `assert_contains`. Audit each use. For deterministic output, upgrade to full comparison. Files with highest `assert_contains` counts to audit first:
-- `101_ensure_recover_output_contract.sh` (15 uses)
-- `100_inline_capture_interpolation.sh` (13 uses)
-- `78_lang_redesign_constructs.sh` (13 uses)
-- `50_cli_and_parse_guards.sh` (11 uses)
-- `70_run_artifacts.sh` (10 uses)
-- `104_run_async.sh` (10 uses)
-- `97_step_output_contract.sh` (9 uses)
+The number appears at the **same indentation level as the async call site** — if a nested workflow fires its own `run async`, those get their own numbering at the nested indent level.
 
-**Run artifact verification**  
-Tests that exercise `run async`, `ensure ... recover`, and inbox dispatch should also verify:
-- `.jaiph/runs/` step `.out` / `.err` file contents via `e2e::expect_out` / `e2e::expect_run_file`
-- `run_summary.jsonl` event sequence where relevant (event types, ordering, step IDs)
+**Color**  
+Subscript numbers are rendered in **dim/grey** (ANSI `\u001b[2m`) — same style as the `·` continuation markers. When `NO_COLOR` is set or output is non-TTY, the subscript number is emitted without ANSI codes.
+
+**Before → After**
+
+Before:
+```text
+workflow default
+  ▸ workflow cursor_say_hello
+  ▸ workflow claude_say_hello
+  ·   ▸ prompt cursor "Say: Greetings! I am [mo..."
+  ·   ▸ prompt claude "Say: Greetings! I am [mo..."
+  ·   ✓ prompt claude (4s)
+  ·   ℹ Greetings! I am Claude Opus 4.6.
+  ✓ workflow claude_say_hello (4s)
+  ·   ✓ prompt cursor (5s)
+  ·   ℹ Greetings! I am Composer.
+  ✓ workflow cursor_say_hello (5s)
+
+✓ PASS workflow default (5.6s)
+```
+
+After:
+```text
+workflow default
+ ₁▸ workflow cursor_say_hello
+ ₂▸ workflow claude_say_hello
+ ₁·   ▸ prompt cursor "Say: Greetings! I am [mo..."
+ ₂·   ▸ prompt claude "Say: Greetings! I am [mo..."
+ ₂·   ✓ prompt claude (4s)
+ ₂·   ℹ Greetings! I am Claude Opus 4.6.
+ ₂✓ workflow claude_say_hello (4s)
+ ₁·   ✓ prompt cursor (5s)
+ ₁·   ℹ Greetings! I am Composer.
+ ₁✓ workflow cursor_say_hello (5s)
+
+✓ PASS workflow default (5.6s)
+```
+
+Non-async steps (the root workflow line, `✓ PASS`) have **no** subscript number — only lines within an async branch get one.
+
+**Nested async example**
+
+```text
+workflow default
+ ₁▸ workflow parallel_suite
+ ₂▸ workflow lint_check
+ ₁·  ₁▸ workflow test_unit
+ ₁·  ₂▸ workflow test_integration
+ ₁·  ₁✓ workflow test_unit (2s)
+ ₁·  ₂✓ workflow test_integration (5s)
+ ₁✓ workflow parallel_suite (5s)
+ ₂✓ workflow lint_check (1s)
+
+✓ PASS workflow default (5s)
+```
 
 **Context**
 
-- E2e helpers: `e2e/lib/common.sh` — `e2e::expect_stdout`, `e2e::assert_output_equals`, `e2e::expect_out`, `e2e::expect_run_file`, `e2e::expect_run_file_count`, `e2e::normalize_output`.
-- Policy is already documented in `e2e/lib/common.sh` header (lines 5-12), `AGENT.md` ("Tree Output Assertions"), and `.jaiph/engineer.jh` (rule #8 in `code_philosophy`).
+- Progress tree builder: `src/cli/run/progress.ts` — `buildRunTreeRows()` / `collectWorkflowChildren()`. The `asyncPrefix` is already tracked (`step.async ? "async " : ""`); extend with a numeric index.
+- Display renderer: `src/cli/run/display.ts` — `formatStartLine()`, `formatCompletedLine()`, `formatHeartbeatLine()`. These take `indent` and render `·` prefixes. The subscript number needs to be prepended at the indent level of the async call site.
+- Runtime event pipeline: `src/runtime/kernel/node-workflow-runtime.ts` — `executeSteps()` dispatches async branches via `asyncFrameStack.run()`. The async branch index needs to propagate through `STEP_START`/`STEP_END`/`LOG` events so the display layer can map lines to branches.
+- Stderr handler: `src/cli/run/stderr-handler.ts` — parses `run_summary.jsonl` events and renders lines; needs to read the async branch index from events.
+- E2E tests: `e2e/tests/104_run_async.sh` — existing async tests; add cases verifying subscript numbers for flat and nested async.
+- Docs: `docs/index.html` — update the async workflow output sample to show subscript numbers.
 
 **Acceptance criteria**
 
-- `e2e/tests/104_run_async.sh` uses `e2e::expect_stdout` for all deterministic output sections.
-- Every surviving `assert_contains` in the e2e suite has an inline comment explaining why full comparison is not feasible.
-- Run artifact contents (`.out` files) are verified with `e2e::expect_out` / `e2e::expect_run_file` in async, ensure/recover, and inbox tests.
-- All e2e tests pass after the upgrade.
+- `run async` branches display subscript numbers (` ₁` ` ₂` ` ₃`…) at the async call site's indentation level in both TTY and non-TTY output.
+- Two-digit numbers work (`₁₀`, `₁₁`, etc.).
+- Numbers are dim/grey in TTY mode; plain text in non-TTY / `NO_COLOR`.
+- Nested `run async` inside a child workflow gets its own numbering scope at the child's indent level.
+- Non-async lines have no subscript number prefix.
+- E2E test with nested async workflows verifies correct numbering and indentation.
+- `docs/index.html` async sample updated.
 
 ---
 

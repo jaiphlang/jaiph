@@ -50,11 +50,13 @@ run_dir="$(e2e::run_dir_at "${TEST_DIR}/runs_out" "artifacts_fail.jh")"
 summary_file="${run_dir}run_summary.jsonl"
 
 # Then
+# assert_contains: FAIL stderr output includes absolute run-dir paths which vary per invocation
 e2e::assert_contains "${run_err_out}" "Logs:" "failure output includes logs location"
 e2e::assert_contains "${run_err_out}" "Summary:" "failure output includes summary location"
 e2e::assert_contains "${run_err_out}" "err:" "failure output includes failing stderr file path"
 e2e::assert_file_exists "${summary_file}" "run summary file is created"
 summary_content="$(<"${summary_file}")"
+# assert_contains: run_summary.jsonl contains timestamps, UUIDs, and paths that vary per invocation
 e2e::assert_contains "${summary_content}" "\"type\":\"STEP_END\"" "summary records step end events"
 e2e::assert_contains "${summary_content}" "\"status\":1" "summary records non-zero failing step status"
 
@@ -92,10 +94,11 @@ shopt -u nullglob
 [[ ${#sc_outs[@]} -ge 1 ]] || e2e::fail "expected script echo_line_impl .out"
 
 wf_out="$(<"${wf_outs[0]}")"
+# assert_contains: prompt transcript includes agent command path and flags that vary by backend/config
 e2e::assert_contains "${wf_out}" "Command:" "workflow .out includes prompt command transcript"
 e2e::assert_contains "${wf_out}" "Prompt:" "workflow .out includes prompt header"
 e2e::assert_contains "${wf_out}" "e2e-artifacts-prompt-line" "workflow .out includes prompt body"
 e2e::assert_contains "${wf_out}" "mock-final-line" "workflow .out includes mocked prompt final text"
 
-e2e::assert_contains "$(<"${sc_outs[0]}")" "script-step-out" "script step .out captures script stdout only"
+e2e::assert_equals "$(<"${sc_outs[0]}")" "script-step-out" "script step .out captures script stdout only"
 e2e::pass "prompt + script artifacts: split between workflow .out and script .out"

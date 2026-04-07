@@ -36,6 +36,10 @@ e2e::run "basic_inbox.jh" >/dev/null
 # Then
 e2e::assert_file_exists "${TEST_DIR}/received.txt" "receiver was invoked by inbox dispatch"
 e2e::assert_equals "$(cat "${TEST_DIR}/received.txt")" "hello from sender" "receiver gets message content via inbox route"
+e2e::expect_out "basic_inbox.jh" "emit_hello" "hello from sender"
+e2e::expect_file "*inbox/001-greetings.txt" <<'EOF'
+hello from sender
+EOF
 
 e2e::section "Multi-target route"
 
@@ -172,16 +176,26 @@ EOF
 display_out="$(e2e::run "display_inbox.jh" 2>/dev/null)"
 
 # Then
-# assert_contains: CLI progress tree includes dispatch timing and indentation that varies
-e2e::assert_contains "${display_out}" "workflow default" "display workflow ran"
-e2e::assert_contains "${display_out}" "workflow analyst" "analyst dispatch is visible"
-# assert_contains: param values include dynamic message content and timing varies
-e2e::assert_contains "${display_out}" 'chan="findings"' "analyst dispatch shows channel param"
-e2e::assert_contains "${display_out}" 'sender="scanner"' "analyst dispatch shows sender param"
-e2e::assert_contains "${display_out}" "workflow reviewer" "reviewer dispatch is visible"
-e2e::assert_contains "${display_out}" 'chan="report"' "reviewer dispatch shows channel param"
-e2e::assert_contains "${display_out}" 'sender="analyst"' "reviewer dispatch shows sender param"
-e2e::assert_contains "${display_out}" "✓ PASS workflow default" "display workflow succeeds"
+e2e::expect_stdout "${display_out}" <<'EXPECTED'
+
+Jaiph: Running display_inbox.jh
+
+workflow default
+  ▸ workflow scanner
+  ·   ▸ script emit_findings
+  ·   ✓ script emit_findings (<time>)
+  ✓ workflow scanner (<time>)
+  ▸ workflow analyst (message="Found 3 issues in auth module", chan="findings", sender="scanner")
+  ·   ▸ script emit_summary (1="Found 3 issues in auth module")
+  ·   ✓ script emit_summary (<time>)
+  ✓ workflow analyst (<time>)
+  ▸ workflow reviewer (message="Summary: Found 3 issues in auth ...", chan="report", sender="analyst")
+  ·   ▸ script print_reviewed (1="Summary: Found 3 issues in auth ...")
+  ·   ✓ script print_reviewed (<time>)
+  ✓ workflow reviewer (<time>)
+
+✓ PASS workflow default (<time>)
+EXPECTED
 e2e::expect_out_files "display_inbox.jh" 7
 e2e::expect_file "*script__print_reviewed.out" <<'EOF'
 [reviewed] Summary: Found 3 issues in auth module

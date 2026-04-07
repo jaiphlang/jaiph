@@ -15,6 +15,7 @@ e2e::section "Installer and smoke checks"
 help_output="$(jaiph --help)"
 
 # Then
+# assert_contains: help text includes dynamic command list and version info that vary across builds
 e2e::assert_contains "${help_output}" "jaiph" "jaiph CLI responds to --help"
 
 e2e::section "Project init and generated files"

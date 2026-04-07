@@ -33,7 +33,9 @@ e2e::assert_file_exists "${TEST_DIR}/before.txt" "before.txt created before back
 e2e::assert_file_exists "${TEST_DIR}/job1.txt"   "job1.txt created by background process"
 e2e::assert_file_exists "${TEST_DIR}/job2.txt"   "job2.txt created by background process"
 e2e::assert_file_exists "${TEST_DIR}/after.txt"   "after.txt created after wait"
+# assert_contains: file may contain trailing newline or shell-injected whitespace
 e2e::assert_contains "$(cat "${TEST_DIR}/job1.txt")" "job1" "job1 output correct"
+# assert_contains: file may contain trailing newline or shell-injected whitespace
 e2e::assert_contains "$(cat "${TEST_DIR}/job2.txt")" "job2" "job2 output correct"
 
 # ---------------------------------------------------------------------------
@@ -101,7 +103,9 @@ line_count="$(echo "$out_content" | wc -l | tr -d ' ')"
 if [[ "$line_count" -lt 10 ]]; then
   e2e::fail "expected at least 10 lines in output, got ${line_count}"
 fi
+# assert_contains: concurrent background jobs produce interleaved output in nondeterministic order
 e2e::assert_contains "$out_content" "A-1" "output contains A-1"
+# assert_contains: concurrent background jobs produce interleaved output in nondeterministic order
 e2e::assert_contains "$out_content" "B-5" "output contains B-5"
 e2e::pass "concurrent stdout from background jobs captured in .out artifact"
 

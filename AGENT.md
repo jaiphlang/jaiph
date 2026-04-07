@@ -52,10 +52,11 @@ E2E tests are documentation. They must be easy for humans to read.
 
 For `jaiph run` output, assert the **whole tree contract**, not isolated fragments.
 
-- Use `e2e::assert_output_equals` with normalized output whenever possible.
+- Use `e2e::expect_stdout` with a heredoc for full normalized output comparison.
 - Build an expected multiline output block and compare end-to-end.
-- Do not rely only on partial `assert_contains` checks for tree structure.
+- `e2e::assert_contains` is allowed only when full equality is not feasible — every use must have an inline comment explaining why (nondeterministic output, absolute paths, platform-dependent text).
 - If output is dynamic (timings/colors), normalize first via `e2e::normalize_output`.
+- Verify run artifacts independently with `e2e::expect_out` / `e2e::expect_run_file`.
 
 ## TTY / Progress Rendering Guidance
 

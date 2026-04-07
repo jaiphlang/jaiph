@@ -93,7 +93,7 @@ out_block="$(e2e::run "retry_block.jh" 2>&1)"
 # Then
 e2e::assert_file_exists "${TEST_DIR}/ready2.txt" "recover block ran and created ready2.txt"
 e2e::assert_file_exists "${TEST_DIR}/recover_ran.txt" "recover block first statement ran"
-e2e::assert_contains "$(cat "${TEST_DIR}/recover_ran.txt")" "recovering" "recover block echoed into file"
+e2e::assert_equals "$(cat "${TEST_DIR}/recover_ran.txt")" "recovering" "recover block echoed into file"
 
 e2e::expect_stdout "${out_block}" <<'EOF'
 
@@ -145,6 +145,7 @@ set -e
 
 # Then
 e2e::assert_equals "${exit_fail}" "1" "jaiph run exits 1 when ensure condition never passes within max retries"
+# assert_contains: FAIL output includes absolute run-dir paths which vary per invocation
 e2e::assert_contains "${out_fail}" "Workflow execution failed." "stderr reports workflow failure after retry exhaustion"
 e2e::pass "ensure ... recover: exit 1 after JAIPH_ENSURE_MAX_RETRIES"
 
@@ -179,5 +180,6 @@ out_ml="$(e2e::run "recover_multiline_prompt.jh" 2>&1)"
 
 # Then
 e2e::assert_file_exists "${TEST_DIR}/ready3.txt" "recover with multiline prompt ran and created ready3.txt"
+# assert_contains: prompt output includes dynamic agent command and response content
 e2e::assert_contains "${out_ml}" "prompt" "output mentions prompt step"
 e2e::pass "ensure ... recover { multiline prompt with param }: parses and runs"

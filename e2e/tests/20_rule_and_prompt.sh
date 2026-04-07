@@ -79,6 +79,7 @@ rule_fail_err="$(cat "${rule_fail_stderr}")"
 rm -f "${rule_fail_stderr}"
 
 # Then
+# assert_contains: FAIL output includes absolute run-dir paths and progress tree which vary per invocation
 e2e::assert_contains "${rule_fail_err}" "e2e-rule-fail-message" "rule_fail.jh emits expected stderr"
 
 # Given
@@ -109,6 +110,7 @@ ensure_fail_err="$(cat "${ensure_fail_stderr}")"
 rm -f "${ensure_fail_stderr}"
 
 # Then
+# assert_contains: FAIL output includes absolute run-dir paths and progress tree which vary per invocation
 e2e::assert_contains "${ensure_fail_err}" "e2e-rule-fail-message" "ensure failure emits expected stderr"
 
 # Given
@@ -154,8 +156,11 @@ workflow default
 EOF
 prompt_flow_run_dir="$(e2e::run_dir "prompt_flow.jh")"
 prompt_flow_out="$(<"${prompt_flow_run_dir}000001-workflow__default.out")"
+# assert_contains: prompt transcript includes dynamic agent command output and timestamps
 e2e::assert_contains "${prompt_flow_out}" "Command:" "prompt_flow default .out contains prompt command transcript"
+# assert_contains: prompt transcript includes dynamic agent command output and timestamps
 e2e::assert_contains "${prompt_flow_out}" "Prompt:" "prompt_flow default .out contains prompt section"
+# assert_contains: prompt transcript includes dynamic agent command output and timestamps
 e2e::assert_contains "${prompt_flow_out}" "Final answer:" "prompt_flow default .out contains prompt final section"
 
 # Prompt with variable references shows named params in tree (not positional args)
@@ -181,6 +186,7 @@ workflow default
 EOF
 prompt_vars_run_dir="$(e2e::run_dir "prompt_with_vars.jh")"
 prompt_vars_out_file="$(<"${prompt_vars_run_dir}000001-workflow__default.out")"
+# assert_contains: prompt transcript includes dynamic agent command headers and response body
 e2e::assert_contains "${prompt_vars_out_file}" "engineer does Fix bugs" "prompt_with_vars transcript includes rendered prompt text"
 
 # Async prompt branches produce distinct artifacts and unique seq values
@@ -252,6 +258,7 @@ workflow default
 EOF
 multiline_run_dir="$(e2e::run_dir "multiline_prompt.jh")"
 multiline_default_out="$(<"${multiline_run_dir}000001-workflow__default.out")"
+# assert_contains: prompt transcript includes dynamic agent command headers and response body
 e2e::assert_contains "${multiline_default_out}" "Line one and line two." "triple-quoted prompt transcript is captured in workflow .out"
 
 # Given: workflow with prompt but test does not mock it -> selected backend runs (cursor by default).

@@ -24,6 +24,7 @@ basic_out="$(e2e::run "inline_basic.jh")"
 # hash-based name is deterministic but hard to predict in heredoc; check structure
 # nondeterministic: inline script name contains content hash
 e2e::assert_contains "${basic_out}" "script __inline_" "tree shows inline script step"
+# assert_contains: output includes dynamic timing and inline script hash name
 e2e::assert_contains "${basic_out}" "PASS workflow default" "workflow passes"
 
 # Verify artifact content

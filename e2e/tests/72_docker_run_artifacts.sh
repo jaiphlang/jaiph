@@ -45,6 +45,7 @@ summary_file="${run_dir}run_summary.jsonl"
 e2e::assert_file_exists "${summary_file}" "docker: run_summary.jsonl exists on host"
 
 summary_content="$(<"${summary_file}")"
+# assert_contains: run_summary.jsonl contains timestamps, UUIDs, and paths that vary per invocation
 e2e::assert_contains "${summary_content}" "\"type\":\"STEP_END\"" "docker: summary records step events"
 
 # At least one .out file should exist
