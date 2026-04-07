@@ -199,3 +199,42 @@ jaiph format "${TEST_DIR}/multiline_prompt.jh"
 second_prompt="$(cat "${TEST_DIR}/multiline_prompt.jh")"
 
 e2e::assert_equals "${first_prompt}" "${second_prompt}" "multiline prompt format is idempotent"
+
+# -------------------------------------------------------------------
+e2e::section "jaiph format preserves blank lines between steps"
+
+e2e::file "blank_lines.jh" <<'EOF'
+workflow default() {
+  log "first"
+
+  log "second"
+  log "third"
+
+  run some_wf()
+}
+
+workflow some_wf() {
+  log "hello"
+}
+EOF
+
+jaiph format "${TEST_DIR}/blank_lines.jh"
+
+blank_out="$(cat "${TEST_DIR}/blank_lines.jh")"
+e2e::assert_equals "${blank_out}" 'workflow default() {
+  log "first"
+
+  log "second"
+  log "third"
+
+  run some_wf()
+}
+
+workflow some_wf() {
+  log "hello"
+}' "preserves blank lines between steps"
+
+# Verify idempotency with blank lines
+jaiph format "${TEST_DIR}/blank_lines.jh"
+blank_out2="$(cat "${TEST_DIR}/blank_lines.jh")"
+e2e::assert_equals "${blank_out}" "${blank_out2}" "blank line preservation is idempotent"

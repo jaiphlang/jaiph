@@ -130,7 +130,13 @@ export function parseRuleBlock(
           accumShellCol = colFromRaw(innerRaw);
         }
         currentCommandLines.push(innerRaw);
-      } else flushCommand();
+      } else {
+        flushCommand();
+        const lastStep = rule.steps[rule.steps.length - 1];
+        if (lastStep && lastStep.type !== "blank_line") {
+          rule.steps.push({ type: "blank_line" });
+        }
+      }
       continue;
     }
     if (inner.startsWith("#")) {
@@ -220,6 +226,9 @@ export function parseRuleBlock(
   flushCommand();
   if (i >= lines.length) {
     fail(filePath, `unterminated rule block: ${rule.name}`, lineNo);
+  }
+  while (rule.steps.length > 0 && rule.steps[rule.steps.length - 1].type === "blank_line") {
+    rule.steps.pop();
   }
   return { rule, nextIndex: i + 1, exported: isExported };
 }

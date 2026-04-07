@@ -466,7 +466,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           `${s.type} is not allowed in rules`,
         );
       }
-      if (s.type === "comment") {
+      if (s.type === "comment" || s.type === "blank_line") {
         return;
       }
       if (s.type === "ensure") {
@@ -771,7 +771,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
     // Named params are validated via knownVars; positional argN access was removed.
 
     const validateStep = (s: WorkflowStepDef, recoverPayloadArg1?: boolean): void => {
-      if (s.type === "comment") {
+      if (s.type === "comment" || s.type === "blank_line") {
         return;
       }
       if (s.type === "send") {

@@ -594,7 +594,7 @@ export class NodeWorkflowRuntime {
     let returnValue: string | undefined;
     const pendingAsync: Array<{ ref: string; promise: Promise<StepResult> }> = [];
     for (const step of steps) {
-      if (step.type === "comment") continue;
+      if (step.type === "comment" || step.type === "blank_line") continue;
       if (step.type === "log") {
         const logIr = await this.interpolateWithCaptures(step.message, scope);
         if (!logIr.ok) return this.mergeStepResult(accOut, accErr, logIr.result);
