@@ -130,3 +130,72 @@ no_args_exit=0
 jaiph format 2>/dev/null || no_args_exit=$?
 
 e2e::assert_equals "${no_args_exit}" "1" "no args exits 1"
+
+# -------------------------------------------------------------------
+e2e::section "jaiph format multiline string idempotency"
+
+e2e::file "multiline_str.jh" <<'EOF'
+workflow default() {
+  const txt = """
+    AAA
+    BBB
+  """
+  log """
+hello multiline
+world
+"""
+}
+EOF
+
+jaiph format "${TEST_DIR}/multiline_str.jh"
+first_pass="$(cat "${TEST_DIR}/multiline_str.jh")"
+
+jaiph format "${TEST_DIR}/multiline_str.jh"
+second_pass="$(cat "${TEST_DIR}/multiline_str.jh")"
+
+e2e::assert_equals "${first_pass}" "${second_pass}" "multiline string format is idempotent"
+
+# -------------------------------------------------------------------
+e2e::section "jaiph format multiline script idempotency"
+
+e2e::file "multiline_script.jh" <<'EOF'
+script greet = ```bash
+echo "hello"
+echo "world"
+```
+
+workflow default() {
+  run ```bash
+echo "inline"
+echo "script"
+```()
+}
+EOF
+
+jaiph format "${TEST_DIR}/multiline_script.jh"
+first_script="$(cat "${TEST_DIR}/multiline_script.jh")"
+
+jaiph format "${TEST_DIR}/multiline_script.jh"
+second_script="$(cat "${TEST_DIR}/multiline_script.jh")"
+
+e2e::assert_equals "${first_script}" "${second_script}" "multiline script format is idempotent"
+
+# -------------------------------------------------------------------
+e2e::section "jaiph format multiline prompt idempotency"
+
+e2e::file "multiline_prompt.jh" <<'EOF'
+workflow default() {
+  const result = prompt """
+    You are a helpful assistant.
+    Please help me.
+  """
+}
+EOF
+
+jaiph format "${TEST_DIR}/multiline_prompt.jh"
+first_prompt="$(cat "${TEST_DIR}/multiline_prompt.jh")"
+
+jaiph format "${TEST_DIR}/multiline_prompt.jh"
+second_prompt="$(cat "${TEST_DIR}/multiline_prompt.jh")"
+
+e2e::assert_equals "${first_prompt}" "${second_prompt}" "multiline prompt format is idempotent"

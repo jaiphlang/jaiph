@@ -12,34 +12,6 @@ Process rules:
 
 ---
 
-## Tooling — `jaiph format` must not mutate multiline string content <!-- dev-ready -->
-
-**Goal**  
-Repeated runs of `jaiph format` must not add indentation to the inner text of multiline strings (including prompts and any other `"""…"""` blocks). Each format pass currently "shifts" the body deeper, so content like:
-
-```text
-const txt = """
-    AAA
-    BBB
-"""
-```
-
-drifts on every format. The formatter should leave multiline string bodies **unchanged** (no re-indent of inner lines, no normalization that accumulates levels). The same applies to multiline **scripts** and similar constructs where the embedded text is opaque to layout rules.
-
-**Context**
-
-- Formatter source: `src/format/emit.ts` — the `emitModule()` function re-emits the AST; multiline string/prompt bodies are likely re-indented relative to the surrounding scope during emission.
-- Triple-quote parsing: `src/parse/triple-quote.ts` — `parseTripleQuoteBlock()` and `tripleQuoteBodyToRaw()` control how raw content is stored in the AST.
-- Fenced script parsing: `src/parse/fence.ts` — `parseFencedBlock()` for script bodies.
-- E2E format tests: `e2e/tests/100_format_command.sh` — add idempotency cases for multiline strings/scripts.
-
-**Acceptance criteria**
-
-- Formatting a file with multiline strings / scripts is **idempotent** for those regions: inner lines do not gain extra indentation on a second or subsequent `jaiph format`.
-- No automatic conversion from multiline strings to single-line (or the reverse) as part of formatting.
-
----
-
 ## Tooling — `jaiph format` preserves intentional blank lines between calls <!-- dev-ready -->
 
 **Goal**  

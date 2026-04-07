@@ -283,7 +283,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
         const langTag = step.lang ?? "";
         lines.push(`${ci}${capture}run \`\`\`${langTag}`);
         for (const bl of step.body.split("\n")) {
-          lines.push(`${ci}${bl}`);
+          lines.push(bl);
         }
         lines.push(`${ci}\`\`\`(${argsStr})`);
       } else {
@@ -301,7 +301,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
         const inner = step.raw.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
         lines.push(`${ci}${capture}prompt """`);
         for (const bl of inner.split("\n")) {
-          lines.push(`${ci}${bl}`);
+          lines.push(bl);
         }
         lines.push(`${ci}"""`);
         if (step.returns) {
@@ -319,7 +319,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
       if (step.value.kind === "run_inline_script_capture" &&
           (step.value.lang || step.value.body.includes("\n"))) {
         for (const bl of step.value.body.split("\n")) {
-          lines.push(`${ci}${bl}`);
+          lines.push(bl);
         }
         const argsStr = formatArgs(step.value.args ?? "", step.value.bareIdentifierArgs);
         lines.push(`${ci}\`\`\`(${argsStr})`);
@@ -328,7 +328,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
       if (step.value.kind === "prompt_capture" && step.value.bodyKind === "triple_quoted") {
         const inner = step.value.raw.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
         for (const bl of inner.split("\n")) {
-          lines.push(`${ci}${bl}`);
+          lines.push(bl);
         }
         lines.push(`${ci}"""`);
         if (step.value.returns) {
@@ -340,7 +340,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
           step.value.bashRhs.endsWith('"') && step.value.bashRhs.includes("\n")) {
         const inner = step.value.bashRhs.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
         for (const bl of inner.split("\n")) {
-          lines.push(`${ci}${bl}`);
+          lines.push(bl);
         }
         lines.push(`${ci}"""`);
       }
@@ -352,7 +352,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
         const inner = step.message.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
         lines.push(`${ci}fail """`);
         for (const bl of inner.split("\n")) {
-          lines.push(`${ci}${bl}`);
+          lines.push(bl);
         }
         lines.push(`${ci}"""`);
       } else {
@@ -369,7 +369,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
       if (step.message.includes("\n")) {
         lines.push(`${ci}log """`);
         for (const bl of step.message.split("\n")) {
-          lines.push(`${ci}${bl}`);
+          lines.push(bl);
         }
         lines.push(`${ci}"""`);
       } else {
@@ -381,7 +381,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
       if (step.message.includes("\n")) {
         lines.push(`${ci}logerr """`);
         for (const bl of step.message.split("\n")) {
-          lines.push(`${ci}${bl}`);
+          lines.push(bl);
         }
         lines.push(`${ci}"""`);
       } else {
@@ -406,7 +406,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
         const inner = step.value.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
         lines.push(`${ci}return """`);
         for (const bl of inner.split("\n")) {
-          lines.push(`${ci}${bl}`);
+          lines.push(bl);
         }
         lines.push(`${ci}"""`);
       } else {
@@ -420,7 +420,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
         const inner = step.rhs.token.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
         lines.push(`${ci}${step.channel} <- """`);
         for (const bl of inner.split("\n")) {
-          lines.push(`${ci}${bl}`);
+          lines.push(bl);
         }
         lines.push(`${ci}"""`);
       } else {
