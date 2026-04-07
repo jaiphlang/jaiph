@@ -66,6 +66,9 @@ TEST_SCRIPTS=(
   "e2e/tests/113_match_expression.sh"
   "e2e/tests/114_if_else_chains.sh"
   "e2e/tests/115_custom_agent_command.sh"
+  "e2e/tests/116_cross_file_import.sh"
+  "e2e/tests/117_double_dash_passthrough.sh"
+  "e2e/tests/118_import_not_found.sh"
 )
 
 PASS_COUNT=0
