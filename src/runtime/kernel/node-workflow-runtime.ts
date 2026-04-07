@@ -179,6 +179,7 @@ export class NodeWorkflowRuntime {
   private stepSeq = 0;
   private stack: Frame[] = [];
   private asyncFrameStack = new AsyncLocalStorage<Frame[]>();
+  private asyncIndicesStorage = new AsyncLocalStorage<number[]>();
   private inboxSeq = 0;
   private promptSeq = 0;
   private workflowCtxStack: WorkflowContext[] = [];
@@ -186,6 +187,10 @@ export class NodeWorkflowRuntime {
 
   private getFrameStack(): Frame[] {
     return this.asyncFrameStack.getStore() ?? this.stack;
+  }
+
+  private getAsyncIndices(): number[] {
+    return this.asyncIndicesStorage.getStore() ?? [];
   }
 
   constructor(graph: RuntimeGraph, opts: { env?: NodeJS.ProcessEnv; cwd?: string; mockBodies?: Map<string, MockBodyDef> }) {
@@ -404,16 +409,17 @@ export class NodeWorkflowRuntime {
 
   private emitLog(type: "LOG" | "LOGERR", message: string): void {
     const depth = this.getFrameStack().length;
+    const indices = this.getAsyncIndices();
+    const liveBase: Record<string, unknown> = { type, message, depth };
+    if (indices.length > 0) liveBase.async_indices = indices;
     const payload = {
-      type,
-      message,
-      depth,
+      ...liveBase,
       ts: nowIso(),
       run_id: this.runId,
       event_version: 1,
     };
     if (this.env.JAIPH_TEST_MODE !== "1") {
-      process.stderr.write(`__JAIPH_EVENT__ ${JSON.stringify({ type, message, depth })}\n`);
+      process.stderr.write(`__JAIPH_EVENT__ ${JSON.stringify(liveBase)}\n`);
     }
     appendRunSummaryLine(JSON.stringify(payload));
   }
@@ -598,6 +604,7 @@ export class NodeWorkflowRuntime {
     let accErr = "";
     let returnValue: string | undefined;
     const pendingAsync: Array<{ ref: string; promise: Promise<StepResult> }> = [];
+    let asyncCounter = 0;
     for (const step of steps) {
       if (step.type === "comment" || step.type === "blank_line") continue;
       if (step.type === "log") {
@@ -909,9 +916,13 @@ export class NodeWorkflowRuntime {
       }
       if (step.type === "run") {
         if (step.async) {
+          asyncCounter += 1;
           const branchStack = [...this.getFrameStack()];
+          const branchIndices = [...this.getAsyncIndices(), asyncCounter];
           const promise = this.asyncFrameStack.run(branchStack, () =>
-            this.executeRunRef(scope, step.workflow.value, step.args ?? ""),
+            this.asyncIndicesStorage.run(branchIndices, () =>
+              this.executeRunRef(scope, step.workflow.value, step.args ?? ""),
+            ),
           );
           pendingAsync.push({ ref: step.workflow.value, promise });
           continue;
@@ -1395,10 +1406,12 @@ export class NodeWorkflowRuntime {
   }
 
   private emitStep(payload: Record<string, unknown>): void {
+    const indices = this.getAsyncIndices();
+    const full = indices.length > 0 ? { ...payload, async_indices: indices } : payload;
     if (this.env.JAIPH_TEST_MODE !== "1") {
-      process.stderr.write(`__JAIPH_EVENT__ ${JSON.stringify(payload)}\n`);
+      process.stderr.write(`__JAIPH_EVENT__ ${JSON.stringify(full)}\n`);
     }
-    appendRunSummaryLine(JSON.stringify({ ...payload, event_version: 1 }));
+    appendRunSummaryLine(JSON.stringify({ ...full, event_version: 1 }));
   }
 
   private async executeMockBodyDef(ref: string, mockDef: MockBodyDef, args: string[]): Promise<StepResult> {

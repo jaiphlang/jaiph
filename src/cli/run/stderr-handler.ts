@@ -113,6 +113,29 @@ export function registerStateSubscriber(emitter: RunEmitter, state: RunState): v
   });
 }
 
+// ── Async branch circled-number helpers ──
+
+/** Unicode circled number ①②③… (U+2460–U+2473 for 1–20, fallback to parenthesized). */
+function circledNumber(n: number): string {
+  if (n >= 1 && n <= 20) return String.fromCodePoint(0x245F + n);
+  return `(${n})`;
+}
+
+/**
+ * Build an indent string with circled async-branch numbers embedded.
+ * Each depth level is one `"  · "` segment (4 chars). For levels that have
+ * an async index, the leading `"  "` is replaced with `"{num} "`.
+ */
+function buildAsyncIndent(depth: number, asyncIndices: number[]): string {
+  if (asyncIndices.length === 0) return "  · ".repeat(depth);
+  let result = "";
+  for (let i = 0; i < depth; i++) {
+    const head = i < asyncIndices.length ? `${circledNumber(asyncIndices[i])} ` : "  ";
+    result += `${head}· `;
+  }
+  return result;
+}
+
 // ── Subscriber: TTY rendering ──
 
 export type NonTTYHeartbeatStep = {
@@ -189,7 +212,8 @@ export function registerTTYSubscriber(emitter: RunEmitter, ctx: TTYContext): voi
 
   emitter.on("log", (logEvent) => {
     const depth = Math.max(1, logEvent.depth);
-    const indent = "  · ".repeat(depth);
+    const asyncIndices = logEvent.async_indices ?? [];
+    const indent = buildAsyncIndent(depth, asyncIndices);
     const prefix = indent.slice(0, -2);
     const dimPrefix = colorize(prefix, "dim", ctx.colorEnabled);
     const safeMessage = sanitizeMultilineLogForTerminal(logEvent.message);
@@ -201,7 +225,8 @@ export function registerTTYSubscriber(emitter: RunEmitter, ctx: TTYContext): voi
 
   emitter.on("step_start", (data) => {
     if (data.isRoot) return;
-    const indent = "  · ".repeat(data.depth);
+    const asyncIndices = data.event.async_indices ?? [];
+    const indent = buildAsyncIndent(data.depth, asyncIndices);
     const label = formatStartLine(indent, data.event.kind, data.event.name, ctx.colorEnabled, data.event.params);
     stepIndentById.set(data.eventId, indent);
     if (!ctx.isTTY) {
@@ -223,7 +248,8 @@ export function registerTTYSubscriber(emitter: RunEmitter, ctx: TTYContext): voi
     if (data.isRoot) return;
     const elapsedSec = Math.max(0, Math.floor((data.event.elapsed_ms ?? 0) / 1000));
     const fallbackDepth = Math.max(1, data.event.depth ?? 1);
-    const indent = stepIndentById.get(data.eventId) ?? "  · ".repeat(fallbackDepth);
+    const fallbackIndices = data.event.async_indices ?? [];
+    const indent = stepIndentById.get(data.eventId) ?? buildAsyncIndent(fallbackDepth, fallbackIndices);
     const completedLine = formatCompletedLine(indent, data.event.status ?? 1, elapsedSec, ctx.colorEnabled, data.event.kind, data.event.name);
     writeTTYLine(completedLine, ctx);
     stepIndentById.delete(data.eventId);
