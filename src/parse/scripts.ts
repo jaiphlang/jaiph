@@ -108,8 +108,6 @@ export function parseScriptBlock(
       );
     }
 
-    validateScriptBodyNoInterpolation(body, filePath, lineNo, 1);
-
     return {
       scriptDef: {
         name: scriptName,

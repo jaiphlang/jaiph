@@ -15,6 +15,12 @@
       "bodyKind": "fenced",
       "comments": [],
       "name": "multiline"
+    },
+    {
+      "body": "echo \"Hello ${USER}\"\necho \"${PATH:-/usr/bin}\"",
+      "bodyKind": "fenced",
+      "comments": [],
+      "name": "with_shell_expansion"
     }
   ],
   "workflows": [

@@ -76,8 +76,6 @@ export function parseAnonymousInlineScript(
           );
         }
 
-        validateScriptBodyNoInterpolation(body, filePath, lineNo, col);
-
         return {
           body,
           ...(lang ? { lang } : {}),
