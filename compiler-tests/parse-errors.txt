@@ -1682,6 +1682,17 @@ workflow default() {
   x = run 123bad
 }
 
+=== fenced script with shell parameter expansion is valid
+# @expect ok
+--- input.jh
+script deploy = ```
+echo "Installing ${PKG_NAME:-default}"
+echo "Version: ${VERSION}"
+```
+workflow default() {
+  run deploy()
+}
+
 === empty inline recover block
 # @expect error E_PARSE "recover block must contain at least one statement" @5:18
 --- input.jh

@@ -244,7 +244,8 @@ date +%s
 
 **Restrictions:**
 - `run async` with inline scripts is not supported — inline scripts cannot be used with `run async`.
-- Jaiph interpolation (`${...}`) is forbidden inside script bodies — use `$1`, `$2` positional arguments instead.
+- **Backtick** (single-line) inline scripts: Jaiph interpolation (`${...}`) is forbidden — use `$1`, `$2` positional arguments instead.
+- **Fenced block** (triple-backtick) inline scripts: `${...}` is passed through to the shell as standard shell parameter expansion.
 
 ### `run async` — Concurrent Execution
 
@@ -558,7 +559,12 @@ echo "Environment initialized"
 ```
 ```
 
-Script bodies are opaque bash — the compiler does not parse them as Jaiph steps. For bash scripts, the emitter applies only lightweight transforms: `return` normalization, `local`/`export`/`readonly` spacing, and import alias resolution. Jaiph interpolation (`${...}`) is forbidden in all script bodies — use `$1`, `$2` positional arguments to pass data from orchestration to scripts.
+Script bodies are opaque bash — the compiler does not parse them as Jaiph steps. For bash scripts, the emitter applies only lightweight transforms: `return` normalization, `local`/`export`/`readonly` spacing, and import alias resolution.
+
+**Interpolation rules differ by body form:**
+
+- **Backtick** (single-line): Jaiph interpolation (`${...}`) is forbidden — the compiler rejects `${name}` with `E_PARSE` to prevent ambiguity between Jaiph variables and shell parameter expansion. Use `$1`, `$2` positional arguments to pass data from orchestration to scripts.
+- **Fenced block** (triple-backtick): `${...}` is passed through to the shell verbatim. Shell parameter expansion (`${VAR}`, `${VAR:-default}`, `${#VAR}`, etc.) works as expected. The triple-backtick delimiter signals "this is opaque shell", so there is no ambiguity with Jaiph interpolation.
 
 ### Polyglot Scripts
 
@@ -629,8 +635,8 @@ Jaiph orchestration strings support `${identifier}` interpolation. Every identif
 | `${ensure ref(args)}` | Inline capture — executes rule, inlines result | All Jaiph strings |
 | `$varName` | Rejected — use `${varName}` | — |
 | `$1`, `$2` | Positional shell args — only in `script` bodies | `script` bodies only |
-| `${var:-fallback}` | Rejected (`E_PARSE`) | — |
-| `$(…)` | Rejected (`E_PARSE`) | — |
+| `${var:-fallback}` | Rejected (`E_PARSE`) in orchestration strings and backtick scripts; passes through in fenced script blocks | — |
+| `$(…)` | Rejected (`E_PARSE`) in orchestration strings | — |
 
 **Dot notation** (`${var.field}`) accesses a single field from a typed prompt capture. The variable must be bound to a `prompt … returns` step, and the field must exist in the schema. Both constraints are checked at compile time. See [prompt — Typed prompt](#prompt--agent-interaction) for details.
 
@@ -713,7 +719,7 @@ rule_body_step  = comment_line | workflow_step ;
 script_decl     = "script" IDENT "=" script_rhs ;
 script_rhs      = backtick_script_body | fenced_script_block ;
 backtick_script_body = "`" script_text "`" ;  (* single-line; no newlines; no ${...} interpolation *)
-fenced_script_block = "```" [ LANG_TAG ] newline { script_line newline } "```" ;
+fenced_script_block = "```" [ LANG_TAG ] newline { script_line newline } "```" ;  (* ${...} passed through to shell *)
 LANG_TAG        = IDENT ;  (* any identifier — maps to #!/usr/bin/env <tag>; rejected when body starts with #! *)
 shebang_line    = "#!" rest_of_line ;  (* rejected when LANG_TAG is present *)
 script_line     = comment_line | command_line ;

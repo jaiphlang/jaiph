@@ -12,33 +12,6 @@ Process rules:
 
 ---
 
-## Bug — `${...}` in multiline scripts breaks compilation <!-- dev-ready -->
-
-**Goal**  
-Multiline script blocks (triple-backtick fenced) should accept valid shell syntax, including `${variable}` / `${...}` expansion. Today using `${VAR}` in a fenced script produces `E_PARSE: script bodies cannot contain Jaiph interpolation`; it should parse and compile correctly while still passing through to the shell as intended.
-
-**Root cause**  
-`validateScriptBodyNoInterpolation()` in `src/parse/scripts.ts` applies the same `${identifier}` rejection regex to **both** single-line backtick and multi-line fenced bodies (line 110 for fenced, line 141 for backtick). In fenced blocks the user is writing full shell — `${VAR}` is legitimate shell parameter expansion and should not be blocked.
-
-**Fix path**  
-Skip `validateScriptBodyNoInterpolation()` for `bodyKind: "fenced"` scripts. Keep the check for `bodyKind: "backtick"` (single-line), where Jaiph `${name}` vs shell `${name}` ambiguity is a real footgun. The fenced block delimiter (```` ``` ````) already signals "this is opaque shell".
-
-**Files to touch**
-
-- `src/parse/scripts.ts` — remove the `validateScriptBodyNoInterpolation(body, ...)` call inside the fenced-block branch (line ~110); keep the call in the backtick branch (line ~141).
-- `src/parse/inline-script.ts` — same split: fenced inline scripts allow `${...}`, backtick inline scripts reject it.
-- `compiler-tests/parse-errors.txt` — keep the existing single-line rejection case (`script broken = \`echo ${name}\``); add a **valid** fenced-block case (`# @expect ok`) with `${VAR}` in a multi-line body.
-- `golden-ast/` — add a fixture for a fenced script containing `${VAR}` to lock the AST shape.
-
-**Acceptance criteria**
-
-- A fenced script containing `${VAR}` or nested `${...}` compiles and runs without parser/compiler errors.
-- A single-line backtick script containing `${name}` still produces `E_PARSE`.
-- Behavior matches shell expectations for the embedded script (no accidental stripping or mangling of `${...}`).
-- Compiler test case (fenced ok + backtick rejected) and golden AST fixture added.
-
----
-
 ## Tooling — `jaiph format` must not mutate multiline string content <!-- dev-ready -->
 
 **Goal**  
