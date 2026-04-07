@@ -12,89 +12,40 @@ Process rules:
 
 ---
 
-## CLI — async thread numbers in progress tree <!-- dev-ready -->
+## Testing — upgrade e2e tests to full output comparison <!-- dev-ready -->
 
 **Goal**  
-When a workflow uses `run async`, the progress tree should show a **circled number** prefix on every output line belonging to that async branch. This makes interleaved async output scannable at a glance — you can tell which branch produced which line without tracing indentation.
+Async step ordering is deterministic. Many e2e tests use `e2e::assert_contains` for output that is fully predictable. Replace these with `e2e::expect_stdout` (full normalized output comparison) and `e2e::expect_out` / `e2e::expect_run_file` (full artifact comparison). `assert_contains` should only survive where output is genuinely nondeterministic (platform-dependent text, unbounded logs, timing-dependent ordering) — and each surviving use must have an inline comment explaining why.
 
-**Numbering**  
-Circled numbers use Unicode starting at U+2460: ① ② ③ ④ ⑤ … Numbering is **global order of `run async` dispatch** within the parent workflow (first async call = ①, second = ②, etc.). The number appears at the **same indentation level as the async call site** — if a nested workflow fires its own `run async`, those get their own numbering at the nested indent level.
+**Primary target: `e2e/tests/104_run_async.sh`**  
+Currently uses `assert_contains` 10 times, `expect_stdout` 0 times. Async output ordering is deterministic (dispatch order = print order). Every section should use `e2e::expect_stdout` for the full CLI tree output and `e2e::expect_out` / `e2e::expect_run_file` for run artifacts.
 
-**Color**  
-Circled numbers are rendered in **dim/grey** (ANSI `\u001b[2m`) — same style as the `·` continuation markers. When `NO_COLOR` is set or output is non-TTY, the circled number is emitted without ANSI codes.
+**Secondary: audit all e2e tests**  
+34 e2e test files use `assert_contains`. Audit each use. For deterministic output, upgrade to full comparison. Files with highest `assert_contains` counts to audit first:
+- `101_ensure_recover_output_contract.sh` (15 uses)
+- `100_inline_capture_interpolation.sh` (13 uses)
+- `78_lang_redesign_constructs.sh` (13 uses)
+- `50_cli_and_parse_guards.sh` (11 uses)
+- `70_run_artifacts.sh` (10 uses)
+- `104_run_async.sh` (10 uses)
+- `97_step_output_contract.sh` (9 uses)
 
-**Before → After**
-
-Before:
-```text
-workflow default
-  ▸ workflow cursor_say_hello
-  ▸ workflow claude_say_hello
-  ·   ▸ prompt cursor "Say: Greetings! I am [mo..."
-  ·   ▸ prompt claude "Say: Greetings! I am [mo..."
-  ·   ✓ prompt cursor (3s)
-  ·   ℹ Greetings! I am **Composer**, a language model trained by Cursor.
-  ✓ workflow cursor_say_hello (3s)
-  ·   ✓ prompt claude (4s)
-  ·   ℹ Greetings! I am Claude Opus 4.6.
-  ✓ workflow claude_say_hello (4s)
-
-✓ PASS workflow default (4.6s)
-```
-
-After:
-```text
-workflow default
-① ▸ workflow cursor_say_hello
-② ▸ workflow claude_say_hello
-① ·   ▸ prompt cursor "Say: Greetings! I am [mo..."
-② ·   ▸ prompt claude "Say: Greetings! I am [mo..."
-① ·   ✓ prompt cursor (3s)
-① ·   ℹ Greetings! I am **Composer**, a language model trained by Cursor.
-① ✓ workflow cursor_say_hello (3s)
-② ·   ✓ prompt claude (4s)
-② ·   ℹ Greetings! I am Claude Opus 4.6.
-② ✓ workflow claude_say_hello (4s)
-
-✓ PASS workflow default (4.6s)
-```
-
-Non-async steps (the root workflow line, `✓ PASS`) have **no** circled number — only lines within an async branch get one.
-
-**Nested async example**
-
-If a nested workflow also uses `run async`, those branches get their own numbering at the nested indentation:
-```text
-workflow default
-① ▸ workflow parallel_suite
-② ▸ workflow lint_check
-① · ① ▸ workflow test_unit
-① · ② ▸ workflow test_integration
-① · ① ✓ workflow test_unit (2s)
-① · ② ✓ workflow test_integration (5s)
-① ✓ workflow parallel_suite (5s)
-② ✓ workflow lint_check (1s)
-
-✓ PASS workflow default (5s)
-```
+**Run artifact verification**  
+Tests that exercise `run async`, `ensure ... recover`, and inbox dispatch should also verify:
+- `.jaiph/runs/` step `.out` / `.err` file contents via `e2e::expect_out` / `e2e::expect_run_file`
+- `run_summary.jsonl` event sequence where relevant (event types, ordering, step IDs)
 
 **Context**
 
-- Progress tree builder: `src/cli/run/progress.ts` — `buildRunTreeRows()` / `collectWorkflowChildren()`. The `asyncPrefix` is already tracked (`step.async ? "async " : ""`); extend with a numeric index.
-- Display renderer: `src/cli/run/display.ts` — `formatStartLine()`, `formatCompletedLine()`, `formatHeartbeatLine()`. These take `indent` and render `·` prefixes. The circled number needs to be prepended at the indent level of the async call site.
-- Runtime event pipeline: `src/runtime/kernel/node-workflow-runtime.ts` — `executeSteps()` dispatches async branches via `asyncFrameStack.run()`. The async branch index needs to propagate through `STEP_START`/`STEP_END`/`LOG` events so the display layer can map lines to branches.
-- Stderr handler: `src/cli/run/stderr-handler.ts` — parses `run_summary.jsonl` events and renders lines; needs to read the async branch index from events.
-- E2E tests: `e2e/tests/104_run_async.sh` — existing async tests; add a case with nested workflows calling `run async` to verify nested circled numbers.
-- Docs: `docs/index.html` — update the async workflow output sample to show circled numbers.
+- E2e helpers: `e2e/lib/common.sh` — `e2e::expect_stdout`, `e2e::assert_output_equals`, `e2e::expect_out`, `e2e::expect_run_file`, `e2e::expect_run_file_count`, `e2e::normalize_output`.
+- Policy is already documented in `e2e/lib/common.sh` header (lines 5-12), `AGENT.md` ("Tree Output Assertions"), and `.jaiph/engineer.jh` (rule #8 in `code_philosophy`).
 
 **Acceptance criteria**
 
-- `run async` branches display circled numbers (①②③…) at the async call site's indentation level in both TTY and non-TTY output.
-- Numbers are dim/grey in TTY mode; plain text in non-TTY / `NO_COLOR`.
-- Nested `run async` inside a child workflow gets its own numbering scope at the child's indent level.
-- Non-async lines have no circled number prefix.
-- E2E test with nested async workflows verifies correct numbering and indentation.
-- `docs/index.html` async sample updated.
+- `e2e/tests/104_run_async.sh` uses `e2e::expect_stdout` for all deterministic output sections.
+- Every surviving `assert_contains` in the e2e suite has an inline comment explaining why full comparison is not feasible.
+- Run artifact contents (`.out` files) are verified with `e2e::expect_out` / `e2e::expect_run_file` in async, ensure/recover, and inbox tests.
+- All e2e tests pass after the upgrade.
 
 ---
 

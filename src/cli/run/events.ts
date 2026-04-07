@@ -23,13 +23,27 @@ export type StepEvent = {
   out_content: string;
   /** Stderr content embedded in the event for failed steps. */
   err_content: string;
+  /** Chain of 1-based async branch indices (one per nested `run async` level). */
+  async_indices: number[];
 };
 
 export type LogEvent = {
   type: "LOG" | "LOGERR";
   message: string;
   depth: number;
+  /** Chain of 1-based async branch indices (one per nested `run async` level). */
+  async_indices: number[];
 };
+
+function parseAsyncIndices(parsed: Record<string, unknown>): number[] {
+  const raw = parsed.async_indices;
+  if (!Array.isArray(raw)) return [];
+  const indices: number[] = [];
+  for (const v of raw) {
+    if (typeof v === "number") indices.push(v);
+  }
+  return indices;
+}
 
 const PREFIX = "__JAIPH_EVENT__ ";
 
@@ -47,6 +61,7 @@ export function parseLogEvent(line: string): LogEvent | undefined {
       type: parsed.type as "LOG" | "LOGERR",
       message: typeof parsed.message === "string" ? parsed.message.replace(/^(?:\r?\n)+/, "") : "",
       depth: typeof parsed.depth === "number" ? parsed.depth : 0,
+      async_indices: parseAsyncIndices(parsed),
     };
   } catch {
     return undefined;
@@ -95,6 +110,7 @@ export function parseStepEvent(line: string): StepEvent | undefined {
       channel: typeof (parsed as Record<string, unknown>).channel === "string" ? (parsed as Record<string, unknown>).channel as string : "",
       out_content: typeof (parsed as Record<string, unknown>).out_content === "string" ? (parsed as Record<string, unknown>).out_content as string : "",
       err_content: typeof (parsed as Record<string, unknown>).err_content === "string" ? (parsed as Record<string, unknown>).err_content as string : "",
+      async_indices: parseAsyncIndices(parsed as Record<string, unknown>),
     };
   } catch {
     return undefined;

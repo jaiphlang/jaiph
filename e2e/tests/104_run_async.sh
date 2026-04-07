@@ -157,14 +157,93 @@ if [[ -z "$branch_x_line" ]] || [[ -z "$branch_y_line" ]]; then
   e2e::fail "expected both workflow start lines in progress output"
 fi
 
-# Extract leading whitespace before the ▸ marker.
+# Extract leading text before the ▸ marker. With circled async numbers the
+# prefixes differ (① vs ②) but their *length* must be equal (same depth).
 indent_x="${branch_x_line%%▸*}"
 indent_y="${branch_y_line%%▸*}"
 
-if [[ "$indent_x" != "$indent_y" ]]; then
+if [[ "${#indent_x}" -ne "${#indent_y}" ]]; then
   printf "branch_x indent: [%s]\n" "$indent_x" >&2
   printf "branch_y indent: [%s]\n" "$indent_y" >&2
   printf "Output was:\n%s\n" "$depth_output" >&2
-  e2e::fail "async sibling workflows should have same indentation"
+  e2e::fail "async sibling workflows should have same indentation depth"
 fi
 e2e::pass "async sibling workflows render at same tree depth"
+
+# --- circled numbers on async branches ---
+
+e2e::section "run async circled numbers in progress tree"
+
+e2e::file "circled.jh" <<'EOF'
+workflow alpha() {
+  log "alpha-done"
+}
+
+workflow beta() {
+  log "beta-done"
+}
+
+workflow default() {
+  run async alpha()
+  run async beta()
+}
+EOF
+
+circled_output="$(NO_COLOR=1 e2e::run "circled.jh" 2>&1)"
+
+# ① should prefix the first async branch (alpha)
+# non-deterministic interleaving: assert_contains is required
+e2e::assert_contains "$circled_output" "①" "circled ① appears for first async branch"
+# ② should prefix the second async branch (beta)
+e2e::assert_contains "$circled_output" "②" "circled ② appears for second async branch"
+# Non-async lines (root workflow, PASS line) must NOT have circled numbers
+pass_line="$(echo "$circled_output" | grep 'PASS')"
+if echo "$pass_line" | LC_ALL=en_US.UTF-8 grep -q '[①②③④⑤⑥⑦⑧⑨⑩]'; then
+  e2e::fail "PASS line should not have circled number prefix"
+fi
+e2e::pass "non-async lines have no circled number"
+
+# --- nested async with circled numbers ---
+
+e2e::section "nested run async circled numbers"
+
+e2e::file "nested_async.jh" <<'EOF'
+workflow inner_a() {
+  log "inner-a"
+}
+
+workflow inner_b() {
+  log "inner-b"
+}
+
+workflow outer() {
+  run async inner_a()
+  run async inner_b()
+}
+
+workflow side() {
+  log "side-done"
+}
+
+workflow default() {
+  run async outer()
+  run async side()
+}
+EOF
+
+nested_output="$(NO_COLOR=1 e2e::run "nested_async.jh" 2>&1)"
+
+# Outer async branches get ① and ②
+e2e::assert_contains "$nested_output" "①" "outer ① present"
+e2e::assert_contains "$nested_output" "②" "outer ② present"
+
+# Nested async inside outer() should produce lines with two circled numbers.
+# The inner branches of outer() get their own ① ② at the nested indent level.
+# Look for a line containing two circled-number characters (① · ① or ① · ②).
+# non-deterministic interleaving: assert_contains is required
+nested_line="$(echo "$nested_output" | LC_ALL=en_US.UTF-8 grep '①.*·.*①\|①.*·.*②' | head -1)"
+if [[ -z "$nested_line" ]]; then
+  printf "Output was:\n%s\n" "$nested_output" >&2
+  e2e::fail "expected nested async lines with two circled numbers (e.g. ① · ① ...)"
+fi
+e2e::pass "nested async branches show two levels of circled numbers"

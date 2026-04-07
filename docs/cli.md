@@ -128,7 +128,25 @@ Example lines:
 
 If no parameters are passed, the line is unchanged (e.g. `▸ workflow default`). Disable color with `NO_COLOR=1`.
 
-**Async sibling depth.** When a workflow contains multiple `run async` steps, all async branches render as siblings at the same indentation level. Inner steps within each branch appear one level deeper. The runtime isolates each async branch's frame stack, so `depth` on events is relative to the branch's own call depth.
+**Async branch numbering.** When a workflow contains multiple `run async` steps, each branch is prefixed with a **circled number** (①②③…) at the async call site's indentation level. Numbers use Unicode circled digits (U+2460–U+2473 for 1–20; parenthesized fallback above 20) and are assigned in **dispatch order** within the parent workflow (first `run async` = ①, second = ②, etc.). The circled number is rendered in dim/grey (same style as `·` continuation markers); in non-TTY or `NO_COLOR` mode it is emitted without ANSI codes. Non-async lines (root workflow, final PASS/FAIL) have no prefix.
+
+If a nested workflow also uses `run async`, those branches get their own numbering scope at the nested indent level:
+
+```text
+workflow default
+① ▸ workflow parallel_suite
+② ▸ workflow lint_check
+① · ① ▸ workflow test_unit
+① · ② ▸ workflow test_integration
+① · ① ✓ workflow test_unit (2s)
+① · ② ✓ workflow test_integration (5s)
+① ✓ workflow parallel_suite (5s)
+② ✓ workflow lint_check (1s)
+
+✓ PASS workflow default (5s)
+```
+
+All async branches render as siblings at the same indentation level. Inner steps within each branch appear one level deeper. The runtime isolates each async branch's frame stack, so `depth` on events is relative to the branch's own call depth. The `async_indices` array on events carries the chain of 1-based branch indices (one per nested `run async` level) so the display layer can map lines to branches.
 
 **Prompt transcript replay.** The progress renderer shows only ▸ / ✓ lines for a `prompt` step — not a nested subtree. After the step completes (on terminal stdout, non-test runs), the runtime replays the step's `.out` artifact if stdout was not already streamed live. Replay is skipped when stdout is a pipe or when the prompt already streamed via tee. `jaiph test` does not use this replay path.
 
@@ -192,6 +210,7 @@ Each run directory also contains `run_summary.jsonl`: one JSON object per line, 
 | `params` | — | — | optional JSON array | optional JSON array | — | — | — | — | — |
 | `dispatched`, `channel`, `sender` | — | — | optional (inbox dispatch) | optional (inbox dispatch) | — | — | — | — | — |
 | `out_content`, `err_content` | — | — | — | optional on `STEP_END` | — | — | — | — | — |
+| `async_indices` | — | — | optional `number[]` | optional `number[]` | optional `number[]` | optional `number[]` | — | — | — |
 | `message`, `depth` | — | — | — | — | required | required | — | — | — |
 | `inbox_seq`, `channel`, `sender` | — | — | — | — | — | — | required | required | required |
 | `payload_preview`, `payload_ref` | — | — | — | — | — | — | required | — | — |

@@ -20,13 +20,13 @@ test("parseLogEvent: returns undefined for non-LOG/LOGERR type", () => {
 test("parseLogEvent: parses valid LOG event", () => {
   const line = '__JAIPH_EVENT__ {"type":"LOG","message":"hello world","depth":2}';
   const result = parseLogEvent(line);
-  assert.deepEqual(result, { type: "LOG", message: "hello world", depth: 2 });
+  assert.deepEqual(result, { type: "LOG", message: "hello world", depth: 2, async_indices: [] });
 });
 
 test("parseLogEvent: parses valid LOGERR event", () => {
   const line = '__JAIPH_EVENT__ {"type":"LOGERR","message":"error occurred","depth":1}';
   const result = parseLogEvent(line);
-  assert.deepEqual(result, { type: "LOGERR", message: "error occurred", depth: 1 });
+  assert.deepEqual(result, { type: "LOGERR", message: "error occurred", depth: 1, async_indices: [] });
 });
 
 test("parseLogEvent: defaults message to empty string when not a string", () => {
@@ -105,6 +105,7 @@ test("parseStepEvent: parses minimal valid STEP_START event", () => {
   assert.equal(result!.channel, "");
   assert.equal(result!.out_content, "");
   assert.equal(result!.err_content, "");
+  assert.deepEqual(result!.async_indices, []);
 });
 
 test("parseStepEvent: parses STEP_END with status and elapsed_ms", () => {

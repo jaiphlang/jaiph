@@ -43,6 +43,7 @@ test("registerTTYSubscriber: STEP_END fallback indent uses event depth", () => {
       channel: "",
       out_content: "",
       err_content: "",
+      async_indices: [],
     };
     emitter.emit("step_end", { event, eventId: "missing-start-id", isRoot: false });
   } finally {
