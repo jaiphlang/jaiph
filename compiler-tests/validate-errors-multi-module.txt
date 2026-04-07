@@ -92,3 +92,53 @@ workflow default() {
 export rule other_rule() {
   return "ok"
 }
+
+=== import resolves to missing file
+# @expect error E_IMPORT_NOT_FOUND "resolves to missing file"
+--- main.jh
+import "nonexistent.jh" as lib
+workflow default() {
+  run lib.deploy()
+}
+
+=== arity mismatch on imported workflow
+# @expect error E_VALIDATE "expects 2 argument(s)"
+--- main.jh
+import "lib.jh" as lib
+workflow default() {
+  run lib.helper("one")
+}
+--- lib.jh
+export workflow helper(a, b) {
+  log "ok"
+}
+
+=== send RHS with imported script bare ref
+# @expect error E_VALIDATE "must be called with run"
+--- main.jh
+import "lib.jh" as lib
+channel c
+workflow default() {
+  c <- lib.helper
+}
+--- lib.jh
+script helper = `echo "ok"`
+workflow dummy() {
+  log "ok"
+}
+
+=== send RHS with imported rule bare ref
+# @expect error E_VALIDATE "must be called with ensure"
+--- main.jh
+import "lib.jh" as lib
+channel c
+workflow default() {
+  c <- lib.check
+}
+--- lib.jh
+export rule check() {
+  return "ok"
+}
+workflow dummy() {
+  log "ok"
+}

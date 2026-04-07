@@ -397,3 +397,147 @@ export rule check() {
   return "ok"
 }
 
+=== arity mismatch: too few args to workflow
+# @expect error E_VALIDATE "expects 2 argument(s)"
+--- input.jh
+workflow helper(a, b) {
+  log "ok"
+}
+workflow default() {
+  run helper("one")
+}
+
+=== arity mismatch: too many args to workflow
+# @expect error E_VALIDATE "expects 1 argument(s)"
+--- input.jh
+workflow helper(a) {
+  log "ok"
+}
+workflow default() {
+  run helper("one", "two")
+}
+
+=== arity mismatch: zero args to workflow expecting two
+# @expect error E_VALIDATE "expects 2 argument(s)"
+--- input.jh
+workflow helper(a, b) {
+  log "ok"
+}
+workflow default() {
+  run helper()
+}
+
+=== arity mismatch: too few args to rule
+# @expect error E_VALIDATE "expects 1 argument(s)"
+--- input.jh
+rule check(x) {
+  return "ok"
+}
+workflow default() {
+  ensure check()
+}
+
+=== route target with wrong parameter count
+# @expect error E_VALIDATE "must declare exactly 3 parameters"
+--- input.jh
+channel findings -> handler
+workflow handler(msg) {
+  log "${msg}"
+}
+workflow default() {
+  findings <- "data"
+}
+
+=== route target with zero parameters
+# @expect error E_VALIDATE "must declare exactly 3 parameters"
+--- input.jh
+channel findings -> handler
+workflow handler() {
+  log "got"
+}
+workflow default() {
+  findings <- "data"
+}
+
+=== inline run ref with unknown rule
+# @expect error E_VALIDATE "unknown local workflow or script reference"
+--- input.jh
+workflow default() {
+  log "got: ${run nonexistent()}"
+}
+
+=== match: missing wildcard arm with single pattern
+# @expect error E_VALIDATE "match must have exactly one wildcard (_) arm"
+--- input.jh
+workflow default() {
+  const x = "hello"
+  return match x {
+    "hello" => "yes"
+  }
+}
+
+=== send RHS with local rule bare ref
+# @expect error E_VALIDATE "rule" @6:5
+--- input.jh
+channel c
+rule check() {
+  return "ok"
+}
+workflow default() {
+  c <- check
+}
+
+=== shell redirection in run args rejected in rule
+# @expect error E_PARSE "shell redirection" @3:1
+--- input.jh
+script impl = `true`
+rule check() {
+  run impl() | grep ok
+}
+workflow default() {
+  ensure check()
+}
+
+=== shell redirection in run args rejected in workflow
+# @expect error E_PARSE "shell redirection" @3:1
+--- input.jh
+script impl = `true`
+workflow default() {
+  run impl() > /tmp/out
+}
+
+=== shell redirection in ensure args rejected in workflow
+# @expect error E_PARSE "shell redirection" @5:1
+--- input.jh
+rule check() {
+  return "ok"
+}
+workflow default() {
+  ensure check() | grep ok
+}
+
+=== channel ref with unknown import alias
+# @expect error E_VALIDATE "is not defined" @3:1
+--- main.jh
+import "lib.jh" as lib
+workflow default() {
+  ghost.mychan <- "x"
+}
+--- lib.jh
+workflow dummy() {
+  log "ok"
+}
+
+=== imported route target with wrong parameter count
+# @expect error E_VALIDATE "must declare exactly 3 parameters"
+--- main.jh
+import "lib.jh" as lib
+channel findings -> lib.handler
+workflow default() {
+  findings <- "data"
+}
+--- lib.jh
+export workflow handler(msg) {
+  log "${msg}"
+}
+

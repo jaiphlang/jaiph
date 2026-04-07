@@ -1288,3 +1288,406 @@ workflow default() {
   prompt """
   Hello multiline
 }
+
+=== script with returns on closing fence rejected
+# @expect error E_PARSE "script definitions do not support" @1:1
+--- input.jh
+script transform = ```
+echo hello
+``` returns "{ x: string }"
+
+=== script with double-quoted body rejected
+# @expect error E_PARSE "script bodies use backticks" @1:1
+--- input.jh
+script broken = "echo hello"
+
+=== script body with Jaiph interpolation rejected
+# @expect error E_PARSE "script bodies cannot contain Jaiph interpolation" @1:1
+--- input.jh
+script broken = `echo ${name}`
+
+=== script with brace-style body rejected
+# @expect error E_PARSE "brace-style script bodies are no longer supported" @1:1
+--- input.jh
+script broken {
+  echo hello
+}
+
+=== script body with bare identifier rejected
+# @expect error E_PARSE "script bodies must be backtick or fenced block" @1:1
+--- input.jh
+script broken = hello
+
+=== script body with trailing content after backtick
+# @expect error E_PARSE "unexpected content after script body backtick" @1:1
+--- input.jh
+script broken = `echo ok` extra
+
+=== inline script fenced without argument list
+# @expect error E_PARSE "anonymous inline script requires argument list" @4:3
+--- input.jh
+workflow default() {
+  run ```
+echo hello
+```
+}
+
+=== inline script fenced with shebang and lang tag conflict
+# @expect error E_PARSE "already sets the shebang" @2:3
+--- input.jh
+workflow default() {
+  run ```node
+#!/usr/bin/env node
+console.log("hi");
+```()
+}
+
+=== inline script fenced unterminated in workflow
+# @expect error E_PARSE "unterminated fenced block" @2:3
+--- input.jh
+workflow default() {
+  run ```
+echo hello
+}
+
+=== inline script single backtick without argument list
+# @expect error E_PARSE "anonymous inline script requires argument list" @2:3
+--- input.jh
+workflow default() {
+  run `echo hello`
+}
+
+=== inline script fenced with invalid lang token
+# @expect error E_PARSE "invalid opening fence" @2:3
+--- input.jh
+workflow default() {
+  run ```not a lang```()
+}
+
+=== config block unterminated
+# @expect error E_PARSE "config block not closed" @1:1
+--- input.jh
+config {
+  agent.backend = "claude"
+
+=== config block with trailing content after close brace
+# @expect error E_PARSE "unexpected content after closing '}'" @1:1
+--- input.jh
+config { agent.backend = "claude" } extra
+workflow default() {
+  log "ok"
+}
+
+=== match subject with dollar prefix rejected
+# @expect error E_PARSE "match subject should be a bare identifier" @3:1
+--- input.jh
+workflow default() {
+  const x = "hello"
+  return match $x {
+    _ => "yes"
+  }
+}
+
+=== match subject with invalid identifier
+# @expect error E_PARSE "match subject must be a valid identifier" @3:1
+--- input.jh
+workflow default() {
+  const x = "hello"
+  return match 123 {
+    _ => "yes"
+  }
+}
+
+=== const run with invalid reference
+# @expect error E_PARSE "const ... = run must target a valid reference" @2:13
+--- input.jh
+workflow default() {
+  const x = run 123bad
+}
+
+=== const ensure with invalid reference
+# @expect error E_PARSE "const ... = ensure must target a valid reference" @2:13
+--- input.jh
+workflow default() {
+  const x = ensure 123bad
+}
+
+=== const ensure cannot use recover
+# @expect error E_PARSE "const ... = ensure cannot use recover" @2:13
+--- input.jh
+workflow default() {
+  const x = ensure check() recover {
+    log "no"
+  }
+}
+
+=== run with invalid reference in workflow
+# @expect error E_PARSE "run must target a valid reference" @2:1
+--- input.jh
+workflow default() {
+  run 123bad
+}
+
+=== run async with invalid reference in workflow
+# @expect error E_PARSE "run async must target a valid reference" @2:1
+--- input.jh
+workflow default() {
+  run async 123bad()
+}
+
+=== empty parameter name in parameter list
+# @expect error E_PARSE "empty parameter name" @1:1
+--- input.jh
+workflow foo(a,,b) {
+  log "ok"
+}
+
+=== invalid parameter name in workflow
+# @expect error E_PARSE "invalid parameter name" @1:1
+--- input.jh
+workflow foo(123bad) {
+  log "ok"
+}
+
+=== duplicate parameter name in workflow
+# @expect error E_PARSE "duplicate parameter name" @1:1
+--- input.jh
+workflow foo(a, a) {
+  log "ok"
+}
+
+=== send with unterminated string
+# @expect error E_PARSE "multiline strings use triple quotes" @3:12
+--- input.jh
+channel findings
+workflow default() {
+  findings <- "this never closes
+}
+
+=== triple-quote opening with content on same line
+# @expect error E_PARSE "must not have content on the same line" @2:1
+--- input.jh
+workflow default() {
+  prompt """ hello
+"""
+}
+
+=== log with trailing content after string
+# @expect error E_PARSE "unexpected content after log string" @2:3
+--- input.jh
+workflow default() {
+  log "hello" extra
+}
+
+=== logerr with trailing content after string
+# @expect error E_PARSE "unexpected content after logerr string" @2:3
+--- input.jh
+workflow default() {
+  logerr "hello" extra
+}
+
+=== recover: prompt capture without const
+# @expect error E_PARSE "const name = prompt" @5:1
+--- input.jh
+rule check() {
+  return "ok"
+}
+workflow default() {
+  ensure check() recover {
+    x = prompt "fix"
+  }
+}
+
+=== top-level const triple-quote with trailing content after close
+# @expect error E_PARSE "unexpected content after closing" @3
+--- input.jh
+const X = """
+hello
+""" extra
+
+=== unterminated return string in workflow
+# @expect error E_PARSE "multiline strings use triple quotes" @2:3
+--- input.jh
+workflow default() {
+  return "unclosed
+}
+
+=== unterminated fail string in workflow
+# @expect error E_PARSE "multiline strings use triple quotes" @2:3
+--- input.jh
+workflow default() {
+  fail "unclosed
+}
+
+=== brace-if: unterminated brace in if condition
+# @expect error E_PARSE "unterminated '{' in if condition" @5:1
+--- input.jh
+rule gate() {
+  return "ok"
+}
+workflow default() {
+  if ensure gate() { log "hi"
+}
+
+=== brace-if: inline if body with else on same line
+# @expect error E_PARSE "unexpected content after ensure call" @5:1
+--- input.jh
+rule gate() {
+  return "ok"
+}
+workflow default() {
+  if ensure gate() { log "hi" } else { log "no" }
+}
+
+=== prompt assign without const in workflow
+# @expect error E_PARSE "const name = prompt" @2:3
+--- input.jh
+workflow default() {
+  x = prompt "hello"
+}
+
+=== fail without double quote in workflow body
+# @expect error E_PARSE "fail must match" @2:3
+--- input.jh
+workflow default() {
+  fail reason
+}
+
+=== unterminated multiline recover block
+# @expect error E_PARSE "unterminated recover block" @5:18
+--- input.jh
+rule check() {
+  return "ok"
+}
+workflow default() {
+  ensure check() recover {
+    log "recovering"
+
+=== duplicate name: rule and workflow
+# @expect error E_PARSE "duplicate name" @4:1
+--- input.jh
+rule foo() {
+  return "ok"
+}
+workflow foo() {
+  log "ok"
+}
+workflow default() {
+  log "ok"
+}
+
+=== duplicate name: script and workflow
+# @expect error E_PARSE "duplicate name" @2:1
+--- input.jh
+script helper = `echo ok`
+workflow helper() {
+  log "ok"
+}
+workflow default() {
+  log "ok"
+}
+
+=== duplicate name: rule and script
+# @expect error E_PARSE "duplicate name" @4:1
+--- input.jh
+rule foo() {
+  return "ok"
+}
+script foo = `echo ok`
+workflow default() {
+  log "ok"
+}
+
+=== channel route with no target after arrow
+# @expect error E_PARSE "channel route requires at least one target" @1:1
+--- input.jh
+channel findings ->
+workflow default() {
+  log "ok"
+}
+
+=== empty multiline recover block
+# @expect error E_PARSE "recover block must contain at least one statement" @5:18
+--- input.jh
+rule check() {
+  return "ok"
+}
+workflow default() {
+  ensure check() recover {
+  }
+}
+
+=== ensure with invalid reference
+# @expect error E_PARSE "ensure must target a valid reference" @2:1
+--- input.jh
+workflow default() {
+  ensure 123bad
+}
+
+=== config line without equals sign
+# @expect error E_PARSE "config line must be key = value" @2:3
+--- input.jh
+config {
+  agent.backend
+}
+workflow default() {
+  log "ok"
+}
+
+=== prompt with trailing non-returns content
+# @expect error E_PARSE "after prompt string expected keyword" @2:1
+--- input.jh
+workflow default() {
+  const _ = prompt "text" garbage
+}
+
+=== prompt returns with single-quoted schema
+# @expect error E_PARSE "single-quoted strings are not supported" @2:1
+--- input.jh
+workflow default() {
+  const _ = prompt "text" returns '{ type: string }'
+}
+
+=== unterminated returns schema string
+# @expect error E_PARSE "unterminated returns schema string" @2:1
+--- input.jh
+workflow default() {
+  const _ = prompt "text" returns "{ unterminated
+}
+
+=== test block without opening brace
+# @expect error E_PARSE "test block must match" @3:1
+--- input.test.jh
+import "lib.jh" as lib
+
+test "missing brace"
+  out = lib.default
+--- lib.jh
+workflow default() {
+  log "ok"
+}
+
+=== send with trailing content after string
+# @expect error E_PARSE "send right-hand side must be" @3:12
+--- input.jh
+channel findings
+workflow default() {
+  findings <- "hello" extra
+}
+
+=== capture run with invalid reference in workflow
+# @expect error E_PARSE "run must target a valid reference" @2:1
+--- input.jh
+workflow default() {
+  x = run 123bad
+}
+
+=== empty inline recover block
+# @expect error E_PARSE "recover block must contain at least one statement" @5:18
+--- input.jh
+rule check() {
+  return "ok"
+}
+workflow default() {
+  ensure check() recover { }
+}
