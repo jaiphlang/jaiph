@@ -259,7 +259,7 @@ workflow default() {
 }
 ```
 
-In the progress tree, each async branch is prefixed with a circled number (①②③…) assigned in dispatch order. Nested `run async` inside a child workflow gets its own numbering scope at the child's indent level. See [CLI — Async branch numbering](cli.md#run-progress-and-tree-output) for display details.
+In the progress tree, each async branch is prefixed with a subscript number (₁₂₃…) assigned in dispatch order. Nested `run async` inside a child workflow gets its own numbering scope at the child's indent level. See [CLI — Async branch numbering](cli.md#run-progress-and-tree-output) for display details.
 
 Constraints:
 - Workflow-only — rejected in rules with `E_VALIDATE`.

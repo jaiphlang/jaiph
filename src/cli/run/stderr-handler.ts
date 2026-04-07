@@ -113,24 +113,27 @@ export function registerStateSubscriber(emitter: RunEmitter, state: RunState): v
   });
 }
 
-// ── Async branch circled-number helpers ──
+// ── Async branch subscript-number helpers ──
 
-/** Unicode circled number ①②③… (U+2460–U+2473 for 1–20, fallback to parenthesized). */
-function circledNumber(n: number): string {
-  if (n >= 1 && n <= 20) return String.fromCodePoint(0x245F + n);
-  return `(${n})`;
+/** Unicode subscript number ₁₂₃… (U+2080–U+2089 per digit). */
+function subscriptNumber(n: number): string {
+  let result = "";
+  for (const d of String(n)) {
+    result += String.fromCodePoint(0x2080 + Number(d));
+  }
+  return result;
 }
 
 /**
- * Build an indent string with circled async-branch numbers embedded.
+ * Build an indent string with subscript async-branch numbers embedded.
  * Each depth level is one `"  · "` segment (4 chars). For levels that have
- * an async index, the leading `"  "` is replaced with `"{num} "`.
+ * an async index, the leading `"  "` is replaced with `" {subscript}"`.
  */
 function buildAsyncIndent(depth: number, asyncIndices: number[]): string {
   if (asyncIndices.length === 0) return "  · ".repeat(depth);
   let result = "";
   for (let i = 0; i < depth; i++) {
-    const head = i < asyncIndices.length ? `${circledNumber(asyncIndices[i])} ` : "  ";
+    const head = i < asyncIndices.length ? ` ${subscriptNumber(asyncIndices[i])}` : "  ";
     result += `${head}· `;
   }
   return result;

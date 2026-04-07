@@ -402,16 +402,16 @@ workflow default(name) {
 Jaiph: Running async.jh
 
 <span class="run-keyword">workflow</span> default
-<span class="run-marker">①</span> <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> cursor_say_hello
-<span class="run-marker">②</span> <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> claude_say_hello
-<span class="run-marker">①</span> <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> cursor "Say: Greetings! I am [mo..."
-<span class="run-marker">②</span> <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> claude "Say: Greetings! I am [mo..."
-<span class="run-marker">①</span> <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">prompt cursor (3s)</span>
-<span class="run-marker">①</span> <span class="run-marker">·</span>   <span class="run-marker">ℹ</span> Greetings! I am **Composer**, a language model trained by Cursor.
-<span class="run-marker">①</span> <span class="run-pass">✓</span> <span class="run-time">workflow cursor_say_hello (3s)</span>
-<span class="run-marker">②</span> <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">prompt claude (4s)</span>
-<span class="run-marker">②</span> <span class="run-marker">·</span>   <span class="run-marker">ℹ</span> Greetings! I am Claude Opus 4.6.
-<span class="run-marker">②</span> <span class="run-pass">✓</span> <span class="run-time">workflow claude_say_hello (4s)</span>
+ <span class="run-marker">₁</span><span class="run-marker">▸</span> <span class="run-keyword">workflow</span> cursor_say_hello
+ <span class="run-marker">₂</span><span class="run-marker">▸</span> <span class="run-keyword">workflow</span> claude_say_hello
+ <span class="run-marker">₁</span><span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> cursor "Say: Greetings! I am [mo..."
+ <span class="run-marker">₂</span><span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> claude "Say: Greetings! I am [mo..."
+ <span class="run-marker">₁</span><span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">prompt cursor (3s)</span>
+ <span class="run-marker">₁</span><span class="run-marker">·</span>   <span class="run-marker">ℹ</span> Greetings! I am **Composer**, a language model trained by Cursor.
+ <span class="run-marker">₁</span><span class="run-pass">✓</span> <span class="run-time">workflow cursor_say_hello (3s)</span>
+ <span class="run-marker">₂</span><span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">prompt claude (4s)</span>
+ <span class="run-marker">₂</span><span class="run-marker">·</span>   <span class="run-marker">ℹ</span> Greetings! I am Claude Opus 4.6.
+ <span class="run-marker">₂</span><span class="run-pass">✓</span> <span class="run-time">workflow claude_say_hello (4s)</span>
 
 <span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(4.6s)</span></code></pre>
                     <p>Both workflows run in parallel, and in this case Cursor was faster than Claude.</p>

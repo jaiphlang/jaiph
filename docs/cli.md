@@ -128,20 +128,20 @@ Example lines:
 
 If no parameters are passed, the line is unchanged (e.g. `▸ workflow default`). Disable color with `NO_COLOR=1`.
 
-**Async branch numbering.** When a workflow contains multiple `run async` steps, each branch is prefixed with a **circled number** (①②③…) at the async call site's indentation level. Numbers use Unicode circled digits (U+2460–U+2473 for 1–20; parenthesized fallback above 20) and are assigned in **dispatch order** within the parent workflow (first `run async` = ①, second = ②, etc.). The circled number is rendered in dim/grey (same style as `·` continuation markers); in non-TTY or `NO_COLOR` mode it is emitted without ANSI codes. Non-async lines (root workflow, final PASS/FAIL) have no prefix.
+**Async branch numbering.** When a workflow contains multiple `run async` steps, each branch is prefixed with a **subscript number** (₁₂₃…) at the async call site's indentation level. Numbers use Unicode subscript digits (U+2080–U+2089) and are assigned in **dispatch order** within the parent workflow (first `run async` = ₁, second = ₂, etc.). The subscript number is always rendered with a leading space (` ₁`, ` ₂`, ` ₁₂`) and in dim/grey (same style as `·` continuation markers); in non-TTY or `NO_COLOR` mode it is emitted without ANSI codes. Non-async lines (root workflow, final PASS/FAIL) have no prefix.
 
 If a nested workflow also uses `run async`, those branches get their own numbering scope at the nested indent level:
 
 ```text
 workflow default
-① ▸ workflow parallel_suite
-② ▸ workflow lint_check
-① · ① ▸ workflow test_unit
-① · ② ▸ workflow test_integration
-① · ① ✓ workflow test_unit (2s)
-① · ② ✓ workflow test_integration (5s)
-① ✓ workflow parallel_suite (5s)
-② ✓ workflow lint_check (1s)
+ ₁▸ workflow parallel_suite
+ ₂▸ workflow lint_check
+ ₁·  ₁▸ workflow test_unit
+ ₁·  ₂▸ workflow test_integration
+ ₁·  ₁✓ workflow test_unit (2s)
+ ₁·  ₂✓ workflow test_integration (5s)
+ ₁✓ workflow parallel_suite (5s)
+ ₂✓ workflow lint_check (1s)
 
 ✓ PASS workflow default (5s)
 ```

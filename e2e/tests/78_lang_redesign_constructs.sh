@@ -131,11 +131,11 @@ e2e::expect_stdout "${out}" <<'EXPECTED'
 Jaiph: Running wait_step.jh
 
 workflow default
-① ▸ workflow bg_job
-① ·   ▸ script write_marker
+ ₁▸ workflow bg_job
+ ₁·   ▸ script write_marker
   ℹ wait-done
-① ·   ✓ script write_marker (<time>)
-① ✓ workflow bg_job (<time>)
+ ₁·   ✓ script write_marker (<time>)
+ ₁✓ workflow bg_job (<time>)
 
 ✓ PASS workflow default (<time>)
 EXPECTED
