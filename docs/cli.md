@@ -161,6 +161,8 @@ log response
 
 On non-zero exit, the CLI may print a footer with the path to `run_summary.jsonl`, `out:` / `err:` artifact paths, and `Output of failed step:` plus a trimmed excerpt. These are resolved from the **first** `STEP_END` object in the summary with `status` != 0, using `out_content` / `err_content` when present and otherwise the `out_file` / `err_file` fields. If no failed `STEP_END` is found, the CLI falls back to a run-directory artifact heuristic.
 
+In Docker mode, the meta file written by the container contains container-internal paths (`/jaiph/workspace/…`). The CLI remaps these to host paths before reading artifacts, so the failure summary displays identically to local runs. See [Sandboxing — Path remapping](sandboxing.md#path-remapping).
+
 ### Run artifacts and live output
 
 Each run directory is `<JAIPH_RUNS_DIR>/<YYYY-MM-DD>/<HH-MM-SS>-<source>/`, where date and time are UTC and `<source>` is `JAIPH_SOURCE_FILE` if set, otherwise the entry file basename. Every step writes stdout and stderr to artifact files named with a zero-padded sequence prefix: `000001-module__rule.out`, `000002-module__workflow.err`, etc.

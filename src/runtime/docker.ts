@@ -290,7 +290,7 @@ export interface DockerSpawnOptions {
   isTTY: boolean;
 }
 
-const CONTAINER_WORKSPACE = "/jaiph/workspace";
+export const CONTAINER_WORKSPACE = "/jaiph/workspace";
 const AGENT_ENV_PREFIXES = ["CURSOR_", "ANTHROPIC_", "CLAUDE_"] as const;
 
 /**
