@@ -143,6 +143,8 @@ The CLI automatically remaps workspace-related variables so run artifacts land u
 
 You do not need to configure `JAIPH_RUNS_DIR` differently for Docker runs; remapping is automatic.
 
+**Post-run meta file remapping.** The container writes `run_dir` and `summary_file` paths into the meta file using container-internal paths (e.g. `/jaiph/workspace/.jaiph/runs/…`). After the container exits, the host CLI translates these back to host paths by replacing the `/jaiph/workspace/` prefix with the actual workspace root. This ensures the failure summary ("Output of failed step") and artifact references resolve correctly on the host. The remapping applies only to Docker runs; local runs use host paths natively.
+
 ### Example
 
 A workflow with Docker sandboxing enabled and an extra read-only mount for a `config` directory (using the shorthand form):

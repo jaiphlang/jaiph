@@ -12,31 +12,6 @@ Process rules:
 
 ---
 
-## Bug — Docker mode swallows failed-step output
-
-**Problem**  
-When a workflow fails in Docker mode, the "Output of failed step" line is missing from the terminal summary. Non-Docker runs print it; Docker runs silently drop it.
-
-**Repro**
-
-```bash
-# Shows "Output of failed step: You didn't provide your name :(" 
-examples/say_hello.jh
-
-# Missing that line entirely
-JAIPH_DOCKER_ENABLED=true examples/say_hello.jh
-```
-
-**Root cause (likely)**  
-The failure summary renderer reads the step's `.out` file from disk after the run completes. In Docker mode the output files live inside the container (or at a remapped path); by the time the host-side summary code tries to read them, the path doesn't resolve.
-
-**Acceptance criteria**
-
-- `JAIPH_DOCKER_ENABLED=true examples/say_hello.jh` prints the same "Output of failed step" line as the non-Docker run.
-- No regression in non-Docker output.
-
----
-
 ## Libs — add lib resolution + `queue` as first Jaiph lib <!-- dev-ready -->
 
 **Goal**  

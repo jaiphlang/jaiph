@@ -30,6 +30,7 @@ import {
   resolveDockerConfig,
   spawnDockerProcess,
   cleanupDocker,
+  CONTAINER_WORKSPACE,
 } from "../../runtime/docker";
 import {
   styleKeywordLabel,
@@ -162,6 +163,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     return reportResult(
       runState.capturedStderr, childExit.status, startedAt, runtimeEnv,
       emitter, runState.workflowRunId, inputAbs, workspaceRoot, metaFile,
+      dockerResult ? CONTAINER_WORKSPACE : undefined,
     );
   } finally {
     if (shouldCleanup) {
@@ -312,9 +314,20 @@ function reportResult(
   inputAbs: string,
   workspaceRoot: string,
   metaFile: string,
+  containerWorkspace?: string,
 ): number {
   const elapsedMs = Date.now() - startedAt;
   const elapsedLabel = formatElapsedDuration(elapsedMs);
+  // In Docker mode, meta file contains container paths (e.g. /jaiph/workspace/...).
+  // Remap them to host paths so the CLI can read artifacts.
+  const remapPath = (p: string): string => {
+    if (!containerWorkspace) return p;
+    if (p.startsWith(containerWorkspace + "/")) {
+      return join(workspaceRoot, p.slice(containerWorkspace.length + 1));
+    }
+    if (p === containerWorkspace) return workspaceRoot;
+    return p;
+  };
   let runDir: string | undefined;
   let summaryFile: string | undefined;
   if (existsSync(metaFile)) {
@@ -322,11 +335,11 @@ function reportResult(
     for (const line of metaLines) {
       if (line.startsWith("run_dir=")) {
         const value = line.slice("run_dir=".length).trim();
-        if (value) runDir = value;
+        if (value) runDir = remapPath(value);
       }
       if (line.startsWith("summary_file=")) {
         const value = line.slice("summary_file=".length).trim();
-        if (value) summaryFile = value;
+        if (value) summaryFile = remapPath(value);
       }
     }
   }
