@@ -250,7 +250,7 @@ test("buildDockerArgs: includes basic docker run flags", () => {
   assert.ok(args.includes("arg1"));
 });
 
-test("buildDockerArgs: TTY flag when isTTY is true", () => {
+test("buildDockerArgs: no -t flag even when isTTY is true (stderr-only event contract)", () => {
   const opts: DockerSpawnOptions = {
     config: {
       enabled: true,
@@ -269,7 +269,7 @@ test("buildDockerArgs: TTY flag when isTTY is true", () => {
     isTTY: true,
   };
   const args = buildDockerArgs(opts, "/tmp/gen");
-  assert.ok(args.includes("-t"));
+  assert.ok(!args.includes("-t"));
 });
 
 test("buildDockerArgs: --network flag for non-default network", () => {

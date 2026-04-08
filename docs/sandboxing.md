@@ -102,7 +102,7 @@ The CLI also mounts the host directory containing the run meta file at `/jaiph/m
 
 ### Runtime behavior
 
-**Container flags** -- `docker run --rm`. On Linux, UID/GID mapping (`--user $(id -u):$(id -g)`) is applied when the `id` command succeeds; other platforms omit `--user`.
+**Container flags** -- `docker run --rm` (no `-t`). The pseudo-TTY flag is intentionally omitted: Docker's `-t` merges stderr into stdout, which would break the `__JAIPH_EVENT__` stderr-only live contract between the container and the host CLI. Without `-t`, events stay on stderr where the CLI parses and renders them as the progress tree — the same channel used for local runs. On Linux, UID/GID mapping (`--user $(id -u):$(id -g)`) is applied when the `id` command succeeds; other platforms omit `--user`.
 
 **Events** -- The runner writes `__JAIPH_EVENT__` JSON to stderr, the same channel used for local runs. The CLI listens on stderr only; stdout carries plain script output. `STEP_END` events embed `out_content` (and `err_content` on failure) so consumers do not need host paths to step artifact files. Embedded content is capped at 1 MiB; larger output is truncated with a `[truncated]` marker while full logs remain on disk.
 
