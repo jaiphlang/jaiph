@@ -18,7 +18,7 @@
 
 ## Core components
 
-- **CLI** (`src/cli`) — `jaiph run` / `test` / `format` / `report` / `init` / `use`; spawns the workflow runner, parses live events, runs hooks.
+- **CLI** (`src/cli`) — `jaiph run` / `test` / `format` / `report` / `init` / `install` / `use`; spawns the workflow runner, parses live events, runs hooks.
 - **Parser** (`src/parser.ts`, `src/parse/*`) — `.jh` / `.test.jh` → AST.
 - **Validator** (`src/transpile/validate.ts`) — imports and symbol references at compile time.
 - **Transpiler** (`src/transpile/*`) — emits atomic `script` files under `scripts/` only (no workflow-level shell).

@@ -27,7 +27,8 @@ async function main(): Promise<number> {
   if (!process.env.JAIPH_SCRIPTS && builtScript) {
     process.env.JAIPH_SCRIPTS = join(dirname(builtScript), "scripts");
   }
-  const graph = buildRuntimeGraph(sourceFile);
+  const workspaceRoot = process.env.JAIPH_WORKSPACE || undefined;
+  const graph = buildRuntimeGraph(sourceFile, workspaceRoot);
   const runtime = new NodeWorkflowRuntime(graph, { env: process.env, cwd: process.cwd() });
   const status = workflowName === "default" ? await runtime.runDefault(runArgs) : 1;
   writeFileSync(

@@ -25,10 +25,11 @@ import {
 import { validatePromptReturnsSchema, validatePromptStepReturns } from "./validate-prompt-schema";
 
 export interface ValidateContext {
-  resolveImportPath: (fromFile: string, importPath: string) => string;
+  resolveImportPath: (fromFile: string, importPath: string, workspaceRoot?: string) => string;
   existsSync: (path: string) => boolean;
   readFile: (path: string) => string;
   parse: (content: string, filePath: string) => jaiphModule;
+  workspaceRoot?: string;
 }
 
 /** Check if args contain unquoted shell redirection operators (>, >>, |, &). */
@@ -268,7 +269,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         `duplicate import alias "${imp.alias}"`,
       );
     }
-    const resolved = ctx.resolveImportPath(ast.filePath, imp.path);
+    const resolved = ctx.resolveImportPath(ast.filePath, imp.path, ctx.workspaceRoot);
     importsByAlias.set(imp.alias, resolved);
     if (!ctx.existsSync(resolved)) {
       throw jaiphError(

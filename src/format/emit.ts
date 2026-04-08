@@ -44,16 +44,18 @@ export function emitModule(mod: jaiphModule, opts: EmitOptions = DEFAULT_OPTIONS
     }
   }
 
+  const exportedNames = new Set(mod.exports);
+
   for (const r of mod.rules) {
-    sections.push(emitRule(r, pad));
+    sections.push(emitRule(r, pad, exportedNames.has(r.name)));
   }
 
   for (const s of mod.scripts) {
-    sections.push(emitScript(s, pad));
+    sections.push(emitScript(s, pad, exportedNames.has(s.name)));
   }
 
   for (const w of mod.workflows) {
-    sections.push(emitWorkflow(w, pad));
+    sections.push(emitWorkflow(w, pad, exportedNames.has(w.name)));
   }
 
   if (mod.tests) {
@@ -117,38 +119,41 @@ function emitComments(comments: string[]): string[] {
   return comments.map((c) => (c.startsWith("#") ? c : `# ${c}`));
 }
 
-function emitRule(rule: RuleDef, pad: string): string {
+function emitRule(rule: RuleDef, pad: string, exported: boolean): string {
   const lines: string[] = [];
   lines.push(...emitComments(rule.comments));
   const paramStr = `(${rule.params.join(", ")})`;
-  lines.push(`rule ${rule.name}${paramStr} {`);
+  const prefix = exported ? "export " : "";
+  lines.push(`${prefix}rule ${rule.name}${paramStr} {`);
   lines.push(...emitSteps(rule.steps, pad, pad));
   lines.push("}");
   return lines.join("\n");
 }
 
-function emitScript(script: ScriptDef, _pad: string): string {
+function emitScript(script: ScriptDef, _pad: string, exported: boolean): string {
   const lines: string[] = [];
   lines.push(...emitComments(script.comments));
+  const prefix = exported ? "export " : "";
   if (script.bodyKind === "fenced" || script.lang || script.body.includes("\n")) {
     const langTag = script.lang ?? "";
-    lines.push(`script ${script.name} = \`\`\`${langTag}`);
+    lines.push(`${prefix}script ${script.name} = \`\`\`${langTag}`);
     for (const bl of script.body.split("\n")) {
       lines.push(bl);
     }
     lines.push("```");
   } else {
-    lines.push(`script ${script.name} = \`${script.body}\``);
+    lines.push(`${prefix}script ${script.name} = \`${script.body}\``);
   }
   return lines.join("\n");
 }
 
-function emitWorkflow(wf: WorkflowDef, pad: string): string {
+function emitWorkflow(wf: WorkflowDef, pad: string, exported: boolean): string {
   const lines: string[] = [];
   lines.push(...emitComments(wf.comments));
 
   const paramStr = `(${wf.params.join(", ")})`;
-  lines.push(`workflow ${wf.name}${paramStr} {`);
+  const prefix = exported ? "export " : "";
+  lines.push(`${prefix}workflow ${wf.name}${paramStr} {`);
 
   if (wf.metadata) {
     const configLines = emitConfig(wf.metadata, pad + pad);

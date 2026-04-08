@@ -11,7 +11,7 @@ Jaiph ships as a command-line tool. You point it at `.jh` source files, and it v
 
 Before execution, the CLI runs compile-time validation and script extraction. It then hands off to the Node workflow runtime, which interprets the parsed AST directly — there is no Bash transpilation of workflows; only extracted `script` bodies are emitted as shell. The CLI owns process spawn and signal propagation; the runtime kernel owns prompt and script execution, file-backed inbox, the `__JAIPH_EVENT__` stream on stderr, and `run_summary.jsonl`. For full architecture details, see [Architecture](architecture).
 
-**Commands:** `run`, `test`, `format`, `init`, `use`, `report`.
+**Commands:** `run`, `test`, `format`, `init`, `install`, `use`, `report`.
 
 **Global options:** `-h` / `--help` and `-v` / `--version` are recognized only as the **first argument** (e.g. `jaiph --help`). They are not parsed after a subcommand or file path. `jaiph report` has its own `--help`.
 
@@ -304,6 +304,55 @@ Creates:
 
 - `.jaiph/bootstrap.jh` — if it does not exist (otherwise left unchanged). Made executable.
 - `.jaiph/jaiph-skill.md` — synced from the local Jaiph installation when the skill file is found; otherwise sync is skipped and a note is printed.
+
+## `jaiph install`
+
+Install project-scoped libraries. Libraries are git repos cloned into `.jaiph/libs/<name>/` under the workspace root. A lockfile (`.jaiph/libs.lock`) tracks installed libraries for reproducible setups.
+
+```bash
+jaiph install [--force] <repo-url[@version]> ...
+jaiph install [--force]
+```
+
+**With arguments** — clone each repo into `.jaiph/libs/<name>/` (shallow: `--depth 1`) and upsert the entry in `.jaiph/libs.lock`. The library name is derived from the URL: last path segment, stripped of `.git` suffix (e.g. `github.com/you/queue-lib.git` → `queue-lib`). Version pinning uses `@<tag-or-branch>` after the URL.
+
+**Without arguments** — restore all libraries from `.jaiph/libs.lock`. Useful after cloning a project or in CI.
+
+If `.jaiph/libs/<name>/` already exists, the library is skipped. Use `--force` to delete and re-clone.
+
+**Lockfile format** (`.jaiph/libs.lock`):
+
+```json
+{
+  "libs": [
+    { "name": "queue-lib", "url": "https://github.com/you/queue-lib.git", "version": "v1.0" }
+  ]
+}
+```
+
+**Examples:**
+
+```bash
+# Install a library
+jaiph install https://github.com/you/queue-lib.git
+
+# Install at a specific version
+jaiph install https://github.com/you/queue-lib.git@v1.0
+
+# Re-clone an existing library
+jaiph install --force https://github.com/you/queue-lib.git
+
+# Restore all libraries from lockfile
+jaiph install
+```
+
+After installation, import library modules using the `<lib-name>/<path>` convention:
+
+```jaiph
+import "queue-lib/queue" as queue
+```
+
+See [Grammar — Imports and Exports](grammar.md#imports-and-exports) for resolution rules.
 
 ## `jaiph use`
 
