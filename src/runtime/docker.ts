@@ -331,10 +331,9 @@ export function remapDockerEnv(
 export function buildDockerArgs(opts: DockerSpawnOptions, generatedDir: string): string[] {
   const args: string[] = ["run", "--rm"];
 
-  // TTY passthrough
-  if (opts.isTTY) {
-    args.push("-t");
-  }
+  // No -t flag: the container runs a non-interactive Node process.
+  // Docker's -t merges stderr into stdout, which breaks the
+  // __JAIPH_EVENT__ stderr-only live contract between runtime and CLI.
 
   // UID/GID mapping on Linux
   if (process.platform === "linux") {

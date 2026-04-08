@@ -12,39 +12,6 @@ Process rules:
 
 ---
 
-## Bug — Docker mode dumps raw JSON events instead of tree UI, and fails <!-- dev-ready -->
-
-**Problem**  
-Running with `JAIPH_DOCKER_ENABLED=true` has two issues:
-
-1. **No tree rendering.** The host process receives `__JAIPH_EVENT__` JSON lines from the container's stdout but dumps them raw instead of feeding them to the tree renderer. Locally (non-Docker) the same events produce the live step tree — in Docker mode the user sees wall-of-JSON.
-2. **Workflow fails.** `say_hello.jh` (no LLM, pure script) exits with `status: 1` / `FAIL` even though the script runs correctly inside the container. Likely the host-side process treats the raw-event output or a non-zero inner exit code incorrectly.
-
-**Reproduction**
-
-```bash
-JAIPH_DOCKER_ENABLED=true examples/say_hello.jh       # fails, raw JSON
-JAIPH_DOCKER_ENABLED=true examples/async.jh            # fails, raw JSON
-```
-
-Compare with local (no Docker) which renders the tree correctly.
-
-**Context**
-
-- Docker execution path: `src/runtime/kernel/` — look for Docker run/exec logic that spawns the container and reads its stdout.
-- Tree renderer / event consumer: the component that parses `__JAIPH_EVENT__` lines and renders the live tree UI during local runs.
-- The container writes `__JAIPH_EVENT__` JSON to stdout. The host needs to intercept these lines, parse them, and feed them to the same tree renderer used for local runs — instead of echoing them verbatim.
-- The exit-code propagation from the inner `jaiph` process inside the container back to the host process may be broken or conflated with Docker's own exit code.
-
-**Acceptance criteria**
-
-- `JAIPH_DOCKER_ENABLED=true examples/say_hello.jh` renders the same step tree as the non-Docker run.
-- `JAIPH_DOCKER_ENABLED=true examples/say_hello.jh` succeeds (exit 0) when the workflow logic succeeds.
-- `JAIPH_DOCKER_ENABLED=true examples/async.jh` renders tree and reports correct per-step status.
-- No raw `__JAIPH_EVENT__` JSON visible to the user.
-
----
-
 ## Language — replace `if` with generalized `recover`, remove implicit retry loop <!-- dev-ready -->
 
 **Goal**  
