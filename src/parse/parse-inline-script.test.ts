@@ -118,7 +118,7 @@ test("parser: rule body supports multiline fenced run ```", () => {
   }
 });
 
-test("parser: rule brace-if body supports fenced run ```", () => {
+test("parser: if keyword in rule produces E_PARSE", () => {
   const src = [
     'script ok = `true`',
     "rule r() {",
@@ -132,16 +132,10 @@ test("parser: rule brace-if body supports fenced run ```", () => {
     "  ensure r()",
     "}",
   ].join("\n");
-  const ast = parsejaiph(src, "test.jh");
-  const ifStep = ast.rules[0].steps[0];
-  assert.equal(ifStep.type, "if");
-  if (ifStep.type === "if") {
-    const inner = ifStep.thenSteps[0];
-    assert.equal(inner.type, "run_inline_script");
-    if (inner.type === "run_inline_script") {
-      assert.equal(inner.body.trim(), "echo in-branch");
-    }
-  }
+  assert.throws(
+    () => parsejaiph(src, "test.jh"),
+    /if statements have been removed/,
+  );
 });
 
 test("parser: old run script() syntax is rejected", () => {

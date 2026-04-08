@@ -54,17 +54,11 @@ workflow default() {
   cmd || { echo "failed"; exit 1; }
 }
 
-=== if not ensure plus inline shell short-circuit fails shell-step ban
-# @expect error E_VALIDATE "inline shell steps are forbidden in workflows" @7:5
+=== inline shell short-circuit fails shell-step ban
+# @expect error E_VALIDATE "inline shell steps are forbidden in workflows" @3:3
 --- input.jh
-rule gate() {
-  run gate_impl()
-}
 script gate_impl = `true`
 workflow default() {
-  if not ensure gate() {
-    echo fallback
-  }
   other || { echo "err"; exit 1; }
 }
 
@@ -263,23 +257,6 @@ workflow helper() {
 }
 rule check() {
   run async helper()
-}
-workflow default() {
-  ensure check()
-}
-
-=== ensure recover in rules (caught at parse time)
-# NOTE: unreachable at validate layer — parser (workflow-brace.ts) catches this first as E_PARSE.
-# Covered by parse-errors.txt "brace-if: ensure recover in rules".
-# @expect error E_PARSE "ensure ... recover is not allowed in rules" @5:3
---- input.jh
-rule sub_rule() {
-  return "ok"
-}
-rule check() {
-  ensure sub_rule() recover {
-    log "recovering"
-  }
 }
 workflow default() {
   ensure check()

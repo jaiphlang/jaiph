@@ -158,7 +158,7 @@ workflow analyze_gaps() {
 }
 
 workflow write_tests() {
-  if not run gap_report_nonempty() {
+  run gap_report_nonempty() recover (err) {
     fail "No gap report found (see .jaiph/tmp/qa_gap_report_active.txt). Run analyze_gaps first."
   }
   const gap_report = run read_gap_report()

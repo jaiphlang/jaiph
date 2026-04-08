@@ -7,7 +7,7 @@ redirect_from:
 
 # Jaiph Grammar
 
-Jaiph source files (`.jh`) combine a small orchestration language with shell execution. **Workflows** and **rules** express Jaiph steps — sequencing, conditionals, prompts, channels. **Scripts** contain Bash (or another interpreter via shebang) and run as isolated subprocesses. The runtime interprets the AST directly; only script bodies are emitted as executable files. This page is the language reference. For system boundaries and event contracts, see [Architecture](architecture).
+Jaiph source files (`.jh`) combine a small orchestration language with shell execution. **Workflows** and **rules** express Jaiph steps — sequencing, failure handling (`recover`), value branching (`match`), prompts, channels. **Scripts** contain Bash (or another interpreter via shebang) and run as isolated subprocesses. The runtime interprets the AST directly; only script bodies are emitted as executable files. This page is the language reference. For system boundaries and event contracts, see [Architecture](architecture).
 
 **Scope:** Lexical rules, syntax, and runtime semantics for normal modules (`.jh`). Test files (`*.test.jh`) are described in [Testing](testing.md). CLI and configuration are covered in [CLI](cli.md) and [Configuration](configuration.md).
 
@@ -42,9 +42,9 @@ The compiler enforces these boundaries at every call site. Using a script where 
 
 Jaiph enforces a strict boundary between orchestration and execution. Workflows and rules contain only Jaiph steps. Bash lives in `script` bodies.
 
-- **Workflows** — Named sequences of Jaiph steps: `ensure`, `run`, `prompt`, `const`, `fail`, `return`, `log`/`logerr`, inbox `send` (`channel <- …`), brace `if`, `match`, and `run async`. Any line that is not a recognized step is a parse error — extract bash to a `script` and call it with `run`.
+- **Workflows** — Named sequences of Jaiph steps: `ensure`, `run`, `prompt`, `const`, `fail`, `return`, `log`/`logerr`, inbox `send` (`channel <- …`), `match`, `run async`, `ensure … recover`, and `run … recover`. Any line that is not a recognized step is a parse error — extract bash to a `script` and call it with `run`.
 
-- **Rules** — Named blocks of structured Jaiph steps: `ensure` (other rules), `run` (scripts only — not workflows), `const`, brace `if`, `match`, `fail`, `log`/`logerr`, `return "…"`. Rules cannot use `prompt`, inbox send/route, `wait`, `run async`, or `ensure … recover`.
+- **Rules** — Named blocks of structured Jaiph steps: `ensure` (other rules), `run` (scripts only — not workflows), `const`, `match`, `fail`, `log`/`logerr`, `return "…"`, `ensure … recover`, `run … recover`. Rules cannot use `prompt`, inbox send/route, `wait`, or `run async`.
 
 - **Scripts** — Top-level `script` definitions emitted as separate executable files under the workspace `scripts/` directory. Called from workflows or rules with `run`. Bodies are opaque to the compiler — the parser does not check Jaiph keywords inside them. Use `echo`/`printf` for data output and `return N`/`return $?` for exit status. Jaiph interpolation (`${...}`) is forbidden in script bodies — use `$1`, `$2` positional arguments instead. Polyglot support: a fence lang tag (`` ```<tag> ``) maps to `#!/usr/bin/env <tag>` — any tag is valid (no hardcoded allowlist). Alternatively, a manual `#!` shebang as the first line of the body selects the interpreter; if both a fence tag and a `#!` first line are present, it is an error. Without either, `#!/usr/bin/env bash` is used. For trivial one-off commands, **inline scripts** (`` run `body`(args) `` or `` run ```lang...body...```(args) ``) let you embed a script body directly in a step without a named definition — see [`run` — Inline Scripts](#inline-scripts).
 
@@ -154,9 +154,9 @@ ensure check_branch(branch_name)         # works with ensure too
 # run docs.update_from_task("${task}")   — E_VALIDATE: use bare identifier: ...(task)
 ```
 
-This rule applies to all call sites: `run`, `ensure`, `if` conditions, `return run`/`return ensure`, `send … <- run`, and `const x = run …`. Quoted strings with additional text around the interpolation (e.g. `"prefix_${name}"`) are allowed since they cannot be expressed as bare identifiers.
+This rule applies to all call sites: `run`, `ensure`, `return run`/`return ensure`, `send … <- run`, and `const x = run …`. Quoted strings with additional text around the interpolation (e.g. `"prefix_${name}"`) are allowed since they cannot be expressed as bare identifiers.
 
-Bare identifiers must reference a known variable (`const`, capture, or named parameter). Unknown names produce an `E_VALIDATE` error at compile time. Jaiph keywords (`run`, `ensure`, `if`, `const`, etc.) cannot be used as bare identifier arguments.
+Bare identifiers must reference a known variable (`const`, capture, or named parameter). Unknown names produce an `E_VALIDATE` error at compile time. Jaiph keywords (`run`, `ensure`, `const`, etc.) cannot be used as bare identifier arguments.
 
 ### Arity Checking
 
@@ -172,7 +172,7 @@ workflow default() {
 }
 ```
 
-Arity checking applies to all `run` and `ensure` call sites (steps, captures, `if` conditions, `return run`/`return ensure`, and `send` RHS), including the bare form (`run ref` = zero arguments). When the callee has no declared parameters (legacy style), no arity check is performed — any number of arguments is accepted.
+Arity checking applies to all `run` and `ensure` call sites (steps, captures, `return run`/`return ensure`, and `send` RHS), including the bare form (`run ref` = zero arguments). When the callee has no declared parameters (legacy style), no arity check is performed — any number of arguments is accepted.
 
 Arguments are available as `${paramName}` in orchestration strings (rules and workflows) and `$1`, `$2`, … in script bodies.
 
@@ -276,9 +276,9 @@ ensure check_deps()                    # explicit parens — also valid
 result = ensure lib.validate(input)
 ```
 
-### `ensure … recover` — Retry with Recovery
+### `ensure … recover` — Failure Recovery
 
-When `ensure` includes a `recover` clause, failure triggers a retry loop: run the rule, on failure run the recovery body, repeat until the rule passes or the maximum attempt rounds are reached (default 3, overridable with `JAIPH_ENSURE_MAX_RETRIES`).
+When `ensure` includes a `recover` clause, a failure in the rule triggers the recovery body **once** (like a catch clause). There is no retry loop — the rule runs, and if it fails, the recovery body executes a single time.
 
 `recover` requires **explicit bindings** in parentheses — bare `recover` without bindings is `E_PARSE`:
 
@@ -292,23 +292,53 @@ ensure ci_passes(repo) recover (failure) {
   run auto_fix()
 }
 
-# Two bindings — failure payload + attempt number (1-based)
+# Two bindings — failure payload + attempt number (always "1")
 ensure ci_passes() recover (failure, attempt) {
   run save_string_to_file(failure, "ci_failure.log")
-  prompt "CI failed (attempt ${attempt}). Log is in ci_failure.log — fix the code."
+  prompt "CI failed. Log is in ci_failure.log — fix the code."
 }
 ```
 
 **Bindings:**
-- The first binding (e.g. `failure`) receives the merged stdout+stderr from the failed rule execution, including output from nested scripts and rules. The payload refreshes per retry attempt.
-- The optional second binding (e.g. `attempt`) receives the 1-based attempt number as a string.
+- The first binding (e.g. `failure`) receives the merged stdout+stderr from the failed rule execution, including output from nested scripts and rules.
+- The optional second binding (e.g. `attempt`) receives the attempt number as a string (always `"1"`).
 - Binding names must be valid identifiers. At most two bindings are allowed.
 
 Syntax rules:
 - `recover` must be followed by `(<name>)` or `(<name>, <attempt>)` — bare `recover` or `recover {` without bindings is `E_PARSE`.
 - All rule arguments must appear inside the call parentheses **before** `recover`.
 - `recover` must be followed by at least one recovery step after the bindings.
-- `ensure … recover` is workflow-only — not allowed in rule bodies.
+
+### `run … recover` — Failure Recovery for Scripts and Workflows
+
+`run` also supports a `recover` clause with the same semantics as `ensure … recover`. When the target script or workflow fails, the recovery body runs **once**.
+
+```jaiph
+# Single-statement recovery
+run deploy() recover (err) run rollback()
+
+# Block recovery
+run deploy(env) recover (err) {
+  log "Deploy failed, rolling back"
+  run rollback(env)
+}
+
+# Two bindings — failure payload + attempt number (always "1")
+run build() recover (err, attempt) {
+  run save_string_to_file(err, "build_failure.log")
+  log "Build failed. Log saved."
+}
+```
+
+**Bindings** follow the same rules as `ensure … recover`:
+- The first binding receives the merged stdout+stderr from the failed execution.
+- The optional second binding receives the attempt number as a string (always `"1"`).
+- At most two bindings are allowed.
+
+Syntax rules:
+- `recover` must be followed by `(<name>)` or `(<name>, <attempt>)` — bare `recover` or `recover {` without bindings is `E_PARSE`.
+- All call arguments must appear inside the parentheses **before** `recover`.
+- `recover` must be followed by at least one recovery step after the bindings.
 
 ### `prompt` — Agent Interaction
 
@@ -395,22 +425,6 @@ Analyze this input in detail.
 RHS forms: value expressions (`${var}`, quoted strings, triple-quoted `"""..."""` multiline blocks), or explicit `run`/`ensure`/`prompt` capture. Prompt capture supports all three body forms: string literal, identifier, and triple-quoted block. A bare reference like `const x = ref(args)` is rejected — use `const x = run ref(args)`.
 
 Restrictions on const RHS: `$(…)`, `${var:-fallback}`, `${var%%…}`, `${var//…}`, and `${#var}` are all rejected.
-
-### `if` / `else if` / `else` — Conditionals
-
-Only brace form with `ensure` or `run` conditions:
-
-```jaiph
-if ensure lib.check_input {
-  run process
-} else if not run file_exists(path) {
-  fail "missing file"
-} else {
-  log "skipping"
-}
-```
-
-`not` negates the condition. Branches contain normal workflow steps. Shell-style `if … then … fi` is not supported.
 
 ### `send` — Channel Messages
 
@@ -728,7 +742,7 @@ env_value       = double_quoted_string | triple_quoted_block | bare_value ;
 
 rule_decl       = [ "export" ] "rule" IDENT [ "(" param_list ")" ] "{" { rule_body_step } "}" ;
 rule_body_step  = comment_line | workflow_step ;
-  (* validation rejects prompt, send, wait, ensure…recover, const…=prompt, run async,
+  (* validation rejects prompt, send, wait, const…=prompt, run async,
      and run targets that are not scripts *)
 
 script_decl     = "script" IDENT "=" script_rhs ;
@@ -745,10 +759,10 @@ workflow_config = config_block ;
   (* optional per-workflow override; must appear before steps;
      only agent.* and run.* keys allowed; runtime.* yields E_PARSE *)
 
-workflow_step   = ensure_stmt | run_stmt | run_async_stmt | prompt_stmt | prompt_capture_stmt
+workflow_step   = ensure_stmt | run_stmt | run_recover_stmt | run_async_stmt | prompt_stmt | prompt_capture_stmt
                 | const_decl_step | ensure_capture_stmt | run_capture_stmt | return_stmt
                 | fail_stmt | wait_stmt | log_stmt | logerr_stmt | send_stmt
-                | if_brace_stmt | match_stmt | comment_line ;
+                | match_stmt | comment_line ;
   (* route declarations (-> workflow) belong at the top level in channel_decl,
      not inside workflow bodies; a -> inside a body is E_PARSE *)
 
@@ -779,6 +793,7 @@ logerr_stmt     = "logerr" ( double_quoted_string | triple_quoted_block | IDENT 
 
 ensure_stmt     = "ensure" call_ref [ "recover" recover_bindings recover_body ] ;
 ensure_capture_stmt = IDENT "=" "ensure" call_ref [ "recover" recover_bindings recover_body ] ;
+run_recover_stmt   = "run" call_ref "recover" recover_bindings recover_body ;
 run_capture_stmt   = IDENT "=" "run" ( call_ref | inline_script ) ;
 run_stmt        = "run" ( call_ref | inline_script ) ;
 call_ref        = REF "(" [ call_args ] ")" | REF ;  (* bare REF = zero-arg call; parens required when args present *)
@@ -791,15 +806,10 @@ returns_schema  = "returns" double_quoted_string ;
 
 recover_bindings = "(" IDENT [ "," IDENT ] ")" ;  (* 1st = failure payload, optional 2nd = attempt number *)
 recover_body    = single_workflow_stmt | "{" { workflow_step } "}" ;
-single_workflow_stmt = ensure_stmt | run_stmt | prompt_stmt | prompt_capture_stmt
+single_workflow_stmt = ensure_stmt | run_stmt | run_recover_stmt | prompt_stmt | prompt_capture_stmt
                 | const_decl_step | run_capture_stmt | ensure_capture_stmt
                 | return_stmt | fail_stmt | wait_stmt | log_stmt | logerr_stmt
-                | send_stmt | if_brace_stmt ;
-
-if_brace_stmt   = "if" [ "not" ] brace_if_head "{" { workflow_step } "}"
-                  { "else" "if" [ "not" ] brace_if_head "{" { workflow_step } "}" }
-                  [ "else" "{" { workflow_step } "}" ] ;
-brace_if_head   = "ensure" call_ref | "run" call_ref ;
+                | send_stmt ;
 ```
 
 ## Validation Rules
@@ -819,7 +829,7 @@ Validation rules:
 4. **Unified namespace:** channels, rules, workflows, scripts, and top-level `const` share one namespace per module.
 5. `ensure` must target a rule. `run` in a workflow targets a workflow or script. `run` in a rule targets a script only. These rules also apply to `return run` and `return ensure` forms.
 6. Channel references in `send` must resolve to declared channels. Route targets on channel declarations must be workflows with exactly 3 parameters. Route declarations inside workflow bodies are rejected at parse time.
-7. `ensure … recover` argument ordering: all arguments inside parentheses before `recover`.
+7. `ensure … recover` and `run … recover` argument ordering: all arguments inside parentheses before `recover`.
 8. Shell redirection (`>`, `|`, `&`) after `run`/`ensure` is rejected — use a script.
 9. **Type crossing:** `string` and `script` are non-interchangeable primitive types (see [Types](#types)). `prompt` rejects script names; `run` rejects string consts; assigning a script to a `const` or interpolating a script name with `${…}` is rejected. Each crossing produces an actionable `E_VALIDATE` message.
 
@@ -836,7 +846,8 @@ At runtime, the Node workflow runtime interprets the AST directly:
 - **Config:** Precedence chain: environment → workflow-level → module-level → defaults.
 - **Script isolation:** Managed subprocesses with only essential variables. Module-scoped variables not visible.
 - **Prompt + schema:** JSON extraction and schema validation via the JS kernel. Exit codes: 0=ok, 1=parse error, 2=missing field, 3=type mismatch.
-- **ensure … recover:** Bounded retry loop (default 3 rounds, `JAIPH_ENSURE_MAX_RETRIES`). Requires explicit bindings: `recover (failure) { … }` or `recover (failure, attempt) { … }`. The first binding gets fresh merged stdout+stderr per attempt; the optional second binding gets the 1-based attempt number.
+- **ensure/run … recover:** On failure, the recovery body runs **once** (like a catch clause). There is no retry loop. Requires explicit bindings: `recover (failure) { … }` or `recover (failure, attempt) { … }`. The first binding gets the merged stdout+stderr from the failed execution; the optional second binding gets the attempt number (always `"1"`).
+- **Recursion safety:** There is a hard recursion depth limit of 256. Exceeding it produces a runtime error.
 - **Assignment capture:** Rules and workflows use explicit `return "…"`. Scripts use stdout.
 - **`run async`:** Promise-based concurrency. Implicit join via `Promise.allSettled` before workflow returns. Failures aggregated.
 - **Channels:** Messages enqueued via `send`, dispatched to route targets at workflow end. Each target must declare exactly 3 parameters; the runtime binds message, channel, and sender to the declared names.

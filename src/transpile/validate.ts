@@ -111,12 +111,7 @@ function collectKnownVars(steps: WorkflowStepDef[], envDecls?: { name: string }[
       if ((s.type === "ensure" || s.type === "run" || s.type === "prompt" || s.type === "run_inline_script") && s.captureName) {
         vars.add(s.captureName);
       }
-      if (s.type === "if") {
-        walk(s.thenSteps);
-        if (s.elseIfBranches) for (const br of s.elseIfBranches) walk(br.thenSteps);
-        if (s.elseSteps) walk(s.elseSteps);
-      }
-      if (s.type === "ensure" && s.recover) {
+      if ((s.type === "ensure" || s.type === "run") && s.recover) {
         const recoverSteps = "single" in s.recover ? [s.recover.single] : s.recover.block;
         walk(recoverSteps);
       }
@@ -385,17 +380,6 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
       if (s.type === "const" && s.value.kind === "prompt_capture" && s.value.returns !== undefined) {
         schemas.set(s.name, parseSchemaFieldNames(s.value.returns));
       }
-      if (s.type === "if") {
-        for (const [k, v] of collectPromptSchemas(s.thenSteps)) schemas.set(k, v);
-        if (s.elseIfBranches) {
-          for (const br of s.elseIfBranches) {
-            for (const [k, v] of collectPromptSchemas(br.thenSteps)) schemas.set(k, v);
-          }
-        }
-        if (s.elseSteps) {
-          for (const [k, v] of collectPromptSchemas(s.elseSteps)) schemas.set(k, v);
-        }
-      }
     }
     return schemas;
   };
@@ -476,13 +460,11 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         validateNoQuotedSingleInterpolation(ast.filePath, s.ref.loc, s.args);
         validateBareIdentifierArgs(ast.filePath, s.ref.loc, s.bareIdentifierArgs, ruleKnownVars);
         if (s.recover) {
-          throw jaiphError(
-            ast.filePath,
-            s.ref.loc.line,
-            s.ref.loc.col,
-            "E_VALIDATE",
-            "ensure ... recover is not allowed in rules",
-          );
+          const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
+          const rb = new Set<string>();
+          rb.add(s.recover.bindings.failure);
+          if (s.recover.bindings.attempt) rb.add(s.recover.bindings.attempt);
+          for (const r of steps) validateRuleStep(r);
         }
         return;
       }
@@ -504,39 +486,12 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         validateArity(ast.filePath, s.workflow.loc, s.workflow.value, s.args, "workflow", ast, refCtx);
         validateNoQuotedSingleInterpolation(ast.filePath, s.workflow.loc, s.args);
         validateBareIdentifierArgs(ast.filePath, s.workflow.loc, s.bareIdentifierArgs, ruleKnownVars);
-        return;
-      }
-      if (s.type === "if") {
-        validateNoShellRedirection(ast.filePath, s.condition.ref.loc, s.condition.kind, s.condition.args);
-        validateBareIdentifierArgs(ast.filePath, s.condition.ref.loc, s.condition.bareIdentifierArgs, ruleKnownVars);
-        if (s.condition.kind === "ensure") {
-          validateRef(s.condition.ref, ast, refCtx, expectRuleRef);
-          validateArity(ast.filePath, s.condition.ref.loc, s.condition.ref.value, s.condition.args, "rule", ast, refCtx);
-          validateNoQuotedSingleInterpolation(ast.filePath, s.condition.ref.loc, s.condition.args);
-        } else {
-          validateRef(s.condition.ref, ast, refCtx, expectRunInRuleRef);
-          validateArity(ast.filePath, s.condition.ref.loc, s.condition.ref.value, s.condition.args, "workflow", ast, refCtx);
-          validateNoQuotedSingleInterpolation(ast.filePath, s.condition.ref.loc, s.condition.args);
-        }
-        for (const ts of s.thenSteps) validateRuleStep(ts);
-        if (s.elseIfBranches) {
-          for (const br of s.elseIfBranches) {
-            validateNoShellRedirection(ast.filePath, br.condition.ref.loc, br.condition.kind, br.condition.args);
-            validateBareIdentifierArgs(ast.filePath, br.condition.ref.loc, br.condition.bareIdentifierArgs, ruleKnownVars);
-            if (br.condition.kind === "ensure") {
-              validateRef(br.condition.ref, ast, refCtx, expectRuleRef);
-              validateArity(ast.filePath, br.condition.ref.loc, br.condition.ref.value, br.condition.args, "rule", ast, refCtx);
-              validateNoQuotedSingleInterpolation(ast.filePath, br.condition.ref.loc, br.condition.args);
-            } else {
-              validateRef(br.condition.ref, ast, refCtx, expectRunInRuleRef);
-              validateArity(ast.filePath, br.condition.ref.loc, br.condition.ref.value, br.condition.args, "workflow", ast, refCtx);
-              validateNoQuotedSingleInterpolation(ast.filePath, br.condition.ref.loc, br.condition.args);
-            }
-            for (const ts of br.thenSteps) validateRuleStep(ts);
-          }
-        }
-        if (s.elseSteps) {
-          for (const es of s.elseSteps) validateRuleStep(es);
+        if (s.recover) {
+          const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
+          const rb = new Set<string>();
+          rb.add(s.recover.bindings.failure);
+          if (s.recover.bindings.attempt) rb.add(s.recover.bindings.attempt);
+          for (const r of steps) validateRuleStep(r);
         }
         return;
       }
@@ -834,39 +789,12 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         validateArity(ast.filePath, s.workflow.loc, s.workflow.value, s.args, "workflow", ast, refCtx);
         validateNoQuotedSingleInterpolation(ast.filePath, s.workflow.loc, s.args);
         validateBareIdentifierArgs(ast.filePath, s.workflow.loc, s.bareIdentifierArgs, wfKnownVars, recoverBindings);
-        return;
-      }
-      if (s.type === "if") {
-        validateNoShellRedirection(ast.filePath, s.condition.ref.loc, s.condition.kind, s.condition.args);
-        validateBareIdentifierArgs(ast.filePath, s.condition.ref.loc, s.condition.bareIdentifierArgs, wfKnownVars, recoverBindings);
-        if (s.condition.kind === "ensure") {
-          validateRef(s.condition.ref, ast, refCtx, expectRuleRef);
-          validateArity(ast.filePath, s.condition.ref.loc, s.condition.ref.value, s.condition.args, "rule", ast, refCtx);
-          validateNoQuotedSingleInterpolation(ast.filePath, s.condition.ref.loc, s.condition.args);
-        } else {
-          validateRef(s.condition.ref, ast, refCtx, expectRunTargetRef);
-          validateArity(ast.filePath, s.condition.ref.loc, s.condition.ref.value, s.condition.args, "workflow", ast, refCtx);
-          validateNoQuotedSingleInterpolation(ast.filePath, s.condition.ref.loc, s.condition.args);
-        }
-        for (const ts of s.thenSteps) validateStep(ts, recoverBindings);
-        if (s.elseIfBranches) {
-          for (const br of s.elseIfBranches) {
-            validateNoShellRedirection(ast.filePath, br.condition.ref.loc, br.condition.kind, br.condition.args);
-            validateBareIdentifierArgs(ast.filePath, br.condition.ref.loc, br.condition.bareIdentifierArgs, wfKnownVars, recoverBindings);
-            if (br.condition.kind === "ensure") {
-              validateRef(br.condition.ref, ast, refCtx, expectRuleRef);
-              validateArity(ast.filePath, br.condition.ref.loc, br.condition.ref.value, br.condition.args, "rule", ast, refCtx);
-              validateNoQuotedSingleInterpolation(ast.filePath, br.condition.ref.loc, br.condition.args);
-            } else {
-              validateRef(br.condition.ref, ast, refCtx, expectRunTargetRef);
-              validateArity(ast.filePath, br.condition.ref.loc, br.condition.ref.value, br.condition.args, "workflow", ast, refCtx);
-              validateNoQuotedSingleInterpolation(ast.filePath, br.condition.ref.loc, br.condition.args);
-            }
-            for (const ts of br.thenSteps) validateStep(ts, recoverBindings);
-          }
-        }
-        if (s.elseSteps) {
-          for (const es of s.elseSteps) validateStep(es, recoverBindings);
+        if (s.recover) {
+          const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
+          const rb = new Set<string>();
+          rb.add(s.recover.bindings.failure);
+          if (s.recover.bindings.attempt) rb.add(s.recover.bindings.attempt);
+          for (const r of steps) validateStep(r, rb);
         }
         return;
       }

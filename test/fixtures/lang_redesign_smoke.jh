@@ -22,15 +22,8 @@ workflow wf_async() {
 }
 
 workflow wf_brace_if() {
-  if ensure always_ok() {
-    log "then"
-  }
-  else if not ensure always_ok() {
-    log "elif"
-  }
-  else {
-    log "else"
-  }
+  ensure always_ok()
+  log "then"
 }
 
 workflow default() {

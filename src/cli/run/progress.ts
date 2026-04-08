@@ -48,21 +48,6 @@ function selfRecursiveRunSiteCount(mod: jaiphModule, workflowName: string): numb
       count += 1;
       continue;
     }
-    if (step.type === "if") {
-      for (const thenStep of step.thenSteps) {
-        if (thenStep.type === "run" && thenStep.workflow.value === workflowName) {
-          count += 1;
-        }
-      }
-      if (step.elseSteps) {
-        for (const elseStep of step.elseSteps) {
-          if (elseStep.type === "run" && elseStep.workflow.value === workflowName) {
-            count += 1;
-          }
-        }
-      }
-      continue;
-    }
   }
   return count;
 }
@@ -93,7 +78,16 @@ export function collectWorkflowChildren(
           : currentSymbol
             ? `${currentSymbol}::${wf}`
             : undefined;
-      return [{ label: `${asyncPrefix}workflow ${wf}`, nested: wf, stepFunc }];
+      const arr: Array<{ label: string; nested?: string; stepFunc?: string }> = [
+        { label: `${asyncPrefix}workflow ${wf}`, nested: wf, stepFunc },
+      ];
+      if (s.recover) {
+        const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
+        for (const r of steps) {
+          arr.push(...stepToItems(r));
+        }
+      }
+      return arr;
     }
     if (s.type === "ensure") {
       const ref = s.ref.value;
@@ -184,87 +178,11 @@ export function collectWorkflowChildren(
           : currentSymbol
             ? `${currentSymbol}::${wf}`
             : undefined;
-      items.push({ label: `${asyncPrefix}workflow ${wf}`, nested: wf, stepFunc });
+      items.push(...stepToItems(step));
       continue;
     }
     if (step.type === "run_inline_script") {
       items.push({ label: "script (inline)" });
-      continue;
-    }
-    if (step.type === "if") {
-      if (step.condition.kind === "ensure") {
-        const ensureRef = step.condition.ref.value;
-        const ensureStepFunc =
-          symbols && ensureRef.includes(".")
-            ? (() => {
-                const dot = ensureRef.indexOf(".");
-                const alias = ensureRef.slice(0, dot);
-                const name = ensureRef.slice(dot + 1);
-                return `${symbols.get(alias) ?? alias}::${name}`;
-              })()
-            : currentSymbol
-              ? `${currentSymbol}::${ensureRef}`
-              : undefined;
-        items.push({ label: `rule ${ensureRef}`, stepFunc: ensureStepFunc });
-      } else {
-        const wf = step.condition.ref.value;
-        const stepFunc =
-          symbols && wf.includes(".")
-            ? (() => {
-                const dot = wf.indexOf(".");
-                const alias = wf.slice(0, dot);
-                const name = wf.slice(dot + 1);
-                return `${symbols.get(alias) ?? alias}::${name}`;
-              })()
-            : currentSymbol
-              ? `${currentSymbol}::${wf}`
-              : undefined;
-        items.push({ label: `workflow ${wf}`, nested: wf, stepFunc });
-      }
-      for (const thenStep of step.thenSteps) {
-        items.push(...stepToItems(thenStep));
-      }
-      if (step.elseIfBranches) {
-        for (const br of step.elseIfBranches) {
-          if (br.condition.kind === "ensure") {
-            const ensureRef = br.condition.ref.value;
-            const ensureStepFunc =
-              symbols && ensureRef.includes(".")
-                ? (() => {
-                    const dot = ensureRef.indexOf(".");
-                    const alias = ensureRef.slice(0, dot);
-                    const name = ensureRef.slice(dot + 1);
-                    return `${symbols.get(alias) ?? alias}::${name}`;
-                  })()
-                : currentSymbol
-                  ? `${currentSymbol}::${ensureRef}`
-                  : undefined;
-            items.push({ label: `rule ${ensureRef}`, stepFunc: ensureStepFunc });
-          } else {
-            const wf = br.condition.ref.value;
-            const stepFunc =
-              symbols && wf.includes(".")
-                ? (() => {
-                    const dot = wf.indexOf(".");
-                    const alias = wf.slice(0, dot);
-                    const name = wf.slice(dot + 1);
-                    return `${symbols.get(alias) ?? alias}::${name}`;
-                  })()
-                : currentSymbol
-                  ? `${currentSymbol}::${wf}`
-                  : undefined;
-            items.push({ label: `workflow ${wf}`, nested: wf, stepFunc });
-          }
-          for (const thenStep of br.thenSteps) {
-            items.push(...stepToItems(thenStep));
-          }
-        }
-      }
-      if (step.elseSteps) {
-        for (const elseStep of step.elseSteps) {
-          items.push(...stepToItems(elseStep));
-        }
-      }
       continue;
     }
     if (step.type === "prompt") {

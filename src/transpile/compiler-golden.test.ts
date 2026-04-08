@@ -385,142 +385,45 @@ test("parser: unknown runtime key throws E_PARSE", () => {
   );
 });
 
-test("parser: positive if ensure parses into if step", () => {
-  const source = [
-    "rule ready() {",
-    "  return \"ok\"",
-    "}",
-    "workflow default() {",
-    "  if ensure ready() {",
-    "    log \"success\"",
-    "  }",
-    "}",
-  ].join("\n");
-  const mod = parsejaiph(source, "/fake/entry.jh");
-  const steps = mod.workflows[0].steps;
-  assert.equal(steps.length, 1);
-  assert.equal(steps[0].type, "if");
-  const step = steps[0] as { type: "if"; negated: boolean; condition: { kind: "ensure"; ref: { value: string } }; thenSteps: unknown[] };
-  assert.equal(step.negated, false);
-  assert.equal(step.condition.kind, "ensure");
-  assert.equal(step.condition.ref.value, "ready");
-  assert.equal(step.thenSteps.length, 1);
-});
-
-test("parser: positive if ensure with args parses correctly", () => {
-  const source = [
-    "rule check() {",
-    "  return \"ok\"",
-    "}",
-    "workflow default() {",
-    "  if ensure check(foo=bar baz) {",
-    "    log \"ok\"",
-    "  }",
-    "}",
-  ].join("\n");
-  const mod = parsejaiph(source, "/fake/entry.jh");
-  const step = mod.workflows[0].steps[0] as {
-    type: "if";
-    negated: boolean;
-    condition: { kind: "ensure"; ref: { value: string }; args?: string };
-  };
-  assert.equal(step.type, "if");
-  assert.equal(step.negated, false);
-  assert.equal(step.condition.ref.value, "check");
-  assert.equal(step.condition.args, "foo=bar baz");
-});
-
-test("parser: negated if ensure with args parses correctly", () => {
-  const source = [
-    "rule check() {",
-    "  return \"ok\"",
-    "}",
-    "workflow fix() {",
-    "  log \"fix\"",
-    "}",
-    "workflow default() {",
-    "  if not ensure check(foo=bar) {",
-    "    run fix()",
-    "  }",
-    "}",
-  ].join("\n");
-  const mod = parsejaiph(source, "/fake/entry.jh");
-  const step = mod.workflows[1].steps[0] as {
-    type: "if";
-    negated: boolean;
-    condition: { kind: "ensure"; ref: { value: string }; args?: string };
-  };
-  assert.equal(step.type, "if");
-  assert.equal(step.negated, true);
-  assert.equal(step.condition.args, "foo=bar");
-});
-
-test("parser: if ensure with else branch parses correctly", () => {
-  const source = [
-    "rule ready() {",
-    "  return \"ok\"",
-    "}",
-    "workflow default() {",
-    "  if ensure ready() {",
-    "    log \"yes\"",
-    "  } else {",
-    "    log \"no\"",
-    "  }",
-    "}",
-  ].join("\n");
-  const mod = parsejaiph(source, "/fake/entry.jh");
-  const step = mod.workflows[0].steps[0] as {
-    type: "if";
-    negated: boolean;
-    thenSteps: unknown[];
-    elseSteps?: unknown[];
-  };
-  assert.equal(step.type, "if");
-  assert.equal(step.negated, false);
-  assert.equal(step.thenSteps.length, 1);
-  assert.ok(step.elseSteps);
-  assert.equal(step.elseSteps!.length, 1);
-});
-
-test("parser: negated if ensure with else branch parses correctly", () => {
-  const source = [
-    "rule ready() {",
-    "  return \"ok\"",
-    "}",
-    "workflow default() {",
-    "  if not ensure ready() {",
-    "    log \"fail\"",
-    "  } else {",
-    "    log \"pass\"",
-    "  }",
-    "}",
-  ].join("\n");
-  const mod = parsejaiph(source, "/fake/entry.jh");
-  const step = mod.workflows[0].steps[0] as {
-    type: "if";
-    negated: boolean;
-    thenSteps: unknown[];
-    elseSteps?: unknown[];
-  };
-  assert.equal(step.type, "if");
-  assert.equal(step.negated, true);
-  assert.equal(step.thenSteps.length, 1);
-  assert.ok(step.elseSteps);
-  assert.equal(step.elseSteps!.length, 1);
-});
-
-test("parser: malformed if ensure emits E_PARSE", () => {
-  const source = [
-    "workflow default() {",
-    "  if ensure; then",
-    "    log \"x\"",
-    "  fi",
-    "}",
-  ].join("\n");
+test("parser: if keyword produces E_PARSE", () => {
   assert.throws(
-    () => parsejaiph(source, "/fake/entry.jh"),
-    /then\/fi syntax is not supported/,
+    () =>
+      parsejaiph(
+        [
+          "rule check() {",
+          "  return \"ok\"",
+          "}",
+          "workflow default() {",
+          "  if ensure check(foo=bar baz) {",
+          "    log \"ok\"",
+          "  }",
+          "}",
+        ].join("\n"),
+        "/fake/entry.jh",
+      ),
+    /if statements have been removed/,
   );
+});
+
+test("parser: run ... recover parses correctly", () => {
+  const source = [
+    'script helper = `echo ok`',
+    "workflow default() {",
+    "  run helper() recover (err) {",
+    '    log "failed"',
+    "  }",
+    "}",
+  ].join("\n");
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  const step = mod.workflows[0].steps[0];
+  assert.equal(step.type, "run");
+  if (step.type === "run") {
+    assert.ok(step.recover);
+    assert.equal(step.recover!.bindings.failure, "err");
+    const recoverSteps = "block" in step.recover! ? step.recover!.block : [step.recover!.single];
+    assert.equal(recoverSteps.length, 1);
+    assert.equal(recoverSteps[0].type, "log");
+  }
 });
 
 test("parser: fail step parses quoted message", () => {
@@ -617,42 +520,22 @@ test("parser: wait parses as workflow step (not shell)", () => {
   assert.equal(mod.workflows[0].steps[0].type, "wait");
 });
 
-test("parser: brace-style if parses not, else if, and else", () => {
+test("parser: brace-style if produces E_PARSE", () => {
   const source = [
     "rule ok() {",
     "  return \"ok\"",
     "}",
-    "rule bad() {",
-    "  fail \"no\"",
-    "}",
     'script check = `true`',
     "workflow default() {",
-    "  if not ensure bad() {",
+    "  if not ensure ok() {",
     "    log \"neg\"",
-    "  }",
-    "  else if run check() {",
-    "    log \"elif\"",
-    "  }",
-    "  else {",
-    "    log \"final\"",
     "  }",
     "}",
   ].join("\n");
-  const mod = parsejaiph(source, "/fake/entry.jh");
-  const step = mod.workflows[0].steps[0] as {
-    type: string;
-    negated: boolean;
-    elseIfBranches?: Array<{ negated: boolean; condition: { kind: string } }>;
-    elseSteps?: unknown[];
-  };
-  assert.equal(step.type, "if");
-  assert.equal(step.negated, true);
-  assert.ok(step.elseIfBranches);
-  assert.equal(step.elseIfBranches!.length, 1);
-  assert.equal(step.elseIfBranches![0].negated, false);
-  assert.equal(step.elseIfBranches![0].condition.kind, "run");
-  assert.ok(step.elseSteps);
-  assert.equal(step.elseSteps!.length, 1);
+  assert.throws(
+    () => parsejaiph(source, "/fake/entry.jh"),
+    /if statements have been removed/,
+  );
 });
 
 test("parser: send operator parses channel <- \"literal\"", () => {

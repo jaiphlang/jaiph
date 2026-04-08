@@ -27,24 +27,6 @@ workflow default() {
   log "${msg}"
 }
 
-=== workflow with if-else
-# @expect ok
---- input.jh
-rule ok() {
-  run ok_impl()
-}
-
-script ok_impl = `true`
-
-workflow default() {
-  if ensure ok() {
-    log "yes"
-  }
-  else {
-    log "no"
-  }
-}
-
 === workflow with fail
 # @expect ok
 --- input.jh
@@ -289,19 +271,6 @@ workflow default() {
   return
 }
 
-=== return run in brace-if then branch
-# @expect ok
---- input.jh
-script helper = `echo "ok"`
-rule check() {
-  return "yes"
-}
-workflow default() {
-  if ensure check() {
-    return run helper()
-  }
-}
-
 === run async in workflow
 # @expect ok
 --- input.jh
@@ -501,73 +470,6 @@ workflow default() {
   log "ok"
 }
 
-=== positive if ensure
-# @expect ok
---- input.jh
-rule ready() {
-  return "ok"
-}
-workflow default() {
-  if ensure ready() {
-    log "success"
-  }
-}
-
-=== positive if ensure with args
-# @expect ok
---- input.jh
-rule check(a, b) {
-  return "ok"
-}
-workflow default() {
-  if ensure check(foo=bar baz) {
-    log "ok"
-  }
-}
-
-=== negated if ensure with args
-# @expect ok
---- input.jh
-rule check(x) {
-  return "ok"
-}
-workflow fix() {
-  log "fix"
-}
-workflow default() {
-  if not ensure check(foo=bar) {
-    run fix()
-  }
-}
-
-=== if ensure with else branch
-# @expect ok
---- input.jh
-rule ready() {
-  return "ok"
-}
-workflow default() {
-  if ensure ready() {
-    log "yes"
-  } else {
-    log "no"
-  }
-}
-
-=== negated if ensure with else branch
-# @expect ok
---- input.jh
-rule ready() {
-  return "ok"
-}
-workflow default() {
-  if not ensure ready() {
-    log "fail"
-  } else {
-    log "pass"
-  }
-}
-
 === fail step parses quoted message
 # @expect ok
 --- input.jh
@@ -604,28 +506,6 @@ workflow default() {
 --- input.jh
 workflow default() {
   wait
-}
-
-=== brace-style if with not, else if, and else
-# @expect ok
---- input.jh
-rule ok() {
-  return "ok"
-}
-rule bad() {
-  fail "no"
-}
-script check = `true`
-workflow default() {
-  if not ensure bad() {
-    log "neg"
-  }
-  else if run check() {
-    log "elif"
-  }
-  else {
-    log "final"
-  }
 }
 
 === send operator parses channel <- literal
@@ -773,25 +653,6 @@ workflow default() {
   run multiline_str()
 }
 
-=== if not ensure then-branch allows mixed prompt and run
-# @expect ok
---- input.jh
-rule gate() {
-  run gate_impl()
-}
-script gate_impl = `false`
-
-workflow fix_build() {
-  const _ = prompt "fix build"
-}
-
-workflow default() {
-  if not ensure gate() {
-    const _ = prompt "recover"
-    run fix_build()
-  }
-}
-
 === prompt with returns schema single-line
 # @expect ok
 --- input.jh
@@ -824,6 +685,22 @@ workflow default() {
   ensure ci_passes("$repo_dir") recover (failure) {
     run fix_it()
   }
+}
+
+=== ensure recover in rules is valid
+# @expect ok
+--- input.jh
+rule sub_rule() {
+  return "ok"
+}
+script fallback_impl = `echo "fallback"`
+rule check() {
+  ensure sub_rule() recover (err) {
+    run fallback_impl()
+  }
+}
+workflow default() {
+  ensure check()
 }
 
 === valid ${name} interpolation in log

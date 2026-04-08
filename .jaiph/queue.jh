@@ -86,11 +86,11 @@ script arg_nonempty = `[ -n "${1:-}" ]`
 
 workflow get_first_task() {
   const qf = run queue_file_path()
-  if not run file_exists(qf) {
+  run file_exists(qf) recover (err) {
     fail "missing queue file"
   }
   const first_header = run first_header_line(qf)
-  if not run arg_nonempty(first_header) {
+  run arg_nonempty(first_header) recover (err) {
     fail "no tasks found in queue"
   }
   const task = run get_task_by_header(first_header)
@@ -171,7 +171,7 @@ rm -f "$qf.bak"
 ```
 
 workflow remove_completed_task(header) {
-  if not run arg_nonempty(header) {
+  run arg_nonempty(header) recover (err) {
     fail "header required"
   }
   const qf = run queue_file_path()

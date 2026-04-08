@@ -15,8 +15,8 @@ import { parseConfigBlock } from "./metadata";
 import { parsePromptStep } from "./prompt";
 import { parseSendRhs } from "./send-rhs";
 import { parseAnonymousInlineScript } from "./inline-script";
-import { parseEnsureStep } from "./steps";
-import { parseBlockStatement, tryParseBraceIfChain } from "./workflow-brace";
+import { parseEnsureStep, parseRunRecoverStep } from "./steps";
+import { parseBlockStatement } from "./workflow-brace";
 import { dottedReturnToQuotedString, isBareDottedIdentifierReturn } from "./workflow-return-dotted";
 import { parseMatchExpr } from "./match";
 import {
@@ -146,11 +146,6 @@ export function parseWorkflowBlock(
         continue;
       }
       hadNonCommentStepInline = true;
-      const braceIfCh = tryParseBraceIfChain(filePath, [t], 0);
-      if (braceIfCh) {
-        workflow.steps.push(braceIfCh.step);
-        continue;
-      }
       const st = parseBlockStatement(filePath, [t], 0, { forRule: false });
       workflow.steps.push(st.step);
     }
@@ -233,11 +228,6 @@ export function parseWorkflowBlock(
             );
           }
           hadNonCommentStep = true;
-          const braceIfCh = tryParseBraceIfChain(filePath, [t], 0);
-          if (braceIfCh) {
-            workflow.steps.push(braceIfCh.step);
-            continue;
-          }
           const st = parseBlockStatement(filePath, [t], 0, { forRule: false });
           workflow.steps.push(st.step);
         }
@@ -246,13 +236,6 @@ export function parseWorkflowBlock(
     }
 
     hadNonCommentStep = true;
-
-    const braceIf = tryParseBraceIfChain(filePath, lines, idx);
-    if (braceIf) {
-      workflow.steps.push(braceIf.step);
-      idx = braceIf.nextIdx - 1;
-      continue;
-    }
 
     const constDecl = inner.match(/^const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/s);
     if (constDecl) {
@@ -381,6 +364,13 @@ export function parseWorkflowBlock(
         if (runBody.startsWith("script(") || runBody.startsWith("script (")) {
           fail(filePath, 'inline script syntax has changed: use run `body`(args) instead of run script(args) "body"', innerNo);
         }
+        // Check for capture = run ... recover
+        const recoverResult = parseRunRecoverStep(filePath, lines, idx, innerNo, innerRaw, runBody, captureName);
+        if (recoverResult) {
+          workflow.steps.push(recoverResult.step);
+          idx = recoverResult.nextIdx;
+          continue;
+        }
         const call = parseCallRef(runBody);
         if (!call) {
           fail(filePath, "run must target a valid reference: run ref or run ref(args)", innerNo);
@@ -457,6 +447,13 @@ export function parseWorkflowBlock(
       }
       if (runBody.startsWith("script(") || runBody.startsWith("script (")) {
         fail(filePath, 'inline script syntax has changed: use run `body`(args) instead of run script(args) "body"', innerNo);
+      }
+      // Check for run ... recover
+      const recoverResult = parseRunRecoverStep(filePath, lines, idx, innerNo, innerRaw, runBody);
+      if (recoverResult) {
+        workflow.steps.push(recoverResult.step);
+        idx = recoverResult.nextIdx;
+        continue;
       }
       const call = parseCallRef(runBody);
       if (!call) {
@@ -585,6 +582,9 @@ export function parseWorkflowBlock(
           continue;
         }
       }
+      if (returnValue.startsWith("'")) {
+        fail(filePath, 'single-quoted strings are not supported; use double quotes ("...") instead', innerNo, retLoc.col);
+      }
       if (isJaiphValueReturn(returnValue) || isBareDottedIdentifierReturn(returnValue)) {
         // Reject multiline "..."
         if (returnValue.startsWith('"') && !hasUnescapedClosingQuote(returnValue, 1)) {
@@ -603,27 +603,12 @@ export function parseWorkflowBlock(
     }
 
     if (/^if\s/.test(inner)) {
-      const looksLikeJaiphIf =
-        /^if\s+!\s*ensure\b/.test(inner) ||
-        /^if\s+ensure\b/.test(inner) ||
-        /^if\s+!\s*run\b/.test(inner) ||
-        /^if\s+run\b/.test(inner) ||
-        /^if\s+not\s+ensure\b/.test(inner) ||
-        /^if\s+not\s+run\b/.test(inner);
-      if (looksLikeJaiphIf) {
-        fail(
-          filePath,
-          'use brace-style if: if [not] ensure|run <ref> [args] { ... } (then/fi syntax is not supported)',
-          innerNo,
-          innerRaw.indexOf("if") + 1,
-        );
-      }
-      workflow.steps.push({
-        type: "shell",
-        command: inner,
-        loc: { line: innerNo, col: colFromRaw(innerRaw) },
-      });
-      continue;
+      fail(
+        filePath,
+        'if statements have been removed; use "ensure ref() recover (err) { ... }" or "run ref() recover (err) { ... }" for failure handling, and "match" for value branching',
+        innerNo,
+        innerRaw.indexOf("if") + 1,
+      );
     }
 
     // Standalone match statement: match <subject> { ... }

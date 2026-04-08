@@ -134,7 +134,7 @@ test("bare return has no managed field", () => {
   }
 });
 
-test("return run in brace-if then branch", () => {
+test("return run in ensure recover block", () => {
   const mod = parsejaiph(
     [
       'script helper = `echo "ok"`',
@@ -142,17 +142,19 @@ test("return run in brace-if then branch", () => {
       '  return "yes"',
       "}",
       "workflow default() {",
-      "  if ensure check() {",
+      "  ensure check() recover (err) {",
       "    return run helper()",
       "  }",
       "}",
     ].join("\n"),
     "test.jh",
   );
-  const ifStep = mod.workflows[0].steps[0];
-  assert.equal(ifStep.type, "if");
-  if (ifStep.type === "if") {
-    const retStep = ifStep.thenSteps[0];
+  const ensureStep = mod.workflows[0].steps[0];
+  assert.equal(ensureStep.type, "ensure");
+  if (ensureStep.type === "ensure") {
+    assert.ok(ensureStep.recover);
+    const recoverSteps = "block" in ensureStep.recover! ? ensureStep.recover!.block : [ensureStep.recover!.single];
+    const retStep = recoverSteps[0];
     assert.equal(retStep.type, "return");
     if (retStep.type === "return") {
       assert.ok(retStep.managed);

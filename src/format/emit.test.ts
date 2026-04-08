@@ -55,27 +55,6 @@ describe("emitModule", () => {
     assert.equal(roundTrip(source), source);
   });
 
-  it("formats if/else if/else", () => {
-    const source = [
-      "workflow default() {",
-      "  if ensure ok() {",
-      '    log "then"',
-      "  }",
-      "  else if not ensure ok() {",
-      '    log "elif"',
-      "  }",
-      "  else {",
-      '    log "else"',
-      "  }",
-      "}",
-      "",
-    ].join("\n");
-
-    const mod = parsejaiph(source, "test.jh");
-    const result = emitModule(mod);
-    assert.equal(result, source);
-  });
-
   it("formats const with different RHS types", () => {
     const source = [
       "workflow default(name) {",

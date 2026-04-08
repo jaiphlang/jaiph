@@ -254,13 +254,13 @@ workflow default() {
   log "ok"
 }
 
-=== malformed if ensure with then/fi syntax
-# @expect error E_PARSE "then/fi syntax is not supported" @2:3
+=== if keyword produces removed error
+# @expect error E_PARSE "if statements have been removed" @2:3
 --- input.jh
 workflow default() {
-  if ensure; then
+  if ensure ready() {
     log "x"
-  fi
+  }
 }
 
 === channel declaration must be single per line
@@ -343,8 +343,8 @@ workflow default() {
   prompt "this never closes
 }
 
-=== unterminated brace if block
-# @expect error E_PARSE "unterminated block" @6:1
+=== if keyword with not produces removed error
+# @expect error E_PARSE "if statements have been removed" @6:3
 --- input.jh
 rule gate() {
   run gate_impl()
@@ -352,7 +352,9 @@ rule gate() {
 script gate_impl = `false`
 workflow default() {
   if not ensure gate() {
-    echo fallback
+    log "fallback"
+  }
+}
 
 === invalid workflow reference shape with extra dots
 # @expect error E_PARSE "unexpected content after run call" @2:1
@@ -694,31 +696,16 @@ workflow default() {
   findings -> analyst
 }
 
-=== brace-if: expected else brace after if-chain
-# @expect error E_PARSE "after if-chain" @8:1
+=== if keyword in workflow with args produces removed error
+# @expect error E_PARSE "if statements have been removed" @5:3
 --- input.jh
-rule gate() {
+rule check(a, b) {
   return "ok"
 }
 workflow default() {
-  if ensure gate() {
-    log "yes"
+  if ensure check(foo=bar baz) {
+    log "ok"
   }
-  else
-    log "no"
-}
-
-=== brace-if: else body on same line
-# @expect error E_PARSE "else branch body must not be on the same line" @8:1
---- input.jh
-rule gate() {
-  return "ok"
-}
-workflow default() {
-  if ensure gate() {
-    log "yes"
-  }
-  else { log "no" }
 }
 
 === brace-if: wait in rules
@@ -752,49 +739,18 @@ workflow default() {
   ensure check()
 }
 
-=== brace-if: run async capture in brace block
-# @expect error E_PARSE "capture is not supported with run async" @9:9
+=== if keyword with else branch produces removed error
+# @expect error E_PARSE "if statements have been removed" @5:3
 --- input.jh
-workflow helper() {
-  log "hi"
-}
-rule gate() {
+rule ready() {
   return "ok"
 }
 workflow default() {
-  if ensure gate() {
-    x = run async helper()
-  }
-}
-
-=== brace-if: malformed else if
-# @expect error E_PARSE "malformed else if" @8:1
---- input.jh
-rule gate() {
-  return "ok"
-}
-workflow default() {
-  if ensure gate() {
+  if ensure ready() {
     log "yes"
-  }
-  else if badcondition {
+  } else {
     log "no"
   }
-}
-
-=== brace-if: ensure recover in rules
-# @expect error E_PARSE "ensure ... recover is not allowed in rules" @5:3
---- input.jh
-rule sub_rule() {
-  return "ok"
-}
-rule check() {
-  ensure sub_rule() recover {
-    log "recovering"
-  }
-}
-workflow default() {
-  ensure check()
 }
 
 === brace-if: const prompt in rules
@@ -1116,19 +1072,14 @@ workflow default() {
 }
 
 
-=== brace-if: run async without parens in block is valid
+=== run async without parens in workflow is valid
 # @expect ok
 --- input.jh
-rule gate() {
-  return "ok"
-}
 workflow helper() {
   log "hi"
 }
 workflow default() {
-  if ensure gate() {
-    run async helper
-  }
+  run async helper
 }
 
 
@@ -1196,59 +1147,37 @@ workflow default() {
   const x = ${var:-default}
 }
 
-=== brace-if: run without parentheses in block is valid
+=== run without parentheses in workflow block is valid
 # @expect ok
 --- input.jh
 script helper = `echo "hi"`
-rule gate() {
-  return "ok"
-}
 workflow default() {
-  if ensure gate() {
-    run helper
-  }
+  run helper
 }
 
-=== brace-if: return with single-quoted string
-# @expect error E_PARSE "single-quoted strings are not supported" @6:5
+=== return with single-quoted string
+# @expect error E_PARSE "single-quoted strings are not supported" @2:3
 --- input.jh
-rule gate() {
-  return "ok"
-}
 workflow default() {
-  if ensure gate() {
-    return 'hello'
-  }
+  return 'hello'
 }
 
-=== brace-if: capture and send combined in block
-# @expect error E_PARSE "capture and send cannot be combined" @7:1
+=== capture and send combined in workflow body
+# @expect error E_PARSE "capture and send cannot be combined" @3:1
 --- input.jh
-rule gate() {
-  return "ok"
-}
 channel findings
 workflow default() {
-  if ensure gate() {
-    x = findings <- "hello"
-  }
+  x = findings <- "hello"
 }
 
-=== brace-if: then/fi syntax nested in block
-# @expect error E_PARSE "then/fi syntax is not supported" @9:5
+=== if keyword at top of workflow produces removed error
+# @expect error E_PARSE "if statements have been removed" @2:3
 --- input.jh
-rule gate() {
-  return "ok"
-}
-rule inner() {
-  return "ok"
-}
 workflow default() {
-  if ensure gate() {
-    if ensure inner(); then
-      log "x"
-    fi
+  if ensure ready() {
+    log "x"
   }
+  log "done"
 }
 
 === run without parentheses in workflow is valid
@@ -1532,24 +1461,14 @@ workflow default() {
   fail "unclosed
 }
 
-=== brace-if: unterminated brace in if condition
-# @expect error E_PARSE "unterminated '{' in if condition" @5:1
+=== if keyword after other steps produces removed error
+# @expect error E_PARSE "if statements have been removed" @3:3
 --- input.jh
-rule gate() {
-  return "ok"
-}
 workflow default() {
-  if ensure gate() { log "hi"
-}
-
-=== brace-if: inline if body with else on same line
-# @expect error E_PARSE "unexpected content after ensure call" @5:1
---- input.jh
-rule gate() {
-  return "ok"
-}
-workflow default() {
-  if ensure gate() { log "hi" } else { log "no" }
+  log "start"
+  if ensure gate() {
+    log "hi"
+  }
 }
 
 === prompt assign without const in workflow

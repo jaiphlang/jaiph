@@ -35,7 +35,7 @@ workflow default() {
 EOF
 
 rm -f "${TEST_DIR}/recover_simple.txt"
-JAIPH_ENSURE_MAX_RETRIES=1 e2e::run "simple_echo.jh" >/dev/null 2>&1 || true
+e2e::run "simple_echo.jh" >/dev/null 2>&1 || true
 
 e2e::assert_file_exists "${TEST_DIR}/recover_simple.txt" "recover wrote payload file"
 witness="$(<"${TEST_DIR}/recover_simple.txt")"
@@ -74,7 +74,7 @@ workflow default() {
 EOF
 
 rm -f "${TEST_DIR}/recover_nested.log"
-JAIPH_ENSURE_MAX_RETRIES=1 e2e::run "nested_payload.jh" >/dev/null 2>&1 || true
+e2e::run "nested_payload.jh" >/dev/null 2>&1 || true
 
 e2e::assert_file_exists "${TEST_DIR}/recover_nested.log" "recover wrote nested payload"
 witness="$(<"${TEST_DIR}/recover_nested.log")"
@@ -110,7 +110,7 @@ workflow default() {
 EOF
 
 rm -f "${TEST_DIR}/ci_failure.log"
-JAIPH_ENSURE_MAX_RETRIES=1 e2e::run "ci_payload.jh" >/dev/null 2>&1 || true
+e2e::run "ci_payload.jh" >/dev/null 2>&1 || true
 
 e2e::assert_file_exists "${TEST_DIR}/ci_failure.log" "recover wrote CI failure payload"
 witness="$(<"${TEST_DIR}/ci_failure.log")"
@@ -119,23 +119,13 @@ e2e::assert_equals "${witness}" "${expected_witness}" "CI failure payload matche
 e2e::pass "CI-style failure: multi-line payload captured"
 
 # ===================================================================
-# 4. Retry payload updates per attempt
+# 4. Recover runs once (single attempt, no retry loop)
 # ===================================================================
-e2e::section "recover payload refreshes per attempt (not stale)"
+e2e::section "recover runs exactly once on failure"
 
-e2e::file "retry_updates.jh" <<'EOF'
+e2e::file "single_attempt.jh" <<'EOF'
 script emit_attempt = ```
-local attempt_file=".jaiph/tmp/attempt_counter"
-if [ ! -f "$attempt_file" ]; then
-  printf "1" > "$attempt_file"
-  echo "attempt-1"
-  exit 1
-fi
-local n
-n=$(<"$attempt_file")
-n=$((n + 1))
-printf "%s" "$n" > "$attempt_file"
-echo "attempt-$n"
+echo "attempt-output"
 exit 1
 ```
 
@@ -146,24 +136,19 @@ rule check_rule() {
 }
 
 workflow default() {
-  ensure check_rule() recover (failure, attempt) {
-    run save_string_to_file(failure, "payload_attempt_${attempt}.txt")
+  ensure check_rule() recover (failure) {
+    run save_string_to_file(failure, "payload_single.txt")
   }
 }
 EOF
 
-rm -rf "${TEST_DIR}/.jaiph/tmp"
-mkdir -p "${TEST_DIR}/.jaiph/tmp"
-rm -f "${TEST_DIR}/payload_attempt_1.txt" "${TEST_DIR}/payload_attempt_2.txt"
-JAIPH_ENSURE_MAX_RETRIES=2 e2e::run "retry_updates.jh" >/dev/null 2>&1 || true
+rm -f "${TEST_DIR}/payload_single.txt"
+e2e::run "single_attempt.jh" >/dev/null 2>&1 || true
 
-e2e::assert_file_exists "${TEST_DIR}/payload_attempt_1.txt" "first attempt payload written"
-e2e::assert_file_exists "${TEST_DIR}/payload_attempt_2.txt" "second attempt payload written"
-attempt1="$(<"${TEST_DIR}/payload_attempt_1.txt")"
-attempt2="$(<"${TEST_DIR}/payload_attempt_2.txt")"
-e2e::assert_equals "${attempt1}" "attempt-1" "first recover gets attempt-1 output"
-e2e::assert_equals "${attempt2}" "attempt-2" "second recover gets attempt-2 output"
-e2e::pass "retry payload updates per attempt"
+e2e::assert_file_exists "${TEST_DIR}/payload_single.txt" "recover payload written"
+payload="$(<"${TEST_DIR}/payload_single.txt")"
+e2e::assert_equals "${payload}" "attempt-output" "recover gets failure output"
+e2e::pass "recover runs exactly once on failure"
 
 # ===================================================================
 # 5. No false payload on success

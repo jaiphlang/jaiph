@@ -12,69 +12,6 @@ Process rules:
 
 ---
 
-## Language — replace `if` with generalized `recover`, remove implicit retry loop <!-- dev-ready -->
-
-**Goal**  
-Simplify the error-handling model from three overlapping mechanisms (`if ensure/run`, `ensure … recover` with implicit retry loop, `match`) to two orthogonal ones (`recover` as a catch-like handler, `match` for value-based branching). Concretely:
-
-1. **Remove `if` statements entirely.** The `if ensure …` / `if run …` construct conflates control flow with execution. Every use case maps to `recover` (failure handling) or `match` (value branching).
-2. **Change `recover` semantics: no implicit retry loop.** Currently `recover` retries up to `JAIPH_ENSURE_MAX_RETRIES` (default 3) automatically. Instead, `recover` runs its body **once** on failure — like a `catch` clause. Retries require explicit recursion (the workflow/rule calls itself).
-3. **Extend `recover` to all call types.** Currently `ensure … recover` is workflow-only. Support `recover` on `ensure` and `run` calls in workflows, rules, and scripts.
-
-**Migration patterns**
-
-```jaiph
-# OLD: if ensure check { run deploy } else { run rollback }
-# NEW:
-ensure check recover (err) {
-  run rollback
-  return
-}
-run deploy
-
-# OLD: if not ensure check { run fix }
-# NEW:
-ensure check recover (err) { run fix }
-
-# OLD: implicit 3-retry loop
-# NEW: explicit recursion
-workflow deploy {
-  ensure tests_pass recover (err) {
-    run fix_tests(err)
-    run deploy
-  }
-}
-```
-
-**Context**
-
-- `if` parser: `src/parse/workflow-brace.ts` — `parseIfBraceHead` / `parseElseIfBraceHead`.
-- `if` runtime: `src/runtime/kernel/node-workflow-runtime.ts` — `executeSteps`, `if` branch (~line 954).
-- `recover` parser: `src/parse/steps.ts` — `parseEnsureStep`, `parseRecoverStatement`.
-- `recover` runtime: `src/runtime/kernel/node-workflow-runtime.ts` — `executeEnsureRef` (~line 1167), retry loop with `JAIPH_ENSURE_MAX_RETRIES`.
-- `recover` validation restriction (rules): `src/transpile/validate.ts` (~line 478) — `E_VALIDATE` when `recover` appears in a rule body.
-- AST types: `src/types.ts` — `IfConditionDef`, `WorkflowStepDef`.
-- Grammar docs: `docs/grammar.md` — `if_brace_stmt`, `ensure_stmt`.
-- E2E tests: `e2e/tests/78_lang_redesign_constructs.sh`, `e2e/tests/60_ensure_conditionals.sh`, `e2e/tests/114_if_else_chains.sh`, `e2e/tests/61_ensure_recover.sh`, `e2e/tests/100_ensure_recover_invalid.sh`.
-
-**Implementation notes**
-
-- **`run … recover` is new syntax.** Removing `if` requires `run X recover (err) { … }` to handle workflow/script failures inline.
-- **Recursion safety.** Implement tail-call optimization (detect self-call in tail position, reuse frame) or enforce a recursion depth limit with a clear error.
-- **Migrate all `.jh` files** in `examples/`, `.jaiph/`, and `e2e/` that use `if` to `recover` + `match`.
-
-**Acceptance criteria**
-
-- `if` keyword no longer parses (produces `E_PARSE`).
-- `recover` runs its body once on failure, no implicit retry loop.
-- `ensure … recover` and `run … recover` work in workflows, rules, and scripts.
-- `run … recover` syntax parses, validates, and executes correctly.
-- Recursion depth is bounded (TCO or hard limit with clear error).
-- All existing E2E tests pass (migrated away from `if`).
-- `docs/grammar.md` and `CHANGELOG.md` updated.
-
----
-
 ## Docs — write `language.md` covering all core language primitives <!-- dev-ready -->
 
 **Goal**  
@@ -127,6 +64,119 @@ One-paragraph high-level description.
 - Edge cases and constraints are documented (not just the happy path).
 - Cross-references to `grammar.md` for formal EBNF, `testing.md` for test harness details, `configuration.md` for full config key list.
 - No redundant duplication of full EBNF — link to `grammar.md` instead.
+
+---
+
+## Bug — Docker mode swallows failed-step output
+
+**Problem**  
+When a workflow fails in Docker mode, the "Output of failed step" line is missing from the terminal summary. Non-Docker runs print it; Docker runs silently drop it.
+
+**Repro**
+
+```bash
+# Shows "Output of failed step: You didn't provide your name :(" 
+examples/say_hello.jh
+
+# Missing that line entirely
+JAIPH_DOCKER_ENABLED=true examples/say_hello.jh
+```
+
+**Root cause (likely)**  
+The failure summary renderer reads the step's `.out` file from disk after the run completes. In Docker mode the output files live inside the container (or at a remapped path); by the time the host-side summary code tries to read them, the path doesn't resolve.
+
+**Acceptance criteria**
+
+- `JAIPH_DOCKER_ENABLED=true examples/say_hello.jh` prints the same "Output of failed step" line as the non-Docker run.
+- No regression in non-Docker output.
+
+---
+
+## Libs — add lib resolution + `queue` as first Jaiph lib <!-- dev-ready -->
+
+**Goal**  
+Establish the Jaiph library pattern: a `.jh` file with exports, installable in a known path, importable by name. Build `queue.jh` as the first lib — a markdown-section-based task queue manager backed by a central directory (designed for Obsidian vaults). This validates the lib system and is immediately useful for Jaiph's own development.
+
+**Part 1: Lib resolution in the import resolver**
+
+Currently `import "path" as alias` resolves relative to the importing file only. Add a fallback: if relative resolution fails, check `JAIPH_LIB_PATH` (default `~/.jaiph/lib/`). This is the only language-level change needed.
+
+```jaiph
+import "queue" as queue    # resolves to ~/.jaiph/lib/queue.jh
+```
+
+Resolution order:
+1. Relative to importing file (existing behavior)
+2. `JAIPH_LIB_PATH` directories (new, colon-separated, default `~/.jaiph/lib`)
+
+**Part 2: `queue.jh` lib**
+
+A lib that reads/writes markdown files in `QUEUE_DIR` (env var, e.g. `~/vault/queues`). One file per project. Sections (`## heading`) are tasks. Hashtags in headings (`#dev-ready`, `#bug`) are filterable tags.
+
+Exports:
+- `script get(project, tag?)` — return first `##` section, optionally filtered by `#tag`
+- `script list(project?, tag?)` — list section headings with tags; `--all` across projects
+- `script add(project, content)` — prepend a task section
+- `script complete(project)` — remove the first `##` section
+- `workflow next_task(project, tag)` — wrapper: get + return
+- `rule has_tasks(project)` — check if project has any sections
+
+**Part 3: Hashtag migration**
+
+Migrate `QUEUE.md` headings from `<!-- dev-ready -->` HTML comments to `#dev-ready` hashtags. This makes tags visible in Obsidian's native tag search/filter/graph.
+
+**Context**
+
+- Import resolver: `src/transpile/` — where import paths are resolved (look for `import` resolution in `validate.ts` or a dedicated resolver module).
+- `export` keyword: `src/parser.ts` — currently supported on `workflow` and `rule`; verify it works on `script`.
+- Existing cross-file import tests: `e2e/tests/116_cross_file_import.sh`, `e2e/tests/118_import_not_found.sh`.
+- Examples of imports: `examples/` — any `.jh` files using `import`.
+
+**Acceptance criteria**
+
+- `import "queue" as queue` resolves from `~/.jaiph/lib/queue.jh` when no relative match exists.
+- `JAIPH_LIB_PATH` env var overrides the default lib directory.
+- `export script` works (parser + validator).
+- `queue.jh` lib installed in `~/.jaiph/lib/` provides `get`, `list`, `add`, `complete`, `next_task`, `has_tasks`.
+- E2E test: a workflow imports `queue`, adds a task, lists it, completes it.
+- Existing relative-path imports are unaffected.
+- `QUEUE.md` hashtag migration: `<!-- dev-ready -->` → `#dev-ready` across all headings.
+
+---
+
+## Runtime — credential proxy for Docker mode
+
+**Goal**  
+Containers should never hold real API keys. Implement a host-side HTTP proxy (the "Phantom Token" pattern) that intercepts outbound API requests from containers, strips a placeholder credential, and injects the real key before forwarding upstream. The agent inside the container literally cannot leak the real key — it never has it.
+
+**Design**
+
+1. **Host-side proxy** — a lightweight `http.createServer` bound to `127.0.0.1:<port>` (macOS/WSL2) or the `docker0` bridge IP (Linux). Receives requests from the container, swaps `x-api-key: placeholder` with the real key from host env, forwards to the upstream API, pipes the response back (including streaming SSE).
+2. **Container env injection** — instead of passing `ANTHROPIC_API_KEY=$real_key` into `docker run`, pass `ANTHROPIC_API_KEY=placeholder` + `ANTHROPIC_BASE_URL=http://host.docker.internal:<port>`.
+3. **Multi-backend routing** — Jaiph supports Claude and Cursor backends. Each backend's CLI must respect a base URL override env var. `claude` CLI supports `ANTHROPIC_BASE_URL`; `cursor-agent` may not — needs investigation.
+4. **Lifecycle** — proxy starts before the first Docker container launch, shuts down after the last container exits or on Jaiph process exit.
+
+**Context**
+
+- Pattern reference: [NanoClaw's credential proxy](https://jonno.nz/posts/nanoclaw-architecture-masterclass-in-doing-less/) — same approach, independently arrived at.
+- Current Docker execution path: `src/runtime/kernel/` — Docker run/exec logic, env var forwarding.
+- Dockerfile: `.jaiph/Dockerfile` — container image setup.
+- Backend CLI invocation: `src/runtime/kernel/node-workflow-runtime.ts` — where `claude` / `cursor-agent` commands are constructed with env vars.
+
+**Open questions**
+
+- Does `cursor-agent` support a base URL override? If not, the proxy pattern may require a wrapper script or LD_PRELOAD-based interception inside the container.
+- Single port with path-based routing vs one port per backend?
+- Should the proxy also enforce rate limits or audit-log API calls?
+
+**Acceptance criteria**
+
+- Host-side proxy starts automatically when Docker mode is active.
+- Containers receive only placeholder credentials — no real API keys in container env.
+- `claude` CLI calls from inside Docker succeed via the proxy.
+- Proxy handles streaming responses (SSE) correctly.
+- Real keys never appear in container logs, env dumps, or process listings.
+- Platform-specific host address resolution works (macOS, Linux).
 
 ---
 

@@ -15,19 +15,6 @@
           }
         }
       ]
-    },
-    {
-      "comments": [],
-      "name": "maybe",
-      "params": [],
-      "steps": [
-        {
-          "type": "run",
-          "workflow": {
-            "value": "maybe_impl"
-          }
-        }
-      ]
     }
   ],
   "scripts": [
@@ -38,10 +25,10 @@
       "name": "ok_impl"
     },
     {
-      "body": "test -f /tmp/flag",
+      "body": "printf '%s' \"$1\" > \"$2\"",
       "bodyKind": "backtick",
       "comments": [],
-      "name": "maybe_impl"
+      "name": "save"
     }
   ],
   "workflows": [
@@ -51,43 +38,27 @@
       "params": [],
       "steps": [
         {
-          "condition": {
-            "kind": "ensure",
-            "ref": {
-              "value": "ok"
-            }
+          "recover": {
+            "bindings": {
+              "failure": "err"
+            },
+            "block": [
+              {
+                "args": "${err} \"error.log\"",
+                "bareIdentifierArgs": [
+                  "err"
+                ],
+                "type": "run",
+                "workflow": {
+                  "value": "save"
+                }
+              }
+            ]
           },
-          "elseIfBranches": [
-            {
-              "condition": {
-                "kind": "ensure",
-                "ref": {
-                  "value": "maybe"
-                }
-              },
-              "negated": false,
-              "thenSteps": [
-                {
-                  "message": "maybe",
-                  "type": "log"
-                }
-              ]
-            }
-          ],
-          "elseSteps": [
-            {
-              "message": "no",
-              "type": "log"
-            }
-          ],
-          "negated": false,
-          "thenSteps": [
-            {
-              "message": "yes",
-              "type": "log"
-            }
-          ],
-          "type": "if"
+          "ref": {
+            "value": "ok"
+          },
+          "type": "ensure"
         }
       ]
     }

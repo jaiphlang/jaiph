@@ -13,7 +13,7 @@ E2E_MOCK_BIN="${ROOT_DIR}/e2e/bin"
 chmod 755 "${E2E_MOCK_BIN}/cursor-agent"
 export PATH="${E2E_MOCK_BIN}:${PATH}"
 
-e2e::section "ensure recover retries nested rules and succeeds after recover action"
+e2e::section "ensure recover runs body once on failure (no retry)"
 
 rm -rf "${TEST_DIR}/.jaiph/tmp"
 mkdir -p "${TEST_DIR}/.jaiph/tmp"
@@ -84,18 +84,6 @@ workflow default
   ✓ script save_string_to_file (<time>)
   ▸ script mark_recovered
   ✓ script mark_recovered (<time>)
-  ▸ rule top_rule
-  ·   ▸ script emit_root_step
-  ·   ✓ script emit_root_step (<time>)
-  ·   ▸ rule nested_rule
-  ·   ·   ▸ script emit_nested_step
-  ·   ·   ✓ script emit_nested_step (<time>)
-  ·   ·   ▸ rule deep_rule
-  ·   ·   ·   ▸ script emit_deep_step_then_fail_until_recovered
-  ·   ·   ·   ✓ script emit_deep_step_then_fail_until_recovered (<time>)
-  ·   ·   ✓ rule deep_rule (<time>)
-  ·   ✓ rule nested_rule (<time>)
-  ✓ rule top_rule (<time>)
 
 ✓ PASS workflow default (<time>)
 EXPECTED
@@ -104,4 +92,4 @@ e2e::assert_file_exists "${TEST_DIR}/witness_failed_payload.txt" "recover wrote 
 witness="$(<"${TEST_DIR}/witness_failed_payload.txt")"
 e2e::assert_equals "${witness}" "recovered-on-retry" "recover action writes witness marker"
 
-e2e::pass "ensure recover retries nested rules and succeeds after recover action"
+e2e::pass "ensure recover runs body once on failure (no retry)"
