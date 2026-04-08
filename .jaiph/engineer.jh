@@ -302,24 +302,23 @@ workflow implement(task, role_name) {
     Task description:
     ${task}
     </task>
-"""
+  """
 }
 
 workflow default(name) {
-  const role_arg = "${name}"
   # ensure git.is_clean
   const task = run queue.get_first_task()
   const task_header = run first_line_task(task)
   ensure queue.task_is_dev_ready(task)
   log "Implementing task: ${task_header}"
 
-  run arg_nonempty(role_arg) recover (err) {
-    const role_name = run classify_role(task)
-    log "Auto-selected role: ${role_name}"
-    run implement(task, role_name)
-    return
+  const role_name = match name {
+    "" => "${run classify_role(task)}"
+    _ => "${name}"
   }
-  run implement(task, role_arg)
+  log "Role: ${role_name}"
+
+  run implement(task, role_name)
 
   run ci.ensure_ci_passes()
   run docs.update_from_task(task)
