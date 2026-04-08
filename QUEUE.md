@@ -12,6 +12,157 @@ Process rules:
 
 ---
 
+## Bug — Docker mode dumps raw JSON events instead of tree UI, and fails <!-- dev-ready -->
+
+**Problem**  
+Running with `JAIPH_DOCKER_ENABLED=true` has two issues:
+
+1. **No tree rendering.** The host process receives `__JAIPH_EVENT__` JSON lines from the container's stdout but dumps them raw instead of feeding them to the tree renderer. Locally (non-Docker) the same events produce the live step tree — in Docker mode the user sees wall-of-JSON.
+2. **Workflow fails.** `say_hello.jh` (no LLM, pure script) exits with `status: 1` / `FAIL` even though the script runs correctly inside the container. Likely the host-side process treats the raw-event output or a non-zero inner exit code incorrectly.
+
+**Reproduction**
+
+```bash
+JAIPH_DOCKER_ENABLED=true examples/say_hello.jh       # fails, raw JSON
+JAIPH_DOCKER_ENABLED=true examples/async.jh            # fails, raw JSON
+```
+
+Compare with local (no Docker) which renders the tree correctly.
+
+**Context**
+
+- Docker execution path: `src/runtime/kernel/` — look for Docker run/exec logic that spawns the container and reads its stdout.
+- Tree renderer / event consumer: the component that parses `__JAIPH_EVENT__` lines and renders the live tree UI during local runs.
+- The container writes `__JAIPH_EVENT__` JSON to stdout. The host needs to intercept these lines, parse them, and feed them to the same tree renderer used for local runs — instead of echoing them verbatim.
+- The exit-code propagation from the inner `jaiph` process inside the container back to the host process may be broken or conflated with Docker's own exit code.
+
+**Acceptance criteria**
+
+- `JAIPH_DOCKER_ENABLED=true examples/say_hello.jh` renders the same step tree as the non-Docker run.
+- `JAIPH_DOCKER_ENABLED=true examples/say_hello.jh` succeeds (exit 0) when the workflow logic succeeds.
+- `JAIPH_DOCKER_ENABLED=true examples/async.jh` renders tree and reports correct per-step status.
+- No raw `__JAIPH_EVENT__` JSON visible to the user.
+
+---
+
+## Language — replace `if` with generalized `recover`, remove implicit retry loop <!-- dev-ready -->
+
+**Goal**  
+Simplify the error-handling model from three overlapping mechanisms (`if ensure/run`, `ensure … recover` with implicit retry loop, `match`) to two orthogonal ones (`recover` as a catch-like handler, `match` for value-based branching). Concretely:
+
+1. **Remove `if` statements entirely.** The `if ensure …` / `if run …` construct conflates control flow with execution. Every use case maps to `recover` (failure handling) or `match` (value branching).
+2. **Change `recover` semantics: no implicit retry loop.** Currently `recover` retries up to `JAIPH_ENSURE_MAX_RETRIES` (default 3) automatically. Instead, `recover` runs its body **once** on failure — like a `catch` clause. Retries require explicit recursion (the workflow/rule calls itself).
+3. **Extend `recover` to all call types.** Currently `ensure … recover` is workflow-only. Support `recover` on `ensure` and `run` calls in workflows, rules, and scripts.
+
+**Migration patterns**
+
+```jaiph
+# OLD: if ensure check { run deploy } else { run rollback }
+# NEW:
+ensure check recover (err) {
+  run rollback
+  return
+}
+run deploy
+
+# OLD: if not ensure check { run fix }
+# NEW:
+ensure check recover (err) { run fix }
+
+# OLD: implicit 3-retry loop
+# NEW: explicit recursion
+workflow deploy {
+  ensure tests_pass recover (err) {
+    run fix_tests(err)
+    run deploy
+  }
+}
+```
+
+**Context**
+
+- `if` parser: `src/parse/workflow-brace.ts` — `parseIfBraceHead` / `parseElseIfBraceHead`.
+- `if` runtime: `src/runtime/kernel/node-workflow-runtime.ts` — `executeSteps`, `if` branch (~line 954).
+- `recover` parser: `src/parse/steps.ts` — `parseEnsureStep`, `parseRecoverStatement`.
+- `recover` runtime: `src/runtime/kernel/node-workflow-runtime.ts` — `executeEnsureRef` (~line 1167), retry loop with `JAIPH_ENSURE_MAX_RETRIES`.
+- `recover` validation restriction (rules): `src/transpile/validate.ts` (~line 478) — `E_VALIDATE` when `recover` appears in a rule body.
+- AST types: `src/types.ts` — `IfConditionDef`, `WorkflowStepDef`.
+- Grammar docs: `docs/grammar.md` — `if_brace_stmt`, `ensure_stmt`.
+- E2E tests: `e2e/tests/78_lang_redesign_constructs.sh`, `e2e/tests/60_ensure_conditionals.sh`, `e2e/tests/114_if_else_chains.sh`, `e2e/tests/61_ensure_recover.sh`, `e2e/tests/100_ensure_recover_invalid.sh`.
+
+**Implementation notes**
+
+- **`run … recover` is new syntax.** Removing `if` requires `run X recover (err) { … }` to handle workflow/script failures inline.
+- **Recursion safety.** Implement tail-call optimization (detect self-call in tail position, reuse frame) or enforce a recursion depth limit with a clear error.
+- **Migrate all `.jh` files** in `examples/`, `.jaiph/`, and `e2e/` that use `if` to `recover` + `match`.
+
+**Acceptance criteria**
+
+- `if` keyword no longer parses (produces `E_PARSE`).
+- `recover` runs its body once on failure, no implicit retry loop.
+- `ensure … recover` and `run … recover` work in workflows, rules, and scripts.
+- `run … recover` syntax parses, validates, and executes correctly.
+- Recursion depth is bounded (TCO or hard limit with clear error).
+- All existing E2E tests pass (migrated away from `if`).
+- `docs/grammar.md` and `CHANGELOG.md` updated.
+
+---
+
+## Docs — write `language.md` covering all core language primitives <!-- dev-ready -->
+
+**Goal**  
+Create `docs/language.md` — a single, self-contained reference for Jaiph's language fundamentals. Structured for humans: each primitive gets **concept → brief description → example → details/edge cases**. This replaces `grammar.md` as the go-to language doc (grammar.md stays as the formal EBNF reference).
+
+**Structure per section**
+
+```
+## <Concept>
+One-paragraph high-level description.
+
+    <minimal working example>
+
+**Details:** edge cases, constraints, gotchas.
+```
+
+**Primitives to cover (in this order)**
+
+1. **Strings** — double-quoted literals, escape sequences, `${…}` interpolation, `"""…"""` heredocs, rejected shell-isms (`$(…)`, `${var:-…}`)
+2. **Variables (`const`)** — module-level `const`, step-level `const`, bare identifier args as implicit `"${name}"`, scope rules
+3. **Scripts** — named scripts (backtick, fenced, shebang), inline scripts (`` run `cmd` ``), interpreter tags (`` ```python ``), `${…}` passthrough in fenced vs blocked in backtick
+4. **Workflows** — definition, parameters, calling via `run`, `run async`, return values (`return "…"`, `return run …`, `return ensure …`, `return match …`), workflow-scoped `config`
+5. **Rules** — definition, parameters, calling via `ensure`, success = exit 0, restricted step set (no `prompt`, no `run async`, no `recover`, scripts only via `run`)
+6. **Prompts** — `prompt "…"`, `prompt """…"""`, backends (`cursor`, `claude`), `agent.default_model` / `agent.backend` config, capturing results (`const x = prompt …` / `x = prompt …`)
+7. **Structured prompt output (`returns`)** — `prompt "…" returns "schema"`, JSON schema strings, field access via `${result.field}`, validation rules
+8. **Pattern matching (`match`)** — `match var { … }`, patterns (`"literal"`, `/regex/`, `_`), arm bodies, expression form (`const x = match …`, `return match …`), exactly-one-wildcard rule
+9. **Error handling (`recover`)** — `ensure … recover (failure) { … }`, `recover (failure, attempt) { … }`, single-run semantics (post-redesign), recursion for retries, `run … recover` (post-redesign)
+10. **`fail` and `return`** — aborting vs returning, `fail "message"`, bare `return`, value returns, interaction with recover
+11. **Logging (`log`, `logerr`)** — string/heredoc/bare-identifier forms, stdout vs stderr
+12. **Channels and inbox (`channel`, `send`)** — `channel name`, `channel name -> wf1, wf2`, `send channel <- "…"`, send RHS forms (literal, variable, `run`, forward), dispatch semantics
+13. **Imports** — `import "path" as alias`, `.jh` auto-append, qualified references (`alias.name`), `export` on workflows/rules
+14. **Config** — module-level `config { … }`, workflow-level `config { … }`, allowed keys, value types, `runtime.*` (module-only) vs `agent.*`/`run.*`
+15. **Conditionals (`if`)** — *(if still present post-redesign, otherwise: note removal and migration to `recover` + `match`)*
+16. **Testing** — `test "…" { … }`, `mock prompt`, `mock workflow/rule/script`, `expect_contain`/`expect_not_contain`/`expect_equal`, `allow_failure`, `.test.jh` convention
+17. **File structure** — shebang `#!`, comments `#`, blank lines, top-level statement order, `jaiph format` canonicalization
+18. **Reserved words** — full keyword list, where they matter (param names, bare args)
+
+**Context**
+
+- Formal grammar (EBNF): `docs/grammar.md`
+- AST types: `src/types.ts`
+- Parser modules: `src/parse/*.ts`
+- Existing topical docs: `docs/configuration.md`, `docs/testing.md`, `docs/inbox.md`
+- Examples: `examples/*.jh`
+
+**Acceptance criteria**
+
+- `docs/language.md` exists and covers all 18 sections above.
+- Every section has at least one runnable example.
+- Edge cases and constraints are documented (not just the happy path).
+- Cross-references to `grammar.md` for formal EBNF, `testing.md` for test harness details, `configuration.md` for full config key list.
+- No redundant duplication of full EBNF — link to `grammar.md` instead.
+
+---
+
 ## Runtime — harden Docker execution environment
 
 **Goal**  
