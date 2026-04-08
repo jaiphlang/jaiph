@@ -70,7 +70,7 @@ export function walkTestFiles(inputPath: string): string[] {
   return files;
 }
 
-function collectFileWithImports(entrypoint: string): string[] {
+function collectFileWithImports(entrypoint: string, workspaceRoot?: string): string[] {
   const visited = new Set<string>();
   const queue = [entrypoint];
   while (queue.length > 0) {
@@ -79,7 +79,7 @@ function collectFileWithImports(entrypoint: string): string[] {
     visited.add(file);
     const ast = parsejaiph(readFileSync(file, "utf8"), file);
     for (const imp of ast.imports) {
-      const importedFile = resolveImportPath(file, imp.path);
+      const importedFile = resolveImportPath(file, imp.path, workspaceRoot);
       if (!visited.has(importedFile)) queue.push(importedFile);
     }
   }
@@ -95,6 +95,7 @@ export function buildScripts(
   inputPath: string,
   targetDir: string | undefined,
   emitScriptsFn: (file: string, root: string) => ScriptArtifact[],
+  workspaceRoot?: string,
 ): { scriptsDir: string } {
   const absInput = resolve(inputPath);
   const inputStat = statSync(absInput);
@@ -103,7 +104,7 @@ export function buildScripts(
   ensureDir(outRoot);
 
   const entrypointFile = inputStat.isFile() ? absInput : null;
-  const files = entrypointFile ? collectFileWithImports(entrypointFile) : walkjhFiles(rootDir);
+  const files = entrypointFile ? collectFileWithImports(entrypointFile, workspaceRoot) : walkjhFiles(rootDir);
   const scriptsRoot = join(outRoot, "scripts");
   ensureDir(scriptsRoot);
 

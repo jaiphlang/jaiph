@@ -76,11 +76,13 @@ A `.jh` file is a module. Modules contain top-level declarations in any order: i
 
 ### Imports and Exports
 
-`import` loads another module; `export` marks a declaration as public.
+`import` loads another module; `export` marks a declaration as public. All three definition types support export: `export workflow`, `export rule`, and `export script`.
 
 ```jaiph
 import "tools/security.jh" as security
 import "bootstrap.jh" as bootstrap
+
+export script build_docs = `mkdocs build`
 
 export workflow default() {
   ensure security.scan_passes()
@@ -89,6 +91,16 @@ export workflow default() {
 ```
 
 Imported symbols use dot notation: `alias.name`. The `.jh` extension is appended automatically if omitted. Import aliases must be unique within a module.
+
+### Library Imports
+
+Import paths resolve relative to the importing file first. If no file is found and the path contains a `/`, the resolver falls back to project-scoped libraries under `.jaiph/libs/`:
+
+```jaiph
+import "queue-lib/queue" as queue   # resolves to .jaiph/libs/queue-lib/queue.jh
+```
+
+The path is split as `<lib-name>/<path-inside-lib>`. Libraries are installed with `jaiph install` — see [CLI — `jaiph install`](cli.md#jaiph-install). Missing library imports fail at compile time with `E_IMPORT_NOT_FOUND`.
 
 ### Top-Level `const`
 

@@ -85,7 +85,7 @@ export async function runSingleTestFile(
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-test-"));
   try {
     /** Only compile the test module and its imports — not every `.jh` under the workspace. */
-    const { scriptsDir } = buildScripts(testFileAbs, outDir);
+    const { scriptsDir } = buildScripts(testFileAbs, outDir, workspaceRoot);
     return await runTestFile(testFileAbs, workspaceRoot, scriptsDir, ast.tests);
   } finally {
     rmSync(outDir, { recursive: true, force: true });

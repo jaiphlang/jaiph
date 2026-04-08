@@ -1,0 +1,109 @@
+# Queue library — markdown-section-based task queue manager.
+# Backed by QUEUE_DIR env var. One file per project.
+# ## headings are tasks. Hashtags in headings (#dev-ready, #bug) are filterable tags.
+
+# Return the first ## section from a project queue file, optionally filtered by #tag.
+export script get = ```bash
+PROJECT="$1"
+TAG="${2:-}"
+FILE="${QUEUE_DIR:-.}/${PROJECT}.md"
+if [ ! -f "$FILE" ]; then
+  echo ""
+  exit 0
+fi
+awk -v tag="$TAG" '
+  /^## / {
+    if (found) exit
+    if (tag == "" || index($0, "#" tag) > 0) {
+      found = 1
+      print
+      next
+    }
+  }
+  found { print }
+' "$FILE"
+```
+
+# List section headings with tags; if no project given, list all projects.
+export script list = ```bash
+PROJECT="${1:-}"
+TAG="${2:-}"
+DIR="${QUEUE_DIR:-.}"
+if [ -n "$PROJECT" ]; then
+  FILE="$DIR/${PROJECT}.md"
+  if [ ! -f "$FILE" ]; then exit 0; fi
+  grep '^## ' "$FILE" | while IFS= read -r line; do
+    if [ -z "$TAG" ] || echo "$line" | grep -q "#${TAG}"; then
+      echo "$line"
+    fi
+  done
+else
+  for f in "$DIR"/*.md; do
+    [ -f "$f" ] || continue
+    name="$(basename "$f" .md)"
+    grep '^## ' "$f" | while IFS= read -r line; do
+      if [ -z "$TAG" ] || echo "$line" | grep -q "#${TAG}"; then
+        echo "${name}: ${line}"
+      fi
+    done
+  done
+fi
+```
+
+# Prepend a new task section to a project queue file.
+export script add = ```bash
+PROJECT="$1"
+shift
+CONTENT="$*"
+DIR="${QUEUE_DIR:-.}"
+FILE="$DIR/${PROJECT}.md"
+mkdir -p "$DIR"
+if [ ! -f "$FILE" ]; then
+  printf "# %s Queue\n\n---\n\n" "$PROJECT" > "$FILE"
+fi
+TMPFILE="$(mktemp)"
+# Find the first --- separator and insert after it
+awk -v content="$CONTENT" '
+  BEGIN { inserted = 0 }
+  /^---/ && !inserted {
+    print
+    printf "\n%s\n", content
+    inserted = 1
+    next
+  }
+  { print }
+' "$FILE" > "$TMPFILE"
+mv "$TMPFILE" "$FILE"
+echo "Added task to $PROJECT"
+```
+
+# Remove the first ## section from a project queue file.
+export script complete = ```bash
+PROJECT="$1"
+FILE="${QUEUE_DIR:-.}/${PROJECT}.md"
+if [ ! -f "$FILE" ]; then
+  echo "No queue file for $PROJECT"
+  exit 1
+fi
+TMPFILE="$(mktemp)"
+awk '
+  /^## / {
+    if (!found) { found = 1; skipping = 1; next }
+  }
+  skipping && /^## / { skipping = 0 }
+  !skipping { print }
+' "$FILE" > "$TMPFILE"
+mv "$TMPFILE" "$FILE"
+echo "Completed first task in $PROJECT"
+```
+
+# Wrapper workflow: get first task matching tag and return it.
+export workflow next_task(project, tag) {
+  const task = run get(project, tag)
+  return "${task}"
+}
+
+# Check if a project has any ## sections.
+export rule has_tasks(project) {
+  run get(project)
+}

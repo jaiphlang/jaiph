@@ -84,7 +84,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     const runtimeEnv = resolveRuntimeEnv(effectiveConfig, workspaceRoot, inputAbs);
     runtimeEnv.JAIPH_SOURCE_ABS = inputAbs;
     const metaFile = join(outDir, `.jaiph-run-meta-${Date.now()}-${process.pid}.txt`);
-    const { scriptsDir } = buildScripts(inputAbs, outDir);
+    const { scriptsDir } = buildScripts(inputAbs, outDir, workspaceRoot);
     runtimeEnv.JAIPH_SCRIPTS = scriptsDir;
 
     // Set up event emitter and subscribers

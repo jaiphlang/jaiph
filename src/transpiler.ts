@@ -12,18 +12,19 @@ export type { ScriptArtifact } from "./transpile/emit-script";
 /**
  * Parse, validate, and extract per-`script` bash files for one module (no workflow bash emission).
  */
-export function emitScriptsForModule(inputFile: string, rootDir: string): ScriptArtifact[] {
+export function emitScriptsForModule(inputFile: string, rootDir: string, workspaceRoot?: string): ScriptArtifact[] {
   const ast = parsejaiph(readFileSync(inputFile, "utf8"), inputFile);
   validateReferences(ast, {
     resolveImportPath,
     existsSync,
     readFile: (path: string) => readFileSync(path, "utf8"),
     parse: parsejaiph,
+    workspaceRoot,
   });
   const workflowSymbol = workflowSymbolForFile(inputFile, rootDir);
   const importedWorkflowSymbols = new Map<string, string>();
   for (const imp of ast.imports) {
-    const importedFile = resolveImportPath(ast.filePath, imp.path);
+    const importedFile = resolveImportPath(ast.filePath, imp.path, workspaceRoot);
     importedWorkflowSymbols.set(imp.alias, workflowSymbolForFile(importedFile, rootDir));
   }
   return buildScriptFiles(ast, importedWorkflowSymbols, workflowSymbol);
@@ -31,6 +32,7 @@ export function emitScriptsForModule(inputFile: string, rootDir: string): Script
 
 export { walkTestFiles };
 
-export function buildScripts(inputPath: string, targetDir?: string): { scriptsDir: string } {
-  return buildScriptsImpl(inputPath, targetDir, emitScriptsForModule);
+export function buildScripts(inputPath: string, targetDir?: string, workspaceRoot?: string): { scriptsDir: string } {
+  const emitFn = (file: string, root: string) => emitScriptsForModule(file, root, workspaceRoot);
+  return buildScriptsImpl(inputPath, targetDir, emitFn, workspaceRoot);
 }

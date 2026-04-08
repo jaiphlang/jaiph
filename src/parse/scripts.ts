@@ -42,7 +42,7 @@ export function parseScriptBlock(
   lines: string[],
   startIndex: number,
   pendingComments: string[],
-): { scriptDef: ScriptDef; nextIndex: number } {
+): { scriptDef: ScriptDef; nextIndex: number; exported: boolean } {
   const lineNo = startIndex + 1;
   const raw = lines[startIndex];
   const line = raw.trim();
@@ -56,27 +56,27 @@ export function parseScriptBlock(
     );
   }
 
-  // Match: script name = ...
-  const match = line.match(/^script\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+  // Match: [export] script name = ...
+  const match = line.match(/^(export\s+)?script\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
   if (!match) {
     // Check for old brace syntax
-    if (/^script\s+[A-Za-z_][A-Za-z0-9_]*\s*\{/.test(line)) {
+    if (/^(export\s+)?script\s+[A-Za-z_][A-Za-z0-9_]*\s*\{/.test(line)) {
       fail(
         filePath,
         "brace-style script bodies are no longer supported; use: script name = `...` or script name = ```...```",
         lineNo,
       );
     }
-    if (/^script\s+[A-Za-z_][A-Za-z0-9_]*\s*\(/.test(line)) {
-      const nameM = line.match(/^script\s+([A-Za-z_][A-Za-z0-9_]*)/);
+    if (/^(export\s+)?script\s+[A-Za-z_][A-Za-z0-9_]*\s*\(/.test(line)) {
+      const nameM = line.match(/^(?:export\s+)?script\s+([A-Za-z_][A-Za-z0-9_]*)/);
       fail(
         filePath,
         `definitions must not use parentheses: script ${nameM?.[1] ?? "name"} = \`...\``,
         lineNo,
       );
     }
-    if (/^script\s+[A-Za-z_][A-Za-z0-9_]*/.test(line)) {
-      const nameM = line.match(/^script\s+([A-Za-z_][A-Za-z0-9_]*)/);
+    if (/^(export\s+)?script\s+[A-Za-z_][A-Za-z0-9_]*/.test(line)) {
+      const nameM = line.match(/^(?:export\s+)?script\s+([A-Za-z_][A-Za-z0-9_]*)/);
       fail(
         filePath,
         `script definitions require = after the name: script ${nameM?.[1] ?? "name"} = \`...\``,
@@ -86,8 +86,9 @@ export function parseScriptBlock(
     fail(filePath, "invalid script declaration", lineNo);
   }
 
-  const scriptName = match[1];
-  const rhs = match[2].trimStart();
+  const isExported = Boolean(match[1]);
+  const scriptName = match[2];
+  const rhs = match[3].trimStart();
 
   // Case 1: Fenced block — opening ``` must be on the same line as script name =
   if (rhs.startsWith("```")) {
@@ -118,6 +119,7 @@ export function parseScriptBlock(
         loc: { line: lineNo, col: 1 },
       },
       nextIndex: nextIdx,
+      exported: isExported,
     };
   }
 
@@ -147,6 +149,7 @@ export function parseScriptBlock(
         loc: { line: lineNo, col: 1 },
       },
       nextIndex: startIndex + 1,
+      exported: isExported,
     };
   }
 

@@ -119,6 +119,39 @@ Run the bootstrap workflow to get started:
 
 By convention, keep Jaiph workflow files in `<project_root>/.jaiph/` so workspace-root detection and agent setup stay predictable. Jaiph resolves `JAIPH_WORKSPACE` to the project root and `JAIPH_LIB` to `<workspace>/.jaiph/lib` for shared script libraries.
 
+## Libraries
+
+Jaiph supports project-scoped libraries — reusable `.jh` modules installed from git repos into `.jaiph/libs/` under your workspace root.
+
+### Installing libraries
+
+```bash
+# Install a library
+jaiph install https://github.com/you/queue-lib.git
+
+# Install at a specific tag or branch
+jaiph install https://github.com/you/queue-lib.git@v1.0
+
+# Restore all libraries from lockfile (e.g. after git clone)
+jaiph install
+```
+
+Installed libraries are tracked in `.jaiph/libs.lock` for reproducibility. Add `.jaiph/libs/` to your `.gitignore` and commit `.jaiph/libs.lock`.
+
+### Importing from libraries
+
+Use the `<lib-name>/<module-path>` convention in import statements:
+
+```jaiph
+import "queue-lib/queue" as queue
+
+workflow default() {
+  run queue.list("my-project")
+}
+```
+
+The import resolver tries relative paths first (existing behavior), then falls back to `.jaiph/libs/`. See [CLI — `jaiph install`](cli.md#jaiph-install) for details.
+
 ## Language overview
 
 Jaiph source files combine a small orchestration language with scripts in any language. The four core building blocks:
@@ -175,6 +208,7 @@ workflow default(task) {
 ## Further reading
 
 - [Grammar](grammar.md) — full language reference
+- [Language](language.md) — practical language reference with examples
 - [CLI Reference](cli.md) — commands, flags, environment variables
 - [Configuration](configuration.md) — `config` blocks, agent backends, runtime options
 - [Testing](testing.md) — `*.test.jh` suites, mocks, assertions

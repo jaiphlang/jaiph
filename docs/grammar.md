@@ -54,11 +54,13 @@ Jaiph enforces a strict boundary between orchestration and execution. Workflows 
 
 ## Imports and Exports
 
-`import "path" as alias` loads another module. `export rule` / `export workflow` marks a declaration as public. In practice, any rule or workflow in an imported module can be referenced — export is not enforced at reference time.
+`import "path" as alias` loads another module. `export rule` / `export workflow` / `export script` marks a declaration as public. In practice, any rule, workflow, or script in an imported module can be referenced — export is not enforced at reference time.
 
 ```jaiph
 import "tools/security.jh" as security
 import "bootstrap.jh" as bootstrap
+
+export script build_docs = `mkdocs build`
 
 export workflow default() {
   ensure security.scan_passes()
@@ -67,6 +69,20 @@ export workflow default() {
 ```
 
 Imported symbols use **dot notation**: `alias.name`. A reference is either a bare `IDENT` (local) or `IDENT.IDENT` (module-qualified). The compiler validates that the target exists and matches the calling keyword (`ensure` for rules, `run` for workflows/scripts).
+
+### Import Resolution
+
+Import paths resolve in two stages:
+
+1. **Relative to the importing file** (existing behavior). The `.jh` extension is appended if omitted.
+2. **Library fallback.** If relative resolution finds no file and the path contains a `/`, it is split as `<lib-name>/<path-inside-lib>` and resolved to `<workspace-root>/.jaiph/libs/<lib-name>/<path-inside-lib>.jh`. Libraries are installed with `jaiph install` (see [CLI — `jaiph install`](cli.md#jaiph-install)).
+
+```jaiph
+import "queue-lib/queue" as queue       # resolves to .jaiph/libs/queue-lib/queue.jh
+import "tools/security.jh" as security  # resolves relative (unchanged)
+```
+
+Missing imports fail at compile time with `E_IMPORT_NOT_FOUND`.
 
 ## Module-Level Declarations
 

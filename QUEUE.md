@@ -12,58 +12,6 @@ Process rules:
 
 ---
 
-## Libs — add lib resolution + `queue` as first Jaiph lib <!-- dev-ready -->
-
-**Goal**  
-Establish the Jaiph library pattern: a `.jh` file with exports, installable in a known path, importable by name. Build `queue.jh` as the first lib — a markdown-section-based task queue manager backed by a central directory (designed for Obsidian vaults). This validates the lib system and is immediately useful for Jaiph's own development.
-
-**Part 1: Lib resolution in the import resolver**
-
-Currently `import "path" as alias` resolves relative to the importing file only. Add a fallback: if relative resolution fails, check `JAIPH_LIB_PATH` (default `~/.jaiph/lib/`). This is the only language-level change needed.
-
-```jaiph
-import "queue" as queue    # resolves to ~/.jaiph/lib/queue.jh
-```
-
-Resolution order:
-1. Relative to importing file (existing behavior)
-2. `JAIPH_LIB_PATH` directories (new, colon-separated, default `~/.jaiph/lib`)
-
-**Part 2: `queue.jh` lib**
-
-A lib that reads/writes markdown files in `QUEUE_DIR` (env var, e.g. `~/vault/queues`). One file per project. Sections (`## heading`) are tasks. Hashtags in headings (`#dev-ready`, `#bug`) are filterable tags.
-
-Exports:
-- `script get(project, tag?)` — return first `##` section, optionally filtered by `#tag`
-- `script list(project?, tag?)` — list section headings with tags; `--all` across projects
-- `script add(project, content)` — prepend a task section
-- `script complete(project)` — remove the first `##` section
-- `workflow next_task(project, tag)` — wrapper: get + return
-- `rule has_tasks(project)` — check if project has any sections
-
-**Part 3: Hashtag migration**
-
-Migrate `QUEUE.md` headings from `<!-- dev-ready -->` HTML comments to `#dev-ready` hashtags. This makes tags visible in Obsidian's native tag search/filter/graph.
-
-**Context**
-
-- Import resolver: `src/transpile/` — where import paths are resolved (look for `import` resolution in `validate.ts` or a dedicated resolver module).
-- `export` keyword: `src/parser.ts` — currently supported on `workflow` and `rule`; verify it works on `script`.
-- Existing cross-file import tests: `e2e/tests/116_cross_file_import.sh`, `e2e/tests/118_import_not_found.sh`.
-- Examples of imports: `examples/` — any `.jh` files using `import`.
-
-**Acceptance criteria**
-
-- `import "queue" as queue` resolves from `~/.jaiph/lib/queue.jh` when no relative match exists.
-- `JAIPH_LIB_PATH` env var overrides the default lib directory.
-- `export script` works (parser + validator).
-- `queue.jh` lib installed in `~/.jaiph/lib/` provides `get`, `list`, `add`, `complete`, `next_task`, `has_tasks`.
-- E2E test: a workflow imports `queue`, adds a task, lists it, completes it.
-- Existing relative-path imports are unaffected.
-- `QUEUE.md` hashtag migration: `<!-- dev-ready -->` → `#dev-ready` across all headings.
-
----
-
 ## Runtime — credential proxy for Docker mode
 
 **Goal**  
@@ -119,7 +67,7 @@ Docker mode is the isolation boundary for workflow runs. Harden it: least-privil
 
 ---
 
-## Runtime — default Docker when not CI or unsafe <!-- dev-ready -->
+## Runtime — default Docker when not CI or unsafe #dev-ready
 
 **Goal**  
 When the user has not opted into "unsafe" local execution, workflows should run in Docker by default. **Default `runtime.docker_enabled` to on** only when **neither** `CI=true` **nor** `JAIPH_UNSAFE=true` is set in the environment. If either is set, default Docker to **off** unless explicitly overridden via `runtime.docker_enabled` / `JAIPH_DOCKER_ENABLED`.
@@ -140,7 +88,7 @@ Introduce **`JAIPH_UNSAFE=true`** as the explicit "run on host / skip Docker def
 
 ---
 
-## `jaiph serve` — expose workflows as an MCP server <!-- dev-ready -->
+## `jaiph serve` — expose workflows as an MCP server #dev-ready
 
 **Goal**  
 Add a `jaiph serve <file.jh>` command that starts a stdio MCP server. Each top-level workflow in the file becomes a callable MCP tool. This lets any MCP client (Cursor, Claude Desktop, custom agents) invoke Jaiph workflows directly.

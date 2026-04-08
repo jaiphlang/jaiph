@@ -254,7 +254,7 @@ export async function runTestFile(
   // constant across all blocks and steps within a single runTestFile call.
   // If a future test step mutates imported files on disk mid-run, a manual
   // rebuild would be needed — but that is not a supported pattern today.
-  const graph = buildRuntimeGraph(testFileAbs);
+  const graph = buildRuntimeGraph(testFileAbs, workspaceRoot);
 
   let total = 0;
   let failed = 0;

@@ -25,7 +25,7 @@ All orchestration — local `jaiph run`, `jaiph test`, and **Docker `jaiph run`*
 ## Core components
 
 - **CLI (`src/cli`)**
-  - Entry point (`run`, `test`, `init`, `use`, `format`, `report`).
+  - Entry point (`run`, `test`, `init`, `install`, `use`, `format`, `report`).
   - **Workflow launch** is owned in TypeScript (`src/runtime/kernel/workflow-launch.ts` + `src/cli/run/lifecycle.ts`): spawns the **Node workflow runner** (`node-workflow-runner.ts`), which calls `buildRuntimeGraph()` then `NodeWorkflowRuntime`.
   - Parses runtime events and renders progress; dispatches hooks.
 
@@ -37,7 +37,7 @@ All orchestration — local `jaiph run`, `jaiph test`, and **Docker `jaiph run`*
   - Shared compile-time schema (`jaiphModule`, step defs, test defs, hook payload types).
 
 - **Validator (`src/transpile/validate.ts`)**
-  - Resolves imports and symbol references; emits deterministic compile-time errors.
+  - Resolves imports and symbol references; emits deterministic compile-time errors. Import resolution (`resolveImportPath` in `resolve.ts`) checks relative paths first, then falls back to project-scoped libraries under `<workspace>/.jaiph/libs/` — the workspace root is threaded through all compilation call sites.
 
 - **Transpiler (`src/transpiler.ts`, `src/transpile/*`)**
   - **`emitScriptsForModule`** parses, runs **`validateReferences`**, and **`buildScriptFiles`** — the only compile path for `jaiph run` / `jaiph test` — **persists only atomic `script` files** under `scripts/`. Inline scripts (`` run `body`(args) ``) are also emitted as `scripts/__inline_<hash>` with deterministic hash-based names. There is no workflow-level bash emission.

@@ -78,10 +78,14 @@ export function detectWorkspaceRoot(startDir: string): string {
     }
   }
   let current = fallback;
+  let insideAncestorJaiphTmp = false;
   while (true) {
     if (existsSync(join(current, ".jaiph")) || existsSync(join(current, ".git"))) {
+      if (startDirIsUnderAncestorJaiphTmp(fallback, current)) {
+        insideAncestorJaiphTmp = true;
+      }
       if (
-        !startDirIsUnderAncestorJaiphTmp(fallback, current) &&
+        !insideAncestorJaiphTmp &&
         !skipWorkspaceMarkerOnSharedTmpRoot(current, fallback) &&
         !skipStrayWorkspaceMarkerUnderMacOsTempTree(current, fallback)
       ) {
@@ -108,10 +112,10 @@ export function resolveInstalledSkillPath(): string | undefined {
   return candidates.find((path) => existsSync(path));
 }
 
-export function loadImportedModules(mainMod: jaiphModule): Map<string, jaiphModule> {
+export function loadImportedModules(mainMod: jaiphModule, workspaceRoot?: string): Map<string, jaiphModule> {
   const map = new Map<string, jaiphModule>();
   for (const imp of mainMod.imports) {
-    const resolved = resolveImportPath(mainMod.filePath, imp.path);
+    const resolved = resolveImportPath(mainMod.filePath, imp.path, workspaceRoot);
     if (existsSync(resolved)) {
       map.set(imp.alias, parsejaiph(readFileSync(resolved, "utf8"), resolved));
     }

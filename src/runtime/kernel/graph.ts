@@ -30,23 +30,23 @@ export interface ResolvedScript {
   script: ScriptDef;
 }
 
-function buildNode(filePath: string): RuntimeModuleNode {
+function buildNode(filePath: string, workspaceRoot?: string): RuntimeModuleNode {
   const ast = parsejaiph(readFileSync(filePath, "utf8"), filePath);
   const imports = new Map<string, string>();
   for (const imp of ast.imports) {
-    imports.set(imp.alias, resolveImportPath(filePath, imp.path));
+    imports.set(imp.alias, resolveImportPath(filePath, imp.path, workspaceRoot));
   }
   return { filePath, ast, imports };
 }
 
-export function buildRuntimeGraph(entryFile: string): RuntimeGraph {
+export function buildRuntimeGraph(entryFile: string, workspaceRoot?: string): RuntimeGraph {
   const entry = resolve(entryFile);
   const modules = new Map<string, RuntimeModuleNode>();
   const queue: string[] = [entry];
   while (queue.length > 0) {
     const current = queue.shift()!;
     if (modules.has(current)) continue;
-    const node = buildNode(current);
+    const node = buildNode(current, workspaceRoot);
     modules.set(current, node);
     for (const imported of node.imports.values()) {
       if (!modules.has(imported)) queue.push(imported);
