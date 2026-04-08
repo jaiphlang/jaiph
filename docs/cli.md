@@ -382,7 +382,7 @@ These variables apply to `jaiph run` and workflow execution. Variables marked **
 **Execution behavior:**
 
 - `JAIPH_DEBUG` — set to `true` for debug tracing.
-- `JAIPH_ENSURE_MAX_RETRIES` — maximum attempt rounds for `ensure ... recover` (default: **3**). When all rounds fail, the workflow exits with status 1.
+- `JAIPH_RECURSION_DEPTH_LIMIT` — maximum recursion depth for workflows and rules (default: **256**). Exceeding this limit produces a runtime error.
 - `JAIPH_INBOX_PARALLEL` — set to `true` for parallel dispatch of inbox route targets (overrides in-file `run.inbox_parallel`). See [Inbox](inbox.md).
 - `NO_COLOR` — disables colored output.
 

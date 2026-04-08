@@ -262,12 +262,14 @@ testing say_hello.test.jh
 
                 <div class="code-tab-panel" data-panel="ensure-ci-passes-jh" data-sample="ensure-ci-passes"
                     data-sample-file="ensure_ci_passes.jh">
-                    <p>This workflow uses Jaiph's <code>ensure ... recover</code> pattern to keep retrying a failing CI
-                        command after an agent-assisted fix.
+                    <p>This workflow uses Jaiph's <code>ensure ... recover</code> pattern to handle a failing CI
+                        check with an agent-assisted fix.
                         The <code>recover (failure)</code> binding receives the full merged stdout+stderr from the failed
-                        rule execution — including output from nested scripts and rules. The payload refreshes on each
-                        retry attempt. An optional second binding (<code>recover (failure, attempt)</code>) provides the
-                        1-based attempt number. Persist the failure payload to a stable path (here under
+                        rule execution — including output from nested scripts and rules. An optional second binding
+                        (<code>recover (failure, attempt)</code>) provides the attempt number (always <code>"1"</code>).
+                        The recovery body runs <strong>once</strong> on failure (like a <code>catch</code> clause) —
+                        for retries, use explicit recursion (the workflow calls itself).
+                        Persist the failure payload to a stable path (here under
                         <code>.jaiph/tmp/</code>) and assert it is non-empty before the prompt, so the message about
                         "inspect the log file" matches what is on disk.</p>
                     <p>The workflow uses custom <code>config</code> to enable agent YOLO mode. Otherwise the agent
@@ -470,9 +472,10 @@ Jaiph: Running async.jh
                     (<code>channel_ref</code> can be local or imported, e.g. <code>shared.findings</code>).
                     See <a href="inbox">Inbox &amp; Dispatch</a>.
                 </p>
-                <p><strong>Ensure recover pattern.</strong> <code>ensure ... recover ...</code> gives bounded
-                    self-healing retries: run a rule, apply a fix on failure, then retry up to the configured limit. See
-                    <a href="grammar">Grammar</a>.
+                <p><strong>Failure recovery.</strong> <code>ensure … recover</code> and <code>run … recover</code>
+                    handle failures inline: when a rule or script fails, the recovery body runs <strong>once</strong>
+                    (like a <code>catch</code> clause). For retries, use explicit recursion. Both forms work in workflows
+                    and rules. See <a href="grammar">Grammar</a>.
                 </p>
 
                 <h3>Runtime</h3>
@@ -563,10 +566,11 @@ Jaiph: Running async.jh
                     </dd>
 
                     <dt><code>ensure ref</code> &middot; <code>ensure ref(args) recover (name) { ... }</code> &middot;
-                        <code>run ref</code> &middot; <code>run `body`(args)</code>
+                        <code>run ref</code> &middot; <code>run ref(args) recover (name) { ... }</code> &middot;
+                        <code>run `body`(args)</code>
                     </dt>
-                    <dd><code>ensure</code> executes a rule (with optional args); <code>recover</code> adds bounded
-                        retry repair logic with explicit bindings; <code>run</code> calls another workflow or module script from a workflow
+                    <dd><code>ensure</code> executes a rule (with optional args); <code>recover</code> handles
+                        failure inline (runs once, like a catch clause); <code>run</code> calls another workflow or module script
                         (managed step &mdash; same value/log contract as <code>ensure</code>). Parentheses are
                         <strong>optional</strong> when passing zero arguments &mdash; <code>run setup</code> is
                         equivalent to <code>run setup()</code>. When arguments are present, parentheses are required.
@@ -612,10 +616,13 @@ Jaiph: Running async.jh
                     <dt><code>fail "reason"</code> &middot; <code>fail """..."""</code></dt>
                     <dd><code>fail</code> aborts with stderr + non-zero exit. Use triple quotes for multiline messages.</dd>
 
-                    <dt><code>if [not] ensure ref { }</code> &middot; <code>if [not] run ref { }</code></dt>
-                    <dd>Brace conditionals only, with optional <code>else if</code> / <code>else</code> chains.
-                        Parentheses optional for zero-arg conditions; required when passing arguments.
-                        Use <code>run</code> to a script to express command-based tests.
+                    <dt><code>ensure ref() recover (err) { … }</code> &middot;
+                        <code>run ref() recover (err) { … }</code>
+                    </dt>
+                    <dd>Failure recovery: when the target fails, the recovery body runs <strong>once</strong>
+                        (like a <code>catch</code> clause). <code>recover</code> requires explicit bindings
+                        in parentheses. Works in both workflows and rules. For retries, use explicit
+                        recursion in the recovery body.
                     </dd>
 
                     <dt><code>match var { "lit" =&gt; …, /re/ =&gt; …, _ =&gt; … }</code></dt>

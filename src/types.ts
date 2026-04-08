@@ -53,10 +53,6 @@ export type ConstRhs =
   | { kind: "run_inline_script_capture"; body: string; lang?: string; args?: string; bareIdentifierArgs?: string[] }
   | { kind: "match_expr"; match: MatchExprDef };
 
-export type IfConditionDef =
-  | { kind: "ensure"; ref: RuleRefDef; args?: string; bareIdentifierArgs?: string[] }
-  | { kind: "run"; ref: WorkflowRefDef; args?: string; bareIdentifierArgs?: string[] };
-
 /** RHS of `channel <- …` */
 export type SendRhsDef =
   | { kind: "forward" }
@@ -129,6 +125,10 @@ export type WorkflowStepDef =
       captureName?: string;
       /** When set, execute asynchronously with implicit join before workflow completes. */
       async?: boolean;
+      /** When set, catch failure and run recovery body once. */
+      recover?:
+        | { single: WorkflowStepDef; bindings: { failure: string; attempt?: string } }
+        | { block: WorkflowStepDef[]; bindings: { failure: string; attempt?: string } };
     }
   | {
       type: "prompt";
@@ -162,19 +162,6 @@ export type WorkflowStepDef =
   | {
       type: "wait";
       loc: SourceLoc;
-    }
-  | {
-      type: "if";
-      negated: boolean;
-      condition: IfConditionDef;
-      thenSteps: WorkflowStepDef[];
-      /** Brace-style `else if` chain (parser-only; emits bash `elif`). */
-      elseIfBranches?: Array<{
-        negated: boolean;
-        condition: IfConditionDef;
-        thenSteps: WorkflowStepDef[];
-      }>;
-      elseSteps?: WorkflowStepDef[];
     }
   | {
       type: "log";

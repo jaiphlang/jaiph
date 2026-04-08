@@ -67,7 +67,7 @@ import "tools/security.jh" as security
 script check_deps = `test -f "package.json"`
 
 rule deps_exist() {
-  if not run check_deps() {
+  run check_deps() recover (err) {
     fail "Missing package.json"
   }
 }

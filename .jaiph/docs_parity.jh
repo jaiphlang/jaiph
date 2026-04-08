@@ -208,11 +208,19 @@ workflow docs_overview(docPaths) {
 
 workflow process_docs_md_recursive(file, remaining) {
   run docs_page(file)
-  if run arg_nonempty(remaining) {
-    const next = run first_line_str(remaining)
-    const rest = run rest_lines_str(remaining)
-    run process_docs_md_recursive(next, rest)
+  run arg_nonempty(remaining) recover (err) {
+    return
   }
+  const next = run first_line_str(remaining)
+  const rest = run rest_lines_str(remaining)
+  run process_docs_md_recursive(next, rest)
+}
+
+workflow maybe_process_docs_md(first_doc, rest_docs) {
+  run arg_nonempty(first_doc) recover (err) {
+    return
+  }
+  run process_docs_md_recursive(first_doc, rest_docs)
 }
 
 workflow default() {
@@ -222,9 +230,7 @@ workflow default() {
   const docs_md_list = run list_docs_md_paths()
   const first_doc = run first_line_str(docs_md_list)
   const rest_docs = run rest_lines_str(docs_md_list)
-  if run arg_nonempty(first_doc) {
-    run process_docs_md_recursive(first_doc, rest_docs)
-  }
+  run maybe_process_docs_md(first_doc, rest_docs)
   run docs_overview(docs_md_list)
   ensure only_expected_docs_changed_after_prompt(allowed_list)
 }

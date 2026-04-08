@@ -170,8 +170,8 @@ test("ACCEPTANCE: unterminated prompt string fails with E_PARSE", () => {
   });
 });
 
-test("ACCEPTANCE: brace if block must close before workflow ends", () => {
-  withTempDir("jaiph-acc-if-brace-close-", (root) => {
+test("ACCEPTANCE: if keyword produces E_PARSE removed error", () => {
+  withTempDir("jaiph-acc-if-removed-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
       [
@@ -182,17 +182,19 @@ test("ACCEPTANCE: brace if block must close before workflow ends", () => {
         "",
         "workflow default() {",
         "  if not ensure gate() {",
-        "    echo fallback",
+        '    log "fallback"',
+        "  }",
+        "}",
         "",
       ].join("\n"),
     );
 
-    assert.throws(() => buildScripts(root, join(root, "out")), /E_PARSE unterminated block, expected "}"/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /E_PARSE.*if statements have been removed/);
   });
 });
 
-test("ACCEPTANCE: if not ensure then-branch allows mixed prompt and run", () => {
-  withTempDir("jaiph-acc-if-ensure-mixed-", (root) => {
+test("ACCEPTANCE: ensure recover then-branch allows mixed prompt and run", () => {
+  withTempDir("jaiph-acc-recover-ensure-mixed-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
       [
@@ -202,12 +204,12 @@ test("ACCEPTANCE: if not ensure then-branch allows mixed prompt and run", () => 
         'script gate_impl = `false`',
         "",
         "workflow fix_build() {",
-        '  prompt "fix build"',
+        '  const _ = prompt "fix build"',
         "}",
         "",
         "workflow default() {",
-        "  if not ensure gate() {",
-        '    prompt "recover"',
+        "  ensure gate() recover (err) {",
+        '    const _ = prompt "recover"',
         "    run fix_build()",
         "  }",
         "}",
@@ -336,20 +338,14 @@ test("ACCEPTANCE: workflow shell step with || { ... } fails under strict shell-s
   });
 });
 
-test("ACCEPTANCE: if not ensure { } + inline shell short-circuit fails under strict shell-step ban", () => {
-  withTempDir("jaiph-acc-if-and-or-brace-", (root) => {
+test("ACCEPTANCE: inline shell short-circuit fails under strict shell-step ban", () => {
+  withTempDir("jaiph-acc-or-brace-workflow-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
       [
-        "rule gate() {",
-        "  run gate_impl()",
-        "}",
         'script gate_impl = `true`',
         "",
         "workflow default() {",
-        "  if not ensure gate() {",
-        "    echo fallback",
-        "  }",
         '  other || { echo "err"; exit 1; }',
         "}",
         "",

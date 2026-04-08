@@ -142,92 +142,59 @@ EXPECTED
 e2e::assert_file_exists "${TEST_DIR}/waited.txt" "async job wrote marker file"
 
 # ---------------------------------------------------------------------------
-# brace-style if
+# ensure ... recover
 # ---------------------------------------------------------------------------
-e2e::section "brace if with ensure (positive)"
+e2e::section "ensure with recover on failure"
 
-e2e::file "brace_if_ensure.jh" <<'EOF'
-script always_ok_impl = `true`
-rule always_ok() {
-  run always_ok_impl()
-}
-
-workflow default() {
-  if ensure always_ok() {
-    log "then-branch"
-  }
-}
-EOF
-
-out="$(e2e::run "brace_if_ensure.jh")"
-
-e2e::expect_stdout "${out}" <<'EXPECTED'
-
-Jaiph: Running brace_if_ensure.jh
-
-workflow default
-  ▸ rule always_ok
-  ·   ▸ script always_ok_impl
-  ·   ✓ script always_ok_impl (<time>)
-  ✓ rule always_ok (<time>)
-  ℹ then-branch
-
-✓ PASS workflow default (<time>)
-EXPECTED
-
-# ---------------------------------------------------------------------------
-e2e::section "brace if not ensure (negated)"
-
-e2e::file "brace_if_not.jh" <<'EOF'
+e2e::file "ensure_recover.jh" <<'EOF'
 script always_fail_impl = `false`
 rule always_fail() {
   run always_fail_impl()
 }
 
 workflow default() {
-  if not ensure always_fail() {
-    log "negated-branch"
+  ensure always_fail() recover (err) {
+    log "recovered"
   }
+  log "continued"
 }
 EOF
 
-out="$(e2e::run "brace_if_not.jh")"
+out="$(e2e::run "ensure_recover.jh")"
 
 e2e::expect_stdout "${out}" <<'EXPECTED'
 
-Jaiph: Running brace_if_not.jh
+Jaiph: Running ensure_recover.jh
 
 workflow default
   ▸ rule always_fail
   ·   ▸ script always_fail_impl
   ·   ✗ script always_fail_impl (<time>)
   ✗ rule always_fail (<time>)
-  ℹ negated-branch
+  ℹ recovered
+  ℹ continued
 
 ✓ PASS workflow default (<time>)
 EXPECTED
 
 # ---------------------------------------------------------------------------
-e2e::section "brace if with run + else"
+e2e::section "run with recover on failure"
 
-e2e::file "brace_if_run_else.jh" <<'EOF'
+e2e::file "run_recover.jh" <<'EOF'
 script returns_false = `return 1`
 
 workflow default() {
-  if run returns_false() {
-    log "should-not-run"
-  }
-  else {
+  run returns_false() recover (err) {
     log "else-branch-ok"
   }
 }
 EOF
 
-out="$(e2e::run "brace_if_run_else.jh")"
+out="$(e2e::run "run_recover.jh")"
 
 e2e::expect_stdout "${out}" <<'EXPECTED'
 
-Jaiph: Running brace_if_run_else.jh
+Jaiph: Running run_recover.jh
 
 workflow default
   ▸ script returns_false
@@ -238,57 +205,15 @@ workflow default
 EXPECTED
 
 # ---------------------------------------------------------------------------
-e2e::section "brace if with else if chain"
-
-e2e::file "brace_if_chain.jh" <<'EOF'
-script always_fail_impl = `false`
-rule always_fail() {
-  run always_fail_impl()
-}
-
-script returns_ok = `true`
-
-workflow default() {
-  if ensure always_fail() {
-    log "first"
-  }
-  else if run returns_ok() {
-    log "second-branch"
-  }
-  else {
-    log "third"
-  }
-}
-EOF
-
-out="$(e2e::run "brace_if_chain.jh")"
-
-e2e::expect_stdout "${out}" <<'EXPECTED'
-
-Jaiph: Running brace_if_chain.jh
-
-workflow default
-  ▸ rule always_fail
-  ·   ▸ script always_fail_impl
-  ·   ✗ script always_fail_impl (<time>)
-  ✗ rule always_fail (<time>)
-  ▸ script returns_ok
-  ✓ script returns_ok (<time>)
-  ℹ second-branch
-
-✓ PASS workflow default (<time>)
-EXPECTED
-
+# structured rules: run ... recover + fail inside rules
 # ---------------------------------------------------------------------------
-# structured rules: run + if + fail inside rules
-# ---------------------------------------------------------------------------
-e2e::section "structured rule with run and fail"
+e2e::section "structured rule with run recover and fail"
 
 e2e::file "structured_rule.jh" <<'EOF'
 script check_ok = `return 0`
 
 rule require_name() {
-  if not run check_ok() {
+  run check_ok() recover (err) {
     fail "name is required"
   }
 }
@@ -322,7 +247,7 @@ e2e::file "structured_rule_fail.jh" <<'EOF'
 script check_fail = `return 1`
 
 rule require_name() {
-  if not run check_fail() {
+  run check_fail() recover (err) {
     fail "name is required"
   }
 }

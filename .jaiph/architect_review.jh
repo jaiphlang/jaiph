@@ -98,41 +98,47 @@ workflow review_task(task) {
 }
 
 workflow review_one_header(header) {
-  if not run arg_nonempty(header) {
+  run arg_nonempty(header) recover (err) {
     return
   }
   const task = run queue.get_task_by_header(header)
-  if run task_has_dev_ready_marker(task) {
-    log "Already dev-ready: ${header}"
-    return
-  }
-  const verdict = run review_task(task)
-  if run str_equals(verdict, "dev-ready") {
+  run task_has_dev_ready_marker(task) recover (err) {
+    const verdict = run review_task(task)
+    run str_equals(verdict, "dev-ready") recover (err) {
+      log "Needs work: ${header}"
+      return
+    }
     run queue.mark_task_dev_ready(header)
     log "Marked dev-ready: ${header}"
+    return
   }
-  else {
-    log "Needs work: ${header}"
-  }
+  log "Already dev-ready: ${header}"
 }
 
 workflow process_headers_recursive(header, remaining) {
   run review_one_header(header)
-  if run arg_nonempty(remaining) {
-    const next = run first_line_str(remaining)
-    const rest = run rest_lines_str(remaining)
-    run process_headers_recursive(next, rest)
+  run arg_nonempty(remaining) recover (err) {
+    return
   }
+  const next = run first_line_str(remaining)
+  const rest = run rest_lines_str(remaining)
+  run process_headers_recursive(next, rest)
+}
+
+workflow maybe_process_headers(first, rest) {
+  run arg_nonempty(first) recover (err) {
+    return
+  }
+  run process_headers_recursive(first, rest)
 }
 
 workflow default() {
   const headers = run queue.get_all_task_headers()
   const first = run first_line_str(headers)
   const rest = run rest_lines_str(headers)
-  if run arg_nonempty(first) {
-    run process_headers_recursive(first, rest)
+  run maybe_process_headers(first, rest)
+  run queue_has_any_task_not_dev_ready() recover (err) {
+    return
   }
-  if run queue_has_any_task_not_dev_ready() {
-    fail "One or more tasks need work. Review the agent output above."
-  }
+  fail "One or more tasks need work. Review the agent output above."
 }

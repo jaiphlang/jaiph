@@ -10,36 +10,29 @@ e2e::prepare_test_env "ensure_recover_value"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
 # ===================================================================
-e2e::section "ensure...recover: assignment returns the last successful rule return value"
+e2e::section "ensure capture = return value from successful rule"
 # ===================================================================
 
-e2e::file "recover_capture.jh" <<'EOF'
+e2e::file "capture_success.jh" <<'EOF'
 script check_ready_impl = ```
 echo "rule-stdout-check"
-test -f ready.txt
 ```
 rule check_ready() {
   run check_ready_impl()
   return "ready-value"
 }
 
-script fix_it_impl = `touch ready.txt`
-workflow fix_it() {
-  run fix_it_impl()
-}
-
 script echo_captured = `echo "captured=$1"`
 workflow default() {
-  val = ensure check_ready() recover (failure) run fix_it()
+  val = ensure check_ready()
   run echo_captured(val)
 }
 EOF
-rm -f "${TEST_DIR}/ready.txt"
 rm -rf "${TEST_DIR}/runs_rcap"
 
-JAIPH_RUNS_DIR="runs_rcap" e2e::run "recover_capture.jh" >/dev/null 2>&1
+JAIPH_RUNS_DIR="runs_rcap" e2e::run "capture_success.jh" >/dev/null 2>&1
 
-run_dir="$(e2e::run_dir_at "${TEST_DIR}/runs_rcap" "recover_capture.jh")"
+run_dir="$(e2e::run_dir_at "${TEST_DIR}/runs_rcap" "capture_success.jh")"
 
 # Assignment variable gets the return value from the successful rule call
 shopt -s nullglob
@@ -53,28 +46,24 @@ e2e::assert_equals "${cap_content}" "captured=ready-value" "ensure...recover cap
 if [[ "${cap_content}" == *"rule-stdout-check"* ]]; then
   e2e::fail "rule stdout must NOT leak into capture variable"
 fi
-e2e::pass "ensure...recover capture: return value only"
+e2e::pass "ensure capture: return value only"
 
 # ===================================================================
 e2e::section "ensure...recover: recover block receives merged stdout+stderr from failed rule"
 # ===================================================================
 
-rm -f "${TEST_DIR}/ready2.txt"
 rm -f "${TEST_DIR}/recover_received.txt"
 
 e2e::file "recover_receives_output.jh" <<'EOF'
 script analyze_impl = ```
 echo "analysis-stdout-log"
-test -f ready2.txt
+exit 1
 ```
 rule analyze() {
   run analyze_impl()
 }
 
-script recover_handler = ```
-echo "$1" > recover_received.txt
-touch ready2.txt
-```
+script recover_handler = `echo "$1" > recover_received.txt`
 workflow default() {
   ensure analyze() recover (failure) {
     run recover_handler(failure)

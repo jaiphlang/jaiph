@@ -2,21 +2,11 @@ rule ok() {
   run ok_impl()
 }
 
-rule maybe() {
-  run maybe_impl()
-}
-
 script ok_impl = `true`
-script maybe_impl = `test -f /tmp/flag`
+script save = `printf '%s' "$1" > "$2"`
 
 workflow default() {
-  if ensure ok() {
-    log "yes"
-  }
-  else if ensure maybe() {
-    log "maybe"
-  }
-  else {
-    log "no"
+  ensure ok() recover (err) {
+    run save(err, "error.log")
   }
 }

@@ -14,6 +14,7 @@ import type { WorkflowMetadata } from "../../types";
 import { extractJson, validateFields } from "./schema";
 
 const MAX_EMBED = 1024 * 1024;
+const MAX_RECURSION_DEPTH = 256;
 type EnsureRecover = Extract<WorkflowStepDef, { type: "ensure" }>["recover"];
 
 /** Mock body definition: shell for script mocks, Jaiph steps for workflow/rule mocks. */
@@ -40,6 +41,8 @@ type StepResult = {
   output: string;
   error: string;
   returnValue?: string;
+  /** Set when a recover body executed a `return` statement. */
+  recoverReturn?: boolean;
 };
 
 type StepIO = {
@@ -928,10 +931,23 @@ export class NodeWorkflowRuntime {
           continue;
         }
         const runResult = await this.executeRunRef(scope, step.workflow.value, step.args ?? "");
-        if (step.captureName && runResult.status === 0) {
-          scope.vars.set(step.captureName, runResult.returnValue ?? runResult.output.trim());
+        if (runResult.status === 0) {
+          if (step.captureName) {
+            scope.vars.set(step.captureName, runResult.returnValue ?? runResult.output.trim());
+          }
+        } else if (step.recover) {
+          const recoverSteps = "single" in step.recover ? [step.recover.single] : step.recover.block;
+          const recoverVars = new Map(scope.vars);
+          const recoverPayload = `${runResult.output}${runResult.error}`;
+          recoverVars.set(step.recover.bindings.failure, recoverPayload);
+          if (step.recover.bindings.attempt) {
+            recoverVars.set(step.recover.bindings.attempt, "1");
+          }
+          const rr = await this.executeSteps({ ...scope, vars: recoverVars }, recoverSteps);
+          if (rr.status !== 0 || rr.returnValue !== undefined) return this.mergeStepResult(accOut, accErr, rr);
+        } else {
+          return this.mergeStepResult(accOut, accErr, runResult);
         }
-        if (runResult.status !== 0) return this.mergeStepResult(accOut, accErr, runResult);
         continue;
       }
       if (step.type === "run_inline_script") {
@@ -949,44 +965,7 @@ export class NodeWorkflowRuntime {
           scope.vars.set(step.captureName, ensureResult.returnValue ?? ensureResult.output.trim());
         }
         if (ensureResult.status !== 0) return this.mergeStepResult(accOut, accErr, ensureResult);
-        continue;
-      }
-      if (step.type === "if") {
-        const cond = step.condition.kind === "run"
-          ? await this.executeRunRef(scope, step.condition.ref.value, step.condition.args ?? "")
-          : await this.executeEnsureRef(scope, step.condition.ref.value, step.condition.args ?? "", undefined);
-        const pass = step.negated ? cond.status !== 0 : cond.status === 0;
-        if (pass) {
-          const r = await this.executeSteps(scope, step.thenSteps, io);
-          if (r.status !== 0 || r.returnValue !== undefined) return this.mergeStepResult(accOut, accErr, r);
-          accOut += r.output;
-          accErr += r.error;
-          continue;
-        }
-        if (step.elseIfBranches) {
-          let matched = false;
-          for (const branch of step.elseIfBranches) {
-            const bcond = branch.condition.kind === "run"
-              ? await this.executeRunRef(scope, branch.condition.ref.value, branch.condition.args ?? "")
-              : await this.executeEnsureRef(scope, branch.condition.ref.value, branch.condition.args ?? "", undefined);
-            const bpass = branch.negated ? bcond.status !== 0 : bcond.status === 0;
-            if (bpass) {
-              matched = true;
-              const r = await this.executeSteps(scope, branch.thenSteps, io);
-              if (r.status !== 0 || r.returnValue !== undefined) return this.mergeStepResult(accOut, accErr, r);
-              accOut += r.output;
-              accErr += r.error;
-              break;
-            }
-          }
-          if (matched) continue;
-        }
-        if (step.elseSteps) {
-          const r = await this.executeSteps(scope, step.elseSteps, io);
-          if (r.status !== 0 || r.returnValue !== undefined) return this.mergeStepResult(accOut, accErr, r);
-          accOut += r.output;
-          accErr += r.error;
-        }
+        if (ensureResult.recoverReturn) return this.mergeStepResult(accOut, accErr, ensureResult);
         continue;
       }
       if (step.type === "match") {
@@ -1187,27 +1166,20 @@ export class NodeWorkflowRuntime {
       }
       return this.executeRule(resolvedRule.filePath, resolvedRule.rule.name, scope, args);
     };
-    if (!recover) return attempt();
-    const maxRetries = Number(this.env.JAIPH_ENSURE_MAX_RETRIES ?? "3");
-    for (let i = 0; i < maxRetries; i += 1) {
-      const res = await attempt();
-      if (res.status === 0) return res;
-      const recoverSteps = "single" in recover ? [recover.single] : recover.block;
-      // Recover blocks receive the failed ensure output under the explicit binding name.
-      const recoverVars = new Map(scope.vars);
-      const recoverPayload = `${res.output}${res.error}`;
-      recoverVars.set(recover.bindings.failure, recoverPayload);
-      if (recover.bindings.attempt) {
-        recoverVars.set(recover.bindings.attempt, String(i + 1));
-      }
-      const recoverScope: Scope = {
-        ...scope,
-        vars: recoverVars,
-      };
-      const rr = await this.executeSteps(recoverScope, recoverSteps);
-      if (rr.status !== 0) return rr;
+    const res = await attempt();
+    if (res.status === 0) return res;
+    if (!recover) return res;
+    const recoverSteps = "single" in recover ? [recover.single] : recover.block;
+    const recoverVars = new Map(scope.vars);
+    const recoverPayload = `${res.output}${res.error}`;
+    recoverVars.set(recover.bindings.failure, recoverPayload);
+    if (recover.bindings.attempt) {
+      recoverVars.set(recover.bindings.attempt, "1");
     }
-    return { status: 1, output: "", error: `ensure ${ref} failed after ${maxRetries} retries` };
+    const rr = await this.executeSteps({ ...scope, vars: recoverVars }, recoverSteps);
+    if (rr.status !== 0) return rr;
+    if (rr.returnValue !== undefined) return { ...rr, recoverReturn: true };
+    return { status: 0, output: res.output, error: "" };
   }
 
   private async executeScript(
@@ -1350,6 +1322,9 @@ export class NodeWorkflowRuntime {
     const parentId = stack.length > 0 ? stack[stack.length - 1]!.id : null;
     const id = `${this.runId}:${process.pid}:${seq}`;
     const depth = stack.length;
+    if (depth > MAX_RECURSION_DEPTH) {
+      return { status: 1, output: "", error: `Maximum recursion depth (${MAX_RECURSION_DEPTH}) exceeded at ${kind} ${name}` };
+    }
     const frame: Frame = { id, kind, name };
     stack.push(frame);
     writeFileSync(outFile, "");

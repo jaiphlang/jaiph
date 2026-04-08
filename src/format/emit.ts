@@ -3,7 +3,6 @@ import type {
   WorkflowStepDef,
   ConstRhs,
   SendRhsDef,
-  IfConditionDef,
   WorkflowDef,
   RuleDef,
   ScriptDef,
@@ -217,14 +216,6 @@ function emitRef(ref: { value: string }, args?: string, bareIdentifierArgs?: str
   return `${ref.value}()`;
 }
 
-function emitCondition(cond: IfConditionDef, negated: boolean): string {
-  const neg = negated ? "not " : "";
-  if (cond.kind === "ensure") {
-    return `${neg}ensure ${emitRef(cond.ref, cond.args, cond.bareIdentifierArgs)}`;
-  }
-  return `${neg}run ${emitRef(cond.ref, cond.args, cond.bareIdentifierArgs)}`;
-}
-
 function emitMatchPattern(p: import("../types").MatchPatternDef): string {
   if (p.kind === "string_literal") return `"${p.value}"`;
   if (p.kind === "regex") return `/${p.source}/`;
@@ -278,7 +269,21 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
       const ref = emitRef(step.workflow, step.args, step.bareIdentifierArgs);
       const capture = step.captureName ? `${step.captureName} = ` : "";
       const asyncPrefix = step.async ? "async " : "";
-      lines.push(`${ci}${capture}run ${asyncPrefix}${ref}`);
+      if (step.recover) {
+        const b = step.recover.bindings;
+        const bindStr = b.attempt ? `(${b.failure}, ${b.attempt})` : `(${b.failure})`;
+        if ("single" in step.recover) {
+          const recoverLines = emitStep(step.recover.single, pad, "");
+          const recoverText = recoverLines.map((l) => l.trim()).join("\n");
+          lines.push(`${ci}${capture}run ${asyncPrefix}${ref} recover ${bindStr} ${recoverText}`);
+        } else {
+          lines.push(`${ci}${capture}run ${asyncPrefix}${ref} recover ${bindStr} {`);
+          lines.push(...emitSteps(step.recover.block, pad, ci + pad));
+          lines.push(`${ci}}`);
+        }
+      } else {
+        lines.push(`${ci}${capture}run ${asyncPrefix}${ref}`);
+      }
       break;
     }
 
@@ -436,28 +441,6 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
       break;
     }
 
-    case "if": {
-      const cond = emitCondition(step.condition, step.negated);
-      lines.push(`${ci}if ${cond} {`);
-      lines.push(...emitSteps(step.thenSteps, pad, ci + pad));
-      lines.push(`${ci}}`);
-
-      if (step.elseIfBranches) {
-        for (const branch of step.elseIfBranches) {
-          const branchCond = emitCondition(branch.condition, branch.negated);
-          lines.push(`${ci}else if ${branchCond} {`);
-          lines.push(...emitSteps(branch.thenSteps, pad, ci + pad));
-          lines.push(`${ci}}`);
-        }
-      }
-
-      if (step.elseSteps && step.elseSteps.length > 0) {
-        lines.push(`${ci}else {`);
-        lines.push(...emitSteps(step.elseSteps, pad, ci + pad));
-        lines.push(`${ci}}`);
-      }
-      break;
-    }
 
     case "match": {
       lines.push(`${ci}match ${step.expr.subject} {`);

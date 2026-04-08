@@ -98,49 +98,21 @@ test("ensure bare identifier parses identically to ensure ref()", () => {
 
 // === if condition with bare identifier ===
 
-test("if not run bare identifier parses correctly", () => {
-  const mod = parsejaiph(
-    [
-      "workflow default() {",
-      "  if not run exists {",
-      '    log "missing"',
-      "  }",
-      "}",
-    ].join("\n"),
-    "test.jh",
+test("if keyword produces E_PARSE error", () => {
+  assert.throws(
+    () =>
+      parsejaiph(
+        [
+          "workflow default() {",
+          "  if not run exists {",
+          '    log "missing"',
+          "  }",
+          "}",
+        ].join("\n"),
+        "test.jh",
+      ),
+    /if statements have been removed/,
   );
-  const step = mod.workflows[0].steps[0];
-  assert.equal(step.type, "if");
-  if (step.type === "if") {
-    assert.equal(step.negated, true);
-    assert.equal(step.condition.kind, "run");
-    assert.equal(step.condition.ref.value, "exists");
-    assert.equal(step.condition.args, undefined);
-  }
-});
-
-test("if ensure bare identifier parses correctly", () => {
-  const mod = parsejaiph(
-    [
-      "rule ready() {",
-      '  return "ok"',
-      "}",
-      "workflow default() {",
-      "  if ensure ready {",
-      '    log "ready"',
-      "  }",
-      "}",
-    ].join("\n"),
-    "test.jh",
-  );
-  const step = mod.workflows[0].steps[0];
-  assert.equal(step.type, "if");
-  if (step.type === "if") {
-    assert.equal(step.negated, false);
-    assert.equal(step.condition.kind, "ensure");
-    assert.equal(step.condition.ref.value, "ready");
-    assert.equal(step.condition.args, undefined);
-  }
 });
 
 // === const capture with bare identifier ===
