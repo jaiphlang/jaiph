@@ -346,6 +346,13 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
           lines.push(`${ci}returns "${step.value.returns}"`);
         }
       }
+      // Handle match expression arms and closing brace
+      if (step.value.kind === "match_expr") {
+        for (const arm of step.value.match.arms) {
+          lines.push(`${ci}${pad}${emitMatchPattern(arm.pattern)} => ${arm.body}`);
+        }
+        lines.push(`${ci}}`);
+      }
       // Handle multi-line triple-quoted expr (const name = """...""")
       if (step.value.kind === "expr" && step.value.bashRhs.startsWith('"') &&
           step.value.bashRhs.endsWith('"') && step.value.bashRhs.includes("\n")) {
