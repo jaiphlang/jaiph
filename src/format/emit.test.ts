@@ -225,11 +225,11 @@ describe("emitModule", () => {
     assert.equal(roundTrip(source), source);
   });
 
-  it("formats assignment captures", () => {
+  it("formats const captures", () => {
     const source = [
       "workflow default() {",
-      "  response = ensure check()",
-      "  out = run helper()",
+      "  const response = ensure check()",
+      "  const out = run helper()",
       "  log \"${response}\"",
       "}",
       "",

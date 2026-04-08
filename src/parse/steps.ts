@@ -58,7 +58,7 @@ function parseRecoverStatement(
     fail(filePath, "empty recover statement", lineNo, col);
   }
   if (t === "wait") {
-    return { type: "wait", loc: { line: lineNo, col } };
+    fail(filePath, '"wait" has been removed from the language', lineNo, col);
   }
   if (t === "return") {
     return { type: "return", value: '""', loc: { line: lineNo, col } };
@@ -136,51 +136,14 @@ function parseRecoverStatement(
   ) {
     const captureName = genericAssignMatch[1];
     const rest = genericAssignMatch[2].trim();
-    if (rest.startsWith("run ")) {
-      const runBody = rest.slice("run ".length).trim();
-      if (runBody.startsWith("`")) {
-        const result = parseAnonymousInlineScript(filePath, [], lineNo - 1, runBody, lineNo, col);
-        return {
-          type: "run_inline_script",
-          body: result.body,
-          ...(result.lang ? { lang: result.lang } : {}),
-          args: result.args,
-          ...(result.bareIdentifierArgs ? { bareIdentifierArgs: result.bareIdentifierArgs } : {}),
-          captureName,
-          loc: { line: lineNo, col },
-        };
-      }
-      const call = parseCallRef(runBody);
-      if (call) {
-        rejectTrailingContent(filePath, lineNo, "run", call.rest);
-        return {
-          type: "run",
-          workflow: { value: call.ref, loc: { line: lineNo, col } },
-          args: call.args,
-          ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
-          captureName,
-        };
-      }
+    if (rest.startsWith("run ") || rest.startsWith("ensure ")) {
+      fail(
+        filePath,
+        `assignment without "const" is no longer supported; use "const ${captureName} = ${rest}"`,
+        lineNo,
+        col,
+      );
     }
-    if (rest.startsWith("ensure ")) {
-      const call = parseCallRef(rest.slice("ensure ".length).trim());
-      if (call) {
-        rejectTrailingContent(filePath, lineNo, "ensure", call.rest);
-        return {
-          type: "ensure",
-          ref: { value: call.ref, loc: { line: lineNo, col } },
-          args: call.args,
-          ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
-          captureName,
-        };
-      }
-    }
-    return {
-      type: "shell",
-      command: rest,
-      loc: { line: lineNo, col },
-      captureName,
-    };
   }
   if (t.startsWith("run ")) {
     const runBody = t.slice("run ".length).trim();
@@ -206,8 +169,8 @@ function parseRecoverStatement(
         if (closeParen !== -1) {
           const bStr = rightPart.slice(1, closeParen).trim();
           const bParts = bStr.split(",").map((s) => s.trim()).filter(Boolean);
-          if (bParts.length >= 1 && bParts.length <= 2 && bParts.every((p) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(p))) {
-            const bindings = { failure: bParts[0], ...(bParts.length > 1 ? { attempt: bParts[1] } : {}) };
+          if (bParts.length === 1 && /^[A-Za-z_][A-Za-z0-9_]*$/.test(bParts[0])) {
+            const bindings = { failure: bParts[0] };
             const after = rightPart.slice(closeParen + 1).trim();
             if (after.startsWith("{") && after.endsWith("}")) {
               const blockContent = after.slice(1, -1).trim();
@@ -258,8 +221,8 @@ function parseRecoverStatement(
         if (closeParen !== -1) {
           const bStr = rightPart.slice(1, closeParen).trim();
           const bParts = bStr.split(",").map((s) => s.trim()).filter(Boolean);
-          if (bParts.length >= 1 && bParts.length <= 2 && bParts.every((p) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(p))) {
-            const bindings = { failure: bParts[0], ...(bParts.length > 1 ? { attempt: bParts[1] } : {}) };
+          if (bParts.length === 1 && /^[A-Za-z_][A-Za-z0-9_]*$/.test(bParts[0])) {
+            const bindings = { failure: bParts[0] };
             const after = rightPart.slice(closeParen + 1).trim();
             if (after.startsWith("{") && after.endsWith("}")) {
               const blockContent = after.slice(1, -1).trim();
@@ -351,7 +314,7 @@ export function parseEnsureStep(
     const recoverCol = innerRaw.indexOf("recover") + 1;
     fail(
       filePath,
-      'recover requires explicit bindings and a body: recover (<name>) { ... } or recover (<name>, <attempt>) { ... }',
+      'recover requires explicit bindings and a body: recover (<name>) { ... }',
       innerNo,
       recoverCol,
     );
@@ -360,7 +323,7 @@ export function parseEnsureStep(
   if (recoverIdx === -1) {
     const call = parseCallRef(ensureBody);
     if (!call) {
-      fail(filePath, "ensure must target a valid reference: ensure ref or ensure ref(args)", innerNo);
+      fail(filePath, "ensure must target a valid reference: ensure ref() or ensure ref(args) — parentheses are required", innerNo);
     }
     rejectTrailingContent(filePath, innerNo, "ensure", call.rest);
     return {
@@ -378,7 +341,7 @@ export function parseEnsureStep(
   const right = ensureBody.slice(recoverIdx + " recover ".length).trim();
   const call = parseCallRef(left);
   if (!call) {
-    fail(filePath, "ensure must target a valid reference: ensure ref or ensure ref(args)", innerNo);
+    fail(filePath, "ensure must target a valid reference: ensure ref() or ensure ref(args) — parentheses are required", innerNo);
   }
   rejectTrailingContent(filePath, innerNo, "ensure", call.rest);
   const ref = call.ref;
@@ -389,7 +352,7 @@ export function parseEnsureStep(
   if (!right.startsWith("(")) {
     fail(
       filePath,
-      'recover requires explicit bindings: recover (<name>) { ... } or recover (<name>, <attempt>) { ... }',
+      'recover requires explicit bindings: recover (<name>) { ... }',
       innerNo,
       recoverCol,
     );
@@ -402,17 +365,15 @@ export function parseEnsureStep(
   const bindingsStr = right.slice(1, closeParen).trim();
   const bindingParts = bindingsStr.split(",").map((s) => s.trim()).filter(Boolean);
   if (bindingParts.length === 0) {
-    fail(filePath, "recover requires at least one binding: recover (<name>) or recover (<name>, <attempt>)", innerNo, recoverCol);
+    fail(filePath, "recover requires exactly one binding: recover (<name>) { ... }", innerNo, recoverCol);
   }
-  if (bindingParts.length > 2) {
-    fail(filePath, "recover accepts at most two bindings: recover (<failure>, <attempt>)", innerNo, recoverCol);
+  if (bindingParts.length > 1) {
+    fail(filePath, 'recover accepts exactly one binding: recover (<name>) — the second binding (attempt) has been removed', innerNo, recoverCol);
   }
-  for (const p of bindingParts) {
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(p)) {
-      fail(filePath, `invalid recover binding name: "${p}" — must be a valid identifier`, innerNo, recoverCol);
-    }
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(bindingParts[0])) {
+    fail(filePath, `invalid recover binding name: "${bindingParts[0]}" — must be a valid identifier`, innerNo, recoverCol);
   }
-  const bindings = { failure: bindingParts[0], ...(bindingParts.length > 1 ? { attempt: bindingParts[1] } : {}) };
+  const bindings = { failure: bindingParts[0] };
 
   const afterBindings = right.slice(closeParen + 1).trim();
 
@@ -490,7 +451,7 @@ export function parseRunRecoverStep(
     const recoverCol = innerRaw.indexOf("recover") + 1;
     fail(
       filePath,
-      'recover requires explicit bindings and a body: recover (<name>) { ... } or recover (<name>, <attempt>) { ... }',
+      'recover requires explicit bindings and a body: recover (<name>) { ... }',
       innerNo,
       recoverCol,
     );
@@ -506,7 +467,7 @@ export function parseRunRecoverStep(
   if (!right.startsWith("(")) {
     fail(
       filePath,
-      'recover requires explicit bindings: recover (<name>) { ... } or recover (<name>, <attempt>) { ... }',
+      'recover requires explicit bindings: recover (<name>) { ... }',
       innerNo,
       recoverCol,
     );
@@ -519,17 +480,15 @@ export function parseRunRecoverStep(
   const bindingsStr = right.slice(1, closeParen).trim();
   const bindingParts = bindingsStr.split(",").map((s) => s.trim()).filter(Boolean);
   if (bindingParts.length === 0) {
-    fail(filePath, "recover requires at least one binding: recover (<name>) or recover (<name>, <attempt>)", innerNo, recoverCol);
+    fail(filePath, "recover requires exactly one binding: recover (<name>) { ... }", innerNo, recoverCol);
   }
-  if (bindingParts.length > 2) {
-    fail(filePath, "recover accepts at most two bindings: recover (<failure>, <attempt>)", innerNo, recoverCol);
+  if (bindingParts.length > 1) {
+    fail(filePath, 'recover accepts exactly one binding: recover (<name>) — the second binding (attempt) has been removed', innerNo, recoverCol);
   }
-  for (const p of bindingParts) {
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(p)) {
-      fail(filePath, `invalid recover binding name: "${p}" — must be a valid identifier`, innerNo, recoverCol);
-    }
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(bindingParts[0])) {
+    fail(filePath, `invalid recover binding name: "${bindingParts[0]}" — must be a valid identifier`, innerNo, recoverCol);
   }
-  const bindings = { failure: bindingParts[0], ...(bindingParts.length > 1 ? { attempt: bindingParts[1] } : {}) };
+  const bindings = { failure: bindingParts[0] };
 
   const afterBindings = right.slice(closeParen + 1).trim();
   const base = {

@@ -22,7 +22,6 @@ workflow default() {
   echo "before" > before.txt
   sleep 0.05 && echo "job1" > job1.txt &
   sleep 0.05 && echo "job2" > job2.txt &
-  wait
   echo "after" > after.txt
 }
 EOF
@@ -65,7 +64,6 @@ e2e::file "bg_bare_wait.jh" <<'EOF'
 workflow default() {
   false &
   true &
-  wait
   echo "reached" > reached.txt
 }
 EOF
@@ -82,7 +80,6 @@ e2e::file "bg_output.jh" <<'EOF'
 workflow default() {
   for i in $(seq 1 5); do echo "A-$i"; done &
   for i in $(seq 1 5); do echo "B-$i"; done &
-  wait
 }
 EOF
 

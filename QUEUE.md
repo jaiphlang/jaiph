@@ -12,50 +12,6 @@ Process rules:
 
 ---
 
-## Language — remove deprecated constructs and relax unnecessary restrictions <!-- dev-ready -->
-
-**Goal**  
-Clean up the language by removing constructs and restrictions that no longer fit. Each item is a small, independent change.
-
-**Removals**
-
-1. **Remove optional parentheses for zero-arg calls.** Currently `run setup` and `run setup()` are both valid. Require parentheses always — `run setup()`. Removes ambiguity and simplifies the parser.
-   - Parser: `src/parse/core.ts` (`parseCallRef`)
-   - E2E: grep for bare `run <name>` / `ensure <name>` without parens across `e2e/`, `examples/`, `.jaiph/`
-
-2. **Remove `"${var}"` standalone argument rejection.** The validator currently rejects `run process("${task}")` and forces the bare form `run process(task)`. This is unnecessary — `"${var}"` is regular string interpolation and should be allowed.
-   - Validator: `src/transpile/validate.ts` (`validateNoQuotedSingleInterpolation`)
-
-3. **Remove second `recover` binding (attempt number).** `recover (failure, attempt)` should become `recover (failure)` only. The attempt number is a leftover from the retry loop which no longer exists.
-   - Parser: `src/parse/steps.ts` (`parseRecoverStatement`) — reject comma in recover bindings
-   - Runtime: `src/runtime/kernel/node-workflow-runtime.ts` (`executeEnsureRef`) — remove attempt binding logic
-
-4. **Remove underscore form for typed prompt field access.** Drop `${result_type}` — only `${result.field}` should be supported.
-   - Runtime: `src/runtime/kernel/node-workflow-runtime.ts` — where prompt result fields are stored in scope
-   - Validator: `src/transpile/validate.ts` — field resolution logic
-
-5. **Remove `inbox <-` forward syntax.** Sending without a payload (`channel <-` to forward the first parameter) should not be supported. Always require an explicit payload.
-   - Parser: `src/parse/send-rhs.ts` (`forward` kind)
-   - Runtime: `src/runtime/kernel/node-workflow-runtime.ts` — send execution
-
-6. **Remove `wait` keyword.** Legacy no-op. Remove from parser, runtime, and reserved words.
-   - Parser: `src/parse/steps.ts`
-   - Runtime: `src/runtime/kernel/node-workflow-runtime.ts`
-   - Reserved words: `src/parse/core.ts` (`JAIPH_KEYWORDS`)
-
-7. **Remove assignment capture without `const`.** `name = run helper()` should become `const name = run helper()`. Only `const` binding should be supported.
-   - Parser: `src/parse/workflow-brace.ts`, `src/parse/steps.ts` — assignment parsing
-   - E2E: grep for `^  \w+ = (run|ensure|prompt)` patterns
-
-**Acceptance criteria**
-
-- Each removal produces a clear parse or validation error with a migration hint.
-- All `.jh` files in `examples/`, `.jaiph/`, `e2e/` migrated.
-- All E2E tests pass.
-- `docs/grammar.md` updated.
-
----
-
 ## Bug — Docker mode swallows failed-step output
 
 **Problem**  

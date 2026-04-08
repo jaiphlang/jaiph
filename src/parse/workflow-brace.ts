@@ -169,10 +169,7 @@ export function parseBlockStatement(
   }
 
   if (inner === "wait") {
-    if (forRule) {
-      fail(filePath, "wait is not allowed in rules", innerNo, innerRaw.indexOf("wait") + 1);
-    }
-    return { step: { type: "wait", loc: { line: innerNo, col: innerRaw.indexOf("wait") + 1 } }, nextIdx: idx + 1 };
+    fail(filePath, '"wait" has been removed from the language', innerNo, innerRaw.indexOf("wait") + 1);
   }
 
   if (inner.startsWith("ensure ")) {
@@ -191,7 +188,7 @@ export function parseBlockStatement(
     }
     const call = parseCallRef(runBody);
     if (!call) {
-      fail(filePath, "run async must target a valid reference: run async ref or run async ref(args)", innerNo);
+      fail(filePath, "run async must target a valid reference: run async ref() or run async ref(args) — parentheses are required", innerNo);
     }
     rejectTrailingContent(filePath, innerNo, "run async", call.rest);
     return {
@@ -235,7 +232,7 @@ export function parseBlockStatement(
     }
     const call = parseCallRef(runBody);
     if (!call) {
-      fail(filePath, "run must target a valid reference: run ref or run ref(args)", innerNo);
+      fail(filePath, "run must target a valid reference: run ref() or run ref(args) — parentheses are required", innerNo);
     }
     rejectTrailingContent(filePath, innerNo, "run", call.rest);
     return {
@@ -281,72 +278,14 @@ export function parseBlockStatement(
   ) {
     const captureName = genericAssignMatch[1];
     const rest = genericAssignMatch[2].trim();
-    if (matchSendOperator(rest)) {
-      fail(filePath, "E_PARSE capture and send cannot be combined; use separate steps", innerNo);
-    }
-    if (rest.startsWith("ensure ")) {
-      const result = parseEnsureStep(
-        filePath, lines, idx, innerNo, innerRaw,
-        rest.slice("ensure ".length).trim(), captureName,
+    if (rest.startsWith("run ") || rest.startsWith("ensure ")) {
+      fail(
+        filePath,
+        `assignment without "const" is no longer supported; use "const ${captureName} = ${rest}"`,
+        innerNo,
+        innerRaw.indexOf(captureName) + 1,
       );
-      return { step: result.step, nextIdx: result.nextIdx + 1 };
     }
-    if (rest.startsWith("run async ")) {
-      fail(filePath, "capture is not supported with run async; use separate steps", innerNo, innerRaw.indexOf("run") + 1);
-    }
-    if (rest.startsWith("run ")) {
-      const runBody = rest.slice("run ".length).trim();
-      if (runBody.startsWith("`")) {
-        const result = parseAnonymousInlineScript(filePath, lines, idx, runBody, innerNo, innerRaw.indexOf("run") + 1);
-        return {
-          step: {
-            type: "run_inline_script",
-            body: result.body,
-            ...(result.lang ? { lang: result.lang } : {}),
-            args: result.args,
-            ...(result.bareIdentifierArgs ? { bareIdentifierArgs: result.bareIdentifierArgs } : {}),
-            captureName,
-            loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
-          },
-          nextIdx: result.nextLineIdx,
-        };
-      }
-      if (runBody.startsWith("script(") || runBody.startsWith("script (")) {
-        fail(filePath, 'inline script syntax has changed: use run `body`(args) instead of run script(args) "body"', innerNo);
-      }
-      // Check for capture = run ... recover
-      const recoverResult = parseRunRecoverStep(filePath, lines, idx, innerNo, innerRaw, runBody, captureName);
-      if (recoverResult) {
-        return { step: recoverResult.step, nextIdx: recoverResult.nextIdx + 1 };
-      }
-      const call = parseCallRef(runBody);
-      if (!call) {
-        fail(filePath, "run must target a valid reference: run ref or run ref(args)", innerNo);
-      }
-      rejectTrailingContent(filePath, innerNo, "run", call.rest);
-      return {
-        step: {
-          type: "run",
-          workflow: {
-            value: call.ref,
-            loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
-          },
-          args: call.args,
-          ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
-          captureName,
-        },
-        nextIdx: idx + 1,
-      };
-    }
-    return {
-      step: {
-        type: "shell",
-        command: rest,
-        loc: { line: innerNo, col: innerRaw.indexOf(rest) + 1 },
-        captureName,
-      },
-      nextIdx: idx + 1,
-    };
   }
 
   if (inner.startsWith("log ") || inner === "log") {

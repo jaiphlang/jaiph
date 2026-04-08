@@ -501,13 +501,6 @@ workflow default() {
   const ans = prompt "type here"
 }
 
-=== wait parses as workflow step
-# @expect ok
---- input.jh
-workflow default() {
-  wait
-}
-
 === send operator parses channel <- literal
 # @expect ok
 --- input.jh
@@ -526,14 +519,6 @@ workflow analyst(message, chan, sender) {
 }
 workflow default() {
   findings <- "hi"
-}
-
-=== standalone channel <- forwards
-# @expect ok
---- input.jh
-channel findings
-workflow default() {
-  findings <-
 }
 
 === arrow inside quotes is not a send

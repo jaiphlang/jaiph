@@ -78,7 +78,7 @@ test("buildScripts extracts script for run with capture workflow", () => {
       [
         "script f = `printf '%s' 'ok'`",
         "workflow default() {",
-        "  x = run f()",
+        "  const x = run f()",
         '  return "${x}"',
         "}",
         "",
@@ -194,7 +194,7 @@ test("bare identifier arg: capture variable passes validation", () => {
         'script get_name = `echo "world"`',
         'script greet = `echo "hello $1"`',
         "workflow default() {",
-        "  result = run get_name()",
+        "  const result = run get_name()",
         "  run greet(result)",
         "}",
         "",
@@ -248,7 +248,9 @@ test("bare identifier arg: top-level const passes validation", () => {
 });
 
 test("E_VALIDATE: braced parameter name in run args is rejected (use bare identifier)", () => {
+  // validateNoQuotedSingleInterpolation was removed; "${seconds}" in call args is now allowed
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-braced-wf-param-"));
+  const out = join(root, "out");
   try {
     writeFileSync(
       join(root, "m.jh"),
@@ -260,10 +262,7 @@ test("E_VALIDATE: braced parameter name in run args is rejected (use bare identi
         "",
       ].join("\n"),
     );
-    assert.throws(
-      () => buildScripts(join(root, "m.jh"), join(root, "out")),
-      /do not use "\$\{seconds\}"/,
-    );
+    buildScripts(join(root, "m.jh"), out);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -290,7 +289,9 @@ test("buildScripts accepts run delay(seconds) with bare workflow parameter", () 
 });
 
 test("E_VALIDATE: braced const name in run args is rejected (use bare identifier)", () => {
+  // validateNoQuotedSingleInterpolation was removed; "${name}" in call args is now allowed
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-braced-const-"));
+  const out = join(root, "out");
   try {
     writeFileSync(
       join(root, "m.jh"),
@@ -303,17 +304,16 @@ test("E_VALIDATE: braced const name in run args is rejected (use bare identifier
         "",
       ].join("\n"),
     );
-    assert.throws(
-      () => buildScripts(join(root, "m.jh"), join(root, "out")),
-      /do not use "\$\{name\}" in call arguments; use a bare identifier/,
-    );
+    buildScripts(join(root, "m.jh"), out);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
 test("E_VALIDATE: braced argN in run args is rejected (use bare identifier)", () => {
+  // validateNoQuotedSingleInterpolation was removed; "${arg1}" in call args is now allowed
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-braced-argn-"));
+  const out = join(root, "out");
   try {
     writeFileSync(
       join(root, "m.jh"),
@@ -325,10 +325,7 @@ test("E_VALIDATE: braced argN in run args is rejected (use bare identifier)", ()
         "",
       ].join("\n"),
     );
-    assert.throws(
-      () => buildScripts(join(root, "m.jh"), join(root, "out")),
-      /do not use "\$\{arg1\}" in call arguments; use a bare identifier/,
-    );
+    buildScripts(join(root, "m.jh"), out);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

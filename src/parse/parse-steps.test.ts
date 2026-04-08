@@ -42,12 +42,10 @@ test("parseEnsureStep: parses ensure with captureName", () => {
 
 test("parseEnsureStep: ensure without parens parses as zero-arg call", () => {
   const lines = ["  ensure my_rule"];
-  const { step } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], "my_rule");
-  assert.equal(step.type, "ensure");
-  if (step.type === "ensure") {
-    assert.equal(step.ref.value, "my_rule");
-    assert.equal(step.args, undefined);
-  }
+  assert.throws(
+    () => parseEnsureStep("test.jh", lines, 0, 1, lines[0], "my_rule"),
+    /parentheses are required/,
+  );
 });
 
 // === parseEnsureStep: recover with single statement ===
@@ -78,13 +76,10 @@ test("parseEnsureStep: parses ensure with recover run statement", () => {
 
 test("parseEnsureStep: parses ensure with recover wait statement", () => {
   const lines = ["  ensure my_rule() recover (failure) wait"];
-  const { step } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], "my_rule() recover (failure) wait");
-  if (step.type === "ensure") {
-    assert.ok(step.recover);
-    if ("single" in step.recover) {
-      assert.equal(step.recover.single.type, "wait");
-    }
-  }
+  assert.throws(
+    () => parseEnsureStep("test.jh", lines, 0, 1, lines[0], "my_rule() recover (failure) wait"),
+    /"wait" has been removed from the language/,
+  );
 });
 
 test("parseEnsureStep: parses ensure with recover fail statement", () => {
@@ -136,14 +131,12 @@ test("parseEnsureStep: parses ensure with multiline recover block", () => {
 
 // === parseEnsureStep: recover bindings ===
 
-test("parseEnsureStep: parses recover with two bindings", () => {
+test("parseEnsureStep: rejects recover with two bindings", () => {
   const lines = ['  ensure my_rule() recover (failure, attempt) { log "retry" }'];
-  const { step } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], 'my_rule() recover (failure, attempt) { log "retry" }');
-  if (step.type === "ensure") {
-    assert.ok(step.recover);
-    assert.equal(step.recover.bindings.failure, "failure");
-    assert.equal(step.recover.bindings.attempt, "attempt");
-  }
+  assert.throws(
+    () => parseEnsureStep("test.jh", lines, 0, 1, lines[0], 'my_rule() recover (failure, attempt) { log "retry" }'),
+    /recover accepts exactly one binding.*attempt.*has been removed/,
+  );
 });
 
 // === parseEnsureStep: recover errors ===

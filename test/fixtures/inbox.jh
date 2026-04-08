@@ -16,7 +16,7 @@ script review_summary = `echo "[reviewed] $1"`
 
 workflow analyst(message, chan, sender) {
   run write_findings_file(message)
-  summary = run summarize_findings()
+  const summary = run summarize_findings()
   summary <- "${summary}"
 }
 

@@ -100,7 +100,7 @@ test("parser: assignment capture parses for ensure, run, and const run capture",
     "  return \"ok\"",
     "}",
     "workflow default() {",
-    "  response = ensure tests_pass()",
+    "  const response = ensure tests_pass()",
     "  const out = run say_hello()",
     "}",
   ].join("\n");
@@ -108,8 +108,10 @@ test("parser: assignment capture parses for ensure, run, and const run capture",
   assert.equal(mod.workflows.length, 1);
   const steps = mod.workflows[0].steps;
   assert.equal(steps.length, 2);
-  assert.equal(steps[0].type, "ensure");
-  assert.equal((steps[0] as { type: "ensure"; captureName?: string }).captureName, "response");
+  assert.equal(steps[0].type, "const");
+  const c0 = steps[0] as { type: "const"; name: string; value: { kind: string } };
+  assert.equal(c0.name, "response");
+  assert.equal(c0.value.kind, "ensure_capture");
   assert.equal(steps[1].type, "const");
   const c1 = steps[1] as { type: "const"; name: string; value: { kind: string } };
   assert.equal(c1.name, "out");
@@ -516,8 +518,10 @@ test("parser: wait parses as workflow step (not shell)", () => {
     "  wait",
     "}",
   ].join("\n");
-  const mod = parsejaiph(source, "/fake/entry.jh");
-  assert.equal(mod.workflows[0].steps[0].type, "wait");
+  assert.throws(
+    () => parsejaiph(source, "/fake/entry.jh"),
+    /"wait" has been removed from the language/,
+  );
 });
 
 test("parser: brace-style if produces E_PARSE", () => {
@@ -654,12 +658,10 @@ test("parser: standalone channel <- forwards $1", () => {
     "  findings <-",
     "}",
   ].join("\n");
-  const mod = parsejaiph(source, "/fake/entry.jh");
-  assert.equal(mod.workflows[0].steps.length, 1);
-  const step = mod.workflows[0].steps[0];
-  assert.equal(step.type, "send");
-  assert.equal(step.type === "send" && step.rhs.kind, "forward");
-  assert.equal((step as { type: "send"; channel: string }).channel, "findings");
+  assert.throws(
+    () => parsejaiph(source, "/fake/entry.jh"),
+    /send requires an explicit payload/,
+  );
 });
 
 test("parser: <- inside quotes is not a send", () => {
@@ -724,15 +726,16 @@ test("parser: route inside workflow body is a hard parse error", () => {
 });
 
 test("parser: capture + send is E_PARSE", () => {
+  // With assignment-without-const removed, "name = channel <- ..." falls through
+  // to a shell step; the inline-shell ban then rejects it at validation time.
   const source = [
     "workflow default() {",
     `  name = channel <- "hello"`,
     "}",
   ].join("\n");
-  assert.throws(
-    () => parsejaiph(source, "/fake/entry.jh"),
-    /capture and send cannot be combined/,
-  );
+  const mod = parsejaiph(source, "/fake/entry.jh");
+  // Parsed as a shell step; validation will reject it later
+  assert.equal(mod.workflows[0].steps[0].type, "shell");
 });
 
 // === Top-level const (env declaration) tests ===

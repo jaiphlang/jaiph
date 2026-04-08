@@ -216,7 +216,6 @@ Jaiph: Running say_hello.jh
                         and set the capture variable to the raw JSON string. The parser tolerates text before the JSON
                         object (e.g. when the agent writes preamble before <code>{...}</code>). You can access the
                         fields with dot notation: <code>${response.hello}</code> and <code>${response.fact}</code>.
-                        The underscore form (<code>${response_hello}</code>) also works but dot notation is preferred.
                     </p>
                 </div>
 
@@ -265,8 +264,7 @@ testing say_hello.test.jh
                     <p>This workflow uses Jaiph's <code>ensure ... recover</code> pattern to handle a failing CI
                         check with an agent-assisted fix.
                         The <code>recover (failure)</code> binding receives the full merged stdout+stderr from the failed
-                        rule execution — including output from nested scripts and rules. An optional second binding
-                        (<code>recover (failure, attempt)</code>) provides the attempt number (always <code>"1"</code>).
+                        rule execution — including output from nested scripts and rules.
                         The recovery body runs <strong>once</strong> on failure (like a <code>catch</code> clause) —
                         for retries, use explicit recursion (the workflow calls itself).
                         Persist the failure payload to a stable path (here under
@@ -565,15 +563,15 @@ Jaiph: Running async.jh
                             href="cli">CLI reference</a>).
                     </dd>
 
-                    <dt><code>ensure ref</code> &middot; <code>ensure ref(args) recover (name) { ... }</code> &middot;
-                        <code>run ref</code> &middot; <code>run ref(args) recover (name) { ... }</code> &middot;
+                    <dt><code>ensure ref()</code> &middot; <code>ensure ref(args) recover (name) { ... }</code> &middot;
+                        <code>run ref()</code> &middot; <code>run ref(args) recover (name) { ... }</code> &middot;
                         <code>run `body`(args)</code>
                     </dt>
                     <dd><code>ensure</code> executes a rule (with optional args); <code>recover</code> handles
                         failure inline (runs once, like a catch clause); <code>run</code> calls another workflow or module script
                         (managed step &mdash; same value/log contract as <code>ensure</code>). Parentheses are
-                        <strong>optional</strong> when passing zero arguments &mdash; <code>run setup</code> is
-                        equivalent to <code>run setup()</code>. When arguments are present, parentheses are required.
+                        <strong>required</strong> on all call sites &mdash; even when passing zero arguments
+                        (e.g. <code>run setup()</code>).
                         Arguments can be quoted strings or <strong>bare identifiers</strong>:
                         <code>run greet(name)</code> is equivalent to <code>run greet("${name}")</code>.
                         <code>run `body`(args)</code> embeds a one-off shell command directly
@@ -588,10 +586,11 @@ Jaiph: Running async.jh
                         or a triple-quoted <code>"""</code> block for multiline text. Triple backticks are reserved for
                         scripts. Optionally validates structured JSON output and exposes captured variables.</dd>
 
-                    <dt><code>const name = …</code> &middot; <code>name = ensure ref()</code> &middot;
-                        <code>name = run ref()</code>
+                    <dt><code>const name = …</code> &middot; <code>const name = ensure ref()</code> &middot;
+                        <code>const name = run ref()</code>
                     </dt>
-                    <dd>Bind or capture step values. For <code>ensure</code> / <code>run</code> to rules and workflows,
+                    <dd>Bind or capture step values. All captures require the <code>const</code> keyword.
+                        For <code>ensure</code> / <code>run</code> to rules and workflows,
                         explicit
                         <code>return "value"</code> (or <code>return run ref()</code> /
                         <code>return ensure ref()</code>) feeds the variable; for <code>run</code> to a

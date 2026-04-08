@@ -20,7 +20,7 @@ echo "captured-value"
 script print_capture = `echo "out=x=$1"`
 
 workflow default() {
-  x = run give()
+  const x = run give()
   run print_capture("$x")
 }
 EOF

@@ -256,50 +256,26 @@ test("parseCallRef: no args returns no bareIdentifierArgs", () => {
   assert.equal(result.bareIdentifierArgs, undefined);
 });
 
-// === parseCallRef: bare identifier (no parens) ===
+// === parseCallRef: bare identifier (no parens) — now returns null ===
 
-test("parseCallRef: bare identifier matches as zero-arg call", () => {
-  const result = parseCallRef("setup");
-  assert.ok(result);
-  assert.equal(result.ref, "setup");
-  assert.equal(result.args, undefined);
-  assert.equal(result.bareIdentifierArgs, undefined);
-  assert.equal(result.rest, "");
+test("parseCallRef: bare identifier returns null (parens required)", () => {
+  assert.equal(parseCallRef("setup"), null);
 });
 
-test("parseCallRef: bare dotted identifier matches as zero-arg call", () => {
-  const result = parseCallRef("lib.setup");
-  assert.ok(result);
-  assert.equal(result.ref, "lib.setup");
-  assert.equal(result.args, undefined);
-  assert.equal(result.rest, "");
+test("parseCallRef: bare dotted identifier returns null (parens required)", () => {
+  assert.equal(parseCallRef("lib.setup"), null);
 });
 
-test("parseCallRef: bare identifier with trailing content returns rest", () => {
-  const result = parseCallRef("setup extra");
-  assert.ok(result);
-  assert.equal(result.ref, "setup");
-  assert.equal(result.rest, " extra");
+test("parseCallRef: bare identifier with trailing content returns null", () => {
+  assert.equal(parseCallRef("setup extra"), null);
 });
 
 test("parseCallRef: bare identifier followed by { returns null (definition, not call)", () => {
-  const result = parseCallRef("setup {");
-  assert.equal(result, null);
+  assert.equal(parseCallRef("setup {"), null);
 });
 
 test("parseCallRef: bare identifier followed by { with content returns null", () => {
-  const result = parseCallRef("setup { body }");
-  assert.equal(result, null);
-});
-
-test("parseCallRef: bare identifier parses identically to parenthesized zero-arg", () => {
-  const bare = parseCallRef("setup");
-  const paren = parseCallRef("setup()");
-  assert.ok(bare);
-  assert.ok(paren);
-  assert.equal(bare.ref, paren.ref);
-  assert.equal(bare.args, paren.args);
-  assert.equal(bare.bareIdentifierArgs, paren.bareIdentifierArgs);
+  assert.equal(parseCallRef("setup { body }"), null);
 });
 
 test("parseCallRef: bare identifier starting with digit returns null", () => {

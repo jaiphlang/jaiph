@@ -97,7 +97,6 @@ Valid RHS forms:
 | Double-quoted literal | `findings <- "## results"` | Interpolated string |
 | Variable expansion | `findings <- ${var}` | Value of the variable |
 | `run` capture | `findings <- run build_msg()` | Return value or trimmed stdout of the workflow/script |
-| Empty (forward) | `findings <-` | Forwards the workflow's first declared parameter |
 
 The RHS does **not** accept raw shell commands — see
 [Grammar — Managed calls vs command substitution](grammar.md#managed-calls-vs-command-substitution).
@@ -110,15 +109,7 @@ workflow researcher() {
 }
 ```
 
-If no RHS follows `<-`, the workflow's first declared parameter is forwarded:
-
-```jh
-channel findings
-
-workflow forwarder() {
-  findings <-
-}
-```
+An explicit RHS is always required — bare `channel <-` (forward syntax) is no longer supported.
 
 The `<-` operator is only recognized when it appears outside of quoted strings
 on the surrounding line so channel names and literals are not misread as send

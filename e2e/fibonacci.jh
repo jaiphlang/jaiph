@@ -33,6 +33,6 @@ echo "$result"
 
 workflow default(n) {
   ensure ensure_is_number(n)
-  result = run fib(n)
+  const result = run fib(n)
   log "${result}"
 }

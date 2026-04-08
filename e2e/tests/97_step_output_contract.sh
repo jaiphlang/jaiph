@@ -23,7 +23,7 @@ script emit_stdout = `echo "stdout-log"`
 script emit_stderr = `echo "stderr-log" >&2`
 script emit_captured = `echo "captured=$1"`
 workflow default() {
-  out = run emit_value()
+  const out = run emit_value()
   run emit_stdout()
   run emit_stderr()
   run emit_captured(out)
@@ -73,7 +73,7 @@ rule compute(input) {
 }
 script echo_captured_ensure = `echo "captured=$1"`
 workflow default() {
-  val = ensure compute("input")
+  const val = ensure compute("input")
   run echo_captured_ensure(val)
 }
 EOF
@@ -115,7 +115,7 @@ workflow greeter() {
 }
 script echo_captured_run = `echo "captured=$1"`
 workflow default() {
-  val = run greeter()
+  const val = run greeter()
   run echo_captured_run(val)
 }
 EOF
@@ -156,7 +156,7 @@ echo "hash-abc123"
 ```
 script echo_captured_fn = `echo "captured=$1"`
 workflow default() {
-  val = run compute_hash()
+  const val = run compute_hash()
   run echo_captured_fn(val)
 }
 EOF

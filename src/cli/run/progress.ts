@@ -131,9 +131,6 @@ export function collectWorkflowChildren(
     if (s.type === "const") {
       return [{ label: `const ${s.name}` }];
     }
-    if (s.type === "wait") {
-      return [{ label: "wait" }];
-    }
     if (s.type === "return") {
       return [{ label: `return ${s.value}` }];
     }
@@ -207,10 +204,6 @@ export function collectWorkflowChildren(
     }
     if (step.type === "const") {
       items.push({ label: `const ${step.name}` });
-      continue;
-    }
-    if (step.type === "wait") {
-      items.push({ label: "wait" });
       continue;
     }
     if (step.type === "return") {

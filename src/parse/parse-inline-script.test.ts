@@ -35,19 +35,13 @@ workflow default() {
   }
 });
 
-test("parser: capture form — x = run `body`()", () => {
+test("parser: capture form — x = run `body`() rejected without const", () => {
   const src = `
 workflow default() {
   x = run \`echo hello\`()
 }
 `;
-  const ast = parsejaiph(src, "test.jh");
-  const step = ast.workflows[0].steps[0];
-  assert.equal(step.type, "run_inline_script");
-  if (step.type === "run_inline_script") {
-    assert.equal(step.body, "echo hello");
-    assert.equal(step.captureName, "x");
-  }
+  assert.throws(() => parsejaiph(src, "test.jh"), /assignment without "const"/);
 });
 
 test("parser: const capture form — const x = run `body`()", () => {

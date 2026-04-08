@@ -55,7 +55,7 @@ export function braceDepthDelta(line: string): number {
 
 /** Jaiph keywords that cannot be used as bare identifier arguments. */
 const JAIPH_KEYWORDS = new Set([
-  "run", "ensure", "prompt", "return", "fail", "wait", "log", "logerr",
+  "run", "ensure", "prompt", "return", "fail", "log", "logerr",
   "if", "else", "not", "const", "local", "match", "import", "export",
   "workflow", "rule", "script", "channel", "config", "recover", "async",
   "returns", "send", "true", "false",
@@ -208,15 +208,7 @@ export function parseCallRef(s: string): { ref: string; args?: string; bareIdent
       rest,
     };
   }
-  // Bare identifier form: ref (no parens, zero args)
-  // Must not match when followed by { (that's a definition, not a call)
-  const bareMatch = t.match(/^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)/);
-  if (bareMatch && isRef(bareMatch[1])) {
-    const ref = bareMatch[1];
-    const rest = t.slice(ref.length);
-    if (rest.trimStart().startsWith("{")) return null;
-    return { ref, rest };
-  }
+  // Bare identifier form (no parens) is no longer allowed — require parentheses.
   return null;
 }
 

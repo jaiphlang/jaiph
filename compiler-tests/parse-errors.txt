@@ -184,7 +184,7 @@ script:node transform() {
 script:node transform
 
 === capture with run async rejected
-# @expect error E_PARSE "capture is not supported with run async" @2:7
+# @expect error E_PARSE "assignment without" @2:3
 --- input.jh
 workflow default() {
   x = run async some_wf()
@@ -272,7 +272,7 @@ workflow default() {
 }
 
 === capture and send cannot be combined
-# @expect error E_PARSE "capture and send cannot be combined" @2:1
+# @expect error E_VALIDATE "inline shell steps are forbidden" @2:3
 --- input.jh
 workflow default() {
   name = channel <- "hello"
@@ -357,7 +357,7 @@ workflow default() {
 }
 
 === invalid workflow reference shape with extra dots
-# @expect error E_PARSE "unexpected content after run call" @2:1
+# @expect error E_PARSE "run must target a valid reference" @2:1
 --- input.jh
 workflow default() {
   run bad.ref.shape()
@@ -420,7 +420,7 @@ workflow default() {
 }
 
 === capture and send combined alt form
-# @expect error E_PARSE "capture and send cannot be combined" @2:1
+# @expect error E_VALIDATE "inline shell steps are forbidden" @2:3
 --- input.jh
 workflow default() {
   name = channel <- echo hello
@@ -643,8 +643,8 @@ workflow default() {
   }
 }
 
-=== run async without parentheses is valid
-# @expect ok
+=== run async without parentheses requires parens
+# @expect error E_PARSE "run async must target a valid reference" @5:1
 --- input.jh
 workflow helper() {
   log "hi"
@@ -709,7 +709,7 @@ workflow default() {
 }
 
 === brace-if: wait in rules
-# @expect error E_PARSE "wait is not allowed in rules" @2:3
+# @expect error E_PARSE "has been removed" @2:3
 --- input.jh
 rule check() {
   wait
@@ -853,14 +853,14 @@ workflow default() {
 }
 
 === inline script: unterminated parentheses
-# @expect error E_PARSE "unexpected content after run call" @2:1
+# @expect error E_PARSE "run must target a valid reference" @2:1
 --- input.jh
 workflow default() {
   run script "echo hello"
 }
 
 === inline script without parentheses
-# @expect error E_PARSE "unexpected content after run call" @2:1
+# @expect error E_PARSE "run must target a valid reference" @2:1
 --- input.jh
 workflow default() {
   run script "echo hello"
@@ -1072,8 +1072,8 @@ workflow default() {
 }
 
 
-=== run async without parens in workflow is valid
-# @expect ok
+=== run async without parens in workflow requires parens
+# @expect error E_PARSE "run async must target a valid reference" @5:1
 --- input.jh
 workflow helper() {
   log "hi"
@@ -1147,8 +1147,8 @@ workflow default() {
   const x = ${var:-default}
 }
 
-=== run without parentheses in workflow block is valid
-# @expect ok
+=== run without parentheses in workflow requires parens
+# @expect error E_PARSE "parentheses are required" @3:1
 --- input.jh
 script helper = `echo "hi"`
 workflow default() {
@@ -1163,7 +1163,7 @@ workflow default() {
 }
 
 === capture and send combined in workflow body
-# @expect error E_PARSE "capture and send cannot be combined" @3:1
+# @expect error E_VALIDATE "inline shell steps are forbidden" @3:3
 --- input.jh
 channel findings
 workflow default() {
@@ -1180,32 +1180,32 @@ workflow default() {
   log "done"
 }
 
-=== run without parentheses in workflow is valid
-# @expect ok
+=== run without parentheses in workflow requires parens
+# @expect error E_PARSE "parentheses are required" @3:1
 --- input.jh
 script helper = `echo "hi"`
 workflow default() {
   run helper
 }
 
-=== capture run without parentheses in workflow is valid
-# @expect ok
+=== capture run without parentheses requires const
+# @expect error E_PARSE "assignment without" @3:3
 --- input.jh
 script helper = `echo "hi"`
 workflow default() {
   x = run helper
 }
 
-=== const run without parentheses is valid
-# @expect ok
+=== const run without parentheses requires parens
+# @expect error E_PARSE "must target a valid reference" @3:13
 --- input.jh
 script helper = `echo "hi"`
 workflow default() {
   const x = run helper
 }
 
-=== const ensure without parentheses is valid
-# @expect ok
+=== const ensure without parentheses requires parens
+# @expect error E_PARSE "must target a valid reference" @5:13
 --- input.jh
 rule check() {
   return "ok"
@@ -1608,7 +1608,7 @@ workflow default() {
 }
 
 === capture run with invalid reference in workflow
-# @expect error E_PARSE "run must target a valid reference" @2:1
+# @expect error E_PARSE "assignment without" @2:3
 --- input.jh
 workflow default() {
   x = run 123bad

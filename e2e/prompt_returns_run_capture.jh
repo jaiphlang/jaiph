@@ -3,16 +3,16 @@
 workflow classify_like(task) {
   const result = prompt "Classify task \"${task}\" into a single engineer role name (JSON only)." returns "{ role: string }"
 
-  return "${result_role}"
+  return "${result.role}"
 }
 
 # Same pattern as engineer.jh default: capture role from nested workflow.
 workflow pick_role(task) {
-  role_name = run classify_like(task)
+  const role_name = run classify_like(task)
   return "${role_name}"
 }
 
 workflow default(subject) {
-  chosen = run classify_like(subject)
+  const chosen = run classify_like(subject)
   log "chosen=${chosen}"
 }

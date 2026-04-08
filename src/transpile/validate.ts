@@ -202,43 +202,6 @@ function validateArity(
   }
 }
 
-/**
- * Reject any call argument that is exactly `"${identifier}"` — the caller should use a bare identifier instead
- * (e.g. `run foo(name)` not `run foo("${name}")`). Bare identifiers in the spaced args string appear as
- * unquoted `${name}`; only the quoted form `"${name}"` is rejected here.
- */
-function validateNoQuotedSingleInterpolation(
-  filePath: string,
-  loc: { line: number; col: number },
-  args: string | undefined,
-): void {
-  if (!args) return;
-  // Walk space-separated tokens respecting quotes; reject any that match exactly "${identifier}"
-  let i = 0;
-  while (i < args.length) {
-    while (i < args.length && (args[i] === " " || args[i] === "\t")) i++;
-    if (i >= args.length) break;
-    if (args[i] === '"') {
-      let j = i + 1;
-      while (j < args.length && !(args[j] === '"' && args[j - 1] !== "\\")) j++;
-      const token = args.slice(i, j + 1);
-      i = j + 1;
-      const m = token.match(/^"\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}"$/);
-      if (m) {
-        const name = m[1]!;
-        throw jaiphError(
-          filePath,
-          loc.line,
-          loc.col,
-          "E_VALIDATE",
-          `do not use "\${${name}}" in call arguments; use a bare identifier: ...(${name})`,
-        );
-      }
-    } else {
-      while (i < args.length && args[i] !== " " && args[i] !== "\t") i++;
-    }
-  }
-}
 
 /** Validate bare identifier args against known variables. */
 function validateBareIdentifierArgs(
@@ -441,7 +404,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
     const ruleKnownVars = collectKnownVars(rule.steps, ast.envDecls, rule.params);
     // Named params are validated via knownVars; positional argN access was removed.
     const validateRuleStep = (s: WorkflowStepDef): void => {
-      if (s.type === "prompt" || s.type === "send" || s.type === "wait") {
+      if (s.type === "prompt" || s.type === "send") {
         throw jaiphError(
           ast.filePath,
           s.loc.line,
@@ -457,13 +420,12 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         validateNoShellRedirection(ast.filePath, s.ref.loc, "ensure", s.args);
         validateRef(s.ref, ast, refCtx, expectRuleRef);
         validateArity(ast.filePath, s.ref.loc, s.ref.value, s.args, "rule", ast, refCtx);
-        validateNoQuotedSingleInterpolation(ast.filePath, s.ref.loc, s.args);
+
         validateBareIdentifierArgs(ast.filePath, s.ref.loc, s.bareIdentifierArgs, ruleKnownVars);
         if (s.recover) {
           const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
           const rb = new Set<string>();
           rb.add(s.recover.bindings.failure);
-          if (s.recover.bindings.attempt) rb.add(s.recover.bindings.attempt);
           for (const r of steps) validateRuleStep(r);
         }
         return;
@@ -484,13 +446,12 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         }
         validateRef(s.workflow, ast, refCtx, expectRunInRuleRef);
         validateArity(ast.filePath, s.workflow.loc, s.workflow.value, s.args, "workflow", ast, refCtx);
-        validateNoQuotedSingleInterpolation(ast.filePath, s.workflow.loc, s.args);
+
         validateBareIdentifierArgs(ast.filePath, s.workflow.loc, s.bareIdentifierArgs, ruleKnownVars);
         if (s.recover) {
           const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
           const rb = new Set<string>();
           rb.add(s.recover.bindings.failure);
-          if (s.recover.bindings.attempt) rb.add(s.recover.bindings.attempt);
           for (const r of steps) validateRuleStep(r);
         }
         return;
@@ -552,13 +513,13 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
             validateNoShellRedirection(ast.filePath, s.managed.ref.loc, "run", s.managed.args);
             validateRef(s.managed.ref, ast, refCtx, expectRunInRuleRef);
             validateArity(ast.filePath, s.managed.ref.loc, s.managed.ref.value, s.managed.args, "workflow", ast, refCtx);
-            validateNoQuotedSingleInterpolation(ast.filePath, s.managed.ref.loc, s.managed.args);
+
             validateBareIdentifierArgs(ast.filePath, s.managed.ref.loc, s.managed.bareIdentifierArgs, ruleKnownVars);
           } else if (s.managed.kind === "ensure") {
             validateNoShellRedirection(ast.filePath, s.managed.ref.loc, "ensure", s.managed.args);
             validateRef(s.managed.ref, ast, refCtx, expectRuleRef);
             validateArity(ast.filePath, s.managed.ref.loc, s.managed.ref.value, s.managed.args, "rule", ast, refCtx);
-            validateNoQuotedSingleInterpolation(ast.filePath, s.managed.ref.loc, s.managed.args);
+
             validateBareIdentifierArgs(ast.filePath, s.managed.ref.loc, s.managed.bareIdentifierArgs, ruleKnownVars);
           } else if (s.managed.kind === "match") {
             validateMatchExpr(ast.filePath, s.managed.match);
@@ -592,13 +553,13 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           }
           validateRef(v.ref, ast, refCtx, expectRunInRuleRef);
           validateArity(ast.filePath, v.ref.loc, v.ref.value, v.args, "workflow", ast, refCtx);
-          validateNoQuotedSingleInterpolation(ast.filePath, v.ref.loc, v.args);
+
           validateBareIdentifierArgs(ast.filePath, v.ref.loc, v.bareIdentifierArgs, ruleKnownVars);
         } else if (v.kind === "ensure_capture") {
           validateNoShellRedirection(ast.filePath, v.ref.loc, "ensure", v.args);
           validateRef(v.ref, ast, refCtx, expectRuleRef);
           validateArity(ast.filePath, v.ref.loc, v.ref.value, v.args, "rule", ast, refCtx);
-          validateNoQuotedSingleInterpolation(ast.filePath, v.ref.loc, v.args);
+
           validateBareIdentifierArgs(ast.filePath, v.ref.loc, v.bareIdentifierArgs, ruleKnownVars);
         } else if (v.kind === "prompt_capture") {
           throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", "const ... = prompt is not allowed in rules");
@@ -735,7 +696,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           validateNoShellRedirection(ast.filePath, s.rhs.ref.loc, "run", s.rhs.args);
           validateRef(s.rhs.ref, ast, refCtx, expectRunTargetRef);
           validateArity(ast.filePath, s.rhs.ref.loc, s.rhs.ref.value, s.rhs.args, "workflow", ast, refCtx);
-          validateNoQuotedSingleInterpolation(ast.filePath, s.rhs.ref.loc, s.rhs.args);
+
           validateBareIdentifierArgs(ast.filePath, s.rhs.ref.loc, s.rhs.bareIdentifierArgs, wfKnownVars, recoverBindings);
         } else if (s.rhs.kind === "literal") {
           const inner = s.rhs.token.startsWith('"') && s.rhs.token.endsWith('"')
@@ -769,13 +730,12 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         validateNoShellRedirection(ast.filePath, s.ref.loc, "ensure", s.args);
         validateRef(s.ref, ast, refCtx, expectRuleRef);
         validateArity(ast.filePath, s.ref.loc, s.ref.value, s.args, "rule", ast, refCtx);
-        validateNoQuotedSingleInterpolation(ast.filePath, s.ref.loc, s.args);
+
         validateBareIdentifierArgs(ast.filePath, s.ref.loc, s.bareIdentifierArgs, wfKnownVars, recoverBindings);
         if (s.recover) {
           const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
           const rb = new Set<string>();
           rb.add(s.recover.bindings.failure);
-          if (s.recover.bindings.attempt) rb.add(s.recover.bindings.attempt);
           for (const r of steps) validateStep(r, rb);
         }
         return;
@@ -787,13 +747,12 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         }
         validateRef(s.workflow, ast, refCtx, expectRunTargetRef);
         validateArity(ast.filePath, s.workflow.loc, s.workflow.value, s.args, "workflow", ast, refCtx);
-        validateNoQuotedSingleInterpolation(ast.filePath, s.workflow.loc, s.args);
+
         validateBareIdentifierArgs(ast.filePath, s.workflow.loc, s.bareIdentifierArgs, wfKnownVars, recoverBindings);
         if (s.recover) {
           const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
           const rb = new Set<string>();
           rb.add(s.recover.bindings.failure);
-          if (s.recover.bindings.attempt) rb.add(s.recover.bindings.attempt);
           for (const r of steps) validateStep(r, rb);
         }
         return;
@@ -862,13 +821,13 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
             validateNoShellRedirection(ast.filePath, s.managed.ref.loc, "run", s.managed.args);
             validateRef(s.managed.ref, ast, refCtx, expectRunTargetRef);
             validateArity(ast.filePath, s.managed.ref.loc, s.managed.ref.value, s.managed.args, "workflow", ast, refCtx);
-            validateNoQuotedSingleInterpolation(ast.filePath, s.managed.ref.loc, s.managed.args);
+
             validateBareIdentifierArgs(ast.filePath, s.managed.ref.loc, s.managed.bareIdentifierArgs, wfKnownVars, recoverBindings);
           } else if (s.managed.kind === "ensure") {
             validateNoShellRedirection(ast.filePath, s.managed.ref.loc, "ensure", s.managed.args);
             validateRef(s.managed.ref, ast, refCtx, expectRuleRef);
             validateArity(ast.filePath, s.managed.ref.loc, s.managed.ref.value, s.managed.args, "rule", ast, refCtx);
-            validateNoQuotedSingleInterpolation(ast.filePath, s.managed.ref.loc, s.managed.args);
+
             validateBareIdentifierArgs(ast.filePath, s.managed.ref.loc, s.managed.bareIdentifierArgs, wfKnownVars, recoverBindings);
           } else if (s.managed.kind === "match") {
             validateMatchExpr(ast.filePath, s.managed.match);
@@ -912,9 +871,6 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         );
         return;
       }
-      if (s.type === "wait") {
-        return;
-      }
       if (s.type === "const") {
         const v = s.value;
         if (v.kind === "run_capture") {
@@ -924,13 +880,13 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           }
           validateRef(v.ref, ast, refCtx, expectRunTargetRef);
           validateArity(ast.filePath, v.ref.loc, v.ref.value, v.args, "workflow", ast, refCtx);
-          validateNoQuotedSingleInterpolation(ast.filePath, v.ref.loc, v.args);
+
           validateBareIdentifierArgs(ast.filePath, v.ref.loc, v.bareIdentifierArgs, wfKnownVars, recoverBindings);
         } else if (v.kind === "ensure_capture") {
           validateNoShellRedirection(ast.filePath, v.ref.loc, "ensure", v.args);
           validateRef(v.ref, ast, refCtx, expectRuleRef);
           validateArity(ast.filePath, v.ref.loc, v.ref.value, v.args, "rule", ast, refCtx);
-          validateNoQuotedSingleInterpolation(ast.filePath, v.ref.loc, v.args);
+
           validateBareIdentifierArgs(ast.filePath, v.ref.loc, v.bareIdentifierArgs, wfKnownVars, recoverBindings);
         } else if (v.kind === "prompt_capture") {
           if (v.bodyKind === "identifier" && v.bodyIdentifier && localScripts.has(v.bodyIdentifier)) {
