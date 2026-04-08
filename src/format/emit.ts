@@ -249,7 +249,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
       const capture = step.captureName ? `${step.captureName} = ` : "";
       if (step.recover) {
         const b = step.recover.bindings;
-        const bindStr = b.attempt ? `(${b.failure}, ${b.attempt})` : `(${b.failure})`;
+        const bindStr = `(${b.failure})`;
         if ("single" in step.recover) {
           const recoverLines = emitStep(step.recover.single, pad, "");
           const recoverText = recoverLines.map((l) => l.trim()).join("\n");
@@ -271,7 +271,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
       const asyncPrefix = step.async ? "async " : "";
       if (step.recover) {
         const b = step.recover.bindings;
-        const bindStr = b.attempt ? `(${b.failure}, ${b.attempt})` : `(${b.failure})`;
+        const bindStr = `(${b.failure})`;
         if ("single" in step.recover) {
           const recoverLines = emitStep(step.recover.single, pad, "");
           const recoverText = recoverLines.map((l) => l.trim()).join("\n");
@@ -378,10 +378,6 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
       }
       break;
     }
-
-    case "wait":
-      lines.push(`${ci}wait`);
-      break;
 
     case "log":
       if (step.message.includes("\n")) {
@@ -502,8 +498,6 @@ function emitConstStep(name: string, value: ConstRhs): string {
 
 function emitSendRhs(rhs: SendRhsDef): string {
   switch (rhs.kind) {
-    case "forward":
-      return "forward";
     case "literal":
       return rhs.token;
     case "var":

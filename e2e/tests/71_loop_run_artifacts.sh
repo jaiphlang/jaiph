@@ -24,9 +24,9 @@ workflow review(name) {
 }
 
 workflow default() {
-  first = run review("alpha")
-  second = run review("beta")
-  third = run review("gamma")
+  const first = run review("alpha")
+  const second = run review("beta")
+  const third = run review("gamma")
 }
 EOF
 

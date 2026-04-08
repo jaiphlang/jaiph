@@ -2,16 +2,20 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { parseSendRhs } from "./send-rhs";
 
-// === parseSendRhs: forward ===
+// === parseSendRhs: empty/whitespace RHS is now rejected ===
 
 test("parseSendRhs: empty RHS returns forward kind", () => {
-  const { rhs } = parseSendRhs("test.jh", "", 1, 1);
-  assert.equal(rhs.kind, "forward");
+  assert.throws(
+    () => parseSendRhs("test.jh", "", 1, 1),
+    /send requires an explicit payload/,
+  );
 });
 
 test("parseSendRhs: whitespace-only RHS returns forward kind", () => {
-  const { rhs } = parseSendRhs("test.jh", "   ", 1, 1);
-  assert.equal(rhs.kind, "forward");
+  assert.throws(
+    () => parseSendRhs("test.jh", "   ", 1, 1),
+    /send requires an explicit payload/,
+  );
 });
 
 // === parseSendRhs: literal ===

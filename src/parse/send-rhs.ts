@@ -29,7 +29,7 @@ export function parseSendRhs(
   const t = rhs.trim();
   const defaultNext = (idx ?? lineNo - 1) + 1;
   if (t === "") {
-    return { rhs: { kind: "forward" }, nextIdx: defaultNext };
+    fail(filePath, 'send requires an explicit payload: channel <- "message" — bare forward syntax (channel <-) has been removed', lineNo, col);
   }
   if (t.startsWith('"""') && lines && idx !== undefined) {
     const tqLines = [...lines];

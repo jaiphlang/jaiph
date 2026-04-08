@@ -219,21 +219,6 @@ test("collectWorkflowChildren: collects const steps", () => {
   assert.equal(items[0].label, "const x");
 });
 
-test("collectWorkflowChildren: collects wait steps", () => {
-  const mod = minimalModule({
-    workflows: [{
-      name: "default",
-      comments: [],
-      params: [],
-      steps: [
-        { type: "wait", loc: { line: 2, col: 3 } },
-      ],
-      loc: { line: 1, col: 1 },
-    }],
-  });
-  const items = collectWorkflowChildren(mod, "default");
-  assert.equal(items[0].label, "wait");
-});
 
 test("collectWorkflowChildren: collects return steps", () => {
   const mod = minimalModule({

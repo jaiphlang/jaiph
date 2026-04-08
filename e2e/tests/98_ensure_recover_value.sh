@@ -24,7 +24,7 @@ rule check_ready() {
 
 script echo_captured = `echo "captured=$1"`
 workflow default() {
-  val = ensure check_ready()
+  const val = ensure check_ready()
   run echo_captured(val)
 }
 EOF

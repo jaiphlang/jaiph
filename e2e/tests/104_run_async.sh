@@ -149,7 +149,7 @@ workflow helper() {
 }
 
 workflow default() {
-  x = run async helper()
+  const x = run async helper()
 }
 EOF
 
@@ -162,7 +162,7 @@ if [[ "$capture_status" -eq 0 ]]; then
   e2e::fail "expected parse error for capture + run async"
 fi
 # Error line includes absolute source path which varies per invocation
-e2e::assert_contains "$capture_output" "capture is not supported with run async" "capture + run async diagnostic"
+e2e::assert_contains "$capture_output" "const ... = run must target a valid reference" "capture + run async diagnostic"
 
 # --- run async sibling depth in progress tree ---
 

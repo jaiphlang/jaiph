@@ -44,7 +44,7 @@ Jaiph enforces a strict boundary between orchestration and execution. Workflows 
 
 - **Workflows** — Named sequences of Jaiph steps: `ensure`, `run`, `prompt`, `const`, `fail`, `return`, `log`/`logerr`, inbox `send` (`channel <- …`), `match`, `run async`, `ensure … recover`, and `run … recover`. Any line that is not a recognized step is a parse error — extract bash to a `script` and call it with `run`.
 
-- **Rules** — Named blocks of structured Jaiph steps: `ensure` (other rules), `run` (scripts only — not workflows), `const`, `match`, `fail`, `log`/`logerr`, `return "…"`, `ensure … recover`, `run … recover`. Rules cannot use `prompt`, inbox send/route, `wait`, or `run async`.
+- **Rules** — Named blocks of structured Jaiph steps: `ensure` (other rules), `run` (scripts only — not workflows), `const`, `match`, `fail`, `log`/`logerr`, `return "…"`, `ensure … recover`, `run … recover`. Rules cannot use `prompt`, inbox send/route, or `run async`.
 
 - **Scripts** — Top-level `script` definitions emitted as separate executable files under the workspace `scripts/` directory. Called from workflows or rules with `run`. Bodies are opaque to the compiler — the parser does not check Jaiph keywords inside them. Use `echo`/`printf` for data output and `return N`/`return $?` for exit status. Jaiph interpolation (`${...}`) is forbidden in script bodies — use `$1`, `$2` positional arguments instead. Polyglot support: a fence lang tag (`` ```<tag> ``) maps to `#!/usr/bin/env <tag>` — any tag is valid (no hardcoded allowlist). Alternatively, a manual `#!` shebang as the first line of the body selects the interpreter; if both a fence tag and a `#!` first line are present, it is an error. Without either, `#!/usr/bin/env bash` is used. For trivial one-off commands, **inline scripts** (`` run `body`(args) `` or `` run ```lang...body...```(args) ``) let you embed a script body directly in a step without a named definition — see [`run` — Inline Scripts](#inline-scripts).
 
@@ -135,23 +135,21 @@ At runtime, named parameters are the only way to access arguments: if `workflow 
 
 ### Call-Site Arguments
 
-Parentheses are **optional** when passing zero arguments — `run setup` is equivalent to `run setup()`. When arguments are present, parentheses are required with comma-separated expressions:
+Parentheses are **required** for all call sites — `run setup()`, `ensure gate()`, etc. Bare identifiers without parentheses (e.g. `run setup`) are `E_PARSE`. When arguments are present, they are comma-separated expressions inside the parentheses:
 
 ```jaiph
-run setup                              # zero args — parens optional
-run setup()                            # zero args — explicit parens also valid
-run implement("my-task", "my-role")    # with args — parens required
-ensure gate(path)                      # with args — parens required
+run setup()                            # zero args
+run implement("my-task", "my-role")    # with args
+ensure gate(path)                      # with args
 ```
 
-**Bare identifier arguments:** In-scope variable names must be passed as bare identifiers without quoting. A bare identifier `name` is equivalent to `"${name}"` — the variable's value is passed as the argument. Using `"${name}"` as a standalone call argument is rejected at compile time with an `E_VALIDATE` error — use the bare form instead:
+**Bare identifier arguments:** In-scope variable names must be passed as bare identifiers without quoting. A bare identifier `name` is equivalent to `"${name}"` — the variable's value is passed as the argument:
 
 ```jaiph
 const task = run get_next_task()
 run docs.update_from_task(task)          # correct: bare identifier
 run queue.remove(task, "completed")      # mixed bare + quoted literal
 ensure check_branch(branch_name)         # works with ensure too
-# run docs.update_from_task("${task}")   — E_VALIDATE: use bare identifier: ...(task)
 ```
 
 This rule applies to all call sites: `run`, `ensure`, `return run`/`return ensure`, `send … <- run`, and `const x = run …`. Quoted strings with additional text around the interpolation (e.g. `"prefix_${name}"`) are allowed since they cannot be expressed as bare identifiers.
@@ -292,20 +290,14 @@ ensure ci_passes(repo) recover (failure) {
   run auto_fix()
 }
 
-# Two bindings — failure payload + attempt number (always "1")
-ensure ci_passes() recover (failure, attempt) {
-  run save_string_to_file(failure, "ci_failure.log")
-  prompt "CI failed. Log is in ci_failure.log — fix the code."
-}
 ```
 
 **Bindings:**
-- The first binding (e.g. `failure`) receives the merged stdout+stderr from the failed rule execution, including output from nested scripts and rules.
-- The optional second binding (e.g. `attempt`) receives the attempt number as a string (always `"1"`).
-- Binding names must be valid identifiers. At most two bindings are allowed.
+- The binding (e.g. `failure`) receives the merged stdout+stderr from the failed rule execution, including output from nested scripts and rules.
+- Binding names must be valid identifiers. Exactly one binding is required.
 
 Syntax rules:
-- `recover` must be followed by `(<name>)` or `(<name>, <attempt>)` — bare `recover` or `recover {` without bindings is `E_PARSE`.
+- `recover` must be followed by `(<name>)` — bare `recover` or `recover {` without bindings is `E_PARSE`.
 - All rule arguments must appear inside the call parentheses **before** `recover`.
 - `recover` must be followed by at least one recovery step after the bindings.
 
@@ -323,20 +315,14 @@ run deploy(env) recover (err) {
   run rollback(env)
 }
 
-# Two bindings — failure payload + attempt number (always "1")
-run build() recover (err, attempt) {
-  run save_string_to_file(err, "build_failure.log")
-  log "Build failed. Log saved."
-}
 ```
 
 **Bindings** follow the same rules as `ensure … recover`:
-- The first binding receives the merged stdout+stderr from the failed execution.
-- The optional second binding receives the attempt number as a string (always `"1"`).
-- At most two bindings are allowed.
+- The binding receives the merged stdout+stderr from the failed execution.
+- Exactly one binding is required.
 
 Syntax rules:
-- `recover` must be followed by `(<name>)` or `(<name>, <attempt>)` — bare `recover` or `recover {` without bindings is `E_PARSE`.
+- `recover` must be followed by `(<name>)` — bare `recover` or `recover {` without bindings is `E_PARSE`.
 - All call arguments must appear inside the parentheses **before** `recover`.
 - `recover` must be followed by at least one recovery step after the bindings.
 
@@ -395,11 +381,11 @@ result = prompt text returns "{ type: string, risk: string }"
 
 For a **triple-quoted** prompt, either put `returns "…"` on the line **immediately after** the closing `"""`, or on the **same line** as the closing delimiter: `""" returns "{ … }"` (nothing else may follow the schema string on that line).
 
-When `returns` is present, capture is required. The schema is flat only — allowed types are `string`, `number`, `boolean`. The runtime validates the response: it searches for valid JSON (last non-empty line, fenced code blocks, standalone `{…}`, embedded JSON). On success, the capture variable holds the raw JSON string and each field is accessible via **dot notation** — `${result.type}`, `${result.risk}`. The underscore form (`${result_type}`) also works but dot notation is preferred for clarity. On failure, the step fails with a parse, missing-field, or type error.
+When `returns` is present, capture is required. The schema is flat only — allowed types are `string`, `number`, `boolean`. The runtime validates the response: it searches for valid JSON (last non-empty line, fenced code blocks, standalone `{…}`, embedded JSON). On success, the capture variable holds the raw JSON string and each field is accessible via **dot notation** — `${result.type}`, `${result.risk}`. On failure, the step fails with a parse, missing-field, or type error.
 
-**String values in orchestration:** Bindings in workflows and rules are **strings** end-to-end (including capture, `return`, and `${…}` interpolation). For typed prompts, schema types only constrain the **parsed JSON** from the agent: after validation, each field is coerced with string conversion for storage. For example, `returns "{ n: number }"` with `{"n":42}` stores `42` as the **text** `"42"` in `${x.n}` / `x_n`, not a numeric type. The same applies to `boolean`. Bare `return x.field` in a workflow is sugar for `return "${x.field}"`.
+**String values in orchestration:** Bindings in workflows and rules are **strings** end-to-end (including capture, `return`, and `${…}` interpolation). For typed prompts, schema types only constrain the **parsed JSON** from the agent: after validation, each field is coerced with string conversion for storage. For example, `returns "{ n: number }"` with `{"n":42}` stores `42` as the **text** `"42"` in `${x.n}`, not a numeric type. The same applies to `boolean`. Bare `return x.field` in a workflow is sugar for `return "${x.field}"`.
 
-**Dot notation validation:** The compiler validates `${var.field}` references at compile time. If `var` is not a typed prompt capture, the compiler reports an error. If `field` is not defined in the `returns` schema, the error lists available fields. At runtime, `${result.type}` resolves to the same storage slot as `${result_type}` — both forms are interchangeable.
+**Dot notation validation:** The compiler validates `${var.field}` references at compile time. If `var` is not a typed prompt capture, the compiler reports an error. If `field` is not defined in the `returns` schema, the error lists available fields.
 
 Prompts are not allowed in rules.
 
@@ -432,15 +418,14 @@ Restrictions on const RHS: `$(…)`, `${var:-fallback}`, `${var%%…}`, `${var//
 alerts <- "Build started"
 reports <- ${output}
 results <- run build_message(data)
-results <- run get_summary                  # bare form
-inbox <-                                    # forward: sends first declared parameter
+results <- run get_summary()
 alerts <- """
   Build report for ${project}:
   Status: ${status}
 """
 ```
 
-RHS must be empty (forward), a double-quoted literal, a triple-quoted `"""..."""` multiline block, `${var}`, or `run ref(args)`. Arbitrary shell on the RHS is `E_PARSE`. Combining capture and send (`name = channel <- …`) is `E_PARSE`.
+RHS must be a double-quoted literal, a triple-quoted `"""..."""` multiline block, `${var}`, or `run ref(args)`. An explicit payload is always required — bare `channel <-` without a value is `E_PARSE`. Arbitrary shell on the RHS is `E_PARSE`.
 
 ### Channel Routing
 
@@ -548,26 +533,16 @@ return match status {
 }
 ```
 
-### `wait`
+### Variable Binding
+
+All captures require `const`:
 
 ```jaiph
-wait
+const result = run helper(arg)
+const check = ensure validator(input)
+const answer = prompt "Summarize the report"
+const reply = prompt myVar
 ```
-
-Legacy no-op kept for backwards compatibility. Use `run async` for managed parallel work.
-
-### Assignment Capture
-
-`name = <step>` captures a value without `const`:
-
-```jaiph
-result = run helper(arg)
-check = ensure validator(input)
-answer = prompt "Summarize the report"
-reply = prompt myVar
-```
-
-Prefer `const name = …` for new code.
 
 ## Scripts
 
@@ -693,7 +668,6 @@ Every step produces three distinct outputs — status, value, and logs:
 | `log` / `logerr` | always 0 | empty | event + stdout/stderr |
 | `fail` | non-zero (abort) | empty | message to stderr |
 | `run async` | aggregated | not supported (capture rejected) | async step logs to artifacts |
-| `wait` | no-op | empty | n/a |
 | `const` | same as RHS step | empty (binds local) | n/a |
 
 Key rules:
@@ -710,12 +684,12 @@ Key rules:
 - **Shebang:** A `#!` first line of the file is ignored by the parser.
 - **Import path:** Quoted string in `import "path" as alias`. Missing `.jh` extension is appended automatically.
 - **String quoting:** Jaiph has a four-delimiter system. `"..."` is the single-line string form (double quotes only — single-quoted strings are parse errors). `"""..."""` is the multiline string form; the opening `"""` must end the line, and the closing `"""` must be on its own line. A double-quoted string that spans multiple lines is rejected with a guidance error pointing to triple quotes. Use `\"` for literal double quotes and `\\` for literal backslashes. `${...}` interpolation works in both forms. Script bodies use single backtick (`` `...` ``) for single-line or triple backtick (`` ```...``` ``) for multi-line — normal shell quoting is allowed inside script bodies. Triple backticks in prompt/string context are rejected.
-- **Optional call-site parentheses:** `run ref` and `run ref()` are equivalent at call sites (zero-arg calls). `jaiph format` normalizes to the parenthesized form (`ref()`) for unambiguous output.
+- **Required call-site parentheses:** All call sites require parentheses — `run ref()`, not `run ref`. Bare identifiers without parentheses are `E_PARSE`.
 - **Top-level ordering:** The parser accepts top-level definitions in any order. `jaiph format` normalizes them to a canonical order: imports → config → channels → const declarations → rules → scripts → workflows → tests. See [CLI — `jaiph format`](cli.md#jaiph-format).
 
 ## EBNF (Practical Form)
 
-Informal symbols: `string` = quoted string; `call_ref` = `REF [ "(" [args] ")" ]` — parentheses are optional when passing zero arguments (bare `REF` is equivalent to `REF "(" ")"`); when arguments are present, parentheses are required with comma-separated expressions (each argument may be a quoted string, `${var}`, or a **bare identifier** — see [Call Arguments](#call-arguments-and-positional-parameters)); `double_quoted_string` = single-line double-quoted string supporting `\$`, `\"`, `\\`, `` \` `` escapes and `${identifier}` / `${run …}` / `${ensure …}` interpolation; `triple_quoted_block` = multiline string delimited by `"""` on opening and closing lines, supporting the same interpolation; `prompt_body` = single-line double-quoted string | bare `IDENT` (reference to an existing binding) | triple-quoted block (`""" … """`).
+Informal symbols: `string` = quoted string; `call_ref` = `REF "(" [args] ")"` — parentheses are always required (each argument may be a quoted string, `${var}`, or a **bare identifier** — see [Call Arguments](#call-arguments-and-positional-parameters)); `double_quoted_string` = single-line double-quoted string supporting `\$`, `\"`, `\\`, `` \` `` escapes and `${identifier}` / `${run …}` / `${ensure …}` interpolation; `triple_quoted_block` = multiline string delimited by `"""` on opening and closing lines, supporting the same interpolation; `prompt_body` = single-line double-quoted string | bare `IDENT` (reference to an existing binding) | triple-quoted block (`""" … """`).
 
 ```ebnf
 file            = { top_level } ;
@@ -742,7 +716,7 @@ env_value       = double_quoted_string | triple_quoted_block | bare_value ;
 
 rule_decl       = [ "export" ] "rule" IDENT [ "(" param_list ")" ] "{" { rule_body_step } "}" ;
 rule_body_step  = comment_line | workflow_step ;
-  (* validation rejects prompt, send, wait, const…=prompt, run async,
+  (* validation rejects prompt, send, const…=prompt, run async,
      and run targets that are not scripts *)
 
 script_decl     = "script" IDENT "=" script_rhs ;
@@ -760,8 +734,8 @@ workflow_config = config_block ;
      only agent.* and run.* keys allowed; runtime.* yields E_PARSE *)
 
 workflow_step   = ensure_stmt | run_stmt | run_recover_stmt | run_async_stmt | prompt_stmt | prompt_capture_stmt
-                | const_decl_step | ensure_capture_stmt | run_capture_stmt | return_stmt
-                | fail_stmt | wait_stmt | log_stmt | logerr_stmt | send_stmt
+                | const_decl_step | return_stmt
+                | fail_stmt | log_stmt | logerr_stmt | send_stmt
                 | match_stmt | comment_line ;
   (* route declarations (-> workflow) belong at the top level in channel_decl,
      not inside workflow bodies; a -> inside a body is E_PARSE *)
@@ -773,7 +747,6 @@ const_rhs       = double_quoted_string | triple_quoted_block | bash_value_expr
                 | "match" IDENT "{" { match_arm } "}" ;
 
 fail_stmt       = "fail" ( double_quoted_string | triple_quoted_block ) ;
-wait_stmt       = "wait" ;
 run_async_stmt  = "run" "async" call_ref ;
 return_stmt     = "return" return_value ;
 return_value    = double_quoted_string | triple_quoted_block | "$" IDENT | "${" IDENT "}"
@@ -785,30 +758,27 @@ match_arm       = match_pattern "=>" arm_body ;
 match_pattern   = double_quoted_string | "/" regex_source "/" | "_" ;
 arm_body        = double_quoted_string | "$" IDENT | "${" IDENT "}" ;
 
-send_stmt       = IDENT "<-" [ send_rhs ] ;
+send_stmt       = IDENT "<-" send_rhs ;
 send_rhs        = double_quoted_string | triple_quoted_block | "${" IDENT "}" | "run" call_ref | REF ;
 
 log_stmt        = "log" ( double_quoted_string | triple_quoted_block | IDENT ) ;
 logerr_stmt     = "logerr" ( double_quoted_string | triple_quoted_block | IDENT ) ;
 
 ensure_stmt     = "ensure" call_ref [ "recover" recover_bindings recover_body ] ;
-ensure_capture_stmt = IDENT "=" "ensure" call_ref [ "recover" recover_bindings recover_body ] ;
 run_recover_stmt   = "run" call_ref "recover" recover_bindings recover_body ;
-run_capture_stmt   = IDENT "=" "run" ( call_ref | inline_script ) ;
 run_stmt        = "run" ( call_ref | inline_script ) ;
-call_ref        = REF "(" [ call_args ] ")" | REF ;  (* bare REF = zero-arg call; parens required when args present *)
+call_ref        = REF "(" [ call_args ] ")" ;  (* parentheses always required *)
 inline_script   = backtick_script_body "(" [ call_args ] ")" | fenced_script_block "(" [ call_args ] ")" ;
 prompt_body     = double_quoted_string | IDENT | triple_quoted_block ;
 triple_quoted_block = "\"\"\"" newline { body_line newline } "\"\"\"" ;
 prompt_stmt     = "prompt" prompt_body [ returns_schema ] ;
-prompt_capture_stmt = IDENT "=" "prompt" prompt_body [ returns_schema ] ;
 returns_schema  = "returns" double_quoted_string ;
 
-recover_bindings = "(" IDENT [ "," IDENT ] ")" ;  (* 1st = failure payload, optional 2nd = attempt number *)
+recover_bindings = "(" IDENT ")" ;  (* failure payload *)
 recover_body    = single_workflow_stmt | "{" { workflow_step } "}" ;
 single_workflow_stmt = ensure_stmt | run_stmt | run_recover_stmt | prompt_stmt | prompt_capture_stmt
-                | const_decl_step | run_capture_stmt | ensure_capture_stmt
-                | return_stmt | fail_stmt | wait_stmt | log_stmt | logerr_stmt
+                | const_decl_step
+                | return_stmt | fail_stmt | log_stmt | logerr_stmt
                 | send_stmt ;
 ```
 
@@ -846,7 +816,7 @@ At runtime, the Node workflow runtime interprets the AST directly:
 - **Config:** Precedence chain: environment → workflow-level → module-level → defaults.
 - **Script isolation:** Managed subprocesses with only essential variables. Module-scoped variables not visible.
 - **Prompt + schema:** JSON extraction and schema validation via the JS kernel. Exit codes: 0=ok, 1=parse error, 2=missing field, 3=type mismatch.
-- **ensure/run … recover:** On failure, the recovery body runs **once** (like a catch clause). There is no retry loop. Requires explicit bindings: `recover (failure) { … }` or `recover (failure, attempt) { … }`. The first binding gets the merged stdout+stderr from the failed execution; the optional second binding gets the attempt number (always `"1"`).
+- **ensure/run … recover:** On failure, the recovery body runs **once** (like a catch clause). There is no retry loop. Requires explicit bindings: `recover (failure) { … }`. The binding gets the merged stdout+stderr from the failed execution.
 - **Recursion safety:** There is a hard recursion depth limit of 256. Exceeding it produces a runtime error.
 - **Assignment capture:** Rules and workflows use explicit `return "…"`. Scripts use stdout.
 - **`run async`:** Promise-based concurrency. Implicit join via `Promise.allSettled` before workflow returns. Failures aggregated.

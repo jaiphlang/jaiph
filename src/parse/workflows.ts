@@ -292,11 +292,7 @@ export function parseWorkflowBlock(
     }
 
     if (inner === "wait") {
-      workflow.steps.push({
-        type: "wait",
-        loc: { line: innerNo, col: innerRaw.indexOf("wait") + 1 },
-      });
-      continue;
+      fail(filePath, '"wait" has been removed from the language', innerNo, innerRaw.indexOf("wait") + 1);
     }
 
     const promptAssignMatch = inner.match(
@@ -330,71 +326,14 @@ export function parseWorkflowBlock(
     ) {
       const captureName = genericAssignMatch[1];
       const rest = genericAssignMatch[2].trim();
-      if (matchSendOperator(rest)) {
-        fail(filePath, "E_PARSE capture and send cannot be combined; use separate steps", innerNo);
-      }
-      if (rest.startsWith("ensure ")) {
-        const result = parseEnsureStep(
-          filePath, lines, idx, innerNo, innerRaw,
-          rest.slice("ensure ".length).trim(), captureName,
+      if (rest.startsWith("run ") || rest.startsWith("ensure ")) {
+        fail(
+          filePath,
+          `assignment without "const" is no longer supported; use "const ${captureName} = ${rest}"`,
+          innerNo,
+          innerRaw.indexOf(captureName) + 1,
         );
-        idx = result.nextIdx;
-        workflow.steps.push(result.step);
-        continue;
       }
-      if (rest.startsWith("run async ")) {
-        fail(filePath, "capture is not supported with run async; use separate steps", innerNo, innerRaw.indexOf("run") + 1);
-      }
-      if (rest.startsWith("run ")) {
-        const runBody = rest.slice("run ".length).trim();
-        if (runBody.startsWith("`")) {
-          const result = parseAnonymousInlineScript(filePath, lines, idx, runBody, innerNo, innerRaw.indexOf("run") + 1);
-          workflow.steps.push({
-            type: "run_inline_script",
-            body: result.body,
-            ...(result.lang ? { lang: result.lang } : {}),
-            args: result.args,
-            ...(result.bareIdentifierArgs ? { bareIdentifierArgs: result.bareIdentifierArgs } : {}),
-            captureName,
-            loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
-          });
-          idx = result.nextLineIdx - 1;
-          continue;
-        }
-        if (runBody.startsWith("script(") || runBody.startsWith("script (")) {
-          fail(filePath, 'inline script syntax has changed: use run `body`(args) instead of run script(args) "body"', innerNo);
-        }
-        // Check for capture = run ... recover
-        const recoverResult = parseRunRecoverStep(filePath, lines, idx, innerNo, innerRaw, runBody, captureName);
-        if (recoverResult) {
-          workflow.steps.push(recoverResult.step);
-          idx = recoverResult.nextIdx;
-          continue;
-        }
-        const call = parseCallRef(runBody);
-        if (!call) {
-          fail(filePath, "run must target a valid reference: run ref or run ref(args)", innerNo);
-        }
-        rejectTrailingContent(filePath, innerNo, "run", call.rest);
-        workflow.steps.push({
-          type: "run",
-          workflow: {
-            value: call.ref,
-            loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
-          },
-          args: call.args,
-          ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
-          captureName,
-        });
-        continue;
-      }
-      workflow.steps.push({
-        type: "shell",
-        command: rest,
-        loc: { line: innerNo, col: innerRaw.indexOf(rest) + 1 },
-        captureName,
-      });
-      continue;
     }
 
     if (inner.startsWith("ensure ")) {
@@ -414,7 +353,7 @@ export function parseWorkflowBlock(
       }
       const call = parseCallRef(runBody);
       if (!call) {
-        fail(filePath, "run async must target a valid reference: run async ref or run async ref(args)", innerNo);
+        fail(filePath, "run async must target a valid reference: run async ref() or run async ref(args) — parentheses are required", innerNo);
       }
       rejectTrailingContent(filePath, innerNo, "run async", call.rest);
       workflow.steps.push({
@@ -457,7 +396,7 @@ export function parseWorkflowBlock(
       }
       const call = parseCallRef(runBody);
       if (!call) {
-        fail(filePath, "run must target a valid reference: run ref or run ref(args)", innerNo);
+        fail(filePath, "run must target a valid reference: run ref() or run ref(args) — parentheses are required", innerNo);
       }
       rejectTrailingContent(filePath, innerNo, "run", call.rest);
       workflow.steps.push({

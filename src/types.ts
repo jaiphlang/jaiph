@@ -55,7 +55,6 @@ export type ConstRhs =
 
 /** RHS of `channel <- …` */
 export type SendRhsDef =
-  | { kind: "forward" }
   | { kind: "literal"; token: string }
   | { kind: "var"; bash: string }
   | { kind: "run"; ref: WorkflowRefDef; args?: string; bareIdentifierArgs?: string[] }
@@ -113,8 +112,8 @@ export type WorkflowStepDef =
       captureName?: string;
       /** When set, transpiles to for/seq bounded retry loop (break on success, exit 1 after max). */
       recover?:
-        | { single: WorkflowStepDef; bindings: { failure: string; attempt?: string } }
-        | { block: WorkflowStepDef[]; bindings: { failure: string; attempt?: string } };
+        | { single: WorkflowStepDef; bindings: { failure: string } }
+        | { block: WorkflowStepDef[]; bindings: { failure: string } };
     }
   | {
       type: "run";
@@ -127,8 +126,8 @@ export type WorkflowStepDef =
       async?: boolean;
       /** When set, catch failure and run recovery body once. */
       recover?:
-        | { single: WorkflowStepDef; bindings: { failure: string; attempt?: string } }
-        | { block: WorkflowStepDef[]; bindings: { failure: string; attempt?: string } };
+        | { single: WorkflowStepDef; bindings: { failure: string } }
+        | { block: WorkflowStepDef[]; bindings: { failure: string } };
     }
   | {
       type: "prompt";
@@ -157,10 +156,6 @@ export type WorkflowStepDef =
       type: "const";
       name: string;
       value: ConstRhs;
-      loc: SourceLoc;
-    }
-  | {
-      type: "wait";
       loc: SourceLoc;
     }
   | {

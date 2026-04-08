@@ -228,7 +228,7 @@ workflow default() {
 Calls a workflow or script (in a workflow) or a script only (in a rule).
 
 ```jaiph
-run setup_env
+run setup_env()
 run lib.build_project(task)
 const output = run transform()
 ```
@@ -254,7 +254,7 @@ Constraints: workflow-only (rejected in rules), capture not supported.
 Runs a rule and succeeds if its exit code is 0.
 
 ```jaiph
-ensure check_deps
+ensure check_deps()
 ensure lib.validate(input)
 const result = ensure validator(path)
 ```
@@ -292,7 +292,7 @@ Sends text to the configured agent backend. Three body forms:
 
 ```jaiph
 prompt "Review the code for security issues"
-answer = prompt "Summarize the report"
+const answer = prompt "Summarize the report"
 ```
 
 **Identifier reference** (existing binding):
@@ -311,12 +311,12 @@ Analyze the following: ${input}
 """
 ```
 
-All three forms work with capture (`name = prompt …` or `const name = prompt …`).
+All three forms work with capture (`const name = prompt …`).
 
 **Typed prompt** — ask the agent for structured JSON with `returns`:
 
 ```jaiph
-result = prompt "Analyze this code" returns "{ type: string, risk: string }"
+const result = prompt "Analyze this code" returns "{ type: string, risk: string }"
 log "Type: ${result.type}, Risk: ${result.risk}"
 ```
 
@@ -445,7 +445,7 @@ Embed a shell command directly in a step without a named `script` definition. Si
 
 ```jaiph
 run `echo hello`()
-x = run `echo captured`()
+const x = run `echo captured`()
 const y = run `date +%s`()
 ```
 

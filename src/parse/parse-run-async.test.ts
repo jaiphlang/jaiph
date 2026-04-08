@@ -70,6 +70,6 @@ test("parse: capture + run async is rejected", () => {
   ].join("\n");
   assert.throws(
     () => parsejaiph(src, "test.jh"),
-    /capture is not supported with run async/,
+    /assignment without "const" is no longer supported/,
   );
 });

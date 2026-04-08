@@ -115,7 +115,7 @@ test("ACCEPTANCE: invalid workflow reference shape fails at parse stage", () => 
       ].join("\n"),
     );
 
-    assert.throws(() => buildScripts(root, join(root, "out")), /E_PARSE unexpected content after run call/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /E_PARSE.*run must target a valid reference/);
   });
 });
 
@@ -669,7 +669,9 @@ test("ACCEPTANCE: capture + send is parse error", () => {
         "",
       ].join("\n"),
     );
-    assert.throws(() => buildScripts(root, join(root, "out")), /capture and send cannot be combined/);
+    // "name = channel <- echo hello" is treated as an inline shell step,
+    // which is rejected by the inline-shell validation pass.
+    assert.throws(() => buildScripts(root, join(root, "out")), /inline shell steps are forbidden/);
   });
 });
 
@@ -696,7 +698,7 @@ test("ACCEPTANCE: inbox.jh fixture builds successfully", () => {
         "",
         "workflow analyst(message, chan, sender) {",
         '  run write_findings_file(message)',
-        '  summary = run summarize_findings()',
+        '  const summary = run summarize_findings()',
         '  summary <- "${summary}"',
         "}",
         "",

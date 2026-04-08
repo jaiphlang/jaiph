@@ -74,7 +74,7 @@ echo "got: $1"
 ```
 
 workflow default() {
-  x = run `echo captured-value`()
+  const x = run `echo captured-value`()
   run show(x)
 }
 EOF

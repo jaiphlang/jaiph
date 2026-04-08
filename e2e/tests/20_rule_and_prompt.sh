@@ -26,7 +26,7 @@ echo "e2e-rule-pass-done"
 ```
 workflow default() {
   ensure check_passes()
-  msg = run done_impl()
+  const msg = run done_impl()
   return "${msg}"
 }
 EOF

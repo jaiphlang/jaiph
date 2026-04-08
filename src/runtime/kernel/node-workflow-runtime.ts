@@ -84,8 +84,15 @@ function nowIso(): string {
 function interpolate(input: string, vars: Map<string, string>, env?: NodeJS.ProcessEnv): string {
   const lookup = (key: string): string => vars.get(key) ?? env?.[key] ?? "";
   return input.replace(/\$\{([a-zA-Z_][a-zA-Z0-9_]*)(?:\.([a-zA-Z_][a-zA-Z0-9_]*))?\}/g, (_m, base, field) => {
-    const key = field ? `${base}_${field}` : String(base);
-    return lookup(key);
+    if (!field) return lookup(String(base));
+    // Dot field access: parse JSON stored in the base variable and extract the field.
+    const raw = lookup(String(base));
+    try {
+      const obj = JSON.parse(raw);
+      return obj != null && typeof obj === "object" && field in obj ? String(obj[field]) : "";
+    } catch {
+      return "";
+    }
   });
 }
 
@@ -636,9 +643,6 @@ export class NodeWorkflowRuntime {
         const message = failIr.value;
         return this.mergeStepResult(accOut, accErr, { status: 1, output: "", error: message });
       }
-      if (step.type === "wait") {
-        continue;
-      }
       if (step.type === "shell") {
         return this.mergeStepResult(accOut, accErr, {
           status: 1,
@@ -687,10 +691,6 @@ export class NodeWorkflowRuntime {
           const runValue = await this.executeRunRef(scope, step.rhs.ref.value, step.rhs.args ?? "");
           if (runValue.status !== 0) return this.mergeStepResult(accOut, accErr, runValue);
           payload = runValue.returnValue ?? runValue.output.trim();
-        } else if (step.rhs.kind === "forward") {
-          // Forward sends the first declared parameter value (the message content in inbox dispatch).
-          const firstParam = scope.declaredParamNames?.[0];
-          payload = (firstParam ? scope.vars.get(firstParam) : undefined) ?? "";
         } else {
           return this.mergeStepResult(accOut, accErr, {
             status: 1,
@@ -908,9 +908,6 @@ export class NodeWorkflowRuntime {
               });
             }
             scope.vars.set(step.name, extracted.source);
-            for (const field of schemaFields) {
-              scope.vars.set(`${step.name}_${field.name}`, String(extracted.obj[field.name]));
-            }
           } else {
             scope.vars.set(step.name, result.final);
           }
@@ -940,9 +937,6 @@ export class NodeWorkflowRuntime {
           const recoverVars = new Map(scope.vars);
           const recoverPayload = `${runResult.output}${runResult.error}`;
           recoverVars.set(step.recover.bindings.failure, recoverPayload);
-          if (step.recover.bindings.attempt) {
-            recoverVars.set(step.recover.bindings.attempt, "1");
-          }
           const rr = await this.executeSteps({ ...scope, vars: recoverVars }, recoverSteps);
           if (rr.status !== 0 || rr.returnValue !== undefined) return this.mergeStepResult(accOut, accErr, rr);
         } else {
@@ -1173,9 +1167,6 @@ export class NodeWorkflowRuntime {
     const recoverVars = new Map(scope.vars);
     const recoverPayload = `${res.output}${res.error}`;
     recoverVars.set(recover.bindings.failure, recoverPayload);
-    if (recover.bindings.attempt) {
-      recoverVars.set(recover.bindings.attempt, "1");
-    }
     const rr = await this.executeSteps({ ...scope, vars: recoverVars }, recoverSteps);
     if (rr.status !== 0) return rr;
     if (rr.returnValue !== undefined) return { ...rr, recoverReturn: true };

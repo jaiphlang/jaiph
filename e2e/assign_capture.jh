@@ -11,7 +11,7 @@ rule echo_line() {
   return "captured-value"
 }
 workflow default() {
-  response = ensure echo_line()
-  out = run shell_capture()
+  const response = ensure echo_line()
+  const out = run shell_capture()
   run format_output(response, out)
 }
