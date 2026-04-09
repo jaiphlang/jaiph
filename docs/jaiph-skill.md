@@ -42,7 +42,7 @@ Use this loop whenever you add or change Jaiph workflows so failures surface bef
 
 1. **Preflight** — Run the project’s readiness checks if they exist (often `jaiph run .jaiph/readiness.jh` or a named preflight workflow). When the repo ships native tests (`*.test.jh`), run `jaiph test` before large edits when practical.
 2. **Implement** — Edit `.jh` modules using only constructs described in [Grammar](grammar.md); keep managed-call rules (`ensure` for rules, `run` for workflows and scripts); keep bash inside **`script`** bodies only (no raw shell in workflow/rule bodies).
-3. **Format** — Run `jaiph format <file.jh ...>` on all authored or modified `.jh` files before committing. This normalizes whitespace, indentation, and definition order to the canonical style. Use `jaiph format --check <file.jh ...>` to verify formatting without writing (non-zero exit on drift — useful in CI).
+3. **Format** — Run `jaiph format <file.jh ...>` on all authored or modified `.jh` files before committing. This normalizes whitespace, indentation, and top-level ordering (imports, config, and channels hoisted to the top; everything else kept in source order). Use `jaiph format --check <file.jh ...>` to verify formatting without writing (non-zero exit on drift — useful in CI).
 4. **Verify** — Run `jaiph test` (whole workspace or a focused path) and any verification workflow the repo defines (commonly `jaiph run .jaiph/verification.jh`). Fix failures you introduce.
 5. **Inspect (optional)** — Use `jaiph report --workspace .` to browse `.jaiph/runs` when you need the reporting UI or raw step logs instead of only the terminal tree.
 
@@ -116,7 +116,7 @@ Rules:
 - Put expensive checks after fast checks.
 - Include clear prompts with concrete acceptance criteria.
 - Reuse rules via `ensure`; reuse workflows and scripts via `run`.
-- **Always run `jaiph format` on `.jh` files you create or modify before committing.** This ensures canonical whitespace, indentation, and definition order. In CI, use `jaiph format --check` to gate on formatting.
+- **Always run `jaiph format` on `.jh` files you create or modify before committing.** This ensures canonical whitespace, indentation, and top-level ordering. In CI, use `jaiph format --check` to gate on formatting.
 - Use only syntax described in [jaiph.org](https://jaiph.org) and [Grammar](grammar.md). For advanced constructs (e.g. `config` block, `export`, prompt capture), see the grammar. For testing workflows, see [Testing](testing.md) (`expect_contain`, `expect_not_contain`, `expect_equal`, mocks).
 
 ## Suggested Starter Layout

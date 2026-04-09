@@ -727,7 +727,7 @@ Key rules:
 - **Import path:** Quoted string in `import "path" as alias`. Missing `.jh` extension is appended automatically.
 - **String quoting:** Jaiph has a four-delimiter system. `"..."` is the single-line string form (double quotes only — single-quoted strings are parse errors). `"""..."""` is the multiline string form; the opening `"""` must end the line, and the closing `"""` must be on its own line. A double-quoted string that spans multiple lines is rejected with a guidance error pointing to triple quotes. Use `\"` for literal double quotes and `\\` for literal backslashes. `${...}` interpolation works in both forms. Script bodies use single backtick (`` `...` ``) for single-line or triple backtick (`` ```...``` ``) for multi-line — normal shell quoting is allowed inside script bodies. Triple backticks in prompt/string context are rejected.
 - **Required call-site parentheses:** All call sites require parentheses — `run ref()`, not `run ref`. Bare identifiers without parentheses are `E_PARSE`.
-- **Top-level ordering:** The parser accepts top-level definitions in any order. `jaiph format` normalizes them to a canonical order: imports → config → channels → const declarations → rules → scripts → workflows → tests. See [CLI — `jaiph format`](cli.md#jaiph-format).
+- **Top-level ordering:** The parser accepts top-level definitions in any order. `jaiph format` hoists `import`, `config`, and `channel` declarations to the top (in that order), but preserves the source-file order of all other definitions (`const`, `rule`, `script`, `workflow`, `test`). Comments before a hoisted construct move with it; comments before non-hoisted definitions stay in place. See [CLI — `jaiph format`](cli.md#jaiph-format).
 
 ## EBNF (Practical Form)
 

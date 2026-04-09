@@ -72,7 +72,13 @@ export function emitModule(mod: jaiphModule, opts: EmitOptions = DEFAULT_OPTIONS
 
   for (const item of topLevelOrderForEmit(mod)) {
     if (item.kind === "env") {
-      sections.push(emitEnvDecl(mod.envDecls![item.index]).join("\n"));
+      const env = mod.envDecls![item.index];
+      const envLines: string[] = [];
+      if (env.comments?.length) {
+        envLines.push(...emitComments(env.comments));
+      }
+      envLines.push(...emitEnvDecl(env));
+      sections.push(envLines.join("\n"));
       continue;
     }
     if (item.kind === "rule") {

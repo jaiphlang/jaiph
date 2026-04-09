@@ -72,7 +72,7 @@ Strings and scripts are structurally distinct and non-interchangeable — using 
 
 ## Module Structure
 
-A `.jh` file is a module. Modules contain top-level declarations in any order: imports, config, channels, constants, rules, scripts, and workflows. `jaiph format` normalizes them to a canonical order.
+A `.jh` file is a module. Modules contain top-level declarations in any order: imports, config, channels, constants, rules, scripts, and workflows. `jaiph format` hoists imports, config, and channels to the top but preserves the relative order of everything else.
 
 ### Imports and Exports
 
