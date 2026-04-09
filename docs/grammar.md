@@ -54,7 +54,9 @@ Jaiph enforces a strict boundary between orchestration and execution. Workflows 
 
 ## Imports and Exports
 
-`import "path" as alias` loads another module. `export rule` / `export workflow` / `export script` marks a declaration as public. In practice, any rule, workflow, or script in an imported module can be referenced — export is not enforced at reference time.
+`import "path" as alias` loads another module. `export rule` / `export workflow` / `export script` marks a declaration as public.
+
+**Export visibility.** If a module contains at least one `export` declaration, only exported names are reachable through the import alias — referencing a non-exported symbol produces `E_VALIDATE`: `"<name>" is not exported from module "<alias>"`. Modules with zero `export` declarations retain legacy behavior: all top-level definitions are implicitly public.
 
 ```jaiph
 import "tools/security.jh" as security

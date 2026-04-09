@@ -312,3 +312,83 @@ test("validateRef: bare_send_rhs rejects unknown import alias", () => {
     /unknown import alias "bad"/,
   );
 });
+
+// --- export visibility ---
+
+test("validateRef: rejects reference to non-exported symbol in module with exports", () => {
+  const importedMod = minimalModule({
+    filePath: "lib.jh",
+    exports: ["public_rule"],
+    rules: [
+      { name: "public_rule", comments: [], params: [], steps: [], loc: { line: 1, col: 1 } },
+      { name: "private_rule", comments: [], params: [], steps: [], loc: { line: 2, col: 1 } },
+    ],
+  });
+  const mod = minimalModule();
+  const ctx = makeCtx({
+    importsByAlias: new Map([["lib", "lib.jh"]]),
+    importedAstCache: new Map([["lib.jh", importedMod]]),
+  });
+  assert.throws(
+    () => validateRef(ref("lib.private_rule"), mod, ctx, { mode: "expect", expect: RULE_REF_EXPECT }),
+    /"private_rule" is not exported from module "lib"/,
+  );
+});
+
+test("validateRef: accepts reference to exported symbol in module with exports", () => {
+  const importedMod = minimalModule({
+    filePath: "lib.jh",
+    exports: ["public_rule"],
+    rules: [
+      { name: "public_rule", comments: [], params: [], steps: [], loc: { line: 1, col: 1 } },
+      { name: "private_rule", comments: [], params: [], steps: [], loc: { line: 2, col: 1 } },
+    ],
+  });
+  const mod = minimalModule();
+  const ctx = makeCtx({
+    importsByAlias: new Map([["lib", "lib.jh"]]),
+    importedAstCache: new Map([["lib.jh", importedMod]]),
+  });
+  validateRef(ref("lib.public_rule"), mod, ctx, { mode: "expect", expect: RULE_REF_EXPECT });
+});
+
+test("validateRef: module with zero exports allows all references (legacy)", () => {
+  const importedMod = minimalModule({
+    filePath: "lib.jh",
+    exports: [],
+    rules: [
+      { name: "any_rule", comments: [], params: [], steps: [], loc: { line: 1, col: 1 } },
+    ],
+  });
+  const mod = minimalModule();
+  const ctx = makeCtx({
+    importsByAlias: new Map([["lib", "lib.jh"]]),
+    importedAstCache: new Map([["lib.jh", importedMod]]),
+  });
+  validateRef(ref("lib.any_rule"), mod, ctx, { mode: "expect", expect: RULE_REF_EXPECT });
+});
+
+test("validateRef: bare_send_rhs rejects non-exported symbol before kind check", () => {
+  const importedMod = minimalModule({
+    filePath: "lib.jh",
+    exports: ["exported_wf"],
+    workflows: [
+      { name: "exported_wf", comments: [], params: [], steps: [], loc: { line: 1, col: 1 } },
+      { name: "private_wf", comments: [], params: [], steps: [], loc: { line: 2, col: 1 } },
+    ],
+  });
+  const mod = minimalModule();
+  const ctx = makeCtx({
+    importsByAlias: new Map([["lib", "lib.jh"]]),
+    importedAstCache: new Map([["lib.jh", importedMod]]),
+  });
+  assert.throws(
+    () =>
+      validateRef(ref("lib.private_wf"), mod, ctx, {
+        mode: "bare_send_rhs",
+        bareSend: BARE_SEND_REF_MSG,
+        lookupImportedKind: () => "workflow",
+      }),
+    /"private_wf" is not exported from module "lib"/,
+  );
+});

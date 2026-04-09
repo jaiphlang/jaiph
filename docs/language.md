@@ -92,6 +92,18 @@ export workflow default() {
 
 Imported symbols use dot notation: `alias.name`. The `.jh` extension is appended automatically if omitted. Import aliases must be unique within a module.
 
+#### Export Visibility
+
+If a module contains at least one `export` declaration, it has an **explicit API surface**: only exported names can be referenced through the import alias. Referencing a symbol that exists in the module but is not exported produces a compile-time error:
+
+```
+E_VALIDATE: "private_rule" is not exported from module "lib"
+```
+
+Modules with **zero** `export` declarations retain legacy behavior — every top-level rule, script, and workflow is implicitly public. This means existing projects that don't use `export` continue to work without changes.
+
+The check applies uniformly to all qualified-reference positions: `run`, `ensure`, channel route targets, `send` RHS, and test mocks.
+
 ### Library Imports
 
 Import paths resolve relative to the importing file first. If no file is found and the path contains a `/`, the resolver falls back to project-scoped libraries under `.jaiph/libs/`:

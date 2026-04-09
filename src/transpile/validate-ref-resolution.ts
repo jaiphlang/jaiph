@@ -135,6 +135,15 @@ export function validateRef(
     if (!ctx.importsByAlias.has(alias)) {
       throw jaiphError(fp, line, col, "E_VALIDATE", msg.unknownImportAlias(alias, ref.value));
     }
+    // Export visibility: if module declares explicit exports, non-exported symbols are hidden.
+    const importedFileBare = ctx.importsByAlias.get(alias)!;
+    const importedAstBare = ctx.importedAstCache.get(importedFileBare);
+    if (importedAstBare && importedAstBare.exports.length > 0
+      && !importedAstBare.exports.includes(importedName)
+      && lookupKind(importedAstBare, importedName) !== undefined) {
+      throw jaiphError(fp, line, col, "E_VALIDATE",
+        `"${importedName}" is not exported from module "${alias}"`);
+    }
     const ik = spec.lookupImportedKind(alias, importedName);
     if (ik === "workflow") {
       throw jaiphError(fp, line, col, "E_VALIDATE", msg.wrongWorkflowImported(ref.value));
@@ -167,6 +176,16 @@ export function validateRef(
     throw jaiphError(fp, line, col, "E_VALIDATE", expectSpec.unknownImportAlias(alias, ref.value));
   }
   const importedAst = ctx.importedAstCache.get(importedFile)!;
+
+  // Export visibility: if module declares explicit exports, only those are reachable.
+  if (importedAst.exports.length > 0 && !importedAst.exports.includes(importedName)) {
+    const exists = lookupKind(importedAst, importedName) !== undefined;
+    if (exists) {
+      throw jaiphError(fp, line, col, "E_VALIDATE",
+        `"${importedName}" is not exported from module "${alias}"`);
+    }
+  }
+
   if (importedHasAllowedKind(importedAst, importedName, expectSpec.allowedKinds)) return;
 
   const ik = lookupKind(importedAst, importedName);
