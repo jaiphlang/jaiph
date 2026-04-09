@@ -12,27 +12,6 @@ Process rules:
 
 ---
 
-## Compiler — enforce `export` for imported qualified references #dev-ready
-
-**Goal**  
-Cross-module references (`import "…" as lib` then `lib.some_name` in `run` / `ensure` / channel routes / etc.) must respect the imported module’s API surface: if the imported file uses the `export` keyword on any rule, script, or workflow, then **only** names listed in that module’s `exports` array may be referenced through the import alias. A reference to a symbol that exists in the module but is not exported must fail validation (`E_VALIDATE`) with a clear message.
-
-**Today**  
-Parsing records `export` in `jaiphModule.exports` (`src/parser.ts`), and the formatter emits it (`src/format/emit.ts`). Reference resolution only checks that the short name exists on the imported AST (`importedHasAllowedKind` in `src/transpile/validate-ref-resolution.ts`); it does **not** consult `exports`.
-
-**Design notes**
-
-- **Modules with no `export` lines** (`exports` is `[]`): keep current behavior — treat every top-level rule / script / workflow as importable — so existing projects keep working without churn.
-- **Modules with at least one `export`**: switch to **explicit surface** — a qualified ref `alias.name` is valid only if `name` is in `importedModule.exports` (and still exists and has the right kind for the call site). Symbols that are only used internally in that file stay private to importers.
-- Apply the same rule everywhere split refs are validated (run targets, ensure targets, mocks in tests, channel `->` routes if they use `alias.workflow`, etc. — audit `validateReferences` / `validateRef` call graph).
-
-**Acceptance criteria**
-
-- Unit tests: importer references non-exported symbol in a module that has some `export` → `E_VALIDATE`; same symbol works when exported; module with zero exports still allows references (legacy).
-- Docs or changelog note describing explicit-export modules vs legacy “all public” modules.
-
----
-
 ## Runtime — credential proxy for Docker mode
 
 **Goal**  
