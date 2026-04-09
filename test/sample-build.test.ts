@@ -4,7 +4,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { buildScripts, walkTestFiles } from "../src/transpiler";
+import { buildScripts, resolveImportPath, walkTestFiles } from "../src/transpiler";
 import { parsejaiph } from "../src/parser";
 import { buildRunTreeRows } from "../src/cli";
 import { formatRunningBottomLine } from "../src/cli/run/progress";
@@ -129,13 +129,13 @@ test(".jaiph/main.jh imports only existing modules", () => {
 
   const ast = parsejaiph(readFileSync(mainJh, "utf8"), mainJh);
   for (const imp of ast.imports) {
-    const resolved = join(dirname(mainJh), imp.path);
+    const resolved = resolveImportPath(mainJh, imp.path, process.cwd());
     assert.ok(existsSync(resolved), `import "${imp.alias}" resolves to missing file "${resolved}"`);
   }
 
   const outDir = join(jaiphDir, ".tmp-build-out");
   try {
-    assert.doesNotThrow(() => buildScripts(jaiphDir, outDir));
+    assert.doesNotThrow(() => buildScripts(jaiphDir, outDir, process.cwd()));
   } finally {
     rmSync(outDir, { recursive: true, force: true });
   }

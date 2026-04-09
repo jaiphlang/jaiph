@@ -1,0 +1,55 @@
+{
+  "channels": [],
+  "exports": [],
+  "imports": [],
+  "rules": [],
+  "scripts": [],
+  "topLevelOrder": [
+    {
+      "index": 0,
+      "kind": "workflow"
+    }
+  ],
+  "workflows": [
+    {
+      "comments": [],
+      "name": "default",
+      "params": [],
+      "steps": [
+        {
+          "name": "input",
+          "type": "const",
+          "value": {
+            "bashRhs": "\"hello\"",
+            "kind": "expr"
+          }
+        },
+        {
+          "managed": {
+            "kind": "match",
+            "match": {
+              "arms": [
+                {
+                  "body": "\"greeting line one\ngreeting line two\"",
+                  "pattern": {
+                    "kind": "string_literal",
+                    "value": "hello"
+                  }
+                },
+                {
+                  "body": "\"unknown\"",
+                  "pattern": {
+                    "kind": "wildcard"
+                  }
+                }
+              ],
+              "subject": "input"
+            }
+          },
+          "type": "return",
+          "value": "__match__"
+        }
+      ]
+    }
+  ]
+}

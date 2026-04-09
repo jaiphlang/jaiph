@@ -261,6 +261,21 @@ function emitMatchPattern(p: import("../types").MatchPatternDef): string {
   return "_";
 }
 
+function emitMatchArm(arm: import("../types").MatchArmDef, armIndent: string, bodyIndent: string): string[] {
+  const patStr = emitMatchPattern(arm.pattern);
+  // Multiline body (triple-quoted): body stored as "line1\nline2" with outer quotes and actual newlines.
+  if (arm.body.startsWith('"') && arm.body.endsWith('"') && arm.body.includes("\n")) {
+    const inner = arm.body.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+    const lines: string[] = [`${armIndent}${patStr} => """`];
+    for (const bl of inner.split("\n")) {
+      lines.push(bl);
+    }
+    lines.push(`${bodyIndent}"""`);
+    return lines;
+  }
+  return [`${armIndent}${patStr} => ${arm.body}`];
+}
+
 function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): string[] {
   const lines: string[] = [];
   const ci = currentIndent;
@@ -388,7 +403,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
       // Handle match expression arms and closing brace
       if (step.value.kind === "match_expr") {
         for (const arm of step.value.match.arms) {
-          lines.push(`${ci}${pad}${emitMatchPattern(arm.pattern)} => ${arm.body}`);
+          lines.push(...emitMatchArm(arm, `${ci}${pad}`, ci));
         }
         lines.push(`${ci}}`);
       }
@@ -451,7 +466,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
         } else if (step.managed.kind === "match") {
           lines.push(`${ci}return match ${step.managed.match.subject} {`);
           for (const arm of step.managed.match.arms) {
-            lines.push(`${ci}${pad}${emitMatchPattern(arm.pattern)} => ${arm.body}`);
+            lines.push(...emitMatchArm(arm, `${ci}${pad}`, ci));
           }
           lines.push(`${ci}}`);
         }
@@ -487,7 +502,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
     case "match": {
       lines.push(`${ci}match ${step.expr.subject} {`);
       for (const arm of step.expr.arms) {
-        lines.push(`${ci}${pad}${emitMatchPattern(arm.pattern)} => ${arm.body}`);
+        lines.push(...emitMatchArm(arm, `${ci}${pad}`, ci));
       }
       lines.push(`${ci}}`);
       break;
@@ -570,7 +585,7 @@ function emitTestStep(step: TestStepDef, pad: string): string[] {
     case "test_mock_prompt_block": {
       const lines = [`${pad}mock prompt {`];
       for (const arm of step.arms) {
-        lines.push(`${pad}${pad}${emitMatchPattern(arm.pattern)} => ${arm.body}`);
+        lines.push(...emitMatchArm(arm, `${pad}${pad}`, pad));
       }
       lines.push(`${pad}}`);
       return lines;

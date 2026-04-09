@@ -1,0 +1,10 @@
+workflow default() {
+  const input = "hello"
+  return match input {
+    "hello" => """
+greeting line one
+greeting line two
+    """
+    _ => "unknown"
+  }
+}

@@ -441,6 +441,20 @@ match status {
 
 Patterns can be string literals (exact equality), regex (`/pattern/`), or `_` (default). Exactly one default arm is required.
 
+**Arm bodies** — the value expression after `=>`. Allowed: string literals (`"…"` or `"""…"""`), variable references, `fail "…"`, `run ref(…)`, `ensure ref(…)`. The `return` keyword inside an arm body is forbidden — use `return match x { … }` at the outer level. Inline script forms (backtick) are also forbidden in arms; use named scripts.
+
+**Multiline arm bodies** — triple-quoted:
+
+```jaiph
+match mode {
+  "verbose" => """
+Detailed output enabled.
+All logs will be shown.
+  """
+  _ => "standard"
+}
+```
+
 **Expression form** — works with `const` and `return`:
 
 ```jaiph
@@ -449,6 +463,8 @@ const label = match status {
   _ => "failure"
 }
 ```
+
+The outer `return` in `return match x { … }` applies to the whole match expression and remains valid.
 
 
 ## Inline Scripts
