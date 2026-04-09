@@ -71,6 +71,7 @@ TEST_SCRIPTS=(
   "e2e/tests/117_double_dash_passthrough.sh"
   "e2e/tests/118_import_not_found.sh"
   "e2e/tests/119_lib_import.sh"
+  "e2e/tests/120_match_arm_execution.sh"
 )
 
 PASS_COUNT=0

@@ -443,6 +443,14 @@ Patterns can be string literals (exact equality), regex (`/pattern/`), or `_` (d
 
 **Arm bodies** — the value expression after `=>`. Allowed: string literals (`"…"` or `"""…"""`), variable references, `fail "…"`, `run ref(…)`, `ensure ref(…)`. The `return` keyword inside an arm body is forbidden — use `return match x { … }` at the outer level. Inline script forms (backtick) are also forbidden in arms; use named scripts.
 
+**Runtime execution** — arm bodies are not merely string values. Each form executes at runtime:
+- `fail "message"` aborts the workflow with a non-zero exit and the given message.
+- `run ref(args)` executes the named script or workflow and captures its return value.
+- `ensure ref(args)` executes the named rule and captures its return value.
+- String literals and variable references evaluate to their string value as before.
+
+When a `const` step uses a `match` expression containing `run` or `ensure` arms, the CLI progress tree surfaces the nested script/workflow/rule targets as child steps (e.g. `▸ script safe_name` / `✓ script safe_name`), consistent with top-level `run` steps.
+
 **Multiline arm bodies** — triple-quoted:
 
 ```jaiph

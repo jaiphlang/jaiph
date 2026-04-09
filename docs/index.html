@@ -633,6 +633,8 @@ Jaiph: Running async.jh
                         Exactly one <code>_</code> wildcard arm is required.
                         Arm bodies support single-line strings, triple-quoted <code>"""…"""</code> multiline strings,
                         <code>fail</code>, <code>run ref(…)</code>, and <code>ensure ref(…)</code>.
+                        These forms execute at runtime: <code>fail</code> aborts the workflow,
+                        <code>run</code>/<code>ensure</code> execute the target and capture its return value.
                         The <code>return</code> keyword and inline scripts are forbidden inside arm bodies.
                     </dd>
 

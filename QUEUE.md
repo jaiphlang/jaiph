@@ -12,34 +12,6 @@ Process rules:
 
 ---
 
-## Bug — `match` arm bodies: runtime must execute `fail` / `run` / `ensure`, not stringify; progress tree should show nested scripts #dev-ready
-
-**Goal**  
-`const name = match subject { … }` must behave like real workflow steps in each arm: `fail "…"` must abort with failure, `run script(…)` / `run workflow(…)` / `ensure rule(…)` must execute and capture return values. CLI output must not masquerade arm source text as `log` lines (`ℹ fail "…"` / `ℹ run safe_name(…)`). The TTY/static step tree should surface nested script (and workflow) calls inside `match` the same way `e2e/tests/113_match_expression.sh` expects `▸ script …` / `✓ script …` under the workflow.
-
-**Repro**  
-File: `e2e/match.jh` (shebang `jaiph`; defines `script safe_name` and `workflow default(name_param)` with `const name = match name_param { "" => fail "usage: …"; _ => run safe_name(name_param) }` then `log name`).
-
-```bash
-e2e/match.jh                          # observed: ℹ fail "usage: …" then ✓ PASS — wrong (should fail workflow)
-e2e/match.jh dsdsa                    # observed: ℹ run safe_name(name_param), no script row — wrong (should run script, show script in tree)
-```
-
-**Observed vs expected**  
-- Today the Node runtime treats each match arm body only as a string: `evaluateMatch` in `src/runtime/kernel/node-workflow-runtime.ts` interpolates `arm.body` and returns `stripOuterQuotes(…)` as the match value — it never dispatches `fail` or `run`. The following `log ${name}` then prints that verbatim string, which the CLI renders as a **LOG** event (`ℹ …`), hence “wrong log content.”  
-- `src/cli/run/progress.ts` `collectWorkflowChildren` only labels `const` steps as `const <name>` and does not walk `value.kind === "match_expr"` arms, so the projected tree never shows `script safe_name` (unlike top-level `run get_status()` in 113).
-
-**Pointers**  
-- Fix execution: parse or branch on arm body shape in `evaluateMatch` (or evaluate arms via the same machinery as standalone steps) so `fail` / `run` / `ensure` / expression literals are handled correctly; add regression tests (unit and/or E2E using `e2e/match.jh` or inline fixture).  
-- Optional UX follow-up: extend `collectWorkflowChildren` for `const` + `match_expr` to list nested `run`/`ensure` targets for tree parity with `113_match_expression.sh`.
-
-**Acceptance criteria**  
-- `e2e/match.jh` with no args exits non-zero and does not print a fake `log` line for the usage message.  
-- `e2e/match.jh some/name` runs `safe_name`, logs the transformed name, exit 0; progress output includes script `safe_name` (or equivalent) in the step tree, consistent with other match E2E tests.  
-- Existing `e2e/tests/113_match_expression.sh` and match-related unit tests keep passing.
-
----
-
 ## Tooling — `jaiph format` preserves top-level definition order #dev-ready
 
 **Goal**  
