@@ -110,6 +110,17 @@ function parseInlineCaptureCall(body: string): { ref: string; argsRaw: string } 
   return { ref: trimmed.slice(0, spaceIdx), argsRaw: trimmed.slice(spaceIdx + 1).trim() };
 }
 
+const BARE_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/** Convert comma-separated call args (as written in source) to space-separated form with bare identifiers wrapped in ${…}. */
+function commaArgsToInterpolated(raw: string): string {
+  if (!raw.trim()) return "";
+  return raw.split(",").map((seg) => {
+    const t = seg.trim();
+    return BARE_IDENT_RE.test(t) ? `\${${t}}` : t;
+  }).join(" ");
+}
+
 function parseArgsRaw(raw: string, vars: Map<string, string>, env?: NodeJS.ProcessEnv): string[] {
   if (!raw.trim()) return [];
   const out: string[] = [];
@@ -600,7 +611,34 @@ export class NodeWorkflowRuntime {
         matched = new RegExp(arm.pattern.source).test(subject);
       }
       if (matched) {
-        const bodyIr = await this.interpolateWithCaptures(arm.body, scope);
+        const body = arm.body.trimStart();
+
+        // fail "message" — abort with failure
+        if (body.startsWith("fail ")) {
+          const msgRaw = body.slice(5).trimStart();
+          const msgIr = await this.interpolateWithCaptures(msgRaw, scope);
+          if (!msgIr.ok) return msgIr;
+          return { ok: false, result: { status: 1, output: "", error: stripOuterQuotes(msgIr.value) } };
+        }
+
+        // run ref(args) — execute script/workflow and capture return value
+        const runM = body.match(/^run\s+([A-Za-z_][A-Za-z0-9_.]*)\(([^)]*)\)\s*$/);
+        if (runM) {
+          const result = await this.executeRunRef(scope, runM[1]!, commaArgsToInterpolated(runM[2]!));
+          if (result.status !== 0) return { ok: false, result };
+          return { ok: true, value: result.returnValue ?? result.output.trim() };
+        }
+
+        // ensure ref(args) — execute rule and capture return value
+        const ensureM = body.match(/^ensure\s+([A-Za-z_][A-Za-z0-9_.]*)\(([^)]*)\)\s*$/);
+        if (ensureM) {
+          const result = await this.executeEnsureRef(scope, ensureM[1]!, commaArgsToInterpolated(ensureM[2]!), undefined);
+          if (result.status !== 0) return { ok: false, result };
+          return { ok: true, value: result.returnValue ?? result.output.trim() };
+        }
+
+        // Default: string expression
+        const bodyIr = await this.interpolateWithCaptures(body, scope);
         if (!bodyIr.ok) return bodyIr;
         return { ok: true, value: stripOuterQuotes(bodyIr.value) };
       }

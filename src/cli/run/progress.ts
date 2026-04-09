@@ -129,7 +129,24 @@ export function collectWorkflowChildren(
       return [{ label: `fail ${s.message}` }];
     }
     if (s.type === "const") {
-      return [{ label: `const ${s.name}` }];
+      const constItems: Array<{ label: string; nested?: string; stepFunc?: string }> = [
+        { label: `const ${s.name}` },
+      ];
+      if (s.value.kind === "match_expr") {
+        for (const arm of s.value.match.arms) {
+          const body = arm.body.trimStart();
+          const runM = body.match(/^run\s+([A-Za-z_][A-Za-z0-9_.]*)\(/);
+          if (runM) {
+            constItems.push({ label: `workflow ${runM[1]}`, nested: runM[1] });
+            continue;
+          }
+          const ensureM = body.match(/^ensure\s+([A-Za-z_][A-Za-z0-9_.]*)\(/);
+          if (ensureM) {
+            constItems.push({ label: `rule ${ensureM[1]}`, nested: ensureM[1] });
+          }
+        }
+      }
+      return constItems;
     }
     if (s.type === "return") {
       return [{ label: `return ${s.value}` }];
@@ -203,7 +220,7 @@ export function collectWorkflowChildren(
       continue;
     }
     if (step.type === "const") {
-      items.push({ label: `const ${step.name}` });
+      items.push(...stepToItems(step));
       continue;
     }
     if (step.type === "return") {
