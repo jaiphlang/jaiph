@@ -1,6 +1,6 @@
 #!/usr/bin/env jaiph
 
-import "./queue.jh" as queue
+import "jaiphlang/queue" as queue
 
 config {
   agent.backend = "claude"
@@ -20,27 +20,6 @@ rest_lines "$1"
 script arg_nonempty = `[ -n "$1" ]`
 
 script str_equals = `[ "$1" = "$2" ]`
-
-script task_has_dev_ready_marker = `printf '%s\n' "$1" | grep -q '<!-- dev-ready -->'`
-
-script queue_has_any_task_not_dev_ready = ```
-local qf
-qf="$JAIPH_WORKSPACE/QUEUE.md"
-awk '
-  BEGIN { bad=0 }
-  /^## / {
-    if (inblk && !marked) bad=1
-    inblk=1
-    marked=0
-    next
-  }
-  inblk && /<!-- dev-ready -->/ { marked=1 }
-  END {
-    if (inblk && !marked) bad=1
-    exit bad
-  }
-' "$qf"
-```
 
 workflow review_task(task) {
   const result = prompt """
@@ -102,7 +81,7 @@ workflow review_one_header(header) {
     return
   }
   const task = run queue.get_task_by_header(header)
-  run task_has_dev_ready_marker(task) recover (err) {
+  ensure queue.task_is_dev_ready(task) recover (err) {
     const verdict = run review_task(task)
     run str_equals(verdict, "dev-ready") recover (err) {
       log "Needs work: ${header}"
@@ -137,8 +116,7 @@ workflow default() {
   const first = run first_line_str(headers)
   const rest = run rest_lines_str(headers)
   run maybe_process_headers(first, rest)
-  run queue_has_any_task_not_dev_ready() recover (err) {
-    return
+  ensure queue.all_dev_ready() recover (err) {
+    fail "One or more tasks need work. Review the agent output above."
   }
-  fail "One or more tasks need work. Review the agent output above."
 }

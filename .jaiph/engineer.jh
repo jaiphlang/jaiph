@@ -5,7 +5,7 @@
 # verifies CI, updates docs, commits, and removes from queue.
 #
 
-import "./queue.jh" as queue
+import "jaiphlang/queue" as queue
 import "./docs_parity.jh" as docs
 import "./ensure_ci_passes.jh" as ci
 import "./git.jh" as git
@@ -201,7 +201,7 @@ script first_line_task = ```
 local line
 line="$(printf '%s\n' "$1" | awk 'NR==1 { print; exit }')"
 line="${line#\#\# }"
-line="${line%% <!--*}"
+line="$(printf '%s\n' "$line" | sed 's/ *#[A-Za-z0-9_-]*//g')"
 printf '%s\n' "$line"
 ```
 
