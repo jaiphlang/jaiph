@@ -631,6 +631,9 @@ Jaiph: Running async.jh
                         Usable as a statement, expression (<code>const x = match var { … }</code>),
                         or with <code>return</code> (<code>return match var { … }</code>).
                         Exactly one <code>_</code> wildcard arm is required.
+                        Arm bodies support single-line strings, triple-quoted <code>"""…"""</code> multiline strings,
+                        <code>fail</code>, <code>run ref(…)</code>, and <code>ensure ref(…)</code>.
+                        The <code>return</code> keyword and inline scripts are forbidden inside arm bodies.
                     </dd>
 
                     <dt><code>log "message"</code> &middot; <code>log """..."""</code> &middot;

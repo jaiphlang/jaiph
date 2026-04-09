@@ -535,6 +535,30 @@ Exactly one `_` wildcard arm is required.
 
 Using `$var` or `${var}` as the match subject is a parse error — use the bare name: `match varName { ... }`.
 
+**Arm bodies** — the expression after `=>` produces the match result. Allowed forms:
+
+- String literal: `"value"` or multiline `"""…"""`
+- Variable reference / interpolation: `$var`, `${var}`
+- `fail "message"` — aborts the workflow/rule
+- `run ref(args)` / `ensure ref(args)` — managed call whose result becomes the match value
+
+**Disallowed** — rejected at validate time with `E_VALIDATE`:
+
+- `return` inside an arm body (`"x" => return "y"`) — the match expression itself produces the value; use `return match x { … }` at the outer level instead
+- Inline script forms (backtick `` `…`() ``) — use a named script with `run script_name(…)`
+
+**Multiline arm bodies** use triple-quoted strings:
+
+```jaiph
+match mode {
+  "verbose" => """
+Detailed output enabled.
+All logs will be shown.
+  """
+  _ => "standard"
+}
+```
+
 **Expression form:** `match` works as an expression with `const` and `return`:
 
 ```jaiph
@@ -548,6 +572,8 @@ return match status {
   _ => "fail"
 }
 ```
+
+The outer `return` applies to the whole match expression — it is not the same as `return` inside an arm body (which is forbidden).
 
 ### Variable Binding
 
@@ -772,7 +798,10 @@ match_stmt      = "match" IDENT "{" { match_arm } "}" ;
 match_expr      = "match" IDENT "{" { match_arm } "}" ;
 match_arm       = match_pattern "=>" arm_body ;
 match_pattern   = double_quoted_string | "/" regex_source "/" | "_" ;
-arm_body        = double_quoted_string | "$" IDENT | "${" IDENT "}" ;
+arm_body        = double_quoted_string | triple_quoted_block
+                | "$" IDENT | "${" IDENT "}"
+                | "fail" double_quoted_string
+                | "run" call_ref | "ensure" call_ref ;
 
 send_stmt       = IDENT "<-" send_rhs ;
 send_rhs        = double_quoted_string | triple_quoted_block | "${" IDENT "}" | "run" call_ref | REF ;

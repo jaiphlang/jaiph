@@ -280,4 +280,35 @@ describe("emitModule", () => {
     ].join("\n");
     assert.equal(roundTrip(source), source);
   });
+
+  it("formats match with triple-quoted arm body", () => {
+    const source = [
+      "workflow default() {",
+      '  const x = "ok"',
+      "  return match x {",
+      '    "ok" => """',
+      "line one",
+      "line two",
+      '  """',
+      '    _ => "default"',
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
+
+  it("formats match with single-line arms round-trip", () => {
+    const source = [
+      "workflow default() {",
+      '  const x = "ok"',
+      "  return match x {",
+      '    "ok" => "yes"',
+      '    _ => "no"',
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
 });

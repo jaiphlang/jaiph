@@ -86,6 +86,27 @@ function validateMatchExpr(filePath: string, expr: MatchExprDef): void {
         );
       }
     }
+    // Reject `return` as the leading token of an arm body.
+    const bodyTrimmed = arm.body.trimStart();
+    if (/^return(\s|$)/.test(bodyTrimmed)) {
+      throw jaiphError(
+        filePath,
+        expr.loc.line,
+        expr.loc.col,
+        "E_VALIDATE",
+        `match arm body must not start with "return"; the match expression itself produces the value — use the expression directly after =>`,
+      );
+    }
+    // Reject inline script forms in arm bodies (backtick `…`() or fenced ```…```()).
+    if (/`[^`]*`\s*\(/.test(bodyTrimmed) || bodyTrimmed.startsWith("```")) {
+      throw jaiphError(
+        filePath,
+        expr.loc.line,
+        expr.loc.col,
+        "E_VALIDATE",
+        `inline scripts are not allowed in match arm bodies; use a named script with "run script_name(…)" instead`,
+      );
+    }
   }
   if (wildcardCount === 0) {
     throw jaiphError(filePath, expr.loc.line, expr.loc.col, "E_VALIDATE", "match must have exactly one wildcard (_) arm");

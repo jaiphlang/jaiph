@@ -12,38 +12,6 @@ Process rules:
 
 ---
 
-## Language — `match` arm bodies: string values only, no `return`/inline script; multiline string literals; validation #dev-ready
-
-**Goal**  
-Tighten `match` so each arm body is unambiguously a **string-producing expression**: the match result is always a string (subject is already string-shaped). Keep **`return match x { … }`** as-is (outer `return` applies to the whole `match` expression — see prior design note). **Inside** arms, forbid the `return` keyword so a branch cannot read like workflow control flow — only the expression after `=>` defines the value.
-
-**Allowed arm bodies (conceptual)**  
-- String literals: `"…"` and **multiline** `"""…"""` (new — today only single-line `"…"` is parsed; extend `parseArmBody` in `src/parse/match.ts` and keep `parseMatchArms` in sync so bodies can span lines when triple-quoted).  
-- Interpolation and bare identifiers that denote string values (`${var}`, `$var` if already supported by interpolation).  
-- **`fail "…"`** — aborts; no string result (special case, still one arm body).  
-- **Managed calls that run code and yield a captured string**: `run script(…)`, `run workflow(…)`, `ensure rule(…)` — execution is allowed; the **value** left in the match is still the stringlike outcome of that step (same semantics as after the runtime fix for executed arms).
-
-**Disallowed**  
-- Arm body starting with or being only **`return`** (e.g. `"x" => return "y"`) — **E_VALIDATE** with a clear message; arms are not mini-`return` sites.  
-- **Inline script forms in arms** (backtick `` `…`() `` or fenced ``` blocks as call targets) — disallow so arms cannot embed ad-hoc script text; **named `run my_script(…)` stays allowed**.
-
-**Implementation pointers**  
-- Parser: triple-quoted arm bodies; possibly reuse or mirror triple-quote handling used elsewhere (`log`/`prompt`/const RHS). Formatter: `src/format/emit.ts` match / `match_expr` emission must preserve multiline arms.  
-- Validation: extend `validateMatchExpr` or walk `arm.body` strings in `src/transpile/validate.ts` (and any shared helper for “inline script in expression”).  
-- Tests: parser + validator + formatter round-trip; E2E or unit case with `"""` arm and with rejected `return` / rejected inline script.  
-- Docs: `docs/grammar.md` (`arm_body`), `docs/language.md` / `docs/index.html` — document allowed forms and multiline strings.
-
-**Relationship**  
-Arm bodies that use `run` / `ensure` / `fail` only make sense once those bodies are **executed** (see the queue task **Bug — `match` arm bodies: runtime must execute …**). This task can land after that runtime work, or validation/parser can land first if it only rejects syntax that was already invalid or misleading.
-
-**Acceptance criteria**  
-- `return` as the leading token of a match arm body is rejected at validate time with `E_VALIDATE`.  
-- Inline script-in-arm forms are rejected with `E_VALIDATE`.  
-- `"""` multiline string arm bodies parse, format round-trip, and produce the expected string value at runtime.  
-- `return match x { … }` at workflow/rule level remains valid; docs distinguish outer `return` vs forbidden inner `return`.
-
----
-
 ## Bug — `match` arm bodies: runtime must execute `fail` / `run` / `ensure`, not stringify; progress tree should show nested scripts #dev-ready
 
 **Goal**  

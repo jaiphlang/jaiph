@@ -1,6 +1,7 @@
 import type { MatchArmDef, MatchExprDef, MatchPatternDef } from "../types";
 import { fail, indexOfClosingDoubleQuote } from "./core";
 import { splitStatementsOnSemicolons } from "./statement-split";
+import { tripleQuoteBodyToRaw } from "./triple-quote";
 
 const IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -114,6 +115,7 @@ export function parseMatchArms(
       return { arms, nextIndex: i + 1 };
     }
     const armSegments = splitStatementsOnSemicolons(line, { allowRegexLiteral: true });
+    let tripleQuoteAdvanced = false;
     for (const seg of armSegments) {
       const segLine = seg.trim();
       if (!segLine || segLine.startsWith("#")) {
@@ -124,10 +126,39 @@ export function parseMatchArms(
         fail(filePath, 'expected "=>" after match pattern', lineNo);
       }
       const afterArrow = rest.slice(2).trimStart();
+      // Triple-quoted arm body: pattern => """
+      if (afterArrow === '"""' || afterArrow.startsWith('"""')) {
+        const textAfterTriple = afterArrow.slice(3).trim();
+        if (textAfterTriple.length > 0) {
+          fail(filePath, 'opening """ in match arm must not have content on the same line', lineNo);
+        }
+        const bodyLines: string[] = [];
+        let j = i + 1;
+        for (; j < lines.length; j++) {
+          const trimmed = lines[j].trim();
+          if (trimmed.startsWith('"""')) {
+            const afterClose = trimmed.slice(3).trim();
+            if (afterClose.length > 0) {
+              fail(filePath, 'closing """ in match arm must not have content on the same line', j + 1);
+            }
+            break;
+          }
+          bodyLines.push(lines[j]);
+        }
+        if (j >= lines.length) {
+          fail(filePath, 'unterminated triple-quoted block in match arm: no closing """ before end of match', lineNo);
+        }
+        arms.push({ pattern, body: tripleQuoteBodyToRaw(bodyLines.join("\n")) });
+        i = j + 1;
+        tripleQuoteAdvanced = true;
+        break;
+      }
       const body = parseArmBody(filePath, afterArrow, lineNo);
       arms.push({ pattern, body });
     }
-    i += 1;
+    if (!tripleQuoteAdvanced) {
+      i += 1;
+    }
   }
   fail(filePath, "unterminated match block", openerLineNo);
 }
