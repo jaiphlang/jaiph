@@ -1,7 +1,5 @@
 #!/usr/bin/env jaiph
 
-import "./queue.jh" as queue
-
 const role = """
     You are an expert technical writer for this project.
     1. You are fluent in Markdown and can read TypeScript code and Bash
