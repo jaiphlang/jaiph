@@ -12,20 +12,6 @@ Process rules:
 
 ---
 
-## Tooling — `jaiph format` preserves top-level definition order #dev-ready
-
-**Goal**  
-`jaiph format` should only normalize the leading block to: all `import` lines (in source order), then the module `config { ... }` block if present, then all `channel` lines (in source order). Everything else (`rule`, `script`, `workflow`, top-level `const`, and `test` blocks in `*.test.jh`) must keep the same relative order as in the source file. Top-level `#` comments must not be dropped (including when separated from the next declaration by blank lines). Comments immediately before an `import`, `config`, or `channel` move with that construct after hoist.
-
-**Context**  
-Formatter: `src/format/emit.ts`, parser: `src/parser.ts`. Regression: formatting `lib/queue.jh` moved `workflow` after `script` and could strip header comments.
-
-**Acceptance criteria**  
-- Round-trip tests in `src/format/emit.test.ts` cover mixed rule/workflow/script order and comment preservation.
-- `jaiph format` on a file with interleaved definitions does not reorder non-hoisted top-level items.
-
----
-
 ## Compiler — enforce `export` for imported qualified references #dev-ready
 
 **Goal**  

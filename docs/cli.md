@@ -266,7 +266,7 @@ Reformat `.jh` source files to a canonical style. The formatter parses each file
 
 **Blank-line preservation:** A single blank line between steps inside a workflow or rule body is preserved — use it for visual grouping of related calls. Multiple consecutive blank lines are collapsed to one; trailing blank lines before `}` are removed. This applies to all block-level steps (calls, `log`, `const`, `if`, etc.).
 
-**Canonical definition order:** The formatter reorders top-level definitions to a fixed order: imports → config → channels → const declarations → rules → scripts → workflows → tests. Source files may declare these in any order; `jaiph format` normalizes them.
+**Top-level ordering:** The formatter hoists `import`, `config`, and `channel` declarations to the top of the file (in that order, preserving source order within each group). All other top-level definitions — `const`, `rule`, `script`, `workflow`, and `test` blocks — keep their original relative order from the source file. Comments immediately before an `import`, `config`, or `channel` move with that construct when hoisted; comments before non-hoisted definitions stay in place.
 
 ```bash
 jaiph format [--check] [--indent <n>] <file.jh ...>

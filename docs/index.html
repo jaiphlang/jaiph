@@ -502,11 +502,12 @@ Jaiph: Running async.jh
                     suites, mocks, and assertions to cover deterministic and agent-assisted paths. See <a
                         href="testing">Testing</a>.</p>
                 <p><strong>Formatting.</strong> <code>jaiph format</code> rewrites <code>.jh</code> files to a
-                    canonical style — consistent whitespace, indentation, and definition order (imports → config →
-                    channels → const → rules → scripts → workflows → tests). Use <code>--check</code> in CI to
-                    catch drift without modifying files, and <code>--indent &lt;n&gt;</code> to set spaces per level.
+                    canonical style — consistent whitespace and indentation. Imports, config, and channels are hoisted
+                    to the top; all other definitions (const, rules, scripts, workflows, tests) keep their source-file
+                    order. Use <code>--check</code> in CI to catch drift without modifying files, and
+                    <code>--indent &lt;n&gt;</code> to set spaces per level.
                     Formatting is idempotent; comments, shebangs, and intentional blank lines between
-                    steps are preserved. Multiline string and
+                    steps are preserved. Comments before hoisted constructs move with them. Multiline string and
                     script bodies are emitted verbatim — inner lines are never re-indented. See <a href="cli#jaiph-format">CLI
                         reference</a>.</p>
 

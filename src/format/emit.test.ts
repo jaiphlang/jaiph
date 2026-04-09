@@ -298,6 +298,94 @@ describe("emitModule", () => {
     assert.equal(roundTrip(source), source);
   });
 
+  it("preserves mixed workflow/rule/script interleaved order", () => {
+    const source = [
+      "workflow dispatch() {",
+      '  log "dispatching"',
+      "}",
+      "",
+      "rule is_ready() {",
+      "  run dispatch()",
+      "}",
+      "",
+      "script helper = `echo ok`",
+      "",
+      "workflow finalize() {",
+      '  log "done"',
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
+
+  it("preserves comments before each top-level declaration type", () => {
+    const source = [
+      "# A workflow",
+      "workflow w() {",
+      '  log "w"',
+      "}",
+      "",
+      "# A rule",
+      "rule r() {",
+      "  run w()",
+      "}",
+      "",
+      "# A script",
+      "script s = `echo s`",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
+
+  it("preserves comments before top-level const declarations", () => {
+    const source = [
+      "# Project name",
+      "const project = my-project",
+      "",
+      "workflow default() {",
+      '  log "${project}"',
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
+
+  it("hoists imports and channels while preserving non-hoisted order", () => {
+    const source = [
+      "workflow first() {",
+      '  log "1"',
+      "}",
+      "",
+      'import "lib.jh" as lib',
+      "",
+      "rule middle() {",
+      "  run first()",
+      "}",
+      "",
+      "channel events",
+      "",
+      "script last = `echo last`",
+      "",
+    ].join("\n");
+    const expected = [
+      'import "lib.jh" as lib',
+      "",
+      "channel events",
+      "",
+      "workflow first() {",
+      '  log "1"',
+      "}",
+      "",
+      "rule middle() {",
+      "  run first()",
+      "}",
+      "",
+      "script last = `echo last`",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), expected);
+  });
+
   it("formats match with single-line arms round-trip", () => {
     const source = [
       "workflow default() {",

@@ -100,8 +100,11 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
     }
 
     if (/^const\s+[A-Za-z_]/.test(line)) {
-      pendingTopLevelComments = [];
       const { envDecl, nextIndex } = parseEnvDecl(filePath, lines, i - 1);
+      if (pendingTopLevelComments.length > 0) {
+        envDecl.comments = [...pendingTopLevelComments];
+        pendingTopLevelComments = [];
+      }
       if (!mod.envDecls) {
         mod.envDecls = [];
       }

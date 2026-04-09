@@ -217,6 +217,7 @@ export interface EnvDeclDef {
   name: string;
   value: string;
   loc: SourceLoc;
+  comments?: string[];
 }
 
 /** Source order of definitions below imports / config / channels (formatter and round-trip). */
