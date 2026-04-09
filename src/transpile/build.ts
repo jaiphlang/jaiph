@@ -70,7 +70,8 @@ export function walkTestFiles(inputPath: string): string[] {
   return files;
 }
 
-function collectFileWithImports(entrypoint: string, workspaceRoot?: string): string[] {
+/** Entry `.jh` plus all files reachable via `import` (transitive), sorted. */
+export function collectTransitiveJhModules(entrypoint: string, workspaceRoot?: string): string[] {
   const visited = new Set<string>();
   const queue = [entrypoint];
   while (queue.length > 0) {
@@ -104,7 +105,7 @@ export function buildScripts(
   ensureDir(outRoot);
 
   const entrypointFile = inputStat.isFile() ? absInput : null;
-  const files = entrypointFile ? collectFileWithImports(entrypointFile, workspaceRoot) : walkjhFiles(rootDir);
+  const files = entrypointFile ? collectTransitiveJhModules(entrypointFile, workspaceRoot) : walkjhFiles(rootDir);
   const scriptsRoot = join(outRoot, "scripts");
   ensureDir(scriptsRoot);
 

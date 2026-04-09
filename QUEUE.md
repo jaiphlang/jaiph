@@ -12,6 +12,101 @@ Process rules:
 
 ---
 
+## Language — `match` arm bodies: string values only, no `return`/inline script; multiline string literals; validation #dev-ready
+
+**Goal**  
+Tighten `match` so each arm body is unambiguously a **string-producing expression**: the match result is always a string (subject is already string-shaped). Keep **`return match x { … }`** as-is (outer `return` applies to the whole `match` expression — see prior design note). **Inside** arms, forbid the `return` keyword so a branch cannot read like workflow control flow — only the expression after `=>` defines the value.
+
+**Allowed arm bodies (conceptual)**  
+- String literals: `"…"` and **multiline** `"""…"""` (new — today only single-line `"…"` is parsed; extend `parseArmBody` in `src/parse/match.ts` and keep `parseMatchArms` in sync so bodies can span lines when triple-quoted).  
+- Interpolation and bare identifiers that denote string values (`${var}`, `$var` if already supported by interpolation).  
+- **`fail "…"`** — aborts; no string result (special case, still one arm body).  
+- **Managed calls that run code and yield a captured string**: `run script(…)`, `run workflow(…)`, `ensure rule(…)` — execution is allowed; the **value** left in the match is still the stringlike outcome of that step (same semantics as after the runtime fix for executed arms).
+
+**Disallowed**  
+- Arm body starting with or being only **`return`** (e.g. `"x" => return "y"`) — **E_VALIDATE** with a clear message; arms are not mini-`return` sites.  
+- **Inline script forms in arms** (backtick `` `…`() `` or fenced ``` blocks as call targets) — disallow so arms cannot embed ad-hoc script text; **named `run my_script(…)` stays allowed**.
+
+**Implementation pointers**  
+- Parser: triple-quoted arm bodies; possibly reuse or mirror triple-quote handling used elsewhere (`log`/`prompt`/const RHS). Formatter: `src/format/emit.ts` match / `match_expr` emission must preserve multiline arms.  
+- Validation: extend `validateMatchExpr` or walk `arm.body` strings in `src/transpile/validate.ts` (and any shared helper for “inline script in expression”).  
+- Tests: parser + validator + formatter round-trip; E2E or unit case with `"""` arm and with rejected `return` / rejected inline script.  
+- Docs: `docs/grammar.md` (`arm_body`), `docs/language.md` / `docs/index.html` — document allowed forms and multiline strings.
+
+**Relationship**  
+Arm bodies that use `run` / `ensure` / `fail` only make sense once those bodies are **executed** (see the queue task **Bug — `match` arm bodies: runtime must execute …**). This task can land after that runtime work, or validation/parser can land first if it only rejects syntax that was already invalid or misleading.
+
+**Acceptance criteria**  
+- `return` as the leading token of a match arm body is rejected at validate time with `E_VALIDATE`.  
+- Inline script-in-arm forms are rejected with `E_VALIDATE`.  
+- `"""` multiline string arm bodies parse, format round-trip, and produce the expected string value at runtime.  
+- `return match x { … }` at workflow/rule level remains valid; docs distinguish outer `return` vs forbidden inner `return`.
+
+---
+
+## Bug — `match` arm bodies: runtime must execute `fail` / `run` / `ensure`, not stringify; progress tree should show nested scripts #dev-ready
+
+**Goal**  
+`const name = match subject { … }` must behave like real workflow steps in each arm: `fail "…"` must abort with failure, `run script(…)` / `run workflow(…)` / `ensure rule(…)` must execute and capture return values. CLI output must not masquerade arm source text as `log` lines (`ℹ fail "…"` / `ℹ run safe_name(…)`). The TTY/static step tree should surface nested script (and workflow) calls inside `match` the same way `e2e/tests/113_match_expression.sh` expects `▸ script …` / `✓ script …` under the workflow.
+
+**Repro**  
+File: `e2e/match.jh` (shebang `jaiph`; defines `script safe_name` and `workflow default(name_param)` with `const name = match name_param { "" => fail "usage: …"; _ => run safe_name(name_param) }` then `log name`).
+
+```bash
+e2e/match.jh                          # observed: ℹ fail "usage: …" then ✓ PASS — wrong (should fail workflow)
+e2e/match.jh dsdsa                    # observed: ℹ run safe_name(name_param), no script row — wrong (should run script, show script in tree)
+```
+
+**Observed vs expected**  
+- Today the Node runtime treats each match arm body only as a string: `evaluateMatch` in `src/runtime/kernel/node-workflow-runtime.ts` interpolates `arm.body` and returns `stripOuterQuotes(…)` as the match value — it never dispatches `fail` or `run`. The following `log ${name}` then prints that verbatim string, which the CLI renders as a **LOG** event (`ℹ …`), hence “wrong log content.”  
+- `src/cli/run/progress.ts` `collectWorkflowChildren` only labels `const` steps as `const <name>` and does not walk `value.kind === "match_expr"` arms, so the projected tree never shows `script safe_name` (unlike top-level `run get_status()` in 113).
+
+**Pointers**  
+- Fix execution: parse or branch on arm body shape in `evaluateMatch` (or evaluate arms via the same machinery as standalone steps) so `fail` / `run` / `ensure` / expression literals are handled correctly; add regression tests (unit and/or E2E using `e2e/match.jh` or inline fixture).  
+- Optional UX follow-up: extend `collectWorkflowChildren` for `const` + `match_expr` to list nested `run`/`ensure` targets for tree parity with `113_match_expression.sh`.
+
+**Acceptance criteria**  
+- `e2e/match.jh` with no args exits non-zero and does not print a fake `log` line for the usage message.  
+- `e2e/match.jh some/name` runs `safe_name`, logs the transformed name, exit 0; progress output includes script `safe_name` (or equivalent) in the step tree, consistent with other match E2E tests.  
+- Existing `e2e/tests/113_match_expression.sh` and match-related unit tests keep passing.
+
+---
+
+## Tooling — `jaiph format` preserves top-level definition order #dev-ready
+
+**Goal**  
+`jaiph format` should only normalize the leading block to: all `import` lines (in source order), then the module `config { ... }` block if present, then all `channel` lines (in source order). Everything else (`rule`, `script`, `workflow`, top-level `const`, and `test` blocks in `*.test.jh`) must keep the same relative order as in the source file. Top-level `#` comments must not be dropped (including when separated from the next declaration by blank lines). Comments immediately before an `import`, `config`, or `channel` move with that construct after hoist.
+
+**Context**  
+Formatter: `src/format/emit.ts`, parser: `src/parser.ts`. Regression: formatting `lib/queue.jh` moved `workflow` after `script` and could strip header comments.
+
+**Acceptance criteria**  
+- Round-trip tests in `src/format/emit.test.ts` cover mixed rule/workflow/script order and comment preservation.
+- `jaiph format` on a file with interleaved definitions does not reorder non-hoisted top-level items.
+
+---
+
+## Compiler — enforce `export` for imported qualified references #dev-ready
+
+**Goal**  
+Cross-module references (`import "…" as lib` then `lib.some_name` in `run` / `ensure` / channel routes / etc.) must respect the imported module’s API surface: if the imported file uses the `export` keyword on any rule, script, or workflow, then **only** names listed in that module’s `exports` array may be referenced through the import alias. A reference to a symbol that exists in the module but is not exported must fail validation (`E_VALIDATE`) with a clear message.
+
+**Today**  
+Parsing records `export` in `jaiphModule.exports` (`src/parser.ts`), and the formatter emits it (`src/format/emit.ts`). Reference resolution only checks that the short name exists on the imported AST (`importedHasAllowedKind` in `src/transpile/validate-ref-resolution.ts`); it does **not** consult `exports`.
+
+**Design notes**
+
+- **Modules with no `export` lines** (`exports` is `[]`): keep current behavior — treat every top-level rule / script / workflow as importable — so existing projects keep working without churn.
+- **Modules with at least one `export`**: switch to **explicit surface** — a qualified ref `alias.name` is valid only if `name` is in `importedModule.exports` (and still exists and has the right kind for the call site). Symbols that are only used internally in that file stay private to importers.
+- Apply the same rule everywhere split refs are validated (run targets, ensure targets, mocks in tests, channel `->` routes if they use `alias.workflow`, etc. — audit `validateReferences` / `validateRef` call graph).
+
+**Acceptance criteria**
+
+- Unit tests: importer references non-exported symbol in a module that has some `export` → `E_VALIDATE`; same symbol works when exported; module with zero exports still allows references (legacy).
+- Docs or changelog note describing explicit-export modules vs legacy “all public” modules.
+
+---
+
 ## Runtime — credential proxy for Docker mode
 
 **Goal**  

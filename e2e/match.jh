@@ -1,0 +1,11 @@
+#!/usr/bin/env jaiph
+
+script safe_name = `printf '%s\n' "$1" | tr '/:' '--'`
+
+workflow default(name_param) {
+  const name = match name_param {
+    "" => fail "usage: jaiph <this-file>.jh <name>"
+    _ => return run safe_name(name_param)
+  }
+  log name
+}

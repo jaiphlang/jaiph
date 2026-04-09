@@ -11,7 +11,16 @@ import { parseTestBlock } from "./parse/tests";
 
 export function parsejaiph(source: string, filePath: string): jaiphModule {
   const lines = source.split(/\r?\n/);
-  const mod: jaiphModule = { filePath, imports: [], channels: [], exports: [], rules: [], scripts: [], workflows: [] };
+  const mod: jaiphModule = {
+    filePath,
+    imports: [],
+    channels: [],
+    exports: [],
+    rules: [],
+    scripts: [],
+    workflows: [],
+    topLevelOrder: [],
+  };
   let i = 0;
   let pendingTopLevelComments: string[] = [];
 
@@ -22,7 +31,6 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
     i += 1;
 
     if (!line) {
-      pendingTopLevelComments = [];
       continue;
     }
 
@@ -39,22 +47,33 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
       if (mod.metadata !== undefined) {
         fail(filePath, "duplicate config block (only one allowed per file)", lineNo, 1);
       }
+      if (pendingTopLevelComments.length > 0) {
+        mod.configLeadingComments = [...pendingTopLevelComments];
+        pendingTopLevelComments = [];
+      }
       const { metadata, nextIndex } = parseConfigBlock(filePath, lines, i - 1);
       mod.metadata = metadata;
       i = nextIndex;
-      pendingTopLevelComments = [];
       continue;
     }
 
     if (line.startsWith("import ")) {
-      pendingTopLevelComments = [];
-      mod.imports.push(parseImportLine(filePath, line, raw, lineNo));
+      const imp = parseImportLine(filePath, line, raw, lineNo);
+      if (pendingTopLevelComments.length > 0) {
+        imp.leadingComments = [...pendingTopLevelComments];
+        pendingTopLevelComments = [];
+      }
+      mod.imports.push(imp);
       continue;
     }
 
     if (line.startsWith("channel ")) {
-      pendingTopLevelComments = [];
-      mod.channels.push(parseChannelLine(filePath, line, raw, lineNo));
+      const ch = parseChannelLine(filePath, line, raw, lineNo);
+      if (pendingTopLevelComments.length > 0) {
+        ch.leadingComments = [...pendingTopLevelComments];
+        pendingTopLevelComments = [];
+      }
+      mod.channels.push(ch);
       continue;
     }
 
@@ -63,8 +82,15 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
       if (!mod.tests) {
         mod.tests = [];
       }
-      const { testBlock, nextIndex } = parseTestBlock(filePath, lines, i - 1);
+      const { testBlock, nextIndex } = parseTestBlock(
+        filePath,
+        lines,
+        i - 1,
+        pendingTopLevelComments.length > 0 ? [...pendingTopLevelComments] : undefined,
+      );
+      pendingTopLevelComments = [];
       mod.tests.push(testBlock);
+      mod.topLevelOrder!.push({ kind: "test", index: mod.tests.length - 1 });
       i = nextIndex;
       continue;
     }
@@ -80,6 +106,7 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
         mod.envDecls = [];
       }
       mod.envDecls.push(envDecl);
+      mod.topLevelOrder!.push({ kind: "env", index: mod.envDecls.length - 1 });
       i = nextIndex;
       continue;
     }
@@ -91,6 +118,7 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
         mod.exports.push(rule.name);
       }
       mod.rules.push(rule);
+      mod.topLevelOrder!.push({ kind: "rule", index: mod.rules.length - 1 });
       i = nextIndex;
       continue;
     }
@@ -102,6 +130,7 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
         mod.exports.push(scriptDef.name);
       }
       mod.scripts.push(scriptDef);
+      mod.topLevelOrder!.push({ kind: "script", index: mod.scripts.length - 1 });
       i = nextIndex;
       continue;
     }
@@ -113,6 +142,7 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
         mod.exports.push(workflow.name);
       }
       mod.workflows.push(workflow);
+      mod.topLevelOrder!.push({ kind: "workflow", index: mod.workflows.length - 1 });
       i = nextIndex;
       continue;
     }

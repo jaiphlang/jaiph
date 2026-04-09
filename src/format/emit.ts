@@ -11,6 +11,7 @@ import type {
   TestStepDef,
   EnvDeclDef,
   WorkflowMetadata,
+  TopLevelEmitOrder,
 } from "../types";
 
 export interface EmitOptions {
@@ -18,6 +19,26 @@ export interface EmitOptions {
 }
 
 const DEFAULT_OPTIONS: EmitOptions = { indent: 2 };
+
+/** When `topLevelOrder` is missing (hand-built AST), match pre–source-order emit behavior. */
+function legacyTopLevelOrder(mod: jaiphModule): TopLevelEmitOrder[] {
+  const o: TopLevelEmitOrder[] = [];
+  if (mod.envDecls) {
+    for (let i = 0; i < mod.envDecls.length; i++) o.push({ kind: "env", index: i });
+  }
+  for (let i = 0; i < mod.rules.length; i++) o.push({ kind: "rule", index: i });
+  for (let i = 0; i < mod.scripts.length; i++) o.push({ kind: "script", index: i });
+  for (let i = 0; i < mod.workflows.length; i++) o.push({ kind: "workflow", index: i });
+  if (mod.tests) {
+    for (let i = 0; i < mod.tests.length; i++) o.push({ kind: "test", index: i });
+  }
+  return o;
+}
+
+function topLevelOrderForEmit(mod: jaiphModule): TopLevelEmitOrder[] {
+  if (mod.topLevelOrder && mod.topLevelOrder.length > 0) return mod.topLevelOrder;
+  return legacyTopLevelOrder(mod);
+}
 
 export function emitModule(mod: jaiphModule, opts: EmitOptions = DEFAULT_OPTIONS): string {
   const sections: string[] = [];
@@ -27,41 +48,54 @@ export function emitModule(mod: jaiphModule, opts: EmitOptions = DEFAULT_OPTIONS
   // (handled by the format command reading the first line of the original source)
 
   for (const imp of mod.imports) {
+    if (imp.leadingComments?.length) {
+      sections.push(...emitComments(imp.leadingComments));
+    }
     sections.push(`import "${imp.path}" as ${imp.alias}`);
   }
 
   if (mod.metadata) {
+    if (mod.configLeadingComments?.length) {
+      sections.push(...emitComments(mod.configLeadingComments));
+    }
     sections.push(emitConfig(mod.metadata, pad));
   }
 
   for (const ch of mod.channels) {
-    sections.push(emitChannel(ch));
-  }
-
-  if (mod.envDecls) {
-    for (const env of mod.envDecls) {
-      sections.push(emitEnvDecl(env).join("\n"));
+    if (ch.leadingComments?.length) {
+      sections.push(...emitComments(ch.leadingComments));
     }
+    sections.push(emitChannel(ch));
   }
 
   const exportedNames = new Set(mod.exports);
 
-  for (const r of mod.rules) {
-    sections.push(emitRule(r, pad, exportedNames.has(r.name)));
-  }
-
-  for (const s of mod.scripts) {
-    sections.push(emitScript(s, pad, exportedNames.has(s.name)));
-  }
-
-  for (const w of mod.workflows) {
-    sections.push(emitWorkflow(w, pad, exportedNames.has(w.name)));
-  }
-
-  if (mod.tests) {
-    for (const t of mod.tests) {
-      sections.push(emitTestBlock(t, pad));
+  for (const item of topLevelOrderForEmit(mod)) {
+    if (item.kind === "env") {
+      sections.push(emitEnvDecl(mod.envDecls![item.index]).join("\n"));
+      continue;
     }
+    if (item.kind === "rule") {
+      sections.push(emitRule(mod.rules[item.index], pad, exportedNames.has(mod.rules[item.index].name)));
+      continue;
+    }
+    if (item.kind === "script") {
+      sections.push(
+        emitScript(mod.scripts[item.index], pad, exportedNames.has(mod.scripts[item.index].name)),
+      );
+      continue;
+    }
+    if (item.kind === "workflow") {
+      sections.push(
+        emitWorkflow(
+          mod.workflows[item.index],
+          pad,
+          exportedNames.has(mod.workflows[item.index].name),
+        ),
+      );
+      continue;
+    }
+    sections.push(emitTestBlock(mod.tests![item.index], pad));
   }
 
   return sections.join("\n\n") + "\n";
@@ -518,6 +552,9 @@ function emitSendRhs(rhs: SendRhsDef): string {
 
 function emitTestBlock(test: TestBlockDef, pad: string): string {
   const lines: string[] = [];
+  if (test.leadingComments?.length) {
+    lines.push(...emitComments(test.leadingComments));
+  }
   lines.push(`test "${test.description}" {`);
   for (const step of test.steps) {
     lines.push(...emitTestStep(step, pad));
