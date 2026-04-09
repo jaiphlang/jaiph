@@ -8,6 +8,7 @@ import { runUse } from "./commands/use";
 import { runReportCommand } from "./commands/report";
 import { runFormat } from "./commands/format";
 import { runInstall } from "./commands/install";
+import { runCompile } from "./commands/compile";
 
 export async function main(argv: string[]): Promise<number> {
   const [, , cmd, ...rest] = argv;
@@ -43,6 +44,9 @@ export async function main(argv: string[]): Promise<number> {
     }
     if (cmd === "install") {
       return runInstall(rest);
+    }
+    if (cmd === "compile") {
+      return runCompile(rest);
     }
     if (cmd === "report") {
       return runReportCommand(rest);

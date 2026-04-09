@@ -23,6 +23,24 @@
       "name": "with_shell_expansion"
     }
   ],
+  "topLevelOrder": [
+    {
+      "index": 0,
+      "kind": "script"
+    },
+    {
+      "index": 1,
+      "kind": "script"
+    },
+    {
+      "index": 2,
+      "kind": "script"
+    },
+    {
+      "index": 0,
+      "kind": "workflow"
+    }
+  ],
   "workflows": [
     {
       "comments": [],

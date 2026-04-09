@@ -50,6 +50,7 @@ TEST_SCRIPTS=(
   "e2e/tests/99_managed_call_semantics.sh"
   "e2e/tests/100_ensure_recover_invalid.sh"
   "e2e/tests/100_format_command.sh"
+  "e2e/tests/109_compile_command.sh"
   "e2e/tests/100_bare_identifier_args.sh"
   "e2e/tests/100_inline_capture_interpolation.sh"
   "e2e/tests/101_ensure_recover_output_contract.sh"

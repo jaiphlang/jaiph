@@ -7,6 +7,8 @@ export interface ImportDef {
   path: string;
   alias: string;
   loc: SourceLoc;
+  /** Top-level `#` lines immediately before this import (formatter). */
+  leadingComments?: string[];
 }
 
 export interface RuleRefDef {
@@ -77,6 +79,8 @@ export interface ChannelDef {
   name: string;
   routes?: WorkflowRefDef[];
   loc: SourceLoc;
+  /** Top-level `#` lines immediately before this channel (formatter). */
+  leadingComments?: string[];
 }
 
 export interface WorkflowDef {
@@ -215,10 +219,20 @@ export interface EnvDeclDef {
   loc: SourceLoc;
 }
 
+/** Source order of definitions below imports / config / channels (formatter and round-trip). */
+export type TopLevelEmitOrder =
+  | { kind: "rule"; index: number }
+  | { kind: "script"; index: number }
+  | { kind: "workflow"; index: number }
+  | { kind: "env"; index: number }
+  | { kind: "test"; index: number };
+
 export interface jaiphModule {
   filePath: string;
   /** Optional in-file workflow metadata (agent model, command, run options). */
   metadata?: WorkflowMetadata;
+  /** Top-level `#` lines immediately before `config {` (formatter). */
+  configLeadingComments?: string[];
   imports: ImportDef[];
   channels: ChannelDef[];
   exports: string[];
@@ -229,6 +243,8 @@ export interface jaiphModule {
   envDecls?: EnvDeclDef[];
   /** Present only when parsing a *.test.jh file. */
   tests?: TestBlockDef[];
+  /** Encounter order of rule / script / workflow / env / test (excludes imports, config, channels). */
+  topLevelOrder?: TopLevelEmitOrder[];
 }
 
 /** Docker sandbox runtime configuration. */
@@ -281,6 +297,8 @@ export interface TestBlockDef {
   description: string;
   steps: TestStepDef[];
   loc: SourceLoc;
+  /** Top-level `#` lines immediately before this `test` block (formatter). */
+  leadingComments?: string[];
 }
 
 export interface JaiphTestModule {

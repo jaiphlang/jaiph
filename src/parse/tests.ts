@@ -99,6 +99,7 @@ export function parseTestBlock(
   filePath: string,
   lines: string[],
   startIndex: number,
+  leadingComments?: string[],
 ): { testBlock: TestBlockDef; nextIndex: number } {
   const lineNo = startIndex + 1;
   const raw = lines[startIndex];
@@ -114,6 +115,9 @@ export function parseTestBlock(
     steps: [],
     loc: { line: lineNo, col: raw.indexOf("test") + 1 },
   };
+  if (leadingComments && leadingComments.length > 0) {
+    testBlock.leadingComments = [...leadingComments];
+  }
 
   let i = startIndex + 1;
   for (; i < lines.length; i += 1) {

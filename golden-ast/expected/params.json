@@ -27,6 +27,20 @@
       "name": "checker"
     }
   ],
+  "topLevelOrder": [
+    {
+      "index": 0,
+      "kind": "workflow"
+    },
+    {
+      "index": 0,
+      "kind": "rule"
+    },
+    {
+      "index": 0,
+      "kind": "script"
+    }
+  ],
   "workflows": [
     {
       "comments": [],

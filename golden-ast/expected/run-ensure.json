@@ -25,6 +25,24 @@
       "name": "validator"
     }
   ],
+  "topLevelOrder": [
+    {
+      "index": 0,
+      "kind": "rule"
+    },
+    {
+      "index": 0,
+      "kind": "script"
+    },
+    {
+      "index": 0,
+      "kind": "workflow"
+    },
+    {
+      "index": 1,
+      "kind": "workflow"
+    }
+  ],
   "workflows": [
     {
       "comments": [],

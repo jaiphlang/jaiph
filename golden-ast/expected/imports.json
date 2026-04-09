@@ -9,6 +9,12 @@
   ],
   "rules": [],
   "scripts": [],
+  "topLevelOrder": [
+    {
+      "index": 0,
+      "kind": "workflow"
+    }
+  ],
   "workflows": [
     {
       "comments": [],

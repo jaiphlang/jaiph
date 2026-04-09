@@ -1,109 +1,130 @@
-# Queue library — markdown-section-based task queue manager.
-# Backed by QUEUE_DIR env var. One file per project.
-# ## headings are tasks. Hashtags in headings (#dev-ready, #bug) are filterable tags.
-
-# Return the first ## section from a project queue file, optionally filtered by #tag.
-export script get = ```bash
-PROJECT="$1"
-TAG="${2:-}"
-FILE="${QUEUE_DIR:-.}/${PROJECT}.md"
-if [ ! -f "$FILE" ]; then
-  echo ""
-  exit 0
-fi
-awk -v tag="$TAG" '
-  /^## / {
-    if (found) exit
-    if (tag == "" || index($0, "#" tag) > 0) {
-      found = 1
-      print
-      next
-    }
-  }
-  found { print }
-' "$FILE"
-```
-
-# List section headings with tags; if no project given, list all projects.
-export script list = ```bash
-PROJECT="${1:-}"
-TAG="${2:-}"
-DIR="${QUEUE_DIR:-.}"
-if [ -n "$PROJECT" ]; then
-  FILE="$DIR/${PROJECT}.md"
-  if [ ! -f "$FILE" ]; then exit 0; fi
-  grep '^## ' "$FILE" | while IFS= read -r line; do
-    if [ -z "$TAG" ] || echo "$line" | grep -q "#${TAG}"; then
-      echo "$line"
-    fi
-  done
-else
-  for f in "$DIR"/*.md; do
-    [ -f "$f" ] || continue
-    name="$(basename "$f" .md)"
-    grep '^## ' "$f" | while IFS= read -r line; do
-      if [ -z "$TAG" ] || echo "$line" | grep -q "#${TAG}"; then
-        echo "${name}: ${line}"
-      fi
-    done
-  done
-fi
-```
-
-# Prepend a new task section to a project queue file.
-export script add = ```bash
-PROJECT="$1"
-shift
-CONTENT="$*"
-DIR="${QUEUE_DIR:-.}"
-FILE="$DIR/${PROJECT}.md"
-mkdir -p "$DIR"
-if [ ! -f "$FILE" ]; then
-  printf "# %s Queue\n\n---\n\n" "$PROJECT" > "$FILE"
-fi
-TMPFILE="$(mktemp)"
-# Find the first --- separator and insert after it
-awk -v content="$CONTENT" '
-  BEGIN { inserted = 0 }
-  /^---/ && !inserted {
-    print
-    printf "\n%s\n", content
-    inserted = 1
-    next
-  }
-  { print }
-' "$FILE" > "$TMPFILE"
-mv "$TMPFILE" "$FILE"
-echo "Added task to $PROJECT"
-```
-
-# Remove the first ## section from a project queue file.
-export script complete = ```bash
-PROJECT="$1"
-FILE="${QUEUE_DIR:-.}/${PROJECT}.md"
-if [ ! -f "$FILE" ]; then
-  echo "No queue file for $PROJECT"
-  exit 1
-fi
-TMPFILE="$(mktemp)"
-awk '
-  /^## / {
-    if (!found) { found = 1; skipping = 1; next }
-  }
-  skipping && /^## / { skipping = 0 }
-  !skipping { print }
-' "$FILE" > "$TMPFILE"
-mv "$TMPFILE" "$FILE"
-echo "Completed first task in $PROJECT"
-```
-
-# Wrapper workflow: get first task matching tag and return it.
-export workflow next_task(project, tag) {
-  const task = run get(project, tag)
-  return "${task}"
+rule has_tasks(project) {
+  run queue("get", project)
 }
 
-# Check if a project has any ## sections.
-export rule has_tasks(project) {
-  run get(project)
+script queue = ```python3
+import sys, os, re, json
+
+def parse_queue(path):
+    if not os.path.isfile(path):
+        return {"description": "", "tasks": []}
+    with open(path) as f:
+        text = f.read()
+    lines = text.split("\n")
+    desc_lines = []
+    tasks = []
+    current = None
+    for line in lines:
+        if line.startswith("## "):
+            if current:
+                current["description"] = "\n".join(current["_lines"]).strip()
+                del current["_lines"]
+                tasks.append(current)
+            raw_title = line[3:].strip()
+            tags = re.findall(r"#([A-Za-z0-9_-]+)", raw_title)
+            title = re.sub(r"\s*#[A-Za-z0-9_-]+", "", raw_title).strip()
+            current = {"title": title, "tags": tags, "_lines": []}
+        elif current is not None:
+            current["_lines"].append(line)
+        else:
+            desc_lines.append(line)
+    if current:
+        current["description"] = "\n".join(current["_lines"]).strip()
+        del current["_lines"]
+        tasks.append(current)
+    return {"description": "\n".join(desc_lines).strip(), "tasks": tasks}
+
+def write_queue(path, queue):
+    lines = []
+    if queue["description"]:
+        lines.append(queue["description"])
+        lines.append("")
+    for task in queue["tasks"]:
+        tag_suffix = " " + " ".join(f"#{t}" for t in task["tags"]) if task["tags"] else ""
+        lines.append(f"## {task['title']}{tag_suffix}")
+        if task["description"]:
+            lines.append("")
+            lines.append(task["description"])
+        lines.append("")
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w") as f:
+        f.write("\n".join(lines).rstrip() + "\n")
+
+def queue_path(project):
+    d = os.environ.get("QUEUE_DIR", ".")
+    return os.path.join(d, f"{project}.md")
+
+def cmd_get(args):
+    project, tag = args[0], args[1] if len(args) > 1 else None
+    q = parse_queue(queue_path(project))
+    for task in q["tasks"]:
+        if tag is None or tag in task["tags"]:
+            tag_suffix = " " + " ".join(f"#{t}" for t in task["tags"]) if task["tags"] else ""
+            print(f"## {task['title']}{tag_suffix}")
+            if task["description"]:
+                print()
+                print(task["description"])
+            return
+    sys.exit(1)
+
+def cmd_list(args):
+    project = args[0] if args else None
+    tag = args[1] if len(args) > 1 else None
+    d = os.environ.get("QUEUE_DIR", ".")
+    if project:
+        q = parse_queue(queue_path(project))
+        for task in q["tasks"]:
+            if tag is None or tag in task["tags"]:
+                tag_str = " " + " ".join(f"#{t}" for t in task["tags"]) if task["tags"] else ""
+                print(f"## {task['title']}{tag_str}")
+    else:
+        import glob
+        for f in sorted(glob.glob(os.path.join(d, "*.md"))):
+            name = os.path.splitext(os.path.basename(f))[0]
+            q = parse_queue(f)
+            for task in q["tasks"]:
+                if tag is None or tag in task["tags"]:
+                    tag_str = " " + " ".join(f"#{t}" for t in task["tags"]) if task["tags"] else ""
+                    print(f"{name}: ## {task['title']}{tag_str}")
+
+def cmd_add(args):
+    project, title = args[0], args[1]
+    tag = args[2] if len(args) > 2 else None
+    desc = args[3] if len(args) > 3 else ""
+    path = queue_path(project)
+    q = parse_queue(path)
+    if not q["description"]:
+        q["description"] = f"# {project} Queue\n\n---"
+    tags = [tag] if tag else []
+    q["tasks"].insert(0, {"title": title, "tags": tags, "description": desc})
+    write_queue(path, q)
+    print(f"Added task to {project}")
+
+def cmd_complete(args):
+    project = args[0]
+    path = queue_path(project)
+    q = parse_queue(path)
+    if not q["tasks"]:
+        print(f"No tasks in {project}", file=sys.stderr)
+        sys.exit(1)
+    removed = q["tasks"].pop(0)
+    write_queue(path, q)
+    print(f"Completed: {removed['title']}")
+
+def cmd_json(args):
+    project = args[0]
+    q = parse_queue(queue_path(project))
+    print(json.dumps(q, indent=2))
+
+commands = {"get": cmd_get, "list": cmd_list, "add": cmd_add, "complete": cmd_complete, "json": cmd_json}
+
+if len(sys.argv) < 2 or sys.argv[1] not in commands:
+    print(f"Usage: queue <{'|'.join(commands)}> [args...]", file=sys.stderr)
+    sys.exit(1)
+
+commands[sys.argv[1]](sys.argv[2:])
+```
+
+workflow next_task(project, tag) {
+  return run queue("get", project, tag)
 }

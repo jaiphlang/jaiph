@@ -174,6 +174,50 @@ describe("emitModule", () => {
     assert.equal(roundTrip(input), expected);
   });
 
+  it("preserves rule / workflow / script order from source", () => {
+    const source = [
+      "workflow w() {",
+      '  log "hi"',
+      "}",
+      "",
+      "rule r() {",
+      "  run w()",
+      "}",
+      "",
+      "script s = `echo s`",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
+
+  it("preserves a top-level comment before declarations across blank lines", () => {
+    const source = [
+      "# About this module",
+      "",
+      "rule r() {",
+      "  run w()",
+      "}",
+      "",
+      "workflow w() {",
+      '  log "x"',
+      "}",
+      "",
+    ].join("\n");
+    // Blank lines only between top-level sections; attached comments sit directly above their decl.
+    const expected = [
+      "# About this module",
+      "rule r() {",
+      "  run w()",
+      "}",
+      "",
+      "workflow w() {",
+      '  log "x"',
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), expected);
+  });
+
   it("is idempotent", () => {
     const source = [
       "# A comment",
