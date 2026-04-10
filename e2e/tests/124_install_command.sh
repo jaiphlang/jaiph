@@ -32,7 +32,8 @@ JHEOF
     git commit -m "initial" >/dev/null 2>&1
     git push origin main >/dev/null 2>&1
   )
-  echo "${repo_dir}"
+  # file:// protocol ensures --depth 1 works via smart transport on all platforms
+  echo "file://${repo_dir}"
 }
 
 # ── 1. Install a local library ────────────────────────────────────────────────
