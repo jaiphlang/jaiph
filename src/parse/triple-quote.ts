@@ -1,5 +1,15 @@
-import { dedentCommonLeadingWhitespace } from "./dedent";
 import { fail } from "./core";
+
+/** Per language.md: trim blank lines adjacent to opening/closing `"""` only — do not dedent inner margin. */
+export function trimAdjacentBlankLines(text: string): string {
+  if (text === "") return "";
+  const lines = text.split("\n");
+  let start = 0;
+  let end = lines.length;
+  while (start < end && lines[start]!.trim() === "") start++;
+  while (end > start && lines[end - 1]!.trim() === "") end--;
+  return lines.slice(start, end).join("\n");
+}
 
 /**
  * Parse a triple-quoted string block (`"""..."""`).
@@ -28,7 +38,7 @@ export function parseTripleQuoteBlock(
     const trimmed = lines[i].trim();
     if (trimmed.startsWith('"""')) {
       const afterClose = trimmed.slice(3).trim();
-      return { body: joinAndDedentBody(bodyLines), nextIdx: i + 1, afterClose };
+      return { body: joinTripleQuoteBody(bodyLines), nextIdx: i + 1, afterClose };
     }
     bodyLines.push(lines[i]);
   }
@@ -36,8 +46,8 @@ export function parseTripleQuoteBlock(
   fail(filePath, 'unterminated triple-quoted block: no closing """ before end of file', lineNo);
 }
 
-function joinAndDedentBody(bodyLines: string[]): string {
-  return dedentCommonLeadingWhitespace(bodyLines.join("\n"));
+function joinTripleQuoteBody(bodyLines: string[]): string {
+  return trimAdjacentBlankLines(bodyLines.join("\n"));
 }
 
 /**

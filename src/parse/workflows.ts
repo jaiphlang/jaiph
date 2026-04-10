@@ -267,6 +267,7 @@ export function parseWorkflowBlock(
         workflow.steps.push({
           type: "fail",
           message: tripleQuoteBodyToRaw(body),
+          tripleQuoted: true,
           loc: { line: innerNo, col: failCol },
         });
         idx = nextIdx - 1;
@@ -419,7 +420,7 @@ export function parseWorkflowBlock(
         tqLines[idx] = logArg;
         const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, idx);
         if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
-        workflow.steps.push({ type: "log", message: body, loc: { line: innerNo, col: logCol } });
+        workflow.steps.push({ type: "log", message: body, tripleQuoted: true, loc: { line: innerNo, col: logCol } });
         idx = nextIdx - 1;
         continue;
       }
@@ -439,7 +440,7 @@ export function parseWorkflowBlock(
         tqLines[idx] = logerrArg;
         const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, idx);
         if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
-        workflow.steps.push({ type: "logerr", message: body, loc: { line: innerNo, col: logerrCol } });
+        workflow.steps.push({ type: "logerr", message: body, tripleQuoted: true, loc: { line: innerNo, col: logerrCol } });
         idx = nextIdx - 1;
         continue;
       }
@@ -471,7 +472,7 @@ export function parseWorkflowBlock(
         tqLines[idx] = returnValue;
         const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, idx);
         if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
-        workflow.steps.push({ type: "return", value: tripleQuoteBodyToRaw(body), loc: retLoc });
+        workflow.steps.push({ type: "return", value: tripleQuoteBodyToRaw(body), tripleQuoted: true, loc: retLoc });
         idx = nextIdx - 1;
         continue;
       }

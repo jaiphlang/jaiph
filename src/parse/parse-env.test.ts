@@ -54,7 +54,7 @@ test("parseEnvDecl: triple-quoted with interpolation", () => {
     '"""',
   ];
   const { envDecl } = parseEnvDecl("test.jh", lines, 0);
-  assert.equal(envDecl.value, "Hello ${name}\nDone");
+  assert.equal(envDecl.value, "  Hello ${name}\n  Done");
 });
 
 test("parseEnvDecl: rejects unclosed double-quoted string as multiline error", () => {

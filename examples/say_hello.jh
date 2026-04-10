@@ -3,10 +3,10 @@
 # scripts are defined in fenced blocks or single line backticks
 # by default it's bash, but it cany be any env: ```node, ```python3, etc.
 script validate_name = ```
-if [ -z "$1" ]; then
-  echo "You didn't provide your name :(" >&2
-  exit 1
-fi
+  if [ -z "$1" ]; then
+    echo "You didn't provide your name :(" >&2
+    exit 1
+  fi
 ```
 
 # rules are always executed on readonly filesystem
@@ -20,8 +20,8 @@ workflow default(name) {
 
   # prompts call agents - cursor by default, but it's configurable
   const response = prompt """
-Say hello to ${name} and provide a fun fact about a person with the same name.
-Respond with a single line. Do not inspect files or run tools.
+    Say hello to ${name} and provide a fun fact about a person with the same name.
+    Respond with a single line. Do not inspect files or run tools.
   """
 
   log response

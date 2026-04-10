@@ -34,7 +34,8 @@
                   "pattern": {
                     "kind": "string_literal",
                     "value": "hello"
-                  }
+                  },
+                  "tripleQuotedBody": true
                 },
                 {
                   "body": "\"unknown\"",

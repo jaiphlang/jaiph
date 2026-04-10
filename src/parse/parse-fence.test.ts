@@ -46,10 +46,10 @@ test("fence: fenceLineIdx not at start", () => {
   assert.equal(result.nextIdx, 4);
 });
 
-test("fence: dedents common leading whitespace in body lines", () => {
+test("fence: preserves script body indentation (no margin strip)", () => {
   const lines = ["```", "  indented", "    more", "```"];
   const result = parseFencedBlock("test.jh", lines, 0);
-  assert.equal(result.body, "indented\n  more");
+  assert.equal(result.body, "  indented\n    more");
 });
 
 test("fence: error on unterminated fence", () => {

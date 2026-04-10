@@ -176,7 +176,7 @@ export function parseBlockStatement(
       if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
       const message = tripleQuoteBodyToRaw(body);
       return {
-        step: { type: "fail", message, loc: { line: innerNo, col: failCol } },
+        step: { type: "fail", message, tripleQuoted: true, loc: { line: innerNo, col: failCol } },
         nextIdx,
       };
     }
@@ -325,7 +325,7 @@ export function parseBlockStatement(
       tqLines[idx] = logArg;
       const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, idx);
       if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
-      return { step: { type: "log", message: body, loc: { line: innerNo, col: logCol } }, nextIdx };
+      return { step: { type: "log", message: body, tripleQuoted: true, loc: { line: innerNo, col: logCol } }, nextIdx };
     }
     if (logArg.startsWith('"') && !hasUnescapedClosingQuote(logArg, 1)) {
       fail(filePath, 'multiline strings use triple quotes: log """..."""', innerNo, logCol);
@@ -342,7 +342,7 @@ export function parseBlockStatement(
       tqLines[idx] = logerrArg;
       const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, idx);
       if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
-      return { step: { type: "logerr", message: body, loc: { line: innerNo, col: logerrCol } }, nextIdx };
+      return { step: { type: "logerr", message: body, tripleQuoted: true, loc: { line: innerNo, col: logerrCol } }, nextIdx };
     }
     if (logerrArg.startsWith('"') && !hasUnescapedClosingQuote(logerrArg, 1)) {
       fail(filePath, 'multiline strings use triple quotes: logerr """..."""', innerNo, logerrCol);
@@ -373,7 +373,7 @@ export function parseBlockStatement(
       const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, idx);
       if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
       return {
-        step: { type: "return", value: tripleQuoteBodyToRaw(body), loc: retLoc },
+        step: { type: "return", value: tripleQuoteBodyToRaw(body), tripleQuoted: true, loc: retLoc },
         nextIdx,
       };
     }

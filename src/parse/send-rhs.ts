@@ -36,7 +36,7 @@ export function parseSendRhs(
     tqLines[idx] = t;
     const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, idx);
     if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
-    return { rhs: { kind: "literal", token: tripleQuoteBodyToRaw(body) }, nextIdx };
+    return { rhs: { kind: "literal", token: tripleQuoteBodyToRaw(body), tripleQuoted: true }, nextIdx };
   }
   if (t.startsWith('"')) {
     if (!hasUnescapedClosingQuote(t, 1)) {

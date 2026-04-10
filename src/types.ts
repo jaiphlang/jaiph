@@ -30,6 +30,8 @@ export type MatchPatternDef =
 export interface MatchArmDef {
   pattern: MatchPatternDef;
   body: string;
+  /** Arm body was parsed from `pattern => """ ... """` (runtime dedents margin; formatter keeps source). */
+  tripleQuotedBody?: boolean;
 }
 
 export interface MatchExprDef {
@@ -39,7 +41,7 @@ export interface MatchExprDef {
 }
 
 export type ConstRhs =
-  | { kind: "expr"; bashRhs: string }
+  | { kind: "expr"; bashRhs: string; /** `const x = """..."""` — runtime dedents margin. */ tripleQuoted?: boolean }
   | { kind: "run_capture"; ref: WorkflowRefDef; args?: string; bareIdentifierArgs?: string[] }
   | { kind: "ensure_capture"; ref: RuleRefDef; args?: string; bareIdentifierArgs?: string[] }
   | {
@@ -57,7 +59,7 @@ export type ConstRhs =
 
 /** RHS of `channel <- …` */
 export type SendRhsDef =
-  | { kind: "literal"; token: string }
+  | { kind: "literal"; token: string; /** `channel <- """..."""` — runtime dedents margin. */ tripleQuoted?: boolean }
   | { kind: "var"; bash: string }
   | { kind: "run"; ref: WorkflowRefDef; args?: string; bareIdentifierArgs?: string[] }
   /** Parsed then rejected in validation (use `run ref` to capture a return value). */
@@ -154,6 +156,8 @@ export type WorkflowStepDef =
   | {
       type: "fail";
       message: string;
+      /** Set when `fail """..."""`; runtime dedents margin. */
+      tripleQuoted?: boolean;
       loc: SourceLoc;
     }
   | {
@@ -165,11 +169,15 @@ export type WorkflowStepDef =
   | {
       type: "log";
       message: string;
+      /** Set when `log """..."""`; runtime dedents margin. */
+      tripleQuoted?: boolean;
       loc: SourceLoc;
     }
   | {
       type: "logerr";
       message: string;
+      /** Set when `logerr """..."""`; runtime dedents margin. */
+      tripleQuoted?: boolean;
       loc: SourceLoc;
     }
   | {
@@ -181,6 +189,8 @@ export type WorkflowStepDef =
   | {
       type: "return";
       value: string;
+      /** Set when `return """..."""`; runtime dedents margin. */
+      tripleQuoted?: boolean;
       loc: SourceLoc;
       /** When set, return value comes from a managed run/ensure/match instead of the literal `value`. */
       managed?:
