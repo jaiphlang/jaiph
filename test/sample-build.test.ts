@@ -1090,25 +1090,27 @@ test("jaiph init creates workspace structure and guidance", () => {
     assert.equal(existsSync(join(root, ".jaiph")), true);
     assert.equal(existsSync(join(root, ".jaiph/lib")), false);
     assert.equal(existsSync(join(root, ".jaiph/bootstrap.jh")), true);
-    assert.equal(existsSync(join(root, ".jaiph/jaiph-skill.md")), true);
+    assert.equal(existsSync(join(root, ".jaiph/SKILL.md")), true);
     const bootstrap = readFileSync(join(root, ".jaiph/bootstrap.jh"), "utf8");
     assert.match(bootstrap, /^#!\/usr\/bin\/env jaiph\n\n/);
     assert.match(bootstrap, /workflow default\(\) \{/);
-    assert.match(bootstrap, /\.jaiph\/jaiph-skill\.md/);
+    assert.match(bootstrap, /\.jaiph\/SKILL\.md/);
     assert.match(bootstrap, /Analyze repository structure/);
     assert.match(bootstrap, /Create or update Jaiph workflows under \.jaiph\//);
     assert.doesNotMatch(bootstrap, /\$1/);
     assert.equal(statSync(join(root, ".jaiph/bootstrap.jh")).mode & 0o777, 0o755);
-    const localSkill = readFileSync(join(root, ".jaiph/jaiph-skill.md"), "utf8");
+    const localSkill = readFileSync(join(root, ".jaiph/SKILL.md"), "utf8");
     assert.match(localSkill, /Jaiph Bootstrap Skill/);
     assert.equal(existsSync(join(root, ".gitignore")), false);
+    assert.equal(readFileSync(join(root, ".jaiph", ".gitignore"), "utf8"), "runs\ntmp\n");
     assert.match(initResult.stdout, /Jaiph init/);
     assert.match(initResult.stdout, /▸ Creating \.jaiph\/bootstrap\.jh/);
     assert.match(initResult.stdout, /✓ Initialized \.jaiph\/bootstrap\.jh/);
-    assert.match(initResult.stdout, /Synced \.jaiph\/jaiph-skill\.md/);
+    assert.match(initResult.stdout, /✓ Created \.jaiph\/\.gitignore/);
+    assert.match(initResult.stdout, /Wrote \.jaiph\/SKILL\.md from installation/);
     assert.match(initResult.stdout, /\.\/\.jaiph\/bootstrap\.jh/);
     assert.match(initResult.stdout, /analyze the project/i);
-    assert.match(initResult.stdout, /add `\.jaiph\/` to `\.gitignore`/i);
+    assert.match(initResult.stdout, /\.jaiph\/\.gitignore/i);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

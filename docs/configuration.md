@@ -318,4 +318,4 @@ workflow default() {
 
 ## Created by `jaiph init`
 
-`jaiph init` creates `.jaiph/bootstrap.jh` and syncs `.jaiph/jaiph-skill.md` from your installation. It does not add a separate config file — use `config { ... }` in your workflow sources.
+`jaiph init` creates `.jaiph/bootstrap.jh` and writes `.jaiph/SKILL.md` from the skill file bundled with your installation (see `JAIPH_SKILL_PATH` in the CLI reference). It does not add a separate config file — use `config { ... }` in your workflow sources.

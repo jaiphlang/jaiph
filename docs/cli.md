@@ -302,8 +302,9 @@ jaiph init [workspace-path]
 
 Creates:
 
-- `.jaiph/bootstrap.jh` — if it does not exist (otherwise left unchanged). Made executable.
-- `.jaiph/jaiph-skill.md` — synced from the local Jaiph installation when the skill file is found; otherwise sync is skipped and a note is printed.
+- `.jaiph/.gitignore` — lists `runs` and `tmp`. If the file already exists and does not match this exact list, `jaiph init` exits with a non-zero status.
+- `.jaiph/bootstrap.jh` — canonical bootstrap workflow; made executable. If the file already exists and does not match the built-in template, `jaiph init` exits with a non-zero status.
+- `.jaiph/SKILL.md` — copied from the skill file bundled with your Jaiph installation (or from `JAIPH_SKILL_PATH` when set). If no skill file is found, this file is not written and a note is printed.
 
 ## `jaiph install`
 
@@ -469,4 +470,4 @@ For `JAIPH_DOCKER_*` defaults, image selection, mounts, and container behavior, 
 
 ### `jaiph init`
 
-- `JAIPH_SKILL_PATH` — path to the skill file copied to `.jaiph/jaiph-skill.md` when syncing from the local installation.
+- `JAIPH_SKILL_PATH` — path to the skill markdown copied to `.jaiph/SKILL.md` when running `jaiph init`.

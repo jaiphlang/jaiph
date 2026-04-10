@@ -31,4 +31,10 @@ else
 fi
 e2e::assert_file_exists "${BOOTSTRAP_FILE}" "bootstrap file exists"
 e2e::assert_file_executable "${BOOTSTRAP_FILE}" "bootstrap file is executable"
-e2e::assert_file_exists "${TEST_DIR}/.jaiph/jaiph-skill.md" "jaiph-skill.md exists"
+e2e::assert_file_exists "${TEST_DIR}/.jaiph/SKILL.md" "SKILL.md exists"
+
+# Bash command substitution strips a trailing newline; compare bytes with cmp.
+if ! cmp -s "${TEST_DIR}/.jaiph/.gitignore" <(printf 'runs\ntmp\n'); then
+  e2e::fail "Expected .jaiph/.gitignore to list runs and tmp with a final newline"
+fi
+e2e::pass ".jaiph/.gitignore lists runs and tmp"
