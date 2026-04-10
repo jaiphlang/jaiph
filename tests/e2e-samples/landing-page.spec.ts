@@ -98,7 +98,7 @@ function runScript(tmpRoot: string, rel: string, args: string[]): { combined: st
 /** Outputs that depend on LLMs or agents — cannot match page text deterministically. */
 const SKIP_OUTPUT: Record<string, Set<string>> = {
   'say-hello': new Set(['success']),
-  'ensure-ci-passes': new Set(['run']),
+  'recover-loop': new Set(['run']),
   async: new Set(['run']),
 };
 

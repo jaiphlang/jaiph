@@ -24,15 +24,15 @@ EXAMPLES_DIR="${ROOT_DIR}/examples"
 COVERED_RUN=(
   "agent_inbox.jh"
   "say_hello.jh"       # failure path only; success needs a real agent
+  "recover_loop.jh"    # success path only (report.txt pre-created); recovery needs a real agent
 )
 # Covered via `jaiph test`:
 COVERED_TEST=(
   "say_hello.test.jh"
-  "ensure_ci_passes.test.jh"
+  "recover_loop.test.jh"
 )
 # Excluded (not runnable in e2e):
 EXCLUDED=(
-  "ensure_ci_passes.jh" # requires real `npm run test:ci`; CI/env-specific
   "async.jh"            # requires real agent backends (cursor, claude) for prompt steps
 )
 
@@ -134,17 +134,42 @@ testing say_hello.test.jh
   - without name, workflow fails with validation message
 EOF
 
-# ── ensure_ci_passes.test.jh ────────────────────────────────────────────────
+# ── recover_loop.jh ────────────────────────────────────────────────────────
+# Success path: report.txt exists, rule passes, no recovery needed.
 
-e2e::section "examples/ensure_ci_passes.test.jh — native test with mocked script"
+e2e::section "examples/recover_loop.jh — success path (report.txt pre-created)"
+
+touch "${TEST_DIR}/report.txt"
 
 # When
-ci_test_out="$(jaiph test "${TEST_DIR}/ensure_ci_passes.test.jh" 2>&1)"
+recover_out="$(e2e::run "recover_loop.jh")"
 
 # Then
-e2e::expect_stdout "${ci_test_out}" <<'EOF'
-testing ensure_ci_passes.test.jh
-  ▸ ci passes on first attempt skips recover
+e2e::expect_stdout "${recover_out}" <<'EOF'
+
+Jaiph: Running recover_loop.jh
+
+workflow default
+  ▸ rule report_exists
+  ·   ▸ script check_report
+  ·   ✓ script check_report (<time>)
+  ✓ rule report_exists (<time>)
+✓ PASS workflow default (<time>)
+EOF
+
+rm -f "${TEST_DIR}/report.txt"
+
+# ── recover_loop.test.jh ──────────────────────────────────────────────────
+
+e2e::section "examples/recover_loop.test.jh — native test with mocked script"
+
+# When
+rl_test_out="$(jaiph test "${TEST_DIR}/recover_loop.test.jh" 2>&1)"
+
+# Then
+e2e::expect_stdout "${rl_test_out}" <<'EOF'
+testing recover_loop.test.jh
+  ▸ report exists on first attempt skips recover
   ✓ <time>
 ✓ 1 test(s) passed
 EOF
