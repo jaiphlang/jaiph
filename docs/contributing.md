@@ -215,7 +215,7 @@ npm run test:samples
 
 If a Jekyll server is already running on **`http://127.0.0.1:4000`**, Playwright reuses it (`reuseExistingServer` in `playwright.config.ts`). Otherwise it starts one.
 
-Samples that require live agent backends (e.g. `async.jh`, `ensure_ci_passes.jh`) are verified for source parity only — output verification is limited to fully deterministic workflows.
+Samples that require live agent backends (e.g. `async.jh`, `recover_loop.jh`) are verified for source parity only — output verification is limited to fully deterministic workflows.
 
 ## E2E testing
 

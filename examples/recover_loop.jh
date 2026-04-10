@@ -1,0 +1,17 @@
+#!/usr/bin/env jaiph
+
+# Recursive recovery: when a check fails, prompt an agent to fix it,
+# then retry via run default(). Jaiph CI uses the same pattern to
+# auto-fix failing tests — see .jaiph/ensure_ci_passes.jh
+script check_report = `test -f report.txt`
+
+rule report_exists() {
+  run check_report()
+}
+
+workflow default() {
+  ensure report_exists() recover (failure) {
+    prompt "report.txt is missing. Create it with a short dummy summary."
+    run default()
+  }
+}

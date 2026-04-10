@@ -1,0 +1,10 @@
+#!/usr/bin/env jaiph
+
+import "recover_loop.jh" as rl
+
+test "report exists on first attempt skips recover" {
+  mock script rl.check_report() {
+    exit 0
+  }
+  run rl.default()
+}

@@ -130,7 +130,7 @@ layout: null
                     <button type="button" class="code-tab-button"
                         data-target="say-hello-test-jh">say_hello.test.jh</button>
                     <button type="button" class="code-tab-button"
-                        data-target="ensure-ci-passes-jh">ensure_ci_passes.jh</button>
+                        data-target="recover-loop-jh">recover_loop.jh</button>
                     <button type="button" class="code-tab-button"
                         data-target="inbox-pipeline-jh">agent_inbox.jh</button>
                     <button type="button" class="code-tab-button" data-target="async-jh">async.jh</button>
@@ -259,64 +259,55 @@ testing say_hello.test.jh
   - without name, workflow fails with validation message</code></pre>
                 </div>
 
-                <div class="code-tab-panel" data-panel="ensure-ci-passes-jh" data-sample="ensure-ci-passes"
-                    data-sample-file="ensure_ci_passes.jh">
-                    <p>This workflow uses Jaiph's <code>ensure ... recover</code> pattern to handle a failing CI
-                        check with an agent-assisted fix.
-                        The <code>recover (failure)</code> binding receives the full merged stdout+stderr from the failed
-                        rule execution — including output from nested scripts and rules.
-                        The recovery body runs <strong>once</strong> on failure (like a <code>catch</code> clause) —
-                        for retries, use explicit recursion (the workflow calls itself).
-                        Persist the failure payload to a stable path (here under
-                        <code>.jaiph/tmp/</code>) and assert it is non-empty before the prompt, so the message about
-                        "inspect the log file" matches what is on disk.</p>
-                    <p>The workflow uses custom <code>config</code> to enable agent YOLO mode. Otherwise the agent
-                        cannot
-                        run some commands (for example <code>npm test</code>). By default Jaiph runs agents in their
-                        default, more secure modes.</p>
+                <div class="code-tab-panel" data-panel="recover-loop-jh" data-sample="recover-loop"
+                    data-sample-file="recover_loop.jh">
+                    <p>The <code>ensure ... recover</code> pattern checks a rule and, on failure,
+                        runs a recovery block. The <code>recover (failure)</code> binding captures
+                        the merged stdout+stderr from the failed check.
+                        Recovery runs <strong>once</strong> — for retries, the workflow calls itself
+                        recursively (<code>run default()</code>).</p>
                     <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
-config {
-  agent.backend = "cursor"
-  agent.cursor_flags = "--force"
-  # for Claude you can use:
-  # agent.backend = "claude"
-  # agent.claude_flags = "--permission-mode bypassPermissions"
+# Recursive recovery: when a check fails, prompt an agent to fix it,
+# then retry via run default(). Jaiph CI uses the same pattern to
+# auto-fix failing tests — see .jaiph/ensure_ci_passes.jh
+script check_report = `test -f report.txt`
+
+rule report_exists() {
+  run check_report()
 }
-
-script npm_run_test_ci = `npm run test:ci`
-
-rule ci_passes() {
-  run npm_run_test_ci()
-}
-
-script save_string_to_file = `printf '%s' "$1" > "$2"`
 
 workflow default() {
-  ensure ci_passes() recover (failure) {
-    run save_string_to_file(failure, ".jaiph/tmp/ci_failure.log")
-    prompt "The CI check failed. Failure output is in .jaiph/tmp/ci_failure.log — fix the code so npm run test:ci passes."
+  ensure report_exists() recover (failure) {
+    prompt "report.txt is missing. Create it with a short dummy summary."
+    run default()
   }
 }</code></pre>
-                    <p>In the run below, <code>ci_passes</code> fails once. The failure output is captured in
-                        <code>.jaiph/runs</code> artifacts. Jaiph prompts the agent for a fix and retries until the
-                        check passes.
+                    <p>In the run below, <code>report_exists</code> fails once. The agent creates
+                        <code>report.txt</code>, and the recursive <code>run default()</code> retries
+                        successfully.
                     </p>
-                    <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  .jaiph/ensure_ci_passes.jh</span>
+                    <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  ./recover_loop.jh</span>
 
-Jaiph: Running ensure_ci_passes.jh
+Jaiph: Running recover_loop.jh
 
 <span class="run-keyword">workflow</span> default
-  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> ensure_ci_passes
-  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> ci_passes
-  <span class="run-marker">·</span>   <span class="run-fail">✗ rule ci_passes (11s)</span>
-  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> cursor "Fix failing CI so n..."
-  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">prompt cursor (24s)</span>
-  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> ci_passes
-  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">rule ci_passes (10s)</span>
-  <span class="run-pass">✓</span> <span class="run-time">workflow ensure_ci_passes (45s)</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">rule</span> report_exists
+  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">script</span> check_report
+  <span class="run-marker">·</span>   <span class="run-fail">✗ script check_report (0s)</span>
+  <span class="run-fail">✗ rule report_exists (0s)</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> cursor "report.txt is missin..."
+  <span class="run-pass">✓</span> <span class="run-time">prompt cursor (5s)</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> default
+  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> report_exists
+  <span class="run-marker">·</span>   <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">script</span> check_report
+  <span class="run-marker">·</span>   <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">script check_report (0s)</span>
+  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">rule report_exists (0s)</span>
+  <span class="run-pass">✓</span> <span class="run-time">workflow default (0.1s)</span>
 
-<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(45.1s)</span></code></pre>
+<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(5.5s)</span></code></pre>
+                    <p>Jaiph's own CI uses this same pattern to auto-fix failing tests — see
+                        <a href="https://github.com/jaiphlang/jaiph/blob/main/.jaiph/ensure_ci_passes.jh"><code>.jaiph/ensure_ci_passes.jh</code></a>.</p>
                 </div>
 
                 <div class="code-tab-panel" data-panel="inbox-pipeline-jh" data-sample="agent-inbox"
