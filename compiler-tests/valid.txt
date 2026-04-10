@@ -672,6 +672,24 @@ workflow default() {
   }
 }
 
+=== ensure recover multiline triple-quoted prompt and hash comment
+# @expect ok
+--- input.jh
+rule gate() {
+  run noop()
+}
+script noop = `true`
+
+workflow default() {
+  ensure gate() recover (err) {
+    prompt """
+      fix the build
+    """
+    # after prompt
+    run noop()
+  }
+}
+
 === ensure recover in rules is valid
 # @expect ok
 --- input.jh

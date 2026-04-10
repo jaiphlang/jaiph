@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { parsejaiph } from "../parser";
 import { parseEnsureStep } from "./steps";
 
 // === parseEnsureStep: basic ensure without recover ===
@@ -129,6 +130,48 @@ test("parseEnsureStep: parses ensure with multiline recover block", () => {
   assert.equal(nextIdx, 3);
 });
 
+test("parseEnsureStep: multiline recover block with triple-quoted prompt", () => {
+  const lines = [
+    "  ensure gate() recover (err) {",
+    "    run save()",
+    '    prompt """',
+    "      fix CI",
+    '    """',
+    "    run retry()",
+    "  }",
+  ];
+  const { step, nextIdx } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], "gate() recover (err) {");
+  assert.equal(step.type, "ensure");
+  if (step.type === "ensure" && step.recover && "block" in step.recover) {
+    assert.equal(step.recover.block.length, 3);
+    assert.equal(step.recover.block[0].type, "run");
+    const p = step.recover.block[1];
+    assert.equal(p.type, "prompt");
+    if (p.type === "prompt") {
+      assert.equal(p.bodyKind, "triple_quoted");
+      assert.ok(p.raw.includes("fix CI"));
+    }
+    assert.equal(step.recover.block[2].type, "run");
+  }
+  assert.equal(nextIdx, 6);
+});
+
+test("parseEnsureStep: recover block lines starting with # are comments not shell", () => {
+  const lines = [
+    "  ensure gate() recover (err) {",
+    "    # note",
+    "    run retry()",
+    "  }",
+  ];
+  const { step } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], "gate() recover (err) {");
+  assert.equal(step.type, "ensure");
+  if (step.type === "ensure" && step.recover && "block" in step.recover) {
+    assert.equal(step.recover.block.length, 2);
+    assert.equal(step.recover.block[0].type, "comment");
+    assert.equal(step.recover.block[1].type, "run");
+  }
+});
+
 // === parseEnsureStep: recover bindings ===
 
 test("parseEnsureStep: rejects recover with two bindings", () => {
@@ -207,6 +250,37 @@ test("parseEnsureStep: recover with logerr statement", () => {
     assert.ok(step.recover);
     if ("single" in step.recover) {
       assert.equal(step.recover.single.type, "logerr");
+    }
+  }
+});
+
+test("parsejaiph: workflow with ensure recover and multiline triple-quoted prompt", () => {
+  const src = [
+    "rule gate() {",
+    "  run noop()",
+    "}",
+    "script noop = `true`",
+    "workflow w() {",
+    "  ensure gate() recover (err) {",
+    '    prompt """',
+    "      hello",
+    '    """',
+    "  }",
+    "}",
+    "",
+  ].join("\n");
+  const mod = parsejaiph(src, "recover_prompt.jh");
+  const w = mod.workflows.find((x) => x.name === "w");
+  assert.ok(w);
+  const ensureStep = w!.steps[0];
+  assert.equal(ensureStep.type, "ensure");
+  if (ensureStep.type === "ensure" && ensureStep.recover && "block" in ensureStep.recover) {
+    assert.equal(ensureStep.recover.block.length, 1);
+    const p = ensureStep.recover.block[0];
+    assert.equal(p.type, "prompt");
+    if (p.type === "prompt") {
+      assert.equal(p.bodyKind, "triple_quoted");
+      assert.ok(p.raw.includes("hello"));
     }
   }
 });

@@ -196,29 +196,38 @@ export function parsePromptStep(
 
   // --- Case 1: Triple-quoted block ---
   if (promptArg.startsWith('"""')) {
-    // Build a lines array where the opening """ sits at the real lineIdx
-    // so that parseTripleQuoteBlock reports correct line numbers on errors.
-    const tqLines = [...lines];
-    tqLines[lineIdx] = promptArg;
+    // Recover blocks pass `lines: []` and a single merged `promptArg` (multiline).
+    // Split into synthetic lines so `parseTripleQuoteBlock` sees an opening line of only `"""`.
+    let tqLines: string[];
+    let tripleQuoteLineIdx: number;
+    if (lines.length === 0) {
+      tqLines = promptArg.split(/\r?\n/);
+      tripleQuoteLineIdx = 0;
+    } else {
+      tqLines = [...lines];
+      tqLines[lineIdx] = promptArg;
+      tripleQuoteLineIdx = lineIdx;
+    }
     const { body, nextIdx: realNextIdx, returns: returnsOnClosingLine } = parsePromptTripleQuoteBlock(
       filePath,
       tqLines,
-      lineIdx,
+      tripleQuoteLineIdx,
     );
 
     // Wrap body in quotes so the runtime's interpolateWithCaptures can process ${} vars
     const raw = tripleQuoteBodyToRaw(body);
 
+    const linesForReturns = lines.length === 0 ? tqLines : lines;
     let returnsSchema: string | undefined = returnsOnClosingLine;
     let consumeEndIdx = realNextIdx;
     if (returnsSchema === undefined) {
-      const lineAfterClose = (lines[realNextIdx] ?? "").trim();
+      const lineAfterClose = (linesForReturns[realNextIdx] ?? "").trim();
       if (lineAfterClose.startsWith("returns ")) {
         const pr = parseReturnsClause(
           filePath,
           realNextIdx + 1,
           lineAfterClose,
-          lines,
+          linesForReturns,
           realNextIdx,
         );
         returnsSchema = pr.returns;

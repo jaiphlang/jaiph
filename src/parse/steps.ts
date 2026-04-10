@@ -16,30 +16,80 @@ function rejectTrailingContent(
 }
 import { parsePromptStep } from "./prompt";
 
-/** Split recover block content into statements on `;` or `\n`, but not inside double-quoted strings. */
+/**
+ * Split recover block content into statements on `;` or `\n`, but not inside
+ * double-quoted strings or triple-quoted `"""…"""` blocks (same idea as
+ * `splitStatementsOnSemicolons`).
+ */
 function splitRecoverStatements(blockContent: string): string[] {
   const statements: string[] = [];
   let current = "";
   let inDoubleQuote = false;
+  let inTripleQuote = false;
   let braceDepth = 0;
-  for (let i = 0; i < blockContent.length; i += 1) {
+  let i = 0;
+  while (i < blockContent.length) {
     const ch = blockContent[i];
-    if (ch === '"' && (i === 0 || blockContent[i - 1] !== "\\")) {
-      inDoubleQuote = !inDoubleQuote;
+    const next3 = blockContent.slice(i, i + 3);
+
+    if (inTripleQuote) {
+      if (next3 === '"""') {
+        current += next3;
+        inTripleQuote = false;
+        i += 3;
+        continue;
+      }
       current += ch;
+      i += 1;
       continue;
     }
-    if (!inDoubleQuote) {
-      if (ch === "{") { braceDepth += 1; current += ch; continue; }
-      if (ch === "}") { braceDepth -= 1; current += ch; continue; }
+
+    if (inDoubleQuote) {
+      if (ch === '"' && (i === 0 || blockContent[i - 1] !== "\\")) {
+        inDoubleQuote = false;
+      }
+      current += ch;
+      i += 1;
+      continue;
     }
-    if (!inDoubleQuote && braceDepth === 0 && (ch === ";" || ch === "\n")) {
+
+    if (next3 === '"""') {
+      inTripleQuote = true;
+      current += next3;
+      i += 3;
+      continue;
+    }
+
+    if (ch === '"') {
+      inDoubleQuote = true;
+      current += ch;
+      i += 1;
+      continue;
+    }
+
+    if (ch === "{") {
+      braceDepth += 1;
+      current += ch;
+      i += 1;
+      continue;
+    }
+    if (ch === "}") {
+      braceDepth -= 1;
+      current += ch;
+      i += 1;
+      continue;
+    }
+
+    if (braceDepth === 0 && (ch === ";" || ch === "\n")) {
       const trimmed = current.trim();
       if (trimmed) statements.push(trimmed);
       current = "";
+      i += 1;
       continue;
     }
+
     current += ch;
+    i += 1;
   }
   const trimmed = current.trim();
   if (trimmed) statements.push(trimmed);
@@ -56,6 +106,9 @@ function parseRecoverStatement(
   const t = stmt.trim();
   if (!t) {
     fail(filePath, "empty recover statement", lineNo, col);
+  }
+  if (t.startsWith("#")) {
+    return { type: "comment", text: t, loc: { line: lineNo, col } };
   }
   if (t === "wait") {
     fail(filePath, '"wait" has been removed from the language', lineNo, col);
