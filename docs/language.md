@@ -175,7 +175,7 @@ workflow deploy(env, version) {
 }
 ```
 
-Workflows support all step types: `run`, `ensure`, `prompt`, `const`, `log`, `logerr`, `fail`, `return`, `send`, `match`, `run async`, and `recover`.
+Workflows support all step types: `run`, `ensure`, `prompt`, `const`, `log`, `logerr`, `fail`, `return`, `send`, `match`, `if`, `run async`, and `recover`.
 
 ### Rules
 
@@ -485,6 +485,41 @@ const label = match status {
 ```
 
 The outer `return` in `return match x { … }` applies to the whole match expression and remains valid.
+
+### `if` — Conditional Guard
+
+Simple conditional that executes a block when a string comparison holds. No `else` branch — use `match` for exhaustive value branching.
+
+```jaiph
+if param == "" {
+  fail "param was not provided"
+}
+
+if mode =~ /^debug/ {
+  log "Debug mode enabled"
+}
+```
+
+The subject is a bare identifier (no `$` or `${}`). Operators:
+
+| Operator | Meaning | Operand type |
+|---|---|---|
+| `==` | exact string equality | `"string"` |
+| `!=` | string inequality | `"string"` |
+| `=~` | regex match | `/pattern/` |
+| `!~` | regex non-match | `/pattern/` |
+
+The body is a brace block containing any valid workflow/rule steps. `if` is a statement — it does not produce a value, so it cannot be used with `const` or `return`.
+
+```jaiph
+workflow default(env) {
+  if env != "production" {
+    log "Skipping deploy for non-production env"
+    return ""
+  }
+  run deploy()
+}
+```
 
 
 ## Inline Scripts

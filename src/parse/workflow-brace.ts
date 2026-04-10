@@ -112,11 +112,40 @@ export function parseBlockStatement(
     };
   }
 
-  // Reject `if` keyword — it has been removed from the language
-  if (/^if\s/.test(inner)) {
+  // if <subject> <op> <operand> { ... }
+  const ifHead = inner.match(
+    /^if\s+([A-Za-z_][A-Za-z0-9_]*)\s+(==|!=|=~|!~)\s+("(?:[^"\\]|\\.)*"|\/(?:[^/\\]|\\.)*\/)\s*\{\s*$/,
+  );
+  if (ifHead) {
+    const subject = ifHead[1];
+    const operator = ifHead[2] as "==" | "!=" | "=~" | "!~";
+    const rawOperand = ifHead[3];
+    const ifLoc = { line: innerNo, col: innerRaw.indexOf("if") + 1 };
+
+    let operand: { kind: "string_literal"; value: string } | { kind: "regex"; source: string };
+    if (rawOperand.startsWith('"')) {
+      operand = { kind: "string_literal", value: rawOperand.slice(1, -1) };
+    } else {
+      operand = { kind: "regex", source: rawOperand.slice(1, -1) };
+    }
+
+    if ((operator === "==" || operator === "!=") && operand.kind === "regex") {
+      fail(filePath, `operator "${operator}" requires a string operand ("..."), not a regex`, innerNo, ifLoc.col);
+    }
+    if ((operator === "=~" || operator === "!~") && operand.kind === "string_literal") {
+      fail(filePath, `operator "${operator}" requires a regex operand (/pattern/), not a string`, innerNo, ifLoc.col);
+    }
+
+    const { steps: body, nextIdx } = parseBraceBlockBody(filePath, lines, idx + 1, innerNo);
+    return {
+      step: { type: "if", subject, operator, operand, body, loc: ifLoc },
+      nextIdx,
+    };
+  }
+  if (/^if[\s(]/.test(inner)) {
     fail(
       filePath,
-      'if statements have been removed; use "ensure ref() recover (err) { ... }" or "run ref() recover (err) { ... }" for failure handling, and "match" for value branching',
+      'invalid if syntax; expected: if <identifier> <op> <operand> { ... } where op is ==, !=, =~, or !~ and operand is "string" or /regex/',
       innerNo,
       innerRaw.indexOf("if") + 1,
     );
