@@ -49,21 +49,21 @@ export function emitModule(mod: jaiphModule, opts: EmitOptions = DEFAULT_OPTIONS
 
   for (const imp of mod.imports) {
     if (imp.leadingComments?.length) {
-      sections.push(...emitComments(imp.leadingComments));
+      sections.push(emitCommentBlock(imp.leadingComments));
     }
     sections.push(`import "${imp.path}" as ${imp.alias}`);
   }
 
   if (mod.metadata) {
     if (mod.configLeadingComments?.length) {
-      sections.push(...emitComments(mod.configLeadingComments));
+      sections.push(emitCommentBlock(mod.configLeadingComments));
     }
     sections.push(emitConfig(mod.metadata, pad));
   }
 
   for (const ch of mod.channels) {
     if (ch.leadingComments?.length) {
-      sections.push(...emitComments(ch.leadingComments));
+      sections.push(emitCommentBlock(ch.leadingComments));
     }
     sections.push(emitChannel(ch));
   }
@@ -157,6 +157,11 @@ function emitEnvDecl(env: EnvDeclDef): string[] {
 
 function emitComments(comments: string[]): string[] {
   return comments.map((c) => (c.startsWith("#") ? c : `# ${c}`));
+}
+
+/** One section string: consecutive `#` lines stay single-spaced (module sections join with blank lines). */
+function emitCommentBlock(comments: string[]): string {
+  return emitComments(comments).join("\n");
 }
 
 function emitRule(rule: RuleDef, pad: string, exported: boolean): string {
