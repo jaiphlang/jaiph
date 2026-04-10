@@ -1,4 +1,14 @@
-# Nightly
+# 0.9.0
+
+## Summary
+
+- **Language:** Major syntax overhaul — triple-quoted strings (`"""..."""`) for multiline text, backtick/fenced delimiters for scripts, explicit `recover` bindings, required parentheses on definitions, bare identifier arguments, `export` visibility on modules, `match` arm runtime execution, and `${...}` shell expansion allowed in fenced script blocks. The `if` keyword was initially removed in favor of `recover`/`match`, then re-added as a conditional guard (`if var == "value" { … }`, `if var =~ /pattern/ { … }`). Seven deprecated constructs removed with migration hints.
+- **CLI:** `jaiph install` for project-scoped libraries with lockfile, `jaiph format` for canonical `.jh` formatting, `jaiph init` with `.gitignore`/bootstrap/skill scaffolding, async branch numbering in progress tree, prompt backend/model display, inbox dispatch parameter display, and file shorthand routing.
+- **Runtime:** `codex` backend (OpenAI Chat Completions API), custom agent commands, Docker sandbox fixes (tree UI, failed-step output, path remapping), model auto-detection, `return run`/`return ensure` direct managed calls, and string/script type crossing enforcement.
+- **Testing:** Golden AST tests for parse tree shape, txtar-based compiler test suite with 238 cases, E2E full-output comparison audit across 27 test files, and Playwright landing-page sample verification.
+- **Docs:** Complete documentation overhaul — all 11 pages revisited against source code, agent skill improved with examples/testing/CLI table, README audience routing, and landing page updated with all new features.
+
+## All changes
 
 - **CLI:** `jaiph init` writes `.jaiph/.gitignore` listing `runs` and `tmp`, validates `.jaiph/bootstrap.jh` against the canonical template, and writes `.jaiph/SKILL.md` from the bundled skill (or `JAIPH_SKILL_PATH`). Refuses to overwrite mismatched `.gitignore` or `bootstrap.jh`. Docs updated (`docs/cli.md`, `docs/getting-started.md`, `docs/index.html`, `docs/jaiph-skill.md`, `docs/configuration.md`).
 - **Feature — Compiler:** Enforce `export` for imported qualified references — Modules that use the `export` keyword on any definition now have an explicit public API surface: only exported names can be referenced through an import alias (`alias.name`). Referencing a non-exported symbol that exists in the module produces `E_VALIDATE` with the message `"<name>" is not exported from module "<alias>"`. Modules with zero `export` lines retain legacy behavior — all top-level definitions are implicitly public. The check applies to all qualified-ref validation paths: `run`, `ensure`, `send` RHS, channel routes, and test mocks. Implementation: `src/transpile/validate-ref-resolution.ts`. Unit tests added. Docs updated (`docs/grammar.md`, `docs/language.md`, `docs/architecture.md`).
