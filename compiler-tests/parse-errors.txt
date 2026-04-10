@@ -1761,3 +1761,690 @@ test "bad step" {
 workflow default() {
   log "ok"
 }
+
+=== ensure recover with unterminated bindings paren
+# @expect error E_PARSE "unterminated recover bindings"
+--- input.jh
+rule check() {
+  return "ok"
+}
+workflow default() {
+  ensure check() recover (failure {
+    log "recovering"
+  }
+}
+
+=== ensure recover with empty bindings
+# @expect error E_PARSE "recover requires exactly one binding"
+--- input.jh
+rule check() {
+  return "ok"
+}
+workflow default() {
+  ensure check() recover () {
+    log "recovering"
+  }
+}
+
+=== ensure recover with invalid binding name
+# @expect error E_PARSE "invalid recover binding name"
+--- input.jh
+rule check() {
+  return "ok"
+}
+workflow default() {
+  ensure check() recover (123bad) {
+    log "recovering"
+  }
+}
+
+=== ensure recover with no body after bindings
+# @expect error E_PARSE "recover requires a body after bindings"
+--- input.jh
+rule check() {
+  return "ok"
+}
+workflow default() {
+  ensure check() recover (failure)
+}
+
+=== run recover with unterminated bindings paren
+# @expect error E_PARSE "unterminated recover bindings"
+--- input.jh
+workflow helper() {
+  log "ok"
+}
+workflow default() {
+  run helper() recover (failure {
+    log "recovering"
+  }
+}
+
+=== run recover with empty bindings
+# @expect error E_PARSE "recover requires exactly one binding"
+--- input.jh
+workflow helper() {
+  log "ok"
+}
+workflow default() {
+  run helper() recover () {
+    log "recovering"
+  }
+}
+
+=== run recover with invalid binding name
+# @expect error E_PARSE "invalid recover binding name"
+--- input.jh
+workflow helper() {
+  log "ok"
+}
+workflow default() {
+  run helper() recover (123bad) {
+    log "recovering"
+  }
+}
+
+=== run recover with no body after bindings
+# @expect error E_PARSE "recover requires a body after bindings"
+--- input.jh
+workflow helper() {
+  log "ok"
+}
+workflow default() {
+  run helper() recover (failure)
+}
+
+=== ensure recover with multiple bindings rejected
+# @expect error E_PARSE "recover accepts exactly one binding"
+--- input.jh
+rule check() {
+  return "ok"
+}
+workflow default() {
+  ensure check() recover (failure, attempt) {
+    log "recovering"
+  }
+}
+
+=== run recover with multiple bindings rejected
+# @expect error E_PARSE "recover accepts exactly one binding"
+--- input.jh
+workflow helper() {
+  log "ok"
+}
+workflow default() {
+  run helper() recover (failure, attempt) {
+    log "recovering"
+  }
+}
+
+=== inline recover fail without double quote
+# @expect error E_PARSE "fail must match"
+--- input.jh
+rule check() {
+  return "ok"
+}
+workflow default() {
+  ensure check() recover (failure) fail reason
+}
+
+=== inline recover unterminated fail string
+# @expect error E_PARSE "unterminated fail string"
+--- input.jh
+rule check() {
+  return "ok"
+}
+workflow default() {
+  ensure check() recover (failure) fail "reason
+}
+
+=== inline config block missing equals sign
+# @expect error E_PARSE "config line must be key = value"
+--- input.jh
+config { agent.backend }
+workflow default() {
+  log "ok"
+}
+
+=== inline config block with unknown key
+# @expect error E_PARSE "unknown config key"
+--- input.jh
+config { bad.key = "x" }
+workflow default() {
+  log "ok"
+}
+
+=== inline config block with multiline array opening
+# @expect error E_PARSE "multiline config arrays require"
+--- input.jh
+config { runtime.workspace = [ }
+workflow default() {
+  log "ok"
+}
+
+=== inline config block with non-empty workspace array
+# @expect error E_PARSE "runtime.workspace arrays with elements require"
+--- input.jh
+config { runtime.workspace = ["foo"] }
+workflow default() {
+  log "ok"
+}
+
+=== config block header not exactly config brace
+# @expect error E_PARSE "config block must be exactly"
+--- input.jh
+config {x
+  agent.backend = "claude"
+}
+workflow default() {
+  log "ok"
+}
+
+=== config value with single-quoted string
+# @expect error E_PARSE "single-quoted strings are not supported"
+--- input.jh
+config {
+  agent.backend = 'claude'
+}
+workflow default() {
+  log "ok"
+}
+
+=== workflow body content after brace without closing on same line
+# @expect error E_PARSE "expected newline after '{'"
+--- input.jh
+workflow default() { log "hello"
+}
+
+=== runtime keys in inline workflow config
+# @expect error E_PARSE "runtime.* keys are not allowed"
+--- input.jh
+workflow default() { config { runtime.docker_enabled = true } }
+
+=== rule body content after brace without closing on same line
+# @expect error E_PARSE "expected newline after '{'"
+--- input.jh
+rule check() { run foo()
+}
+workflow default() {
+  ensure check()
+}
+
+=== prompt triple-quote closing with invalid trailing content
+# @expect error E_PARSE "closing"
+--- input.jh
+workflow default() {
+  const _ = prompt """
+hello
+""" garbage
+}
+
+=== prompt identifier body with single-quoted returns
+# @expect error E_PARSE "single-quoted strings are not supported"
+--- input.jh
+workflow default() {
+  const myVar = "text"
+  const _ = prompt myVar returns '{ type: string }'
+}
+
+=== prompt identifier body with non-returns trailing content
+# @expect error E_PARSE "after prompt body expected keyword"
+--- input.jh
+workflow default() {
+  const myVar = "text"
+  const _ = prompt myVar garbage
+}
+
+=== prompt identifier body with unterminated returns schema
+# @expect error E_PARSE "unterminated returns schema string"
+--- input.jh
+workflow default() {
+  const myVar = "text"
+  const _ = prompt myVar returns "{ unterminated
+}
+
+=== script body with invalid rhs character
+# @expect error E_PARSE "script body must be a backtick or fenced block"
+--- input.jh
+script broken = @invalid
+
+=== match triple-quote arm closing with trailing content
+# @expect error E_PARSE "closing"
+--- input.jh
+workflow default() {
+  const x = "hello"
+  return match x {
+    "hello" => """
+line one
+""" extra
+    _ => "no"
+  }
+}
+
+=== match: opening triple-quote in arm with content on same line
+# @expect error E_PARSE "opening" @4:1
+--- input.jh
+workflow default() {
+  const x = "hello"
+  return match x {
+    "hello" => """content here
+"""
+    _ => "no"
+  }
+}
+
+=== match: unterminated triple-quoted block in arm
+# @expect error E_PARSE "unterminated triple-quoted block in match arm"
+--- input.jh
+workflow default() {
+  const x = "hello"
+  return match x {
+    "hello" => """
+some content
+    _ => "no"
+  }
+}
+
+=== send with empty payload rejected
+# @expect error E_PARSE "send requires an explicit payload"
+--- input.jh
+channel findings
+workflow default() {
+  findings <-
+}
+
+=== config after semicolon-separated steps in workflow
+# @expect error E_PARSE "config must be the first workflow step"
+--- input.jh
+workflow default() {
+  log "hello"; config { agent.backend = "claude" }
+}
+
+=== mock prompt single-quoted string rejected
+# @expect error E_PARSE "single-quoted strings are not supported"
+--- input.test.jh
+import "lib.jh" as lib
+
+test "bad mock" {
+  mock prompt 'answer'
+  const out = run lib.default()
+}
+--- lib.jh
+workflow default() {
+  log "hello"
+}
+
+=== wait in recover block rejected
+# @expect error E_PARSE "has been removed"
+--- input.jh
+rule check() {
+  return "ok"
+}
+workflow default() {
+  ensure check() recover (err) {
+    wait
+  }
+}
+
+=== reserved keyword as parameter name
+# @expect error E_PARSE "reserved keyword"
+--- input.jh
+workflow myWorkflow(run) {
+  log "hello"
+}
+
+=== log triple-quote with trailing content
+# @expect error E_PARSE "unexpected content after closing"
+--- input.jh
+workflow default() {
+  log """
+hello
+""" extra
+}
+
+=== logerr triple-quote with trailing content
+# @expect error E_PARSE "unexpected content after closing"
+--- input.jh
+workflow default() {
+  logerr """
+hello
+""" extra
+}
+
+=== fail triple-quote with trailing content
+# @expect error E_PARSE "unexpected content after closing"
+--- input.jh
+workflow default() {
+  fail """
+something went wrong
+""" extra
+}
+
+=== return triple-quote with trailing content
+# @expect error E_PARSE "unexpected content after closing"
+--- input.jh
+workflow default() {
+  return """
+result value
+""" extra
+}
+
+=== send triple-quote with trailing content
+# @expect error E_PARSE "unexpected content after closing"
+--- input.jh
+channel inbox
+workflow default() {
+  inbox <- """
+payload
+""" extra
+}
+
+=== wait in inline recover statement
+# @expect error E_PARSE "has been removed"
+--- input.jh
+rule check() {
+  return "ok"
+}
+workflow default() {
+  ensure check() recover (err) wait
+}
+
+=== recover block: assignment without const rejected
+# @expect error E_PARSE "assignment without"
+--- input.jh
+workflow helper() {
+  log "ok"
+}
+workflow default() {
+  run helper() recover (err) {
+    x = run helper()
+  }
+}
+
+=== recover block: prompt assign without const
+# @expect error E_PARSE "const name = prompt"
+--- input.jh
+rule check() {
+  return "ok"
+}
+workflow default() {
+  ensure check() recover (failure) {
+    x = prompt "fix"
+  }
+}
+
+=== const run with old inline script syntax
+# @expect error E_PARSE "inline script syntax has changed"
+--- input.jh
+workflow default() {
+  const x = run script() "echo hello"
+}
+
+=== top-level const with invalid name
+# @expect error E_PARSE "unsupported top-level statement"
+--- input.jh
+const 123bad = "hello"
+workflow default() {
+  log "ok"
+}
+
+=== wait in workflow body rejected
+# @expect error E_PARSE "has been removed" @2:3
+--- input.jh
+workflow default() {
+  wait
+}
+
+=== wait in workflow body after other steps rejected
+# @expect error E_PARSE "has been removed" @3:3
+--- input.jh
+workflow default() {
+  log "hello"
+  wait
+}
+
+=== shell redirection after const run call rejected
+# @expect error E_PARSE "unexpected content after run call"
+--- input.jh
+script helper = `echo ok`
+workflow default() {
+  const x = run helper() | grep ok
+}
+
+=== shell redirection after send run call rejected
+# @expect error E_PARSE "unexpected content after run call"
+--- input.jh
+channel findings
+script helper = `echo ok`
+workflow default() {
+  findings <- run helper() > output.txt
+}
+
+=== prompt body must be string or identifier not number
+# @expect error E_PARSE "prompt body must be"
+--- input.jh
+workflow default() {
+  const _ = prompt 123
+}
+
+=== send rhs trailing content after braced var
+# @expect error E_PARSE "send right-hand side must be"
+--- input.jh
+channel findings
+workflow default() {
+  const myvar = "data"
+  findings <- ${myvar} extra
+}
+
+=== config string key with boolean value
+# @expect error E_PARSE "must be a string" @2:3
+--- input.jh
+config {
+  agent.default_model = true
+}
+workflow default() {
+  log "ok"
+}
+
+=== config boolean key with string value
+# @expect error E_PARSE "must be true or false" @2:3
+--- input.jh
+config {
+  run.debug = "yes"
+}
+workflow default() {
+  log "ok"
+}
+
+=== config keyword alone on a line
+# @expect error E_PARSE "unsupported top-level statement" @1:1
+--- input.jh
+config
+  agent.backend = "codex"
+workflow default() {
+  log "ok"
+}
+
+=== send multiline string without triple quotes
+# @expect error E_PARSE "multiline strings use triple quotes" @3:5
+--- input.jh
+channel c
+workflow default() {
+  c <- "hello
+world"
+}
+
+=== send triple-quoted payload valid
+# @expect ok
+--- input.jh
+channel c
+workflow default() {
+  c <- """
+hello world
+"""
+}
+
+=== top-level script single backtick unterminated
+# @expect error E_PARSE "unterminated inline script backtick" @1:1
+--- input.jh
+script broken = `echo hello
+
+=== inline recover return without value
+# @expect error E_PARSE "recover requires explicit bindings"
+--- input.jh
+rule check() {
+  return "ok"
+}
+workflow default() {
+  ensure check() recover return
+}
+
+=== run recover unterminated multiline block
+# @expect error E_PARSE "unterminated recover block"
+--- input.jh
+workflow helper() {
+  log "ok"
+}
+workflow default() {
+  run helper() recover (err) {
+    log "recovering"
+
+=== ensure recover unterminated multiline block
+# @expect error E_PARSE "unterminated recover block"
+--- input.jh
+rule check() {
+  return "ok"
+}
+workflow default() {
+  ensure check() recover (err) {
+    log "recovering"
+
+=== inline script fenced unterminated in rule body
+# @expect error E_PARSE "unterminated fenced block"
+--- input.jh
+rule check() {
+  run ```
+echo hello
+}
+workflow default() {
+  ensure check()
+}
+
+=== fail triple-quote opening with content on same line
+# @expect error E_PARSE "must not have content on the same line"
+--- input.jh
+workflow default() {
+  fail """content here
+"""
+}
+
+=== return triple-quote opening with content on same line
+# @expect error E_PARSE "must not have content on the same line"
+--- input.jh
+workflow default() {
+  return """content here
+"""
+}
+
+=== logerr triple-quote opening with content on same line
+# @expect error E_PARSE "must not have content on the same line"
+--- input.jh
+workflow default() {
+  logerr """content here
+"""
+}
+
+=== unterminated triple-quoted send block
+# @expect error E_PARSE "unterminated triple-quoted block"
+--- input.jh
+channel inbox
+workflow default() {
+  inbox <- """
+payload data
+
+=== run recover without bindings bare recover block
+# @expect error E_PARSE "recover requires explicit bindings"
+--- input.jh
+workflow helper() {
+  log "ok"
+}
+workflow default() {
+  run helper() recover {
+    log "recovering"
+  }
+}
+
+=== log triple-quote opening with content on same line
+# @expect error E_PARSE "must not have content on the same line"
+--- input.jh
+workflow default() {
+  log """content here
+"""
+}
+
+=== const triple-quote opening with content on same line
+# @expect error E_PARSE "must not have content on the same line"
+--- input.jh
+workflow default() {
+  const x = """content here
+"""
+}
+
+=== unterminated triple-quoted log block
+# @expect error E_PARSE "unterminated triple-quoted block"
+--- input.jh
+workflow default() {
+  log """
+hello world
+
+=== unterminated triple-quoted fail block
+# @expect error E_PARSE "unterminated triple-quoted block"
+--- input.jh
+workflow default() {
+  fail """
+something went wrong
+
+=== unterminated triple-quoted return block
+# @expect error E_PARSE "unterminated triple-quoted block"
+--- input.jh
+workflow default() {
+  return """
+result value
+
+=== unterminated triple-quoted const block
+# @expect error E_PARSE "unterminated triple-quoted block"
+--- input.jh
+workflow default() {
+  const x = """
+hello
+
+=== inline run recover with single fail statement
+# @expect ok
+--- input.jh
+workflow helper() {
+  log "ok"
+}
+workflow default() {
+  run helper() recover (err) fail "unrecoverable: ${err}"
+}
+
+=== send rhs with run to workflow
+# @expect ok
+--- input.jh
+channel c
+workflow helper() {
+  return "data"
+}
+workflow default() {
+  c <- run helper()
+}
+
+=== send rhs with run to script
+# @expect ok
+--- input.jh
+channel c
+script helper = `echo "data"`
+workflow default() {
+  c <- run helper()
+}
+

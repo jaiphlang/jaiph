@@ -960,3 +960,222 @@ You are a helpful assistant.
 Analyze: ${input}
 """
 }
+
+=== valid run recover block in workflow
+# @expect ok
+--- input.jh
+workflow helper() {
+  log "ok"
+}
+workflow fallback() {
+  log "fallback"
+}
+workflow default() {
+  run helper() recover (failure) {
+    run fallback()
+  }
+}
+
+=== prompt triple-quoted block with returns clause
+# @expect ok
+--- input.jh
+workflow default() {
+  const result = prompt """
+Analyze this input.
+""" returns "{ type: string }"
+  return "${result}"
+}
+
+=== buildRunTreeRows with custom root label
+# @expect ok
+--- input.jh
+workflow my_custom() {
+  log "testing custom root"
+}
+workflow default() {
+  run my_custom()
+}
+
+=== workflow with logerr step
+# @expect ok
+--- input.jh
+workflow default() {
+  log "info message"
+  logerr "error message"
+}
+
+=== run recover with log and fail in block
+# @expect ok
+--- input.jh
+workflow helper() {
+  log "ok"
+}
+workflow default() {
+  run helper() recover (err) {
+    log "recovery: ${err}"
+    fail "unrecoverable"
+  }
+}
+
+=== inline ensure recover with single log statement
+# @expect ok
+--- input.jh
+rule check() {
+  return "ok"
+}
+workflow default() {
+  ensure check() recover (err) log "recovered: ${err}"
+}
+
+=== inline ensure recover with single fail statement
+# @expect ok
+--- input.jh
+rule check() {
+  return "ok"
+}
+workflow default() {
+  ensure check() recover (err) fail "unrecoverable: ${err}"
+}
+
+=== recover block with return string statement
+# @expect ok
+--- input.jh
+workflow helper() {
+  log "ok"
+}
+workflow default() {
+  run helper() recover (err) {
+    return "fallback"
+  }
+}
+
+=== recover block with return run statement
+# @expect ok
+--- input.jh
+workflow helper() {
+  log "ok"
+}
+workflow fallback() {
+  return "ok"
+}
+workflow default() {
+  run helper() recover (err) {
+    return run fallback()
+  }
+}
+
+=== recover block with const capture
+# @expect ok
+--- input.jh
+script get_fix = `echo "fix applied"`
+workflow helper() {
+  log "ok"
+}
+workflow default() {
+  run helper() recover (err) {
+    const fix = run get_fix()
+    log "applied: ${fix}"
+  }
+}
+
+=== export script definition
+# @expect ok
+--- input.jh
+export script helper = `echo ok`
+workflow default() {
+  run helper()
+}
+
+=== inline run recover with single log statement
+# @expect ok
+--- input.jh
+workflow helper() {
+  log "ok"
+}
+workflow default() {
+  run helper() recover (err) log "recovered: ${err}"
+}
+
+=== recover block with bare return
+# @expect ok
+--- input.jh
+workflow helper() {
+  log "ok"
+}
+workflow default() {
+  run helper() recover (err) {
+    return
+  }
+}
+
+=== recover block with return ensure
+# @expect ok
+--- input.jh
+rule check() {
+  return "ok"
+}
+workflow helper() {
+  log "ok"
+}
+workflow default() {
+  run helper() recover (err) {
+    return ensure check()
+  }
+}
+
+=== match with regex pattern compiles
+# @expect ok
+--- input.jh
+workflow default() {
+  const x = "hello"
+  return match x {
+    /^hello$/ => "yes"
+    _ => "no"
+  }
+}
+
+=== match with run arm body in const context
+# @expect ok
+--- input.jh
+script get_val = `echo "matched"`
+workflow default() {
+  const x = "hello"
+  const result = match x {
+    "hello" => run get_val()
+    _ => "fallback"
+  }
+}
+
+=== recover binding used in bare identifier arg
+# @expect ok
+--- input.jh
+script fix = `echo "fixing $1"`
+rule check() {
+  return "ok"
+}
+workflow default() {
+  ensure check() recover (failure) {
+    run fix(failure)
+  }
+}
+
+=== valid interpolation in logerr
+# @expect ok
+--- input.jh
+workflow default(name) {
+  logerr "error for ${name}"
+}
+
+=== valid interpolation in fail
+# @expect ok
+--- input.jh
+workflow default(name) {
+  fail "error for ${name}"
+}
+
+=== valid interpolation in return
+# @expect ok
+--- input.jh
+workflow default(name) {
+  return "result for ${name}"
+}

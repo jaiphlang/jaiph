@@ -518,3 +518,281 @@ export workflow handler(msg) {
   log "${msg}"
 }
 
+=== const run of string variable in rule rejected
+# @expect error E_VALIDATE "strings are not executable"
+--- input.jh
+const greeting = "hello"
+rule check() {
+  const x = run greeting()
+}
+workflow default() {
+  ensure check()
+}
+
+=== channel reference with three dot parts is rejected
+# @expect error E_VALIDATE "inline shell steps are forbidden in workflows"
+--- input.jh
+workflow default() {
+  a.b.c <- "x"
+}
+
+=== command substitution invokes workflow in send shell RHS
+# @expect error E_VALIDATE "command substitution cannot invoke workflow"
+--- input.jh
+channel c
+workflow helper() {
+  log "hi"
+}
+workflow default() {
+  c <- $(helper)
+}
+
+=== command substitution invokes script in send shell RHS
+# @expect error E_VALIDATE "command substitution cannot invoke script"
+--- input.jh
+channel c
+script helper = `echo ok`
+workflow default() {
+  c <- $(helper)
+}
+
+=== scripts are not values in rule const
+# @expect error E_VALIDATE "scripts are not values"
+--- input.jh
+script helper = `echo ok`
+rule check() {
+  const x = helper
+}
+workflow default() {
+  ensure check()
+}
+
+=== scripts are not values in workflow const
+# @expect error E_VALIDATE "scripts are not values"
+--- input.jh
+script helper = `echo ok`
+workflow default() {
+  const x = helper
+}
+
+=== scripts are not promptable in workflow
+# @expect error E_VALIDATE "scripts are not promptable"
+--- input.jh
+script helper = `echo ok`
+workflow default() {
+  const _ = prompt helper
+}
+
+=== scripts cannot be interpolated in log
+# @expect error E_VALIDATE "scripts cannot be interpolated"
+--- input.jh
+script helper = `echo ok`
+workflow default() {
+  log "result: ${helper}"
+}
+
+=== match arm body cannot start with return
+# @expect error E_VALIDATE "match arm body must not start with"
+--- input.jh
+workflow default() {
+  const x = "hello"
+  return match x {
+    "hello" => return "yes"
+    _ => "no"
+  }
+}
+
+=== inline script in match arm body rejected
+# @expect error E_VALIDATE "inline scripts are not allowed in match arm bodies"
+--- input.jh
+workflow default() {
+  const x = "hello"
+  return match x {
+    "hello" => run `echo yes`()
+    _ => "no"
+  }
+}
+
+=== strings are not executable in workflow run
+# @expect error E_VALIDATE "strings are not executable"
+--- input.jh
+workflow default() {
+  const name = "hello"
+  run name()
+}
+
+=== const run of string variable in rule rejected
+# @expect error E_VALIDATE "strings are not executable"
+--- input.jh
+rule check() {
+  const name = "hello"
+  const x = run name()
+}
+workflow default() {
+  ensure check()
+}
+
+=== match arm body cannot start with return in const context
+# @expect error E_VALIDATE "match arm body must not start with"
+--- input.jh
+workflow default() {
+  const x = "hello"
+  const y = match x {
+    "hello" => return "yes"
+    _ => "no"
+  }
+}
+
+=== unknown identifier in fail string
+# @expect error E_VALIDATE "unknown identifier"
+--- input.jh
+workflow default() {
+  fail "error: ${ghost}"
+}
+
+=== unknown identifier in rule log string
+# @expect error E_VALIDATE "unknown identifier"
+--- input.jh
+rule check() {
+  log "value: ${ghost}"
+}
+workflow default() {
+  ensure check()
+}
+
+=== unknown identifier in send literal
+# @expect error E_VALIDATE "unknown identifier"
+--- input.jh
+channel c
+workflow default() {
+  c <- "data: ${ghost}"
+}
+
+=== send RHS with local script bare ref requires run
+# @expect error E_VALIDATE "must be called with run"
+--- input.jh
+channel c
+script helper = `echo ok`
+workflow default() {
+  c <- helper
+}
+
+=== unknown identifier in workflow logerr string
+# @expect error E_VALIDATE "unknown identifier"
+--- input.jh
+workflow default() {
+  logerr "error: ${ghost}"
+}
+
+=== unknown identifier in workflow return string
+# @expect error E_VALIDATE "unknown identifier"
+--- input.jh
+workflow default() {
+  return "result: ${ghost}"
+}
+
+=== scripts cannot be interpolated in logerr
+# @expect error E_VALIDATE "scripts cannot be interpolated"
+--- input.jh
+script helper = `echo ok`
+workflow default() {
+  logerr "error: ${helper}"
+}
+
+=== scripts cannot be interpolated in fail
+# @expect error E_VALIDATE "scripts cannot be interpolated"
+--- input.jh
+script helper = `echo ok`
+workflow default() {
+  fail "error: ${helper}"
+}
+
+=== scripts cannot be interpolated in return
+# @expect error E_VALIDATE "scripts cannot be interpolated"
+--- input.jh
+script helper = `echo ok`
+workflow default() {
+  return "result: ${helper}"
+}
+
+=== strings are not executable in workflow const run
+# @expect error E_VALIDATE "strings are not executable"
+--- input.jh
+workflow default() {
+  const name = "hello"
+  const x = run name()
+}
+
+=== ensure rejects local workflow reference
+# @expect error E_VALIDATE "must be called with run"
+--- input.jh
+workflow helper() {
+  log "ok"
+}
+workflow default() {
+  ensure helper()
+}
+
+=== run async is rejected in rules with imported workflow
+# @expect error E_VALIDATE "run async is not allowed in rules"
+--- main.jh
+import "lib.jh" as lib
+rule check() {
+  run async lib.helper()
+}
+workflow default() {
+  ensure check()
+}
+--- lib.jh
+export workflow helper() {
+  log "hi"
+}
+
+=== scripts cannot be interpolated in send literal
+# @expect error E_VALIDATE "scripts cannot be interpolated"
+--- input.jh
+channel c
+script helper = `echo ok`
+workflow default() {
+  c <- "result: ${helper}"
+}
+
+=== unknown identifier in inline run capture in log
+# @expect error E_VALIDATE "unknown local workflow or script reference"
+--- input.jh
+workflow default() {
+  log "got: ${run nonexistent_script()}"
+}
+
+=== strings are not executable in rule run
+# @expect error E_VALIDATE "strings are not executable"
+--- input.jh
+const greeting = "hello"
+rule check() {
+  const x = run greeting()
+}
+workflow default() {
+  ensure check()
+}
+
+=== unknown identifier in workflow log string
+# @expect error E_VALIDATE "unknown identifier"
+--- input.jh
+workflow default() {
+  log "value: ${ghost}"
+}
+
+=== match arm body with ensure arm in const context
+# @expect ok
+--- input.jh
+rule check() {
+  return "ok"
+}
+workflow default() {
+  const x = "hello"
+  const result = match x {
+    "hello" => ensure check()
+    _ => "fallback"
+  }
+}
+
