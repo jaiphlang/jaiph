@@ -2242,19 +2242,22 @@ test("parser parses mock workflow, rule, and script in test block", () => {
     assert.deepEqual(steps[0].params, []);
     assert.equal(steps[0].steps.length, 2);
   }
-  assert.equal(steps[1].type, "test_mock_rule");
-  if (steps[1].type === "test_mock_rule") {
-    assert.equal(steps[1].ref, "app.policy_check");
-    assert.deepEqual(steps[1].params, []);
-    assert.equal(steps[1].steps.length, 1);
+  assert.equal(steps[1].type, "blank_line");
+  assert.equal(steps[2].type, "test_mock_rule");
+  if (steps[2].type === "test_mock_rule") {
+    assert.equal(steps[2].ref, "app.policy_check");
+    assert.deepEqual(steps[2].params, []);
+    assert.equal(steps[2].steps.length, 1);
   }
-  assert.equal(steps[2].type, "test_mock_script");
-  if (steps[2].type === "test_mock_script") {
-    assert.equal(steps[2].ref, "app.changed_files");
-    assert.ok(steps[2].body.includes('echo "a.ts"'));
+  assert.equal(steps[3].type, "blank_line");
+  assert.equal(steps[4].type, "test_mock_script");
+  if (steps[4].type === "test_mock_script") {
+    assert.equal(steps[4].ref, "app.changed_files");
+    assert.ok(steps[4].body.includes('echo "a.ts"'));
   }
-  assert.equal(steps[3].type, "test_run_workflow");
-  assert.equal(steps[4].type, "test_expect_contain");
+  assert.equal(steps[5].type, "blank_line");
+  assert.equal(steps[6].type, "test_run_workflow");
+  assert.equal(steps[7].type, "test_expect_contain");
 });
 
 test("parser ignores test keyword in non-test file", () => {

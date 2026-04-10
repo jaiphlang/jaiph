@@ -1,3 +1,4 @@
+import { dedentCommonLeadingWhitespace } from "./dedent";
 import { fail } from "./core";
 
 /**
@@ -60,7 +61,7 @@ export function parseFencedBlock(
     if (trimmed.startsWith("```")) {
       const closing = parseClosingFenceLine(filePath, i + 1, trimmed);
       return {
-        body: bodyLines.join("\n"),
+        body: dedentCommonLeadingWhitespace(bodyLines.join("\n")),
         ...(lang ? { lang } : {}),
         ...(closing.kind === "with_returns" ? { returns: closing.returns } : {}),
         nextIdx: i + 1,
