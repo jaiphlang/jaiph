@@ -10,7 +10,7 @@ workflow default() {
   prompt "
     You are bootstrapping Jaiph for this repository.
     First, read the Jaiph agent bootstrap guide at:
-    .jaiph/jaiph-skill.md
+    .jaiph/SKILL.md
     Follow that guide and Jaiph language rules exactly.
     Perform these tasks in order:
     1) Analyze repository structure, languages, package manager, and build/test/lint commands.
@@ -25,6 +25,9 @@ workflow default() {
 }
 `;
 
+/** Ignores ephemeral dirs under `.jaiph/`; kept in-repo so workflows and libs stay tracked. */
+const JAIPH_DIR_GITIGNORE_TEMPLATE = "runs\ntmp\n";
+
 export function runInit(rest: string[]): number {
   const workspaceArg = rest[0] ?? ".";
   const workspaceRoot = resolve(workspaceArg);
@@ -35,44 +38,77 @@ export function runInit(rest: string[]): number {
   }
 
   const jaiphDir = join(workspaceRoot, ".jaiph");
+  const gitignorePath = join(jaiphDir, ".gitignore");
   const bootstrapPath = join(jaiphDir, "bootstrap.jh");
-  const skillPath = join(jaiphDir, "jaiph-skill.md");
+  const skillPath = join(jaiphDir, "SKILL.md");
   const palette = colorPalette();
 
   process.stdout.write("\n");
   process.stdout.write("Jaiph init\n");
   process.stdout.write("\n");
-  process.stdout.write(`${palette.dim}▸ Creating ${join(".jaiph", "bootstrap.jh")} in ${workspaceRoot}...${palette.reset}\n`);
   mkdirSync(jaiphDir, { recursive: true });
 
+  let createdGitignore = false;
+  if (existsSync(gitignorePath)) {
+    const existingGitignore = readFileSync(gitignorePath, "utf8");
+    if (existingGitignore !== JAIPH_DIR_GITIGNORE_TEMPLATE) {
+      process.stderr.write(
+        `jaiph init: ${join(".jaiph", ".gitignore")} exists with unexpected content; refusing to overwrite. Remove or replace it, then run again.\n`,
+      );
+      return 1;
+    }
+  } else {
+    writeFileSync(gitignorePath, JAIPH_DIR_GITIGNORE_TEMPLATE, "utf8");
+    createdGitignore = true;
+  }
+
   let createdBootstrap = false;
-  if (!existsSync(bootstrapPath)) {
+  if (existsSync(bootstrapPath)) {
+    if (readFileSync(bootstrapPath, "utf8") !== BOOTSTRAP_TEMPLATE) {
+      process.stderr.write(
+        `jaiph init: ${join(".jaiph", "bootstrap.jh")} exists with unexpected content; refusing to overwrite. Remove or replace it, then run again.\n`,
+      );
+      return 1;
+    }
+  } else {
+    process.stdout.write(`${palette.dim}▸ Creating ${join(".jaiph", "bootstrap.jh")} in ${workspaceRoot}...${palette.reset}\n`);
     writeFileSync(bootstrapPath, BOOTSTRAP_TEMPLATE, "utf8");
     createdBootstrap = true;
   }
   chmodSync(bootstrapPath, 0o755);
   const installedSkillPath = resolveInstalledSkillPath();
-  let syncedSkill = false;
+  let wroteSkill = false;
   if (installedSkillPath) {
     writeFileSync(skillPath, readFileSync(installedSkillPath, "utf8"), "utf8");
-    syncedSkill = true;
+    wroteSkill = true;
   }
 
   process.stdout.write(`${palette.green}✓ Initialized ${join(".jaiph", "bootstrap.jh")}${palette.reset}\n`);
+  if (createdGitignore) {
+    process.stdout.write(`${palette.green}✓ Created ${join(".jaiph", ".gitignore")}${palette.reset}\n`);
+  } else {
+    process.stdout.write(
+      `${palette.dim}▸ Note: ${join(".jaiph", ".gitignore")} already matched the template; left unchanged.${palette.reset}\n`,
+    );
+  }
   if (!createdBootstrap) {
     process.stdout.write(`${palette.dim}▸ Note: bootstrap file already existed; left unchanged.${palette.reset}\n`);
   }
-  if (syncedSkill) {
-    process.stdout.write(`${palette.green}✓ Synced ${join(".jaiph", "jaiph-skill.md")}${palette.reset}\n`);
+  if (wroteSkill) {
+    process.stdout.write(`${palette.green}✓ Wrote ${join(".jaiph", "SKILL.md")} from installation${palette.reset}\n`);
   } else {
-    process.stdout.write(`${palette.dim}▸ Note: local jaiph-skill.md not found in installation; skipped sync.${palette.reset}\n`);
+    process.stdout.write(
+      `${palette.dim}▸ Note: skill file not found in installation (${join(".jaiph", "SKILL.md")} not written). Set JAIPH_SKILL_PATH and run again.${palette.reset}\n`,
+    );
   }
   process.stdout.write("\n");
   process.stdout.write("Try:\n");
   process.stdout.write("  ./.jaiph/bootstrap.jh\n");
   process.stdout.write("\n");
   process.stdout.write("This asks an agent to analyze the project and scaffold recommended workflows.\n");
-  process.stdout.write("Tip: add `.jaiph/` to `.gitignore`.\n");
+  process.stdout.write(
+    "Ephemeral paths (`.jaiph/runs/`, `.jaiph/tmp/`) are ignored via `.jaiph/.gitignore`; commit workflows and the rest of `.jaiph/` as usual.\n",
+  );
   process.stdout.write("\n");
   return 0;
 }

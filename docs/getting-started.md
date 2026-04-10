@@ -72,7 +72,7 @@ Each run writes artifacts under `.jaiph/runs/<date>/<time>-<source>/`:
 - `run_summary.jsonl` — append-only JSONL event timeline (workflow boundaries, step start/end, log, inbox events)
 - `inbox/` — inbox message files (when channels are used)
 
-Add `.jaiph/runs/` to your `.gitignore`.
+Run `jaiph init` to add `.jaiph/.gitignore` (it ignores `runs` and `tmp` under `.jaiph/`). You can also list those paths in a root `.gitignore` if you prefer.
 
 ### Reporting
 
@@ -106,8 +106,9 @@ jaiph init
 
 This creates a `.jaiph/` directory in your project root with:
 
+- `.jaiph/.gitignore` — ignores ephemeral `runs/` and `tmp/` under `.jaiph/` (workflows and libraries stay tracked)
 - `.jaiph/bootstrap.jh` — an interactive workflow that asks an agent to scaffold recommended workflows for your project
-- `.jaiph/jaiph-skill.md` — the agent skill file for AI assistants authoring `.jh` workflows
+- `.jaiph/SKILL.md` — the agent skill file for AI assistants authoring `.jh` workflows (from your Jaiph installation, or `JAIPH_SKILL_PATH`)
 
 Run the bootstrap workflow to get started:
 

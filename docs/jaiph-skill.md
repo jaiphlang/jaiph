@@ -19,7 +19,7 @@ The **JS kernel** (`src/runtime/kernel/`) handles **prompt** execution, **manage
 
 **Test lane:** `jaiph test` runs **`*.test.jh`** in-process (`node-test-runner.ts`): **`buildScripts(workspace)`**, then **`buildRuntimeGraph(testFile)` once per file**, mocks, and assertions — same `NodeWorkflowRuntime` as `jaiph run`.
 
-**After `jaiph init`**, a repository gets `.jaiph/bootstrap.jh` (a prompt that tells the agent to read `.jaiph/jaiph-skill.md`) and a copy of this file. The expected outcome is a **minimal workflow set** for safe feature work: preflight checks, an implementation workflow, verification, and a `workflow default` entrypoint that wires them together (with an optional human-or-agent “review” step when you use a task queue).
+**After `jaiph init`**, a repository gets `.jaiph/bootstrap.jh` (a prompt that tells the agent to read `.jaiph/SKILL.md`) and a copy of this file. The expected outcome is a **minimal workflow set** for safe feature work: preflight checks, an implementation workflow, verification, and a `workflow default` entrypoint that wires them together (with an optional human-or-agent “review” step when you use a task queue).
 
 **Concepts:**
 
@@ -58,7 +58,7 @@ Use this guide when generating or updating `.jaiph/*.jh` workflows for a reposit
 
 When this skill conflicts with the compiler or runtime, follow the implementation. For language rules and validation codes, [Grammar](grammar.md) is the detailed reference. Published docs: [jaiph.org](https://jaiph.org).
 
-`jaiph init` copies this skill into `.jaiph/jaiph-skill.md` only when the installed Jaiph bundle includes a skill file. If sync is skipped, point `JAIPH_SKILL_PATH` at this file (or `docs/jaiph-skill.md` in a checkout) and run `jaiph init` again — see [CLI Reference](cli.md).
+`jaiph init` writes this skill to `.jaiph/SKILL.md` when the installed Jaiph bundle includes a skill file (or when `JAIPH_SKILL_PATH` points at a markdown file). If that step is skipped, set `JAIPH_SKILL_PATH` to this file (or `docs/jaiph-skill.md` in a checkout) and run `jaiph init` again — see [CLI Reference](cli.md).
 
 Ignore any outdated Markdown that contradicts the above.
 
@@ -121,7 +121,7 @@ Rules:
 
 ## Suggested Starter Layout
 
-- `.jaiph/bootstrap.jh` — Created by `jaiph init`; contains a single prompt that points the agent at this guide.
+- `.jaiph/bootstrap.jh` — Created by `jaiph init`; contains a single prompt that points the agent at `.jaiph/SKILL.md` (a copy of this guide).
 - `.jaiph/readiness.jh` — Preflight: rules and `workflow default` that runs readiness checks.
 - `.jaiph/ba_review.jh` (or any name you choose) — (Optional) Pre-implementation review: reads tasks from a queue file, sends one to an agent for review, and marks it dev-ready or exits with questions. This repository uses `.jaiph/architect_review.jh` with `QUEUE.md`.
 - `.jaiph/verification.jh` — Verification: rules and `workflow default` for lint/test/build.
