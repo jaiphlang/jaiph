@@ -8,8 +8,7 @@ trap e2e::cleanup EXIT
 e2e::prepare_test_env "install_command"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
-# ── Helper: create a local bare git repo with a .jh file ──────────────────────
-
+# Bare repo + one commit with lib.jh (local git identity: CI/Docker often have no global user.*)
 create_local_lib() {
   local name="$1"
   local repo_dir="${TEST_DIR}/repos/${name}.git"
@@ -22,6 +21,8 @@ create_local_lib() {
   (
     cd "${work_dir}"
     git checkout -b main >/dev/null 2>&1 || true
+    git config user.email "e2e@jaiph.local"
+    git config user.name "jaiph-e2e"
     git remote add origin "${repo_dir}"
     cat > lib.jh <<'JHEOF'
 export workflow greet() {
@@ -32,78 +33,61 @@ JHEOF
     git commit -m "initial" >/dev/null 2>&1
     git push origin main >/dev/null 2>&1
   )
-  # file:// protocol ensures --depth 1 works via smart transport on all platforms
   echo "file://${repo_dir}"
 }
 
-# ── 1. Install a local library ────────────────────────────────────────────────
+repo_url="$(create_local_lib "mylib")"
 
-e2e::section "jaiph install with local repo"
+# ── Project A: install, --force, restore from lockfile ───────────────────────
 
-repo_path="$(create_local_lib "mylib")"
+e2e::section "jaiph install (clone, lockfile, --force, restore)"
 
-# Run install from a project directory
-project_dir="${TEST_DIR}/project1"
-mkdir -p "${project_dir}"
-(cd "${project_dir}" && e2e::git_init)
+proj_a="${TEST_DIR}/a"
+mkdir -p "${proj_a}"
+(cd "${proj_a}" && e2e::git_init)
 
-install_out="$(cd "${project_dir}" && jaiph install "${repo_path}" 2>&1)"
+out="$(cd "${proj_a}" && jaiph install "${repo_url}" 2>&1)"
+# assert_contains: success line includes ANSI color codes
+e2e::assert_contains "${out}" "Installed mylib" "install reports success"
+e2e::assert_file_exists "${proj_a}/.jaiph/libs/mylib/lib.jh" "cloned lib.jh at workspace root"
+e2e::assert_file_exists "${proj_a}/.jaiph/libs.lock" "lockfile written"
 
-# assert_contains: output includes ANSI codes and path which varies per machine
-e2e::assert_contains "${install_out}" "Installed mylib" "install reports success"
+lock="$(cat "${proj_a}/.jaiph/libs.lock")"
+# assert_contains: JSON pretty-print whitespace may differ by platform
+e2e::assert_contains "${lock}" '"mylib"' "lockfile names the lib"
 
-# Verify the library was cloned (deriveLibName strips .git suffix)
-e2e::assert_file_exists "${project_dir}/.jaiph/libs/mylib/lib.jh" "library file exists"
+force_out="$(cd "${proj_a}" && jaiph install --force "${repo_url}" 2>&1)"
+# assert_contains: success line includes ANSI color codes
+e2e::assert_contains "${force_out}" "Installed mylib" "--force re-clone reports success"
 
-# Verify lockfile was created
-e2e::assert_file_exists "${project_dir}/.jaiph/libs.lock" "lockfile exists"
+restore_out="$(cd "${proj_a}" && jaiph install 2>&1)"
+# assert_contains: header plus ANSI; full transcript is environment-specific
+e2e::assert_contains "${restore_out}" "Restoring" "no-args install uses lockfile"
 
-lock_content="$(cat "${project_dir}/.jaiph/libs.lock")"
-# assert_contains: lockfile JSON structure varies by platform whitespace
-e2e::assert_contains "${lock_content}" '"mylib"' "lockfile contains lib name"
+e2e::pass "install workflow (clone, lockfile, --force, restore)"
 
-e2e::pass "install creates library and lockfile"
+# ── No lockfile / empty deps ─────────────────────────────────────────────────
 
-# ── 2. Install with --force re-clones ────────────────────────────────────────
+e2e::section "jaiph install with no lockfile"
 
-e2e::section "jaiph install --force re-clones"
+proj_b="${TEST_DIR}/b"
+mkdir -p "${proj_b}"
+(cd "${proj_b}" && e2e::git_init)
 
-force_out="$(cd "${project_dir}" && jaiph install --force "${repo_path}" 2>&1)"
-# assert_contains: output includes ANSI codes
-e2e::assert_contains "${force_out}" "Installed mylib" "force install reports success"
-e2e::pass "install --force re-clones existing library"
+empty_out="$(cd "${proj_b}" && jaiph install 2>&1)"
+# assert_contains: we only assert the user-visible diagnostic line
+e2e::assert_contains "${empty_out}" "No libs in lockfile" "reports empty deps"
+e2e::pass "no-args with missing lockfile"
 
-# ── 3. Install without args skips already installed ───────────────────────────
+# ── Invalid URL ────────────────────────────────────────────────────────────────
 
-e2e::section "jaiph install (no args) restores from lockfile"
+e2e::section "jaiph install rejects bad URL"
 
-# The library already exists from step 1, so restore should skip it
-restore_out="$(cd "${project_dir}" && jaiph install 2>&1)"
-# assert_contains: output includes ANSI codes and "already exists" or "Restoring"
-e2e::assert_contains "${restore_out}" "Restoring" "restore from lockfile shows header"
-e2e::pass "install with no args restores from lockfile"
-
-# ── 4. Install without args on empty lockfile ────────────────────────────────
-
-e2e::section "jaiph install (no args) with empty lockfile"
-
-project_dir2="${TEST_DIR}/project2"
-mkdir -p "${project_dir2}"
-(cd "${project_dir2}" && e2e::git_init)
-
-empty_out="$(cd "${project_dir2}" && jaiph install 2>&1)"
-e2e::assert_contains "${empty_out}" "No libs in lockfile" "empty lockfile reports no libs"
-e2e::pass "install with no args and no lockfile shows message"
-
-# ── 5. Install with invalid URL fails ────────────────────────────────────────
-
-e2e::section "jaiph install with invalid URL fails"
-
-project_dir3="${TEST_DIR}/project3"
-mkdir -p "${project_dir3}"
-(cd "${project_dir3}" && e2e::git_init)
+proj_c="${TEST_DIR}/c"
+mkdir -p "${proj_c}"
+(cd "${proj_c}" && e2e::git_init)
 
 bad_exit=0
-cd "${project_dir3}" && jaiph install "/nonexistent/path/to/repo.git" >/dev/null 2>&1 || bad_exit=$?
-e2e::assert_equals "${bad_exit}" "1" "install with bad URL exits 1"
-e2e::pass "install with invalid URL exits with error"
+(cd "${proj_c}" && jaiph install "/nonexistent/path/to/repo.git" >/dev/null 2>&1) || bad_exit=$?
+e2e::assert_equals "${bad_exit}" "1" "bad URL exits 1"
+e2e::pass "invalid URL fails"
