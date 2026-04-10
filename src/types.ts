@@ -209,6 +209,14 @@ export type WorkflowStepDef =
       expr: MatchExprDef;
     }
   | {
+      type: "if";
+      subject: string;
+      operator: "==" | "!=" | "=~" | "!~";
+      operand: { kind: "string_literal"; value: string } | { kind: "regex"; source: string };
+      body: WorkflowStepDef[];
+      loc: SourceLoc;
+    }
+  | {
       /** Preserved intentional blank line between steps (formatter only). */
       type: "blank_line";
     };

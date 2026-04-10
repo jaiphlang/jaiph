@@ -387,7 +387,7 @@ test("parser: unknown runtime key throws E_PARSE", () => {
   );
 });
 
-test("parser: if keyword produces E_PARSE", () => {
+test("parser: if keyword with old syntax produces E_PARSE", () => {
   assert.throws(
     () =>
       parsejaiph(
@@ -403,7 +403,7 @@ test("parser: if keyword produces E_PARSE", () => {
         ].join("\n"),
         "/fake/entry.jh",
       ),
-    /if statements have been removed/,
+    /invalid if syntax/,
   );
 });
 
@@ -524,7 +524,7 @@ test("parser: wait parses as workflow step (not shell)", () => {
   );
 });
 
-test("parser: brace-style if produces E_PARSE", () => {
+test("parser: brace-style if with old syntax produces E_PARSE", () => {
   const source = [
     "rule ok() {",
     "  return \"ok\"",
@@ -538,7 +538,7 @@ test("parser: brace-style if produces E_PARSE", () => {
   ].join("\n");
   assert.throws(
     () => parsejaiph(source, "/fake/entry.jh"),
-    /if statements have been removed/,
+    /invalid if syntax/,
   );
 });
 

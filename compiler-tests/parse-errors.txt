@@ -254,8 +254,8 @@ workflow default() {
   log "ok"
 }
 
-=== if keyword produces removed error
-# @expect error E_PARSE "if statements have been removed" @2:3
+=== if keyword with old syntax produces error
+# @expect error E_PARSE "invalid if syntax" @2:3
 --- input.jh
 workflow default() {
   if ensure ready() {
@@ -343,8 +343,8 @@ workflow default() {
   prompt "this never closes
 }
 
-=== if keyword with not produces removed error
-# @expect error E_PARSE "if statements have been removed" @6:3
+=== if keyword with not produces error
+# @expect error E_PARSE "invalid if syntax" @6:3
 --- input.jh
 rule gate() {
   run gate_impl()
@@ -696,8 +696,8 @@ workflow default() {
   findings -> analyst
 }
 
-=== if keyword in workflow with args produces removed error
-# @expect error E_PARSE "if statements have been removed" @5:3
+=== if keyword in workflow with args produces error
+# @expect error E_PARSE "invalid if syntax" @5:3
 --- input.jh
 rule check(a, b) {
   return "ok"
@@ -739,8 +739,8 @@ workflow default() {
   ensure check()
 }
 
-=== if keyword with else branch produces removed error
-# @expect error E_PARSE "if statements have been removed" @5:3
+=== if keyword with else branch produces error
+# @expect error E_PARSE "invalid if syntax" @5:3
 --- input.jh
 rule ready() {
   return "ok"
@@ -1170,8 +1170,8 @@ workflow default() {
   x = findings <- "hello"
 }
 
-=== if keyword at top of workflow produces removed error
-# @expect error E_PARSE "if statements have been removed" @2:3
+=== if keyword at top of workflow produces error
+# @expect error E_PARSE "invalid if syntax" @2:3
 --- input.jh
 workflow default() {
   if ensure ready() {
@@ -1461,8 +1461,8 @@ workflow default() {
   fail "unclosed
 }
 
-=== if keyword after other steps produces removed error
-# @expect error E_PARSE "if statements have been removed" @3:3
+=== if keyword after other steps produces error
+# @expect error E_PARSE "invalid if syntax" @3:3
 --- input.jh
 workflow default() {
   log "start"

@@ -518,6 +518,16 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
       lines.push(`${ci}}`);
       break;
     }
+
+    case "if": {
+      const operandStr = step.operand.kind === "string_literal"
+        ? `"${step.operand.value}"`
+        : `/${step.operand.source}/`;
+      lines.push(`${ci}if ${step.subject} ${step.operator} ${operandStr} {`);
+      lines.push(...emitSteps(step.body, pad, ci + pad));
+      lines.push(`${ci}}`);
+      break;
+    }
   }
 
   return lines;

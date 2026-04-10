@@ -16,7 +16,7 @@ import { parsePromptStep } from "./prompt";
 import { parseSendRhs } from "./send-rhs";
 import { parseAnonymousInlineScript } from "./inline-script";
 import { parseEnsureStep, parseRunRecoverStep } from "./steps";
-import { parseBlockStatement } from "./workflow-brace";
+import { parseBraceBlockBody, parseBlockStatement } from "./workflow-brace";
 import { dottedReturnToQuotedString, isBareDottedIdentifierReturn } from "./workflow-return-dotted";
 import { parseMatchExpr } from "./match";
 import {
@@ -541,10 +541,38 @@ export function parseWorkflowBlock(
       }
     }
 
-    if (/^if\s/.test(inner)) {
+    const ifHead = inner.match(
+      /^if\s+([A-Za-z_][A-Za-z0-9_]*)\s+(==|!=|=~|!~)\s+("(?:[^"\\]|\\.)*"|\/(?:[^/\\]|\\.)*\/)\s*\{\s*$/,
+    );
+    if (ifHead) {
+      const subject = ifHead[1];
+      const operator = ifHead[2] as "==" | "!=" | "=~" | "!~";
+      const rawOperand = ifHead[3];
+      const ifLoc = { line: innerNo, col: innerRaw.indexOf("if") + 1 };
+
+      let operand: { kind: "string_literal"; value: string } | { kind: "regex"; source: string };
+      if (rawOperand.startsWith('"')) {
+        operand = { kind: "string_literal", value: rawOperand.slice(1, -1) };
+      } else {
+        operand = { kind: "regex", source: rawOperand.slice(1, -1) };
+      }
+
+      if ((operator === "==" || operator === "!=") && operand.kind === "regex") {
+        fail(filePath, `operator "${operator}" requires a string operand ("..."), not a regex`, innerNo, ifLoc.col);
+      }
+      if ((operator === "=~" || operator === "!~") && operand.kind === "string_literal") {
+        fail(filePath, `operator "${operator}" requires a regex operand (/pattern/), not a string`, innerNo, ifLoc.col);
+      }
+
+      const { steps: body, nextIdx } = parseBraceBlockBody(filePath, lines, idx + 1, innerNo);
+      workflow.steps.push({ type: "if", subject, operator, operand, body, loc: ifLoc });
+      idx = nextIdx - 1;
+      continue;
+    }
+    if (/^if[\s(]/.test(inner)) {
       fail(
         filePath,
-        'if statements have been removed; use "ensure ref() recover (err) { ... }" or "run ref() recover (err) { ... }" for failure handling, and "match" for value branching',
+        'invalid if syntax; expected: if <identifier> <op> <operand> { ... } where op is ==, !=, =~, or !~ and operand is "string" or /regex/',
         innerNo,
         innerRaw.indexOf("if") + 1,
       );

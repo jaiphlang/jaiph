@@ -42,9 +42,9 @@ The compiler enforces these boundaries at every call site. Using a script where 
 
 Jaiph enforces a strict boundary between orchestration and execution. Workflows and rules contain only Jaiph steps. Bash lives in `script` bodies.
 
-- **Workflows** — Named sequences of Jaiph steps: `ensure`, `run`, `prompt`, `const`, `fail`, `return`, `log`/`logerr`, inbox `send` (`channel <- …`), `match`, `run async`, `ensure … recover`, and `run … recover`. Any line that is not a recognized step is a parse error — extract bash to a `script` and call it with `run`.
+- **Workflows** — Named sequences of Jaiph steps: `ensure`, `run`, `prompt`, `const`, `fail`, `return`, `log`/`logerr`, inbox `send` (`channel <- …`), `match`, `if`, `run async`, `ensure … recover`, and `run … recover`. Any line that is not a recognized step is a parse error — extract bash to a `script` and call it with `run`.
 
-- **Rules** — Named blocks of structured Jaiph steps: `ensure` (other rules), `run` (scripts only — not workflows), `const`, `match`, `fail`, `log`/`logerr`, `return "…"`, `ensure … recover`, `run … recover`. Rules cannot use `prompt`, inbox send/route, or `run async`.
+- **Rules** — Named blocks of structured Jaiph steps: `ensure` (other rules), `run` (scripts only — not workflows), `const`, `match`, `if`, `fail`, `log`/`logerr`, `return "…"`, `ensure … recover`, `run … recover`. Rules cannot use `prompt`, inbox send/route, or `run async`.
 
 - **Scripts** — Top-level `script` definitions emitted as separate executable files under the workspace `scripts/` directory. Called from workflows or rules with `run`. Bodies are opaque to the compiler — the parser does not check Jaiph keywords inside them. Use `echo`/`printf` for data output and `return N`/`return $?` for exit status. Jaiph interpolation (`${...}`) is forbidden in script bodies — use `$1`, `$2` positional arguments instead. Polyglot support: a fence lang tag (`` ```<tag> ``) maps to `#!/usr/bin/env <tag>` — any tag is valid (no hardcoded allowlist). Alternatively, a manual `#!` shebang as the first line of the body selects the interpreter; if both a fence tag and a `#!` first line are present, it is an error. Without either, `#!/usr/bin/env bash` is used. For trivial one-off commands, **inline scripts** (`` run `body`(args) `` or `` run ```lang...body...```(args) ``) let you embed a script body directly in a step without a named definition — see [`run` — Inline Scripts](#inline-scripts).
 
@@ -780,7 +780,7 @@ workflow_config = config_block ;
 workflow_step   = ensure_stmt | run_stmt | run_recover_stmt | run_async_stmt | prompt_stmt | prompt_capture_stmt
                 | const_decl_step | return_stmt
                 | fail_stmt | log_stmt | logerr_stmt | send_stmt
-                | match_stmt | comment_line ;
+                | match_stmt | if_stmt | comment_line ;
   (* route declarations (-> workflow) belong at the top level in channel_decl,
      not inside workflow bodies; a -> inside a body is E_PARSE *)
 
@@ -798,6 +798,10 @@ return_value    = double_quoted_string | triple_quoted_block | "$" IDENT | "${" 
 
 match_stmt      = "match" IDENT "{" { match_arm } "}" ;
 match_expr      = "match" IDENT "{" { match_arm } "}" ;
+
+if_stmt         = "if" IDENT if_op if_operand "{" { workflow_step } "}" ;
+if_op           = "==" | "!=" | "=~" | "!~" ;
+if_operand      = double_quoted_string | "/" regex_source "/" ;
 match_arm       = match_pattern "=>" arm_body ;
 match_pattern   = double_quoted_string | "/" regex_source "/" | "_" ;
 arm_body        = double_quoted_string | triple_quoted_block

@@ -170,8 +170,8 @@ test("ACCEPTANCE: unterminated prompt string fails with E_PARSE", () => {
   });
 });
 
-test("ACCEPTANCE: if keyword produces E_PARSE removed error", () => {
-  withTempDir("jaiph-acc-if-removed-", (root) => {
+test("ACCEPTANCE: if keyword with old syntax produces E_PARSE error", () => {
+  withTempDir("jaiph-acc-if-old-syntax-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
       [
@@ -189,7 +189,7 @@ test("ACCEPTANCE: if keyword produces E_PARSE removed error", () => {
       ].join("\n"),
     );
 
-    assert.throws(() => buildScripts(root, join(root, "out")), /E_PARSE.*if statements have been removed/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /E_PARSE.*invalid if syntax/);
   });
 });
 

@@ -45,7 +45,7 @@ test("ensure bare identifier is rejected — parentheses required", () => {
 
 // === if condition with bare identifier ===
 
-test("if keyword produces E_PARSE error", () => {
+test("if keyword with old syntax produces E_PARSE error", () => {
   assert.throws(
     () =>
       parsejaiph(
@@ -58,7 +58,7 @@ test("if keyword produces E_PARSE error", () => {
         ].join("\n"),
         "test.jh",
       ),
-    /if statements have been removed/,
+    /invalid if syntax/,
   );
 });
 

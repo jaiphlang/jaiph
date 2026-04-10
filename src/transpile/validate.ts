@@ -137,6 +137,9 @@ function collectKnownVars(steps: WorkflowStepDef[], envDecls?: { name: string }[
         const recoverSteps = "single" in s.recover ? [s.recover.single] : s.recover.block;
         walk(recoverSteps);
       }
+      if (s.type === "if") {
+        walk(s.body);
+      }
     }
   };
   walk(steps);
@@ -614,6 +617,15 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         validateMatchExpr(ast.filePath, s.expr);
         return;
       }
+      if (s.type === "if") {
+        if (s.operand.kind === "regex") {
+          try { new RegExp(s.operand.source); } catch {
+            throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `invalid regex in if condition: /${s.operand.source}/`);
+          }
+        }
+        for (const bodyStep of s.body) validateRuleStep(bodyStep);
+        return;
+      }
       if (s.type === "run_inline_script") {
         return;
       }
@@ -960,6 +972,15 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
       }
       if (s.type === "match") {
         validateMatchExpr(ast.filePath, s.expr);
+        return;
+      }
+      if (s.type === "if") {
+        if (s.operand.kind === "regex") {
+          try { new RegExp(s.operand.source); } catch {
+            throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `invalid regex in if condition: /${s.operand.source}/`);
+          }
+        }
+        for (const bodyStep of s.body) validateStep(bodyStep, recoverBindings);
         return;
       }
       if (s.type === "run_inline_script") {

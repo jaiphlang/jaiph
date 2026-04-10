@@ -112,7 +112,7 @@ test("parser: rule body supports multiline fenced run ```", () => {
   }
 });
 
-test("parser: if keyword in rule produces E_PARSE", () => {
+test("parser: if keyword with old syntax in rule produces E_PARSE", () => {
   const src = [
     'script ok = `true`',
     "rule r() {",
@@ -128,7 +128,7 @@ test("parser: if keyword in rule produces E_PARSE", () => {
   ].join("\n");
   assert.throws(
     () => parsejaiph(src, "test.jh"),
-    /if statements have been removed/,
+    /invalid if syntax/,
   );
 });
 

@@ -1000,6 +1000,28 @@ export class NodeWorkflowRuntime {
         if (ensureResult.recoverReturn) return this.mergeStepResult(accOut, accErr, ensureResult);
         continue;
       }
+      if (step.type === "if") {
+        const subjectVal = scope.vars.get(step.subject) ?? scope.env?.[step.subject] ?? "";
+        let condMet = false;
+        if (step.operator === "==" && step.operand.kind === "string_literal") {
+          condMet = subjectVal === step.operand.value;
+        } else if (step.operator === "!=" && step.operand.kind === "string_literal") {
+          condMet = subjectVal !== step.operand.value;
+        } else if (step.operator === "=~" && step.operand.kind === "regex") {
+          condMet = new RegExp(step.operand.source).test(subjectVal);
+        } else if (step.operator === "!~" && step.operand.kind === "regex") {
+          condMet = !new RegExp(step.operand.source).test(subjectVal);
+        }
+        if (condMet) {
+          const bodyResult = await this.executeSteps(scope, step.body, io);
+          if (bodyResult.status !== 0 || bodyResult.returnValue !== undefined) {
+            return this.mergeStepResult(accOut, accErr, bodyResult);
+          }
+          accOut += bodyResult.output;
+          accErr += bodyResult.error;
+        }
+        continue;
+      }
       if (step.type === "match") {
         const matchResult = await this.evaluateMatch(scope, step.expr);
         if (!matchResult.ok) return this.mergeStepResult(accOut, accErr, matchResult.result);
