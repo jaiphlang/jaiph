@@ -428,7 +428,7 @@ test("parseTestBlock: unrecognized line is E_PARSE", () => {
 
 // === parseTestBlock: comments and empty lines ===
 
-test("parseTestBlock: skips comments and empty lines", () => {
+test("parseTestBlock: preserves comments and blank lines as steps", () => {
   const lines = [
     'test "t1" {',
     '',
@@ -438,8 +438,10 @@ test("parseTestBlock: skips comments and empty lines", () => {
     '}',
   ];
   const { testBlock } = parseTestBlock("test.jh", lines, 0);
-  assert.equal(testBlock.steps.length, 1);
-  assert.equal(testBlock.steps[0].type, "test_run_workflow");
+  assert.equal(testBlock.steps.length, 3);
+  assert.equal(testBlock.steps[0].type, "comment");
+  assert.equal(testBlock.steps[1].type, "test_run_workflow");
+  assert.equal(testBlock.steps[2].type, "blank_line");
 });
 
 // === parseTestBlock: multiple steps ===

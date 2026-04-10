@@ -79,6 +79,7 @@ TEST_SCRIPTS=(
   "e2e/tests/125_test_discovery_errors.sh"
   "e2e/tests/126_file_shorthand_routing.sh"
   "e2e/tests/127_cli_edge_cases.sh"
+  "e2e/tests/128_examples_format_check.sh"
 )
 
 PASS_COUNT=0

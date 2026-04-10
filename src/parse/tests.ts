@@ -125,12 +125,21 @@ export function parseTestBlock(
     const innerRaw = lines[i];
     const inner = innerRaw.trim();
     if (!inner) {
+      const last = testBlock.steps[testBlock.steps.length - 1];
+      if (last && last.type !== "blank_line") {
+        testBlock.steps.push({ type: "blank_line" });
+      }
       continue;
     }
     if (inner === "}") {
       break;
     }
     if (inner.startsWith("#")) {
+      testBlock.steps.push({
+        type: "comment",
+        text: inner,
+        loc: { line: innerNo, col: colFromRaw(innerRaw) },
+      });
       continue;
     }
     const col = colFromRaw(innerRaw);
