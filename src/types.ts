@@ -254,6 +254,8 @@ export interface jaiphModule {
   tests?: TestBlockDef[];
   /** Encounter order of rule / script / workflow / env / test (excludes imports, config, channels). */
   topLevelOrder?: TopLevelEmitOrder[];
+  /** Top-level `#` lines after the last declaration (formatter). */
+  trailingTopLevelComments?: string[];
 }
 
 /** Docker sandbox runtime configuration. */
@@ -264,6 +266,11 @@ export interface RuntimeConfig {
   dockerTimeout?: number;
   workspace?: string[];
 }
+
+/** One line inside `config { }`: comment or assignment (formatter round-trip order). */
+export type ConfigBodyPart =
+  | { kind: "comment"; text: string }
+  | { kind: "assign"; key: string };
 
 /** In-file workflow metadata (replaces config file for V1). */
 export interface WorkflowMetadata {
@@ -277,10 +284,14 @@ export interface WorkflowMetadata {
   };
   run?: { debug?: boolean; logsDir?: string; inboxParallel?: boolean };
   runtime?: RuntimeConfig;
+  /** Preserves `#` lines and assignment order inside `config { }` (formatter). */
+  configBodySequence?: ConfigBodyPart[];
 }
 
 /** Step inside a test block. Only present when module is a test file (*.test.jh). */
 export type TestStepDef =
+  | { type: "comment"; text: string; loc: SourceLoc }
+  | { type: "blank_line" }
   | { type: "test_mock_prompt"; response: string; loc: SourceLoc }
   | {
       type: "test_mock_prompt_block";

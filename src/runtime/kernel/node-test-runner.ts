@@ -95,6 +95,9 @@ async function runTestBlock(
 
     // Collect mock setup
     for (const step of block.steps) {
+      if (step.type === "comment" || step.type === "blank_line") {
+        continue;
+      }
       if (step.type === "test_mock_prompt") {
         mockResponses.push(step.response);
       }
@@ -115,6 +118,9 @@ async function runTestBlock(
 
     // Execute test steps
     for (const step of block.steps) {
+      if (step.type === "comment" || step.type === "blank_line") {
+        continue;
+      }
       if (step.type === "test_mock_prompt" || step.type === "test_mock_prompt_block" ||
           step.type === "test_mock_workflow" || step.type === "test_mock_rule" ||
           step.type === "test_mock_script") {

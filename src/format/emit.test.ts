@@ -60,7 +60,7 @@ describe("emitModule", () => {
       "workflow default(name) {",
       '  const n = "${arg1}"',
       '  const out = run helper(n)',
-      "  log \"${out}\"",
+      "  log out",
       "}",
       "",
     ].join("\n");
@@ -116,6 +116,20 @@ describe("emitModule", () => {
       "config {",
       '  agent.backend = "claude"',
       "}",
+      "",
+      "workflow default() {",
+      '  log "ok"',
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
+
+  it("round-trips top-level const with quotes in a triple-quoted body", () => {
+    const source = [
+      "const prompt_text = \"\"\"",
+      "Say: \"Greetings! I am [model name].\"",
+      '"""',
       "",
       "workflow default() {",
       '  log "ok"',
@@ -260,6 +274,43 @@ describe("emitModule", () => {
     assert.equal(roundTrip(source), source);
   });
 
+  it("preserves # comments inside config blocks and round-trips", () => {
+    const source = [
+      "config {",
+      "  # note",
+      '  agent.backend = "cursor"',
+      "}",
+      "",
+      "workflow default() {",
+      '  log "ok"',
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
+
+  it("preserves trailing top-level # comments at end of file", () => {
+    const source = [
+      "workflow default() {",
+      '  log "ok"',
+      "}",
+      "",
+      "# trailing",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
+
+  it("emits bare log identifier as log name not quoted interpolation", () => {
+    const source = [
+      "workflow default() {",
+      "  log review",
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
+
   it("formats channel routing", () => {
     const source = [
       "channel findings -> analyst",
@@ -276,7 +327,7 @@ describe("emitModule", () => {
     const source = [
       "workflow default() {",
       "  const result = prompt \"classify\" returns \"{ role: string }\"",
-      "  log \"${result}\"",
+      "  log result",
       "}",
       "",
     ].join("\n");
@@ -288,7 +339,7 @@ describe("emitModule", () => {
       "workflow default() {",
       "  const response = ensure check()",
       "  const out = run helper()",
-      "  log \"${response}\"",
+      "  log response",
       "}",
       "",
     ].join("\n");
@@ -357,7 +408,7 @@ describe("emitModule", () => {
       "const project = my-project",
       "",
       "workflow default() {",
-      '  log "${project}"',
+      "  log project",
       "}",
       "",
     ].join("\n");

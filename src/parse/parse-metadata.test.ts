@@ -137,6 +137,10 @@ test("parseConfigBlock: skips empty lines and comments", () => {
   ];
   const { metadata } = parseConfigBlock("test.jh", lines, 0);
   assert.equal(metadata.agent?.command, "claude");
+  assert.deepEqual(metadata.configBodySequence, [
+    { kind: "comment", text: "# this is a comment" },
+    { kind: "assign", key: "agent.command" },
+  ]);
 });
 
 test("parseConfigBlock: fails on line without = separator", () => {

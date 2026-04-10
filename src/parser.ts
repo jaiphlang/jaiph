@@ -153,6 +153,10 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
     fail(filePath, `unsupported top-level statement: ${line}`, lineNo);
   }
 
+  if (pendingTopLevelComments.length > 0) {
+    mod.trailingTopLevelComments = [...pendingTopLevelComments];
+  }
+
   // Unified namespace: rules, workflows, and scripts share a single name space.
   const seen = new Map<string, string>();
   for (const ch of mod.channels) {

@@ -1,4 +1,4 @@
-import type { WorkflowMetadata } from "../types";
+import type { ConfigBodyPart, WorkflowMetadata } from "../types";
 import { colFromRaw, fail } from "./core";
 import { findClosingBraceIndex, splitStatementsOnSemicolons } from "./statement-split";
 
@@ -247,10 +247,15 @@ export function parseConfigBlock(
     }
     const inner = rawOpen.slice(openBraceIdx + 1, closeIdx);
     const out: WorkflowMetadata = {};
+    const bodySequence: ConfigBodyPart[] = [];
     const assignmentLines = splitStatementsOnSemicolons(inner);
     for (const assignRaw of assignmentLines) {
       const line = assignRaw.trim();
-      if (!line || line.startsWith("#")) {
+      if (!line) {
+        continue;
+      }
+      if (line.startsWith("#")) {
+        bodySequence.push({ kind: "comment", text: line });
         continue;
       }
       const eq = line.indexOf("=");
@@ -289,6 +294,10 @@ export function parseConfigBlock(
       }
       value = parseMetadataValue(filePath, rawOpen, valuePart, openLineNo);
       assignConfigKey(filePath, out, key, value, openLineNo, rawOpen);
+      bodySequence.push({ kind: "assign", key });
+    }
+    if (bodySequence.length > 0) {
+      out.configBodySequence = bodySequence;
     }
     return { metadata: out, nextIndex: startIndex + 1 };
   }
@@ -298,6 +307,7 @@ export function parseConfigBlock(
   }
 
   const out: WorkflowMetadata = {};
+  const bodySequence: ConfigBodyPart[] = [];
   let idx = startIndex + 1;
 
   for (; idx < lines.length; idx += 1) {
@@ -309,9 +319,13 @@ export function parseConfigBlock(
       continue;
     }
     if (line.startsWith("#")) {
+      bodySequence.push({ kind: "comment", text: line });
       continue;
     }
     if (line === "}") {
+      if (bodySequence.length > 0) {
+        out.configBodySequence = bodySequence;
+      }
       idx += 1;
       return { metadata: out, nextIndex: idx };
     }
@@ -335,6 +349,7 @@ export function parseConfigBlock(
     // Check for array opening bracket
     let value: string | boolean | number | string[];
     const trimmedValue = valuePart.trim();
+    bodySequence.push({ kind: "assign", key });
     if (trimmedValue === "[") {
       // Multi-line array
       const arrayResult = parseArrayValue(filePath, lines, idx + 1);

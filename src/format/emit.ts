@@ -47,11 +47,15 @@ export function emitModule(mod: jaiphModule, opts: EmitOptions = DEFAULT_OPTIONS
   // Shebang — we don't store it in the AST, so the caller must prepend it if needed.
   // (handled by the format command reading the first line of the original source)
 
+  const importLines: string[] = [];
   for (const imp of mod.imports) {
     if (imp.leadingComments?.length) {
-      sections.push(emitCommentBlock(imp.leadingComments));
+      importLines.push(emitCommentBlock(imp.leadingComments));
     }
-    sections.push(`import "${imp.path}" as ${imp.alias}`);
+    importLines.push(`import "${imp.path}" as ${imp.alias}`);
+  }
+  if (importLines.length > 0) {
+    sections.push(importLines.join("\n"));
   }
 
   if (mod.metadata) {
@@ -61,11 +65,15 @@ export function emitModule(mod: jaiphModule, opts: EmitOptions = DEFAULT_OPTIONS
     sections.push(emitConfig(mod.metadata, pad));
   }
 
+  const channelLines: string[] = [];
   for (const ch of mod.channels) {
     if (ch.leadingComments?.length) {
-      sections.push(emitCommentBlock(ch.leadingComments));
+      channelLines.push(emitCommentBlock(ch.leadingComments));
     }
-    sections.push(emitChannel(ch));
+    channelLines.push(emitChannel(ch));
+  }
+  if (channelLines.length > 0) {
+    sections.push(channelLines.join("\n"));
   }
 
   const exportedNames = new Set(mod.exports);
@@ -104,11 +112,85 @@ export function emitModule(mod: jaiphModule, opts: EmitOptions = DEFAULT_OPTIONS
     sections.push(emitTestBlock(mod.tests![item.index], pad));
   }
 
+  if (mod.trailingTopLevelComments?.length) {
+    sections.push(emitCommentBlock(mod.trailingTopLevelComments));
+  }
+
   return sections.join("\n\n") + "\n";
+}
+
+/** Emit lines for one `key = value` inside `config { }` (matches canonical value formatting). */
+function emitConfigKeyLines(meta: WorkflowMetadata, key: string, pad: string): string[] {
+  switch (key) {
+    case "agent.default_model":
+      if (meta.agent?.defaultModel === undefined) return [];
+      return [`${pad}agent.default_model = "${meta.agent.defaultModel}"`];
+    case "agent.command":
+      if (meta.agent?.command === undefined) return [];
+      return [`${pad}agent.command = "${meta.agent.command}"`];
+    case "agent.backend":
+      if (meta.agent?.backend === undefined) return [];
+      return [`${pad}agent.backend = "${meta.agent.backend}"`];
+    case "agent.trusted_workspace":
+      if (meta.agent?.trustedWorkspace === undefined) return [];
+      return [`${pad}agent.trusted_workspace = "${meta.agent.trustedWorkspace}"`];
+    case "agent.cursor_flags":
+      if (meta.agent?.cursorFlags === undefined) return [];
+      return [`${pad}agent.cursor_flags = "${meta.agent.cursorFlags}"`];
+    case "agent.claude_flags":
+      if (meta.agent?.claudeFlags === undefined) return [];
+      return [`${pad}agent.claude_flags = "${meta.agent.claudeFlags}"`];
+    case "run.debug":
+      if (meta.run?.debug === undefined) return [];
+      return [`${pad}run.debug = ${meta.run.debug}`];
+    case "run.logs_dir":
+      if (meta.run?.logsDir === undefined) return [];
+      return [`${pad}run.logs_dir = "${meta.run.logsDir}"`];
+    case "run.inbox_parallel":
+      if (meta.run?.inboxParallel === undefined) return [];
+      return [`${pad}run.inbox_parallel = ${meta.run.inboxParallel}`];
+    case "runtime.docker_enabled":
+      if (meta.runtime?.dockerEnabled === undefined) return [];
+      return [`${pad}runtime.docker_enabled = ${meta.runtime.dockerEnabled}`];
+    case "runtime.docker_image":
+      if (meta.runtime?.dockerImage === undefined) return [];
+      return [`${pad}runtime.docker_image = "${meta.runtime.dockerImage}"`];
+    case "runtime.docker_network":
+      if (meta.runtime?.dockerNetwork === undefined) return [];
+      return [`${pad}runtime.docker_network = "${meta.runtime.dockerNetwork}"`];
+    case "runtime.docker_timeout":
+      if (meta.runtime?.dockerTimeout === undefined) return [];
+      return [`${pad}runtime.docker_timeout = ${meta.runtime.dockerTimeout}`];
+    case "runtime.workspace": {
+      if (meta.runtime?.workspace === undefined) return [];
+      if (meta.runtime.workspace.length === 0) {
+        return [`${pad}runtime.workspace = []`];
+      }
+      const ws: string[] = [`${pad}runtime.workspace = [`];
+      for (const w of meta.runtime.workspace) {
+        ws.push(`${pad}${pad}"${w}",`);
+      }
+      ws.push(`${pad}]`);
+      return ws;
+    }
+    default:
+      return [];
+  }
 }
 
 function emitConfig(meta: WorkflowMetadata, pad: string): string {
   const lines: string[] = ["config {"];
+  if (meta.configBodySequence?.length) {
+    for (const part of meta.configBodySequence) {
+      if (part.kind === "comment") {
+        lines.push(`${pad}${part.text}`);
+      } else {
+        lines.push(...emitConfigKeyLines(meta, part.key, pad));
+      }
+    }
+    lines.push("}");
+    return lines.join("\n");
+  }
   if (meta.agent) {
     if (meta.agent.defaultModel !== undefined) lines.push(`${pad}agent.default_model = "${meta.agent.defaultModel}"`);
     if (meta.agent.command !== undefined) lines.push(`${pad}agent.command = "${meta.agent.command}"`);
@@ -143,6 +225,7 @@ function emitConfig(meta: WorkflowMetadata, pad: string): string {
   return lines.join("\n");
 }
 
+/** Top-level `const` RHS: bare slugs, JSON string, or triple-quoted when `"` / `\\` would break double-quote round-trip. */
 function emitEnvDecl(env: EnvDeclDef): string[] {
   if (env.value.includes("\n")) {
     const lines = [`const ${env.name} = """`];
@@ -152,7 +235,13 @@ function emitEnvDecl(env: EnvDeclDef): string[] {
     lines.push('"""');
     return lines;
   }
-  return [`const ${env.name} = ${env.value}`];
+  if (/^[A-Za-z0-9_./@+#%^&=*:~?-]+$/.test(env.value)) {
+    return [`const ${env.name} = ${env.value}`];
+  }
+  if (/["\\]/.test(env.value)) {
+    return [`const ${env.name} = """`, env.value, '"""'];
+  }
+  return [`const ${env.name} = ${JSON.stringify(env.value)}`];
 }
 
 function emitComments(comments: string[]): string[] {
@@ -192,6 +281,28 @@ function emitScript(script: ScriptDef, _pad: string, exported: boolean): string 
   return lines.join("\n");
 }
 
+/** Single-line `config { agent.backend = "…" }` when that is the only workflow metadata field. */
+function emitCompactInlineWorkflowConfig(meta: WorkflowMetadata): string | null {
+  if (meta.run !== undefined || meta.runtime !== undefined) return null;
+  const seq = meta.configBodySequence;
+  if (seq?.length) {
+    if (seq.length !== 1 || seq[0].kind !== "assign" || seq[0].key !== "agent.backend") {
+      return null;
+    }
+  }
+  if (!meta.agent) return null;
+  const a = meta.agent;
+  const fieldCount =
+    (a.defaultModel !== undefined ? 1 : 0) +
+    (a.command !== undefined ? 1 : 0) +
+    (a.backend !== undefined ? 1 : 0) +
+    (a.trustedWorkspace !== undefined ? 1 : 0) +
+    (a.cursorFlags !== undefined ? 1 : 0) +
+    (a.claudeFlags !== undefined ? 1 : 0);
+  if (fieldCount !== 1 || a.backend === undefined) return null;
+  return `config { agent.backend = "${a.backend}" }`;
+}
+
 function emitWorkflow(wf: WorkflowDef, pad: string, exported: boolean): string {
   const lines: string[] = [];
   lines.push(...emitComments(wf.comments));
@@ -201,10 +312,14 @@ function emitWorkflow(wf: WorkflowDef, pad: string, exported: boolean): string {
   lines.push(`${prefix}workflow ${wf.name}${paramStr} {`);
 
   if (wf.metadata) {
-    const configLines = emitConfig(wf.metadata, pad + pad);
-    // Inline the config block inside the workflow
-    for (const cl of configLines.split("\n")) {
-      lines.push(`${pad}${cl}`);
+    const compact = emitCompactInlineWorkflowConfig(wf.metadata);
+    if (compact) {
+      lines.push(`${pad}${compact}`);
+    } else {
+      const configLines = emitConfig(wf.metadata, pad);
+      for (const cl of configLines.split("\n")) {
+        lines.push(`${pad}${cl}`);
+      }
     }
   }
 
@@ -220,6 +335,23 @@ function emitChannel(ch: ChannelDef): string {
     return `channel ${ch.name} -> ${targets}`;
   }
   return `channel ${ch.name}`;
+}
+
+/** `log` / `logerr` message: bare identifier form vs JSON-string form (matches parse storage). */
+function emitLogMessageRhs(message: string): string {
+  // Parser stores bare `log name` as the literal string `${name}` (interpolation sentinel).
+  if (
+    message.length >= 3 &&
+    message[0] === "$" &&
+    message[1] === "{" &&
+    message[message.length - 1] === "}"
+  ) {
+    const inner = message.slice(2, -1);
+    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(inner)) {
+      return inner;
+    }
+  }
+  return JSON.stringify(message);
 }
 
 function emitSteps(steps: WorkflowStepDef[], pad: string, currentIndent: string): string[] {
@@ -452,7 +584,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
         }
         lines.push(`${ci}"""`);
       } else {
-        lines.push(`${ci}log "${step.message}"`);
+        lines.push(`${ci}log ${emitLogMessageRhs(step.message)}`);
       }
       break;
 
@@ -464,7 +596,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
         }
         lines.push(`${ci}"""`);
       } else {
-        lines.push(`${ci}logerr "${step.message}"`);
+        lines.push(`${ci}logerr ${emitLogMessageRhs(step.message)}`);
       }
       break;
 
@@ -601,6 +733,10 @@ function emitTestBlock(test: TestBlockDef, pad: string): string {
 
 function emitTestStep(step: TestStepDef, pad: string): string[] {
   switch (step.type) {
+    case "comment":
+      return [`${pad}${step.text}`];
+    case "blank_line":
+      return [""];
     case "test_mock_prompt":
       return [`${pad}mock prompt "${step.response}"`];
     case "test_mock_prompt_block": {
