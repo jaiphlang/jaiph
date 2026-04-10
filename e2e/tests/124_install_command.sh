@@ -16,12 +16,12 @@ create_local_lib() {
   local work_dir="${TEST_DIR}/repos/${name}_work"
 
   mkdir -p "${repo_dir}" "${work_dir}"
-  git init --bare --initial-branch=main "${repo_dir}" >/dev/null 2>&1 \
-    || git init --bare "${repo_dir}" >/dev/null 2>&1
-  git init -b main "${work_dir}" >/dev/null 2>&1 \
-    || git init "${work_dir}" >/dev/null 2>&1
+  git init --bare "${repo_dir}" >/dev/null 2>&1
+  git -C "${repo_dir}" symbolic-ref HEAD refs/heads/main
+  git init "${work_dir}" >/dev/null 2>&1
   (
     cd "${work_dir}"
+    git checkout -b main >/dev/null 2>&1 || true
     git remote add origin "${repo_dir}"
     cat > lib.jh <<'JHEOF'
 export workflow greet() {
@@ -30,7 +30,7 @@ export workflow greet() {
 JHEOF
     git add lib.jh
     git commit -m "initial" >/dev/null 2>&1
-    git push origin HEAD:main >/dev/null 2>&1
+    git push origin main >/dev/null 2>&1
   )
   echo "${repo_dir}"
 }
