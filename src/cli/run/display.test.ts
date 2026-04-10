@@ -217,3 +217,193 @@ test("formatHeartbeatLine: wraps in dim ANSI when dimEnabled", () => {
   assert.ok(result.endsWith("\u001b[0m"), "should end with reset");
   assert.ok(result.includes("script build (running 10s)"));
 });
+
+// === formatStartLine: prompt preview escape handling ===
+
+test("formatStartLine: prompt preview escapes backslashes", () => {
+  const params: Array<[string, string]> = [
+    ["prompt_text", "path\\to\\file"],
+  ];
+  const result = formatStartLine("  ", "prompt", "prompt", false, params);
+  assert.ok(result.includes("\\\\"), "backslashes should be escaped");
+});
+
+test("formatStartLine: prompt preview escapes double quotes", () => {
+  const params: Array<[string, string]> = [
+    ["prompt_text", 'say "hello"'],
+  ];
+  const result = formatStartLine("  ", "prompt", "prompt", false, params);
+  assert.ok(result.includes('\\"hello\\"'), "quotes should be escaped");
+});
+
+test("formatStartLine: prompt preview escapes backslash before quote", () => {
+  const params: Array<[string, string]> = [
+    ["prompt_text", 'a\\"b'],
+  ];
+  const result = formatStartLine("  ", "prompt", "prompt", false, params);
+  // The backslash should be doubled, and the quote should be escaped
+  assert.ok(result.includes("\\\\"), "backslash should be escaped");
+});
+
+// === formatStartLine: multi-param prompt suffix rendering ===
+
+test("formatStartLine: prompt with two params shows second as suffix", () => {
+  const params: Array<[string, string]> = [
+    ["prompt_text", "Analyze this"],
+    ["schema", "{ type: string }"],
+  ];
+  const result = formatStartLine("  ", "prompt", "prompt", false, params);
+  assert.ok(result.includes("Analyze this"), "preview should be shown");
+  assert.ok(result.includes("schema"), "second param key should appear in suffix");
+});
+
+test("formatStartLine: prompt with only internal params shows no preview", () => {
+  const params: Array<[string, string]> = [
+    ["impl", "mymod::impl"],
+    ["executor", "jaiph::prompt_impl"],
+  ];
+  const result = formatStartLine("  ", "prompt", "prompt", false, params);
+  // All values are internal (ends with ::impl or jaiph::prompt_impl), so no preview
+  const quoteCount = (result.match(/"/g) || []).length;
+  assert.equal(quoteCount, 0, "no quoted preview when all params are internal");
+});
+
+test("formatStartLine: prompt skips first param in suffix when it matches preview", () => {
+  const params: Array<[string, string]> = [
+    ["text", "Hello world"],
+    ["extra", "more data"],
+  ];
+  const result = formatStartLine("  ", "prompt", "prompt", false, params);
+  // "Hello world" should appear as the preview (in quotes)
+  assert.ok(result.includes('"Hello world"'), "preview should be in quotes");
+  // "extra" should appear in the suffix
+  assert.ok(result.includes("extra"), "second param should appear in suffix");
+});
+
+// === formatStartLine: whitespace-only preview ===
+
+test("formatStartLine: prompt with whitespace-only preview shows no quoted text", () => {
+  const params: Array<[string, string]> = [
+    ["prompt_text", "   "],
+  ];
+  const result = formatStartLine("  ", "prompt", "prompt", false, params);
+  // After trim, oneLine is empty → no quoted preview
+  const quoteCount = (result.match(/"/g) || []).length;
+  assert.equal(quoteCount, 0, "no quoted preview for whitespace-only text");
+});
+
+// === formatStartLine: indent edge cases ===
+
+test("formatStartLine: empty indent produces valid output", () => {
+  const result = formatStartLine("", "workflow", "deploy", false);
+  assert.ok(result.includes("workflow"), "kind should be present");
+  assert.ok(result.includes("deploy"), "name should be present");
+});
+
+test("formatStartLine: single-char indent slices correctly", () => {
+  const result = formatStartLine(" ", "script", "build", false);
+  assert.ok(result.includes("script"), "kind should be present");
+  assert.ok(result.includes("build"), "name should be present");
+});
+
+test("formatStartLine: prompt kind with no params falls through to else branch", () => {
+  const result = formatStartLine("  ", "prompt", "prompt", false);
+  // With no params, falls into else branch: kind === name → just "prompt" once
+  const promptCount = (result.match(/prompt/g) || []).length;
+  assert.equal(promptCount, 1, "should show 'prompt' exactly once");
+  assert.ok(result.includes("▸"), "should have start marker");
+});
+
+test("formatStartLine: prompt kind with empty params array falls through to else branch", () => {
+  const result = formatStartLine("  ", "prompt", "prompt", false, []);
+  // Empty params array: condition `params.length > 0` is false → else branch
+  const promptCount = (result.match(/prompt/g) || []).length;
+  assert.equal(promptCount, 1, "should show 'prompt' exactly once");
+});
+
+test("formatStartLine: prompt kind with undefined params and different name", () => {
+  const result = formatStartLine("  ", "prompt", "claude", false);
+  // No params, kind !== name → shows "prompt claude"
+  assert.ok(result.includes("prompt"), "kind should be present");
+  assert.ok(result.includes("claude"), "name should be present");
+});
+
+// === formatCompletedLine: indent edge ===
+
+test("formatCompletedLine: empty indent produces valid output", () => {
+  const result = formatCompletedLine("", 0, 1, false, "workflow", "test");
+  assert.ok(result.includes("✓"), "success marker should be present");
+  assert.ok(result.includes("workflow test"), "kind and name should be present");
+});
+
+// === formatHeartbeatLine: empty indent ===
+
+test("formatHeartbeatLine: empty indent produces valid output", () => {
+  const result = formatHeartbeatLine("", "script", "build", 5, false);
+  assert.ok(result.includes("script build"), "kind and name should be present");
+  assert.ok(result.includes("running 5s"), "elapsed should be present");
+});
+
+// === PROMPT_ARGS_DISPLAY_MAX cap ===
+
+test("formatStartLine: prompt param suffix respects 96-char cap", () => {
+  const longValue = "V".repeat(100);
+  const params: Array<[string, string]> = [
+    ["prompt_text", "Hello"],
+    ["context", longValue],
+  ];
+  const result = formatStartLine("  ", "prompt", "prompt", false, params);
+  // The suffix portion (after the preview) should be capped
+  assert.ok(result.includes("Hello"), "preview should be shown");
+  // Total suffix should not exceed PROMPT_ARGS_DISPLAY_MAX (96 chars)
+  // The formatNamedParamsForDisplay call uses capTotalLength: 96
+  const suffixStart = result.indexOf("context");
+  if (suffixStart >= 0) {
+    const suffix = result.slice(suffixStart - 2); // include " ("
+    assert.ok(suffix.length <= 100, "suffix should be capped near 96 chars");
+    assert.ok(suffix.includes("..."), "capped suffix should contain ellipsis");
+  }
+});
+
+test("formatStartLine: prompt with many params gets suffix truncated", () => {
+  const params: Array<[string, string]> = [
+    ["prompt_text", "Analyze"],
+    ["a", "A".repeat(30)],
+    ["b", "B".repeat(30)],
+    ["c", "C".repeat(30)],
+  ];
+  const result = formatStartLine("  ", "prompt", "prompt", false, params);
+  assert.ok(result.includes("Analyze"), "preview should be present");
+  // With 3 params of 30 chars each, the suffix must be truncated at 96
+  assert.ok(result.includes("..."), "should have truncation ellipsis");
+});
+
+// --- formatStartLine: workflow/rule/script with params ---
+
+test("formatStartLine: workflow with params shows param suffix (no color)", () => {
+  const params: Array<[string, string]> = [["repo", "/home/user/project"]];
+  const result = formatStartLine("  ", "workflow", "deploy", false, params);
+  assert.ok(result.includes("workflow deploy"), "label present");
+  assert.ok(result.includes("repo"), "param name in suffix");
+});
+
+test("formatStartLine: rule with params shows param suffix (no color)", () => {
+  const params: Array<[string, string]> = [["threshold", "90"]];
+  const result = formatStartLine("  ", "rule", "check_coverage", false, params);
+  assert.ok(result.includes("rule check_coverage"), "label present");
+  assert.ok(result.includes("threshold"), "param name in suffix");
+});
+
+test("formatStartLine: script kind does not show params when empty", () => {
+  const result = formatStartLine("  ", "script", "deploy_impl", false, []);
+  assert.ok(result.includes("script deploy_impl"), "label present");
+  // Empty params array should not add trailing content
+  assert.ok(!result.includes("("), "no param parens for empty params");
+});
+
+test("formatCompletedLine: nested indent with script kind and name (no color)", () => {
+  const result = formatCompletedLine("      ", 0, 2.5, false, "script", "build_impl");
+  assert.ok(result.includes("✓"), "success marker");
+  assert.ok(result.includes("script build_impl"), "kind and name present");
+  assert.ok(result.includes("2.5s"), "elapsed time present");
+});

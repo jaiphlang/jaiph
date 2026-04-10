@@ -142,3 +142,128 @@ export rule check() {
 workflow dummy() {
   log "ok"
 }
+
+=== imported channel name not found
+# @expect error E_VALIDATE "is not defined"
+--- main.jh
+import "lib.jh" as lib
+workflow default() {
+  lib.nonexistent_chan <- "data"
+}
+--- lib.jh
+channel other_chan
+workflow dummy() {
+  log "ok"
+}
+
+=== ensure non-exported rule from module with exports
+# @expect error E_VALIDATE "is not exported from module"
+--- main.jh
+import "lib.jh" as lib
+workflow default() {
+  ensure lib.private_check()
+}
+--- lib.jh
+export rule public_check() {
+  return "ok"
+}
+rule private_check() {
+  return "ok"
+}
+
+=== run non-exported workflow from module with exports
+# @expect error E_VALIDATE "is not exported from module"
+--- main.jh
+import "lib.jh" as lib
+workflow default() {
+  run lib.private_wf()
+}
+--- lib.jh
+export workflow public_wf() {
+  log "ok"
+}
+workflow private_wf() {
+  log "private"
+}
+
+=== shell line with unknown imported symbol in workflow
+# @expect error E_VALIDATE "inline shell steps are forbidden in workflows"
+--- main.jh
+import "lib.jh" as lib
+workflow default() {
+  lib.nonexistent_thing
+}
+--- lib.jh
+script helper = `echo ok`
+workflow dummy() {
+  log "ok"
+}
+
+=== run non-exported script from module with exports
+# @expect error E_VALIDATE "is not exported from module"
+--- main.jh
+import "lib.jh" as lib
+workflow default() {
+  run lib.private_script()
+}
+--- lib.jh
+export script public_script = `echo public`
+script private_script = `echo private`
+workflow dummy() {
+  log "ok"
+}
+
+=== send RHS with non-exported workflow bare ref
+# @expect error E_VALIDATE "is not exported from module"
+--- main.jh
+import "lib.jh" as lib
+channel c
+workflow default() {
+  c <- lib.private_wf
+}
+--- lib.jh
+export workflow public_wf() {
+  log "ok"
+}
+workflow private_wf() {
+  log "private"
+}
+
+=== arity mismatch on imported rule
+# @expect error E_VALIDATE "expects 2 argument(s)"
+--- main.jh
+import "lib.jh" as lib
+workflow default() {
+  ensure lib.check("one")
+}
+--- lib.jh
+export rule check(a, b) {
+  return "ok"
+}
+
+=== send RHS with non-exported script bare ref
+# @expect error E_VALIDATE "is not exported from module"
+--- main.jh
+import "lib.jh" as lib
+channel c
+workflow default() {
+  c <- lib.private_script
+}
+--- lib.jh
+export script public_script = `echo public`
+script private_script = `echo private`
+workflow dummy() {
+  log "ok"
+}
+
+=== const ensure on imported workflow rejected
+# @expect error E_VALIDATE "must be called with run"
+--- main.jh
+import "lib.jh" as lib
+workflow default() {
+  const x = ensure lib.deploy()
+}
+--- lib.jh
+export workflow deploy() {
+  log "deploying"
+}

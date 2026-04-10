@@ -72,6 +72,13 @@ TEST_SCRIPTS=(
   "e2e/tests/118_import_not_found.sh"
   "e2e/tests/119_lib_import.sh"
   "e2e/tests/120_match_arm_execution.sh"
+  "e2e/tests/121_export_visibility.sh"
+  "e2e/tests/122_cli_error_guards.sh"
+  "e2e/tests/123_triple_quoted_strings.sh"
+  "e2e/tests/124_install_command.sh"
+  "e2e/tests/125_test_discovery_errors.sh"
+  "e2e/tests/126_file_shorthand_routing.sh"
+  "e2e/tests/127_cli_edge_cases.sh"
 )
 
 PASS_COUNT=0
