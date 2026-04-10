@@ -1,6 +1,7 @@
 import type { MatchArmDef, MatchExprDef, MatchPatternDef } from "../types";
 import { fail, indexOfClosingDoubleQuote } from "./core";
 import { splitStatementsOnSemicolons } from "./statement-split";
+import { dedentCommonLeadingWhitespace } from "./dedent";
 import { tripleQuoteBodyToRaw } from "./triple-quote";
 
 const IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -148,7 +149,10 @@ export function parseMatchArms(
         if (j >= lines.length) {
           fail(filePath, 'unterminated triple-quoted block in match arm: no closing """ before end of match', lineNo);
         }
-        arms.push({ pattern, body: tripleQuoteBodyToRaw(bodyLines.join("\n")) });
+        arms.push({
+          pattern,
+          body: tripleQuoteBodyToRaw(dedentCommonLeadingWhitespace(bodyLines.join("\n"))),
+        });
         i = j + 1;
         tripleQuoteAdvanced = true;
         break;

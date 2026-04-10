@@ -1,3 +1,4 @@
+import { dedentCommonLeadingWhitespace } from "./dedent";
 import { fail } from "./core";
 
 /**
@@ -27,12 +28,16 @@ export function parseTripleQuoteBlock(
     const trimmed = lines[i].trim();
     if (trimmed.startsWith('"""')) {
       const afterClose = trimmed.slice(3).trim();
-      return { body: bodyLines.join("\n"), nextIdx: i + 1, afterClose };
+      return { body: joinAndDedentBody(bodyLines), nextIdx: i + 1, afterClose };
     }
     bodyLines.push(lines[i]);
   }
 
   fail(filePath, 'unterminated triple-quoted block: no closing """ before end of file', lineNo);
+}
+
+function joinAndDedentBody(bodyLines: string[]): string {
+  return dedentCommonLeadingWhitespace(bodyLines.join("\n"));
 }
 
 /**
