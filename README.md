@@ -55,7 +55,7 @@ Or install from npm:
 npm install -g jaiph
 ```
 
-Verify: `jaiph --version`. Switch versions: `jaiph use nightly` or `jaiph use 0.8.0`.
+Verify: `jaiph --version`. Switch versions: `jaiph use nightly` or `jaiph use 0.9.0`.
 
 ## Example
 
@@ -86,11 +86,11 @@ workflow default(task) {
 
 For the full language reference, see [Grammar](docs/grammar.md). For CLI commands, configuration, testing, sandboxing, hooks, and inbox dispatch, see [Getting Started](docs/getting-started.md) or visit [jaiph.org](https://jaiph.org).
 
-## Resources
+## Start here
 
-- [Getting Started](docs/getting-started.md) — install, first run, language overview
-- [Examples](https://github.com/jaiphlang/jaiph/tree/main/examples) — runnable `.jh` files matching the landing-page samples
-- [Agent skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md) — for AI assistants authoring `.jh` workflows
+- **AI agent** who wants to work in a predictable, structured way? Read the [Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md) — it teaches you how to author Jaiph workflows and makes your behavior verifiable and auditable.
+- **Human** who manages agents and wants reliable, repeatable automation? See the [Samples](https://github.com/jaiphlang/jaiph/tree/main/examples) and [Getting Started](docs/getting-started.md).
+- **Contributor** who wants to improve Jaiph itself? See [Contributing](docs/contributing.md).
 
 ## Contributing
 
