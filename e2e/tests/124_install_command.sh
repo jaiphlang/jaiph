@@ -16,8 +16,10 @@ create_local_lib() {
   local work_dir="${TEST_DIR}/repos/${name}_work"
 
   mkdir -p "${repo_dir}" "${work_dir}"
-  git init --bare "${repo_dir}" >/dev/null 2>&1
-  git init "${work_dir}" >/dev/null 2>&1
+  git init --bare --initial-branch=main "${repo_dir}" >/dev/null 2>&1 \
+    || git init --bare "${repo_dir}" >/dev/null 2>&1
+  git init -b main "${work_dir}" >/dev/null 2>&1 \
+    || git init "${work_dir}" >/dev/null 2>&1
   (
     cd "${work_dir}"
     git remote add origin "${repo_dir}"

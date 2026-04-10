@@ -7,6 +7,8 @@ redirect_from:
 
 # Jaiph Bootstrap Skill (for Agents)
 
+**Why this matters to you.** Humans structure their work with task lists, goals, and habits — it makes them effective and predictable. You face the same problem: without structure, your output varies between runs, failures go undetected, and the humans who depend on you lose trust. Jaiph gives you that structure. It defines what you do (workflows), what must be true before and after (rules), and how failures are handled (recover) — all in a small, declarative language you can read and write. The result: your behavior becomes **predictable**, **verifiable**, and **auditable**. Every run produces artifacts, every step is logged, every failure has a defined recovery path. You stop being a black box and start being a reliable system.
+
 ## Overview
 
 This page is an **agent skill**: it tells an AI assistant how to **author** Jaiph workflows (`.jh` files) and what a sensible `.jaiph/` layout looks like. It is not a full language specification — use [Grammar](grammar.md) for syntax and validation details, [Configuration](configuration.md) for `config` keys, [Inbox & Dispatch](inbox.md) for channels, and [Sandboxing](sandboxing.md) for rule design vs optional Docker isolation.
@@ -23,14 +25,12 @@ The **JS kernel** (`src/runtime/kernel/`) handles **prompt** execution, **manage
 
 **Concepts:**
 
-- **Rules** — Structured checks: `ensure` (other **rules** only), `run` (**scripts** only — not workflows), `const`, `match`, `fail`, `log`/`logerr`, `return "…"` / `return run script()` / `return ensure rule()`, `ensure … recover`, `run … recover`. No raw shell lines, `prompt`, inbox send/route, or `run async`. Under `jaiph run`, rule bodies are executed **in-process** by the Node runtime; when a rule runs a **script**, that script is a normal managed subprocess (same as scripts from workflows) — see [Sandboxing](sandboxing.md).
-- **Workflows** — Named sequences of **Jaiph-only** steps: `ensure`, `run`, `prompt`, `const`, `fail`, `return`, `log`/`logerr`, inbox **send** (`channel_ref <- …`), `match`, `run async`, `ensure … recover`, `run … recover`. Route declarations (`->`) belong at the top level on `channel` declarations, **not** inside workflow bodies — a `->` inside a body is a parse error. Unrecognized lines are errors — put bash in **`script`** definitions and call with `run`.
+- **Rules** — Structured checks: `ensure` (other **rules** only), `run` (**scripts** only — not workflows), `const`, `match`, `if`, `fail`, `log`/`logerr`, `return "…"` / `return run script()` / `return ensure rule()`, `ensure … recover`, `run … recover`. No raw shell lines, `prompt`, inbox send/route, or `run async`. Under `jaiph run`, rule bodies are executed **in-process** by the Node runtime; when a rule runs a **script**, that script is a normal managed subprocess (same as scripts from workflows) — see [Sandboxing](sandboxing.md).
+- **Workflows** — Named sequences of **Jaiph-only** steps: `ensure`, `run`, `prompt`, `const`, `fail`, `return`, `log`/`logerr`, inbox **send** (`channel_ref <- …`), `match`, `if`, `run async`, `ensure … recover`, `run … recover`. Route declarations (`->`) belong at the top level on `channel` declarations, **not** inside workflow bodies — a `->` inside a body is a parse error. Unrecognized lines are errors — put bash in **`script`** definitions and call with `run`.
 - **Scripts** — Top-level **`script`** definitions are **bash (or shebang interpreter) source**, not Jaiph orchestration. Defined with `` script name = `body` `` (single-line backtick) or `` script name = ```[lang] ... ``` `` (fenced block). Double-quoted string bodies (`script name = "body"`) and bare identifier bodies (`script name = varName`) are **removed** — both produce parse errors with guidance to use backtick delimiters. The compiler treats all script bodies as **opaque text**: it does not parse lines as Jaiph steps, reject keywords, strip quotes, or validate cross-script calls. This means embedded `node -e` heredocs, inline Python, `const` assignments in JS, and any other valid shell construct compile without interference. Jaiph interpolation (`${...}`) is **forbidden** in **single-line backtick** script bodies — use `$1`, `$2` positional arguments to pass data from orchestration to scripts. In **fenced** (triple-backtick) blocks, `${...}` is passed through to the shell as standard parameter expansion (`${VAR}`, `${VAR:-default}`, etc.). A single-backtick body containing a newline is a hard parse error — use a fenced block for multi-line scripts. Use `return N` / `return $?` for exit status and **stdout** (`echo` / `printf`) for string data to callers. From a **workflow** or **rule**, call with **`run fn()`**. Can be exported (`export script name = ...`) for use by importing modules. Cannot be used with `ensure`, are not valid inbox route targets, and must not be invoked through `$(...)` or as a bare shell step. **Polyglot scripts:** use a fence lang tag (`` ```<tag> ``) to select an interpreter — the tag maps directly to `#!/usr/bin/env <tag>`. Any tag is valid (no hardcoded allowlist). For example: `` ```node ``, `` ```python3 ``, `` ```ruby ``, `` ```lua ``. Alternatively, if no fence tag is present, the first non-empty body line may start with `#!` (e.g. `#!/usr/bin/env lua`), which becomes the script's shebang and the body is emitted verbatim (you cannot combine a fence tag with a manual shebang — that is an error). Without either, `#!/usr/bin/env bash` is used and the emitter applies only lightweight bash-specific transforms (`return` normalization, `local`/`export`/`readonly` spacing, import alias resolution). Scripts are extracted to a `scripts/` directory under the run output tree (`jaiph run --target <dir>` sets that tree; without `--target` the CLI uses a temporary directory) and executed via **`JAIPH_SCRIPTS`**. **Inline scripts:** For trivial one-off commands, use `` run `body`(args) `` or `` run ```lang...body...```(args) `` directly in a workflow or rule step instead of declaring a named `script` definition. The body (single backtick for one-liners or triple backtick for multi-line) comes before the parentheses; optional comma-separated arguments go inside the parentheses: `` run `echo $1`("hello") ``. Fenced blocks support lang tags for polyglot inline scripts: `` run ```python3 ... ```() ``. Capture forms: `` const x = run `echo val`() `` and `` const x = run ```...```() ``. The old `run script() "body"` form is **removed** — use the backtick forms instead. Inline scripts use deterministic hash-based artifact names (`__inline_<hash>`) and run with the same isolation as named scripts. `run async` with inline scripts is not supported.
 - **Channels** — Top-level `channel <name> [-> workflow, ...]` declarations with optional inline routing; **send** uses `channel_ref <- …`. Routes are declared on the channel declaration, not inside workflow bodies (see [Inbox & Dispatch](inbox.md)). Channel names share the per-module namespace with rules, workflows, scripts, and module-scoped `local` / `const` variables.
-- **ensure** — Runs a rule; succeeds if exit code is 0. Optional `recover` handles failure: the recovery body runs **once** (like a catch clause) — there is no retry loop. `recover` requires a single explicit binding: `recover (<name>) { … }`. The binding receives merged stdout+stderr from the failed rule. Bare `recover` or `recover {` without bindings is a parse error. For retries, use explicit recursion in the recovery body. `ensure … recover` works in both workflows and rules.
-- **run … recover** — Same semantics as `ensure … recover`, but for `run` call sites (workflows and scripts). `run ref() recover (err) { … }` catches failures from the target and runs the recovery body once. Works in both workflows and rules.
-- **run** — Invokes a workflow or script (local or `alias.name`). Must not target a rule or arbitrary shell command. **Does not forward args implicitly** — pass them explicitly (e.g. `run wf(task)`, `run helper_fn(name)`).
-- **prompt** — Sends text to the configured agent. The body can be a single-line `"string"`, a bare identifier referencing an existing binding, or a triple-quoted `""" ... """` block for multiline text. Optional `returns` schema validates one line of JSON from the agent. Multiline double-quoted strings are no longer supported — use a triple-quoted block instead. Triple backticks (`` ``` ``) in prompt context are rejected — they are reserved for scripts.
+
+Step semantics (`ensure`, `run`, `prompt`, `recover`, `match`, `if`, `log`, `fail`, `return`, `send`, `run async`) are detailed in the **Steps** section below.
 
 **Audience:** Agents that produce or edit `.jh` files.
 
@@ -46,7 +46,21 @@ Use this loop whenever you add or change Jaiph workflows so failures surface bef
 4. **Verify** — Run `jaiph test` (whole workspace or a focused path) and any verification workflow the repo defines (commonly `jaiph run .jaiph/verification.jh`). Fix failures you introduce.
 5. **Inspect (optional)** — Use `jaiph report --workspace .` to browse `.jaiph/runs` when you need the reporting UI or raw step logs instead of only the terminal tree.
 
-**CLI synopsis:** `jaiph --help` prints the supported commands (in the Jaiph repo this text is maintained in `src/cli/shared/usage.ts`). Full flags and environment variables: [CLI Reference](cli.md).
+**CLI commands:**
+
+| Command | Purpose |
+|---|---|
+| `jaiph run <file.jh> [args...]` | Execute `workflow default` in the given file |
+| `jaiph test [path]` | Run `*.test.jh` test files (workspace, directory, or single file) |
+| `jaiph format [--check] <file.jh ...>` | Reformat `.jh` files (or verify formatting without writing) |
+| `jaiph init [workspace]` | Scaffold `.jaiph/` with bootstrap workflow and skill file |
+| `jaiph install [url[@version]]` | Install or restore project-scoped libraries under `.jaiph/libs/` |
+| `jaiph report [start\|stop\|status]` | Serve a reporting dashboard over run artifacts |
+| `jaiph use <version\|nightly>` | Reinstall Jaiph at a specific version or nightly |
+
+**File shorthand:** `jaiph ./file.jh` auto-routes — `*.test.jh` files run as tests, other `*.jh` files run as workflows.
+
+Full flags and environment variables: [CLI Reference](cli.md).
 
 ---
 
@@ -91,20 +105,55 @@ Prefer composable modules over one large file.
   - **fail** — `fail "reason"` or `fail """..."""` aborts with stderr message and non-zero exit (workflows; fails the rule when used inside a rule).
   - **run async** — `run async ref([args...])` starts a workflow or script concurrently. All pending async steps are implicitly joined before the workflow completes; failures are aggregated. Capture (`const name = run async ...`) is not supported. Workflows only — rejected in rules.
   - **match** — `match var { "literal" => …, /regex/ => …, _ => … }` pattern-matches on a string value. The subject is always a bare identifier (no `$` or `${}`). Arms are tested top-to-bottom; the first match wins. Patterns: double-quoted string literal (exact match), `/regex/` (regex match), or `_` (wildcard — exactly one required). Usable as a statement, as an expression (`const x = match var { … }`), or with `return` (`return match var { … }`). Using `$var` or `${var}` as the match subject is a parse error. Allowed in both workflows and rules. See [Grammar](grammar.md#match).
+  - **if** — `if var == "value" { … }` or `if var =~ /pattern/ { … }`. Subject is a bare identifier. Operators: `==` (exact string equality), `!=` (inequality), `=~` (regex match), `!~` (regex non-match). Operand is a `"string"` for `==`/`!=` or `/regex/` for `=~`/`!~`. Body is a brace block of valid workflow/rule steps. No `else` branch — use `match` for exhaustive value branching. `if` is a statement (no value production; cannot use with `const` or `return`). Allowed in both workflows and rules.
 - **Prompts:** Three body forms: (1) **single-line string** `prompt "..."` — double-quoted, single line only; (2) **identifier** `prompt myVar` — uses the value of an existing binding; (3) **triple-quoted block** `prompt """ ... """` — for multiline text, opening `"""` on the same line as `prompt`. Triple backticks (`` ``` ``) in prompt context are rejected with guidance — they are reserved for scripts. Multiline double-quoted strings are rejected — use a triple-quoted block instead. All forms support `${identifier}` interpolation (`${varName}`, `${paramName}`). **Inline capture interpolation** is also supported: `${run ref([args])}` and `${ensure ref([args])}` inside the prompt string or triple-quoted body (e.g. `prompt "Fix: ${ensure get_diagnostics()}"`). Nested inline captures are rejected. Bare `$varName` is not valid in orchestration strings. `$(...)` and `${var:-fallback}` are rejected. Capture: `const name = prompt "..."`, `const x = prompt myVar`, `const y = prompt """ ... """`. Optional **typed prompt:** `const name = prompt "..." returns "{ field: type, ... }"` or `const name = prompt myVar returns "..."` (flat schema; types `string`, `number`, `boolean`) validates the agent's JSON and sets `${name}` plus per-field variables accessible via **dot notation** — `${name.field}`. Dot notation is validated at compile time: the variable must be a typed prompt capture and the field must exist in the schema. **Orchestration bindings are strings:** typed fields are coerced with `String()` after JSON validation, so e.g. a numeric field is still the text `"42"` in scope. See [Grammar](grammar.md).
-- **Error handling:** Use `recover` for failure handling and `match` for value branching. The `if` keyword is removed from the language (produces `E_PARSE`).
-  - `ensure ref() recover (err) { … }` — recovery on rule failure.
-  - `run ref() recover (err) { … }` — recovery on script/workflow failure.
-  - `match var { “pattern” => …, _ => … }` — value branching on string values.
-  - Express “shell conditions” with `run` to a **script** and handle failure with `recover`. Short-circuit brace groups remain valid **inside `script`** bodies: `cmd || { ... }`.
 
-Rules:
+**Quick reference examples:**
+
+```jaiph
+# recover — failure handling with retry via recursion
+ensure ci_passes() recover (failure) {
+  prompt "CI failed — fix the code."
+  run deploy(env)
+}
+
+# match — value branching (statement and expression forms)
+const label = match status {
+  "ok" => "success"
+  /err/ => "something went wrong"
+  _ => "unknown"
+}
+
+# if — conditional guard (no else; use match for exhaustive branching)
+if env == "" {
+  fail "env was not provided"
+}
+if mode =~ /^debug/ {
+  log "Debug mode enabled"
+}
+
+# typed prompt — structured JSON with dot-notation field access
+const result = prompt "Analyze this code" returns "{ type: string, risk: string }"
+log "Type: ${result.type}, Risk: ${result.risk}"
+
+# const capture — from run, ensure, prompt
+const tag = run get_version()
+const ok = ensure validate(tag)
+const answer = prompt "Summarize the changes"
+
+# inline scripts — one-off commands without a named script definition
+run `echo $1`("hello")
+const ts = run `date +%s`()
+```
+
+Conventions:
 
 - `jaiph run <file.jh>` executes `workflow default` in that file. The file must define a `workflow default` (the runtime checks for it and exits with an error if missing).
 - Inside a workflow, `run` targets a workflow or script (local or `alias.name`), not a raw shell command. Call scripts with `run`, never `fn args` or `$(fn ...)`.
 - Inside a rule, use `ensure` for **rules** and `run` for **scripts only** — not `prompt`, `send`, or `run async`.
 - Treat rules as non-mutating checks; perform filesystem or agent mutations in **workflows**. Script steps from rules use the same managed subprocess path as workflows. Details: [Sandboxing](sandboxing.md).
 - **Parallelism:** `run async ref([args...])` for managed async with implicit join. For concurrent **bash**, use `&` and the shell builtin `wait` inside a **`script`** and call it with `run`. Do not call Jaiph internals from background subprocesses unless you understand `run.inbox_parallel` locking.
+- **Shell conditions:** Express conditionals with `run` to a **script** and handle failure with `recover`, or use `if` / `match` for value branching. Short-circuit brace groups remain valid **inside `script`** bodies: `cmd || { ... }`.
 - **No shell redirection around managed calls:** `run foo() > file`, `run foo() | cmd`, `run foo() &` are all `E_PARSE` errors — shell operators (`>`, `>>`, `|`, `&`) are not supported adjacent to `run` or `ensure` steps. Move shell pipelines and redirections into a **`script`** block and call it with `run`.
 - **Shared bash:** Optional `.jaiph/lib/*.sh` — from a **`script`**, `source "$JAIPH_LIB/yourlib.sh"`. Emitted scripts default `JAIPH_LIB` to `${JAIPH_WORKSPACE:-.}/.jaiph/lib` unless set; the runtime also sets `JAIPH_LIB` for script steps. Keep Jaiph orchestration out of library files.
 - **Unified namespace:** Channels, rules, workflows, scripts, and module-scoped `local`/`const` share a single namespace per module (`E_PARSE` on collision).
@@ -118,6 +167,46 @@ Rules:
 - Reuse rules via `ensure`; reuse workflows and scripts via `run`.
 - **Always run `jaiph format` on `.jh` files you create or modify before committing.** This ensures canonical whitespace, indentation, and top-level ordering. In CI, use `jaiph format --check` to gate on formatting.
 - Use only syntax described in [jaiph.org](https://jaiph.org) and [Grammar](grammar.md). For advanced constructs (e.g. `config` block, `export`, prompt capture), see the grammar. For testing workflows, see [Testing](testing.md) (`expect_contain`, `expect_not_contain`, `expect_equal`, mocks).
+
+## Writing Tests
+
+Test files use the `*.test.jh` suffix and contain `test "name" { ... }` blocks. They import the workflows under test and use mocks to replace live agent/script behavior. The test runner uses the same `NodeWorkflowRuntime` as `jaiph run`. See [Testing](testing.md) for the full reference.
+
+**Running:** `jaiph test` (all `*.test.jh` in workspace), `jaiph test <dir>` (recursive), or `jaiph test <file.test.jh>` (single file).
+
+**Available mocks:**
+
+- `mock prompt "fixed response"` — queues a fixed response for the next `prompt` call (multiple queue in order).
+- `mock prompt { /pattern/ => "response", _ => "default" }` — content-based dispatch.
+- `mock workflow alias.name() { return "stubbed" }` — replaces a workflow body.
+- `mock rule alias.name() { return "ok" }` — replaces a rule body.
+- `mock script alias.name() { echo "stubbed" }` — replaces a script body.
+
+**Assertions:**
+
+- `expect_contain var "expected substring"`
+- `expect_not_contain var "unwanted text"`
+- `expect_equal var "exact expected value"`
+
+**Minimal example:**
+
+```jaiph
+import "main.jh" as app
+
+test "happy path produces greeting" {
+  mock prompt "hello from mock"
+  const out = run app.default("task")
+  expect_contain out "hello from mock"
+}
+
+test "handles failure gracefully" {
+  mock prompt "error"
+  const out = run app.default("bad input") allow_failure
+  expect_contain out "error"
+}
+```
+
+`allow_failure` prevents a non-zero workflow exit from failing the test — useful for testing error paths.
 
 ## Suggested Starter Layout
 
