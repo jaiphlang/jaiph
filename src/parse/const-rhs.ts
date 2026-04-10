@@ -153,7 +153,7 @@ export function parseConstRhs(
     tqLines[lineIdx] = head;
     const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, lineIdx);
     if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
-    return { value: { kind: "expr", bashRhs: tripleQuoteBodyToRaw(body) }, nextLineIdx: nextIdx - 1 };
+    return { value: { kind: "expr", bashRhs: tripleQuoteBodyToRaw(body), tripleQuoted: true }, nextLineIdx: nextIdx - 1 };
   }
   const callLike = head.includes("(") ? parseCallRef(head.trimEnd()) : null;
   if (callLike) {

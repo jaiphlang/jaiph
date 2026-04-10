@@ -12,6 +12,10 @@ import { buildStepDisplayParamPairs } from "../../cli/commands/format-params.js"
 import { resolveRuleRef, resolveScriptRef, resolveWorkflowRef, type RuntimeGraph } from "./graph";
 import type { WorkflowMetadata } from "../../types";
 import { extractJson, validateFields } from "./schema";
+import {
+  plainMultilineOrchestrationForRuntime,
+  tripleQuotedRawForRuntime,
+} from "../orchestration-text";
 
 const MAX_EMBED = 1024 * 1024;
 const MAX_RECURSION_DEPTH = 256;
@@ -611,7 +615,10 @@ export class NodeWorkflowRuntime {
         matched = new RegExp(arm.pattern.source).test(subject);
       }
       if (matched) {
-        const body = arm.body.trimStart();
+        let body = arm.body.trimStart();
+        if (arm.tripleQuotedBody) {
+          body = tripleQuotedRawForRuntime(arm.body).trimStart();
+        }
 
         // fail "message" — abort with failure
         if (body.startsWith("fail ")) {
@@ -656,7 +663,8 @@ export class NodeWorkflowRuntime {
     for (const step of steps) {
       if (step.type === "comment" || step.type === "blank_line") continue;
       if (step.type === "log") {
-        const logIr = await this.interpolateWithCaptures(step.message, scope);
+        const logMsg = step.tripleQuoted ? plainMultilineOrchestrationForRuntime(step.message) : step.message;
+        const logIr = await this.interpolateWithCaptures(logMsg, scope);
         if (!logIr.ok) return this.mergeStepResult(accOut, accErr, logIr.result);
         const message = logIr.value;
         this.emitLog("LOG", message);
@@ -666,7 +674,8 @@ export class NodeWorkflowRuntime {
         continue;
       }
       if (step.type === "logerr") {
-        const logErrIr = await this.interpolateWithCaptures(step.message, scope);
+        const logerrMsg = step.tripleQuoted ? plainMultilineOrchestrationForRuntime(step.message) : step.message;
+        const logErrIr = await this.interpolateWithCaptures(logerrMsg, scope);
         if (!logErrIr.ok) return this.mergeStepResult(accOut, accErr, logErrIr.result);
         const message = logErrIr.value;
         this.emitLog("LOGERR", message);
@@ -676,7 +685,8 @@ export class NodeWorkflowRuntime {
         continue;
       }
       if (step.type === "fail") {
-        const failIr = await this.interpolateWithCaptures(step.message, scope);
+        const failMsg = step.tripleQuoted ? tripleQuotedRawForRuntime(step.message) : step.message;
+        const failIr = await this.interpolateWithCaptures(failMsg, scope);
         if (!failIr.ok) return this.mergeStepResult(accOut, accErr, failIr.result);
         const message = failIr.value;
         return this.mergeStepResult(accOut, accErr, { status: 1, output: "", error: message });
@@ -704,7 +714,8 @@ export class NodeWorkflowRuntime {
           return this.mergeStepResult(accOut, accErr, { status: 0, output: "", error: "", returnValue });
         }
         // Match Bash semantics: return "$var" should return var value, not literal quotes.
-        const retIr = await this.interpolateWithCaptures(step.value, scope);
+        const retRaw = step.tripleQuoted ? tripleQuotedRawForRuntime(step.value) : step.value;
+        const retIr = await this.interpolateWithCaptures(retRaw, scope);
         if (!retIr.ok) return this.mergeStepResult(accOut, accErr, retIr.result);
         returnValue = stripOuterQuotes(retIr.value);
         return this.mergeStepResult(accOut, accErr, { status: 0, output: "", error: "", returnValue });
@@ -720,7 +731,9 @@ export class NodeWorkflowRuntime {
         }
         let payload = "";
         if (step.rhs.kind === "literal") {
-          const sendIr = await this.interpolateWithCaptures(step.rhs.token, scope);
+          const sendTok =
+            step.rhs.tripleQuoted ? tripleQuotedRawForRuntime(step.rhs.token) : step.rhs.token;
+          const sendIr = await this.interpolateWithCaptures(sendTok, scope);
           if (!sendIr.ok) return this.mergeStepResult(accOut, accErr, sendIr.result);
           payload = sendIr.value;
         } else if (step.rhs.kind === "var") {
@@ -772,7 +785,9 @@ export class NodeWorkflowRuntime {
         continue;
       }
       if (step.type === "prompt") {
-        const promptIr = await this.interpolateWithCaptures(step.raw, scope);
+        const promptRaw =
+          step.bodyKind === "triple_quoted" ? tripleQuotedRawForRuntime(step.raw) : step.raw;
+        const promptIr = await this.interpolateWithCaptures(promptRaw, scope);
         if (!promptIr.ok) return this.mergeStepResult(accOut, accErr, promptIr.result);
         let promptText = promptIr.value;
         const promptConfig = resolveConfig(scope.env);
@@ -849,7 +864,9 @@ export class NodeWorkflowRuntime {
       }
       if (step.type === "const") {
         if (step.value.kind === "expr") {
-          const exprIr = await this.interpolateWithCaptures(step.value.bashRhs, scope);
+          const exprRhs =
+            step.value.tripleQuoted ? tripleQuotedRawForRuntime(step.value.bashRhs) : step.value.bashRhs;
+          const exprIr = await this.interpolateWithCaptures(exprRhs, scope);
           if (!exprIr.ok) return this.mergeStepResult(accOut, accErr, exprIr.result);
           scope.vars.set(step.name, stripOuterQuotes(exprIr.value));
           continue;
@@ -880,7 +897,11 @@ export class NodeWorkflowRuntime {
           continue;
         }
         if (step.value.kind === "prompt_capture") {
-          const pcIr = await this.interpolateWithCaptures(step.value.raw, scope);
+          const pcRaw =
+            step.value.bodyKind === "triple_quoted"
+              ? tripleQuotedRawForRuntime(step.value.raw)
+              : step.value.raw;
+          const pcIr = await this.interpolateWithCaptures(pcRaw, scope);
           if (!pcIr.ok) return this.mergeStepResult(accOut, accErr, pcIr.result);
           let promptText = pcIr.value;
           const promptConfig = resolveConfig(scope.env);

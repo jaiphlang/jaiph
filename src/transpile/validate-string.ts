@@ -11,6 +11,7 @@
 
 import { jaiphError } from "../errors";
 import { parseCallRef } from "../parse/core";
+import { dedentCommonLeadingWhitespace } from "../parse/dedent";
 
 /**
  * Check for shell fallback/expansion syntax inside ${...} blocks.
@@ -297,8 +298,10 @@ export function validatePromptString(
   filePath: string,
   line: number,
   col: number,
+  opts?: { tripleQuoted?: boolean },
 ): void {
-  const content = stripDoubleQuotes(raw);
+  let content = stripDoubleQuotes(raw);
+  if (opts?.tripleQuoted) content = dedentCommonLeadingWhitespace(content);
   validateJaiphStringContent(content, filePath, line, col, "prompt");
 }
 
@@ -311,8 +314,10 @@ export function validateLogString(
   line: number,
   col: number,
   keyword: string,
+  opts?: { tripleQuoted?: boolean },
 ): void {
-  validateJaiphStringContent(message, filePath, line, col, keyword);
+  const text = opts?.tripleQuoted ? dedentCommonLeadingWhitespace(message) : message;
+  validateJaiphStringContent(text, filePath, line, col, keyword);
 }
 
 /**
@@ -323,8 +328,10 @@ export function validateFailString(
   filePath: string,
   line: number,
   col: number,
+  opts?: { tripleQuoted?: boolean },
 ): void {
-  const content = stripDoubleQuotes(message);
+  let content = stripDoubleQuotes(message);
+  if (opts?.tripleQuoted) content = dedentCommonLeadingWhitespace(content);
   validateJaiphStringContent(content, filePath, line, col, "fail");
 }
 
@@ -336,9 +343,11 @@ export function validateReturnString(
   filePath: string,
   line: number,
   col: number,
+  opts?: { tripleQuoted?: boolean },
 ): void {
   if (value.startsWith('"')) {
-    const content = stripDoubleQuotes(value);
+    let content = stripDoubleQuotes(value);
+    if (opts?.tripleQuoted) content = dedentCommonLeadingWhitespace(content);
     validateJaiphStringContent(content, filePath, line, col, "return");
   }
 }

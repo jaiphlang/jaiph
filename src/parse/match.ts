@@ -1,8 +1,7 @@
 import type { MatchArmDef, MatchExprDef, MatchPatternDef } from "../types";
 import { fail, indexOfClosingDoubleQuote } from "./core";
 import { splitStatementsOnSemicolons } from "./statement-split";
-import { dedentCommonLeadingWhitespace } from "./dedent";
-import { tripleQuoteBodyToRaw } from "./triple-quote";
+import { tripleQuoteBodyToRaw, trimAdjacentBlankLines } from "./triple-quote";
 
 const IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -151,7 +150,8 @@ export function parseMatchArms(
         }
         arms.push({
           pattern,
-          body: tripleQuoteBodyToRaw(dedentCommonLeadingWhitespace(bodyLines.join("\n"))),
+          body: tripleQuoteBodyToRaw(trimAdjacentBlankLines(bodyLines.join("\n"))),
+          tripleQuotedBody: true,
         });
         i = j + 1;
         tripleQuoteAdvanced = true;
