@@ -125,6 +125,20 @@ describe("emitModule", () => {
     assert.equal(roundTrip(source), source);
   });
 
+  it("does not insert blank lines between consecutive config-leading # lines", () => {
+    const source = [
+      "#",
+      "# Header line.",
+      "#",
+      "",
+      "config {",
+      '  agent.backend = "cursor"',
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
+
   it("respects custom indent", () => {
     const input = [
       "workflow default() {",
