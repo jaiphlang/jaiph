@@ -1,3 +1,7 @@
+# Unreleased
+
+- **Feature — Language:** `import script` for external script files — Jaiph modules can now import executable script bodies from separate files instead of embedding them inline. The new syntax `import script "./queue.py" as queue` at module scope loads the target file as a script symbol, callable with `run queue(args)` exactly like an inline `script` definition. Path resolution is deterministic and relative to the importing `.jh` file's directory (not the process CWD). The imported file is treated as raw script source — shebangs are preserved and used to select the interpreter. Missing targets fail at compile time with `E_IMPORT_NOT_FOUND`. Script import aliases share the unified per-module namespace with channels, rules, workflows, scripts, and top-level `const`. The formatter emits `import script` statements before regular imports. The bundled `queue.jh` library has been migrated to use `import script "./queue.py" as queue`, moving the 178-line embedded Python script into a standalone file with a shebang. Implementation: `ScriptImportDef` in `src/types.ts`, `parseScriptImportLine()` in `src/parse/imports.ts`, script import handling in `src/parser.ts`, `src/transpile/validate.ts`, `src/transpile/emit-script.ts`, `src/transpiler.ts`, `src/runtime/kernel/graph.ts`, `src/format/emit.ts`. Parser and compiler tests added. Docs updated (`docs/grammar.md`, `docs/language.md`, `docs/getting-started.md`, `docs/jaiph-skill.md`).
+
 # 0.9.0
 
 ## Summary

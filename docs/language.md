@@ -92,6 +92,23 @@ export workflow default() {
 
 Imported symbols use dot notation: `alias.name`. The `.jh` extension is appended automatically if omitted. Import aliases must be unique within a module.
 
+#### Script Imports
+
+`import script` loads an external script file and binds it to a local script symbol. The imported file is treated as raw script source (not as a Jaiph module) — shebangs are preserved and used to select the interpreter. The bound name works exactly like a locally declared `script`: callable with `run`, capturable with `const`, and subject to the same isolation rules.
+
+```jaiph
+import script "./queue.py" as queue
+
+workflow default() {
+  const result = run queue("get")
+  log result
+}
+```
+
+The path is resolved relative to the importing `.jh` file's directory (not the process CWD). The path must be double-quoted. Missing targets fail at compile time with `E_IMPORT_NOT_FOUND`.
+
+This is useful when a script body is large enough that embedding it inline couples DSL structure and script implementation too tightly, or when you want normal editor/tooling support (syntax highlighting, linting) on the script file.
+
 #### Export Visibility
 
 If a module contains at least one `export` declaration, it has an **explicit API surface**: only exported names can be referenced through the import alias. Referencing a symbol that exists in the module but is not exported produces a compile-time error:
@@ -610,5 +627,5 @@ Every step produces three outputs: status, value, and logs.
 - **Blank lines:** Preserved as visual grouping between steps; consecutive blanks collapsed by `jaiph format`
 - **Shebang:** A `#!` first line of the file is ignored by the parser
 - **String quoting:** `"..."` for single-line, `"""..."""` for multiline. Single-quoted strings are parse errors. Use `\"` for literal double quotes, `\\` for literal backslashes
-- **Unified namespace:** Channels, rules, workflows, scripts, and top-level `const` share one namespace per module
+- **Unified namespace:** Channels, rules, workflows, scripts, script import aliases, and top-level `const` share one namespace per module
 - **Recursion limit:** Hard depth limit of 256 at runtime

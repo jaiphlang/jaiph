@@ -36,6 +36,18 @@ function buildNode(filePath: string, workspaceRoot?: string): RuntimeModuleNode 
   for (const imp of ast.imports) {
     imports.set(imp.alias, resolveImportPath(filePath, imp.path, workspaceRoot));
   }
+  // Synthesise ScriptDef stubs for script imports so resolveScriptRef finds them.
+  if (ast.scriptImports) {
+    for (const si of ast.scriptImports) {
+      ast.scripts.push({
+        name: si.alias,
+        comments: [],
+        body: "",
+        bodyKind: "fenced",
+        loc: si.loc,
+      });
+    }
+  }
   return { filePath, ast, imports };
 }
 

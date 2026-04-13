@@ -21,7 +21,24 @@ script arg_nonempty = `[ -n "$1" ]`
 
 script str_equals = `[ "$1" = "$2" ]`
 
-workflow review_task(task) {
+script mkdir_p_simple = `mkdir -p "$1"`
+
+script jaiph_tmp_dir = `printf '%s\n' "$JAIPH_WORKSPACE/.jaiph/tmp"`
+
+script jaiph_review_body_file = `printf '%s\n' "$JAIPH_WORKSPACE/.jaiph/tmp/architect_review_body.txt"`
+
+# Writes UTF-8 text to a path (path, then content).
+script save_string_to_file = ```python3
+import sys
+if len(sys.argv) < 3:
+    sys.exit(2)
+path, content = sys.argv[1], sys.argv[2]
+open(path, "w", encoding="utf-8").write(content)
+```
+
+# Packed as: first line = verdict, rest = updated_description (must stay top-level:
+# const … = prompt """…""" is not supported inside ensure … recover — see parseRecoverStatement).
+workflow architect_agent_review(task) {
   const result = prompt """
     You are a software architect reviewing a task from the Jaiph
     improvement queue. Jaiph is a TypeScript compiler and runtime
@@ -50,46 +67,64 @@ workflow review_task(task) {
     Read the full QUEUE.md (QUEUE.md) for context on other
     queued tasks.
 
-    If the task meets all criteria, respond with:
-      verdict: dev-ready
+    Respond with JSON fields:
+    - **verdict** — the string dev-ready or the string needs-work (JSON values).
+    - **updated_description** — The full new task **body** only (markdown
+      below the task heading line in QUEUE.md; do not repeat the H2 heading line).
+      For needs-work, put a numbered list of questions, concerns, or
+      recommendations here (mandatory). For dev-ready, put the merged/final
+      body if you changed the text (e.g. merged answers); use an empty string
+      if the body is unchanged and only the tag should be added.
 
-    If NOT, respond with:
-      verdict: needs-work
-    and update the task block in QUEUE.md with a numbered list of
-    questions, concerns, or recommendations that must be addressed
-    before development can start. This is mandatory if you consider the task
-    as not ready for development.
-
-    If the task in the QUEUE.md already contains answers to the questions,
+    If the task in QUEUE.md already contains answers to prior questions,
     merge the answers into the description, remove redundancies, but keep
-    the original context and reasoning if it may help the developer. If all
-    questions are answered, mark the task as dev-ready.
+    useful context. If all questions are answered, use verdict dev-ready
+    and include the merged body in updated_description when it changed.
 
-    If you are able to answer the questions yourself based on your knowledge
-    of the codebase and the task, do so, and factor those answers into your
-    evaluation.
+    If you can answer open questions yourself from the codebase, do so and
+    reflect that in your verdict and updated_description.
 
     Task to review:
     ${task}
-  """ returns "{ verdict: string }"
+  """
+  returns "{ verdict: string, updated_description: string }"
 
-  return "${result_verdict}"
+  return """
+    ${result.verdict}
+    ${result.updated_description}
+  """
 }
 
 workflow review_one_header(header) {
   run arg_nonempty(header) recover (err) {
-    return
+    return ""
   }
   const task = run queue.get_task_by_header(header)
   ensure queue.task_is_dev_ready(task) recover (err) {
-    const verdict = run review_task(task)
+    const packed = run architect_agent_review(task)
+    const verdict = run first_line_str(packed)
+    const updated_description = run rest_lines_str(packed)
+    const body_file = run jaiph_review_body_file()
+    run mkdir_p_simple(run, jaiph_tmp_dir())
     run str_equals(verdict, "dev-ready") recover (err) {
-      log "Needs work: ${header}"
-      return
+      run arg_nonempty(updated_description) recover (err) {
+        fail "needs-work requires a non-empty updated_description (questions for the author)."
+      }
+      run save_string_to_file(body_file, updated_description)
+      run queue.set_task_description_from_file(header, body_file)
+      log "Needs work (description updated): ${header}"
+      return ""
     }
+    run arg_nonempty(updated_description) recover (err) {
+      run queue.mark_task_dev_ready(header)
+      log "Marked dev-ready: ${header}"
+      return ""
+    }
+    run save_string_to_file(body_file, updated_description)
+    run queue.set_task_description_from_file(header, body_file)
     run queue.mark_task_dev_ready(header)
     log "Marked dev-ready: ${header}"
-    return
+    return ""
   }
   log "Already dev-ready: ${header}"
 }
@@ -97,7 +132,7 @@ workflow review_one_header(header) {
 workflow process_headers_recursive(header, remaining) {
   run review_one_header(header)
   run arg_nonempty(remaining) recover (err) {
-    return
+    return ""
   }
   const next = run first_line_str(remaining)
   const rest = run rest_lines_str(remaining)
@@ -106,7 +141,7 @@ workflow process_headers_recursive(header, remaining) {
 
 workflow maybe_process_headers(first, rest) {
   run arg_nonempty(first) recover (err) {
-    return
+    return ""
   }
   run process_headers_recursive(first, rest)
 }

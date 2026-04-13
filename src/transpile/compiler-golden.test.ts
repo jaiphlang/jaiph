@@ -956,3 +956,55 @@ test("compiler golden: script calling itself is allowed", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// === import script ===
+
+test("compiler: import script emits external file verbatim as script artifact", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-import-script-"));
+  try {
+    const scriptContent = "#!/usr/bin/env python3\nprint('hello')\n";
+    writeFileSync(join(root, "helper.py"), scriptContent);
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        'import script "./helper.py" as helper',
+        "",
+        "workflow default() {",
+        '  run helper("arg")',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const scripts = emitScriptsForModule(input, root);
+    const helperScript = scripts.find((s) => s.name === "helper");
+    assert.ok(helperScript, "helper script artifact should exist");
+    assert.equal(helperScript.content, scriptContent);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("compiler: import script fails when target file is missing", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-import-script-missing-"));
+  try {
+    const input = join(root, "entry.jh");
+    writeFileSync(
+      input,
+      [
+        'import script "./nonexistent.py" as helper',
+        "",
+        "workflow default() {",
+        '  run helper("arg")',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => emitScriptsForModule(input, root),
+      /E_IMPORT_NOT_FOUND.*nonexistent\.py/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

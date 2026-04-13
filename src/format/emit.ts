@@ -48,6 +48,14 @@ export function emitModule(mod: jaiphModule, opts: EmitOptions = DEFAULT_OPTIONS
   // (handled by the format command reading the first line of the original source)
 
   const importLines: string[] = [];
+  if (mod.scriptImports) {
+    for (const si of mod.scriptImports) {
+      if (si.leadingComments?.length) {
+        importLines.push(emitCommentBlock(si.leadingComments));
+      }
+      importLines.push(`import script "${si.path}" as ${si.alias}`);
+    }
+  }
   for (const imp of mod.imports) {
     if (imp.leadingComments?.length) {
       importLines.push(emitCommentBlock(imp.leadingComments));

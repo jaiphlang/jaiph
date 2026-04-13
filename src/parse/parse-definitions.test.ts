@@ -213,3 +213,35 @@ test("log accepts a bare identifier (stored as interpolation)", () => {
   assert.equal(mod.workflows[0].steps[0].type, "log");
   assert.equal((mod.workflows[0].steps[0] as { message: string }).message, "${msg}");
 });
+
+// === import script ===
+
+test("import script parses into scriptImports", () => {
+  const mod = parsejaiph(
+    'import script "./queue.py" as queue\n\nworkflow default() {\n  run queue("get")\n}\n',
+    "/tmp/test.jh",
+  );
+  assert.equal(mod.scriptImports?.length, 1);
+  assert.equal(mod.scriptImports![0].path, "./queue.py");
+  assert.equal(mod.scriptImports![0].alias, "queue");
+});
+
+test("import script name collides with inline script", () => {
+  assert.throws(
+    () =>
+      parsejaiph(
+        'import script "./q.py" as q\n\nscript q = `echo hi`\n',
+        "/tmp/test.jh",
+      ),
+    /duplicate name "q"/,
+  );
+});
+
+test("import script does not conflict with module imports", () => {
+  const mod = parsejaiph(
+    'import script "./helper.sh" as helper\nimport "other" as other\n\nworkflow w() {\n  run helper("x")\n}\n',
+    "/tmp/test.jh",
+  );
+  assert.equal(mod.scriptImports?.length, 1);
+  assert.equal(mod.imports.length, 1);
+});
