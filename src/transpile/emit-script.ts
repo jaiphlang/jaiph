@@ -1,5 +1,5 @@
 import { inlineScriptName } from "../inline-script-name";
-import type { jaiphModule, WorkflowStepDef } from "../types";
+import type { jaiphModule, ScriptImportDef, WorkflowStepDef } from "../types";
 import { scriptShebangIsBash } from "../parse/script-bash";
 import { langToShebang } from "../parse/scripts";
 
@@ -129,8 +129,18 @@ export function buildScriptFiles(
   ast: jaiphModule,
   importedWorkflowSymbols: Map<string, string>,
   _workflowSymbol: string,
+  resolvedScriptImports?: Map<string, string>,
 ): ScriptArtifact[] {
   const out: ScriptArtifact[] = [];
+
+  // Emit imported script files verbatim (they are complete executables with shebangs).
+  if (resolvedScriptImports) {
+    for (const [name, content] of resolvedScriptImports) {
+      const normalized = content.endsWith("\n") ? content : content + "\n";
+      out.push({ name, content: normalized });
+    }
+  }
+
   for (const sc of ast.scripts) {
     const rawBody = resolveScriptBody(sc, ast);
     const { shebang, cleanBody } = resolveScriptShebang(rawBody, sc.lang);

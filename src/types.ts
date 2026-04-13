@@ -11,6 +11,17 @@ export interface ImportDef {
   leadingComments?: string[];
 }
 
+/** `import script "<path>" as <name>` — binds an external script file as a local script symbol. */
+export interface ScriptImportDef {
+  /** Relative path to the script file (as written in source). */
+  path: string;
+  /** Bound script name. */
+  alias: string;
+  loc: SourceLoc;
+  /** Top-level `#` lines immediately before this import (formatter). */
+  leadingComments?: string[];
+}
+
 export interface RuleRefDef {
   value: string;
   loc: SourceLoc;
@@ -253,6 +264,8 @@ export interface jaiphModule {
   /** Top-level `#` lines immediately before `config {` (formatter). */
   configLeadingComments?: string[];
   imports: ImportDef[];
+  /** `import script "<path>" as <name>` declarations. */
+  scriptImports?: ScriptImportDef[];
   channels: ChannelDef[];
   exports: string[];
   rules: RuleDef[];

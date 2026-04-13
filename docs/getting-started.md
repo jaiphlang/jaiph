@@ -182,6 +182,7 @@ Jaiph source files combine a small orchestration language with scripts in any la
 - `run script() recover (err) { ... }` — failure recovery on `run` calls (same semantics as `ensure … recover`)
 - `channel name [-> workflow]` / `ch <- "msg"` — inter-workflow messaging (routes declared inline on channel)
 - `import "file.jh" as alias` — module composition
+- `import script "./helper.py" as helper` — import an external script file as a local script symbol
 
 ### Example
 

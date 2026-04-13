@@ -1,3 +1,4 @@
+import { dirname, resolve } from "node:path";
 import { jaiphError } from "../errors";
 import type { jaiphModule, MatchExprDef, WorkflowStepDef } from "../types";
 import type { SubstitutionValidateEnv } from "./validate-substitution";
@@ -277,6 +278,11 @@ function resolveRouteTargetParams(
   return wf?.params.length;
 }
 
+/** Resolve a script import path relative to the importing file's directory. */
+export function resolveScriptImportPath(fromFile: string, importPath: string): string {
+  return resolve(dirname(fromFile), importPath);
+}
+
 export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void {
   const localChannels = new Set(ast.channels.map((c) => c.name));
   const localRules = new Set(ast.rules.map((r) => r.name));
@@ -284,6 +290,23 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
   const localScripts = new Set(ast.scripts.map((s) => s.name));
   const importsByAlias = new Map<string, string>();
   const importedAstCache = new Map<string, jaiphModule>();
+
+  // Validate script imports: resolve paths and check existence.
+  if (ast.scriptImports) {
+    for (const si of ast.scriptImports) {
+      const resolved = resolveScriptImportPath(ast.filePath, si.path);
+      if (!ctx.existsSync(resolved)) {
+        throw jaiphError(
+          ast.filePath,
+          si.loc.line,
+          si.loc.col,
+          "E_IMPORT_NOT_FOUND",
+          `import script "${si.alias}" resolves to missing file "${resolved}"`,
+        );
+      }
+      localScripts.add(si.alias);
+    }
+  }
 
   for (const imp of ast.imports) {
     if (importsByAlias.has(imp.alias)) {
