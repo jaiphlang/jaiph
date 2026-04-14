@@ -46,8 +46,8 @@ For day-to-day work on the compiler and CLI you usually stay inside the clone: i
 | Command | What it runs |
 |---------|----------------|
 | `npm install` | Installs TypeScript and types (dev dependencies). |
-| `npm run build` | Runs `tsc`, then copies **`src/runtime`** → **`dist/src/runtime`** and **`src/reporting/public`** → **`dist/src/reporting/public`** (kernel JS and reporting assets for the compiled CLI). |
-| `npm run build:standalone` | `npm run build`, then copies **`dist/src/runtime`** → **`dist/runtime`** and **`dist/src/reporting/public`** → **`dist/reporting/public`**, and runs **`bun build --compile`** on `src/cli.ts` → **`dist/jaiph`**. Requires [Bun](https://bun.sh). Ship the **`dist/`** tree (binary plus those sibling directories) for a self-contained layout. |
+| `npm run build` | Runs `tsc`, then copies **`src/runtime`** → **`dist/src/runtime`** (kernel JS for the compiled CLI). |
+| `npm run build:standalone` | `npm run build`, then copies **`dist/src/runtime`** → **`dist/runtime`** and runs **`bun build --compile`** on `src/cli.ts` → **`dist/jaiph`**. Requires [Bun](https://bun.sh). Ship the **`dist/`** tree (binary plus the runtime directory) for a self-contained layout. |
 | `npm test` | **`npm run clean`**, then **`npm run build`**, then the Node.js test runner with **`NODE_OPTIONS`** including **`--enable-source-maps`** (and a large heap limit) on `dist/test/*.test.js`, every file under `dist/src/` matching `*.test.js` or `*.acceptance.test.js` (via `find`), `dist/src/compiler-test-runner.js` (txtar compiler tests), and `dist/src/golden-ast-runner.js` (golden AST tests). |
 | `npm run test:compiler` | **`npm run build`**, then **`node --test`** on `dist/src/compiler-test-runner.js` — runs txtar-based compiler test fixtures from `compiler-tests/`. |
 | `npm run test:golden-ast` | **`npm run build`**, then **`node --test`** on `dist/src/golden-ast-runner.js` — runs golden AST tests from `golden-ast/`. Use `UPDATE_GOLDEN=1 npm run test:golden-ast` to regenerate goldens after intentional parser changes. |
@@ -131,7 +131,6 @@ The table below is the inventory as of this writing; after large refactors, pref
 | `src/parse/parse-imports.test.ts` | `imports.ts` — import lines, aliases, errors |
 | `src/parse/parse-metadata.test.ts` | `metadata.ts` — config block parsing |
 | `src/parse/parse-run-async.test.ts` | Parser — `run async` workflow steps |
-| `src/reporting/reporting-server.test.ts` | Reporting server — paths, `run_summary.jsonl`, registry |
 | `src/runtime/docker.test.ts` | `docker.ts` — mounts, `buildDockerArgs` |
 | `src/runtime/kernel/emit.test.ts` | `emit.ts` — `__JAIPH_EVENT__` JSON and `run_summary.jsonl` append |
 | `src/runtime/kernel/graph.test.ts` | `graph.ts` — `buildRuntimeGraph`, symbol lookup |

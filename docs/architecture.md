@@ -25,7 +25,7 @@ All orchestration — local `jaiph run`, `jaiph test`, and **Docker `jaiph run`*
 ## Core components
 
 - **CLI (`src/cli`)**
-  - Entry point (`run`, `test`, `init`, `install`, `use`, `format`, `report`).
+  - Entry point (`run`, `test`, `init`, `install`, `use`, `format`).
   - **Workflow launch** is owned in TypeScript (`src/runtime/kernel/workflow-launch.ts` + `src/cli/run/lifecycle.ts`): spawns the **Node workflow runner** (`node-workflow-runner.ts`), which calls `buildRuntimeGraph()` then `NodeWorkflowRuntime`.
   - Parses runtime events and renders progress; dispatches hooks.
 
@@ -57,9 +57,6 @@ All orchestration — local `jaiph run`, `jaiph test`, and **Docker `jaiph run`*
 
 - **Docker runtime helper (`src/runtime/docker.ts`)**
   - Parses mount specs, resolves Docker config (image, network, timeout), and builds the `docker run` invocation used by `jaiph run --docker`. The container runs the same `node-workflow-runner` process as local execution.
-
-- **Reporting (`src/reporting/*`)**
-  - Reads `.jaiph/runs` and `run_summary.jsonl`; `jaiph report` serves the local UI. Standalone binaries resolve static assets from `reporting/public` next to the executable when bundled.
 
 ## Runtime vs CLI responsibilities
 
@@ -118,8 +115,8 @@ Static tree from AST (`progress.ts`); runtime events (`events.ts`, `stderr-handl
 
 ## Distribution: Node vs Bun standalone
 
-- **Development / npm:** `npm run build` → `tsc` + copy `runtime/kernel/` and `reporting/public` into `dist/`. `node dist/src/cli.js` runs the CLI.
-- **Standalone:** `npm run build:standalone` produces `dist/jaiph` (Bun `--compile`) and copies **`runtime/kernel/`** and **`reporting/public`** into **`dist/`** next to the binary. Reporting asset resolution falls back to `dirname(process.execPath)` so the bundle runs **without a Node.js install**. Target machines still need **bash** (or another interpreter) for `script` step subprocess execution and **Node.js** for the runtime kernel.
+- **Development / npm:** `npm run build` → `tsc` + copy `runtime/kernel/` into `dist/`. `node dist/src/cli.js` runs the CLI.
+- **Standalone:** `npm run build:standalone` produces `dist/jaiph` (Bun `--compile`) and copies **`runtime/kernel/`** into **`dist/`** next to the binary. The bundle runs **without a Node.js install**. Target machines still need **bash** (or another interpreter) for `script` step subprocess execution and **Node.js** for the runtime kernel.
 
 ## Mermaid architecture diagram
 
@@ -166,8 +163,6 @@ flowchart TD
 
     RT -->|channels files / queues| INBOX[Inbox under .jaiph/runs]
     RT -->|durable artifacts| SUM[.jaiph/runs + run_summary.jsonl]
-    SUM --> REP[Reporting server / UI]
-
     CLI --> HK[Hook dispatcher via event stream]
     HK --> HPROC[Hook shell commands]
 ```

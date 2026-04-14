@@ -273,7 +273,7 @@ When a `prompt` step runs, Jaiph resolves the effective model using this order:
 {"type":"PROMPT_START","backend":"cursor","model":"gpt-4","model_reason":"explicit",...}
 ```
 
-The `model_reason` field is one of: `explicit` (from `agent.default_model`), `flags` (extracted from backend flags), or `backend-default` (no model configured — the backend picks its own). Inspect these events via `jaiph report` or directly in the run summary file.
+The `model_reason` field is one of: `explicit` (from `agent.default_model`), `flags` (extracted from backend flags), or `backend-default` (no model configured — the backend picks its own). Inspect these events directly in the run summary file.
 
 **No-model troubleshooting.** If the backend rejects the auto-selected default, set `agent.default_model` explicitly or pass `--model <name>` in the backend-specific flags.
 

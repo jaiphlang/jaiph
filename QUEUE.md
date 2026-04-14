@@ -12,27 +12,6 @@ Process rules:
 
 ---
 
-## Remove `jaiph report` entirely #dev-ready
-
-**Goal**  
-Delete the `jaiph report` feature completely from the product surface: command handling, implementation code, tests, docs, examples, and changelog mentions that describe it as a supported capability. This is a hard removal, not a deprecation path.
-
-**Context**
-
-- Remove the CLI entrypoint and any runtime/helpers used only by `jaiph report`.
-- Remove parser/runtime/docs references that describe report generation or report-specific output formats.
-- Search all user-facing docs (`README`, `docs/`, examples, changelog) for `jaiph report` and remove or rewrite those sections so the feature no longer appears to exist.
-- Remove or update tests that exercise report behavior.
-
-**Acceptance criteria**
-
-- `jaiph report` is no longer recognized as a valid command.
-- No dead code remains that exists only to support report generation.
-- No docs, examples, or release notes present `jaiph report` as available functionality.
-- Test suite is updated to match the removal.
-
----
-
 ## Rename `recover` keyword to `catch` #dev-ready
 
 **Goal**  

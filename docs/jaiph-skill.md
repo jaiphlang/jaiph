@@ -44,7 +44,7 @@ Use this loop whenever you add or change Jaiph workflows so failures surface bef
 2. **Implement** — Edit `.jh` modules using only constructs described in [Grammar](grammar.md); keep managed-call rules (`ensure` for rules, `run` for workflows and scripts); keep bash inside **`script`** bodies only (no raw shell in workflow/rule bodies).
 3. **Format** — Run `jaiph format <file.jh ...>` on all authored or modified `.jh` files before committing. This normalizes whitespace, indentation, and top-level ordering (imports, config, and channels hoisted to the top; everything else kept in source order). Use `jaiph format --check <file.jh ...>` to verify formatting without writing (non-zero exit on drift — useful in CI).
 4. **Verify** — Run `jaiph test` (whole workspace or a focused path) and any verification workflow the repo defines (commonly `jaiph run .jaiph/verification.jh`). Fix failures you introduce.
-5. **Inspect (optional)** — Use `jaiph report --workspace .` to browse `.jaiph/runs` when you need the reporting UI or raw step logs instead of only the terminal tree.
+5. **Inspect (optional)** — Browse `.jaiph/runs` directly when you need raw step logs or `run_summary.jsonl` instead of only the terminal tree.
 
 **CLI commands:**
 
@@ -55,7 +55,6 @@ Use this loop whenever you add or change Jaiph workflows so failures surface bef
 | `jaiph format [--check] <file.jh ...>` | Reformat `.jh` files (or verify formatting without writing) |
 | `jaiph init [workspace]` | Scaffold `.jaiph/` with bootstrap workflow and skill file |
 | `jaiph install [url[@version]]` | Install or restore project-scoped libraries under `.jaiph/libs/` |
-| `jaiph report [start\|stop\|status]` | Serve a reporting dashboard over run artifacts |
 | `jaiph use <version\|nightly>` | Reinstall Jaiph at a specific version or nightly |
 
 **File shorthand:** `jaiph ./file.jh` auto-routes — `*.test.jh` files run as tests, other `*.jh` files run as workflows.
