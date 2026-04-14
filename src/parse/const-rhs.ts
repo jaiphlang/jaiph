@@ -129,7 +129,7 @@ export function parseConstRhs(
       fail(filePath, "const ... = ensure must target a valid reference", lineNo, col);
     }
     if (call.rest.trim()) {
-      fail(filePath, "const ... = ensure cannot use recover", lineNo, col);
+      fail(filePath, "const ... = ensure cannot use catch", lineNo, col);
     }
     const ref: RuleRefDef = { value: call.ref, loc: { line: lineNo, col } };
     return {

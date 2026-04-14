@@ -260,8 +260,8 @@ testing say_hello.test.jh
 
                 <div class="code-tab-panel" data-panel="recover-loop-jh" data-sample="recover-loop"
                     data-sample-file="recover_loop.jh">
-                    <p>The <code>ensure ... recover</code> pattern checks a rule and, on failure,
-                        runs a recovery block. The <code>recover (failure)</code> binding captures
+                    <p>The <code>ensure … catch</code> pattern checks a rule and, on failure,
+                        runs a recovery block. The <code>catch (failure)</code> binding captures
                         the merged stdout+stderr from the failed check.
                         Recovery runs <strong>once</strong> — for retries, the workflow calls itself
                         recursively (<code>run default()</code>).</p>
@@ -277,7 +277,7 @@ rule report_exists() {
 }
 
 workflow default() {
-  ensure report_exists() recover (failure) {
+  ensure report_exists() catch (failure) {
     prompt "report.txt is missing. Create it with a short dummy summary."
     run default()
   }
@@ -461,7 +461,7 @@ Jaiph: Running async.jh
                     (<code>channel_ref</code> can be local or imported, e.g. <code>shared.findings</code>).
                     See <a href="inbox">Inbox &amp; Dispatch</a>.
                 </p>
-                <p><strong>Failure recovery.</strong> <code>ensure … recover</code> and <code>run … recover</code>
+                <p><strong>Failure recovery.</strong> <code>ensure … catch</code> and <code>run … catch</code>
                     handle failures inline: when a rule or script fails, the recovery body runs <strong>once</strong>
                     (like a <code>catch</code> clause). For retries, use explicit recursion. Both forms work in workflows
                     and rules. See <a href="grammar">Grammar</a>.
@@ -550,12 +550,12 @@ Jaiph: Running async.jh
                             href="cli">CLI reference</a>).
                     </dd>
 
-                    <dt><code>ensure ref()</code> &middot; <code>ensure ref(args) recover (name) { ... }</code> &middot;
-                        <code>run ref()</code> &middot; <code>run ref(args) recover (name) { ... }</code> &middot;
+                    <dt><code>ensure ref()</code> &middot; <code>ensure ref(args) catch (name) { ... }</code> &middot;
+                        <code>run ref()</code> &middot; <code>run ref(args) catch (name) { ... }</code> &middot;
                         <code>run `body`(args)</code>
                     </dt>
-                    <dd><code>ensure</code> executes a rule (with optional args); <code>recover</code> handles
-                        failure inline (runs once, like a catch clause); <code>run</code> calls another workflow or module script
+                    <dd><code>ensure</code> executes a rule (with optional args); <code>catch</code> handles
+                        failure inline (runs once); <code>run</code> calls another workflow or module script
                         (managed step &mdash; same value/log contract as <code>ensure</code>). Parentheses are
                         <strong>required</strong> on all call sites &mdash; even when passing zero arguments
                         (e.g. <code>run setup()</code>).
@@ -602,11 +602,11 @@ Jaiph: Running async.jh
                     <dt><code>fail "reason"</code> &middot; <code>fail """..."""</code></dt>
                     <dd><code>fail</code> aborts with stderr + non-zero exit. Use triple quotes for multiline messages.</dd>
 
-                    <dt><code>ensure ref() recover (err) { … }</code> &middot;
-                        <code>run ref() recover (err) { … }</code>
+                    <dt><code>ensure ref() catch (err) { … }</code> &middot;
+                        <code>run ref() catch (err) { … }</code>
                     </dt>
                     <dd>Failure recovery: when the target fails, the recovery body runs <strong>once</strong>
-                        (like a <code>catch</code> clause). <code>recover</code> requires explicit bindings
+                        (like a <code>catch</code> clause). <code>catch</code> requires explicit bindings
                         in parentheses. Works in both workflows and rules. For retries, use explicit
                         recursion in the recovery body.
                     </dd>

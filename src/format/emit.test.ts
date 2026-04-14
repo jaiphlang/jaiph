@@ -67,10 +67,10 @@ describe("emitModule", () => {
     assert.equal(roundTrip(source), source);
   });
 
-  it("formats ensure with recover block", () => {
+  it("formats ensure with catch block", () => {
     const source = [
       "workflow default() {",
-      "  ensure ci_passes() recover (failure) {",
+      "  ensure ci_passes() catch (failure) {",
       '    prompt "fix it"',
       "  }",
       "}",

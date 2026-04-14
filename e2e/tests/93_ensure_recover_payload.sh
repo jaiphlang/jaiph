@@ -13,7 +13,7 @@ E2E_MOCK_BIN="${ROOT_DIR}/e2e/bin"
 chmod 755 "${E2E_MOCK_BIN}/cursor-agent"
 export PATH="${E2E_MOCK_BIN}:${PATH}"
 
-e2e::section "ensure recover runs body once on failure (no retry)"
+e2e::section "ensure catch runs body once on failure (no retry)"
 
 rm -rf "${TEST_DIR}/.jaiph/tmp"
 mkdir -p "${TEST_DIR}/.jaiph/tmp"
@@ -54,7 +54,7 @@ rule top_rule() {
 }
 
 workflow default() {
-  ensure top_rule() recover (failure) {
+  ensure top_rule() catch (failure) {
     run save_string_to_file("recovered-on-retry", witness_failed_payload.txt)
     run mark_recovered()
   }
@@ -92,4 +92,4 @@ e2e::assert_file_exists "${TEST_DIR}/witness_failed_payload.txt" "recover wrote 
 witness="$(<"${TEST_DIR}/witness_failed_payload.txt")"
 e2e::assert_equals "${witness}" "recovered-on-retry" "recover action writes witness marker"
 
-e2e::pass "ensure recover runs body once on failure (no retry)"
+e2e::pass "ensure catch runs body once on failure (no retry)"

@@ -9,7 +9,7 @@ trap e2e::cleanup EXIT
 e2e::prepare_test_env "ensure_recover"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
-e2e::section "ensure ... recover ... (single statement) runs once on failure"
+e2e::section "ensure ... catch ... (single statement) runs once on failure"
 rm -f "${TEST_DIR}/ready.txt"
 
 # Given
@@ -29,7 +29,7 @@ workflow install_deps() {
 }
 
 workflow default() {
-  ensure dep() recover (failure) run install_deps()
+  ensure dep() catch (failure) run install_deps()
 }
 EOF
 
@@ -55,10 +55,10 @@ workflow default
 ✓ PASS workflow default (<time>)
 EOF
 
-e2e::pass "ensure dep recover run install_deps: recover runs once on failure"
+e2e::pass "ensure dep catch run install_deps: catch runs once on failure"
 e2e::expect_out_files "retry_single.jh" 5
 
-e2e::section "ensure ... recover { stmt; stmt; } (block) runs multiple recover statements once"
+e2e::section "ensure ... catch { stmt; stmt; } (block) runs multiple catch statements once"
 rm -f "${TEST_DIR}/ready2.txt" "${TEST_DIR}/recover_ran.txt"
 
 # Given
@@ -74,7 +74,7 @@ echo "recovering" > recover_ran.txt
 script recover_touch = `touch ready2.txt`
 
 workflow default() {
-  ensure ready() recover (failure) {
+  ensure ready() catch (failure) {
     run recover_echo()
     run recover_touch()
   }
@@ -105,10 +105,10 @@ workflow default
 ✓ PASS workflow default (<time>)
 EOF
 
-e2e::pass "ensure ready recover { echo ...; touch ...; }: block runs once on failure"
+e2e::pass "ensure ready catch { echo ...; touch ...; }: block runs once on failure"
 e2e::expect_out_files "retry_block.jh" 5
 
-e2e::section "ensure without recover exits 1 on failure"
+e2e::section "ensure without catch exits 1 on failure"
 
 # Given
 e2e::file "ensure_fail.jh" <<'EOF'
@@ -133,14 +133,14 @@ e2e::assert_equals "${exit_fail}" "1" "jaiph run exits 1 when ensure fails witho
 e2e::assert_contains "${out_fail}" "Workflow execution failed." "stderr reports workflow failure"
 e2e::pass "ensure without recover: exit 1 on failure"
 
-e2e::section "ensure ... recover { multiline prompt with param } parses and runs"
+e2e::section "ensure ... catch { multiline prompt with param } parses and runs"
 
 E2E_MOCK_BIN="${ROOT_DIR}/e2e/bin"
 chmod 755 "${E2E_MOCK_BIN}/cursor-agent"
 export PATH="${E2E_MOCK_BIN}:${PATH}"
 rm -f "${TEST_DIR}/ready3.txt"
 
-# Given: multiline prompt inside recover block with a $ci_log_file parameter
+# Given: multiline prompt inside catch block with a $ci_log_file parameter
 e2e::file "recover_multiline_prompt.jh" <<'EOF'
 const ci_log_file = "/tmp/ci.log"
 
@@ -152,7 +152,7 @@ rule check_ready() {
 script mark_ready3 = `touch ready3.txt`
 
 workflow default() {
-  ensure check_ready() recover (failure) {
+  ensure check_ready() catch (failure) {
     prompt "The CI build failed. Please inspect the log file at ${ci_log_file} and suggest a fix."
     run mark_ready3()
   }
@@ -166,4 +166,4 @@ out_ml="$(e2e::run "recover_multiline_prompt.jh" 2>&1)"
 e2e::assert_file_exists "${TEST_DIR}/ready3.txt" "recover with multiline prompt ran and created ready3.txt"
 # assert_contains: prompt output includes dynamic agent command and response content
 e2e::assert_contains "${out_ml}" "prompt" "output mentions prompt step"
-e2e::pass "ensure ... recover { multiline prompt with param }: parses and runs"
+e2e::pass "ensure ... catch { multiline prompt with param }: parses and runs"

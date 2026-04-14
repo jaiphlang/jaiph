@@ -1684,9 +1684,9 @@ test("buildScripts accepts ensure inside a rule block", () => {
   }
 });
 
-test("buildScripts extracts scripts for ensure ... recover workflow", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-ensure-recover-"));
-  const outDir = mkdtempSync(join(tmpdir(), "jaiph-ensure-recover-out-"));
+test("buildScripts extracts scripts for ensure ... catch workflow", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-ensure-catch-"));
+  const outDir = mkdtempSync(join(tmpdir(), "jaiph-ensure-catch-out-"));
   try {
     const filePath = join(root, "entry.jh");
     writeFileSync(
@@ -1704,7 +1704,7 @@ test("buildScripts extracts scripts for ensure ... recover workflow", () => {
         "}",
         "",
         "workflow default() {",
-        "  ensure dep() recover (failure) run install_deps()",
+        "  ensure dep() catch (failure) run install_deps()",
         "}",
         "",
       ].join("\n"),
@@ -1718,9 +1718,9 @@ test("buildScripts extracts scripts for ensure ... recover workflow", () => {
   }
 });
 
-test("build rejects ensure recover inline shell block under strict shell-step ban", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-ensure-recover-block-"));
-  const outDir = mkdtempSync(join(tmpdir(), "jaiph-ensure-recover-block-out-"));
+test("build rejects ensure catch inline shell block under strict shell-step ban", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-ensure-catch-block-"));
+  const outDir = mkdtempSync(join(tmpdir(), "jaiph-ensure-catch-block-out-"));
   try {
     const filePath = join(root, "entry.jh");
     writeFileSync(
@@ -1732,7 +1732,7 @@ test("build rejects ensure recover inline shell block under strict shell-step ba
         "}",
         "",
         "workflow default() {",
-        "  ensure ready() recover (failure) { echo fixing; touch ready.txt; }",
+        "  ensure ready() catch (failure) { echo fixing; touch ready.txt; }",
         "}",
         "",
       ].join("\n"),

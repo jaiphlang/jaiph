@@ -48,10 +48,10 @@ test("NodeWorkflowRuntime: workflow step .out accumulates Command:/Prompt: and l
   }
 });
 
-test("NodeWorkflowRuntime: ensure recover receives failure payload in recover scope (explicit binding)", async () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-node-wf-ensure-recover-"));
+test("NodeWorkflowRuntime: ensure catch receives failure payload in catch scope (explicit binding)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-node-wf-ensure-catch-"));
   try {
-    const jh = join(root, "ensure_recover_payload.jh");
+    const jh = join(root, "ensure_catch_payload.jh");
     writeFileSync(
       jh,
       [
@@ -65,16 +65,16 @@ test("NodeWorkflowRuntime: ensure recover receives failure payload in recover sc
         "  run check_ready_impl()",
         "}",
         "",
-        'script write_recover_received = `echo "$1" > recover_received.txt`',
+        'script write_catch_received = `echo "$1" > catch_received.txt`',
         "",
-        'script write_recover_arg2 = `echo "$1" > recover_arg2.txt`',
+        'script write_catch_arg2 = `echo "$1" > catch_arg2.txt`',
         "",
         'script mark_ready = `touch ready.txt`',
         "",
         "workflow default(name, extra) {",
-        "  ensure check_ready() recover (failure) {",
-        '    run write_recover_received(failure)',
-        '    run write_recover_arg2(extra)',
+        "  ensure check_ready() catch (failure) {",
+        '    run write_catch_received(failure)',
+        '    run write_catch_arg2(extra)',
         "    run mark_ready()",
         "  }",
         "}",
@@ -90,10 +90,10 @@ test("NodeWorkflowRuntime: ensure recover receives failure payload in recover sc
       ),
       { mode: 0o755 },
     );
-    writeFileSync(join(scriptsDir, "write_recover_received"), '#!/usr/bin/env bash\nprintf "%s" "$1" > recover_received.txt\n', {
+    writeFileSync(join(scriptsDir, "write_catch_received"), '#!/usr/bin/env bash\nprintf "%s" "$1" > catch_received.txt\n', {
       mode: 0o755,
     });
-    writeFileSync(join(scriptsDir, "write_recover_arg2"), '#!/usr/bin/env bash\nprintf "%s" "$1" > recover_arg2.txt\n', {
+    writeFileSync(join(scriptsDir, "write_catch_arg2"), '#!/usr/bin/env bash\nprintf "%s" "$1" > catch_arg2.txt\n', {
       mode: 0o755,
     });
     writeFileSync(join(scriptsDir, "mark_ready"), "#!/usr/bin/env bash\ntouch ready.txt\n", { mode: 0o755 });
@@ -110,12 +110,12 @@ test("NodeWorkflowRuntime: ensure recover receives failure payload in recover sc
     const status = await runtime.runDefault(["original-arg1", "preserved-arg2"]);
     assert.equal(status, 0);
 
-    const recoverPayload = readFileSync(join(root, "recover_received.txt"), "utf8");
-    assert.match(recoverPayload, /analysis-stdout-log/);
-    assert.match(recoverPayload, /analysis-stderr-log/);
+    const catchPayload = readFileSync(join(root, "catch_received.txt"), "utf8");
+    assert.match(catchPayload, /analysis-stdout-log/);
+    assert.match(catchPayload, /analysis-stderr-log/);
 
-    const recoverArg2 = readFileSync(join(root, "recover_arg2.txt"), "utf8").trim();
-    assert.equal(recoverArg2, "preserved-arg2");
+    const catchArg2 = readFileSync(join(root, "catch_arg2.txt"), "utf8").trim();
+    assert.equal(catchArg2, "preserved-arg2");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

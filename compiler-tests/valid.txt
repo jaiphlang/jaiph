@@ -654,7 +654,7 @@ workflow default() {
     returns "{ type: string, risk: string }"
 }
 
-=== valid ensure recover block
+=== valid ensure catch block
 # @expect ok
 --- input.jh
 rule ci_passes(repo_dir) {
@@ -667,12 +667,12 @@ workflow fix_it() {
 }
 
 workflow default() {
-  ensure ci_passes("$repo_dir") recover (failure) {
+  ensure ci_passes("$repo_dir") catch (failure) {
     run fix_it()
   }
 }
 
-=== ensure recover multiline triple-quoted prompt and hash comment
+=== ensure catch multiline triple-quoted prompt and hash comment
 # @expect ok
 --- input.jh
 rule gate() {
@@ -681,7 +681,7 @@ rule gate() {
 script noop = `true`
 
 workflow default() {
-  ensure gate() recover (err) {
+  ensure gate() catch (err) {
     prompt """
       fix the build
     """
@@ -690,7 +690,7 @@ workflow default() {
   }
 }
 
-=== ensure recover in rules is valid
+=== ensure catch in rules is valid
 # @expect ok
 --- input.jh
 rule sub_rule() {
@@ -698,7 +698,7 @@ rule sub_rule() {
 }
 script fallback_impl = `echo "fallback"`
 rule check() {
-  ensure sub_rule() recover (err) {
+  ensure sub_rule() catch (err) {
     run fallback_impl()
   }
 }
@@ -979,7 +979,7 @@ Analyze: ${input}
 """
 }
 
-=== valid run recover block in workflow
+=== valid run catch block in workflow
 # @expect ok
 --- input.jh
 workflow helper() {
@@ -989,7 +989,7 @@ workflow fallback() {
   log "fallback"
 }
 workflow default() {
-  run helper() recover (failure) {
+  run helper() catch (failure) {
     run fallback()
   }
 }
@@ -1022,52 +1022,52 @@ workflow default() {
   logerr "error message"
 }
 
-=== run recover with log and fail in block
+=== run catch with log and fail in block
 # @expect ok
 --- input.jh
 workflow helper() {
   log "ok"
 }
 workflow default() {
-  run helper() recover (err) {
+  run helper() catch (err) {
     log "recovery: ${err}"
     fail "unrecoverable"
   }
 }
 
-=== inline ensure recover with single log statement
+=== inline ensure catch with single log statement
 # @expect ok
 --- input.jh
 rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover (err) log "recovered: ${err}"
+  ensure check() catch (err) log "recovered: ${err}"
 }
 
-=== inline ensure recover with single fail statement
+=== inline ensure catch with single fail statement
 # @expect ok
 --- input.jh
 rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover (err) fail "unrecoverable: ${err}"
+  ensure check() catch (err) fail "unrecoverable: ${err}"
 }
 
-=== recover block with return string statement
+=== catch block with return string statement
 # @expect ok
 --- input.jh
 workflow helper() {
   log "ok"
 }
 workflow default() {
-  run helper() recover (err) {
+  run helper() catch (err) {
     return "fallback"
   }
 }
 
-=== recover block with return run statement
+=== catch block with return run statement
 # @expect ok
 --- input.jh
 workflow helper() {
@@ -1077,12 +1077,12 @@ workflow fallback() {
   return "ok"
 }
 workflow default() {
-  run helper() recover (err) {
+  run helper() catch (err) {
     return run fallback()
   }
 }
 
-=== recover block with const capture
+=== catch block with const capture
 # @expect ok
 --- input.jh
 script get_fix = `echo "fix applied"`
@@ -1090,7 +1090,7 @@ workflow helper() {
   log "ok"
 }
 workflow default() {
-  run helper() recover (err) {
+  run helper() catch (err) {
     const fix = run get_fix()
     log "applied: ${fix}"
   }
@@ -1104,29 +1104,29 @@ workflow default() {
   run helper()
 }
 
-=== inline run recover with single log statement
+=== inline run catch with single log statement
 # @expect ok
 --- input.jh
 workflow helper() {
   log "ok"
 }
 workflow default() {
-  run helper() recover (err) log "recovered: ${err}"
+  run helper() catch (err) log "recovered: ${err}"
 }
 
-=== recover block with bare return
+=== catch block with bare return
 # @expect ok
 --- input.jh
 workflow helper() {
   log "ok"
 }
 workflow default() {
-  run helper() recover (err) {
+  run helper() catch (err) {
     return
   }
 }
 
-=== recover block with return ensure
+=== catch block with return ensure
 # @expect ok
 --- input.jh
 rule check() {
@@ -1136,7 +1136,7 @@ workflow helper() {
   log "ok"
 }
 workflow default() {
-  run helper() recover (err) {
+  run helper() catch (err) {
     return ensure check()
   }
 }
@@ -1164,7 +1164,7 @@ workflow default() {
   }
 }
 
-=== recover binding used in bare identifier arg
+=== catch binding used in bare identifier arg
 # @expect ok
 --- input.jh
 script fix = `echo "fixing $1"`
@@ -1172,7 +1172,7 @@ rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover (failure) {
+  ensure check() catch (failure) {
     run fix(failure)
   }
 }

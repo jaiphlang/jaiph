@@ -20,7 +20,7 @@
         "script",
         "test",
         "ensure",
-        "recover",
+        "catch",
         "run",
         "prompt",
         "returns",

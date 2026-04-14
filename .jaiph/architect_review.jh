@@ -37,7 +37,7 @@ open(path, "w", encoding="utf-8").write(content)
 ```
 
 # Packed as: first line = verdict, rest = updated_description (must stay top-level:
-# const … = prompt """…""" is not supported inside ensure … recover — see parseRecoverStatement).
+# const … = prompt """…""" is not supported inside ensure … catch — see parseRecoverStatement).
 workflow architect_agent_review(task) {
   const result = prompt """
     You are a software architect reviewing a task from the Jaiph
@@ -96,18 +96,18 @@ workflow architect_agent_review(task) {
 }
 
 workflow review_one_header(header) {
-  run arg_nonempty(header) recover (err) {
+  run arg_nonempty(header) catch (err) {
     return ""
   }
   const task = run queue.get_task_by_header(header)
-  ensure queue.task_is_dev_ready(task) recover (err) {
+  ensure queue.task_is_dev_ready(task) catch (err) {
     const packed = run architect_agent_review(task)
     const verdict = run first_line_str(packed)
     const updated_description = run rest_lines_str(packed)
     const body_file = run jaiph_review_body_file()
     run mkdir_p_simple(run, jaiph_tmp_dir())
-    run str_equals(verdict, "dev-ready") recover (err) {
-      run arg_nonempty(updated_description) recover (err) {
+    run str_equals(verdict, "dev-ready") catch (err) {
+      run arg_nonempty(updated_description) catch (err) {
         fail "needs-work requires a non-empty updated_description (questions for the author)."
       }
       run save_string_to_file(body_file, updated_description)
@@ -115,7 +115,7 @@ workflow review_one_header(header) {
       log "Needs work (description updated): ${header}"
       return ""
     }
-    run arg_nonempty(updated_description) recover (err) {
+    run arg_nonempty(updated_description) catch (err) {
       run queue.mark_task_dev_ready(header)
       log "Marked dev-ready: ${header}"
       return ""
@@ -131,7 +131,7 @@ workflow review_one_header(header) {
 
 workflow process_headers_recursive(header, remaining) {
   run review_one_header(header)
-  run arg_nonempty(remaining) recover (err) {
+  run arg_nonempty(remaining) catch (err) {
     return ""
   }
   const next = run first_line_str(remaining)
@@ -140,7 +140,7 @@ workflow process_headers_recursive(header, remaining) {
 }
 
 workflow maybe_process_headers(first, rest) {
-  run arg_nonempty(first) recover (err) {
+  run arg_nonempty(first) catch (err) {
     return ""
   }
   run process_headers_recursive(first, rest)
@@ -151,7 +151,7 @@ workflow default() {
   const first = run first_line_str(headers)
   const rest = run rest_lines_str(headers)
   run maybe_process_headers(first, rest)
-  ensure queue.all_dev_ready() recover (err) {
+  ensure queue.all_dev_ready() catch (err) {
     fail "One or more tasks need work. Review the agent output above."
   }
 }

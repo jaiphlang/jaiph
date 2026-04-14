@@ -49,7 +49,7 @@ fi
 e2e::pass "ensure capture: return value only"
 
 # ===================================================================
-e2e::section "ensure...recover: recover block receives merged stdout+stderr from failed rule"
+e2e::section "ensure...recover: catch block receives merged stdout+stderr from failed rule"
 # ===================================================================
 
 rm -f "${TEST_DIR}/recover_received.txt"
@@ -65,7 +65,7 @@ rule analyze() {
 
 script recover_handler = `echo "$1" > recover_received.txt`
 workflow default() {
-  ensure analyze() recover (failure) {
+  ensure analyze() catch (failure) {
     run recover_handler(failure)
   }
 }
@@ -74,12 +74,12 @@ rm -rf "${TEST_DIR}/runs_rrv"
 
 JAIPH_RUNS_DIR="runs_rrv" e2e::run "recover_receives_output.jh" >/dev/null 2>&1
 
-# The recover block should receive the merged stdout+stderr from the failed rule
+# The catch block should receive the merged stdout+stderr from the failed rule
 e2e::assert_file_exists "${TEST_DIR}/recover_received.txt" "recover block ran"
 recover_content="$(<"${TEST_DIR}/recover_received.txt")"
-# assert_contains: recover $1 contains merged stdout+stderr from failed rule; may include extra runtime text
+# assert_contains: catch $1 contains merged stdout+stderr from failed rule; may include extra runtime text
 e2e::assert_contains "${recover_content}" "analysis-stdout-log" "recover block receives rule stdout in \$1"
-e2e::pass "ensure...recover: recover block output semantics"
+e2e::pass "ensure...recover: catch block output semantics"
 
 # ===================================================================
 e2e::section "ensure...recover: rule stdout goes to artifacts"

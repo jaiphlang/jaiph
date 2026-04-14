@@ -57,7 +57,7 @@ export function braceDepthDelta(line: string): number {
 const JAIPH_KEYWORDS = new Set([
   "run", "ensure", "prompt", "return", "fail", "log", "logerr",
   "if", "else", "not", "const", "local", "match", "import", "export",
-  "workflow", "rule", "script", "channel", "config", "recover", "async",
+  "workflow", "rule", "script", "channel", "config", "catch", "async",
   "returns", "send", "true", "false",
 ]);
 

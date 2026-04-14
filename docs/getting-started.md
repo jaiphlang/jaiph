@@ -50,7 +50,7 @@ workflow default() {
 
 The script installs Jaiph automatically if it is not already on your `PATH`. Requires `node` and `curl`.
 
-For more runnable samples (inbox, async, testing, ensure/recover), see the [`examples/`](https://github.com/jaiphlang/jaiph/tree/main/examples) directory.
+For more runnable samples (inbox, async, testing, ensure/catch), see the [`examples/`](https://github.com/jaiphlang/jaiph/tree/main/examples) directory.
 
 ## Running a workflow
 
@@ -149,7 +149,7 @@ Jaiph source files combine a small orchestration language with scripts in any la
 
 **workflow** — Ordered steps that orchestrate rules, scripts, prompts, and other workflows. Must use Jaiph keywords only (no raw shell lines). Every file needs a `workflow default` entry point.
 
-**rule** — Reusable checks composed of structured steps (`ensure`, `run`, `const`, `match`, `fail`, `return`, `log`, `ensure … recover`, `run … recover`). Called with `ensure` from workflows.
+**rule** — Reusable checks composed of structured steps (`ensure`, `run`, `const`, `match`, `fail`, `return`, `log`, `ensure … catch`, `run … catch`). Called with `ensure` from workflows.
 
 **script** — Shell (or polyglot) code definitions that execute as isolated subprocesses. Called with `run` from workflows and rules. Named scripts use backtick delimiters: `` script name = `body` `` for single-line or `` script name = ```lang ... ``` `` for multi-line. Use fence lang tags (`` ```node ``, `` ```python3 ``, `` ```ruby ``, etc.) to select an interpreter — the tag maps directly to `#!/usr/bin/env <tag>` (any tag is valid, no hardcoded allowlist). If no tag is present, add a manual `#!` shebang as the first body line. Scripts receive only positional arguments (`$1`, `$2`, …) and essential Jaiph variables (`JAIPH_LIB`, `JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`). Jaiph interpolation (`${...}`) is forbidden in **single-line backtick** script bodies to prevent ambiguity with shell variables; fenced (triple-backtick) blocks allow `${...}` — it passes through as standard shell parameter expansion. For trivial one-off commands, use **inline scripts**: `` run `echo ok`() `` or fenced blocks (`` run ```...```(args) ``) — no named `script` definition needed.
 
@@ -168,8 +168,8 @@ Jaiph source files combine a small orchestration language with scripts in any la
 - `run async workflow()` — concurrent execution with implicit join
 - `const x = prompt "..." returns "{ field: type }"` — structured capture with `${x.field}` access; `number` / `boolean` in the schema validate JSON but each field is **stored as a string** in workflow scope (orchestration is text-only)
 - `return run workflow` / `return ensure rule` — direct return from a managed call (parens optional)
-- `ensure rule() recover (failure) { ... }` — failure recovery with explicit bindings (runs once on failure, like a catch clause)
-- `run script() recover (err) { ... }` — failure recovery on `run` calls (same semantics as `ensure … recover`)
+- `ensure rule() catch (failure) { ... }` — failure recovery with explicit bindings (runs once on failure)
+- `run script() catch (err) { ... }` — failure recovery on `run` calls (same semantics as `ensure … catch`)
 - `channel name [-> workflow]` / `ch <- "msg"` — inter-workflow messaging (routes declared inline on channel)
 - `import "file.jh" as alias` — module composition
 - `import script "./helper.py" as helper` — import an external script file as a local script symbol
@@ -182,7 +182,7 @@ Jaiph source files combine a small orchestration language with scripts in any la
 script check_deps = `test -f "package.json"`
 
 rule deps_exist() {
-  run check_deps() recover (err) {
+  run check_deps() catch (err) {
     fail "Missing package.json"
   }
 }

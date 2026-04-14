@@ -206,7 +206,7 @@ workflow docs_overview(docPaths) {
 
 workflow process_docs_md_recursive(file, remaining) {
   run docs_page(file)
-  run arg_nonempty(remaining) recover (err) {
+  run arg_nonempty(remaining) catch (err) {
     return
   }
   const next = run first_line_str(remaining)
@@ -215,7 +215,7 @@ workflow process_docs_md_recursive(file, remaining) {
 }
 
 workflow maybe_process_docs_md(first_doc, rest_docs) {
-  run arg_nonempty(first_doc) recover (err) {
+  run arg_nonempty(first_doc) catch (err) {
     return
   }
   run process_docs_md_recursive(first_doc, rest_docs)

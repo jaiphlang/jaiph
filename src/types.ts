@@ -127,7 +127,7 @@ export type WorkflowStepDef =
       bareIdentifierArgs?: string[];
       /** When set, capture step stdout into this variable name. */
       captureName?: string;
-      /** When set, transpiles to for/seq bounded retry loop (break on success, exit 1 after max). */
+      /** When set, catch failure and run recovery body once. */
       recover?:
         | { single: WorkflowStepDef; bindings: { failure: string } }
         | { block: WorkflowStepDef[]; bindings: { failure: string } };

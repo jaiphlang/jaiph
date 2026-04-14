@@ -100,7 +100,7 @@ script save_simplifier_report = `printf '%s\n' "$1" > .jaiph/tmp/simplifier_repo
 script read_simplifier_report = `cat .jaiph/tmp/simplifier_report.md`
 
 workflow apply_simplifications() {
-  run report_file_nonempty() recover (err) {
+  run report_file_nonempty() catch (err) {
     fail "No report at .jaiph/tmp/simplifier_report.md. Run find_simplifications first."
   }
   const report = run read_simplifier_report()

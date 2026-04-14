@@ -9,7 +9,7 @@ trap e2e::cleanup EXIT
 e2e::prepare_test_env "engineer_recover_contract"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
-e2e::section "engineer-style recover writes CI log and preserves role arg"
+e2e::section "engineer-style catch writes CI log and preserves role arg"
 
 e2e::file "engineer_recover_contract.jh" <<'EOF'
 script save_string_to_file = `echo "$1" > "$2"`
@@ -28,7 +28,7 @@ rule ci_passes() {
 
 workflow implement(task, role) {
   const the_task = "${task}"
-  ensure ci_passes() recover (failure) {
+  ensure ci_passes() catch (failure) {
     const ci_failure_log = "${failure}"
     const ci_log_file = ".jaiph/tmp/ensure_ci_passes.last.log"
     run mkdir_p_simple(".jaiph/tmp")
@@ -50,12 +50,12 @@ e2e::assert_file_exists "${TEST_DIR}/.jaiph/tmp/recover.role" "recover keeps sec
 
 ci_log="$(<"${TEST_DIR}/.jaiph/tmp/ensure_ci_passes.last.log")"
 role="$(<"${TEST_DIR}/.jaiph/tmp/recover.role")"
-# assert_contains: recover payload aggregates stdout+stderr; exact merge format varies
+# assert_contains: catch payload aggregates stdout+stderr; exact merge format varies
 e2e::assert_contains "${ci_log}" "ci failure: tests failed" "recover \$1 contains failed rule stdout"
-# assert_contains: recover payload aggregates stdout+stderr; exact merge format varies
+# assert_contains: catch payload aggregates stdout+stderr; exact merge format varies
 e2e::assert_contains "${ci_log}" "expected 0 but got 1" "recover \$1 contains failed rule stderr"
 if [[ "${role}" != "surgical" ]]; then
   e2e::fail "recover \$2 preserves role argument"
 fi
 
-e2e::pass "engineer-style ensure recover contract holds"
+e2e::pass "engineer-style ensure catch contract holds"

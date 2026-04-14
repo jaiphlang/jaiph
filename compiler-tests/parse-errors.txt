@@ -370,52 +370,52 @@ workflow default() {
   prompt "x" returns "{ a: string }"
 }
 
-=== ensure recover with args after recover
-# @expect error E_PARSE "recover requires explicit bindings" @6:22
+=== ensure catch with args after catch
+# @expect error E_PARSE "catch requires explicit bindings" @6:22
 --- input.jh
 rule ci_passes() {
   run ci_passes_impl()
 }
 script ci_passes_impl = `true`
 workflow default() {
-  ensure ci_passes() recover "$repo_dir" {
+  ensure ci_passes() catch "$repo_dir" {
     prompt "Apply the smallest safe fix."
   }
 }
 
-=== ensure recover with multiple args after recover
-# @expect error E_PARSE "recover requires explicit bindings" @6:25
+=== ensure catch with multiple args after catch
+# @expect error E_PARSE "catch requires explicit bindings" @6:25
 --- input.jh
 rule some_rule() {
   true
 }
 
 workflow default() {
-  ensure some_rule("a") recover "b" {
+  ensure some_rule("a") catch "b" {
     log "should not parse"
   }
 }
 
-=== ensure recover without block
-# @expect error E_PARSE "recover requires explicit bindings" @6:33
+=== ensure catch without block
+# @expect error E_PARSE "catch requires explicit bindings" @6:33
 --- input.jh
 rule ci_passes() {
   true
 }
 
 workflow default() {
-  ensure ci_passes("$repo_dir") recover
+  ensure ci_passes("$repo_dir") catch
 }
 
-=== ensure recover without bindings (bare recover block)
-# @expect error E_PARSE "recover requires explicit bindings" @5:18
+=== ensure catch without bindings (bare catch block)
+# @expect error E_PARSE "catch requires explicit bindings" @5:18
 --- input.jh
 rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover {
-    log "recovering"
+  ensure check() catch {
+    log "catching"
   }
 }
 
@@ -908,74 +908,74 @@ workflow default() {
   }
 }
 
-=== recover: fail without double quote
+=== catch: fail without double quote
 # @expect error E_PARSE "fail must match" @5:1
 --- input.jh
 rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover (failure) {
+  ensure check() catch (failure) {
     fail reason
   }
 }
 
-=== recover: unterminated fail string
+=== catch: unterminated fail string
 # @expect error E_PARSE "unterminated fail string" @5:1
 --- input.jh
 rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover (failure) {
+  ensure check() catch (failure) {
     fail "reason
   }
 }
 
-=== recover: log without double quote
+=== catch: log without double quote
 # @expect error E_PARSE "log must match" @5:1
 --- input.jh
 rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover (failure) {
+  ensure check() catch (failure) {
     log reason why
   }
 }
 
-=== recover: unterminated log string
+=== catch: unterminated log string
 # @expect error E_PARSE "unterminated log string" @5:1
 --- input.jh
 rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover (failure) {
+  ensure check() catch (failure) {
     log "reason
   }
 }
 
-=== recover: logerr without double quote
+=== catch: logerr without double quote
 # @expect error E_PARSE "logerr must match" @5:1
 --- input.jh
 rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover (failure) {
+  ensure check() catch (failure) {
     logerr reason why
   }
 }
 
-=== recover: unterminated logerr string
+=== catch: unterminated logerr string
 # @expect error E_PARSE "unterminated logerr string" @5:1
 --- input.jh
 rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover (failure) {
+  ensure check() catch (failure) {
     logerr "reason
   }
 }
@@ -1354,11 +1354,11 @@ workflow default() {
   const x = ensure 123bad
 }
 
-=== const ensure cannot use recover
-# @expect error E_PARSE "const ... = ensure cannot use recover" @2:13
+=== const ensure cannot use catch
+# @expect error E_PARSE "const ... = ensure cannot use catch" @2:13
 --- input.jh
 workflow default() {
-  const x = ensure check() recover {
+  const x = ensure check() catch {
     log "no"
   }
 }
@@ -1428,14 +1428,14 @@ workflow default() {
   logerr "hello" extra
 }
 
-=== recover: prompt capture without const
+=== catch: prompt capture without const
 # @expect error E_PARSE "const name = prompt" @5:1
 --- input.jh
 rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover (failure) {
+  ensure check() catch (failure) {
     x = prompt "fix"
   }
 }
@@ -1485,15 +1485,15 @@ workflow default() {
   fail reason
 }
 
-=== unterminated multiline recover block
-# @expect error E_PARSE "unterminated recover block" @5:18
+=== unterminated multiline catch block
+# @expect error E_PARSE "unterminated catch block" @5:18
 --- input.jh
 rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover (failure) {
-    log "recovering"
+  ensure check() catch (failure) {
+    log "catching"
 
 === duplicate name: rule and workflow
 # @expect error E_PARSE "duplicate name" @4:1
@@ -1538,14 +1538,14 @@ workflow default() {
   log "ok"
 }
 
-=== empty multiline recover block
-# @expect error E_PARSE "recover block must contain at least one statement" @5:18
+=== empty multiline catch block
+# @expect error E_PARSE "catch block must contain at least one statement" @5:18
 --- input.jh
 rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover (failure) {
+  ensure check() catch (failure) {
   }
 }
 
@@ -1625,14 +1625,14 @@ workflow default() {
   run deploy()
 }
 
-=== empty inline recover block
-# @expect error E_PARSE "recover block must contain at least one statement" @5:18
+=== empty inline catch block
+# @expect error E_PARSE "catch block must contain at least one statement" @5:18
 --- input.jh
 rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover (failure) { }
+  ensure check() catch (failure) { }
 }
 
 === test: old camelCase expectContain rejected
@@ -1762,140 +1762,140 @@ workflow default() {
   log "ok"
 }
 
-=== ensure recover with unterminated bindings paren
-# @expect error E_PARSE "unterminated recover bindings"
+=== ensure catch with unterminated bindings paren
+# @expect error E_PARSE "unterminated catch bindings"
 --- input.jh
 rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover (failure {
-    log "recovering"
+  ensure check() catch (failure {
+    log "catching"
   }
 }
 
-=== ensure recover with empty bindings
-# @expect error E_PARSE "recover requires exactly one binding"
+=== ensure catch with empty bindings
+# @expect error E_PARSE "catch requires exactly one binding"
 --- input.jh
 rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover () {
-    log "recovering"
+  ensure check() catch () {
+    log "catching"
   }
 }
 
-=== ensure recover with invalid binding name
-# @expect error E_PARSE "invalid recover binding name"
+=== ensure catch with invalid binding name
+# @expect error E_PARSE "invalid catch binding name"
 --- input.jh
 rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover (123bad) {
-    log "recovering"
+  ensure check() catch (123bad) {
+    log "catching"
   }
 }
 
-=== ensure recover with no body after bindings
-# @expect error E_PARSE "recover requires a body after bindings"
+=== ensure catch with no body after bindings
+# @expect error E_PARSE "catch requires a body after bindings"
 --- input.jh
 rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover (failure)
+  ensure check() catch (failure)
 }
 
-=== run recover with unterminated bindings paren
-# @expect error E_PARSE "unterminated recover bindings"
+=== run catch with unterminated bindings paren
+# @expect error E_PARSE "unterminated catch bindings"
 --- input.jh
 workflow helper() {
   log "ok"
 }
 workflow default() {
-  run helper() recover (failure {
-    log "recovering"
+  run helper() catch (failure {
+    log "catching"
   }
 }
 
-=== run recover with empty bindings
-# @expect error E_PARSE "recover requires exactly one binding"
+=== run catch with empty bindings
+# @expect error E_PARSE "catch requires exactly one binding"
 --- input.jh
 workflow helper() {
   log "ok"
 }
 workflow default() {
-  run helper() recover () {
-    log "recovering"
+  run helper() catch () {
+    log "catching"
   }
 }
 
-=== run recover with invalid binding name
-# @expect error E_PARSE "invalid recover binding name"
+=== run catch with invalid binding name
+# @expect error E_PARSE "invalid catch binding name"
 --- input.jh
 workflow helper() {
   log "ok"
 }
 workflow default() {
-  run helper() recover (123bad) {
-    log "recovering"
+  run helper() catch (123bad) {
+    log "catching"
   }
 }
 
-=== run recover with no body after bindings
-# @expect error E_PARSE "recover requires a body after bindings"
+=== run catch with no body after bindings
+# @expect error E_PARSE "catch requires a body after bindings"
 --- input.jh
 workflow helper() {
   log "ok"
 }
 workflow default() {
-  run helper() recover (failure)
+  run helper() catch (failure)
 }
 
-=== ensure recover with multiple bindings rejected
-# @expect error E_PARSE "recover accepts exactly one binding"
+=== ensure catch with multiple bindings rejected
+# @expect error E_PARSE "catch accepts exactly one binding"
 --- input.jh
 rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover (failure, attempt) {
-    log "recovering"
+  ensure check() catch (failure, attempt) {
+    log "catching"
   }
 }
 
-=== run recover with multiple bindings rejected
-# @expect error E_PARSE "recover accepts exactly one binding"
+=== run catch with multiple bindings rejected
+# @expect error E_PARSE "catch accepts exactly one binding"
 --- input.jh
 workflow helper() {
   log "ok"
 }
 workflow default() {
-  run helper() recover (failure, attempt) {
-    log "recovering"
+  run helper() catch (failure, attempt) {
+    log "catching"
   }
 }
 
-=== inline recover fail without double quote
+=== inline catch fail without double quote
 # @expect error E_PARSE "fail must match"
 --- input.jh
 rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover (failure) fail reason
+  ensure check() catch (failure) fail reason
 }
 
-=== inline recover unterminated fail string
+=== inline catch unterminated fail string
 # @expect error E_PARSE "unterminated fail string"
 --- input.jh
 rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover (failure) fail "reason
+  ensure check() catch (failure) fail "reason
 }
 
 === inline config block missing equals sign
@@ -2074,14 +2074,14 @@ workflow default() {
   log "hello"
 }
 
-=== wait in recover block rejected
+=== wait in catch block rejected
 # @expect error E_PARSE "has been removed"
 --- input.jh
 rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover (err) {
+  ensure check() catch (err) {
     wait
   }
 }
@@ -2139,36 +2139,36 @@ payload
 """ extra
 }
 
-=== wait in inline recover statement
+=== wait in inline catch statement
 # @expect error E_PARSE "has been removed"
 --- input.jh
 rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover (err) wait
+  ensure check() catch (err) wait
 }
 
-=== recover block: assignment without const rejected
+=== catch block: assignment without const rejected
 # @expect error E_PARSE "assignment without"
 --- input.jh
 workflow helper() {
   log "ok"
 }
 workflow default() {
-  run helper() recover (err) {
+  run helper() catch (err) {
     x = run helper()
   }
 }
 
-=== recover block: prompt assign without const
+=== catch block: prompt assign without const
 # @expect error E_PARSE "const name = prompt"
 --- input.jh
 rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover (failure) {
+  ensure check() catch (failure) {
     x = prompt "fix"
   }
 }
@@ -2289,35 +2289,35 @@ hello world
 --- input.jh
 script broken = `echo hello
 
-=== inline recover return without value
-# @expect error E_PARSE "recover requires explicit bindings"
+=== inline catch return without value
+# @expect error E_PARSE "catch requires explicit bindings"
 --- input.jh
 rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover return
+  ensure check() catch return
 }
 
-=== run recover unterminated multiline block
-# @expect error E_PARSE "unterminated recover block"
+=== run catch unterminated multiline block
+# @expect error E_PARSE "unterminated catch block"
 --- input.jh
 workflow helper() {
   log "ok"
 }
 workflow default() {
-  run helper() recover (err) {
-    log "recovering"
+  run helper() catch (err) {
+    log "catching"
 
-=== ensure recover unterminated multiline block
-# @expect error E_PARSE "unterminated recover block"
+=== ensure catch unterminated multiline block
+# @expect error E_PARSE "unterminated catch block"
 --- input.jh
 rule check() {
   return "ok"
 }
 workflow default() {
-  ensure check() recover (err) {
-    log "recovering"
+  ensure check() catch (err) {
+    log "catching"
 
 === inline script fenced unterminated in rule body
 # @expect error E_PARSE "unterminated fenced block"
@@ -2362,15 +2362,15 @@ workflow default() {
   inbox <- """
 payload data
 
-=== run recover without bindings bare recover block
-# @expect error E_PARSE "recover requires explicit bindings"
+=== run catch without bindings bare catch block
+# @expect error E_PARSE "catch requires explicit bindings"
 --- input.jh
 workflow helper() {
   log "ok"
 }
 workflow default() {
-  run helper() recover {
-    log "recovering"
+  run helper() catch {
+    log "catching"
   }
 }
 
@@ -2418,14 +2418,14 @@ workflow default() {
   const x = """
 hello
 
-=== inline run recover with single fail statement
+=== inline run catch with single fail statement
 # @expect ok
 --- input.jh
 workflow helper() {
   log "ok"
 }
 workflow default() {
-  run helper() recover (err) fail "unrecoverable: ${err}"
+  run helper() catch (err) fail "uncatchable: ${err}"
 }
 
 === send rhs with run to workflow

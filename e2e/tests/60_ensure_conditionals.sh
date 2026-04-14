@@ -9,7 +9,7 @@ trap e2e::cleanup EXIT
 e2e::prepare_test_env "ensure_conditionals"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
-e2e::section "ensure recover branch behavior"
+e2e::section "ensure catch branch behavior"
 
 # Given
 e2e::file "ensure_run_branch.jh" <<'EOF'
@@ -26,7 +26,7 @@ workflow recovery() {
 }
 
 workflow default() {
-  ensure always_fail() recover (err) {
+  ensure always_fail() catch (err) {
     run recovery()
   }
 }
@@ -43,7 +43,7 @@ echo "shell-ran" > shell_ran.txt
 ```
 
 workflow default() {
-  ensure always_fail() recover (err) {
+  ensure always_fail() catch (err) {
     run shell_ran_impl()
   }
 }
@@ -60,7 +60,7 @@ echo "should-not-run" > should_not_run.txt
 ```
 
 workflow default() {
-  ensure always_ok() recover (err) {
+  ensure always_ok() catch (err) {
     run should_not_run_impl()
   }
 }
@@ -126,6 +126,6 @@ EOF
 e2e::expect_out_files "ensure_pass_branch.jh" 3
 
 if [[ -f "${TEST_DIR}/should_not_run.txt" ]]; then
-  e2e::fail "ensure recover should not execute recover-branch when ensure passes"
+  e2e::fail "ensure catch should not execute recover-branch when ensure passes"
 fi
-e2e::pass "ensure recover skips recover-branch when ensure passes"
+e2e::pass "ensure catch skips recover-branch when ensure passes"
