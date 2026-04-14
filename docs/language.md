@@ -192,7 +192,7 @@ workflow deploy(env, version) {
 }
 ```
 
-Workflows support all step types: `run`, `ensure`, `prompt`, `const`, `log`, `logerr`, `fail`, `return`, `send`, `match`, `if`, `run async`, and `recover`.
+Workflows support all step types: `run`, `ensure`, `prompt`, `const`, `log`, `logerr`, `fail`, `return`, `send`, `match`, `if`, `run async`, and `catch`.
 
 ### Rules
 
@@ -300,30 +300,30 @@ ensure lib.validate(input)
 const result = ensure validator(path)
 ```
 
-### `recover` — Failure Recovery
+### `catch` — Failure Recovery
 
-Both `ensure` and `run` support a `recover` clause. On failure, the recovery body runs once. `recover` requires an explicit binding that receives merged stdout+stderr from the failed step.
+Both `ensure` and `run` support a `catch` clause. On failure, the recovery body runs once. `catch` requires an explicit binding that receives merged stdout+stderr from the failed step.
 
 ```jaiph
 # Single-statement recovery
-ensure install_deps() recover (failure) run fix_deps()
+ensure install_deps() catch (failure) run fix_deps()
 
 # Block recovery
-run deploy(env) recover (err) {
+run deploy(env) catch (err) {
   log "Deploy failed, rolling back"
   run rollback(env)
 }
 
 # Retry via recursion
 workflow deploy(env) {
-  ensure ci_passes() recover (failure) {
+  ensure ci_passes() catch (failure) {
     prompt "CI failed — fix the code."
     run deploy(env)
   }
 }
 ```
 
-Bare `recover` without a binding is a parse error. All call arguments must appear inside parentheses before `recover`.
+Bare `catch` without a binding is a parse error. All call arguments must appear inside parentheses before `catch`.
 
 ### `prompt` — Agent Interaction
 

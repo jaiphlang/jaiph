@@ -169,7 +169,7 @@ rl_test_out="$(jaiph test "${TEST_DIR}/recover_loop.test.jh" 2>&1)"
 # Then
 e2e::expect_stdout "${rl_test_out}" <<'EOF'
 testing recover_loop.test.jh
-  ▸ report exists on first attempt skips recover
+  ▸ report exists on first attempt skips catch
   ✓ <time>
 ✓ 1 test(s) passed
 EOF

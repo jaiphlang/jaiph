@@ -10,7 +10,7 @@ rule report_exists() {
 }
 
 workflow default() {
-  ensure report_exists() recover (failure) {
+  ensure report_exists() catch (failure) {
     prompt "report.txt is missing. Create it with a short dummy summary."
     run default()
   }

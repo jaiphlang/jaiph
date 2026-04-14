@@ -140,7 +140,7 @@ export function validateSimpleInterpolationIdentifiers(
   scopeLabel: "workflow" | "rule",
   /** Typed prompt captures: map capture name → returns schema field names (for `${base}` / `${base_field}`). */
   promptFieldSchemas?: Map<string, string[]>,
-  /** Extra variable names from `ensure … recover` bindings. */
+  /** Extra variable names from `ensure … catch` bindings. */
   recoverBindings?: Set<string>,
   /** Script names in the current module — `${scriptName}` is rejected because scripts cannot be interpolated. */
   localScripts?: Set<string>,

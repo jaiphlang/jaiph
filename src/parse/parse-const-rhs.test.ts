@@ -139,10 +139,10 @@ test("parseConstRhs: ensure without parens rejects (parens required)", () => {
   );
 });
 
-test("parseConstRhs: ensure with recover throws", () => {
+test("parseConstRhs: ensure with catch throws", () => {
   assert.throws(
-    () => parseConstRhs("test.jh", ["const x = ensure my_rule() recover fail"], 0, "ensure my_rule() recover fail", 1, 1, false, "x"),
-    /cannot use recover/,
+    () => parseConstRhs("test.jh", ["const x = ensure my_rule() catch fail"], 0, "ensure my_rule() catch fail", 1, 1, false, "x"),
+    /cannot use catch/,
   );
 });
 

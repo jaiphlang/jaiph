@@ -45,7 +45,7 @@ type StepResult = {
   output: string;
   error: string;
   returnValue?: string;
-  /** Set when a recover body executed a `return` statement. */
+  /** Set when a catch body executed a `return` statement. */
   recoverReturn?: boolean;
 };
 

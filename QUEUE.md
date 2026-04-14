@@ -12,27 +12,6 @@ Process rules:
 
 ---
 
-## Rename `recover` keyword to `catch` #dev-ready
-
-**Goal**  
-Replace the language keyword `recover` with `catch`, because `catch` is the more natural and familiar term. This is a breaking syntax change; compatibility with `recover` should not be supported.
-
-**Context**
-
-- Update the lexer/parser/AST and any syntax highlighters or grammar docs that mention `recover`.
-- Update runtime semantics only as needed to preserve existing behavior under the new keyword.
-- Rename tests, fixtures, examples, and docs so `catch` is the canonical syntax everywhere.
-- If parser errors mention `recover`, update diagnostics to mention `catch` instead.
-
-**Acceptance criteria**
-
-- Source files using `catch` parse and execute with the same semantics previously attached to `recover`.
-- `recover` is removed from docs/examples and no longer presented as valid syntax.
-- Tests and fixtures use `catch`.
-- Any syntax or parse errors reference `catch`, not `recover`.
-
----
-
 ## Runtime — credential proxy for Docker mode
 
 **Goal**  

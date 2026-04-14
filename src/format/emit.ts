@@ -458,9 +458,9 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
         if ("single" in step.recover) {
           const recoverLines = emitStep(step.recover.single, pad, "");
           const recoverText = recoverLines.map((l) => l.trim()).join("\n");
-          lines.push(`${ci}${capture}ensure ${ref} recover ${bindStr} ${recoverText}`);
+          lines.push(`${ci}${capture}ensure ${ref} catch ${bindStr} ${recoverText}`);
         } else {
-          lines.push(`${ci}${capture}ensure ${ref} recover ${bindStr} {`);
+          lines.push(`${ci}${capture}ensure ${ref} catch ${bindStr} {`);
           lines.push(...emitSteps(step.recover.block, pad, ci + pad));
           lines.push(`${ci}}`);
         }
@@ -480,9 +480,9 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
         if ("single" in step.recover) {
           const recoverLines = emitStep(step.recover.single, pad, "");
           const recoverText = recoverLines.map((l) => l.trim()).join("\n");
-          lines.push(`${ci}${capture}run ${asyncPrefix}${ref} recover ${bindStr} ${recoverText}`);
+          lines.push(`${ci}${capture}run ${asyncPrefix}${ref} catch ${bindStr} ${recoverText}`);
         } else {
-          lines.push(`${ci}${capture}run ${asyncPrefix}${ref} recover ${bindStr} {`);
+          lines.push(`${ci}${capture}run ${asyncPrefix}${ref} catch ${bindStr} {`);
           lines.push(...emitSteps(step.recover.block, pad, ci + pad));
           lines.push(`${ci}}`);
         }

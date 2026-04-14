@@ -142,7 +142,7 @@ test("return run in ensure recover block", () => {
       '  return "yes"',
       "}",
       "workflow default() {",
-      "  ensure check() recover (err) {",
+      "  ensure check() catch (err) {",
       "    return run helper()",
       "  }",
       "}",

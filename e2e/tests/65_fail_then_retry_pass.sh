@@ -13,7 +13,7 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 # - first call fails gate1 -> remediate1 -> recurse
 # - second call fails gate2 -> remediate2 -> recurse
 # Tree should reflect nested recursion depth.
-e2e::section "ensure recover supports multi-gate recursive nesting"
+e2e::section "ensure catch supports multi-gate recursive nesting"
 rm -f "${TEST_DIR}/.gate1_passed" "${TEST_DIR}/.gate2_passed"
 
 # Given
@@ -39,12 +39,12 @@ workflow remediate2() {
 }
 
 workflow make_pass() {
-  ensure gate1() recover (err) {
+  ensure gate1() catch (err) {
     run remediate1()
     run make_pass()
     return
   }
-  ensure gate2() recover (err) {
+  ensure gate2() catch (err) {
     run remediate2()
     run make_pass()
     return
@@ -104,7 +104,7 @@ workflow default
 ✓ PASS workflow default (<time>)
 EOF
 
-e2e::pass "ensure recover with two recursive gates: fail gate1 then gate2, pass on nested retries"
+e2e::pass "ensure catch with two recursive gates: fail gate1 then gate2, pass on nested retries"
 
 # Same scenario but with a single ensure gate.
 e2e::section "single-gate recursive retry: fail first, pass on retry"
@@ -118,7 +118,7 @@ rule gate() {
 script check_gate = `test -f .gate_passed`
 script mark_gate = `touch .gate_passed`
 workflow make_pass() {
-  ensure gate() recover (err) {
+  ensure gate() catch (err) {
     run mark_gate()
     run make_pass()
     return

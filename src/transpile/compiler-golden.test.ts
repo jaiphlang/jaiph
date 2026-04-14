@@ -407,11 +407,11 @@ test("parser: if keyword with old syntax produces E_PARSE", () => {
   );
 });
 
-test("parser: run ... recover parses correctly", () => {
+test("parser: run ... catch parses correctly", () => {
   const source = [
     'script helper = `echo ok`',
     "workflow default() {",
-    "  run helper() recover (err) {",
+    "  run helper() catch (err) {",
     '    log "failed"',
     "  }",
     "}",

@@ -9,9 +9,9 @@ trap e2e::cleanup EXIT
 e2e::prepare_test_env "recover_chains"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
-# ── 1. ensure recover: rule fails → recover runs ────────────────────────────
+# ── 1. ensure recover: rule fails → catch runs ────────────────────────────
 
-e2e::section "ensure recover: rule fails → recover body runs"
+e2e::section "ensure recover: rule fails → catch body runs"
 
 e2e::file "ensure_fail_recover.jh" <<'EOF'
 script fail_impl = `false`
@@ -22,7 +22,7 @@ rule fail_rule() {
 script then_action = `echo "then-ran" > then_ran.txt`
 
 workflow default() {
-  ensure fail_rule() recover (err) {
+  ensure fail_rule() catch (err) {
     run then_action()
   }
 }
@@ -47,11 +47,11 @@ workflow default
 ✓ PASS workflow default (<time>)
 EOF
 
-e2e::pass "ensure recover: ensure fails → recover body runs"
+e2e::pass "ensure recover: ensure fails → catch body runs"
 
-# ── 2. ensure recover: rule passes → recover skipped, continue ──────────────
+# ── 2. ensure recover: rule passes → catch skipped, continue ──────────────
 
-e2e::section "ensure recover: rule passes → recover skipped"
+e2e::section "ensure recover: rule passes → catch skipped"
 
 e2e::file "ensure_pass_no_recover.jh" <<'EOF'
 script ok_impl = `true`
@@ -62,7 +62,7 @@ rule ok_rule() {
 script else_action = `echo "else-ran" > else_ran.txt`
 
 workflow default() {
-  ensure ok_rule() recover (err) {
+  ensure ok_rule() catch (err) {
     log "should-not-run"
   }
   run else_action()
@@ -88,7 +88,7 @@ workflow default
 ✓ PASS workflow default (<time>)
 EOF
 
-e2e::pass "ensure recover: ensure passes → recover skipped"
+e2e::pass "ensure recover: ensure passes → catch skipped"
 
 # ── 3. chained ensure recover: first fails, second passes ───────────────────
 
@@ -108,10 +108,10 @@ rule second_check() {
 script second_action = `echo "second-ran" > second_ran.txt`
 
 workflow default() {
-  ensure first_check() recover (err) {
+  ensure first_check() catch (err) {
     log "first-recovered"
   }
-  ensure second_check() recover (err) {
+  ensure second_check() catch (err) {
     log "should-not-run"
   }
   run second_action()

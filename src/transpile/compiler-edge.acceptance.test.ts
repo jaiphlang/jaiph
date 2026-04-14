@@ -193,8 +193,8 @@ test("ACCEPTANCE: if keyword with old syntax produces E_PARSE error", () => {
   });
 });
 
-test("ACCEPTANCE: ensure recover then-branch allows mixed prompt and run", () => {
-  withTempDir("jaiph-acc-recover-ensure-mixed-", (root) => {
+test("ACCEPTANCE: ensure catch then-branch allows mixed prompt and run", () => {
+  withTempDir("jaiph-acc-catch-ensure-mixed-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
       [
@@ -208,7 +208,7 @@ test("ACCEPTANCE: ensure recover then-branch allows mixed prompt and run", () =>
         "}",
         "",
         "workflow default() {",
-        "  ensure gate() recover (err) {",
+        "  ensure gate() catch (err) {",
         '    const _ = prompt "recover"',
         "    run fix_build()",
         "  }",
@@ -716,10 +716,10 @@ test("ACCEPTANCE: inbox.jh fixture builds successfully", () => {
   });
 });
 
-// === ensure ... recover validation ===
+// === ensure ... catch validation ===
 
-test("ACCEPTANCE: ensure recover with args after recover fails with E_PARSE", () => {
-  withTempDir("jaiph-acc-recover-args-after-", (root) => {
+test("ACCEPTANCE: ensure catch with args after catch fails with E_PARSE", () => {
+  withTempDir("jaiph-acc-catch-args-after-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
       [
@@ -729,7 +729,7 @@ test("ACCEPTANCE: ensure recover with args after recover fails with E_PARSE", ()
         'script ci_passes_impl = `true`',
         "",
         "workflow default() {",
-        '  ensure ci_passes() recover "$repo_dir" {',
+        '  ensure ci_passes() catch "$repo_dir" {',
         '    prompt "Apply the smallest safe fix."',
         "  }",
         "}",
@@ -738,13 +738,13 @@ test("ACCEPTANCE: ensure recover with args after recover fails with E_PARSE", ()
     );
     assert.throws(
       () => buildScripts(root, join(root, "out")),
-      /E_PARSE.*recover requires explicit bindings/,
+      /E_PARSE.*catch requires explicit bindings/,
     );
   });
 });
 
-test("ACCEPTANCE: ensure recover with multiple args after recover fails with E_PARSE", () => {
-  withTempDir("jaiph-acc-recover-multi-args-", (root) => {
+test("ACCEPTANCE: ensure catch with multiple args after catch fails with E_PARSE", () => {
+  withTempDir("jaiph-acc-catch-multi-args-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
       [
@@ -753,7 +753,7 @@ test("ACCEPTANCE: ensure recover with multiple args after recover fails with E_P
         "}",
         "",
         "workflow default() {",
-        '  ensure some_rule("a") recover "b" {',
+        '  ensure some_rule("a") catch "b" {',
         '    log "should not parse"',
         "  }",
         "}",
@@ -762,12 +762,12 @@ test("ACCEPTANCE: ensure recover with multiple args after recover fails with E_P
     );
     assert.throws(
       () => buildScripts(root, join(root, "out")),
-      /E_PARSE.*recover requires explicit bindings/,
+      /E_PARSE.*catch requires explicit bindings/,
     );
   });
 });
 
-test("ACCEPTANCE: ensure recover without block fails with E_PARSE", () => {
+test("ACCEPTANCE: ensure catch without block fails with E_PARSE", () => {
   assert.throws(
     () =>
       parsejaiph(
@@ -777,18 +777,18 @@ test("ACCEPTANCE: ensure recover without block fails with E_PARSE", () => {
           "}",
           "",
           "workflow default() {",
-          '  ensure ci_passes("$repo_dir") recover',
+          '  ensure ci_passes("$repo_dir") catch',
           "}",
           "",
         ].join("\n"),
         "/fake/main.jh",
       ),
-    /E_PARSE.*recover requires explicit bindings/,
+    /E_PARSE.*catch requires explicit bindings/,
   );
 });
 
-test("ACCEPTANCE: valid ensure recover block still works", () => {
-  withTempDir("jaiph-acc-recover-valid-", (root) => {
+test("ACCEPTANCE: valid ensure catch block still works", () => {
+  withTempDir("jaiph-acc-catch-valid-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
       [
@@ -802,7 +802,7 @@ test("ACCEPTANCE: valid ensure recover block still works", () => {
         "}",
         "",
         "workflow default() {",
-        '  ensure ci_passes("$repo_dir") recover (failure) {',
+        '  ensure ci_passes("$repo_dir") catch (failure) {',
         "    run fix_it()",
         "  }",
         "}",

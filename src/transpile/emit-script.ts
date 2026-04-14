@@ -69,7 +69,7 @@ function wrapBashStandaloneScriptBody(body: string, envPreamble: string): string
 
 export type ScriptArtifact = { name: string; content: string };
 
-/** Collect all inline script steps from a step tree (handles if/else/recover nesting). */
+/** Collect all inline script steps from a step tree (handles if/else/catch nesting). */
 function collectInlineScripts(
   steps: WorkflowStepDef[],
   seen: Set<string>,

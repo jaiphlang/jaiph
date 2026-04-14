@@ -235,7 +235,7 @@ script save_string_to_file = `echo "$1" > "$2"`
 script mkdir_p_simple = `mkdir -p "$1"`
 
 workflow implement(task, role_name) {
-  run task_text_has_header(task) recover (err) {
+  run task_text_has_header(task) catch (err) {
     fail "Provided task does not contain a '## [text]' header"
   }
   const role = run select_role(role_name)

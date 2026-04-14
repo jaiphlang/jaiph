@@ -172,7 +172,7 @@ function parsePromptTripleQuoteBlock(
  *   3. Triple-quoted block: prompt """ ... """
  *
  * Returns the parsed step and the 0-based line index to continue from.
- * For recover statements where multiline scanning is unnecessary, pass `[]` for lines.
+ * For catch statements where multiline scanning is unnecessary, pass `[]` for lines.
  */
 export function parsePromptStep(
   filePath: string,

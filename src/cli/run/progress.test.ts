@@ -407,9 +407,9 @@ test("formatRunningBottomLine: formats elapsed with one decimal", () => {
   assert.ok(result.includes("10.0s"), "should show one decimal place");
 });
 
-// --- collectWorkflowChildren: recover blocks ---
+// --- collectWorkflowChildren: catch blocks ---
 
-test("collectWorkflowChildren: run step with single recover includes recovery items", () => {
+test("collectWorkflowChildren: run step with single catch includes recovery items", () => {
   const mod = minimalModule({
     workflows: [{
       name: "default",
@@ -434,7 +434,7 @@ test("collectWorkflowChildren: run step with single recover includes recovery it
   assert.equal(items[1].label, "ℹ recovering");
 });
 
-test("collectWorkflowChildren: run step with block recover includes all recovery items", () => {
+test("collectWorkflowChildren: run step with block catch includes all recovery items", () => {
   const mod = minimalModule({
     workflows: [{
       name: "default",
@@ -463,7 +463,7 @@ test("collectWorkflowChildren: run step with block recover includes all recovery
   assert.equal(items[2].label, "workflow fallback");
 });
 
-test("collectWorkflowChildren: ensure step with single recover includes recovery items", () => {
+test("collectWorkflowChildren: ensure step with single catch includes recovery items", () => {
   const mod = minimalModule({
     workflows: [{
       name: "default",
@@ -488,7 +488,7 @@ test("collectWorkflowChildren: ensure step with single recover includes recovery
   assert.equal(items[1].label, "workflow fix_it");
 });
 
-test("collectWorkflowChildren: ensure step with block recover includes all recovery items", () => {
+test("collectWorkflowChildren: ensure step with block catch includes all recovery items", () => {
   const mod = minimalModule({
     workflows: [{
       name: "default",
@@ -1454,9 +1454,9 @@ test("buildRunTreeRows: workflow with multiple step types produces correct tree"
   assert.equal(rows.length, 6);
 });
 
-// --- buildRunTreeRows: run with recover block in tree ---
+// --- buildRunTreeRows: run with catch block in tree ---
 
-test("buildRunTreeRows: run with recover block shows recovery steps in tree", () => {
+test("buildRunTreeRows: run with catch block shows recovery steps in tree", () => {
   const mod = minimalModule({
     workflows: [
       {
@@ -1488,12 +1488,12 @@ test("buildRunTreeRows: run with recover block shows recovery steps in tree", ()
     ],
   });
   const rows = buildRunTreeRows(mod);
-  // root + workflow risky + log trying (expanded) + log recovering (recover) + workflow fallback (recover)
+  // root + workflow risky + log trying (expanded) + log recovering (catch) + workflow fallback (catch)
   assert.equal(rows[0].rawLabel, "workflow default");
   assert.equal(rows[1].rawLabel, "workflow risky");
   // risky is expanded since it has children
   assert.equal(rows[2].rawLabel, "ℹ trying");
-  // recover block children
+  // catch block children
   assert.equal(rows[3].rawLabel, "ℹ recovering");
   assert.equal(rows[4].rawLabel, "workflow fallback");
   assert.equal(rows.length, 5);

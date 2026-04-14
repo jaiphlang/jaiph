@@ -142,9 +142,9 @@ EXPECTED
 e2e::assert_file_exists "${TEST_DIR}/waited.txt" "async job wrote marker file"
 
 # ---------------------------------------------------------------------------
-# ensure ... recover
+# ensure ... catch
 # ---------------------------------------------------------------------------
-e2e::section "ensure with recover on failure"
+e2e::section "ensure with catch on failure"
 
 e2e::file "ensure_recover.jh" <<'EOF'
 script always_fail_impl = `false`
@@ -153,7 +153,7 @@ rule always_fail() {
 }
 
 workflow default() {
-  ensure always_fail() recover (err) {
+  ensure always_fail() catch (err) {
     log "recovered"
   }
   log "continued"
@@ -178,13 +178,13 @@ workflow default
 EXPECTED
 
 # ---------------------------------------------------------------------------
-e2e::section "run with recover on failure"
+e2e::section "run with catch on failure"
 
 e2e::file "run_recover.jh" <<'EOF'
 script returns_false = `return 1`
 
 workflow default() {
-  run returns_false() recover (err) {
+  run returns_false() catch (err) {
     log "else-branch-ok"
   }
 }
@@ -205,15 +205,15 @@ workflow default
 EXPECTED
 
 # ---------------------------------------------------------------------------
-# structured rules: run ... recover + fail inside rules
+# structured rules: run ... catch + fail inside rules
 # ---------------------------------------------------------------------------
-e2e::section "structured rule with run recover and fail"
+e2e::section "structured rule with run catch and fail"
 
 e2e::file "structured_rule.jh" <<'EOF'
 script check_ok = `return 0`
 
 rule require_name() {
-  run check_ok() recover (err) {
+  run check_ok() catch (err) {
     fail "name is required"
   }
 }
@@ -247,7 +247,7 @@ e2e::file "structured_rule_fail.jh" <<'EOF'
 script check_fail = `return 1`
 
 rule require_name() {
-  run check_fail() recover (err) {
+  run check_fail() catch (err) {
     fail "name is required"
   }
 }

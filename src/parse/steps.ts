@@ -17,11 +17,11 @@ function rejectTrailingContent(
 import { parsePromptStep } from "./prompt";
 
 /**
- * Split recover block content into statements on `;` or `\n`, but not inside
+ * Split catch block content into statements on `;` or `\n`, but not inside
  * double-quoted strings or triple-quoted `"""…"""` blocks (same idea as
  * `splitStatementsOnSemicolons`).
  */
-function splitRecoverStatements(blockContent: string): string[] {
+function splitCatchStatements(blockContent: string): string[] {
   const statements: string[] = [];
   let current = "";
   let inDoubleQuote = false;
@@ -97,7 +97,7 @@ function splitRecoverStatements(blockContent: string): string[] {
 }
 
 /** Parse a single workflow statement string (e.g. "run foo", "ensure bar", "echo x") into a step. */
-function parseRecoverStatement(
+function parseCatchStatement(
   filePath: string,
   lineNo: number,
   col: number,
@@ -105,7 +105,7 @@ function parseRecoverStatement(
 ): WorkflowStepDef {
   const t = stmt.trim();
   if (!t) {
-    fail(filePath, "empty recover statement", lineNo, col);
+    fail(filePath, "empty catch statement", lineNo, col);
   }
   if (t.startsWith("#")) {
     return { type: "comment", text: t, loc: { line: lineNo, col } };
@@ -166,10 +166,10 @@ function parseRecoverStatement(
     const message = arg.slice(0, closeIdx + 1);
     return { type: "fail", message, loc: { line: lineNo, col } };
   }
-  const constRecover = t.match(/^const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/s);
-  if (constRecover) {
-    const name = constRecover[1];
-    const rhs = constRecover[2].trim();
+  const constMatch = t.match(/^const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/s);
+  if (constMatch) {
+    const name = constMatch[1];
+    const rhs = constMatch[2].trim();
     const syntheticLines = [t];
     const { value } = parseConstRhs(filePath, syntheticLines, 0, rhs, lineNo, col, false, name);
     return {
@@ -211,11 +211,11 @@ function parseRecoverStatement(
         loc: { line: lineNo, col },
       };
     }
-    // Check for run ... recover inside recover blocks
-    const recIdx = runBody.indexOf(" recover ");
+    // Check for run ... catch inside catch blocks
+    const recIdx = runBody.indexOf(" catch ");
     if (recIdx !== -1) {
       const leftPart = runBody.slice(0, recIdx).trim();
-      const rightPart = runBody.slice(recIdx + " recover ".length).trim();
+      const rightPart = runBody.slice(recIdx + " catch ".length).trim();
       const callPart = parseCallRef(leftPart);
       if (callPart && !callPart.rest.trim() && rightPart.startsWith("(")) {
         const closeParen = rightPart.indexOf(")");
@@ -227,8 +227,8 @@ function parseRecoverStatement(
             const after = rightPart.slice(closeParen + 1).trim();
             if (after.startsWith("{") && after.endsWith("}")) {
               const blockContent = after.slice(1, -1).trim();
-              const stmts = splitRecoverStatements(blockContent);
-              const blockSteps = stmts.map((s) => parseRecoverStatement(filePath, lineNo, col, s));
+              const stmts = splitCatchStatements(blockContent);
+              const blockSteps = stmts.map((s) => parseCatchStatement(filePath, lineNo, col, s));
               return {
                 type: "run",
                 workflow: { value: callPart.ref, loc: { line: lineNo, col } },
@@ -238,7 +238,7 @@ function parseRecoverStatement(
               };
             }
             if (!after.startsWith("{") && after) {
-              const singleStep = parseRecoverStatement(filePath, lineNo, col, after);
+              const singleStep = parseCatchStatement(filePath, lineNo, col, after);
               return {
                 type: "run",
                 workflow: { value: callPart.ref, loc: { line: lineNo, col } },
@@ -264,10 +264,10 @@ function parseRecoverStatement(
   }
   if (t.startsWith("ensure ")) {
     const ensureBody = t.slice("ensure ".length).trim();
-    const ensRecIdx = ensureBody.indexOf(" recover ");
+    const ensRecIdx = ensureBody.indexOf(" catch ");
     if (ensRecIdx !== -1) {
       const leftPart = ensureBody.slice(0, ensRecIdx).trim();
-      const rightPart = ensureBody.slice(ensRecIdx + " recover ".length).trim();
+      const rightPart = ensureBody.slice(ensRecIdx + " catch ".length).trim();
       const callPart = parseCallRef(leftPart);
       if (callPart && !callPart.rest.trim() && rightPart.startsWith("(")) {
         const closeParen = rightPart.indexOf(")");
@@ -279,8 +279,8 @@ function parseRecoverStatement(
             const after = rightPart.slice(closeParen + 1).trim();
             if (after.startsWith("{") && after.endsWith("}")) {
               const blockContent = after.slice(1, -1).trim();
-              const stmts = splitRecoverStatements(blockContent);
-              const blockSteps = stmts.map((s) => parseRecoverStatement(filePath, lineNo, col, s));
+              const stmts = splitCatchStatements(blockContent);
+              const blockSteps = stmts.map((s) => parseCatchStatement(filePath, lineNo, col, s));
               return {
                 type: "ensure",
                 ref: { value: callPart.ref, loc: { line: lineNo, col } },
@@ -290,7 +290,7 @@ function parseRecoverStatement(
               };
             }
             if (!after.startsWith("{") && after) {
-              const singleStep = parseRecoverStatement(filePath, lineNo, col, after);
+              const singleStep = parseCatchStatement(filePath, lineNo, col, after);
               return {
                 type: "ensure",
                 ref: { value: callPart.ref, loc: { line: lineNo, col } },
@@ -320,7 +320,7 @@ function parseRecoverStatement(
   if (promptAssignMatch) {
     fail(
       filePath,
-      'use "const name = prompt ..." in recover blocks (e.g. const x = prompt "...")',
+      'use "const name = prompt ..." in catch blocks (e.g. const x = prompt "...")',
       lineNo,
       col + t.indexOf(promptAssignMatch[1]),
     );
@@ -347,7 +347,7 @@ function parseRecoverStatement(
 }
 
 /**
- * Parse an `ensure <ref> [args] [recover ...]` step, with optional captureName.
+ * Parse an `ensure <ref> [args] [catch ...]` step, with optional captureName.
  * Returns the step and the updated 0-based line index.
  */
 export function parseEnsureStep(
@@ -359,21 +359,21 @@ export function parseEnsureStep(
   ensureBody: string,
   captureName?: string,
 ): { step: WorkflowStepDef; nextIdx: number } {
-  const recoverIdx = ensureBody.indexOf(" recover ");
+  const catchIdx = ensureBody.indexOf(" catch ");
   const ensureCol = innerRaw.indexOf("ensure") + 1;
 
-  // `recover` at end of line with no block → error
-  if (/\srecover$/.test(ensureBody)) {
-    const recoverCol = innerRaw.indexOf("recover") + 1;
+  // `catch` at end of line with no block → error
+  if (/\scatch$/.test(ensureBody)) {
+    const catchCol = innerRaw.indexOf("catch") + 1;
     fail(
       filePath,
-      'recover requires explicit bindings and a body: recover (<name>) { ... }',
+      'catch requires explicit bindings and a body: catch (<name>) { ... }',
       innerNo,
-      recoverCol,
+      catchCol,
     );
   }
 
-  if (recoverIdx === -1) {
+  if (catchIdx === -1) {
     const call = parseCallRef(ensureBody);
     if (!call) {
       fail(filePath, "ensure must target a valid reference: ensure ref() or ensure ref(args) — parentheses are required", innerNo);
@@ -390,8 +390,8 @@ export function parseEnsureStep(
       nextIdx: idx,
     };
   }
-  const left = ensureBody.slice(0, recoverIdx).trim();
-  const right = ensureBody.slice(recoverIdx + " recover ".length).trim();
+  const left = ensureBody.slice(0, catchIdx).trim();
+  const right = ensureBody.slice(catchIdx + " catch ".length).trim();
   const call = parseCallRef(left);
   if (!call) {
     fail(filePath, "ensure must target a valid reference: ensure ref() or ensure ref(args) — parentheses are required", innerNo);
@@ -399,32 +399,32 @@ export function parseEnsureStep(
   rejectTrailingContent(filePath, innerNo, "ensure", call.rest);
   const ref = call.ref;
   const args = call.args;
-  const recoverCol = innerRaw.indexOf("recover") + 1;
+  const catchCol = innerRaw.indexOf("catch") + 1;
 
-  // Recover requires explicit bindings: recover (<name>) or recover (<name>, <attempt>)
+  // Catch requires explicit bindings: catch (<name>)
   if (!right.startsWith("(")) {
     fail(
       filePath,
-      'recover requires explicit bindings: recover (<name>) { ... }',
+      'catch requires explicit bindings: catch (<name>) { ... }',
       innerNo,
-      recoverCol,
+      catchCol,
     );
   }
 
   const closeParen = right.indexOf(")");
   if (closeParen === -1) {
-    fail(filePath, 'unterminated recover bindings: expected ")"', innerNo, recoverCol);
+    fail(filePath, 'unterminated catch bindings: expected ")"', innerNo, catchCol);
   }
   const bindingsStr = right.slice(1, closeParen).trim();
   const bindingParts = bindingsStr.split(",").map((s) => s.trim()).filter(Boolean);
   if (bindingParts.length === 0) {
-    fail(filePath, "recover requires exactly one binding: recover (<name>) { ... }", innerNo, recoverCol);
+    fail(filePath, "catch requires exactly one binding: catch (<name>) { ... }", innerNo, catchCol);
   }
   if (bindingParts.length > 1) {
-    fail(filePath, 'recover accepts exactly one binding: recover (<name>) — the second binding (attempt) has been removed', innerNo, recoverCol);
+    fail(filePath, 'catch accepts exactly one binding: catch (<name>) — the second binding (attempt) has been removed', innerNo, catchCol);
   }
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(bindingParts[0])) {
-    fail(filePath, `invalid recover binding name: "${bindingParts[0]}" — must be a valid identifier`, innerNo, recoverCol);
+    fail(filePath, `invalid catch binding name: "${bindingParts[0]}" — must be a valid identifier`, innerNo, catchCol);
   }
   const bindings = { failure: bindingParts[0] };
 
@@ -451,43 +451,43 @@ export function parseEnsureStep(
       blockLines.push(trimmed);
     }
     if (closeLineIdx === -1) {
-      fail(filePath, 'unterminated recover block, expected "}"', innerNo, recoverCol);
+      fail(filePath, 'unterminated catch block, expected "}"', innerNo, catchCol);
     }
-    const statements = splitRecoverStatements(blockLines.join("\n"));
+    const statements = splitCatchStatements(blockLines.join("\n"));
     if (statements.length === 0) {
-      fail(filePath, "recover block must contain at least one statement", innerNo, recoverCol);
+      fail(filePath, "catch block must contain at least one statement", innerNo, catchCol);
     }
-    const blockSteps = statements.map((s) => parseRecoverStatement(filePath, innerNo, 1, s));
+    const blockSteps = statements.map((s) => parseCatchStatement(filePath, innerNo, 1, s));
     return { step: { ...base, recover: { block: blockSteps, bindings } }, nextIdx: closeLineIdx };
   }
 
   if (afterBindings.startsWith("{")) {
     const closeBrace = afterBindings.indexOf("}");
     if (closeBrace === -1) {
-      fail(filePath, 'unterminated recover block, expected "}"', innerNo, recoverCol);
+      fail(filePath, 'unterminated catch block, expected "}"', innerNo, catchCol);
     }
     const blockContent = afterBindings.slice(1, closeBrace).trim();
-    const statements = splitRecoverStatements(blockContent);
+    const statements = splitCatchStatements(blockContent);
     if (statements.length === 0) {
-      fail(filePath, "recover block must contain at least one statement", innerNo, recoverCol);
+      fail(filePath, "catch block must contain at least one statement", innerNo, catchCol);
     }
-    const blockSteps = statements.map((s) => parseRecoverStatement(filePath, innerNo, recoverCol, s));
+    const blockSteps = statements.map((s) => parseCatchStatement(filePath, innerNo, catchCol, s));
     return { step: { ...base, recover: { block: blockSteps, bindings } }, nextIdx: idx };
   }
 
   if (!afterBindings) {
-    fail(filePath, "recover requires a body after bindings", innerNo, recoverCol);
+    fail(filePath, "catch requires a body after bindings", innerNo, catchCol);
   }
 
-  const singleStep = parseRecoverStatement(filePath, innerNo, recoverCol, afterBindings);
+  const singleStep = parseCatchStatement(filePath, innerNo, catchCol, afterBindings);
   return { step: { ...base, recover: { single: singleStep, bindings } }, nextIdx: idx };
 }
 
 /**
- * Try to parse `run <ref>(args) recover (bindings) { ... }` syntax.
- * Returns null if the run body does not contain ` recover `.
+ * Try to parse `run <ref>(args) catch (bindings) { ... }` syntax.
+ * Returns null if the run body does not contain ` catch `.
  */
-export function parseRunRecoverStep(
+export function parseRunCatchStep(
   filePath: string,
   lines: string[],
   idx: number,
@@ -496,50 +496,50 @@ export function parseRunRecoverStep(
   runBody: string,
   captureName?: string,
 ): { step: WorkflowStepDef; nextIdx: number } | null {
-  const recoverIdx = runBody.indexOf(" recover ");
-  if (recoverIdx === -1) return null;
+  const catchIdx = runBody.indexOf(" catch ");
+  if (catchIdx === -1) return null;
 
-  // `recover` at end of line with no block → error
-  if (/\srecover$/.test(runBody)) {
-    const recoverCol = innerRaw.indexOf("recover") + 1;
+  // `catch` at end of line with no block → error
+  if (/\scatch$/.test(runBody)) {
+    const catchCol = innerRaw.indexOf("catch") + 1;
     fail(
       filePath,
-      'recover requires explicit bindings and a body: recover (<name>) { ... }',
+      'catch requires explicit bindings and a body: catch (<name>) { ... }',
       innerNo,
-      recoverCol,
+      catchCol,
     );
   }
 
-  const left = runBody.slice(0, recoverIdx).trim();
-  const right = runBody.slice(recoverIdx + " recover ".length).trim();
+  const left = runBody.slice(0, catchIdx).trim();
+  const right = runBody.slice(catchIdx + " catch ".length).trim();
   const call = parseCallRef(left);
   if (!call || call.rest.trim()) return null;
   const runCol = innerRaw.indexOf("run") + 1;
-  const recoverCol = innerRaw.indexOf("recover") + 1;
+  const catchCol = innerRaw.indexOf("catch") + 1;
 
   if (!right.startsWith("(")) {
     fail(
       filePath,
-      'recover requires explicit bindings: recover (<name>) { ... }',
+      'catch requires explicit bindings: catch (<name>) { ... }',
       innerNo,
-      recoverCol,
+      catchCol,
     );
   }
 
   const closeParen = right.indexOf(")");
   if (closeParen === -1) {
-    fail(filePath, 'unterminated recover bindings: expected ")"', innerNo, recoverCol);
+    fail(filePath, 'unterminated catch bindings: expected ")"', innerNo, catchCol);
   }
   const bindingsStr = right.slice(1, closeParen).trim();
   const bindingParts = bindingsStr.split(",").map((s) => s.trim()).filter(Boolean);
   if (bindingParts.length === 0) {
-    fail(filePath, "recover requires exactly one binding: recover (<name>) { ... }", innerNo, recoverCol);
+    fail(filePath, "catch requires exactly one binding: catch (<name>) { ... }", innerNo, catchCol);
   }
   if (bindingParts.length > 1) {
-    fail(filePath, 'recover accepts exactly one binding: recover (<name>) — the second binding (attempt) has been removed', innerNo, recoverCol);
+    fail(filePath, 'catch accepts exactly one binding: catch (<name>) — the second binding (attempt) has been removed', innerNo, catchCol);
   }
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(bindingParts[0])) {
-    fail(filePath, `invalid recover binding name: "${bindingParts[0]}" — must be a valid identifier`, innerNo, recoverCol);
+    fail(filePath, `invalid catch binding name: "${bindingParts[0]}" — must be a valid identifier`, innerNo, catchCol);
   }
   const bindings = { failure: bindingParts[0] };
 
@@ -566,34 +566,34 @@ export function parseRunRecoverStep(
       blockLines.push(trimmed);
     }
     if (closeLineIdx === -1) {
-      fail(filePath, 'unterminated recover block, expected "}"', innerNo, recoverCol);
+      fail(filePath, 'unterminated catch block, expected "}"', innerNo, catchCol);
     }
-    const statements = splitRecoverStatements(blockLines.join("\n"));
+    const statements = splitCatchStatements(blockLines.join("\n"));
     if (statements.length === 0) {
-      fail(filePath, "recover block must contain at least one statement", innerNo, recoverCol);
+      fail(filePath, "catch block must contain at least one statement", innerNo, catchCol);
     }
-    const blockSteps = statements.map((s) => parseRecoverStatement(filePath, innerNo, 1, s));
+    const blockSteps = statements.map((s) => parseCatchStatement(filePath, innerNo, 1, s));
     return { step: { ...base, recover: { block: blockSteps, bindings } }, nextIdx: closeLineIdx };
   }
 
   if (afterBindings.startsWith("{")) {
     const closeBrace = afterBindings.indexOf("}");
     if (closeBrace === -1) {
-      fail(filePath, 'unterminated recover block, expected "}"', innerNo, recoverCol);
+      fail(filePath, 'unterminated catch block, expected "}"', innerNo, catchCol);
     }
     const blockContent = afterBindings.slice(1, closeBrace).trim();
-    const statements = splitRecoverStatements(blockContent);
+    const statements = splitCatchStatements(blockContent);
     if (statements.length === 0) {
-      fail(filePath, "recover block must contain at least one statement", innerNo, recoverCol);
+      fail(filePath, "catch block must contain at least one statement", innerNo, catchCol);
     }
-    const blockSteps = statements.map((s) => parseRecoverStatement(filePath, innerNo, recoverCol, s));
+    const blockSteps = statements.map((s) => parseCatchStatement(filePath, innerNo, catchCol, s));
     return { step: { ...base, recover: { block: blockSteps, bindings } }, nextIdx: idx };
   }
 
   if (!afterBindings) {
-    fail(filePath, "recover requires a body after bindings", innerNo, recoverCol);
+    fail(filePath, "catch requires a body after bindings", innerNo, catchCol);
   }
 
-  const singleStep = parseRecoverStatement(filePath, innerNo, recoverCol, afterBindings);
+  const singleStep = parseCatchStatement(filePath, innerNo, catchCol, afterBindings);
   return { step: { ...base, recover: { single: singleStep, bindings } }, nextIdx: idx };
 }

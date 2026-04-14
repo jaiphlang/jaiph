@@ -10,7 +10,7 @@ e2e::prepare_test_env "ensure_recover_output_contract"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
 # ===================================================================
-# 1. Simple script failure through rule: stdout + stderr in recover binding
+# 1. Simple script failure through rule: stdout + stderr in catch binding
 # ===================================================================
 e2e::section "recover payload includes script stdout and stderr"
 
@@ -28,7 +28,7 @@ rule simple_echo_rule() {
 }
 
 workflow default() {
-  ensure simple_echo_rule() recover (failure) {
+  ensure simple_echo_rule() catch (failure) {
     run save_string_to_file(failure, "recover_simple.txt")
   }
 }
@@ -41,7 +41,7 @@ e2e::assert_file_exists "${TEST_DIR}/recover_simple.txt" "recover wrote payload 
 witness="$(<"${TEST_DIR}/recover_simple.txt")"
 expected_witness="$(printf 'Hello\nOops')"
 e2e::assert_equals "${witness}" "${expected_witness}" "recover binding contains script stdout+stderr"
-e2e::pass "simple script failure: stdout + stderr in recover payload"
+e2e::pass "simple script failure: stdout + stderr in catch payload"
 
 # ===================================================================
 # 2. Nested rule + script failure aggregation
@@ -67,7 +67,7 @@ rule outer() {
 }
 
 workflow default() {
-  ensure outer() recover (failure) {
+  ensure outer() catch (failure) {
     run save_string_to_file(failure, "recover_nested.log")
   }
 }
@@ -103,7 +103,7 @@ rule ci_passes() {
 }
 
 workflow default() {
-  ensure ci_passes() recover (failure) {
+  ensure ci_passes() catch (failure) {
     run save_string_to_file(failure, "ci_failure.log")
   }
 }
@@ -136,7 +136,7 @@ rule check_rule() {
 }
 
 workflow default() {
-  ensure check_rule() recover (failure) {
+  ensure check_rule() catch (failure) {
     run save_string_to_file(failure, "payload_single.txt")
   }
 }
@@ -153,7 +153,7 @@ e2e::pass "recover runs exactly once on failure"
 # ===================================================================
 # 5. No false payload on success
 # ===================================================================
-e2e::section "no recover payload when rule succeeds"
+e2e::section "no catch payload when rule succeeds"
 
 e2e::file "success_no_payload.jh" <<'EOF'
 script say_ok = `echo "all good"`
@@ -165,7 +165,7 @@ rule passes_first_try() {
 }
 
 workflow default() {
-  ensure passes_first_try() recover (failure) {
+  ensure passes_first_try() catch (failure) {
     run save_string_to_file(failure, "false_payload.txt")
   }
 }
