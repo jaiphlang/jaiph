@@ -12,6 +12,48 @@ Process rules:
 
 ---
 
+## Remove `jaiph report` entirely #dev-ready
+
+**Goal**  
+Delete the `jaiph report` feature completely from the product surface: command handling, implementation code, tests, docs, examples, and changelog mentions that describe it as a supported capability. This is a hard removal, not a deprecation path.
+
+**Context**
+
+- Remove the CLI entrypoint and any runtime/helpers used only by `jaiph report`.
+- Remove parser/runtime/docs references that describe report generation or report-specific output formats.
+- Search all user-facing docs (`README`, `docs/`, examples, changelog) for `jaiph report` and remove or rewrite those sections so the feature no longer appears to exist.
+- Remove or update tests that exercise report behavior.
+
+**Acceptance criteria**
+
+- `jaiph report` is no longer recognized as a valid command.
+- No dead code remains that exists only to support report generation.
+- No docs, examples, or release notes present `jaiph report` as available functionality.
+- Test suite is updated to match the removal.
+
+---
+
+## Rename `recover` keyword to `catch` #dev-ready
+
+**Goal**  
+Replace the language keyword `recover` with `catch`, because `catch` is the more natural and familiar term. This is a breaking syntax change; compatibility with `recover` should not be supported.
+
+**Context**
+
+- Update the lexer/parser/AST and any syntax highlighters or grammar docs that mention `recover`.
+- Update runtime semantics only as needed to preserve existing behavior under the new keyword.
+- Rename tests, fixtures, examples, and docs so `catch` is the canonical syntax everywhere.
+- If parser errors mention `recover`, update diagnostics to mention `catch` instead.
+
+**Acceptance criteria**
+
+- Source files using `catch` parse and execute with the same semantics previously attached to `recover`.
+- `recover` is removed from docs/examples and no longer presented as valid syntax.
+- Tests and fixtures use `catch`.
+- Any syntax or parse errors reference `catch`, not `recover`.
+
+---
+
 ## Runtime — credential proxy for Docker mode
 
 **Goal**  
