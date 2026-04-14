@@ -11,7 +11,7 @@ Workflows often need **side effects** — notifications, structured logging, CI 
 
 Under the hood, `jaiph run` follows a predictable path: prepare scripts, spawn the workflow runner (locally or in Docker), stream **`__JAIPH_EVENT__`** JSON lines from the runner’s stderr, then print PASS/FAIL. Hooks tap into that path. The CLI parses the same stderr events that drive the progress tree and builds a JSON payload for each hook command (see [Architecture — Runtime vs CLI responsibilities](architecture#runtime-vs-cli-responsibilities)). Hooks are **not** part of the Node workflow runtime; channel send/receive and inbox dispatch are separate mechanisms ([Inbox & Dispatch](inbox.md)).
 
-Hooks run only for **`jaiph run`** (including the `jaiph <file.jh>` shorthand) and are **not** triggered by `jaiph test`, `jaiph report`, `jaiph init`, or other commands. They work identically for local and Docker-backed runs.
+Hooks run only for **`jaiph run`** (including the `jaiph <file.jh>` shorthand) and are **not** triggered by `jaiph test`, `jaiph init`, or other commands. They work identically for local and Docker-backed runs.
 
 ## Config locations
 

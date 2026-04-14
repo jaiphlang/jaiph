@@ -11,9 +11,9 @@ Jaiph ships as a command-line tool. You point it at `.jh` source files, and it v
 
 Before execution, the CLI runs compile-time validation and script extraction. It then hands off to the Node workflow runtime, which interprets the parsed AST directly — there is no Bash transpilation of workflows; only extracted `script` bodies are emitted as shell. The CLI owns process spawn and signal propagation; the runtime kernel owns prompt and script execution, file-backed inbox, the `__JAIPH_EVENT__` stream on stderr, and `run_summary.jsonl`. For full architecture details, see [Architecture](architecture).
 
-**Commands:** `run`, `test`, `format`, `init`, `install`, `use`, `report`.
+**Commands:** `run`, `test`, `format`, `init`, `install`, `use`.
 
-**Global options:** `-h` / `--help` and `-v` / `--version` are recognized only as the **first argument** (e.g. `jaiph --help`). They are not parsed after a subcommand or file path. `jaiph report` has its own `--help`.
+**Global options:** `-h` / `--help` and `-v` / `--version` are recognized only as the **first argument** (e.g. `jaiph --help`). They are not parsed after a subcommand or file path.
 
 ## File shorthand
 
@@ -229,7 +229,7 @@ Each run directory also contains `run_summary.jsonl`: one JSON object per line, 
 - **`INBOX_ENQUEUE`:** recorded when a message is queued. `payload_preview` is UTF-8-safe JSON (up to 4096 bytes; truncated with `...`). `payload_ref` is `null` when the full body fits, otherwise a run-relative path.
 - **`INBOX_DISPATCH_START` / `INBOX_DISPATCH_COMPLETE`:** wrap one invocation of a route target. `status` is exit code; `elapsed_ms` is wall time.
 
-Together with step `.out` / `.err` files, `run_summary.jsonl` is enough to reconstruct the step tree, log timelines, inbox flow, and workflow boundaries. The `jaiph report` command exposes this data through a local HTTP API and browser UI (see [Reporting server](reporting.md)).
+Together with step `.out` / `.err` files, `run_summary.jsonl` is enough to reconstruct the step tree, log timelines, inbox flow, and workflow boundaries.
 
 ### Hooks
 
@@ -373,31 +373,6 @@ jaiph use nightly
 jaiph use 0.9.0
 ```
 
-## `jaiph report` {#jaiph-report}
-
-Serve a read-only reporting dashboard over run artifacts (`run_summary.jsonl` plus step `.out` / `.err` files). No database; the server indexes and tails summary files the runtime already writes.
-
-```bash
-jaiph report [start|stop|status] [--host <addr>] [--port <n>] [--poll-ms <n>] [--runs-dir <path>] [--workspace <path>] [--pid-file <path>]
-```
-
-**Commands:**
-
-- **`start`** — start server in foreground and block until `Ctrl+C` (default when omitted).
-- **`stop`** — stop the server process referenced by the PID file.
-- **`status`** — check if the PID-referenced server is running.
-
-**Options:**
-
-- **`--host`** — bind address (default `127.0.0.1`).
-- **`--port`** — listen port (default `8787`).
-- **`--poll-ms`** — summary tail loop interval in milliseconds (default `500`, minimum `50`).
-- **`--runs-dir`** — runs root directory. Uses `JAIPH_REPORT_RUNS_DIR` if set, otherwise `<workspace>/.jaiph/runs`.
-- **`--workspace`** — project directory for resolving the default runs path (default: current working directory).
-- **`--pid-file`** — PID file path for `status`/`stop` (default `<workspace>/.jaiph/report.pid`).
-
-The server discovers runs under `<YYYY-MM-DD>/<time>-<source>/run_summary.jsonl`, caches directory scans, and tails each summary with byte-offset tracking so updates appear live without rereading whole files. HTTP API and UI details: [Reporting server](reporting.md).
-
 ## File extension
 
 **`.jh`** is the file extension for Jaiph source files. Use it for entrypoints, imports, and all CLI commands (`run`, `test`). Import resolution appends `.jh` when the path omits the extension.
@@ -451,14 +426,6 @@ These variables apply to `jaiph run` and workflow execution. Variables marked **
 - `JAIPH_DOCKER_TIMEOUT` — execution timeout in seconds (overrides in-file `runtime.docker_timeout`).
 
 For `JAIPH_DOCKER_*` defaults, image selection, mounts, and container behavior, see [Sandboxing](sandboxing.md).
-
-### `jaiph report`
-
-- `JAIPH_REPORT_HOST` — bind address (default `127.0.0.1`).
-- `JAIPH_REPORT_PORT` — port (default `8787`).
-- `JAIPH_REPORT_POLL_MS` — summary tail loop interval in ms (default `500`, minimum `50`).
-- `JAIPH_REPORT_RUNS_DIR` — runs root (default `<cwd>/.jaiph/runs` unless `--runs-dir` / `--workspace` override).
-- `JAIPH_REPORT_PID_FILE` — PID file for `status`/`stop` (default `<workspace>/.jaiph/report.pid`).
 
 ### Install and `jaiph use`
 

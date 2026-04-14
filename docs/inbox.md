@@ -343,8 +343,8 @@ their declared parameter names.
   Use `log` inside the receiver to surface lines in the tree. The runtime
   embeds stdout in `STEP_END` (`out_content`) with the same JSON escaping
   rules as other steps.
-- For a browsable history of past runs, use [`jaiph report`](cli.md#jaiph-report)
-  (see [Reporting server](reporting.md)).
+- Run artifacts and `run_summary.jsonl` provide a browsable history of past runs
+  (see [CLI — Run artifacts](cli.md#run-artifacts-and-live-output)).
 
 ### Example output
 

@@ -5,7 +5,6 @@ import { runWorkflow } from "./commands/run";
 import { runTest } from "./commands/test";
 import { runInit } from "./commands/init";
 import { runUse } from "./commands/use";
-import { runReportCommand } from "./commands/report";
 import { runFormat } from "./commands/format";
 import { runInstall } from "./commands/install";
 import { runCompile } from "./commands/compile";
@@ -47,9 +46,6 @@ export async function main(argv: string[]): Promise<number> {
     }
     if (cmd === "compile") {
       return runCompile(rest);
-    }
-    if (cmd === "report") {
-      return runReportCommand(rest);
     }
     process.stderr.write(`Unknown command: ${cmd}\n`);
     printUsage();

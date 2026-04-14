@@ -74,16 +74,6 @@ Each run writes artifacts under `.jaiph/runs/<date>/<time>-<source>/`:
 
 Run `jaiph init` to add `.jaiph/.gitignore` (it ignores `runs` and `tmp` under `.jaiph/`). You can also list those paths in a root `.gitignore` if you prefer.
 
-### Reporting
-
-View run history, step trees, and logs in a local web UI:
-
-```bash
-jaiph report --workspace .
-```
-
-See [Reporting](reporting.md) for details.
-
 ### Formatting
 
 Enforce consistent style across `.jh` files:
@@ -217,6 +207,5 @@ workflow default(task) {
 - [Hooks](hooks.md) — lifecycle event automation
 - [Inbox & Dispatch](inbox.md) — channel messaging between workflows
 - [Sandboxing](sandboxing.md) — Docker isolation
-- [Reporting](reporting.md) — run history web UI
 - [Architecture](architecture.md) — system structure, execution flow, contracts
 - [Contributing](contributing.md) — development setup, testing philosophy

@@ -15,8 +15,8 @@
   },
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "tsc -p tsconfig.json && node -e \"require('node:fs').cpSync('src/runtime','dist/src/runtime',{recursive:true}); require('node:fs').cpSync('src/reporting/public','dist/src/reporting/public',{recursive:true})\"",
-    "build:standalone": "npm run build && node -e \"const fs=require('node:fs'); fs.cpSync('dist/src/runtime','dist/runtime',{recursive:true}); fs.cpSync('dist/src/reporting/public','dist/reporting/public',{recursive:true});\" && bun build --compile ./src/cli.ts --outfile ./dist/jaiph",
+    "build": "tsc -p tsconfig.json && node -e \"require('node:fs').cpSync('src/runtime','dist/src/runtime',{recursive:true})\"",
+    "build:standalone": "npm run build && node -e \"const fs=require('node:fs'); fs.cpSync('dist/src/runtime','dist/runtime',{recursive:true});\" && bun build --compile ./src/cli.ts --outfile ./dist/jaiph",
     "test:compiler": "npm run build && node --test dist/src/compiler-test-runner.js",
     "test:golden-ast": "npm run build && node --test dist/src/golden-ast-runner.js",
     "test": "npm run clean && npm run build && NODE_OPTIONS='--max-old-space-size=32768 --enable-source-maps' node --test dist/test/*.test.js $(find dist/src -name '*.test.js' -o -name '*.acceptance.test.js') dist/src/compiler-test-runner.js dist/src/golden-ast-runner.js",
@@ -25,8 +25,7 @@
     "test:acceptance": "npm run test:acceptance:compiler && npm run test:acceptance:runtime",
     "test:ci": "npm test && npm run test:e2e",
     "test:e2e": "npm run build && bash ./e2e/test_all.sh",
-    "test:samples": "npx playwright test",
-    "report": "npm run build && node dist/src/reporting/cli.js"
+    "test:samples": "npx playwright test"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
