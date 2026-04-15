@@ -434,7 +434,10 @@ export function spawnDockerProcess(opts: DockerSpawnOptions): DockerSpawnResult 
   const dockerArgs = buildDockerArgs(opts, generatedDir);
 
   const child = spawn("docker", dockerArgs, {
-    stdio: "pipe",
+    // stdin must be "ignore": Docker may block waiting for stdin EOF even
+    // without -i, which prevents the process from exiting after the container
+    // stops and breaks live event streaming on stdout/stderr.
+    stdio: ["ignore", "pipe", "pipe"],
     cwd: opts.workspaceRoot,
     env: opts.env,
   });

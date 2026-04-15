@@ -104,6 +104,8 @@ The CLI also mounts the host directory containing the run meta file at `/jaiph/m
 
 **Container flags** -- `docker run --rm` (no `-t`). The pseudo-TTY flag is intentionally omitted: Docker's `-t` merges stderr into stdout, which would break the `__JAIPH_EVENT__` stderr-only live contract between the container and the host CLI. Without `-t`, events stay on stderr where the CLI parses and renders them as the progress tree — the same channel used for local runs. On Linux, UID/GID mapping (`--user $(id -u):$(id -g)`) is applied when the `id` command succeeds; other platforms omit `--user`.
 
+**stdin** -- The Docker process is spawned with stdin set to `ignore` (`stdio: ["ignore", "pipe", "pipe"]`). Docker may block waiting for an stdin EOF even without the `-i` flag; ignoring stdin ensures the Docker CLI exits promptly when the container stops and that live event streaming on stdout/stderr is not stalled. This prevents the host CLI from hanging in a `RUNNING` state after the container has already exited.
+
 **Events** -- The runner writes `__JAIPH_EVENT__` JSON to stderr, the same channel used for local runs. The CLI listens on stderr only; stdout carries plain script output. `STEP_END` events embed `out_content` (and `err_content` on failure) so consumers do not need host paths to step artifact files. Embedded content is capped at 1 MiB; larger output is truncated with a `[truncated]` marker while full logs remain on disk.
 
 **Network** -- `"default"` omits `--network` (Docker's default bridge). `"none"` passes `--network none`. Any other value is passed through as-is.
@@ -121,7 +123,7 @@ When the image is not explicit:
 1. If `.jaiph/Dockerfile` exists in the workspace root, the runtime builds it, tags the result `jaiph-runtime:latest`, and uses that image. Build failure produces `E_DOCKER_BUILD`.
 2. Otherwise, the default image (`node:20-bookworm`) is pulled if needed.
 
-The repository's example `.jaiph/Dockerfile` includes `ubuntu:latest` as a base, Node.js LTS from NodeSource, Claude Code CLI, cursor-agent, and common utilities (`bash`, `curl`, `git`, `ca-certificates`, `gnupg`).
+The repository's example `.jaiph/Dockerfile` includes `ubuntu:latest` as a base, Node.js LTS from NodeSource, Claude Code CLI, cursor-agent, and common utilities (`bash`, `curl`, `git`, `ca-certificates`, `gnupg`). The image creates a non-root `jaiph` user (UID 10001) and sets `USER jaiph` — this is required because tools like Claude Code refuse `--dangerously-skip-permissions` when running as root. On macOS, where Jaiph does not pass `--user` to `docker run`, the image's `USER` directive provides the non-root default. The Jaiph CLI (`nightly` channel) is also installed inside the image.
 
 ### Environment variable forwarding
 

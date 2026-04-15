@@ -12,6 +12,45 @@ Process rules:
 
 ---
 
+## CLI — `jaiph init` emits invalid `prompt` string (needs triple quotes) #dev-ready
+
+**Goal**  
+`jaiph init` must generate workflows that compile. It currently emits a multi-line `prompt` using a single `"..."` string literal with embedded newlines, which is not valid Jaiph syntax for that form. The bootstrap workflow should use a **triple-quoted** string (`""" ... """`) so the generated `.jh` file parses and compiles.
+
+**Context**
+
+- Observed emitted snippet (broken): `workflow default() { prompt "\n    You are bootstrapping...\n  " }` — double quotes cannot span multiple lines as emitted.
+- Expected: `prompt """ ... """` (or equivalent language-supported multiline string) with the same semantic content (bootstrap guide path `.jaiph/SKILL.md`, ordered tasks 1–5, usage with `jaiph run`).
+
+**Acceptance criteria**
+
+- Running `jaiph init` (or the code path that materializes the default bootstrap workflow) produces compilable Jaiph source.
+- Regression: test or snapshot that the init template uses triple-quoted `prompt` (or documented multiline form) and `jaiph check` / compile succeeds on the generated file.
+
+---
+
+## Init — `.jaiph/Dockerfile` + bootstrap prompt (Jaiph install + project sandbox) #dev-ready
+
+**Goal**  
+`jaiph init` should materialize a `.jaiph/Dockerfile` in the target repository that matches the **shape** of Jaiph’s own `.jaiph/Dockerfile` (Ubuntu base, curl/git/ca-certificates, Node LTS, agent CLIs as needed), but must install **Jaiph itself** via the default install path: `curl -fsSL https://jaiph.org/install | bash`, so Docker-mode workflows run with a proper Jaiph toolchain inside the sandbox.
+
+Enrich the **bootstrap workflow prompt** so the agent is explicitly asked to **review and update** `.jaiph/Dockerfile` for the **current project** — that file defines the container sandbox (runtimes, package managers, build tools) and must be aligned with how this repo is built and tested.
+
+Extend the bootstrap workflow so it **logs informational messages at the end** summarizing **what** was changed (files, key edits) and **why** (tie each change to repo structure, tests, or sandbox needs).
+
+**Context**
+
+- Reference Dockerfile in this repo: `.jaiph/Dockerfile` — use as a template baseline, not a blind copy; init output should swap in Jaiph install via `jaiph.org/install` and leave room for project-specific layers.
+- Docker mode and image selection already point at `.jaiph/Dockerfile` in runtime docs and kernel.
+
+**Acceptance criteria**
+
+- Init creates or updates `.jaiph/Dockerfile` with Jaiph installed via `curl -fsSL https://jaiph.org/install | bash` (document any ordering constraints vs Node/agents).
+- Bootstrap `prompt` instructs updating the Dockerfile for this repo’s sandbox needs.
+- Bootstrap workflow ends with clear `log` (or equivalent) lines: what changed, why — suitable for a human scanning CI or local run output.
+
+---
+
 ## Runtime — credential proxy for Docker mode
 
 **Goal**  

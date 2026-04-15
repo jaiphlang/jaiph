@@ -13,6 +13,7 @@ import "./git.jh" as git
 config {
   # agent.backend = "cursor"
   # agent.default_model = "gpt-5.3-codex"
+  # agent.cursor_flags = "--force"
   agent.backend = "claude"
   agent.claude_flags = "--permission-mode bypassPermissions"
 }

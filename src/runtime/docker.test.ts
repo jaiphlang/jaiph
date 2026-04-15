@@ -605,6 +605,21 @@ test("buildDockerArgs: does not forward undefined agent env vars", () => {
 });
 
 // ---------------------------------------------------------------------------
+// spawnDockerProcess: stdin must be ignored
+// ---------------------------------------------------------------------------
+
+test("spawnDockerProcess: stdin is ignored to prevent hang on container exit", () => {
+  // We cannot call spawnDockerProcess without Docker, but we verify the
+  // design contract: the spawn call must use ["ignore", "pipe", "pipe"]
+  // instead of "pipe" to prevent the Docker CLI from blocking on stdin.
+  const src = readFileSync(join(__dirname, "docker.ts"), "utf8");
+  assert.ok(
+    src.includes('["ignore", "pipe", "pipe"]'),
+    "spawnDockerProcess must use stdio: [\"ignore\", \"pipe\", \"pipe\"] to prevent stdin hang",
+  );
+});
+
+// ---------------------------------------------------------------------------
 // resolveImage
 // ---------------------------------------------------------------------------
 
