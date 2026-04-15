@@ -4,6 +4,7 @@ import { mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from "node
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { runInit } from "./init";
+import { parsejaiph } from "../../parser";
 
 const CANONICAL_GITIGNORE = "runs\ntmp\n";
 
@@ -30,6 +31,19 @@ test("init: second run succeeds when .gitignore matches template", () => {
   try {
     assert.equal(runInit([dir]), 0);
     assert.equal(runInit([dir]), 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("init: generated bootstrap uses triple-quoted prompt and parses", () => {
+  const dir = makeTempDir();
+  try {
+    assert.equal(runInit([dir]), 0);
+    const bootstrapPath = join(dir, ".jaiph", "bootstrap.jh");
+    const source = readFileSync(bootstrapPath, "utf8");
+    assert.equal(source.includes('prompt """'), true);
+    assert.doesNotThrow(() => parsejaiph(source, bootstrapPath));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

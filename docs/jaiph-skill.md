@@ -21,7 +21,7 @@ The **JS kernel** (`src/runtime/kernel/`) handles **prompt** execution, **manage
 
 **Test lane:** `jaiph test` runs **`*.test.jh`** in-process (`node-test-runner.ts`): **`buildScripts(workspace)`**, then **`buildRuntimeGraph(testFile)` once per file**, mocks, and assertions — same `NodeWorkflowRuntime` as `jaiph run`.
 
-**After `jaiph init`**, a repository gets `.jaiph/bootstrap.jh` (a prompt that tells the agent to read `.jaiph/SKILL.md`) and a copy of this file. The expected outcome is a **minimal workflow set** for safe feature work: preflight checks, an implementation workflow, verification, and a `workflow default` entrypoint that wires them together (with an optional human-or-agent “review” step when you use a task queue).
+**After `jaiph init`**, a repository gets `.jaiph/bootstrap.jh` (a triple-quoted prompt that tells the agent to read `.jaiph/SKILL.md`) and a copy of this file. The expected outcome is a **minimal workflow set** for safe feature work: preflight checks, an implementation workflow, verification, and a `workflow default` entrypoint that wires them together (with an optional human-or-agent “review” step when you use a task queue).
 
 **Concepts:**
 
@@ -209,7 +209,7 @@ test "handles failure gracefully" {
 
 ## Suggested Starter Layout
 
-- `.jaiph/bootstrap.jh` — Created by `jaiph init`; contains a single prompt that points the agent at `.jaiph/SKILL.md` (a copy of this guide).
+- `.jaiph/bootstrap.jh` — Created by `jaiph init`; contains a single triple-quoted prompt (`prompt """ ... """`) that points the agent at `.jaiph/SKILL.md` (a copy of this guide).
 - `.jaiph/readiness.jh` — Preflight: rules and `workflow default` that runs readiness checks.
 - `.jaiph/ba_review.jh` (or any name you choose) — (Optional) Pre-implementation review: reads tasks from a queue file, sends one to an agent for review, and marks it dev-ready or exits with questions. This repository uses `.jaiph/architect_review.jh` with `QUEUE.md`.
 - `.jaiph/verification.jh` — Verification: rules and `workflow default` for lint/test/build.

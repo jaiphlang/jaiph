@@ -7,7 +7,7 @@ const BOOTSTRAP_TEMPLATE = `#!/usr/bin/env jaiph
 
 # Bootstraps Jaiph workflows for this repository.
 workflow default() {
-  prompt "
+  prompt """
     You are bootstrapping Jaiph for this repository.
     First, read the Jaiph agent bootstrap guide at:
     .jaiph/SKILL.md
@@ -21,7 +21,7 @@ workflow default() {
        - verification workflow (tests/lint/build)
     4) Keep workflows minimal, composable, and specific to this project.
     5) Print a short usage guide with exact jaiph run commands.
-  "
+  """
 }
 `;
 
