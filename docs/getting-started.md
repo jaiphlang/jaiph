@@ -97,7 +97,8 @@ jaiph init
 This creates a `.jaiph/` directory in your project root with:
 
 - `.jaiph/.gitignore` — ignores ephemeral `runs/` and `tmp/` under `.jaiph/` (workflows and libraries stay tracked)
-- `.jaiph/bootstrap.jh` — an interactive workflow that asks an agent to scaffold recommended workflows for your project; its bootstrap prompt is emitted as a triple-quoted multiline string (`prompt """ ... """`) so the file is valid Jaiph source out of the box
+- `.jaiph/bootstrap.jh` — an interactive workflow that asks an agent to scaffold recommended workflows for your project. The generated template uses a triple-quoted multiline prompt (`prompt """ ... """`), explicitly asks the agent to review/update `.jaiph/Dockerfile` for this repository's sandbox needs, and logs a final summary of what changed and why
+- `.jaiph/Dockerfile` — generated project sandbox image template (`ubuntu:latest`, common utilities, Node.js LTS, Claude Code CLI, cursor-agent). It installs Jaiph with the default installer path: `curl -fsSL https://jaiph.org/install | bash`
 - `.jaiph/SKILL.md` — the agent skill file for AI assistants authoring `.jh` workflows (from your Jaiph installation, or `JAIPH_SKILL_PATH`)
 
 Run the bootstrap workflow to get started:

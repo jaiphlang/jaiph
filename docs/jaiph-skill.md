@@ -21,7 +21,7 @@ The **JS kernel** (`src/runtime/kernel/`) handles **prompt** execution, **manage
 
 **Test lane:** `jaiph test` runs **`*.test.jh`** in-process (`node-test-runner.ts`): **`buildScripts(workspace)`**, then **`buildRuntimeGraph(testFile)` once per file**, mocks, and assertions — same `NodeWorkflowRuntime` as `jaiph run`.
 
-**After `jaiph init`**, a repository gets `.jaiph/bootstrap.jh` (a triple-quoted prompt that tells the agent to read `.jaiph/SKILL.md`) and a copy of this file. The expected outcome is a **minimal workflow set** for safe feature work: preflight checks, an implementation workflow, verification, and a `workflow default` entrypoint that wires them together (with an optional human-or-agent “review” step when you use a task queue).
+**After `jaiph init`**, a repository gets `.jaiph/bootstrap.jh` (a triple-quoted prompt that tells the agent to read `.jaiph/SKILL.md`), `.jaiph/Dockerfile` (project sandbox image template), and a copy of this file. The bootstrap prompt explicitly asks the agent to review/update `.jaiph/Dockerfile` for the current repo and to end with a clear `WHAT CHANGED` + `WHY` summary. The expected outcome is a **minimal workflow set** for safe feature work: preflight checks, an implementation workflow, verification, and a `workflow default` entrypoint that wires them together (with an optional human-or-agent “review” step when you use a task queue).
 
 **Concepts:**
 
@@ -53,7 +53,7 @@ Use this loop whenever you add or change Jaiph workflows so failures surface bef
 | `jaiph run <file.jh> [args...]` | Execute `workflow default` in the given file |
 | `jaiph test [path]` | Run `*.test.jh` test files (workspace, directory, or single file) |
 | `jaiph format [--check] <file.jh ...>` | Reformat `.jh` files (or verify formatting without writing) |
-| `jaiph init [workspace]` | Scaffold `.jaiph/` with bootstrap workflow and skill file |
+| `jaiph init [workspace]` | Scaffold `.jaiph/` with bootstrap workflow, Dockerfile template, and skill file |
 | `jaiph install [url[@version]]` | Install or restore project-scoped libraries under `.jaiph/libs/` |
 | `jaiph use <version\|nightly>` | Reinstall Jaiph at a specific version or nightly |
 
@@ -79,11 +79,12 @@ Ignore any outdated Markdown that contradicts the above.
 
 A **minimal workflow set** under `.jaiph/` that matches the delivery loop above:
 
-1. **Preflight** — Rules and `ensure` for repo state and required tools (e.g. clean git, required binaries). Expose a small workflow (e.g. `workflow default` in `readiness.jh`) that runs these checks.
-2. **Review (optional)** — A workflow that reviews queued tasks before development starts (any filename, e.g. `ba_review.jh`). An agent prompt evaluates the next task for clarity, consistency, conflicts, and feasibility, then either marks it as ready or exits with questions. The implementation workflow gates on this marker so unreviewed tasks cannot proceed. This repository’s `.jaiph/architect_review.jh` is one concrete example; it uses `QUEUE.md` as the task queue.
-3. **Implementation** — A workflow that drives coding changes (typically via `prompt`), e.g. `workflow implement` in `main.jh`. When using a task queue, the implementation workflow should check that the first task is marked as ready (e.g. via a `<!-- dev-ready -->` marker) before proceeding.
-4. **Verification** — Rules and a `workflow default` for lint/test/build (e.g. `verification.jh`). Complement this with repo-native `*.test.jh` suites run by `jaiph test` where appropriate.
-5. **Entrypoint** — A single `workflow default` (e.g. in `.jaiph/main.jh`) that runs: preflight → (optional) review → implementation → verification. This is what `jaiph run .jaiph/main.jh "..."` executes.
+1. **Sandbox baseline** — Review/update `.jaiph/Dockerfile` first so container execution matches the repository's actual build/test/runtime/tooling needs. Keep Jaiph installed via `curl -fsSL https://jaiph.org/install | bash`.
+2. **Preflight** — Rules and `ensure` for repo state and required tools (e.g. clean git, required binaries). Expose a small workflow (e.g. `workflow default` in `readiness.jh`) that runs these checks.
+3. **Review (optional)** — A workflow that reviews queued tasks before development starts (any filename, e.g. `ba_review.jh`). An agent prompt evaluates the next task for clarity, consistency, conflicts, and feasibility, then either marks it as ready or exits with questions. The implementation workflow gates on this marker so unreviewed tasks cannot proceed. This repository’s `.jaiph/architect_review.jh` is one concrete example; it uses `QUEUE.md` as the task queue.
+4. **Implementation** — A workflow that drives coding changes (typically via `prompt`), e.g. `workflow implement` in `main.jh`. When using a task queue, the implementation workflow should check that the first task is marked as ready (e.g. via a `<!-- dev-ready -->` marker) before proceeding.
+5. **Verification** — Rules and a `workflow default` for lint/test/build (e.g. `verification.jh`). Complement this with repo-native `*.test.jh` suites run by `jaiph test` where appropriate.
+6. **Entrypoint** — A single `workflow default` (e.g. in `.jaiph/main.jh`) that runs: preflight → (optional) review → implementation → verification. This is what `jaiph run .jaiph/main.jh "..."` executes.
 
 Prefer composable modules over one large file.
 
@@ -210,6 +211,7 @@ test "handles failure gracefully" {
 ## Suggested Starter Layout
 
 - `.jaiph/bootstrap.jh` — Created by `jaiph init`; contains a single triple-quoted prompt (`prompt """ ... """`) that points the agent at `.jaiph/SKILL.md` (a copy of this guide).
+- `.jaiph/Dockerfile` — Created by `jaiph init`; base Docker sandbox template. Review and tailor runtime/build/test tooling to the current repository.
 - `.jaiph/readiness.jh` — Preflight: rules and `workflow default` that runs readiness checks.
 - `.jaiph/ba_review.jh` (or any name you choose) — (Optional) Pre-implementation review: reads tasks from a queue file, sends one to an agent for review, and marks it dev-ready or exits with questions. This repository uses `.jaiph/architect_review.jh` with `QUEUE.md`.
 - `.jaiph/verification.jh` — Verification: rules and `workflow default` for lint/test/build.

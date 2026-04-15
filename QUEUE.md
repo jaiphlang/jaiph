@@ -12,28 +12,6 @@ Process rules:
 
 ---
 
-## Init — `.jaiph/Dockerfile` + bootstrap prompt (Jaiph install + project sandbox) #dev-ready
-
-**Goal**  
-`jaiph init` should materialize a `.jaiph/Dockerfile` in the target repository that matches the **shape** of Jaiph’s own `.jaiph/Dockerfile` (Ubuntu base, curl/git/ca-certificates, Node LTS, agent CLIs as needed), but must install **Jaiph itself** via the default install path: `curl -fsSL https://jaiph.org/install | bash`, so Docker-mode workflows run with a proper Jaiph toolchain inside the sandbox.
-
-Enrich the **bootstrap workflow prompt** so the agent is explicitly asked to **review and update** `.jaiph/Dockerfile` for the **current project** — that file defines the container sandbox (runtimes, package managers, build tools) and must be aligned with how this repo is built and tested.
-
-Extend the bootstrap workflow so it **logs informational messages at the end** summarizing **what** was changed (files, key edits) and **why** (tie each change to repo structure, tests, or sandbox needs).
-
-**Context**
-
-- Reference Dockerfile in this repo: `.jaiph/Dockerfile` — use as a template baseline, not a blind copy; init output should swap in Jaiph install via `jaiph.org/install` and leave room for project-specific layers.
-- Docker mode and image selection already point at `.jaiph/Dockerfile` in runtime docs and kernel.
-
-**Acceptance criteria**
-
-- Init creates or updates `.jaiph/Dockerfile` with Jaiph installed via `curl -fsSL https://jaiph.org/install | bash` (document any ordering constraints vs Node/agents).
-- Bootstrap `prompt` instructs updating the Dockerfile for this repo’s sandbox needs.
-- Bootstrap workflow ends with clear `log` (or equivalent) lines: what changed, why — suitable for a human scanning CI or local run output.
-
----
-
 ## Runtime — credential proxy for Docker mode
 
 **Goal**  
