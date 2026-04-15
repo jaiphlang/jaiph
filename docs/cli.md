@@ -303,7 +303,7 @@ jaiph init [workspace-path]
 Creates:
 
 - `.jaiph/.gitignore` — lists `runs` and `tmp`. If the file already exists and does not match this exact list, `jaiph init` exits with a non-zero status.
-- `.jaiph/bootstrap.jh` — canonical bootstrap workflow; made executable. If the file already exists and does not match the built-in template, `jaiph init` exits with a non-zero status.
+- `.jaiph/bootstrap.jh` — canonical bootstrap workflow; made executable. The template uses a triple-quoted multiline prompt body (`prompt """ ... """`) so the generated file parses and compiles as valid Jaiph. If the file already exists and does not match the built-in template, `jaiph init` exits with a non-zero status.
 - `.jaiph/SKILL.md` — copied from the skill file bundled with your Jaiph installation (or from `JAIPH_SKILL_PATH` when set). If no skill file is found, this file is not written and a note is printed.
 
 ## `jaiph install`

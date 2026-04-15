@@ -12,23 +12,6 @@ Process rules:
 
 ---
 
-## CLI — `jaiph init` emits invalid `prompt` string (needs triple quotes) #dev-ready
-
-**Goal**  
-`jaiph init` must generate workflows that compile. It currently emits a multi-line `prompt` using a single `"..."` string literal with embedded newlines, which is not valid Jaiph syntax for that form. The bootstrap workflow should use a **triple-quoted** string (`""" ... """`) so the generated `.jh` file parses and compiles.
-
-**Context**
-
-- Observed emitted snippet (broken): `workflow default() { prompt "\n    You are bootstrapping...\n  " }` — double quotes cannot span multiple lines as emitted.
-- Expected: `prompt """ ... """` (or equivalent language-supported multiline string) with the same semantic content (bootstrap guide path `.jaiph/SKILL.md`, ordered tasks 1–5, usage with `jaiph run`).
-
-**Acceptance criteria**
-
-- Running `jaiph init` (or the code path that materializes the default bootstrap workflow) produces compilable Jaiph source.
-- Regression: test or snapshot that the init template uses triple-quoted `prompt` (or documented multiline form) and `jaiph check` / compile succeeds on the generated file.
-
----
-
 ## Init — `.jaiph/Dockerfile` + bootstrap prompt (Jaiph install + project sandbox) #dev-ready
 
 **Goal**  

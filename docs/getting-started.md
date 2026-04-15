@@ -97,7 +97,7 @@ jaiph init
 This creates a `.jaiph/` directory in your project root with:
 
 - `.jaiph/.gitignore` — ignores ephemeral `runs/` and `tmp/` under `.jaiph/` (workflows and libraries stay tracked)
-- `.jaiph/bootstrap.jh` — an interactive workflow that asks an agent to scaffold recommended workflows for your project
+- `.jaiph/bootstrap.jh` — an interactive workflow that asks an agent to scaffold recommended workflows for your project; its bootstrap prompt is emitted as a triple-quoted multiline string (`prompt """ ... """`) so the file is valid Jaiph source out of the box
 - `.jaiph/SKILL.md` — the agent skill file for AI assistants authoring `.jh` workflows (from your Jaiph installation, or `JAIPH_SKILL_PATH`)
 
 Run the bootstrap workflow to get started:
