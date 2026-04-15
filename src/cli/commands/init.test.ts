@@ -7,6 +7,7 @@ import { runInit } from "./init";
 import { parsejaiph } from "../../parser";
 
 const CANONICAL_GITIGNORE = "runs\ntmp\n";
+const JAIPH_INSTALL_COMMAND = "curl -fsSL https://jaiph.org/install | bash";
 
 function makeTempDir(): string {
   const dir = join(tmpdir(), `jaiph-init-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -44,6 +45,22 @@ test("init: generated bootstrap uses triple-quoted prompt and parses", () => {
     const source = readFileSync(bootstrapPath, "utf8");
     assert.equal(source.includes('prompt """'), true);
     assert.doesNotThrow(() => parsejaiph(source, bootstrapPath));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("init: creates .jaiph/Dockerfile with jaiph installer", () => {
+  const dir = makeTempDir();
+  try {
+    assert.equal(runInit([dir]), 0);
+    const dockerfilePath = join(dir, ".jaiph", "Dockerfile");
+    assert.equal(existsSync(dockerfilePath), true);
+    const dockerfile = readFileSync(dockerfilePath, "utf8");
+    assert.equal(dockerfile.includes("FROM ubuntu:latest"), true);
+    assert.equal(dockerfile.includes("ca-certificates"), true);
+    assert.equal(dockerfile.includes("setup_lts.x"), true);
+    assert.equal(dockerfile.includes(JAIPH_INSTALL_COMMAND), true);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

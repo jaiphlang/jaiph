@@ -426,9 +426,9 @@ Jaiph: Running async.jh
                     plus <code>run_summary.jsonl</code>, an append-only JSONL event stream for reporting). Keep those
                     out of
                     git: <code>jaiph init</code> writes <code>.jaiph/.gitignore</code> (listing <code>runs</code> and
-                    <code>tmp</code>) so ephemeral data stays untracked while workflows remain committable. See the
-                    <a href="cli#run-summary-jsonl">CLI reference</a> for event types, field requirements, and
-                    correlation rules.
+                    <code>tmp</code>), a bootstrap workflow, and a starter <code>.jaiph/Dockerfile</code> for sandboxed
+                    runs. See the <a href="cli#run-summary-jsonl">CLI reference</a> for event types, field requirements,
+                    and correlation rules.
                 </p>
 
                 <h3>Language</h3>

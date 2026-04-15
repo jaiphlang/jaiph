@@ -123,7 +123,7 @@ When the image is not explicit:
 1. If `.jaiph/Dockerfile` exists in the workspace root, the runtime builds it, tags the result `jaiph-runtime:latest`, and uses that image. Build failure produces `E_DOCKER_BUILD`.
 2. Otherwise, the default image (`node:20-bookworm`) is pulled if needed.
 
-The repository's example `.jaiph/Dockerfile` includes `ubuntu:latest` as a base, Node.js LTS from NodeSource, Claude Code CLI, cursor-agent, and common utilities (`bash`, `curl`, `git`, `ca-certificates`, `gnupg`). The image creates a non-root `jaiph` user (UID 10001) and sets `USER jaiph` — this is required because tools like Claude Code refuse `--dangerously-skip-permissions` when running as root. On macOS, where Jaiph does not pass `--user` to `docker run`, the image's `USER` directive provides the non-root default. The Jaiph CLI (`nightly` channel) is also installed inside the image.
+The repository's example `.jaiph/Dockerfile` includes `ubuntu:latest` as a base, Node.js LTS from NodeSource, Claude Code CLI, cursor-agent, and common utilities (`bash`, `curl`, `git`, `ca-certificates`, `gnupg`). The image creates a non-root `jaiph` user (UID 10001) and sets `USER jaiph` — this is required because tools like Claude Code refuse `--dangerously-skip-permissions` when running as root. On macOS, where Jaiph does not pass `--user` to `docker run`, the image's `USER` directive provides the non-root default. Jaiph itself is installed with the default installer path (`curl -fsSL https://jaiph.org/install | bash`) after Node and agent CLIs are present, so Docker-mode workflows have a complete toolchain inside the sandbox.
 
 ### Environment variable forwarding
 
