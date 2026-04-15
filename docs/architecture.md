@@ -56,7 +56,7 @@ All orchestration — local `jaiph run`, `jaiph test`, and **Docker `jaiph run`*
   - `jaiph format` rewrites `.jh` / `.test.jh` files into canonical style. Pure AST→text emitter; no side-effects beyond file writes.
 
 - **Docker runtime helper (`src/runtime/docker.ts`)**
-  - Parses mount specs, resolves Docker config (image, network, timeout), and builds the `docker run` invocation used by `jaiph run --docker`. The container runs the same `node-workflow-runner` process as local execution.
+  - Parses mount specs, resolves Docker config (image, network, timeout), and builds the `docker run` invocation used by `jaiph run --docker`. The container runs the same `node-workflow-runner` process as local execution. The spawn call uses `stdio: ["ignore", "pipe", "pipe"]` — stdin is ignored to prevent the Docker CLI from blocking on stdin EOF, which would stall event streaming and cause the host CLI to hang after the container exits.
 
 ## Runtime vs CLI responsibilities
 

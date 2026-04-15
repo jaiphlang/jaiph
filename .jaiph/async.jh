@@ -1,0 +1,21 @@
+#!/usr/bin/env jaiph
+
+const prompt_text = "Say: Greetings! I am [model name]."
+
+workflow cursor_say_hello(name) {
+  config { agent.backend = "cursor" }
+  const response = prompt "${prompt_text}"
+  log response
+}
+
+workflow claude_say_hello(name) {
+  config { agent.backend = "claude" }
+  const response = prompt "${prompt_text}"
+  log response
+}
+
+# surrounding workflow waits for all to complete
+workflow default(name) {
+  run async cursor_say_hello(name)
+  run async claude_say_hello(name)
+}
