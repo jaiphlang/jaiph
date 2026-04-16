@@ -30,7 +30,7 @@ import {
   resolveDockerConfig,
   spawnDockerProcess,
   cleanupDocker,
-  CONTAINER_WORKSPACE,
+  applyDelta,
 } from "../../runtime/docker";
 import {
   styleKeywordLabel,
@@ -83,9 +83,9 @@ export async function runWorkflow(rest: string[]): Promise<number> {
 
     const runtimeEnv = resolveRuntimeEnv(effectiveConfig, workspaceRoot, inputAbs);
     runtimeEnv.JAIPH_SOURCE_ABS = inputAbs;
-    const metaFile = join(outDir, `.jaiph-run-meta-${Date.now()}-${process.pid}.txt`);
     const { scriptsDir } = buildScripts(inputAbs, outDir, workspaceRoot);
     runtimeEnv.JAIPH_SCRIPTS = scriptsDir;
+    const metaFile = join(outDir, `.jaiph-run-meta-${Date.now()}-${process.pid}.txt`);
 
     // Set up event emitter and subscribers
     const emitter = createRunEmitter();
@@ -136,14 +136,17 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     const childExit = await waitForRunExit(execResult, () => signalHandlers.remove());
     drainBuffers(onLine, buf, ttyCtx);
 
+    // Apply delta from Docker container (extract changed files, deletions)
+    let dockerDelta: ReturnType<typeof applyDelta> | undefined;
     if (dockerResult) {
       const timedOut = dockerResult.timeoutTimer === undefined && activeDockerConfig.timeout > 0
         ? false
         : (Date.now() - startedAt) >= activeDockerConfig.timeout * 1000;
-      cleanupDocker(dockerResult);
       if (timedOut && childExit.status !== 0) {
         runState.capturedStderr += "E_TIMEOUT container execution exceeded timeout\n";
       }
+      dockerDelta = applyDelta(dockerResult.containerId, workspaceRoot);
+      cleanupDocker(dockerResult);
     }
 
     if (childExit.signal && runState.capturedStderr.trim().length === 0) {
@@ -163,7 +166,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     return reportResult(
       runState.capturedStderr, childExit.status, startedAt, runtimeEnv,
       emitter, runState.workflowRunId, inputAbs, workspaceRoot, metaFile,
-      dockerResult ? CONTAINER_WORKSPACE : undefined,
+      dockerDelta,
     );
   } finally {
     if (shouldCleanup) {
@@ -216,10 +219,8 @@ function spawnExec(
   if (dockerConfig.enabled) {
     dockerResult = spawnDockerProcess({
       config: dockerConfig,
-      scriptsDir: runtimeEnv.JAIPH_SCRIPTS ?? join(outDir, "scripts"),
       sourceAbs: runtimeEnv.JAIPH_SOURCE_ABS!,
       workspaceRoot,
-      metaFile,
       runArgs,
       env: runtimeEnv,
       isTTY,
@@ -314,32 +315,28 @@ function reportResult(
   inputAbs: string,
   workspaceRoot: string,
   metaFile: string,
-  containerWorkspace?: string,
+  dockerDelta?: { runDir?: string; summaryFile?: string },
 ): number {
   const elapsedMs = Date.now() - startedAt;
   const elapsedLabel = formatElapsedDuration(elapsedMs);
-  // In Docker mode, meta file contains container paths (e.g. /jaiph/workspace/...).
-  // Remap them to host paths so the CLI can read artifacts.
-  const remapPath = (p: string): string => {
-    if (!containerWorkspace) return p;
-    if (p.startsWith(containerWorkspace + "/")) {
-      return join(workspaceRoot, p.slice(containerWorkspace.length + 1));
-    }
-    if (p === containerWorkspace) return workspaceRoot;
-    return p;
-  };
   let runDir: string | undefined;
   let summaryFile: string | undefined;
-  if (existsSync(metaFile)) {
+
+  if (dockerDelta) {
+    // Docker mode: run artifacts were extracted via delta sync
+    runDir = dockerDelta.runDir;
+    summaryFile = dockerDelta.summaryFile;
+  } else if (existsSync(metaFile)) {
+    // Local mode: read run_dir/summary_file from meta file
     const metaLines = readFileSync(metaFile, "utf8").split(/\r?\n/);
     for (const line of metaLines) {
       if (line.startsWith("run_dir=")) {
         const value = line.slice("run_dir=".length).trim();
-        if (value) runDir = remapPath(value);
+        if (value) runDir = value;
       }
       if (line.startsWith("summary_file=")) {
         const value = line.slice("summary_file=".length).trim();
-        if (value) summaryFile = remapPath(value);
+        if (value) summaryFile = value;
       }
     }
   }

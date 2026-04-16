@@ -1,13 +1,16 @@
 FROM ubuntu:latest
 
-# Standard utilities
+# Standard utilities + fuse-overlayfs for CoW sandbox
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       bash \
       curl \
       git \
       ca-certificates \
-      gnupg && \
+      gnupg \
+      fuse-overlayfs \
+      fuse3 \
+      rsync && \
     rm -rf /var/lib/apt/lists/*
 
 # Node.js latest LTS (required by jaiph::stream_json_to_text in prompt.sh)
@@ -19,7 +22,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
 # when running as root. Jaiph only passes --user on Linux hosts; on macOS the container
 # defaults to root unless the image sets USER.
 RUN useradd --create-home --uid 10001 --shell /bin/bash jaiph && \
-    mkdir -p /jaiph/workspace && \
+    mkdir -p /jaiph/workspace /jaiph/workspace-ro /jaiph/delta/files && \
     chown -R jaiph:jaiph /jaiph
 
 # Claude Code CLI (Anthropic) — global install for all users
@@ -48,5 +51,10 @@ ENV PATH="/home/jaiph/.local/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 # jaiph (official installer: https://jaiph.org/install)
 RUN curl -fsSL https://jaiph.org/install | bash
 RUN jaiph use nightly
+
+# Overlay wrapper: sets up fuse-overlayfs CoW on top of ro workspace mount,
+# falls back to copy-on-start when FUSE is unavailable.
+COPY overlay-run.sh /jaiph/overlay-run.sh
+RUN chmod +x /jaiph/overlay-run.sh
 
 WORKDIR /jaiph/workspace
