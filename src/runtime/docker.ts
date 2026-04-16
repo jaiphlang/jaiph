@@ -1,7 +1,7 @@
 import { execSync, spawn, ChildProcess } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve, basename, dirname, relative, isAbsolute } from "node:path";
+import { join, resolve, dirname, relative, isAbsolute } from "node:path";
 import type { RuntimeConfig } from "../types";
 
 /** Parsed mount specification. */
@@ -212,85 +212,20 @@ export function resolveImage(config: DockerRunConfig, workspaceRoot: string): st
 }
 
 // ---------------------------------------------------------------------------
-// Generated directory setup
-// ---------------------------------------------------------------------------
-
-function copyExecutableScriptsDir(scriptsSrc: string, generatedDir: string): void {
-  if (!existsSync(scriptsSrc)) return;
-  const scriptsDest = join(generatedDir, "scripts");
-  mkdirSync(scriptsDest, { recursive: true });
-  for (const name of readdirSync(scriptsSrc)) {
-    const sf = join(scriptsSrc, name);
-    if (statSync(sf).isFile()) {
-      copyFileSync(sf, join(scriptsDest, name));
-    }
-  }
-}
-
-/**
- * Resolve the compiled dist/src root directory.
- * Works for both `node dist/src/cli.js` (tsc layout, __dirname = dist/src/runtime)
- * and Bun standalone (executable next to dist/).
- */
-function resolveDistSrcRoot(): string {
-  // __dirname is dist/src/runtime when running from tsc output
-  const fromModule = join(__dirname, "..");
-  if (existsSync(join(fromModule, "runtime", "kernel", "node-workflow-runner.js"))) return fromModule;
-  const nextToExec = join(dirname(process.execPath), "src");
-  if (existsSync(join(nextToExec, "runtime", "kernel", "node-workflow-runner.js"))) return nextToExec;
-  return fromModule;
-}
-
-function copyDirRecursive(src: string, dest: string): void {
-  mkdirSync(dest, { recursive: true });
-  for (const entry of readdirSync(src, { withFileTypes: true })) {
-    const srcPath = join(src, entry.name);
-    const destPath = join(dest, entry.name);
-    if (entry.isDirectory()) {
-      if (entry.name === "reporting") continue;
-      copyDirRecursive(srcPath, destPath);
-    } else if (entry.isFile() && entry.name.endsWith(".js")) {
-      copyFileSync(srcPath, destPath);
-    }
-  }
-}
-
-/**
- * Create a temp directory with scripts + compiled JS source tree,
- * to be mounted read-only at /jaiph/generated/ inside the container.
- * Node-orchestrated: no workflow .sh or jaiph_stdlib.sh needed.
- */
-export function prepareGeneratedDir(
-  scriptsDir: string,
-): string {
-  const generatedDir = mkdtempSync(join(tmpdir(), "jaiph-docker-gen-"));
-
-  // Copy extracted script step files
-  copyExecutableScriptsDir(scriptsDir, generatedDir);
-
-  // Copy compiled JS source tree (parser, types, transpile, runtime kernel)
-  const distSrc = resolveDistSrcRoot();
-  copyDirRecursive(distSrc, join(generatedDir, "src"));
-
-  return generatedDir;
-}
-
-// ---------------------------------------------------------------------------
 // Docker command builder
 // ---------------------------------------------------------------------------
 
 export interface DockerSpawnOptions {
   config: DockerRunConfig;
-  scriptsDir: string;
   sourceAbs: string;
   workspaceRoot: string;
-  metaFile: string;
   runArgs: string[];
   env: Record<string, string | undefined>;
   isTTY: boolean;
 }
 
 export const CONTAINER_WORKSPACE = "/jaiph/workspace";
+const CONTAINER_WORKSPACE_RO = "/jaiph/workspace-ro";
 const AGENT_ENV_PREFIXES = ["CURSOR_", "ANTHROPIC_", "CLAUDE_"] as const;
 
 /**
@@ -326,56 +261,51 @@ export function remapDockerEnv(
 }
 
 /**
- * Build the full `docker run` argument list.
+ * Remap mount container paths for the overlay layout.
+ * The primary workspace mount targets /jaiph/workspace-ro (read-only lower layer);
+ * additional mounts under /jaiph/workspace become /jaiph/workspace-ro sub-paths.
  */
-export function buildDockerArgs(opts: DockerSpawnOptions, generatedDir: string): string[] {
-  const args: string[] = ["run", "--rm"];
-
-  // No -t flag: the container runs a non-interactive Node process.
-  // Docker's -t merges stderr into stdout, which breaks the
-  // __JAIPH_EVENT__ stderr-only live contract between runtime and CLI.
-
-  // UID/GID mapping on Linux
-  if (process.platform === "linux") {
-    try {
-      const uid = execSync("id -u", { encoding: "utf8" }).trim();
-      const gid = execSync("id -g", { encoding: "utf8" }).trim();
-      args.push("--user", `${uid}:${gid}`);
-    } catch {
-      // Fall through without --user
-    }
+function overlayMountPath(containerPath: string): string {
+  if (containerPath === "/jaiph/workspace" || containerPath.replace(/\/+$/, "") === "/jaiph/workspace") {
+    return CONTAINER_WORKSPACE_RO;
   }
+  if (containerPath.startsWith("/jaiph/workspace/")) {
+    return CONTAINER_WORKSPACE_RO + containerPath.slice("/jaiph/workspace".length);
+  }
+  return containerPath;
+}
+
+/**
+ * Build the `docker create` argument list.
+ * Uses read-only workspace mount + fuse-overlayfs overlay (via /jaiph/overlay-run.sh).
+ */
+export function buildDockerArgs(opts: DockerSpawnOptions): string[] {
+  const args: string[] = ["create"];
+
+  // FUSE device for fuse-overlayfs CoW overlay
+  args.push("--device", "/dev/fuse");
+
+  // No -t flag: Docker's -t merges stderr into stdout, which breaks the
+  // __JAIPH_EVENT__ stderr-only live contract between runtime and CLI.
 
   // Network
   if (opts.config.network !== "default") {
     args.push("--network", opts.config.network);
   }
 
-  // Mount generated dir read-only at /jaiph/generated/
-  args.push("-v", `${generatedDir}:/jaiph/generated:ro`);
-
-  // User-specified mounts
+  // Workspace mounts — all forced to read-only, remapped to /jaiph/workspace-ro
   for (const mount of opts.config.mounts) {
     const hostAbs = resolve(opts.workspaceRoot, mount.hostPath);
-    args.push("-v", `${hostAbs}:${mount.containerPath}:${mount.mode}`);
+    const containerTarget = overlayMountPath(mount.containerPath);
+    args.push("-v", `${hostAbs}:${containerTarget}:ro`);
   }
-
-  // Mount meta file directory at a stable in-container path.
-  // Host temp paths like /var/folders/... can alias to /private/var/... on macOS,
-  // and reusing the host absolute path inside the container is brittle.
-  const metaDir = dirname(opts.metaFile);
-  const metaBase = basename(opts.metaFile);
-  const containerMetaDir = "/jaiph/meta";
-  args.push("-v", `${metaDir}:${containerMetaDir}:rw`);
 
   // Environment variables — remap workspace-related paths for the container
   const containerEnv = remapDockerEnv(opts.env, opts.workspaceRoot);
-  args.push("-e", `JAIPH_META_FILE=${containerMetaDir}/${metaBase}`);
-  args.push("-e", `JAIPH_SCRIPTS=/jaiph/generated/scripts`);
 
-  // Forward JAIPH_* env vars (except overridden keys)
+  // Forward JAIPH_* env vars
   for (const [key, value] of Object.entries(containerEnv)) {
-    if (key.startsWith("JAIPH_") && key !== "JAIPH_META_FILE" && key !== "JAIPH_SCRIPTS" && value !== undefined) {
+    if (key.startsWith("JAIPH_") && value !== undefined) {
       args.push("-e", `${key}=${value}`);
     }
   }
@@ -389,22 +319,17 @@ export function buildDockerArgs(opts: DockerSpawnOptions, generatedDir: string):
   }
 
   // Working directory
-  args.push("-w", "/jaiph/workspace");
+  args.push("-w", CONTAINER_WORKSPACE);
 
   // Image
   args.push(opts.config.image);
 
-  // Command: Node-orchestrated workflow runner.
-  // Source file path inside the container (workspace is mounted at /jaiph/workspace).
+  // Command: overlay wrapper runs fuse-overlayfs setup, then `jaiph run`
   const relSource = relative(opts.workspaceRoot, opts.sourceAbs);
   const containerSourcePath = `${CONTAINER_WORKSPACE}/${relSource}`;
   args.push(
-    "node",
-    "/jaiph/generated/src/runtime/kernel/node-workflow-runner.js",
-    `${containerMetaDir}/${metaBase}`,
-    containerSourcePath,
-    "/jaiph/generated/scripts",
-    "default",
+    "/jaiph/overlay-run.sh",
+    "jaiph", "run", containerSourcePath,
     ...opts.runArgs,
   );
 
@@ -412,69 +337,176 @@ export function buildDockerArgs(opts: DockerSpawnOptions, generatedDir: string):
 }
 
 // ---------------------------------------------------------------------------
-// Docker spawn with timeout
+// Docker spawn with timeout + delta lifecycle
 // ---------------------------------------------------------------------------
 
 export interface DockerSpawnResult {
   child: ChildProcess;
-  generatedDir: string;
+  containerId: string;
   timeoutTimer?: NodeJS.Timeout;
-  containerId?: string;
 }
 
 /**
- * Spawn the Docker container and set up timeout handling.
+ * Create and start the Docker container.
+ * Lifecycle: docker create → docker start -a (attach stdout/stderr for event streaming).
+ * After the container exits, the caller must invoke `applyDelta` then `cleanupContainer`.
  */
 export function spawnDockerProcess(opts: DockerSpawnOptions): DockerSpawnResult {
   checkDockerAvailable();
   const resolvedImage = resolveImage(opts.config, opts.workspaceRoot);
   opts = { ...opts, config: { ...opts.config, image: resolvedImage } };
 
-  const generatedDir = prepareGeneratedDir(opts.scriptsDir);
-  const dockerArgs = buildDockerArgs(opts, generatedDir);
+  const dockerArgs = buildDockerArgs(opts);
 
-  const child = spawn("docker", dockerArgs, {
-    // stdin must be "ignore": Docker may block waiting for stdin EOF even
-    // without -i, which prevents the process from exiting after the container
-    // stops and breaks live event streaming on stdout/stderr.
+  // docker create → returns container ID on stdout
+  const containerId = execSync(
+    `docker ${dockerArgs.map(shellEscape).join(" ")}`,
+    { encoding: "utf8", timeout: 30_000 },
+  ).trim();
+
+  // docker start -a: attach stdout/stderr for live event streaming
+  const child = spawn("docker", ["start", "-a", containerId], {
     stdio: ["ignore", "pipe", "pipe"],
     cwd: opts.workspaceRoot,
-    env: opts.env,
   });
 
   // Set up timeout
   let timeoutTimer: NodeJS.Timeout | undefined;
   if (opts.config.timeout > 0) {
     timeoutTimer = setTimeout(() => {
-      // Kill the container on timeout
       try {
-        child.kill("SIGTERM");
+        execSync(`docker stop -t 5 ${containerId}`, { stdio: "ignore", timeout: 15_000 });
       } catch {
         // no-op
       }
-      // Force kill after a grace period
-      setTimeout(() => {
-        try {
-          child.kill("SIGKILL");
-        } catch {
-          // no-op
-        }
-      }, 5000);
     }, opts.config.timeout * 1000);
   }
 
-  return { child, generatedDir, timeoutTimer };
+  return { child, containerId, timeoutTimer };
+}
+
+function shellEscape(s: string): string {
+  if (/^[a-zA-Z0-9_./:=@-]+$/.test(s)) return s;
+  return `'${s.replace(/'/g, "'\\''")}'`;
+}
+
+// ---------------------------------------------------------------------------
+// Delta application
+// ---------------------------------------------------------------------------
+
+export interface DeltaResult {
+  runDir?: string;
+  summaryFile?: string;
 }
 
 /**
- * Clean up Docker resources after execution.
+ * Extract the delta from the container and apply it to the host workspace.
+ * The container's /jaiph/delta/ directory contains:
+ * - files/ — changed/added files (relative to workspace root)
+ * - deletions.txt — one relative path per line for deleted files
+ */
+export function applyDelta(containerId: string, workspaceRoot: string): DeltaResult {
+  const tmpDelta = mkdtempSync(join(tmpdir(), "jaiph-delta-"));
+  try {
+    // Copy delta from container to host temp dir
+    try {
+      execSync(`docker cp ${containerId}:/jaiph/delta/. ${tmpDelta}/`, {
+        stdio: "ignore",
+        timeout: 60_000,
+      });
+    } catch {
+      // Delta extraction failed — container may have crashed before overlay-run.sh
+      // finished the delta phase. Return empty result.
+      return {};
+    }
+
+    // Apply changed/added files
+    const filesDir = join(tmpDelta, "files");
+    if (existsSync(filesDir)) {
+      copyDirToWorkspace(filesDir, workspaceRoot);
+    }
+
+    // Apply deletions
+    const deletionsFile = join(tmpDelta, "deletions.txt");
+    if (existsSync(deletionsFile)) {
+      const deletions = readFileSync(deletionsFile, "utf8").split("\n").filter(Boolean);
+      for (const rel of deletions) {
+        const target = join(workspaceRoot, rel);
+        try {
+          rmSync(target, { force: true });
+        } catch {
+          // Best-effort
+        }
+      }
+    }
+
+    // Discover run_dir from applied artifacts
+    return findRunArtifacts(workspaceRoot);
+  } finally {
+    rmSync(tmpDelta, { recursive: true, force: true });
+  }
+}
+
+function copyDirToWorkspace(src: string, dest: string): void {
+  for (const entry of readdirSync(src, { withFileTypes: true })) {
+    const srcPath = join(src, entry.name);
+    const destPath = join(dest, entry.name);
+    if (entry.isDirectory()) {
+      mkdirSync(destPath, { recursive: true });
+      copyDirToWorkspace(srcPath, destPath);
+    } else if (entry.isFile()) {
+      copyFileSync(srcPath, destPath);
+    }
+  }
+}
+
+/**
+ * Find the most recent run directory under .jaiph/runs/.
+ * Run dirs follow the pattern: .jaiph/runs/<date>/<time>-<workflow>/
+ */
+function findRunArtifacts(workspaceRoot: string): DeltaResult {
+  const runsRoot = join(workspaceRoot, ".jaiph", "runs");
+  if (!existsSync(runsRoot)) return {};
+
+  let latestDir: string | undefined;
+  let latestMtime = 0;
+
+  try {
+    for (const dateDir of readdirSync(runsRoot, { withFileTypes: true })) {
+      if (!dateDir.isDirectory()) continue;
+      const datePath = join(runsRoot, dateDir.name);
+      for (const runDir of readdirSync(datePath, { withFileTypes: true })) {
+        if (!runDir.isDirectory()) continue;
+        const runPath = join(datePath, runDir.name);
+        const stat = statSync(runPath);
+        if (stat.mtimeMs > latestMtime) {
+          latestMtime = stat.mtimeMs;
+          latestDir = runPath;
+        }
+      }
+    }
+  } catch {
+    return {};
+  }
+
+  if (!latestDir) return {};
+
+  const summaryFile = join(latestDir, "run_summary.jsonl");
+  return {
+    runDir: latestDir,
+    summaryFile: existsSync(summaryFile) ? summaryFile : undefined,
+  };
+}
+
+/**
+ * Clean up the Docker container after execution.
  */
 export function cleanupDocker(result: DockerSpawnResult): void {
   if (result.timeoutTimer) {
     clearTimeout(result.timeoutTimer);
   }
   try {
-    rmSync(result.generatedDir, { recursive: true, force: true });
+    execSync(`docker rm -f ${result.containerId}`, { stdio: "ignore", timeout: 15_000 });
   } catch {
     // Best-effort cleanup
   }

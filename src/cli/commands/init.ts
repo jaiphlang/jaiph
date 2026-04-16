@@ -42,14 +42,17 @@ const JAIPH_DOCKERFILE_TEMPLATE = `FROM ubuntu:latest
 ${DOCKERFILE_TEMPLATE_MARKER}
 # Keep this file aligned with your repository's runtime/build/test needs.
 
-# Standard utilities
+# Standard utilities + fuse-overlayfs for CoW sandbox
 RUN apt-get update && \\
     apt-get install -y --no-install-recommends \\
       bash \\
       curl \\
       git \\
       ca-certificates \\
-      gnupg && \\
+      gnupg \\
+      fuse-overlayfs \\
+      fuse3 \\
+      rsync && \\
     rm -rf /var/lib/apt/lists/*
 
 # Node.js latest LTS (required by jaiph prompt stream helpers)
@@ -59,7 +62,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \\
 
 # Non-root user keeps agent CLIs happy in Docker mode.
 RUN useradd --create-home --uid 10001 --shell /bin/bash jaiph && \\
-    mkdir -p /jaiph/workspace && \\
+    mkdir -p /jaiph/workspace /jaiph/workspace-ro /jaiph/delta/files && \\
     chown -R jaiph:jaiph /jaiph
 
 # Claude Code CLI (Anthropic)
@@ -85,6 +88,11 @@ ENV PATH="/home/jaiph/.local/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 # jaiph (official installer: https://jaiph.org/install)
 RUN ${JAIPH_INSTALL_COMMAND}
+
+# Overlay wrapper: sets up fuse-overlayfs CoW on top of ro workspace mount,
+# falls back to copy-on-start when FUSE is unavailable.
+COPY overlay-run.sh /jaiph/overlay-run.sh
+RUN chmod +x /jaiph/overlay-run.sh
 
 # Add project-specific package managers/build tools below as needed.
 
