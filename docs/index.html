@@ -71,6 +71,7 @@ layout: null
                 <div class="code-tab-list">
                     <button type="button" class="code-tab-button is-active" data-target="try-run-sample">Try it
                         out</button>
+                    <button type="button" class="code-tab-button" data-target="try-init-project">Init project</button>
                     <button type="button" class="code-tab-button" data-target="try-install-only">Just install</button>
                 </div>
 
@@ -80,6 +81,14 @@ layout: null
                         already
                         installed), and runs the sample workflow with <a href="https://cursor.com/docs/cli/installation" target="_blank" rel="noopener noreferrer">Cursor CLI</a> agent backend (the default one). See <a href="#samples">more samples</a>!</p>
                     <p class="small warning">Jaiph is under heavy development. Core features and workflow syntax are stable since v0.8.0, but you may expect breaking changes before v1.0.0.</p>
+                </div>
+
+                <div class="code-tab-panel" data-panel="try-init-project">
+                    <p class="small">Run the script below from the project directory:</p>
+                    <pre><code class="language-bash">curl -fsSL https://jaiph.org/init | bash</code></pre>
+                    <p class="small">Installs Jaiph <strong>v0.9.1</strong> to <strong>~/.local/bin</strong> (if not
+                        already installed), and runs <code>jaiph init</code> to initialize the Jaiph workspace in the
+                        current directory.</p>
                 </div>
 
                 <div class="code-tab-panel" data-panel="try-install-only">
@@ -415,20 +424,11 @@ Jaiph: Running async.jh
             <div class="card doc-content">
                 <h3>Running a workflow</h3>
                 <pre><code class="language-bash">./path/to/main.jh "first" "second" "third"</code></pre>
-                <p>Arguments are bound to <strong>named parameters</strong> declared on the default workflow
-                    (e.g. <code>workflow default(task)</code> &rarr; <code>${task}</code>).
-                    When you call a workflow, it executes the <code>workflow default</code> entrypoint.
+                <p>Jaiph runs the <code>default</code> workflow in the file and binds invocation arguments to its
+                    parameters. Run artifacts and step output go under <code>.jaiph/runs/</code>.
                 </p>
-                <p>By convention, keep Jaiph workflow files in <code>&lt;project_root&gt;/.jaiph/</code> so
-                    workspace-root detection and agent setup stay predictable.
-                    Jaiph stores run artifacts in <code>.jaiph/runs/</code> (step <code>.out</code>/<code>.err</code>
-                    logs
-                    plus <code>run_summary.jsonl</code>, an append-only JSONL event stream for reporting). Keep those
-                    out of
-                    git: <code>jaiph init</code> writes <code>.jaiph/.gitignore</code> (listing <code>runs</code> and
-                    <code>tmp</code>), a bootstrap workflow, and a starter <code>.jaiph/Dockerfile</code> for sandboxed
-                    runs. See the <a href="cli#run-summary-jsonl">CLI reference</a> for event types, field requirements,
-                    and correlation rules.
+                <p><code>.jaiph/</code> is the Jaiph working directory in your project—the recommended place for
+                    workflow files. Run <code>jaiph init</code> so the project is configured correctly.
                 </p>
 
                 <h3>Language</h3>
@@ -440,7 +440,7 @@ Jaiph: Running async.jh
                     (<a href="/getting-started" target="_blank"
                         rel="noopener noreferrer">jaiph.org/getting-started</a>).
                 </p>
-                <p><strong>Embed and run scripts in the language of your choice.</strong> Define them with fence lang
+                <p><strong>Embed and run scripts</strong> in the language of your choice. Define them with fence lang
                     tags providing the runtime: <code>```node</code>, <code>```python3</code>, <code>```ruby</code>,
                     <code>```pwsh</code> etc.
                 </p>

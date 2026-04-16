@@ -7,7 +7,7 @@ redirect_from:
 
 # Contributing to Jaiph
 
-Open-source projects depend on clear repo conventions: how to build, test, and propose changes. **This page is that map for Jaiph** — branches, installing from a clone, code philosophy, **test strategy** (layers, TypeScript layout, E2E philosophy, bash harness), and CI. It does **not** teach the language; for that, use [Getting Started](getting-started.md) and [Grammar](grammar.md). For **how the implementation is structured** (components, build pipeline, runtime contracts, artifact paths on disk), see [Architecture](architecture).
+Open-source projects depend on clear repo conventions: how to build, test, and propose changes. **This page is that map for Jaiph** — branches, installing from a clone, code philosophy, **test strategy** (layers, TypeScript layout, E2E philosophy, bash harness), and CI. It does **not** teach the language; for that, use [Getting Started](getting-started.md) (documentation map), [Setup](setup.md) (install and workspace), and [Grammar](grammar.md). For **how the implementation is structured** (components, build pipeline, runtime contracts, artifact paths on disk), see [Architecture](architecture).
 
 ## Branching and pull requests
 
@@ -183,7 +183,7 @@ Pushing a version tag (`v*`) triggers `.github/workflows/release.yml`, which pub
 
 ### Local docs site (Jekyll)
 
-The **Getting started (local)** CI job validates that the documentation site under `docs/` can be built and served from source. It uses Ruby 3.2 with `bundler-cache`, runs `bundle exec jekyll serve --host 127.0.0.1 --port 4000` in the background, and polls `http://127.0.0.1:4000/` for up to 30 seconds before asserting HTTP 200 on `/` and `/getting-started`.
+The **Getting started (local)** CI job validates that the documentation site under `docs/` can be built and served from source. It uses Ruby 3.2 with `bundler-cache`, runs `bundle exec jekyll serve --host 127.0.0.1 --port 4000` in the background, and polls `http://127.0.0.1:4000/` for up to 30 seconds before asserting HTTP 200 on `/`, `/getting-started`, `/setup`, `/libraries`, and `/artifacts`.
 
 To run the same check locally:
 
