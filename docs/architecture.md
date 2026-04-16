@@ -83,6 +83,8 @@ Channel transport remains file/queue based in runtime inbox logic.
 
 ### Durable artifact layout
 
+For an onboarding-style description of the same paths (what to expect in a repo, what to ignore in git), see [Runtime artifacts](artifacts.md).
+
 The runtime persists step captures and the event timeline under a UTC-dated hierarchy:
 
 ```

@@ -1,6 +1,6 @@
 # ![Jaiph](docs/logo.png)
 
-[jaiph.org](https://jaiph.org) · [Getting Started](docs/getting-started.md) · [Grammar](docs/grammar.md) · [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Testing](docs/testing.md) · [Hooks](docs/hooks.md) · [Inbox & Dispatch](docs/inbox.md) · [Sandboxing](docs/sandboxing.md) · [Architecture](docs/architecture.md) · [Contributing](docs/contributing.md)
+[jaiph.org](https://jaiph.org) · [Getting Started](docs/getting-started.md) · [Setup](docs/setup.md) · [Libraries](docs/libraries.md) · [Grammar](docs/grammar.md) · [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Testing](docs/testing.md) · [Hooks](docs/hooks.md) · [Inbox & Dispatch](docs/inbox.md) · [Sandboxing](docs/sandboxing.md) · [Runtime artifacts](docs/artifacts.md) · [Architecture](docs/architecture.md) · [Contributing](docs/contributing.md)
 
 ---
 
@@ -82,7 +82,7 @@ workflow default(task) {
 ./main.jh "add user authentication"
 ```
 
-For the full language reference, see [Grammar](docs/grammar.md). For CLI commands, configuration, testing, sandboxing, hooks, and inbox dispatch, see [Getting Started](docs/getting-started.md) or visit [jaiph.org](https://jaiph.org).
+For the full language reference, see [Grammar](docs/grammar.md). For install, workspace layout, libraries, CLI commands, configuration, testing, sandboxing, hooks, inbox dispatch, and on-disk run output, see [Getting Started](docs/getting-started.md) (map), [Setup](docs/setup.md), and [Runtime artifacts](docs/artifacts.md), or visit [jaiph.org](https://jaiph.org).
 
 ## Start here
 

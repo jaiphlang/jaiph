@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# docs/init — Install Jaiph (if needed) and run jaiph init in the current directory.
+# Usage: curl -fsSL https://jaiph.org/init | bash
+#
+# JAIPH_SITE — base URL for the install script (default https://jaiph.org).
+#   Use http://127.0.0.1:4000 with JAIPH_REPO_URL for local docs/CI.
+
+JAIPH_SITE="${JAIPH_SITE:-https://jaiph.org}"
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "Error: node is required but not found in \$PATH." >&2
+  echo "Install Node.js (https://nodejs.org) and try again." >&2
+  exit 1
+fi
+
+if ! command -v jaiph >/dev/null 2>&1; then
+  echo "Jaiph not found — installing..."
+  curl -fsSL "${JAIPH_SITE}/install" | bash
+  export PATH="$HOME/.local/bin:$PATH"
+  if ! command -v jaiph >/dev/null 2>&1; then
+    echo "Error: jaiph was not found after installation." >&2
+    exit 1
+  fi
+fi
+
+jaiph init

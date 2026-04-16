@@ -11,7 +11,7 @@ redirect_from:
 
 ## Overview
 
-This page is an **agent skill**: it tells an AI assistant how to **author** Jaiph workflows (`.jh` files) and what a sensible `.jaiph/` layout looks like. It is not a full language specification — use [Grammar](grammar.md) for syntax and validation details, [Configuration](configuration.md) for `config` keys, [Inbox & Dispatch](inbox.md) for channels, and [Sandboxing](sandboxing.md) for rule design vs optional Docker isolation.
+This page is an **agent skill**: it tells an AI assistant how to **author** Jaiph workflows (`.jh` files) and what a sensible `.jaiph/` layout looks like. It is not a full language specification — use [Getting started](getting-started.md) as the documentation map, [Grammar](grammar.md) for syntax and validation details, [Configuration](configuration.md) for `config` keys, [Inbox & Dispatch](inbox.md) for channels, and [Sandboxing](sandboxing.md) for rule design vs optional Docker isolation.
 
 **Jaiph** is a small language for agentic workflows: **orchestration** (rules, prompts, managed calls) and **bash in `script` definitions**. The **Node workflow runtime** (`NodeWorkflowRuntime`) interprets the parsed AST directly — there is no bash transpilation of workflow bodies on the execution path. Before `jaiph run` / `jaiph test`, **`buildScripts()`** parses each reachable workspace **`*.jh`** module, runs **compile-time validation** (`validateReferences`), and writes extracted **`script`** files only (`*.test.jh` is not walked for emit). The workflow runner then **`buildRuntimeGraph()`** loads modules with **parse-only** imports (validation is not repeated there). See [Architecture](architecture).
 

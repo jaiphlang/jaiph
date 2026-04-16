@@ -131,6 +131,9 @@ jobs:
         run: |
           curl -fsS -o /dev/null -w "HTTP %{http_code} for /\n" http://127.0.0.1:4000/
           curl -fsS -o /dev/null -w "HTTP %{http_code} for /getting-started\n" http://127.0.0.1:4000/getting-started
+          curl -fsS -o /dev/null -w "HTTP %{http_code} for /setup\n" http://127.0.0.1:4000/setup
+          curl -fsS -o /dev/null -w "HTTP %{http_code} for /libraries\n" http://127.0.0.1:4000/libraries
+          curl -fsS -o /dev/null -w "HTTP %{http_code} for /artifacts\n" http://127.0.0.1:4000/artifacts
 
       - name: Verify landing-page samples
         run: |
