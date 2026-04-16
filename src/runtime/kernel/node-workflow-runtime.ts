@@ -201,6 +201,7 @@ export class NodeWorkflowRuntime {
   private readonly runId: string;
   private readonly runDir: string;
   private readonly summaryFile: string;
+  private heartbeatTimer: ReturnType<typeof setInterval> | undefined;
   private stepSeq = 0;
   private stack: Frame[] = [];
   private asyncFrameStack = new AsyncLocalStorage<Frame[]>();
@@ -236,6 +237,7 @@ export class NodeWorkflowRuntime {
     this.env.JAIPH_RUN_SUMMARY_FILE = this.summaryFile;
     this.env.JAIPH_RUN_ID = this.runId;
     this.env.JAIPH_RUN_DIR = this.runDir;
+    this.startHeartbeat();
     const workspaceForLib = this.env.JAIPH_WORKSPACE ?? this.cwd;
     if (this.env.JAIPH_LIB === undefined || this.env.JAIPH_LIB === "") {
       this.env.JAIPH_LIB = join(workspaceForLib, ".jaiph", "lib");
@@ -248,6 +250,27 @@ export class NodeWorkflowRuntime {
 
   getSummaryFile(): string {
     return this.summaryFile;
+  }
+
+  private writeHeartbeat(): void {
+    try {
+      writeFileSync(join(this.runDir, "heartbeat"), String(Date.now()), "utf8");
+    } catch {
+      // best-effort; don't crash the runtime
+    }
+  }
+
+  private startHeartbeat(): void {
+    this.writeHeartbeat();
+    this.heartbeatTimer = setInterval(() => this.writeHeartbeat(), 10_000);
+    this.heartbeatTimer.unref();
+  }
+
+  stopHeartbeat(): void {
+    if (this.heartbeatTimer !== undefined) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = undefined;
+    }
   }
 
   async runDefault(args: string[]): Promise<number> {
@@ -264,6 +287,7 @@ export class NodeWorkflowRuntime {
     if (!resolved) {
       process.stderr.write("jaiph run requires workflow 'default' in the input file\n");
       this.emitWorkflow("WORKFLOW_END", "default");
+      this.stopHeartbeat();
       return 1;
     }
     // Bind CLI args to declared parameter names by position.
@@ -272,6 +296,7 @@ export class NodeWorkflowRuntime {
     });
     const result = await this.executeWorkflow(resolved.filePath, resolved.workflow.name, rootScope, args, false);
     this.emitWorkflow("WORKFLOW_END", "default");
+    this.stopHeartbeat();
     return result.status;
   }
 
@@ -286,6 +311,7 @@ export class NodeWorkflowRuntime {
       loc: { line: 1, col: 1 },
     });
     if (!resolved) {
+      this.stopHeartbeat();
       return { status: 1, output: `Unknown workflow: ${ref}` };
     }
     // Bind args to declared parameter names by position.
@@ -293,6 +319,7 @@ export class NodeWorkflowRuntime {
       if (i < args.length) rootScope.vars.set(name, args[i]);
     });
     const result = await this.executeWorkflow(resolved.filePath, resolved.workflow.name, rootScope, args, false);
+    this.stopHeartbeat();
     return { status: result.status, output: result.output, error: result.error, returnValue: result.returnValue };
   }
 
