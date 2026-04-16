@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildRuntimeGraph } from "./graph";
@@ -387,6 +387,36 @@ test("NodeWorkflowRuntime: prompt STEP_START params include named vars reference
     const paramMap = new Map(params);
     assert.ok(paramMap.has("dataset"), `expected 'dataset' in params, got keys: ${[...paramMap.keys()].join(", ")}`);
     assert.equal(paramMap.get("dataset"), "users");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("NodeWorkflowRuntime: heartbeat file created at construction, removed on stop", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-node-wf-heartbeat-"));
+  try {
+    const jh = join(root, "heartbeat.jh");
+    writeFileSync(jh, 'workflow default() {\n  log "ok"\n}\n');
+    const mockFile = join(root, "mocks.txt");
+    writeFileSync(mockFile, "");
+
+    const graph = buildRuntimeGraph(jh);
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      JAIPH_TEST_MODE: "1",
+      JAIPH_MOCK_RESPONSES_FILE: mockFile,
+      JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
+    };
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });
+    const runDir = runtime.getRunDir();
+
+    const heartbeatPath = join(runDir, "heartbeat");
+    assert.ok(existsSync(heartbeatPath), "heartbeat file should exist after construction");
+    const ts = parseInt(readFileSync(heartbeatPath, "utf8"), 10);
+    assert.ok(ts > 0 && ts <= Date.now(), "heartbeat should contain a valid epoch ms timestamp");
+
+    await runtime.runDefault([]);
+    runtime.stopHeartbeat();
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
