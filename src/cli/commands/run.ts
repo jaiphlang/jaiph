@@ -30,7 +30,7 @@ import {
   resolveDockerConfig,
   spawnDockerProcess,
   cleanupDocker,
-  applyDelta,
+  CONTAINER_WORKSPACE,
 } from "../../runtime/docker";
 import {
   styleKeywordLabel,
@@ -136,8 +136,6 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     const childExit = await waitForRunExit(execResult, () => signalHandlers.remove());
     drainBuffers(onLine, buf, ttyCtx);
 
-    // Apply delta from Docker container (extract changed files, deletions)
-    let dockerDelta: ReturnType<typeof applyDelta> | undefined;
     if (dockerResult) {
       const timedOut = dockerResult.timeoutTimer === undefined && activeDockerConfig.timeout > 0
         ? false
@@ -145,7 +143,6 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       if (timedOut && childExit.status !== 0) {
         runState.capturedStderr += "E_TIMEOUT container execution exceeded timeout\n";
       }
-      dockerDelta = applyDelta(dockerResult.containerId, workspaceRoot);
       cleanupDocker(dockerResult);
     }
 
@@ -166,7 +163,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     return reportResult(
       runState.capturedStderr, childExit.status, startedAt, runtimeEnv,
       emitter, runState.workflowRunId, inputAbs, workspaceRoot, metaFile,
-      dockerDelta,
+      dockerResult ? CONTAINER_WORKSPACE : undefined,
     );
   } finally {
     if (shouldCleanup) {
@@ -219,8 +216,10 @@ function spawnExec(
   if (dockerConfig.enabled) {
     dockerResult = spawnDockerProcess({
       config: dockerConfig,
+      scriptsDir: runtimeEnv.JAIPH_SCRIPTS ?? join(outDir, "scripts"),
       sourceAbs: runtimeEnv.JAIPH_SOURCE_ABS!,
       workspaceRoot,
+      metaFile,
       runArgs,
       env: runtimeEnv,
       isTTY,
@@ -315,28 +314,30 @@ function reportResult(
   inputAbs: string,
   workspaceRoot: string,
   metaFile: string,
-  dockerDelta?: { runDir?: string; summaryFile?: string },
+  containerWorkspace?: string,
 ): number {
   const elapsedMs = Date.now() - startedAt;
   const elapsedLabel = formatElapsedDuration(elapsedMs);
+  const remapPath = (p: string): string => {
+    if (!containerWorkspace) return p;
+    if (p.startsWith(containerWorkspace + "/")) {
+      return join(workspaceRoot, p.slice(containerWorkspace.length + 1));
+    }
+    if (p === containerWorkspace) return workspaceRoot;
+    return p;
+  };
   let runDir: string | undefined;
   let summaryFile: string | undefined;
-
-  if (dockerDelta) {
-    // Docker mode: run artifacts were extracted via delta sync
-    runDir = dockerDelta.runDir;
-    summaryFile = dockerDelta.summaryFile;
-  } else if (existsSync(metaFile)) {
-    // Local mode: read run_dir/summary_file from meta file
+  if (existsSync(metaFile)) {
     const metaLines = readFileSync(metaFile, "utf8").split(/\r?\n/);
     for (const line of metaLines) {
       if (line.startsWith("run_dir=")) {
         const value = line.slice("run_dir=".length).trim();
-        if (value) runDir = value;
+        if (value) runDir = remapPath(value);
       }
       if (line.startsWith("summary_file=")) {
         const value = line.slice("summary_file=".length).trim();
-        if (value) summaryFile = value;
+        if (value) summaryFile = remapPath(value);
       }
     }
   }

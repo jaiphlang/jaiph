@@ -17,6 +17,15 @@ import { mkdtempSync, writeFileSync, mkdirSync, existsSync, readFileSync, rmSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+/** Shared temp workspace for buildDockerArgs tests (mkdirSync .jaiph/runs). */
+const TEST_WS = mkdtempSync(join(tmpdir(), "jaiph-test-ws-"));
+const TEST_GEN = mkdtempSync(join(tmpdir(), "jaiph-test-gen-"));
+const TEST_META = join(TEST_WS, ".jaiph-meta-test.txt");
+test.after(() => {
+  rmSync(TEST_WS, { recursive: true, force: true });
+  rmSync(TEST_GEN, { recursive: true, force: true });
+});
+
 // ---------------------------------------------------------------------------
 // parseMount
 // ---------------------------------------------------------------------------
@@ -172,57 +181,71 @@ test("resolveDockerConfig: workspace from in-file", () => {
 // buildDockerArgs
 // ---------------------------------------------------------------------------
 
-test("buildDockerArgs: includes docker create flags with overlay layout", () => {
-  const opts: DockerSpawnOptions = {
-    config: {
-      enabled: true,
-      image: "ubuntu:24.04",
-      imageExplicit: false,
-      network: "default",
-      timeout: 300,
-      mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
-    },
-    sourceAbs: "/home/user/project/main.jh",
-    workspaceRoot: "/home/user/project",
-    runArgs: ["arg1"],
-    env: {},
-    isTTY: false,
-  };
-  const args = buildDockerArgs(opts);
+test("buildDockerArgs: ro workspace + rw runs sub-mount + raw node runtime", () => {
+  const tmpWs = mkdtempSync(join(tmpdir(), "jaiph-test-ws-"));
+  const tmpGen = mkdtempSync(join(tmpdir(), "jaiph-test-gen-"));
+  const metaFile = join(tmpWs, ".jaiph-meta-test.txt");
+  try {
+    const opts: DockerSpawnOptions = {
+      config: {
+        enabled: true,
+        image: "ubuntu:24.04",
+        imageExplicit: false,
+        network: "default",
+        timeout: 300,
+        mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
+      },
+      scriptsDir: join(tmpWs, "scripts"),
+      sourceAbs: join(tmpWs, "main.jh"),
+      workspaceRoot: tmpWs,
+      metaFile,
+      runArgs: ["arg1"],
+      env: {},
+      isTTY: false,
+    };
+    const args = buildDockerArgs(opts, tmpGen);
 
-  assert.ok(args.includes("create"));
-  assert.ok(!args.includes("--rm")); // no --rm: container kept for delta extraction
-  assert.ok(!args.includes("-t")); // no TTY
-  assert.ok(!args.includes("--network")); // "default" omits --network
-  assert.ok(args.includes("ubuntu:24.04"));
-  assert.ok(args.includes("-w"));
-  assert.ok(args.includes("/jaiph/workspace"));
+    assert.ok(args.includes("run"));
+    assert.ok(args.includes("--rm"));
+    assert.ok(!args.includes("-t"));
+    assert.ok(!args.includes("--network"));
+    assert.ok(args.includes("ubuntu:24.04"));
 
-  // FUSE device for fuse-overlayfs
-  const deviceIdx = args.indexOf("--device");
-  assert.ok(deviceIdx >= 0);
-  assert.equal(args[deviceIdx + 1], "/dev/fuse");
+    const vFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-v");
 
-  // Workspace mount is read-only at /jaiph/workspace-ro
-  const vFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-v");
-  const wsMount = vFlags.find((v) => v.includes("/jaiph/workspace-ro"));
-  assert.ok(wsMount, "workspace must be mounted at /jaiph/workspace-ro");
-  assert.ok(wsMount!.endsWith(":ro"), "workspace mount must be read-only");
+    // Generated dir mounted ro at /jaiph/generated
+    const genMount = vFlags.find((v) => v.includes("/jaiph/generated:"));
+    assert.ok(genMount, "generated dir mount present");
+    assert.ok(genMount!.endsWith(":ro"), "generated dir must be read-only");
 
-  // No /jaiph/generated or /jaiph/meta mounts
-  assert.ok(!vFlags.some((v) => v.includes("/jaiph/generated")));
-  assert.ok(!vFlags.some((v) => v.includes("/jaiph/meta")));
+    // Workspace mount forced to ro regardless of config
+    const wsMount = vFlags.find((v) => v.includes("/jaiph/workspace:"));
+    assert.ok(wsMount, "workspace mount present");
+    assert.ok(wsMount!.endsWith(":ro"), "workspace mount must be read-only");
 
-  // No JAIPH_META_FILE or JAIPH_SCRIPTS env
-  assert.ok(!args.some((a) => a.includes("JAIPH_META_FILE")));
-  assert.ok(!args.some((a) => a.includes("JAIPH_SCRIPTS")));
+    // Writable sub-mount for .jaiph/runs
+    const runsMount = vFlags.find((v) => v.includes(".jaiph/runs"));
+    assert.ok(runsMount, "runs sub-mount present");
+    assert.ok(runsMount!.endsWith(":rw"), "runs sub-mount must be rw");
 
-  // Overlay wrapper + jaiph run command
-  assert.ok(args.includes("/jaiph/overlay-run.sh"));
-  assert.ok(args.includes("jaiph"));
-  assert.ok(args.includes("run"));
-  assert.ok(args.includes("/jaiph/workspace/main.jh"));
-  assert.ok(args.includes("arg1"));
+    // Meta dir mounted rw at /jaiph/meta
+    const metaMount = vFlags.find((v) => v.includes("/jaiph/meta:"));
+    assert.ok(metaMount, "meta dir mount present");
+    assert.ok(metaMount!.endsWith(":rw"), "meta dir must be rw");
+
+    // .jaiph/runs directory was created on host
+    assert.ok(existsSync(join(tmpWs, ".jaiph", "runs")));
+
+    // Raw node runtime command (not jaiph CLI)
+    assert.ok(args.includes("node"));
+    assert.ok(args.includes("/jaiph/generated/src/runtime/kernel/node-workflow-runner.js"));
+    assert.ok(args.includes("/jaiph/workspace/main.jh"));
+    assert.ok(args.includes("arg1"));
+    assert.ok(args.includes("default"));
+  } finally {
+    rmSync(tmpWs, { recursive: true, force: true });
+    rmSync(tmpGen, { recursive: true, force: true });
+  }
 });
 
 test("buildDockerArgs: no -t flag even when isTTY is true (stderr-only event contract)", () => {
@@ -235,13 +258,15 @@ test("buildDockerArgs: no -t flag even when isTTY is true (stderr-only event con
       timeout: 300,
       mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
     },
-    sourceAbs: "/home/user/project/main.jh",
-    workspaceRoot: "/home/user/project",
+    scriptsDir: join(TEST_WS, "scripts"),
+    sourceAbs: join(TEST_WS, "main.jh"),
+    workspaceRoot: TEST_WS,
+    metaFile: TEST_META,
     runArgs: [],
     env: {},
     isTTY: true,
   };
-  const args = buildDockerArgs(opts);
+  const args = buildDockerArgs(opts, TEST_GEN);
   assert.ok(!args.includes("-t"));
 });
 
@@ -255,13 +280,15 @@ test("buildDockerArgs: --network flag for non-default network", () => {
       timeout: 300,
       mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
     },
-    sourceAbs: "/home/user/project/main.jh",
-    workspaceRoot: "/home/user/project",
+    scriptsDir: join(TEST_WS, "scripts"),
+    sourceAbs: join(TEST_WS, "main.jh"),
+    workspaceRoot: TEST_WS,
+    metaFile: TEST_META,
     runArgs: [],
     env: {},
     isTTY: false,
   };
-  const args = buildDockerArgs(opts);
+  const args = buildDockerArgs(opts, TEST_GEN);
   const netIdx = args.indexOf("--network");
   assert.ok(netIdx > 0);
   assert.equal(args[netIdx + 1], "none");
@@ -277,8 +304,10 @@ test("buildDockerArgs: forwards JAIPH_ env vars", () => {
       timeout: 300,
       mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
     },
-    sourceAbs: "/home/user/project/main.jh",
-    workspaceRoot: "/home/user/project",
+    scriptsDir: join(TEST_WS, "scripts"),
+    sourceAbs: join(TEST_WS, "main.jh"),
+    workspaceRoot: TEST_WS,
+    metaFile: TEST_META,
     runArgs: [],
     env: {
       JAIPH_DEBUG: "true",
@@ -286,12 +315,12 @@ test("buildDockerArgs: forwards JAIPH_ env vars", () => {
     },
     isTTY: false,
   };
-  const args = buildDockerArgs(opts);
+  const args = buildDockerArgs(opts, TEST_GEN);
   assert.ok(args.includes("JAIPH_DEBUG=true"));
   assert.ok(!args.some((a) => a.includes("OTHER_VAR")));
 });
 
-test("buildDockerArgs: multiple mounts are all read-only at workspace-ro", () => {
+test("buildDockerArgs: all workspace mounts forced ro + runs rw sub-mount", () => {
   const opts: DockerSpawnOptions = {
     config: {
       enabled: true,
@@ -304,23 +333,23 @@ test("buildDockerArgs: multiple mounts are all read-only at workspace-ro", () =>
         { hostPath: "config", containerPath: "/jaiph/workspace/config", mode: "ro" },
       ],
     },
-    sourceAbs: "/home/user/project/main.jh",
-    workspaceRoot: "/home/user/project",
+    scriptsDir: join(TEST_WS, "scripts"),
+    sourceAbs: join(TEST_WS, "main.jh"),
+    workspaceRoot: TEST_WS,
+    metaFile: TEST_META,
     runArgs: [],
     env: {},
     isTTY: false,
   };
-  const args = buildDockerArgs(opts);
+  const args = buildDockerArgs(opts, TEST_GEN);
   const vFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-v");
-  assert.equal(vFlags.length, 2);
-  // All mounts forced to :ro
-  for (const v of vFlags) {
-    assert.ok(v.endsWith(":ro"), `mount ${v} should be read-only`);
-  }
-  // Primary workspace remapped to /jaiph/workspace-ro
-  assert.ok(vFlags.some((v) => v.includes("/jaiph/workspace-ro:")));
-  // Sub-mount remapped to /jaiph/workspace-ro/config
-  assert.ok(vFlags.some((v) => v.includes("/jaiph/workspace-ro/config:")));
+  // 1 generated + 2 configured + 1 runs sub-mount + 1 meta = 5
+  assert.equal(vFlags.length, 5);
+  // All configured mounts forced to ro
+  assert.ok(vFlags.some((v) => v.includes("/jaiph/workspace:") && v.endsWith(":ro")));
+  assert.ok(vFlags.some((v) => v.includes("/jaiph/workspace/config:") && v.endsWith(":ro")));
+  // Auto runs sub-mount is rw
+  assert.ok(vFlags.some((v) => v.includes(".jaiph/runs") && v.endsWith(":rw")));
 });
 
 test("buildDockerArgs: overrides JAIPH_WORKSPACE to container path", () => {
@@ -333,15 +362,17 @@ test("buildDockerArgs: overrides JAIPH_WORKSPACE to container path", () => {
       timeout: 300,
       mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
     },
-    sourceAbs: "/home/user/project/main.jh",
-    workspaceRoot: "/home/user/project",
+    scriptsDir: join(TEST_WS, "scripts"),
+    sourceAbs: join(TEST_WS, "main.jh"),
+    workspaceRoot: TEST_WS,
+    metaFile: TEST_META,
     runArgs: [],
-    env: { JAIPH_WORKSPACE: "/home/user/project" },
+    env: { JAIPH_WORKSPACE: TEST_WS },
     isTTY: false,
   };
-  const args = buildDockerArgs(opts);
+  const args = buildDockerArgs(opts, TEST_GEN);
   assert.ok(args.includes("JAIPH_WORKSPACE=/jaiph/workspace"));
-  assert.ok(!args.some((a) => a === "JAIPH_WORKSPACE=/home/user/project"));
+  assert.ok(!args.some((a) => a === `JAIPH_WORKSPACE=${TEST_WS}`));
 });
 
 test("buildDockerArgs: remaps absolute JAIPH_RUNS_DIR inside workspace", () => {
@@ -354,13 +385,15 @@ test("buildDockerArgs: remaps absolute JAIPH_RUNS_DIR inside workspace", () => {
       timeout: 300,
       mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
     },
-    sourceAbs: "/home/user/project/main.jh",
-    workspaceRoot: "/home/user/project",
+    scriptsDir: join(TEST_WS, "scripts"),
+    sourceAbs: join(TEST_WS, "main.jh"),
+    workspaceRoot: TEST_WS,
+    metaFile: TEST_META,
     runArgs: [],
-    env: { JAIPH_RUNS_DIR: "/home/user/project/custom/runs" },
+    env: { JAIPH_RUNS_DIR: join(TEST_WS, "custom/runs") },
     isTTY: false,
   };
-  const args = buildDockerArgs(opts);
+  const args = buildDockerArgs(opts, TEST_GEN);
   assert.ok(args.includes("JAIPH_RUNS_DIR=/jaiph/workspace/custom/runs"));
 });
 
@@ -374,13 +407,15 @@ test("buildDockerArgs: passes through relative JAIPH_RUNS_DIR unchanged", () => 
       timeout: 300,
       mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
     },
-    sourceAbs: "/home/user/project/main.jh",
-    workspaceRoot: "/home/user/project",
+    scriptsDir: join(TEST_WS, "scripts"),
+    sourceAbs: join(TEST_WS, "main.jh"),
+    workspaceRoot: TEST_WS,
+    metaFile: TEST_META,
     runArgs: [],
     env: { JAIPH_RUNS_DIR: "runs_out" },
     isTTY: false,
   };
-  const args = buildDockerArgs(opts);
+  const args = buildDockerArgs(opts, TEST_GEN);
   assert.ok(args.includes("JAIPH_RUNS_DIR=runs_out"));
 });
 
@@ -394,13 +429,15 @@ test("buildDockerArgs: throws for absolute JAIPH_RUNS_DIR outside workspace", ()
       timeout: 300,
       mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
     },
-    sourceAbs: "/home/user/project/main.jh",
-    workspaceRoot: "/home/user/project",
+    scriptsDir: join(TEST_WS, "scripts"),
+    sourceAbs: join(TEST_WS, "main.jh"),
+    workspaceRoot: TEST_WS,
+    metaFile: TEST_META,
     runArgs: [],
     env: { JAIPH_RUNS_DIR: "/var/log/jaiph-runs" },
     isTTY: false,
   };
-  assert.throws(() => buildDockerArgs(opts), /E_DOCKER_RUNS_DIR/);
+  assert.throws(() => buildDockerArgs(opts, TEST_GEN), /E_DOCKER_RUNS_DIR/);
 });
 
 // ---------------------------------------------------------------------------
@@ -472,8 +509,10 @@ test("buildDockerArgs: forwards ANTHROPIC_* env vars", () => {
       timeout: 300,
       mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
     },
-    sourceAbs: "/home/user/project/main.jh",
-    workspaceRoot: "/home/user/project",
+    scriptsDir: join(TEST_WS, "scripts"),
+    sourceAbs: join(TEST_WS, "main.jh"),
+    workspaceRoot: TEST_WS,
+    metaFile: TEST_META,
     runArgs: [],
     env: {
       ANTHROPIC_API_KEY: "sk-ant-test-key",
@@ -481,7 +520,7 @@ test("buildDockerArgs: forwards ANTHROPIC_* env vars", () => {
     },
     isTTY: false,
   };
-  const args = buildDockerArgs(opts);
+  const args = buildDockerArgs(opts, TEST_GEN);
   assert.ok(args.includes("ANTHROPIC_API_KEY=sk-ant-test-key"));
   assert.ok(args.includes("ANTHROPIC_BASE_URL=https://api.example.test"));
 });
@@ -496,8 +535,10 @@ test("buildDockerArgs: forwards CURSOR_* env vars", () => {
       timeout: 300,
       mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
     },
-    sourceAbs: "/home/user/project/main.jh",
-    workspaceRoot: "/home/user/project",
+    scriptsDir: join(TEST_WS, "scripts"),
+    sourceAbs: join(TEST_WS, "main.jh"),
+    workspaceRoot: TEST_WS,
+    metaFile: TEST_META,
     runArgs: [],
     env: {
       CURSOR_API_KEY: "cursor-key-123",
@@ -506,7 +547,7 @@ test("buildDockerArgs: forwards CURSOR_* env vars", () => {
     },
     isTTY: false,
   };
-  const args = buildDockerArgs(opts);
+  const args = buildDockerArgs(opts, TEST_GEN);
   assert.ok(args.includes("CURSOR_API_KEY=cursor-key-123"));
   assert.ok(args.includes("CURSOR_SESSION_ID=sess-456"));
   assert.ok(!args.some((a) => a.includes("OTHER_VAR")));
@@ -522,8 +563,10 @@ test("buildDockerArgs: forwards CLAUDE_* env vars", () => {
       timeout: 300,
       mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
     },
-    sourceAbs: "/home/user/project/main.jh",
-    workspaceRoot: "/home/user/project",
+    scriptsDir: join(TEST_WS, "scripts"),
+    sourceAbs: join(TEST_WS, "main.jh"),
+    workspaceRoot: TEST_WS,
+    metaFile: TEST_META,
     runArgs: [],
     env: {
       CLAUDE_API_KEY: "claude-key-123",
@@ -531,7 +574,7 @@ test("buildDockerArgs: forwards CLAUDE_* env vars", () => {
     },
     isTTY: false,
   };
-  const args = buildDockerArgs(opts);
+  const args = buildDockerArgs(opts, TEST_GEN);
   assert.ok(args.includes("CLAUDE_API_KEY=claude-key-123"));
   assert.ok(args.includes("CLAUDE_AUTH_TOKEN=token-456"));
 });
@@ -546,8 +589,10 @@ test("buildDockerArgs: does not forward undefined agent env vars", () => {
       timeout: 300,
       mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
     },
-    sourceAbs: "/home/user/project/main.jh",
-    workspaceRoot: "/home/user/project",
+    scriptsDir: join(TEST_WS, "scripts"),
+    sourceAbs: join(TEST_WS, "main.jh"),
+    workspaceRoot: TEST_WS,
+    metaFile: TEST_META,
     runArgs: [],
     env: {
       ANTHROPIC_API_KEY: undefined,
@@ -555,7 +600,7 @@ test("buildDockerArgs: does not forward undefined agent env vars", () => {
     },
     isTTY: false,
   };
-  const args = buildDockerArgs(opts);
+  const args = buildDockerArgs(opts, TEST_GEN);
   assert.ok(!args.some((a) => a.includes("ANTHROPIC_API_KEY")));
   assert.ok(!args.some((a) => a.includes("CURSOR_TOKEN")));
 });
@@ -564,13 +609,11 @@ test("buildDockerArgs: does not forward undefined agent env vars", () => {
 // spawnDockerProcess: stdin must be ignored
 // ---------------------------------------------------------------------------
 
-test("spawnDockerProcess: stdin is ignored to prevent hang on container exit", () => {
-  // Verify the design contract: docker start -a must use ["ignore", "pipe", "pipe"]
-  // to prevent the Docker CLI from blocking on stdin.
+test("spawnDockerProcess: stdin ignored, stdout+stderr piped for events", () => {
   const src = readFileSync(join(__dirname, "docker.ts"), "utf8");
   assert.ok(
     src.includes('["ignore", "pipe", "pipe"]'),
-    "spawnDockerProcess must use stdio: [\"ignore\", \"pipe\", \"pipe\"] to prevent stdin hang",
+    "spawnDockerProcess must use stdio: [\"ignore\", \"pipe\", \"pipe\"]",
   );
 });
 
