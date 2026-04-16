@@ -91,8 +91,7 @@ RUN ${JAIPH_INSTALL_COMMAND}
 
 # Overlay wrapper: sets up fuse-overlayfs CoW on top of ro workspace mount,
 # falls back to copy-on-start when FUSE is unavailable.
-COPY overlay-run.sh /jaiph/overlay-run.sh
-RUN chmod +x /jaiph/overlay-run.sh
+COPY --chmod=755 overlay-run.sh /jaiph/overlay-run.sh
 
 # Add project-specific package managers/build tools below as needed.
 
