@@ -79,7 +79,9 @@ function handleLine(
   }
 }
 
-/** Create a line handler that parses stderr lines and emits events through the emitter. */
+/**
+ * Create a line handler that parses stderr lines and emits events through the emitter.
+ */
 export function createStderrParser(emitter: RunEmitter): (line: string) => void {
   const formatDiagnosticLine = (ln: string) => ln;
   const state: StderrParserState = {
