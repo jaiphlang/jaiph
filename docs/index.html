@@ -76,7 +76,7 @@ layout: null
 
                 <div class="code-tab-panel is-active" data-panel="try-run-sample">
                     <pre><code class="language-bash static-highlight"><span class="code-line">curl -fsSL https://jaiph.org/run | bash -s '</span><span class="code-line"><span class="ralph-keyword">workflow</span> <span class="ralph-definition">default</span>() {</span><span class="code-line">  <span class="ralph-keyword">const</span> <span class="ralph-variable">response</span> <span class="ralph-operator">=</span> <span class="ralph-keyword">prompt</span> <span class="ralph-string">"Say: Hello, I am [model name]!"</span></span><span class="code-line">  <span class="ralph-keyword">log</span> response</span><span class="code-line">}'</span></code></pre>
-                    <p class="small">Installs Jaiph <strong>v0.9.0</strong> to <strong>~/.local/bin</strong> (if not
+                    <p class="small">Installs Jaiph <strong>v0.9.1</strong> to <strong>~/.local/bin</strong> (if not
                         already
                         installed), and runs the sample workflow with <a href="https://cursor.com/docs/cli/installation" target="_blank" rel="noopener noreferrer">Cursor CLI</a> agent backend (the default one). See <a href="#samples">more samples</a>!</p>
                     <p class="small warning">Jaiph is under heavy development. Core features and workflow syntax are stable since v0.8.0, but you may expect breaking changes before v1.0.0.</p>
@@ -84,7 +84,7 @@ layout: null
 
                 <div class="code-tab-panel" data-panel="try-install-only">
                     <pre><code class="language-bash">curl -fsSL https://jaiph.org/install | bash</code></pre>
-                    <p class="small">The installer will install the version <strong>0.9.0</strong> of Jaiph to
+                    <p class="small">The installer will install the version <strong>0.9.1</strong> of Jaiph to
                         <strong>~/.local/bin</strong>. To switch versions, use <code>jaiph use nightly</code>
                         or <code>jaiph use &lt;version&gt;</code> to switch.
                     </p>
@@ -440,15 +440,9 @@ Jaiph: Running async.jh
                     (<a href="/getting-started" target="_blank"
                         rel="noopener noreferrer">jaiph.org/getting-started</a>).
                 </p>
-                <p><strong>Use Bash (or any language) in scripts.</strong> Command pipelines, checks, and background
-                    jobs
-                    belong in <code>script</code> definitions; workflows and rules call them with <code>run</code>. Use
-                    fence lang tags (<code>```node</code>, <code>```python3</code>, <code>```ruby</code>, etc.) to select
-                    an interpreter without writing a shebang line &mdash; any tag is valid, mapping directly to
-                    <code>#!/usr/bin/env &lt;tag&gt;</code>. If no tag is present, add a manual
-                    <code>#!</code> shebang as the first body line.
-                    For trivial one-off commands, use <strong>inline scripts</strong>:
-                    <code>run `echo ok`()</code> &mdash; no named block needed.
+                <p><strong>Embed and run scripts in the language of your choice.</strong> Define them with fence lang
+                    tags providing the runtime: <code>```node</code>, <code>```python3</code>, <code>```ruby</code>,
+                    <code>```pwsh</code> etc.
                 </p>
                 <p><strong>Async calls.</strong> For async managed work, use <code>run async wf()</code> — Jaiph fans
                     out the workflows concurrently and <strong>implicitly joins</strong> them before the parent workflow
@@ -487,14 +481,8 @@ Jaiph: Running async.jh
                 <p><strong>Testing Jaiph workflows.</strong> Test workflows with executable <code>*.test.jh</code>
                     suites, mocks, and assertions to cover deterministic and agent-assisted paths. See <a
                         href="testing">Testing</a>.</p>
-                <p><strong>Formatting.</strong> <code>jaiph format</code> rewrites <code>.jh</code> files to a
-                    canonical style — consistent whitespace and indentation. Imports, config, and channels are hoisted
-                    to the top; all other definitions (const, rules, scripts, workflows, tests) keep their source-file
-                    order. Use <code>--check</code> in CI to catch drift without modifying files, and
-                    <code>--indent &lt;n&gt;</code> to set spaces per level.
-                    Formatting is idempotent; comments, shebangs, and intentional blank lines between
-                    steps are preserved. Comments before hoisted constructs move with them. Multiline string and
-                    script bodies are emitted verbatim — inner lines are never re-indented. See <a href="cli#jaiph-format">CLI
+                <p><strong>Formatting.</strong> <code>jaiph format</code> rewrites <code>.jh</code> files to a canonical
+                    style &mdash; consistent whitespace and indentation. See <a href="cli#jaiph-format">CLI
                         reference</a>.</p>
 
                 <h3>Samples</h3>
