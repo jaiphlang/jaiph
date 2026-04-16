@@ -53,7 +53,7 @@ Or install from npm:
 npm install -g jaiph
 ```
 
-Verify: `jaiph --version`. Switch versions: `jaiph use nightly` or `jaiph use 0.9.0`.
+Verify: `jaiph --version`. Switch versions: `jaiph use nightly` or `jaiph use 0.9.1`.
 
 ## Example
 
