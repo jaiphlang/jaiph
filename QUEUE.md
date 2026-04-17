@@ -12,152 +12,149 @@ Process rules:
 
 ***
 
-## Docker — strict image contract + publish official `jaiph-runtime` images to GHCR
+## Docker — strict image contract + publish official `jaiph-runtime` images to GHCR #dev-ready
 
 **Goal**
-Remove all Docker runtime bootstrapping/fallback magic. In Docker mode, **every selected image must already contain a working `jaiph` CLI**. Jaiph must **not** build a thin derived image at runtime, must **not** mount host `dist/` into the container, and must **not** auto-install itself into arbitrary base images. The product contract becomes explicit: if Docker is on, the image is responsible for containing Jaiph.
+Remove all Docker runtime bootstrapping/fallback magic. In Docker mode, **every selected image must already contain a working `jaiph` CLI**. Jaiph must **not** build a thin derived image at runtime and must **not** auto-install itself into arbitrary base images. (Today the host uses `npm pack` + `docker build` to install the local package into a derived image; there is no bind-mount of host `dist/`, but that derived-image install path is equally forbidden.) The product contract becomes explicit: if Docker is on, the image is responsible for containing Jaiph.
 
-At the same time, publish an official Jaiph runtime image to **GHCR** and make it the default Docker image:
+Publish an official Jaiph runtime image to **GHCR** and make it the default Docker image:
 
 * tagged releases → `ghcr.io/jaiphlang/jaiph-runtime:<version>`
 * nightly builds → `ghcr.io/jaiphlang/jaiph-runtime:nightly`
-* default runtime image in Jaiph config/runtime should point at that official image
+* default `runtime.docker_image` / env default should point at that official image
 
-This is a deliberate contract change. Convenience fallback to `node:20-bookworm` + runtime bootstrap is **not** desired.
+Convenience fallback to `node:20-bookworm` + runtime bootstrap is **not** desired.
 
 **Required product decision**
 
 1. **Strict requirement** — all Docker images used by Jaiph must already have `jaiph`.
 2. **Official default image** — Jaiph publishes and uses `ghcr.io/jaiphlang/jaiph-runtime`.
-3. **No hidden runtime mutation** — no auto-derived image build, no host `dist/` mount hack, no `npm install -g` during Docker run startup.
+3. **No hidden runtime mutation** — no auto-derived image build, no `npm install -g` of Jaiph during Docker run startup.
 4. **Fast fail** — if the chosen image lacks `jaiph`, Jaiph must fail clearly with an explicit Docker/runtime error.
 
 **Why this task exists**
 
-The current codebase has tension between two incompatible models:
+The codebase currently mixes a generic contract (`jaiph run --raw` inside the container) with a convenience path (stock images without `jaiph`). Both cannot be true without bootstrapping. This task chooses the strict model and removes the second.
 
-* generic Docker contract: run `jaiph run --raw` inside the container
-* convenience contract: allow stock images that do not contain `jaiph`
+**Critical implementation detail (from current `src/runtime/docker.ts`)**
 
-Both cannot be true without runtime bootstrapping. This task intentionally chooses the first model and removes the second.
+When `imageExplicit === false`, `resolveImage` currently ends in `ensureLocalRuntimeImage`, which **always** targets a derived `jaiph-runtime-auto:*` tag built via `npm pack`, even if the base image already contains `jaiph`. After switching the default to the official GHCR image (or any image that already has `jaiph`), the runtime must **use that image as-is** when `command -v jaiph` succeeds — no auto-derivation. If `jaiph` is missing, fail fast (no fallback build).
+
+**Resolved defaults (no longer open)**
+
+* **Default tag rule**: Release npm builds embed `ghcr.io/jaiphlang/jaiph-runtime:<semver>` matching the package/`jaiph` version. Main/nightly CI artifacts and docs for contributors use the `:nightly` tag; state the rule explicitly in docs.
+* **Cursor / Claude CLIs in the official image**: **Exclude by default** from the minimal `jaiph-runtime` image to keep size and supply chain small; document how to extend a custom image (the managed `.jaiph/Dockerfile` template may remain a fuller example).
+
+**Queue coordination**
+
+Ship published GHCR images before or together with the later queued task “Runtime — default Docker when not CI or unsafe”, which will expect a pullable default image for local users.
 
 **Context**
 
-* Docker runtime implementation: `src/runtime/docker.ts`
-* Docker run path / spawn site: `src/cli/commands/run.ts`
-* Docker docs: `docs/sandboxing.md`, `docs/configuration.md`, `docs/cli.md`
-* Current Docker E2E coverage: `e2e/tests/72_docker_run_artifacts.sh`, `e2e/tests/73_docker_dockerfile_detection.sh`, `e2e/tests/74_docker_lifecycle.sh`
-* Managed project Dockerfile template: `.jaiph/Dockerfile`, plus `jaiph init` scaffolding in `src/cli/commands/init.ts`
-* CI/release workflows: `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `.github/workflows/nightly-engineer.yml`
+* Docker runtime: `src/runtime/docker.ts`
+* Docker run path: `src/cli/commands/run.ts`
+* Docs: `docs/sandboxing.md`, `docs/configuration.md`, `docs/cli.md`
+* E2E: `e2e/tests/72_docker_run_artifacts.sh`, `e2e/tests/73_docker_dockerfile_detection.sh`, `e2e/tests/74_docker_lifecycle.sh`
+* Managed Dockerfile: `.jaiph/Dockerfile`, `src/cli/commands/init.ts`
+* CI: `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `.github/workflows/nightly-engineer.yml`
 
 **Implementation requirements**
 
-1. **Runtime**
-   * Remove Docker fallback logic that auto-builds a derived image or auto-installs Jaiph into arbitrary base images.
-   * Keep the container entry generic: `jaiph run --raw ...`
-   * Add an explicit preflight/validation step for Docker images:
-     * either the selected image is the official `ghcr.io/jaiphlang/jaiph-runtime:*`,
-     * or a custom image that already contains `jaiph`.
-   * If `jaiph` is missing in the chosen image, fail with a clear error message that tells the user to:
-     * use the official GHCR image, or
-     * install Jaiph in their custom image.
+1. **Runtime** — Remove `ensureLocalRuntimeImage` / `buildRuntimeImageFromLocalPackage` / auto-derivation paths. Keep container entry `jaiph run --raw ...`. Preflight: after pull, verify `jaiph` exists in the selected image; if not, error with guidance to use `ghcr.io/jaiphlang/jaiph-runtime` or install Jaiph in a custom image. Preflight is by capability check, not by image name whitelist.
+2. **Default image** — Default becomes the official GHCR runtime image (not `node:20-bookworm`).
+3. **Publishing** — CI/release builds and pushes `ghcr.io/jaiphlang/jaiph-runtime` for release tags and `nightly`. Image includes Node.js, `jaiph`, `fuse-overlayfs` (and other sandbox prereqs per `.jaiph/Dockerfile`), and non-root user if that remains the contract.
+4. **Docs** — Rewrite Docker sections for the strict contract; remove language about auto-derived images and stock bases “just working.”
+5. **Tests** — Update E2E for strict contract; add/keep regression that an image without `jaiph` fails with a clear error.
 
-2. **Default image**
-   * Change the default Docker image away from `node:20-bookworm`.
-   * Default must become the official GHCR runtime image.
-   * Decide whether the default tag should be version-pinned at release time and `nightly` on main/nightly builds; document the exact rule.
+**Scope note**
 
-3. **Publishing**
-   * Add CI/release automation to build and publish `ghcr.io/jaiphlang/jaiph-runtime`.
-   * Publish at least:
-     * per-tag release images
-     * `nightly`
-   * Ensure the published image contains:
-     * `jaiph`
-     * Node.js
-     * `fuse-overlayfs` / Docker runtime prerequisites
-     * non-root runtime user if that remains part of the sandbox contract
-   * Decide whether Cursor / Claude CLIs belong in the official runtime image by default; document the decision explicitly.
-
-4. **Docs**
-   * Rewrite Docker docs to state the strict image contract clearly.
-   * Document the official GHCR image as the default and recommended path.
-   * Document how custom images must install `jaiph`.
-   * Remove any wording that implies Jaiph will make arbitrary base images work automatically.
-
-5. **Tests**
-   * Update E2E/tests so they assert the strict contract, not the bootstrap fallback.
-   * In particular, tests that currently expect `node:20-bookworm` to work without Jaiph must be rewritten.
-   * Add/keep a regression test that proves Docker fails clearly when the selected image lacks `jaiph`.
+Expect changes across more than three files (runtime, CI workflows, init scaffolding, docs, E2E, unit tests). Prefer plain functions and small helpers; `docker.ts` is already large—avoid speculative abstractions.
 
 **Acceptance criteria**
 
 * Default Docker image is `ghcr.io/jaiphlang/jaiph-runtime:*`, not `node:20-bookworm`.
 * Jaiph never auto-builds a derived runtime image at Docker run time.
-* Jaiph never mounts host build output into the container to provide `jaiph`.
+* Jaiph never injects Jaiph into the container except by using an image that already contains it (no `npm pack` bootstrap).
 * A custom image without `jaiph` fails fast with a clear actionable error.
 * Official GHCR runtime images are published for release tags and `nightly`.
 * Docs describe the strict contract and official image flow without ambiguity.
-* Unit + E2E coverage prevents regression back to runtime bootstrap behavior.
+* Unit + E2E coverage prevents regression to bootstrap behavior.
 
-***
-
-## Support optional config properties in Jaiph DSL: version, name, description.
-
-## Runtime — credential proxy for Docker mode
+## Support optional config properties in Jaiph DSL: version, name, description. #dev-ready
 
 **Goal**
-Containers should never hold real API keys. Implement a host-side HTTP proxy (the "Phantom Token" pattern) that intercepts outbound API requests from containers, strips a placeholder credential, and injects the real key before forwarding upstream. The agent inside the container literally cannot leak the real key — it never has it.
 
-**Design**
+Add optional module-scoped manifest fields in the module-level `config { }` block so a `.jh` file can declare human-readable **name**, **version**, and **description** without changing agent/run/runtime execution.
 
-1. **Host-side proxy** — a lightweight `http.createServer` bound to `127.0.0.1:<port>` (macOS/WSL2) or the `docker0` bridge IP (Linux). Receives requests from the container, swaps `x-api-key: placeholder` with the real key from host env, forwards to the upstream API, pipes the response back (including streaming SSE).
-2. **Container env injection** — instead of passing `ANTHROPIC_API_KEY=$real_key` into `docker run`, pass `ANTHROPIC_API_KEY=placeholder` + `ANTHROPIC_BASE_URL=http://host.docker.internal:<port>`.
-3. **Multi-backend routing** — Jaiph supports Claude and Cursor backends. Each backend's CLI must respect a base URL override env var. `claude` CLI supports `ANTHROPIC_BASE_URL`; `cursor-agent` may not — needs investigation.
-4. **Lifecycle** — proxy starts before the first Docker container launch, shuts down after the last container exits or on Jaiph process exit.
+**Keys (dot-separated, string values)**
 
-**Context**
+- `module.name`
+- `module.version`
+- `module.description`
 
-* Pattern reference: [NanoClaw's credential proxy](https://jonno.nz/posts/nanoclaw-architecture-masterclass-in-doing-less/) — same approach, independently arrived at.
-* Current Docker execution path: `src/runtime/kernel/` — Docker run/exec logic, env var forwarding.
-* Dockerfile: `.jaiph/Dockerfile` — container image setup.
-* Backend CLI invocation: `src/runtime/kernel/node-workflow-runtime.ts` — where `claude` / `cursor-agent` commands are constructed with env vars.
+All optional; omitted keys leave the corresponding field unset.
 
-**Open questions**
+**Semantics**
 
-* Does `cursor-agent` support a base URL override? If not, the proxy pattern may require a wrapper script or LD\_PRELOAD-based interception inside the container.
-* Single port with path-based routing vs one port per backend?
-* Should the proxy also enforce rate limits or audit-log API calls?
+- Values use the same double-quoted string rules as other config strings (existing escapes). No semver validation in v1 unless a later task adds it.
+- **Module-level only:** `module.*` keys must not appear in workflow-level `config { }` blocks. After parsing, reject workflow-level config that sets any `module.*` key, using the same pattern as the existing `runtime.*` workflow guard in `src/parse/workflows.ts`.
+- Stored on `WorkflowMetadata` as descriptive metadata only. They do **not** map into `JaiphConfig`, environment resolution, or the Node workflow runtime unless a future task wires them (e.g. MCP tool metadata).
+
+**Implementation touchpoints**
+
+- `src/parse/metadata.ts` — `ALLOWED_KEYS`, `KEY_TYPES`, `assignConfigKey`.
+- `src/types.ts` — optional `module?: { name?: string; version?: string; description?: string }` on `WorkflowMetadata`.
+- `src/format/emit.ts` — formatter round-trip for the new keys.
+- `src/parse/workflows.ts` — workflow-level rejection for `module.*` (mirror `metadata.runtime`).
+- Tests: `src/parse/parse-metadata.test.ts`; update parse-error golden/txtar cases if the unknown-key allowed-list appears in expectations.
+- Docs: `docs/configuration.md`, `docs/grammar.md` (`config_key`).
+
+**Non-goals**
+
+- Environment variables, CLI output, or runtime behavior changes beyond parsing/formatting/validation.
+
+**Queue coordination**
+
+- No conflict with the queued `jaiph serve` MCP task; future work may read `module.description` for tool listings.
 
 **Acceptance criteria**
 
-* Host-side proxy starts automatically when Docker mode is active.
-* Containers receive only placeholder credentials — no real API keys in container env.
-* `claude` CLI calls from inside Docker succeed via the proxy.
-* Proxy handles streaming responses (SSE) correctly.
-* Real keys never appear in container logs, env dumps, or process listings.
-* Platform-specific host address resolution works (macOS, Linux).
+- Module-level `config` accepts `module.name`, `module.version`, and `module.description`; values round-trip through `jaiph format`.
+- Workflow-level `config` containing any `module.*` assignment fails with an explicit error (consistent with `runtime.*` workflow rules).
+- Unit tests cover happy path and workflow rejection; docs and grammar list the keys.
 
-***
+**Scope note**
 
-## Runtime — harden Docker execution environment
+- Expect more than three files (parser, types, formatter, workflows guard, tests, docs); keep the existing plain `assignConfigKey` style — no new abstraction layers.
+
+## Runtime — harden Docker execution environment #dev-ready
 
 **Goal**
-Docker mode is the isolation boundary for workflow runs. Harden it: least-privilege mounts, explicit and documented env forwarding (what crosses the container boundary), network defaults, image supply chain, and failure modes when Docker is misconfigured or unavailable — so "Docker on" is a deliberate security posture, not accidental leakage.
+Docker mode is the isolation boundary for workflow runs. Harden it: least-privilege mounts, explicit and documented env forwarding (what crosses the container boundary), network defaults, and failure modes when Docker is misconfigured or unavailable — so "Docker on" is a deliberate security posture, not accidental leakage. (Image provenance and the official default image belong to the queued **Docker — strict image contract + GHCR** task; this task only documents or tightens runtime-visible pull/verify behavior as needed, without redefining publishing or the default image.)
 
 **Context**
 
-* Docker runtime: `src/runtime/kernel/` — look for `docker.ts` or Docker-related logic in the run path.
-* E2E Docker tests: `e2e/tests/72_docker_run_artifacts.sh`, `e2e/tests/73_docker_dockerfile_detection.sh`.
-* Config: `runtime.docker_enabled`, `runtime.docker_timeout`, `runtime.workspace` keys in `src/config.ts` and metadata parsing.
+* Docker runtime: `src/runtime/docker.ts` (`parseMounts` / `validateMounts`, `resolveDockerConfig`, `buildDockerArgs`, `checkDockerAvailable`, `spawnDockerProcess`); CLI integration: `src/cli/commands/run.ts`.
+* Current forwarding: `buildDockerArgs` remaps `JAIPH_WORKSPACE` and `JAIPH_RUNS_DIR`, passes through `JAIPH_*` except `JAIPH_DOCKER_*`, and passes keys prefixed `CURSOR_`, `ANTHROPIC_`, or `CLAUDE_` (see `AGENT_ENV_PREFIXES` in `docker.ts`). Mounts come from resolved `runtime.workspace` plus fixed rw run-dir, ro overlay script, and `--device /dev/fuse`.
+* E2E: `e2e/tests/72_docker_run_artifacts.sh`, `e2e/tests/73_docker_dockerfile_detection.sh`.
+* Config: `runtime.docker_enabled`, `runtime.docker_image`, `runtime.docker_network`, `runtime.docker_timeout`, `runtime.workspace` via `src/config.ts` and metadata parsing.
+
+**Queue coordination**
+
+* Land after or together with **Docker — strict image contract + publish official `jaiph-runtime` images to GHCR** so bootstrap removal and default image changes are settled before deep hardening refactors the same code paths.
+* Land after or together with **Runtime — credential proxy for Docker mode** so any env allowlist/denylist and `docs/sandboxing.md` text stay consistent with placeholder `ANTHROPIC_*` and host-reachable API base URLs (no real secrets in `-e`).
+* The later task **Runtime — default Docker when not CI or unsafe** changes `runtime.docker_enabled` defaults; avoid conflicting precedence — document how hardened Docker behavior interacts with that default once both exist.
 
 **Acceptance criteria**
 
-* Threat-model notes (short section in `docs/sandboxing.md` or equivalent): what Docker is / isn't protecting against.
-* Concrete hardening changes in `docker.ts` / run path (e.g. mount validation, env allowlist or documented denylist, safer defaults) with unit tests.
+* Threat-model notes (short section in `docs/sandboxing.md` or equivalent): what Docker is / is not protecting against (including that hooks run on the host).
+* Concrete hardening changes in `docker.ts` / run path (e.g. mount validation, env allowlist or documented denylist aligned with the credential-proxy contract, safer defaults) with unit tests.
 * No silent widen of host access without opt-in.
+* Document network mode behavior (`runtime.docker_network` / `--network`) and failure modes for missing Docker or failed pulls (`E_DOCKER_*`), extending existing patterns where appropriate.
 
-***
+**Scope note**
+
+* `docker.ts` is already large (~650+ lines); prefer small helpers or one focused sibling module over speculative abstractions. Expect at least `docker.ts`, `docker.test.ts`, and `docs/sandboxing.md`; split follow-ups if the change set outgrows one cycle.
 
 ## Runtime — default Docker when not CI or unsafe #dev-ready
 
@@ -179,6 +176,45 @@ Introduce **`JAIPH_UNSAFE=true`** as the explicit "run on host / skip Docker def
 * `CHANGELOG` + sandboxing / configuration docs updated.
 
 ***
+
+## Runtime — credential proxy for Docker mode
+
+**Goal**
+Containers should never hold real API keys. Implement a host-side HTTP proxy (the Phantom Token pattern) that intercepts outbound API requests from containers, strips a placeholder credential, and injects the real key from the host process environment before forwarding upstream. The workload in the container never receives the real secret.
+
+**Design**
+
+1. **Host-side proxy** — A lightweight Node HTTP server bound to an address **reachable from the container network** (typically **`0.0.0.0:<ephemeral-port>`** on the host; binding only `127.0.0.1` is often wrong for container-to-host access). For each request: replace placeholder auth with the real `ANTHROPIC_API_KEY` from the host, forward to the real Anthropic API base URL from host configuration, stream the response back (including SSE).
+2. **Container env injection** — In `src/runtime/docker.ts` (`buildDockerArgs` / env passed into `-e`): pass `ANTHROPIC_API_KEY=<placeholder>` and `ANTHROPIC_BASE_URL=http://host.docker.internal:<port>` (or `http://<host-gateway>:<port>`). Never pass the real key in `-e`.
+3. **Linux networking** — When using the hostname `host.docker.internal`, add **`--add-host=host.docker.internal:host-gateway`** to the `docker run` argument list where supported so the name resolves inside the container.
+4. **Backends (v1 scope)** — **Claude / Anthropic only.** The Anthropic SDK and `claude` CLI honor `ANTHROPIC_BASE_URL`. **Cursor (`cursor-agent`)** does not have a documented equivalent to `ANTHROPIC_BASE_URL` in public Cursor CLI docs; **leave Cursor and codex (`OPENAI_*`) out of this task** and open a follow-up if the product needs the same guarantee there.
+5. **Routing** — **Single listen port** and a single Anthropic-compatible upstream in v1. Multi-upstream path routing is deferred.
+6. **Non-goals (v1)** — Rate limits and audit logging.
+7. **Lifecycle** — Start the proxy before the first `spawnDockerProcess` for that Jaiph process; stop it when tearing down the Docker run (and on Jaiph exit), with reference counting if multiple Docker runs can occur in one process.
+
+**Context**
+
+* Pattern reference: [NanoClaw credential proxy](https://jonno.nz/posts/nanoclaw-architecture-masterclass-in-doing-less/).
+* **Implementation touchpoints** — `src/runtime/docker.ts` (primary: `-e` forwarding, optional extra Docker flags), `src/cli/commands/run.ts` (spawn/cleanup lifecycle). Agent CLI args/env preparation: `src/runtime/kernel/prompt.ts` (likely unchanged).
+* Image template: `.jaiph/Dockerfile`.
+
+**Queue coordination**
+
+* This edits the same `docker.ts` / Docker spawn path as the queued **Docker — strict image contract + GHCR** task—land together or immediately after to reduce merge churn.
+* Later **Runtime — harden Docker execution environment** may tighten env policy; document proxy-related variables when that work lands.
+
+**Acceptance criteria**
+
+* Host-side proxy starts automatically when Docker mode is active (Anthropic/Claude path).
+* Containers receive only a placeholder `ANTHROPIC_API_KEY` — no real Anthropic API key in container environment.
+* `claude` CLI calls from inside Docker succeed via the proxy.
+* Proxy handles streaming responses (SSE) correctly.
+* Real keys do not appear in Jaiph-supplied container `-e` values (so they do not appear in `docker inspect` for those vars or in container `printenv` for them as anything but the placeholder).
+* macOS and Linux: documented/working host reachability (`host.docker.internal` + `host-gateway` on Linux as needed, or an equivalent bridge address).
+
+**Scope note**
+
+* Target **~3 files**: one small new module for the proxy plus focused edits in `docker.ts` and `run.ts`. Plain functions, no new abstraction layers.
 
 ## `jaiph serve` — expose workflows as an MCP server #dev-ready
 
