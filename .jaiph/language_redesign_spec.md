@@ -75,7 +75,7 @@ These are not options. Implementation starts from this table.
 | Custom shebang | Yes | `#!/usr/bin/env node` (first line of body; omit for default `#!/usr/bin/env bash`) |
 | All body content | Yes | Full language content matching the shebang (bash by default) |
 | Nested bash functions | Yes (bash) | `helper() { ... }` (internal to the script body) |
-| `source` shared lib | Yes (bash) | `source "$JAIPH_LIB/utils.sh"` |
+| Shared bash via workspace lib dir | **No** | Use `import script`, a sibling module, or inline bash in a `script` block — `JAIPH_LIB` is not provided |
 | `return N` / `exit N` | Yes (bash) | Exit code (integer only) |
 | stdout (`echo`, `printf`) | Yes | Value output mechanism |
 | `local` | Yes (bash) | Bash variable declarations |
@@ -159,16 +159,7 @@ script check_is_number() {
 
 ### Shared utility code (bash scripts only)
 
-Scripts that need common logic `source` a shared bash library rather than calling other Jaiph scripts. Libraries live in a conventional location (e.g. `.jaiph/lib/`) and are plain bash files.
-
-```
-script check_is_number() {
-  source "$JAIPH_LIB/validators.sh"
-  is_integer "$1"
-}
-```
-
-The runtime sets `$JAIPH_LIB` to the project's shared library path. Libraries are not Jaiph constructs — they are plain bash, managed outside the Jaiph compiler.
+Scripts cannot call other Jaiph scripts. Factor repeated bash into **`import script "./helper.sh" as helper`** (path relative to the `.jh` file), another `.jh` module, or a small extra `script` in the same module. Do not use a workspace-wide bash drop directory outside the compiler model.
 
 Non-bash scripts use their language's own module system for shared code.
 
@@ -432,7 +423,7 @@ Every `.jh` file was scanned. Below are all patterns found that require migratio
 
 **Problem**: the loop body contains orchestration keywords (`run`, `ensure`, `prompt`, `log`). Cannot be pushed to a script.
 
-**Resolution**: use **workflow recursion**. Extract per-item logic into a workflow, then recurse over the list. Shared utility scripts `first_line` and `rest_lines` (in `$JAIPH_LIB`) split newline-delimited lists.
+**Resolution**: use **workflow recursion**. Extract per-item logic into a workflow, then recurse over the list. Split newline-delimited lists with tiny `script` steps (e.g. `printf '%s\n' "$1" | head -n 1` / `tail -n +2`) or `import script`.
 
 ```
 script list_docs_files() {
@@ -531,7 +522,7 @@ if run matches "$verdict" "dev-ready" {
 }
 ```
 
-These are small, reusable utility scripts. Candidates for a shared library (`$JAIPH_LIB/checks.sh`).
+These are small, reusable utility scripts in the same module (or behind `import script`).
 
 ### P7: `return "$(command)"` in scripts (Jaiph value return)
 
@@ -606,15 +597,13 @@ workflow ensure_ci_passes() {
 
 **File**: docs_parity.jh — rule `only_expected_docs_changed_after_prompt` calls script `is_allowed_file` directly.
 
-**Migration**: under full isolation + no script-to-script calls, inline the logic or use a shared lib:
+**Migration**: under full isolation + no script-to-script calls, inline the logic or add a dedicated `import script` helper:
 
 ```
 script check_only_expected_changed(allowed, changed) {
-  source "$JAIPH_LIB/file_checks.sh"
-
   while IFS= read -r f; do
     [ -z "$f" ] && continue
-    if ! is_in_list "$allowed" "$f"; then
+    if [[ $'\n'"$allowed"$'\n' != *$'\n'"$f"$'\n'* ]]; then
       echo "Unexpected file changed: $f" >&2
       return 1
     fi
@@ -709,12 +698,11 @@ script check_only_expected_changed(allowed, changed) {
 **4a. Implement full isolation for script execution**
 - Scripts run as separate processes (inherent from separate files + exec)
 - Only positional args available (inherent from separate executable)
-- Set `$JAIPH_LIB` env var for shared library access
-- Set `$JAIPH_SCRIPTS` env var for build output scripts path
+- Set `$JAIPH_SCRIPTS` and `$JAIPH_WORKSPACE` for script steps (no workspace bash lib dir)
 
 **4b. Reject script-to-script calls**
 - Parser/validator: detect when a script body references another Jaiph script name
-- Error: `"scripts cannot call other Jaiph scripts; use a shared library or compose in a workflow"`
+- Error: `"scripts cannot call other Jaiph scripts; use import script, inline bash, or compose in a workflow"`
 
 ### Phase 5: Remove shell (breaking changes)
 
@@ -742,7 +730,7 @@ script check_only_expected_changed(allowed, changed) {
 
 - Rewrite all `e2e/*.jh` fixtures
 - Rewrite all `.jaiph/*.jh` workflows
-- Create shared libraries in `.jaiph/lib/` for common patterns (P6, P11)
+- Factor repeated bash into `import script` or extra `script` blocks in the same module (P6, P11)
 - Update test fixtures and golden transpilation outputs
 - Update docs and README examples
 
@@ -770,7 +758,7 @@ script check_only_expected_changed(allowed, changed) {
 | `src/transpile/validate.ts` | Collapse duplicate ref resolution. Rename `function` → `script` in errors/lookups. Allow `run` in rules (scripts only). Remove shell-condition validation. Add script isolation validation. |
 | `src/transpile/shell-jaiph-guard.ts` | Scope down — only applies to bash scripts now. |
 | `e2e/*.jh` | Rewrite all fixtures to new syntax. |
-| `.jaiph/*.jh` | Rewrite all workflows to new syntax. Create `.jaiph/lib/` shared libraries. |
+| `.jaiph/*.jh` | Rewrite all workflows to new syntax. |
 | `test/fixtures/**` | Update golden transpilation outputs. |
 | `docs/*` | Update grammar, getting-started, CLI docs for `script` keyword and shebang. |
 
@@ -785,7 +773,7 @@ script check_only_expected_changed(allowed, changed) {
 | `const` scoping conflicts with bash `local` | Low | `const` is parser-level immutability; transpiles to `local` |
 | Return semantics confusion during migration | Medium | Parser errors guide users: `"return 'value' not allowed in script; use echo"` |
 | Script isolation perf overhead (fork+exec per call) | Medium | Measure fork cost; scripts are already logically isolated. Optimize hot paths if needed |
-| Shared lib mechanism needs runtime support (`$JAIPH_LIB`) | Low | Simple: runtime sets one env var before script execution |
+| Users want a global bash grab-bag | Medium | `import script` + small modules; no `JAIPH_LIB` |
 | `.jaiph/` workflow migration is large (9 files) | High | Migrate in parallel with parser changes; each file is independently testable |
 | Separate file management complexity | Medium | Deterministic naming (`scripts/<name>`), cleanup on rebuild |
 | Custom shebang scripts may have missing dependencies | Low | Not Jaiph's problem — user owns their runtime. Document clearly |
@@ -803,7 +791,6 @@ script check_only_expected_changed(allowed, changed) {
 - Scripts execute in full isolation (no inherited variables)
 - `const` declarations work in workflows and rules with all RHS forms
 - `if` brace syntax works with `not` and `else if`
-- Shared libraries loadable from bash scripts via `$JAIPH_LIB`
 - Parser errors for raw shell include actionable rewrite examples
 - `jaiph::set_return_value` removed from script transpilation paths
 - `validate.ts` under 500 lines after dedup

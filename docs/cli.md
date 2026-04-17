@@ -390,10 +390,9 @@ These variables apply to `jaiph run` and workflow execution. Variables marked **
 - `JAIPH_RUN_DIR`, `JAIPH_RUN_ID`, `JAIPH_RUN_SUMMARY_FILE` — set by `NodeWorkflowRuntime` to the run directory, stable run UUID, and `run_summary.jsonl` path.
 - `JAIPH_SOURCE_FILE` — set automatically by the CLI to the entry file basename. Used to name run directories.
 
-**Workspace and libraries:**
+**Workspace and run paths:**
 
 - `JAIPH_WORKSPACE` — workspace root, set by the CLI. Detected by walking up from the entry `.jh` file's directory until `.jaiph` or `.git` is found. Guards in `detectWorkspaceRoot` skip misleading markers under shared system temp directories (`/tmp`, `/var/tmp`, macOS `/var/folders/.../T/...`) and nested `.jaiph/tmp` trees. In Docker sandbox mode the runtime remaps it inside the container (see [Sandboxing](sandboxing.md)).
-- `JAIPH_LIB` — directory for project-local shared bash libraries (conventionally `<workspace>/.jaiph/lib`). The runtime sets this to `${JAIPH_WORKSPACE:-.}/.jaiph/lib` for `script` steps. Override when libraries live elsewhere. See [Grammar](grammar.md#step-output-contract).
 - `JAIPH_RUNS_DIR` — root directory for run logs (default: `.jaiph/runs` under workspace).
 
 **Agent and prompt configuration:**
