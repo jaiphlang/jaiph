@@ -396,11 +396,24 @@ if [ "$overlay_ok" -ne 1 ]; then
       printf '\n' >&2
     fi
   else
-    printf 'jaiph docker: workspace overlay unavailable and rsync copy fallback is unavailable; /jaiph/workspace may be incomplete' >&2
-    if [ -n "$overlay_reason" ]; then
-      printf ' (%s)' "$overlay_reason" >&2
+    if cp -a "$LOWER"/. "$MERGED"/ 2>/tmp/jaiph-workspace-cp.err; then
+      printf 'jaiph docker: workspace overlay unavailable; using cp fallback at /jaiph/workspace' >&2
+      if [ -n "$overlay_reason" ]; then
+        printf ' (%s)' "$overlay_reason" >&2
+      fi
+      printf '\n' >&2
+      overlay_ok=1
+    else
+      cp_reason="$(tr '\n' ' ' </tmp/jaiph-workspace-cp.err | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')"
+      printf 'jaiph docker: workspace overlay unavailable and copy fallbacks are unavailable; /jaiph/workspace may be incomplete' >&2
+      if [ -n "$overlay_reason" ]; then
+        printf ' (%s)' "$overlay_reason" >&2
+      fi
+      if [ -n "$cp_reason" ]; then
+        printf ' [cp fallback: %s]' "$cp_reason" >&2
+      fi
+      printf '\n' >&2
     fi
-    printf '\n' >&2
   fi
 fi
 exec "$@"

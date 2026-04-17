@@ -464,3 +464,160 @@ test("E_VALIDATE: ${arg1} in log is unknown identifier", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// --- Explicit nested managed call tests ---
+
+test("buildScripts accepts run foo(run bar()) — explicit nested managed call", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-nested-run-run-"));
+  const out = join(root, "out");
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        'script mkdir_p_simple = `mkdir -p "$1"`',
+        'script jaiph_tmp_dir = `printf "%s\\n" "/tmp/jaiph"`',
+        "workflow default() {",
+        "  run mkdir_p_simple(run jaiph_tmp_dir())",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    buildScripts(join(root, "m.jh"), out);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("buildScripts accepts run foo(ensure rule_bar()) — explicit nested ensure", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-nested-run-ensure-"));
+  const out = join(root, "out");
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        'script do_work = `echo "$1"`',
+        "rule check_ok() {",
+        '  run do_work("ok")',
+        "}",
+        "workflow default() {",
+        "  run do_work(ensure check_ok())",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    buildScripts(join(root, "m.jh"), out);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("buildScripts accepts run foo(run `echo aaa`()) — explicit nested inline script", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-nested-run-inline-"));
+  const out = join(root, "out");
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        'script do_work = `echo "$1"`',
+        "workflow default() {",
+        "  run do_work(run `echo aaa`())",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    buildScripts(join(root, "m.jh"), out);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("buildScripts accepts const x = run bar() followed by run foo(x)", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-capture-then-pass-"));
+  const out = join(root, "out");
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        'script bar = `echo "hello"`',
+        'script foo = `echo "$1"`',
+        "workflow default() {",
+        "  const x = run bar()",
+        "  run foo(x)",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    buildScripts(join(root, "m.jh"), out);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("E_VALIDATE: run foo(rule_bar()) — bare rule call in args is rejected", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-nested-bare-rule-"));
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        'script do_work = `echo "$1"`',
+        "rule rule_bar() {",
+        '  run do_work("ok")',
+        "}",
+        "workflow default() {",
+        "  run do_work(rule_bar())",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      /nested managed calls in argument position must be explicit/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("E_VALIDATE: run foo(`echo aaa`()) — bare inline script call in args is rejected", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-nested-bare-inline-"));
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        'script do_work = `echo "$1"`',
+        "workflow default() {",
+        "  run do_work(`echo aaa`())",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      /nested inline script calls in argument position must be explicit/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("E_VALIDATE: const x = bar() — bare call in const assignment is rejected", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-const-bare-call-"));
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        'script bar = `echo "hello"`',
+        "workflow default() {",
+        "  const x = bar()",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      /Script calls in const assignments must use run/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
