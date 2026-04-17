@@ -30,7 +30,7 @@ import {
   resolveDockerConfig,
   spawnDockerProcess,
   cleanupDocker,
-  CONTAINER_WORKSPACE,
+  findRunArtifacts,
 } from "../../runtime/docker";
 import {
   styleKeywordLabel,
@@ -52,7 +52,7 @@ import {
 } from "../run/stderr-handler";
 
 export async function runWorkflow(rest: string[]): Promise<number> {
-  const { target, positional } = parseArgs(rest);
+  const { target, raw, positional } = parseArgs(rest);
   const input = positional[0];
   const runArgs = positional.slice(1);
   if (!input) {
@@ -61,7 +61,6 @@ export async function runWorkflow(rest: string[]): Promise<number> {
   }
   const inputAbs = resolve(input);
   const workspaceRoot = detectWorkspaceRoot(dirname(inputAbs));
-  const hooksConfig = loadMergedHooks(workspaceRoot);
   const inputStat = statSync(inputAbs);
   const ext = extname(inputAbs);
   if (!inputStat.isFile() || ext !== ".jh") {
@@ -69,6 +68,11 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     return 1;
   }
 
+  if (raw) {
+    return runWorkflowRaw(inputAbs, workspaceRoot, target, runArgs);
+  }
+
+  const hooksConfig = loadMergedHooks(workspaceRoot);
   const mod = parsejaiph(readFileSync(inputAbs, "utf8"), inputAbs);
   const effectiveConfig = metadataToConfig(mod.metadata);
 
@@ -87,7 +91,6 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     runtimeEnv.JAIPH_SCRIPTS = scriptsDir;
     const metaFile = join(outDir, `.jaiph-run-meta-${Date.now()}-${process.pid}.txt`);
 
-    // Set up event emitter and subscribers
     const emitter = createRunEmitter();
     const runState = createRunState();
     const ttyCtx: TTYContext = {
@@ -163,8 +166,46 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     return reportResult(
       runState.capturedStderr, childExit.status, startedAt, runtimeEnv,
       emitter, runState.workflowRunId, inputAbs, workspaceRoot, metaFile,
-      dockerResult ? CONTAINER_WORKSPACE : undefined,
+      dockerResult?.sandboxRunDir,
     );
+  } finally {
+    if (shouldCleanup) {
+      rmSync(outDir, { recursive: true, force: true });
+    }
+  }
+}
+
+/**
+ * Raw mode: transparent passthrough for Docker sandbox.
+ * Parses and compiles the workflow, spawns the runtime with inherited stdio
+ * so __JAIPH_EVENT__ lines flow directly to stderr for the host CLI to render.
+ * No banner, no tree rendering, no reportResult.
+ */
+async function runWorkflowRaw(
+  inputAbs: string,
+  workspaceRoot: string,
+  target: string | undefined,
+  runArgs: string[],
+): Promise<number> {
+  const mod = parsejaiph(readFileSync(inputAbs, "utf8"), inputAbs);
+  const effectiveConfig = metadataToConfig(mod.metadata);
+  const outDir = target ? resolve(target) : mkdtempSync(join(tmpdir(), "jaiph-run-"));
+  const shouldCleanup = !target;
+  try {
+    const runtimeEnv = resolveRuntimeEnv(effectiveConfig, workspaceRoot, inputAbs);
+    runtimeEnv.JAIPH_SOURCE_ABS = inputAbs;
+    const { scriptsDir } = buildScripts(inputAbs, outDir, workspaceRoot);
+    runtimeEnv.JAIPH_SCRIPTS = scriptsDir;
+    const metaFile = join(outDir, `.jaiph-run-meta-${Date.now()}-${process.pid}.txt`);
+
+    const dummyBuiltPath = join(outDir, "entry.sh");
+    const execResult = spawnRunProcess(
+      [metaFile, dummyBuiltPath, "default", ...runArgs],
+      { cwd: workspaceRoot, env: runtimeEnv, stdio: "inherit" },
+    );
+
+    const childExit = await waitForRunExit(execResult);
+    return childExit.status;
   } finally {
     if (shouldCleanup) {
       rmSync(outDir, { recursive: true, force: true });
@@ -214,12 +255,12 @@ function spawnExec(
   let execResult;
 
   if (dockerConfig.enabled) {
+    const sandboxRunDir = mkdtempSync(join(tmpdir(), "jaiph-sandbox-run-"));
     dockerResult = spawnDockerProcess({
       config: dockerConfig,
-      scriptsDir: runtimeEnv.JAIPH_SCRIPTS ?? join(outDir, "scripts"),
       sourceAbs: runtimeEnv.JAIPH_SOURCE_ABS!,
       workspaceRoot,
-      metaFile,
+      sandboxRunDir,
       runArgs,
       env: runtimeEnv,
       isTTY,
@@ -314,30 +355,27 @@ function reportResult(
   inputAbs: string,
   workspaceRoot: string,
   metaFile: string,
-  containerWorkspace?: string,
+  sandboxRunDir?: string,
 ): number {
   const elapsedMs = Date.now() - startedAt;
   const elapsedLabel = formatElapsedDuration(elapsedMs);
-  const remapPath = (p: string): string => {
-    if (!containerWorkspace) return p;
-    if (p.startsWith(containerWorkspace + "/")) {
-      return join(workspaceRoot, p.slice(containerWorkspace.length + 1));
-    }
-    if (p === containerWorkspace) return workspaceRoot;
-    return p;
-  };
   let runDir: string | undefined;
   let summaryFile: string | undefined;
-  if (existsSync(metaFile)) {
+
+  if (sandboxRunDir) {
+    const artifacts = findRunArtifacts(sandboxRunDir);
+    runDir = artifacts.runDir;
+    summaryFile = artifacts.summaryFile;
+  } else if (existsSync(metaFile)) {
     const metaLines = readFileSync(metaFile, "utf8").split(/\r?\n/);
     for (const line of metaLines) {
       if (line.startsWith("run_dir=")) {
         const value = line.slice("run_dir=".length).trim();
-        if (value) runDir = remapPath(value);
+        if (value) runDir = value;
       }
       if (line.startsWith("summary_file=")) {
         const value = line.slice("summary_file=".length).trim();
-        if (value) summaryFile = remapPath(value);
+        if (value) summaryFile = value;
       }
     }
   }

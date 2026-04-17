@@ -7,6 +7,9 @@ import {
   resolveDockerConfig,
   buildDockerArgs,
   remapDockerEnv,
+  overlayMountPath,
+  findRunArtifacts,
+  writeOverlayScript,
   resolveImage,
   buildImageFromDockerfile,
   type MountSpec,
@@ -15,16 +18,38 @@ import {
 } from "./docker";
 import { mkdtempSync, writeFileSync, mkdirSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 
-/** Shared temp workspace for buildDockerArgs tests (mkdirSync .jaiph/runs). */
+/** Shared temp workspace for buildDockerArgs tests. */
 const TEST_WS = mkdtempSync(join(tmpdir(), "jaiph-test-ws-"));
-const TEST_GEN = mkdtempSync(join(tmpdir(), "jaiph-test-gen-"));
-const TEST_META = join(TEST_WS, ".jaiph-meta-test.txt");
+const TEST_SANDBOX = mkdtempSync(join(tmpdir(), "jaiph-test-sandbox-"));
+const TEST_OVERLAY = writeOverlayScript();
+const TEST_OVERLAY_DIR = dirname(TEST_OVERLAY);
 test.after(() => {
   rmSync(TEST_WS, { recursive: true, force: true });
-  rmSync(TEST_GEN, { recursive: true, force: true });
+  rmSync(TEST_SANDBOX, { recursive: true, force: true });
+  rmSync(TEST_OVERLAY_DIR, { recursive: true, force: true });
 });
+
+function defaultOpts(overrides?: Partial<DockerSpawnOptions>): DockerSpawnOptions {
+  return {
+    config: {
+      enabled: true,
+      image: "ubuntu:24.04",
+      imageExplicit: false,
+      network: "default",
+      timeout: 300,
+      mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
+    },
+    sourceAbs: join(TEST_WS, "main.jh"),
+    workspaceRoot: TEST_WS,
+    sandboxRunDir: TEST_SANDBOX,
+    runArgs: [],
+    env: {},
+    isTTY: false,
+    ...overrides,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // parseMount
@@ -181,263 +206,144 @@ test("resolveDockerConfig: workspace from in-file", () => {
 // buildDockerArgs
 // ---------------------------------------------------------------------------
 
-test("buildDockerArgs: ro workspace + rw runs sub-mount + raw node runtime", () => {
-  const tmpWs = mkdtempSync(join(tmpdir(), "jaiph-test-ws-"));
-  const tmpGen = mkdtempSync(join(tmpdir(), "jaiph-test-gen-"));
-  const metaFile = join(tmpWs, ".jaiph-meta-test.txt");
-  try {
-    const opts: DockerSpawnOptions = {
-      config: {
-        enabled: true,
-        image: "ubuntu:24.04",
-        imageExplicit: false,
-        network: "default",
-        timeout: 300,
-        mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
-      },
-      scriptsDir: join(tmpWs, "scripts"),
-      sourceAbs: join(tmpWs, "main.jh"),
-      workspaceRoot: tmpWs,
-      metaFile,
-      runArgs: ["arg1"],
-      env: {},
-      isTTY: false,
-    };
-    const args = buildDockerArgs(opts, tmpGen);
+test("buildDockerArgs: workspace ro + overlay-ro + sandbox run rw + fuse device", () => {
+  const opts = defaultOpts({ runArgs: ["arg1"] });
+  const args = buildDockerArgs(opts, TEST_OVERLAY);
 
-    assert.ok(args.includes("run"));
-    assert.ok(args.includes("--rm"));
-    assert.ok(!args.includes("-t"));
-    assert.ok(!args.includes("--network"));
-    assert.ok(args.includes("ubuntu:24.04"));
+  assert.ok(args.includes("run"));
+  assert.ok(args.includes("--rm"));
+  assert.ok(!args.includes("-t"));
+  assert.ok(!args.includes("--network"));
+  assert.ok(args.includes("ubuntu:24.04"));
 
-    const vFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-v");
+  const deviceIdx = args.indexOf("--device");
+  assert.ok(deviceIdx >= 0);
+  assert.equal(args[deviceIdx + 1], "/dev/fuse");
 
-    // Generated dir mounted ro at /jaiph/generated
-    const genMount = vFlags.find((v) => v.includes("/jaiph/generated:"));
-    assert.ok(genMount, "generated dir mount present");
-    assert.ok(genMount!.endsWith(":ro"), "generated dir must be read-only");
+  const vFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-v");
 
-    // Workspace mount forced to ro regardless of config
-    const wsMount = vFlags.find((v) => v.includes("/jaiph/workspace:"));
-    assert.ok(wsMount, "workspace mount present");
-    assert.ok(wsMount!.endsWith(":ro"), "workspace mount must be read-only");
+  // Workspace ro
+  const wsMount = vFlags.find((v) => v.includes("/jaiph/workspace:"));
+  assert.ok(wsMount, "workspace mount present");
+  assert.ok(wsMount!.endsWith(":ro"), "workspace must be ro");
 
-    // Writable sub-mount for .jaiph/runs
-    const runsMount = vFlags.find((v) => v.includes(".jaiph/runs"));
-    assert.ok(runsMount, "runs sub-mount present");
-    assert.ok(runsMount!.endsWith(":rw"), "runs sub-mount must be rw");
+  // Overlay lower-layer ro
+  const wsRoMount = vFlags.find((v) => v.includes("/jaiph/workspace-ro:"));
+  assert.ok(wsRoMount, "workspace-ro mount present");
+  assert.ok(wsRoMount!.endsWith(":ro"), "workspace-ro must be ro");
 
-    // Meta dir mounted rw at /jaiph/meta
-    const metaMount = vFlags.find((v) => v.includes("/jaiph/meta:"));
-    assert.ok(metaMount, "meta dir mount present");
-    assert.ok(metaMount!.endsWith(":rw"), "meta dir must be rw");
+  // Sandbox run dir rw
+  const runMount = vFlags.find((v) => v.includes("/jaiph/run:"));
+  assert.ok(runMount, "sandbox run mount present");
+  assert.ok(runMount!.endsWith(":rw"), "sandbox run must be rw");
 
-    // .jaiph/runs directory was created on host
-    assert.ok(existsSync(join(tmpWs, ".jaiph", "runs")));
+  // Overlay script mounted ro
+  const overlayMount = vFlags.find((v) => v.includes("/jaiph/overlay-run.sh:"));
+  assert.ok(overlayMount, "overlay script mount present");
+  assert.ok(overlayMount!.endsWith(":ro"), "overlay script must be ro");
 
-    // Raw node runtime command (not jaiph CLI)
-    assert.ok(args.includes("node"));
-    assert.ok(args.includes("/jaiph/generated/src/runtime/kernel/node-workflow-runner.js"));
-    assert.ok(args.includes("/jaiph/workspace/main.jh"));
-    assert.ok(args.includes("arg1"));
-    assert.ok(args.includes("default"));
-  } finally {
-    rmSync(tmpWs, { recursive: true, force: true });
-    rmSync(tmpGen, { recursive: true, force: true });
-  }
+  // Total: 2 workspace (primary + -ro) + 1 run + 1 overlay script = 4
+  assert.equal(vFlags.length, 4);
+
+  // Command: overlay-run.sh → jaiph run --raw <source>
+  assert.ok(args.includes("/jaiph/overlay-run.sh"));
+  assert.ok(args.includes("jaiph"));
+  assert.ok(args.includes("--raw"));
+  assert.ok(args.includes("/jaiph/workspace/main.jh"));
+  assert.ok(args.includes("arg1"));
 });
 
-test("buildDockerArgs: no -t flag even when isTTY is true (stderr-only event contract)", () => {
-  const opts: DockerSpawnOptions = {
-    config: {
-      enabled: true,
-      image: "ubuntu:24.04",
-      imageExplicit: false,
-      network: "default",
-      timeout: 300,
-      mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
-    },
-    scriptsDir: join(TEST_WS, "scripts"),
-    sourceAbs: join(TEST_WS, "main.jh"),
-    workspaceRoot: TEST_WS,
-    metaFile: TEST_META,
-    runArgs: [],
-    env: {},
-    isTTY: true,
-  };
-  const args = buildDockerArgs(opts, TEST_GEN);
+test("buildDockerArgs: no -t flag even when isTTY is true", () => {
+  const args = buildDockerArgs(defaultOpts({ isTTY: true }), TEST_OVERLAY);
   assert.ok(!args.includes("-t"));
 });
 
 test("buildDockerArgs: --network flag for non-default network", () => {
-  const opts: DockerSpawnOptions = {
-    config: {
-      enabled: true,
-      image: "ubuntu:24.04",
-      imageExplicit: false,
-      network: "none",
-      timeout: 300,
-      mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
-    },
-    scriptsDir: join(TEST_WS, "scripts"),
-    sourceAbs: join(TEST_WS, "main.jh"),
-    workspaceRoot: TEST_WS,
-    metaFile: TEST_META,
-    runArgs: [],
-    env: {},
-    isTTY: false,
-  };
-  const args = buildDockerArgs(opts, TEST_GEN);
+  const opts = defaultOpts({
+    config: { ...defaultOpts().config, network: "none" },
+  });
+  const args = buildDockerArgs(opts, TEST_OVERLAY);
   const netIdx = args.indexOf("--network");
   assert.ok(netIdx > 0);
   assert.equal(args[netIdx + 1], "none");
 });
 
-test("buildDockerArgs: forwards JAIPH_ env vars", () => {
-  const opts: DockerSpawnOptions = {
-    config: {
-      enabled: true,
-      image: "ubuntu:24.04",
-      imageExplicit: false,
-      network: "default",
-      timeout: 300,
-      mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
-    },
-    scriptsDir: join(TEST_WS, "scripts"),
-    sourceAbs: join(TEST_WS, "main.jh"),
-    workspaceRoot: TEST_WS,
-    metaFile: TEST_META,
-    runArgs: [],
-    env: {
-      JAIPH_DEBUG: "true",
-      OTHER_VAR: "ignored",
-    },
-    isTTY: false,
-  };
-  const args = buildDockerArgs(opts, TEST_GEN);
+test("buildDockerArgs: forwards JAIPH_ env vars, excludes JAIPH_DOCKER_*", () => {
+  const opts = defaultOpts({
+    env: { JAIPH_DEBUG: "true", JAIPH_DOCKER_IMAGE: "nope", OTHER_VAR: "ignored" },
+  });
+  const args = buildDockerArgs(opts, TEST_OVERLAY);
   assert.ok(args.includes("JAIPH_DEBUG=true"));
+  assert.ok(!args.some((a) => a.includes("JAIPH_DOCKER_IMAGE")));
   assert.ok(!args.some((a) => a.includes("OTHER_VAR")));
 });
 
-test("buildDockerArgs: all workspace mounts forced ro + runs rw sub-mount", () => {
-  const opts: DockerSpawnOptions = {
+test("buildDockerArgs: overrides JAIPH_WORKSPACE and JAIPH_RUNS_DIR", () => {
+  const opts = defaultOpts({
+    env: { JAIPH_WORKSPACE: "/host/path", JAIPH_RUNS_DIR: "/host/runs" },
+  });
+  const args = buildDockerArgs(opts, TEST_OVERLAY);
+  assert.ok(args.includes("JAIPH_WORKSPACE=/jaiph/workspace"));
+  assert.ok(args.includes("JAIPH_RUNS_DIR=/jaiph/run"));
+  assert.ok(!args.some((a) => a === "JAIPH_WORKSPACE=/host/path"));
+  assert.ok(!args.some((a) => a === "JAIPH_RUNS_DIR=/host/runs"));
+});
+
+test("buildDockerArgs: multiple workspace mounts all forced ro", () => {
+  const opts = defaultOpts({
     config: {
-      enabled: true,
-      image: "ubuntu:24.04",
-      imageExplicit: false,
-      network: "default",
-      timeout: 300,
+      ...defaultOpts().config,
       mounts: [
         { hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" },
         { hostPath: "config", containerPath: "/jaiph/workspace/config", mode: "ro" },
       ],
     },
-    scriptsDir: join(TEST_WS, "scripts"),
-    sourceAbs: join(TEST_WS, "main.jh"),
-    workspaceRoot: TEST_WS,
-    metaFile: TEST_META,
-    runArgs: [],
-    env: {},
-    isTTY: false,
-  };
-  const args = buildDockerArgs(opts, TEST_GEN);
+  });
+  const args = buildDockerArgs(opts, TEST_OVERLAY);
   const vFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-v");
-  // 1 generated + 2 configured + 1 runs sub-mount + 1 meta = 5
-  assert.equal(vFlags.length, 5);
-  // All configured mounts forced to ro
+  // 2 configured × 2 (primary + -ro) + 1 run + 1 overlay script = 6
+  assert.equal(vFlags.length, 6);
   assert.ok(vFlags.some((v) => v.includes("/jaiph/workspace:") && v.endsWith(":ro")));
+  assert.ok(vFlags.some((v) => v.includes("/jaiph/workspace-ro:") && v.endsWith(":ro")));
   assert.ok(vFlags.some((v) => v.includes("/jaiph/workspace/config:") && v.endsWith(":ro")));
-  // Auto runs sub-mount is rw
-  assert.ok(vFlags.some((v) => v.includes(".jaiph/runs") && v.endsWith(":rw")));
+  assert.ok(vFlags.some((v) => v.includes("/jaiph/workspace-ro/config:") && v.endsWith(":ro")));
 });
 
-test("buildDockerArgs: overrides JAIPH_WORKSPACE to container path", () => {
-  const opts: DockerSpawnOptions = {
-    config: {
-      enabled: true,
-      image: "ubuntu:24.04",
-      imageExplicit: false,
-      network: "default",
-      timeout: 300,
-      mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
-    },
-    scriptsDir: join(TEST_WS, "scripts"),
-    sourceAbs: join(TEST_WS, "main.jh"),
-    workspaceRoot: TEST_WS,
-    metaFile: TEST_META,
-    runArgs: [],
-    env: { JAIPH_WORKSPACE: TEST_WS },
-    isTTY: false,
-  };
-  const args = buildDockerArgs(opts, TEST_GEN);
-  assert.ok(args.includes("JAIPH_WORKSPACE=/jaiph/workspace"));
-  assert.ok(!args.some((a) => a === `JAIPH_WORKSPACE=${TEST_WS}`));
+// ---------------------------------------------------------------------------
+// buildDockerArgs: agent env var forwarding
+// ---------------------------------------------------------------------------
+
+test("buildDockerArgs: forwards ANTHROPIC_* env vars", () => {
+  const args = buildDockerArgs(defaultOpts({
+    env: { ANTHROPIC_API_KEY: "sk-ant-test-key", ANTHROPIC_BASE_URL: "https://api.example.test" },
+  }), TEST_OVERLAY);
+  assert.ok(args.includes("ANTHROPIC_API_KEY=sk-ant-test-key"));
+  assert.ok(args.includes("ANTHROPIC_BASE_URL=https://api.example.test"));
 });
 
-test("buildDockerArgs: remaps absolute JAIPH_RUNS_DIR inside workspace", () => {
-  const opts: DockerSpawnOptions = {
-    config: {
-      enabled: true,
-      image: "ubuntu:24.04",
-      imageExplicit: false,
-      network: "default",
-      timeout: 300,
-      mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
-    },
-    scriptsDir: join(TEST_WS, "scripts"),
-    sourceAbs: join(TEST_WS, "main.jh"),
-    workspaceRoot: TEST_WS,
-    metaFile: TEST_META,
-    runArgs: [],
-    env: { JAIPH_RUNS_DIR: join(TEST_WS, "custom/runs") },
-    isTTY: false,
-  };
-  const args = buildDockerArgs(opts, TEST_GEN);
-  assert.ok(args.includes("JAIPH_RUNS_DIR=/jaiph/workspace/custom/runs"));
+test("buildDockerArgs: forwards CURSOR_* env vars", () => {
+  const args = buildDockerArgs(defaultOpts({
+    env: { CURSOR_API_KEY: "cursor-key-123", CURSOR_SESSION_ID: "sess-456", OTHER_VAR: "ignored" },
+  }), TEST_OVERLAY);
+  assert.ok(args.includes("CURSOR_API_KEY=cursor-key-123"));
+  assert.ok(args.includes("CURSOR_SESSION_ID=sess-456"));
+  assert.ok(!args.some((a) => a.includes("OTHER_VAR")));
 });
 
-test("buildDockerArgs: passes through relative JAIPH_RUNS_DIR unchanged", () => {
-  const opts: DockerSpawnOptions = {
-    config: {
-      enabled: true,
-      image: "ubuntu:24.04",
-      imageExplicit: false,
-      network: "default",
-      timeout: 300,
-      mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
-    },
-    scriptsDir: join(TEST_WS, "scripts"),
-    sourceAbs: join(TEST_WS, "main.jh"),
-    workspaceRoot: TEST_WS,
-    metaFile: TEST_META,
-    runArgs: [],
-    env: { JAIPH_RUNS_DIR: "runs_out" },
-    isTTY: false,
-  };
-  const args = buildDockerArgs(opts, TEST_GEN);
-  assert.ok(args.includes("JAIPH_RUNS_DIR=runs_out"));
+test("buildDockerArgs: forwards CLAUDE_* env vars", () => {
+  const args = buildDockerArgs(defaultOpts({
+    env: { CLAUDE_API_KEY: "claude-key-123", CLAUDE_AUTH_TOKEN: "token-456" },
+  }), TEST_OVERLAY);
+  assert.ok(args.includes("CLAUDE_API_KEY=claude-key-123"));
+  assert.ok(args.includes("CLAUDE_AUTH_TOKEN=token-456"));
 });
 
-test("buildDockerArgs: throws for absolute JAIPH_RUNS_DIR outside workspace", () => {
-  const opts: DockerSpawnOptions = {
-    config: {
-      enabled: true,
-      image: "ubuntu:24.04",
-      imageExplicit: false,
-      network: "default",
-      timeout: 300,
-      mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
-    },
-    scriptsDir: join(TEST_WS, "scripts"),
-    sourceAbs: join(TEST_WS, "main.jh"),
-    workspaceRoot: TEST_WS,
-    metaFile: TEST_META,
-    runArgs: [],
-    env: { JAIPH_RUNS_DIR: "/var/log/jaiph-runs" },
-    isTTY: false,
-  };
-  assert.throws(() => buildDockerArgs(opts, TEST_GEN), /E_DOCKER_RUNS_DIR/);
+test("buildDockerArgs: does not forward undefined agent env vars", () => {
+  const args = buildDockerArgs(defaultOpts({
+    env: { ANTHROPIC_API_KEY: undefined, CURSOR_TOKEN: undefined },
+  }), TEST_OVERLAY);
+  assert.ok(!args.some((a) => a.includes("ANTHROPIC_API_KEY")));
+  assert.ok(!args.some((a) => a.includes("CURSOR_TOKEN")));
 });
 
 // ---------------------------------------------------------------------------
@@ -445,33 +351,100 @@ test("buildDockerArgs: throws for absolute JAIPH_RUNS_DIR outside workspace", ()
 // ---------------------------------------------------------------------------
 
 test("remapDockerEnv: overrides JAIPH_WORKSPACE to container path", () => {
-  const result = remapDockerEnv({ JAIPH_WORKSPACE: "/home/user/project" }, "/home/user/project");
+  const result = remapDockerEnv({ JAIPH_WORKSPACE: "/home/user/project" });
   assert.equal(result.JAIPH_WORKSPACE, "/jaiph/workspace");
 });
 
-test("remapDockerEnv: relative JAIPH_RUNS_DIR is unchanged", () => {
-  const result = remapDockerEnv({ JAIPH_RUNS_DIR: "runs_out" }, "/home/user/project");
-  assert.equal(result.JAIPH_RUNS_DIR, "runs_out");
+test("remapDockerEnv: overrides JAIPH_RUNS_DIR to /jaiph/run", () => {
+  const result = remapDockerEnv({ JAIPH_RUNS_DIR: "/home/user/project/.jaiph/runs" });
+  assert.equal(result.JAIPH_RUNS_DIR, "/jaiph/run");
 });
 
-test("remapDockerEnv: absolute JAIPH_RUNS_DIR inside workspace is remapped", () => {
-  const result = remapDockerEnv(
-    { JAIPH_RUNS_DIR: "/home/user/project/.jaiph/runs" },
-    "/home/user/project",
+test("remapDockerEnv: sets JAIPH_RUNS_DIR even when not in input", () => {
+  const result = remapDockerEnv({});
+  assert.equal(result.JAIPH_RUNS_DIR, "/jaiph/run");
+});
+
+// ---------------------------------------------------------------------------
+// overlayMountPath
+// ---------------------------------------------------------------------------
+
+test("overlayMountPath: /jaiph/workspace → /jaiph/workspace-ro", () => {
+  assert.equal(overlayMountPath("/jaiph/workspace"), "/jaiph/workspace-ro");
+});
+
+test("overlayMountPath: subpath remapped", () => {
+  assert.equal(overlayMountPath("/jaiph/workspace/config"), "/jaiph/workspace-ro/config");
+});
+
+test("overlayMountPath: non-workspace path unchanged", () => {
+  assert.equal(overlayMountPath("/other/path"), "/other/path");
+});
+
+// ---------------------------------------------------------------------------
+// writeOverlayScript
+// ---------------------------------------------------------------------------
+
+test("writeOverlayScript: creates executable script with fuse-overlayfs setup", () => {
+  const scriptPath = writeOverlayScript();
+  try {
+    assert.ok(existsSync(scriptPath));
+    const content = readFileSync(scriptPath, "utf8");
+    assert.ok(content.startsWith("#!/usr/bin/env bash"));
+    assert.ok(content.includes("fuse-overlayfs"));
+    assert.ok(content.includes('exec "$@"'));
+  } finally {
+    rmSync(dirname(scriptPath), { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// findRunArtifacts
+// ---------------------------------------------------------------------------
+
+test("findRunArtifacts: discovers run dir and summary file", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "jaiph-test-find-"));
+  try {
+    const runDir = join(tmp, "2026-04-17", "09-30-00-test.jh");
+    mkdirSync(runDir, { recursive: true });
+    writeFileSync(join(runDir, "run_summary.jsonl"), "{}");
+    const result = findRunArtifacts(tmp);
+    assert.equal(result.runDir, runDir);
+    assert.equal(result.summaryFile, join(runDir, "run_summary.jsonl"));
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("findRunArtifacts: returns runDir without summary if missing", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "jaiph-test-find-"));
+  try {
+    const runDir = join(tmp, "2026-04-17", "09-30-00-test.jh");
+    mkdirSync(runDir, { recursive: true });
+    const result = findRunArtifacts(tmp);
+    assert.equal(result.runDir, runDir);
+    assert.equal(result.summaryFile, undefined);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("findRunArtifacts: returns empty for non-existent dir", () => {
+  const result = findRunArtifacts("/tmp/jaiph-nonexistent-" + Date.now());
+  assert.equal(result.runDir, undefined);
+  assert.equal(result.summaryFile, undefined);
+});
+
+// ---------------------------------------------------------------------------
+// spawnDockerProcess: stdin must be ignored
+// ---------------------------------------------------------------------------
+
+test("spawnDockerProcess: stdin ignored, stdout+stderr piped for events", () => {
+  const src = readFileSync(join(__dirname, "docker.ts"), "utf8");
+  assert.ok(
+    src.includes('["ignore", "pipe", "pipe"]'),
+    "spawnDockerProcess must use stdio: [\"ignore\", \"pipe\", \"pipe\"]",
   );
-  assert.equal(result.JAIPH_RUNS_DIR, "/jaiph/workspace/.jaiph/runs");
-});
-
-test("remapDockerEnv: absolute JAIPH_RUNS_DIR outside workspace throws", () => {
-  assert.throws(
-    () => remapDockerEnv({ JAIPH_RUNS_DIR: "/var/log/runs" }, "/home/user/project"),
-    /E_DOCKER_RUNS_DIR/,
-  );
-});
-
-test("remapDockerEnv: undefined JAIPH_RUNS_DIR is left undefined", () => {
-  const result = remapDockerEnv({}, "/home/user/project");
-  assert.equal(result.JAIPH_RUNS_DIR, undefined);
 });
 
 // ---------------------------------------------------------------------------
@@ -496,128 +469,6 @@ test("resolveDockerConfig: imageExplicit is true when in-file sets image", () =>
 });
 
 // ---------------------------------------------------------------------------
-// buildDockerArgs: agent env var forwarding
-// ---------------------------------------------------------------------------
-
-test("buildDockerArgs: forwards ANTHROPIC_* env vars", () => {
-  const opts: DockerSpawnOptions = {
-    config: {
-      enabled: true,
-      image: "ubuntu:24.04",
-      imageExplicit: false,
-      network: "default",
-      timeout: 300,
-      mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
-    },
-    scriptsDir: join(TEST_WS, "scripts"),
-    sourceAbs: join(TEST_WS, "main.jh"),
-    workspaceRoot: TEST_WS,
-    metaFile: TEST_META,
-    runArgs: [],
-    env: {
-      ANTHROPIC_API_KEY: "sk-ant-test-key",
-      ANTHROPIC_BASE_URL: "https://api.example.test",
-    },
-    isTTY: false,
-  };
-  const args = buildDockerArgs(opts, TEST_GEN);
-  assert.ok(args.includes("ANTHROPIC_API_KEY=sk-ant-test-key"));
-  assert.ok(args.includes("ANTHROPIC_BASE_URL=https://api.example.test"));
-});
-
-test("buildDockerArgs: forwards CURSOR_* env vars", () => {
-  const opts: DockerSpawnOptions = {
-    config: {
-      enabled: true,
-      image: "ubuntu:24.04",
-      imageExplicit: false,
-      network: "default",
-      timeout: 300,
-      mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
-    },
-    scriptsDir: join(TEST_WS, "scripts"),
-    sourceAbs: join(TEST_WS, "main.jh"),
-    workspaceRoot: TEST_WS,
-    metaFile: TEST_META,
-    runArgs: [],
-    env: {
-      CURSOR_API_KEY: "cursor-key-123",
-      CURSOR_SESSION_ID: "sess-456",
-      OTHER_VAR: "ignored",
-    },
-    isTTY: false,
-  };
-  const args = buildDockerArgs(opts, TEST_GEN);
-  assert.ok(args.includes("CURSOR_API_KEY=cursor-key-123"));
-  assert.ok(args.includes("CURSOR_SESSION_ID=sess-456"));
-  assert.ok(!args.some((a) => a.includes("OTHER_VAR")));
-});
-
-test("buildDockerArgs: forwards CLAUDE_* env vars", () => {
-  const opts: DockerSpawnOptions = {
-    config: {
-      enabled: true,
-      image: "ubuntu:24.04",
-      imageExplicit: false,
-      network: "default",
-      timeout: 300,
-      mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
-    },
-    scriptsDir: join(TEST_WS, "scripts"),
-    sourceAbs: join(TEST_WS, "main.jh"),
-    workspaceRoot: TEST_WS,
-    metaFile: TEST_META,
-    runArgs: [],
-    env: {
-      CLAUDE_API_KEY: "claude-key-123",
-      CLAUDE_AUTH_TOKEN: "token-456",
-    },
-    isTTY: false,
-  };
-  const args = buildDockerArgs(opts, TEST_GEN);
-  assert.ok(args.includes("CLAUDE_API_KEY=claude-key-123"));
-  assert.ok(args.includes("CLAUDE_AUTH_TOKEN=token-456"));
-});
-
-test("buildDockerArgs: does not forward undefined agent env vars", () => {
-  const opts: DockerSpawnOptions = {
-    config: {
-      enabled: true,
-      image: "ubuntu:24.04",
-      imageExplicit: false,
-      network: "default",
-      timeout: 300,
-      mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
-    },
-    scriptsDir: join(TEST_WS, "scripts"),
-    sourceAbs: join(TEST_WS, "main.jh"),
-    workspaceRoot: TEST_WS,
-    metaFile: TEST_META,
-    runArgs: [],
-    env: {
-      ANTHROPIC_API_KEY: undefined,
-      CURSOR_TOKEN: undefined,
-    },
-    isTTY: false,
-  };
-  const args = buildDockerArgs(opts, TEST_GEN);
-  assert.ok(!args.some((a) => a.includes("ANTHROPIC_API_KEY")));
-  assert.ok(!args.some((a) => a.includes("CURSOR_TOKEN")));
-});
-
-// ---------------------------------------------------------------------------
-// spawnDockerProcess: stdin must be ignored
-// ---------------------------------------------------------------------------
-
-test("spawnDockerProcess: stdin ignored, stdout+stderr piped for events", () => {
-  const src = readFileSync(join(__dirname, "docker.ts"), "utf8");
-  assert.ok(
-    src.includes('["ignore", "pipe", "pipe"]'),
-    "spawnDockerProcess must use stdio: [\"ignore\", \"pipe\", \"pipe\"]",
-  );
-});
-
-// ---------------------------------------------------------------------------
 // resolveImage
 // ---------------------------------------------------------------------------
 
@@ -626,20 +477,8 @@ test("resolveImage: uses Dockerfile when imageExplicit is false and Dockerfile e
   try {
     mkdirSync(join(tmpDir, ".jaiph"), { recursive: true });
     writeFileSync(join(tmpDir, ".jaiph", "Dockerfile"), "FROM ubuntu:latest\n");
-    const config: DockerRunConfig = {
-      enabled: true,
-      image: "ubuntu:24.04",
-      imageExplicit: false,
-      network: "default",
-      timeout: 300,
-      mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
-    };
-    // We can't actually run docker build in unit tests, so we test the logic
-    // by checking that the Dockerfile path is detected correctly.
     const dockerfilePath = join(tmpDir, ".jaiph", "Dockerfile");
     assert.ok(existsSync(dockerfilePath));
-    // resolveImage would call buildImageFromDockerfile which needs Docker;
-    // we verify the detection path separately.
   } finally {
     rmSync(tmpDir, { recursive: true, force: true });
   }
@@ -658,9 +497,6 @@ test("resolveImage: skips Dockerfile when imageExplicit is true", () => {
       timeout: 300,
       mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
     };
-    // When imageExplicit is true, resolveImage should skip Dockerfile detection
-    // and attempt pullImageIfNeeded instead. We can't call it without Docker,
-    // but we can verify the config flag is respected by checking existence.
     assert.ok(existsSync(join(tmpDir, ".jaiph", "Dockerfile")));
     assert.equal(config.imageExplicit, true);
   } finally {

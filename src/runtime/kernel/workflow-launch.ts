@@ -28,11 +28,11 @@ export function buildRunModuleLaunch(
 /** Spawn the detached workflow leader used by `jaiph run`. */
 export function spawnJaiphWorkflowProcess(
   positionalArgs: string[],
-  options: { cwd: string; env: NodeJS.ProcessEnv },
+  options: { cwd: string; env: NodeJS.ProcessEnv; stdio?: "pipe" | "inherit" },
 ): ChildProcess {
   const launch = buildRunModuleLaunch(positionalArgs, options.env);
   return spawn(launch.command, launch.args, {
-    stdio: "pipe",
+    stdio: options.stdio ?? "pipe",
     cwd: options.cwd,
     env: launch.env,
     detached: true,

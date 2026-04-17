@@ -55,8 +55,9 @@ export function printUsage(): void {
   );
 }
 
-export function parseArgs(args: string[]): { target?: string; positional: string[] } {
+export function parseArgs(args: string[]): { target?: string; raw?: boolean; positional: string[] } {
   let target: string | undefined;
+  let raw: boolean | undefined;
   const positional: string[] = [];
   for (let i = 0; i < args.length; i += 1) {
     if (args[i] === "--target") {
@@ -68,11 +69,15 @@ export function parseArgs(args: string[]): { target?: string; positional: string
       i += 1;
       continue;
     }
+    if (args[i] === "--raw") {
+      raw = true;
+      continue;
+    }
     if (args[i] === "--") {
       positional.push(...args.slice(i + 1));
       break;
     }
     positional.push(args[i]);
   }
-  return { target, positional };
+  return { target, raw, positional };
 }

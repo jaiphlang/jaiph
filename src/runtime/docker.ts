@@ -1,7 +1,7 @@
 import { execSync, spawn, ChildProcess } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve, basename, dirname, relative, isAbsolute } from "node:path";
+import { join, resolve, dirname, relative } from "node:path";
 import type { RuntimeConfig } from "../types";
 
 /** Parsed mount specification. */
@@ -212,60 +212,31 @@ export function resolveImage(config: DockerRunConfig, workspaceRoot: string): st
 }
 
 // ---------------------------------------------------------------------------
-// Generated directory setup
+// Overlay entrypoint script (written to temp file, mounted into container)
 // ---------------------------------------------------------------------------
 
-function copyExecutableScriptsDir(scriptsSrc: string, generatedDir: string): void {
-  if (!existsSync(scriptsSrc)) return;
-  const scriptsDest = join(generatedDir, "scripts");
-  mkdirSync(scriptsDest, { recursive: true });
-  for (const name of readdirSync(scriptsSrc)) {
-    const sf = join(scriptsSrc, name);
-    if (statSync(sf).isFile()) {
-      copyFileSync(sf, join(scriptsDest, name));
-    }
-  }
-}
+const OVERLAY_SCRIPT = `#!/usr/bin/env bash
+set -euo pipefail
+LOWER=/jaiph/workspace-ro
+UPPER=/tmp/overlay-upper
+WORK=/tmp/overlay-work
+MERGED=/jaiph/workspace
+mkdir -p "$UPPER" "$WORK"
+if command -v fuse-overlayfs >/dev/null 2>&1 && [ -e /dev/fuse ]; then
+  fuse-overlayfs -o "lowerdir=$LOWER,upperdir=$UPPER,workdir=$WORK" "$MERGED" 2>/dev/null || true
+fi
+exec "$@"
+`;
 
 /**
- * Resolve the compiled dist/src root directory.
- * Works for both `node dist/src/cli.js` (tsc layout, __dirname = dist/src/runtime)
- * and Bun standalone (executable next to dist/).
+ * Write overlay-run.sh to a temp file and return its path.
+ * Mounted read-only at /jaiph/overlay-run.sh inside the container.
  */
-function resolveDistSrcRoot(): string {
-  const fromModule = join(__dirname, "..");
-  if (existsSync(join(fromModule, "runtime", "kernel", "node-workflow-runner.js"))) return fromModule;
-  const nextToExec = join(dirname(process.execPath), "src");
-  if (existsSync(join(nextToExec, "runtime", "kernel", "node-workflow-runner.js"))) return nextToExec;
-  return fromModule;
-}
-
-function copyDirRecursive(src: string, dest: string): void {
-  mkdirSync(dest, { recursive: true });
-  for (const entry of readdirSync(src, { withFileTypes: true })) {
-    const srcPath = join(src, entry.name);
-    const destPath = join(dest, entry.name);
-    if (entry.isDirectory()) {
-      if (entry.name === "reporting") continue;
-      copyDirRecursive(srcPath, destPath);
-    } else if (entry.isFile() && entry.name.endsWith(".js")) {
-      copyFileSync(srcPath, destPath);
-    }
-  }
-}
-
-/**
- * Create a temp directory with scripts + compiled JS source tree,
- * to be mounted read-only at /jaiph/generated/ inside the container.
- * The container runs the raw Node runtime (node-workflow-runner.js),
- * which emits __JAIPH_EVENT__ to stderr without any CLI rendering.
- */
-export function prepareGeneratedDir(scriptsDir: string): string {
-  const generatedDir = mkdtempSync(join(tmpdir(), "jaiph-docker-gen-"));
-  copyExecutableScriptsDir(scriptsDir, generatedDir);
-  const distSrc = resolveDistSrcRoot();
-  copyDirRecursive(distSrc, join(generatedDir, "src"));
-  return generatedDir;
+export function writeOverlayScript(): string {
+  const dir = mkdtempSync(join(tmpdir(), "jaiph-overlay-"));
+  const scriptPath = join(dir, "overlay-run.sh");
+  writeFileSync(scriptPath, OVERLAY_SCRIPT, { mode: 0o755 });
+  return scriptPath;
 }
 
 // ---------------------------------------------------------------------------
@@ -274,70 +245,62 @@ export function prepareGeneratedDir(scriptsDir: string): string {
 
 export interface DockerSpawnOptions {
   config: DockerRunConfig;
-  scriptsDir: string;
   sourceAbs: string;
   workspaceRoot: string;
-  metaFile: string;
+  /** Host directory mounted at /jaiph/run:rw for this single run's artifacts. */
+  sandboxRunDir: string;
   runArgs: string[];
   env: Record<string, string | undefined>;
   isTTY: boolean;
 }
 
 export const CONTAINER_WORKSPACE = "/jaiph/workspace";
+export const CONTAINER_RUN_DIR = "/jaiph/run";
 const AGENT_ENV_PREFIXES = ["CURSOR_", "ANTHROPIC_", "CLAUDE_"] as const;
 
 /**
- * Remap JAIPH_WORKSPACE and JAIPH_RUNS_DIR for use inside the Docker container.
- *
- * - JAIPH_WORKSPACE is always overridden to `/jaiph/workspace`.
- * - JAIPH_RUNS_DIR: relative values pass through unchanged; absolute values
- *   inside the host workspace are remapped to the equivalent container path;
- *   absolute values outside the host workspace cause a thrown error.
+ * Remap environment variables for use inside the Docker container.
+ * JAIPH_WORKSPACE → /jaiph/workspace, JAIPH_RUNS_DIR → /jaiph/run.
  */
 export function remapDockerEnv(
   env: Record<string, string | undefined>,
-  hostWorkspace: string,
 ): Record<string, string | undefined> {
   const out = { ...env };
   out.JAIPH_WORKSPACE = CONTAINER_WORKSPACE;
-
-  const runsDir = out.JAIPH_RUNS_DIR;
-  if (runsDir !== undefined && isAbsolute(runsDir)) {
-    const absWorkspace = resolve(hostWorkspace);
-    const absRunsDir = resolve(runsDir);
-    const rel = relative(absWorkspace, absRunsDir);
-    if (rel.startsWith("..") || isAbsolute(rel)) {
-      throw new Error(
-        `E_DOCKER_RUNS_DIR absolute JAIPH_RUNS_DIR "${runsDir}" is outside the host workspace "${absWorkspace}". ` +
-        `In Docker mode, JAIPH_RUNS_DIR must be relative or inside the workspace.`,
-      );
-    }
-    out.JAIPH_RUNS_DIR = `${CONTAINER_WORKSPACE}/${rel}`;
-  }
-
+  out.JAIPH_RUNS_DIR = CONTAINER_RUN_DIR;
   return out;
 }
 
-/** Host-side subdir for sandbox run artifacts, mounted rw inside the container. */
-const SANDBOX_RUNS_DIR = ".jaiph/runs";
+/** Remap a container mount path to the overlay lower-layer equivalent. */
+export function overlayMountPath(containerPath: string): string {
+  if (containerPath === CONTAINER_WORKSPACE || containerPath === CONTAINER_WORKSPACE + "/") {
+    return `${CONTAINER_WORKSPACE}-ro`;
+  }
+  if (containerPath.startsWith(CONTAINER_WORKSPACE + "/")) {
+    return `${CONTAINER_WORKSPACE}-ro${containerPath.slice(CONTAINER_WORKSPACE.length)}`;
+  }
+  return containerPath;
+}
 
 /**
  * Build the `docker run --rm` argument list.
  *
- * Workspace is mounted **read-only** to prevent mount deadlocks with concurrent
- * runners on macOS Docker Desktop.  A writable sub-mount at .jaiph/runs lets
- * the runtime write run artifacts visible on the host.
+ * Mounts:
+ *  1. workspace → /jaiph/workspace:ro  (fallback when overlay absent)
+ *  2. workspace → /jaiph/workspace-ro:ro  (overlay lower layer)
+ *  3. sandboxRunDir → /jaiph/run:rw  (single run artifacts)
  *
- * The container runs the raw Node runtime (node-workflow-runner.js) which emits
- * __JAIPH_EVENT__ to stderr.  The host CLI renders the tree from those events.
+ * overlay-run.sh (baked in image) creates a fuse-overlayfs CoW at
+ * /jaiph/workspace using -ro as lower.  /jaiph/run is outside the overlay
+ * so writes go directly to the host mount — no symlink needed.
+ *
+ * The container runs `jaiph run --raw <file>` using its own installed jaiph.
  */
-export function buildDockerArgs(opts: DockerSpawnOptions, generatedDir: string): string[] {
+export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath: string): string[] {
   const args: string[] = ["run", "--rm"];
 
-  // No -t flag: Docker's -t merges stderr into stdout, which breaks the
-  // __JAIPH_EVENT__ stderr-only live contract between runtime and CLI.
+  args.push("--device", "/dev/fuse");
 
-  // UID/GID mapping on Linux
   if (process.platform === "linux") {
     try {
       const uid = execSync("id -u", { encoding: "utf8" }).trim();
@@ -348,74 +311,45 @@ export function buildDockerArgs(opts: DockerSpawnOptions, generatedDir: string):
     }
   }
 
-  // Network
   if (opts.config.network !== "default") {
     args.push("--network", opts.config.network);
   }
 
-  // Mount generated dir read-only at /jaiph/generated/
-  args.push("-v", `${generatedDir}:/jaiph/generated:ro`);
-
-  // Workspace mounts — forced read-only to prevent deadlocks
+  // Workspace: ro at primary path (fallback) + overlay lower layer path
   for (const mount of opts.config.mounts) {
     const hostAbs = resolve(opts.workspaceRoot, mount.hostPath);
     args.push("-v", `${hostAbs}:${mount.containerPath}:ro`);
+    args.push("-v", `${hostAbs}:${overlayMountPath(mount.containerPath)}:ro`);
   }
 
-  // Writable sub-mount for run artifacts (.jaiph/runs)
-  const hostRunsDir = join(opts.workspaceRoot, SANDBOX_RUNS_DIR);
-  mkdirSync(hostRunsDir, { recursive: true });
-  args.push("-v", `${hostRunsDir}:${CONTAINER_WORKSPACE}/${SANDBOX_RUNS_DIR}:rw`);
+  // Single run directory: rw mount outside the overlay
+  args.push("-v", `${opts.sandboxRunDir}:${CONTAINER_RUN_DIR}:rw`);
 
-  // Mount meta file directory rw at a stable container path
-  const metaDir = dirname(opts.metaFile);
-  const metaBase = basename(opts.metaFile);
-  const containerMetaDir = "/jaiph/meta";
-  args.push("-v", `${metaDir}:${containerMetaDir}:rw`);
+  // Overlay entrypoint script (runtime-generated, mounted ro)
+  args.push("-v", `${overlayScriptPath}:/jaiph/overlay-run.sh:ro`);
 
-  // Environment variables — remap workspace-related paths for the container
-  const containerEnv = remapDockerEnv(opts.env, opts.workspaceRoot);
-  args.push("-e", `JAIPH_META_FILE=${containerMetaDir}/${metaBase}`);
-  args.push("-e", `JAIPH_SCRIPTS=/jaiph/generated/scripts`);
+  // Environment
+  const containerEnv = remapDockerEnv(opts.env);
 
-  // Forward JAIPH_* env vars (except overridden keys and Docker-related — no nested Docker)
-  for (const [key, value] of Object.entries(containerEnv)) {
-    if (
-      key.startsWith("JAIPH_") &&
-      key !== "JAIPH_META_FILE" &&
-      key !== "JAIPH_SCRIPTS" &&
-      !key.startsWith("JAIPH_DOCKER_") &&
-      value !== undefined
-    ) {
-      args.push("-e", `${key}=${value}`);
-    }
-  }
-
-  // Forward agent-related env vars for Cursor/Claude authentication.
   for (const [key, value] of Object.entries(containerEnv)) {
     if (value === undefined) continue;
+    if (key.startsWith("JAIPH_") && !key.startsWith("JAIPH_DOCKER_")) {
+      args.push("-e", `${key}=${value}`);
+    }
     if (AGENT_ENV_PREFIXES.some((prefix) => key.startsWith(prefix))) {
       args.push("-e", `${key}=${value}`);
     }
   }
 
-  // Working directory
   args.push("-w", CONTAINER_WORKSPACE);
-
-  // Image
   args.push(opts.config.image);
 
-  // Command: raw Node runtime (not the full jaiph CLI).
-  // The runtime emits __JAIPH_EVENT__ to stderr; the host CLI renders the tree.
+  // Command: overlay wrapper → jaiph run --raw
   const relSource = relative(opts.workspaceRoot, opts.sourceAbs);
-  const containerSourcePath = `${CONTAINER_WORKSPACE}/${relSource}`;
   args.push(
-    "node",
-    "/jaiph/generated/src/runtime/kernel/node-workflow-runner.js",
-    `${containerMetaDir}/${metaBase}`,
-    containerSourcePath,
-    "/jaiph/generated/scripts",
-    "default",
+    "/jaiph/overlay-run.sh",
+    "jaiph", "run", "--raw",
+    `${CONTAINER_WORKSPACE}/${relSource}`,
     ...opts.runArgs,
   );
 
@@ -428,23 +362,28 @@ export function buildDockerArgs(opts: DockerSpawnOptions, generatedDir: string):
 
 export interface DockerSpawnResult {
   child: ChildProcess;
-  generatedDir: string;
+  /** Host directory mounted at /jaiph/run — scan for artifacts after exit. */
+  sandboxRunDir: string;
+  /** Temp directory containing overlay-run.sh — cleaned up after exit. */
+  overlayScriptDir: string;
   timeoutTimer?: NodeJS.Timeout;
 }
 
 /**
- * Spawn the Docker container and set up timeout handling.
+ * Spawn the Docker container.
  *
- * The container runs the raw Node runtime (node-workflow-runner.js) which emits
- * __JAIPH_EVENT__ to stderr.  stdout carries workflow output, stderr carries events.
+ * The container runs `jaiph run --raw <file>` using its own installed jaiph.
+ * Events flow via stderr; stdout carries workflow output.
  */
 export function spawnDockerProcess(opts: DockerSpawnOptions): DockerSpawnResult {
   checkDockerAvailable();
   const resolvedImage = resolveImage(opts.config, opts.workspaceRoot);
   opts = { ...opts, config: { ...opts.config, image: resolvedImage } };
 
-  const generatedDir = prepareGeneratedDir(opts.scriptsDir);
-  const dockerArgs = buildDockerArgs(opts, generatedDir);
+  mkdirSync(opts.sandboxRunDir, { recursive: true });
+  const overlayScriptPath = writeOverlayScript();
+  const overlayScriptDir = dirname(overlayScriptPath);
+  const dockerArgs = buildDockerArgs(opts, overlayScriptPath);
 
   const child = spawn("docker", dockerArgs, {
     stdio: ["ignore", "pipe", "pipe"],
@@ -470,7 +409,7 @@ export function spawnDockerProcess(opts: DockerSpawnOptions): DockerSpawnResult 
     }, opts.config.timeout * 1000);
   }
 
-  return { child, generatedDir, timeoutTimer };
+  return { child, sandboxRunDir: opts.sandboxRunDir, overlayScriptDir, timeoutTimer };
 }
 
 /**
@@ -481,9 +420,34 @@ export function cleanupDocker(result: DockerSpawnResult): void {
     clearTimeout(result.timeoutTimer);
   }
   try {
-    rmSync(result.generatedDir, { recursive: true, force: true });
+    rmSync(result.overlayScriptDir, { recursive: true, force: true });
   } catch {
     // Best-effort cleanup
   }
+}
+
+/**
+ * Discover run artifacts inside the sandbox run directory.
+ * The runtime creates `<JAIPH_RUNS_DIR>/<date>/<time>-<source>/` structure.
+ * Returns the first (and typically only) run directory found, plus summary file.
+ */
+export function findRunArtifacts(
+  sandboxRunDir: string,
+): { runDir?: string; summaryFile?: string } {
+  if (!existsSync(sandboxRunDir)) return {};
+  for (const dateDir of readdirSync(sandboxRunDir)) {
+    const datePath = join(sandboxRunDir, dateDir);
+    if (!statSync(datePath).isDirectory()) continue;
+    for (const runEntry of readdirSync(datePath)) {
+      const runPath = join(datePath, runEntry);
+      if (!statSync(runPath).isDirectory()) continue;
+      const summaryFile = join(runPath, "run_summary.jsonl");
+      return {
+        runDir: runPath,
+        summaryFile: existsSync(summaryFile) ? summaryFile : undefined,
+      };
+    }
+  }
+  return {};
 }
 

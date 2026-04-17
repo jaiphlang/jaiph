@@ -4,7 +4,7 @@ import { spawnJaiphWorkflowProcess } from "../../runtime/kernel/workflow-launch"
 
 export function spawnRunProcess(
   args: string[],
-  options: { cwd: string; env: NodeJS.ProcessEnv },
+  options: { cwd: string; env: NodeJS.ProcessEnv; stdio?: "pipe" | "inherit" },
 ): ChildProcess {
   return spawnJaiphWorkflowProcess(args, options);
 }
