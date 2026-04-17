@@ -6,7 +6,7 @@ function toInstallRef(version: string): string | undefined {
     return undefined;
   }
   if (trimmed === "nightly") {
-    return "main";
+    return "nightly";
   }
   return `v${trimmed}`;
 }
