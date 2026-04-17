@@ -62,9 +62,43 @@ export function parseMounts(specs: string[]): MountSpec[] {
 }
 
 /**
- * Validate mount list: exactly one mount must target `/jaiph/workspace`.
+ * Host paths that must never be bind-mounted into a container.
+ * Prevents accidental exposure of the Docker daemon, OS internals, or
+ * the entire root filesystem.
  */
-export function validateMounts(mounts: MountSpec[]): void {
+const DENIED_HOST_PATHS = [
+  "/var/run/docker.sock",
+  "/run/docker.sock",
+  "/proc",
+  "/sys",
+  "/dev",
+] as const;
+
+/**
+ * Validate a single mount's host path against the denylist.
+ * Rejects exact matches and child paths (e.g. `/proc/1/root`).
+ */
+export function validateMountHostPath(hostAbsPath: string): void {
+  const normalized = hostAbsPath.replace(/\/+$/, "");
+  if (normalized === "" || normalized === "/") {
+    throw new Error(
+      `E_VALIDATE_MOUNT refusing to mount the host root filesystem ("/") into the container`,
+    );
+  }
+  for (const denied of DENIED_HOST_PATHS) {
+    if (normalized === denied || normalized.startsWith(denied + "/")) {
+      throw new Error(
+        `E_VALIDATE_MOUNT refusing to mount denied host path "${hostAbsPath}" into the container`,
+      );
+    }
+  }
+}
+
+/**
+ * Validate mount list: exactly one mount must target `/jaiph/workspace`.
+ * Also rejects dangerous host paths.
+ */
+export function validateMounts(mounts: MountSpec[], workspaceRoot?: string): void {
   const workspaceMounts = mounts.filter(
     (m) => m.containerPath === "/jaiph/workspace" || m.containerPath.replace(/\/+$/, "") === "/jaiph/workspace",
   );
@@ -73,6 +107,10 @@ export function validateMounts(mounts: MountSpec[]): void {
   }
   if (workspaceMounts.length > 1) {
     throw new Error("E_VALIDATE exactly one mount must target /jaiph/workspace, found multiple");
+  }
+  for (const mount of mounts) {
+    const hostAbs = workspaceRoot ? resolve(workspaceRoot, mount.hostPath) : resolve(mount.hostPath);
+    validateMountHostPath(hostAbs);
   }
 }
 
@@ -363,6 +401,27 @@ export const CONTAINER_WORKSPACE = "/jaiph/workspace";
 export const CONTAINER_RUN_DIR = "/jaiph/run";
 const AGENT_ENV_PREFIXES = ["CURSOR_", "ANTHROPIC_", "CLAUDE_"] as const;
 
+/**
+ * Environment variable prefixes that are never forwarded into the container.
+ * Prevents leaking host credentials that aren't part of the explicit allowlist.
+ */
+export const ENV_DENYLIST_PREFIXES = [
+  "SSH_",
+  "GPG_",
+  "AWS_",
+  "GCP_",
+  "AZURE_",
+  "GOOGLE_",
+  "DOCKER_",
+  "KUBE",
+  "NPM_TOKEN",
+] as const;
+
+/** Returns true if `key` matches any denied prefix. */
+export function isEnvDenied(key: string): boolean {
+  return ENV_DENYLIST_PREFIXES.some((prefix) => key.startsWith(prefix));
+}
+
 /** Resolve the host run-artifacts root for Docker-backed runs. */
 export function resolveDockerHostRunsRoot(
   workspaceRoot: string,
@@ -426,6 +485,11 @@ export function overlayMountPath(containerPath: string): string {
 export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath: string): string[] {
   const args: string[] = ["run", "--rm"];
 
+  // Least-privilege: drop all capabilities, re-add only SYS_ADMIN for fuse-overlayfs
+  args.push("--cap-drop", "ALL");
+  args.push("--cap-add", "SYS_ADMIN");
+  args.push("--security-opt", "no-new-privileges");
+
   args.push("--device", "/dev/fuse");
 
   if (process.platform === "linux") {
@@ -445,6 +509,7 @@ export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath: str
   // Workspace inputs: mounted only at the overlay lower-layer path.
   for (const mount of opts.config.mounts) {
     const hostAbs = resolve(opts.workspaceRoot, mount.hostPath);
+    validateMountHostPath(hostAbs);
     args.push("-v", `${hostAbs}:${overlayMountPath(mount.containerPath)}:ro`);
   }
 
@@ -459,6 +524,7 @@ export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath: str
 
   for (const [key, value] of Object.entries(containerEnv)) {
     if (value === undefined) continue;
+    if (isEnvDenied(key)) continue;
     if (key.startsWith("JAIPH_") && !key.startsWith("JAIPH_DOCKER_")) {
       args.push("-e", `${key}=${value}`);
     }

@@ -4,6 +4,7 @@ import {
   parseMount,
   parseMounts,
   validateMounts,
+  validateMountHostPath,
   resolveDockerConfig,
   buildDockerArgs,
   remapDockerEnv,
@@ -14,6 +15,8 @@ import {
   resolveImage,
   buildImageFromDockerfile,
   verifyImageHasJaiph,
+  isEnvDenied,
+  ENV_DENYLIST_PREFIXES,
   GHCR_IMAGE_REPO,
   type MountSpec,
   type DockerRunConfig,
@@ -571,4 +574,105 @@ test("verifyImageHasJaiph: throws E_DOCKER_NO_JAIPH with guidance for missing ja
   const src = readFileSync(join(__dirname, "docker.ts"), "utf8");
   assert.ok(src.includes("E_DOCKER_NO_JAIPH"), "verifyImageHasJaiph must use E_DOCKER_NO_JAIPH error code");
   assert.ok(src.includes(GHCR_IMAGE_REPO), "error message must reference official GHCR image");
+});
+
+// ---------------------------------------------------------------------------
+// validateMountHostPath: dangerous mount rejection
+// ---------------------------------------------------------------------------
+
+test("validateMountHostPath: allows normal workspace path", () => {
+  assert.doesNotThrow(() => validateMountHostPath("/home/user/project"));
+});
+
+test("validateMountHostPath: rejects root filesystem", () => {
+  assert.throws(() => validateMountHostPath("/"), /E_VALIDATE_MOUNT.*root filesystem/);
+});
+
+test("validateMountHostPath: rejects docker socket", () => {
+  assert.throws(() => validateMountHostPath("/var/run/docker.sock"), /E_VALIDATE_MOUNT.*denied/);
+});
+
+test("validateMountHostPath: rejects /proc", () => {
+  assert.throws(() => validateMountHostPath("/proc"), /E_VALIDATE_MOUNT.*denied/);
+});
+
+test("validateMountHostPath: rejects /proc subpath", () => {
+  assert.throws(() => validateMountHostPath("/proc/1/root"), /E_VALIDATE_MOUNT.*denied/);
+});
+
+test("validateMountHostPath: rejects /sys", () => {
+  assert.throws(() => validateMountHostPath("/sys"), /E_VALIDATE_MOUNT.*denied/);
+});
+
+test("validateMountHostPath: rejects /dev", () => {
+  assert.throws(() => validateMountHostPath("/dev"), /E_VALIDATE_MOUNT.*denied/);
+});
+
+test("validateMountHostPath: rejects /run/docker.sock", () => {
+  assert.throws(() => validateMountHostPath("/run/docker.sock"), /E_VALIDATE_MOUNT.*denied/);
+});
+
+// ---------------------------------------------------------------------------
+// isEnvDenied: env denylist
+// ---------------------------------------------------------------------------
+
+test("isEnvDenied: blocks SSH_ vars", () => {
+  assert.equal(isEnvDenied("SSH_AUTH_SOCK"), true);
+});
+
+test("isEnvDenied: blocks AWS_ vars", () => {
+  assert.equal(isEnvDenied("AWS_SECRET_ACCESS_KEY"), true);
+});
+
+test("isEnvDenied: blocks DOCKER_ vars", () => {
+  assert.equal(isEnvDenied("DOCKER_HOST"), true);
+});
+
+test("isEnvDenied: blocks GPG_ vars", () => {
+  assert.equal(isEnvDenied("GPG_AGENT_INFO"), true);
+});
+
+test("isEnvDenied: blocks KUBE vars", () => {
+  assert.equal(isEnvDenied("KUBECONFIG"), true);
+});
+
+test("isEnvDenied: allows JAIPH_ vars", () => {
+  assert.equal(isEnvDenied("JAIPH_DEBUG"), false);
+});
+
+test("isEnvDenied: allows ANTHROPIC_ vars", () => {
+  assert.equal(isEnvDenied("ANTHROPIC_API_KEY"), false);
+});
+
+test("buildDockerArgs: denied env vars are not forwarded", () => {
+  const opts = defaultOpts({
+    env: {
+      JAIPH_DEBUG: "true",
+      SSH_AUTH_SOCK: "/tmp/ssh.sock",
+      AWS_SECRET_ACCESS_KEY: "secret",
+      DOCKER_HOST: "unix:///var/run/docker.sock",
+    },
+  });
+  const args = buildDockerArgs(opts, TEST_OVERLAY);
+  assert.ok(args.includes("JAIPH_DEBUG=true"), "allowed JAIPH_ var forwarded");
+  assert.ok(!args.some((a) => a.includes("SSH_AUTH_SOCK")), "SSH_ denied");
+  assert.ok(!args.some((a) => a.includes("AWS_SECRET_ACCESS_KEY")), "AWS_ denied");
+  assert.ok(!args.some((a) => a.includes("DOCKER_HOST")), "DOCKER_ denied");
+});
+
+// ---------------------------------------------------------------------------
+// buildDockerArgs: security flags
+// ---------------------------------------------------------------------------
+
+test("buildDockerArgs: includes --cap-drop ALL and --security-opt no-new-privileges", () => {
+  const args = buildDockerArgs(defaultOpts(), TEST_OVERLAY);
+  const capDropIdx = args.indexOf("--cap-drop");
+  assert.ok(capDropIdx >= 0, "--cap-drop present");
+  assert.equal(args[capDropIdx + 1], "ALL");
+  const capAddIdx = args.indexOf("--cap-add");
+  assert.ok(capAddIdx >= 0, "--cap-add present");
+  assert.equal(args[capAddIdx + 1], "SYS_ADMIN");
+  const secOptIdx = args.indexOf("--security-opt");
+  assert.ok(secOptIdx >= 0, "--security-opt present");
+  assert.equal(args[secOptIdx + 1], "no-new-privileges");
 });

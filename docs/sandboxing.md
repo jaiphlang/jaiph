@@ -19,6 +19,25 @@ The runtime executes rules by walking the AST in-process (`NodeWorkflowRuntime.e
 
 `jaiph test` executes tests in-process with `NodeTestRunner` and does not use Docker or a separate rule sandbox.
 
+## Threat model
+
+Docker sandboxing is designed to contain damage from untrusted or semi-trusted workflow scripts. Understanding what it does and does not protect against helps you make informed decisions about when to enable it.
+
+**What Docker protects against:**
+
+- **Filesystem access** -- Scripts inside the container cannot read or write arbitrary host paths. The host workspace is mounted read-only; writes go to a tmpfs overlay and are discarded on exit. Only the run-artifacts directory (`/jaiph/run`) persists writes to the host.
+- **Process isolation** -- Container processes cannot see or signal host processes. The container runs with `--cap-drop ALL` (only `SYS_ADMIN` is re-added for fuse-overlayfs) and `--security-opt no-new-privileges` to prevent privilege escalation.
+- **Credential leakage** -- Sensitive host environment variables (`SSH_*`, `GPG_*`, `AWS_*`, `GCP_*`, `AZURE_*`, `GOOGLE_*`, `DOCKER_*`, `KUBE*`, `NPM_TOKEN*`) are never forwarded into the container. Only `JAIPH_*` (except `JAIPH_DOCKER_*`) and agent prefixes (`ANTHROPIC_*`, `CLAUDE_*`, `CURSOR_*`) cross the container boundary.
+- **Mount safety** -- The host root filesystem (`/`), Docker socket (`/var/run/docker.sock`, `/run/docker.sock`), and OS internals (`/proc`, `/sys`, `/dev`) cannot be mounted into the container. Attempting to do so produces `E_VALIDATE_MOUNT`.
+
+**What Docker does NOT protect against:**
+
+- **Hooks run on the host.** Hook commands in `hooks.json` execute on the host CLI process, not inside the container. A malicious hook definition has full host access. Treat `hooks.json` as trusted configuration.
+- **Network egress by default.** Unless `runtime.docker_network` is set to `"none"`, the container has outbound network access via Docker's default bridge. Scripts can reach external services and exfiltrate data through the network.
+- **Agent credential forwarding.** `ANTHROPIC_*`, `CLAUDE_*`, and `CURSOR_*` variables are forwarded into the container so agent-backed workflows function. A malicious script can read these from its environment. When the credential-proxy feature lands, these will be replaced by proxy URLs that do not expose raw API keys.
+- **Image supply chain.** Jaiph verifies that the selected image contains `jaiph` but does not verify image signatures or provenance. Use trusted registries and pin image digests for production workloads.
+- **Container escapes.** Docker is not a security boundary against a determined attacker with kernel exploits. It raises the bar significantly for script-level mischief but is not equivalent to a VM or hardware-level isolation.
+
 ## Docker container isolation
 
 > **Beta.** Docker sandboxing is functional but still under active development. Expect rough edges, breaking changes, and incomplete platform coverage. Feedback is welcome at <https://github.com/jaiphlang/jaiph/issues>.
@@ -80,6 +99,12 @@ Mode must be `ro` or `rw` (otherwise `E_PARSE`). Exactly one mount must target `
 
 Host paths are resolved relative to the workspace root. Each mount is duplicated at the overlay lower-layer path (`/jaiph/workspace-ro/...`) so the overlay wrapper can use it as the read-only source.
 
+The following host paths are rejected at mount validation time with `E_VALIDATE_MOUNT`:
+
+- `/` (host root filesystem)
+- `/var/run/docker.sock`, `/run/docker.sock` (Docker daemon socket)
+- `/proc`, `/sys`, `/dev` (OS internals, including subpaths like `/proc/1/root`)
+
 ### Container layout
 
 ```
@@ -96,7 +121,7 @@ The working directory is `/jaiph/workspace`. The host CLI generates `overlay-run
 
 ### Runtime behavior
 
-**Container lifecycle** -- `docker run --rm` launches the container and auto-removes it on exit. `--device /dev/fuse` exposes the FUSE device for the overlay. The pseudo-TTY flag (`-t`) is intentionally omitted: Docker's `-t` merges stderr into stdout, which would break the `__JAIPH_EVENT__` stderr-only live contract. On Linux, `--user <uid>:<gid>` maps the container user to the host user.
+**Container lifecycle** -- `docker run --rm` launches the container and auto-removes it on exit. `--cap-drop ALL --cap-add SYS_ADMIN` drops all Linux capabilities except `SYS_ADMIN` (required for fuse-overlayfs). `--security-opt no-new-privileges` prevents any process inside the container from gaining additional privileges. `--device /dev/fuse` exposes the FUSE device for the overlay. The pseudo-TTY flag (`-t`) is intentionally omitted: Docker's `-t` merges stderr into stdout, which would break the `__JAIPH_EVENT__` stderr-only live contract. On Linux, `--user <uid>:<gid>` maps the container user to the host user.
 
 **stdin** -- The `docker run` process is spawned with stdin set to `ignore` to prevent the Docker CLI from blocking on stdin EOF.
 
@@ -106,11 +131,27 @@ The working directory is `/jaiph/workspace`. The host CLI generates `overlay-run
 
 **Run artifacts** -- The host CLI mounts the resolved host runs root at `/jaiph/run:rw` inside the container. By default this is `.jaiph/runs` under the workspace; a relative `JAIPH_RUNS_DIR` is resolved under the workspace; an absolute `JAIPH_RUNS_DIR` must stay within the workspace or the run fails with `E_DOCKER_RUNS_DIR`. `JAIPH_RUNS_DIR` is set to `/jaiph/run` inside the container, so the runtime writes artifacts directly into the requested host path.
 
-**Network** -- `"default"` omits `--network` (Docker's default bridge). `"none"` passes `--network none`. Any other value is passed through as-is.
+**Network** -- `"default"` omits `--network`, which uses Docker's default bridge network (outbound access allowed). `"none"` passes `--network none` and fully disables networking -- use this for workflows that should not make external calls. Any other value (e.g. a custom Docker network name) is passed through as-is. Set `runtime.docker_network` in config or `JAIPH_DOCKER_NETWORK` in the environment.
 
 **Timeout** -- When `runtime.docker_timeout` is greater than zero, the CLI sends `SIGTERM` to the container process on overrun, followed by `SIGKILL` after a 5-second grace period. The failure message includes `E_TIMEOUT container execution exceeded timeout`.
 
 **Image pull** -- If the image is not present locally, `docker pull` runs automatically. Pull failure produces `E_DOCKER_PULL`.
+
+### Failure modes
+
+Docker-related errors use `E_DOCKER_*` codes for programmatic detection:
+
+| Error code | Trigger | Behavior |
+|------------|---------|----------|
+| `E_DOCKER_NOT_FOUND` | `docker info` fails (Docker not installed or daemon not running) | Run exits immediately. No fallback to local execution. |
+| `E_DOCKER_PULL` | `docker pull` fails (network error, image not found, auth failure) | Run exits. Check registry access and image name. |
+| `E_DOCKER_BUILD` | `docker build` from `.jaiph/Dockerfile` fails | Run exits. Fix the Dockerfile and retry. |
+| `E_DOCKER_NO_JAIPH` | Selected image does not contain a `jaiph` CLI | Run exits with guidance to use the official image or install jaiph. |
+| `E_DOCKER_RUNS_DIR` | Absolute `JAIPH_RUNS_DIR` points outside the workspace | Run exits. Use a relative path or an absolute path within the workspace. |
+| `E_VALIDATE_MOUNT` | Mount targets a denied host path (`/`, `/proc`, docker socket, etc.) | Run exits before container launch. |
+| `E_TIMEOUT` | Container exceeds `runtime.docker_timeout` seconds | Container receives SIGTERM, then SIGKILL after 5s grace period. |
+
+All failures are deterministic and produce non-zero exit codes. There is no silent fallback from Docker to local execution.
 
 ### Image contract
 
@@ -162,6 +203,16 @@ All `JAIPH_*` variables from the host are forwarded into the container, **except
 - `CURSOR_*`
 - `ANTHROPIC_*`
 - `CLAUDE_*`
+
+The following prefixes are **never** forwarded, even if present on the host:
+
+- `SSH_*`, `GPG_*` -- authentication agent sockets and signing keys
+- `AWS_*`, `GCP_*`, `AZURE_*`, `GOOGLE_*` -- cloud provider credentials
+- `DOCKER_*` -- Docker daemon configuration (prevents container-in-container)
+- `KUBE*` -- Kubernetes configuration
+- `NPM_TOKEN*` -- package registry credentials
+
+This denylist is enforced in `buildDockerArgs` and cannot be overridden. If a workflow needs cloud credentials inside the container, pass them explicitly through `JAIPH_*`-prefixed variables or use a credential proxy.
 
 ### Example
 
