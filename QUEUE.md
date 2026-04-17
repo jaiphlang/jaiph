@@ -12,74 +12,6 @@ Process rules:
 
 ***
 
-## Docker — strict image contract + publish official `jaiph-runtime` images to GHCR #dev-ready
-
-**Goal**
-Remove all Docker runtime bootstrapping/fallback magic. In Docker mode, **every selected image must already contain a working `jaiph` CLI**. Jaiph must **not** build a thin derived image at runtime and must **not** auto-install itself into arbitrary base images. (Today the host uses `npm pack` + `docker build` to install the local package into a derived image; there is no bind-mount of host `dist/`, but that derived-image install path is equally forbidden.) The product contract becomes explicit: if Docker is on, the image is responsible for containing Jaiph.
-
-Publish an official Jaiph runtime image to **GHCR** and make it the default Docker image:
-
-* tagged releases → `ghcr.io/jaiphlang/jaiph-runtime:<version>`
-* nightly builds → `ghcr.io/jaiphlang/jaiph-runtime:nightly`
-* default `runtime.docker_image` / env default should point at that official image
-
-Convenience fallback to `node:20-bookworm` + runtime bootstrap is **not** desired.
-
-**Required product decision**
-
-1. **Strict requirement** — all Docker images used by Jaiph must already have `jaiph`.
-2. **Official default image** — Jaiph publishes and uses `ghcr.io/jaiphlang/jaiph-runtime`.
-3. **No hidden runtime mutation** — no auto-derived image build, no `npm install -g` of Jaiph during Docker run startup.
-4. **Fast fail** — if the chosen image lacks `jaiph`, Jaiph must fail clearly with an explicit Docker/runtime error.
-
-**Why this task exists**
-
-The codebase currently mixes a generic contract (`jaiph run --raw` inside the container) with a convenience path (stock images without `jaiph`). Both cannot be true without bootstrapping. This task chooses the strict model and removes the second.
-
-**Critical implementation detail (from current `src/runtime/docker.ts`)**
-
-When `imageExplicit === false`, `resolveImage` currently ends in `ensureLocalRuntimeImage`, which **always** targets a derived `jaiph-runtime-auto:*` tag built via `npm pack`, even if the base image already contains `jaiph`. After switching the default to the official GHCR image (or any image that already has `jaiph`), the runtime must **use that image as-is** when `command -v jaiph` succeeds — no auto-derivation. If `jaiph` is missing, fail fast (no fallback build).
-
-**Resolved defaults (no longer open)**
-
-* **Default tag rule**: Release npm builds embed `ghcr.io/jaiphlang/jaiph-runtime:<semver>` matching the package/`jaiph` version. Main/nightly CI artifacts and docs for contributors use the `:nightly` tag; state the rule explicitly in docs.
-* **Cursor / Claude CLIs in the official image**: **Exclude by default** from the minimal `jaiph-runtime` image to keep size and supply chain small; document how to extend a custom image (the managed `.jaiph/Dockerfile` template may remain a fuller example).
-
-**Queue coordination**
-
-Ship published GHCR images before or together with the later queued task “Runtime — default Docker when not CI or unsafe”, which will expect a pullable default image for local users.
-
-**Context**
-
-* Docker runtime: `src/runtime/docker.ts`
-* Docker run path: `src/cli/commands/run.ts`
-* Docs: `docs/sandboxing.md`, `docs/configuration.md`, `docs/cli.md`
-* E2E: `e2e/tests/72_docker_run_artifacts.sh`, `e2e/tests/73_docker_dockerfile_detection.sh`, `e2e/tests/74_docker_lifecycle.sh`
-* Managed Dockerfile: `.jaiph/Dockerfile`, `src/cli/commands/init.ts`
-* CI: `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `.github/workflows/nightly-engineer.yml`
-
-**Implementation requirements**
-
-1. **Runtime** — Remove `ensureLocalRuntimeImage` / `buildRuntimeImageFromLocalPackage` / auto-derivation paths. Keep container entry `jaiph run --raw ...`. Preflight: after pull, verify `jaiph` exists in the selected image; if not, error with guidance to use `ghcr.io/jaiphlang/jaiph-runtime` or install Jaiph in a custom image. Preflight is by capability check, not by image name whitelist.
-2. **Default image** — Default becomes the official GHCR runtime image (not `node:20-bookworm`).
-3. **Publishing** — CI/release builds and pushes `ghcr.io/jaiphlang/jaiph-runtime` for release tags and `nightly`. Image includes Node.js, `jaiph`, `fuse-overlayfs` (and other sandbox prereqs per `.jaiph/Dockerfile`), and non-root user if that remains the contract.
-4. **Docs** — Rewrite Docker sections for the strict contract; remove language about auto-derived images and stock bases “just working.”
-5. **Tests** — Update E2E for strict contract; add/keep regression that an image without `jaiph` fails with a clear error.
-
-**Scope note**
-
-Expect changes across more than three files (runtime, CI workflows, init scaffolding, docs, E2E, unit tests). Prefer plain functions and small helpers; `docker.ts` is already large—avoid speculative abstractions.
-
-**Acceptance criteria**
-
-* Default Docker image is `ghcr.io/jaiphlang/jaiph-runtime:*`, not `node:20-bookworm`.
-* Jaiph never auto-builds a derived runtime image at Docker run time.
-* Jaiph never injects Jaiph into the container except by using an image that already contains it (no `npm pack` bootstrap).
-* A custom image without `jaiph` fails fast with a clear actionable error.
-* Official GHCR runtime images are published for release tags and `nightly`.
-* Docs describe the strict contract and official image flow without ambiguity.
-* Unit + E2E coverage prevents regression to bootstrap behavior.
-
 ## Support optional config properties in Jaiph DSL: version, name, description. #dev-ready
 
 **Goal**
@@ -88,44 +20,44 @@ Add optional module-scoped manifest fields in the module-level `config { }` bloc
 
 **Keys (dot-separated, string values)**
 
-- `module.name`
-- `module.version`
-- `module.description`
+* `module.name`
+* `module.version`
+* `module.description`
 
 All optional; omitted keys leave the corresponding field unset.
 
 **Semantics**
 
-- Values use the same double-quoted string rules as other config strings (existing escapes). No semver validation in v1 unless a later task adds it.
-- **Module-level only:** `module.*` keys must not appear in workflow-level `config { }` blocks. After parsing, reject workflow-level config that sets any `module.*` key, using the same pattern as the existing `runtime.*` workflow guard in `src/parse/workflows.ts`.
-- Stored on `WorkflowMetadata` as descriptive metadata only. They do **not** map into `JaiphConfig`, environment resolution, or the Node workflow runtime unless a future task wires them (e.g. MCP tool metadata).
+* Values use the same double-quoted string rules as other config strings (existing escapes). No semver validation in v1 unless a later task adds it.
+* **Module-level only:** `module.*` keys must not appear in workflow-level `config { }` blocks. After parsing, reject workflow-level config that sets any `module.*` key, using the same pattern as the existing `runtime.*` workflow guard in `src/parse/workflows.ts`.
+* Stored on `WorkflowMetadata` as descriptive metadata only. They do **not** map into `JaiphConfig`, environment resolution, or the Node workflow runtime unless a future task wires them (e.g. MCP tool metadata).
 
 **Implementation touchpoints**
 
-- `src/parse/metadata.ts` — `ALLOWED_KEYS`, `KEY_TYPES`, `assignConfigKey`.
-- `src/types.ts` — optional `module?: { name?: string; version?: string; description?: string }` on `WorkflowMetadata`.
-- `src/format/emit.ts` — formatter round-trip for the new keys.
-- `src/parse/workflows.ts` — workflow-level rejection for `module.*` (mirror `metadata.runtime`).
-- Tests: `src/parse/parse-metadata.test.ts`; update parse-error golden/txtar cases if the unknown-key allowed-list appears in expectations.
-- Docs: `docs/configuration.md`, `docs/grammar.md` (`config_key`).
+* `src/parse/metadata.ts` — `ALLOWED_KEYS`, `KEY_TYPES`, `assignConfigKey`.
+* `src/types.ts` — optional `module?: { name?: string; version?: string; description?: string }` on `WorkflowMetadata`.
+* `src/format/emit.ts` — formatter round-trip for the new keys.
+* `src/parse/workflows.ts` — workflow-level rejection for `module.*` (mirror `metadata.runtime`).
+* Tests: `src/parse/parse-metadata.test.ts`; update parse-error golden/txtar cases if the unknown-key allowed-list appears in expectations.
+* Docs: `docs/configuration.md`, `docs/grammar.md` (`config_key`).
 
 **Non-goals**
 
-- Environment variables, CLI output, or runtime behavior changes beyond parsing/formatting/validation.
+* Environment variables, CLI output, or runtime behavior changes beyond parsing/formatting/validation.
 
 **Queue coordination**
 
-- No conflict with the queued `jaiph serve` MCP task; future work may read `module.description` for tool listings.
+* No conflict with the queued `jaiph serve` MCP task; future work may read `module.description` for tool listings.
 
 **Acceptance criteria**
 
-- Module-level `config` accepts `module.name`, `module.version`, and `module.description`; values round-trip through `jaiph format`.
-- Workflow-level `config` containing any `module.*` assignment fails with an explicit error (consistent with `runtime.*` workflow rules).
-- Unit tests cover happy path and workflow rejection; docs and grammar list the keys.
+* Module-level `config` accepts `module.name`, `module.version`, and `module.description`; values round-trip through `jaiph format`.
+* Workflow-level `config` containing any `module.*` assignment fails with an explicit error (consistent with `runtime.*` workflow rules).
+* Unit tests cover happy path and workflow rejection; docs and grammar list the keys.
 
 **Scope note**
 
-- Expect more than three files (parser, types, formatter, workflows guard, tests, docs); keep the existing plain `assignConfigKey` style — no new abstraction layers.
+* Expect more than three files (parser, types, formatter, workflows guard, tests, docs); keep the existing plain `assignConfigKey` style — no new abstraction layers.
 
 ## Runtime — harden Docker execution environment #dev-ready
 
@@ -154,7 +86,7 @@ Docker mode is the isolation boundary for workflow runs. Harden it: least-privil
 
 **Scope note**
 
-* `docker.ts` is already large (~650+ lines); prefer small helpers or one focused sibling module over speculative abstractions. Expect at least `docker.ts`, `docker.test.ts`, and `docs/sandboxing.md`; split follow-ups if the change set outgrows one cycle.
+* `docker.ts` is already large (\~650+ lines); prefer small helpers or one focused sibling module over speculative abstractions. Expect at least `docker.ts`, `docker.test.ts`, and `docs/sandboxing.md`; split follow-ups if the change set outgrows one cycle.
 
 ## Runtime — default Docker when not CI or unsafe #dev-ready
 
@@ -176,6 +108,8 @@ Introduce **`JAIPH_UNSAFE=true`** as the explicit "run on host / skip Docker def
 * `CHANGELOG` + sandboxing / configuration docs updated.
 
 ***
+
+## Docker sandbox: Figure out a way to pass code changes from engineer.jh in docker mode to local env (git patch saved to .jaiph/runs?)
 
 ## Runtime — credential proxy for Docker mode
 
@@ -214,7 +148,7 @@ Containers should never hold real API keys. Implement a host-side HTTP proxy (th
 
 **Scope note**
 
-* Target **~3 files**: one small new module for the proxy plus focused edits in `docker.ts` and `run.ts`. Plain functions, no new abstraction layers.
+* Target **\~3 files**: one small new module for the proxy plus focused edits in `docker.ts` and `run.ts`. Plain functions, no new abstraction layers.
 
 ## `jaiph serve` — expose workflows as an MCP server #dev-ready
 

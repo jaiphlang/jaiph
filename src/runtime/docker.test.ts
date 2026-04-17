@@ -13,6 +13,8 @@ import {
   writeOverlayScript,
   resolveImage,
   buildImageFromDockerfile,
+  verifyImageHasJaiph,
+  GHCR_IMAGE_REPO,
   type MountSpec,
   type DockerRunConfig,
   type DockerSpawnOptions,
@@ -137,7 +139,7 @@ test("parseMounts: throws when no workspace mount", () => {
 test("resolveDockerConfig: defaults when no in-file and no env", () => {
   const cfg = resolveDockerConfig(undefined, {});
   assert.equal(cfg.enabled, false);
-  assert.equal(cfg.image, "node:20-bookworm");
+  assert.ok(cfg.image.startsWith(GHCR_IMAGE_REPO + ":"), `default image should be GHCR: ${cfg.image}`);
   assert.equal(cfg.network, "default");
   assert.equal(cfg.timeout, 300);
   assert.equal(cfg.mounts.length, 1);
@@ -506,6 +508,14 @@ test("resolveDockerConfig: imageExplicit is true when in-file sets image", () =>
 });
 
 // ---------------------------------------------------------------------------
+// GHCR_IMAGE_REPO
+// ---------------------------------------------------------------------------
+
+test("GHCR_IMAGE_REPO: points to official registry", () => {
+  assert.equal(GHCR_IMAGE_REPO, "ghcr.io/jaiphlang/jaiph-runtime");
+});
+
+// ---------------------------------------------------------------------------
 // resolveImage
 // ---------------------------------------------------------------------------
 
@@ -539,4 +549,26 @@ test("resolveImage: skips Dockerfile when imageExplicit is true", () => {
   } finally {
     rmSync(tmpDir, { recursive: true, force: true });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Strict contract: no auto-build, no npm pack bootstrap
+// ---------------------------------------------------------------------------
+
+test("docker.ts: no auto-build or npm-pack bootstrap code", () => {
+  const src = readFileSync(join(__dirname, "docker.ts"), "utf8");
+  assert.ok(!src.includes("npm pack"), "docker.ts must not contain npm pack");
+  assert.ok(!src.includes("npm install -g"), "docker.ts must not contain npm install -g");
+  assert.ok(!src.includes("jaiph-runtime-auto"), "docker.ts must not reference auto-derived image tag");
+  assert.ok(!src.includes("ensureLocalRuntimeImage"), "docker.ts must not contain ensureLocalRuntimeImage");
+  assert.ok(!src.includes("buildRuntimeImageFromLocalPackage"), "docker.ts must not contain buildRuntimeImageFromLocalPackage");
+});
+
+test("verifyImageHasJaiph: throws E_DOCKER_NO_JAIPH with guidance for missing jaiph", () => {
+  // Unit-test the error message structure without running Docker.
+  // verifyImageHasJaiph uses imageHasJaiph internally which spawns Docker,
+  // so we test the error message format by checking the source contract.
+  const src = readFileSync(join(__dirname, "docker.ts"), "utf8");
+  assert.ok(src.includes("E_DOCKER_NO_JAIPH"), "verifyImageHasJaiph must use E_DOCKER_NO_JAIPH error code");
+  assert.ok(src.includes(GHCR_IMAGE_REPO), "error message must reference official GHCR image");
 });

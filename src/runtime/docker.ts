@@ -1,6 +1,5 @@
 import { execFileSync, execSync, spawn, ChildProcess } from "node:child_process";
-import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname, relative } from "node:path";
 import type { RuntimeConfig } from "../types";
@@ -81,10 +80,25 @@ export function validateMounts(mounts: MountSpec[]): void {
 // Config resolution (env > in-file > defaults)
 // ---------------------------------------------------------------------------
 
+/** Read the package version to derive the default GHCR image tag. */
+function resolveDefaultImageTag(): string {
+  try {
+    const pkgPath = resolve(__dirname, "..", "..", "..", "package.json");
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+    if (pkg.version && typeof pkg.version === "string") {
+      return pkg.version;
+    }
+  } catch {
+    // Fall through to nightly.
+  }
+  return "nightly";
+}
+
+export const GHCR_IMAGE_REPO = "ghcr.io/jaiphlang/jaiph-runtime";
+
 const DEFAULTS: DockerRunConfig = {
   enabled: false,
-  /** Node + bash; required for JS kernel (run-step-exec) inside the container. */
-  image: "node:20-bookworm",
+  image: `${GHCR_IMAGE_REPO}:${resolveDefaultImageTag()}`,
   imageExplicit: false,
   network: "default",
   timeout: 300,
@@ -175,7 +189,6 @@ export function pullImageIfNeeded(image: string): void {
 // ---------------------------------------------------------------------------
 
 const DOCKERFILE_IMAGE_TAG = "jaiph-runtime:latest";
-const AUTO_RUNTIME_IMAGE_REPO = "jaiph-runtime-auto";
 
 /**
  * Build a Docker image from a Dockerfile and tag it.
@@ -194,26 +207,6 @@ export function buildImageFromDockerfile(dockerfilePath: string, tag: string = D
   return tag;
 }
 
-function installedPackageRoot(): string {
-  return resolve(__dirname, "..", "..", "..");
-}
-
-function autoRuntimeImageTag(baseImage: string, packageRoot: string): string {
-  const packageJsonPath = join(packageRoot, "package.json");
-  const cliPath = join(packageRoot, "dist", "src", "cli.js");
-  const dockerRuntimePath = join(packageRoot, "dist", "src", "runtime", "docker.js");
-  const nodeWorkflowRuntimePath = join(packageRoot, "dist", "src", "runtime", "kernel", "node-workflow-runtime.js");
-  const packageStamp = existsSync(packageJsonPath) ? statSync(packageJsonPath).mtimeMs : 0;
-  const cliStamp = existsSync(cliPath) ? statSync(cliPath).mtimeMs : 0;
-  const dockerRuntimeStamp = existsSync(dockerRuntimePath) ? statSync(dockerRuntimePath).mtimeMs : 0;
-  const nodeWorkflowRuntimeStamp = existsSync(nodeWorkflowRuntimePath) ? statSync(nodeWorkflowRuntimePath).mtimeMs : 0;
-  const digest = createHash("sha256")
-    .update(`${baseImage}|${resolve(packageRoot)}|${packageStamp}|${cliStamp}|${dockerRuntimeStamp}|${nodeWorkflowRuntimeStamp}`)
-    .digest("hex")
-    .slice(0, 12);
-  return `${AUTO_RUNTIME_IMAGE_REPO}:${digest}`;
-}
-
 function imageHasJaiph(image: string): boolean {
   try {
     execFileSync(
@@ -227,103 +220,17 @@ function imageHasJaiph(image: string): boolean {
   }
 }
 
-function imageConfiguredUser(image: string): string | undefined {
-  try {
-    const raw = execFileSync(
-      "docker",
-      ["image", "inspect", image, "--format", "{{json .Config.User}}"],
-      { encoding: "utf8", timeout: 30_000 },
-    ).trim();
-    const parsed = JSON.parse(raw) as string;
-    return parsed.length > 0 ? parsed : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function imageHomeDir(image: string): string | undefined {
-  try {
-    const raw = execFileSync(
-      "docker",
-      ["image", "inspect", image, "--format", "{{json .Config.Env}}"],
-      { encoding: "utf8", timeout: 30_000 },
-    ).trim();
-    const envList = JSON.parse(raw) as string[];
-    for (const entry of envList) {
-      if (entry.startsWith("HOME=")) {
-        const value = entry.slice("HOME=".length);
-        return value.length > 0 ? value : undefined;
-      }
-    }
-  } catch {
-    // Fall through.
-  }
-  return undefined;
-}
-
-function buildRuntimeImageFromLocalPackage(baseImage: string, packageRoot: string, tag: string): string {
-  const contextDir = mkdtempSync(join(tmpdir(), "jaiph-runtime-image-"));
-  try {
-    const tarballName = execFileSync(
-      "npm",
-      ["pack", packageRoot, "--silent", "--pack-destination", contextDir],
-      { cwd: packageRoot, encoding: "utf8", timeout: 300_000 },
-    ).trim().split(/\r?\n/).pop()?.trim();
-    if (!tarballName) {
-      throw new Error("npm pack produced no tarball");
-    }
-    const originalUser = imageConfiguredUser(baseImage);
-    const originalHome = imageHomeDir(baseImage);
-    writeFileSync(
-      join(contextDir, "Dockerfile"),
-      [
-        `FROM ${baseImage}`,
-        `USER root`,
-        `COPY ${tarballName} /tmp/${tarballName}`,
-        `RUN npm install -g /tmp/${tarballName} && rm -f /tmp/${tarballName}` +
-        (originalHome
-          ? ` && JAIPH_NPM_BIN="$(npm prefix -g)/bin/jaiph" && mkdir -p ${originalHome}/.local/bin && ln -sf "$JAIPH_NPM_BIN" ${originalHome}/.local/bin/jaiph`
-          : ""),
-        ...(originalUser ? [`USER ${originalUser}`] : []),
-        "",
-      ].join("\n"),
+/**
+ * Verify that the selected Docker image contains `jaiph`.
+ * Fails fast with an actionable error when the binary is missing.
+ */
+export function verifyImageHasJaiph(image: string): void {
+  if (!imageHasJaiph(image)) {
+    throw new Error(
+      `E_DOCKER_NO_JAIPH the Docker image "${image}" does not contain a jaiph CLI. ` +
+      `Use the official runtime image (${GHCR_IMAGE_REPO}:<version>) or install jaiph ` +
+      `in your custom image. See https://jaiph.org/sandboxing for details.`,
     );
-    execFileSync("docker", ["build", "-t", tag, contextDir], {
-      stdio: "inherit",
-      timeout: 600_000,
-    });
-    return tag;
-  } catch {
-    throw new Error(`E_DOCKER_BUILD failed to build runtime image from base "${baseImage}"`);
-  } finally {
-    rmSync(contextDir, { recursive: true, force: true });
-  }
-}
-
-function ensureLocalRuntimeImage(baseImage: string): string {
-  pullImageIfNeeded(baseImage);
-  const packageRoot = installedPackageRoot();
-  const tag = autoRuntimeImageTag(baseImage, packageRoot);
-  try {
-    execSync(`docker image inspect ${tag}`, { stdio: "ignore", timeout: 30_000 });
-    return tag;
-  } catch {
-    return buildRuntimeImageFromLocalPackage(baseImage, packageRoot, tag);
-  }
-}
-
-function ensureImageHasJaiph(baseImage: string): string {
-  pullImageIfNeeded(baseImage);
-  if (imageHasJaiph(baseImage)) {
-    return baseImage;
-  }
-  const packageRoot = installedPackageRoot();
-  const tag = autoRuntimeImageTag(baseImage, packageRoot);
-  try {
-    execSync(`docker image inspect ${tag}`, { stdio: "ignore", timeout: 30_000 });
-    return tag;
-  } catch {
-    return buildRuntimeImageFromLocalPackage(baseImage, packageRoot, tag);
   }
 }
 
@@ -332,19 +239,26 @@ function ensureImageHasJaiph(baseImage: string): string {
  *
  * When the image was not explicitly configured (`imageExplicit === false`),
  * checks for `.jaiph/Dockerfile` in the workspace root. If present, builds
- * from it and returns the built image tag. Otherwise falls back to the
- * configured (default) image and pulls it if needed.
+ * from it and verifies jaiph is present. Otherwise uses the configured
+ * (default) image — the official GHCR runtime image — and pulls if needed.
+ *
+ * All images are verified to contain `jaiph` before use. If the image
+ * lacks jaiph, the run fails immediately with guidance.
  */
 export function resolveImage(config: DockerRunConfig, workspaceRoot: string): string {
-  let baseImage = config.image;
+  let image = config.image;
   if (!config.imageExplicit) {
     const dockerfilePath = join(workspaceRoot, ".jaiph", "Dockerfile");
     if (existsSync(dockerfilePath)) {
-      baseImage = buildImageFromDockerfile(dockerfilePath);
+      image = buildImageFromDockerfile(dockerfilePath);
+    } else {
+      pullImageIfNeeded(image);
     }
-    return ensureLocalRuntimeImage(baseImage);
+  } else {
+    pullImageIfNeeded(image);
   }
-  return ensureImageHasJaiph(baseImage);
+  verifyImageHasJaiph(image);
+  return image;
 }
 
 // ---------------------------------------------------------------------------

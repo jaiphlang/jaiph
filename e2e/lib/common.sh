@@ -463,6 +463,59 @@ EOF
   JAIPH_BIN_DIR="${JAIPH_E2E_BIN_DIR}" curl -fsSL "${E2E_SERVER_URL}/install" | bash
 }
 
+E2E_DOCKER_TEST_IMAGE="${JAIPH_E2E_DOCKER_IMAGE:-}"
+E2E_DOCKER_IMAGE_BUILT=0
+
+# Build a local jaiph-e2e-runtime image from the current source tree.
+# Caches the image name in E2E_DOCKER_TEST_IMAGE so it is built at most once.
+e2e::ensure_docker_test_image() {
+  if [[ -n "${E2E_DOCKER_TEST_IMAGE}" ]]; then
+    return 0
+  fi
+  if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+    return 1
+  fi
+  local tag="jaiph-e2e-runtime:local"
+  if [[ "${E2E_DOCKER_IMAGE_BUILT}" == "1" ]]; then
+    E2E_DOCKER_TEST_IMAGE="${tag}"
+    export JAIPH_E2E_DOCKER_IMAGE="${tag}"
+    return 0
+  fi
+  local context_dir
+  context_dir="$(mktemp -d)"
+  (cd "${E2E_REPO_ROOT}" && npm pack --pack-destination "${context_dir}" >/dev/null 2>&1)
+  local tarball
+  tarball="$(ls "${context_dir}"/jaiph-*.tgz 2>/dev/null | head -1)"
+  if [[ -z "${tarball}" ]]; then
+    rm -rf "${context_dir}"
+    return 1
+  fi
+  mv "${tarball}" "${context_dir}/jaiph.tgz"
+  if [[ -f "${E2E_REPO_ROOT}/docker/Dockerfile.runtime" ]]; then
+    cp "${E2E_REPO_ROOT}/docker/Dockerfile.runtime" "${context_dir}/Dockerfile"
+  else
+    cat > "${context_dir}/Dockerfile" <<'EODOCKERFILE'
+FROM node:20-bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends bash curl git ca-certificates fuse-overlayfs fuse3 rsync && rm -rf /var/lib/apt/lists/*
+RUN useradd --create-home --uid 10001 --shell /bin/bash jaiph && mkdir -p /jaiph/workspace /jaiph/workspace-ro /jaiph/run && chown -R jaiph:jaiph /jaiph
+ARG JAIPH_TARBALL=jaiph.tgz
+COPY ${JAIPH_TARBALL} /tmp/jaiph.tgz
+RUN npm install -g /tmp/jaiph.tgz && rm -f /tmp/jaiph.tgz
+USER jaiph
+ENV HOME=/home/jaiph
+ENV PATH="/home/jaiph/.local/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+WORKDIR /jaiph/workspace
+EODOCKERFILE
+  fi
+  if docker build -t "${tag}" --build-arg JAIPH_TARBALL=jaiph.tgz "${context_dir}" >/dev/null 2>&1; then
+    E2E_DOCKER_IMAGE_BUILT=1
+    E2E_DOCKER_TEST_IMAGE="${tag}"
+    export JAIPH_E2E_DOCKER_IMAGE="${tag}"
+  fi
+  rm -rf "${context_dir}"
+  [[ -n "${E2E_DOCKER_TEST_IMAGE}" ]]
+}
+
 e2e::prepare_test_env() {
   local test_name="$1"
   e2e::prepare_shared_context

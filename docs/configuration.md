@@ -146,7 +146,7 @@ These configure Docker sandboxing. Unlike agent and run keys, runtime keys are r
 | Key | Type | Default | Env variable | Description |
 |-----|------|---------|--------------|-------------|
 | `runtime.docker_enabled` | boolean | `false` | `JAIPH_DOCKER_ENABLED` | Enable Docker for this run. |
-| `runtime.docker_image` | string | `node:20-bookworm` | `JAIPH_DOCKER_IMAGE` | Image name. When unset, Jaiph builds from `.jaiph/Dockerfile` if it exists, otherwise uses the default. |
+| `runtime.docker_image` | string | `ghcr.io/jaiphlang/jaiph-runtime:<version>` | `JAIPH_DOCKER_IMAGE` | Image name. Must already contain `jaiph`. When unset, Jaiph builds from `.jaiph/Dockerfile` if it exists, otherwise uses the official GHCR image matching the installed jaiph version. |
 | `runtime.docker_network` | string | `default` | `JAIPH_DOCKER_NETWORK` | Docker network mode. |
 | `runtime.docker_timeout` | integer | `300` | `JAIPH_DOCKER_TIMEOUT` | Timeout in seconds. Invalid or unparsable values fall back to the default. |
 | `runtime.workspace` | string[] | `[".:/jaiph/workspace:rw"]` | _(no env override)_ | Mount list. Only settable via in-file config or defaults. |
