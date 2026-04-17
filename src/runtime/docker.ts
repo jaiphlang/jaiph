@@ -201,10 +201,14 @@ function installedPackageRoot(): string {
 function autoRuntimeImageTag(baseImage: string, packageRoot: string): string {
   const packageJsonPath = join(packageRoot, "package.json");
   const cliPath = join(packageRoot, "dist", "src", "cli.js");
+  const dockerRuntimePath = join(packageRoot, "dist", "src", "runtime", "docker.js");
+  const nodeWorkflowRuntimePath = join(packageRoot, "dist", "src", "runtime", "kernel", "node-workflow-runtime.js");
   const packageStamp = existsSync(packageJsonPath) ? statSync(packageJsonPath).mtimeMs : 0;
   const cliStamp = existsSync(cliPath) ? statSync(cliPath).mtimeMs : 0;
+  const dockerRuntimeStamp = existsSync(dockerRuntimePath) ? statSync(dockerRuntimePath).mtimeMs : 0;
+  const nodeWorkflowRuntimeStamp = existsSync(nodeWorkflowRuntimePath) ? statSync(nodeWorkflowRuntimePath).mtimeMs : 0;
   const digest = createHash("sha256")
-    .update(`${baseImage}|${resolve(packageRoot)}|${packageStamp}|${cliStamp}`)
+    .update(`${baseImage}|${resolve(packageRoot)}|${packageStamp}|${cliStamp}|${dockerRuntimeStamp}|${nodeWorkflowRuntimeStamp}`)
     .digest("hex")
     .slice(0, 12);
   return `${AUTO_RUNTIME_IMAGE_REPO}:${digest}`;
@@ -223,6 +227,40 @@ function imageHasJaiph(image: string): boolean {
   }
 }
 
+function imageConfiguredUser(image: string): string | undefined {
+  try {
+    const raw = execFileSync(
+      "docker",
+      ["image", "inspect", image, "--format", "{{json .Config.User}}"],
+      { encoding: "utf8", timeout: 30_000 },
+    ).trim();
+    const parsed = JSON.parse(raw) as string;
+    return parsed.length > 0 ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function imageHomeDir(image: string): string | undefined {
+  try {
+    const raw = execFileSync(
+      "docker",
+      ["image", "inspect", image, "--format", "{{json .Config.Env}}"],
+      { encoding: "utf8", timeout: 30_000 },
+    ).trim();
+    const envList = JSON.parse(raw) as string[];
+    for (const entry of envList) {
+      if (entry.startsWith("HOME=")) {
+        const value = entry.slice("HOME=".length);
+        return value.length > 0 ? value : undefined;
+      }
+    }
+  } catch {
+    // Fall through.
+  }
+  return undefined;
+}
+
 function buildRuntimeImageFromLocalPackage(baseImage: string, packageRoot: string, tag: string): string {
   const contextDir = mkdtempSync(join(tmpdir(), "jaiph-runtime-image-"));
   try {
@@ -234,12 +272,19 @@ function buildRuntimeImageFromLocalPackage(baseImage: string, packageRoot: strin
     if (!tarballName) {
       throw new Error("npm pack produced no tarball");
     }
+    const originalUser = imageConfiguredUser(baseImage);
+    const originalHome = imageHomeDir(baseImage);
     writeFileSync(
       join(contextDir, "Dockerfile"),
       [
         `FROM ${baseImage}`,
+        `USER root`,
         `COPY ${tarballName} /tmp/${tarballName}`,
-        `RUN npm install -g /tmp/${tarballName} && rm -f /tmp/${tarballName}`,
+        `RUN npm install -g /tmp/${tarballName} && rm -f /tmp/${tarballName}` +
+        (originalHome
+          ? ` && JAIPH_NPM_BIN="$(npm prefix -g)/bin/jaiph" && mkdir -p ${originalHome}/.local/bin && ln -sf "$JAIPH_NPM_BIN" ${originalHome}/.local/bin/jaiph`
+          : ""),
+        ...(originalUser ? [`USER ${originalUser}`] : []),
         "",
       ].join("\n"),
     );
@@ -252,6 +297,18 @@ function buildRuntimeImageFromLocalPackage(baseImage: string, packageRoot: strin
     throw new Error(`E_DOCKER_BUILD failed to build runtime image from base "${baseImage}"`);
   } finally {
     rmSync(contextDir, { recursive: true, force: true });
+  }
+}
+
+function ensureLocalRuntimeImage(baseImage: string): string {
+  pullImageIfNeeded(baseImage);
+  const packageRoot = installedPackageRoot();
+  const tag = autoRuntimeImageTag(baseImage, packageRoot);
+  try {
+    execSync(`docker image inspect ${tag}`, { stdio: "ignore", timeout: 30_000 });
+    return tag;
+  } catch {
+    return buildRuntimeImageFromLocalPackage(baseImage, packageRoot, tag);
   }
 }
 
@@ -285,6 +342,7 @@ export function resolveImage(config: DockerRunConfig, workspaceRoot: string): st
     if (existsSync(dockerfilePath)) {
       baseImage = buildImageFromDockerfile(dockerfilePath);
     }
+    return ensureLocalRuntimeImage(baseImage);
   }
   return ensureImageHasJaiph(baseImage);
 }
@@ -299,9 +357,51 @@ LOWER=/jaiph/workspace-ro
 UPPER=/tmp/overlay-upper
 WORK=/tmp/overlay-work
 MERGED=/jaiph/workspace
-mkdir -p "$UPPER" "$WORK"
+mkdir -p "$UPPER" "$WORK" "$MERGED"
+overlay_ok=0
+overlay_reason=""
 if command -v fuse-overlayfs >/dev/null 2>&1 && [ -e /dev/fuse ]; then
-  fuse-overlayfs -o "lowerdir=$LOWER,upperdir=$UPPER,workdir=$WORK" "$MERGED" 2>/dev/null || true
+  if fuse-overlayfs -o "lowerdir=$LOWER,upperdir=$UPPER,workdir=$WORK" "$MERGED" 2>/tmp/jaiph-fuse-overlay.err; then
+    probe_path="$(mktemp "$MERGED/.jaiph-overlay-probe.XXXXXX" 2>/dev/null || true)"
+    if [ -n "$probe_path" ]; then
+      rm -f "$probe_path"
+      overlay_ok=1
+    else
+      overlay_reason="fuse-overlayfs mounted but workspace is still not writable"
+    fi
+  else
+    overlay_reason="$(tr '\n' ' ' </tmp/jaiph-fuse-overlay.err | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')"
+  fi
+else
+  overlay_reason="fuse-overlayfs unavailable or /dev/fuse missing"
+fi
+if [ "$overlay_ok" -ne 1 ]; then
+  if command -v rsync >/dev/null 2>&1; then
+    if rsync -a --delete "$LOWER"/ "$MERGED"/ 2>/tmp/jaiph-workspace-copy.err; then
+      printf 'jaiph docker: workspace overlay unavailable; using copy fallback at /jaiph/workspace' >&2
+      if [ -n "$overlay_reason" ]; then
+        printf ' (%s)' "$overlay_reason" >&2
+      fi
+      printf '\n' >&2
+      overlay_ok=1
+    else
+      copy_reason="$(tr '\n' ' ' </tmp/jaiph-workspace-copy.err | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')"
+      printf 'jaiph docker: workspace overlay unavailable and copy fallback failed; /jaiph/workspace may be incomplete' >&2
+      if [ -n "$overlay_reason" ]; then
+        printf ' (%s)' "$overlay_reason" >&2
+      fi
+      if [ -n "$copy_reason" ]; then
+        printf ' [copy fallback: %s]' "$copy_reason" >&2
+      fi
+      printf '\n' >&2
+    fi
+  else
+    printf 'jaiph docker: workspace overlay unavailable and rsync copy fallback is unavailable; /jaiph/workspace may be incomplete' >&2
+    if [ -n "$overlay_reason" ]; then
+      printf ' (%s)' "$overlay_reason" >&2
+    fi
+    printf '\n' >&2
+  fi
 fi
 exec "$@"
 `;
@@ -386,13 +486,13 @@ export function overlayMountPath(containerPath: string): string {
  * Build the `docker run --rm` argument list.
  *
  * Mounts:
- *  1. workspace → /jaiph/workspace:ro  (fallback when overlay absent)
- *  2. workspace → /jaiph/workspace-ro:ro  (overlay lower layer)
- *  3. sandboxRunDir → /jaiph/run:rw  (single run artifacts)
+ *  1. workspace → /jaiph/workspace-ro:ro  (overlay lower layer / copy source)
+ *  2. sandboxRunDir → /jaiph/run:rw       (single run artifacts)
  *
- * overlay-run.sh (baked in image) creates a fuse-overlayfs CoW at
- * /jaiph/workspace using -ro as lower.  /jaiph/run is outside the overlay
- * so writes go directly to the host mount — no symlink needed.
+ * The image already contains a writable `/jaiph/workspace` directory.
+ * `overlay-run.sh` mounts `fuse-overlayfs` there when available; otherwise it
+ * copies the lower layer into that directory as a writable fallback. `/jaiph/run`
+ * is outside the overlay, so run artifacts still persist to the host mount.
  *
  * The container runs `jaiph run --raw <file>` using its own installed jaiph.
  */
@@ -415,10 +515,9 @@ export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath: str
     args.push("--network", opts.config.network);
   }
 
-  // Workspace: ro at primary path (fallback) + overlay lower layer path
+  // Workspace inputs: mounted only at the overlay lower-layer path.
   for (const mount of opts.config.mounts) {
     const hostAbs = resolve(opts.workspaceRoot, mount.hostPath);
-    args.push("-v", `${hostAbs}:${mount.containerPath}:ro`);
     args.push("-v", `${hostAbs}:${overlayMountPath(mount.containerPath)}:ro`);
   }
 

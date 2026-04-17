@@ -381,7 +381,9 @@ function reportResult(
     }
   }
   const runtimeDebugEnabled = runtimeEnv.JAIPH_DEBUG === "true";
-  const runtimeErrorPrinted = hasFatalRuntimeStderr(capturedStderr, runtimeDebugEnabled);
+  const runtimeErrorPrinted = sandboxRunDir
+    ? false
+    : hasFatalRuntimeStderr(capturedStderr, runtimeDebugEnabled);
   const resolvedStatus = exitStatus !== 0 || runtimeErrorPrinted ? 1 : 0;
 
   emitter.emit("workflow_end", {

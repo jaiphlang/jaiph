@@ -12,6 +12,7 @@ import { buildStepDisplayParamPairs } from "../../cli/commands/format-params.js"
 import { resolveRuleRef, resolveScriptRef, resolveWorkflowRef, type RuntimeGraph } from "./graph";
 import type { WorkflowMetadata } from "../../types";
 import { extractJson, validateFields } from "./schema";
+import { parseCallRef } from "../../parse/core";
 import {
   plainMultilineOrchestrationForRuntime,
   tripleQuotedRawForRuntime,
@@ -155,6 +156,79 @@ function parseArgsRaw(raw: string, vars: Map<string, string>, env?: NodeJS.Proce
   }
   if (cur.length > 0) {
     out.push(interpolate(cur, vars, env));
+  }
+  return out;
+}
+
+type ParsedArgToken =
+  | { kind: "literal"; value: string }
+  | { kind: "managed"; managedKind: "run" | "ensure"; ref: string; argsRaw: string };
+
+function parseManagedArgAt(raw: string, start: number): { token: ParsedArgToken; next: number } | null {
+  const tail = raw.slice(start);
+  const keyword = tail.startsWith("run ")
+    ? "run"
+    : tail.startsWith("ensure ")
+      ? "ensure"
+      : null;
+  if (!keyword) return null;
+  const afterKeyword = raw.slice(start + keyword.length).trimStart();
+  const skipped = raw.slice(start + keyword.length).length - afterKeyword.length;
+  const call = parseCallRef(afterKeyword);
+  if (!call) return null;
+  if (call.rest.length > 0 && !/^\s/.test(call.rest)) return null;
+  const consumed = afterKeyword.length - call.rest.length;
+  return {
+    token: {
+      kind: "managed",
+      managedKind: keyword,
+      ref: call.ref,
+      argsRaw: call.args ?? "",
+    },
+    next: start + keyword.length + skipped + consumed,
+  };
+}
+
+function parseArgTokens(raw: string): ParsedArgToken[] {
+  if (!raw.trim()) return [];
+  const out: ParsedArgToken[] = [];
+  let i = 0;
+  while (i < raw.length) {
+    while (i < raw.length && /\s/.test(raw[i]!)) i += 1;
+    if (i >= raw.length) break;
+    const managed = parseManagedArgAt(raw, i);
+    if (managed) {
+      out.push(managed.token);
+      i = managed.next;
+      continue;
+    }
+    let cur = "";
+    let quote: "'" | '"' | null = null;
+    while (i < raw.length) {
+      const ch = raw[i]!;
+      if (quote) {
+        if (ch === quote) {
+          quote = null;
+        } else {
+          cur += ch;
+        }
+        i += 1;
+        continue;
+      }
+      if (ch === "'" || ch === '"') {
+        quote = ch;
+        i += 1;
+        continue;
+      }
+      if (/\s/.test(ch)) {
+        break;
+      }
+      cur += ch;
+      i += 1;
+    }
+    if (cur.length > 0) {
+      out.push({ kind: "literal", value: cur });
+    }
   }
   return out;
 }
@@ -1223,8 +1297,32 @@ export class NodeWorkflowRuntime {
     return `${filePath}::${name}`;
   }
 
+  private async resolveArgsRaw(scope: Scope, raw: string | string[]): Promise<string[] | StepResult> {
+    if (Array.isArray(raw)) {
+      return raw;
+    }
+    const tokens = parseArgTokens(raw);
+    const resolved: string[] = [];
+    for (const token of tokens) {
+      if (token.kind === "literal") {
+        resolved.push(interpolate(token.value, scope.vars, scope.env));
+        continue;
+      }
+      const result = token.managedKind === "run"
+        ? await this.executeRunRef(scope, token.ref, token.argsRaw)
+        : await this.executeEnsureRef(scope, token.ref, token.argsRaw, undefined);
+      if (result.status !== 0) {
+        return result;
+      }
+      resolved.push(result.returnValue ?? result.output.trim());
+    }
+    return resolved;
+  }
+
   private async executeRunRef(scope: Scope, ref: string, argsRaw: string | string[]): Promise<StepResult> {
-    const args = Array.isArray(argsRaw) ? argsRaw : parseArgsRaw(argsRaw, scope.vars, scope.env);
+    const resolvedArgs = await this.resolveArgsRaw(scope, argsRaw);
+    if (!Array.isArray(resolvedArgs)) return resolvedArgs;
+    const args = resolvedArgs;
     const resolvedWorkflow = resolveWorkflowRef(this.graph, scope.filePath, { value: ref, loc: { line: 1, col: 1 } });
     if (resolvedWorkflow) {
       const mk = this.mockKey(resolvedWorkflow.filePath, resolvedWorkflow.workflow.name);
@@ -1263,7 +1361,9 @@ export class NodeWorkflowRuntime {
     argsRaw: string,
     recover: EnsureRecover | undefined,
   ): Promise<StepResult> {
-    const args = parseArgsRaw(argsRaw, scope.vars, scope.env);
+    const resolvedArgs = await this.resolveArgsRaw(scope, argsRaw);
+    if (!Array.isArray(resolvedArgs)) return resolvedArgs;
+    const args = resolvedArgs;
     const attempt = async (): Promise<StepResult> => {
       const resolvedRule = resolveRuleRef(this.graph, scope.filePath, { value: ref, loc: { line: 1, col: 1 } });
       if (!resolvedRule) return { status: 1, output: "", error: `Unknown ensure target: ${ref}` };
@@ -1353,7 +1453,9 @@ export class NodeWorkflowRuntime {
     shebang: string | undefined,
     argsRaw: string,
   ): Promise<StepResult> {
-    const args = parseArgsRaw(argsRaw, scope.vars, scope.env);
+    const resolvedArgs = await this.resolveArgsRaw(scope, argsRaw);
+    if (!Array.isArray(resolvedArgs)) return resolvedArgs;
+    const args = resolvedArgs;
     const scriptName = inlineScriptName(body, shebang);
     return this.executeManagedStep(
       "script",
