@@ -3,6 +3,7 @@ import * as assert from "node:assert/strict";
 import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PassThrough } from "node:stream";
 import {
   buildBackendArgs,
   executePrompt,
@@ -187,6 +188,46 @@ describe("executePrompt", () => {
       assert.equal(result.status, 0);
       assert.equal(result.final, "hello-from-cursor");
       assert.ok(chunks.join("").includes("Final answer:"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("captures cursor stderr into the provided stderr writer on failure", async () => {
+    const root = mkdtempSync(join(tmpdir(), "jaiph-prompt-cursor-stderr-"));
+    try {
+      const fakeAgent = join(root, "cursor-agent");
+      writeFileSync(
+        fakeAgent,
+        [
+          "#!/usr/bin/env bash",
+          'echo "Cannot use this model: gpt-5.4" >&2',
+          "exit 1",
+          "",
+        ].join("\n"),
+      );
+      chmodSync(fakeAgent, 0o755);
+      const stdoutChunks: string[] = [];
+      const stderrChunks: string[] = [];
+      const stdout = new PassThrough();
+      const stderr = new PassThrough();
+      stdout.on("data", (chunk) => stdoutChunks.push(String(chunk)));
+      stderr.on("data", (chunk) => stderrChunks.push(String(chunk)));
+      const result = await executePrompt(
+        "ignored",
+        makeConfig({
+          agentCommand: fakeAgent,
+          workspaceRoot: root,
+          trustedWorkspace: root,
+          model: "gpt-5.4",
+        }),
+        stdout,
+        process.env,
+        stderr,
+      );
+      assert.equal(result.status, 1);
+      assert.match(stdoutChunks.join(""), /^Command:\n/);
+      assert.match(stderrChunks.join(""), /Cannot use this model: gpt-5\.4/);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

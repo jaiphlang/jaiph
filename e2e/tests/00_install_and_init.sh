@@ -101,23 +101,26 @@ RUN useradd --create-home --uid 10001 --shell /bin/bash jaiph && \
 # Claude Code CLI (Anthropic)
 RUN npm install -g @anthropic-ai/claude-code
 
-# cursor-agent (Cursor)
-RUN curl -fsSL https://cursor.com/install -o /tmp/install-cursor-agent.sh && \
-    bash /tmp/install-cursor-agent.sh && \
-    export PATH="$HOME/.local/bin:$PATH" && \
-    if command -v cursor-agent >/dev/null 2>&1; then \
-      ln -sf "$(command -v cursor-agent)" /usr/local/bin/cursor-agent; \
-    elif command -v agent >/dev/null 2>&1; then \
-      ln -sf "$(command -v agent)" /usr/local/bin/cursor-agent; \
-    elif command -v cursor >/dev/null 2>&1; then \
-      ln -sf "$(command -v cursor)" /usr/local/bin/cursor-agent; \
-    fi && \
-    command -v cursor-agent >/dev/null 2>&1 && \
-    rm -f /tmp/install-cursor-agent.sh
-
 USER jaiph
 ENV HOME=/home/jaiph
 ENV PATH="/home/jaiph/.local/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+# cursor-agent (Cursor) — install as the runtime user so the binary remains
+# reachable after switching away from root. The installer currently places
+# the CLI in ~/.local/bin and may name it "agent" or "cursor".
+RUN mkdir -p "$HOME/.local/bin" && \
+    curl -fsSL https://cursor.com/install -o /tmp/install-cursor-agent.sh && \
+    bash /tmp/install-cursor-agent.sh && \
+    export PATH="$HOME/.local/bin:$PATH" && \
+    if command -v cursor-agent >/dev/null 2>&1; then \
+      true; \
+    elif command -v agent >/dev/null 2>&1; then \
+      ln -sf "$(command -v agent)" "$HOME/.local/bin/cursor-agent"; \
+    elif command -v cursor >/dev/null 2>&1; then \
+      ln -sf "$(command -v cursor)" "$HOME/.local/bin/cursor-agent"; \
+    fi && \
+    command -v cursor-agent >/dev/null 2>&1 && \
+    rm -f /tmp/install-cursor-agent.sh
 
 # jaiph (official installer: https://jaiph.org/install)
 RUN curl -fsSL https://jaiph.org/install | bash

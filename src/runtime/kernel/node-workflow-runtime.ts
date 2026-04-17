@@ -838,14 +838,22 @@ export class NodeWorkflowRuntime {
         }
         const out = new PassThrough();
         const chunks: string[] = [];
+        const err = new PassThrough();
+        const errChunks: string[] = [];
         out.on("data", (d) => {
           const chunk = String(d);
           chunks.push(chunk);
           appendFileSync(promptStep.outFile, chunk);
           io?.appendOut(chunk);
         });
-        const result = await executePrompt(promptText, promptConfig, out, scope.env);
-        this.emitPromptStepEnd(promptStep, result.status, chunks.join(""), "");
+        err.on("data", (d) => {
+          const chunk = String(d);
+          errChunks.push(chunk);
+          io?.appendErr(chunk);
+        });
+        const result = await executePrompt(promptText, promptConfig, out, scope.env, err);
+        const promptErr = errChunks.join("");
+        this.emitPromptStepEnd(promptStep, result.status, chunks.join(""), promptErr);
         this.emitPromptEvent("PROMPT_END", { backend, model: modelRes.model || undefined, model_reason: modelRes.reason, status: result.status });
         const output = chunks.join("");
         accOut += output;
@@ -853,7 +861,7 @@ export class NodeWorkflowRuntime {
           return this.mergeStepResult(accOut, accErr, {
             status: result.status,
             output: "",
-            error: "prompt failed",
+            error: promptErr.trim() || "prompt failed",
           });
         }
         if (schemaFields) {
@@ -958,14 +966,22 @@ export class NodeWorkflowRuntime {
           }
           const out = new PassThrough();
           const chunks: string[] = [];
+          const err = new PassThrough();
+          const errChunks: string[] = [];
           out.on("data", (d) => {
             const chunk = String(d);
             chunks.push(chunk);
             appendFileSync(promptStep.outFile, chunk);
             io?.appendOut(chunk);
           });
-          const result = await executePrompt(promptText, promptConfig, out, scope.env);
-          this.emitPromptStepEnd(promptStep, result.status, chunks.join(""), "");
+          err.on("data", (d) => {
+            const chunk = String(d);
+            errChunks.push(chunk);
+            io?.appendErr(chunk);
+          });
+          const result = await executePrompt(promptText, promptConfig, out, scope.env, err);
+          const promptErr = errChunks.join("");
+          this.emitPromptStepEnd(promptStep, result.status, chunks.join(""), promptErr);
           this.emitPromptEvent("PROMPT_END", { backend, model: modelRes.model || undefined, model_reason: modelRes.reason, status: result.status });
           const pcOut = chunks.join("");
           accOut += pcOut;
@@ -973,7 +989,7 @@ export class NodeWorkflowRuntime {
             return this.mergeStepResult(accOut, accErr, {
               status: result.status,
               output: "",
-              error: "prompt failed",
+              error: promptErr.trim() || "prompt failed",
             });
           }
           if (schemaFields) {

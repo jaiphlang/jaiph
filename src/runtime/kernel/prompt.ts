@@ -372,9 +372,10 @@ function runCodexBackend(
   config: PromptConfig,
   promptText: string,
   writer: StreamWriter,
+  stderr: NodeJS.WritableStream,
 ): Promise<{ final: string; status: number }> {
   if (!config.codexApiKey) {
-    process.stderr.write(
+    stderr.write(
       'jaiph: agent.backend is "codex" but OPENAI_API_KEY is not set. ' +
       "Set the OPENAI_API_KEY environment variable to your OpenAI API key.\n",
     );
@@ -421,7 +422,7 @@ function runCodexBackend(
             } catch {
               // Use raw status code only.
             }
-            process.stderr.write(`jaiph: codex API error: ${msg}\n`);
+            stderr.write(`jaiph: codex API error: ${msg}\n`);
             resolve({ final: "", status: 1 });
           });
           return;
@@ -463,14 +464,14 @@ function runCodexBackend(
         });
 
         res.on("error", (err: Error) => {
-          process.stderr.write(`jaiph: codex stream error: ${err.message}\n`);
+          stderr.write(`jaiph: codex stream error: ${err.message}\n`);
           resolve({ final, status: 1 });
         });
       },
     );
 
     req.on("error", (err: Error) => {
-      process.stderr.write(`jaiph: codex API request failed: ${err.message}\n`);
+      stderr.write(`jaiph: codex API request failed: ${err.message}\n`);
       resolve({ final: "", status: 1 });
     });
 
@@ -485,15 +486,16 @@ function runBackend(
   promptText: string,
   writer: StreamWriter,
   execEnv: NodeJS.ProcessEnv = process.env,
+  stderr: NodeJS.WritableStream = process.stderr,
 ): Promise<{ final: string; status: number }> {
   // Codex uses HTTP API, not a CLI subprocess.
   if (config.backend === "codex") {
-    return runCodexBackend(config, promptText, writer);
+    return runCodexBackend(config, promptText, writer, stderr);
   }
 
   // Pre-flight check for claude backend
   if (config.backend === "claude" && !commandExists("claude")) {
-    process.stderr.write(
+    stderr.write(
       'jaiph: agent.backend is "claude" but the Claude CLI (claude) was not found in PATH. ' +
       'Install the Anthropic Claude CLI or set agent.backend = "cursor" (or JAIPH_AGENT_BACKEND=cursor).\n',
     );
@@ -508,12 +510,12 @@ function runBackend(
     if (isClaude) {
       const prepared = prepareClaudeEnv(execEnv, config.workspaceRoot);
       if (prepared.error) {
-        process.stderr.write(`${prepared.error}\n`);
+        stderr.write(`${prepared.error}\n`);
         resolve({ final: "", status: 1 });
         return;
       }
       if (prepared.warning) {
-        process.stderr.write(`${prepared.warning}\n`);
+        stderr.write(`${prepared.warning}\n`);
       }
       childEnv = prepared.env;
     }
@@ -524,11 +526,11 @@ function runBackend(
       stdio: useStdin ? ["pipe", "pipe", "pipe"] : ["ignore", "pipe", "pipe"],
       env: childEnv,
     });
-    const stopTailWatchdog = startTailWatchdog(child.pid ?? -1, process.stderr, childEnv);
+    const stopTailWatchdog = startTailWatchdog(child.pid ?? -1, stderr, childEnv);
 
     child.on("error", (err) => {
       stopTailWatchdog();
-      process.stderr.write(`jaiph: failed to start ${command}: ${err.message}\n`);
+      stderr.write(`jaiph: failed to start ${command}: ${err.message}\n`);
       resolve({ final: "", status: 1 });
     });
 
@@ -541,7 +543,7 @@ function runBackend(
     if (isCustom) {
       let final = "";
       let wroteHeader = false;
-      child.stderr?.pipe(process.stderr);
+      child.stderr?.pipe(stderr);
       child.stdout?.on("data", (chunk: Buffer) => {
         const text = chunk.toString();
         if (!wroteHeader) {
@@ -570,7 +572,7 @@ function runBackend(
     } else {
       // Cursor: parse only stdout; pipe stderr through to process stderr
       parseInput = child.stdout!;
-      child.stderr?.pipe(process.stderr);
+      child.stderr?.pipe(stderr);
     }
 
     parseStream(parseInput, writer).then((final) => {
@@ -629,6 +631,7 @@ export async function executePrompt(
   stdout: NodeJS.WritableStream,
   /** Workflow/runtime env (JAIPH_TEST_MODE and mocks); defaults to process.env for CLI entry. */
   execEnv: NodeJS.ProcessEnv = process.env,
+  stderr: NodeJS.WritableStream = process.stderr,
 ): Promise<{ final: string; status: number }> {
   writePromptTranscriptHeader(stdout, config, promptText);
 
@@ -667,7 +670,7 @@ export async function executePrompt(
     writeFinal: (text) => stdout.write(text),
   };
 
-  const result = await runBackend(config, promptText, writer, execEnv);
+  const result = await runBackend(config, promptText, writer, execEnv, stderr);
   const final =
     config.backend === "cursor"
       ? trimSurroundingBlankLines(result.final)

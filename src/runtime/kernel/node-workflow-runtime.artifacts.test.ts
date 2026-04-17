@@ -48,6 +48,66 @@ test("NodeWorkflowRuntime: workflow step .out accumulates Command:/Prompt: and l
   }
 });
 
+test("NodeWorkflowRuntime: failed prompt preserves backend stderr in artifacts and summary", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-node-prompt-stderr-"));
+  try {
+    const jh = join(root, "prompt_failure.jh");
+    writeFileSync(
+      jh,
+      [
+        "workflow default() {",
+        '  prompt "hello-fail"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const fakeAgent = join(root, "cursor-agent");
+    writeFileSync(
+      fakeAgent,
+      [
+        "#!/usr/bin/env bash",
+        'echo "Cannot use this model: gpt-5.4" >&2',
+        "exit 1",
+        "",
+      ].join("\n"),
+      { mode: 0o755 },
+    );
+
+    const graph = buildRuntimeGraph(jh);
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
+      JAIPH_AGENT_BACKEND: "cursor",
+      JAIPH_AGENT_COMMAND: fakeAgent,
+      JAIPH_AGENT_MODEL: "gpt-5.4",
+      JAIPH_WORKSPACE: root,
+    };
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });
+    const prevSummaryEnv = process.env.JAIPH_RUN_SUMMARY_FILE;
+    process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
+    let status: number;
+    try {
+      status = await runtime.runDefault([]);
+    } finally {
+      if (prevSummaryEnv === undefined) delete process.env.JAIPH_RUN_SUMMARY_FILE;
+      else process.env.JAIPH_RUN_SUMMARY_FILE = prevSummaryEnv;
+    }
+    assert.equal(status, 1);
+
+    const runDir = runtime.getRunDir();
+    const promptErr = readdirSync(runDir).find((f) => f.includes("prompt__prompt.err"));
+    assert.ok(promptErr, `expected prompt__prompt.err in ${runDir}`);
+    const promptErrContent = readFileSync(join(runDir, promptErr!), "utf8");
+    assert.match(promptErrContent, /Cannot use this model: gpt-5\.4/);
+
+    const summaryContent = readFileSync(runtime.getSummaryFile(), "utf8");
+    assert.match(summaryContent, /Cannot use this model: gpt-5\.4/);
+    assert.ok(!summaryContent.includes('"err_content":"prompt failed"'));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("NodeWorkflowRuntime: ensure catch receives failure payload in catch scope (explicit binding)", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-node-wf-ensure-catch-"));
   try {
