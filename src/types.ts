@@ -307,6 +307,7 @@ export interface WorkflowMetadata {
   };
   run?: { debug?: boolean; logsDir?: string; inboxParallel?: boolean };
   runtime?: RuntimeConfig;
+  module?: { name?: string; version?: string; description?: string };
   /** Preserves `#` lines and assignment order inside `config { }` (formatter). */
   configBodySequence?: ConfigBodyPart[];
 }

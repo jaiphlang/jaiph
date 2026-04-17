@@ -503,9 +503,9 @@ Jaiph: Running async.jh
                 <h3>Jaiph workflows</h3>
                 <dl class="primitive-list">
                     <dt><code>config { ... }</code></dt>
-                    <dd>Optional runtime options (agent backend/flags, logs, runtime). Allowed at the top level
+                    <dd>Optional runtime options (agent backend/flags, logs, runtime, module metadata). Allowed at the top level
                         (module-wide) and inside individual workflows (per-workflow overrides for <code>agent.*</code>
-                        and <code>run.*</code> keys). Environment variables override config values. See <a
+                        and <code>run.*</code> keys only; <code>runtime.*</code> and <code>module.*</code> are module-level only). Environment variables override config values. See <a
                             href="configuration">Configuration</a>.</dd>
 
                     <dt><code>import "file.jh" as alias</code> &middot; <code>const name = value</code> /

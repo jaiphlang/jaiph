@@ -142,6 +142,9 @@ export function parseWorkflowBlock(
         if (metadata.runtime) {
           fail(filePath, "runtime.* keys are not allowed in workflow-level config (only agent.* and run.* keys)", lineNo);
         }
+        if (metadata.module) {
+          fail(filePath, "module.* keys are not allowed in workflow-level config (only agent.* and run.* keys)", lineNo);
+        }
         workflow.metadata = metadata;
         continue;
       }
@@ -200,6 +203,9 @@ export function parseWorkflowBlock(
       const { metadata, nextIndex } = parseConfigBlock(filePath, lines, idx);
       if (metadata.runtime) {
         fail(filePath, "runtime.* keys are not allowed in workflow-level config (only agent.* and run.* keys)", innerNo);
+      }
+      if (metadata.module) {
+        fail(filePath, "module.* keys are not allowed in workflow-level config (only agent.* and run.* keys)", innerNo);
       }
       workflow.metadata = metadata;
       idx = nextIndex - 1;

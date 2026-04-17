@@ -87,7 +87,7 @@ workflow default() {
 **Rules:**
 
 - At most one per workflow; it must be the first non-comment construct in the body. A duplicate is `E_PARSE`: `duplicate config block inside workflow (only one allowed per workflow)`.
-- Only **`agent.*` and `run.*` keys** are allowed. Any `runtime.*` key is `E_PARSE`.
+- Only **`agent.*` and `run.*` keys** are allowed. Any `runtime.*` or `module.*` key is `E_PARSE`.
 - Workflow-level values apply to all steps in that workflow, including `ensure`d rules and scripts called from it. When the workflow finishes, the previous environment is restored.
 
 **Sibling isolation:** Each workflow gets its own clone of the parent environment. Sibling workflows never see each other's config — even when they execute sequentially. If workflow `alpha` sets `agent.backend = "claude"` and workflow `beta` only sets `agent.default_model = "beta-model"`, `beta` still sees the module-level backend (e.g. `"cursor"`), not `alpha`'s.
@@ -136,6 +136,31 @@ These control runtime behavior unrelated to the agent.
 | `run.logs_dir` | string | `.jaiph/runs` | `JAIPH_RUNS_DIR` | Step log directory. Relative paths are joined with the workspace root; absolute paths are used as-is. |
 | `run.debug` | boolean | `false` | `JAIPH_DEBUG` | Enables debug tracing for the run. |
 | `run.inbox_parallel` | boolean | `false` | `JAIPH_INBOX_PARALLEL` | Dispatch inbox route targets concurrently. See [Inbox — Parallel dispatch](inbox.md#parallel-dispatch). |
+
+### Module keys
+
+Optional descriptive metadata about the workflow module. These are informational only — they do not affect agent, run, or runtime behavior. Future features (e.g. MCP tool metadata) may consume them.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `module.name` | string | _(unset)_ | Human-readable name for this module. |
+| `module.version` | string | _(unset)_ | Version string (no validation — any quoted string is accepted). |
+| `module.description` | string | _(unset)_ | Short description of what this module does. |
+
+Module keys can only appear in **module-level** config blocks. Any `module.*` key inside a workflow-level config is `E_PARSE`.
+
+```jh
+config {
+  module.name = "deploy-pipeline"
+  module.version = "2.0.0"
+  module.description = "Production deployment with rollback"
+  agent.backend = "claude"
+}
+
+workflow default() {
+  log "deploying..."
+}
+```
 
 ### Runtime keys (Docker sandbox — beta)
 
@@ -303,6 +328,9 @@ Quick reference for all in-file keys and their environment variable equivalents:
 | `runtime.docker_network` | `JAIPH_DOCKER_NETWORK` |
 | `runtime.docker_timeout` | `JAIPH_DOCKER_TIMEOUT` |
 | `runtime.workspace` | _(no env override)_ |
+| `module.name` | _(no env override)_ |
+| `module.version` | _(no env override)_ |
+| `module.description` | _(no env override)_ |
 
 ## Inspecting effective config at runtime
 

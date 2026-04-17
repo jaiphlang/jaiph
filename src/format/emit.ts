@@ -182,6 +182,15 @@ function emitConfigKeyLines(meta: WorkflowMetadata, key: string, pad: string): s
       ws.push(`${pad}]`);
       return ws;
     }
+    case "module.name":
+      if (meta.module?.name === undefined) return [];
+      return [`${pad}module.name = "${meta.module.name}"`];
+    case "module.version":
+      if (meta.module?.version === undefined) return [];
+      return [`${pad}module.version = "${meta.module.version}"`];
+    case "module.description":
+      if (meta.module?.description === undefined) return [];
+      return [`${pad}module.description = "${meta.module.description}"`];
     default:
       return [];
   }
@@ -229,6 +238,11 @@ function emitConfig(meta: WorkflowMetadata, pad: string): string {
         lines.push(`${pad}]`);
       }
     }
+  }
+  if (meta.module) {
+    if (meta.module.name !== undefined) lines.push(`${pad}module.name = "${meta.module.name}"`);
+    if (meta.module.version !== undefined) lines.push(`${pad}module.version = "${meta.module.version}"`);
+    if (meta.module.description !== undefined) lines.push(`${pad}module.description = "${meta.module.description}"`);
   }
   lines.push("}");
   return lines.join("\n");
