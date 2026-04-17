@@ -1143,7 +1143,7 @@ test("jaiph use maps nightly and version refs for reinstallation", () => {
       },
     });
     assert.equal(nightlyResult.status, 0, nightlyResult.stderr);
-    assert.equal(readFileSync(outputPath, "utf8"), "main");
+    assert.equal(readFileSync(outputPath, "utf8"), "nightly");
 
     const versionResult = spawnSync("node", [cliPath, "use", "0.2.3"], {
       encoding: "utf8",

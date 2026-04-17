@@ -1,8 +1,20 @@
 # Unreleased
 
+# 0.9.2
+
+## Summary
+
+- **Runtime:** Remove `JAIPH_LIB` in favor of workspace-relative paths and `import script`; strip inherited `JAIPH_LIB` so parent shells cannot inject stale library paths.
+- **Runtime:** Write a `heartbeat` file in the run directory (refreshed every 10s) so external tooling can tell whether a run is still alive.
+- **Docker:** Base images without `jaiph` now work generically: Jaiph builds a thin derived image, installs the current package into it, and writes artifacts directly to the configured host runs root.
+- **Docs / E2E:** Align documentation and tests with the `JAIPH_LIB` removal.
+
+## All changes
+
 - **Breaking — Runtime:** Remove `JAIPH_LIB` — The Node runtime no longer sets `JAIPH_LIB`, and isolated script subprocesses no longer receive it (`run-step-exec.ts`). `resolveRuntimeEnv` still deletes inherited `JAIPH_LIB` so a parent shell cannot inject a stale path. Workflows that used `source "$JAIPH_LIB/…"` must use `JAIPH_WORKSPACE`-relative paths, `import script`, or inline bash. Project-scoped **`.jaiph/libs/`** (`jaiph install`) is unchanged.
 - **Docs / E2E:** Documentation and tests no longer describe or assert `JAIPH_LIB` / `.jaiph/lib` (singular).
 - **Feature — Runtime:** Heartbeat file in run directory — The runtime now writes a `heartbeat` file (containing epoch-ms timestamp) to the run directory (`.jaiph/runs/<date>/<time>-<source>/heartbeat`) immediately on construction and refreshes it every 10 seconds. External tooling can `stat()` or read this file to detect whether a Jaiph process is still alive; a stale heartbeat (>~20s) means the process is dead. The timer is `.unref()`ed so it never keeps the Node process alive past its natural exit. Implementation: `startHeartbeat()` / `stopHeartbeat()` in `NodeWorkflowRuntime`. Unit test added.
+- **Fix — Docker:** Generic runtime image bootstrap and host run-dir mapping — Docker no longer assumes the selected image already contains `jaiph`, but it also no longer relies on a host-mounted `dist/` tree. When the selected base image lacks `jaiph`, Jaiph now builds a thin derived image from that base and installs the current local package with `npm install -g`, then runs `jaiph run --raw` there. Docker-backed runs now mount the resolved host runs root directly at `/jaiph/run`, so the default `.jaiph/runs`, relative `JAIPH_RUNS_DIR`, and absolute in-workspace `JAIPH_RUNS_DIR` all persist artifacts in the expected host location; absolute paths outside the workspace fail with `E_DOCKER_RUNS_DIR`. Implementation: `resolveImage()`, `resolveDockerHostRunsRoot()`, and `findRunArtifacts()` in `src/runtime/docker.ts`; `spawnExec()` in `src/cli/commands/run.ts`. Unit and E2E coverage updated.
 
 # 0.9.1
 

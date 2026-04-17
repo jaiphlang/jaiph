@@ -1,4 +1,5 @@
-import { execSync, spawn, ChildProcess } from "node:child_process";
+import { execFileSync, execSync, spawn, ChildProcess } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname, relative } from "node:path";
@@ -174,6 +175,7 @@ export function pullImageIfNeeded(image: string): void {
 // ---------------------------------------------------------------------------
 
 const DOCKERFILE_IMAGE_TAG = "jaiph-runtime:latest";
+const AUTO_RUNTIME_IMAGE_REPO = "jaiph-runtime-auto";
 
 /**
  * Build a Docker image from a Dockerfile and tag it.
@@ -192,6 +194,82 @@ export function buildImageFromDockerfile(dockerfilePath: string, tag: string = D
   return tag;
 }
 
+function installedPackageRoot(): string {
+  return resolve(__dirname, "..", "..", "..");
+}
+
+function autoRuntimeImageTag(baseImage: string, packageRoot: string): string {
+  const packageJsonPath = join(packageRoot, "package.json");
+  const cliPath = join(packageRoot, "dist", "src", "cli.js");
+  const packageStamp = existsSync(packageJsonPath) ? statSync(packageJsonPath).mtimeMs : 0;
+  const cliStamp = existsSync(cliPath) ? statSync(cliPath).mtimeMs : 0;
+  const digest = createHash("sha256")
+    .update(`${baseImage}|${resolve(packageRoot)}|${packageStamp}|${cliStamp}`)
+    .digest("hex")
+    .slice(0, 12);
+  return `${AUTO_RUNTIME_IMAGE_REPO}:${digest}`;
+}
+
+function imageHasJaiph(image: string): boolean {
+  try {
+    execFileSync(
+      "docker",
+      ["run", "--rm", "--entrypoint", "sh", image, "-lc", "command -v jaiph >/dev/null 2>&1"],
+      { stdio: "ignore", timeout: 30_000 },
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function buildRuntimeImageFromLocalPackage(baseImage: string, packageRoot: string, tag: string): string {
+  const contextDir = mkdtempSync(join(tmpdir(), "jaiph-runtime-image-"));
+  try {
+    const tarballName = execFileSync(
+      "npm",
+      ["pack", packageRoot, "--silent", "--pack-destination", contextDir],
+      { cwd: packageRoot, encoding: "utf8", timeout: 300_000 },
+    ).trim().split(/\r?\n/).pop()?.trim();
+    if (!tarballName) {
+      throw new Error("npm pack produced no tarball");
+    }
+    writeFileSync(
+      join(contextDir, "Dockerfile"),
+      [
+        `FROM ${baseImage}`,
+        `COPY ${tarballName} /tmp/${tarballName}`,
+        `RUN npm install -g /tmp/${tarballName} && rm -f /tmp/${tarballName}`,
+        "",
+      ].join("\n"),
+    );
+    execFileSync("docker", ["build", "-t", tag, contextDir], {
+      stdio: "inherit",
+      timeout: 600_000,
+    });
+    return tag;
+  } catch {
+    throw new Error(`E_DOCKER_BUILD failed to build runtime image from base "${baseImage}"`);
+  } finally {
+    rmSync(contextDir, { recursive: true, force: true });
+  }
+}
+
+function ensureImageHasJaiph(baseImage: string): string {
+  pullImageIfNeeded(baseImage);
+  if (imageHasJaiph(baseImage)) {
+    return baseImage;
+  }
+  const packageRoot = installedPackageRoot();
+  const tag = autoRuntimeImageTag(baseImage, packageRoot);
+  try {
+    execSync(`docker image inspect ${tag}`, { stdio: "ignore", timeout: 30_000 });
+    return tag;
+  } catch {
+    return buildRuntimeImageFromLocalPackage(baseImage, packageRoot, tag);
+  }
+}
+
 /**
  * Resolve the Docker image to use.
  *
@@ -201,14 +279,14 @@ export function buildImageFromDockerfile(dockerfilePath: string, tag: string = D
  * configured (default) image and pulls it if needed.
  */
 export function resolveImage(config: DockerRunConfig, workspaceRoot: string): string {
+  let baseImage = config.image;
   if (!config.imageExplicit) {
     const dockerfilePath = join(workspaceRoot, ".jaiph", "Dockerfile");
     if (existsSync(dockerfilePath)) {
-      return buildImageFromDockerfile(dockerfilePath);
+      baseImage = buildImageFromDockerfile(dockerfilePath);
     }
   }
-  pullImageIfNeeded(config.image);
-  return config.image;
+  return ensureImageHasJaiph(baseImage);
 }
 
 // ---------------------------------------------------------------------------
@@ -257,6 +335,28 @@ export interface DockerSpawnOptions {
 export const CONTAINER_WORKSPACE = "/jaiph/workspace";
 export const CONTAINER_RUN_DIR = "/jaiph/run";
 const AGENT_ENV_PREFIXES = ["CURSOR_", "ANTHROPIC_", "CLAUDE_"] as const;
+
+/** Resolve the host run-artifacts root for Docker-backed runs. */
+export function resolveDockerHostRunsRoot(
+  workspaceRoot: string,
+  env: Record<string, string | undefined>,
+): string {
+  const configured = env.JAIPH_RUNS_DIR;
+  if (!configured || configured.length === 0) {
+    return join(workspaceRoot, ".jaiph", "runs");
+  }
+  if (!configured.startsWith("/")) {
+    return join(workspaceRoot, configured);
+  }
+  const resolved = resolve(configured);
+  const workspaceAbs = resolve(workspaceRoot);
+  if (resolved === workspaceAbs || !resolved.startsWith(`${workspaceAbs}/`)) {
+    throw new Error(
+      `E_DOCKER_RUNS_DIR unsupported: absolute JAIPH_RUNS_DIR must be within the workspace when using Docker`,
+    );
+  }
+  return resolved;
+}
 
 /**
  * Remap environment variables for use inside the Docker container.
@@ -426,28 +526,27 @@ export function cleanupDocker(result: DockerSpawnResult): void {
   }
 }
 
-/**
- * Discover run artifacts inside the sandbox run directory.
- * The runtime creates `<JAIPH_RUNS_DIR>/<date>/<time>-<source>/` structure.
- * Returns the first (and typically only) run directory found, plus summary file.
- */
 export function findRunArtifacts(
   sandboxRunDir: string,
 ): { runDir?: string; summaryFile?: string } {
   if (!existsSync(sandboxRunDir)) return {};
+  const candidates: string[] = [];
   for (const dateDir of readdirSync(sandboxRunDir)) {
     const datePath = join(sandboxRunDir, dateDir);
     if (!statSync(datePath).isDirectory()) continue;
     for (const runEntry of readdirSync(datePath)) {
       const runPath = join(datePath, runEntry);
       if (!statSync(runPath).isDirectory()) continue;
-      const summaryFile = join(runPath, "run_summary.jsonl");
-      return {
-        runDir: runPath,
-        summaryFile: existsSync(summaryFile) ? summaryFile : undefined,
-      };
+      candidates.push(runPath);
     }
   }
-  return {};
+  candidates.sort();
+  const runDir = candidates[candidates.length - 1];
+  if (!runDir) return {};
+  const summaryFile = join(runDir, "run_summary.jsonl");
+  return {
+    runDir,
+    summaryFile: existsSync(summaryFile) ? summaryFile : undefined,
+  };
 }
 

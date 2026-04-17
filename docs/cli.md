@@ -364,14 +364,14 @@ Reinstall Jaiph globally with the selected channel or version.
 jaiph use <version|nightly>
 ```
 
-- `nightly` — installs from `main` branch.
+- `nightly` — installs from the `nightly` ref.
 - `<version>` — installs tag `v<version>`.
 
 **Examples:**
 
 ```bash
 jaiph use nightly
-jaiph use 0.9.1
+jaiph use 0.9.2
 ```
 
 ## File extension
@@ -430,7 +430,7 @@ For `JAIPH_DOCKER_*` defaults, image selection, mounts, and container behavior, 
 ### Install and `jaiph use`
 
 - `JAIPH_REPO_URL` — Git repo URL or local path for install script.
-- `JAIPH_REPO_REF` — ref used when installing; `jaiph use <version>` sets this to `v<version>` or `main` for nightly.
+- `JAIPH_REPO_REF` — ref used when installing; `jaiph use <version>` sets this to `v<version>` or `nightly` for nightly.
 - `JAIPH_BIN_DIR` — target bin directory (default: `$HOME/.local/bin`).
 - `JAIPH_LIB_DIR` — target lib directory (default: `$JAIPH_BIN_DIR/.jaiph`).
 - `JAIPH_INSTALL_COMMAND` — command run by `jaiph use` to reinstall (default: `curl -fsSL https://jaiph.org/install | bash`).

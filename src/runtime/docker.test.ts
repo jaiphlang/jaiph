@@ -9,6 +9,7 @@ import {
   remapDockerEnv,
   overlayMountPath,
   findRunArtifacts,
+  resolveDockerHostRunsRoot,
   writeOverlayScript,
   resolveImage,
   buildImageFromDockerfile,
@@ -365,6 +366,26 @@ test("remapDockerEnv: sets JAIPH_RUNS_DIR even when not in input", () => {
   assert.equal(result.JAIPH_RUNS_DIR, "/jaiph/run");
 });
 
+test("resolveDockerHostRunsRoot: defaults under workspace", () => {
+  assert.equal(resolveDockerHostRunsRoot(TEST_WS, {}), join(TEST_WS, ".jaiph", "runs"));
+});
+
+test("resolveDockerHostRunsRoot: resolves relative path under workspace", () => {
+  assert.equal(resolveDockerHostRunsRoot(TEST_WS, { JAIPH_RUNS_DIR: "custom_runs" }), join(TEST_WS, "custom_runs"));
+});
+
+test("resolveDockerHostRunsRoot: keeps absolute path inside workspace", () => {
+  const abs = join(TEST_WS, "abs_runs");
+  assert.equal(resolveDockerHostRunsRoot(TEST_WS, { JAIPH_RUNS_DIR: abs }), abs);
+});
+
+test("resolveDockerHostRunsRoot: rejects absolute path outside workspace", () => {
+  assert.throws(
+    () => resolveDockerHostRunsRoot(TEST_WS, { JAIPH_RUNS_DIR: "/tmp/outside-runs" }),
+    /E_DOCKER_RUNS_DIR/,
+  );
+});
+
 // ---------------------------------------------------------------------------
 // overlayMountPath
 // ---------------------------------------------------------------------------
@@ -433,6 +454,22 @@ test("findRunArtifacts: returns empty for non-existent dir", () => {
   const result = findRunArtifacts("/tmp/jaiph-nonexistent-" + Date.now());
   assert.equal(result.runDir, undefined);
   assert.equal(result.summaryFile, undefined);
+});
+
+test("findRunArtifacts: returns latest run when multiple exist", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "jaiph-test-find-"));
+  try {
+    const older = join(tmp, "2026-04-17", "09-30-00-test.jh");
+    const newer = join(tmp, "2026-04-17", "09-31-00-test.jh");
+    mkdirSync(older, { recursive: true });
+    mkdirSync(newer, { recursive: true });
+    writeFileSync(join(newer, "run_summary.jsonl"), "{}");
+    const result = findRunArtifacts(tmp);
+    assert.equal(result.runDir, newer);
+    assert.equal(result.summaryFile, join(newer, "run_summary.jsonl"));
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
 });
 
 // ---------------------------------------------------------------------------

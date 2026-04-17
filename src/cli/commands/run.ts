@@ -31,6 +31,7 @@ import {
   spawnDockerProcess,
   cleanupDocker,
   findRunArtifacts,
+  resolveDockerHostRunsRoot,
 } from "../../runtime/docker";
 import {
   styleKeywordLabel,
@@ -255,7 +256,7 @@ function spawnExec(
   let execResult;
 
   if (dockerConfig.enabled) {
-    const sandboxRunDir = mkdtempSync(join(tmpdir(), "jaiph-sandbox-run-"));
+    const sandboxRunDir = resolveDockerHostRunsRoot(workspaceRoot, runtimeEnv);
     dockerResult = spawnDockerProcess({
       config: dockerConfig,
       sourceAbs: runtimeEnv.JAIPH_SOURCE_ABS!,
