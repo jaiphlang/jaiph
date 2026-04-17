@@ -62,7 +62,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \\
 
 # Non-root user keeps agent CLIs happy in Docker mode.
 RUN useradd --create-home --uid 10001 --shell /bin/bash jaiph && \\
-    mkdir -p /jaiph/workspace /jaiph/workspace-ro /jaiph/delta/files && \\
+    mkdir -p /jaiph/workspace /jaiph/workspace-ro /jaiph/run && \\
     chown -R jaiph:jaiph /jaiph
 
 # Claude Code CLI (Anthropic)
@@ -91,10 +91,6 @@ RUN mkdir -p "$HOME/.local/bin" && \\
 
 # jaiph (official installer: https://jaiph.org/install)
 RUN ${JAIPH_INSTALL_COMMAND}
-
-# Overlay wrapper: sets up fuse-overlayfs CoW on top of ro workspace mount,
-# falls back to copy-on-start when FUSE is unavailable.
-COPY --chmod=755 overlay-run.sh /jaiph/overlay-run.sh
 
 # Add project-specific package managers/build tools below as needed.
 
