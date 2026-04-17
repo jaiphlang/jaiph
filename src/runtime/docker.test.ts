@@ -207,7 +207,7 @@ test("resolveDockerConfig: workspace from in-file", () => {
 // buildDockerArgs
 // ---------------------------------------------------------------------------
 
-test("buildDockerArgs: workspace ro + overlay-ro + sandbox run rw + fuse device", () => {
+test("buildDockerArgs: workspace-ro + sandbox run rw + fuse device", () => {
   const opts = defaultOpts({ runArgs: ["arg1"] });
   const args = buildDockerArgs(opts, TEST_OVERLAY);
 
@@ -223,15 +223,11 @@ test("buildDockerArgs: workspace ro + overlay-ro + sandbox run rw + fuse device"
 
   const vFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-v");
 
-  // Workspace ro
-  const wsMount = vFlags.find((v) => v.includes("/jaiph/workspace:"));
-  assert.ok(wsMount, "workspace mount present");
-  assert.ok(wsMount!.endsWith(":ro"), "workspace must be ro");
-
   // Overlay lower-layer ro
   const wsRoMount = vFlags.find((v) => v.includes("/jaiph/workspace-ro:"));
   assert.ok(wsRoMount, "workspace-ro mount present");
   assert.ok(wsRoMount!.endsWith(":ro"), "workspace-ro must be ro");
+  assert.ok(!vFlags.some((v) => v.includes("/jaiph/workspace:")), "workspace mount must stay writable inside image");
 
   // Sandbox run dir rw
   const runMount = vFlags.find((v) => v.includes("/jaiph/run:"));
@@ -243,8 +239,8 @@ test("buildDockerArgs: workspace ro + overlay-ro + sandbox run rw + fuse device"
   assert.ok(overlayMount, "overlay script mount present");
   assert.ok(overlayMount!.endsWith(":ro"), "overlay script must be ro");
 
-  // Total: 2 workspace (primary + -ro) + 1 run + 1 overlay script = 4
-  assert.equal(vFlags.length, 4);
+  // Total: 1 workspace-ro + 1 run + 1 overlay script = 3
+  assert.equal(vFlags.length, 3);
 
   // Command: overlay-run.sh → jaiph run --raw <source>
   assert.ok(args.includes("/jaiph/overlay-run.sh"));
@@ -290,7 +286,7 @@ test("buildDockerArgs: overrides JAIPH_WORKSPACE and JAIPH_RUNS_DIR", () => {
   assert.ok(!args.some((a) => a === "JAIPH_RUNS_DIR=/host/runs"));
 });
 
-test("buildDockerArgs: multiple workspace mounts all forced ro", () => {
+test("buildDockerArgs: multiple workspace mounts only lower-layer paths are mounted ro", () => {
   const opts = defaultOpts({
     config: {
       ...defaultOpts().config,
@@ -302,11 +298,11 @@ test("buildDockerArgs: multiple workspace mounts all forced ro", () => {
   });
   const args = buildDockerArgs(opts, TEST_OVERLAY);
   const vFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-v");
-  // 2 configured × 2 (primary + -ro) + 1 run + 1 overlay script = 6
-  assert.equal(vFlags.length, 6);
-  assert.ok(vFlags.some((v) => v.includes("/jaiph/workspace:") && v.endsWith(":ro")));
+  // 2 configured lower-layer mounts + 1 run + 1 overlay script = 4
+  assert.equal(vFlags.length, 4);
+  assert.ok(!vFlags.some((v) => v.includes("/jaiph/workspace:") && v.endsWith(":ro")));
   assert.ok(vFlags.some((v) => v.includes("/jaiph/workspace-ro:") && v.endsWith(":ro")));
-  assert.ok(vFlags.some((v) => v.includes("/jaiph/workspace/config:") && v.endsWith(":ro")));
+  assert.ok(!vFlags.some((v) => v.includes("/jaiph/workspace/config:") && v.endsWith(":ro")));
   assert.ok(vFlags.some((v) => v.includes("/jaiph/workspace-ro/config:") && v.endsWith(":ro")));
 });
 
@@ -413,6 +409,10 @@ test("writeOverlayScript: creates executable script with fuse-overlayfs setup", 
     const content = readFileSync(scriptPath, "utf8");
     assert.ok(content.startsWith("#!/usr/bin/env bash"));
     assert.ok(content.includes("fuse-overlayfs"));
+    assert.ok(content.includes("workspace overlay unavailable"));
+    assert.ok(content.includes("using copy fallback"));
+    assert.ok(content.includes('rsync -a --delete "$LOWER"/ "$MERGED"/'));
+    assert.ok(content.includes("mktemp \"$MERGED/.jaiph-overlay-probe.XXXXXX\""));
     assert.ok(content.includes('exec "$@"'));
   } finally {
     rmSync(dirname(scriptPath), { recursive: true, force: true });

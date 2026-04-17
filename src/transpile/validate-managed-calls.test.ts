@@ -184,6 +184,29 @@ test("bare identifier arg: unknown name fails E_VALIDATE", () => {
   }
 });
 
+test("E_VALIDATE: nested call-like arg requires explicit run or ensure", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-nested-call-"));
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        'script mkdir_p_simple = `mkdir -p "$1"`',
+        'script jaiph_tmp_dir = `printf "%s\\n" "$JAIPH_WORKSPACE/.jaiph/tmp"`',
+        "workflow default() {",
+        "  run mkdir_p_simple(jaiph_tmp_dir())",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      /nested managed calls in argument position must be explicit/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("bare identifier arg: capture variable passes validation", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-bare-cap-"));
   const out = join(root, "out");

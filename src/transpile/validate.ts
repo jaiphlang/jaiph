@@ -257,6 +257,53 @@ function validateBareIdentifierArgs(
   }
 }
 
+function stripQuotedArgContent(args: string): string {
+  let out = "";
+  let quote: "'" | '"' | null = null;
+  for (let i = 0; i < args.length; i += 1) {
+    const ch = args[i]!;
+    if (quote) {
+      if (ch === quote && args[i - 1] !== "\\") {
+        quote = null;
+      }
+      out += " ";
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      out += " ";
+      continue;
+    }
+    out += ch;
+  }
+  return out;
+}
+
+function validateNestedManagedCallArgs(
+  filePath: string,
+  loc: { line: number; col: number },
+  args: string | undefined,
+): void {
+  if (!args) return;
+  const stripped = stripQuotedArgContent(args);
+  const re = /\b([A-Za-z_][A-Za-z0-9_.]*)\s*\(/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(stripped)) !== null) {
+    const before = stripped.slice(0, match.index).trimEnd();
+    const lastToken = before.length === 0 ? "" : before.slice(before.lastIndexOf(" ") + 1);
+    if (lastToken === "run" || lastToken === "ensure") {
+      continue;
+    }
+    throw jaiphError(
+      filePath,
+      loc.line,
+      loc.col,
+      "E_VALIDATE",
+      `nested managed calls in argument position must be explicit; use "run ${match[1]}(...)" or "ensure ${match[1]}(...)" inside the argument list`,
+    );
+  }
+}
+
 /** Resolve a route target workflow ref to its declared parameter count. Returns undefined if unresolvable. */
 function resolveRouteTargetParams(
   ref: string,
@@ -474,6 +521,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
       }
       if (s.type === "ensure") {
         validateNoShellRedirection(ast.filePath, s.ref.loc, "ensure", s.args);
+        validateNestedManagedCallArgs(ast.filePath, s.ref.loc, s.args);
         validateRef(s.ref, ast, refCtx, expectRuleRef);
         validateArity(ast.filePath, s.ref.loc, s.ref.value, s.args, "rule", ast, refCtx);
 
@@ -488,6 +536,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
       }
       if (s.type === "run") {
         validateNoShellRedirection(ast.filePath, s.workflow.loc, "run", s.args);
+        validateNestedManagedCallArgs(ast.filePath, s.workflow.loc, s.args);
         if (s.async) {
           throw jaiphError(
             ast.filePath,
@@ -572,12 +621,14 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         if (s.managed) {
           if (s.managed.kind === "run") {
             validateNoShellRedirection(ast.filePath, s.managed.ref.loc, "run", s.managed.args);
+            validateNestedManagedCallArgs(ast.filePath, s.managed.ref.loc, s.managed.args);
             validateRef(s.managed.ref, ast, refCtx, expectRunInRuleRef);
             validateArity(ast.filePath, s.managed.ref.loc, s.managed.ref.value, s.managed.args, "workflow", ast, refCtx);
 
             validateBareIdentifierArgs(ast.filePath, s.managed.ref.loc, s.managed.bareIdentifierArgs, ruleKnownVars);
           } else if (s.managed.kind === "ensure") {
             validateNoShellRedirection(ast.filePath, s.managed.ref.loc, "ensure", s.managed.args);
+            validateNestedManagedCallArgs(ast.filePath, s.managed.ref.loc, s.managed.args);
             validateRef(s.managed.ref, ast, refCtx, expectRuleRef);
             validateArity(ast.filePath, s.managed.ref.loc, s.managed.ref.value, s.managed.args, "rule", ast, refCtx);
 
@@ -610,6 +661,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         const v = s.value;
         if (v.kind === "run_capture") {
           validateNoShellRedirection(ast.filePath, v.ref.loc, "run", v.args);
+          validateNestedManagedCallArgs(ast.filePath, v.ref.loc, v.args);
           if (!v.ref.value.includes(".") && ruleKnownVars.has(v.ref.value) && !localScripts.has(v.ref.value)) {
             throw jaiphError(ast.filePath, v.ref.loc.line, v.ref.loc.col, "E_VALIDATE", `strings are not executable; "${v.ref.value}" is a string — use a script instead`);
           }
@@ -619,6 +671,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           validateBareIdentifierArgs(ast.filePath, v.ref.loc, v.bareIdentifierArgs, ruleKnownVars);
         } else if (v.kind === "ensure_capture") {
           validateNoShellRedirection(ast.filePath, v.ref.loc, "ensure", v.args);
+          validateNestedManagedCallArgs(ast.filePath, v.ref.loc, v.args);
           validateRef(v.ref, ast, refCtx, expectRuleRef);
           validateArity(ast.filePath, v.ref.loc, v.ref.value, v.args, "rule", ast, refCtx);
 
@@ -765,6 +818,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         validateChannelRef(s.channel, s.loc);
         if (s.rhs.kind === "run") {
           validateNoShellRedirection(ast.filePath, s.rhs.ref.loc, "run", s.rhs.args);
+          validateNestedManagedCallArgs(ast.filePath, s.rhs.ref.loc, s.rhs.args);
           validateRef(s.rhs.ref, ast, refCtx, expectRunTargetRef);
           validateArity(ast.filePath, s.rhs.ref.loc, s.rhs.ref.value, s.rhs.args, "workflow", ast, refCtx);
 
@@ -799,6 +853,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
       }
       if (s.type === "ensure") {
         validateNoShellRedirection(ast.filePath, s.ref.loc, "ensure", s.args);
+        validateNestedManagedCallArgs(ast.filePath, s.ref.loc, s.args);
         validateRef(s.ref, ast, refCtx, expectRuleRef);
         validateArity(ast.filePath, s.ref.loc, s.ref.value, s.args, "rule", ast, refCtx);
 
@@ -813,6 +868,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
       }
       if (s.type === "run") {
         validateNoShellRedirection(ast.filePath, s.workflow.loc, "run", s.args);
+        validateNestedManagedCallArgs(ast.filePath, s.workflow.loc, s.args);
         if (!s.workflow.value.includes(".") && wfKnownVars.has(s.workflow.value) && !localScripts.has(s.workflow.value) && !localWorkflows.has(s.workflow.value)) {
           throw jaiphError(ast.filePath, s.workflow.loc.line, s.workflow.loc.col, "E_VALIDATE", `strings are not executable; "${s.workflow.value}" is a string — use a script instead`);
         }
@@ -899,12 +955,14 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         if (s.managed) {
           if (s.managed.kind === "run") {
             validateNoShellRedirection(ast.filePath, s.managed.ref.loc, "run", s.managed.args);
+            validateNestedManagedCallArgs(ast.filePath, s.managed.ref.loc, s.managed.args);
             validateRef(s.managed.ref, ast, refCtx, expectRunTargetRef);
             validateArity(ast.filePath, s.managed.ref.loc, s.managed.ref.value, s.managed.args, "workflow", ast, refCtx);
 
             validateBareIdentifierArgs(ast.filePath, s.managed.ref.loc, s.managed.bareIdentifierArgs, wfKnownVars, recoverBindings);
           } else if (s.managed.kind === "ensure") {
             validateNoShellRedirection(ast.filePath, s.managed.ref.loc, "ensure", s.managed.args);
+            validateNestedManagedCallArgs(ast.filePath, s.managed.ref.loc, s.managed.args);
             validateRef(s.managed.ref, ast, refCtx, expectRuleRef);
             validateArity(ast.filePath, s.managed.ref.loc, s.managed.ref.value, s.managed.args, "rule", ast, refCtx);
 
@@ -957,6 +1015,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         const v = s.value;
         if (v.kind === "run_capture") {
           validateNoShellRedirection(ast.filePath, v.ref.loc, "run", v.args);
+          validateNestedManagedCallArgs(ast.filePath, v.ref.loc, v.args);
           if (!v.ref.value.includes(".") && wfKnownVars.has(v.ref.value) && !localScripts.has(v.ref.value) && !localWorkflows.has(v.ref.value)) {
             throw jaiphError(ast.filePath, v.ref.loc.line, v.ref.loc.col, "E_VALIDATE", `strings are not executable; "${v.ref.value}" is a string — use a script instead`);
           }
@@ -966,6 +1025,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           validateBareIdentifierArgs(ast.filePath, v.ref.loc, v.bareIdentifierArgs, wfKnownVars, recoverBindings);
         } else if (v.kind === "ensure_capture") {
           validateNoShellRedirection(ast.filePath, v.ref.loc, "ensure", v.args);
+          validateNestedManagedCallArgs(ast.filePath, v.ref.loc, v.args);
           validateRef(v.ref, ast, refCtx, expectRuleRef);
           validateArity(ast.filePath, v.ref.loc, v.ref.value, v.args, "rule", ast, refCtx);
 

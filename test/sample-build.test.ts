@@ -173,6 +173,40 @@ test("jaiph run compiles and executes workflow with args", () => {
   }
 });
 
+test("jaiph run resolves nested managed call arguments", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-nested-args-"));
+  try {
+    const filePath = join(root, "nested_args.jh");
+    writeFileSync(
+      filePath,
+      [
+        "script mkdir_p_simple = ```",
+        'mkdir -p "$1"',
+        "```",
+        "script jaiph_tmp_dir = ```",
+        'printf "%s\\n" "$JAIPH_WORKSPACE/.jaiph/tmp"',
+        "```",
+        "workflow default() {",
+        "  run mkdir_p_simple(run jaiph_tmp_dir())",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const runResult = spawnSync("node", [cliPath, "run", filePath], {
+      encoding: "utf8",
+      cwd: root,
+      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+    });
+
+    assert.equal(runResult.status, 0, runResult.stderr);
+    assert.equal(existsSync(join(root, ".jaiph", "tmp")), true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("executable .jh invokes jaiph run semantics", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-exec-jh-"));
   try {

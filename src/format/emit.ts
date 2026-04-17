@@ -13,6 +13,7 @@ import type {
   WorkflowMetadata,
   TopLevelEmitOrder,
 } from "../types";
+import { parseCallRef } from "../parse/core";
 
 export interface EmitOptions {
   indent: number;
@@ -378,6 +379,23 @@ function formatArgs(args: string, bareIdentifierArgs?: string[]): string {
   while (i < args.length) {
     while (i < args.length && (args[i] === " " || args[i] === "\t")) i++;
     if (i >= args.length) break;
+    const tail = args.slice(i);
+    const keyword = tail.startsWith("run ")
+      ? "run"
+      : tail.startsWith("ensure ")
+        ? "ensure"
+        : null;
+    if (keyword) {
+      const afterKeyword = args.slice(i + keyword.length).trimStart();
+      const skipped = args.slice(i + keyword.length).length - afterKeyword.length;
+      const call = parseCallRef(afterKeyword);
+      if (call && (call.rest.length === 0 || /^\s/.test(call.rest))) {
+        const consumed = afterKeyword.length - call.rest.length;
+        tokens.push(`${keyword} ${call.ref}(${formatArgs(call.args ?? "", call.bareIdentifierArgs)})`);
+        i += keyword.length + skipped + consumed;
+        continue;
+      }
+    }
     if (args[i] === '"') {
       let j = i + 1;
       while (j < args.length && !(args[j] === '"' && args[j - 1] !== "\\")) j++;
