@@ -19,7 +19,7 @@
     "build:standalone": "npm run build && node -e \"const fs=require('node:fs'); fs.cpSync('dist/src/runtime','dist/runtime',{recursive:true});\" && bun build --compile ./src/cli.ts --outfile ./dist/jaiph",
     "test:compiler": "npm run build && node --test dist/src/compiler-test-runner.js",
     "test:golden-ast": "npm run build && node --test dist/src/golden-ast-runner.js",
-    "test": "npm run clean && npm run build && NODE_OPTIONS='--max-old-space-size=32768 --enable-source-maps' node --test dist/test/*.test.js $(find dist/src -name '*.test.js' -o -name '*.acceptance.test.js') dist/src/compiler-test-runner.js dist/src/golden-ast-runner.js",
+    "test": "npm run clean && npm run build && JAIPH_UNSAFE=true NODE_OPTIONS='--max-old-space-size=32768 --enable-source-maps' node --test dist/test/*.test.js $(find dist/src -name '*.test.js' -o -name '*.acceptance.test.js') dist/src/compiler-test-runner.js dist/src/golden-ast-runner.js",
     "test:acceptance:compiler": "npm run build && node --test $(find dist/src -name '*.acceptance.test.js')",
     "test:acceptance:runtime": "bash ./e2e/test_all.sh",
     "test:acceptance": "npm run test:acceptance:compiler && npm run test:acceptance:runtime",

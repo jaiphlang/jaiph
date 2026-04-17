@@ -145,21 +145,27 @@ const DEFAULTS: DockerRunConfig = {
 
 /**
  * Resolve effective Docker config.
- * Precedence: env vars (`JAIPH_DOCKER_*`) > in-file RuntimeConfig > defaults.
- * Docker is disabled by default; opt in via config or env.
+ * Precedence: env vars (`JAIPH_DOCKER_*`) > in-file RuntimeConfig > CI/unsafe default rule.
+ *
+ * Default rule (when no explicit override is set):
+ *  - `CI=true` or `JAIPH_UNSAFE=true` → Docker off
+ *  - Otherwise → Docker on
  */
 export function resolveDockerConfig(
   inFile: RuntimeConfig | undefined,
   env: Record<string, string | undefined>,
 ): DockerRunConfig {
-  // enabled: env > in-file > default (false)
+  // enabled: env JAIPH_DOCKER_ENABLED > in-file > CI/unsafe default rule
   let enabled: boolean;
   if (env.JAIPH_DOCKER_ENABLED !== undefined) {
     enabled = env.JAIPH_DOCKER_ENABLED === "true";
   } else if (inFile?.dockerEnabled !== undefined) {
     enabled = inFile.dockerEnabled;
   } else {
-    enabled = DEFAULTS.enabled;
+    // Default: Docker on unless CI or unsafe mode is active
+    const isCI = env.CI === "true";
+    const isUnsafe = env.JAIPH_UNSAFE === "true";
+    enabled = !(isCI || isUnsafe);
   }
 
   // image: env > in-file > default

@@ -462,8 +462,9 @@ Jaiph: Running async.jh
                 </p>
 
                 <h3>Runtime</h3>
-                <p><strong>Docker sandboxing.</strong> Enable isolated execution with Docker for stronger containment of
-                    agent and shell actions. Configure in <code>config { runtime.* }</code>. See <a
+                <p><strong>Docker sandboxing.</strong> Workflows run inside Docker by default for local development, providing
+                    filesystem and process isolation for agent and shell actions. Disable with <code>JAIPH_UNSAFE=true</code>
+                    or <code>runtime.docker_enabled = false</code>. See <a
                         href="sandboxing">Sandboxing</a>.</p>
                 <p><strong>Hooks.</strong> Attach shell automation to workflow and step lifecycle events via
                     <code>~/.jaiph/hooks.json</code> or <code>&lt;project&gt;/.jaiph/hooks.json</code>. See <a
