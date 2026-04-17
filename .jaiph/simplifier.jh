@@ -36,7 +36,6 @@ const simplifier_principles = """
 """
 
 script assert_no_test_or_e2e_in_changed = ```
-source "$JAIPH_LIB/git_paths.sh"
 local bad=0
 while IFS= read -r f; do
   [ -z "$f" ] && continue
@@ -44,7 +43,13 @@ while IFS= read -r f; do
     echo "Simplifier workflow must not modify tests or e2e: $f" >&2
     bad=1
   fi
-done < <(git_changed_paths_sorted)
+done < <(
+  {
+    git diff --name-only --cached
+    git diff --name-only
+    git ls-files --others --exclude-standard
+  } | sort -u
+)
 return $bad
 ```
 

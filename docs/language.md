@@ -593,10 +593,10 @@ If the inline capture fails, the enclosing step fails. Nested inline captures ar
 Scripts run in a clean process environment. Only these variables are inherited:
 
 - **System:** `PATH`, `HOME`, `TERM`, `USER`
-- **Jaiph:** `JAIPH_LIB`, `JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`
+- **Jaiph:** `JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`
 - **Positional arguments:** `$1`, `$2`, …
 
-Module-scoped `const` variables are not visible. Use shared libraries (`source "$JAIPH_LIB/…"`) or pass data as arguments.
+Module-scoped `const` variables are not visible. Pass data as positional arguments, duplicate small bash inline, or use `import script` for shared helpers.
 
 **Interpolation rules by body form:**
 

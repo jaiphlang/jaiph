@@ -3,19 +3,16 @@
 import "jaiphlang/queue" as queue
 
 config {
-  agent.backend = "claude"
-  agent.claude_flags = "--permission-mode bypassPermissions"
+  agent.backend = "cursor"
+  agent.default_model = "composer-2"
+  agent.cursor_flags = "--force"
+  # agent.backend = "claude"
+  # agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
-script first_line_str = ```
-source "$JAIPH_LIB/strings.sh"
-first_line "$1"
-```
+script first_line_str = `printf '%s\n' "$1" | head -n 1`
 
-script rest_lines_str = ```
-source "$JAIPH_LIB/strings.sh"
-rest_lines "$1"
-```
+script rest_lines_str = `printf '%s\n' "$1" | tail -n +2`
 
 script arg_nonempty = `[ -n "$1" ]`
 

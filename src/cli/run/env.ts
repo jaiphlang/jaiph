@@ -81,8 +81,7 @@ export function resolveRuntimeEnv(
   // Same for the workflow module path: a parent shell or nested tool may export this; the emitted
   // module only sets JAIPH_RUN_STEP_MODULE when unset, so a stale path would break run-step-exec.
   delete env.JAIPH_RUN_STEP_MODULE;
-  // JAIPH_LIB must be derived from the current JAIPH_WORKSPACE, not inherited from a parent
-  // shell (which may point to a different workspace).  The Node runtime defaults it when unset.
+  // Strip stale JAIPH_LIB from a parent shell (removed from the product; scripts use JAIPH_WORKSPACE).
   delete env.JAIPH_LIB;
 
   return env;

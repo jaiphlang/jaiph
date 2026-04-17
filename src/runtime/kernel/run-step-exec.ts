@@ -43,7 +43,6 @@ function isolatedScriptEnv(): NodeJS.ProcessEnv {
     HOME: process.env.HOME ?? "",
     TERM: process.env.TERM ?? "",
     USER: process.env.USER ?? "",
-    JAIPH_LIB: process.env.JAIPH_LIB ?? "",
     JAIPH_SCRIPTS: process.env.JAIPH_SCRIPTS ?? "",
     JAIPH_WORKSPACE: process.env.JAIPH_WORKSPACE ?? "",
   };

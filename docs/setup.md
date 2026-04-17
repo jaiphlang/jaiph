@@ -103,4 +103,4 @@ Run the bootstrap workflow to get started:
 
 ### Workspace convention
 
-By convention, keep Jaiph workflow files in `<project_root>/.jaiph/` so workspace-root detection and agent setup stay predictable. Jaiph resolves `JAIPH_WORKSPACE` to the project root and `JAIPH_LIB` to `<workspace>/.jaiph/lib` for shared script libraries.
+By convention, keep Jaiph workflow files in `<project_root>/.jaiph/` so workspace-root detection and agent setup stay predictable. Jaiph resolves `JAIPH_WORKSPACE` to the project root. Reusable `.jh` modules installed with `jaiph install` live under `.jaiph/libs/` (see [Libraries](libraries.md)).

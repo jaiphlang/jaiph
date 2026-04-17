@@ -220,8 +220,6 @@ For each workflow run inside a test block, the harness builds the runtime enviro
 | `JAIPH_RUNS_DIR` | Per-block temp directory |
 | `JAIPH_SCRIPTS` | Temp `buildScripts` output |
 
-`NodeWorkflowRuntime` sets `JAIPH_LIB` to `<JAIPH_WORKSPACE>/.jaiph/lib` when it is unset or empty.
-
 You do not set `JAIPH_TEST_MODE` yourself; the harness manages it.
 
 ## Organizing tests

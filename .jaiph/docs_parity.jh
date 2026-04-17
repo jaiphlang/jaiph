@@ -31,9 +31,14 @@ rule docs_files_present(list) {
 }
 
 script assert_worktree_clean_for_docs = ```
-source "$JAIPH_LIB/git_paths.sh"
 local current_changed_files
-current_changed_files="$(git_changed_paths_sorted)"
+current_changed_files="$(
+  {
+    git diff --name-only --cached
+    git diff --name-only
+    git ls-files --others --exclude-standard
+  } | sort -u
+)"
 if [ -n "$current_changed_files" ]; then
   echo "Refusing to run docs parity workflow on a dirty worktree." >&2
   echo "Please commit, stash, or discard these files first:" >&2
@@ -48,9 +53,14 @@ rule worktree_is_clean() {
 
 script assert_only_allowed_changed = ```
 local allowed="$1"
-source "$JAIPH_LIB/git_paths.sh"
 local after_changed_files
-after_changed_files="$(git_changed_paths_sorted)"
+after_changed_files="$(
+  {
+    git diff --name-only --cached
+    git diff --name-only
+    git ls-files --others --exclude-standard
+  } | sort -u
+)"
 while IFS= read -r changed_file; do
   [ -z "$changed_file" ] && continue
   if [[ $'\n'"$allowed"$'\n' == *$'\n'"$changed_file"$'\n'* ]]; then
@@ -67,15 +77,9 @@ rule only_expected_docs_changed_after_prompt(allowed) {
 
 script arg_nonempty = `[ -n "${1:-}" ]`
 
-script first_line_str = ```
-source "$JAIPH_LIB/strings.sh"
-first_line "$1"
-```
+script first_line_str = `printf '%s\n' "$1" | head -n 1`
 
-script rest_lines_str = ```
-source "$JAIPH_LIB/strings.sh"
-rest_lines "$1"
-```
+script rest_lines_str = `printf '%s\n' "$1" | tail -n +2`
 
 script list_docs_md_paths = ```
 local out=""

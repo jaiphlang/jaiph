@@ -39,69 +39,6 @@ e2e::assert_equals "${leak_out}" "secret=EMPTY" "script cannot read parent const
 e2e::pass "script isolation: parent variables not inherited"
 
 # ---------------------------------------------------------------------------
-e2e::section "JAIPH_LIB defaults to workspace .jaiph/lib (Node runtime)"
-# ---------------------------------------------------------------------------
-
-e2e::file "lib_check.jh" <<'EOF'
-script check_lib = ```
-echo "lib=${JAIPH_LIB:-UNSET}"
-```
-
-workflow default() {
-  run check_lib()
-}
-EOF
-
-rm -rf "${TEST_DIR}/runs_lib"
-JAIPH_RUNS_DIR="runs_lib" e2e::run "lib_check.jh" >/dev/null
-
-run_dir="$(e2e::run_dir_at "${TEST_DIR}/runs_lib" "lib_check.jh")"
-shopt -s nullglob
-lib_files=( "${run_dir}"*check_lib.out )
-shopt -u nullglob
-[[ ${#lib_files[@]} -ge 1 ]] || e2e::fail "expected check_lib .out artifact"
-lib_out="$(<"${lib_files[0]}")"
-expected_lib="$(cd "${TEST_DIR}" && pwd)/.jaiph/lib"
-e2e::assert_equals "${lib_out}" "lib=${expected_lib}" "JAIPH_LIB defaults to \${JAIPH_WORKSPACE}/.jaiph/lib"
-
-e2e::pass "JAIPH_LIB default matches workspace lib dir"
-
-# ---------------------------------------------------------------------------
-e2e::section "source \$JAIPH_LIB/... works from isolated script"
-# ---------------------------------------------------------------------------
-
-mkdir -p "${TEST_DIR}/.jaiph/lib"
-cat > "${TEST_DIR}/.jaiph/lib/test_util.sh" <<'LIBEOF'
-test_util_greeting() {
-  printf "hello-from-lib"
-}
-LIBEOF
-
-e2e::file "source_lib.jh" <<'EOF'
-script use_lib = ```
-source "$JAIPH_LIB/test_util.sh"
-test_util_greeting
-```
-
-workflow default() {
-  run use_lib()
-}
-EOF
-
-rm -rf "${TEST_DIR}/runs_srclib"
-JAIPH_LIB="${TEST_DIR}/.jaiph/lib" JAIPH_RUNS_DIR="runs_srclib" e2e::run "source_lib.jh" >/dev/null
-
-run_dir="$(e2e::run_dir_at "${TEST_DIR}/runs_srclib" "source_lib.jh")"
-shopt -s nullglob
-srclib_files=( "${run_dir}"*use_lib.out )
-shopt -u nullglob
-[[ ${#srclib_files[@]} -ge 1 ]] || e2e::fail "expected use_lib .out artifact"
-srclib_out="$(<"${srclib_files[0]}")"
-e2e::assert_equals "${srclib_out}" "hello-from-lib" "source JAIPH_LIB works in isolated script"
-
-e2e::pass "shared library sourcing works under isolation"
-
-# ---------------------------------------------------------------------------
 e2e::section "opaque script body: embedded JS line starting with const"
 # ---------------------------------------------------------------------------
 

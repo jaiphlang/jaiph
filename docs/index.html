@@ -531,9 +531,9 @@ Jaiph: Running async.jh
                         call-site arity when the callee declares params. Any fence tag is valid &mdash; it maps directly to
                         <code>#!/usr/bin/env &lt;tag&gt;</code>. Scripts run in <strong>full isolation</strong>
                         &mdash; only positional arguments
-                        and essential Jaiph variables (<code>JAIPH_LIB</code>, <code>JAIPH_SCRIPTS</code>,
+                        and essential Jaiph variables (<code>JAIPH_SCRIPTS</code>,
                         <code>JAIPH_WORKSPACE</code>) are inherited; module-scoped variables are not visible.
-                        Use <code>source "$JAIPH_LIB/…"</code> for shared utilities. Scripts are emitted as
+                        Reuse shell helpers with <code>import script</code> or small named <code>script</code> blocks in the same module. Scripts are emitted as
                         separate executable files under <code>scripts/</code> (within the run build output tree; see <a
                             href="cli">CLI reference</a>).
                     </dd>

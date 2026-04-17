@@ -277,7 +277,7 @@ date +%s
 
 **Deterministic naming:** Inline script bodies are emitted as executable files under `scripts/` with names of the form `__inline_<hash>` (12-character SHA-256 prefix of body + shebang). The same body and shebang always produce the same artifact name across runs.
 
-**Isolation:** Inline scripts run with the same subprocess isolation as named scripts — no parent scope variables are visible. Only positional arguments and essential Jaiph variables (`JAIPH_LIB`, `JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`) are inherited.
+**Isolation:** Inline scripts run with the same subprocess isolation as named scripts — no parent scope variables are visible. Only positional arguments and essential Jaiph variables (`JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`) are inherited.
 
 **Restrictions:**
 - `run async` with inline scripts is not supported — inline scripts cannot be used with `run async`.
@@ -685,10 +685,10 @@ Non-bash scripts skip Jaiph keyword validation and emit the body verbatim.
 Scripts run in a clean process environment (`env -i`). Only these variables are inherited:
 
 - System: `PATH`, `HOME`, `TERM`, `USER`
-- Jaiph: `JAIPH_LIB`, `JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`
+- Jaiph: `JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`
 - Positional arguments (`$1`, `$2`, …)
 
-Module-scoped `const` variables are **not** visible. Use shared libraries (`source "$JAIPH_LIB/…"`) or pass data as arguments.
+Module-scoped `const` variables are **not** visible. Pass data as positional arguments, duplicate small bash inline, or use `import script` for shared helpers.
 
 ## String Interpolation {#string-interpolation}
 

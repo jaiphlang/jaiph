@@ -1,5 +1,7 @@
 # Unreleased
 
+- **Breaking — Runtime:** Remove `JAIPH_LIB` — The Node runtime no longer sets `JAIPH_LIB`, and isolated script subprocesses no longer receive it (`run-step-exec.ts`). `resolveRuntimeEnv` still deletes inherited `JAIPH_LIB` so a parent shell cannot inject a stale path. Workflows that used `source "$JAIPH_LIB/…"` must use `JAIPH_WORKSPACE`-relative paths, `import script`, or inline bash. Project-scoped **`.jaiph/libs/`** (`jaiph install`) is unchanged.
+- **Docs / E2E:** Documentation and tests no longer describe or assert `JAIPH_LIB` / `.jaiph/lib` (singular).
 - **Feature — Runtime:** Heartbeat file in run directory — The runtime now writes a `heartbeat` file (containing epoch-ms timestamp) to the run directory (`.jaiph/runs/<date>/<time>-<source>/heartbeat`) immediately on construction and refreshes it every 10 seconds. External tooling can `stat()` or read this file to detect whether a Jaiph process is still alive; a stale heartbeat (>~20s) means the process is dead. The timer is `.unref()`ed so it never keeps the Node process alive past its natural exit. Implementation: `startHeartbeat()` / `stopHeartbeat()` in `NodeWorkflowRuntime`. Unit test added.
 
 # 0.9.1
