@@ -23,9 +23,9 @@ The runtime executes rules by walking the AST in-process (`NodeWorkflowRuntime.e
 
 > **Beta.** Docker sandboxing is functional but still under active development. Expect rough edges, breaking changes, and incomplete platform coverage. Feedback is welcome at <https://github.com/jaiphlang/jaiph/issues>.
 
-Docker applies to `jaiph run` only (not `jaiph test`). When enabled, the entire workflow -- every rule and script step -- runs inside a single container. The host CLI compiles the workflow and copies the compiled JS + scripts into a temporary directory, which is mounted read-only at `/jaiph/generated/` inside the container. The container runs the raw Node runtime (`node-workflow-runner.js`) directly -- not the full `jaiph` CLI -- so it emits `__JAIPH_EVENT__` to stderr without any rendering. The host CLI renders the progress tree from those events.
+Docker applies to `jaiph run` only (not `jaiph test`). When enabled, the entire workflow -- every rule and script step -- runs inside a single container. The container runs `jaiph run --raw <file>` using its own installed jaiph -- not the host's. The `--raw` flag makes jaiph emit `__JAIPH_EVENT__` lines to stderr without rendering a progress tree, so the host CLI can render from those events.
 
-The host workspace is mounted **read-only** to prevent bind-mount deadlocks with concurrent runners on macOS Docker Desktop. A writable sub-mount at `.jaiph/runs` lets the runtime write run artifacts that are immediately visible on the host. There is no delta sync or copy-on-write overlay.
+The host workspace is mounted **read-only** to prevent bind-mount deadlocks with concurrent runners on macOS Docker Desktop. A `fuse-overlayfs` copy-on-write overlay makes the workspace appear writable inside the container -- reads come from the host mount, writes go to a tmpfs upper layer and are discarded on exit. Run artifacts are written to a separate rw mount at `/jaiph/run` (outside the overlay), so they persist to the host. If `fuse-overlayfs` is unavailable, the workspace stays read-only (no regression).
 
 ### Enabling Docker
 
@@ -50,7 +50,7 @@ All Docker-related keys live under `runtime.*` in module-level config:
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `runtime.docker_enabled` | boolean | `false` | Enable Docker sandbox for the run. |
-| `runtime.docker_image` | string | `"node:20-bookworm"` | Container image (must include Node.js; use `.jaiph/Dockerfile` for custom images). |
+| `runtime.docker_image` | string | `"node:20-bookworm"` | Container image (must include Node.js and jaiph; use `.jaiph/Dockerfile` for custom images). |
 | `runtime.docker_network` | string | `"default"` | Docker network mode. |
 | `runtime.docker_timeout` | integer | `300` | Max execution time in seconds. `0` disables the timeout. |
 | `runtime.workspace` | string array | `[".:/jaiph/workspace:rw"]` | Mount specifications (see below). |
@@ -67,44 +67,44 @@ If `JAIPH_DOCKER_TIMEOUT` is set but not a valid integer, the default (`300`) is
 
 ### Mount specifications
 
-Mount strings in `runtime.workspace` define which host paths are visible inside the container. All mounts are **forced to read-only** regardless of the specified mode to prevent bind-mount deadlocks on macOS Docker Desktop.
+Mount strings in `runtime.workspace` define which host paths are visible inside the container. All mounts are **forced to read-only** regardless of the specified mode to prevent bind-mount deadlocks on macOS Docker Desktop. The overlay wrapper makes the workspace writable via fuse-overlayfs.
 
 | Form | Segments | Example | Result |
 |------|----------|---------|--------|
-| Full | 3 | `".:/jaiph/workspace:rw"` | Mount `.` at `/jaiph/workspace` (forced read-only) |
-| Shorthand | 2 | `"config:ro"` | Mount `config` at `/jaiph/workspace/config` (read-only) |
+| Full | 3 | `".:/jaiph/workspace:rw"` | Mount `.` at `/jaiph/workspace` and `/jaiph/workspace-ro` (both read-only; overlay makes workspace writable) |
+| Shorthand | 2 | `"config:ro"` | Mount `config` at `/jaiph/workspace/config` and `/jaiph/workspace-ro/config` (read-only) |
 | Too few | 1 | `"data"` | `E_PARSE` |
 | Too many | 4+ | `"a:b:c:d"` | `E_PARSE` |
 
 Mode must be `ro` or `rw` (otherwise `E_PARSE`). Exactly one mount must target `/jaiph/workspace` -- zero or more than one produces `E_VALIDATE`. The default `[".:/jaiph/workspace:rw"]` satisfies this requirement.
 
-Host paths are resolved relative to the workspace root.
+Host paths are resolved relative to the workspace root. Each mount is duplicated at the overlay lower-layer path (`/jaiph/workspace-ro/...`) so the overlay wrapper can use it as the read-only source.
 
 ### Container layout
 
 ```
 /jaiph/
-  generated/          # host-compiled JS + scripts (read-only mount)
-    src/              # compiled runtime kernel (node-workflow-runner.js, etc.)
-    scripts/          # extracted script step files
-  workspace/          # read-only bind mount of host workspace
+  workspace-ro/       # read-only bind mount of host workspace (overlay lower layer)
+  workspace/          # fuse-overlayfs merged view (reads from -ro, writes to tmpfs)
     *.jh              # source files
-    .jaiph/
-      runs/           # run artifacts (writable sub-mount)
-  meta/               # meta file IPC directory (writable mount)
+    .jaiph/           # project config
+  run/                # writable bind mount for this run's artifacts (host temp dir)
+  overlay-run.sh      # runtime-generated entrypoint mounted ro from host temp file
 ```
 
-The working directory is `/jaiph/workspace`. The host CLI compiles the workflow and copies the JS source tree + scripts to a temporary directory, mounted at `/jaiph/generated/`. The container runs `node /jaiph/generated/src/runtime/kernel/node-workflow-runner.js` directly.
+The working directory is `/jaiph/workspace`. The host CLI generates `overlay-run.sh` (a ~10 line bash script) to a temp file and mounts it read-only at `/jaiph/overlay-run.sh`. The container runs `/jaiph/overlay-run.sh jaiph run --raw <file>`. The overlay wrapper sets up fuse-overlayfs, then execs the jaiph command. The container's own installed jaiph handles parsing, compilation, script extraction, and runtime execution. No `COPY` in the Dockerfile is needed -- the script is a jaiph runtime artifact.
 
 ### Runtime behavior
 
-**Container lifecycle** -- `docker run --rm` launches the container and auto-removes it on exit. The pseudo-TTY flag (`-t`) is intentionally omitted: Docker's `-t` merges stderr into stdout, which would break the `__JAIPH_EVENT__` stderr-only live contract. On Linux, `--user <uid>:<gid>` maps the container user to the host user.
+**Container lifecycle** -- `docker run --rm` launches the container and auto-removes it on exit. `--device /dev/fuse` exposes the FUSE device for the overlay. The pseudo-TTY flag (`-t`) is intentionally omitted: Docker's `-t` merges stderr into stdout, which would break the `__JAIPH_EVENT__` stderr-only live contract. On Linux, `--user <uid>:<gid>` maps the container user to the host user.
 
 **stdin** -- The `docker run` process is spawned with stdin set to `ignore` to prevent the Docker CLI from blocking on stdin EOF.
 
-**Events** -- The raw Node runtime writes `__JAIPH_EVENT__` JSON to stderr, the same channel used for local runs. The host CLI listens on stderr and renders the progress tree; stdout carries plain script output. `STEP_END` events embed `out_content` (and `err_content` on failure) so consumers do not need host paths to step artifact files. Embedded content is capped at 1 MiB; larger output is truncated with a `[truncated]` marker while full logs remain on disk.
+**Events** -- The container's jaiph runs in `--raw` mode: it spawns the runtime with inherited stdio, so `__JAIPH_EVENT__` JSON flows directly to the container's stderr. The host CLI reads Docker's stderr pipe and renders the progress tree. stdout carries plain script output. `STEP_END` events embed `out_content` (and `err_content` on failure) so consumers do not need host paths to step artifact files.
 
-**Run artifacts** -- The `.jaiph/runs` directory is mounted as a writable sub-mount inside the container. The runtime writes run artifacts (logs, summary) directly to this mount, making them immediately visible on the host. After the container exits, the host CLI reads the meta file (mounted via `/jaiph/meta/`) to discover `run_dir` and `summary_file` paths, remapping container paths back to host paths.
+**Overlay** -- The `overlay-run.sh` wrapper (generated by the host CLI and mounted read-only) sets up `fuse-overlayfs` with the ro bind mount (`/jaiph/workspace-ro`) as the lower layer and a tmpfs as the upper layer, merged at `/jaiph/workspace`. All workspace writes go to the tmpfs and are discarded on container exit. If fuse-overlayfs is unavailable (e.g. the image doesn't include it), the overlay step is skipped and the workspace remains read-only.
+
+**Run artifacts** -- The host CLI creates a temporary directory and mounts it at `/jaiph/run:rw` inside the container. `JAIPH_RUNS_DIR` is set to `/jaiph/run`, so the runtime writes run artifacts there. Because `/jaiph/run` is outside the overlay, writes go directly to the host mount -- no symlink needed. After the container exits, the host CLI scans the mounted directory to discover `run_dir` and `summary_file`.
 
 **Network** -- `"default"` omits `--network` (Docker's default bridge). `"none"` passes `--network none`. Any other value is passed through as-is.
 
@@ -121,29 +121,15 @@ When the image is not explicit:
 1. If `.jaiph/Dockerfile` exists in the workspace root, the runtime builds it, tags the result `jaiph-runtime:latest`, and uses that image. Build failure produces `E_DOCKER_BUILD`.
 2. Otherwise, the default image (`node:20-bookworm`) is pulled if needed.
 
-The repository's example `.jaiph/Dockerfile` includes `ubuntu:latest` as a base, Node.js LTS from NodeSource, Claude Code CLI, cursor-agent, and common utilities. The image creates a non-root `jaiph` user (UID 10001) and sets `USER jaiph` -- this is required because tools like Claude Code refuse `--dangerously-skip-permissions` when running as root. The container does not need `jaiph` installed for execution -- the host provides the compiled runtime via the `/jaiph/generated/` mount.
+The repository's example `.jaiph/Dockerfile` includes `ubuntu:latest` as a base, Node.js LTS from NodeSource, `fuse-overlayfs`, Claude Code CLI, cursor-agent, and jaiph (installed via the official installer). The image creates a non-root `jaiph` user (UID 10001) and sets `USER jaiph`. Including `fuse-overlayfs` and `jaiph` in the image is required for full functionality. The Dockerfile does not need to copy any jaiph runtime files -- `overlay-run.sh` is generated by the host CLI and mounted into the container at runtime.
 
 ### Environment variable forwarding
 
-All `JAIPH_*` variables from the host are forwarded into the container, **except** `JAIPH_DOCKER_*` variables (excluded to prevent nested Docker execution) and `JAIPH_META_FILE` / `JAIPH_SCRIPTS` (overridden to container paths). The following prefixes are also forwarded for agent authentication:
+All `JAIPH_*` variables from the host are forwarded into the container, **except** `JAIPH_DOCKER_*` variables (excluded to prevent nested Docker execution). `JAIPH_WORKSPACE` is overridden to `/jaiph/workspace` and `JAIPH_RUNS_DIR` is overridden to `/jaiph/run`. The following prefixes are also forwarded for agent authentication:
 
 - `CURSOR_*`
 - `ANTHROPIC_*`
 - `CLAUDE_*`
-
-### Path remapping
-
-The CLI automatically remaps workspace-related variables so run artifacts land under the workspace mount:
-
-- `JAIPH_WORKSPACE` is always `/jaiph/workspace` inside the container.
-- `JAIPH_RUNS_DIR`:
-  - **Relative** (e.g. `custom_runs`) -- unchanged; resolves under `/jaiph/workspace` via the mount.
-  - **Absolute, inside host workspace** -- rewritten to the equivalent path under `/jaiph/workspace`.
-  - **Absolute, outside host workspace** -- rejected with `E_DOCKER_RUNS_DIR`. Use a relative path or a directory inside the workspace instead.
-
-You do not need to configure `JAIPH_RUNS_DIR` differently for Docker runs; remapping is automatic.
-
-**Post-run artifact discovery.** After the container exits, the host CLI reads the meta file (mounted via `/jaiph/meta/`) to discover `run_dir` and `summary_file`. Container paths (e.g. `/jaiph/workspace/.jaiph/runs/...`) are remapped to host paths automatically.
 
 ### Example
 
