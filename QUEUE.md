@@ -12,35 +12,6 @@ Process rules:
 
 ***
 
-## Runtime — harden Docker execution environment #dev-ready
-
-**Goal**
-Docker mode is the isolation boundary for workflow runs. Harden it: least-privilege mounts, explicit and documented env forwarding (what crosses the container boundary), network defaults, and failure modes when Docker is misconfigured or unavailable — so "Docker on" is a deliberate security posture, not accidental leakage. (Image provenance and the official default image belong to the queued **Docker — strict image contract + GHCR** task; this task only documents or tightens runtime-visible pull/verify behavior as needed, without redefining publishing or the default image.)
-
-**Context**
-
-* Docker runtime: `src/runtime/docker.ts` (`parseMounts` / `validateMounts`, `resolveDockerConfig`, `buildDockerArgs`, `checkDockerAvailable`, `spawnDockerProcess`); CLI integration: `src/cli/commands/run.ts`.
-* Current forwarding: `buildDockerArgs` remaps `JAIPH_WORKSPACE` and `JAIPH_RUNS_DIR`, passes through `JAIPH_*` except `JAIPH_DOCKER_*`, and passes keys prefixed `CURSOR_`, `ANTHROPIC_`, or `CLAUDE_` (see `AGENT_ENV_PREFIXES` in `docker.ts`). Mounts come from resolved `runtime.workspace` plus fixed rw run-dir, ro overlay script, and `--device /dev/fuse`.
-* E2E: `e2e/tests/72_docker_run_artifacts.sh`, `e2e/tests/73_docker_dockerfile_detection.sh`.
-* Config: `runtime.docker_enabled`, `runtime.docker_image`, `runtime.docker_network`, `runtime.docker_timeout`, `runtime.workspace` via `src/config.ts` and metadata parsing.
-
-**Queue coordination**
-
-* Land after or together with **Docker — strict image contract + publish official `jaiph-runtime` images to GHCR** so bootstrap removal and default image changes are settled before deep hardening refactors the same code paths.
-* Land after or together with **Runtime — credential proxy for Docker mode** so any env allowlist/denylist and `docs/sandboxing.md` text stay consistent with placeholder `ANTHROPIC_*` and host-reachable API base URLs (no real secrets in `-e`).
-* The later task **Runtime — default Docker when not CI or unsafe** changes `runtime.docker_enabled` defaults; avoid conflicting precedence — document how hardened Docker behavior interacts with that default once both exist.
-
-**Acceptance criteria**
-
-* Threat-model notes (short section in `docs/sandboxing.md` or equivalent): what Docker is / is not protecting against (including that hooks run on the host).
-* Concrete hardening changes in `docker.ts` / run path (e.g. mount validation, env allowlist or documented denylist aligned with the credential-proxy contract, safer defaults) with unit tests.
-* No silent widen of host access without opt-in.
-* Document network mode behavior (`runtime.docker_network` / `--network`) and failure modes for missing Docker or failed pulls (`E_DOCKER_*`), extending existing patterns where appropriate.
-
-**Scope note**
-
-* `docker.ts` is already large (\~650+ lines); prefer small helpers or one focused sibling module over speculative abstractions. Expect at least `docker.ts`, `docker.test.ts`, and `docs/sandboxing.md`; split follow-ups if the change set outgrows one cycle.
-
 ## Runtime — default Docker when not CI or unsafe #dev-ready
 
 **Goal**
