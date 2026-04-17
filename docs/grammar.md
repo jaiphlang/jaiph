@@ -195,6 +195,33 @@ This rule applies to all call sites: `run`, `ensure`, `return run`/`return ensur
 
 Bare identifiers must reference a known variable (`const`, capture, or named parameter). Unknown names produce an `E_VALIDATE` error at compile time. Jaiph keywords (`run`, `ensure`, `const`, etc.) cannot be used as bare identifier arguments.
 
+### Nested Managed Calls in Arguments
+
+Call arguments can contain **explicit nested managed calls** using `run` or `ensure`. The nested call executes first and its result is passed as a single argument to the outer call. This is a deliberate language rule: managed execution must always be explicit — scripts and workflows execute only via `run`, rules only via `ensure`, even inside argument lists.
+
+**Valid explicit forms:**
+
+```jaiph
+run mkdir_p_simple(run jaiph_tmp_dir())      # nested run
+run do_work(ensure check_ok())               # nested ensure
+run do_work(run `echo aaa`())                # nested inline script
+```
+
+**Invalid bare call-like forms** — rejected at compile time with actionable errors:
+
+```jaiph
+# run do_work(bar())           — E_VALIDATE: nested managed calls must be explicit
+# run do_work(rule_bar())      — E_VALIDATE: nested managed calls must be explicit
+# run do_work(`echo aaa`())    — E_VALIDATE: nested inline scripts must be explicit
+```
+
+The **capture-then-pass** form is always valid:
+
+```jaiph
+const x = run bar()
+run foo(x)
+```
+
 ### Arity Checking
 
 When the callee declares named parameters, the compiler validates that the number of arguments at the call site matches the number of declared parameters. A mismatch produces an `E_VALIDATE` error:
@@ -841,6 +868,10 @@ ensure_stmt     = "ensure" call_ref [ "catch" catch_bindings catch_body ] ;
 run_catch_stmt  = "run" call_ref "catch" catch_bindings catch_body ;
 run_stmt        = "run" ( call_ref | inline_script ) ;
 call_ref        = REF "(" [ call_args ] ")" ;  (* parentheses always required *)
+call_arg        = double_quoted_string | IDENT | "${" IDENT "}"
+                | "run" ( call_ref | inline_script )       (* explicit nested managed call *)
+                | "ensure" call_ref ;                      (* explicit nested ensure *)
+call_args       = call_arg { "," call_arg } ;
 inline_script   = backtick_script_body "(" [ call_args ] ")" | fenced_script_block "(" [ call_args ] ")" ;
 prompt_body     = double_quoted_string | IDENT | triple_quoted_block ;
 triple_quoted_block = "\"\"\"" newline { body_line newline } "\"\"\"" ;
@@ -861,7 +892,7 @@ After parsing, the compiler validates references and config (`src/transpile/vali
 
 - **E_PARSE:** Invalid syntax — duplicate config, invalid keys/values, `$(…)` or `${var:-fallback}` in orchestration strings, `${...}` interpolation in script bodies, `prompt … returns` without capture, bare `ref(args)` in const RHS (use `run`/`ensure`/`prompt`), `local` at top level, unrecognized workflow/rule line, invalid send RHS, arguments after `catch`, bare `catch` with no recovery step, nested inline captures, shell redirection after `run`/`ensure`, invalid parameter names (non-identifier, duplicate, or reserved keyword), or missing `{` on definition line.
 - **E_SCHEMA:** Invalid `returns` schema — empty, non-flat, unsupported type (only `string`, `number`, `boolean`).
-- **E_VALIDATE:** Reference errors — unknown rule/workflow, duplicate alias, `ensure` on non-rule, `run` on rule, `run` to workflow inside rule, `run async` in rule, forbidden Jaiph usage inside `$(…)`, dot notation on non-prompt variable or invalid field name, bare identifier argument referencing an unknown variable, `${identifier}` in strings referencing an unknown variable, standalone `"${identifier}"` in call arguments (use bare identifier instead), arity mismatch (call-site argument count differs from callee's declared parameter count), **type crossing** — `prompt` with a script name (`scripts are not promptable`), `run` with a string const (`strings are not executable`), `const x = scriptName` (`scripts are not values`), `${scriptName}` interpolation (`scripts cannot be interpolated`).
+- **E_VALIDATE:** Reference errors — unknown rule/workflow, duplicate alias, `ensure` on non-rule, `run` on rule, `run` to workflow inside rule, `run async` in rule, forbidden Jaiph usage inside `$(…)`, dot notation on non-prompt variable or invalid field name, bare identifier argument referencing an unknown variable, `${identifier}` in strings referencing an unknown variable, standalone `"${identifier}"` in call arguments (use bare identifier instead), arity mismatch (call-site argument count differs from callee's declared parameter count), **bare nested managed calls** — `run foo(bar())` or `run foo(rule_bar())` without explicit `run`/`ensure` keyword, **bare nested inline script calls** — `run foo(\`echo aaa\`())` without explicit `run`, **type crossing** — `prompt` with a script name (`scripts are not promptable`), `run` with a string const (`strings are not executable`), `const x = scriptName` (`scripts are not values`), `${scriptName}` interpolation (`scripts cannot be interpolated`).
 - **E_IMPORT_NOT_FOUND:** Import target file does not exist.
 
 Validation rules:
@@ -875,6 +906,7 @@ Validation rules:
 7. `ensure … catch` and `run … catch` argument ordering: all arguments inside parentheses before `catch`.
 8. Shell redirection (`>`, `|`, `&`) after `run`/`ensure` is rejected — use a script.
 9. **Type crossing:** `string` and `script` are non-interchangeable primitive types (see [Types](#types)). `prompt` rejects script names; `run` rejects string consts; assigning a script to a `const` or interpolating a script name with `${…}` is rejected. Each crossing produces an actionable `E_VALIDATE` message.
+10. **Explicit nested managed calls:** Bare call-like forms in argument position (`run foo(bar())`, `run foo(rule_bar())`) are rejected — add the missing `run` or `ensure` keyword. Bare inline script calls in arguments (`run foo(\`echo aaa\`())`) are also rejected — add `run`. Valid forms: `run foo(run bar())`, `run foo(ensure rule_bar())`, `run foo(run \`echo aaa\`())`.
 
 ## Build Artifacts {#build-artifacts}
 

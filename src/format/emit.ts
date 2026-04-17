@@ -371,6 +371,33 @@ function emitSteps(steps: WorkflowStepDef[], pad: string, currentIndent: string)
   return lines;
 }
 
+/** Try to parse `` `body`(args) `` from the start of a string. Returns consumed length or null. */
+function parseInlineScriptArg(s: string): { body: string; innerArgs: string; consumed: number } | null {
+  if (!s.startsWith("`")) return null;
+  const closeIdx = s.indexOf("`", 1);
+  if (closeIdx === -1) return null;
+  const body = s.slice(1, closeIdx);
+  const afterClose = s.slice(closeIdx + 1);
+  if (!afterClose.startsWith("(")) return null;
+  let depth = 1;
+  let j = 1;
+  let inQuote: string | null = null;
+  while (j < afterClose.length && depth > 0) {
+    const ch = afterClose[j];
+    if (inQuote) {
+      if (ch === inQuote && afterClose[j - 1] !== "\\") inQuote = null;
+    } else {
+      if (ch === '"' || ch === "'") inQuote = ch;
+      else if (ch === "(") depth++;
+      else if (ch === ")") depth--;
+    }
+    j++;
+  }
+  if (depth !== 0) return null;
+  const innerArgs = afterClose.slice(1, j - 1).trim();
+  return { body, innerArgs, consumed: closeIdx + 1 + j };
+}
+
 /** Convert space-separated args back to comma-separated format with bare identifiers. */
 function formatArgs(args: string, bareIdentifierArgs?: string[]): string {
   const bare = new Set(bareIdentifierArgs ?? []);
@@ -394,6 +421,16 @@ function formatArgs(args: string, bareIdentifierArgs?: string[]): string {
         tokens.push(`${keyword} ${call.ref}(${formatArgs(call.args ?? "", call.bareIdentifierArgs)})`);
         i += keyword.length + skipped + consumed;
         continue;
+      }
+      // Try inline script form: run `body`(args)
+      if (keyword === "run") {
+        const inlineResult = parseInlineScriptArg(afterKeyword);
+        if (inlineResult) {
+          const formattedInner = inlineResult.innerArgs ? formatArgs(inlineResult.innerArgs) : "";
+          tokens.push(`run \`${inlineResult.body}\`(${formattedInner})`);
+          i += keyword.length + skipped + inlineResult.consumed;
+          continue;
+        }
       }
     }
     if (args[i] === '"') {

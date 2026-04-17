@@ -1,5 +1,9 @@
 # Unreleased
 
+## All changes
+
+- **Feature — Language/Runtime:** Explicit nested managed calls in argument position — Call arguments can now contain nested managed calls using `run` or `ensure` keywords explicitly: `run foo(run bar())`, `run foo(ensure rule_bar())`, and `run foo(run \`echo "aaa"\`())`. The nested call executes first and its result is passed as a single argument to the outer call. Bare call-like forms in argument position are rejected at compile time: `run foo(bar())` → `E_VALIDATE` with an actionable message telling the user to add `run` or `ensure`. Bare inline script calls in argument position (`run foo(\`echo aaa\`())`) are also rejected with guidance. The explicit capture-then-pass form (`const x = run bar()` followed by `run foo(x)`) remains valid. Bare call-like forms in `const` assignments (`const x = bar()`) are also rejected — use `const x = run bar()`. The formatter round-trips explicit nested forms correctly, including the inline script variant. The runtime evaluates nested managed argument tokens (workflows, scripts, rules, and inline scripts) before passing the result to the outer call. Implementation: validator (`src/transpile/validate.ts` — `validateNestedManagedCallArgs` extended for inline script detection), runtime (`src/runtime/kernel/node-workflow-runtime.ts` — `managed_inline_script` token kind, `parseInlineScriptAt`, `resolveArgsRawSync` fast path), formatter (`src/format/emit.ts` — `parseInlineScriptArg`, inline script formatting in `formatArgs`). Regression tests added for all valid and invalid forms. Docs updated (`docs/language.md`, `docs/grammar.md`, `docs/jaiph-skill.md`).
+
 # 0.9.2
 
 ## Summary

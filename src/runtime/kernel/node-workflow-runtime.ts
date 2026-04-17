@@ -162,7 +162,37 @@ function parseArgsRaw(raw: string, vars: Map<string, string>, env?: NodeJS.Proce
 
 type ParsedArgToken =
   | { kind: "literal"; value: string }
-  | { kind: "managed"; managedKind: "run" | "ensure"; ref: string; argsRaw: string };
+  | { kind: "managed"; managedKind: "run" | "ensure"; ref: string; argsRaw: string }
+  | { kind: "managed_inline_script"; body: string; lang?: string; argsRaw: string };
+
+/** Try to parse `\`body\`(args)` from a string at a given position. */
+function parseInlineScriptAt(s: string): { body: string; argsRaw: string; consumed: number } | null {
+  const t = s.trimStart();
+  const skippedWs = s.length - t.length;
+  if (!t.startsWith("`")) return null;
+  const closeIdx = t.indexOf("`", 1);
+  if (closeIdx === -1) return null;
+  const body = t.slice(1, closeIdx);
+  const afterClose = t.slice(closeIdx + 1);
+  if (!afterClose.startsWith("(")) return null;
+  let depth = 1;
+  let i = 1;
+  let inQuote: string | null = null;
+  while (i < afterClose.length && depth > 0) {
+    const ch = afterClose[i];
+    if (inQuote) {
+      if (ch === inQuote && afterClose[i - 1] !== "\\") inQuote = null;
+    } else {
+      if (ch === '"' || ch === "'") inQuote = ch;
+      else if (ch === "(") depth++;
+      else if (ch === ")") depth--;
+    }
+    i++;
+  }
+  if (depth !== 0) return null;
+  const argsContent = afterClose.slice(1, i - 1).trim();
+  return { body, argsRaw: argsContent, consumed: skippedWs + closeIdx + 1 + i };
+}
 
 function parseManagedArgAt(raw: string, start: number): { token: ParsedArgToken; next: number } | null {
   const tail = raw.slice(start);
@@ -175,18 +205,33 @@ function parseManagedArgAt(raw: string, start: number): { token: ParsedArgToken;
   const afterKeyword = raw.slice(start + keyword.length).trimStart();
   const skipped = raw.slice(start + keyword.length).length - afterKeyword.length;
   const call = parseCallRef(afterKeyword);
-  if (!call) return null;
-  if (call.rest.length > 0 && !/^\s/.test(call.rest)) return null;
-  const consumed = afterKeyword.length - call.rest.length;
-  return {
-    token: {
-      kind: "managed",
-      managedKind: keyword,
-      ref: call.ref,
-      argsRaw: call.args ?? "",
-    },
-    next: start + keyword.length + skipped + consumed,
-  };
+  if (call && (call.rest.length === 0 || /^\s/.test(call.rest))) {
+    const consumed = afterKeyword.length - call.rest.length;
+    return {
+      token: {
+        kind: "managed",
+        managedKind: keyword,
+        ref: call.ref,
+        argsRaw: call.args ?? "",
+      },
+      next: start + keyword.length + skipped + consumed,
+    };
+  }
+  // Try inline script form: run `body`(args)
+  if (keyword === "run") {
+    const inlineResult = parseInlineScriptAt(afterKeyword);
+    if (inlineResult) {
+      return {
+        token: {
+          kind: "managed_inline_script",
+          body: inlineResult.body,
+          argsRaw: inlineResult.argsRaw,
+        },
+        next: start + keyword.length + skipped + inlineResult.consumed,
+      };
+    }
+  }
+  return null;
 }
 
 function parseArgTokens(raw: string): ParsedArgToken[] {
@@ -1297,6 +1342,16 @@ export class NodeWorkflowRuntime {
     return `${filePath}::${name}`;
   }
 
+  /** Synchronous fast-path: resolve args when every token is a plain literal. */
+  private resolveArgsRawSync(scope: Scope, raw: string | string[]): string[] | null {
+    if (Array.isArray(raw)) return raw;
+    const tokens = parseArgTokens(raw);
+    for (const token of tokens) {
+      if (token.kind !== "literal") return null;
+    }
+    return tokens.map((t) => interpolate((t as { kind: "literal"; value: string }).value, scope.vars, scope.env));
+  }
+
   private async resolveArgsRaw(scope: Scope, raw: string | string[]): Promise<string[] | StepResult> {
     if (Array.isArray(raw)) {
       return raw;
@@ -1306,6 +1361,12 @@ export class NodeWorkflowRuntime {
     for (const token of tokens) {
       if (token.kind === "literal") {
         resolved.push(interpolate(token.value, scope.vars, scope.env));
+        continue;
+      }
+      if (token.kind === "managed_inline_script") {
+        const result = await this.executeInlineScript(scope, token.body, undefined, token.argsRaw);
+        if (result.status !== 0) return result;
+        resolved.push(result.returnValue ?? result.output.trim());
         continue;
       }
       const result = token.managedKind === "run"
@@ -1320,7 +1381,7 @@ export class NodeWorkflowRuntime {
   }
 
   private async executeRunRef(scope: Scope, ref: string, argsRaw: string | string[]): Promise<StepResult> {
-    const resolvedArgs = await this.resolveArgsRaw(scope, argsRaw);
+    const resolvedArgs = this.resolveArgsRawSync(scope, argsRaw) ?? await this.resolveArgsRaw(scope, argsRaw);
     if (!Array.isArray(resolvedArgs)) return resolvedArgs;
     const args = resolvedArgs;
     const resolvedWorkflow = resolveWorkflowRef(this.graph, scope.filePath, { value: ref, loc: { line: 1, col: 1 } });

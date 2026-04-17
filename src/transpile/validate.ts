@@ -302,6 +302,23 @@ function validateNestedManagedCallArgs(
       `nested managed calls in argument position must be explicit; use "run ${match[1]}(...)" or "ensure ${match[1]}(...)" inside the argument list`,
     );
   }
+  // Detect bare inline script calls: `body`() without preceding run/ensure
+  const btRe = /`[^`]*`\s*\(/g;
+  let btMatch: RegExpExecArray | null;
+  while ((btMatch = btRe.exec(stripped)) !== null) {
+    const before = stripped.slice(0, btMatch.index).trimEnd();
+    const lastToken = before.length === 0 ? "" : before.slice(before.lastIndexOf(" ") + 1);
+    if (lastToken === "run" || lastToken === "ensure") {
+      continue;
+    }
+    throw jaiphError(
+      filePath,
+      loc.line,
+      loc.col,
+      "E_VALIDATE",
+      `nested inline script calls in argument position must be explicit; use "run \`...\`(...)" inside the argument list`,
+    );
+  }
 }
 
 /** Resolve a route target workflow ref to its declared parameter count. Returns undefined if unresolvable. */

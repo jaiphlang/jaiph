@@ -248,6 +248,36 @@ run process(task, "extra context")   # mixed bare + quoted
 run process("${task}")              # equivalent to bare form
 ```
 
+### Nested Managed Calls in Arguments
+
+Call arguments can contain nested managed calls — but the `run` or `ensure` keyword must be explicit. This is a deliberate language rule: scripts and workflows execute only via `run`, and rules execute only via `ensure`, even when nested inside another call's arguments.
+
+**Valid — explicit nested calls:**
+
+```jaiph
+run mkdir_p_simple(run jaiph_tmp_dir())
+run do_work(ensure check_ok())
+run do_work(run `echo aaa`())
+```
+
+The nested call executes first and its result is passed as a single argument to the outer call.
+
+**Invalid — bare call-like forms:**
+
+```jaiph
+# run do_work(bar())          — E_VALIDATE: use "run bar()" or "ensure bar()"
+# run do_work(rule_bar())     — E_VALIDATE: use "ensure rule_bar()"
+# run do_work(`echo aaa`())   — E_VALIDATE: use "run `...`()"
+# const x = bar()             — E_PARSE: use "const x = run bar()"
+```
+
+The explicit capture-then-pass form is also valid:
+
+```jaiph
+const x = run bar()
+run foo(x)
+```
+
 ### Arity Checking
 
 When the callee declares named parameters, the compiler validates argument count:
