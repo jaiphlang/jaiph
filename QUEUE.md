@@ -12,6 +12,96 @@ Process rules:
 
 ***
 
+## Docker — strict image contract + publish official `jaiph-runtime` images to GHCR
+
+**Goal**
+Remove all Docker runtime bootstrapping/fallback magic. In Docker mode, **every selected image must already contain a working `jaiph` CLI**. Jaiph must **not** build a thin derived image at runtime, must **not** mount host `dist/` into the container, and must **not** auto-install itself into arbitrary base images. The product contract becomes explicit: if Docker is on, the image is responsible for containing Jaiph.
+
+At the same time, publish an official Jaiph runtime image to **GHCR** and make it the default Docker image:
+
+* tagged releases → `ghcr.io/jaiphlang/jaiph-runtime:<version>`
+* nightly builds → `ghcr.io/jaiphlang/jaiph-runtime:nightly`
+* default runtime image in Jaiph config/runtime should point at that official image
+
+This is a deliberate contract change. Convenience fallback to `node:20-bookworm` + runtime bootstrap is **not** desired.
+
+**Required product decision**
+
+1. **Strict requirement** — all Docker images used by Jaiph must already have `jaiph`.
+2. **Official default image** — Jaiph publishes and uses `ghcr.io/jaiphlang/jaiph-runtime`.
+3. **No hidden runtime mutation** — no auto-derived image build, no host `dist/` mount hack, no `npm install -g` during Docker run startup.
+4. **Fast fail** — if the chosen image lacks `jaiph`, Jaiph must fail clearly with an explicit Docker/runtime error.
+
+**Why this task exists**
+
+The current codebase has tension between two incompatible models:
+
+* generic Docker contract: run `jaiph run --raw` inside the container
+* convenience contract: allow stock images that do not contain `jaiph`
+
+Both cannot be true without runtime bootstrapping. This task intentionally chooses the first model and removes the second.
+
+**Context**
+
+* Docker runtime implementation: `src/runtime/docker.ts`
+* Docker run path / spawn site: `src/cli/commands/run.ts`
+* Docker docs: `docs/sandboxing.md`, `docs/configuration.md`, `docs/cli.md`
+* Current Docker E2E coverage: `e2e/tests/72_docker_run_artifacts.sh`, `e2e/tests/73_docker_dockerfile_detection.sh`, `e2e/tests/74_docker_lifecycle.sh`
+* Managed project Dockerfile template: `.jaiph/Dockerfile`, plus `jaiph init` scaffolding in `src/cli/commands/init.ts`
+* CI/release workflows: `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `.github/workflows/nightly-engineer.yml`
+
+**Implementation requirements**
+
+1. **Runtime**
+   * Remove Docker fallback logic that auto-builds a derived image or auto-installs Jaiph into arbitrary base images.
+   * Keep the container entry generic: `jaiph run --raw ...`
+   * Add an explicit preflight/validation step for Docker images:
+     * either the selected image is the official `ghcr.io/jaiphlang/jaiph-runtime:*`,
+     * or a custom image that already contains `jaiph`.
+   * If `jaiph` is missing in the chosen image, fail with a clear error message that tells the user to:
+     * use the official GHCR image, or
+     * install Jaiph in their custom image.
+
+2. **Default image**
+   * Change the default Docker image away from `node:20-bookworm`.
+   * Default must become the official GHCR runtime image.
+   * Decide whether the default tag should be version-pinned at release time and `nightly` on main/nightly builds; document the exact rule.
+
+3. **Publishing**
+   * Add CI/release automation to build and publish `ghcr.io/jaiphlang/jaiph-runtime`.
+   * Publish at least:
+     * per-tag release images
+     * `nightly`
+   * Ensure the published image contains:
+     * `jaiph`
+     * Node.js
+     * `fuse-overlayfs` / Docker runtime prerequisites
+     * non-root runtime user if that remains part of the sandbox contract
+   * Decide whether Cursor / Claude CLIs belong in the official runtime image by default; document the decision explicitly.
+
+4. **Docs**
+   * Rewrite Docker docs to state the strict image contract clearly.
+   * Document the official GHCR image as the default and recommended path.
+   * Document how custom images must install `jaiph`.
+   * Remove any wording that implies Jaiph will make arbitrary base images work automatically.
+
+5. **Tests**
+   * Update E2E/tests so they assert the strict contract, not the bootstrap fallback.
+   * In particular, tests that currently expect `node:20-bookworm` to work without Jaiph must be rewritten.
+   * Add/keep a regression test that proves Docker fails clearly when the selected image lacks `jaiph`.
+
+**Acceptance criteria**
+
+* Default Docker image is `ghcr.io/jaiphlang/jaiph-runtime:*`, not `node:20-bookworm`.
+* Jaiph never auto-builds a derived runtime image at Docker run time.
+* Jaiph never mounts host build output into the container to provide `jaiph`.
+* A custom image without `jaiph` fails fast with a clear actionable error.
+* Official GHCR runtime images are published for release tags and `nightly`.
+* Docs describe the strict contract and official image flow without ambiguity.
+* Unit + E2E coverage prevents regression back to runtime bootstrap behavior.
+
+***
+
 ## Support optional config properties in Jaiph DSL: version, name, description.
 
 ## Runtime — credential proxy for Docker mode
