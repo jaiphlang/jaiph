@@ -12,53 +12,6 @@ Process rules:
 
 ***
 
-## Support optional config properties in Jaiph DSL: version, name, description. #dev-ready
-
-**Goal**
-
-Add optional module-scoped manifest fields in the module-level `config { }` block so a `.jh` file can declare human-readable **name**, **version**, and **description** without changing agent/run/runtime execution.
-
-**Keys (dot-separated, string values)**
-
-* `module.name`
-* `module.version`
-* `module.description`
-
-All optional; omitted keys leave the corresponding field unset.
-
-**Semantics**
-
-* Values use the same double-quoted string rules as other config strings (existing escapes). No semver validation in v1 unless a later task adds it.
-* **Module-level only:** `module.*` keys must not appear in workflow-level `config { }` blocks. After parsing, reject workflow-level config that sets any `module.*` key, using the same pattern as the existing `runtime.*` workflow guard in `src/parse/workflows.ts`.
-* Stored on `WorkflowMetadata` as descriptive metadata only. They do **not** map into `JaiphConfig`, environment resolution, or the Node workflow runtime unless a future task wires them (e.g. MCP tool metadata).
-
-**Implementation touchpoints**
-
-* `src/parse/metadata.ts` — `ALLOWED_KEYS`, `KEY_TYPES`, `assignConfigKey`.
-* `src/types.ts` — optional `module?: { name?: string; version?: string; description?: string }` on `WorkflowMetadata`.
-* `src/format/emit.ts` — formatter round-trip for the new keys.
-* `src/parse/workflows.ts` — workflow-level rejection for `module.*` (mirror `metadata.runtime`).
-* Tests: `src/parse/parse-metadata.test.ts`; update parse-error golden/txtar cases if the unknown-key allowed-list appears in expectations.
-* Docs: `docs/configuration.md`, `docs/grammar.md` (`config_key`).
-
-**Non-goals**
-
-* Environment variables, CLI output, or runtime behavior changes beyond parsing/formatting/validation.
-
-**Queue coordination**
-
-* No conflict with the queued `jaiph serve` MCP task; future work may read `module.description` for tool listings.
-
-**Acceptance criteria**
-
-* Module-level `config` accepts `module.name`, `module.version`, and `module.description`; values round-trip through `jaiph format`.
-* Workflow-level `config` containing any `module.*` assignment fails with an explicit error (consistent with `runtime.*` workflow rules).
-* Unit tests cover happy path and workflow rejection; docs and grammar list the keys.
-
-**Scope note**
-
-* Expect more than three files (parser, types, formatter, workflows guard, tests, docs); keep the existing plain `assignConfigKey` style — no new abstraction layers.
-
 ## Runtime — harden Docker execution environment #dev-ready
 
 **Goal**

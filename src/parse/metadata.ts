@@ -17,6 +17,9 @@ const ALLOWED_KEYS = new Set([
   "runtime.docker_network",
   "runtime.docker_timeout",
   "runtime.workspace",
+  "module.name",
+  "module.version",
+  "module.description",
 ]);
 
 /** Expected value type for each key that needs type validation. */
@@ -35,6 +38,9 @@ const KEY_TYPES: Record<string, "string" | "boolean" | "number" | "string[]"> = 
   "runtime.docker_network": "string",
   "runtime.docker_timeout": "number",
   "runtime.workspace": "string[]",
+  "module.name": "string",
+  "module.version": "string",
+  "module.description": "string",
 };
 
 function parseMetadataValue(filePath: string, rawLine: string, valuePart: string, lineNo: number): string | boolean | number | string[] {
@@ -222,6 +228,21 @@ function assignConfigKey(
       out.runtime = {};
     }
     out.runtime.workspace = value as string[];
+  } else if (key === "module.name") {
+    if (!out.module) {
+      out.module = {};
+    }
+    out.module.name = value as string;
+  } else if (key === "module.version") {
+    if (!out.module) {
+      out.module = {};
+    }
+    out.module.version = value as string;
+  } else if (key === "module.description") {
+    if (!out.module) {
+      out.module = {};
+    }
+    out.module.description = value as string;
   }
 }
 

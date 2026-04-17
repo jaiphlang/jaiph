@@ -200,6 +200,74 @@ test("parseConfigBlock: fails on type mismatch (number where string expected)", 
 });
 
 // ---------------------------------------------------------------------------
+// Module manifest keys (module.name, module.version, module.description)
+// ---------------------------------------------------------------------------
+
+test("parseConfigBlock: parses module.name, module.version, module.description", () => {
+  const lines = [
+    "config {",
+    '  module.name = "my-workflow"',
+    '  module.version = "1.2.3"',
+    '  module.description = "A helpful workflow"',
+    "}",
+  ];
+  const { metadata } = parseConfigBlock("test.jh", lines, 0);
+  assert.equal(metadata.module?.name, "my-workflow");
+  assert.equal(metadata.module?.version, "1.2.3");
+  assert.equal(metadata.module?.description, "A helpful workflow");
+});
+
+test("parseConfigBlock: module keys are optional (partial set)", () => {
+  const lines = [
+    "config {",
+    '  module.name = "only-name"',
+    "}",
+  ];
+  const { metadata } = parseConfigBlock("test.jh", lines, 0);
+  assert.equal(metadata.module?.name, "only-name");
+  assert.equal(metadata.module?.version, undefined);
+  assert.equal(metadata.module?.description, undefined);
+});
+
+test("parseConfigBlock: module keys coexist with other config keys", () => {
+  const lines = [
+    "config {",
+    '  module.name = "proj"',
+    '  agent.backend = "claude"',
+    "}",
+  ];
+  const { metadata } = parseConfigBlock("test.jh", lines, 0);
+  assert.equal(metadata.module?.name, "proj");
+  assert.equal(metadata.agent?.backend, "claude");
+});
+
+test("module keys round-trip through formatter", () => {
+  const src = [
+    'config {',
+    '  module.name = "my-tool"',
+    '  module.version = "0.1.0"',
+    '  module.description = "Does things"',
+    '}',
+    '',
+    'workflow default() {',
+    '  log "ok"',
+    '}',
+  ].join("\n");
+  const mod = parsejaiph(src, "test.jh");
+  assert.equal(mod.metadata?.module?.name, "my-tool");
+  assert.equal(mod.metadata?.module?.version, "0.1.0");
+  assert.equal(mod.metadata?.module?.description, "Does things");
+
+  // Verify formatter round-trip produces valid source that re-parses identically
+  const { emitModule } = require("../format/emit");
+  const emitted = emitModule(mod);
+  const reparsed = parsejaiph(emitted, "test.jh");
+  assert.equal(reparsed.metadata?.module?.name, "my-tool");
+  assert.equal(reparsed.metadata?.module?.version, "0.1.0");
+  assert.equal(reparsed.metadata?.module?.description, "Does things");
+});
+
+// ---------------------------------------------------------------------------
 // Workflow-level config
 // ---------------------------------------------------------------------------
 
@@ -261,6 +329,20 @@ test("workflow config: rejects config after steps", () => {
   assert.throws(
     () => parsejaiph(src, "test.jh"),
     /config block inside workflow must appear before any steps/,
+  );
+});
+
+test("workflow config: rejects module.* keys", () => {
+  const src = [
+    "workflow default() {",
+    "  config {",
+    '    module.name = "nope"',
+    "  }",
+    "}",
+  ].join("\n");
+  assert.throws(
+    () => parsejaiph(src, "test.jh"),
+    /module\.\* keys are not allowed in workflow-level config/,
   );
 });
 
