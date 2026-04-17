@@ -98,6 +98,7 @@ for script in "${TEST_SCRIPTS[@]}"; do
 
   e2e::section "Running ${script_name}"
   if JAIPH_E2E_SKIP_INSTALL=1 \
+    JAIPH_UNSAFE="${JAIPH_UNSAFE:-true}" \
     JAIPH_E2E_TMP_DIR="${JAIPH_E2E_TMP_DIR:-}" \
     JAIPH_E2E_BIN_DIR="${JAIPH_E2E_BIN_DIR}" \
     JAIPH_E2E_WORK_DIR="${JAIPH_E2E_WORK_DIR}" \

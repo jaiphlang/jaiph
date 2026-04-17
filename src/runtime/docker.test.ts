@@ -139,9 +139,9 @@ test("parseMounts: throws when no workspace mount", () => {
 // resolveDockerConfig
 // ---------------------------------------------------------------------------
 
-test("resolveDockerConfig: defaults when no in-file and no env", () => {
+test("resolveDockerConfig: defaults when no in-file and no env — Docker on", () => {
   const cfg = resolveDockerConfig(undefined, {});
-  assert.equal(cfg.enabled, false);
+  assert.equal(cfg.enabled, true);
   assert.ok(cfg.image.startsWith(GHCR_IMAGE_REPO + ":"), `default image should be GHCR: ${cfg.image}`);
   assert.equal(cfg.network, "default");
   assert.equal(cfg.timeout, 300);
@@ -181,6 +181,26 @@ test("resolveDockerConfig: CI=true with in-file override enables Docker", () => 
 test("resolveDockerConfig: env JAIPH_DOCKER_ENABLED=true overrides CI default", () => {
   const cfg = resolveDockerConfig(undefined, { CI: "true", JAIPH_DOCKER_ENABLED: "true" });
   assert.equal(cfg.enabled, true);
+});
+
+test("resolveDockerConfig: JAIPH_UNSAFE=true disables Docker by default", () => {
+  const cfg = resolveDockerConfig(undefined, { JAIPH_UNSAFE: "true" });
+  assert.equal(cfg.enabled, false);
+});
+
+test("resolveDockerConfig: JAIPH_UNSAFE=true with in-file override enables Docker", () => {
+  const cfg = resolveDockerConfig({ dockerEnabled: true }, { JAIPH_UNSAFE: "true" });
+  assert.equal(cfg.enabled, true);
+});
+
+test("resolveDockerConfig: JAIPH_UNSAFE=true with env JAIPH_DOCKER_ENABLED=true enables Docker", () => {
+  const cfg = resolveDockerConfig(undefined, { JAIPH_UNSAFE: "true", JAIPH_DOCKER_ENABLED: "true" });
+  assert.equal(cfg.enabled, true);
+});
+
+test("resolveDockerConfig: both CI and JAIPH_UNSAFE unset with explicit JAIPH_DOCKER_ENABLED=false disables", () => {
+  const cfg = resolveDockerConfig(undefined, { JAIPH_DOCKER_ENABLED: "false" });
+  assert.equal(cfg.enabled, false);
 });
 
 test("resolveDockerConfig: network env override", () => {

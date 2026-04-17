@@ -48,17 +48,29 @@ The host workspace is mounted **read-only** to prevent bind-mount deadlocks with
 
 ### Enabling Docker
 
-Docker sandboxing is opt-in. Set `runtime.docker_enabled = true` in a module-level `config` block:
+Docker sandboxing is **on by default** for local development. When neither `CI=true` nor `JAIPH_UNSAFE=true` is set in the environment, `runtime.docker_enabled` defaults to `true`. In CI environments (`CI=true`) or when the user explicitly opts out with `JAIPH_UNSAFE=true`, the default flips to `false`.
+
+To disable Docker for a local run without setting an environment variable, set `runtime.docker_enabled = false` in a module-level `config` block:
 
 ```jh
 config {
-  runtime.docker_enabled = true
+  runtime.docker_enabled = false
 }
 ```
 
 `runtime.*` keys belong only in module-level config. Placing them in a workflow-level `config` block is a parse error.
 
-The environment variable `JAIPH_DOCKER_ENABLED` overrides the in-file setting when set: only the literal string `"true"` enables Docker; any other value disables it. When unset, the in-file value (default `false`) applies.
+The environment variable `JAIPH_DOCKER_ENABLED` overrides both the in-file setting and the CI/unsafe default when set: only the literal string `"true"` enables Docker; any other value disables it. `JAIPH_UNSAFE=true` is the explicit "run on host / skip Docker default" escape hatch for local development when Docker is unwanted.
+
+**Default rule (when no explicit `JAIPH_DOCKER_ENABLED` or in-file `runtime.docker_enabled` is set):**
+
+| Environment | Default |
+|-------------|---------|
+| Plain local (no `CI`, no `JAIPH_UNSAFE`) | Docker **on** |
+| `CI=true` | Docker **off** |
+| `JAIPH_UNSAFE=true` | Docker **off** |
+
+Explicit overrides (`JAIPH_DOCKER_ENABLED` env or in-file `runtime.docker_enabled`) always take precedence over the default rule.
 
 If Docker is enabled but `docker info` fails, the run exits with `E_DOCKER_NOT_FOUND` -- there is no silent fallback to local execution.
 
@@ -68,7 +80,7 @@ All Docker-related keys live under `runtime.*` in module-level config:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `runtime.docker_enabled` | boolean | `false` | Enable Docker sandbox for the run. |
+| `runtime.docker_enabled` | boolean | `true` locally; `false` when `CI=true` or `JAIPH_UNSAFE=true` | Enable Docker sandbox for the run. |
 | `runtime.docker_image` | string | `"ghcr.io/jaiphlang/jaiph-runtime:<version>"` | Container image. Must already contain `jaiph`. Defaults to the official GHCR runtime image matching the installed jaiph version. |
 | `runtime.docker_network` | string | `"default"` | Docker network mode. |
 | `runtime.docker_timeout` | integer | `300` | Max execution time in seconds. `0` disables the timeout. |
@@ -78,9 +90,9 @@ Each key is type-checked at parse time. Unknown keys produce `E_PARSE`.
 
 #### Environment variable overrides
 
-Following the `JAIPH_*` convention: `JAIPH_DOCKER_ENABLED`, `JAIPH_DOCKER_IMAGE`, `JAIPH_DOCKER_NETWORK`, `JAIPH_DOCKER_TIMEOUT`. Workspace mounts are not overridable via environment.
+Following the `JAIPH_*` convention: `JAIPH_DOCKER_ENABLED`, `JAIPH_DOCKER_IMAGE`, `JAIPH_DOCKER_NETWORK`, `JAIPH_DOCKER_TIMEOUT`. Additionally, `CI` and `JAIPH_UNSAFE` affect the default for `runtime.docker_enabled` (see [Enabling Docker](#enabling-docker)). Workspace mounts are not overridable via environment.
 
-Precedence: environment variable > in-file config > default.
+Precedence: `JAIPH_DOCKER_ENABLED` env > in-file config > CI/unsafe default rule.
 
 If `JAIPH_DOCKER_TIMEOUT` is set but not a valid integer, the default (`300`) is used.
 
