@@ -50,7 +50,7 @@ All Docker-related keys live under `runtime.*` in module-level config:
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `runtime.docker_enabled` | boolean | `false` | Enable Docker sandbox for the run. |
-| `runtime.docker_image` | string | `"node:20-bookworm"` | Base container image. If it lacks `jaiph`, Jaiph builds a thin derived image and installs the current package into it. |
+| `runtime.docker_image` | string | `"ghcr.io/jaiphlang/jaiph-runtime:<version>"` | Container image. Must already contain `jaiph`. Defaults to the official GHCR runtime image matching the installed jaiph version. |
 | `runtime.docker_network` | string | `"default"` | Docker network mode. |
 | `runtime.docker_timeout` | integer | `300` | Max execution time in seconds. `0` disables the timeout. |
 | `runtime.workspace` | string array | `[".:/jaiph/workspace:rw"]` | Mount specifications (see below). |
@@ -92,7 +92,7 @@ Host paths are resolved relative to the workspace root. Each mount is duplicated
   overlay-run.sh      # runtime-generated entrypoint mounted ro from host temp file
 ```
 
-The working directory is `/jaiph/workspace`. The host CLI generates `overlay-run.sh` (a ~10 line bash script) to a temp file and mounts it read-only at `/jaiph/overlay-run.sh`. The container runs `/jaiph/overlay-run.sh jaiph run --raw <file>`. The overlay wrapper sets up fuse-overlayfs, then execs the jaiph command. When the selected image does not already contain `jaiph`, the host first builds a thin derived image from that base and installs the current Jaiph package into it, so the runtime path stays generic. No `COPY` in the project Dockerfile is needed -- `overlay-run.sh` is a jaiph runtime artifact.
+The working directory is `/jaiph/workspace`. The host CLI generates `overlay-run.sh` (a ~10 line bash script) to a temp file and mounts it read-only at `/jaiph/overlay-run.sh`. The container runs `/jaiph/overlay-run.sh jaiph run --raw <file>`. The overlay wrapper sets up fuse-overlayfs, then execs the jaiph command. The image must already contain `jaiph` — Jaiph does not install itself into the container at runtime. No `COPY` in the project Dockerfile is needed for jaiph runtime files — `overlay-run.sh` is a jaiph runtime artifact.
 
 ### Runtime behavior
 
@@ -112,6 +112,22 @@ The working directory is `/jaiph/workspace`. The host CLI generates `overlay-run
 
 **Image pull** -- If the image is not present locally, `docker pull` runs automatically. Pull failure produces `E_DOCKER_PULL`.
 
+### Image contract
+
+**Every Docker image used by Jaiph must already contain a working `jaiph` CLI.** Jaiph does not auto-install itself into containers at runtime — no derived image builds, no `npm pack` bootstrap. If the selected image lacks `jaiph`, the run fails immediately with `E_DOCKER_NO_JAIPH` and guidance to use the official image or install jaiph in a custom image.
+
+### Official runtime image
+
+Jaiph publishes official runtime images to GHCR:
+
+| Tag | Built from | Use case |
+|-----|-----------|----------|
+| `ghcr.io/jaiphlang/jaiph-runtime:<semver>` | Release tags (`v*`) | Production / pinned versions |
+| `ghcr.io/jaiphlang/jaiph-runtime:nightly` | `nightly` branch | Contributors and CI |
+| `ghcr.io/jaiphlang/jaiph-runtime:latest` | Latest release tag | Convenience alias |
+
+The default `runtime.docker_image` is `ghcr.io/jaiphlang/jaiph-runtime:<version>` where `<version>` matches the installed jaiph package version. The official image includes Node.js, jaiph, `fuse-overlayfs`, and a non-root `jaiph` user (UID 10001). It does **not** include agent CLIs (Claude Code, cursor-agent) to keep the image small. To add agent CLIs, extend the official image or use a custom `.jaiph/Dockerfile` (see below).
+
 ### Dockerfile-based image detection
 
 The runtime considers the image explicitly configured when either `runtime.docker_image` appears in the file or `JAIPH_DOCKER_IMAGE` is set in the environment. In that case, `.jaiph/Dockerfile` is not consulted.
@@ -119,11 +135,25 @@ The runtime considers the image explicitly configured when either `runtime.docke
 When the image is not explicit:
 
 1. If `.jaiph/Dockerfile` exists in the workspace root, the runtime builds it, tags the result `jaiph-runtime:latest`, and uses that image. Build failure produces `E_DOCKER_BUILD`.
-2. Otherwise, the default image (`node:20-bookworm`) is pulled if needed.
+2. Otherwise, the default image (`ghcr.io/jaiphlang/jaiph-runtime:<version>`) is pulled if needed.
 
-If the selected base image does not already contain `jaiph`, Jaiph builds a thin derived runtime image from it and installs the current local package with `npm install -g`, then runs the workflow in that derived image.
+After resolving the image (whether from a Dockerfile build, an explicit image, or the default), Jaiph verifies that `jaiph` is available inside the container. If the check fails, the run exits with `E_DOCKER_NO_JAIPH`.
 
-The repository's example `.jaiph/Dockerfile` includes `ubuntu:latest` as a base, Node.js LTS from NodeSource, `fuse-overlayfs`, Claude Code CLI, cursor-agent, and jaiph (installed via the official installer). The image creates a non-root `jaiph` user (UID 10001) and sets `USER jaiph`. Including `fuse-overlayfs` and `jaiph` in the image is still the best path for full sandbox parity and faster startup, but Jaiph can also auto-build a thin derived runtime image when the base image lacks `jaiph`. The Dockerfile does not need to copy any jaiph runtime files -- `overlay-run.sh` is generated by the host CLI and mounted into the container at runtime.
+The `jaiph init` scaffold generates a `.jaiph/Dockerfile` that extends the official runtime image with agent CLIs (Claude Code, cursor-agent). The Dockerfile does not need to copy any jaiph runtime files — `overlay-run.sh` is generated by the host CLI and mounted into the container at runtime.
+
+### Extending the official image
+
+To add project-specific tools or agent CLIs to the official image, create a `.jaiph/Dockerfile`:
+
+```dockerfile
+FROM ghcr.io/jaiphlang/jaiph-runtime:nightly
+
+USER root
+RUN npm install -g @anthropic-ai/claude-code
+USER jaiph
+
+# Add project-specific package managers/build tools below.
+```
 
 ### Environment variable forwarding
 

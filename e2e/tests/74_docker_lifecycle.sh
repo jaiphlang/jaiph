@@ -16,6 +16,13 @@ if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
   exit 0
 fi
 
+# Build a local test image with jaiph installed from current source.
+if ! e2e::ensure_docker_test_image; then
+  e2e::section "docker lifecycle (skipped — test image build failed)"
+  e2e::skip "Could not build local Docker test image"
+  exit 0
+fi
+
 # ---------------------------------------------------------------------------
 # Early container exit / failed startup path
 # ---------------------------------------------------------------------------
@@ -39,7 +46,7 @@ EOF
 
 # When: run with Docker enabled — the container should fail and jaiph should
 # exit promptly (within 30 seconds), not hang in RUNNING.
-if timeout 30 bash -c "JAIPH_DOCKER_ENABLED=true jaiph run '${TEST_DIR}/early_exit.jh' >/dev/null 2>&1"; then
+if timeout 30 bash -c "JAIPH_DOCKER_ENABLED=true JAIPH_DOCKER_IMAGE='${E2E_DOCKER_TEST_IMAGE}' jaiph run '${TEST_DIR}/early_exit.jh' >/dev/null 2>&1"; then
   e2e::fail "docker: early_exit.jh should have failed but exited 0"
 fi
 exit_code=$?
@@ -77,7 +84,7 @@ workflow default() {
 EOF
 
 # When: run with Docker enabled
-if ! timeout 60 bash -c "JAIPH_DOCKER_ENABLED=true jaiph run '${TEST_DIR}/stream_check.jh' >/dev/null 2>&1"; then
+if ! timeout 60 bash -c "JAIPH_DOCKER_ENABLED=true JAIPH_DOCKER_IMAGE='${E2E_DOCKER_TEST_IMAGE}' jaiph run '${TEST_DIR}/stream_check.jh' >/dev/null 2>&1"; then
   e2e::fail "docker: stream_check.jh failed"
 fi
 

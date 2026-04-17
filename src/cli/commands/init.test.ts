@@ -50,17 +50,16 @@ test("init: generated bootstrap uses triple-quoted prompt and parses", () => {
   }
 });
 
-test("init: creates .jaiph/Dockerfile with jaiph installer", () => {
+test("init: creates .jaiph/Dockerfile extending official GHCR image", () => {
   const dir = makeTempDir();
   try {
     assert.equal(runInit([dir]), 0);
     const dockerfilePath = join(dir, ".jaiph", "Dockerfile");
     assert.equal(existsSync(dockerfilePath), true);
     const dockerfile = readFileSync(dockerfilePath, "utf8");
-    assert.equal(dockerfile.includes("FROM ubuntu:latest"), true);
-    assert.equal(dockerfile.includes("ca-certificates"), true);
-    assert.equal(dockerfile.includes("setup_lts.x"), true);
-    assert.equal(dockerfile.includes(JAIPH_INSTALL_COMMAND), true);
+    assert.equal(dockerfile.includes("ghcr.io/jaiphlang/jaiph-runtime"), true);
+    assert.equal(dockerfile.includes("cursor"), true);
+    assert.equal(dockerfile.includes("claude-code"), true);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

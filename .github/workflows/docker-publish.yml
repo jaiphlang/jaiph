@@ -1,0 +1,72 @@
+name: Publish Docker runtime image
+
+on:
+  push:
+    branches: [nightly]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: jaiphlang/jaiph-runtime
+
+jobs:
+  publish:
+    name: Build and push jaiph-runtime
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies and build
+        run: |
+          npm ci
+          npm run build
+
+      - name: Create npm tarball
+        run: npm pack --pack-destination docker/
+
+      - name: Rename tarball for Dockerfile
+        run: |
+          cd docker
+          mv jaiph-*.tgz jaiph.tgz
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine image tags
+        id: tags
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            echo "tags=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> "$GITHUB_OUTPUT"
+          else
+            echo "tags=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:nightly" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: docker
+          file: docker/Dockerfile.runtime
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: JAIPH_TARBALL=jaiph.tgz
+
+      - name: Verify pushed image contains jaiph
+        run: |
+          TAG="$(echo '${{ steps.tags.outputs.tags }}' | cut -d',' -f1)"
+          docker run --rm --entrypoint sh "${TAG}" -lc "command -v jaiph && jaiph --version"

@@ -16,6 +16,13 @@ if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
   exit 0
 fi
 
+# Build a local test image with jaiph installed from current source.
+if ! e2e::ensure_docker_test_image; then
+  e2e::section "docker run artifacts (skipped — test image build failed)"
+  e2e::skip "Could not build local Docker test image"
+  exit 0
+fi
+
 e2e::section "docker run artifacts — happy path"
 
 # Given: a simple workflow that produces stdout artifacts
@@ -32,9 +39,9 @@ workflow default() {
 }
 EOF
 
-# When: run with Docker enabled (override the e2e default of JAIPH_DOCKER_ENABLED=false)
-if ! JAIPH_DOCKER_ENABLED=true jaiph run "${TEST_DIR}/docker_artifacts.jh" >/dev/null 2>&1; then
-  JAIPH_DOCKER_ENABLED=true jaiph run "${TEST_DIR}/docker_artifacts.jh"
+# When: run with Docker enabled using the E2E test image
+if ! JAIPH_DOCKER_ENABLED=true JAIPH_DOCKER_IMAGE="${E2E_DOCKER_TEST_IMAGE}" jaiph run "${TEST_DIR}/docker_artifacts.jh" >/dev/null 2>&1; then
+  JAIPH_DOCKER_ENABLED=true JAIPH_DOCKER_IMAGE="${E2E_DOCKER_TEST_IMAGE}" jaiph run "${TEST_DIR}/docker_artifacts.jh"
   e2e::fail "docker: jaiph run docker_artifacts.jh failed"
 fi
 
@@ -77,7 +84,7 @@ EOF
 rm -rf "${TEST_DIR}/custom_runs"
 
 # When: run with Docker and relative JAIPH_RUNS_DIR
-(cd "${TEST_DIR}" && JAIPH_DOCKER_ENABLED=true JAIPH_RUNS_DIR="custom_runs" jaiph run "${TEST_DIR}/docker_rel_runs.jh" >/dev/null 2>&1)
+(cd "${TEST_DIR}" && JAIPH_DOCKER_ENABLED=true JAIPH_DOCKER_IMAGE="${E2E_DOCKER_TEST_IMAGE}" JAIPH_RUNS_DIR="custom_runs" jaiph run "${TEST_DIR}/docker_rel_runs.jh" >/dev/null 2>&1)
 
 # Then: artifacts should be under the relative dir on host
 rel_run_dir="$(e2e::run_dir_at "${TEST_DIR}/custom_runs" "docker_rel_runs.jh")"
@@ -105,7 +112,7 @@ abs_runs_dir="${TEST_DIR}/abs_runs"
 rm -rf "${abs_runs_dir}"
 
 # When: run with absolute JAIPH_RUNS_DIR inside workspace
-JAIPH_DOCKER_ENABLED=true JAIPH_RUNS_DIR="${abs_runs_dir}" jaiph run "${TEST_DIR}/docker_abs_runs.jh" >/dev/null 2>&1
+JAIPH_DOCKER_ENABLED=true JAIPH_DOCKER_IMAGE="${E2E_DOCKER_TEST_IMAGE}" JAIPH_RUNS_DIR="${abs_runs_dir}" jaiph run "${TEST_DIR}/docker_abs_runs.jh" >/dev/null 2>&1
 
 # Then: artifacts should be under the absolute path on host
 abs_run_dir="$(e2e::run_dir_at "${abs_runs_dir}" "docker_abs_runs.jh")"
@@ -131,9 +138,29 @@ EOF
 
 # When/Then: absolute path outside workspace should fail
 outside_dir="/tmp/jaiph-outside-workspace-test-$$"
-if JAIPH_DOCKER_ENABLED=true JAIPH_RUNS_DIR="${outside_dir}" jaiph run "${TEST_DIR}/docker_outside.jh" >/dev/null 2>&1; then
+if JAIPH_DOCKER_ENABLED=true JAIPH_DOCKER_IMAGE="${E2E_DOCKER_TEST_IMAGE}" JAIPH_RUNS_DIR="${outside_dir}" jaiph run "${TEST_DIR}/docker_outside.jh" >/dev/null 2>&1; then
   rm -rf "${outside_dir}"
   e2e::fail "docker: absolute JAIPH_RUNS_DIR outside workspace should fail"
 fi
 rm -rf "${outside_dir}"
 e2e::pass "docker: absolute JAIPH_RUNS_DIR outside workspace exits non-zero"
+
+e2e::section "docker run artifacts — image without jaiph fails fast"
+
+# Given: a workflow and a stock image that does NOT contain jaiph
+e2e::file "docker_no_jaiph.jh" <<'EOF'
+script greet_impl = ```
+echo "should not run"
+```
+workflow default() {
+  run greet_impl()
+}
+EOF
+
+# When/Then: using an image without jaiph should fail with E_DOCKER_NO_JAIPH
+error_output=""
+if error_output="$(JAIPH_DOCKER_ENABLED=true JAIPH_DOCKER_IMAGE=node:20-bookworm-slim jaiph run "${TEST_DIR}/docker_no_jaiph.jh" 2>&1)"; then
+  e2e::fail "docker: image without jaiph should fail"
+fi
+# assert_contains: error message varies by image name and guidance text
+e2e::assert_contains "${error_output}" "E_DOCKER_NO_JAIPH" "docker: missing jaiph produces E_DOCKER_NO_JAIPH error"
