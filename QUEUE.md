@@ -12,46 +12,45 @@ Process rules:
 
 ***
 
-## Docker sandbox: Figure out a way to pass code changes from engineer.jh in docker mode to local env (git patch saved to .jaiph/runs?)
-
-## Runtime — credential proxy for Docker mode
+## Runtime — credential proxy for Docker mode #dev-ready
 
 **Goal**
 Containers should never hold real API keys. Implement a host-side HTTP proxy (the Phantom Token pattern) that intercepts outbound API requests from containers, strips a placeholder credential, and injects the real key from the host process environment before forwarding upstream. The workload in the container never receives the real secret.
 
 **Design**
 
-1. **Host-side proxy** — A lightweight Node HTTP server bound to an address **reachable from the container network** (typically **`0.0.0.0:<ephemeral-port>`** on the host; binding only `127.0.0.1` is often wrong for container-to-host access). For each request: replace placeholder auth with the real `ANTHROPIC_API_KEY` from the host, forward to the real Anthropic API base URL from host configuration, stream the response back (including SSE).
-2. **Container env injection** — In `src/runtime/docker.ts` (`buildDockerArgs` / env passed into `-e`): pass `ANTHROPIC_API_KEY=<placeholder>` and `ANTHROPIC_BASE_URL=http://host.docker.internal:<port>` (or `http://<host-gateway>:<port>`). Never pass the real key in `-e`.
+1. **Host-side proxy** — A lightweight Node HTTP server bound to an address **reachable from the container network** (typically **`0.0.0.0:<ephemeral-port>`** on the host; binding only `127.0.0.1` is often wrong for container-to-host access). For each request: replace placeholder auth with the real `ANTHROPIC_API_KEY` from the host, forward to the real Anthropic API base URL from host configuration (`ANTHROPIC_BASE_URL` when set, otherwise the Anthropic default), stream the response back (including SSE).
+2. **Container env injection** — In `src/runtime/docker.ts` (`buildDockerArgs` / env passed into `-e`): pass `ANTHROPIC_API_KEY=<placeholder>` and `ANTHROPIC_BASE_URL=http://host.docker.internal:<port>` (or `http://<host-gateway>:<port>`). Never pass the real key in `-e`. Use one **fixed placeholder string** (for example `__JAIPH_ANTHROPIC_KEY_PLACEHOLDER__`) defined in one place and shared by the proxy and Docker env wiring so tests stay deterministic.
 3. **Linux networking** — When using the hostname `host.docker.internal`, add **`--add-host=host.docker.internal:host-gateway`** to the `docker run` argument list where supported so the name resolves inside the container.
-4. **Backends (v1 scope)** — **Claude / Anthropic only.** The Anthropic SDK and `claude` CLI honor `ANTHROPIC_BASE_URL`. **Cursor (`cursor-agent`)** does not have a documented equivalent to `ANTHROPIC_BASE_URL` in public Cursor CLI docs; **leave Cursor and codex (`OPENAI_*`) out of this task** and open a follow-up if the product needs the same guarantee there.
-5. **Routing** — **Single listen port** and a single Anthropic-compatible upstream in v1. Multi-upstream path routing is deferred.
-6. **Non-goals (v1)** — Rate limits and audit logging.
-7. **Lifecycle** — Start the proxy before the first `spawnDockerProcess` for that Jaiph process; stop it when tearing down the Docker run (and on Jaiph exit), with reference counting if multiple Docker runs can occur in one process.
+4. **Activation** — Start the proxy when Docker mode is active **and** the host has a real `ANTHROPIC_API_KEY` to protect (if unset, no proxy). Non-Docker runs unchanged.
+5. **Backends (v1 scope)** — **Claude / Anthropic only.** The Anthropic SDK and `claude` CLI honor `ANTHROPIC_BASE_URL`. **Cursor (`cursor-agent`)** does not have a documented equivalent to `ANTHROPIC_BASE_URL` in public Cursor CLI docs; **leave Cursor and codex (`OPENAI_*`) out of this task** and open a follow-up if the product needs the same guarantee there.
+6. **Routing** — **Single listen port** and a single Anthropic-compatible upstream in v1. Multi-upstream path routing is deferred.
+7. **Non-goals (v1)** — Rate limits and audit logging.
+8. **Lifecycle** — Start the proxy immediately before `spawnDockerProcess` when activation applies; stop it in `cleanupDocker` (or paired helper) when the Docker run tears down. The only current call site is `src/cli/commands/run.ts` (one Docker run per CLI process); structure so multiple spawns could refcount later if needed.
 
 **Context**
 
 * Pattern reference: [NanoClaw credential proxy](https://jonno.nz/posts/nanoclaw-architecture-masterclass-in-doing-less/).
-* **Implementation touchpoints** — `src/runtime/docker.ts` (primary: `-e` forwarding, optional extra Docker flags), `src/cli/commands/run.ts` (spawn/cleanup lifecycle). Agent CLI args/env preparation: `src/runtime/kernel/prompt.ts` (likely unchanged).
+* **Implementation touchpoints** — New small module for the HTTP proxy; `src/runtime/docker.ts` (primary: `-e` forwarding, optional extra Docker flags); `src/cli/commands/run.ts` if wiring cannot live entirely in `docker.ts`. `src/runtime/kernel/prompt.ts` likely unchanged. Expect `src/runtime/docker.test.ts` updates for new `-e` behavior.
 * Image template: `.jaiph/Dockerfile`.
 
 **Queue coordination**
 
-* This edits the same `docker.ts` / Docker spawn path as the queued **Docker — strict image contract + GHCR** task—land together or immediately after to reduce merge churn.
+* Coordinate merges with other Docker/runtime work in this queue (for example **Docker sandbox: Figure out a way to pass code changes from engineer.jh in docker mode to local env**) to limit churn on `docker.ts` / `run.ts`.
 * Later **Runtime — harden Docker execution environment** may tighten env policy; document proxy-related variables when that work lands.
 
 **Acceptance criteria**
 
-* Host-side proxy starts automatically when Docker mode is active (Anthropic/Claude path).
+* Host-side proxy starts automatically under the activation rule above.
 * Containers receive only a placeholder `ANTHROPIC_API_KEY` — no real Anthropic API key in container environment.
 * `claude` CLI calls from inside Docker succeed via the proxy.
 * Proxy handles streaming responses (SSE) correctly.
 * Real keys do not appear in Jaiph-supplied container `-e` values (so they do not appear in `docker inspect` for those vars or in container `printenv` for them as anything but the placeholder).
-* macOS and Linux: documented/working host reachability (`host.docker.internal` + `host-gateway` on Linux as needed, or an equivalent bridge address).
+* macOS and Linux: documented/working host reachability (`host.docker.internal` + `host-gateway` on Linux as needed, or an equivalent bridge address). Update `docs/sandboxing.md` so the credential-forwarding section matches shipped behavior (replacing the prior “when the credential-proxy feature lands” wording).
 
 **Scope note**
 
-* Target **\~3 files**: one small new module for the proxy plus focused edits in `docker.ts` and `run.ts`. Plain functions, no new abstraction layers.
+* Target **~3 production files**: one small new module for the proxy plus focused edits in `docker.ts` and `run.ts`; tests updated alongside. Plain functions, no new abstraction layers.
 
 ## `jaiph serve` — expose workflows as an MCP server #dev-ready
 
