@@ -18,6 +18,7 @@ import {
   isEnvDenied,
   ENV_DENYLIST_PREFIXES,
   GHCR_IMAGE_REPO,
+  exportWorkspacePatch,
   type MountSpec,
   type DockerRunConfig,
   type DockerSpawnOptions,
@@ -695,4 +696,63 @@ test("buildDockerArgs: includes --cap-drop ALL and --security-opt no-new-privile
   const secOptIdx = args.indexOf("--security-opt");
   assert.ok(secOptIdx >= 0, "--security-opt present");
   assert.equal(args[secOptIdx + 1], "no-new-privileges");
+});
+
+// ---------------------------------------------------------------------------
+// exportWorkspacePatch
+// ---------------------------------------------------------------------------
+
+test("exportWorkspacePatch writes patch when git repo has changes", () => {
+  const dir = mkdtempSync(join(tmpdir(), "jaiph-patch-test-"));
+  const patchOut = join(dir, "workspace.patch");
+  try {
+    const { execSync } = require("node:child_process");
+    execSync("git init", { cwd: dir, stdio: "ignore" });
+    execSync("git config user.email test@test.com", { cwd: dir, stdio: "ignore" });
+    execSync("git config user.name test", { cwd: dir, stdio: "ignore" });
+    // Create initial commit so diff has a baseline
+    writeFileSync(join(dir, "initial.txt"), "initial\n");
+    execSync("git add . && git commit -m init", { cwd: dir, stdio: "ignore" });
+    // Make a change
+    writeFileSync(join(dir, "new-file.txt"), "hello\n");
+
+    const result = exportWorkspacePatch(dir, patchOut);
+    assert.equal(result, true, "should return true when patch is non-empty");
+    assert.ok(existsSync(patchOut), "patch file should exist");
+    const content = readFileSync(patchOut, "utf8");
+    assert.ok(content.includes("new-file.txt"), "patch should reference the new file");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("exportWorkspacePatch returns false and omits file when no changes", () => {
+  const dir = mkdtempSync(join(tmpdir(), "jaiph-patch-test-"));
+  const patchOut = join(dir, "workspace.patch");
+  try {
+    const { execSync } = require("node:child_process");
+    execSync("git init", { cwd: dir, stdio: "ignore" });
+    execSync("git config user.email test@test.com", { cwd: dir, stdio: "ignore" });
+    execSync("git config user.name test", { cwd: dir, stdio: "ignore" });
+    writeFileSync(join(dir, "initial.txt"), "initial\n");
+    execSync("git add . && git commit -m init", { cwd: dir, stdio: "ignore" });
+
+    const result = exportWorkspacePatch(dir, patchOut);
+    assert.equal(result, false, "should return false when no changes");
+    assert.ok(!existsSync(patchOut), "patch file should not exist");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("exportWorkspacePatch returns false for non-git directory", () => {
+  const dir = mkdtempSync(join(tmpdir(), "jaiph-patch-test-"));
+  const patchOut = join(dir, "workspace.patch");
+  try {
+    const result = exportWorkspacePatch(dir, patchOut);
+    assert.equal(result, false, "should return false for non-git dir");
+    assert.ok(!existsSync(patchOut), "patch file should not exist");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
