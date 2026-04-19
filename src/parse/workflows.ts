@@ -15,7 +15,7 @@ import { parseConfigBlock } from "./metadata";
 import { parsePromptStep } from "./prompt";
 import { parseSendRhs } from "./send-rhs";
 import { parseAnonymousInlineScript } from "./inline-script";
-import { parseEnsureStep, parseRunCatchStep } from "./steps";
+import { parseEnsureStep, parseRunCatchStep, parseRunRecoverStep } from "./steps";
 import { parseBraceBlockBody, parseBlockStatement } from "./workflow-brace";
 import { dottedReturnToQuotedString, isBareDottedIdentifierReturn } from "./workflow-return-dotted";
 import { parseMatchExpr } from "./match";
@@ -399,6 +399,13 @@ export function parseWorkflowBlock(
       if (catchResult) {
         workflow.steps.push(catchResult.step);
         idx = catchResult.nextIdx;
+        continue;
+      }
+      // Check for run ... recover (loop semantics)
+      const recoverResult = parseRunRecoverStep(filePath, lines, idx, innerNo, innerRaw, runBody);
+      if (recoverResult) {
+        workflow.steps.push(recoverResult.step);
+        idx = recoverResult.nextIdx;
         continue;
       }
       const call = parseCallRef(runBody);

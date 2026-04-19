@@ -11,7 +11,7 @@ import {
 import { parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 import { parseConstRhs } from "./const-rhs";
 import { parseAnonymousInlineScript } from "./inline-script";
-import { parseEnsureStep, parseRunCatchStep } from "./steps";
+import { parseEnsureStep, parseRunCatchStep, parseRunRecoverStep } from "./steps";
 import { parsePromptStep } from "./prompt";
 import { parseSendRhs } from "./send-rhs";
 import { parseMatchExpr } from "./match";
@@ -258,6 +258,11 @@ export function parseBlockStatement(
     const catchResult = parseRunCatchStep(filePath, lines, idx, innerNo, innerRaw, runBody);
     if (catchResult) {
       return { step: catchResult.step, nextIdx: catchResult.nextIdx + 1 };
+    }
+    // Check for run ... recover (loop semantics)
+    const recoverResult = parseRunRecoverStep(filePath, lines, idx, innerNo, innerRaw, runBody);
+    if (recoverResult) {
+      return { step: recoverResult.step, nextIdx: recoverResult.nextIdx + 1 };
     }
     const call = parseCallRef(runBody);
     if (!call) {

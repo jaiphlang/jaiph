@@ -1153,6 +1153,30 @@ export class NodeWorkflowRuntime {
           pendingAsync.push({ ref: step.workflow.value, promise });
           continue;
         }
+        // recover loop: retry with repair block until success or limit exhaustion
+        if (step.recoverLoop) {
+          const limit = Number(scope.env.JAIPH_RECOVER_LIMIT) || 10;
+          const recoverSteps = "single" in step.recoverLoop ? [step.recoverLoop.single] : step.recoverLoop.block;
+          let lastResult: StepResult | undefined;
+          for (let attempt = 0; attempt < limit; attempt += 1) {
+            const runResult = await this.executeRunRef(scope, step.workflow.value, step.args ?? "");
+            if (runResult.status === 0) {
+              if (step.captureName) {
+                scope.vars.set(step.captureName, runResult.returnValue ?? runResult.output.trim());
+              }
+              lastResult = undefined;
+              break;
+            }
+            lastResult = runResult;
+            const recoverVars = new Map(scope.vars);
+            const recoverPayload = `${runResult.output}${runResult.error}`;
+            recoverVars.set(step.recoverLoop.bindings.failure, recoverPayload);
+            const rr = await this.executeSteps({ ...scope, vars: recoverVars }, recoverSteps);
+            if (rr.status !== 0 || rr.returnValue !== undefined) return this.mergeStepResult(accOut, accErr, rr);
+          }
+          if (lastResult) return this.mergeStepResult(accOut, accErr, lastResult);
+          continue;
+        }
         const runResult = await this.executeRunRef(scope, step.workflow.value, step.args ?? "");
         if (runResult.status === 0) {
           if (step.captureName) {
@@ -1582,6 +1606,9 @@ export class NodeWorkflowRuntime {
       }
       if (parentEnv.JAIPH_INBOX_PARALLEL_LOCKED !== "1" && meta.run?.inboxParallel !== undefined) {
         nextEnv.JAIPH_INBOX_PARALLEL = meta.run.inboxParallel ? "true" : "false";
+      }
+      if (parentEnv.JAIPH_RECOVER_LIMIT_LOCKED !== "1" && meta.run?.recoverLimit !== undefined) {
+        nextEnv.JAIPH_RECOVER_LIMIT = String(meta.run.recoverLimit);
       }
     };
     apply(moduleMeta);

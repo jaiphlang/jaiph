@@ -140,6 +140,10 @@ function collectKnownVars(steps: WorkflowStepDef[], envDecls?: { name: string }[
         const recoverSteps = "single" in s.recover ? [s.recover.single] : s.recover.block;
         walk(recoverSteps);
       }
+      if (s.type === "run" && s.recoverLoop) {
+        const recoverSteps = "single" in s.recoverLoop ? [s.recoverLoop.single] : s.recoverLoop.block;
+        walk(recoverSteps);
+      }
       if (s.type === "if") {
         walk(s.body);
       }
@@ -576,6 +580,12 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           rb.add(s.recover.bindings.failure);
           for (const r of steps) validateRuleStep(r);
         }
+        if (s.recoverLoop) {
+          const steps = "single" in s.recoverLoop ? [s.recoverLoop.single] : s.recoverLoop.block;
+          const rb = new Set<string>();
+          rb.add(s.recoverLoop.bindings.failure);
+          for (const r of steps) validateRuleStep(r);
+        }
         return;
       }
       if (s.type === "fail") {
@@ -897,6 +907,12 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
           const rb = new Set<string>();
           rb.add(s.recover.bindings.failure);
+          for (const r of steps) validateStep(r, rb);
+        }
+        if (s.recoverLoop) {
+          const steps = "single" in s.recoverLoop ? [s.recoverLoop.single] : s.recoverLoop.block;
+          const rb = new Set<string>();
+          rb.add(s.recoverLoop.bindings.failure);
           for (const r of steps) validateStep(r, rb);
         }
         return;

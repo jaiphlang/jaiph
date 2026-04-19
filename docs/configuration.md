@@ -17,7 +17,7 @@ All execution goes through the Node workflow runtime (`NodeWorkflowRuntime`), wh
 
 Jaiph provides three configuration mechanisms. When the same key is set in more than one place, the highest-priority source wins:
 
-1. **Environment variables** — highest priority. `JAIPH_AGENT_*`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, `JAIPH_INBOX_PARALLEL`, `JAIPH_DOCKER_*`, and `JAIPH_UNSAFE`.
+1. **Environment variables** — highest priority. `JAIPH_AGENT_*`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, `JAIPH_INBOX_PARALLEL`, `JAIPH_RECOVER_LIMIT`, `JAIPH_DOCKER_*`, and `JAIPH_UNSAFE`.
 2. **In-file `config { ... }` blocks** — at module scope and optionally inside a `workflow` body.
 3. **Built-in defaults** — lowest priority, used when nothing else sets a value.
 
@@ -136,6 +136,7 @@ These control runtime behavior unrelated to the agent.
 | `run.logs_dir` | string | `.jaiph/runs` | `JAIPH_RUNS_DIR` | Step log directory. Relative paths are joined with the workspace root; absolute paths are used as-is. |
 | `run.debug` | boolean | `false` | `JAIPH_DEBUG` | Enables debug tracing for the run. |
 | `run.inbox_parallel` | boolean | `false` | `JAIPH_INBOX_PARALLEL` | Dispatch inbox route targets concurrently. See [Inbox — Parallel dispatch](inbox.md#parallel-dispatch). |
+| `run.recover_limit` | integer | `10` | `JAIPH_RECOVER_LIMIT` | Maximum number of attempts for `run … recover` retry loops. When exhausted the step fails. See [Grammar — `run … recover`](grammar#run-recover). |
 
 ### Module keys
 
@@ -323,6 +324,7 @@ Quick reference for all in-file keys and their environment variable equivalents:
 | `run.logs_dir` | `JAIPH_RUNS_DIR` |
 | `run.debug` | `JAIPH_DEBUG` |
 | `run.inbox_parallel` | `JAIPH_INBOX_PARALLEL` |
+| `run.recover_limit` | `JAIPH_RECOVER_LIMIT` |
 | `runtime.docker_enabled` | `JAIPH_DOCKER_ENABLED` |
 | `runtime.docker_image` | `JAIPH_DOCKER_IMAGE` |
 | `runtime.docker_network` | `JAIPH_DOCKER_NETWORK` |

@@ -192,7 +192,7 @@ workflow deploy(env, version) {
 }
 ```
 
-Workflows support all step types: `run`, `ensure`, `prompt`, `const`, `log`, `logerr`, `fail`, `return`, `send`, `match`, `if`, `run async`, and `catch`.
+Workflows support all step types: `run`, `ensure`, `prompt`, `const`, `log`, `logerr`, `fail`, `return`, `send`, `match`, `if`, `run async`, `catch`, and `recover`.
 
 ### Rules
 
@@ -354,6 +354,29 @@ workflow deploy(env) {
 ```
 
 Bare `catch` without a binding is a parse error. All call arguments must appear inside parentheses before `catch`.
+
+### `recover` — Repair-and-Retry Loop
+
+Where `catch` runs a recovery block once, `recover` retries the failing target in a loop. On each failure the runtime executes the repair block, then re-runs the target — repeating until success or the retry limit is exhausted.
+
+```jaiph
+workflow default(env) {
+  run deploy(env) recover(err) {
+    log "Deploy failed, repairing"
+    run auto_fix(err)
+  }
+}
+```
+
+The default retry limit is 10. Override it with `run.recover_limit` in a config block or the `JAIPH_RECOVER_LIMIT` environment variable:
+
+```jaiph
+config {
+  run.recover_limit = 3
+}
+```
+
+`recover` bindings follow the same rules as `catch` — exactly one binding, receives merged stdout+stderr from the failed step. `recover` is only supported on `run` (not `ensure`), and is mutually exclusive with `catch` on the same call site.
 
 ### `prompt` — Agent Interaction
 
