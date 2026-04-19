@@ -352,7 +352,7 @@ workflow default() {
 }
 ```
 
-Nested isolation is a compile-time error: if `A` calls `run isolated B()` and `A` is itself called via `run isolated`, the program is rejected. Calls inside an isolated body without the `isolated` modifier run in the same container. See [Sandboxing — Per-call isolation](sandboxing.md#per-call-isolation-with-run-isolated) for details.
+Nested isolation is a compile-time error: if `A` calls `run isolated B()` and `A` is itself called via `run isolated`, the program is rejected. Calls inside an isolated body without the `isolated` modifier run in the same container. To pass data out of an isolated branch, use the `workspace.export_patch` and `workspace.export` primitives from the standard library — they write files to a coordinator-readable location that survives container teardown. See [Libraries — Standard library: workspace](libraries.md#standard-library-workspace) and [Sandboxing — Per-call isolation](sandboxing.md#per-call-isolation-with-run-isolated) for details.
 
 ### `ensure` — Execute a Rule
 

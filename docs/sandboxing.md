@@ -279,6 +279,17 @@ workflow default() {
 4. **No silent fallback.** If the backend is unavailable, `run isolated` is a hard error — it never degrades to a non-isolating copy.
 5. **No on/off switch.** There is no env var or config key to disable isolation.
 
+### Branch outputs
+
+Writes inside an isolated branch are discarded on teardown, but the run artifact directory (`/jaiph/run`) is host-mounted and survives. The `jaiphlang/workspace` standard library provides two primitives for passing data out of a branch:
+
+- `workspace.export_patch(name)` — packages git changes into a patch file at `.jaiph/runs/<run_id>/branches/<branch_id>/<name>` and returns the absolute host path.
+- `workspace.export(local_path, name)` — copies a file from the branch workspace to the same location and returns the absolute host path.
+
+The coordinator reads the returned path after the branch handle resolves. A branch that does not call an export primitive simply returns whatever its function returned — the runtime does not require an export.
+
+See [Libraries — Standard library: workspace](libraries.md#standard-library-workspace) for the full API and a candidate-pattern example.
+
 ### Backend: Docker + fuse-overlayfs
 
 The v1 backend requires Docker with fuse-overlayfs support. The container runs with `--cap-drop ALL --cap-add SYS_ADMIN --device /dev/fuse`. Run artifacts are written to a host-mounted directory (`/jaiph/run`) that survives container teardown.

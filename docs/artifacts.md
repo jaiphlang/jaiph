@@ -23,6 +23,9 @@ The runtime uses a UTC-dated hierarchy. Each run gets its own folder: date, then
       .seq                             # step-sequence counter (kernel/seq-alloc.ts)
       run_summary.jsonl                # durable event timeline
       workspace.patch                  # (Docker only) git diff of sandbox workspace changes
+      branches/                        # (isolated branches only) per-branch output directory
+        <branch-id>/                   # one directory per run async isolated branch
+          <name>                       # files written by workspace.export_patch / workspace.export
 ```
 
 Sequence prefixes are **monotonic and unique** per run (allocated in the kernel), so artifact names sort in execution order. For how this fits into the CLI and kernel, see [Architecture — Durable artifact layout](architecture.md#durable-artifact-layout).
@@ -34,6 +37,7 @@ Sequence prefixes are **monotonic and unique** per run (allocated in the kernel)
 - **`inbox/`** — When you use channels, message payloads can be reflected as files under the run for inspection (see [Inbox & Dispatch](inbox.md)).
 - **`.seq`** — Internal counter backing the numeric prefixes; you normally do not edit it.
 - **`workspace.patch`** — (Docker runs only) A `git diff --binary` patch capturing all workspace modifications made during the run. Generated automatically during runtime teardown when Docker sandboxing is enabled and the workspace has changes. The patch is sufficient to review or `git apply` on the host. Omitted when there are no workspace changes. See [Sandboxing — Workspace patch export](sandboxing.md#runtime-behavior).
+- **`branches/<branch-id>/<name>`** — (Isolated branches only) Files written by `workspace.export_patch(name)` or `workspace.export(local_path, name)` from inside an `run async isolated` branch. Each branch gets its own subdirectory. The paths are coordinator-readable: `export_patch` and `export` return absolute host paths that can be passed to `workspace.apply_patch` or read directly after the branch handle resolves. See [Libraries — Standard library: workspace](libraries.md#standard-library-workspace).
 
 ## Keeping runs out of git
 

@@ -19,6 +19,7 @@ import {
 } from "../orchestration-text";
 import {
   CONTAINER_WORKSPACE,
+  CONTAINER_RUN_DIR,
   exportWorkspacePatch,
   checkIsolatedBackendAvailable,
   resolveIsolatedImage,
@@ -1715,6 +1716,12 @@ export class NodeWorkflowRuntime {
       }
     } catch {
       // Meta file may not exist for failed runs — that's ok
+    }
+
+    // Remap container paths in the return value: /jaiph/run/... → branchRunDir/...
+    // so the coordinator receives host-readable absolute paths.
+    if (returnValue && returnValue.startsWith(CONTAINER_RUN_DIR + "/")) {
+      returnValue = branchRunDir + returnValue.slice(CONTAINER_RUN_DIR.length);
     }
 
     return {

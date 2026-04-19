@@ -14,61 +14,6 @@ Process rules:
 
 ***
 
-## Runtime — explicit branch outputs and join/apply path #dev-ready
-
-**Goal**
-Make candidate-style orchestration real with explicit user-named exports. The runtime provides fan-out, isolation, and result-passing plus a writable outputs location per branch. It does not provide diff merging or candidate selection logic; those are user code (typically LLM-driven inside the join workflow).
-
-**Scope**
-
-* Provide a writable outputs location inside each isolated workspace at a stable path under `.jaiph/runs/<run_id>/branches/<branch_id>/`. The location must survive container teardown and be readable from the coordinator.
-* Add two standard-library primitives:
-  - `workspace.export_patch(name)` — packages the branch's git changes into a patch file at `.jaiph/runs/<run_id>/branches/<branch_id>/<name>` and returns the absolute path string.
-  - `workspace.export(local_path, name)` — copies a file from `local_path` inside the branch workspace to `.jaiph/runs/<run_id>/branches/<branch_id>/<name>` and returns the absolute path string.
-* Branch handles resolve to whatever the function returned. There is no runtime-injected struct on top.
-* Track minimum branch metadata (id, status, exit code, timing) for observability only. Do not expose a `branch.*` user-facing API.
-* Add `apply_patch(path)` to the standard library: applies a patch file to the coordinator workspace via `git apply`. Not a language primitive.
-* `workspace.export_patch` excludes `.jaiph/` from the diff (both the branch and the coordinator write run artifacts there; including those in the patch would clobber state on apply). **This exclusion must be documented in `docs/libraries.md` and in the workspace.jh inline comment.** The previous attempt shipped the exclusion silently; users will lose changes to `.jaiph/*` from a patch and not know why.
-* Implement the chosen mechanism so the following pattern works end-to-end:
-
-  ```jh
-  workflow implement_candidate(task, role, patch_name) {
-    run implement(task, role)
-    return run workspace.export_patch(patch_name)
-  }
-
-  workflow default() {
-    const task = run queue.get_first_task()
-
-    b1 = run async isolated implement_candidate(task, "surgical",   "candidate_surgical.patch")
-    b2 = run async isolated implement_candidate(task, "optimizer",  "candidate_optimizer.patch")
-    b3 = run async isolated implement_candidate(task, "stabilizer", "candidate_stabilizer.patch")
-
-    const final = run isolated join_implementations(b1, b2, b3)
-    run apply_patch(final)
-  }
-  ```
-
-* A branch that does not call an export primitive simply returns whatever its function returned. The runtime does not require an export.
-* Keep the apply step conservative: a single explicit application step against the coordinator workspace.
-
-**Required tests**
-
-* Runtime tests for `workspace.export_patch` and `workspace.export`: file is created at the expected coordinator-readable path; return value matches that path.
-* Runtime test that branch handle return values are the function's return value (string from `export_patch`, anything else for non-exporting branches).
-* Acceptance test for the candidate / join / apply shape above.
-* Failure-path test when `apply_patch` cannot apply the chosen patch cleanly.
-* Test that `workspace.export_patch` excludes `.jaiph/` from the produced patch (write a file under `.jaiph/` inside the branch, export, assert the patch does not reference it).
-
-**Acceptance criteria**
-
-* `workspace.export_patch` and `workspace.export` work and return coordinator-readable paths.
-* `apply_patch` works as a standard-library function, not a language primitive.
-* Branch handles resolve to plain user-defined return values; no magic struct exists.
-* Join and apply work for the baseline candidate pattern.
-* The `.jaiph/` exclusion is documented in `docs/libraries.md` and in the workspace.jh source.
-* Tests cover both success and at least one conservative failure path, plus the `.jaiph/` exclusion.
-
 ## Language/Runtime — add `readonly`, remove `rule`, remove `ensure` #dev-ready
 
 **Goal**

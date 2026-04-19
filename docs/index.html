@@ -481,6 +481,12 @@ Jaiph: Running async.jh
                     are discarded on teardown. Composes with <code>async</code> for parallel isolated branches.
                     No silent fallback, no on/off switch &mdash; <code>isolated</code> always means OS-level isolation.
                     See <a href="sandboxing#per-call-isolation-with-run-isolated">Sandboxing &mdash; Per-call isolation</a>.</p>
+                <p><strong>Workspace exports.</strong> The <code>jaiphlang/workspace</code> standard library provides
+                    <code>export_patch</code>, <code>export</code>, and <code>apply_patch</code> for passing
+                    data out of isolated branches. Export a branch&rsquo;s git changes as a patch, copy arbitrary files,
+                    then apply the chosen result on the coordinator &mdash; enabling candidate-style orchestration
+                    where multiple branches compete and a join step selects the winner.
+                    See <a href="libraries#standard-library-workspace">Libraries &mdash; workspace</a>.</p>
                 <p><strong>Hooks.</strong> Attach shell automation to workflow and step lifecycle events via
                     <code>~/.jaiph/hooks.json</code> or <code>&lt;project&gt;/.jaiph/hooks.json</code>. See <a
                         href="hooks">Hooks</a>.

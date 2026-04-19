@@ -1,0 +1,32 @@
+#!/usr/bin/env jaiph
+
+#
+# Workspace utilities for branch outputs, patch export, and file export.
+#
+# Standard-library module: import "jaiphlang/workspace" as workspace
+#
+# export_patch excludes .jaiph/ from the produced diff because both the
+# branch and the coordinator write run artifacts there; including those
+# in the patch would clobber state on apply. Files written under .jaiph/
+# inside a branch workspace will NOT appear in the exported patch.
+#
+import script "./workspace.sh" as ws
+
+# Packages the branch's git changes into a patch file at the run artifact
+# directory and returns the absolute path. The diff excludes .jaiph/ to
+# avoid clobbering coordinator run artifacts on apply.
+export workflow export_patch(name) {
+  return run ws("export_patch", name)
+}
+
+# Copies a file from local_path inside the branch workspace to the run
+# artifact directory under the given name. Returns the absolute path.
+export workflow export(local_path, name) {
+  return run ws("export", local_path, name)
+}
+
+# Applies a patch file to the current workspace via git apply.
+# Not a language primitive — a standard-library function.
+export workflow apply_patch(path) {
+  run ws("apply_patch", path)
+}
