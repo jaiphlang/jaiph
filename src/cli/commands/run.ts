@@ -27,13 +27,6 @@ import {
   waitForRunExit,
 } from "../run/lifecycle";
 import {
-  resolveDockerConfig,
-  spawnDockerProcess,
-  cleanupDocker,
-  findRunArtifacts,
-  resolveDockerHostRunsRoot,
-} from "../../runtime/docker";
-import {
   styleKeywordLabel,
   formatElapsedDuration,
   formatRunningBottomLine,
@@ -115,9 +108,11 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       workspace: workspaceRoot,
     });
 
-    const { execResult, dockerResult, dockerConfig: activeDockerConfig } = spawnExec(
-      mod, runtimeEnv, outDir, workspaceRoot, metaFile, "default", runArgs, isTTY,
-    );
+    const dummyBuiltPath = join(outDir, "entry.sh");
+    const execResult = spawnRunProcess([metaFile, dummyBuiltPath, "default", ...runArgs], {
+      cwd: workspaceRoot,
+      env: runtimeEnv,
+    });
 
     const signalHandlers = setupRunSignalHandlers(execResult, { forceKillAfterMs: 1500 });
 
@@ -140,16 +135,6 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     const childExit = await waitForRunExit(execResult, () => signalHandlers.remove());
     drainBuffers(onLine, buf, ttyCtx);
 
-    if (dockerResult) {
-      const timedOut = dockerResult.timeoutTimer === undefined && activeDockerConfig.timeout > 0
-        ? false
-        : (Date.now() - startedAt) >= activeDockerConfig.timeout * 1000;
-      if (timedOut && childExit.status !== 0) {
-        runState.capturedStderr += "E_TIMEOUT container execution exceeded timeout\n";
-      }
-      cleanupDocker(dockerResult);
-    }
-
     if (childExit.signal && runState.capturedStderr.trim().length === 0) {
       runState.capturedStderr = `Process terminated by signal ${childExit.signal}`;
     }
@@ -167,7 +152,6 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     return reportResult(
       runState.capturedStderr, childExit.status, startedAt, runtimeEnv,
       emitter, runState.workflowRunId, inputAbs, workspaceRoot, metaFile,
-      dockerResult?.sandboxRunDir,
     );
   } finally {
     if (shouldCleanup) {
@@ -241,42 +225,6 @@ function writeBanner(
   if (isTTY) {
     process.stdout.write("\n" + formatRunningBottomLine("default", 0));
   }
-}
-
-function spawnExec(
-  mod: ReturnType<typeof parsejaiph>,
-  runtimeEnv: Record<string, string | undefined>,
-  outDir: string,
-  workspaceRoot: string,
-  metaFile: string,
-  workflowSymbol: string,
-  runArgs: string[],
-  isTTY: boolean,
-): { execResult: ReturnType<typeof spawnRunProcess>; dockerResult: ReturnType<typeof spawnDockerProcess> | undefined; dockerConfig: ReturnType<typeof resolveDockerConfig> } {
-  const dockerConfig = resolveDockerConfig(mod.metadata?.runtime, runtimeEnv);
-  let dockerResult: ReturnType<typeof spawnDockerProcess> | undefined;
-  let execResult;
-
-  if (dockerConfig.enabled) {
-    const sandboxRunDir = resolveDockerHostRunsRoot(workspaceRoot, runtimeEnv);
-    dockerResult = spawnDockerProcess({
-      config: dockerConfig,
-      sourceAbs: runtimeEnv.JAIPH_SOURCE_ABS!,
-      workspaceRoot,
-      sandboxRunDir,
-      runArgs,
-      env: runtimeEnv,
-      isTTY,
-    });
-    execResult = dockerResult.child;
-  } else {
-    const dummyBuiltPath = join(outDir, "entry.sh");
-    execResult = spawnRunProcess([metaFile, dummyBuiltPath, workflowSymbol, ...runArgs], {
-      cwd: workspaceRoot,
-      env: runtimeEnv,
-    });
-  }
-  return { execResult, dockerResult, dockerConfig };
 }
 
 type StreamBuffers = { stdout: string; stderr: string };
@@ -358,18 +306,13 @@ function reportResult(
   inputAbs: string,
   workspaceRoot: string,
   metaFile: string,
-  sandboxRunDir?: string,
 ): number {
   const elapsedMs = Date.now() - startedAt;
   const elapsedLabel = formatElapsedDuration(elapsedMs);
   let runDir: string | undefined;
   let summaryFile: string | undefined;
 
-  if (sandboxRunDir) {
-    const artifacts = findRunArtifacts(sandboxRunDir);
-    runDir = artifacts.runDir;
-    summaryFile = artifacts.summaryFile;
-  } else if (existsSync(metaFile)) {
+  if (existsSync(metaFile)) {
     const metaLines = readFileSync(metaFile, "utf8").split(/\r?\n/);
     for (const line of metaLines) {
       if (line.startsWith("run_dir=")) {
@@ -383,9 +326,7 @@ function reportResult(
     }
   }
   const runtimeDebugEnabled = runtimeEnv.JAIPH_DEBUG === "true";
-  const runtimeErrorPrinted = sandboxRunDir
-    ? false
-    : hasFatalRuntimeStderr(capturedStderr, runtimeDebugEnabled);
+  const runtimeErrorPrinted = hasFatalRuntimeStderr(capturedStderr, runtimeDebugEnabled);
   const resolvedStatus = exitStatus !== 0 || runtimeErrorPrinted ? 1 : 0;
 
   emitter.emit("workflow_end", {

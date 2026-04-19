@@ -258,14 +258,6 @@ export interface jaiphModule {
   trailingTopLevelComments?: string[];
 }
 
-/** Docker sandbox runtime configuration. */
-export interface RuntimeConfig {
-  dockerEnabled?: boolean;
-  dockerImage?: string;
-  dockerNetwork?: string;
-  dockerTimeout?: number;
-  workspace?: string[];
-}
 
 /** One line inside `config { }`: comment or assignment (formatter round-trip order). */
 export type ConfigBodyPart =
@@ -283,7 +275,6 @@ export interface WorkflowMetadata {
     claudeFlags?: string;
   };
   run?: { debug?: boolean; logsDir?: string; inboxParallel?: boolean; recoverLimit?: number };
-  runtime?: RuntimeConfig;
   module?: { name?: string; version?: string; description?: string };
   /** Preserves `#` lines and assignment order inside `config { }` (formatter). */
   configBodySequence?: ConfigBodyPart[];

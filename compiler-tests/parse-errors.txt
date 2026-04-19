@@ -124,13 +124,14 @@ workflow default() {
   }
 }
 
-=== runtime keys in workflow config
-# @expect error E_PARSE "runtime.* keys are not allowed in workflow-level config" @2:1
+=== removed runtime keys are rejected
+# @expect error E_PARSE "unknown config key: runtime.docker_enabled" @2:3
 --- input.jh
+config {
+  runtime.docker_enabled = true
+}
 workflow default() {
-  config {
-    runtime.docker_enabled = true
-  }
+  log "ok"
 }
 
 === script tag with manual shebang conflict
@@ -193,20 +194,10 @@ workflow default() {
 }
 
 === config integer key rejects string value
-# @expect error E_PARSE "runtime.docker_timeout must be an integer" @2:3
+# @expect error E_PARSE "run.recover_limit must be an integer" @2:3
 --- input.jh
 config {
-  runtime.docker_timeout = "fast"
-}
-workflow default() {
-  log "ok"
-}
-
-=== config array key rejects non-array value
-# @expect error E_PARSE "runtime.workspace must be an array of strings" @2:3
---- input.jh
-config {
-  runtime.workspace = "not-an-array"
+  run.recover_limit = "fast"
 }
 workflow default() {
   log "ok"
@@ -608,8 +599,8 @@ workflow default() {
 script broken = ```
 echo hello
 
-=== metadata: single-quoted array element
-# @expect error E_PARSE "single-quoted strings are not supported" @3:5
+=== metadata: removed runtime.workspace key rejected
+# @expect error E_PARSE "unknown config key: runtime.workspace" @2:3
 --- input.jh
 config {
   runtime.workspace = [
@@ -619,25 +610,6 @@ config {
 workflow default() {
   log "ok"
 }
-
-=== metadata: unquoted array element
-# @expect error E_PARSE "array elements must be quoted strings" @3:5
---- input.jh
-config {
-  runtime.workspace = [
-    unquoted_value
-  ]
-}
-workflow default() {
-  log "ok"
-}
-
-=== metadata: unclosed array
-# @expect error E_PARSE "array not closed" @2:1
---- input.jh
-config {
-  runtime.workspace = [
-    ".:/jaiph/workspace:rw"
 
 === unterminated test block
 # @expect error E_PARSE "unterminated test block" @3:1
@@ -1585,18 +1557,10 @@ workflow default() {
   log "ok"
 }
 
-=== inline config block with multiline array opening
-# @expect error E_PARSE "multiline config arrays require"
+=== inline config block with removed runtime key
+# @expect error E_PARSE "unknown config key: runtime.workspace"
 --- input.jh
-config { runtime.workspace = [ }
-workflow default() {
-  log "ok"
-}
-
-=== inline config block with non-empty workspace array
-# @expect error E_PARSE "runtime.workspace arrays with elements require"
---- input.jh
-config { runtime.workspace = ["foo"] }
+config { runtime.workspace = [] }
 workflow default() {
   log "ok"
 }
@@ -1627,8 +1591,8 @@ workflow default() {
 workflow default() { log "hello"
 }
 
-=== runtime keys in inline workflow config
-# @expect error E_PARSE "runtime.* keys are not allowed"
+=== runtime keys in inline workflow config rejected as unknown
+# @expect error E_PARSE "unknown config key: runtime.docker_enabled"
 --- input.jh
 workflow default() { config { runtime.docker_enabled = true } }
 

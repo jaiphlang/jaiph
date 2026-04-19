@@ -14,40 +14,6 @@ Process rules:
 
 ***
 
-## Configuration — remove the user-visible Docker mode and language-level sandbox config #dev-ready
-
-**Goal**
-Cut sandbox-backend details out of the user-facing surface entirely. Users express orchestration intent through `isolated`; they do not toggle Docker on/off, and they do not see Docker keys in `.jh` config. The previous attempt removed in-`.jh` keys but left the env vars and the whole-program Docker spawn path — finish that cleanup.
-
-**Scope**
-
-* Remove **all** user-visible knobs that toggle whether sandboxing happens:
-  - Delete `JAIPH_DOCKER_ENABLED` and any code that reads it.
-  - Delete the whole-program Docker spawn path in `src/cli/commands/run.ts` (`if (dockerConfig.enabled) spawnDockerProcess(...)`). `jaiph run file.jh` always runs the orchestrator on the host. Sandboxing happens per-call via `run isolated`.
-  - Delete `--raw` mode in `cli/commands/run.ts` if its only purpose was supporting the inner-container path of whole-program Docker mode.
-* Remove language-level `runtime.docker_*` style settings from `.jh` config (the previous attempt did this; verify nothing crept back).
-* **Allowed remaining configuration** (host-level env or CLI config, never in `.jh`):
-  - `JAIPH_ISOLATED_IMAGE` — the container image used for `run isolated`. Default to the official GHCR image. May be overridden for development.
-  - Optional: container network policy, per-call timeout. Both are tuning knobs, not on/off switches.
-* Keep only configuration justified by the target design: agent selection, observability, run artifacts, recover loop budget, module metadata.
-* `src/runtime/docker.ts` keeps the primitives (overlay script, cap-drop args, env denylist, `spawnDockerProcess`) since the `isolated` task reuses them as the backend. Strip anything that is only used by the deleted whole-program Docker mode (e.g. `findRunArtifacts` if nothing else calls it after this cleanup).
-
-**Required tests**
-
-* Parser / validation tests for removed config keys.
-* Test that `JAIPH_DOCKER_ENABLED=true` is not honored — it has no effect on `jaiph run` behavior.
-* Test that a workflow with no `run isolated` calls runs entirely on the host (no container spawned).
-* Test that a workflow with `run isolated` calls spawns the backend exactly for those calls and no others.
-* Docs updates so configuration examples match the reduced surface.
-
-**Acceptance criteria**
-
-* `JAIPH_DOCKER_ENABLED` and the whole-program Docker spawn path are gone.
-* `.jh` config no longer exposes sandbox-backend plumbing as authoring surface.
-* `JAIPH_ISOLATED_IMAGE` (and any other retained backend-tuning vars) are documented as host-level configuration only.
-* No code path treats sandboxing as user-optional. `run isolated` always sandboxes; absence of the keyword always doesn't.
-* Docs and tests match the reduced config model.
-
 ## Productization — rewrite the built-in orchestration workflows to the new model #dev-ready
 
 **Goal**

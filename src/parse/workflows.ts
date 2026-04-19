@@ -139,9 +139,6 @@ export function parseWorkflowBlock(
         if (nextIndex !== 1) {
           fail(filePath, "internal parse error: inline config expected on one line", lineNo);
         }
-        if (metadata.runtime) {
-          fail(filePath, "runtime.* keys are not allowed in workflow-level config (only agent.* and run.* keys)", lineNo);
-        }
         if (metadata.module) {
           fail(filePath, "module.* keys are not allowed in workflow-level config (only agent.* and run.* keys)", lineNo);
         }
@@ -201,9 +198,6 @@ export function parseWorkflowBlock(
         fail(filePath, "config block inside workflow must appear before any steps", innerNo);
       }
       const { metadata, nextIndex } = parseConfigBlock(filePath, lines, idx);
-      if (metadata.runtime) {
-        fail(filePath, "runtime.* keys are not allowed in workflow-level config (only agent.* and run.* keys)", innerNo);
-      }
       if (metadata.module) {
         fail(filePath, "module.* keys are not allowed in workflow-level config (only agent.* and run.* keys)", innerNo);
       }

@@ -20,7 +20,7 @@ For **how to contribute** — branches, test layers, E2E assertion policy, and b
 3. **CLI** (Node from `dist/src/cli.js`, or a **Bun-compiled** `jaiph` binary) prepares script executables (scripts-only), spawns the **`node-workflow-runner`** child, **which** builds `RuntimeGraph` and runs **`NodeWorkflowRuntime`**. Script steps execute as managed subprocesses; prompt, inbox I/O, and event/summary emission are handled by the JS kernel under `src/runtime/kernel/`.
 4. Stream live events to CLI and persist durable run artifacts.
 
-All orchestration — local `jaiph run`, `jaiph test`, and **Docker `jaiph run`** — uses the **Node workflow runtime** (AST interpreter). Docker containers run the same `node-workflow-runner` process with the compiled JS source tree and scripts mounted read-only.
+All orchestration — local `jaiph run` and `jaiph test` — uses the **Node workflow runtime** (AST interpreter). Per-call `run isolated` steps launch Docker containers that run the same `node-workflow-runner` process with the compiled JS source tree and scripts mounted read-only.
 
 ## Core components
 
@@ -56,8 +56,8 @@ All orchestration — local `jaiph run`, `jaiph test`, and **Docker `jaiph run`*
   - `jaiph format` rewrites `.jh` / `.test.jh` files into canonical style. Pure AST→text emitter; no side-effects beyond file writes.
 
 - **Docker runtime helper (`src/runtime/docker.ts`)**
-  - Parses mount specs, resolves Docker config (image, network, timeout), and builds the `docker run` invocation used by `jaiph run --docker`. The container runs the same `node-workflow-runner` process as local execution. The default image is the official `ghcr.io/jaiphlang/jaiph-runtime` GHCR image; every selected image must already contain `jaiph` (no auto-install or derived-image build at runtime). The spawn call uses `stdio: ["ignore", "pipe", "pipe"]` — stdin is ignored to prevent the Docker CLI from blocking on stdin EOF, which would stall event streaming and cause the host CLI to hang after the container exits.
-  - **Workspace immutability:** Docker runs cannot modify the host workspace. The host checkout is mounted read-only; `/jaiph/workspace` is a sandbox-local copy-on-write overlay discarded on exit. The only host-writable path is `/jaiph/run` (run artifacts). During teardown, `exportWorkspacePatch()` emits a `workspace.patch` file (best-effort `git diff --binary`) into the run directory so sandbox edits can be reviewed or applied on the host. See [Sandboxing](sandboxing.md) for the full contract.
+  - Provides per-call Docker isolation for `run isolated` steps. Resolves images (official GHCR image or `JAIPH_ISOLATED_IMAGE` override), builds `docker run` invocations, and manages container lifecycle. Each isolated call spawns a dedicated container with a fuse-overlayfs overlay: the host workspace is read-only, writes land in a discarded upper layer, and the branch cannot see host processes or credentials.
+  - **Workspace patch export:** When an isolated branch modifies files under `/jaiph/workspace`, the runtime exports a `workspace.patch` file into the run directory during teardown (`exportWorkspacePatch` in `docker.ts`). See [Sandboxing](sandboxing.md) for the full contract.
 
 ## Runtime vs CLI responsibilities
 
@@ -143,16 +143,14 @@ flowchart TD
     BS2 --> Transpile
     BS2 --> TR[Node Test Runner in-process]
 
-    Transpile -->|jaiph run local| RW[Node workflow runner child]
-    Transpile -->|jaiph run Docker| DC[Container runs node-workflow-runner]
+    Transpile -->|jaiph run| RW[Node workflow runner child]
 
     RW --> G[buildRuntimeGraph parse-only + imports]
     G --> GRAPH[RuntimeGraph]
     RW --> RT[NodeWorkflowRuntime]
     RT --> GRAPH
 
-    DC --> G
-    DC --> RT
+    RT -->|run isolated| DC[Container runs node-workflow-runner]
 
     TR -->|test_run_workflow| G
     TR --> RT
@@ -192,12 +190,7 @@ sequenceDiagram
     Prep->>TF: loop: parse + validateReferences + emit
     TF-->>Prep: scripts/ atomic only
     Prep-->>CLI: scriptsDir + env JAIPH_SCRIPTS
-    alt local
-        CLI->>Runner: spawn detached node-workflow-runner
-    else Docker
-        CLI->>Runner: spawn container running node-workflow-runner
-        Note over CLI: CLI parses events on stderr only
-    end
+    CLI->>Runner: spawn detached node-workflow-runner
     Runner->>Graph: buildRuntimeGraph(sourceAbs) parse-only
     Graph-->>Runner: RuntimeGraph
     Runner->>Runtime: runDefault(run args)
@@ -246,7 +239,7 @@ sequenceDiagram
 ## Summary
 
 - `.jh` / `*.test.jh` share parser/AST; **compile-time** validation runs in **`emitScriptsForModule`** during **`buildScripts`**. **`buildRuntimeGraph`** loads modules with **parse-only** imports.
-- **Node-only runtime:** all execution — local `jaiph run`, Docker `jaiph run`, and `jaiph test` — goes through `NodeWorkflowRuntime`. Docker containers run `node-workflow-runner` with the compiled JS tree and scripts mounted, using the same semantics as local execution.
+- **Node-only runtime:** all execution — local `jaiph run` and `jaiph test` — goes through `NodeWorkflowRuntime`. Per-call `run isolated` steps spawn Docker containers running `node-workflow-runner` with the same semantics as local execution.
 - **CLI** owns launch, observation, hooks, and runtime preparation (`buildScripts`). Workflow execution runs in **`NodeWorkflowRuntime`**, with **script steps** as managed subprocesses.
 - No workflow-level `.sh` files or `jaiph_stdlib.sh` are produced or required.
 - Contracts: `__JAIPH_EVENT__`, `.jaiph/runs`, `run_summary.jsonl`, hook payloads.

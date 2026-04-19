@@ -18,35 +18,20 @@ test("parseConfigBlock: parses boolean values", () => {
   const lines = [
     "config {",
     "  run.debug = true",
-    "  runtime.docker_enabled = false",
     "}",
   ];
   const { metadata } = parseConfigBlock("test.jh", lines, 0);
   assert.equal(metadata.run?.debug, true);
-  assert.equal(metadata.runtime?.dockerEnabled, false);
 });
 
 test("parseConfigBlock: parses integer values", () => {
   const lines = [
     "config {",
-    "  runtime.docker_timeout = 300",
+    "  run.recover_limit = 5",
     "}",
   ];
   const { metadata } = parseConfigBlock("test.jh", lines, 0);
-  assert.equal(metadata.runtime?.dockerTimeout, 300);
-});
-
-test("parseConfigBlock: parses multiline array", () => {
-  const lines = [
-    "config {",
-    "  runtime.workspace = [",
-    '    "src/"',
-    '    "lib/"',
-    "  ]",
-    "}",
-  ];
-  const { metadata } = parseConfigBlock("test.jh", lines, 0);
-  assert.deepEqual(metadata.runtime?.workspace, ["src/", "lib/"]);
+  assert.equal(metadata.run?.recoverLimit, 5);
 });
 
 test("parseConfigBlock: fails on unknown config key", () => {
@@ -177,25 +162,39 @@ test("parseConfigBlock: handles escape sequences in string values", () => {
   assert.equal(metadata.agent?.cursorFlags, "flag\nvalue");
 });
 
-test("parseConfigBlock: parses empty array", () => {
+test("parseConfigBlock: rejects removed runtime.* keys as unknown", () => {
+  const lines = [
+    "config {",
+    "  runtime.docker_enabled = true",
+    "}",
+  ];
+  assert.throws(
+    () => parseConfigBlock("test.jh", lines, 0),
+    /unknown config key: runtime\.docker_enabled/,
+  );
+});
+
+test("parseConfigBlock: rejects removed runtime.docker_image key", () => {
+  const lines = [
+    "config {",
+    '  runtime.docker_image = "ubuntu:24.04"',
+    "}",
+  ];
+  assert.throws(
+    () => parseConfigBlock("test.jh", lines, 0),
+    /unknown config key: runtime\.docker_image/,
+  );
+});
+
+test("parseConfigBlock: rejects removed runtime.workspace key", () => {
   const lines = [
     "config {",
     "  runtime.workspace = []",
     "}",
   ];
-  const { metadata } = parseConfigBlock("test.jh", lines, 0);
-  assert.deepEqual(metadata.runtime?.workspace, []);
-});
-
-test("parseConfigBlock: fails on type mismatch (number where string expected)", () => {
-  const lines = [
-    "config {",
-    "  runtime.docker_image = 123",
-    "}",
-  ];
   assert.throws(
     () => parseConfigBlock("test.jh", lines, 0),
-    /runtime\.docker_image must be a string/,
+    /unknown config key: runtime\.workspace/,
   );
 });
 
@@ -346,7 +345,7 @@ test("workflow config: rejects module.* keys", () => {
   );
 });
 
-test("workflow config: rejects runtime.* keys", () => {
+test("workflow config: rejects runtime.* keys as unknown", () => {
   const src = [
     "workflow default() {",
     "  config {",
@@ -356,7 +355,7 @@ test("workflow config: rejects runtime.* keys", () => {
   ].join("\n");
   assert.throws(
     () => parsejaiph(src, "test.jh"),
-    /runtime\.\* keys are not allowed in workflow-level config/,
+    /unknown config key: runtime\.docker_enabled/,
   );
 });
 

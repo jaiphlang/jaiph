@@ -208,7 +208,7 @@ test "handles failure gracefully" {
 ## Suggested Starter Layout
 
 - `.jaiph/bootstrap.jh` — Created by `jaiph init`; contains a single triple-quoted prompt (`prompt """ ... """`) that points the agent at `.jaiph/SKILL.md` (a copy of this guide).
-- `.jaiph/Dockerfile` — Created by `jaiph init`; base Docker sandbox template. Review and tailor runtime/build/test tooling to the current repository.
+- `.jaiph/Dockerfile` — Created by `jaiph init`; extends the official runtime image with agent CLIs. Used as the base for `run isolated` containers. Review and tailor to the current repository's needs.
 - `.jaiph/readiness.jh` — Preflight: validation workflows and `workflow default` that runs readiness checks via `run readonly`.
 - `.jaiph/ba_review.jh` (or any name you choose) — (Optional) Pre-implementation review: reads tasks from a queue file, sends one to an agent for review, and marks it dev-ready or exits with questions. This repository uses `.jaiph/architect_review.jh` with `QUEUE.md`.
 - `.jaiph/verification.jh` — Verification: validation workflows and `workflow default` for lint/test/build via `run readonly`.

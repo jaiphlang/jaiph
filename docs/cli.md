@@ -161,7 +161,7 @@ log response
 
 On non-zero exit, the CLI may print a footer with the path to `run_summary.jsonl`, `out:` / `err:` artifact paths, and `Output of failed step:` plus a trimmed excerpt. These are resolved from the **first** `STEP_END` object in the summary with `status` != 0, using `out_content` / `err_content` when present and otherwise the `out_file` / `err_file` fields. If no failed `STEP_END` is found, the CLI falls back to a run-directory artifact heuristic.
 
-In Docker mode, the meta file written by the container contains container-internal paths (`/jaiph/workspace/…`). The CLI remaps these to host paths before reading artifacts, so the failure summary displays identically to local runs. See [Sandboxing — Path remapping](sandboxing.md#path-remapping).
+For `run isolated` steps, the runtime remaps container-internal paths (`/jaiph/workspace/…`) to host paths so artifacts are accessible from the host.
 
 ### Run artifacts and live output
 
@@ -304,7 +304,7 @@ Creates:
 
 - `.jaiph/.gitignore` — lists `runs` and `tmp`. If the file already exists and does not match this exact list, `jaiph init` exits with a non-zero status.
 - `.jaiph/bootstrap.jh` — canonical bootstrap workflow; made executable. The template uses a triple-quoted multiline prompt body (`prompt """ ... """`) so the generated file parses and compiles as valid Jaiph. It also asks the agent to review/update `.jaiph/Dockerfile` for this repository and ends by logging a summary (`WHAT CHANGED` + `WHY`).
-- `.jaiph/Dockerfile` — Docker sandbox template that extends the official `ghcr.io/jaiphlang/jaiph-runtime:nightly` image with agent CLIs (Claude Code, cursor-agent). The base image already contains Node.js, jaiph, and `fuse-overlayfs`, so the generated Dockerfile only adds project-specific tooling. If the file is missing, init creates it. If it already exists and includes the init marker comment, init updates it to the latest template. Otherwise (custom user-managed Dockerfile), init leaves it unchanged and prints a note.
+- `.jaiph/Dockerfile` — Container image template that extends the official `ghcr.io/jaiphlang/jaiph-runtime:nightly` image with agent CLIs (Claude Code, cursor-agent). Used as the base for `run isolated` containers. The base image already contains Node.js, jaiph, and `fuse-overlayfs`, so the generated Dockerfile only adds project-specific tooling. If the file is missing, init creates it. If it already exists and includes the init marker comment, init updates it to the latest template. Otherwise (custom user-managed Dockerfile), init leaves it unchanged and prints a note.
 - `.jaiph/SKILL.md` — copied from the skill file bundled with your Jaiph installation (or from `JAIPH_SKILL_PATH` when set). If no skill file is found, this file is not written and a note is printed.
 
 ## `jaiph install`
@@ -392,7 +392,7 @@ These variables apply to `jaiph run` and workflow execution. Variables marked **
 
 **Workspace and run paths:**
 
-- `JAIPH_WORKSPACE` — workspace root, set by the CLI. Detected by walking up from the entry `.jh` file's directory until `.jaiph` or `.git` is found. Guards in `detectWorkspaceRoot` skip misleading markers under shared system temp directories (`/tmp`, `/var/tmp`, macOS `/var/folders/.../T/...`) and nested `.jaiph/tmp` trees. In Docker sandbox mode the runtime remaps it inside the container (see [Sandboxing](sandboxing.md)).
+- `JAIPH_WORKSPACE` — workspace root, set by the CLI. Detected by walking up from the entry `.jh` file's directory until `.jaiph` or `.git` is found. Guards in `detectWorkspaceRoot` skip misleading markers under shared system temp directories (`/tmp`, `/var/tmp`, macOS `/var/folders/.../T/...`) and nested `.jaiph/tmp` trees. Inside `run isolated` containers, remapped to `/jaiph/workspace`.
 - `JAIPH_RUNS_DIR` — root directory for run logs (default: `.jaiph/runs` under workspace).
 
 **Agent and prompt configuration:**
@@ -418,14 +418,13 @@ These variables apply to `jaiph run` and workflow execution. Variables marked **
 - `JAIPH_NON_TTY_HEARTBEAT_FIRST_SEC` — seconds before the first heartbeat (default: `60`).
 - `JAIPH_NON_TTY_HEARTBEAT_INTERVAL_MS` — minimum milliseconds between subsequent heartbeats (default: `30000`; minimum `250`).
 
-**Docker sandbox:**
+**Isolated execution (host-level only):**
 
-- `JAIPH_DOCKER_ENABLED` — set to `true` to enable Docker sandbox (overrides in-file `runtime.docker_enabled`).
-- `JAIPH_DOCKER_IMAGE` — Docker image for sandbox (overrides in-file `runtime.docker_image`). The image must already contain `jaiph`; if it does not, the run fails with `E_DOCKER_NO_JAIPH`. Defaults to the official GHCR runtime image (`ghcr.io/jaiphlang/jaiph-runtime:<version>`).
-- `JAIPH_DOCKER_NETWORK` — Docker network mode (overrides in-file `runtime.docker_network`).
-- `JAIPH_DOCKER_TIMEOUT` — execution timeout in seconds (overrides in-file `runtime.docker_timeout`).
+- `JAIPH_ISOLATED_IMAGE` — container image for `run isolated` calls. Must already contain `jaiph`. Defaults to `ghcr.io/jaiphlang/jaiph-runtime:<version>`.
+- `JAIPH_DOCKER_NETWORK` — Docker network mode for isolated containers (default: `default`).
+- `JAIPH_DOCKER_TIMEOUT` — timeout in seconds for isolated containers (default: `300`).
 
-For `JAIPH_DOCKER_*` defaults, image selection, mounts, and container behavior, see [Sandboxing](sandboxing.md).
+These are host-level tuning knobs — not settable in `.jh` config. There is no env var that enables or disables isolation; `run isolated` always means OS-level isolation. See [Sandboxing](sandboxing.md) and [Configuration — Isolated execution keys](configuration.md#isolated-execution-keys-host-level-only).
 
 ### Install and `jaiph use`
 

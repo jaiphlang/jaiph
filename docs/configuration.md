@@ -9,7 +9,7 @@ redirect_from:
 
 Jaiph separates **what runs** (your `.jh` graphs) from **how the host runs it** (models, paths, sandboxes, logging). Operational settings live in **configuration** so the same `.jh` sources work unchanged across machines and CI.
 
-All execution goes through the Node workflow runtime (`NodeWorkflowRuntime`), which interprets the AST, runs `prompt` and `script` steps, and handles channels, inbox dispatch, and artifacts (see [Architecture](architecture)). Configuration tunes this stack — agent backend, runs directory, Docker sandbox, inbox parallelism — without touching control flow.
+All execution goes through the Node workflow runtime (`NodeWorkflowRuntime`), which interprets the AST, runs `prompt` and `script` steps, and handles channels, inbox dispatch, and artifacts (see [Architecture](architecture)). Configuration tunes this stack — agent backend, runs directory, inbox parallelism — without touching control flow.
 
 **Source of truth:** When this document and the implementation disagree, treat the source code as authoritative.
 
@@ -17,15 +17,13 @@ All execution goes through the Node workflow runtime (`NodeWorkflowRuntime`), wh
 
 Jaiph provides three configuration mechanisms. When the same key is set in more than one place, the highest-priority source wins:
 
-1. **Environment variables** — highest priority. `JAIPH_AGENT_*`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, `JAIPH_INBOX_PARALLEL`, `JAIPH_RECOVER_LIMIT`, `JAIPH_DOCKER_*`, and `JAIPH_UNSAFE`.
+1. **Environment variables** — highest priority. `JAIPH_AGENT_*`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, `JAIPH_INBOX_PARALLEL`, and `JAIPH_RECOVER_LIMIT`.
 2. **In-file `config { ... }` blocks** — at module scope and optionally inside a `workflow` body.
 3. **Built-in defaults** — lowest priority, used when nothing else sets a value.
 
 For **agent and run keys**, the full precedence chain is:
 
 > **environment > workflow-level config > module-level config > defaults**
-
-For **Docker / `runtime.*` keys**, the same idea applies (environment overrides in-file), but these are resolved by the `jaiph run` CLI at launch time. They cannot appear in workflow-level `config` blocks. See [Runtime keys](#runtime-keys-docker-sandbox--beta).
 
 ## In-file config blocks
 
@@ -87,7 +85,7 @@ workflow default() {
 **Rules:**
 
 - At most one per workflow; it must be the first non-comment construct in the body. A duplicate is `E_PARSE`: `duplicate config block inside workflow (only one allowed per workflow)`.
-- Only **`agent.*` and `run.*` keys** are allowed. Any `runtime.*` or `module.*` key is `E_PARSE`.
+- Only **`agent.*` and `run.*` keys** are allowed. Any `module.*` key is `E_PARSE`.
 - Workflow-level values apply to all steps in that workflow, including `run readonly` targets and scripts called from it. When the workflow finishes, the previous environment is restored.
 
 **Sibling isolation:** Each workflow gets its own clone of the parent environment. Sibling workflows never see each other's config — even when they execute sequentially. If workflow `alpha` sets `agent.backend = "claude"` and workflow `beta` only sets `agent.default_model = "beta-model"`, `beta` still sees the module-level backend (e.g. `"cursor"`), not `alpha`'s.
@@ -99,18 +97,8 @@ workflow default() {
 | String | Double-quoted | `"gpt-4"` |
 | Boolean | Unquoted `true` / `false` | `true` |
 | Integer | Unsigned decimal digits only | `300` |
-| String array | `[` on the `=` line, one quoted string per line, then `]` | See below |
 
-Recognized escapes inside strings: `\\`, `\n`, `\t`, `\"`. Trailing commas and `#` comments are allowed inside arrays. An empty array (`key = []` on one line) is valid.
-
-```jh
-config {
-  runtime.workspace = [
-    ".:/jaiph/workspace:rw",
-    "config:config:ro"    # read-only config mount
-  ]
-}
-```
+Recognized escapes inside strings: `\\`, `\n`, `\t`, `\"`.
 
 ## Config keys reference
 
@@ -163,27 +151,17 @@ workflow default() {
 }
 ```
 
-### Runtime keys (Docker sandbox — beta)
+### Isolated execution keys (host-level only)
 
-These configure Docker sandboxing. Unlike agent and run keys, runtime keys are resolved by the `jaiph run` CLI at launch — not by the workflow runtime. They can only appear in **module-level** config blocks (not workflow-level).
-
-> Docker sandboxing is in **beta**. See [Sandboxing](sandboxing.md) for mounts, workspace layout, Dockerfile detection, env forwarding, path remapping, and container behavior.
-
-| Key | Type | Default | Env variable | Description |
-|-----|------|---------|--------------|-------------|
-| `runtime.docker_enabled` | boolean | `true` locally; `false` when `CI=true` or `JAIPH_UNSAFE=true` | `JAIPH_DOCKER_ENABLED` | Enable Docker for this run. See [Sandboxing -- Enabling Docker](sandboxing.md#enabling-docker) for the default rule. |
-| `runtime.docker_image` | string | `ghcr.io/jaiphlang/jaiph-runtime:<version>` | `JAIPH_DOCKER_IMAGE` | Image name. Must already contain `jaiph`. When unset, Jaiph builds from `.jaiph/Dockerfile` if it exists, otherwise uses the official GHCR image matching the installed jaiph version. |
-| `runtime.docker_network` | string | `default` | `JAIPH_DOCKER_NETWORK` | Docker network mode. |
-| `runtime.docker_timeout` | integer | `300` | `JAIPH_DOCKER_TIMEOUT` | Timeout in seconds. Invalid or unparsable values fall back to the default. |
-| `runtime.workspace` | string[] | `[".:/jaiph/workspace:rw"]` | _(no env override)_ | Mount list. Only settable via in-file config or defaults. |
-
-**Per-call isolation (`run isolated`)** uses the existing Docker backend but has its own image override:
+These environment variables configure the Docker backend used by `run isolated` steps. They are host-level tuning knobs — not settable in `.jh` config blocks.
 
 | Env variable | Default | Description |
 |---|---|---|
-| `JAIPH_ISOLATED_IMAGE` | Same as `runtime.docker_image` | Container image for `run isolated` calls. Host-level only — not settable in `.jh` config. |
+| `JAIPH_ISOLATED_IMAGE` | `ghcr.io/jaiphlang/jaiph-runtime:<version>` | Container image for `run isolated` calls. Must already contain `jaiph`. |
+| `JAIPH_DOCKER_NETWORK` | `default` | Docker network mode for isolated containers. |
+| `JAIPH_DOCKER_TIMEOUT` | `300` | Timeout in seconds for isolated containers. |
 
-`JAIPH_DOCKER_NETWORK` and `JAIPH_DOCKER_TIMEOUT` also apply to isolated containers. There is no config key or env var that disables isolation — `run isolated` always means OS-level isolation. See [Sandboxing — Per-call isolation](sandboxing.md#per-call-isolation-with-run-isolated).
+There is no config key or env var that disables isolation — `run isolated` always means OS-level isolation. See [Sandboxing — Per-call isolation](sandboxing.md#per-call-isolation-with-run-isolated).
 
 ## Precedence in detail
 
@@ -195,8 +173,6 @@ For **agent and run keys**, resolution order (highest wins):
 2. **Workflow-level `config`** — overrides module values for the duration of that workflow.
 3. **Module-level `config`** — applies to workflows that don't define their own block.
 4. **Built-in defaults.**
-
-For **Docker / `runtime.*` keys**, the `jaiph run` driver merges **`JAIPH_DOCKER_*` env > module-level `runtime.*` > CI/unsafe default rule**. The default rule enables Docker when neither `CI=true` nor `JAIPH_UNSAFE=true` is set (see [Sandboxing -- Enabling Docker](sandboxing.md#enabling-docker)). Mounts (`runtime.workspace`) are never taken from env. Workflow-level config cannot set runtime keys.
 
 ### Locked variables
 
@@ -333,12 +309,6 @@ Quick reference for all in-file keys and their environment variable equivalents:
 | `run.debug` | `JAIPH_DEBUG` |
 | `run.inbox_parallel` | `JAIPH_INBOX_PARALLEL` |
 | `run.recover_limit` | `JAIPH_RECOVER_LIMIT` |
-| `runtime.docker_enabled` | `JAIPH_DOCKER_ENABLED` |
-| `runtime.docker_image` | `JAIPH_DOCKER_IMAGE` |
-| `runtime.docker_network` | `JAIPH_DOCKER_NETWORK` |
-| `runtime.docker_timeout` | `JAIPH_DOCKER_TIMEOUT` |
-| `runtime.workspace` | _(no env override)_ |
-| _(per-call isolation)_ | `JAIPH_ISOLATED_IMAGE` |
 | `module.name` | _(no env override)_ |
 | `module.version` | _(no env override)_ |
 | `module.description` | _(no env override)_ |
@@ -352,8 +322,6 @@ workflow default() {
   log "backend=${JAIPH_AGENT_BACKEND} trusted_workspace=${JAIPH_AGENT_TRUSTED_WORKSPACE}"
 }
 ```
-
-`JAIPH_DOCKER_*` variables are **not** populated from in-file `runtime.*` inside the workflow runner process. Docker is configured when the CLI spawns the runner (or container). If you need Docker-related variables inside a `script` step, export them yourself or inherit them from the parent shell.
 
 ## Created by `jaiph init`
 

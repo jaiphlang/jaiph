@@ -22,8 +22,6 @@ TEST_SCRIPTS=(
   "e2e/tests/65_fail_then_retry_pass.sh"
   "e2e/tests/70_run_artifacts.sh"
   "e2e/tests/71_loop_run_artifacts.sh"
-  "e2e/tests/72_docker_run_artifacts.sh"
-  "e2e/tests/73_docker_dockerfile_detection.sh"
   "e2e/tests/74_live_step_output.sh"
   "e2e/tests/78_lang_redesign_constructs.sh"
   "e2e/tests/79_workflow_fail_keyword.sh"

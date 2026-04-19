@@ -27,7 +27,7 @@ Jaiph is a composable scripting language and runtime for AI agent workflows. You
 - **[Configuration](configuration.md)** — `config { }` blocks, agent backends, logging, and runtime options (including env overrides).
 - **[Runtime artifacts](artifacts.md)** — What Jaiph writes under `.jaiph/runs/` (per-step logs, JSONL timeline, inbox files) versus live progress on stderr.
 - **[Hooks](hooks.md)** — Project or user `hooks.json` to run shell commands on workflow and step lifecycle events.
-- **[Sandboxing](sandboxing.md)** — Optional Docker-backed isolation for agent and script steps (beta).
+- **[Sandboxing](sandboxing.md)** — `run readonly` for language-level step restrictions and `run isolated` for per-call OS-level Docker isolation.
 
 ## Other
 

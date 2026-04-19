@@ -841,13 +841,10 @@ config_block    = "config" "{" { config_line } "}" ;
 config_line     = config_key "=" config_value ;
 config_key      = "agent.default_model" | "agent.command" | "agent.backend" | "agent.trusted_workspace"
                 | "agent.cursor_flags" | "agent.claude_flags" | "run.logs_dir" | "run.debug"
-                | "run.inbox_parallel" | "runtime.docker_enabled" | "runtime.docker_image" | "runtime.docker_network"
-                | "runtime.docker_timeout" | "runtime.workspace"
+                | "run.inbox_parallel" | "run.recover_limit"
                 | "module.name" | "module.version" | "module.description" ;
-config_value    = string | "true" | "false" | integer | string_array ;
+config_value    = string | "true" | "false" | integer ;
 integer         = digit { digit } ;
-string_array    = "[" { array_element } "]" ;
-array_element   = string [ "," ] ;
 
 import_stmt     = "import" string "as" IDENT ;
 import_script_stmt = "import" "script" string "as" IDENT ;
@@ -869,7 +866,7 @@ workflow_decl   = [ "export" ] "workflow" IDENT [ "(" param_list ")" ] "{" [ wor
 param_list      = IDENT { "," IDENT } ;  (* identifiers; no duplicates; no reserved keywords *)
 workflow_config = config_block ;
   (* optional per-workflow override; must appear before steps;
-     only agent.* and run.* keys allowed; runtime.* and module.* yield E_PARSE *)
+     only agent.* and run.* keys allowed; module.* yields E_PARSE *)
 
 workflow_step   = run_stmt | run_readonly_stmt | run_catch_stmt | run_recover_stmt | run_async_stmt | run_isolated_stmt | prompt_stmt | prompt_capture_stmt
                 | const_decl_step | return_stmt

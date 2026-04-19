@@ -13,11 +13,6 @@ const ALLOWED_KEYS = new Set([
   "run.debug",
   "run.inbox_parallel",
   "run.recover_limit",
-  "runtime.docker_enabled",
-  "runtime.docker_image",
-  "runtime.docker_network",
-  "runtime.docker_timeout",
-  "runtime.workspace",
   "module.name",
   "module.version",
   "module.description",
@@ -35,11 +30,6 @@ const KEY_TYPES: Record<string, "string" | "boolean" | "number" | "string[]"> = 
   "run.debug": "boolean",
   "run.inbox_parallel": "boolean",
   "run.recover_limit": "number",
-  "runtime.docker_enabled": "boolean",
-  "runtime.docker_image": "string",
-  "runtime.docker_network": "string",
-  "runtime.docker_timeout": "number",
-  "runtime.workspace": "string[]",
   "module.name": "string",
   "module.version": "string",
   "module.description": "string",
@@ -210,31 +200,6 @@ function assignConfigKey(
       out.run = {};
     }
     out.run.recoverLimit = value as number;
-  } else if (key === "runtime.docker_enabled") {
-    if (!out.runtime) {
-      out.runtime = {};
-    }
-    out.runtime.dockerEnabled = value as boolean;
-  } else if (key === "runtime.docker_image") {
-    if (!out.runtime) {
-      out.runtime = {};
-    }
-    out.runtime.dockerImage = value as string;
-  } else if (key === "runtime.docker_network") {
-    if (!out.runtime) {
-      out.runtime = {};
-    }
-    out.runtime.dockerNetwork = value as string;
-  } else if (key === "runtime.docker_timeout") {
-    if (!out.runtime) {
-      out.runtime = {};
-    }
-    out.runtime.dockerTimeout = value as number;
-  } else if (key === "runtime.workspace") {
-    if (!out.runtime) {
-      out.runtime = {};
-    }
-    out.runtime.workspace = value as string[];
   } else if (key === "module.name") {
     if (!out.module) {
       out.module = {};

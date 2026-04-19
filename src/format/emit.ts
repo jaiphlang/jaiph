@@ -155,30 +155,6 @@ function emitConfigKeyLines(meta: WorkflowMetadata, key: string, pad: string): s
     case "run.recover_limit":
       if (meta.run?.recoverLimit === undefined) return [];
       return [`${pad}run.recover_limit = ${meta.run.recoverLimit}`];
-    case "runtime.docker_enabled":
-      if (meta.runtime?.dockerEnabled === undefined) return [];
-      return [`${pad}runtime.docker_enabled = ${meta.runtime.dockerEnabled}`];
-    case "runtime.docker_image":
-      if (meta.runtime?.dockerImage === undefined) return [];
-      return [`${pad}runtime.docker_image = "${meta.runtime.dockerImage}"`];
-    case "runtime.docker_network":
-      if (meta.runtime?.dockerNetwork === undefined) return [];
-      return [`${pad}runtime.docker_network = "${meta.runtime.dockerNetwork}"`];
-    case "runtime.docker_timeout":
-      if (meta.runtime?.dockerTimeout === undefined) return [];
-      return [`${pad}runtime.docker_timeout = ${meta.runtime.dockerTimeout}`];
-    case "runtime.workspace": {
-      if (meta.runtime?.workspace === undefined) return [];
-      if (meta.runtime.workspace.length === 0) {
-        return [`${pad}runtime.workspace = []`];
-      }
-      const ws: string[] = [`${pad}runtime.workspace = [`];
-      for (const w of meta.runtime.workspace) {
-        ws.push(`${pad}${pad}"${w}",`);
-      }
-      ws.push(`${pad}]`);
-      return ws;
-    }
     case "module.name":
       if (meta.module?.name === undefined) return [];
       return [`${pad}module.name = "${meta.module.name}"`];
@@ -219,23 +195,6 @@ function emitConfig(meta: WorkflowMetadata, pad: string): string {
     if (meta.run.logsDir !== undefined) lines.push(`${pad}run.logs_dir = "${meta.run.logsDir}"`);
     if (meta.run.inboxParallel !== undefined) lines.push(`${pad}run.inbox_parallel = ${meta.run.inboxParallel}`);
     if (meta.run.recoverLimit !== undefined) lines.push(`${pad}run.recover_limit = ${meta.run.recoverLimit}`);
-  }
-  if (meta.runtime) {
-    if (meta.runtime.dockerEnabled !== undefined) lines.push(`${pad}runtime.docker_enabled = ${meta.runtime.dockerEnabled}`);
-    if (meta.runtime.dockerImage !== undefined) lines.push(`${pad}runtime.docker_image = "${meta.runtime.dockerImage}"`);
-    if (meta.runtime.dockerNetwork !== undefined) lines.push(`${pad}runtime.docker_network = "${meta.runtime.dockerNetwork}"`);
-    if (meta.runtime.dockerTimeout !== undefined) lines.push(`${pad}runtime.docker_timeout = ${meta.runtime.dockerTimeout}`);
-    if (meta.runtime.workspace !== undefined) {
-      if (meta.runtime.workspace.length === 0) {
-        lines.push(`${pad}runtime.workspace = []`);
-      } else {
-        lines.push(`${pad}runtime.workspace = [`);
-        for (const w of meta.runtime.workspace) {
-          lines.push(`${pad}${pad}"${w}",`);
-        }
-        lines.push(`${pad}]`);
-      }
-    }
   }
   if (meta.module) {
     if (meta.module.name !== undefined) lines.push(`${pad}module.name = "${meta.module.name}"`);
@@ -293,7 +252,7 @@ function emitScript(script: ScriptDef, _pad: string, exported: boolean): string 
 
 /** Single-line `config { agent.backend = "…" }` when that is the only workflow metadata field. */
 function emitCompactInlineWorkflowConfig(meta: WorkflowMetadata): string | null {
-  if (meta.run !== undefined || meta.runtime !== undefined) return null;
+  if (meta.run !== undefined) return null;
   const seq = meta.configBodySequence;
   if (seq?.length) {
     if (seq.length !== 1 || seq[0].kind !== "assign" || seq[0].key !== "agent.backend") {
