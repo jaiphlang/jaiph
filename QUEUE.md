@@ -14,36 +14,6 @@ Process rules:
 
 ***
 
-## Spec — handle, isolation, and recover composition rules #dev-ready
-
-**Goal**
-Lock down the value model and composition rules from `docs/target-design.md` as a written specification before any runtime code changes. This task ships only docs and tests; no production behavior changes.
-
-**Scope**
-
-* Write a precise spec section (in `docs/target-design.md` or a sibling `docs/spec-async-isolated.md`) covering:
-  - `Handle<T>` value model: a handle resolves to whatever the called function returned. First non-passthrough read forces resolution. Passthrough (assignment, storage, passing through arguments and returns unchanged) does not.
-  - Workflow exit implicitly joins remaining unresolved handles; not an error.
-  - `run isolated` inside an already-isolated execution context is a compile-time error, **including transitively** (i.e. `run isolated A` where A calls B where B calls `run isolated C` is also a compile-time error). The check walks the static call graph, not just the immediate target.
-  - Calls inside an isolated body run in the same sandboxed context; there is no nested isolation.
-  - `recover` for an isolated async branch runs inside the branch's sandboxed context, retries inside the branch, and the coordinator only observes the final result.
-  - `recover` for non-isolated `run` runs in the current workspace.
-  - **`isolated` is an OS-level isolation contract**, not a workspace-write convention. The spec must enumerate what `isolated` guarantees: read-only host filesystem (except a designated writable workspace), separate PID/mount/network namespaces, no inherited host credentials (env denylist), no escape via `kill $PPID` or writing outside the designated workspace.
-  - **The v1 backend is fixed: Docker + fuse-overlayfs, reusing `src/runtime/docker.ts`.** The spec must say so explicitly. Other backends (Podman, Firecracker, gVisor, microVM CLIs) are not part of v1 and are not authoring surface either way. `git worktree` is intentionally not part of the design — record the decision and the reason (requires git in host and container, doesn't apply to non-git workspaces, adds per-call host-side lifecycle the overlay backend doesn't need).
-  - `ensure` is removed; `rule` is removed.
-* Capture every rule above as a planned test name (compile-time error tests, runtime resolution tests, recover-loop tests, **isolation containment tests**). Implementation of those tests lands in the corresponding later tasks.
-
-**Required tests**
-
-* No production tests in this task. The deliverable is the spec plus a checklist of test names that later tasks will fulfill.
-
-**Acceptance criteria**
-
-* Spec section exists, is referenced from the rest of `docs/target-design.md`, and is internally consistent.
-* Every composition rule has a named placeholder test it expects later tasks to add.
-* The spec explicitly documents the OS-level isolation contract for `isolated`. "Workspace-scoped convention" is not allowed as a definition.
-* The spec explicitly states that the v1 backend is the existing Docker + fuse-overlayfs implementation in `src/runtime/docker.ts`, reused (not rewritten), and that no `git worktree` layer is added.
-
 ## Language/Runtime — add `recover` loop semantics for non-isolated `run` #dev-ready
 
 **Goal**

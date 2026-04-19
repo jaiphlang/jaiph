@@ -248,3 +248,7 @@ workflow default() {
   log "Running inside Docker"
 }
 ```
+
+## Target design: per-call `run isolated`
+
+The current whole-program Docker mode described above is being replaced by per-call `run isolated` semantics in the target redesign. Instead of wrapping an entire `jaiph run` invocation in a container, isolation moves to individual call sites (`run isolated foo()`), reusing the existing Docker + fuse-overlayfs backend in `src/runtime/docker.ts`. The formal specification for the isolation contract, nested-isolation rules, and `recover` composition inside isolated branches is in [Spec: Handle, Isolation, and Recover Composition](spec-async-isolated.md). For the high-level motivation and design rationale, see [Target Design — Sandboxing redesign](target-design.md#sandboxing-redesign).
