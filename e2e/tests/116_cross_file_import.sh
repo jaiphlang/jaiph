@@ -93,13 +93,13 @@ e2e::expect_out "main_script.jh" "slib.echo_msg" "script-lib-msg"
 e2e::pass "cross-file import: run exported script"
 
 # ---------------------------------------------------------------------------
-e2e::section "cross-file import: ensure exported rule"
+e2e::section "cross-file import: run exported workflow (from rule lib)"
 # ---------------------------------------------------------------------------
 
 # Given
 e2e::file "rulelib.jh" <<'EOF'
 script check_impl = `true`
-export rule passes() {
+export workflow passes() {
   run check_impl()
 }
 EOF
@@ -108,7 +108,7 @@ e2e::file "main_rule.jh" <<'EOF'
 import "rulelib.jh" as rlib
 
 workflow default() {
-  ensure rlib.passes()
+  run rlib.passes()
   log "rule passed"
 }
 EOF
@@ -122,16 +122,16 @@ e2e::expect_stdout "${rule_out}" <<'EOF'
 Jaiph: Running main_rule.jh
 
 workflow default
-  ▸ rule passes
+  ▸ workflow passes
   ·   ▸ script check_impl
   ·   ✓ script check_impl (<time>)
-  ✓ rule passes (<time>)
+  ✓ workflow passes (<time>)
   ℹ rule passed
 
 ✓ PASS workflow default (<time>)
 EOF
 
-e2e::pass "cross-file import: ensure exported rule"
+e2e::pass "cross-file import: run exported workflow (from rule lib)"
 
 # ---------------------------------------------------------------------------
 e2e::section "cross-file import: capture from exported script"

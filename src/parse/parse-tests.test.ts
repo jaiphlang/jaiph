@@ -142,21 +142,6 @@ test("parseTestBlock: parses mock workflow with named params", () => {
   }
 });
 
-test("parseTestBlock: parses mock rule block with parens", () => {
-  const lines = [
-    'test "t1" {',
-    '  mock rule lib.check() {',
-    '    return "ok"',
-    '  }',
-    '}',
-  ];
-  const { testBlock } = parseTestBlock("test.jh", lines, 0);
-  assert.equal(testBlock.steps[0].type, "test_mock_rule");
-  if (testBlock.steps[0].type === "test_mock_rule") {
-    assert.deepEqual(testBlock.steps[0].params, []);
-  }
-});
-
 test("parseTestBlock: parses mock script block with parens", () => {
   const lines = [
     'test "t1" {',
@@ -211,20 +196,6 @@ test("parseTestBlock: rejects mock workflow without parens", () => {
   assert.throws(
     () => parseTestBlock("test.jh", lines, 0),
     /mock workflow requires parentheses/,
-  );
-});
-
-test("parseTestBlock: rejects mock rule without parens", () => {
-  const lines = [
-    'test "t1" {',
-    '  mock rule lib.check {',
-    '    return "ok"',
-    '  }',
-    '}',
-  ];
-  assert.throws(
-    () => parseTestBlock("test.jh", lines, 0),
-    /mock rule requires parentheses/,
   );
 });
 

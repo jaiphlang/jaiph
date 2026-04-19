@@ -7,7 +7,7 @@ redirect_from:
 
 # Testing Jaiph Workflows
 
-Jaiph includes a built-in test harness for workflow testing. Test files (`*.test.jh`) let you mock prompt responses, stub workflows, rules, and scripts, run workflows through the same Node runtime used by `jaiph run`, and assert on captured output — all without calling real LLMs or depending on external state.
+Jaiph includes a built-in test harness for workflow testing. Test files (`*.test.jh`) let you mock prompt responses, stub workflows and scripts, run workflows through the same Node runtime used by `jaiph run`, and assert on captured output — all without calling real LLMs or depending on external state.
 
 Workflow runs combine prompts, shell commands, and orchestration logic. Without a harness, outcomes depend on live models, timing, and the host machine — making regressions hard to catch in CI or during refactors. The test harness solves this by giving you fixed prompt responses, in-process execution, and deterministic assertions.
 
@@ -102,16 +102,6 @@ mock workflow w.greet() {
 ```
 
 The reference format is `<alias>.<workflow>` (preferred) or `<name>` for a workflow defined in the test file itself.
-
-### Mock rule
-
-Same as mock workflow, but for rules (body uses Jaiph steps, not shell):
-
-```jaiph
-mock rule w.validate() {
-  return "stubbed validation"
-}
-```
 
 ### Mock script
 

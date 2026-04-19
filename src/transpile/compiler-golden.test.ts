@@ -15,12 +15,8 @@ test("compiler: extracts script bodies for a simple module", () => {
       [
         'script f_ok = `echo ok`',
         "",
-        "rule ok() {",
-        "  run f_ok()",
-        "}",
-        "",
         "workflow default() {",
-        "  ensure ok()",
+        "  run f_ok()",
         "  log \"done\"",
         "}",
         "",
@@ -92,30 +88,22 @@ test("compiler corpus: representative e2e workflows compile", () => {
   }
 });
 
-test("parser: assignment capture parses for ensure, run, and const run capture", () => {
+test("parser: assignment capture parses for run capture", () => {
   const source = [
     'script say_hello = `echo hello`',
     "",
-    "rule tests_pass() {",
-    "  return \"ok\"",
-    "}",
     "workflow default() {",
-    "  const response = ensure tests_pass()",
     "  const out = run say_hello()",
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
   assert.equal(mod.workflows.length, 1);
   const steps = mod.workflows[0].steps;
-  assert.equal(steps.length, 2);
+  assert.equal(steps.length, 1);
   assert.equal(steps[0].type, "const");
   const c0 = steps[0] as { type: "const"; name: string; value: { kind: string } };
-  assert.equal(c0.name, "response");
-  assert.equal(c0.value.kind, "ensure_capture");
-  assert.equal(steps[1].type, "const");
-  const c1 = steps[1] as { type: "const"; name: string; value: { kind: string } };
-  assert.equal(c1.name, "out");
-  assert.equal(c1.value.kind, "run_capture");
+  assert.equal(c0.name, "out");
+  assert.equal(c0.value.kind, "run_capture");
 });
 
 test("parser: config block parses and populates mod.metadata", () => {
@@ -392,11 +380,9 @@ test("parser: if keyword with old syntax produces E_PARSE", () => {
     () =>
       parsejaiph(
         [
-          "rule check() {",
-          "  return \"ok\"",
-          "}",
+          'script check = `true`',
           "workflow default() {",
-          "  if ensure check(foo=bar baz) {",
+          "  if run check(foo=bar baz) {",
           "    log \"ok\"",
           "  }",
           "}",
@@ -526,12 +512,9 @@ test("parser: wait parses as workflow step (not shell)", () => {
 
 test("parser: brace-style if with old syntax produces E_PARSE", () => {
   const source = [
-    "rule ok() {",
-    "  return \"ok\"",
-    "}",
     'script check = `true`',
     "workflow default() {",
-    "  if not ensure ok() {",
+    "  if not run check() {",
     "    log \"neg\"",
     "  }",
     "}",
@@ -796,22 +779,6 @@ test("parser: top-level local keyword is rejected", () => {
   assert.throws(
     () => parsejaiph(source, "/fake/entry.jh"),
     /unknown top-level keyword "local" — use const NAME = VALUE/,
-  );
-});
-
-test("parser: top-level const name collision with rule is E_PARSE", () => {
-  const source = [
-    'const foo = "bar"',
-    "rule foo() {",
-    "  return \"ok\"",
-    "}",
-    "workflow default() {",
-    "  ensure foo()",
-    "}",
-  ].join("\n");
-  assert.throws(
-    () => parsejaiph(source, "/fake/entry.jh"),
-    /duplicate name "foo".*variable name collides with rule/,
   );
 });
 

@@ -149,9 +149,8 @@ layout: null
                     data-sample-file="say_hello.jh">
                     <p><strong>Jaiph</strong> workflows are typically executable <code>.jh</code> files with a shebang.
                     </p>
-                    <p>The core primitives are <strong>rule</strong> (read-only checks), <strong>prompt</strong>
-                        (calling agents), <strong>script</strong> (custom code or shell commands)
-                        and <strong>workflow</strong> (the main unit of orchestration).
+                    <p>The core primitives are <strong>workflow</strong> (the main unit of orchestration, including read-only checks via <code>run readonly</code>), <strong>prompt</strong>
+                        (calling agents), and <strong>script</strong> (custom code or shell commands).
                     </p>
                     <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
@@ -164,14 +163,14 @@ script validate_name = ```
   fi
 ```
 
-# rules are always executed on readonly filesystem
-rule name_was_provided(name) {
+# workflows called with run readonly execute without side effects
+workflow name_was_provided(name) {
   run validate_name(name)
 }
 
 # workflows are main unit of orchestration
 workflow default(name) {
-  ensure name_was_provided(name)
+  run readonly name_was_provided(name)
 
   # prompts call agents - cursor by default, but it's configurable
   const response = prompt """
@@ -187,10 +186,10 @@ workflow default(name) {
 Jaiph: Running say_hello.jh
 
 <span class="run-keyword">workflow</span> default <span class="run-params">(name="Jakub")</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">rule</span> name_was_provided <span class="run-params">(name="Jakub")</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> name_was_provided <span class="run-params">(name="Jakub")</span>
   <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">script</span> validate_name <span class="run-params">(1="Jakub")</span>
   <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">script validate_name (0s)</span>
-  <span class="run-pass">✓</span> <span class="run-time">rule name_was_provided (0s)</span>
+  <span class="run-pass">✓</span> <span class="run-time">workflow name_was_provided (0s)</span>
   <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> cursor "Say hello to Jakub and p..." <span class="run-params">(name="Jakub")</span>
   <span class="run-pass">✓</span> <span class="run-time">prompt cursor (3s)</span>
   <span class="run-marker">ℹ</span> Hello Jakub — Czech conductor Jakub Hrůša has led major orchestras including the Bamberg Symphony and often appears at the BBC Proms.
@@ -202,10 +201,10 @@ Jaiph: Running say_hello.jh
 Jaiph: Running say_hello.jh
 
 <span class="run-keyword">workflow</span> default
-  <span class="run-marker">▸</span> <span class="run-keyword">rule</span> name_was_provided
+  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> name_was_provided
   <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">script</span> validate_name
   <span class="run-marker">·</span>   <span class="run-fail">✗ script validate_name</span> <span class="run-time">(0s)</span>
-  <span class="run-fail">✗ rule name_was_provided</span> <span class="run-time">(0s)</span>
+  <span class="run-fail">✗ workflow name_was_provided</span> <span class="run-time">(0s)</span>
 
 <span class="run-fail">✗ FAIL</span> <span class="run-keyword">workflow</span> default <span class="run-time">(0.4s)</span>
   Logs: &lt;path&gt;
@@ -439,8 +438,8 @@ Jaiph: Running async.jh
                 </p>
 
                 <h3>Language</h3>
-                <p><strong>Combine prompts with strict checks.</strong> Compose <code>rule</code>,
-                    <code>script</code>, <code>ensure</code>, and <code>prompt</code> in one executable flow so checks
+                <p><strong>Combine prompts with strict checks.</strong> Compose <code>workflow</code>,
+                    <code>script</code>, <code>run readonly</code>, and <code>prompt</code> in one executable flow so checks
                     and AI steps stay in the same pipeline. This way you can enforce structure over non-deterministic
                     agent responses.
                     See <a href="grammar">Grammar</a> and <a href="getting-started">Getting started</a>
@@ -464,8 +463,8 @@ Jaiph: Running async.jh
                     (<code>channel_ref</code> can be local or imported, e.g. <code>shared.findings</code>).
                     See <a href="inbox">Inbox &amp; Dispatch</a>.
                 </p>
-                <p><strong>Failure recovery.</strong> <code>ensure … catch</code> and <code>run … catch</code>
-                    handle failures inline: when a rule or script fails, the recovery body runs <strong>once</strong>.
+                <p><strong>Failure recovery.</strong> <code>run … catch</code>
+                    handles failures inline: when a workflow or script fails, the recovery body runs <strong>once</strong>.
                     For automatic retries, use <code>run … recover</code> — a repair-and-retry loop that
                     re-runs the target until success or a configurable retry limit (default 10).
                     See <a href="grammar">Grammar</a>.
@@ -535,19 +534,17 @@ Jaiph: Running async.jh
                     </dt>
                     <dd>Import other modules and define module-scoped variables (prefer <code>const</code> for new code)
                         shared by
-                        rules, scripts, and workflows in the same file. Values can be single-line
+                        scripts and workflows in the same file. Values can be single-line
                         <code>"..."</code> strings, triple-quoted <code>"""..."""</code> multiline strings,
                         or bare tokens.</dd>
 
-                    <dt><code>rule name() { ... }</code> &middot; <code>rule name(params) { ... }</code> &middot;
-                        <code>workflow name() { ... }</code> &middot; <code>workflow name(params) { ... }</code> &middot;
+                    <dt><code>workflow name() { ... }</code> &middot; <code>workflow name(params) { ... }</code> &middot;
                         <code>script name = `cmd`</code> &middot; <code>script name = ```[lang] ... ```</code>
                     </dt>
-                    <dd><code>rule</code> is for reusable checks (Jaiph structured steps; used with
-                        <code>ensure</code>),
-                        <code>workflow</code> orchestrates Jaiph steps only, and <code>script</code> holds bash (or any
+                    <dd><code>workflow</code> orchestrates Jaiph steps (use <code>run readonly</code> to call a workflow
+                        without side effects), and <code>script</code> holds bash (or any
                         language via a fence lang tag like <code>```node</code>, <code>```python3</code>, or a custom
-                        shebang) invoked with <code>run</code>. Rules and workflows <strong>require parentheses</strong>
+                        shebang) invoked with <code>run</code>. Workflows <strong>require parentheses</strong>
                         on every definition &mdash; even when parameterless (e.g. <code>workflow default() { &hellip; }</code>).
                         Named parameters go inside the parentheses; the compiler validates
                         call-site arity when the callee declares params. Any fence tag is valid &mdash; it maps directly to
@@ -560,13 +557,13 @@ Jaiph: Running async.jh
                             href="cli">CLI reference</a>).
                     </dd>
 
-                    <dt><code>ensure ref()</code> &middot; <code>ensure ref(args) catch (name) { ... }</code> &middot;
-                        <code>run ref()</code> &middot; <code>run ref(args) catch (name) { ... }</code> &middot;
+                    <dt><code>run ref()</code> &middot; <code>run ref(args) catch (name) { ... }</code> &middot;
+                        <code>run readonly ref()</code> &middot; <code>run readonly ref(args)</code> &middot;
                         <code>run `body`(args)</code>
                     </dt>
-                    <dd><code>ensure</code> executes a rule (with optional args); <code>catch</code> handles
-                        failure inline (runs once); <code>run</code> calls another workflow or module script
-                        (managed step &mdash; same value/log contract as <code>ensure</code>). Parentheses are
+                    <dd><code>run</code> calls another workflow or module script;
+                        <code>run readonly</code> calls a workflow without side effects (read-only filesystem);
+                        <code>catch</code> handles failure inline (runs once). Parentheses are
                         <strong>required</strong> on all call sites &mdash; even when passing zero arguments
                         (e.g. <code>run setup()</code>).
                         Arguments can be quoted strings or <strong>bare identifiers</strong>:
@@ -583,14 +580,13 @@ Jaiph: Running async.jh
                         or a triple-quoted <code>"""</code> block for multiline text. Triple backticks are reserved for
                         scripts. Optionally validates structured JSON output and exposes captured variables.</dd>
 
-                    <dt><code>const name = …</code> &middot; <code>const name = ensure ref()</code> &middot;
-                        <code>const name = run ref()</code>
+                    <dt><code>const name = …</code> &middot; <code>const name = run ref()</code> &middot;
+                        <code>const name = run readonly ref()</code>
                     </dt>
                     <dd>Bind or capture step values. All captures require the <code>const</code> keyword.
-                        For <code>ensure</code> / <code>run</code> to rules and workflows,
+                        For <code>run</code> / <code>run readonly</code> to workflows,
                         explicit
-                        <code>return "value"</code> (or <code>return run ref()</code> /
-                        <code>return ensure ref()</code>) feeds the variable; for <code>run</code> to a
+                        <code>return "value"</code> (or <code>return run ref()</code>) feeds the variable; for <code>run</code> to a
                         <strong>script</strong>, capture follows
                         stdout. <code>const</code> RHS has stricter rules (no <code>$(...)</code> &mdash; use
                         <code>run</code>
@@ -623,12 +619,12 @@ Jaiph: Running async.jh
                     <dt><code>fail "reason"</code> &middot; <code>fail """..."""</code></dt>
                     <dd><code>fail</code> aborts with stderr + non-zero exit. Use triple quotes for multiline messages.</dd>
 
-                    <dt><code>ensure ref() catch (err) { … }</code> &middot;
-                        <code>run ref() catch (err) { … }</code>
+                    <dt><code>run ref() catch (err) { … }</code> &middot;
+                        <code>run readonly ref() catch (err) { … }</code>
                     </dt>
                     <dd>Failure recovery: when the target fails, the recovery body runs <strong>once</strong>
                         (like a <code>catch</code> clause). <code>catch</code> requires explicit bindings
-                        in parentheses. Works in both workflows and rules.
+                        in parentheses. Works in workflows.
                     </dd>
 
                     <dt><code>run ref() recover(err) { … }</code> &middot;
@@ -651,9 +647,9 @@ Jaiph: Running async.jh
                         or with <code>return</code> (<code>return match var { … }</code>).
                         Exactly one <code>_</code> wildcard arm is required.
                         Arm bodies support single-line strings, triple-quoted <code>"""…"""</code> multiline strings,
-                        <code>fail</code>, <code>run ref(…)</code>, and <code>ensure ref(…)</code>.
+                        <code>fail</code>, and <code>run ref(…)</code>.
                         These forms execute at runtime: <code>fail</code> aborts the workflow,
-                        <code>run</code>/<code>ensure</code> execute the target and capture its return value.
+                        <code>run</code> executes the target and captures its return value.
                         The <code>return</code> keyword and inline scripts are forbidden inside arm bodies.
                     </dd>
 
@@ -691,9 +687,9 @@ Jaiph: Running async.jh
                     <dd>Stub prompt calls with fixed responses or pattern-based dispatch so tests stay deterministic.
                     </dd>
 
-                    <dt><code>mock workflow</code> &middot; <code>mock rule</code> &middot; <code>mock script</code>
+                    <dt><code>mock workflow</code> &middot; <code>mock script</code>
                     </dt>
-                    <dd>Replace workflow, rule, or script implementations in tests for isolation and targeted
+                    <dd>Replace workflow or script implementations in tests for isolation and targeted
                         assertions.
                     </dd>
 

@@ -10,13 +10,13 @@ script validate_name = ```
 ```
 
 # rules are always executed on readonly filesystem
-rule name_was_provided(name) {
+workflow name_was_provided(name) {
   run validate_name(name)
 }
 
 # workflows are main unit of orchestration
 workflow default(name) {
-  ensure name_was_provided(name)
+  run name_was_provided(name)
 
   # prompts call agents - cursor by default, but it's configurable
   const response = prompt """

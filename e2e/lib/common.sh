@@ -190,7 +190,6 @@ e2e::expect_out() {
     "${dir}"*"${file%.*}__${workflow}.out"
     "${dir}"*"workflow__${workflow}.out"
     "${dir}"*"script__${workflow}.out"
-    "${dir}"*"rule__${workflow}.out"
   )
   shopt -u nullglob
 
@@ -216,7 +215,7 @@ e2e::expect_rule_out() {
   shopt -s nullglob
   local matches=(
     "${dir}"*"${normalized}.out"
-    "${dir}"*"rule__${short_rule}.out"
+    "${dir}"*"workflow__${short_rule}.out"
   )
   shopt -u nullglob
 

@@ -7,17 +7,17 @@ redirect_from:
 
 # Sandboxing
 
-Jaiph provides two independent ways to limit what a workflow can do. **Rules** restrict step types at the language level so validation logic stays small and reviewable. **Docker** (opt-in) runs the entire `jaiph run` workflow inside a container for filesystem and process isolation. You can use either mechanism on its own or combine them.
+Jaiph provides two independent ways to limit what a workflow can do. **`run readonly`** restricts step types at the language level so validation logic stays small and reviewable. **Docker** (opt-in) runs the entire `jaiph run` workflow inside a container for filesystem and process isolation. You can use either mechanism on its own or combine them.
 
 Both local and Docker runs use the same Node workflow runtime and stream `__JAIPH_EVENT__` on stderr. [Hooks](hooks.md) always run on the host CLI and consume that same event stream, even when the runner is inside a container. For `config` syntax, allowed keys, and precedence rules, see [Configuration](configuration.md). For the full step-type matrix, see [Grammar](grammar.md).
 
-## Rules: structured validation, not mutation
+## `run readonly`: structured validation, not mutation
 
-Rules restrict which step types are allowed in their body. The permitted set is: `ensure` (other rules), `run` (scripts only, not workflows), `const` (script/rule captures or bash RHS, not `prompt`), `match`, `fail`, `log` / `logerr`, `return`, `ensure … catch`, and `run … catch`. Raw shell, `prompt`, `send` / `route`, and `run async` are disallowed. See [Grammar -- High-level concepts](grammar.md#high-level-concepts) for the authoritative list.
+`run readonly ref()` executes a workflow in a read-only context. Inside a `readonly` call, the permitted step set is restricted: `run` (scripts and workflows), `const` (script/workflow captures or bash RHS, not `prompt`), `match`, `fail`, `log` / `logerr`, `return`, and `run … catch`. Raw shell, `prompt`, `send` / `route`, and `run async` are disallowed. See [Grammar — High-level concepts](grammar.md#high-level-concepts) for the authoritative list.
 
-The runtime executes rules by walking the AST in-process (`NodeWorkflowRuntime.executeRule`). There is no per-rule OS sandbox -- no mount namespace, no automatic read-only filesystem. When a rule runs a script step, that script executes as a normal managed subprocess with full access to paths the process user can reach. Treat rules as non-mutating checks by convention; perform intentional filesystem changes in workflows, not rules.
+The runtime executes readonly workflow bodies by walking the AST in-process. There is no per-call OS sandbox — no mount namespace, no automatic read-only filesystem. When a readonly workflow runs a script step, that script executes as a normal managed subprocess with full access to paths the process user can reach. Treat readonly workflows as non-mutating checks by convention; perform intentional filesystem changes in unrestricted workflows.
 
-`jaiph test` executes tests in-process with `NodeTestRunner` and does not use Docker or a separate rule sandbox.
+`jaiph test` executes tests in-process with `NodeTestRunner` and does not use Docker or a separate readonly sandbox.
 
 ## Threat model
 

@@ -15,11 +15,10 @@
         "export",
         "channel",
         "local",
-        "rule",
         "workflow",
         "script",
         "test",
-        "ensure",
+        "readonly",
         "catch",
         "recover",
         "run",
@@ -186,9 +185,9 @@
             }
         });
 
-        // Definition names after rule / workflow / script
+        // Definition names after workflow / script / channel
         if (
-            (firstValue === "rule" || firstValue === "workflow" || firstValue === "script" || firstValue === "channel") &&
+            (firstValue === "workflow" || firstValue === "script" || firstValue === "channel") &&
             significant[1] &&
             significant[1].token.type === "identifier"
         ) {
@@ -264,7 +263,7 @@
             for (let i = 1; i < significant.length - 1; i += 1) {
                 if (
                     significant[i].token.type === "identifier" &&
-                    (significant[i].token.value === "ensure" || significant[i].token.value === "run")
+                    significant[i].token.value === "run"
                 ) {
                     annotated[significant[i].index].kind = "keyword";
                     if (significant[i + 1].token.type === "identifier") {
@@ -287,13 +286,13 @@
             }
         }
 
-        if (firstValue === "ensure" || firstValue === "run") {
+        if (firstValue === "run") {
             var refAt = 1;
-            // Skip modifier keywords (async, isolated) to find the actual ref
+            // Skip modifier keywords (async, isolated, readonly) to find the actual ref
             while (
                 significant[refAt] &&
                 significant[refAt].token.type === "identifier" &&
-                (significant[refAt].token.value === "async" || significant[refAt].token.value === "isolated")
+                (significant[refAt].token.value === "async" || significant[refAt].token.value === "isolated" || significant[refAt].token.value === "readonly")
             ) {
                 annotated[significant[refAt].index].kind = "keyword";
                 refAt += 1;
@@ -345,27 +344,6 @@
             }
         }
 
-        if (firstValue === "ensure") {
-            for (let i = 1; i < significant.length; i += 1) {
-                if (
-                    significant[i].token.type === "identifier" &&
-                    significant[i].token.value === "else"
-                ) {
-                    annotated[significant[i].index].kind = "keyword";
-                    if (
-                        significant[i + 1] &&
-                        significant[i + 1].token.type === "identifier" &&
-                        significant[i + 1].token.value === "run"
-                    ) {
-                        annotated[significant[i + 1].index].kind = "keyword";
-                        if (significant[i + 2] && significant[i + 2].token.type === "identifier") {
-                            annotated[significant[i + 2].index].kind = "identifier";
-                        }
-                    }
-                    break;
-                }
-            }
-        }
 
         return annotated;
     }

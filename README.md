@@ -11,7 +11,7 @@
 
 ## What is Jaiph?
 
-**Jaiph** is a composable scripting language and runtime for defining and orchestrating AI agent workflows. You write **`.jh`** files that combine prompts, rules, scripts, and workflows into executable pipelines. The CLI parses source into an AST, validates references at compile time, and the Node workflow runtime interprets the AST directly.
+**Jaiph** is a composable scripting language and runtime for defining and orchestrating AI agent workflows. You write **`.jh`** files that combine prompts, scripts, and workflows into executable pipelines. The CLI parses source into an AST, validates references at compile time, and the Node workflow runtime interprets the AST directly.
 
 > [!WARNING]
 > Jaiph is still in an early stage. Expect breaking changes.
@@ -64,17 +64,17 @@ import "tools/security.jh" as security
 
 script check_deps = `test -f "package.json"`
 
-rule deps_exist() {
+workflow deps_exist() {
   run check_deps() catch (err) {
     fail "Missing package.json"
   }
 }
 
 workflow default(task) {
-  ensure deps_exist()
+  run readonly deps_exist()
   const ts = run `date +%s`()
   prompt "Build the application: ${task}"
-  ensure security.scan_passes()
+  run readonly security.scan_passes()
 }
 ```
 

@@ -5,12 +5,12 @@
 # auto-fix failing tests — see .jaiph/ensure_ci_passes.jh
 script check_report = `test -f report.txt`
 
-rule report_exists() {
+workflow report_exists() {
   run check_report()
 }
 
 workflow default() {
-  ensure report_exists() catch (failure) {
+  run report_exists() catch (failure) {
     prompt "report.txt is missing. Create it with a short dummy summary."
     run default()
   }

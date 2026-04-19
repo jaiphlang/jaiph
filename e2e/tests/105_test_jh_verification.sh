@@ -11,7 +11,7 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
 # ==========================================================================
 # Section 1: Passing test with import, mock prompt, mock script, mock
-#            workflow, mock rule, and assertions — exact output verification
+#            workflow, mock workflow, and assertions — exact output verification
 # ==========================================================================
 
 e2e::section "jaiph test: representative passing .test.jh"
@@ -21,7 +21,7 @@ e2e::file "lib.jh" <<'EOF'
 #!/usr/bin/env jaiph
 script validate_impl = `[ -n "$1" ] && echo "valid"`
 
-rule validate(input) {
+workflow validate(input) {
   run validate_impl(input)
 }
 
@@ -32,7 +32,7 @@ workflow deploy() {
 }
 
 workflow default(input) {
-  ensure validate(input)
+  run validate(input)
   const response = prompt "summarize deployment"
   run deploy()
 }
@@ -44,7 +44,7 @@ import "lib.jh" as lib
 test "full orchestration with all mock types" {
   mock prompt "deployment summary"
 
-  mock rule lib.validate(input) {
+  mock workflow lib.validate(input) {
     return "mock-valid"
   }
 

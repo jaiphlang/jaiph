@@ -225,7 +225,7 @@ e2e::pass "if body not taken → workflow continues"
 e2e::section "if in rules"
 
 e2e::file "if_rule.jh" <<'EOF'
-rule validate(input) {
+workflow validate(input) {
   if input == "" {
     fail "input must not be empty"
   }
@@ -233,13 +233,13 @@ rule validate(input) {
 }
 
 workflow default(val) {
-  ensure validate(val)
+  run validate(val)
   log "validated"
 }
 EOF
 
 e2e::expect_fail "if_rule.jh"
-e2e::pass "if in rule triggers fail on empty"
+e2e::pass "if in workflow triggers fail on empty"
 
 rule_ok_out="$(e2e::run "if_rule.jh" "data")"
 e2e::expect_stdout "${rule_ok_out}" <<'EOF'
@@ -247,11 +247,11 @@ e2e::expect_stdout "${rule_ok_out}" <<'EOF'
 Jaiph: Running if_rule.jh
 
 workflow default (val="data")
-  ▸ rule validate (input="data")
+  ▸ workflow validate (input="data")
   ·   ℹ input ok: data
-  ✓ rule validate (<time>)
+  ✓ workflow validate (<time>)
   ℹ validated
 
 ✓ PASS workflow default (<time>)
 EOF
-e2e::pass "if in rule skips body when condition is false"
+e2e::pass "if in workflow skips body when condition is false"

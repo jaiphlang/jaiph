@@ -23,12 +23,12 @@ sleep 1
 echo "line-3"
 echo "err-3" >&2
 ```
-rule slow_writer() {
+workflow slow_writer() {
   run slow_writer_impl()
 }
 
 workflow default() {
-  ensure slow_writer()
+  run slow_writer()
 }
 WORKFLOW
 

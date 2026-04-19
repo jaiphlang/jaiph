@@ -35,12 +35,12 @@ script fail_fast_impl = ```
 echo "about to fail"
 exit 1
 ```
-rule fail_fast() {
+workflow fail_fast() {
   run fail_fast_impl()
 }
 
 workflow default() {
-  ensure fail_fast()
+  run fail_fast()
 }
 EOF
 
@@ -72,13 +72,13 @@ e2e::file "stream_check.jh" <<'EOF'
 script greet_impl = ```
 echo "streamed hello"
 ```
-rule greet() {
+workflow greet() {
   run greet_impl()
 }
 
 workflow default() {
   log "before greet"
-  ensure greet()
+  run greet()
   log "after greet"
 }
 EOF

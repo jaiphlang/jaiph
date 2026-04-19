@@ -82,7 +82,7 @@ function collectInlineScripts(
     } else if (s.type === "const" && s.value.kind === "run_inline_script_capture") {
       const shebang = s.value.lang ? langToShebang(s.value.lang) : undefined;
       emitInlineScriptArtifact(s.value.body, shebang, seen, out);
-    } else if ((s.type === "ensure" || s.type === "run") && s.recover) {
+    } else if (s.type === "run" && s.recover) {
       const recoverSteps = "single" in s.recover ? [s.recover.single] : s.recover.block;
       collectInlineScripts(recoverSteps, seen, out);
     }
@@ -155,10 +155,9 @@ export function buildScriptFiles(
     out.push({ name: sc.name, content });
   }
 
-  // Emit inline script artifacts from workflow/rule steps
+  // Emit inline script artifacts from workflow steps
   const seen = new Set<string>();
   for (const w of ast.workflows) collectInlineScripts(w.steps, seen, out);
-  for (const r of ast.rules) collectInlineScripts(r.steps, seen, out);
 
   return out;
 }

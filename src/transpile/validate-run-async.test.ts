@@ -5,33 +5,6 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { buildScripts } from "../transpiler";
 
-test("E_VALIDATE: run async is rejected in rules", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-val-async-rule-"));
-  try {
-    writeFileSync(
-      join(root, "m.jh"),
-      [
-        "workflow helper() {",
-        '  log "hi"',
-        "}",
-        "rule check() {",
-        "  run async helper()",
-        "}",
-        "workflow default() {",
-        "  ensure check()",
-        "}",
-        "",
-      ].join("\n"),
-    );
-    assert.throws(
-      () => buildScripts(join(root, "m.jh"), join(root, "out")),
-      /run async is not allowed in rules/,
-    );
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
 test("E_VALIDATE: run async is accepted in workflows", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-async-wf-"));
   try {

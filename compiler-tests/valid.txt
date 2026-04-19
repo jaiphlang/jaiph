@@ -5,17 +5,17 @@ workflow default() {
   log "hello"
 }
 
-=== workflow with rule and script
+=== workflow with sub-workflow and script
 # @expect ok
 --- input.jh
-rule check() {
+workflow check() {
   run checker()
 }
 
 script checker = `echo ok`
 
 workflow default() {
-  ensure check()
+  run check()
   log "done"
 }
 
@@ -51,10 +51,10 @@ workflow default() {
 import "lib.jh" as lib
 
 workflow default() {
-  ensure lib.check()
+  run lib.check()
 }
 --- lib.jh
-rule check() {
+workflow check() {
   run check_impl()
 }
 
@@ -87,12 +87,6 @@ workflow default() {
   run `echo hello`()
 }
 
-=== rule with empty braced body
-# @expect ok
---- input.jh
-rule check() {
-}
-
 === script with empty braced body
 # @expect ok
 --- input.jh
@@ -108,12 +102,6 @@ workflow default() {
 # @expect ok
 --- input.jh
 export workflow main() {
-}
-
-=== export rule with empty braced body
-# @expect ok
---- input.jh
-export rule check() {
 }
 
 === workflow config inside workflow
@@ -219,42 +207,24 @@ export workflow helper() {
   log "ok"
 }
 
-=== return ensure in workflow
+=== return run from sub-workflow
 # @expect ok
 --- input.jh
-rule check() {
+workflow check() {
   return "ok"
 }
 workflow default() {
-  return ensure check()
+  return run check()
 }
 
-=== return ensure with args
+=== return run from sub-workflow with args
 # @expect ok
 --- input.jh
-rule check(x) {
+workflow check(x) {
   return "ok"
 }
 workflow default() {
-  return ensure check("x")
-}
-
-=== return run in rule
-# @expect ok
---- input.jh
-script helper = `echo "ok"`
-rule my_rule() {
-  return run helper()
-}
-
-=== return ensure in rule
-# @expect ok
---- input.jh
-rule sub_rule() {
-  return "ok"
-}
-rule my_rule() {
-  return ensure sub_rule()
+  return run check("x")
 }
 
 === return with string value
@@ -343,16 +313,16 @@ print('hello')
 ```()
 }
 
-=== assignment capture parses for ensure and const run
+=== assignment capture parses for run workflows and const run
 # @expect ok
 --- input.jh
 script say_hello = `echo hello`
 
-rule tests_pass() {
+workflow tests_pass() {
   return "ok"
 }
 workflow default() {
-  const response = ensure tests_pass()
+  const response = run tests_pass()
   const out = run say_hello()
 }
 
@@ -586,12 +556,12 @@ workflow default() {
 --- input.jh
 script f_ok = `echo ok`
 
-rule ok() {
+workflow ok() {
   run f_ok()
 }
 
 workflow default() {
-  ensure ok()
+  run ok()
   log "done"
 }
 
@@ -654,10 +624,10 @@ workflow default() {
     returns "{ type: string, risk: string }"
 }
 
-=== valid ensure catch block
+=== valid run catch block
 # @expect ok
 --- input.jh
-rule ci_passes(repo_dir) {
+workflow ci_passes(repo_dir) {
   run ci_passes_impl()
 }
 script ci_passes_impl = `true`
@@ -667,21 +637,21 @@ workflow fix_it() {
 }
 
 workflow default() {
-  ensure ci_passes("$repo_dir") catch (failure) {
+  run ci_passes("$repo_dir") catch (failure) {
     run fix_it()
   }
 }
 
-=== ensure catch multiline triple-quoted prompt and hash comment
+=== run catch multiline triple-quoted prompt and hash comment
 # @expect ok
 --- input.jh
-rule gate() {
+workflow gate() {
   run noop()
 }
 script noop = `true`
 
 workflow default() {
-  ensure gate() catch (err) {
+  run gate() catch (err) {
     prompt """
       fix the build
     """
@@ -690,20 +660,20 @@ workflow default() {
   }
 }
 
-=== ensure catch in rules is valid
+=== run catch in sub-workflows is valid
 # @expect ok
 --- input.jh
-rule sub_rule() {
+workflow sub_workflow() {
   return "ok"
 }
 script fallback_impl = `echo "fallback"`
-rule check() {
-  ensure sub_rule() catch (err) {
+workflow check() {
+  run sub_workflow() catch (err) {
     run fallback_impl()
   }
 }
 workflow default() {
-  ensure check()
+  run check()
 }
 
 === valid ${name} interpolation in log
@@ -743,14 +713,14 @@ workflow default() {
   log "got: ${run greet()}"
 }
 
-=== valid inline ensure capture in log
+=== valid inline run capture in log from workflow
 # @expect ok
 --- input.jh
-rule check() {
+workflow check() {
   return "ok"
 }
 workflow default() {
-  log "status: ${ensure check()}"
+  log "status: ${run check()}"
 }
 
 === valid inline run capture with args
@@ -772,15 +742,15 @@ workflow default() {
   run helper()
 }
 
-=== valid inline run capture in rule log
+=== valid inline run capture in workflow log
 # @expect ok
 --- input.jh
 script greet = `echo "hello"`
-rule check() {
+workflow check() {
   log "got: ${run greet()}"
 }
 workflow default() {
-  ensure check()
+  run check()
 }
 
 === valid dot field ref in log compiles
@@ -863,17 +833,17 @@ workflow default() {
   run helper()
 }
 
-=== rule with multiple steps
+=== workflow with multiple steps
 # @expect ok
 --- input.jh
 script check_a = `true`
 script check_b = `true`
-rule validate() {
+workflow validate() {
   run check_a()
   run check_b()
 }
 workflow default() {
-  ensure validate()
+  run validate()
 }
 
 === prompt step in workflow
@@ -1035,24 +1005,24 @@ workflow default() {
   }
 }
 
-=== inline ensure catch with single log statement
+=== inline run catch with single log statement
 # @expect ok
 --- input.jh
-rule check() {
+workflow check() {
   return "ok"
 }
 workflow default() {
-  ensure check() catch (err) log "recovered: ${err}"
+  run check() catch (err) log "recovered: ${err}"
 }
 
-=== inline ensure catch with single fail statement
+=== inline run catch with single fail statement
 # @expect ok
 --- input.jh
-rule check() {
+workflow check() {
   return "ok"
 }
 workflow default() {
-  ensure check() catch (err) fail "unrecoverable: ${err}"
+  run check() catch (err) fail "unrecoverable: ${err}"
 }
 
 === catch block with return string statement
@@ -1104,7 +1074,7 @@ workflow default() {
   run helper()
 }
 
-=== inline run catch with single log statement
+=== inline run catch with single log statement in workflow
 # @expect ok
 --- input.jh
 workflow helper() {
@@ -1126,10 +1096,10 @@ workflow default() {
   }
 }
 
-=== catch block with return ensure
+=== catch block with return run
 # @expect ok
 --- input.jh
-rule check() {
+workflow check() {
   return "ok"
 }
 workflow helper() {
@@ -1137,7 +1107,7 @@ workflow helper() {
 }
 workflow default() {
   run helper() catch (err) {
-    return ensure check()
+    return run check()
   }
 }
 
@@ -1168,11 +1138,11 @@ workflow default() {
 # @expect ok
 --- input.jh
 script fix = `echo "fixing $1"`
-rule check() {
+workflow check() {
   return "ok"
 }
 workflow default() {
-  ensure check() catch (failure) {
+  run check() catch (failure) {
     run fix(failure)
   }
 }

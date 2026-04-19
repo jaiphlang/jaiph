@@ -9,13 +9,13 @@ trap e2e::cleanup EXIT
 e2e::prepare_test_env "mock_workflow_rule_script"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
-e2e::section "Mock workflow, rule, and script in *.test.jh"
+e2e::section "Mock workflow, workflow, and script in *.test.jh"
 
 # Given
 e2e::file "app.jh" <<'EOF'
 #!/usr/bin/env jaiph
 script policy_check_impl = `echo real-policy`
-rule policy_check() {
+workflow policy_check() {
   run policy_check_impl()
 }
 script changed_files = `echo real_files`
@@ -26,7 +26,7 @@ workflow build() {
   run build_impl()
 }
 workflow default() {
-  ensure policy_check()
+  run policy_check()
   run build()
 }
 EOF
@@ -41,7 +41,7 @@ test "isolated orchestration" {
     return "build ok"
   }
 
-  mock rule app.policy_check() {
+  mock workflow app.policy_check() {
     log "policy ok"
     return "policy ok"
   }
@@ -69,4 +69,4 @@ if [[ "${test_out}" != *"isolated orchestration"* ]]; then
   printf "%s\n" "${test_out}" >&2
   e2e::fail "expected test case name in output"
 fi
-e2e::pass "mock workflow, rule, and script tests pass"
+e2e::pass "mock workflow, workflow, and script tests pass"

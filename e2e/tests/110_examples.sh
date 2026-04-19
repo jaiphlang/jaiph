@@ -92,10 +92,10 @@ e2e::expect_stdout "${say_hello_out}" <<'EOF'
 Jaiph: Running say_hello.jh
 
 workflow default
-  ▸ rule name_was_provided
+  ▸ workflow name_was_provided
   ·   ▸ script validate_name
   ·   ✗ script validate_name (<time>)
-  ✗ rule name_was_provided (<time>)
+  ✗ workflow name_was_provided (<time>)
 EOF
 
 e2e::expect_file "*script__validate_name.err" <<'EOF'
@@ -135,7 +135,7 @@ testing say_hello.test.jh
 EOF
 
 # ── recover_loop.jh ────────────────────────────────────────────────────────
-# Success path: report.txt exists, rule passes, no recovery needed.
+# Success path: report.txt exists, workflow passes, no recovery needed.
 
 e2e::section "examples/recover_loop.jh — success path (report.txt pre-created)"
 
@@ -150,10 +150,10 @@ e2e::expect_stdout "${recover_out}" <<'EOF'
 Jaiph: Running recover_loop.jh
 
 workflow default
-  ▸ rule report_exists
+  ▸ workflow report_exists
   ·   ▸ script check_report
   ·   ✓ script check_report (<time>)
-  ✓ rule report_exists (<time>)
+  ✓ workflow report_exists (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 

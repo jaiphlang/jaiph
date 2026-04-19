@@ -19,7 +19,6 @@ function minimalModule(overrides?: Partial<jaiphModule>): jaiphModule {
     imports: [],
     channels: [],
     exports: [],
-    rules: [],
     scripts: [],
     workflows: [],
     ...overrides,
@@ -109,21 +108,21 @@ test("collectWorkflowChildren: collects async run with prefix", () => {
   assert.equal(items[0].label, "async workflow bg_task");
 });
 
-test("collectWorkflowChildren: collects ensure steps", () => {
+test("collectWorkflowChildren: collects run steps", () => {
   const mod = minimalModule({
     workflows: [{
       name: "default",
       comments: [],
       params: [],
       steps: [
-        { type: "ensure", ref: { value: "check_passes", loc: { line: 2, col: 3 } } },
+        { type: "run", workflow: { value: "check_passes", loc: { line: 2, col: 3 } } },
       ],
       loc: { line: 1, col: 1 },
     }],
   });
   const items = collectWorkflowChildren(mod, "default");
   assert.equal(items.length, 1);
-  assert.equal(items[0].label, "rule check_passes");
+  assert.equal(items[0].label, "workflow check_passes");
 });
 
 test("collectWorkflowChildren: collects prompt steps", () => {
@@ -463,7 +462,7 @@ test("collectWorkflowChildren: run step with block catch includes all recovery i
   assert.equal(items[2].label, "workflow fallback");
 });
 
-test("collectWorkflowChildren: ensure step with single catch includes recovery items", () => {
+test("collectWorkflowChildren: run step with single catch includes recovery items", () => {
   const mod = minimalModule({
     workflows: [{
       name: "default",
@@ -471,8 +470,8 @@ test("collectWorkflowChildren: ensure step with single catch includes recovery i
       params: [],
       steps: [
         {
-          type: "ensure",
-          ref: { value: "check", loc: { line: 2, col: 3 } },
+          type: "run",
+          workflow: { value: "check", loc: { line: 2, col: 3 } },
           recover: {
             single: { type: "run", workflow: { value: "fix_it", loc: { line: 3, col: 5 } } },
             bindings: { failure: "err" },
@@ -484,11 +483,11 @@ test("collectWorkflowChildren: ensure step with single catch includes recovery i
   });
   const items = collectWorkflowChildren(mod, "default");
   assert.equal(items.length, 2);
-  assert.equal(items[0].label, "rule check");
+  assert.equal(items[0].label, "workflow check");
   assert.equal(items[1].label, "workflow fix_it");
 });
 
-test("collectWorkflowChildren: ensure step with block catch includes all recovery items", () => {
+test("collectWorkflowChildren: run step with block catch includes all recovery items", () => {
   const mod = minimalModule({
     workflows: [{
       name: "default",
@@ -496,8 +495,8 @@ test("collectWorkflowChildren: ensure step with block catch includes all recover
       params: [],
       steps: [
         {
-          type: "ensure",
-          ref: { value: "check", loc: { line: 2, col: 3 } },
+          type: "run",
+          workflow: { value: "check", loc: { line: 2, col: 3 } },
           recover: {
             block: [
               { type: "log", message: "check failed", loc: { line: 3, col: 5 } },
@@ -512,7 +511,7 @@ test("collectWorkflowChildren: ensure step with block catch includes all recover
   });
   const items = collectWorkflowChildren(mod, "default");
   assert.equal(items.length, 3);
-  assert.equal(items[0].label, "rule check");
+  assert.equal(items[0].label, "workflow check");
   assert.equal(items[1].label, "ℹ check failed");
   assert.equal(items[2].label, "fail unrecoverable");
 });
@@ -600,7 +599,7 @@ test("collectWorkflowChildren: const with match_expr containing run arm", () => 
   assert.equal(items[1].nested, "deploy");
 });
 
-test("collectWorkflowChildren: const with match_expr containing ensure arm", () => {
+test("collectWorkflowChildren: const with match_expr containing run arm", () => {
   const mod = minimalModule({
     workflows: [{
       name: "default",
@@ -615,7 +614,7 @@ test("collectWorkflowChildren: const with match_expr containing ensure arm", () 
             match: {
               subject: "x",
               arms: [
-                { pattern: { kind: "string_literal", value: "check" }, body: 'ensure gate()' },
+                { pattern: { kind: "string_literal", value: "check" }, body: 'run gate()' },
                 { pattern: { kind: "wildcard" }, body: '"skip"' },
               ],
               loc: { line: 3, col: 10 },
@@ -630,11 +629,11 @@ test("collectWorkflowChildren: const with match_expr containing ensure arm", () 
   const items = collectWorkflowChildren(mod, "default");
   assert.equal(items.length, 2);
   assert.equal(items[0].label, "const status");
-  assert.equal(items[1].label, "rule gate");
+  assert.equal(items[1].label, "workflow gate");
   assert.equal(items[1].nested, "gate");
 });
 
-test("collectWorkflowChildren: const with match_expr arm with no run/ensure", () => {
+test("collectWorkflowChildren: const with match_expr arm with no run", () => {
   const mod = minimalModule({
     workflows: [{
       name: "default",
@@ -815,14 +814,14 @@ test("collectWorkflowChildren: run step with currentSymbol populates stepFunc", 
   assert.equal(items[0].stepFunc, "main_mod::helper");
 });
 
-test("collectWorkflowChildren: ensure step with dotted ref populates stepFunc from symbols", () => {
+test("collectWorkflowChildren: run step with dotted ref populates stepFunc from symbols", () => {
   const mod = minimalModule({
     workflows: [{
       name: "default",
       comments: [],
       params: [],
       steps: [
-        { type: "ensure", ref: { value: "lib.check", loc: { line: 2, col: 3 } } },
+        { type: "run", workflow: { value: "lib.check", loc: { line: 2, col: 3 } } },
       ],
       loc: { line: 1, col: 1 },
     }],
@@ -832,14 +831,14 @@ test("collectWorkflowChildren: ensure step with dotted ref populates stepFunc fr
   assert.equal(items[0].stepFunc, "mylib::check");
 });
 
-test("collectWorkflowChildren: ensure step with currentSymbol populates stepFunc", () => {
+test("collectWorkflowChildren: run step with currentSymbol populates stepFunc", () => {
   const mod = minimalModule({
     workflows: [{
       name: "default",
       comments: [],
       params: [],
       steps: [
-        { type: "ensure", ref: { value: "gate", loc: { line: 2, col: 3 } } },
+        { type: "run", workflow: { value: "gate", loc: { line: 2, col: 3 } } },
       ],
       loc: { line: 1, col: 1 },
     }],
@@ -1018,12 +1017,12 @@ test("buildRunTreeRows: custom rootLabel appears in root row", () => {
   assert.equal(rows[0].isRoot, true);
 });
 
-test("buildRunTreeRows: custom rootLabel with rule kind", () => {
+test("buildRunTreeRows: custom rootLabel with workflow kind", () => {
   const mod = minimalModule({
     workflows: [{ name: "check", comments: [], params: [], steps: [], loc: { line: 1, col: 1 } }],
   });
-  const rows = buildRunTreeRows(mod, "rule check");
-  assert.equal(rows[0].rawLabel, "rule check");
+  const rows = buildRunTreeRows(mod, "workflow check");
+  assert.equal(rows[0].rawLabel, "workflow check");
   assert.equal(rows[0].isRoot, true);
 });
 
@@ -1392,7 +1391,7 @@ test("buildRunTreeRows: match arm with run body expands nested workflow", () => 
   assert.equal(rows.length, 4);
 });
 
-test("buildRunTreeRows: match arm with ensure body shows rule in tree", () => {
+test("buildRunTreeRows: match arm with run body shows workflow in tree", () => {
   const mod = minimalModule({
     workflows: [{
       name: "default",
@@ -1407,7 +1406,7 @@ test("buildRunTreeRows: match arm with ensure body shows rule in tree", () => {
             match: {
               subject: "mode",
               arms: [
-                { pattern: { kind: "string_literal", value: "strict" }, body: 'ensure gate()' },
+                { pattern: { kind: "string_literal", value: "strict" }, body: 'run gate()' },
                 { pattern: { kind: "wildcard" }, body: '"skip"' },
               ],
               loc: { line: 3, col: 3 },
@@ -1422,7 +1421,7 @@ test("buildRunTreeRows: match arm with ensure body shows rule in tree", () => {
   const rows = buildRunTreeRows(mod);
   assert.equal(rows[0].rawLabel, "workflow default");
   assert.equal(rows[1].rawLabel, "const status");
-  assert.equal(rows[2].rawLabel, "rule gate");
+  assert.equal(rows[2].rawLabel, "workflow gate");
   assert.equal(rows.length, 3);
 });
 
@@ -1437,7 +1436,7 @@ test("buildRunTreeRows: workflow with multiple step types produces correct tree"
       steps: [
         { type: "log", message: "starting", loc: { line: 2, col: 3 } },
         { type: "run", workflow: { value: "helper", loc: { line: 3, col: 3 } } },
-        { type: "ensure", ref: { value: "check", loc: { line: 4, col: 3 } } },
+        { type: "run", workflow: { value: "check", loc: { line: 4, col: 3 } } },
         { type: "send", channel: "events", rhs: { kind: "literal", token: '"data"' }, loc: { line: 5, col: 3 } },
         { type: "fail", message: '"reason"', loc: { line: 6, col: 3 } },
       ],
@@ -1448,7 +1447,7 @@ test("buildRunTreeRows: workflow with multiple step types produces correct tree"
   assert.equal(rows[0].rawLabel, "workflow default");
   assert.equal(rows[1].rawLabel, "ℹ starting");
   assert.equal(rows[2].rawLabel, "workflow helper");
-  assert.equal(rows[3].rawLabel, "rule check");
+  assert.equal(rows[3].rawLabel, "workflow check");
   assert.equal(rows[4].rawLabel, "events <- send");
   assert.equal(rows[5].rawLabel, 'fail "reason"');
   assert.equal(rows.length, 6);

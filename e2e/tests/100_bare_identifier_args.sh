@@ -24,23 +24,23 @@ rm -rf "${TEST_DIR}/runs_bare"
 out="$(JAIPH_RUNS_DIR="runs_bare" e2e::run "bare_const.jh" 2>&1)"
 e2e::pass "run script with bare identifier const arg compiles and runs"
 
-e2e::section "ensure rule with bare identifier arg"
+e2e::section "run workflow with bare identifier arg"
 
 e2e::file "bare_ensure.jh" <<'EOF'
 script check_impl = `true`
 
-rule check(value) {
+workflow check(value) {
   run check_impl($1)
 }
 
 workflow default() {
   const status = "ok"
-  ensure check(status)
+  run check(status)
 }
 EOF
 
 out="$(JAIPH_RUNS_DIR="runs_bare" e2e::run "bare_ensure.jh" 2>&1)"
-e2e::pass "ensure rule with bare identifier arg"
+e2e::pass "run workflow with bare identifier arg"
 
 e2e::section "mixed bare and quoted args"
 

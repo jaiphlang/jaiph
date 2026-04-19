@@ -9,13 +9,6 @@ workflow default() {
 --- input.jh
 script 123bad = `echo x`
 
-=== invalid rule declaration
-# @expect error E_PARSE "invalid rule declaration" @1:1
---- input.jh
-rule 123bad {
-  run foo()
-}
-
 === invalid workflow declaration
 # @expect error E_PARSE "invalid workflow declaration" @1:1
 --- input.jh
@@ -73,31 +66,6 @@ workflow default() {
 workflow default() {
   prompt "Show host $(uname)"
 }
-
-=== rule without braces
-# @expect error E_PARSE "rule declarations require parentheses" @1:1
---- input.jh
-rule foo
-
-=== rule with parentheses (unterminated)
-# @expect error E_PARSE "unterminated rule block" @1:1
---- input.jh
-rule foo() {
-
-=== rule with colon instead of braces
-# @expect error E_PARSE "rule declarations require parentheses" @1:1
---- input.jh
-rule foo:
-
-=== export rule without braces
-# @expect error E_PARSE "rule declarations require parentheses" @1:1
---- input.jh
-export rule bar
-
-=== rule with parentheses but no brace
-# @expect error E_PARSE "rule declarations require braces" @1:1
---- input.jh
-rule gate()
 
 === script without braces
 # @expect error E_PARSE "script definitions require = after the name" @1:1
@@ -254,15 +222,6 @@ workflow default() {
   log "ok"
 }
 
-=== if keyword with old syntax produces error
-# @expect error E_PARSE "invalid if syntax" @2:3
---- input.jh
-workflow default() {
-  if ensure ready() {
-    log "x"
-  }
-}
-
 === channel declaration must be single per line
 # @expect error E_PARSE "invalid channel declaration" @1:1
 --- input.jh
@@ -284,17 +243,6 @@ workflow default() {
 local greeting = "hello world"
 workflow default() {
   log "${greeting}"
-}
-
-=== top-level const name collision with rule
-# @expect error E_PARSE "variable name collides with rule" @1:1
---- input.jh
-const foo = "bar"
-rule foo() {
-  return "ok"
-}
-workflow default() {
-  ensure foo()
 }
 
 === top-level const name collision with workflow
@@ -322,12 +270,6 @@ workflow default() {
   const x = some_script("${arg}")
 }
 
-=== unterminated rule block
-# @expect error E_PARSE "unterminated rule block" @1:1
---- input.jh
-rule bad() {
-  echo x
-
 === unsupported top-level statement
 # @expect error E_PARSE "unsupported top-level statement" @1:1
 --- input.jh
@@ -341,19 +283,6 @@ workflow default() {
 --- input.jh
 workflow default() {
   prompt "this never closes
-}
-
-=== if keyword with not produces error
-# @expect error E_PARSE "invalid if syntax" @6:3
---- input.jh
-rule gate() {
-  run gate_impl()
-}
-script gate_impl = `false`
-workflow default() {
-  if not ensure gate() {
-    log "fallback"
-  }
 }
 
 === invalid workflow reference shape with extra dots
@@ -370,53 +299,41 @@ workflow default() {
   prompt "x" returns "{ a: string }"
 }
 
-=== ensure catch with args after catch
-# @expect error E_PARSE "catch requires explicit bindings" @6:22
+=== run catch with args after catch
+# @expect error E_PARSE "catch requires explicit bindings" @6:19
 --- input.jh
-rule ci_passes() {
+workflow ci_passes() {
   run ci_passes_impl()
 }
 script ci_passes_impl = `true`
 workflow default() {
-  ensure ci_passes() catch "$repo_dir" {
+  run ci_passes() catch "$repo_dir" {
     prompt "Apply the smallest safe fix."
   }
 }
 
-=== ensure catch with multiple args after catch
-# @expect error E_PARSE "catch requires explicit bindings" @6:25
+=== run catch with multiple args after catch
+# @expect error E_PARSE "catch requires explicit bindings" @6:20
 --- input.jh
-rule some_rule() {
-  true
+workflow some_wf() {
+  log "ok"
 }
 
 workflow default() {
-  ensure some_rule("a") catch "b" {
+  run some_wf("a") catch "b" {
     log "should not parse"
   }
 }
 
-=== ensure catch without block
-# @expect error E_PARSE "catch requires explicit bindings" @6:33
+=== run catch without block
+# @expect error E_PARSE "unexpected content after run call" @6:1
 --- input.jh
-rule ci_passes() {
-  true
+workflow ci_passes() {
+  log "ok"
 }
 
 workflow default() {
-  ensure ci_passes("$repo_dir") catch
-}
-
-=== ensure catch without bindings (bare catch block)
-# @expect error E_PARSE "catch requires explicit bindings" @5:18
---- input.jh
-rule check() {
-  return "ok"
-}
-workflow default() {
-  ensure check() catch {
-    log "catching"
-  }
+  run ci_passes("$repo_dir") catch
 }
 
 === capture and send combined alt form
@@ -515,17 +432,6 @@ workflow default() {
 --- input.jh
 workflow default() {
   logerr "host is $(uname)"
-}
-
-=== reject shell fallback in rule log
-# @expect error E_PARSE "shell fallback syntax" @3:3
---- input.jh
-script noop = `true`
-rule check() {
-  log "${x:-fallback}"
-}
-workflow default() {
-  ensure check()
 }
 
 === nested inline capture rejected
@@ -696,73 +602,6 @@ workflow default() {
   findings -> analyst
 }
 
-=== if keyword in workflow with args produces error
-# @expect error E_PARSE "invalid if syntax" @5:3
---- input.jh
-rule check(a, b) {
-  return "ok"
-}
-workflow default() {
-  if ensure check(foo=bar baz) {
-    log "ok"
-  }
-}
-
-=== brace-if: wait in rules
-# @expect error E_PARSE "has been removed" @2:3
---- input.jh
-rule check() {
-  wait
-}
-workflow default() {
-  ensure check()
-}
-
-=== brace-if: prompt in rules
-# @expect error E_PARSE "prompt is not allowed in rules" @2:3
---- input.jh
-rule check() {
-  prompt "ask something"
-}
-workflow default() {
-  ensure check()
-}
-
-=== brace-if: send in rules
-# @expect error E_PARSE "send operator is not allowed in rules" @3:1
---- input.jh
-channel findings
-rule check() {
-  findings <- "data"
-}
-workflow default() {
-  ensure check()
-}
-
-=== if keyword with else branch produces error
-# @expect error E_PARSE "invalid if syntax" @5:3
---- input.jh
-rule ready() {
-  return "ok"
-}
-workflow default() {
-  if ensure ready() {
-    log "yes"
-  } else {
-    log "no"
-  }
-}
-
-=== brace-if: const prompt in rules
-# @expect error E_PARSE "prompt is not allowed in rules" @2:13
---- input.jh
-rule check() {
-  const x = prompt "ask"
-}
-workflow default() {
-  ensure check()
-}
-
 === unterminated script block
 # @expect error E_PARSE "unterminated fenced block" @1:1
 --- input.jh
@@ -911,11 +750,11 @@ workflow default() {
 === catch: fail without double quote
 # @expect error E_PARSE "fail must match" @5:1
 --- input.jh
-rule check() {
+workflow helper() {
   return "ok"
 }
 workflow default() {
-  ensure check() catch (failure) {
+  run helper() catch (failure) {
     fail reason
   }
 }
@@ -923,11 +762,11 @@ workflow default() {
 === catch: unterminated fail string
 # @expect error E_PARSE "unterminated fail string" @5:1
 --- input.jh
-rule check() {
+workflow helper() {
   return "ok"
 }
 workflow default() {
-  ensure check() catch (failure) {
+  run helper() catch (failure) {
     fail "reason
   }
 }
@@ -935,11 +774,11 @@ workflow default() {
 === catch: log without double quote
 # @expect error E_PARSE "log must match" @5:1
 --- input.jh
-rule check() {
+workflow helper() {
   return "ok"
 }
 workflow default() {
-  ensure check() catch (failure) {
+  run helper() catch (failure) {
     log reason why
   }
 }
@@ -947,11 +786,11 @@ workflow default() {
 === catch: unterminated log string
 # @expect error E_PARSE "unterminated log string" @5:1
 --- input.jh
-rule check() {
+workflow helper() {
   return "ok"
 }
 workflow default() {
-  ensure check() catch (failure) {
+  run helper() catch (failure) {
     log "reason
   }
 }
@@ -959,11 +798,11 @@ workflow default() {
 === catch: logerr without double quote
 # @expect error E_PARSE "logerr must match" @5:1
 --- input.jh
-rule check() {
+workflow helper() {
   return "ok"
 }
 workflow default() {
-  ensure check() catch (failure) {
+  run helper() catch (failure) {
     logerr reason why
   }
 }
@@ -971,11 +810,11 @@ workflow default() {
 === catch: unterminated logerr string
 # @expect error E_PARSE "unterminated logerr string" @5:1
 --- input.jh
-rule check() {
+workflow helper() {
   return "ok"
 }
 workflow default() {
-  ensure check() catch (failure) {
+  run helper() catch (failure) {
     logerr "reason
   }
 }
@@ -1030,22 +869,6 @@ import "lib.jh" as lib
 
 test "bad ref" {
   mock workflow a.b.c {
-    return "mocked"
-  }
-  const out = run lib.default()
-}
---- lib.jh
-workflow default() {
-  log "ok"
-}
-
-=== test: mock rule with invalid ref (no parens)
-# @expect error E_PARSE "unrecognized test step" @4:3
---- input.test.jh
-import "lib.jh" as lib
-
-test "bad ref" {
-  mock rule a.b.c {
     return "mocked"
   }
   const out = run lib.default()
@@ -1170,24 +993,6 @@ workflow default() {
   x = findings <- "hello"
 }
 
-=== if keyword at top of workflow produces error
-# @expect error E_PARSE "invalid if syntax" @2:3
---- input.jh
-workflow default() {
-  if ensure ready() {
-    log "x"
-  }
-  log "done"
-}
-
-=== run without parentheses in workflow requires parens
-# @expect error E_PARSE "parentheses are required" @3:1
---- input.jh
-script helper = `echo "hi"`
-workflow default() {
-  run helper
-}
-
 === capture run without parentheses requires const
 # @expect error E_PARSE "assignment without" @3:3
 --- input.jh
@@ -1202,16 +1007,6 @@ workflow default() {
 script helper = `echo "hi"`
 workflow default() {
   const x = run helper
-}
-
-=== const ensure without parentheses requires parens
-# @expect error E_PARSE "must target a valid reference" @5:13
---- input.jh
-rule check() {
-  return "ok"
-}
-workflow default() {
-  const x = ensure check
 }
 
 === triple-backtick prompt is rejected
@@ -1347,18 +1142,11 @@ workflow default() {
   const x = run 123bad
 }
 
-=== const ensure with invalid reference
-# @expect error E_PARSE "const ... = ensure must target a valid reference" @2:13
+=== const run cannot use catch
+# @expect error E_PARSE "catch requires explicit bindings" @2:25
 --- input.jh
 workflow default() {
-  const x = ensure 123bad
-}
-
-=== const ensure cannot use catch
-# @expect error E_PARSE "const ... = ensure cannot use catch" @2:13
---- input.jh
-workflow default() {
-  const x = ensure check() catch {
+  const x = run check() catch {
     log "no"
   }
 }
@@ -1431,11 +1219,11 @@ workflow default() {
 === catch: prompt capture without const
 # @expect error E_PARSE "const name = prompt" @5:1
 --- input.jh
-rule check() {
+workflow helper() {
   return "ok"
 }
 workflow default() {
-  ensure check() catch (failure) {
+  run helper() catch (failure) {
     x = prompt "fix"
   }
 }
@@ -1461,16 +1249,6 @@ workflow default() {
   fail "unclosed
 }
 
-=== if keyword after other steps produces error
-# @expect error E_PARSE "invalid if syntax" @3:3
---- input.jh
-workflow default() {
-  log "start"
-  if ensure gate() {
-    log "hi"
-  }
-}
-
 === prompt assign without const in workflow
 # @expect error E_PARSE "const name = prompt" @2:3
 --- input.jh
@@ -1486,27 +1264,14 @@ workflow default() {
 }
 
 === unterminated multiline catch block
-# @expect error E_PARSE "unterminated catch block" @5:18
+# @expect error E_PARSE "unterminated catch block" @5:16
 --- input.jh
-rule check() {
+workflow helper() {
   return "ok"
 }
 workflow default() {
-  ensure check() catch (failure) {
+  run helper() catch (failure) {
     log "catching"
-
-=== duplicate name: rule and workflow
-# @expect error E_PARSE "duplicate name" @4:1
---- input.jh
-rule foo() {
-  return "ok"
-}
-workflow foo() {
-  log "ok"
-}
-workflow default() {
-  log "ok"
-}
 
 === duplicate name: script and workflow
 # @expect error E_PARSE "duplicate name" @2:1
@@ -1515,17 +1280,6 @@ script helper = `echo ok`
 workflow helper() {
   log "ok"
 }
-workflow default() {
-  log "ok"
-}
-
-=== duplicate name: rule and script
-# @expect error E_PARSE "duplicate name" @4:1
---- input.jh
-rule foo() {
-  return "ok"
-}
-script foo = `echo ok`
 workflow default() {
   log "ok"
 }
@@ -1539,21 +1293,14 @@ workflow default() {
 }
 
 === empty multiline catch block
-# @expect error E_PARSE "catch block must contain at least one statement" @5:18
+# @expect error E_PARSE "catch block must contain at least one statement" @5:16
 --- input.jh
-rule check() {
+workflow helper() {
   return "ok"
 }
 workflow default() {
-  ensure check() catch (failure) {
+  run helper() catch (failure) {
   }
-}
-
-=== ensure with invalid reference
-# @expect error E_PARSE "ensure must target a valid reference" @2:1
---- input.jh
-workflow default() {
-  ensure 123bad
 }
 
 === config line without equals sign
@@ -1626,13 +1373,13 @@ workflow default() {
 }
 
 === empty inline catch block
-# @expect error E_PARSE "catch block must contain at least one statement" @5:18
+# @expect error E_PARSE "catch block must contain at least one statement" @5:16
 --- input.jh
-rule check() {
+workflow helper() {
   return "ok"
 }
 workflow default() {
-  ensure check() catch (failure) { }
+  run helper() catch (failure) { }
 }
 
 === test: old camelCase expectContain rejected
@@ -1715,24 +1462,6 @@ workflow default() {
   log "ok"
 }
 
-=== test: mock rule without parens rejected
-# @expect error E_PARSE "mock rule requires parentheses" @4:3
---- input.test.jh
-import "lib.jh" as lib
-
-test "old syntax" {
-  mock rule lib.check {
-    return "mocked"
-  }
-}
---- lib.jh
-rule check() {
-  return "ok"
-}
-workflow default() {
-  log "ok"
-}
-
 === test: mock script without parens rejected
 # @expect error E_PARSE "mock script requires parentheses" @4:3
 --- input.test.jh
@@ -1760,52 +1489,6 @@ test "bad step" {
 --- lib.jh
 workflow default() {
   log "ok"
-}
-
-=== ensure catch with unterminated bindings paren
-# @expect error E_PARSE "unterminated catch bindings"
---- input.jh
-rule check() {
-  return "ok"
-}
-workflow default() {
-  ensure check() catch (failure {
-    log "catching"
-  }
-}
-
-=== ensure catch with empty bindings
-# @expect error E_PARSE "catch requires exactly one binding"
---- input.jh
-rule check() {
-  return "ok"
-}
-workflow default() {
-  ensure check() catch () {
-    log "catching"
-  }
-}
-
-=== ensure catch with invalid binding name
-# @expect error E_PARSE "invalid catch binding name"
---- input.jh
-rule check() {
-  return "ok"
-}
-workflow default() {
-  ensure check() catch (123bad) {
-    log "catching"
-  }
-}
-
-=== ensure catch with no body after bindings
-# @expect error E_PARSE "catch requires a body after bindings"
---- input.jh
-rule check() {
-  return "ok"
-}
-workflow default() {
-  ensure check() catch (failure)
 }
 
 === run catch with unterminated bindings paren
@@ -1854,18 +1537,6 @@ workflow default() {
   run helper() catch (failure)
 }
 
-=== ensure catch with multiple bindings rejected
-# @expect error E_PARSE "catch accepts exactly one binding"
---- input.jh
-rule check() {
-  return "ok"
-}
-workflow default() {
-  ensure check() catch (failure, attempt) {
-    log "catching"
-  }
-}
-
 === run catch with multiple bindings rejected
 # @expect error E_PARSE "catch accepts exactly one binding"
 --- input.jh
@@ -1881,21 +1552,21 @@ workflow default() {
 === inline catch fail without double quote
 # @expect error E_PARSE "fail must match"
 --- input.jh
-rule check() {
+workflow helper() {
   return "ok"
 }
 workflow default() {
-  ensure check() catch (failure) fail reason
+  run helper() catch (failure) fail reason
 }
 
 === inline catch unterminated fail string
 # @expect error E_PARSE "unterminated fail string"
 --- input.jh
-rule check() {
+workflow helper() {
   return "ok"
 }
 workflow default() {
-  ensure check() catch (failure) fail "reason
+  run helper() catch (failure) fail "reason
 }
 
 === inline config block missing equals sign
@@ -1960,15 +1631,6 @@ workflow default() { log "hello"
 # @expect error E_PARSE "runtime.* keys are not allowed"
 --- input.jh
 workflow default() { config { runtime.docker_enabled = true } }
-
-=== rule body content after brace without closing on same line
-# @expect error E_PARSE "expected newline after '{'"
---- input.jh
-rule check() { run foo()
-}
-workflow default() {
-  ensure check()
-}
 
 === prompt triple-quote closing with invalid trailing content
 # @expect error E_PARSE "closing"
@@ -2077,11 +1739,11 @@ workflow default() {
 === wait in catch block rejected
 # @expect error E_PARSE "has been removed"
 --- input.jh
-rule check() {
+workflow helper() {
   return "ok"
 }
 workflow default() {
-  ensure check() catch (err) {
+  run helper() catch (err) {
     wait
   }
 }
@@ -2142,11 +1804,11 @@ payload
 === wait in inline catch statement
 # @expect error E_PARSE "has been removed"
 --- input.jh
-rule check() {
+workflow helper() {
   return "ok"
 }
 workflow default() {
-  ensure check() catch (err) wait
+  run helper() catch (err) wait
 }
 
 === catch block: assignment without const rejected
@@ -2164,11 +1826,11 @@ workflow default() {
 === catch block: prompt assign without const
 # @expect error E_PARSE "const name = prompt"
 --- input.jh
-rule check() {
+workflow helper() {
   return "ok"
 }
 workflow default() {
-  ensure check() catch (failure) {
+  run helper() catch (failure) {
     x = prompt "fix"
   }
 }
@@ -2292,11 +1954,11 @@ script broken = `echo hello
 === inline catch return without value
 # @expect error E_PARSE "catch requires explicit bindings"
 --- input.jh
-rule check() {
+workflow helper() {
   return "ok"
 }
 workflow default() {
-  ensure check() catch return
+  run helper() catch return
 }
 
 === run catch unterminated multiline block
@@ -2308,27 +1970,6 @@ workflow helper() {
 workflow default() {
   run helper() catch (err) {
     log "catching"
-
-=== ensure catch unterminated multiline block
-# @expect error E_PARSE "unterminated catch block"
---- input.jh
-rule check() {
-  return "ok"
-}
-workflow default() {
-  ensure check() catch (err) {
-    log "catching"
-
-=== inline script fenced unterminated in rule body
-# @expect error E_PARSE "unterminated fenced block"
---- input.jh
-rule check() {
-  run ```
-echo hello
-}
-workflow default() {
-  ensure check()
-}
 
 === fail triple-quote opening with content on same line
 # @expect error E_PARSE "must not have content on the same line"

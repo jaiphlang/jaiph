@@ -1,4 +1,4 @@
-import type { ConstRhs, RuleRefDef, WorkflowRefDef } from "../types";
+import type { ConstRhs, WorkflowRefDef } from "../types";
 import { fail, isRef, parseCallRef } from "./core";
 import { parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 import { parseAnonymousInlineScript } from "./inline-script";
@@ -53,7 +53,7 @@ export function validateConstBashExpr(filePath: string, expr: string, lineNo: nu
 }
 
 /**
- * Parse RHS after `const name = ` (trimmed). `forRule` disallows prompt capture.
+ * Parse RHS after `const name = ` (trimmed).
  */
 export function parseConstRhs(
   filePath: string,
@@ -62,14 +62,11 @@ export function parseConstRhs(
   rhs: string,
   lineNo: number,
   col: number,
-  forRule: boolean,
+  _forRule: boolean,
   constName: string,
 ): { value: ConstRhs; nextLineIdx: number } {
   const head = rhs.trimStart();
   if (head.startsWith("prompt ")) {
-    if (forRule) {
-      fail(filePath, "const ... = prompt is not allowed in rules", lineNo, col);
-    }
     const innerRaw = lines[lineIdx];
     const promptCol = innerRaw.indexOf("prompt") + 1;
     const promptArg = rhs.slice(rhs.indexOf("prompt") + "prompt".length).trimStart();
@@ -151,6 +148,26 @@ export function parseConstRhs(
       nextLineIdx: lineIdx,
     };
   }
+  if (head.startsWith("run readonly ")) {
+    const rest = head.slice("run readonly ".length).trim();
+    if (rest.startsWith("`")) {
+      fail(filePath, "run readonly is not supported with inline scripts", lineNo, col);
+    }
+    const call = parseCallRef(rest);
+    if (!call) {
+      fail(filePath, "const ... = run readonly must target a valid reference", lineNo, col);
+    }
+    rejectTrailingContent(filePath, lineNo, "run readonly", call.rest);
+    const ref: WorkflowRefDef = { value: call.ref, loc: { line: lineNo, col } };
+    return {
+      value: {
+        kind: "run_capture", ref, args: call.args,
+        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
+        readonly: true,
+      },
+      nextLineIdx: lineIdx,
+    };
+  }
   if (head.startsWith("run ")) {
     const rest = head.slice("run ".length).trim();
     if (rest.startsWith("`")) {
@@ -178,24 +195,6 @@ export function parseConstRhs(
     return {
       value: {
         kind: "run_capture", ref, args: call.args,
-        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
-      },
-      nextLineIdx: lineIdx,
-    };
-  }
-  if (head.startsWith("ensure ")) {
-    const rest = head.slice("ensure ".length).trim();
-    const call = parseCallRef(rest);
-    if (!call) {
-      fail(filePath, "const ... = ensure must target a valid reference", lineNo, col);
-    }
-    if (call.rest.trim()) {
-      fail(filePath, "const ... = ensure cannot use catch", lineNo, col);
-    }
-    const ref: RuleRefDef = { value: call.ref, loc: { line: lineNo, col } };
-    return {
-      value: {
-        kind: "ensure_capture", ref, args: call.args,
         ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
       },
       nextLineIdx: lineIdx,

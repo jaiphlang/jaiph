@@ -78,22 +78,22 @@ if jaiph run "${TEST_DIR}/sub_fn.jh" >/dev/null 2>&1; then
 fi
 e2e::pass "command substitution with Jaiph function rejected"
 
-e2e::section "ensure and run workflows still build"
+e2e::section "run workflows still build"
 
 e2e::file "ensure_run_smoke.jh" <<'EOF'
 script ok_impl = `true`
 
-rule ok() {
+workflow ok() {
   run ok_impl()
 }
 workflow child() {
-  ensure ok()
+  run ok()
 }
 workflow default() {
-  ensure ok()
+  run ok()
   run child()
 }
 EOF
 
 smoke_out="$(jaiph run "${TEST_DIR}/ensure_run_smoke.jh" 2>&1)"
-e2e::pass "ensure and run regression smoke"
+e2e::pass "run regression smoke"

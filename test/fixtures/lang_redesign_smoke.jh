@@ -1,6 +1,6 @@
 #!/usr/bin/env jaiph
 
-rule always_ok() {
+workflow always_ok() {
   run always_ok_impl()
 }
 
@@ -22,10 +22,10 @@ workflow wf_async() {
 }
 
 workflow wf_brace_if() {
-  ensure always_ok()
+  run always_ok()
   log "then"
 }
 
 workflow default() {
-  ensure always_ok()
+  run always_ok()
 }

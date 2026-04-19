@@ -9,7 +9,7 @@ trap e2e::cleanup EXIT
 e2e::prepare_test_env "assign_capture"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
-e2e::section "Assignment capture for ensure and shell"
+e2e::section "Assignment capture for run and shell"
 
 # Given
 cp "${ROOT_DIR}/e2e/assign_capture.jh" "${TEST_DIR}/assign_capture.jh"
@@ -23,10 +23,10 @@ e2e::expect_stdout "${assign_out}" <<'EOF'
 Jaiph: Running assign_capture.jh
 
 workflow default
-  ▸ rule echo_line
+  ▸ workflow echo_line
   ·   ▸ script echo_line_impl
   ·   ✓ script echo_line_impl (<time>)
-  ✓ rule echo_line (<time>)
+  ✓ workflow echo_line (<time>)
   ▸ script shell_capture
   ✓ script shell_capture (<time>)
   ▸ script format_output (1="captured-value", 2="shell-capture")

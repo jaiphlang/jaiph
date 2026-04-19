@@ -40,7 +40,7 @@ e2e::expect_out "hello.jh" "hello_impl" "hello-jh"
 # Given
 e2e::file "lib.jh" <<'EOF'
 script ready_impl = `echo "from-lib"`
-rule ready() {
+workflow ready() {
   const result = run ready_impl()
   return "${result}"
 }
@@ -50,7 +50,7 @@ e2e::file "app.jh" <<'EOF'
 import "lib.jh" as lib
 script mixed_ok_impl = `echo "mixed-ok"`
 workflow default() {
-  ensure lib.ready()
+  run lib.ready()
   const msg = run mixed_ok_impl()
   return "${msg}"
 }
@@ -65,10 +65,10 @@ e2e::expect_stdout "${mixed_out}" <<'EOF'
 Jaiph: Running app.jh
 
 workflow default
-  ▸ rule ready
+  ▸ workflow ready
   ·   ▸ script ready_impl
   ·   ✓ script ready_impl (<time>)
-  ✓ rule ready (<time>)
+  ✓ workflow ready (<time>)
   ▸ script mixed_ok_impl
   ✓ script mixed_ok_impl (<time>)
 ✓ PASS workflow default (<time>)
@@ -78,7 +78,7 @@ e2e::expect_out_files "app.jh" 4
 e2e::expect_out "app.jh" "ready_impl" "from-lib"
 e2e::expect_out "app.jh" "mixed_ok_impl" "mixed-ok"
 
-e2e::section "Git-aware rule arguments"
+e2e::section "Git-aware workflow arguments"
 
 # Given
 e2e::file "current_branch.jh" <<'EOF'
@@ -94,12 +94,12 @@ if [ "$(git branch --show-current)" != "$1" ]; then
   exit 1
 fi
 ```
-rule current_branch(branch) {
+workflow current_branch(branch) {
   run current_branch_impl(branch)
 }
 
 workflow default(branch) {
-  ensure current_branch(branch)
+  run current_branch(branch)
 }
 EOF
 

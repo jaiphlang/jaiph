@@ -22,17 +22,12 @@ export interface ScriptImportDef {
   leadingComments?: string[];
 }
 
-export interface RuleRefDef {
-  value: string;
-  loc: SourceLoc;
-}
-
 export interface WorkflowRefDef {
   value: string;
   loc: SourceLoc;
 }
 
-/** RHS of `const name = ...` in workflows/rules (P10). */
+/** RHS of `const name = ...` in workflows (P10). */
 export type MatchPatternDef =
   | { kind: "string_literal"; value: string }
   | { kind: "regex"; source: string }
@@ -53,8 +48,7 @@ export interface MatchExprDef {
 
 export type ConstRhs =
   | { kind: "expr"; bashRhs: string; /** `const x = """..."""` — runtime dedents margin. */ tripleQuoted?: boolean }
-  | { kind: "run_capture"; ref: WorkflowRefDef; args?: string; bareIdentifierArgs?: string[]; async?: boolean; isolated?: boolean }
-  | { kind: "ensure_capture"; ref: RuleRefDef; args?: string; bareIdentifierArgs?: string[] }
+  | { kind: "run_capture"; ref: WorkflowRefDef; args?: string; bareIdentifierArgs?: string[]; async?: boolean; isolated?: boolean; readonly?: boolean }
   | {
       kind: "prompt_capture";
       raw: string;
@@ -77,16 +71,6 @@ export type SendRhsDef =
   | { kind: "bare_ref"; ref: WorkflowRefDef }
   /** Shell fragment emitted as `"$(...)"` for inbox send. */
   | { kind: "shell"; command: string; loc: SourceLoc };
-
-export interface RuleDef {
-  name: string;
-  /** Named parameters declared on the rule definition (`()` means none). */
-  params: string[];
-  comments: string[];
-  /** Rule body: Jaiph keywords plus shell fragments. */
-  steps: WorkflowStepDef[];
-  loc: SourceLoc;
-}
 
 export interface ChannelDef {
   name: string;
@@ -121,18 +105,6 @@ export interface ScriptDef {
 
 export type WorkflowStepDef =
   | {
-      type: "ensure";
-      ref: RuleRefDef;
-      args?: string;
-      bareIdentifierArgs?: string[];
-      /** When set, capture step stdout into this variable name. */
-      captureName?: string;
-      /** When set, catch failure and run recovery body once. */
-      recover?:
-        | { single: WorkflowStepDef; bindings: { failure: string } }
-        | { block: WorkflowStepDef[]; bindings: { failure: string } };
-    }
-  | {
       type: "run";
       workflow: WorkflowRefDef;
       args?: string;
@@ -143,6 +115,8 @@ export type WorkflowStepDef =
       async?: boolean;
       /** When set, execute in an OS-level isolated container (Docker + fuse-overlayfs). */
       isolated?: boolean;
+      /** When set, execute in a readonly context (no prompt, no send). */
+      readonly?: boolean;
       /** When set, catch failure and run recovery body once. */
       recover?:
         | { single: WorkflowStepDef; bindings: { failure: string } }
@@ -209,10 +183,9 @@ export type WorkflowStepDef =
       /** Set when `return """..."""`; runtime dedents margin. */
       tripleQuoted?: boolean;
       loc: SourceLoc;
-      /** When set, return value comes from a managed run/ensure/match instead of the literal `value`. */
+      /** When set, return value comes from a managed run/match instead of the literal `value`. */
       managed?:
         | { kind: "run"; ref: WorkflowRefDef; args?: string; bareIdentifierArgs?: string[] }
-        | { kind: "ensure"; ref: RuleRefDef; args?: string; bareIdentifierArgs?: string[] }
         | { kind: "match"; match: MatchExprDef };
     }
   | {
@@ -257,7 +230,6 @@ export interface EnvDeclDef {
 
 /** Source order of definitions below imports / config / channels (formatter and round-trip). */
 export type TopLevelEmitOrder =
-  | { kind: "rule"; index: number }
   | { kind: "script"; index: number }
   | { kind: "workflow"; index: number }
   | { kind: "env"; index: number }
@@ -274,14 +246,13 @@ export interface jaiphModule {
   scriptImports?: ScriptImportDef[];
   channels: ChannelDef[];
   exports: string[];
-  rules: RuleDef[];
   scripts: ScriptDef[];
   workflows: WorkflowDef[];
   /** Top-level variable declarations (`const name = value`). */
   envDecls?: EnvDeclDef[];
   /** Present only when parsing a *.test.jh file. */
   tests?: TestBlockDef[];
-  /** Encounter order of rule / script / workflow / env / test (excludes imports, config, channels). */
+  /** Encounter order of script / workflow / env / test (excludes imports, config, channels). */
   topLevelOrder?: TopLevelEmitOrder[];
   /** Top-level `#` lines after the last declaration (formatter). */
   trailingTopLevelComments?: string[];
@@ -340,7 +311,6 @@ export type TestStepDef =
   | { type: "test_expect_not_contain"; variable: string; substring: string; loc: SourceLoc }
   | { type: "test_expect_equal"; variable: string; expected: string; loc: SourceLoc }
   | { type: "test_mock_workflow"; ref: string; params: string[]; steps: WorkflowStepDef[]; loc: SourceLoc }
-  | { type: "test_mock_rule"; ref: string; params: string[]; steps: WorkflowStepDef[]; loc: SourceLoc }
   | { type: "test_mock_script"; ref: string; params: string[]; body: string; loc: SourceLoc };
 
 export interface TestBlockDef {
@@ -381,7 +351,7 @@ export interface HookPayload {
   workflow_id: string;
   /** Step id (only for step_start/step_end). */
   step_id?: string;
-  /** Step kind: workflow, rule, script, prompt. */
+  /** Step kind: workflow, script, prompt. */
   step_kind?: string;
   /** Step name (e.g. default, scan_passes). */
   step_name?: string;

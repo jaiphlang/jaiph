@@ -15,7 +15,7 @@ import { parseConfigBlock } from "./metadata";
 import { parsePromptStep } from "./prompt";
 import { parseSendRhs } from "./send-rhs";
 import { parseAnonymousInlineScript } from "./inline-script";
-import { parseEnsureStep, parseRunCatchStep, parseRunRecoverStep } from "./steps";
+import { parseRunCatchStep, parseRunRecoverStep } from "./steps";
 import { parseBraceBlockBody, parseBlockStatement } from "./workflow-brace";
 import { dottedReturnToQuotedString, isBareDottedIdentifierReturn } from "./workflow-return-dotted";
 import { parseMatchExpr } from "./match";
@@ -149,7 +149,7 @@ export function parseWorkflowBlock(
         continue;
       }
       hadNonCommentStepInline = true;
-      const st = parseBlockStatement(filePath, [t], 0, { forRule: false });
+      const st = parseBlockStatement(filePath, [t], 0, {});
       workflow.steps.push(st.step);
     }
     return { workflow, nextIndex: startIndex + 1, exported: isExported };
@@ -234,7 +234,7 @@ export function parseWorkflowBlock(
             );
           }
           hadNonCommentStep = true;
-          const st = parseBlockStatement(filePath, [t], 0, { forRule: false });
+          const st = parseBlockStatement(filePath, [t], 0, {});
           workflow.steps.push(st.step);
         }
         continue;
@@ -248,7 +248,7 @@ export function parseWorkflowBlock(
       const name = constDecl[1];
       const rhs = constDecl[2].trim();
       // const name = run [async] [isolated] ref() recover|catch → parse as run step with captureName
-      const constRunAsyncIso = rhs.match(/^run\s+(async\s+isolated|async|isolated)\s+/);
+      const constRunAsyncIso = rhs.match(/^run\s+(async\s+isolated|async|isolated|readonly)\s+/);
       if (constRunAsyncIso && (/ recover\(/.test(rhs) || / catch /.test(rhs))) {
         const mods = constRunAsyncIso[1];
         const isAsync = mods.includes("async");
@@ -257,7 +257,7 @@ export function parseWorkflowBlock(
         const catchResult = parseRunCatchStep(filePath, lines, idx, innerNo, innerRaw, runBody, name);
         if (catchResult) {
           const s = catchResult.step;
-          if (s.type === "run") { if (isAsync) s.async = true; if (isIsolated) s.isolated = true; }
+          if (s.type === "run") { if (isAsync) s.async = true; if (isIsolated) s.isolated = true; if (mods === "readonly") s.readonly = true; }
           workflow.steps.push(s);
           idx = catchResult.nextIdx;
           continue;
@@ -265,14 +265,14 @@ export function parseWorkflowBlock(
         const recoverResult = parseRunRecoverStep(filePath, lines, idx, innerNo, innerRaw, runBody, name);
         if (recoverResult) {
           const s = recoverResult.step;
-          if (s.type === "run") { if (isAsync) s.async = true; if (isIsolated) s.isolated = true; }
+          if (s.type === "run") { if (isAsync) s.async = true; if (isIsolated) s.isolated = true; if (mods === "readonly") s.readonly = true; }
           workflow.steps.push(s);
           idx = recoverResult.nextIdx;
           continue;
         }
       }
       // const name = run ref() recover|catch (non-async) → parse as run step with captureName
-      if (rhs.startsWith("run ") && !rhs.startsWith("run async") && !rhs.startsWith("run isolated") && (/ recover\(/.test(rhs) || / catch /.test(rhs))) {
+      if (rhs.startsWith("run ") && !rhs.startsWith("run async") && !rhs.startsWith("run isolated") && !rhs.startsWith("run readonly") && (/ recover\(/.test(rhs) || / catch /.test(rhs))) {
         const runBody = rhs.slice("run ".length);
         const catchResult = parseRunCatchStep(filePath, lines, idx, innerNo, innerRaw, runBody, name);
         if (catchResult) {
@@ -373,7 +373,7 @@ export function parseWorkflowBlock(
     ) {
       const captureName = genericAssignMatch[1];
       const rest = genericAssignMatch[2].trim();
-      if (rest.startsWith("run ") || rest.startsWith("ensure ")) {
+      if (rest.startsWith("run ")) {
         fail(
           filePath,
           `assignment without "const" is no longer supported; use "const ${captureName} = ${rest}"`,
@@ -383,13 +383,42 @@ export function parseWorkflowBlock(
       }
     }
 
-    if (inner.startsWith("ensure ")) {
-      const result = parseEnsureStep(
-        filePath, lines, idx, innerNo, innerRaw,
-        inner.slice("ensure ".length).trim(),
-      );
-      idx = result.nextIdx;
-      workflow.steps.push(result.step);
+    if (inner.startsWith("run readonly ")) {
+      const runBody = inner.slice("run readonly ".length).trim();
+      if (runBody.startsWith("`")) {
+        fail(filePath, "run readonly is not supported with inline scripts", innerNo, innerRaw.indexOf("run") + 1);
+      }
+      const catchResult = parseRunCatchStep(filePath, lines, idx, innerNo, innerRaw, runBody);
+      if (catchResult) {
+        const s = catchResult.step;
+        if (s.type === "run") { s.readonly = true; }
+        workflow.steps.push(s);
+        idx = catchResult.nextIdx;
+        continue;
+      }
+      const recoverResult = parseRunRecoverStep(filePath, lines, idx, innerNo, innerRaw, runBody);
+      if (recoverResult) {
+        const s = recoverResult.step;
+        if (s.type === "run") { s.readonly = true; }
+        workflow.steps.push(s);
+        idx = recoverResult.nextIdx;
+        continue;
+      }
+      const call = parseCallRef(runBody);
+      if (!call) {
+        fail(filePath, "run readonly must target a valid reference: run readonly ref() — parentheses are required", innerNo);
+      }
+      rejectTrailingContent(filePath, innerNo, "run readonly", call.rest);
+      workflow.steps.push({
+        type: "run",
+        workflow: {
+          value: call.ref,
+          loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
+        },
+        args: call.args,
+        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
+        readonly: true,
+      });
       continue;
     }
 
@@ -636,22 +665,6 @@ export function parseWorkflowBlock(
             loc: retLoc,
             managed: {
               kind: "run", ref: { value: call.ref, loc: retLoc }, args: call.args,
-              ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
-            },
-          });
-          continue;
-        }
-      }
-      if (returnValue.startsWith("ensure ")) {
-        const call = parseCallRef(returnValue.slice("ensure ".length).trim());
-        if (call) {
-          rejectTrailingContent(filePath, innerNo, "ensure", call.rest);
-          workflow.steps.push({
-            type: "return",
-            value: `ensure ${call.ref}(${call.args ?? ""})`,
-            loc: retLoc,
-            managed: {
-              kind: "ensure", ref: { value: call.ref, loc: retLoc }, args: call.args,
               ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
             },
           });

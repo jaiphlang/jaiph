@@ -9,7 +9,7 @@ trap e2e::cleanup EXIT
 e2e::prepare_test_env "rule_and_prompt"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
-e2e::section "Rules, ensure, and prompt test behavior"
+e2e::section "Workflows, run, and prompt test behavior"
 E2E_MOCK_BIN="${ROOT_DIR}/e2e/bin"
 chmod 755 "${E2E_MOCK_BIN}/mock_ok" "${E2E_MOCK_BIN}/mock_fail" "${E2E_MOCK_BIN}/cursor-agent"
 export PATH="${E2E_MOCK_BIN}:${PATH}"
@@ -18,14 +18,14 @@ export PATH="${E2E_MOCK_BIN}:${PATH}"
 e2e::file "rule_pass.jh" <<'EOF'
 #!/usr/bin/env jaiph
 script check_passes_impl = `mock_ok`
-rule check_passes() {
+workflow check_passes() {
   run check_passes_impl()
 }
 script done_impl = ```
 echo "e2e-rule-pass-done"
 ```
 workflow default() {
-  ensure check_passes()
+  run check_passes()
   const msg = run done_impl()
   return "${msg}"
 }
@@ -40,10 +40,10 @@ e2e::expect_stdout "${rule_pass_out}" <<'EOF'
 Jaiph: Running rule_pass.jh
 
 workflow default
-  ▸ rule check_passes
+  ▸ workflow check_passes
   ·   ▸ script check_passes_impl
   ·   ✓ script check_passes_impl (<time>)
-  ✓ rule check_passes (<time>)
+  ✓ workflow check_passes (<time>)
   ▸ script done_impl
   ✓ script done_impl (<time>)
 ✓ PASS workflow default (<time>)
@@ -59,11 +59,11 @@ script check_fails_impl = `mock_fail`
 script unreachable_impl = ```
 echo "unreachable"
 ```
-rule check_fails() {
+workflow check_fails() {
   run check_fails_impl()
 }
 workflow default() {
-  ensure check_fails()
+  run check_fails()
   run unreachable_impl()
 }
 EOF
@@ -87,15 +87,15 @@ e2e::file "ensure_fail.jh" <<'EOF'
 #!/usr/bin/env jaiph
 script step_ok_impl = `mock_ok`
 script step_fail_impl = `mock_fail`
-rule step_ok() {
+workflow step_ok() {
   run step_ok_impl()
 }
-rule step_fail() {
+workflow step_fail() {
   run step_fail_impl()
 }
 workflow default() {
-  ensure step_ok()
-  ensure step_fail()
+  run step_ok()
+  run step_fail()
 }
 EOF
 
@@ -111,7 +111,7 @@ rm -f "${ensure_fail_stderr}"
 
 # Then
 # assert_contains: FAIL output includes absolute run-dir paths and progress tree which vary per invocation
-e2e::assert_contains "${ensure_fail_err}" "e2e-rule-fail-message" "ensure failure emits expected stderr"
+e2e::assert_contains "${ensure_fail_err}" "e2e-rule-fail-message" "run failure emits expected stderr"
 
 # Given
 e2e::file "prompt_flow.jh" <<'EOF'

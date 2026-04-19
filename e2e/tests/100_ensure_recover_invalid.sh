@@ -9,16 +9,16 @@ trap e2e::cleanup EXIT
 e2e::prepare_test_env "ensure_recover_invalid"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
-e2e::section "ensure catch with args after catch fails at parse time"
+e2e::section "run catch with args after catch fails at parse time"
 
 # Given
 e2e::file "args_after_recover.jh" <<'EOF'
-rule ci_passes() {
+workflow ci_passes() {
   true
 }
 
 workflow default() {
-  ensure ci_passes() catch "$repo_dir" {
+  run ci_passes() catch "$repo_dir" {
     echo "should not parse"
   }
 }
@@ -39,18 +39,18 @@ rm -f "${err_file}"
 e2e::assert_contains "${err_out}" "E_PARSE" "args after catch emits E_PARSE"
 # assert_contains: compile error includes absolute source path which varies per machine
 e2e::assert_contains "${err_out}" "catch requires explicit bindings" "args after catch has clear error message"
-e2e::pass "ensure catch with args after catch fails with clear error"
+e2e::pass "run catch with args after catch fails with clear error"
 
-e2e::section "ensure catch with multiple args after catch fails at parse time"
+e2e::section "run catch with multiple args after catch fails at parse time"
 
 # Given
 e2e::file "multi_args_after_recover.jh" <<'EOF'
-rule some_rule(input) {
+workflow some_rule(input) {
   true
 }
 
 workflow default() {
-  ensure some_rule("a") catch "b" {
+  run some_rule("a") catch "b" {
     echo "should not parse"
   }
 }
@@ -71,18 +71,18 @@ rm -f "${err_file}"
 e2e::assert_contains "${err_out}" "E_PARSE" "multiple args after catch emits E_PARSE"
 # assert_contains: compile error includes absolute source path which varies per machine
 e2e::assert_contains "${err_out}" "catch requires explicit bindings" "multiple args after catch has clear error message"
-e2e::pass "ensure catch with multiple args after catch fails with clear error"
+e2e::pass "run catch with multiple args after catch fails with clear error"
 
-e2e::section "ensure catch without block fails at parse time"
+e2e::section "run catch without block fails at parse time"
 
 # Given
 e2e::file "recover_no_block.jh" <<'EOF'
-rule ci_passes(repo_dir) {
+workflow ci_passes(repo_dir) {
   true
 }
 
 workflow default() {
-  ensure ci_passes("$repo_dir") catch
+  run ci_passes("$repo_dir") catch
 }
 EOF
 
@@ -100,5 +100,5 @@ rm -f "${err_file}"
 # assert_contains: compile error includes absolute source path which varies per machine
 e2e::assert_contains "${err_out}" "E_PARSE" "catch without block emits E_PARSE"
 # assert_contains: compile error includes absolute source path which varies per machine
-e2e::assert_contains "${err_out}" "catch requires explicit bindings" "catch without block has clear error message"
-e2e::pass "ensure catch without block fails with clear error"
+e2e::assert_contains "${err_out}" "unexpected content after run call" "catch without block has clear error message"
+e2e::pass "run catch without block fails with clear error"

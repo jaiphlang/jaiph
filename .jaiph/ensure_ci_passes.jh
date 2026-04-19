@@ -5,7 +5,7 @@ config {
   agent.cursor_flags = "--force"
 }
 
-rule ci_passes() {
+workflow ci_passes() {
   run npm_run_test_ci()
 }
 
@@ -25,7 +25,7 @@ workflow ensure_ci_passes() {
   const ci_log_file = "${ci_log_dir}/ensure_ci_passes.last.log"
   run mkdir_p_simple(ci_log_dir)
 
-  ensure ci_passes() catch (failure) {
+  run ci_passes() catch (failure) {
     run save_string_to_file(failure, ci_log_file)
     run assert_nonempty_file_or_fail(ci_log_file)
 

@@ -35,18 +35,18 @@ e2e::assert_contains "${summary_content}" '"type":"LOG"' "summary has LOG event"
 e2e::assert_contains "${summary_content}" "got: hello" "inline run capture resolved in log"
 
 # --------------------------------------------------------------------------
-# Section 2: ${ensure ref} inline capture in log
+# Section 2: ${run ref} inline capture in log (workflow)
 # --------------------------------------------------------------------------
 
-e2e::section "inline ensure capture in log"
+e2e::section "inline run capture in log (workflow)"
 
 e2e::file "ic_ensure_log.jh" <<'EOF'
-rule check() {
+workflow check() {
   return "ok"
 }
 
 workflow default() {
-  log "status: ${ensure check()}"
+  log "status: ${run check()}"
 }
 EOF
 
@@ -56,7 +56,7 @@ JAIPH_RUNS_DIR="${TEST_DIR}/runs_ic2" jaiph run "${TEST_DIR}/ic_ensure_log.jh" >
 run_dir2="$(e2e::run_dir_at "${TEST_DIR}/runs_ic2" "ic_ensure_log.jh")"
 summary2="$(<"${run_dir2}run_summary.jsonl")"
 # assert_contains: run_summary.jsonl is variable-length with timestamps
-e2e::assert_contains "${summary2}" "status: ok" "inline ensure capture resolved in log"
+e2e::assert_contains "${summary2}" "status: ok" "inline run capture resolved in log (workflow)"
 
 # --------------------------------------------------------------------------
 # Section 3: ${run ref} with args
@@ -202,7 +202,7 @@ rm -f "${TEST_DIR}/ic_nested.jh" "${TEST_DIR}/ic_unknown.jh"
 e2e::file "ic_lib.jh" <<'EOF'
 script greet = `echo "hello"`
 
-rule check_ok() {
+workflow check_ok() {
   return "ok"
 }
 
@@ -211,7 +211,7 @@ workflow run_capture_log() {
 }
 
 workflow ensure_capture_log() {
-  log "status: ${ensure check_ok()}"
+  log "status: ${run check_ok()}"
 }
 
 workflow capture_return() {
@@ -227,7 +227,7 @@ test "inline run capture in log" {
   expect_contain out "got: hello"
 }
 
-test "inline ensure capture in log" {
+test "inline run capture in log (workflow)" {
   const out = run ic.ensure_capture_log()
   expect_contain out "status: ok"
 }

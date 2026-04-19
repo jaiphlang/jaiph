@@ -51,7 +51,7 @@ test("buildScripts extracts scripts for fixture corpus", () => {
   }
 });
 
-test("build validates imported rule references with deterministic errors", () => {
+test("build validates imported workflow references with deterministic errors", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-invalid-"));
   try {
     writeFileSync(
@@ -60,12 +60,12 @@ test("build validates imported rule references with deterministic errors", () =>
         'import "./mod.jh" as mod',
         "",
         "script local_impl = `echo ok`",
-        "rule local() {",
+        "workflow local() {",
         "  run local_impl()",
         "}",
         "",
         "workflow main() {",
-        "  ensure mod.missing()",
+        "  run mod.missing()",
         "}",
         "",
       ].join("\n"),
@@ -74,18 +74,18 @@ test("build validates imported rule references with deterministic errors", () =>
       join(root, "mod.jh"),
       [
         "script existing_impl = `echo hi`",
-        "rule existing() {",
+        "workflow existing() {",
         "  run existing_impl()",
         "}",
         "",
         "workflow mod() {",
-        "  ensure existing()",
+        "  run existing()",
         "}",
         "",
       ].join("\n"),
     );
 
-    assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE imported rule "mod\.missing" does not exist/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE imported workflow or script "mod\.missing" does not exist/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -100,13 +100,13 @@ test("build fails on missing import file", () => {
       [
         'import "../missing/mod.jh" as mod',
         "",
-        "rule local() {",
+        "workflow local() {",
         "  echo ok",
         "}",
         "",
         "workflow entry() {",
-        "  ensure local()",
-        "  ensure mod.anything()",
+        "  run local()",
+        "  run mod.anything()",
         "}",
         "",
       ].join("\n"),
@@ -366,7 +366,7 @@ test("jaiph run fails when runtime emits non-xtrace stderr", () => {
   }
 });
 
-test("jaiph run fails when required arg is missing and rule handles it", () => {
+test("jaiph run fails when required arg is missing and workflow handles it", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-run-missing-arg-"));
   try {
     const filePath = join(root, "missing-arg.jh");
@@ -379,12 +379,12 @@ test("jaiph run fails when required arg is missing and rule handles it", () => {
         "  exit 1",
         "fi",
         "\`\`\`",
-        "rule name_provided(name) {",
+        "workflow name_provided(name) {",
         "  run require_name(name)",
         "}",
         "",
         "workflow default(name) {",
-        "  ensure name_provided(name)",
+        "  run name_provided(name)",
         '  prompt "Say hello to ${name}"',
         "}",
         "",
@@ -408,8 +408,8 @@ test("jaiph run fails when required arg is missing and rule handles it", () => {
   }
 });
 
-test("jaiph run allows rules to call top-level helper functions in readonly mode", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-run-rule-helper-fn-"));
+test("jaiph run allows workflows to call top-level helper functions in readonly mode", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-wf-helper-fn-"));
   try {
     const filePath = join(root, "helpers.jh");
     writeFileSync(
@@ -420,12 +420,12 @@ test("jaiph run allows rules to call top-level helper functions in readonly mode
         'test "ok" = "ok"',
         "\`\`\`",
         "",
-        "rule helper_is_ok() {",
+        "workflow helper_is_ok() {",
         "  run helper_is_ok_impl()",
         "}",
         "",
         "workflow default() {",
-        "  ensure helper_is_ok()",
+        "  run helper_is_ok()",
         "}",
         "",
       ].join("\n"),
@@ -445,7 +445,7 @@ test("jaiph run allows rules to call top-level helper functions in readonly mode
   }
 });
 
-test("jaiph run prints rule tree and fail summary", () => {
+test("jaiph run prints workflow tree and fail summary", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-run-tree-fail-"));
   try {
     const filePath = join(root, "fail.jh");
@@ -456,12 +456,12 @@ test("jaiph run prints rule tree and fail summary", () => {
         "echo \"Current branch is not 'main'.\" >&2",
         "exit 1",
         "\`\`\`",
-        "rule current_branch() {",
+        "workflow current_branch() {",
         "  run current_branch_impl()",
         "}",
         "",
         "workflow default() {",
-        "  ensure current_branch()",
+        "  run current_branch()",
         "}",
         "",
       ].join("\n"),
@@ -476,8 +476,8 @@ test("jaiph run prints rule tree and fail summary", () => {
 
     assert.equal(runResult.status, 1);
     assert.match(runResult.stdout, /workflow default/);
-    assert.match(runResult.stdout, /▸ rule current_branch/);
-    assert.match(runResult.stdout, /✗ rule current_branch \(\d+s\)/);
+    assert.match(runResult.stdout, /▸ workflow current_branch/);
+    assert.match(runResult.stdout, /✗ workflow current_branch \(\d+s\)/);
     assert.match(runResult.stderr, /✗ FAIL workflow default \((?:\d+(?:\.\d+)?s|\d+m \d+s)\)/);
     assert.match(runResult.stderr, /Logs: /);
     assert.match(runResult.stderr, /Summary: /);
@@ -1204,7 +1204,7 @@ test("buildScripts accepts files with no workflows", () => {
       filePath,
       [
         "script only_rule_impl = `echo ok`",
-        "rule only_rule() {",
+        "workflow only_workflow() {",
         "  run only_rule_impl()",
         "}",
         "",
@@ -1219,9 +1219,9 @@ test("buildScripts accepts files with no workflows", () => {
   }
 });
 
-test("buildScripts extracts scripts for ensure-with-args workflow", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-ensure-args-"));
-  const outDir = mkdtempSync(join(tmpdir(), "jaiph-ensure-args-out-"));
+test("buildScripts extracts scripts for run-with-args workflow", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-args-"));
+  const outDir = mkdtempSync(join(tmpdir(), "jaiph-run-args-out-"));
   try {
     const filePath = join(root, "entry.jh");
     writeFileSync(
@@ -1230,12 +1230,12 @@ test("buildScripts extracts scripts for ensure-with-args workflow", () => {
         "script check_branch_impl = \`\`\`",
         "test \"$1\" = \"main\"",
         "\`\`\`",
-        "rule check_branch(branch) {",
+        "workflow check_branch(branch) {",
         "  run check_branch_impl(branch)",
         "}",
         "",
         "workflow default(name) {",
-        "  ensure check_branch(name)",
+        "  run check_branch(name)",
         "}",
         "",
       ].join("\n"),
@@ -1624,87 +1624,29 @@ test("jaiph test fails when non-test file is passed", () => {
   }
 });
 
-test("build fails when run in rule references unknown symbol", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-run-in-rule-"));
-  const outDir = mkdtempSync(join(tmpdir(), "jaiph-run-in-rule-out-"));
-  try {
-    const filePath = join(root, "entry.jh");
-    writeFileSync(
-      filePath,
-      [
-        "rule bad() {",
-        "  run some_workflow()",
-        "}",
-        "",
-        "workflow default() {",
-        "  ensure bad()",
-        "}",
-        "",
-      ].join("\n"),
-    );
+// Tests "build fails when run in rule references unknown symbol" and
+// "build fails when run in rule targets a workflow" were removed because
+// rule-specific restrictions no longer apply after rule -> workflow migration.
 
-    assert.throws(
-      () => buildScripts(filePath, outDir),
-      /unknown local script reference.*run in rules must target a script/,
-    );
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-    rmSync(outDir, { recursive: true, force: true });
-  }
-});
-
-test("build fails when run in rule targets a workflow", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-run-wf-in-rule-"));
-  const outDir = mkdtempSync(join(tmpdir(), "jaiph-run-wf-in-rule-out-"));
-  try {
-    const filePath = join(root, "entry.jh");
-    writeFileSync(
-      filePath,
-      [
-        "workflow helper() {",
-        '  log "hi"',
-        "}",
-        "",
-        "rule bad() {",
-        "  run helper()",
-        "}",
-        "",
-        "workflow default() {",
-        "  ensure bad()",
-        "}",
-        "",
-      ].join("\n"),
-    );
-
-    assert.throws(
-      () => buildScripts(filePath, outDir),
-      /run inside a rule must target a script, not workflow/,
-    );
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-    rmSync(outDir, { recursive: true, force: true });
-  }
-});
-
-test("buildScripts accepts ensure inside a rule block", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-ensure-in-rule-"));
-  const outDir = mkdtempSync(join(tmpdir(), "jaiph-ensure-in-rule-out-"));
+test("buildScripts accepts run inside a workflow block", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-in-wf-"));
+  const outDir = mkdtempSync(join(tmpdir(), "jaiph-run-in-wf-out-"));
   try {
     const filePath = join(root, "entry.jh");
     writeFileSync(
       filePath,
       [
         "script dep_impl = `echo dep`",
-        "rule dep() {",
+        "workflow dep() {",
         "  run dep_impl()",
         "}",
         "",
-        "rule main() {",
-        "  ensure dep()",
+        "workflow main() {",
+        "  run dep()",
         "}",
         "",
         "workflow default() {",
-        "  ensure main()",
+        "  run main()",
         "}",
         "",
       ].join("\n"),
@@ -1718,16 +1660,16 @@ test("buildScripts accepts ensure inside a rule block", () => {
   }
 });
 
-test("buildScripts extracts scripts for ensure ... catch workflow", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-ensure-catch-"));
-  const outDir = mkdtempSync(join(tmpdir(), "jaiph-ensure-catch-out-"));
+test("buildScripts extracts scripts for run ... catch workflow", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-catch-"));
+  const outDir = mkdtempSync(join(tmpdir(), "jaiph-run-catch-out-"));
   try {
     const filePath = join(root, "entry.jh");
     writeFileSync(
       filePath,
       [
         "script dep_impl = `test -f ready.txt`",
-        "rule dep() {",
+        "workflow dep() {",
         "  run dep_impl()",
         "}",
         "",
@@ -1738,7 +1680,7 @@ test("buildScripts extracts scripts for ensure ... catch workflow", () => {
         "}",
         "",
         "workflow default() {",
-        "  ensure dep() catch (failure) run install_deps()",
+        "  run dep() catch (failure) run install_deps()",
         "}",
         "",
       ].join("\n"),
@@ -1752,21 +1694,21 @@ test("buildScripts extracts scripts for ensure ... catch workflow", () => {
   }
 });
 
-test("build rejects ensure catch inline shell block under strict shell-step ban", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-ensure-catch-block-"));
-  const outDir = mkdtempSync(join(tmpdir(), "jaiph-ensure-catch-block-out-"));
+test("build rejects run catch inline shell block under strict shell-step ban", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-run-catch-block-"));
+  const outDir = mkdtempSync(join(tmpdir(), "jaiph-run-catch-block-out-"));
   try {
     const filePath = join(root, "entry.jh");
     writeFileSync(
       filePath,
       [
         "script ready_impl = `test -f ready.txt`",
-        "rule ready() {",
+        "workflow ready() {",
         "  run ready_impl()",
         "}",
         "",
         "workflow default() {",
-        "  ensure ready() catch (failure) { echo fixing; touch ready.txt; }",
+        "  run ready() catch (failure) { echo fixing; touch ready.txt; }",
         "}",
         "",
       ].join("\n"),
@@ -2170,19 +2112,19 @@ test("jaiph test when prompt is not mocked runs selected backend", () => {
   }
 });
 
-test("jaiph test passes for workflow using ensure only with mocks", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-test-ensure-only-"));
+test("jaiph test passes for workflow using run only with mocks", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-test-run-only-"));
   try {
     writeFileSync(
       join(root, "ensure_only.jh"),
       [
         "script ready_impl = `echo ok`",
-        "rule ready() {",
+        "workflow ready() {",
         "  run ready_impl()",
         "}",
         "",
         "workflow default() {",
-        "  ensure ready()",
+        "  run ready()",
         '  return "ready-ok"',
         "}",
         "",
@@ -2243,7 +2185,7 @@ test("parser parses test blocks in *.test.jh file", () => {
   }
 });
 
-test("parser parses mock workflow, rule, and script in test block", () => {
+test("parser parses mock workflow and script in test block", () => {
   const source = [
     'import "app.jh" as app',
     "",
@@ -2251,10 +2193,6 @@ test("parser parses mock workflow, rule, and script in test block", () => {
     "  mock workflow app.build() {",
     '    log "build ok"',
     '    return "done"',
-    "  }",
-    "",
-    "  mock rule app.policy_check() {",
-    '    return "blocked"',
     "  }",
     "",
     "  mock script app.changed_files() {",
@@ -2279,21 +2217,14 @@ test("parser parses mock workflow, rule, and script in test block", () => {
     assert.equal(steps[0].steps.length, 2);
   }
   assert.equal(steps[1].type, "blank_line");
-  assert.equal(steps[2].type, "test_mock_rule");
-  if (steps[2].type === "test_mock_rule") {
-    assert.equal(steps[2].ref, "app.policy_check");
-    assert.deepEqual(steps[2].params, []);
-    assert.equal(steps[2].steps.length, 1);
+  assert.equal(steps[2].type, "test_mock_script");
+  if (steps[2].type === "test_mock_script") {
+    assert.equal(steps[2].ref, "app.changed_files");
+    assert.ok(steps[2].body.includes('echo "a.ts"'));
   }
   assert.equal(steps[3].type, "blank_line");
-  assert.equal(steps[4].type, "test_mock_script");
-  if (steps[4].type === "test_mock_script") {
-    assert.equal(steps[4].ref, "app.changed_files");
-    assert.ok(steps[4].body.includes('echo "a.ts"'));
-  }
-  assert.equal(steps[5].type, "blank_line");
-  assert.equal(steps[6].type, "test_run_workflow");
-  assert.equal(steps[7].type, "test_expect_contain");
+  assert.equal(steps[4].type, "test_run_workflow");
+  assert.equal(steps[5].type, "test_expect_contain");
 });
 
 test("parser ignores test keyword in non-test file", () => {
@@ -2307,14 +2238,14 @@ test("parser ignores test keyword in non-test file", () => {
   assert.equal(mod.tests, undefined);
 });
 
-test("jaiph test runs *.test.jh with mock workflow, rule, and script", () => {
+test("jaiph test runs *.test.jh with mock workflow and script", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-test-mock-symbols-"));
   try {
     writeFileSync(
       join(root, "app.jh"),
       [
         "script policy_check_impl = `echo real-policy`",
-        "rule policy_check() {",
+        "workflow policy_check() {",
         "  run policy_check_impl()",
         "}",
         "script changed_files = `echo real_files`",
@@ -2325,7 +2256,7 @@ test("jaiph test runs *.test.jh with mock workflow, rule, and script", () => {
         "  run build_impl()",
         "}",
         "workflow default() {",
-        "  ensure policy_check()",
+        "  run policy_check()",
         "  run build()",
         "}",
         "",
@@ -2342,7 +2273,7 @@ test("jaiph test runs *.test.jh with mock workflow, rule, and script", () => {
         '    return "build ok"',
         "  }",
         "",
-        "  mock rule app.policy_check() {",
+        "  mock workflow app.policy_check() {",
         '    return "policy ok"',
         "  }",
         "",

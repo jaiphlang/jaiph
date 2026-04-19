@@ -6,29 +6,29 @@ script git_porcelain_empty = `test -z "$(git status --porcelain)"`
 
 script git_porcelain_nonempty = `test -n "$(git status --porcelain)"`
 
-rule in_git_repo() {
+workflow in_git_repo() {
   run git_inside_worktree() catch (err) {
     fail "not inside a git repository"
   }
 }
 
-rule branch_clean() {
+workflow branch_clean() {
   run git_porcelain_empty()
 }
 
-rule has_changes() {
+workflow has_changes() {
   run git_porcelain_nonempty()
 }
 
-rule is_clean() {
-  ensure in_git_repo()
-  ensure branch_clean()
+workflow is_clean() {
+  run in_git_repo()
+  run branch_clean()
 }
 
 workflow commit(task) {
-  ensure in_git_repo()
+  run in_git_repo()
 
-  ensure has_changes() catch (err) {
+  run has_changes() catch (err) {
     log "No changes to commit — skipping."
     return ""
   }

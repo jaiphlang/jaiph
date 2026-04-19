@@ -49,10 +49,10 @@ e2e::assert_equals "$(echo "${greeting_content}" | tr -d '\n')" "hello world" "s
 
 e2e::expect_out_files "env_demo.jh" 3
 
-e2e::section "top-level const accessible in rules and workflows (not scripts)"
+e2e::section "top-level const accessible in workflows (not scripts)"
 
 # Scripts run in full isolation and cannot see module-level consts.
-# Rules and workflows still see them via env shims.
+# Workflows still see them via env shims.
 
 # Given
 e2e::file "env_all.jh" <<'EOF'
@@ -63,7 +63,7 @@ echo "$1" > rule_msg.txt
 test -n "$1"
 ```
 
-rule check_msg() {
+workflow check_msg() {
   run check_msg_impl(msg)
 }
 
@@ -72,7 +72,7 @@ script write_msg = `echo "${msg:-}" > func_msg.txt`
 script write_wf_msg = `echo "$1" > wf_msg.txt`
 
 workflow default() {
-  ensure check_msg()
+  run check_msg()
   run write_msg()
   run write_wf_msg(msg)
 }
@@ -82,14 +82,14 @@ EOF
 jaiph run "${TEST_DIR}/env_all.jh"
 
 # Then
-e2e::assert_file_exists "${TEST_DIR}/rule_msg.txt" "rule wrote msg"
+e2e::assert_file_exists "${TEST_DIR}/rule_msg.txt" "workflow wrote msg"
 e2e::assert_file_exists "${TEST_DIR}/func_msg.txt" "function wrote msg"
 e2e::assert_file_exists "${TEST_DIR}/wf_msg.txt" "workflow wrote msg"
 
-e2e::assert_equals "$(tr -d '\n' < "${TEST_DIR}/rule_msg.txt")" "shared-value" "rule sees correct value"
+e2e::assert_equals "$(tr -d '\n' < "${TEST_DIR}/rule_msg.txt")" "shared-value" "workflow sees correct value"
 e2e::assert_equals "$(tr -d '\n' < "${TEST_DIR}/func_msg.txt")" "" "script does NOT see module const (isolation)"
 e2e::assert_equals "$(tr -d '\n' < "${TEST_DIR}/wf_msg.txt")" "shared-value" "workflow sees correct value"
 
 e2e::expect_out_files "env_all.jh" 5
 
-e2e::pass "top-level const declarations: rules+workflows see vars, scripts isolated"
+e2e::pass "top-level const declarations: workflows see vars, scripts isolated"

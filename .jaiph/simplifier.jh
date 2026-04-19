@@ -53,7 +53,7 @@ done < <(
 return $bad
 ```
 
-rule no_test_or_e2e_paths_changed() {
+workflow no_test_or_e2e_paths_changed() {
   run assert_no_test_or_e2e_in_changed()
 }
 
@@ -97,7 +97,7 @@ workflow find_simplifications() {
 
   run save_simplifier_report(report)
   log "Simplification report saved to .jaiph/tmp/simplifier_report.md"
-  ensure no_test_or_e2e_paths_changed()
+  run no_test_or_e2e_paths_changed()
 }
 
 script save_simplifier_report = `printf '%s\n' "$1" > .jaiph/tmp/simplifier_report.md`
@@ -136,16 +136,16 @@ workflow apply_simplifications() {
     </task>
 """
 
-  ensure no_test_or_e2e_paths_changed()
+  run no_test_or_e2e_paths_changed()
 }
 
 script mkdir_tmp_jaiph = `mkdir -p .jaiph/tmp`
 
 workflow default() {
-  ensure git.is_clean()
+  run git.is_clean()
   run mkdir_tmp_jaiph()
   run find_simplifications()
   run apply_simplifications()
   run ci.ensure_ci_passes()
-  ensure no_test_or_e2e_paths_changed()
+  run no_test_or_e2e_paths_changed()
 }

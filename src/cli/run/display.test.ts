@@ -387,10 +387,10 @@ test("formatStartLine: workflow with params shows param suffix (no color)", () =
   assert.ok(result.includes("repo"), "param name in suffix");
 });
 
-test("formatStartLine: rule with params shows param suffix (no color)", () => {
+test("formatStartLine: script with params shows param suffix (no color)", () => {
   const params: Array<[string, string]> = [["threshold", "90"]];
-  const result = formatStartLine("  ", "rule", "check_coverage", false, params);
-  assert.ok(result.includes("rule check_coverage"), "label present");
+  const result = formatStartLine("  ", "script", "check_coverage", false, params);
+  assert.ok(result.includes("script check_coverage"), "label present");
   assert.ok(result.includes("threshold"), "param name in suffix");
 });
 

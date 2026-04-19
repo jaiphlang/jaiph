@@ -4,7 +4,6 @@ import type {
   ConstRhs,
   SendRhsDef,
   WorkflowDef,
-  RuleDef,
   ScriptDef,
   ChannelDef,
   TestBlockDef,
@@ -27,7 +26,6 @@ function legacyTopLevelOrder(mod: jaiphModule): TopLevelEmitOrder[] {
   if (mod.envDecls) {
     for (let i = 0; i < mod.envDecls.length; i++) o.push({ kind: "env", index: i });
   }
-  for (let i = 0; i < mod.rules.length; i++) o.push({ kind: "rule", index: i });
   for (let i = 0; i < mod.scripts.length; i++) o.push({ kind: "script", index: i });
   for (let i = 0; i < mod.workflows.length; i++) o.push({ kind: "workflow", index: i });
   if (mod.tests) {
@@ -96,10 +94,6 @@ export function emitModule(mod: jaiphModule, opts: EmitOptions = DEFAULT_OPTIONS
       }
       envLines.push(...emitEnvDecl(env));
       sections.push(envLines.join("\n"));
-      continue;
-    }
-    if (item.kind === "rule") {
-      sections.push(emitRule(mod.rules[item.index], pad, exportedNames.has(mod.rules[item.index].name)));
       continue;
     }
     if (item.kind === "script") {
@@ -280,17 +274,6 @@ function emitCommentBlock(comments: string[]): string {
   return emitComments(comments).join("\n");
 }
 
-function emitRule(rule: RuleDef, pad: string, exported: boolean): string {
-  const lines: string[] = [];
-  lines.push(...emitComments(rule.comments));
-  const paramStr = `(${rule.params.join(", ")})`;
-  const prefix = exported ? "export " : "";
-  lines.push(`${prefix}rule ${rule.name}${paramStr} {`);
-  lines.push(...emitSteps(rule.steps, pad, pad));
-  lines.push("}");
-  return lines.join("\n");
-}
-
 function emitScript(script: ScriptDef, _pad: string, exported: boolean): string {
   const lines: string[] = [];
   lines.push(...emitComments(script.comments));
@@ -427,9 +410,7 @@ function formatArgs(args: string, bareIdentifierArgs?: string[]): string {
     const tail = args.slice(i);
     const keyword = tail.startsWith("run ")
       ? "run"
-      : tail.startsWith("ensure ")
-        ? "ensure"
-        : null;
+      : null;
     if (keyword) {
       const afterKeyword = args.slice(i + keyword.length).trimStart();
       const skipped = args.slice(i + keyword.length).length - afterKeyword.length;
@@ -522,41 +503,21 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
       break;
     }
 
-    case "ensure": {
-      const ref = emitRef(step.ref, step.args, step.bareIdentifierArgs);
-      const capture = step.captureName ? `${step.captureName} = ` : "";
-      if (step.recover) {
-        const b = step.recover.bindings;
-        const bindStr = `(${b.failure})`;
-        if ("single" in step.recover) {
-          const recoverLines = emitStep(step.recover.single, pad, "");
-          const recoverText = recoverLines.map((l) => l.trim()).join("\n");
-          lines.push(`${ci}${capture}ensure ${ref} catch ${bindStr} ${recoverText}`);
-        } else {
-          lines.push(`${ci}${capture}ensure ${ref} catch ${bindStr} {`);
-          lines.push(...emitSteps(step.recover.block, pad, ci + pad));
-          lines.push(`${ci}}`);
-        }
-      } else {
-        lines.push(`${ci}${capture}ensure ${ref}`);
-      }
-      break;
-    }
-
     case "run": {
       const ref = emitRef(step.workflow, step.args, step.bareIdentifierArgs);
       const capture = step.captureName ? `${step.captureName} = ` : "";
       const asyncPrefix = step.async ? "async " : "";
       const isolatedPrefix = step.isolated ? "isolated " : "";
+      const readonlyPrefix = step.readonly ? "readonly " : "";
       if (step.recover) {
         const b = step.recover.bindings;
         const bindStr = `(${b.failure})`;
         if ("single" in step.recover) {
           const recoverLines = emitStep(step.recover.single, pad, "");
           const recoverText = recoverLines.map((l) => l.trim()).join("\n");
-          lines.push(`${ci}${capture}run ${asyncPrefix}${isolatedPrefix}${ref} catch ${bindStr} ${recoverText}`);
+          lines.push(`${ci}${capture}run ${asyncPrefix}${isolatedPrefix}${readonlyPrefix}${ref} catch ${bindStr} ${recoverText}`);
         } else {
-          lines.push(`${ci}${capture}run ${asyncPrefix}${isolatedPrefix}${ref} catch ${bindStr} {`);
+          lines.push(`${ci}${capture}run ${asyncPrefix}${isolatedPrefix}${readonlyPrefix}${ref} catch ${bindStr} {`);
           lines.push(...emitSteps(step.recover.block, pad, ci + pad));
           lines.push(`${ci}}`);
         }
@@ -566,14 +527,14 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
         if ("single" in step.recoverLoop) {
           const recoverLines = emitStep(step.recoverLoop.single, pad, "");
           const recoverText = recoverLines.map((l) => l.trim()).join("\n");
-          lines.push(`${ci}${capture}run ${asyncPrefix}${isolatedPrefix}${ref} recover${bindStr} ${recoverText}`);
+          lines.push(`${ci}${capture}run ${asyncPrefix}${isolatedPrefix}${readonlyPrefix}${ref} recover${bindStr} ${recoverText}`);
         } else {
-          lines.push(`${ci}${capture}run ${asyncPrefix}${isolatedPrefix}${ref} recover${bindStr} {`);
+          lines.push(`${ci}${capture}run ${asyncPrefix}${isolatedPrefix}${readonlyPrefix}${ref} recover${bindStr} {`);
           lines.push(...emitSteps(step.recoverLoop.block, pad, ci + pad));
           lines.push(`${ci}}`);
         }
       } else {
-        lines.push(`${ci}${capture}run ${asyncPrefix}${isolatedPrefix}${ref}`);
+        lines.push(`${ci}${capture}run ${asyncPrefix}${isolatedPrefix}${readonlyPrefix}${ref}`);
       }
       break;
     }
@@ -698,8 +659,6 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
       if (step.managed) {
         if (step.managed.kind === "run") {
           lines.push(`${ci}return run ${emitRef(step.managed.ref, step.managed.args, step.managed.bareIdentifierArgs)}`);
-        } else if (step.managed.kind === "ensure") {
-          lines.push(`${ci}return ensure ${emitRef(step.managed.ref, step.managed.args, step.managed.bareIdentifierArgs)}`);
         } else if (step.managed.kind === "match") {
           lines.push(`${ci}return match ${step.managed.match.subject} {`);
           for (const arm of step.managed.match.arms) {
@@ -770,10 +729,9 @@ function emitConstStep(name: string, value: ConstRhs): string {
     case "run_capture": {
       const asyncPrefix = value.async ? "async " : "";
       const isoPrefix = value.isolated ? "isolated " : "";
-      return `const ${name} = run ${asyncPrefix}${isoPrefix}${emitRef(value.ref, value.args, value.bareIdentifierArgs)}`;
+      const readonlyPrefix = value.readonly ? "readonly " : "";
+      return `const ${name} = run ${asyncPrefix}${isoPrefix}${readonlyPrefix}${emitRef(value.ref, value.args, value.bareIdentifierArgs)}`;
     }
-    case "ensure_capture":
-      return `const ${name} = ensure ${emitRef(value.ref, value.args, value.bareIdentifierArgs)}`;
     case "prompt_capture": {
       const returns = value.returns ? ` returns "${value.returns}"` : "";
       if (value.bodyKind === "identifier" && value.bodyIdentifier) {
@@ -859,13 +817,6 @@ function emitTestStep(step: TestStepDef, pad: string): string[] {
     case "test_mock_workflow": {
       const paramStr = `(${step.params.join(", ")})`;
       const lines = [`${pad}mock workflow ${step.ref}${paramStr} {`];
-      lines.push(...emitSteps(step.steps, pad, pad + pad));
-      lines.push(`${pad}}`);
-      return lines;
-    }
-    case "test_mock_rule": {
-      const paramStr = `(${step.params.join(", ")})`;
-      const lines = [`${pad}mock rule ${step.ref}${paramStr} {`];
       lines.push(...emitSteps(step.steps, pad, pad + pad));
       lines.push(`${pad}}`);
       return lines;

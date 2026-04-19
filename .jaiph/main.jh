@@ -10,7 +10,7 @@ import "./architect_review.jh" as architect
 import "./git.jh" as git
 
 workflow default() {
-  ensure git.is_clean()
+  run git.is_clean()
 
   run architect.default()
   run implement.default("queue")

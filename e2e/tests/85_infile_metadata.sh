@@ -20,11 +20,11 @@ config {
   run.logs_dir = "meta_runs"
 }
 script ok_impl = `echo ok`
-rule ok() {
+workflow ok() {
   run ok_impl()
 }
 workflow default() {
-  ensure ok()
+  run ok()
 }
 EOF
 
@@ -48,11 +48,11 @@ config {
   run.logs_dir = "config_wins"
 }
 script ok_impl = `echo ok`
-rule ok() {
+workflow ok() {
   run ok_impl()
 }
 workflow default() {
-  ensure ok()
+  run ok()
 }
 EOF
 

@@ -310,7 +310,7 @@ workflow default(name) {
   # ensure git.is_clean
   const task = run queue.get_first_task()
   const task_header = run first_line_task(task)
-  ensure queue.task_is_dev_ready(task)
+  run queue.task_is_dev_ready(task)
   log "Implementing task: ${task_header}"
 
   const role_name = match name {

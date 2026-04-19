@@ -48,12 +48,12 @@ e2e::file "fs_write_rule.jh" <<'EOF'
 script write_attempt_impl = ```
 echo "abc" > rule_wrote.txt
 ```
-rule write_attempt() {
+workflow write_attempt() {
   run write_attempt_impl()
 }
 
 workflow default() {
-  ensure write_attempt()
+  run write_attempt()
 }
 EOF
 rm -f "${TEST_DIR}/rule_wrote.txt"
@@ -64,7 +64,7 @@ if e2e::readonly_sandbox_available; then
   if e2e::run "fs_write_rule.jh" 2>"${rule_write_stderr}"; then
     cat "${rule_write_stderr}" >&2
     rm -f "${rule_write_stderr}"
-    e2e::fail "rule write should be blocked when readonly sandbox is available"
+    e2e::fail "workflow write should be blocked when readonly sandbox is available"
   fi
   rm -f "${rule_write_stderr}"
 
@@ -72,7 +72,7 @@ if e2e::readonly_sandbox_available; then
   if [[ -f "${TEST_DIR}/rule_wrote.txt" ]]; then
     e2e::fail "rule_wrote.txt should not exist when readonly sandbox blocks writes"
   fi
-  e2e::pass "rule write is blocked in readonly sandbox"
+  e2e::pass "workflow write is blocked in readonly sandbox"
 else
   # When
   permissive_out="$(e2e::run "fs_write_rule.jh")"
@@ -85,10 +85,10 @@ else
 Jaiph: Running fs_write_rule.jh
 
 workflow default
-  ▸ rule write_attempt
+  ▸ workflow write_attempt
   ·   ▸ script write_attempt_impl
   ·   ✓ script write_attempt_impl (<time>)
-  ✓ rule write_attempt (<time>)
+  ✓ workflow write_attempt (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 

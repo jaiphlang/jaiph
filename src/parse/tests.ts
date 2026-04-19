@@ -173,18 +173,8 @@ export function parseTestBlock(
     rejectOldMockSyntax(filePath, inner, "workflow", innerNo, col);
     const mockWfHeader = parseMockHeader(filePath, inner, "mock workflow ", innerNo, col);
     if (mockWfHeader) {
-      const { steps, nextIdx } = parseBraceBlockBody(filePath, lines, i + 1, innerNo, { forRule: false });
+      const { steps, nextIdx } = parseBraceBlockBody(filePath, lines, i + 1, innerNo, {});
       testBlock.steps.push({ type: "test_mock_workflow", ref: mockWfHeader.ref, params: mockWfHeader.params, steps, loc });
-      i = nextIdx - 1;
-      continue;
-    }
-
-    // --- mock rule (new: requires parens, body is Jaiph steps) ---
-    rejectOldMockSyntax(filePath, inner, "rule", innerNo, col);
-    const mockRuleHeader = parseMockHeader(filePath, inner, "mock rule ", innerNo, col);
-    if (mockRuleHeader) {
-      const { steps, nextIdx } = parseBraceBlockBody(filePath, lines, i + 1, innerNo, { forRule: true });
-      testBlock.steps.push({ type: "test_mock_rule", ref: mockRuleHeader.ref, params: mockRuleHeader.params, steps, loc });
       i = nextIdx - 1;
       continue;
     }

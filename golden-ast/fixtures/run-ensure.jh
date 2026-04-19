@@ -1,11 +1,11 @@
-rule check() {
+workflow check() {
   run validator()
 }
 
 script validator = `true`
 
 workflow default() {
-  ensure check()
+  run check()
   run helper()
 }
 

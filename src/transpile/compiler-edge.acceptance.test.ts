@@ -22,7 +22,7 @@ test("ACCEPTANCE: duplicate import alias fails with E_VALIDATE", () => {
       join(root, "a.jh"),
       [
         'script one_impl = `echo one`',
-        "rule one() {",
+        "workflow one() {",
         "  run one_impl()",
         "}",
         "",
@@ -32,7 +32,7 @@ test("ACCEPTANCE: duplicate import alias fails with E_VALIDATE", () => {
       join(root, "b.jh"),
       [
         'script two_impl = `echo two`',
-        "rule two() {",
+        "workflow two() {",
         "  run two_impl()",
         "}",
         "",
@@ -45,7 +45,7 @@ test("ACCEPTANCE: duplicate import alias fails with E_VALIDATE", () => {
         'import "b.jh" as mod',
         "",
         "workflow default() {",
-        "  ensure mod.one()",
+        "  run mod.one()",
         "}",
         "",
       ].join("\n"),
@@ -55,35 +55,19 @@ test("ACCEPTANCE: duplicate import alias fails with E_VALIDATE", () => {
   });
 });
 
-test("ACCEPTANCE: unknown local rule reference fails deterministically", () => {
-  withTempDir("jaiph-acc-unknown-local-rule-", (root) => {
+test("ACCEPTANCE: unknown local workflow reference in run (formerly rule) fails deterministically", () => {
+  withTempDir("jaiph-acc-unknown-local-wf-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
       [
         "workflow default() {",
-        "  ensure missing_rule()",
+        "  run missing_workflow()",
         "}",
         "",
       ].join("\n"),
     );
 
-    assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE unknown local rule reference "missing_rule"/);
-  });
-});
-
-test("ACCEPTANCE: unknown import alias in rule reference fails deterministically", () => {
-  withTempDir("jaiph-acc-unknown-import-alias-rule-", (root) => {
-    writeFileSync(
-      join(root, "main.jh"),
-      [
-        "workflow default() {",
-        "  ensure ghost.guard()",
-        "}",
-        "",
-      ].join("\n"),
-    );
-
-    assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE unknown import alias "ghost" for rule reference "ghost\.guard"/);
+    assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE unknown local workflow or script reference "missing_workflow"/);
   });
 });
 
@@ -147,10 +131,10 @@ test("ACCEPTANCE: imported workflow missing fails with E_VALIDATE", () => {
   });
 });
 
-test("ACCEPTANCE: unterminated rule block reports parse location and code", () => {
+test("ACCEPTANCE: unterminated workflow block reports parse location and code", () => {
   assert.throws(
-    () => parsejaiph("rule bad() {\n  echo x\n", "/fake/main.jh"),
-    /\/fake\/main\.jh:1:1 E_PARSE unterminated rule block: bad/,
+    () => parsejaiph("workflow bad() {\n  echo x\n", "/fake/main.jh"),
+    /\/fake\/main\.jh:1:1 E_PARSE unterminated workflow block: bad/,
   );
 });
 
@@ -175,13 +159,13 @@ test("ACCEPTANCE: if keyword with old syntax produces E_PARSE error", () => {
     writeFileSync(
       join(root, "main.jh"),
       [
-        "rule gate() {",
+        "workflow gate() {",
         "  run gate_impl()",
         "}",
         'script gate_impl = `false`',
         "",
         "workflow default() {",
-        "  if not ensure gate() {",
+        "  if not run gate() {",
         '    log "fallback"',
         "  }",
         "}",
@@ -193,12 +177,12 @@ test("ACCEPTANCE: if keyword with old syntax produces E_PARSE error", () => {
   });
 });
 
-test("ACCEPTANCE: ensure catch then-branch allows mixed prompt and run", () => {
-  withTempDir("jaiph-acc-catch-ensure-mixed-", (root) => {
+test("ACCEPTANCE: run catch then-branch allows mixed prompt and run", () => {
+  withTempDir("jaiph-acc-catch-run-mixed-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
       [
-        "rule gate() {",
+        "workflow gate() {",
         "  run gate_impl()",
         "}",
         'script gate_impl = `false`',
@@ -208,7 +192,7 @@ test("ACCEPTANCE: ensure catch then-branch allows mixed prompt and run", () => {
         "}",
         "",
         "workflow default() {",
-        "  ensure gate() catch (err) {",
+        "  run gate() catch (err) {",
         '    const _ = prompt "recover"',
         "    run fix_build()",
         "  }",
@@ -271,53 +255,6 @@ test("ACCEPTANCE: unterminated mock prompt block fails with E_PARSE", () => {
       ),
     /E_PARSE.*unterminated match block/,
   );
-});
-
-test("ACCEPTANCE: rule with inline brace group cmd || { ... } fails under strict shell-step ban", () => {
-  withTempDir("jaiph-acc-rule-or-brace-", (root) => {
-    writeFileSync(
-      join(root, "main.jh"),
-      [
-        "rule example() {",
-        '  check_something || { echo "failed"; exit 1; }',
-        "}",
-        "",
-        "workflow default() {",
-        "  ensure example()",
-        "}",
-        "",
-      ].join("\n"),
-    );
-    assert.throws(
-      () => buildScripts(join(root, "main.jh"), join(root, "out")),
-      /E_VALIDATE inline shell steps are forbidden in rules; use explicit script blocks/,
-    );
-  });
-});
-
-test("ACCEPTANCE: rule with multi-line || { ... } fails under strict shell-step ban", () => {
-  withTempDir("jaiph-acc-rule-or-brace-multiline-", (root) => {
-    writeFileSync(
-      join(root, "main.jh"),
-      [
-        "rule example() {",
-        "  check_something || {",
-        '    echo "failed"',
-        "    exit 1",
-        "  }",
-        "}",
-        "",
-        "workflow default() {",
-        "  ensure example()",
-        "}",
-        "",
-      ].join("\n"),
-    );
-    assert.throws(
-      () => buildScripts(join(root, "main.jh"), join(root, "out")),
-      /E_VALIDATE inline shell steps are forbidden in rules; use explicit script blocks/,
-    );
-  });
 });
 
 test("ACCEPTANCE: workflow shell step with || { ... } fails under strict shell-step ban", () => {
@@ -622,26 +559,6 @@ test("ACCEPTANCE: route with unknown workflow fails E_VALIDATE", () => {
   });
 });
 
-test("ACCEPTANCE: route with rule ref fails E_VALIDATE", () => {
-  withTempDir("jaiph-acc-route-rule-ref-", (root) => {
-    writeFileSync(
-      join(root, "main.jh"),
-      [
-        "channel findings -> check",
-        "rule check() {",
-        "  run check_impl()",
-        "}",
-        'script check_impl = `true`',
-        "workflow default() {",
-        "  log \"ok\"",
-        "}",
-        "",
-      ].join("\n"),
-    );
-    assert.throws(() => buildScripts(root, join(root, "out")), /E_VALIDATE rule "check" must be called with ensure/);
-  });
-});
-
 test("ACCEPTANCE: route inside workflow body is E_PARSE", () => {
   withTempDir("jaiph-acc-route-in-body-", (root) => {
     writeFileSync(
@@ -716,20 +633,20 @@ test("ACCEPTANCE: inbox.jh fixture builds successfully", () => {
   });
 });
 
-// === ensure ... catch validation ===
+// === run ... catch validation ===
 
-test("ACCEPTANCE: ensure catch with args after catch fails with E_PARSE", () => {
+test("ACCEPTANCE: run catch with args after catch fails with E_PARSE", () => {
   withTempDir("jaiph-acc-catch-args-after-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
       [
-        "rule ci_passes() {",
+        "workflow ci_passes() {",
         "  run ci_passes_impl()",
         "}",
         'script ci_passes_impl = `true`',
         "",
         "workflow default() {",
-        '  ensure ci_passes() catch "$repo_dir" {',
+        '  run ci_passes() catch "$repo_dir" {',
         '    prompt "Apply the smallest safe fix."',
         "  }",
         "}",
@@ -743,17 +660,18 @@ test("ACCEPTANCE: ensure catch with args after catch fails with E_PARSE", () => 
   });
 });
 
-test("ACCEPTANCE: ensure catch with multiple args after catch fails with E_PARSE", () => {
+test("ACCEPTANCE: run catch with multiple args after catch fails with E_PARSE", () => {
   withTempDir("jaiph-acc-catch-multi-args-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
       [
-        "rule some_rule() {",
-        "  true",
+        "workflow some_workflow() {",
+        "  run some_impl()",
         "}",
+        'script some_impl = `true`',
         "",
         "workflow default() {",
-        '  ensure some_rule("a") catch "b" {',
+        '  run some_workflow("a") catch "b" {',
         '    log "should not parse"',
         "  }",
         "}",
@@ -767,32 +685,33 @@ test("ACCEPTANCE: ensure catch with multiple args after catch fails with E_PARSE
   });
 });
 
-test("ACCEPTANCE: ensure catch without block fails with E_PARSE", () => {
+test("ACCEPTANCE: run catch without block fails with E_PARSE", () => {
   assert.throws(
     () =>
       parsejaiph(
         [
-          "rule ci_passes() {",
-          "  true",
+          "workflow ci_passes() {",
+          "  run ci_passes_impl()",
           "}",
+          'script ci_passes_impl = `true`',
           "",
           "workflow default() {",
-          '  ensure ci_passes("$repo_dir") catch',
+          '  run ci_passes("$repo_dir") catch',
           "}",
           "",
         ].join("\n"),
         "/fake/main.jh",
       ),
-    /E_PARSE.*catch requires explicit bindings/,
+    /E_PARSE.*unexpected content after run call: 'catch'/,
   );
 });
 
-test("ACCEPTANCE: valid ensure catch block still works", () => {
+test("ACCEPTANCE: valid run catch block still works", () => {
   withTempDir("jaiph-acc-catch-valid-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
       [
-        "rule ci_passes(repo_dir) {",
+        "workflow ci_passes(repo_dir) {",
         "  run ci_passes_impl()",
         "}",
         'script ci_passes_impl = `true`',
@@ -802,7 +721,7 @@ test("ACCEPTANCE: valid ensure catch block still works", () => {
         "}",
         "",
         "workflow default() {",
-        '  ensure ci_passes("$repo_dir") catch (failure) {',
+        '  run ci_passes("$repo_dir") catch (failure) {',
         "    run fix_it()",
         "  }",
         "}",

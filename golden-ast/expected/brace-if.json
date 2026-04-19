@@ -2,21 +2,6 @@
   "channels": [],
   "exports": [],
   "imports": [],
-  "rules": [
-    {
-      "comments": [],
-      "name": "ok",
-      "params": [],
-      "steps": [
-        {
-          "type": "run",
-          "workflow": {
-            "value": "ok_impl"
-          }
-        }
-      ]
-    }
-  ],
   "scripts": [
     {
       "body": "true",
@@ -34,7 +19,7 @@
   "topLevelOrder": [
     {
       "index": 0,
-      "kind": "rule"
+      "kind": "workflow"
     },
     {
       "index": 0,
@@ -45,11 +30,24 @@
       "kind": "script"
     },
     {
-      "index": 0,
+      "index": 1,
       "kind": "workflow"
     }
   ],
   "workflows": [
+    {
+      "comments": [],
+      "name": "ok",
+      "params": [],
+      "steps": [
+        {
+          "type": "run",
+          "workflow": {
+            "value": "ok_impl"
+          }
+        }
+      ]
+    },
     {
       "comments": [],
       "name": "default",
@@ -73,10 +71,10 @@
               }
             ]
           },
-          "ref": {
+          "type": "run",
+          "workflow": {
             "value": "ok"
-          },
-          "type": "ensure"
+          }
         }
       ]
     }

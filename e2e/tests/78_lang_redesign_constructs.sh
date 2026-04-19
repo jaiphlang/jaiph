@@ -60,15 +60,15 @@ workflow default
 EXPECTED
 
 # ---------------------------------------------------------------------------
-e2e::section "const with ensure capture"
+e2e::section "const with run capture"
 
 e2e::file "const_ensure.jh" <<'EOF'
-rule always_pass() {
+workflow always_pass() {
   return "rule-val"
 }
 
 workflow default() {
-  const r = ensure always_pass()
+  const r = run always_pass()
   log "${r}"
 }
 EOF
@@ -80,8 +80,8 @@ e2e::expect_stdout "${out}" <<'EXPECTED'
 Jaiph: Running const_ensure.jh
 
 workflow default
-  ▸ rule always_pass
-  ✓ rule always_pass (<time>)
+  ▸ workflow always_pass
+  ✓ workflow always_pass (<time>)
   ℹ rule-val
 
 ✓ PASS workflow default (<time>)
@@ -142,18 +142,18 @@ EXPECTED
 e2e::assert_file_exists "${TEST_DIR}/waited.txt" "async job wrote marker file"
 
 # ---------------------------------------------------------------------------
-# ensure ... catch
+# run ... catch
 # ---------------------------------------------------------------------------
-e2e::section "ensure with catch on failure"
+e2e::section "run with catch on failure"
 
 e2e::file "ensure_recover.jh" <<'EOF'
 script always_fail_impl = `false`
-rule always_fail() {
+workflow always_fail() {
   run always_fail_impl()
 }
 
 workflow default() {
-  ensure always_fail() catch (err) {
+  run always_fail() catch (err) {
     log "recovered"
   }
   log "continued"
@@ -167,10 +167,10 @@ e2e::expect_stdout "${out}" <<'EXPECTED'
 Jaiph: Running ensure_recover.jh
 
 workflow default
-  ▸ rule always_fail
+  ▸ workflow always_fail
   ·   ▸ script always_fail_impl
   ·   ✗ script always_fail_impl (<time>)
-  ✗ rule always_fail (<time>)
+  ✗ workflow always_fail (<time>)
   ℹ recovered
   ℹ continued
 
@@ -207,19 +207,19 @@ EXPECTED
 # ---------------------------------------------------------------------------
 # structured rules: run ... catch + fail inside rules
 # ---------------------------------------------------------------------------
-e2e::section "structured rule with run catch and fail"
+e2e::section "structured workflow with run catch and fail"
 
 e2e::file "structured_rule.jh" <<'EOF'
 script check_ok = `return 0`
 
-rule require_name() {
+workflow require_name() {
   run check_ok() catch (err) {
     fail "name is required"
   }
 }
 
 workflow default() {
-  ensure require_name()
+  run require_name()
   log "passed"
 }
 EOF
@@ -231,29 +231,29 @@ e2e::expect_stdout "${out}" <<'EXPECTED'
 Jaiph: Running structured_rule.jh
 
 workflow default
-  ▸ rule require_name
+  ▸ workflow require_name
   ·   ▸ script check_ok
   ·   ✓ script check_ok (<time>)
-  ✓ rule require_name (<time>)
+  ✓ workflow require_name (<time>)
   ℹ passed
 
 ✓ PASS workflow default (<time>)
 EXPECTED
 
 # ---------------------------------------------------------------------------
-e2e::section "structured rule fails correctly"
+e2e::section "structured workflow fails correctly"
 
 e2e::file "structured_rule_fail.jh" <<'EOF'
 script check_fail = `return 1`
 
-rule require_name() {
+workflow require_name() {
   run check_fail() catch (err) {
     fail "name is required"
   }
 }
 
 workflow default() {
-  ensure require_name()
+  run require_name()
 }
 EOF
 
@@ -262,35 +262,9 @@ out="$(e2e::run "structured_rule_fail.jh" 2>&1)"
 code=$?
 set -e
 
-[[ ${code} -ne 0 ]] || e2e::fail "structured rule should have failed"
+[[ ${code} -ne 0 ]] || e2e::fail "structured workflow should have failed"
 # assert_contains: FAIL output includes absolute run-dir paths which vary per invocation
-e2e::assert_contains "${out}" "Workflow execution failed." "structured rule failure is reported"
-
-# ---------------------------------------------------------------------------
-e2e::section "run targeting workflow inside rule is rejected"
-
-e2e::file "run_wf_in_rule.jh" <<'EOF'
-workflow helper() {
-  log "nope"
-}
-
-rule bad() {
-  run helper()
-}
-
-workflow default() {
-  ensure bad()
-}
-EOF
-
-set +e
-out="$(e2e::run "run_wf_in_rule.jh" 2>&1)"
-code=$?
-set -e
-
-[[ ${code} -ne 0 ]] || e2e::fail "run workflow inside rule should be rejected"
-# assert_contains: runtime validation error includes absolute source path which varies per invocation
-e2e::assert_contains "${out}" "script" "error guides toward script"
+e2e::assert_contains "${out}" "Workflow execution failed." "structured workflow failure is reported"
 
 # ---------------------------------------------------------------------------
 # module-level const

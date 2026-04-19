@@ -53,25 +53,25 @@ jaiph run ./flows/review.jh "review this diff"
 
 ### Argument passing
 
-Positional arguments are available inside `script` bodies as standard bash `$1`, `$2`, `"$@"`. In Jaiph orchestration strings (`log`, `prompt`, `fail`, `return`, `send`, `run`/`ensure` args), use **named parameters** (e.g. `workflow default(task)` → `${task}`) — only `${identifier}` forms are supported (no shell parameter expansion). The same rule applies to `prompt` text and to `const` RHS strings where orchestration applies.
+Positional arguments are available inside `script` bodies as standard bash `$1`, `$2`, `"$@"`. In Jaiph orchestration strings (`log`, `prompt`, `fail`, `return`, `send`, `run` args), use **named parameters** (e.g. `workflow default(task)` → `${task}`) — only `${identifier}` forms are supported (no shell parameter expansion). The same rule applies to `prompt` text and to `const` RHS strings where orchestration applies.
 
-Rules receive forwarded arguments through `ensure`:
+Workflows receive forwarded arguments through `run`:
 
 ```jaiph
 script check_branch = `test "$(git branch --show-current)" = "$1"`
 
-rule current_branch(expected) {
+workflow current_branch(expected) {
   run check_branch("${expected}")
 }
 
 workflow default() {
-  ensure current_branch("main")
+  run readonly current_branch("main")
 }
 ```
 
-Workflow and rule bodies contain structured Jaiph steps only — use `run` to call a `script` for shell execution. In bash-bearing contexts (mainly `script` bodies, and restricted `const` / send RHS forms), `$(...)` and the first command word are validated: they must not invoke Jaiph rules, workflows, or scripts, contain inbox send (`<-`), or use `run` / `ensure` as shell commands (`E_VALIDATE`). See [Grammar — Managed calls vs command substitution](grammar.md#managed-calls-vs-command-substitution).
+Workflow bodies contain structured Jaiph steps only — use `run` to call a `script` for shell execution. In bash-bearing contexts (mainly `script` bodies, and restricted `const` / send RHS forms), `$(...)` and the first command word are validated: they must not invoke Jaiph workflows or scripts, contain inbox send (`<-`), or use `run` as shell commands (`E_VALIDATE`). See [Grammar — Managed calls vs command substitution](grammar.md#managed-calls-vs-command-substitution).
 
-For `const` in those bodies, a reference plus arguments on the RHS must be written as `const name = run ref([args...])` (or `ensure` for rule capture), not as `const name = ref([args...])` — the latter is `E_PARSE` with text that explains the fix.
+For `const` in those bodies, a reference plus arguments on the RHS must be written as `const name = run ref([args...])`, not as `const name = ref([args...])` — the latter is `E_PARSE` with text that explains the fix.
 
 ### Shebang execution
 
@@ -90,10 +90,10 @@ After validation, the CLI spawns the Node workflow runner as a detached child. T
 
 ### Run progress and tree output
 
-During `jaiph run`, the CLI renders a live tree of steps. Each step appears as a line with a marker, the step kind (`workflow`, `prompt`, `script`, `rule`), and the step name:
+During `jaiph run`, the CLI renders a live tree of steps. Each step appears as a line with a marker, the step kind (`workflow`, `prompt`, `script`), and the step name:
 
 - **`▸`** — step started
-- **`✓`** / **`✗`** — step completed (pass/fail), with elapsed time (e.g. `✓ workflow scanner (0s)`, `✗ rule ci_passes (11s)`)
+- **`✓`** / **`✗`** — step completed (pass/fail), with elapsed time (e.g. `✓ workflow scanner (0s)`, `✗ workflow ci_passes (11s)`)
 - **`ℹ`** — `log` message (dim/gray, inline at the correct depth; no marker, spinner, or timing)
 - **`!`** — `logerr` message (red, writes to stderr)
 
@@ -124,7 +124,7 @@ Example lines:
 - `· prompt cursor (running 60s)`
 - `·   ▸ prompt cursor "${role} does ${task}" (role="engineer", task="Fix bugs")`
 - `·   ▸ script fib (1="3")`
-- `·   ▸ rule check_arg (1="Alice")`
+- `·   ▸ workflow check_arg (1="Alice")`
 
 If no parameters are passed, the line is unchanged (e.g. `▸ workflow default`). Disable color with `NO_COLOR=1`.
 
@@ -264,9 +264,9 @@ jaiph test e2e/say_hello.test.jh
 
 Reformat `.jh` source files to a canonical style. The formatter parses each file into an AST and re-emits it with consistent whitespace and indentation. Formatting is idempotent — running it twice produces the same output. Comments and shebangs are preserved. Multiline string bodies (`"""…"""`), prompt blocks, and fenced script blocks are emitted verbatim — inner lines are not re-indented relative to the surrounding scope, so repeated formatting never shifts embedded content deeper.
 
-**Blank-line preservation:** A single blank line between steps inside a workflow or rule body is preserved — use it for visual grouping of related calls. Multiple consecutive blank lines are collapsed to one; trailing blank lines before `}` are removed. This applies to all block-level steps (calls, `log`, `const`, `if`, etc.).
+**Blank-line preservation:** A single blank line between steps inside a workflow body is preserved — use it for visual grouping of related calls. Multiple consecutive blank lines are collapsed to one; trailing blank lines before `}` are removed. This applies to all block-level steps (calls, `log`, `const`, `if`, etc.).
 
-**Top-level ordering:** The formatter hoists `import`, `config`, and `channel` declarations to the top of the file (in that order, preserving source order within each group). All other top-level definitions — `const`, `rule`, `script`, `workflow`, and `test` blocks — keep their original relative order from the source file. Comments immediately before an `import`, `config`, or `channel` move with that construct when hoisted; comments before non-hoisted definitions stay in place.
+**Top-level ordering:** The formatter hoists `import`, `config`, and `channel` declarations to the top of the file (in that order, preserving source order within each group). All other top-level definitions — `const`, `script`, `workflow`, and `test` blocks — keep their original relative order from the source file. Comments immediately before an `import`, `config`, or `channel` move with that construct when hoisted; comments before non-hoisted definitions stay in place.
 
 ```bash
 jaiph format [--check] [--indent <n>] <file.jh ...>

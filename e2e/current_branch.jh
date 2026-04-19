@@ -12,10 +12,10 @@ if [ "$(git branch --show-current)" != "$1" ]; then
 fi
 ```
 
-rule current_branch(branch) {
+workflow current_branch(branch) {
   run current_branch_impl(branch)
 }
 
 workflow default(branch) {
-  ensure current_branch(branch)
+  run current_branch(branch)
 }

@@ -41,13 +41,13 @@ EOF
 
 e2e::expect_out_files "scripts.jh" 2
 
-e2e::section "run, ensure, and script argument forwarding"
+e2e::section "run, run, and script argument forwarding"
 
 # Given
 e2e::file "args_forwarding.jh" <<'EOF'
 script expect_args_impl = `return 0`
 
-rule expect_args(a, b) {
+workflow expect_args(a, b) {
   run expect_args_impl()
 }
 
@@ -60,7 +60,7 @@ printf "%s|%s\n" "$1" "$2" > workflow_args.txt
 ```
 
 workflow called(a, b) {
-  ensure expect_args(a, b)
+  run expect_args(a, b)
   run write_args(a, b)
   run write_workflow_args(a, b)
 }
@@ -86,10 +86,10 @@ Jaiph: Running args_forwarding.jh
 
 workflow default
   ▸ workflow called (a="one", b="two words")
-  ·   ▸ rule expect_args (a="one", b="two words")
+  ·   ▸ workflow expect_args (a="one", b="two words")
   ·   ·   ▸ script expect_args_impl
   ·   ·   ✓ script expect_args_impl (<time>)
-  ·   ✓ rule expect_args (<time>)
+  ·   ✓ workflow expect_args (<time>)
   ·   ▸ script write_args (1="one", 2="two words")
   ·   ✓ script write_args (<time>)
   ·   ▸ script write_workflow_args (1="one", 2="two words")
@@ -100,4 +100,4 @@ EOF
 
 e2e::expect_out_files "args_forwarding.jh" 6
 
-e2e::pass "run, ensure, and script all support argument forwarding"
+e2e::pass "run, run, and script all support argument forwarding"

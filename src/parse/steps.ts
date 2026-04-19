@@ -96,7 +96,7 @@ function splitCatchStatements(blockContent: string): string[] {
   return statements;
 }
 
-/** Parse a single workflow statement string (e.g. "run foo", "ensure bar", "echo x") into a step. */
+/** Parse a single workflow statement string (e.g. "run foo", "echo x") into a step. */
 function parseCatchStatement(
   filePath: string,
   lineNo: number,
@@ -128,23 +128,6 @@ function parseCatchStatement(
           loc: { line: lineNo, col },
           managed: {
             kind: "run",
-            ref: { value: call.ref, loc: { line: lineNo, col } },
-            args: call.args,
-            ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
-          },
-        };
-      }
-    }
-    // return ensure ref(args) — managed ensure
-    if (retVal.startsWith("ensure ")) {
-      const call = parseCallRef(retVal.slice("ensure ".length).trim());
-      if (call && !call.rest.trim()) {
-        return {
-          type: "return",
-          value: `ensure ${call.ref}(${call.args ?? ""})`,
-          loc: { line: lineNo, col },
-          managed: {
-            kind: "ensure",
             ref: { value: call.ref, loc: { line: lineNo, col } },
             args: call.args,
             ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
@@ -189,7 +172,7 @@ function parseCatchStatement(
   ) {
     const captureName = genericAssignMatch[1];
     const rest = genericAssignMatch[2].trim();
-    if (rest.startsWith("run ") || rest.startsWith("ensure ")) {
+    if (rest.startsWith("run ")) {
       fail(
         filePath,
         `assignment without "const" is no longer supported; use "const ${captureName} = ${rest}"`,
@@ -262,58 +245,6 @@ function parseCatchStatement(
       };
     }
   }
-  if (t.startsWith("ensure ")) {
-    const ensureBody = t.slice("ensure ".length).trim();
-    const ensRecIdx = ensureBody.indexOf(" catch ");
-    if (ensRecIdx !== -1) {
-      const leftPart = ensureBody.slice(0, ensRecIdx).trim();
-      const rightPart = ensureBody.slice(ensRecIdx + " catch ".length).trim();
-      const callPart = parseCallRef(leftPart);
-      if (callPart && !callPart.rest.trim() && rightPart.startsWith("(")) {
-        const closeParen = rightPart.indexOf(")");
-        if (closeParen !== -1) {
-          const bStr = rightPart.slice(1, closeParen).trim();
-          const bParts = bStr.split(",").map((s) => s.trim()).filter(Boolean);
-          if (bParts.length === 1 && /^[A-Za-z_][A-Za-z0-9_]*$/.test(bParts[0])) {
-            const bindings = { failure: bParts[0] };
-            const after = rightPart.slice(closeParen + 1).trim();
-            if (after.startsWith("{") && after.endsWith("}")) {
-              const blockContent = after.slice(1, -1).trim();
-              const stmts = splitCatchStatements(blockContent);
-              const blockSteps = stmts.map((s) => parseCatchStatement(filePath, lineNo, col, s));
-              return {
-                type: "ensure",
-                ref: { value: callPart.ref, loc: { line: lineNo, col } },
-                args: callPart.args,
-                ...(callPart.bareIdentifierArgs ? { bareIdentifierArgs: callPart.bareIdentifierArgs } : {}),
-                recover: { block: blockSteps, bindings },
-              };
-            }
-            if (!after.startsWith("{") && after) {
-              const singleStep = parseCatchStatement(filePath, lineNo, col, after);
-              return {
-                type: "ensure",
-                ref: { value: callPart.ref, loc: { line: lineNo, col } },
-                args: callPart.args,
-                ...(callPart.bareIdentifierArgs ? { bareIdentifierArgs: callPart.bareIdentifierArgs } : {}),
-                recover: { single: singleStep, bindings },
-              };
-            }
-          }
-        }
-      }
-    }
-    const call = parseCallRef(ensureBody);
-    if (call) {
-      rejectTrailingContent(filePath, lineNo, "ensure", call.rest);
-      return {
-        type: "ensure",
-        ref: { value: call.ref, loc: { line: lineNo, col } },
-        args: call.args,
-        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
-      };
-    }
-  }
   const promptAssignMatch = t.match(
     /^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*prompt\s+(.+)$/s,
   );
@@ -344,143 +275,6 @@ function parseCatchStatement(
     return { type: "logerr", message, loc: { line: lineNo, col: logerrCol } };
   }
   return { type: "shell", command: t, loc: { line: lineNo, col } };
-}
-
-/**
- * Parse an `ensure <ref> [args] [catch ...]` step, with optional captureName.
- * Returns the step and the updated 0-based line index.
- */
-export function parseEnsureStep(
-  filePath: string,
-  lines: string[],
-  idx: number,
-  innerNo: number,
-  innerRaw: string,
-  ensureBody: string,
-  captureName?: string,
-): { step: WorkflowStepDef; nextIdx: number } {
-  const catchIdx = ensureBody.indexOf(" catch ");
-  const ensureCol = innerRaw.indexOf("ensure") + 1;
-
-  // `catch` at end of line with no block → error
-  if (/\scatch$/.test(ensureBody)) {
-    const catchCol = innerRaw.indexOf("catch") + 1;
-    fail(
-      filePath,
-      'catch requires explicit bindings and a body: catch (<name>) { ... }',
-      innerNo,
-      catchCol,
-    );
-  }
-
-  if (catchIdx === -1) {
-    const call = parseCallRef(ensureBody);
-    if (!call) {
-      fail(filePath, "ensure must target a valid reference: ensure ref() or ensure ref(args) — parentheses are required", innerNo);
-    }
-    rejectTrailingContent(filePath, innerNo, "ensure", call.rest);
-    return {
-      step: {
-        type: "ensure",
-        ref: { value: call.ref, loc: { line: innerNo, col: ensureCol } },
-        args: call.args,
-        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
-        ...(captureName ? { captureName } : {}),
-      },
-      nextIdx: idx,
-    };
-  }
-  const left = ensureBody.slice(0, catchIdx).trim();
-  const right = ensureBody.slice(catchIdx + " catch ".length).trim();
-  const call = parseCallRef(left);
-  if (!call) {
-    fail(filePath, "ensure must target a valid reference: ensure ref() or ensure ref(args) — parentheses are required", innerNo);
-  }
-  rejectTrailingContent(filePath, innerNo, "ensure", call.rest);
-  const ref = call.ref;
-  const args = call.args;
-  const catchCol = innerRaw.indexOf("catch") + 1;
-
-  // Catch requires explicit bindings: catch (<name>)
-  if (!right.startsWith("(")) {
-    fail(
-      filePath,
-      'catch requires explicit bindings: catch (<name>) { ... }',
-      innerNo,
-      catchCol,
-    );
-  }
-
-  const closeParen = right.indexOf(")");
-  if (closeParen === -1) {
-    fail(filePath, 'unterminated catch bindings: expected ")"', innerNo, catchCol);
-  }
-  const bindingsStr = right.slice(1, closeParen).trim();
-  const bindingParts = bindingsStr.split(",").map((s) => s.trim()).filter(Boolean);
-  if (bindingParts.length === 0) {
-    fail(filePath, "catch requires exactly one binding: catch (<name>) { ... }", innerNo, catchCol);
-  }
-  if (bindingParts.length > 1) {
-    fail(filePath, 'catch accepts exactly one binding: catch (<name>) — the second binding (attempt) has been removed', innerNo, catchCol);
-  }
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(bindingParts[0])) {
-    fail(filePath, `invalid catch binding name: "${bindingParts[0]}" — must be a valid identifier`, innerNo, catchCol);
-  }
-  const bindings = { failure: bindingParts[0] };
-
-  const afterBindings = right.slice(closeParen + 1).trim();
-
-  const refLoc = { value: ref, loc: { line: innerNo, col: ensureCol } };
-  const base = {
-    type: "ensure" as const, ref: refLoc, args,
-    ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
-    ...(captureName ? { captureName } : {}),
-  };
-
-  if (afterBindings === "{") {
-    let blockLines: string[] = [];
-    let closeLineIdx = -1;
-    let braceDepth = 1;
-    for (let look = idx + 1; look < lines.length; look += 1) {
-      const trimmed = lines[look].trim();
-      if (trimmed.endsWith("{")) braceDepth += 1;
-      if (trimmed === "}") {
-        braceDepth -= 1;
-        if (braceDepth === 0) { closeLineIdx = look; break; }
-      }
-      blockLines.push(trimmed);
-    }
-    if (closeLineIdx === -1) {
-      fail(filePath, 'unterminated catch block, expected "}"', innerNo, catchCol);
-    }
-    const statements = splitCatchStatements(blockLines.join("\n"));
-    if (statements.length === 0) {
-      fail(filePath, "catch block must contain at least one statement", innerNo, catchCol);
-    }
-    const blockSteps = statements.map((s) => parseCatchStatement(filePath, innerNo, 1, s));
-    return { step: { ...base, recover: { block: blockSteps, bindings } }, nextIdx: closeLineIdx };
-  }
-
-  if (afterBindings.startsWith("{")) {
-    const closeBrace = afterBindings.indexOf("}");
-    if (closeBrace === -1) {
-      fail(filePath, 'unterminated catch block, expected "}"', innerNo, catchCol);
-    }
-    const blockContent = afterBindings.slice(1, closeBrace).trim();
-    const statements = splitCatchStatements(blockContent);
-    if (statements.length === 0) {
-      fail(filePath, "catch block must contain at least one statement", innerNo, catchCol);
-    }
-    const blockSteps = statements.map((s) => parseCatchStatement(filePath, innerNo, catchCol, s));
-    return { step: { ...base, recover: { block: blockSteps, bindings } }, nextIdx: idx };
-  }
-
-  if (!afterBindings) {
-    fail(filePath, "catch requires a body after bindings", innerNo, catchCol);
-  }
-
-  const singleStep = parseCatchStatement(filePath, innerNo, catchCol, afterBindings);
-  return { step: { ...base, recover: { single: singleStep, bindings } }, nextIdx: idx };
 }
 
 /**

@@ -16,7 +16,7 @@ e2e::file "artifacts_fail.jh" <<'EOF'
 script ok_step_impl = ```
 echo "ok-out"
 ```
-rule ok_step() {
+workflow ok_step() {
   run ok_step_impl()
 }
 
@@ -25,13 +25,13 @@ echo "bad-out"
 echo "bad-err" >&2
 exit 1
 ```
-rule failing_step() {
+workflow failing_step() {
   run failing_step_impl()
 }
 
 workflow default() {
-  ensure ok_step()
-  ensure failing_step()
+  run ok_step()
+  run failing_step()
 }
 EOF
 rm -rf "${TEST_DIR}/runs_out"

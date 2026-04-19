@@ -53,7 +53,7 @@ An empty array (or omitting the key) means “no commands from this file for thi
 | `step_start` | When the CLI observes a step-start event on the runner's stderr stream. |
 | `step_end` | When the CLI observes a step-end event on that stream. |
 
-Step kinds correspond to the runtime step types: `workflow`, `rule`, `script`, and `prompt`. Step hooks are driven by the same `__JAIPH_EVENT__` stderr stream as the progress tree; see [CLI — Run progress and tree output](cli.md#run-progress-and-tree-output).
+Step kinds correspond to the runtime step types: `workflow`, `script`, and `prompt`. Step hooks are driven by the same `__JAIPH_EVENT__` stderr stream as the progress tree; see [CLI — Run progress and tree output](cli.md#run-progress-and-tree-output).
 
 ## Precedence
 
@@ -79,7 +79,7 @@ Each command receives a single JSON object on **stdin** (UTF-8). Parse it with `
 | `run_path` | all | Absolute path to the `.jh` file being run. |
 | `workspace` | all | Workspace root directory (same rules as [Config locations](#config-locations)). |
 | `step_id` | `step_*` | Step id used for progress and log paths. Usually the runtime’s `id`; if empty, the CLI synthesizes a stable `legacy:…` id so starts and ends match. |
-| `step_kind` | `step_*` | `workflow`, `rule`, `script`, or `prompt`. |
+| `step_kind` | `step_*` | `workflow`, `script`, or `prompt`. |
 | `step_name` | `step_*` | Step name (e.g. `default`, `scan_passes`). |
 | `status` | `*_end` | Exit status: 0 = success, non-zero = failure. For `workflow_end`, non-zero if the subprocess exited non-zero **or** the CLI detected a fatal error on stderr (see [CLI](cli.md)). |
 | `elapsed_ms` | `*_end` | Milliseconds elapsed: total wall time (`workflow_end`) or step duration (`step_end`). |

@@ -58,16 +58,16 @@ export workflow set_task_description_from_file(header, bodyPath) {
 }
 
 # Passes when the queue has at least one task.
-export rule has_tasks() {
+export workflow has_tasks() {
   run queue("get")
 }
 
 # Passes when the task text has #dev-ready on its header line.
-export rule task_is_dev_ready(task) {
+export workflow task_is_dev_ready(task) {
   run queue("has_tag", task, "dev-ready")
 }
 
 # Passes only when every task in the queue carries #dev-ready.
-export rule all_dev_ready() {
+export workflow all_dev_ready() {
   run queue("check_all_tagged", "dev-ready")
 }

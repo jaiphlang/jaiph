@@ -2,7 +2,7 @@ workflow greet(name, greeting) {
   log "${greeting}, ${name}!"
 }
 
-rule validate(input) {
+workflow validate(input) {
   run checker()
 }
 

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parsejaiph } from "../../parser";
-import type { RuleDef, ScriptDef, WorkflowDef, WorkflowRefDef, RuleRefDef, jaiphModule } from "../../types";
+import type { ScriptDef, WorkflowDef, WorkflowRefDef, jaiphModule } from "../../types";
 import { resolveImportPath } from "../../transpile/resolve";
 
 export interface RuntimeModuleNode {
@@ -18,11 +18,6 @@ export interface RuntimeGraph {
 export interface ResolvedWorkflow {
   filePath: string;
   workflow: WorkflowDef;
-}
-
-export interface ResolvedRule {
-  filePath: string;
-  rule: RuleDef;
 }
 
 export interface ResolvedScript {
@@ -87,28 +82,6 @@ export function resolveWorkflowRef(graph: RuntimeGraph, fromFile: string, ref: W
   if (!importedNode) return null;
   const workflow = importedNode.ast.workflows.find((w) => w.name === name) ?? null;
   return workflow ? { filePath: importedNode.filePath, workflow } : null;
-}
-
-export function lookupRule(graph: RuntimeGraph, fromFile: string, ref: RuleRefDef): RuleDef | null {
-  return resolveRuleRef(graph, fromFile, ref)?.rule ?? null;
-}
-
-export function resolveRuleRef(graph: RuntimeGraph, fromFile: string, ref: RuleRefDef): ResolvedRule | null {
-  const node = graph.modules.get(resolve(fromFile));
-  if (!node) return null;
-  const parts = ref.value.split(".");
-  if (parts.length === 1) {
-    const rule = node.ast.rules.find((r) => r.name === parts[0]) ?? null;
-    return rule ? { filePath: node.filePath, rule } : null;
-  }
-  const [alias, name] = parts;
-  if (!alias || !name) return null;
-  const importedFile = node.imports.get(alias);
-  if (!importedFile) return null;
-  const importedNode = graph.modules.get(importedFile);
-  if (!importedNode) return null;
-  const rule = importedNode.ast.rules.find((r) => r.name === name) ?? null;
-  return rule ? { filePath: importedNode.filePath, rule } : null;
 }
 
 export function lookupScript(graph: RuntimeGraph, fromFile: string, ref: string): ScriptDef | null {

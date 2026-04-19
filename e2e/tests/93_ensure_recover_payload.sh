@@ -13,7 +13,7 @@ E2E_MOCK_BIN="${ROOT_DIR}/e2e/bin"
 chmod 755 "${E2E_MOCK_BIN}/cursor-agent"
 export PATH="${E2E_MOCK_BIN}:${PATH}"
 
-e2e::section "ensure catch runs body once on failure (no retry)"
+e2e::section "run catch runs body once on failure (no retry)"
 
 rm -rf "${TEST_DIR}/.jaiph/tmp"
 mkdir -p "${TEST_DIR}/.jaiph/tmp"
@@ -39,22 +39,22 @@ exit 1
 
 script mark_recovered = `touch .jaiph/tmp/recovered`
 
-rule deep_rule() {
+workflow deep_rule() {
   run emit_deep_step_then_fail_until_recovered()
 }
 
-rule nested_rule() {
+workflow nested_rule() {
   run emit_nested_step()
-  ensure deep_rule()
+  run deep_rule()
 }
 
-rule top_rule() {
+workflow top_rule() {
   run emit_root_step()
-  ensure nested_rule()
+  run nested_rule()
 }
 
 workflow default() {
-  ensure top_rule() catch (failure) {
+  run top_rule() catch (failure) {
     run save_string_to_file("recovered-on-retry", witness_failed_payload.txt)
     run mark_recovered()
   }
@@ -68,18 +68,18 @@ e2e::expect_stdout "${out}" <<'EXPECTED'
 Jaiph: Running ensure_recover_payload.jh
 
 workflow default
-  ▸ rule top_rule
+  ▸ workflow top_rule
   ·   ▸ script emit_root_step
   ·   ✓ script emit_root_step (<time>)
-  ·   ▸ rule nested_rule
+  ·   ▸ workflow nested_rule
   ·   ·   ▸ script emit_nested_step
   ·   ·   ✓ script emit_nested_step (<time>)
-  ·   ·   ▸ rule deep_rule
+  ·   ·   ▸ workflow deep_rule
   ·   ·   ·   ▸ script emit_deep_step_then_fail_until_recovered
   ·   ·   ·   ✗ script emit_deep_step_then_fail_until_recovered (<time>)
-  ·   ·   ✗ rule deep_rule (<time>)
-  ·   ✗ rule nested_rule (<time>)
-  ✗ rule top_rule (<time>)
+  ·   ·   ✗ workflow deep_rule (<time>)
+  ·   ✗ workflow nested_rule (<time>)
+  ✗ workflow top_rule (<time>)
   ▸ script save_string_to_file (1="recovered-on-retry", 2="witness_failed_payload.txt")
   ✓ script save_string_to_file (<time>)
   ▸ script mark_recovered
@@ -92,4 +92,4 @@ e2e::assert_file_exists "${TEST_DIR}/witness_failed_payload.txt" "recover wrote 
 witness="$(<"${TEST_DIR}/witness_failed_payload.txt")"
 e2e::assert_equals "${witness}" "recovered-on-retry" "recover action writes witness marker"
 
-e2e::pass "ensure catch runs body once on failure (no retry)"
+e2e::pass "run catch runs body once on failure (no retry)"

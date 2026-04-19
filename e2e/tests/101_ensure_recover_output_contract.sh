@@ -10,7 +10,7 @@ e2e::prepare_test_env "ensure_recover_output_contract"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
 # ===================================================================
-# 1. Simple script failure through rule: stdout + stderr in catch binding
+# 1. Simple script failure through workflow: stdout + stderr in catch binding
 # ===================================================================
 e2e::section "recover payload includes script stdout and stderr"
 
@@ -23,12 +23,12 @@ exit 1
 
 script save_string_to_file = `printf '%s' "$1" > "$2"`
 
-rule simple_echo_rule() {
+workflow simple_echo_rule() {
   run simple_echo()
 }
 
 workflow default() {
-  ensure simple_echo_rule() catch (failure) {
+  run simple_echo_rule() catch (failure) {
     run save_string_to_file(failure, "recover_simple.txt")
   }
 }
@@ -44,9 +44,9 @@ e2e::assert_equals "${witness}" "${expected_witness}" "recover binding contains 
 e2e::pass "simple script failure: stdout + stderr in catch payload"
 
 # ===================================================================
-# 2. Nested rule + script failure aggregation
+# 2. Nested workflow + script failure aggregation
 # ===================================================================
-e2e::section "recover payload aggregates nested rule log + script output"
+e2e::section "recover payload aggregates nested workflow log + script output"
 
 e2e::file "nested_payload.jh" <<'EOF'
 script failing_script = ```
@@ -57,17 +57,17 @@ exit 1
 
 script save_string_to_file = `printf '%s' "$1" > "$2"`
 
-rule inner() {
+workflow inner() {
   run failing_script()
 }
 
-rule outer() {
+workflow outer() {
   log "outer start"
-  ensure inner()
+  run inner()
 }
 
 workflow default() {
-  ensure outer() catch (failure) {
+  run outer() catch (failure) {
     run save_string_to_file(failure, "recover_nested.log")
   }
 }
@@ -79,8 +79,8 @@ e2e::run "nested_payload.jh" >/dev/null 2>&1 || true
 e2e::assert_file_exists "${TEST_DIR}/recover_nested.log" "recover wrote nested payload"
 witness="$(<"${TEST_DIR}/recover_nested.log")"
 expected_witness="$(printf 'outer start\nnested-stdout\nnested-stderr')"
-e2e::assert_equals "${witness}" "${expected_witness}" "recover binding aggregates rule log + script stdout + stderr"
-e2e::pass "nested rule+script failure: aggregated payload in recover"
+e2e::assert_equals "${witness}" "${expected_witness}" "recover binding aggregates workflow log + script stdout + stderr"
+e2e::pass "nested workflow+script failure: aggregated payload in recover"
 
 # ===================================================================
 # 3. CI-style failure payload (multi-line test output)
@@ -98,12 +98,12 @@ exit 1
 
 script save_string_to_file = `printf '%s' "$1" > "$2"`
 
-rule ci_passes() {
+workflow ci_passes() {
   run npm_run_test_ci()
 }
 
 workflow default() {
-  ensure ci_passes() catch (failure) {
+  run ci_passes() catch (failure) {
     run save_string_to_file(failure, "ci_failure.log")
   }
 }
@@ -131,12 +131,12 @@ exit 1
 
 script save_string_to_file = `printf '%s' "$1" > "$2"`
 
-rule check_rule() {
+workflow check_rule() {
   run emit_attempt()
 }
 
 workflow default() {
-  ensure check_rule() catch (failure) {
+  run check_rule() catch (failure) {
     run save_string_to_file(failure, "payload_single.txt")
   }
 }
@@ -153,19 +153,19 @@ e2e::pass "recover runs exactly once on failure"
 # ===================================================================
 # 5. No false payload on success
 # ===================================================================
-e2e::section "no catch payload when rule succeeds"
+e2e::section "no catch payload when workflow succeeds"
 
 e2e::file "success_no_payload.jh" <<'EOF'
 script say_ok = `echo "all good"`
 
 script save_string_to_file = `printf '%s' "$1" > "$2"`
 
-rule passes_first_try() {
+workflow passes_first_try() {
   run say_ok()
 }
 
 workflow default() {
-  ensure passes_first_try() catch (failure) {
+  run passes_first_try() catch (failure) {
     run save_string_to_file(failure, "false_payload.txt")
   }
 }
@@ -175,6 +175,6 @@ rm -f "${TEST_DIR}/false_payload.txt"
 e2e::run "success_no_payload.jh" >/dev/null 2>&1
 
 if [[ -f "${TEST_DIR}/false_payload.txt" ]]; then
-  e2e::fail "recover block should NOT run when rule succeeds"
+  e2e::fail "recover block should NOT run when workflow succeeds"
 fi
 e2e::pass "no false payload on success"

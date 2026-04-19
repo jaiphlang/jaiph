@@ -30,12 +30,12 @@ e2e::file "docker_artifacts.jh" <<'EOF'
 script greet_impl = ```
 echo "hello from docker"
 ```
-rule greet() {
+workflow greet() {
   run greet_impl()
 }
 
 workflow default() {
-  ensure greet()
+  run greet()
 }
 EOF
 
@@ -72,12 +72,12 @@ e2e::file "docker_rel_runs.jh" <<'EOF'
 script greet_impl = ```
 echo "hello relative"
 ```
-rule greet() {
+workflow greet() {
   run greet_impl()
 }
 
 workflow default() {
-  ensure greet()
+  run greet()
 }
 EOF
 
@@ -99,12 +99,12 @@ e2e::file "docker_abs_runs.jh" <<'EOF'
 script greet_impl = ```
 echo "hello absolute"
 ```
-rule greet() {
+workflow greet() {
   run greet_impl()
 }
 
 workflow default() {
-  ensure greet()
+  run greet()
 }
 EOF
 
@@ -127,12 +127,12 @@ e2e::file "docker_outside.jh" <<'EOF'
 script greet_impl = ```
 echo "should not run"
 ```
-rule greet() {
+workflow greet() {
   run greet_impl()
 }
 
 workflow default() {
-  ensure greet()
+  run greet()
 }
 EOF
 

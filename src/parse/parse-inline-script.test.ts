@@ -87,9 +87,9 @@ workflow default() {
   assert.throws(() => parsejaiph(src, "test.jh"), /not supported with inline scripts/);
 });
 
-test("parser: rule body supports multiline fenced run ```", () => {
+test("parser: workflow body supports multiline fenced run ```", () => {
   const src = [
-    "rule check(name) {",
+    "workflow check(name) {",
     "  run ```",
     "    if [ -z \"$1\" ]; then",
     "      echo fail >&2",
@@ -97,13 +97,10 @@ test("parser: rule body supports multiline fenced run ```", () => {
     "    fi",
     "  ```(name)",
     "}",
-    "workflow default() {",
-    "  ensure check()",
-    "}",
   ].join("\n");
   const ast = parsejaiph(src, "test.jh");
-  assert.equal(ast.rules.length, 1);
-  const step = ast.rules[0].steps[0];
+  assert.equal(ast.workflows.length, 1);
+  const step = ast.workflows[0].steps[0];
   assert.equal(step.type, "run_inline_script");
   if (step.type === "run_inline_script") {
     assert.ok(step.body.includes('if [ -z "$1" ]'));
@@ -112,18 +109,15 @@ test("parser: rule body supports multiline fenced run ```", () => {
   }
 });
 
-test("parser: if keyword with old syntax in rule produces E_PARSE", () => {
+test("parser: if keyword with old syntax in workflow produces E_PARSE", () => {
   const src = [
     'script ok = `true`',
-    "rule r() {",
+    "workflow w() {",
     "  if run ok() {",
     "    run ```",
     "echo in-branch",
     "```()",
     "  }",
-    "}",
-    "workflow default() {",
-    "  ensure r()",
     "}",
   ].join("\n");
   assert.throws(

@@ -1,9 +1,9 @@
 #!/usr/bin/env jaiph
 # E2E fixture: rule that runs mock_fail (deterministic fail).
-rule check_fails() {
+workflow check_fails() {
   mock_fail
 }
 workflow default() {
-  ensure check_fails()
+  run check_fails()
   echo "unreachable"
 }

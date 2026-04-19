@@ -33,10 +33,10 @@ describe("emitModule", () => {
     assert.equal(roundTrip(source), source);
   });
 
-  it("formats rules with comments", () => {
+  it("formats workflows with comments", () => {
     const source = [
       "# Validates prerequisites.",
-      "rule project_ready(name) {",
+      "workflow project_ready(name) {",
       '  run check(arg1)',
       "}",
       "",
@@ -67,10 +67,10 @@ describe("emitModule", () => {
     assert.equal(roundTrip(source), source);
   });
 
-  it("formats ensure with catch block", () => {
+  it("formats run with catch block", () => {
     const source = [
       "workflow default() {",
-      "  ensure ci_passes() catch (failure) {",
+      "  run ci_passes() catch (failure) {",
       '    prompt "fix it"',
       "  }",
       "}",
@@ -270,13 +270,13 @@ describe("emitModule", () => {
     assert.equal(roundTrip(input), expected);
   });
 
-  it("preserves rule / workflow / script order from source", () => {
+  it("preserves workflow / workflow / script order from source", () => {
     const source = [
       "workflow w() {",
       '  log "hi"',
       "}",
       "",
-      "rule r() {",
+      "workflow r() {",
       "  run w()",
       "}",
       "",
@@ -290,7 +290,7 @@ describe("emitModule", () => {
     const source = [
       "# About this module",
       "",
-      "rule r() {",
+      "workflow r() {",
       "  run w()",
       "}",
       "",
@@ -302,7 +302,7 @@ describe("emitModule", () => {
     // Blank lines only between top-level sections; attached comments sit directly above their decl.
     const expected = [
       "# About this module",
-      "rule r() {",
+      "workflow r() {",
       "  run w()",
       "}",
       "",
@@ -317,12 +317,12 @@ describe("emitModule", () => {
   it("is idempotent", () => {
     const source = [
       "# A comment",
-      "rule check() {",
+      "workflow check() {",
       "  run impl()",
       "}",
       "",
       "workflow default() {",
-      "  ensure check()",
+      "  run check()",
       '  log "done"',
       "}",
       "",
@@ -405,7 +405,7 @@ describe("emitModule", () => {
   it("formats const captures", () => {
     const source = [
       "workflow default() {",
-      "  const response = ensure check()",
+      "  const response = run check()",
       "  const out = run helper()",
       "  log response",
       "}",
@@ -431,13 +431,13 @@ describe("emitModule", () => {
     assert.equal(roundTrip(source), source);
   });
 
-  it("preserves mixed workflow/rule/script interleaved order", () => {
+  it("preserves mixed workflow/script interleaved order", () => {
     const source = [
       "workflow dispatch() {",
       '  log "dispatching"',
       "}",
       "",
-      "rule is_ready() {",
+      "workflow is_ready() {",
       "  run dispatch()",
       "}",
       "",
@@ -458,8 +458,8 @@ describe("emitModule", () => {
       '  log "w"',
       "}",
       "",
-      "# A rule",
-      "rule r() {",
+      "# Another workflow",
+      "workflow r() {",
       "  run w()",
       "}",
       "",
@@ -491,7 +491,7 @@ describe("emitModule", () => {
       "",
       'import "lib.jh" as lib',
       "",
-      "rule middle() {",
+      "workflow middle() {",
       "  run first()",
       "}",
       "",
@@ -509,7 +509,7 @@ describe("emitModule", () => {
       '  log "1"',
       "}",
       "",
-      "rule middle() {",
+      "workflow middle() {",
       "  run first()",
       "}",
       "",

@@ -11,7 +11,7 @@ import {
 import { parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 import { parseConstRhs } from "./const-rhs";
 import { parseAnonymousInlineScript } from "./inline-script";
-import { parseEnsureStep, parseRunCatchStep, parseRunRecoverStep } from "./steps";
+import { parseRunCatchStep, parseRunRecoverStep } from "./steps";
 import { parsePromptStep } from "./prompt";
 import { parseSendRhs } from "./send-rhs";
 import { parseMatchExpr } from "./match";
@@ -35,7 +35,7 @@ function rejectTrailingContent(
   fail(filePath, `unexpected content after ${keyword} call: '${trimmed}'; shell redirection (>, |, &) is not supported — use a script block`, lineNo);
 }
 
-export type BlockParseOpts = { forRule?: boolean };
+export type BlockParseOpts = Record<string, never>;
 
 /** Parse statements until a closing `}` at the current block level. */
 export function parseBraceBlockBody(
@@ -99,7 +99,6 @@ export function parseBlockStatement(
   const innerRaw = lines[idx];
   const inner = innerRaw.trim();
   const innerNo = idx + 1;
-  const forRule = opts?.forRule === true;
 
   if (inner.startsWith("#")) {
     return {
@@ -156,7 +155,7 @@ export function parseBlockStatement(
     const name = constMatch[1];
     const rhs = constMatch[2].trim();
     const { value, nextLineIdx } = parseConstRhs(
-      filePath, lines, idx, rhs, innerNo, innerRaw.indexOf(rhs) + 1, forRule, name,
+      filePath, lines, idx, rhs, innerNo, innerRaw.indexOf(rhs) + 1, false, name,
     );
     const nextLine = nextLineIdx > idx ? nextLineIdx + 1 : idx + 1;
     return {
@@ -199,15 +198,6 @@ export function parseBlockStatement(
 
   if (inner === "wait") {
     fail(filePath, '"wait" has been removed from the language', innerNo, innerRaw.indexOf("wait") + 1);
-  }
-
-  if (inner.startsWith("ensure ")) {
-    const ensureBody = inner.slice("ensure ".length).trim();
-    const r = parseEnsureStep(
-      filePath, lines, idx, innerNo, innerRaw,
-      ensureBody,
-    );
-    return { step: r.step, nextIdx: r.nextIdx + 1 };
   }
 
   if (inner.startsWith("run async isolated ")) {
@@ -310,6 +300,43 @@ export function parseBlockStatement(
     };
   }
 
+  if (inner.startsWith("run readonly ")) {
+    const runBody = inner.slice("run readonly ".length).trim();
+    if (runBody.startsWith("`")) {
+      fail(filePath, "run readonly is not supported with inline scripts", innerNo, innerRaw.indexOf("run") + 1);
+    }
+    const catchResult = parseRunCatchStep(filePath, lines, idx, innerNo, innerRaw, runBody);
+    if (catchResult) {
+      const s = catchResult.step;
+      if (s.type === "run") { s.readonly = true; }
+      return { step: s, nextIdx: catchResult.nextIdx + 1 };
+    }
+    const recoverResult = parseRunRecoverStep(filePath, lines, idx, innerNo, innerRaw, runBody);
+    if (recoverResult) {
+      const s = recoverResult.step;
+      if (s.type === "run") { s.readonly = true; }
+      return { step: s, nextIdx: recoverResult.nextIdx + 1 };
+    }
+    const call = parseCallRef(runBody);
+    if (!call) {
+      fail(filePath, "run readonly must target a valid reference: run readonly ref() — parentheses are required", innerNo);
+    }
+    rejectTrailingContent(filePath, innerNo, "run readonly", call.rest);
+    return {
+      step: {
+        type: "run",
+        workflow: {
+          value: call.ref,
+          loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
+        },
+        args: call.args,
+        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
+        readonly: true,
+      },
+      nextIdx: idx + 1,
+    };
+  }
+
   if (inner.startsWith("run ")) {
     const runBody = inner.slice("run ".length).trim();
     if (runBody.startsWith("`")) {
@@ -358,10 +385,6 @@ export function parseBlockStatement(
     };
   }
 
-  if (forRule && (inner.startsWith("prompt ") || /^[A-Za-z_][A-Za-z0-9_]*\s*=\s*prompt\s/.test(inner))) {
-    fail(filePath, "prompt is not allowed in rules", innerNo, colFromRaw(innerRaw));
-  }
-
   const promptAssignMatch = inner.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*prompt\s+(.+)$/s);
   if (promptAssignMatch) {
     fail(
@@ -387,7 +410,7 @@ export function parseBlockStatement(
   ) {
     const captureName = genericAssignMatch[1];
     const rest = genericAssignMatch[2].trim();
-    if (rest.startsWith("run ") || rest.startsWith("ensure ")) {
+    if (rest.startsWith("run ")) {
       fail(
         filePath,
         `assignment without "const" is no longer supported; use "const ${captureName} = ${rest}"`,
@@ -490,24 +513,6 @@ export function parseBlockStatement(
         };
       }
     }
-    if (returnValue.startsWith("ensure ")) {
-      const call = parseCallRef(returnValue.slice("ensure ".length).trim());
-      if (call) {
-        rejectTrailingContent(filePath, innerNo, "ensure", call.rest);
-        return {
-          step: {
-            type: "return",
-            value: `ensure ${call.ref}(${call.args ?? ""})`,
-            loc: retLoc,
-            managed: {
-              kind: "ensure", ref: { value: call.ref, loc: retLoc }, args: call.args,
-              ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
-            },
-          },
-          nextIdx: idx + 1,
-        };
-      }
-    }
     if (returnValue.startsWith("'")) {
       fail(filePath, 'single-quoted strings are not supported; use double quotes ("...") instead', innerNo, retLoc.col);
     }
@@ -549,9 +554,6 @@ export function parseBlockStatement(
 
   const sendMatch = matchSendOperator(inner);
   if (sendMatch) {
-    if (forRule) {
-      fail(filePath, "send operator is not allowed in rules", innerNo, 1);
-    }
     const arrowIdx = inner.indexOf("<-");
     const rhsCol = arrowIdx >= 0 ? arrowIdx + 3 : 1;
     const { rhs, nextIdx: sendNextIdx } = parseSendRhs(filePath, sendMatch.rhsText, innerNo, rhsCol, lines, idx);

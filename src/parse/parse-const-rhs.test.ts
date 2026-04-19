@@ -124,35 +124,6 @@ test("parseConstRhs: run without parens rejects (parens required)", () => {
   );
 });
 
-test("parseConstRhs: parses ensure capture", () => {
-  const result = parseConstRhs("test.jh", ["const x = ensure my_rule()"], 0, "ensure my_rule()", 1, 1, false, "x");
-  assert.equal(result.value.kind, "ensure_capture");
-  if (result.value.kind === "ensure_capture") {
-    assert.equal(result.value.ref.value, "my_rule");
-  }
-});
-
-test("parseConstRhs: ensure without parens rejects (parens required)", () => {
-  assert.throws(
-    () => parseConstRhs("test.jh", ["const x = ensure my_rule"], 0, "ensure my_rule", 1, 1, false, "x"),
-    /must target a valid reference/,
-  );
-});
-
-test("parseConstRhs: ensure with catch throws", () => {
-  assert.throws(
-    () => parseConstRhs("test.jh", ["const x = ensure my_rule() catch fail"], 0, "ensure my_rule() catch fail", 1, 1, false, "x"),
-    /cannot use catch/,
-  );
-});
-
-test("parseConstRhs: prompt in rule throws", () => {
-  assert.throws(
-    () => parseConstRhs("test.jh", ['const x = prompt "hello"'], 0, 'prompt "hello"', 1, 1, true, "x"),
-    /not allowed in rules/,
-  );
-});
-
 test("parseConstRhs: bare call without run suggests fix", () => {
   assert.throws(
     () => parseConstRhs("test.jh", ["const x = my_script()"], 0, "my_script()", 1, 1, false, "x"),

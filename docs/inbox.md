@@ -130,7 +130,7 @@ Targets must be **workflows** (local or imported as `alias.name`). **Rules**
 and **scripts** are not valid route targets — the compiler uses workflow-only
 reference checks, so a bad target is **`E_VALIDATE`** with messages such as
 `unknown local workflow reference "…"`, `imported workflow "…" does not exist`,
-`rule "…" must be called with ensure`, or `script "…" cannot be called with run`.
+`script "…" cannot be called with run` (in this context).
 A name that is not a valid `alias.name` / `name` pattern fails at parse time as
 **`E_PARSE`** `invalid workflow reference in channel route: "…"`.
 

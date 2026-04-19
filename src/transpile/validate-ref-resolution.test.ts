@@ -3,10 +3,8 @@ import assert from "node:assert/strict";
 import {
   lookupKind,
   validateRef,
-  RULE_REF_EXPECT,
   WORKFLOW_REF_EXPECT,
   RUN_TARGET_REF_EXPECT,
-  RUN_IN_RULE_REF_EXPECT,
   BARE_SEND_REF_MSG,
   type RefResolutionContext,
 } from "./validate-ref-resolution";
@@ -18,7 +16,6 @@ function minimalModule(overrides?: Partial<jaiphModule>): jaiphModule {
     imports: [],
     channels: [],
     exports: [],
-    rules: [],
     scripts: [],
     workflows: [],
     ...overrides,
@@ -29,7 +26,6 @@ function makeCtx(overrides?: Partial<RefResolutionContext>): RefResolutionContex
   return {
     importsByAlias: new Map(),
     importedAstCache: new Map(),
-    localRules: new Set(),
     localWorkflows: new Set(),
     localScripts: new Set(),
     ...overrides,
@@ -41,13 +37,6 @@ function ref(value: string) {
 }
 
 // --- lookupKind ---
-
-test("lookupKind: finds rule", () => {
-  const mod = minimalModule({
-    rules: [{ name: "check", comments: [], params: [], steps: [], loc: { line: 1, col: 1 } }],
-  });
-  assert.equal(lookupKind(mod, "check"), "rule");
-});
 
 test("lookupKind: finds workflow", () => {
   const mod = minimalModule({
@@ -67,41 +56,6 @@ test("lookupKind: returns undefined for missing symbol", () => {
   assert.equal(lookupKind(minimalModule(), "missing"), undefined);
 });
 
-// --- validateRef: expect mode (RULE_REF_EXPECT) ---
-
-test("validateRef: accepts local rule with RULE_REF_EXPECT", () => {
-  const mod = minimalModule();
-  const ctx = makeCtx({ localRules: new Set(["check"]) });
-  validateRef(ref("check"), mod, ctx, { mode: "expect", expect: RULE_REF_EXPECT });
-});
-
-test("validateRef: rejects local workflow with RULE_REF_EXPECT", () => {
-  const mod = minimalModule();
-  const ctx = makeCtx({ localWorkflows: new Set(["deploy"]) });
-  assert.throws(
-    () => validateRef(ref("deploy"), mod, ctx, { mode: "expect", expect: RULE_REF_EXPECT }),
-    /workflow "deploy" must be called with run/,
-  );
-});
-
-test("validateRef: rejects local script with RULE_REF_EXPECT", () => {
-  const mod = minimalModule();
-  const ctx = makeCtx({ localScripts: new Set(["build"]) });
-  assert.throws(
-    () => validateRef(ref("build"), mod, ctx, { mode: "expect", expect: RULE_REF_EXPECT }),
-    /script "build" cannot be called with ensure/,
-  );
-});
-
-test("validateRef: rejects unknown local name with RULE_REF_EXPECT", () => {
-  const mod = minimalModule();
-  const ctx = makeCtx();
-  assert.throws(
-    () => validateRef(ref("missing"), mod, ctx, { mode: "expect", expect: RULE_REF_EXPECT }),
-    /unknown local rule reference "missing"/,
-  );
-});
-
 // --- validateRef: expect mode (WORKFLOW_REF_EXPECT) ---
 
 test("validateRef: accepts local workflow with WORKFLOW_REF_EXPECT", () => {
@@ -110,35 +64,26 @@ test("validateRef: accepts local workflow with WORKFLOW_REF_EXPECT", () => {
   validateRef(ref("deploy"), mod, ctx, { mode: "expect", expect: WORKFLOW_REF_EXPECT });
 });
 
-test("validateRef: rejects local rule with WORKFLOW_REF_EXPECT", () => {
-  const mod = minimalModule();
-  const ctx = makeCtx({ localRules: new Set(["check"]) });
-  assert.throws(
-    () => validateRef(ref("check"), mod, ctx, { mode: "expect", expect: WORKFLOW_REF_EXPECT }),
-    /rule "check" must be called with ensure/,
-  );
-});
-
 // --- validateRef: imported references ---
 
-test("validateRef: accepts imported rule with RULE_REF_EXPECT", () => {
+test("validateRef: accepts imported workflow with WORKFLOW_REF_EXPECT", () => {
   const importedMod = minimalModule({
     filePath: "lib.jh",
-    rules: [{ name: "ready", comments: [], params: [], steps: [], loc: { line: 1, col: 1 } }],
+    workflows: [{ name: "deploy", comments: [], params: [], steps: [], loc: { line: 1, col: 1 } }],
   });
   const mod = minimalModule();
   const ctx = makeCtx({
     importsByAlias: new Map([["lib", "lib.jh"]]),
     importedAstCache: new Map([["lib.jh", importedMod]]),
   });
-  validateRef(ref("lib.ready"), mod, ctx, { mode: "expect", expect: RULE_REF_EXPECT });
+  validateRef(ref("lib.deploy"), mod, ctx, { mode: "expect", expect: WORKFLOW_REF_EXPECT });
 });
 
 test("validateRef: rejects unknown import alias", () => {
   const mod = minimalModule();
   const ctx = makeCtx();
   assert.throws(
-    () => validateRef(ref("unknown.thing"), mod, ctx, { mode: "expect", expect: RULE_REF_EXPECT }),
+    () => validateRef(ref("unknown.thing"), mod, ctx, { mode: "expect", expect: WORKFLOW_REF_EXPECT }),
     /unknown import alias "unknown"/,
   );
 });
@@ -151,15 +96,15 @@ test("validateRef: rejects missing imported symbol", () => {
     importedAstCache: new Map([["lib.jh", importedMod]]),
   });
   assert.throws(
-    () => validateRef(ref("lib.missing"), mod, ctx, { mode: "expect", expect: RULE_REF_EXPECT }),
-    /imported rule "lib.missing" does not exist/,
+    () => validateRef(ref("lib.missing"), mod, ctx, { mode: "expect", expect: WORKFLOW_REF_EXPECT }),
+    /imported workflow "lib.missing" does not exist/,
   );
 });
 
 test("validateRef: rejects wrong kind for imported symbol", () => {
   const importedMod = minimalModule({
     filePath: "lib.jh",
-    workflows: [{ name: "deploy", comments: [], params: [], steps: [], loc: { line: 1, col: 1 } }],
+    scripts: [{ name: "build", comments: [], body: "", bodyKind: "backtick" as const, loc: { line: 1, col: 1 } }],
   });
   const mod = minimalModule();
   const ctx = makeCtx({
@@ -167,8 +112,8 @@ test("validateRef: rejects wrong kind for imported symbol", () => {
     importedAstCache: new Map([["lib.jh", importedMod]]),
   });
   assert.throws(
-    () => validateRef(ref("lib.deploy"), mod, ctx, { mode: "expect", expect: RULE_REF_EXPECT }),
-    /workflow "lib.deploy" must be called with run/,
+    () => validateRef(ref("lib.build"), mod, ctx, { mode: "expect", expect: WORKFLOW_REF_EXPECT }),
+    /script "lib.build" cannot be called with run/,
   );
 });
 
@@ -176,8 +121,8 @@ test("validateRef: rejects three-part reference", () => {
   const mod = minimalModule();
   const ctx = makeCtx();
   assert.throws(
-    () => validateRef(ref("a.b.c"), mod, ctx, { mode: "expect", expect: RULE_REF_EXPECT }),
-    /invalid rule reference "a.b.c"/,
+    () => validateRef(ref("a.b.c"), mod, ctx, { mode: "expect", expect: WORKFLOW_REF_EXPECT }),
+    /invalid workflow reference "a.b.c"/,
   );
 });
 
@@ -193,32 +138,6 @@ test("validateRef: accepts local script with RUN_TARGET_REF_EXPECT", () => {
   const mod = minimalModule();
   const ctx = makeCtx({ localScripts: new Set(["build"]) });
   validateRef(ref("build"), mod, ctx, { mode: "expect", expect: RUN_TARGET_REF_EXPECT });
-});
-
-test("validateRef: rejects local rule with RUN_TARGET_REF_EXPECT", () => {
-  const mod = minimalModule();
-  const ctx = makeCtx({ localRules: new Set(["check"]) });
-  assert.throws(
-    () => validateRef(ref("check"), mod, ctx, { mode: "expect", expect: RUN_TARGET_REF_EXPECT }),
-    /rule "check" must be called with ensure, not run/,
-  );
-});
-
-// --- validateRef: RUN_IN_RULE_REF_EXPECT (only scripts) ---
-
-test("validateRef: accepts local script with RUN_IN_RULE_REF_EXPECT", () => {
-  const mod = minimalModule();
-  const ctx = makeCtx({ localScripts: new Set(["build"]) });
-  validateRef(ref("build"), mod, ctx, { mode: "expect", expect: RUN_IN_RULE_REF_EXPECT });
-});
-
-test("validateRef: rejects local workflow with RUN_IN_RULE_REF_EXPECT", () => {
-  const mod = minimalModule();
-  const ctx = makeCtx({ localWorkflows: new Set(["deploy"]) });
-  assert.throws(
-    () => validateRef(ref("deploy"), mod, ctx, { mode: "expect", expect: RUN_IN_RULE_REF_EXPECT }),
-    /run inside a rule must target a script, not workflow "deploy"/,
-  );
 });
 
 // --- validateRef: bare_send_rhs mode ---
@@ -252,22 +171,6 @@ test("validateRef: bare_send_rhs rejects local script", () => {
         lookupImportedKind: () => undefined,
       }),
     /script "build" must be called with run/,
-  );
-});
-
-test("validateRef: bare_send_rhs rejects local rule", () => {
-  const mod = minimalModule({
-    rules: [{ name: "check", comments: [], params: [], steps: [], loc: { line: 1, col: 1 } }],
-  });
-  const ctx = makeCtx();
-  assert.throws(
-    () =>
-      validateRef(ref("check"), mod, ctx, {
-        mode: "bare_send_rhs",
-        bareSend: BARE_SEND_REF_MSG,
-        lookupImportedKind: () => undefined,
-      }),
-    /rule "check" must be called with ensure/,
   );
 });
 
@@ -318,10 +221,10 @@ test("validateRef: bare_send_rhs rejects unknown import alias", () => {
 test("validateRef: rejects reference to non-exported symbol in module with exports", () => {
   const importedMod = minimalModule({
     filePath: "lib.jh",
-    exports: ["public_rule"],
-    rules: [
-      { name: "public_rule", comments: [], params: [], steps: [], loc: { line: 1, col: 1 } },
-      { name: "private_rule", comments: [], params: [], steps: [], loc: { line: 2, col: 1 } },
+    exports: ["public_wf"],
+    workflows: [
+      { name: "public_wf", comments: [], params: [], steps: [], loc: { line: 1, col: 1 } },
+      { name: "private_wf", comments: [], params: [], steps: [], loc: { line: 2, col: 1 } },
     ],
   });
   const mod = minimalModule();
@@ -330,18 +233,18 @@ test("validateRef: rejects reference to non-exported symbol in module with expor
     importedAstCache: new Map([["lib.jh", importedMod]]),
   });
   assert.throws(
-    () => validateRef(ref("lib.private_rule"), mod, ctx, { mode: "expect", expect: RULE_REF_EXPECT }),
-    /"private_rule" is not exported from module "lib"/,
+    () => validateRef(ref("lib.private_wf"), mod, ctx, { mode: "expect", expect: WORKFLOW_REF_EXPECT }),
+    /"private_wf" is not exported from module "lib"/,
   );
 });
 
 test("validateRef: accepts reference to exported symbol in module with exports", () => {
   const importedMod = minimalModule({
     filePath: "lib.jh",
-    exports: ["public_rule"],
-    rules: [
-      { name: "public_rule", comments: [], params: [], steps: [], loc: { line: 1, col: 1 } },
-      { name: "private_rule", comments: [], params: [], steps: [], loc: { line: 2, col: 1 } },
+    exports: ["public_wf"],
+    workflows: [
+      { name: "public_wf", comments: [], params: [], steps: [], loc: { line: 1, col: 1 } },
+      { name: "private_wf", comments: [], params: [], steps: [], loc: { line: 2, col: 1 } },
     ],
   });
   const mod = minimalModule();
@@ -349,15 +252,15 @@ test("validateRef: accepts reference to exported symbol in module with exports",
     importsByAlias: new Map([["lib", "lib.jh"]]),
     importedAstCache: new Map([["lib.jh", importedMod]]),
   });
-  validateRef(ref("lib.public_rule"), mod, ctx, { mode: "expect", expect: RULE_REF_EXPECT });
+  validateRef(ref("lib.public_wf"), mod, ctx, { mode: "expect", expect: WORKFLOW_REF_EXPECT });
 });
 
 test("validateRef: module with zero exports allows all references (legacy)", () => {
   const importedMod = minimalModule({
     filePath: "lib.jh",
     exports: [],
-    rules: [
-      { name: "any_rule", comments: [], params: [], steps: [], loc: { line: 1, col: 1 } },
+    workflows: [
+      { name: "any_wf", comments: [], params: [], steps: [], loc: { line: 1, col: 1 } },
     ],
   });
   const mod = minimalModule();
@@ -365,7 +268,7 @@ test("validateRef: module with zero exports allows all references (legacy)", () 
     importsByAlias: new Map([["lib", "lib.jh"]]),
     importedAstCache: new Map([["lib.jh", importedMod]]),
   });
-  validateRef(ref("lib.any_rule"), mod, ctx, { mode: "expect", expect: RULE_REF_EXPECT });
+  validateRef(ref("lib.any_wf"), mod, ctx, { mode: "expect", expect: WORKFLOW_REF_EXPECT });
 });
 
 test("validateRef: bare_send_rhs rejects non-exported symbol before kind check", () => {

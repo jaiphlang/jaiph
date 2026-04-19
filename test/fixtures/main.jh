@@ -4,7 +4,7 @@ import "bootstrap_project.jh" as bootstrap
 import "tools/security.jh" as security
 
 # Validates local build prerequisites.
-rule project_ready() {
+workflow project_ready() {
   run project_ready_impl()
 }
 
@@ -14,7 +14,7 @@ test -n "$NODE_ENV"
 ```
 
 # Verifies the project compiles successfully.
-rule build_passes() {
+workflow build_passes() {
   run build_passes_impl()
 }
 
@@ -24,7 +24,7 @@ script build_passes_impl = `npm run build`
 # Arguments:
 #   $1: Feature requirements passed to the prompt.
 workflow default(requirements) {
-  ensure project_ready() catch (err) {
+  run project_ready() catch (err) {
     run bootstrap.nodejs()
   }
   
@@ -33,8 +33,8 @@ workflow default(requirements) {
     Follow requirements: ${requirements}
 """
   
-  ensure build_passes()
-  ensure security.scan_passes()
+  run build_passes()
+  run security.scan_passes()
 
   run update_docs()
 }

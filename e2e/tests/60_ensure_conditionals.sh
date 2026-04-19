@@ -9,12 +9,12 @@ trap e2e::cleanup EXIT
 e2e::prepare_test_env "ensure_conditionals"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
-e2e::section "ensure catch branch behavior"
+e2e::section "run catch branch behavior"
 
 # Given
 e2e::file "ensure_run_branch.jh" <<'EOF'
 script always_fail_impl = `false`
-rule always_fail() {
+workflow always_fail() {
   run always_fail_impl()
 }
 
@@ -26,7 +26,7 @@ workflow recovery() {
 }
 
 workflow default() {
-  ensure always_fail() catch (err) {
+  run always_fail() catch (err) {
     run recovery()
   }
 }
@@ -34,7 +34,7 @@ EOF
 
 e2e::file "ensure_shell_branch.jh" <<'EOF'
 script always_fail_impl = `false`
-rule always_fail() {
+workflow always_fail() {
   run always_fail_impl()
 }
 
@@ -43,7 +43,7 @@ echo "shell-ran" > shell_ran.txt
 ```
 
 workflow default() {
-  ensure always_fail() catch (err) {
+  run always_fail() catch (err) {
     run shell_ran_impl()
   }
 }
@@ -51,7 +51,7 @@ EOF
 
 e2e::file "ensure_pass_branch.jh" <<'EOF'
 script always_ok_impl = `true`
-rule always_ok() {
+workflow always_ok() {
   run always_ok_impl()
 }
 
@@ -60,7 +60,7 @@ echo "should-not-run" > should_not_run.txt
 ```
 
 workflow default() {
-  ensure always_ok() catch (err) {
+  run always_ok() catch (err) {
     run should_not_run_impl()
   }
 }
@@ -73,17 +73,17 @@ shell_out="$(e2e::run "ensure_shell_branch.jh")"
 skip_out="$(e2e::run "ensure_pass_branch.jh")"
 
 # Then
-e2e::assert_file_exists "${TEST_DIR}/recovery_ran.txt" "recovery workflow ran after ensure failure"
+e2e::assert_file_exists "${TEST_DIR}/recovery_ran.txt" "recovery workflow ran after run failure"
 
 e2e::expect_stdout "${recovery_out}" <<'EOF'
 
 Jaiph: Running ensure_run_branch.jh
 
 workflow default
-  ▸ rule always_fail
+  ▸ workflow always_fail
   ·   ▸ script always_fail_impl
   ·   ✗ script always_fail_impl (<time>)
-  ✗ rule always_fail (<time>)
+  ✗ workflow always_fail (<time>)
   ▸ workflow recovery
   ·   ▸ script recovery_impl
   ·   ✓ script recovery_impl (<time>)
@@ -93,17 +93,17 @@ EOF
 
 e2e::expect_out_files "ensure_run_branch.jh" 5
 
-e2e::assert_file_exists "${TEST_DIR}/shell_ran.txt" "shell fallback ran after ensure failure"
+e2e::assert_file_exists "${TEST_DIR}/shell_ran.txt" "shell fallback ran after run failure"
 
 e2e::expect_stdout "${shell_out}" <<'EOF'
 
 Jaiph: Running ensure_shell_branch.jh
 
 workflow default
-  ▸ rule always_fail
+  ▸ workflow always_fail
   ·   ▸ script always_fail_impl
   ·   ✗ script always_fail_impl (<time>)
-  ✗ rule always_fail (<time>)
+  ✗ workflow always_fail (<time>)
   ▸ script shell_ran_impl
   ✓ script shell_ran_impl (<time>)
 ✓ PASS workflow default (<time>)
@@ -116,16 +116,16 @@ e2e::expect_stdout "${skip_out}" <<'EOF'
 Jaiph: Running ensure_pass_branch.jh
 
 workflow default
-  ▸ rule always_ok
+  ▸ workflow always_ok
   ·   ▸ script always_ok_impl
   ·   ✓ script always_ok_impl (<time>)
-  ✓ rule always_ok (<time>)
+  ✓ workflow always_ok (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
 e2e::expect_out_files "ensure_pass_branch.jh" 3
 
 if [[ -f "${TEST_DIR}/should_not_run.txt" ]]; then
-  e2e::fail "ensure catch should not execute recover-branch when ensure passes"
+  e2e::fail "run catch should not execute recover-branch when run passes"
 fi
-e2e::pass "ensure catch skips recover-branch when ensure passes"
+e2e::pass "run catch skips recover-branch when run passes"

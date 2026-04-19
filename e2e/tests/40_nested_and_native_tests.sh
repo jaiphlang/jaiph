@@ -156,10 +156,10 @@ e2e::expect_stdout "${fib_out}" <<'EOF'
 Jaiph: Running fibonacci.jh
 
 workflow default (n="3")
-  ▸ rule ensure_is_number (value="3")
+  ▸ workflow ensure_is_number (value="3")
   ·   ▸ script ensure_is_number_impl (1="3")
   ·   ✓ script ensure_is_number_impl (<time>)
-  ✓ rule ensure_is_number (<time>)
+  ✓ workflow ensure_is_number (<time>)
   ▸ script fib (1="3")
   ✓ script fib (<time>)
   ℹ 2
@@ -175,7 +175,7 @@ shopt -u nullglob
 [[ ${#fib_out_files[@]} -eq 1 ]] || e2e::fail "expected one fib .out file for fibonacci.jh, got ${#fib_out_files[@]}"
 e2e::assert_equals "$(<"${fib_out_files[0]}")" "2" "fibonacci.jh fib step .out content (fib(3)=2)"
 
-e2e::section "Parametrized workflow, rule, and prompt: params in tree (exact output)"
+e2e::section "Parametrized workflow, workflow, and prompt: params in tree (exact output)"
 
 # Given
 e2e::file "param_demo.jh" <<'EOF'
@@ -186,11 +186,11 @@ script check_arg_impl = ```
 script echo_response = ```
 echo "$1"
 ```
-rule check_arg(name) {
+workflow check_arg(name) {
   run check_arg_impl(name)
 }
 workflow default(name) {
-  ensure check_arg(name)
+  run check_arg(name)
   const response = prompt "e2e-param-prompt-text"
   run echo_response(response)
 }
@@ -200,7 +200,7 @@ e2e::file "param_demo.test.jh" <<'EOF'
 #!/usr/bin/env jaiph
 import "param_demo.jh" as w
 
-test "parametrized workflow and rule show params in tree; prompt shows value only" {
+test "parametrized workflow and workflow show params in tree; prompt shows value only" {
   mock prompt "e2e-param-mock-response"
   const response = run w.default("Alice")
   expect_contain response "e2e-param-mock-response"
@@ -215,7 +215,7 @@ if [[ "${param_test_out}" != *"passed"* ]] && [[ "${param_test_out}" != *"PASS"*
   printf "%s\n" "${param_test_out}" >&2
   e2e::fail "param_demo.test.jh should pass"
 fi
-e2e::pass "parametrized workflow/rule/prompt show params in tree"
+e2e::pass "parametrized workflow/workflow/prompt show params in tree"
 
 # Exact output: run workflow with args, no prompt (so no agent needed)
 e2e::file "param_run_only.jh" <<'EOF'
@@ -226,11 +226,11 @@ script need_one_impl = ```
 script param_done_impl = ```
 echo "e2e-param-done"
 ```
-rule need_one(name) {
+workflow need_one(name) {
   run need_one_impl(name)
 }
 workflow default(name) {
-  ensure need_one(name)
+  run need_one(name)
   run param_done_impl()
 }
 EOF
@@ -244,10 +244,10 @@ e2e::expect_stdout "${param_run_out}" <<'EOF'
 Jaiph: Running param_run_only.jh
 
 workflow default (name="Bob")
-  ▸ rule need_one (name="Bob")
+  ▸ workflow need_one (name="Bob")
   ·   ▸ script need_one_impl (1="Bob")
   ·   ✓ script need_one_impl (<time>)
-  ✓ rule need_one (<time>)
+  ✓ workflow need_one (<time>)
   ▸ script param_done_impl
   ✓ script param_done_impl (<time>)
 ✓ PASS workflow default (<time>)

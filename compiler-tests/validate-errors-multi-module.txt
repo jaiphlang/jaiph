@@ -5,16 +5,16 @@ import "a.jh" as mod
 import "b.jh" as mod
 
 workflow default() {
-  ensure mod.one()
+  run mod.one()
 }
 --- a.jh
 script one_impl = `echo one`
-rule one() {
+workflow one() {
   run one_impl()
 }
 --- b.jh
 script two_impl = `echo two`
-rule two() {
+workflow two() {
   run two_impl()
 }
 
@@ -78,21 +78,6 @@ workflow dummy() {
   log "ok"
 }
 
-=== run in rule targeting imported rule rejected
-# @expect error E_VALIDATE "must be called with ensure, not run" @3:3
---- main.jh
-import "lib.jh" as lib
-rule local_check() {
-  run lib.other_rule()
-}
-workflow default() {
-  ensure local_check()
-}
---- lib.jh
-export rule other_rule() {
-  return "ok"
-}
-
 === import resolves to missing file
 # @expect error E_IMPORT_NOT_FOUND "resolves to missing file"
 --- main.jh
@@ -127,8 +112,8 @@ workflow dummy() {
   log "ok"
 }
 
-=== send RHS with imported rule bare ref
-# @expect error E_VALIDATE "must be called with ensure"
+=== send RHS with imported workflow bare ref
+# @expect error E_VALIDATE "must be called with run"
 --- main.jh
 import "lib.jh" as lib
 channel c
@@ -136,8 +121,8 @@ workflow default() {
   c <- lib.check
 }
 --- lib.jh
-export rule check() {
-  return "ok"
+export workflow check() {
+  log "ok"
 }
 workflow dummy() {
   log "ok"
@@ -154,21 +139,6 @@ workflow default() {
 channel other_chan
 workflow dummy() {
   log "ok"
-}
-
-=== ensure non-exported rule from module with exports
-# @expect error E_VALIDATE "is not exported from module"
---- main.jh
-import "lib.jh" as lib
-workflow default() {
-  ensure lib.private_check()
-}
---- lib.jh
-export rule public_check() {
-  return "ok"
-}
-rule private_check() {
-  return "ok"
 }
 
 === run non-exported workflow from module with exports
@@ -229,18 +199,6 @@ workflow private_wf() {
   log "private"
 }
 
-=== arity mismatch on imported rule
-# @expect error E_VALIDATE "expects 2 argument(s)"
---- main.jh
-import "lib.jh" as lib
-workflow default() {
-  ensure lib.check("one")
-}
---- lib.jh
-export rule check(a, b) {
-  return "ok"
-}
-
 === send RHS with non-exported script bare ref
 # @expect error E_VALIDATE "is not exported from module"
 --- main.jh
@@ -254,16 +212,4 @@ export script public_script = `echo public`
 script private_script = `echo private`
 workflow dummy() {
   log "ok"
-}
-
-=== const ensure on imported workflow rejected
-# @expect error E_VALIDATE "must be called with run"
---- main.jh
-import "lib.jh" as lib
-workflow default() {
-  const x = ensure lib.deploy()
-}
---- lib.jh
-export workflow deploy() {
-  log "deploying"
 }

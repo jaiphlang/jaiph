@@ -4,7 +4,6 @@ import { parseChannelLine } from "./parse/channels";
 import { parseEnvDecl } from "./parse/env";
 import { parseImportLine, parseScriptImportLine } from "./parse/imports";
 import { parseConfigBlock } from "./parse/metadata";
-import { parseRuleBlock } from "./parse/rules";
 import { parseScriptBlock } from "./parse/scripts";
 import { parseWorkflowBlock } from "./parse/workflows";
 import { parseTestBlock } from "./parse/tests";
@@ -16,7 +15,6 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
     imports: [],
     channels: [],
     exports: [],
-    rules: [],
     scripts: [],
     workflows: [],
     topLevelOrder: [],
@@ -125,18 +123,6 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
       continue;
     }
 
-    if (line.includes("rule ")) {
-      const { rule, nextIndex, exported } = parseRuleBlock(filePath, lines, i - 1, pendingTopLevelComments);
-      pendingTopLevelComments = [];
-      if (exported) {
-        mod.exports.push(rule.name);
-      }
-      mod.rules.push(rule);
-      mod.topLevelOrder!.push({ kind: "rule", index: mod.rules.length - 1 });
-      i = nextIndex;
-      continue;
-    }
-
     if (line.includes("script ") || line.startsWith("script:")) {
       const { scriptDef, nextIndex, exported } = parseScriptBlock(filePath, lines, i - 1, pendingTopLevelComments);
       pendingTopLevelComments = [];
@@ -168,13 +154,13 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
     mod.trailingTopLevelComments = [...pendingTopLevelComments];
   }
 
-  // Unified namespace: rules, workflows, and scripts share a single name space.
+  // Unified namespace: workflows and scripts share a single name space.
   const seen = new Map<string, string>();
   if (mod.scriptImports) {
     for (const si of mod.scriptImports) {
       const prev = seen.get(si.alias);
       if (prev) {
-        fail(filePath, `duplicate name "${si.alias}" — channels, rules, workflows, and scripts share a single namespace (already declared as ${prev})`, si.loc.line, si.loc.col);
+        fail(filePath, `duplicate name "${si.alias}" — channels, workflows, and scripts share a single namespace (already declared as ${prev})`, si.loc.line, si.loc.col);
       }
       seen.set(si.alias, "script import");
     }
@@ -184,31 +170,24 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
     if (prev) {
       fail(
         filePath,
-        `duplicate name "${ch.name}" — channels, rules, workflows, and scripts share a single namespace (already declared as ${prev})`,
+        `duplicate name "${ch.name}" — channels, workflows, and scripts share a single namespace (already declared as ${prev})`,
         ch.loc.line,
         ch.loc.col,
       );
     }
     seen.set(ch.name, "channel");
   }
-  for (const r of mod.rules) {
-    const prev = seen.get(r.name);
-    if (prev) {
-      fail(filePath, `duplicate name "${r.name}" — rules, workflows, and scripts share a single namespace (already declared as ${prev})`, r.loc.line, r.loc.col);
-    }
-    seen.set(r.name, "rule");
-  }
   for (const sc of mod.scripts) {
     const prev = seen.get(sc.name);
     if (prev) {
-      fail(filePath, `duplicate name "${sc.name}" — rules, workflows, and scripts share a single namespace (already declared as ${prev})`, sc.loc.line, sc.loc.col);
+      fail(filePath, `duplicate name "${sc.name}" — workflows and scripts share a single namespace (already declared as ${prev})`, sc.loc.line, sc.loc.col);
     }
     seen.set(sc.name, "script");
   }
   for (const w of mod.workflows) {
     const prev = seen.get(w.name);
     if (prev) {
-      fail(filePath, `duplicate name "${w.name}" — rules, workflows, and scripts share a single namespace (already declared as ${prev})`, w.loc.line, w.loc.col);
+      fail(filePath, `duplicate name "${w.name}" — workflows and scripts share a single namespace (already declared as ${prev})`, w.loc.line, w.loc.col);
     }
     seen.set(w.name, "workflow");
   }

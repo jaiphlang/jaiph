@@ -49,18 +49,18 @@ e2e::assert_contains "${vis_out}" "is not exported" "non-exported workflow refer
 e2e::pass "referencing non-exported workflow from module with exports"
 
 # ---------------------------------------------------------------------------
-e2e::section "referencing non-exported rule from module with exports"
+e2e::section "referencing non-exported workflow from module with exports (workflow)"
 # ---------------------------------------------------------------------------
 
 # Given
 e2e::file "rule_lib.jh" <<'EOF'
 script check_impl = `true`
 
-export rule public_rule() {
+export workflow public_rule() {
   run check_impl()
 }
 
-rule private_rule() {
+workflow private_rule() {
   run check_impl()
 }
 EOF
@@ -69,7 +69,7 @@ e2e::file "rule_main.jh" <<'EOF'
 import "rule_lib.jh" as lib
 
 workflow default() {
-  ensure lib.private_rule()
+  run lib.private_rule()
 }
 EOF
 
@@ -78,16 +78,16 @@ rule_err="$(mktemp)"
 if jaiph run "${TEST_DIR}/rule_main.jh" 2>"${rule_err}"; then
   cat "${rule_err}" >&2
   rm -f "${rule_err}"
-  e2e::fail "jaiph run should fail when referencing non-exported rule"
+  e2e::fail "jaiph run should fail when referencing non-exported workflow"
 fi
 rule_out="$(cat "${rule_err}")"
 rm -f "${rule_err}"
 
 # Then
 # assert_contains: error includes absolute path which varies per machine
-e2e::assert_contains "${rule_out}" "is not exported" "non-exported rule reference produces export error"
+e2e::assert_contains "${rule_out}" "is not exported" "non-exported workflow reference produces export error"
 
-e2e::pass "referencing non-exported rule from module with exports"
+e2e::pass "referencing non-exported workflow from module with exports (workflow)"
 
 # ---------------------------------------------------------------------------
 e2e::section "referencing non-exported script from module with exports"

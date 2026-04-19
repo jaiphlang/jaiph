@@ -2,23 +2,6 @@
   "channels": [],
   "exports": [],
   "imports": [],
-  "rules": [
-    {
-      "comments": [],
-      "name": "validate",
-      "params": [
-        "input"
-      ],
-      "steps": [
-        {
-          "type": "run",
-          "workflow": {
-            "value": "checker"
-          }
-        }
-      ]
-    }
-  ],
   "scripts": [
     {
       "body": "echo ok",
@@ -33,8 +16,8 @@
       "kind": "workflow"
     },
     {
-      "index": 0,
-      "kind": "rule"
+      "index": 1,
+      "kind": "workflow"
     },
     {
       "index": 0,
@@ -53,6 +36,21 @@
         {
           "message": "${greeting}, ${name}!",
           "type": "log"
+        }
+      ]
+    },
+    {
+      "comments": [],
+      "name": "validate",
+      "params": [
+        "input"
+      ],
+      "steps": [
+        {
+          "type": "run",
+          "workflow": {
+            "value": "checker"
+          }
         }
       ]
     }

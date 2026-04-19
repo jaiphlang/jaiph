@@ -129,7 +129,7 @@ e2e::assert_contains "${subshell_out}" "E_PARSE" "prompt command substitution em
 # assert_contains: compile error includes absolute source path which varies per machine
 e2e::assert_contains "${subshell_out}" "prompt cannot contain" "prompt command substitution is rejected with explicit guard"
 
-e2e::section "shell redirection around run/ensure is rejected"
+e2e::section "shell redirection around run is rejected"
 
 # Given — run with stdout redirect
 e2e::file "run_redirect.jh" <<'EOF'

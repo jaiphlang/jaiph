@@ -62,18 +62,18 @@ fi
 e2e::pass "script step output contract"
 
 # ===================================================================
-e2e::section "ensure rule: captures return value only, stdout to artifacts"
+e2e::section "run workflow: captures return value only, stdout to artifacts"
 # ===================================================================
 
 e2e::file "contract_ensure.jh" <<'EOF'
 script compute_echo = `echo "rule-stdout-goes-to-artifacts"`
-rule compute(input) {
+workflow compute(input) {
   run compute_echo()
   return "${input}-processed"
 }
 script echo_captured_ensure = `echo "captured=$1"`
 workflow default() {
-  const val = ensure compute("input")
+  const val = run compute("input")
   run echo_captured_ensure(val)
 }
 EOF
@@ -89,7 +89,7 @@ rule_script_outs=( "${run_dir}"/*compute_echo.out )
 shopt -u nullglob
 [[ ${#rule_script_outs[@]} -ge 1 ]] || e2e::fail "expected compute_echo .out artifact"
 rule_script_content="$(<"${rule_script_outs[0]}")"
-e2e::assert_equals "${rule_script_content}" "rule-stdout-goes-to-artifacts" "rule script stdout in artifact"
+e2e::assert_equals "${rule_script_content}" "rule-stdout-goes-to-artifacts" "workflow script stdout in artifact"
 
 # Capture variable gets only return value
 shopt -s nullglob
@@ -97,11 +97,11 @@ cap_outs=( "${run_dir}"/*echo_captured_ensure.out )
 shopt -u nullglob
 [[ ${#cap_outs[@]} -ge 1 ]] || e2e::fail "expected echo_captured_ensure .out artifact"
 cap_content="$(<"${cap_outs[0]}")"
-e2e::assert_equals "${cap_content}" "captured=input-processed" "ensure capture = return value only"
+e2e::assert_equals "${cap_content}" "captured=input-processed" "run capture = return value only"
 if [[ "${cap_content}" == *"rule-stdout-goes-to-artifacts"* ]]; then
-  e2e::fail "rule stdout must NOT leak into capture variable"
+  e2e::fail "workflow stdout must NOT leak into capture variable"
 fi
-e2e::pass "ensure rule output contract"
+e2e::pass "run workflow output contract"
 
 # ===================================================================
 e2e::section "run workflow: captures return value only, stdout to artifacts"

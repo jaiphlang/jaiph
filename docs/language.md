@@ -7,7 +7,7 @@ redirect_from:
 
 # Language
 
-Jaiph is a small orchestration language for AI agent workflows. You write `.jh` files that wire together prompts, shell scripts, validation rules, and message channels into executable pipelines. This page is the practical reference for every language primitive — what it does, how to use it, and where the edges are. For the formal EBNF grammar, see [Grammar](grammar). For system internals, see [Architecture](architecture).
+Jaiph is a small orchestration language for AI agent workflows. You write `.jh` files that wire together prompts, shell scripts, workflows, and message channels into executable pipelines. This page is the practical reference for every language primitive — what it does, how to use it, and where the edges are. For the formal EBNF grammar, see [Grammar](grammar). For system internals, see [Architecture](architecture).
 
 ## Strings
 
@@ -72,11 +72,11 @@ Strings and scripts are structurally distinct and non-interchangeable — using 
 
 ## Module Structure
 
-A `.jh` file is a module. Modules contain top-level declarations in any order: imports, config, channels, constants, rules, scripts, and workflows. `jaiph format` hoists imports, config, and channels to the top but preserves the relative order of everything else.
+A `.jh` file is a module. Modules contain top-level declarations in any order: imports, config, channels, constants, scripts, and workflows. `jaiph format` hoists imports, config, and channels to the top but preserves the relative order of everything else.
 
 ### Imports and Exports
 
-`import` loads another module; `export` marks a declaration as public. All three definition types support export: `export workflow`, `export rule`, and `export script`.
+`import` loads another module; `export` marks a declaration as public. Both definition types support export: `export workflow` and `export script`.
 
 ```jaiph
 import "tools/security.jh" as security
@@ -85,7 +85,7 @@ import "bootstrap.jh" as bootstrap
 export script build_docs = `mkdocs build`
 
 export workflow default() {
-  ensure security.scan_passes()
+  run readonly security.scan_passes()
   run bootstrap.nodejs()
 }
 ```
@@ -114,12 +114,12 @@ This is useful when a script body is large enough that embedding it inline coupl
 If a module contains at least one `export` declaration, it has an **explicit API surface**: only exported names can be referenced through the import alias. Referencing a symbol that exists in the module but is not exported produces a compile-time error:
 
 ```
-E_VALIDATE: "private_rule" is not exported from module "lib"
+E_VALIDATE: "private_wf" is not exported from module "lib"
 ```
 
-Modules with **zero** `export` declarations retain legacy behavior — every top-level rule, script, and workflow is implicitly public. This means existing projects that don't use `export` continue to work without changes.
+Modules with **zero** `export` declarations retain legacy behavior — every top-level script and workflow is implicitly public. This means existing projects that don't use `export` continue to work without changes.
 
-The check applies uniformly to all qualified-reference positions: `run`, `ensure`, channel route targets, `send` RHS, and test mocks.
+The check applies uniformly to all qualified-reference positions: `run`, channel route targets, `send` RHS, and test mocks.
 
 ### Library Imports
 
@@ -133,7 +133,7 @@ The path is split as `<lib-name>/<path-inside-lib>`. Libraries are installed wit
 
 ### Top-Level `const`
 
-Module-scoped variables accessible as `${name}` inside that module's rules and workflows.
+Module-scoped variables accessible as `${name}` inside that module's workflows.
 
 ```jaiph
 const REPO = "my-project"
@@ -180,7 +180,7 @@ Named sequences of orchestration steps. Workflows can call other workflows, scri
 
 ```jaiph
 workflow default() {
-  ensure check_deps()
+  run readonly check_deps()
   run setup_env()
   prompt "Review the code for issues"
 }
@@ -192,25 +192,7 @@ workflow deploy(env, version) {
 }
 ```
 
-Workflows support all step types: `run`, `ensure`, `prompt`, `const`, `log`, `logerr`, `fail`, `return`, `send`, `match`, `if`, `run async`, `catch`, and `recover`.
-
-### Rules
-
-Named blocks of structured validation steps. Rules are called with `ensure` and are meant for checks and gates.
-
-```jaiph
-rule check_deps() {
-  run verify_lockfile()
-  run check_versions()
-}
-
-rule gate(path) {
-  run check_exists(path)
-  ensure validate_format(path)
-}
-```
-
-Rules are more restricted than workflows: they cannot use `prompt`, `send`, or `run async`. Inside a rule, `run` targets scripts only (not workflows). Rules execute in a read-only filesystem — they are meant for validation and checks, not side effects.
+Workflows support all step types: `run`, `run readonly`, `prompt`, `const`, `log`, `logerr`, `fail`, `return`, `send`, `match`, `if`, `run async`, `catch`, and `recover`.
 
 ### Scripts
 
@@ -220,7 +202,7 @@ Executable shell (or polyglot) definitions. Bodies are opaque to the compiler �
 
 ### Definitions
 
-All workflow and rule definitions require parentheses. Named parameters go inside:
+All workflow definitions require parentheses. Named parameters go inside:
 
 ```jaiph
 workflow implement(task, role) {
@@ -250,13 +232,13 @@ run process("${task}")              # equivalent to bare form
 
 ### Nested Managed Calls in Arguments
 
-Call arguments can contain nested managed calls — but the `run` or `ensure` keyword must be explicit. This is a deliberate language rule: scripts and workflows execute only via `run`, and rules execute only via `ensure`, even when nested inside another call's arguments.
+Call arguments can contain nested managed calls — but the `run` keyword must be explicit. This is a deliberate language rule: scripts and workflows execute only via `run`, even when nested inside another call's arguments.
 
 **Valid — explicit nested calls:**
 
 ```jaiph
 run mkdir_p_simple(run jaiph_tmp_dir())
-run do_work(ensure check_ok())
+run do_work(run check_ok())
 run do_work(run `echo aaa`())
 ```
 
@@ -265,8 +247,7 @@ The nested call executes first and its result is passed as a single argument to 
 **Invalid — bare call-like forms:**
 
 ```jaiph
-# run do_work(bar())          — E_VALIDATE: use "run bar()" or "ensure bar()"
-# run do_work(rule_bar())     — E_VALIDATE: use "ensure rule_bar()"
+# run do_work(bar())          — E_VALIDATE: use "run bar()"
 # run do_work(`echo aaa`())   — E_VALIDATE: use "run `...`()"
 # const x = bar()             — E_PARSE: use "const x = run bar()"
 ```
@@ -296,7 +277,7 @@ workflow default() {
 
 ### `run` — Execute a Workflow or Script
 
-Calls a workflow or script (in a workflow) or a script only (in a rule).
+Calls a workflow or script.
 
 ```jaiph
 run setup_env()
@@ -305,6 +286,25 @@ const output = run transform()
 ```
 
 **Capture:** For a workflow, captures the explicit `return` value. For a script, captures stdout.
+
+### `run readonly` — Read-Only Execution
+
+`run readonly` executes a workflow in a read-only context. Inside a `readonly` call, `prompt`, `send`, and `run async` are forbidden — the compiler rejects them. This is the replacement for the former `rule` primitive: validation-style logic that should not produce side effects is expressed as a normal `workflow` and called with `run readonly`.
+
+```jaiph
+workflow check_deps() {
+  run verify_lockfile()
+  run check_versions()
+}
+
+workflow default() {
+  run readonly check_deps()
+  run setup_env()
+  prompt "Review the code for issues"
+}
+```
+
+`readonly` composes with other modifiers: `run readonly`, `run async readonly`, but not with `isolated` (the combination is a compile-time error). Capture works the same as a normal `run` — the callee's `return` value is captured.
 
 ### `run async` — Concurrent Execution with Handles
 
@@ -337,7 +337,7 @@ run async isolated bar() recover(err) {
 
 When combined with `isolated`, the recover block and all retries execute inside the branch's sandboxed context. The coordinator observes only the final outcome.
 
-Constraints: workflow-only (rejected in rules), no inline scripts.
+Constraints: no inline scripts.
 
 ### `run isolated` — OS-Level Isolation
 
@@ -354,23 +354,13 @@ workflow default() {
 
 Nested isolation is a compile-time error: if `A` calls `run isolated B()` and `A` is itself called via `run isolated`, the program is rejected. Calls inside an isolated body without the `isolated` modifier run in the same container. To pass data out of an isolated branch, use the `workspace.export_patch` and `workspace.export` primitives from the standard library — they write files to a coordinator-readable location that survives container teardown. See [Libraries — Standard library: workspace](libraries.md#standard-library-workspace) and [Sandboxing — Per-call isolation](sandboxing.md#per-call-isolation-with-run-isolated) for details.
 
-### `ensure` — Execute a Rule
-
-Runs a rule and succeeds if its exit code is 0.
-
-```jaiph
-ensure check_deps()
-ensure lib.validate(input)
-const result = ensure validator(path)
-```
-
 ### `catch` — Failure Recovery
 
-Both `ensure` and `run` support a `catch` clause. On failure, the recovery body runs once. `catch` requires an explicit binding that receives merged stdout+stderr from the failed step.
+`run` supports a `catch` clause. On failure, the recovery body runs once. `catch` requires an explicit binding that receives merged stdout+stderr from the failed step.
 
 ```jaiph
 # Single-statement recovery
-ensure install_deps() catch (failure) run fix_deps()
+run install_deps() catch (failure) run fix_deps()
 
 # Block recovery
 run deploy(env) catch (err) {
@@ -380,7 +370,7 @@ run deploy(env) catch (err) {
 
 # Retry via recursion
 workflow deploy(env) {
-  ensure ci_passes() catch (failure) {
+  run ci_passes() catch (failure) {
     prompt "CI failed — fix the code."
     run deploy(env)
   }
@@ -410,7 +400,7 @@ config {
 }
 ```
 
-`recover` bindings follow the same rules as `catch` — exactly one binding, receives merged stdout+stderr from the failed step. `recover` is only supported on `run` (not `ensure`), and is mutually exclusive with `catch` on the same call site.
+`recover` bindings follow the same rules as `catch` — exactly one binding, receives merged stdout+stderr from the failed step. `recover` is mutually exclusive with `catch` on the same call site.
 
 ### `prompt` — Agent Interaction
 
@@ -450,11 +440,11 @@ log "Type: ${result.type}, Risk: ${result.risk}"
 
 Schema supports flat fields with types `string`, `number`, `boolean`. Fields are accessible via dot notation (`${result.type}`). The compiler validates field references at compile time.
 
-Prompts are not allowed in rules.
+Prompts are not allowed inside `run readonly` calls.
 
 ### `const` — Variable Binding
 
-Introduces a variable in a workflow or rule body.
+Introduces a variable in a workflow body.
 
 ```jaiph
 const tag = "v1.0"
@@ -463,7 +453,7 @@ const message = """
   Welcome to the project.
 """
 const result = run helper(arg)
-const check = ensure validator(input)
+const check = run readonly validator(input)
 const answer = prompt "Summarize the report"
 const label = match status {
   "ok" => "success"
@@ -491,7 +481,7 @@ Both accept single-line strings, triple-quoted blocks, or bare identifiers.
 
 ### `fail`
 
-Aborts the workflow or rule with a message on stderr and non-zero exit.
+Aborts the workflow with a message on stderr and non-zero exit.
 
 ```jaiph
 fail "Missing required configuration"
@@ -504,7 +494,7 @@ fail """
 
 ### `return`
 
-Sets the managed return value in rules and workflows.
+Sets the managed return value in workflows.
 
 ```jaiph
 return "success"
@@ -519,7 +509,7 @@ return """
 
 ```jaiph
 return run helper()
-return ensure check(input)
+return run readonly check(input)
 return match status {
   "ok" => "pass"
   _ => "fail"
@@ -557,15 +547,14 @@ match status {
 
 Patterns can be string literals (exact equality), regex (`/pattern/`), or `_` (default). Exactly one default arm is required.
 
-**Arm bodies** — the value expression after `=>`. Allowed: string literals (`"…"` or `"""…"""`), variable references, `fail "…"`, `run ref(…)`, `ensure ref(…)`. The `return` keyword inside an arm body is forbidden — use `return match x { … }` at the outer level. Inline script forms (backtick) are also forbidden in arms; use named scripts.
+**Arm bodies** — the value expression after `=>`. Allowed: string literals (`"…"` or `"""…"""`), variable references, `fail "…"`, `run ref(…)`. The `return` keyword inside an arm body is forbidden — use `return match x { … }` at the outer level. Inline script forms (backtick) are also forbidden in arms; use named scripts.
 
 **Runtime execution** — arm bodies are not merely string values. Each form executes at runtime:
 - `fail "message"` aborts the workflow with a non-zero exit and the given message.
 - `run ref(args)` executes the named script or workflow and captures its return value.
-- `ensure ref(args)` executes the named rule and captures its return value.
 - String literals and variable references evaluate to their string value as before.
 
-When a `const` step uses a `match` expression containing `run` or `ensure` arms, the CLI progress tree surfaces the nested script/workflow/rule targets as child steps (e.g. `▸ script safe_name` / `✓ script safe_name`), consistent with top-level `run` steps.
+When a `const` step uses a `match` expression containing `run` arms, the CLI progress tree surfaces the nested script/workflow targets as child steps (e.g. `▸ script safe_name` / `✓ script safe_name`), consistent with top-level `run` steps.
 
 **Multiline arm bodies** — triple-quoted:
 
@@ -613,7 +602,7 @@ The subject is a bare identifier (no `$` or `${}`). Operators:
 | `=~` | regex match | `/pattern/` |
 | `!~` | regex non-match | `/pattern/` |
 
-The body is a brace block containing any valid workflow/rule steps. `if` is a statement — it does not produce a value, so it cannot be used with `const` or `return`.
+The body is a brace block containing any valid workflow steps. `if` is a statement — it does not produce a value, so it cannot be used with `const` or `return`.
 
 ```jaiph
 workflow default(env) {
@@ -661,7 +650,6 @@ Jaiph orchestration strings support `${identifier}` interpolation. Every identif
 | `${varName}` | Variable reference | All orchestration strings |
 | `${var.field}` | Typed prompt field access | All orchestration strings |
 | `${run ref(args)}` | Inline capture — executes and inlines result | All orchestration strings |
-| `${ensure ref(args)}` | Inline capture — executes rule and inlines result | All orchestration strings |
 | `$1`, `$2` | Positional args (bash convention) | Script bodies — syntax depends on interpreter |
 
 `$varName` (without braces) is rejected — always use `${varName}`. Shell expansions like `${var:-fallback}`, `$(…)`, and `${#var}` are rejected in orchestration strings.
@@ -670,7 +658,7 @@ Jaiph orchestration strings support `${identifier}` interpolation. Every identif
 
 ```jaiph
 log "Got: ${run some_script()}"
-log "Status: ${ensure check_ok()}"
+log "Status: ${run check_ok()}"
 ```
 
 If the inline capture fails, the enclosing step fails. Nested inline captures are rejected — extract the inner call to a `const`.
@@ -696,8 +684,8 @@ Every step produces three outputs: status, value, and logs.
 
 | Step | Status | Capture value (`x = …`) | Logs |
 |---|---|---|---|
-| `ensure rule` | exit code | explicit `return` value | artifacts |
 | `run workflow` | exit code | explicit `return` value | artifacts |
+| `run readonly workflow` | exit code | explicit `return` value | artifacts |
 | `run script` | exit code | stdout | artifacts |
 | `run` inline | exit code | stdout | artifacts |
 | `prompt` | exit code | final assistant answer | artifacts |
@@ -714,5 +702,5 @@ Every step produces three outputs: status, value, and logs.
 - **Blank lines:** Preserved as visual grouping between steps; consecutive blanks collapsed by `jaiph format`
 - **Shebang:** A `#!` first line of the file is ignored by the parser
 - **String quoting:** `"..."` for single-line, `"""..."""` for multiline. Single-quoted strings are parse errors. Use `\"` for literal double quotes, `\\` for literal backslashes
-- **Unified namespace:** Channels, rules, workflows, scripts, script import aliases, and top-level `const` share one namespace per module
+- **Unified namespace:** Channels, workflows, scripts, script import aliases, and top-level `const` share one namespace per module
 - **Recursion limit:** Hard depth limit of 256 at runtime

@@ -1,13 +1,13 @@
 import { mkdtempSync, writeFileSync, chmodSync, rmSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { buildRuntimeGraph, resolveWorkflowRef, resolveRuleRef, resolveScriptRef, type RuntimeGraph } from "./graph";
+import { buildRuntimeGraph, resolveWorkflowRef, resolveScriptRef, type RuntimeGraph } from "./graph";
 import { NodeWorkflowRuntime, type MockBodyDef } from "./node-workflow-runtime";
 import type { TestBlockDef, TestStepDef } from "../../types";
 
 type TestResult = { pass: boolean; error?: string };
 
-type MockRefStep = Extract<TestStepDef, { type: "test_mock_workflow" | "test_mock_rule" | "test_mock_script" }>;
+type MockRefStep = Extract<TestStepDef, { type: "test_mock_workflow" | "test_mock_script" }>;
 
 function resolveMockBodies(
   graph: RuntimeGraph,
@@ -22,9 +22,6 @@ function resolveMockBodies(
     if (step.type === "test_mock_workflow") {
       const resolved = resolveWorkflowRef(graph, entryFile, { value: ref, loc });
       if (resolved) key = `${resolved.filePath}::${resolved.workflow.name}`;
-    } else if (step.type === "test_mock_rule") {
-      const resolved = resolveRuleRef(graph, entryFile, { value: ref, loc });
-      if (resolved) key = `${resolved.filePath}::${resolved.rule.name}`;
     } else if (step.type === "test_mock_script") {
       const resolved = resolveScriptRef(graph, entryFile, ref);
       if (resolved) key = `${resolved.filePath}::${resolved.script.name}`;
@@ -90,7 +87,7 @@ async function runTestBlock(
   try {
     const mockResponses: string[] = [];
     let mockDispatchPath = "";
-    const mockRefs: Array<Extract<TestStepDef, { type: "test_mock_workflow" | "test_mock_rule" | "test_mock_script" }>> = [];
+    const mockRefs: Array<Extract<TestStepDef, { type: "test_mock_workflow" | "test_mock_script" }>> = [];
     const vars = new Map<string, string>();
 
     // Collect mock setup
@@ -104,7 +101,7 @@ async function runTestBlock(
       if (step.type === "test_mock_prompt_block") {
         mockDispatchPath = writeMockDispatchScript(step, tmpDir);
       }
-      if (step.type === "test_mock_workflow" || step.type === "test_mock_rule" || step.type === "test_mock_script") {
+      if (step.type === "test_mock_workflow" || step.type === "test_mock_script") {
         mockRefs.push(step);
       }
     }
@@ -122,7 +119,7 @@ async function runTestBlock(
         continue;
       }
       if (step.type === "test_mock_prompt" || step.type === "test_mock_prompt_block" ||
-          step.type === "test_mock_workflow" || step.type === "test_mock_rule" ||
+          step.type === "test_mock_workflow" ||
           step.type === "test_mock_script") {
         continue; // Already processed above
       }

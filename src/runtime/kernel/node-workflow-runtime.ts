@@ -9,7 +9,7 @@ import type { MatchExprDef, WorkflowStepDef } from "../../types";
 import { executePrompt, resolveConfig, resolveModel, resolvePromptStepName } from "./prompt";
 import { appendRunSummaryLine, formatUtcTimestamp } from "./emit";
 import { buildStepDisplayParamPairs } from "../../cli/commands/format-params.js";
-import { resolveRuleRef, resolveScriptRef, resolveWorkflowRef, type RuntimeGraph } from "./graph";
+import { resolveScriptRef, resolveWorkflowRef, type RuntimeGraph } from "./graph";
 import type { WorkflowMetadata } from "../../types";
 import { extractJson, validateFields } from "./schema";
 import { parseCallRef } from "../../parse/core";
@@ -31,8 +31,6 @@ import {
 const MAX_EMBED = 1024 * 1024;
 const MAX_RECURSION_DEPTH = 256;
 const HANDLE_PREFIX = "__JAIPH_HANDLE__";
-type EnsureRecover = Extract<WorkflowStepDef, { type: "ensure" }>["recover"];
-
 type AsyncHandle = {
   id: string;
   ref: string;
@@ -52,6 +50,8 @@ type Scope = {
   env: NodeJS.ProcessEnv;
   /** Declared parameter names for the active workflow or rule. */
   declaredParamNames?: string[];
+  /** When true, prompt and send steps are forbidden. */
+  readonly?: boolean;
 };
 
 type Frame = {
@@ -120,7 +120,7 @@ function interpolate(input: string, vars: Map<string, string>, env?: NodeJS.Proc
   });
 }
 
-/** Body after "run" / "ensure" in ${run ...} / ${ensure ...} (e.g. greet(), greet(x), or greet x). */
+/** Body after "run" in ${run ...} (e.g. greet(), greet(x), or greet x). */
 function parseInlineCaptureCall(body: string): { ref: string; argsRaw: string } {
   const trimmed = body.trim();
   const paren = trimmed.match(/^([\w.]+)\s*\(([^)]*)\)\s*$/);
@@ -181,7 +181,7 @@ function parseArgsRaw(raw: string, vars: Map<string, string>, env?: NodeJS.Proce
 
 type ParsedArgToken =
   | { kind: "literal"; value: string }
-  | { kind: "managed"; managedKind: "run" | "ensure"; ref: string; argsRaw: string }
+  | { kind: "managed"; managedKind: "run"; ref: string; argsRaw: string }
   | { kind: "managed_inline_script"; body: string; lang?: string; argsRaw: string };
 
 /** Try to parse `\`body\`(args)` from a string at a given position. */
@@ -217,9 +217,7 @@ function parseManagedArgAt(raw: string, start: number): { token: ParsedArgToken;
   const tail = raw.slice(start);
   const keyword = tail.startsWith("run ")
     ? "run"
-    : tail.startsWith("ensure ")
-      ? "ensure"
-      : null;
+    : null;
   if (!keyword) return null;
   const afterKeyword = raw.slice(start + keyword.length).trimStart();
   const skipped = raw.slice(start + keyword.length).length - afterKeyword.length;
@@ -696,38 +694,6 @@ export class NodeWorkflowRuntime {
     }, resolved.workflow.params);
   }
 
-  private async executeRule(filePath: string, ruleName: string, scope: Scope, args: string[]): Promise<StepResult> {
-    const resolved = resolveRuleRef(this.graph, filePath, {
-      value: ruleName,
-      loc: { line: 1, col: 1 },
-    });
-    if (!resolved) {
-      return { status: 1, output: "", error: `Unknown rule: ${ruleName}` };
-    }
-    return this.executeManagedStep("rule", `${ruleName}`, args, async (io) => {
-      // Same-module rules inherit the calling scope's effective env (which already
-      // includes module + workflow metadata).  Only apply callee module metadata
-      // for cross-module rule references so we don't overwrite workflow-level overrides.
-      const sameModule = resolvePath(scope.filePath) === resolvePath(resolved.filePath);
-      const moduleMeta = sameModule ? undefined : this.graph.modules.get(resolved.filePath)?.ast.metadata;
-      const ruleEnv = this.applyMetadataScope(scope.env, moduleMeta);
-      const ruleVars = new Map(scope.vars);
-      resolved.rule.params.forEach((name, i) => {
-        if (i < args.length) ruleVars.set(name, args[i]);
-      });
-      return this.executeSteps(
-        {
-          filePath: resolved.filePath,
-          vars: ruleVars,
-          env: ruleEnv,
-          declaredParamNames: resolved.rule.params,
-        },
-        resolved.rule.steps,
-        io,
-      );
-    }, resolved.rule.params);
-  }
-
   private mergeStepResult(accOut: string, accErr: string, r: StepResult): StepResult {
     return {
       status: r.status,
@@ -791,10 +757,10 @@ export class NodeWorkflowRuntime {
     return undefined;
   }
 
-  private static readonly INLINE_CAPTURE_RE = /\$\{(run|ensure)\s+([^}]+)\}/g;
+  private static readonly INLINE_CAPTURE_RE = /\$\{(run)\s+([^}]+)\}/g;
 
   /**
-   * Interpolate string with inline captures: ${run ref [args]} / ${ensure ref [args]}.
+   * Interpolate string with inline captures: ${run ref [args]}.
    * Executes each capture, replaces with output, then does regular ${var} interpolation.
    * Returns { ok: true, value } on success or { ok: false, result } on failure.
    */
@@ -817,9 +783,7 @@ export class NodeWorkflowRuntime {
     while ((m = re.exec(input)) !== null) {
       result += input.slice(lastIndex, m.index);
       const { ref, argsRaw } = parseInlineCaptureCall(m[2]);
-      const r = m[1] === "run"
-        ? await this.executeRunRef(scope, ref, argsRaw)
-        : await this.executeEnsureRef(scope, ref, argsRaw, undefined);
+      const r = await this.executeRunRef(scope, ref, argsRaw);
       if (r.status !== 0) return { ok: false, result: r };
       result += r.returnValue ?? r.output.trim();
       lastIndex = m.index + m[0].length;
@@ -861,14 +825,6 @@ export class NodeWorkflowRuntime {
         const runM = body.match(/^run\s+([A-Za-z_][A-Za-z0-9_.]*)\(([^)]*)\)\s*$/);
         if (runM) {
           const result = await this.executeRunRef(scope, runM[1]!, commaArgsToInterpolated(runM[2]!));
-          if (result.status !== 0) return { ok: false, result };
-          return { ok: true, value: result.returnValue ?? result.output.trim() };
-        }
-
-        // ensure ref(args) — execute rule and capture return value
-        const ensureM = body.match(/^ensure\s+([A-Za-z_][A-Za-z0-9_.]*)\(([^)]*)\)\s*$/);
-        if (ensureM) {
-          const result = await this.executeEnsureRef(scope, ensureM[1]!, commaArgsToInterpolated(ensureM[2]!), undefined);
           if (result.status !== 0) return { ok: false, result };
           return { ok: true, value: result.returnValue ?? result.output.trim() };
         }
@@ -935,9 +891,7 @@ export class NodeWorkflowRuntime {
             returnValue = matchResult.value;
             return this.mergeStepResult(accOut, accErr, { status: 0, output: "", error: "", returnValue });
           }
-          const result = step.managed.kind === "run"
-            ? await this.executeRunRef(scope, step.managed.ref.value, step.managed.args ?? "")
-            : await this.executeEnsureRef(scope, step.managed.ref.value, step.managed.args ?? "", undefined);
+          const result = await this.executeRunRef(scope, step.managed.ref.value, step.managed.args ?? "");
           if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
           returnValue = result.returnValue ?? result.output.trim();
           return this.mergeStepResult(accOut, accErr, { status: 0, output: "", error: "", returnValue });
@@ -950,6 +904,13 @@ export class NodeWorkflowRuntime {
         return this.mergeStepResult(accOut, accErr, { status: 0, output: "", error: "", returnValue });
       }
       if (step.type === "send") {
+        if (scope.readonly) {
+          return this.mergeStepResult(accOut, accErr, {
+            status: 1,
+            output: "",
+            error: "send is not allowed in readonly context",
+          });
+        }
         const ctx = this.workflowCtxStack[this.workflowCtxStack.length - 1];
         if (!ctx) {
           return this.mergeStepResult(accOut, accErr, {
@@ -1016,6 +977,13 @@ export class NodeWorkflowRuntime {
         continue;
       }
       if (step.type === "prompt") {
+        if (scope.readonly) {
+          return this.mergeStepResult(accOut, accErr, {
+            status: 1,
+            output: "",
+            error: "prompt is not allowed in readonly context",
+          });
+        }
         const promptRaw =
           step.bodyKind === "triple_quoted" ? tripleQuotedRawForRuntime(step.raw) : step.raw;
         const promptIr = await this.interpolateWithCaptures(promptRaw, scope);
@@ -1111,6 +1079,7 @@ export class NodeWorkflowRuntime {
           continue;
         }
         if (step.value.kind === "run_capture") {
+          const captureScope: Scope = (step.value as any).readonly ? { ...scope, readonly: true } : scope;
           if (step.value.async) {
             // Async capture: create a handle and store sentinel in the variable.
             asyncCounter += 1;
@@ -1121,7 +1090,7 @@ export class NodeWorkflowRuntime {
               : (s: Scope, ref: string, args: string | string[]) => this.executeRunRef(s, ref, args);
             const captureRef = step.value.ref.value;
             const captureArgs = step.value.args ?? "";
-            const scopeSnap = { ...scope, vars: new Map(scope.vars) };
+            const scopeSnap = { ...captureScope, vars: new Map(captureScope.vars) };
             const promise = this.asyncFrameStack.run(branchStack, () =>
               this.asyncIndicesStorage.run(branchIndices, () =>
                 execRef(scopeSnap, captureRef, captureArgs),
@@ -1136,8 +1105,8 @@ export class NodeWorkflowRuntime {
             continue;
           }
           const captureExec = step.value.isolated
-            ? this.executeIsolatedRunRef(scope, step.value.ref.value, step.value.args ?? "")
-            : this.executeRunRef(scope, step.value.ref.value, step.value.args ?? "");
+            ? this.executeIsolatedRunRef(captureScope, step.value.ref.value, step.value.args ?? "")
+            : this.executeRunRef(captureScope, step.value.ref.value, step.value.args ?? "");
           const runResult = await captureExec;
           if (runResult.status !== 0) return this.mergeStepResult(accOut, accErr, runResult);
           scope.vars.set(step.name, runResult.returnValue ?? runResult.output.trim());
@@ -1148,12 +1117,6 @@ export class NodeWorkflowRuntime {
           const result = await this.executeInlineScript(scope, step.value.body, shebang, step.value.args ?? "");
           if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
           scope.vars.set(step.name, result.returnValue ?? result.output.trim());
-          continue;
-        }
-        if (step.value.kind === "ensure_capture") {
-          const ensureResult = await this.executeEnsureRef(scope, step.value.ref.value, step.value.args ?? "", undefined);
-          if (ensureResult.status !== 0) return this.mergeStepResult(accOut, accErr, ensureResult);
-          scope.vars.set(step.name, ensureResult.returnValue ?? ensureResult.output.trim());
           continue;
         }
         if (step.value.kind === "match_expr") {
@@ -1252,6 +1215,8 @@ export class NodeWorkflowRuntime {
         const execRef = step.isolated
           ? (s: Scope, ref: string, args: string | string[]) => this.executeIsolatedRunRef(s, ref, args)
           : (s: Scope, ref: string, args: string | string[]) => this.executeRunRef(s, ref, args);
+        // Propagate readonly flag to the target workflow scope.
+        const runScope: Scope = (step as any).readonly ? { ...scope, readonly: true } : scope;
 
         if (step.async) {
           asyncCounter += 1;
@@ -1263,7 +1228,7 @@ export class NodeWorkflowRuntime {
           const stepRecoverLoop = step.recoverLoop;
           const stepRecover = step.recover;
           const stepCapture = step.captureName;
-          const scopeSnapshot = { ...scope, vars: new Map(scope.vars) };
+          const scopeSnapshot = { ...runScope, vars: new Map(runScope.vars) };
           const promise = this.asyncFrameStack.run(branchStack, () =>
             this.asyncIndicesStorage.run(branchIndices, async () => {
               if (stepRecoverLoop) {
@@ -1305,11 +1270,11 @@ export class NodeWorkflowRuntime {
         }
         // recover loop: retry with repair block until success or limit exhaustion
         if (step.recoverLoop) {
-          const limit = Number(scope.env.JAIPH_RECOVER_LIMIT) || 10;
+          const limit = Number(runScope.env.JAIPH_RECOVER_LIMIT) || 10;
           const recoverSteps = "single" in step.recoverLoop ? [step.recoverLoop.single] : step.recoverLoop.block;
           let lastResult: StepResult | undefined;
           for (let attempt = 0; attempt < limit; attempt += 1) {
-            const runResult = await execRef(scope, step.workflow.value, step.args ?? "");
+            const runResult = await execRef(runScope, step.workflow.value, step.args ?? "");
             if (runResult.status === 0) {
               if (step.captureName) {
                 scope.vars.set(step.captureName, runResult.returnValue ?? runResult.output.trim());
@@ -1318,26 +1283,26 @@ export class NodeWorkflowRuntime {
               break;
             }
             lastResult = runResult;
-            const recoverVars = new Map(scope.vars);
+            const recoverVars = new Map(runScope.vars);
             const recoverPayload = `${runResult.output}${runResult.error}`;
             recoverVars.set(step.recoverLoop.bindings.failure, recoverPayload);
-            const rr = await this.executeSteps({ ...scope, vars: recoverVars }, recoverSteps);
+            const rr = await this.executeSteps({ ...runScope, vars: recoverVars }, recoverSteps);
             if (rr.status !== 0 || rr.returnValue !== undefined) return this.mergeStepResult(accOut, accErr, rr);
           }
           if (lastResult) return this.mergeStepResult(accOut, accErr, lastResult);
           continue;
         }
-        const runResult = await execRef(scope, step.workflow.value, step.args ?? "");
+        const runResult = await execRef(runScope, step.workflow.value, step.args ?? "");
         if (runResult.status === 0) {
           if (step.captureName) {
             scope.vars.set(step.captureName, runResult.returnValue ?? runResult.output.trim());
           }
         } else if (step.recover) {
           const recoverSteps = "single" in step.recover ? [step.recover.single] : step.recover.block;
-          const recoverVars = new Map(scope.vars);
+          const recoverVars = new Map(runScope.vars);
           const recoverPayload = `${runResult.output}${runResult.error}`;
           recoverVars.set(step.recover.bindings.failure, recoverPayload);
-          const rr = await this.executeSteps({ ...scope, vars: recoverVars }, recoverSteps);
+          const rr = await this.executeSteps({ ...runScope, vars: recoverVars }, recoverSteps);
           if (rr.status !== 0 || rr.returnValue !== undefined) return this.mergeStepResult(accOut, accErr, rr);
         } else {
           return this.mergeStepResult(accOut, accErr, runResult);
@@ -1351,15 +1316,6 @@ export class NodeWorkflowRuntime {
           scope.vars.set(step.captureName, result.returnValue ?? result.output.trim());
         }
         if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
-        continue;
-      }
-      if (step.type === "ensure") {
-        const ensureResult = await this.executeEnsureRef(scope, step.ref.value, step.args ?? "", step.recover);
-        if (step.captureName && ensureResult.status === 0) {
-          scope.vars.set(step.captureName, ensureResult.returnValue ?? ensureResult.output.trim());
-        }
-        if (ensureResult.status !== 0) return this.mergeStepResult(accOut, accErr, ensureResult);
-        if (ensureResult.recoverReturn) return this.mergeStepResult(accOut, accErr, ensureResult);
         continue;
       }
       if (step.type === "if") {
@@ -1564,9 +1520,7 @@ export class NodeWorkflowRuntime {
         resolved.push(result.returnValue ?? result.output.trim());
         continue;
       }
-      const result = token.managedKind === "run"
-        ? await this.executeRunRef(scope, token.ref, token.argsRaw)
-        : await this.executeEnsureRef(scope, token.ref, token.argsRaw, undefined);
+      const result = await this.executeRunRef(scope, token.ref, token.argsRaw);
       if (result.status !== 0) {
         return result;
       }
@@ -1730,44 +1684,6 @@ export class NodeWorkflowRuntime {
       error: stderr,
       returnValue,
     };
-  }
-
-  private async executeEnsureRef(
-    scope: Scope,
-    ref: string,
-    argsRaw: string,
-    recover: EnsureRecover | undefined,
-  ): Promise<StepResult> {
-    const resolvedArgs = await this.resolveArgsRaw(scope, argsRaw);
-    if (!Array.isArray(resolvedArgs)) return resolvedArgs;
-    const args = resolvedArgs;
-    const attempt = async (): Promise<StepResult> => {
-      const resolvedRule = resolveRuleRef(this.graph, scope.filePath, { value: ref, loc: { line: 1, col: 1 } });
-      if (!resolvedRule) return { status: 1, output: "", error: `Unknown ensure target: ${ref}` };
-      const mk = this.mockKey(resolvedRule.filePath, resolvedRule.rule.name);
-      const mockBody = this.mockBodies.get(mk);
-      if (mockBody !== undefined) {
-        return this.executeManagedStep(
-          "rule",
-          ref,
-          args,
-          async () => this.executeMockBodyDef(ref, mockBody, args),
-          resolvedRule.rule.params,
-        );
-      }
-      return this.executeRule(resolvedRule.filePath, resolvedRule.rule.name, scope, args);
-    };
-    const res = await attempt();
-    if (res.status === 0) return res;
-    if (!recover) return res;
-    const recoverSteps = "single" in recover ? [recover.single] : recover.block;
-    const recoverVars = new Map(scope.vars);
-    const recoverPayload = `${res.output}${res.error}`;
-    recoverVars.set(recover.bindings.failure, recoverPayload);
-    const rr = await this.executeSteps({ ...scope, vars: recoverVars }, recoverSteps);
-    if (rr.status !== 0) return rr;
-    if (rr.returnValue !== undefined) return { ...rr, recoverReturn: true };
-    return { status: 0, output: res.output, error: "" };
   }
 
   private async executeScript(

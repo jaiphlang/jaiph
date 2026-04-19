@@ -7,7 +7,7 @@ redirect_from:
 
 # Getting Started
 
-Jaiph is a composable scripting language and runtime for AI agent workflows. You write `.jh` files that combine prompts, rules, scripts, and workflows into executable pipelines.
+Jaiph is a composable scripting language and runtime for AI agent workflows. You write `.jh` files that combine prompts, scripts, and workflows into executable pipelines.
 
 ## Setup
 
@@ -16,7 +16,7 @@ Jaiph is a composable scripting language and runtime for AI agent workflows. You
 
 ## Language
 
-- **[Language](language.md)** — Practical guide to rules, scripts, prompts, workflows, and imports, with patterns you can copy.
+- **[Language](language.md)** — Practical guide to scripts, prompts, workflows, and imports, with patterns you can copy.
 - **[Inbox & Dispatch](inbox.md)** — Named channels and sends for routing work between workflows without tight coupling.
 - **[Testing](testing.md)** — `*.test.jh` suites, mocks, and assertions for deterministic checks around workflows.
 - **[Grammar](grammar.md)** — Formal syntax, types, and step contracts for the whole surface area.

@@ -14,35 +14,6 @@ Process rules:
 
 ***
 
-## Language/Runtime — add `readonly`, remove `rule`, remove `ensure` #dev-ready
-
-**Goal**
-Match the spec: replace `rule` with explicit execution policy and remove `ensure` entirely. Validation-style logic uses `run readonly ...`. `ensure X [catch(err) {...}]` becomes `run X [catch(err) {...}]`.
-
-**Scope**
-
-* Add `run readonly ...` semantics.
-* Remove `rule` parsing/validation/runtime support.
-* Remove `ensure` parsing/validation/runtime support.
-* Migrate all in-tree `.jh` files (`.jaiph/*.jh`, `examples/*.jh`, `e2e/*.jh`, `golden-ast/fixtures/*.jh`, `test/fixtures/*.jh`) so they no longer use `ensure` or `rule`. Mechanical replacement: `ensure X` → `run X`, `ensure X catch(err) {...}` → `run X catch(err) {...}`, `rule R(...) {...}` → `workflow R(...) {...}` invoked via `run readonly R(...)`.
-* Keep the model explicit and small. Do not invent a replacement primitive besides `readonly`.
-
-**Required tests**
-
-* Parser / formatter / validation updates for removing `rule`, removing `ensure`, and adding `readonly`.
-* Runtime tests proving readonly restrictions (mutation attempts inside `run readonly ...` must fail).
-* Acceptance tests showing `run readonly ...` as the validation path.
-* Snapshot/e2e tests covering migrated `.jh` files still pass.
-
-**Acceptance criteria**
-
-* `rule` is removed.
-* `ensure` is removed.
-* `run readonly ...` works as the replacement execution policy.
-* All in-tree `.jh` files compile and run without `ensure` or `rule`.
-* Docs and tests no longer describe `rule` or `ensure` as live primitives.
-* The docs-site Jaiph syntax highlighter (`docs/assets/js/main.js`) is updated in lockstep: `readonly` is added to `STATEMENT_KEYWORDS`; `rule` and `ensure` are removed from `STATEMENT_KEYWORDS` **and** from the keyword-flow special cases (the branches that special-case `firstValue === "rule"`, `firstValue === "ensure"`, etc.). Any leftover `rule`/`ensure` code paths in the highlighter are deleted, not left as dead code.
-
 ## Configuration — remove the user-visible Docker mode and language-level sandbox config #dev-ready
 
 **Goal**

@@ -68,7 +68,7 @@ printf 'rule_model:%s\n' "$JAIPH_AGENT_MODEL" >> "$JAIPH_OVERRIDE_LOG"
 printf 'rule_backend:%s\n' "$JAIPH_AGENT_BACKEND" >> "$JAIPH_OVERRIDE_LOG"
 ```
 
-rule check_config() {
+workflow check_config() {
   run log_rule_config()
 }
 
@@ -76,11 +76,11 @@ workflow with_override() {
   config {
     agent.default_model = "workflow-model"
   }
-  ensure check_config()
+  run check_config()
 }
 
 workflow without_override() {
-  ensure check_config()
+  run check_config()
 }
 
 workflow default() {
@@ -100,7 +100,7 @@ expected="$(printf '%s\n' \
   'rule_model:module-model' \
   'rule_backend:cursor')"
 e2e::assert_equals "${actual}" "${expected}" \
-  "rule inside overriding workflow sees workflow model; rule in non-overriding sees module model"
+  "workflow inside overriding workflow sees workflow model; workflow in non-overriding sees module model"
 
 # ---------------------------------------------------------------------------
 # Section 3: Interaction — nested run with workflow config precedence

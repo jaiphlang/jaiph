@@ -97,7 +97,7 @@ workflow review_one_header(header) {
     return ""
   }
   const task = run queue.get_task_by_header(header)
-  ensure queue.task_is_dev_ready(task) catch (err) {
+  run queue.task_is_dev_ready(task) catch (err) {
     const packed = run architect_agent_review(task)
     const verdict = run first_line_str(packed)
     const updated_description = run rest_lines_str(packed)
@@ -148,7 +148,7 @@ workflow default() {
   const first = run first_line_str(headers)
   const rest = run rest_lines_str(headers)
   run maybe_process_headers(first, rest)
-  ensure queue.all_dev_ready() catch (err) {
+  run queue.all_dev_ready() catch (err) {
     fail "One or more tasks need work. Review the agent output above."
   }
 }

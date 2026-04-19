@@ -49,12 +49,12 @@ e2e::file "dockerfile_detect.jh" <<'EOF'
 script check_marker_impl = ```
 test -f /jaiph-runtime-marker && echo "marker found"
 ```
-rule check_marker() {
+workflow check_marker() {
   run check_marker_impl()
 }
 
 workflow default() {
-  ensure check_marker()
+  run check_marker()
 }
 EOF
 
@@ -77,12 +77,12 @@ if test -f /jaiph-runtime-marker; then
 fi
 echo "no marker"
 ```
-rule check_no_marker() {
+workflow check_no_marker() {
   run check_no_marker_impl()
 }
 
 workflow default() {
-  ensure check_no_marker()
+  run check_no_marker()
 }
 EOF
 
@@ -101,12 +101,12 @@ cat > "${fallback_dir}/fallback.jh" <<'EOF'
 script greet_impl = ```
 echo "hello fallback"
 ```
-rule greet() {
+workflow greet() {
   run greet_impl()
 }
 
 workflow default() {
-  ensure greet()
+  run greet()
 }
 EOF
 
@@ -127,12 +127,12 @@ script check_env_impl = ```
 echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-unset}"
 echo "CURSOR_SESSION=${CURSOR_SESSION:-unset}"
 ```
-rule check_env() {
+workflow check_env() {
   run check_env_impl()
 }
 
 workflow default() {
-  ensure check_env()
+  run check_env()
 }
 EOF
 

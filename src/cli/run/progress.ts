@@ -89,30 +89,6 @@ export function collectWorkflowChildren(
       }
       return arr;
     }
-    if (s.type === "ensure") {
-      const ref = s.ref.value;
-      const stepFunc =
-        symbols && ref.includes(".")
-          ? (() => {
-              const dot = ref.indexOf(".");
-              const alias = ref.slice(0, dot);
-              const name = ref.slice(dot + 1);
-              return `${symbols.get(alias) ?? alias}::${name}`;
-            })()
-          : currentSymbol
-            ? `${currentSymbol}::${ref}`
-            : undefined;
-      const arr: Array<{ label: string; nested?: string; stepFunc?: string }> = [
-        { label: `rule ${ref}`, stepFunc },
-      ];
-      if (s.recover) {
-        const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
-        for (const r of steps) {
-          arr.push(...stepToItems(r));
-        }
-      }
-      return arr;
-    }
     if (s.type === "prompt") {
       return [{ label: formatPromptLabel(s.raw), stepFunc: "jaiph::prompt" }];
     }
@@ -140,9 +116,9 @@ export function collectWorkflowChildren(
             constItems.push({ label: `workflow ${runM[1]}`, nested: runM[1] });
             continue;
           }
-          const ensureM = body.match(/^ensure\s+([A-Za-z_][A-Za-z0-9_.]*)\(/);
-          if (ensureM) {
-            constItems.push({ label: `rule ${ensureM[1]}`, nested: ensureM[1] });
+          const readonlyRunM = body.match(/^readonly\s+run\s+([A-Za-z_][A-Za-z0-9_.]*)\(/);
+          if (readonlyRunM) {
+            constItems.push({ label: `workflow ${readonlyRunM[1]}`, nested: readonlyRunM[1] });
           }
         }
       }
@@ -174,10 +150,6 @@ export function collectWorkflowChildren(
   }
 
   for (const step of workflow.steps) {
-    if (step.type === "ensure") {
-      items.push(...stepToItems(step));
-      continue;
-    }
     if (step.type === "run") {
       const wf = step.workflow.value;
       const asyncPrefix = step.async ? "async " : "";

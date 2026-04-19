@@ -126,7 +126,7 @@ The table below is the inventory as of this writing; after large refactors, pref
 | `src/cli/shared/errors.test.ts` | `errors.ts` — `summarizeError`, failure metadata |
 | `src/cli/shared/paths.test.ts` | `paths.ts` — `detectWorkspaceRoot` |
 | `src/parse/parse-core.test.ts` | `core.ts` — low-level parse helpers (`stripQuotes`, `isRef`, brace depth, `fail`, …) |
-| `src/parse/parse-definitions.test.ts` | Parser — invalid `rule` / `script` / `workflow` declarations and fix hints |
+| `src/parse/parse-definitions.test.ts` | Parser — invalid `script` / `workflow` declarations and fix hints |
 | `src/parse/parse-env.test.ts` | `env.ts` — env declaration parsing |
 | `src/parse/parse-imports.test.ts` | `imports.ts` — import lines, aliases, errors |
 | `src/parse/parse-metadata.test.ts` | `metadata.ts` — config block parsing |
@@ -327,8 +327,7 @@ After a workflow runs, its step outputs are written as sequenced artifact files 
 | Helper | Description |
 |--------|-------------|
 | `e2e::expect_out_files "file" N` | Assert that the run directory for `file` contains exactly `N` `.out` files. Use `0` for steps with no stdout (e.g. `touch`, `test`, redirected output). |
-| `e2e::expect_out "file" "step" "expected"` | Assert that the `.out` file for the named step (script, rule, or `default` workflow bucket) matches `expected` exactly. |
-| `e2e::expect_rule_out "file" "rule" "expected"` | Assert that the `.out` file for a rule step matches `expected` exactly. Dot-separated rule names are normalized (e.g. `lib.ready` → `lib__ready`). |
+| `e2e::expect_out "file" "step" "expected"` | Assert that the `.out` file for the named step (script or `default` workflow bucket) matches `expected` exactly. |
 | `e2e::expect_run_file "file" "name" "expected"` | Assert that a specific named file (e.g. `000002-module__step.out`) in the run directory for `file` matches `expected` exactly. Use when you need to assert on a file by its sequence-prefixed name. |
 | `e2e::expect_run_file_at "base" "file" "name" "expected"` | Same as `e2e::expect_run_file` but searches under a custom base directory instead of `.jaiph/runs/`. Use for tests with custom `run.logs_dir` or `JAIPH_RUNS_DIR`. |
 | `e2e::expect_run_file_count "file" N` | Assert that the run directory for `file` contains exactly `N` artifact files (`.out` + `.err` combined). |

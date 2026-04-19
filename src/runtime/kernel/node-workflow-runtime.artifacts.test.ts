@@ -108,10 +108,10 @@ test("NodeWorkflowRuntime: failed prompt preserves backend stderr in artifacts a
   }
 });
 
-test("NodeWorkflowRuntime: ensure catch receives failure payload in catch scope (explicit binding)", async () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-node-wf-ensure-catch-"));
+test("NodeWorkflowRuntime: run catch receives failure payload in catch scope (explicit binding)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-node-wf-run-catch-"));
   try {
-    const jh = join(root, "ensure_catch_payload.jh");
+    const jh = join(root, "run_catch_payload.jh");
     writeFileSync(
       jh,
       [
@@ -121,7 +121,7 @@ test("NodeWorkflowRuntime: ensure catch receives failure payload in catch scope 
         "test -f ready.txt",
         "```",
         "",
-        "rule check_ready() {",
+        "workflow check_ready() {",
         "  run check_ready_impl()",
         "}",
         "",
@@ -132,7 +132,7 @@ test("NodeWorkflowRuntime: ensure catch receives failure payload in catch scope 
         'script mark_ready = `touch ready.txt`',
         "",
         "workflow default(name, extra) {",
-        "  ensure check_ready() catch (failure) {",
+        "  run check_ready() catch (failure) {",
         '    run write_catch_received(failure)',
         '    run write_catch_arg2(extra)',
         "    run mark_ready()",

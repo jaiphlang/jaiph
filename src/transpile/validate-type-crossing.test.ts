@@ -113,13 +113,13 @@ test("E_VALIDATE: const = run a string const in workflow", () => {
   });
 });
 
-test("E_VALIDATE: run a string const in rule", () => {
+test("E_VALIDATE: run a string const in workflow (formerly rule)", () => {
   withTempDir("jaiph-type-cross-", (root) => {
     writeFileSync(
       join(root, "m.jh"),
       [
         'const greeting = "hello"',
-        "rule check() {",
+        "workflow check() {",
         "  run greeting()",
         "}",
         "",
@@ -153,13 +153,13 @@ test("E_VALIDATE: const assignment from script name in workflow", () => {
   });
 });
 
-test("E_VALIDATE: const assignment from script name in rule", () => {
+test("E_VALIDATE: const assignment from script name in workflow (formerly rule)", () => {
   withTempDir("jaiph-type-cross-", (root) => {
     writeFileSync(
       join(root, "m.jh"),
       [
         "script save = `echo ok`",
-        "rule check() {",
+        "workflow check() {",
         "  const x = save",
         "}",
         "",
@@ -212,13 +212,13 @@ test("E_VALIDATE: script interpolation in prompt string", () => {
   });
 });
 
-test("E_VALIDATE: script interpolation in rule log", () => {
+test("E_VALIDATE: script interpolation in workflow log (formerly rule)", () => {
   withTempDir("jaiph-type-cross-", (root) => {
     writeFileSync(
       join(root, "m.jh"),
       [
         "script save = `echo ok`",
-        "rule check() {",
+        "workflow check() {",
         '  log "result: ${save}"',
         "}",
         "",

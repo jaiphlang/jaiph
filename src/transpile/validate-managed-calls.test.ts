@@ -488,19 +488,19 @@ test("buildScripts accepts run foo(run bar()) — explicit nested managed call",
   }
 });
 
-test("buildScripts accepts run foo(ensure rule_bar()) — explicit nested ensure", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-val-nested-run-ensure-"));
+test("buildScripts accepts run foo(run check_ok()) — explicit nested run", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-nested-run-wf-"));
   const out = join(root, "out");
   try {
     writeFileSync(
       join(root, "m.jh"),
       [
         'script do_work = `echo "$1"`',
-        "rule check_ok() {",
+        "workflow check_ok() {",
         '  run do_work("ok")',
         "}",
         "workflow default() {",
-        "  run do_work(ensure check_ok())",
+        "  run do_work(run check_ok())",
         "}",
         "",
       ].join("\n"),
@@ -553,18 +553,18 @@ test("buildScripts accepts const x = run bar() followed by run foo(x)", () => {
   }
 });
 
-test("E_VALIDATE: run foo(rule_bar()) — bare rule call in args is rejected", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-val-nested-bare-rule-"));
+test("E_VALIDATE: run foo(check_bar()) — bare workflow call in args is rejected", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-nested-bare-wf-"));
   try {
     writeFileSync(
       join(root, "m.jh"),
       [
         'script do_work = `echo "$1"`',
-        "rule rule_bar() {",
+        "workflow check_bar() {",
         '  run do_work("ok")',
         "}",
         "workflow default() {",
-        "  run do_work(rule_bar())",
+        "  run do_work(check_bar())",
         "}",
         "",
       ].join("\n"),

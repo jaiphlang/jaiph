@@ -44,12 +44,12 @@ config {
 
 script noop = `true`
 
-rule some_rule() {
+workflow some_check() {
   run noop()
 }
 
 workflow default() {
-  ensure some_rule()
+  run readonly some_check()
 }
 ```
 
@@ -75,12 +75,12 @@ workflow fast_check() {
     agent.backend = "claude"
     agent.default_model = "gpt-4"
   }
-  ensure some_rule()
+  run readonly some_check()
 }
 
 workflow default() {
   # Uses module-level config (cursor / gpt-3.5).
-  ensure some_rule()
+  run readonly some_check()
 }
 ```
 
@@ -88,7 +88,7 @@ workflow default() {
 
 - At most one per workflow; it must be the first non-comment construct in the body. A duplicate is `E_PARSE`: `duplicate config block inside workflow (only one allowed per workflow)`.
 - Only **`agent.*` and `run.*` keys** are allowed. Any `runtime.*` or `module.*` key is `E_PARSE`.
-- Workflow-level values apply to all steps in that workflow, including `ensure`d rules and scripts called from it. When the workflow finishes, the previous environment is restored.
+- Workflow-level values apply to all steps in that workflow, including `run readonly` targets and scripts called from it. When the workflow finishes, the previous environment is restored.
 
 **Sibling isolation:** Each workflow gets its own clone of the parent environment. Sibling workflows never see each other's config — even when they execute sequentially. If workflow `alpha` sets `agent.backend = "claude"` and workflow `beta` only sets `agent.default_model = "beta-model"`, `beta` still sees the module-level backend (e.g. `"cursor"`), not `alpha`'s.
 
@@ -218,11 +218,11 @@ When workflows call into other workflows, the config scope depends on the call t
 
 After any nested call returns, the caller's scope is restored exactly as before.
 
-### `ensure` and cross-module rules
+### `run readonly` and cross-module calls
 
-When you `ensure` a rule from **another** module, the runtime merges that module's module-level `config` (`agent.*` / `run.*`) on top of the current environment (respecting locks). Workflow-level config does not apply to rules.
+When you `run readonly` a workflow from **another** module, the runtime merges that module's module-level `config` (`agent.*` / `run.*`) on top of the current environment (respecting locks).
 
-**Same-module** `ensure` keeps the caller's environment as-is, so workflow-level overrides stay in place.
+**Same-module** `run readonly` keeps the caller's environment as-is, so workflow-level overrides stay in place.
 
 ## Backend selection
 

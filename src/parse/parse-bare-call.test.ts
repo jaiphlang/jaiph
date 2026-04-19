@@ -31,18 +31,6 @@ test("run with args and parens still works", () => {
   }
 });
 
-// === ensure bare identifier (no parens) is now rejected ===
-
-test("ensure bare identifier is rejected — parentheses required", () => {
-  assert.throws(
-    () => parsejaiph(
-      `rule check() {\n  return "ok"\n}\nworkflow default() {\n  ensure check\n}`,
-      "test.jh",
-    ),
-    /parentheses are required/,
-  );
-});
-
 // === if condition with bare identifier ===
 
 test("if keyword with old syntax produces E_PARSE error", () => {
@@ -71,16 +59,6 @@ test("const x = run bare identifier is rejected — parentheses required", () =>
   );
 });
 
-test("const x = ensure bare identifier is rejected — parentheses required", () => {
-  assert.throws(
-    () => parsejaiph(
-      `rule check() {\n  return "ok"\n}\nworkflow default() {\n  const x = ensure check\n}`,
-      "test.jh",
-    ),
-    /must target a valid reference/,
-  );
-});
-
 // === return run/ensure bare identifier (no parens) now falls through ===
 
 test("return run bare identifier does not parse as managed return", () => {
@@ -88,17 +66,6 @@ test("return run bare identifier does not parse as managed return", () => {
   // and falls through to a shell step
   const mod = parsejaiph(
     `workflow default() {\n  return run helper\n}`,
-    "test.jh",
-  );
-  const step = mod.workflows[0].steps[0];
-  assert.equal(step.type, "shell");
-});
-
-test("return ensure bare identifier does not parse as managed return", () => {
-  // Without parens, "return ensure check" is not recognized as a managed return
-  // and falls through to a shell step
-  const mod = parsejaiph(
-    `rule check() {\n  return "ok"\n}\nworkflow default() {\n  return ensure check\n}`,
     "test.jh",
   );
   const step = mod.workflows[0].steps[0];
@@ -145,23 +112,6 @@ test("x = run bare identifier is rejected — const required", () => {
   );
 });
 
-test("x = ensure bare identifier is rejected — const required", () => {
-  assert.throws(
-    () => parsejaiph(
-      [
-        "rule check() {",
-        '  return "ok"',
-        "}",
-        "workflow default() {",
-        "  x = ensure check",
-        "}",
-      ].join("\n"),
-      "test.jh",
-    ),
-    /assignment without "const" is no longer supported/,
-  );
-});
-
 // === definition without () remains a parse error ===
 
 test("workflow definition without () is a parse error", () => {
@@ -171,28 +121,3 @@ test("workflow definition without () is a parse error", () => {
   );
 });
 
-test("rule definition without () is a parse error", () => {
-  assert.throws(
-    () => parsejaiph(`rule check {\n  return "ok"\n}`, "test.jh"),
-    (err: any) => err.message.includes("require parentheses"),
-  );
-});
-
-// === ensure with recover + bare identifier (no parens) is now rejected ===
-
-test("ensure bare identifier with recover is rejected — parentheses required", () => {
-  assert.throws(
-    () => parsejaiph(
-      [
-        "rule check() {",
-        '  return "ok"',
-        "}",
-        "workflow default() {",
-        '  ensure check catch (failure) { log "retrying" }',
-        "}",
-      ].join("\n"),
-      "test.jh",
-    ),
-    /parentheses are required/,
-  );
-});

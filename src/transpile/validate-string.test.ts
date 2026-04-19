@@ -265,15 +265,14 @@ test("reject $(...) in logerr message", () => {
 // Rule context: same validations apply
 // ---------------------------------------------------------------------------
 
-test("reject ${var:-fallback} in rule log", () => {
-  withTempDir("jaiph-str-bad-fallback-rule-", (root) => {
+test("reject ${var:-fallback} in workflow log", () => {
+  withTempDir("jaiph-str-bad-fallback-wf-", (root) => {
     writeJh(root, "m.jh", [
-      'script noop = `true`',
-      "rule check() {",
+      "workflow check() {",
       '  log "${x:-fallback}"',
       "}",
       "workflow default() {",
-      "  ensure check()",
+      "  run check()",
       "}",
     ]);
     assert.throws(
@@ -299,14 +298,14 @@ test("valid: ${run ref} inline capture in log", () => {
   });
 });
 
-test("valid: ${ensure ref} inline capture in log", () => {
-  withTempDir("jaiph-str-ic-ensure-", (root) => {
+test("valid: ${run ref} inline capture in log (workflow)", () => {
+  withTempDir("jaiph-str-ic-run-wf-", (root) => {
     writeJh(root, "m.jh", [
-      "rule check() {",
+      "workflow check() {",
       '  return "ok"',
       "}",
       "workflow default() {",
-      '  log "status: ${ensure check()}"',
+      '  log "status: ${run check()}"',
       "}",
     ]);
     buildScripts(join(root, "m.jh"), join(root, "out"));
@@ -340,15 +339,15 @@ test("valid: ${run ref} inline capture in return", () => {
   });
 });
 
-test("valid: ${run ref} inline capture in rule log", () => {
-  withTempDir("jaiph-str-ic-rule-", (root) => {
+test("valid: ${run ref} inline capture in workflow log (nested)", () => {
+  withTempDir("jaiph-str-ic-wf-nested-", (root) => {
     writeJh(root, "m.jh", [
       'script greet = `echo "hello"`',
-      "rule check() {",
+      "workflow check() {",
       '  log "got: ${run greet()}"',
       "}",
       "workflow default() {",
-      "  ensure check()",
+      "  run check()",
       "}",
     ]);
     buildScripts(join(root, "m.jh"), join(root, "out"));

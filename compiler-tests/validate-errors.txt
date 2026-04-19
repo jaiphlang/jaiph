@@ -1,10 +1,3 @@
-=== unknown local rule reference
-# @expect error E_VALIDATE "unknown local rule reference" @2:3
---- input.jh
-workflow default() {
-  ensure missing_rule()
-}
-
 === unknown local workflow or script reference in run
 # @expect error E_VALIDATE "unknown local workflow or script reference" @2:3
 --- input.jh
@@ -20,31 +13,6 @@ workflow analyst() {
 }
 workflow default() {
   typo <- "x"
-}
-
-=== rule with inline brace group fails shell-step ban
-# @expect error E_VALIDATE "inline shell steps are forbidden in rules" @2:3
---- input.jh
-rule example() {
-  check_something || { echo "failed"; exit 1; }
-}
-
-workflow default() {
-  ensure example()
-}
-
-=== rule with multi-line brace group fails shell-step ban
-# @expect error E_VALIDATE "inline shell steps are forbidden in rules" @2:3
---- input.jh
-rule example() {
-  check_something || {
-    echo "failed"
-    exit 1
-  }
-}
-
-workflow default() {
-  ensure example()
 }
 
 === workflow shell step with brace group fails shell-step ban
@@ -116,35 +84,10 @@ workflow default() {
   run greet(unknown_var)
 }
 
-=== run async is rejected in rules
-# @expect error E_VALIDATE "run async is not allowed in rules" @5:3
---- input.jh
-workflow helper() {
-  log "hi"
-}
-rule check() {
-  run async helper()
-}
-workflow default() {
-  ensure check()
-}
-
 === route with unknown workflow
 # @expect error E_VALIDATE "unknown local workflow reference" @1:21
 --- input.jh
 channel findings -> missing_wf
-workflow default() {
-  log "ok"
-}
-
-=== route with rule ref
-# @expect error E_VALIDATE "must be called with ensure" @1:21
---- input.jh
-channel findings -> check
-rule check() {
-  run check_impl()
-}
-script check_impl = `true`
 workflow default() {
   log "ok"
 }
@@ -178,11 +121,11 @@ workflow default() {
   log "bad field ${result.bogus}"
 }
 
-=== unknown import alias in rule reference
+=== unknown import alias in run reference
 # @expect error E_VALIDATE "unknown import alias" @2:3
 --- input.jh
 workflow default() {
-  ensure ghost.guard()
+  run ghost.guard()
 }
 
 === match: missing wildcard arm
@@ -206,72 +149,6 @@ workflow default() {
     _ => "maybe"
     _ => "no"
   }
-}
-
-=== shell redirection in ensure args rejected
-# @expect error E_PARSE "shell redirection" @5:1
---- input.jh
-rule check() {
-  return "ok"
-}
-workflow default() {
-  ensure check() | grep ok
-}
-
-=== run in workflow targeting a rule is rejected
-# @expect error E_VALIDATE "must be called with ensure, not run" @5:3
---- input.jh
-rule check() {
-  return "ok"
-}
-workflow default() {
-  run check()
-}
-
-=== run in rule targeting a rule is rejected
-# @expect error E_VALIDATE "must be called with ensure, not run" @5:3
---- input.jh
-rule other_rule() {
-  return "ok"
-}
-rule check() {
-  run other_rule()
-}
-workflow default() {
-  ensure check()
-}
-
-=== ensure rejects local script reference
-# @expect error E_VALIDATE "cannot be called with ensure" @3:3
---- input.jh
-script my_script = `echo ok`
-workflow default() {
-  ensure my_script()
-}
-
-=== run async is rejected in rules
-# @expect error E_VALIDATE "run async is not allowed in rules" @5:3
---- input.jh
-workflow helper() {
-  log "hi"
-}
-rule check() {
-  run async helper()
-}
-workflow default() {
-  ensure check()
-}
-
-=== const prompt in rules (caught at parse time)
-# NOTE: unreachable at validate layer — parser (workflow-brace.ts) catches this first as E_PARSE.
-# Covered by parse-errors.txt "brace-if: const prompt in rules".
-# @expect error E_PARSE "prompt is not allowed in rules" @2:13
---- input.jh
-rule check() {
-  const x = prompt "ask"
-}
-workflow default() {
-  ensure check()
 }
 
 === returns schema cannot be empty
@@ -309,71 +186,6 @@ workflow default() {
   const result = prompt "classify" returns "{ foo: array }"
 }
 
-=== run in workflow targeting a rule via import
-# @expect error E_VALIDATE "must be called with ensure, not run" @3:3
---- main.jh
-import "lib.jh" as lib
-workflow default() {
-  run lib.check()
-}
---- lib.jh
-export rule check() {
-  return "ok"
-}
-
-=== ensure imported workflow requires run
-# @expect error E_VALIDATE "must be called with run" @3:3
---- main.jh
-import "lib.jh" as lib
-workflow default() {
-  ensure lib.deploy()
-}
---- lib.jh
-export workflow deploy() {
-  log "deploying"
-}
-
-=== ensure rejects imported script
-# @expect error E_VALIDATE "cannot be called with ensure" @3:3
---- main.jh
-import "lib.jh" as lib
-workflow default() {
-  ensure lib.helper()
-}
---- lib.jh
-script helper = `echo "ok"`
-workflow dummy() {
-  log "ok"
-}
-
-=== run inside rule must target script not imported workflow
-# @expect error E_VALIDATE "run inside a rule must target a script" @3:3
---- main.jh
-import "lib.jh" as lib
-rule check() {
-  run lib.deploy()
-}
-workflow default() {
-  ensure check()
-}
---- lib.jh
-export workflow deploy() {
-  log "deploying"
-}
-
-=== route with imported rule ref rejected
-# @expect error E_VALIDATE "must be called with ensure" @2:21
---- main.jh
-import "lib.jh" as lib
-channel findings -> lib.check
-workflow default() {
-  log "ok"
-}
---- lib.jh
-export rule check() {
-  return "ok"
-}
-
 === arity mismatch: too few args to workflow
 # @expect error E_VALIDATE "expects 2 argument(s)"
 --- input.jh
@@ -404,16 +216,6 @@ workflow default() {
   run helper()
 }
 
-=== arity mismatch: too few args to rule
-# @expect error E_VALIDATE "expects 1 argument(s)"
---- input.jh
-rule check(x) {
-  return "ok"
-}
-workflow default() {
-  ensure check()
-}
-
 === route target with wrong parameter count
 # @expect error E_VALIDATE "must declare exactly 3 parameters"
 --- input.jh
@@ -436,7 +238,7 @@ workflow default() {
   findings <- "data"
 }
 
-=== inline run ref with unknown rule
+=== inline run ref with unknown workflow or script
 # @expect error E_VALIDATE "unknown local workflow or script reference"
 --- input.jh
 workflow default() {
@@ -453,44 +255,12 @@ workflow default() {
   }
 }
 
-=== send RHS with local rule bare ref
-# @expect error E_VALIDATE "rule" @6:5
---- input.jh
-channel c
-rule check() {
-  return "ok"
-}
-workflow default() {
-  c <- check
-}
-
-=== shell redirection in run args rejected in rule
-# @expect error E_PARSE "shell redirection" @3:1
---- input.jh
-script impl = `true`
-rule check() {
-  run impl() | grep ok
-}
-workflow default() {
-  ensure check()
-}
-
 === shell redirection in run args rejected in workflow
 # @expect error E_PARSE "shell redirection" @3:1
 --- input.jh
 script impl = `true`
 workflow default() {
   run impl() > /tmp/out
-}
-
-=== shell redirection in ensure args rejected in workflow
-# @expect error E_PARSE "shell redirection" @5:1
---- input.jh
-rule check() {
-  return "ok"
-}
-workflow default() {
-  ensure check() | grep ok
 }
 
 === channel ref with unknown import alias
@@ -518,17 +288,6 @@ export workflow handler(msg) {
   log "${msg}"
 }
 
-=== const run of string variable in rule rejected
-# @expect error E_VALIDATE "strings are not executable"
---- input.jh
-const greeting = "hello"
-rule check() {
-  const x = run greeting()
-}
-workflow default() {
-  ensure check()
-}
-
 === channel reference with three dot parts is rejected
 # @expect error E_VALIDATE "inline shell steps are forbidden in workflows"
 --- input.jh
@@ -554,17 +313,6 @@ channel c
 script helper = `echo ok`
 workflow default() {
   c <- $(helper)
-}
-
-=== scripts are not values in rule const
-# @expect error E_VALIDATE "scripts are not values"
---- input.jh
-script helper = `echo ok`
-rule check() {
-  const x = helper
-}
-workflow default() {
-  ensure check()
 }
 
 === scripts are not values in workflow const
@@ -621,17 +369,6 @@ workflow default() {
   run name()
 }
 
-=== const run of string variable in rule rejected
-# @expect error E_VALIDATE "strings are not executable"
---- input.jh
-rule check() {
-  const name = "hello"
-  const x = run name()
-}
-workflow default() {
-  ensure check()
-}
-
 === match arm body cannot start with return in const context
 # @expect error E_VALIDATE "match arm body must not start with"
 --- input.jh
@@ -648,16 +385,6 @@ workflow default() {
 --- input.jh
 workflow default() {
   fail "error: ${ghost}"
-}
-
-=== unknown identifier in rule log string
-# @expect error E_VALIDATE "unknown identifier"
---- input.jh
-rule check() {
-  log "value: ${ghost}"
-}
-workflow default() {
-  ensure check()
 }
 
 === unknown identifier in send literal
@@ -723,31 +450,6 @@ workflow default() {
   const x = run name()
 }
 
-=== ensure rejects local workflow reference
-# @expect error E_VALIDATE "must be called with run"
---- input.jh
-workflow helper() {
-  log "ok"
-}
-workflow default() {
-  ensure helper()
-}
-
-=== run async is rejected in rules with imported workflow
-# @expect error E_VALIDATE "run async is not allowed in rules"
---- main.jh
-import "lib.jh" as lib
-rule check() {
-  run async lib.helper()
-}
-workflow default() {
-  ensure check()
-}
---- lib.jh
-export workflow helper() {
-  log "hi"
-}
-
 === scripts cannot be interpolated in send literal
 # @expect error E_VALIDATE "scripts cannot be interpolated"
 --- input.jh
@@ -764,35 +466,9 @@ workflow default() {
   log "got: ${run nonexistent_script()}"
 }
 
-=== strings are not executable in rule run
-# @expect error E_VALIDATE "strings are not executable"
---- input.jh
-const greeting = "hello"
-rule check() {
-  const x = run greeting()
-}
-workflow default() {
-  ensure check()
-}
-
 === unknown identifier in workflow log string
 # @expect error E_VALIDATE "unknown identifier"
 --- input.jh
 workflow default() {
   log "value: ${ghost}"
 }
-
-=== match arm body with ensure arm in const context
-# @expect ok
---- input.jh
-rule check() {
-  return "ok"
-}
-workflow default() {
-  const x = "hello"
-  const result = match x {
-    "hello" => ensure check()
-    _ => "fallback"
-  }
-}
-

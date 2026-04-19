@@ -44,18 +44,18 @@ EOF
 
 e2e::expect_out "return_run.jh" "greet" "hello-direct"
 
-e2e::section "return ensure: direct return of rule result"
+e2e::section "return run: direct return of workflow result"
 
 # Given
 e2e::file "return_ensure.jh" <<'EOF'
 script check_impl = `echo "rule-ok"`
 
-rule check() {
+workflow check() {
   return run check_impl()
 }
 
 workflow default() {
-  const r = ensure check()
+  const r = run check()
   log "got: ${r}"
 }
 EOF
@@ -69,10 +69,10 @@ e2e::expect_stdout "${return_ensure_out}" <<'EOF'
 Jaiph: Running return_ensure.jh
 
 workflow default
-  ▸ rule check
+  ▸ workflow check
   ·   ▸ script check_impl
   ·   ✓ script check_impl (<time>)
-  ✓ rule check (<time>)
+  ✓ workflow check (<time>)
   ℹ got: rule-ok
 ✓ PASS workflow default (<time>)
 EOF
@@ -114,20 +114,20 @@ EOF
 
 e2e::expect_out "return_run_args.jh" "echo_arg" "passed-arg"
 
-e2e::section "return ensure in rule"
+e2e::section "return run in workflow"
 
 # Given
 e2e::file "return_ensure_rule.jh" <<'EOF'
-rule inner() {
+workflow inner() {
   return "inner-val"
 }
 
-rule outer() {
-  return ensure inner()
+workflow outer() {
+  return run inner()
 }
 
 workflow default() {
-  const r = ensure outer()
+  const r = run outer()
   log "got: ${r}"
 }
 EOF
@@ -141,10 +141,10 @@ e2e::expect_stdout "${return_ensure_rule_out}" <<'EOF'
 Jaiph: Running return_ensure_rule.jh
 
 workflow default
-  ▸ rule outer
-  ·   ▸ rule inner
-  ·   ✓ rule inner (<time>)
-  ✓ rule outer (<time>)
+  ▸ workflow outer
+  ·   ▸ workflow inner
+  ·   ✓ workflow inner (<time>)
+  ✓ workflow outer (<time>)
   ℹ got: inner-val
 ✓ PASS workflow default (<time>)
 EOF

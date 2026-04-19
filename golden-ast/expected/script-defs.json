@@ -2,7 +2,6 @@
   "channels": [],
   "exports": [],
   "imports": [],
-  "rules": [],
   "scripts": [
     {
       "body": "echo hello",
