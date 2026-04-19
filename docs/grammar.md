@@ -311,23 +311,37 @@ date +%s
 - **Backtick** (single-line) inline scripts: Jaiph interpolation (`${...}`) is forbidden — use `$1`, `$2` positional arguments instead.
 - **Fenced block** (triple-backtick) inline scripts: `${...}` is passed through to the shell as standard shell parameter expansion.
 
-### `run async` — Concurrent Execution
+### `run async` — Concurrent Execution with Handles
 
-`run async ref(args)` starts a workflow or script concurrently. All pending async steps are implicitly joined before the enclosing workflow returns. If any fail, the workflow fails with an aggregated error.
+`run async ref(args)` starts a workflow or script concurrently and returns a **handle**. The handle resolves transparently on first read (string interpolation, passing as argument, comparison). Unresolved handles are implicitly joined before the enclosing workflow returns.
 
 ```jaiph
 workflow default() {
-  run async lib.task_a()
-  run async lib.task_b()
-  # both joined automatically before workflow returns
+  const h1 = run async lib.task_a()
+  const h2 = run async lib.task_b()
+  run consume("${h1}" "${h2}")  # both resolve here
 }
 ```
+
+**Capture:** `const name = run async ref()` stores a handle in `name`. Reading the variable (e.g. `"${name}"`) blocks until the async step completes and returns the resolved value.
+
+**Recover composition:** `recover` and `catch` compose with `run async`:
+
+```jaiph
+run async foo() recover(err) {
+  log "retrying: ${err}"
+}
+run async isolated bar() recover(err) {
+  log "retry inside sandbox"
+}
+```
+
+When `isolated` is present, the recover block and all retries run inside the branch's sandboxed context. The coordinator observes only the final outcome.
 
 In the progress tree, each async branch is prefixed with a subscript number (₁₂₃…) assigned in dispatch order. Nested `run async` inside a child workflow gets its own numbering scope at the child's indent level. See [CLI — Async branch numbering](cli.md#run-progress-and-tree-output) for display details.
 
 Constraints:
 - Workflow-only — rejected in rules with `E_VALIDATE`.
-- Capture is not supported: `name = run async …` is `E_PARSE`.
 - For concurrent bash (pipelines, `&`), put the bash in a script and call with `run`.
 
 ### `run isolated` — OS-Level Isolation
@@ -843,7 +857,7 @@ Every step produces three distinct outputs — status, value, and logs:
 | `prompt` | prompt exit code | final assistant answer | transcript to artifacts |
 | `log` / `logerr` | always 0 | empty | event + stdout/stderr |
 | `fail` | non-zero (abort) | empty | message to stderr |
-| `run async` | aggregated | not supported (capture rejected) | async step logs to artifacts |
+| `run async` | aggregated (join) | handle resolves to return value | async step logs to artifacts |
 | `const` | same as RHS step | empty (binds local) | n/a |
 
 Key rules:
@@ -925,7 +939,7 @@ const_rhs       = double_quoted_string | triple_quoted_block | bash_value_expr
                 | "match" IDENT "{" { match_arm } "}" ;
 
 fail_stmt       = "fail" ( double_quoted_string | triple_quoted_block ) ;
-run_async_stmt  = "run" "async" [ "isolated" ] call_ref ;
+run_async_stmt  = "run" "async" [ "isolated" ] call_ref [ catch_clause | recover_clause ] ;
 run_isolated_stmt = "run" "isolated" call_ref ;
 return_stmt     = "return" return_value ;
 return_value    = double_quoted_string | triple_quoted_block | "$" IDENT | "${" IDENT "}"
@@ -1014,5 +1028,5 @@ At runtime, the Node workflow runtime interprets the AST directly:
 - **run … recover:** Repair-and-retry loop. On failure, the binding gets merged stdout+stderr, the repair block runs, then the target is retried — repeating until success or the retry limit (default 10, configurable via `run.recover_limit` or `JAIPH_RECOVER_LIMIT`). When the limit is exhausted, the step fails.
 - **Recursion safety:** There is a hard recursion depth limit of 256. Exceeding it produces a runtime error.
 - **Assignment capture:** Rules and workflows use explicit `return "…"`. Scripts use stdout.
-- **`run async`:** Promise-based concurrency. Implicit join via `Promise.allSettled` before workflow returns. Failures aggregated.
+- **`run async`:** Handle-based concurrency. `const h = run async ref()` creates a handle; reading `h` forces resolution. Unresolved handles are implicitly joined before workflow returns. Failures aggregated. `recover` and `catch` compose with `run async` (including `run async isolated`).
 - **Channels:** Messages enqueued via `send`, dispatched to route targets at workflow end. Each target must declare exactly 3 parameters; the runtime binds message, channel, and sender to the declared names.

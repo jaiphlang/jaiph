@@ -139,30 +139,26 @@ EXPECTED
 e2e::expect_out "async_interleave.jh" "default" "slow-done"
 e2e::expect_out "async_interleave.jh" "slow" "slow-done"
 
-# --- capture + run async is rejected at parse time ---
+# --- const capture + run async returns handle that resolves on read ---
+# (This was previously a parse error; now valid under the Handle model.)
 
-e2e::section "capture + run async parse error"
+e2e::section "const capture + run async handle"
 
 e2e::file "capture_async.jh" <<'EOF'
 workflow helper() {
-  log "hi"
+  return "hello-handle"
 }
 
 workflow default() {
-  const x = run async helper()
+  const h = run async helper()
+  log "${h}"
 }
 EOF
 
-set +e
 capture_output="$(e2e::run "capture_async.jh" 2>&1)"
-capture_status=$?
-set -e
 
-if [[ "$capture_status" -eq 0 ]]; then
-  e2e::fail "expected parse error for capture + run async"
-fi
-# Error line includes absolute source path which varies per invocation
-e2e::assert_contains "$capture_output" "const ... = run must target a valid reference" "capture + run async diagnostic"
+# The handle resolves on interpolation; the log should contain the return value.
+e2e::assert_contains "$capture_output" "hello-handle" "handle resolves on read"
 
 # --- run async sibling depth in progress tree ---
 

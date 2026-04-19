@@ -768,8 +768,9 @@ function emitConstStep(name: string, value: ConstRhs): string {
       }
       return `const ${name} = ${value.bashRhs}`;
     case "run_capture": {
+      const asyncPrefix = value.async ? "async " : "";
       const isoPrefix = value.isolated ? "isolated " : "";
-      return `const ${name} = run ${isoPrefix}${emitRef(value.ref, value.args, value.bareIdentifierArgs)}`;
+      return `const ${name} = run ${asyncPrefix}${isoPrefix}${emitRef(value.ref, value.args, value.bareIdentifierArgs)}`;
     }
     case "ensure_capture":
       return `const ${name} = ensure ${emitRef(value.ref, value.args, value.bareIdentifierArgs)}`;

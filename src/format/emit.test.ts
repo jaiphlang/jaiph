@@ -89,6 +89,74 @@ describe("emitModule", () => {
     assert.equal(roundTrip(source), source);
   });
 
+  it("formats run async with recover block", () => {
+    const source = [
+      "workflow default() {",
+      '  run async foo() recover(err) {',
+      '    log "$err"',
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
+
+  it("formats run async isolated with recover block", () => {
+    const source = [
+      "workflow default() {",
+      '  run async isolated bar() recover(e) {',
+      '    log "$e"',
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
+
+  it("formats run async with catch block", () => {
+    const source = [
+      "workflow default() {",
+      '  run async foo() catch (err) {',
+      '    log "$err"',
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
+
+  it("formats run async isolated with catch block", () => {
+    const source = [
+      "workflow default() {",
+      '  run async isolated foo() catch (err) {',
+      '    log "$err"',
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
+
+  it("formats const = run async ref", () => {
+    const source = [
+      "workflow default() {",
+      "  const h = run async slow_op()",
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
+
+  it("formats const = run async isolated ref", () => {
+    const source = [
+      "workflow default() {",
+      "  const h = run async isolated slow_op()",
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
+
   it("formats return statement", () => {
     const source = [
       "workflow default() {",

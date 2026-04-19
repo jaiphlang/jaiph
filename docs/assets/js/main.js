@@ -23,6 +23,7 @@
         "catch",
         "recover",
         "run",
+        "async",
         "isolated",
         "prompt",
         "returns",

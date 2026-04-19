@@ -247,6 +247,46 @@ export function parseWorkflowBlock(
     if (constDecl) {
       const name = constDecl[1];
       const rhs = constDecl[2].trim();
+      // const name = run [async] [isolated] ref() recover|catch → parse as run step with captureName
+      const constRunAsyncIso = rhs.match(/^run\s+(async\s+isolated|async|isolated)\s+/);
+      if (constRunAsyncIso && (/ recover\(/.test(rhs) || / catch /.test(rhs))) {
+        const mods = constRunAsyncIso[1];
+        const isAsync = mods.includes("async");
+        const isIsolated = mods.includes("isolated");
+        const runBody = rhs.slice(constRunAsyncIso[0].length);
+        const catchResult = parseRunCatchStep(filePath, lines, idx, innerNo, innerRaw, runBody, name);
+        if (catchResult) {
+          const s = catchResult.step;
+          if (s.type === "run") { if (isAsync) s.async = true; if (isIsolated) s.isolated = true; }
+          workflow.steps.push(s);
+          idx = catchResult.nextIdx;
+          continue;
+        }
+        const recoverResult = parseRunRecoverStep(filePath, lines, idx, innerNo, innerRaw, runBody, name);
+        if (recoverResult) {
+          const s = recoverResult.step;
+          if (s.type === "run") { if (isAsync) s.async = true; if (isIsolated) s.isolated = true; }
+          workflow.steps.push(s);
+          idx = recoverResult.nextIdx;
+          continue;
+        }
+      }
+      // const name = run ref() recover|catch (non-async) → parse as run step with captureName
+      if (rhs.startsWith("run ") && !rhs.startsWith("run async") && !rhs.startsWith("run isolated") && (/ recover\(/.test(rhs) || / catch /.test(rhs))) {
+        const runBody = rhs.slice("run ".length);
+        const catchResult = parseRunCatchStep(filePath, lines, idx, innerNo, innerRaw, runBody, name);
+        if (catchResult) {
+          workflow.steps.push(catchResult.step);
+          idx = catchResult.nextIdx;
+          continue;
+        }
+        const recoverResult = parseRunRecoverStep(filePath, lines, idx, innerNo, innerRaw, runBody, name);
+        if (recoverResult) {
+          workflow.steps.push(recoverResult.step);
+          idx = recoverResult.nextIdx;
+          continue;
+        }
+      }
       const { value, nextLineIdx } = parseConstRhs(
         filePath, lines, idx, rhs, innerNo, innerRaw.indexOf(rhs) + 1, false, name,
       );
@@ -358,6 +398,24 @@ export function parseWorkflowBlock(
       if (runBody.startsWith("`")) {
         fail(filePath, "run isolated is not supported with inline scripts", innerNo, innerRaw.indexOf("run") + 1);
       }
+      // Check for run async isolated ... catch
+      const catchResult = parseRunCatchStep(filePath, lines, idx, innerNo, innerRaw, runBody);
+      if (catchResult) {
+        const s = catchResult.step;
+        if (s.type === "run") { s.async = true; s.isolated = true; }
+        workflow.steps.push(s);
+        idx = catchResult.nextIdx;
+        continue;
+      }
+      // Check for run async isolated ... recover (loop semantics)
+      const recoverResult = parseRunRecoverStep(filePath, lines, idx, innerNo, innerRaw, runBody);
+      if (recoverResult) {
+        const s = recoverResult.step;
+        if (s.type === "run") { s.async = true; s.isolated = true; }
+        workflow.steps.push(s);
+        idx = recoverResult.nextIdx;
+        continue;
+      }
       const call = parseCallRef(runBody);
       if (!call) {
         fail(filePath, "run async isolated must target a valid reference: run async isolated ref() — parentheses are required", innerNo);
@@ -404,6 +462,24 @@ export function parseWorkflowBlock(
       const runBody = inner.slice("run async ".length).trim();
       if (runBody.startsWith("`")) {
         fail(filePath, "run async is not supported with inline scripts", innerNo, innerRaw.indexOf("run") + 1);
+      }
+      // Check for run async ... catch
+      const catchResult = parseRunCatchStep(filePath, lines, idx, innerNo, innerRaw, runBody);
+      if (catchResult) {
+        const s = catchResult.step;
+        if (s.type === "run") { s.async = true; }
+        workflow.steps.push(s);
+        idx = catchResult.nextIdx;
+        continue;
+      }
+      // Check for run async ... recover (loop semantics)
+      const recoverResult = parseRunRecoverStep(filePath, lines, idx, innerNo, innerRaw, runBody);
+      if (recoverResult) {
+        const s = recoverResult.step;
+        if (s.type === "run") { s.async = true; }
+        workflow.steps.push(s);
+        idx = recoverResult.nextIdx;
+        continue;
       }
       const call = parseCallRef(runBody);
       if (!call) {

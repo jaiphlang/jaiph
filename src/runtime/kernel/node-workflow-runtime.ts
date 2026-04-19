@@ -29,7 +29,16 @@ import {
 
 const MAX_EMBED = 1024 * 1024;
 const MAX_RECURSION_DEPTH = 256;
+const HANDLE_PREFIX = "__JAIPH_HANDLE__";
 type EnsureRecover = Extract<WorkflowStepDef, { type: "ensure" }>["recover"];
+
+type AsyncHandle = {
+  id: string;
+  ref: string;
+  promise: Promise<StepResult>;
+  resolved?: StepResult;
+  captureName?: string;
+};
 
 /** Mock body definition: shell for script mocks, Jaiph steps for workflow/rule mocks. */
 export type MockBodyDef =
@@ -338,6 +347,8 @@ export class NodeWorkflowRuntime {
   private promptSeq = 0;
   private workflowCtxStack: WorkflowContext[] = [];
   private readonly mockBodies: Map<string, MockBodyDef>;
+  private asyncHandles = new Map<string, AsyncHandle>();
+  private handleCounter = 0;
 
   private getFrameStack(): Frame[] {
     return this.asyncFrameStack.getStore() ?? this.stack;
@@ -725,6 +736,60 @@ export class NodeWorkflowRuntime {
     };
   }
 
+  /**
+   * Resolve a single async handle by ID. Awaits the promise if not yet resolved
+   * and caches the result.
+   */
+  private async resolveAsyncHandle(handleId: string): Promise<StepResult> {
+    const handle = this.asyncHandles.get(handleId);
+    if (!handle) return { status: 1, output: "", error: `unknown handle: ${handleId}` };
+    if (!handle.resolved) {
+      handle.resolved = await handle.promise;
+    }
+    return handle.resolved;
+  }
+
+  /**
+   * Check if a variable value is a handle sentinel. If so, resolve the handle
+   * and update the variable in scope with the resolved value.
+   */
+  private async resolveHandleVar(name: string, scope: Scope): Promise<void> {
+    const val = scope.vars.get(name);
+    if (!val || !val.startsWith(HANDLE_PREFIX)) return;
+    const handleId = val.slice(HANDLE_PREFIX.length);
+    const result = await this.resolveAsyncHandle(handleId);
+    if (result.status === 0) {
+      scope.vars.set(name, result.returnValue ?? result.output.trim());
+    } else {
+      scope.vars.set(name, "");
+    }
+  }
+
+  /**
+   * Scan a string for variable references ($name, ${name}) and resolve any
+   * that point to async handles. Called before interpolation.
+   */
+  private async resolveHandlesInString(input: string, scope: Scope): Promise<StepResult | undefined> {
+    const varRefs = new Set<string>();
+    const re = /\$\{?([a-zA-Z_][a-zA-Z0-9_]*)\}?/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(input)) !== null) {
+      varRefs.add(m[1]!);
+    }
+    for (const name of varRefs) {
+      const val = scope.vars.get(name);
+      if (val && val.startsWith(HANDLE_PREFIX)) {
+        const handleId = val.slice(HANDLE_PREFIX.length);
+        const result = await this.resolveAsyncHandle(handleId);
+        if (result.status !== 0) {
+          return result;
+        }
+        scope.vars.set(name, result.returnValue ?? result.output.trim());
+      }
+    }
+    return undefined;
+  }
+
   private static readonly INLINE_CAPTURE_RE = /\$\{(run|ensure)\s+([^}]+)\}/g;
 
   /**
@@ -736,6 +801,10 @@ export class NodeWorkflowRuntime {
     input: string,
     scope: Scope,
   ): Promise<{ ok: true; value: string } | { ok: false; result: StepResult }> {
+    // Resolve any async handles referenced in the input before interpolation.
+    const handleErr = await this.resolveHandlesInString(input, scope);
+    if (handleErr) return { ok: false, result: handleErr };
+
     const re = new RegExp(NodeWorkflowRuntime.INLINE_CAPTURE_RE.source, "g");
     if (!re.test(input)) {
       return { ok: true, value: interpolate(input, scope.vars, scope.env) };
@@ -817,7 +886,7 @@ export class NodeWorkflowRuntime {
     let accOut = "";
     let accErr = "";
     let returnValue: string | undefined;
-    const pendingAsync: Array<{ ref: string; promise: Promise<StepResult> }> = [];
+    const pendingAsync: AsyncHandle[] = [];
     let asyncCounter = 0;
     for (const step of steps) {
       if (step.type === "comment" || step.type === "blank_line") continue;
@@ -896,6 +965,8 @@ export class NodeWorkflowRuntime {
           if (!sendIr.ok) return this.mergeStepResult(accOut, accErr, sendIr.result);
           payload = sendIr.value;
         } else if (step.rhs.kind === "var") {
+          const sendVarErr = await this.resolveHandlesInString(step.rhs.bash, scope);
+          if (sendVarErr) return this.mergeStepResult(accOut, accErr, sendVarErr);
           payload = interpolate(step.rhs.bash, scope.vars, scope.env);
         } else if (step.rhs.kind === "run") {
           const runValue = await this.executeRunRef(scope, step.rhs.ref.value, step.rhs.args ?? "");
@@ -1039,6 +1110,30 @@ export class NodeWorkflowRuntime {
           continue;
         }
         if (step.value.kind === "run_capture") {
+          if (step.value.async) {
+            // Async capture: create a handle and store sentinel in the variable.
+            asyncCounter += 1;
+            const branchStack = [...this.getFrameStack()];
+            const branchIndices = [...this.getAsyncIndices(), asyncCounter];
+            const execRef = step.value.isolated
+              ? (s: Scope, ref: string, args: string | string[]) => this.executeIsolatedRunRef(s, ref, args)
+              : (s: Scope, ref: string, args: string | string[]) => this.executeRunRef(s, ref, args);
+            const captureRef = step.value.ref.value;
+            const captureArgs = step.value.args ?? "";
+            const scopeSnap = { ...scope, vars: new Map(scope.vars) };
+            const promise = this.asyncFrameStack.run(branchStack, () =>
+              this.asyncIndicesStorage.run(branchIndices, () =>
+                execRef(scopeSnap, captureRef, captureArgs),
+              ),
+            );
+            this.handleCounter += 1;
+            const handleId = String(this.handleCounter);
+            const handle: AsyncHandle = { id: handleId, ref: captureRef, promise, captureName: step.name };
+            this.asyncHandles.set(handleId, handle);
+            pendingAsync.push(handle);
+            scope.vars.set(step.name, HANDLE_PREFIX + handleId);
+            continue;
+          }
           const captureExec = step.value.isolated
             ? this.executeIsolatedRunRef(scope, step.value.ref.value, step.value.args ?? "")
             : this.executeRunRef(scope, step.value.ref.value, step.value.args ?? "");
@@ -1161,12 +1256,50 @@ export class NodeWorkflowRuntime {
           asyncCounter += 1;
           const branchStack = [...this.getFrameStack()];
           const branchIndices = [...this.getAsyncIndices(), asyncCounter];
+          // Capture recover/recoverLoop so the entire loop runs in the async branch.
+          const stepRef = step.workflow.value;
+          const stepArgs = step.args ?? "";
+          const stepRecoverLoop = step.recoverLoop;
+          const stepRecover = step.recover;
+          const stepCapture = step.captureName;
+          const scopeSnapshot = { ...scope, vars: new Map(scope.vars) };
           const promise = this.asyncFrameStack.run(branchStack, () =>
-            this.asyncIndicesStorage.run(branchIndices, () =>
-              execRef(scope, step.workflow.value, step.args ?? ""),
-            ),
+            this.asyncIndicesStorage.run(branchIndices, async () => {
+              if (stepRecoverLoop) {
+                const limit = Number(scopeSnapshot.env.JAIPH_RECOVER_LIMIT) || 10;
+                const recoverSteps = "single" in stepRecoverLoop ? [stepRecoverLoop.single] : stepRecoverLoop.block;
+                let lastResult: StepResult | undefined;
+                for (let attempt = 0; attempt < limit; attempt += 1) {
+                  const runResult = await execRef(scopeSnapshot, stepRef, stepArgs);
+                  if (runResult.status === 0) { lastResult = undefined; return runResult; }
+                  lastResult = runResult;
+                  const recoverVars = new Map(scopeSnapshot.vars);
+                  const recoverPayload = `${runResult.output}${runResult.error}`;
+                  recoverVars.set(stepRecoverLoop.bindings.failure, recoverPayload);
+                  const rr = await this.executeSteps({ ...scopeSnapshot, vars: recoverVars }, recoverSteps);
+                  if (rr.status !== 0 || rr.returnValue !== undefined) return rr;
+                }
+                return lastResult ?? { status: 0, output: "", error: "" };
+              }
+              const runResult = await execRef(scopeSnapshot, stepRef, stepArgs);
+              if (runResult.status !== 0 && stepRecover) {
+                const recoverSteps = "single" in stepRecover ? [stepRecover.single] : stepRecover.block;
+                const recoverVars = new Map(scopeSnapshot.vars);
+                const recoverPayload = `${runResult.output}${runResult.error}`;
+                recoverVars.set(stepRecover.bindings.failure, recoverPayload);
+                return this.executeSteps({ ...scopeSnapshot, vars: recoverVars }, recoverSteps);
+              }
+              return runResult;
+            }),
           );
-          pendingAsync.push({ ref: step.workflow.value, promise });
+          this.handleCounter += 1;
+          const handleId = String(this.handleCounter);
+          const handle: AsyncHandle = { id: handleId, ref: stepRef, promise, captureName: stepCapture };
+          this.asyncHandles.set(handleId, handle);
+          pendingAsync.push(handle);
+          if (stepCapture) {
+            scope.vars.set(stepCapture, HANDLE_PREFIX + handleId);
+          }
           continue;
         }
         // recover loop: retry with repair block until success or limit exhaustion
@@ -1229,6 +1362,8 @@ export class NodeWorkflowRuntime {
         continue;
       }
       if (step.type === "if") {
+        // Resolve handle if the subject variable is one (comparison forces resolution).
+        await this.resolveHandleVar(step.subject, scope);
         const subjectVal = scope.vars.get(step.subject) ?? scope.env?.[step.subject] ?? "";
         let condMet = false;
         if (step.operator === "==" && step.operand.kind === "string_literal") {
@@ -1257,20 +1392,27 @@ export class NodeWorkflowRuntime {
         continue;
       }
     }
-    // Implicit join: await all pending async steps before returning.
+    // Implicit join: await all pending async handles before returning.
     if (pendingAsync.length > 0) {
-      const settled = await Promise.allSettled(pendingAsync.map((p) => p.promise));
+      const unresolved = pendingAsync.filter((h) => !h.resolved);
+      if (unresolved.length > 0) {
+        await Promise.allSettled(unresolved.map((h) => h.promise));
+      }
       const failures: string[] = [];
-      for (let i = 0; i < settled.length; i += 1) {
-        const r = settled[i]!;
-        if (r.status === "rejected") {
-          failures.push(`run async ${pendingAsync[i]!.ref}: ${String(r.reason)}`);
-        } else if (r.value.status !== 0) {
-          failures.push(`run async ${pendingAsync[i]!.ref}: ${r.value.error}`);
-          accOut += r.value.output;
-          accErr += r.value.error;
+      for (const handle of pendingAsync) {
+        if (!handle.resolved) {
+          try { handle.resolved = await handle.promise; } catch (e) {
+            failures.push(`run async ${handle.ref}: ${String(e)}`);
+            continue;
+          }
+        }
+        const r = handle.resolved;
+        if (r.status !== 0) {
+          failures.push(`run async ${handle.ref}: ${r.error}`);
+          accOut += r.output;
+          accErr += r.error;
         } else {
-          accOut += r.value.output;
+          accOut += r.output;
         }
       }
       if (failures.length > 0) {
@@ -1405,6 +1547,9 @@ export class NodeWorkflowRuntime {
     if (Array.isArray(raw)) {
       return raw;
     }
+    // Resolve any async handles referenced in the args string before interpolation.
+    const handleErr = await this.resolveHandlesInString(raw, scope);
+    if (handleErr) return handleErr;
     const tokens = parseArgTokens(raw);
     const resolved: string[] = [];
     for (const token of tokens) {

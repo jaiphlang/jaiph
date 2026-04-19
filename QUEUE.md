@@ -14,50 +14,6 @@ Process rules:
 
 ***
 
-## Runtime — redesign `run async` around handles with transparent resolution, including `recover` composition #dev-ready
-
-**Goal**
-Match the async contract in the spec: `run async` returns a handle immediately, the handle resolves on first non-passthrough read, and the workflow exit implicitly joins any remaining unresolved handles. **Also ship `recover` composition for async (with and without `isolated`)** — this is the piece the previous attempt missed.
-
-**Scope**
-
-* Replace the current implicit end-of-workflow join in `src/runtime/kernel/node-workflow-runtime.ts` with a value-based handle model.
-* `run async ...` returns a `Handle<T>` value. `T` is the same return type the function would have under a non-async `run`.
-* Reads that force resolution: passing as an argument to `run`, string interpolation, comparison, conditional branching, any other access to the underlying value.
-* Passthrough (assignment, storing in a list, passing through `workflow` arguments and returns unchanged) does not force resolution.
-* Workflow exit implicitly joins unresolved handles. This is not an error; it preserves today's end-of-workflow behavior at the boundary.
-* No fire-and-forget mode.
-* **`recover` composition with async (this was the missed piece):**
-  - `b1 = run async foo() recover(err) { ... }` — handle resolves to either the eventual success value (after retry loop runs in the coordinator workspace) or the final failure.
-  - `b1 = run async isolated foo() recover(err) { ... }` — recover block runs **inside the branch's sandboxed context**. `foo` retries inside the same context. The coordinator observes only the final outcome. Recover blocks for isolated branches cannot mutate the coordinator workspace.
-  - Parser must accept `recover(err) { ... }` after both `run async ref(args)` and `run async isolated ref(args)`. The previous attempt had the parser silently reject these with a "trailing content" error — that is the failure mode to fix.
-  - Same retry-limit semantics as non-async `recover`.
-* Preserve async progress/event visibility unless the contract forces an intentional change.
-* Update docs that still describe the old statement-based async model.
-
-**Required tests**
-
-* Parser / formatter / validation coverage for `run async [isolated] ref(args) recover(err) { ... }`.
-* Runtime tests for handle creation, transparent resolution at first read, and resolution forced by passing a handle into another `run`.
-* Runtime test for the candidate-join shape: multiple async handles passed into another call all resolve before the callee runs.
-* Runtime test that workflow exit joins unresolved handles without raising an error.
-* Runtime test that handles can be stored in a list and resolved when read.
-* **The four spec-named recover-composition tests, all must pass:**
-  - `recover-isolated-runs-in-branch` — recover block executes inside the branch's sandboxed context, not on the coordinator.
-  - `recover-isolated-retries-in-branch` — retry after recover executes inside the same branch context (verified by inspecting filesystem state or env between attempts).
-  - `recover-isolated-coordinator-sees-final-only` — coordinator observes only the final result, not intermediate failures.
-  - `recover-isolated-no-coordinator-mutation` — recover block cannot mutate coordinator workspace.
-
-**Acceptance criteria**
-
-* `run async ...` returns a first-class handle value.
-* Handle reads force resolution per the spec.
-* Workflow exit implicitly joins remaining handles.
-* `recover` works on `run async ref()` and `run async isolated ref()`. The parser accepts both forms; the runtime implements the spec contract for both.
-* All four named recover-composition tests pass.
-* Docs and tests match the new contract.
-* The docs-site Jaiph syntax highlighter (`docs/assets/js/main.js`) recognizes `async` as a keyword (modifier on `run`) and continues to highlight `recover` correctly when it appears as `recover(err) { ... }` after `run async ref(args)` or `run async isolated ref(args)`. A docs code block with `b1 = run async isolated foo() recover(err) { ... }` renders with `run`, `async`, `isolated`, and `recover` all colored.
-
 ## Runtime — explicit branch outputs and join/apply path #dev-ready
 
 **Goal**

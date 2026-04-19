@@ -90,6 +90,47 @@ export function parseConstRhs(
       nextLineIdx: result.nextLineIdx,
     };
   }
+  if (head.startsWith("run async isolated ")) {
+    const rest = head.slice("run async isolated ".length).trim();
+    if (rest.startsWith("`")) {
+      fail(filePath, "run isolated is not supported with inline scripts", lineNo, col);
+    }
+    const call = parseCallRef(rest);
+    if (!call) {
+      fail(filePath, "const ... = run async isolated must target a valid reference", lineNo, col);
+    }
+    rejectTrailingContent(filePath, lineNo, "run async isolated", call.rest);
+    const ref: WorkflowRefDef = { value: call.ref, loc: { line: lineNo, col } };
+    return {
+      value: {
+        kind: "run_capture", ref, args: call.args,
+        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
+        async: true,
+        isolated: true,
+      },
+      nextLineIdx: lineIdx,
+    };
+  }
+  if (head.startsWith("run async ")) {
+    const rest = head.slice("run async ".length).trim();
+    if (rest.startsWith("`")) {
+      fail(filePath, "run async is not supported with inline scripts", lineNo, col);
+    }
+    const call = parseCallRef(rest);
+    if (!call) {
+      fail(filePath, "const ... = run async must target a valid reference", lineNo, col);
+    }
+    rejectTrailingContent(filePath, lineNo, "run async", call.rest);
+    const ref: WorkflowRefDef = { value: call.ref, loc: { line: lineNo, col } };
+    return {
+      value: {
+        kind: "run_capture", ref, args: call.args,
+        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
+        async: true,
+      },
+      nextLineIdx: lineIdx,
+    };
+  }
   if (head.startsWith("run isolated ")) {
     const rest = head.slice("run isolated ".length).trim();
     if (rest.startsWith("`")) {

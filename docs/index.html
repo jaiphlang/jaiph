@@ -379,8 +379,8 @@ Jaiph: Running agent_inbox.jh
                 <div class="code-tab-panel" data-panel="async-jh" data-sample="async" data-sample-file="async.jh">
                     <p>This sample runs two prompt workflows in parallel: one with Cursor and one with Claude.</p>
                     <p>Each workflow sets its own <code>agent.backend</code>, captures the prompt response, and logs it.
-                        The default workflow uses <code>run async</code> to fan out both workflows concurrently, with an
-                        implicit join before completion.</p>
+                        The default workflow uses <code>run async</code> to fan out both workflows concurrently.
+                        Each call returns a handle; unresolved handles are implicitly joined before the workflow returns.</p>
                     <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
 const prompt_text = "Say: Greetings! I am [model name]."
@@ -451,10 +451,11 @@ Jaiph: Running async.jh
                     tags providing the runtime: <code>```node</code>, <code>```python3</code>, <code>```ruby</code>,
                     <code>```pwsh</code> etc.
                 </p>
-                <p><strong>Async calls.</strong> For async managed work, use <code>run async wf()</code> — Jaiph fans
-                    out the workflows concurrently and <strong>implicitly joins</strong> them before the parent workflow
-                    completes. Combine with <code>isolated</code> (<code>run async isolated wf()</code>) for
-                    parallel sandboxed branches.
+                <p><strong>Async calls with handles.</strong> <code>const h = run async wf()</code> returns a
+                    <strong>handle</strong> immediately. The handle resolves transparently on first read
+                    (interpolation, passing as argument, comparison). Unresolved handles are implicitly joined
+                    before the workflow returns. Combine with <code>isolated</code>
+                    (<code>run async isolated wf()</code>) for parallel sandboxed branches.
                 </p>
                 <p><strong>Agent inbox pattern (channels).</strong> Use inbox channels as a way to pass messages between
                     workflows. Declare channels at top level with <code>channel &lt;name&gt; [-&gt; workflow]</code>
@@ -595,11 +596,13 @@ Jaiph: Running async.jh
                         <a href="grammar#step-output-contract">Step output contract</a>.
                     </dd>
 
-                    <dt><code>run async ref(args)</code></dt>
-                    <dd>Run a workflow or script concurrently. All async steps are implicitly joined
-                        before the workflow completes; failures are aggregated. Workflows only &mdash;
-                        capture (<code>const x = run async ...</code>) is not supported.
-                        See <a href="grammar">Grammar</a>.
+                    <dt><code>run async ref(args)</code> &middot; <code>const h = run async ref(args)</code></dt>
+                    <dd>Run a workflow or script concurrently, returning a <strong>handle</strong>.
+                        The handle resolves transparently on first read (interpolation, passing as
+                        argument, comparison). Unresolved handles are implicitly joined before the
+                        workflow returns. <code>recover</code> and <code>catch</code> compose with
+                        <code>run async</code> (including <code>run async isolated</code>).
+                        Workflows only. See <a href="grammar">Grammar</a>.
                     </dd>
 
                     <dt><code>run isolated ref(args)</code> &middot; <code>run async isolated ref(args)</code></dt>
@@ -622,11 +625,15 @@ Jaiph: Running async.jh
                         in parentheses. Works in both workflows and rules.
                     </dd>
 
-                    <dt><code>run ref() recover(err) { … }</code></dt>
+                    <dt><code>run ref() recover(err) { … }</code> &middot;
+                        <code>run async [isolated] ref() recover(err) { … }</code>
+                    </dt>
                     <dd>Repair-and-retry loop: on failure, bind the error, run the repair block,
-                        and retry the target — repeating until success or the retry limit
+                        and retry the target &mdash; repeating until success or the retry limit
                         (default 10, configurable via <code>run.recover_limit</code> or
-                        <code>JAIPH_RECOVER_LIMIT</code>). Only supported on <code>run</code>.
+                        <code>JAIPH_RECOVER_LIMIT</code>). When combined with <code>isolated</code>,
+                        the recover block and retries execute inside the branch&rsquo;s sandboxed context.
+                        Only supported on <code>run</code>.
                         See <a href="grammar#run-recover">Grammar</a>.
                     </dd>
 

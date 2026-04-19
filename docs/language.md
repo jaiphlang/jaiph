@@ -306,19 +306,38 @@ const output = run transform()
 
 **Capture:** For a workflow, captures the explicit `return` value. For a script, captures stdout.
 
-### `run async` — Concurrent Execution
+### `run async` — Concurrent Execution with Handles
 
-Starts a workflow or script concurrently. All pending async steps are implicitly joined before the enclosing workflow returns.
+`run async` returns a **handle** immediately while the target executes concurrently.
+
+**Handle resolution.** A handle resolves transparently on the first operation that reads its value: string interpolation (`"${h}"`), passing as an argument to `run`, comparison in `if`, or any other access. Assignment (`const copy = "${h}"`) and pass-through do not force resolution — the handle continues in the background until read.
+
+**Capture.** Use `const` to capture the handle value:
 
 ```jaiph
 workflow default() {
-  run async lib.task_a()
-  run async lib.task_b()
-  # both joined automatically before workflow returns
+  const h = run async slow_task()
+  # ... other work runs concurrently ...
+  log "${h}"  # blocks here until slow_task completes
 }
 ```
 
-Constraints: workflow-only (rejected in rules), capture not supported.
+**Implicit join.** Unresolved handles are joined before the enclosing workflow returns — this is not an error, it preserves end-of-workflow consistency.
+
+**Recover composition.** `recover` and `catch` compose with `run async`:
+
+```jaiph
+run async foo() recover(err) {
+  log "retrying after: ${err}"
+}
+run async isolated bar() recover(err) {
+  log "retry inside sandbox"
+}
+```
+
+When combined with `isolated`, the recover block and all retries execute inside the branch's sandboxed context. The coordinator observes only the final outcome.
+
+Constraints: workflow-only (rejected in rules), no inline scripts.
 
 ### `run isolated` — OS-Level Isolation
 
@@ -328,8 +347,8 @@ Runs a workflow in an isolated Docker container with a fuse-overlayfs overlay. T
 workflow default() {
   run isolated untrusted_task()
   const result = run isolated analyze()
-  run async isolated branch_a()
-  run async isolated branch_b()
+  const h1 = run async isolated branch_a()
+  const h2 = run async isolated branch_b()
 }
 ```
 

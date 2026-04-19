@@ -215,6 +215,18 @@ export function parseBlockStatement(
     if (runBody.startsWith("`")) {
       fail(filePath, "run isolated is not supported with inline scripts", innerNo, innerRaw.indexOf("run") + 1);
     }
+    const catchResult = parseRunCatchStep(filePath, lines, idx, innerNo, innerRaw, runBody);
+    if (catchResult) {
+      const s = catchResult.step;
+      if (s.type === "run") { s.async = true; s.isolated = true; }
+      return { step: s, nextIdx: catchResult.nextIdx + 1 };
+    }
+    const recoverResult = parseRunRecoverStep(filePath, lines, idx, innerNo, innerRaw, runBody);
+    if (recoverResult) {
+      const s = recoverResult.step;
+      if (s.type === "run") { s.async = true; s.isolated = true; }
+      return { step: s, nextIdx: recoverResult.nextIdx + 1 };
+    }
     const call = parseCallRef(runBody);
     if (!call) {
       fail(filePath, "run async isolated must target a valid reference: run async isolated ref() — parentheses are required", innerNo);
@@ -265,6 +277,18 @@ export function parseBlockStatement(
     const runBody = inner.slice("run async ".length).trim();
     if (runBody.startsWith("`")) {
       fail(filePath, "run async is not supported with inline scripts", innerNo, innerRaw.indexOf("run") + 1);
+    }
+    const catchResult = parseRunCatchStep(filePath, lines, idx, innerNo, innerRaw, runBody);
+    if (catchResult) {
+      const s = catchResult.step;
+      if (s.type === "run") { s.async = true; }
+      return { step: s, nextIdx: catchResult.nextIdx + 1 };
+    }
+    const recoverResult = parseRunRecoverStep(filePath, lines, idx, innerNo, innerRaw, runBody);
+    if (recoverResult) {
+      const s = recoverResult.step;
+      if (s.type === "run") { s.async = true; }
+      return { step: s, nextIdx: recoverResult.nextIdx + 1 };
     }
     const call = parseCallRef(runBody);
     if (!call) {

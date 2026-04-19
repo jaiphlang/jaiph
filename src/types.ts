@@ -53,7 +53,7 @@ export interface MatchExprDef {
 
 export type ConstRhs =
   | { kind: "expr"; bashRhs: string; /** `const x = """..."""` — runtime dedents margin. */ tripleQuoted?: boolean }
-  | { kind: "run_capture"; ref: WorkflowRefDef; args?: string; bareIdentifierArgs?: string[]; isolated?: boolean }
+  | { kind: "run_capture"; ref: WorkflowRefDef; args?: string; bareIdentifierArgs?: string[]; async?: boolean; isolated?: boolean }
   | { kind: "ensure_capture"; ref: RuleRefDef; args?: string; bareIdentifierArgs?: string[] }
   | {
       kind: "prompt_capture";
