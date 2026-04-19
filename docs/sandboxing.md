@@ -249,6 +249,52 @@ workflow default() {
 }
 ```
 
-## Target design: per-call `run isolated`
+## Per-call isolation with `run isolated`
 
-The current whole-program Docker mode described above is being replaced by per-call `run isolated` semantics in the target redesign. Instead of wrapping an entire `jaiph run` invocation in a container, isolation moves to individual call sites (`run isolated foo()`), reusing the existing Docker + fuse-overlayfs backend in `src/runtime/docker.ts`. The formal specification for the isolation contract, nested-isolation rules, and `recover` composition inside isolated branches is in [Spec: Handle, Isolation, and Recover Composition](spec-async-isolated.md). For the high-level motivation and design rationale, see [Target Design — Sandboxing redesign](target-design.md#sandboxing-redesign).
+`run isolated` provides OS-level isolation at the call site. Each `run isolated foo()` spawns a dedicated Docker container with a fuse-overlayfs overlay: the host workspace is read-only, writes land in a discarded upper layer, and the branch cannot see host processes or credentials.
+
+### Syntax
+
+```jh
+workflow default() {
+  # Synchronous isolated call
+  run isolated review()
+
+  # Capture return value from an isolated call
+  const result = run isolated analyze()
+
+  # Async + isolated: spawns N containers in parallel
+  const a = run async isolated branch_a()
+  const b = run async isolated branch_b()
+}
+```
+
+`isolated` is a modifier on `run`, like `async`. The two compose: `run async isolated` spawns the branch in a container and returns immediately. Calls inside an isolated body (`run foo()` without the `isolated` modifier) execute in the same container — there is no double isolation.
+
+### What `isolated` guarantees
+
+1. **Read-only host filesystem.** Writes from the branch land in an overlay upper layer, discarded on teardown.
+2. **Separate PID namespace.** The branch cannot signal or inspect host processes.
+3. **Credential denylist.** `SSH_*`, `AWS_*`, `GCP_*`, `AZURE_*`, `GOOGLE_*`, `DOCKER_*`, `KUBE*`, and `NPM_TOKEN*` are never forwarded.
+4. **No silent fallback.** If the backend is unavailable, `run isolated` is a hard error — it never degrades to a non-isolating copy.
+5. **No on/off switch.** There is no env var or config key to disable isolation.
+
+### Backend: Docker + fuse-overlayfs
+
+The v1 backend requires Docker with fuse-overlayfs support. The container runs with `--cap-drop ALL --cap-add SYS_ADMIN --device /dev/fuse`. Run artifacts are written to a host-mounted directory (`/jaiph/run`) that survives container teardown.
+
+The container image defaults to the official GHCR image (`ghcr.io/jaiphlang/jaiph-runtime:<version>`). Override with `JAIPH_ISOLATED_IMAGE` for custom images.
+
+### Nested isolation is forbidden
+
+`run isolated` inside an already-isolated context is a compile-time error. The compiler walks the static call graph: if `run isolated A()` is written and `A` transitively reaches another `run isolated`, the program is rejected. A runtime guard (`JAIPH_ISOLATED=1` sentinel) provides defense-in-depth.
+
+### Host requirements
+
+- Docker daemon running (`docker info` must succeed)
+- fuse-overlayfs installed in the container image (included in the official image)
+- `/dev/fuse` available to the Docker VM
+
+If any requirement is missing, `run isolated` fails with an actionable error message.
+
+For the formal specification, see [Spec: Handle, Isolation, and Recover Composition](spec-async-isolated.md).

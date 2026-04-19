@@ -351,6 +351,75 @@ export function resolveScriptImportPath(fromFile: string, importPath: string): s
   return resolve(dirname(fromFile), importPath);
 }
 
+/**
+ * Walk the static call graph from a workflow to find any reachable `run isolated` step.
+ * Returns the ref string of the first nested `run isolated` found, or undefined.
+ */
+function findNestedIsolatedRef(
+  startRef: string,
+  ast: jaiphModule,
+  importsByAlias: Map<string, string>,
+  importedAstCache: Map<string, jaiphModule>,
+): string | undefined {
+  const visited = new Set<string>();
+
+  const resolveWorkflow = (ref: string): { ast: jaiphModule; wf: { name: string; steps: WorkflowStepDef[] } } | undefined => {
+    const dotIdx = ref.indexOf(".");
+    if (dotIdx >= 0) {
+      const alias = ref.slice(0, dotIdx);
+      const name = ref.slice(dotIdx + 1);
+      const importPath = importsByAlias.get(alias);
+      if (!importPath) return undefined;
+      const importedAst = importedAstCache.get(importPath);
+      if (!importedAst) return undefined;
+      const wf = importedAst.workflows.find((w) => w.name === name);
+      return wf ? { ast: importedAst, wf } : undefined;
+    }
+    const wf = ast.workflows.find((w) => w.name === ref);
+    return wf ? { ast, wf } : undefined;
+  };
+
+  const walkSteps = (steps: WorkflowStepDef[]): string | undefined => {
+    for (const s of steps) {
+      if (s.type === "run") {
+        if (s.isolated) return s.workflow.value;
+        const found = walkRef(s.workflow.value);
+        if (found) return found;
+        if (s.recover) {
+          const recoverSteps = "single" in s.recover ? [s.recover.single] : s.recover.block;
+          const f = walkSteps(recoverSteps);
+          if (f) return f;
+        }
+        if (s.recoverLoop) {
+          const recoverSteps = "single" in s.recoverLoop ? [s.recoverLoop.single] : s.recoverLoop.block;
+          const f = walkSteps(recoverSteps);
+          if (f) return f;
+        }
+      }
+      if (s.type === "const" && s.value.kind === "run_capture") {
+        if (s.value.isolated) return s.value.ref.value;
+        const found = walkRef(s.value.ref.value);
+        if (found) return found;
+      }
+      if (s.type === "if") {
+        const f = walkSteps(s.body);
+        if (f) return f;
+      }
+    }
+    return undefined;
+  };
+
+  const walkRef = (ref: string): string | undefined => {
+    if (visited.has(ref)) return undefined;
+    visited.add(ref);
+    const resolved = resolveWorkflow(ref);
+    if (!resolved) return undefined;
+    return walkSteps(resolved.wf.steps);
+  };
+
+  return walkRef(startRef);
+}
+
 export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void {
   const localChannels = new Set(ast.channels.map((c) => c.name));
   const localRules = new Set(ast.rules.map((r) => r.name));
@@ -567,6 +636,15 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
             "run async is not allowed in rules; use it in workflows only",
           );
         }
+        if (s.isolated) {
+          throw jaiphError(
+            ast.filePath,
+            s.workflow.loc.line,
+            s.workflow.loc.col,
+            "E_VALIDATE",
+            "run isolated is not allowed in rules; use it in workflows only",
+          );
+        }
         if (!s.workflow.value.includes(".") && ruleKnownVars.has(s.workflow.value) && !localScripts.has(s.workflow.value)) {
           throw jaiphError(ast.filePath, s.workflow.loc.line, s.workflow.loc.col, "E_VALIDATE", `strings are not executable; "${s.workflow.value}" is a string — use a script instead`);
         }
@@ -687,6 +765,9 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
       if (s.type === "const") {
         const v = s.value;
         if (v.kind === "run_capture") {
+          if (v.isolated) {
+            throw jaiphError(ast.filePath, v.ref.loc.line, v.ref.loc.col, "E_VALIDATE", "run isolated is not allowed in rules; use it in workflows only");
+          }
           validateNoShellRedirection(ast.filePath, v.ref.loc, "run", v.args);
           validateNestedManagedCallArgs(ast.filePath, v.ref.loc, v.args);
           if (!v.ref.value.includes(".") && ruleKnownVars.has(v.ref.value) && !localScripts.has(v.ref.value)) {
@@ -903,6 +984,18 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         validateArity(ast.filePath, s.workflow.loc, s.workflow.value, s.args, "workflow", ast, refCtx);
 
         validateBareIdentifierArgs(ast.filePath, s.workflow.loc, s.bareIdentifierArgs, wfKnownVars, recoverBindings);
+        if (s.isolated) {
+          const nestedRef = findNestedIsolatedRef(s.workflow.value, ast, importsByAlias, importedAstCache);
+          if (nestedRef) {
+            throw jaiphError(
+              ast.filePath,
+              s.workflow.loc.line,
+              s.workflow.loc.col,
+              "E_VALIDATE",
+              `nested isolation is not allowed: "run isolated ${s.workflow.value}()" transitively reaches "run isolated ${nestedRef}()" — isolation cannot be nested`,
+            );
+          }
+        }
         if (s.recover) {
           const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
           const rb = new Set<string>();
@@ -1056,6 +1149,18 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           validateArity(ast.filePath, v.ref.loc, v.ref.value, v.args, "workflow", ast, refCtx);
 
           validateBareIdentifierArgs(ast.filePath, v.ref.loc, v.bareIdentifierArgs, wfKnownVars, recoverBindings);
+          if (v.isolated) {
+            const nestedRef = findNestedIsolatedRef(v.ref.value, ast, importsByAlias, importedAstCache);
+            if (nestedRef) {
+              throw jaiphError(
+                ast.filePath,
+                v.ref.loc.line,
+                v.ref.loc.col,
+                "E_VALIDATE",
+                `nested isolation is not allowed: "run isolated ${v.ref.value}()" transitively reaches "run isolated ${nestedRef}()" — isolation cannot be nested`,
+              );
+            }
+          }
         } else if (v.kind === "ensure_capture") {
           validateNoShellRedirection(ast.filePath, v.ref.loc, "ensure", v.args);
           validateNestedManagedCallArgs(ast.filePath, v.ref.loc, v.args);

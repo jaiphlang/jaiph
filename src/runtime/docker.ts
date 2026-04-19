@@ -686,3 +686,220 @@ export function findRunArtifacts(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Isolated execution backend (per-call Docker + fuse-overlayfs, no fallback)
+// ---------------------------------------------------------------------------
+
+/**
+ * Strict overlay script for `run isolated`. Fails hard if fuse-overlayfs is
+ * unavailable — no rsync / cp -a fallback chain.
+ */
+const ISOLATED_OVERLAY_SCRIPT = `#!/usr/bin/env bash
+set -euo pipefail
+LOWER=/jaiph/workspace-ro
+UPPER=/tmp/overlay-upper
+WORK=/tmp/overlay-work
+MERGED=/jaiph/workspace
+mkdir -p "$UPPER" "$WORK" "$MERGED"
+if ! command -v fuse-overlayfs >/dev/null 2>&1 || [ ! -e /dev/fuse ]; then
+  printf 'jaiph isolated: fuse-overlayfs or /dev/fuse is not available in this container — isolated execution requires fuse-overlayfs in Docker; install Docker with fuse support or load the fuse module\\n' >&2
+  exit 126
+fi
+if ! fuse-overlayfs -o "lowerdir=$LOWER,upperdir=$UPPER,workdir=$WORK" "$MERGED" 2>/tmp/jaiph-fuse-overlay.err; then
+  reason="$(tr '\\n' ' ' </tmp/jaiph-fuse-overlay.err | sed 's/[[:space:]]\\+/ /g; s/^ //; s/ $//')"
+  printf 'jaiph isolated: fuse-overlayfs mount failed: %s\\n' "$reason" >&2
+  exit 126
+fi
+probe_path="$(mktemp "$MERGED/.jaiph-overlay-probe.XXXXXX" 2>/dev/null || true)"
+if [ -z "$probe_path" ]; then
+  printf 'jaiph isolated: fuse-overlayfs mounted but workspace is not writable\\n' >&2
+  exit 126
+fi
+rm -f "$probe_path"
+exec "$@"
+`;
+
+/** Write the strict isolated overlay script to a temp file. */
+export function writeIsolatedOverlayScript(): string {
+  const dir = mkdtempSync(join(tmpdir(), "jaiph-isolated-"));
+  const scriptPath = join(dir, "isolated-overlay-run.sh");
+  writeFileSync(scriptPath, ISOLATED_OVERLAY_SCRIPT, { mode: 0o755 });
+  return scriptPath;
+}
+
+/** Resolve isolated image from env or use the default Docker image. */
+export function resolveIsolatedImage(env: Record<string, string | undefined>): string {
+  if (env.JAIPH_ISOLATED_IMAGE) return env.JAIPH_ISOLATED_IMAGE;
+  return `${GHCR_IMAGE_REPO}:${resolveDefaultImageTag()}`;
+}
+
+export interface IsolatedSpawnOptions {
+  /** Absolute path to the .jh source file. */
+  sourceAbs: string;
+  /** Host workspace root directory. */
+  workspaceRoot: string;
+  /** Host directory for this branch's run artifacts (mounted at /jaiph/run:rw). */
+  branchRunDir: string;
+  /** Named workflow to run inside the container. */
+  workflowName: string;
+  /** Arguments to pass to the workflow. */
+  runArgs: string[];
+  /** Host environment. */
+  env: Record<string, string | undefined>;
+  /** Container image override (resolved from JAIPH_ISOLATED_IMAGE or default). */
+  image: string;
+  /** Network mode. */
+  network: string;
+  /** Timeout in seconds. */
+  timeout: number;
+}
+
+/**
+ * Build Docker args for an isolated per-call container.
+ * Similar to `buildDockerArgs` but uses the strict overlay script and
+ * runs a specific named workflow via `jaiph run --raw --entry <name>`.
+ */
+export function buildIsolatedDockerArgs(opts: IsolatedSpawnOptions, overlayScriptPath: string): string[] {
+  const args: string[] = ["run", "--rm"];
+
+  // Least-privilege: drop all capabilities, re-add only SYS_ADMIN for fuse-overlayfs.
+  // Note: no-new-privileges is NOT set here because fusermount3 is setuid and
+  // requires privilege escalation to mount the FUSE filesystem.
+  args.push("--cap-drop", "ALL");
+  args.push("--cap-add", "SYS_ADMIN");
+  args.push("--device", "/dev/fuse");
+
+  // Docker default: separate PID namespace (container processes isolated from host).
+
+  if (process.platform === "linux") {
+    try {
+      const uid = execSync("id -u", { encoding: "utf8" }).trim();
+      const gid = execSync("id -g", { encoding: "utf8" }).trim();
+      args.push("--user", `${uid}:${gid}`);
+    } catch {
+      // Fall through without --user
+    }
+  }
+
+  if (opts.network !== "default") {
+    args.push("--network", opts.network);
+  }
+
+  // Workspace: mounted read-only at the overlay lower-layer path
+  const hostWorkspaceAbs = resolve(opts.workspaceRoot);
+  validateMountHostPath(hostWorkspaceAbs);
+  args.push("-v", `${hostWorkspaceAbs}:${CONTAINER_WORKSPACE}-ro:ro`);
+
+  // Branch run artifacts directory: rw mount outside the overlay
+  args.push("-v", `${opts.branchRunDir}:${CONTAINER_RUN_DIR}:rw`);
+
+  // Overlay entrypoint script (runtime-generated, mounted ro)
+  args.push("-v", `${overlayScriptPath}:/jaiph/overlay-run.sh:ro`);
+
+  // Environment: JAIPH_* vars (minus denied prefixes) + isolation sentinel
+  const containerEnv: Record<string, string> = {
+    JAIPH_WORKSPACE: CONTAINER_WORKSPACE,
+    JAIPH_RUNS_DIR: CONTAINER_RUN_DIR,
+    JAIPH_ISOLATED: "1",
+  };
+
+  for (const [key, value] of Object.entries(opts.env)) {
+    if (value === undefined) continue;
+    if (isEnvDenied(key)) continue;
+    if (key.startsWith("JAIPH_") && !key.startsWith("JAIPH_DOCKER_")) {
+      containerEnv[key] = value;
+    }
+    if (AGENT_ENV_PREFIXES.some((prefix) => key.startsWith(prefix))) {
+      containerEnv[key] = value;
+    }
+  }
+  // Override workspace/runs with container paths
+  containerEnv.JAIPH_WORKSPACE = CONTAINER_WORKSPACE;
+  containerEnv.JAIPH_RUNS_DIR = CONTAINER_RUN_DIR;
+  containerEnv.JAIPH_ISOLATED = "1";
+
+  for (const [key, value] of Object.entries(containerEnv)) {
+    args.push("-e", `${key}=${value}`);
+  }
+
+  args.push("-w", CONTAINER_WORKSPACE);
+  args.push(opts.image);
+
+  // Command: overlay wrapper → jaiph run --raw --entry <workflow_name>
+  const relSource = relative(opts.workspaceRoot, opts.sourceAbs);
+  args.push(
+    "/jaiph/overlay-run.sh",
+    "jaiph", "run", "--raw", "--entry", opts.workflowName,
+    `${CONTAINER_WORKSPACE}/${relSource}`,
+    ...opts.runArgs,
+  );
+
+  return args;
+}
+
+export interface IsolatedSpawnResult {
+  child: ChildProcess;
+  branchRunDir: string;
+  overlayScriptDir: string;
+  timeoutTimer?: NodeJS.Timeout;
+}
+
+/**
+ * Check that the isolated execution backend (Docker + fuse-overlayfs) is available.
+ * Throws with an actionable error message if not.
+ */
+export function checkIsolatedBackendAvailable(): void {
+  try {
+    execSync("docker info", { stdio: "ignore", timeout: 10_000 });
+  } catch {
+    throw new Error(
+      "isolated execution requires fuse-overlayfs in Docker; install Docker and ensure the daemon is running. " +
+      "See https://jaiph.org/sandboxing for details.",
+    );
+  }
+}
+
+/**
+ * Spawn an isolated container for a single `run isolated` call.
+ * Returns a handle with the child process and cleanup metadata.
+ */
+export function spawnIsolatedProcess(opts: IsolatedSpawnOptions): IsolatedSpawnResult {
+  checkIsolatedBackendAvailable();
+
+  const resolvedImage = resolveImage(
+    { enabled: true, image: opts.image, imageExplicit: !!opts.env.JAIPH_ISOLATED_IMAGE, network: opts.network, timeout: opts.timeout, mounts: [] },
+    opts.workspaceRoot,
+  );
+
+  mkdirSync(opts.branchRunDir, { recursive: true });
+  const overlayScriptPath = writeIsolatedOverlayScript();
+  const overlayScriptDir = dirname(overlayScriptPath);
+  const dockerArgs = buildIsolatedDockerArgs({ ...opts, image: resolvedImage }, overlayScriptPath);
+
+  const child = spawn("docker", dockerArgs, {
+    stdio: ["ignore", "pipe", "pipe"],
+    cwd: opts.workspaceRoot,
+    env: opts.env,
+  });
+
+  let timeoutTimer: NodeJS.Timeout | undefined;
+  if (opts.timeout > 0) {
+    timeoutTimer = setTimeout(() => {
+      try { child.kill("SIGTERM"); } catch { /* no-op */ }
+      setTimeout(() => {
+        try { child.kill("SIGKILL"); } catch { /* no-op */ }
+      }, 5000);
+    }, opts.timeout * 1000);
+  }
+
+  return { child, branchRunDir: opts.branchRunDir, overlayScriptDir, timeoutTimer };
+}
+
+/** Clean up isolated container resources after execution. */
+export function cleanupIsolated(result: IsolatedSpawnResult): void {
+  if (result.timeoutTimer) clearTimeout(result.timeoutTimer);
+  try {
+    rmSync(result.overlayScriptDir, { recursive: true, force: true });
+  } catch { /* Best-effort cleanup */ }
+}
+

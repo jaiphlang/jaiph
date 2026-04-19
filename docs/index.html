@@ -116,6 +116,7 @@ layout: null
                     <div class="comparison-col">
                         <h3>Runtime</h3>
                         <p>Built-in Docker sandboxing</p>
+                        <p>Per-call OS-level isolation (<code>run isolated</code>)</p>
                         <p>Built-in testing framework</p>
                         <p>Tracks and saves all agent responses</p>
                     </div>
@@ -452,7 +453,8 @@ Jaiph: Running async.jh
                 </p>
                 <p><strong>Async calls.</strong> For async managed work, use <code>run async wf()</code> — Jaiph fans
                     out the workflows concurrently and <strong>implicitly joins</strong> them before the parent workflow
-                    completes.
+                    completes. Combine with <code>isolated</code> (<code>run async isolated wf()</code>) for
+                    parallel sandboxed branches.
                 </p>
                 <p><strong>Agent inbox pattern (channels).</strong> Use inbox channels as a way to pass messages between
                     workflows. Declare channels at top level with <code>channel &lt;name&gt; [-&gt; workflow]</code>
@@ -473,6 +475,11 @@ Jaiph: Running async.jh
                     filesystem and process isolation for agent and shell actions. Disable with <code>JAIPH_UNSAFE=true</code>
                     or <code>runtime.docker_enabled = false</code>. See <a
                         href="sandboxing">Sandboxing</a>.</p>
+                <p><strong>Per-call isolation.</strong> Use <code>run isolated foo()</code> to run a single workflow
+                    in a dedicated Docker container with a fuse-overlayfs overlay. The host workspace is read-only; writes
+                    are discarded on teardown. Composes with <code>async</code> for parallel isolated branches.
+                    No silent fallback, no on/off switch &mdash; <code>isolated</code> always means OS-level isolation.
+                    See <a href="sandboxing#per-call-isolation-with-run-isolated">Sandboxing &mdash; Per-call isolation</a>.</p>
                 <p><strong>Hooks.</strong> Attach shell automation to workflow and step lifecycle events via
                     <code>~/.jaiph/hooks.json</code> or <code>&lt;project&gt;/.jaiph/hooks.json</code>. See <a
                         href="hooks">Hooks</a>.
@@ -593,6 +600,15 @@ Jaiph: Running async.jh
                         before the workflow completes; failures are aggregated. Workflows only &mdash;
                         capture (<code>const x = run async ...</code>) is not supported.
                         See <a href="grammar">Grammar</a>.
+                    </dd>
+
+                    <dt><code>run isolated ref(args)</code> &middot; <code>run async isolated ref(args)</code></dt>
+                    <dd>Run a workflow in an OS-level isolated Docker container with fuse-overlayfs
+                        overlay. The host workspace is read-only; writes are discarded on teardown.
+                        Composes with <code>async</code> for parallel isolated branches.
+                        Nested <code>run isolated</code> is a compile-time error (checked transitively).
+                        No silent fallback &mdash; missing Docker is a hard error.
+                        See <a href="sandboxing#per-call-isolation-with-run-isolated">Sandboxing</a>.
                     </dd>
 
                     <dt><code>fail "reason"</code> &middot; <code>fail """..."""</code></dt>

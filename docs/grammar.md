@@ -330,6 +330,39 @@ Constraints:
 - Capture is not supported: `name = run async …` is `E_PARSE`.
 - For concurrent bash (pipelines, `&`), put the bash in a script and call with `run`.
 
+### `run isolated` — OS-Level Isolation
+
+`run isolated ref(args)` runs a workflow inside an isolated Docker container with a fuse-overlayfs overlay. The host workspace is mounted read-only; writes from the branch land in a discarded upper layer. Each call spawns a dedicated container that is torn down when the workflow completes.
+
+```jaiph
+workflow default() {
+  run isolated untrusted_task()
+  const result = run isolated analyze()
+}
+```
+
+`isolated` composes with `async`: `run async isolated` spawns an isolated container concurrently. Multiple `run async isolated` calls spawn N containers in parallel.
+
+```jaiph
+workflow default() {
+  run async isolated branch_a()
+  run async isolated branch_b()
+}
+```
+
+Calls inside an isolated body (`run foo()` without the `isolated` modifier) execute in the same container — there is no double isolation or new container for inner calls.
+
+**Nested isolation is a compile-time error.** The compiler walks the static call graph: if `run isolated A()` is written and `A` transitively reaches another `run isolated`, the program is rejected with `E_VALIDATE`. A runtime guard (`JAIPH_ISOLATED` sentinel) provides defense-in-depth against dynamic dispatch paths.
+
+**No silent fallback.** If Docker or fuse-overlayfs is unavailable, `run isolated` fails with an actionable error message — it never degrades to a non-isolating backend.
+
+Constraints:
+- Workflow-only — rejected in rules with `E_VALIDATE`.
+- Inline scripts are not supported: `run isolated \`…\`()` is `E_PARSE`.
+- There is no env var, CLI flag, or config key that disables isolation.
+
+See [Sandboxing — Per-call isolation](sandboxing.md#per-call-isolation-with-run-isolated) for the full isolation contract and host requirements.
+
 ### `ensure` — Execute a Rule
 
 `ensure` runs a rule and succeeds if its exit code is 0.
@@ -878,7 +911,7 @@ workflow_config = config_block ;
   (* optional per-workflow override; must appear before steps;
      only agent.* and run.* keys allowed; runtime.* and module.* yield E_PARSE *)
 
-workflow_step   = ensure_stmt | run_stmt | run_catch_stmt | run_recover_stmt | run_async_stmt | prompt_stmt | prompt_capture_stmt
+workflow_step   = ensure_stmt | run_stmt | run_catch_stmt | run_recover_stmt | run_async_stmt | run_isolated_stmt | prompt_stmt | prompt_capture_stmt
                 | const_decl_step | return_stmt
                 | fail_stmt | log_stmt | logerr_stmt | send_stmt
                 | match_stmt | if_stmt | comment_line ;
@@ -887,12 +920,13 @@ workflow_step   = ensure_stmt | run_stmt | run_catch_stmt | run_recover_stmt | r
 
 const_decl_step = "const" IDENT "=" const_rhs ;
 const_rhs       = double_quoted_string | triple_quoted_block | bash_value_expr
-                | "run" ( call_ref | inline_script ) | "ensure" call_ref
+                | "run" [ "isolated" ] ( call_ref | inline_script ) | "ensure" call_ref
                 | "prompt" prompt_body [ returns_schema ]
                 | "match" IDENT "{" { match_arm } "}" ;
 
 fail_stmt       = "fail" ( double_quoted_string | triple_quoted_block ) ;
-run_async_stmt  = "run" "async" call_ref ;
+run_async_stmt  = "run" "async" [ "isolated" ] call_ref ;
+run_isolated_stmt = "run" "isolated" call_ref ;
 return_stmt     = "return" return_value ;
 return_value    = double_quoted_string | triple_quoted_block | "$" IDENT | "${" IDENT "}"
                 | "run" call_ref | "ensure" call_ref | "match" IDENT "{" { match_arm } "}" ;

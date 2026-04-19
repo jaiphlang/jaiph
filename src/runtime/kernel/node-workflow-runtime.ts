@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve as resolvePath } from "node:path";
 import { PassThrough } from "node:stream";
 import { randomUUID } from "node:crypto";
@@ -17,7 +17,15 @@ import {
   plainMultilineOrchestrationForRuntime,
   tripleQuotedRawForRuntime,
 } from "../orchestration-text";
-import { CONTAINER_WORKSPACE, exportWorkspacePatch } from "../docker";
+import {
+  CONTAINER_WORKSPACE,
+  exportWorkspacePatch,
+  checkIsolatedBackendAvailable,
+  resolveIsolatedImage,
+  spawnIsolatedProcess,
+  cleanupIsolated,
+  findRunArtifacts,
+} from "../docker";
 
 const MAX_EMBED = 1024 * 1024;
 const MAX_RECURSION_DEPTH = 256;
@@ -1031,7 +1039,10 @@ export class NodeWorkflowRuntime {
           continue;
         }
         if (step.value.kind === "run_capture") {
-          const runResult = await this.executeRunRef(scope, step.value.ref.value, step.value.args ?? "");
+          const captureExec = step.value.isolated
+            ? this.executeIsolatedRunRef(scope, step.value.ref.value, step.value.args ?? "")
+            : this.executeRunRef(scope, step.value.ref.value, step.value.args ?? "");
+          const runResult = await captureExec;
           if (runResult.status !== 0) return this.mergeStepResult(accOut, accErr, runResult);
           scope.vars.set(step.name, runResult.returnValue ?? runResult.output.trim());
           continue;
@@ -1141,13 +1152,18 @@ export class NodeWorkflowRuntime {
         }
       }
       if (step.type === "run") {
+        // Choose execution backend: isolated (Docker per-call) or normal
+        const execRef = step.isolated
+          ? (s: Scope, ref: string, args: string | string[]) => this.executeIsolatedRunRef(s, ref, args)
+          : (s: Scope, ref: string, args: string | string[]) => this.executeRunRef(s, ref, args);
+
         if (step.async) {
           asyncCounter += 1;
           const branchStack = [...this.getFrameStack()];
           const branchIndices = [...this.getAsyncIndices(), asyncCounter];
           const promise = this.asyncFrameStack.run(branchStack, () =>
             this.asyncIndicesStorage.run(branchIndices, () =>
-              this.executeRunRef(scope, step.workflow.value, step.args ?? ""),
+              execRef(scope, step.workflow.value, step.args ?? ""),
             ),
           );
           pendingAsync.push({ ref: step.workflow.value, promise });
@@ -1159,7 +1175,7 @@ export class NodeWorkflowRuntime {
           const recoverSteps = "single" in step.recoverLoop ? [step.recoverLoop.single] : step.recoverLoop.block;
           let lastResult: StepResult | undefined;
           for (let attempt = 0; attempt < limit; attempt += 1) {
-            const runResult = await this.executeRunRef(scope, step.workflow.value, step.args ?? "");
+            const runResult = await execRef(scope, step.workflow.value, step.args ?? "");
             if (runResult.status === 0) {
               if (step.captureName) {
                 scope.vars.set(step.captureName, runResult.returnValue ?? runResult.output.trim());
@@ -1177,7 +1193,7 @@ export class NodeWorkflowRuntime {
           if (lastResult) return this.mergeStepResult(accOut, accErr, lastResult);
           continue;
         }
-        const runResult = await this.executeRunRef(scope, step.workflow.value, step.args ?? "");
+        const runResult = await execRef(scope, step.workflow.value, step.args ?? "");
         if (runResult.status === 0) {
           if (step.captureName) {
             scope.vars.set(step.captureName, runResult.returnValue ?? runResult.output.trim());
@@ -1447,6 +1463,121 @@ export class NodeWorkflowRuntime {
       );
     }
     return { status: 1, output: "", error: `Unknown run target: ${ref}` };
+  }
+
+  /**
+   * Execute a workflow in an isolated Docker container (per-call).
+   * Runtime guard: fails if already inside an isolated context.
+   */
+  private async executeIsolatedRunRef(scope: Scope, ref: string, argsRaw: string | string[]): Promise<StepResult> {
+    // Runtime guard: detect nested isolation via env sentinel
+    if (scope.env.JAIPH_ISOLATED === "1") {
+      return {
+        status: 1,
+        output: "",
+        error: `nested isolation is not allowed: "run isolated ${ref}()" invoked inside an already-isolated context`,
+      };
+    }
+
+    // Check backend availability
+    try {
+      checkIsolatedBackendAvailable();
+    } catch (err: unknown) {
+      return {
+        status: 1,
+        output: "",
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+
+    const resolvedArgs = this.resolveArgsRawSync(scope, argsRaw) ?? await this.resolveArgsRaw(scope, argsRaw);
+    if (!Array.isArray(resolvedArgs)) return resolvedArgs;
+
+    const workspaceRoot = scope.env.JAIPH_WORKSPACE || this.cwd;
+    const sourceAbs = scope.env.JAIPH_SOURCE_ABS || this.graph.entryFile;
+    const branchId = randomUUID().slice(0, 8);
+    const branchRunDir = join(this.runDir, "branches", branchId);
+
+    const image = resolveIsolatedImage(scope.env);
+    const network = scope.env.JAIPH_DOCKER_NETWORK || "default";
+    const timeout = Number(scope.env.JAIPH_DOCKER_TIMEOUT) || 300;
+
+    const isolatedResult = spawnIsolatedProcess({
+      sourceAbs,
+      workspaceRoot,
+      branchRunDir,
+      workflowName: ref,
+      runArgs: resolvedArgs,
+      env: scope.env as Record<string, string | undefined>,
+      image,
+      network,
+      timeout,
+    });
+
+    // Collect stdout and stderr from the container.
+    // Forward __JAIPH_EVENT__ lines from container stderr to host stderr
+    // so the outer CLI renders log/progress events from the isolated run.
+    let stdout = "";
+    let stderr = "";
+    let stderrBuf = "";
+    isolatedResult.child.stdout?.setEncoding("utf8");
+    isolatedResult.child.stderr?.setEncoding("utf8");
+    isolatedResult.child.stdout?.on("data", (chunk: string) => { stdout += chunk; });
+    isolatedResult.child.stderr?.on("data", (chunk: string) => {
+      stderrBuf += chunk;
+      let idx = stderrBuf.indexOf("\n");
+      while (idx !== -1) {
+        const line = stderrBuf.slice(0, idx);
+        stderrBuf = stderrBuf.slice(idx + 1);
+        if (line.startsWith("__JAIPH_EVENT__ ")) {
+          process.stderr.write(line + "\n");
+        } else {
+          stderr += line + "\n";
+        }
+        idx = stderrBuf.indexOf("\n");
+      }
+    });
+
+    const exitCode = await new Promise<number>((res) => {
+      isolatedResult.child.on("close", (code) => res(code ?? 1));
+      isolatedResult.child.on("error", () => res(1));
+    });
+
+    cleanupIsolated(isolatedResult);
+
+    // Try to read the meta file for return value
+    let returnValue: string | undefined;
+    const artifacts = findRunArtifacts(branchRunDir);
+    // Also check for meta file written by the runner
+    const metaGlob = join(branchRunDir, ".jaiph-run-meta-*.txt");
+    try {
+      // Read meta files from the branch run dir
+      const { readdirSync: rds } = require("node:fs");
+      const entries = rds(branchRunDir) as string[];
+      for (const entry of entries) {
+        if (entry.startsWith(".jaiph-run-meta-") && entry.endsWith(".txt")) {
+          const metaContent = readFileSync(join(branchRunDir, entry), "utf8");
+          for (const line of metaContent.split(/\r?\n/)) {
+            if (line.startsWith("return_value=")) {
+              returnValue = line.slice("return_value=".length);
+            }
+            if (line.startsWith("output=") && !stdout.trim()) {
+              stdout = line.slice("output=".length);
+            }
+          }
+          break;
+        }
+      }
+    } catch {
+      // Meta file may not exist for failed runs — that's ok
+    }
+
+    return {
+      status: exitCode,
+      output: stdout,
+      error: stderr,
+      returnValue,
+    };
   }
 
   private async executeEnsureRef(

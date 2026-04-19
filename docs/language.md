@@ -320,6 +320,21 @@ workflow default() {
 
 Constraints: workflow-only (rejected in rules), capture not supported.
 
+### `run isolated` — OS-Level Isolation
+
+Runs a workflow in an isolated Docker container with a fuse-overlayfs overlay. The host workspace is read-only; writes land in a discarded upper layer. Composes with `async`: `run async isolated` spawns an isolated container concurrently.
+
+```jaiph
+workflow default() {
+  run isolated untrusted_task()
+  const result = run isolated analyze()
+  run async isolated branch_a()
+  run async isolated branch_b()
+}
+```
+
+Nested isolation is a compile-time error: if `A` calls `run isolated B()` and `A` is itself called via `run isolated`, the program is rejected. Calls inside an isolated body without the `isolated` modifier run in the same container. See [Sandboxing — Per-call isolation](sandboxing.md#per-call-isolation-with-run-isolated) for details.
+
 ### `ensure` — Execute a Rule
 
 Runs a rule and succeeds if its exit code is 0.

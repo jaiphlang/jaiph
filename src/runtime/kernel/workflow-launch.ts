@@ -9,7 +9,7 @@ export function buildRunModuleLaunch(
   positionalArgs: string[],
   env: NodeJS.ProcessEnv,
 ): { command: string; args: string[]; env: NodeJS.ProcessEnv } {
-  const [metaFile, builtScript, _workflowSymbol, ...runArgs] = positionalArgs;
+  const [metaFile, builtScript, workflowSymbol, ...runArgs] = positionalArgs;
   if (!metaFile || !builtScript) {
     throw new Error("jaiph run launch requires meta_file and built_script");
   }
@@ -20,7 +20,7 @@ export function buildRunModuleLaunch(
   const runnerPath = join(__dirname, "node-workflow-runner.js");
   return {
     command: process.execPath,
-    args: [runnerPath, metaFile, sourceAbs, builtScript, "default", ...runArgs],
+    args: [runnerPath, metaFile, sourceAbs, builtScript, workflowSymbol || "default", ...runArgs],
     env: { ...env, JAIPH_META_FILE: metaFile },
   };
 }

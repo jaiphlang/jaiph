@@ -67,7 +67,7 @@ The v1 backend is fixed: **Docker + fuse-overlayfs, reusing the existing impleme
 What the existing code already provides and `run isolated` reuses:
 
 - fuse-overlayfs mount with the host workspace as a read-only lower layer and an in-container writable upper layer, merged at `/jaiph/workspace`.
-- `--cap-drop ALL` plus only `SYS_ADMIN` for fuse-overlayfs; `--security-opt no-new-privileges`.
+- `--cap-drop ALL` plus only `SYS_ADMIN` for fuse-overlayfs. (`no-new-privileges` is not set for the isolated path because `fusermount3` is a setuid binary that requires privilege escalation.)
 - The credential env denylist enumerated in §2.1.
 - A host-path mount denylist (Docker socket, `/proc`, `/sys`, `/dev`).
 - A host-writable run-artifacts directory (`/jaiph/run`) mounted `:rw` outside the overlay, so exports survive container teardown.

@@ -90,6 +90,26 @@ export function parseConstRhs(
       nextLineIdx: result.nextLineIdx,
     };
   }
+  if (head.startsWith("run isolated ")) {
+    const rest = head.slice("run isolated ".length).trim();
+    if (rest.startsWith("`")) {
+      fail(filePath, "run isolated is not supported with inline scripts", lineNo, col);
+    }
+    const call = parseCallRef(rest);
+    if (!call) {
+      fail(filePath, "const ... = run isolated must target a valid reference", lineNo, col);
+    }
+    rejectTrailingContent(filePath, lineNo, "run isolated", call.rest);
+    const ref: WorkflowRefDef = { value: call.ref, loc: { line: lineNo, col } };
+    return {
+      value: {
+        kind: "run_capture", ref, args: call.args,
+        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
+        isolated: true,
+      },
+      nextLineIdx: lineIdx,
+    };
+  }
   if (head.startsWith("run ")) {
     const rest = head.slice("run ".length).trim();
     if (rest.startsWith("`")) {

@@ -547,15 +547,16 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
       const ref = emitRef(step.workflow, step.args, step.bareIdentifierArgs);
       const capture = step.captureName ? `${step.captureName} = ` : "";
       const asyncPrefix = step.async ? "async " : "";
+      const isolatedPrefix = step.isolated ? "isolated " : "";
       if (step.recover) {
         const b = step.recover.bindings;
         const bindStr = `(${b.failure})`;
         if ("single" in step.recover) {
           const recoverLines = emitStep(step.recover.single, pad, "");
           const recoverText = recoverLines.map((l) => l.trim()).join("\n");
-          lines.push(`${ci}${capture}run ${asyncPrefix}${ref} catch ${bindStr} ${recoverText}`);
+          lines.push(`${ci}${capture}run ${asyncPrefix}${isolatedPrefix}${ref} catch ${bindStr} ${recoverText}`);
         } else {
-          lines.push(`${ci}${capture}run ${asyncPrefix}${ref} catch ${bindStr} {`);
+          lines.push(`${ci}${capture}run ${asyncPrefix}${isolatedPrefix}${ref} catch ${bindStr} {`);
           lines.push(...emitSteps(step.recover.block, pad, ci + pad));
           lines.push(`${ci}}`);
         }
@@ -565,14 +566,14 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
         if ("single" in step.recoverLoop) {
           const recoverLines = emitStep(step.recoverLoop.single, pad, "");
           const recoverText = recoverLines.map((l) => l.trim()).join("\n");
-          lines.push(`${ci}${capture}run ${asyncPrefix}${ref} recover${bindStr} ${recoverText}`);
+          lines.push(`${ci}${capture}run ${asyncPrefix}${isolatedPrefix}${ref} recover${bindStr} ${recoverText}`);
         } else {
-          lines.push(`${ci}${capture}run ${asyncPrefix}${ref} recover${bindStr} {`);
+          lines.push(`${ci}${capture}run ${asyncPrefix}${isolatedPrefix}${ref} recover${bindStr} {`);
           lines.push(...emitSteps(step.recoverLoop.block, pad, ci + pad));
           lines.push(`${ci}}`);
         }
       } else {
-        lines.push(`${ci}${capture}run ${asyncPrefix}${ref}`);
+        lines.push(`${ci}${capture}run ${asyncPrefix}${isolatedPrefix}${ref}`);
       }
       break;
     }
@@ -766,8 +767,10 @@ function emitConstStep(name: string, value: ConstRhs): string {
         return `const ${name} = """`;
       }
       return `const ${name} = ${value.bashRhs}`;
-    case "run_capture":
-      return `const ${name} = run ${emitRef(value.ref, value.args, value.bareIdentifierArgs)}`;
+    case "run_capture": {
+      const isoPrefix = value.isolated ? "isolated " : "";
+      return `const ${name} = run ${isoPrefix}${emitRef(value.ref, value.args, value.bareIdentifierArgs)}`;
+    }
     case "ensure_capture":
       return `const ${name} = ensure ${emitRef(value.ref, value.args, value.bareIdentifierArgs)}`;
     case "prompt_capture": {

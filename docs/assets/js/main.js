@@ -23,6 +23,7 @@
         "catch",
         "recover",
         "run",
+        "isolated",
         "prompt",
         "returns",
         "mock",
@@ -286,8 +287,18 @@
         }
 
         if (firstValue === "ensure" || firstValue === "run") {
-            if (significant[1] && significant[1].token.type === "identifier") {
-                annotated[significant[1].index].kind = "identifier";
+            var refAt = 1;
+            // Skip modifier keywords (async, isolated) to find the actual ref
+            while (
+                significant[refAt] &&
+                significant[refAt].token.type === "identifier" &&
+                (significant[refAt].token.value === "async" || significant[refAt].token.value === "isolated")
+            ) {
+                annotated[significant[refAt].index].kind = "keyword";
+                refAt += 1;
+            }
+            if (significant[refAt] && significant[refAt].token.type === "identifier") {
+                annotated[significant[refAt].index].kind = "identifier";
             }
         }
 

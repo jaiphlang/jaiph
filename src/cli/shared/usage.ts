@@ -55,9 +55,10 @@ export function printUsage(): void {
   );
 }
 
-export function parseArgs(args: string[]): { target?: string; raw?: boolean; positional: string[] } {
+export function parseArgs(args: string[]): { target?: string; raw?: boolean; entry?: string; positional: string[] } {
   let target: string | undefined;
   let raw: boolean | undefined;
+  let entry: string | undefined;
   const positional: string[] = [];
   for (let i = 0; i < args.length; i += 1) {
     if (args[i] === "--target") {
@@ -73,11 +74,20 @@ export function parseArgs(args: string[]): { target?: string; raw?: boolean; pos
       raw = true;
       continue;
     }
+    if (args[i] === "--entry") {
+      const val = args[i + 1];
+      if (!val) {
+        throw new Error("--entry requires a workflow name");
+      }
+      entry = val;
+      i += 1;
+      continue;
+    }
     if (args[i] === "--") {
       positional.push(...args.slice(i + 1));
       break;
     }
     positional.push(args[i]);
   }
-  return { target, raw, positional };
+  return { target, raw, entry, positional };
 }

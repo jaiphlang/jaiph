@@ -53,7 +53,7 @@ export interface MatchExprDef {
 
 export type ConstRhs =
   | { kind: "expr"; bashRhs: string; /** `const x = """..."""` — runtime dedents margin. */ tripleQuoted?: boolean }
-  | { kind: "run_capture"; ref: WorkflowRefDef; args?: string; bareIdentifierArgs?: string[] }
+  | { kind: "run_capture"; ref: WorkflowRefDef; args?: string; bareIdentifierArgs?: string[]; isolated?: boolean }
   | { kind: "ensure_capture"; ref: RuleRefDef; args?: string; bareIdentifierArgs?: string[] }
   | {
       kind: "prompt_capture";
@@ -141,6 +141,8 @@ export type WorkflowStepDef =
       captureName?: string;
       /** When set, execute asynchronously with implicit join before workflow completes. */
       async?: boolean;
+      /** When set, execute in an OS-level isolated container (Docker + fuse-overlayfs). */
+      isolated?: boolean;
       /** When set, catch failure and run recovery body once. */
       recover?:
         | { single: WorkflowStepDef; bindings: { failure: string } }

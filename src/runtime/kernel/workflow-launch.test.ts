@@ -11,7 +11,7 @@ test("buildRunModuleLaunch always uses node runner", () => {
   assert.equal(launch.args[1], "/tmp/meta.txt");
   assert.equal(launch.args[2], "/tmp/source.jh");
   assert.equal(launch.args[3], "/tmp/workflow.sh");
-  assert.equal(launch.args[4], "default");
+  assert.equal(launch.args[4], "entry");
   assert.equal(launch.args[5], "a");
 });
 

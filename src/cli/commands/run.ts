@@ -53,7 +53,7 @@ import {
 } from "../run/stderr-handler";
 
 export async function runWorkflow(rest: string[]): Promise<number> {
-  const { target, raw, positional } = parseArgs(rest);
+  const { target, raw, entry, positional } = parseArgs(rest);
   const input = positional[0];
   const runArgs = positional.slice(1);
   if (!input) {
@@ -70,7 +70,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
   }
 
   if (raw) {
-    return runWorkflowRaw(inputAbs, workspaceRoot, target, runArgs);
+    return runWorkflowRaw(inputAbs, workspaceRoot, target, runArgs, entry);
   }
 
   const hooksConfig = loadMergedHooks(workspaceRoot);
@@ -187,6 +187,7 @@ async function runWorkflowRaw(
   workspaceRoot: string,
   target: string | undefined,
   runArgs: string[],
+  entry?: string,
 ): Promise<number> {
   const mod = parsejaiph(readFileSync(inputAbs, "utf8"), inputAbs);
   const effectiveConfig = metadataToConfig(mod.metadata);
@@ -199,9 +200,10 @@ async function runWorkflowRaw(
     runtimeEnv.JAIPH_SCRIPTS = scriptsDir;
     const metaFile = join(outDir, `.jaiph-run-meta-${Date.now()}-${process.pid}.txt`);
 
+    const workflowName = entry ?? "default";
     const dummyBuiltPath = join(outDir, "entry.sh");
     const execResult = spawnRunProcess(
-      [metaFile, dummyBuiltPath, "default", ...runArgs],
+      [metaFile, dummyBuiltPath, workflowName, ...runArgs],
       { cwd: workspaceRoot, env: runtimeEnv, stdio: "inherit" },
     );
 

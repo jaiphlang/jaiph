@@ -14,63 +14,6 @@ Process rules:
 
 ***
 
-## Runtime — add `isolated` as a run-level primitive with OS-level isolation #dev-ready
-
-**Goal**
-Match the spec: `run isolated foo()` runs `foo` in a sandboxed execution context that genuinely isolates it from the host. Workspace-write isolation alone is **not acceptable** — see the lessons section above. The user-facing surface is one keyword: `isolated`. There is no opt-in/opt-out switch.
-
-**Scope**
-
-* Implement `run isolated ...` as a run-level primitive in the runtime and CLI launch path.
-* **The backend is the existing Docker + fuse-overlayfs implementation in `src/runtime/docker.ts`. Reuse it; do not write a new one.** That file already provides the overlay mount, capability drops (`--cap-drop ALL` + `SYS_ADMIN` only), `--security-opt no-new-privileges`, the credential env denylist, the host-path mount denylist, and the separate `:rw` run-artifacts directory. The work in this task is plumbing it as a per-call backend for `run isolated`, not implementing a new sandbox.
-* **No new backends, no `git worktree` layer.** `git worktree` is intentionally out of scope: it requires git in host and container, doesn't apply to non-git workspaces, and adds a per-call host-side lifecycle the overlay backend doesn't need. If diff cleanliness is a problem, fix it in `workspace.export_patch` (filter the diff), not by changing the backend.
-* **Banned alternatives** (do not implement; reject in review): `mkdtempSync` + `cpSync`, `cp -r`, "temporary directory copy," bare `git worktree add`, any new container backend (Podman, Firecracker, gVisor) — all out of scope for this task. The single backend is fuse-overlayfs in Docker, as already shipped.
-* The user surface is exactly one keyword: `isolated`. There is **no** `JAIPH_DOCKER_ENABLED`-style switch, no `--no-docker` flag, no `runtime.sandbox = false` knob. If the host cannot provide fuse-overlayfs in Docker, `run isolated` is a hard error at run time with an actionable message ("isolated execution requires fuse-overlayfs in Docker; install Docker / load the fuse module").
-* **Tightenings to the existing `src/runtime/docker.ts` code, required by this task:**
-  - **Remove the rsync / `cp -a` fallback chain** in the overlay script (currently lines ~336–376 of `src/runtime/docker.ts`) for the `run isolated` code path. Missing fuse-overlayfs is a hard error per the spec, not a quiet copy. Whether the existing whole-program Docker mode keeps the fallback is moot, because the `config cleanup` task deletes that path entirely.
-  - Wire the per-call invocation: each `run isolated foo()` invocation spawns a container, runs `foo` inside it, captures its return value (or exported artifacts) via the `:rw` run-artifacts mount, and tears down. Multiple `run async isolated × N` spawns N containers in parallel.
-  - Per-branch run-artifacts dir: each isolated call gets `.jaiph/runs/<run_id>/branches/<branch_id>/` (already the established convention), mounted at the existing `/jaiph/run` container path.
-* **Allowed configuration** (host-level only, never in `.jh`):
-  - container image name via `JAIPH_ISOLATED_IMAGE`, defaulting to the official GHCR image (the existing `runtime.docker_image` default carries over)
-  - optionally: container network policy and per-call timeout (the existing `runtime.docker_network` and `runtime.docker_timeout` carry over as host-level env)
-  - **not allowed**: any flag that disables isolation, falls back to a weaker backend, or makes isolation user-optional
-* Each isolated call gets:
-  - a writable workspace via fuse-overlayfs upper layer; host workspace mounted at `/jaiph/workspace-ro:ro` (already implemented), merged view at `/jaiph/workspace`
-  - a writable run-artifacts directory at `/jaiph/run` (already implemented)
-  - the credential env denylist already enumerated in `ENV_DENYLIST_PREFIXES` (already implemented; verify it still covers the spec's prefix list and add any missing)
-  - a separate PID namespace (Docker default; verify, do not assume)
-* Calls made *inside* an isolated body execute in the same container (no double-isolation overhead).
-* Enforce nested-isolation as a compile-time error **transitively**: walk the static call graph from the isolated callsite. If any reachable workflow contains another `run isolated`, fail with a clear error pointing at both call sites. Add a runtime guard as defense in depth: if `executeIsolatedRunRef` is invoked while already inside an isolated context (detected via an env sentinel like `JAIPH_BRANCH_ID`), fail loudly.
-
-**Required tests**
-
-* **Containment tests (e2e, must execute against a real backend; skip-with-explicit-error if backend unavailable)**:
-  - `isolated-cannot-write-host-workspace`: branch writes to a file under the coordinator workspace path; after the branch exits, the coordinator workspace is unchanged.
-  - `isolated-cannot-read-host-secret`: a sentinel file is placed at `$HOME/.jaiph-isolation-canary` containing a known string before the test; the branch attempts to read it and emit its contents; the test asserts the branch could not read the string.
-  - `isolated-cannot-kill-coordinator`: branch attempts `kill -9 $PPID` (or equivalent for the orchestrator's pid); the coordinator survives and the branch's attempt fails or is no-op.
-  - `isolated-env-denylist`: coordinator process has `AWS_SECRET_ACCESS_KEY=canary-value` set; the branch reads its env and emits it; the test asserts the value is not present.
-  - `isolated-writable-workspace`: branch writes to a file inside its designated workspace; the file is visible inside the branch but not at the corresponding host path.
-  - `isolated-export-survives-teardown`: branch creates a file in its run-artifacts directory (`workspace.export_patch` style); coordinator can read it after the branch exits.
-* **Composition tests**:
-  - `nested-isolated-direct-is-compile-error`: `run isolated A` where A directly contains `run isolated B`. Compile fails.
-  - `nested-isolated-transitive-is-compile-error`: `run isolated A` where A → B → C and C contains `run isolated D`. Compile fails. **This case must be in the test suite; the previous attempt only covered the direct case.**
-  - `nested-isolated-runtime-guard`: even if the static check is bypassed (e.g. via dynamic dispatch), the runtime fails when `executeIsolatedRunRef` runs inside an active isolated context.
-  - `isolated-non-isolated-inner-call-shares-context`: a non-isolated `run` inside an isolated body executes in the same sandboxed context (verified by inspecting environment, PID namespace, or filesystem identity).
-* **Backend availability**:
-  - `isolated-fails-without-backend`: with the backend disabled or unavailable, `run isolated` returns a clear error referencing how to install/start the backend. There is no silent fallback.
-
-**Acceptance criteria**
-
-* `run isolated ...` provides genuine OS-level isolation per the spec.
-* All six containment tests pass on CI against a real backend.
-* The user surface is exactly the `isolated` keyword. No env or config makes isolation optional or weaker.
-* Nested-isolation compile error fires transitively (not only on the immediate target). Runtime guard exists as defense in depth.
-* `mkdtempSync` + `cpSync` does not appear anywhere in the isolated execution path.
-* The fuse-overlayfs path in `src/runtime/docker.ts` is reused, not duplicated. No second sandbox implementation is introduced. No `git worktree` layer is introduced.
-* The rsync / `cp -a` fallback chain in the overlay script is removed for the `run isolated` path (or the whole script, if the `config cleanup` task already removed the whole-program Docker mode that depended on it).
-* User-facing docs describe `isolated` as the language contract; Docker + fuse-overlayfs is mentioned only as the v1 implementation backend and as a host requirement.
-* The docs-site Jaiph syntax highlighter (`docs/assets/js/main.js`) recognizes `isolated` as a keyword. Code blocks containing `run isolated foo()` render with `isolated` colored.
-
 ## Runtime — redesign `run async` around handles with transparent resolution, including `recover` composition #dev-ready
 
 **Goal**

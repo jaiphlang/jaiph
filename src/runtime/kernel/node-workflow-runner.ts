@@ -30,12 +30,21 @@ async function main(): Promise<number> {
   const workspaceRoot = process.env.JAIPH_WORKSPACE || undefined;
   const graph = buildRuntimeGraph(sourceFile, workspaceRoot);
   const runtime = new NodeWorkflowRuntime(graph, { env: process.env, cwd: process.cwd() });
-  const status = workflowName === "default" ? await runtime.runDefault(runArgs) : 1;
-  writeFileSync(
-    metaFile,
-    `status=${status}\nrun_dir=${runtime.getRunDir()}\nsummary_file=${runtime.getSummaryFile()}\n`,
-    "utf8",
-  );
+  let status: number;
+  let returnValue: string | undefined;
+  let output = "";
+  if (workflowName === "default") {
+    status = await runtime.runDefault(runArgs);
+  } else {
+    const result = await runtime.runNamedWorkflow(workflowName, runArgs);
+    status = result.status;
+    returnValue = result.returnValue;
+    output = result.output;
+  }
+  let meta = `status=${status}\nrun_dir=${runtime.getRunDir()}\nsummary_file=${runtime.getSummaryFile()}\n`;
+  if (returnValue !== undefined) meta += `return_value=${returnValue}\n`;
+  if (output) meta += `output=${output}\n`;
+  writeFileSync(metaFile, meta, "utf8");
   return status;
 }
 

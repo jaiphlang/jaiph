@@ -353,6 +353,53 @@ export function parseWorkflowBlock(
       continue;
     }
 
+    if (inner.startsWith("run async isolated ")) {
+      const runBody = inner.slice("run async isolated ".length).trim();
+      if (runBody.startsWith("`")) {
+        fail(filePath, "run isolated is not supported with inline scripts", innerNo, innerRaw.indexOf("run") + 1);
+      }
+      const call = parseCallRef(runBody);
+      if (!call) {
+        fail(filePath, "run async isolated must target a valid reference: run async isolated ref() — parentheses are required", innerNo);
+      }
+      rejectTrailingContent(filePath, innerNo, "run async isolated", call.rest);
+      workflow.steps.push({
+        type: "run",
+        workflow: {
+          value: call.ref,
+          loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
+        },
+        args: call.args,
+        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
+        async: true,
+        isolated: true,
+      });
+      continue;
+    }
+
+    if (inner.startsWith("run isolated ")) {
+      const runBody = inner.slice("run isolated ".length).trim();
+      if (runBody.startsWith("`")) {
+        fail(filePath, "run isolated is not supported with inline scripts", innerNo, innerRaw.indexOf("run") + 1);
+      }
+      const call = parseCallRef(runBody);
+      if (!call) {
+        fail(filePath, "run isolated must target a valid reference: run isolated ref() — parentheses are required", innerNo);
+      }
+      rejectTrailingContent(filePath, innerNo, "run isolated", call.rest);
+      workflow.steps.push({
+        type: "run",
+        workflow: {
+          value: call.ref,
+          loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
+        },
+        args: call.args,
+        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
+        isolated: true,
+      });
+      continue;
+    }
+
     if (inner.startsWith("run async ")) {
       const runBody = inner.slice("run async ".length).trim();
       if (runBody.startsWith("`")) {

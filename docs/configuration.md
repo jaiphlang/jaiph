@@ -177,6 +177,14 @@ These configure Docker sandboxing. Unlike agent and run keys, runtime keys are r
 | `runtime.docker_timeout` | integer | `300` | `JAIPH_DOCKER_TIMEOUT` | Timeout in seconds. Invalid or unparsable values fall back to the default. |
 | `runtime.workspace` | string[] | `[".:/jaiph/workspace:rw"]` | _(no env override)_ | Mount list. Only settable via in-file config or defaults. |
 
+**Per-call isolation (`run isolated`)** uses the existing Docker backend but has its own image override:
+
+| Env variable | Default | Description |
+|---|---|---|
+| `JAIPH_ISOLATED_IMAGE` | Same as `runtime.docker_image` | Container image for `run isolated` calls. Host-level only — not settable in `.jh` config. |
+
+`JAIPH_DOCKER_NETWORK` and `JAIPH_DOCKER_TIMEOUT` also apply to isolated containers. There is no config key or env var that disables isolation — `run isolated` always means OS-level isolation. See [Sandboxing — Per-call isolation](sandboxing.md#per-call-isolation-with-run-isolated).
+
 ## Precedence in detail
 
 ### Resolution order
@@ -330,6 +338,7 @@ Quick reference for all in-file keys and their environment variable equivalents:
 | `runtime.docker_network` | `JAIPH_DOCKER_NETWORK` |
 | `runtime.docker_timeout` | `JAIPH_DOCKER_TIMEOUT` |
 | `runtime.workspace` | _(no env override)_ |
+| _(per-call isolation)_ | `JAIPH_ISOLATED_IMAGE` |
 | `module.name` | _(no env override)_ |
 | `module.version` | _(no env override)_ |
 | `module.description` | _(no env override)_ |
