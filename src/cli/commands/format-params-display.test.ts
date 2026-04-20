@@ -125,6 +125,25 @@ test("buildStepDisplayParamPairs uses declared names when arity matches", () => 
   ]);
 });
 
+test("formatNamedParamsForDisplay does not produce backslash-quote escaping", () => {
+  const params: Array<[string, string]> = [
+    ["message", 'Found 3 issues in "auth" module'],
+  ];
+  const result = formatNamedParamsForDisplay(params);
+  assert.ok(!result.includes('\\"'), "no backslash-quote escaping in display output");
+  assert.ok(result.includes('"auth"'), "inner quotes pass through for readability");
+  assert.equal(result, ' (message="Found 3 issues in "auth" module")');
+});
+
+test("formatParamsForDisplay does not produce backslash-quote escaping", () => {
+  const params: Array<[string, string]> = [
+    ["message", 'Found 3 issues in "auth" module'],
+  ];
+  const result = formatParamsForDisplay(params);
+  assert.ok(!result.includes('\\"'), "no backslash-quote escaping in display output");
+  assert.ok(result.includes('"auth"'), "inner quotes pass through for readability");
+});
+
 test("buildStepDisplayParamPairs falls back to numeric or argN positional keys", () => {
   assert.deepEqual(buildStepDisplayParamPairs(["x"], undefined, { positionalStyle: "numeric" }), [["1", "x"]]);
   assert.deepEqual(buildStepDisplayParamPairs(["x"], [], { positionalStyle: "numeric" }), [["1", "x"]]);

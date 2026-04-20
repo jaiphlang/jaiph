@@ -228,12 +228,13 @@ test("formatStartLine: prompt preview escapes backslashes", () => {
   assert.ok(result.includes("\\\\"), "backslashes should be escaped");
 });
 
-test("formatStartLine: prompt preview escapes double quotes", () => {
+test("formatStartLine: prompt preview passes through double quotes", () => {
   const params: Array<[string, string]> = [
     ["prompt_text", 'say "hello"'],
   ];
   const result = formatStartLine("  ", "prompt", "prompt", false, params);
-  assert.ok(result.includes('\\"hello\\"'), "quotes should be escaped");
+  assert.ok(result.includes('"hello"'), "quotes should pass through");
+  assert.ok(!result.includes('\\"'), "no backslash-quote escaping");
 });
 
 test("formatStartLine: prompt preview escapes backslash before quote", () => {

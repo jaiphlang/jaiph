@@ -66,7 +66,7 @@ export function formatNamedParamsForDisplay(params: Array<[string, string]>, opt
     const normalized = normalizeParamValue(v);
     const visible =
       normalized.length > MAX_PARAM_VALUE_DISPLAY ? `${normalized.slice(0, MAX_PARAM_VALUE_DISPLAY)}...` : normalized;
-    const escaped = visible.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    const escaped = visible.replace(/\\/g, "\\\\");
     const isPositional = /^arg\d+$/.test(k) || /^[1-9]\d*$/.test(k);
     const key = allPositional && isPositional ? String(positionalSeq++) : displayKey(k);
     return `${key}="${escaped}"`;
@@ -91,7 +91,7 @@ export function formatParamsForDisplay(params: Array<[string, string]>, options?
     const visible =
       normalized.length > MAX_PARAM_VALUE_DISPLAY ? `${normalized.slice(0, MAX_PARAM_VALUE_DISPLAY)}...` : normalized;
     const needsQuotes = /[\s,]/.test(visible) || visible.includes('"');
-    const escaped = visible.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    const escaped = visible.replace(/\\/g, "\\\\");
     return needsQuotes ? `"${escaped}"` : visible;
   });
   let result = ` (${parts.join(", ")})`;
