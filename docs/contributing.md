@@ -60,6 +60,21 @@ For day-to-day work on the compiler and CLI you usually stay inside the clone: i
 
 Run a single Node test file after a build with e.g. `node --test dist/src/parse/parse-core.test.js`. The `dist/` paths mirror the source layout under `src/`.
 
+## Workspace hygiene
+
+The root `.gitignore` blocks common debug and temp directory patterns so they never reach version control:
+
+| Pattern | Purpose |
+|---------|---------|
+| `docker-*/` | Leftover Docker debug/experiment directories |
+| `nested-*/` | Nested-run debug directories |
+| `overlay-*/` | Overlay/fuse debug directories |
+| `local-*/` | Local debug directories |
+| `.tmp*/` | Temp build/debug directories |
+| `QUEUE.md.tmp.*` | Stale queue temp files |
+
+If you create throwaway directories during development, use one of these prefixes so they are automatically ignored. To track a file that matches a blocked pattern, use `git add -f`.
+
 ## Code philosophy
 
 Jaiph's codebase is maintained by both humans and AI agents. Code should be easy to read, navigate, and modify for both — which means the same thing: straightforward, flat, and explicit.
