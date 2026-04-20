@@ -1,0 +1,51 @@
+#!/usr/bin/env jaiph
+
+# Mixed workflow: regular host-side work + parallel isolated containers.
+# Deterministic (no prompts). Each isolated branch sleeps with periodic
+# stderr log lines, writes a file into /jaiph/run (host-mounted), and
+# returns the host-visible path on stdout.
+#
+# Run:   jaiph run examples/isolated_mix.jh
+# Cancel: Ctrl-C (containers should exit cleanly via --rm).
+
+script regular_work = ```
+  printf 'host-side work: %s\n' "$1" >&2
+  sleep 1
+  printf 'host-side work done: %s\n' "$1" >&2
+```
+
+script branch_work = ```
+  label="$1"
+  secs="$2"
+  out="/jaiph/run/branch_${label}.txt"
+  printf 'branch %s starting (sleep %ss)\n' "$label" "$secs" >&2
+  i=0
+  while [ "$i" -lt "$secs" ]; do
+    printf 'branch %s tick %d/%s\n' "$label" "$i" "$secs" >&2
+    sleep 1
+    i=$((i + 1))
+  done
+  printf 'branch %s done; writing %s\n' "$label" "$out" >&2
+  printf 'hello from %s\n' "$label" > "$out"
+  printf '%s' "$out"
+```
+
+workflow branch(label, secs) {
+  return run branch_work(label, secs)
+}
+
+workflow default() {
+  run regular_work("before-branches")
+
+  const a = run async isolated branch("A", "6")
+  const b = run async isolated branch("B", "6")
+  const c = run async isolated branch("C", "6")
+
+  run regular_work("between-branches-and-join")
+
+  log "Branch A returned: ${a}"
+  log "Branch B returned: ${b}"
+  log "Branch C returned: ${c}"
+
+  run regular_work("after-branches")
+}
