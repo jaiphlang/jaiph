@@ -81,17 +81,48 @@ const DOCKERFILE_IMAGE_TAG = "jaiph-runtime:latest";
 
 /**
  * Build a Docker image from a Dockerfile and tag it.
+ *
+ * Skips the build entirely when an image with `tag` already exists locally.
+ * The runtime has no way to know whether the existing image is "fresh enough"
+ * for the user's intent (Dockerfile contents alone are insufficient: layers
+ * like `RUN jaiph use nightly` depend on remote state that Docker's layer
+ * cache cannot detect changes in). Re-tagging on every call would silently
+ * overwrite manually-built images (e.g. one the user just rebuilt with
+ * `--no-cache`) with a stale-cached version. So: build only when the tag is
+ * absent, otherwise trust the existing image. Users who need a refresh run
+ * `docker build` (or `docker rmi <tag>`) themselves.
+ *
+ * Build output is captured (not inherited) so it never corrupts the host TTY's
+ * live progress frame. On failure, the captured output is included in the
+ * thrown error so the user can diagnose.
+ *
  * Throws on build failure.
  */
 export function buildImageFromDockerfile(dockerfilePath: string, tag: string = DOCKERFILE_IMAGE_TAG): string {
+  try {
+    execSync(`docker image inspect ${tag}`, { stdio: "ignore", timeout: 30_000 });
+    return tag;
+  } catch {
+    // Image absent — fall through to build
+  }
   const contextDir = dirname(dockerfilePath);
   try {
-    execSync(`docker build -t ${tag} -f ${dockerfilePath} ${contextDir}`, {
-      stdio: "inherit",
+    // --pull --no-cache: this branch only fires when the image is absent
+    // (the existence check above short-circuits otherwise), so any RUN layers
+    // that depend on remote state (e.g. `RUN jaiph use nightly`) must reflect
+    // current remote state, not a months-old cached layer. Users who want a
+    // refresh delete the image (`docker rmi`) and the next run rebuilds clean.
+    execSync(`docker build --pull --no-cache -t ${tag} -f ${dockerfilePath} ${contextDir}`, {
+      stdio: ["ignore", "pipe", "pipe"],
       timeout: 600_000,
     });
-  } catch {
-    throw new Error(`E_DOCKER_BUILD failed to build image from "${dockerfilePath}"`);
+  } catch (err: unknown) {
+    const stdout = (err as { stdout?: Buffer }).stdout?.toString() ?? "";
+    const stderr = (err as { stderr?: Buffer }).stderr?.toString() ?? "";
+    const tail = (stdout + stderr).split("\n").slice(-40).join("\n");
+    throw new Error(
+      `E_DOCKER_BUILD failed to build image from "${dockerfilePath}"\n${tail}`,
+    );
   }
   return tag;
 }
