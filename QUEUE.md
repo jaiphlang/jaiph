@@ -13,40 +13,6 @@ Process rules:
 
 ***
 
-## Cleanup — delete top-level debug cruft and harden `.gitignore` #dev-ready
-
-**Goal**
-The repo root contains 22+ leftover debug directories from an abandoned per-call isolated experiment (`docker-nested-arg.*`, `docker-nested-clean.*`, `overlay-warn.*`, `nested-run-arg.*`, `local-nested-arg.*`, `overlay-manual.*`, `docker-live-debug.*`), plus stale `.tmp`, `.tmp-build`, `.tmp-debug`, `.tmp_run_debug`, `QUEUE.md.tmp.4951`, `safe_name`, top-level `lib/`, top-level `run/`. None are in `.gitignore`. Fix that, in one pass, so the workspace is readable at a glance and these don't return.
-
-**Scope**
-
-* Delete every leftover debug directory at the repo root matching `docker-*/`, `nested-*/`, `overlay-*/`, `local-*/`, `.tmp*/`. Verify with `git ls-files <pattern>` first that they are not tracked (they should not be).
-* Investigate three suspicious top-level paths: `safe_name`, `lib/`, `run/`. The default disposition is **delete**. Only keep one if you can identify a live consumer in the source tree (search with `rg`/`grep` for the path string). If a consumer exists, document it inline next to the deletion decision.
-* Delete tracked cruft files: `safe_name` and `QUEUE.md.tmp.4951`. Verify they are tracked first (`git ls-files`); use `git rm` rather than `rm` for tracked paths.
-* Add patterns to `.gitignore` so they cannot return without a deliberate override:
-  - `docker-*/`
-  - `nested-*/`
-  - `overlay-*/`
-  - `local-*/`
-  - `.tmp*/`
-  - `QUEUE.md.tmp.*`
-* Sanity-check: after the cleanup, `ls` at the repo root should show only documented project directories. No `.cidfile`, no `.pid`, no random temp dir names.
-
-**Non-goals**
-
-* Do not touch `.jaiph/runs/`, `dist/`, `node_modules/` — already in `.gitignore` and load-bearing.
-* Do not delete the `docker/` directory (singular, no suffix) — that is a different, intentional location.
-* No code changes; this task is filesystem hygiene only.
-
-**Acceptance criteria**
-
-* Repo root listing contains zero `docker-*`, `nested-*`, `overlay-*`, `local-*`, or `.tmp*` directories after the change.
-* `.gitignore` contains the patterns listed above; `git status` is clean immediately after deletion.
-* Disposition of `safe_name`, `lib/`, `run/` is recorded in the commit message (deleted, kept-and-why).
-* A second `npm run build && npm test` after the cleanup passes (proves nothing important was removed).
-
-***
-
 ## Cleanup — remove dead per-call-isolated leftovers from `src/runtime/docker.ts` #dev-ready
 
 **Goal**
