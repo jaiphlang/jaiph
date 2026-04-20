@@ -266,15 +266,10 @@ export function registerTTYSubscriber(emitter: RunEmitter, ctx: TTYContext): voi
   });
 
   emitter.on("stderr_line", (data) => {
-    if (ctx.isTTY && ctx.runningInterval !== undefined) {
-      process.stdout.write("\r\u001b[K\u001b[1A\r\u001b[K");
-    }
-    if (!ctx.isTTY) {
+    if (ctx.isTTY) {
+      writeTTYLine(data.line, ctx, "single");
+    } else {
       process.stderr.write(`${data.line}\n`);
-    }
-    if (ctx.isTTY && ctx.runningInterval !== undefined) {
-      const elapsedSec = (Date.now() - ctx.startedAt) / 1000;
-      process.stdout.write(formatRunningBottomLine("default", elapsedSec));
     }
   });
 }
