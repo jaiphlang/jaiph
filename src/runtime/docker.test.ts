@@ -11,8 +11,6 @@ import {
   overlayMountPath,
   resolveDockerHostRunsRoot,
   writeOverlayScript,
-  resolveImage,
-  buildImageFromDockerfile,
   verifyImageHasJaiph,
   isEnvDenied,
   ENV_DENYLIST_PREFIXES,
@@ -495,43 +493,7 @@ test("GHCR_IMAGE_REPO: points to official registry", () => {
 });
 
 // ---------------------------------------------------------------------------
-// resolveImage
-// ---------------------------------------------------------------------------
-
-test("resolveImage: uses Dockerfile when imageExplicit is false and Dockerfile exists", () => {
-  const tmpDir = mkdtempSync(join(tmpdir(), "jaiph-resolve-image-"));
-  try {
-    mkdirSync(join(tmpDir, ".jaiph"), { recursive: true });
-    writeFileSync(join(tmpDir, ".jaiph", "Dockerfile"), "FROM ubuntu:latest\n");
-    const dockerfilePath = join(tmpDir, ".jaiph", "Dockerfile");
-    assert.ok(existsSync(dockerfilePath));
-  } finally {
-    rmSync(tmpDir, { recursive: true, force: true });
-  }
-});
-
-test("resolveImage: skips Dockerfile when imageExplicit is true", () => {
-  const tmpDir = mkdtempSync(join(tmpdir(), "jaiph-resolve-image-"));
-  try {
-    mkdirSync(join(tmpDir, ".jaiph"), { recursive: true });
-    writeFileSync(join(tmpDir, ".jaiph", "Dockerfile"), "FROM ubuntu:latest\n");
-    const config: DockerRunConfig = {
-      enabled: true,
-      image: "custom:image",
-      imageExplicit: true,
-      network: "default",
-      timeout: 300,
-      mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
-    };
-    assert.ok(existsSync(join(tmpDir, ".jaiph", "Dockerfile")));
-    assert.equal(config.imageExplicit, true);
-  } finally {
-    rmSync(tmpDir, { recursive: true, force: true });
-  }
-});
-
-// ---------------------------------------------------------------------------
-// Strict contract: no auto-build, no npm pack bootstrap
+// Strict contract: no on-run workspace Dockerfile build, no npm pack bootstrap
 // ---------------------------------------------------------------------------
 
 test("docker.ts: no auto-build or npm-pack bootstrap code", () => {
@@ -541,6 +503,12 @@ test("docker.ts: no auto-build or npm-pack bootstrap code", () => {
   assert.ok(!src.includes("jaiph-runtime-auto"), "docker.ts must not reference auto-derived image tag");
   assert.ok(!src.includes("ensureLocalRuntimeImage"), "docker.ts must not contain ensureLocalRuntimeImage");
   assert.ok(!src.includes("buildRuntimeImageFromLocalPackage"), "docker.ts must not contain buildRuntimeImageFromLocalPackage");
+  assert.ok(
+    /export function resolveImage\(config: DockerRunConfig\): string \{[\s\S]*?pullImageIfNeeded\(image\);[\s\S]*?verifyImageHasJaiph\(image\);/.test(
+      src,
+    ),
+    "resolveImage must pull and verify config.image only (no workspace Dockerfile build)",
+  );
 });
 
 test("verifyImageHasJaiph: throws E_DOCKER_NO_JAIPH with guidance for missing jaiph", () => {
