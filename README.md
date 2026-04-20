@@ -1,6 +1,6 @@
 # ![Jaiph](docs/logo.png)
 
-[jaiph.org](https://jaiph.org) · [Getting Started](docs/getting-started.md) · [Setup](docs/setup.md) · [Libraries](docs/libraries.md) · [Grammar](docs/grammar.md) · [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Testing](docs/testing.md) · [Hooks](docs/hooks.md) · [Inbox & Dispatch](docs/inbox.md) · [Sandboxing](docs/sandboxing.md) · [Runtime artifacts](docs/artifacts.md) · [Architecture](docs/architecture.md) · [Contributing](docs/contributing.md)
+[jaiph.org](https://jaiph.org) · [Getting Started](docs/getting-started.md) · [Setup](docs/setup.md) · [Libraries](docs/libraries.md) · [Grammar](docs/grammar.md) · [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Testing](docs/testing.md) · [Hooks](docs/hooks.md) · [Inbox & Dispatch](docs/inbox.md) · [Sandboxing](docs/sandboxing.md) · [Runtime artifacts](docs/artifacts.md) · [Async Handles](docs/spec-async-handles.md) · [Architecture](docs/architecture.md) · [Contributing](docs/contributing.md)
 
 ---
 

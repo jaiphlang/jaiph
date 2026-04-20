@@ -501,4 +501,39 @@ describe("emitModule", () => {
     ].join("\n");
     assert.equal(roundTrip(source), source);
   });
+
+  it("round-trips const capture with run async", () => {
+    const source = [
+      "workflow default() {",
+      "  const h = run async foo()",
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
+
+  it("round-trips run async with recover block", () => {
+    const source = [
+      "workflow default() {",
+      "  run async foo() recover (err) {",
+      '    log "repair"',
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
+
+  it("round-trips run async with multi-line recover block", () => {
+    const source = [
+      "workflow default() {",
+      "  run async foo() recover (err) {",
+      '    log "repairing"',
+      "    run fix_it()",
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
 });

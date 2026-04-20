@@ -766,8 +766,10 @@ function emitConstStep(name: string, value: ConstRhs): string {
         return `const ${name} = """`;
       }
       return `const ${name} = ${value.bashRhs}`;
-    case "run_capture":
-      return `const ${name} = run ${emitRef(value.ref, value.args, value.bareIdentifierArgs)}`;
+    case "run_capture": {
+      const asyncMod = value.async ? "async " : "";
+      return `const ${name} = run ${asyncMod}${emitRef(value.ref, value.args, value.bareIdentifierArgs)}`;
+    }
     case "ensure_capture":
       return `const ${name} = ensure ${emitRef(value.ref, value.args, value.bareIdentifierArgs)}`;
     case "prompt_capture": {
