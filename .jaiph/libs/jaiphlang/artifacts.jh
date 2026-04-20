@@ -1,0 +1,36 @@
+#!/usr/bin/env jaiph
+
+#
+# Artifact publishing for Jaiph workflows.
+# Copies files from the workspace into ${JAIPH_ARTIFACTS_DIR} so they
+# survive sandbox teardown and are readable on the host at
+# .jaiph/runs/<run_id>/artifacts/.
+#
+# Usage:
+#   import "jaiphlang/artifacts" as artifacts
+#
+#   workflow default() {
+#     run artifacts.save("./build/output.bin", "build-output.bin")
+#     run artifacts.save_patch("snapshot.patch")
+#   }
+#
+import script "./artifacts.sh" as artifacts
+
+# Copies the file at `local_path` into the artifacts directory under `name`.
+# Returns the absolute path of the saved artifact.
+export workflow save(local_path, name) {
+  return run artifacts("save", local_path, name)
+}
+
+# Runs `git diff` (working tree vs HEAD, excluding .jaiph/) and writes
+# the patch to the artifacts directory under `name`.
+# Returns the absolute path of the saved patch file.
+export workflow save_patch(name) {
+  return run artifacts("save_patch", name)
+}
+
+# Applies a patch file to the current workspace via `git apply`.
+# Useful for replaying artifacts across runs.
+export workflow apply_patch(path) {
+  run artifacts("apply_patch", path)
+}

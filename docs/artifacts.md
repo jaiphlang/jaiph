@@ -19,6 +19,7 @@ The runtime uses a UTC-dated hierarchy. Each run gets its own folder: date, then
     <HH-MM-SS>-<source-basename>/       # UTC time + JAIPH_SOURCE_FILE or entry basename
       000001-module__step.out          # stdout capture per step (seq-prefixed)
       000001-module__step.err          # stderr capture (when non-empty)
+      artifacts/                       # user-published artifacts (via jaiphlang/artifacts lib)
       inbox/                           # inbox message files (when channels are used)
       .seq                             # step-sequence counter (kernel/seq-alloc.ts)
       run_summary.jsonl                # durable event timeline
@@ -33,6 +34,7 @@ Sequence prefixes are **monotonic and unique** per run (allocated in the kernel)
 - **`run_summary.jsonl`** — Append-only JSONL timeline: workflow boundaries, step start/end, structured log lines, inbox-related events. Useful for tooling and post-run analysis.
 - **`inbox/`** — When you use channels, message payloads can be reflected as files under the run for inspection (see [Inbox & Dispatch](inbox.md)).
 - **`.seq`** — Internal counter backing the numeric prefixes; you normally do not edit it.
+- **`artifacts/`** — User-published files created by the `jaiphlang/artifacts` library. The runtime creates this directory before the first workflow step runs and exposes its path via `JAIPH_ARTIFACTS_DIR`. Files written here survive sandbox teardown because the directory is on the host filesystem (mapped via the existing `/jaiph/run` mount in Docker mode). See [Libraries — `jaiphlang/artifacts`](libraries.md#jaiphlangartifacts--publishing-files-out-of-the-sandbox).
 - **`workspace.patch`** — (Docker runs only) A `git diff --binary` patch capturing all workspace modifications made during the run. Generated automatically during runtime teardown when Docker sandboxing is enabled and the workspace has changes. The patch is sufficient to review or `git apply` on the host. Omitted when there are no workspace changes. See [Sandboxing — Workspace patch export](sandboxing.md#runtime-behavior).
 
 ## Keeping runs out of git

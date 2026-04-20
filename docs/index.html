@@ -480,6 +480,11 @@ Jaiph: Running async.jh
                     executable — a shell script, a Python wrapper, or your own CLI tool — and Jaiph will
                     pipe the prompt via stdin and capture raw stdout as the response. No JSON stream
                     protocol required; just read stdin and print your answer.</p>
+                <p><strong>Artifacts library.</strong> Publish files from inside the sandbox to a host-readable
+                    location with the built-in <code>jaiphlang/artifacts</code> library. <code>artifacts.save</code>
+                    copies a file, <code>artifacts.save_patch</code> exports a git diff, and
+                    <code>artifacts.apply_patch</code> replays it. Works identically in Docker and on the host.
+                    See <a href="libraries#jaiphlangartifacts--publishing-files-out-of-the-sandbox">Libraries</a>.</p>
                 <p><strong>Configuration.</strong> Control behavior with <code>config { ... }</code> blocks
                     at the module level or inside individual workflows for per-workflow overrides, plus environment
                     variables (env wins precedence). See <a href="configuration">Configuration</a> and

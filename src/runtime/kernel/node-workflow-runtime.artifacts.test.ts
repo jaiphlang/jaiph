@@ -452,6 +452,64 @@ test("NodeWorkflowRuntime: prompt STEP_START params include named vars reference
   }
 });
 
+test("NodeWorkflowRuntime: JAIPH_ARTIFACTS_DIR is set and points at writable artifacts/ subdir", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-node-wf-artifacts-dir-"));
+  try {
+    const jh = join(root, "artifacts_env.jh");
+    writeFileSync(jh, 'workflow default() {\n  log "ok"\n}\n');
+
+    const graph = buildRuntimeGraph(jh);
+    const runsDir = join(root, ".jaiph", "runs");
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      JAIPH_TEST_MODE: "1",
+      JAIPH_RUNS_DIR: runsDir,
+    };
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });
+    const runDir = runtime.getRunDir();
+    const artifactsDir = env.JAIPH_ARTIFACTS_DIR;
+
+    // JAIPH_ARTIFACTS_DIR is set and points at <runDir>/artifacts
+    assert.ok(artifactsDir, "JAIPH_ARTIFACTS_DIR should be set");
+    assert.equal(artifactsDir, join(runDir, "artifacts"));
+
+    // The directory exists before any workflow step runs
+    assert.ok(existsSync(artifactsDir!), "artifacts dir should exist on disk");
+
+    // It is writable
+    const probe = join(artifactsDir!, "probe.txt");
+    writeFileSync(probe, "test");
+    assert.equal(readFileSync(probe, "utf8"), "test");
+
+    runtime.stopHeartbeat();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("NodeWorkflowRuntime: JAIPH_ARTIFACTS_DIR resolves under .jaiph/runs when JAIPH_RUNS_DIR is unset", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-node-wf-artifacts-default-"));
+  try {
+    const jh = join(root, "artifacts_default.jh");
+    writeFileSync(jh, 'workflow default() {\n  log "ok"\n}\n');
+
+    const graph = buildRuntimeGraph(jh);
+    const env: NodeJS.ProcessEnv = { ...process.env, JAIPH_TEST_MODE: "1" };
+    delete env.JAIPH_RUNS_DIR;
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });
+    const artifactsDir = env.JAIPH_ARTIFACTS_DIR;
+
+    assert.ok(artifactsDir, "JAIPH_ARTIFACTS_DIR should be set");
+    assert.ok(artifactsDir!.includes(join(".jaiph", "runs")), "should be under .jaiph/runs");
+    assert.ok(artifactsDir!.endsWith("/artifacts"), "should end with /artifacts");
+    assert.ok(existsSync(artifactsDir!), "artifacts dir should exist");
+
+    runtime.stopHeartbeat();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("NodeWorkflowRuntime: heartbeat file created at construction, removed on stop", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-node-wf-heartbeat-"));
   try {

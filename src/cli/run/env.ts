@@ -72,6 +72,7 @@ export function resolveRuntimeEnv(
   delete env.BASH_ENV;
   delete env.JAIPH_META_FILE;
   delete env.JAIPH_RUN_DIR;
+  delete env.JAIPH_ARTIFACTS_DIR;
   delete env.JAIPH_PRECEDING_FILES;
   delete env.JAIPH_RUN_SUMMARY_FILE;
   // A parent shell may export JAIPH_SCRIPTS for its own module (e.g. nested `jaiph run` → npm → tests).

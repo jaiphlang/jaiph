@@ -344,6 +344,8 @@ workflow default() {
 }
 ```
 
+The runtime also sets `JAIPH_ARTIFACTS_DIR` — the absolute path to the writable artifacts directory for the current run (`.jaiph/runs/<run_id>/artifacts/` on the host, `/jaiph/run/artifacts` inside the Docker sandbox). The `jaiphlang/artifacts` library reads this variable; you can also use it directly in scripts. See [Libraries — `jaiphlang/artifacts`](libraries.md#jaiphlangartifacts--publishing-files-out-of-the-sandbox).
+
 `JAIPH_DOCKER_*` variables are **not** populated from in-file `runtime.*` inside the workflow runner process. Docker is configured when the CLI spawns the runner (or container). If you need Docker-related variables inside a `script` step, export them yourself or inherit them from the parent shell.
 
 ## Created by `jaiph init`
