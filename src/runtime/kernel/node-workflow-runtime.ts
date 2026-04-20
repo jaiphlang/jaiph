@@ -1153,6 +1153,28 @@ export class NodeWorkflowRuntime {
           pendingAsync.push({ ref: step.workflow.value, promise });
           continue;
         }
+        if (step.recoverLoop) {
+          const limit = this.resolveRecoverLimit(scope.filePath);
+          const loopSteps = "single" in step.recoverLoop ? [step.recoverLoop.single] : step.recoverLoop.block;
+          let lastResult = await this.executeRunRef(scope, step.workflow.value, step.args ?? "");
+          let attempt = 1;
+          while (lastResult.status !== 0 && attempt <= limit) {
+            const loopVars = new Map(scope.vars);
+            loopVars.set(step.recoverLoop.bindings.failure, `${lastResult.output}${lastResult.error}`);
+            const rr = await this.executeSteps({ ...scope, vars: loopVars }, loopSteps);
+            if (rr.status !== 0 || rr.returnValue !== undefined) return this.mergeStepResult(accOut, accErr, rr);
+            lastResult = await this.executeRunRef(scope, step.workflow.value, step.args ?? "");
+            attempt += 1;
+          }
+          if (lastResult.status === 0) {
+            if (step.captureName) {
+              scope.vars.set(step.captureName, lastResult.returnValue ?? lastResult.output.trim());
+            }
+          } else {
+            return this.mergeStepResult(accOut, accErr, lastResult);
+          }
+          continue;
+        }
         const runResult = await this.executeRunRef(scope, step.workflow.value, step.args ?? "");
         if (runResult.status === 0) {
           if (step.captureName) {
@@ -1587,6 +1609,11 @@ export class NodeWorkflowRuntime {
     apply(moduleMeta);
     apply(workflowMeta);
     return nextEnv;
+  }
+
+  private resolveRecoverLimit(filePath: string): number {
+    const moduleMeta = this.graph.modules.get(filePath)?.ast.metadata;
+    return moduleMeta?.run?.recoverLimit ?? 10;
   }
 
   private async executeManagedStep(

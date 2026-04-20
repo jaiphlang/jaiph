@@ -2425,3 +2425,157 @@ test("walkTestFiles discovers *.test.jh in directory", () => {
   }
 });
 
+// --- recover loop semantics ---
+
+test("recover: success on first attempt skips recover body", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-recover-pass-"));
+  try {
+    writeFileSync(
+      join(root, "main.jh"),
+      [
+        "script ok_impl = `echo ok`",
+        "workflow ok() {",
+        "  run ok_impl()",
+        "}",
+        "workflow default() {",
+        '  run ok() recover(err) {',
+        '    log "should not run"',
+        '  }',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const r = spawnSync("node", [cliPath, "run", join(root, "main.jh")], {
+      encoding: "utf8",
+      cwd: root,
+      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+    });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /PASS/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("recover: one repair loop before success", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-recover-repair-"));
+  try {
+    // Script that fails unless a marker file exists (created by the recover body)
+    writeFileSync(
+      join(root, "main.jh"),
+      [
+        "script check = `test -f .marker`",
+        "workflow check_wf() {",
+        "  run check()",
+        "}",
+        "script fix_impl = `touch .marker`",
+        "workflow fix() {",
+        "  run fix_impl()",
+        "}",
+        "workflow default() {",
+        "  run check_wf() recover(err) {",
+        "    run fix()",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const r = spawnSync("node", [cliPath, "run", join(root, "main.jh")], {
+      encoding: "utf8",
+      cwd: root,
+      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+    });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /PASS/);
+    assert.ok(existsSync(join(root, ".marker")), "repair body should have created marker");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("recover: retry limit exhaustion fails the workflow", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-recover-exhaust-"));
+  try {
+    writeFileSync(
+      join(root, "main.jh"),
+      [
+        "config {",
+        "  run.recover_limit = 2",
+        "}",
+        "",
+        "script always_fail = `exit 1`",
+        "workflow failing() {",
+        "  run always_fail()",
+        "}",
+        "workflow default() {",
+        '  run failing() recover(err) {',
+        '    log "repair attempt"',
+        '  }',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const r = spawnSync("node", [cliPath, "run", join(root, "main.jh")], {
+      encoding: "utf8",
+      cwd: root,
+      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+    });
+    assert.notEqual(r.status, 0, "should fail after retry limit exhausted");
+    const combined = r.stdout + r.stderr;
+    assert.match(combined, /FAIL/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("recover: retry limit configurable via config", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-recover-limit-"));
+  try {
+    // Counter file incremented by recover body; check script reads and compares.
+    writeFileSync(join(root, ".counter"), "0");
+    writeFileSync(
+      join(root, "main.jh"),
+      [
+        "config {",
+        "  run.recover_limit = 3",
+        "}",
+        "",
+        "script count_impl = ```",
+        'count=$(cat .counter)',
+        'if [ "$count" -ge 3 ]; then exit 0; fi',
+        "exit 1",
+        "```",
+        "workflow attempt_wf() {",
+        "  run count_impl()",
+        "}",
+        "script bump_impl = ```",
+        'count=$(cat .counter)',
+        'echo $(( count + 1 )) > .counter',
+        "```",
+        "workflow bump() {",
+        "  run bump_impl()",
+        "}",
+        "workflow default() {",
+        "  run attempt_wf() recover(err) {",
+        "    run bump()",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const cliPath = join(process.cwd(), "dist/src/cli.js");
+    const r = spawnSync("node", [cliPath, "run", join(root, "main.jh")], {
+      encoding: "utf8",
+      cwd: root,
+      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+    });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /PASS/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+

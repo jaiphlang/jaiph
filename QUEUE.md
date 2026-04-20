@@ -13,45 +13,6 @@ Process rules:
 
 ***
 
-## Language/Runtime — add `recover` loop semantics for non-isolated `run` #dev-ready
-
-**Goal**
-Add `recover` as a first-class repair-and-retry primitive distinct from `catch`. Ship for non-isolated, non-async `run` first. Async composition lands in the next task, not here.
-
-**Scope**
-
-* Keep existing `catch` behavior as one-attempt try/catch.
-* Add:
-
-  ```jh
-  run sth() recover(err) {
-    ...
-  }
-  ```
-
-  with loop semantics: try, bind failure, run repair block, retry, stop on success or retry-limit exhaustion.
-* Add a small explicit retry limit (default 10) with config override.
-* Keep the runtime behavior simple and observable; do not introduce speculative control-flow abstractions.
-
-**Required tests**
-
-* Parser / formatter / validation coverage for `recover`.
-* Runtime tests for:
-  - success on first attempt
-  - one or more repair loops before success
-  - retry limit exhaustion
-  - retry limit configured via `config`
-* At least one acceptance test using `recover` to repair and retry a failing run.
-
-**Acceptance criteria**
-
-* `recover` is distinct from `catch`.
-* The retry limit is explicit and configurable.
-* Tests prove loop behavior and limit handling.
-* The docs-site Jaiph syntax highlighter (`docs/assets/js/main.js`, the `STATEMENT_KEYWORDS` set and any keyword-flow special cases) recognizes `recover` as a keyword. Any `.jh` code block on the docs site that uses `recover` renders with the keyword colored.
-
-***
-
 ## Runtime — spec and implement `Handle<T>` for `run async`, including `recover` composition #dev-ready
 
 **Goal**

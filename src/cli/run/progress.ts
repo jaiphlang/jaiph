@@ -81,7 +81,12 @@ export function collectWorkflowChildren(
       const arr: Array<{ label: string; nested?: string; stepFunc?: string }> = [
         { label: `${asyncPrefix}workflow ${wf}`, nested: wf, stepFunc },
       ];
-      if (s.recover) {
+      if (s.recoverLoop) {
+        const steps = "single" in s.recoverLoop ? [s.recoverLoop.single] : s.recoverLoop.block;
+        for (const r of steps) {
+          arr.push(...stepToItems(r));
+        }
+      } else if (s.recover) {
         const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
         for (const r of steps) {
           arr.push(...stepToItems(r));

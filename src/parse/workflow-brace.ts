@@ -11,7 +11,7 @@ import {
 import { parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 import { parseConstRhs } from "./const-rhs";
 import { parseAnonymousInlineScript } from "./inline-script";
-import { parseEnsureStep, parseRunCatchStep } from "./steps";
+import { parseEnsureStep, parseRunCatchStep, parseRunRecoverStep } from "./steps";
 import { parsePromptStep } from "./prompt";
 import { parseSendRhs } from "./send-rhs";
 import { parseMatchExpr } from "./match";
@@ -253,6 +253,11 @@ export function parseBlockStatement(
     }
     if (runBody.startsWith("script(") || runBody.startsWith("script (")) {
       fail(filePath, 'inline script syntax has changed: use run `body`(args) instead of run script(args) "body"', innerNo);
+    }
+    // Check for run ... recover (loop semantics)
+    const recoverResult = parseRunRecoverStep(filePath, lines, idx, innerNo, innerRaw, runBody);
+    if (recoverResult) {
+      return { step: recoverResult.step, nextIdx: recoverResult.nextIdx + 1 };
     }
     // Check for run ... catch
     const catchResult = parseRunCatchStep(filePath, lines, idx, innerNo, innerRaw, runBody);

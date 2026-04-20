@@ -12,6 +12,7 @@ const ALLOWED_KEYS = new Set([
   "run.logs_dir",
   "run.debug",
   "run.inbox_parallel",
+  "run.recover_limit",
   "runtime.docker_enabled",
   "runtime.docker_image",
   "runtime.docker_network",
@@ -33,6 +34,7 @@ const KEY_TYPES: Record<string, "string" | "boolean" | "number" | "string[]"> = 
   "run.logs_dir": "string",
   "run.debug": "boolean",
   "run.inbox_parallel": "boolean",
+  "run.recover_limit": "number",
   "runtime.docker_enabled": "boolean",
   "runtime.docker_image": "string",
   "runtime.docker_network": "string",
@@ -203,6 +205,11 @@ function assignConfigKey(
       out.run = {};
     }
     out.run.inboxParallel = value as boolean;
+  } else if (key === "run.recover_limit") {
+    if (!out.run) {
+      out.run = {};
+    }
+    out.run.recoverLimit = value as number;
   } else if (key === "runtime.docker_enabled") {
     if (!out.runtime) {
       out.runtime = {};
