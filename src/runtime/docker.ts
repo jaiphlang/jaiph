@@ -1,5 +1,5 @@
 import { execFileSync, execSync, spawn, ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname, relative } from "node:path";
 import type { RuntimeConfig } from "../types";
@@ -281,26 +281,17 @@ export function verifyImageHasJaiph(image: string): void {
 /**
  * Resolve the Docker image to use.
  *
- * When the image was not explicitly configured (`imageExplicit === false`),
- * checks for `.jaiph/Dockerfile` in the workspace root. If present, builds
- * from it and verifies jaiph is present. Otherwise uses the configured
- * (default) image — the official GHCR runtime image — and pulls if needed.
+ * Always uses `config.image` (from env, in-file `runtime.docker_image`, or the
+ * default `ghcr.io/jaiphlang/jaiph-runtime:<version>`). Pulls from the registry
+ * if the image is not present locally. Does not build from `.jaiph/Dockerfile`;
+ * use that file to build/push a custom image and set `runtime.docker_image` or
+ * `JAIPH_DOCKER_IMAGE` to reference it.
  *
- * All images are verified to contain `jaiph` before use. If the image
- * lacks jaiph, the run fails immediately with guidance.
+ * Verifies that `jaiph` exists in the image before use (`E_DOCKER_NO_JAIPH`).
  */
-export function resolveImage(config: DockerRunConfig, workspaceRoot: string): string {
-  let image = config.image;
-  if (!config.imageExplicit) {
-    const dockerfilePath = join(workspaceRoot, ".jaiph", "Dockerfile");
-    if (existsSync(dockerfilePath)) {
-      image = buildImageFromDockerfile(dockerfilePath);
-    } else {
-      pullImageIfNeeded(image);
-    }
-  } else {
-    pullImageIfNeeded(image);
-  }
+export function resolveImage(config: DockerRunConfig): string {
+  const image = config.image;
+  pullImageIfNeeded(image);
   verifyImageHasJaiph(image);
   return image;
 }
@@ -663,7 +654,7 @@ export interface DockerSpawnResult {
  */
 export function spawnDockerProcess(opts: DockerSpawnOptions): DockerSpawnResult {
   checkDockerAvailable();
-  const resolvedImage = resolveImage(opts.config, opts.workspaceRoot);
+  const resolvedImage = resolveImage(opts.config);
   opts = { ...opts, config: { ...opts.config, image: resolvedImage } };
 
   mkdirSync(opts.sandboxRunDir, { recursive: true });

@@ -23,52 +23,39 @@ if ! e2e::ensure_docker_test_image; then
   exit 0
 fi
 
-e2e::section "docker dockerfile detection — custom Dockerfile builds and runs"
+e2e::section "docker — invalid .jaiph/Dockerfile is not built on run"
 
-# Given: a .jaiph/Dockerfile that produces an image with jaiph AND a marker file.
-# We install jaiph from a local tarball so the custom image satisfies the strict contract.
+# Given: a syntactically invalid .jaiph/Dockerfile. If `jaiph run` tried to build it,
+# the run would fail with E_DOCKER_BUILD. The driver must use the default GHCR image instead.
 mkdir -p "${TEST_DIR}/.jaiph"
+printf '%s\n' 'THIS IS NOT A VALID DOCKERFILE' > "${TEST_DIR}/.jaiph/Dockerfile"
 
-(cd "${ROOT_DIR}" && npm pack --pack-destination "${TEST_DIR}/.jaiph" >/dev/null 2>&1)
-tarball_name="$(ls "${TEST_DIR}/.jaiph"/jaiph-*.tgz 2>/dev/null | head -1 | xargs basename)"
-
-cat > "${TEST_DIR}/.jaiph/Dockerfile" <<DOCKERFILE
-FROM node:20-bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends bash fuse-overlayfs fuse3 rsync && rm -rf /var/lib/apt/lists/*
-RUN useradd --create-home --uid 10001 --shell /bin/bash jaiph && mkdir -p /jaiph/workspace /jaiph/workspace-ro /jaiph/run && chown -R jaiph:jaiph /jaiph
-COPY ${tarball_name} /tmp/jaiph.tgz
-RUN npm install -g /tmp/jaiph.tgz && rm -f /tmp/jaiph.tgz
-RUN touch /jaiph-runtime-marker
-USER jaiph
-ENV HOME=/home/jaiph
-ENV PATH="/home/jaiph/.local/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-WORKDIR /jaiph/workspace
-DOCKERFILE
-
-e2e::file "dockerfile_detect.jh" <<'EOF'
-script check_marker_impl = ```
-test -f /jaiph-runtime-marker && echo "marker found"
+e2e::file "dockerfile_ignored.jh" <<'EOF'
+script ping_impl = ```
+echo "pulled default image ok"
 ```
-rule check_marker() {
-  run check_marker_impl()
+rule ping() {
+  run ping_impl()
 }
 
 workflow default() {
-  ensure check_marker()
+  ensure ping()
 }
 EOF
 
-# When: run with Docker enabled and no explicit docker_image
-JAIPH_DOCKER_ENABLED=true jaiph run "${TEST_DIR}/dockerfile_detect.jh" >/dev/null 2>&1
+# When: Docker enabled, implicit default image (pull ghcr.io/jaiphlang/jaiph-runtime:<version>)
+if ! JAIPH_DOCKER_ENABLED=true jaiph run "${TEST_DIR}/dockerfile_ignored.jh" >/dev/null 2>&1; then
+  JAIPH_DOCKER_ENABLED=true jaiph run "${TEST_DIR}/dockerfile_ignored.jh" || true
+  e2e::fail "docker: run should use pulled default image, not build broken .jaiph/Dockerfile"
+fi
 
-# Then: the workflow should succeed (marker file present = custom image was used)
-run_dir="$(e2e::run_dir "dockerfile_detect.jh")"
-e2e::expect_run_file "dockerfile_detect.jh" "000003-script__check_marker_impl.out" "marker found"
-e2e::pass "docker: .jaiph/Dockerfile detected and image built"
+run_dir="$(e2e::run_dir "dockerfile_ignored.jh")"
+e2e::expect_run_file "dockerfile_ignored.jh" "000003-script__ping_impl.out" "pulled default image ok"
+e2e::pass "docker: broken .jaiph/Dockerfile is ignored; default runtime image is used"
 
-e2e::section "docker dockerfile detection — explicit image skips Dockerfile"
+e2e::section "docker — explicit image with present .jaiph/Dockerfile"
 
-# Given: same workspace with .jaiph/Dockerfile, but explicit image set
+# Given: same workspace with invalid .jaiph/Dockerfile, explicit image set
 e2e::file "dockerfile_skip.jh" <<'EOF'
 script check_no_marker_impl = ```
 if test -f /jaiph-runtime-marker; then
@@ -91,9 +78,9 @@ JAIPH_DOCKER_ENABLED=true JAIPH_DOCKER_IMAGE="${E2E_DOCKER_TEST_IMAGE}" jaiph ru
 
 # Then: the marker file should NOT exist (E2E test image, not custom build)
 e2e::expect_run_file "dockerfile_skip.jh" "000003-script__check_no_marker_impl.out" "no marker"
-e2e::pass "docker: explicit image skips .jaiph/Dockerfile"
+e2e::pass "docker: explicit image used; .jaiph/Dockerfile not built"
 
-e2e::section "docker dockerfile detection — fallback without Dockerfile uses configured image"
+e2e::section "docker — workspace without .jaiph/Dockerfile uses configured image"
 
 # Given: a separate test dir without .jaiph/Dockerfile, using the E2E test image
 fallback_dir="$(mktemp -d "${JAIPH_E2E_WORK_DIR}/docker_fallback.XXXXXX")"

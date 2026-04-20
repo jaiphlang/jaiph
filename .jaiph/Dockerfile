@@ -50,7 +50,7 @@ RUN mkdir -p "$HOME/.local/bin" && \
     rm -f /tmp/install-cursor-agent.sh
 
 # jaiph (official installer: https://jaiph.org/install)
-RUN curl -fsSL https://jaiph.org/install | bash
-RUN jaiph use nightly
+ARG JAIPH_REPO_REF=nightly
+RUN JAIPH_REPO_REF=${JAIPH_REPO_REF} curl -fsSL https://jaiph.org/install | bash
 
 WORKDIR /jaiph/workspace
