@@ -182,7 +182,13 @@ async function runWorkflowRaw(
     runtimeEnv.JAIPH_SOURCE_ABS = inputAbs;
     const { scriptsDir } = buildScripts(inputAbs, outDir, workspaceRoot);
     runtimeEnv.JAIPH_SCRIPTS = scriptsDir;
-    const metaFile = join(outDir, `.jaiph-run-meta-${Date.now()}-${process.pid}.txt`);
+    // When invoked from an isolated container, the host pre-allocates a meta
+    // file path inside the host-mounted run dir and passes it via env. Without
+    // this, the meta file lives in the container's tmp dir (cleaned up on exit)
+    // and the host can never read return_value back from the branch.
+    const metaFile = process.env.JAIPH_META_FILE
+      ? process.env.JAIPH_META_FILE
+      : join(outDir, `.jaiph-run-meta-${Date.now()}-${process.pid}.txt`);
 
     const workflowName = entry ?? "default";
     const dummyBuiltPath = join(outDir, "entry.sh");

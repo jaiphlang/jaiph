@@ -25,7 +25,6 @@ import {
   resolveIsolatedImage,
   spawnIsolatedProcess,
   cleanupIsolated,
-  findRunArtifacts,
 } from "../docker";
 
 const MAX_EMBED = 1024 * 1024;
@@ -1602,21 +1601,46 @@ export class NodeWorkflowRuntime {
     const network = scope.env.JAIPH_DOCKER_NETWORK || "default";
     const timeout = Number(scope.env.JAIPH_DOCKER_TIMEOUT) || 300;
 
+    // Pre-allocate the meta file path inside the host-mounted branchRunDir so
+    // the inner runtime writes return_value to a host-readable location.
+    // Without this the meta file lives in the container's tmp dir and is
+    // lost on exit, leaving handles to resolve as empty strings.
+    const containerMetaPath = `${CONTAINER_RUN_DIR}/.jaiph-run-meta.txt`;
+    const hostMetaPath = join(branchRunDir, ".jaiph-run-meta.txt");
+
     const isolatedResult = spawnIsolatedProcess({
       sourceAbs,
       workspaceRoot,
       branchRunDir,
       workflowName: ref,
       runArgs: resolvedArgs,
-      env: scope.env as Record<string, string | undefined>,
+      env: {
+        ...(scope.env as Record<string, string | undefined>),
+        JAIPH_META_FILE: containerMetaPath,
+      },
       image,
       network,
       timeout,
     });
 
+    // Emit a synthetic BRANCH_START so the host's run_summary.jsonl (and the
+    // CLI's TTY tree) has a durable record that an isolated branch is running.
+    // Without this the host shows nothing for ~8min while handles resolve.
+    const branchStartedAt = Date.now();
+    this.emitBranchEvent({
+      type: "BRANCH_START",
+      branch_id: branchId,
+      ref,
+      ts: nowIso(),
+      run_id: this.runId,
+    });
+
     // Collect stdout and stderr from the container.
     // Forward __JAIPH_EVENT__ lines from container stderr to host stderr
-    // so the outer CLI renders log/progress events from the isolated run.
+    // (so the outer CLI renders progress live) and ALSO append them to the
+    // host's run_summary.jsonl with branch_id annotation (so the host has a
+    // durable record of branch progress, not just whatever survived in the
+    // TTY scrollback).
     let stdout = "";
     let stderr = "";
     let stderrBuf = "";
@@ -1631,6 +1655,7 @@ export class NodeWorkflowRuntime {
         stderrBuf = stderrBuf.slice(idx + 1);
         if (line.startsWith("__JAIPH_EVENT__ ")) {
           process.stderr.write(line + "\n");
+          this.persistForwardedBranchEvent(line, branchId);
         } else {
           stderr += line + "\n";
         }
@@ -1645,31 +1670,22 @@ export class NodeWorkflowRuntime {
 
     cleanupIsolated(isolatedResult);
 
-    // Try to read the meta file for return value
+    // Read the meta file written by the inner runtime at the host-mounted
+    // path we pre-allocated via JAIPH_META_FILE. Returns plain-string return
+    // values (e.g. workspace.export_patch path) back to the host.
     let returnValue: string | undefined;
-    const artifacts = findRunArtifacts(branchRunDir);
-    // Also check for meta file written by the runner
-    const metaGlob = join(branchRunDir, ".jaiph-run-meta-*.txt");
     try {
-      // Read meta files from the branch run dir
-      const { readdirSync: rds } = require("node:fs");
-      const entries = rds(branchRunDir) as string[];
-      for (const entry of entries) {
-        if (entry.startsWith(".jaiph-run-meta-") && entry.endsWith(".txt")) {
-          const metaContent = readFileSync(join(branchRunDir, entry), "utf8");
-          for (const line of metaContent.split(/\r?\n/)) {
-            if (line.startsWith("return_value=")) {
-              returnValue = line.slice("return_value=".length);
-            }
-            if (line.startsWith("output=") && !stdout.trim()) {
-              stdout = line.slice("output=".length);
-            }
-          }
-          break;
+      const metaContent = readFileSync(hostMetaPath, "utf8");
+      for (const line of metaContent.split(/\r?\n/)) {
+        if (line.startsWith("return_value=")) {
+          returnValue = line.slice("return_value=".length);
+        }
+        if (line.startsWith("output=") && !stdout.trim()) {
+          stdout = line.slice("output=".length);
         }
       }
     } catch {
-      // Meta file may not exist for failed runs — that's ok
+      // Meta file may be absent if the inner runtime crashed before writing it.
     }
 
     // Remap container paths in the return value: /jaiph/run/... → branchRunDir/...
@@ -1678,12 +1694,55 @@ export class NodeWorkflowRuntime {
       returnValue = branchRunDir + returnValue.slice(CONTAINER_RUN_DIR.length);
     }
 
+    this.emitBranchEvent({
+      type: "BRANCH_END",
+      branch_id: branchId,
+      ref,
+      ts: nowIso(),
+      status: exitCode,
+      elapsed_ms: Date.now() - branchStartedAt,
+      return_value: returnValue ?? null,
+      run_id: this.runId,
+    });
+
     return {
       status: exitCode,
       output: stdout,
       error: stderr,
       returnValue,
     };
+  }
+
+  /** Emit a host-side BRANCH_START / BRANCH_END marker for an isolated branch. */
+  private emitBranchEvent(payload: Record<string, unknown>): void {
+    const indices = this.getAsyncIndices();
+    const full = indices.length > 0 ? { ...payload, async_indices: indices } : payload;
+    if (this.env.JAIPH_TEST_MODE !== "1") {
+      process.stderr.write(`__JAIPH_EVENT__ ${JSON.stringify(full)}\n`);
+    }
+    appendRunSummaryLine(JSON.stringify({ ...full, event_version: 1 }));
+  }
+
+  /**
+   * Append a forwarded inner-branch __JAIPH_EVENT__ line to the host's
+   * run_summary.jsonl with a branch_id annotation. The line is forwarded to
+   * host stderr separately for live TTY rendering; this call only persists
+   * the event. Unparseable lines are ignored (they are still on stderr).
+   */
+  private persistForwardedBranchEvent(line: string, branchId: string): void {
+    const prefix = "__JAIPH_EVENT__ ";
+    const json = line.slice(line.indexOf(prefix) + prefix.length);
+    let payload: Record<string, unknown>;
+    try {
+      payload = JSON.parse(json) as Record<string, unknown>;
+    } catch {
+      return;
+    }
+    appendRunSummaryLine(JSON.stringify({
+      ...payload,
+      branch_id: branchId,
+      event_version: 1,
+    }));
   }
 
   private async executeScript(
