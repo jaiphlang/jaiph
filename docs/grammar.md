@@ -468,7 +468,7 @@ prompt "Review the following code for security issues"
 answer = prompt "Summarize the report"
 ```
 
-If a `"` string has no closing quote on the same line, the parser rejects it with: `multiline prompt strings are no longer supported; use a triple-quoted block instead`.
+If a `"` string has no closing quote on the same line, the parser rejects it — multiline prompt text must use a triple-quoted block (`prompt """..."""`).
 
 **2. Identifier reference**
 

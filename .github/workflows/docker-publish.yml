@@ -43,8 +43,8 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: .jaiph
-          file: .jaiph/Dockerfile
+          context: runtime
+          file: runtime/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           build-args: |

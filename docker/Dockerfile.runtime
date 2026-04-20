@@ -5,7 +5,7 @@
 # copy-on-write workspace overlay.
 #
 # Agent CLIs (Claude Code, cursor-agent) are excluded to keep the image small.
-# To add them, extend this image or use a custom .jaiph/Dockerfile.
+# To add them, extend this image or build a custom image and set JAIPH_DOCKER_IMAGE.
 #
 # Tags:
 #   :<semver>  — matches the jaiph npm package version (built on release)

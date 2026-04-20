@@ -303,8 +303,7 @@ jaiph init [workspace-path]
 Creates:
 
 - `.jaiph/.gitignore` — lists `runs` and `tmp`. If the file already exists and does not match this exact list, `jaiph init` exits with a non-zero status.
-- `.jaiph/bootstrap.jh` — canonical bootstrap workflow; made executable. The template uses a triple-quoted multiline prompt body (`prompt """ ... """`) so the generated file parses and compiles as valid Jaiph. It also asks the agent to review/update `.jaiph/Dockerfile` for this repository and ends by logging a summary (`WHAT CHANGED` + `WHY`).
-- `.jaiph/Dockerfile` — Docker sandbox template that extends the official `ghcr.io/jaiphlang/jaiph-runtime:nightly` image with agent CLIs (Claude Code, cursor-agent). The base image already contains Node.js, jaiph, and `fuse-overlayfs`, so the generated Dockerfile only adds project-specific tooling. `jaiph run` does not build this file automatically; build or publish the image yourself and set `runtime.docker_image` / `JAIPH_DOCKER_IMAGE` if you need a custom image. If the file is missing, init creates it. If it already exists and includes the init marker comment, init updates it to the latest template. Otherwise (custom user-managed Dockerfile), init leaves it unchanged and prints a note.
+- `.jaiph/bootstrap.jh` — canonical bootstrap workflow; made executable. The template uses a triple-quoted multiline prompt body (`prompt """ ... """`) so the generated file parses and compiles as valid Jaiph. It asks the agent to scaffold workflows under `.jaiph/` and ends by logging a summary (`WHAT CHANGED` + `WHY`). Docker sandboxing uses the default `ghcr.io/jaiphlang/jaiph-runtime` image unless you set `runtime.docker_image` or `JAIPH_DOCKER_IMAGE`.
 - `.jaiph/SKILL.md` — copied from the skill file bundled with your Jaiph installation (or from `JAIPH_SKILL_PATH` when set). If no skill file is found, this file is not written and a note is printed.
 
 ## `jaiph install`
