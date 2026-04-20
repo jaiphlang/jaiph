@@ -949,7 +949,7 @@ export class NodeWorkflowRuntime {
             step.rhs.tripleQuoted ? tripleQuotedRawForRuntime(step.rhs.token) : step.rhs.token;
           const sendIr = await this.interpolateWithCaptures(sendTok, scope);
           if (!sendIr.ok) return this.mergeStepResult(accOut, accErr, sendIr.result);
-          payload = sendIr.value;
+          payload = stripOuterQuotes(sendIr.value);
         } else if (step.rhs.kind === "var") {
           const sendHandleErr = await this.resolveHandlesInInput(scope, step.rhs.bash);
           if (sendHandleErr) return this.mergeStepResult(accOut, accErr, sendHandleErr);

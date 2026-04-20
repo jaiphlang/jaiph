@@ -49,7 +49,7 @@ export function formatStartLine(
       oneLine.length > PROMPT_PREVIEW_MAX
         ? `${oneLine.slice(0, PROMPT_PREVIEW_MAX)}...`
         : oneLine;
-    const escaped = previewDisplay.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    const escaped = previewDisplay.replace(/\\/g, "\\\\");
     const backendPart = name !== kind ? ` ${name}` : "";
     namePart = previewDisplay.length > 0 ? `${kindLabel}${backendPart} "${escaped}"` : `${kindLabel}${backendPart}`;
     const restParams = params.filter(([, v]) => !isInternalParamValue(v));

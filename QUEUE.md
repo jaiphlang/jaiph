@@ -13,66 +13,6 @@ Process rules:
 
 ***
 
-## Bug — double quotes in workflow step / log output (agent_inbox) #dev-ready
-
-**Goal**
-When running `CI=true ./examples/agent_inbox.jh`, step titles and reviewer lines show broken or noisy quoting: e.g. `message="\"Found 3 issues in auth module\""`, and `! Critical issue: "Summary: "Found 3 issues in auth module""`. Messages that contain double quotes should render readably (single consistent escaping or structured display), not as nested `\"` soup or ambiguous `""` pairs.
-
-**Sample — before / after**
-
-*Before* (current; excerpt from `CI=true ./examples/agent_inbox.jh`):
-
-```
-Jaiph: Running agent_inbox.jh
-
-workflow default
-  ▸ workflow scanner
-  ·   ℹ Scanning for issues...
-  ✓ workflow scanner (0s)
-  ▸ workflow analyst (message="\"Found 3 issues in auth module\"", chan="findings", sender="scanner")
-  ·   ℹ Analyzing message from scanner on channel findings...
-  ✓ workflow analyst (0s)
-  ▸ workflow reviewer (message="\"Summary: \"Found 3 issues in aut...", chan="report", sender="analyst")
-  ·   ℹ Reviewing message from analyst on channel report...
-  ·   ! Critical issue: "Summary: "Found 3 issues in auth module""
-  ✓ workflow reviewer (0s)
-
-✓ PASS workflow default (0.1s)
-```
-
-*After* (target: human-readable; exact formatting is up to implementation—key is no `\"` noise and no ambiguous nested `"` around the same payload):
-
-```
-Jaiph: Running agent_inbox.jh
-
-workflow default
-  ▸ workflow scanner
-  ·   ℹ Scanning for issues...
-  ✓ workflow scanner (0s)
-  ▸ workflow analyst (message="Found 3 issues in auth module", chan="findings", sender="scanner")
-  ·   ℹ Analyzing message from scanner on channel findings...
-  ✓ workflow analyst (0s)
-  ▸ workflow reviewer (message="Summary: Found 3 issues in auth module…", chan="report", sender="analyst")
-  ·   ℹ Reviewing message from analyst on channel report...
-  ·   ! Critical issue: Summary: Found 3 issues in auth module
-  ✓ workflow reviewer (0s)
-
-✓ PASS workflow default (0.1s)
-```
-
-**Context (read before starting)**
-
-* Reproduce: `CI=true ./examples/agent_inbox.jh` from repo root; inspect stderr lines for `workflow analyst`, `workflow reviewer`, and any `! Critical issue:` line.
-* Likely surfaces: interpolation of workflow args into step labels, or string formatting when echoing channel payloads; may involve `stderr-handler`, docker/run summary, or workflow event text builders.
-* Fix should not change the example’s semantics—only how quoted strings are encoded for human-readable TTY output.
-
-**Acceptance criteria**
-
-* `CI=true ./examples/agent_inbox.jh` output shows no `\"` escape sequences inside displayed `message=...` fragments unless intentionally documenting raw JSON; reviewer/critical lines do not contain ambiguous nested `"` pairs for this fixture.
-* A regression test exists (unit or golden on formatted line) that fails if a payload like `Found 3 issues in "auth" module` is rendered with broken quoting.
-
-***
-
 ## Cleanup — consolidate the 5-way test directory split #dev-ready
 
 **Goal**
