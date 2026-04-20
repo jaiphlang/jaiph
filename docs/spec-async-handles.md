@@ -103,6 +103,8 @@ Async handles preserve the existing async progress/event visibility model:
 
 Handle resolution does not emit additional events beyond what the async branch already emits.
 
+The live TTY rendering path for async branches is covered by a dedicated PTY-based E2E test (`e2e/tests/131_tty_async_progress.sh`). It spawns `jaiph run` under a real pseudo-terminal with two concurrent async branches and asserts that per-branch events render under the correct subscript node, that resolved return values appear in the final frame, and that no ANSI escape corruption occurs. See [Testing — PTY-based TTY tests](testing.md#pty-based-tty-tests) for details.
+
 ## Constraints
 
 - `run async` is only allowed in workflows, not in rules.
