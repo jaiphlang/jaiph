@@ -360,6 +360,19 @@ For concurrency-sensitive behavior (for example parallel inbox dispatch), the re
 
 See `e2e/tests/91_inbox_dispatch.sh`, `e2e/tests/93_inbox_stress.sh`, and `e2e/tests/94_parallel_shell_steps.sh` for examples.
 
+## PTY-based TTY tests
+
+Some CLI behavior only activates when stdout is a real TTY — the live progress tree with ANSI redraws, for example. These tests use Python's `pty.openpty()` to spawn `jaiph run` under a pseudo-terminal, capture the raw byte stream, and assert on the rendered output.
+
+Two PTY tests exist today:
+
+| Test file | What it covers |
+|-----------|----------------|
+| `e2e/tests/81_tty_progress_tree.sh` | Synchronous workflow progress rendering — verifies the tree structure, step timing, and PASS/FAIL markers under a real TTY. |
+| `e2e/tests/131_tty_async_progress.sh` | Async workflow progress rendering — verifies that `run async` branches (with `Handle<T>` deferred resolution) render per-branch progress events under subscript-numbered nodes (₁, ₂), that both branches show resolved return values in the final frame, and that no orphaned ANSI escape sequences appear. |
+
+Both tests require Python 3 and use only deterministic, non-LLM steps (sleep loops, `log`, scripts) so results are reproducible. Assertions use `assert_contains` with order-insensitive matching because async interleaving and PTY redraws make exact full-output comparison infeasible.
+
 ## E2E testing
 
 Shell harnesses and CI expectations for the full repo are described in [Contributing — E2E testing](contributing.md#e2e-testing).

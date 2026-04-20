@@ -13,41 +13,6 @@ Process rules:
 
 ***
 
-## Runtime — PTY-based TTY test for `run async` #dev-ready
-
-**Goal**
-Live progress for `run async` (with handles, deferred resolution, multi-branch fan-out without isolation) takes a different render path than synchronous steps. Close the regression-coverage gap by exercising that path through a real PTY.
-
-**Context (read before starting)**
-
-`e2e/tests/81_tty_progress_tree.sh` already uses Python's `pty.openpty()` to drive `jaiph run` under a real TTY and asserts on the rendered progress frames. It covers non-async workflows. There is no equivalent for `run async`. The host progress renderer takes a different path for async (handles, deferred resolution, multiple in-flight calls competing for the live frame), and that path has been broken before without any test catching it.
-
-**Scope**
-
-* Add an e2e test (sibling of `e2e/tests/81_tty_progress_tree.sh`) that:
-  * spawns `jaiph run` under a real PTY,
-  * exercises a workflow that uses `run async branch()` with at least two concurrent async calls,
-  * each branch emits multiple progress events over time (use a deterministic step like a sleep loop with `print` calls — do not depend on `prompt claude` or any other non-deterministic step),
-  * captures the PTY output and asserts:
-    1. each branch's progress events appear under that branch's node in the tree as they happen,
-    2. the final frame shows both branches as completed with their resolved return values,
-    3. no ANSI corruption (orphaned escape sequences, stray cursor moves outside the rendered region).
-* The test must fail today against any regression that batches async progress events at branch completion, drops them, or scrambles the frame.
-
-**Non-goals**
-
-* Do not test `prompt claude` or any non-deterministic step. Branches must emit synthetic, time-spaced events.
-* Do not assert on exact frame timing; assert on order and presence within a generous timeout.
-* No `isolated` variant — that keyword is not part of this codebase.
-
-**Acceptance criteria**
-
-* New test lives next to `e2e/tests/81_tty_progress_tree.sh` and follows the same shell-driving-Python-PTY pattern.
-* The test passes on a green build and fails when the live-progress path for `run async` regresses.
-* Test runs as part of the standard e2e suite (no separate invocation).
-
-***
-
 ## Cleanup — delete top-level debug cruft and harden `.gitignore` #dev-ready
 
 **Goal**
