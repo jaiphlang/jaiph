@@ -411,11 +411,14 @@ export class NodeWorkflowRuntime {
     const runsRoot = this.resolveRunsRoot();
     this.runDir = join(runsRoot, datePart, `${timePart}-${source}`);
     mkdirSync(this.runDir, { recursive: true });
+    const artifactsDir = join(this.runDir, "artifacts");
+    mkdirSync(artifactsDir, { recursive: true });
     this.summaryFile = join(this.runDir, "run_summary.jsonl");
     writeFileSync(this.summaryFile, "");
     this.env.JAIPH_RUN_SUMMARY_FILE = this.summaryFile;
     this.env.JAIPH_RUN_ID = this.runId;
     this.env.JAIPH_RUN_DIR = this.runDir;
+    this.env.JAIPH_ARTIFACTS_DIR = artifactsDir;
     this.startHeartbeat();
   }
 
