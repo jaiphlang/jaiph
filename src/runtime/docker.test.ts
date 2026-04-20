@@ -434,10 +434,17 @@ test("writeOverlayScript: creates executable script with fuse-overlayfs setup", 
     assert.ok(content.startsWith("#!/usr/bin/env bash"));
     assert.ok(content.includes("fuse-overlayfs"));
     assert.ok(content.includes("workspace overlay unavailable"));
+    assert.ok(content.includes("copying workspace into a temp directory before startup"));
     assert.ok(content.includes("using copy fallback"));
+    assert.ok(content.includes("live output begins after the copy completes"));
+    assert.ok(content.includes("excludes .jaiph/runs"));
     assert.ok(content.includes("mktemp -d /tmp/jaiph-workspace."));
     assert.ok(content.includes("rewrite_workspace_path()"));
-    assert.ok(content.includes('rsync -a --delete --no-owner --no-group'));
+    assert.ok(content.includes("--exclude='.jaiph/runs'"));
+    assert.ok(content.includes('rsync -a --delete --exclude=\'.jaiph/runs\' --no-owner --no-group'));
+    assert.ok(content.includes("case \"$entry\" in"));
+    assert.ok(content.includes(".|..|.jaiph) continue ;;"));
+    assert.ok(content.includes(".|..|runs) continue ;;"));
     assert.ok(content.includes("mktemp \"$MERGED/.jaiph-overlay-probe.XXXXXX\""));
     assert.ok(content.includes('exec "${rewritten_args[@]}"'));
   } finally {

@@ -53,3 +53,33 @@ test("registerTTYSubscriber: STEP_END fallback indent uses event depth", () => {
   const output = writes.join("");
   assert.match(output, /^  ·   ✓ prompt prompt \(1s\)\n$/);
 });
+
+test("registerTTYSubscriber: stderr_line renders immediately in TTY mode", () => {
+  const emitter = createRunEmitter();
+  const ctx: TTYContext = {
+    isTTY: true,
+    colorEnabled: false,
+    startedAt: Date.now(),
+    runningInterval: undefined,
+    nonTTYHeartbeatInterval: undefined,
+    nonTTYHeartbeatStep: null,
+  };
+  const writes: string[] = [];
+  const originalWrite = process.stdout.write.bind(process.stdout);
+  (process.stdout.write as unknown as (chunk: string) => boolean) = ((chunk: string | Uint8Array) => {
+    writes.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8"));
+    return true;
+  }) as unknown as typeof process.stdout.write;
+
+  try {
+    registerTTYSubscriber(emitter, ctx);
+    emitter.emit("stderr_line", {
+      line: "jaiph docker: workspace overlay unavailable; copying workspace into a temp directory before startup",
+    });
+  } finally {
+    (process.stdout.write as unknown as typeof process.stdout.write) = originalWrite as typeof process.stdout.write;
+  }
+
+  const output = writes.join("");
+  assert.equal(output, "jaiph docker: workspace overlay unavailable; copying workspace into a temp directory before startup\n");
+});

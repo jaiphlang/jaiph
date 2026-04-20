@@ -339,12 +339,35 @@ rewrite_workspace_path() {
 
 copy_workspace_with_rsync() {
   local target="$1"
-  rsync -a --delete --no-owner --no-group --chmod=Du+rwx,Dgo+rx,Fu+rw,Fgo+r "$LOWER"/ "$target"/
+  rsync -a --delete --exclude='.jaiph/runs' --no-owner --no-group --chmod=Du+rwx,Dgo+rx,Fu+rw,Fgo+r "$LOWER"/ "$target"/
 }
 
 copy_workspace_with_cp() {
   local target="$1"
-  cp -a --no-preserve=ownership "$LOWER"/. "$target"/
+  mkdir -p "$target"
+  (
+    cd "$LOWER"
+    shopt -s dotglob nullglob
+    for entry in * .*; do
+      case "$entry" in
+        .|..|.jaiph) continue ;;
+      esac
+      cp -a --no-preserve=ownership "$entry" "$target"/
+    done
+    if [ -d ".jaiph" ]; then
+      mkdir -p "$target/.jaiph"
+      (
+        cd ".jaiph"
+        shopt -s dotglob nullglob
+        for entry in * .*; do
+          case "$entry" in
+            .|..|runs) continue ;;
+          esac
+          cp -a --no-preserve=ownership "$entry" "$target/.jaiph"/
+        done
+      )
+    fi
+  )
   chmod -R u+rwX "$target" 2>/dev/null || true
 }
 
@@ -366,6 +389,11 @@ else
   overlay_reason="fuse-overlayfs unavailable or /dev/fuse missing"
 fi
 if [ "$overlay_ok" -ne 1 ]; then
+  printf 'jaiph docker: workspace overlay unavailable; copying workspace into a temp directory before startup (live output begins after the copy completes; excludes .jaiph/runs)' >&2
+  if [ -n "$overlay_reason" ]; then
+    printf ' (%s)' "$overlay_reason" >&2
+  fi
+  printf '\n' >&2
   tmp_workspace="$(mktemp -d /tmp/jaiph-workspace.XXXXXX 2>/dev/null || true)"
   if [ -n "$tmp_workspace" ]; then
     if command -v rsync >/dev/null 2>&1; then
