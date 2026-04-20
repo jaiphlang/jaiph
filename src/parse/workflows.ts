@@ -358,6 +358,22 @@ export function parseWorkflowBlock(
       if (runBody.startsWith("`")) {
         fail(filePath, "run async is not supported with inline scripts", innerNo, innerRaw.indexOf("run") + 1);
       }
+      // Check for run async ... recover (loop semantics)
+      const recoverResult = parseRunRecoverStep(filePath, lines, idx, innerNo, innerRaw, runBody);
+      if (recoverResult) {
+        if (recoverResult.step.type === "run") recoverResult.step.async = true;
+        workflow.steps.push(recoverResult.step);
+        idx = recoverResult.nextIdx;
+        continue;
+      }
+      // Check for run async ... catch
+      const catchResult = parseRunCatchStep(filePath, lines, idx, innerNo, innerRaw, runBody);
+      if (catchResult) {
+        if (catchResult.step.type === "run") catchResult.step.async = true;
+        workflow.steps.push(catchResult.step);
+        idx = catchResult.nextIdx;
+        continue;
+      }
       const call = parseCallRef(runBody);
       if (!call) {
         fail(filePath, "run async must target a valid reference: run async ref() or run async ref(args) — parentheses are required", innerNo);

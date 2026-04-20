@@ -92,6 +92,27 @@ export function parseConstRhs(
   }
   if (head.startsWith("run ")) {
     const rest = head.slice("run ".length).trim();
+    // const x = run async ref() — async capture returning a handle
+    if (rest.startsWith("async ")) {
+      const asyncRest = rest.slice("async ".length).trim();
+      if (asyncRest.startsWith("`")) {
+        fail(filePath, "run async is not supported with inline scripts", lineNo, col);
+      }
+      const call = parseCallRef(asyncRest);
+      if (!call) {
+        fail(filePath, "const ... = run async must target a valid reference", lineNo, col);
+      }
+      rejectTrailingContent(filePath, lineNo, "run async", call.rest);
+      const ref: WorkflowRefDef = { value: call.ref, loc: { line: lineNo, col } };
+      return {
+        value: {
+          kind: "run_capture", ref, args: call.args,
+          ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
+          async: true,
+        },
+        nextLineIdx: lineIdx,
+      };
+    }
     if (rest.startsWith("`")) {
       const result = parseAnonymousInlineScript(filePath, lines, lineIdx, rest, lineNo, col);
       return {

@@ -306,19 +306,41 @@ const output = run transform()
 
 **Capture:** For a workflow, captures the explicit `return` value. For a script, captures stdout.
 
-### `run async` — Concurrent Execution
+### `run async` — Concurrent Execution with Handles
 
-Starts a workflow or script concurrently. All pending async steps are implicitly joined before the enclosing workflow returns.
+`run async ref(args)` starts a workflow or script concurrently and returns a **`Handle<T>`** — a value that resolves to the called function's return value on first non-passthrough read. `T` is the same type the function would return under a synchronous `run`.
 
 ```jaiph
 workflow default() {
+  # Fire-and-forget style (handle created but not captured)
   run async lib.task_a()
-  run async lib.task_b()
-  # both joined automatically before workflow returns
+
+  # Capture the handle for later use
+  const h = run async lib.task_b()
+
+  # Reading the handle forces resolution (blocks until task_b completes)
+  log "${h}"
 }
 ```
 
-Constraints: workflow-only (rejected in rules), capture not supported.
+**Handle resolution:** The handle resolves on first non-passthrough read — string interpolation, passing as argument to `run`, comparison, conditional branching, or match subject. Passthrough operations (initial capture into `const`, re-assignment) do not force resolution.
+
+**Implicit join:** When a workflow scope exits, the runtime implicitly joins all remaining unresolved handles created in that scope. This is not an error — it preserves backward compatibility with the pre-handle `run async` model.
+
+**`recover` composition:** `recover` works with `run async` to provide retry-loop semantics on the async branch:
+
+```jaiph
+const b1 = run async foo() recover(err) {
+  log "repairing: ${err}"
+  run fix_it()
+}
+```
+
+The async branch retries `foo()` using the same retry-limit semantics as non-async `recover` (default 10, configurable via `run.recover_limit`). The handle resolves to the eventual success value or the final failure. `catch` also works with `run async` for single-shot recovery (no retry loop).
+
+See [Spec: Async Handles](spec-async-handles) for the full value model.
+
+Constraints: workflow-only (rejected in rules), inline scripts not supported with `run async`.
 
 ### `ensure` — Execute a Rule
 
@@ -397,7 +419,7 @@ workflow default() {
 **Constraints:**
 - `recover` requires exactly one binding: `recover(name)`. Bare `recover` without bindings is a parse error.
 - All call arguments must appear inside parentheses **before** `recover`.
-- `recover` is available on `run` steps in workflows only (not `ensure`, not `run async`).
+- `recover` is available on `run` steps in workflows only (not `ensure`). `recover` also works with `run async` — see [`run async`](#run-async--concurrent-execution-with-handles).
 - `recover` and `catch` are mutually exclusive on the same step — use one or the other.
 
 ### `prompt` — Agent Interaction
@@ -691,7 +713,7 @@ Every step produces three outputs: status, value, and logs.
 | `prompt` | exit code | final assistant answer | artifacts |
 | `log` / `logerr` | always 0 | — | event stream |
 | `fail` | non-zero (abort) | — | stderr |
-| `run async` | aggregated | not supported | artifacts |
+| `run async` | aggregated | `Handle<T>` — resolves to return value on read | artifacts |
 | `const` | same as RHS | binds locally | — |
 
 ## Lexical Notes

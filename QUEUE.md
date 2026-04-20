@@ -13,50 +13,6 @@ Process rules:
 
 ***
 
-## Runtime — spec and implement `Handle<T>` for `run async`, including `recover` composition #dev-ready
-
-**Goal**
-Replace the current implicit end-of-workflow join with a value-based handle model. `run async foo()` returns a `Handle<T>` immediately. The handle resolves on first non-passthrough read. Workflow exit implicitly joins remaining unresolved handles. Ship `recover` composition for `run async` in the same task.
-
-This task ships **both the written spec and the runtime implementation in one go.** The previous attempt split them across two tasks and the spec drifted from the implementation. Keep them together so the contract and the code land in the same review.
-
-**Scope**
-
-* Write the spec section in `docs/spec-async-handles.md` (a new file) covering:
-  - `Handle<T>` value model: a handle resolves to whatever the called function returned. First non-passthrough read forces resolution. Passthrough (assignment, storage, passing through arguments and returns unchanged) does not.
-  - Workflow exit implicitly joins any remaining unresolved handles; this is not an error.
-  - No fire-and-forget mode.
-  - `recover` composition: `b1 = run async foo() recover(err) { ... }` — handle resolves to either the eventual success value (after the retry loop runs) or the final failure. Same retry-limit semantics as the non-async `recover` task.
-* Replace the implicit end-of-workflow join in `src/runtime/kernel/node-workflow-runtime.ts` with the value-based handle model.
-* `run async ...` returns a `Handle<T>` value. `T` is the same return type the function would have under a non-async `run`.
-* Reads that force resolution: passing as an argument to `run`, string interpolation, comparison, conditional branching, any other access to the underlying value.
-* Passthrough (assignment, storing in a list, passing through `workflow` arguments and returns unchanged) does not force resolution.
-* Workflow exit implicitly joins unresolved handles. This preserves today's end-of-workflow behavior at the boundary.
-* Parser must accept `recover(err) { ... }` after `run async ref(args)`. The previous attempt had the parser silently reject this with a "trailing content" error — that is the failure mode to fix.
-* Preserve async progress/event visibility unless the contract forces an intentional change.
-* Update docs that still describe the old statement-based async model.
-
-**Required tests**
-
-* Parser / formatter / validation coverage for `run async ref(args) recover(err) { ... }`.
-* Runtime tests for handle creation, transparent resolution at first read, and resolution forced by passing a handle into another `run`.
-* Runtime test for the multi-handle join shape: multiple async handles passed into another call all resolve before the callee runs.
-* Runtime test that workflow exit joins unresolved handles without raising an error.
-* Runtime test that handles can be stored in a list and resolved when read.
-* Runtime test for `run async foo() recover(err) { ... }`: handle resolves to the success value after at least one repair loop.
-* Runtime test that the retry-limit semantics are shared with the non-async `recover` task.
-
-**Acceptance criteria**
-
-* `run async ...` returns a first-class handle value.
-* Handle reads force resolution per the spec.
-* Workflow exit implicitly joins remaining handles (no error).
-* `recover` works on `run async ref()`. The parser accepts the form; the runtime implements the spec contract.
-* Spec and implementation ship in the same change set; the spec is internally consistent and self-contained.
-* The docs-site Jaiph syntax highlighter (`docs/assets/js/main.js`) recognizes `async` as a keyword (modifier on `run`) and continues to highlight `recover` correctly when it appears as `recover(err) { ... }` after `run async ref(args)`. A docs code block with `b1 = run async foo() recover(err) { ... }` renders with `run`, `async`, and `recover` all colored.
-
-***
-
 ## Artifacts — runtime mount + `artifacts.jh` lib for publishing files out of the sandbox #dev-ready
 
 **Goal**

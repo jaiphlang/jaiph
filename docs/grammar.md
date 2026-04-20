@@ -311,23 +311,46 @@ date +%s
 - **Backtick** (single-line) inline scripts: Jaiph interpolation (`${...}`) is forbidden — use `$1`, `$2` positional arguments instead.
 - **Fenced block** (triple-backtick) inline scripts: `${...}` is passed through to the shell as standard shell parameter expansion.
 
-### `run async` — Concurrent Execution
+### `run async` — Concurrent Execution with Handles
 
-`run async ref(args)` starts a workflow or script concurrently. All pending async steps are implicitly joined before the enclosing workflow returns. If any fail, the workflow fails with an aggregated error.
+`run async ref(args)` starts a workflow or script concurrently and returns a **`Handle<T>`** immediately. `T` is the same return type the function would have under a synchronous `run`. The handle resolves to the eventual return value on first non-passthrough read.
 
 ```jaiph
 workflow default() {
   run async lib.task_a()
-  run async lib.task_b()
-  # both joined automatically before workflow returns
+  const h = run async lib.task_b()
+  # Reading h forces resolution — blocks until task_b completes
+  log "${h}"
+  # task_a is implicitly joined before workflow returns
 }
 ```
 
+**Resolution semantics:** A handle resolves on first non-passthrough read. Reads that force resolution: string interpolation (`"${h}"`), passing as argument to `run`, comparison/conditional (`if h == "ok"`), match subject, channel send. Passthrough (initial capture, re-assignment) does not force resolution. Once resolved, the handle is replaced by the resolved string value; subsequent reads return the cached value.
+
+**Implicit join:** When a workflow scope exits, all remaining unresolved handles created in that scope are implicitly joined. This is not an error.
+
+**`recover` and `catch` composition:** Both `recover` (retry loop) and `catch` (single-shot) work with `run async`:
+
+```jaiph
+run async foo() recover(err) {
+  log "repairing: ${err}"
+  run fix_it()
+}
+
+run async bar() catch(e) {
+  log "caught: ${e}"
+}
+```
+
+`recover` uses the same retry-limit semantics as non-async `recover` (default 10, configurable via `run.recover_limit`).
+
 In the progress tree, each async branch is prefixed with a subscript number (₁₂₃…) assigned in dispatch order. Nested `run async` inside a child workflow gets its own numbering scope at the child's indent level. See [CLI — Async branch numbering](cli.md#run-progress-and-tree-output) for display details.
+
+See [Spec: Async Handles](spec-async-handles) for the full value model.
 
 Constraints:
 - Workflow-only — rejected in rules with `E_VALIDATE`.
-- Capture is not supported: `name = run async …` is `E_PARSE`.
+- Inline scripts not supported with `run async`.
 - For concurrent bash (pipelines, `&`), put the bash in a script and call with `run`.
 
 ### `ensure` — Execute a Rule
@@ -430,7 +453,7 @@ Syntax rules:
 - All call arguments must appear inside the parentheses **before** `recover`.
 - `recover` must be followed by at least one recovery step after the bindings.
 - `recover` and `catch` are mutually exclusive on the same `run` step.
-- `recover` is not supported on `ensure` or `run async` steps.
+- `recover` is not supported on `ensure` steps. `recover` works with `run async` — see [`run async`](#run-async--concurrent-execution-with-handles).
 
 ### `prompt` — Agent Interaction
 
@@ -799,7 +822,7 @@ Every step produces three distinct outputs — status, value, and logs:
 | `prompt` | prompt exit code | final assistant answer | transcript to artifacts |
 | `log` / `logerr` | always 0 | empty | event + stdout/stderr |
 | `fail` | non-zero (abort) | empty | message to stderr |
-| `run async` | aggregated | not supported (capture rejected) | async step logs to artifacts |
+| `run async` | aggregated | `Handle<T>` — resolves to return value on read | async step logs to artifacts |
 | `const` | same as RHS step | empty (binds local) | n/a |
 
 Key rules:
@@ -876,12 +899,14 @@ workflow_step   = ensure_stmt | run_stmt | run_catch_stmt | run_recover_stmt | r
 
 const_decl_step = "const" IDENT "=" const_rhs ;
 const_rhs       = double_quoted_string | triple_quoted_block | bash_value_expr
-                | "run" ( call_ref | inline_script ) | "ensure" call_ref
+                | "run" ( call_ref | inline_script ) | "run" "async" call_ref
+                | "ensure" call_ref
                 | "prompt" prompt_body [ returns_schema ]
                 | "match" IDENT "{" { match_arm } "}" ;
 
 fail_stmt       = "fail" ( double_quoted_string | triple_quoted_block ) ;
-run_async_stmt  = "run" "async" call_ref ;
+run_async_stmt  = "run" "async" call_ref [ "recover" recover_bindings recover_body ] [ "catch" catch_bindings catch_body ] ;
+run_async_capture = "const" IDENT "=" "run" "async" call_ref ;
 return_stmt     = "return" return_value ;
 return_value    = double_quoted_string | triple_quoted_block | "$" IDENT | "${" IDENT "}"
                 | "run" call_ref | "ensure" call_ref | "match" IDENT "{" { match_arm } "}" ;
@@ -969,5 +994,5 @@ At runtime, the Node workflow runtime interprets the AST directly:
 - **run … recover:** Repair-and-retry loop. On failure, the binding gets merged stdout+stderr, the repair body runs, and the target is retried. Loop stops on success or when `run.recover_limit` (default 10) is exhausted. Requires explicit bindings: `recover(err) { … }`.
 - **Recursion safety:** There is a hard recursion depth limit of 256. Exceeding it produces a runtime error.
 - **Assignment capture:** Rules and workflows use explicit `return "…"`. Scripts use stdout.
-- **`run async`:** Promise-based concurrency. Implicit join via `Promise.allSettled` before workflow returns. Failures aggregated.
+- **`run async`:** Returns a `Handle<T>` value. Handle-based concurrency with implicit resolution on first non-passthrough read and implicit join of unresolved handles at workflow exit. `recover` and `catch` composition supported. Failures aggregated at join.
 - **Channels:** Messages enqueued via `send`, dispatched to route targets at workflow end. Each target must declare exactly 3 parameters; the runtime binds message, channel, and sender to the declared names.
