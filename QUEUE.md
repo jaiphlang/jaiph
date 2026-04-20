@@ -14,6 +14,97 @@ Process rules:
 
 ***
 
+## Runtime — flatten and rebalance run-artifact directory layout #dev-ready
+
+**Goal**
+A run directory must be readable at a glance: a developer should be able to `ls` the run dir and immediately see the host workflow's steps next to its branches' steps, without descending three nested directories to find anything useful.
+
+**Context (read before starting)**
+
+Today's layout for a run with `run async isolated` branches:
+
+```
+.jaiph/runs/2026-04-20/09-51-43-engineer.jh/
+  000001-workflow__default.out         <- host steps live at the top level
+  000002-workflow__get_first_task.out
+  000003-script__queue.out
+  ...
+  branches/
+    2e236643/                          <- opaque branch id
+      2026-04-20/                      <- redundant: parent dir is already dated
+        09-51-48-engineer.jh/          <- redundant: parent dir already names the source
+          000001-workflow__implement_candidate.out
+          000002-workflow__implement.out
+          ...
+          run_summary.jsonl
+  run_summary.jsonl
+  heartbeat
+```
+
+Two concrete pains, verified while debugging the 09-51-43 run:
+
+1. **Asymmetry.** Host steps sit at the top level; branch steps are buried under `branches/<id>/<date>/<time>-<source>.jh/`. Tooling, eyes, and tab-completion all have to handle two shapes.
+2. **Redundant nesting.** `<date>/<time>-<source>.jh/` inside each branch repeats information already encoded in the parent run dir. Every branch adds three levels of clicks before the actual `000001-...out` file.
+
+**Scope**
+
+Move to a flat, symmetric layout:
+
+```
+.jaiph/runs/2026-04-20/09-51-43-engineer.jh/
+  host/
+    000001-workflow__default.out
+    000002-workflow__get_first_task.out
+    000003-script__queue.out
+    ...
+  branches/
+    2e236643/
+      000001-workflow__implement_candidate.out
+      000002-workflow__implement.out
+      ...
+      run_summary.jsonl
+    849c6431/
+      ...
+    ce8f4d39/
+      ...
+  run_summary.jsonl
+  heartbeat
+```
+
+Specifically:
+
+* Add a `host/` subdirectory; move all top-level `NNNNNN-<kind>__<name>.{out,err}` files into it.
+* Inside `branches/<id>/`, drop the `<date>/<time>-<source>.jh/` wrapper. Branch step files live directly under the branch id dir, alongside the branch's `run_summary.jsonl` and `heartbeat`.
+* Update every code path that writes to or reads from these directories. Search for `runs`, `branches/`, and step-path construction in `src/runtime/kernel/`, `src/cli/run/`, and `e2e/lib/`.
+* Update `run_summary.jsonl` `out_file` / `err_file` fields to point at the new locations.
+* Update every e2e helper that resolves run paths (e.g. `e2e::expect_run_file`) to handle the new layout. Existing tests must pass without changing their assertions if they use the helpers; tests that hardcode old paths must be updated to use helpers (and the test fixed if the helper is missing the case).
+
+**Naming choice**
+
+`host/` over `main/`, `root/`, or `local/`:
+* `main` is overloaded (git default branch, workflow `default`, "main thread").
+* `root` is correct in the tree sense but ambiguous when run dirs are themselves nested (a branch's run dir has its own root).
+* `local` does not contrast cleanly with anything; "local to what?".
+* `host/` mirrors the established sandboxing vocabulary (host vs. container/branch) and reads naturally next to `branches/`.
+
+If a stronger argument for `root/` or another name surfaces during implementation, document it in the task PR and pick one — but do not ship two names.
+
+**Non-goals**
+
+* No change to the file-naming scheme inside the directories (`NNNNNN-<kind>__<name>.{out,err}` stays).
+* No change to `run_summary.jsonl` event schema beyond updating `out_file` / `err_file` paths.
+* No change to top-level `.jaiph/runs/<date>/` grouping.
+* No backward-compatibility shims. Old run directories on disk are read-only artifacts; the new layout applies to runs going forward.
+
+**Acceptance criteria**
+
+* An e2e test runs a workflow with `run async isolated` (≥2 branches) and asserts the new layout exactly: `host/` exists with the expected step files, each branch dir under `branches/<id>/` contains its step files directly (no inner date/time/source wrapper), and the top-level run dir contains only `host/`, `branches/`, `run_summary.jsonl`, `heartbeat`.
+* `run_summary.jsonl` `out_file` and `err_file` paths resolve to existing files under the new layout.
+* Every existing e2e test passes after the helper update — no test asserts old paths directly.
+* The change is limited to runtime + CLI + e2e helpers. No changes to the language or workflow semantics.
+
+***
+
 ## Runtime — kill isolated containers on parent signal #dev-ready
 
 **Goal**
