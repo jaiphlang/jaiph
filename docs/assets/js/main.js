@@ -21,6 +21,7 @@
         "test",
         "ensure",
         "catch",
+        "recover",
         "run",
         "prompt",
         "returns",

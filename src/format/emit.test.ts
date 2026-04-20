@@ -464,4 +464,41 @@ describe("emitModule", () => {
     ].join("\n");
     assert.equal(roundTrip(source), source);
   });
+
+  it("round-trips run with single recover statement", () => {
+    const source = [
+      "workflow default() {",
+      '  run deploy() recover (err) log "fixing"',
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
+
+  it("round-trips run with multiline recover block", () => {
+    const source = [
+      "workflow default() {",
+      "  run deploy() recover (err) {",
+      '    log "fixing"',
+      "    run fix()",
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
+
+  it("round-trips config with run.recover_limit", () => {
+    const source = [
+      "config {",
+      "  run.recover_limit = 5",
+      "}",
+      "",
+      "workflow default() {",
+      '  log "ok"',
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
 });

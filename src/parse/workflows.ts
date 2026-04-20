@@ -15,7 +15,7 @@ import { parseConfigBlock } from "./metadata";
 import { parsePromptStep } from "./prompt";
 import { parseSendRhs } from "./send-rhs";
 import { parseAnonymousInlineScript } from "./inline-script";
-import { parseEnsureStep, parseRunCatchStep } from "./steps";
+import { parseEnsureStep, parseRunCatchStep, parseRunRecoverStep } from "./steps";
 import { parseBraceBlockBody, parseBlockStatement } from "./workflow-brace";
 import { dottedReturnToQuotedString, isBareDottedIdentifierReturn } from "./workflow-return-dotted";
 import { parseMatchExpr } from "./match";
@@ -393,6 +393,13 @@ export function parseWorkflowBlock(
       }
       if (runBody.startsWith("script(") || runBody.startsWith("script (")) {
         fail(filePath, 'inline script syntax has changed: use run `body`(args) instead of run script(args) "body"', innerNo);
+      }
+      // Check for run ... recover (loop semantics)
+      const recoverResult = parseRunRecoverStep(filePath, lines, idx, innerNo, innerRaw, runBody);
+      if (recoverResult) {
+        workflow.steps.push(recoverResult.step);
+        idx = recoverResult.nextIdx;
+        continue;
       }
       // Check for run ... catch
       const catchResult = parseRunCatchStep(filePath, lines, idx, innerNo, innerRaw, runBody);

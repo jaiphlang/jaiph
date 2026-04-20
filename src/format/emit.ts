@@ -158,6 +158,9 @@ function emitConfigKeyLines(meta: WorkflowMetadata, key: string, pad: string): s
     case "run.inbox_parallel":
       if (meta.run?.inboxParallel === undefined) return [];
       return [`${pad}run.inbox_parallel = ${meta.run.inboxParallel}`];
+    case "run.recover_limit":
+      if (meta.run?.recoverLimit === undefined) return [];
+      return [`${pad}run.recover_limit = ${meta.run.recoverLimit}`];
     case "runtime.docker_enabled":
       if (meta.runtime?.dockerEnabled === undefined) return [];
       return [`${pad}runtime.docker_enabled = ${meta.runtime.dockerEnabled}`];
@@ -221,6 +224,7 @@ function emitConfig(meta: WorkflowMetadata, pad: string): string {
     if (meta.run.debug !== undefined) lines.push(`${pad}run.debug = ${meta.run.debug}`);
     if (meta.run.logsDir !== undefined) lines.push(`${pad}run.logs_dir = "${meta.run.logsDir}"`);
     if (meta.run.inboxParallel !== undefined) lines.push(`${pad}run.inbox_parallel = ${meta.run.inboxParallel}`);
+    if (meta.run.recoverLimit !== undefined) lines.push(`${pad}run.recover_limit = ${meta.run.recoverLimit}`);
   }
   if (meta.runtime) {
     if (meta.runtime.dockerEnabled !== undefined) lines.push(`${pad}runtime.docker_enabled = ${meta.runtime.dockerEnabled}`);
@@ -543,7 +547,19 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
       const ref = emitRef(step.workflow, step.args, step.bareIdentifierArgs);
       const capture = step.captureName ? `${step.captureName} = ` : "";
       const asyncPrefix = step.async ? "async " : "";
-      if (step.recover) {
+      if (step.recoverLoop) {
+        const b = step.recoverLoop.bindings;
+        const bindStr = `(${b.failure})`;
+        if ("single" in step.recoverLoop) {
+          const recoverLines = emitStep(step.recoverLoop.single, pad, "");
+          const recoverText = recoverLines.map((l) => l.trim()).join("\n");
+          lines.push(`${ci}${capture}run ${asyncPrefix}${ref} recover ${bindStr} ${recoverText}`);
+        } else {
+          lines.push(`${ci}${capture}run ${asyncPrefix}${ref} recover ${bindStr} {`);
+          lines.push(...emitSteps(step.recoverLoop.block, pad, ci + pad));
+          lines.push(`${ci}}`);
+        }
+      } else if (step.recover) {
         const b = step.recover.bindings;
         const bindStr = `(${b.failure})`;
         if ("single" in step.recover) {

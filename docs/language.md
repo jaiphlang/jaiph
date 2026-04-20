@@ -192,7 +192,7 @@ workflow deploy(env, version) {
 }
 ```
 
-Workflows support all step types: `run`, `ensure`, `prompt`, `const`, `log`, `logerr`, `fail`, `return`, `send`, `match`, `if`, `run async`, and `catch`.
+Workflows support all step types: `run`, `ensure`, `prompt`, `const`, `log`, `logerr`, `fail`, `return`, `send`, `match`, `if`, `run async`, `catch`, and `recover`.
 
 ### Rules
 
@@ -354,6 +354,51 @@ workflow deploy(env) {
 ```
 
 Bare `catch` without a binding is a parse error. All call arguments must appear inside parentheses before `catch`.
+
+### `recover` — Repair-and-Retry Loop
+
+`recover` is a first-class retry primitive for `run` steps. Unlike `catch` (which runs the recovery body once), `recover` implements a **loop**: try the target, and if it fails, bind the error, run the repair body, then retry. The loop stops when the target succeeds or when the retry limit is exhausted.
+
+```jaiph
+# Single-statement recovery loop
+run deploy() recover(err) run fix_deploy()
+
+# Block recovery loop
+run deploy(env) recover(err) {
+  log "Deploy failed: ${err}"
+  run auto_repair(env)
+}
+```
+
+**Semantics:**
+
+1. Execute the `run` target.
+2. If it succeeds, continue (the `recover` body never runs).
+3. If it fails, bind merged stdout+stderr to the `recover` binding (e.g. `err`), execute the repair body, then go to step 1.
+4. If the retry limit is reached and the target still fails, the step fails with the last error.
+
+**Retry limit:** The default limit is **10** attempts. Override it per-module with the `run.recover_limit` config key:
+
+```jaiph
+config {
+  run.recover_limit = 3
+}
+
+workflow default() {
+  run flaky_step() recover(err) {
+    log "Retrying after: ${err}"
+    run repair()
+  }
+}
+```
+
+**Capture:** When the target eventually succeeds, `const name = run ref() recover(err) { … }` captures the result (same rules as plain `run` — `return` value for workflows, stdout for scripts).
+
+**Constraints:**
+- `recover` requires exactly one binding: `recover(name)`. Bare `recover` without bindings is a parse error.
+- All call arguments must appear inside parentheses **before** `recover`.
+- `recover` is available on `run` steps in workflows only (not `ensure`, not `run async`).
+- `recover` and `catch` are mutually exclusive on the same step — use one or the other.
 
 ### `prompt` — Agent Interaction
 

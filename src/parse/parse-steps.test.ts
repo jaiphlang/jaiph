@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { parsejaiph } from "../parser";
-import { parseEnsureStep } from "./steps";
+import { parseEnsureStep, parseRunRecoverStep } from "./steps";
 
 // === parseEnsureStep: basic ensure without catch ===
 
@@ -282,5 +282,120 @@ test("parsejaiph: workflow with ensure catch and multiline triple-quoted prompt"
       assert.equal(p.bodyKind, "triple_quoted");
       assert.ok(p.raw.includes("hello"));
     }
+  }
+});
+
+// === parseRunRecoverStep: basic recover ===
+
+test("parseRunRecoverStep: returns null when no recover keyword", () => {
+  const lines = ["  run my_workflow()"];
+  const result = parseRunRecoverStep("test.jh", lines, 0, 1, lines[0], "my_workflow()");
+  assert.equal(result, null);
+});
+
+test("parseRunRecoverStep: parses run with single recover statement", () => {
+  const lines = ['  run my_workflow() recover(err) log "repairing"'];
+  const result = parseRunRecoverStep("test.jh", lines, 0, 1, lines[0], 'my_workflow() recover(err) log "repairing"');
+  assert.ok(result);
+  const step = result!.step;
+  assert.equal(step.type, "run");
+  if (step.type === "run") {
+    assert.equal(step.workflow.value, "my_workflow");
+    assert.ok(step.recoverLoop);
+    assert.equal(step.recoverLoop!.bindings.failure, "err");
+    if ("single" in step.recoverLoop!) {
+      assert.equal(step.recoverLoop!.single.type, "log");
+    }
+  }
+});
+
+test("parseRunRecoverStep: parses run with inline recover block", () => {
+  const lines = ['  run fix() recover(e) { log "a"; run patch() }'];
+  const result = parseRunRecoverStep("test.jh", lines, 0, 1, lines[0], 'fix() recover(e) { log "a"; run patch() }');
+  assert.ok(result);
+  const step = result!.step;
+  if (step.type === "run" && step.recoverLoop && "block" in step.recoverLoop) {
+    assert.equal(step.recoverLoop.block.length, 2);
+    assert.equal(step.recoverLoop.block[0].type, "log");
+    assert.equal(step.recoverLoop.block[1].type, "run");
+  }
+});
+
+test("parseRunRecoverStep: parses run with multiline recover block", () => {
+  const lines = [
+    "  run deploy() recover(err) {",
+    '    log "retrying"',
+    "    run cleanup()",
+    "  }",
+  ];
+  const result = parseRunRecoverStep("test.jh", lines, 0, 1, lines[0], "deploy() recover(err) {");
+  assert.ok(result);
+  const step = result!.step;
+  if (step.type === "run" && step.recoverLoop && "block" in step.recoverLoop) {
+    assert.equal(step.recoverLoop.block.length, 2);
+    assert.equal(step.recoverLoop.block[0].type, "log");
+    assert.equal(step.recoverLoop.block[1].type, "run");
+  }
+  assert.equal(result!.nextIdx, 3);
+});
+
+test("parseRunRecoverStep: rejects recover at EOL without body", () => {
+  const lines = ["  run my_workflow() recover"];
+  assert.throws(
+    () => parseRunRecoverStep("test.jh", lines, 0, 1, lines[0], "my_workflow() recover"),
+    /recover requires explicit bindings/,
+  );
+});
+
+test("parseRunRecoverStep: rejects recover without bindings", () => {
+  const lines = ["  run my_workflow() recover {"];
+  assert.throws(
+    () => parseRunRecoverStep("test.jh", lines, 0, 1, lines[0], "my_workflow() recover {"),
+    /recover requires explicit bindings/,
+  );
+});
+
+test("parseRunRecoverStep: rejects recover with two bindings", () => {
+  const lines = ['  run my_workflow() recover(a, b) { log "x" }'];
+  assert.throws(
+    () => parseRunRecoverStep("test.jh", lines, 0, 1, lines[0], 'my_workflow() recover(a, b) { log "x" }'),
+    /recover accepts exactly one binding/,
+  );
+});
+
+test("parseRunRecoverStep: empty recover block throws", () => {
+  const lines = ["  run my_workflow() recover(err) { }"];
+  assert.throws(
+    () => parseRunRecoverStep("test.jh", lines, 0, 1, lines[0], "my_workflow() recover(err) { }"),
+    /recover block must contain at least one statement/,
+  );
+});
+
+// === parsejaiph: full workflow with recover ===
+
+test("parsejaiph: workflow with run recover block", () => {
+  const src = [
+    "workflow deploy() {",
+    '  run setup() recover(err) {',
+    '    log "fixing"',
+    '    run fix()',
+    '  }',
+    "}",
+    "workflow setup() {",
+    '  log "setup"',
+    "}",
+    "workflow fix() {",
+    '  log "fix"',
+    "}",
+    "",
+  ].join("\n");
+  const mod = parsejaiph(src, "recover_test.jh");
+  const w = mod.workflows.find((x) => x.name === "deploy");
+  assert.ok(w);
+  const runStep = w!.steps[0];
+  assert.equal(runStep.type, "run");
+  if (runStep.type === "run") {
+    assert.ok(runStep.recoverLoop);
+    assert.equal(runStep.recover, undefined);
   }
 });

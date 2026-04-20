@@ -42,7 +42,7 @@ The compiler enforces these boundaries at every call site. Using a script where 
 
 Jaiph enforces a strict boundary between orchestration and execution. Workflows and rules contain only Jaiph steps. Bash lives in `script` bodies.
 
-- **Workflows** — Named sequences of Jaiph steps: `ensure`, `run`, `prompt`, `const`, `fail`, `return`, `log`/`logerr`, inbox `send` (`channel <- …`), `match`, `if`, `run async`, `ensure … catch`, and `run … catch`. Any line that is not a recognized step is a parse error — extract bash to a `script` and call it with `run`.
+- **Workflows** — Named sequences of Jaiph steps: `ensure`, `run`, `prompt`, `const`, `fail`, `return`, `log`/`logerr`, inbox `send` (`channel <- …`), `match`, `if`, `run async`, `ensure … catch`, `run … catch`, and `run … recover`. Any line that is not a recognized step is a parse error — extract bash to a `script` and call it with `run`.
 
 - **Rules** — Named blocks of structured Jaiph steps: `ensure` (other rules), `run` (scripts only — not workflows), `const`, `match`, `if`, `fail`, `log`/`logerr`, `return "…"`, `ensure … catch`, `run … catch`. Rules cannot use `prompt`, inbox send/route, or `run async`.
 
@@ -391,6 +391,46 @@ Syntax rules:
 - `catch` must be followed by `(<name>)` — bare `catch` or `catch {` without bindings is `E_PARSE`.
 - All call arguments must appear inside the parentheses **before** `catch`.
 - `catch` must be followed by at least one recovery step after the bindings.
+
+### `run … recover` — Repair-and-Retry Loop
+
+`recover` adds loop semantics to a `run` step. Unlike `catch` (which runs the recovery body once and stops), `recover` retries the target after each repair attempt until it succeeds or the retry limit is exhausted.
+
+```jaiph
+# Single-statement recover
+run deploy() recover(err) run fix_deploy()
+
+# Block recover
+run deploy(env) recover(err) {
+  log "Deploy failed: ${err}"
+  run auto_repair(env)
+}
+```
+
+**Loop behavior:**
+
+1. Execute the `run` target.
+2. If it succeeds, continue (the `recover` body never runs).
+3. If it fails, bind merged stdout+stderr to the binding (e.g. `err`), execute the repair body, then go to step 1.
+4. If the retry limit is reached and the target still fails, the step fails with the last error.
+
+**Retry limit:** Default is **10**. Override per-module with `run.recover_limit`:
+
+```jaiph
+config {
+  run.recover_limit = 3
+}
+```
+
+**Bindings** follow the same rules as `catch`:
+- Exactly one binding is required. The binding receives merged stdout+stderr from the failed execution.
+
+Syntax rules:
+- `recover` must be followed by `(<name>)` — bare `recover` or `recover {` without bindings is `E_PARSE`.
+- All call arguments must appear inside the parentheses **before** `recover`.
+- `recover` must be followed by at least one recovery step after the bindings.
+- `recover` and `catch` are mutually exclusive on the same `run` step.
+- `recover` is not supported on `ensure` or `run async` steps.
 
 ### `prompt` — Agent Interaction
 
@@ -827,7 +867,7 @@ workflow_config = config_block ;
   (* optional per-workflow override; must appear before steps;
      only agent.* and run.* keys allowed; runtime.* and module.* yield E_PARSE *)
 
-workflow_step   = ensure_stmt | run_stmt | run_catch_stmt | run_async_stmt | prompt_stmt | prompt_capture_stmt
+workflow_step   = ensure_stmt | run_stmt | run_catch_stmt | run_recover_stmt | run_async_stmt | prompt_stmt | prompt_capture_stmt
                 | const_decl_step | return_stmt
                 | fail_stmt | log_stmt | logerr_stmt | send_stmt
                 | match_stmt | if_stmt | comment_line ;
@@ -867,6 +907,7 @@ logerr_stmt     = "logerr" ( double_quoted_string | triple_quoted_block | IDENT 
 
 ensure_stmt     = "ensure" call_ref [ "catch" catch_bindings catch_body ] ;
 run_catch_stmt  = "run" call_ref "catch" catch_bindings catch_body ;
+run_recover_stmt = "run" call_ref "recover" recover_bindings recover_body ;
 run_stmt        = "run" ( call_ref | inline_script ) ;
 call_ref        = REF "(" [ call_args ] ")" ;  (* parentheses always required *)
 call_arg        = double_quoted_string | IDENT | "${" IDENT "}"
@@ -881,7 +922,9 @@ returns_schema  = "returns" double_quoted_string ;
 
 catch_bindings  = "(" IDENT ")" ;  (* failure payload *)
 catch_body      = single_workflow_stmt | "{" { workflow_step } "}" ;
-single_workflow_stmt = ensure_stmt | run_stmt | run_catch_stmt | prompt_stmt | prompt_capture_stmt
+recover_bindings = "(" IDENT ")" ;  (* failure payload — same as catch *)
+recover_body    = single_workflow_stmt | "{" { workflow_step } "}" ;
+single_workflow_stmt = ensure_stmt | run_stmt | run_catch_stmt | run_recover_stmt | prompt_stmt | prompt_capture_stmt
                 | const_decl_step
                 | return_stmt | fail_stmt | log_stmt | logerr_stmt
                 | send_stmt ;
@@ -904,7 +947,7 @@ Validation rules:
 4. **Unified namespace:** channels, rules, workflows, scripts, script import aliases, and top-level `const` share one namespace per module.
 5. `ensure` must target a rule. `run` in a workflow targets a workflow or script. `run` in a rule targets a script only. These rules also apply to `return run` and `return ensure` forms.
 6. Channel references in `send` must resolve to declared channels. Route targets on channel declarations must be workflows with exactly 3 parameters. Route declarations inside workflow bodies are rejected at parse time.
-7. `ensure … catch` and `run … catch` argument ordering: all arguments inside parentheses before `catch`.
+7. `ensure … catch`, `run … catch`, and `run … recover` argument ordering: all arguments inside parentheses before `catch`/`recover`.
 8. Shell redirection (`>`, `|`, `&`) after `run`/`ensure` is rejected — use a script.
 9. **Type crossing:** `string` and `script` are non-interchangeable primitive types (see [Types](#types)). `prompt` rejects script names; `run` rejects string consts; assigning a script to a `const` or interpolating a script name with `${…}` is rejected. Each crossing produces an actionable `E_VALIDATE` message.
 10. **Explicit nested managed calls:** Bare call-like forms in argument position (`run foo(bar())`, `run foo(rule_bar())`) are rejected — add the missing `run` or `ensure` keyword. Bare inline script calls in arguments (`run foo(\`echo aaa\`())`) are also rejected — add `run`. Valid forms: `run foo(run bar())`, `run foo(ensure rule_bar())`, `run foo(run \`echo aaa\`())`.
@@ -923,6 +966,7 @@ At runtime, the Node workflow runtime interprets the AST directly:
 - **Script isolation:** Managed subprocesses with only essential variables. Module-scoped variables not visible.
 - **Prompt + schema:** JSON extraction and schema validation via the JS kernel. Exit codes: 0=ok, 1=parse error, 2=missing field, 3=type mismatch.
 - **ensure/run … catch:** On failure, the recovery body runs **once**. There is no retry loop. Requires explicit bindings: `catch (failure) { … }`. The binding gets the merged stdout+stderr from the failed execution.
+- **run … recover:** Repair-and-retry loop. On failure, the binding gets merged stdout+stderr, the repair body runs, and the target is retried. Loop stops on success or when `run.recover_limit` (default 10) is exhausted. Requires explicit bindings: `recover(err) { … }`.
 - **Recursion safety:** There is a hard recursion depth limit of 256. Exceeding it produces a runtime error.
 - **Assignment capture:** Rules and workflows use explicit `return "…"`. Scripts use stdout.
 - **`run async`:** Promise-based concurrency. Implicit join via `Promise.allSettled` before workflow returns. Failures aggregated.

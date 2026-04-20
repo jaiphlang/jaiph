@@ -211,6 +211,47 @@ function parseCatchStatement(
         loc: { line: lineNo, col },
       };
     }
+    // Check for run ... recover inside catch/recover blocks
+    const recoverLoopMatch = runBody.match(/ recover(?=[\s(])/);
+    if (recoverLoopMatch) {
+      const recLoopIdx = recoverLoopMatch.index!;
+      const leftPart = runBody.slice(0, recLoopIdx).trim();
+      const rightPart = runBody.slice(recLoopIdx + " recover".length).trimStart();
+      const callPart = parseCallRef(leftPart);
+      if (callPart && !callPart.rest.trim() && rightPart.startsWith("(")) {
+        const closeParen = rightPart.indexOf(")");
+        if (closeParen !== -1) {
+          const bStr = rightPart.slice(1, closeParen).trim();
+          const bParts = bStr.split(",").map((s) => s.trim()).filter(Boolean);
+          if (bParts.length === 1 && /^[A-Za-z_][A-Za-z0-9_]*$/.test(bParts[0])) {
+            const bindings = { failure: bParts[0] };
+            const after = rightPart.slice(closeParen + 1).trim();
+            if (after.startsWith("{") && after.endsWith("}")) {
+              const blockContent = after.slice(1, -1).trim();
+              const stmts = splitCatchStatements(blockContent);
+              const blockSteps = stmts.map((s) => parseCatchStatement(filePath, lineNo, col, s));
+              return {
+                type: "run",
+                workflow: { value: callPart.ref, loc: { line: lineNo, col } },
+                args: callPart.args,
+                ...(callPart.bareIdentifierArgs ? { bareIdentifierArgs: callPart.bareIdentifierArgs } : {}),
+                recoverLoop: { block: blockSteps, bindings },
+              };
+            }
+            if (!after.startsWith("{") && after) {
+              const singleStep = parseCatchStatement(filePath, lineNo, col, after);
+              return {
+                type: "run",
+                workflow: { value: callPart.ref, loc: { line: lineNo, col } },
+                args: callPart.args,
+                ...(callPart.bareIdentifierArgs ? { bareIdentifierArgs: callPart.bareIdentifierArgs } : {}),
+                recoverLoop: { single: singleStep, bindings },
+              };
+            }
+          }
+        }
+      }
+    }
     // Check for run ... catch inside catch blocks
     const recIdx = runBody.indexOf(" catch ");
     if (recIdx !== -1) {
@@ -481,6 +522,122 @@ export function parseEnsureStep(
 
   const singleStep = parseCatchStatement(filePath, innerNo, catchCol, afterBindings);
   return { step: { ...base, recover: { single: singleStep, bindings } }, nextIdx: idx };
+}
+
+/**
+ * Try to parse `run <ref>(args) recover(binding) { ... }` syntax (loop semantics).
+ * Returns null if the run body does not contain ` recover `.
+ */
+export function parseRunRecoverStep(
+  filePath: string,
+  lines: string[],
+  idx: number,
+  innerNo: number,
+  innerRaw: string,
+  runBody: string,
+  captureName?: string,
+): { step: WorkflowStepDef; nextIdx: number } | null {
+  // Match ` recover(`, ` recover `, or ` recover` at end of line
+  const recoverMatch = runBody.match(/ recover(?=[\s(]|$)/);
+  if (!recoverMatch) return null;
+  const recoverIdx = recoverMatch.index!;
+
+  if (/ recover$/.test(runBody)) {
+    const recoverCol = innerRaw.indexOf("recover") + 1;
+    fail(
+      filePath,
+      'recover requires explicit bindings and a body: recover(<name>) { ... }',
+      innerNo,
+      recoverCol,
+    );
+  }
+
+  const left = runBody.slice(0, recoverIdx).trim();
+  const right = runBody.slice(recoverIdx + " recover".length).trimStart();
+  const call = parseCallRef(left);
+  if (!call || call.rest.trim()) return null;
+  const runCol = innerRaw.indexOf("run") + 1;
+  const recoverCol = innerRaw.indexOf("recover") + 1;
+
+  if (!right.startsWith("(")) {
+    fail(
+      filePath,
+      'recover requires explicit bindings: recover(<name>) { ... }',
+      innerNo,
+      recoverCol,
+    );
+  }
+
+  const closeParen = right.indexOf(")");
+  if (closeParen === -1) {
+    fail(filePath, 'unterminated recover bindings: expected ")"', innerNo, recoverCol);
+  }
+  const bindingsStr = right.slice(1, closeParen).trim();
+  const bindingParts = bindingsStr.split(",").map((s) => s.trim()).filter(Boolean);
+  if (bindingParts.length === 0) {
+    fail(filePath, "recover requires exactly one binding: recover(<name>) { ... }", innerNo, recoverCol);
+  }
+  if (bindingParts.length > 1) {
+    fail(filePath, "recover accepts exactly one binding: recover(<name>)", innerNo, recoverCol);
+  }
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(bindingParts[0])) {
+    fail(filePath, `invalid recover binding name: "${bindingParts[0]}" — must be a valid identifier`, innerNo, recoverCol);
+  }
+  const bindings = { failure: bindingParts[0] };
+
+  const afterBindings = right.slice(closeParen + 1).trim();
+  const base = {
+    type: "run" as const,
+    workflow: { value: call.ref, loc: { line: innerNo, col: runCol } },
+    args: call.args,
+    ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
+    ...(captureName ? { captureName } : {}),
+  };
+
+  if (afterBindings === "{") {
+    let blockLines: string[] = [];
+    let closeLineIdx = -1;
+    let braceDepth = 1;
+    for (let look = idx + 1; look < lines.length; look += 1) {
+      const trimmed = lines[look].trim();
+      if (trimmed.endsWith("{")) braceDepth += 1;
+      if (trimmed === "}") {
+        braceDepth -= 1;
+        if (braceDepth === 0) { closeLineIdx = look; break; }
+      }
+      blockLines.push(trimmed);
+    }
+    if (closeLineIdx === -1) {
+      fail(filePath, 'unterminated recover block, expected "}"', innerNo, recoverCol);
+    }
+    const statements = splitCatchStatements(blockLines.join("\n"));
+    if (statements.length === 0) {
+      fail(filePath, "recover block must contain at least one statement", innerNo, recoverCol);
+    }
+    const blockSteps = statements.map((s) => parseCatchStatement(filePath, innerNo, 1, s));
+    return { step: { ...base, recoverLoop: { block: blockSteps, bindings } }, nextIdx: closeLineIdx };
+  }
+
+  if (afterBindings.startsWith("{")) {
+    const closeBrace = afterBindings.indexOf("}");
+    if (closeBrace === -1) {
+      fail(filePath, 'unterminated recover block, expected "}"', innerNo, recoverCol);
+    }
+    const blockContent = afterBindings.slice(1, closeBrace).trim();
+    const statements = splitCatchStatements(blockContent);
+    if (statements.length === 0) {
+      fail(filePath, "recover block must contain at least one statement", innerNo, recoverCol);
+    }
+    const blockSteps = statements.map((s) => parseCatchStatement(filePath, innerNo, recoverCol, s));
+    return { step: { ...base, recoverLoop: { block: blockSteps, bindings } }, nextIdx: idx };
+  }
+
+  if (!afterBindings) {
+    fail(filePath, "recover requires a body after bindings", innerNo, recoverCol);
+  }
+
+  const singleStep = parseCatchStatement(filePath, innerNo, recoverCol, afterBindings);
+  return { step: { ...base, recoverLoop: { single: singleStep, bindings } }, nextIdx: idx };
 }
 
 /**

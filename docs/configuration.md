@@ -136,6 +136,7 @@ These control runtime behavior unrelated to the agent.
 | `run.logs_dir` | string | `.jaiph/runs` | `JAIPH_RUNS_DIR` | Step log directory. Relative paths are joined with the workspace root; absolute paths are used as-is. |
 | `run.debug` | boolean | `false` | `JAIPH_DEBUG` | Enables debug tracing for the run. |
 | `run.inbox_parallel` | boolean | `false` | `JAIPH_INBOX_PARALLEL` | Dispatch inbox route targets concurrently. See [Inbox — Parallel dispatch](inbox.md#parallel-dispatch). |
+| `run.recover_limit` | integer | `10` | _(no env override)_ | Maximum number of retry attempts for `run … recover` loops before the step fails. See [Language — `recover`](language.md#recover--repair-and-retry-loop). |
 
 ### Module keys
 
@@ -323,6 +324,7 @@ Quick reference for all in-file keys and their environment variable equivalents:
 | `run.logs_dir` | `JAIPH_RUNS_DIR` |
 | `run.debug` | `JAIPH_DEBUG` |
 | `run.inbox_parallel` | `JAIPH_INBOX_PARALLEL` |
+| `run.recover_limit` | _(no env override)_ |
 | `runtime.docker_enabled` | `JAIPH_DOCKER_ENABLED` |
 | `runtime.docker_image` | `JAIPH_DOCKER_IMAGE` |
 | `runtime.docker_network` | `JAIPH_DOCKER_NETWORK` |

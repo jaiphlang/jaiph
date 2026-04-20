@@ -145,6 +145,10 @@ export type WorkflowStepDef =
       recover?:
         | { single: WorkflowStepDef; bindings: { failure: string } }
         | { block: WorkflowStepDef[]; bindings: { failure: string } };
+      /** When set, retry with repair loop semantics (try → fail → recover body → retry). */
+      recoverLoop?:
+        | { single: WorkflowStepDef; bindings: { failure: string } }
+        | { block: WorkflowStepDef[]; bindings: { failure: string } };
     }
   | {
       type: "prompt";
@@ -305,7 +309,7 @@ export interface WorkflowMetadata {
     cursorFlags?: string;
     claudeFlags?: string;
   };
-  run?: { debug?: boolean; logsDir?: string; inboxParallel?: boolean };
+  run?: { debug?: boolean; logsDir?: string; inboxParallel?: boolean; recoverLimit?: number };
   runtime?: RuntimeConfig;
   module?: { name?: string; version?: string; description?: string };
   /** Preserves `#` lines and assignment order inside `config { }` (formatter). */
