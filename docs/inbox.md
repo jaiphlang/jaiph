@@ -109,7 +109,7 @@ workflow researcher() {
 }
 ```
 
-An explicit RHS is always required — bare `channel <-` (forward syntax) is no longer supported.
+An explicit RHS is always required — bare `channel <-` (without a value) is invalid.
 
 The `<-` operator is only recognized when it appears outside of quoted strings
 on the surrounding line so channel names and literals are not misread as send

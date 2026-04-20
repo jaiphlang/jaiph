@@ -123,7 +123,7 @@ mock script w.helper() {
 }
 ```
 
-The former `mock function` syntax is no longer accepted — the parser emits an error with migration guidance.
+Test stubs use `mock script`, not `mock function`; the latter is a parse error with a fix hint.
 
 ### Workflow run (with capture)
 

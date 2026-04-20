@@ -64,7 +64,7 @@ workflow default() {
   # Returns the absolute path of the saved patch file.
   const patch = run artifacts.save_patch("snapshot.patch")
 
-  # Apply a previously-saved patch to the current workspace.
+  # Apply a saved patch to the current workspace.
   run artifacts.apply_patch(patch)
 }
 ```

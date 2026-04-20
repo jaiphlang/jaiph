@@ -283,9 +283,8 @@ export function verifyImageHasJaiph(image: string): void {
  *
  * Always uses `config.image` (from env, in-file `runtime.docker_image`, or the
  * default `ghcr.io/jaiphlang/jaiph-runtime:<version>`). Pulls from the registry
- * if the image is not present locally. Does not build from `.jaiph/Dockerfile`;
- * use that file to build/push a custom image and set `runtime.docker_image` or
- * `JAIPH_DOCKER_IMAGE` to reference it.
+ * if the image is not present locally. To use a custom image, build/push it
+ * yourself and set `runtime.docker_image` or `JAIPH_DOCKER_IMAGE`.
  *
  * Verifies that `jaiph` exists in the image before use (`E_DOCKER_NO_JAIPH`).
  */

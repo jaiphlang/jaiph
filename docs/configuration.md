@@ -167,12 +167,12 @@ workflow default() {
 
 These configure Docker sandboxing. Unlike agent and run keys, runtime keys are resolved by the `jaiph run` CLI at launch — not by the workflow runtime. They can only appear in **module-level** config blocks (not workflow-level).
 
-> Docker sandboxing is in **beta**. See [Sandboxing](sandboxing.md) for mounts, workspace layout, Dockerfile detection, env forwarding, path remapping, and container behavior.
+> Docker sandboxing is in **beta**. See [Sandboxing](sandboxing.md) for mounts, workspace layout, env forwarding, path remapping, and container behavior.
 
 | Key | Type | Default | Env variable | Description |
 |-----|------|---------|--------------|-------------|
 | `runtime.docker_enabled` | boolean | `true` locally; `false` when `CI=true` or `JAIPH_UNSAFE=true` | `JAIPH_DOCKER_ENABLED` | Enable Docker for this run. See [Sandboxing -- Enabling Docker](sandboxing.md#enabling-docker) for the default rule. |
-| `runtime.docker_image` | string | `ghcr.io/jaiphlang/jaiph-runtime:<version>` | `JAIPH_DOCKER_IMAGE` | Image name. Must already contain `jaiph`. When unset, uses the official GHCR image tag matching the installed jaiph version. A workspace `.jaiph/Dockerfile` is not built automatically on `jaiph run` — build and push (or tag locally) your own image, then set this key or `JAIPH_DOCKER_IMAGE`. |
+| `runtime.docker_image` | string | `ghcr.io/jaiphlang/jaiph-runtime:<version>` | `JAIPH_DOCKER_IMAGE` | Image name. Must already contain `jaiph`. When unset, uses the official GHCR image tag matching the installed jaiph version. For a custom image, build and push (or tag locally), then set this key or `JAIPH_DOCKER_IMAGE`. |
 | `runtime.docker_network` | string | `default` | `JAIPH_DOCKER_NETWORK` | Docker network mode. |
 | `runtime.docker_timeout` | integer | `300` | `JAIPH_DOCKER_TIMEOUT` | Timeout in seconds. Invalid or unparsable values fall back to the default. |
 | `runtime.workspace` | string[] | `[".:/jaiph/workspace:rw"]` | _(no env override)_ | Mount list. Only settable via in-file config or defaults. |
@@ -350,4 +350,4 @@ The runtime also sets `JAIPH_ARTIFACTS_DIR` — the absolute path to the writabl
 
 ## Created by `jaiph init`
 
-`jaiph init` creates `.jaiph/bootstrap.jh`, `.jaiph/Dockerfile`, and writes `.jaiph/SKILL.md` from the skill file bundled with your installation (see `JAIPH_SKILL_PATH` in the CLI reference). It does not add a separate config file — use `config { ... }` in your workflow sources.
+`jaiph init` creates `.jaiph/bootstrap.jh` and writes `.jaiph/SKILL.md` from the skill file bundled with your installation (see `JAIPH_SKILL_PATH` in the CLI reference). It does not add a separate config file — use `config { ... }` in your workflow sources.
