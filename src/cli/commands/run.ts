@@ -30,7 +30,6 @@ import {
   resolveDockerConfig,
   spawnDockerProcess,
   cleanupDocker,
-  findRunArtifacts,
   resolveDockerHostRunsRoot,
 } from "../../runtime/docker";
 import {
@@ -363,11 +362,7 @@ function reportResult(
   let runDir: string | undefined;
   let summaryFile: string | undefined;
 
-  if (sandboxRunDir) {
-    const artifacts = findRunArtifacts(sandboxRunDir);
-    runDir = artifacts.runDir;
-    summaryFile = artifacts.summaryFile;
-  } else if (existsSync(metaFile)) {
+  if (existsSync(metaFile)) {
     const metaLines = readFileSync(metaFile, "utf8").split(/\r?\n/);
     for (const line of metaLines) {
       if (line.startsWith("run_dir=")) {

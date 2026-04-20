@@ -9,7 +9,6 @@ import {
   buildDockerArgs,
   remapDockerEnv,
   overlayMountPath,
-  findRunArtifacts,
   resolveDockerHostRunsRoot,
   writeOverlayScript,
   resolveImage,
@@ -18,7 +17,6 @@ import {
   isEnvDenied,
   ENV_DENYLIST_PREFIXES,
   GHCR_IMAGE_REPO,
-  exportWorkspacePatch,
   type MountSpec,
   type DockerRunConfig,
   type DockerSpawnOptions,
@@ -447,58 +445,6 @@ test("writeOverlayScript: creates executable script with fuse-overlayfs setup", 
   }
 });
 
-// ---------------------------------------------------------------------------
-// findRunArtifacts
-// ---------------------------------------------------------------------------
-
-test("findRunArtifacts: discovers run dir and summary file", () => {
-  const tmp = mkdtempSync(join(tmpdir(), "jaiph-test-find-"));
-  try {
-    const runDir = join(tmp, "2026-04-17", "09-30-00-test.jh");
-    mkdirSync(runDir, { recursive: true });
-    writeFileSync(join(runDir, "run_summary.jsonl"), "{}");
-    const result = findRunArtifacts(tmp);
-    assert.equal(result.runDir, runDir);
-    assert.equal(result.summaryFile, join(runDir, "run_summary.jsonl"));
-  } finally {
-    rmSync(tmp, { recursive: true, force: true });
-  }
-});
-
-test("findRunArtifacts: returns runDir without summary if missing", () => {
-  const tmp = mkdtempSync(join(tmpdir(), "jaiph-test-find-"));
-  try {
-    const runDir = join(tmp, "2026-04-17", "09-30-00-test.jh");
-    mkdirSync(runDir, { recursive: true });
-    const result = findRunArtifacts(tmp);
-    assert.equal(result.runDir, runDir);
-    assert.equal(result.summaryFile, undefined);
-  } finally {
-    rmSync(tmp, { recursive: true, force: true });
-  }
-});
-
-test("findRunArtifacts: returns empty for non-existent dir", () => {
-  const result = findRunArtifacts("/tmp/jaiph-nonexistent-" + Date.now());
-  assert.equal(result.runDir, undefined);
-  assert.equal(result.summaryFile, undefined);
-});
-
-test("findRunArtifacts: returns latest run when multiple exist", () => {
-  const tmp = mkdtempSync(join(tmpdir(), "jaiph-test-find-"));
-  try {
-    const older = join(tmp, "2026-04-17", "09-30-00-test.jh");
-    const newer = join(tmp, "2026-04-17", "09-31-00-test.jh");
-    mkdirSync(older, { recursive: true });
-    mkdirSync(newer, { recursive: true });
-    writeFileSync(join(newer, "run_summary.jsonl"), "{}");
-    const result = findRunArtifacts(tmp);
-    assert.equal(result.runDir, newer);
-    assert.equal(result.summaryFile, join(newer, "run_summary.jsonl"));
-  } finally {
-    rmSync(tmp, { recursive: true, force: true });
-  }
-});
 
 // ---------------------------------------------------------------------------
 // spawnDockerProcess: stdin must be ignored
@@ -700,61 +646,3 @@ test("buildDockerArgs: includes --cap-drop ALL and --security-opt no-new-privile
   assert.equal(args[secOptIdx + 1], "no-new-privileges");
 });
 
-// ---------------------------------------------------------------------------
-// exportWorkspacePatch
-// ---------------------------------------------------------------------------
-
-test("exportWorkspacePatch writes patch when git repo has changes", () => {
-  const dir = mkdtempSync(join(tmpdir(), "jaiph-patch-test-"));
-  const patchOut = join(dir, "workspace.patch");
-  try {
-    const { execSync } = require("node:child_process");
-    execSync("git init", { cwd: dir, stdio: "ignore" });
-    execSync("git config user.email test@test.com", { cwd: dir, stdio: "ignore" });
-    execSync("git config user.name test", { cwd: dir, stdio: "ignore" });
-    // Create initial commit so diff has a baseline
-    writeFileSync(join(dir, "initial.txt"), "initial\n");
-    execSync("git add . && git commit -m init", { cwd: dir, stdio: "ignore" });
-    // Make a change
-    writeFileSync(join(dir, "new-file.txt"), "hello\n");
-
-    const result = exportWorkspacePatch(dir, patchOut);
-    assert.equal(result, true, "should return true when patch is non-empty");
-    assert.ok(existsSync(patchOut), "patch file should exist");
-    const content = readFileSync(patchOut, "utf8");
-    assert.ok(content.includes("new-file.txt"), "patch should reference the new file");
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test("exportWorkspacePatch returns false and omits file when no changes", () => {
-  const dir = mkdtempSync(join(tmpdir(), "jaiph-patch-test-"));
-  const patchOut = join(dir, "workspace.patch");
-  try {
-    const { execSync } = require("node:child_process");
-    execSync("git init", { cwd: dir, stdio: "ignore" });
-    execSync("git config user.email test@test.com", { cwd: dir, stdio: "ignore" });
-    execSync("git config user.name test", { cwd: dir, stdio: "ignore" });
-    writeFileSync(join(dir, "initial.txt"), "initial\n");
-    execSync("git add . && git commit -m init", { cwd: dir, stdio: "ignore" });
-
-    const result = exportWorkspacePatch(dir, patchOut);
-    assert.equal(result, false, "should return false when no changes");
-    assert.ok(!existsSync(patchOut), "patch file should not exist");
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test("exportWorkspacePatch returns false for non-git directory", () => {
-  const dir = mkdtempSync(join(tmpdir(), "jaiph-patch-test-"));
-  const patchOut = join(dir, "workspace.patch");
-  try {
-    const result = exportWorkspacePatch(dir, patchOut);
-    assert.equal(result, false, "should return false for non-git dir");
-    assert.ok(!existsSync(patchOut), "patch file should not exist");
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});

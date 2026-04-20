@@ -23,7 +23,6 @@ The runtime uses a UTC-dated hierarchy. Each run gets its own folder: date, then
       inbox/                           # inbox message files (when channels are used)
       .seq                             # step-sequence counter (kernel/seq-alloc.ts)
       run_summary.jsonl                # durable event timeline
-      workspace.patch                  # (Docker only) git diff of sandbox workspace changes
 ```
 
 Sequence prefixes are **monotonic and unique** per run (allocated in the kernel), so artifact names sort in execution order. For how this fits into the CLI and kernel, see [Architecture — Durable artifact layout](architecture.md#durable-artifact-layout).
@@ -34,8 +33,7 @@ Sequence prefixes are **monotonic and unique** per run (allocated in the kernel)
 - **`run_summary.jsonl`** — Append-only JSONL timeline: workflow boundaries, step start/end, structured log lines, inbox-related events. Useful for tooling and post-run analysis.
 - **`inbox/`** — When you use channels, message payloads can be reflected as files under the run for inspection (see [Inbox & Dispatch](inbox.md)).
 - **`.seq`** — Internal counter backing the numeric prefixes; you normally do not edit it.
-- **`artifacts/`** — User-published files created by the `jaiphlang/artifacts` library. The runtime creates this directory before the first workflow step runs and exposes its path via `JAIPH_ARTIFACTS_DIR`. Files written here survive sandbox teardown because the directory is on the host filesystem (mapped via the existing `/jaiph/run` mount in Docker mode). See [Libraries — `jaiphlang/artifacts`](libraries.md#jaiphlangartifacts--publishing-files-out-of-the-sandbox).
-- **`workspace.patch`** — (Docker runs only) A `git diff --binary` patch capturing all workspace modifications made during the run. Generated automatically during runtime teardown when Docker sandboxing is enabled and the workspace has changes. The patch is sufficient to review or `git apply` on the host. Omitted when there are no workspace changes. See [Sandboxing — Workspace patch export](sandboxing.md#runtime-behavior).
+- **`artifacts/`** — User-published files created by the `jaiphlang/artifacts` library. The runtime creates this directory before the first workflow step runs and exposes its path via `JAIPH_ARTIFACTS_DIR`. Files written here survive sandbox teardown because the directory is on the host filesystem (mapped via the existing `/jaiph/run` mount in Docker mode). Workflows that need to capture workspace changes should call `artifacts.save_patch(name)`, which writes a `git diff` patch here. See [Libraries — `jaiphlang/artifacts`](libraries.md#jaiphlangartifacts--publishing-files-out-of-the-sandbox).
 
 ## Keeping runs out of git
 
