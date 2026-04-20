@@ -14,27 +14,6 @@ Process rules:
 
 ***
 
-## Productization — rewrite the built-in orchestration workflows to the new model #dev-ready
-
-**Goal**
-Prove the redesign is usable by migrating the built-in Jaiph orchestration files to it, especially `.jaiph/engineer.jh`.
-
-**Scope**
-
-* Update `.jaiph/engineer.jh` to use the new async-handle, isolated-branch, join/apply shape with the candidate-join pattern.
-* Update other built-in `.jaiph/*.jh` workflows only where needed to keep the shipped experience coherent.
-* Keep the migration narrow. Do not expand this task into unrelated product ideas.
-
-**Required tests**
-
-* Update or add focused tests that exercise the shipped orchestration path.
-* Verify docs/examples align with what ships.
-
-**Acceptance criteria**
-
-* `.jaiph/engineer.jh` demonstrates the new model rather than the old one.
-* The built-in workflow experience is coherent end-to-end.
-
 ## Cleanup — remove the target design document after the rewrite lands #dev-ready
 
 **Goal**

@@ -1,19 +1,19 @@
 #!/usr/bin/env jaiph
 
 #
-# Picks the first pending task from QUEUE.md, implements it,
-# verifies CI, updates docs, commits, and removes from queue.
+# Picks the first pending task from QUEUE.md, spawns parallel isolated
+# candidate implementations (async-handle + candidate-join pattern),
+# selects the best patch, applies it, verifies CI, updates docs,
+# commits, and removes from queue.
 #
 
 import "jaiphlang/queue" as queue
+import "jaiphlang/workspace" as workspace
 import "./docs_parity.jh" as docs
 import "./ensure_ci_passes.jh" as ci
 import "./git.jh" as git
 
 config {
-  # agent.backend = "cursor"
-  # agent.default_model = "gpt-5.3-codex"
-  # agent.cursor_flags = "--force"
   agent.backend = "claude"
   agent.claude_flags = "--permission-mode bypassPermissions"
 }
@@ -194,8 +194,6 @@ case "$1" in
 esac
 ```
 
-script arg_nonempty = `[ -n "${1:-}" ]`
-
 script task_text_has_header = `printf '%s\n' "$1" | grep -q '^## '`
 
 script first_line_task = ```
@@ -205,35 +203,6 @@ line="${line#\#\# }"
 line="$(printf '%s\n' "$line" | sed 's/ *#[A-Za-z0-9_-]*//g')"
 printf '%s\n' "$line"
 ```
-
-workflow classify_role(task) {
-  const result = prompt """
-    Classify this task into the single best-fit engineer role.
-
-    Roles:
-    - surgical: Bug fixes, narrow-scope changes, specific error corrections.
-      Keywords: fix, patch, correct, resolve, handle.
-    - reductionist: Deduplication, simplification, dead code removal, unification.
-      Keywords: deduplicate, unify, collapse, remove, simplify, merge.
-    - optimizer: Structural refactors, splitting large units, new subsystems.
-      Keywords: split, extract, redesign, refactor, add [new subsystem].
-    - stabilizer: Test coverage, hardening, error handling, safety improvements.
-      Keywords: test, coverage, harden, validate, assert, detect.
-    - writer: Documentation updates, docs pages, README, getting started, content review.
-      Keywords: docs, documentation, write, update docs, readme, revisit, interlink.
-
-    Task:
-    ${task}
-
-    Respond with exactly one role name.
-  """ returns "{ role: string }"
-
-  return result.role
-}
-
-script save_string_to_file = `echo "$1" > "$2"`
-
-script mkdir_p_simple = `mkdir -p "$1"`
 
 workflow implement(task, role_name) {
   run task_text_has_header(task) catch (err) {
@@ -306,20 +275,52 @@ workflow implement(task, role_name) {
   """
 }
 
-workflow default(name) {
-  # ensure git.is_clean
+# Runs implement inside an isolated branch and exports the result as a patch.
+# Used as a target for run async isolated in the candidate-join pattern.
+workflow implement_candidate(task, role_name, patch_name) {
+  run implement(task, role_name)
+  return run workspace.export_patch(patch_name)
+}
+
+# Reads three candidate patch paths (forcing handle resolution / implicit join)
+# and selects the best implementation via agent review.
+workflow select_best_candidate(p_surgical, p_optimizer, p_stabilizer) {
+  const result = prompt """
+    You are reviewing three candidate implementation patches for the same task.
+    Each was produced by a different engineering role in an isolated branch.
+
+    Patch files (absolute paths — read each one):
+    1. Surgical (minimal safe change):    ${p_surgical}
+    2. Optimizer (structural refactor):   ${p_optimizer}
+    3. Stabilizer (correctness-focused):  ${p_stabilizer}
+
+    Evaluate each patch against:
+    - Correctness and completeness vs acceptance criteria
+    - Minimal unnecessary change and low blast radius
+    - Code quality and test coverage
+
+    Return the absolute path of the best candidate patch.
+  """ returns "{ path: string }"
+
+  return result.path
+}
+
+workflow default() {
   const task = run queue.get_first_task()
   const task_header = run first_line_task(task)
   run queue.task_is_dev_ready(task)
   log "Implementing task: ${task_header}"
 
-  const role_name = match name {
-    "" => "${run classify_role(task)}"
-    _ => "${name}"
-  }
-  log "Role: ${role_name}"
+  # Fan-out: spawn 3 isolated candidates in parallel (async handles)
+  const b_surgical = run async isolated implement_candidate(task, "surgical", "candidate_surgical.patch")
+  const b_optimizer = run async isolated implement_candidate(task, "optimizer", "candidate_optimizer.patch")
+  const b_stabilizer = run async isolated implement_candidate(task, "stabilizer", "candidate_stabilizer.patch")
 
-  run implement(task, role_name)
+  # Join + select: passing handles as args forces resolution of all branches
+  const winner = run select_best_candidate(b_surgical, b_optimizer, b_stabilizer)
+
+  # Apply winning patch to coordinator workspace
+  run workspace.apply_patch(winner)
 
   run ci.ensure_ci_passes()
   run docs.update_from_task(task)

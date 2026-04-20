@@ -5,17 +5,21 @@ const prompt_text = "Say: Greetings! I am [model name]."
 workflow cursor_say_hello(name) {
   config { agent.backend = "cursor" }
   const response = prompt "${prompt_text}"
-  log response
+  return "${response}"
 }
 
 workflow claude_say_hello(name) {
   config { agent.backend = "claude" }
   const response = prompt "${prompt_text}"
-  log response
+  return "${response}"
 }
 
-# surrounding workflow waits for all to complete
+# Handle-based async: spawns both concurrently, reading handles forces
+# resolution (implicit join). Handles are first-class values — passthrough
+# until read via interpolation or argument passing.
 workflow default(name) {
-  run async cursor_say_hello(name)
-  run async claude_say_hello(name)
+  const h1 = run async cursor_say_hello(name)
+  const h2 = run async claude_say_hello(name)
+  log "Cursor: ${h1}"
+  log "Claude: ${h2}"
 }

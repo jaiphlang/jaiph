@@ -73,11 +73,13 @@ workflow implement_candidate(task, role, patch_name) {
 workflow default() {
   const task = run queue.get_first_task()
 
-  b1 = run async isolated implement_candidate(task, "surgical",   "candidate_surgical.patch")
-  b2 = run async isolated implement_candidate(task, "optimizer",  "candidate_optimizer.patch")
-  b3 = run async isolated implement_candidate(task, "stabilizer", "candidate_stabilizer.patch")
+  # Fan-out: async handles + isolated branches
+  const b1 = run async isolated implement_candidate(task, "surgical",   "candidate_surgical.patch")
+  const b2 = run async isolated implement_candidate(task, "optimizer",  "candidate_optimizer.patch")
+  const b3 = run async isolated implement_candidate(task, "stabilizer", "candidate_stabilizer.patch")
 
-  const final = run isolated join_implementations(b1, b2, b3)
-  run workspace.apply_patch(final)
+  # Join + select: passing handles as arguments forces resolution
+  const winner = run select_best_candidate(b1, b2, b3)
+  run workspace.apply_patch(winner)
 }
 ```

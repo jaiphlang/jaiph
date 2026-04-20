@@ -387,19 +387,21 @@ const prompt_text = "Say: Greetings! I am [model name]."
 workflow cursor_say_hello(name) {
   config { agent.backend = "cursor" }
   const response = prompt "${prompt_text}"
-  log response
+  return "${response}"
 }
 
 workflow claude_say_hello(name) {
   config { agent.backend = "claude" }
   const response = prompt "${prompt_text}"
-  log response
+  return "${response}"
 }
 
-# surrounding workflow waits for all to complete
+# Handle-based async: reading handles forces resolution (implicit join)
 workflow default(name) {
-  run async cursor_say_hello(name)
-  run async claude_say_hello(name)
+  const h1 = run async cursor_say_hello(name)
+  const h2 = run async claude_say_hello(name)
+  log "Cursor: ${h1}"
+  log "Claude: ${h2}"
 }</code></pre>
                     <p>Running the workflow:</p>
                     <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  ./async.jh</span>
@@ -510,8 +512,9 @@ Jaiph: Running async.jh
                         href="https://github.com/jaiphlang/jaiph/blob/main/.jaiph/docs_parity.jh">.jaiph/docs_parity.jh</a>
                     workflow runs documentation maintenance checks, changelog updates, and cross-doc consistency guards.
                     The <a href="https://github.com/jaiphlang/jaiph/blob/main/.jaiph/engineer.jh">.jaiph/engineer.jh</a>
-                    workflow implements a queue-driven engineering loop that picks work, implements changes, verifies
-                    CI, and updates queue state.
+                    workflow implements a queue-driven engineering loop that picks a task, fans out three
+                    isolated candidate implementations in parallel (async handles + <code>run isolated</code>),
+                    selects the best patch via agent review, applies it, verifies CI, and updates queue state.
                 </p>
             </div>
         </section>
