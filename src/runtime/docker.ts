@@ -1,5 +1,5 @@
 import { execFileSync, execSync, spawn, ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname, relative } from "node:path";
 import type { RuntimeConfig } from "../types";
@@ -684,65 +684,4 @@ export function cleanupDocker(result: DockerSpawnResult): void {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Workspace patch export (Docker teardown)
-// ---------------------------------------------------------------------------
-
-/**
- * Export a git diff of workspace changes to a patch file.
- * Used during Docker run teardown to capture sandbox-local modifications.
- *
- * Contract:
- * - When there are changes, writes `workspace.patch` (git apply-able).
- * - When there are no changes, the file is omitted (not created).
- * - Best-effort: failures are reported on stderr but do not affect workflow exit status.
- *
- * @returns true if a non-empty patch was written.
- */
-export function exportWorkspacePatch(workspaceDir: string, outputPath: string): boolean {
-  try {
-    // Stage intent-to-add for untracked files so they appear in git diff
-    execSync("git add -N .", { cwd: workspaceDir, stdio: "ignore", timeout: 30_000 });
-  } catch {
-    // Not a git repo or no new files — continue to diff
-  }
-  try {
-    const diff = execSync("git diff --binary", {
-      cwd: workspaceDir,
-      timeout: 60_000,
-      maxBuffer: 50 * 1024 * 1024,
-    });
-    if (!diff || diff.length === 0) return false;
-    writeFileSync(outputPath, diff);
-    return true;
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`jaiph docker: workspace patch export failed: ${msg}\n`);
-    return false;
-  }
-}
-
-export function findRunArtifacts(
-  sandboxRunDir: string,
-): { runDir?: string; summaryFile?: string } {
-  if (!existsSync(sandboxRunDir)) return {};
-  const candidates: string[] = [];
-  for (const dateDir of readdirSync(sandboxRunDir)) {
-    const datePath = join(sandboxRunDir, dateDir);
-    if (!statSync(datePath).isDirectory()) continue;
-    for (const runEntry of readdirSync(datePath)) {
-      const runPath = join(datePath, runEntry);
-      if (!statSync(runPath).isDirectory()) continue;
-      candidates.push(runPath);
-    }
-  }
-  candidates.sort();
-  const runDir = candidates[candidates.length - 1];
-  if (!runDir) return {};
-  const summaryFile = join(runDir, "run_summary.jsonl");
-  return {
-    runDir,
-    summaryFile: existsSync(summaryFile) ? summaryFile : undefined,
-  };
-}
 

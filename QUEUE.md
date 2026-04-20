@@ -13,52 +13,6 @@ Process rules:
 
 ***
 
-## Cleanup — remove dead per-call-isolated leftovers from `src/runtime/docker.ts` #dev-ready
-
-**Goal**
-`src/runtime/docker.ts` (688 LoC) still exports four functions written exclusively for the now-abandoned per-call `isolated` keyword: `exportWorkspacePatch`, `findRunArtifacts`, plus the helper `exportPatchIfDocker` in `src/runtime/kernel/node-workflow-runtime.ts`. These have one or two live callers each, all of which are themselves transitional code from the same abandoned design. Once the new `artifacts.jh` lib has landed (it replaces the use case end-to-end), these can go. Net reduction: ~200 LoC of source + ~150 LoC of dead tests in `src/runtime/docker.test.ts`.
-
-**Context (read before starting)**
-
-* `exportWorkspacePatch(workspaceDir, outputPath)` writes a `git diff` patch when running inside the Docker sandbox. Single live caller: `NodeWorkflowRuntime.exportPatchIfDocker()` (in `src/runtime/kernel/node-workflow-runtime.ts`), which writes `<runDir>/workspace.patch` at workflow end. The new `artifacts.save_patch()` workflow in `.jaiph/libs/jaiphlang/artifacts.jh` (shipped by the artifacts task) replaces this use case explicitly: callers who want a patch ask for one by name, with the path returned to them.
-* `findRunArtifacts(sandboxRunDir)` discovers the latest run dir under a Docker-mounted artifacts area. Single live caller: `src/cli/commands/run.ts:367` — the host reads it after the sandbox exits to surface the inner run's artifacts. With the artifacts task's explicit `JAIPH_ARTIFACTS_DIR` mount and known path, this discovery is no longer needed: the host already knows where to look.
-* The `isolated` keyword is not part of this codebase. There is no per-call isolation primitive to keep these helpers alive for.
-
-**Scope**
-
-* **Precondition check**: before deleting, run `rg 'exportWorkspacePatch|findRunArtifacts|exportPatchIfDocker' src/` and verify the only callers are the ones listed above. If any new caller has appeared, evaluate it on the spot — either it is also dead and can go in this task, or removal is blocked and you stop and report.
-* **Precondition check**: confirm the artifacts task has shipped (look for `.jaiph/libs/jaiphlang/artifacts.jh` and a working `artifacts.save_patch`). If it has not, this task is not ready — do not attempt half-removal that breaks the runtime.
-* Remove from `src/runtime/docker.ts`:
-  - `exportWorkspacePatch` (function + export)
-  - `findRunArtifacts` (function + export)
-* Remove from `src/runtime/kernel/node-workflow-runtime.ts`:
-  - `exportPatchIfDocker` (private method)
-  - The import of `exportWorkspacePatch` from `../docker`
-  - Any call site of `exportPatchIfDocker` (verify zero remain after the method is gone)
-* Remove from `src/cli/commands/run.ts`:
-  - The `findRunArtifacts(sandboxRunDir)` call at line ~367
-  - The import of `findRunArtifacts`
-  - Any code that consumes the result of `findRunArtifacts` and is now dead (chase the value, do not leave dangling variables)
-* Remove from `src/runtime/docker.test.ts`:
-  - All `findRunArtifacts: ...` test cases
-  - All `exportWorkspacePatch: ...` test cases
-  - The shared test fixtures used only by those tests
-
-**Non-goals**
-
-* Do not touch `writeOverlayScript`, `overlayMountPath`, `buildDockerArgs`, or other docker.ts functions — those remain load-bearing for the whole-program Docker sandbox.
-* Do not modify the artifacts lib or its runtime mount; this task only removes the predecessor primitives.
-* Do not collapse env vars or config keys — that is a separate concern explicitly out of scope.
-
-**Acceptance criteria**
-
-* `rg 'exportWorkspacePatch|findRunArtifacts|exportPatchIfDocker' src/` returns zero matches.
-* `npm run build` succeeds with no TypeScript errors after removal.
-* `npm test` passes (proves no remaining test depends on the deleted primitives).
-* Net diff: ~200 LoC removed from `src/runtime/docker.ts` and `src/runtime/kernel/node-workflow-runtime.ts`, ~150 LoC of dead tests removed from `src/runtime/docker.test.ts`. If your diff is materially smaller, you missed something; if materially larger, you are deleting more than the task scope — stop and reassess.
-
-***
-
 ## Cleanup — consolidate the 5-way test directory split #dev-ready
 
 **Goal**

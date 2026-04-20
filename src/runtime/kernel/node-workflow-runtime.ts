@@ -17,7 +17,6 @@ import {
   plainMultilineOrchestrationForRuntime,
   tripleQuotedRawForRuntime,
 } from "../orchestration-text";
-import { CONTAINER_RUN_DIR, exportWorkspacePatch } from "../docker";
 
 const MAX_EMBED = 1024 * 1024;
 const MAX_RECURSION_DEPTH = 256;
@@ -451,13 +450,6 @@ export class NodeWorkflowRuntime {
     }
   }
 
-  /** Best-effort: export workspace changes as a patch file for Docker runs. */
-  private exportPatchIfDocker(): void {
-    const ws = this.env.JAIPH_WORKSPACE;
-    if (!ws || this.env.JAIPH_RUNS_DIR !== CONTAINER_RUN_DIR) return;
-    exportWorkspacePatch(ws, join(this.runDir, "workspace.patch"));
-  }
-
   async runDefault(args: string[]): Promise<number> {
     this.emitWorkflow("WORKFLOW_START", "default");
     const rootScope: Scope = {
@@ -481,7 +473,6 @@ export class NodeWorkflowRuntime {
     });
     const result = await this.executeWorkflow(resolved.filePath, resolved.workflow.name, rootScope, args, false);
     this.emitWorkflow("WORKFLOW_END", "default");
-    this.exportPatchIfDocker();
     this.stopHeartbeat();
     return result.status;
   }
