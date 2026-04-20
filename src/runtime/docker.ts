@@ -315,7 +315,39 @@ LOWER=/jaiph/workspace-ro
 UPPER=/tmp/overlay-upper
 WORK=/tmp/overlay-work
 MERGED=/jaiph/workspace
+RUNTIME_WORKSPACE="$MERGED"
 mkdir -p "$UPPER" "$WORK" "$MERGED"
+
+rewrite_workspace_path() {
+  local value="$1"
+  if [ "$RUNTIME_WORKSPACE" = "$MERGED" ]; then
+    printf '%s' "$value"
+    return
+  fi
+  case "$value" in
+    "$MERGED")
+      printf '%s' "$RUNTIME_WORKSPACE"
+      ;;
+    "$MERGED"/*)
+      printf '%s' "$RUNTIME_WORKSPACE"\${value#$MERGED}
+      ;;
+    *)
+      printf '%s' "$value"
+      ;;
+  esac
+}
+
+copy_workspace_with_rsync() {
+  local target="$1"
+  rsync -a --delete --no-owner --no-group --chmod=Du+rwx,Dgo+rx,Fu+rw,Fgo+r "$LOWER"/ "$target"/
+}
+
+copy_workspace_with_cp() {
+  local target="$1"
+  cp -a --no-preserve=ownership "$LOWER"/. "$target"/
+  chmod -R u+rwX "$target" 2>/dev/null || true
+}
+
 overlay_ok=0
 overlay_reason=""
 if command -v fuse-overlayfs >/dev/null 2>&1 && [ -e /dev/fuse ]; then
@@ -334,46 +366,74 @@ else
   overlay_reason="fuse-overlayfs unavailable or /dev/fuse missing"
 fi
 if [ "$overlay_ok" -ne 1 ]; then
-  if command -v rsync >/dev/null 2>&1; then
-    if rsync -a --delete "$LOWER"/ "$MERGED"/ 2>/tmp/jaiph-workspace-copy.err; then
-      printf 'jaiph docker: workspace overlay unavailable; using copy fallback at /jaiph/workspace' >&2
-      if [ -n "$overlay_reason" ]; then
-        printf ' (%s)' "$overlay_reason" >&2
+  tmp_workspace="$(mktemp -d /tmp/jaiph-workspace.XXXXXX 2>/dev/null || true)"
+  if [ -n "$tmp_workspace" ]; then
+    if command -v rsync >/dev/null 2>&1; then
+      if copy_workspace_with_rsync "$tmp_workspace" 2>/tmp/jaiph-workspace-copy.err; then
+        RUNTIME_WORKSPACE="$tmp_workspace"
+        printf 'jaiph docker: workspace overlay unavailable; using copy fallback at %s' "$RUNTIME_WORKSPACE" >&2
+        if [ -n "$overlay_reason" ]; then
+          printf ' (%s)' "$overlay_reason" >&2
+        fi
+        printf '\n' >&2
+        overlay_ok=1
+      else
+        copy_reason="$(tr '\n' ' ' </tmp/jaiph-workspace-copy.err | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')"
+        rm -rf "$tmp_workspace"
+        printf 'jaiph docker: workspace overlay unavailable and copy fallback failed; container workspace may be incomplete' >&2
+        if [ -n "$overlay_reason" ]; then
+          printf ' (%s)' "$overlay_reason" >&2
+        fi
+        if [ -n "$copy_reason" ]; then
+          printf ' [copy fallback: %s]' "$copy_reason" >&2
+        fi
+        printf '\n' >&2
       fi
-      printf '\n' >&2
-      overlay_ok=1
     else
-      copy_reason="$(tr '\n' ' ' </tmp/jaiph-workspace-copy.err | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')"
-      printf 'jaiph docker: workspace overlay unavailable and copy fallback failed; /jaiph/workspace may be incomplete' >&2
-      if [ -n "$overlay_reason" ]; then
-        printf ' (%s)' "$overlay_reason" >&2
+      if copy_workspace_with_cp "$tmp_workspace" 2>/tmp/jaiph-workspace-cp.err; then
+        RUNTIME_WORKSPACE="$tmp_workspace"
+        printf 'jaiph docker: workspace overlay unavailable; using cp fallback at %s' "$RUNTIME_WORKSPACE" >&2
+        if [ -n "$overlay_reason" ]; then
+          printf ' (%s)' "$overlay_reason" >&2
+        fi
+        printf '\n' >&2
+        overlay_ok=1
+      else
+        cp_reason="$(tr '\n' ' ' </tmp/jaiph-workspace-cp.err | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')"
+        rm -rf "$tmp_workspace"
+        printf 'jaiph docker: workspace overlay unavailable and copy fallbacks are unavailable; container workspace may be incomplete' >&2
+        if [ -n "$overlay_reason" ]; then
+          printf ' (%s)' "$overlay_reason" >&2
+        fi
+        if [ -n "$cp_reason" ]; then
+          printf ' [cp fallback: %s]' "$cp_reason" >&2
+        fi
+        printf '\n' >&2
       fi
-      if [ -n "$copy_reason" ]; then
-        printf ' [copy fallback: %s]' "$copy_reason" >&2
-      fi
-      printf '\n' >&2
     fi
   else
-    if cp -a "$LOWER"/. "$MERGED"/ 2>/tmp/jaiph-workspace-cp.err; then
-      printf 'jaiph docker: workspace overlay unavailable; using cp fallback at /jaiph/workspace' >&2
-      if [ -n "$overlay_reason" ]; then
-        printf ' (%s)' "$overlay_reason" >&2
-      fi
-      printf '\n' >&2
-      overlay_ok=1
-    else
-      cp_reason="$(tr '\n' ' ' </tmp/jaiph-workspace-cp.err | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')"
-      printf 'jaiph docker: workspace overlay unavailable and copy fallbacks are unavailable; /jaiph/workspace may be incomplete' >&2
-      if [ -n "$overlay_reason" ]; then
-        printf ' (%s)' "$overlay_reason" >&2
-      fi
-      if [ -n "$cp_reason" ]; then
-        printf ' [cp fallback: %s]' "$cp_reason" >&2
-      fi
-      printf '\n' >&2
+    printf 'jaiph docker: workspace overlay unavailable and temp workspace allocation failed; container workspace may be incomplete' >&2
+    if [ -n "$overlay_reason" ]; then
+      printf ' (%s)' "$overlay_reason" >&2
     fi
+    printf '\n' >&2
   fi
 fi
+
+if [ "$RUNTIME_WORKSPACE" != "$MERGED" ]; then
+  export JAIPH_WORKSPACE="$RUNTIME_WORKSPACE"
+  if [ -n "\${JAIPH_AGENT_TRUSTED_WORKSPACE:-}" ]; then
+    export JAIPH_AGENT_TRUSTED_WORKSPACE="$(rewrite_workspace_path "$JAIPH_AGENT_TRUSTED_WORKSPACE")"
+  fi
+  rewritten_args=()
+  for arg in "$@"; do
+    rewritten_args+=("$(rewrite_workspace_path "$arg")")
+  done
+  cd "$RUNTIME_WORKSPACE"
+  exec "\${rewritten_args[@]}"
+fi
+
+cd "$MERGED"
 exec "$@"
 `;
 
@@ -481,10 +541,10 @@ export function overlayMountPath(containerPath: string): string {
  *  1. workspace → /jaiph/workspace-ro:ro  (overlay lower layer / copy source)
  *  2. sandboxRunDir → /jaiph/run:rw       (single run artifacts)
  *
- * The image already contains a writable `/jaiph/workspace` directory.
- * `overlay-run.sh` mounts `fuse-overlayfs` there when available; otherwise it
- * copies the lower layer into that directory as a writable fallback. `/jaiph/run`
- * is outside the overlay, so run artifacts still persist to the host mount.
+ * The image already contains a `/jaiph/workspace` directory used as the overlay
+ * merge target. When overlay mounts are unavailable, `overlay-run.sh` falls back
+ * to a writable per-run workspace copy under `/tmp`. `/jaiph/run` is outside the
+ * overlay, so run artifacts still persist to the host mount.
  *
  * The container runs `jaiph run --raw <file>` using its own installed jaiph.
  */

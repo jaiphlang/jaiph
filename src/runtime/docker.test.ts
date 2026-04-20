@@ -437,9 +437,11 @@ test("writeOverlayScript: creates executable script with fuse-overlayfs setup", 
     assert.ok(content.includes("fuse-overlayfs"));
     assert.ok(content.includes("workspace overlay unavailable"));
     assert.ok(content.includes("using copy fallback"));
-    assert.ok(content.includes('rsync -a --delete "$LOWER"/ "$MERGED"/'));
+    assert.ok(content.includes("mktemp -d /tmp/jaiph-workspace."));
+    assert.ok(content.includes("rewrite_workspace_path()"));
+    assert.ok(content.includes('rsync -a --delete --no-owner --no-group'));
     assert.ok(content.includes("mktemp \"$MERGED/.jaiph-overlay-probe.XXXXXX\""));
-    assert.ok(content.includes('exec "$@"'));
+    assert.ok(content.includes('exec "${rewritten_args[@]}"'));
   } finally {
     rmSync(dirname(scriptPath), { recursive: true, force: true });
   }

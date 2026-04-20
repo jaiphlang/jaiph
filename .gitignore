@@ -49,3 +49,11 @@ e2e/current_branch.sh
 e2e/assign_capture.sh
 
 .obsidian/
+
+# debug / temp directories (never commit)
+docker-*/
+nested-*/
+overlay-*/
+local-*/
+.tmp*/
+QUEUE.md.tmp.*
