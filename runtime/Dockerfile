@@ -31,6 +31,7 @@ RUN apt-get update && \
       python3 \
       python3-pip \
       python-is-python3 \
+      util-linux \
       make \
       g++ \
       fuse-overlayfs \

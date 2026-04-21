@@ -447,15 +447,15 @@ test("writeOverlayScript: creates executable script with fuse-overlayfs setup", 
   }
 });
 
-test("writeOverlayScript: contains no setpriv/chown host-uid dance", () => {
+test("writeOverlayScript: mounts as root and then drops to host uid via setpriv", () => {
   const scriptPath = writeOverlayScript();
   try {
     const content = readFileSync(scriptPath, "utf8");
-    assert.ok(!content.includes("JAIPH_HOST_UID"), "no JAIPH_HOST_UID contract");
-    assert.ok(!content.includes("JAIPH_HOST_GID"), "no JAIPH_HOST_GID contract");
-    assert.ok(!content.includes("setpriv"), "no in-container privilege drop");
-    assert.ok(!content.includes("chown"), "no in-container chown");
-    assert.ok(!content.includes("allow_other"), "no allow_other needed");
+    assert.ok(content.includes("JAIPH_HOST_UID"), "host uid contract present");
+    assert.ok(content.includes("JAIPH_HOST_GID"), "host gid contract present");
+    assert.ok(content.includes("setpriv"), "drops privileges via setpriv");
+    assert.ok(content.includes("chown"), "best-effort chown for /jaiph/run");
+    assert.ok(content.includes("allow_other"), "allow_other so dropped uid can use mounted overlay");
   } finally {
     rmSync(dirname(scriptPath), { recursive: true, force: true });
   }
@@ -648,12 +648,15 @@ test("buildDockerArgs: includes --cap-drop ALL and --security-opt no-new-privile
   assert.equal(args[secOptIdx + 1], "no-new-privileges");
 });
 
-test("buildDockerArgs: overlay mode adds only SYS_ADMIN", () => {
+test("buildDockerArgs: overlay mode adds SYS_ADMIN + SETUID + SETGID + CHOWN", () => {
   const args = buildDockerArgs(defaultOpts(), TEST_OVERLAY);
   const capAddValues = args
     .map((v, i) => (v === "--cap-add" ? args[i + 1] : null))
     .filter((v): v is string => v !== null);
-  assert.deepStrictEqual(capAddValues, ["SYS_ADMIN"], "only SYS_ADMIN is required");
+  assert.ok(capAddValues.includes("SYS_ADMIN"), "SYS_ADMIN present");
+  assert.ok(capAddValues.includes("SETUID"), "SETUID present");
+  assert.ok(capAddValues.includes("SETGID"), "SETGID present");
+  assert.ok(capAddValues.includes("CHOWN"), "CHOWN present");
 });
 
 test("buildDockerArgs: copy mode adds no caps", () => {
@@ -770,7 +773,7 @@ test("buildDockerArgs: throws when overlay mode is selected without script path"
 // buildDockerArgs: UID/GID handling (Linux only)
 // ---------------------------------------------------------------------------
 
-test("buildDockerArgs: overlay mode runs as root and does not inject JAIPH_HOST_UID/GID (Linux)", () => {
+test("buildDockerArgs: overlay mode runs as root and injects JAIPH_HOST_UID/GID (Linux)", () => {
   if (process.platform !== "linux") return;
   const args = buildDockerArgs(defaultOpts(), TEST_OVERLAY);
   const userIdx = args.indexOf("--user");
@@ -780,8 +783,8 @@ test("buildDockerArgs: overlay mode runs as root and does not inject JAIPH_HOST_
   const envFlags = args
     .map((v, i) => (v === "-e" ? args[i + 1] : null))
     .filter((v): v is string => v !== null);
-  assert.ok(!envFlags.some((v) => v.startsWith("JAIPH_HOST_UID=")), "no JAIPH_HOST_UID env");
-  assert.ok(!envFlags.some((v) => v.startsWith("JAIPH_HOST_GID=")), "no JAIPH_HOST_GID env");
+  assert.ok(envFlags.some((v) => v.startsWith("JAIPH_HOST_UID=")), "JAIPH_HOST_UID env present");
+  assert.ok(envFlags.some((v) => v.startsWith("JAIPH_HOST_GID=")), "JAIPH_HOST_GID env present");
 });
 
 test("buildDockerArgs: copy mode runs as host UID:GID directly (Linux)", () => {
