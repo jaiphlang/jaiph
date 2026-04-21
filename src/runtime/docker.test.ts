@@ -631,6 +631,30 @@ test("buildDockerArgs: includes --cap-drop ALL and --security-opt no-new-privile
   assert.equal(args[secOptIdx + 1], "no-new-privileges");
 });
 
+test("buildDockerArgs: overlay mode adds --security-opt apparmor=unconfined on Linux to allow fuse mounts", () => {
+  if (process.platform !== "linux") return;
+  const args = buildDockerArgs(defaultOpts(), TEST_OVERLAY);
+  const secOptIndices = args
+    .map((v, i) => (v === "--security-opt" ? i : -1))
+    .filter((i) => i >= 0);
+  const values = secOptIndices.map((i) => args[i + 1]);
+  assert.ok(values.includes("apparmor=unconfined"), "apparmor=unconfined present in overlay mode");
+});
+
+test("buildDockerArgs: copy mode does not add --security-opt apparmor=unconfined", () => {
+  const cloneDir = mkdtempSync(join(tmpdir(), "jaiph-test-clone-"));
+  try {
+    const args = buildDockerArgs(copyOpts(cloneDir));
+    const secOptIndices = args
+      .map((v, i) => (v === "--security-opt" ? i : -1))
+      .filter((i) => i >= 0);
+    const values = secOptIndices.map((i) => args[i + 1]);
+    assert.ok(!values.includes("apparmor=unconfined"), "no apparmor flag needed in copy mode");
+  } finally {
+    rmSync(cloneDir, { recursive: true, force: true });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // buildDockerArgs: copy-mode sandbox (host pre-clones workspace, mounts rw)
 // ---------------------------------------------------------------------------
