@@ -70,7 +70,9 @@ echo ""
 echo -e "${BOLD}Jaiph installer${NC}"
 echo ""
 
-require_cmd git
+if [ -z "${JAIPH_FROM_LOCAL}" ]; then
+  require_cmd git
+fi
 require_cmd node
 require_cmd npm
 
