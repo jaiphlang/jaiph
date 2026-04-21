@@ -615,11 +615,21 @@ export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath?: st
   let hostUid: string | undefined;
   let hostGid: string | undefined;
   if (process.platform === "linux") {
+    // Prefer native Node APIs; shelling out to `id` can fail in constrained
+    // PATH/shell environments (e.g. scripted docs runners).
     try {
-      hostUid = execSync("id -u", { encoding: "utf8" }).trim();
-      hostGid = execSync("id -g", { encoding: "utf8" }).trim();
+      if (typeof process.getuid === "function") hostUid = String(process.getuid());
+      if (typeof process.getgid === "function") hostGid = String(process.getgid());
     } catch {
-      // Fall through without host uid/gid.
+      // Fall through to shell fallback below.
+    }
+    if (!hostUid || !hostGid) {
+      try {
+        hostUid = execSync("id -u", { encoding: "utf8" }).trim();
+        hostGid = execSync("id -g", { encoding: "utf8" }).trim();
+      } catch {
+        // Fall through without host uid/gid.
+      }
     }
     if (mode === "overlay") {
       args.push("--user", "0:0");
