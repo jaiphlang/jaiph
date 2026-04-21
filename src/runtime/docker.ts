@@ -586,10 +586,15 @@ export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath?: st
     //   SYS_ADMIN: fuse-overlayfs mount
     //   SETUID/SETGID: setpriv uid/gid switch
     //   CHOWN: best-effort chown of /jaiph/run
+    //   DAC_READ_SEARCH: fuse-overlayfs daemon (running as root) needs to read
+    //     lower-layer files owned by host_uid with restrictive perms (e.g. 0600
+    //     workflow files, 0700 workspace dirs) so the kernel can serve them
+    //     through the merged view to the dropped-uid workflow process.
     args.push("--cap-add", "SYS_ADMIN");
     args.push("--cap-add", "SETUID");
     args.push("--cap-add", "SETGID");
     args.push("--cap-add", "CHOWN");
+    args.push("--cap-add", "DAC_READ_SEARCH");
   }
   args.push("--security-opt", "no-new-privileges");
 

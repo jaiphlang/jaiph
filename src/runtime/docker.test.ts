@@ -648,7 +648,7 @@ test("buildDockerArgs: includes --cap-drop ALL and --security-opt no-new-privile
   assert.equal(args[secOptIdx + 1], "no-new-privileges");
 });
 
-test("buildDockerArgs: overlay mode adds SYS_ADMIN + SETUID + SETGID + CHOWN", () => {
+test("buildDockerArgs: overlay mode adds SYS_ADMIN + SETUID + SETGID + CHOWN + DAC_READ_SEARCH", () => {
   const args = buildDockerArgs(defaultOpts(), TEST_OVERLAY);
   const capAddValues = args
     .map((v, i) => (v === "--cap-add" ? args[i + 1] : null))
@@ -657,6 +657,10 @@ test("buildDockerArgs: overlay mode adds SYS_ADMIN + SETUID + SETGID + CHOWN", (
   assert.ok(capAddValues.includes("SETUID"), "SETUID present");
   assert.ok(capAddValues.includes("SETGID"), "SETGID present");
   assert.ok(capAddValues.includes("CHOWN"), "CHOWN present");
+  assert.ok(
+    capAddValues.includes("DAC_READ_SEARCH"),
+    "DAC_READ_SEARCH present so fuse-overlayfs can read host files with restrictive perms",
+  );
 });
 
 test("buildDockerArgs: copy mode adds no caps", () => {

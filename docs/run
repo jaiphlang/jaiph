@@ -11,10 +11,10 @@ set -euo pipefail
 
 JAIPH_SITE="${JAIPH_SITE:-https://jaiph.org}"
 
-TMPFILE=""
+WORKDIR=""
 
 cleanup() {
-  [ -n "$TMPFILE" ] && rm -f "$TMPFILE"
+  [ -n "$WORKDIR" ] && rm -rf "$WORKDIR"
 }
 trap cleanup EXIT INT TERM
 
@@ -47,9 +47,15 @@ if [ -z "$WORKFLOW" ]; then
   exit 1
 fi
 
-# ── Write to temp file and run ──
+# ── Write to a dedicated workspace and run ──
+#
+# A self-contained workdir (with a `.jaiph` marker) makes the Docker sandbox
+# bind-mount only this directory, not all of $TMPDIR. Mounting host /tmp would
+# expose unrelated files and breaks fuse-overlayfs reads inside the container.
 
-TMPFILE="$(mktemp "${TMPDIR:-/tmp}/jaiph-run-XXXXXX.jh")"
+WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/jaiph-run-XXXXXX")"
+mkdir -p "${WORKDIR}/.jaiph"
+TMPFILE="${WORKDIR}/workflow.jh"
 printf '%s\n' "$WORKFLOW" > "$TMPFILE"
 
 jaiph run "$TMPFILE"
