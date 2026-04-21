@@ -1,5 +1,11 @@
 # Unreleased
 
+## Summary
+
+- **Language / runtime:** Adds `Handle<T>` for `run async`, repair-and-retry `recover` loops on `run` steps, explicit nested managed calls in arguments, and optional `module.*` fields in `config`.
+- **Docker / artifacts:** Read-only workspace with a COW sandbox layer and persistence through the run directory. Docker is on by default whenever `JAIPH_UNSAFE` is not set to `true` (including CI). Tighter capabilities plus mount and env denylists. **Breaking:** images must already include `jaiph` (default `ghcr.io/jaiphlang/jaiph-runtime`), with official builds published to GHCR. New `artifacts.jh` library and `JAIPH_ARTIFACTS_DIR` for pulling files and patches out of the sandbox.
+- **CLI / polish:** Clearer quoting in the progress tree and prompts, removal of dead isolation-export paths and stray repo debug junk, and a PTY-based E2E test for the async progress tree.
+
 ## All changes
 
 - **Fix — CLI/Runtime:** Clean up double-quote rendering in step titles and log output — Parameter values displayed in the progress tree (e.g. `message="Found 3 issues in auth module"`) no longer produce backslash-escaped `\"` sequences or ambiguous nested `""` pairs. The fix touches three layers: `formatNamedParamsForDisplay` and `formatParamsForDisplay` in `src/cli/commands/format-params.ts` no longer escape inner double quotes with backslash (the surrounding `key="value"` delimiters are structural, not shell-safe); `formatStartLine` in `src/cli/run/display.ts` applies the same change for prompt previews; and `node-workflow-runtime.ts` strips outer quotes from interpolated channel-send payloads via `stripOuterQuotes` so messages like `"Found 3 issues"` are stored as `Found 3 issues` rather than carrying literal quote wrappers through dispatch. Regression tests added: `format-params-display.test.ts` asserts no `\"` in formatted output for payloads containing inner quotes; `display.test.ts` verifies prompt previews pass through quotes without escaping. E2E golden output for `agent_inbox.jh` updated to match.

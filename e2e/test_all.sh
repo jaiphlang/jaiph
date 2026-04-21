@@ -98,8 +98,9 @@ for script in "${TEST_SCRIPTS[@]}"; do
   mkdir -p "${test_dir}"
 
   e2e::section "Running ${script_name}"
+  # JAIPH_UNSAFE is not defaulted here: unset → Docker on (see resolveDockerConfig).
+  # CI sets per-job env (ubuntu docker vs host). For fast local runs: JAIPH_UNSAFE=true npm run test:e2e
   if JAIPH_E2E_SKIP_INSTALL=1 \
-    JAIPH_UNSAFE="${JAIPH_UNSAFE:-true}" \
     JAIPH_E2E_TMP_DIR="${JAIPH_E2E_TMP_DIR:-}" \
     JAIPH_E2E_BIN_DIR="${JAIPH_E2E_BIN_DIR}" \
     JAIPH_E2E_WORK_DIR="${JAIPH_E2E_WORK_DIR}" \
