@@ -25,9 +25,18 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Non-root user for sandbox safety.
+#
+# /jaiph/workspace and /jaiph/run are mountpoints that get covered at runtime
+# (overlay or bind mount). Their bare permissions only matter before the mount
+# happens. We set them to 1777 (sticky-bit world-writable) so the container can
+# run as the *host* UID — not the image's `jaiph` UID — without having to chown
+# anything at runtime. fusermount3/fuse-overlayfs need write access to the
+# mountpoint to mount the overlay, and a host UID that doesn't match `jaiph`
+# (10001) wouldn't have it on a 0755 dir.
 RUN useradd --create-home --uid 10001 --shell /bin/bash jaiph && \
     mkdir -p /jaiph/workspace /jaiph/workspace-ro /jaiph/run && \
-    chown -R jaiph:jaiph /jaiph
+    chown -R jaiph:jaiph /jaiph && \
+    chmod 1777 /jaiph/workspace /jaiph/run
 
 # Install jaiph from the local tarball (provided at build time via --build-arg).
 # The tarball is produced by `npm pack` in CI before the docker build step.

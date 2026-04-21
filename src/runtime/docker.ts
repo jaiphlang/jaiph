@@ -319,7 +319,6 @@ LOWER=/jaiph/workspace-ro
 UPPER=/tmp/overlay-upper
 WORK=/tmp/overlay-work
 MERGED=/jaiph/workspace
-RUN_DIR=/jaiph/run
 mkdir -p "$UPPER" "$WORK" "$MERGED"
 
 if ! command -v fuse-overlayfs >/dev/null 2>&1; then
@@ -330,30 +329,13 @@ if [ ! -e /dev/fuse ]; then
   printf 'E_DOCKER_OVERLAY /dev/fuse not present in container; pass --device /dev/fuse or set JAIPH_DOCKER_NO_OVERLAY=1 to use the copy sandbox path\\n' >&2
   exit 78
 fi
-# allow_other so a non-root user can read/write through the overlay after the
-# privilege drop below. As root we don't need /etc/fuse.conf user_allow_other.
-if ! fuse-overlayfs -o "lowerdir=$LOWER,upperdir=$UPPER,workdir=$WORK,allow_other" "$MERGED" 2>/tmp/jaiph-fuse-overlay.err; then
+if ! fuse-overlayfs -o "lowerdir=$LOWER,upperdir=$UPPER,workdir=$WORK" "$MERGED" 2>/tmp/jaiph-fuse-overlay.err; then
   reason="$(tr '\\n' ' ' </tmp/jaiph-fuse-overlay.err | sed 's/[[:space:]]\\+/ /g; s/^ //; s/ $//')"
   printf 'E_DOCKER_OVERLAY fuse-overlayfs mount failed: %s\\n' "$reason" >&2
   exit 78
 fi
 
 cd "$MERGED"
-
-# Privilege drop: overlay setup needs root, but the workflow itself shouldn't
-# run as root. When the host passes JAIPH_HOST_UID/GID we chown /jaiph/run so
-# artifacts land owned by the host user (readable outside the container) and
-# exec via setpriv. If setpriv isn't installed (custom images) we fall back to
-# running as root with a single warning — security posture matches the legacy
-# overlay path.
-if [ -n "\${JAIPH_HOST_UID:-}" ] && [ -n "\${JAIPH_HOST_GID:-}" ]; then
-  chown -R "$JAIPH_HOST_UID:$JAIPH_HOST_GID" "$RUN_DIR" 2>/dev/null || true
-  if command -v setpriv >/dev/null 2>&1; then
-    exec setpriv --reuid="$JAIPH_HOST_UID" --regid="$JAIPH_HOST_GID" --clear-groups -- "$@"
-  fi
-  printf 'jaiph: setpriv not found in image; running workflow as root inside container\\n' >&2
-fi
-
 exec "$@"
 `;
 
@@ -616,6 +598,11 @@ export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath?: st
 
   args.push("--cap-drop", "ALL");
   if (mode === "overlay") {
+    // SYS_ADMIN is the only cap we add: fuse-overlayfs needs it to mount the
+    // union filesystem directly (without going through fusermount3's suid
+    // path, which would be neutered by --security-opt no-new-privileges
+    // anyway). The workflow doesn't need any of these — they're only used by
+    // the entrypoint script during the overlay setup.
     args.push("--cap-add", "SYS_ADMIN");
   }
   args.push("--security-opt", "no-new-privileges");
@@ -633,30 +620,20 @@ export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath?: st
     }
   }
 
-  // UID/GID strategy:
-  //   copy mode  → run as host UID:GID directly so writes to the cloned
-  //                workspace and /jaiph/run land owned by the host user.
-  //   overlay mode → run as root (0:0) so fuse-overlayfs can mount and own
-  //                  /jaiph/workspace, then the entrypoint script drops
-  //                  privileges to JAIPH_HOST_UID/GID via setpriv before
-  //                  exec'ing the workflow. We set --user 0:0 explicitly to
-  //                  override the image's USER directive (e.g. the official
-  //                  image runs as `jaiph` UID 10001 by default).
-  // Linux-only: macOS Docker Desktop translates UIDs across the VM boundary,
-  // so we don't override --user there.
-  let hostUid: string | undefined;
-  let hostGid: string | undefined;
+  // UID/GID strategy (Linux): always run the container as the host user so
+  // writes to bind mounts (cloned workspace in copy mode, /jaiph/run in both
+  // modes) end up owned by the host user. This works in overlay mode too
+  // because the official image's `/jaiph/workspace` mountpoint is mode 1777,
+  // giving any UID write access — required by fuse-overlayfs to mount there.
+  // macOS Docker Desktop translates UIDs across the VM boundary, so we don't
+  // override --user there.
   if (process.platform === "linux") {
     try {
-      hostUid = execSync("id -u", { encoding: "utf8" }).trim();
-      hostGid = execSync("id -g", { encoding: "utf8" }).trim();
+      const uid = execSync("id -u", { encoding: "utf8" }).trim();
+      const gid = execSync("id -g", { encoding: "utf8" }).trim();
+      args.push("--user", `${uid}:${gid}`);
     } catch {
-      // Fall through without --user / JAIPH_HOST_*
-    }
-    if (mode === "copy" && hostUid && hostGid) {
-      args.push("--user", `${hostUid}:${hostGid}`);
-    } else if (mode === "overlay") {
-      args.push("--user", "0:0");
+      // Fall through without --user.
     }
   }
 
@@ -709,12 +686,6 @@ export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath?: st
     if (AGENT_ENV_PREFIXES.some((prefix) => key.startsWith(prefix))) {
       args.push("-e", `${key}=${value}`);
     }
-  }
-
-  // Tell the in-container overlay script which UID/GID to drop to.
-  if (mode === "overlay" && hostUid && hostGid) {
-    args.push("-e", `JAIPH_HOST_UID=${hostUid}`);
-    args.push("-e", `JAIPH_HOST_GID=${hostGid}`);
   }
 
   args.push("-w", CONTAINER_WORKSPACE);
