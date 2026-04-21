@@ -171,7 +171,7 @@ These configure Docker sandboxing. Unlike agent and run keys, runtime keys are r
 
 | Key | Type | Default | Env variable | Description |
 |-----|------|---------|--------------|-------------|
-| `runtime.docker_enabled` | boolean | `true` locally; `false` when `CI=true` or `JAIPH_UNSAFE=true` | `JAIPH_DOCKER_ENABLED` | Enable Docker for this run. See [Sandboxing -- Enabling Docker](sandboxing.md#enabling-docker) for the default rule. |
+| `runtime.docker_enabled` | boolean | `true` by default (incl. CI); `false` only when `JAIPH_UNSAFE=true` | `JAIPH_DOCKER_ENABLED` | Enable Docker for this run. See [Sandboxing -- Enabling Docker](sandboxing.md#enabling-docker) for the default rule. |
 | `runtime.docker_image` | string | `ghcr.io/jaiphlang/jaiph-runtime:<version>` | `JAIPH_DOCKER_IMAGE` | Image name. Must already contain `jaiph`. When unset, uses the official GHCR image tag matching the installed jaiph version. For a custom image, build and push (or tag locally), then set this key or `JAIPH_DOCKER_IMAGE`. |
 | `runtime.docker_network` | string | `default` | `JAIPH_DOCKER_NETWORK` | Docker network mode. |
 | `runtime.docker_timeout` | integer | `300` | `JAIPH_DOCKER_TIMEOUT` | Timeout in seconds. Invalid or unparsable values fall back to the default. |
@@ -188,7 +188,7 @@ For **agent and run keys**, resolution order (highest wins):
 3. **Module-level `config`** — applies to workflows that don't define their own block.
 4. **Built-in defaults.**
 
-For **Docker / `runtime.*` keys**, the `jaiph run` driver merges **`JAIPH_DOCKER_*` env > module-level `runtime.*` > CI/unsafe default rule**. The default rule enables Docker when neither `CI=true` nor `JAIPH_UNSAFE=true` is set (see [Sandboxing -- Enabling Docker](sandboxing.md#enabling-docker)). Mounts (`runtime.workspace`) are never taken from env. Workflow-level config cannot set runtime keys.
+For **Docker / `runtime.*` keys**, the `jaiph run` driver merges **`JAIPH_DOCKER_*` env > module-level `runtime.*` > unsafe default rule**. The default rule enables Docker unless `JAIPH_UNSAFE=true` is set; `CI=true` no longer disables Docker (see [Sandboxing -- Enabling Docker](sandboxing.md#enabling-docker)). Mounts (`runtime.workspace`) are never taken from env. Workflow-level config cannot set runtime keys.
 
 ### Locked variables
 

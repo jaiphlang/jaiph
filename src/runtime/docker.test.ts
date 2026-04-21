@@ -173,19 +173,19 @@ test("resolveDockerConfig: env overrides in-file", () => {
   assert.equal(cfg.image, "debian:12");
 });
 
-test("resolveDockerConfig: CI=true disables Docker by default", () => {
+test("resolveDockerConfig: CI=true does NOT disable Docker (CI runs the real sandbox path)", () => {
   const cfg = resolveDockerConfig(undefined, { CI: "true" });
+  assert.equal(cfg.enabled, true);
+});
+
+test("resolveDockerConfig: CI=true with in-file dockerEnabled=false respects the in-file override", () => {
+  const cfg = resolveDockerConfig({ dockerEnabled: false }, { CI: "true" });
   assert.equal(cfg.enabled, false);
 });
 
-test("resolveDockerConfig: CI=true with in-file override enables Docker", () => {
-  const cfg = resolveDockerConfig({ dockerEnabled: true }, { CI: "true" });
-  assert.equal(cfg.enabled, true);
-});
-
-test("resolveDockerConfig: env JAIPH_DOCKER_ENABLED=true overrides CI default", () => {
-  const cfg = resolveDockerConfig(undefined, { CI: "true", JAIPH_DOCKER_ENABLED: "true" });
-  assert.equal(cfg.enabled, true);
+test("resolveDockerConfig: env JAIPH_DOCKER_ENABLED=false disables even when CI=true and in-file enables", () => {
+  const cfg = resolveDockerConfig({ dockerEnabled: true }, { CI: "true", JAIPH_DOCKER_ENABLED: "false" });
+  assert.equal(cfg.enabled, false);
 });
 
 test("resolveDockerConfig: JAIPH_UNSAFE=true disables Docker by default", () => {

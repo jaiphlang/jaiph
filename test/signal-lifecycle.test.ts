@@ -146,7 +146,7 @@ async function runInterruptTest(
   const child = spawn("node", [cliPath, "run", workflowPath], {
     stdio: "pipe",
     cwd: root,
-    env: { ...process.env, CI: "true" }, // disable Docker so exit-within-5s assertion is reliable
+    env: { ...process.env, JAIPH_UNSAFE: "true" }, // disable Docker so exit-within-5s assertion is reliable (CI=true no longer disables)
   });
 
   const exitPromise = new Promise<{ code: number | null; signal: string | null }>((resolve) => {
