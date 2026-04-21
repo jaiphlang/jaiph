@@ -440,7 +440,6 @@ test("writeOverlayScript: creates executable script with fuse-overlayfs setup", 
     assert.ok(content.startsWith("#!/usr/bin/env bash"));
     assert.ok(content.includes("fuse-overlayfs -o"));
     assert.ok(content.includes("lowerdir=$LOWER,upperdir=$UPPER,workdir=$WORK"));
-    assert.ok(content.includes("allow_other"), "allow_other so non-root user can access overlay after privilege drop");
     assert.ok(content.includes('exec "$@"'));
     assert.ok(content.includes("E_DOCKER_OVERLAY"));
   } finally {
@@ -448,16 +447,15 @@ test("writeOverlayScript: creates executable script with fuse-overlayfs setup", 
   }
 });
 
-test("writeOverlayScript: drops privileges via setpriv when JAIPH_HOST_UID/GID provided", () => {
+test("writeOverlayScript: contains no setpriv / chown / JAIPH_HOST_UID dance", () => {
+  // Mountpoint perms (1777) in the image let the container run as the host
+  // UID directly — no need for root + privilege drop inside the container.
   const scriptPath = writeOverlayScript();
   try {
     const content = readFileSync(scriptPath, "utf8");
-    assert.ok(content.includes("JAIPH_HOST_UID"), "honors JAIPH_HOST_UID");
-    assert.ok(content.includes("JAIPH_HOST_GID"), "honors JAIPH_HOST_GID");
-    assert.ok(content.includes("setpriv"), "uses setpriv to drop privileges");
-    assert.ok(content.includes("--reuid="), "passes --reuid to setpriv");
-    assert.ok(content.includes("--regid="), "passes --regid to setpriv");
-    assert.ok(content.includes("chown"), "chowns /jaiph/run so artifacts end up host-owned");
+    assert.ok(!content.includes("setpriv"), "no setpriv: container runs as host UID from start");
+    assert.ok(!content.includes("JAIPH_HOST_UID"), "no JAIPH_HOST_UID env contract");
+    assert.ok(!content.includes("chown"), "no in-container chown");
   } finally {
     rmSync(dirname(scriptPath), { recursive: true, force: true });
   }
@@ -639,12 +637,32 @@ test("buildDockerArgs: includes --cap-drop ALL and --security-opt no-new-privile
   const capDropIdx = args.indexOf("--cap-drop");
   assert.ok(capDropIdx >= 0, "--cap-drop present");
   assert.equal(args[capDropIdx + 1], "ALL");
-  const capAddIdx = args.indexOf("--cap-add");
-  assert.ok(capAddIdx >= 0, "--cap-add present");
-  assert.equal(args[capAddIdx + 1], "SYS_ADMIN");
   const secOptIdx = args.indexOf("--security-opt");
   assert.ok(secOptIdx >= 0, "--security-opt present");
   assert.equal(args[secOptIdx + 1], "no-new-privileges");
+});
+
+test("buildDockerArgs: overlay mode adds only SYS_ADMIN (no SETUID/SETGID/CHOWN)", () => {
+  // Container runs as host UID throughout — no in-container privilege drop,
+  // no chown. The image's 1777 mountpoint lets fuse-overlayfs mount as host UID.
+  const args = buildDockerArgs(defaultOpts(), TEST_OVERLAY);
+  const capAddValues = args
+    .map((v, i) => (v === "--cap-add" ? args[i + 1] : null))
+    .filter((v): v is string => v !== null);
+  assert.deepStrictEqual(capAddValues, ["SYS_ADMIN"], "only SYS_ADMIN, used by fuse-overlayfs to mount directly");
+});
+
+test("buildDockerArgs: copy mode adds no caps", () => {
+  const cloneDir = mkdtempSync(join(tmpdir(), "jaiph-test-clone-"));
+  try {
+    const args = buildDockerArgs(copyOpts(cloneDir));
+    const capAddValues = args
+      .map((v, i) => (v === "--cap-add" ? args[i + 1] : null))
+      .filter((v): v is string => v !== null);
+    assert.deepStrictEqual(capAddValues, [], "copy mode runs with no added capabilities");
+  } finally {
+    rmSync(cloneDir, { recursive: true, force: true });
+  }
 });
 
 test("buildDockerArgs: overlay mode adds --security-opt apparmor=unconfined on Linux to allow fuse mounts", () => {
@@ -748,36 +766,38 @@ test("buildDockerArgs: throws when overlay mode is selected without script path"
 // buildDockerArgs: UID/GID handling (Linux only)
 // ---------------------------------------------------------------------------
 
-test("buildDockerArgs: overlay mode runs container as root and forwards JAIPH_HOST_UID/GID (Linux)", () => {
+test("buildDockerArgs: both modes run as host UID:GID on Linux (no privilege-drop dance)", () => {
   if (process.platform !== "linux") return;
-  const args = buildDockerArgs(defaultOpts(), TEST_OVERLAY);
 
-  const userIdx = args.indexOf("--user");
-  assert.ok(userIdx >= 0, "--user flag present");
-  assert.equal(args[userIdx + 1], "0:0", "container runs as root so fuse-overlayfs can mount /jaiph/workspace");
+  const overlayArgs = buildDockerArgs(defaultOpts(), TEST_OVERLAY);
+  const overlayUserIdx = overlayArgs.indexOf("--user");
+  assert.ok(overlayUserIdx >= 0, "overlay: --user flag present");
+  assert.notEqual(overlayArgs[overlayUserIdx + 1], "0:0", "overlay: container does NOT run as root");
+  assert.match(overlayArgs[overlayUserIdx + 1], /^\d+:\d+$/, "overlay: --user is host uid:gid");
 
-  const envFlags = args
-    .map((v, i) => (v === "-e" ? args[i + 1] : null))
-    .filter((v): v is string => v !== null);
-  assert.ok(envFlags.some((v) => v.startsWith("JAIPH_HOST_UID=")), "JAIPH_HOST_UID forwarded to container");
-  assert.ok(envFlags.some((v) => v.startsWith("JAIPH_HOST_GID=")), "JAIPH_HOST_GID forwarded to container");
-});
-
-test("buildDockerArgs: copy mode runs as host UID:GID and does NOT forward JAIPH_HOST_UID/GID (Linux)", () => {
-  if (process.platform !== "linux") return;
   const cloneDir = mkdtempSync(join(tmpdir(), "jaiph-test-clone-"));
   try {
-    const args = buildDockerArgs(copyOpts(cloneDir));
+    const copyArgs = buildDockerArgs(copyOpts(cloneDir));
+    const copyUserIdx = copyArgs.indexOf("--user");
+    assert.ok(copyUserIdx >= 0, "copy: --user flag present");
+    assert.equal(copyArgs[copyUserIdx + 1], overlayArgs[overlayUserIdx + 1], "copy and overlay use the same host UID:GID");
+  } finally {
+    rmSync(cloneDir, { recursive: true, force: true });
+  }
+});
 
-    const userIdx = args.indexOf("--user");
-    assert.ok(userIdx >= 0, "--user flag present in copy mode");
-    assert.notEqual(args[userIdx + 1], "0:0", "copy mode runs as host UID, not root");
-
-    const envFlags = args
-      .map((v, i) => (v === "-e" ? args[i + 1] : null))
-      .filter((v): v is string => v !== null);
-    assert.ok(!envFlags.some((v) => v.startsWith("JAIPH_HOST_UID=")), "no privilege-drop env in copy mode");
-    assert.ok(!envFlags.some((v) => v.startsWith("JAIPH_HOST_GID=")), "no privilege-drop env in copy mode");
+test("buildDockerArgs: no JAIPH_HOST_UID/GID env injected (no privilege-drop contract)", () => {
+  const overlayArgs = buildDockerArgs(defaultOpts(), TEST_OVERLAY);
+  const cloneDir = mkdtempSync(join(tmpdir(), "jaiph-test-clone-"));
+  try {
+    const copyArgs = buildDockerArgs(copyOpts(cloneDir));
+    for (const args of [overlayArgs, copyArgs]) {
+      const envFlags = args
+        .map((v, i) => (v === "-e" ? args[i + 1] : null))
+        .filter((v): v is string => v !== null);
+      assert.ok(!envFlags.some((v) => v.startsWith("JAIPH_HOST_UID=")), "no JAIPH_HOST_UID env");
+      assert.ok(!envFlags.some((v) => v.startsWith("JAIPH_HOST_GID=")), "no JAIPH_HOST_GID env");
+    }
   } finally {
     rmSync(cloneDir, { recursive: true, force: true });
   }
