@@ -244,6 +244,8 @@ jobs:
           npm ci
           npm run test:e2e
           '@
+          # PowerShell on Windows can keep CRLF in here-strings; strip CR so bash does not see "pipefail\r".
+          $bashScript = $bashScript -replace "`r", ""
           wsl -d "$distro" -- bash -lc "$bashScript"
 
   docker-publish:
