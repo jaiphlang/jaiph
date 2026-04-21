@@ -68,11 +68,6 @@ e2e::pass "bootstrap template matches expected triple-quoted prompt content"
 jaiph compile "${BOOTSTRAP_FILE}"
 e2e::pass "generated bootstrap workflow compiles"
 
-if [[ -f "${TEST_DIR}/.jaiph/Dockerfile" ]]; then
-  e2e::fail "Expected jaiph init not to create .jaiph/Dockerfile"
-fi
-e2e::pass "jaiph init does not create .jaiph/Dockerfile"
-
 # Bash command substitution strips a trailing newline; compare bytes with cmp.
 if ! cmp -s "${TEST_DIR}/.jaiph/.gitignore" <(printf 'runs\ntmp\n'); then
   e2e::fail "Expected .jaiph/.gitignore to list runs and tmp with a final newline"

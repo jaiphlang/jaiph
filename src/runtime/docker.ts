@@ -229,29 +229,6 @@ export function pullImageIfNeeded(image: string): void {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Dockerfile-based image build
-// ---------------------------------------------------------------------------
-
-const DOCKERFILE_IMAGE_TAG = "jaiph-runtime:latest";
-
-/**
- * Build a Docker image from a Dockerfile and tag it.
- * Throws on build failure.
- */
-export function buildImageFromDockerfile(dockerfilePath: string, tag: string = DOCKERFILE_IMAGE_TAG): string {
-  const contextDir = dirname(dockerfilePath);
-  try {
-    execSync(`docker build -t ${tag} -f ${dockerfilePath} ${contextDir}`, {
-      stdio: "inherit",
-      timeout: 600_000,
-    });
-  } catch {
-    throw new Error(`E_DOCKER_BUILD failed to build image from "${dockerfilePath}"`);
-  }
-  return tag;
-}
-
 function imageHasJaiph(image: string): boolean {
   try {
     execFileSync(
