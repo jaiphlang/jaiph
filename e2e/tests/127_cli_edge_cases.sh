@@ -49,25 +49,34 @@ e2e::assert_contains "${indent_none_msg}" "positive integer" "format --indent wi
 
 e2e::section "format on unreadable file"
 
-e2e::file "unreadable.jh" <<'EOF'
+# DAC permission checks do not apply to UID 0; the WSL CI job runs bash as
+# root by design (its bootstrap detects `id -u == 0` and skips sudo), and
+# any environment with CAP_DAC_READ_SEARCH would behave the same way.
+# Skip rather than fail so the assertion remains meaningful where it can
+# actually be checked.
+if [[ "$(id -u)" -eq 0 ]]; then
+  e2e::skip "running as root (or with DAC_READ_SEARCH) — chmod 000 cannot make a file unreadable"
+else
+  e2e::file "unreadable.jh" <<'EOF'
 workflow default() {
   log "hello"
 }
 EOF
-chmod 000 "${TEST_DIR}/unreadable.jh"
+  chmod 000 "${TEST_DIR}/unreadable.jh"
 
-unread_err="$(mktemp)"
-if jaiph format "${TEST_DIR}/unreadable.jh" 2>"${unread_err}"; then
+  unread_err="$(mktemp)"
+  if jaiph format "${TEST_DIR}/unreadable.jh" 2>"${unread_err}"; then
+    rm -f "${unread_err}"
+    chmod 644 "${TEST_DIR}/unreadable.jh"
+    e2e::fail "format should fail on unreadable file"
+  fi
+  unread_msg="$(cat "${unread_err}")"
   rm -f "${unread_err}"
   chmod 644 "${TEST_DIR}/unreadable.jh"
-  e2e::fail "format should fail on unreadable file"
-fi
-unread_msg="$(cat "${unread_err}")"
-rm -f "${unread_err}"
-chmod 644 "${TEST_DIR}/unreadable.jh"
 
-# assert_contains: error message includes dynamic path
-e2e::assert_contains "${unread_msg}" "cannot read file" "format reports unreadable file"
+  # assert_contains: error message includes dynamic path
+  e2e::assert_contains "${unread_msg}" "cannot read file" "format reports unreadable file"
+fi
 
 # ── 4. jaiph compile --workspace with no value ─────────────────────────────
 
