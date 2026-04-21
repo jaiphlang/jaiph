@@ -204,7 +204,7 @@ Jaiph publishes official runtime images to GHCR:
 | `ghcr.io/jaiphlang/jaiph-runtime:nightly` | `nightly` branch | Contributors and CI |
 | `ghcr.io/jaiphlang/jaiph-runtime:latest` | Latest release tag | Convenience alias |
 
-The default `runtime.docker_image` is `ghcr.io/jaiphlang/jaiph-runtime:<version>` where `<version>` matches the installed jaiph package version. Published tags (`:<semver>`, `:nightly`, `:latest`) are built from the `runtime/Dockerfile` in the jaiph repository (see `.github/workflows/docker-publish.yml`). The image includes Node.js, jaiph, `fuse-overlayfs`, agent CLIs where that Dockerfile installs them, and a non-root `jaiph` user (UID 10001).
+The default `runtime.docker_image` is `ghcr.io/jaiphlang/jaiph-runtime:<version>` where `<version>` matches the installed jaiph package version. Published tags (`:<semver>`, `:nightly`, `:latest`) are built from the `runtime/Dockerfile` in the jaiph repository (see the `docker-publish` job in `.github/workflows/ci.yml`). The image includes Node.js, jaiph, `fuse-overlayfs`, agent CLIs where that Dockerfile installs them, and a non-root `jaiph` user (UID 10001).
 
 ### Custom images and `jaiph run`
 
