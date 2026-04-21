@@ -146,27 +146,27 @@ const DEFAULTS: DockerRunConfig = {
 
 /**
  * Resolve effective Docker config.
- * Precedence: env vars (`JAIPH_DOCKER_*`) > in-file RuntimeConfig > CI/unsafe default rule.
+ * Precedence: env vars (`JAIPH_DOCKER_*`) > in-file RuntimeConfig > unsafe default rule.
  *
  * Default rule (when no explicit override is set):
- *  - `CI=true` or `JAIPH_UNSAFE=true` → Docker off
- *  - Otherwise → Docker on
+ *  - `JAIPH_UNSAFE=true` → Docker off (explicit "run on host" escape hatch)
+ *  - Otherwise → Docker on (including in CI; CI=true alone no longer disables Docker)
  */
 export function resolveDockerConfig(
   inFile: RuntimeConfig | undefined,
   env: Record<string, string | undefined>,
 ): DockerRunConfig {
-  // enabled: env JAIPH_DOCKER_ENABLED > in-file > CI/unsafe default rule
+  // enabled: env JAIPH_DOCKER_ENABLED > in-file > unsafe default rule
   let enabled: boolean;
   if (env.JAIPH_DOCKER_ENABLED !== undefined) {
     enabled = env.JAIPH_DOCKER_ENABLED === "true";
   } else if (inFile?.dockerEnabled !== undefined) {
     enabled = inFile.dockerEnabled;
   } else {
-    // Default: Docker on unless CI or unsafe mode is active
-    const isCI = env.CI === "true";
-    const isUnsafe = env.JAIPH_UNSAFE === "true";
-    enabled = !(isCI || isUnsafe);
+    // Default: Docker on unless the user explicitly opts out via JAIPH_UNSAFE.
+    // CI=true is intentionally not consulted — CI runs (incl. landing-page e2e
+    // and docs sample tests) should exercise the same sandbox path users do.
+    enabled = env.JAIPH_UNSAFE !== "true";
   }
 
   // image: env > in-file > default

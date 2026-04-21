@@ -4,14 +4,10 @@ import type { SandboxMode } from "../../runtime/docker";
 const PROMPT_PREVIEW_MAX = 24;
 const PROMPT_ARGS_DISPLAY_MAX = 96;
 
-function isCiEnvironment(): boolean {
-  const c = process.env.CI;
-  return c === "true" || c === "1";
-}
-
 /**
  * First stdout lines for `jaiph run`: file name plus a dim parenthetical describing
- * Docker sandbox mode. In CI, the host-dependent detail (fuse vs copy) is redacted.
+ * Docker sandbox mode. The label always reflects the actual mode (no CI obfuscation)
+ * so docs/landing-page samples can compare against the literal banner text.
  */
 export function formatJaiphRunningBannerLines(
   fileBasename: string,
@@ -22,10 +18,8 @@ export function formatJaiphRunningBannerLines(
   let parenInner: string;
   if (!dockerEnabled) {
     parenInner = "no sandbox";
-  } else if (isCiEnvironment()) {
-    parenInner = "Docker sandbox, …";
   } else {
-    parenInner = sandboxMode === "overlay" ? "Docker sandbox, fusefs" : "Docker sandbox, tmp dir";
+    parenInner = sandboxMode === "overlay" ? "Docker sandbox, fusefs" : "Docker sandbox, tmp workspace";
   }
   const dimParen = colorize(` (${parenInner})`, "dim", colorEnabled);
   return `\nJaiph: Running ${fileBasename}${dimParen}\n\n`;

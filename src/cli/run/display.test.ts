@@ -16,36 +16,25 @@ test("formatJaiphRunningBannerLines: no Docker shows no sandbox (no color)", () 
   assert.equal(s, "\nJaiph: Running say_hello.jh (no sandbox)\n\n");
 });
 
-test("formatJaiphRunningBannerLines: Docker overlay shows fusefs locally (no color)", () => {
-  const prev = process.env.CI;
-  delete process.env.CI;
-  try {
-    const s = formatJaiphRunningBannerLines("say_hello.jh", true, "overlay", false);
-    assert.equal(s, "\nJaiph: Running say_hello.jh (Docker sandbox, fusefs)\n\n");
-  } finally {
-    if (prev === undefined) delete process.env.CI;
-    else process.env.CI = prev;
-  }
+test("formatJaiphRunningBannerLines: Docker overlay shows fusefs (no color)", () => {
+  const s = formatJaiphRunningBannerLines("say_hello.jh", true, "overlay", false);
+  assert.equal(s, "\nJaiph: Running say_hello.jh (Docker sandbox, fusefs)\n\n");
 });
 
-test("formatJaiphRunningBannerLines: Docker copy shows tmp dir locally (no color)", () => {
-  const prev = process.env.CI;
-  delete process.env.CI;
-  try {
-    const s = formatJaiphRunningBannerLines("say_hello.jh", true, "copy", false);
-    assert.equal(s, "\nJaiph: Running say_hello.jh (Docker sandbox, tmp dir)\n\n");
-  } finally {
-    if (prev === undefined) delete process.env.CI;
-    else process.env.CI = prev;
-  }
+test("formatJaiphRunningBannerLines: Docker copy shows tmp workspace (no color)", () => {
+  const s = formatJaiphRunningBannerLines("say_hello.jh", true, "copy", false);
+  assert.equal(s, "\nJaiph: Running say_hello.jh (Docker sandbox, tmp workspace)\n\n");
 });
 
-test("formatJaiphRunningBannerLines: CI obfuscates Docker sandbox detail", () => {
+test("formatJaiphRunningBannerLines: banner is the same in CI and locally (no obfuscation)", () => {
   const prev = process.env.CI;
   process.env.CI = "true";
   try {
-    const s = formatJaiphRunningBannerLines("say_hello.jh", true, "overlay", false);
-    assert.equal(s, "\nJaiph: Running say_hello.jh (Docker sandbox, …)\n\n");
+    const sCi = formatJaiphRunningBannerLines("say_hello.jh", true, "overlay", false);
+    delete process.env.CI;
+    const sLocal = formatJaiphRunningBannerLines("say_hello.jh", true, "overlay", false);
+    assert.equal(sCi, sLocal);
+    assert.equal(sCi, "\nJaiph: Running say_hello.jh (Docker sandbox, fusefs)\n\n");
   } finally {
     if (prev === undefined) delete process.env.CI;
     else process.env.CI = prev;
@@ -53,15 +42,8 @@ test("formatJaiphRunningBannerLines: CI obfuscates Docker sandbox detail", () =>
 });
 
 test("formatJaiphRunningBannerLines: dim ANSI wraps parenthetical when color on", () => {
-  const prev = process.env.CI;
-  delete process.env.CI;
-  try {
-    const s = formatJaiphRunningBannerLines("x.jh", false, null, true);
-    assert.ok(s.includes("\u001b[2m (no sandbox)\u001b[0m"));
-  } finally {
-    if (prev === undefined) delete process.env.CI;
-    else process.env.CI = prev;
-  }
+  const s = formatJaiphRunningBannerLines("x.jh", false, null, true);
+  assert.ok(s.includes("\u001b[2m (no sandbox)\u001b[0m"));
 });
 
 // === colorize ===
