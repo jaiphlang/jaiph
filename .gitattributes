@@ -1,12 +1,17 @@
-*.sh text eol=lf
+# Force LF line endings on every text file in every working tree.
+#
+# Why global: the WSL CI job runs against a checkout on the windows-latest
+# runner (default core.autocrlf=true). Any text file without an explicit
+# attribute is normalised to CRLF on checkout, which has surfaced as a
+# series of unrelated CI failures:
+#   * bash scripts:    `$'\r': command not found` / `set: pipefail: invalid option name`
+#   * .jh source:      `jaiph format --check` reports "needs formatting"
+#                      because format normalises to LF
+# Per-extension whack-a-mole would keep finding new variants. `text=auto`
+# tells git to detect text vs binary per file; combined with `eol=lf` it
+# stores LF in the index and writes LF to working trees on every platform.
+* text=auto eol=lf
 
-# Extensionless shell scripts: enforce LF so Windows checkouts (e.g. WSL CI
-# job hosted on a windows-latest runner with default core.autocrlf=true) do
-# not corrupt them with CRLF. CRLF on bash scripts manifests as opaque
-# `$'\r': command not found` / `set: pipefail: invalid option name` errors.
-docs/init    text eol=lf
-docs/install text eol=lf
-docs/run     text eol=lf
-e2e/bin/cursor-agent text eol=lf
-e2e/bin/mock_fail    text eol=lf
-e2e/bin/mock_ok      text eol=lf
+# Belt-and-suspenders: explicitly mark binary assets so `text=auto` cannot
+# misclassify them and corrupt the bytes by line-ending normalisation.
+*.png binary
