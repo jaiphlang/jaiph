@@ -1,6 +1,68 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { colorize, formatCompletedLine, formatHeartbeatLine, formatStartLine, sanitizeMultilineLogForTerminal } from "./display";
+import {
+  colorize,
+  formatCompletedLine,
+  formatHeartbeatLine,
+  formatJaiphRunningBannerLines,
+  formatStartLine,
+  sanitizeMultilineLogForTerminal,
+} from "./display";
+
+// === formatJaiphRunningBannerLines ===
+
+test("formatJaiphRunningBannerLines: no Docker shows no sandbox (no color)", () => {
+  const s = formatJaiphRunningBannerLines("say_hello.jh", false, null, false);
+  assert.equal(s, "\nJaiph: Running say_hello.jh (no sandbox)\n\n");
+});
+
+test("formatJaiphRunningBannerLines: Docker overlay shows fusefs locally (no color)", () => {
+  const prev = process.env.CI;
+  delete process.env.CI;
+  try {
+    const s = formatJaiphRunningBannerLines("say_hello.jh", true, "overlay", false);
+    assert.equal(s, "\nJaiph: Running say_hello.jh (Docker sandbox, fusefs)\n\n");
+  } finally {
+    if (prev === undefined) delete process.env.CI;
+    else process.env.CI = prev;
+  }
+});
+
+test("formatJaiphRunningBannerLines: Docker copy shows tmp dir locally (no color)", () => {
+  const prev = process.env.CI;
+  delete process.env.CI;
+  try {
+    const s = formatJaiphRunningBannerLines("say_hello.jh", true, "copy", false);
+    assert.equal(s, "\nJaiph: Running say_hello.jh (Docker sandbox, tmp dir)\n\n");
+  } finally {
+    if (prev === undefined) delete process.env.CI;
+    else process.env.CI = prev;
+  }
+});
+
+test("formatJaiphRunningBannerLines: CI obfuscates Docker sandbox detail", () => {
+  const prev = process.env.CI;
+  process.env.CI = "true";
+  try {
+    const s = formatJaiphRunningBannerLines("say_hello.jh", true, "overlay", false);
+    assert.equal(s, "\nJaiph: Running say_hello.jh (Docker sandbox, …)\n\n");
+  } finally {
+    if (prev === undefined) delete process.env.CI;
+    else process.env.CI = prev;
+  }
+});
+
+test("formatJaiphRunningBannerLines: dim ANSI wraps parenthetical when color on", () => {
+  const prev = process.env.CI;
+  delete process.env.CI;
+  try {
+    const s = formatJaiphRunningBannerLines("x.jh", false, null, true);
+    assert.ok(s.includes("\u001b[2m (no sandbox)\u001b[0m"));
+  } finally {
+    if (prev === undefined) delete process.env.CI;
+    else process.env.CI = prev;
+  }
+});
 
 // === colorize ===
 

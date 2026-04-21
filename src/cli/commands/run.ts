@@ -31,6 +31,8 @@ import {
   spawnDockerProcess,
   cleanupDocker,
   resolveDockerHostRunsRoot,
+  selectSandboxMode,
+  type SandboxMode,
 } from "../../runtime/docker";
 import {
   styleKeywordLabel,
@@ -39,7 +41,7 @@ import {
 } from "../run/progress";
 import { loadMergedHooks, registerHooksSubscriber } from "../run/hooks";
 import { resolveRuntimeEnv } from "../run/env";
-import { colorize } from "../run/display";
+import { colorize, formatJaiphRunningBannerLines } from "../run/display";
 import { createRunEmitter } from "../run/emitter";
 import {
   createStderrParser,
@@ -83,10 +85,21 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     const isTTY = !!process.stdout.isTTY;
     const startedAt = Date.now();
 
-    writeBanner(mod, inputAbs, runArgs, colorEnabled, isTTY, startedAt);
-
     const runtimeEnv = resolveRuntimeEnv(effectiveConfig, workspaceRoot, inputAbs);
     runtimeEnv.JAIPH_SOURCE_ABS = inputAbs;
+    const dockerConfigForBanner = resolveDockerConfig(mod.metadata?.runtime, runtimeEnv);
+    const sandboxModeForBanner = dockerConfigForBanner.enabled ? selectSandboxMode(runtimeEnv) : null;
+
+    writeBanner(
+      mod,
+      inputAbs,
+      runArgs,
+      colorEnabled,
+      isTTY,
+      startedAt,
+      dockerConfigForBanner.enabled,
+      sandboxModeForBanner,
+    );
     const { scriptsDir } = buildScripts(inputAbs, outDir, workspaceRoot);
     runtimeEnv.JAIPH_SCRIPTS = scriptsDir;
     const metaFile = join(outDir, `.jaiph-run-meta-${Date.now()}-${process.pid}.txt`);
@@ -220,9 +233,13 @@ function writeBanner(
   colorEnabled: boolean,
   isTTY: boolean,
   startedAt: number,
+  dockerEnabled: boolean,
+  sandboxMode: SandboxMode | null,
 ): void {
   const rootLabel = "workflow default";
-  process.stdout.write(`\nJaiph: Running ${basename(inputAbs)}\n\n`);
+  process.stdout.write(
+    formatJaiphRunningBannerLines(basename(inputAbs), dockerEnabled, sandboxMode, colorEnabled),
+  );
   const defaultWf = mod.workflows.find((w) => w.name === "default");
   const rootParamsSuffix =
     runArgs.length > 0

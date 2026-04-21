@@ -183,7 +183,7 @@ workflow default(name) {
                     <p>Running the workflow:</p>
                     <pre><code class="jaiph-run" data-sample-output="success"><span class="run-command">➜  ./say_hello.jh Jakub</span>
 
-Jaiph: Running say_hello.jh
+Jaiph: Running say_hello.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</span>
 
 <span class="run-keyword">workflow</span> default <span class="run-params">(name="Jakub")</span>
   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> name_was_provided <span class="run-params">(name="Jakub")</span>
@@ -198,7 +198,7 @@ Jaiph: Running say_hello.jh
                     <p>When you don't provide the name parameter, the workflow fails:</p>
                     <pre><code class="jaiph-run" data-sample-output="failure"><span class="run-command">➜  ./say_hello.jh</span>
 
-Jaiph: Running say_hello.jh
+Jaiph: Running say_hello.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</span>
 
 <span class="run-keyword">workflow</span> default
   <span class="run-marker">▸</span> <span class="run-keyword">rule</span> name_was_provided
@@ -299,7 +299,7 @@ workflow default() {
                     </p>
                     <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  ./recover_loop.jh</span>
 
-Jaiph: Running recover_loop.jh
+Jaiph: Running recover_loop.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</span>
 
 <span class="run-keyword">workflow</span> default
   <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> check
@@ -354,7 +354,7 @@ workflow default() {
                     <p>Running the workflow:</p>
                     <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  ./agent_inbox.jh</span>
 
-Jaiph: Running agent_inbox.jh
+Jaiph: Running agent_inbox.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</span>
 
 <span class="run-keyword">workflow</span> default
   <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> scanner
@@ -401,7 +401,7 @@ workflow default(name) {
                     <p>Running the workflow:</p>
                     <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  ./async.jh</span>
 
-Jaiph: Running async.jh
+Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</span>
 
 <span class="run-keyword">workflow</span> default
  <span class="run-marker">₁</span><span class="run-marker">▸</span> <span class="run-keyword">workflow</span> cursor_say_hello
