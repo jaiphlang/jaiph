@@ -574,6 +574,10 @@ pre code .code-line::before {
     user-select: none;
 }
 
+.jaiph-run .run-banner-meta {
+    color: var(--muted);
+}
+
 .jaiph-run .run-command {
     color: var(--muted);
     font-weight: 600;

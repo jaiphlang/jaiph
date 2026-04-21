@@ -82,6 +82,7 @@ e2e::normalize_output() {
   # still asserting that the same set of progress lines was emitted.
   printf "%s" "${input}" \
     | sed -E $'s/\x1B\\[[0-9;]*[A-Za-z]//g' \
+    | sed -E 's/^(Jaiph: Running [^ ]+) \(.+\)$/\1/' \
     | sed -E 's/\(([0-9]+(\.[0-9]+)?s|[0-9]+m [0-9]+s)\)/(<time>)/g' \
     | sed -E 's/\(([0-9]+(\.[0-9]+)?s|[0-9]+m [0-9]+s) failed\)/(<time> failed)/g' \
     | sed -E 's/✓ ([0-9]+)(\.[0-9]+)?s/✓ <time>/g' \
