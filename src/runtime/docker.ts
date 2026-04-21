@@ -1,5 +1,5 @@
 import { execFileSync, execSync, spawn, spawnSync, ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname, relative } from "node:path";
@@ -746,6 +746,18 @@ export function spawnDockerProcess(opts: DockerSpawnOptions): DockerSpawnResult 
 
   const mode: SandboxMode = opts.sandboxMode ?? selectSandboxMode(opts.env);
   mkdirSync(opts.sandboxRunDir, { recursive: true });
+  // Linux overlay mode runs as container root. Some hosts run Docker with
+  // user-namespace remapping, where container root is not host root and cannot
+  // create entries in a 0755 host-owned bind mount. Make the run dir
+  // world-writable so artifacts remain writable regardless of UID mapping.
+  if (process.platform === "linux" && mode === "overlay") {
+    try {
+      chmodSync(opts.sandboxRunDir, 0o777);
+    } catch {
+      // Best effort: if chmod fails, docker run may still succeed on hosts
+      // without user-namespace remapping.
+    }
+  }
 
   let overlayScriptPath: string | undefined;
   let overlayScriptDir: string | undefined;
