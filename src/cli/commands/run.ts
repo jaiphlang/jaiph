@@ -18,6 +18,8 @@ import {
   hasFatalRuntimeStderr,
   latestRunFiles,
   failedStepArtifactPaths,
+  discoverDockerRunDir,
+  remapContainerPath,
 } from "../shared/errors";
 import { detectWorkspaceRoot } from "../shared/paths";
 import { parseArgs } from "../shared/usage";
@@ -392,6 +394,13 @@ function reportResult(
       }
     }
   }
+  // Docker mode: container meta file is inaccessible from host.
+  // Discover the run directory from the bind-mounted sandbox runs dir.
+  if (!runDir && sandboxRunDir) {
+    const discovered = discoverDockerRunDir(sandboxRunDir);
+    runDir = discovered.runDir;
+    summaryFile = discovered.summaryFile;
+  }
   const runtimeDebugEnabled = runtimeEnv.JAIPH_DEBUG === "true";
   const runtimeErrorPrinted = sandboxRunDir
     ? false
@@ -434,9 +443,10 @@ function reportResult(
       process.stderr.write(`  Summary: ${summaryFile}\n`);
     }
     const fromSummary = summaryFile ? failedStepArtifactPaths(summaryFile) : {};
+    const remap = (p: string) => sandboxRunDir ? remapContainerPath(p, sandboxRunDir) : p;
     const files =
       fromSummary.out !== undefined || fromSummary.err !== undefined
-        ? { out: fromSummary.out, err: fromSummary.err }
+        ? { out: fromSummary.out ? remap(fromSummary.out) : undefined, err: fromSummary.err ? remap(fromSummary.err) : undefined }
         : latestRunFiles(runDir);
     if (files.out) process.stderr.write(`    out: ${files.out}\n`);
     if (files.err) process.stderr.write(`    err: ${files.err}\n`);
