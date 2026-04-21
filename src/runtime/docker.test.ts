@@ -487,6 +487,12 @@ test("spawnDockerProcess: stdin ignored, stdout+stderr piped for events", () => 
   );
 });
 
+test("spawnDockerProcess: Linux overlay mode chmods sandbox run dir for userns-remap compatibility", () => {
+  const src = readFileSync(join(__dirname, "docker.ts"), "utf8");
+  assert.ok(src.includes("mode === \"overlay\""), "guarded to overlay mode");
+  assert.ok(src.includes("chmodSync(opts.sandboxRunDir, 0o777)"), "run dir chmod present");
+});
+
 // ---------------------------------------------------------------------------
 // resolveDockerConfig: imageExplicit
 // ---------------------------------------------------------------------------
