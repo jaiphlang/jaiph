@@ -532,14 +532,37 @@ export function resolveDockerHostRunsRoot(
 
 /**
  * Remap environment variables for use inside the Docker container.
- * JAIPH_WORKSPACE → /jaiph/workspace, JAIPH_RUNS_DIR → /jaiph/run.
+ *
+ * Host-side `resolveRuntimeEnv` resolves several JAIPH_* keys to absolute
+ * host paths (the workspace root, agent trusted workspace, runs dir). Those
+ * paths do not exist inside the container — the workspace is bind-mounted at
+ * /jaiph/workspace and run artifacts at /jaiph/run. If we forwarded them
+ * unchanged the container would receive nonsense paths; worse, they reach
+ * agent CLIs (cursor-agent --trust <path>) and surface in model context,
+ * confusing the model into reporting it can't access "/tmp/jaiph-run-XXX".
+ *
+ * - JAIPH_WORKSPACE              → /jaiph/workspace (always)
+ * - JAIPH_RUNS_DIR               → /jaiph/run      (always)
+ * - JAIPH_AGENT_TRUSTED_WORKSPACE → remapped from <workspaceRoot>[/sub] to
+ *                                   /jaiph/workspace[/sub] when it points
+ *                                   inside the workspace; otherwise left as
+ *                                   the explicit absolute path the user set.
  */
 export function remapDockerEnv(
   env: Record<string, string | undefined>,
+  workspaceRoot?: string,
 ): Record<string, string | undefined> {
   const out = { ...env };
   out.JAIPH_WORKSPACE = CONTAINER_WORKSPACE;
   out.JAIPH_RUNS_DIR = CONTAINER_RUN_DIR;
+  if (workspaceRoot && out.JAIPH_AGENT_TRUSTED_WORKSPACE) {
+    const trusted = out.JAIPH_AGENT_TRUSTED_WORKSPACE;
+    if (trusted === workspaceRoot) {
+      out.JAIPH_AGENT_TRUSTED_WORKSPACE = CONTAINER_WORKSPACE;
+    } else if (trusted.startsWith(workspaceRoot + "/")) {
+      out.JAIPH_AGENT_TRUSTED_WORKSPACE = CONTAINER_WORKSPACE + trusted.slice(workspaceRoot.length);
+    }
+  }
   return out;
 }
 
@@ -682,7 +705,7 @@ export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath?: st
     args.push("-v", `${overlayScriptPath}:/jaiph/overlay-run.sh:ro`);
   }
 
-  const containerEnv = remapDockerEnv(opts.env);
+  const containerEnv = remapDockerEnv(opts.env, opts.workspaceRoot);
   for (const [key, value] of Object.entries(containerEnv)) {
     if (value === undefined) continue;
     if (isEnvDenied(key)) continue;
