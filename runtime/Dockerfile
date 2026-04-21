@@ -80,4 +80,15 @@ RUN mkdir -p "$HOME/.local/bin" && \
     command -v cursor-agent >/dev/null 2>&1 && \
     rm -f /tmp/install-cursor-agent.sh
 
+# At runtime the container drops to the host UID (overlay mode) or starts as
+# the host UID directly (copy mode) — neither is the `jaiph` user that owns
+# /home/jaiph. cursor-agent (~/.cursor) and claude CLI (~/.claude*) need to
+# create state files inside HOME, which would fail without write permission.
+# Apply 1777 (world-writable + sticky) to every dir under /home/jaiph so any
+# UID can create new files; existing files keep their modes and the sticky bit
+# prevents non-owners from deleting/replacing the installed binaries.
+USER root
+RUN find /home/jaiph -type d -exec chmod 1777 {} +
+USER jaiph
+
 WORKDIR /jaiph/workspace

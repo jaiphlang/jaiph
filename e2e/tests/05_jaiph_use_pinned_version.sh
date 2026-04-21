@@ -17,7 +17,17 @@ export JAIPH_LIB_DIR="${USE_BIN}/.jaiph"
 e2e::section "jaiph use <package.json version> reinstalls via installer"
 
 export JAIPH_INSTALL_COMMAND="bash \"${E2E_REPO_ROOT}/docs/install\" \"${E2E_REPO_ROOT}\""
+# Capture without `set -e` aborting silently — we want the install output
+# surfaced on failure for diagnosability (esp. on WSL where missing tools or
+# /mnt/<drive> copy quirks fail without obvious context).
+set +e
 use_combined="$(jaiph use "${VERSION}" 2>&1)"
+use_status=$?
+set -e
+if [[ "${use_status}" -ne 0 ]]; then
+  printf 'jaiph use exited %d. Captured output:\n%s\n' "${use_status}" "${use_combined}" >&2
+  e2e::fail "jaiph use exited non-zero"
+fi
 # assert_contains: installer output includes dynamic paths and progress text that vary per environment
 e2e::assert_contains "${use_combined}" "Reinstalling Jaiph from ref 'v${VERSION}'" \
   "jaiph use prints expected git ref for pinned version"
