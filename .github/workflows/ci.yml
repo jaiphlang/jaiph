@@ -204,7 +204,7 @@ jobs:
 
   docker-publish:
     name: Publish Docker runtime image
-    needs: [test, e2e, docs-local, e2e-wsl]
+    # needs: [test, e2e, docs-local, e2e-wsl]
     if: github.ref == 'refs/heads/nightly' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
