@@ -235,7 +235,12 @@ jobs:
             SUDO=sudo
           fi
           $SUDO apt-get update
-          $SUDO apt-get install -y curl ca-certificates
+          # git: required by feature-coverage tests (124_install_command,
+          # 129_artifacts_lib, the git-aware section of 10_basic_workflows).
+          # docs/install only needs git when not installing from a local source,
+          # so installing it here does not change the "no-git host" code path
+          # those tests already cover via JAIPH_FROM_LOCAL.
+          $SUDO apt-get install -y curl ca-certificates git
           if ! command -v node >/dev/null 2>&1; then
             if [ -n "$SUDO" ]; then
               curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
