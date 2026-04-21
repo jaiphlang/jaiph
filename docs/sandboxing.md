@@ -26,7 +26,7 @@ Docker sandboxing is designed to contain damage from untrusted or semi-trusted w
 **What Docker protects against:**
 
 - **Filesystem access** -- Scripts inside the container cannot read or write arbitrary host paths. The container's `/jaiph/workspace` is either an in-container fuse-overlayfs union over a read-only bind of the host workspace (overlay mode, writes land in a tmpfs upper layer and are discarded on exit) or a host-side clone of the workspace mounted read-write (copy mode, the clone is removed on exit). Only the run-artifacts directory (`/jaiph/run`) persists writes back to the host workspace.
-- **Process isolation** -- Container processes cannot see or signal host processes. The container runs with `--cap-drop ALL` (overlay mode re-adds `SYS_ADMIN` for fuse-overlayfs; copy mode runs without it) and `--security-opt no-new-privileges` to prevent privilege escalation.
+- **Process isolation** -- Container processes cannot see or signal host processes. The container runs with `--cap-drop ALL` (overlay mode re-adds `SYS_ADMIN` for fuse-overlayfs; copy mode runs without it) and `--security-opt no-new-privileges` to prevent privilege escalation. In overlay mode the container starts as root only long enough for the entrypoint script to mount fuse-overlayfs; the workflow itself is then exec'd via `setpriv` as the host UID/GID so neither the workflow nor anything it spawns runs as root.
 - **Credential leakage** -- Sensitive host environment variables (`SSH_*`, `GPG_*`, `AWS_*`, `GCP_*`, `AZURE_*`, `GOOGLE_*`, `DOCKER_*`, `KUBE*`, `NPM_TOKEN*`) are never forwarded into the container. Only `JAIPH_*` (except `JAIPH_DOCKER_*`) and agent prefixes (`ANTHROPIC_*`, `CLAUDE_*`, `CURSOR_*`) cross the container boundary.
 - **Mount safety** -- The host root filesystem (`/`), Docker socket (`/var/run/docker.sock`, `/run/docker.sock`), and OS internals (`/proc`, `/sys`, `/dev`) cannot be mounted into the container. Attempting to do so produces `E_VALIDATE_MOUNT`.
 
@@ -150,7 +150,14 @@ The working directory is `/jaiph/workspace`. In overlay mode the host CLI genera
 
 ### Runtime behavior
 
-**Container lifecycle** -- `docker run --rm` launches the container and auto-removes it on exit. `--cap-drop ALL` drops all Linux capabilities; overlay mode re-adds `SYS_ADMIN` (required for fuse-overlayfs) and exposes `/dev/fuse` via `--device`, while copy mode runs without either. `--security-opt no-new-privileges` prevents any process inside the container from gaining additional privileges. The pseudo-TTY flag (`-t`) is intentionally omitted: Docker's `-t` merges stderr into stdout, which would break the `__JAIPH_EVENT__` stderr-only live contract. On Linux, `--user <uid>:<gid>` maps the container user to the host user.
+**Container lifecycle** -- `docker run --rm` launches the container and auto-removes it on exit. `--cap-drop ALL` drops all Linux capabilities; overlay mode re-adds `SYS_ADMIN` (required for fuse-overlayfs) and exposes `/dev/fuse` via `--device`, while copy mode runs without either. `--security-opt no-new-privileges` prevents any process inside the container from gaining additional privileges. The pseudo-TTY flag (`-t`) is intentionally omitted: Docker's `-t` merges stderr into stdout, which would break the `__JAIPH_EVENT__` stderr-only live contract.
+
+**UID/GID handling on Linux:**
+
+- **Copy mode** -- the container runs directly as `--user <host_uid>:<host_gid>` so writes to the cloned workspace and `/jaiph/run` land owned by the host user.
+- **Overlay mode** -- the container starts as `--user 0:0` because `fuse-overlayfs` needs root to mount `/jaiph/workspace` (the image's `USER jaiph` cannot, since it doesn't own the mountpoint after the host UID is forwarded). The host CLI passes `JAIPH_HOST_UID` and `JAIPH_HOST_GID` env vars; `overlay-run.sh` mounts the overlay, `chown`s `/jaiph/run` to the host user, then `exec`s the workflow via `setpriv --reuid=$JAIPH_HOST_UID --regid=$JAIPH_HOST_GID --clear-groups -- jaiph run --raw …`. The workflow itself never runs as root. Custom images that lack `setpriv` print a one-line warning and run the workflow as root inside the container; install `util-linux` (which provides `setpriv`) to restore the privilege drop.
+
+On macOS Docker Desktop the VM transparently translates UIDs across the bind-mount boundary, so no `--user` override is applied.
 
 **stdin** -- The `docker run` process is spawned with stdin set to `ignore` to prevent the Docker CLI from blocking on stdin EOF.
 
