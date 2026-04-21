@@ -169,15 +169,34 @@ jobs:
           $distros = @(wsl -l -q | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" })
           if ($distros.Count -eq 0) {
             Write-Warning "No WSL distro is available on this runner. Importing Ubuntu rootfs for CI."
-            $archivePath = Join-Path $env:RUNNER_TEMP "ubuntu-base-24.04.tar.gz"
+            $archivePath = Join-Path $env:RUNNER_TEMP "ubuntu-base-amd64.tar.gz"
             $installPath = Join-Path $env:RUNNER_TEMP "wsl-ubuntu"
-            $ubuntuBaseUrl = "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04-base-amd64.tar.gz"
+            $ubuntuBaseReleaseIndexUrl = "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/"
 
             if (Test-Path $installPath) {
               Remove-Item -Path $installPath -Recurse -Force
             }
             New-Item -ItemType Directory -Path $installPath -Force | Out-Null
-            Invoke-WebRequest -Uri $ubuntuBaseUrl -OutFile $archivePath
+            $releaseIndex = Invoke-WebRequest -Uri $ubuntuBaseReleaseIndexUrl
+            $matches = [regex]::Matches($releaseIndex.Content, 'ubuntu-base-24\.04\.(\d+)-base-amd64\.tar\.gz')
+            $candidates = @($matches | ForEach-Object { $_.Value } | Sort-Object -Unique)
+            if ($candidates.Count -eq 0) {
+              Write-Error "Unable to resolve an Ubuntu Base 24.04 amd64 archive from $ubuntuBaseReleaseIndexUrl"
+              exit 1
+            }
+            $archiveName = $candidates |
+              Sort-Object {
+                [int]([regex]::Match($_, '24\.04\.(\d+)-').Groups[1].Value)
+              } -Descending |
+              Select-Object -First 1
+            $ubuntuBaseUrl = "$ubuntuBaseReleaseIndexUrl$archiveName"
+            Write-Host "Downloading Ubuntu base archive: $ubuntuBaseUrl"
+            try {
+              Invoke-WebRequest -Uri $ubuntuBaseUrl -OutFile $archivePath -MaximumRetryCount 3 -RetryIntervalSec 2
+            } catch {
+              Write-Error "Failed to download $ubuntuBaseUrl : $($_.Exception.Message)"
+              exit 1
+            }
             wsl --import "$ciDistro" "$installPath" "$archivePath" --version 2
             $distros = @("$ciDistro")
           }
@@ -241,30 +260,27 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Image tags and jaiph ref
+      - name: Image tags
         id: meta
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
             echo "tags=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> "$GITHUB_OUTPUT"
-            echo "jaiph_ref=v${VERSION}" >> "$GITHUB_OUTPUT"
           else
             echo "tags=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:nightly" >> "$GITHUB_OUTPUT"
-            echo "jaiph_ref=nightly" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: runtime
+          context: .
           file: runtime/Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
-          build-args: |
-            JAIPH_REPO_REF=${{ steps.meta.outputs.jaiph_ref }}
 
       - name: Verify pushed image contains jaiph
         run: |
           TAG="$(echo '${{ steps.meta.outputs.tags }}' | cut -d',' -f1)"
           docker run --rm --entrypoint sh "${TAG}" -lc "command -v jaiph && jaiph --version"
+          docker run --rm --user 0:0 --cap-drop ALL --cap-add SYS_ADMIN --entrypoint sh "${TAG}" -lc "command -v jaiph"
