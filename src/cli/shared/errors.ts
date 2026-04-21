@@ -1,5 +1,6 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { CONTAINER_RUN_DIR } from "../../runtime/docker";
 
 export function colorPalette(): { green: string; red: string; dim: string; reset: string } {
   const enabled = process.stdout.isTTY && process.env.NO_COLOR === undefined;
@@ -194,4 +195,47 @@ export function readFailedStepOutput(summaryPath: string): string | null {
   if (errContent) parts.push(errContent);
   if (parts.length === 0) return null;
   return parts.join("\n");
+}
+
+/**
+ * Discover run directory from the Docker sandbox runs mount.
+ * In Docker mode the container's meta file is inaccessible from the host,
+ * so we scan the bind-mounted sandboxRunDir for the latest run directory.
+ */
+export function discoverDockerRunDir(sandboxRunDir: string): { runDir?: string; summaryFile?: string } {
+  try {
+    const dateDirs = readdirSync(sandboxRunDir)
+      .filter((d) => !d.startsWith(".") && statSync(join(sandboxRunDir, d)).isDirectory())
+      .sort()
+      .reverse();
+    for (const dateDir of dateDirs) {
+      const datePath = join(sandboxRunDir, dateDir);
+      const timeDirs = readdirSync(datePath)
+        .filter((d) => statSync(join(datePath, d)).isDirectory())
+        .sort()
+        .reverse();
+      for (const timeDir of timeDirs) {
+        const runDir = join(datePath, timeDir);
+        const summaryFile = join(runDir, "run_summary.jsonl");
+        if (existsSync(summaryFile)) {
+          return { runDir, summaryFile };
+        }
+      }
+    }
+  } catch {
+    // ignore — sandboxRunDir may not exist or be readable
+  }
+  return {};
+}
+
+/** Remap a container-internal path to the equivalent host path. */
+export function remapContainerPath(containerPath: string, sandboxRunDir: string): string {
+  const prefix = CONTAINER_RUN_DIR + "/";
+  if (containerPath.startsWith(prefix)) {
+    return join(sandboxRunDir, containerPath.slice(CONTAINER_RUN_DIR.length));
+  }
+  if (containerPath === CONTAINER_RUN_DIR) {
+    return sandboxRunDir;
+  }
+  return containerPath;
 }
