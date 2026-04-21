@@ -25,8 +25,8 @@ Docker sandboxing is designed to contain damage from untrusted or semi-trusted w
 
 **What Docker protects against:**
 
-- **Filesystem access** -- Scripts inside the container cannot read or write arbitrary host paths. The host workspace is mounted read-only; writes go to a tmpfs overlay and are discarded on exit. Only the run-artifacts directory (`/jaiph/run`) persists writes to the host.
-- **Process isolation** -- Container processes cannot see or signal host processes. The container runs with `--cap-drop ALL` (only `SYS_ADMIN` is re-added for fuse-overlayfs) and `--security-opt no-new-privileges` to prevent privilege escalation.
+- **Filesystem access** -- Scripts inside the container cannot read or write arbitrary host paths. The container's `/jaiph/workspace` is either an in-container fuse-overlayfs union over a read-only bind of the host workspace (overlay mode, writes land in a tmpfs upper layer and are discarded on exit) or a host-side clone of the workspace mounted read-write (copy mode, the clone is removed on exit). Only the run-artifacts directory (`/jaiph/run`) persists writes back to the host workspace.
+- **Process isolation** -- Container processes cannot see or signal host processes. The container runs with `--cap-drop ALL` (overlay mode re-adds `SYS_ADMIN` for fuse-overlayfs; copy mode runs without it) and `--security-opt no-new-privileges` to prevent privilege escalation.
 - **Credential leakage** -- Sensitive host environment variables (`SSH_*`, `GPG_*`, `AWS_*`, `GCP_*`, `AZURE_*`, `GOOGLE_*`, `DOCKER_*`, `KUBE*`, `NPM_TOKEN*`) are never forwarded into the container. Only `JAIPH_*` (except `JAIPH_DOCKER_*`) and agent prefixes (`ANTHROPIC_*`, `CLAUDE_*`, `CURSOR_*`) cross the container boundary.
 - **Mount safety** -- The host root filesystem (`/`), Docker socket (`/var/run/docker.sock`, `/run/docker.sock`), and OS internals (`/proc`, `/sys`, `/dev`) cannot be mounted into the container. Attempting to do so produces `E_VALIDATE_MOUNT`.
 
@@ -44,7 +44,12 @@ Docker sandboxing is designed to contain damage from untrusted or semi-trusted w
 
 Docker applies to `jaiph run` only (not `jaiph test`). When enabled, the entire workflow -- every rule and script step -- runs inside a single container. The container runs `jaiph run --raw <file>` using its own installed jaiph -- not the host's. The `--raw` flag makes jaiph emit `__JAIPH_EVENT__` lines to stderr without rendering a progress tree, so the host CLI can render from those events.
 
-The host workspace is mounted **read-only** to prevent bind-mount deadlocks with concurrent runners on macOS Docker Desktop. A `fuse-overlayfs` copy-on-write overlay makes the workspace appear writable inside the container -- reads come from the host mount, writes go to a tmpfs upper layer and are discarded on exit. Run artifacts are written to a separate rw mount at `/jaiph/run` (outside the overlay), so they persist to the host. If `fuse-overlayfs` is unavailable, the workspace stays read-only (no regression).
+The container's `/jaiph/workspace` always *looks* writable to scripts but never mutates the host checkout. The CLI picks one of two sandbox primitives at launch time:
+
+- **Overlay mode** (selected when `/dev/fuse` exists on the host -- typically Linux). The host workspace is bind-mounted read-only at `/jaiph/workspace-ro`. The runtime entrypoint (`overlay-run.sh`) sets up `fuse-overlayfs` with that read-only bind as the lower layer and a tmpfs as the upper layer, merged at `/jaiph/workspace`. Writes go to the tmpfs and are discarded on container exit. Requires `--cap-add SYS_ADMIN` and `--device /dev/fuse`.
+- **Copy mode** (selected when `/dev/fuse` is missing -- typically macOS Docker Desktop, or when forced via `JAIPH_DOCKER_NO_OVERLAY=1`). Before launching the container, the CLI clones the host workspace (excluding `.jaiph/runs`) into a fresh `<runs-root>/.sandbox-<id>/` directory, then bind-mounts that clone read-write at `/jaiph/workspace`. On macOS the clone uses `cp -cR` (APFS clonefile, near-zero cost); on other platforms it falls back to `cp -pR` and emits a one-line stderr warning. The clone is removed on exit unless `JAIPH_DOCKER_KEEP_SANDBOX=1` is set. No `SYS_ADMIN`, no `/dev/fuse`, no in-container overlay script.
+
+In both modes, run artifacts are written to a separate rw mount at `/jaiph/run` (outside the workspace sandbox) so they persist to the host.
 
 ### Enabling Docker
 
@@ -98,18 +103,18 @@ If `JAIPH_DOCKER_TIMEOUT` is set but not a valid integer, the default (`300`) is
 
 ### Mount specifications
 
-Mount strings in `runtime.workspace` define which host paths are visible inside the container. All mounts are **forced to read-only** regardless of the specified mode to prevent bind-mount deadlocks on macOS Docker Desktop. The overlay wrapper makes the workspace writable via fuse-overlayfs.
+Mount strings in `runtime.workspace` define which host paths are visible inside the container. The mount targeting `/jaiph/workspace` selects the workspace source; additional sub-mounts pin parts of the tree to a particular mode (e.g. `"config:ro"` to make a subdir read-only inside the container).
 
 | Form | Segments | Example | Result |
 |------|----------|---------|--------|
-| Full | 3 | `".:/jaiph/workspace:rw"` | Mount `.` at `/jaiph/workspace` and `/jaiph/workspace-ro` (both read-only; overlay makes workspace writable) |
-| Shorthand | 2 | `"config:ro"` | Mount `config` at `/jaiph/workspace/config` and `/jaiph/workspace-ro/config` (read-only) |
+| Full | 3 | `".:/jaiph/workspace:rw"` | Workspace source. In overlay mode this becomes the read-only lower layer at `/jaiph/workspace-ro`; in copy mode the clone is mounted rw at `/jaiph/workspace`. |
+| Shorthand | 2 | `"config:ro"` | Mount `config` under `/jaiph/workspace/config`. In overlay mode the path is duplicated at `/jaiph/workspace-ro/config`; in copy mode the cloned subdirectory is bound at the requested mode. |
 | Too few | 1 | `"data"` | `E_PARSE` |
 | Too many | 4+ | `"a:b:c:d"` | `E_PARSE` |
 
 Mode must be `ro` or `rw` (otherwise `E_PARSE`). Exactly one mount must target `/jaiph/workspace` -- zero or more than one produces `E_VALIDATE`. The default `[".:/jaiph/workspace:rw"]` satisfies this requirement.
 
-Host paths are resolved relative to the workspace root. Each mount is duplicated at the overlay lower-layer path (`/jaiph/workspace-ro/...`) so the overlay wrapper can use it as the read-only source.
+Host paths are resolved relative to the workspace root. In overlay mode each mount is duplicated at the overlay lower-layer path (`/jaiph/workspace-ro/...`) so the overlay wrapper can use it as the read-only source. In copy mode, sub-mounts under `/jaiph/workspace` are bound from the cloned workspace directory.
 
 The following host paths are rejected at mount validation time with `E_VALIDATE_MOUNT`:
 
@@ -119,31 +124,45 @@ The following host paths are rejected at mount validation time with `E_VALIDATE_
 
 ### Container layout
 
+Overlay mode:
+
 ```
 /jaiph/
   workspace-ro/       # read-only bind mount of host workspace (overlay lower layer)
   workspace/          # fuse-overlayfs merged view (reads from -ro, writes to tmpfs)
     *.jh              # source files
     .jaiph/           # project config
-  run/                # writable bind mount for this run's artifacts (host temp dir)
+  run/                # writable bind mount for this run's artifacts (host runs root)
   overlay-run.sh      # runtime-generated entrypoint mounted ro from host temp file
 ```
 
-The working directory is `/jaiph/workspace`. The host CLI generates `overlay-run.sh` (a ~10 line bash script) to a temp file and mounts it read-only at `/jaiph/overlay-run.sh`. The container runs `/jaiph/overlay-run.sh jaiph run --raw <file>`. The overlay wrapper sets up fuse-overlayfs, then execs the jaiph command. The image must already contain `jaiph` — Jaiph does not install itself into the container at runtime. No `COPY` in the project Dockerfile is needed for jaiph runtime files — `overlay-run.sh` is a jaiph runtime artifact.
+Copy mode:
+
+```
+/jaiph/
+  workspace/          # rw bind mount of <runs-root>/.sandbox-<id>/ on the host
+    *.jh              # cloned source files (writes are local to the clone)
+    .jaiph/           # cloned config (.jaiph/runs is excluded from the clone)
+  run/                # writable bind mount for this run's artifacts (host runs root)
+```
+
+The working directory is `/jaiph/workspace`. In overlay mode the host CLI generates `overlay-run.sh` (a short bash script) to a temp file and mounts it read-only at `/jaiph/overlay-run.sh`; the container runs `/jaiph/overlay-run.sh jaiph run --raw <file>`. In copy mode the container runs `jaiph run --raw <file>` directly -- no entrypoint script. The image must already contain `jaiph` — Jaiph does not install itself into the container at runtime.
 
 ### Runtime behavior
 
-**Container lifecycle** -- `docker run --rm` launches the container and auto-removes it on exit. `--cap-drop ALL --cap-add SYS_ADMIN` drops all Linux capabilities except `SYS_ADMIN` (required for fuse-overlayfs). `--security-opt no-new-privileges` prevents any process inside the container from gaining additional privileges. `--device /dev/fuse` exposes the FUSE device for the overlay. The pseudo-TTY flag (`-t`) is intentionally omitted: Docker's `-t` merges stderr into stdout, which would break the `__JAIPH_EVENT__` stderr-only live contract. On Linux, `--user <uid>:<gid>` maps the container user to the host user.
+**Container lifecycle** -- `docker run --rm` launches the container and auto-removes it on exit. `--cap-drop ALL` drops all Linux capabilities; overlay mode re-adds `SYS_ADMIN` (required for fuse-overlayfs) and exposes `/dev/fuse` via `--device`, while copy mode runs without either. `--security-opt no-new-privileges` prevents any process inside the container from gaining additional privileges. The pseudo-TTY flag (`-t`) is intentionally omitted: Docker's `-t` merges stderr into stdout, which would break the `__JAIPH_EVENT__` stderr-only live contract. On Linux, `--user <uid>:<gid>` maps the container user to the host user.
 
 **stdin** -- The `docker run` process is spawned with stdin set to `ignore` to prevent the Docker CLI from blocking on stdin EOF.
 
 **Events** -- The container's jaiph runs in `--raw` mode: it spawns the runtime with inherited stdio, so `__JAIPH_EVENT__` JSON flows directly to the container's stderr. The host CLI reads Docker's stderr pipe and renders the progress tree. stdout carries plain script output. `STEP_END` events embed `out_content` (and `err_content` on failure) so consumers do not need host paths to step artifact files.
 
-**Overlay** -- The `overlay-run.sh` wrapper (generated by the host CLI and mounted read-only) sets up `fuse-overlayfs` with the ro bind mount (`/jaiph/workspace-ro`) as the lower layer and a tmpfs as the upper layer, merged at `/jaiph/workspace`. All workspace writes go to the tmpfs and are discarded on container exit. If fuse-overlayfs is unavailable (e.g. the image doesn't include it), the overlay step is skipped and the workspace remains read-only.
+**Sandbox primitive (overlay vs. copy)** -- Selected at launch time. If `/dev/fuse` exists on the host, the CLI uses **overlay mode**: the `overlay-run.sh` wrapper (generated by the host CLI and mounted read-only) sets up `fuse-overlayfs` with the ro bind mount (`/jaiph/workspace-ro`) as the lower layer and a tmpfs as the upper layer, merged at `/jaiph/workspace`. All workspace writes go to the tmpfs and are discarded on container exit. If `fuse-overlayfs` is missing from the image at runtime, the entrypoint exits with `E_DOCKER_OVERLAY` -- there is no in-container fallback. Set `JAIPH_DOCKER_NO_OVERLAY=1` on the host to opt into copy mode instead.
+
+If `/dev/fuse` is missing on the host, the CLI uses **copy mode**: before launching the container it clones the workspace into `<runs-root>/.sandbox-<id>/` (excluding `.jaiph/runs`) using `cp -cR` on macOS (APFS clonefile, O(1) per file) or `cp -pR` elsewhere (a real copy; a single stderr warning is printed when the fast path is unavailable). The clone is bind-mounted rw at `/jaiph/workspace`. After the container exits the clone is removed unless `JAIPH_DOCKER_KEEP_SANDBOX=1` is set, in which case the path is left in place and printed to stderr for debugging.
 
 **Run artifacts** -- The host CLI mounts the resolved host runs root at `/jaiph/run:rw` inside the container. By default this is `.jaiph/runs` under the workspace; a relative `JAIPH_RUNS_DIR` is resolved under the workspace; an absolute `JAIPH_RUNS_DIR` must stay within the workspace or the run fails with `E_DOCKER_RUNS_DIR`. `JAIPH_RUNS_DIR` is set to `/jaiph/run` inside the container, so the runtime writes artifacts directly into the requested host path.
 
-**Workspace immutability contract** -- Docker runs cannot directly modify the host workspace. The host checkout is bind-mounted read-only; the writable `/jaiph/workspace` inside the container is a sandbox-local copy-on-write layer (fuse-overlayfs or copy fallback) whose state is discarded on container exit. The only persistence channel from a Docker run to the host is the run-artifacts directory (`/jaiph/run` → host `.jaiph/runs`). Non-Docker (local) runs are unaffected by this contract.
+**Workspace immutability contract** -- Docker runs cannot directly modify the host workspace. In overlay mode the host checkout is bind-mounted read-only and writes land in a tmpfs upper layer that is discarded on container exit. In copy mode the container writes to a separate host-side clone of the workspace (`<runs-root>/.sandbox-<id>/`), which is removed on container exit unless explicitly kept for debugging. In both modes the only persistence channel from a Docker run to the host is the run-artifacts directory (`/jaiph/run` → host `.jaiph/runs`). Non-Docker (local) runs are unaffected by this contract.
 
 **Workspace patch export** -- To capture workspace changes as a patch, call `artifacts.save_patch(name)` from `jaiphlang/artifacts`; it writes a named `git diff` into the `artifacts/` subdirectory under the run tree. Callers choose when and what to record; output lives alongside other artifacts. See [Libraries — `jaiphlang/artifacts`](libraries.md#jaiphlangartifacts--publishing-files-out-of-the-sandbox). The published GHCR runtime image includes `git`.
 
@@ -164,6 +183,8 @@ Docker-related errors use `E_DOCKER_*` codes for programmatic detection:
 | `E_DOCKER_BUILD` | `docker build` fails when using helpers that build from a Dockerfile | Not used during normal `jaiph run` image resolution. |
 | `E_DOCKER_NO_JAIPH` | Selected image does not contain a `jaiph` CLI | Run exits with guidance to use the official image or install jaiph. |
 | `E_DOCKER_RUNS_DIR` | Absolute `JAIPH_RUNS_DIR` points outside the workspace | Run exits. Use a relative path or an absolute path within the workspace. |
+| `E_DOCKER_OVERLAY` | Overlay mode selected but `fuse-overlayfs` is missing from the image or the mount fails inside the container | Container exits with code 78. Use the official runtime image, install `fuse-overlayfs` in your custom image, or set `JAIPH_DOCKER_NO_OVERLAY=1` on the host to switch to copy mode. |
+| `E_DOCKER_SANDBOX_COPY` | Copy mode failed to clone the host workspace (`cp` returned non-zero) | Run exits before container launch. Inspect the path printed in the error. |
 | `E_VALIDATE_MOUNT` | Mount targets a denied host path (`/`, `/proc`, docker socket, etc.) | Run exits before container launch. |
 | `E_TIMEOUT` | Container exceeds `runtime.docker_timeout` seconds | Container receives SIGTERM, then SIGKILL after 5s grace period. |
 
