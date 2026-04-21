@@ -165,42 +165,56 @@ jobs:
         id: detect_wsl
         shell: pwsh
         run: |
+          $ciDistro = "jaiph-ci-ubuntu"
           $distros = @(wsl -l -q | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" })
           if ($distros.Count -eq 0) {
-            "distro=" >> $env:GITHUB_OUTPUT
-            Write-Warning "No WSL distro is available on this runner. Skipping WSL E2E."
-            exit 0
+            Write-Warning "No WSL distro is available on this runner. Importing Ubuntu rootfs for CI."
+            $archivePath = Join-Path $env:RUNNER_TEMP "ubuntu-base-24.04.tar.gz"
+            $installPath = Join-Path $env:RUNNER_TEMP "wsl-ubuntu"
+            $ubuntuBaseUrl = "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04-base-amd64.tar.gz"
+
+            if (Test-Path $installPath) {
+              Remove-Item -Path $installPath -Recurse -Force
+            }
+            New-Item -ItemType Directory -Path $installPath -Force | Out-Null
+            Invoke-WebRequest -Uri $ubuntuBaseUrl -OutFile $archivePath
+            wsl --import "$ciDistro" "$installPath" "$archivePath" --version 2
+            $distros = @("$ciDistro")
           }
           $ubuntu = $distros | Where-Object { $_ -match "^Ubuntu" } | Select-Object -First 1
           $selected = if ($ubuntu) { $ubuntu } else { $distros[0] }
+          if (-not $selected) {
+            Write-Error "Failed to provision a WSL distro for CI."
+            exit 1
+          }
           "distro=$selected" >> $env:GITHUB_OUTPUT
           Write-Host "Using WSL distro: $selected"
 
       - name: Install Node and run E2E tests in WSL
-        if: steps.detect_wsl.outputs.distro != ''
         shell: pwsh
         run: |
           $workspace = "${{ github.workspace }}"
           $distro = "${{ steps.detect_wsl.outputs.distro }}"
-          wsl -d "$distro" -- bash -lc "set -euo pipefail
+          $env:JAIPH_WORKSPACE = $workspace
+          $bashScript = @'
+          set -euo pipefail
           export DEBIAN_FRONTEND=noninteractive
           export JAIPH_UNSAFE=true
-          sudo apt-get update
-          sudo apt-get install -y curl ca-certificates
-          if ! command -v node >/dev/null 2>&1; then
-            curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-            sudo apt-get install -y nodejs
+          SUDO=
+          if [ "$(id -u)" -ne 0 ]; then
+            SUDO=sudo
           fi
-          cd \"\$(wslpath '$workspace')\"
+          $SUDO apt-get update
+          $SUDO apt-get install -y curl ca-certificates
+          if ! command -v node >/dev/null 2>&1; then
+            curl -fsSL https://deb.nodesource.com/setup_20.x | $SUDO -E bash -
+            $SUDO apt-get install -y nodejs
+          fi
+          cd "$(wslpath "$JAIPH_WORKSPACE")"
           npm ci
           npm run test:e2e
-          "
-
-      - name: WSL E2E skipped
-        if: steps.detect_wsl.outputs.distro == ''
-        shell: pwsh
-        run: |
-          Write-Host "No WSL distro found on this runner image; skipping WSL E2E."
+          '@
+          wsl -d "$distro" -- bash -lc "$bashScript"
 
   docker-publish:
     name: Publish Docker runtime image
