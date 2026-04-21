@@ -15,11 +15,14 @@ import {
   isEnvDenied,
   ENV_DENYLIST_PREFIXES,
   GHCR_IMAGE_REPO,
+  selectSandboxMode,
+  cloneWorkspaceForSandbox,
+  allocateSandboxWorkspaceDir,
   type MountSpec,
   type DockerRunConfig,
   type DockerSpawnOptions,
 } from "./docker";
-import { mkdtempSync, writeFileSync, mkdirSync, existsSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 
@@ -50,8 +53,13 @@ function defaultOpts(overrides?: Partial<DockerSpawnOptions>): DockerSpawnOption
     runArgs: [],
     env: {},
     isTTY: false,
+    sandboxMode: "overlay",
     ...overrides,
   };
+}
+
+function copyOpts(sandboxWorkspaceDir: string, overrides?: Partial<DockerSpawnOptions>): DockerSpawnOptions {
+  return defaultOpts({ sandboxMode: "copy", sandboxWorkspaceDir, ...overrides });
 }
 
 // ---------------------------------------------------------------------------
@@ -430,21 +438,23 @@ test("writeOverlayScript: creates executable script with fuse-overlayfs setup", 
     assert.ok(existsSync(scriptPath));
     const content = readFileSync(scriptPath, "utf8");
     assert.ok(content.startsWith("#!/usr/bin/env bash"));
-    assert.ok(content.includes("fuse-overlayfs"));
-    assert.ok(content.includes("workspace overlay unavailable"));
-    assert.ok(content.includes("copying workspace into a temp directory before startup"));
-    assert.ok(content.includes("using copy fallback"));
-    assert.ok(content.includes("live output begins after the copy completes"));
-    assert.ok(content.includes("excludes .jaiph/runs"));
-    assert.ok(content.includes("mktemp -d /tmp/jaiph-workspace."));
-    assert.ok(content.includes("rewrite_workspace_path()"));
-    assert.ok(content.includes("--exclude='.jaiph/runs'"));
-    assert.ok(content.includes('rsync -a --delete --exclude=\'.jaiph/runs\' --no-owner --no-group'));
-    assert.ok(content.includes("case \"$entry\" in"));
-    assert.ok(content.includes(".|..|.jaiph) continue ;;"));
-    assert.ok(content.includes(".|..|runs) continue ;;"));
-    assert.ok(content.includes("mktemp \"$MERGED/.jaiph-overlay-probe.XXXXXX\""));
-    assert.ok(content.includes('exec "${rewritten_args[@]}"'));
+    assert.ok(content.includes("fuse-overlayfs -o"));
+    assert.ok(content.includes("lowerdir=$LOWER,upperdir=$UPPER,workdir=$WORK"));
+    assert.ok(content.includes('exec "$@"'));
+    assert.ok(content.includes("E_DOCKER_OVERLAY"));
+  } finally {
+    rmSync(dirname(scriptPath), { recursive: true, force: true });
+  }
+});
+
+test("writeOverlayScript: contains no in-container rsync/cp fallback (host handles it now)", () => {
+  const scriptPath = writeOverlayScript();
+  try {
+    const content = readFileSync(scriptPath, "utf8");
+    assert.ok(!content.includes("rsync"), "rsync fallback removed from container script");
+    assert.ok(!content.includes("copy_workspace_with_cp"), "cp fallback removed from container script");
+    assert.ok(!content.includes("rewrite_workspace_path"), "path-rewrite logic removed");
+    assert.ok(!content.includes("RUNTIME_WORKSPACE"), "workspace switch logic removed");
   } finally {
     rmSync(dirname(scriptPath), { recursive: true, force: true });
   }
@@ -619,5 +629,172 @@ test("buildDockerArgs: includes --cap-drop ALL and --security-opt no-new-privile
   const secOptIdx = args.indexOf("--security-opt");
   assert.ok(secOptIdx >= 0, "--security-opt present");
   assert.equal(args[secOptIdx + 1], "no-new-privileges");
+});
+
+// ---------------------------------------------------------------------------
+// buildDockerArgs: copy-mode sandbox (host pre-clones workspace, mounts rw)
+// ---------------------------------------------------------------------------
+
+test("buildDockerArgs: copy mode mounts cloned workspace rw at /jaiph/workspace and skips overlay/fuse/SYS_ADMIN", () => {
+  const cloneDir = mkdtempSync(join(tmpdir(), "jaiph-test-clone-"));
+  try {
+    const args = buildDockerArgs(copyOpts(cloneDir));
+    const vFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-v");
+
+    const wsMount = vFlags.find((v) => v.endsWith(":/jaiph/workspace:rw"));
+    assert.ok(wsMount, "workspace bound rw at /jaiph/workspace");
+    assert.ok(wsMount!.startsWith(`${cloneDir}:`), "host side is the cloned workspace");
+    assert.ok(!vFlags.some((v) => v.includes("/jaiph/workspace-ro")), "no overlay lower-layer mount in copy mode");
+    assert.ok(!vFlags.some((v) => v.includes("/jaiph/overlay-run.sh")), "no overlay script mount in copy mode");
+
+    assert.ok(!args.includes("/dev/fuse"), "no fuse device in copy mode");
+    assert.ok(!args.includes("SYS_ADMIN"), "no SYS_ADMIN cap in copy mode");
+
+    assert.ok(args.includes("--cap-drop"));
+    assert.ok(args.includes("ALL"));
+    assert.ok(args.includes("--security-opt"));
+    assert.ok(args.includes("no-new-privileges"));
+
+    const idxImage = args.indexOf("ubuntu:24.04");
+    const tail = args.slice(idxImage + 1);
+    assert.equal(tail[0], "jaiph", "no overlay-run.sh wrapper in copy mode");
+    assert.equal(tail[1], "run");
+    assert.equal(tail[2], "--raw");
+    assert.equal(tail[3], "/jaiph/workspace/main.jh");
+  } finally {
+    rmSync(cloneDir, { recursive: true, force: true });
+  }
+});
+
+test("buildDockerArgs: copy mode binds run dir rw at /jaiph/run", () => {
+  const cloneDir = mkdtempSync(join(tmpdir(), "jaiph-test-clone-"));
+  try {
+    const args = buildDockerArgs(copyOpts(cloneDir));
+    const vFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-v");
+    const runMount = vFlags.find((v) => v.endsWith(":/jaiph/run:rw"));
+    assert.ok(runMount, "run dir bound rw at /jaiph/run");
+  } finally {
+    rmSync(cloneDir, { recursive: true, force: true });
+  }
+});
+
+test("buildDockerArgs: copy mode honors workspace sub-mounts as separate binds (e.g. config:ro)", () => {
+  const cloneDir = mkdtempSync(join(tmpdir(), "jaiph-test-clone-"));
+  try {
+    const opts = copyOpts(cloneDir, {
+      config: {
+        ...defaultOpts().config,
+        mounts: [
+          { hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" },
+          { hostPath: "config", containerPath: "/jaiph/workspace/config", mode: "ro" },
+        ],
+      },
+    });
+    const args = buildDockerArgs(opts);
+    const vFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-v");
+    const subMount = vFlags.find((v) => v.endsWith(":/jaiph/workspace/config:ro"));
+    assert.ok(subMount, "config sub-mount present and ro");
+    assert.ok(subMount!.startsWith(`${join(cloneDir, "config")}:`), "config sub-mount points into the cloned workspace");
+  } finally {
+    rmSync(cloneDir, { recursive: true, force: true });
+  }
+});
+
+test("buildDockerArgs: throws when overlay mode is selected without script path", () => {
+  assert.throws(() => buildDockerArgs(defaultOpts({ sandboxMode: "overlay" })), /overlay mode requires/);
+});
+
+test("buildDockerArgs: throws when copy mode is selected without sandboxWorkspaceDir", () => {
+  assert.throws(
+    () => buildDockerArgs(defaultOpts({ sandboxMode: "copy", sandboxWorkspaceDir: undefined })),
+    /copy mode requires sandboxWorkspaceDir/,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// selectSandboxMode
+// ---------------------------------------------------------------------------
+
+test("selectSandboxMode: JAIPH_DOCKER_NO_OVERLAY=1 forces copy", () => {
+  assert.equal(selectSandboxMode({ JAIPH_DOCKER_NO_OVERLAY: "1" }), "copy");
+  assert.equal(selectSandboxMode({ JAIPH_DOCKER_NO_OVERLAY: "true" }), "copy");
+});
+
+test("selectSandboxMode: returns overlay iff /dev/fuse exists on host (platform-correlated)", () => {
+  const expected = existsSync("/dev/fuse") ? "overlay" : "copy";
+  assert.equal(selectSandboxMode({}), expected);
+});
+
+// ---------------------------------------------------------------------------
+// cloneWorkspaceForSandbox + allocateSandboxWorkspaceDir
+// ---------------------------------------------------------------------------
+
+test("cloneWorkspaceForSandbox: copies entries and excludes .jaiph/runs", () => {
+  const src = mkdtempSync(join(tmpdir(), "jaiph-clone-src-"));
+  const dst = mkdtempSync(join(tmpdir(), "jaiph-clone-dst-"));
+  try {
+    writeFileSync(join(src, "file.txt"), "hello");
+    mkdirSync(join(src, "subdir"), { recursive: true });
+    writeFileSync(join(src, "subdir", "nested.txt"), "nested");
+    mkdirSync(join(src, ".jaiph"), { recursive: true });
+    writeFileSync(join(src, ".jaiph", "engineer.jh"), "wf");
+    mkdirSync(join(src, ".jaiph", "runs", "2026-01-01"), { recursive: true });
+    writeFileSync(join(src, ".jaiph", "runs", "2026-01-01", "log.txt"), "PII");
+
+    cloneWorkspaceForSandbox(src, dst);
+
+    assert.equal(readFileSync(join(dst, "file.txt"), "utf8"), "hello");
+    assert.equal(readFileSync(join(dst, "subdir", "nested.txt"), "utf8"), "nested");
+    assert.equal(readFileSync(join(dst, ".jaiph", "engineer.jh"), "utf8"), "wf");
+    assert.ok(!existsSync(join(dst, ".jaiph", "runs")), ".jaiph/runs must NOT be copied");
+  } finally {
+    rmSync(src, { recursive: true, force: true });
+    rmSync(dst, { recursive: true, force: true });
+  }
+});
+
+test("cloneWorkspaceForSandbox: produces independent file inodes (writes do not leak to source)", () => {
+  // Guards against the broken cp-rl/hardlink design we explicitly avoided.
+  const src = mkdtempSync(join(tmpdir(), "jaiph-clone-src-"));
+  const dst = mkdtempSync(join(tmpdir(), "jaiph-clone-dst-"));
+  try {
+    writeFileSync(join(src, "leak-check.txt"), "original");
+    cloneWorkspaceForSandbox(src, dst);
+    writeFileSync(join(dst, "leak-check.txt"), "mutated-by-container");
+    assert.equal(
+      readFileSync(join(src, "leak-check.txt"), "utf8"),
+      "original",
+      "host file must not be mutated by writes inside the cloned workspace",
+    );
+  } finally {
+    rmSync(src, { recursive: true, force: true });
+    rmSync(dst, { recursive: true, force: true });
+  }
+});
+
+test("cloneWorkspaceForSandbox: empty workspace produces empty clone", () => {
+  const src = mkdtempSync(join(tmpdir(), "jaiph-clone-src-"));
+  const dst = mkdtempSync(join(tmpdir(), "jaiph-clone-dst-"));
+  try {
+    cloneWorkspaceForSandbox(src, dst);
+    assert.deepStrictEqual(readdirSync(dst), []);
+  } finally {
+    rmSync(src, { recursive: true, force: true });
+    rmSync(dst, { recursive: true, force: true });
+  }
+});
+
+test("allocateSandboxWorkspaceDir: creates a fresh .sandbox-* dir under the runs root", () => {
+  const runsRoot = mkdtempSync(join(tmpdir(), "jaiph-runs-"));
+  try {
+    const a = allocateSandboxWorkspaceDir(runsRoot);
+    const b = allocateSandboxWorkspaceDir(runsRoot);
+    assert.notEqual(a, b);
+    assert.ok(a.startsWith(join(runsRoot, ".sandbox-")));
+    assert.ok(b.startsWith(join(runsRoot, ".sandbox-")));
+    assert.ok(existsSync(a) && existsSync(b));
+  } finally {
+    rmSync(runsRoot, { recursive: true, force: true });
+  }
 });
 

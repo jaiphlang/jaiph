@@ -1,5 +1,6 @@
-import { execFileSync, execSync, spawn, ChildProcess } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync, execSync, spawn, spawnSync, ChildProcess } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname, relative } from "node:path";
 import type { RuntimeConfig } from "../types";
@@ -299,156 +300,39 @@ export function resolveImage(config: DockerRunConfig): string {
 // Overlay entrypoint script (written to temp file, mounted into container)
 // ---------------------------------------------------------------------------
 
+/**
+ * Container-side fuse-overlayfs setup.
+ *
+ * Used only when the host selects "overlay" sandbox mode (i.e. /dev/fuse exists
+ * on the host). Mounts a fuse-overlayfs union at /jaiph/workspace (lower = the
+ * host workspace bind-mounted ro at /jaiph/workspace-ro, upper = tmpfs) and
+ * execs the command. If fuse-overlayfs is missing or fails, the script exits
+ * with a clear error code; the host-copy mode is the documented fallback users
+ * opt into (e.g. when fuse is unavailable on macOS Docker Desktop).
+ *
+ * No in-container rsync/cp fallback. That path was the slow one — we replaced
+ * it with a host-side clone (see `cloneWorkspaceForSandbox`).
+ */
 const OVERLAY_SCRIPT = `#!/usr/bin/env bash
 set -euo pipefail
 LOWER=/jaiph/workspace-ro
 UPPER=/tmp/overlay-upper
 WORK=/tmp/overlay-work
 MERGED=/jaiph/workspace
-RUNTIME_WORKSPACE="$MERGED"
 mkdir -p "$UPPER" "$WORK" "$MERGED"
 
-rewrite_workspace_path() {
-  local value="$1"
-  if [ "$RUNTIME_WORKSPACE" = "$MERGED" ]; then
-    printf '%s' "$value"
-    return
-  fi
-  case "$value" in
-    "$MERGED")
-      printf '%s' "$RUNTIME_WORKSPACE"
-      ;;
-    "$MERGED"/*)
-      printf '%s' "$RUNTIME_WORKSPACE"\${value#$MERGED}
-      ;;
-    *)
-      printf '%s' "$value"
-      ;;
-  esac
-}
-
-copy_workspace_with_rsync() {
-  local target="$1"
-  rsync -a --delete --exclude='.jaiph/runs' --no-owner --no-group --chmod=Du+rwx,Dgo+rx,Fu+rw,Fgo+r "$LOWER"/ "$target"/
-}
-
-copy_workspace_with_cp() {
-  local target="$1"
-  mkdir -p "$target"
-  (
-    cd "$LOWER"
-    shopt -s dotglob nullglob
-    for entry in * .*; do
-      case "$entry" in
-        .|..|.jaiph) continue ;;
-      esac
-      cp -a --no-preserve=ownership "$entry" "$target"/
-    done
-    if [ -d ".jaiph" ]; then
-      mkdir -p "$target/.jaiph"
-      (
-        cd ".jaiph"
-        shopt -s dotglob nullglob
-        for entry in * .*; do
-          case "$entry" in
-            .|..|runs) continue ;;
-          esac
-          cp -a --no-preserve=ownership "$entry" "$target/.jaiph"/
-        done
-      )
-    fi
-  )
-  chmod -R u+rwX "$target" 2>/dev/null || true
-}
-
-overlay_ok=0
-overlay_reason=""
-if command -v fuse-overlayfs >/dev/null 2>&1 && [ -e /dev/fuse ]; then
-  if fuse-overlayfs -o "lowerdir=$LOWER,upperdir=$UPPER,workdir=$WORK" "$MERGED" 2>/tmp/jaiph-fuse-overlay.err; then
-    probe_path="$(mktemp "$MERGED/.jaiph-overlay-probe.XXXXXX" 2>/dev/null || true)"
-    if [ -n "$probe_path" ]; then
-      rm -f "$probe_path"
-      overlay_ok=1
-    else
-      overlay_reason="fuse-overlayfs mounted but workspace is still not writable"
-    fi
-  else
-    overlay_reason="$(tr '\n' ' ' </tmp/jaiph-fuse-overlay.err | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')"
-  fi
-else
-  overlay_reason="fuse-overlayfs unavailable or /dev/fuse missing"
+if ! command -v fuse-overlayfs >/dev/null 2>&1; then
+  printf 'E_DOCKER_OVERLAY fuse-overlayfs not found in image; install it or set JAIPH_DOCKER_NO_OVERLAY=1 on the host to use the copy sandbox path\\n' >&2
+  exit 78
 fi
-if [ "$overlay_ok" -ne 1 ]; then
-  printf 'jaiph docker: workspace overlay unavailable; copying workspace into a temp directory before startup (live output begins after the copy completes; excludes .jaiph/runs)' >&2
-  if [ -n "$overlay_reason" ]; then
-    printf ' (%s)' "$overlay_reason" >&2
-  fi
-  printf '\n' >&2
-  tmp_workspace="$(mktemp -d /tmp/jaiph-workspace.XXXXXX 2>/dev/null || true)"
-  if [ -n "$tmp_workspace" ]; then
-    if command -v rsync >/dev/null 2>&1; then
-      if copy_workspace_with_rsync "$tmp_workspace" 2>/tmp/jaiph-workspace-copy.err; then
-        RUNTIME_WORKSPACE="$tmp_workspace"
-        printf 'jaiph docker: workspace overlay unavailable; using copy fallback at %s' "$RUNTIME_WORKSPACE" >&2
-        if [ -n "$overlay_reason" ]; then
-          printf ' (%s)' "$overlay_reason" >&2
-        fi
-        printf '\n' >&2
-        overlay_ok=1
-      else
-        copy_reason="$(tr '\n' ' ' </tmp/jaiph-workspace-copy.err | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')"
-        rm -rf "$tmp_workspace"
-        printf 'jaiph docker: workspace overlay unavailable and copy fallback failed; container workspace may be incomplete' >&2
-        if [ -n "$overlay_reason" ]; then
-          printf ' (%s)' "$overlay_reason" >&2
-        fi
-        if [ -n "$copy_reason" ]; then
-          printf ' [copy fallback: %s]' "$copy_reason" >&2
-        fi
-        printf '\n' >&2
-      fi
-    else
-      if copy_workspace_with_cp "$tmp_workspace" 2>/tmp/jaiph-workspace-cp.err; then
-        RUNTIME_WORKSPACE="$tmp_workspace"
-        printf 'jaiph docker: workspace overlay unavailable; using cp fallback at %s' "$RUNTIME_WORKSPACE" >&2
-        if [ -n "$overlay_reason" ]; then
-          printf ' (%s)' "$overlay_reason" >&2
-        fi
-        printf '\n' >&2
-        overlay_ok=1
-      else
-        cp_reason="$(tr '\n' ' ' </tmp/jaiph-workspace-cp.err | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')"
-        rm -rf "$tmp_workspace"
-        printf 'jaiph docker: workspace overlay unavailable and copy fallbacks are unavailable; container workspace may be incomplete' >&2
-        if [ -n "$overlay_reason" ]; then
-          printf ' (%s)' "$overlay_reason" >&2
-        fi
-        if [ -n "$cp_reason" ]; then
-          printf ' [cp fallback: %s]' "$cp_reason" >&2
-        fi
-        printf '\n' >&2
-      fi
-    fi
-  else
-    printf 'jaiph docker: workspace overlay unavailable and temp workspace allocation failed; container workspace may be incomplete' >&2
-    if [ -n "$overlay_reason" ]; then
-      printf ' (%s)' "$overlay_reason" >&2
-    fi
-    printf '\n' >&2
-  fi
+if [ ! -e /dev/fuse ]; then
+  printf 'E_DOCKER_OVERLAY /dev/fuse not present in container; pass --device /dev/fuse or set JAIPH_DOCKER_NO_OVERLAY=1 to use the copy sandbox path\\n' >&2
+  exit 78
 fi
-
-if [ "$RUNTIME_WORKSPACE" != "$MERGED" ]; then
-  export JAIPH_WORKSPACE="$RUNTIME_WORKSPACE"
-  if [ -n "\${JAIPH_AGENT_TRUSTED_WORKSPACE:-}" ]; then
-    export JAIPH_AGENT_TRUSTED_WORKSPACE="$(rewrite_workspace_path "$JAIPH_AGENT_TRUSTED_WORKSPACE")"
-  fi
-  rewritten_args=()
-  for arg in "$@"; do
-    rewritten_args+=("$(rewrite_workspace_path "$arg")")
-  done
-  cd "$RUNTIME_WORKSPACE"
-  exec "\${rewritten_args[@]}"
+if ! fuse-overlayfs -o "lowerdir=$LOWER,upperdir=$UPPER,workdir=$WORK" "$MERGED" 2>/tmp/jaiph-fuse-overlay.err; then
+  reason="$(tr '\\n' ' ' </tmp/jaiph-fuse-overlay.err | sed 's/[[:space:]]\\+/ /g; s/^ //; s/ $//')"
+  printf 'E_DOCKER_OVERLAY fuse-overlayfs mount failed: %s\\n' "$reason" >&2
+  exit 78
 fi
 
 cd "$MERGED"
@@ -467,6 +351,128 @@ export function writeOverlayScript(): string {
 }
 
 // ---------------------------------------------------------------------------
+// Sandbox mode selection + host-side workspace clone
+// ---------------------------------------------------------------------------
+
+/** Selected sandbox primitive for a Docker run. */
+export type SandboxMode = "overlay" | "copy";
+
+/**
+ * Choose the sandbox mode for the upcoming run.
+ *
+ * Heuristic: presence of `/dev/fuse` on the host is a strong proxy for
+ * fuse-overlayfs viability inside the container. Linux dev/CI hosts typically
+ * have it; macOS Docker Desktop typically doesn't expose it. Override with
+ * `JAIPH_DOCKER_NO_OVERLAY=1` to force the host-copy path.
+ */
+export function selectSandboxMode(env: Record<string, string | undefined>): SandboxMode {
+  if (env.JAIPH_DOCKER_NO_OVERLAY === "1" || env.JAIPH_DOCKER_NO_OVERLAY === "true") {
+    return "copy";
+  }
+  return existsSync("/dev/fuse") ? "overlay" : "copy";
+}
+
+/** Run `cp` with the given flags. Returns true on success. */
+function tryCp(flags: string[], src: string, dst: string): { ok: boolean; stderr: string } {
+  const r = spawnSync("cp", [...flags, src, dst], { stdio: ["ignore", "ignore", "pipe"] });
+  return { ok: r.status === 0, stderr: r.stderr?.toString() ?? "" };
+}
+
+/**
+ * Copy a single top-level entry into the sandbox workspace.
+ *
+ * On macOS, prefers `cp -cR` (APFS clonefile, O(1) per file). On any
+ * platform/filesystem where clonefile fails (or on Linux where BSD `-c` isn't
+ * supported), falls back to plain `cp -R` and notes the fallback for the caller
+ * to surface as a one-time warning.
+ */
+function copyEntryWithCloneFallback(
+  src: string,
+  dst: string,
+  state: { cloneAttempted: boolean; cloneSupported: boolean; firstFallbackReason: string | null },
+): void {
+  if (process.platform === "darwin") {
+    if (!state.cloneAttempted) {
+      state.cloneAttempted = true;
+      const r = tryCp(["-cR"], src, dst);
+      if (r.ok) {
+        state.cloneSupported = true;
+        return;
+      }
+      state.firstFallbackReason = r.stderr.trim().split("\n")[0] || "cp -cR failed";
+      const fb = tryCp(["-pR"], src, dst);
+      if (!fb.ok) {
+        throw new Error(`E_DOCKER_SANDBOX_COPY failed to copy ${src} → ${dst}: ${fb.stderr.trim()}`);
+      }
+      return;
+    }
+    if (state.cloneSupported) {
+      const r = tryCp(["-cR"], src, dst);
+      if (r.ok) return;
+    }
+    const fb = tryCp(["-pR"], src, dst);
+    if (!fb.ok) {
+      throw new Error(`E_DOCKER_SANDBOX_COPY failed to copy ${src} → ${dst}: ${fb.stderr.trim()}`);
+    }
+    return;
+  }
+  const r = tryCp(["-pR"], src, dst);
+  if (!r.ok) {
+    throw new Error(`E_DOCKER_SANDBOX_COPY failed to copy ${src} → ${dst}: ${r.stderr.trim()}`);
+  }
+}
+
+/**
+ * Clone the host workspace into a sandbox directory.
+ *
+ * - macOS: tries `cp -cR` (APFS clonefile, O(1)); on failure, falls back to
+ *   `cp -pR` (real copy) with a single stderr warning noting the reason.
+ * - Linux/other: uses `cp -pR` directly. The slow case (no fuse-overlayfs +
+ *   non-COW filesystem) is documented; users on those hosts pay the copy cost.
+ *
+ * Excludes `.jaiph/runs` (mounted separately at `/jaiph/run`) and `.git/objects`
+ * is intentionally NOT excluded — workflows may need git history.
+ */
+export function cloneWorkspaceForSandbox(
+  srcRoot: string,
+  dstRoot: string,
+  warn: (msg: string) => void = (m) => process.stderr.write(`${m}\n`),
+): void {
+  mkdirSync(dstRoot, { recursive: true });
+  const state = { cloneAttempted: false, cloneSupported: false, firstFallbackReason: null as string | null };
+
+  for (const entry of readdirSync(srcRoot, { withFileTypes: true })) {
+    if (entry.name === ".jaiph") continue;
+    copyEntryWithCloneFallback(join(srcRoot, entry.name), join(dstRoot, entry.name), state);
+  }
+
+  const jaiphSrc = join(srcRoot, ".jaiph");
+  if (existsSync(jaiphSrc)) {
+    const jaiphDst = join(dstRoot, ".jaiph");
+    mkdirSync(jaiphDst, { recursive: true });
+    for (const entry of readdirSync(jaiphSrc, { withFileTypes: true })) {
+      if (entry.name === "runs") continue;
+      copyEntryWithCloneFallback(join(jaiphSrc, entry.name), join(jaiphDst, entry.name), state);
+    }
+  }
+
+  if (process.platform === "darwin" && state.cloneAttempted && !state.cloneSupported) {
+    warn(
+      `jaiph docker: clonefile (cp -cR) unavailable on this filesystem; using plain copy ` +
+      `(${state.firstFallbackReason ?? "unknown reason"}). Workspace clone may be slow for large trees.`,
+    );
+  }
+}
+
+/** Allocate a fresh sandbox workspace directory adjacent to the runs root. */
+export function allocateSandboxWorkspaceDir(runsRoot: string): string {
+  const id = randomBytes(4).toString("hex");
+  const dir = join(runsRoot, `.sandbox-${id}`);
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+// ---------------------------------------------------------------------------
 // Docker command builder
 // ---------------------------------------------------------------------------
 
@@ -479,6 +485,18 @@ export interface DockerSpawnOptions {
   runArgs: string[];
   env: Record<string, string | undefined>;
   isTTY: boolean;
+  /**
+   * How to make the workspace appear writable inside the container.
+   *  - "overlay": bind workspace ro, set up fuse-overlayfs in-container.
+   *  - "copy":    pre-clone workspace on host, bind the clone rw.
+   * Defaults to `selectSandboxMode(env)` when omitted.
+   */
+  sandboxMode?: SandboxMode;
+  /**
+   * Required when `sandboxMode === "copy"`: the host path of the cloned
+   * workspace to bind at `/jaiph/workspace`. Caller owns its lifecycle.
+   */
+  sandboxWorkspaceDir?: string;
 }
 
 export const CONTAINER_WORKSPACE = "/jaiph/workspace";
@@ -555,26 +573,38 @@ export function overlayMountPath(containerPath: string): string {
 /**
  * Build the `docker run --rm` argument list.
  *
- * Mounts:
- *  1. workspace → /jaiph/workspace-ro:ro  (overlay lower layer / copy source)
- *  2. sandboxRunDir → /jaiph/run:rw       (single run artifacts)
- *
- * The image already contains a `/jaiph/workspace` directory used as the overlay
- * merge target. When overlay mounts are unavailable, `overlay-run.sh` falls back
- * to a writable per-run workspace copy under `/tmp`. `/jaiph/run` is outside the
- * overlay, so run artifacts still persist to the host mount.
+ * Two sandbox shapes:
+ *  - "overlay": workspace bind-mounts ro at /jaiph/workspace-ro; entrypoint
+ *    script sets up fuse-overlayfs at /jaiph/workspace. Requires SYS_ADMIN
+ *    and /dev/fuse. Run artifacts mount at /jaiph/run (outside the overlay).
+ *  - "copy": host pre-clones workspace to `opts.sandboxWorkspaceDir`; that
+ *    dir bind-mounts rw at /jaiph/workspace. No overlay script, no fuse,
+ *    no SYS_ADMIN. Run artifacts mount at /jaiph/run as before.
  *
  * The container runs `jaiph run --raw <file>` using its own installed jaiph.
+ *
+ * `overlayScriptPath` is required for "overlay" mode and ignored for "copy".
  */
-export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath: string): string[] {
+export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath?: string): string[] {
+  const mode: SandboxMode = opts.sandboxMode ?? selectSandboxMode(opts.env);
+  if (mode === "overlay" && !overlayScriptPath) {
+    throw new Error("buildDockerArgs: overlay mode requires overlayScriptPath");
+  }
+  if (mode === "copy" && !opts.sandboxWorkspaceDir) {
+    throw new Error("buildDockerArgs: copy mode requires sandboxWorkspaceDir");
+  }
+
   const args: string[] = ["run", "--rm"];
 
-  // Least-privilege: drop all capabilities, re-add only SYS_ADMIN for fuse-overlayfs
   args.push("--cap-drop", "ALL");
-  args.push("--cap-add", "SYS_ADMIN");
+  if (mode === "overlay") {
+    args.push("--cap-add", "SYS_ADMIN");
+  }
   args.push("--security-opt", "no-new-privileges");
 
-  args.push("--device", "/dev/fuse");
+  if (mode === "overlay") {
+    args.push("--device", "/dev/fuse");
+  }
 
   if (process.platform === "linux") {
     try {
@@ -590,22 +620,42 @@ export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath: str
     args.push("--network", opts.config.network);
   }
 
-  // Workspace inputs: mounted only at the overlay lower-layer path.
-  for (const mount of opts.config.mounts) {
-    const hostAbs = resolve(opts.workspaceRoot, mount.hostPath);
+  if (mode === "overlay") {
+    // Workspace inputs land at the overlay lower-layer path; overlay script merges them rw.
+    for (const mount of opts.config.mounts) {
+      const hostAbs = resolve(opts.workspaceRoot, mount.hostPath);
+      validateMountHostPath(hostAbs);
+      args.push("-v", `${hostAbs}:${overlayMountPath(mount.containerPath)}:ro`);
+    }
+  } else {
+    // Pre-cloned workspace mounts rw directly at /jaiph/workspace.
+    const hostAbs = resolve(opts.sandboxWorkspaceDir!);
     validateMountHostPath(hostAbs);
-    args.push("-v", `${hostAbs}:${overlayMountPath(mount.containerPath)}:ro`);
+    args.push("-v", `${hostAbs}:${CONTAINER_WORKSPACE}:rw`);
+    // Honor any additional sub-mounts (e.g. "config:ro") relative to the cloned
+    // workspace, so users can still pin parts as ro inside the container.
+    for (const mount of opts.config.mounts) {
+      if (mount.containerPath === CONTAINER_WORKSPACE) continue;
+      const subRel = relative(CONTAINER_WORKSPACE, mount.containerPath);
+      if (subRel.startsWith("..")) {
+        // External (non-workspace) mounts: bind the original host path through.
+        const extAbs = resolve(opts.workspaceRoot, mount.hostPath);
+        validateMountHostPath(extAbs);
+        args.push("-v", `${extAbs}:${mount.containerPath}:${mount.mode}`);
+      } else {
+        const subAbs = join(hostAbs, subRel);
+        args.push("-v", `${subAbs}:${mount.containerPath}:${mount.mode}`);
+      }
+    }
   }
 
-  // Single run directory: rw mount outside the overlay
   args.push("-v", `${opts.sandboxRunDir}:${CONTAINER_RUN_DIR}:rw`);
 
-  // Overlay entrypoint script (runtime-generated, mounted ro)
-  args.push("-v", `${overlayScriptPath}:/jaiph/overlay-run.sh:ro`);
+  if (mode === "overlay") {
+    args.push("-v", `${overlayScriptPath}:/jaiph/overlay-run.sh:ro`);
+  }
 
-  // Environment
   const containerEnv = remapDockerEnv(opts.env);
-
   for (const [key, value] of Object.entries(containerEnv)) {
     if (value === undefined) continue;
     if (isEnvDenied(key)) continue;
@@ -620,14 +670,21 @@ export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath: str
   args.push("-w", CONTAINER_WORKSPACE);
   args.push(opts.config.image);
 
-  // Command: overlay wrapper → jaiph run --raw
   const relSource = relative(opts.workspaceRoot, opts.sourceAbs);
-  args.push(
-    "/jaiph/overlay-run.sh",
-    "jaiph", "run", "--raw",
-    `${CONTAINER_WORKSPACE}/${relSource}`,
-    ...opts.runArgs,
-  );
+  if (mode === "overlay") {
+    args.push(
+      "/jaiph/overlay-run.sh",
+      "jaiph", "run", "--raw",
+      `${CONTAINER_WORKSPACE}/${relSource}`,
+      ...opts.runArgs,
+    );
+  } else {
+    args.push(
+      "jaiph", "run", "--raw",
+      `${CONTAINER_WORKSPACE}/${relSource}`,
+      ...opts.runArgs,
+    );
+  }
 
   return args;
 }
@@ -640,8 +697,14 @@ export interface DockerSpawnResult {
   child: ChildProcess;
   /** Host directory mounted at /jaiph/run — scan for artifacts after exit. */
   sandboxRunDir: string;
-  /** Temp directory containing overlay-run.sh — cleaned up after exit. */
-  overlayScriptDir: string;
+  /** Selected sandbox primitive for this run. */
+  sandboxMode: SandboxMode;
+  /** Temp directory containing overlay-run.sh — cleaned up after exit (overlay mode). */
+  overlayScriptDir?: string;
+  /** Pre-cloned workspace dir mounted rw — removed on cleanup unless kept (copy mode). */
+  sandboxWorkspaceDir?: string;
+  /** When true, cleanup leaves `sandboxWorkspaceDir` on disk for debugging. */
+  keepSandboxWorkspace: boolean;
   timeoutTimer?: NodeJS.Timeout;
 }
 
@@ -650,15 +713,35 @@ export interface DockerSpawnResult {
  *
  * The container runs `jaiph run --raw <file>` using its own installed jaiph.
  * Events flow via stderr; stdout carries workflow output.
+ *
+ * Sandbox mode is picked from `opts.sandboxMode` if set, otherwise
+ * `selectSandboxMode(opts.env)`. In "copy" mode the workspace is cloned to a
+ * fresh `<runsRoot>/.sandbox-<id>/` directory (or the provided
+ * `opts.sandboxWorkspaceDir`) before launch.
  */
 export function spawnDockerProcess(opts: DockerSpawnOptions): DockerSpawnResult {
   checkDockerAvailable();
   const resolvedImage = resolveImage(opts.config);
   opts = { ...opts, config: { ...opts.config, image: resolvedImage } };
 
+  const mode: SandboxMode = opts.sandboxMode ?? selectSandboxMode(opts.env);
   mkdirSync(opts.sandboxRunDir, { recursive: true });
-  const overlayScriptPath = writeOverlayScript();
-  const overlayScriptDir = dirname(overlayScriptPath);
+
+  let overlayScriptPath: string | undefined;
+  let overlayScriptDir: string | undefined;
+  let sandboxWorkspaceDir: string | undefined;
+  const keepSandboxWorkspace =
+    opts.env.JAIPH_DOCKER_KEEP_SANDBOX === "1" || opts.env.JAIPH_DOCKER_KEEP_SANDBOX === "true";
+
+  if (mode === "overlay") {
+    overlayScriptPath = writeOverlayScript();
+    overlayScriptDir = dirname(overlayScriptPath);
+  } else {
+    sandboxWorkspaceDir = opts.sandboxWorkspaceDir ?? allocateSandboxWorkspaceDir(opts.sandboxRunDir);
+    cloneWorkspaceForSandbox(opts.workspaceRoot, sandboxWorkspaceDir);
+  }
+
+  opts = { ...opts, sandboxMode: mode, sandboxWorkspaceDir };
   const dockerArgs = buildDockerArgs(opts, overlayScriptPath);
 
   const child = spawn("docker", dockerArgs, {
@@ -685,20 +768,40 @@ export function spawnDockerProcess(opts: DockerSpawnOptions): DockerSpawnResult 
     }, opts.config.timeout * 1000);
   }
 
-  return { child, sandboxRunDir: opts.sandboxRunDir, overlayScriptDir, timeoutTimer };
+  return {
+    child,
+    sandboxRunDir: opts.sandboxRunDir,
+    sandboxMode: mode,
+    overlayScriptDir,
+    sandboxWorkspaceDir,
+    keepSandboxWorkspace,
+    timeoutTimer,
+  };
 }
 
 /**
  * Clean up Docker resources after execution.
+ *
+ * Removes the overlay script tempdir (overlay mode) and the cloned workspace
+ * (copy mode), unless `JAIPH_DOCKER_KEEP_SANDBOX=1` was set.
  */
 export function cleanupDocker(result: DockerSpawnResult): void {
   if (result.timeoutTimer) {
     clearTimeout(result.timeoutTimer);
   }
-  try {
-    rmSync(result.overlayScriptDir, { recursive: true, force: true });
-  } catch {
-    // Best-effort cleanup
+  if (result.overlayScriptDir) {
+    try {
+      rmSync(result.overlayScriptDir, { recursive: true, force: true });
+    } catch {
+      // Best-effort cleanup
+    }
+  }
+  if (result.sandboxWorkspaceDir && !result.keepSandboxWorkspace) {
+    try {
+      rmSync(result.sandboxWorkspaceDir, { recursive: true, force: true });
+    } catch {
+      // Best-effort cleanup
+    }
   }
 }
 
