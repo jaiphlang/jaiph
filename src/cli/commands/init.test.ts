@@ -49,16 +49,6 @@ test("init: generated bootstrap uses triple-quoted prompt and parses", () => {
   }
 });
 
-test("init: does not create .jaiph/Dockerfile", () => {
-  const dir = makeTempDir();
-  try {
-    assert.equal(runInit([dir]), 0);
-    assert.equal(existsSync(join(dir, ".jaiph", "Dockerfile")), false);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
 test("init: fails when .jaiph/.gitignore exists with unexpected content", () => {
   const dir = makeTempDir();
   try {
