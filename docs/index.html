@@ -79,8 +79,11 @@ layout: null
                     <pre><code class="language-bash static-highlight"><span class="code-line">curl -fsSL https://jaiph.org/run | bash -s '</span><span class="code-line"><span class="ralph-keyword">workflow</span> <span class="ralph-definition">default</span>() {</span><span class="code-line">  <span class="ralph-keyword">const</span> <span class="ralph-variable">response</span> <span class="ralph-operator">=</span> <span class="ralph-keyword">prompt</span> <span class="ralph-string">"Say: Hello, I am [model name]!"</span></span><span class="code-line">  <span class="ralph-keyword">log</span> response</span><span class="code-line">}'</span></code></pre>
                     <p class="small">Installs Jaiph <strong>v0.9.2</strong> to <strong>~/.local/bin</strong> (if not
                         already
-                        installed), and runs the sample workflow with <a href="https://cursor.com/docs/cli/installation" target="_blank" rel="noopener noreferrer">Cursor CLI</a> agent backend (the default one). See <a href="#samples">more samples</a>!</p>
-                    <p class="small warning">Jaiph is under heavy development. Core features and workflow syntax are stable since v0.8.0, but you may expect breaking changes before v1.0.0.</p>
+                        installed), and runs the sample workflow with <a href="https://cursor.com/docs/cli/installation"
+                            target="_blank" rel="noopener noreferrer">Cursor CLI</a> agent backend (the default one).
+                        See <a href="#samples">more samples</a>!</p>
+                    <p class="small warning">Jaiph is under heavy development. Core features and workflow syntax are
+                        stable since v0.8.0, but you may expect breaking changes before v1.0.0.</p>
                 </div>
 
                 <div class="code-tab-panel" data-panel="try-init-project">
@@ -103,6 +106,17 @@ layout: null
         </section>
 
         <section>
+            <h2>What is Jaiph?</h2>
+            <div class="card doc-content">
+                <p><strong>Jaiph</strong> is a language and runtime for defining and orchestrating AI agent workflows.
+                </p>
+                <p>It allows you to combine agentic workflows with strict checks and script calls. It comes with
+                    build-in Docker sanboxing for agentic workflows, and a set of tooling to make your development
+                    faster and more efficient.</p>
+            </div>
+        </section>
+
+        <section>
             <h2>Why Jaiph?</h2>
             <div class="card doc-content">
                 <div class="comparison-grid">
@@ -114,10 +128,11 @@ layout: null
                         <p>Embed scripts in your favorite language</p>
                     </div>
                     <div class="comparison-col">
-                        <h3>Runtime</h3>
+                        <h3>Tooling</h3>
                         <p>Built-in Docker sandboxing</p>
                         <p>Built-in testing framework</p>
                         <p>Tracks and saves all agent responses</p>
+                        <p>Default formatter and VSCode plugin</p>
                     </div>
                     <div class="comparison-col">
                         <h3>Open Source</h3>
@@ -137,8 +152,7 @@ layout: null
                         data-target="say-hello-jh">say_hello.jh</button>
                     <button type="button" class="code-tab-button"
                         data-target="say-hello-test-jh">say_hello.test.jh</button>
-                    <button type="button" class="code-tab-button"
-                        data-target="recover-loop-jh">recover_loop.jh</button>
+                    <button type="button" class="code-tab-button" data-target="recover-loop-jh">recover_loop.jh</button>
                     <button type="button" class="code-tab-button"
                         data-target="inbox-pipeline-jh">agent_inbox.jh</button>
                     <button type="button" class="code-tab-button" data-target="async-jh">async.jh</button>
@@ -252,7 +266,8 @@ test "with name, returns greeting and logs response" {
   # When
   run hello.default("Alice")
 }</code></pre>
-                    <p>Example failing test run output (expected string omits the trailing <code>:(</code> from stderr):</p>
+                    <p>Example failing test run output (expected string omits the trailing <code>:(</code> from stderr):
+                    </p>
                     <pre><code class="jaiph-run" data-sample-output="failing-run"><span class="run-command">➜  ./say_hello.test.jh</span>
 testing say_hello.test.jh
   <span class="run-marker">▸</span> without name, workflow fails with validation message
@@ -317,7 +332,8 @@ Jaiph: Running recover_loop.jh<span class="run-banner-meta"> (Docker sandbox, fu
 
 <span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(0.5s)</span></code></pre>
                     <p>For one-shot failure handling without retry, use <code>catch</code> instead. See
-                        <a href="/language#recover--repair-and-retry-loop">Language — recover</a>.</p>
+                        <a href="/language#recover--repair-and-retry-loop">Language — recover</a>.
+                    </p>
                 </div>
 
                 <div class="code-tab-panel" data-panel="inbox-pipeline-jh" data-sample="agent-inbox"
@@ -468,10 +484,12 @@ Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</
                 </p>
 
                 <h3>Runtime</h3>
-                <p><strong>Docker sandboxing.</strong> Workflows run inside Docker by default for local development, providing
-                    filesystem and process isolation for agent and shell actions. Disable with <code>JAIPH_UNSAFE=true</code>
-                    or <code>runtime.docker_enabled = false</code>. See <a
-                        href="sandboxing">Sandboxing</a>.</p>
+                <p><strong>Docker sandboxing.</strong> Workflows run inside Docker by default for local development,
+                    providing
+                    filesystem and process isolation for agent and shell actions. Disable with
+                    <code>JAIPH_UNSAFE=true</code>
+                    or <code>runtime.docker_enabled = false</code>. See <a href="sandboxing">Sandboxing</a>.
+                </p>
                 <p><strong>Hooks.</strong> Attach shell automation to workflow and step lifecycle events via
                     <code>~/.jaiph/hooks.json</code> or <code>&lt;project&gt;/.jaiph/hooks.json</code>. See <a
                         href="hooks">Hooks</a>.
@@ -484,7 +502,8 @@ Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</
                     location with the built-in <code>jaiphlang/artifacts</code> library. <code>artifacts.save</code>
                     copies a file, <code>artifacts.save_patch</code> exports a git diff, and
                     <code>artifacts.apply_patch</code> replays it. Works identically in Docker and on the host.
-                    See <a href="libraries#jaiphlangartifacts--publishing-files-out-of-the-sandbox">Libraries</a>.</p>
+                    See <a href="libraries#jaiphlangartifacts--publishing-files-out-of-the-sandbox">Libraries</a>.
+                </p>
                 <p><strong>Configuration.</strong> Control behavior with <code>config { ... }</code> blocks
                     at the module level or inside individual workflows for per-workflow overrides, plus environment
                     variables (env wins precedence). See <a href="configuration">Configuration</a> and
@@ -515,9 +534,11 @@ Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</
                 <h3>Jaiph workflows</h3>
                 <dl class="primitive-list">
                     <dt><code>config { ... }</code></dt>
-                    <dd>Optional runtime options (agent backend/flags, logs, runtime, module metadata). Allowed at the top level
+                    <dd>Optional runtime options (agent backend/flags, logs, runtime, module metadata). Allowed at the
+                        top level
                         (module-wide) and inside individual workflows (per-workflow overrides for <code>agent.*</code>
-                        and <code>run.*</code> keys only; <code>runtime.*</code> and <code>module.*</code> are module-level only). Environment variables override config values. See <a
+                        and <code>run.*</code> keys only; <code>runtime.*</code> and <code>module.*</code> are
+                        module-level only). Environment variables override config values. See <a
                             href="configuration">Configuration</a>.</dd>
 
                     <dt><code>import "file.jh" as alias</code> &middot; <code>const name = value</code> /
@@ -527,10 +548,12 @@ Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</
                         shared by
                         rules, scripts, and workflows in the same file. Values can be single-line
                         <code>"..."</code> strings, triple-quoted <code>"""..."""</code> multiline strings,
-                        or bare tokens.</dd>
+                        or bare tokens.
+                    </dd>
 
                     <dt><code>rule name() { ... }</code> &middot; <code>rule name(params) { ... }</code> &middot;
-                        <code>workflow name() { ... }</code> &middot; <code>workflow name(params) { ... }</code> &middot;
+                        <code>workflow name() { ... }</code> &middot; <code>workflow name(params) { ... }</code>
+                        &middot;
                         <code>script name = `cmd`</code> &middot; <code>script name = ```[lang] ... ```</code>
                     </dt>
                     <dd><code>rule</code> is for reusable checks (Jaiph structured steps; used with
@@ -538,14 +561,17 @@ Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</
                         <code>workflow</code> orchestrates Jaiph steps only, and <code>script</code> holds bash (or any
                         language via a fence lang tag like <code>```node</code>, <code>```python3</code>, or a custom
                         shebang) invoked with <code>run</code>. Rules and workflows <strong>require parentheses</strong>
-                        on every definition &mdash; even when parameterless (e.g. <code>workflow default() { &hellip; }</code>).
+                        on every definition &mdash; even when parameterless (e.g.
+                        <code>workflow default() { &hellip; }</code>).
                         Named parameters go inside the parentheses; the compiler validates
-                        call-site arity when the callee declares params. Any fence tag is valid &mdash; it maps directly to
+                        call-site arity when the callee declares params. Any fence tag is valid &mdash; it maps directly
+                        to
                         <code>#!/usr/bin/env &lt;tag&gt;</code>. Scripts run in <strong>full isolation</strong>
                         &mdash; only positional arguments
                         and essential Jaiph variables (<code>JAIPH_SCRIPTS</code>,
                         <code>JAIPH_WORKSPACE</code>) are inherited; module-scoped variables are not visible.
-                        Reuse shell helpers with <code>import script</code> or small named <code>script</code> blocks in the same module. Scripts are emitted as
+                        Reuse shell helpers with <code>import script</code> or small named <code>script</code> blocks in
+                        the same module. Scripts are emitted as
                         separate executable files under <code>scripts/</code> (within the run build output tree; see <a
                             href="cli">CLI reference</a>).
                     </dd>
@@ -563,7 +589,8 @@ Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</
                         <code>run greet(name)</code> is equivalent to <code>run greet("${name}")</code>.
                         <code>run `body`(args)</code> embeds a one-off shell command directly
                         without a named <code>script</code> definition &mdash; supports arguments and capture.
-                        Use triple backticks for multiline: <code>run ```...```(args)</code>.</dd>
+                        Use triple backticks for multiline: <code>run ```...```(args)</code>.
+                    </dd>
 
                     <dt><code>prompt "..."</code> &middot; <code>prompt myVar</code> &middot;
                         <code>prompt """ ... """</code> &middot;
@@ -606,7 +633,8 @@ Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</
                     </dd>
 
                     <dt><code>fail "reason"</code> &middot; <code>fail """..."""</code></dt>
-                    <dd><code>fail</code> aborts with stderr + non-zero exit. Use triple quotes for multiline messages.</dd>
+                    <dd><code>fail</code> aborts with stderr + non-zero exit. Use triple quotes for multiline messages.
+                    </dd>
 
                     <dt><code>ensure ref() catch (err) { … }</code> &middot;
                         <code>run ref() catch (err) { … }</code>
