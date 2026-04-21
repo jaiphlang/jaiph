@@ -80,6 +80,14 @@ e2e::expect_out "app.jh" "mixed_ok_impl" "mixed-ok"
 
 e2e::section "Git-aware rule arguments"
 
+# This section exercises a workflow whose script body shells out to `git`.
+# Some supported environments (notably the WSL CI job) do not preinstall git;
+# Jaiph itself does not require it, so skip gracefully rather than fail the
+# whole acceptance test on a feature that is not applicable here.
+if ! command -v git >/dev/null 2>&1; then
+  e2e::skip "git not available — skipping git-aware rule arguments"
+else
+
 # Given
 e2e::file "current_branch.jh" <<'EOF'
 #!/usr/bin/env jaiph
@@ -123,3 +131,5 @@ EOF
   e2e::expect_fail "current_branch.jh" "${wrong_branch}"
   e2e::pass "current_branch.jh fails for wrong branch"
 )
+
+fi
