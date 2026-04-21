@@ -33,12 +33,26 @@ jobs:
           git ls-remote --exit-code https://github.com/jaiphlang/jaiph.git "refs/tags/v${VERSION}"
 
   e2e:
-    name: E2E install and CLI workflow (${{ matrix.os }})
+    name: E2E (${{ matrix.os }}, ${{ matrix.label }})
     runs-on: ${{ matrix.os }}
+    env:
+      # Host/safe split applies on Ubuntu only. macOS runners do not ship Docker the same way — keep host-only there.
+      # "docker": unset JAIPH_UNSAFE so resolveDockerConfig enables the sandbox (pulls ghcr.io/jaiphlang/jaiph-runtime).
+      # "host": explicit opt-out, same as a fast local `JAIPH_UNSAFE=true npm run test:e2e`.
+      JAIPH_UNSAFE: ${{ matrix.jaiph_unsafe }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            label: docker
+            jaiph_unsafe: ""
+          - os: ubuntu-latest
+            label: host
+            jaiph_unsafe: "true"
+          - os: macos-latest
+            label: host
+            jaiph_unsafe: "true"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -170,6 +184,7 @@ jobs:
           $distro = "${{ steps.detect_wsl.outputs.distro }}"
           wsl -d "$distro" -- bash -lc "set -euo pipefail
           export DEBIAN_FRONTEND=noninteractive
+          export JAIPH_UNSAFE=true
           sudo apt-get update
           sudo apt-get install -y curl ca-certificates
           if ! command -v node >/dev/null 2>&1; then

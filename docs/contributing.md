@@ -54,7 +54,7 @@ For day-to-day work on the compiler and CLI you usually stay inside the clone: i
 | `npm run test:acceptance:compiler` | **`npm run build`**, then **`node --test`** on only `dist/src/**/*.acceptance.test.js` — compiler acceptance tests without the full unit suite or E2E. |
 | `npm run test:acceptance:runtime` | **`bash ./e2e/test_all.sh`** only — same E2E driver as below **without** an implicit rebuild; ensure `dist/` is up to date before running. |
 | `npm run test:acceptance` | **`npm run test:acceptance:compiler`** then **`npm run test:acceptance:runtime`**. |
-| `npm run test:e2e` | **`npm run build`**, then **`bash ./e2e/test_all.sh`**. Prefer this when you want a fresh `dist/` before E2E. |
+| `npm run test:e2e` | **`npm run build`**, then **`bash ./e2e/test_all.sh`**. Prefer this when you want a fresh `dist/` before E2E. By default this exercises the **Docker** sandbox when `JAIPH_UNSAFE` is unset. For a faster host-only run (no container), use **`JAIPH_UNSAFE=true npm run test:e2e`**. |
 | `npm run test:samples` | **`npx playwright test`** — Playwright suite for the docs landing page (`tests/e2e-samples/`). Uses `http://127.0.0.1:4000` (see `playwright.config.ts`); starts Jekyll via `webServer` or reuses one already on that port. Requires Playwright (`npx playwright install chromium` once). |
 | `npm run test:ci` | `npm test` followed by `npm run test:e2e` — useful before pushing when you want the full local picture. |
 
@@ -188,9 +188,9 @@ The project uses GitHub Actions (`.github/workflows/ci.yml`). Every push trigger
 | Job | Runner | Purpose |
 |-----|--------|---------|
 | **Compiler and unit tests** | `ubuntu-latest` | `npm test` (TypeScript unit + acceptance + golden tests), plus a `curl` check that the public install URL responds and a git-tag verification on `main`. |
-| **E2E install and CLI workflow** | `ubuntu-latest`, `macos-latest` (matrix) | `npm run test:e2e` — full build-and-run E2E suite on each OS. |
+| **E2E install and CLI workflow** | Matrix: **`ubuntu-latest` twice** + **`macos-latest`** | `npm run test:e2e` — full build-and-run E2E suite. **Ubuntu — docker:** `JAIPH_UNSAFE` unset (default Docker sandbox, pulls `ghcr.io/jaiphlang/jaiph-runtime`). **Ubuntu — host:** `JAIPH_UNSAFE=true` (host execution, no Docker). **macOS — host:** `JAIPH_UNSAFE=true` (macOS runners are not used for the Docker path). |
 | **Getting started (local)** | `ubuntu-latest` | Builds and serves the Jekyll documentation site locally (`bundle exec jekyll serve` on `127.0.0.1:4000`), waits for it to respond, smoke-checks key pages with `curl`, then runs the **Playwright landing-page sample verification** (`npx playwright test`). The Playwright step builds Jaiph, extracts sample source and expected output from the served HTML, verifies source parity with `examples/*.jh`, and runs deterministic samples through the CLI. No dependency on `jaiph.org`. |
-| **E2E install and CLI workflow (windows-latest + wsl)** | `windows-latest` | Detects an available WSL distro, installs Node inside it, and runs `npm run test:e2e` under WSL. Skipped when no distro is present on the runner image. |
+| **E2E install and CLI workflow (windows-latest + wsl)** | `windows-latest` | Detects an available WSL distro, installs Node inside it, and runs `npm run test:e2e` under WSL with **`JAIPH_UNSAFE=true`** (host-only, matching the previous default). Skipped when no distro is present on the runner image. |
 
 ### npm publish on tag (trusted publishing)
 
