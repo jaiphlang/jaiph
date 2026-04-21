@@ -1,1 +1,12 @@
 *.sh text eol=lf
+
+# Extensionless shell scripts: enforce LF so Windows checkouts (e.g. WSL CI
+# job hosted on a windows-latest runner with default core.autocrlf=true) do
+# not corrupt them with CRLF. CRLF on bash scripts manifests as opaque
+# `$'\r': command not found` / `set: pipefail: invalid option name` errors.
+docs/init    text eol=lf
+docs/install text eol=lf
+docs/run     text eol=lf
+e2e/bin/cursor-agent text eol=lf
+e2e/bin/mock_fail    text eol=lf
+e2e/bin/mock_ok      text eol=lf

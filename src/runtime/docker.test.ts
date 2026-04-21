@@ -392,6 +392,35 @@ test("remapDockerEnv: sets JAIPH_RUNS_DIR even when not in input", () => {
   assert.equal(result.JAIPH_RUNS_DIR, "/jaiph/run");
 });
 
+test("remapDockerEnv: rewrites JAIPH_AGENT_TRUSTED_WORKSPACE from host workspaceRoot to /jaiph/workspace", () => {
+  const result = remapDockerEnv(
+    { JAIPH_AGENT_TRUSTED_WORKSPACE: "/tmp/jaiph-run-abcdef" },
+    "/tmp/jaiph-run-abcdef",
+  );
+  assert.equal(result.JAIPH_AGENT_TRUSTED_WORKSPACE, "/jaiph/workspace");
+});
+
+test("remapDockerEnv: rewrites a workspace subpath in JAIPH_AGENT_TRUSTED_WORKSPACE", () => {
+  const result = remapDockerEnv(
+    { JAIPH_AGENT_TRUSTED_WORKSPACE: "/home/me/project/sub/dir" },
+    "/home/me/project",
+  );
+  assert.equal(result.JAIPH_AGENT_TRUSTED_WORKSPACE, "/jaiph/workspace/sub/dir");
+});
+
+test("remapDockerEnv: leaves JAIPH_AGENT_TRUSTED_WORKSPACE unchanged when outside workspace", () => {
+  const result = remapDockerEnv(
+    { JAIPH_AGENT_TRUSTED_WORKSPACE: "/some/other/abs/path" },
+    "/home/me/project",
+  );
+  assert.equal(result.JAIPH_AGENT_TRUSTED_WORKSPACE, "/some/other/abs/path");
+});
+
+test("remapDockerEnv: omitted workspaceRoot leaves JAIPH_AGENT_TRUSTED_WORKSPACE intact (back-compat)", () => {
+  const result = remapDockerEnv({ JAIPH_AGENT_TRUSTED_WORKSPACE: "/home/me/project" });
+  assert.equal(result.JAIPH_AGENT_TRUSTED_WORKSPACE, "/home/me/project");
+});
+
 test("resolveDockerHostRunsRoot: defaults under workspace", () => {
   assert.equal(resolveDockerHostRunsRoot(TEST_WS, {}), join(TEST_WS, ".jaiph", "runs"));
 });
