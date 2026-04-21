@@ -604,6 +604,15 @@ export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath?: st
 
   if (mode === "overlay") {
     args.push("--device", "/dev/fuse");
+    // Many Linux hosts (Ubuntu 22.04+, GitHub Actions runners, etc.) ship a
+    // default AppArmor profile that denies fuse mounts inside containers
+    // even when SYS_ADMIN + /dev/fuse are present. Unconfining apparmor for
+    // this single container restores the documented fuse-overlayfs
+    // behavior. Linux-only: macOS Docker Desktop has no AppArmor and
+    // rejects unknown security-opts on some versions.
+    if (process.platform === "linux") {
+      args.push("--security-opt", "apparmor=unconfined");
+    }
   }
 
   if (process.platform === "linux") {

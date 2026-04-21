@@ -74,6 +74,12 @@ e2e::assert_equals() {
 e2e::normalize_output() {
   local input="$1"
   # Strip ANSI and normalize timing values for stable assertions.
+  # Final perl step canonicalizes the order of contiguous "async-progress"
+  # lines (lines starting with one or more spaces followed by a subscript
+  # marker ₁..₉, UTF-8 bytes E2 82 81..89). Async branches that run in
+  # parallel complete in non-deterministic order; sorting both actual and
+  # expected with the same stable order makes strict equality usable while
+  # still asserting that the same set of progress lines was emitted.
   printf "%s" "${input}" \
     | sed -E $'s/\x1B\\[[0-9;]*[A-Za-z]//g' \
     | sed -E 's/\(([0-9]+(\.[0-9]+)?s|[0-9]+m [0-9]+s)\)/(<time>)/g' \
@@ -84,7 +90,19 @@ e2e::normalize_output() {
     | sed -E 's/^( *)(cursor-agent|printf %s) .*$/\1<agent-command>/g' \
     | sed -E 's/\(1="\/[^"]*"/(1="<script-path>"/g' \
     | sed -E 's/[[:space:]]+$//g' \
-    | perl -0777 -pe 's/([^\n])\n(✓ PASS)/$1\n\n$2/g'
+    | perl -0777 -pe 's/([^\n])\n(✓ PASS)/$1\n\n$2/g' \
+    | perl -e '
+        use strict; use warnings;
+        binmode STDIN;
+        binmode STDOUT;
+        my @buf;
+        sub flush { print join("", sort @buf); @buf = (); }
+        while (my $line = <STDIN>) {
+          if ($line =~ /^ +\xe2\x82[\x81-\x89]/) { push @buf, $line; }
+          else { flush(); print $line; }
+        }
+        flush();
+      '
 }
 
 e2e::assert_output_equals() {

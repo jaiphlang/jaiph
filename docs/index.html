@@ -360,12 +360,12 @@ Jaiph: Running agent_inbox.jh
   <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> scanner
   <span class="run-marker">·</span>   <span class="run-marker">ℹ</span> Scanning for issues...
   <span class="run-pass">✓</span> <span class="run-time">workflow scanner (0s)</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> analyst <span class="run-params">(message="\"Found 3 issues in auth module\"", chan="findings", sender="scanner")</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> analyst <span class="run-params">(message="Found 3 issues in auth module", chan="findings", sender="scanner")</span>
   <span class="run-marker">·</span>   <span class="run-marker">ℹ</span> Analyzing message from scanner on channel findings...
   <span class="run-pass">✓</span> <span class="run-time">workflow analyst (0s)</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> reviewer <span class="run-params">(message="\"Summary: \"Found 3 issues in aut...", chan="report", sender="analyst")</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> reviewer <span class="run-params">(message="Summary: Found 3 issues in auth ...", chan="report", sender="analyst")</span>
   <span class="run-marker">·</span>   <span class="run-marker">ℹ</span> Reviewing message from analyst on channel report...
-  <span class="run-marker">·</span>   <span class="run-fail">! Critical issue: "Summary: "Found 3 issues in auth module""</span>
+  <span class="run-marker">·</span>   <span class="run-fail">! Critical issue: Summary: Found 3 issues in auth module</span>
   <span class="run-pass">✓</span> <span class="run-time">workflow reviewer (0s)</span>
 
 <span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(0s)</span></code></pre>
