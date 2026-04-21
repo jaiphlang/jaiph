@@ -62,6 +62,12 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Build runtime image for Docker E2E
+        if: matrix.label == 'docker'
+        run: |
+          docker build -t jaiph-ci-runtime:local -f runtime/Dockerfile .
+          echo "JAIPH_DOCKER_IMAGE=jaiph-ci-runtime:local" >> "$GITHUB_ENV"
+
       - name: Run runtime acceptance E2E
         run: |
           npm ci
@@ -90,6 +96,11 @@ jobs:
         with:
           node-version: "20"
           cache: npm
+
+      - name: Build runtime image for docs sample Docker runs
+        run: |
+          docker build -t jaiph-ci-runtime:local -f runtime/Dockerfile .
+          echo "JAIPH_DOCKER_IMAGE=jaiph-ci-runtime:local" >> "$GITHUB_ENV"
 
       - name: Install dependencies
         run: npm ci
@@ -237,7 +248,7 @@ jobs:
 
   docker-publish:
     name: Publish Docker runtime image
-    # needs: [test, e2e, docs-local, e2e-wsl]
+    needs: [test, e2e, docs-local, e2e-wsl]
     if: github.ref == 'refs/heads/nightly' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
