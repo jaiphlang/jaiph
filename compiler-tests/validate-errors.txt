@@ -796,3 +796,11 @@ workflow default() {
   }
 }
 
+=== return bare unknown identifier
+# @expect error E_VALIDATE "unknown identifier" @3:3
+--- input.jh
+workflow default() {
+  const msg = "hello"
+  return missing_name
+}
+

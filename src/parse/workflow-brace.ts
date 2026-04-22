@@ -15,7 +15,7 @@ import { parseEnsureStep, parseRunCatchStep, parseRunRecoverStep } from "./steps
 import { parsePromptStep } from "./prompt";
 import { parseSendRhs } from "./send-rhs";
 import { parseMatchExpr } from "./match";
-import { dottedReturnToQuotedString, isBareDottedIdentifierReturn } from "./workflow-return-dotted";
+import { dottedReturnToQuotedString, isBareDottedIdentifierReturn, isBareIdentifierReturn, bareIdentifierToQuotedString } from "./workflow-return-dotted";
 import {
   expandBlockLineStatements,
   findClosingBraceIndex,
@@ -506,7 +506,8 @@ export function parseBlockStatement(
       !(/^[0-9]+$/.test(returnValue) || returnValue === "$?") &&
       (returnValue.startsWith('"') ||
         returnValue.startsWith("$") ||
-        isBareDottedIdentifierReturn(returnValue))
+        isBareDottedIdentifierReturn(returnValue) ||
+        isBareIdentifierReturn(returnValue))
     ) {
       // Reject multiline "..."
       if (returnValue.startsWith('"') && !hasUnescapedClosingQuote(returnValue, 1)) {
@@ -514,7 +515,9 @@ export function parseBlockStatement(
       }
       const value = isBareDottedIdentifierReturn(returnValue)
         ? dottedReturnToQuotedString(returnValue)
-        : returnValue;
+        : isBareIdentifierReturn(returnValue)
+          ? bareIdentifierToQuotedString(returnValue)
+          : returnValue;
       return {
         step: {
           type: "return",

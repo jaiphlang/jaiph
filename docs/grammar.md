@@ -606,6 +606,7 @@ Aborts the workflow or rule with a message on stderr and non-zero exit. Accepts 
 ```jaiph
 return "success"
 return "${result}"
+return response                        # bare identifier — sugar for return "${response}"
 return """
   Report for ${name}:
   Status: ${status}
@@ -617,7 +618,11 @@ return run `cat report.txt`()          # inline script — runs and returns stdo
 return run `echo $1`("arg")            # inline script with arguments
 ```
 
-Sets the managed return value in rules and workflows. The value can be a single-line `"..."` string, a triple-quoted `"""..."""` multiline block, a variable reference, or a **direct managed call** using `return run ref(args)`, `return ensure ref(args)`, or `return run \`script\`(args)`. A direct managed call executes the target and uses its result as the return value — equivalent to capturing into a variable and returning it, but without the boilerplate:
+Sets the managed return value in rules and workflows. The value can be a single-line `"..."` string, a triple-quoted `"""..."""` multiline block, a bare identifier, a variable reference, or a **direct managed call** using `return run ref(args)`, `return ensure ref(args)`, or `return run \`script\`(args)`.
+
+**Bare identifier:** `return response` is sugar for `return "${response}"` — the identifier is resolved against the same scope rules used for `${ident}` interpolation (must be a `const`, capture, or parameter). An unknown identifier produces `E_VALIDATE` naming the missing binding, not a shell-step error. Both `return response` and `return "${response}"` remain valid and are equivalent.
+
+A direct managed call executes the target and uses its result as the return value — equivalent to capturing into a variable and returning it, but without the boilerplate:
 
 ```jaiph
 # Before: capture then return
@@ -944,6 +949,7 @@ run_async_stmt  = "run" "async" call_ref [ "recover" recover_bindings recover_bo
 run_async_capture = "const" IDENT "=" "run" "async" call_ref ;
 return_stmt     = "return" return_value ;
 return_value    = double_quoted_string | triple_quoted_block | "$" IDENT | "${" IDENT "}"
+                | IDENT
                 | "run" ( call_ref | inline_script ) | "ensure" call_ref
                 | "match" IDENT "{" { match_arm } "}" ;
 

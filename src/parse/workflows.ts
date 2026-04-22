@@ -17,7 +17,7 @@ import { parseSendRhs } from "./send-rhs";
 import { parseAnonymousInlineScript } from "./inline-script";
 import { parseEnsureStep, parseRunCatchStep, parseRunRecoverStep } from "./steps";
 import { parseBraceBlockBody, parseBlockStatement } from "./workflow-brace";
-import { dottedReturnToQuotedString, isBareDottedIdentifierReturn } from "./workflow-return-dotted";
+import { dottedReturnToQuotedString, isBareDottedIdentifierReturn, isBareIdentifierReturn, bareIdentifierToQuotedString } from "./workflow-return-dotted";
 import { parseMatchExpr } from "./match";
 import {
   expandBlockLineStatements,
@@ -617,14 +617,16 @@ export function parseWorkflowBlock(
       if (returnValue.startsWith("'")) {
         fail(filePath, 'single-quoted strings are not supported; use double quotes ("...") instead', innerNo, retLoc.col);
       }
-      if (isJaiphValueReturn(returnValue) || isBareDottedIdentifierReturn(returnValue)) {
+      if (isJaiphValueReturn(returnValue) || isBareDottedIdentifierReturn(returnValue) || isBareIdentifierReturn(returnValue)) {
         // Reject multiline "..."
         if (returnValue.startsWith('"') && !hasUnescapedClosingQuote(returnValue, 1)) {
           fail(filePath, 'multiline strings use triple quotes: return """..."""', innerNo, retLoc.col);
         }
         const value = isBareDottedIdentifierReturn(returnValue)
           ? dottedReturnToQuotedString(returnValue)
-          : returnValue;
+          : isBareIdentifierReturn(returnValue)
+            ? bareIdentifierToQuotedString(returnValue)
+            : returnValue;
         workflow.steps.push({
           type: "return",
           value,

@@ -2,6 +2,7 @@ import type { WorkflowStepDef } from "../types";
 import { parseConstRhs } from "./const-rhs";
 import { fail, indexOfClosingDoubleQuote, isRef, parseCallRef, parseLogMessageRhs } from "./core";
 import { parseAnonymousInlineScript } from "./inline-script";
+import { isBareIdentifierReturn, bareIdentifierToQuotedString, isBareDottedIdentifierReturn, dottedReturnToQuotedString } from "./workflow-return-dotted";
 
 /** Reject non-empty trailing content after a call expression (e.g. shell redirection). */
 function rejectTrailingContent(
@@ -152,7 +153,12 @@ function parseCatchStatement(
         };
       }
     }
-    return { type: "return", value: retVal, loc: { line: lineNo, col } };
+    const value = isBareDottedIdentifierReturn(retVal)
+      ? dottedReturnToQuotedString(retVal)
+      : isBareIdentifierReturn(retVal)
+        ? bareIdentifierToQuotedString(retVal)
+        : retVal;
+    return { type: "return", value, loc: { line: lineNo, col } };
   }
   if (/^fail\s+/.test(t)) {
     const arg = t.slice("fail".length).trimStart();

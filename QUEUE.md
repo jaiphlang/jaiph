@@ -13,48 +13,6 @@ Process rules:
 
 ***
 
-## Support `return <identifier>` and stop misrouting it through the shell-step validator #dev-ready
-
-**Goal**
-`return response` (bare identifier in return position) must be a first-class return form. Today it falls through to the catch-all "inline shell steps are forbidden in workflows; use explicit script blocks" `E_VALIDATE` error, which is wrong on three counts: it is not a shell statement, the user is not asked to write one, and the suggested fix (script block) does not solve the problem. Two separate symptoms — "identifier return is not accepted" and "the diagnostic is shell-flavored" — share a single root cause: the validator's bare-statement fallthrough swallows everything it does not explicitly recognize.
-
-**Repro**
-
-```jh
-workflow default(name) {
-  const response = prompt """
-    Say hello to ${name}.
-  """
-  return response
-}
-```
-
-Current output: `<file>:N:M E_VALIDATE inline shell steps are forbidden in workflows; use explicit script blocks`.
-
-**Scope**
-
-* Update parser/validator so workflow/rule return values accept bare identifiers (`return response`), resolved against the same scope rules used for `${ident}` interpolation and bare-identifier call arguments.
-* Audit every emit site of the "inline shell steps are forbidden" `E_VALIDATE` message. Either narrow it to actual inline-shell cases, or replace it entirely with construct-specific diagnostics. After this change, the message must only appear when the user actually wrote a bare shell command.
-* Unknown-identifier returns (`return missing_name` where `missing_name` is not in scope) must produce a precise unknown-identifier error, naming the missing binding.
-* Keep existing valid return forms working unchanged: `return "..."`, `return """..."""`, `return "${ident}"`, `return run ...`, `return ensure ...`, `return match ...`, dotted returns.
-* Tests must cover: (a) `return response` accepted when in scope; (b) `return missing` rejected with unknown-identifier error; (c) the "inline shell steps" message no longer fires for any non-shell construct in the test suite; (d) `return "${response}"` still accepted.
-
-**Non-goals**
-
-* Do not remove `return "${response}"`; both forms remain valid.
-* Do not broaden return syntax beyond bare identifiers and the diagnostic cleanup.
-* Do not add compatibility shims for the old misleading message.
-
-**Acceptance criteria**
-
-* The repro compiles and runs; `return response` propagates the captured prompt response.
-* `return <unknown>` produces an unknown-identifier validation error naming the missing binding (not a shell-step error).
-* No checked-in `.jh` file produces the "inline shell steps are forbidden" error after this change unless it actually contains a bare shell command.
-* `return "${response}"` and all other listed return forms still parse, validate, and run.
-* Regression tests in `src/transpile/` and an e2e covering the repro are added and fail without the fix.
-
-***
-
 ## Cleanup — consolidate the 5-way test directory split #dev-ready
 
 **Goal**
