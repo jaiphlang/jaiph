@@ -1,6 +1,7 @@
 # Unreleased
 
 - **Language:** `return run \`…\`(args)` and `log run \`…\`(args)` — inline scripts wrapped with explicit `run` now work in value positions (`return`, `log`, `logerr`). Bare inline scripts without `run` remain rejected at compile time with clear errors. Parser, validator, emitter, formatter, and runtime all updated. E2E and unit tests cover zero-arg and argument forms plus rejection paths.
+- **Language:** Bare unknown identifiers in `match` arm bodies (e.g. `_ => true`, `_ => blorp`) are now rejected at compile time with `E_VALIDATE: unknown identifier "…" in match arm body`. Previously, a bare word that was not an in-scope variable was silently treated as a string literal. Only bare in-scope identifiers (`const`, capture, or parameter names) are accepted; all other bare words must be quoted. The existing unknown-verb check (for words followed by arguments) and this new bare-word check together cover all unknown-identifier cases in arm bodies. Regression tests cover `true`, `false`, arbitrary unknown words, in-scope identifiers, and string literals.
 - **Language:** `match` arms are now strictly newline-delimited — trailing commas after arm bodies and comma separators between arms are rejected at parse time with the diagnostic `"commas are not allowed in match arms; use one arm per line"`. Previously, commas after arms were silently accepted. Parser and validation tests cover string-value, `fail`, and inline comma-separated forms.
 
 # 0.9.3

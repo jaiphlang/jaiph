@@ -657,6 +657,7 @@ Using `$var` or `${var}` as the match subject is a parse error — use the bare 
 **Arm bodies** — the expression after `=>` produces the match result. Allowed forms:
 
 - String literal: `"value"` or multiline `"""…"""`
+- Bare in-scope identifier: `name` (must be a `const`, capture, or named parameter)
 - Variable reference / interpolation: `$var`, `${var}`
 - `fail "message"` — aborts the workflow/rule
 - `run ref(args)` / `ensure ref(args)` — managed call whose result becomes the match value
@@ -666,6 +667,7 @@ Using `$var` or `${var}` as the match subject is a parse error — use the bare 
 - Commas between or after arms (`"x" => "y",` or `"a" => "x", _ => "y"`) — arms are newline-delimited; use one arm per line
 - `return` inside an arm body (`"x" => return "y"`) — the match expression itself produces the value; use `return match x { … }` at the outer level instead
 - Inline script forms (backtick `` `…`() ``) — use a named script with `run script_name(…)`
+- Bare unknown identifiers (`_ => true`, `_ => blorp`) — a bare word that is not an in-scope variable (`const`, capture, or parameter) is rejected with `E_VALIDATE`: `unknown identifier "…" in match arm body`
 
 **Multiline arm bodies** use triple-quoted strings:
 
@@ -928,6 +930,7 @@ if_operand      = double_quoted_string | "/" regex_source "/" ;
 match_arm       = match_pattern "=>" arm_body NEWLINE ;
 match_pattern   = double_quoted_string | "/" regex_source "/" | "_" ;
 arm_body        = double_quoted_string | triple_quoted_block
+                | IDENT
                 | "$" IDENT | "${" IDENT "}"
                 | "fail" double_quoted_string
                 | "run" call_ref | "ensure" call_ref ;

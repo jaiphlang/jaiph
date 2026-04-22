@@ -178,8 +178,8 @@ test("match arm with bare function-call form (error(\"...\")) is rejected", () =
   }
 });
 
-test("match arm with single bare token (true) is accepted as string value", () => {
-  const root = mkdtempSync(join(tmpdir(), "jaiph-val-match-bare-token-"));
+test("E_VALIDATE: bare unknown word (true) in match arm body is rejected", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-match-bare-true-"));
   try {
     writeFileSync(
       join(root, "m.jh"),
@@ -187,8 +187,107 @@ test("match arm with single bare token (true) is accepted as string value", () =
         "workflow default() {",
         '  const x = "ok"',
         "  return match x {",
-        '    "ok" => true',
+        '    "" => fail "missing"',
+        "    _ => true",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      { message: /unknown identifier "true" in match arm body/ },
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("E_VALIDATE: bare unknown word (blorp) in match arm body is rejected", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-match-bare-blorp-"));
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        "workflow default() {",
+        '  const x = "ok"',
+        "  return match x {",
+        '    "" => fail "missing"',
+        "    _ => blorp",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      { message: /unknown identifier "blorp" in match arm body/ },
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("E_VALIDATE: bare unknown word (false) in match arm body is rejected", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-match-bare-false-"));
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        "workflow default() {",
+        '  const x = "ok"',
+        "  return match x {",
+        '    "" => fail "missing"',
         "    _ => false",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      { message: /unknown identifier "false" in match arm body/ },
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("match arm with bare in-scope identifier is accepted", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-match-bare-inscope-"));
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        "workflow default() {",
+        '  const name = "alice"',
+        "  return match name {",
+        '    "" => fail "missing"',
+        "    _ => name",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.doesNotThrow(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("match arm with string literal continues to compile", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-match-string-lit-"));
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        "workflow default() {",
+        '  const name = "alice"',
+        "  return match name {",
+        '    "" => fail "missing"',
+        '    _ => "ok"',
         "  }",
         "}",
         "",

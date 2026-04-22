@@ -147,7 +147,7 @@ e2e::file "fail_rule.jh" <<'EOF'
 rule name_was_provided(name) {
   match name {
     "" => fail "You didn't provide your name :("
-    _  => true
+    _  => name
   }
 }
 

@@ -578,7 +578,7 @@ match status {
 
 Patterns can be string literals (exact equality), regex (`/pattern/`), or `_` (default). Exactly one default arm is required. Arms are **newline-delimited** — commas between or after arms are rejected at parse time (`"commas are not allowed in match arms; use one arm per line"`).
 
-**Arm bodies** — the value expression after `=>`. Allowed: string literals (`"…"` or `"""…"""`), variable references, `fail "…"`, `run ref(…)`, `ensure ref(…)`. The `return` keyword inside an arm body is forbidden — use `return match x { … }` at the outer level. Inline script forms (backtick) are also forbidden in arms; use named scripts.
+**Arm bodies** — the value expression after `=>`. Allowed: string literals (`"…"` or `"""…"""`), bare in-scope identifiers (`const`, capture, or parameter), `$var`/`${var}` interpolation, `fail "…"`, `run ref(…)`, `ensure ref(…)`. A bare word that is not an in-scope variable is rejected at compile time with `E_VALIDATE` (`unknown identifier "…" in match arm body`) — this catches typos like `_ => true` or `_ => blorp` that would otherwise silently become string literals. The `return` keyword inside an arm body is forbidden — use `return match x { … }` at the outer level. Inline script forms (backtick) are also forbidden in arms; use named scripts.
 
 **Runtime execution** — arm bodies are not merely string values. Each form executes at runtime:
 - `fail "message"` aborts the workflow with a non-zero exit and the given message.

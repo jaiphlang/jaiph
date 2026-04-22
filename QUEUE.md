@@ -13,38 +13,6 @@ Process rules:
 
 ***
 
-## Reject bare unknown words (incl. `true`) in `match` arm bodies #dev-ready
-
-**Goal**
-A bare word like `true`, `false`, `blorp`, etc. used as a `match` arm body must fail compilation as an unknown identifier. Today such tokens are silently treated as string literals — `_ => true` returns the literal string `"true"` and the rule passes. This is exactly the failure mode that allowed the `say_hello` validation rule to "work" with a meaningless default branch.
-
-**Context (read before starting)**
-
-* Commit `6c4b0ea` already rejects unknown leading verbs in arm bodies — but only when the verb is followed by arguments or `(` (e.g. `_ => error "msg"`). The current `validateMatchExpr` check does **not** fire for a bare word with no trailing tokens, so `_ => true` and `_ => blorp` slip through. This task closes that hole.
-* The valid arm body forms are: string literal (single- or triple-quoted), bare in-scope identifier (`_ => name_arg`), `${var}` interpolation, `fail "..."`, `run ref(...)`, `ensure ref(...)`. Anything else must error.
-
-**Scope**
-
-* In `validateMatchExpr` (or the equivalent code path), reject any arm body that is a single bare word which is not a known in-scope identifier.
-* Diagnostic must classify this as the existing unknown-identifier validation error (shape matching other "unknown name" errors elsewhere in the validator), not a shell/script error and not a generic parse error.
-* Verify the same rule applies whether the leading-verb check fires first or not — the two checks together must cover both the with-args case (`_ => error "msg"`) and the bare-word case (`_ => true`).
-
-**Non-goals**
-
-* Do not introduce booleans into the language.
-* Do not broaden expression syntax as part of this task.
-* Do not change the valid forms enumerated above.
-
-**Acceptance criteria**
-
-* `match name { "" => fail "..." _ => true }` fails compilation with an unknown-identifier validation error.
-* `match name { "" => fail "..." _ => blorp }` fails with the same error class.
-* `match name { "" => fail "..." _ => "ok" }` continues to compile and run.
-* `match name { "" => fail "..." _ => name }` (bare in-scope identifier) continues to compile and run.
-* Regression tests cover all four cases above so `true`, `false`, and arbitrary bare unknowns cannot silently become accepted later.
-
-***
-
 ## Bug: reject reassignment of immutable names (`const`, params, scripts) #dev-ready
 
 **Goal**
