@@ -650,7 +650,7 @@ Pattern match on a string value. The subject is always a **bare identifier** (va
 - **Regex** (`/err/`) — tested against the subject
 - **Wildcard** (`_`) — matches anything
 
-Exactly one `_` wildcard arm is required.
+Exactly one `_` wildcard arm is required. Arms are **newline-delimited** — commas between or after arms are rejected at parse time with the diagnostic `"commas are not allowed in match arms; use one arm per line"`.
 
 Using `$var` or `${var}` as the match subject is a parse error — use the bare name: `match varName { ... }`.
 
@@ -661,8 +661,9 @@ Using `$var` or `${var}` as the match subject is a parse error — use the bare 
 - `fail "message"` — aborts the workflow/rule
 - `run ref(args)` / `ensure ref(args)` — managed call whose result becomes the match value
 
-**Disallowed** — rejected at validate time with `E_VALIDATE`:
+**Disallowed** — rejected at parse/validate time:
 
+- Commas between or after arms (`"x" => "y",` or `"a" => "x", _ => "y"`) — arms are newline-delimited; use one arm per line
 - `return` inside an arm body (`"x" => return "y"`) — the match expression itself produces the value; use `return match x { … }` at the outer level instead
 - Inline script forms (backtick `` `…`() ``) — use a named script with `run script_name(…)`
 
@@ -924,7 +925,7 @@ match_expr      = "match" IDENT "{" { match_arm } "}" ;
 if_stmt         = "if" IDENT if_op if_operand "{" { workflow_step } "}" ;
 if_op           = "==" | "!=" | "=~" | "!~" ;
 if_operand      = double_quoted_string | "/" regex_source "/" ;
-match_arm       = match_pattern "=>" arm_body ;
+match_arm       = match_pattern "=>" arm_body NEWLINE ;
 match_pattern   = double_quoted_string | "/" regex_source "/" | "_" ;
 arm_body        = double_quoted_string | triple_quoted_block
                 | "$" IDENT | "${" IDENT "}"

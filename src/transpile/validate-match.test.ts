@@ -202,6 +202,55 @@ test("match arm with single bare token (true) is accepted as string value", () =
   }
 });
 
+test("match arm with trailing comma after fail is rejected", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-match-comma-fail-"));
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        "rule valid_name(name_arg) {",
+        "  return match name_arg {",
+        '    "" => fail "You didn\'t provide your name :(",',
+        "    _  => name_arg",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      /commas are not allowed in match arms; use one arm per line/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("match arm with trailing comma after string value is rejected", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-match-comma-str-"));
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        "workflow default() {",
+        '  const x = "ok"',
+        "  return match x {",
+        '    "ok" => "yes",',
+        '    _ => "no"',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      /commas are not allowed in match arms; use one arm per line/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("triple-quoted arm body parses and validates", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-match-tq-"));
   try {

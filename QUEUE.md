@@ -13,45 +13,6 @@ Process rules:
 
 ***
 
-## Enforce newline-delimited `match` arms (reject commas) #dev-ready
-
-**Goal**
-`match` arms should be newline-delimited statements, not comma-separated items. A trailing comma after an arm (e.g. `"" => fail "...",`) is currently being accepted in places where it should be rejected. Tighten syntax so commas are not allowed between/after arms.
-
-**Repro**
-
-```jh
-rule valid_name(name_arg) {
-  return match name_arg {
-    "" => fail "You didn't provide your name :(",
-    _  => name_arg
-  }
-}
-```
-
-The comma after the first arm should be a compile/parse error.
-
-**Scope**
-
-* Update parser/grammar so `match` arms are recognized only as newline-delimited entries.
-* Reject trailing commas after arm bodies and comma separators between arms.
-* Ensure diagnostics are explicit (e.g. "commas are not allowed in match arms; use one arm per line"), not a generic fallback error.
-* Add tests for both direct value arms and managed/fail arms to ensure comma rejection is consistent.
-
-**Non-goals**
-
-* Do not change existing newline-based `match` syntax that is already valid.
-* Do not introduce alternative separators for arms.
-
-**Acceptance criteria**
-
-* `"" => fail "...",` inside a `match` fails compilation/parsing.
-* Comma-separated forms like `"a" => "x", _ => "y"` are rejected.
-* Newline-only forms continue to parse/validate.
-* Tests cover the `valid_name` repro and prevent regression.
-
-***
-
 ## Reject bare unknown words (incl. `true`) in `match` arm bodies #dev-ready
 
 **Goal**

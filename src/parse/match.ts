@@ -69,9 +69,9 @@ function parsePattern(filePath: string, text: string, lineNo: number): { pattern
 
 /**
  * Parse the body (value expression) after `=>` in a match arm.
- * Returns the raw value string (with quotes).
+ * Returns the raw value string and any remaining text after the body.
  */
-function parseArmBody(filePath: string, text: string, lineNo: number): string {
+function parseArmBody(filePath: string, text: string, lineNo: number): { body: string; rest: string } {
   const t = text.trimStart();
   if (!t) {
     fail(filePath, "match arm body cannot be empty", lineNo);
@@ -81,13 +81,13 @@ function parseArmBody(filePath: string, text: string, lineNo: number): string {
     if (closeIdx === -1) {
       fail(filePath, "unterminated string in match arm body", lineNo);
     }
-    return t.slice(0, closeIdx + 1);
+    return { body: t.slice(0, closeIdx + 1), rest: t.slice(closeIdx + 1).trimStart() };
   }
   if (t.startsWith("'")) {
     fail(filePath, 'single-quoted strings are not supported; use double quotes ("...") instead', lineNo);
   }
   // Allow $var, ${var}, ${var.field}, or bare words up to end of line
-  return t;
+  return { body: t, rest: "" };
 }
 
 /**
@@ -121,11 +121,11 @@ export function parseMatchArms(
       if (!segLine || segLine.startsWith("#")) {
         continue;
       }
-      const { pattern, rest } = parsePattern(filePath, segLine, lineNo);
-      if (!rest.startsWith("=>")) {
+      const { pattern, rest: afterPattern } = parsePattern(filePath, segLine, lineNo);
+      if (!afterPattern.startsWith("=>")) {
         fail(filePath, 'expected "=>" after match pattern', lineNo);
       }
-      const afterArrow = rest.slice(2).trimStart();
+      const afterArrow = afterPattern.slice(2).trimStart();
       // Triple-quoted arm body: pattern => """
       if (afterArrow === '"""' || afterArrow.startsWith('"""')) {
         const textAfterTriple = afterArrow.slice(3).trim();
@@ -157,7 +157,10 @@ export function parseMatchArms(
         tripleQuoteAdvanced = true;
         break;
       }
-      const body = parseArmBody(filePath, afterArrow, lineNo);
+      const { body, rest } = parseArmBody(filePath, afterArrow, lineNo);
+      if (body.trimEnd().endsWith(",") || rest.startsWith(",")) {
+        fail(filePath, "commas are not allowed in match arms; use one arm per line", lineNo);
+      }
       arms.push({ pattern, body });
     }
     if (!tripleQuoteAdvanced) {

@@ -77,3 +77,43 @@ test("parseMatchArms: parses bare expression arm body", () => {
   const { arms } = parseMatchArms("test.jh", lines, 1, 1);
   assert.equal(arms[0].body, 'fail "oops"');
 });
+
+// === parseMatchArms: comma rejection ===
+
+test("parseMatchArms: rejects trailing comma after bare arm body", () => {
+  const lines = [
+    '{',
+    '  "" => fail "You didn\'t provide your name :(",',
+    '  _ => name_arg',
+    '}',
+  ];
+  assert.throws(
+    () => parseMatchArms("test.jh", lines, 1, 1),
+    /commas are not allowed in match arms; use one arm per line/,
+  );
+});
+
+test("parseMatchArms: rejects trailing comma after quoted arm body", () => {
+  const lines = [
+    '{',
+    '  "a" => "result",',
+    '  _ => "default"',
+    '}',
+  ];
+  assert.throws(
+    () => parseMatchArms("test.jh", lines, 1, 1),
+    /commas are not allowed in match arms; use one arm per line/,
+  );
+});
+
+test("parseMatchArms: rejects comma-separated arms on one line", () => {
+  const lines = [
+    '{',
+    '  "a" => "x", _ => "y"',
+    '}',
+  ];
+  assert.throws(
+    () => parseMatchArms("test.jh", lines, 1, 1),
+    /commas are not allowed in match arms; use one arm per line/,
+  );
+});

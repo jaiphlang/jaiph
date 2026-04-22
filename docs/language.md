@@ -576,7 +576,7 @@ match status {
 }
 ```
 
-Patterns can be string literals (exact equality), regex (`/pattern/`), or `_` (default). Exactly one default arm is required.
+Patterns can be string literals (exact equality), regex (`/pattern/`), or `_` (default). Exactly one default arm is required. Arms are **newline-delimited** — commas between or after arms are rejected at parse time (`"commas are not allowed in match arms; use one arm per line"`).
 
 **Arm bodies** — the value expression after `=>`. Allowed: string literals (`"…"` or `"""…"""`), variable references, `fail "…"`, `run ref(…)`, `ensure ref(…)`. The `return` keyword inside an arm body is forbidden — use `return match x { … }` at the outer level. Inline script forms (backtick) are also forbidden in arms; use named scripts.
 
