@@ -1,15 +1,15 @@
 #!/usr/bin/env jaiph
 
-rule valid_name(name_arg) {
-  return match name_arg {
+rule valid_name(name_input) {
+  return match name_input {
     "" => fail "You didn't provide your name :("
-    _ => name_arg
+    _ => name_input
   }
 }
 
 # workflows are main unit of orchestration
-workflow default(name_arg) {
-  const name_arg = ensure valid_name(name_arg)
+workflow default(name_input) {
+  const name_arg = ensure valid_name(name_input)
 
   # prompts call agents - cursor by default, but it's configurable
   const response = prompt """

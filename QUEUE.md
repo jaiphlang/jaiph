@@ -13,52 +13,6 @@ Process rules:
 
 ***
 
-## Bug: reject reassignment of immutable names (`const`, params, scripts) #dev-ready
-
-**Goal**
-Jaiph bindings are immutable. Compilation should fail when a workflow/rule parameter, a `const` name, or a `script` name is redefined/reassigned in the same visible scope.
-
-**Repro**
-
-```jh
-workflow default(name_arg) {
-  const name_arg = ensure valid_name(name_arg)
-}
-```
-
-This should fail compile: parameter `name_arg` cannot be rebound by `const`.
-
-**Context (read before starting)**
-
-* `examples/say_hello.jh` currently uses this exact pattern (`workflow default(name_arg) { const name_arg = ensure valid_name(name_arg) ... }`). Implementing this task will break that file at compile time, and the example must be fixed in the same change. The simplest fix is to rename the parameter (e.g. `name_input`) and bind a new `const name_arg = ensure valid_name(name_input)`. Apply the same audit to `examples/*.jh`, `examples/*.test.jh`, and `.jaiph/*.jh` — any other file with a param/const collision must be migrated in this PR.
-
-**Scope**
-
-* Enforce immutability checks during validation for:
-  - parameter name shadow/rebind via `const`,
-  - duplicate `const` declarations in the same scope,
-  - `script` name collisions with immutable names where they are visible.
-* Ensure diagnostics are explicit about immutable-name reassignment: which name, and where it was first bound (file + line).
-* Apply consistently in workflows and rules.
-* Migrate every file in the repo that currently violates the new rule (examples, `.jaiph/`, e2e fixtures) as part of this PR; the queue task is not done while a checked-in `.jh` file fails compilation.
-* Add/extend tests to cover success + failure cases.
-
-**Non-goals**
-
-* Do not change runtime semantics.
-* Do not introduce mutable assignment syntax.
-
-**Acceptance criteria**
-
-* The repro fails compilation with an immutable-binding error that names the conflicting binding and its origin.
-* Rebinding any parameter via `const` is rejected.
-* Duplicate `const` names in the same scope are rejected.
-* Rebinding/conflicting `script` names is rejected where applicable.
-* `npm test` and `bash e2e/test_all.sh` pass with no `.jh` file in the repo violating the new rule.
-* Tests lock behavior to prevent regression.
-
-***
-
 ## Support `return <identifier>` and stop misrouting it through the shell-step validator #dev-ready
 
 **Goal**

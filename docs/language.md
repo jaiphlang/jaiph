@@ -228,7 +228,7 @@ workflow implement(task, role) {
 }
 ```
 
-Parameter names must be valid identifiers, unique, and not reserved keywords. Inside the body, parameters are accessed as `${paramName}`.
+Parameter names must be valid identifiers, unique, and not reserved keywords. Inside the body, parameters are accessed as `${paramName}`. Parameters are immutable — they cannot be rebound by `const` or any other declaration in the same scope (see [`const` — Variable Binding](#const--variable-binding) for details).
 
 ### Call Sites
 
@@ -464,7 +464,7 @@ Prompts are not allowed in rules.
 
 ### `const` — Variable Binding
 
-Introduces a variable in a workflow or rule body.
+Introduces an **immutable** variable in a workflow or rule body.
 
 ```jaiph
 const tag = "v1.0"
@@ -482,6 +482,18 @@ const label = match status {
 ```
 
 A bare reference like `const x = ref(args)` is rejected — use `const x = run ref(args)`.
+
+**Immutability:** All bindings — parameters, `const` declarations, captures, and `script` names — are immutable within their scope. The compiler rejects:
+
+- Rebinding a parameter name via `const` (e.g. `workflow run(x) { const x = … }`)
+- Duplicate `const` declarations with the same name in the same scope
+- A `script` name that collides with an existing immutable binding
+
+The error names the conflicting binding and its origin:
+
+```
+E_VALIDATE: cannot rebind immutable name "x"; already bound as parameter at file.jh:1
+```
 
 ### `log` and `logerr`
 
