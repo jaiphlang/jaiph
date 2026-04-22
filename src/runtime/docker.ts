@@ -5,13 +5,6 @@ import { tmpdir } from "node:os";
 import { join, resolve, dirname, relative } from "node:path";
 import type { RuntimeConfig } from "../types";
 
-/** Parsed mount specification. */
-export interface MountSpec {
-  hostPath: string;
-  containerPath: string;
-  mode: "ro" | "rw";
-}
-
 /** Resolved Docker runtime config with defaults applied and env overrides merged. */
 export interface DockerRunConfig {
   enabled: boolean;
@@ -20,46 +13,6 @@ export interface DockerRunConfig {
   imageExplicit: boolean;
   network: string;
   timeout: number;
-  mounts: MountSpec[];
-}
-
-// ---------------------------------------------------------------------------
-// Mount parsing
-// ---------------------------------------------------------------------------
-
-/**
- * Parse a single mount string.
- * - 3 segments: `"host:container:mode"`
- * - 2 segments: `"host:mode"` → mounts at `/jaiph/workspace/<host>`
- * - 1 segment → error
- */
-export function parseMount(spec: string): MountSpec {
-  const parts = spec.split(":");
-  if (parts.length === 3) {
-    const [hostPath, containerPath, mode] = parts;
-    if (mode !== "ro" && mode !== "rw") {
-      throw new Error(`E_PARSE mount mode must be "ro" or "rw", got "${mode}" in "${spec}"`);
-    }
-    return { hostPath, containerPath, mode };
-  }
-  if (parts.length === 2) {
-    const [hostPath, mode] = parts;
-    if (mode !== "ro" && mode !== "rw") {
-      throw new Error(`E_PARSE mount mode must be "ro" or "rw", got "${mode}" in "${spec}"`);
-    }
-    return { hostPath, containerPath: `/jaiph/workspace/${hostPath}`, mode };
-  }
-  throw new Error(`E_PARSE mount spec must have 2 or 3 colon-separated segments, got "${spec}"`);
-}
-
-/**
- * Parse and validate all mount specs.
- * Enforces: exactly one mount must target `/jaiph/workspace`.
- */
-export function parseMounts(specs: string[]): MountSpec[] {
-  const mounts = specs.map(parseMount);
-  validateMounts(mounts);
-  return mounts;
 }
 
 /**
@@ -95,26 +48,6 @@ export function validateMountHostPath(hostAbsPath: string): void {
   }
 }
 
-/**
- * Validate mount list: exactly one mount must target `/jaiph/workspace`.
- * Also rejects dangerous host paths.
- */
-export function validateMounts(mounts: MountSpec[], workspaceRoot?: string): void {
-  const workspaceMounts = mounts.filter(
-    (m) => m.containerPath === "/jaiph/workspace" || m.containerPath.replace(/\/+$/, "") === "/jaiph/workspace",
-  );
-  if (workspaceMounts.length === 0) {
-    throw new Error("E_VALIDATE exactly one mount must target /jaiph/workspace");
-  }
-  if (workspaceMounts.length > 1) {
-    throw new Error("E_VALIDATE exactly one mount must target /jaiph/workspace, found multiple");
-  }
-  for (const mount of mounts) {
-    const hostAbs = workspaceRoot ? resolve(workspaceRoot, mount.hostPath) : resolve(mount.hostPath);
-    validateMountHostPath(hostAbs);
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Config resolution (env > in-file > defaults)
 // ---------------------------------------------------------------------------
@@ -141,7 +74,6 @@ const DEFAULTS: DockerRunConfig = {
   imageExplicit: false,
   network: "default",
   timeout: 300,
-  mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
 };
 
 /**
@@ -191,13 +123,7 @@ export function resolveDockerConfig(
     timeout = inFile?.dockerTimeout ?? DEFAULTS.timeout;
   }
 
-  // workspace mounts: in-file > default (not overridable via env)
-  const mountSpecs = inFile?.workspace ?? DEFAULTS.mounts.map((m) => `${m.hostPath}:${m.containerPath}:${m.mode}`);
-  const mounts = typeof mountSpecs[0] === "string"
-    ? parseMounts(mountSpecs as string[])
-    : (mountSpecs as unknown as MountSpec[]);
-
-  return { enabled, image, imageExplicit, network, timeout, mounts };
+  return { enabled, image, imageExplicit, network, timeout };
 }
 
 // ---------------------------------------------------------------------------
@@ -670,33 +596,15 @@ export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath?: st
     args.push("--network", opts.config.network);
   }
 
+  // Single workspace mount — no user-configurable mounts.
   if (mode === "overlay") {
-    // Workspace inputs land at the overlay lower-layer path; overlay script merges them rw.
-    for (const mount of opts.config.mounts) {
-      const hostAbs = resolve(opts.workspaceRoot, mount.hostPath);
-      validateMountHostPath(hostAbs);
-      args.push("-v", `${hostAbs}:${overlayMountPath(mount.containerPath)}:ro`);
-    }
+    const hostAbs = resolve(opts.workspaceRoot);
+    validateMountHostPath(hostAbs);
+    args.push("-v", `${hostAbs}:${overlayMountPath(CONTAINER_WORKSPACE)}:ro`);
   } else {
-    // Pre-cloned workspace mounts rw directly at /jaiph/workspace.
     const hostAbs = resolve(opts.sandboxWorkspaceDir!);
     validateMountHostPath(hostAbs);
     args.push("-v", `${hostAbs}:${CONTAINER_WORKSPACE}:rw`);
-    // Honor any additional sub-mounts (e.g. "config:ro") relative to the cloned
-    // workspace, so users can still pin parts as ro inside the container.
-    for (const mount of opts.config.mounts) {
-      if (mount.containerPath === CONTAINER_WORKSPACE) continue;
-      const subRel = relative(CONTAINER_WORKSPACE, mount.containerPath);
-      if (subRel.startsWith("..")) {
-        // External (non-workspace) mounts: bind the original host path through.
-        const extAbs = resolve(opts.workspaceRoot, mount.hostPath);
-        validateMountHostPath(extAbs);
-        args.push("-v", `${extAbs}:${mount.containerPath}:${mount.mode}`);
-      } else {
-        const subAbs = join(hostAbs, subRel);
-        args.push("-v", `${subAbs}:${mount.containerPath}:${mount.mode}`);
-      }
-    }
   }
 
   args.push("-v", `${opts.sandboxRunDir}:${CONTAINER_RUN_DIR}:rw`);

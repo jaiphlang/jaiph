@@ -234,8 +234,8 @@ workflow default() {
   log "ok"
 }
 
-=== config array key rejects non-array value
-# @expect error E_PARSE "runtime.workspace must be an array of strings" @2:3
+=== config array key rejects runtime.workspace (no longer supported)
+# @expect error E_PARSE "runtime.workspace is no longer supported" @2:3
 --- input.jh
 config {
   runtime.workspace = "not-an-array"
@@ -769,8 +769,8 @@ workflow default() {
 script broken = ```
 echo hello
 
-=== metadata: single-quoted array element
-# @expect error E_PARSE "single-quoted strings are not supported" @3:5
+=== metadata: runtime.workspace array rejected (single-quoted element)
+# @expect error E_PARSE "runtime.workspace is no longer supported" @2:3
 --- input.jh
 config {
   runtime.workspace = [
@@ -781,8 +781,8 @@ workflow default() {
   log "ok"
 }
 
-=== metadata: unquoted array element
-# @expect error E_PARSE "array elements must be quoted strings" @3:5
+=== metadata: runtime.workspace array rejected (unquoted element)
+# @expect error E_PARSE "runtime.workspace is no longer supported" @2:3
 --- input.jh
 config {
   runtime.workspace = [
@@ -793,8 +793,8 @@ workflow default() {
   log "ok"
 }
 
-=== metadata: unclosed array
-# @expect error E_PARSE "array not closed" @2:1
+=== metadata: runtime.workspace array rejected (unclosed)
+# @expect error E_PARSE "runtime.workspace is no longer supported" @2:3
 --- input.jh
 config {
   runtime.workspace = [
@@ -1914,16 +1914,16 @@ workflow default() {
   log "ok"
 }
 
-=== inline config block with multiline array opening
-# @expect error E_PARSE "multiline config arrays require"
+=== inline config block rejects runtime.workspace (array opening)
+# @expect error E_PARSE "runtime.workspace is no longer supported"
 --- input.jh
 config { runtime.workspace = [ }
 workflow default() {
   log "ok"
 }
 
-=== inline config block with non-empty workspace array
-# @expect error E_PARSE "runtime.workspace arrays with elements require"
+=== inline config block rejects runtime.workspace (non-empty array)
+# @expect error E_PARSE "runtime.workspace is no longer supported"
 --- input.jh
 config { runtime.workspace = ["foo"] }
 workflow default() {

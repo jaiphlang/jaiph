@@ -13,43 +13,6 @@ Process rules:
 
 ***
 
-## Sandbox — drop `runtime.workspace` config, hardcode single mount #dev-ready
-
-**Goal**
-Today `runtime.workspace` lets a `.jh` author declare arbitrary mounts (e.g. `["..:/jaiph/workspace:rw", "/etc:/etc:rw"]`). `validateMountHostPath` only blocks an explicit denylist (`/`, `/proc`, `/sys`, `/dev`, docker socket); it does **not** check that the resolved host path stays inside the workspace root. Combined with "Docker on by default", a misconfigured workflow silently bind-mounts the user's parent dir or `/etc` into the container. This breaks the workspace-immutability claim in `docs/sandboxing.md`. Remove the foot-gun by deleting the config knob.
-
-**Context (read before starting)**
-
-* The configurable mount path is `runtime.workspace` (parsed in `src/config.ts` → `RuntimeConfig.workspace`, consumed in `resolveDockerConfig` in `src/runtime/docker.ts`).
-* The default value is `[".:/jaiph/workspace:rw"]`. In overlay mode the host bind is RO; the container sees a writable merged view via fuse-overlayfs. In copy mode the host clone is bound RW. The user-facing `:rw` / `:ro` mode is irrelevant to sandbox safety because the sandbox primitive controls writability.
-* Tests in `src/runtime/docker.test.ts` exercise multi-mount scenarios (`buildDockerArgs: multiple workspace mounts only lower-layer paths are mounted ro`, `buildDockerArgs: copy mode honors workspace sub-mounts as separate binds`). Those tests must be deleted in this task.
-* `docs/sandboxing.md` has a whole "Mount specifications" section with the 3-segment / 2-segment grammar. Remove it.
-
-**Scope**
-
-* Remove the `workspace` field from `RuntimeConfig` (`src/types.ts` / `src/config.ts`) and the parser path that reads `runtime.workspace`. Make any `runtime.workspace` key in a `.jh` config block fail with a clear `E_PARSE` ("`runtime.workspace` is no longer supported; the workspace is mounted automatically").
-* Hardcode the single mount in `src/runtime/docker.ts`: drop `MountSpec`, `parseMount`, `parseMounts`, `validateMounts`, the `mounts` field on `DockerRunConfig`, and the per-mount loops in `buildDockerArgs`. Replace with one inlined bind: `<workspaceRoot>` → `/jaiph/workspace-ro` (overlay) or `<sandboxWorkspaceDir>` → `/jaiph/workspace` (copy).
-* Keep `validateMountHostPath` and the `DENIED_HOST_PATHS` list — call it once on the resolved workspace root before launching the container, so a workspace rooted at `/proc` or `/` still fails fast.
-* Update tests in `src/runtime/docker.test.ts`: delete the `parseMount*`, `validateMounts`, multi-mount, and copy-mode-sub-mount tests. Keep the denylist tests by retargeting them at the workspace-root validation call. Add one new test: `runtime.workspace = […]` in a `.jh` file produces `E_PARSE` with a helpful message.
-* Update `docs/sandboxing.md`: delete the "Mount specifications" section, the `runtime.workspace` row in the Configuration keys table, and any example using extra mounts. Replace with one paragraph stating "the workspace mount is automatic and not configurable".
-* Update `docs/configuration.md`, `docs/grammar.md`, and any other docs that mention `runtime.workspace`.
-
-**Non-goals**
-
-* Do not change the sandbox primitive selection (overlay vs copy) or the `/jaiph/run` artifact mount — those stay as-is.
-* Do not introduce a new "extra mounts" feature in any form. The whole point is no user-controlled mounts.
-
-**Acceptance criteria**
-
-* `runtime.workspace` in a `.jh` file produces `E_PARSE` (covered by a new test).
-* `MountSpec`, `parseMount`, `parseMounts`, and `validateMounts` are deleted from `src/runtime/docker.ts` and its test file.
-* `buildDockerArgs` emits exactly one workspace-related `-v` flag (plus `/jaiph/run` and, in overlay mode, `/jaiph/overlay-run.sh`).
-* `validateMountHostPath` is still called on the resolved workspace root before container launch; a denied workspace root still produces `E_VALIDATE_MOUNT`.
-* `docs/sandboxing.md` has no "Mount specifications" section and no `runtime.workspace` references.
-* `npm test` and the four `e2e/tests/7*_docker_*.sh` still pass.
-
-***
-
 ## Sandbox — drop `runtime.docker_enabled` config, env-only opt-in/out #dev-ready
 
 **Goal**

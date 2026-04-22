@@ -173,18 +173,6 @@ function emitConfigKeyLines(meta: WorkflowMetadata, key: string, pad: string): s
     case "runtime.docker_timeout":
       if (meta.runtime?.dockerTimeout === undefined) return [];
       return [`${pad}runtime.docker_timeout = ${meta.runtime.dockerTimeout}`];
-    case "runtime.workspace": {
-      if (meta.runtime?.workspace === undefined) return [];
-      if (meta.runtime.workspace.length === 0) {
-        return [`${pad}runtime.workspace = []`];
-      }
-      const ws: string[] = [`${pad}runtime.workspace = [`];
-      for (const w of meta.runtime.workspace) {
-        ws.push(`${pad}${pad}"${w}",`);
-      }
-      ws.push(`${pad}]`);
-      return ws;
-    }
     case "module.name":
       if (meta.module?.name === undefined) return [];
       return [`${pad}module.name = "${meta.module.name}"`];
@@ -231,17 +219,6 @@ function emitConfig(meta: WorkflowMetadata, pad: string): string {
     if (meta.runtime.dockerImage !== undefined) lines.push(`${pad}runtime.docker_image = "${meta.runtime.dockerImage}"`);
     if (meta.runtime.dockerNetwork !== undefined) lines.push(`${pad}runtime.docker_network = "${meta.runtime.dockerNetwork}"`);
     if (meta.runtime.dockerTimeout !== undefined) lines.push(`${pad}runtime.docker_timeout = ${meta.runtime.dockerTimeout}`);
-    if (meta.runtime.workspace !== undefined) {
-      if (meta.runtime.workspace.length === 0) {
-        lines.push(`${pad}runtime.workspace = []`);
-      } else {
-        lines.push(`${pad}runtime.workspace = [`);
-        for (const w of meta.runtime.workspace) {
-          lines.push(`${pad}${pad}"${w}",`);
-        }
-        lines.push(`${pad}]`);
-      }
-    }
   }
   if (meta.module) {
     if (meta.module.name !== undefined) lines.push(`${pad}module.name = "${meta.module.name}"`);

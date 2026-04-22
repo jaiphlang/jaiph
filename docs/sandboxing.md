@@ -89,34 +89,22 @@ All Docker-related keys live under `runtime.*` in module-level config:
 | `runtime.docker_image` | string | `"ghcr.io/jaiphlang/jaiph-runtime:<version>"` | Container image. Must already contain `jaiph`. Defaults to the official GHCR runtime image matching the installed jaiph version. |
 | `runtime.docker_network` | string | `"default"` | Docker network mode. |
 | `runtime.docker_timeout` | integer | `300` | Max execution time in seconds. `0` disables the timeout. |
-| `runtime.workspace` | string array | `[".:/jaiph/workspace:rw"]` | Mount specifications (see below). |
 
-Each key is type-checked at parse time. Unknown keys produce `E_PARSE`.
+Each key is type-checked at parse time. Unknown keys produce `E_PARSE`. The workspace mount is automatic and not configurable.
 
 #### Environment variable overrides
 
-Following the `JAIPH_*` convention: `JAIPH_DOCKER_ENABLED`, `JAIPH_DOCKER_IMAGE`, `JAIPH_DOCKER_NETWORK`, `JAIPH_DOCKER_TIMEOUT`. Additionally, `JAIPH_UNSAFE` affects the default for `runtime.docker_enabled` (see [Enabling Docker](#enabling-docker)). `CI=true` does **not** affect the default — CI runs use the same sandbox path users do. Workspace mounts are not overridable via environment.
+Following the `JAIPH_*` convention: `JAIPH_DOCKER_ENABLED`, `JAIPH_DOCKER_IMAGE`, `JAIPH_DOCKER_NETWORK`, `JAIPH_DOCKER_TIMEOUT`. Additionally, `JAIPH_UNSAFE` affects the default for `runtime.docker_enabled` (see [Enabling Docker](#enabling-docker)). `CI=true` does **not** affect the default — CI runs use the same sandbox path users do.
 
 Precedence: `JAIPH_DOCKER_ENABLED` env > in-file config > unsafe default rule.
 
 If `JAIPH_DOCKER_TIMEOUT` is set but not a valid integer, the default (`300`) is used.
 
-### Mount specifications
+### Workspace mount
 
-Mount strings in `runtime.workspace` define which host paths are visible inside the container. The mount targeting `/jaiph/workspace` selects the workspace source; additional sub-mounts pin parts of the tree to a particular mode (e.g. `"config:ro"` to make a subdir read-only inside the container).
+The workspace mount is automatic and not configurable. The workspace root is always bound into the container — in overlay mode at `/jaiph/workspace-ro` (read-only, with fuse-overlayfs merged at `/jaiph/workspace`), and in copy mode the host-side clone is mounted read-write at `/jaiph/workspace`. There are no user-controlled extra mounts.
 
-| Form | Segments | Example | Result |
-|------|----------|---------|--------|
-| Full | 3 | `".:/jaiph/workspace:rw"` | Workspace source. In overlay mode this becomes the read-only lower layer at `/jaiph/workspace-ro`; in copy mode the clone is mounted rw at `/jaiph/workspace`. |
-| Shorthand | 2 | `"config:ro"` | Mount `config` under `/jaiph/workspace/config`. In overlay mode the path is duplicated at `/jaiph/workspace-ro/config`; in copy mode the cloned subdirectory is bound at the requested mode. |
-| Too few | 1 | `"data"` | `E_PARSE` |
-| Too many | 4+ | `"a:b:c:d"` | `E_PARSE` |
-
-Mode must be `ro` or `rw` (otherwise `E_PARSE`). Exactly one mount must target `/jaiph/workspace` -- zero or more than one produces `E_VALIDATE`. The default `[".:/jaiph/workspace:rw"]` satisfies this requirement.
-
-Host paths are resolved relative to the workspace root. In overlay mode each mount is duplicated at the overlay lower-layer path (`/jaiph/workspace-ro/...`) so the overlay wrapper can use it as the read-only source. In copy mode, sub-mounts under `/jaiph/workspace` are bound from the cloned workspace directory.
-
-The following host paths are rejected at mount validation time with `E_VALIDATE_MOUNT`:
+The workspace root is validated before launch. The following host paths are rejected with `E_VALIDATE_MOUNT`:
 
 - `/` (host root filesystem)
 - `/var/run/docker.sock`, `/run/docker.sock` (Docker daemon socket)
@@ -256,16 +244,12 @@ This denylist is enforced in `buildDockerArgs` and cannot be overridden. If a wo
 
 ### Example
 
-A workflow with Docker sandboxing enabled and an extra read-only mount for a `config` directory (using the shorthand form):
+A workflow with Docker sandboxing enabled:
 
 ```jh
 config {
   runtime.docker_enabled = true
   runtime.docker_timeout = 600
-  runtime.workspace = [
-    ".:/jaiph/workspace:rw",
-    "config:ro"
-  ]
 }
 
 workflow default() {
