@@ -449,6 +449,28 @@ function formatArgs(args: string, bareIdentifierArgs?: string[]): string {
   return tokens.join(", ");
 }
 
+/** Emit inline script form: `prefix \`body\`(args)` or fenced block. */
+function emitInlineScriptLines(
+  prefix: string,
+  body: string,
+  lang?: string,
+  args?: string,
+  bareIdentifierArgs?: string[],
+  ci?: string,
+): string[] {
+  const argsStr = formatArgs(args ?? "", bareIdentifierArgs);
+  if (lang || body.includes("\n")) {
+    const langTag = lang ?? "";
+    const result = [`${prefix} \`\`\`${langTag}`];
+    for (const bl of body.split("\n")) {
+      result.push(bl);
+    }
+    result.push(`${ci ?? ""}\`\`\`(${argsStr})`);
+    return result;
+  }
+  return [`${prefix} \`${body}\`(${argsStr})`];
+}
+
 function emitRef(ref: { value: string }, args?: string, bareIdentifierArgs?: string[]): string {
   if (args !== undefined) {
     return `${ref.value}(${formatArgs(args, bareIdentifierArgs)})`;
@@ -647,7 +669,9 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
     }
 
     case "log":
-      if (step.message.includes("\n")) {
+      if (step.managed?.kind === "run_inline_script") {
+        lines.push(...emitInlineScriptLines(`${ci}log run`, step.managed.body, step.managed.lang, step.managed.args, step.managed.bareIdentifierArgs, ci));
+      } else if (step.message.includes("\n")) {
         lines.push(`${ci}log """`);
         for (const bl of step.message.split("\n")) {
           lines.push(bl);
@@ -659,7 +683,9 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
       break;
 
     case "logerr":
-      if (step.message.includes("\n")) {
+      if (step.managed?.kind === "run_inline_script") {
+        lines.push(...emitInlineScriptLines(`${ci}logerr run`, step.managed.body, step.managed.lang, step.managed.args, step.managed.bareIdentifierArgs, ci));
+      } else if (step.message.includes("\n")) {
         lines.push(`${ci}logerr """`);
         for (const bl of step.message.split("\n")) {
           lines.push(bl);
@@ -682,6 +708,8 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
             lines.push(...emitMatchArm(arm, `${ci}${pad}`, ci));
           }
           lines.push(`${ci}}`);
+        } else if (step.managed.kind === "run_inline_script") {
+          lines.push(...emitInlineScriptLines(`${ci}return run`, step.managed.body, step.managed.lang, step.managed.args, step.managed.bareIdentifierArgs, ci));
         }
       } else if (step.value.includes("\n")) {
         const inner = step.value.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");

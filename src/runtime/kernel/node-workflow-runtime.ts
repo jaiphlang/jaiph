@@ -877,6 +877,17 @@ export class NodeWorkflowRuntime {
     for (const step of steps) {
       if (step.type === "comment" || step.type === "blank_line") continue;
       if (step.type === "log") {
+        if (step.managed?.kind === "run_inline_script") {
+          const shebang = step.managed.lang ? `#!/usr/bin/env ${step.managed.lang}` : undefined;
+          const result = await this.executeInlineScript(scope, step.managed.body, shebang, step.managed.args ?? "");
+          if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
+          const message = result.returnValue ?? result.output.trim();
+          this.emitLog("LOG", message);
+          const chunk = `${message}\n`;
+          accOut += chunk;
+          io?.appendOut(chunk);
+          continue;
+        }
         const logMsg = step.tripleQuoted ? plainMultilineOrchestrationForRuntime(step.message) : step.message;
         const logIr = await this.interpolateWithCaptures(logMsg, scope);
         if (!logIr.ok) return this.mergeStepResult(accOut, accErr, logIr.result);
@@ -888,6 +899,17 @@ export class NodeWorkflowRuntime {
         continue;
       }
       if (step.type === "logerr") {
+        if (step.managed?.kind === "run_inline_script") {
+          const shebang = step.managed.lang ? `#!/usr/bin/env ${step.managed.lang}` : undefined;
+          const result = await this.executeInlineScript(scope, step.managed.body, shebang, step.managed.args ?? "");
+          if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
+          const message = result.returnValue ?? result.output.trim();
+          this.emitLog("LOGERR", message);
+          const chunk = `${message}\n`;
+          accErr += chunk;
+          io?.appendErr(chunk);
+          continue;
+        }
         const logerrMsg = step.tripleQuoted ? plainMultilineOrchestrationForRuntime(step.message) : step.message;
         const logErrIr = await this.interpolateWithCaptures(logerrMsg, scope);
         if (!logErrIr.ok) return this.mergeStepResult(accOut, accErr, logErrIr.result);
@@ -918,6 +940,13 @@ export class NodeWorkflowRuntime {
             const matchResult = await this.evaluateMatch(scope, step.managed.match);
             if (!matchResult.ok) return this.mergeStepResult(accOut, accErr, matchResult.result);
             returnValue = matchResult.value;
+            return this.mergeStepResult(accOut, accErr, { status: 0, output: "", error: "", returnValue });
+          }
+          if (step.managed.kind === "run_inline_script") {
+            const shebang = step.managed.lang ? `#!/usr/bin/env ${step.managed.lang}` : undefined;
+            const result = await this.executeInlineScript(scope, step.managed.body, shebang, step.managed.args ?? "");
+            if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
+            returnValue = result.returnValue ?? result.output.trim();
             return this.mergeStepResult(accOut, accErr, { status: 0, output: "", error: "", returnValue });
           }
           const result = step.managed.kind === "run"

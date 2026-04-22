@@ -187,6 +187,8 @@ export type WorkflowStepDef =
       /** Set when `log """..."""`; runtime dedents margin. */
       tripleQuoted?: boolean;
       loc: SourceLoc;
+      /** When set, log message comes from a managed inline-script call. */
+      managed?: { kind: "run_inline_script"; body: string; lang?: string; args?: string; bareIdentifierArgs?: string[] };
     }
   | {
       type: "logerr";
@@ -194,6 +196,8 @@ export type WorkflowStepDef =
       /** Set when `logerr """..."""`; runtime dedents margin. */
       tripleQuoted?: boolean;
       loc: SourceLoc;
+      /** When set, logerr message comes from a managed inline-script call. */
+      managed?: { kind: "run_inline_script"; body: string; lang?: string; args?: string; bareIdentifierArgs?: string[] };
     }
   | {
       type: "send";
@@ -211,7 +215,8 @@ export type WorkflowStepDef =
       managed?:
         | { kind: "run"; ref: WorkflowRefDef; args?: string; bareIdentifierArgs?: string[] }
         | { kind: "ensure"; ref: RuleRefDef; args?: string; bareIdentifierArgs?: string[] }
-        | { kind: "match"; match: MatchExprDef };
+        | { kind: "match"; match: MatchExprDef }
+        | { kind: "run_inline_script"; body: string; lang?: string; args?: string; bareIdentifierArgs?: string[] };
     }
   | {
       type: "run_inline_script";

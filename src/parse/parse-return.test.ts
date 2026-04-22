@@ -134,6 +134,91 @@ test("bare return has no managed field", () => {
   }
 });
 
+test("return run inline script parses managed inline script", () => {
+  const mod = parsejaiph(
+    "workflow default() {\n  return run `cat report.txt`()\n}",
+    "test.jh",
+  );
+  const step = mod.workflows[0].steps[0];
+  assert.equal(step.type, "return");
+  if (step.type === "return") {
+    assert.ok(step.managed);
+    assert.equal(step.managed!.kind, "run_inline_script");
+    if (step.managed!.kind === "run_inline_script") {
+      assert.equal(step.managed!.body, "cat report.txt");
+      assert.equal(step.managed!.args, undefined);
+    }
+  }
+});
+
+test("return run inline script with args", () => {
+  const mod = parsejaiph(
+    'workflow default() {\n  return run `echo $1`("x")\n}',
+    "test.jh",
+  );
+  const step = mod.workflows[0].steps[0];
+  assert.equal(step.type, "return");
+  if (step.type === "return") {
+    assert.ok(step.managed);
+    assert.equal(step.managed!.kind, "run_inline_script");
+    if (step.managed!.kind === "run_inline_script") {
+      assert.equal(step.managed!.body, "echo $1");
+      assert.equal(step.managed!.args, '"x"');
+    }
+  }
+});
+
+test("return bare inline script is rejected", () => {
+  assert.throws(
+    () => parsejaiph("workflow default() {\n  return `cat report.txt`()\n}", "test.jh"),
+    /bare inline scripts in return are not allowed/,
+  );
+});
+
+test("log run inline script parses managed inline script", () => {
+  const mod = parsejaiph(
+    "workflow default() {\n  log run `cat report.txt`()\n}",
+    "test.jh",
+  );
+  const step = mod.workflows[0].steps[0];
+  assert.equal(step.type, "log");
+  if (step.type === "log") {
+    assert.ok(step.managed);
+    assert.equal(step.managed!.kind, "run_inline_script");
+    assert.equal(step.managed!.body, "cat report.txt");
+    assert.equal(step.managed!.args, undefined);
+  }
+});
+
+test("log run inline script with args", () => {
+  const mod = parsejaiph(
+    'workflow default() {\n  log run `echo $1`("x")\n}',
+    "test.jh",
+  );
+  const step = mod.workflows[0].steps[0];
+  assert.equal(step.type, "log");
+  if (step.type === "log") {
+    assert.ok(step.managed);
+    assert.equal(step.managed!.kind, "run_inline_script");
+    assert.equal(step.managed!.body, "echo $1");
+    assert.equal(step.managed!.args, '"x"');
+  }
+});
+
+test("log bare inline script is rejected", () => {
+  assert.throws(
+    () => parsejaiph("workflow default() {\n  log `cat report.txt`()\n}", "test.jh"),
+    /bare inline scripts in log are not allowed/,
+  );
+});
+
+test("logerr bare inline script is rejected", () => {
+  assert.throws(
+    () => parsejaiph("workflow default() {\n  logerr `cat report.txt`()\n}", "test.jh"),
+    /bare inline scripts in logerr are not allowed/,
+  );
+});
+
 test("return run in ensure recover block", () => {
   const mod = parsejaiph(
     [

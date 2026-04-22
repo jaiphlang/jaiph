@@ -497,7 +497,14 @@ log """
 """
 ```
 
-Both accept single-line strings, triple-quoted blocks, or bare identifiers.
+Both accept single-line strings, triple-quoted blocks, bare identifiers, or **managed inline-script calls**:
+
+```jaiph
+log run `echo hello`()
+logerr run `echo $1`("details")
+```
+
+A managed inline-script call executes the script and logs its stdout. The `run` keyword is required — bare inline scripts (`log \`…\`()`) are rejected at compile time.
 
 ### `fail`
 
@@ -534,7 +541,11 @@ return match status {
   "ok" => "pass"
   _ => "fail"
 }
+return run `cat report.txt`()
+return run `echo $1`("arg")
 ```
+
+Inline scripts are supported with `return run \`…\`(args)`. The `run` keyword is required — bare inline scripts (`return \`…\`()`) are rejected at compile time.
 
 
 ### `send` — Channel Messages

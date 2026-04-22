@@ -444,6 +444,27 @@ export function parseWorkflowBlock(
     if (inner.startsWith("log ") || inner === "log") {
       const logArg = inner.slice("log".length).trimStart();
       const logCol = innerRaw.indexOf("log") + 1;
+      if (logArg.startsWith("run ") && logArg.slice("run ".length).trimStart().startsWith("`")) {
+        const runBody = logArg.slice("run ".length).trim();
+        const result = parseAnonymousInlineScript(filePath, lines, idx, runBody, innerNo, logCol);
+        workflow.steps.push({
+          type: "log",
+          message: "",
+          loc: { line: innerNo, col: logCol },
+          managed: {
+            kind: "run_inline_script",
+            body: result.body,
+            ...(result.lang ? { lang: result.lang } : {}),
+            args: result.args,
+            ...(result.bareIdentifierArgs ? { bareIdentifierArgs: result.bareIdentifierArgs } : {}),
+          },
+        });
+        idx = result.nextLineIdx - 1;
+        continue;
+      }
+      if (logArg.startsWith("`") || logArg.startsWith("```")) {
+        fail(filePath, 'bare inline scripts in log are not allowed; use "log run `...`()" to execute a managed inline script', innerNo, logCol);
+      }
       if (logArg.startsWith('"""')) {
         const tqLines = [...lines];
         tqLines[idx] = logArg;
@@ -464,6 +485,27 @@ export function parseWorkflowBlock(
     if (inner.startsWith("logerr ") || inner === "logerr") {
       const logerrArg = inner.slice("logerr".length).trimStart();
       const logerrCol = innerRaw.indexOf("logerr") + 1;
+      if (logerrArg.startsWith("run ") && logerrArg.slice("run ".length).trimStart().startsWith("`")) {
+        const runBody = logerrArg.slice("run ".length).trim();
+        const result = parseAnonymousInlineScript(filePath, lines, idx, runBody, innerNo, logerrCol);
+        workflow.steps.push({
+          type: "logerr",
+          message: "",
+          loc: { line: innerNo, col: logerrCol },
+          managed: {
+            kind: "run_inline_script",
+            body: result.body,
+            ...(result.lang ? { lang: result.lang } : {}),
+            args: result.args,
+            ...(result.bareIdentifierArgs ? { bareIdentifierArgs: result.bareIdentifierArgs } : {}),
+          },
+        });
+        idx = result.nextLineIdx - 1;
+        continue;
+      }
+      if (logerrArg.startsWith("`") || logerrArg.startsWith("```")) {
+        fail(filePath, 'bare inline scripts in logerr are not allowed; use "logerr run `...`()" to execute a managed inline script', innerNo, logerrCol);
+      }
       if (logerrArg.startsWith('"""')) {
         const tqLines = [...lines];
         tqLines[idx] = logerrArg;
@@ -520,7 +562,25 @@ export function parseWorkflowBlock(
         continue;
       }
       if (returnValue.startsWith("run ")) {
-        const call = parseCallRef(returnValue.slice("run ".length).trim());
+        const runBody = returnValue.slice("run ".length).trim();
+        if (runBody.startsWith("`")) {
+          const result = parseAnonymousInlineScript(filePath, lines, idx, runBody, innerNo, innerRaw.indexOf("run") + 1);
+          workflow.steps.push({
+            type: "return",
+            value: `run inline_script`,
+            loc: retLoc,
+            managed: {
+              kind: "run_inline_script",
+              body: result.body,
+              ...(result.lang ? { lang: result.lang } : {}),
+              args: result.args,
+              ...(result.bareIdentifierArgs ? { bareIdentifierArgs: result.bareIdentifierArgs } : {}),
+            },
+          });
+          idx = result.nextLineIdx - 1;
+          continue;
+        }
+        const call = parseCallRef(runBody);
         if (call) {
           rejectTrailingContent(filePath, innerNo, "run", call.rest);
           workflow.steps.push({
@@ -550,6 +610,9 @@ export function parseWorkflowBlock(
           });
           continue;
         }
+      }
+      if (returnValue.startsWith("`") || returnValue.startsWith("```")) {
+        fail(filePath, 'bare inline scripts in return are not allowed; use "return run `...`()" to execute a managed inline script', innerNo, retLoc.col);
       }
       if (returnValue.startsWith("'")) {
         fail(filePath, 'single-quoted strings are not supported; use double quotes ("...") instead', innerNo, retLoc.col);

@@ -582,9 +582,11 @@ log """
 """
 ```
 
-`log` writes to stdout; `logerr` writes to stderr (shown with a red `!` marker in the progress tree). Both accept single-line `"..."` strings, triple-quoted `"""..."""` multiline blocks, or bare identifiers. `${identifier}` interpolation works in all forms. At runtime, backslash escapes in the final string are interpreted (`\n` → newline).
+`log` writes to stdout; `logerr` writes to stderr (shown with a red `!` marker in the progress tree). Both accept single-line `"..."` strings, triple-quoted `"""..."""` multiline blocks, bare identifiers, or **managed inline-script calls** (`log run \`…\`(args)`). `${identifier}` interpolation works in string forms. At runtime, backslash escapes in the final string are interpreted (`\n` → newline).
 
 **Bare identifier form:** When `log` or `logerr` is followed by a single bare identifier (no quotes), it expands to `"${identifier}"` — the variable's value is logged. The identifier must reference a known binding (`const`, capture, or named parameter).
+
+**Managed inline-script form:** `log run \`script\`(args)` and `logerr run \`script\`(args)` execute the inline script and log its stdout. The `run` keyword is required — bare inline scripts (`log \`…\`()`, `logerr \`…\`()`) are rejected at compile time with a clear error.
 
 ### `fail`
 
@@ -611,9 +613,11 @@ return """
 return run helper                      # bare form — same as return run helper()
 return run helper()
 return ensure check(input)
+return run `cat report.txt`()          # inline script — runs and returns stdout
+return run `echo $1`("arg")            # inline script with arguments
 ```
 
-Sets the managed return value in rules and workflows. The value can be a single-line `"..."` string, a triple-quoted `"""..."""` multiline block, a variable reference, or a **direct managed call** using `return run ref(args)` or `return ensure ref(args)`. A direct managed call executes the target and uses its result as the return value — equivalent to capturing into a variable and returning it, but without the boilerplate:
+Sets the managed return value in rules and workflows. The value can be a single-line `"..."` string, a triple-quoted `"""..."""` multiline block, a variable reference, or a **direct managed call** using `return run ref(args)`, `return ensure ref(args)`, or `return run \`script\`(args)`. A direct managed call executes the target and uses its result as the return value — equivalent to capturing into a variable and returning it, but without the boilerplate:
 
 ```jaiph
 # Before: capture then return
@@ -625,6 +629,8 @@ return run helper()
 ```
 
 In workflows, `return run` targets a workflow or script; `return ensure` targets a rule. In rules, `return run` targets a script only; `return ensure` targets another rule. The same validation rules that apply to standalone `run`/`ensure` steps apply here — unknown refs, type mismatches, and shell redirection are all rejected at compile time.
+
+**Inline-script form:** `return run \`script\`(args)` executes the inline script and uses its stdout as the return value. The `run` keyword is required — bare inline scripts (`return \`…\`()`) are rejected at compile time with a clear error.
 
 A bare integer (`return 0`) or `return $?` is a bash exit code, not a Jaiph value return. `return "…"` is not allowed in script bodies — use `echo`/`printf`.
 
@@ -909,7 +915,8 @@ run_async_stmt  = "run" "async" call_ref [ "recover" recover_bindings recover_bo
 run_async_capture = "const" IDENT "=" "run" "async" call_ref ;
 return_stmt     = "return" return_value ;
 return_value    = double_quoted_string | triple_quoted_block | "$" IDENT | "${" IDENT "}"
-                | "run" call_ref | "ensure" call_ref | "match" IDENT "{" { match_arm } "}" ;
+                | "run" ( call_ref | inline_script ) | "ensure" call_ref
+                | "match" IDENT "{" { match_arm } "}" ;
 
 match_stmt      = "match" IDENT "{" { match_arm } "}" ;
 match_expr      = "match" IDENT "{" { match_arm } "}" ;
@@ -927,8 +934,8 @@ arm_body        = double_quoted_string | triple_quoted_block
 send_stmt       = IDENT "<-" send_rhs ;
 send_rhs        = double_quoted_string | triple_quoted_block | "${" IDENT "}" | "run" call_ref | REF ;
 
-log_stmt        = "log" ( double_quoted_string | triple_quoted_block | IDENT ) ;
-logerr_stmt     = "logerr" ( double_quoted_string | triple_quoted_block | IDENT ) ;
+log_stmt        = "log" ( double_quoted_string | triple_quoted_block | IDENT | "run" inline_script ) ;
+logerr_stmt     = "logerr" ( double_quoted_string | triple_quoted_block | IDENT | "run" inline_script ) ;
 
 ensure_stmt     = "ensure" call_ref [ "catch" catch_bindings catch_body ] ;
 run_catch_stmt  = "run" call_ref "catch" catch_bindings catch_body ;
