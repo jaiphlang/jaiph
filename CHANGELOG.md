@@ -1,6 +1,7 @@
 # Unreleased
 
 - **Language:** `return run \`…\`(args)` and `log run \`…\`(args)` — inline scripts wrapped with explicit `run` now work in value positions (`return`, `log`, `logerr`). Bare inline scripts without `run` remain rejected at compile time with clear errors. Parser, validator, emitter, formatter, and runtime all updated. E2E and unit tests cover zero-arg and argument forms plus rejection paths.
+- **Language:** `match` arms are now strictly newline-delimited — trailing commas after arm bodies and comma separators between arms are rejected at parse time with the diagnostic `"commas are not allowed in match arms; use one arm per line"`. Previously, commas after arms were silently accepted. Parser and validation tests cover string-value, `fail`, and inline comma-separated forms.
 
 # 0.9.3
 

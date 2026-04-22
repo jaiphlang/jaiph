@@ -146,7 +146,7 @@ e2e::section "docker vs no-sandbox: match-fail in rule produces identical footer
 e2e::file "fail_rule.jh" <<'EOF'
 rule name_was_provided(name) {
   match name {
-    "" => fail "You didn't provide your name :(",
+    "" => fail "You didn't provide your name :("
     _  => true
   }
 }
