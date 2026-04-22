@@ -67,7 +67,7 @@ function validateNoShellRedirection(
   );
 }
 
-function validateMatchExpr(filePath: string, expr: MatchExprDef): void {
+function validateMatchExpr(filePath: string, expr: MatchExprDef, knownVars: Set<string>): void {
   if (expr.arms.length === 0) {
     throw jaiphError(filePath, expr.loc.line, expr.loc.col, "E_VALIDATE", "match must have at least one arm");
   }
@@ -110,12 +110,12 @@ function validateMatchExpr(filePath: string, expr: MatchExprDef): void {
         `inline scripts are not allowed in match arm bodies; use a named script with "run script_name(…)" instead`,
       );
     }
-    // Reject unknown verbs and bare function-call forms in arm bodies.
+    // Reject unknown verbs, bare function-call forms, and bare unknown identifiers in arm bodies.
     // Allowed bodies: string literal ("..." or """..."""), $var/${var},
-    // single bare token (e.g. true), or a verb call: fail "...", run ref(...), ensure ref(...).
+    // bare in-scope identifier (param/const/capture), or a verb call: fail "...", run ref(...), ensure ref(...).
     // A bare identifier followed by space+content (e.g. `error "msg"`) or by `(` (e.g. `error("msg")`)
-    // is a programming mistake — most likely a typo for `fail`. Skip the check for
-    // triple-quoted bodies since those are literal text.
+    // is a programming mistake — most likely a typo for `fail`. A bare identifier not in scope
+    // (e.g. `true`, `blorp`) is also rejected. Skip the check for triple-quoted bodies since those are literal text.
     if (!arm.tripleQuotedBody) {
       const idMatch = bodyTrimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)/);
       if (idMatch) {
@@ -131,6 +131,18 @@ function validateMatchExpr(filePath: string, expr: MatchExprDef): void {
             expr.loc.col,
             "E_VALIDATE",
             `unknown match arm verb "${ident}"; allowed: fail "...", run ref(...), ensure ref(...).${hint}`,
+          );
+        }
+        // Reject bare unknown identifiers (e.g. `_ => true`, `_ => blorp`).
+        // Only bare words with no trailing content reach here — valid ones
+        // must be in-scope variables (params, consts, captures).
+        if (!startsCall && !startsArgs && after.trim() === "" && !knownVars.has(ident)) {
+          throw jaiphError(
+            filePath,
+            expr.loc.line,
+            expr.loc.col,
+            "E_VALIDATE",
+            `unknown identifier "${ident}" in match arm body; declare it with "const", use a capture, or add a parameter`,
           );
         }
       }
@@ -684,7 +696,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
 
             validateBareIdentifierArgs(ast.filePath, s.managed.ref.loc, s.managed.bareIdentifierArgs, ruleKnownVars);
           } else if (s.managed.kind === "match") {
-            validateMatchExpr(ast.filePath, s.managed.match);
+            validateMatchExpr(ast.filePath, s.managed.match, ruleKnownVars);
           }
           // run_inline_script — no ref to validate
         } else {
@@ -732,7 +744,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         } else if (v.kind === "run_inline_script_capture") {
           // inline script capture — no ref to validate
         } else if (v.kind === "match_expr") {
-          validateMatchExpr(ast.filePath, v.match);
+          validateMatchExpr(ast.filePath, v.match, ruleKnownVars);
         } else if (v.kind === "expr") {
           const bareRhs = v.bashRhs.trim();
           if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(bareRhs) && localScripts.has(bareRhs)) {
@@ -755,7 +767,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         return;
       }
       if (s.type === "match") {
-        validateMatchExpr(ast.filePath, s.expr);
+        validateMatchExpr(ast.filePath, s.expr, ruleKnownVars);
         return;
       }
       if (s.type === "if") {
@@ -1027,7 +1039,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
 
             validateBareIdentifierArgs(ast.filePath, s.managed.ref.loc, s.managed.bareIdentifierArgs, wfKnownVars, recoverBindings);
           } else if (s.managed.kind === "match") {
-            validateMatchExpr(ast.filePath, s.managed.match);
+            validateMatchExpr(ast.filePath, s.managed.match, wfKnownVars);
           }
           return;
         }
@@ -1117,7 +1129,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         } else if (v.kind === "run_inline_script_capture") {
           // inline script capture — no ref to validate
         } else if (v.kind === "match_expr") {
-          validateMatchExpr(ast.filePath, v.match);
+          validateMatchExpr(ast.filePath, v.match, wfKnownVars);
         } else if (v.kind === "expr") {
           const bareRhs = v.bashRhs.trim();
           if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(bareRhs) && localScripts.has(bareRhs)) {
@@ -1142,7 +1154,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         return;
       }
       if (s.type === "match") {
-        validateMatchExpr(ast.filePath, s.expr);
+        validateMatchExpr(ast.filePath, s.expr, wfKnownVars);
         return;
       }
       if (s.type === "if") {
