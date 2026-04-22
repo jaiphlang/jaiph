@@ -118,7 +118,7 @@ Static tree from AST (`progress.ts`); runtime events (`events.ts`, `stderr-handl
 
 ## Distribution: Node vs Bun standalone
 
-- **Development / npm:** `npm run build` → `tsc` + copy `runtime/kernel/` into `dist/`. `node dist/src/cli.js` runs the CLI.
+- **Development / npm:** `npm run build` → `tsc` + copy `runtime/kernel/` into `dist/` + copy `runtime/overlay-run.sh` into `dist/src/runtime/`. `node dist/src/cli.js` runs the CLI.
 - **Standalone:** `npm run build:standalone` produces `dist/jaiph` (Bun `--compile`) and copies **`runtime/kernel/`** into **`dist/`** next to the binary. The bundle runs **without a Node.js install**. Target machines still need **bash** (or another interpreter) for `script` step subprocess execution and **Node.js** for the runtime kernel.
 
 ## Mermaid architecture diagram

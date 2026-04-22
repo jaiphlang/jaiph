@@ -13,40 +13,6 @@ Process rules:
 
 ***
 
-## Sandbox — extract overlay script to `runtime/overlay-run.sh` and shellcheck in CI #dev-ready
-
-**Goal**
-`OVERLAY_SCRIPT` is a 30+ line bash blob inside a TS template literal in `src/runtime/docker.ts`. Editing it requires escape-character gymnastics and the file is invisible to `shellcheck`. Move it to a real `.sh` file and lint it.
-
-**Context (read before starting)**
-
-* Source: `OVERLAY_SCRIPT` constant in `src/runtime/docker.ts` (lines ~293–324).
-* Consumer: `writeOverlayScript()` writes the constant to a temp file, returns its path; the path is bind-mounted into the container at `/jaiph/overlay-run.sh`.
-* `shellcheck` is not yet a CI dependency. Add it.
-
-**Scope**
-
-* Create `runtime/overlay-run.sh` with the current bash content, executable bit set in git (`git update-index --chmod=+x`).
-* In `src/runtime/docker.ts`, read the file at module load (`readFileSync(join(__dirname, '../../runtime/overlay-run.sh'), 'utf8')`) — handle the `dist/` vs source path the same way `resolveDefaultImageTag` already does.
-* Update `writeOverlayScript` to write the loaded content (no behavior change).
-* Add `shellcheck` to `.github/workflows/ci.yml` as a dedicated job that runs `shellcheck runtime/overlay-run.sh e2e/tests/*.sh e2e/lib/*.sh`. Fix any newly surfaced violations in `runtime/overlay-run.sh` (e2e fixes are out of scope; suppress with `# shellcheck disable=…` if they break CI).
-* Update existing tests in `src/runtime/docker.test.ts` (`writeOverlayScript: …`) to read from the new file location instead of the inlined constant.
-* Make sure the file is included in the published npm package: add `runtime/overlay-run.sh` to the `files` array in `package.json` if not already there.
-
-**Non-goals**
-
-* Do not rewrite the script logic. Move-and-lint only.
-* Do not shellcheck the entire e2e suite in this task; only the new file.
-
-**Acceptance criteria**
-
-* `OVERLAY_SCRIPT` constant no longer exists in `src/runtime/docker.ts`.
-* `runtime/overlay-run.sh` exists, is executable, and is shipped in the npm package.
-* `shellcheck runtime/overlay-run.sh` passes in CI.
-* `npm test` and the four `e2e/tests/7*_docker_*.sh` still pass.
-
-***
-
 ## Sandbox — refactor `cloneWorkspaceForSandbox` state-threading into a small class #dev-ready
 
 **Goal**

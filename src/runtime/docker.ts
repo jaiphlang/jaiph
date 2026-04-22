@@ -273,50 +273,17 @@ export function resolveImage(config: DockerRunConfig): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Container-side fuse-overlayfs setup.
+ * Container-side fuse-overlayfs setup loaded from runtime/overlay-run.sh.
  *
- * Used only when the host selects "overlay" sandbox mode (i.e. /dev/fuse exists
- * on the host). Mounts a fuse-overlayfs union at /jaiph/workspace (lower = the
- * host workspace bind-mounted ro at /jaiph/workspace-ro, upper = tmpfs) and
- * execs the command. If fuse-overlayfs is missing or fails, the script exits
- * with a clear error code; the host-copy mode is the documented fallback users
- * opt into (e.g. when fuse is unavailable on macOS Docker Desktop).
- *
- * No in-container rsync/cp fallback. That path was the slow one — we replaced
- * it with a host-side clone (see `cloneWorkspaceForSandbox`).
+ * Resolves the file relative to package root — works from both source and dist
+ * layouts, mirroring the approach used by `resolveDefaultImageTag`.
  */
-const OVERLAY_SCRIPT = `#!/usr/bin/env bash
-set -euo pipefail
-LOWER=/jaiph/workspace-ro
-UPPER=/tmp/overlay-upper
-WORK=/tmp/overlay-work
-MERGED=/jaiph/workspace
-RUN_DIR=/jaiph/run
-mkdir -p "$UPPER" "$WORK" "$MERGED"
-
-if ! command -v fuse-overlayfs >/dev/null 2>&1; then
-  printf 'E_DOCKER_OVERLAY fuse-overlayfs not found in image; install it or set JAIPH_DOCKER_NO_OVERLAY=1 on the host to use the copy sandbox path\\n' >&2
-  exit 78
-fi
-if [ ! -e /dev/fuse ]; then
-  printf 'E_DOCKER_OVERLAY /dev/fuse not present in container; pass --device /dev/fuse or set JAIPH_DOCKER_NO_OVERLAY=1 to use the copy sandbox path\\n' >&2
-  exit 78
-fi
-if ! fuse-overlayfs -o "lowerdir=$LOWER,upperdir=$UPPER,workdir=$WORK,allow_other" "$MERGED" 2>/tmp/jaiph-fuse-overlay.err; then
-  reason="$(tr '\\n' ' ' </tmp/jaiph-fuse-overlay.err | sed 's/[[:space:]]\\+/ /g; s/^ //; s/ $//')"
-  printf 'E_DOCKER_OVERLAY fuse-overlayfs mount failed: %s\\n' "$reason" >&2
-  exit 78
-fi
-
-cd "$MERGED"
-
-# Drop to host UID/GID after mounting overlay as root.
-if [ -n "\${JAIPH_HOST_UID:-}" ] && [ -n "\${JAIPH_HOST_GID:-}" ] && command -v setpriv >/dev/null 2>&1; then
-  chown "$JAIPH_HOST_UID:$JAIPH_HOST_GID" "$RUN_DIR" 2>/dev/null || true
-  exec setpriv --reuid="$JAIPH_HOST_UID" --regid="$JAIPH_HOST_GID" --clear-groups -- "$@"
-fi
-exec "$@"
-`;
+const OVERLAY_SCRIPT = readFileSync(
+  existsSync(resolve(__dirname, "overlay-run.sh"))
+    ? resolve(__dirname, "overlay-run.sh")
+    : resolve(__dirname, "..", "..", "..", "runtime", "overlay-run.sh"),
+  "utf8",
+);
 
 /**
  * Write overlay-run.sh to a temp file and return its path.
