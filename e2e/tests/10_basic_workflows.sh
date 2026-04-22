@@ -32,6 +32,8 @@ workflow default
   ▸ script hello_impl
   ✓ script hello_impl (<time>)
 ✓ PASS workflow default (<time>)
+
+hello-jh
 EOF
 
 e2e::expect_out_files "hello.jh" 2
@@ -72,6 +74,8 @@ workflow default
   ▸ script mixed_ok_impl
   ✓ script mixed_ok_impl (<time>)
 ✓ PASS workflow default (<time>)
+
+mixed-ok
 EOF
 
 e2e::expect_out_files "app.jh" 4

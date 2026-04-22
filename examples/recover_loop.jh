@@ -10,7 +10,7 @@ workflow default() {
   # Recovery in loop: when check_report_exists() fails, the recovery body
   # is executed to fix it, and then check_report_exists() is retried.
   # By default, the retry limit is 10.
-  run check_report_exists() recover(failure) {
+  run check_report_exists() recover (failure) {
     logerr "Failed to check report.txt"
     prompt "report.txt is missing. Create it with a short dummy summary."
   }
