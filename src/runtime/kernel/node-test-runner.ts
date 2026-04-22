@@ -149,29 +149,40 @@ async function runTestBlock(
           mockBodies,
         });
         const result = await runtime.runNamedWorkflow(step.workflowRef, step.args ?? []);
-        if (step.captureName) {
-          // Match production run_capture semantics: prefer returnValue over raw output.
-          if (result.status === 0 && result.returnValue) {
-            vars.set(step.captureName, result.returnValue);
-          } else if (result.status !== 0 && result.error) {
-            // Failed workflow: capture error content (matches bash stderr capture)
-            vars.set(step.captureName, result.error.trim());
-          } else {
-            // No explicit return — read all .out artifact files (matches bash harness semantics)
-            const runDir = runtime.getRunDir();
+        // Resolve the value following production `run_capture` semantics so we can bind
+        // both the explicit capture target and the implicit `response` alias.
+        let runValue: string | undefined;
+        if (result.status === 0 && result.returnValue) {
+          runValue = result.returnValue;
+        } else if (result.status !== 0 && result.error) {
+          runValue = result.error.trim();
+        } else if (step.captureName) {
+          // No explicit return — read all .out artifact files (matches bash harness semantics).
+          // Only needed when an explicit capture target requires a value.
+          const runDir = runtime.getRunDir();
+          try {
+            const outFiles = readdirSync(runDir)
+              .filter((f) => f.endsWith(".out"))
+              .sort();
             let captured = "";
-            try {
-              const outFiles = readdirSync(runDir)
-                .filter((f) => f.endsWith(".out"))
-                .sort();
-              for (const outFile of outFiles) {
-                captured += readFileSync(join(runDir, outFile), "utf8");
-              }
-            } catch {
-              captured = result.output;
+            for (const outFile of outFiles) {
+              captured += readFileSync(join(runDir, outFile), "utf8");
             }
-            vars.set(step.captureName, captured);
+            runValue = captured;
+          } catch {
+            runValue = result.output;
           }
+        }
+        if (step.captureName && runValue !== undefined) {
+          vars.set(step.captureName, runValue);
+        }
+        // Implicit `response` alias: bind the most recent `run` workflow's return value
+        // (or captured failure output) so `expect_equal response "..."` works without
+        // requiring an explicit `const response = run ...`. Last-write-wins across runs.
+        if (result.status === 0 && result.returnValue !== undefined) {
+          vars.set("response", result.returnValue);
+        } else if (result.status !== 0 && result.error) {
+          vars.set("response", result.error.trim());
         }
         if (!step.allowFailure && result.status !== 0) {
           return { pass: false, error: `workflow exited with status ${result.status}` };

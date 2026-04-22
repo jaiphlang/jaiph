@@ -6,6 +6,67 @@ import { join } from "node:path";
 import { buildRuntimeGraph } from "./graph";
 import { NodeWorkflowRuntime } from "./node-workflow-runtime";
 
+test("NodeWorkflowRuntime: runDefault writes return_value.txt with the workflow's return value", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-node-wf-return-"));
+  try {
+    const jh = join(root, "returns.jh");
+    writeFileSync(
+      jh,
+      [
+        "workflow default(name) {",
+        '  return "hello ${name}"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const graph = buildRuntimeGraph(jh);
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      JAIPH_TEST_MODE: "1",
+      JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
+    };
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });
+    const status = await runtime.runDefault(["world"]);
+    assert.equal(status, 0);
+
+    const returnValueFile = join(runtime.getRunDir(), "return_value.txt");
+    assert.ok(existsSync(returnValueFile), `expected return_value.txt in ${runtime.getRunDir()}`);
+    assert.equal(readFileSync(returnValueFile, "utf8"), "hello world");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("NodeWorkflowRuntime: runDefault does not write return_value.txt when workflow has no return", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-node-wf-noreturn-"));
+  try {
+    const jh = join(root, "noreturn.jh");
+    writeFileSync(
+      jh,
+      [
+        "workflow default() {",
+        '  log "side effect only"',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const graph = buildRuntimeGraph(jh);
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      JAIPH_TEST_MODE: "1",
+      JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
+    };
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });
+    const status = await runtime.runDefault([]);
+    assert.equal(status, 0);
+
+    const returnValueFile = join(runtime.getRunDir(), "return_value.txt");
+    assert.ok(!existsSync(returnValueFile), "expected no return_value.txt for workflow without return");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("NodeWorkflowRuntime: workflow step .out accumulates Command:/Prompt: and log (mocked prompt)", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-node-wf-artifacts-"));
   try {
