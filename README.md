@@ -1,6 +1,6 @@
 # ![Jaiph](docs/logo.png)
 
-[jaiph.org](https://jaiph.org) · [Getting Started](docs/getting-started.md) · [Setup](docs/setup.md) · [Libraries](docs/libraries.md) · [Grammar](docs/grammar.md) · [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Testing](docs/testing.md) · [Hooks](docs/hooks.md) · [Inbox & Dispatch](docs/inbox.md) · [Sandboxing](docs/sandboxing.md) · [Runtime artifacts](docs/artifacts.md) · [Async Handles](docs/spec-async-handles.md) · [Architecture](docs/architecture.md) · [Contributing](docs/contributing.md)
+[jaiph.org](https://jaiph.org) · [Getting Started](docs/getting-started.md) ([jaiph.org/getting-started](https://jaiph.org/getting-started)) · [Setup](docs/setup.md) · [Libraries](docs/libraries.md) · [Grammar](docs/grammar.md) · [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Testing](docs/testing.md) · [Hooks](docs/hooks.md) · [Inbox & Dispatch](docs/inbox.md) · [Sandboxing](docs/sandboxing.md) · [Runtime artifacts](docs/artifacts.md) · [Async Handles](docs/spec-async-handles.md) · [Architecture](docs/architecture.md) · [Contributing](docs/contributing.md)
 
 ---
 
@@ -18,7 +18,7 @@
 
 ## Core components
 
-- **CLI** (`src/cli`) — `jaiph run` / `test` / `format` / `init` / `install` / `use`; spawns the workflow runner, parses live events, runs hooks.
+- **CLI** (`src/cli`) — `jaiph run` / `test` / `compile` / `format` / `init` / `install` / `use`; prepares scripts, spawns the workflow runner (or in-process test runner), parses `__JAIPH_EVENT__` on stderr, runs hooks on `jaiph run` only.
 - **Parser** (`src/parser.ts`, `src/parse/*`) — `.jh` / `.test.jh` → AST.
 - **Validator** (`src/transpile/validate.ts`) — imports and symbol references at compile time.
 - **Transpiler** (`src/transpile/*`) — emits atomic `script` files under `scripts/` only (no workflow-level shell).

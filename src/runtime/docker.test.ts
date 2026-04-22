@@ -43,7 +43,7 @@ function defaultOpts(overrides?: Partial<DockerSpawnOptions>): DockerSpawnOption
       image: "ubuntu:24.04",
       imageExplicit: false,
       network: "default",
-      timeout: 300,
+      timeoutSeconds: 300,
     },
     sourceAbs: join(TEST_WS, "main.jh"),
     workspaceRoot: TEST_WS,
@@ -69,17 +69,17 @@ test("resolveDockerConfig: defaults when no in-file and no env — Docker on", (
   assert.equal(cfg.enabled, true);
   assert.ok(cfg.image.startsWith(GHCR_IMAGE_REPO + ":"), `default image should be GHCR: ${cfg.image}`);
   assert.equal(cfg.network, "default");
-  assert.equal(cfg.timeout, 300);
+  assert.equal(cfg.timeoutSeconds, 300);
 });
 
 test("resolveDockerConfig: in-file image/timeout overrides defaults (dockerEnabled removed)", () => {
   const cfg = resolveDockerConfig(
-    { dockerImage: "alpine:3.19", dockerTimeout: 60 },
+    { dockerImage: "alpine:3.19", dockerTimeoutSeconds: 60 },
     {},
   );
   assert.equal(cfg.enabled, true, "enabled defaults to true (no JAIPH_UNSAFE)");
   assert.equal(cfg.image, "alpine:3.19");
-  assert.equal(cfg.timeout, 60);
+  assert.equal(cfg.timeoutSeconds, 60);
 });
 
 test("resolveDockerConfig: env overrides in-file image", () => {
@@ -128,7 +128,7 @@ test("resolveDockerConfig: network env override", () => {
 
 test("resolveDockerConfig: timeout env override", () => {
   const cfg = resolveDockerConfig(undefined, { JAIPH_DOCKER_TIMEOUT: "120" });
-  assert.equal(cfg.timeout, 120);
+  assert.equal(cfg.timeoutSeconds, 120);
 });
 
 test("resolveDockerConfig: invalid timeout env throws E_DOCKER_TIMEOUT", () => {
@@ -168,17 +168,17 @@ test("resolveDockerConfig: empty timeout env throws E_DOCKER_TIMEOUT", () => {
 
 test("resolveDockerConfig: timeout env 0 disables timeout", () => {
   const cfg = resolveDockerConfig(undefined, { JAIPH_DOCKER_TIMEOUT: "0" });
-  assert.equal(cfg.timeout, 0);
+  assert.equal(cfg.timeoutSeconds, 0);
 });
 
 test("resolveDockerConfig: timeout env 300 accepted", () => {
   const cfg = resolveDockerConfig(undefined, { JAIPH_DOCKER_TIMEOUT: "300" });
-  assert.equal(cfg.timeout, 300);
+  assert.equal(cfg.timeoutSeconds, 300);
 });
 
 test("resolveDockerConfig: negative in-file timeout throws E_DOCKER_TIMEOUT", () => {
   assert.throws(
-    () => resolveDockerConfig({ dockerTimeout: -5 }, {}),
+    () => resolveDockerConfig({ dockerTimeoutSeconds: -5 }, {}),
     { message: /E_DOCKER_TIMEOUT/ },
   );
 });
@@ -955,7 +955,13 @@ test("prepareImage: writes pulling/pulled status to stderr on cold pull", () => 
     return true;
   }) as typeof process.stderr.write;
   try {
-    const config: DockerRunConfig = { enabled: true, image: "test:latest", imageExplicit: false, network: "default", timeout: 300 };
+    const config: DockerRunConfig = {
+      enabled: true,
+      image: "test:latest",
+      imageExplicit: false,
+      network: "default",
+      timeoutSeconds: 300,
+    };
     prepareImage(config);
     assert.ok(stderrWrites.some((s) => s.includes("pulling image test:latest")), "status line before pull");
     assert.ok(stderrWrites.some((s) => s.includes("pulled")), "status line after pull");
@@ -979,7 +985,13 @@ test("prepareImage: no status output when image is already local", () => {
     return true;
   }) as typeof process.stderr.write;
   try {
-    const config: DockerRunConfig = { enabled: true, image: "test:latest", imageExplicit: false, network: "default", timeout: 300 };
+    const config: DockerRunConfig = {
+      enabled: true,
+      image: "test:latest",
+      imageExplicit: false,
+      network: "default",
+      timeoutSeconds: 300,
+    };
     prepareImage(config);
     assert.ok(!stderrWrites.some((s) => s.includes("pulling")), "no pull status when image is local");
   } finally {

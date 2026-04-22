@@ -171,9 +171,9 @@ function emitConfigKeyLines(meta: WorkflowMetadata, key: string, pad: string): s
     case "runtime.docker_network":
       if (meta.runtime?.dockerNetwork === undefined) return [];
       return [`${pad}runtime.docker_network = "${meta.runtime.dockerNetwork}"`];
-    case "runtime.docker_timeout":
-      if (meta.runtime?.dockerTimeout === undefined) return [];
-      return [`${pad}runtime.docker_timeout = ${meta.runtime.dockerTimeout}`];
+    case "runtime.docker_timeout_seconds":
+      if (meta.runtime?.dockerTimeoutSeconds === undefined) return [];
+      return [`${pad}runtime.docker_timeout_seconds = ${meta.runtime.dockerTimeoutSeconds}`];
     case "module.name":
       if (meta.module?.name === undefined) return [];
       return [`${pad}module.name = "${meta.module.name}"`];
@@ -218,7 +218,9 @@ function emitConfig(meta: WorkflowMetadata, pad: string): string {
   if (meta.runtime) {
     if (meta.runtime.dockerImage !== undefined) lines.push(`${pad}runtime.docker_image = "${meta.runtime.dockerImage}"`);
     if (meta.runtime.dockerNetwork !== undefined) lines.push(`${pad}runtime.docker_network = "${meta.runtime.dockerNetwork}"`);
-    if (meta.runtime.dockerTimeout !== undefined) lines.push(`${pad}runtime.docker_timeout = ${meta.runtime.dockerTimeout}`);
+    if (meta.runtime.dockerTimeoutSeconds !== undefined) {
+      lines.push(`${pad}runtime.docker_timeout_seconds = ${meta.runtime.dockerTimeoutSeconds}`);
+    }
   }
   if (meta.module) {
     if (meta.module.name !== undefined) lines.push(`${pad}module.name = "${meta.module.name}"`);

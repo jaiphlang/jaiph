@@ -7,9 +7,11 @@ redirect_from:
 
 # Configuration
 
-Jaiph separates **what runs** (your `.jh` graphs) from **how the host runs it** (models, paths, sandboxes, logging). Operational settings live in **configuration** so the same `.jh` sources work unchanged across machines and CI.
+When you need the same workflow sources to behave differently on different machines, you separate **what the graph does** (rules, `prompt` / `script` / `run`, channels) from **operational knobs**: which LLM backend to use, where to write run logs, how inbox dispatch behaves, and how the CLI chooses host vs. Docker. Jaiph keeps the language stable and pushes those choices into **configuration** — in-file `config` blocks, environment variables, and defaults in the tool.
 
-All execution goes through the Node workflow runtime (`NodeWorkflowRuntime`), which interprets the AST, runs `prompt` and `script` steps, and handles channels, inbox dispatch, and artifacts (see [Architecture](architecture)). Configuration tunes this stack — agent backend, runs directory, Docker sandbox, inbox parallelism — without touching control flow.
+All execution is interpreted by the Node workflow runtime (`NodeWorkflowRuntime`): the AST, managed scripts, prompts, channels, inbox, and `.jaiph/runs` artifacts (see [Architecture](architecture.md)). Configuration only adjusts that stack; it does not change the workflow language or the compile graph.
+
+`jaiph compile` and `buildScripts()` use the same parser, so **unknown `config` keys and wrong value types** fail with deterministic parse errors. Runtime graph loading is parse-only; **compile-time** validation of references runs in the transpile path, not in `buildRuntimeGraph()` (see [Architecture — Summary](architecture.md#summary)).
 
 **Source of truth:** When this document and the implementation disagree, treat the source code as authoritative.
 
@@ -17,7 +19,7 @@ All execution goes through the Node workflow runtime (`NodeWorkflowRuntime`), wh
 
 Jaiph provides three configuration mechanisms. When the same key is set in more than one place, the highest-priority source wins:
 
-1. **Environment variables** — highest priority. `JAIPH_AGENT_*`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, `JAIPH_INBOX_PARALLEL`, `JAIPH_DOCKER_*`, and `JAIPH_UNSAFE`.
+1. **Environment variables** — highest priority. Includes `JAIPH_AGENT_*`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, `JAIPH_INBOX_PARALLEL`, `JAIPH_DOCKER_ENABLED`, other `JAIPH_DOCKER_*`, and `JAIPH_UNSAFE` (for Docker on/off, see [Sandboxing — Enabling Docker](sandboxing.md#enabling-docker)). Docker **enablement** is only controlled here — there is no `runtime.*` in-file key for that (removed; using it is a parse error with a migration message).
 2. **In-file `config { ... }` blocks** — at module scope and optionally inside a `workflow` body.
 3. **Built-in defaults** — lowest priority, used when nothing else sets a value.
 
@@ -25,13 +27,15 @@ For **agent and run keys**, the full precedence chain is:
 
 > **environment > workflow-level config > module-level config > defaults**
 
-For **Docker / `runtime.*` keys**, the same idea applies (environment overrides in-file), but these are resolved by the `jaiph run` CLI at launch time. They cannot appear in workflow-level `config` blocks. See [Runtime keys](#runtime-keys-docker-sandbox--beta).
+For **`runtime.*` (image, network, timeout)**, the CLI merges at **`jaiph run` launch** — not inside `NodeWorkflowRuntime` — in the order **`JAIPH_DOCKER_*` environment > in-file `runtime.*` > defaults** (and separately: Docker on/off is env-only, see above and [Precedence in detail](#precedence-in-detail)). `runtime.*` cannot appear in workflow-level `config` blocks.
 
 ## In-file config blocks
 
 ### Module-level config
 
-Place a `config { ... }` block in the **entry** workflow file (the path passed to `jaiph run`). It is optional and applies to every workflow in that file unless a workflow provides its own overrides.
+Each `*.jh` file may have **at most one** module-level `config { ... }` block. It is optional. Settings apply to all workflows in **that** file, unless a workflow has its own block.
+
+**`jaiph run`:** the CLI reads **only the entry file’s** module `config` when it builds the initial process environment via `resolveRuntimeEnv` (before spawning the workflow runner or Docker). Imported modules’ module-level `config` is not merged into that first env snapshot — but the runtime still applies per-module and workflow `config` from the [import graph](architecture.md#summary) when you enter a workflow, run a nested `run` in the same module, or `ensure` a rule (see [Scoping across nested calls](#scoping-across-nested-calls)). **Cross-module** `run` and **same-module** `ensure` are special cases, explained there.
 
 ```jh
 config {
@@ -55,7 +59,7 @@ workflow default() {
 
 **Syntax rules:**
 
-- The opening line must be exactly `config {` (optional whitespace around tokens, nothing else).
+- The opening line is `config` and `{` with only optional whitespace between them (and nothing else on that line before `{`).
 - One module-level config block per file. A duplicate causes `E_PARSE`: `duplicate config block (only one allowed per file)`.
 - May appear at any position among top-level constructs; convention is near the top.
 - Unknown keys cause `E_PARSE` and list the allowed keys. Wrong value types also cause `E_PARSE`.
@@ -68,6 +72,12 @@ A `config { ... }` block inside a `workflow { ... }` body overrides module-level
 config {
   agent.backend = "cursor"
   agent.default_model = "gpt-3.5"
+}
+
+script noop = `true`
+
+rule some_rule() {
+  run noop()
 }
 
 workflow fast_check() {
@@ -162,7 +172,7 @@ These configure Docker sandboxing. Unlike agent and run keys, runtime keys are r
 |-----|------|---------|--------------|-------------|
 | `runtime.docker_image` | string | `ghcr.io/jaiphlang/jaiph-runtime:<version>` | `JAIPH_DOCKER_IMAGE` | Image name. Must already contain `jaiph`. When unset, uses the official GHCR image tag matching the installed jaiph version. For a custom image, build and push (or tag locally), then set this key or `JAIPH_DOCKER_IMAGE`. |
 | `runtime.docker_network` | string | `default` | `JAIPH_DOCKER_NETWORK` | Docker network mode. |
-| `runtime.docker_timeout` | integer | `300` | `JAIPH_DOCKER_TIMEOUT` | Timeout in seconds. Invalid or unparsable values fall back to the default. |
+| `runtime.docker_timeout_seconds` | integer | `300` | `JAIPH_DOCKER_TIMEOUT` | Timeout in seconds. Use `0` to disable. An invalid or negative **environment** value aborts the run with `E_DOCKER_TIMEOUT` (no silent fallback). In-file must be a non-negative integer. |
 
 ## Precedence in detail
 
@@ -175,7 +185,7 @@ For **agent and run keys**, resolution order (highest wins):
 3. **Module-level `config`** — applies to workflows that don't define their own block.
 4. **Built-in defaults.**
 
-For **Docker enablement**, the `jaiph run` driver uses **`JAIPH_DOCKER_ENABLED` env > unsafe default rule** (env only; `runtime.docker_enabled` is no longer supported). The default rule enables Docker unless `JAIPH_UNSAFE=true` is set; `CI=true` no longer disables Docker (see [Sandboxing -- Enabling Docker](sandboxing.md#enabling-docker)). For other `runtime.*` keys (image, network, timeout), the merge is **`JAIPH_DOCKER_*` env > module-level `runtime.*` > defaults**. Workflow-level config cannot set runtime keys.
+For **Docker enablement**, the `jaiph run` driver uses **`JAIPH_DOCKER_ENABLED` env > unsafe default rule** (env only; `runtime.docker_enabled` is no longer supported). The default rule enables Docker unless `JAIPH_UNSAFE=true` is set; `CI=true` no longer disables Docker (see [Sandboxing — Enabling Docker](sandboxing.md#enabling-docker)). For other `runtime.*` keys (image, network, timeout), the merge is **`JAIPH_DOCKER_*` env > module-level `runtime.*` > defaults**. Workflow-level config cannot set runtime keys.
 
 ### Locked variables
 
@@ -275,10 +285,10 @@ The codex backend streams responses from the OpenAI API and supports structured 
 When a `prompt` step runs, Jaiph resolves the effective model using this order:
 
 1. **Explicit model** — `agent.default_model` / `JAIPH_AGENT_MODEL` is set and non-empty → use it.
-2. **Flags model** — `--model <name>` is found inside the backend-specific flags (`agent.cursor_flags` or `agent.claude_flags`) → use it.
-3. **Backend default** — no model specified anywhere → the backend CLI auto-selects its own default model.
+2. **Flags model** — for **cursor** and **claude**, `--model <name>` is found inside the corresponding flags (`agent.cursor_flags` or `agent.claude_flags`) → use it. **Codex** has no flag channel for the model; only step 1 or 3 apply.
+3. **Backend default** — **cursor** and **claude** use each CLI’s default when nothing else picks a model. **Codex** defaults to `gpt-4o` in code when no explicit model is set (see [Codex setup](#codex-setup)).
 
-`agent.default_model` works for **both** backends. For the Claude backend, when `agent.default_model` is set and `agent.claude_flags` does not already contain `--model`, Jaiph passes `--model <value>` to the Claude CLI automatically. If both are set, the value in `agent.claude_flags` takes precedence (it is appended last).
+`agent.default_model` applies to **cursor**, **claude**, and **codex**. For the **Claude** backend, when `agent.default_model` is set and `agent.claude_flags` does not already contain `--model`, Jaiph passes `--model <value>` to the Claude CLI automatically. If both are set, the value in `agent.claude_flags` takes precedence (it is appended last).
 
 **Diagnostics.** Every prompt step records the resolved model in `PROMPT_START` and `PROMPT_END` events in `run_summary.jsonl`:
 
@@ -292,9 +302,9 @@ The `model_reason` field is one of: `explicit` (from `agent.default_model`), `fl
 
 ## Testing with `jaiph test`
 
-The test harness does **not** call `resolveRuntimeEnv` — it constructs a minimal env (`process.env` plus `JAIPH_TEST_MODE`, `JAIPH_WORKSPACE`, `JAIPH_RUNS_DIR`, `JAIPH_SCRIPTS`, and mock variables). CLI-side defaults and lock flags are not available in tests.
+`jaiph test` never calls `resolveRuntimeEnv`. For a `test_run_workflow` step, the test runner builds a child `env` by **spreading `process.env`**, then sets `JAIPH_TEST_MODE`, `JAIPH_WORKSPACE`, `JAIPH_RUNS_DIR` (an ephemeral test path), `JAIPH_SCRIPTS`, and mock fields (`JAIPH_MOCK_RESPONSES_FILE` and/or `JAIPH_MOCK_DISPATCH_SCRIPT`) as needed. There is no CLI pass that pre-merges in-file `config` into that env; **`JAIPH_*_LOCKED` flags are not set** unless you export them in the parent environment yourself.
 
-When a `test_run_workflow` step runs, `NodeWorkflowRuntime` still applies module and workflow metadata via `applyMetadataScope` (same merge rules for non-locked keys). For predictable agent settings in tests, set `JAIPH_AGENT_*` / `JAIPH_RUNS_DIR` / etc. in the environment, or use `config` in the module that defines the workflow under test.
+`NodeWorkflowRuntime` still layers module- and workflow-level in-file `config` with `applyMetadataScope` (same `*_LOCKED` rules: metadata wins only when the key is not locked in the current env). To pin agent settings in CI, set `JAIPH_AGENT_*` / `JAIPH_RUNS_DIR` / `JAIPH_DEBUG` in the environment, and/or keep `config` in the `.jh` module that defines the workflow you exercise. Note: `jaiph run`’s `resolveRuntimeEnv` resolves `agent.trusted_workspace` to an absolute path against the workspace; **metadata-only** merging uses the in-file string as given — for tests, a relative `agent.trusted_workspace` may end up in `JAIPH_AGENT_TRUSTED_WORKSPACE` as-is, so set an absolute path in env or config if you need parity with a normal run.
 
 ## Config-to-env mapping
 
@@ -314,7 +324,7 @@ Quick reference for all in-file keys and their environment variable equivalents:
 | `run.recover_limit` | _(no env override)_ |
 | `runtime.docker_image` | `JAIPH_DOCKER_IMAGE` |
 | `runtime.docker_network` | `JAIPH_DOCKER_NETWORK` |
-| `runtime.docker_timeout` | `JAIPH_DOCKER_TIMEOUT` |
+| `runtime.docker_timeout_seconds` | `JAIPH_DOCKER_TIMEOUT` |
 | `module.name` | _(no env override)_ |
 | `module.version` | _(no env override)_ |
 | `module.description` | _(no env override)_ |

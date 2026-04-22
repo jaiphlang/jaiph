@@ -6,6 +6,7 @@ import { findClosingBraceIndex, splitStatementsOnSemicolons } from "./statement-
 const REJECTED_KEYS: Record<string, string> = {
   "runtime.workspace": "runtime.workspace is no longer supported; the workspace is mounted automatically",
   "runtime.docker_enabled": "runtime.docker_enabled is no longer supported; set JAIPH_DOCKER_ENABLED or JAIPH_UNSAFE in the environment",
+  "runtime.docker_timeout": "runtime.docker_timeout was renamed to runtime.docker_timeout_seconds",
 };
 
 const ALLOWED_KEYS = new Set([
@@ -21,7 +22,7 @@ const ALLOWED_KEYS = new Set([
   "run.recover_limit",
   "runtime.docker_image",
   "runtime.docker_network",
-  "runtime.docker_timeout",
+  "runtime.docker_timeout_seconds",
   "module.name",
   "module.version",
   "module.description",
@@ -41,7 +42,7 @@ const KEY_TYPES: Record<string, "string" | "boolean" | "number" | "string[]"> = 
   "run.recover_limit": "number",
   "runtime.docker_image": "string",
   "runtime.docker_network": "string",
-  "runtime.docker_timeout": "number",
+  "runtime.docker_timeout_seconds": "number",
   "module.name": "string",
   "module.version": "string",
   "module.description": "string",
@@ -222,11 +223,11 @@ function assignConfigKey(
       out.runtime = {};
     }
     out.runtime.dockerNetwork = value as string;
-  } else if (key === "runtime.docker_timeout") {
+  } else if (key === "runtime.docker_timeout_seconds") {
     if (!out.runtime) {
       out.runtime = {};
     }
-    out.runtime.dockerTimeout = value as number;
+    out.runtime.dockerTimeoutSeconds = value as number;
   } else if (key === "module.name") {
     if (!out.module) {
       out.module = {};

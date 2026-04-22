@@ -12,7 +12,7 @@ export interface DockerRunConfig {
   /** True when image was explicitly set via env or in-file config (not the default). */
   imageExplicit: boolean;
   network: string;
-  timeout: number;
+  timeoutSeconds: number;
 }
 
 /**
@@ -73,7 +73,7 @@ const DEFAULTS: DockerRunConfig = {
   image: `${GHCR_IMAGE_REPO}:${resolveDefaultImageTag()}`,
   imageExplicit: false,
   network: "default",
-  timeout: 300,
+  timeoutSeconds: 300,
 };
 
 /**
@@ -113,7 +113,7 @@ export function resolveDockerConfig(
     DEFAULTS.network;
 
   // timeout: env > in-file > default
-  let timeout: number;
+  let timeoutSeconds: number;
   if (env.JAIPH_DOCKER_TIMEOUT !== undefined) {
     const raw = env.JAIPH_DOCKER_TIMEOUT;
     if (!/^\d+$/.test(raw)) {
@@ -121,17 +121,17 @@ export function resolveDockerConfig(
         `E_DOCKER_TIMEOUT JAIPH_DOCKER_TIMEOUT must be a non-negative integer (or 0 to disable), got "${raw}"`,
       );
     }
-    timeout = parseInt(raw, 10);
+    timeoutSeconds = parseInt(raw, 10);
   } else {
-    timeout = inFile?.dockerTimeout ?? DEFAULTS.timeout;
-    if (timeout < 0) {
+    timeoutSeconds = inFile?.dockerTimeoutSeconds ?? DEFAULTS.timeoutSeconds;
+    if (timeoutSeconds < 0) {
       throw new Error(
-        `E_DOCKER_TIMEOUT runtime.docker_timeout must be a non-negative integer (or 0 to disable), got "${timeout}"`,
+        `E_DOCKER_TIMEOUT runtime.docker_timeout_seconds must be a non-negative integer (or 0 to disable), got "${timeoutSeconds}"`,
       );
     }
   }
 
-  return { enabled, image, imageExplicit, network, timeout };
+  return { enabled, image, imageExplicit, network, timeoutSeconds };
 }
 
 // ---------------------------------------------------------------------------
@@ -748,7 +748,7 @@ export function spawnDockerProcess(opts: DockerSpawnOptions): DockerSpawnResult 
   });
 
   let timeoutTimer: NodeJS.Timeout | undefined;
-  if (opts.config.timeout > 0) {
+  if (opts.config.timeoutSeconds > 0) {
     timeoutTimer = setTimeout(() => {
       try {
         child.kill("SIGTERM");
@@ -762,7 +762,7 @@ export function spawnDockerProcess(opts: DockerSpawnOptions): DockerSpawnResult 
           // no-op
         }
       }, 5000);
-    }, opts.config.timeout * 1000);
+    }, opts.config.timeoutSeconds * 1000);
   }
 
   return {

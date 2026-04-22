@@ -36,14 +36,26 @@ test("parseConfigBlock: rejects runtime.docker_enabled with E_PARSE", () => {
   );
 });
 
-test("parseConfigBlock: parses integer values", () => {
+test("parseConfigBlock: rejects renamed runtime.docker_timeout key with guidance", () => {
   const lines = [
     "config {",
     "  runtime.docker_timeout = 300",
     "}",
   ];
+  assert.throws(
+    () => parseConfigBlock("test.jh", lines, 0),
+    /runtime\.docker_timeout was renamed to runtime\.docker_timeout_seconds/,
+  );
+});
+
+test("parseConfigBlock: parses integer values", () => {
+  const lines = [
+    "config {",
+    "  runtime.docker_timeout_seconds = 300",
+    "}",
+  ];
   const { metadata } = parseConfigBlock("test.jh", lines, 0);
-  assert.equal(metadata.runtime?.dockerTimeout, 300);
+  assert.equal(metadata.runtime?.dockerTimeoutSeconds, 300);
 });
 
 test("parseConfigBlock: rejects runtime.workspace with E_PARSE", () => {
@@ -364,7 +376,7 @@ test("workflow config: rejects runtime.* keys", () => {
   const src = [
     "workflow default() {",
     "  config {",
-    "    runtime.docker_timeout = 300",
+    "    runtime.docker_timeout_seconds = 300",
     "  }",
     "}",
   ].join("\n");

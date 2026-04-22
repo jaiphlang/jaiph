@@ -7,7 +7,7 @@ redirect_from:
 
 # Contributing to Jaiph
 
-Open-source projects depend on clear repo conventions: how to build, test, and propose changes. **This page is that map for Jaiph** — branches, installing from a clone, code philosophy, **test strategy** (layers, TypeScript layout, E2E philosophy, bash harness), and CI. It does **not** teach the language; for that, use [Getting Started](getting-started.md) (documentation map), [Setup](setup.md) (install and workspace), and [Grammar](grammar.md). For **how the implementation is structured** (components, build pipeline, runtime contracts, artifact paths on disk), see [Architecture](architecture).
+A shared workflow needs shared expectations: which branch to target, how to build from a clone, and what evidence a change should carry. **This page is that contract for Jaiph** — branching, local install, code and testing philosophy, the layered test stack (TypeScript, txtar, goldens, bash E2E), and what CI enforces. It does **not** teach the language; for that, use [Getting Started](getting-started.md) (documentation map), [Setup](setup.md) (install and workspace), and [Grammar](grammar.md). For **how the implementation is structured** (components, compile and run pipelines, `buildRuntimeGraph` vs validation, runtime contracts, artifact paths), use [Architecture](architecture.md) as the source of truth.
 
 ## Branching and pull requests
 
@@ -48,7 +48,7 @@ For day-to-day work on the compiler and CLI you usually stay inside the clone: i
 | `npm install` | Installs TypeScript and types (dev dependencies). |
 | `npm run build` | Runs `tsc`, then copies **`src/runtime`** → **`dist/src/runtime`** (kernel JS for the compiled CLI) and **`runtime/overlay-run.sh`** → **`dist/src/runtime/overlay-run.sh`** (Docker overlay entrypoint). |
 | `npm run build:standalone` | `npm run build`, then copies **`dist/src/runtime`** → **`dist/runtime`** and runs **`bun build --compile`** on `src/cli.ts` → **`dist/jaiph`**. Requires [Bun](https://bun.sh). Ship the **`dist/`** tree (binary plus the runtime directory) for a self-contained layout. |
-| `npm test` | **`npm run clean`**, then **`npm run build`**, then the Node.js test runner with **`NODE_OPTIONS`** including **`--enable-source-maps`** (and a large heap limit) on `dist/test/*.test.js`, every file under `dist/src/` matching `*.test.js` or `*.acceptance.test.js` (via `find`), `dist/src/compiler-test-runner.js` (txtar compiler tests), and `dist/src/golden-ast-runner.js` (golden AST tests). |
+| `npm test` | **`npm run clean`**, then **`npm run build`**, then the Node.js test runner with **`JAIPH_UNSAFE=true`**, **`NODE_OPTIONS`** including **`--enable-source-maps`** and a large heap limit, on `dist/test/*.test.js`, every file under `dist/src/` matching `*.test.js` or `*.acceptance.test.js` (via `find`), `dist/src/compiler-test-runner.js` (txtar compiler tests), and `dist/src/golden-ast-runner.js` (golden AST tests). |
 | `npm run test:compiler` | **`npm run build`**, then **`node --test`** on `dist/src/compiler-test-runner.js` — runs txtar-based compiler test fixtures from `compiler-tests/`. |
 | `npm run test:golden-ast` | **`npm run build`**, then **`node --test`** on `dist/src/golden-ast-runner.js` — runs golden AST tests from `golden-ast/`. Use `UPDATE_GOLDEN=1 npm run test:golden-ast` to regenerate goldens after intentional parser changes. |
 | `npm run test:acceptance:compiler` | **`npm run build`**, then **`node --test`** on only `dist/src/**/*.acceptance.test.js` — compiler acceptance tests without the full unit suite or E2E. |
@@ -98,18 +98,19 @@ Jaiph uses several test layers. Each layer catches a different class of bug. Use
 | **Module tests** | `src/**/*.test.ts` (colocated) | Bugs in pure functions (event parsing, param formatting, path resolution, config merging) | The function is self-contained, takes input and returns output, no I/O |
 | **Compiler acceptance tests** | `src/transpile/*.acceptance.test.ts` (colocated) | Cross-module compiler behavior: validation errors, resolution, and other cases that need a temp project tree or subprocess | You need a deterministic error string, multi-file `buildScripts`, or behavior that does not fit a tiny golden snippet |
 | **Compiler golden tests** | `src/transpile/compiler-golden.test.ts` (colocated) | Regressions in the parser, validation messages, and scripts-only extraction (`buildScriptFiles` in `emit-script.ts`) — expectations are inline in the test file | You changed the parser, validator, or script extraction and need to lock an exact error string, extracted script shape, or corpus behavior |
-| **Compiler tests (txtar)** | `compiler-tests/*.txt` | Parse and validate outcomes — success, parse errors, validation errors — using language-agnostic txtar fixtures (200 cases across 4 fixture files) | You want a portable test case that can be reused by alternative compiler implementations; the test is a `.jh` input paired with an expected outcome |
-| **Golden AST tests** | `golden-ast/fixtures/*.jh` + `golden-ast/expected/*.json` | Parse tree shape for successful parses — serialized to deterministic JSON with locations stripped (8 fixtures covering catch, imports, log, match, params, prompt-capture, run-ensure, script-defs) | You changed the parser and need to verify the AST structure hasn't drifted; txtar tests only check pass/fail, goldens lock in the actual tree shape |
+| **Compiler tests (txtar)** | `compiler-tests/*.txt` | Parse and validate outcomes — success, parse errors, validation errors — using language-agnostic txtar fixtures (hundreds of `===` cases across the four `*.txt` files) | You want a portable test case that can be reused by alternative compiler implementations; the test is a `.jh` input paired with an expected outcome |
+| **Golden AST tests** | `golden-ast/fixtures/*.jh` + `golden-ast/expected/*.json` | Parse tree shape for successful parses — serialized to deterministic JSON with locations stripped (9 fixtures: e.g. imports, brace-if, log, match and match-multiline, params, prompt-capture, run-ensure, script-defs) | You changed the parser and need to verify the AST structure hasn't drifted; txtar tests only check pass/fail, goldens lock in the actual tree shape |
 | **Cross-cutting tests** | `test/*.test.ts` | Process-level integration behavior: signal handling, TTY rendering, run summary structure, sample builds | The test spans multiple modules or requires subprocess/PTY harnesses |
 | **E2E tests** | `e2e/tests/*.sh` | Runtime behavior — does the workflow actually execute correctly end-to-end? | The behavior involves the CLI launcher, Node runtime, process lifecycle, or file artifacts |
 
 ### Key principles
 
-1. **Tests are behavior contracts.** E2E tests and acceptance tests define what the product does. Default approach: change production code to satisfy tests, not the other way around.
-2. **Modify existing tests only with a strong reason:** intentional product behavior change, incorrect test expectation, or removal of an obsolete feature. Any such change should be minimal and paired with a clear rationale.
-3. **Golden tests are the compiler's safety net.** After transpiler changes, run `npm test`. Failures in `src/transpile/compiler-golden.test.ts` usually mean updating an explicit expected string or fixture in that file — there is no separate dump script; align expectations with intentional emitter changes and re-run `npm test`. **Golden AST tests** (`golden-ast/`) complement this by locking in the parse tree shape — if those fail, regenerate with `UPDATE_GOLDEN=1 npm run test:golden-ast` and review the diff.
-4. **E2E tests assert two things independently:** what the user sees (CLI tree output via `e2e::expect_stdout`) and what the runtime persists (artifact files via `e2e::expect_out`, `e2e::expect_file`). A bug could break one without the other.
-5. **Prefer the narrowest test layer.** A pure function bug should be caught by a unit test, not an E2E test. E2E tests are expensive to run and hard to debug — reserve them for integration-level behavior.
+1. **Compile-time validation vs graph loading.** `buildScripts` / `emitScriptsForModule` run **`validateReferences`** before any script files are written. **`buildRuntimeGraph()`** only parses modules and follows imports — it does **not** re-run that validation. Lock compile errors in the compiler/validator tests; the runtime graph is the wrong layer for that (see [Architecture — Transpiler / Node workflow runtime](architecture.md#core-components)).
+2. **Tests are behavior contracts.** E2E tests and acceptance tests define what the product does. Default approach: change production code to satisfy tests, not the other way around.
+3. **Modify existing tests only with a strong reason:** intentional product behavior change, incorrect test expectation, or removal of an obsolete feature. Any such change should be minimal and paired with a clear rationale.
+4. **Golden tests are the compiler's safety net.** After transpiler changes, run `npm test`. Failures in `src/transpile/compiler-golden.test.ts` usually mean updating an explicit expected string or fixture in that file — there is no separate dump script; align expectations with intentional emitter changes and re-run `npm test`. **Golden AST tests** (`golden-ast/`) complement this by locking in the parse tree shape — if those fail, regenerate with `UPDATE_GOLDEN=1 npm run test:golden-ast` and review the diff.
+5. **E2E tests assert two things independently:** what the user sees (CLI tree output via `e2e::expect_stdout`) and what the runtime persists (artifact files via `e2e::expect_out`, `e2e::expect_file`). A bug could break one without the other.
+6. **Prefer the narrowest test layer.** A pure function bug should be caught by a unit test, not an E2E test. E2E tests are expensive to run and hard to debug — reserve them for integration-level behavior.
 
 ### TypeScript test layout
 
@@ -126,47 +127,18 @@ Module tests live next to the source files they validate, inside the same `src/`
 find src -type f \( -name '*.test.ts' -o -name '*.acceptance.test.ts' \) | sort
 ```
 
-The table below is the inventory as of this writing; after large refactors, prefer the `find` command above over assuming this list is exhaustive.
+**Grouping (use the `find` output as authoritative after refactors):**
 
-| Test file | Source / focus |
-|-----------|----------------|
-| `src/cli/commands/format-params-display.test.ts` | `format-params.ts` — parameter display helpers |
-| `src/cli/run/display.test.ts` | `display.ts` — `colorize`, progress line formatting |
-| `src/cli/run/events.test.ts` | `events.ts` — `parseLogEvent`, `parseStepEvent` for `__JAIPH_EVENT__` JSON lines |
-| `src/cli/run/hooks.test.ts` | `hooks.ts` — hook discovery, merge, `runHooksForEvent` |
-| `src/cli/run/lifecycle.test.ts` | `lifecycle.ts` — `waitForRunExit` and child exit handling |
-| `src/cli/run/non-tty-heartbeat.test.ts` | Non-TTY runs — long-step heartbeat line shape |
-| `src/cli/run/resolve-env.test.ts` | `env.ts` — workspace resolution, config defaults, env precedence |
-| `src/cli/run/stderr-handler.test.ts` | `stderr-handler.ts` — TTY subscriber / stderr routing |
-| `src/cli/shared/errors.test.ts` | `errors.ts` — `summarizeError`, failure metadata |
-| `src/cli/shared/paths.test.ts` | `paths.ts` — `detectWorkspaceRoot` |
-| `src/parse/parse-core.test.ts` | `core.ts` — low-level parse helpers (`stripQuotes`, `isRef`, brace depth, `fail`, …) |
-| `src/parse/parse-definitions.test.ts` | Parser — invalid `rule` / `script` / `workflow` declarations and fix hints |
-| `src/parse/parse-env.test.ts` | `env.ts` — env declaration parsing |
-| `src/parse/parse-imports.test.ts` | `imports.ts` — import lines, aliases, errors |
-| `src/parse/parse-metadata.test.ts` | `metadata.ts` — config block parsing |
-| `src/parse/parse-run-async.test.ts` | Parser — `run async` workflow steps |
-| `src/runtime/docker.test.ts` | `docker.ts` — mounts, `buildDockerArgs` |
-| `src/runtime/kernel/emit.test.ts` | `emit.ts` — `__JAIPH_EVENT__` JSON and `run_summary.jsonl` append |
-| `src/runtime/kernel/graph.test.ts` | `graph.ts` — `buildRuntimeGraph`, symbol lookup |
-| `src/runtime/kernel/mock.test.ts` | `mock.ts` — test-mode mock dispatch |
-| `src/runtime/kernel/node-test-runner.test.ts` | `node-test-runner.ts` — e.g. `buildRuntimeGraph` once per test file (see [Testing](testing.md)) |
-| `src/runtime/kernel/node-workflow-runtime.artifacts.test.ts` | `node-workflow-runtime.ts` — step `.out` / artifact behavior with mocked prompt |
-| `src/runtime/kernel/prompt.test.ts` | `prompt.ts` — kernel prompt execution and mocks |
-| `src/runtime/kernel/schema.test.ts` | `schema.ts` — prompt schema validation |
-| `src/runtime/kernel/seq-alloc.test.ts` | `seq-alloc.ts` — `.seq` atomic allocation |
-| `src/runtime/kernel/stream-parser.test.ts` | `stream-parser.ts` — streaming JSON from agents |
-| `src/runtime/kernel/workflow-launch.test.ts` | `workflow-launch.ts` — `buildRunModuleLaunch` argv (Node runner) |
-| `src/transpile/compiler-edge.acceptance.test.ts` | Cross-module — validation, resolution, multi-file builds |
-| `src/transpile/compiler-golden.test.ts` | `transpiler.ts`, `emit-script.ts`, parser — golden cases and corpus |
-| `src/transpile/emit-script.test.ts` | `emit-script.ts` — `normalizeShellLocalExport`, `resolveShellRefs` |
-| `src/transpile/validate-managed-calls.test.ts` | `validate.ts` — `E_VALIDATE` (e.g. disallowed constructs) |
-| `src/transpile/validate-run-async.test.ts` | Validation — `run async` restrictions |
-| `src/transpile/validate-string.test.ts` | `validate-string.ts` / `buildScripts` — string interpolation and related errors |
+| Area | Typical location | What it usually covers |
+|------|------------------|------------------------|
+| Parser and tokenizer helpers | `src/parse/*.test.ts`, `src/parse/dedent.test.ts` | `.jh` / `.test.jh` surface: imports, config, steps, strings, channels, fences, `run async`, … |
+| CLI and terminal UX | `src/cli/**/*.test.ts` | Commands, `jaiph run` lifecycle, progress, hooks, `resolve-env` |
+| Transpiler and validation | `src/transpile/*.test.ts` + `*.acceptance.test.ts` | `validateReferences`, `emit`, golden compiler (`compiler-golden.test.ts`), cross-module edge cases (`compiler-edge.acceptance.test.ts`) |
+| Formatter | `src/format/*.test.ts` | `jaiph format` |
+| Runtime and Docker | `src/runtime/kernel/*.test.ts`, `src/runtime/docker.test.ts` | Graph, emit, prompts, test runner, workflow launch, `docker` helper |
+| Standalone root tests | e.g. `src/inline-script-name.test.ts` | Small colocated cases that are not under a feature subtree |
 
-When adding a new source module or extending an existing one, create or extend the corresponding `*.test.ts` file in the same directory. This keeps tests discoverable — given a source file, the test file is always a sibling.
-
-For details on kernel module internals (`emit.ts`, `seq-alloc.ts`, `run-step-exec.ts`, `node-test-runner.ts`), the compile pipeline, and validation contracts, see [Architecture](architecture).
+When adding a new source module or extending an existing one, create or extend the corresponding `*.test.ts` in the same directory. For kernel internals, the compile path, and artifact contracts, see [Architecture](architecture.md).
 
 ### Cross-cutting tests in `test/`
 
@@ -183,15 +155,16 @@ Shared test data (`test/fixtures/`, `test/expected/`) also remains in `test/`.
 
 ## CI pipeline
 
-The project uses GitHub Actions (`.github/workflows/ci.yml`). Every push triggers five jobs:
+The project uses GitHub Actions (`.github/workflows/ci.yml`). The workflow defines **six** jobs; on a typical feature-branch push, **five** of them run. The sixth — **Publish Docker runtime image** — runs only on pushes to **`nightly`** and on **`v*`** version tags, after the other jobs succeed. It builds and pushes `ghcr.io/jaiphlang/jaiph-runtime` (the default `runtime.docker_image` / `JAIPH_DOCKER_IMAGE` when Docker sandboxing is on; see **Docker runtime helper** in [Architecture](architecture.md#core-components)).
 
 | Job | Runner | Purpose |
 |-----|--------|---------|
 | **ShellCheck** | `ubuntu-latest` | Runs `shellcheck` on `runtime/overlay-run.sh` to lint the standalone shell script shipped in the npm package. |
 | **Compiler and unit tests** | `ubuntu-latest` | `npm test` (TypeScript unit + acceptance + golden tests), plus a `curl` check that the public install URL responds and a git-tag verification on `main`. |
-| **E2E install and CLI workflow** | Matrix: **`ubuntu-latest` twice** + **`macos-latest`** | `npm run test:e2e` — full build-and-run E2E suite. **Ubuntu — docker:** `JAIPH_UNSAFE` unset (default Docker sandbox, pulls `ghcr.io/jaiphlang/jaiph-runtime`). **Ubuntu — host:** `JAIPH_UNSAFE=true` (host execution, no Docker). **macOS — host:** `JAIPH_UNSAFE=true` (macOS runners are not used for the Docker path). |
-| **Getting started (local)** | `ubuntu-latest` | Builds and serves the Jekyll documentation site locally (`bundle exec jekyll serve` on `127.0.0.1:4000`), waits for it to respond, smoke-checks key pages with `curl`, then runs the **Playwright landing-page sample verification** (`npx playwright test`). The Playwright step builds Jaiph, extracts sample source and expected output from the served HTML, verifies source parity with `examples/*.jh`, and runs deterministic samples through the CLI. No dependency on `jaiph.org`. |
-| **E2E install and CLI workflow (windows-latest + wsl)** | `windows-latest` | Detects an available WSL distro, installs Node inside it, and runs `npm run test:e2e` under WSL with **`JAIPH_UNSAFE=true`** (host-only, matching the previous default). Skipped when no distro is present on the runner image. |
+| **E2E install and CLI workflow** | Matrix: **`ubuntu-latest` twice** + **`macos-latest`** | `npm run test:e2e` — full build-and-run E2E suite. In **CI**, the **docker** matrix leg builds `jaiph-ci-runtime:local` from `runtime/Dockerfile` and sets **`JAIPH_DOCKER_IMAGE`** so the job does not pull the public GHCR image during the run. **Ubuntu — docker:** `JAIPH_UNSAFE` unset (container sandbox). **Ubuntu / macOS — host:** `JAIPH_UNSAFE=true` (no Docker; macOS does not run the docker leg). On a **developer machine**, with `JAIPH_UNSAFE` unset, the CLI still resolves the default image (typically `ghcr.io/jaiphlang/jaiph-runtime`) for Docker-backed runs — see `src/runtime/docker.ts` and [Architecture](architecture.md). |
+| **Getting started (local)** | `ubuntu-latest` | Serves the Jekyll site from `docs/` on `127.0.0.1:4000`, smoke-checks key routes with `curl`, builds the same local runtime image as E2E for any Docker-backed sample paths, installs Playwright (Chromium), and runs `npx playwright test` for landing-page samples. The Playwright step builds Jaiph, checks sample source against `examples/*.jh`, and runs deterministic samples through the CLI. No runtime dependency on `jaiph.org` for the site content. |
+| **E2E install and CLI workflow (windows-latest + wsl)** | `windows-latest` | Provisions or selects a WSL distro, installs Node inside it, and runs `npm run test:e2e` under WSL with **`JAIPH_UNSAFE=true`**. |
+| **Publish Docker runtime image** | `ubuntu-latest` | *Conditional (see above).* Multi-arch push to GHCR. |
 
 ### npm publish on tag (trusted publishing)
 
@@ -199,7 +172,7 @@ Pushing a version tag (`v*`) triggers `.github/workflows/release.yml`, which pub
 
 ### Local docs site (Jekyll)
 
-The **Getting started (local)** CI job validates that the documentation site under `docs/` can be built and served from source. It uses Ruby 3.2 with `bundler-cache`, runs `bundle exec jekyll serve --host 127.0.0.1 --port 4000` in the background, and polls `http://127.0.0.1:4000/` for up to 30 seconds before asserting HTTP 200 on `/`, `/getting-started`, `/setup`, `/libraries`, and `/artifacts`.
+The **Getting started (local)** CI job validates that the documentation site under `docs/` can be built and served from source. It uses Ruby 3.2 with `bundler-cache`, runs `bundle exec jekyll serve --host 127.0.0.1 --port 4000` in the background, and polls `http://127.0.0.1:4000/` for up to 30 seconds before asserting HTTP 200 on `/`, `/getting-started`, `/setup`, `/libraries`, and `/artifacts`. The same job also prepares Node, a local `jaiph-ci-runtime:local` image, Playwright Chromium, and (for samples that need them) external CLIs — see the `docs-local` job in `.github/workflows/ci.yml` for the exact package list, which can change.
 
 To run the same check locally:
 
@@ -253,9 +226,9 @@ E2E tests are the outermost **behavior contracts** for the CLI and runtime. Each
 - **Unbounded or variable-length logs** — e.g. `run_summary.jsonl` with platform-dependent event counts, or live step output where line count varies.
 - **Platform-dependent text** — e.g. OS-specific error messages, paths that differ across CI environments.
 
-**Normalization:** `e2e::normalize_output` (in `e2e/lib/common.sh`) strips ANSI codes and replaces timing values with `<time>`, agent commands with `<agent-command>`, and script paths with `<script-path>`. This keeps full-equality heredocs stable across machines.
+**Normalization:** `e2e::normalize_output` (in `e2e/lib/common.sh`) strips ANSI codes, replaces timing values with `<time>`, normalizes some CLI-specific strings (`<agent-command>`, `<script-path>`), and **sorts** a class of async progress lines (UTF-8 subscript markers) so strict equality stays stable when parallel branches finish in different orders. This keeps full-equality heredocs usable across machines.
 
-**Where files land on disk** (directory tree, sequence prefixes): [Architecture — Durable artifact layout](architecture#durable-artifact-layout). Runtime testing with `*.test.jh` is covered in [Testing](testing.md). The `run_summary.jsonl` event contract is exercised in `e2e/tests/88_run_summary_event_contract.sh`.
+**Where files land on disk** (directory tree, sequence prefixes): [Architecture — Durable artifact layout](architecture.md#durable-artifact-layout). Runtime testing with `*.test.jh` is covered in [Testing](testing.md). The `run_summary.jsonl` event contract is exercised in `e2e/tests/88_run_summary_event_contract.sh`.
 
 ### Test structure
 
@@ -278,7 +251,7 @@ e2e::section "Feature under test"
 e2e::file "hello.jh" <<'EOF'
 script hello_impl = `echo "hello-jh"`
 workflow default() {
-  msg = run hello_impl()
+  const msg = run hello_impl()
   return "${msg}"
 }
 EOF
@@ -338,7 +311,7 @@ All helpers are defined in `e2e/lib/common.sh`.
 
 #### Run artifact assertions
 
-After a workflow runs, its step outputs are written as sequenced artifact files under `.jaiph/runs/`. These helpers verify artifact content independently from CLI display output. For the on-disk layout and naming scheme, see [Architecture — Durable artifact layout](architecture#durable-artifact-layout).
+After a workflow runs, its step outputs are written as sequenced artifact files under `.jaiph/runs/`. These helpers verify artifact content independently from CLI display output. For the on-disk layout and naming scheme, see [Architecture — Durable artifact layout](architecture.md#durable-artifact-layout).
 
 | Helper | Description |
 |--------|-------------|

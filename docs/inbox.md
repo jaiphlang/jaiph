@@ -7,16 +7,27 @@ redirect_from:
 
 # Inbox & Dispatch
 
-Multi-step automation often splits work across workflows: one stage produces a
-result, another should run only after that result exists. Instead of gluing
-stages together with temporary files and shell scripts, Jaiph provides a
-first-class **inbox** — a logical channel between workflows with no external
-message broker. One workflow **sends** a message (`<-`); another is
-**dispatched** when the orchestrator drains the queue (`->`). The runtime owns
-routing and ordering.
+## Overview
 
-The Node workflow runtime (`NodeWorkflowRuntime`) keeps an **in-memory** queue
-and route map per entered workflow. Each send also writes a durable copy to
+Pipelines often split work across **workflows** that hand off a payload: one
+stage produces output, a later stage reacts to it. A generic way to do that
+without a separate broker is an **in-module channel**: a named queue the
+runtime can drain after a caller finishes its steps, driving receiver workflows
+in order.
+
+**Jaiph’s model** is a small orchestration feature on top of that idea: a
+`channel` is declared with optional `->` routes to **workflow** targets; a send
+uses `<-` to enqueue a string payload. `NodeWorkflowRuntime` keeps the queue
+and route map in memory, writes a matching file under the run for audit, and
+**dispatches** targets when the **entry** workflow’s step list completes (plus
+any implicit `run async` join) — not when a separate `->` “fires”; the `->`
+in source code is **static routing** on the channel line, not a runtime
+operator.
+
+`NodeWorkflowRuntime` attaches an **in-memory** queue and route map to each
+**`WorkflowContext`** (one per `run`/`inbox` nesting level; channel-level
+`->` rows populate the map **only** on the entry context — see
+[Who registers routes and who drains](#who-registers-routes-and-who-drains)). Each send also writes a durable copy to
 `inbox/NNN-<channel>.txt` under the run directory for audit and reporting —
 channel transport is queue-based, not filesystem-driven. There are no directory
 watchers, no polling loops, and no third-party brokers.
@@ -54,6 +65,10 @@ channel name, and sender bound to its declared parameters `message`, `chan`, and
   `JAIPH_INBOX_PARALLEL=true` (see [Parallel dispatch](#parallel-dispatch)).
 - **Inbox is scoped per run.** Message files live under that run's **`inbox/`**
   directory; they are not a separate mailbox outside `.jaiph/runs`.
+- **Channels are compile-checked.** Unknown channels, bad route targets, and
+  invalid `send` RHS forms are `E_PARSE` / `E_VALIDATE` from
+  `validateReferences` in the build path; **`buildRuntimeGraph()`** only parses
+  modules and does not repeat that pass (see [Architecture — Summary](architecture.md#summary)).
 
 ## Syntax
 
@@ -95,11 +110,14 @@ Valid RHS forms:
 | RHS form | Example | Behavior |
 |---|---|---|
 | Double-quoted literal | `findings <- "## results"` | Interpolated string |
-| Variable expansion | `findings <- ${var}` | Value of the variable |
+| Triple-quoted block | `findings <- """line1\n  ${x}"""` | Multiline string; margin rules match other `"""` steps (see [Grammar](grammar.md#send--channel-messages)) |
+| Variable expansion | `findings <- ${var}` or `$name` | Value of the variable |
 | `run` capture | `findings <- run build_msg()` | Return value or trimmed stdout of the workflow/script |
 
-The RHS does **not** accept raw shell commands — see
-[Grammar — Managed calls vs command substitution](grammar.md#managed-calls-vs-command-substitution).
+The RHS does **not** accept raw shell commands or bare workflow/rule/script
+names (use a string, `$` / `${…}`, or `run ref(…)` — see
+[Grammar — `send`](grammar.md#send--channel-messages) and
+[Grammar — `channel` routing](grammar.md#channel-routing)).
 
 ```jh
 channel findings
@@ -115,8 +133,10 @@ The `<-` operator is only recognized when it appears outside of quoted strings
 on the surrounding line so channel names and literals are not misread as send
 syntax.
 
-Send and route parsing rules are specified in
-[Grammar — Parse and runtime semantics](grammar.md#parse-and-runtime-semantics).
+Send and route syntax, plus compile-time checks, are summarized under
+[Grammar — `send`](grammar.md#send--channel-messages) and
+[Grammar — `channel` routing](grammar.md#channel-routing); the EBNF and
+validation list live at the end of [Grammar](grammar.md#validation-rules).
 
 ### Route declaration: `channel <name> -> <workflow>`
 
@@ -130,9 +150,13 @@ Targets must be **workflows** (local or imported as `alias.name`). **Rules**
 and **scripts** are not valid route targets — the compiler uses workflow-only
 reference checks, so a bad target is **`E_VALIDATE`** with messages such as
 `unknown local workflow reference "…"`, `imported workflow "…" does not exist`,
-`rule "…" must be called with ensure`, or `script "…" cannot be called with run`.
-A name that is not a valid `alias.name` / `name` pattern fails at parse time as
-**`E_PARSE`** `invalid workflow reference in channel route: "…"`.
+`rule "…" must be called with ensure`, or `script "…" cannot be called with run`
+(see [Grammar — `channel` routing](grammar.md#channel-routing) for a short
+version of the same rules). A name that is not a valid
+`alias.name` / `name` pattern fails at parse time as **`E_PARSE`**
+`invalid workflow reference in channel route: "…"`. The wrong **parameter
+count** on a resolved workflow is
+`E_VALIDATE: inbox route target "…" must declare exactly 3 parameters (message, channel, sender), but declares N`.
 
 ```jh
 channel findings -> analyst
@@ -174,7 +198,7 @@ channel <- "${payload}"
 
 ## Inbox layout
 
-Under the run directory (see [Architecture — Durable artifact layout](architecture#durable-artifact-layout)):
+Under the run directory (see [Architecture — Durable artifact layout](architecture.md#durable-artifact-layout)):
 
 ```
 .jaiph/runs/<YYYY-MM-DD>/<HH-MM-SS>-<source-basename>/inbox/
@@ -327,8 +351,13 @@ their declared parameter names.
   from `jaiph run`, the line includes `channel`, `sender`, and
   `inbox_seq`. The full message body is always available on disk at
   `inbox/NNN-<channel>.txt`.
-- Workflows remain directly callable: `jaiph run analyst "some content" "findings" "researcher"`. When
-  called directly, the parameters are bound from CLI arguments.
+- **Calling a receiver with explicit args:** the CLI’s `jaiph run` only starts
+  the file’s `default` workflow; extra CLI arguments are passed to `default`
+  (see [CLI — `jaiph run`](cli.md#jaiph-run)). There is no `jaiph run
+  <name> <file> …` form. To hand `(message, channel, sender)` to a workflow
+  such as `analyst` outside of inbox dispatch, use a **`run` step** from another
+  workflow, e.g. `run analyst("…", "findings", "researcher")` (or
+  `test_run_workflow` in `*.test.jh`).
 
 ## Progress tree integration
 

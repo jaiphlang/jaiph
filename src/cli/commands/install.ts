@@ -19,9 +19,14 @@ function deriveLibName(url: string): string {
   return lastSegment.replace(/\.git$/, "");
 }
 
-function parseUrlAndVersion(arg: string): { url: string; version?: string } {
+/** Splits a clone URL and optional @ref. Ref after `.../.git@` is recognized for any transport (https, git@, scp). */
+export function parseUrlAndVersion(arg: string): { url: string; version?: string } {
+  const m = arg.match(/^(.+?\.git)@([A-Za-z0-9._+/-]+)$/);
+  if (m) {
+    return { url: m[1], version: m[2] };
+  }
   const atIdx = arg.lastIndexOf("@");
-  // Avoid splitting on @ in protocols like git@github.com:...
+  // Avoid splitting on @ in protocols like git@github.com:... or user:pass@host/...
   if (atIdx > 0 && !arg.slice(0, atIdx).includes("://") && !arg.slice(0, atIdx).includes(":")) {
     return { url: arg.slice(0, atIdx), version: arg.slice(atIdx + 1) };
   }
