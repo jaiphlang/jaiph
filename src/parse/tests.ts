@@ -157,9 +157,19 @@ export function parseTestBlock(
       if (arg.startsWith("'")) {
         fail(filePath, 'single-quoted strings are not supported; use double quotes ("...") instead', innerNo, innerRaw.indexOf("mock"));
       }
+      // `mock prompt <ident>` resolves the ident from a previously declared `const` in this block.
+      if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(arg)) {
+        testBlock.steps.push({
+          type: "test_mock_prompt",
+          response: "",
+          responseVar: arg,
+          loc,
+        });
+        continue;
+      }
       const isDoubleQuoted = arg.startsWith('"') && hasUnescapedClosingQuote(arg, 1);
       if (!isDoubleQuoted) {
-        fail(filePath, 'mock prompt must be: mock prompt "<response>" or mock prompt { "pattern" => "response", _ => "default" }', innerNo, innerRaw.indexOf("mock"));
+        fail(filePath, 'mock prompt must be: mock prompt "<response>", mock prompt <const_name>, or mock prompt { "pattern" => "response", _ => "default" }', innerNo, innerRaw.indexOf("mock"));
       }
       testBlock.steps.push({
         type: "test_mock_prompt",
@@ -215,6 +225,17 @@ export function parseTestBlock(
       });
       continue;
     }
+    const expectContainVarMatch = inner.match(/^expect_contain\s+([A-Za-z_][A-Za-z0-9_]*)\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/);
+    if (expectContainVarMatch) {
+      testBlock.steps.push({
+        type: "test_expect_contain",
+        variable: expectContainVarMatch[1],
+        substring: "",
+        substringVar: expectContainVarMatch[2],
+        loc,
+      });
+      continue;
+    }
 
     // --- expect_not_contain (snake_case) ---
     const expectNotContainMatch = inner.match(/^expect_not_contain\s+([A-Za-z_][A-Za-z0-9_]*)\s+"((?:[^"\\]|\\.)*)"\s*$/);
@@ -223,6 +244,17 @@ export function parseTestBlock(
         type: "test_expect_not_contain",
         variable: expectNotContainMatch[1],
         substring: expectNotContainMatch[2].replace(/\\"/g, '"').replace(/\\n/g, "\n"),
+        loc,
+      });
+      continue;
+    }
+    const expectNotContainVarMatch = inner.match(/^expect_not_contain\s+([A-Za-z_][A-Za-z0-9_]*)\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/);
+    if (expectNotContainVarMatch) {
+      testBlock.steps.push({
+        type: "test_expect_not_contain",
+        variable: expectNotContainVarMatch[1],
+        substring: "",
+        substringVar: expectNotContainVarMatch[2],
         loc,
       });
       continue;
@@ -239,6 +271,17 @@ export function parseTestBlock(
       });
       continue;
     }
+    const expectEqualVarMatch = inner.match(/^expect_equal\s+([A-Za-z_][A-Za-z0-9_]*)\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/);
+    if (expectEqualVarMatch) {
+      testBlock.steps.push({
+        type: "test_expect_equal",
+        variable: expectEqualVarMatch[1],
+        expected: "",
+        expectedVar: expectEqualVarMatch[2],
+        loc,
+      });
+      continue;
+    }
 
     // --- Reject old camelCase assertions ---
     if (/^expectContain\s/.test(inner)) {
@@ -249,6 +292,20 @@ export function parseTestBlock(
     }
     if (/^expectEqual\s/.test(inner)) {
       fail(filePath, 'camelCase assertions are no longer supported; use "expect_equal"', innerNo, col);
+    }
+
+    // --- const NAME = "literal" (test-scope string binding) ---
+    // Must come before the `const ... = run` matcher so plain literal consts win.
+    // Only double-quoted string literals are supported in v1; no interpolation.
+    const constLiteralMatch = inner.match(/^const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*"((?:[^"\\]|\\.)*)"\s*$/);
+    if (constLiteralMatch) {
+      testBlock.steps.push({
+        type: "test_const",
+        name: constLiteralMatch[1],
+        value: constLiteralMatch[2].replace(/\\"/g, '"').replace(/\\n/g, "\n").replace(/\\\\/g, "\\"),
+        loc,
+      });
+      continue;
     }
 
     // --- const capture = run ref("args") [allow_failure] ---

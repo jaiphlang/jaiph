@@ -839,8 +839,12 @@ function emitTestStep(step: TestStepDef, pad: string): string[] {
       return [`${pad}${step.text}`];
     case "blank_line":
       return [""];
+    case "test_const":
+      return [`${pad}const ${step.name} = "${step.value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n")}"`];
     case "test_mock_prompt":
-      return [`${pad}mock prompt "${step.response}"`];
+      return step.responseVar
+        ? [`${pad}mock prompt ${step.responseVar}`]
+        : [`${pad}mock prompt "${step.response}"`];
     case "test_mock_prompt_block": {
       const lines = [`${pad}mock prompt {`];
       for (const arm of step.arms) {
@@ -856,11 +860,17 @@ function emitTestStep(step: TestStepDef, pad: string): string[] {
       return [`${pad}${capture}run ${step.workflowRef}(${args})${allow}`];
     }
     case "test_expect_contain":
-      return [`${pad}expect_contain ${step.variable} "${step.substring}"`];
+      return step.substringVar
+        ? [`${pad}expect_contain ${step.variable} ${step.substringVar}`]
+        : [`${pad}expect_contain ${step.variable} "${step.substring}"`];
     case "test_expect_not_contain":
-      return [`${pad}expect_not_contain ${step.variable} "${step.substring}"`];
+      return step.substringVar
+        ? [`${pad}expect_not_contain ${step.variable} ${step.substringVar}`]
+        : [`${pad}expect_not_contain ${step.variable} "${step.substring}"`];
     case "test_expect_equal":
-      return [`${pad}expect_equal ${step.variable} "${step.expected}"`];
+      return step.expectedVar
+        ? [`${pad}expect_equal ${step.variable} ${step.expectedVar}`]
+        : [`${pad}expect_equal ${step.variable} "${step.expected}"`];
     case "test_mock_workflow": {
       const paramStr = `(${step.params.join(", ")})`;
       const lines = [`${pad}mock workflow ${step.ref}${paramStr} {`];

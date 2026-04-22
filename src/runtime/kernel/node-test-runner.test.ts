@@ -52,6 +52,95 @@ test "block B" {
   }
 });
 
+test("test runner resolves `const` bindings inside `mock prompt <ident>` and `expect_equal var <ident>`", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "jaiph-const-binding-"));
+  const scriptsDir = join(dir, "scripts");
+  mkdirSync(scriptsDir, { recursive: true });
+
+  try {
+    const testFile = join(dir, "consts.test.jh");
+    writeFileSync(
+      testFile,
+      `workflow ask() {
+  const r = prompt "say hi"
+  return r
+}
+
+test "const drives mock and expect" {
+  const expected = "Hello Alice!"
+  mock prompt expected
+  run ask()
+  expect_equal response expected
+}
+`,
+    );
+
+    const exitCode = await runTestFile(testFile, dir, scriptsDir, [
+      {
+        description: "const drives mock and expect", loc,
+        steps: [
+          { type: "test_const" as const, name: "expected", value: "Hello Alice!", loc },
+          { type: "test_mock_prompt" as const, response: "", responseVar: "expected", loc },
+          { type: "test_run_workflow" as const, workflowRef: "ask", args: [], loc },
+          {
+            type: "test_expect_equal" as const,
+            variable: "response",
+            expected: "",
+            expectedVar: "expected",
+            loc,
+          },
+        ],
+      },
+    ]);
+
+    assert.equal(exitCode, 0, "test should pass when const value flows into mock and expect_equal");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("test runner reports a clear error when an expect_* step references an undefined const", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "jaiph-undefined-const-"));
+  const scriptsDir = join(dir, "scripts");
+  mkdirSync(scriptsDir, { recursive: true });
+
+  try {
+    const testFile = join(dir, "missing.test.jh");
+    writeFileSync(
+      testFile,
+      `workflow noop() {
+  return "v"
+}
+
+test "undefined const ref" {
+  run noop()
+  expect_equal response missing
+}
+`,
+    );
+
+    const exitCode = await runTestFile(testFile, dir, scriptsDir, [
+      {
+        description: "undefined const ref", loc,
+        steps: [
+          { type: "test_run_workflow" as const, workflowRef: "noop", args: [], loc },
+          {
+            type: "test_expect_equal" as const,
+            variable: "response",
+            expected: "",
+            expectedVar: "missing",
+            loc,
+          },
+        ],
+      },
+    ]);
+
+    assert.notEqual(exitCode, 0, "test should fail when referencing an undefined const");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("test runner binds implicit `response` after `run` so expect_equal works without explicit capture", async () => {
   const dir = mkdtempSync(join(tmpdir(), "jaiph-implicit-response-"));
   const scriptsDir = join(dir, "scripts");

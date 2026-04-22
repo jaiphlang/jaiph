@@ -9,6 +9,25 @@ type TestResult = { pass: boolean; error?: string };
 
 type MockRefStep = Extract<TestStepDef, { type: "test_mock_workflow" | "test_mock_rule" | "test_mock_script" }>;
 
+/**
+ * Resolve the second argument of an `expect_*` step. Returns the literal value
+ * when the step was authored with a quoted string, or looks up `varName` in
+ * `vars` when the step was authored with a bare identifier referring to a
+ * `test_const`. Returns an `Error` (not throws) so callers can surface a clear
+ * test failure rather than crashing the run.
+ */
+function resolveExpectArg(
+  vars: Map<string, string>,
+  literal: string,
+  varName: string | undefined,
+): string | Error {
+  if (varName === undefined) return literal;
+  if (!vars.has(varName)) {
+    return new Error(`expect: undefined const "${varName}" (declare it earlier in the test block)`);
+  }
+  return vars.get(varName)!;
+}
+
 function resolveMockBodies(
   graph: RuntimeGraph,
   entryFile: string,
@@ -93,13 +112,28 @@ async function runTestBlock(
     const mockRefs: Array<Extract<TestStepDef, { type: "test_mock_workflow" | "test_mock_rule" | "test_mock_script" }>> = [];
     const vars = new Map<string, string>();
 
-    // Collect mock setup
+    // Collect mock setup. Walk in source order so that `const` bindings declared
+    // before a `mock prompt <ident>` are available when the response is resolved.
     for (const step of block.steps) {
       if (step.type === "comment" || step.type === "blank_line") {
         continue;
       }
+      if (step.type === "test_const") {
+        vars.set(step.name, step.value);
+        continue;
+      }
       if (step.type === "test_mock_prompt") {
-        mockResponses.push(step.response);
+        if (step.responseVar !== undefined) {
+          if (!vars.has(step.responseVar)) {
+            return {
+              pass: false,
+              error: `mock prompt: undefined const "${step.responseVar}" (declare it earlier in the test block)`,
+            };
+          }
+          mockResponses.push(vars.get(step.responseVar)!);
+        } else {
+          mockResponses.push(step.response);
+        }
       }
       if (step.type === "test_mock_prompt_block") {
         mockDispatchPath = writeMockDispatchScript(step, tmpDir);
@@ -123,7 +157,8 @@ async function runTestBlock(
       }
       if (step.type === "test_mock_prompt" || step.type === "test_mock_prompt_block" ||
           step.type === "test_mock_workflow" || step.type === "test_mock_rule" ||
-          step.type === "test_mock_script") {
+          step.type === "test_mock_script" ||
+          step.type === "test_const") {
         continue; // Already processed above
       }
 
@@ -192,10 +227,12 @@ async function runTestBlock(
 
       if (step.type === "test_expect_contain") {
         const value = vars.get(step.variable) ?? "";
-        if (!value.includes(step.substring)) {
+        const substring = resolveExpectArg(vars, step.substring, step.substringVar);
+        if (substring instanceof Error) return { pass: false, error: substring.message };
+        if (!value.includes(substring)) {
           return {
             pass: false,
-            error: `expect_contain failed: "${step.variable}" (${value.length} chars) does not contain "${step.substring}"`,
+            error: `expect_contain failed: "${step.variable}" (${value.length} chars) does not contain "${substring}"`,
           };
         }
         continue;
@@ -203,10 +240,12 @@ async function runTestBlock(
 
       if (step.type === "test_expect_not_contain") {
         const value = vars.get(step.variable) ?? "";
-        if (value.includes(step.substring)) {
+        const substring = resolveExpectArg(vars, step.substring, step.substringVar);
+        if (substring instanceof Error) return { pass: false, error: substring.message };
+        if (value.includes(substring)) {
           return {
             pass: false,
-            error: `expect_not_contain failed: "${step.variable}" contains "${step.substring}"`,
+            error: `expect_not_contain failed: "${step.variable}" contains "${substring}"`,
           };
         }
         continue;
@@ -214,10 +253,12 @@ async function runTestBlock(
 
       if (step.type === "test_expect_equal") {
         const value = vars.get(step.variable) ?? "";
-        if (value !== step.expected) {
+        const expected = resolveExpectArg(vars, step.expected, step.expectedVar);
+        if (expected instanceof Error) return { pass: false, error: expected.message };
+        if (value !== expected) {
           return {
             pass: false,
-            error: `expect_equal failed:\n    - ${step.expected}\n    + ${value}`,
+            error: `expect_equal failed:\n    - ${expected}\n    + ${value}`,
           };
         }
         continue;
