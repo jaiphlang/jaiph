@@ -475,6 +475,17 @@ function reportResult(
         process.stderr.write(`    ${line}\n`);
       }
     }
+  } else if (sandboxRunDir) {
+    // Docker mode: discoverDockerRunDir returned nothing. Surface the
+    // sandbox runs root + expected run_id so the user can still investigate
+    // (instead of leaving them with only "Workflow execution failed.").
+    process.stderr.write(`  Sandbox runs dir: ${sandboxRunDir}\n`);
+    if (expectedRunId) {
+      process.stderr.write(`    expected run_id: ${expectedRunId}\n`);
+    }
+    process.stderr.write(
+      `  Could not locate this run's artifacts under the sandbox runs dir.\n`,
+    );
   }
 
   return resolvedStatus;

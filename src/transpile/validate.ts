@@ -110,6 +110,31 @@ function validateMatchExpr(filePath: string, expr: MatchExprDef): void {
         `inline scripts are not allowed in match arm bodies; use a named script with "run script_name(…)" instead`,
       );
     }
+    // Reject unknown verbs and bare function-call forms in arm bodies.
+    // Allowed bodies: string literal ("..." or """..."""), $var/${var},
+    // single bare token (e.g. true), or a verb call: fail "...", run ref(...), ensure ref(...).
+    // A bare identifier followed by space+content (e.g. `error "msg"`) or by `(` (e.g. `error("msg")`)
+    // is a programming mistake — most likely a typo for `fail`. Skip the check for
+    // triple-quoted bodies since those are literal text.
+    if (!arm.tripleQuotedBody) {
+      const idMatch = bodyTrimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)/);
+      if (idMatch) {
+        const ident = idMatch[1]!;
+        const after = bodyTrimmed.slice(ident.length);
+        const startsCall = after.startsWith("(");
+        const startsArgs = /^\s+\S/.test(after);
+        if ((startsCall || startsArgs) && ident !== "fail" && ident !== "run" && ident !== "ensure") {
+          const hint = ident === "error" ? ` did you mean "fail"?` : "";
+          throw jaiphError(
+            filePath,
+            expr.loc.line,
+            expr.loc.col,
+            "E_VALIDATE",
+            `unknown match arm verb "${ident}"; allowed: fail "...", run ref(...), ensure ref(...).${hint}`,
+          );
+        }
+      }
+    }
   }
   if (wildcardCount === 0) {
     throw jaiphError(filePath, expr.loc.line, expr.loc.col, "E_VALIDATE", "match must have exactly one wildcard (_) arm");

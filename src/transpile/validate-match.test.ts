@@ -128,6 +128,80 @@ test("match arm with run ref body is accepted", () => {
   }
 });
 
+test("match arm with unknown verb (e.g. error) is rejected with hint", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-match-unknown-verb-"));
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        "workflow default() {",
+        '  const x = "ok"',
+        "  return match x {",
+        '    "" => error "missing"',
+        "    _ => true",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      { message: /unknown match arm verb "error".*did you mean "fail"/ },
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("match arm with bare function-call form (error(\"...\")) is rejected", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-match-bare-call-"));
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        "workflow default() {",
+        '  const x = "ok"',
+        "  return match x {",
+        '    "" => error("missing")',
+        "    _ => true",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.throws(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+      { message: /unknown match arm verb "error"/ },
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("match arm with single bare token (true) is accepted as string value", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-val-match-bare-token-"));
+  try {
+    writeFileSync(
+      join(root, "m.jh"),
+      [
+        "workflow default() {",
+        '  const x = "ok"',
+        "  return match x {",
+        '    "ok" => true',
+        "    _ => false",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    assert.doesNotThrow(
+      () => buildScripts(join(root, "m.jh"), join(root, "out")),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("triple-quoted arm body parses and validates", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-match-tq-"));
   try {
