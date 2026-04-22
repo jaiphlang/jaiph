@@ -13,36 +13,6 @@ Process rules:
 
 ***
 
-## Sandbox — docs sweep: credential-leak warning + `KEEP_SANDBOX` claim fix #dev-ready
-
-**Goal**
-Two doc-only fixes in `docs/sandboxing.md`. (1) The default network is bridged with outbound access; combined with forwarded `ANTHROPIC_*`/`CURSOR_*`/`CLAUDE_*` agent credentials, a malicious script can exfiltrate API keys. The current docs bury this under "What Docker does NOT protect against" — promote it to the "Enabling Docker" section so users see it before they enable. (2) The "Runtime behavior" section claims `JAIPH_DOCKER_KEEP_SANDBOX=1` causes the path to be "printed to stderr for debugging". The code does not print. Strike the claim.
-
-**Context (read before starting)**
-
-* Affected file: `docs/sandboxing.md` only. No code changes.
-* Section 1 location: lines ~32–38 (the "What Docker does NOT protect against" bullet about agent credential forwarding).
-* Section 2 location: line ~168 ("the path is left in place and printed to stderr for debugging").
-
-**Scope**
-
-* In the "Enabling Docker" section (around line 56), add a clearly delimited note (e.g. blockquote) reading: "Docker is enabled by default but **does not isolate agent credentials**. `ANTHROPIC_*`, `CLAUDE_*`, and `CURSOR_*` env vars are forwarded into the container and the default network allows outbound access. A malicious script can read these from its environment and exfiltrate them. Set `runtime.docker_network = \"none\"` for workflows that should not make external calls."
-* In the "Runtime behavior" section, change "in which case the path is left in place and printed to stderr for debugging" to "in which case the path is left in place for debugging". No reference to stderr printing.
-* Verify the doc still builds (Jekyll, in `docs/`).
-
-**Non-goals**
-
-* No code changes. None. This is a docs task.
-* Do not redesign the threat model — only relocate and clarify.
-
-**Acceptance criteria**
-
-* `docs/sandboxing.md` "Enabling Docker" section contains the agent-credential warning blockquote.
-* The phrase "printed to stderr for debugging" no longer appears in `docs/sandboxing.md`.
-* `bundle exec jekyll build` (or whatever the docs CI step is) still passes.
-
-***
-
 ## Cleanup — consolidate the 5-way test directory split #dev-ready
 
 **Goal**
