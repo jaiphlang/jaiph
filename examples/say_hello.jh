@@ -1,21 +1,23 @@
 #!/usr/bin/env jaiph
 
-rule valid_name(name_input) {
-  return match name_input {
+# rules are executed on readonly filesystem
+rule valid_name(name_arg) {
+  return match name_arg {
+    /[A-Z][a-z]+/ => name_arg
     "" => fail "You didn't provide your name :("
-    _ => name_input
+    _ => fail "You provided an invalid name :("
   }
 }
 
 # workflows are main unit of orchestration
-workflow default(name_input) {
-  const name_arg = ensure valid_name(name_input)
+workflow default(name_arg) {
+  const name = ensure valid_name(name_arg)
 
   # prompts call agents - cursor by default, but it's configurable
   const response = prompt """
-    Say hello to ${name_arg} and provide a fun fact about a person with the same name.
+    Say hello to ${name} and provide a fun fact about a person with the same name.
     Respond with a single line. Do not inspect files or run tools.
   """
 
-  return "${response}"
+  return response
 }
