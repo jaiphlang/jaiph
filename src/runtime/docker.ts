@@ -409,27 +409,20 @@ export interface DockerSpawnOptions {
 
 export const CONTAINER_WORKSPACE = "/jaiph/workspace";
 export const CONTAINER_RUN_DIR = "/jaiph/run";
-const AGENT_ENV_PREFIXES = ["CURSOR_", "ANTHROPIC_", "CLAUDE_"] as const;
 
 /**
- * Environment variable prefixes that are never forwarded into the container.
- * Prevents leaking host credentials that aren't part of the explicit allowlist.
+ * Explicit allowlist of environment variable prefixes forwarded into the
+ * container. Everything else is dropped — fail-closed by design.
  */
-export const ENV_DENYLIST_PREFIXES = [
-  "SSH_",
-  "GPG_",
-  "AWS_",
-  "GCP_",
-  "AZURE_",
-  "GOOGLE_",
-  "DOCKER_",
-  "KUBE",
-  "NPM_TOKEN",
-] as const;
+const ENV_ALLOW_PREFIXES = ["JAIPH_", "ANTHROPIC_", "CURSOR_", "CLAUDE_"] as const;
 
-/** Returns true if `key` matches any denied prefix. */
-export function isEnvDenied(key: string): boolean {
-  return ENV_DENYLIST_PREFIXES.some((prefix) => key.startsWith(prefix));
+/** Prefix excluded from the allowlist even though it starts with JAIPH_. */
+const ENV_ALLOW_EXCLUDE_PREFIX = "JAIPH_DOCKER_";
+
+/** Returns true if `key` is on the explicit allowlist for container forwarding. */
+export function isEnvAllowed(key: string): boolean {
+  if (key.startsWith(ENV_ALLOW_EXCLUDE_PREFIX)) return false;
+  return ENV_ALLOW_PREFIXES.some((prefix) => key.startsWith(prefix));
 }
 
 /** Resolve the host run-artifacts root for Docker-backed runs. */
@@ -614,13 +607,8 @@ export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath?: st
   const containerEnv = remapDockerEnv(opts.env, opts.workspaceRoot);
   for (const [key, value] of Object.entries(containerEnv)) {
     if (value === undefined) continue;
-    if (isEnvDenied(key)) continue;
-    if (key.startsWith("JAIPH_") && !key.startsWith("JAIPH_DOCKER_")) {
-      args.push("-e", `${key}=${value}`);
-    }
-    if (AGENT_ENV_PREFIXES.some((prefix) => key.startsWith(prefix))) {
-      args.push("-e", `${key}=${value}`);
-    }
+    if (!isEnvAllowed(key)) continue;
+    args.push("-e", `${key}=${value}`);
   }
   if (mode === "overlay" && hostUid && hostGid) {
     args.push("-e", `JAIPH_HOST_UID=${hostUid}`);

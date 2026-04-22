@@ -13,38 +13,6 @@ Process rules:
 
 ***
 
-## Sandbox — env forwarding becomes an explicit allowlist #dev-ready
-
-**Goal**
-`buildDockerArgs` today forwards anything matching `JAIPH_*` (minus `JAIPH_DOCKER_*`) and the three agent prefixes (`ANTHROPIC_*`, `CURSOR_*`, `CLAUDE_*`), and separately scrubs a denylist (`SSH_*`, `AWS_*`, …). The denylist is incomplete (`GH_TOKEN`, `GITHUB_TOKEN`, `PYPI_*`, `CARGO_*` are not on it) and is fundamentally fail-open: any future env var leaks unless someone remembers to add it. Invert to allowlist-only.
-
-**Context (read before starting)**
-
-* The forwarding logic lives in `buildDockerArgs` in `src/runtime/docker.ts` (the loop around lines ~709–718).
-* `ENV_DENYLIST_PREFIXES` and `isEnvDenied` exist for defense-in-depth. After this change they are unreachable code (the allowlist is already a strict subset). Delete them along with their tests.
-* The current allowed set in practice: `JAIPH_*` (minus `JAIPH_DOCKER_*`), `ANTHROPIC_*`, `CURSOR_*`, `CLAUDE_*`. That set stays — the task is to make the *implementation* allowlist-only, not to change which vars are forwarded.
-
-**Scope**
-
-* Rewrite the forwarding loop in `buildDockerArgs` so a variable is forwarded **only if** it matches the explicit allowlist. Concretely: a single `isEnvAllowed(key)` predicate that returns true iff the key starts with `JAIPH_` (and not `JAIPH_DOCKER_`), `ANTHROPIC_`, `CURSOR_`, or `CLAUDE_`.
-* Delete `ENV_DENYLIST_PREFIXES`, `isEnvDenied`, and every test that exercises them.
-* Add unit tests for `isEnvAllowed` covering each prefix boundary and a smoke test that an unrelated var (e.g. `GITHUB_TOKEN`) is not forwarded by `buildDockerArgs`.
-* Update `docs/sandboxing.md` "Environment variable forwarding" section: replace the "denylist enforced in `buildDockerArgs`" wording with "explicit allowlist; everything else is dropped".
-
-**Non-goals**
-
-* Do not change which prefixes are allowed. That conversation is separate.
-* Do not introduce a user-configurable allowlist. Allowlist is hardcoded.
-
-**Acceptance criteria**
-
-* `ENV_DENYLIST_PREFIXES`, `isEnvDenied`, and their tests are gone.
-* A new `isEnvAllowed` is exported and unit-tested.
-* `buildDockerArgs` forwards no environment variable that fails `isEnvAllowed`. Test: pass `{ GITHUB_TOKEN: "x", PYPI_TOKEN: "y", JAIPH_DEBUG: "true" }` → only `JAIPH_DEBUG` ends up in `args`.
-* `docs/sandboxing.md` reflects the allowlist model.
-
-***
-
 ## Sandbox — replace `execSync` with `execFileSync` for docker calls #dev-ready
 
 **Goal**

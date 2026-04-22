@@ -9,8 +9,7 @@ import {
   resolveDockerHostRunsRoot,
   writeOverlayScript,
   verifyImageHasJaiph,
-  isEnvDenied,
-  ENV_DENYLIST_PREFIXES,
+  isEnvAllowed,
   GHCR_IMAGE_REPO,
   selectSandboxMode,
   cloneWorkspaceForSandbox,
@@ -511,41 +510,59 @@ test("validateMountHostPath: rejects /run/docker.sock", () => {
 });
 
 // ---------------------------------------------------------------------------
-// isEnvDenied: env denylist
+// isEnvAllowed: env allowlist
 // ---------------------------------------------------------------------------
 
-test("isEnvDenied: blocks SSH_ vars", () => {
-  assert.equal(isEnvDenied("SSH_AUTH_SOCK"), true);
+test("isEnvAllowed: allows JAIPH_ vars", () => {
+  assert.equal(isEnvAllowed("JAIPH_DEBUG"), true);
 });
 
-test("isEnvDenied: blocks AWS_ vars", () => {
-  assert.equal(isEnvDenied("AWS_SECRET_ACCESS_KEY"), true);
+test("isEnvAllowed: excludes JAIPH_DOCKER_ vars", () => {
+  assert.equal(isEnvAllowed("JAIPH_DOCKER_IMAGE"), false);
+  assert.equal(isEnvAllowed("JAIPH_DOCKER_ENABLED"), false);
 });
 
-test("isEnvDenied: blocks DOCKER_ vars", () => {
-  assert.equal(isEnvDenied("DOCKER_HOST"), true);
+test("isEnvAllowed: allows ANTHROPIC_ vars", () => {
+  assert.equal(isEnvAllowed("ANTHROPIC_API_KEY"), true);
 });
 
-test("isEnvDenied: blocks GPG_ vars", () => {
-  assert.equal(isEnvDenied("GPG_AGENT_INFO"), true);
+test("isEnvAllowed: allows CURSOR_ vars", () => {
+  assert.equal(isEnvAllowed("CURSOR_API_KEY"), true);
 });
 
-test("isEnvDenied: blocks KUBE vars", () => {
-  assert.equal(isEnvDenied("KUBECONFIG"), true);
+test("isEnvAllowed: allows CLAUDE_ vars", () => {
+  assert.equal(isEnvAllowed("CLAUDE_AUTH_TOKEN"), true);
 });
 
-test("isEnvDenied: allows JAIPH_ vars", () => {
-  assert.equal(isEnvDenied("JAIPH_DEBUG"), false);
+test("isEnvAllowed: rejects SSH_ vars", () => {
+  assert.equal(isEnvAllowed("SSH_AUTH_SOCK"), false);
 });
 
-test("isEnvDenied: allows ANTHROPIC_ vars", () => {
-  assert.equal(isEnvDenied("ANTHROPIC_API_KEY"), false);
+test("isEnvAllowed: rejects AWS_ vars", () => {
+  assert.equal(isEnvAllowed("AWS_SECRET_ACCESS_KEY"), false);
 });
 
-test("buildDockerArgs: denied env vars are not forwarded", () => {
+test("isEnvAllowed: rejects GITHUB_TOKEN", () => {
+  assert.equal(isEnvAllowed("GITHUB_TOKEN"), false);
+});
+
+test("isEnvAllowed: rejects PYPI_TOKEN", () => {
+  assert.equal(isEnvAllowed("PYPI_TOKEN"), false);
+});
+
+test("isEnvAllowed: rejects arbitrary vars", () => {
+  assert.equal(isEnvAllowed("HOME"), false);
+  assert.equal(isEnvAllowed("PATH"), false);
+  assert.equal(isEnvAllowed("GH_TOKEN"), false);
+  assert.equal(isEnvAllowed("CARGO_REGISTRY_TOKEN"), false);
+});
+
+test("buildDockerArgs: only forwards env vars matching allowlist", () => {
   const opts = defaultOpts({
     env: {
       JAIPH_DEBUG: "true",
+      GITHUB_TOKEN: "x",
+      PYPI_TOKEN: "y",
       SSH_AUTH_SOCK: "/tmp/ssh.sock",
       AWS_SECRET_ACCESS_KEY: "secret",
       DOCKER_HOST: "unix:///var/run/docker.sock",
@@ -553,9 +570,11 @@ test("buildDockerArgs: denied env vars are not forwarded", () => {
   });
   const args = buildDockerArgs(opts, TEST_OVERLAY);
   assert.ok(args.includes("JAIPH_DEBUG=true"), "allowed JAIPH_ var forwarded");
-  assert.ok(!args.some((a) => a.includes("SSH_AUTH_SOCK")), "SSH_ denied");
-  assert.ok(!args.some((a) => a.includes("AWS_SECRET_ACCESS_KEY")), "AWS_ denied");
-  assert.ok(!args.some((a) => a.includes("DOCKER_HOST")), "DOCKER_ denied");
+  assert.ok(!args.some((a) => a.includes("GITHUB_TOKEN")), "GITHUB_TOKEN not forwarded");
+  assert.ok(!args.some((a) => a.includes("PYPI_TOKEN")), "PYPI_TOKEN not forwarded");
+  assert.ok(!args.some((a) => a.includes("SSH_AUTH_SOCK")), "SSH_ not forwarded");
+  assert.ok(!args.some((a) => a.includes("AWS_SECRET_ACCESS_KEY")), "AWS_ not forwarded");
+  assert.ok(!args.some((a) => a.includes("DOCKER_HOST")), "DOCKER_ not forwarded");
 });
 
 // ---------------------------------------------------------------------------
