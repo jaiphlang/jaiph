@@ -1253,5 +1253,81 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
       validateStep(step);
     }
   }
+
+  if (ast.tests && ast.tests.length > 0) {
+    validateTestBlocks(ast, ast.tests);
+  }
+}
+
+/**
+ * Validate variable references inside `test` blocks. The only names in scope are
+ * those introduced by `const NAME = …` (literal or `run … capture`) earlier in
+ * the same block. There is no implicit `response`: an `expect_*` step that
+ * references an undeclared name is a compile-time error.
+ *
+ * Errors raised:
+ * - `mock prompt <ident>` where `<ident>` was not declared earlier
+ * - `expect_*` LHS variable not declared earlier
+ * - `expect_* var <ident>` RHS where `<ident>` was not declared earlier
+ */
+function validateTestBlocks(ast: jaiphModule, tests: import("../types").TestBlockDef[]): void {
+  for (const tb of tests) {
+    const inScope = new Set<string>();
+    for (const step of tb.steps) {
+      if (step.type === "test_const") {
+        inScope.add(step.name);
+        continue;
+      }
+      if (step.type === "test_run_workflow") {
+        if (step.captureName) inScope.add(step.captureName);
+        continue;
+      }
+      if (step.type === "test_mock_prompt" && step.responseVar) {
+        if (!inScope.has(step.responseVar)) {
+          throw jaiphError(
+            ast.filePath,
+            step.loc.line,
+            step.loc.col,
+            "E_VALIDATE",
+            `mock prompt: undefined name "${step.responseVar}" (declare it earlier with: const ${step.responseVar} = "…")`,
+          );
+        }
+        continue;
+      }
+      if (
+        step.type === "test_expect_contain" ||
+        step.type === "test_expect_not_contain" ||
+        step.type === "test_expect_equal"
+      ) {
+        if (!inScope.has(step.variable)) {
+          throw jaiphError(
+            ast.filePath,
+            step.loc.line,
+            step.loc.col,
+            "E_VALIDATE",
+            `${step.type.replace("test_", "")}: undefined name "${step.variable}" (capture it first with: const ${step.variable} = run …)`,
+          );
+        }
+        const refName =
+          step.type === "test_expect_equal"
+            ? step.expectedVar
+            : step.substringVar;
+        if (refName !== undefined && !inScope.has(refName)) {
+          throw jaiphError(
+            ast.filePath,
+            step.loc.line,
+            step.loc.col,
+            "E_VALIDATE",
+            `${step.type.replace("test_", "")}: undefined name "${refName}" (declare it earlier with: const ${refName} = "…")`,
+          );
+        }
+        continue;
+      }
+      // Other step types (mock_workflow/rule/script bodies, blank_line, comment) are
+      // out of scope for this pass: their bodies are validated as workflow/rule steps
+      // by the regular path when materialized, and they do not contribute to the
+      // test-level `vars` map.
+    }
+  }
 }
 
