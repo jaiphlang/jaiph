@@ -13,38 +13,6 @@ Process rules:
 
 ***
 
-## Sandbox — reject negative `JAIPH_DOCKER_TIMEOUT` explicitly #dev-ready
-
-**Goal**
-Today `JAIPH_DOCKER_TIMEOUT="-5"` parses cleanly to `-5`, then `> 0` returns false in `spawnDockerProcess`, and the timeout silently disables. A typo like `300-` parses as `300` (ParseInt ignores trailing junk), masking the user's intent. Validate strictly.
-
-**Context (read before starting)**
-
-* Parsing lives in `resolveDockerConfig` in `src/runtime/docker.ts` (lines ~187–192).
-* The `0 disables` semantics is documented and must stay.
-* `parseInt("abc", 10)` → `NaN`, currently falls back to default. Keep that behavior.
-
-**Scope**
-
-* Replace the current parse with a strict integer check: accept only `^-?\d+$` matched strings; reject anything else with `Error("E_DOCKER_TIMEOUT JAIPH_DOCKER_TIMEOUT must be a non-negative integer (or 0 to disable), got \"…\"")`.
-* Reject negatives with the same `E_DOCKER_TIMEOUT` error.
-* Keep the "invalid integer falls back to default" behavior **only** for the historical `"abc"`-style failure already covered by `resolveDockerConfig: invalid timeout env falls back to default`. (Decide: hard-fail or default-fallback for non-integer input. Pick hard-fail for consistency with the new strictness; update or delete the old test accordingly.)
-* Add `E_DOCKER_TIMEOUT` to the failure-modes table in `docs/sandboxing.md`.
-* Add unit tests for: `"-5"` rejected, `"300-"` rejected, `"0"` accepted (disables), `"300"` accepted, `""` rejected.
-
-**Non-goals**
-
-* Do not change the in-file `runtime.docker_timeout` parse path beyond consistency with the new env validation. (If it currently accepts negatives, also tighten it here.)
-
-**Acceptance criteria**
-
-* `JAIPH_DOCKER_TIMEOUT="-5"` and `"300-"` both produce `E_DOCKER_TIMEOUT`.
-* `JAIPH_DOCKER_TIMEOUT="0"` still disables the timeout.
-* `docs/sandboxing.md` failure-modes table includes the new error code.
-* `npm test` and the four `e2e/tests/7*_docker_*.sh` still pass.
-
-***
-
 ## Sandbox — pre-pull docker image with single status line before workflow start #dev-ready
 
 **Goal**

@@ -79,7 +79,7 @@ All Docker-related keys live under `runtime.*` in module-level config:
 |-----|------|---------|-------------|
 | `runtime.docker_image` | string | `"ghcr.io/jaiphlang/jaiph-runtime:<version>"` | Container image. Must already contain `jaiph`. Defaults to the official GHCR runtime image matching the installed jaiph version. |
 | `runtime.docker_network` | string | `"default"` | Docker network mode. |
-| `runtime.docker_timeout` | integer | `300` | Max execution time in seconds. `0` disables the timeout. |
+| `runtime.docker_timeout` | integer | `300` | Max execution time in seconds. Must be a non-negative integer; `0` disables the timeout. Negative values produce `E_DOCKER_TIMEOUT`. |
 
 Each key is type-checked at parse time. Unknown keys produce `E_PARSE`. The workspace mount is automatic and not configurable.
 
@@ -89,7 +89,7 @@ Following the `JAIPH_*` convention: `JAIPH_DOCKER_ENABLED`, `JAIPH_DOCKER_IMAGE`
 
 Precedence: `JAIPH_DOCKER_ENABLED` env > unsafe default rule.
 
-If `JAIPH_DOCKER_TIMEOUT` is set but not a valid integer, the default (`300`) is used.
+If `JAIPH_DOCKER_TIMEOUT` is set but not a valid non-negative integer, the run exits with `E_DOCKER_TIMEOUT`.
 
 ### Workspace mount
 
@@ -175,6 +175,7 @@ Docker-related errors use `E_DOCKER_*` codes for programmatic detection:
 | `E_DOCKER_NO_JAIPH` | Selected image does not contain a `jaiph` CLI | Run exits with guidance to use the official image or install jaiph. |
 | `E_DOCKER_RUNS_DIR` | Absolute `JAIPH_RUNS_DIR` points outside the workspace | Run exits. Use a relative path or an absolute path within the workspace. |
 | `E_DOCKER_OVERLAY` | Overlay mode selected but `fuse-overlayfs` is missing from the image or the mount fails inside the container | Container exits with code 78. Use the official runtime image, install `fuse-overlayfs` in your custom image, or set `JAIPH_DOCKER_NO_OVERLAY=1` on the host to switch to copy mode. The CLI already passes `--security-opt apparmor=unconfined` on Linux to defeat the default AppArmor fuse-deny; remaining failures usually mean the host kernel itself blocks fuse mounts (rootless docker without the right user-namespace setup, locked-down kernel, etc.). |
+| `E_DOCKER_TIMEOUT` | `JAIPH_DOCKER_TIMEOUT` or `runtime.docker_timeout` is not a valid non-negative integer | Run exits before container launch. Value must be a non-negative integer; `0` disables the timeout. |
 | `E_DOCKER_UID` | Linux host UID/GID detection failed (`process.getuid` and `id -u` both unavailable) | Run exits before container launch. Ensures the container never silently runs as root. Applies to both copy and overlay modes. |
 | `E_DOCKER_SANDBOX_COPY` | Copy mode failed to clone the host workspace (`cp` returned non-zero) | Run exits before container launch. Inspect the path printed in the error. |
 | `E_VALIDATE_MOUNT` | Mount targets a denied host path (`/`, `/proc`, docker socket, etc.) | Run exits before container launch. |
