@@ -202,7 +202,7 @@ export function readFailedStepOutput(summaryPath: string): string | null {
  * In Docker mode the container's meta file is inaccessible from the host,
  * so we scan the bind-mounted sandboxRunDir for the latest run directory.
  */
-export function discoverDockerRunDir(sandboxRunDir: string): { runDir?: string; summaryFile?: string } {
+export function discoverDockerRunDir(sandboxRunDir: string, expectedRunId: string): { runDir?: string; summaryFile?: string } {
   try {
     const dateDirs = readdirSync(sandboxRunDir)
       .filter((d) => !d.startsWith(".") && statSync(join(sandboxRunDir, d)).isDirectory())
@@ -217,8 +217,16 @@ export function discoverDockerRunDir(sandboxRunDir: string): { runDir?: string; 
       for (const timeDir of timeDirs) {
         const runDir = join(datePath, timeDir);
         const summaryFile = join(runDir, "run_summary.jsonl");
-        if (existsSync(summaryFile)) {
-          return { runDir, summaryFile };
+        if (!existsSync(summaryFile)) continue;
+        const firstLine = readFileSync(summaryFile, "utf8").split(/\r?\n/)[0];
+        if (!firstLine) continue;
+        try {
+          const parsed = JSON.parse(firstLine) as { type?: string; run_id?: string };
+          if (parsed.type === "WORKFLOW_START" && parsed.run_id === expectedRunId) {
+            return { runDir, summaryFile };
+          }
+        } catch {
+          // ignore malformed JSON
         }
       }
     }

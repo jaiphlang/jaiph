@@ -13,38 +13,6 @@ Process rules:
 
 ***
 
-## Sandbox — fix concurrent-run race in `discoverDockerRunDir` via run-id stamping #dev-ready
-
-**Goal**
-`discoverDockerRunDir` (in `src/cli/shared/errors.ts`) finds the run directory by scanning the bind-mounted runs root and picking the lexicographically-latest dir with a `run_summary.jsonl`. Two parallel `jaiph run` invocations sharing `JAIPH_RUNS_DIR` race: the host CLI for run A may report run B's directory in its failure footer. The non-Docker path doesn't have this issue because it uses a per-process `metaFile`.
-
-**Context (read before starting)**
-
-* `discoverDockerRunDir` in `src/cli/shared/errors.ts` (lines ~205–229) does the scan.
-* The runtime already emits a `run_id` in `WORKFLOW_START` (visible in `.jaiph/runs/<date>/<time>-<src>/run_summary.jsonl`).
-* The host CLI can generate a UUID per `runWorkflow` invocation and forward it as `JAIPH_RUN_ID` into the container env. The runtime, if `JAIPH_RUN_ID` is set, uses that as the workflow run id instead of generating its own.
-
-**Scope**
-
-* In `src/cli/commands/run.ts`, generate a fresh UUID per invocation and put it on `runtimeEnv.JAIPH_RUN_ID` before spawning Docker (or the local runtime).
-* In the runtime kernel (search for where `runId` is generated, likely `src/runtime/kernel/node-workflow-runtime.ts`), prefer `process.env.JAIPH_RUN_ID` when set, else generate as today.
-* Rewrite `discoverDockerRunDir` to take an extra `expectedRunId: string` argument and pick the directory whose `run_summary.jsonl` first line is a `WORKFLOW_START` with that `run_id`. Update its caller in `src/cli/commands/run.ts`.
-* Add a unit test for `discoverDockerRunDir` that creates two run dirs in the same root and asserts the correct one is returned for each id.
-* Update env forwarding allowlist if needed (already covered by `JAIPH_*`).
-
-**Non-goals**
-
-* Do not change the on-disk run-dir naming scheme (date/time/source).
-* Do not change `run_summary.jsonl` event shape — `run_id` already exists.
-
-**Acceptance criteria**
-
-* `JAIPH_RUN_ID` env, when set, is used by the runtime as the workflow run id.
-* `discoverDockerRunDir(sandboxRunDir, expectedRunId)` returns the matching dir even when a newer unrelated run dir exists alongside it (covered by new unit test).
-* `npm test` and the four `e2e/tests/7*_docker_*.sh` still pass.
-
-***
-
 ## Sandbox — fail fast with `E_DOCKER_UID` when host UID detection fails on Linux #dev-ready
 
 **Goal**
