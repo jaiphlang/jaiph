@@ -67,6 +67,60 @@ test("NodeWorkflowRuntime: runDefault does not write return_value.txt when workf
   }
 });
 
+test("NodeWorkflowRuntime: prompt step preview preserves authored ${var} placeholders (not interpolated)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-prompt-preview-"));
+  try {
+    const jh = join(root, "prompt_preview.jh");
+    writeFileSync(
+      jh,
+      [
+        "workflow default(name) {",
+        '  prompt "Say hello to ${name} and stop."',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const mockFile = join(root, "mocks.txt");
+    writeFileSync(mockFile, "ok\n");
+
+    const graph = buildRuntimeGraph(jh);
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      JAIPH_TEST_MODE: "1",
+      JAIPH_MOCK_RESPONSES_FILE: mockFile,
+      JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
+    };
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });
+    const prevSummaryEnv = process.env.JAIPH_RUN_SUMMARY_FILE;
+    process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
+    let status: number;
+    try {
+      status = await runtime.runDefault(["Adam"]);
+    } finally {
+      if (prevSummaryEnv === undefined) delete process.env.JAIPH_RUN_SUMMARY_FILE;
+      else process.env.JAIPH_RUN_SUMMARY_FILE = prevSummaryEnv;
+    }
+    assert.equal(status, 0);
+
+    const summary = readFileSync(runtime.getSummaryFile(), "utf8");
+    const promptStart = summary
+      .split("\n")
+      .filter(Boolean)
+      .map((l) => JSON.parse(l) as Record<string, unknown>)
+      .find((e) => e.type === "STEP_START" && e.kind === "prompt");
+    assert.ok(promptStart, "expected a prompt STEP_START in run summary");
+    const params = (promptStart as { params: Array<[string, string]> }).params;
+    const previewEntry = params.find(([k]) => k === "prompt_text");
+    assert.ok(previewEntry, "prompt STEP_START should include a prompt_text param");
+    assert.equal(previewEntry![1], "Say hello to ${name} and stop.");
+    const nameEntry = params.find(([k]) => k === "name");
+    assert.ok(nameEntry, "prompt STEP_START should include the resolved `name` param");
+    assert.equal(nameEntry![1], "Adam");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("NodeWorkflowRuntime: workflow step .out accumulates Command:/Prompt: and log (mocked prompt)", async () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-node-wf-artifacts-"));
   try {

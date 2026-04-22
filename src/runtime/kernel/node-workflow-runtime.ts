@@ -557,7 +557,6 @@ export class NodeWorkflowRuntime {
   }
 
   private emitPromptStepStart(
-    promptText: string,
     backend: string,
     scopeVars: Map<string, string>,
     rawPromptSource: string,
@@ -573,7 +572,9 @@ export class NodeWorkflowRuntime {
     const errFile = join(this.runDir, `${String(seq).padStart(6, "0")}-${safe}.err`);
     writeFileSync(outFile, "");
     writeFileSync(errFile, "");
-    const preview = stripOuterQuotes(promptText).replace(/\s+/g, " ").trim();
+    // Preview keeps the authored `${var}` placeholders rather than substituted values,
+    // so the tree shows what the user wrote; concrete values live alongside in params.
+    const preview = stripOuterQuotes(rawPromptSource).replace(/\s+/g, " ").trim();
     const params: Array<[string, string]> = [["prompt_text", preview]];
     const seen = new Set<string>(["prompt_text"]);
     // Include named vars referenced in the prompt text.
@@ -1044,7 +1045,7 @@ export class NodeWorkflowRuntime {
         const backend = promptConfig.backend || "cursor";
         const stepName = resolvePromptStepName(promptConfig);
         const modelRes = resolveModel(promptConfig);
-        const promptStep = this.emitPromptStepStart(promptText, stepName, scope.vars, step.raw);
+        const promptStep = this.emitPromptStepStart(stepName, scope.vars, step.raw);
         this.emitPromptEvent("PROMPT_START", {
           backend,
           model: modelRes.model || undefined,
@@ -1184,7 +1185,6 @@ export class NodeWorkflowRuntime {
           const stepName = resolvePromptStepName(promptConfig);
           const modelRes = resolveModel(promptConfig);
           const promptStep = this.emitPromptStepStart(
-            promptText,
             stepName,
             scope.vars,
             step.value.raw,
