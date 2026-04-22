@@ -325,34 +325,43 @@ function tryCp(flags: string[], src: string, dst: string): { ok: boolean; stderr
 }
 
 /**
- * Copy a single top-level entry into the sandbox workspace.
+ * Handles workspace cloning with automatic clonefile detection and fallback.
  *
- * On macOS, prefers `cp -cR` (APFS clonefile, O(1) per file). On any
- * platform/filesystem where clonefile fails (or on Linux where BSD `-c` isn't
- * supported), falls back to plain `cp -R` and notes the fallback for the caller
- * to surface as a one-time warning.
+ * On macOS, the first `copy()` call probes `cp -cR` (APFS clonefile, O(1)).
+ * If it works, subsequent calls use clonefile directly. If it fails, all calls
+ * fall back to `cp -pR` and the reason is recorded for a one-time warning.
+ * On Linux/other platforms, always uses `cp -pR`.
  */
-function copyEntryWithCloneFallback(
-  src: string,
-  dst: string,
-  state: { cloneAttempted: boolean; cloneSupported: boolean; firstFallbackReason: string | null },
-): void {
-  if (process.platform === "darwin") {
-    if (!state.cloneAttempted) {
-      state.cloneAttempted = true;
+class WorkspaceCloner {
+  private cloneAttempted = false;
+  private cloneSupported = false;
+  private firstFallbackReason: string | null = null;
+
+  copy(src: string, dst: string): void {
+    if (process.platform !== "darwin") {
+      const r = tryCp(["-pR"], src, dst);
+      if (!r.ok) {
+        throw new Error(`E_DOCKER_SANDBOX_COPY failed to copy ${src} → ${dst}: ${r.stderr.trim()}`);
+      }
+      return;
+    }
+
+    if (!this.cloneAttempted) {
+      this.cloneAttempted = true;
       const r = tryCp(["-cR"], src, dst);
       if (r.ok) {
-        state.cloneSupported = true;
+        this.cloneSupported = true;
         return;
       }
-      state.firstFallbackReason = r.stderr.trim().split("\n")[0] || "cp -cR failed";
+      this.firstFallbackReason = r.stderr.trim().split("\n")[0] || "cp -cR failed";
       const fb = tryCp(["-pR"], src, dst);
       if (!fb.ok) {
         throw new Error(`E_DOCKER_SANDBOX_COPY failed to copy ${src} → ${dst}: ${fb.stderr.trim()}`);
       }
       return;
     }
-    if (state.cloneSupported) {
+
+    if (this.cloneSupported) {
       const r = tryCp(["-cR"], src, dst);
       if (r.ok) return;
     }
@@ -360,11 +369,14 @@ function copyEntryWithCloneFallback(
     if (!fb.ok) {
       throw new Error(`E_DOCKER_SANDBOX_COPY failed to copy ${src} → ${dst}: ${fb.stderr.trim()}`);
     }
-    return;
   }
-  const r = tryCp(["-pR"], src, dst);
-  if (!r.ok) {
-    throw new Error(`E_DOCKER_SANDBOX_COPY failed to copy ${src} → ${dst}: ${r.stderr.trim()}`);
+
+  get fellBackToPlainCopy(): boolean {
+    return this.cloneAttempted && !this.cloneSupported;
+  }
+
+  get fallbackReason(): string {
+    return this.firstFallbackReason ?? "unknown reason";
   }
 }
 
@@ -385,11 +397,11 @@ export function cloneWorkspaceForSandbox(
   warn: (msg: string) => void = (m) => process.stderr.write(`${m}\n`),
 ): void {
   mkdirSync(dstRoot, { recursive: true });
-  const state = { cloneAttempted: false, cloneSupported: false, firstFallbackReason: null as string | null };
+  const cloner = new WorkspaceCloner();
 
   for (const entry of readdirSync(srcRoot, { withFileTypes: true })) {
     if (entry.name === ".jaiph") continue;
-    copyEntryWithCloneFallback(join(srcRoot, entry.name), join(dstRoot, entry.name), state);
+    cloner.copy(join(srcRoot, entry.name), join(dstRoot, entry.name));
   }
 
   const jaiphSrc = join(srcRoot, ".jaiph");
@@ -398,14 +410,14 @@ export function cloneWorkspaceForSandbox(
     mkdirSync(jaiphDst, { recursive: true });
     for (const entry of readdirSync(jaiphSrc, { withFileTypes: true })) {
       if (entry.name === "runs") continue;
-      copyEntryWithCloneFallback(join(jaiphSrc, entry.name), join(jaiphDst, entry.name), state);
+      cloner.copy(join(jaiphSrc, entry.name), join(jaiphDst, entry.name));
     }
   }
 
-  if (process.platform === "darwin" && state.cloneAttempted && !state.cloneSupported) {
+  if (process.platform === "darwin" && cloner.fellBackToPlainCopy) {
     warn(
       `jaiph docker: clonefile (cp -cR) unavailable on this filesystem; using plain copy ` +
-      `(${state.firstFallbackReason ?? "unknown reason"}). Workspace clone may be slow for large trees.`,
+      `(${cloner.fallbackReason}). Workspace clone may be slow for large trees.`,
     );
   }
 }
