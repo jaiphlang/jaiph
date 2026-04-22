@@ -7,7 +7,8 @@
     "url": "https://github.com/jaiphlang/jaiph.git"
   },
   "files": [
-    "dist/src/"
+    "dist/src/",
+    "runtime/overlay-run.sh"
   ],
   "type": "commonjs",
   "bin": {
@@ -15,7 +16,7 @@
   },
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "tsc -p tsconfig.json && node -e \"require('node:fs').cpSync('src/runtime','dist/src/runtime',{recursive:true})\"",
+    "build": "tsc -p tsconfig.json && node -e \"require('node:fs').cpSync('src/runtime','dist/src/runtime',{recursive:true})\" && node -e \"require('node:fs').cpSync('runtime/overlay-run.sh','dist/src/runtime/overlay-run.sh')\"",
     "build:standalone": "npm run build && node -e \"const fs=require('node:fs'); fs.cpSync('dist/src/runtime','dist/runtime',{recursive:true});\" && bun build --compile ./src/cli.ts --outfile ./dist/jaiph",
     "test:compiler": "npm run build && node --test dist/src/compiler-test-runner.js",
     "test:golden-ast": "npm run build && node --test dist/src/golden-ast-runner.js",

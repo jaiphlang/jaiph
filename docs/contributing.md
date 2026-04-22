@@ -46,7 +46,7 @@ For day-to-day work on the compiler and CLI you usually stay inside the clone: i
 | Command | What it runs |
 |---------|----------------|
 | `npm install` | Installs TypeScript and types (dev dependencies). |
-| `npm run build` | Runs `tsc`, then copies **`src/runtime`** → **`dist/src/runtime`** (kernel JS for the compiled CLI). |
+| `npm run build` | Runs `tsc`, then copies **`src/runtime`** → **`dist/src/runtime`** (kernel JS for the compiled CLI) and **`runtime/overlay-run.sh`** → **`dist/src/runtime/overlay-run.sh`** (Docker overlay entrypoint). |
 | `npm run build:standalone` | `npm run build`, then copies **`dist/src/runtime`** → **`dist/runtime`** and runs **`bun build --compile`** on `src/cli.ts` → **`dist/jaiph`**. Requires [Bun](https://bun.sh). Ship the **`dist/`** tree (binary plus the runtime directory) for a self-contained layout. |
 | `npm test` | **`npm run clean`**, then **`npm run build`**, then the Node.js test runner with **`NODE_OPTIONS`** including **`--enable-source-maps`** (and a large heap limit) on `dist/test/*.test.js`, every file under `dist/src/` matching `*.test.js` or `*.acceptance.test.js` (via `find`), `dist/src/compiler-test-runner.js` (txtar compiler tests), and `dist/src/golden-ast-runner.js` (golden AST tests). |
 | `npm run test:compiler` | **`npm run build`**, then **`node --test`** on `dist/src/compiler-test-runner.js` — runs txtar-based compiler test fixtures from `compiler-tests/`. |
@@ -183,10 +183,11 @@ Shared test data (`test/fixtures/`, `test/expected/`) also remains in `test/`.
 
 ## CI pipeline
 
-The project uses GitHub Actions (`.github/workflows/ci.yml`). Every push triggers four jobs:
+The project uses GitHub Actions (`.github/workflows/ci.yml`). Every push triggers five jobs:
 
 | Job | Runner | Purpose |
 |-----|--------|---------|
+| **ShellCheck** | `ubuntu-latest` | Runs `shellcheck` on `runtime/overlay-run.sh` to lint the standalone shell script shipped in the npm package. |
 | **Compiler and unit tests** | `ubuntu-latest` | `npm test` (TypeScript unit + acceptance + golden tests), plus a `curl` check that the public install URL responds and a git-tag verification on `main`. |
 | **E2E install and CLI workflow** | Matrix: **`ubuntu-latest` twice** + **`macos-latest`** | `npm run test:e2e` — full build-and-run E2E suite. **Ubuntu — docker:** `JAIPH_UNSAFE` unset (default Docker sandbox, pulls `ghcr.io/jaiphlang/jaiph-runtime`). **Ubuntu — host:** `JAIPH_UNSAFE=true` (host execution, no Docker). **macOS — host:** `JAIPH_UNSAFE=true` (macOS runners are not used for the Docker path). |
 | **Getting started (local)** | `ubuntu-latest` | Builds and serves the Jekyll documentation site locally (`bundle exec jekyll serve` on `127.0.0.1:4000`), waits for it to respond, smoke-checks key pages with `curl`, then runs the **Playwright landing-page sample verification** (`npx playwright test`). The Playwright step builds Jaiph, extracts sample source and expected output from the served HTML, verifies source parity with `examples/*.jh`, and runs deterministic samples through the CLI. No dependency on `jaiph.org`. |
