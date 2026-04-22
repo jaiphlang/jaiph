@@ -536,4 +536,37 @@ describe("emitModule", () => {
     ].join("\n");
     assert.equal(roundTrip(source), source);
   });
+
+  it("preserves bare identifier return (does not rewrite as ${var} interpolation)", () => {
+    const source = [
+      "workflow default() {",
+      '  const response = "hi"',
+      "  return response",
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
+
+  it("preserves bare dotted identifier return (does not rewrite as ${base.field})", () => {
+    const source = [
+      "workflow default() {",
+      '  const r = prompt "go" returns "{ ok: bool }"',
+      "  return r.ok",
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
+
+  it('preserves explicit "${var}" return form when authored that way', () => {
+    const source = [
+      "workflow default() {",
+      '  const response = "hi"',
+      '  return "${response}"',
+      "}",
+      "",
+    ].join("\n");
+    assert.equal(roundTrip(source), source);
+  });
 });

@@ -153,12 +153,19 @@ function parseCatchStatement(
         };
       }
     }
-    const value = isBareDottedIdentifierReturn(retVal)
+    const isBareDotted = isBareDottedIdentifierReturn(retVal);
+    const isBare = !isBareDotted && isBareIdentifierReturn(retVal);
+    const value = isBareDotted
       ? dottedReturnToQuotedString(retVal)
-      : isBareIdentifierReturn(retVal)
+      : isBare
         ? bareIdentifierToQuotedString(retVal)
         : retVal;
-    return { type: "return", value, loc: { line: lineNo, col } };
+    return {
+      type: "return",
+      value,
+      loc: { line: lineNo, col },
+      ...(isBareDotted || isBare ? { bareSource: retVal.trim() } : {}),
+    };
   }
   if (/^fail\s+/.test(t)) {
     const arg = t.slice("fail".length).trimStart();

@@ -622,15 +622,18 @@ export function parseWorkflowBlock(
         if (returnValue.startsWith('"') && !hasUnescapedClosingQuote(returnValue, 1)) {
           fail(filePath, 'multiline strings use triple quotes: return """..."""', innerNo, retLoc.col);
         }
-        const value = isBareDottedIdentifierReturn(returnValue)
+        const isBareDotted = isBareDottedIdentifierReturn(returnValue);
+        const isBare = !isBareDotted && isBareIdentifierReturn(returnValue);
+        const value = isBareDotted
           ? dottedReturnToQuotedString(returnValue)
-          : isBareIdentifierReturn(returnValue)
+          : isBare
             ? bareIdentifierToQuotedString(returnValue)
             : returnValue;
         workflow.steps.push({
           type: "return",
           value,
           loc: retLoc,
+          ...(isBareDotted || isBare ? { bareSource: returnValue.trim() } : {}),
         });
         continue;
       }
