@@ -162,7 +162,7 @@ If `/dev/fuse` is missing on the host, the CLI uses **copy mode**: before launch
 
 **Timeout** -- When `runtime.docker_timeout` is greater than zero, the CLI sends `SIGTERM` to the container process on overrun, followed by `SIGKILL` after a 5-second grace period. The failure message includes `E_TIMEOUT container execution exceeded timeout`.
 
-**Image pull** -- If the image is not present locally, `docker pull` runs automatically. Pull failure produces `E_DOCKER_PULL`.
+**Image pre-pull** -- Image preparation (`prepareImage`) runs **before** the CLI banner so Docker's pull overhead does not interleave with the progress tree. If the image is not present locally, a single `pulling image <name>…` status line is written to stderr, then `docker pull --quiet` runs (Docker's native layer progress is suppressed). Pull failure produces `E_DOCKER_PULL`. After the pull (or if the image was already local), `verifyImageHasJaiph` confirms the image contains `jaiph`. The banner and progress tree only begin after image preparation completes.
 
 ### Failure modes
 

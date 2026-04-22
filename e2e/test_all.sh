@@ -24,6 +24,7 @@ TEST_SCRIPTS=(
   "e2e/tests/71_loop_run_artifacts.sh"
   "e2e/tests/72_docker_run_artifacts.sh"
   "e2e/tests/74b_docker_signal_cleanup.sh"
+  "e2e/tests/74c_docker_prepull.sh"
   "e2e/tests/74_live_step_output.sh"
   "e2e/tests/76_docker_failure_parity.sh"
   "e2e/tests/78_lang_redesign_constructs.sh"

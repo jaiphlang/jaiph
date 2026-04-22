@@ -192,9 +192,9 @@ export function pullImageIfNeeded(image: string): void {
   try {
     _dockerExec.run(["image", "inspect", image], { stdio: "ignore", timeout: 30_000 });
   } catch {
-    // Image not present locally — pull it
+    // Image not present locally — pull it (--quiet suppresses layer progress)
     try {
-      _dockerExec.run(["pull", image], { stdio: "inherit", timeout: 300_000 });
+      _dockerExec.run(["pull", "--quiet", image], { stdio: "ignore", timeout: 300_000 });
     } catch {
       throw new Error(`E_DOCKER_PULL failed to pull image "${image}"`);
     }
@@ -203,8 +203,7 @@ export function pullImageIfNeeded(image: string): void {
 
 function imageHasJaiph(image: string): boolean {
   try {
-    execFileSync(
-      "docker",
+    _dockerExec.run(
       ["run", "--rm", "--entrypoint", "sh", image, "-lc", "command -v jaiph >/dev/null 2>&1"],
       { stdio: "ignore", timeout: 30_000 },
     );
@@ -229,20 +228,44 @@ export function verifyImageHasJaiph(image: string): void {
 }
 
 /**
- * Resolve the Docker image to use.
+ * Pre-pull the Docker image (if not local) and verify it contains `jaiph`.
  *
- * Always uses `config.image` (from env, in-file `runtime.docker_image`, or the
- * default `ghcr.io/jaiphlang/jaiph-runtime:<version>`). Pulls from the registry
- * if the image is not present locally. To use a custom image, build/push it
- * yourself and set `runtime.docker_image` or `JAIPH_DOCKER_IMAGE`.
- *
- * Verifies that `jaiph` exists in the image before use (`E_DOCKER_NO_JAIPH`).
+ * Intended to run **before** the CLI banner so Docker's pull overhead doesn't
+ * interleave with the progress tree. On a cold pull, writes a single
+ * `pulling image <name>…` status line to stderr; Docker's native progress is
+ * suppressed via `--quiet`.
  */
-export function resolveImage(config: DockerRunConfig): string {
+export function prepareImage(config: DockerRunConfig): string {
   const image = config.image;
-  pullImageIfNeeded(image);
+
+  let needsPull = false;
+  try {
+    _dockerExec.run(["image", "inspect", image], { stdio: "ignore", timeout: 30_000 });
+  } catch {
+    needsPull = true;
+  }
+
+  if (needsPull) {
+    process.stderr.write(`pulling image ${image}…\n`);
+    try {
+      _dockerExec.run(["pull", "--quiet", image], { stdio: "ignore", timeout: 300_000 });
+    } catch {
+      throw new Error(`E_DOCKER_PULL failed to pull image "${image}"`);
+    }
+    process.stderr.write(`pulled\n`);
+  }
+
   verifyImageHasJaiph(image);
   return image;
+}
+
+/**
+ * Resolve the Docker image to use.
+ *
+ * Thin wrapper around `prepareImage` — kept for back-compat in tests.
+ */
+export function resolveImage(config: DockerRunConfig): string {
+  return prepareImage(config);
 }
 
 // ---------------------------------------------------------------------------
@@ -711,8 +734,6 @@ export interface DockerSpawnResult {
  */
 export function spawnDockerProcess(opts: DockerSpawnOptions): DockerSpawnResult {
   checkDockerAvailable();
-  const resolvedImage = resolveImage(opts.config);
-  opts = { ...opts, config: { ...opts.config, image: resolvedImage } };
 
   const mode: SandboxMode = opts.sandboxMode ?? selectSandboxMode(opts.env);
   mkdirSync(opts.sandboxRunDir, { recursive: true });
