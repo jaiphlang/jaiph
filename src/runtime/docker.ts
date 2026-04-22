@@ -1,4 +1,4 @@
-import { execFileSync, execSync, spawn, spawnSync, ChildProcess } from "node:child_process";
+import { execFileSync, spawn, spawnSync, ChildProcess } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -125,12 +125,22 @@ export function resolveDockerConfig(
 }
 
 // ---------------------------------------------------------------------------
+// Internal test seam — allows tests to intercept docker calls without DI.
+// ---------------------------------------------------------------------------
+
+export const _dockerExec = {
+  run(args: string[], opts: object): void {
+    execFileSync("docker", args, opts as any);
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Docker availability
 // ---------------------------------------------------------------------------
 
 export function checkDockerAvailable(): void {
   try {
-    execSync("docker info", { stdio: "ignore", timeout: 10_000 });
+    _dockerExec.run(["info"], { stdio: "ignore", timeout: 10_000 });
   } catch {
     throw new Error("E_DOCKER_NOT_FOUND docker is not available. Install Docker and ensure the daemon is running, or set JAIPH_UNSAFE=true to run on the host (no sandbox).");
   }
@@ -142,11 +152,11 @@ export function checkDockerAvailable(): void {
 
 export function pullImageIfNeeded(image: string): void {
   try {
-    execSync(`docker image inspect ${image}`, { stdio: "ignore", timeout: 30_000 });
+    _dockerExec.run(["image", "inspect", image], { stdio: "ignore", timeout: 30_000 });
   } catch {
     // Image not present locally — pull it
     try {
-      execSync(`docker pull ${image}`, { stdio: "inherit", timeout: 300_000 });
+      _dockerExec.run(["pull", image], { stdio: "inherit", timeout: 300_000 });
     } catch {
       throw new Error(`E_DOCKER_PULL failed to pull image "${image}"`);
     }
@@ -570,8 +580,8 @@ export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath?: st
     }
     if (!hostUid || !hostGid) {
       try {
-        hostUid = execSync("id -u", { encoding: "utf8" }).trim();
-        hostGid = execSync("id -g", { encoding: "utf8" }).trim();
+        hostUid = execFileSync("id", ["-u"], { encoding: "utf8" }).trim();
+        hostGid = execFileSync("id", ["-g"], { encoding: "utf8" }).trim();
       } catch {
         // Fall through without host uid/gid.
       }

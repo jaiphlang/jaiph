@@ -14,6 +14,8 @@ import {
   selectSandboxMode,
   cloneWorkspaceForSandbox,
   allocateSandboxWorkspaceDir,
+  pullImageIfNeeded,
+  _dockerExec,
   type DockerRunConfig,
   type DockerSpawnOptions,
 } from "./docker";
@@ -823,6 +825,44 @@ test("allocateSandboxWorkspaceDir: creates a fresh .sandbox-* dir under the runs
     assert.ok(existsSync(a) && existsSync(b));
   } finally {
     rmSync(runsRoot, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// pullImageIfNeeded: shell metacharacter safety (execFileSync migration)
+// ---------------------------------------------------------------------------
+
+test("pullImageIfNeeded: image with semicolon is passed verbatim, no shell expansion", () => {
+  const captured: string[][] = [];
+  const original = _dockerExec.run;
+  _dockerExec.run = (args: string[], _opts: object) => {
+    captured.push([...args]);
+    // Simulate "image inspect" succeeding (image already present)
+  };
+  try {
+    pullImageIfNeeded("alpine; echo pwned");
+    assert.equal(captured.length, 1, "exactly one docker call (image inspect)");
+    assert.deepStrictEqual(captured[0], ["image", "inspect", "alpine; echo pwned"]);
+  } finally {
+    _dockerExec.run = original;
+  }
+});
+
+test("pullImageIfNeeded: semicolon image passed verbatim to docker pull on inspect failure", () => {
+  const captured: string[][] = [];
+  const original = _dockerExec.run;
+  _dockerExec.run = (args: string[], _opts: object) => {
+    captured.push([...args]);
+    if (args[0] === "image") throw new Error("not found");
+    // docker pull succeeds
+  };
+  try {
+    pullImageIfNeeded("alpine; echo pwned");
+    assert.equal(captured.length, 2, "inspect + pull");
+    assert.deepStrictEqual(captured[0], ["image", "inspect", "alpine; echo pwned"]);
+    assert.deepStrictEqual(captured[1], ["pull", "alpine; echo pwned"]);
+  } finally {
+    _dockerExec.run = original;
   }
 });
 

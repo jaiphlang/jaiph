@@ -29,6 +29,7 @@ Docker sandboxing is designed to contain damage from untrusted or semi-trusted w
 - **Process isolation** -- Container processes cannot see or signal host processes. The container runs with `--cap-drop ALL` (overlay mode re-adds `SYS_ADMIN` for fuse-overlayfs; copy mode adds nothing) and `--security-opt no-new-privileges` to prevent privilege escalation. In Linux overlay mode the workflow runs as root inside the container so fuse-overlayfs can mount reliably; copy mode and macOS remain non-root as before.
 - **Credential leakage** -- Environment variable forwarding uses an explicit allowlist: only `JAIPH_*` (except `JAIPH_DOCKER_*`), `ANTHROPIC_*`, `CLAUDE_*`, and `CURSOR_*` cross the container boundary. Everything else is dropped.
 - **Mount safety** -- The host root filesystem (`/`), Docker socket (`/var/run/docker.sock`, `/run/docker.sock`), and OS internals (`/proc`, `/sys`, `/dev`) cannot be mounted into the container. Attempting to do so produces `E_VALIDATE_MOUNT`.
+- **Shell injection safety** -- All Docker CLI invocations (`docker info`, `docker image inspect`, `docker pull`) use `execFileSync` with an explicit argument array, bypassing `/bin/sh`. Image names and other parameters are passed as literal argv entries with no shell expansion, so values containing shell metacharacters (`;`, `$`, backticks, etc.) are never evaluated.
 
 **What Docker does NOT protect against:**
 
