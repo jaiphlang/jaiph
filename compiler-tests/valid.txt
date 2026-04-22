@@ -1157,3 +1157,18 @@ workflow default(name) {
 workflow default(name) {
   return "result for ${name}"
 }
+
+=== return bare identifier
+# @expect ok
+--- input.jh
+workflow default() {
+  const msg = "hello"
+  return msg
+}
+
+=== return bare identifier from parameter
+# @expect ok
+--- input.jh
+workflow default(name) {
+  return name
+}

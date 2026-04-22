@@ -538,11 +538,14 @@ Sets the managed return value in rules and workflows.
 ```jaiph
 return "success"
 return "${result}"
+return response                        # bare identifier — returns the variable's value
 return """
   Report for ${name}:
   Status: ${status}
 """
 ```
+
+**Bare identifier** — `return response` is sugar for `return "${response}"`. The identifier must be in scope (`const`, capture, or parameter). Unknown identifiers produce a compile-time `E_VALIDATE` error naming the missing binding.
 
 **Direct managed call** — executes a target and uses its result as the return value:
 

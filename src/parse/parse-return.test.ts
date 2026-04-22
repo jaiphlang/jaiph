@@ -219,6 +219,69 @@ test("logerr bare inline script is rejected", () => {
   );
 });
 
+test("return bare identifier is sugar for interpolated string", () => {
+  const mod = parsejaiph(
+    `workflow default() {\n  const response = "hello"\n  return response\n}`,
+    "test.jh",
+  );
+  const step = mod.workflows[0].steps[1];
+  assert.equal(step.type, "return");
+  if (step.type === "return") {
+    assert.equal(step.managed, undefined);
+    assert.equal(step.value, '"${response}"');
+  }
+});
+
+test("return bare identifier in brace block (if body)", () => {
+  const mod = parsejaiph(
+    [
+      "workflow default(name) {",
+      '  const msg = "hi"',
+      '  if name == "x" {',
+      "    return msg",
+      "  }",
+      "}",
+    ].join("\n"),
+    "test.jh",
+  );
+  const ifStep = mod.workflows[0].steps[1];
+  assert.equal(ifStep.type, "if");
+  if (ifStep.type === "if") {
+    const retStep = ifStep.body[0];
+    assert.equal(retStep.type, "return");
+    if (retStep.type === "return") {
+      assert.equal(retStep.value, '"${msg}"');
+    }
+  }
+});
+
+test("return bare identifier in catch/recover block", () => {
+  const mod = parsejaiph(
+    [
+      "rule check() {",
+      '  return "yes"',
+      "}",
+      "workflow default() {",
+      "  ensure check() catch (err) {",
+      "    return err",
+      "  }",
+      "}",
+    ].join("\n"),
+    "test.jh",
+  );
+  const ensureStep = mod.workflows[0].steps[0];
+  assert.equal(ensureStep.type, "ensure");
+  if (ensureStep.type === "ensure") {
+    assert.ok(ensureStep.recover);
+    const recoverSteps = "block" in ensureStep.recover! ? ensureStep.recover!.block : [ensureStep.recover!.single];
+    const retStep = recoverSteps[0];
+    assert.equal(retStep.type, "return");
+    if (retStep.type === "return") {
+      assert.equal(retStep.value, '"${err}"');
+    }
+  }
+});
+
 test("return run in ensure recover block", () => {
   const mod = parsejaiph(
     [

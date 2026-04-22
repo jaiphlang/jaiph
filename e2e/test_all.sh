@@ -82,6 +82,7 @@ TEST_SCRIPTS=(
   "e2e/tests/127_cli_edge_cases.sh"
   "e2e/tests/128_examples_format_check.sh"
   "e2e/tests/130_run_recover_loop.sh"
+  "e2e/tests/133_return_bare_identifier.sh"
 )
 
 PASS_COUNT=0

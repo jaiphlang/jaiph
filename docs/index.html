@@ -607,7 +607,8 @@ Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</
                         <code>const</code>, capture, or <code>script</code> cannot be rebound in the same scope.
                         For <code>ensure</code> / <code>run</code> to rules and workflows,
                         explicit
-                        <code>return "value"</code> (or <code>return run ref()</code> /
+                        <code>return "value"</code>, <code>return identifier</code>
+                        (or <code>return run ref()</code> /
                         <code>return ensure ref()</code>) feeds the variable; for <code>run</code> to a
                         <strong>script</strong>, capture follows
                         stdout. <code>const</code> RHS has stricter rules (no <code>$(...)</code> &mdash; use
