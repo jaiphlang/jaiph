@@ -11,9 +11,9 @@ TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
 e2e::section "say_hello.test.jh exact failing output"
 
-# Given
-cp "${ROOT_DIR}/e2e/say_hello.jh" "${TEST_DIR}/say_hello.jh"
-cp "${ROOT_DIR}/e2e/say_hello.test.jh" "${TEST_DIR}/say_hello.test.jh"
+# Given — use the canonical examples/ fixtures (single source of truth)
+cp "${ROOT_DIR}/examples/say_hello.jh" "${TEST_DIR}/say_hello.jh"
+cp "${ROOT_DIR}/examples/say_hello.test.jh" "${TEST_DIR}/say_hello.test.jh"
 
 # When
 set +e
