@@ -168,23 +168,18 @@ layout: null
                     </p>
                     <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
-# scripts are defined in fenced blocks or single line backticks
-# by default it's bash, but it cany be any env: ```node, ```python3, etc.
-script validate_name = ```
-  if [ -z "$1" ]; then
-    echo "You didn't provide your name :(" >&2
-    exit 1
-  fi
-```
-
-# rules are always executed on readonly filesystem
-rule name_was_provided(name) {
-  run validate_name(name)
+# rules are executed on readonly filesystem
+rule valid_name(name_arg) {
+  return match name_arg {
+    /[A-Z][a-z]+/ =&gt; name_arg
+    "" =&gt; fail "You didn't provide your name :("
+    _ =&gt; fail "You provided an invalid name :("
+  }
 }
 
 # workflows are main unit of orchestration
-workflow default(name) {
-  ensure name_was_provided(name)
+workflow default(name_arg) {
+  const name = ensure valid_name(name_arg)
 
   # prompts call agents - cursor by default, but it's configurable
   const response = prompt """
@@ -192,33 +187,30 @@ workflow default(name) {
     Respond with a single line. Do not inspect files or run tools.
   """
 
-  log response
+  return response
 }</code></pre>
                     <p>Running the workflow:</p>
-                    <pre><code class="jaiph-run" data-sample-output="success"><span class="run-command">➜  ./say_hello.jh Jakub</span>
+                    <pre><code class="jaiph-run" data-sample-output="success"><span class="run-command">➜  ./say_hello.jh Adam</span>
 
 Jaiph: Running say_hello.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</span>
 
-<span class="run-keyword">workflow</span> default <span class="run-params">(name="Jakub")</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">rule</span> name_was_provided <span class="run-params">(name="Jakub")</span>
-  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">script</span> validate_name <span class="run-params">(1="Jakub")</span>
-  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">script validate_name (0s)</span>
-  <span class="run-pass">✓</span> <span class="run-time">rule name_was_provided (0s)</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> cursor "Say hello to Jakub and p..." <span class="run-params">(name="Jakub")</span>
-  <span class="run-pass">✓</span> <span class="run-time">prompt cursor (3s)</span>
-  <span class="run-marker">ℹ</span> Hello Jakub — Czech conductor Jakub Hrůša has led major orchestras including the Bamberg Symphony and often appears at the BBC Proms.
+<span class="run-keyword">workflow</span> default <span class="run-params">(name_arg="Adam")</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">rule</span> valid_name <span class="run-params">(name_arg="Adam")</span>
+  <span class="run-pass">✓</span> <span class="run-time">rule valid_name (0s)</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> cursor "Say hello to ${name} and..." <span class="run-params">(name="Adam")</span>
+  <span class="run-pass">✓</span> <span class="run-time">prompt cursor (5s)</span>
 
-<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(4.1s)</span></code></pre>
+<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(5.1s)</span>
+
+Hello, Adam—Adam Smith, the 18th-century Scottish economist and philosopher, is often called the father of modern economics for his landmark work *The Wealth of Nations*.</code></pre>
                     <p>When you don't provide the name parameter, the workflow fails:</p>
                     <pre><code class="jaiph-run" data-sample-output="failure"><span class="run-command">➜  ./say_hello.jh</span>
 
 Jaiph: Running say_hello.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</span>
 
 <span class="run-keyword">workflow</span> default
-  <span class="run-marker">▸</span> <span class="run-keyword">rule</span> name_was_provided
-  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">script</span> validate_name
-  <span class="run-marker">·</span>   <span class="run-fail">✗ script validate_name</span> <span class="run-time">(0s)</span>
-  <span class="run-fail">✗ rule name_was_provided</span> <span class="run-time">(0s)</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">rule</span> valid_name
+  <span class="run-fail">✗ rule valid_name</span> <span class="run-time">(0s)</span>
 
 <span class="run-fail">✗ FAIL</span> <span class="run-keyword">workflow</span> default <span class="run-time">(0.4s)</span>
   Logs: &lt;path&gt;
@@ -251,6 +243,10 @@ Jaiph: Running say_hello.jh<span class="run-banner-meta"> (Docker sandbox, fusef
 
 import "say_hello.jh" as hello
 
+# We expect this test to fail due to mismatch in error message
+# between the prompt and the error message in the test file.
+# We use it to verify the test works and the error message output
+# is correct.
 test "without name, workflow fails with validation message" {
   # When
   const response = run hello.default() allow_failure
@@ -261,10 +257,14 @@ test "without name, workflow fails with validation message" {
 
 test "with name, returns greeting and logs response" {
   # Given
-  mock prompt "Hello Alice! Fun fact: Alice in Wonderland was written by Lewis Carroll."
+  const expected_response = "Hello Alice! Fun fact: Alice in Wonderland was written by Lewis Carroll."
+  mock prompt expected_response
 
   # When
-  run hello.default("Alice")
+  const response = run hello.default("Alice")
+
+  # Then
+  expect_equal response expected_response
 }</code></pre>
                     <p>Example failing test run output (expected string omits the trailing <code>:(</code> from stderr):
                     </p>
@@ -285,52 +285,64 @@ testing say_hello.test.jh
                 <div class="code-tab-panel" data-panel="recover-loop-jh" data-sample="recover-loop"
                     data-sample-file="recover_loop.jh">
                     <p>The <code>run … recover</code> pattern is a first-class repair-and-retry loop.
-                        When the target fails, the <code>recover(err)</code> body runs, then the target
-                        is retried automatically. The loop stops on success or when the retry limit
-                        (default 10, configurable via <code>run.recover_limit</code>) is exhausted.</p>
+                        When the target fails, the <code>recover(failure)</code> body runs, then the
+                        target is retried automatically. The loop stops on success or when the retry
+                        limit (default 10, configurable via <code>run.recover_limit</code>) is
+                        exhausted. Below, an agent is asked to create the missing file so the next
+                        attempt at the same script call passes.</p>
                     <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
-# recover loop: when check() fails, fix() repairs the problem,
-# and Jaiph automatically retries check(). No manual recursion needed.
-script check_gate = `test -f .gate_passed`
-
-workflow check() {
-  run check_gate()
-}
-
-script do_fix = `touch .gate_passed`
-
-workflow fix() {
-  run do_fix()
-}
+# scripts are defined in fenced blocks or single line backticks
+# by default it's bash, but it cany be any env: ```node, ```python3, etc.
+script check_report_exists = ```
+  test -f report.txt
+```
 
 workflow default() {
-  run check() recover(err) {
-    run fix()
+  # Recovery in loop: when check_report_exists() fails, the recovery body
+  # is executed to fix it, and then check_report_exists() is retried.
+  # By default, the retry limit is 10.
+  run check_report_exists() recover(failure) {
+    logerr "Failed to check report.txt"
+    prompt "report.txt is missing. Create it with a short dummy summary."
   }
+
+  # scripts can be also executed inline
+  return run `cat report.txt`()
 }</code></pre>
-                    <p>In the run below, <code>check()</code> fails once. The recover body runs
-                        <code>fix()</code>, and Jaiph retries <code>check()</code> which now succeeds.
+                    <p>In the run below, <code>check_report_exists()</code> fails on the first
+                        attempt. The <code>recover</code> body logs the failure and prompts an agent
+                        to create <code>report.txt</code>; Jaiph then retries the script call which
+                        now succeeds. The inline-backtick <code>cat report.txt</code> script returns
+                        the file contents from the workflow, which Jaiph prints below the run tree.
                     </p>
                     <pre><code class="jaiph-run" data-sample-output="run"><span class="run-command">➜  ./recover_loop.jh</span>
 
 Jaiph: Running recover_loop.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</span>
 
 <span class="run-keyword">workflow</span> default
-  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> check
-  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">script</span> check_gate
-  <span class="run-marker">·</span>   <span class="run-fail">✗ script check_gate (0s)</span>
-  <span class="run-fail">✗ workflow check (0s)</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> fix
-  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">script</span> do_fix
-  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">script do_fix (0s)</span>
-  <span class="run-pass">✓</span> <span class="run-time">workflow fix (0s)</span>
-  <span class="run-marker">▸</span> <span class="run-keyword">workflow</span> check
-  <span class="run-marker">·</span>   <span class="run-marker">▸</span> <span class="run-keyword">script</span> check_gate
-  <span class="run-marker">·</span>   <span class="run-pass">✓</span> <span class="run-time">script check_gate (0s)</span>
-  <span class="run-pass">✓</span> <span class="run-time">workflow check (0s)</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">script</span> check_report_exists
+  <span class="run-fail">✗ script check_report_exists (0s)</span>
+  <span class="run-fail">! Failed to check report.txt</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">prompt</span> cursor "report.txt is missing. C..."
+  <span class="run-pass">✓</span> <span class="run-time">prompt cursor (5s)</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">script</span> check_report_exists
+  <span class="run-pass">✓</span> <span class="run-time">script check_report_exists (0s)</span>
+  <span class="run-marker">▸</span> <span class="run-keyword">script</span> __inline_752d3a136cc9
+  <span class="run-pass">✓</span> <span class="run-time">script __inline_752d3a136cc9 (0s)</span>
 
-<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(0.5s)</span></code></pre>
+<span class="run-pass">✓ PASS</span> <span class="run-keyword">workflow</span> default <span class="run-time">(6.1s)</span>
+
+Summary
+-------
+
+This is a placeholder report. No build or test results were generated for
+this file; it exists only to satisfy tooling or documentation that expects
+`report.txt` to be present.
+
+- Status: OK (dummy)
+- Artifacts: none
+- Next steps: replace with a real report when you add automated reporting</code></pre>
                     <p>For one-shot failure handling without retry, use <code>catch</code> instead. See
                         <a href="/language#recover--repair-and-retry-loop">Language — recover</a>.
                     </p>
@@ -338,11 +350,11 @@ Jaiph: Running recover_loop.jh<span class="run-banner-meta"> (Docker sandbox, fu
 
                 <div class="code-tab-panel" data-panel="inbox-pipeline-jh" data-sample="agent-inbox"
                     data-sample-file="agent_inbox.jh">
-                    <p>The <strong>inbox</strong> system lets workflows communicate through named channels.
-                        A workflow sends a message with <code>&lt;-</code> (RHS: quoted literal, <code>${var}</code>, or
-                        <code>run</code> to a script) and an inline route on the channel declaration
-                        (<code>channel name -&gt; workflow</code>) dispatches it to receivers with
-                        the dispatch values (message, channel, sender) bound to the target's declared parameters.
+                    <p>You can define named <strong>channels</strong> with inline routing — for instance
+                        <code>channel findings -&gt; analyst</code> means the <code>analyst</code> workflow
+                        listens to messages passed on the <code>findings</code> channel. Each time a
+                        message is sent to <code>findings</code> with the <code>&lt;-</code> operator,
+                        the <code>analyst</code> workflow is triggered.
                     </p>
                     <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
@@ -391,8 +403,8 @@ Jaiph: Running agent_inbox.jh<span class="run-banner-meta"> (Docker sandbox, fus
                     <p>This sample runs two prompt workflows in parallel: one with Cursor and one with Claude.</p>
                     <p>Each workflow sets its own <code>agent.backend</code>, captures the prompt response, and logs it.
                         The default workflow uses <code>run async</code> to fan out both workflows concurrently.
-                        Each <code>run async</code> returns a <code>Handle&lt;T&gt;</code> that resolves on first read;
-                        unresolved handles are implicitly joined before the workflow completes.</p>
+                        Each <code>run async</code> response resolves on the first read, or at the end of
+                        the embracing workflow.</p>
                     <pre><code class="language-jaiph" data-sample-source>#!/usr/bin/env jaiph
 
 const prompt_text = "Say: Greetings! I am [model name]."

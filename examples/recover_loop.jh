@@ -1,9 +1,5 @@
 #!/usr/bin/env jaiph
 
-# Recursive recovery: when a check fails, prompt an agent to fix it,
-# then retry via run default(). Jaiph CI uses the same pattern to
-# auto-fix failing tests — see .jaiph/ensure_ci_passes.jh
-
 # scripts are defined in fenced blocks or single line backticks
 # by default it's bash, but it cany be any env: ```node, ```python3, etc.
 script check_report_exists = ```
@@ -11,10 +7,11 @@ script check_report_exists = ```
 ```
 
 workflow default() {
-  # Recovery in loop: when check_report_exists() fails, prompt an agent to fix it,
-  # then retry via run default().
+  # Recovery in loop: when check_report_exists() fails, the recovery body
+  # is executed to fix it, and then check_report_exists() is retried.
+  # By default, the retry limit is 10.
   run check_report_exists() recover(failure) {
-    logerr "Failed to check report.txt: ${failure}"
+    logerr "Failed to check report.txt"
     prompt "report.txt is missing. Create it with a short dummy summary."
   }
 
