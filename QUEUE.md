@@ -13,37 +13,6 @@ Process rules:
 
 ***
 
-## Sandbox — replace `execSync` with `execFileSync` for docker calls #dev-ready
-
-**Goal**
-`pullImageIfNeeded` and `checkDockerAvailable` interpolate a string into `execSync`, then run it through `/bin/sh`. The `image` argument flows from `JAIPH_DOCKER_IMAGE` env or the in-file `runtime.docker_image` value. Both can carry shell metacharacters. `imageHasJaiph` already uses `execFileSync` correctly. Make the other two consistent. Pure mechanical fix; the value is the security audit trail it leaves.
-
-**Context (read before starting)**
-
-* Affected sites in `src/runtime/docker.ts`:
-  - `checkDockerAvailable` → `execSync("docker info", …)`
-  - `pullImageIfNeeded` → `execSync(\`docker image inspect ${image}\`, …)` and `execSync(\`docker pull ${image}\`, …)`
-* `imageHasJaiph` shows the desired pattern: `execFileSync("docker", [...args], {…})`.
-
-**Scope**
-
-* Replace each `execSync` in `src/runtime/docker.ts` with `execFileSync("docker", [...args], …)`.
-* Add a unit test that constructs `pullImageIfNeeded` with an image string containing a semicolon (e.g. `"alpine; echo pwned"`) and asserts the call rejects/passes the literal value to docker (no shell expansion). Test by mocking `execFileSync` via a test seam — do not actually invoke docker.
-* If introducing a test seam adds non-trivial code, it is acceptable to extract a thin internal `runDocker(args)` wrapper used by all three call sites and inject it for tests. Keep the wrapper under 20 LoC.
-
-**Non-goals**
-
-* Do not change error codes, timeouts, or stdio inheritance.
-* Do not refactor `imageHasJaiph` (already correct).
-
-**Acceptance criteria**
-
-* No `execSync` in `src/runtime/docker.ts`.
-* New test demonstrates that an image string with a semicolon is passed verbatim to docker (no shell evaluation).
-* `npm test` and the four `e2e/tests/7*_docker_*.sh` still pass.
-
-***
-
 ## Sandbox — guarantee cleanup on signals and unexpected exit #dev-ready
 
 **Goal**
