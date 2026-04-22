@@ -3,6 +3,7 @@ FROM node:22-bookworm-slim AS builder
 WORKDIR /src
 COPY package.json package-lock.json tsconfig.json ./
 COPY src ./src
+COPY runtime/overlay-run.sh ./runtime/overlay-run.sh
 RUN npm ci && npm run build && npm pack --pack-destination /tmp >/dev/null && mv /tmp/jaiph-*.tgz /tmp/jaiph.tgz
 
 FROM ubuntu:24.04
