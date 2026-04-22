@@ -291,7 +291,6 @@ export interface RuntimeConfig {
   dockerImage?: string;
   dockerNetwork?: string;
   dockerTimeout?: number;
-  workspace?: string[];
 }
 
 /** One line inside `config { }`: comment or assignment (formatter round-trip order). */

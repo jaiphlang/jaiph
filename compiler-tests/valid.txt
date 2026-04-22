@@ -418,42 +418,6 @@ workflow default() {
   log "ok"
 }
 
-=== config array value parses multi-line array
-# @expect ok
---- input.jh
-config {
-  runtime.workspace = [
-    ".:/jaiph/workspace:rw",
-    "config:config:ro"
-  ]
-}
-workflow default() {
-  log "ok"
-}
-
-=== config empty array
-# @expect ok
---- input.jh
-config {
-  runtime.workspace = []
-}
-workflow default() {
-  log "ok"
-}
-
-=== config array with trailing commas and comments
-# @expect ok
---- input.jh
-config {
-  runtime.workspace = [
-    ".:/jaiph/workspace:rw",
-    "config:config:ro",
-  ]
-}
-workflow default() {
-  log "ok"
-}
-
 === all runtime config keys
 # @expect ok
 --- input.jh
@@ -462,9 +426,6 @@ config {
   runtime.docker_image = "ubuntu:24.04"
   runtime.docker_network = "host"
   runtime.docker_timeout = 600
-  runtime.workspace = [
-    ".:/jaiph/workspace:rw"
-  ]
 }
 workflow default() {
   log "ok"

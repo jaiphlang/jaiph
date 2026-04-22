@@ -36,7 +36,7 @@ test("parseConfigBlock: parses integer values", () => {
   assert.equal(metadata.runtime?.dockerTimeout, 300);
 });
 
-test("parseConfigBlock: parses multiline array", () => {
+test("parseConfigBlock: rejects runtime.workspace with E_PARSE", () => {
   const lines = [
     "config {",
     "  runtime.workspace = [",
@@ -45,8 +45,10 @@ test("parseConfigBlock: parses multiline array", () => {
     "  ]",
     "}",
   ];
-  const { metadata } = parseConfigBlock("test.jh", lines, 0);
-  assert.deepEqual(metadata.runtime?.workspace, ["src/", "lib/"]);
+  assert.throws(
+    () => parseConfigBlock("test.jh", lines, 0),
+    /runtime\.workspace is no longer supported/,
+  );
 });
 
 test("parseConfigBlock: fails on unknown config key", () => {
@@ -177,14 +179,16 @@ test("parseConfigBlock: handles escape sequences in string values", () => {
   assert.equal(metadata.agent?.cursorFlags, "flag\nvalue");
 });
 
-test("parseConfigBlock: parses empty array", () => {
+test("parseConfigBlock: rejects runtime.workspace even with empty array", () => {
   const lines = [
     "config {",
     "  runtime.workspace = []",
     "}",
   ];
-  const { metadata } = parseConfigBlock("test.jh", lines, 0);
-  assert.deepEqual(metadata.runtime?.workspace, []);
+  assert.throws(
+    () => parseConfigBlock("test.jh", lines, 0),
+    /runtime\.workspace is no longer supported/,
+  );
 });
 
 test("parseConfigBlock: fails on type mismatch (number where string expected)", () => {

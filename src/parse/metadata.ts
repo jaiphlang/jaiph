@@ -2,6 +2,11 @@ import type { ConfigBodyPart, WorkflowMetadata } from "../types";
 import { colFromRaw, fail } from "./core";
 import { findClosingBraceIndex, splitStatementsOnSemicolons } from "./statement-split";
 
+/** Keys that were removed — produce a clear E_PARSE instead of "unknown key". */
+const REJECTED_KEYS: Record<string, string> = {
+  "runtime.workspace": "runtime.workspace is no longer supported; the workspace is mounted automatically",
+};
+
 const ALLOWED_KEYS = new Set([
   "agent.default_model",
   "agent.command",
@@ -17,7 +22,6 @@ const ALLOWED_KEYS = new Set([
   "runtime.docker_image",
   "runtime.docker_network",
   "runtime.docker_timeout",
-  "runtime.workspace",
   "module.name",
   "module.version",
   "module.description",
@@ -39,7 +43,6 @@ const KEY_TYPES: Record<string, "string" | "boolean" | "number" | "string[]"> = 
   "runtime.docker_image": "string",
   "runtime.docker_network": "string",
   "runtime.docker_timeout": "number",
-  "runtime.workspace": "string[]",
   "module.name": "string",
   "module.version": "string",
   "module.description": "string",
@@ -230,11 +233,6 @@ function assignConfigKey(
       out.runtime = {};
     }
     out.runtime.dockerTimeout = value as number;
-  } else if (key === "runtime.workspace") {
-    if (!out.runtime) {
-      out.runtime = {};
-    }
-    out.runtime.workspace = value as string[];
   } else if (key === "module.name") {
     if (!out.module) {
       out.module = {};
@@ -293,6 +291,9 @@ export function parseConfigBlock(
       const key = line.slice(0, eq).trim();
       const valuePart = line.slice(eq + 1);
 
+      if (REJECTED_KEYS[key]) {
+        return fail(filePath, REJECTED_KEYS[key], openLineNo, colFromRaw(rawOpen));
+      }
       if (!ALLOWED_KEYS.has(key)) {
         return fail(
           filePath,
@@ -308,14 +309,6 @@ export function parseConfigBlock(
         return fail(
           filePath,
           "multiline config arrays require a multiline config { … } block (opening 'config {' alone on its own line)",
-          openLineNo,
-          colFromRaw(rawOpen),
-        );
-      }
-      if (key === "runtime.workspace" && trimmedValue.startsWith("[") && trimmedValue !== "[]") {
-        return fail(
-          filePath,
-          "runtime.workspace arrays with elements require a multiline config { … } block",
           openLineNo,
           colFromRaw(rawOpen),
         );
@@ -365,6 +358,9 @@ export function parseConfigBlock(
     const key = line.slice(0, eq).trim();
     const valuePart = line.slice(eq + 1);
 
+    if (REJECTED_KEYS[key]) {
+      return fail(filePath, REJECTED_KEYS[key], lineNo, colFromRaw(raw));
+    }
     if (!ALLOWED_KEYS.has(key)) {
       return fail(
         filePath,

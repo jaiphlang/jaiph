@@ -1,9 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  parseMount,
-  parseMounts,
-  validateMounts,
   validateMountHostPath,
   resolveDockerConfig,
   buildDockerArgs,
@@ -18,7 +15,6 @@ import {
   selectSandboxMode,
   cloneWorkspaceForSandbox,
   allocateSandboxWorkspaceDir,
-  type MountSpec,
   type DockerRunConfig,
   type DockerSpawnOptions,
 } from "./docker";
@@ -45,7 +41,6 @@ function defaultOpts(overrides?: Partial<DockerSpawnOptions>): DockerSpawnOption
       imageExplicit: false,
       network: "default",
       timeout: 300,
-      mounts: [{ hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" }],
     },
     sourceAbs: join(TEST_WS, "main.jh"),
     workspaceRoot: TEST_WS,
@@ -63,84 +58,6 @@ function copyOpts(sandboxWorkspaceDir: string, overrides?: Partial<DockerSpawnOp
 }
 
 // ---------------------------------------------------------------------------
-// parseMount
-// ---------------------------------------------------------------------------
-
-test("parseMount: 3-segment full form", () => {
-  const m = parseMount(".:/jaiph/workspace:rw");
-  assert.deepStrictEqual(m, { hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" });
-});
-
-test("parseMount: 3-segment read-only", () => {
-  const m = parseMount("config:/etc/config:ro");
-  assert.deepStrictEqual(m, { hostPath: "config", containerPath: "/etc/config", mode: "ro" });
-});
-
-test("parseMount: 2-segment shorthand", () => {
-  const m = parseMount("config:ro");
-  assert.deepStrictEqual(m, { hostPath: "config", containerPath: "/jaiph/workspace/config", mode: "ro" });
-});
-
-test("parseMount: 2-segment rw shorthand", () => {
-  const m = parseMount("data:rw");
-  assert.deepStrictEqual(m, { hostPath: "data", containerPath: "/jaiph/workspace/data", mode: "rw" });
-});
-
-test("parseMount: 1 segment throws E_PARSE", () => {
-  assert.throws(() => parseMount("onlyone"), /E_PARSE/);
-});
-
-test("parseMount: invalid mode in 3-segment throws E_PARSE", () => {
-  assert.throws(() => parseMount("a:b:wx"), /E_PARSE.*mode/);
-});
-
-test("parseMount: invalid mode in 2-segment throws E_PARSE", () => {
-  assert.throws(() => parseMount("a:wx"), /E_PARSE.*mode/);
-});
-
-// ---------------------------------------------------------------------------
-// validateMounts
-// ---------------------------------------------------------------------------
-
-test("validateMounts: exactly one /jaiph/workspace mount passes", () => {
-  const mounts: MountSpec[] = [
-    { hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" },
-    { hostPath: "config", containerPath: "/jaiph/workspace/config", mode: "ro" },
-  ];
-  assert.doesNotThrow(() => validateMounts(mounts));
-});
-
-test("validateMounts: no /jaiph/workspace mount throws E_VALIDATE", () => {
-  const mounts: MountSpec[] = [
-    { hostPath: ".", containerPath: "/app", mode: "rw" },
-  ];
-  assert.throws(() => validateMounts(mounts), /E_VALIDATE.*\/jaiph\/workspace/);
-});
-
-test("validateMounts: multiple /jaiph/workspace mounts throws E_VALIDATE", () => {
-  const mounts: MountSpec[] = [
-    { hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" },
-    { hostPath: "other", containerPath: "/jaiph/workspace", mode: "ro" },
-  ];
-  assert.throws(() => validateMounts(mounts), /E_VALIDATE.*multiple/);
-});
-
-// ---------------------------------------------------------------------------
-// parseMounts
-// ---------------------------------------------------------------------------
-
-test("parseMounts: parses and validates multiple mount specs", () => {
-  const mounts = parseMounts([".:/jaiph/workspace:rw", "config:ro"]);
-  assert.equal(mounts.length, 2);
-  assert.equal(mounts[0].containerPath, "/jaiph/workspace");
-  assert.equal(mounts[1].containerPath, "/jaiph/workspace/config");
-});
-
-test("parseMounts: throws when no workspace mount", () => {
-  assert.throws(() => parseMounts(["config:/etc/config:ro"]), /E_VALIDATE/);
-});
-
-// ---------------------------------------------------------------------------
 // resolveDockerConfig
 // ---------------------------------------------------------------------------
 
@@ -150,8 +67,6 @@ test("resolveDockerConfig: defaults when no in-file and no env — Docker on", (
   assert.ok(cfg.image.startsWith(GHCR_IMAGE_REPO + ":"), `default image should be GHCR: ${cfg.image}`);
   assert.equal(cfg.network, "default");
   assert.equal(cfg.timeout, 300);
-  assert.equal(cfg.mounts.length, 1);
-  assert.equal(cfg.mounts[0].containerPath, "/jaiph/workspace");
 });
 
 test("resolveDockerConfig: in-file overrides defaults", () => {
@@ -221,16 +136,6 @@ test("resolveDockerConfig: timeout env override", () => {
 test("resolveDockerConfig: invalid timeout env falls back to default", () => {
   const cfg = resolveDockerConfig(undefined, { JAIPH_DOCKER_TIMEOUT: "abc" });
   assert.equal(cfg.timeout, 300);
-});
-
-test("resolveDockerConfig: workspace from in-file", () => {
-  const cfg = resolveDockerConfig(
-    { workspace: [".:/jaiph/workspace:rw", "config:ro"] },
-    {},
-  );
-  assert.equal(cfg.mounts.length, 2);
-  assert.equal(cfg.mounts[0].containerPath, "/jaiph/workspace");
-  assert.equal(cfg.mounts[1].containerPath, "/jaiph/workspace/config");
 });
 
 // ---------------------------------------------------------------------------
@@ -314,26 +219,6 @@ test("buildDockerArgs: overrides JAIPH_WORKSPACE and JAIPH_RUNS_DIR", () => {
   assert.ok(args.includes("JAIPH_RUNS_DIR=/jaiph/run"));
   assert.ok(!args.some((a) => a === "JAIPH_WORKSPACE=/host/path"));
   assert.ok(!args.some((a) => a === "JAIPH_RUNS_DIR=/host/runs"));
-});
-
-test("buildDockerArgs: multiple workspace mounts only lower-layer paths are mounted ro", () => {
-  const opts = defaultOpts({
-    config: {
-      ...defaultOpts().config,
-      mounts: [
-        { hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" },
-        { hostPath: "config", containerPath: "/jaiph/workspace/config", mode: "ro" },
-      ],
-    },
-  });
-  const args = buildDockerArgs(opts, TEST_OVERLAY);
-  const vFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-v");
-  // 2 configured lower-layer mounts + 1 run + 1 overlay script = 4
-  assert.equal(vFlags.length, 4);
-  assert.ok(!vFlags.some((v) => v.includes("/jaiph/workspace:") && v.endsWith(":ro")));
-  assert.ok(vFlags.some((v) => v.includes("/jaiph/workspace-ro:") && v.endsWith(":ro")));
-  assert.ok(!vFlags.some((v) => v.includes("/jaiph/workspace/config:") && v.endsWith(":ro")));
-  assert.ok(vFlags.some((v) => v.includes("/jaiph/workspace-ro/config:") && v.endsWith(":ro")));
 });
 
 // ---------------------------------------------------------------------------
@@ -771,28 +656,6 @@ test("buildDockerArgs: copy mode binds run dir rw at /jaiph/run", () => {
     const vFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-v");
     const runMount = vFlags.find((v) => v.endsWith(":/jaiph/run:rw"));
     assert.ok(runMount, "run dir bound rw at /jaiph/run");
-  } finally {
-    rmSync(cloneDir, { recursive: true, force: true });
-  }
-});
-
-test("buildDockerArgs: copy mode honors workspace sub-mounts as separate binds (e.g. config:ro)", () => {
-  const cloneDir = mkdtempSync(join(tmpdir(), "jaiph-test-clone-"));
-  try {
-    const opts = copyOpts(cloneDir, {
-      config: {
-        ...defaultOpts().config,
-        mounts: [
-          { hostPath: ".", containerPath: "/jaiph/workspace", mode: "rw" },
-          { hostPath: "config", containerPath: "/jaiph/workspace/config", mode: "ro" },
-        ],
-      },
-    });
-    const args = buildDockerArgs(opts);
-    const vFlags = args.filter((_, i) => i > 0 && args[i - 1] === "-v");
-    const subMount = vFlags.find((v) => v.endsWith(":/jaiph/workspace/config:ro"));
-    assert.ok(subMount, "config sub-mount present and ro");
-    assert.ok(subMount!.startsWith(`${join(cloneDir, "config")}:`), "config sub-mount points into the cloned workspace");
   } finally {
     rmSync(cloneDir, { recursive: true, force: true });
   }
