@@ -50,5 +50,31 @@ workflow commit(task) {
 
     Changes were made for the following task:
     ${task}
-"""
+  """
+}
+
+# Writes a unified diff (HEAD vs working tree, excluding `.jaiph/`) to `dest`.
+# Returns `dest` (relative path). `task` is reserved for callers / future naming.
+script write_tree_patch = ```
+  set -euo pipefail
+  dest="$1"
+  mkdir -p "$(dirname "$dest")"
+  diff_out="$(git diff HEAD -- . ':!.jaiph/' 2>/dev/null || true)"
+  if [[ -z "${diff_out}" ]]; then
+    git add -N . -- ':!.jaiph/' 2>/dev/null || true
+    diff_out="$(git diff HEAD -- . ':!.jaiph/' 2>/dev/null || true)"
+    git reset HEAD -- . 2>/dev/null || true
+  fi
+  if [[ -n "${diff_out}" ]]; then
+    printf '%s\n' "${diff_out}" > "$dest"
+  else
+    : > "$dest"
+  fi
+  printf '%s' "$dest"
+```
+
+workflow patch(task) {
+  ensure in_git_repo()
+  const dest = ".jaiph/tmp/engineer-workspace.patch"
+  return run write_tree_patch(dest)
 }

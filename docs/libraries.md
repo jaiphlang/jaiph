@@ -72,7 +72,7 @@ The module also defines a `default` workflow for **direct CLI** use (arguments a
 
 ### `jaiphlang/artifacts` — publishing files out of the sandbox
 
-Copies files from the **workspace** (or sandbox overlay) into the run’s `artifacts/` tree so they remain on the host after a Docker run or process exit. The kernel sets `JAIPH_ARTIFACTS_DIR` to the writable directory for the current run; the library’s shell helper reads it. See [Architecture](architecture.md#durable-artifact-layout) and [Sandboxing](sandboxing.md) for how that interacts with the read-only workspace in Docker.
+Copies files from the **workspace** (or sandbox overlay) into the run’s `artifacts/` tree so they remain on the host after a Docker run or process exit. The kernel sets `JAIPH_ARTIFACTS_DIR` to the writable directory for the current run. See [Architecture](architecture.md#durable-artifact-layout) and [Sandboxing](sandboxing.md) for how that interacts with the read-only workspace in Docker.
 
 ```jaiph
 import "jaiphlang/artifacts" as artifacts
@@ -81,13 +81,6 @@ workflow default() {
   # Copy a file into the artifacts directory under a chosen name.
   # Returns the absolute path of the saved artifact.
   const path = run artifacts.save("./build/output.bin", "build-output.bin")
-
-  # Working tree + index vs HEAD, excluding .jaiph/ — write patch into artifacts.
-  # Returns the absolute path of the saved patch file.
-  const patch = run artifacts.save_patch("snapshot.patch")
-
-  # Apply a non-empty saved patch to the current workspace (git apply).
-  run artifacts.apply_patch(patch)
 }
 ```
 
@@ -96,10 +89,3 @@ workflow default() {
 | Workflow | Description |
 |----------|-------------|
 | `save(local_path, name)` | Requires `local_path` to be a **file**. Copies to `${JAIPH_ARTIFACTS_DIR}/${name}` (creates parent dirs). Returns the absolute destination path. |
-| `save_patch(name)` | Runs `git diff` against `HEAD` for the workspace tree, with pathspec excluding `.jaiph/`. If there is no diff yet, it may use a short intent-to-add pass for **untracked** content, then reset. If there is still nothing, writes an **empty** file. Returns the path to that file. |
-| `apply_patch(path)` | Runs `git apply` on a patch **file**. Fails if the file is missing, or **empty** (empty patches cannot be applied). |
-
-**Notes**
-
-- `save_patch` omits `.jaiph/` from the diff so re-applying does not clobber run state.
-- A **clean** tree produces an **empty** patch file; do not pass that to `apply_patch` until it has content you intend to apply.

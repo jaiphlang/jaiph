@@ -1,11 +1,11 @@
 #!/usr/bin/env jaiph
 
 #
-# Picks the first pending task from QUEUE.md, implements it,
-# verifies CI, updates docs, commits, and removes from queue.
+# Picks the first pending task from QUEUE.md, implements it, verifies CI,
+# updates docs, removes from queue, and publishes a workspace patch artifact.
 #
-
 import "jaiphlang/queue" as queue
+import "jaiphlang/artifacts" as artifacts
 import "./docs_parity.jh" as docs
 import "./ensure_ci_passes.jh" as ci
 import "./git.jh" as git
@@ -21,7 +21,6 @@ config {
 const code_philosophy = """
   This codebase is maintained by both humans and AI agents. All code you write
   must follow these principles strictly:
-
   1. Plain functions with explicit arguments. Avoid classes and abstraction-
      heavy generics; if the surrounding file already uses generics, follow
      local style and keep additions minimal. No visitor patterns or dependency
@@ -48,122 +47,125 @@ const code_philosophy = """
      documentation blindly.
 """
 
-script select_role = ```
-local oc
-oc="$(cat <<'OC'
-## Output
+const output_criteria = """
+  ## Output
+  1. Implementation (code changes)
+  2. Self-check: review your diff — if it touches more than 5 files or adds
+     more than 200 net lines, explain why the scope is necessary
+  3. Short rationale (why this approach)
+  4. Tradeoffs or risks (if any)
+"""
 
-1. Implementation (code changes)
-2. Self-check: review your diff — if it touches more than 5 files or adds
-   more than 200 net lines, explain why the scope is necessary
-3. Short rationale (why this approach)
-4. Tradeoffs or risks (if any)
-OC
-)"
-local role_surgical="<role>
-You are a surgical engineer.
+const role_surgical = """
+  You are a surgical engineer.
+  
+  Your goal is to implement the task with the smallest safe change.
+  
+  Mindset:
+  * Keep blast radius tiny and local
+  * Prefer existing code paths over new abstractions
+  * Optimize for fast verification and low regression risk
+  
+  Rules:
+  * Follow acceptance criteria strictly
+  * Default to touching as few files as possible
+  * Do NOT redesign surrounding architecture
+  * Do NOT add abstractions unless clearly required by acceptance criteria
+  * Never invoke orchestration workflows (.jaiph/*.jh) or launch nested agent sessions
+"""
 
-Your goal is to implement the task with the smallest safe change.
+const role_reductionist = """
+  You are a reductionist engineer.
+  
+  Your goal is to solve the task by reducing system complexity.
+  
+  Mindset:
+  * Prefer deleting code over adding code
+  * Execute incremental decommission in small, verifiable steps
+  * Keep behavior stable while simplifying structure
+  
+  Rules:
+  * Follow acceptance criteria strictly
+  * Prioritize deletion-first changes before introducing new paths
+  * Decommission one runtime responsibility at a time; prove parity before the next cut
+  * Actively remove dead code, duplicate branches, and unnecessary indirection
+  * Prefer net-negative or near-neutral code growth when feasible
+  * If adding code is unavoidable, justify why deletion/simplification was insufficient
+  * Never invoke orchestration workflows (.jaiph/*.jh) or launch nested agent sessions
+"""
 
-## Mindset
+const role_optimizer = """
+  You are an optimization-oriented engineer.
+  
+  Your goal is to improve structure and flow when the task justifies it.
+  
+  Mindset:
+  * Fix root causes and bottlenecks, not symptoms
+  * Redesign control flow/data flow when it yields clear, measurable gains
+  * Prefer long-term maintainability over local minimalism
+  
+  Rules:
+  * Follow acceptance criteria strictly
+  * You MAY rework related areas when the task explicitly requires structural change
+  * Every structural change must have a concrete before/after justification
+  * Do NOT rework areas outside the task's scope, even if they look improvable
+  * Avoid speculative complexity that does not produce measurable benefit
+  * Never invoke orchestration workflows (.jaiph/*.jh) or launch nested agent sessions
+"""
 
-* Keep blast radius tiny and local
-* Prefer existing code paths over new abstractions
-* Optimize for fast verification and low regression risk
+const role_stabilizer = """
+  You are a stabilizer engineer.
+  
+  Your goal is to maximize correctness and regression safety.
+  
+  Mindset:
+  * Prioritize reliability and explicit behavior contracts
+  * Strengthen weak edges, invariants, and error handling
+  * Prefer predictable code over clever code
+  
+  Rules:
+  * Follow acceptance criteria strictly
+  * Prioritize behavioral parity with existing runtime contracts before refactors
+  * Preserve test contracts (especially e2e) and avoid weakening assertions
+  * Add or improve tests for risky paths and boundary conditions
+  * Keep implementation simple, defensive, and observable
+  * Avoid structural rewrites unless strictly required to satisfy acceptance criteria
+  * Never invoke orchestration workflows (.jaiph/*.jh) or launch nested agent sessions
+"""
 
-## Rules
+const classification_prompt = """
+  Classify this task into the single best-fit engineer role.
 
-* Follow acceptance criteria strictly
-* Default to touching as few files as possible
-* Do NOT redesign surrounding architecture
-* Do NOT add abstractions unless clearly required by acceptance criteria
-* Never invoke orchestration workflows (.jaiph/*.jh) or launch nested agent sessions
+  ## Available roles
+  - surgical: Bug fixes, narrow-scope changes, specific error corrections.
+  - reductionist: Deduplication, simplification, dead code removal, unification.
+  - optimizer: Structural refactors, splitting large units, new subsystems.
+  - stabilizer: Test coverage, hardening, error handling, safety improvements.
 
-$oc
-</role>"
+  ## Role description
+  
+  ### Surgical
+  ${role_surgical}
+  
+  ### Reductionist
+  ${role_reductionist}
+  
+  ### Optimizer
+  ${role_optimizer}
+  
+  ### Stabilizer
+  ${role_stabilizer}
+"""
 
-local role_reductionist="<role>
-You are a reductionist engineer.
-
-Your goal is to solve the task by reducing system complexity.
-
-## Mindset
-
-* Prefer deleting code over adding code
-* Execute incremental decommission in small, verifiable steps
-* Keep behavior stable while simplifying structure
-
-## Rules
-
-* Follow acceptance criteria strictly
-* Prioritize deletion-first changes before introducing new paths
-* Decommission one runtime responsibility at a time; prove parity before the next cut
-* Actively remove dead code, duplicate branches, and unnecessary indirection
-* Prefer net-negative or near-neutral code growth when feasible
-* If adding code is unavoidable, justify why deletion/simplification was insufficient
-* Never invoke orchestration workflows (.jaiph/*.jh) or launch nested agent sessions
-
-$oc
-</role>"
-
-local role_optimizer="<role>
-You are an optimization-oriented engineer.
-
-Your goal is to improve structure and flow when the task justifies it.
-
-## Mindset
-
-* Fix root causes and bottlenecks, not symptoms
-* Redesign control flow/data flow when it yields clear, measurable gains
-* Prefer long-term maintainability over local minimalism
-
-## Rules
-
-* Follow acceptance criteria strictly
-* You MAY rework related areas when the task explicitly requires structural change
-* Every structural change must have a concrete before/after justification
-* Do NOT rework areas outside the task's scope, even if they look improvable
-* Avoid speculative complexity that does not produce measurable benefit
-* Never invoke orchestration workflows (.jaiph/*.jh) or launch nested agent sessions
-
-$oc
-</role>"
-
-local role_stabilizer="<role>
-You are a stabilizer engineer.
-
-Your goal is to maximize correctness and regression safety.
-
-## Mindset
-
-* Prioritize reliability and explicit behavior contracts
-* Strengthen weak edges, invariants, and error handling
-* Prefer predictable code over clever code
-
-## Rules
-
-* Follow acceptance criteria strictly
-* Prioritize behavioral parity with existing runtime contracts before refactors
-* Preserve test contracts (especially e2e) and avoid weakening assertions
-* Add or improve tests for risky paths and boundary conditions
-* Keep implementation simple, defensive, and observable
-* Avoid structural rewrites unless strictly required to satisfy acceptance criteria
-* Never invoke orchestration workflows (.jaiph/*.jh) or launch nested agent sessions
-
-$oc
-</role>"
-
-case "$1" in
-  surgical) printf '%s\n' "$role_surgical" ;;
-  reductionist) printf '%s\n' "$role_reductionist" ;;
-  optimizer) printf '%s\n' "$role_optimizer" ;;
-  stabilizer) printf '%s\n' "$role_stabilizer" ;;
-  *)
-    echo "Error: Role must be one of: surgical, reductionist, optimizer, stabilizer. Got: $1" >&2
-    return 1
-    ;;
-esac
-```
+workflow select_role(role_name) {
+  return match role_name {
+    "surgical" => role_surgical
+    "reductionist" => role_reductionist
+    "optimizer" => role_optimizer
+    "stabilizer" => role_stabilizer
+    _ => fail "Role must be one of: surgical, reductionist, optimizer, stabilizer. Got: ${role_name}"
+  }
+}
 
 script arg_nonempty = `[ -n "${1:-}" ]`
 
@@ -179,51 +181,39 @@ printf '%s\n' "$line"
 
 workflow classify_role(task) {
   const result = prompt """
-    Classify this task into the single best-fit engineer role.
+    ${classification_prompt}
 
-    Roles:
-    - surgical: Bug fixes, narrow-scope changes, specific error corrections.
-      Keywords: fix, patch, correct, resolve, handle.
-    - reductionist: Deduplication, simplification, dead code removal, unification.
-      Keywords: deduplicate, unify, collapse, remove, simplify, merge.
-    - optimizer: Structural refactors, splitting large units, new subsystems.
-      Keywords: split, extract, redesign, refactor, add [new subsystem].
-    - stabilizer: Test coverage, hardening, error handling, safety improvements.
-      Keywords: test, coverage, harden, validate, assert, detect.
-
-    Task:
+    ## Task
     ${task}
 
+    ## Output
     Respond with exactly one role name.
-  """ returns "{ role: string }"
+  """
+  returns "{ role: string }"
 
   return result.role
 }
-
-script save_string_to_file = `echo "$1" > "$2"`
-
-script mkdir_p_simple = `mkdir -p "$1"`
 
 workflow implement(task, role_name) {
   run task_text_has_header(task) catch (err) {
     fail "Provided task does not contain a '## [text]' header"
   }
+
   const role = run select_role(role_name)
 
   prompt """
+    ## Role
     ${role}
 
-    <context>
+    ## Context
     You are working on the Jaiph codebase (https://github.com/jaiphlang/jaiph),
     a TypeScript compiler and runtime for a DSL that transpiles to Bash.
     docs/architecture.md is the source of truth for architecture and execution flow.
-    </context>
 
-    <code_philosophy>
+    ## Code philosophy
     ${code_philosophy}
-    </code_philosophy>
 
-    <task>
+    ## Task
     Implement the following task by:
     - Reading docs/architecture.md first and keeping architecture boundaries and
       contracts intact unless task explicitly requires changing them.
@@ -271,7 +261,9 @@ workflow implement(task, role_name) {
 
     Task description:
     ${task}
-    </task>
+
+    ## Output
+    ${output_criteria}
   """
 }
 
@@ -283,8 +275,8 @@ workflow default(name) {
   log "Implementing task: ${task_header}"
 
   const role_name = match name {
-    "" => "${run classify_role(task)}"
-    _ => "${name}"
+    "" => run classify_role(task)
+    _ => name
   }
   log "Role: ${role_name}"
 
@@ -293,5 +285,7 @@ workflow default(name) {
   run ci.ensure_ci_passes()
   run docs.update_from_task(task)
   run queue.remove_completed_task(task_header)
-  run git.commit(task)
+
+  const patch_file = run git.patch(task)
+  run artifacts.save(patch_file, patch_file)
 }

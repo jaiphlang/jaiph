@@ -11,26 +11,26 @@
 #
 #   workflow default() {
 #     run artifacts.save("./build/output.bin", "build-output.bin")
-#     run artifacts.save_patch("snapshot.patch")
 #   }
 #
-import script "./artifacts.sh" as artifacts
+
+script save_script = ```
+  set -euo pipefail
+  ARTIFACTS_DIR="${JAIPH_ARTIFACTS_DIR:?JAIPH_ARTIFACTS_DIR is not set}"
+  src="$1"
+  dest_name="$2"
+  if [[ ! -f "$src" ]]; then
+    printf 'artifacts save: file not found: %s\n' "$src" >&2
+    exit 1
+  fi
+  dest="${ARTIFACTS_DIR}/${dest_name}"
+  mkdir -p "$(dirname "$dest")"
+  cp -- "$src" "$dest"
+  printf '%s' "$dest"
+```
 
 # Copies the file at `local_path` into the artifacts directory under `name`.
 # Returns the absolute path of the saved artifact.
 export workflow save(local_path, name) {
-  return run artifacts("save", local_path, name)
-}
-
-# Runs `git diff` (working tree vs HEAD, excluding .jaiph/) and writes
-# the patch to the artifacts directory under `name`.
-# Returns the absolute path of the saved patch file.
-export workflow save_patch(name) {
-  return run artifacts("save_patch", name)
-}
-
-# Applies a patch file to the current workspace via `git apply`.
-# Useful for replaying artifacts across runs.
-export workflow apply_patch(path) {
-  run artifacts("apply_patch", path)
+  return run save_script(local_path, name)
 }
