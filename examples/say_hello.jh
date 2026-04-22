@@ -1,17 +1,10 @@
 #!/usr/bin/env jaiph
 
-# scripts are defined in fenced blocks or single line backticks
-# by default it's bash, but it cany be any env: ```node, ```python3, etc.
-script validate_name = ```
-  if [ -z "$1" ]; then
-    echo "You didn't provide your name :(" >&2
-    exit 1
-  fi
-```
-
-# rules are always executed on readonly filesystem
 rule name_was_provided(name) {
-  run validate_name(name)
+  match name {
+    "" => error "You didn't provide your name :(",
+    _  => true
+  }
 }
 
 # workflows are main unit of orchestration

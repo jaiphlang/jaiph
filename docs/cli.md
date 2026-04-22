@@ -370,7 +370,7 @@ jaiph use <version|nightly>
 
 ```bash
 jaiph use nightly
-jaiph use 0.9.2
+jaiph use 0.9.3
 ```
 
 ## File extension

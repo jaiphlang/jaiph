@@ -116,17 +116,12 @@ export function resolveDockerConfig(
   let timeout: number;
   if (env.JAIPH_DOCKER_TIMEOUT !== undefined) {
     const raw = env.JAIPH_DOCKER_TIMEOUT;
-    if (!/^-?\d+$/.test(raw)) {
+    if (!/^\d+$/.test(raw)) {
       throw new Error(
         `E_DOCKER_TIMEOUT JAIPH_DOCKER_TIMEOUT must be a non-negative integer (or 0 to disable), got "${raw}"`,
       );
     }
     timeout = parseInt(raw, 10);
-    if (timeout < 0) {
-      throw new Error(
-        `E_DOCKER_TIMEOUT JAIPH_DOCKER_TIMEOUT must be a non-negative integer (or 0 to disable), got "${raw}"`,
-      );
-    }
   } else {
     timeout = inFile?.dockerTimeout ?? DEFAULTS.timeout;
     if (timeout < 0) {
