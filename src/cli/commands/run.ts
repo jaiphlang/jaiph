@@ -5,6 +5,7 @@ import {
   rmSync,
   statSync,
 } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, extname } from "node:path";
 import { basename } from "node:path";
@@ -89,6 +90,8 @@ export async function runWorkflow(rest: string[]): Promise<number> {
 
     const runtimeEnv = resolveRuntimeEnv(effectiveConfig, workspaceRoot, inputAbs);
     runtimeEnv.JAIPH_SOURCE_ABS = inputAbs;
+    const runId = randomUUID();
+    runtimeEnv.JAIPH_RUN_ID = runId;
     const dockerConfigForBanner = resolveDockerConfig(mod.metadata?.runtime, runtimeEnv);
     const sandboxModeForBanner = dockerConfigForBanner.enabled ? selectSandboxMode(runtimeEnv) : null;
 
@@ -190,7 +193,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     return reportResult(
       runState.capturedStderr, childExit.status, startedAt, runtimeEnv,
       emitter, runState.workflowRunId, inputAbs, workspaceRoot, metaFile,
-      dockerResult?.sandboxRunDir,
+      dockerResult?.sandboxRunDir, runId,
     );
   } finally {
     if (shouldCleanup) {
@@ -384,6 +387,7 @@ function reportResult(
   workspaceRoot: string,
   metaFile: string,
   sandboxRunDir?: string,
+  expectedRunId?: string,
 ): number {
   const elapsedMs = Date.now() - startedAt;
   const elapsedLabel = formatElapsedDuration(elapsedMs);
@@ -405,8 +409,8 @@ function reportResult(
   }
   // Docker mode: container meta file is inaccessible from host.
   // Discover the run directory from the bind-mounted sandbox runs dir.
-  if (!runDir && sandboxRunDir) {
-    const discovered = discoverDockerRunDir(sandboxRunDir);
+  if (!runDir && sandboxRunDir && expectedRunId) {
+    const discovered = discoverDockerRunDir(sandboxRunDir, expectedRunId);
     runDir = discovered.runDir;
     summaryFile = discovered.summaryFile;
   }

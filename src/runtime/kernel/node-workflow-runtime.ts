@@ -402,7 +402,7 @@ export class NodeWorkflowRuntime {
     this.env = opts.env ?? process.env;
     this.cwd = opts.cwd ?? process.cwd();
     this.mockBodies = opts.mockBodies ?? new Map();
-    this.runId = randomUUID();
+    this.runId = this.env.JAIPH_RUN_ID || randomUUID();
     const source = this.env.JAIPH_SOURCE_FILE ?? basename(graph.entryFile);
     const date = new Date();
     const datePart = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
