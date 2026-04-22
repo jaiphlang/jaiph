@@ -33,6 +33,8 @@ workflow default
   ▸ script hello_impl
   ✓ script hello_impl (<time>)
 ✓ PASS workflow default (<time>)
+
+hello-shorthand
 EOF
 
 e2e::expect_out "hello.jh" "hello_impl" "hello-shorthand"

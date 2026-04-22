@@ -144,10 +144,10 @@ e2e::expect_stdout "${recover_out}" <<'EOF'
 Jaiph: Running recover_loop.jh
 
 workflow default
-  ▸ rule report_exists
-  ·   ▸ script check_report
-  ·   ✓ script check_report (<time>)
-  ✓ rule report_exists (<time>)
+  ▸ script check_report_exists
+  ✓ script check_report_exists (<time>)
+  ▸ script __inline_<id>
+  ✓ script __inline_<id> (<time>)
 ✓ PASS workflow default (<time>)
 EOF
 
@@ -156,6 +156,8 @@ rm -f "${TEST_DIR}/report.txt"
 # ── recover_loop.test.jh ──────────────────────────────────────────────────
 
 e2e::section "examples/recover_loop.test.jh — native test with mocked script"
+
+touch "${TEST_DIR}/report.txt"
 
 # When
 rl_test_out="$(jaiph test "${TEST_DIR}/recover_loop.test.jh" 2>&1)"

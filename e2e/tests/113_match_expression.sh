@@ -36,6 +36,8 @@ workflow default
   ▸ script get_status
   ✓ script get_status (<time>)
 ✓ PASS workflow default (<time>)
+
+something broke
 EOF
 
 e2e::expect_out "match_string.jh" "get_status" "error"
@@ -68,6 +70,8 @@ workflow default
   ▸ script get_mode
   ✓ script get_mode (<time>)
 ✓ PASS workflow default (<time>)
+
+default
 EOF
 
 e2e::expect_out "match_wildcard.jh" "get_mode" "unknown-mode"
@@ -100,6 +104,8 @@ workflow default
   ▸ script get_input
   ✓ script get_input (<time>)
 ✓ PASS workflow default (<time>)
+
+error
 EOF
 
 e2e::expect_out "match_regex.jh" "get_input" "ERROR: something failed"
@@ -132,6 +138,8 @@ workflow default
   ▸ script get_code
   ✓ script get_code (<time>)
 ✓ PASS workflow default (<time>)
+
+success
 EOF
 
 e2e::pass "match in return statement"

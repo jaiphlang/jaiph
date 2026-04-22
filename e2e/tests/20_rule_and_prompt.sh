@@ -47,6 +47,8 @@ workflow default
   ▸ script done_impl
   ✓ script done_impl (<time>)
 ✓ PASS workflow default (<time>)
+
+e2e-rule-pass-done
 EOF
 
 e2e::expect_out_files "rule_pass.jh" 4
@@ -180,7 +182,7 @@ e2e::expect_stdout "${prompt_vars_out}" <<'EOF'
 Jaiph: Running prompt_with_vars.jh
 
 workflow default
-  ▸ prompt cursor "engineer does Fix bugs" (role="engineer", task="Fix bugs")
+  ▸ prompt cursor "${role} does ${task}" (role="engineer", task="Fix bugs")
   ✓ prompt cursor (<time>)
 ✓ PASS workflow default (<time>)
 EOF

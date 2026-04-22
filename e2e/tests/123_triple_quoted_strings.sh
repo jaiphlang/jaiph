@@ -54,7 +54,11 @@ e2e::expect_stdout "${return_out}" <<'EOF'
 Jaiph: Running return_multiline.jh
 
 workflow default
+
 ✓ PASS workflow default (<time>)
+
+line one
+line two
 EOF
 
 # ── 3. Triple-quoted const with interpolation ─────────────────────────────────

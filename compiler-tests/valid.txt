@@ -412,7 +412,7 @@ workflow default() {
 # @expect ok
 --- input.jh
 config {
-  runtime.docker_timeout = 300
+  runtime.docker_timeout_seconds = 300
 }
 workflow default() {
   log "ok"
@@ -424,7 +424,7 @@ workflow default() {
 config {
   runtime.docker_image = "ubuntu:24.04"
   runtime.docker_network = "host"
-  runtime.docker_timeout = 600
+  runtime.docker_timeout_seconds = 600
 }
 workflow default() {
   log "ok"
