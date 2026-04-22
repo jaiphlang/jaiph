@@ -13,36 +13,6 @@ Process rules:
 
 ***
 
-## Sandbox — refactor `cloneWorkspaceForSandbox` state-threading into a small class #dev-ready
-
-**Goal**
-`copyEntryWithCloneFallback` threads a mutable `{ cloneAttempted, cloneSupported, firstFallbackReason }` object through every recursive call. Reading the function requires holding the state machine in head. Replace with a small class instance that owns the state and exposes one method.
-
-**Context (read before starting)**
-
-* All affected code lives in `src/runtime/docker.ts` (`tryCp`, `copyEntryWithCloneFallback`, `cloneWorkspaceForSandbox` — lines ~360–449).
-* Tests in `src/runtime/docker.test.ts` cover behavior (`cloneWorkspaceForSandbox: copies entries and excludes .jaiph/runs`, `…produces independent file inodes`, `…empty workspace`). Behavior must stay identical.
-
-**Scope**
-
-* Introduce a non-exported `class WorkspaceCloner` in `src/runtime/docker.ts` with private state (`cloneAttempted`, `cloneSupported`, `firstFallbackReason`) and one public method `copy(src: string, dst: string): void`.
-* `cloneWorkspaceForSandbox` instantiates one cloner, calls `cloner.copy(...)` for each entry, then surfaces the one-time fallback warning by reading from the cloner.
-* Delete `copyEntryWithCloneFallback` and its `state` parameter.
-* No new tests required (existing tests cover behavior).
-
-**Non-goals**
-
-* Do not export the class. It is an implementation detail.
-* Do not change the clonefile-vs-cp decision tree.
-
-**Acceptance criteria**
-
-* `copyEntryWithCloneFallback` and its `state` parameter no longer exist.
-* `cloneWorkspaceForSandbox` is shorter and reads top-to-bottom without state plumbing.
-* `npm test` still passes with no test changes.
-
-***
-
 ## Sandbox — docs sweep: credential-leak warning + `KEEP_SANDBOX` claim fix #dev-ready
 
 **Goal**
