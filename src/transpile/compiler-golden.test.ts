@@ -312,10 +312,9 @@ test("parser: runtime.workspace with scalar value also produces E_PARSE", () => 
   );
 });
 
-test("parser: all runtime config keys are accepted", () => {
+test("parser: all runtime config keys are accepted (docker_enabled removed)", () => {
   const source = [
     "config {",
-    "  runtime.docker_enabled = true",
     '  runtime.docker_image = "ubuntu:24.04"',
     '  runtime.docker_network = "host"',
     "  runtime.docker_timeout = 600",
@@ -326,10 +325,24 @@ test("parser: all runtime config keys are accepted", () => {
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
   assert.ok(mod.metadata?.runtime);
-  assert.strictEqual(mod.metadata!.runtime!.dockerEnabled, true);
   assert.strictEqual(mod.metadata!.runtime!.dockerImage, "ubuntu:24.04");
   assert.strictEqual(mod.metadata!.runtime!.dockerNetwork, "host");
   assert.strictEqual(mod.metadata!.runtime!.dockerTimeout, 600);
+});
+
+test("parser: runtime.docker_enabled produces E_PARSE with helpful message", () => {
+  const source = [
+    "config {",
+    "  runtime.docker_enabled = true",
+    "}",
+    "workflow default() {",
+    "  log \"ok\"",
+    "}",
+  ].join("\n");
+  assert.throws(
+    () => parsejaiph(source, "/fake/entry.jh"),
+    /runtime\.docker_enabled is no longer supported/,
+  );
 });
 
 test("parser: unknown runtime key throws E_PARSE", () => {

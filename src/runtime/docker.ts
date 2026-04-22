@@ -78,9 +78,9 @@ const DEFAULTS: DockerRunConfig = {
 
 /**
  * Resolve effective Docker config.
- * Precedence: env vars (`JAIPH_DOCKER_*`) > in-file RuntimeConfig > unsafe default rule.
+ * Precedence: env vars (`JAIPH_DOCKER_*`) > unsafe default rule.
  *
- * Default rule (when no explicit override is set):
+ * Default rule (when no explicit `JAIPH_DOCKER_ENABLED` is set):
  *  - `JAIPH_UNSAFE=true` → Docker off (explicit "run on host" escape hatch)
  *  - Otherwise → Docker on (including in CI; CI=true alone no longer disables Docker)
  */
@@ -88,12 +88,10 @@ export function resolveDockerConfig(
   inFile: RuntimeConfig | undefined,
   env: Record<string, string | undefined>,
 ): DockerRunConfig {
-  // enabled: env JAIPH_DOCKER_ENABLED > in-file > unsafe default rule
+  // enabled: env JAIPH_DOCKER_ENABLED > unsafe default rule
   let enabled: boolean;
   if (env.JAIPH_DOCKER_ENABLED !== undefined) {
     enabled = env.JAIPH_DOCKER_ENABLED === "true";
-  } else if (inFile?.dockerEnabled !== undefined) {
-    enabled = inFile.dockerEnabled;
   } else {
     // Default: Docker on unless the user explicitly opts out via JAIPH_UNSAFE.
     // CI=true is intentionally not consulted — CI runs (incl. landing-page e2e
@@ -134,7 +132,7 @@ export function checkDockerAvailable(): void {
   try {
     execSync("docker info", { stdio: "ignore", timeout: 10_000 });
   } catch {
-    throw new Error("E_DOCKER_NOT_FOUND docker is not available. Install Docker and ensure the daemon is running.");
+    throw new Error("E_DOCKER_NOT_FOUND docker is not available. Install Docker and ensure the daemon is running, or set JAIPH_UNSAFE=true to run on the host (no sandbox).");
   }
 }
 

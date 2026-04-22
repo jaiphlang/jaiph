@@ -18,12 +18,22 @@ test("parseConfigBlock: parses boolean values", () => {
   const lines = [
     "config {",
     "  run.debug = true",
-    "  runtime.docker_enabled = false",
     "}",
   ];
   const { metadata } = parseConfigBlock("test.jh", lines, 0);
   assert.equal(metadata.run?.debug, true);
-  assert.equal(metadata.runtime?.dockerEnabled, false);
+});
+
+test("parseConfigBlock: rejects runtime.docker_enabled with E_PARSE", () => {
+  const lines = [
+    "config {",
+    "  runtime.docker_enabled = false",
+    "}",
+  ];
+  assert.throws(
+    () => parseConfigBlock("test.jh", lines, 0),
+    /runtime\.docker_enabled is no longer supported.*JAIPH_DOCKER_ENABLED.*JAIPH_UNSAFE/,
+  );
 });
 
 test("parseConfigBlock: parses integer values", () => {
@@ -354,7 +364,7 @@ test("workflow config: rejects runtime.* keys", () => {
   const src = [
     "workflow default() {",
     "  config {",
-    "    runtime.docker_enabled = true",
+    "    runtime.docker_timeout = 300",
     "  }",
     "}",
   ].join("\n");

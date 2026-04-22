@@ -69,19 +69,19 @@ test("resolveDockerConfig: defaults when no in-file and no env — Docker on", (
   assert.equal(cfg.timeout, 300);
 });
 
-test("resolveDockerConfig: in-file overrides defaults", () => {
+test("resolveDockerConfig: in-file image/timeout overrides defaults (dockerEnabled removed)", () => {
   const cfg = resolveDockerConfig(
-    { dockerEnabled: true, dockerImage: "alpine:3.19", dockerTimeout: 60 },
+    { dockerImage: "alpine:3.19", dockerTimeout: 60 },
     {},
   );
-  assert.equal(cfg.enabled, true);
+  assert.equal(cfg.enabled, true, "enabled defaults to true (no JAIPH_UNSAFE)");
   assert.equal(cfg.image, "alpine:3.19");
   assert.equal(cfg.timeout, 60);
 });
 
-test("resolveDockerConfig: env overrides in-file", () => {
+test("resolveDockerConfig: env overrides in-file image", () => {
   const cfg = resolveDockerConfig(
-    { dockerEnabled: true, dockerImage: "alpine:3.19" },
+    { dockerImage: "alpine:3.19" },
     { JAIPH_DOCKER_ENABLED: "false", JAIPH_DOCKER_IMAGE: "debian:12" },
   );
   assert.equal(cfg.enabled, false);
@@ -93,24 +93,19 @@ test("resolveDockerConfig: CI=true does NOT disable Docker (CI runs the real san
   assert.equal(cfg.enabled, true);
 });
 
-test("resolveDockerConfig: CI=true with in-file dockerEnabled=false respects the in-file override", () => {
-  const cfg = resolveDockerConfig({ dockerEnabled: false }, { CI: "true" });
-  assert.equal(cfg.enabled, false);
+test("resolveDockerConfig: CI=true does not disable Docker (env-only control)", () => {
+  const cfg = resolveDockerConfig(undefined, { CI: "true" });
+  assert.equal(cfg.enabled, true);
 });
 
-test("resolveDockerConfig: env JAIPH_DOCKER_ENABLED=false disables even when CI=true and in-file enables", () => {
-  const cfg = resolveDockerConfig({ dockerEnabled: true }, { CI: "true", JAIPH_DOCKER_ENABLED: "false" });
+test("resolveDockerConfig: env JAIPH_DOCKER_ENABLED=false disables even when CI=true", () => {
+  const cfg = resolveDockerConfig(undefined, { CI: "true", JAIPH_DOCKER_ENABLED: "false" });
   assert.equal(cfg.enabled, false);
 });
 
 test("resolveDockerConfig: JAIPH_UNSAFE=true disables Docker by default", () => {
   const cfg = resolveDockerConfig(undefined, { JAIPH_UNSAFE: "true" });
   assert.equal(cfg.enabled, false);
-});
-
-test("resolveDockerConfig: JAIPH_UNSAFE=true with in-file override enables Docker", () => {
-  const cfg = resolveDockerConfig({ dockerEnabled: true }, { JAIPH_UNSAFE: "true" });
-  assert.equal(cfg.enabled, true);
 });
 
 test("resolveDockerConfig: JAIPH_UNSAFE=true with env JAIPH_DOCKER_ENABLED=true enables Docker", () => {
@@ -136,6 +131,21 @@ test("resolveDockerConfig: timeout env override", () => {
 test("resolveDockerConfig: invalid timeout env falls back to default", () => {
   const cfg = resolveDockerConfig(undefined, { JAIPH_DOCKER_TIMEOUT: "abc" });
   assert.equal(cfg.timeout, 300);
+});
+
+test("resolveDockerConfig: in-file dockerEnabled is ignored (field removed from RuntimeConfig)", () => {
+  // After removal, even if someone constructs a RuntimeConfig with the old shape,
+  // the enabled flag is derived from env only.
+  const cfg = resolveDockerConfig({} as any, { JAIPH_UNSAFE: "true" });
+  assert.equal(cfg.enabled, false, "JAIPH_UNSAFE disables Docker regardless of in-file");
+});
+
+test("checkDockerAvailable: E_DOCKER_NOT_FOUND message mentions JAIPH_UNSAFE", () => {
+  const src = readFileSync(join(__dirname, "docker.ts"), "utf8");
+  assert.ok(
+    src.includes("JAIPH_UNSAFE=true to run on the host"),
+    "E_DOCKER_NOT_FOUND must mention JAIPH_UNSAFE escape hatch",
+  );
 });
 
 // ---------------------------------------------------------------------------

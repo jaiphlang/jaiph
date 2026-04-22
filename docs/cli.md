@@ -419,7 +419,7 @@ These variables apply to `jaiph run` and workflow execution. Variables marked **
 
 **Docker sandbox:**
 
-- `JAIPH_DOCKER_ENABLED` — set to `true` to enable Docker sandbox (overrides in-file `runtime.docker_enabled`).
+- `JAIPH_DOCKER_ENABLED` — set to `true` to enable Docker sandbox; any other value disables it.
 - `JAIPH_DOCKER_IMAGE` — Docker image for sandbox (overrides in-file `runtime.docker_image`). The image must already contain `jaiph`; if it does not, the run fails with `E_DOCKER_NO_JAIPH`. Defaults to the official GHCR runtime image (`ghcr.io/jaiphlang/jaiph-runtime:<version>`).
 - `JAIPH_DOCKER_NETWORK` — Docker network mode (overrides in-file `runtime.docker_network`).
 - `JAIPH_DOCKER_TIMEOUT` — execution timeout in seconds (overrides in-file `runtime.docker_timeout`).

@@ -53,31 +53,22 @@ In both modes, run artifacts are written to a separate rw mount at `/jaiph/run` 
 
 ### Enabling Docker
 
-Docker sandboxing is **on by default** for both local development and CI. When `JAIPH_UNSAFE=true` is not set, `runtime.docker_enabled` defaults to `true`. CI environments (`CI=true`) deliberately exercise the same sandbox path users do — landing-page e2e tests and docs sample tests would otherwise skip the sandbox in CI and miss real regressions. The only environment-driven escape hatch is `JAIPH_UNSAFE=true`.
+Docker sandboxing is controlled exclusively through environment variables -- workflow files do not participate. This makes "the sandbox is escapable only by an explicit env var" the documented threat model.
 
-To disable Docker for a local run without setting an environment variable, set `runtime.docker_enabled = false` in a module-level `config` block:
+Docker is **on by default** for both local development and CI. To run on the host without a sandbox, set `JAIPH_UNSAFE=true`. To control Docker enablement explicitly, set `JAIPH_DOCKER_ENABLED`.
 
-```jh
-config {
-  runtime.docker_enabled = false
-}
-```
+**Precedence (two rows, env only):**
 
-`runtime.*` keys belong only in module-level config. Placing them in a workflow-level `config` block is a parse error.
+| Check | Result |
+|-------|--------|
+| `JAIPH_DOCKER_ENABLED` is set | `"true"` enables Docker; any other value disables it |
+| Default (no explicit env) | Docker **on**, unless `JAIPH_UNSAFE=true` (Docker **off**) |
 
-The environment variable `JAIPH_DOCKER_ENABLED` overrides both the in-file setting and the unsafe default when set: only the literal string `"true"` enables Docker; any other value disables it. `JAIPH_UNSAFE=true` is the explicit "run on host / skip Docker default" escape hatch for local development when Docker is unwanted.
+CI environments (`CI=true`) deliberately exercise the same sandbox path users do -- `CI=true` alone does not disable Docker.
 
-**Default rule (when no explicit `JAIPH_DOCKER_ENABLED` or in-file `runtime.docker_enabled` is set):**
+If Docker is enabled but `docker info` fails, the run exits with `E_DOCKER_NOT_FOUND` and suggests setting `JAIPH_UNSAFE=true` as an escape hatch. There is no silent fallback to local execution.
 
-| Environment | Default |
-|-------------|---------|
-| Plain local (no `JAIPH_UNSAFE`) | Docker **on** |
-| `CI=true` | Docker **on** (CI exercises the same sandbox path as users) |
-| `JAIPH_UNSAFE=true` | Docker **off** |
-
-Explicit overrides (`JAIPH_DOCKER_ENABLED` env or in-file `runtime.docker_enabled`) always take precedence over the default rule.
-
-If Docker is enabled but `docker info` fails, the run exits with `E_DOCKER_NOT_FOUND` -- there is no silent fallback to local execution.
+> **Migration note:** `runtime.docker_enabled` in a `.jh` config block is no longer supported and produces a parse error. Use `JAIPH_DOCKER_ENABLED` or `JAIPH_UNSAFE` in the environment instead.
 
 ### Configuration keys
 
@@ -85,7 +76,6 @@ All Docker-related keys live under `runtime.*` in module-level config:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `runtime.docker_enabled` | boolean | `true` by default (incl. CI); `false` only when `JAIPH_UNSAFE=true` | Enable Docker sandbox for the run. |
 | `runtime.docker_image` | string | `"ghcr.io/jaiphlang/jaiph-runtime:<version>"` | Container image. Must already contain `jaiph`. Defaults to the official GHCR runtime image matching the installed jaiph version. |
 | `runtime.docker_network` | string | `"default"` | Docker network mode. |
 | `runtime.docker_timeout` | integer | `300` | Max execution time in seconds. `0` disables the timeout. |
@@ -94,9 +84,9 @@ Each key is type-checked at parse time. Unknown keys produce `E_PARSE`. The work
 
 #### Environment variable overrides
 
-Following the `JAIPH_*` convention: `JAIPH_DOCKER_ENABLED`, `JAIPH_DOCKER_IMAGE`, `JAIPH_DOCKER_NETWORK`, `JAIPH_DOCKER_TIMEOUT`. Additionally, `JAIPH_UNSAFE` affects the default for `runtime.docker_enabled` (see [Enabling Docker](#enabling-docker)). `CI=true` does **not** affect the default — CI runs use the same sandbox path users do.
+Following the `JAIPH_*` convention: `JAIPH_DOCKER_ENABLED`, `JAIPH_DOCKER_IMAGE`, `JAIPH_DOCKER_NETWORK`, `JAIPH_DOCKER_TIMEOUT`. Additionally, `JAIPH_UNSAFE=true` disables Docker by default (see [Enabling Docker](#enabling-docker)). `CI=true` does **not** affect the default — CI runs use the same sandbox path users do.
 
-Precedence: `JAIPH_DOCKER_ENABLED` env > in-file config > unsafe default rule.
+Precedence: `JAIPH_DOCKER_ENABLED` env > unsafe default rule.
 
 If `JAIPH_DOCKER_TIMEOUT` is set but not a valid integer, the default (`300`) is used.
 
@@ -244,11 +234,10 @@ This denylist is enforced in `buildDockerArgs` and cannot be overridden. If a wo
 
 ### Example
 
-A workflow with Docker sandboxing enabled:
+A workflow with a custom Docker timeout (Docker is on by default):
 
 ```jh
 config {
-  runtime.docker_enabled = true
   runtime.docker_timeout = 600
 }
 

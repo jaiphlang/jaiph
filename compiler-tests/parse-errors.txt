@@ -161,7 +161,7 @@ workflow default() {
 --- input.jh
 workflow default() {
   config {
-    runtime.docker_enabled = true
+    runtime.docker_timeout = 300
   }
 }
 
@@ -239,6 +239,16 @@ workflow default() {
 --- input.jh
 config {
   runtime.workspace = "not-an-array"
+}
+workflow default() {
+  log "ok"
+}
+
+=== config rejects runtime.docker_enabled (no longer supported)
+# @expect error E_PARSE "runtime.docker_enabled is no longer supported" @2:3
+--- input.jh
+config {
+  runtime.docker_enabled = true
 }
 workflow default() {
   log "ok"
@@ -1959,7 +1969,7 @@ workflow default() { log "hello"
 === runtime keys in inline workflow config
 # @expect error E_PARSE "runtime.* keys are not allowed"
 --- input.jh
-workflow default() { config { runtime.docker_enabled = true } }
+workflow default() { config { runtime.docker_timeout = 300 } }
 
 === rule body content after brace without closing on same line
 # @expect error E_PARSE "expected newline after '{'"
