@@ -115,10 +115,25 @@ export function resolveDockerConfig(
   // timeout: env > in-file > default
   let timeout: number;
   if (env.JAIPH_DOCKER_TIMEOUT !== undefined) {
-    timeout = parseInt(env.JAIPH_DOCKER_TIMEOUT, 10);
-    if (isNaN(timeout)) timeout = DEFAULTS.timeout;
+    const raw = env.JAIPH_DOCKER_TIMEOUT;
+    if (!/^-?\d+$/.test(raw)) {
+      throw new Error(
+        `E_DOCKER_TIMEOUT JAIPH_DOCKER_TIMEOUT must be a non-negative integer (or 0 to disable), got "${raw}"`,
+      );
+    }
+    timeout = parseInt(raw, 10);
+    if (timeout < 0) {
+      throw new Error(
+        `E_DOCKER_TIMEOUT JAIPH_DOCKER_TIMEOUT must be a non-negative integer (or 0 to disable), got "${raw}"`,
+      );
+    }
   } else {
     timeout = inFile?.dockerTimeout ?? DEFAULTS.timeout;
+    if (timeout < 0) {
+      throw new Error(
+        `E_DOCKER_TIMEOUT runtime.docker_timeout must be a non-negative integer (or 0 to disable), got "${timeout}"`,
+      );
+    }
   }
 
   return { enabled, image, imageExplicit, network, timeout };

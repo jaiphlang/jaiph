@@ -130,9 +130,49 @@ test("resolveDockerConfig: timeout env override", () => {
   assert.equal(cfg.timeout, 120);
 });
 
-test("resolveDockerConfig: invalid timeout env falls back to default", () => {
-  const cfg = resolveDockerConfig(undefined, { JAIPH_DOCKER_TIMEOUT: "abc" });
+test("resolveDockerConfig: invalid timeout env throws E_DOCKER_TIMEOUT", () => {
+  assert.throws(
+    () => resolveDockerConfig(undefined, { JAIPH_DOCKER_TIMEOUT: "abc" }),
+    { message: /E_DOCKER_TIMEOUT/ },
+  );
+});
+
+test("resolveDockerConfig: negative timeout env throws E_DOCKER_TIMEOUT", () => {
+  assert.throws(
+    () => resolveDockerConfig(undefined, { JAIPH_DOCKER_TIMEOUT: "-5" }),
+    { message: /E_DOCKER_TIMEOUT/ },
+  );
+});
+
+test("resolveDockerConfig: trailing junk in timeout env throws E_DOCKER_TIMEOUT", () => {
+  assert.throws(
+    () => resolveDockerConfig(undefined, { JAIPH_DOCKER_TIMEOUT: "300-" }),
+    { message: /E_DOCKER_TIMEOUT/ },
+  );
+});
+
+test("resolveDockerConfig: empty timeout env throws E_DOCKER_TIMEOUT", () => {
+  assert.throws(
+    () => resolveDockerConfig(undefined, { JAIPH_DOCKER_TIMEOUT: "" }),
+    { message: /E_DOCKER_TIMEOUT/ },
+  );
+});
+
+test("resolveDockerConfig: timeout env 0 disables timeout", () => {
+  const cfg = resolveDockerConfig(undefined, { JAIPH_DOCKER_TIMEOUT: "0" });
+  assert.equal(cfg.timeout, 0);
+});
+
+test("resolveDockerConfig: timeout env 300 accepted", () => {
+  const cfg = resolveDockerConfig(undefined, { JAIPH_DOCKER_TIMEOUT: "300" });
   assert.equal(cfg.timeout, 300);
+});
+
+test("resolveDockerConfig: negative in-file timeout throws E_DOCKER_TIMEOUT", () => {
+  assert.throws(
+    () => resolveDockerConfig({ dockerTimeout: -5 }, {}),
+    { message: /E_DOCKER_TIMEOUT/ },
+  );
 });
 
 test("resolveDockerConfig: in-file dockerEnabled is ignored (field removed from RuntimeConfig)", () => {
