@@ -20,4 +20,7 @@ test "with name, returns greeting and logs response" {
 
   # When
   run hello.default("Alice")
+
+  # Then
+  expect_equal response "Hello Alice! Fun fact: Alice in Wonderland was written by Lewis Carroll."
 }

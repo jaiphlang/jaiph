@@ -445,6 +445,13 @@ function reportResult(
     process.stdout.write(
       `${passPrefix}${palette.green}\u2713 PASS${palette.reset} workflow default ${palette.dim}(${elapsedLabel})${palette.reset}\n`,
     );
+    // Print workflow return value (if any) on its own line, separated by a blank line.
+    // The runtime writes return_value.txt only when the default workflow returns a value.
+    const returnValue = readWorkflowReturnValue(runDir, sandboxRunDir);
+    if (returnValue !== undefined && returnValue.length > 0) {
+      const trimmed = returnValue.endsWith("\n") ? returnValue.slice(0, -1) : returnValue;
+      process.stdout.write(`\n${trimmed}\n`);
+    }
     return 0;
   }
 
@@ -489,4 +496,20 @@ function reportResult(
   }
 
   return resolvedStatus;
+}
+
+function readWorkflowReturnValue(
+  runDir: string | undefined,
+  sandboxRunDir: string | undefined,
+): string | undefined {
+  if (!runDir) return undefined;
+  const candidate = sandboxRunDir
+    ? remapContainerPath(join(runDir, "return_value.txt"), sandboxRunDir)
+    : join(runDir, "return_value.txt");
+  if (!existsSync(candidate)) return undefined;
+  try {
+    return readFileSync(candidate, "utf8");
+  } catch {
+    return undefined;
+  }
 }

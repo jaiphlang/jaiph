@@ -51,3 +51,39 @@ test "block B" {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("test runner binds implicit `response` after `run` so expect_equal works without explicit capture", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "jaiph-implicit-response-"));
+  const scriptsDir = join(dir, "scripts");
+  mkdirSync(scriptsDir, { recursive: true });
+
+  try {
+    const testFile = join(dir, "implicit.test.jh");
+    writeFileSync(
+      testFile,
+      `workflow greet(name) {
+  return "hello \${name}"
+}
+
+test "implicit response" {
+  run greet("world")
+  expect_equal response "hello world"
+}
+`,
+    );
+
+    const exitCode = await runTestFile(testFile, dir, scriptsDir, [
+      {
+        description: "implicit response", loc,
+        steps: [
+          { type: "test_run_workflow" as const, workflowRef: "greet", args: ["world"], loc },
+          { type: "test_expect_equal" as const, variable: "response", expected: "hello world", loc },
+        ],
+      },
+    ]);
+
+    assert.equal(exitCode, 0, "test should pass via implicit `response` binding");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

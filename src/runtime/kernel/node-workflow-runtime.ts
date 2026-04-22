@@ -472,6 +472,16 @@ export class NodeWorkflowRuntime {
       if (i < args.length) rootScope.vars.set(name, args[i]);
     });
     const result = await this.executeWorkflow(resolved.filePath, resolved.workflow.name, rootScope, args, false);
+    // Persist the workflow's return value so the CLI can print it after the run tree.
+    // Empty/undefined values are written as an empty file so the consumer can distinguish
+    // "ran with no return" from "no run happened".
+    if (result.status === 0 && result.returnValue !== undefined) {
+      try {
+        writeFileSync(join(this.runDir, "return_value.txt"), result.returnValue, "utf8");
+      } catch {
+        // Best-effort capture; the run succeeded regardless.
+      }
+    }
     this.emitWorkflow("WORKFLOW_END", "default");
     this.stopHeartbeat();
     return result.status;
