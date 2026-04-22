@@ -26,6 +26,9 @@
         "async",
         "prompt",
         "returns",
+        "return",
+        "match",
+        "fail",
         "mock",
         "log",
         "logerr",
@@ -54,6 +57,21 @@
     function tokenizeJaiphLine(line, state) {
         const tokens = [];
         let i = 0;
+
+        if (state.inFence) {
+            const trimmed = line.trim();
+            if (trimmed === "```") {
+                state.inFence = false;
+                const leading = line.match(/^(\s*)/);
+                if (leading && leading[1]) {
+                    tokens.push({ type: "whitespace", value: leading[1], kind: "plain" });
+                }
+                tokens.push({ type: "fence", value: "```", kind: "string" });
+                return tokens;
+            }
+            tokens.push({ type: "string", value: line, kind: "string" });
+            return tokens;
+        }
 
         while (i < line.length) {
             const ch = line[i];
@@ -84,6 +102,31 @@
             if (ch === "/" && line[i + 1] === "/") {
                 tokens.push({ type: "comment", value: line.slice(i), kind: "comment" });
                 break;
+            }
+
+            if (ch === "/") {
+                // Treat /.../ as a regex literal when it appears at the start of
+                // an expression on this line (e.g. a match-arm LHS). Heuristic:
+                // no significant tokens emitted yet on this line.
+                const noSignificant = tokens.every(function (t) {
+                    return t.type === "whitespace" || t.type === "comment";
+                });
+                if (noSignificant) {
+                    let j = i + 1;
+                    while (j < line.length && line[j] !== "/") {
+                        if (line[j] === "\\" && j + 1 < line.length) {
+                            j += 2;
+                            continue;
+                        }
+                        j += 1;
+                    }
+                    if (j < line.length && line[j] === "/" && j > i + 1) {
+                        j += 1;
+                        tokens.push({ type: "regex", value: line.slice(i, j), kind: "string" });
+                        i = j;
+                        continue;
+                    }
+                }
             }
 
             if (ch === "#") {
@@ -140,6 +183,32 @@
             if (ch === "-" && line[i + 1] === ">") {
                 tokens.push({ type: "arrow", value: "->", kind: "operator" });
                 i += 2;
+                continue;
+            }
+
+            if (ch === "=" && line[i + 1] === ">") {
+                tokens.push({ type: "fat_arrow", value: "=>", kind: "operator" });
+                i += 2;
+                continue;
+            }
+
+            if (ch === "`" && line[i + 1] === "`" && line[i + 2] === "`") {
+                tokens.push({ type: "fence", value: "```", kind: "string" });
+                i += 3;
+                state.inFence = true;
+                continue;
+            }
+
+            if (ch === "`") {
+                const start = i;
+                i += 1;
+                while (i < line.length && line[i] !== "`") {
+                    i += 1;
+                }
+                if (i < line.length) {
+                    i += 1;
+                }
+                tokens.push({ type: "string", value: line.slice(start, i), kind: "string" });
                 continue;
             }
 
@@ -416,7 +485,7 @@
      *   Array of line nodes with annotated tokens.
      */
     function parseJaiph(raw) {
-        const state = { inString: false };
+        const state = { inString: false, inFence: false };
         const tokenLines = raw.split("\n").map(function (line) {
             return tokenizeJaiphLine(line, state);
         });
