@@ -13,36 +13,6 @@ Process rules:
 
 ***
 
-## Sandbox — guarantee cleanup on signals and unexpected exit #dev-ready
-
-**Goal**
-`spawnDockerProcess` creates either a host overlay-script tempdir or a per-run cloned-workspace dir under `<runs-root>/.sandbox-<id>/`. `cleanupDocker(dockerResult)` is called at the end of `runWorkflow` only on the normal path. A `Ctrl-C` (SIGINT), parent kill (SIGTERM), or any uncaught error leaks the directory. After ten interrupted runs on a `node_modules`-heavy repo the runs root has gigabytes of stale clones.
-
-**Context (read before starting)**
-
-* Spawn site: `spawnDockerProcess` in `src/runtime/docker.ts`. Cleanup site: `cleanupDocker` (same file). Caller: `src/cli/commands/run.ts` `runWorkflow`.
-* Existing signal handling lives in `src/cli/run/lifecycle.ts` `setupRunSignalHandlers`. That's the natural extension point.
-* `process.on("exit", …)` runs synchronously and only synchronous cleanup is reliable there. `rmSync` is synchronous.
-
-**Scope**
-
-* Extend `setupRunSignalHandlers` (or add a sibling helper) to also accept a `cleanupDocker` callback. On SIGINT/SIGTERM, after sending the kill signal to the child, call the cleanup callback before exiting.
-* Add a `process.on("exit", …)` guard inside `runWorkflow` (or its docker-spawn helper) that calls `cleanupDocker(dockerResult)` if it has not already been called. Use a flag on `DockerSpawnResult` (e.g. `cleaned: boolean`) to avoid double-rm.
-* Add an e2e test in `e2e/tests/74_docker_lifecycle.sh` (or a new `74b`): start a workflow with a long-running `sleep 30`, send SIGINT after 1 second, assert that no `.sandbox-*` directory remains under the runs root.
-
-**Non-goals**
-
-* Do not try to clean up after SIGKILL — by definition impossible. A startup-time sweep of stale `.sandbox-*` dirs older than N hours is a separate task; not in scope here.
-* Do not change the SIGTERM → SIGKILL grace period for the docker child (already 1.5s in `setupRunSignalHandlers`).
-
-**Acceptance criteria**
-
-* SIGINT during a Docker run leaves no `.sandbox-*` directory behind (covered by new e2e).
-* The normal exit path still cleans up exactly once (no double-`rmSync` warnings).
-* `npm test` and the four `e2e/tests/7*_docker_*.sh` still pass.
-
-***
-
 ## Sandbox — fix concurrent-run race in `discoverDockerRunDir` via run-id stamping #dev-ready
 
 **Goal**

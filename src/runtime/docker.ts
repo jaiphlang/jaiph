@@ -664,6 +664,8 @@ export interface DockerSpawnResult {
   /** When true, cleanup leaves `sandboxWorkspaceDir` on disk for debugging. */
   keepSandboxWorkspace: boolean;
   timeoutTimer?: NodeJS.Timeout;
+  /** Set to true after cleanupDocker has run — prevents double-rmSync. */
+  cleaned?: boolean;
 }
 
 /**
@@ -756,6 +758,8 @@ export function spawnDockerProcess(opts: DockerSpawnOptions): DockerSpawnResult 
  * (copy mode), unless `JAIPH_DOCKER_KEEP_SANDBOX=1` was set.
  */
 export function cleanupDocker(result: DockerSpawnResult): void {
+  if (result.cleaned) return;
+  result.cleaned = true;
   if (result.timeoutTimer) {
     clearTimeout(result.timeoutTimer);
   }

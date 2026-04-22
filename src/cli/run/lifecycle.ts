@@ -30,7 +30,7 @@ export function terminateRunProcessGroup(
 
 export function setupRunSignalHandlers(
   child: ChildProcess,
-  opts?: { forceKillAfterMs?: number },
+  opts?: { forceKillAfterMs?: number; onSignalCleanup?: () => void },
 ): { remove: () => void } {
   const forceKillAfterMs = opts?.forceKillAfterMs ?? 1500;
   let forceKillTimer: NodeJS.Timeout | undefined;
@@ -45,10 +45,12 @@ export function setupRunSignalHandlers(
   };
   const handleInterrupt = (): void => {
     terminateRunProcessGroup(child, "SIGINT");
+    opts?.onSignalCleanup?.();
     scheduleForceKill();
   };
   const handleTerminate = (): void => {
     terminateRunProcessGroup(child, "SIGTERM");
+    opts?.onSignalCleanup?.();
     scheduleForceKill();
   };
   process.once("SIGINT", handleInterrupt);
