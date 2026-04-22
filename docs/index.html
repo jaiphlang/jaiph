@@ -603,6 +603,8 @@ Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</
                         <code>const name = run ref()</code>
                     </dt>
                     <dd>Bind or capture step values. All captures require the <code>const</code> keyword.
+                        All bindings are <strong>immutable</strong> &mdash; a name bound by a parameter,
+                        <code>const</code>, capture, or <code>script</code> cannot be rebound in the same scope.
                         For <code>ensure</code> / <code>run</code> to rules and workflows,
                         explicit
                         <code>return "value"</code> (or <code>return run ref()</code> /
@@ -615,6 +617,7 @@ Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</
                         <code>const x = run helper(arg)</code>,
                         not
                         <code>const x = helper(arg)</code> (compile error with a correction hint). See
+                        <a href="grammar#immutable-bindings">Immutable bindings</a> and
                         <a href="grammar#step-output-contract">Step output contract</a>.
                     </dd>
 

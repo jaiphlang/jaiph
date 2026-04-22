@@ -122,7 +122,7 @@ world
 """
 ```
 
-Variables are accessible as `${name}` inside that module's rules and workflows. They are **not** passed to script subprocesses — use arguments or shared libraries instead. Declaration order matters: `${name}` in a value only expands variables already bound above. Names share the unified namespace with channels, rules, workflows, and scripts.
+Variables are accessible as `${name}` inside that module's rules and workflows. They are **not** passed to script subprocesses — use arguments or shared libraries instead. Declaration order matters: `${name}` in a value only expands variables already bound above. Names share the unified namespace with channels, rules, workflows, and scripts. All bindings are immutable — see [Immutable Bindings](#immutable-bindings).
 
 Top-level `local` is rejected — use `const`.
 
@@ -520,7 +520,7 @@ Prompts are not allowed in rules.
 
 ### `const` — Variable Binding
 
-`const name = <rhs>` introduces a variable in the workflow or rule body.
+`const name = <rhs>` introduces an **immutable** variable in the workflow or rule body. The name must not collide with a parameter, an earlier `const`, a capture, or a `script` name in the same scope — see [Immutable Bindings](#immutable-bindings).
 
 ```jaiph
 const tag = "v1.0"
@@ -706,6 +706,32 @@ const result = run helper(arg)
 const check = ensure validator(input)
 const answer = prompt "Summarize the report"
 const reply = prompt myVar
+```
+
+### Immutable Bindings
+
+All Jaiph bindings are immutable. Once a name is bound — whether by a parameter declaration, a `const` statement, a capture, or a `script` definition — it cannot be rebound in the same visible scope. The compiler enforces this during validation and rejects violations with `E_VALIDATE`.
+
+**Rejected patterns:**
+
+| Pattern | Error |
+|---|---|
+| `workflow w(x) { const x = … }` | parameter `x` cannot be rebound by `const` |
+| `const x = "a"` then `const x = "b"` | duplicate `const` in same scope |
+| `script foo = \`…\`` with param/const `foo` in scope | `script` name collides with immutable binding |
+
+The diagnostic names the conflicting binding and where it was first bound:
+
+```
+E_VALIDATE: cannot rebind immutable name "x"; already bound as parameter at file.jh:1
+```
+
+**Migration:** Code that previously shadowed a parameter with a `const` of the same name (e.g. `workflow w(input) { const input = ensure validate(input) }`) must rename either the parameter or the `const`:
+
+```jaiph
+workflow w(raw_input) {
+  const input = ensure validate(raw_input)
+}
 ```
 
 ## Scripts

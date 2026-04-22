@@ -186,6 +186,70 @@ function collectKnownVars(steps: WorkflowStepDef[], envDecls?: { name: string }[
   return vars;
 }
 
+/** Validate that no immutable binding (param, const, capture) is redefined in the same scope. */
+function validateImmutableBindings(
+  filePath: string,
+  steps: WorkflowStepDef[],
+  params: string[],
+  declLoc: { line: number; col: number },
+  envDecls?: { name: string; loc: { line: number; col: number } }[],
+  moduleScripts?: Set<string>,
+): void {
+  // Map from name → { kind, line } for the first binding site.
+  const bound = new Map<string, { kind: string; line: number }>();
+  for (const p of params) {
+    bound.set(p, { kind: "parameter", line: declLoc.line });
+  }
+
+  const check = (name: string, kind: string, loc: { line: number; col: number }): void => {
+    const prev = bound.get(name);
+    if (prev) {
+      throw jaiphError(
+        filePath,
+        loc.line,
+        loc.col,
+        "E_VALIDATE",
+        `cannot rebind immutable name "${name}"; already bound as ${prev.kind} at ${filePath}:${prev.line}`,
+      );
+    }
+    if (moduleScripts?.has(name)) {
+      throw jaiphError(
+        filePath,
+        loc.line,
+        loc.col,
+        "E_VALIDATE",
+        `cannot rebind immutable name "${name}"; already bound as script in this module`,
+      );
+    }
+    bound.set(name, { kind, line: loc.line });
+  };
+
+  const walk = (ss: WorkflowStepDef[]): void => {
+    for (const s of ss) {
+      if (s.type === "const") {
+        check(s.name, "const", s.loc);
+      }
+      if (s.type === "ensure" && s.captureName) {
+        check(s.captureName, "capture", s.ref.loc);
+      }
+      if (s.type === "run" && s.captureName) {
+        check(s.captureName, "capture", s.workflow.loc);
+      }
+      if ((s.type === "prompt" || s.type === "run_inline_script") && s.captureName) {
+        check(s.captureName, "capture", s.loc);
+      }
+      if ((s.type === "ensure" || s.type === "run") && s.recover) {
+        const recoverSteps = "single" in s.recover ? [s.recover.single] : s.recover.block;
+        walk(recoverSteps);
+      }
+      if (s.type === "if") {
+        walk(s.body);
+      }
+    }
+  };
+  walk(steps);
+}
+
 /** Count the number of call arguments from a space-separated args string (respects quotes). */
 function countCallArgs(argsStr: string | undefined): number {
   if (!argsStr || !argsStr.trim()) return 0;
@@ -558,6 +622,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
   };
 
   for (const rule of ast.rules) {
+    validateImmutableBindings(ast.filePath, rule.steps, rule.params, rule.loc, ast.envDecls, localScripts);
     const ruleKnownVars = collectKnownVars(rule.steps, ast.envDecls, rule.params);
     // Named params are validated via knownVars; positional argN access was removed.
     const validateRuleStep = (s: WorkflowStepDef): void => {
@@ -869,6 +934,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
   }
 
   for (const workflow of ast.workflows) {
+    validateImmutableBindings(ast.filePath, workflow.steps, workflow.params, workflow.loc, ast.envDecls, localScripts);
     const promptSchemas = collectPromptSchemas(workflow.steps);
     const wfKnownVars = collectKnownVars(workflow.steps, ast.envDecls, workflow.params);
     // Named params are validated via knownVars; positional argN access was removed.
