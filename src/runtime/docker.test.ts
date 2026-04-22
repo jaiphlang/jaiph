@@ -145,6 +145,13 @@ test("resolveDockerConfig: negative timeout env throws E_DOCKER_TIMEOUT", () => 
   );
 });
 
+test("resolveDockerConfig: negative-zero timeout env throws E_DOCKER_TIMEOUT", () => {
+  assert.throws(
+    () => resolveDockerConfig(undefined, { JAIPH_DOCKER_TIMEOUT: "-0" }),
+    { message: /E_DOCKER_TIMEOUT/ },
+  );
+});
+
 test("resolveDockerConfig: trailing junk in timeout env throws E_DOCKER_TIMEOUT", () => {
   assert.throws(
     () => resolveDockerConfig(undefined, { JAIPH_DOCKER_TIMEOUT: "300-" }),
