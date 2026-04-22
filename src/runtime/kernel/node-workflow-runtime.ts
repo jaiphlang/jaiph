@@ -551,7 +551,6 @@ export class NodeWorkflowRuntime {
     backend: string,
     scopeVars: Map<string, string>,
     rawPromptSource: string,
-    declaredParamNames?: string[],
   ): PromptStepHandle {
     this.promptSeq += 1;
     this.stepSeq += 1;
@@ -576,17 +575,6 @@ export class NodeWorkflowRuntime {
         seen.add(name);
         const val = scopeVars.get(name) ?? "";
         if (val.length > 0) params.push([name, val]);
-      }
-    }
-    if (declaredParamNames) {
-      for (const pn of declaredParamNames) {
-        if (!seen.has(pn)) {
-          const val = scopeVars.get(pn) ?? "";
-          if (val.length > 0) {
-            seen.add(pn);
-            params.push([pn, val]);
-          }
-        }
       }
     }
     this.emitStep({
@@ -857,6 +845,13 @@ export class NodeWorkflowRuntime {
           return { ok: true, value: result.returnValue ?? result.output.trim() };
         }
 
+        // Bare in-scope identifier (e.g. `=> name_arg`) — sugar for `=> "${name_arg}"`.
+        // Validator already ensures the identifier is in scope; runtime mirrors `return val`.
+        const bareIdent = body.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*$/);
+        if (bareIdent && (scope.vars.has(bareIdent[1]!) || scope.env?.[bareIdent[1]!] !== undefined)) {
+          return { ok: true, value: scope.vars.get(bareIdent[1]!) ?? scope.env?.[bareIdent[1]!] ?? "" };
+        }
+
         // Default: string expression
         const bodyIr = await this.interpolateWithCaptures(body, scope);
         if (!bodyIr.ok) return bodyIr;
@@ -1039,7 +1034,7 @@ export class NodeWorkflowRuntime {
         const backend = promptConfig.backend || "cursor";
         const stepName = resolvePromptStepName(promptConfig);
         const modelRes = resolveModel(promptConfig);
-        const promptStep = this.emitPromptStepStart(promptText, stepName, scope.vars, step.raw, scope.declaredParamNames);
+        const promptStep = this.emitPromptStepStart(promptText, stepName, scope.vars, step.raw);
         this.emitPromptEvent("PROMPT_START", {
           backend,
           model: modelRes.model || undefined,
@@ -1183,7 +1178,6 @@ export class NodeWorkflowRuntime {
             stepName,
             scope.vars,
             step.value.raw,
-            scope.declaredParamNames,
           );
           this.emitPromptEvent("PROMPT_START", {
             backend,
