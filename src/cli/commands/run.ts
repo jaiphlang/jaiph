@@ -31,6 +31,8 @@ import {
 } from "../run/lifecycle";
 import {
   resolveDockerConfig,
+  checkDockerAvailable,
+  prepareImage,
   spawnDockerProcess,
   cleanupDocker,
   resolveDockerHostRunsRoot,
@@ -93,6 +95,10 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     const runId = randomUUID();
     runtimeEnv.JAIPH_RUN_ID = runId;
     const dockerConfigForBanner = resolveDockerConfig(mod.metadata?.runtime, runtimeEnv);
+    if (dockerConfigForBanner.enabled) {
+      checkDockerAvailable();
+      prepareImage(dockerConfigForBanner);
+    }
     const sandboxModeForBanner = dockerConfigForBanner.enabled ? selectSandboxMode(runtimeEnv) : null;
 
     writeBanner(

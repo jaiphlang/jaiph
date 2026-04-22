@@ -56,7 +56,7 @@ All orchestration — local `jaiph run`, `jaiph test`, and **Docker `jaiph run`*
   - `jaiph format` rewrites `.jh` / `.test.jh` files into canonical style. Pure AST→text emitter; no side-effects beyond file writes.
 
 - **Docker runtime helper (`src/runtime/docker.ts`)**
-  - Parses mount specs, resolves Docker config (image, network, timeout), and builds the `docker run` invocation used by `jaiph run --docker`. The container runs the same `node-workflow-runner` process as local execution. The default image is the official `ghcr.io/jaiphlang/jaiph-runtime` GHCR image; every selected image must already contain `jaiph` (no auto-install or derived-image build at runtime). The spawn call uses `stdio: ["ignore", "pipe", "pipe"]` — stdin is ignored to prevent the Docker CLI from blocking on stdin EOF, which would stall event streaming and cause the host CLI to hang after the container exits.
+  - Parses mount specs, resolves Docker config (image, network, timeout), and builds the `docker run` invocation used by `jaiph run --docker`. The container runs the same `node-workflow-runner` process as local execution. The default image is the official `ghcr.io/jaiphlang/jaiph-runtime` GHCR image; every selected image must already contain `jaiph` (no auto-install or derived-image build at runtime). Image preparation (`prepareImage`) runs before the CLI banner: it checks whether the image is local, pulls with `--quiet` if needed (writing a single status line to stderr), and verifies that `jaiph` exists in the image. `spawnDockerProcess` no longer handles pull or verification — it receives a pre-resolved image. The spawn call uses `stdio: ["ignore", "pipe", "pipe"]` — stdin is ignored to prevent the Docker CLI from blocking on stdin EOF, which would stall event streaming and cause the host CLI to hang after the container exits.
   - **Workspace immutability:** Docker runs cannot modify the host workspace. The host checkout is mounted read-only; `/jaiph/workspace` is a sandbox-local copy-on-write overlay discarded on exit. The only host-writable path is `/jaiph/run` (run artifacts). Workflows that need to capture workspace changes should use the `artifacts.save_patch()` library function, which writes a named patch into the artifacts directory. See [Sandboxing](sandboxing.md) for the full contract and [Libraries — `jaiphlang/artifacts`](libraries.md#jaiphlangartifacts--publishing-files-out-of-the-sandbox) for the patch workflow.
 
 ## Runtime vs CLI responsibilities
@@ -195,6 +195,8 @@ sequenceDiagram
     alt local
         CLI->>Runner: spawn detached node-workflow-runner
     else Docker
+        CLI->>CLI: prepareImage (pull --quiet + verify jaiph)
+        Note over CLI: runs before banner so pull doesn't interleave
         CLI->>Runner: spawn container running node-workflow-runner
         Note over CLI: CLI parses events on stderr only
     end

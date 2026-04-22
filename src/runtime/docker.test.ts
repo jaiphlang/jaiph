@@ -9,6 +9,7 @@ import {
   resolveDockerHostRunsRoot,
   writeOverlayScript,
   verifyImageHasJaiph,
+  prepareImage,
   isEnvAllowed,
   GHCR_IMAGE_REPO,
   selectSandboxMode,
@@ -500,10 +501,10 @@ test("docker.ts: no auto-build or npm-pack bootstrap code", () => {
   assert.ok(!src.includes("ensureLocalRuntimeImage"), "docker.ts must not contain ensureLocalRuntimeImage");
   assert.ok(!src.includes("buildRuntimeImageFromLocalPackage"), "docker.ts must not contain buildRuntimeImageFromLocalPackage");
   assert.ok(
-    /export function resolveImage\(config: DockerRunConfig\): string \{[\s\S]*?pullImageIfNeeded\(image\);[\s\S]*?verifyImageHasJaiph\(image\);/.test(
+    /export function resolveImage\(config: DockerRunConfig\): string \{[\s\S]*?return prepareImage\(config\);/.test(
       src,
     ),
-    "resolveImage must pull and verify config.image only (no workspace Dockerfile build)",
+    "resolveImage must delegate to prepareImage (no workspace Dockerfile build)",
   );
 });
 
@@ -927,6 +928,63 @@ test("allocateSandboxWorkspaceDir: creates a fresh .sandbox-* dir under the runs
 // pullImageIfNeeded: shell metacharacter safety (execFileSync migration)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// prepareImage: structured status output
+// ---------------------------------------------------------------------------
+
+test("prepareImage: writes pulling/pulled status to stderr on cold pull", () => {
+  const captured: string[][] = [];
+  const stderrWrites: string[] = [];
+  const original = _dockerExec.run;
+  const origWrite = process.stderr.write;
+  _dockerExec.run = (args: string[], _opts: object) => {
+    captured.push([...args]);
+    if (args[0] === "image" && args[1] === "inspect") throw new Error("not found");
+    if (args[0] === "pull") return; // pull succeeds
+    if (args[0] === "run") return; // imageHasJaiph check
+  };
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    stderrWrites.push(String(chunk));
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    const config: DockerRunConfig = { enabled: true, image: "test:latest", imageExplicit: false, network: "default", timeout: 300 };
+    prepareImage(config);
+    assert.ok(stderrWrites.some((s) => s.includes("pulling image test:latest")), "status line before pull");
+    assert.ok(stderrWrites.some((s) => s.includes("pulled")), "status line after pull");
+    assert.ok(captured.some((a) => a[0] === "pull" && a.includes("--quiet")), "pull uses --quiet");
+  } finally {
+    _dockerExec.run = original;
+    process.stderr.write = origWrite;
+  }
+});
+
+test("prepareImage: no status output when image is already local", () => {
+  const stderrWrites: string[] = [];
+  const original = _dockerExec.run;
+  const origWrite = process.stderr.write;
+  _dockerExec.run = (args: string[], _opts: object) => {
+    if (args[0] === "image" && args[1] === "inspect") return; // image exists
+    if (args[0] === "run") return; // imageHasJaiph check
+  };
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    stderrWrites.push(String(chunk));
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    const config: DockerRunConfig = { enabled: true, image: "test:latest", imageExplicit: false, network: "default", timeout: 300 };
+    prepareImage(config);
+    assert.ok(!stderrWrites.some((s) => s.includes("pulling")), "no pull status when image is local");
+  } finally {
+    _dockerExec.run = original;
+    process.stderr.write = origWrite;
+  }
+});
+
+// ---------------------------------------------------------------------------
+// pullImageIfNeeded: shell metacharacter safety (execFileSync migration)
+// ---------------------------------------------------------------------------
+
 test("pullImageIfNeeded: image with semicolon is passed verbatim, no shell expansion", () => {
   const captured: string[][] = [];
   const original = _dockerExec.run;
@@ -955,7 +1013,7 @@ test("pullImageIfNeeded: semicolon image passed verbatim to docker pull on inspe
     pullImageIfNeeded("alpine; echo pwned");
     assert.equal(captured.length, 2, "inspect + pull");
     assert.deepStrictEqual(captured[0], ["image", "inspect", "alpine; echo pwned"]);
-    assert.deepStrictEqual(captured[1], ["pull", "alpine; echo pwned"]);
+    assert.deepStrictEqual(captured[1], ["pull", "--quiet", "alpine; echo pwned"]);
   } finally {
     _dockerExec.run = original;
   }

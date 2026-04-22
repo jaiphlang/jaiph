@@ -13,37 +13,6 @@ Process rules:
 
 ***
 
-## Sandbox — pre-pull docker image with single status line before workflow start #dev-ready
-
-**Goal**
-`pullImageIfNeeded` runs inside `resolveImage`, which runs inside `spawnDockerProcess`, which is called *after* the host CLI has already started rendering the running banner and tree. On a cold image pull, Docker's own progress UI (`Pulling from …`, layer hashes, percent bars) interleaves with the jaiph progress tree. The output is unreadable. Pre-pull before the banner; replace Docker's noisy progress with one structured status line.
-
-**Context (read before starting)**
-
-* The current pull happens inside `pullImageIfNeeded` in `src/runtime/docker.ts`, called from `resolveImage`, called from `spawnDockerProcess`.
-* The call site in `runWorkflow` (`src/cli/commands/run.ts`) writes the banner first, then calls `spawnExec` which kicks off `spawnDockerProcess`. The order of operations is the issue.
-* `imageHasJaiph` should also run pre-banner — its docker startup overhead has the same UX problem.
-
-**Scope**
-
-* Extract a `prepareImage(config: DockerRunConfig)` function in `src/runtime/docker.ts` that does the existing `pullImageIfNeeded` + `verifyImageHasJaiph` and returns the resolved image string. Pull progress: pass `--quiet` to `docker pull` and write a single `pulling image <name>…` line to stderr before the call, then `pulled` (or the error) after.
-* Call `prepareImage` from `runWorkflow` in `src/cli/commands/run.ts` **before** `writeBanner`. The banner stays clean.
-* Remove the pull/verify from `resolveImage` (or keep `resolveImage` as a thin wrapper around `prepareImage` for back-compat in tests).
-* Add an e2e test in `e2e/tests/74_docker_lifecycle.sh` (or new `74c`): force a pull (use a cheap image like `alpine:3.20` not present locally), assert that stdout contains the running banner only after stderr contains a `pulling image` line.
-
-**Non-goals**
-
-* Do not implement layer-by-layer progress reporting via `docker pull --json`. One-line status is enough for now.
-* Do not cache pull results across invocations beyond what the local Docker daemon already does.
-
-**Acceptance criteria**
-
-* The running banner does not appear until image preparation is done.
-* On cold pull, exactly one `pulling image …` line appears on stderr; Docker's native progress is suppressed (`--quiet`).
-* `npm test` and the four `e2e/tests/7*_docker_*.sh` still pass.
-
-***
-
 ## Sandbox — extract overlay script to `runtime/overlay-run.sh` and shellcheck in CI #dev-ready
 
 **Goal**
