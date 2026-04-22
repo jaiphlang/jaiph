@@ -287,7 +287,6 @@ export interface jaiphModule {
 
 /** Docker sandbox runtime configuration. */
 export interface RuntimeConfig {
-  dockerEnabled?: boolean;
   dockerImage?: string;
   dockerNetwork?: string;
   dockerTimeout?: number;

@@ -160,7 +160,6 @@ These configure Docker sandboxing. Unlike agent and run keys, runtime keys are r
 
 | Key | Type | Default | Env variable | Description |
 |-----|------|---------|--------------|-------------|
-| `runtime.docker_enabled` | boolean | `true` by default (incl. CI); `false` only when `JAIPH_UNSAFE=true` | `JAIPH_DOCKER_ENABLED` | Enable Docker for this run. See [Sandboxing -- Enabling Docker](sandboxing.md#enabling-docker) for the default rule. |
 | `runtime.docker_image` | string | `ghcr.io/jaiphlang/jaiph-runtime:<version>` | `JAIPH_DOCKER_IMAGE` | Image name. Must already contain `jaiph`. When unset, uses the official GHCR image tag matching the installed jaiph version. For a custom image, build and push (or tag locally), then set this key or `JAIPH_DOCKER_IMAGE`. |
 | `runtime.docker_network` | string | `default` | `JAIPH_DOCKER_NETWORK` | Docker network mode. |
 | `runtime.docker_timeout` | integer | `300` | `JAIPH_DOCKER_TIMEOUT` | Timeout in seconds. Invalid or unparsable values fall back to the default. |
@@ -176,7 +175,7 @@ For **agent and run keys**, resolution order (highest wins):
 3. **Module-level `config`** — applies to workflows that don't define their own block.
 4. **Built-in defaults.**
 
-For **Docker / `runtime.*` keys**, the `jaiph run` driver merges **`JAIPH_DOCKER_*` env > module-level `runtime.*` > unsafe default rule**. The default rule enables Docker unless `JAIPH_UNSAFE=true` is set; `CI=true` no longer disables Docker (see [Sandboxing -- Enabling Docker](sandboxing.md#enabling-docker)). Workflow-level config cannot set runtime keys.
+For **Docker enablement**, the `jaiph run` driver uses **`JAIPH_DOCKER_ENABLED` env > unsafe default rule** (env only; `runtime.docker_enabled` is no longer supported). The default rule enables Docker unless `JAIPH_UNSAFE=true` is set; `CI=true` no longer disables Docker (see [Sandboxing -- Enabling Docker](sandboxing.md#enabling-docker)). For other `runtime.*` keys (image, network, timeout), the merge is **`JAIPH_DOCKER_*` env > module-level `runtime.*` > defaults**. Workflow-level config cannot set runtime keys.
 
 ### Locked variables
 
@@ -313,7 +312,6 @@ Quick reference for all in-file keys and their environment variable equivalents:
 | `run.debug` | `JAIPH_DEBUG` |
 | `run.inbox_parallel` | `JAIPH_INBOX_PARALLEL` |
 | `run.recover_limit` | _(no env override)_ |
-| `runtime.docker_enabled` | `JAIPH_DOCKER_ENABLED` |
 | `runtime.docker_image` | `JAIPH_DOCKER_IMAGE` |
 | `runtime.docker_network` | `JAIPH_DOCKER_NETWORK` |
 | `runtime.docker_timeout` | `JAIPH_DOCKER_TIMEOUT` |

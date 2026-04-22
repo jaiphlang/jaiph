@@ -5,6 +5,7 @@ import { findClosingBraceIndex, splitStatementsOnSemicolons } from "./statement-
 /** Keys that were removed — produce a clear E_PARSE instead of "unknown key". */
 const REJECTED_KEYS: Record<string, string> = {
   "runtime.workspace": "runtime.workspace is no longer supported; the workspace is mounted automatically",
+  "runtime.docker_enabled": "runtime.docker_enabled is no longer supported; set JAIPH_DOCKER_ENABLED or JAIPH_UNSAFE in the environment",
 };
 
 const ALLOWED_KEYS = new Set([
@@ -18,7 +19,6 @@ const ALLOWED_KEYS = new Set([
   "run.debug",
   "run.inbox_parallel",
   "run.recover_limit",
-  "runtime.docker_enabled",
   "runtime.docker_image",
   "runtime.docker_network",
   "runtime.docker_timeout",
@@ -39,7 +39,6 @@ const KEY_TYPES: Record<string, "string" | "boolean" | "number" | "string[]"> = 
   "run.debug": "boolean",
   "run.inbox_parallel": "boolean",
   "run.recover_limit": "number",
-  "runtime.docker_enabled": "boolean",
   "runtime.docker_image": "string",
   "runtime.docker_network": "string",
   "runtime.docker_timeout": "number",
@@ -213,11 +212,6 @@ function assignConfigKey(
       out.run = {};
     }
     out.run.recoverLimit = value as number;
-  } else if (key === "runtime.docker_enabled") {
-    if (!out.runtime) {
-      out.runtime = {};
-    }
-    out.runtime.dockerEnabled = value as boolean;
   } else if (key === "runtime.docker_image") {
     if (!out.runtime) {
       out.runtime = {};

@@ -13,41 +13,6 @@ Process rules:
 
 ***
 
-## Sandbox — drop `runtime.docker_enabled` config, env-only opt-in/out #dev-ready
-
-**Goal**
-Three sources of truth for "is Docker on?" (env `JAIPH_DOCKER_ENABLED`, in-file `runtime.docker_enabled`, env `JAIPH_UNSAFE`) is two too many. Collapse to env only. Users who want to run on the host set `JAIPH_UNSAFE=true` (or `JAIPH_DOCKER_ENABLED=false`). Workflow files no longer participate. This also makes "the sandbox is escapable only by an explicit env var" the documented threat model.
-
-**Context (read before starting)**
-
-* `dockerEnabled` is parsed from `runtime.docker_enabled` in `src/config.ts` → `RuntimeConfig.dockerEnabled` and consumed in `resolveDockerConfig` (`src/runtime/docker.ts` lines ~159–170).
-* The current precedence is `JAIPH_DOCKER_ENABLED` env > in-file `runtime.docker_enabled` > unsafe-default rule. After this task the order becomes `JAIPH_DOCKER_ENABLED` env > unsafe-default rule.
-* `E_DOCKER_NOT_FOUND` (line ~211 of `src/runtime/docker.ts`) currently says `"docker is not available. Install Docker and ensure the daemon is running."`. Add a second sentence pointing to the escape hatch.
-* Existing tests assert in-file overrides: `resolveDockerConfig: in-file overrides defaults`, `resolveDockerConfig: env overrides in-file`, `resolveDockerConfig: CI=true with in-file dockerEnabled=false respects the in-file override`, `resolveDockerConfig: JAIPH_UNSAFE=true with in-file override enables Docker`. All of those must be rewritten or deleted.
-
-**Scope**
-
-* Remove the `dockerEnabled` field from `RuntimeConfig` (`src/types.ts` / `src/config.ts`) and the parse path. `runtime.docker_enabled` in a `.jh` file produces `E_PARSE` ("`runtime.docker_enabled` is no longer supported; set `JAIPH_DOCKER_ENABLED` or `JAIPH_UNSAFE` in the environment").
-* Simplify `resolveDockerConfig` so `enabled` is derived from env only.
-* Update `E_DOCKER_NOT_FOUND` message to: `"docker is not available. Install Docker and ensure the daemon is running, or set JAIPH_UNSAFE=true to run on the host (no sandbox)."`
-* Update `docs/sandboxing.md`: rewrite the "Enabling Docker" section to drop the in-file path, simplify the precedence table, and make the env-only contract explicit.
-* Update tests in `src/runtime/docker.test.ts`: delete the in-file-override tests, retain env-only tests, add a test that `runtime.docker_enabled` in a `.jh` produces `E_PARSE`, and add a test that `E_DOCKER_NOT_FOUND` mentions `JAIPH_UNSAFE`.
-
-**Non-goals**
-
-* Do not change `JAIPH_UNSAFE` semantics elsewhere in the codebase. Its only role remains "skip the Docker default".
-* Do not remove other `runtime.docker_*` keys (`docker_image`, `docker_network`, `docker_timeout`) — only `docker_enabled`.
-
-**Acceptance criteria**
-
-* `dockerEnabled` no longer exists on `RuntimeConfig`.
-* `runtime.docker_enabled` in a `.jh` file fails with `E_PARSE` and the helpful message.
-* `E_DOCKER_NOT_FOUND` message references `JAIPH_UNSAFE=true` (covered by a test).
-* `docs/sandboxing.md` "Enabling Docker" section reflects env-only control; precedence table has at most two rows.
-* `npm test` and the four `e2e/tests/7*_docker_*.sh` still pass.
-
-***
-
 ## Sandbox — env forwarding becomes an explicit allowlist #dev-ready
 
 **Goal**

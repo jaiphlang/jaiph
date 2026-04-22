@@ -162,8 +162,9 @@ function emitConfigKeyLines(meta: WorkflowMetadata, key: string, pad: string): s
       if (meta.run?.recoverLimit === undefined) return [];
       return [`${pad}run.recover_limit = ${meta.run.recoverLimit}`];
     case "runtime.docker_enabled":
-      if (meta.runtime?.dockerEnabled === undefined) return [];
-      return [`${pad}runtime.docker_enabled = ${meta.runtime.dockerEnabled}`];
+      // runtime.docker_enabled was removed; skip silently for back-compat with
+      // any cached AST that still carries the key in configBodySequence.
+      return [];
     case "runtime.docker_image":
       if (meta.runtime?.dockerImage === undefined) return [];
       return [`${pad}runtime.docker_image = "${meta.runtime.dockerImage}"`];
@@ -215,7 +216,6 @@ function emitConfig(meta: WorkflowMetadata, pad: string): string {
     if (meta.run.recoverLimit !== undefined) lines.push(`${pad}run.recover_limit = ${meta.run.recoverLimit}`);
   }
   if (meta.runtime) {
-    if (meta.runtime.dockerEnabled !== undefined) lines.push(`${pad}runtime.docker_enabled = ${meta.runtime.dockerEnabled}`);
     if (meta.runtime.dockerImage !== undefined) lines.push(`${pad}runtime.docker_image = "${meta.runtime.dockerImage}"`);
     if (meta.runtime.dockerNetwork !== undefined) lines.push(`${pad}runtime.docker_network = "${meta.runtime.dockerNetwork}"`);
     if (meta.runtime.dockerTimeout !== undefined) lines.push(`${pad}runtime.docker_timeout = ${meta.runtime.dockerTimeout}`);
