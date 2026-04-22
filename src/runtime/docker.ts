@@ -134,6 +134,29 @@ export const _dockerExec = {
   },
 };
 
+/** Test seam for host UID/GID detection — allows tests to simulate detection failure. */
+export const _uidDetect = {
+  getHostUidGid(): { uid: string; gid: string } | undefined {
+    let uid: string | undefined;
+    let gid: string | undefined;
+    try {
+      if (typeof process.getuid === "function") uid = String(process.getuid());
+      if (typeof process.getgid === "function") gid = String(process.getgid());
+    } catch {
+      // Fall through to shell fallback below.
+    }
+    if (!uid || !gid) {
+      try {
+        uid = execFileSync("id", ["-u"], { encoding: "utf8" }).trim();
+        gid = execFileSync("id", ["-g"], { encoding: "utf8" }).trim();
+      } catch {
+        // Both detection paths failed.
+      }
+    }
+    return uid && gid ? { uid, gid } : undefined;
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Docker availability
 // ---------------------------------------------------------------------------
@@ -570,25 +593,17 @@ export function buildDockerArgs(opts: DockerSpawnOptions, overlayScriptPath?: st
   let hostUid: string | undefined;
   let hostGid: string | undefined;
   if (process.platform === "linux") {
-    // Prefer native Node APIs; shelling out to `id` can fail in constrained
-    // PATH/shell environments (e.g. scripted docs runners).
-    try {
-      if (typeof process.getuid === "function") hostUid = String(process.getuid());
-      if (typeof process.getgid === "function") hostGid = String(process.getgid());
-    } catch {
-      // Fall through to shell fallback below.
+    const detected = _uidDetect.getHostUidGid();
+    if (!detected) {
+      throw new Error(
+        "E_DOCKER_UID failed to determine host UID/GID; refusing to run sandbox as root.",
+      );
     }
-    if (!hostUid || !hostGid) {
-      try {
-        hostUid = execFileSync("id", ["-u"], { encoding: "utf8" }).trim();
-        hostGid = execFileSync("id", ["-g"], { encoding: "utf8" }).trim();
-      } catch {
-        // Fall through without host uid/gid.
-      }
-    }
+    hostUid = detected.uid;
+    hostGid = detected.gid;
     if (mode === "overlay") {
       args.push("--user", "0:0");
-    } else if (hostUid && hostGid) {
+    } else {
       args.push("--user", `${hostUid}:${hostGid}`);
     }
   }

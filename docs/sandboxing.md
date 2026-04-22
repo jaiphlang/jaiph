@@ -136,9 +136,11 @@ The working directory is `/jaiph/workspace`. In overlay mode the host CLI genera
 **UID/GID handling on Linux:**
 
 - **Copy mode** -- the container runs directly as `--user <host_uid>:<host_gid>` so writes to the cloned workspace and `/jaiph/run` land owned by the host user.
-- **Overlay mode** -- the container runs as `--user 0:0` and executes the workflow as root inside the container. This keeps the overlay path simple and robust on Linux runners where `fusermount3` enforces strict mountpoint checks.
+- **Overlay mode** -- the container runs as `--user 0:0` and executes the workflow as root inside the container. This keeps the overlay path simple and robust on Linux runners where `fusermount3` enforces strict mountpoint checks. The host UID/GID are still required (forwarded as `JAIPH_HOST_UID`/`JAIPH_HOST_GID` env vars) so the entrypoint can drop privileges via `setpriv`.
 
-On macOS Docker Desktop the VM transparently translates UIDs across the bind-mount boundary, so no `--user` override is applied.
+In both modes, if the host UID/GID cannot be determined (`process.getuid()` and `id -u` both fail), `buildDockerArgs` throws `E_DOCKER_UID` and the run exits before the container is launched. This prevents the container from silently running as root with files owned by root, which would cause permission errors on host-side cleanup.
+
+On macOS Docker Desktop the VM transparently translates UIDs across the bind-mount boundary, so no `--user` override is applied and UID detection is skipped.
 
 **stdin** -- The `docker run` process is spawned with stdin set to `ignore` to prevent the Docker CLI from blocking on stdin EOF.
 
@@ -173,6 +175,7 @@ Docker-related errors use `E_DOCKER_*` codes for programmatic detection:
 | `E_DOCKER_NO_JAIPH` | Selected image does not contain a `jaiph` CLI | Run exits with guidance to use the official image or install jaiph. |
 | `E_DOCKER_RUNS_DIR` | Absolute `JAIPH_RUNS_DIR` points outside the workspace | Run exits. Use a relative path or an absolute path within the workspace. |
 | `E_DOCKER_OVERLAY` | Overlay mode selected but `fuse-overlayfs` is missing from the image or the mount fails inside the container | Container exits with code 78. Use the official runtime image, install `fuse-overlayfs` in your custom image, or set `JAIPH_DOCKER_NO_OVERLAY=1` on the host to switch to copy mode. The CLI already passes `--security-opt apparmor=unconfined` on Linux to defeat the default AppArmor fuse-deny; remaining failures usually mean the host kernel itself blocks fuse mounts (rootless docker without the right user-namespace setup, locked-down kernel, etc.). |
+| `E_DOCKER_UID` | Linux host UID/GID detection failed (`process.getuid` and `id -u` both unavailable) | Run exits before container launch. Ensures the container never silently runs as root. Applies to both copy and overlay modes. |
 | `E_DOCKER_SANDBOX_COPY` | Copy mode failed to clone the host workspace (`cp` returned non-zero) | Run exits before container launch. Inspect the path printed in the error. |
 | `E_VALIDATE_MOUNT` | Mount targets a denied host path (`/`, `/proc`, docker socket, etc.) | Run exits before container launch. |
 | `E_TIMEOUT` | Container exceeds `runtime.docker_timeout` seconds | Container receives SIGTERM, then SIGKILL after 5s grace period. |

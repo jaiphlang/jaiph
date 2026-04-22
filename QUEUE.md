@@ -13,35 +13,6 @@ Process rules:
 
 ***
 
-## Sandbox — fail fast with `E_DOCKER_UID` when host UID detection fails on Linux #dev-ready
-
-**Goal**
-Linux copy mode currently does `process.getuid()` then falls back to `id -u`. If both fail, no `--user` flag is passed and the container runs as root. Files in the cloned workspace and `/jaiph/run` get owned by root; subsequent host-side `rmSync` may fail; the user gets a confusing permission error far from the cause. Replace the silent degradation with a hard failure that names the problem.
-
-**Context (read before starting)**
-
-* The fallback chain lives in `buildDockerArgs` in `src/runtime/docker.ts` (lines ~644–667).
-* Overlay mode intentionally runs as `--user 0:0` (the entrypoint drops to host UID via `setpriv`); only copy mode is affected.
-
-**Scope**
-
-* In `buildDockerArgs`, when `process.platform === "linux"` and mode is `"copy"`, treat missing `hostUid`/`hostGid` as a fatal error: throw `Error("E_DOCKER_UID failed to determine host UID/GID; refusing to run sandbox as root.")`.
-* In overlay mode keep the existing behavior (root in container is intentional, but the JAIPH_HOST_UID/GID env vars are required for the entrypoint to drop privileges — if they would be missing, also throw `E_DOCKER_UID` so the container does not run as root unconditionally).
-* Add unit tests asserting the throw on a stubbed Linux platform with no UID source.
-* Add `E_DOCKER_UID` to the failure-modes table in `docs/sandboxing.md`.
-
-**Non-goals**
-
-* Do not change macOS behavior (no `--user` override there is intentional).
-
-**Acceptance criteria**
-
-* On Linux with no detectable UID/GID, `buildDockerArgs` throws `E_DOCKER_UID` (covered by unit test).
-* `docs/sandboxing.md` failure-modes table includes the new error code.
-* `npm test` and the four `e2e/tests/7*_docker_*.sh` still pass.
-
-***
-
 ## Sandbox — reject negative `JAIPH_DOCKER_TIMEOUT` explicitly #dev-ready
 
 **Goal**

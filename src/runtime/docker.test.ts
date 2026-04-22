@@ -16,6 +16,7 @@ import {
   allocateSandboxWorkspaceDir,
   pullImageIfNeeded,
   _dockerExec,
+  _uidDetect,
   type DockerRunConfig,
   type DockerSpawnOptions,
 } from "./docker";
@@ -731,6 +732,60 @@ test("buildDockerArgs: copy mode runs as host UID:GID directly (Linux)", () => {
     assert.ok(!envFlags.some((v) => v.startsWith("JAIPH_HOST_GID=")), "no JAIPH_HOST_GID env in copy mode");
   } finally {
     rmSync(cloneDir, { recursive: true, force: true });
+  }
+});
+
+test("buildDockerArgs: throws E_DOCKER_UID on Linux when UID/GID detection fails (copy mode)", (t) => {
+  const origPlatform = Object.getOwnPropertyDescriptor(process, "platform");
+  Object.defineProperty(process, "platform", { value: "linux", configurable: true });
+  const origGetHostUidGid = _uidDetect.getHostUidGid;
+  _uidDetect.getHostUidGid = () => undefined;
+  try {
+    const cloneDir = mkdtempSync(join(tmpdir(), "jaiph-test-uid-"));
+    try {
+      assert.throws(
+        () => buildDockerArgs(copyOpts(cloneDir)),
+        /E_DOCKER_UID/,
+      );
+    } finally {
+      rmSync(cloneDir, { recursive: true, force: true });
+    }
+  } finally {
+    _uidDetect.getHostUidGid = origGetHostUidGid;
+    if (origPlatform) Object.defineProperty(process, "platform", origPlatform);
+    else Object.defineProperty(process, "platform", { value: process.platform, configurable: true });
+  }
+});
+
+test("buildDockerArgs: throws E_DOCKER_UID on Linux when UID/GID detection fails (overlay mode)", () => {
+  const origPlatform = Object.getOwnPropertyDescriptor(process, "platform");
+  Object.defineProperty(process, "platform", { value: "linux", configurable: true });
+  const origGetHostUidGid = _uidDetect.getHostUidGid;
+  _uidDetect.getHostUidGid = () => undefined;
+  try {
+    assert.throws(
+      () => buildDockerArgs(defaultOpts(), TEST_OVERLAY),
+      /E_DOCKER_UID/,
+    );
+  } finally {
+    _uidDetect.getHostUidGid = origGetHostUidGid;
+    if (origPlatform) Object.defineProperty(process, "platform", origPlatform);
+    else Object.defineProperty(process, "platform", { value: process.platform, configurable: true });
+  }
+});
+
+test("buildDockerArgs: does not throw E_DOCKER_UID on macOS even without UID detection", () => {
+  const origPlatform = Object.getOwnPropertyDescriptor(process, "platform");
+  Object.defineProperty(process, "platform", { value: "darwin", configurable: true });
+  const origGetHostUidGid = _uidDetect.getHostUidGid;
+  _uidDetect.getHostUidGid = () => undefined;
+  try {
+    // Should not throw — macOS skips UID handling entirely
+    assert.doesNotThrow(() => buildDockerArgs(defaultOpts(), TEST_OVERLAY));
+  } finally {
+    _uidDetect.getHostUidGid = origGetHostUidGid;
+    if (origPlatform) Object.defineProperty(process, "platform", origPlatform);
+    else Object.defineProperty(process, "platform", { value: process.platform, configurable: true });
   }
 });
 
