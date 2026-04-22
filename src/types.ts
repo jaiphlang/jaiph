@@ -210,6 +210,12 @@ export type WorkflowStepDef =
       value: string;
       /** Set when `return """..."""`; runtime dedents margin. */
       tripleQuoted?: boolean;
+      /**
+       * Original source expression when `return <expr>` was bare-identifier
+       * sugar (`return response` → value `"${response}"`). Preserved so the
+       * formatter can emit the bare form authored by the user.
+       */
+      bareSource?: string;
       loc: SourceLoc;
       /** When set, return value comes from a managed run/ensure/match instead of the literal `value`. */
       managed?:

@@ -711,6 +711,8 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
         } else if (step.managed.kind === "run_inline_script") {
           lines.push(...emitInlineScriptLines(`${ci}return run`, step.managed.body, step.managed.lang, step.managed.args, step.managed.bareIdentifierArgs, ci));
         }
+      } else if (step.bareSource) {
+        lines.push(`${ci}return ${step.bareSource}`);
       } else if (step.value.includes("\n")) {
         const inner = step.value.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
         lines.push(`${ci}return """`);
