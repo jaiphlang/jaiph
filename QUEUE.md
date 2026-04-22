@@ -13,52 +13,6 @@ Process rules:
 
 ***
 
-## Allow inline-script managed forms in value positions (`return`/`log`) #dev-ready
-
-**Goal**
-Managed inline-script calls wrapped with explicit `run` should work in value positions. Both `return run \`cat report.txt\`() ` and `log run \`cat report.txt\`() ` are legitimate forms and should not be rejected by parser/validator shape checks.
-
-**Repro**
-
-```jh
-workflow default() {
-  return run `cat report.txt`()
-}
-```
-
-This call should work. The same applies to:
-
-```jh
-workflow default() {
-  log run `cat report.txt`()
-}
-```
-
-**Scope**
-
-* Ensure parser and validation accept `run \`...\`(args)` as a value expression in:
-  - `return ...`
-  - `log ...`
-  (including zero-arg `()`).
-* Keep existing managed return behavior consistent with named refs (`return run ref(...)`).
-* Add regression tests for zero-arg and argument forms of inline-script managed values in both contexts.
-* Verify error paths still reject truly bare inline scripts when `run` is missing (e.g. `return \`...\`()`, `log \`...\`()`)
-
-**Non-goals**
-
-* Do not change runtime semantics of inline scripts beyond enabling this accepted return form.
-* Do not relax restrictions for unrelated inline-script contexts.
-
-**Acceptance criteria**
-
-* `return run \`cat report.txt\`() ` compiles and runs.
-* `log run \`cat report.txt\`() ` compiles and runs.
-* `return run \`echo hi\`("x")` is accepted when argument shape is valid.
-* `return \`cat report.txt\`() ` and `log \`cat report.txt\`() ` (without `run`) remain rejected with clear errors.
-* Tests cover parse + validate + runtime paths for both managed inline-script value contexts.
-
-***
-
 ## Enforce newline-delimited `match` arms (reject commas) #dev-ready
 
 **Goal**

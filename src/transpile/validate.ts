@@ -628,6 +628,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         return;
       }
       if (s.type === "log") {
+        if (s.managed?.kind === "run_inline_script") return; // inline script — no ref to validate
         validateLogString(s.message, ast.filePath, s.loc.line, s.loc.col, "log", { tripleQuoted: s.tripleQuoted });
         const logRuleInner = s.tripleQuoted ? dedentCommonLeadingWhitespace(s.message) : s.message;
         validateRuleStringCaptures(logRuleInner, s.loc);
@@ -646,6 +647,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         return;
       }
       if (s.type === "logerr") {
+        if (s.managed?.kind === "run_inline_script") return; // inline script — no ref to validate
         validateLogString(s.message, ast.filePath, s.loc.line, s.loc.col, "logerr", {
           tripleQuoted: s.tripleQuoted,
         });
@@ -684,6 +686,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           } else if (s.managed.kind === "match") {
             validateMatchExpr(ast.filePath, s.managed.match);
           }
+          // run_inline_script — no ref to validate
         } else {
           validateReturnString(s.value, ast.filePath, s.loc.line, s.loc.col, { tripleQuoted: s.tripleQuoted });
           if (s.value.startsWith('"')) {
@@ -964,6 +967,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         return;
       }
       if (s.type === "log") {
+        if (s.managed?.kind === "run_inline_script") return; // inline script — no ref to validate
         validateLogString(s.message, ast.filePath, s.loc.line, s.loc.col, "log", {
           tripleQuoted: s.tripleQuoted,
         });
@@ -985,6 +989,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         return;
       }
       if (s.type === "logerr") {
+        if (s.managed?.kind === "run_inline_script") return; // inline script — no ref to validate
         validateLogString(s.message, ast.filePath, s.loc.line, s.loc.col, "logerr", {
           tripleQuoted: s.tripleQuoted,
         });

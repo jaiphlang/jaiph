@@ -82,6 +82,12 @@ function collectInlineScripts(
     } else if (s.type === "const" && s.value.kind === "run_inline_script_capture") {
       const shebang = s.value.lang ? langToShebang(s.value.lang) : undefined;
       emitInlineScriptArtifact(s.value.body, shebang, seen, out);
+    } else if (s.type === "return" && s.managed?.kind === "run_inline_script") {
+      const shebang = s.managed.lang ? langToShebang(s.managed.lang) : undefined;
+      emitInlineScriptArtifact(s.managed.body, shebang, seen, out);
+    } else if ((s.type === "log" || s.type === "logerr") && s.managed?.kind === "run_inline_script") {
+      const shebang = s.managed.lang ? langToShebang(s.managed.lang) : undefined;
+      emitInlineScriptArtifact(s.managed.body, shebang, seen, out);
     } else if ((s.type === "ensure" || s.type === "run") && s.recover) {
       const recoverSteps = "single" in s.recover ? [s.recover.single] : s.recover.block;
       collectInlineScripts(recoverSteps, seen, out);
