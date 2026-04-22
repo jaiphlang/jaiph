@@ -92,14 +92,8 @@ e2e::expect_stdout "${say_hello_out}" <<'EOF'
 Jaiph: Running say_hello.jh
 
 workflow default
-  ▸ rule name_was_provided
-  ·   ▸ script validate_name
-  ·   ✗ script validate_name (<time>)
-  ✗ rule name_was_provided (<time>)
-EOF
-
-e2e::expect_file "*script__validate_name.err" <<'EOF'
-You didn't provide your name :(
+  ▸ rule valid_name
+  ✗ rule valid_name (<time>)
 EOF
 
 # ── say_hello.test.jh ───────────────────────────────────────────────────────

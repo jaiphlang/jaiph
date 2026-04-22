@@ -13,6 +13,211 @@ Process rules:
 
 ***
 
+## Allow inline-script managed forms in value positions (`return`/`log`) #dev-ready
+
+**Goal**
+Managed inline-script calls wrapped with explicit `run` should work in value positions. Both `return run \`cat report.txt\`() ` and `log run \`cat report.txt\`() ` are legitimate forms and should not be rejected by parser/validator shape checks.
+
+**Repro**
+
+```jh
+workflow default() {
+  return run `cat report.txt`()
+}
+```
+
+This call should work. The same applies to:
+
+```jh
+workflow default() {
+  log run `cat report.txt`()
+}
+```
+
+**Scope**
+
+* Ensure parser and validation accept `run \`...\`(args)` as a value expression in:
+  - `return ...`
+  - `log ...`
+  (including zero-arg `()`).
+* Keep existing managed return behavior consistent with named refs (`return run ref(...)`).
+* Add regression tests for zero-arg and argument forms of inline-script managed values in both contexts.
+* Verify error paths still reject truly bare inline scripts when `run` is missing (e.g. `return \`...\`()`, `log \`...\`()`)
+
+**Non-goals**
+
+* Do not change runtime semantics of inline scripts beyond enabling this accepted return form.
+* Do not relax restrictions for unrelated inline-script contexts.
+
+**Acceptance criteria**
+
+* `return run \`cat report.txt\`() ` compiles and runs.
+* `log run \`cat report.txt\`() ` compiles and runs.
+* `return run \`echo hi\`("x")` is accepted when argument shape is valid.
+* `return \`cat report.txt\`() ` and `log \`cat report.txt\`() ` (without `run`) remain rejected with clear errors.
+* Tests cover parse + validate + runtime paths for both managed inline-script value contexts.
+
+***
+
+## Enforce newline-delimited `match` arms (reject commas) #dev-ready
+
+**Goal**
+`match` arms should be newline-delimited statements, not comma-separated items. A trailing comma after an arm (e.g. `"" => fail "...",`) is currently being accepted in places where it should be rejected. Tighten syntax so commas are not allowed between/after arms.
+
+**Repro**
+
+```jh
+rule valid_name(name_arg) {
+  return match name_arg {
+    "" => fail "You didn't provide your name :(",
+    _  => name_arg
+  }
+}
+```
+
+The comma after the first arm should be a compile/parse error.
+
+**Scope**
+
+* Update parser/grammar so `match` arms are recognized only as newline-delimited entries.
+* Reject trailing commas after arm bodies and comma separators between arms.
+* Ensure diagnostics are explicit (e.g. "commas are not allowed in match arms; use one arm per line"), not a generic fallback error.
+* Add tests for both direct value arms and managed/fail arms to ensure comma rejection is consistent.
+
+**Non-goals**
+
+* Do not change existing newline-based `match` syntax that is already valid.
+* Do not introduce alternative separators for arms.
+
+**Acceptance criteria**
+
+* `"" => fail "...",` inside a `match` fails compilation/parsing.
+* Comma-separated forms like `"a" => "x", _ => "y"` are rejected.
+* Newline-only forms continue to parse/validate.
+* Tests cover the `valid_name` repro and prevent regression.
+
+***
+
+## Reject bare unknown words (incl. `true`) in `match` arm bodies #dev-ready
+
+**Goal**
+A bare word like `true`, `false`, `blorp`, etc. used as a `match` arm body must fail compilation as an unknown identifier. Today such tokens are silently treated as string literals — `_ => true` returns the literal string `"true"` and the rule passes. This is exactly the failure mode that allowed the `say_hello` validation rule to "work" with a meaningless default branch.
+
+**Context (read before starting)**
+
+* Commit `6c4b0ea` already rejects unknown leading verbs in arm bodies — but only when the verb is followed by arguments or `(` (e.g. `_ => error "msg"`). The current `validateMatchExpr` check does **not** fire for a bare word with no trailing tokens, so `_ => true` and `_ => blorp` slip through. This task closes that hole.
+* The valid arm body forms are: string literal (single- or triple-quoted), bare in-scope identifier (`_ => name_arg`), `${var}` interpolation, `fail "..."`, `run ref(...)`, `ensure ref(...)`. Anything else must error.
+
+**Scope**
+
+* In `validateMatchExpr` (or the equivalent code path), reject any arm body that is a single bare word which is not a known in-scope identifier.
+* Diagnostic must classify this as the existing unknown-identifier validation error (shape matching other "unknown name" errors elsewhere in the validator), not a shell/script error and not a generic parse error.
+* Verify the same rule applies whether the leading-verb check fires first or not — the two checks together must cover both the with-args case (`_ => error "msg"`) and the bare-word case (`_ => true`).
+
+**Non-goals**
+
+* Do not introduce booleans into the language.
+* Do not broaden expression syntax as part of this task.
+* Do not change the valid forms enumerated above.
+
+**Acceptance criteria**
+
+* `match name { "" => fail "..." _ => true }` fails compilation with an unknown-identifier validation error.
+* `match name { "" => fail "..." _ => blorp }` fails with the same error class.
+* `match name { "" => fail "..." _ => "ok" }` continues to compile and run.
+* `match name { "" => fail "..." _ => name }` (bare in-scope identifier) continues to compile and run.
+* Regression tests cover all four cases above so `true`, `false`, and arbitrary bare unknowns cannot silently become accepted later.
+
+***
+
+## Bug: reject reassignment of immutable names (`const`, params, scripts) #dev-ready
+
+**Goal**
+Jaiph bindings are immutable. Compilation should fail when a workflow/rule parameter, a `const` name, or a `script` name is redefined/reassigned in the same visible scope.
+
+**Repro**
+
+```jh
+workflow default(name_arg) {
+  const name_arg = ensure valid_name(name_arg)
+}
+```
+
+This should fail compile: parameter `name_arg` cannot be rebound by `const`.
+
+**Context (read before starting)**
+
+* `examples/say_hello.jh` currently uses this exact pattern (`workflow default(name_arg) { const name_arg = ensure valid_name(name_arg) ... }`). Implementing this task will break that file at compile time, and the example must be fixed in the same change. The simplest fix is to rename the parameter (e.g. `name_input`) and bind a new `const name_arg = ensure valid_name(name_input)`. Apply the same audit to `examples/*.jh`, `examples/*.test.jh`, and `.jaiph/*.jh` — any other file with a param/const collision must be migrated in this PR.
+
+**Scope**
+
+* Enforce immutability checks during validation for:
+  - parameter name shadow/rebind via `const`,
+  - duplicate `const` declarations in the same scope,
+  - `script` name collisions with immutable names where they are visible.
+* Ensure diagnostics are explicit about immutable-name reassignment: which name, and where it was first bound (file + line).
+* Apply consistently in workflows and rules.
+* Migrate every file in the repo that currently violates the new rule (examples, `.jaiph/`, e2e fixtures) as part of this PR; the queue task is not done while a checked-in `.jh` file fails compilation.
+* Add/extend tests to cover success + failure cases.
+
+**Non-goals**
+
+* Do not change runtime semantics.
+* Do not introduce mutable assignment syntax.
+
+**Acceptance criteria**
+
+* The repro fails compilation with an immutable-binding error that names the conflicting binding and its origin.
+* Rebinding any parameter via `const` is rejected.
+* Duplicate `const` names in the same scope are rejected.
+* Rebinding/conflicting `script` names is rejected where applicable.
+* `npm test` and `bash e2e/test_all.sh` pass with no `.jh` file in the repo violating the new rule.
+* Tests lock behavior to prevent regression.
+
+***
+
+## Support `return <identifier>` and stop misrouting it through the shell-step validator #dev-ready
+
+**Goal**
+`return response` (bare identifier in return position) must be a first-class return form. Today it falls through to the catch-all "inline shell steps are forbidden in workflows; use explicit script blocks" `E_VALIDATE` error, which is wrong on three counts: it is not a shell statement, the user is not asked to write one, and the suggested fix (script block) does not solve the problem. Two separate symptoms — "identifier return is not accepted" and "the diagnostic is shell-flavored" — share a single root cause: the validator's bare-statement fallthrough swallows everything it does not explicitly recognize.
+
+**Repro**
+
+```jh
+workflow default(name) {
+  const response = prompt """
+    Say hello to ${name}.
+  """
+  return response
+}
+```
+
+Current output: `<file>:N:M E_VALIDATE inline shell steps are forbidden in workflows; use explicit script blocks`.
+
+**Scope**
+
+* Update parser/validator so workflow/rule return values accept bare identifiers (`return response`), resolved against the same scope rules used for `${ident}` interpolation and bare-identifier call arguments.
+* Audit every emit site of the "inline shell steps are forbidden" `E_VALIDATE` message. Either narrow it to actual inline-shell cases, or replace it entirely with construct-specific diagnostics. After this change, the message must only appear when the user actually wrote a bare shell command.
+* Unknown-identifier returns (`return missing_name` where `missing_name` is not in scope) must produce a precise unknown-identifier error, naming the missing binding.
+* Keep existing valid return forms working unchanged: `return "..."`, `return """..."""`, `return "${ident}"`, `return run ...`, `return ensure ...`, `return match ...`, dotted returns.
+* Tests must cover: (a) `return response` accepted when in scope; (b) `return missing` rejected with unknown-identifier error; (c) the "inline shell steps" message no longer fires for any non-shell construct in the test suite; (d) `return "${response}"` still accepted.
+
+**Non-goals**
+
+* Do not remove `return "${response}"`; both forms remain valid.
+* Do not broaden return syntax beyond bare identifiers and the diagnostic cleanup.
+* Do not add compatibility shims for the old misleading message.
+
+**Acceptance criteria**
+
+* The repro compiles and runs; `return response` propagates the captured prompt response.
+* `return <unknown>` produces an unknown-identifier validation error naming the missing binding (not a shell-step error).
+* No checked-in `.jh` file produces the "inline shell steps are forbidden" error after this change unless it actually contains a bare shell command.
+* `return "${response}"` and all other listed return forms still parse, validate, and run.
+* Regression tests in `src/transpile/` and an e2e covering the repro are added and fail without the fix.
+
+***
+
 ## Cleanup — consolidate the 5-way test directory split #dev-ready
 
 **Goal**
@@ -83,10 +288,10 @@ Today there are five different places that contain "tests": `src/**/*.test.ts` (
 
 ***
 
-## Refactor — split `src/runtime/kernel/node-workflow-runtime.ts` (1720 LoC) #dev-ready
+## Refactor — split `src/runtime/kernel/node-workflow-runtime.ts` (1901 LoC) #dev-ready
 
 **Goal**
-`src/runtime/kernel/node-workflow-runtime.ts` is a 1720-LoC god file: ~280 LoC of free arg-parsing helpers above the class, then a 1440-LoC `NodeWorkflowRuntime` class with 25 methods spanning workflow orchestration, step execution, prompt step lifecycle, event emission, mock execution, frame stack management, and heartbeat I/O. Reading or modifying any one concern requires holding all of them in head. Split along clean seams so each concern is in a focused module.
+`src/runtime/kernel/node-workflow-runtime.ts` is a 1901-LoC god file: ~280 LoC of free arg-parsing helpers above the class, then ~1620 LoC of `NodeWorkflowRuntime` spanning workflow orchestration, step execution, prompt step lifecycle, event emission, mock execution, frame stack management, and heartbeat I/O. Reading or modifying any one concern requires holding all of them in head. Split along clean seams so each concern is in a focused module.
 
 **Context (read before starting)**
 
@@ -114,7 +319,7 @@ After the split, `node-workflow-runtime.ts` keeps only:
 * The async-handle bookkeeping (`getAsyncIndices`, `getFrameStack`)
 * Heartbeat (`startHeartbeat`, `stopHeartbeat`, `writeHeartbeat`)
 
-Target size for `node-workflow-runtime.ts` after split: ~900–1100 LoC. Still large, but a single coherent concern (the orchestrator).
+Target size for `node-workflow-runtime.ts` after split: ~1000–1200 LoC. Still large, but a single coherent concern (the orchestrator).
 
 **Non-goals**
 
@@ -125,7 +330,7 @@ Target size for `node-workflow-runtime.ts` after split: ~900–1100 LoC. Still l
 
 **Acceptance criteria**
 
-* `src/runtime/kernel/node-workflow-runtime.ts` is between 900 and 1100 LoC after the split.
+* `src/runtime/kernel/node-workflow-runtime.ts` is between 1000 and 1200 LoC after the split.
 * `src/runtime/kernel/runtime-arg-parser.ts`, `runtime-event-emitter.ts`, `runtime-mock.ts` exist and own their respective concerns.
 * `runtime-arg-parser.test.ts` exists with direct unit tests for the extracted helpers.
 * `npm test` passes with no test changes other than possibly importing helpers from their new location.

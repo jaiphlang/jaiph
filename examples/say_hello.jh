@@ -1,21 +1,21 @@
 #!/usr/bin/env jaiph
 
-rule name_was_provided(name) {
-  match name {
-    "" => error "You didn't provide your name :(",
-    _  => true
+rule valid_name(name_arg) {
+  return match name_arg {
+    "" => fail "You didn't provide your name :("
+    _ => name_arg
   }
 }
 
 # workflows are main unit of orchestration
-workflow default(name) {
-  ensure name_was_provided(name)
+workflow default(name_arg) {
+  const name_arg = ensure valid_name(name_arg)
 
   # prompts call agents - cursor by default, but it's configurable
   const response = prompt """
-    Say hello to ${name} and provide a fun fact about a person with the same name.
+    Say hello to ${name_arg} and provide a fun fact about a person with the same name.
     Respond with a single line. Do not inspect files or run tools.
   """
 
-  log response
+  return "${response}"
 }
