@@ -5,9 +5,13 @@ redirect_from:
   - /getting-started.md
 ---
 
-# Getting Started
+# Getting started
 
-Jaiph is a composable scripting language and runtime for AI agent workflows. You write `.jh` files that combine prompts, rules, scripts, and workflows into executable pipelines.
+## Overview
+
+**Jaiph** is a workflow system for building agent-style pipelines. You write `.jh` sources (and optional `*.test.jh` test modules) that combine **prompts**, **rules**, **scripts**, and **workflows**. The project ships a **TypeScript CLI** and a **JavaScript kernel** under the Node workflow runtime: the same AST is **parsed and validated** at prepare time, **script** bodies are written as files under `scripts/`, and **execution** is direct AST interpretation in process—there is no separate workflow shell binary (see [Architecture](architecture.md) for boundaries, pipelines, and contracts such as `__JAIPH_EVENT__` and `.jaiph/runs/`).
+
+This page is a **map**: it does not teach syntax end-to-end; it points to install steps, language references, and runtime behavior.
 
 ## Setup
 
@@ -17,17 +21,18 @@ Jaiph is a composable scripting language and runtime for AI agent workflows. You
 ## Language
 
 - **[Language](language.md)** — Practical guide to rules, scripts, prompts, workflows, and imports, with patterns you can copy.
-- **[Inbox & Dispatch](inbox.md)** — Named channels and sends for routing work between workflows without tight coupling.
+- **[Inbox & Dispatch](inbox.md)** — Named channels and `send` for routing work between workflows without tight coupling.
 - **[Testing](testing.md)** — `*.test.jh` suites, mocks, and assertions for deterministic checks around workflows.
+- **[Spec: Async Handles](spec-async-handles.md)** — `Handle<T>` resolution, implicit join, and interaction with `run async`.
 - **[Grammar](grammar.md)** — Formal syntax, types, and step contracts for the whole surface area.
 
 ## Runtime
 
-- **[CLI](cli.md)** — `jaiph run`, `test`, `format`, `init`, `install`, `use`, flags, and environment variables.
+- **[CLI](cli.md)** — `jaiph run`, `test`, `compile`, `format`, `init`, `install`, `use`, flags, and environment variables.
 - **[Configuration](configuration.md)** — `config { }` blocks, agent backends, logging, and runtime options (including env overrides).
 - **[Runtime artifacts](artifacts.md)** — What Jaiph writes under `.jaiph/runs/` (per-step logs, JSONL timeline, inbox files) versus live progress on stderr.
 - **[Hooks](hooks.md)** — Project or user `hooks.json` to run shell commands on workflow and step lifecycle events.
-- **[Sandboxing](sandboxing.md)** — Optional Docker-backed isolation for agent and script steps (beta).
+- **[Sandboxing](sandboxing.md)** — Optional Docker-backed workflow isolation (beta; opt-in through `runtime.*` keys in module `config` and environment—see [Configuration](configuration.md)).
 
 ## Other
 

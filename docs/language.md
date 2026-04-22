@@ -7,7 +7,11 @@ redirect_from:
 
 # Language
 
-Jaiph is a small orchestration language for AI agent workflows. You write `.jh` files that wire together prompts, shell scripts, validation rules, and message channels into executable pipelines. This page is the practical reference for every language primitive — what it does, how to use it, and where the edges are. For the formal EBNF grammar, see [Grammar](grammar). For system internals, see [Architecture](architecture).
+Workflow systems usually need two layers: a **host language** that sequences work, handles failures, and talks to tools, and **task code** (shell, Python, and so on) that does the mechanical steps. Jaiph’s `.jh` modules are that host layer: they wire prompts, scripts, validation **rules**, and **channels** into pipelines you can run from the CLI or CI.
+
+Under the hood, the **TypeScript CLI** parses modules, runs **`validateReferences`** while emitting script files (`emitScriptsForModule` / `buildScripts`), then starts a **Node workflow runtime** that walks the same AST in process — there is no separate workflow shell. The runtime’s `buildRuntimeGraph` pass loads imports with the parser only; compile-time checks live in the transpile path, not in the graph loader. For repository layout, event contracts, and diagrams, see [Architecture](architecture.md).
+
+This page is the practical reference for language primitives — syntax, steps, and runtime behavior at the author’s eye level. For lexical/syntax tables and edge-case grammar, see [Grammar](grammar.md). Test files (`*.test.jh`) are a dialect documented in [Testing](testing.md).
 
 ## Strings
 
@@ -66,7 +70,7 @@ print(f"Analyzing {sys.argv[1]}")
 ```
 </code></pre>
 
-The tag maps to `#!/usr/bin/env <tag>`. Any tag is valid. Alternatively, use a manual `#!` shebang as the first line. Combining both is an error.
+The tag maps to `#!/usr/bin/env <tag>`. Any tag is valid. Alternatively, use a manual `#!` shebang as the first line. Combining both is an error. If the body has **neither** a fence lang tag nor a leading `#!` line, emitted scripts default to `#!/usr/bin/env bash`.
 
 Strings and scripts are structurally distinct and non-interchangeable — using one where the other is expected produces a compile-time error.
 
@@ -129,7 +133,7 @@ Import paths resolve relative to the importing file first. If no file is found a
 import "queue-lib/queue" as queue   # resolves to .jaiph/libs/queue-lib/queue.jh
 ```
 
-The path is split as `<lib-name>/<path-inside-lib>`. Libraries are installed with `jaiph install` — see [CLI — `jaiph install`](cli.md#jaiph-install). Missing library imports fail at compile time with `E_IMPORT_NOT_FOUND`.
+The path is split as `<lib-name>/<path-inside-lib>`. Libraries are installed with `jaiph install` — see [CLI — jaiph install](cli.md#jaiph-install). Missing library imports fail at compile time with `E_IMPORT_NOT_FOUND`.
 
 ### Top-Level `const`
 
@@ -156,7 +160,7 @@ channel findings -> analyst
 channel events -> handler_a, handler_b
 ```
 
-Routes (`->`) declare which workflows receive messages sent to the channel. See [Inbox & Dispatch](inbox) for dispatch semantics.
+Routes (`->`) declare which workflows receive messages sent to the channel. See [Inbox & Dispatch](inbox.md) for dispatch semantics.
 
 ### Config
 
@@ -170,7 +174,7 @@ config {
 }
 ```
 
-See [Configuration](configuration) for all available keys and precedence rules.
+See [Configuration](configuration.md) for all available keys and precedence rules.
 
 ## Definitions
 
@@ -210,7 +214,7 @@ rule gate(path) {
 }
 ```
 
-Rules are more restricted than workflows: they cannot use `prompt`, `send`, or `run async`. Inside a rule, `run` targets scripts only (not workflows). Rules execute in a read-only filesystem — they are meant for validation and checks, not side effects.
+Rules are more restricted than workflows: the compiler rejects `prompt`, `send`, and `run async` in rule bodies, and `run` may only target **scripts** (never workflows or other rules via `run` — use `ensure` for rules). Those restrictions are **static** (see `validateReferences` in `src/transpile/validate.ts`). At runtime, `run` inside a rule still launches a normal managed script subprocess with the same **environment model** as workflow scripts (see [Script isolation](#script-isolation)); scripts can perform side effects — the language simply keeps orchestration-heavy steps out of rules.
 
 ### Scripts
 
@@ -239,13 +243,13 @@ run setup()
 run deploy("prod", version)
 ```
 
-**Bare identifier arguments** pass a variable's value without quoting. `run deploy(env)` is equivalent to `run deploy("${env}")`:
+**Bare identifier arguments** pass a variable’s value without quoting; the compiler records the identifier so unknown names fail early. You can still pass the same value as a quoted orchestration string (for example `run greet("${name}")` when a literal is required), but **prefer the bare form** when the whole argument is exactly one binding — it reads clearly and matches formatter output.
 
 ```jaiph
 const task = run get_next_task()
 run process(task)                    # bare identifier — passes value of task
-run process(task, "extra context")   # mixed bare + quoted
-run process("${task}")              # equivalent to bare form
+run process(task, "extra context")   # mixed bare + quoted literal
+run greet("hello_${name}")           # quoted string with extra text — allowed
 ```
 
 ### Nested Managed Calls in Arguments
@@ -338,7 +342,7 @@ const b1 = run async foo() recover(err) {
 
 The async branch retries `foo()` using the same retry-limit semantics as non-async `recover` (default 10, configurable via `run.recover_limit`). The handle resolves to the eventual success value or the final failure. `catch` also works with `run async` for single-shot recovery (no retry loop).
 
-See [Spec: Async Handles](spec-async-handles) for the full value model.
+See [Spec: Async Handles](spec-async-handles.md) for the full value model.
 
 Constraints: workflow-only (rejected in rules), inline scripts not supported with `run async`.
 
@@ -686,7 +690,7 @@ print(f"args: {sys.argv[1:]}")
 ```()
 </code></pre>
 
-Inline scripts have the same subprocess isolation as named scripts. They are emitted as `scripts/__inline_<hash>` with deterministic names. `run async` with inline scripts is not supported.
+Inline scripts use the same emission layout (`scripts/__inline_<hash>`) and the same **`NodeWorkflowRuntime` spawn contract** as named scripts (full scope env, cwd from `JAIPH_WORKSPACE` / module path — see [Script isolation](#script-isolation)). `run async` with inline scripts is not supported.
 
 ## String Interpolation
 
@@ -711,15 +715,13 @@ log "Status: ${ensure check_ok()}"
 
 If the inline capture fails, the enclosing step fails. Nested inline captures are rejected — extract the inner call to a `const`.
 
-## Script Isolation
+## Script isolation
 
-Scripts run in a clean process environment. Only these variables are inherited:
+**Emitted script files** do not embed module `const` values or other Jaiph “shims” — the transpiler writes the authored body plus a shebang (see `emitScriptsForModule` / `emit-script.ts`). Anything a script needs from the module must be passed as **positional arguments** (`$1`, `$2`, …), read from paths under `JAIPH_WORKSPACE`, or live in shared script sources (`import script`).
 
-- **System:** `PATH`, `HOME`, `TERM`, `USER`
-- **Jaiph:** `JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`
-- **Positional arguments:** `$1`, `$2`, …
+**Subprocess environment (`NodeWorkflowRuntime`):** When the AST interpreter runs `run` / inline scripts, it spawns the emitted executable with the **current workflow scope environment** — a copy of the runner’s `process.env` merged with Jaiph-populated keys (`JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`, `JAIPH_RUN_DIR`, `JAIPH_ARTIFACTS_DIR`, prompt-related `JAIPH_AGENT_*` variables when set, and values derived from `config { … }` via metadata). It is **not** reset to a tiny fixed allowlist; anything visible to the workflow runner is visible to child scripts unless your deployment strips the parent environment.
 
-Module-scoped `const` variables are not visible. Pass data as positional arguments, duplicate small bash inline, or use `import script` for shared helpers.
+The kernel helper `run-step-exec.ts` still uses a **minimal** env (`PATH`, `HOME`, `TERM`, `USER`, `JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`) for its own **internal** `spawnSync` script-capture paths — that is not the same code path as ordinary `NodeWorkflowRuntime` `spawn()` for user `script` steps.
 
 **Interpolation rules by body form:**
 

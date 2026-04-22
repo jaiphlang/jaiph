@@ -252,7 +252,7 @@ test("parser: duplicate config block throws E_PARSE", () => {
 test("parser: config integer value parses as number", () => {
   const source = [
     "config {",
-    "  runtime.docker_timeout = 300",
+    "  runtime.docker_timeout_seconds = 300",
     "}",
     "workflow default() {",
     "  log \"ok\"",
@@ -260,14 +260,14 @@ test("parser: config integer value parses as number", () => {
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
   assert.ok(mod.metadata);
-  assert.strictEqual(mod.metadata!.runtime?.dockerTimeout, 300);
-  assert.strictEqual(typeof mod.metadata!.runtime?.dockerTimeout, "number");
+  assert.strictEqual(mod.metadata!.runtime?.dockerTimeoutSeconds, 300);
+  assert.strictEqual(typeof mod.metadata!.runtime?.dockerTimeoutSeconds, "number");
 });
 
 test("parser: config integer key rejects string value with E_PARSE", () => {
   const source = [
     "config {",
-    '  runtime.docker_timeout = "fast"',
+    '  runtime.docker_timeout_seconds = "fast"',
     "}",
     "workflow default() {",
     "  log \"ok\"",
@@ -275,7 +275,7 @@ test("parser: config integer key rejects string value with E_PARSE", () => {
   ].join("\n");
   assert.throws(
     () => parsejaiph(source, "/fake/entry.jh"),
-    /runtime\.docker_timeout must be an integer/,
+    /runtime\.docker_timeout_seconds must be an integer/,
   );
 });
 
@@ -317,7 +317,7 @@ test("parser: all runtime config keys are accepted (docker_enabled removed)", ()
     "config {",
     '  runtime.docker_image = "ubuntu:24.04"',
     '  runtime.docker_network = "host"',
-    "  runtime.docker_timeout = 600",
+    "  runtime.docker_timeout_seconds = 600",
     "}",
     "workflow default() {",
     "  log \"ok\"",
@@ -327,7 +327,7 @@ test("parser: all runtime config keys are accepted (docker_enabled removed)", ()
   assert.ok(mod.metadata?.runtime);
   assert.strictEqual(mod.metadata!.runtime!.dockerImage, "ubuntu:24.04");
   assert.strictEqual(mod.metadata!.runtime!.dockerNetwork, "host");
-  assert.strictEqual(mod.metadata!.runtime!.dockerTimeout, 600);
+  assert.strictEqual(mod.metadata!.runtime!.dockerTimeoutSeconds, 600);
 });
 
 test("parser: runtime.docker_enabled produces E_PARSE with helpful message", () => {

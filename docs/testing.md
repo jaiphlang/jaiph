@@ -7,9 +7,9 @@ redirect_from:
 
 # Testing Jaiph Workflows
 
-Jaiph includes a built-in test harness for workflow testing. Test files (`*.test.jh`) let you mock prompt responses, stub workflows, rules, and scripts, run workflows through the same Node runtime used by `jaiph run`, and assert on captured output — all without calling real LLMs or depending on external state.
+Jaiph includes a built-in test harness for workflow testing. Test files (`*.test.jh`) let you mock prompt responses, stub workflows, rules, and scripts, run workflows through the same in-process [Node workflow runtime](architecture.md#core-components) used by `jaiph run` (`NodeWorkflowRuntime`), and assert on captured output — all without calling real LLMs or depending on external state. Unlike `jaiph run`, the test harness does not spawn a separate `node-workflow-runner` process: after `buildScripts`, the CLI runs `runTestFile` from `node-test-runner.ts` in the same process. There is no Docker mode for `jaiph test` (workflows under test always run on the host). The system layout (including **Test runner integration** and the Node test runner) is described in [Architecture](architecture.md).
 
-Workflow runs combine prompts, shell commands, and orchestration logic. Without a harness, outcomes depend on live models, timing, and the host machine — making regressions hard to catch in CI or during refactors. The test harness solves this by giving you fixed prompt responses, in-process execution, and deterministic assertions.
+In production, a workflow’s behavior depends on live models, host timing, and local files. A harness fixes inputs (mock prompts, stubbed workflows/scripts), runs the same interpreter the CLI uses for real runs, and checks outputs with small assertions so CI and refactors can catch regressions without external services.
 
 ## File naming and layout
 
@@ -65,9 +65,10 @@ Queues a fixed response for the next `prompt` call in the workflow under test. M
 ```jaiph
 mock prompt "hello from mock"
 mock prompt "second response"
+mock prompt myConstName
 ```
 
-The response must be a double-quoted string. Standard escape sequences (`\"`, `\n`, `\\`) work inside double-quoted strings.
+Use a **double-quoted string** (escapes: `\"`, `\n`, `\\`) or a bare identifier for a [test `const`](#test-block-constants) defined earlier in the block.
 
 ### Mock prompt (content-based dispatch)
 
@@ -164,6 +165,15 @@ run w.setup("arg")
 run w.setup() allow_failure
 ```
 
+### Test block constants
+
+Inside a `test` block, `const NAME = "value"` binds a test-local string (double-quoted literal only; no interpolation). Names can be used as:
+
+- `mock prompt NAME` — the next `prompt` consumes the bound value
+- the second argument to `expect_contain`, `expect_not_contain`, or `expect_equal` when written as a bare identifier (not quoted)
+
+`const` bindings used for `mock prompt` or expected values must appear **before** the steps that read them. Capture variables (`const x = run w.default()`) are separate: only `const … = run …` introduces a capture name for `expect_*`.
+
 ### Assertions
 
 After capturing workflow output, use these to check the result:
@@ -174,7 +184,14 @@ expect_not_contain response "unwanted text"
 expect_equal response "exact expected value"
 ```
 
-Expected strings must be double-quoted. Escape `"` inside the string with `\"`. Failures print expected vs. actual previews.
+The second argument is either a **double-quoted string** (with `\"`, `\n`, and `\\` escapes) or a **`const` name** bound earlier in the same test block (see [Test block constants](#test-block-constants)):
+
+```jaiph
+const want = "expected substring"
+expect_contain response want
+```
+
+Failures print expected vs. actual previews.
 
 ## Typed prompts
 
@@ -191,7 +208,7 @@ testing workflow_greeting.test.jh
   ▸ runs happy path
   ✓ 0s
   ▸ handles error case
-  ✗ expect_contain failed: "out" does not contain "expected" 1s
+  ✗ expect_contain failed: "response" (42 chars) does not contain "expected" 1s
 
 ✗ 1 / 2 test(s) failed
   - handles error case
@@ -201,13 +218,13 @@ When all tests pass: `✓ N test(s) passed`. Exit status is 0 on full success, n
 
 ## How it works
 
-The CLI parses each test file and hands `test { ... }` blocks to `runTestFile()` in the test runner. That function:
+The CLI parses each test file and passes `test "…" { … }` blocks to `runTestFile()` (`src/runtime/kernel/node-test-runner.ts`). That path aligns with the **Test runner integration** description in [Architecture](architecture.md):
 
-1. Calls `buildRuntimeGraph(testFile)` once per file to build the import closure.
-2. Prepares `script` artifacts for the workspace via `buildScripts()` into a temporary directory (test files are excluded from this walk).
-3. Sets `JAIPH_SCRIPTS` to that directory and runs each block with `JAIPH_TEST_MODE=1`.
+1. **`buildScripts(testFileAbs, tmpDir, workspaceRoot)`** — same helper as `jaiph run`, with the **test file as the entrypoint** (`test.ts` calls it with the absolute path to the `*.test.jh` file). For a file entrypoint, the transpiler walks the test module and every file reachable by transitive **`import`** (see `collectTransitiveJhModules` in `src/transpile/build.ts`); it runs `validateReferences` / `emitScriptsForModule` per file and writes atomic **`script`** files into a temp `scripts/` tree. (If `buildScripts` were ever given a **directory** entrypoint, directory walks skip `*.test.jh` files — that is not how `jaiph test` invokes it.)
+2. **`buildRuntimeGraph(testFileAbs, workspaceRoot)`** — called **once per test file**; the same graph is reused for every `test` block in that file and for every `run` step inside them.
+3. For each block, a fresh temp layout sets env vars (below); workflows run in **`NodeWorkflowRuntime`**, not in a detached child.
 
-There is no Bash transpilation of workflows on this path — only extracted `script` files are shell, same as production. The runtime graph is cached per file; mutating imported files on disk mid-run is not supported.
+There is no Bash transpilation of full workflows on this path — only extracted `script` bodies are shell, same as production. The import graph is fixed for a single `jaiph test` process; **mutating imported `*.jh` on disk between blocks** is not a supported use case.
 
 ## Environment variables
 
@@ -217,8 +234,9 @@ For each workflow run inside a test block, the harness builds the runtime enviro
 |---|---|
 | `JAIPH_TEST_MODE` | `1` |
 | `JAIPH_WORKSPACE` | Project root (from `detectWorkspaceRoot`) |
-| `JAIPH_RUNS_DIR` | Per-block temp directory |
-| `JAIPH_SCRIPTS` | Temp `buildScripts` output |
+| `JAIPH_RUNS_DIR` | Per test block, `…/tmp/jaiph-test-block-*/.jaiph/runs` (ephemeral) |
+| `JAIPH_SCRIPTS` | Directory containing extracted `script` files from `buildScripts` (temp) |
+| `JAIPH_MOCK_RESPONSES_FILE` or `JAIPH_MOCK_DISPATCH_SCRIPT` | Set by the runner when using inline or block `mock prompt` (do not set manually) |
 
 You do not set `JAIPH_TEST_MODE` yourself; the harness manages it.
 
@@ -299,10 +317,12 @@ Test cases are organized by error type and single-vs-multi-module:
 
 | File | Cases | What it covers |
 |------|-------|----------------|
-| `compiler-tests/valid.txt` | 103 | Success cases — source compiles without error (single-module) |
-| `compiler-tests/parse-errors.txt` | 108 | `E_PARSE` error cases — syntax and grammar violations |
-| `compiler-tests/validate-errors.txt` | 24 | `E_VALIDATE`, `E_IMPORT_NOT_FOUND`, `E_SCHEMA` error cases (single-module) |
-| `compiler-tests/validate-errors-multi-module.txt` | 3 | Validation errors requiring imports (multi-file) |
+| `compiler-tests/valid.txt` | 119 | Success cases — source compiles without error (single-module) |
+| `compiler-tests/parse-errors.txt` | 274 | `E_PARSE` error cases — syntax and grammar violations |
+| `compiler-tests/validate-errors.txt` | 88 | `E_VALIDATE`, `E_IMPORT_NOT_FOUND`, `E_SCHEMA` error cases (single-module) |
+| `compiler-tests/validate-errors-multi-module.txt` | 20 | Validation errors requiring imports (multi-file) |
+
+(Counts are one `# @expect` per test case; re-count after large fixture changes.)
 
 The initial cases were extracted from TypeScript test files across `src/parse/*.test.ts` and `src/transpile/*.test.ts`. Additional cases were written directly as txtar fixtures to cover compiler error paths that had no prior test coverage. Only tests that verify "source in, pass/fail out" qualify — tests that check AST structure or internal APIs remain in TypeScript.
 
@@ -377,7 +397,7 @@ Both tests require Python 3 and use only deterministic, non-LLM steps (sleep loo
 
 Shell harnesses and CI expectations for the full repo are described in [Contributing — E2E testing](contributing.md#e2e-testing).
 
-E2E tests compare full CLI output and full artifact file contents by default. Use `e2e::expect_stdout`, `e2e::expect_out`, `e2e::expect_file`, `e2e::expect_run_file`, or `e2e::assert_equals`. Substring checks (`e2e::assert_contains`) require an inline comment justifying the exception. For the full policy (two surfaces, full equality, `assert_contains` exceptions, normalization), see [Contributing — E2E testing](contributing.md#e2e-testing). For the on-disk tree under `.jaiph/runs/`, see [Architecture — Durable artifact layout](architecture#durable-artifact-layout).
+E2E tests compare full CLI output and full artifact file contents by default. Use `e2e::expect_stdout`, `e2e::expect_out`, `e2e::expect_file`, `e2e::expect_run_file`, or `e2e::assert_equals`. Substring checks (`e2e::assert_contains`) require an inline comment justifying the exception. For the full policy (two surfaces, full equality, `assert_contains` exceptions, normalization), see [Contributing — E2E testing](contributing.md#e2e-testing). For the on-disk tree under `.jaiph/runs/`, see [Architecture — Durable artifact layout](architecture.md#durable-artifact-layout).
 
 Every `.jh` sample under `e2e/` must be wired into at least one test. Run `bash e2e/check_orphan_samples.sh` to detect unreferenced fixtures. See [Contributing — Orphan sample guard](contributing.md#orphan-sample-guard) for details.
 
@@ -389,8 +409,8 @@ The project includes a Playwright-based test (`tests/e2e-samples/landing-page.sp
 
 ## Limitations (v1)
 
-- Prompt mocks are inline only — no external mock config files.
-- Do not combine `mock prompt { ... }` with `mock prompt "..."` in the same test block; only the block dispatch is active.
-- Capture without explicit `return` reads stdout step artifacts (`*.out` files) or falls back to aggregated runtime output.
-- Assertions only support double-quoted expected strings.
-- Extra arguments after the test path (`jaiph test <path> [extra...]`) are accepted but ignored (reserved for future use).
+- **Prompt mocks** must be written **inside the test file** (inline `mock prompt "…"`, `mock prompt <const>`, or `mock prompt { … }`) — there are no external mock-config file paths.
+- **Do not combine** `mock prompt { … }` with queue-style `mock prompt "…"` / `mock prompt <const>` in the same test block; when a block is present, queued entries are ignored.
+- **Capture** without a successful non-empty `return` concatenates all step `*.out` files in the run directory (sorted by filename), then falls back to the runtime’s aggregated output string.
+- **`expect_*` right-hand side** is either a double-quoted literal or a test `const` name — not an arbitrary expression.
+- **Extra CLI arguments** after the path (`jaiph test <path> [extra...]`) are accepted but ignored (reserved for future use).

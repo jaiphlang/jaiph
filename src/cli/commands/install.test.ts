@@ -4,8 +4,34 @@ import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { tmpdir } from "node:os";
+import { parseUrlAndVersion } from "./install";
 
 const CLI_PATH = join(__dirname, "../../../src/cli.js");
+
+test("parseUrlAndVersion: https repo.git@ref (tag or branch)", () => {
+  assert.deepEqual(parseUrlAndVersion("https://github.com/you/queue-lib.git@v1.0"), {
+    url: "https://github.com/you/queue-lib.git",
+    version: "v1.0",
+  });
+  assert.deepEqual(parseUrlAndVersion("https://a/b/c.git@feature/xyz"), {
+    url: "https://a/b/c.git",
+    version: "feature/xyz",
+  });
+});
+
+test("parseUrlAndVersion: git@host:path.git@ref", () => {
+  assert.deepEqual(parseUrlAndVersion("git@github.com:org/repo.git@main"), {
+    url: "git@github.com:org/repo.git",
+    version: "main",
+  });
+});
+
+test("parseUrlAndVersion: schemaless path@ref when no : before @", () => {
+  assert.deepEqual(parseUrlAndVersion("acme/queue-lib@v0.1"), {
+    url: "acme/queue-lib",
+    version: "v0.1",
+  });
+});
 
 function makeTempProject(): string {
   const dir = join(tmpdir(), `jaiph-install-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);

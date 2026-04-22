@@ -1,62 +1,80 @@
 ---
 title: "Spec: Async Handles"
+permalink: /spec-async-handles
+redirect_from:
+  - /spec-async-handles.md
 ---
 
 # Async Handles — `Handle<T>` Value Model
 
-This document specifies the `Handle<T>` value model for `run async` in Jaiph.
+## Context
+
+Pipelines often wait on work that could overlap: several scripts or workflows are independent, and the author wants the **main sequence** to move on while that work runs. A generic way to do that in Jaiph is **`run async`**: start the callee in parallel, get a value you can read later, and let the runtime guarantee nothing is left dangling when the current **step list** returns.
+
+**This page** is the value model: what `Handle<T>` means, when it becomes a real string, and how `recover` / `catch` and progress reporting interact. Syntax and step forms live in the [Language — `run async`](language.md#run-async--concurrent-execution-with-handles) and [Grammar — `run async`](grammar.md#run-async--concurrent-execution-with-handles) sections. For system layout (AST interpreter, events, `async_indices` on the CLI), see [Architecture](architecture.md).
+
+**Implementation fact:** The behavior is implemented in **`NodeWorkflowRuntime`** — a handle is a tracked in-flight `run` result, joined at the [step list boundary](#implicit-join) that registered it. That is the same in-process runtime as in [Architecture — System overview](architecture.md#system-overview); there is no second execution engine for async work.
 
 ## Overview
 
-`run async ref(args)` returns a **`Handle<T>`** immediately. `T` is the same type the called function would return under a synchronous `run`. The handle resolves to the eventual return value on first non-passthrough read.
+`run async ref(args)` schedules the same **`run` target** (workflow or script) **without blocking** the current step list. The expression’s value is a **handle**—conceptually `Handle<T>` where `T` is what a synchronous `run` would have produced (return value of a workflow, or trimmed stdout of a script). The handle is materialized in the variable map as an **opaque** string; the first **non-passthrough** use that needs the real value **awaits** the in-flight work and then **replaces** the variable with the resolved string for later reads.
 
 ## Handle creation
 
 ```jaiph
-const h = run async foo()
-run async bar()
+workflow default() {
+  const h = run async foo()
+  run async bar()
+}
 ```
 
-- `const h = run async foo()` — `h` receives a handle. The async execution starts immediately; the workflow continues without waiting.
-- `run async bar()` — a handle is created internally but not captured. The workflow proceeds without waiting.
+- `const h = run async foo()` — `h` holds a handle. Work for `foo()` starts immediately; later steps can run in parallel.
+- `run async bar()` — a handle is still created and **tracked** for [implicit join](#implicit-join) even if you do not store it in a variable.
 
-There is **no fire-and-forget mode**. Every `run async` creates a handle tracked by the runtime, whether captured or not.
+This is not “fire and forget” in a scheduler sense: the runtime **registers** every `run async`, captured or not, and still **joins** it when the [scope below](#implicit-join) allows.
 
-## Resolution semantics
+## Resolution
 
-A handle resolves to the value of the called function (its `return` value or trimmed stdout). Resolution is triggered by the **first non-passthrough read**.
+A handle resolves to the `run` result: workflow **`return`**, or **trimmed script stdout** on success; on failure, resolution carries the same failure shape as a synchronous `run` (and can fail the block or the join, depending on where resolution happens). Resolution is triggered on the first **non-passthrough** read of the value.
 
 ### Reads that force resolution
 
 | Access pattern | Example | Forces resolution? |
-|---|---|---|
-| String interpolation | `log "${h}"` | Yes |
-| Passing as argument to `run` | `run other(h)` | Yes |
-| Comparison / conditional | `if h == "ok" { ... }` | Yes |
-| Match subject | `match h { ... }` | Yes |
-| Any other value access | `channel <- $h` | Yes |
+| --- | --- | --- |
+| String / template interpolation (including `log` / `fail` / `return` messages) | `log "result: ${h}"` | Yes |
+| `run` (or `ensure`) argument strings that use `${var}` | `run downstream("${h}")` | Yes — handles in `${…}` are resolved when args are built |
+| `if` subject | `if h == "ok" { ... }` | Yes — subject is read after handle handling |
+| `match` subject | `match h { ... }` | Yes |
+| Send with a `${var}` payload (or a quoted string containing it) | `findings <- ${h}` | Yes — `${name}` in the RHS is scanned to resolve handles (`findings` is the channel name) |
 
-### Passthrough (does NOT force resolution)
+**Send RHS:** use `${var}` in the `channel <- …` payload (or a quoted string containing `${var}`). Resolution follows the same `${...}`-based path as in other steps; a bare shell-style `$name` in the `var` RHS is not a substitute for `${name}` in the current runtime.
+
+### Passthrough (does not force resolution)
+
+Only the **binding step** that starts the async work is non-blocking:
 
 | Access pattern | Example | Forces resolution? |
-|---|---|---|
-| Initial capture | `const h = run async foo()` | No |
-| Re-assignment | (internal scope passing) | No |
+| --- | --- | --- |
+| Initial handle capture | `const h = run async foo()` | No — stores the handle token; the `run async` has already been scheduled |
 
-Once resolved, the handle is replaced in-place by the resolved string value. Subsequent reads return the cached value without re-executing.
+Every later use of `h` that goes through the **read** paths in the table above (or any place the runtime must treat `h` as a real string) forces resolution, including the first `${h}` in a `const`, `log`, or `return` string.
 
-## Workflow exit — implicit join
+After resolution, the variable **holds the string value**; further reads are ordinary string reads (no re-`run`).
 
-When a workflow scope exits (the last step completes), the runtime **implicitly joins all remaining unresolved handles** created in that scope. This is not an error condition.
+## Implicit join
 
-- If all handles resolve successfully, the workflow returns normally.
-- If any handle resolved (or resolves during join) with a non-zero status, the workflow fails with an aggregated error message listing all failed async refs.
+When the **step list** you are in finishes, the runtime **awaits every `run async` handle** that was still registered in that list’s scope. That is the “implicit join”: it is tied to the **`executeSteps` scope** for that block, not only to the outer name of a workflow. For example, handles created only inside an `if` (or a similar inner body) are joined at the end of that **inner** list, before the next line after the `if` runs. Entry workflows [drain the inbox](inbox.md#who-registers-routes-and-who-drains) when their step list ends (and after that join).
 
-This preserves backward compatibility with the pre-handle `run async` behavior where all async steps were awaited at workflow exit.
+- If all joined work succeeds, the outer step list continues or the workflow **returns** normally.
+- If any handle finishes with a **non-zero** `run` status, the block fails (or join reports an aggregate error) with a message that references the `run async` **ref** string(s) involved.
 
-## `recover` composition
+This matches the pre-handle model where all async work was effectively awaited before the workflow could complete, but allows overlapping steps **until** a read or a scope boundary forces ordering.
 
-`recover` works with `run async` to provide retry-loop semantics on the async branch:
+## `recover` and `catch`
+
+### `recover` (retry loop)
+
+`recover` on `run async` mirrors non-async `recover`: on failure, run the **repair** body, then **retry** the `run` target, up to the [recover limit](#retry-limit). The async branch is scheduled once as a **single** promise; retries happen **inside** that branch.
 
 ```jaiph
 const b1 = run async foo() recover(err) {
@@ -65,25 +83,15 @@ const b1 = run async foo() recover(err) {
 }
 ```
 
-### Semantics
+1. The async path runs `foo()`.
+2. If `foo()` succeeds, the handle resolves to that success value.
+3. If it fails, `err` is the merged **stdout+stderr** of the failure, and the `recover` body runs.
+4. If the `recover` body **succeeds** (status 0 and no `return` from the repair), `foo()` is run again.
+5. Steps 3–4 repeat until `foo()` succeeds or the [recover limit](#retry-limit) is exhausted; then the handle result reflects the final **failure** (or last attempt), like synchronous `recover`.
 
-1. The async branch executes `foo()`.
-2. If `foo()` succeeds, the handle resolves to its return value.
-3. If `foo()` fails, the recover body runs with `err` bound to the merged stdout+stderr of the failure.
-4. If the recover body completes successfully (status 0, no early return), `foo()` is retried.
-5. Steps 3–4 repeat until `foo()` succeeds or the retry limit is reached.
-6. If the retry limit is exhausted, the handle resolves to the final failure result.
+### `catch` (single-shot, surface keyword `catch`)
 
-### Retry limit
-
-The retry limit is shared with non-async `recover`:
-
-- Default: **10** attempts.
-- Configurable per module/workflow via `config { run.recover_limit = N }`.
-
-### `catch` composition
-
-`catch` also works with `run async` for single-shot recovery (no retry loop):
+Use `catch` for a **one-time** error handler: if `foo()` fails, the `catch` body runs **once**; there is no automatic retry of `foo()`.
 
 ```jaiph
 run async foo() catch(err) {
@@ -91,23 +99,30 @@ run async foo() catch(err) {
 }
 ```
 
-If `foo()` fails, the catch body runs once. No retry.
+The `catch` keyword is the user-facing name; the same failure-binding pattern applies as for synchronous `run … catch` (see [Language — `catch`](language.md#catch--failure-recovery) and the `run … catch` section in [Grammar](grammar.md)).
 
-## Interaction with progress/events
+### Retry limit
 
-Async handles preserve the existing async progress/event visibility model:
+- **Default limit:** **10** when the module’s metadata does not set `run.recover_limit`.
+- **Config:** **`run.recover_limit = N` in the file’s top-level `config { }`**. The runtime currently reads this from the **module** (the `.jh` file’s `config` block), not from a per-workflow `config` nested inside a workflow body.
 
-- Each async branch gets a unique branch index (subscript numbering: ₁, ₂, …).
-- Step events (`STEP_START`, `STEP_END`) and log events carry `async_indices` for the branch.
-- The CLI progress tree renders async branches at the appropriate indent level.
+## Progress and events
 
-Handle resolution does not emit additional events beyond what the async branch already emits.
+Async work uses the same **subscripted branch** model as before: each nested or concurrent `run async` level has a 1-based index chain (`async_indices` on step/log events; see [Architecture — CLI progress reporting pipeline](architecture.md#cli-progress-reporting-pipeline)). The CLI’s progress tree indents and labels those branches; resolving a handle does not add a separate “resolution” event beyond the branch’s own step/log events.
 
-The live TTY rendering path for async branches is covered by a dedicated PTY-based E2E test (`e2e/tests/131_tty_async_progress.sh`). It spawns `jaiph run` under a real pseudo-terminal with two concurrent async branches and asserts that per-branch events render under the correct subscript node, that resolved return values appear in the final frame, and that no ANSI escape corruption occurs. See [Testing — PTY-based TTY tests](testing.md#pty-based-tty-tests) for details.
+A PTY-based E2E test exercises TTY output for two concurrent async branches: `e2e/tests/131_tty_async_progress.sh` (summary in [Testing — PTY-based TTY tests](testing.md#pty-based-tty-tests)).
 
 ## Constraints
 
-- `run async` is only allowed in workflows, not in rules.
-- `run async` is not supported with inline scripts (`` run async `body`(args) ``).
-- There is no explicit `await` keyword. Resolution is implicit on first read or at workflow exit.
-- There is no fire-and-forget. All handles are joined.
+- **`run async`** is only allowed in **workflows** — not in **rules** (the validator enforces this).
+- **`run async`** is **not** supported for **inline scripts** (`` `body`(args) ``, ` ```…``` `, or similar).
+- A **`run async`** call must be a **normal reference with parentheses**: `run async name()` or `run async name(args)` — not a bare name.
+- There is **no `await` keyword**; you either **read** the value (triggers resolution) or hit a **join** at the [step-list boundary](#implicit-join).
+- “Uncaptured” `run async` still **joins**; there is no opt-out to skip waiting at scope end.
+
+### Relationship to the rest of the system
+
+- **Local / Docker / tests** — the same [Node workflow runtime](architecture.md#core-components) runs `run async` everywhere; Docker and `jaiph test` do not use a different handle implementation.
+- **Script extraction** is unchanged: only script **bodies** are materialized for `JAIPH_SCRIPTS`; `run async` remains orchestration, not a new artifact type (see [Architecture](architecture.md#emit-artifacts)).
+
+If this spec and `src/runtime/kernel/node-workflow-runtime.ts` disagree, the source is authoritative; keep [Grammar](grammar.md#run-async--concurrent-execution-with-handles) and [Language](language.md#run-async--concurrent-execution-with-handles) aligned when you change behavior.

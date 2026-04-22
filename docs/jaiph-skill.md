@@ -7,19 +7,19 @@ redirect_from:
 
 # Jaiph Bootstrap Skill (for Agents)
 
-**Why this matters to you.** Humans structure their work with task lists, goals, and habits — it makes them effective and predictable. You face the same problem: without structure, your output varies between runs, failures go undetected, and the humans who depend on you lose trust. Jaiph gives you that structure. It defines what you do (workflows), what must be true before and after (rules), and how failures are handled (catch) — all in a small, declarative language you can read and write. The result: your behavior becomes **predictable**, **verifiable**, and **auditable**. Every run produces artifacts, every step is logged, every failure has a defined recovery path. You stop being a black box and start being a reliable system.
+**Why this page exists.** Agentic work needs the same things human teams need: a clear sequence of steps, explicit checks, and a record of what ran. Jaiph is a small workflow language for that: **workflows** sequence orchestration, **rules** express checks, **`script`** holds real shell, and the runtime logs steps and writes run artifacts. The payoff is behavior that is easier to repeat, verify, and debug than ad-hoc shell snippets alone.
 
 ## Overview
 
 This page is an **agent skill**: it tells an AI assistant how to **author** Jaiph workflows (`.jh` files) and what a sensible `.jaiph/` layout looks like. It is not a full language specification — use [Getting started](getting-started.md) as the documentation map, [Grammar](grammar.md) for syntax and validation details, [Configuration](configuration.md) for `config` keys, [Inbox & Dispatch](inbox.md) for channels, and [Sandboxing](sandboxing.md) for rule design vs optional Docker isolation.
 
-**Jaiph** is a small language for agentic workflows: **orchestration** (rules, prompts, managed calls) and **bash in `script` definitions**. The **Node workflow runtime** (`NodeWorkflowRuntime`) interprets the parsed AST directly — there is no bash transpilation of workflow bodies on the execution path. Before `jaiph run` / `jaiph test`, **`buildScripts()`** parses each reachable workspace **`*.jh`** module, runs **compile-time validation** (`validateReferences`), and writes extracted **`script`** files only (`*.test.jh` is not walked for emit). The workflow runner then **`buildRuntimeGraph()`** loads modules with **parse-only** imports (validation is not repeated there). See [Architecture](architecture).
+**Jaiph** is a small language for agentic workflows: **orchestration** (rules, prompts, managed calls) and **shell in `script` definitions**. The **Node workflow runtime** (`NodeWorkflowRuntime`) interprets the parsed AST in process — there is no separate transpiled workflow shell on the execution path ([Architecture](architecture.md)). Before `jaiph run` or `jaiph test`, **`buildScripts()`** takes a single **entry** `.jh` path (the workflow file, or the `*.test.jh` file for tests), runs **compile-time validation** (`validateReferences` inside **`emitScriptsForModule`**), and writes extracted **`script`** files under `scripts/` for that module and every file reachable from it via transitive **`import`** — not the whole workspace unless those files are imported. **`jaiph compile`** runs the same validation without emitting scripts or executing workflows. The runner’s **`buildRuntimeGraph()`** then loads the graph with **parse-only** imports (it does not re-run `validateReferences`).
 
 **Contracts (CLI vs runtime):** **Live:** `__JAIPH_EVENT__` JSON lines on **stderr only** (CLI progress and **hooks** — hooks are **CLI-only**, driven by that stream). **Durable:** `.jaiph/runs/...` and **`run_summary.jsonl`**. Channels are enforced at compile time and executed in the runtime (in-memory queue + inbox files under the run dir); they are not hooks.
 
 The **JS kernel** (`src/runtime/kernel/`) handles **prompt** execution, **managed script subprocesses**, **inbox** queues and dispatch, and **event/summary emission**. **Rule** bodies run in-process; user **`script`** bodies run as separate OS processes (bash by default, polyglot via fence lang tags like `` ```node ``, `` ```python3 `` or a leading `#!` shebang in the body).
 
-**Test lane:** `jaiph test` runs **`*.test.jh`** in-process (`node-test-runner.ts`): **`buildScripts(workspace)`**, then **`buildRuntimeGraph(testFile)` once per file**, mocks, and assertions — same `NodeWorkflowRuntime` as `jaiph run`.
+**Test lane:** `jaiph test` runs **`*.test.jh`** in-process (`node-test-runner.ts`): for each file it calls **`buildScripts(testFile, …)`** (same helper as `jaiph run`, with the **test file as the entry** so its import closure is validated and scripts are emitted), then **`buildRuntimeGraph(testFile)` once per file**, mocks, and assertions — same `NodeWorkflowRuntime` as `jaiph run`.
 
 **After `jaiph init`**, a repository gets `.jaiph/bootstrap.jh` (a triple-quoted prompt that tells the agent to read `.jaiph/SKILL.md`) and a copy of this file. The bootstrap prompt asks the agent to scaffold workflows under `.jaiph/` and to end with a clear `WHAT CHANGED` + `WHY` summary. The expected outcome is a **minimal workflow set** for safe feature work: preflight checks, an implementation workflow, verification, and a `workflow default` entrypoint that wires them together (with an optional human-or-agent “review” step when you use a task queue). Docker-backed runs use the official `ghcr.io/jaiphlang/jaiph-runtime` image by default; see [Sandboxing](sandboxing.md) to override with `runtime.docker_image` or `JAIPH_DOCKER_IMAGE`.
 
@@ -43,18 +43,20 @@ Use this loop whenever you add or change Jaiph workflows so failures surface bef
 1. **Preflight** — Run the project’s readiness checks if they exist (often `jaiph run .jaiph/readiness.jh` or a named preflight workflow). When the repo ships native tests (`*.test.jh`), run `jaiph test` before large edits when practical.
 2. **Implement** — Edit `.jh` modules using only constructs described in [Grammar](grammar.md); keep managed-call rules (`ensure` for rules, `run` for workflows and scripts); keep bash inside **`script`** bodies only (no raw shell in workflow/rule bodies).
 3. **Format** — Run `jaiph format <file.jh ...>` on all authored or modified `.jh` files before committing. This normalizes whitespace, indentation, and top-level ordering (imports, config, and channels hoisted to the top; everything else kept in source order). Use `jaiph format --check <file.jh ...>` to verify formatting without writing (non-zero exit on drift — useful in CI).
-4. **Verify** — Run `jaiph test` (whole workspace or a focused path) and any verification workflow the repo defines (commonly `jaiph run .jaiph/verification.jh`). Fix failures you introduce.
-5. **Inspect (optional)** — Browse `.jaiph/runs` directly when you need raw step logs or `run_summary.jsonl` instead of only the terminal tree.
+4. **Compile check** — Run `jaiph compile <file-or-dir>` on the paths you touched (or `jaiph compile --json …` in automation). Same reference checks as before a run, without executing workflows or writing `scripts/` ([Architecture](architecture.md)).
+5. **Verify** — Run `jaiph test` (whole workspace or a focused path) and any verification workflow the repo defines (commonly `jaiph run .jaiph/verification.jh`). Fix failures you introduce.
+6. **Inspect (optional)** — Browse `.jaiph/runs` directly when you need raw step logs or `run_summary.jsonl` instead of only the terminal tree.
 
 **CLI commands:**
 
 | Command | Purpose |
 |---|---|
-| `jaiph run <file.jh> [args...]` | Execute `workflow default` in the given file |
+| `jaiph run [--target <dir>] [--raw] <file.jh> [--] [args...]` | Execute `workflow default` in the given file (`--raw`: no banner/tree/hooks; used for embedding and Docker inner runs) |
 | `jaiph test [path]` | Run `*.test.jh` test files (workspace, directory, or single file) |
-| `jaiph format [--check] <file.jh ...>` | Reformat `.jh` files (or verify formatting without writing) |
+| `jaiph format [--check] [--indent <n>] <file.jh ...>` | Reformat `.jh` files (or verify formatting without writing) |
+| `jaiph compile [--json] [--workspace <dir>] <.jh files or dirs…>` | Parse and `validateReferences` only (no script emission, no run) |
 | `jaiph init [workspace]` | Scaffold `.jaiph/` with bootstrap workflow and skill file |
-| `jaiph install [url[@version]]` | Install or restore project-scoped libraries under `.jaiph/libs/` |
+| `jaiph install [--force] [<url[@version]> …]` | Clone libraries into `.jaiph/libs/` or restore from `.jaiph/libs.lock` |
 | `jaiph use <version\|nightly>` | Reinstall Jaiph at a specific version or nightly |
 
 **File shorthand:** `jaiph ./file.jh` auto-routes — `*.test.jh` files run as tests, other `*.jh` files run as workflows.
@@ -186,7 +188,7 @@ Test files use the `*.test.jh` suffix and contain `test "name" { ... }` blocks. 
 - `mock prompt { /pattern/ => "response", _ => "default" }` — content-based dispatch.
 - `mock workflow alias.name() { return "stubbed" }` — replaces a workflow body.
 - `mock rule alias.name() { return "ok" }` — replaces a rule body.
-- `mock script alias.name() { echo "stubbed" }` — replaces a script body.
+- `mock script alias.name() { … }` — replaces a script body with **shell lines** between the braces (same line as `{` is not enough; put the shell on the following lines, then `}` on its own line).
 
 **Assertions:**
 
@@ -212,7 +214,7 @@ test "handles failure gracefully" {
 }
 ```
 
-`allow_failure` prevents a non-zero workflow exit from failing the test — useful for testing error paths.
+`allow_failure` on a `run` step (with or without `const … =`) prevents a non-zero workflow exit from failing the test — useful for testing error paths. For **`mock script`**, put shell lines on lines after the opening `{`, then close with `}` on its own line (see [Testing](testing.md)).
 
 ## Suggested Starter Layout
 
@@ -232,6 +234,7 @@ Include a compile check and, when the repository has native tests (`*.test.jh`),
 
 ```bash
 jaiph format .jaiph/*.jh
+jaiph compile .jaiph
 jaiph test
 jaiph run .jaiph/main.jh "implement feature X"
 # Or run verification only:

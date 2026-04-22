@@ -7,13 +7,17 @@ redirect_from:
 
 # Sandboxing
 
-Jaiph provides two independent ways to limit what a workflow can do. **Rules** restrict step types at the language level so validation logic stays small and reviewable. **Docker** (opt-in) runs the entire `jaiph run` workflow inside a container for filesystem and process isolation. You can use either mechanism on its own or combine them.
+Workflows orchestrate **managed scripts** and other steps on the machine where `jaiph run` executes. That power is useful for builds and agents, but it also means a script can read files, call the network, and run arbitrary programs unless you constrain it. Jaiph addresses that at two layers: **language rules** (what may appear in a rule body) and **Docker-backed isolation** for `jaiph run` (on by default via env; see [Enabling Docker](#enabling-docker)). You can rely on rules alone, turn Docker off for host execution, or combine both.
 
-Both local and Docker runs use the same Node workflow runtime and stream `__JAIPH_EVENT__` on stderr. [Hooks](hooks.md) always run on the host CLI and consume that same event stream, even when the runner is inside a container. For `config` syntax, allowed keys, and precedence rules, see [Configuration](configuration.md). For the full step-type matrix, see [Grammar](grammar.md).
+At a high level, the **CLI** chooses local vs Docker launch; the **Node workflow runtime** (`NodeWorkflowRuntime` in `src/runtime/kernel/`) interprets the same AST either way. See [Architecture](architecture.md) for how compile validation, the runner child, and durable artifacts fit together.
+
+Both local and Docker runs stream `__JAIPH_EVENT__` on **stderr** only; [Hooks](hooks.md) always run on the **host** CLI and read that stream, even when the workflow runs in a container. For `config` syntax, allowed keys, and merge rules, see [Configuration](configuration.md). For the full step-type matrix, see [Grammar](grammar.md).
 
 ## Rules: structured validation, not mutation
 
-Rules restrict which step types are allowed in their body. The permitted set is: `ensure` (other rules), `run` (scripts only, not workflows), `const` (script/rule captures or bash RHS, not `prompt`), `match`, `fail`, `log` / `logerr`, `return`, `ensure … catch`, and `run … catch`. Raw shell, `prompt`, `send` / `route`, and `run async` are disallowed. See [Grammar -- High-level concepts](grammar.md#high-level-concepts) for the authoritative list.
+Rules restrict which step types are allowed in their body — enforced at **compile time** in `validateReferences` (`src/transpile/validate.ts`), not by an OS sandbox. The permitted set matches [Grammar — Language concepts](grammar.md#language-concepts): `ensure` (other rules only), `run` (**scripts** only — not workflows), `const` (script/`ensure` captures, `match` expressions, or bash RHS — never `prompt`), `match`, `if`, `fail`, `log` / `logerr`, `return` (strings, identifiers, `return run …` / `return ensure …`, and the managed forms the grammar allows), `ensure … catch`, `run … catch`, and `run … recover`. Inline script steps and managed `log`/`logerr` from inline scripts are allowed where the grammar permits them.
+
+Disallowed in rules: **raw shell lines** (every line must be a recognized Jaiph step — use a `script` and `run`), `prompt`, inbox **`send`** / routing, and **`run async`**. See the grammar page for the authoritative list and examples.
 
 The runtime executes rules by walking the AST in-process (`NodeWorkflowRuntime.executeRule`). There is no per-rule OS sandbox -- no mount namespace, no automatic read-only filesystem. When a rule runs a script step, that script executes as a normal managed subprocess with full access to paths the process user can reach. Treat rules as non-mutating checks by convention; perform intentional filesystem changes in workflows, not rules.
 
@@ -26,7 +30,7 @@ Docker sandboxing is designed to contain damage from untrusted or semi-trusted w
 **What Docker protects against:**
 
 - **Filesystem access** -- Scripts inside the container cannot read or write arbitrary host paths. The container's `/jaiph/workspace` is either an in-container fuse-overlayfs union over a read-only bind of the host workspace (overlay mode, writes land in a tmpfs upper layer and are discarded on exit) or a host-side clone of the workspace mounted read-write (copy mode, the clone is removed on exit). Only the run-artifacts directory (`/jaiph/run`) persists writes back to the host workspace.
-- **Process isolation** -- Container processes cannot see or signal host processes. The container runs with `--cap-drop ALL` (overlay mode re-adds `SYS_ADMIN` for fuse-overlayfs; copy mode adds nothing) and `--security-opt no-new-privileges` to prevent privilege escalation. In Linux overlay mode the workflow runs as root inside the container so fuse-overlayfs can mount reliably; copy mode and macOS remain non-root as before.
+- **Process isolation** -- Container processes cannot see or signal host processes. Every sandboxed container uses `--cap-drop ALL` plus `--security-opt no-new-privileges`. **Overlay mode** (Linux) adds capabilities required for `fuse-overlayfs` and for dropping privileges after mount: `SYS_ADMIN`, `SETUID`, `SETGID`, `CHOWN`, and `DAC_READ_SEARCH` (see `buildDockerArgs` in `src/runtime/docker.ts`). **Copy mode** does not add capabilities. The overlay entrypoint (`runtime/overlay-run.sh`) starts as the container user `0:0` so it can mount, then normally **`exec`s `jaiph run` as the host UID/GID** via `setpriv` when `JAIPH_HOST_UID` / `JAIPH_HOST_GID` are set; copy mode uses `--user <host_uid>:<host_gid>` directly. macOS Docker Desktop does not use Linux `--user` overrides (UID mapping is handled by the VM).
 - **Credential leakage** -- Environment variable forwarding uses an explicit allowlist: only `JAIPH_*` (except `JAIPH_DOCKER_*`), `ANTHROPIC_*`, `CLAUDE_*`, and `CURSOR_*` cross the container boundary. Everything else is dropped.
 - **Mount safety** -- The host root filesystem (`/`), Docker socket (`/var/run/docker.sock`, `/run/docker.sock`), and OS internals (`/proc`, `/sys`, `/dev`) cannot be mounted into the container. Attempting to do so produces `E_VALIDATE_MOUNT`.
 - **Shell injection safety** -- All Docker CLI invocations (`docker info`, `docker image inspect`, `docker pull`) use `execFileSync` with an explicit argument array, bypassing `/bin/sh`. Image names and other parameters are passed as literal argv entries with no shell expansion, so values containing shell metacharacters (`;`, `$`, backticks, etc.) are never evaluated.
@@ -35,7 +39,7 @@ Docker sandboxing is designed to contain damage from untrusted or semi-trusted w
 
 - **Hooks run on the host.** Hook commands in `hooks.json` execute on the host CLI process, not inside the container. A malicious hook definition has full host access. Treat `hooks.json` as trusted configuration.
 - **Network egress by default.** Unless `runtime.docker_network` is set to `"none"`, the container has outbound network access via Docker's default bridge. Scripts can reach external services and exfiltrate data through the network.
-- **Agent credential forwarding.** `ANTHROPIC_*`, `CLAUDE_*`, and `CURSOR_*` variables are forwarded into the container so agent-backed workflows function. A malicious script can read these from its environment. When the credential-proxy feature lands, these will be replaced by proxy URLs that do not expose raw API keys.
+- **Agent credential forwarding.** `ANTHROPIC_*`, `CLAUDE_*`, and `CURSOR_*` variables are forwarded into the container so agent-backed workflows function. Any workflow code in the container can read them from the environment together with outbound network access; treat that as **full disclosure** of those secrets to workflow code.
 - **Image supply chain.** Jaiph verifies that the selected image contains `jaiph` but does not verify image signatures or provenance. Use trusted registries and pin image digests for production workloads.
 - **Container escapes.** Docker is not a security boundary against a determined attacker with kernel exploits. It raises the bar significantly for script-level mischief but is not equivalent to a VM or hardware-level isolation.
 
@@ -43,18 +47,18 @@ Docker sandboxing is designed to contain damage from untrusted or semi-trusted w
 
 > **Beta.** Docker sandboxing is functional but still under active development. Expect rough edges, breaking changes, and incomplete platform coverage. Feedback is welcome at <https://github.com/jaiphlang/jaiph/issues>.
 
-Docker applies to `jaiph run` only (not `jaiph test`). When enabled, the entire workflow -- every rule and script step -- runs inside a single container. The container runs `jaiph run --raw <file>` using its own installed jaiph -- not the host's. The `--raw` flag makes jaiph emit `__JAIPH_EVENT__` lines to stderr without rendering a progress tree, so the host CLI can render from those events.
+Docker applies to `jaiph run` only (not `jaiph test`). Enablement is **environment-driven** (see [Enabling Docker](#enabling-docker)); there is no `jaiph run --docker` flag — the CLI decides from env before spawn. When Docker is active, the entire workflow (every rule and script step) runs inside a **single** container. The container runs `jaiph run --raw <file>` using the **image’s** installed `jaiph`, not the host binary. The `--raw` flag skips the banner and progress UI in that inner process so `__JAIPH_EVENT__` JSON lines go to **stderr** unchanged for the host CLI to parse.
 
 The container's `/jaiph/workspace` always *looks* writable to scripts but never mutates the host checkout. The CLI picks one of two sandbox primitives at launch time:
 
-- **Overlay mode** (selected when `/dev/fuse` exists on the host -- typically Linux). The host workspace is bind-mounted read-only at `/jaiph/workspace-ro`. The runtime entrypoint (`overlay-run.sh`) sets up `fuse-overlayfs` with that read-only bind as the lower layer and a tmpfs as the upper layer, merged at `/jaiph/workspace`. Writes go to the tmpfs and are discarded on container exit. Requires `--cap-add SYS_ADMIN` and `--device /dev/fuse`.
+- **Overlay mode** (selected when `/dev/fuse` exists on the host -- typically Linux). The host workspace is bind-mounted read-only at `/jaiph/workspace-ro`. The runtime entrypoint (`overlay-run.sh`) sets up `fuse-overlayfs` with that read-only bind as the lower layer and a tmpfs as the upper layer, merged at `/jaiph/workspace`. Writes go to the tmpfs and are discarded on container exit. Requires `/dev/fuse` in the container and the extra Linux capabilities described under [Process isolation](#threat-model) (not only `SYS_ADMIN`).
 - **Copy mode** (selected when `/dev/fuse` is missing -- typically macOS Docker Desktop, or when forced via `JAIPH_DOCKER_NO_OVERLAY=1`). Before launching the container, the CLI clones the host workspace (excluding `.jaiph/runs`) into a fresh `<runs-root>/.sandbox-<id>/` directory, then bind-mounts that clone read-write at `/jaiph/workspace`. On macOS the clone uses `cp -cR` (APFS clonefile, near-zero cost); on other platforms it falls back to `cp -pR` and emits a one-line stderr warning. The clone is removed on exit unless `JAIPH_DOCKER_KEEP_SANDBOX=1` is set. No `SYS_ADMIN`, no `/dev/fuse`, no in-container overlay script.
 
 In both modes, run artifacts are written to a separate rw mount at `/jaiph/run` (outside the workspace sandbox) so they persist to the host.
 
 ### Enabling Docker
 
-Docker sandboxing is controlled exclusively through environment variables -- workflow files do not participate. This makes "the sandbox is escapable only by an explicit env var" the documented threat model.
+**Turning Docker on or off** uses environment variables only — workflow files cannot enable or disable the container (see [Enabling Docker](#enabling-docker)). **Image, network, and timeout** still come from module `config` and env overrides as in [Configuration keys](#configuration-keys). The idea is that skipping the container always requires an explicit host choice (`JAIPH_UNSAFE` / `JAIPH_DOCKER_ENABLED`), not a change committed to a `.jh` file alone.
 
 Docker is **on by default** for both local development and CI. To run on the host without a sandbox, set `JAIPH_UNSAFE=true`. To control Docker enablement explicitly, set `JAIPH_DOCKER_ENABLED`.
 
@@ -75,13 +79,13 @@ If Docker is enabled but `docker info` fails, the run exits with `E_DOCKER_NOT_F
 
 ### Configuration keys
 
-All Docker-related keys live under `runtime.*` in module-level config:
+**Docker on/off** is **not** a `runtime.*` key — only `JAIPH_DOCKER_ENABLED` / `JAIPH_UNSAFE` control that (see [Enabling Docker](#enabling-docker)). The keys below live under `runtime.*` in **module-level** `config` only. They are merged as **`JAIPH_DOCKER_*` environment variables > module `runtime.*` > defaults** (`resolveDockerConfig` in `src/runtime/docker.ts`).
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `runtime.docker_image` | string | `"ghcr.io/jaiphlang/jaiph-runtime:<version>"` | Container image. Must already contain `jaiph`. Defaults to the official GHCR runtime image matching the installed jaiph version. |
 | `runtime.docker_network` | string | `"default"` | Docker network mode. |
-| `runtime.docker_timeout` | integer | `300` | Max execution time in seconds. Must be a non-negative integer; `0` disables the timeout. Negative values produce `E_DOCKER_TIMEOUT`. |
+| `runtime.docker_timeout_seconds` | integer | `300` | Max execution time in seconds. Must be a non-negative integer; `0` disables the timeout. Negative values produce `E_DOCKER_TIMEOUT`. |
 
 Each key is type-checked at parse time. Unknown keys produce `E_PARSE`. The workspace mount is automatic and not configurable.
 
@@ -89,7 +93,7 @@ Each key is type-checked at parse time. Unknown keys produce `E_PARSE`. The work
 
 Following the `JAIPH_*` convention: `JAIPH_DOCKER_ENABLED`, `JAIPH_DOCKER_IMAGE`, `JAIPH_DOCKER_NETWORK`, `JAIPH_DOCKER_TIMEOUT`. Additionally, `JAIPH_UNSAFE=true` disables Docker by default (see [Enabling Docker](#enabling-docker)). `CI=true` does **not** affect the default — CI runs use the same sandbox path users do.
 
-Precedence: `JAIPH_DOCKER_ENABLED` env > unsafe default rule.
+Precedence for **enablement** only: `JAIPH_DOCKER_ENABLED` env > unsafe default rule (see table above). Image, network, and timeout use the env > in-file > default merge described in this section.
 
 If `JAIPH_DOCKER_TIMEOUT` is set but not a valid non-negative integer, the run exits with `E_DOCKER_TIMEOUT`.
 
@@ -131,18 +135,16 @@ The working directory is `/jaiph/workspace`. In overlay mode the host CLI writes
 
 ### Runtime behavior
 
-**Container lifecycle** -- `docker run --rm` launches the container and auto-removes it on exit. `--cap-drop ALL` drops all Linux capabilities; overlay mode re-adds only `SYS_ADMIN` (fuse-overlayfs mount). Copy mode adds nothing. `--security-opt no-new-privileges` prevents any process inside the container from gaining additional privileges. The pseudo-TTY flag (`-t`) is intentionally omitted: Docker's `-t` merges stderr into stdout, which would break the `__JAIPH_EVENT__` stderr-only live contract.
+**Container lifecycle** -- `docker run --rm` launches the container and auto-removes it on exit. `--cap-drop ALL` drops all Linux capabilities; overlay mode re-adds the capability set listed under [Process isolation](#threat-model) (not copy mode). `--security-opt no-new-privileges` is always set. The pseudo-TTY flag (`-t`) is intentionally omitted: Docker's `-t` merges stderr into stdout, which would break the `__JAIPH_EVENT__` stderr-only live contract.
 
 **Signal-safe cleanup** -- When the CLI receives SIGINT (Ctrl-C) or SIGTERM during a Docker run, `cleanupDocker` is called before the process exits. This removes the copy-mode sandbox directory (`<runs-root>/.sandbox-<id>/`) and clears any timeout timer, preventing stale workspace clones from accumulating after interrupted runs. A `process.on("exit")` guard provides a final safety net: if the normal exit path has not already cleaned up, the guard calls `cleanupDocker` synchronously. A `cleaned` flag on `DockerSpawnResult` ensures cleanup runs at most once — there are no double-`rmSync` warnings regardless of which path fires first. SIGKILL cannot be caught and is not handled; a startup-time sweep of stale sandbox directories is out of scope.
 
 **UID/GID handling on Linux:**
 
 - **Copy mode** -- the container runs directly as `--user <host_uid>:<host_gid>` so writes to the cloned workspace and `/jaiph/run` land owned by the host user.
-- **Overlay mode** -- the container runs as `--user 0:0` and executes the workflow as root inside the container. This keeps the overlay path simple and robust on Linux runners where `fusermount3` enforces strict mountpoint checks. The host UID/GID are still required (forwarded as `JAIPH_HOST_UID`/`JAIPH_HOST_GID` env vars) so the entrypoint can drop privileges via `setpriv`.
+- **Overlay mode** -- the container is started as `--user 0:0` so `fuse-overlayfs` can mount. The host UID/GID are forwarded as `JAIPH_HOST_UID` / `JAIPH_HOST_GID`; `overlay-run.sh` **`chown`s the run mount** (best effort) and then **`exec`s `jaiph run` under `setpriv`** to reuid/regid to the host user when `setpriv` is available. If `setpriv` is missing, the workflow may continue as UID 0 inside the container — use an image that includes `setpriv` (the official runtime does) for the intended behavior.
 
-In both modes, if the host UID/GID cannot be determined (`process.getuid()` and `id -u` both fail), `buildDockerArgs` throws `E_DOCKER_UID` and the run exits before the container is launched. This prevents the container from silently running as root with files owned by root, which would cause permission errors on host-side cleanup.
-
-On macOS Docker Desktop the VM transparently translates UIDs across the bind-mount boundary, so no `--user` override is applied and UID detection is skipped.
+On **Linux**, if the host UID/GID cannot be determined (`process.getuid()` / `process.getgid()` and `id -u` / `id -g` both fail), `buildDockerArgs` throws `E_DOCKER_UID` and the run exits before the container is launched. This prevents overlay or copy mode from starting without a usable `--user` mapping. On **macOS** Docker Desktop the VM transparently translates UIDs across the bind-mount boundary, so the CLI does not apply Linux-style `--user` overrides and this check does not run.
 
 **stdin** -- The `docker run` process is spawned with stdin set to `ignore` to prevent the Docker CLI from blocking on stdin EOF.
 
@@ -162,7 +164,7 @@ If `/dev/fuse` is missing on the host, the CLI uses **copy mode**: before launch
 
 **Network** -- `"default"` omits `--network`, which uses Docker's default bridge network (outbound access allowed). `"none"` passes `--network none` and fully disables networking -- use this for workflows that should not make external calls. Any other value (e.g. a custom Docker network name) is passed through as-is. Set `runtime.docker_network` in config or `JAIPH_DOCKER_NETWORK` in the environment.
 
-**Timeout** -- When `runtime.docker_timeout` is greater than zero, the CLI sends `SIGTERM` to the container process on overrun, followed by `SIGKILL` after a 5-second grace period. The failure message includes `E_TIMEOUT container execution exceeded timeout`.
+**Timeout** -- When the effective timeout (from `JAIPH_DOCKER_TIMEOUT` or `runtime.docker_timeout_seconds`, after the merge in [Configuration keys](#configuration-keys)) is greater than zero, the CLI arms a timer on the spawned `docker` child; on overrun it sends `SIGTERM`, then `SIGKILL` after a 5-second grace period. The failure message includes `E_TIMEOUT container execution exceeded timeout`. `0` disables the timer.
 
 **Image pre-pull** -- Image preparation (`prepareImage`) runs **before** the CLI banner so Docker's pull overhead does not interleave with the progress tree. If the image is not present locally, a single `pulling image <name>…` status line is written to stderr, then `docker pull --quiet` runs (Docker's native layer progress is suppressed). Pull failure produces `E_DOCKER_PULL`. After the pull (or if the image was already local), `verifyImageHasJaiph` confirms the image contains `jaiph`. The banner and progress tree only begin after image preparation completes.
 
@@ -177,11 +179,11 @@ Docker-related errors use `E_DOCKER_*` codes for programmatic detection:
 | `E_DOCKER_NO_JAIPH` | Selected image does not contain a `jaiph` CLI | Run exits with guidance to use the official image or install jaiph. |
 | `E_DOCKER_RUNS_DIR` | Absolute `JAIPH_RUNS_DIR` points outside the workspace | Run exits. Use a relative path or an absolute path within the workspace. |
 | `E_DOCKER_OVERLAY` | Overlay mode selected but `fuse-overlayfs` is missing from the image or the mount fails inside the container | Container exits with code 78. Use the official runtime image, install `fuse-overlayfs` in your custom image, or set `JAIPH_DOCKER_NO_OVERLAY=1` on the host to switch to copy mode. The CLI already passes `--security-opt apparmor=unconfined` on Linux to defeat the default AppArmor fuse-deny; remaining failures usually mean the host kernel itself blocks fuse mounts (rootless docker without the right user-namespace setup, locked-down kernel, etc.). |
-| `E_DOCKER_TIMEOUT` | `JAIPH_DOCKER_TIMEOUT` or `runtime.docker_timeout` is not a valid non-negative integer | Run exits before container launch. Value must be a non-negative integer; `0` disables the timeout. |
+| `E_DOCKER_TIMEOUT` | `JAIPH_DOCKER_TIMEOUT` or `runtime.docker_timeout_seconds` is not a valid non-negative integer | Run exits before container launch. Value must be a non-negative integer; `0` disables the timeout. |
 | `E_DOCKER_UID` | Linux host UID/GID detection failed (`process.getuid` and `id -u` both unavailable) | Run exits before container launch. Ensures the container never silently runs as root. Applies to both copy and overlay modes. |
 | `E_DOCKER_SANDBOX_COPY` | Copy mode failed to clone the host workspace (`cp` returned non-zero) | Run exits before container launch. Inspect the path printed in the error. |
 | `E_VALIDATE_MOUNT` | Mount targets a denied host path (`/`, `/proc`, docker socket, etc.) | Run exits before container launch. |
-| `E_TIMEOUT` | Container exceeds `runtime.docker_timeout` seconds | Container receives SIGTERM, then SIGKILL after 5s grace period. |
+| `E_TIMEOUT` | Container exceeds `runtime.docker_timeout_seconds` seconds | Container receives SIGTERM, then SIGKILL after 5s grace period. |
 
 All failures are deterministic and produce non-zero exit codes. There is no silent fallback from Docker to local execution.
 
@@ -242,7 +244,7 @@ A workflow with a custom Docker timeout (Docker is on by default):
 
 ```jh
 config {
-  runtime.docker_timeout = 600
+  runtime.docker_timeout_seconds = 600
 }
 
 workflow default() {

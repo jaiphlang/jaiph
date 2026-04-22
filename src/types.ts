@@ -300,7 +300,7 @@ export interface jaiphModule {
 export interface RuntimeConfig {
   dockerImage?: string;
   dockerNetwork?: string;
-  dockerTimeout?: number;
+  dockerTimeoutSeconds?: number;
 }
 
 /** One line inside `config { }`: comment or assignment (formatter round-trip order). */

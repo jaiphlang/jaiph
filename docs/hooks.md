@@ -9,9 +9,11 @@ redirect_from:
 
 Workflows often need **side effects** — notifications, structured logging, CI integration — but that logic does not belong in `.jh` sources. **Hooks** solve this: they are optional shell commands the CLI runs at fixed points in the run lifecycle, configured in a single `hooks.json` file rather than scattered across workflows.
 
-Under the hood, `jaiph run` follows a predictable path: prepare scripts, spawn the workflow runner (locally or in Docker), stream **`__JAIPH_EVENT__`** JSON lines from the runner’s stderr, then print PASS/FAIL. Hooks tap into that path. The CLI parses the same stderr events that drive the progress tree and builds a JSON payload for each hook command (see [Architecture — Runtime vs CLI responsibilities](architecture#runtime-vs-cli-responsibilities)). Hooks are **not** part of the Node workflow runtime; channel send/receive and inbox dispatch are separate mechanisms ([Inbox & Dispatch](inbox.md)).
+Under the hood, `jaiph run` follows a predictable path: prepare scripts, spawn the workflow runner (locally or in Docker), stream **`__JAIPH_EVENT__`** JSON lines from the runner’s stderr, then print PASS/FAIL. Hooks tap into that path. The CLI parses the same stderr events that drive the progress tree and builds a JSON payload for each hook command. Hooks live entirely in the **CLI** (they are not executed by `NodeWorkflowRuntime`); channels and inbox dispatch are runtime concerns. See [Architecture — Runtime vs CLI responsibilities](architecture.md#runtime-vs-cli-responsibilities) and [Architecture — Channels and hooks in context](architecture.md#channels-and-hooks-in-context).
 
-Hooks run only for **`jaiph run`** (including the `jaiph <file.jh>` shorthand) and are **not** triggered by `jaiph test`, `jaiph init`, or other commands. They work identically for local and Docker-backed runs.
+Hooks run only for normal **`jaiph run`** (including the `jaiph <file.jh>` shorthand). They are **not** triggered by `jaiph test`, `jaiph init`, `jaiph compile`, or other commands. **`jaiph run --raw`** also skips hooks (along with the banner, progress tree, and failure footer); that path exists so another process can consume stderr unchanged — for example the host CLI when Docker runs `jaiph run --raw` inside the container. See the **`--raw`** bullet under [CLI — `jaiph run`](cli.md#jaiph-run).
+
+For local runs, hooks use the same machine as the workflow. For **Docker-backed** runs, hook commands still execute on the **host** CLI process (not inside the container); see [Sandboxing — Runtime behavior](sandboxing.md#runtime-behavior).
 
 ## Config locations
 
@@ -26,12 +28,12 @@ Configuration uses **per-event override** precedence: if the project file lists 
 
 ## Schema
 
-Each file is a single JSON object mapping **event names** to **arrays of shell commands**:
+Each file must be a single JSON **object** at the root (not an array) mapping **event names** to **arrays of shell commands**:
 
 - Keys must be supported event names (see [Supported events](#supported-events)). Unknown keys are ignored.
-- Values must be arrays. A non-array value for a known key is silently ignored.
-- Array elements must be non-empty strings (one shell command each). Empty strings and non-string elements are skipped.
-- Commands for an event are spawned concurrently in array order (see [Behavior](#behavior)).
+- Values must be arrays. A non-array value for a known key is treated as absent for that event.
+- Array elements must be non-empty strings (one shell command each). Empty strings and non-string elements are skipped. An array of only empty strings is normalized away, so that event falls back to the other config file per [Precedence](#precedence).
+- Commands for an event are all spawned without waiting for the previous hook to finish; spawn order follows the array order (see [Behavior](#behavior)).
 
 ```json
 {
@@ -48,7 +50,7 @@ An empty array (or omitting the key) means “no commands from this file for thi
 
 | Event | When it fires |
 |-------|---------------|
-| `workflow_start` | After `buildScripts` completes (parse, validation, script extraction) and **before** the CLI spawns the runner. Does not fire if compilation fails. |
+| `workflow_start` | After **`buildScripts`** completes (parse, **`validateReferences`**, script extraction to `scripts/`) and **before** the runner subprocess is spawned. Does not fire if compilation fails. |
 | `workflow_end` | After the runner subprocess exits (any status), **before** the CLI prints PASS/FAIL. |
 | `step_start` | When the CLI observes a step-start event on the runner's stderr stream. |
 | `step_end` | When the CLI observes a step-end event on that stream. |
@@ -63,7 +65,7 @@ Resolution happens **per event**, independently:
 - Project file omits `workflow_end` or uses an empty array — global `workflow_end` commands run (if any).
 - Overriding `step_end` in the project file has no effect on how `workflow_start` is resolved.
 
-There is no explicit “disable” mechanism. Omitting an event or using `[]` means “fall back to global.” To suppress a global hook for one project, override that event with a no-op: `”workflow_end”: [“true”]`.
+There is no explicit “disable” mechanism. Omitting an event or using `[]` means “fall back to global.” To suppress a global hook for one project, override that event with a no-op: `"workflow_end": ["true"]`.
 
 ## Payload
 
@@ -74,7 +76,7 @@ Each command receives a single JSON object on **stdin** (UTF-8). Parse it with `
 | Field | Present in | Description |
 |-------|------------|-------------|
 | `event` | all | Event name: `workflow_start`, `workflow_end`, `step_start`, or `step_end`. |
-| `workflow_id` | all | Runtime run id (`run_id` from `__JAIPH_EVENT__`). Empty string on `workflow_start`. For `workflow_end`, the first non-empty `run_id` the CLI observed (empty if never sent). |
+| `workflow_id` | all | Runtime run id (`run_id` from step events on the stderr stream). Empty on `workflow_start`. For `workflow_end`, the CLI reuses the first non-empty `run_id` it saw on a step event (empty if the runner never emitted one). `step_start` / `step_end` pass through the `run_id` from each event (usually the same value once the run is underway). |
 | `timestamp` | all | ISO 8601 timestamp (from the CLI or runtime event). |
 | `run_path` | all | Absolute path to the `.jh` file being run. |
 | `workspace` | all | Workspace root directory (same rules as [Config locations](#config-locations)). |
@@ -91,8 +93,8 @@ Each command receives a single JSON object on **stdin** (UTF-8). Parse it with `
 ### Payload by event
 
 - **`workflow_start`** — `event`, `workflow_id` (empty), `timestamp`, `run_path`, `workspace`.
-- **`step_start`** — adds `step_id`, `step_kind`, `step_name`.
-- **`step_end`** — adds `status`, `elapsed_ms`, and optionally `out_file` / `err_file`.
+- **`step_start`** — `workflow_id`, `timestamp`, `run_path`, `workspace`, plus `step_id`, `step_kind`, `step_name`.
+- **`step_end`** — same base fields as `step_start`, plus `status`, `elapsed_ms`, and optionally `out_file` / `err_file`.
 - **`workflow_end`** — `event`, `workflow_id`, `status`, `elapsed_ms`, `timestamp`, `run_path`, `workspace`, and optionally `run_dir` / `summary_file`.
 
 Example payload (`step_end`):
@@ -116,13 +118,15 @@ Example payload (`step_end`):
 
 ## Behavior
 
-- **Shell:** Each command runs as `sh -c ‘<command>’` (POSIX `sh`).
-- **Concurrency:** All commands for a single event are spawned concurrently (no waiting between them). Events themselves follow run order — step events fire before `workflow_end`.
-- **Best-effort:** Hook failures never change the CLI exit code. Non-zero exits or spawn errors produce a `jaiph hooks: ...` line on stderr; the workflow continues normally.
-- **I/O:** Hook stdout is discarded. Hook stderr is forwarded to the CLI’s stderr.
-- **Environment:** Hooks inherit the same environment as the `jaiph run` process.
-- **Working directory:** Hooks run in the directory where `jaiph run` was invoked, **not** the workspace root. To write relative to the project, read the `workspace` field from stdin (see [Examples](#examples)).
+- **Shell:** Each command runs as `sh -c '<command>'` (POSIX `sh` on the **`PATH`** of the `jaiph run` process).
+- **Concurrency:** All commands for a single event are started in sequence without awaiting completion, so they overlap in wall time. Lifecycle order is still respected: `workflow_start`, then step hooks as events arrive, then `workflow_end` before PASS/FAIL.
+- **Best-effort:** Hook failures never change the CLI exit code. Non-zero exits or spawn errors produce a `jaiph hooks: ...` line on stderr; the workflow result is unchanged.
+- **I/O:** Hook stdout is discarded. Hook stderr is forwarded to the CLI’s stderr. The JSON payload is written once to each hook’s stdin (`utf8`); if the process exits before reading stdin, delivery is best-effort and may log an error.
+- **Environment:** Hooks receive a shallow copy of the parent process environment (same keys and values as `jaiph run` at spawn time).
+- **Working directory:** Hooks run with the **current working directory** of the `jaiph run` process (often the directory you launched the CLI from), **not** necessarily the workspace root. To write paths under the project, read the `workspace` field from stdin (see [Examples](#examples)).
 - **Invalid config:** Missing files are silently skipped. If a file exists but fails `JSON.parse` or is not a JSON object, the CLI prints a warning on stderr and ignores that file. Bad per-event values (non-array, empty strings) are skipped without rejecting the rest of the file.
+
+Payload shapes for tooling are also declared in TypeScript as **`HookPayload`** / **`HookEventName`** in `src/types.ts`.
 
 ## Examples
 

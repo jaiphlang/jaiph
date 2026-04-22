@@ -75,8 +75,6 @@ rule only_expected_docs_changed_after_prompt(allowed) {
   run assert_only_allowed_changed(allowed)
 }
 
-script arg_nonempty = `[ -n "${1:-}" ]`
-
 script first_line_str = `printf '%s\n' "$1" | head -n 1`
 
 script rest_lines_str = `printf '%s\n' "$1" | tail -n +2`
@@ -210,7 +208,7 @@ workflow docs_overview(docPaths) {
 
 workflow process_docs_md_recursive(file, remaining) {
   run docs_page(file)
-  run arg_nonempty(remaining) catch (err) {
+  if remaining == "" {
     return
   }
   const next = run first_line_str(remaining)
@@ -219,7 +217,7 @@ workflow process_docs_md_recursive(file, remaining) {
 }
 
 workflow maybe_process_docs_md(first_doc, rest_docs) {
-  run arg_nonempty(first_doc) catch (err) {
+  if first_doc == "" {
     return
   }
   run process_docs_md_recursive(first_doc, rest_docs)

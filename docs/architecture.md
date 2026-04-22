@@ -7,7 +7,7 @@ redirect_from:
 
 # Architecture
 
-Jaiph is a workflow system with a **TypeScript CLI** and a **Node.js kernel** that interprets the AST directly.
+Jaiph is a workflow system with a **TypeScript CLI** and a **JavaScript kernel** (`src/runtime/kernel/`) that interprets the workflow AST in process — there is no separate “workflow shell” emitted for execution.
 
 This page describes **how Jaiph is built**: repository layout of major subsystems, **core components**, compile and run pipelines, and **runtime contracts** (events, artifacts on disk, distribution). It is the map of the implementation.
 
@@ -15,18 +15,20 @@ For **how to contribute** — branches, test layers, E2E assertion policy, and b
 
 ## System overview
 
-1. Parse source into AST (quick parse on the CLI for `jaiph run` metadata; full graph loads use the same parser).
-2. **Compile-time** validation (`validateReferences`, invoked from **`emitScriptsForModule`** / **`buildScripts()`**) runs before script extraction, not inside `buildRuntimeGraph()` (the graph loader only parses modules and follows imports).
-3. **CLI** (Node from `dist/src/cli.js`, or a **Bun-compiled** `jaiph` binary) prepares script executables (scripts-only), spawns the **`node-workflow-runner`** child, **which** builds `RuntimeGraph` and runs **`NodeWorkflowRuntime`**. Script steps execute as managed subprocesses; prompt, inbox I/O, and event/summary emission are handled by the JS kernel under `src/runtime/kernel/`.
-4. Stream live events to CLI and persist durable run artifacts.
+Workflow authors write `.jh` / `.test.jh` modules. The toolchain turns those files into **validated** modules plus **extracted script files**, then the **same AST interpreter** runs workflows whether you use local `jaiph run`, Docker, or `jaiph test`.
+
+1. Parse source into AST (the CLI parses once up front for `jaiph run` metadata such as `runtime` config; `buildRuntimeGraph` and transpilation use the same parser on disk contents).
+2. **Compile-time** validation (`validateReferences`, invoked from **`emitScriptsForModule`** / **`buildScripts()`**) runs before script extraction, not inside `buildRuntimeGraph()` (the graph loader only parses modules and follows imports). The **`jaiph compile`** command runs the same validation over files or directories without executing workflows (see `src/cli/commands/compile.ts`).
+3. **CLI** (`dist/src/cli.js` via npm, or a **Bun-compiled** `dist/jaiph` binary) prepares script executables (scripts-only), then spawns a **detached child** that loads **`node-workflow-runner.js`**. That child calls `buildRuntimeGraph()` and runs **`NodeWorkflowRuntime`**. The child’s interpreter is **`process.execPath`** of the CLI process (Node when you run `node dist/src/cli.js`, the standalone Bun binary when you run `dist/jaiph`). Script steps execute as managed subprocesses; prompt, inbox I/O, and event/summary emission are handled by the kernel under `src/runtime/kernel/`.
+4. Stream live events to the CLI and persist durable run artifacts.
 
 All orchestration — local `jaiph run`, `jaiph test`, and **Docker `jaiph run`** — uses the **Node workflow runtime** (AST interpreter). Docker containers run the same `node-workflow-runner` process with the compiled JS source tree and scripts mounted read-only.
 
 ## Core components
 
 - **CLI (`src/cli`)**
-  - Entry point (`run`, `test`, `init`, `install`, `use`, `format`).
-  - **Workflow launch** is owned in TypeScript (`src/runtime/kernel/workflow-launch.ts` + `src/cli/run/lifecycle.ts`): spawns the **Node workflow runner** (`node-workflow-runner.ts`), which calls `buildRuntimeGraph()` then `NodeWorkflowRuntime`. `setupRunSignalHandlers` accepts an optional `onSignalCleanup` callback for Docker sandbox teardown on SIGINT/SIGTERM.
+  - Entry point (`run`, `test`, `compile`, `init`, `install`, `use`, `format`).
+  - **Workflow launch** is owned in TypeScript (`src/runtime/kernel/workflow-launch.ts` + `src/cli/run/lifecycle.ts`): spawns **`node-workflow-runner.js`** with `process.execPath`, which calls `buildRuntimeGraph()` then `NodeWorkflowRuntime`. `setupRunSignalHandlers` accepts an optional `onSignalCleanup` callback for Docker sandbox teardown on SIGINT/SIGTERM.
   - Parses runtime events and renders progress; dispatches hooks.
 
 - **Parser (`src/parser.ts`, `src/parse/*`)**
@@ -56,7 +58,7 @@ All orchestration — local `jaiph run`, `jaiph test`, and **Docker `jaiph run`*
   - `jaiph format` rewrites `.jh` / `.test.jh` files into canonical style. Pure AST→text emitter; no side-effects beyond file writes.
 
 - **Docker runtime helper (`src/runtime/docker.ts`)**
-  - Parses mount specs, resolves Docker config (image, network, timeout), and builds the `docker run` invocation used by `jaiph run --docker`. The container runs the same `node-workflow-runner` process as local execution. The default image is the official `ghcr.io/jaiphlang/jaiph-runtime` GHCR image; every selected image must already contain `jaiph` (no auto-install or derived-image build at runtime). Image preparation (`prepareImage`) runs before the CLI banner: it checks whether the image is local, pulls with `--quiet` if needed (writing a single status line to stderr), and verifies that `jaiph` exists in the image. `spawnDockerProcess` no longer handles pull or verification — it receives a pre-resolved image. The spawn call uses `stdio: ["ignore", "pipe", "pipe"]` — stdin is ignored to prevent the Docker CLI from blocking on stdin EOF, which would stall event streaming and cause the host CLI to hang after the container exits.
+  - Parses mount specs, resolves Docker config (image, network, timeout), and builds the `docker run` invocation when the CLI enables **Docker sandboxing** for `jaiph run` (environment-driven; there is no `jaiph run --docker` flag — see [Sandboxing](sandboxing.md)). The container runs the same `node-workflow-runner` entry as local execution. The default image is the official `ghcr.io/jaiphlang/jaiph-runtime` GHCR image; every selected image must already contain `jaiph` (no auto-install or derived-image build at runtime). Image preparation (`prepareImage`) runs before the CLI banner: it checks whether the image is local, pulls with `--quiet` if needed (short status lines on stderr instead of Docker’s default pull UI), and verifies that `jaiph` exists in the image. `spawnDockerProcess` does not pull or verify — it receives a pre-resolved image. The spawn call uses `stdio: ["ignore", "pipe", "pipe"]` — stdin is ignored so the Docker CLI does not block on stdin EOF, which would stall event streaming and hang the host CLI after the container exits.
   - **Workspace immutability:** Docker runs cannot modify the host workspace. The host checkout is mounted read-only; `/jaiph/workspace` is a sandbox-local copy-on-write overlay discarded on exit. The only host-writable path is `/jaiph/run` (run artifacts). Workflows that need to capture workspace changes should use the `artifacts.save_patch()` library function, which writes a named patch into the artifacts directory. See [Sandboxing](sandboxing.md) for the full contract and [Libraries — `jaiphlang/artifacts`](libraries.md#jaiphlangartifacts--publishing-files-out-of-the-sandbox) for the patch workflow.
 
 ## Runtime vs CLI responsibilities
@@ -92,14 +94,16 @@ The runtime persists step captures and the event timeline under a UTC-dated hier
 .jaiph/runs/
   <YYYY-MM-DD>/                       # UTC date (see NodeWorkflowRuntime)
     <HH-MM-SS>-<source-basename>/       # UTC time + JAIPH_SOURCE_FILE or entry basename
-      000001-module__step.out          # stdout capture per step (seq-prefixed)
+      000001-module__step.out          # stdout capture per step (6-digit seq prefix)
       000001-module__step.err          # stderr capture (when non-empty)
+      artifacts/                       # user-published files (JAIPH_ARTIFACTS_DIR); created at run start
       inbox/                           # inbox message files (when channels are used)
-      .seq                             # step-sequence counter (kernel/seq-alloc.ts)
+      heartbeat                        # liveness: epoch ms, refreshed about every 10s
+      return_value.txt                 # when `jaiph run` default workflow returns a value (success only)
       run_summary.jsonl                # durable event timeline
 ```
 
-Sequence prefixes are monotonic and unique per run (allocated by `kernel/seq-alloc.ts`), making artifact file names deterministic and ordered.
+Step sequence numbers are monotonic and unique per run: `NodeWorkflowRuntime` allocates them in memory when opening each step’s capture files (`%06d-<safe_name>.out|.err`). The standalone module `kernel/seq-alloc.ts` is a **file-backed** allocator (and CLI `node seq-alloc.js`) for tooling or non-kernel callers; the Node workflow runtime does **not** rely on a `.seq` file in the run directory for ordinary execution.
 
 ## Channels and hooks in context
 
@@ -108,7 +112,7 @@ Channels are validated at compile time (`validateReferences` / send RHS rules) a
 ## Test runner integration (`*.test.jh` in the kernel)
 
 **How** `jaiph test` wires into the same stack as `jaiph run`: `*.test.jh` files are parsed in the CLI; `runTestFile()` drives blocks in-process. **`buildRuntimeGraph(testFile)`** is called **once per `runTestFile` invocation** and the resulting graph is reused across all blocks and `test_run_workflow` steps (the import closure is constant for a given test file within a single process run). Each `test_run_workflow` step resolves mocks against that cached graph, then constructs `NodeWorkflowRuntime` with `mockBodies` / mock prompt env. Mock prompts, workflows, rules, and scripts are supported through the runtime's mock infrastructure.
-Before that, the CLI prepares script executables via **`buildScripts(workspace)`** so imported workflow modules have concrete script paths under `JAIPH_SCRIPTS` (workspace `*.jh` files only; `*.test.jh` is not part of that walk).
+Before that, the CLI prepares script executables via **`buildScripts(testFileAbs, tmpDir, workspaceRoot)`** — the same **`buildScripts`** helper as `jaiph run`, with the **test file as the entrypoint**. That walks the test module and its **import closure** (transitive `import` edges), runs **`validateReferences`** / **`emitScriptsForModule`** per reachable file, and writes `scripts/` so imported workflows have paths under `JAIPH_SCRIPTS`. Unrelated `*.jh` files elsewhere in the repo are not compiled unless imported.
 
 Authoring rules, fixtures, and mock syntax for `*.test.jh` are documented in [Testing](testing.md), not here.
 
@@ -118,8 +122,8 @@ Static tree from AST (`progress.ts`); runtime events (`events.ts`, `stderr-handl
 
 ## Distribution: Node vs Bun standalone
 
-- **Development / npm:** `npm run build` → `tsc` + copy `runtime/kernel/` into `dist/` + copy `runtime/overlay-run.sh` into `dist/src/runtime/`. `node dist/src/cli.js` runs the CLI.
-- **Standalone:** `npm run build:standalone` produces `dist/jaiph` (Bun `--compile`) and copies **`runtime/kernel/`** into **`dist/`** next to the binary. The bundle runs **without a Node.js install**. Target machines still need **bash** (or another interpreter) for `script` step subprocess execution and **Node.js** for the runtime kernel.
+- **Development / npm:** `npm run build` runs `tsc`, copies **`src/runtime/`** to **`dist/src/runtime/`** (kernel, `docker.ts`, etc.), then copies **`runtime/overlay-run.sh`** from the repo root into **`dist/src/runtime/overlay-run.sh`**. The published `jaiph` bin is **`node dist/src/cli.js`**.
+- **Standalone:** `npm run build:standalone` runs the same build, copies **`dist/src/runtime`** to **`dist/runtime`** beside the binary, then `bun build --compile ./src/cli.ts --outfile dist/jaiph`. Workflow launch still spawns `node-workflow-runner.js` using **`process.execPath`**, so the standalone artifact is **self-contained** (no separate Node install) when end users run that binary. **Bash** (or whatever shebang your `script` steps use) is still required on the host for script subprocesses. Ship **`dist/jaiph`** with **`dist/runtime`** alongside it so kernel paths resolve (same layout as `npm run build:standalone`; table in [Contributing](contributing.md)).
 
 ## Mermaid architecture diagram
 
@@ -248,6 +252,7 @@ sequenceDiagram
 ## Summary
 
 - `.jh` / `*.test.jh` share parser/AST; **compile-time** validation runs in **`emitScriptsForModule`** during **`buildScripts`**. **`buildRuntimeGraph`** loads modules with **parse-only** imports.
+- **`jaiph compile`** walks the same import closures as a normal compile check, runs **`validateReferences`** on each module, and exits — no **`buildScriptFiles`** emission, no **`buildScripts`**, no runner spawn.
 - **Node-only runtime:** all execution — local `jaiph run`, Docker `jaiph run`, and `jaiph test` — goes through `NodeWorkflowRuntime`. Docker containers run `node-workflow-runner` with the compiled JS tree and scripts mounted, using the same semantics as local execution.
 - **CLI** owns launch, observation, hooks, and runtime preparation (`buildScripts`). Workflow execution runs in **`NodeWorkflowRuntime`**, with **script steps** as managed subprocesses.
 - No workflow-level `.sh` files or `jaiph_stdlib.sh` are produced or required.

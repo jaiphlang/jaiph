@@ -172,9 +172,9 @@ export async function runWorkflow(rest: string[]): Promise<number> {
     drainBuffers(onLine, buf, ttyCtx);
 
     if (dockerResult) {
-      const timedOut = dockerResult.timeoutTimer === undefined && activeDockerConfig.timeout > 0
+      const timedOut = dockerResult.timeoutTimer === undefined && activeDockerConfig.timeoutSeconds > 0
         ? false
-        : (Date.now() - startedAt) >= activeDockerConfig.timeout * 1000;
+        : (Date.now() - startedAt) >= activeDockerConfig.timeoutSeconds * 1000;
       if (timedOut && childExit.status !== 0) {
         runState.capturedStderr += "E_TIMEOUT container execution exceeded timeout\n";
       }
