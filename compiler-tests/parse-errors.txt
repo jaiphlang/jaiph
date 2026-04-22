@@ -1025,7 +1025,7 @@ workflow default() {
 import "lib.jh" as lib
 
 test "bad mock" {
-  mock prompt not_quoted
+  mock prompt 123-not-a-string
   const out = run lib.default()
 }
 --- lib.jh

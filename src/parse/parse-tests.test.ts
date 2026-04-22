@@ -286,6 +286,70 @@ test("parseTestBlock: parses expect_equal", () => {
   }
 });
 
+test("parseTestBlock: parses test-scope `const NAME = \"literal\"` binding", () => {
+  const lines = [
+    'test "t1" {',
+    '  const expected = "Hello Alice!"',
+    '}',
+  ];
+  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  assert.equal(testBlock.steps[0].type, "test_const");
+  if (testBlock.steps[0].type === "test_const") {
+    assert.equal(testBlock.steps[0].name, "expected");
+    assert.equal(testBlock.steps[0].value, "Hello Alice!");
+  }
+});
+
+test("parseTestBlock: parses `mock prompt <ident>` as a const reference", () => {
+  const lines = [
+    'test "t1" {',
+    '  const r = "ok"',
+    '  mock prompt r',
+    '}',
+  ];
+  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  assert.equal(testBlock.steps[1].type, "test_mock_prompt");
+  if (testBlock.steps[1].type === "test_mock_prompt") {
+    assert.equal(testBlock.steps[1].response, "");
+    assert.equal(testBlock.steps[1].responseVar, "r");
+  }
+});
+
+test("parseTestBlock: parses `expect_equal var <ident>` as a const reference", () => {
+  const lines = [
+    'test "t1" {',
+    '  const expected = "x"',
+    '  expect_equal response expected',
+    '}',
+  ];
+  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  assert.equal(testBlock.steps[1].type, "test_expect_equal");
+  if (testBlock.steps[1].type === "test_expect_equal") {
+    assert.equal(testBlock.steps[1].variable, "response");
+    assert.equal(testBlock.steps[1].expected, "");
+    assert.equal(testBlock.steps[1].expectedVar, "expected");
+  }
+});
+
+test("parseTestBlock: parses `expect_contain` and `expect_not_contain` with const reference", () => {
+  const lines = [
+    'test "t1" {',
+    '  const sub = "hello"',
+    '  expect_contain response sub',
+    '  expect_not_contain response sub',
+    '}',
+  ];
+  const { testBlock } = parseTestBlock("test.jh", lines, 0);
+  assert.equal(testBlock.steps[1].type, "test_expect_contain");
+  if (testBlock.steps[1].type === "test_expect_contain") {
+    assert.equal(testBlock.steps[1].substringVar, "sub");
+  }
+  assert.equal(testBlock.steps[2].type, "test_expect_not_contain");
+  if (testBlock.steps[2].type === "test_expect_not_contain") {
+    assert.equal(testBlock.steps[2].substringVar, "sub");
+  }
+});
+
 test("parseTestBlock: rejects old camelCase expectContain", () => {
   const lines = [
     'test "t1" {',

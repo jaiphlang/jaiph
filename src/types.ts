@@ -329,7 +329,21 @@ export interface WorkflowMetadata {
 export type TestStepDef =
   | { type: "comment"; text: string; loc: SourceLoc }
   | { type: "blank_line" }
-  | { type: "test_mock_prompt"; response: string; loc: SourceLoc }
+  /**
+   * Literal string binding scoped to the enclosing test block:
+   * `const expected = "..."`. The runner seeds test-scope vars with these
+   * before mocks are collected, so subsequent `mock prompt <name>` and
+   * `expect_* var <name>` references resolve to this value.
+   */
+  | { type: "test_const"; name: string; value: string; loc: SourceLoc }
+  | {
+      type: "test_mock_prompt";
+      /** Literal response when authored as `mock prompt "..."`. Empty when responseVar is set. */
+      response: string;
+      /** Identifier when authored as `mock prompt <ident>` referring to a `test_const`. */
+      responseVar?: string;
+      loc: SourceLoc;
+    }
   | {
       type: "test_mock_prompt_block";
       arms: MatchArmDef[];
@@ -343,9 +357,30 @@ export type TestStepDef =
       allowFailure?: boolean;
       loc: SourceLoc;
     }
-  | { type: "test_expect_contain"; variable: string; substring: string; loc: SourceLoc }
-  | { type: "test_expect_not_contain"; variable: string; substring: string; loc: SourceLoc }
-  | { type: "test_expect_equal"; variable: string; expected: string; loc: SourceLoc }
+  | {
+      type: "test_expect_contain";
+      variable: string;
+      substring: string;
+      /** Set when authored as `expect_contain var <ident>`. */
+      substringVar?: string;
+      loc: SourceLoc;
+    }
+  | {
+      type: "test_expect_not_contain";
+      variable: string;
+      substring: string;
+      /** Set when authored as `expect_not_contain var <ident>`. */
+      substringVar?: string;
+      loc: SourceLoc;
+    }
+  | {
+      type: "test_expect_equal";
+      variable: string;
+      expected: string;
+      /** Set when authored as `expect_equal var <ident>`. */
+      expectedVar?: string;
+      loc: SourceLoc;
+    }
   | { type: "test_mock_workflow"; ref: string; params: string[]; steps: WorkflowStepDef[]; loc: SourceLoc }
   | { type: "test_mock_rule"; ref: string; params: string[]; steps: WorkflowStepDef[]; loc: SourceLoc }
   | { type: "test_mock_script"; ref: string; params: string[]; body: string; loc: SourceLoc };
