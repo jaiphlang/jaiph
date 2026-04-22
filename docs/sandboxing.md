@@ -27,7 +27,7 @@ Docker sandboxing is designed to contain damage from untrusted or semi-trusted w
 
 - **Filesystem access** -- Scripts inside the container cannot read or write arbitrary host paths. The container's `/jaiph/workspace` is either an in-container fuse-overlayfs union over a read-only bind of the host workspace (overlay mode, writes land in a tmpfs upper layer and are discarded on exit) or a host-side clone of the workspace mounted read-write (copy mode, the clone is removed on exit). Only the run-artifacts directory (`/jaiph/run`) persists writes back to the host workspace.
 - **Process isolation** -- Container processes cannot see or signal host processes. The container runs with `--cap-drop ALL` (overlay mode re-adds `SYS_ADMIN` for fuse-overlayfs; copy mode adds nothing) and `--security-opt no-new-privileges` to prevent privilege escalation. In Linux overlay mode the workflow runs as root inside the container so fuse-overlayfs can mount reliably; copy mode and macOS remain non-root as before.
-- **Credential leakage** -- Sensitive host environment variables (`SSH_*`, `GPG_*`, `AWS_*`, `GCP_*`, `AZURE_*`, `GOOGLE_*`, `DOCKER_*`, `KUBE*`, `NPM_TOKEN*`) are never forwarded into the container. Only `JAIPH_*` (except `JAIPH_DOCKER_*`) and agent prefixes (`ANTHROPIC_*`, `CLAUDE_*`, `CURSOR_*`) cross the container boundary.
+- **Credential leakage** -- Environment variable forwarding uses an explicit allowlist: only `JAIPH_*` (except `JAIPH_DOCKER_*`), `ANTHROPIC_*`, `CLAUDE_*`, and `CURSOR_*` cross the container boundary. Everything else is dropped.
 - **Mount safety** -- The host root filesystem (`/`), Docker socket (`/var/run/docker.sock`, `/run/docker.sock`), and OS internals (`/proc`, `/sys`, `/dev`) cannot be mounted into the container. Attempting to do so produces `E_VALIDATE_MOUNT`.
 
 **What Docker does NOT protect against:**
@@ -216,21 +216,16 @@ USER jaiph
 
 ### Environment variable forwarding
 
-All `JAIPH_*` variables from the host are forwarded into the container, **except** `JAIPH_DOCKER_*` variables (excluded to prevent nested Docker execution). `JAIPH_WORKSPACE` is overridden to `/jaiph/workspace` and `JAIPH_RUNS_DIR` is overridden to `/jaiph/run`. The following prefixes are also forwarded for agent authentication:
+Environment variable forwarding uses an explicit allowlist; everything else is dropped. Only variables matching the following prefixes are forwarded into the container:
 
-- `CURSOR_*`
+- `JAIPH_*` (except `JAIPH_DOCKER_*`, excluded to prevent nested Docker execution)
 - `ANTHROPIC_*`
+- `CURSOR_*`
 - `CLAUDE_*`
 
-The following prefixes are **never** forwarded, even if present on the host:
+`JAIPH_WORKSPACE` is overridden to `/jaiph/workspace` and `JAIPH_RUNS_DIR` is overridden to `/jaiph/run`.
 
-- `SSH_*`, `GPG_*` -- authentication agent sockets and signing keys
-- `AWS_*`, `GCP_*`, `AZURE_*`, `GOOGLE_*` -- cloud provider credentials
-- `DOCKER_*` -- Docker daemon configuration (prevents container-in-container)
-- `KUBE*` -- Kubernetes configuration
-- `NPM_TOKEN*` -- package registry credentials
-
-This denylist is enforced in `buildDockerArgs` and cannot be overridden. If a workflow needs cloud credentials inside the container, pass them explicitly through `JAIPH_*`-prefixed variables or use a credential proxy.
+This allowlist is enforced in `buildDockerArgs` and cannot be overridden. Any variable not matching the allowlist -- including cloud credentials (`AWS_*`, `GCP_*`, etc.), authentication sockets (`SSH_*`), registry tokens (`NPM_TOKEN`, `GITHUB_TOKEN`, `PYPI_*`, `CARGO_*`), and all other host environment -- is silently dropped. If a workflow needs external credentials inside the container, pass them explicitly through `JAIPH_*`-prefixed variables or use a credential proxy.
 
 ### Example
 
