@@ -20,7 +20,7 @@ test "with name, returns greeting and logs response" {
   mock prompt expected_response
 
   # When
-  run hello.default("Alice")
+  const response = run hello.default("Alice")
 
   # Then
   expect_equal response expected_response

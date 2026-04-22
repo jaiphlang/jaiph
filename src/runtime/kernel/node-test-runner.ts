@@ -184,40 +184,34 @@ async function runTestBlock(
           mockBodies,
         });
         const result = await runtime.runNamedWorkflow(step.workflowRef, step.args ?? []);
-        // Resolve the value following production `run_capture` semantics so we can bind
-        // both the explicit capture target and the implicit `response` alias.
-        let runValue: string | undefined;
-        if (result.status === 0 && result.returnValue) {
-          runValue = result.returnValue;
-        } else if (result.status !== 0 && result.error) {
-          runValue = result.error.trim();
-        } else if (step.captureName) {
-          // No explicit return — read all .out artifact files (matches bash harness semantics).
-          // Only needed when an explicit capture target requires a value.
-          const runDir = runtime.getRunDir();
-          try {
-            const outFiles = readdirSync(runDir)
-              .filter((f) => f.endsWith(".out"))
-              .sort();
-            let captured = "";
-            for (const outFile of outFiles) {
-              captured += readFileSync(join(runDir, outFile), "utf8");
+        // Resolve the captured value following production `run_capture` semantics.
+        // Only an explicit `const X = run …` binding introduces a variable; there is no
+        // implicit alias — `expect_*` must reference an explicitly-captured name.
+        if (step.captureName) {
+          let runValue: string | undefined;
+          if (result.status === 0 && result.returnValue) {
+            runValue = result.returnValue;
+          } else if (result.status !== 0 && result.error) {
+            runValue = result.error.trim();
+          } else {
+            // No explicit return — read all .out artifact files (matches bash harness semantics).
+            const runDir = runtime.getRunDir();
+            try {
+              const outFiles = readdirSync(runDir)
+                .filter((f) => f.endsWith(".out"))
+                .sort();
+              let captured = "";
+              for (const outFile of outFiles) {
+                captured += readFileSync(join(runDir, outFile), "utf8");
+              }
+              runValue = captured;
+            } catch {
+              runValue = result.output;
             }
-            runValue = captured;
-          } catch {
-            runValue = result.output;
           }
-        }
-        if (step.captureName && runValue !== undefined) {
-          vars.set(step.captureName, runValue);
-        }
-        // Implicit `response` alias: bind the most recent `run` workflow's return value
-        // (or captured failure output) so `expect_equal response "..."` works without
-        // requiring an explicit `const response = run ...`. Last-write-wins across runs.
-        if (result.status === 0 && result.returnValue !== undefined) {
-          vars.set("response", result.returnValue);
-        } else if (result.status !== 0 && result.error) {
-          vars.set("response", result.error.trim());
+          if (runValue !== undefined) {
+            vars.set(step.captureName, runValue);
+          }
         }
         if (!step.allowFailure && result.status !== 0) {
           return { pass: false, error: `workflow exited with status ${result.status}` };
@@ -226,6 +220,9 @@ async function runTestBlock(
       }
 
       if (step.type === "test_expect_contain") {
+        if (!vars.has(step.variable)) {
+          return { pass: false, error: `expect_contain: undefined variable "${step.variable}" (capture it first with: const ${step.variable} = run …)` };
+        }
         const value = vars.get(step.variable) ?? "";
         const substring = resolveExpectArg(vars, step.substring, step.substringVar);
         if (substring instanceof Error) return { pass: false, error: substring.message };
@@ -239,6 +236,9 @@ async function runTestBlock(
       }
 
       if (step.type === "test_expect_not_contain") {
+        if (!vars.has(step.variable)) {
+          return { pass: false, error: `expect_not_contain: undefined variable "${step.variable}" (capture it first with: const ${step.variable} = run …)` };
+        }
         const value = vars.get(step.variable) ?? "";
         const substring = resolveExpectArg(vars, step.substring, step.substringVar);
         if (substring instanceof Error) return { pass: false, error: substring.message };
@@ -252,6 +252,9 @@ async function runTestBlock(
       }
 
       if (step.type === "test_expect_equal") {
+        if (!vars.has(step.variable)) {
+          return { pass: false, error: `expect_equal: undefined variable "${step.variable}" (capture it first with: const ${step.variable} = run …)` };
+        }
         const value = vars.get(step.variable) ?? "";
         const expected = resolveExpectArg(vars, step.expected, step.expectedVar);
         if (expected instanceof Error) return { pass: false, error: expected.message };

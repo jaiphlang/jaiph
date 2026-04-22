@@ -804,3 +804,64 @@ workflow default() {
   return missing_name
 }
 
+=== test block: expect_equal LHS variable not captured (no implicit `response`)
+# @expect error E_VALIDATE "expect_equal: undefined name "response""
+--- input.test.jh
+import "lib.jh" as m
+
+test "no implicit response" {
+  run m.greet("world")
+  expect_equal response "hello world"
+}
+--- lib.jh
+workflow greet(name) {
+  return "hello ${name}"
+}
+
+=== test block: expect_equal RHS const reference not declared
+# @expect error E_VALIDATE "expect_equal: undefined name "expected""
+--- input.test.jh
+import "lib.jh" as m
+
+test "missing const ref" {
+  const response = run m.greet()
+  expect_equal response expected
+}
+--- lib.jh
+workflow greet() {
+  return "hi"
+}
+
+=== test block: mock prompt <ident> references undeclared const
+# @expect error E_VALIDATE "mock prompt: undefined name "reply""
+--- input.test.jh
+import "lib.jh" as m
+
+test "mock prompt undeclared" {
+  mock prompt reply
+  const response = run m.ask()
+  expect_equal response "x"
+}
+--- lib.jh
+workflow ask() {
+  const r = prompt "say hi"
+  return r
+}
+
+=== test block: explicit capture + const reference is valid
+# @expect ok
+--- input.test.jh
+import "lib.jh" as m
+
+test "explicit capture" {
+  const expected = "Hello!"
+  mock prompt expected
+  const response = run m.ask()
+  expect_equal response expected
+}
+--- lib.jh
+workflow ask() {
+  const r = prompt "say hi"
+  return r
+}
+

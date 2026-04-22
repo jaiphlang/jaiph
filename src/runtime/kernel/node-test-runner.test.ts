@@ -69,7 +69,7 @@ test("test runner resolves `const` bindings inside `mock prompt <ident>` and `ex
 test "const drives mock and expect" {
   const expected = "Hello Alice!"
   mock prompt expected
-  run ask()
+  const response = run ask()
   expect_equal response expected
 }
 `,
@@ -81,7 +81,7 @@ test "const drives mock and expect" {
         steps: [
           { type: "test_const" as const, name: "expected", value: "Hello Alice!", loc },
           { type: "test_mock_prompt" as const, response: "", responseVar: "expected", loc },
-          { type: "test_run_workflow" as const, workflowRef: "ask", args: [], loc },
+          { type: "test_run_workflow" as const, captureName: "response", workflowRef: "ask", args: [], loc },
           {
             type: "test_expect_equal" as const,
             variable: "response",
@@ -113,7 +113,7 @@ test("test runner reports a clear error when an expect_* step references an unde
 }
 
 test "undefined const ref" {
-  run noop()
+  const response = run noop()
   expect_equal response missing
 }
 `,
@@ -123,7 +123,7 @@ test "undefined const ref" {
       {
         description: "undefined const ref", loc,
         steps: [
-          { type: "test_run_workflow" as const, workflowRef: "noop", args: [], loc },
+          { type: "test_run_workflow" as const, captureName: "response", workflowRef: "noop", args: [], loc },
           {
             type: "test_expect_equal" as const,
             variable: "response",
@@ -141,20 +141,20 @@ test "undefined const ref" {
   }
 });
 
-test("test runner binds implicit `response` after `run` so expect_equal works without explicit capture", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "jaiph-implicit-response-"));
+test("test runner rejects bare `response` reference when `run` was not captured (no implicit binding)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "jaiph-no-implicit-response-"));
   const scriptsDir = join(dir, "scripts");
   mkdirSync(scriptsDir, { recursive: true });
 
   try {
-    const testFile = join(dir, "implicit.test.jh");
+    const testFile = join(dir, "no_implicit.test.jh");
     writeFileSync(
       testFile,
       `workflow greet(name) {
   return "hello \${name}"
 }
 
-test "implicit response" {
+test "no implicit response" {
   run greet("world")
   expect_equal response "hello world"
 }
@@ -163,7 +163,7 @@ test "implicit response" {
 
     const exitCode = await runTestFile(testFile, dir, scriptsDir, [
       {
-        description: "implicit response", loc,
+        description: "no implicit response", loc,
         steps: [
           { type: "test_run_workflow" as const, workflowRef: "greet", args: ["world"], loc },
           { type: "test_expect_equal" as const, variable: "response", expected: "hello world", loc },
@@ -171,7 +171,11 @@ test "implicit response" {
       },
     ]);
 
-    assert.equal(exitCode, 0, "test should pass via implicit `response` binding");
+    assert.notEqual(
+      exitCode,
+      0,
+      "test should fail because `response` was never captured — there is no implicit alias",
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
