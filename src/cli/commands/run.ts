@@ -133,7 +133,15 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       mod, runtimeEnv, outDir, workspaceRoot, metaFile, "default", runArgs, isTTY,
     );
 
-    const signalHandlers = setupRunSignalHandlers(execResult, { forceKillAfterMs: 1500 });
+    const onSignalCleanup = dockerResult ? () => cleanupDocker(dockerResult) : undefined;
+    const signalHandlers = setupRunSignalHandlers(execResult, {
+      forceKillAfterMs: 1500,
+      onSignalCleanup,
+    });
+    const exitGuard = dockerResult
+      ? (): void => { cleanupDocker(dockerResult); }
+      : undefined;
+    if (exitGuard) process.on("exit", exitGuard);
 
     if (isTTY) {
       ttyCtx.runningInterval = setInterval(() => {
@@ -162,6 +170,7 @@ export async function runWorkflow(rest: string[]): Promise<number> {
         runState.capturedStderr += "E_TIMEOUT container execution exceeded timeout\n";
       }
       cleanupDocker(dockerResult);
+      if (exitGuard) process.removeListener("exit", exitGuard);
     }
 
     if (childExit.signal && runState.capturedStderr.trim().length === 0) {

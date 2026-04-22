@@ -26,7 +26,7 @@ All orchestration — local `jaiph run`, `jaiph test`, and **Docker `jaiph run`*
 
 - **CLI (`src/cli`)**
   - Entry point (`run`, `test`, `init`, `install`, `use`, `format`).
-  - **Workflow launch** is owned in TypeScript (`src/runtime/kernel/workflow-launch.ts` + `src/cli/run/lifecycle.ts`): spawns the **Node workflow runner** (`node-workflow-runner.ts`), which calls `buildRuntimeGraph()` then `NodeWorkflowRuntime`.
+  - **Workflow launch** is owned in TypeScript (`src/runtime/kernel/workflow-launch.ts` + `src/cli/run/lifecycle.ts`): spawns the **Node workflow runner** (`node-workflow-runner.ts`), which calls `buildRuntimeGraph()` then `NodeWorkflowRuntime`. `setupRunSignalHandlers` accepts an optional `onSignalCleanup` callback for Docker sandbox teardown on SIGINT/SIGTERM.
   - Parses runtime events and renders progress; dispatches hooks.
 
 - **Parser (`src/parser.ts`, `src/parse/*`)**
