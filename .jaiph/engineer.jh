@@ -11,11 +11,11 @@ import "./ensure_ci_passes.jh" as ci
 import "./git.jh" as git
 
 config {
-  # agent.backend = "cursor"
-  # agent.default_model = "gpt-5.3-codex"
-  # agent.cursor_flags = "--force"
-  agent.backend = "claude"
-  agent.claude_flags = "--permission-mode bypassPermissions"
+  agent.backend = "cursor"
+  agent.default_model = "gpt-5.3-codex"
+  agent.cursor_flags = "--force"
+  # agent.backend = "claude"
+  # agent.claude_flags = "--permission-mode bypassPermissions"
 }
 
 const code_philosophy = """
@@ -287,5 +287,6 @@ workflow default(name) {
   run queue.remove_completed_task(task_header)
 
   const patch_file = run git.patch(task)
-  run artifacts.save(patch_file, patch_file)
+  const target_path = run artifacts.save(patch_file, patch_file)
+  return target_path
 }

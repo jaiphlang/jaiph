@@ -85,7 +85,7 @@ If Docker is enabled but `docker info` fails, the run exits with `E_DOCKER_NOT_F
 |-----|------|---------|-------------|
 | `runtime.docker_image` | string | `"ghcr.io/jaiphlang/jaiph-runtime:<version>"` | Container image. Must already contain `jaiph`. Defaults to the official GHCR runtime image matching the installed jaiph version. |
 | `runtime.docker_network` | string | `"default"` | Docker network mode. |
-| `runtime.docker_timeout_seconds` | integer | `300` | Max execution time in seconds. Must be a non-negative integer; `0` disables the timeout. Negative values produce `E_DOCKER_TIMEOUT`. |
+| `runtime.docker_timeout_seconds` | integer | `3600` | Max execution time in seconds (default one hour). Must be a non-negative integer; `0` disables the timeout. Negative values produce `E_DOCKER_TIMEOUT`. |
 
 Each key is type-checked at parse time. Unknown keys produce `E_PARSE`. The workspace mount is automatic and not configurable.
 
