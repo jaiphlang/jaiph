@@ -69,7 +69,7 @@ test("resolveDockerConfig: defaults when no in-file and no env — Docker on", (
   assert.equal(cfg.enabled, true);
   assert.ok(cfg.image.startsWith(GHCR_IMAGE_REPO + ":"), `default image should be GHCR: ${cfg.image}`);
   assert.equal(cfg.network, "default");
-  assert.equal(cfg.timeoutSeconds, 300);
+  assert.equal(cfg.timeoutSeconds, 3600);
 });
 
 test("resolveDockerConfig: in-file image/timeout overrides defaults (dockerEnabled removed)", () => {

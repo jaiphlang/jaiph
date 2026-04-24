@@ -73,7 +73,7 @@ const DEFAULTS: DockerRunConfig = {
   image: `${GHCR_IMAGE_REPO}:${resolveDefaultImageTag()}`,
   imageExplicit: false,
   network: "default",
-  timeoutSeconds: 300,
+  timeoutSeconds: 3600,
 };
 
 /**

@@ -172,7 +172,7 @@ These configure Docker sandboxing. Unlike agent and run keys, runtime keys are r
 |-----|------|---------|--------------|-------------|
 | `runtime.docker_image` | string | `ghcr.io/jaiphlang/jaiph-runtime:<version>` | `JAIPH_DOCKER_IMAGE` | Image name. Must already contain `jaiph`. When unset, uses the official GHCR image tag matching the installed jaiph version. For a custom image, build and push (or tag locally), then set this key or `JAIPH_DOCKER_IMAGE`. |
 | `runtime.docker_network` | string | `default` | `JAIPH_DOCKER_NETWORK` | Docker network mode. |
-| `runtime.docker_timeout_seconds` | integer | `300` | `JAIPH_DOCKER_TIMEOUT` | Timeout in seconds. Use `0` to disable. An invalid or negative **environment** value aborts the run with `E_DOCKER_TIMEOUT` (no silent fallback). In-file must be a non-negative integer. |
+| `runtime.docker_timeout_seconds` | integer | `3600` | `JAIPH_DOCKER_TIMEOUT` | Timeout in seconds (default one hour). Use `0` to disable. An invalid or negative **environment** value aborts the run with `E_DOCKER_TIMEOUT` (no silent fallback). In-file must be a non-negative integer. |
 
 ## Precedence in detail
 
