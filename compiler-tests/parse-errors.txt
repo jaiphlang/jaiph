@@ -282,7 +282,7 @@ workflow default() {
 }
 
 === capture and send cannot be combined
-# @expect error E_VALIDATE "inline shell steps are forbidden" @2:3
+# @expect error E_VALIDATE "invalid send: channel must be a single name or" @2:3
 --- input.jh
 workflow default() {
   name = channel <- "hello"
@@ -430,7 +430,7 @@ workflow default() {
 }
 
 === capture and send combined alt form
-# @expect error E_VALIDATE "inline shell steps are forbidden" @2:3
+# @expect error E_VALIDATE "invalid send: channel must be a single name or" @2:3
 --- input.jh
 workflow default() {
   name = channel <- echo hello
@@ -1173,7 +1173,7 @@ workflow default() {
 }
 
 === capture and send combined in workflow body
-# @expect error E_VALIDATE "inline shell steps are forbidden" @3:3
+# @expect error E_VALIDATE "invalid send: channel must be a single name or" @3:3
 --- input.jh
 channel findings
 workflow default() {

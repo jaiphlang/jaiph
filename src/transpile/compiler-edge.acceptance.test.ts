@@ -320,7 +320,7 @@ test("ACCEPTANCE: rule with multi-line || { ... } fails under strict shell-step 
   });
 });
 
-test("ACCEPTANCE: workflow shell step with || { ... } fails under strict shell-step ban", () => {
+test("ACCEPTANCE: workflow shell step with || { ... } is allowed and compiles", () => {
   withTempDir("jaiph-acc-workflow-or-brace-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
@@ -331,14 +331,11 @@ test("ACCEPTANCE: workflow shell step with || { ... } fails under strict shell-s
         "",
       ].join("\n"),
     );
-    assert.throws(
-      () => buildScripts(join(root, "main.jh"), join(root, "out")),
-      /E_VALIDATE inline shell steps are forbidden in workflows; use explicit script blocks/,
-    );
+    buildScripts(join(root, "main.jh"), join(root, "out"));
   });
 });
 
-test("ACCEPTANCE: inline shell short-circuit fails under strict shell-step ban", () => {
+test("ACCEPTANCE: inline shell short-circuit in workflow compiles", () => {
   withTempDir("jaiph-acc-or-brace-workflow-", (root) => {
     writeFileSync(
       join(root, "main.jh"),
@@ -351,10 +348,7 @@ test("ACCEPTANCE: inline shell short-circuit fails under strict shell-step ban",
         "",
       ].join("\n"),
     );
-    assert.throws(
-      () => buildScripts(join(root, "main.jh"), join(root, "out")),
-      /E_VALIDATE inline shell steps are forbidden in workflows; use explicit script blocks/,
-    );
+    buildScripts(join(root, "main.jh"), join(root, "out"));
   });
 });
 
@@ -669,9 +663,9 @@ test("ACCEPTANCE: capture + send is parse error", () => {
         "",
       ].join("\n"),
     );
-    // "name = channel <- echo hello" is treated as an inline shell step,
-    // which is rejected by the inline-shell validation pass.
-    assert.throws(() => buildScripts(root, join(root, "out")), /inline shell steps are forbidden/);
+    // "name = channel <- echo hello" parses as a shell line with `<-` that
+    // is not a well-formed `channel <- rhs` send.
+    assert.throws(() => buildScripts(root, join(root, "out")), /invalid send: channel must be a single name or/);
   });
 });
 

@@ -187,7 +187,7 @@ workflow private_wf() {
 }
 
 === shell line with unknown imported symbol in workflow
-# @expect error E_VALIDATE "inline shell steps are forbidden in workflows"
+# @expect error E_VALIDATE "imported workflow or script"
 --- main.jh
 import "lib.jh" as lib
 workflow default() {

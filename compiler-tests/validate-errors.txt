@@ -47,21 +47,6 @@ workflow default() {
   ensure example()
 }
 
-=== workflow shell step with brace group fails shell-step ban
-# @expect error E_VALIDATE "inline shell steps are forbidden in workflows" @2:3
---- input.jh
-workflow default() {
-  cmd || { echo "failed"; exit 1; }
-}
-
-=== inline shell short-circuit fails shell-step ban
-# @expect error E_VALIDATE "inline shell steps are forbidden in workflows" @3:3
---- input.jh
-script gate_impl = `true`
-workflow default() {
-  other || { echo "err"; exit 1; }
-}
-
 === unsupported type in returns schema
 # @expect error E_SCHEMA "unsupported type" @2:3
 --- input.jh
@@ -69,31 +54,23 @@ workflow default() {
   const result = prompt "x" returns "{ foo: array }"
 }
 
-=== inline shell step subshell capture forbidden in workflow
-# @expect error E_VALIDATE "inline shell steps are forbidden in workflows" @3:3
---- input.jh
-script f = `printf '%s' 'x'`
-workflow default() {
-  x="$(f)"
-}
-
-=== direct inline shell step forbidden in workflow
-# @expect error E_VALIDATE "inline shell steps are forbidden in workflows" @3:3
+=== workflow raw shell that names a script must use run
+# @expect error E_VALIDATE "use run f()" @3:3
 --- input.jh
 script f = `printf '%s' 'x'`
 workflow default() {
   f
 }
 
-=== inline shell line with workflow ref is forbidden
-# @expect error E_VALIDATE "inline shell steps are forbidden in workflows" @6:3
+=== workflow raw shell that names a workflow must use run
+# @expect error E_VALIDATE "use run w()" @6:3
 --- input.jh
 script w_impl = `echo x`
 workflow w() {
   run w_impl()
 }
 workflow default() {
-  w $(true)
+  w
 }
 
 === send RHS cannot invoke workflow via shell
@@ -530,7 +507,7 @@ workflow default() {
 }
 
 === channel reference with three dot parts is rejected
-# @expect error E_VALIDATE "inline shell steps are forbidden in workflows"
+# @expect error E_VALIDATE "invalid send: channel must be a single name or" @2:3
 --- input.jh
 workflow default() {
   a.b.c <- "x"
