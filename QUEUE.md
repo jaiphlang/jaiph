@@ -133,3 +133,39 @@ Target size for `node-workflow-runtime.ts` after split: ~1000–1200 LoC. Still 
 * The new modules have no circular imports back into `node-workflow-runtime.ts`. Dependency direction is one-way: orchestrator → helpers/emitter/mock.
 
 ***
+
+## Performance — investigate and fix slow installation
+
+**Goal**
+`jaiph install` (and related dependency or bootstrap steps) feels unreasonably slow; find the dominant cost and improve it without weakening reproducibility (lockfile, shallow clone behavior, etc.).
+
+**Scope**
+
+* Profile or instrument the install path (git clone, lockfile I/O, post-install) and document the top 1–3 contributors to latency.
+* Implement targeted fixes (e.g. avoid redundant work, reduce subprocess churn, cache safely) and verify wall-clock improvement on a cold and warm run where applicable.
+
+**Acceptance criteria**
+
+* A short note in the commit or PR description states what was slow and what changed, with before/after rough timings on the same machine.
+* `jaiph install` behavior remains correct: same lockfile semantics and failure modes for bad URLs or missing refs.
+* `npm test` passes.
+
+***
+
+## Performance — investigate and fix slow workflow start (initial 2–4 s lag)
+
+**Goal**
+When starting workflows (e.g. `jaiph run` / first step), users observe a 2–4 second delay before useful work; reduce that lag or explain and eliminate unnecessary startup work (JIT, imports, process spawn, discovery).
+
+**Scope**
+
+* Reproduce the lag with a minimal `.jh` workflow; trace Node startup, module load, and runtime init (`NodeWorkflowRuntime` and friends).
+* Address fixable costs (e.g. defer heavy work, lazy imports, avoid redundant file scans) without changing user-visible workflow semantics.
+
+**Acceptance criteria**
+
+* Documented repro (command + minimal file) and what was measured (time to first event / first step).
+* Measurable reduction in the cold-start path on a representative case, or a clear justification if the lag is irreducible (e.g. external subprocess).
+* `npm test` passes.
+
+***

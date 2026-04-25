@@ -5,8 +5,9 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { buildScripts } from "../transpiler";
 
-test("E_VALIDATE: inline shell step is forbidden in workflow", () => {
+test("buildScripts accepts subshell capture in workflow shell line", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-sub-fn-"));
+  const out = join(root, "out");
   try {
     writeFileSync(
       join(root, "m.jh"),
@@ -18,16 +19,13 @@ test("E_VALIDATE: inline shell step is forbidden in workflow", () => {
         "",
       ].join("\n"),
     );
-    assert.throws(
-      () => buildScripts(join(root, "m.jh"), join(root, "out")),
-      /inline shell steps are forbidden in workflows; use explicit script blocks/,
-    );
+    buildScripts(join(root, "m.jh"), out);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test("E_VALIDATE: direct inline shell step is forbidden in workflow", () => {
+test("E_VALIDATE: bare script name as raw shell line must use run", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-direct-fn-"));
   try {
     writeFileSync(
@@ -42,7 +40,7 @@ test("E_VALIDATE: direct inline shell step is forbidden in workflow", () => {
     );
     assert.throws(
       () => buildScripts(join(root, "m.jh"), join(root, "out")),
-      /inline shell steps are forbidden in workflows; use explicit script blocks/,
+      /use run f/,
     );
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -93,7 +91,7 @@ test("buildScripts extracts script for run with capture workflow", () => {
   }
 });
 
-test("E_VALIDATE: inline shell line with workflow ref is forbidden", () => {
+test("E_VALIDATE: bare workflow name as raw shell line must use run", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-val-wf-plus-sub-"));
   try {
     writeFileSync(
@@ -104,14 +102,14 @@ test("E_VALIDATE: inline shell line with workflow ref is forbidden", () => {
         "  run w_impl()",
         "}",
         "workflow default() {",
-        "  w $(true)",
+        "  w",
         "}",
         "",
       ].join("\n"),
     );
     assert.throws(
       () => buildScripts(join(root, "m.jh"), join(root, "out")),
-      /inline shell steps are forbidden in workflows; use explicit script blocks/,
+      /use run w/,
     );
   } finally {
     rmSync(root, { recursive: true, force: true });
