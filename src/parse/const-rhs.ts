@@ -4,6 +4,12 @@ import { parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 import { parseAnonymousInlineScript } from "./inline-script";
 import { parsePromptStep } from "./prompt";
 import { parseMatchExpr } from "./match";
+import {
+  bareIdentifierToQuotedString,
+  dottedReturnToQuotedString,
+  isBareDottedIdentifierReturn,
+  isBareIdentifierReturn,
+} from "./workflow-return-dotted";
 
 /** Reject non-empty trailing content after a call expression (e.g. shell redirection). */
 function rejectTrailingContent(
@@ -186,5 +192,12 @@ export function parseConstRhs(
     );
   }
   validateConstBashExpr(filePath, head, lineNo, col);
-  return { value: { kind: "expr", bashRhs: head }, nextLineIdx: lineIdx };
+  const isBareDotted = isBareDottedIdentifierReturn(head);
+  const isBare = !isBareDotted && isBareIdentifierReturn(head);
+  const bashRhs = isBareDotted
+    ? dottedReturnToQuotedString(head)
+    : isBare
+      ? bareIdentifierToQuotedString(head)
+      : head;
+  return { value: { kind: "expr", bashRhs }, nextLineIdx: lineIdx };
 }
