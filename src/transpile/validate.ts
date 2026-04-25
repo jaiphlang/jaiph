@@ -562,6 +562,18 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
   const stripDQ = (s: string): string =>
     s.length >= 2 && s[0] === '"' && s[s.length - 1] === '"' ? s.slice(1, -1) : s;
 
+  /**
+   * Detect `const x = scriptName` and its parser sugar form `const x = "${scriptName}"`.
+   * Both should report the same domain error ("scripts are not values").
+   */
+  const extractConstScriptName = (rhs: string): string | undefined => {
+    const trimmed = rhs.trim();
+    if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmed)) return trimmed;
+    const inner = stripDQ(trimmed);
+    const m = inner.match(/^\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}$/);
+    return m?.[1];
+  };
+
   /** Inner string for validation: same margin removal as runtime for `"""` orchestration text. */
   const semanticQuotedOrchestrationInner = (dqRaw: string, tripleQuoted: boolean): string => {
     if (!tripleQuoted) return stripDQ(dqRaw);
@@ -837,9 +849,9 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         } else if (v.kind === "match_expr") {
           validateMatchExpr(ast.filePath, v.match, ruleKnownVars);
         } else if (v.kind === "expr") {
-          const bareRhs = v.bashRhs.trim();
-          if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(bareRhs) && localScripts.has(bareRhs)) {
-            throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `scripts are not values; "${bareRhs}" is a script definition`);
+          const scriptName = extractConstScriptName(v.bashRhs);
+          if (scriptName && localScripts.has(scriptName)) {
+            throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `scripts are not values; "${scriptName}" is a script definition`);
           }
           validateRuleStringCaptures(stripDQ(v.bashRhs), s.loc);
           validateSimpleInterpolationIdentifiers(
@@ -1223,9 +1235,9 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         } else if (v.kind === "match_expr") {
           validateMatchExpr(ast.filePath, v.match, wfKnownVars);
         } else if (v.kind === "expr") {
-          const bareRhs = v.bashRhs.trim();
-          if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(bareRhs) && localScripts.has(bareRhs)) {
-            throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `scripts are not values; "${bareRhs}" is a script definition`);
+          const scriptName = extractConstScriptName(v.bashRhs);
+          if (scriptName && localScripts.has(scriptName)) {
+            throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `scripts are not values; "${scriptName}" is a script definition`);
           }
           const exprInner = semanticQuotedOrchestrationInner(v.bashRhs, v.tripleQuoted === true);
           validateWorkflowStringCaptures(exprInner, s.loc);
