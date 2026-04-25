@@ -9,9 +9,9 @@ redirect_from:
 
 ## Overview
 
-**Jaiph** is a workflow system for building agent-style pipelines. You write `.jh` sources (and optional `*.test.jh` test modules) that combine **prompts**, **rules**, **scripts**, and **workflows**. The project ships a **TypeScript CLI** and a **JavaScript kernel** under the Node workflow runtime: the same AST is **parsed and validated** at prepare time, **script** bodies are written as files under `scripts/`, and **execution** is direct AST interpretation in process—there is no separate workflow shell binary (see [Architecture](architecture.md) for boundaries, pipelines, and contracts such as `__JAIPH_EVENT__` and `.jaiph/runs/`).
+**Jaiph** is a workflow system for building agent-style pipelines. You write `.jh` sources (and optional `*.test.jh` test modules) that combine **prompts**, **rules**, **scripts**, and **workflows**.
 
-This page is a **map**: it does not teach syntax end-to-end; it points to install steps, language references, and runtime behavior.
+This page is a **map**: it does not teach syntax end-to-end; it points to install steps, language references, and runtime behavior. For how the tool fits together, see [Architecture](architecture.md).
 
 ## Setup
 
