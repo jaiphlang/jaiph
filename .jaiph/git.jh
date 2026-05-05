@@ -1,23 +1,32 @@
 #!/usr/bin/env jaiph
 
-script git_inside_worktree = `git rev-parse --is-inside-work-tree >/dev/null 2>&1`
+script git_inside_worktree = `git rev-parse --is-inside-work-tree 2>&1`
 
 script git_porcelain_empty = `test -z "$(git status --porcelain)"`
 
 script git_porcelain_nonempty = `test -n "$(git status --porcelain)"`
 
+script git_mark_workspace_safe = `git config --global --add safe.directory "$(pwd)"`
+
+script git_create_patch_from_commit = `git config --global --add safe.directory "$(pwd)" && git format-patch -1 $1 > $2`
+
 rule in_git_repo() {
+  run git_mark_workspace_safe()
   run git_inside_worktree() catch (err) {
     fail "not inside a git repository"
   }
 }
 
 rule branch_clean() {
-  run git_porcelain_empty()
+  run git_porcelain_empty() catch (err) {
+    fail "git working tree is not clean"
+  }
 }
 
 rule has_changes() {
-  run git_porcelain_nonempty()
+  run git_porcelain_nonempty() catch (err) {
+    fail "git working tree has no changes"
+  }
 }
 
 rule is_clean() {
@@ -26,55 +35,44 @@ rule is_clean() {
 }
 
 workflow commit(task) {
-  ensure in_git_repo()
-
-  ensure has_changes() catch (err) {
-    log "No changes to commit — skipping."
-    return ""
+  config {
+    agent.backend = "cursor"
+    agent.cursor_flags = "--force"
+    agent.default_model = "auto"
   }
 
-  prompt """
-    Commit the current repository changes now.
+  ensure in_git_repo()
+  ensure has_changes()
 
+  const response = prompt """
+    Please commit current changes and respond with a commit message and
+    suggested patch file name (excluding extension).
+  
     Requirements for commit message:
     1. Write a commit message - first line in imperative mood, under 72 chars.
     2. Start with the common prefix like 'Feat:', 'Fix:', 'Refactor:' etc.
     3. Write a body paragraph with more details about the change.
-
+  
     Requirements for commit:
     1. Review current git changes (git diff --stat, git status).
     2. Stage all relevant changes with git add.
     3. Create exactly one commit.
     4. Do not push.
     5. Remove files that are not relevant to the commit and not git ignored.
-
+  
     Changes were made for the following task:
     ${task}
   """
+  returns "{ message: string, patch_file_name: string }"
+
+  const commit_message = response.message
+  const patch_file_name = "${response.patch_file_name}.patch"
+
+  run git_create_patch_from_commit(commit_message, patch_file_name)
+
+  return patch_file_name
 }
 
-# Writes a unified diff (HEAD vs working tree, excluding `.jaiph/`) to `dest`.
-# Returns `dest` (relative path). `task` is reserved for callers / future naming.
-script write_tree_patch = ```
-  set -euo pipefail
-  dest="$1"
-  mkdir -p "$(dirname "$dest")"
-  diff_out="$(git diff HEAD -- . ':!.jaiph/' 2>/dev/null || true)"
-  if [[ -z "${diff_out}" ]]; then
-    git add -N . -- ':!.jaiph/' 2>/dev/null || true
-    diff_out="$(git diff HEAD -- . ':!.jaiph/' 2>/dev/null || true)"
-    git reset HEAD -- . 2>/dev/null || true
-  fi
-  if [[ -n "${diff_out}" ]]; then
-    printf '%s\n' "${diff_out}" > "$dest"
-  else
-    : > "$dest"
-  fi
-  printf '%s' "$dest"
-```
-
-workflow patch(task) {
-  ensure in_git_repo()
-  const dest = ".jaiph/tmp/engineer-workspace.patch"
-  return run write_tree_patch(dest)
+workflow default(task) {
+  return run commit(task)
 }
