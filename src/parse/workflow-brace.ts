@@ -1,4 +1,4 @@
-import type { WorkflowStepDef } from "../types";
+import type { WorkflowMetadata, WorkflowStepDef } from "../types";
 import {
   colFromRaw,
   fail,
@@ -12,6 +12,7 @@ import {
 import { parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 import { parseConstRhs } from "./const-rhs";
 import { parseAnonymousInlineScript } from "./inline-script";
+import { parseConfigBlock } from "./metadata";
 import { parseEnsureStep, parseRunCatchStep, parseRunRecoverStep } from "./steps";
 import { parsePromptStep } from "./prompt";
 import { parseSendRhs } from "./send-rhs";
@@ -24,7 +25,17 @@ import {
   shouldSkipSemicolonSplitForLine,
 } from "./statement-split";
 
-export type BlockParseOpts = { forRule?: boolean };
+export type BlockParseOpts = {
+  forRule?: boolean;
+  /** When true, push `blank_line` steps so the formatter can preserve spacing. */
+  preserveBlankLines?: boolean;
+  /**
+   * When set, allow a `config { … }` block as the first non-comment statement.
+   * The callback receives the parsed metadata and may throw via `fail()` to
+   * reject specific keys (workflows reject `runtime.*` and `module.*`).
+   */
+  onConfigBlock?: (metadata: WorkflowMetadata, lineNo: number) => void;
+};
 
 /** Parse statements until a closing `}` at the current block level. */
 export function parseBraceBlockBody(
@@ -36,11 +47,18 @@ export function parseBraceBlockBody(
 ): { steps: WorkflowStepDef[]; nextIdx: number } {
   const steps: WorkflowStepDef[] = [];
   let idx = startIdx;
+  let hadNonCommentStep = false;
   while (idx < lines.length) {
     const innerRaw = lines[idx];
     const inner = innerRaw.trim();
     const innerNo = idx + 1;
     if (inner === "") {
+      if (opts?.preserveBlankLines) {
+        const last = steps[steps.length - 1];
+        if (last && last.type !== "blank_line") {
+          steps.push({ type: "blank_line" });
+        }
+      }
       idx += 1;
       continue;
     }
@@ -56,12 +74,44 @@ export function parseBraceBlockBody(
     if (inner === "}") {
       return { steps, nextIdx: idx + 1 };
     }
+    if (opts?.onConfigBlock && /^config\s*\{/.test(inner)) {
+      if (hadNonCommentStep) {
+        fail(filePath, "config block inside workflow must appear before any steps", innerNo);
+      }
+      const { metadata, nextIndex } = parseConfigBlock(filePath, lines, idx);
+      opts.onConfigBlock(metadata, innerNo);
+      idx = nextIndex;
+      continue;
+    }
+    // Reject route declarations at body level: routes belong at the top of the file.
+    const routeMatch = inner.match(
+      /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s+->\s+(.+)$/,
+    );
+    if (routeMatch) {
+      fail(
+        filePath,
+        `route declarations belong at the top level: channel ${routeMatch[1]} -> ${routeMatch[2].trim()}`,
+        innerNo,
+      );
+    }
     if (!shouldSkipSemicolonSplitForLine(innerRaw)) {
       const expanded = expandBlockLineStatements(innerRaw);
       if (shouldApplySemicolonStatementSplit(expanded) && expanded.length > 1) {
         for (const chunk of expanded) {
           const t = chunk.trim();
           if (!t) continue;
+          if (t.startsWith("#")) {
+            steps.push({ type: "comment", text: t, loc: { line: innerNo, col: 1 } });
+            continue;
+          }
+          if (/^config\s*\{/.test(t)) {
+            fail(
+              filePath,
+              "config must be the first workflow step; it cannot appear after semicolon-separated steps on the same line",
+              innerNo,
+            );
+          }
+          hadNonCommentStep = true;
           const one = parseBlockStatement(filePath, [t], 0, opts);
           steps.push(one.step);
         }
@@ -69,6 +119,7 @@ export function parseBraceBlockBody(
         continue;
       }
     }
+    hadNonCommentStep = true;
     const one = parseBlockStatement(filePath, lines, idx, opts);
     steps.push(one.step);
     idx = one.nextIdx;
@@ -203,6 +254,22 @@ export function parseBlockStatement(
     const runBody = inner.slice("run async ".length).trim();
     if (runBody.startsWith("`")) {
       fail(filePath, "run async is not supported with inline scripts", innerNo, innerRaw.indexOf("run") + 1);
+    }
+    // run async ... recover(name) { ... }
+    const recoverResult = parseRunRecoverStep(filePath, lines, idx, innerNo, innerRaw, runBody);
+    if (recoverResult && recoverResult.step.type === "run") {
+      return {
+        step: { ...recoverResult.step, async: true },
+        nextIdx: recoverResult.nextIdx + 1,
+      };
+    }
+    // run async ... catch(name) { ... }
+    const catchResult = parseRunCatchStep(filePath, lines, idx, innerNo, innerRaw, runBody);
+    if (catchResult && catchResult.step.type === "run") {
+      return {
+        step: { ...catchResult.step, async: true },
+        nextIdx: catchResult.nextIdx + 1,
+      };
     }
     const call = parseCallRef(runBody);
     if (!call) {

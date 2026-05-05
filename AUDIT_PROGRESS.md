@@ -30,7 +30,7 @@ deleted before the audit work began; visible in `git status` at session start).
 
 ## B. Duplication
 
-- [ ] B1. Merge workflows.ts step loop into parseBraceBlockBody (consolidate three grammars)
+- [x] B1. Merge workflows.ts step loop into parseBraceBlockBody (consolidate three grammars)
 - [x] B2. Move `rejectTrailingContent` to `parse/core.ts`
 - [x] B3. One bare-identifier helper (delete `workflow-return-dotted.ts`)
 - [x] B4. Single import-line helper
@@ -39,8 +39,8 @@ deleted before the audit work began; visible in `git status` at session start).
 - [ ] B7. Make `parseFencedBlock` return afterClose; reuse for inline-script
 - [ ] B8. Extract `consumeTripleQuotedArg`
 - [ ] B9. Single `parseValueExpression`
-- [ ] B10. Extract `runWithRecovery` (5 → 1)
-- [ ] B11. Merge two prompt-step blocks
+- [x] B10. Extract `runRecoverBody` (consolidate 5 recovery dances; conservative — kept per-site propagation)
+- [x] B11. Merge two prompt-step blocks (also fixed missing per-field schema export in const-prompt path)
 - [x] B12. Delete `resolveArgsRawSync`
 - [x] B13. Single namespace-collision loop in parser.ts
 - [x] B14. Replace `assignConfigKey` switch with table

@@ -1042,89 +1042,16 @@ export class NodeWorkflowRuntime {
         continue;
       }
       if (step.type === "prompt") {
-        const promptRaw =
-          step.bodyKind === "triple_quoted" ? tripleQuotedRawForRuntime(step.raw) : step.raw;
-        const promptIr = await this.interpolateWithCaptures(promptRaw, scope);
-        if (!promptIr.ok) return this.mergeStepResult(accOut, accErr, promptIr.result);
-        let promptText = promptIr.value;
-        const promptConfig = resolveConfig(scope.env);
-        const backend = promptConfig.backend || "cursor";
-        const stepName = resolvePromptStepName(promptConfig);
-        const modelRes = resolveModel(promptConfig);
-        const promptStep = this.emitPromptStepStart(stepName, scope.vars, step.raw);
-        this.emitPromptEvent("PROMPT_START", {
-          backend,
-          model: modelRes.model || undefined,
-          model_reason: modelRes.reason,
-          preview: promptText.slice(0, 120),
-        });
-        let schemaFields: PromptSchemaField[] | undefined;
-        if (step.returns !== undefined) {
-          schemaFields = parsePromptSchema(step.returns);
-          const schemaObject = Object.fromEntries(schemaFields.map((f) => [f.name, f.type]));
-          promptText +=
-            "\n\nRespond with exactly one line of valid JSON (no markdown, no explanation) matching this schema: " +
-            JSON.stringify(schemaObject);
-        }
-        const out = new PassThrough();
-        const chunks: string[] = [];
-        const err = new PassThrough();
-        const errChunks: string[] = [];
-        out.on("data", (d) => {
-          const chunk = String(d);
-          chunks.push(chunk);
-          appendFileSync(promptStep.outFile, chunk);
-          io?.appendOut(chunk);
-        });
-        err.on("data", (d) => {
-          const chunk = String(d);
-          errChunks.push(chunk);
-          io?.appendErr(chunk);
-        });
-        const result = await executePrompt(promptText, promptConfig, out, scope.env, err);
-        const promptErr = errChunks.join("");
-        this.emitPromptStepEnd(promptStep, result.status, chunks.join(""), promptErr);
-        this.emitPromptEvent("PROMPT_END", { backend, model: modelRes.model || undefined, model_reason: modelRes.reason, status: result.status });
-        const output = chunks.join("");
-        accOut += output;
-        if (result.status !== 0) {
+        if (step.returns !== undefined && !step.captureName) {
           return this.mergeStepResult(accOut, accErr, {
-            status: result.status,
+            status: 1,
             output: "",
-            error: promptErr.trim() || "prompt failed",
+            error: 'prompt with "returns" schema must capture to a variable',
           });
         }
-        if (schemaFields) {
-          if (!step.captureName) {
-            return this.mergeStepResult(accOut, accErr, {
-              status: 1,
-              output: "",
-              error: 'prompt with "returns" schema must capture to a variable',
-            });
-          }
-          const extracted = extractJson(result.final);
-          if (!extracted) {
-            return this.mergeStepResult(accOut, accErr, {
-              status: 1,
-              output: "",
-              error: "prompt returned invalid JSON",
-            });
-          }
-          const validation = validateFields(extracted.obj, schemaFields);
-          if (validation !== 0) {
-            return this.mergeStepResult(accOut, accErr, {
-              status: validation,
-              output: "",
-              error: "prompt response failed schema validation",
-            });
-          }
-          scope.vars.set(step.captureName, extracted.source);
-          for (const field of schemaFields) {
-            scope.vars.set(`${step.captureName}_${field.name}`, String(extracted.obj[field.name]));
-          }
-        } else if (step.captureName) {
-          scope.vars.set(step.captureName, result.final);
-        }
+        const r = await this.runPromptStep(scope, step.raw, step.bodyKind, step.returns, step.captureName, io);
+        accOut += r.output;
+        if (!r.ok) return this.mergeStepResult(accOut, accErr, r.result);
         continue;
       }
       if (step.type === "const") {
@@ -1179,85 +1106,16 @@ export class NodeWorkflowRuntime {
           continue;
         }
         if (step.value.kind === "prompt_capture") {
-          const pcRaw =
-            step.value.bodyKind === "triple_quoted"
-              ? tripleQuotedRawForRuntime(step.value.raw)
-              : step.value.raw;
-          const pcIr = await this.interpolateWithCaptures(pcRaw, scope);
-          if (!pcIr.ok) return this.mergeStepResult(accOut, accErr, pcIr.result);
-          let promptText = pcIr.value;
-          const promptConfig = resolveConfig(scope.env);
-          const backend = promptConfig.backend || "cursor";
-          const stepName = resolvePromptStepName(promptConfig);
-          const modelRes = resolveModel(promptConfig);
-          const promptStep = this.emitPromptStepStart(
-            stepName,
-            scope.vars,
+          const r = await this.runPromptStep(
+            scope,
             step.value.raw,
+            step.value.bodyKind,
+            step.value.returns,
+            step.name,
+            io,
           );
-          this.emitPromptEvent("PROMPT_START", {
-            backend,
-            model: modelRes.model || undefined,
-            model_reason: modelRes.reason,
-            preview: promptText.slice(0, 120),
-          });
-          let schemaFields: PromptSchemaField[] | undefined;
-          if (step.value.returns !== undefined) {
-            schemaFields = parsePromptSchema(step.value.returns);
-            const schemaObject = Object.fromEntries(schemaFields.map((f) => [f.name, f.type]));
-            promptText +=
-              "\n\nRespond with exactly one line of valid JSON (no markdown, no explanation) matching this schema: " +
-              JSON.stringify(schemaObject);
-          }
-          const out = new PassThrough();
-          const chunks: string[] = [];
-          const err = new PassThrough();
-          const errChunks: string[] = [];
-          out.on("data", (d) => {
-            const chunk = String(d);
-            chunks.push(chunk);
-            appendFileSync(promptStep.outFile, chunk);
-            io?.appendOut(chunk);
-          });
-          err.on("data", (d) => {
-            const chunk = String(d);
-            errChunks.push(chunk);
-            io?.appendErr(chunk);
-          });
-          const result = await executePrompt(promptText, promptConfig, out, scope.env, err);
-          const promptErr = errChunks.join("");
-          this.emitPromptStepEnd(promptStep, result.status, chunks.join(""), promptErr);
-          this.emitPromptEvent("PROMPT_END", { backend, model: modelRes.model || undefined, model_reason: modelRes.reason, status: result.status });
-          const pcOut = chunks.join("");
-          accOut += pcOut;
-          if (result.status !== 0) {
-            return this.mergeStepResult(accOut, accErr, {
-              status: result.status,
-              output: "",
-              error: promptErr.trim() || "prompt failed",
-            });
-          }
-          if (schemaFields) {
-            const extracted = extractJson(result.final);
-            if (!extracted) {
-              return this.mergeStepResult(accOut, accErr, {
-                status: 1,
-                output: "",
-                error: "prompt returned invalid JSON",
-              });
-            }
-            const validation = validateFields(extracted.obj, schemaFields);
-            if (validation !== 0) {
-              return this.mergeStepResult(accOut, accErr, {
-                status: validation,
-                output: "",
-                error: "prompt response failed schema validation",
-              });
-            }
-            scope.vars.set(step.name, extracted.source);
-          } else {
-            scope.vars.set(step.name, result.final);
-          }
+          accOut += r.output;
+          if (!r.ok) return this.mergeStepResult(accOut, accErr, r.result);
           continue;
         }
       }
@@ -1270,16 +1128,13 @@ export class NodeWorkflowRuntime {
           if (step.recoverLoop) {
             // Async + recover loop: wrap retry logic in a single promise.
             const recoverLimit = this.resolveRecoverLimit(scope.filePath);
-            const loopSteps = "single" in step.recoverLoop ? [step.recoverLoop.single] : step.recoverLoop.block;
-            const recoverBindings = step.recoverLoop.bindings;
+            const recoverLoop = step.recoverLoop;
             promise = this.asyncFrameStack.run(branchStack, () =>
               this.asyncIndicesStorage.run(branchIndices, async () => {
                 let lastResult = await this.executeRunRef(scope, step.workflow.value, step.args ?? "");
                 let attempt = 1;
                 while (lastResult.status !== 0 && attempt <= recoverLimit) {
-                  const loopVars = new Map(scope.vars);
-                  loopVars.set(recoverBindings.failure, `${lastResult.output}${lastResult.error}`);
-                  const rr = await this.executeSteps({ ...scope, vars: loopVars }, loopSteps);
+                  const rr = await this.runRecoverBody(scope, recoverLoop, `${lastResult.output}${lastResult.error}`);
                   if (rr.status !== 0 || rr.returnValue !== undefined) return rr;
                   lastResult = await this.executeRunRef(scope, step.workflow.value, step.args ?? "");
                   attempt += 1;
@@ -1289,15 +1144,12 @@ export class NodeWorkflowRuntime {
             );
           } else if (step.recover) {
             // Async + catch: single-shot recovery in the async branch.
-            const recoverSteps = "single" in step.recover ? [step.recover.single] : step.recover.block;
-            const recoverBindings = step.recover.bindings;
+            const recover = step.recover;
             promise = this.asyncFrameStack.run(branchStack, () =>
               this.asyncIndicesStorage.run(branchIndices, async () => {
                 const result = await this.executeRunRef(scope, step.workflow.value, step.args ?? "");
                 if (result.status === 0) return result;
-                const recoverVars = new Map(scope.vars);
-                recoverVars.set(recoverBindings.failure, `${result.output}${result.error}`);
-                const rr = await this.executeSteps({ ...scope, vars: recoverVars }, recoverSteps);
+                const rr = await this.runRecoverBody(scope, recover, `${result.output}${result.error}`);
                 if (rr.status !== 0) return rr;
                 if (rr.returnValue !== undefined) return { ...rr, recoverReturn: true };
                 return { status: 0, output: result.output, error: result.error };
@@ -1319,13 +1171,10 @@ export class NodeWorkflowRuntime {
         }
         if (step.recoverLoop) {
           const limit = this.resolveRecoverLimit(scope.filePath);
-          const loopSteps = "single" in step.recoverLoop ? [step.recoverLoop.single] : step.recoverLoop.block;
           let lastResult = await this.executeRunRef(scope, step.workflow.value, step.args ?? "");
           let attempt = 1;
           while (lastResult.status !== 0 && attempt <= limit) {
-            const loopVars = new Map(scope.vars);
-            loopVars.set(step.recoverLoop.bindings.failure, `${lastResult.output}${lastResult.error}`);
-            const rr = await this.executeSteps({ ...scope, vars: loopVars }, loopSteps);
+            const rr = await this.runRecoverBody(scope, step.recoverLoop, `${lastResult.output}${lastResult.error}`);
             if (rr.status !== 0 || rr.returnValue !== undefined) return this.mergeStepResult(accOut, accErr, rr);
             lastResult = await this.executeRunRef(scope, step.workflow.value, step.args ?? "");
             attempt += 1;
@@ -1345,11 +1194,7 @@ export class NodeWorkflowRuntime {
             scope.vars.set(step.captureName, runResult.returnValue ?? runResult.output.trim());
           }
         } else if (step.recover) {
-          const recoverSteps = "single" in step.recover ? [step.recover.single] : step.recover.block;
-          const recoverVars = new Map(scope.vars);
-          const recoverPayload = `${runResult.output}${runResult.error}`;
-          recoverVars.set(step.recover.bindings.failure, recoverPayload);
-          const rr = await this.executeSteps({ ...scope, vars: recoverVars }, recoverSteps);
+          const rr = await this.runRecoverBody(scope, step.recover, `${runResult.output}${runResult.error}`);
           if (rr.status !== 0 || rr.returnValue !== undefined) return this.mergeStepResult(accOut, accErr, rr);
         } else {
           return this.mergeStepResult(accOut, accErr, runResult);
@@ -1625,6 +1470,114 @@ export class NodeWorkflowRuntime {
     return { status: 1, output: "", error: `Unknown run target: ${ref}` };
   }
 
+  /**
+   * Execute a prompt step, stream output to artifacts, and bind the captured
+   * value (and per-field exports when a returns schema is set) into `scope`.
+   * Returns the chunk of stdout to add to the caller's accumulator.
+   */
+  private async runPromptStep(
+    scope: Scope,
+    raw: string,
+    bodyKind: "string" | "identifier" | "triple_quoted" | undefined,
+    returns: string | undefined,
+    captureName: string | undefined,
+    io: StepIO | undefined,
+  ): Promise<{ ok: true; output: string } | { ok: false; result: StepResult; output: string }> {
+    const promptRaw = bodyKind === "triple_quoted" ? tripleQuotedRawForRuntime(raw) : raw;
+    const promptIr = await this.interpolateWithCaptures(promptRaw, scope);
+    if (!promptIr.ok) return { ok: false, result: promptIr.result, output: "" };
+    let promptText = promptIr.value;
+    const promptConfig = resolveConfig(scope.env);
+    const backend = promptConfig.backend || "cursor";
+    const stepName = resolvePromptStepName(promptConfig);
+    const modelRes = resolveModel(promptConfig);
+    const promptStep = this.emitPromptStepStart(stepName, scope.vars, raw);
+    this.emitPromptEvent("PROMPT_START", {
+      backend,
+      model: modelRes.model || undefined,
+      model_reason: modelRes.reason,
+      preview: promptText.slice(0, 120),
+    });
+    let schemaFields: PromptSchemaField[] | undefined;
+    if (returns !== undefined) {
+      schemaFields = parsePromptSchema(returns);
+      const schemaObject = Object.fromEntries(schemaFields.map((f) => [f.name, f.type]));
+      promptText +=
+        "\n\nRespond with exactly one line of valid JSON (no markdown, no explanation) matching this schema: " +
+        JSON.stringify(schemaObject);
+    }
+    const out = new PassThrough();
+    const chunks: string[] = [];
+    const err = new PassThrough();
+    const errChunks: string[] = [];
+    out.on("data", (d) => {
+      const chunk = String(d);
+      chunks.push(chunk);
+      appendFileSync(promptStep.outFile, chunk);
+      io?.appendOut(chunk);
+    });
+    err.on("data", (d) => {
+      const chunk = String(d);
+      errChunks.push(chunk);
+      io?.appendErr(chunk);
+    });
+    const result = await executePrompt(promptText, promptConfig, out, scope.env, err);
+    const promptErr = errChunks.join("");
+    this.emitPromptStepEnd(promptStep, result.status, chunks.join(""), promptErr);
+    this.emitPromptEvent("PROMPT_END", {
+      backend,
+      model: modelRes.model || undefined,
+      model_reason: modelRes.reason,
+      status: result.status,
+    });
+    const output = chunks.join("");
+    if (result.status !== 0) {
+      return {
+        ok: false,
+        result: { status: result.status, output: "", error: promptErr.trim() || "prompt failed" },
+        output,
+      };
+    }
+    if (schemaFields) {
+      const extracted = extractJson(result.final);
+      if (!extracted) {
+        return { ok: false, result: { status: 1, output: "", error: "prompt returned invalid JSON" }, output };
+      }
+      const validation = validateFields(extracted.obj, schemaFields);
+      if (validation !== 0) {
+        return {
+          ok: false,
+          result: { status: validation, output: "", error: "prompt response failed schema validation" },
+          output,
+        };
+      }
+      if (captureName) {
+        scope.vars.set(captureName, extracted.source);
+        for (const field of schemaFields) {
+          scope.vars.set(`${captureName}_${field.name}`, String(extracted.obj[field.name]));
+        }
+      }
+    } else if (captureName) {
+      scope.vars.set(captureName, result.final);
+    }
+    return { ok: true, output };
+  }
+
+  /** Run a recover/catch body with `failure` bound to the failed step's payload. */
+  private async runRecoverBody(
+    scope: Scope,
+    recover: { bindings: { failure: string } } & (
+      | { single: WorkflowStepDef }
+      | { block: WorkflowStepDef[] }
+    ),
+    failurePayload: string,
+  ): Promise<StepResult> {
+    const recoverSteps = "single" in recover ? [recover.single] : recover.block;
+    const recoverVars = new Map(scope.vars);
+    recoverVars.set(recover.bindings.failure, failurePayload);
+    return this.executeSteps({ ...scope, vars: recoverVars }, recoverSteps);
+  }
+
   private async executeEnsureRef(
     scope: Scope,
     ref: string,
@@ -1653,11 +1606,7 @@ export class NodeWorkflowRuntime {
     const res = await attempt();
     if (res.status === 0) return res;
     if (!recover) return res;
-    const recoverSteps = "single" in recover ? [recover.single] : recover.block;
-    const recoverVars = new Map(scope.vars);
-    const recoverPayload = `${res.output}${res.error}`;
-    recoverVars.set(recover.bindings.failure, recoverPayload);
-    const rr = await this.executeSteps({ ...scope, vars: recoverVars }, recoverSteps);
+    const rr = await this.runRecoverBody(scope, recover, `${res.output}${res.error}`);
     if (rr.status !== 0) return rr;
     if (rr.returnValue !== undefined) return { ...rr, recoverReturn: true };
     return { status: 0, output: res.output, error: "" };
