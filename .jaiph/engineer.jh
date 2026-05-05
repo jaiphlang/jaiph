@@ -286,7 +286,7 @@ workflow default(name) {
   run docs.update_from_task(task)
   run queue.remove_completed_task(task_header)
 
-  const patch_file = run git.patch(task)
-  const target_path = run artifacts.save(patch_file, patch_file)
-  return target_path
+  const patch_file = run git.commit(task)
+  run artifacts.save(patch_file)
+  return patch_file
 }

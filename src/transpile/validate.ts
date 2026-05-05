@@ -25,6 +25,7 @@ import {
 } from "./validate-string";
 import { validatePromptReturnsSchema, validatePromptStepReturns } from "./validate-prompt-schema";
 import { dedentCommonLeadingWhitespace } from "../parse/dedent";
+import { matchSendOperator } from "../parse/core";
 import { tripleQuotedRawForRuntime } from "../runtime/orchestration-text";
 
 export interface ValidateContext {
@@ -33,6 +34,31 @@ export interface ValidateContext {
   readFile: (path: string) => string;
   parse: (content: string, filePath: string) => jaiphModule;
   workspaceRoot?: string;
+}
+
+/** True when `<-` appears outside quotes (same idea as `matchSendOperator`). */
+function hasUnquotedSendArrow(line: string): boolean {
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (ch === "\\" && (inDoubleQuote || inSingleQuote)) {
+      i += 1;
+      continue;
+    }
+    if (ch === "'" && !inDoubleQuote) {
+      inSingleQuote = !inSingleQuote;
+      continue;
+    }
+    if (ch === '"' && !inSingleQuote) {
+      inDoubleQuote = !inDoubleQuote;
+      continue;
+    }
+    if (!inSingleQuote && !inDoubleQuote && ch === "<" && line[i + 1] === "-") {
+      return true;
+    }
+  }
+  return false;
 }
 
 /** Check if args contain unquoted shell redirection operators (>, >>, |, &). */
@@ -536,6 +562,18 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
   const stripDQ = (s: string): string =>
     s.length >= 2 && s[0] === '"' && s[s.length - 1] === '"' ? s.slice(1, -1) : s;
 
+  /**
+   * Detect `const x = scriptName` and its parser sugar form `const x = "${scriptName}"`.
+   * Both should report the same domain error ("scripts are not values").
+   */
+  const extractConstScriptName = (rhs: string): string | undefined => {
+    const trimmed = rhs.trim();
+    if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmed)) return trimmed;
+    const inner = stripDQ(trimmed);
+    const m = inner.match(/^\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}$/);
+    return m?.[1];
+  };
+
   /** Inner string for validation: same margin removal as runtime for `"""` orchestration text. */
   const semanticQuotedOrchestrationInner = (dqRaw: string, tripleQuoted: boolean): string => {
     if (!tripleQuoted) return stripDQ(dqRaw);
@@ -811,9 +849,9 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         } else if (v.kind === "match_expr") {
           validateMatchExpr(ast.filePath, v.match, ruleKnownVars);
         } else if (v.kind === "expr") {
-          const bareRhs = v.bashRhs.trim();
-          if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(bareRhs) && localScripts.has(bareRhs)) {
-            throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `scripts are not values; "${bareRhs}" is a script definition`);
+          const scriptName = extractConstScriptName(v.bashRhs);
+          if (scriptName && localScripts.has(scriptName)) {
+            throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `scripts are not values; "${scriptName}" is a script definition`);
           }
           validateRuleStringCaptures(stripDQ(v.bashRhs), s.loc);
           validateSimpleInterpolationIdentifiers(
@@ -1197,9 +1235,9 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         } else if (v.kind === "match_expr") {
           validateMatchExpr(ast.filePath, v.match, wfKnownVars);
         } else if (v.kind === "expr") {
-          const bareRhs = v.bashRhs.trim();
-          if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(bareRhs) && localScripts.has(bareRhs)) {
-            throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `scripts are not values; "${bareRhs}" is a script definition`);
+          const scriptName = extractConstScriptName(v.bashRhs);
+          if (scriptName && localScripts.has(scriptName)) {
+            throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `scripts are not values; "${scriptName}" is a script definition`);
           }
           const exprInner = semanticQuotedOrchestrationInner(v.bashRhs, v.tripleQuoted === true);
           validateWorkflowStringCaptures(exprInner, s.loc);
@@ -1236,13 +1274,39 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         return;
       }
       if (s.type === "shell") {
-        throw jaiphError(
-          ast.filePath,
-          s.loc.line,
-          s.loc.col,
-          "E_VALIDATE",
-          "inline shell steps are forbidden in workflows; use explicit script blocks",
-        );
+        if (hasUnquotedSendArrow(s.command) && matchSendOperator(s.command) === null) {
+          throw jaiphError(
+            ast.filePath,
+            s.loc.line,
+            s.loc.col,
+            "E_VALIDATE",
+            "invalid send: channel must be a single name or `alias.name` (at most one dot in the channel part)",
+          );
+        }
+        const t = s.command.trim();
+        if (/^(?:[A-Za-z_][A-Za-z0-9_]*)(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/.test(t)) {
+          if (!t.includes(".")) {
+            if (localScripts.has(t) || localWorkflows.has(t)) {
+              throw jaiphError(
+                ast.filePath,
+                s.loc.line,
+                s.loc.col,
+                "E_VALIDATE",
+                `use run ${t}() — a bare name that refers to a script or workflow must use a managed run step`,
+              );
+            }
+          } else {
+            validateRef({ value: t, loc: s.loc }, ast, refCtx, expectRunTargetRef);
+            throw jaiphError(
+              ast.filePath,
+              s.loc.line,
+              s.loc.col,
+              "E_VALIDATE",
+              `use run ${t}() — "${t}" is a valid script or workflow reference; use a managed run step`,
+            );
+          }
+        }
+        return;
       }
       const _never: never = s;
       return _never;

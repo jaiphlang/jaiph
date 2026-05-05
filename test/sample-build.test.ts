@@ -1752,7 +1752,7 @@ test("buildScripts extracts scripts for ensure ... catch workflow", () => {
   }
 });
 
-test("build rejects ensure catch inline shell block under strict shell-step ban", () => {
+test("build accepts ensure catch body with raw shell lines", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-ensure-catch-block-"));
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-ensure-catch-block-out-"));
   try {
@@ -1772,17 +1772,14 @@ test("build rejects ensure catch inline shell block under strict shell-step ban"
       ].join("\n"),
     );
 
-    assert.throws(
-      () => buildScripts(filePath, outDir),
-      /inline shell steps are forbidden in workflows; use explicit script blocks/,
-    );
+    buildScripts(filePath, outDir);
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(outDir, { recursive: true, force: true });
   }
 });
 
-test("buildScripts rejects shell assignment capture under strict shell-step ban", () => {
+test("buildScripts accepts multiline raw shell in workflow (assignment-style lines)", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-assign-fail-"));
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-assign-fail-out-"));
   try {
@@ -1797,10 +1794,7 @@ test("buildScripts rejects shell assignment capture under strict shell-step ban"
         "",
       ].join("\n"),
     );
-    assert.throws(
-      () => buildScripts(filePath, outDir),
-      /inline shell steps are forbidden in workflows; use explicit script blocks/,
-    );
+    buildScripts(filePath, outDir);
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(outDir, { recursive: true, force: true });

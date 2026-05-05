@@ -78,9 +78,15 @@ Copies files from the **workspace** (or sandbox overlay) into the run’s `artif
 import "jaiphlang/artifacts" as artifacts
 
 workflow default() {
-  # Copy a file into the artifacts directory under a chosen name.
-  # Returns the absolute path of the saved artifact.
-  const path = run artifacts.save("./build/output.bin", "build-output.bin")
+  # Single file:
+  const path = run artifacts.save("./build/output.bin")
+
+  # Or several files at once — newline-separated list of paths:
+  const paths = """
+  a.txt
+  b/nested.txt
+  """
+  const dests = run artifacts.save(paths)
 }
 ```
 
@@ -88,4 +94,4 @@ workflow default() {
 
 | Workflow | Description |
 |----------|-------------|
-| `save(local_path, name)` | Requires `local_path` to be a **file**. Copies to `${JAIPH_ARTIFACTS_DIR}/${name}` (creates parent dirs). Returns the absolute destination path. |
+| `save(paths)` | `paths` is a single file path or a **newline-separated** list of file paths. Each file is copied to `${JAIPH_ARTIFACTS_DIR}/…` using the same relative path (`./` prefix stripped; absolute sources use `basename` only). Returns the absolute destination path(s), one per line, in order. Fails if the list is empty or any file is missing. |

@@ -1,0 +1,9 @@
+#!/usr/bin/env jaiph
+
+import "jaiphlang/artifacts" as artifacts
+
+workflow default() {
+  run `echo "Hello, world!" > output.txt`()
+  const path = run artifacts.save("./output.txt")
+  return path
+}

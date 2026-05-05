@@ -934,11 +934,17 @@ export class NodeWorkflowRuntime {
         return this.mergeStepResult(accOut, accErr, { status: 1, output: "", error: message });
       }
       if (step.type === "shell") {
-        return this.mergeStepResult(accOut, accErr, {
-          status: 1,
-          output: "",
-          error: "inline shell steps are forbidden in Node orchestration runtime; use script blocks",
-        });
+        const cmdIr = await this.interpolateWithCaptures(step.command, scope);
+        if (!cmdIr.ok) return this.mergeStepResult(accOut, accErr, cmdIr.result);
+        const stepName = `sh_line_${step.loc.line}`;
+        const result = await this.executeManagedStep(
+          "script",
+          stepName,
+          [],
+          (io) => this.executeShLine(scope, cmdIr.value, io),
+        );
+        if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
+        continue;
       }
       if (step.type === "return") {
         if (step.managed) {
@@ -1708,6 +1714,56 @@ export class NodeWorkflowRuntime {
         const msg = err instanceof Error ? err.message : String(err);
         error += msg;
         io?.appendErr(msg);
+        resolve({
+          status: 1,
+          output,
+          error,
+          returnValue: output.trim(),
+        });
+      });
+      child.on("close", (code) => {
+        resolve({
+          status: typeof code === "number" ? code : 1,
+          output,
+          error,
+          returnValue: output.trim(),
+        });
+      });
+    });
+  }
+
+  /**
+   * Run a raw workflow shell line (after Jaiph interpolation) via `sh -c` in
+   * the workspace, matching script cwd semantics.
+   */
+  private async executeShLine(scope: Scope, command: string, io: StepIO): Promise<StepResult> {
+    const scriptCwd =
+      scope.env.JAIPH_WORKSPACE && scope.env.JAIPH_WORKSPACE.length > 0
+        ? scope.env.JAIPH_WORKSPACE
+        : dirname(scope.filePath);
+    const env = scope.env;
+    return await new Promise((resolve) => {
+      const child = spawn("sh", ["-c", command], {
+        cwd: scriptCwd,
+        env,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      let output = "";
+      let error = "";
+      child.stdout?.setEncoding("utf8");
+      child.stderr?.setEncoding("utf8");
+      child.stdout?.on("data", (chunk: string) => {
+        output += chunk;
+        io.appendOut(chunk);
+      });
+      child.stderr?.on("data", (chunk: string) => {
+        error += chunk;
+        io.appendErr(chunk);
+      });
+      child.on("error", (err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        error += msg;
+        io.appendErr(msg);
         resolve({
           status: 1,
           output,

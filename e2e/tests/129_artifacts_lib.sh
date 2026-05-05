@@ -22,7 +22,7 @@ e2e::file "artifacts_e2e.jh" <<'EOF'
 import "jaiphlang/artifacts" as artifacts
 
 workflow default() {
-  const save_path = run artifacts.save("./build_output.txt", "saved-output.txt")
+  const save_path = run artifacts.save("./build_output.txt")
   log save_path
 }
 EOF
@@ -36,8 +36,8 @@ e2e::assert_contains "${artifacts_out}" "PASS" "output contains PASS"
 run_dir="$(e2e::run_dir "artifacts_e2e.jh")"
 artifacts_dir="${run_dir}artifacts"
 
-e2e::assert_file_exists "${artifacts_dir}/saved-output.txt" "saved artifact exists"
-saved_content="$(<"${artifacts_dir}/saved-output.txt")"
+e2e::assert_file_exists "${artifacts_dir}/build_output.txt" "saved artifact exists"
+saved_content="$(<"${artifacts_dir}/build_output.txt")"
 e2e::assert_equals "${saved_content}" "build-output-content" "saved artifact content matches source"
 
 e2e::pass "artifacts save"

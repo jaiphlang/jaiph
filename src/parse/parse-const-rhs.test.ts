@@ -100,6 +100,22 @@ test("parseConstRhs: parses bash expression", () => {
   assert.equal(result.nextLineIdx, 0);
 });
 
+test("parseConstRhs: bare identifier is sugar for interpolated string", () => {
+  const result = parseConstRhs("test.jh", ["const x = response"], 0, "response", 1, 1, false, "x");
+  assert.equal(result.value.kind, "expr");
+  if (result.value.kind === "expr") {
+    assert.equal(result.value.bashRhs, '"${response}"');
+  }
+});
+
+test("parseConstRhs: bare dotted identifier is sugar for interpolated string", () => {
+  const result = parseConstRhs("test.jh", ["const x = response.message"], 0, "response.message", 1, 1, false, "x");
+  assert.equal(result.value.kind, "expr");
+  if (result.value.kind === "expr") {
+    assert.equal(result.value.bashRhs, '"${response.message}"');
+  }
+});
+
 test("parseConstRhs: parses run capture", () => {
   const result = parseConstRhs("test.jh", ["const x = run my_script()"], 0, "run my_script()", 1, 1, false, "x");
   assert.equal(result.value.kind, "run_capture");
