@@ -10,27 +10,57 @@
 #   import "jaiphlang/artifacts" as artifacts
 #
 #   workflow default() {
-#     run artifacts.save("./build/output.bin", "build-output.bin")
+#     # Single file:
+#     run artifacts.save("./build/output.bin")
+#
+#     # Or several files: newline-separated list of paths.
+#     const paths = """
+#     a.txt
+#     b/nested.txt
+#     """
+#     run artifacts.save(paths)
 #   }
 #
 
 script save_script = ```
   set -euo pipefail
   ARTIFACTS_DIR="${JAIPH_ARTIFACTS_DIR:?JAIPH_ARTIFACTS_DIR is not set}"
-  src="$1"
-  dest_name="$2"
-  if [[ ! -f "$src" ]]; then
-    printf 'artifacts save: file not found: %s\n' "$src" >&2
+  paths_list="$1"
+  out=""
+
+  while IFS= read -r line || [[ -n "${line-}" ]]; do
+    [[ -z "${line//[[:space:]]/}" ]] && continue
+    src="${line#"${line%%[![:space:]]*}"}"
+    src="${src%"${src##*[![:space:]]}"}"
+    if [[ ! -f "$src" ]]; then
+      printf 'artifacts save: file not found: %s\n' "$src" >&2
+      exit 1
+    fi
+    if [[ "$src" = /* ]]; then
+      relpath="$(basename -- "$src")"
+    else
+      relpath="${src#./}"
+    fi
+    dest="${ARTIFACTS_DIR}/${relpath}"
+    mkdir -p "$(dirname -- "$dest")"
+    cp -- "$src" "$dest"
+    if [[ -n "$out" ]]; then
+      out+=$'\n'
+    fi
+    out+="$dest"
+  done <<<"$paths_list"
+
+  if [[ -z "$out" ]]; then
+    printf 'artifacts save: no paths in list\n' >&2
     exit 1
   fi
-  dest="${ARTIFACTS_DIR}/${dest_name}"
-  mkdir -p "$(dirname "$dest")"
-  cp -- "$src" "$dest"
-  printf '%s' "$dest"
+  printf '%s' "$out"
 ```
 
-# Copies the file at `local_path` into the artifacts directory under `name`.
-# Returns the absolute path of the saved artifact.
-export workflow save(local_path, name) {
-  return run save_script(local_path, name)
+# `paths` is a single file path or a newline-separated list of file paths.
+# Each file is copied under the same relative name as in the list
+# (leading `./` stripped; absolute paths use basename only).
+# Returns the absolute destination paths, one per line, in the same order.
+export workflow save(paths) {
+  return run save_script(paths)
 }
