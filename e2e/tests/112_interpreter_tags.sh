@@ -108,7 +108,7 @@ if run_out="$(e2e::run "bad_tag.jh" 2>&1)"; then
   e2e::fail "expected compile error for unknown tag, but run succeeded"
 else
   # nondeterministic: error includes absolute file path prefix which varies
-  e2e::assert_contains "${run_out}" 'script:lang syntax is no longer supported' "unknown tag produces actionable error"
+  e2e::assert_contains "${run_out}" 'unsupported top-level statement: script:golang' "unknown tag produces parse error"
 fi
 
 # ---------- script:node with manual shebang: compile error ----------

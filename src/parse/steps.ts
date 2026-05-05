@@ -1,20 +1,8 @@
 import type { WorkflowStepDef } from "../types";
 import { parseConstRhs } from "./const-rhs";
-import { fail, indexOfClosingDoubleQuote, isRef, parseCallRef, parseLogMessageRhs } from "./core";
+import { fail, indexOfClosingDoubleQuote, isRef, parseCallRef, parseLogMessageRhs, rejectTrailingContent } from "./core";
 import { parseAnonymousInlineScript } from "./inline-script";
 import { isBareIdentifierReturn, bareIdentifierToQuotedString, isBareDottedIdentifierReturn, dottedReturnToQuotedString } from "./workflow-return-dotted";
-
-/** Reject non-empty trailing content after a call expression (e.g. shell redirection). */
-function rejectTrailingContent(
-  filePath: string,
-  lineNo: number,
-  keyword: string,
-  rest: string,
-): void {
-  const trimmed = rest.trim();
-  if (!trimmed) return;
-  fail(filePath, `unexpected content after ${keyword} call: '${trimmed}'; shell redirection (>, |, &) is not supported — use a script block`, lineNo);
-}
 import { parsePromptStep } from "./prompt";
 
 /**

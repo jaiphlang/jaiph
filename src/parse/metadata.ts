@@ -2,13 +2,6 @@ import type { ConfigBodyPart, WorkflowMetadata } from "../types";
 import { colFromRaw, fail } from "./core";
 import { findClosingBraceIndex, splitStatementsOnSemicolons } from "./statement-split";
 
-/** Keys that were removed — produce a clear E_PARSE instead of "unknown key". */
-const REJECTED_KEYS: Record<string, string> = {
-  "runtime.workspace": "runtime.workspace is no longer supported; the workspace is mounted automatically",
-  "runtime.docker_enabled": "runtime.docker_enabled is no longer supported; set JAIPH_DOCKER_ENABLED or JAIPH_UNSAFE in the environment",
-  "runtime.docker_timeout": "runtime.docker_timeout was renamed to runtime.docker_timeout_seconds",
-};
-
 const ALLOWED_KEYS = new Set([
   "agent.default_model",
   "agent.command",
@@ -144,106 +137,43 @@ function parseArrayValue(
   return fail(filePath, "array not closed with ']'", startIdx, 1);
 }
 
+type ConfigValue = string | boolean | number | string[];
+
+const KEY_SETTERS: Record<string, (out: WorkflowMetadata, value: ConfigValue) => void> = {
+  "agent.default_model": (m, v) => ((m.agent ??= {}).defaultModel = v as string),
+  "agent.command": (m, v) => ((m.agent ??= {}).command = v as string),
+  "agent.trusted_workspace": (m, v) => ((m.agent ??= {}).trustedWorkspace = v as string),
+  "agent.cursor_flags": (m, v) => ((m.agent ??= {}).cursorFlags = v as string),
+  "agent.claude_flags": (m, v) => ((m.agent ??= {}).claudeFlags = v as string),
+  "run.logs_dir": (m, v) => ((m.run ??= {}).logsDir = v as string),
+  "run.debug": (m, v) => ((m.run ??= {}).debug = v as boolean),
+  "run.inbox_parallel": (m, v) => ((m.run ??= {}).inboxParallel = v as boolean),
+  "run.recover_limit": (m, v) => ((m.run ??= {}).recoverLimit = v as number),
+  "runtime.docker_image": (m, v) => ((m.runtime ??= {}).dockerImage = v as string),
+  "runtime.docker_network": (m, v) => ((m.runtime ??= {}).dockerNetwork = v as string),
+  "runtime.docker_timeout_seconds": (m, v) => ((m.runtime ??= {}).dockerTimeoutSeconds = v as number),
+  "module.name": (m, v) => ((m.module ??= {}).name = v as string),
+  "module.version": (m, v) => ((m.module ??= {}).version = v as string),
+  "module.description": (m, v) => ((m.module ??= {}).description = v as string),
+};
+
 function assignConfigKey(
   filePath: string,
   out: WorkflowMetadata,
   key: string,
-  value: string | boolean | number | string[],
+  value: ConfigValue,
   lineNo: number,
   raw: string,
 ): void {
   validateKeyType(filePath, key, value, lineNo, raw);
-
-  if (key === "agent.default_model") {
-    if (!out.agent) {
-      out.agent = {};
+  if (key === "agent.backend") {
+    if (value !== "cursor" && value !== "claude" && value !== "codex") {
+      fail(filePath, 'agent.backend must be "cursor", "claude", or "codex"', lineNo, colFromRaw(raw));
     }
-    out.agent.defaultModel = value as string;
-  } else if (key === "agent.command") {
-    if (!out.agent) {
-      out.agent = {};
-    }
-    out.agent.command = value as string;
-  } else if (key === "agent.backend") {
-    const backend = value === "cursor" || value === "claude" || value === "codex" ? value : undefined;
-    if (!backend) {
-      fail(
-        filePath,
-        'agent.backend must be "cursor", "claude", or "codex"',
-        lineNo,
-        colFromRaw(raw),
-      );
-    }
-    if (!out.agent) {
-      out.agent = {};
-    }
-    out.agent.backend = backend;
-  } else if (key === "agent.trusted_workspace") {
-    if (!out.agent) {
-      out.agent = {};
-    }
-    out.agent.trustedWorkspace = value as string;
-  } else if (key === "agent.cursor_flags") {
-    if (!out.agent) {
-      out.agent = {};
-    }
-    out.agent.cursorFlags = value as string;
-  } else if (key === "agent.claude_flags") {
-    if (!out.agent) {
-      out.agent = {};
-    }
-    out.agent.claudeFlags = value as string;
-  } else if (key === "run.logs_dir") {
-    if (!out.run) {
-      out.run = {};
-    }
-    out.run.logsDir = value as string;
-  } else if (key === "run.debug") {
-    if (!out.run) {
-      out.run = {};
-    }
-    out.run.debug = value as boolean;
-  } else if (key === "run.inbox_parallel") {
-    if (!out.run) {
-      out.run = {};
-    }
-    out.run.inboxParallel = value as boolean;
-  } else if (key === "run.recover_limit") {
-    if (!out.run) {
-      out.run = {};
-    }
-    out.run.recoverLimit = value as number;
-  } else if (key === "runtime.docker_image") {
-    if (!out.runtime) {
-      out.runtime = {};
-    }
-    out.runtime.dockerImage = value as string;
-  } else if (key === "runtime.docker_network") {
-    if (!out.runtime) {
-      out.runtime = {};
-    }
-    out.runtime.dockerNetwork = value as string;
-  } else if (key === "runtime.docker_timeout_seconds") {
-    if (!out.runtime) {
-      out.runtime = {};
-    }
-    out.runtime.dockerTimeoutSeconds = value as number;
-  } else if (key === "module.name") {
-    if (!out.module) {
-      out.module = {};
-    }
-    out.module.name = value as string;
-  } else if (key === "module.version") {
-    if (!out.module) {
-      out.module = {};
-    }
-    out.module.version = value as string;
-  } else if (key === "module.description") {
-    if (!out.module) {
-      out.module = {};
-    }
-    out.module.description = value as string;
+    (out.agent ??= {}).backend = value;
+    return;
   }
+  KEY_SETTERS[key]?.(out, value);
 }
 
 export function parseConfigBlock(
@@ -286,9 +216,6 @@ export function parseConfigBlock(
       const key = line.slice(0, eq).trim();
       const valuePart = line.slice(eq + 1);
 
-      if (REJECTED_KEYS[key]) {
-        return fail(filePath, REJECTED_KEYS[key], openLineNo, colFromRaw(rawOpen));
-      }
       if (!ALLOWED_KEYS.has(key)) {
         return fail(
           filePath,
@@ -353,9 +280,6 @@ export function parseConfigBlock(
     const key = line.slice(0, eq).trim();
     const valuePart = line.slice(eq + 1);
 
-    if (REJECTED_KEYS[key]) {
-      return fail(filePath, REJECTED_KEYS[key], lineNo, colFromRaw(raw));
-    }
     if (!ALLOWED_KEYS.has(key)) {
       return fail(
         filePath,

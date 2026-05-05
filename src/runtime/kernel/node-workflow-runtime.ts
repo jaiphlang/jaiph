@@ -1298,7 +1298,8 @@ export class NodeWorkflowRuntime {
                 const recoverVars = new Map(scope.vars);
                 recoverVars.set(recoverBindings.failure, `${result.output}${result.error}`);
                 const rr = await this.executeSteps({ ...scope, vars: recoverVars }, recoverSteps);
-                if (rr.status !== 0 || rr.returnValue !== undefined) return rr;
+                if (rr.status !== 0) return rr;
+                if (rr.returnValue !== undefined) return { ...rr, recoverReturn: true };
                 return { status: 0, output: result.output, error: result.error };
               }),
             );
@@ -1411,29 +1412,30 @@ export class NodeWorkflowRuntime {
     // Implicit join: await all unresolved handles created in this scope before returning.
     if (localHandleIds.length > 0) {
       const failures: string[] = [];
+      const collectResult = (handleRef: string, result: StepResult): void => {
+        if (result.status !== 0) {
+          failures.push(`run async ${handleRef}: ${result.error}`);
+          accOut += result.output;
+          accErr += result.error;
+        } else {
+          accOut += result.output;
+          // An async branch that recovered via `return X` propagates that value
+          // to the parent workflow, mirroring sync ensure/run+catch semantics.
+          if (result.recoverReturn && result.returnValue !== undefined && returnValue === undefined) {
+            returnValue = result.returnValue;
+          }
+        }
+      };
       for (const handleId of localHandleIds) {
         const handle = this.handleRegistry.get(handleId);
         if (!handle) continue;
         if (handle.resolved) {
-          // Already resolved (via a read earlier) — just check status.
-          if (handle.resolved.status !== 0) {
-            failures.push(`run async ${handle.ref}: ${handle.resolved.error}`);
-            accOut += handle.resolved.output;
-            accErr += handle.resolved.error;
-          } else {
-            accOut += handle.resolved.output;
-          }
+          collectResult(handle.ref, handle.resolved);
           continue;
         }
         try {
           const result = await this.resolveHandleResult(handleId);
-          if (result.status !== 0) {
-            failures.push(`run async ${handle.ref}: ${result.error}`);
-            accOut += result.output;
-            accErr += result.error;
-          } else {
-            accOut += result.output;
-          }
+          collectResult(handle.ref, result);
         } catch (err) {
           failures.push(`run async ${handle.ref}: ${String(err)}`);
         }
@@ -1556,23 +1558,6 @@ export class NodeWorkflowRuntime {
     return `${filePath}::${name}`;
   }
 
-  /** Synchronous fast-path: resolve args when every token is a plain literal and no handles. */
-  private resolveArgsRawSync(scope: Scope, raw: string | string[]): string[] | null {
-    if (Array.isArray(raw)) return raw;
-    const tokens = parseArgTokens(raw);
-    for (const token of tokens) {
-      if (token.kind !== "literal") return null;
-      // Bail to async path if any referenced var is a handle.
-      const varRe = /\$\{([a-zA-Z_][a-zA-Z0-9_]*)/g;
-      let vm: RegExpExecArray | null;
-      while ((vm = varRe.exec(token.value)) !== null) {
-        const val = scope.vars.get(vm[1]);
-        if (val && this.isHandle(val)) return null;
-      }
-    }
-    return tokens.map((t) => interpolate((t as { kind: "literal"; value: string }).value, scope.vars, scope.env));
-  }
-
   private async resolveArgsRaw(scope: Scope, raw: string | string[]): Promise<string[] | StepResult> {
     if (Array.isArray(raw)) {
       return raw;
@@ -1605,7 +1590,7 @@ export class NodeWorkflowRuntime {
   }
 
   private async executeRunRef(scope: Scope, ref: string, argsRaw: string | string[]): Promise<StepResult> {
-    const resolvedArgs = this.resolveArgsRawSync(scope, argsRaw) ?? await this.resolveArgsRaw(scope, argsRaw);
+    const resolvedArgs = await this.resolveArgsRaw(scope, argsRaw);
     if (!Array.isArray(resolvedArgs)) return resolvedArgs;
     const args = resolvedArgs;
     const resolvedWorkflow = resolveWorkflowRef(this.graph, scope.filePath, { value: ref, loc: { line: 1, col: 1 } });
@@ -1714,19 +1699,15 @@ export class NodeWorkflowRuntime {
         const msg = err instanceof Error ? err.message : String(err);
         error += msg;
         io?.appendErr(msg);
-        resolve({
-          status: 1,
-          output,
-          error,
-          returnValue: output.trim(),
-        });
+        resolve({ status: 1, output, error });
       });
       child.on("close", (code) => {
+        const status = typeof code === "number" ? code : 1;
         resolve({
-          status: typeof code === "number" ? code : 1,
+          status,
           output,
           error,
-          returnValue: output.trim(),
+          ...(status === 0 ? { returnValue: output.trim() } : {}),
         });
       });
     });
@@ -1764,19 +1745,15 @@ export class NodeWorkflowRuntime {
         const msg = err instanceof Error ? err.message : String(err);
         error += msg;
         io.appendErr(msg);
-        resolve({
-          status: 1,
-          output,
-          error,
-          returnValue: output.trim(),
-        });
+        resolve({ status: 1, output, error });
       });
       child.on("close", (code) => {
+        const status = typeof code === "number" ? code : 1;
         resolve({
-          status: typeof code === "number" ? code : 1,
+          status,
           output,
           error,
-          returnValue: output.trim(),
+          ...(status === 0 ? { returnValue: output.trim() } : {}),
         });
       });
     });
@@ -1963,28 +1940,22 @@ export class NodeWorkflowRuntime {
 
   private executeMockShellBody(_ref: string, body: string, args: string[], params: string[]): StepResult {
     const { spawnSync } = require("node:child_process") as typeof import("node:child_process");
-    const { mkdtempSync, writeFileSync: wf, chmodSync } = require("node:fs") as typeof import("node:fs");
-    const { join: pjoin } = require("node:path") as typeof import("node:path");
-    const tmpDir = mkdtempSync(pjoin(require("node:os").tmpdir(), "jaiph-mock-"));
-    const scriptPath = pjoin(tmpDir, "mock.sh");
-    wf(scriptPath, `#!/usr/bin/env bash\nset -euo pipefail\n${body}\n`);
-    chmodSync(scriptPath, 0o755);
-    // Inject named params as env vars
     const env = { ...this.env };
     params.forEach((name, i) => {
       if (i < args.length) env[name] = args[i];
     });
-    const r = spawnSync(scriptPath, args, {
+    const r = spawnSync("bash", ["-c", `set -euo pipefail\n${body}`, "mock", ...args], {
       encoding: "utf8",
       cwd: this.cwd,
       env,
     });
-    try { require("node:fs").rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    const status = r.status ?? 1;
+    const output = r.stdout ?? "";
     return {
-      status: r.status ?? 1,
-      output: r.stdout ?? "",
+      status,
+      output,
       error: r.stderr ?? "",
-      returnValue: (r.stdout ?? "").trim(),
+      ...(status === 0 ? { returnValue: output.trim() } : {}),
     };
   }
 }

@@ -279,39 +279,6 @@ test("parser: config integer key rejects string value with E_PARSE", () => {
   );
 });
 
-test("parser: runtime.workspace produces E_PARSE (no longer supported)", () => {
-  const source = [
-    "config {",
-    "  runtime.workspace = [",
-    '    ".:/jaiph/workspace:rw",',
-    '    "config:config:ro"',
-    "  ]",
-    "}",
-    "workflow default() {",
-    "  log \"ok\"",
-    "}",
-  ].join("\n");
-  assert.throws(
-    () => parsejaiph(source, "/fake/entry.jh"),
-    /runtime\.workspace is no longer supported/,
-  );
-});
-
-test("parser: runtime.workspace with scalar value also produces E_PARSE", () => {
-  const source = [
-    "config {",
-    '  runtime.workspace = "not-an-array"',
-    "}",
-    "workflow default() {",
-    "  log \"ok\"",
-    "}",
-  ].join("\n");
-  assert.throws(
-    () => parsejaiph(source, "/fake/entry.jh"),
-    /runtime\.workspace is no longer supported/,
-  );
-});
-
 test("parser: all runtime config keys are accepted (docker_enabled removed)", () => {
   const source = [
     "config {",
@@ -328,21 +295,6 @@ test("parser: all runtime config keys are accepted (docker_enabled removed)", ()
   assert.strictEqual(mod.metadata!.runtime!.dockerImage, "ubuntu:24.04");
   assert.strictEqual(mod.metadata!.runtime!.dockerNetwork, "host");
   assert.strictEqual(mod.metadata!.runtime!.dockerTimeoutSeconds, 600);
-});
-
-test("parser: runtime.docker_enabled produces E_PARSE with helpful message", () => {
-  const source = [
-    "config {",
-    "  runtime.docker_enabled = true",
-    "}",
-    "workflow default() {",
-    "  log \"ok\"",
-    "}",
-  ].join("\n");
-  assert.throws(
-    () => parsejaiph(source, "/fake/entry.jh"),
-    /runtime\.docker_enabled is no longer supported/,
-  );
 });
 
 test("parser: unknown runtime key throws E_PARSE", () => {
@@ -757,19 +709,6 @@ test("parser: top-level const declaration parses bare value", () => {
   assert.ok(mod.envDecls);
   assert.equal(mod.envDecls![0].name, "count");
   assert.equal(mod.envDecls![0].value, "42");
-});
-
-test("parser: top-level local keyword is rejected", () => {
-  const source = [
-    'local greeting = "hello world"',
-    "workflow default() {",
-    "  log \"${greeting}\"",
-    "}",
-  ].join("\n");
-  assert.throws(
-    () => parsejaiph(source, "/fake/entry.jh"),
-    /unknown top-level keyword "local" — use const NAME = VALUE/,
-  );
 });
 
 test("parser: top-level const name collision with rule is E_PARSE", () => {

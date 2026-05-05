@@ -1,9 +1,7 @@
 // Stream JSON parser: converts streaming backend output (cursor-agent / claude CLI)
 // into sectioned text (Reasoning + Final answer) and extracts the final response.
-// Standalone entry point: echo events | node kernel/stream-parser.js
 
 import { createInterface, type Interface } from "node:readline";
-import { writeFileSync } from "node:fs";
 import type { Readable } from "node:stream";
 
 export type StreamState = {
@@ -246,16 +244,3 @@ export function parseStream(
   });
 }
 
-// CLI entry point: reads stdin, writes to stdout, saves final to JAIPH_PROMPT_FINAL_FILE.
-if (require.main === module) {
-  const writer: StreamWriter = {
-    writeReasoning: (t) => { process.stdout.write(t); },
-    writeFinal: (t) => { process.stdout.write(t); },
-  };
-  parseStream(process.stdin, writer).then((final) => {
-    const finalPath = process.env.JAIPH_PROMPT_FINAL_FILE;
-    if (typeof finalPath === "string" && finalPath.length > 0) {
-      try { writeFileSync(finalPath, final, "utf8"); } catch { /* best-effort */ }
-    }
-  });
-}

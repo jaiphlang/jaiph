@@ -43,6 +43,18 @@ export function colFromRaw(raw: string): number {
   return (raw.match(/\S/)?.index ?? 0) + 1;
 }
 
+/** Reject non-empty trailing content after a call expression (e.g. shell redirection). */
+export function rejectTrailingContent(
+  filePath: string,
+  lineNo: number,
+  keyword: string,
+  rest: string,
+): void {
+  const trimmed = rest.trim();
+  if (!trimmed) return;
+  fail(filePath, `unexpected content after ${keyword} call: '${trimmed}'; shell redirection (>, |, &) is not supported — use a script block`, lineNo);
+}
+
 /** Count brace depth change for a line (ignores quotes; used for inline { ... } in rule/workflow bodies). */
 export function braceDepthDelta(line: string): number {
   let delta = 0;
@@ -56,7 +68,7 @@ export function braceDepthDelta(line: string): number {
 /** Jaiph keywords that cannot be used as bare identifier arguments. */
 const JAIPH_KEYWORDS = new Set([
   "run", "ensure", "prompt", "return", "fail", "log", "logerr",
-  "if", "else", "not", "const", "local", "match", "import", "export",
+  "if", "else", "not", "const", "match", "import", "export",
   "workflow", "rule", "script", "channel", "config", "catch", "async",
   "returns", "send", "true", "false",
 ]);

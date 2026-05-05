@@ -1,7 +1,7 @@
 #!/usr/bin/env jaiph
 
 import "./ensure_ci_passes.jh" as ci
-import "./git.jh" as git
+import "jaiphlang/git" as git
 
 config {
   agent.backend = "claude"

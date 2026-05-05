@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert/strict";
-import { extractJson, validateFields, buildEvalString } from "./schema";
+import { extractJson, validateFields } from "./schema";
 
 describe("extractJson", () => {
   it("extracts from a plain JSON line", () => {
@@ -63,19 +63,3 @@ describe("validateFields", () => {
   });
 });
 
-describe("buildEvalString", () => {
-  it("builds correct eval string", () => {
-    const obj = { role: "engineer" };
-    const fields = [{ name: "role", type: "string" }];
-    const result = buildEvalString(obj, fields, "result", '{"role":"engineer"}');
-    assert.ok(result.startsWith("result="));
-    assert.ok(result.includes("export result_role='engineer'"));
-  });
-
-  it("escapes single quotes in values", () => {
-    const obj = { note: "it's fine" };
-    const fields = [{ name: "note", type: "string" }];
-    const result = buildEvalString(obj, fields, "r", '{"note":"it\'s fine"}');
-    assert.ok(result.includes("'\\''"));
-  });
-});
