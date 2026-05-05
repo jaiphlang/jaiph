@@ -1,5 +1,5 @@
 import type { ConstRhs, RuleRefDef, WorkflowRefDef } from "../types";
-import { fail, isRef, parseCallRef } from "./core";
+import { fail, parseCallRef, rejectTrailingContent } from "./core";
 import { parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 import { parseAnonymousInlineScript } from "./inline-script";
 import { parsePromptStep } from "./prompt";
@@ -10,18 +10,6 @@ import {
   isBareDottedIdentifierReturn,
   isBareIdentifierReturn,
 } from "./workflow-return-dotted";
-
-/** Reject non-empty trailing content after a call expression (e.g. shell redirection). */
-function rejectTrailingContent(
-  filePath: string,
-  lineNo: number,
-  keyword: string,
-  rest: string,
-): void {
-  const trimmed = rest.trim();
-  if (!trimmed) return;
-  fail(filePath, `unexpected content after ${keyword} call: '${trimmed}'; shell redirection (>, |, &) is not supported — use a script block`, lineNo);
-}
 
 /**
  * Reject P10 disallowed forms: command substitution and bash string ops in const RHS.

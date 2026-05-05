@@ -1,18 +1,6 @@
 import type { SendRhsDef, WorkflowRefDef } from "../types";
-import { fail, hasUnescapedClosingQuote, indexOfClosingDoubleQuote, isRef, parseCallRef } from "./core";
+import { fail, hasUnescapedClosingQuote, indexOfClosingDoubleQuote, isRef, parseCallRef, rejectTrailingContent } from "./core";
 import { parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
-
-/** Reject non-empty trailing content after a call expression (e.g. shell redirection). */
-function rejectTrailingContent(
-  filePath: string,
-  lineNo: number,
-  keyword: string,
-  rest: string,
-): void {
-  const trimmed = rest.trim();
-  if (!trimmed) return;
-  fail(filePath, `unexpected content after ${keyword} call: '${trimmed}'; shell redirection (>, |, &) is not supported — use a script block`, lineNo);
-}
 
 const SEND_RHS_HINT =
   'send right-hand side must be a quoted string ("..."), a variable ($name or ${...}), or "run <ref> [args]" — not raw shell; use a script or use const';

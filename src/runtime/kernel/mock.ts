@@ -1,4 +1,3 @@
-// JS kernel: test-mode mock helpers.
 // Test-mode mock response and dispatch helpers.
 
 import { readFileSync, writeFileSync, existsSync } from "node:fs";

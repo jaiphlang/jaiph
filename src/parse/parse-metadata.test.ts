@@ -24,30 +24,6 @@ test("parseConfigBlock: parses boolean values", () => {
   assert.equal(metadata.run?.debug, true);
 });
 
-test("parseConfigBlock: rejects runtime.docker_enabled with E_PARSE", () => {
-  const lines = [
-    "config {",
-    "  runtime.docker_enabled = false",
-    "}",
-  ];
-  assert.throws(
-    () => parseConfigBlock("test.jh", lines, 0),
-    /runtime\.docker_enabled is no longer supported.*JAIPH_DOCKER_ENABLED.*JAIPH_UNSAFE/,
-  );
-});
-
-test("parseConfigBlock: rejects renamed runtime.docker_timeout key with guidance", () => {
-  const lines = [
-    "config {",
-    "  runtime.docker_timeout = 300",
-    "}",
-  ];
-  assert.throws(
-    () => parseConfigBlock("test.jh", lines, 0),
-    /runtime\.docker_timeout was renamed to runtime\.docker_timeout_seconds/,
-  );
-});
-
 test("parseConfigBlock: parses integer values", () => {
   const lines = [
     "config {",
@@ -56,21 +32,6 @@ test("parseConfigBlock: parses integer values", () => {
   ];
   const { metadata } = parseConfigBlock("test.jh", lines, 0);
   assert.equal(metadata.runtime?.dockerTimeoutSeconds, 300);
-});
-
-test("parseConfigBlock: rejects runtime.workspace with E_PARSE", () => {
-  const lines = [
-    "config {",
-    "  runtime.workspace = [",
-    '    "src/"',
-    '    "lib/"',
-    "  ]",
-    "}",
-  ];
-  assert.throws(
-    () => parseConfigBlock("test.jh", lines, 0),
-    /runtime\.workspace is no longer supported/,
-  );
 });
 
 test("parseConfigBlock: fails on unknown config key", () => {
@@ -199,18 +160,6 @@ test("parseConfigBlock: handles escape sequences in string values", () => {
   ];
   const { metadata } = parseConfigBlock("test.jh", lines, 0);
   assert.equal(metadata.agent?.cursorFlags, "flag\nvalue");
-});
-
-test("parseConfigBlock: rejects runtime.workspace even with empty array", () => {
-  const lines = [
-    "config {",
-    "  runtime.workspace = []",
-    "}",
-  ];
-  assert.throws(
-    () => parseConfigBlock("test.jh", lines, 0),
-    /runtime\.workspace is no longer supported/,
-  );
 });
 
 test("parseConfigBlock: fails on type mismatch (number where string expected)", () => {

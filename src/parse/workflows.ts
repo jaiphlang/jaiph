@@ -8,6 +8,7 @@ import {
   parseCallRef,
   parseLogMessageRhs,
   parseParamList,
+  rejectTrailingContent,
 } from "./core";
 import { parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
 import { parseConstRhs } from "./const-rhs";
@@ -25,18 +26,6 @@ import {
   shouldApplySemicolonStatementSplit,
   shouldSkipSemicolonSplitForLine,
 } from "./statement-split";
-
-/** Reject non-empty trailing content after a call expression (e.g. shell redirection). */
-function rejectTrailingContent(
-  filePath: string,
-  lineNo: number,
-  keyword: string,
-  rest: string,
-): void {
-  const trimmed = rest.trim();
-  if (!trimmed) return;
-  fail(filePath, `unexpected content after ${keyword} call: '${trimmed}'; shell redirection (>, |, &) is not supported — use a script block`, lineNo);
-}
 
 /**
  * Detect Jaiph value-return syntax vs bash exit-code return.
@@ -616,6 +605,14 @@ export function parseWorkflowBlock(
       }
       if (returnValue.startsWith("'")) {
         fail(filePath, 'single-quoted strings are not supported; use double quotes ("...") instead', innerNo, retLoc.col);
+      }
+      if (/^[0-9]+$/.test(returnValue) || returnValue === "$?") {
+        fail(
+          filePath,
+          'bash exit codes are only valid in scripts; use return "..." for a workflow value',
+          innerNo,
+          retLoc.col,
+        );
       }
       if (isJaiphValueReturn(returnValue) || isBareDottedIdentifierReturn(returnValue) || isBareIdentifierReturn(returnValue)) {
         // Reject multiline "..."

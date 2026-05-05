@@ -7,7 +7,7 @@
 
 import "./engineer.jh" as implement
 import "./architect_review.jh" as architect
-import "./git.jh" as git
+import "jaiphlang/git" as git
 
 workflow default() {
   ensure git.is_clean()

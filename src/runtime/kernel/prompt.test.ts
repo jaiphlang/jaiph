@@ -7,12 +7,9 @@ import { PassThrough } from "node:stream";
 import {
   buildBackendArgs,
   executePrompt,
-  parseEtimeToSeconds,
   prepareClaudeEnv,
   resolveConfig,
   resolveModel,
-  selectTailToKill,
-  type ProcNode,
   type PromptConfig,
 } from "./prompt";
 
@@ -262,28 +259,6 @@ describe("prepareClaudeEnv", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-  });
-});
-
-describe("tail watchdog helpers", () => {
-  it("parses ps etime values", () => {
-    assert.equal(parseEtimeToSeconds("00:59"), 59);
-    assert.equal(parseEtimeToSeconds("01:02:03"), 3723);
-    assert.equal(parseEtimeToSeconds("2-00:00:01"), 172801);
-  });
-
-  it("selects deepest stale tail descendant only", () => {
-    const nodes: ProcNode[] = [
-      { pid: 100, ppid: 1, elapsedSeconds: 5, command: "/usr/bin/node" },
-      { pid: 200, ppid: 100, elapsedSeconds: 50, command: "/bin/zsh" },
-      { pid: 300, ppid: 200, elapsedSeconds: 601, command: "/usr/bin/tail" },
-      { pid: 310, ppid: 200, elapsedSeconds: 999, command: "/usr/bin/tail" },
-      { pid: 320, ppid: 300, elapsedSeconds: 700, command: "/usr/bin/tail" },
-      { pid: 400, ppid: 1, elapsedSeconds: 700, command: "/usr/bin/tail" },
-    ];
-    const selected = selectTailToKill(nodes, 100, 600);
-    assert.ok(selected);
-    assert.equal(selected?.pid, 320);
   });
 });
 

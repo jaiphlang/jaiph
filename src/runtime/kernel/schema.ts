@@ -1,11 +1,4 @@
-// JS kernel: schema validation for typed prompts (returns '{ field: type }').
-// Schema validation for typed prompts.
-// Called from bash: echo "$raw" | node kernel/schema.js
-// Env: JAIPH_PROMPT_SCHEMA, JAIPH_PROMPT_CAPTURE_NAME
-// Stdout: eval-able shell string setting capture var + per-field exports.
-// Exit codes: 0=ok, 1=parse error, 2=missing field, 3=type mismatch.
-
-import { readFileSync } from "node:fs";
+// Schema validation for typed prompts (returns '{ field: type }').
 
 type SchemaField = { name: string; type: string };
 
@@ -108,46 +101,4 @@ export function validateFields(
     }
   }
   return 0;
-}
-
-/** Build eval-able shell string: captureName='json' ; export captureName_field='value' ... */
-export function buildEvalString(
-  obj: Record<string, unknown>,
-  fields: SchemaField[],
-  captureName: string,
-  source: string,
-): string {
-  const esc = (s: string): string => String(s).replace(/'/g, "'\\''");
-  let out = `${captureName}='${esc(source)}'`;
-  for (const f of fields) {
-    out += `; export ${captureName}_${f.name}='${esc(String(obj[f.name]))}'`;
-  }
-  return out;
-}
-
-// Main entry point when run as script
-function main(): void {
-  const raw = readFileSync(0, "utf8");
-  const schemaStr = process.env.JAIPH_PROMPT_SCHEMA || "";
-  const captureName = process.env.JAIPH_PROMPT_CAPTURE_NAME || "result";
-
-  if (!schemaStr) {
-    process.stderr.write("jaiph: prompt_capture_with_schema: JAIPH_PROMPT_SCHEMA must be set\n");
-    process.exit(1);
-  }
-
-  const schema = JSON.parse(schemaStr) as { fields?: SchemaField[] };
-  const fields = (schema.fields || []).map((f) => ({ name: f.name, type: f.type }));
-
-  const extracted = extractJson(raw);
-  if (!extracted) process.exit(1);
-
-  const validationResult = validateFields(extracted.obj, fields);
-  if (validationResult !== 0) process.exit(validationResult);
-
-  process.stdout.write(buildEvalString(extracted.obj, fields, captureName, extracted.source));
-}
-
-if (require.main === module) {
-  main();
 }

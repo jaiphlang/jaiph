@@ -106,10 +106,6 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
       continue;
     }
 
-    if (/^local\s+[A-Za-z_]/.test(line)) {
-      fail(filePath, 'unknown top-level keyword "local" — use const NAME = VALUE', lineNo, 1);
-    }
-
     if (/^const\s+[A-Za-z_]/.test(line)) {
       const { envDecl, nextIndex } = parseEnvDecl(filePath, lines, i - 1);
       if (pendingTopLevelComments.length > 0) {
@@ -125,7 +121,7 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
       continue;
     }
 
-    if (line.includes("rule ")) {
+    if (/^(export\s+)?rule\s/.test(line)) {
       const { rule, nextIndex, exported } = parseRuleBlock(filePath, lines, i - 1, pendingTopLevelComments);
       pendingTopLevelComments = [];
       if (exported) {
@@ -137,7 +133,7 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
       continue;
     }
 
-    if (line.includes("script ") || line.startsWith("script:")) {
+    if (/^(export\s+)?script\s/.test(line)) {
       const { scriptDef, nextIndex, exported } = parseScriptBlock(filePath, lines, i - 1, pendingTopLevelComments);
       pendingTopLevelComments = [];
       if (exported) {
@@ -149,7 +145,7 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
       continue;
     }
 
-    if (line.includes("workflow ")) {
+    if (/^(export\s+)?workflow\s/.test(line)) {
       const { workflow, nextIndex, exported } = parseWorkflowBlock(filePath, lines, i - 1, pendingTopLevelComments);
       pendingTopLevelComments = [];
       if (exported) {
@@ -168,57 +164,26 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
     mod.trailingTopLevelComments = [...pendingTopLevelComments];
   }
 
-  // Unified namespace: rules, workflows, and scripts share a single name space.
+  // Unified namespace: imports, channels, rules, workflows, scripts, and consts all share one name space.
   const seen = new Map<string, string>();
-  if (mod.scriptImports) {
-    for (const si of mod.scriptImports) {
-      const prev = seen.get(si.alias);
+  const groups: Array<{ items: Array<{ name: string; loc: { line: number; col: number } }>; kind: string }> = [
+    { items: (mod.scriptImports ?? []).map((si) => ({ name: si.alias, loc: si.loc })), kind: "script import" },
+    { items: mod.channels.map((c) => ({ name: c.name, loc: c.loc })), kind: "channel" },
+    { items: mod.rules.map((r) => ({ name: r.name, loc: r.loc })), kind: "rule" },
+    { items: mod.scripts.map((s) => ({ name: s.name, loc: s.loc })), kind: "script" },
+    { items: mod.workflows.map((w) => ({ name: w.name, loc: w.loc })), kind: "workflow" },
+    { items: (mod.envDecls ?? []).map((e) => ({ name: e.name, loc: e.loc })), kind: "const" },
+  ];
+  for (const { items, kind } of groups) {
+    for (const { name, loc } of items) {
+      const prev = seen.get(name);
       if (prev) {
-        fail(filePath, `duplicate name "${si.alias}" — channels, rules, workflows, and scripts share a single namespace (already declared as ${prev})`, si.loc.line, si.loc.col);
+        const msg = kind === "const"
+          ? `duplicate name "${name}" — variable name collides with ${prev} of the same name`
+          : `duplicate name "${name}" — channels, rules, workflows, and scripts share a single namespace (already declared as ${prev})`;
+        fail(filePath, msg, loc.line, loc.col);
       }
-      seen.set(si.alias, "script import");
-    }
-  }
-  for (const ch of mod.channels) {
-    const prev = seen.get(ch.name);
-    if (prev) {
-      fail(
-        filePath,
-        `duplicate name "${ch.name}" — channels, rules, workflows, and scripts share a single namespace (already declared as ${prev})`,
-        ch.loc.line,
-        ch.loc.col,
-      );
-    }
-    seen.set(ch.name, "channel");
-  }
-  for (const r of mod.rules) {
-    const prev = seen.get(r.name);
-    if (prev) {
-      fail(filePath, `duplicate name "${r.name}" — rules, workflows, and scripts share a single namespace (already declared as ${prev})`, r.loc.line, r.loc.col);
-    }
-    seen.set(r.name, "rule");
-  }
-  for (const sc of mod.scripts) {
-    const prev = seen.get(sc.name);
-    if (prev) {
-      fail(filePath, `duplicate name "${sc.name}" — rules, workflows, and scripts share a single namespace (already declared as ${prev})`, sc.loc.line, sc.loc.col);
-    }
-    seen.set(sc.name, "script");
-  }
-  for (const w of mod.workflows) {
-    const prev = seen.get(w.name);
-    if (prev) {
-      fail(filePath, `duplicate name "${w.name}" — rules, workflows, and scripts share a single namespace (already declared as ${prev})`, w.loc.line, w.loc.col);
-    }
-    seen.set(w.name, "workflow");
-  }
-  if (mod.envDecls) {
-    for (const env of mod.envDecls) {
-      const prev = seen.get(env.name);
-      if (prev) {
-        fail(filePath, `duplicate name "${env.name}" — variable name collides with ${prev} of the same name`, env.loc.line, env.loc.col);
-      }
-      seen.set(env.name, "const");
+      seen.set(name, kind);
     }
   }
 

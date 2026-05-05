@@ -58,17 +58,6 @@ test("fence tag with manual shebang is rejected", () => {
   );
 });
 
-// === Rejected: old script:lang syntax ===
-
-test("old script:lang syntax is rejected with actionable error", () => {
-  assert.throws(
-    () => parsejaiph("script:node transform = ```\nconsole.log('hi');\n```", "test.jh"),
-    (err: any) =>
-      err.message.includes("E_PARSE") &&
-      err.message.includes("script:lang syntax is no longer supported"),
-  );
-});
-
 // === Rejected: script:tag with parentheses ===
 
 test("script with parentheses is rejected", () => {

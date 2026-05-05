@@ -47,15 +47,6 @@ export function parseScriptBlock(
   const raw = lines[startIndex];
   const line = raw.trim();
 
-  // Reject old script:lang syntax
-  if (/^script:/.test(line)) {
-    fail(
-      filePath,
-      "script:lang syntax is no longer supported; use a fenced block with a lang tag: script name = ```lang",
-      lineNo,
-    );
-  }
-
   // Match: [export] script name = ...
   const match = line.match(/^(export\s+)?script\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
   if (!match) {
