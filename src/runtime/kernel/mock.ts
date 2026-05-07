@@ -1,52 +1,56 @@
 // Test-mode mock response and dispatch helpers.
 
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { execFileSync } from "node:child_process";
-
 /**
- * Read and consume the first line from the mock responses file.
- * Returns the line or null if empty/missing.
+ * Process-local queue of sequential prompt responses, populated from the JSON
+ * env var on first call and consumed in order. Re-seeds when the JSON changes
+ * (different test block / different workflow run).
  */
-export function readNextMockResponse(filePath: string): string | null {
-  if (!filePath || !existsSync(filePath)) {
-    process.stderr.write("jaiph: no mock for prompt (JAIPH_MOCK_RESPONSES_FILE missing or not a file)\n");
-    return null;
+let cachedResponsesJson = "";
+let responsesQueue: string[] = [];
+
+/** Take the next sequential mock response. Returns null when the queue is empty. */
+export function consumeNextMockResponse(json: string): string | null {
+  if (json !== cachedResponsesJson) {
+    cachedResponsesJson = json;
+    try {
+      responsesQueue = JSON.parse(json) as string[];
+    } catch {
+      process.stderr.write("jaiph: invalid JAIPH_MOCK_RESPONSES_JSON\n");
+      return null;
+    }
   }
-  const content = readFileSync(filePath, "utf8");
-  const lines = content.split("\n");
-  const firstLine = lines[0];
-  if (!firstLine) return null;
-  // Consume: write remaining lines back
-  const remaining = lines.slice(1).join("\n");
-  try {
-    writeFileSync(filePath, remaining, "utf8");
-  } catch {
-    // best-effort
-  }
-  return firstLine;
+  return responsesQueue.shift() ?? null;
 }
 
+/** Serialised arm form passed via JAIPH_MOCK_PROMPT_ARMS_JSON. */
+export type MockPromptArm =
+  | { kind: "string"; pattern: string; response: string }
+  | { kind: "regex"; pattern: string; response: string }
+  | { kind: "wildcard"; response: string };
+
 /**
- * Run the mock dispatch script with prompt text as $1.
- * Returns { response, status }.
+ * Match a prompt against the arms (in order), returning the first matching response.
+ * If no arm matches and no wildcard is present, returns status=1 with a clear stderr.
  */
-export function mockDispatch(
+export function dispatchMockArms(
   promptText: string,
-  scriptPath: string,
+  arms: MockPromptArm[],
 ): { response: string; status: number } {
-  if (!scriptPath || !existsSync(scriptPath)) {
-    process.stderr.write("jaiph: no mock for prompt (JAIPH_MOCK_DISPATCH_SCRIPT missing or not executable)\n");
-    return { response: "", status: 1 };
+  for (const arm of arms) {
+    if (arm.kind === "string") {
+      if (promptText === arm.pattern) return { response: arm.response, status: 0 };
+    } else if (arm.kind === "regex") {
+      try {
+        if (new RegExp(arm.pattern).test(promptText)) return { response: arm.response, status: 0 };
+      } catch {
+        // invalid regex — fall through to next arm
+      }
+    } else {
+      return { response: arm.response, status: 0 };
+    }
   }
-  try {
-    const result = execFileSync(scriptPath, [promptText], {
-      encoding: "utf8",
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    return { response: result, status: 0 };
-  } catch (err: unknown) {
-    const execErr = err as { status?: number; stderr?: string };
-    if (execErr.stderr) process.stderr.write(execErr.stderr);
-    return { response: "", status: execErr.status ?? 1 };
-  }
+  process.stderr.write(
+    `jaiph: no mock matched prompt (no branch matched). Prompt preview: ${promptText.slice(0, 80)}...\n`,
+  );
+  return { response: "", status: 1 };
 }

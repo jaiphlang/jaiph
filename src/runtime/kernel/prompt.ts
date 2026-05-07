@@ -4,7 +4,7 @@ import { spawn as nodeSpawn } from "node:child_process";
 import { writeFileSync, readFileSync, existsSync, accessSync, mkdirSync, cpSync, constants as fsConstants } from "node:fs";
 import { basename, delimiter, join } from "node:path";
 import { parseStream, type StreamWriter } from "./stream-parser";
-import { readNextMockResponse, mockDispatch } from "./mock";
+import { consumeNextMockResponse, dispatchMockArms, type MockPromptArm } from "./mock";
 
 export type PromptConfig = {
   backend: string;
@@ -508,9 +508,16 @@ export async function executePrompt(
 
   // Test mode: check mocks first
   if (isTestMode(execEnv)) {
-    const dispatchScript = execEnv.JAIPH_MOCK_DISPATCH_SCRIPT || "";
-    if (dispatchScript) {
-      const result = mockDispatch(promptText, dispatchScript);
+    const armsJson = execEnv.JAIPH_MOCK_PROMPT_ARMS_JSON || "";
+    if (armsJson) {
+      let arms: MockPromptArm[] = [];
+      try {
+        arms = JSON.parse(armsJson) as MockPromptArm[];
+      } catch {
+        stderr.write(`jaiph: invalid JAIPH_MOCK_PROMPT_ARMS_JSON\n`);
+        return { final: "", status: 1 };
+      }
+      const result = dispatchMockArms(promptText, arms);
       if (result.status === 0) {
         writeFinalFile(config.promptFinalFile, result.response);
         stdout.write(result.response);
@@ -521,9 +528,9 @@ export async function executePrompt(
       }
       return { final: "", status: result.status };
     }
-    const mockFile = execEnv.JAIPH_MOCK_RESPONSES_FILE || "";
-    if (mockFile) {
-      const mockResult = readNextMockResponse(mockFile);
+    const responsesJson = execEnv.JAIPH_MOCK_RESPONSES_JSON || "";
+    if (responsesJson) {
+      const mockResult = consumeNextMockResponse(responsesJson);
       if (mockResult !== null) {
         writeFinalFile(config.promptFinalFile, mockResult);
         stdout.write(mockResult);

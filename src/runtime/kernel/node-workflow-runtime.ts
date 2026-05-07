@@ -1017,17 +1017,22 @@ export class NodeWorkflowRuntime {
         };
         // Route to the nearest ancestor context that has a route for this channel.
         let targetCtx = ctx;
+        let routed = false;
         for (let i = this.workflowCtxStack.length - 1; i >= 0; i -= 1) {
           if (this.workflowCtxStack[i]!.routes.has(step.channel)) {
             targetCtx = this.workflowCtxStack[i]!;
+            routed = true;
             break;
           }
         }
         targetCtx.queue.push(msg);
-        // Persist inbox file to run directory.
-        const inboxFileDir = join(this.runDir, "inbox");
-        mkdirSync(inboxFileDir, { recursive: true });
-        writeFileSync(join(inboxFileDir, `${seqPadded}-${step.channel}.txt`), payload, "utf8");
+        // Persist inbox file only when a route consumes the channel — otherwise
+        // the file would be dead audit data with no corresponding dispatch.
+        if (routed) {
+          const inboxFileDir = join(this.runDir, "inbox");
+          mkdirSync(inboxFileDir, { recursive: true });
+          writeFileSync(join(inboxFileDir, `${seqPadded}-${step.channel}.txt`), payload, "utf8");
+        }
         appendRunSummaryLine(
           JSON.stringify({
             type: "INBOX_ENQUEUE",

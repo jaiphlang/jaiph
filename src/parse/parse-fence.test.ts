@@ -68,28 +68,27 @@ test("fence: error on text after opening backticks that isn't single token", () 
   );
 });
 
-test("fence: error on invalid content on closing fence line", () => {
+test("fence: trailing content on closing fence is returned via afterClose", () => {
   const lines = ["```", "body", "``` extra"];
-  assert.throws(
-    () => parseFencedBlock("test.jh", lines, 0),
-    /closing fence must be exactly/,
-  );
+  const result = parseFencedBlock("test.jh", lines, 0);
+  assert.equal(result.body, "body");
+  assert.equal(result.afterClose, " extra");
 });
 
 test("fence: closing line may include returns schema on same line as ```", () => {
   const lines = ['```', "body", '``` returns "{ role: string }"'];
   const result = parseFencedBlock("test.jh", lines, 0);
   assert.equal(result.body, "body");
-  assert.equal(result.returns, "{ role: string }");
+  assert.equal(result.afterClose, ' returns "{ role: string }"');
   assert.equal(result.nextIdx, 3);
 });
 
-test("fence: same-line returns with lang on opening fence", () => {
-  const lines = ["```text", "x", '``` returns "{ n: number }"'];
+test("fence: same-line trailing content with lang on opening fence", () => {
+  const lines = ["```text", "x", '``` (args)'];
   const result = parseFencedBlock("test.jh", lines, 0);
   assert.equal(result.body, "x");
   assert.equal(result.lang, "text");
-  assert.equal(result.returns, "{ n: number }");
+  assert.equal(result.afterClose, ' (args)');
 });
 
 test("fence: closing fence with surrounding whitespace is accepted", () => {

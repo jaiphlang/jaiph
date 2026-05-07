@@ -80,14 +80,13 @@ test("NodeWorkflowRuntime: prompt step preview preserves authored ${var} placeho
         "",
       ].join("\n"),
     );
-    const mockFile = join(root, "mocks.txt");
-    writeFileSync(mockFile, "ok\n");
+    const mockJson = JSON.stringify(["ok"]);
 
     const graph = buildRuntimeGraph(jh);
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       JAIPH_TEST_MODE: "1",
-      JAIPH_MOCK_RESPONSES_FILE: mockFile,
+      JAIPH_MOCK_RESPONSES_JSON: mockJson,
       JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
     };
     const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });
@@ -135,14 +134,13 @@ test("NodeWorkflowRuntime: workflow step .out accumulates Command:/Prompt: and l
         "",
       ].join("\n"),
     );
-    const mockFile = join(root, "mocks.txt");
-    writeFileSync(mockFile, "mocked-agent-reply\n");
+    const mockJson = JSON.stringify(["mocked-agent-reply"]);
 
     const graph = buildRuntimeGraph(jh);
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       JAIPH_TEST_MODE: "1",
-      JAIPH_MOCK_RESPONSES_FILE: mockFile,
+      JAIPH_MOCK_RESPONSES_JSON: mockJson,
       JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
     };
     const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });
@@ -527,15 +525,14 @@ test("NodeWorkflowRuntime: prompt STEP_START params include named vars reference
         "",
       ].join("\n"),
     );
-    const mockFile = join(root, "mocks.txt");
-    writeFileSync(mockFile, "analysis-done\n");
+    const mockJson = JSON.stringify(["analysis-done"]);
 
     const runsDir = join(root, ".jaiph", "runs");
     const graph = buildRuntimeGraph(jh);
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       JAIPH_TEST_MODE: "1",
-      JAIPH_MOCK_RESPONSES_FILE: mockFile,
+      JAIPH_MOCK_RESPONSES_JSON: mockJson,
       JAIPH_RUNS_DIR: runsDir,
     };
     const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });
@@ -630,14 +627,13 @@ test("NodeWorkflowRuntime: heartbeat file created at construction, removed on st
   try {
     const jh = join(root, "heartbeat.jh");
     writeFileSync(jh, 'workflow default() {\n  log "ok"\n}\n');
-    const mockFile = join(root, "mocks.txt");
-    writeFileSync(mockFile, "");
+    const mockJson = JSON.stringify([""]);
 
     const graph = buildRuntimeGraph(jh);
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       JAIPH_TEST_MODE: "1",
-      JAIPH_MOCK_RESPONSES_FILE: mockFile,
+      JAIPH_MOCK_RESPONSES_JSON: mockJson,
       JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
     };
     const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });

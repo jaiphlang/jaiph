@@ -57,3 +57,21 @@ function joinTripleQuoteBody(bodyLines: string[]): string {
 export function tripleQuoteBodyToRaw(body: string): string {
   return `"${body.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
+
+/**
+ * Helper for step parsers: when a step argument starts with `"""`, splice it back
+ * onto the source line and parse the triple-quoted block. Errors if any content
+ * trails the closing `"""`. Returns the message body and the next source index.
+ */
+export function consumeTripleQuotedArg(
+  filePath: string,
+  lines: string[],
+  idx: number,
+  arg: string,
+): { body: string; nextIdx: number } {
+  const tqLines = [...lines];
+  tqLines[idx] = arg;
+  const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, idx);
+  if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
+  return { body, nextIdx };
+}

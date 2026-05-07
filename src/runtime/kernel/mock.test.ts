@@ -1,92 +1,76 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
+import { describe, it } from "node:test";
 import * as assert from "node:assert/strict";
-import { readFileSync, writeFileSync, unlinkSync, mkdirSync, chmodSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { readNextMockResponse, mockDispatch } from "./mock";
+import { consumeNextMockResponse, dispatchMockArms } from "./mock";
 
-function tmpFile(name: string): string {
-  const dir = join(tmpdir(), `jaiph-mock-test-${process.pid}`);
-  try { mkdirSync(dir, { recursive: true }); } catch { /* exists */ }
-  return join(dir, name);
-}
-
-describe("readNextMockResponse", () => {
-  let mockFile: string;
-
-  beforeEach(() => {
-    mockFile = tmpFile("mock-responses.txt");
+describe("consumeNextMockResponse", () => {
+  it("returns responses in order, then null when exhausted", () => {
+    const json = JSON.stringify(["first", "second", "third"]);
+    assert.equal(consumeNextMockResponse(json), "first");
+    assert.equal(consumeNextMockResponse(json), "second");
+    assert.equal(consumeNextMockResponse(json), "third");
+    assert.equal(consumeNextMockResponse(json), null);
   });
 
-  afterEach(() => {
-    try { unlinkSync(mockFile); } catch { /* ok */ }
+  it("re-seeds when JSON changes", () => {
+    consumeNextMockResponse(JSON.stringify(["a"]));
+    const result = consumeNextMockResponse(JSON.stringify(["b", "c"]));
+    assert.equal(result, "b");
   });
 
-  it("reads and consumes first line", () => {
-    writeFileSync(mockFile, "first\nsecond\nthird\n", "utf8");
-    const result = readNextMockResponse(mockFile);
-    assert.equal(result, "first");
-    const remaining = readFileSync(mockFile, "utf8");
-    assert.equal(remaining, "second\nthird\n");
-  });
-
-  it("returns null when file is empty", () => {
-    writeFileSync(mockFile, "", "utf8");
-    const result = readNextMockResponse(mockFile);
-    assert.equal(result, null);
-  });
-
-  it("returns null for missing file", () => {
+  it("returns null on invalid JSON", () => {
     const origWrite = process.stderr.write;
     process.stderr.write = (() => true) as typeof process.stderr.write;
-    const result = readNextMockResponse("/nonexistent/path");
+    const result = consumeNextMockResponse("not-json");
     process.stderr.write = origWrite;
     assert.equal(result, null);
-  });
-
-  it("handles single-line file", () => {
-    writeFileSync(mockFile, "only-line\n", "utf8");
-    const result = readNextMockResponse(mockFile);
-    assert.equal(result, "only-line");
   });
 });
 
-describe("mockDispatch", () => {
-  let scriptPath: string;
-
-  beforeEach(() => {
-    scriptPath = tmpFile("dispatch.sh");
-  });
-
-  afterEach(() => {
-    try { unlinkSync(scriptPath); } catch { /* ok */ }
-  });
-
-  it("runs script and returns stdout", () => {
-    writeFileSync(scriptPath, '#!/bin/bash\necho "mock-response"', { mode: 0o755 });
-    const result = mockDispatch("test prompt", scriptPath);
+describe("dispatchMockArms", () => {
+  it("matches a string-literal arm exactly", () => {
+    const result = dispatchMockArms("hello", [
+      { kind: "string", pattern: "hello", response: "world" },
+      { kind: "wildcard", response: "fallback" },
+    ]);
     assert.equal(result.status, 0);
-    assert.equal(result.response.trim(), "mock-response");
+    assert.equal(result.response, "world");
   });
 
-  it("returns non-zero status on script failure", () => {
-    writeFileSync(scriptPath, "#!/bin/bash\nexit 1", { mode: 0o755 });
-    const result = mockDispatch("test prompt", scriptPath);
-    assert.equal(result.status, 1);
+  it("matches a regex arm when pattern matches", () => {
+    const result = dispatchMockArms("foo-123", [
+      { kind: "regex", pattern: "^foo-\\d+$", response: "matched" },
+      { kind: "wildcard", response: "fallback" },
+    ]);
+    assert.equal(result.status, 0);
+    assert.equal(result.response, "matched");
   });
 
-  it("returns status 1 for missing script", () => {
+  it("falls through to wildcard when no other arm matches", () => {
+    const result = dispatchMockArms("anything", [
+      { kind: "string", pattern: "specific", response: "no" },
+      { kind: "wildcard", response: "default" },
+    ]);
+    assert.equal(result.status, 0);
+    assert.equal(result.response, "default");
+  });
+
+  it("returns status 1 with no match and no wildcard", () => {
     const origWrite = process.stderr.write;
     process.stderr.write = (() => true) as typeof process.stderr.write;
-    const result = mockDispatch("test", "/nonexistent/script");
+    const result = dispatchMockArms("nothing matches", [
+      { kind: "string", pattern: "foo", response: "x" },
+    ]);
     process.stderr.write = origWrite;
     assert.equal(result.status, 1);
+    assert.equal(result.response, "");
   });
 
-  it("passes prompt text as first argument", () => {
-    writeFileSync(scriptPath, '#!/bin/bash\nprintf "%s" "$1"', { mode: 0o755 });
-    const result = mockDispatch("hello world", scriptPath);
+  it("first matching arm wins", () => {
+    const result = dispatchMockArms("hello", [
+      { kind: "regex", pattern: "^h", response: "first" },
+      { kind: "regex", pattern: "lo$", response: "second" },
+    ]);
     assert.equal(result.status, 0);
-    assert.equal(result.response, "hello world");
+    assert.equal(result.response, "first");
   });
 });

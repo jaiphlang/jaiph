@@ -1,5 +1,5 @@
 import type { ScriptDef } from "../types";
-import { fail } from "./core";
+import { fail, parseSingleBacktickBody } from "./core";
 import { parseFencedBlock } from "./fence";
 
 /**
@@ -85,10 +85,10 @@ export function parseScriptBlock(
   if (rhs.startsWith("```")) {
     const fenceLines = [...lines];
     fenceLines[startIndex] = rhs;
-    const { body, lang, nextIdx, returns } = parseFencedBlock(filePath, fenceLines, startIndex);
+    const { body, lang, nextIdx, afterClose } = parseFencedBlock(filePath, fenceLines, startIndex);
 
-    if (returns) {
-      fail(filePath, 'script definitions do not support "returns" on the closing fence', lineNo);
+    if (afterClose.trim()) {
+      fail(filePath, `unexpected content after closing fence: '${afterClose.trim()}'`, lineNo);
     }
 
     // Check for both fence tag and manual shebang
@@ -116,15 +116,8 @@ export function parseScriptBlock(
 
   // Case 2: Single backtick — inline one-line script body
   if (rhs.startsWith("`")) {
-    const closeIdx = rhs.indexOf("`", 1);
-    if (closeIdx === -1) {
-      fail(filePath, "unterminated inline script backtick — missing closing `", lineNo);
-    }
-    const body = rhs.slice(1, closeIdx);
-    if (body.includes("\n")) {
-      fail(filePath, "single backtick script body must be one line — use triple backtick for multiline", lineNo);
-    }
-    const trailing = rhs.slice(closeIdx + 1).trim();
+    const { body, restAfterClose } = parseSingleBacktickBody(rhs, filePath, lineNo, 1);
+    const trailing = restAfterClose.trim();
     if (trailing) {
       fail(filePath, `unexpected content after script body backtick: '${trailing}'`, lineNo);
     }

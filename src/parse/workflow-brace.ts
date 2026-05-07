@@ -9,7 +9,7 @@ import {
   parseLogMessageRhs,
   rejectTrailingContent,
 } from "./core";
-import { parseTripleQuoteBlock, tripleQuoteBodyToRaw } from "./triple-quote";
+import { consumeTripleQuotedArg, tripleQuoteBodyToRaw } from "./triple-quote";
 import { parseConstRhs } from "./const-rhs";
 import { parseAnonymousInlineScript } from "./inline-script";
 import { parseConfigBlock } from "./metadata";
@@ -18,12 +18,6 @@ import { parsePromptStep } from "./prompt";
 import { parseSendRhs } from "./send-rhs";
 import { parseMatchExpr } from "./match";
 import { dottedReturnToQuotedString, isBareDottedIdentifierReturn, isBareIdentifierReturn, bareIdentifierToQuotedString } from "./workflow-return-dotted";
-import {
-  expandBlockLineStatements,
-  findClosingBraceIndex,
-  shouldApplySemicolonStatementSplit,
-  shouldSkipSemicolonSplitForLine,
-} from "./statement-split";
 
 export type BlockParseOpts = {
   forRule?: boolean;
@@ -93,31 +87,6 @@ export function parseBraceBlockBody(
         `route declarations belong at the top level: channel ${routeMatch[1]} -> ${routeMatch[2].trim()}`,
         innerNo,
       );
-    }
-    if (!shouldSkipSemicolonSplitForLine(innerRaw)) {
-      const expanded = expandBlockLineStatements(innerRaw);
-      if (shouldApplySemicolonStatementSplit(expanded) && expanded.length > 1) {
-        for (const chunk of expanded) {
-          const t = chunk.trim();
-          if (!t) continue;
-          if (t.startsWith("#")) {
-            steps.push({ type: "comment", text: t, loc: { line: innerNo, col: 1 } });
-            continue;
-          }
-          if (/^config\s*\{/.test(t)) {
-            fail(
-              filePath,
-              "config must be the first workflow step; it cannot appear after semicolon-separated steps on the same line",
-              innerNo,
-            );
-          }
-          hadNonCommentStep = true;
-          const one = parseBlockStatement(filePath, [t], 0, opts);
-          steps.push(one.step);
-        }
-        idx += 1;
-        continue;
-      }
     }
     hadNonCommentStep = true;
     const one = parseBlockStatement(filePath, lines, idx, opts);
@@ -210,10 +179,7 @@ export function parseBlockStatement(
     const arg = inner.slice("fail".length).trimStart();
     const failCol = innerRaw.indexOf("fail") + 1;
     if (arg.startsWith('"""')) {
-      const tqLines = [...lines];
-      tqLines[idx] = arg;
-      const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, idx);
-      if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
+      const { body, nextIdx } = consumeTripleQuotedArg(filePath, lines, idx, arg);
       const message = tripleQuoteBodyToRaw(body);
       return {
         step: { type: "fail", message, tripleQuoted: true, loc: { line: innerNo, col: failCol } },
@@ -404,10 +370,7 @@ export function parseBlockStatement(
       fail(filePath, 'bare inline scripts in log are not allowed; use "log run `...`()" to execute a managed inline script', innerNo, logCol);
     }
     if (logArg.startsWith('"""')) {
-      const tqLines = [...lines];
-      tqLines[idx] = logArg;
-      const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, idx);
-      if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
+      const { body, nextIdx } = consumeTripleQuotedArg(filePath, lines, idx, logArg);
       return { step: { type: "log", message: body, tripleQuoted: true, loc: { line: innerNo, col: logCol } }, nextIdx };
     }
     if (logArg.startsWith('"') && !hasUnescapedClosingQuote(logArg, 1)) {
@@ -443,10 +406,7 @@ export function parseBlockStatement(
       fail(filePath, 'bare inline scripts in logerr are not allowed; use "logerr run `...`()" to execute a managed inline script', innerNo, logerrCol);
     }
     if (logerrArg.startsWith('"""')) {
-      const tqLines = [...lines];
-      tqLines[idx] = logerrArg;
-      const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, idx);
-      if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
+      const { body, nextIdx } = consumeTripleQuotedArg(filePath, lines, idx, logerrArg);
       return { step: { type: "logerr", message: body, tripleQuoted: true, loc: { line: innerNo, col: logerrCol } }, nextIdx };
     }
     if (logerrArg.startsWith('"') && !hasUnescapedClosingQuote(logerrArg, 1)) {
@@ -473,10 +433,7 @@ export function parseBlockStatement(
     const retLoc = { line: innerNo, col: innerRaw.indexOf("return") + 1 };
     // return """..."""
     if (returnValue.startsWith('"""')) {
-      const tqLines = [...lines];
-      tqLines[idx] = returnValue;
-      const { body, nextIdx, afterClose } = parseTripleQuoteBlock(filePath, tqLines, idx);
-      if (afterClose) fail(filePath, 'unexpected content after closing """', nextIdx);
+      const { body, nextIdx } = consumeTripleQuotedArg(filePath, lines, idx, returnValue);
       return {
         step: { type: "return", value: tripleQuoteBodyToRaw(body), tripleQuoted: true, loc: retLoc },
         nextIdx,

@@ -34,10 +34,10 @@ deleted before the audit work began; visible in `git status` at session start).
 - [x] B2. Move `rejectTrailingContent` to `parse/core.ts`
 - [x] B3. One bare-identifier helper (delete `workflow-return-dotted.ts`)
 - [x] B4. Single import-line helper
-- [ ] B5. Drop inline `config { … }` form
-- [ ] B6. Single backtick-body helper
-- [ ] B7. Make `parseFencedBlock` return afterClose; reuse for inline-script
-- [ ] B8. Extract `consumeTripleQuotedArg`
+- [x] B5. Drop inline `config { … }` form
+- [x] B6. Single backtick-body helper
+- [x] B7. Make `parseFencedBlock` return afterClose; reuse for inline-script
+- [x] B8. Extract `consumeTripleQuotedArg`
 - [ ] B9. Single `parseValueExpression`
 - [x] B10. Extract `runRecoverBody` (consolidate 5 recovery dances; conservative — kept per-site propagation)
 - [x] B11. Merge two prompt-step blocks (also fixed missing per-field schema export in const-prompt path)
@@ -48,25 +48,25 @@ deleted before the audit work began; visible in `git status` at session start).
 ## C. Inconsistencies / bugs
 
 - [x] C1. Replace `includes("rule ")` etc. with strict regex in parser.ts dispatch
-- [ ] C2. Move test-block file-suffix check to validation
+- [ ] C2. (defer — small) Move test-block file-suffix check to validation
 - [x] C3. Reject `return 0` / `return $?` / `return INTEGER` in workflows/rules
 - [x] C4. `executeScript` returnValue only when status === 0
 - [x] C5. Async-branch recovery propagates `recoverReturn`
-- [ ] C6. Move mock-response queue in-memory (delete file IO race)
-- [ ] C7. Rename AST `recover` → `catch`, `recoverLoop` → `recover`
+- [x] C6. Move mock-response queue in-memory (delete file IO race)
+- [—] C7. Deferred — sed-based rename was over-aggressive (caught source-keyword strings); needs hand-edit Rename AST `recover` → `catch`, `recoverLoop` → `recover`
 - [—] C8. Deferred — would emit `__JAIPH_EVENT__` lines on stderr in in-process test runner; behaviour change too risky for this pass Remove `JAIPH_TEST_MODE` event suppression in production code
-- [ ] C9. Inbox files: write only when routed (or document audit-only)
-- [ ] C10. Pick one capture-write strategy in `executeShLine`
-- [ ] C11. Unify parser error-message phrasing
-- [ ] C12. Reject standalone `match` step in validator
-- [ ] C13. Move `couldStartRegexLiteralAt` into `match.ts`
+- [x] C9. Inbox files: write only when routed (or document audit-only)
+- [ ] C10. (defer — needs behaviour decision on stream-vs-final write) Pick one capture-write strategy in `executeShLine`
+- [—] C11. Skipped — tests reference exact phrasing; cosmetic gain not worth churn Unify parser error-message phrasing
+- [—] C12. Skipped — standalone `match` is idiomatic for dispatch (e2e tests use it) Reject standalone `match` step in validator
+- [—] C13. Skipped — `allowRegexLiteral` flag is well-contained; moving needs duplication Move `couldStartRegexLiteralAt` into `match.ts`
 - [x] C14. Replace `executeMockShellBody` tempfile with `bash -c`
-- [ ] C15. Replace `writeMockDispatchScript` bash with in-process JS
+- [x] C15. Replace `writeMockDispatchScript` bash with in-process JS
 
 ## D. Features to remove
 
-- [ ] D1. Drop inline single-line workflow/rule body
-- [ ] D2. Drop semicolon-as-statement-separator inside Jaiph blocks
+- [x] D1. Drop inline single-line workflow/rule body
+- [x] D2. Drop semicolon-as-statement-separator inside Jaiph blocks
 - [ ] D3. Drop `mock prompt { arms }` block form
 - [ ] D4. Drop multi-line/continuation `returns` schema
 - [ ] D5. Drop bare-identifier prompt body (`prompt myVar`)

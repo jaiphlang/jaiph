@@ -287,28 +287,6 @@ function emitScript(script: ScriptDef, _pad: string, exported: boolean): string 
   return lines.join("\n");
 }
 
-/** Single-line `config { agent.backend = "…" }` when that is the only workflow metadata field. */
-function emitCompactInlineWorkflowConfig(meta: WorkflowMetadata): string | null {
-  if (meta.run !== undefined || meta.runtime !== undefined) return null;
-  const seq = meta.configBodySequence;
-  if (seq?.length) {
-    if (seq.length !== 1 || seq[0].kind !== "assign" || seq[0].key !== "agent.backend") {
-      return null;
-    }
-  }
-  if (!meta.agent) return null;
-  const a = meta.agent;
-  const fieldCount =
-    (a.defaultModel !== undefined ? 1 : 0) +
-    (a.command !== undefined ? 1 : 0) +
-    (a.backend !== undefined ? 1 : 0) +
-    (a.trustedWorkspace !== undefined ? 1 : 0) +
-    (a.cursorFlags !== undefined ? 1 : 0) +
-    (a.claudeFlags !== undefined ? 1 : 0);
-  if (fieldCount !== 1 || a.backend === undefined) return null;
-  return `config { agent.backend = "${a.backend}" }`;
-}
-
 function emitWorkflow(wf: WorkflowDef, pad: string, exported: boolean): string {
   const lines: string[] = [];
   lines.push(...emitComments(wf.comments));
@@ -318,14 +296,9 @@ function emitWorkflow(wf: WorkflowDef, pad: string, exported: boolean): string {
   lines.push(`${prefix}workflow ${wf.name}${paramStr} {`);
 
   if (wf.metadata) {
-    const compact = emitCompactInlineWorkflowConfig(wf.metadata);
-    if (compact) {
-      lines.push(`${pad}${compact}`);
-    } else {
-      const configLines = emitConfig(wf.metadata, pad);
-      for (const cl of configLines.split("\n")) {
-        lines.push(`${pad}${cl}`);
-      }
+    const configLines = emitConfig(wf.metadata, pad);
+    for (const cl of configLines.split("\n")) {
+      lines.push(`${pad}${cl}`);
     }
   }
 

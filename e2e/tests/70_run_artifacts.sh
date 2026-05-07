@@ -77,12 +77,10 @@ workflow default() {
 }
 EOF
 rm -rf "${TEST_DIR}/runs_prompt_script"
-mock_resp="${TEST_DIR}/mock_prompt_once.txt"
-printf '%s\n' "mock-final-line" >"${mock_resp}"
 
 JAIPH_RUNS_DIR="${TEST_DIR}/runs_prompt_script" \
   JAIPH_TEST_MODE=1 \
-  JAIPH_MOCK_RESPONSES_FILE="${mock_resp}" \
+  JAIPH_MOCK_RESPONSES_JSON='["mock-final-line"]' \
   jaiph run "${TEST_DIR}/prompt_then_script.jh" >/dev/null
 
 run_dir_ps="$(e2e::run_dir_at "${TEST_DIR}/runs_prompt_script" "prompt_then_script.jh")"
