@@ -43,6 +43,28 @@ export function colFromRaw(raw: string): number {
   return (raw.match(/\S/)?.index ?? 0) + 1;
 }
 
+/**
+ * Parse a single-backtick body `…` from the start of `text`.
+ * Errors if missing closing backtick or if the body spans multiple lines.
+ * Returns the body and the text remaining after the closing backtick.
+ */
+export function parseSingleBacktickBody(
+  text: string,
+  filePath: string,
+  lineNo: number,
+  col: number,
+): { body: string; restAfterClose: string } {
+  const closeIdx = text.indexOf("`", 1);
+  if (closeIdx === -1) {
+    fail(filePath, "unterminated inline script backtick — missing closing `", lineNo, col);
+  }
+  const body = text.slice(1, closeIdx);
+  if (body.includes("\n")) {
+    fail(filePath, "single backtick script body must be one line — use triple backtick for multiline", lineNo, col);
+  }
+  return { body, restAfterClose: text.slice(closeIdx + 1) };
+}
+
 /** Reject non-empty trailing content after a call expression (e.g. shell redirection). */
 export function rejectTrailingContent(
   filePath: string,

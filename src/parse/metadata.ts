@@ -1,6 +1,5 @@
 import type { ConfigBodyPart, WorkflowMetadata } from "../types";
 import { colFromRaw, fail } from "./core";
-import { findClosingBraceIndex, splitStatementsOnSemicolons } from "./statement-split";
 
 const ALLOWED_KEYS = new Set([
   "agent.default_model",
@@ -184,66 +183,6 @@ export function parseConfigBlock(
   const openLineNo = startIndex + 1;
   const rawOpen = lines[startIndex];
   const lineOpen = rawOpen.trim();
-
-  if (!lineOpen.startsWith("config") || !lineOpen.includes("{")) {
-    return fail(filePath, "expected config block: config {", openLineNo, colFromRaw(rawOpen));
-  }
-
-  const openBraceIdx = rawOpen.indexOf("{");
-  const closeIdx = findClosingBraceIndex(rawOpen, openBraceIdx);
-  if (closeIdx !== -1) {
-    const tail = rawOpen.slice(closeIdx + 1).trim();
-    if (tail !== "") {
-      return fail(filePath, "unexpected content after closing '}' of config block", openLineNo, colFromRaw(rawOpen));
-    }
-    const inner = rawOpen.slice(openBraceIdx + 1, closeIdx);
-    const out: WorkflowMetadata = {};
-    const bodySequence: ConfigBodyPart[] = [];
-    const assignmentLines = splitStatementsOnSemicolons(inner);
-    for (const assignRaw of assignmentLines) {
-      const line = assignRaw.trim();
-      if (!line) {
-        continue;
-      }
-      if (line.startsWith("#")) {
-        bodySequence.push({ kind: "comment", text: line });
-        continue;
-      }
-      const eq = line.indexOf("=");
-      if (eq === -1) {
-        return fail(filePath, `config line must be key = value: ${line}`, openLineNo, colFromRaw(rawOpen));
-      }
-      const key = line.slice(0, eq).trim();
-      const valuePart = line.slice(eq + 1);
-
-      if (!ALLOWED_KEYS.has(key)) {
-        return fail(
-          filePath,
-          `unknown config key: ${key}. Allowed: ${[...ALLOWED_KEYS].join(", ")}`,
-          openLineNo,
-          colFromRaw(rawOpen),
-        );
-      }
-
-      let value: string | boolean | number | string[];
-      const trimmedValue = valuePart.trim();
-      if (trimmedValue === "[") {
-        return fail(
-          filePath,
-          "multiline config arrays require a multiline config { … } block (opening 'config {' alone on its own line)",
-          openLineNo,
-          colFromRaw(rawOpen),
-        );
-      }
-      value = parseMetadataValue(filePath, rawOpen, valuePart, openLineNo);
-      assignConfigKey(filePath, out, key, value, openLineNo, rawOpen);
-      bodySequence.push({ kind: "assign", key });
-    }
-    if (bodySequence.length > 0) {
-      out.configBodySequence = bodySequence;
-    }
-    return { metadata: out, nextIndex: startIndex + 1 };
-  }
 
   if (!/^config\s*\{\s*$/.test(lineOpen)) {
     return fail(filePath, "config block must be exactly 'config {' on its own line", openLineNo, colFromRaw(rawOpen));

@@ -1,8 +1,9 @@
-import { mkdtempSync, writeFileSync, chmodSync, rmSync, readdirSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { buildRuntimeGraph, resolveWorkflowRef, resolveRuleRef, resolveScriptRef, type RuntimeGraph } from "./graph";
 import { NodeWorkflowRuntime, type MockBodyDef } from "./node-workflow-runtime";
+import type { MockPromptArm } from "./mock";
 import type { TestBlockDef, TestStepDef } from "../../types";
 
 type TestResult = { pass: boolean; error?: string };
@@ -64,38 +65,19 @@ function resolveMockBodies(
   return bodies;
 }
 
-function writeMockDispatchScript(
+function buildMockArms(
   step: Extract<TestStepDef, { type: "test_mock_prompt_block" }>,
-  dir: string,
-): string {
-  const escSh = (s: string): string => s.replace(/'/g, "'\\''");
-  const lines: string[] = ["#!/usr/bin/env bash", "set -euo pipefail", 'prompt="${1:-}"'];
-  let first = true;
-  for (const arm of step.arms) {
-    const cond = first ? "if" : "elif";
-    first = false;
-    if (arm.pattern.kind === "string_literal") {
-      lines.push(`${cond} [[ "$prompt" == '${escSh(arm.pattern.value)}' ]]; then`);
-    } else if (arm.pattern.kind === "regex") {
-      lines.push(`${cond} [[ "$prompt" =~ ${arm.pattern.source} ]]; then`);
-    } else {
-      // wildcard — always matches; emit as else
-      lines.push("else");
-    }
-    const response = arm.body.replace(/^["']|["']$/g, "").replace(/\\"/g, '"').replace(/\\n/g, "\n").replace(/\\\\/g, "\\");
-    lines.push(`  printf '%s' '${escSh(response)}'`);
-  }
-  // If no wildcard arm, add a fallback that errors
-  if (!step.arms.some((a) => a.pattern.kind === "wildcard")) {
-    lines.push("else");
-    lines.push('  echo "jaiph: no mock matched prompt (no branch matched). Prompt preview: ${prompt:0:80}..." >&2');
-    lines.push("  exit 1");
-  }
-  lines.push("fi");
-  const scriptPath = join(dir, "mock_dispatch.sh");
-  writeFileSync(scriptPath, lines.join("\n") + "\n");
-  chmodSync(scriptPath, 0o755);
-  return scriptPath;
+): MockPromptArm[] {
+  return step.arms.map((arm): MockPromptArm => {
+    const response = arm.body
+      .replace(/^["']|["']$/g, "")
+      .replace(/\\"/g, '"')
+      .replace(/\\n/g, "\n")
+      .replace(/\\\\/g, "\\");
+    if (arm.pattern.kind === "string_literal") return { kind: "string", pattern: arm.pattern.value, response };
+    if (arm.pattern.kind === "regex") return { kind: "regex", pattern: arm.pattern.source, response };
+    return { kind: "wildcard", response };
+  });
 }
 
 async function runTestBlock(
@@ -108,7 +90,7 @@ async function runTestBlock(
   const tmpDir = mkdtempSync(join(tmpdir(), "jaiph-test-block-"));
   try {
     const mockResponses: string[] = [];
-    let mockDispatchPath = "";
+    let mockArmsJson = "";
     const mockRefs: Array<Extract<TestStepDef, { type: "test_mock_workflow" | "test_mock_rule" | "test_mock_script" }>> = [];
     const vars = new Map<string, string>();
 
@@ -136,19 +118,17 @@ async function runTestBlock(
         }
       }
       if (step.type === "test_mock_prompt_block") {
-        mockDispatchPath = writeMockDispatchScript(step, tmpDir);
+        mockArmsJson = JSON.stringify(buildMockArms(step));
       }
       if (step.type === "test_mock_workflow" || step.type === "test_mock_rule" || step.type === "test_mock_script") {
         mockRefs.push(step);
       }
     }
 
-    // Set up mock responses file
-    let mockResponsesFile = "";
-    if (mockResponses.length > 0 && !mockDispatchPath) {
-      mockResponsesFile = join(tmpDir, "mock_responses.txt");
-      writeFileSync(mockResponsesFile, mockResponses.join("\n") + "\n");
-    }
+    // Encode sequential mock responses as JSON for the in-process runtime queue.
+    const mockResponsesJson = mockResponses.length > 0 && !mockArmsJson
+      ? JSON.stringify(mockResponses)
+      : "";
 
     // Execute test steps
     for (const step of block.steps) {
@@ -171,12 +151,12 @@ async function runTestBlock(
           JAIPH_RUNS_DIR: join(tmpDir, ".jaiph", "runs"),
           JAIPH_SCRIPTS: scriptsDir,
         };
-        if (mockDispatchPath) {
-          env.JAIPH_MOCK_DISPATCH_SCRIPT = mockDispatchPath;
-          delete env.JAIPH_MOCK_RESPONSES_FILE;
-        } else if (mockResponsesFile) {
-          env.JAIPH_MOCK_RESPONSES_FILE = mockResponsesFile;
-          delete env.JAIPH_MOCK_DISPATCH_SCRIPT;
+        if (mockArmsJson) {
+          env.JAIPH_MOCK_PROMPT_ARMS_JSON = mockArmsJson;
+          delete env.JAIPH_MOCK_RESPONSES_JSON;
+        } else if (mockResponsesJson) {
+          env.JAIPH_MOCK_RESPONSES_JSON = mockResponsesJson;
+          delete env.JAIPH_MOCK_PROMPT_ARMS_JSON;
         }
         const runtime = new NodeWorkflowRuntime(graph, {
           env,
