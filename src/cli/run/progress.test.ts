@@ -419,7 +419,7 @@ test("collectWorkflowChildren: run step with single catch includes recovery item
         {
           type: "run",
           workflow: { value: "deploy", loc: { line: 2, col: 3 } },
-          recover: {
+          catch: {
             single: { type: "log", message: "recovering", loc: { line: 3, col: 5 } },
             bindings: { failure: "err" },
           },
@@ -444,7 +444,7 @@ test("collectWorkflowChildren: run step with block catch includes all recovery i
         {
           type: "run",
           workflow: { value: "deploy", loc: { line: 2, col: 3 } },
-          recover: {
+          catch: {
             block: [
               { type: "log", message: "retrying", loc: { line: 3, col: 5 } },
               { type: "run", workflow: { value: "fallback", loc: { line: 4, col: 5 } } },
@@ -473,7 +473,7 @@ test("collectWorkflowChildren: ensure step with single catch includes recovery i
         {
           type: "ensure",
           ref: { value: "check", loc: { line: 2, col: 3 } },
-          recover: {
+          catch: {
             single: { type: "run", workflow: { value: "fix_it", loc: { line: 3, col: 5 } } },
             bindings: { failure: "err" },
           },
@@ -498,7 +498,7 @@ test("collectWorkflowChildren: ensure step with block catch includes all recover
         {
           type: "ensure",
           ref: { value: "check", loc: { line: 2, col: 3 } },
-          recover: {
+          catch: {
             block: [
               { type: "log", message: "check failed", loc: { line: 3, col: 5 } },
               { type: "fail", message: "unrecoverable", loc: { line: 4, col: 5 } },
@@ -1467,7 +1467,7 @@ test("buildRunTreeRows: run with catch block shows recovery steps in tree", () =
           {
             type: "run",
             workflow: { value: "risky", loc: { line: 2, col: 3 } },
-            recover: {
+            catch: {
               bindings: { failure: "err" },
               block: [
                 { type: "log", message: "recovering", loc: { line: 4, col: 5 } },

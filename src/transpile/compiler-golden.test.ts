@@ -345,9 +345,9 @@ test("parser: run ... catch parses correctly", () => {
   const step = mod.workflows[0].steps[0];
   assert.equal(step.type, "run");
   if (step.type === "run") {
-    assert.ok(step.recover);
-    assert.equal(step.recover!.bindings.failure, "err");
-    const recoverSteps = "block" in step.recover! ? step.recover!.block : [step.recover!.single];
+    assert.ok(step.catch);
+    assert.equal(step.catch!.bindings.failure, "err");
+    const recoverSteps = "block" in step.catch! ? step.catch!.block : [step.catch!.single];
     assert.equal(recoverSteps.length, 1);
     assert.equal(recoverSteps[0].type, "log");
   }

@@ -20,7 +20,7 @@ import {
 
 const MAX_EMBED = 1024 * 1024;
 const MAX_RECURSION_DEPTH = 256;
-type EnsureRecover = Extract<WorkflowStepDef, { type: "ensure" }>["recover"];
+type EnsureRecover = Extract<WorkflowStepDef, { type: "ensure" }>["catch"];
 
 const HANDLE_PREFIX = "__JAIPH_HANDLE__";
 
@@ -1130,16 +1130,16 @@ export class NodeWorkflowRuntime {
           const branchStack = [...this.getFrameStack()];
           const branchIndices = [...this.getAsyncIndices(), asyncCounter];
           let promise: Promise<StepResult>;
-          if (step.recoverLoop) {
+          if (step.recover) {
             // Async + recover loop: wrap retry logic in a single promise.
             const recoverLimit = this.resolveRecoverLimit(scope.filePath);
-            const recoverLoop = step.recoverLoop;
+            const recover = step.recover;
             promise = this.asyncFrameStack.run(branchStack, () =>
               this.asyncIndicesStorage.run(branchIndices, async () => {
                 let lastResult = await this.executeRunRef(scope, step.workflow.value, step.args ?? "");
                 let attempt = 1;
                 while (lastResult.status !== 0 && attempt <= recoverLimit) {
-                  const rr = await this.runRecoverBody(scope, recoverLoop, `${lastResult.output}${lastResult.error}`);
+                  const rr = await this.runRecoverBody(scope, recover, `${lastResult.output}${lastResult.error}`);
                   if (rr.status !== 0 || rr.returnValue !== undefined) return rr;
                   lastResult = await this.executeRunRef(scope, step.workflow.value, step.args ?? "");
                   attempt += 1;
@@ -1147,9 +1147,9 @@ export class NodeWorkflowRuntime {
                 return lastResult;
               }),
             );
-          } else if (step.recover) {
+          } else if (step.catch) {
             // Async + catch: single-shot recovery in the async branch.
-            const recover = step.recover;
+            const recover = step.catch;
             promise = this.asyncFrameStack.run(branchStack, () =>
               this.asyncIndicesStorage.run(branchIndices, async () => {
                 const result = await this.executeRunRef(scope, step.workflow.value, step.args ?? "");
@@ -1174,12 +1174,12 @@ export class NodeWorkflowRuntime {
           }
           continue;
         }
-        if (step.recoverLoop) {
+        if (step.recover) {
           const limit = this.resolveRecoverLimit(scope.filePath);
           let lastResult = await this.executeRunRef(scope, step.workflow.value, step.args ?? "");
           let attempt = 1;
           while (lastResult.status !== 0 && attempt <= limit) {
-            const rr = await this.runRecoverBody(scope, step.recoverLoop, `${lastResult.output}${lastResult.error}`);
+            const rr = await this.runRecoverBody(scope, step.recover, `${lastResult.output}${lastResult.error}`);
             if (rr.status !== 0 || rr.returnValue !== undefined) return this.mergeStepResult(accOut, accErr, rr);
             lastResult = await this.executeRunRef(scope, step.workflow.value, step.args ?? "");
             attempt += 1;
@@ -1198,8 +1198,8 @@ export class NodeWorkflowRuntime {
           if (step.captureName) {
             scope.vars.set(step.captureName, runResult.returnValue ?? runResult.output.trim());
           }
-        } else if (step.recover) {
-          const rr = await this.runRecoverBody(scope, step.recover, `${runResult.output}${runResult.error}`);
+        } else if (step.catch) {
+          const rr = await this.runRecoverBody(scope, step.catch, `${runResult.output}${runResult.error}`);
           if (rr.status !== 0 || rr.returnValue !== undefined) return this.mergeStepResult(accOut, accErr, rr);
         } else {
           return this.mergeStepResult(accOut, accErr, runResult);
@@ -1216,7 +1216,7 @@ export class NodeWorkflowRuntime {
         continue;
       }
       if (step.type === "ensure") {
-        const ensureResult = await this.executeEnsureRef(scope, step.ref.value, step.args ?? "", step.recover);
+        const ensureResult = await this.executeEnsureRef(scope, step.ref.value, step.args ?? "", step.catch);
         if (step.captureName && ensureResult.status === 0) {
           scope.vars.set(step.captureName, ensureResult.returnValue ?? ensureResult.output.trim());
         }
@@ -1571,15 +1571,15 @@ export class NodeWorkflowRuntime {
   /** Run a recover/catch body with `failure` bound to the failed step's payload. */
   private async runRecoverBody(
     scope: Scope,
-    recover: { bindings: { failure: string } } & (
+    catchDef: { bindings: { failure: string } } & (
       | { single: WorkflowStepDef }
       | { block: WorkflowStepDef[] }
     ),
     failurePayload: string,
   ): Promise<StepResult> {
-    const recoverSteps = "single" in recover ? [recover.single] : recover.block;
+    const recoverSteps = "single" in catchDef ? [catchDef.single] : catchDef.block;
     const recoverVars = new Map(scope.vars);
-    recoverVars.set(recover.bindings.failure, failurePayload);
+    recoverVars.set(catchDef.bindings.failure, failurePayload);
     return this.executeSteps({ ...scope, vars: recoverVars }, recoverSteps);
   }
 
@@ -1587,7 +1587,7 @@ export class NodeWorkflowRuntime {
     scope: Scope,
     ref: string,
     argsRaw: string,
-    recover: EnsureRecover | undefined,
+    catchDef: EnsureRecover | undefined,
   ): Promise<StepResult> {
     const resolvedArgs = await this.resolveArgsRaw(scope, argsRaw);
     if (!Array.isArray(resolvedArgs)) return resolvedArgs;
@@ -1610,8 +1610,8 @@ export class NodeWorkflowRuntime {
     };
     const res = await attempt();
     if (res.status === 0) return res;
-    if (!recover) return res;
-    const rr = await this.runRecoverBody(scope, recover, `${res.output}${res.error}`);
+    if (!catchDef) return res;
+    const rr = await this.runRecoverBody(scope, catchDef, `${res.output}${res.error}`);
     if (rr.status !== 0) return rr;
     if (rr.returnValue !== undefined) return { ...rr, recoverReturn: true };
     return { status: 0, output: res.output, error: "" };
