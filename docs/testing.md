@@ -263,7 +263,7 @@ test "default workflow prints greeting" {
 
 Compiler tests verify parse and validate outcomes using a language-agnostic txtar format. Unlike the TypeScript-embedded tests in `src/`, these fixtures are plain text files that can be reused by alternative implementations (e.g. a Rust compiler).
 
-Test fixture files live in `compiler-tests/` as `.txt` files. Each file contains multiple test cases separated by `===` delimiters:
+Test fixture files live in `test-fixtures/compiler-txtar/` as `.txt` files. Each file contains multiple test cases separated by `===` delimiters:
 
 ```
 === test name here
@@ -309,7 +309,7 @@ The entry file is determined by priority: `main.jh` if present, otherwise `input
 npm run test:compiler
 ```
 
-The runner discovers all `.txt` files in `compiler-tests/`, parses them, writes virtual files to a temp directory per case, runs `parsejaiph` + `validateReferences`, and asserts the expected outcome. Results are reported per test case via `node:test`. Compiler tests are also included in `npm test`.
+The runner (`test-infra/compiler-test-runner.ts`) discovers all `.txt` files in `test-fixtures/compiler-txtar/`, parses them, writes virtual files to a temp directory per case, runs `parsejaiph` + `validateReferences`, and asserts the expected outcome. Results are reported per test case via `node:test`. Compiler tests are also included in `npm test`.
 
 ### Fixture files
 
@@ -317,10 +317,10 @@ Test cases are organized by error type and single-vs-multi-module:
 
 | File | Cases | What it covers |
 |------|-------|----------------|
-| `compiler-tests/valid.txt` | 119 | Success cases — source compiles without error (single-module) |
-| `compiler-tests/parse-errors.txt` | 274 | `E_PARSE` error cases — syntax and grammar violations |
-| `compiler-tests/validate-errors.txt` | 88 | `E_VALIDATE`, `E_IMPORT_NOT_FOUND`, `E_SCHEMA` error cases (single-module) |
-| `compiler-tests/validate-errors-multi-module.txt` | 20 | Validation errors requiring imports (multi-file) |
+| `test-fixtures/compiler-txtar/valid.txt` | 119 | Success cases — source compiles without error (single-module) |
+| `test-fixtures/compiler-txtar/parse-errors.txt` | 274 | `E_PARSE` error cases — syntax and grammar violations |
+| `test-fixtures/compiler-txtar/validate-errors.txt` | 88 | `E_VALIDATE`, `E_IMPORT_NOT_FOUND`, `E_SCHEMA` error cases (single-module) |
+| `test-fixtures/compiler-txtar/validate-errors-multi-module.txt` | 20 | Validation errors requiring imports (multi-file) |
 
 (Counts are one `# @expect` per test case; re-count after large fixture changes.)
 
@@ -332,7 +332,7 @@ The initial cases were extracted from TypeScript test files across `src/parse/*.
 - Test names should be descriptive and unique within a file.
 - Keep test cases minimal — only include what is necessary to trigger the expected outcome.
 
-The format is documented in detail in `compiler-tests/README.md`.
+The format is documented in detail in `test-fixtures/compiler-txtar/README.md`.
 
 ## Golden AST tests
 
@@ -340,7 +340,7 @@ Golden AST tests verify that the parser produces the expected tree shape for suc
 
 ### How it works
 
-Each `.jh` fixture in `golden-ast/fixtures/` is parsed and serialized to deterministic JSON (locations and file paths stripped, keys sorted). The result is compared against a checked-in `.json` golden file in `golden-ast/expected/`.
+Each `.jh` fixture in `test-fixtures/golden-ast/fixtures/` is parsed and serialized to deterministic JSON (locations and file paths stripped, keys sorted). The result is compared against a checked-in `.json` golden file in `test-fixtures/golden-ast/expected/`.
 
 - **Txtar tests** = error messages and "this compiles."
 - **Golden AST tests** = parse tree shape for successful parses.
@@ -366,8 +366,8 @@ Review the diff to confirm the changes are expected, then commit the updated `.j
 
 ### Adding a new fixture
 
-1. Create a small, focused `.jh` file in `golden-ast/fixtures/` (one concern per file).
-2. Run `UPDATE_GOLDEN=1 npm run test:golden-ast` to generate `golden-ast/expected/<name>.json`.
+1. Create a small, focused `.jh` file in `test-fixtures/golden-ast/fixtures/` (one concern per file).
+2. Run `UPDATE_GOLDEN=1 npm run test:golden-ast` to generate `test-fixtures/golden-ast/expected/<name>.json`.
 3. Review the generated JSON and commit both files.
 
 ## Stress and soak testing
@@ -405,7 +405,7 @@ Similarly, every `.jh` and `.test.jh` file under `examples/` must be accounted f
 
 ## Landing-page sample verification
 
-The project includes a Playwright-based test (`tests/e2e-samples/landing-page.spec.ts`) that verifies landing-page code samples stay in sync with real CLI behavior. Run it with `npm run test:samples`. See [Contributing — Landing-page sample verification](contributing.md#landing-page-sample-verification-playwright) for details.
+The project includes a Playwright-based test (`e2e/playwright/landing-page.spec.ts`) that verifies landing-page code samples stay in sync with real CLI behavior. Run it with `npm run test:samples`. See [Contributing — Landing-page sample verification](contributing.md#landing-page-sample-verification-playwright) for details.
 
 ## Limitations (v1)
 

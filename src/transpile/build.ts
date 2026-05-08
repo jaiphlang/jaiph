@@ -19,12 +19,14 @@ export function walkjhFiles(inputPath: string): string[] {
   }
 
   const files: string[] = [];
+  const rootDir = resolve(inputPath);
   const stack = [inputPath];
   while (stack.length > 0) {
     const current = stack.pop()!;
     for (const entry of readdirSync(current, { withFileTypes: true })) {
       const full = join(current, entry.name);
       if (entry.isDirectory()) {
+        if (shouldSkipJhWalkDirectory(rootDir, full)) continue;
         stack.push(full);
       } else if (entry.isFile()) {
         const ext = extname(entry.name);
@@ -37,6 +39,29 @@ export function walkjhFiles(inputPath: string): string[] {
   }
   files.sort();
   return files;
+}
+
+function shouldSkipJhWalkDirectory(rootDir: string, directory: string): boolean {
+  const rel = relative(rootDir, directory).split("/").join("/");
+  const rootBase = parse(rootDir).base;
+  if (rootBase === ".jaiph" && (
+    rel === "runs" ||
+    rel === "tmp" ||
+    rel === "artifacts" ||
+    rel === ".tmp-build-out"
+  )) {
+    return true;
+  }
+  return (
+    rel === ".jaiph/runs" ||
+    rel.startsWith(".jaiph/runs/") ||
+    rel === ".jaiph/tmp" ||
+    rel.startsWith(".jaiph/tmp/") ||
+    rel === ".jaiph/artifacts" ||
+    rel.startsWith(".jaiph/artifacts/") ||
+    rel === ".jaiph/.tmp-build-out" ||
+    rel.startsWith(".jaiph/.tmp-build-out/")
+  );
 }
 
 export function walkTestFiles(inputPath: string): string[] {

@@ -2,8 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, existsSync, writeFileSync } from "node:fs";
 import { join, resolve, basename } from "node:path";
-import { parsejaiph } from "./parser";
-import { jaiphModule } from "./types";
+import { parsejaiph } from "../src/parser";
+import { jaiphModule } from "../src/types";
 
 // --- AST serializer for golden tests ---
 
@@ -33,8 +33,8 @@ function stripLocations(value: unknown): unknown {
 
 // --- golden test runner ---
 
-const fixturesDir = resolve(process.cwd(), "golden-ast/fixtures");
-const expectedDir = resolve(process.cwd(), "golden-ast/expected");
+const fixturesDir = resolve(process.cwd(), "test-fixtures/golden-ast/fixtures");
+const expectedDir = resolve(process.cwd(), "test-fixtures/golden-ast/expected");
 const updateMode = process.env.UPDATE_GOLDEN === "1";
 
 const fixtures = readdirSync(fixturesDir).filter((f) => f.endsWith(".jh")).sort();

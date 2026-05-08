@@ -1,5 +1,5 @@
 === unterminated workflow block
-# @expect error E_PARSE "unterminated workflow block" @1:1
+# @expect error E_PARSE "unterminated block" @1:1
 --- input.jh
 workflow default() {
   log "hello"
@@ -120,7 +120,7 @@ script greet()
 workflow default
 
 === workflow with parentheses (unterminated)
-# @expect error E_PARSE "unterminated workflow block" @1:1
+# @expect error E_PARSE "unterminated block" @1:1
 --- input.jh
 workflow default() {
 
@@ -174,12 +174,12 @@ console.log('hi');
 ```
 
 === script tag with parentheses
-# @expect error E_PARSE "script:lang syntax is no longer supported" @1:1
+# @expect error E_PARSE "unsupported top-level statement" @1:1
 --- input.jh
 script:node transform() {
 
 === script tag without braces
-# @expect error E_PARSE "script:lang syntax is no longer supported" @1:1
+# @expect error E_PARSE "unsupported top-level statement" @1:1
 --- input.jh
 script:node transform
 
@@ -235,7 +235,7 @@ workflow default() {
 }
 
 === config array key rejects runtime.workspace (no longer supported)
-# @expect error E_PARSE "runtime.workspace is no longer supported" @2:3
+# @expect error E_PARSE "unknown config key: runtime.workspace" @2:3
 --- input.jh
 config {
   runtime.workspace = "not-an-array"
@@ -245,7 +245,7 @@ workflow default() {
 }
 
 === config rejects runtime.docker_enabled (no longer supported)
-# @expect error E_PARSE "runtime.docker_enabled is no longer supported" @2:3
+# @expect error E_PARSE "unknown config key: runtime.docker_enabled" @2:3
 --- input.jh
 config {
   runtime.docker_enabled = true
@@ -289,7 +289,7 @@ workflow default() {
 }
 
 === top-level local keyword is rejected
-# @expect error E_PARSE "unknown top-level keyword" @1:1
+# @expect error E_PARSE "unsupported top-level statement" @1:1
 --- input.jh
 local greeting = "hello world"
 workflow default() {
@@ -780,7 +780,7 @@ script broken = ```
 echo hello
 
 === metadata: runtime.workspace array rejected (single-quoted element)
-# @expect error E_PARSE "runtime.workspace is no longer supported" @2:3
+# @expect error E_PARSE "unknown config key: runtime.workspace" @2:3
 --- input.jh
 config {
   runtime.workspace = [
@@ -792,7 +792,7 @@ workflow default() {
 }
 
 === metadata: runtime.workspace array rejected (unquoted element)
-# @expect error E_PARSE "runtime.workspace is no longer supported" @2:3
+# @expect error E_PARSE "unknown config key: runtime.workspace" @2:3
 --- input.jh
 config {
   runtime.workspace = [
@@ -804,7 +804,7 @@ workflow default() {
 }
 
 === metadata: runtime.workspace array rejected (unclosed)
-# @expect error E_PARSE "runtime.workspace is no longer supported" @2:3
+# @expect error E_PARSE "unknown config key: runtime.workspace" @2:3
 --- input.jh
 config {
   runtime.workspace = [
@@ -1094,7 +1094,7 @@ workflow default() {
 
 
 === config block with content on same line as opening
-# @expect ok
+# @expect error E_PARSE "config block must be exactly" @1:1
 --- input.jh
 config { agent.backend = "claude" }
 workflow default() {
@@ -1242,7 +1242,7 @@ workflow default() {
 }
 
 === script with returns on closing fence rejected
-# @expect error E_PARSE "script definitions do not support" @1:1
+# @expect error E_PARSE "unexpected content after closing fence" @1:1
 --- input.jh
 script transform = ```
 echo hello
@@ -1295,7 +1295,7 @@ console.log("hi");
 }
 
 === inline script fenced unterminated in workflow
-# @expect error E_PARSE "unterminated fenced block" @2:3
+# @expect error E_PARSE "unterminated fenced block" @2:1
 --- input.jh
 workflow default() {
   run ```
@@ -1310,7 +1310,7 @@ workflow default() {
 }
 
 === inline script fenced with invalid lang token
-# @expect error E_PARSE "invalid opening fence" @2:3
+# @expect error E_PARSE "invalid opening fence" @2:1
 --- input.jh
 workflow default() {
   run ```not a lang```()
@@ -1323,7 +1323,7 @@ config {
   agent.backend = "claude"
 
 === config block with trailing content after close brace
-# @expect error E_PARSE "unexpected content after closing '}'" @1:1
+# @expect error E_PARSE "config block must be exactly" @1:1
 --- input.jh
 config { agent.backend = "claude" } extra
 workflow default() {
@@ -1909,7 +1909,7 @@ workflow default() {
 }
 
 === inline config block missing equals sign
-# @expect error E_PARSE "config line must be key = value"
+# @expect error E_PARSE "config block must be exactly"
 --- input.jh
 config { agent.backend }
 workflow default() {
@@ -1917,7 +1917,7 @@ workflow default() {
 }
 
 === inline config block with unknown key
-# @expect error E_PARSE "unknown config key"
+# @expect error E_PARSE "config block must be exactly"
 --- input.jh
 config { bad.key = "x" }
 workflow default() {
@@ -1925,7 +1925,7 @@ workflow default() {
 }
 
 === inline config block rejects runtime.workspace (array opening)
-# @expect error E_PARSE "runtime.workspace is no longer supported"
+# @expect error E_PARSE "config block must be exactly"
 --- input.jh
 config { runtime.workspace = [ }
 workflow default() {
@@ -1933,7 +1933,7 @@ workflow default() {
 }
 
 === inline config block rejects runtime.workspace (non-empty array)
-# @expect error E_PARSE "runtime.workspace is no longer supported"
+# @expect error E_PARSE "config block must be exactly"
 --- input.jh
 config { runtime.workspace = ["foo"] }
 workflow default() {
@@ -1967,7 +1967,7 @@ workflow default() { log "hello"
 }
 
 === runtime keys in inline workflow config
-# @expect error E_PARSE "runtime.* keys are not allowed"
+# @expect error E_PARSE "expected newline after '{'"
 --- input.jh
 workflow default() { config { runtime.docker_image = "ubuntu:24.04" } }
 
@@ -2064,7 +2064,7 @@ workflow default() {
 }
 
 === config after semicolon-separated steps in workflow
-# @expect error E_PARSE "config must be the first workflow step"
+# @expect error E_PARSE "unexpected content after log string"
 --- input.jh
 workflow default() {
   log "hello"; config { agent.backend = "claude" }

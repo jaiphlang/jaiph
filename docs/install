@@ -108,6 +108,7 @@ print_step "Installing runtime to ${LIB_DIR}..."
 rm -rf "${LIB_DIR}"
 mkdir -p "${LIB_DIR}"
 cp -R "${tmp_dir}/src/dist/src" "${LIB_DIR}/src"
+cp "${tmp_dir}/src/package.json" "${LIB_DIR}/package.json"
 cp "${tmp_dir}/src/docs/jaiph-skill.md" "${SKILL_TARGET}"
 
 print_step "Installing binary to ${TARGET}..."

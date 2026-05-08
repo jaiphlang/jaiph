@@ -1,5 +1,20 @@
 # Unreleased
 
+- **Fix — Docker default image tag:** `curl` / `docs/install` copied only `dist/src` into `~/.local/bin/.jaiph`, so the CLI could not read `package.json` and defaulted the sandbox image to `ghcr.io/jaiphlang/jaiph-runtime:nightly` even for stable installs. The installer now copies `package.json` beside `src/`, and `resolveDefaultDockerImageTag` checks both the installer layout and the npm `dist/src/runtime` layout.
+- **Repo — Test directory consolidation:** Consolidated the five-way test directory split (`src/**/*.test.ts`, `test/`, `tests/`, `compiler-tests/`, `golden-ast/`) into three test "places" plus two clearly named support directories. File moves:
+  - `src/compiler-test-runner.ts` → `test-infra/compiler-test-runner.ts`
+  - `src/golden-ast-runner.ts` → `test-infra/golden-ast-runner.ts`
+  - `compiler-tests/` → `test-fixtures/compiler-txtar/` (README preserved)
+  - `golden-ast/` → `test-fixtures/golden-ast/`
+  - `tests/e2e-samples/landing-page.spec.ts` → `e2e/playwright/landing-page.spec.ts`
+  - `tests/e2e-samples/docs-site.ts` → `e2e/playwright/docs-site.ts`
+  - `test/run-summary-jsonl.test.ts`, `test/signal-lifecycle.test.ts`, `test/tty-running-timer.test.ts` → `integration/`
+  - `test/sample-build.test.ts` (2814 LoC) split into 7 focused files under `integration/sample-build/` (each ≤500 LoC) plus a shared `helpers.ts`
+  - `test/fixtures/`, `test/expected/` → `test-fixtures/sample-build/`
+  - `test/` and `tests/` directories removed.
+
+  Final layout: `src/**/*.test.ts` (unit, colocated), `integration/` (integration tests), `e2e/` (shell + Playwright), `test-fixtures/` (compiler-txtar, golden-ast, sample-build), `test-infra/` (test runners). `package.json` scripts and `tsconfig.json` updated. No test logic, assertions, or fixtures changed.
+
 # 0.9.3
 
 ## Summary

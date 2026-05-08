@@ -70,7 +70,7 @@ test("compiler golden: prompt substitution guard reports E_PARSE", () => {
 test("compiler corpus: fixtures compile", () => {
   const outA = mkdtempSync(join(tmpdir(), "jaiph-corpus-a-"));
   try {
-    buildScripts(join(process.cwd(), "test/fixtures"), outA);
+    buildScripts(join(process.cwd(), "test-fixtures/sample-build/fixtures"), outA);
   } finally {
     rmSync(outA, { recursive: true, force: true });
   }

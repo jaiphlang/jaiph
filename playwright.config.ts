@@ -1,8 +1,8 @@
 import { defineConfig } from '@playwright/test';
-import { LOCAL_DOCS_SITE } from './tests/e2e-samples/docs-site';
+import { LOCAL_DOCS_SITE } from './e2e/playwright/docs-site';
 
 export default defineConfig({
-  testDir: './tests/e2e-samples',
+  testDir: './e2e/playwright',
   timeout: 60_000,
   use: {
     baseURL: LOCAL_DOCS_SITE,
