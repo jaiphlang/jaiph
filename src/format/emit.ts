@@ -155,9 +155,6 @@ function emitConfigKeyLines(meta: WorkflowMetadata, key: string, pad: string): s
     case "run.logs_dir":
       if (meta.run?.logsDir === undefined) return [];
       return [`${pad}run.logs_dir = "${meta.run.logsDir}"`];
-    case "run.inbox_parallel":
-      if (meta.run?.inboxParallel === undefined) return [];
-      return [`${pad}run.inbox_parallel = ${meta.run.inboxParallel}`];
     case "run.recover_limit":
       if (meta.run?.recoverLimit === undefined) return [];
       return [`${pad}run.recover_limit = ${meta.run.recoverLimit}`];
@@ -212,7 +209,6 @@ function emitConfig(meta: WorkflowMetadata, pad: string): string {
   if (meta.run) {
     if (meta.run.debug !== undefined) lines.push(`${pad}run.debug = ${meta.run.debug}`);
     if (meta.run.logsDir !== undefined) lines.push(`${pad}run.logs_dir = "${meta.run.logsDir}"`);
-    if (meta.run.inboxParallel !== undefined) lines.push(`${pad}run.inbox_parallel = ${meta.run.inboxParallel}`);
     if (meta.run.recoverLimit !== undefined) lines.push(`${pad}run.recover_limit = ${meta.run.recoverLimit}`);
   }
   if (meta.runtime) {

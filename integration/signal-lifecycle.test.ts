@@ -146,7 +146,12 @@ async function runInterruptTest(
   const child = spawn("node", [cliPath, "run", workflowPath], {
     stdio: "pipe",
     cwd: root,
-    env: { ...process.env, JAIPH_UNSAFE: "true" }, // disable Docker so exit-within-5s assertion is reliable (CI=true no longer disables)
+    env: {
+      ...process.env,
+      JAIPH_UNSAFE: "true",
+      JAIPH_DOCKER_ENABLED: "false",
+      JAIPH_RUNS_DIR: join(root, ".jaiph/runs"),
+    },
   });
 
   const exitPromise = new Promise<{ code: number | null; signal: string | null }>((resolve) => {
@@ -155,14 +160,18 @@ async function runInterruptTest(
     });
   });
 
-  // Let the workflow start (bash + sleep running)
-  await new Promise((r) => setTimeout(r, 600));
-
+  // Let the workflow start (bash + sleep running). Detached runner reparenting can
+  // delay visible children; poll briefly instead of a single fixed sleep.
   const nodePid = child.pid;
   assert.ok(nodePid != null, "spawned node process must have a pid");
-  const ourJaiphRunPids = findChildPidsMatching(nodePid, "jaiph-run");
-  const fallbackChildPids = findChildPids(nodePid);
-  const trackedPids = ourJaiphRunPids.length > 0 ? ourJaiphRunPids : fallbackChildPids;
+  let trackedPids: number[] = [];
+  for (let i = 0; i < 50; i += 1) {
+    await new Promise((r) => setTimeout(r, 100));
+    const ourJaiphRunPids = findChildPidsMatching(nodePid, "jaiph-run");
+    const fallbackChildPids = findChildPids(nodePid);
+    trackedPids = ourJaiphRunPids.length > 0 ? ourJaiphRunPids : fallbackChildPids;
+    if (trackedPids.length >= 1) break;
+  }
   assert.ok(
     trackedPids.length >= 1,
     "our node process should have spawned at least one child process",

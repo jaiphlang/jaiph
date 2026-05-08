@@ -372,11 +372,11 @@ Review the diff to confirm the changes are expected, then commit the updated `.j
 
 ## Stress and soak testing
 
-For concurrency-sensitive behavior (for example parallel inbox dispatch), the repository includes shell-based E2E scenarios that go beyond single native tests:
+For concurrency-sensitive behavior (for example inbox stress with many sends and route targets, or `run async` with interleaved managed steps), the repository includes shell-based E2E scenarios that go beyond single native tests:
 
-- High volume and fan-out to exercise locking and dispatch under concurrent writes.
+- High volume and fan-out to exercise locking and dispatch under concurrent writes to the same run directory.
 - Soak loops to flush out intermittent failures.
-- Order-insensitive checks (counts, uniqueness) when parallel work makes ordering non-deterministic.
+- Order-insensitive checks (counts, uniqueness) when concurrent work makes ordering non-deterministic for the surface under test (for example async branch completion in the progress tree).
 
 See `e2e/tests/91_inbox_dispatch.sh`, `e2e/tests/93_inbox_stress.sh`, and `e2e/tests/94_parallel_shell_steps.sh` for examples.
 

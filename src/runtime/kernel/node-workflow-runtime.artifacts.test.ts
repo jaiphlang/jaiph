@@ -650,3 +650,77 @@ test("NodeWorkflowRuntime: heartbeat file created at construction, removed on st
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+function inboxDispatchStartTargets(summaryPath: string): string[] {
+  const text = readFileSync(summaryPath, "utf8");
+  const order: string[] = [];
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue;
+    const e = JSON.parse(line) as { type?: string; target?: string };
+    if (e.type === "INBOX_DISPATCH_START" && typeof e.target === "string") {
+      order.push(e.target);
+    }
+  }
+  return order;
+}
+
+test("NodeWorkflowRuntime: JAIPH_INBOX_PARALLEL has no effect on inbox dispatch sequencing", async () => {
+  const src = [
+    "channel results -> consumer_a, consumer_b",
+    "",
+    "workflow producer() {",
+    '  results <- "dispatch-order-payload"',
+    "}",
+    "",
+    "workflow consumer_a(message, chan, sender) {",
+    '  log "consumer_a"',
+    "}",
+    "",
+    "workflow consumer_b(message, chan, sender) {",
+    '  log "consumer_b"',
+    "}",
+    "",
+    "workflow default() {",
+    "  run producer()",
+    "}",
+    "",
+  ].join("\n");
+
+  const runOnce = async (inboxParallelEnv: string | undefined): Promise<string[]> => {
+    const root = mkdtempSync(join(tmpdir(), "jaiph-inbox-par-env-"));
+    try {
+      const jh = join(root, "inbox_par.jh");
+      writeFileSync(jh, src);
+      const graph = buildRuntimeGraph(jh);
+      const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        JAIPH_TEST_MODE: "1",
+        JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
+      };
+      delete env.JAIPH_INBOX_PARALLEL;
+      if (inboxParallelEnv !== undefined) {
+        env.JAIPH_INBOX_PARALLEL = inboxParallelEnv;
+      }
+      const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });
+      const prevSummary = process.env.JAIPH_RUN_SUMMARY_FILE;
+      process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
+      let status: number;
+      try {
+        status = await runtime.runDefault([]);
+      } finally {
+        if (prevSummary === undefined) delete process.env.JAIPH_RUN_SUMMARY_FILE;
+        else process.env.JAIPH_RUN_SUMMARY_FILE = prevSummary;
+      }
+      assert.equal(status, 0);
+      runtime.stopHeartbeat();
+      return inboxDispatchStartTargets(runtime.getSummaryFile());
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  };
+
+  const without = await runOnce(undefined);
+  const withTrue = await runOnce("true");
+  assert.deepEqual(without, withTrue);
+  assert.deepEqual(without, ["consumer_a", "consumer_b"]);
+});

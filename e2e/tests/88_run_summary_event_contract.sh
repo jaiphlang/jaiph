@@ -32,13 +32,9 @@ trap e2e::cleanup EXIT
 e2e::prepare_test_env "run_summary_event_contract"
 TEST_DIR="${JAIPH_E2E_TEST_DIR}"
 
-e2e::section "run_summary.jsonl contract under parallel inbox dispatch"
+e2e::section "run_summary.jsonl contract under multi-target inbox dispatch"
 
 e2e::file "summary_contract.jh" <<'EOF'
-config {
-  run.inbox_parallel = true
-}
-
 channel ch -> receiver_a, receiver_b
 
 script emit_payload = `echo "contract-payload"`
@@ -216,4 +212,4 @@ for wt in want_types:
         sys.exit(f"missing event type {wt!r} in run_summary.jsonl")
 PY
 
-e2e::pass "run_summary.jsonl: LOG persistence, enqueue event, dispatch pairing, step pairing, workflow balance, JSONL validity (parallel)"
+e2e::pass "run_summary.jsonl: LOG persistence, enqueue event, dispatch pairing, step pairing, workflow balance, JSONL validity (multi-target inbox)"

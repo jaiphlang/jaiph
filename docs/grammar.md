@@ -904,7 +904,7 @@ config_block    = "config" "{" { config_line } "}" ;
 config_line     = config_key "=" config_value ;
 config_key      = "agent.default_model" | "agent.command" | "agent.backend" | "agent.trusted_workspace"
                 | "agent.cursor_flags" | "agent.claude_flags" | "run.logs_dir" | "run.debug"
-                | "run.inbox_parallel" | "run.recover_limit" | "runtime.docker_image" | "runtime.docker_network"
+                | "run.recover_limit" | "runtime.docker_image" | "runtime.docker_network"
                 | "runtime.docker_timeout_seconds"
                 | "module.name" | "module.version" | "module.description" ;
 config_value    = string | "true" | "false" | integer | string_array ;

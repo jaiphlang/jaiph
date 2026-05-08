@@ -74,18 +74,18 @@ test("run_summary.jsonl: workflow, steps, log, inbox dispatch stream", () => {
       ].join("\n"),
     );
 
+    const runsRoot = join(root, ".jaiph/runs");
     const runResult = spawnSync("node", [cliPath, "run", jh], {
       encoding: "utf8",
       cwd: root,
       env: {
         ...process.env,
         JAIPH_DOCKER_ENABLED: "false",
+        JAIPH_RUNS_DIR: runsRoot,
         PATH: `${dirname(process.execPath)}:${process.env.PATH ?? ""}`,
       },
     });
     assert.equal(runResult.status, 0, runResult.stderr);
-
-    const runsRoot = join(root, ".jaiph/runs");
     const runDir = latestRunDir(runsRoot);
     assert.ok(runDir, "run dir");
     const summaryPath = join(runDir, "run_summary.jsonl");
@@ -156,13 +156,18 @@ test("run_summary.jsonl: STEP_END remains parseable for legacy consumers (event_
       jh,
       ['script emit_x = `echo "x"`', "workflow default() {", "  run emit_x()", "}", ""].join("\n"),
     );
+    const runsRoot = join(root, ".jaiph/runs");
     const runResult = spawnSync("node", [cliPath, "run", jh], {
       encoding: "utf8",
       cwd: root,
-      env: { ...process.env, JAIPH_DOCKER_ENABLED: "false" },
+      env: {
+        ...process.env,
+        JAIPH_DOCKER_ENABLED: "false",
+        JAIPH_RUNS_DIR: runsRoot,
+      },
     });
     assert.equal(runResult.status, 0, runResult.stderr);
-    const runDir = latestRunDir(join(root, ".jaiph/runs"));
+    const runDir = latestRunDir(runsRoot);
     const lines = readFileSync(join(runDir, "run_summary.jsonl"), "utf8")
       .trim()
       .split("\n");

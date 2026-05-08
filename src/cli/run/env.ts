@@ -10,7 +10,6 @@ const LOCKED_ENV_KEYS = [
   "JAIPH_AGENT_CLAUDE_FLAGS",
   "JAIPH_RUNS_DIR",
   "JAIPH_DEBUG",
-  "JAIPH_INBOX_PARALLEL",
 ] as const;
 
 /**
@@ -60,9 +59,6 @@ export function resolveRuntimeEnv(
   }
   if (env.JAIPH_DEBUG === undefined && effectiveConfig.run?.debug === true) {
     env.JAIPH_DEBUG = "true";
-  }
-  if (env.JAIPH_INBOX_PARALLEL === undefined && effectiveConfig.run?.inboxParallel === true) {
-    env.JAIPH_INBOX_PARALLEL = "true";
   }
   env.JAIPH_SOURCE_FILE = basename(inputAbs);
   // JAIPH_STDLIB is no longer used; clean it from inherited env.

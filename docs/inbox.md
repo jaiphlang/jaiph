@@ -60,9 +60,8 @@ channel name, and sender bound to its declared parameters `message`, `chan`, and
 - **Inbox is an event bus, not a filesystem watcher.** Delivery is driven by an
   explicit **drain** after the orchestrator workflow's steps finish — no
   `inotifywait`, no `fswatch`, no polling for new files.
-- **Sequential by default, parallel opt-in.** For each queued message, route
-  targets run **in list order** unless `run.inbox_parallel = true` or
-  `JAIPH_INBOX_PARALLEL=true` (see [Parallel dispatch](#parallel-dispatch)).
+- **Sequential dispatch.** For each queued message, route targets run **in list
+  order** (declaration order on the `channel` line), one completion at a time.
 - **Inbox is scoped per run.** Message files live under that run's **`inbox/`**
   directory; they are not a separate mailbox outside `.jaiph/runs`.
 - **Channels are compile-checked.** Unknown channels, bad route targets, and
@@ -168,8 +167,7 @@ workflow default() {
 ```
 
 **Multiple targets on one declaration** are comma-separated — they share one
-route and dispatch in **declaration order** (or concurrently when parallel
-dispatch is on):
+route and dispatch in **declaration order**, sequentially:
 
 ```jh
 channel findings -> analyst, reviewer
@@ -251,11 +249,9 @@ handling and `drainWorkflowQueue`.
      same queue and are processed in subsequent iterations.
    - For each message, look up targets for `channel` on **that** workflow's
      context. If there is no route, **skip** (silent drop).
-   - If there are targets, invoke each target, binding message, channel, and
-     sender to the target's 3 declared parameters — **sequentially** in
-     target-list order by default, or **all targets concurrently** via
-     `Promise.all` when `JAIPH_INBOX_PARALLEL=true`
-     (see [Ordering guarantees](#ordering-guarantees)).
+   - If there are targets, invoke each target **sequentially** in target-list
+     order, binding message, channel, and sender to the target's 3 declared
+     parameters (see [Ordering and sequence ids](#ordering-and-sequence-ids)).
 6. Pop the workflow context and return.
 
 There is no `E_DISPATCH_DEPTH` / `JAIPH_INBOX_MAX_DISPATCH_DEPTH` check in
@@ -269,61 +265,21 @@ There is no `E_DISPATCH_DEPTH` / `JAIPH_INBOX_MAX_DISPATCH_DEPTH` check in
 - **Sender identity** is the **current workflow name** from the context that
   performed the send (e.g. `researcher`), stable across modules.
 
-## Parallel dispatch
+### Ordering and sequence ids
 
-When `run.inbox_parallel = true` is set in a `config` block (module or workflow
-scope) or the environment sets `JAIPH_INBOX_PARALLEL=true`, **all targets listed
-for a single message** are dispatched concurrently (via `Promise.all` in
-`drainWorkflowQueue`) instead of awaiting each target in order.
+Messages are handled **one at a time** in queue order (FIFO). For each message,
+targets run **strictly in list order** on the `channel` line; the next message is
+not processed until all targets for the current message have finished (success, or
+fail-fast on the first non-zero exit).
 
-**Precedence** matches the rest of Jaiph agent/run settings: an explicit
-environment value wins over in-file config. See [Configuration — Defaults and precedence](configuration.md#defaults-and-precedence).
-
-```jh
-config {
-  run.inbox_parallel = true
-}
-
-channel findings -> analyst, reviewer   # analyst and reviewer run in parallel
-
-workflow default() {
-  run producer()
-}
-```
-
-### Ordering guarantees
-
-Messages are handled **one at a time** in queue order (FIFO). **Parallel mode**
-only parallelizes **targets for the same message**; the next message is not
-started until the current message's targets have all finished (`Promise.all`
-completes). Within **sequential** mode, targets for that message run strictly in
-list order.
-
-- **Non-determinism:** With `JAIPH_INBOX_PARALLEL=true`, the order in which
-  concurrent targets finish is undefined; only the per-message barrier is
-  guaranteed before the next message runs.
 - **Sequence ids:** Monotonic per run in the runtime (`inboxSeq`); message
   filenames use the same padded counter.
-
-### Failure propagation
-
-In parallel mode, all targets for a message are awaited together. If any target
-exits non-zero, the owning workflow fails after all concurrent targets complete
-(analogous to `Promise.all` failure semantics vs sequential fail-fast).
-
-### Rollback
-
-To revert to sequential dispatch, remove `run.inbox_parallel = true` from config
-or set `JAIPH_INBOX_PARALLEL=false` in the environment. Sequential mode is the
-default.
 
 ## Error semantics
 
 - **Undefined channel reference:** validation error `Channel "<name>" is not defined`.
-- **Dispatched workflow exits non-zero:** the owning workflow fails. In
-  **sequential** mode the first failing target stops further targets for that
-  message. In **parallel** mode all targets for that message are awaited, then
-  the run fails if any failed.
+- **Dispatched workflow exits non-zero:** the owning workflow fails; the first
+  failing target stops further targets for that message (fail-fast).
 - **No route for a channel:** the message file and queue entry still exist, but
   dispatch **skips** that message (silent drop). This is intentional for optional
   subscribers; use a dedicated workflow if missing handlers should be an error.
