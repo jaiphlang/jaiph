@@ -185,7 +185,7 @@ If a stream stays empty for a step, the runtime may omit that artifact file. Any
 
 ### Run summary (`run_summary.jsonl`) {#run-summary-jsonl}
 
-Each run directory also contains `run_summary.jsonl`: one JSON object per line, appended in execution order. It is the canonical append-only record of runtime events (lifecycle, logs, inbox flow, and step boundaries). Tooling can tail the file by byte offset and process new lines idempotently; parallel inbox dispatch may reorder some events relative to wall-clock time, but each line is written atomically under the same lock used for concurrent writers (see [Inbox — Lock behavior](inbox.md#lock-behavior)).
+Each run directory also contains `run_summary.jsonl`: one JSON object per line, appended in execution order. It is the canonical append-only record of runtime events (lifecycle, logs, inbox flow, and step boundaries). Tooling can tail the file by byte offset and process new lines idempotently. For a single run, lines follow execution order; inbox routes always drain **sequentially**, so inbox lifecycle events stay aligned with dispatch order. Summary lines are still appended atomically under a lock shared with other concurrent writers on the same run directory (for example `run async` branches appending step events).
 
 **Versioning.** Every object includes `event_version` (currently `1`). New fields may be added; consumers should tolerate unknown keys.
 
@@ -194,10 +194,10 @@ Each run directory also contains `run_summary.jsonl`: one JSON object per line, 
 **Correlation rules:**
 
 - **`run_id`:** same across all lines in a given run's file.
-- **Workflow boundaries:** for each workflow name, `WORKFLOW_START` count equals `WORKFLOW_END` count. With `JAIPH_INBOX_PARALLEL=true`, lifecycle lines may interleave — use per-name counts, not a global stack.
+- **Workflow boundaries:** for each workflow name, `WORKFLOW_START` count equals `WORKFLOW_END` count.
 - **Steps:** `STEP_START` and `STEP_END` share the same `id`. Use `parent_id`, `seq`, and `depth` to rebuild the tree.
 - **Inbox:** one `INBOX_ENQUEUE` per `send` with a unique `inbox_seq` (zero-padded, e.g. `001`). Each routed target gets one `INBOX_DISPATCH_START` and one `INBOX_DISPATCH_COMPLETE` sharing the same `inbox_seq`, `channel`, `target`, and `sender`.
-- **Ordering under parallel inbox:** lines are valid JSONL (one object per line, atomic append). Wall-clock `ts` order may diverge from append order between concurrent branches.
+- **Ordering:** lines are valid JSONL (one object per line, atomic append). Inbox dispatch is sequential; `ts` order matches dispatch order for inbox lifecycle events on a single run.
 
 **Event taxonomy (schema `event_version` 1):**
 
@@ -432,7 +432,6 @@ These variables apply to `jaiph run` and workflow execution. Variables marked **
 
 - `JAIPH_DEBUG` — set to `true` for debug tracing.
 - `JAIPH_RECURSION_DEPTH_LIMIT` — maximum recursion depth for workflows and rules (default: **256**). Exceeding this limit produces a runtime error.
-- `JAIPH_INBOX_PARALLEL` — set to `true` for parallel dispatch of inbox route targets (overrides in-file `run.inbox_parallel`). See [Inbox](inbox.md).
 - `NO_COLOR` — disables colored output.
 
 **Non-TTY heartbeat:**

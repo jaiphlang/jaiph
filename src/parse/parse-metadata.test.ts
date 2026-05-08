@@ -46,6 +46,18 @@ test("parseConfigBlock: fails on unknown config key", () => {
   );
 });
 
+test("parseConfigBlock: fails on removed run.inbox_parallel key", () => {
+  const lines = [
+    "config {",
+    "  run.inbox_parallel = true",
+    "}",
+  ];
+  assert.throws(
+    () => parseConfigBlock("test.jh", lines, 0),
+    /unknown config key: run\.inbox_parallel/,
+  );
+});
+
 test("parseConfigBlock: fails on type mismatch (string where boolean expected)", () => {
   const lines = [
     "config {",

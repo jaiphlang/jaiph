@@ -12,7 +12,6 @@ export type JaiphConfig = {
   run?: {
     debug?: boolean;
     logsDir?: string;
-    inboxParallel?: boolean;
   };
 };
 

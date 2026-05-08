@@ -69,14 +69,9 @@ e2e::section "High-volume send: 10 senders, sequence IDs gapless and unique"
 # ===========================================================================
 
 # 10 workflows each send one message to the same channel.
-# Under parallel dispatch, all 10 sends race through the lock.
 # We assert: exactly 10 inbox files (001..010), no gaps, no duplicates.
 
 e2e::file "stress_highvol.jh" <<'EOF'
-config {
-  run.inbox_parallel = true
-}
-
 channel data -> sink
 
 script emit_m1 = `echo "m1"`
@@ -173,10 +168,6 @@ e2e::section "Fan-out correctness: 3 messages x 3 targets = 9 invocations"
 # ===========================================================================
 
 e2e::file "stress_fanout.jh" <<'EOF'
-config {
-  run.inbox_parallel = true
-}
-
 channel ch -> target_x, target_y, target_z
 
 script emit_pa = `echo "pa"`
@@ -257,10 +248,6 @@ e2e::section "Nested dispatch: dispatched workflow sends further messages"
 # Verifies reentrancy: a dispatched workflow can itself send to inbox.
 
 e2e::file "stress_nested.jh" <<'EOF'
-config {
-  run.inbox_parallel = true
-}
-
 channel ch_raw -> processor
 channel ch_processed -> sink
 
@@ -301,15 +288,11 @@ e2e::assert_file_exists "${nd_inbox}/002-ch_processed.txt" "nested: ch_processed
 e2e::section "Failure aggregation: multiple failing targets"
 # ===========================================================================
 
-# Two targets fail, one succeeds. Verify workflow fails and the successful
-# target still ran (all targets in a parallel batch complete before exit).
+# Two targets fail, one succeeds. Verify workflow fails and a successful target
+# listed before the failing targets still ran (sequential fail-fast after good work).
 
 e2e::file "stress_failagg.jh" <<'EOF'
-config {
-  run.inbox_parallel = true
-}
-
-channel ch -> fail_a, fail_b, good
+channel ch -> good, fail_a, fail_b
 
 script emit_msg = `echo "msg"`
 
@@ -354,20 +337,17 @@ if [[ "$fail_exit" -eq 0 ]]; then
 fi
 e2e::pass "failure aggregation: workflow exited non-zero"
 
-# The good target should still have run (parallel waits for all)
+# The good target should still have run (listed first; fail-fast stops at fail_a)
+
 e2e::assert_file_exists "${TEST_DIR}/fail_good_ran.txt" "failure aggregation: good target completed"
 
 # ===========================================================================
 e2e::section "Concurrent artifact integrity: inbox + summary under load"
 # ===========================================================================
 
-# 5 senders x 2 targets in parallel — check inbox files, queue, and summary.
+# 5 senders x 2 targets — check inbox files, queue, and summary.
 
 e2e::file "stress_artifacts.jh" <<'EOF'
-config {
-  run.inbox_parallel = true
-}
-
 channel ev -> t1, t2
 
 script emit_e1 = `echo "e1"`
@@ -439,17 +419,13 @@ assert_valid_jsonl "${art_run_dir}/run_summary.jsonl" "artifacts: run_summary.js
 e2e::section "Soak run: 5 iterations of fan-out scenario prove stability"
 # ===========================================================================
 
-# Repeat the same parallel fan-out scenario multiple times.
+# Repeat the same fan-out scenario multiple times.
 # Each iteration uses a fresh build+run via e2e::run.
 # Detects heisenbugs that only manifest under repeated execution.
 
 SOAK_ITERATIONS=5
 
 e2e::file "stress_soak.jh" <<'EOF'
-config {
-  run.inbox_parallel = true
-}
-
 channel ch -> t1, t2
 
 script soak_emit_i1 = `echo "i1"`
@@ -527,11 +503,11 @@ done
 e2e::pass "soak: all ${SOAK_ITERATIONS} iterations passed — dispatch counts, JSONL validity, sequence integrity"
 
 # ===========================================================================
-e2e::section "Sequential mode: same high-volume scenario produces identical results"
+e2e::section "High-volume replay: second 10-sender workflow matches inbox invariants"
 # ===========================================================================
 
-# Run the 10-sender scenario in sequential mode and verify same invariants.
-# This confirms sequential path is not regressed by parallel-mode changes.
+# Same shape as stress_highvol with distinct script names.
+# Confirms a second high-volume scenario still yields gapless sequences.
 
 e2e::file "stress_seq_mode.jh" <<'EOF'
 channel data -> sink

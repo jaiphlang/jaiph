@@ -318,7 +318,7 @@ export interface WorkflowMetadata {
     cursorFlags?: string;
     claudeFlags?: string;
   };
-  run?: { debug?: boolean; logsDir?: string; inboxParallel?: boolean; recoverLimit?: number };
+  run?: { debug?: boolean; logsDir?: string; recoverLimit?: number };
   runtime?: RuntimeConfig;
   module?: { name?: string; version?: string; description?: string };
   /** Preserves `#` lines and assignment order inside `config { }` (formatter). */

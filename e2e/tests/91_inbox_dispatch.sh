@@ -234,14 +234,10 @@ e2e::assert_file_exists "${TEST_DIR}/args.txt" "receiver wrote args file"
 expected_args="$(printf 'msg=payload-data\nchannel=events\nsender=producer')"
 e2e::assert_equals "$(cat "${TEST_DIR}/args.txt")" "${expected_args}" "receiver positional args (\$1=message, \$2=channel, \$3=sender)"
 
-e2e::section "Parallel dispatch: multi-target route executes all targets"
+e2e::section "Multi-target route: all targets execute"
 
 # Given
 e2e::file "parallel_multi.jh" <<'EOF'
-config {
-  run.inbox_parallel = true
-}
-
 channel results -> consumer_a, consumer_b
 
 script emit_parallel_payload = `echo "parallel-payload"`
@@ -268,19 +264,15 @@ EOF
 e2e::run "parallel_multi.jh" >/dev/null
 
 # Then
-e2e::assert_file_exists "${TEST_DIR}/consumer_a_par.txt" "parallel: consumer_a was dispatched"
-e2e::assert_equals "$(cat "${TEST_DIR}/consumer_a_par.txt")" "A got: parallel-payload" "parallel: consumer_a receives message"
-e2e::assert_file_exists "${TEST_DIR}/consumer_b_par.txt" "parallel: consumer_b was dispatched"
-e2e::assert_equals "$(cat "${TEST_DIR}/consumer_b_par.txt")" "B got: parallel-payload" "parallel: consumer_b receives message"
+e2e::assert_file_exists "${TEST_DIR}/consumer_a_par.txt" "multi-target: consumer_a was dispatched"
+e2e::assert_equals "$(cat "${TEST_DIR}/consumer_a_par.txt")" "A got: parallel-payload" "multi-target: consumer_a receives message"
+e2e::assert_file_exists "${TEST_DIR}/consumer_b_par.txt" "multi-target: consumer_b was dispatched"
+e2e::assert_equals "$(cat "${TEST_DIR}/consumer_b_par.txt")" "B got: parallel-payload" "multi-target: consumer_b receives message"
 
-e2e::section "Parallel dispatch: no duplicate/skipped sequence IDs under concurrent sends"
+e2e::section "Multi-target route: no duplicate/skipped sequence IDs under multiple sends"
 
-# Given — two workflows each send to the same inbox; parallel dispatch exercises lock paths
+# Given — two workflows each send to the same inbox
 e2e::file "parallel_seq.jh" <<'EOF'
-config {
-  run.inbox_parallel = true
-}
-
 channel data -> sink
 
 script emit_from_a = `echo "from-a"`
@@ -321,16 +313,12 @@ sink_lines="$(wc -l < "${TEST_DIR}/sink_log.txt" | tr -d ' ')"
 if [[ "$sink_lines" -ne 2 ]]; then
   e2e::fail "expected 2 sink invocations, got ${sink_lines}"
 fi
-e2e::pass "parallel: no duplicate/skipped sequences — exactly 2 dispatches"
+e2e::pass "multi-send: no duplicate/skipped sequences — exactly 2 dispatches"
 
-e2e::section "Parallel dispatch: failed target causes workflow failure"
+e2e::section "Multi-target route: failed target causes workflow failure"
 
 # Given
 e2e::file "parallel_fail.jh" <<'EOF'
-config {
-  run.inbox_parallel = true
-}
-
 channel ch -> good_target, bad_target
 
 script emit_msg = `echo "msg"`
@@ -359,18 +347,14 @@ e2e::run "parallel_fail.jh" >/dev/null 2>/dev/null || par_fail_exit=$?
 
 # Then
 if [[ "$par_fail_exit" -eq 0 ]]; then
-  e2e::fail "parallel: expected non-zero exit when a target fails"
+  e2e::fail "multi-target: expected non-zero exit when a target fails"
 fi
-e2e::pass "parallel: failed target propagates failure to owning workflow"
+e2e::pass "multi-target: failed target propagates failure to owning workflow"
 
-e2e::section "Parallel dispatch: run summary valid under concurrent activity"
+e2e::section "Multi-target route: run summary stays valid JSON"
 
 # Given
 e2e::file "parallel_summary.jh" <<'EOF'
-config {
-  run.inbox_parallel = true
-}
-
 channel events -> handler_a, handler_b
 
 script emit_e1 = `echo "e1"`
@@ -396,7 +380,7 @@ EOF
 # When
 e2e::run "parallel_summary.jh" >/dev/null
 
-# Then — each STEP_END line must be valid JSON (no corruption from concurrent appends)
+# Then — each line must be valid JSON
 run_dir="$(e2e::run_dir "parallel_summary.jh")"
 summary="${run_dir}/run_summary.jsonl"
 e2e::assert_file_exists "$summary" "run_summary.jsonl exists"
@@ -409,38 +393,4 @@ done < "$summary"
 if [[ "$invalid_lines" -gt 0 ]]; then
   e2e::fail "run_summary.jsonl has ${invalid_lines} invalid JSON lines"
 fi
-e2e::pass "parallel: run_summary.jsonl is valid under concurrent writes"
-
-e2e::section "Parallel dispatch via JAIPH_INBOX_PARALLEL env var"
-
-# Given — same workflow as basic multi-target, but parallel enabled via env
-e2e::file "env_parallel.jh" <<'EOF'
-channel results -> consumer_a, consumer_b
-
-script emit_env_parallel = `echo "env-parallel"`
-workflow producer() {
-  results <- run emit_env_parallel()
-}
-
-script write_env_a = `echo "A: $1" > env_a.txt`
-workflow consumer_a(message, chan, sender) {
-  run write_env_a(message)
-}
-
-script write_env_b = `echo "B: $1" > env_b.txt`
-workflow consumer_b(message, chan, sender) {
-  run write_env_b(message)
-}
-
-workflow default() {
-  run producer()
-}
-EOF
-
-# When
-JAIPH_INBOX_PARALLEL=true e2e::run "env_parallel.jh" >/dev/null
-
-# Then
-e2e::assert_file_exists "${TEST_DIR}/env_a.txt" "env parallel: consumer_a dispatched"
-e2e::assert_file_exists "${TEST_DIR}/env_b.txt" "env parallel: consumer_b dispatched"
-e2e::pass "parallel mode activatable via JAIPH_INBOX_PARALLEL env var"
+e2e::pass "multi-target: run_summary.jsonl lines are valid JSON"

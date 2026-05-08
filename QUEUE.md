@@ -13,54 +13,6 @@ Process rules:
 
 ***
 
-## Language cleanup — drop `JAIPH_INBOX_PARALLEL` parallel inbox dispatch #dev-ready
-
-**Goal**
-Remove the opt-in parallel-mode for inbox dispatch. Always drain the inbox queue sequentially. The "parallel" mode (`JAIPH_INBOX_PARALLEL=true` env var or `run.inbox_parallel = true` config key) uses `Promise.all` over routed targets within a single Node process — which gives no real CPU parallelism, only I/O interleaving for prompt-heavy receivers, while paying ongoing taxes (the `JAIPH_INBOX_PARALLEL_LOCKED` env shim, the `inbox_parallel` config key, the `docs/inbox.md` non-determinism caveats, and the more complex `drainWorkflowQueue` logic).
-
-**Context (read before starting)**
-
-* The parallel branch is in `src/runtime/kernel/node-workflow-runtime.ts:1316` (`const parallel = scope.env.JAIPH_INBOX_PARALLEL === "true";`) and the env-propagation logic at `:1779–1781` (`applyMetadataScope`).
-* The CLI sets the env var from config in `src/cli/run/env.ts:64–66` and locks it in `LOCKED_ENV_KEYS:13`.
-* The config key `run.inbox_parallel` lives in `src/parse/metadata.ts`: `ALLOWED_KEYS:13`, `KEY_TYPES:33`, `KEY_SETTERS:149`. `WorkflowMetadata.run.inboxParallel` is the AST field.
-* User-visible doc references: `docs/inbox.md` (look for "JAIPH_INBOX_PARALLEL" and "parallel" — the non-determinism caveat section).
-* E2E coverage: `e2e/tests/91_inbox_dispatch.sh` has a "Parallel dispatch via JAIPH_INBOX_PARALLEL env var" scenario at the bottom. This entire scenario is dropped along with the feature.
-
-**Scope**
-
-* **Runtime**:
-  - In `drainWorkflowQueue` (`node-workflow-runtime.ts:1316`), remove the `parallel` branch entirely. Sequential drain only.
-  - In `applyMetadataScope` (`:1779`), remove the `JAIPH_INBOX_PARALLEL` propagation block.
-* **CLI env** (`src/cli/run/env.ts`):
-  - Remove `JAIPH_INBOX_PARALLEL` from `LOCKED_ENV_KEYS`.
-  - Remove the `inboxParallel`-from-config block at lines 64–66.
-* **Config schema** (`src/parse/metadata.ts`):
-  - Remove `"run.inbox_parallel"` from `ALLOWED_KEYS`, `KEY_TYPES`, and `KEY_SETTERS`.
-  - `run.inbox_parallel = …` in a config block now produces `unknown config key: run.inbox_parallel`. (Free of charge from the existing `unknown config key` error path.)
-* **AST types** (`src/types.ts`):
-  - Remove `inboxParallel?: boolean` from `WorkflowMetadata.run`.
-* **Docs** (`docs/inbox.md`):
-  - Remove the `JAIPH_INBOX_PARALLEL` paragraph and the non-determinism caveats. State explicitly that inbox dispatch is sequential.
-* **E2E** (`e2e/tests/91_inbox_dispatch.sh`):
-  - Delete the "Parallel dispatch via JAIPH_INBOX_PARALLEL env var" scenario. Keep the rest of the file (sequential-mode tests).
-
-**Non-goals**
-
-* Do not change channel/route semantics or the inbox queue persistence (the per-message file write under `inbox/` when routed). That stays as-is.
-* Do not touch `INBOX_ENQUEUE` / `INBOX_DISPATCH_START` / `INBOX_DISPATCH_COMPLETE` event shapes in `run_summary.jsonl`.
-* Do not introduce a new opt-in for parallel dispatch under a different name. The point is removal.
-
-**Acceptance criteria**
-
-* `JAIPH_INBOX_PARALLEL=true` has no effect on `drainWorkflowQueue` (verifiable by adding a unit test that runs with and without the env var and asserts identical sequencing of dispatch events).
-* `run.inbox_parallel = true` in a `config { … }` block produces `E_PARSE: unknown config key: run.inbox_parallel`. A unit test in `src/parse/parse-metadata.test.ts` covers this.
-* `WorkflowMetadata.run` no longer has the `inboxParallel` field.
-* `docs/inbox.md` no longer mentions `JAIPH_INBOX_PARALLEL` or non-determinism caveats; it states sequential dispatch.
-* `bash e2e/test_all.sh` passes with the parallel-mode scenario removed.
-* `npm test` passes.
-
-***
-
 ## Refactor — split `src/runtime/kernel/node-workflow-runtime.ts` (1915 LoC) #dev-ready
 
 **Goal**

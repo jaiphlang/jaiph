@@ -1313,92 +1313,47 @@ export class NodeWorkflowRuntime {
   }
 
   private async drainWorkflowQueue(scope: Scope, ctx: WorkflowContext): Promise<StepResult> {
-    const parallel = scope.env.JAIPH_INBOX_PARALLEL === "true";
     let cursor = 0;
     while (cursor < ctx.queue.length) {
       const msg = ctx.queue[cursor]!;
       cursor += 1;
       const targets = ctx.routes.get(msg.channel) ?? [];
       if (targets.length === 0) continue;
-      if (parallel) {
-        const inboxArgs = [msg.content, msg.channel, msg.sender];
-        const dispatches = await Promise.all(
-          targets.map(async (target) => {
-            appendRunSummaryLine(
-              JSON.stringify({
-                type: "INBOX_DISPATCH_START",
-                ts: nowIso(),
-                run_id: this.runId,
-                channel: msg.channel,
-                sender: msg.sender,
-                inbox_seq: msg.seqPadded,
-                target,
-                event_version: 1,
-              }),
-            );
-            const t0 = Date.now();
-            const result = await this.executeRunRef(
-              this.buildInboxDispatchScope(scope, target, msg),
-              target,
-              inboxArgs,
-            );
-            appendRunSummaryLine(
-              JSON.stringify({
-                type: "INBOX_DISPATCH_COMPLETE",
-                ts: nowIso(),
-                run_id: this.runId,
-                channel: msg.channel,
-                sender: msg.sender,
-                inbox_seq: msg.seqPadded,
-                target,
-                status: result.status,
-                elapsed_ms: Date.now() - t0,
-                event_version: 1,
-              }),
-            );
-            return result;
+      const inboxArgs = [msg.content, msg.channel, msg.sender];
+      for (const target of targets) {
+        appendRunSummaryLine(
+          JSON.stringify({
+            type: "INBOX_DISPATCH_START",
+            ts: nowIso(),
+            run_id: this.runId,
+            channel: msg.channel,
+            sender: msg.sender,
+            inbox_seq: msg.seqPadded,
+            target,
+            event_version: 1,
           }),
         );
-        for (const d of dispatches) {
-          if (d.status !== 0) return d;
-        }
-      } else {
-        const inboxArgs = [msg.content, msg.channel, msg.sender];
-        for (const target of targets) {
-          appendRunSummaryLine(
-            JSON.stringify({
-              type: "INBOX_DISPATCH_START",
-              ts: nowIso(),
-              run_id: this.runId,
-              channel: msg.channel,
-              sender: msg.sender,
-              inbox_seq: msg.seqPadded,
-              target,
-              event_version: 1,
-            }),
-          );
-          const t0 = Date.now();
-          const dispatch = await this.executeRunRef(
-            this.buildInboxDispatchScope(scope, target, msg),
+        const t0 = Date.now();
+        const dispatch = await this.executeRunRef(
+          this.buildInboxDispatchScope(scope, target, msg),
+          target,
+          inboxArgs,
+        );
+        appendRunSummaryLine(
+          JSON.stringify({
+            type: "INBOX_DISPATCH_COMPLETE",
+            ts: nowIso(),
+            run_id: this.runId,
+            channel: msg.channel,
+            sender: msg.sender,
+            inbox_seq: msg.seqPadded,
             target,
-            inboxArgs,
-          );
-          appendRunSummaryLine(
-            JSON.stringify({
-              type: "INBOX_DISPATCH_COMPLETE",
-              ts: nowIso(),
-              run_id: this.runId,
-              channel: msg.channel,
-              sender: msg.sender,
-              inbox_seq: msg.seqPadded,
-              target,
-              status: dispatch.status,
-              elapsed_ms: Date.now() - t0,
-              event_version: 1,
-            }),
-          );
-          if (dispatch.status !== 0) return dispatch;
-        }
+            status: dispatch.status,
+            elapsed_ms: Date.now() - t0,
+            event_version: 1,
+          }),
+        );
+        if (dispatch.status !== 0) return dispatch;
       }
     }
     return { status: 0, output: "", error: "" };
@@ -1775,9 +1730,6 @@ export class NodeWorkflowRuntime {
       }
       if (parentEnv.JAIPH_DEBUG_LOCKED !== "1" && meta.run?.debug !== undefined) {
         nextEnv.JAIPH_DEBUG = meta.run.debug ? "true" : "false";
-      }
-      if (parentEnv.JAIPH_INBOX_PARALLEL_LOCKED !== "1" && meta.run?.inboxParallel !== undefined) {
-        nextEnv.JAIPH_INBOX_PARALLEL = meta.run.inboxParallel ? "true" : "false";
       }
     };
     apply(moduleMeta);

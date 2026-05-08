@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -282,6 +282,10 @@ test("jaiph run agent.backend = claude uses Claude CLI and captures output", () 
 test("jaiph run agent.backend = claude without claude in PATH fails with clear error", () => {
   const root = mkdtempSync(join(tmpdir(), "jaiph-run-backend-claude-missing-"));
   try {
+    const nodeOnlyBin = join(root, "node-only-bin");
+    mkdirSync(nodeOnlyBin, { recursive: true });
+    symlinkSync(process.execPath, join(nodeOnlyBin, "node"));
+
     const filePath = join(root, "prompt.jh");
     writeFileSync(
       filePath,
@@ -300,7 +304,7 @@ test("jaiph run agent.backend = claude without claude in PATH fails with clear e
     const runEnv: NodeJS.ProcessEnv = {
       ...process.env,
       JAIPH_DOCKER_ENABLED: "false",
-      PATH: `${dirname(process.execPath)}:/bin:/usr/bin:/nonexistent`,
+      PATH: `${nodeOnlyBin}:/nonexistent`,
     };
     delete runEnv.JAIPH_AGENT_BACKEND;
     const runResult = spawnSync("node", [cliPath, "run", filePath], {

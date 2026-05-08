@@ -7,7 +7,7 @@ redirect_from:
 
 # Configuration
 
-When you need the same workflow sources to behave differently on different machines, you separate **what the graph does** (rules, `prompt` / `script` / `run`, channels) from **operational knobs**: which LLM backend to use, where to write run logs, how inbox dispatch behaves, and how the CLI chooses host vs. Docker. Jaiph keeps the language stable and pushes those choices into **configuration** — in-file `config` blocks, environment variables, and defaults in the tool.
+When you need the same workflow sources to behave differently on different machines, you separate **what the graph does** (rules, `prompt` / `script` / `run`, channels) from **operational knobs**: which LLM backend to use, where to write run logs and debug output, and how the CLI chooses host vs. Docker. Jaiph keeps the language stable and pushes those choices into **configuration** — in-file `config` blocks, environment variables, and defaults in the tool. Inbox dispatch order is defined by the language (sequential drain of route targets — see [Inbox & Dispatch](inbox.md)); it is not a configuration toggle.
 
 All execution is interpreted by the Node workflow runtime (`NodeWorkflowRuntime`): the AST, managed scripts, prompts, channels, inbox, and `.jaiph/runs` artifacts (see [Architecture](architecture.md)). Configuration only adjusts that stack; it does not change the workflow language or the compile graph.
 
@@ -19,7 +19,7 @@ All execution is interpreted by the Node workflow runtime (`NodeWorkflowRuntime`
 
 Jaiph provides three configuration mechanisms. When the same key is set in more than one place, the highest-priority source wins:
 
-1. **Environment variables** — highest priority. Includes `JAIPH_AGENT_*`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, `JAIPH_INBOX_PARALLEL`, `JAIPH_DOCKER_ENABLED`, other `JAIPH_DOCKER_*`, and `JAIPH_UNSAFE` (for Docker on/off, see [Sandboxing — Enabling Docker](sandboxing.md#enabling-docker)). Docker **enablement** is only controlled here — there is no `runtime.*` in-file key for that (removed; using it is a parse error with a migration message).
+1. **Environment variables** — highest priority. Includes `JAIPH_AGENT_*`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, `JAIPH_DOCKER_ENABLED`, other `JAIPH_DOCKER_*`, and `JAIPH_UNSAFE` (for Docker on/off, see [Sandboxing — Enabling Docker](sandboxing.md#enabling-docker)). Docker **enablement** is only controlled here — there is no `runtime.*` in-file key for that (removed; using it is a parse error with a migration message).
 2. **In-file `config { ... }` blocks** — at module scope and optionally inside a `workflow` body.
 3. **Built-in defaults** — lowest priority, used when nothing else sets a value.
 
@@ -134,7 +134,6 @@ These control runtime behavior unrelated to the agent.
 |-----|------|---------|--------------|-------------|
 | `run.logs_dir` | string | `.jaiph/runs` | `JAIPH_RUNS_DIR` | Step log directory. Relative paths are joined with the workspace root; absolute paths are used as-is. |
 | `run.debug` | boolean | `false` | `JAIPH_DEBUG` | Enables debug tracing for the run. |
-| `run.inbox_parallel` | boolean | `false` | `JAIPH_INBOX_PARALLEL` | Dispatch inbox route targets concurrently. See [Inbox — Parallel dispatch](inbox.md#parallel-dispatch). |
 | `run.recover_limit` | integer | `10` | _(no env override)_ | Maximum number of retry attempts for `run … recover` loops before the step fails. See [Language — `recover`](language.md#recover--repair-and-retry-loop). |
 
 ### Module keys
@@ -180,7 +179,7 @@ These configure Docker sandboxing. Unlike agent and run keys, runtime keys are r
 
 For **agent and run keys**, resolution order (highest wins):
 
-1. **Environment** — `JAIPH_AGENT_*`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, `JAIPH_INBOX_PARALLEL`. When set, these lock the value for the entire process (see [Locked variables](#locked-variables)).
+1. **Environment** — `JAIPH_AGENT_*`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`. When set, these lock the value for the entire process (see [Locked variables](#locked-variables)).
 2. **Workflow-level `config`** — overrides module values for the duration of that workflow.
 3. **Module-level `config`** — applies to workflows that don't define their own block.
 4. **Built-in defaults.**
@@ -191,7 +190,7 @@ For **Docker enablement**, the `jaiph run` driver uses **`JAIPH_DOCKER_ENABLED` 
 
 When `jaiph run` builds the runner environment, any of these environment variables already present in `process.env` gets a matching `${NAME}_LOCKED` flag set to `"1"`:
 
-`JAIPH_AGENT_MODEL`, `JAIPH_AGENT_COMMAND`, `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_AGENT_CURSOR_FLAGS`, `JAIPH_AGENT_CLAUDE_FLAGS`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`, `JAIPH_INBOX_PARALLEL`
+`JAIPH_AGENT_MODEL`, `JAIPH_AGENT_COMMAND`, `JAIPH_AGENT_BACKEND`, `JAIPH_AGENT_TRUSTED_WORKSPACE`, `JAIPH_AGENT_CURSOR_FLAGS`, `JAIPH_AGENT_CLAUDE_FLAGS`, `JAIPH_RUNS_DIR`, `JAIPH_DEBUG`
 
 Locked values cannot be overridden by module-level or workflow-level config — they are authoritative for the entire process. This is how environment variables always win in the precedence chain.
 
@@ -320,7 +319,6 @@ Quick reference for all in-file keys and their environment variable equivalents:
 | `agent.claude_flags` | `JAIPH_AGENT_CLAUDE_FLAGS` |
 | `run.logs_dir` | `JAIPH_RUNS_DIR` |
 | `run.debug` | `JAIPH_DEBUG` |
-| `run.inbox_parallel` | `JAIPH_INBOX_PARALLEL` |
 | `run.recover_limit` | _(no env override)_ |
 | `runtime.docker_image` | `JAIPH_DOCKER_IMAGE` |
 | `runtime.docker_network` | `JAIPH_DOCKER_NETWORK` |
