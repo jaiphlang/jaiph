@@ -8,7 +8,8 @@ script git_porcelain_nonempty = `test -n "$(git status --porcelain)"`
 
 script git_mark_workspace_safe = `git config --global --add safe.directory "$(pwd)"`
 
-script git_create_patch_from_commit = `git config --global --add safe.directory "$(pwd)" && git format-patch -1 $1 > $2`
+# format-patch emits real diff to stdout only with --stdout; otherwise git writes *.patch files and stdout is only the path.
+script git_create_patch_from_commit = `git config --global --add safe.directory "$(pwd)" && git format-patch -1 HEAD --stdout > $1`
 
 rule in_git_repo() {
   run git_mark_workspace_safe()
@@ -65,10 +66,9 @@ workflow commit(task) {
   """
   returns "{ message: string, patch_file_name: string }"
 
-  const commit_message = response.message
   const patch_file_name = "${response.patch_file_name}.patch"
 
-  run git_create_patch_from_commit(commit_message, patch_file_name)
+  run git_create_patch_from_commit(patch_file_name)
 
   return patch_file_name
 }
