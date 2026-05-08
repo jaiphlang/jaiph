@@ -1,5 +1,6 @@
 # Unreleased
 
+- **Fix — CLI failure footer:** `Output of failed step` and the footer `out:` / `err:` paths now resolve from the **last** non-zero `STEP_END` in `run_summary.jsonl` (append order), not the first. The first failure line could be a recovered `catch`/`ensure` attempt, a stray record, or unrelated noise; the last failure matches the terminal step (the one the progress tree marks as failed). **`src/cli/shared/errors.test.ts`** covers multiple non-zero `STEP_END` lines.
 - **Fix — Docker default image tag:** `curl` / `docs/install` copied only `dist/src` into `~/.local/bin/.jaiph`, so the CLI could not read `package.json` and defaulted the sandbox image to `ghcr.io/jaiphlang/jaiph-runtime:nightly` even for stable installs. The installer now copies `package.json` beside `src/`, and `resolveDefaultDockerImageTag` checks both the installer layout and the npm `dist/src/runtime` layout.
 - **Repo — Test directory consolidation:** Consolidated the five-way test directory split (`src/**/*.test.ts`, `test/`, `tests/`, `compiler-tests/`, `golden-ast/`) into three test "places" plus two clearly named support directories. File moves:
   - `src/compiler-test-runner.ts` → `test-infra/compiler-test-runner.ts`

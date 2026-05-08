@@ -238,6 +238,38 @@ test("failedStepArtifactPaths: empty when summary missing failed STEP_END", () =
   }
 });
 
+test("failedStepArtifactPaths: uses last failed STEP_END when several have non-zero status", () => {
+  const dir = mkdtempSync(join(tmpdir(), "jaiph-failed-paths-last-"));
+  try {
+    const noiseOut = join(dir, "010_noise_fail.out");
+    const terminalOut = join(dir, "020_terminal_fail.out");
+    writeFileSync(
+      join(dir, "summary.jsonl"),
+      [
+        JSON.stringify({
+          type: "STEP_END",
+          status: 1,
+          out_file: noiseOut,
+          err_file: "",
+          out_content: "earlier spurious failure",
+        }),
+        JSON.stringify({
+          type: "STEP_END",
+          status: 1,
+          out_file: terminalOut,
+          err_file: "",
+          out_content: "terminal_failure_body",
+        }),
+      ].join("\n") + "\n",
+    );
+    const summaryPath = join(dir, "summary.jsonl");
+    assert.deepEqual(failedStepArtifactPaths(summaryPath), { out: terminalOut });
+    assert.equal(readFailedStepOutput(summaryPath), "terminal_failure_body");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("failedStepArtifactPaths: maps to failed step out file, not lexicographically latest in run dir", () => {
   const dir = mkdtempSync(join(tmpdir(), "jaiph-failed-paths-latest-"));
   try {

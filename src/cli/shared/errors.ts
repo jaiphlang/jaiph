@@ -119,12 +119,14 @@ type FailedStepSummaryRecord = {
   err_content?: string;
 };
 
-function readFirstFailedStepSummary(summaryPath: string): FailedStepSummaryRecord | null {
+/** Last failed step wins so the excerpt matches terminal failure after `catch`/retries or stray earlier records. */
+function readLastFailedStepSummary(summaryPath: string): FailedStepSummaryRecord | null {
   if (!existsSync(summaryPath)) {
     return null;
   }
   try {
     const lines = readFileSync(summaryPath, "utf8").split(/\r?\n/).filter(Boolean);
+    let last: FailedStepSummaryRecord | null = null;
     for (const line of lines) {
       const parsed = JSON.parse(line) as {
         type?: string;
@@ -137,22 +139,23 @@ function readFirstFailedStepSummary(summaryPath: string): FailedStepSummaryRecor
       if (parsed.type !== "STEP_END" || parsed.status === 0) {
         continue;
       }
-      return {
+      last = {
         out_file: typeof parsed.out_file === "string" ? parsed.out_file : "",
         err_file: typeof parsed.err_file === "string" ? parsed.err_file : "",
         out_content: typeof parsed.out_content === "string" ? parsed.out_content : undefined,
         err_content: typeof parsed.err_content === "string" ? parsed.err_content : undefined,
       };
     }
+    return last;
   } catch {
     // ignore parse/read errors
   }
   return null;
 }
 
-/** Artifact paths from the first failed STEP_END in the run summary (not lexicographic "latest" in the run dir). */
+/** Artifact paths from the last failed STEP_END in the run summary (not lexicographic "latest" in the run dir). */
 export function failedStepArtifactPaths(summaryPath: string): { out?: string; err?: string } {
-  const rec = readFirstFailedStepSummary(summaryPath);
+  const rec = readLastFailedStepSummary(summaryPath);
   if (!rec) {
     return {};
   }
@@ -167,7 +170,7 @@ export function failedStepArtifactPaths(summaryPath: string): { out?: string; er
 }
 
 export function readFailedStepOutput(summaryPath: string): string | null {
-  const rec = readFirstFailedStepSummary(summaryPath);
+  const rec = readLastFailedStepSummary(summaryPath);
   if (!rec) {
     return null;
   }
