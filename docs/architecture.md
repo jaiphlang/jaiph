@@ -52,7 +52,7 @@ All orchestration — local `jaiph run`, `jaiph test`, and **Docker `jaiph run`*
   - Executes `*.test.jh` test blocks using `NodeWorkflowRuntime` with mock support (mock prompts, mock workflow/rule/script bodies). Pure Node harness — no Bash test transpilation.
 
 - **JS kernel (`src/runtime/kernel/`)**
-  - Prompt execution (`prompt.ts`), managed subprocess execution (`run-step-exec.ts`), streaming parse (`stream-parser.ts`), schema (`schema.ts`), mocks (`mock.ts`), **`emit.ts`** (live `__JAIPH_EVENT__` + `run_summary.jsonl`), **`workflow-launch.ts`** (spawn contract).
+  - Prompt execution (`prompt.ts`), streaming parse (`stream-parser.ts`), schema (`schema.ts`), mocks (`mock.ts`), **`emit.ts`** (live `__JAIPH_EVENT__` + `run_summary.jsonl`), **`workflow-launch.ts`** (spawn contract). Script subprocesses are launched directly from `NodeWorkflowRuntime`.
 
 - **Formatter (`src/format/emit.ts`)**
   - `jaiph format` rewrites `.jh` / `.test.jh` files into canonical style. Pure AST→text emitter; no side-effects beyond file writes.
@@ -103,7 +103,7 @@ The runtime persists step captures and the event timeline under a UTC-dated hier
       run_summary.jsonl                # durable event timeline
 ```
 
-Step sequence numbers are monotonic and unique per run: `NodeWorkflowRuntime` allocates them in memory when opening each step’s capture files (`%06d-<safe_name>.out|.err`). The standalone module `kernel/seq-alloc.ts` is a **file-backed** allocator (and CLI `node seq-alloc.js`) for tooling or non-kernel callers; the Node workflow runtime does **not** rely on a `.seq` file in the run directory for ordinary execution.
+Step sequence numbers are monotonic and unique per run: `NodeWorkflowRuntime` allocates them in memory when opening each step’s capture files (`%06d-<safe_name>.out|.err`). There is no `.seq` file in the run directory.
 
 ## Channels and hooks in context
 

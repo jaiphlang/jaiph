@@ -340,17 +340,17 @@ Routed receivers get three dispatch values bound to their declared parameters:
 | 2nd declared parameter | Channel name (e.g. `findings`) |
 | 3rd declared parameter | Sender name (the **workflow name** that performed the send) |
 
-The environment variables `JAIPH_DISPATCH_CHANNEL` and `JAIPH_DISPATCH_SENDER`
-are **not** set by `NodeWorkflowRuntime`; receivers get channel and sender via
-their declared parameter names.
+Receivers get channel and sender via their declared parameter names —
+no environment-variable plumbing.
 
 - **`run_summary.jsonl`:** `NodeWorkflowRuntime` appends `INBOX_ENQUEUE`,
   `INBOX_DISPATCH_START`, and `INBOX_DISPATCH_COMPLETE` via
   `appendRunSummaryLine` (see [CLI — Run summary](cli.md#run-summary-jsonl)).
   `INBOX_DISPATCH_COMPLETE` includes `elapsed_ms`. For `INBOX_ENQUEUE`
   from `jaiph run`, the line includes `channel`, `sender`, and
-  `inbox_seq`. The full message body is always available on disk at
-  `inbox/NNN-<channel>.txt`.
+  `inbox_seq`. When a route consumes the channel, the full message body
+  is also written to `inbox/NNN-<channel>.txt` for audit; sends to
+  unrouted channels stay in the JSONL summary only.
 - **Calling a receiver with explicit args:** the CLI’s `jaiph run` only starts
   the file’s `default` workflow; extra CLI arguments are passed to `default`
   (see [CLI — `jaiph run`](cli.md#jaiph-run)). There is no `jaiph run

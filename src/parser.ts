@@ -88,8 +88,10 @@ export function parsejaiph(source: string, filePath: string): jaiphModule {
       continue;
     }
 
-    const isTestFile = filePath.endsWith(".test.jh");
-    if (isTestFile && line.startsWith("test ")) {
+    if (line.startsWith("test ")) {
+      if (!filePath.endsWith(".test.jh")) {
+        fail(filePath, "test blocks belong in *.test.jh files; rename the file or remove the test block", lineNo);
+      }
       if (!mod.tests) {
         mod.tests = [];
       }

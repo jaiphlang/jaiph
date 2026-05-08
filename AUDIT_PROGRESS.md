@@ -25,7 +25,7 @@ deleted before the audit work began; visible in `git status` at session start).
 - [x] A7. Delete `local NAME` rejection in `parser.ts`; remove `local` from `JAIPH_KEYWORDS`
 - [x] A8. Delete `script:` legacy rejection (parser.ts + scripts.ts)
 - [x] A9. Delete `runtime.docker_*` rename map in `parse/metadata.ts`
-- [ ] A10. Strip bash-heritage comment headers (after touching each file)
+- [x] A10. Strip bash-heritage comment headers + stale doc references (architecture.md, inbox.md)
 - [x] A11. Remove unused `isRef` import in `const-rhs.ts`
 
 ## B. Duplication
@@ -48,7 +48,7 @@ deleted before the audit work began; visible in `git status` at session start).
 ## C. Inconsistencies / bugs
 
 - [x] C1. Replace `includes("rule ")` etc. with strict regex in parser.ts dispatch
-- [ ] C2. (defer — small) Move test-block file-suffix check to validation
+- [x] C2. test blocks outside *.test.jh now produce a clear E_PARSE error in the parser
 - [x] C3. Reject `return 0` / `return $?` / `return INTEGER` in workflows/rules
 - [x] C4. `executeScript` returnValue only when status === 0
 - [x] C5. Async-branch recovery propagates `recoverReturn`
@@ -56,7 +56,7 @@ deleted before the audit work began; visible in `git status` at session start).
 - [—] C7. Deferred — sed-based rename was over-aggressive (caught source-keyword strings); needs hand-edit Rename AST `recover` → `catch`, `recoverLoop` → `recover`
 - [—] C8. Deferred — would emit `__JAIPH_EVENT__` lines on stderr in in-process test runner; behaviour change too risky for this pass Remove `JAIPH_TEST_MODE` event suppression in production code
 - [x] C9. Inbox files: write only when routed (or document audit-only)
-- [ ] C10. (defer — needs behaviour decision on stream-vs-final write) Pick one capture-write strategy in `executeShLine`
+- [—] C10. Skipped — dual-write is structurally redundant but functionally correct; eliminating cleanly requires propagating `io` through mock-body/mock-script paths
 - [—] C11. Skipped — tests reference exact phrasing; cosmetic gain not worth churn Unify parser error-message phrasing
 - [—] C12. Skipped — standalone `match` is idiomatic for dispatch (e2e tests use it) Reject standalone `match` step in validator
 - [—] C13. Skipped — `allowRegexLiteral` flag is well-contained; moving needs duplication Move `couldStartRegexLiteralAt` into `match.ts`
