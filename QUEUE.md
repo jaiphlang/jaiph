@@ -16,7 +16,7 @@ Process rules:
 ## Cleanup — consolidate the 5-way test directory split #dev-ready
 
 **Goal**
-Today there are five different places that contain "tests": `src/**/*.test.ts` (66 unit tests, adjacent to source), `test/` (4 integration files including a 2427-LoC `sample-build.test.ts`), `tests/e2e-samples/` (a single Playwright file), `compiler-tests/` (txtar fixtures), `golden-ast/` (fixtures + expected). Plus runners `src/compiler-test-runner.ts` and `src/golden-ast-runner.ts` mixed into the production source tree. A new contributor cannot tell where a new test belongs without reading the whole layout. Fix the structure in one pass.
+Today there are five different places that contain "tests": `src/**/*.test.ts` (60 unit tests, adjacent to source), `test/` (4 integration files totalling ~3347 LoC, including a 2814-LoC `sample-build.test.ts`), `tests/e2e-samples/` (one Playwright spec plus a shared `docs-site.ts` constants module), `compiler-tests/` (txtar fixtures), `golden-ast/` (fixtures + expected). Plus runners `src/compiler-test-runner.ts` and `src/golden-ast-runner.ts` mixed into the production source tree. A new contributor cannot tell where a new test belongs without reading the whole layout. Fix the structure in one pass.
 
 **Context (read before starting)**
 
@@ -42,13 +42,14 @@ Today there are five different places that contain "tests": `src/**/*.test.ts` (
   - `compiler-tests/` → `test-fixtures/compiler-txtar/` (preserves the README inside).
   - `golden-ast/` → `test-fixtures/golden-ast/` (preserves the `fixtures/` and `expected/` subdirs underneath).
   - Update path references in `test-infra/compiler-test-runner.ts` and `test-infra/golden-ast-runner.ts`.
-* **Fold the singleton Playwright test**:
+* **Fold the Playwright spec**:
   - `tests/e2e-samples/landing-page.spec.ts` → `e2e/playwright/landing-page.spec.ts`.
+  - `tests/e2e-samples/docs-site.ts` (the shared constants module imported by the spec) → `e2e/playwright/docs-site.ts`. Update the relative import.
   - Update `playwright.config.ts` and the `test:samples` npm script accordingly.
   - Delete the now-empty `tests/` directory.
-* **Triage `test/` (4 files, 2960 LoC)**:
+* **Triage `test/` (4 files, ~3347 LoC)**:
   - `test/run-summary-jsonl.test.ts` (178 LoC), `test/signal-lifecycle.test.ts` (220 LoC), `test/tty-running-timer.test.ts` (135 LoC) — keep in a renamed `integration/` directory. They are integration-flavored, not unit, and don't have an obvious adjacent home.
-  - `test/sample-build.test.ts` (2427 LoC) — split. Read the file, group its tests by which subsystem they actually exercise, and move each group either next to that subsystem (`src/.../<name>.integration.test.ts`) or into `integration/sample-build/<topic>.test.ts`. Aim for no resulting file over ~600 LoC. The split is the work; it is not optional.
+  - `test/sample-build.test.ts` (2814 LoC) — split. Read the file, group its tests by which subsystem they actually exercise, and move each group either next to that subsystem (`src/.../<name>.integration.test.ts`) or into `integration/sample-build/<topic>.test.ts`. Aim for no resulting file over ~600 LoC. The split is the work; it is not optional.
   - Move `test/expected/` and `test/fixtures/` to `test-fixtures/sample-build/` if any test still references them after the split.
 * **Final layout** (target):
   ```
@@ -83,10 +84,58 @@ Today there are five different places that contain "tests": `src/**/*.test.ts` (
 
 ***
 
-## Refactor — split `src/runtime/kernel/node-workflow-runtime.ts` (1901 LoC) #dev-ready
+## Language cleanup — drop `JAIPH_INBOX_PARALLEL` parallel inbox dispatch #dev-ready
 
 **Goal**
-`src/runtime/kernel/node-workflow-runtime.ts` is a 1901-LoC god file: ~280 LoC of free arg-parsing helpers above the class, then ~1620 LoC of `NodeWorkflowRuntime` spanning workflow orchestration, step execution, prompt step lifecycle, event emission, mock execution, frame stack management, and heartbeat I/O. Reading or modifying any one concern requires holding all of them in head. Split along clean seams so each concern is in a focused module.
+Remove the opt-in parallel-mode for inbox dispatch. Always drain the inbox queue sequentially. The "parallel" mode (`JAIPH_INBOX_PARALLEL=true` env var or `run.inbox_parallel = true` config key) uses `Promise.all` over routed targets within a single Node process — which gives no real CPU parallelism, only I/O interleaving for prompt-heavy receivers, while paying ongoing taxes (the `JAIPH_INBOX_PARALLEL_LOCKED` env shim, the `inbox_parallel` config key, the `docs/inbox.md` non-determinism caveats, and the more complex `drainWorkflowQueue` logic).
+
+**Context (read before starting)**
+
+* The parallel branch is in `src/runtime/kernel/node-workflow-runtime.ts:1316` (`const parallel = scope.env.JAIPH_INBOX_PARALLEL === "true";`) and the env-propagation logic at `:1779–1781` (`applyMetadataScope`).
+* The CLI sets the env var from config in `src/cli/run/env.ts:64–66` and locks it in `LOCKED_ENV_KEYS:13`.
+* The config key `run.inbox_parallel` lives in `src/parse/metadata.ts`: `ALLOWED_KEYS:13`, `KEY_TYPES:33`, `KEY_SETTERS:149`. `WorkflowMetadata.run.inboxParallel` is the AST field.
+* User-visible doc references: `docs/inbox.md` (look for "JAIPH_INBOX_PARALLEL" and "parallel" — the non-determinism caveat section).
+* E2E coverage: `e2e/tests/91_inbox_dispatch.sh` has a "Parallel dispatch via JAIPH_INBOX_PARALLEL env var" scenario at the bottom. This entire scenario is dropped along with the feature.
+
+**Scope**
+
+* **Runtime**:
+  - In `drainWorkflowQueue` (`node-workflow-runtime.ts:1316`), remove the `parallel` branch entirely. Sequential drain only.
+  - In `applyMetadataScope` (`:1779`), remove the `JAIPH_INBOX_PARALLEL` propagation block.
+* **CLI env** (`src/cli/run/env.ts`):
+  - Remove `JAIPH_INBOX_PARALLEL` from `LOCKED_ENV_KEYS`.
+  - Remove the `inboxParallel`-from-config block at lines 64–66.
+* **Config schema** (`src/parse/metadata.ts`):
+  - Remove `"run.inbox_parallel"` from `ALLOWED_KEYS`, `KEY_TYPES`, and `KEY_SETTERS`.
+  - `run.inbox_parallel = …` in a config block now produces `unknown config key: run.inbox_parallel`. (Free of charge from the existing `unknown config key` error path.)
+* **AST types** (`src/types.ts`):
+  - Remove `inboxParallel?: boolean` from `WorkflowMetadata.run`.
+* **Docs** (`docs/inbox.md`):
+  - Remove the `JAIPH_INBOX_PARALLEL` paragraph and the non-determinism caveats. State explicitly that inbox dispatch is sequential.
+* **E2E** (`e2e/tests/91_inbox_dispatch.sh`):
+  - Delete the "Parallel dispatch via JAIPH_INBOX_PARALLEL env var" scenario. Keep the rest of the file (sequential-mode tests).
+
+**Non-goals**
+
+* Do not change channel/route semantics or the inbox queue persistence (the per-message file write under `inbox/` when routed). That stays as-is.
+* Do not touch `INBOX_ENQUEUE` / `INBOX_DISPATCH_START` / `INBOX_DISPATCH_COMPLETE` event shapes in `run_summary.jsonl`.
+* Do not introduce a new opt-in for parallel dispatch under a different name. The point is removal.
+
+**Acceptance criteria**
+
+* `JAIPH_INBOX_PARALLEL=true` has no effect on `drainWorkflowQueue` (verifiable by adding a unit test that runs with and without the env var and asserts identical sequencing of dispatch events).
+* `run.inbox_parallel = true` in a `config { … }` block produces `E_PARSE: unknown config key: run.inbox_parallel`. A unit test in `src/parse/parse-metadata.test.ts` covers this.
+* `WorkflowMetadata.run` no longer has the `inboxParallel` field.
+* `docs/inbox.md` no longer mentions `JAIPH_INBOX_PARALLEL` or non-determinism caveats; it states sequential dispatch.
+* `bash e2e/test_all.sh` passes with the parallel-mode scenario removed.
+* `npm test` passes.
+
+***
+
+## Refactor — split `src/runtime/kernel/node-workflow-runtime.ts` (1915 LoC) #dev-ready
+
+**Goal**
+`src/runtime/kernel/node-workflow-runtime.ts` is a 1915-LoC god file: ~280 LoC of free arg-parsing helpers above the class, then ~1620 LoC of `NodeWorkflowRuntime` spanning workflow orchestration, step execution, prompt step lifecycle, event emission, mock execution, frame stack management, and heartbeat I/O. Reading or modifying any one concern requires holding all of them in head. Split along clean seams so each concern is in a focused module.
 
 **Context (read before starting)**
 
@@ -95,6 +144,8 @@ Today there are five different places that contain "tests": `src/**/*.test.ts` (
 * Free helpers above the class (`interpolate`, `parseInlineCaptureCall`, `commaArgsToInterpolated`, `parseArgsRaw`, `parseInlineScriptAt`, `parseManagedArgAt`, `parseArgTokens`, `stripOuterQuotes`, `parsePromptSchema`, `BARE_IDENT_RE`, `MAX_EMBED`, `MAX_RECURSION_DEPTH`, `sanitizeName`, `nowIso`) — all stateless. Safe to extract.
 * Methods that are pure event emission (`emitWorkflow`, `emitStep`, `emitPromptStepStart`, `emitPromptStepEnd`, `emitPromptEvent`, `emitLog`) all call `appendRunSummaryLine` and `process.stderr.write`. They depend on the class only for `runId`, `summaryFile`, and `getAsyncIndices()`. Can move to a module that takes those as constructor args.
 * Mock execution methods (`executeMockBodyDef`, `executeMockShellBody`) are largely self-contained and could move to a sibling module.
+* The runtime now also contains two helpers added during the recent audit refactor: `runRecoverBody` (catch/recover body executor) and `runPromptStep` (shared prompt-step pipeline). Both depend on `executeSteps` / `interpolateWithCaptures` and stay with the orchestrator class.
+* `src/runtime/kernel/run-step-exec.ts` was deleted in the audit cleanup; ignore any prior reference to it as a "do not touch" file.
 
 **Scope**
 
@@ -106,11 +157,11 @@ Extract three new sibling modules under `src/runtime/kernel/`:
   - The `ParsedArgToken`, `PromptSchemaField` types if they are not used elsewhere in the class
   - **Required**: extracted helpers must have unit tests (some already do indirectly via runtime tests; new direct tests live in `runtime-arg-parser.test.ts`).
 * **`runtime-event-emitter.ts`** — a small class `RuntimeEventEmitter` constructed with `{ runId, asyncIndicesGetter, env }`, exposing `emitWorkflow`, `emitStep`, `emitPromptStepStart`, `emitPromptStepEnd`, `emitPromptEvent`, `emitLog`. The runtime constructs one and delegates. No more direct `process.stderr.write(__JAIPH_EVENT__ ...)` scattered through the runtime.
-* **`runtime-mock.ts`** — `executeMockBodyDef` and `executeMockShellBody` move here as exported functions taking `{ ref, args, env, cwd, executeStepsBack }` (the last is a callback so the mock can dispatch back into the runtime for `kind: "steps"` mocks). Removes the `require("node:child_process")` and `require("node:fs")` calls that currently shadow ESM imports inside the class body — that is a code smell that should die in this task.
+* **`runtime-mock.ts`** — `executeMockBodyDef` and `executeMockShellBody` move here as exported functions taking `{ ref, args, env, cwd, executeStepsBack }` (the last is a callback so the mock can dispatch back into the runtime for `kind: "steps"` mocks). Removes the `require("node:child_process")` call that currently shadows ESM imports inside `executeMockShellBody` — that is a code smell that should die in this task.
 
 After the split, `node-workflow-runtime.ts` keeps only:
 * The `NodeWorkflowRuntime` class
-* Workflow/step orchestration (`runDefault`, `runNamedWorkflow`, `executeSteps`, `executeStep`, frame and scope management)
+* Workflow/step orchestration (`runDefault`, `runNamedWorkflow`, `executeSteps`, `executeStep`, frame and scope management, `runRecoverBody`, `runPromptStep`)
 * The async-handle bookkeeping (`getAsyncIndices`, `getFrameStack`)
 * Heartbeat (`startHeartbeat`, `stopHeartbeat`, `writeHeartbeat`)
 
@@ -121,7 +172,7 @@ Target size for `node-workflow-runtime.ts` after split: ~1000–1200 LoC. Still 
 * Do not change behavior. Every existing test must still pass without modification.
 * Do not redesign the event format, the mock contract, or the arg-parser's accepted syntax. This is a relocation task only.
 * Do not split further than the three new modules listed. Over-decomposition is its own problem; this task is calibrated for one round of splitting.
-* Do not touch `node-workflow-runner.ts` (the CLI shim) or `run-step-exec.ts` (subprocess plumbing) — those are already correctly sized and out of scope.
+* Do not touch `node-workflow-runner.ts` (the CLI shim) — it is correctly sized and out of scope.
 
 **Acceptance criteria**
 
@@ -131,6 +182,46 @@ Target size for `node-workflow-runtime.ts` after split: ~1000–1200 LoC. Still 
 * `npm test` passes with no test changes other than possibly importing helpers from their new location.
 * No `require("node:...")` calls inside class methods (they are replaced by top-of-file `import` statements as part of the mock extraction).
 * The new modules have no circular imports back into `node-workflow-runtime.ts`. Dependency direction is one-way: orchestrator → helpers/emitter/mock.
+
+***
+
+## Cleanup — remove `JAIPH_TEST_MODE` event suppression in production runtime code #dev-ready
+
+**Goal**
+The runtime currently checks `this.env.JAIPH_TEST_MODE !== "1"` at two sites in `node-workflow-runtime.ts` (lines 649 and 1872, in the `emitLog` and `emitStep` methods after the runtime split moves them into `runtime-event-emitter.ts`) before writing `__JAIPH_EVENT__` lines to stderr. This is a test-only conditional embedded in production code: tests that construct `NodeWorkflowRuntime` in-process set `JAIPH_TEST_MODE=1` to keep their stderr clean. Replace it with an explicit construction-time switch so production code has no test-mode awareness.
+
+**Context (read before starting)**
+
+* If the runtime split has landed, the two `JAIPH_TEST_MODE` checks now live in `runtime-event-emitter.ts`. If not yet, they are at `node-workflow-runtime.ts:649` and `:1872`. This task should be done **after** the runtime split — the new event-emitter module is the natural home for the construction-time switch.
+* `JAIPH_TEST_MODE` is also read by `prompt.ts` (line 85, `isTestMode`) for selecting mock dispatch over the real backend. **That use is legitimate** and not in scope for this task. We are removing only the event-suppression use.
+* `node-test-runner.ts` sets `JAIPH_TEST_MODE: "1"` at line 149 when building the env for in-process runtime construction. After this task, that env var still belongs there for `prompt.ts`'s benefit, but should no longer affect event emission.
+* The reason this can't simply be deleted: `node-test-runner.ts` runs `NodeWorkflowRuntime` in the same Node process as the test runner. Without suppression, every workflow event (`STEP_START`, `STEP_END`, `LOG`, etc.) would print to the test process's stderr, swamping `node --test` reporter output.
+
+**Scope**
+
+* **Constructor option** (`src/runtime/kernel/runtime-event-emitter.ts` after split, or `node-workflow-runtime.ts` if before):
+  - Add a `suppressLiveEvents?: boolean` option to the `RuntimeEventEmitter` constructor (or `NodeWorkflowRuntimeOptions`).
+  - Replace `if (this.env.JAIPH_TEST_MODE !== "1")` with `if (!this.suppressLiveEvents)`. The check moves from a per-call env read to a constructor-time property.
+* **Test runner** (`src/runtime/kernel/node-test-runner.ts`):
+  - When constructing `NodeWorkflowRuntime` for a `test_run_workflow` step, pass `suppressLiveEvents: true` in the options.
+  - Keep `JAIPH_TEST_MODE: "1"` in the env (for `prompt.ts`'s mock-mode selection).
+* **Production paths**:
+  - `node-workflow-runner.ts` (the CLI's spawned child) constructs the runtime without the option, so `suppressLiveEvents` defaults to `false` and live events stream to stderr as before.
+  - No other production caller constructs `NodeWorkflowRuntime` directly.
+
+**Non-goals**
+
+* Do not remove `JAIPH_TEST_MODE` reads from `prompt.ts`. The mock-mode selection use is legitimate and not in scope.
+* Do not change the `__JAIPH_EVENT__` format, the durable `appendRunSummaryLine` call, or any other runtime behavior. This task moves a single conditional from a runtime env read to a constructor option.
+* Do not introduce a new env var for the suppression. The whole point is to take the env-var conditional out of production code.
+
+**Acceptance criteria**
+
+* No production code in `src/runtime/kernel/` (excluding `prompt.ts`'s mock-mode selection) reads `JAIPH_TEST_MODE` for any purpose.
+* `NodeWorkflowRuntime` (or `RuntimeEventEmitter`) has a documented `suppressLiveEvents` option.
+* In-process tests pass `suppressLiveEvents: true` and continue to produce clean test output.
+* `npm test` passes; running it does **not** print any `__JAIPH_EVENT__` lines to stderr (modulo the e2e shell tests which exercise the production CLI path).
+* Spawning `node-workflow-runner.js` directly (production path, e.g. via `jaiph run`) still emits `__JAIPH_EVENT__` lines on stderr as before — verified by an existing e2e test or a new acceptance test.
 
 ***
 
