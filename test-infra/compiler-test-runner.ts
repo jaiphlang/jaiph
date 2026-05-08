@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { readFileSync, writeFileSync, mkdtempSync, rmSync, readdirSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { parsejaiph } from "./parser";
-import { validateReferences } from "./transpile/validate";
-import { resolveImportPath } from "./transpile/resolve";
+import { parsejaiph } from "../src/parser";
+import { validateReferences } from "../src/transpile/validate";
+import { resolveImportPath } from "../src/transpile/resolve";
 
 // --- txtar parser ---
 
@@ -190,7 +190,7 @@ export function expectFailure(tc: TxtarTestCase): boolean {
 
 // --- main: discover and run all txtar files ---
 
-const fixturesDir = resolve(process.cwd(), "compiler-tests");
+const fixturesDir = resolve(process.cwd(), "test-fixtures/compiler-txtar");
 const txtarFiles = readdirSync(fixturesDir).filter((f) => f.endsWith(".txt"));
 
 for (const file of txtarFiles) {

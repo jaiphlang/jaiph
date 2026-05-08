@@ -16,6 +16,7 @@ import {
   cloneWorkspaceForSandbox,
   allocateSandboxWorkspaceDir,
   pullImageIfNeeded,
+  resolveDefaultDockerImageTag,
   _dockerExec,
   _uidDetect,
   type DockerRunConfig,
@@ -70,6 +71,29 @@ test("resolveDockerConfig: defaults when no in-file and no env — Docker on", (
   assert.ok(cfg.image.startsWith(GHCR_IMAGE_REPO + ":"), `default image should be GHCR: ${cfg.image}`);
   assert.equal(cfg.network, "default");
   assert.equal(cfg.timeoutSeconds, 3600);
+});
+
+test("resolveDefaultDockerImageTag: curl-installer layout (package.json beside src/)", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-installer-"));
+  const runtimeDir = join(root, "src", "runtime");
+  mkdirSync(runtimeDir, { recursive: true });
+  writeFileSync(join(root, "package.json"), JSON.stringify({ version: "9.8.7" }), "utf8");
+  assert.equal(resolveDefaultDockerImageTag(runtimeDir), "9.8.7");
+});
+
+test("resolveDefaultDockerImageTag: npm / dist/src/runtime layout", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-npm-"));
+  const runtimeDir = join(root, "dist", "src", "runtime");
+  mkdirSync(runtimeDir, { recursive: true });
+  writeFileSync(join(root, "package.json"), JSON.stringify({ version: "1.2.3" }), "utf8");
+  assert.equal(resolveDefaultDockerImageTag(runtimeDir), "1.2.3");
+});
+
+test("resolveDefaultDockerImageTag: falls back to nightly when no package.json", () => {
+  const root = mkdtempSync(join(tmpdir(), "jaiph-no-pkg-"));
+  const runtimeDir = join(root, "dist", "src", "runtime");
+  mkdirSync(runtimeDir, { recursive: true });
+  assert.equal(resolveDefaultDockerImageTag(runtimeDir), "nightly");
 });
 
 test("resolveDockerConfig: in-file image/timeout overrides defaults (dockerEnabled removed)", () => {

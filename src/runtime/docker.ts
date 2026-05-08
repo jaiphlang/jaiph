@@ -52,16 +52,27 @@ export function validateMountHostPath(hostAbsPath: string): void {
 // Config resolution (env > in-file > defaults)
 // ---------------------------------------------------------------------------
 
-/** Read the package version to derive the default GHCR image tag. */
-function resolveDefaultImageTag(): string {
-  try {
-    const pkgPath = resolve(__dirname, "..", "..", "..", "package.json");
-    const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
-    if (pkg.version && typeof pkg.version === "string") {
-      return pkg.version;
+/**
+ * Read the jaiph package version to derive the default GHCR image tag.
+ *
+ * Tries two relative layouts:
+ * - Installer (`docs/install`): `…/libDir/package.json` next to `libDir/src/runtime/` (two hops up).
+ * - npm / repo build: `…/pkg/package.json` from `pkg/dist/src/runtime/` (three hops up).
+ */
+export function resolveDefaultDockerImageTag(moduleDir: string = __dirname): string {
+  const candidates = [
+    resolve(moduleDir, "..", "..", "package.json"),
+    resolve(moduleDir, "..", "..", "..", "package.json"),
+  ];
+  for (const pkgPath of candidates) {
+    try {
+      const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+      if (pkg.version && typeof pkg.version === "string") {
+        return pkg.version;
+      }
+    } catch {
+      // Try next candidate.
     }
-  } catch {
-    // Fall through to nightly.
   }
   return "nightly";
 }
@@ -70,7 +81,7 @@ export const GHCR_IMAGE_REPO = "ghcr.io/jaiphlang/jaiph-runtime";
 
 const DEFAULTS: DockerRunConfig = {
   enabled: false,
-  image: `${GHCR_IMAGE_REPO}:${resolveDefaultImageTag()}`,
+  image: `${GHCR_IMAGE_REPO}:${resolveDefaultDockerImageTag()}`,
   imageExplicit: false,
   network: "default",
   timeoutSeconds: 3600,
@@ -271,7 +282,7 @@ export function resolveImage(config: DockerRunConfig): string {
  * Container-side fuse-overlayfs setup loaded from runtime/overlay-run.sh.
  *
  * Resolves the file relative to package root — works from both source and dist
- * layouts, mirroring the approach used by `resolveDefaultImageTag`.
+ * layouts, mirroring `resolveDefaultDockerImageTag` (package.json hops).
  */
 const OVERLAY_SCRIPT = readFileSync(
   existsSync(resolve(__dirname, "overlay-run.sh"))

@@ -48,14 +48,14 @@ For day-to-day work on the compiler and CLI you usually stay inside the clone: i
 | `npm install` | Installs TypeScript and types (dev dependencies). |
 | `npm run build` | Runs `tsc`, then copies **`src/runtime`** → **`dist/src/runtime`** (kernel JS for the compiled CLI) and **`runtime/overlay-run.sh`** → **`dist/src/runtime/overlay-run.sh`** (Docker overlay entrypoint). |
 | `npm run build:standalone` | `npm run build`, then copies **`dist/src/runtime`** → **`dist/runtime`** and runs **`bun build --compile`** on `src/cli.ts` → **`dist/jaiph`**. Requires [Bun](https://bun.sh). Ship the **`dist/`** tree (binary plus the runtime directory) for a self-contained layout. |
-| `npm test` | **`npm run clean`**, then **`npm run build`**, then the Node.js test runner with **`JAIPH_UNSAFE=true`**, **`NODE_OPTIONS`** including **`--enable-source-maps`** and a large heap limit, on `dist/test/*.test.js`, every file under `dist/src/` matching `*.test.js` or `*.acceptance.test.js` (via `find`), `dist/src/compiler-test-runner.js` (txtar compiler tests), and `dist/src/golden-ast-runner.js` (golden AST tests). |
-| `npm run test:compiler` | **`npm run build`**, then **`node --test`** on `dist/src/compiler-test-runner.js` — runs txtar-based compiler test fixtures from `compiler-tests/`. |
-| `npm run test:golden-ast` | **`npm run build`**, then **`node --test`** on `dist/src/golden-ast-runner.js` — runs golden AST tests from `golden-ast/`. Use `UPDATE_GOLDEN=1 npm run test:golden-ast` to regenerate goldens after intentional parser changes. |
+| `npm test` | **`npm run clean`**, then **`npm run build`**, then the Node.js test runner with **`JAIPH_UNSAFE=true`**, **`NODE_OPTIONS`** including **`--enable-source-maps`** and a large heap limit, on every file under `dist/integration/` matching `*.test.js`, every file under `dist/src/` matching `*.test.js` or `*.acceptance.test.js` (via `find`), `dist/test-infra/compiler-test-runner.js` (txtar compiler tests), and `dist/test-infra/golden-ast-runner.js` (golden AST tests). |
+| `npm run test:compiler` | **`npm run build`**, then **`node --test`** on `dist/test-infra/compiler-test-runner.js` — runs txtar-based compiler test fixtures from `test-fixtures/compiler-txtar/`. |
+| `npm run test:golden-ast` | **`npm run build`**, then **`node --test`** on `dist/test-infra/golden-ast-runner.js` — runs golden AST tests from `test-fixtures/golden-ast/`. Use `UPDATE_GOLDEN=1 npm run test:golden-ast` to regenerate goldens after intentional parser changes. |
 | `npm run test:acceptance:compiler` | **`npm run build`**, then **`node --test`** on only `dist/src/**/*.acceptance.test.js` — compiler acceptance tests without the full unit suite or E2E. |
 | `npm run test:acceptance:runtime` | **`bash ./e2e/test_all.sh`** only — same E2E driver as below **without** an implicit rebuild; ensure `dist/` is up to date before running. |
 | `npm run test:acceptance` | **`npm run test:acceptance:compiler`** then **`npm run test:acceptance:runtime`**. |
 | `npm run test:e2e` | **`npm run build`**, then **`bash ./e2e/test_all.sh`**. Prefer this when you want a fresh `dist/` before E2E. By default this exercises the **Docker** sandbox when `JAIPH_UNSAFE` is unset. For a faster host-only run (no container), use **`JAIPH_UNSAFE=true npm run test:e2e`**. |
-| `npm run test:samples` | **`npx playwright test`** — Playwright suite for the docs landing page (`tests/e2e-samples/`). Uses `http://127.0.0.1:4000` (see `playwright.config.ts`); starts Jekyll via `webServer` or reuses one already on that port. Requires Playwright (`npx playwright install chromium` once). |
+| `npm run test:samples` | **`npx playwright test`** — Playwright suite for the docs landing page (`e2e/playwright/`). Uses `http://127.0.0.1:4000` (see `playwright.config.ts`); starts Jekyll via `webServer` or reuses one already on that port. Requires Playwright (`npx playwright install chromium` once). |
 | `npm run test:ci` | `npm test` followed by `npm run test:e2e` — useful before pushing when you want the full local picture. |
 
 Run a single Node test file after a build with e.g. `node --test dist/src/parse/parse-core.test.js`. The `dist/` paths mirror the source layout under `src/`.
@@ -98,9 +98,9 @@ Jaiph uses several test layers. Each layer catches a different class of bug. Use
 | **Module tests** | `src/**/*.test.ts` (colocated) | Bugs in pure functions (event parsing, param formatting, path resolution, config merging) | The function is self-contained, takes input and returns output, no I/O |
 | **Compiler acceptance tests** | `src/transpile/*.acceptance.test.ts` (colocated) | Cross-module compiler behavior: validation errors, resolution, and other cases that need a temp project tree or subprocess | You need a deterministic error string, multi-file `buildScripts`, or behavior that does not fit a tiny golden snippet |
 | **Compiler golden tests** | `src/transpile/compiler-golden.test.ts` (colocated) | Regressions in the parser, validation messages, and scripts-only extraction (`buildScriptFiles` in `emit-script.ts`) — expectations are inline in the test file | You changed the parser, validator, or script extraction and need to lock an exact error string, extracted script shape, or corpus behavior |
-| **Compiler tests (txtar)** | `compiler-tests/*.txt` | Parse and validate outcomes — success, parse errors, validation errors — using language-agnostic txtar fixtures (hundreds of `===` cases across the four `*.txt` files) | You want a portable test case that can be reused by alternative compiler implementations; the test is a `.jh` input paired with an expected outcome |
-| **Golden AST tests** | `golden-ast/fixtures/*.jh` + `golden-ast/expected/*.json` | Parse tree shape for successful parses — serialized to deterministic JSON with locations stripped (9 fixtures: e.g. imports, brace-if, log, match and match-multiline, params, prompt-capture, run-ensure, script-defs) | You changed the parser and need to verify the AST structure hasn't drifted; txtar tests only check pass/fail, goldens lock in the actual tree shape |
-| **Cross-cutting tests** | `test/*.test.ts` | Process-level integration behavior: signal handling, TTY rendering, run summary structure, sample builds | The test spans multiple modules or requires subprocess/PTY harnesses |
+| **Compiler tests (txtar)** | `test-fixtures/compiler-txtar/*.txt` | Parse and validate outcomes — success, parse errors, validation errors — using language-agnostic txtar fixtures (hundreds of `===` cases across the four `*.txt` files) | You want a portable test case that can be reused by alternative compiler implementations; the test is a `.jh` input paired with an expected outcome |
+| **Golden AST tests** | `test-fixtures/golden-ast/fixtures/*.jh` + `test-fixtures/golden-ast/expected/*.json` | Parse tree shape for successful parses — serialized to deterministic JSON with locations stripped (9 fixtures: e.g. imports, brace-if, log, match and match-multiline, params, prompt-capture, run-ensure, script-defs) | You changed the parser and need to verify the AST structure hasn't drifted; txtar tests only check pass/fail, goldens lock in the actual tree shape |
+| **Integration tests** | `integration/*.test.ts`, `integration/sample-build/*.test.ts` | Process-level integration behavior: signal handling, TTY rendering, run summary structure, sample builds | The test spans multiple modules or requires subprocess/PTY harnesses |
 | **E2E tests** | `e2e/tests/*.sh` | Runtime behavior — does the workflow actually execute correctly end-to-end? | The behavior involves the CLI launcher, Node runtime, process lifecycle, or file artifacts |
 
 ### Key principles
@@ -108,16 +108,16 @@ Jaiph uses several test layers. Each layer catches a different class of bug. Use
 1. **Compile-time validation vs graph loading.** `buildScripts` / `emitScriptsForModule` run **`validateReferences`** before any script files are written. **`buildRuntimeGraph()`** only parses modules and follows imports — it does **not** re-run that validation. Lock compile errors in the compiler/validator tests; the runtime graph is the wrong layer for that (see [Architecture — Transpiler / Node workflow runtime](architecture.md#core-components)).
 2. **Tests are behavior contracts.** E2E tests and acceptance tests define what the product does. Default approach: change production code to satisfy tests, not the other way around.
 3. **Modify existing tests only with a strong reason:** intentional product behavior change, incorrect test expectation, or removal of an obsolete feature. Any such change should be minimal and paired with a clear rationale.
-4. **Golden tests are the compiler's safety net.** After transpiler changes, run `npm test`. Failures in `src/transpile/compiler-golden.test.ts` usually mean updating an explicit expected string or fixture in that file — there is no separate dump script; align expectations with intentional emitter changes and re-run `npm test`. **Golden AST tests** (`golden-ast/`) complement this by locking in the parse tree shape — if those fail, regenerate with `UPDATE_GOLDEN=1 npm run test:golden-ast` and review the diff.
+4. **Golden tests are the compiler's safety net.** After transpiler changes, run `npm test`. Failures in `src/transpile/compiler-golden.test.ts` usually mean updating an explicit expected string or fixture in that file — there is no separate dump script; align expectations with intentional emitter changes and re-run `npm test`. **Golden AST tests** (`test-fixtures/golden-ast/`) complement this by locking in the parse tree shape — if those fail, regenerate with `UPDATE_GOLDEN=1 npm run test:golden-ast` and review the diff.
 5. **E2E tests assert two things independently:** what the user sees (CLI tree output via `e2e::expect_stdout`) and what the runtime persists (artifact files via `e2e::expect_out`, `e2e::expect_file`). A bug could break one without the other.
 6. **Prefer the narrowest test layer.** A pure function bug should be caught by a unit test, not an E2E test. E2E tests are expensive to run and hard to debug — reserve them for integration-level behavior.
 
 ### TypeScript test layout
 
 - **Module tests** — live next to the source they validate under `src/` (e.g. `src/parse/parse-core.test.ts`, `src/cli/run/display.test.ts`, `src/transpile/compiler-golden.test.ts`). Names are `*.test.ts` or `*.acceptance.test.ts`.
-- **Cross-cutting tests** — span multiple modules or need subprocess/PTY harnesses; they stay in `test/` (see [Cross-cutting tests in `test/`](#cross-cutting-tests-in-test)).
+- **Integration tests** — span multiple modules or need subprocess/PTY harnesses; they live in `integration/` (see [Integration tests](#integration-tests)).
 - **E2E** — bash scripts in `e2e/tests/*.sh`, driven by `e2e/test_all.sh`.
-- **`npm test`** discovers colocated files under `src/` and everything in `test/`; see the [Developing in the repository](#developing-in-the-repository) table for the exact command.
+- **`npm test`** discovers colocated files under `src/`, integration tests under `integration/`, and test infrastructure in `test-infra/`; see the [Developing in the repository](#developing-in-the-repository) table for the exact command.
 
 ### Module test layout (colocated)
 
@@ -140,18 +140,24 @@ find src -type f \( -name '*.test.ts' -o -name '*.acceptance.test.ts' \) | sort
 
 When adding a new source module or extending an existing one, create or extend the corresponding `*.test.ts` in the same directory. For kernel internals, the compile path, and artifact contracts, see [Architecture](architecture.md).
 
-### Cross-cutting tests in `test/`
+### Integration tests
 
-Tests that span multiple modules, require subprocess/PTY harnesses, or exercise process-level behavior remain in `test/`. These do not belong to a single module:
+Tests that span multiple modules, require subprocess/PTY harnesses, or exercise process-level behavior live in `integration/`. These do not belong to a single module:
 
 | Test file | Kind | What it covers |
 |-----------|------|----------------|
-| `sample-build.test.ts` | Integration | Cross-module build/transpile/run-tree behavior using real compiler and CLI components |
-| `run-summary-jsonl.test.ts` | Integration | Runs the CLI on a small workflow and asserts structure and fields of `run_summary.jsonl` under `.jaiph/runs/` |
-| `signal-lifecycle.test.ts` | Acceptance | After SIGINT/SIGTERM, verifies `jaiph run` exits within a time bound and leaves no stale child processes |
-| `tty-running-timer.test.ts` | Acceptance | In a TTY, verifies the “RUNNING workflow” line updates over time (requires Python 3 PTY harness) |
+| `integration/sample-build/build.test.ts` | Integration | Build/transpile behavior — `buildScripts`, `buildScriptFiles`, script extraction |
+| `integration/sample-build/cli-tree.test.ts` | Integration | CLI tree output rendering for sample workflows |
+| `integration/sample-build/run-core.test.ts` | Integration | Core runtime execution — workflow runs, step sequencing, artifacts |
+| `integration/sample-build/run-prompt-agent.test.ts` | Integration | Prompt and agent interaction in sample workflows |
+| `integration/sample-build/recover-handle.test.ts` | Integration | `recover` / `Handle<T>` async behavior in sample workflows |
+| `integration/sample-build/test-advanced.test.ts` | Integration | Advanced test harness behavior — mocks, channels, edge cases |
+| `integration/sample-build/test-framework.test.ts` | Integration | Test framework basics — `mock prompt`, `expect_*`, test block lifecycle |
+| `integration/run-summary-jsonl.test.ts` | Integration | Runs the CLI on a small workflow and asserts structure and fields of `run_summary.jsonl` under `.jaiph/runs/` |
+| `integration/signal-lifecycle.test.ts` | Acceptance | After SIGINT/SIGTERM, verifies `jaiph run` exits within a time bound and leaves no stale child processes |
+| `integration/tty-running-timer.test.ts` | Acceptance | In a TTY, verifies the “RUNNING workflow” line updates over time (requires Python 3 PTY harness) |
 
-Shared test data (`test/fixtures/`, `test/expected/`) also remains in `test/`.
+The `integration/sample-build/` directory also has a shared `helpers.ts` module used by the sample-build tests. Shared test fixtures (`.jh` source files and expected output) live in `test-fixtures/sample-build/`.
 
 ## CI pipeline
 
@@ -188,7 +194,7 @@ The Jekyll project lives entirely inside `docs/` — `Gemfile`, `_config.yml`, l
 
 ### Landing-page sample verification (Playwright)
 
-After the Jekyll smoke-check, the CI job also verifies that code samples shown on the landing page match real CLI behavior. This uses Playwright (Chromium) with a test suite in `tests/e2e-samples/landing-page.spec.ts`.
+After the Jekyll smoke-check, the CI job also verifies that code samples shown on the landing page match real CLI behavior. This uses Playwright (Chromium) with a test suite in `e2e/playwright/landing-page.spec.ts`.
 
 The test does two things:
 
