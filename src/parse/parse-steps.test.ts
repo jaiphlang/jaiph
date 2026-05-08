@@ -11,7 +11,7 @@ test("parseEnsureStep: parses basic ensure call", () => {
   assert.equal(step.type, "ensure");
   if (step.type === "ensure") {
     assert.equal(step.ref.value, "my_rule");
-    assert.equal(step.recover, undefined);
+    assert.equal(step.catch, undefined);
   }
   assert.equal(nextIdx, 0);
 });
@@ -55,10 +55,10 @@ test("parseEnsureStep: parses ensure with single catch statement", () => {
   const lines = ['  ensure my_rule() catch (failure) log "failed"'];
   const { step } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], 'my_rule() catch (failure) log "failed"');
   if (step.type === "ensure") {
-    assert.ok(step.recover);
-    assert.equal(step.recover.bindings.failure, "failure");
-    if ("single" in step.recover) {
-      assert.equal(step.recover.single.type, "log");
+    assert.ok(step.catch);
+    assert.equal(step.catch.bindings.failure, "failure");
+    if ("single" in step.catch) {
+      assert.equal(step.catch.single.type, "log");
     }
   }
 });
@@ -67,10 +67,10 @@ test("parseEnsureStep: parses ensure with catch run statement", () => {
   const lines = ["  ensure my_rule() catch (err) run fallback()"];
   const { step } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], "my_rule() catch (err) run fallback()");
   if (step.type === "ensure") {
-    assert.ok(step.recover);
-    assert.equal(step.recover.bindings.failure, "err");
-    if ("single" in step.recover) {
-      assert.equal(step.recover.single.type, "run");
+    assert.ok(step.catch);
+    assert.equal(step.catch.bindings.failure, "err");
+    if ("single" in step.catch) {
+      assert.equal(step.catch.single.type, "run");
     }
   }
 });
@@ -87,9 +87,9 @@ test("parseEnsureStep: parses ensure with catch fail statement", () => {
   const lines = ['  ensure my_rule() catch (failure) fail "reason"'];
   const { step } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], 'my_rule() catch (failure) fail "reason"');
   if (step.type === "ensure") {
-    assert.ok(step.recover);
-    if ("single" in step.recover) {
-      assert.equal(step.recover.single.type, "fail");
+    assert.ok(step.catch);
+    if ("single" in step.catch) {
+      assert.equal(step.catch.single.type, "fail");
     }
   }
 });
@@ -100,11 +100,11 @@ test("parseEnsureStep: parses ensure with inline catch block", () => {
   const lines = ['  ensure my_rule() catch (failure) { log "a"; log "b" }'];
   const { step } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], 'my_rule() catch (failure) { log "a"; log "b" }');
   if (step.type === "ensure") {
-    assert.ok(step.recover);
-    if ("block" in step.recover) {
-      assert.equal(step.recover.block.length, 2);
-      assert.equal(step.recover.block[0].type, "log");
-      assert.equal(step.recover.block[1].type, "log");
+    assert.ok(step.catch);
+    if ("block" in step.catch) {
+      assert.equal(step.catch.block.length, 2);
+      assert.equal(step.catch.block[0].type, "log");
+      assert.equal(step.catch.block[1].type, "log");
     }
   }
 });
@@ -120,11 +120,11 @@ test("parseEnsureStep: parses ensure with multiline catch block", () => {
   ];
   const { step, nextIdx } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], "my_rule() catch (failure) {");
   if (step.type === "ensure") {
-    assert.ok(step.recover);
-    if ("block" in step.recover) {
-      assert.equal(step.recover.block.length, 2);
-      assert.equal(step.recover.block[0].type, "log");
-      assert.equal(step.recover.block[1].type, "run");
+    assert.ok(step.catch);
+    if ("block" in step.catch) {
+      assert.equal(step.catch.block.length, 2);
+      assert.equal(step.catch.block[0].type, "log");
+      assert.equal(step.catch.block[1].type, "run");
     }
   }
   assert.equal(nextIdx, 3);
@@ -142,16 +142,16 @@ test("parseEnsureStep: multiline catch block with triple-quoted prompt", () => {
   ];
   const { step, nextIdx } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], "gate() catch (err) {");
   assert.equal(step.type, "ensure");
-  if (step.type === "ensure" && step.recover && "block" in step.recover) {
-    assert.equal(step.recover.block.length, 3);
-    assert.equal(step.recover.block[0].type, "run");
-    const p = step.recover.block[1];
+  if (step.type === "ensure" && step.catch && "block" in step.catch) {
+    assert.equal(step.catch.block.length, 3);
+    assert.equal(step.catch.block[0].type, "run");
+    const p = step.catch.block[1];
     assert.equal(p.type, "prompt");
     if (p.type === "prompt") {
       assert.equal(p.bodyKind, "triple_quoted");
       assert.ok(p.raw.includes("fix CI"));
     }
-    assert.equal(step.recover.block[2].type, "run");
+    assert.equal(step.catch.block[2].type, "run");
   }
   assert.equal(nextIdx, 6);
 });
@@ -165,10 +165,10 @@ test("parseEnsureStep: catch block lines starting with # are comments not shell"
   ];
   const { step } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], "gate() catch (err) {");
   assert.equal(step.type, "ensure");
-  if (step.type === "ensure" && step.recover && "block" in step.recover) {
-    assert.equal(step.recover.block.length, 2);
-    assert.equal(step.recover.block[0].type, "comment");
-    assert.equal(step.recover.block[1].type, "run");
+  if (step.type === "ensure" && step.catch && "block" in step.catch) {
+    assert.equal(step.catch.block.length, 2);
+    assert.equal(step.catch.block[0].type, "comment");
+    assert.equal(step.catch.block[1].type, "run");
   }
 });
 
@@ -236,9 +236,9 @@ test("parseEnsureStep: catch with shell command", () => {
   const lines = ["  ensure my_rule() catch (failure) echo fallback"];
   const { step } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], "my_rule() catch (failure) echo fallback");
   if (step.type === "ensure") {
-    assert.ok(step.recover);
-    if ("single" in step.recover) {
-      assert.equal(step.recover.single.type, "shell");
+    assert.ok(step.catch);
+    if ("single" in step.catch) {
+      assert.equal(step.catch.single.type, "shell");
     }
   }
 });
@@ -247,9 +247,9 @@ test("parseEnsureStep: catch with logerr statement", () => {
   const lines = ['  ensure my_rule() catch (failure) logerr "error msg"'];
   const { step } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], 'my_rule() catch (failure) logerr "error msg"');
   if (step.type === "ensure") {
-    assert.ok(step.recover);
-    if ("single" in step.recover) {
-      assert.equal(step.recover.single.type, "logerr");
+    assert.ok(step.catch);
+    if ("single" in step.catch) {
+      assert.equal(step.catch.single.type, "logerr");
     }
   }
 });
@@ -274,9 +274,9 @@ test("parsejaiph: workflow with ensure catch and multiline triple-quoted prompt"
   assert.ok(w);
   const ensureStep = w!.steps[0];
   assert.equal(ensureStep.type, "ensure");
-  if (ensureStep.type === "ensure" && ensureStep.recover && "block" in ensureStep.recover) {
-    assert.equal(ensureStep.recover.block.length, 1);
-    const p = ensureStep.recover.block[0];
+  if (ensureStep.type === "ensure" && ensureStep.catch && "block" in ensureStep.catch) {
+    assert.equal(ensureStep.catch.block.length, 1);
+    const p = ensureStep.catch.block[0];
     assert.equal(p.type, "prompt");
     if (p.type === "prompt") {
       assert.equal(p.bodyKind, "triple_quoted");
@@ -301,10 +301,10 @@ test("parseRunRecoverStep: parses run with single recover statement", () => {
   assert.equal(step.type, "run");
   if (step.type === "run") {
     assert.equal(step.workflow.value, "my_workflow");
-    assert.ok(step.recoverLoop);
-    assert.equal(step.recoverLoop!.bindings.failure, "err");
-    if ("single" in step.recoverLoop!) {
-      assert.equal(step.recoverLoop!.single.type, "log");
+    assert.ok(step.recover);
+    assert.equal(step.recover!.bindings.failure, "err");
+    if ("single" in step.recover!) {
+      assert.equal(step.recover!.single.type, "log");
     }
   }
 });
@@ -314,10 +314,10 @@ test("parseRunRecoverStep: parses run with inline recover block", () => {
   const result = parseRunRecoverStep("test.jh", lines, 0, 1, lines[0], 'fix() recover(e) { log "a"; run patch() }');
   assert.ok(result);
   const step = result!.step;
-  if (step.type === "run" && step.recoverLoop && "block" in step.recoverLoop) {
-    assert.equal(step.recoverLoop.block.length, 2);
-    assert.equal(step.recoverLoop.block[0].type, "log");
-    assert.equal(step.recoverLoop.block[1].type, "run");
+  if (step.type === "run" && step.recover && "block" in step.recover) {
+    assert.equal(step.recover.block.length, 2);
+    assert.equal(step.recover.block[0].type, "log");
+    assert.equal(step.recover.block[1].type, "run");
   }
 });
 
@@ -331,10 +331,10 @@ test("parseRunRecoverStep: parses run with multiline recover block", () => {
   const result = parseRunRecoverStep("test.jh", lines, 0, 1, lines[0], "deploy() recover(err) {");
   assert.ok(result);
   const step = result!.step;
-  if (step.type === "run" && step.recoverLoop && "block" in step.recoverLoop) {
-    assert.equal(step.recoverLoop.block.length, 2);
-    assert.equal(step.recoverLoop.block[0].type, "log");
-    assert.equal(step.recoverLoop.block[1].type, "run");
+  if (step.type === "run" && step.recover && "block" in step.recover) {
+    assert.equal(step.recover.block.length, 2);
+    assert.equal(step.recover.block[0].type, "log");
+    assert.equal(step.recover.block[1].type, "run");
   }
   assert.equal(result!.nextIdx, 3);
 });
@@ -395,7 +395,7 @@ test("parsejaiph: workflow with run recover block", () => {
   const runStep = w!.steps[0];
   assert.equal(runStep.type, "run");
   if (runStep.type === "run") {
-    assert.ok(runStep.recoverLoop);
-    assert.equal(runStep.recover, undefined);
+    assert.ok(runStep.recover);
+    assert.equal(runStep.catch, undefined);
   }
 });

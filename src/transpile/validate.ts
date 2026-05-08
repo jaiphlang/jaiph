@@ -199,8 +199,8 @@ function collectKnownVars(steps: WorkflowStepDef[], envDecls?: { name: string }[
       if ((s.type === "ensure" || s.type === "run" || s.type === "prompt" || s.type === "run_inline_script") && s.captureName) {
         vars.add(s.captureName);
       }
-      if ((s.type === "ensure" || s.type === "run") && s.recover) {
-        const recoverSteps = "single" in s.recover ? [s.recover.single] : s.recover.block;
+      if ((s.type === "ensure" || s.type === "run") && s.catch) {
+        const recoverSteps = "single" in s.catch ? [s.catch.single] : s.catch.block;
         walk(recoverSteps);
       }
       if (s.type === "if") {
@@ -264,8 +264,8 @@ function validateImmutableBindings(
       if ((s.type === "prompt" || s.type === "run_inline_script") && s.captureName) {
         check(s.captureName, "capture", s.loc);
       }
-      if ((s.type === "ensure" || s.type === "run") && s.recover) {
-        const recoverSteps = "single" in s.recover ? [s.recover.single] : s.recover.block;
+      if ((s.type === "ensure" || s.type === "run") && s.catch) {
+        const recoverSteps = "single" in s.catch ? [s.catch.single] : s.catch.block;
         walk(recoverSteps);
       }
       if (s.type === "if") {
@@ -683,10 +683,10 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         validateArity(ast.filePath, s.ref.loc, s.ref.value, s.args, "rule", ast, refCtx);
 
         validateBareIdentifierArgs(ast.filePath, s.ref.loc, s.bareIdentifierArgs, ruleKnownVars);
-        if (s.recover) {
-          const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
+        if (s.catch) {
+          const steps = "single" in s.catch ? [s.catch.single] : s.catch.block;
           const rb = new Set<string>();
-          rb.add(s.recover.bindings.failure);
+          rb.add(s.catch.bindings.failure);
           for (const r of steps) validateRuleStep(r);
         }
         return;
@@ -710,16 +710,16 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         validateArity(ast.filePath, s.workflow.loc, s.workflow.value, s.args, "workflow", ast, refCtx);
 
         validateBareIdentifierArgs(ast.filePath, s.workflow.loc, s.bareIdentifierArgs, ruleKnownVars);
+        if (s.catch) {
+          const steps = "single" in s.catch ? [s.catch.single] : s.catch.block;
+          const rb = new Set<string>();
+          rb.add(s.catch.bindings.failure);
+          for (const r of steps) validateRuleStep(r);
+        }
         if (s.recover) {
           const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
           const rb = new Set<string>();
           rb.add(s.recover.bindings.failure);
-          for (const r of steps) validateRuleStep(r);
-        }
-        if (s.recoverLoop) {
-          const steps = "single" in s.recoverLoop ? [s.recoverLoop.single] : s.recoverLoop.block;
-          const rb = new Set<string>();
-          rb.add(s.recoverLoop.bindings.failure);
           for (const r of steps) validateRuleStep(r);
         }
         return;
@@ -1025,10 +1025,10 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         validateArity(ast.filePath, s.ref.loc, s.ref.value, s.args, "rule", ast, refCtx);
 
         validateBareIdentifierArgs(ast.filePath, s.ref.loc, s.bareIdentifierArgs, wfKnownVars, recoverBindings);
-        if (s.recover) {
-          const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
+        if (s.catch) {
+          const steps = "single" in s.catch ? [s.catch.single] : s.catch.block;
           const rb = new Set<string>();
-          rb.add(s.recover.bindings.failure);
+          rb.add(s.catch.bindings.failure);
           for (const r of steps) validateStep(r, rb);
         }
         return;
@@ -1043,16 +1043,16 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         validateArity(ast.filePath, s.workflow.loc, s.workflow.value, s.args, "workflow", ast, refCtx);
 
         validateBareIdentifierArgs(ast.filePath, s.workflow.loc, s.bareIdentifierArgs, wfKnownVars, recoverBindings);
+        if (s.catch) {
+          const steps = "single" in s.catch ? [s.catch.single] : s.catch.block;
+          const rb = new Set<string>();
+          rb.add(s.catch.bindings.failure);
+          for (const r of steps) validateStep(r, rb);
+        }
         if (s.recover) {
           const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
           const rb = new Set<string>();
           rb.add(s.recover.bindings.failure);
-          for (const r of steps) validateStep(r, rb);
-        }
-        if (s.recoverLoop) {
-          const steps = "single" in s.recoverLoop ? [s.recoverLoop.single] : s.recoverLoop.block;
-          const rb = new Set<string>();
-          rb.add(s.recoverLoop.bindings.failure);
           for (const r of steps) validateStep(r, rb);
         }
         return;

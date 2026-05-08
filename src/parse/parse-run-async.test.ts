@@ -124,11 +124,11 @@ test("parse: run async with recover block", () => {
   if (step.type === "run") {
     assert.equal(step.workflow.value, "foo");
     assert.equal(step.async, true);
-    assert.ok(step.recoverLoop);
-    if (step.recoverLoop && "block" in step.recoverLoop) {
-      assert.equal(step.recoverLoop.bindings.failure, "err");
-      assert.equal(step.recoverLoop.block.length, 1);
-      assert.equal(step.recoverLoop.block[0].type, "log");
+    assert.ok(step.recover);
+    if (step.recover && "block" in step.recover) {
+      assert.equal(step.recover.bindings.failure, "err");
+      assert.equal(step.recover.block.length, 1);
+      assert.equal(step.recover.block[0].type, "log");
     }
   }
 });
@@ -147,9 +147,9 @@ test("parse: run async with multi-line recover block", () => {
   assert.equal(step.type, "run");
   if (step.type === "run") {
     assert.equal(step.async, true);
-    assert.ok(step.recoverLoop);
-    if (step.recoverLoop && "block" in step.recoverLoop) {
-      assert.equal(step.recoverLoop.block.length, 2);
+    assert.ok(step.recover);
+    if (step.recover && "block" in step.recover) {
+      assert.equal(step.recover.block.length, 2);
     }
   }
 });
@@ -166,9 +166,9 @@ test("parse: run async with catch block", () => {
   if (step.type === "run") {
     assert.equal(step.workflow.value, "bar");
     assert.equal(step.async, true);
-    assert.ok(step.recover);
-    if (step.recover && "block" in step.recover) {
-      assert.equal(step.recover.bindings.failure, "e");
+    assert.ok(step.catch);
+    if (step.catch && "block" in step.catch) {
+      assert.equal(step.catch.bindings.failure, "e");
     }
   }
 });

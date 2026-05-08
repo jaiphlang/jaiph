@@ -272,8 +272,8 @@ test("return bare identifier in catch/recover block", () => {
   const ensureStep = mod.workflows[0].steps[0];
   assert.equal(ensureStep.type, "ensure");
   if (ensureStep.type === "ensure") {
-    assert.ok(ensureStep.recover);
-    const recoverSteps = "block" in ensureStep.recover! ? ensureStep.recover!.block : [ensureStep.recover!.single];
+    assert.ok(ensureStep.catch);
+    const recoverSteps = "block" in ensureStep.catch! ? ensureStep.catch!.block : [ensureStep.catch!.single];
     const retStep = recoverSteps[0];
     assert.equal(retStep.type, "return");
     if (retStep.type === "return") {
@@ -300,8 +300,8 @@ test("return run in ensure recover block", () => {
   const ensureStep = mod.workflows[0].steps[0];
   assert.equal(ensureStep.type, "ensure");
   if (ensureStep.type === "ensure") {
-    assert.ok(ensureStep.recover);
-    const recoverSteps = "block" in ensureStep.recover! ? ensureStep.recover!.block : [ensureStep.recover!.single];
+    assert.ok(ensureStep.catch);
+    const recoverSteps = "block" in ensureStep.catch! ? ensureStep.catch!.block : [ensureStep.catch!.single];
     const retStep = recoverSteps[0];
     assert.equal(retStep.type, "return");
     if (retStep.type === "return") {

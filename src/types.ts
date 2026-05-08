@@ -128,7 +128,7 @@ export type WorkflowStepDef =
       /** When set, capture step stdout into this variable name. */
       captureName?: string;
       /** When set, catch failure and run recovery body once. */
-      recover?:
+      catch?:
         | { single: WorkflowStepDef; bindings: { failure: string } }
         | { block: WorkflowStepDef[]; bindings: { failure: string } };
     }
@@ -142,11 +142,11 @@ export type WorkflowStepDef =
       /** When set, execute asynchronously with implicit join before workflow completes. */
       async?: boolean;
       /** When set, catch failure and run recovery body once. */
-      recover?:
+      catch?:
         | { single: WorkflowStepDef; bindings: { failure: string } }
         | { block: WorkflowStepDef[]; bindings: { failure: string } };
       /** When set, retry with repair loop semantics (try → fail → recover body → retry). */
-      recoverLoop?:
+      recover?:
         | { single: WorkflowStepDef; bindings: { failure: string } }
         | { block: WorkflowStepDef[]; bindings: { failure: string } };
     }

@@ -499,16 +499,16 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
     case "ensure": {
       const ref = emitRef(step.ref, step.args, step.bareIdentifierArgs);
       const capture = step.captureName ? `${step.captureName} = ` : "";
-      if (step.recover) {
-        const b = step.recover.bindings;
+      if (step.catch) {
+        const b = step.catch.bindings;
         const bindStr = `(${b.failure})`;
-        if ("single" in step.recover) {
-          const recoverLines = emitStep(step.recover.single, pad, "");
+        if ("single" in step.catch) {
+          const recoverLines = emitStep(step.catch.single, pad, "");
           const recoverText = recoverLines.map((l) => l.trim()).join("\n");
           lines.push(`${ci}${capture}ensure ${ref} catch ${bindStr} ${recoverText}`);
         } else {
           lines.push(`${ci}${capture}ensure ${ref} catch ${bindStr} {`);
-          lines.push(...emitSteps(step.recover.block, pad, ci + pad));
+          lines.push(...emitSteps(step.catch.block, pad, ci + pad));
           lines.push(`${ci}}`);
         }
       } else {
@@ -521,28 +521,28 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
       const ref = emitRef(step.workflow, step.args, step.bareIdentifierArgs);
       const capture = step.captureName ? `${step.captureName} = ` : "";
       const asyncPrefix = step.async ? "async " : "";
-      if (step.recoverLoop) {
-        const b = step.recoverLoop.bindings;
-        const bindStr = `(${b.failure})`;
-        if ("single" in step.recoverLoop) {
-          const recoverLines = emitStep(step.recoverLoop.single, pad, "");
-          const recoverText = recoverLines.map((l) => l.trim()).join("\n");
-          lines.push(`${ci}${capture}run ${asyncPrefix}${ref} recover ${bindStr} ${recoverText}`);
-        } else {
-          lines.push(`${ci}${capture}run ${asyncPrefix}${ref} recover ${bindStr} {`);
-          lines.push(...emitSteps(step.recoverLoop.block, pad, ci + pad));
-          lines.push(`${ci}}`);
-        }
-      } else if (step.recover) {
+      if (step.recover) {
         const b = step.recover.bindings;
         const bindStr = `(${b.failure})`;
         if ("single" in step.recover) {
           const recoverLines = emitStep(step.recover.single, pad, "");
           const recoverText = recoverLines.map((l) => l.trim()).join("\n");
+          lines.push(`${ci}${capture}run ${asyncPrefix}${ref} recover ${bindStr} ${recoverText}`);
+        } else {
+          lines.push(`${ci}${capture}run ${asyncPrefix}${ref} recover ${bindStr} {`);
+          lines.push(...emitSteps(step.recover.block, pad, ci + pad));
+          lines.push(`${ci}}`);
+        }
+      } else if (step.catch) {
+        const b = step.catch.bindings;
+        const bindStr = `(${b.failure})`;
+        if ("single" in step.catch) {
+          const recoverLines = emitStep(step.catch.single, pad, "");
+          const recoverText = recoverLines.map((l) => l.trim()).join("\n");
           lines.push(`${ci}${capture}run ${asyncPrefix}${ref} catch ${bindStr} ${recoverText}`);
         } else {
           lines.push(`${ci}${capture}run ${asyncPrefix}${ref} catch ${bindStr} {`);
-          lines.push(...emitSteps(step.recover.block, pad, ci + pad));
+          lines.push(...emitSteps(step.catch.block, pad, ci + pad));
           lines.push(`${ci}}`);
         }
       } else {

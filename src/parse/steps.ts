@@ -236,7 +236,7 @@ function parseCatchStatement(
                 workflow: { value: callPart.ref, loc: { line: lineNo, col } },
                 args: callPart.args,
                 ...(callPart.bareIdentifierArgs ? { bareIdentifierArgs: callPart.bareIdentifierArgs } : {}),
-                recoverLoop: { block: blockSteps, bindings },
+                recover: { block: blockSteps, bindings },
               };
             }
             if (!after.startsWith("{") && after) {
@@ -246,7 +246,7 @@ function parseCatchStatement(
                 workflow: { value: callPart.ref, loc: { line: lineNo, col } },
                 args: callPart.args,
                 ...(callPart.bareIdentifierArgs ? { bareIdentifierArgs: callPart.bareIdentifierArgs } : {}),
-                recoverLoop: { single: singleStep, bindings },
+                recover: { single: singleStep, bindings },
               };
             }
           }
@@ -276,7 +276,7 @@ function parseCatchStatement(
                 workflow: { value: callPart.ref, loc: { line: lineNo, col } },
                 args: callPart.args,
                 ...(callPart.bareIdentifierArgs ? { bareIdentifierArgs: callPart.bareIdentifierArgs } : {}),
-                recover: { block: blockSteps, bindings },
+                catch: { block: blockSteps, bindings },
               };
             }
             if (!after.startsWith("{") && after) {
@@ -286,7 +286,7 @@ function parseCatchStatement(
                 workflow: { value: callPart.ref, loc: { line: lineNo, col } },
                 args: callPart.args,
                 ...(callPart.bareIdentifierArgs ? { bareIdentifierArgs: callPart.bareIdentifierArgs } : {}),
-                recover: { single: singleStep, bindings },
+                catch: { single: singleStep, bindings },
               };
             }
           }
@@ -328,7 +328,7 @@ function parseCatchStatement(
                 ref: { value: callPart.ref, loc: { line: lineNo, col } },
                 args: callPart.args,
                 ...(callPart.bareIdentifierArgs ? { bareIdentifierArgs: callPart.bareIdentifierArgs } : {}),
-                recover: { block: blockSteps, bindings },
+                catch: { block: blockSteps, bindings },
               };
             }
             if (!after.startsWith("{") && after) {
@@ -338,7 +338,7 @@ function parseCatchStatement(
                 ref: { value: callPart.ref, loc: { line: lineNo, col } },
                 args: callPart.args,
                 ...(callPart.bareIdentifierArgs ? { bareIdentifierArgs: callPart.bareIdentifierArgs } : {}),
-                recover: { single: singleStep, bindings },
+                catch: { single: singleStep, bindings },
               };
             }
           }
@@ -500,7 +500,7 @@ export function parseEnsureStep(
       fail(filePath, "catch block must contain at least one statement", innerNo, catchCol);
     }
     const blockSteps = statements.map((s) => parseCatchStatement(filePath, innerNo, 1, s));
-    return { step: { ...base, recover: { block: blockSteps, bindings } }, nextIdx: closeLineIdx };
+    return { step: { ...base, catch: { block: blockSteps, bindings } }, nextIdx: closeLineIdx };
   }
 
   if (afterBindings.startsWith("{")) {
@@ -514,7 +514,7 @@ export function parseEnsureStep(
       fail(filePath, "catch block must contain at least one statement", innerNo, catchCol);
     }
     const blockSteps = statements.map((s) => parseCatchStatement(filePath, innerNo, catchCol, s));
-    return { step: { ...base, recover: { block: blockSteps, bindings } }, nextIdx: idx };
+    return { step: { ...base, catch: { block: blockSteps, bindings } }, nextIdx: idx };
   }
 
   if (!afterBindings) {
@@ -522,7 +522,7 @@ export function parseEnsureStep(
   }
 
   const singleStep = parseCatchStatement(filePath, innerNo, catchCol, afterBindings);
-  return { step: { ...base, recover: { single: singleStep, bindings } }, nextIdx: idx };
+  return { step: { ...base, catch: { single: singleStep, bindings } }, nextIdx: idx };
 }
 
 /**
@@ -616,7 +616,7 @@ export function parseRunRecoverStep(
       fail(filePath, "recover block must contain at least one statement", innerNo, recoverCol);
     }
     const blockSteps = statements.map((s) => parseCatchStatement(filePath, innerNo, 1, s));
-    return { step: { ...base, recoverLoop: { block: blockSteps, bindings } }, nextIdx: closeLineIdx };
+    return { step: { ...base, recover: { block: blockSteps, bindings } }, nextIdx: closeLineIdx };
   }
 
   if (afterBindings.startsWith("{")) {
@@ -630,7 +630,7 @@ export function parseRunRecoverStep(
       fail(filePath, "recover block must contain at least one statement", innerNo, recoverCol);
     }
     const blockSteps = statements.map((s) => parseCatchStatement(filePath, innerNo, recoverCol, s));
-    return { step: { ...base, recoverLoop: { block: blockSteps, bindings } }, nextIdx: idx };
+    return { step: { ...base, recover: { block: blockSteps, bindings } }, nextIdx: idx };
   }
 
   if (!afterBindings) {
@@ -638,7 +638,7 @@ export function parseRunRecoverStep(
   }
 
   const singleStep = parseCatchStatement(filePath, innerNo, recoverCol, afterBindings);
-  return { step: { ...base, recoverLoop: { single: singleStep, bindings } }, nextIdx: idx };
+  return { step: { ...base, recover: { single: singleStep, bindings } }, nextIdx: idx };
 }
 
 /**
@@ -731,7 +731,7 @@ export function parseRunCatchStep(
       fail(filePath, "catch block must contain at least one statement", innerNo, catchCol);
     }
     const blockSteps = statements.map((s) => parseCatchStatement(filePath, innerNo, 1, s));
-    return { step: { ...base, recover: { block: blockSteps, bindings } }, nextIdx: closeLineIdx };
+    return { step: { ...base, catch: { block: blockSteps, bindings } }, nextIdx: closeLineIdx };
   }
 
   if (afterBindings.startsWith("{")) {
@@ -745,7 +745,7 @@ export function parseRunCatchStep(
       fail(filePath, "catch block must contain at least one statement", innerNo, catchCol);
     }
     const blockSteps = statements.map((s) => parseCatchStatement(filePath, innerNo, catchCol, s));
-    return { step: { ...base, recover: { block: blockSteps, bindings } }, nextIdx: idx };
+    return { step: { ...base, catch: { block: blockSteps, bindings } }, nextIdx: idx };
   }
 
   if (!afterBindings) {
@@ -753,5 +753,5 @@ export function parseRunCatchStep(
   }
 
   const singleStep = parseCatchStatement(filePath, innerNo, catchCol, afterBindings);
-  return { step: { ...base, recover: { single: singleStep, bindings } }, nextIdx: idx };
+  return { step: { ...base, catch: { single: singleStep, bindings } }, nextIdx: idx };
 }

@@ -38,7 +38,7 @@ deleted before the audit work began; visible in `git status` at session start).
 - [x] B6. Single backtick-body helper
 - [x] B7. Make `parseFencedBlock` return afterClose; reuse for inline-script
 - [x] B8. Extract `consumeTripleQuotedArg`
-- [ ] B9. Single `parseValueExpression`
+- [—] B9. Skipped — each RHS site has materially different valid grammar; sub-parsers already extracted; remaining dispatch ladder is small per-site
 - [x] B10. Extract `runRecoverBody` (consolidate 5 recovery dances; conservative — kept per-site propagation)
 - [x] B11. Merge two prompt-step blocks (also fixed missing per-field schema export in const-prompt path)
 - [x] B12. Delete `resolveArgsRawSync`
@@ -53,7 +53,7 @@ deleted before the audit work began; visible in `git status` at session start).
 - [x] C4. `executeScript` returnValue only when status === 0
 - [x] C5. Async-branch recovery propagates `recoverReturn`
 - [x] C6. Move mock-response queue in-memory (delete file IO race)
-- [—] C7. Deferred — sed-based rename was over-aggressive (caught source-keyword strings); needs hand-edit Rename AST `recover` → `catch`, `recoverLoop` → `recover`
+- [x] C7. Renamed AST `recover` → `catch`, `recoverLoop` → `recover` (hand-edit using whole-word + AST-shape patterns; param names containing the reserved-word `catch` use `catchDef`)
 - [—] C8. Deferred — would emit `__JAIPH_EVENT__` lines on stderr in in-process test runner; behaviour change too risky for this pass Remove `JAIPH_TEST_MODE` event suppression in production code
 - [x] C9. Inbox files: write only when routed (or document audit-only)
 - [—] C10. Skipped — dual-write is structurally redundant but functionally correct; eliminating cleanly requires propagating `io` through mock-body/mock-script paths
