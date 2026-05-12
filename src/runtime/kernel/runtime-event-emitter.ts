@@ -31,6 +31,13 @@ export type RuntimeEventEmitterDeps = {
   env: NodeJS.ProcessEnv;
   getFrameStack: () => Frame[];
   getAsyncIndices: () => number[];
+  /**
+   * When true, skip writing `__JAIPH_EVENT__` lines to stderr. Durable
+   * `run_summary.jsonl` writes are unaffected. Set by in-process callers
+   * (e.g. the test runner) that construct the runtime in their own Node
+   * process and don't want event lines swamping reporter output.
+   */
+  suppressLiveEvents?: boolean;
 };
 
 export class RuntimeEventEmitter {
@@ -39,6 +46,7 @@ export class RuntimeEventEmitter {
   private readonly env: NodeJS.ProcessEnv;
   private readonly getFrameStack: () => Frame[];
   private readonly getAsyncIndices: () => number[];
+  private readonly suppressLiveEvents: boolean;
   private stepSeq = 0;
   private promptSeq = 0;
 
@@ -48,6 +56,7 @@ export class RuntimeEventEmitter {
     this.env = deps.env;
     this.getFrameStack = deps.getFrameStack;
     this.getAsyncIndices = deps.getAsyncIndices;
+    this.suppressLiveEvents = deps.suppressLiveEvents ?? false;
   }
 
   allocStepSeq(): number {
@@ -71,7 +80,7 @@ export class RuntimeEventEmitter {
   emitStep(payload: Record<string, unknown>): void {
     const indices = this.getAsyncIndices();
     const full = indices.length > 0 ? { ...payload, async_indices: indices } : payload;
-    if (this.env.JAIPH_TEST_MODE !== "1") {
+    if (!this.suppressLiveEvents) {
       process.stderr.write(`__JAIPH_EVENT__ ${JSON.stringify(full)}\n`);
     }
     appendRunSummaryLine(JSON.stringify({ ...full, event_version: 1 }));
@@ -190,7 +199,7 @@ export class RuntimeEventEmitter {
       run_id: this.runId,
       event_version: 1,
     };
-    if (this.env.JAIPH_TEST_MODE !== "1") {
+    if (!this.suppressLiveEvents) {
       process.stderr.write(`__JAIPH_EVENT__ ${JSON.stringify(liveBase)}\n`);
     }
     appendRunSummaryLine(JSON.stringify(payload));

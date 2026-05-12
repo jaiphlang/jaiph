@@ -25,7 +25,7 @@ test("NodeWorkflowRuntime: runDefault writes return_value.txt with the workflow'
       JAIPH_TEST_MODE: "1",
       JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
     };
-    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
     const status = await runtime.runDefault(["world"]);
     assert.equal(status, 0);
 
@@ -56,7 +56,7 @@ test("NodeWorkflowRuntime: runDefault does not write return_value.txt when workf
       JAIPH_TEST_MODE: "1",
       JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
     };
-    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
     const status = await runtime.runDefault([]);
     assert.equal(status, 0);
 
@@ -89,7 +89,7 @@ test("NodeWorkflowRuntime: prompt step preview preserves authored ${var} placeho
       JAIPH_MOCK_RESPONSES_JSON: mockJson,
       JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
     };
-    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
     const prevSummaryEnv = process.env.JAIPH_RUN_SUMMARY_FILE;
     process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
     let status: number;
@@ -143,7 +143,7 @@ test("NodeWorkflowRuntime: workflow step .out accumulates Command:/Prompt: and l
       JAIPH_MOCK_RESPONSES_JSON: mockJson,
       JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
     };
-    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
     const status = await runtime.runDefault([]);
     assert.equal(status, 0);
 
@@ -195,7 +195,7 @@ test("NodeWorkflowRuntime: failed prompt preserves backend stderr in artifacts a
       JAIPH_AGENT_MODEL: "gpt-5.4",
       JAIPH_WORKSPACE: root,
     };
-    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
     const prevSummaryEnv = process.env.JAIPH_RUN_SUMMARY_FILE;
     process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
     let status: number;
@@ -279,7 +279,7 @@ test("NodeWorkflowRuntime: ensure catch receives failure payload in catch scope 
       JAIPH_SCRIPTS: scriptsDir,
       JAIPH_WORKSPACE: root,
     };
-    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
     const status = await runtime.runDefault(["original-arg1", "preserved-arg2"]);
     assert.equal(status, 0);
 
@@ -353,7 +353,7 @@ test("NodeWorkflowRuntime: nested workflow inherits caller metadata scope (calle
     delete env.JAIPH_AGENT_BACKEND;
     delete env.JAIPH_AGENT_BACKEND_LOCKED;
 
-    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
     const status = await runtime.runDefault([]);
     assert.equal(status, 0);
 
@@ -424,7 +424,7 @@ test("NodeWorkflowRuntime: nested cross-module preserves locked JAIPH_AGENT_BACK
       JAIPH_AGENT_BACKEND_LOCKED: "1",
     };
 
-    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
     const status = await runtime.runDefault([]);
     assert.equal(status, 0);
 
@@ -498,7 +498,7 @@ test("NodeWorkflowRuntime: sibling workflows do not inherit each other's metadat
     delete env.JAIPH_AGENT_BACKEND;
     delete env.JAIPH_AGENT_BACKEND_LOCKED;
 
-    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
     const status = await runtime.runDefault([]);
     assert.equal(status, 0);
 
@@ -535,7 +535,7 @@ test("NodeWorkflowRuntime: prompt STEP_START params include named vars reference
       JAIPH_MOCK_RESPONSES_JSON: mockJson,
       JAIPH_RUNS_DIR: runsDir,
     };
-    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
     // Bridge env so appendRunSummaryLine (reads process.env) writes the summary.
     const prevSummaryEnv = process.env.JAIPH_RUN_SUMMARY_FILE;
     process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
@@ -577,7 +577,7 @@ test("NodeWorkflowRuntime: JAIPH_ARTIFACTS_DIR is set and points at writable art
       JAIPH_TEST_MODE: "1",
       JAIPH_RUNS_DIR: runsDir,
     };
-    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
     const runDir = runtime.getRunDir();
     const artifactsDir = env.JAIPH_ARTIFACTS_DIR;
 
@@ -608,7 +608,7 @@ test("NodeWorkflowRuntime: JAIPH_ARTIFACTS_DIR resolves under .jaiph/runs when J
     const graph = buildRuntimeGraph(jh);
     const env: NodeJS.ProcessEnv = { ...process.env, JAIPH_TEST_MODE: "1" };
     delete env.JAIPH_RUNS_DIR;
-    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
     const artifactsDir = env.JAIPH_ARTIFACTS_DIR;
 
     assert.ok(artifactsDir, "JAIPH_ARTIFACTS_DIR should be set");
@@ -636,7 +636,7 @@ test("NodeWorkflowRuntime: heartbeat file created at construction, removed on st
       JAIPH_MOCK_RESPONSES_JSON: mockJson,
       JAIPH_RUNS_DIR: join(root, ".jaiph", "runs"),
     };
-    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });
+    const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
     const runDir = runtime.getRunDir();
 
     const heartbeatPath = join(runDir, "heartbeat");
@@ -701,7 +701,7 @@ test("NodeWorkflowRuntime: JAIPH_INBOX_PARALLEL has no effect on inbox dispatch 
       if (inboxParallelEnv !== undefined) {
         env.JAIPH_INBOX_PARALLEL = inboxParallelEnv;
       }
-      const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root });
+      const runtime = new NodeWorkflowRuntime(graph, { env, cwd: root, suppressLiveEvents: true });
       const prevSummary = process.env.JAIPH_RUN_SUMMARY_FILE;
       process.env.JAIPH_RUN_SUMMARY_FILE = runtime.getSummaryFile();
       let status: number;
