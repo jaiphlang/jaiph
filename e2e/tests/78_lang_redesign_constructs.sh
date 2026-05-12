@@ -263,8 +263,9 @@ code=$?
 set -e
 
 [[ ${code} -ne 0 ]] || e2e::fail "structured rule should have failed"
-# assert_contains: FAIL output includes absolute run-dir paths which vary per invocation
-e2e::assert_contains "${out}" "Workflow execution failed." "structured rule failure is reported"
+# Detailed failure excerpts suppress the generic summary line (resolveFailureDetails).
+e2e::assert_contains "${out}" "FAIL workflow default" "structured rule failure footer"
+e2e::assert_contains "${out}" "name is required" "fail() output surfaces under failed step"
 
 # ---------------------------------------------------------------------------
 e2e::section "run targeting workflow inside rule is rejected"
