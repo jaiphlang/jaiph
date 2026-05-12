@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve as resolvePath } from "node:path";
 import { PassThrough } from "node:stream";
 import { randomUUID } from "node:crypto";
@@ -7,19 +7,33 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { inlineScriptName } from "../../inline-script-name";
 import type { MatchExprDef, WorkflowStepDef } from "../../types";
 import { executePrompt, resolveConfig, resolveModel, resolvePromptStepName } from "./prompt";
-import { appendRunSummaryLine, formatUtcTimestamp } from "./emit";
+import { appendRunSummaryLine } from "./emit";
 import { buildStepDisplayParamPairs } from "../../cli/commands/format-params.js";
 import { resolveRuleRef, resolveScriptRef, resolveWorkflowRef, type RuntimeGraph } from "./graph";
 import type { WorkflowMetadata } from "../../types";
 import { extractJson, validateFields } from "./schema";
-import { parseCallRef } from "../../parse/core";
 import {
   plainMultilineOrchestrationForRuntime,
   tripleQuotedRawForRuntime,
 } from "../orchestration-text";
+import {
+  commaArgsToInterpolated,
+  interpolate,
+  MAX_EMBED,
+  MAX_RECURSION_DEPTH,
+  nowIso,
+  parseArgTokens,
+  parseInlineCaptureCall,
+  parsePromptSchema,
+  sanitizeName,
+  stripOuterQuotes,
+  type PromptSchemaField,
+} from "./runtime-arg-parser";
+import { RuntimeEventEmitter, type Frame } from "./runtime-event-emitter";
+import { executeMockBodyDef, type MockBodyDef, type StepResult } from "./runtime-mock";
 
-const MAX_EMBED = 1024 * 1024;
-const MAX_RECURSION_DEPTH = 256;
+export type { MockBodyDef } from "./runtime-mock";
+
 type EnsureRecover = Extract<WorkflowStepDef, { type: "ensure" }>["catch"];
 
 const HANDLE_PREFIX = "__JAIPH_HANDLE__";
@@ -30,32 +44,12 @@ type AsyncHandle = {
   resolved?: StepResult;
 };
 
-/** Mock body definition: shell for script mocks, Jaiph steps for workflow/rule mocks. */
-export type MockBodyDef =
-  | { kind: "shell"; body: string; params: string[] }
-  | { kind: "steps"; steps: WorkflowStepDef[]; params: string[] };
-
 type Scope = {
   filePath: string;
   vars: Map<string, string>;
   env: NodeJS.ProcessEnv;
   /** Declared parameter names for the active workflow or rule. */
   declaredParamNames?: string[];
-};
-
-type Frame = {
-  id: string;
-  kind: string;
-  name: string;
-};
-
-type StepResult = {
-  status: number;
-  output: string;
-  error: string;
-  returnValue?: string;
-  /** Set when a catch body executed a `return` statement. */
-  recoverReturn?: boolean;
 };
 
 type StepIO = {
@@ -76,251 +70,6 @@ type WorkflowContext = {
   queue: InboxMsg[];
 };
 
-type PromptSchemaField = { name: string; type: "string" | "number" | "boolean" };
-type PromptStepHandle = {
-  id: string;
-  seq: number;
-  outFile: string;
-  errFile: string;
-  backend: string;
-  startedAtMs: number;
-};
-
-function sanitizeName(raw: string): string {
-  return raw.replace(/[^a-zA-Z0-9_.-]/g, "_");
-}
-
-function nowIso(): string {
-  return formatUtcTimestamp();
-}
-
-function interpolate(input: string, vars: Map<string, string>, env?: NodeJS.ProcessEnv): string {
-  const lookup = (key: string): string => vars.get(key) ?? env?.[key] ?? "";
-  return input.replace(/\$\{([a-zA-Z_][a-zA-Z0-9_]*)(?:\.([a-zA-Z_][a-zA-Z0-9_]*))?\}/g, (_m, base, field) => {
-    if (!field) return lookup(String(base));
-    // Dot field access: parse JSON stored in the base variable and extract the field.
-    const raw = lookup(String(base));
-    try {
-      const obj = JSON.parse(raw);
-      return obj != null && typeof obj === "object" && field in obj ? String(obj[field]) : "";
-    } catch {
-      return "";
-    }
-  });
-}
-
-/** Body after "run" / "ensure" in ${run ...} / ${ensure ...} (e.g. greet(), greet(x), or greet x). */
-function parseInlineCaptureCall(body: string): { ref: string; argsRaw: string } {
-  const trimmed = body.trim();
-  const paren = trimmed.match(/^([\w.]+)\s*\(([^)]*)\)\s*$/);
-  if (paren) {
-    return { ref: paren[1], argsRaw: paren[2].trim() };
-  }
-  const spaceIdx = trimmed.indexOf(" ");
-  if (spaceIdx === -1) {
-    return { ref: trimmed, argsRaw: "" };
-  }
-  return { ref: trimmed.slice(0, spaceIdx), argsRaw: trimmed.slice(spaceIdx + 1).trim() };
-}
-
-const BARE_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
-
-/** Convert comma-separated call args (as written in source) to space-separated form with bare identifiers wrapped in ${…}. */
-function commaArgsToInterpolated(raw: string): string {
-  if (!raw.trim()) return "";
-  return raw.split(",").map((seg) => {
-    const t = seg.trim();
-    return BARE_IDENT_RE.test(t) ? `\${${t}}` : t;
-  }).join(" ");
-}
-
-function parseArgsRaw(raw: string, vars: Map<string, string>, env?: NodeJS.ProcessEnv): string[] {
-  if (!raw.trim()) return [];
-  const out: string[] = [];
-  let cur = "";
-  let quote: "'" | '"' | null = null;
-  for (let i = 0; i < raw.length; i += 1) {
-    const ch = raw[i]!;
-    if (quote) {
-      if (ch === quote) {
-        quote = null;
-      } else {
-        cur += ch;
-      }
-      continue;
-    }
-    if (ch === "'" || ch === '"') {
-      quote = ch;
-      continue;
-    }
-    if (/\s/.test(ch)) {
-      if (cur.length > 0) {
-        out.push(interpolate(cur, vars, env));
-        cur = "";
-      }
-      continue;
-    }
-    cur += ch;
-  }
-  if (cur.length > 0) {
-    out.push(interpolate(cur, vars, env));
-  }
-  return out;
-}
-
-type ParsedArgToken =
-  | { kind: "literal"; value: string }
-  | { kind: "managed"; managedKind: "run" | "ensure"; ref: string; argsRaw: string }
-  | { kind: "managed_inline_script"; body: string; lang?: string; argsRaw: string };
-
-/** Try to parse `\`body\`(args)` from a string at a given position. */
-function parseInlineScriptAt(s: string): { body: string; argsRaw: string; consumed: number } | null {
-  const t = s.trimStart();
-  const skippedWs = s.length - t.length;
-  if (!t.startsWith("`")) return null;
-  const closeIdx = t.indexOf("`", 1);
-  if (closeIdx === -1) return null;
-  const body = t.slice(1, closeIdx);
-  const afterClose = t.slice(closeIdx + 1);
-  if (!afterClose.startsWith("(")) return null;
-  let depth = 1;
-  let i = 1;
-  let inQuote: string | null = null;
-  while (i < afterClose.length && depth > 0) {
-    const ch = afterClose[i];
-    if (inQuote) {
-      if (ch === inQuote && afterClose[i - 1] !== "\\") inQuote = null;
-    } else {
-      if (ch === '"' || ch === "'") inQuote = ch;
-      else if (ch === "(") depth++;
-      else if (ch === ")") depth--;
-    }
-    i++;
-  }
-  if (depth !== 0) return null;
-  const argsContent = afterClose.slice(1, i - 1).trim();
-  return { body, argsRaw: argsContent, consumed: skippedWs + closeIdx + 1 + i };
-}
-
-function parseManagedArgAt(raw: string, start: number): { token: ParsedArgToken; next: number } | null {
-  const tail = raw.slice(start);
-  const keyword = tail.startsWith("run ")
-    ? "run"
-    : tail.startsWith("ensure ")
-      ? "ensure"
-      : null;
-  if (!keyword) return null;
-  const afterKeyword = raw.slice(start + keyword.length).trimStart();
-  const skipped = raw.slice(start + keyword.length).length - afterKeyword.length;
-  const call = parseCallRef(afterKeyword);
-  if (call && (call.rest.length === 0 || /^\s/.test(call.rest))) {
-    const consumed = afterKeyword.length - call.rest.length;
-    return {
-      token: {
-        kind: "managed",
-        managedKind: keyword,
-        ref: call.ref,
-        argsRaw: call.args ?? "",
-      },
-      next: start + keyword.length + skipped + consumed,
-    };
-  }
-  // Try inline script form: run `body`(args)
-  if (keyword === "run") {
-    const inlineResult = parseInlineScriptAt(afterKeyword);
-    if (inlineResult) {
-      return {
-        token: {
-          kind: "managed_inline_script",
-          body: inlineResult.body,
-          argsRaw: inlineResult.argsRaw,
-        },
-        next: start + keyword.length + skipped + inlineResult.consumed,
-      };
-    }
-  }
-  return null;
-}
-
-function parseArgTokens(raw: string): ParsedArgToken[] {
-  if (!raw.trim()) return [];
-  const out: ParsedArgToken[] = [];
-  let i = 0;
-  while (i < raw.length) {
-    while (i < raw.length && /\s/.test(raw[i]!)) i += 1;
-    if (i >= raw.length) break;
-    const managed = parseManagedArgAt(raw, i);
-    if (managed) {
-      out.push(managed.token);
-      i = managed.next;
-      continue;
-    }
-    let cur = "";
-    let quote: "'" | '"' | null = null;
-    while (i < raw.length) {
-      const ch = raw[i]!;
-      if (quote) {
-        if (ch === quote) {
-          quote = null;
-        } else {
-          cur += ch;
-        }
-        i += 1;
-        continue;
-      }
-      if (ch === "'" || ch === '"') {
-        quote = ch;
-        i += 1;
-        continue;
-      }
-      if (/\s/.test(ch)) {
-        break;
-      }
-      cur += ch;
-      i += 1;
-    }
-    if (cur.length > 0) {
-      out.push({ kind: "literal", value: cur });
-    }
-  }
-  return out;
-}
-
-function stripOuterQuotes(value: string): string {
-  if (value.length >= 2) {
-    const first = value[0];
-    const last = value[value.length - 1];
-    if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
-      return value.slice(1, -1);
-    }
-  }
-  return value;
-}
-
-function parsePromptSchema(rawSchema: string): PromptSchemaField[] {
-  const trimmed = rawSchema.trim();
-  if (trimmed.length === 0) return [];
-  if (/[[\]|]/.test(trimmed)) {
-    throw new Error("returns schema must be flat (no arrays or union types)");
-  }
-  const inner = trimmed.replace(/^\s*\{\s*/, "").replace(/\s*\}\s*$/, "").trim();
-  if (inner.length === 0) return [];
-  const fields: PromptSchemaField[] = [];
-  for (const part of inner.split(",")) {
-    const m = part.trim().match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(\S+)\s*$/);
-    if (!m) {
-      throw new Error(`invalid returns schema entry: ${part.trim().slice(0, 40)}`);
-    }
-    const [, name, typeStr] = m;
-    const type = typeStr.toLowerCase();
-    if (type !== "string" && type !== "number" && type !== "boolean") {
-      throw new Error(`unsupported returns schema type: ${typeStr}`);
-    }
-    fields.push({ name, type: type as "string" | "number" | "boolean" });
-  }
-  return fields;
-}
-
 export class NodeWorkflowRuntime {
   private readonly env: NodeJS.ProcessEnv;
   private readonly cwd: string;
@@ -328,13 +77,12 @@ export class NodeWorkflowRuntime {
   private readonly runId: string;
   private readonly runDir: string;
   private readonly summaryFile: string;
+  private readonly emitter: RuntimeEventEmitter;
   private heartbeatTimer: ReturnType<typeof setInterval> | undefined;
-  private stepSeq = 0;
   private stack: Frame[] = [];
   private asyncFrameStack = new AsyncLocalStorage<Frame[]>();
   private asyncIndicesStorage = new AsyncLocalStorage<number[]>();
   private inboxSeq = 0;
-  private promptSeq = 0;
   private workflowCtxStack: WorkflowContext[] = [];
   private readonly mockBodies: Map<string, MockBodyDef>;
   private handleRegistry = new Map<string, AsyncHandle>();
@@ -418,6 +166,13 @@ export class NodeWorkflowRuntime {
     this.env.JAIPH_RUN_ID = this.runId;
     this.env.JAIPH_RUN_DIR = this.runDir;
     this.env.JAIPH_ARTIFACTS_DIR = artifactsDir;
+    this.emitter = new RuntimeEventEmitter({
+      runId: this.runId,
+      runDir: this.runDir,
+      env: this.env,
+      getFrameStack: () => this.getFrameStack(),
+      getAsyncIndices: () => this.getAsyncIndices(),
+    });
     this.startHeartbeat();
   }
 
@@ -451,7 +206,7 @@ export class NodeWorkflowRuntime {
   }
 
   async runDefault(args: string[]): Promise<number> {
-    this.emitWorkflow("WORKFLOW_START", "default");
+    this.emitter.emitWorkflow("WORKFLOW_START", "default");
     const rootScope: Scope = {
       filePath: this.graph.entryFile,
       vars: this.newScopeVars(this.graph.entryFile, undefined, this.env),
@@ -463,7 +218,7 @@ export class NodeWorkflowRuntime {
     });
     if (!resolved) {
       process.stderr.write("jaiph run requires workflow 'default' in the input file\n");
-      this.emitWorkflow("WORKFLOW_END", "default");
+      this.emitter.emitWorkflow("WORKFLOW_END", "default");
       this.stopHeartbeat();
       return 1;
     }
@@ -482,7 +237,7 @@ export class NodeWorkflowRuntime {
         // Best-effort capture; the run succeeded regardless.
       }
     }
-    this.emitWorkflow("WORKFLOW_END", "default");
+    this.emitter.emitWorkflow("WORKFLOW_END", "default");
     this.stopHeartbeat();
     return result.status;
   }
@@ -517,139 +272,6 @@ export class NodeWorkflowRuntime {
       return join(this.cwd, configured);
     }
     return join(this.cwd, ".jaiph", "runs");
-  }
-
-  private emitWorkflow(type: "WORKFLOW_START" | "WORKFLOW_END", workflow: string): void {
-    appendRunSummaryLine(
-      JSON.stringify({
-        type,
-        workflow,
-        source: this.env.JAIPH_SOURCE_FILE ?? "",
-        ts: nowIso(),
-        run_id: this.runId,
-        event_version: 1,
-      }),
-    );
-  }
-
-  private emitPromptEvent(
-    type: "PROMPT_START" | "PROMPT_END",
-    payload: { backend: string; model?: string; model_reason?: string; status?: number; preview?: string },
-  ): void {
-    const stack = this.getFrameStack();
-    const current = stack.length > 0 ? stack[stack.length - 1] : null;
-    appendRunSummaryLine(
-      JSON.stringify({
-        type,
-        ts: nowIso(),
-        run_id: this.runId,
-        depth: stack.length,
-        step_id: current?.id ?? null,
-        step_name: current?.name ?? null,
-        backend: payload.backend,
-        model: payload.model ?? null,
-        model_reason: payload.model_reason ?? null,
-        status: payload.status ?? null,
-        preview: payload.preview ?? null,
-        event_version: 1,
-      }),
-    );
-  }
-
-  private emitPromptStepStart(
-    backend: string,
-    scopeVars: Map<string, string>,
-    rawPromptSource: string,
-  ): PromptStepHandle {
-    this.promptSeq += 1;
-    this.stepSeq += 1;
-    const stack = this.getFrameStack();
-    const current = stack.length > 0 ? stack[stack.length - 1] : null;
-    const id = `${this.runId}:${process.pid}:prompt:${this.promptSeq}`;
-    const seq = this.stepSeq;
-    const safe = sanitizeName("prompt__prompt");
-    const outFile = join(this.runDir, `${String(seq).padStart(6, "0")}-${safe}.out`);
-    const errFile = join(this.runDir, `${String(seq).padStart(6, "0")}-${safe}.err`);
-    writeFileSync(outFile, "");
-    writeFileSync(errFile, "");
-    // Preview keeps the authored `${var}` placeholders rather than substituted values,
-    // so the tree shows what the user wrote; concrete values live alongside in params.
-    const preview = stripOuterQuotes(rawPromptSource).replace(/\s+/g, " ").trim();
-    const params: Array<[string, string]> = [["prompt_text", preview]];
-    const seen = new Set<string>(["prompt_text"]);
-    // Include named vars referenced in the prompt text.
-    const refRe = /\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g;
-    let m: RegExpExecArray | null;
-    while ((m = refRe.exec(rawPromptSource)) !== null) {
-      const name = m[1];
-      if (!seen.has(name)) {
-        seen.add(name);
-        const val = scopeVars.get(name) ?? "";
-        if (val.length > 0) params.push([name, val]);
-      }
-    }
-    this.emitStep({
-      type: "STEP_START",
-      func: "prompt",
-      kind: "prompt",
-      name: backend,
-      ts: nowIso(),
-      status: null,
-      elapsed_ms: null,
-      out_file: outFile,
-      err_file: errFile,
-      id,
-      parent_id: current?.id ?? null,
-      seq,
-      depth: stack.length,
-      run_id: this.runId,
-      params,
-    });
-    return { id, seq, outFile, errFile, backend, startedAtMs: Date.now() };
-  }
-
-  private emitPromptStepEnd(prompt: PromptStepHandle, status: number, outContent: string, errContent: string): void {
-    const stack = this.getFrameStack();
-    const current = stack.length > 0 ? stack[stack.length - 1] : null;
-    if (errContent.length > 0) {
-      writeFileSync(prompt.errFile, errContent);
-    }
-    this.emitStep({
-      type: "STEP_END",
-      func: "prompt",
-      kind: "prompt",
-      name: prompt.backend,
-      ts: nowIso(),
-      status,
-      elapsed_ms: Date.now() - prompt.startedAtMs,
-      out_file: prompt.outFile,
-      err_file: prompt.errFile,
-      id: prompt.id,
-      parent_id: current?.id ?? null,
-      seq: prompt.seq,
-      depth: stack.length,
-      run_id: this.runId,
-      params: [],
-      out_content: outContent.slice(0, MAX_EMBED),
-      err_content: status !== 0 ? errContent.slice(0, MAX_EMBED) : "",
-    });
-  }
-
-  private emitLog(type: "LOG" | "LOGERR", message: string): void {
-    const depth = this.getFrameStack().length;
-    const indices = this.getAsyncIndices();
-    const liveBase: Record<string, unknown> = { type, message, depth };
-    if (indices.length > 0) liveBase.async_indices = indices;
-    const payload = {
-      ...liveBase,
-      ts: nowIso(),
-      run_id: this.runId,
-      event_version: 1,
-    };
-    if (this.env.JAIPH_TEST_MODE !== "1") {
-      process.stderr.write(`__JAIPH_EVENT__ ${JSON.stringify(liveBase)}\n`);
-    }
-    appendRunSummaryLine(JSON.stringify(payload));
   }
 
   private async executeWorkflow(
@@ -882,48 +504,29 @@ export class NodeWorkflowRuntime {
     let asyncCounter = 0;
     for (const step of steps) {
       if (step.type === "comment" || step.type === "blank_line") continue;
-      if (step.type === "log") {
+      if (step.type === "log" || step.type === "logerr") {
+        const level = step.type === "log" ? "LOG" : "LOGERR";
+        let message: string;
         if (step.managed?.kind === "run_inline_script") {
           const shebang = step.managed.lang ? `#!/usr/bin/env ${step.managed.lang}` : undefined;
           const result = await this.executeInlineScript(scope, step.managed.body, shebang, step.managed.args ?? "");
           if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
-          const message = result.returnValue ?? result.output.trim();
-          this.emitLog("LOG", message);
-          const chunk = `${message}\n`;
+          message = result.returnValue ?? result.output.trim();
+        } else {
+          const raw = step.tripleQuoted ? plainMultilineOrchestrationForRuntime(step.message) : step.message;
+          const ir = await this.interpolateWithCaptures(raw, scope);
+          if (!ir.ok) return this.mergeStepResult(accOut, accErr, ir.result);
+          message = ir.value;
+        }
+        this.emitter.emitLog(level, message);
+        const chunk = `${message}\n`;
+        if (level === "LOG") {
           accOut += chunk;
           io?.appendOut(chunk);
-          continue;
-        }
-        const logMsg = step.tripleQuoted ? plainMultilineOrchestrationForRuntime(step.message) : step.message;
-        const logIr = await this.interpolateWithCaptures(logMsg, scope);
-        if (!logIr.ok) return this.mergeStepResult(accOut, accErr, logIr.result);
-        const message = logIr.value;
-        this.emitLog("LOG", message);
-        const chunk = `${message}\n`;
-        accOut += chunk;
-        io?.appendOut(chunk);
-        continue;
-      }
-      if (step.type === "logerr") {
-        if (step.managed?.kind === "run_inline_script") {
-          const shebang = step.managed.lang ? `#!/usr/bin/env ${step.managed.lang}` : undefined;
-          const result = await this.executeInlineScript(scope, step.managed.body, shebang, step.managed.args ?? "");
-          if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
-          const message = result.returnValue ?? result.output.trim();
-          this.emitLog("LOGERR", message);
-          const chunk = `${message}\n`;
+        } else {
           accErr += chunk;
           io?.appendErr(chunk);
-          continue;
         }
-        const logerrMsg = step.tripleQuoted ? plainMultilineOrchestrationForRuntime(step.message) : step.message;
-        const logErrIr = await this.interpolateWithCaptures(logerrMsg, scope);
-        if (!logErrIr.ok) return this.mergeStepResult(accOut, accErr, logErrIr.result);
-        const message = logErrIr.value;
-        this.emitLog("LOGERR", message);
-        const chunk = `${message}\n`;
-        accErr += chunk;
-        io?.appendErr(chunk);
         continue;
       }
       if (step.type === "fail") {
@@ -1129,49 +732,45 @@ export class NodeWorkflowRuntime {
           asyncCounter += 1;
           const branchStack = [...this.getFrameStack()];
           const branchIndices = [...this.getAsyncIndices(), asyncCounter];
+          const ref = step.workflow.value;
+          const argsRaw = step.args ?? "";
+          const runInBranch = (fn: () => Promise<StepResult>): Promise<StepResult> =>
+            this.asyncFrameStack.run(branchStack, () =>
+              this.asyncIndicesStorage.run(branchIndices, fn),
+            );
           let promise: Promise<StepResult>;
           if (step.recover) {
             // Async + recover loop: wrap retry logic in a single promise.
             const recoverLimit = this.resolveRecoverLimit(scope.filePath);
             const recover = step.recover;
-            promise = this.asyncFrameStack.run(branchStack, () =>
-              this.asyncIndicesStorage.run(branchIndices, async () => {
-                let lastResult = await this.executeRunRef(scope, step.workflow.value, step.args ?? "");
-                let attempt = 1;
-                while (lastResult.status !== 0 && attempt <= recoverLimit) {
-                  const rr = await this.runRecoverBody(scope, recover, `${lastResult.output}${lastResult.error}`);
-                  if (rr.status !== 0 || rr.returnValue !== undefined) return rr;
-                  lastResult = await this.executeRunRef(scope, step.workflow.value, step.args ?? "");
-                  attempt += 1;
-                }
-                return lastResult;
-              }),
-            );
+            promise = runInBranch(async () => {
+              let lastResult = await this.executeRunRef(scope, ref, argsRaw);
+              let attempt = 1;
+              while (lastResult.status !== 0 && attempt <= recoverLimit) {
+                const rr = await this.runRecoverBody(scope, recover, `${lastResult.output}${lastResult.error}`);
+                if (rr.status !== 0 || rr.returnValue !== undefined) return rr;
+                lastResult = await this.executeRunRef(scope, ref, argsRaw);
+                attempt += 1;
+              }
+              return lastResult;
+            });
           } else if (step.catch) {
             // Async + catch: single-shot recovery in the async branch.
             const recover = step.catch;
-            promise = this.asyncFrameStack.run(branchStack, () =>
-              this.asyncIndicesStorage.run(branchIndices, async () => {
-                const result = await this.executeRunRef(scope, step.workflow.value, step.args ?? "");
-                if (result.status === 0) return result;
-                const rr = await this.runRecoverBody(scope, recover, `${result.output}${result.error}`);
-                if (rr.status !== 0) return rr;
-                if (rr.returnValue !== undefined) return { ...rr, recoverReturn: true };
-                return { status: 0, output: result.output, error: result.error };
-              }),
-            );
+            promise = runInBranch(async () => {
+              const result = await this.executeRunRef(scope, ref, argsRaw);
+              if (result.status === 0) return result;
+              const rr = await this.runRecoverBody(scope, recover, `${result.output}${result.error}`);
+              if (rr.status !== 0) return rr;
+              if (rr.returnValue !== undefined) return { ...rr, recoverReturn: true };
+              return { status: 0, output: result.output, error: result.error };
+            });
           } else {
-            promise = this.asyncFrameStack.run(branchStack, () =>
-              this.asyncIndicesStorage.run(branchIndices, () =>
-                this.executeRunRef(scope, step.workflow.value, step.args ?? ""),
-              ),
-            );
+            promise = runInBranch(() => this.executeRunRef(scope, ref, argsRaw));
           }
-          const handleId = this.createHandle(step.workflow.value, promise);
+          const handleId = this.createHandle(ref, promise);
           localHandleIds.push(handleId);
-          if (step.captureName) {
-            scope.vars.set(step.captureName, handleId);
-          }
+          if (step.captureName) scope.vars.set(step.captureName, handleId);
           continue;
         }
         if (step.recover) {
@@ -1363,6 +962,28 @@ export class NodeWorkflowRuntime {
     return `${filePath}::${name}`;
   }
 
+  private dispatchMockBody(ref: string, mockDef: MockBodyDef, args: string[]): Promise<StepResult> {
+    return executeMockBodyDef({
+      ref,
+      mockDef,
+      args,
+      env: this.env,
+      cwd: this.cwd,
+      executeStepsBack: (params, stepArgs, steps) => {
+        const scope: Scope = {
+          filePath: this.graph.entryFile,
+          vars: new Map<string, string>(),
+          env: { ...this.env },
+          declaredParamNames: params,
+        };
+        params.forEach((name, i) => {
+          if (i < stepArgs.length) scope.vars.set(name, stepArgs[i]);
+        });
+        return this.executeSteps(scope, steps);
+      },
+    });
+  }
+
   private async resolveArgsRaw(scope: Scope, raw: string | string[]): Promise<string[] | StepResult> {
     if (Array.isArray(raw)) {
       return raw;
@@ -1407,7 +1028,7 @@ export class NodeWorkflowRuntime {
           "workflow",
           ref,
           args,
-          async () => this.executeMockBodyDef(ref, mockBody, args),
+          async () => this.dispatchMockBody(ref, mockBody, args),
           resolvedWorkflow.workflow.params,
         );
       }
@@ -1418,7 +1039,7 @@ export class NodeWorkflowRuntime {
       const mk = this.mockKey(resolvedScript.filePath, resolvedScript.script.name);
       const mockBody = this.mockBodies.get(mk);
       if (mockBody !== undefined) {
-        return this.executeManagedStep("script", ref, args, async () => this.executeMockBodyDef(ref, mockBody, args));
+        return this.executeManagedStep("script", ref, args, async () => this.dispatchMockBody(ref, mockBody, args));
       }
       return this.executeManagedStep(
         "script",
@@ -1451,8 +1072,8 @@ export class NodeWorkflowRuntime {
     const backend = promptConfig.backend || "cursor";
     const stepName = resolvePromptStepName(promptConfig);
     const modelRes = resolveModel(promptConfig);
-    const promptStep = this.emitPromptStepStart(stepName, scope.vars, raw);
-    this.emitPromptEvent("PROMPT_START", {
+    const promptStep = this.emitter.emitPromptStepStart(stepName, scope.vars, raw);
+    this.emitter.emitPromptEvent("PROMPT_START", {
       backend,
       model: modelRes.model || undefined,
       model_reason: modelRes.reason,
@@ -1483,8 +1104,8 @@ export class NodeWorkflowRuntime {
     });
     const result = await executePrompt(promptText, promptConfig, out, scope.env, err);
     const promptErr = errChunks.join("");
-    this.emitPromptStepEnd(promptStep, result.status, chunks.join(""), promptErr);
-    this.emitPromptEvent("PROMPT_END", {
+    this.emitter.emitPromptStepEnd(promptStep, result.status, chunks.join(""), promptErr);
+    this.emitter.emitPromptEvent("PROMPT_END", {
       backend,
       model: modelRes.model || undefined,
       model_reason: modelRes.reason,
@@ -1557,7 +1178,7 @@ export class NodeWorkflowRuntime {
           "rule",
           ref,
           args,
-          async () => this.executeMockBodyDef(ref, mockBody, args),
+          async () => this.dispatchMockBody(ref, mockBody, args),
           resolvedRule.rule.params,
         );
       }
@@ -1572,26 +1193,16 @@ export class NodeWorkflowRuntime {
     return { status: 0, output: res.output, error: "" };
   }
 
-  private async executeScript(
-    filePath: string,
-    scriptName: string,
+  /** Spawn a child process, stream stdout/stderr into io and collect them into the StepResult. */
+  private spawnAndCapture(
+    command: string,
     args: string[],
     env: NodeJS.ProcessEnv,
-    io?: StepIO,
+    cwd: string,
+    io: StepIO | undefined,
   ): Promise<StepResult> {
-    const scriptsDir = env.JAIPH_SCRIPTS;
-    if (!scriptsDir) {
-      return { status: 1, output: "", error: "JAIPH_SCRIPTS not set for script execution" };
-    }
-    const scriptPath = join(scriptsDir, scriptName);
-    const scriptCwd =
-      env.JAIPH_WORKSPACE && env.JAIPH_WORKSPACE.length > 0 ? env.JAIPH_WORKSPACE : dirname(filePath);
-    return await new Promise((resolve) => {
-      const child = spawn(scriptPath, args, {
-        cwd: scriptCwd,
-        env,
-        stdio: ["ignore", "pipe", "pipe"],
-      });
+    return new Promise((resolve) => {
+      const child = spawn(command, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
       let output = "";
       let error = "";
       child.stdout?.setEncoding("utf8");
@@ -1622,50 +1233,32 @@ export class NodeWorkflowRuntime {
     });
   }
 
+  private scriptCwd(env: NodeJS.ProcessEnv, fallbackFilePath: string): string {
+    return env.JAIPH_WORKSPACE && env.JAIPH_WORKSPACE.length > 0
+      ? env.JAIPH_WORKSPACE
+      : dirname(fallbackFilePath);
+  }
+
+  private async executeScript(
+    filePath: string,
+    scriptName: string,
+    args: string[],
+    env: NodeJS.ProcessEnv,
+    io?: StepIO,
+  ): Promise<StepResult> {
+    const scriptsDir = env.JAIPH_SCRIPTS;
+    if (!scriptsDir) {
+      return { status: 1, output: "", error: "JAIPH_SCRIPTS not set for script execution" };
+    }
+    return this.spawnAndCapture(join(scriptsDir, scriptName), args, env, this.scriptCwd(env, filePath), io);
+  }
+
   /**
    * Run a raw workflow shell line (after Jaiph interpolation) via `sh -c` in
    * the workspace, matching script cwd semantics.
    */
-  private async executeShLine(scope: Scope, command: string, io: StepIO): Promise<StepResult> {
-    const scriptCwd =
-      scope.env.JAIPH_WORKSPACE && scope.env.JAIPH_WORKSPACE.length > 0
-        ? scope.env.JAIPH_WORKSPACE
-        : dirname(scope.filePath);
-    const env = scope.env;
-    return await new Promise((resolve) => {
-      const child = spawn("sh", ["-c", command], {
-        cwd: scriptCwd,
-        env,
-        stdio: ["ignore", "pipe", "pipe"],
-      });
-      let output = "";
-      let error = "";
-      child.stdout?.setEncoding("utf8");
-      child.stderr?.setEncoding("utf8");
-      child.stdout?.on("data", (chunk: string) => {
-        output += chunk;
-        io.appendOut(chunk);
-      });
-      child.stderr?.on("data", (chunk: string) => {
-        error += chunk;
-        io.appendErr(chunk);
-      });
-      child.on("error", (err) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        error += msg;
-        io.appendErr(msg);
-        resolve({ status: 1, output, error });
-      });
-      child.on("close", (code) => {
-        const status = typeof code === "number" ? code : 1;
-        resolve({
-          status,
-          output,
-          error,
-          ...(status === 0 ? { returnValue: output.trim() } : {}),
-        });
-      });
-    });
+  private executeShLine(scope: Scope, command: string, io: StepIO): Promise<StepResult> {
+    return this.spawnAndCapture("sh", ["-c", command], scope.env, this.scriptCwd(scope.env, scope.filePath), io);
   }
 
   private async executeInlineScript(
@@ -1749,8 +1342,7 @@ export class NodeWorkflowRuntime {
     fn: (io: StepIO) => Promise<StepResult>,
     declaredParamNames?: string[],
   ): Promise<StepResult> {
-    this.stepSeq += 1;
-    const seq = this.stepSeq;
+    const seq = this.emitter.allocStepSeq();
     const safe = sanitizeName(`${kind}__${name}`);
     const outFile = join(this.runDir, `${String(seq).padStart(6, "0")}-${safe}.out`);
     const errFile = join(this.runDir, `${String(seq).padStart(6, "0")}-${safe}.err`);
@@ -1773,7 +1365,7 @@ export class NodeWorkflowRuntime {
         if (chunk.length > 0) appendFileSync(errFile, chunk);
       },
     };
-    this.emitStep({
+    this.emitter.emitStep({
       type: "STEP_START",
       func: name,
       kind,
@@ -1795,7 +1387,7 @@ export class NodeWorkflowRuntime {
     const elapsed = Date.now() - started;
     writeFileSync(outFile, result.output ?? "");
     writeFileSync(errFile, result.error ?? "");
-    this.emitStep({
+    this.emitter.emitStep({
       type: "STEP_END",
       func: name,
       kind,
@@ -1816,52 +1408,5 @@ export class NodeWorkflowRuntime {
     });
     stack.pop();
     return result;
-  }
-
-  private emitStep(payload: Record<string, unknown>): void {
-    const indices = this.getAsyncIndices();
-    const full = indices.length > 0 ? { ...payload, async_indices: indices } : payload;
-    if (this.env.JAIPH_TEST_MODE !== "1") {
-      process.stderr.write(`__JAIPH_EVENT__ ${JSON.stringify(full)}\n`);
-    }
-    appendRunSummaryLine(JSON.stringify({ ...full, event_version: 1 }));
-  }
-
-  private async executeMockBodyDef(ref: string, mockDef: MockBodyDef, args: string[]): Promise<StepResult> {
-    if (mockDef.kind === "shell") {
-      return this.executeMockShellBody(ref, mockDef.body, args, mockDef.params);
-    }
-    // Jaiph step-based mock (workflow/rule)
-    const scope: Scope = {
-      filePath: this.graph.entryFile,
-      vars: new Map<string, string>(),
-      env: { ...this.env },
-      declaredParamNames: mockDef.params,
-    };
-    mockDef.params.forEach((name, i) => {
-      if (i < args.length) scope.vars.set(name, args[i]);
-    });
-    return this.executeSteps(scope, mockDef.steps);
-  }
-
-  private executeMockShellBody(_ref: string, body: string, args: string[], params: string[]): StepResult {
-    const { spawnSync } = require("node:child_process") as typeof import("node:child_process");
-    const env = { ...this.env };
-    params.forEach((name, i) => {
-      if (i < args.length) env[name] = args[i];
-    });
-    const r = spawnSync("bash", ["-c", `set -euo pipefail\n${body}`, "mock", ...args], {
-      encoding: "utf8",
-      cwd: this.cwd,
-      env,
-    });
-    const status = r.status ?? 1;
-    const output = r.stdout ?? "";
-    return {
-      status,
-      output,
-      error: r.stderr ?? "",
-      ...(status === 0 ? { returnValue: output.trim() } : {}),
-    };
   }
 }
