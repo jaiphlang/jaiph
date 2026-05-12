@@ -13,59 +13,6 @@ Process rules:
 
 ***
 
-## Refactor — split `src/runtime/kernel/node-workflow-runtime.ts` (1915 LoC) #dev-ready
-
-**Goal**
-`src/runtime/kernel/node-workflow-runtime.ts` is a 1915-LoC god file: ~280 LoC of free arg-parsing helpers above the class, then ~1620 LoC of `NodeWorkflowRuntime` spanning workflow orchestration, step execution, prompt step lifecycle, event emission, mock execution, frame stack management, and heartbeat I/O. Reading or modifying any one concern requires holding all of them in head. Split along clean seams so each concern is in a focused module.
-
-**Context (read before starting)**
-
-* This file is actively touched by the `Handle<T>` task. If that task is in flight, **rebase on it before splitting** — do not do this work in parallel without coordinating, or the merge will be miserable.
-* The class has stateful internals (`runId`, `runDir`, `summaryFile`, `heartbeatTimer`, `frameStack`, `asyncIndices`, `env`, `cwd`, `graph`, `mockBodies`). The split must keep state in the class and move stateless helpers out, or pass state explicitly into the extracted modules. Do not invent a second source of truth.
-* Free helpers above the class (`interpolate`, `parseInlineCaptureCall`, `commaArgsToInterpolated`, `parseArgsRaw`, `parseInlineScriptAt`, `parseManagedArgAt`, `parseArgTokens`, `stripOuterQuotes`, `parsePromptSchema`, `BARE_IDENT_RE`, `MAX_EMBED`, `MAX_RECURSION_DEPTH`, `sanitizeName`, `nowIso`) — all stateless. Safe to extract.
-* Methods that are pure event emission (`emitWorkflow`, `emitStep`, `emitPromptStepStart`, `emitPromptStepEnd`, `emitPromptEvent`, `emitLog`) all call `appendRunSummaryLine` and `process.stderr.write`. They depend on the class only for `runId`, `summaryFile`, and `getAsyncIndices()`. Can move to a module that takes those as constructor args.
-* Mock execution methods (`executeMockBodyDef`, `executeMockShellBody`) are largely self-contained and could move to a sibling module.
-* The runtime now also contains two helpers added during the recent audit refactor: `runRecoverBody` (catch/recover body executor) and `runPromptStep` (shared prompt-step pipeline). Both depend on `executeSteps` / `interpolateWithCaptures` and stay with the orchestrator class.
-* `src/runtime/kernel/run-step-exec.ts` was deleted in the audit cleanup; ignore any prior reference to it as a "do not touch" file.
-
-**Scope**
-
-Extract three new sibling modules under `src/runtime/kernel/`:
-
-* **`runtime-arg-parser.ts`** — every stateless free helper currently above the `NodeWorkflowRuntime` class:
-  - `interpolate`, `parseInlineCaptureCall`, `commaArgsToInterpolated`, `parseArgsRaw`, `parseInlineScriptAt`, `parseManagedArgAt`, `parseArgTokens`, `stripOuterQuotes`, `parsePromptSchema`, `sanitizeName`, `nowIso`
-  - The `BARE_IDENT_RE`, `MAX_EMBED`, `MAX_RECURSION_DEPTH` constants
-  - The `ParsedArgToken`, `PromptSchemaField` types if they are not used elsewhere in the class
-  - **Required**: extracted helpers must have unit tests (some already do indirectly via runtime tests; new direct tests live in `runtime-arg-parser.test.ts`).
-* **`runtime-event-emitter.ts`** — a small class `RuntimeEventEmitter` constructed with `{ runId, asyncIndicesGetter, env }`, exposing `emitWorkflow`, `emitStep`, `emitPromptStepStart`, `emitPromptStepEnd`, `emitPromptEvent`, `emitLog`. The runtime constructs one and delegates. No more direct `process.stderr.write(__JAIPH_EVENT__ ...)` scattered through the runtime.
-* **`runtime-mock.ts`** — `executeMockBodyDef` and `executeMockShellBody` move here as exported functions taking `{ ref, args, env, cwd, executeStepsBack }` (the last is a callback so the mock can dispatch back into the runtime for `kind: "steps"` mocks). Removes the `require("node:child_process")` call that currently shadows ESM imports inside `executeMockShellBody` — that is a code smell that should die in this task.
-
-After the split, `node-workflow-runtime.ts` keeps only:
-* The `NodeWorkflowRuntime` class
-* Workflow/step orchestration (`runDefault`, `runNamedWorkflow`, `executeSteps`, `executeStep`, frame and scope management, `runRecoverBody`, `runPromptStep`)
-* The async-handle bookkeeping (`getAsyncIndices`, `getFrameStack`)
-* Heartbeat (`startHeartbeat`, `stopHeartbeat`, `writeHeartbeat`)
-
-Target size for `node-workflow-runtime.ts` after split: ~1000–1200 LoC. Still large, but a single coherent concern (the orchestrator).
-
-**Non-goals**
-
-* Do not change behavior. Every existing test must still pass without modification.
-* Do not redesign the event format, the mock contract, or the arg-parser's accepted syntax. This is a relocation task only.
-* Do not split further than the three new modules listed. Over-decomposition is its own problem; this task is calibrated for one round of splitting.
-* Do not touch `node-workflow-runner.ts` (the CLI shim) — it is correctly sized and out of scope.
-
-**Acceptance criteria**
-
-* `src/runtime/kernel/node-workflow-runtime.ts` is between 1000 and 1200 LoC after the split.
-* `src/runtime/kernel/runtime-arg-parser.ts`, `runtime-event-emitter.ts`, `runtime-mock.ts` exist and own their respective concerns.
-* `runtime-arg-parser.test.ts` exists with direct unit tests for the extracted helpers.
-* `npm test` passes with no test changes other than possibly importing helpers from their new location.
-* No `require("node:...")` calls inside class methods (they are replaced by top-of-file `import` statements as part of the mock extraction).
-* The new modules have no circular imports back into `node-workflow-runtime.ts`. Dependency direction is one-way: orchestrator → helpers/emitter/mock.
-
-***
-
 ## Cleanup — remove `JAIPH_TEST_MODE` event suppression in production runtime code #dev-ready
 
 **Goal**
