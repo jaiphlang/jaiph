@@ -232,13 +232,13 @@ For each workflow run inside a test block, the harness builds the runtime enviro
 
 | Variable | Value |
 |---|---|
-| `JAIPH_TEST_MODE` | `1` |
+| `JAIPH_TEST_MODE` | `1` (selects mock prompt dispatch in `prompt.ts`) |
 | `JAIPH_WORKSPACE` | Project root (from `detectWorkspaceRoot`) |
 | `JAIPH_RUNS_DIR` | Per test block, `…/tmp/jaiph-test-block-*/.jaiph/runs` (ephemeral) |
 | `JAIPH_SCRIPTS` | Directory containing extracted `script` files from `buildScripts` (temp) |
 | `JAIPH_MOCK_RESPONSES_FILE` or `JAIPH_MOCK_DISPATCH_SCRIPT` | Set by the runner when using inline or block `mock prompt` (do not set manually) |
 
-You do not set `JAIPH_TEST_MODE` yourself; the harness manages it.
+You do not set `JAIPH_TEST_MODE` yourself; the harness manages it. Its only purpose is to route prompt steps to the mock dispatcher in `prompt.ts`. It no longer controls `__JAIPH_EVENT__` stderr suppression — the test runner now passes `suppressLiveEvents: true` directly to the in-process `NodeWorkflowRuntime` constructor so test reporter output stays clean. Durable `run_summary.jsonl` writes are unaffected; production runs (`jaiph run` via the spawned `node-workflow-runner` child) do not set the flag and stream events to stderr as before.
 
 ## Organizing tests
 

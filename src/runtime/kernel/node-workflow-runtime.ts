@@ -145,7 +145,21 @@ export class NodeWorkflowRuntime {
     return null;
   }
 
-  constructor(graph: RuntimeGraph, opts: { env?: NodeJS.ProcessEnv; cwd?: string; mockBodies?: Map<string, MockBodyDef> }) {
+  constructor(
+    graph: RuntimeGraph,
+    opts: {
+      env?: NodeJS.ProcessEnv;
+      cwd?: string;
+      mockBodies?: Map<string, MockBodyDef>;
+      /**
+       * When true, the runtime's event emitter skips writing `__JAIPH_EVENT__`
+       * lines to stderr (durable `run_summary.jsonl` writes are unaffected).
+       * Used by in-process callers like the test runner that share stderr
+       * with `node --test` reporter output.
+       */
+      suppressLiveEvents?: boolean;
+    },
+  ) {
     this.graph = graph;
     this.env = opts.env ?? process.env;
     this.cwd = opts.cwd ?? process.cwd();
@@ -172,6 +186,7 @@ export class NodeWorkflowRuntime {
       env: this.env,
       getFrameStack: () => this.getFrameStack(),
       getAsyncIndices: () => this.getAsyncIndices(),
+      suppressLiveEvents: opts.suppressLiveEvents,
     });
     this.startHeartbeat();
   }

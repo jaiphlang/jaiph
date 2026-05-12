@@ -162,6 +162,7 @@ async function runTestBlock(
           env,
           cwd: workspaceRoot,
           mockBodies,
+          suppressLiveEvents: true,
         });
         const result = await runtime.runNamedWorkflow(step.workflowRef, step.args ?? []);
         // Resolve the captured value following production `run_capture` semantics.
