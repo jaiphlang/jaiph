@@ -842,3 +842,80 @@ workflow ask() {
   return r
 }
 
+=== invalid regex in if condition in workflow
+# @expect error E_VALIDATE "invalid regex in if condition"
+--- input.jh
+workflow default() {
+  const x = "test"
+  if x =~ /[bad(/ {
+    log "match"
+  }
+}
+
+=== invalid regex in if condition in rule
+# @expect error E_VALIDATE "invalid regex in if condition"
+--- input.jh
+script noop = `:`
+rule check() {
+  const x = "test"
+  if x =~ /[bad(/ {
+    run noop()
+  }
+}
+workflow default() {
+  ensure check()
+}
+
+=== import script resolves to missing file
+# @expect error E_IMPORT_NOT_FOUND "resolves to missing file"
+--- input.jh
+import script "./missing.py" as queue
+workflow default() {
+  run queue()
+}
+
+=== bare imported workflow as shell line must use run
+# @expect error E_VALIDATE "is a valid script or workflow reference" @3:3
+--- main.jh
+import "lib.jh" as lib
+workflow default() {
+  lib.deploy
+}
+--- lib.jh
+export workflow deploy() {
+  log "ok"
+}
+
+=== bare imported script as shell line must use run
+# @expect error E_VALIDATE "is a valid script or workflow reference" @3:3
+--- main.jh
+import "lib.jh" as lib
+workflow default() {
+  lib.helper
+}
+--- lib.jh
+export script helper = `echo ok`
+workflow dummy() {
+  log "ok"
+}
+
+=== command substitution invokes rule in send shell RHS
+# @expect error E_VALIDATE "command substitution cannot invoke rule"
+--- input.jh
+channel c
+rule check() {
+  return "ok"
+}
+workflow default() {
+  c <- $(check)
+}
+
+=== command substitution contains channel send
+# @expect error E_VALIDATE "command substitution cannot contain channel send"
+--- input.jh
+channel c
+channel d
+workflow default() {
+  c <- $(d <- "x")
+}
+

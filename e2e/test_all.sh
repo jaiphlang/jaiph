@@ -81,8 +81,13 @@ TEST_SCRIPTS=(
   "e2e/tests/126_file_shorthand_routing.sh"
   "e2e/tests/127_cli_edge_cases.sh"
   "e2e/tests/128_examples_format_check.sh"
+  "e2e/tests/128_if_statement.sh"
+  "e2e/tests/129_artifacts_lib.sh"
   "e2e/tests/130_run_recover_loop.sh"
+  "e2e/tests/131_tty_async_progress.sh"
+  "e2e/tests/132_return_log_inline_script.sh"
   "e2e/tests/133_return_bare_identifier.sh"
+  "e2e/tests/134_script_imports.sh"
 )
 
 PASS_COUNT=0

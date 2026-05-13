@@ -9,35 +9,35 @@ config {
 }
 
 script read_contributing_docs = ```
-test -f docs/contributing.md || {
-  echo "docs/contributing.md not found (run from repo root)" >&2
-  return 1
-}
-awk '
-/^---$/ {
-  if (sec == 0) { sec = 1; next }
-  if (sec == 1) { sec = 2; next }
-}
-sec == 1 { next }
-sec == 2 { print }
-' docs/contributing.md
+  test -f docs/contributing.md || {
+    echo "docs/contributing.md not found (run from repo root)" >&2
+    return 1
+  }
+  awk '
+  /^---$/ {
+    if (sec == 0) { sec = 1; next }
+    if (sec == 1) { sec = 2; next }
+  }
+  sec == 1 { next }
+  sec == 2 { print }
+  ' docs/contributing.md
 ```
 
-script read_txtar_format_spec = `cat compiler-tests/README.md`
+script read_txtar_format_spec = `cat test-fixtures/compiler-txtar/README.md`
 
 script read_txtar_fixture_names = ```
-for f in compiler-tests/*.txt; do
-  echo "=== FILE: $f ==="
-  grep '^=== ' "$f" | sed 's/^=== /  /'
-done
+  for f in test-fixtures/compiler-txtar/*.txt; do
+    echo "=== FILE: $f ==="
+    grep '^=== ' "$f" | sed 's/^=== /  /'
+  done
 ```
 
 script read_txtar_fixtures = ```
-for f in compiler-tests/*.txt; do
-  echo "========== $f =========="
-  cat "$f"
-  echo ""
-done
+  for f in test-fixtures/compiler-txtar/*.txt; do
+    echo "========== $f =========="
+    cat "$f"
+    echo ""
+  done
 ```
 
 script new_qa_gap_report_path = `echo ".jaiph/tmp/qa_gap_report_$(date +%Y-%m-%d_%H-%M-%S).md"`
@@ -45,103 +45,103 @@ script new_qa_gap_report_path = `echo ".jaiph/tmp/qa_gap_report_$(date +%Y-%m-%d
 script write_gap_report_pointer = `printf '%s\n' "$1" > .jaiph/tmp/qa_gap_report_active.txt`
 
 script gap_report_nonempty = ```
-p="$(cat .jaiph/tmp/qa_gap_report_active.txt 2>/dev/null)" || return 1
-[ -z "$p" ] && return 1
-test -s "$p"
+  p="$(cat .jaiph/tmp/qa_gap_report_active.txt 2>/dev/null)" || return 1
+  [ -z "$p" ] && return 1
+  test -s "$p"
 ```
 
 script read_gap_report = ```
-p="$(cat .jaiph/tmp/qa_gap_report_active.txt)"
-cat "$p"
+  p="$(cat .jaiph/tmp/qa_gap_report_active.txt)"
+  cat "$p"
 ```
 
 script save_gap_report_file = `printf '%s\n' "$1" > "$2"`
 
 const analyze_gaps_prompt = """
-    <role>
-    You are a QA engineer analyzing the Jaiph codebase for test coverage gaps.
+  <role>
+  You are a QA engineer analyzing the Jaiph codebase for test coverage gaps.
 
-    <contributing_docs>
-    ${contributing_docs}
-    </contributing_docs>
+  <contributing_docs>
+  ${contributing_docs}
+  </contributing_docs>
 
-    <txtar_format>
-    ${txtar_format}
-    </txtar_format>
+  <txtar_format>
+  ${txtar_format}
+  </txtar_format>
 
-    <existing_txtar_tests>
-    ${txtar_names}
-    </existing_txtar_tests>
+  <existing_txtar_tests>
+  ${txtar_names}
+  </existing_txtar_tests>
 
-    Use the testing philosophy and layer locations from contributing_docs above.
-    The test layers are:
+  Use the testing philosophy and layer locations from contributing_docs above.
+  The test layers are:
 
-    1. **Compiler tests (txtar)** — language-agnostic fixtures in compiler-tests/*.txt.
-       Each test case is a .jh source with an expected outcome (ok or error).
-       These test parse + validate without execution. This is the PRIMARY layer
-       for compiler error paths and valid-source acceptance.
+  1. **Compiler tests (txtar)** — language-agnostic fixtures in compiler-tests/*.txt.
+     Each test case is a .jh source with an expected outcome (ok or error).
+     These test parse + validate without execution. This is the PRIMARY layer
+     for compiler error paths and valid-source acceptance.
 
-    2. **Module unit tests** — colocated src/**/*.test.ts for internal API testing
-       (AST structure, helper functions, display formatting).
+  2. **Module unit tests** — colocated src/**/*.test.ts for internal API testing
+     (AST structure, helper functions, display formatting).
 
-    3. **Compiler acceptance** — src/transpile/*.acceptance.test.ts for cross-module
-       and integration scenarios.
+  3. **Compiler acceptance** — src/transpile/*.acceptance.test.ts for cross-module
+     and integration scenarios.
 
-    4. **Runtime e2e** — e2e/tests/*.sh for full execution (compile + run + verify output).
+  4. **Runtime e2e** — e2e/tests/*.sh for full execution (compile + run + verify output).
 
-    5. **CLI display** — src/cli/run/display.test.ts and progress tree rendering tests.
+  5. **CLI display** — src/cli/run/display.test.ts and progress tree rendering tests.
 
-    <task>
-    Your task:
+  <task>
+  Your task:
 
-    1. Read every source file in src/parse/*.ts. For each fail() call, check if
-       the error is covered by either:
-       - A txtar test case in compiler-tests/*.txt (check existing_txtar_tests above)
-       - A colocated TS test in src/parse/*.test.ts
-       List fail() calls with no coverage in either layer. These are COMPILER gaps —
-       they should be fixed with txtar test cases.
+  1. Read every source file in src/parse/*.ts. For each fail() call, check if
+     the error is covered by either:
+     - A txtar test case in compiler-tests/*.txt (check existing_txtar_tests above)
+     - A colocated TS test in src/parse/*.test.ts
+     List fail() calls with no coverage in either layer. These are COMPILER gaps —
+     they should be fixed with txtar test cases.
 
-    2. Read src/transpile/validate.ts, src/transpile/validate-ref-resolution.ts,
-       src/transpile/validate-string.ts, src/transpile/validate-prompt-schema.ts,
-       and src/transpile/shell-jaiph-guard.ts. For each jaiphError() call, check
-       coverage in txtar fixtures and TS tests. List uncovered paths.
-       These are COMPILER gaps — txtar test cases.
+  2. Read src/transpile/validate.ts, src/transpile/validate-ref-resolution.ts,
+     src/transpile/validate-string.ts, src/transpile/validate-prompt-schema.ts,
+     and src/transpile/shell-jaiph-guard.ts. For each jaiphError() call, check
+     coverage in txtar fixtures and TS tests. List uncovered paths.
+     These are COMPILER gaps — txtar test cases.
 
-    3. Read e2e/tests/*.sh file names and compare against the feature list in
-       docs/grammar.md and docs/cli.md. List features with no runtime e2e test.
-       Also check if all e2e test files are registered in e2e/test_all.sh.
-       These are RUNTIME gaps — e2e bash tests.
+  3. Read e2e/tests/*.sh file names and compare against the feature list in
+     docs/grammar.md and docs/cli.md. List features with no runtime e2e test.
+     Also check if all e2e test files are registered in e2e/test_all.sh.
+     These are RUNTIME gaps — e2e bash tests.
 
-    4. Read src/cli/run/display.ts and src/cli/run/progress.ts. For each
-       formatting branch (start line, end line, prompt label, async label,
-       depth indentation, TTY vs non-TTY), check test coverage in
-       display.test.ts. List gaps. Focus on response tree rendering edge cases.
-       These are DISPLAY gaps — TS unit tests.
+  4. Read src/cli/run/display.ts and src/cli/run/progress.ts. For each
+     formatting branch (start line, end line, prompt label, async label,
+     depth indentation, TTY vs non-TTY), check test coverage in
+     display.test.ts. List gaps. Focus on response tree rendering edge cases.
+     These are DISPLAY gaps — TS unit tests.
 
-    5. Read src/cli/commands/*.ts. List error paths and edge cases with no
-       test coverage. These are CLI gaps — TS unit tests or e2e tests.
+  5. Read src/cli/commands/*.ts. List error paths and edge cases with no
+     test coverage. These are CLI gaps — TS unit tests or e2e tests.
 
-    Output a structured gap report. For each gap, specify which test layer
-    should be used:
+  Output a structured gap report. For each gap, specify which test layer
+  should be used:
 
-    ## Gap: [short description]
-    - File: [source file with untested code path]
-    - Code path: [specific branch/function/line range]
-    - Why it matters: [what bug this could hide]
-    - Test layer: **txtar** | **unit** | **acceptance** | **e2e**
-    - Priority: [high | medium | low]
+  ## Gap: [short description]
+  - File: [source file with untested code path]
+  - Code path: [specific branch/function/line range]
+  - Why it matters: [what bug this could hide]
+  - Test layer: **txtar** | **unit** | **acceptance** | **e2e**
+  - Priority: [high | medium | low]
 
-    For **txtar** gaps, also include the suggested test case in txtar format:
-    \`\`\`
-    === suggested test name
-    # @expect error E_CODE "substring"
-    --- input.jh
-    <minimal source to trigger the error>
-    \`\`\`
+  For **txtar** gaps, also include the suggested test case in txtar format:
+  \`\`\`
+  === suggested test name
+  # @expect error E_CODE "substring"
+  --- input.jh
+  <minimal source to trigger the error>
+  \`\`\`
 
-    Sort by priority descending. Be thorough but skip trivial paths.
-    </task>
-    </role>
+  Sort by priority descending. Be thorough but skip trivial paths.
+  </task>
+  </role>
 """
 
 workflow analyze_gaps() {
@@ -220,7 +220,7 @@ workflow write_tests() {
     ${gap_report}
     </task>
     </role>
-"""
+   """
 }
 
 script mkdir_tmp_jaiph_qa = `mkdir -p .jaiph/tmp`

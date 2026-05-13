@@ -2458,3 +2458,67 @@ workflow default() {
   c <- run helper()
 }
 
+=== return with bash exit code rejected in workflow
+# @expect error E_PARSE "bash exit codes are only valid in scripts" @2:3
+--- input.jh
+workflow default() {
+  return 0
+}
+
+=== return with bash dollar-question rejected in workflow
+# @expect error E_PARSE "bash exit codes are only valid in scripts" @2:3
+--- input.jh
+workflow default() {
+  return $?
+}
+
+=== if equality operator with regex operand rejected
+# @expect error E_PARSE "requires a string operand" @2:3
+--- input.jh
+workflow default(x) {
+  if x == /pattern/ {
+    log "match"
+  }
+}
+
+=== if inequality operator with regex operand rejected
+# @expect error E_PARSE "requires a string operand" @2:3
+--- input.jh
+workflow default(x) {
+  if x != /pattern/ {
+    log "match"
+  }
+}
+
+=== if regex-match operator with string operand rejected
+# @expect error E_PARSE "requires a regex operand" @2:3
+--- input.jh
+workflow default(x) {
+  if x =~ "literal" {
+    log "match"
+  }
+}
+
+=== if negative regex-match operator with string operand rejected
+# @expect error E_PARSE "requires a regex operand" @2:3
+--- input.jh
+workflow default(x) {
+  if x !~ "literal" {
+    log "match"
+  }
+}
+
+=== const run async with inline script rejected
+# @expect error E_PARSE "run async is not supported with inline scripts" @2:13
+--- input.jh
+workflow default() {
+  const x = run async `echo hello`()
+}
+
+=== const run async with invalid reference
+# @expect error E_PARSE "const ... = run async must target a valid reference" @2:13
+--- input.jh
+workflow default() {
+  const x = run async 123bad()
+}
+
