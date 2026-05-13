@@ -16,6 +16,15 @@
 > [!WARNING]
 > Jaiph is still in an early stage. Expect breaking changes.
 
+## Features
+
+- **Workflows** — Compose `prompt`, `run`, `ensure`, channel sends, conditionals, `run async` with implicit join, `catch`, and repair-and-retry `recover`.
+- **Rules and scripts** — Rules stay structured (no raw shell lines); **`script`** steps run bash or polyglot code as subprocesses.
+- **Agents** — Backends include Cursor, Claude, Codex (HTTP), or a custom `agent.command`.
+- **Testing** — `*.test.jh` files run in-process (`jaiph test`) with mocks and `expect_*` assertions ([Testing](docs/testing.md)).
+- **Safety and inspectability** — Docker-backed sandbox for **`jaiph run`** (env-controlled; see [Sandboxing](docs/sandboxing.md)); live **`__JAIPH_EVENT__`** on stderr and durable **`.jaiph/runs/`** artifacts ([Architecture](docs/architecture.md)).
+- **Tooling** — `jaiph compile`, `jaiph format`, `jaiph install` / `.jaiph/libs/`, and optional `hooks.json` ([CLI](docs/cli.md), [Hooks](docs/hooks.md)).
+
 ## Core components
 
 - **CLI** (`src/cli`) — `jaiph run` / `test` / `compile` / `format` / `init` / `install` / `use`; prepares scripts, spawns the workflow runner (or in-process test runner), parses `__JAIPH_EVENT__` on stderr, runs hooks on `jaiph run` only.

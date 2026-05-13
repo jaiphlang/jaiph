@@ -11,7 +11,7 @@ When you need the same workflow sources to behave differently on different machi
 
 All execution is interpreted by the Node workflow runtime (`NodeWorkflowRuntime`): the AST, managed scripts, prompts, channels, inbox, and `.jaiph/runs` artifacts (see [Architecture](architecture.md)). Configuration only adjusts that stack; it does not change the workflow language or the compile graph.
 
-`jaiph compile` and `buildScripts()` use the same parser, so **unknown `config` keys and wrong value types** fail with deterministic parse errors. Runtime graph loading is parse-only; **compile-time** validation of references runs in the transpile path, not in `buildRuntimeGraph()` (see [Architecture — Summary](architecture.md#summary)).
+`jaiph compile` parses each module in the import closure (same grammar as `buildScripts()`), so **unknown `config` keys and wrong value types** produce the same parse errors as a normal build. `jaiph compile` then runs **`validateReferences` only** — it does not emit scripts or spawn the runner (see [Architecture](architecture.md#summary)). Runtime graph loading is parse-only; **compile-time** reference validation runs in the transpile path, not in `buildRuntimeGraph()`.
 
 **Source of truth:** When this document and the implementation disagree, treat the source code as authoritative.
 
@@ -26,6 +26,8 @@ Jaiph provides three configuration mechanisms. When the same key is set in more 
 For **agent and run keys**, the full precedence chain is:
 
 > **environment > workflow-level config > module-level config > defaults**
+
+`run.recover_limit` is an exception: only **module-level** values affect `run … recover` (see [Run keys](#run-keys)).
 
 For **`runtime.*` (image, network, timeout)**, the CLI merges at **`jaiph run` launch** — not inside `NodeWorkflowRuntime` — in the order **`JAIPH_DOCKER_*` environment > in-file `runtime.*` > defaults** (and separately: Docker on/off is env-only, see above and [Precedence in detail](#precedence-in-detail)). `runtime.*` cannot appear in workflow-level `config` blocks.
 
@@ -98,7 +100,8 @@ workflow default() {
 
 - At most one per workflow; it must be the first non-comment construct in the body. A duplicate is `E_PARSE`: `duplicate config block inside workflow (only one allowed per workflow)`.
 - Only **`agent.*` and `run.*` keys** are allowed. Any `runtime.*` or `module.*` key is `E_PARSE`.
-- Workflow-level values apply to all steps in that workflow, including `ensure`d rules and scripts called from it. When the workflow finishes, the previous environment is restored.
+- Workflow-level values apply to all steps in that workflow, including `ensure`d rules and scripts called from it, for **`agent.*`** and **`run.logs_dir`** / **`run.debug`** (merged when the workflow or cross-module `ensure` runs). **`run.recover_limit` is different:** the retry limit for `run … recover` comes only from the **module-level** `config` of the **`.jh` file that owns the current scope** when the step runs; a workflow-level `run.recover_limit` assignment is valid syntax but does **not** change recover behavior today.
+- When the workflow finishes, the previous environment is restored.
 
 **Sibling isolation:** Each workflow gets its own clone of the parent environment. Sibling workflows never see each other's config — even when they execute sequentially. If workflow `alpha` sets `agent.backend = "claude"` and workflow `beta` only sets `agent.default_model = "beta-model"`, `beta` still sees the module-level backend (e.g. `"cursor"`), not `alpha`'s.
 
@@ -134,7 +137,7 @@ These control runtime behavior unrelated to the agent.
 |-----|------|---------|--------------|-------------|
 | `run.logs_dir` | string | `.jaiph/runs` | `JAIPH_RUNS_DIR` | Step log directory. Relative paths are joined with the workspace root; absolute paths are used as-is. |
 | `run.debug` | boolean | `false` | `JAIPH_DEBUG` | Enables debug tracing for the run. |
-| `run.recover_limit` | integer | `10` | _(no env override)_ | Maximum number of retry attempts for `run … recover` loops before the step fails. See [Language — `recover`](language.md#recover--repair-and-retry-loop). |
+| `run.recover_limit` | integer | `10` | _(no env override)_ | Maximum attempts for `run … recover` loops before the step fails (see [Language — `recover`](language.md#recover--repair-and-retry-loop)). Effective value comes **only** from the **module-level** `config` block of the **`.jh` file that owns the current scope** (the file containing the workflow or rule that executes the step). Workflow-level `run.recover_limit` does not apply. |
 
 ### Module keys
 
@@ -343,4 +346,4 @@ The runtime also sets `JAIPH_ARTIFACTS_DIR` — the absolute path to the writabl
 
 ## Created by `jaiph init`
 
-`jaiph init` creates `.jaiph/bootstrap.jh` and writes `.jaiph/SKILL.md` from the skill file bundled with your installation (see `JAIPH_SKILL_PATH` in the CLI reference). It does not add a separate config file — use `config { ... }` in your workflow sources.
+`jaiph init` creates `.jaiph/bootstrap.jh`, writes `.jaiph/SKILL.md` from the skill file bundled with your installation (see `JAIPH_SKILL_PATH` in the [CLI](cli.md) reference), and ensures `.jaiph/.gitignore` matches the canonical template (lists `runs` and `tmp` under `.jaiph/`). It does not add a separate config file — use `config { ... }` in your workflow sources.

@@ -37,7 +37,9 @@ jaiph test ./e2e/workflow_greeting.test.jh
 jaiph ./e2e/workflow_greeting.test.jh
 ```
 
-**Discovery:** `jaiph test` walks the given directory recursively, or the workspace root when no path is passed. The workspace root is found by walking up from the current directory until a `.jaiph` or `.git` directory exists; if neither is found, the current directory is used.
+`jaiph path.test.jh` without the `test` subcommand is only accepted when that path resolves to an existing file (`src/cli/index.ts`); otherwise the CLI treats the token as an unknown command.
+
+**Discovery:** With no path argument, Jaiph scans the detected workspace root recursively; with a directory, it scans that tree. Only `*.test.jh` files are collected: the name must end in `.jh` and the stem must end with `.test` (see `walkTestFiles` in `src/transpile/build.ts`). The workspace root—for locating imports and setting `JAIPH_WORKSPACE`—is from `detectWorkspaceRoot` in `src/cli/shared/paths.ts`: walk upward from a starting directory (the current working directory, the directory you passed, or the parent of a single test file) until `.jaiph` or `.git` is found, subject to a few guards for shared temp directories and nested `.jaiph/tmp` layouts; if nothing matches, the resolved starting directory is used as the root.
 
 If no `*.test.jh` files are found, the command prints an error and exits with status 1. A file must contain at least one `test` block; otherwise the CLI reports a parse error. Passing a plain `*.jh` file that is not named `*.test.jh` is rejected — use `jaiph run` for those.
 
@@ -199,7 +201,7 @@ When a workflow uses typed prompts (`returns "{ ... }"`), mock text must be a si
 
 ## Pass/fail reporting
 
-Each test block runs in isolation. Assertions, shell errors, or a workflow exiting non-zero (without `allow_failure`) mark that case as failed.
+Each test block runs in isolation. Failed assertions, harness/runtime errors while executing the block, or a workflow exiting non-zero (without `allow_failure`) mark that case as failed.
 
 The runner output looks like:
 
@@ -236,9 +238,10 @@ For each workflow run inside a test block, the harness builds the runtime enviro
 | `JAIPH_WORKSPACE` | Project root (from `detectWorkspaceRoot`) |
 | `JAIPH_RUNS_DIR` | Per test block, `…/tmp/jaiph-test-block-*/.jaiph/runs` (ephemeral) |
 | `JAIPH_SCRIPTS` | Directory containing extracted `script` files from `buildScripts` (temp) |
-| `JAIPH_MOCK_RESPONSES_FILE` or `JAIPH_MOCK_DISPATCH_SCRIPT` | Set by the runner when using inline or block `mock prompt` (do not set manually) |
+| `JAIPH_MOCK_RESPONSES_JSON` | JSON array of strings: sequential inline `mock prompt "…"` / `mock prompt <const>` responses (only when no `mock prompt { … }` block exists in that case) |
+| `JAIPH_MOCK_PROMPT_ARMS_JSON` | JSON payload for pattern-based `mock prompt { … }` arms (in-process dispatch in `mock.ts` / `prompt.ts`; mutually exclusive with the responses queue for that run) |
 
-You do not set `JAIPH_TEST_MODE` yourself; the harness manages it. Its only purpose is to route prompt steps to the mock dispatcher in `prompt.ts`. It no longer controls `__JAIPH_EVENT__` stderr suppression — the test runner now passes `suppressLiveEvents: true` directly to the in-process `NodeWorkflowRuntime` constructor so test reporter output stays clean. Durable `run_summary.jsonl` writes are unaffected; production runs (`jaiph run` via the spawned `node-workflow-runner` child) do not set the flag and stream events to stderr as before.
+You do not set mock variables or `JAIPH_TEST_MODE` yourself; the harness sets them for each `run …` step that starts an in-process `NodeWorkflowRuntime`. `JAIPH_TEST_MODE` routes prompt steps to the mock path in `prompt.ts`. Suppression of live `__JAIPH_EVENT__` lines on stderr is controlled by `suppressLiveEvents: true` on that runtime (see [Architecture — Test runner integration](architecture.md#test-runner-integration-testjh-in-the-kernel)), not by `JAIPH_TEST_MODE`; durable `run_summary.jsonl` writes still append. Production `jaiph run` uses a spawned `node-workflow-runner` child without `suppressLiveEvents`, so live events keep streaming to stderr there.
 
 ## Organizing tests
 
@@ -278,6 +281,7 @@ workflow default() {
 --- input.jh
 workflow default() {
   log "hello"
+
 ```
 
 ### Format rules
@@ -318,11 +322,11 @@ Test cases are organized by error type and single-vs-multi-module:
 | File | Cases | What it covers |
 |------|-------|----------------|
 | `test-fixtures/compiler-txtar/valid.txt` | 119 | Success cases — source compiles without error (single-module) |
-| `test-fixtures/compiler-txtar/parse-errors.txt` | 274 | `E_PARSE` error cases — syntax and grammar violations |
-| `test-fixtures/compiler-txtar/validate-errors.txt` | 88 | `E_VALIDATE`, `E_IMPORT_NOT_FOUND`, `E_SCHEMA` error cases (single-module) |
+| `test-fixtures/compiler-txtar/parse-errors.txt` | 282 | `E_PARSE` error cases — syntax and grammar violations |
+| `test-fixtures/compiler-txtar/validate-errors.txt` | 92 | `E_VALIDATE`, `E_IMPORT_NOT_FOUND`, `E_SCHEMA` error cases (single-module) |
 | `test-fixtures/compiler-txtar/validate-errors-multi-module.txt` | 20 | Validation errors requiring imports (multi-file) |
 
-(Counts are one `# @expect` per test case; re-count after large fixture changes.)
+(Counts are lines matching `# @expect` in each `.txt` file; the runner also registers separate `node:test` meta-tests in `compiler-test-runner.ts`. Re-count after large fixture changes.)
 
 The initial cases were extracted from TypeScript test files across `src/parse/*.test.ts` and `src/transpile/*.test.ts`. Additional cases were written directly as txtar fixtures to cover compiler error paths that had no prior test coverage. Only tests that verify "source in, pass/fail out" qualify — tests that check AST structure or internal APIs remain in TypeScript.
 
@@ -413,4 +417,5 @@ The project includes a Playwright-based test (`e2e/playwright/landing-page.spec.
 - **Do not combine** `mock prompt { … }` with queue-style `mock prompt "…"` / `mock prompt <const>` in the same test block; when a block is present, queued entries are ignored.
 - **Capture** without a successful non-empty `return` concatenates all step `*.out` files in the run directory (sorted by filename), then falls back to the runtime’s aggregated output string.
 - **`expect_*` right-hand side** is either a double-quoted literal or a test `const` name — not an arbitrary expression.
+- **`expectContain` / `expectEqual` / `expectNotContain` (camelCase)** are rejected; use `expect_contain`, `expect_equal`, `expect_not_contain`.
 - **Extra CLI arguments** after the path (`jaiph test <path> [extra...]`) are accepted but ignored (reserved for future use).

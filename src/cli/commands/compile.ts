@@ -42,8 +42,10 @@ function makeValidateContext(workspaceRoot?: string): ValidateContext {
 function printUsage(): void {
   process.stderr.write(
     "Usage: jaiph compile [--json] [--workspace <dir>] <file.jh | directory> ...\n\n" +
-      "Parse and validate modules (same checks as before `jaiph run`) without executing workflows.\n" +
-      "With a directory, all non-test *.jh files are used as entrypoints; each file’s import closure is validated.\n\n" +
+      "Parse import closures and run validateReferences only (same compile-time checks as before jaiph run).\n" +
+      "Does not emit scripts/, does not run buildRuntimeGraph, does not spawn the workflow runner.\n" +
+      "With a directory, all non-test *.jh files are used as entrypoints; each file's import closure is validated.\n" +
+      "Pass *.test.jh explicitly to validate a test module.\n\n" +
       "  --json       Print one JSON array of diagnostics to stdout (empty on success).\n" +
       "  --workspace  Override workspace root for import resolution for all paths.\n",
   );

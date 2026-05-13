@@ -566,9 +566,12 @@ Jaiph: Running async.jh<span class="run-banner-meta"> (Docker sandbox, fusefs)</
                         &middot;
                         <code>script name = `cmd`</code> &middot; <code>script name = ```[lang] ... ```</code>
                     </dt>
-                    <dd><code>rule</code> is for reusable checks (Jaiph structured steps; used with
-                        <code>ensure</code>),
-                        <code>workflow</code> orchestrates Jaiph steps only, and <code>script</code> holds bash (or any
+                    <dd><code>rule</code> bodies use Jaiph structured steps only (with <code>ensure</code>) &mdash;
+                        raw shell lines are rejected; use <code>script</code> and <code>run</code> for bash.
+                        <code>workflow</code> mixes managed steps with optional <strong>inline shell</strong> lines when
+                        they do not parse as Jaiph keywords (prefer <code>script</code> + <code>run</code> for
+                        non-trivial shell). See <a href="grammar#language-concepts">Grammar — Language concepts</a>.
+                        <code>script</code> holds bash (or any
                         language via a fence lang tag like <code>```node</code>, <code>```python3</code>, or a custom
                         shebang) invoked with <code>run</code>. Rules and workflows <strong>require parentheses</strong>
                         on every definition &mdash; even when parameterless (e.g.

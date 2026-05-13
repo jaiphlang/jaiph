@@ -11,7 +11,9 @@ redirect_from:
 
 **Jaiph** is a workflow system for building agent-style pipelines. You write `.jh` sources (and optional `*.test.jh` test modules) that combine **prompts**, **rules**, **scripts**, and **workflows**.
 
-This page is a **map**: it does not teach syntax end-to-end; it points to install steps, language references, and runtime behavior. For how the tool fits together, see [Architecture](architecture.md).
+The **TypeScript CLI** validates modules, extracts **`script`** bodies to disk, and launches a **Node workflow runtime** that interprets the AST in process (no separate workflow shell). Local `jaiph run`, Docker-backed runs, and `jaiph test` all use that same interpreter stack; only the launch path and observability differ. For boundaries, contracts, and pipelines, see [Architecture](architecture.md).
+
+This page is a **map**: it does not teach syntax end-to-end; it points to install steps, language references, and runtime behavior.
 
 ## Setup
 
@@ -28,16 +30,16 @@ This page is a **map**: it does not teach syntax end-to-end; it points to instal
 
 ## Runtime
 
-- **[CLI](cli.md)** — `jaiph run`, `test`, `compile`, `format`, `init`, `install`, `use`, flags, and environment variables.
+- **[CLI](cli.md)** — `jaiph run`, `test`, `compile`, `format`, `init`, `install`, `use`, flags, environment variables, and [file-path shorthand](cli.md#file-shorthand) for existing `.jh` / `*.test.jh` files. **`jaiph compile`** walks the import closure and runs **`validateReferences` only** — no script emission or runner (see [Architecture — Summary](architecture.md#summary)).
 - **[Configuration](configuration.md)** — `config { }` blocks, agent backends, logging, and runtime options (including env overrides).
 - **[Runtime artifacts](artifacts.md)** — What Jaiph writes under `.jaiph/runs/` (per-step logs, JSONL timeline, inbox files) versus live progress on stderr.
 - **[Hooks](hooks.md)** — Project or user `hooks.json` to run shell commands on workflow and step lifecycle events.
-- **[Sandboxing](sandboxing.md)** — Optional Docker-backed workflow isolation (beta; opt-in through `runtime.*` keys in module `config` and environment—see [Configuration](configuration.md)).
+- **[Sandboxing](sandboxing.md)** — Docker-backed isolation for `jaiph run` only (beta; **on by default**; use **`JAIPH_DOCKER_ENABLED`** or **`JAIPH_UNSAFE`** to force on/off — workflow `config` cannot toggle the container). Image, network, and timeout come from **`runtime.*`** and **`JAIPH_DOCKER_*`** env overrides (see [Configuration](configuration.md)). There is no `jaiph run --docker` flag.
 
 ## Other
 
 - **[VS Code extension](https://marketplace.visualstudio.com/items?itemName=jaiph.jaiph-syntax-vscode)** — Syntax highlighting, formatting, and compile feedback in the editor.
 - **[Architecture](architecture.md)** — How the CLI, parser, transpiler, Node runtime, and contracts fit together; aimed at contributors and deep dives.
 - **[Contributing](contributing.md)** — Clone-and-build workflow, branch strategy, test layers, and how to propose changes.
-- **[Agent Skill](https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md)** — Short, opinionated defaults for AI assistants authoring and running Jaiph in a repo.
+- **[Agent Skill](jaiph-skill.md)** — Short, opinionated defaults for AI assistants authoring and running Jaiph in a repo.
 - **[Examples](https://github.com/jaiphlang/jaiph/tree/main/examples)** — Runnable samples (async, inbox, testing, recovery) alongside the main tree.
