@@ -164,7 +164,7 @@ Routes (`->`) declare which workflows receive messages sent to the channel. See 
 
 ### Config
 
-Optional block setting agent and run options. Allowed at module level and inside individual workflow bodies.
+Optional `config { … }` block. At **module** level it may set `agent.*`, `run.*`, `runtime.*`, and `module.*` keys (see `src/parse/metadata.ts`). A **workflow** may contain **at most one** nested `config { … }`, it must appear **before** the first step, and only **`agent.*`** and **`run.*`** are allowed there — `runtime.*` and `module.*` are rejected with `E_PARSE`.
 
 ```jaiph
 config {
@@ -182,6 +182,8 @@ See [Configuration](configuration.md) for all available keys and precedence rule
 
 Named sequences of orchestration steps. Workflows can call other workflows, scripts, prompts, and channels. Parentheses are required on definitions, even when parameterless.
 
+`jaiph run` only executes the workflow named **`default`** in the entry `.jh` file (the runner’s argv hard-codes that name today). Other workflows are reachable from steps inside the module or its imports. See the `jaiph run` sequence in [Architecture](architecture.md).
+
 ```jaiph
 workflow default() {
   ensure check_deps()
@@ -197,6 +199,14 @@ workflow deploy(env, version) {
 ```
 
 Workflows support all step types: `run`, `ensure`, `prompt`, `const`, `log`, `logerr`, `fail`, `return`, `send`, `match`, `if`, `run async`, `catch`, and `recover`.
+
+#### Inline shell lines (workflows only)
+
+Any workflow body line that does **not** parse as a managed Jaiph step is treated as **inline shell**: the text is Jaiph-interpolated, then executed with `sh -c` in the workspace (same working-directory rules as `run` on scripts — see [Script isolation](#script-isolation)). Prefer a top-level `script` and `run name()` for non-trivial shell.
+
+The compiler still inspects shell lines (for example a first word that names a local script or workflow must be written as a managed `run`/`ensure` step, not as bare shell). **`wait`** is not a step — using it is a parse error (`"wait" has been removed from the language`).
+
+**Rules cannot** contain inline shell; unstructured shell there fails validation (`inline shell steps are forbidden in rules; use explicit script blocks`).
 
 ### Rules
 
@@ -214,7 +224,9 @@ rule gate(path) {
 }
 ```
 
-Rules are more restricted than workflows: the compiler rejects `prompt`, `send`, and `run async` in rule bodies, and `run` may only target **scripts** (never workflows or other rules via `run` — use `ensure` for rules). Those restrictions are **static** (see `validateReferences` in `src/transpile/validate.ts`). At runtime, `run` inside a rule still launches a normal managed script subprocess with the same **environment model** as workflow scripts (see [Script isolation](#script-isolation)); scripts can perform side effects — the language simply keeps orchestration-heavy steps out of rules.
+Rules are more restricted than workflows: the compiler rejects `prompt`, `send`, and `run async` in rule bodies, and `run` may only target **scripts** (never workflows or other rules via `run` — use `ensure` for rules). Rule bodies also reject `const … = prompt`. Those restrictions are **static** (see `validateReferences` in `src/transpile/validate.ts`). At runtime, `run` inside a rule still launches a normal managed script subprocess with the same **environment model** as workflow scripts (see [Script isolation](#script-isolation)); scripts can perform side effects — the language simply keeps orchestration-heavy steps out of rules.
+
+`catch` and **`recover`** on **`run`** are allowed in rules the same as in workflows. **`recover` never attaches to `ensure`** — only `run` steps support `recover`.
 
 ### Scripts
 
@@ -423,7 +435,7 @@ workflow default() {
 **Constraints:**
 - `recover` requires exactly one binding: `recover(name)`. Bare `recover` without bindings is a parse error.
 - All call arguments must appear inside parentheses **before** `recover`.
-- `recover` is available on `run` steps in workflows only (not `ensure`). `recover` also works with `run async` — see [`run async`](#run-async--concurrent-execution-with-handles).
+- `recover` is only valid on **`run`** steps (`ensure` supports `catch`, not `recover`). It is allowed in both workflow and rule bodies. `recover` also works with `run async` — see [`run async`](#run-async--concurrent-execution-with-handles).
 - `recover` and `catch` are mutually exclusive on the same step — use one or the other.
 
 ### `prompt` — Agent Interaction
@@ -666,6 +678,20 @@ workflow default(env) {
 ```
 
 
+### `for` — Iterate lines of a string
+
+```jaiph
+for line in paths_blob {
+  if line != "" {
+    run process_one(line)
+  }
+}
+```
+
+`for <identifier> in <identifier> { … }` splits the **string value** of the right-hand variable on newlines (`\r\n` is normalized to `\n`). If the string ends with a final newline, the trailing empty segment is **not** iterated (so `"a\nb\n"` yields two lines, not three). **Interior** empty lines are still yielded as empty strings. There is **no** automatic trimming of whitespace; use an `if` guard, `match`, or a script when you need to skip blanks or strip indentation.
+
+The iterator name must not conflict with an existing parameter, `const`, or capture in the same scope. After the loop completes, the iterator variable remains set to the last line visited (same shared scope as other workflow bindings).
+
 ## Inline Scripts
 
 Embed a shell command directly in a step without a named `script` definition. Single backticks for one-liners, triple backticks for multiline.
@@ -719,9 +745,7 @@ If the inline capture fails, the enclosing step fails. Nested inline captures ar
 
 **Emitted script files** do not embed module `const` values or other Jaiph “shims” — the transpiler writes the authored body plus a shebang (see `emitScriptsForModule` / `emit-script.ts`). Anything a script needs from the module must be passed as **positional arguments** (`$1`, `$2`, …), read from paths under `JAIPH_WORKSPACE`, or live in shared script sources (`import script`).
 
-**Subprocess environment (`NodeWorkflowRuntime`):** When the AST interpreter runs `run` / inline scripts, it spawns the emitted executable with the **current workflow scope environment** — a copy of the runner’s `process.env` merged with Jaiph-populated keys (`JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`, `JAIPH_RUN_DIR`, `JAIPH_ARTIFACTS_DIR`, prompt-related `JAIPH_AGENT_*` variables when set, and values derived from `config { … }` via metadata). It is **not** reset to a tiny fixed allowlist; anything visible to the workflow runner is visible to child scripts unless your deployment strips the parent environment.
-
-The kernel helper `run-step-exec.ts` still uses a **minimal** env (`PATH`, `HOME`, `TERM`, `USER`, `JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`) for its own **internal** `spawnSync` script-capture paths — that is not the same code path as ordinary `NodeWorkflowRuntime` `spawn()` for user `script` steps.
+**Subprocess environment (`NodeWorkflowRuntime`):** Managed **script** steps (`run` on a named script, script import, or inline `` `…` `` / fenced body), and **workflow inline shell** lines, all use the same **`scope.env`**: the runner’s `process.env` as adjusted by Jaiph (for example `JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`, `JAIPH_RUN_DIR`, `JAIPH_ARTIFACTS_DIR`, prompt-related `JAIPH_AGENT_*` when set, and keys derived from `config { … }`). It is **not** reset to a small fixed allowlist; anything visible to the workflow runner is visible to child processes unless your deployment strips the parent environment.
 
 **Interpolation rules by body form:**
 
