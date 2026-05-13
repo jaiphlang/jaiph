@@ -9,15 +9,17 @@ redirect_from:
 
 Jaiph is a workflow system: authors write `.jh` modules, and a **TypeScript CLI** prepares scripts, launches a **Node workflow runtime**, and surfaces progress while the **JavaScript kernel** executes the AST in process (no separate workflow shell). The CLI is what you install as the `jaiph` binary — it is the boundary between your terminal or CI and the interpreter.
 
-This page lists **commands**, important **flags**, and **environment variables**. It focuses on how the tool behaves, not on the language itself. For syntax and step semantics, see [Grammar](grammar.md). For repository layout, pipelines, and contracts (`__JAIPH_EVENT__`, artifacts, Docker vs local), see [Architecture](architecture.md).
+This page lists **commands**, important **flags**, and **environment variables**. It focuses on how the tool behaves, not on the language itself. For semantics and the overall language model, see [Language](language.md). For concrete syntax rules (imports, orchestration strings, managed calls, …), see [Grammar](grammar.md). For repository layout, pipelines, and contracts (`__JAIPH_EVENT__`, artifacts, Docker vs local), see [Architecture](architecture.md).
 
 **Commands:** `run`, `test`, `compile`, `format`, `init`, `install`, `use`.
 
-**Global options:** `-h` / `--help` and `-v` / `--version` are recognized only as the **first token after `jaiph`** (e.g. `jaiph --help`). They are not treated as global flags after a subcommand or a file path (`jaiph run --help` is **not** usage — use `jaiph --help`, or `jaiph compile -h` for compile-specific usage).
+**Global options:** `-h` / `--help` and `-v` / `--version` are recognized only as the **first token after `jaiph`** (e.g. `jaiph --help`). They are not treated as global flags after a subcommand or a file path (`jaiph run --help` is **not** usage — use `jaiph --help`, or **`jaiph compile -h`** / **`jaiph compile --help`** for compile-specific usage — the `compile` command parses `-h` / `--help` after the subcommand). Running **`jaiph`** with no arguments prints the same overview and exits **0**.
 
 ## File shorthand
 
-If the first argument is an existing file, Jaiph routes it automatically based on the extension. Files ending in **`*.test.jh`** are run as tests (same as `jaiph test <file>`). Other files ending in **`*.jh`** are run as workflows (same as `jaiph run <file>`). The `*.test.jh` check happens first, so test files are never mistaken for workflows.
+If the **first argument after `jaiph`** is an **existing path** (resolved relative to the current working directory), Jaiph routes it automatically based on the extension. Files ending in **`*.test.jh`** are run as tests (same as `jaiph test <file>`). Other paths ending in **`.jh`** are run as workflows (same as `jaiph run <file>`). The `*.test.jh` check happens first, so test modules are never mistaken for workflows.
+
+Additional positional tokens after a **workflow** shorthand are forwarded to **`workflow default`**, matching `jaiph run`. Tokens after a **test** shorthand are accepted but **ignored** (same as `jaiph test <file>` with extra arguments).
 
 ```bash
 # Workflow shorthand
@@ -45,7 +47,7 @@ Any path ending in `.jh` is accepted (including `*.test.jh`, since the extension
 **Flags:**
 
 - **`--target <dir>`** — keep emitted script files and run metadata under `<dir>` instead of a temp directory (useful for debugging).
-- **`--raw`** — skip the banner, live progress tree, hooks, and CLI failure footer. The workflow runner child uses **inherited stdio** so `__JAIPH_EVENT__` JSON lines go to **stderr** unchanged. The **host** CLI relies on this for Docker-backed runs (the container invokes `jaiph run --raw` so the host parses events from Docker’s stderr); you can also use it when embedding Jaiph in another tool. See [Sandboxing — Runtime behavior](sandboxing.md#runtime-behavior).
+- **`--raw`** — skip the banner, live progress tree, hooks, and CLI failure footer. The workflow runner child uses **inherited stdio** so `__JAIPH_EVENT__` JSON lines go to **stderr** unchanged. The **host** CLI relies on this for Docker-backed runs (the container invokes `jaiph run --raw` so the host parses events from Docker’s stderr); you can also use it when embedding Jaiph in another tool. There is no PASS/FAIL line, **`return_value.txt` is not printed to stdout**, and the process exit code alone reflects success or failure. See [Sandboxing — Runtime behavior](sandboxing.md#runtime-behavior).
 - **`--`** — end of Jaiph flags; remaining args are passed to `workflow default` (e.g. `jaiph run file.jh -- --verbose`).
 
 **Examples:**
@@ -73,7 +75,7 @@ workflow default() {
 }
 ```
 
-Workflow and rule bodies contain structured Jaiph steps only — use `run` to call a `script` for shell execution. In bash-bearing contexts (mainly `script` bodies, and restricted `const` / send RHS forms), `$(...)` and the first command word are validated: they must not invoke Jaiph rules, workflows, or scripts, contain inbox send (`<-`), or use `run` / `ensure` as shell commands (`E_VALIDATE`). See [Grammar — Managed calls vs command substitution](grammar.md#managed-calls-vs-command-substitution).
+**Rule** bodies are **managed steps only** — no raw shell lines; use `run` to a `script` for shell execution. **Workflow** bodies may include **inline shell** lines that do not parse as a Jaiph step (the compiler still validates them); for anything non-trivial, prefer a top-level `script` and `run`. In bash-bearing contexts (mainly `script` bodies, and restricted `const` / send RHS forms), `$(...)` and the first command word are validated: they must not invoke Jaiph rules, workflows, or scripts, contain inbox send (`<-`), or use `run` / `ensure` as shell commands (`E_VALIDATE`). See [Grammar — Language concepts](grammar.md#language-concepts) and [Grammar — Managed calls vs command substitution](grammar.md#managed-calls-vs-command-substitution).
 
 For `const` in those bodies, a reference plus arguments on the RHS must be written as `const name = run ref([args...])` (or `ensure` for rule capture), not as `const name = ref([args...])` — the latter is `E_PARSE` with text that explains the fix.
 
@@ -106,6 +108,8 @@ The root PASS/FAIL summary uses the format `✓ PASS workflow default (0.2s)`. C
 **`log` / `logerr` and backslash escapes:** The displayed text follows `echo -e` semantics — a literal `\n` or `\t` in the message becomes a newline or tab. `LOG` / `LOGERR` JSON on stderr (and the `message` field in `run_summary.jsonl`) carries the unexpanded shell string.
 
 **TTY mode:** one extra line at the bottom shows the running workflow and elapsed time: `▸ RUNNING workflow <name> (X.Xs)` — updated in place every second. When the run completes, it is replaced by the final PASS/FAIL line.
+
+**Successful exit:** when the default workflow exits **0**, the CLI prints `✓ PASS workflow default (...)` plus elapsed time (see above). If the workflow **returns** a value, the runtime writes `return_value.txt` under the run directory; the CLI prints that value on stdout **after** the PASS line, separated by a blank line (host paths are unchanged; Docker runs remap container paths when reading the file). See [Architecture — Durable artifact layout](architecture.md#durable-artifact-layout).
 
 **Non-TTY mode** (CI, pipes, log capture): no RUNNING line and no in-place updates. Step start (▸) and completion (✓/✗) lines still print as they occur. Long-running steps additionally print **heartbeat** lines to avoid looking like a hang:
 
@@ -272,16 +276,16 @@ Parse modules and run **`validateReferences`** (the same compile-time checks as 
 jaiph compile [--json] [--workspace <dir>] <file.jh | directory> ...
 ```
 
-At least one path is required.
+At least one path is required. **`jaiph compile -h`** or **`jaiph compile --help`** prints command-specific usage and exits **0**.
 
 **File arguments** — Each `*.jh` file is expanded to its **transitive import closure**; every module in the union is parsed and validated once.
 
-**Directory arguments** — The tree is scanned for `*.jh` files whose basename is **not** `*.test.jh`; each such file is treated as an entrypoint and its closure merged into the same validation set. To validate a test module’s graph explicitly, pass that **`*.test.jh` file** as a path (directories never pick up `*.test.jh` as roots).
+**Directory arguments** — The tree is scanned for `*.jh` files whose basename is **not** `*.test.jh` (same rule as `walkjhFiles` in the transpiler: files like `foo.test.jh` are skipped). Each non-test `*.jh` under the tree is treated as an entrypoint and its closure merged into the same validation set. To validate a test module’s graph explicitly, pass that **`*.test.jh` file** as a path (directories never pick up `*.test.jh` as roots).
 
 **Flags:**
 
 - **`--json`** — On success, print `[]` to stdout. On failure, print one JSON **array** of objects `{ "file", "line", "col", "code", "message" }` to stdout and exit **1** (non-JSON errors use a synthetic `E_COMPILE` object when the message is not in `file:line:col CODE …` form).
-- **`--workspace <dir>`** — Override the workspace root used for **library import resolution** (`<workspace>/.jaiph/libs/`, etc.) for all derived paths. When omitted, the workspace is auto-detected per file the same way as `jaiph run`.
+- **`--workspace <dir>`** — Override the workspace root used for **library import resolution** (`<workspace>/.jaiph/libs/`, etc.) for **all** modules reached from the given paths. When omitted, the workspace is **auto-detected** from each path’s location (`detectWorkspaceRoot` — same algorithm as `jaiph run`, starting from the file’s directory or from a directory argument).
 
 ## `jaiph format`
 
@@ -327,22 +331,22 @@ Creates:
 
 - `.jaiph/.gitignore` — lists `runs` and `tmp`. If the file already exists and does not match this exact list, `jaiph init` exits with a non-zero status.
 - `.jaiph/bootstrap.jh` — canonical bootstrap workflow; made executable. The template uses a triple-quoted multiline prompt body (`prompt """ ... """`) so the generated file parses and compiles as valid Jaiph. It asks the agent to scaffold workflows under `.jaiph/` and ends by logging a summary (`WHAT CHANGED` + `WHY`). Docker sandboxing uses the default `ghcr.io/jaiphlang/jaiph-runtime` image unless you set `runtime.docker_image` or `JAIPH_DOCKER_IMAGE`.
-- `.jaiph/SKILL.md` — copied from the skill file bundled with your Jaiph installation (or from `JAIPH_SKILL_PATH` when set). If no skill file is found, this file is not written and a note is printed.
+- `.jaiph/SKILL.md` — copied from the skill file bundled with your Jaiph installation. If **`JAIPH_SKILL_PATH`** is set, that path is used **only when it exists on disk**; otherwise the CLI searches known install-relative locations and `docs/jaiph-skill.md` from the current directory. If no file is found, `SKILL.md` is not written and a note is printed.
 
 ## `jaiph install`
 
-Install project-scoped libraries. Libraries are git repos cloned into `.jaiph/libs/<name>/` under the workspace root. A lockfile (`.jaiph/libs.lock`) tracks installed libraries for reproducible setups.
+Install project-scoped libraries. Libraries are git repos cloned into `.jaiph/libs/<name>/` under the **workspace root**. The workspace is determined from the **current working directory** (`detectWorkspaceRoot(process.cwd())` — walk upward until `.jaiph` or `.git`, with the same temp-directory guards as `jaiph run`). A lockfile (`.jaiph/libs.lock`) under that root tracks installed libraries for reproducible setups.
 
 ```bash
 jaiph install [--force] <repo-url[@version]> ...
 jaiph install [--force]
 ```
 
-**With arguments** — clone each repo into `.jaiph/libs/<name>/` (shallow: `--depth 1`) and upsert the entry in `.jaiph/libs.lock`. The library name is derived from the URL: last path segment, stripped of `.git` suffix (e.g. `github.com/you/queue-lib.git` → `queue-lib`). Version pinning uses `@<tag-or-branch>` after the URL.
+**With arguments** — clone each repo into `.jaiph/libs/<name>/` (shallow: `--depth 1`) and upsert the entry in `.jaiph/libs.lock`. The library name is derived from the URL: last path segment, stripped of `.git` suffix (e.g. `github.com/you/queue-lib.git` → `queue-lib`). Version pinning is usually written as **`https://…/name.git@<tag-or-branch>`**; other URL shapes with a trailing **`@ref`** are also accepted when the parser can split URL and version unambiguously.
 
-**Without arguments** — restore all libraries from `.jaiph/libs.lock`. Useful after cloning a project or in CI.
+**Without arguments** — restore all libraries from `.jaiph/libs.lock`. Useful after cloning a project or in CI. If the lockfile exists but lists **no** libraries, the command prints `No libs in lockfile.` and exits **0**.
 
-If `.jaiph/libs/<name>/` already exists, the library is skipped. Use `--force` to delete and re-clone.
+If `.jaiph/libs/<name>/` already exists, the library is skipped. Use **`--force`** (anywhere in the argument list) to delete and re-clone.
 
 **Lockfile format** (`.jaiph/libs.lock`):
 
@@ -408,14 +412,16 @@ These variables apply to `jaiph run` and workflow execution. Variables marked **
 
 **Internal variables:**
 
-- `JAIPH_META_FILE` — path to the metadata file the CLI writes under the build output directory; the workflow runner reads it after exit. Set by the launcher on the child process; `resolveRuntimeEnv` removes any inherited value from the parent.
-- `JAIPH_RUN_DIR`, `JAIPH_RUN_ID`, `JAIPH_RUN_SUMMARY_FILE` — `JAIPH_RUN_ID` is generated by the host CLI as a UUID per `jaiph run` invocation and forwarded to the runtime (and into the Docker container when sandboxed). The runtime uses this value as the workflow run identifier; if unset, the runtime generates its own UUID. `JAIPH_RUN_DIR` and `JAIPH_RUN_SUMMARY_FILE` are set by `NodeWorkflowRuntime` to the run directory and `run_summary.jsonl` path.
-- `JAIPH_SOURCE_FILE` — set automatically by the CLI to the entry file basename. Used to name run directories.
+- `JAIPH_META_FILE` — path to the run metadata file (under the CLI’s build output directory for that invocation). Set on the **detached workflow child** only; the parent strips any inherited value so leftover exports do not collide. The runner writes `run_dir=` / `summary_file=` lines for the host to read after exit.
+- `JAIPH_SOURCE_ABS` — absolute path to the entry `.jh` file; set by the CLI for **`jaiph run`** before spawn. Required by the runner (local and Docker).
+- `JAIPH_SCRIPTS` — directory containing emitted **`script`** files for this run; set after **`buildScripts()`**. Any **`JAIPH_SCRIPTS`** exported in the parent shell is cleared before launch so nested toolchains do not point at the wrong tree.
+- `JAIPH_RUN_DIR`, `JAIPH_RUN_ID`, `JAIPH_RUN_SUMMARY_FILE` — for a normal (**non-raw**) **`jaiph run`**, the host generates **`JAIPH_RUN_ID`** once per invocation (UUID), passes it through to the detached child (and into Docker when sandboxed), and Docker failure-path discovery can match summaries by this id. The runtime uses **`JAIPH_RUN_ID`** as the stable run identifier; if it is absent, the runtime may assign its own UUID. **`JAIPH_RUN_DIR`** and **`JAIPH_RUN_SUMMARY_FILE`** are set inside the runner once the UTC run directory exists.
+- `JAIPH_SOURCE_FILE` — set automatically by the CLI to the entry file **basename**. Used to name run directories (see [Architecture — Durable artifact layout](architecture.md#durable-artifact-layout)).
 
 **Workspace and run paths:**
 
 - `JAIPH_WORKSPACE` — workspace root, set by the CLI. Detected by walking up from the entry `.jh` file's directory until `.jaiph` or `.git` is found. Guards in `detectWorkspaceRoot` skip misleading markers under shared system temp directories (`/tmp`, `/var/tmp`, macOS `/var/folders/.../T/...`) and nested `.jaiph/tmp` trees. In Docker sandbox mode the runtime remaps it inside the container (see [Sandboxing](sandboxing.md)).
-- `JAIPH_RUNS_DIR` — root directory for run logs (default: `.jaiph/runs` under workspace).
+- `JAIPH_RUNS_DIR` — root directory for run logs. If unset in the environment, the CLI merges the entry module **`config`** field **`run.logs_dir`** (when present) into the spawned process environment; otherwise the default layout is `.jaiph/runs` under the workspace. Exporting **`JAIPH_RUNS_DIR` yourself locks that choice: in-file **`run.logs_dir`** cannot override an environment-provided value.
 
 **Agent and prompt configuration:**
 
@@ -461,4 +467,4 @@ For overlay vs copy workspace mode, mounts, and stderr wiring, see [Sandboxing](
 
 ### `jaiph init`
 
-- `JAIPH_SKILL_PATH` — path to the skill markdown copied to `.jaiph/SKILL.md` when running `jaiph init`.
+- `JAIPH_SKILL_PATH` — absolute or relative path to the skill markdown copied to `.jaiph/SKILL.md` when running `jaiph init`. The file **must exist**; otherwise this variable is ignored and the default search runs.

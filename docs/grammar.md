@@ -7,7 +7,7 @@ redirect_from:
 
 # Jaiph Grammar
 
-Jaiph source files (`.jh`) combine a small orchestration language with shell execution. **Workflows** and **rules** express Jaiph steps — sequencing, failure handling (`catch`), value branching (`match`), prompts, channels. **Scripts** contain Bash (or another interpreter via shebang) and run as isolated subprocesses. The runtime interprets the AST directly; only script bodies are emitted as executable files. This page is the language reference. For system boundaries and event contracts, see [Architecture](architecture.md).
+Jaiph source files (`.jh`) combine a small orchestration language with shell execution. **Workflows** and **rules** express Jaiph steps — sequencing, failure handling (`catch`), value branching (`match` / `if`), prompts, channels. **Scripts** contain Bash (or another interpreter via shebang) and run as isolated subprocesses. The runtime interprets the AST directly; only script bodies are emitted as executable files. This page is the **lexical and grammatical** reference (tables, edge cases, EBNF). For a narrative tour of the same primitives, see [Language](language.md). For system boundaries and event contracts, see [Architecture](architecture.md).
 
 **Scope:** Lexical rules, syntax, and runtime semantics for normal modules (`.jh`). Test files (`*.test.jh`) are described in [Testing](testing.md). CLI and configuration are covered in [CLI](cli.md) and [Configuration](configuration.md).
 
@@ -42,17 +42,17 @@ The compiler enforces these boundaries at every call site. Using a script where 
 
 ## Language Concepts
 
-Jaiph enforces a strict boundary between orchestration and execution. Workflows and rules contain only Jaiph steps. Bash lives in `script` bodies.
+Jaiph enforces a strict boundary between **managed** steps (interpreted by the runtime) and **shell task code**. Prefer top-level `script` definitions (or inline `run` scripts) for multi-line bash. **Workflow** bodies may also contain free-form **inline shell** lines; **rule** bodies must not — unstructured shell there is rejected at validation.
 
-- **Workflows** — Named sequences of Jaiph steps: `ensure`, `run`, `prompt`, `const`, `fail`, `return`, `log`/`logerr`, inbox `send` (`channel <- …`), `match`, `if`, `run async`, `ensure … catch`, `run … catch`, and `run … recover`. Any line that is not a recognized step is a parse error — extract bash to a `script` and call it with `run`.
+- **Workflows** — Named sequences of steps. **Managed** Jaiph steps include `ensure`, `run`, `prompt`, `const`, `fail`, `return`, `log`/`logerr`, inbox `send` (`channel <- …`), `match`, `if`, `run async`, `ensure … catch`, `run … catch`, and `run … recover`. A line that does **not** parse as one of those becomes an **inline shell** step (bash text stored as a `shell` AST node). The compiler still validates shell lines (for example a bare name that refers to a local script or workflow must be written as `run name()`, not as a shell line). For non-trivial bash, prefer a top-level `script` and `run name()`.
 
-- **Rules** — Named blocks of structured Jaiph steps: `ensure` (other rules), `run` (scripts only — not workflows), `const`, `match`, `if`, `fail`, `log`/`logerr`, `return "…"`, `ensure … catch`, `run … catch`, and `run … recover`. Rules cannot use `prompt`, inbox `send` (or channel routing), or `run async`.
+- **Rules** — Named blocks of the same **managed** step forms as workflows, with restrictions: `ensure` (other rules), `run` (scripts only — not workflows), `const`, `match`, `if`, `fail`, `log`/`logerr`, `return`, `ensure … catch`, `run … catch`, and `run … recover`. Rules cannot use `prompt`, `const … = prompt`, inbox `send`, or `run async`. **Raw shell lines are not allowed** in rules: if a line parses as unstructured shell, validation fails with `E_VALIDATE` (`inline shell steps are forbidden in rules; use explicit script blocks`).
 
-- **Scripts** — Top-level `script` definitions emitted as separate executable files under the workspace `scripts/` directory. Called from workflows or rules with `run`. Bodies are opaque to the compiler — the parser does not check Jaiph keywords inside them. Use `echo`/`printf` for data output and `return N`/`return $?` for exit status. Jaiph interpolation (`${...}`) is forbidden in script bodies — use `$1`, `$2` positional arguments instead. Polyglot support: a fence lang tag (`` ```<tag> ``) maps to `#!/usr/bin/env <tag>` — any tag is valid (no hardcoded allowlist). Alternatively, a manual `#!` shebang as the first line of the body selects the interpreter; if both a fence tag and a `#!` first line are present, it is an error. Without either, `#!/usr/bin/env bash` is used. For trivial one-off commands, **inline scripts** (`` run `body`(args) `` or `` run ```lang...body...```(args) ``) let you embed a script body directly in a step without a named definition — see [`run` — Inline Scripts](#inline-scripts).
+- **Scripts** — Top-level `script` definitions emitted as separate executable files under the workspace `scripts/` directory. Called from workflows or rules with `run`. Bodies are opaque to the compiler — the parser does not check Jaiph keywords inside them. Use `echo`/`printf` for data output and `return N`/`return $?` for exit status. In **single-line backtick** script bodies, Jaiph `${…}` interpolation is **forbidden** (use `$1`, `$2`, … from the orchestration layer). In **fenced** (`\`\`\`…\`\`\``) script bodies, `${…}` is passed through to the shell. Polyglot support: a fence lang tag (`` ```<tag> ``) maps to `#!/usr/bin/env <tag>` — any tag is valid (no hardcoded allowlist). Alternatively, a manual `#!` shebang as the first line of the body selects the interpreter; if both a fence tag and a `#!` first line are present, it is an error. Without either, `#!/usr/bin/env bash` is used. For trivial one-off commands, **inline scripts** (`` run `body`(args) `` or `` run ```lang...body...```(args) ``) let you embed a script body directly in a step without a named definition — see [`run` — Inline Scripts](#inline-scripts).
 
 - **Channels** — Named message queues declared at top level with `channel name`. Optionally declare inline routes with `channel name -> workflow` or `channel name -> wf1, wf2`. Workflows send messages with `<-`. See [Inbox & Dispatch](inbox.md).
 
-- **Config** — Optional block setting agent and run options. Allowed at module level and inside individual workflow bodies. See [Configuration](configuration.md).
+- **Config** — Optional `config { … }` block. At **module** level, keys may include `agent.*`, `run.*`, `runtime.*`, and `module.*` (see `src/parse/metadata.ts`). A **workflow** may contain at most one nested `config { … }`, it must appear before steps, and only `agent.*` and `run.*` are allowed there (`runtime.*` / `module.*` yield `E_PARSE`). See [Configuration](configuration.md).
 
 ## Imports and Exports
 
@@ -149,10 +149,14 @@ workflow default() { … }               # no params — () required
 rule gate(path) { … }                 # one named param
 workflow implement(task, role) { … }  # two named params
 script setup = `echo ok`               # correct (single-line backtick)
-script setup = ```                     # correct (fenced block)
+```
+
+Multiline script bodies use triple-backtick fences (shown in HTML so nested fences render correctly):
+
+<pre><code>script setup = ```
 echo ok
 ```
-```
+</code></pre>
 
 ## Call Arguments and Named Parameters
 
@@ -268,7 +272,7 @@ Inline scripts embed a shell command directly in a workflow or rule step without
 ```jaiph
 workflow default() {
   run `echo hello`()
-  x = run `echo captured`()
+  const x = run `echo captured`()
   const y = run `date +%s`()
   log "got: ${x}, time: ${y}"
 }
@@ -298,14 +302,16 @@ print(f"args: {sys.argv[1:]}")
 
 Both body forms work with capture:
 
-```jaiph
-x = run `echo captured`()
-const y = run ```
+<pre><code>workflow default() {
+  const x = run `echo captured`()
+  const y = run ```
 date +%s
 ```()
-```
+  log "got: ${x} at ${y}"
+}
+</code></pre>
 
-**Deterministic naming:** Inline script bodies are emitted as executable files under `scripts/` with names of the form `__inline_<hash>` (12-character SHA-256 prefix of body + shebang). The same body and shebang always produce the same artifact name across runs.
+**Deterministic naming:** Inline script bodies are emitted as executable files under `scripts/` with names of the form `__inline_<hash>` where `<hash>` is the first **12** hex digits of the SHA-256 digest of `shebang + "\n" + body` when a shebang is present, or of the body alone when it is not (`src/inline-script-name.ts`). The same body and shebang always produce the same artifact name across runs.
 
 **Isolation:** Inline scripts run with the same subprocess isolation as named scripts — no parent scope variables are visible. Only positional arguments and essential Jaiph variables (`JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`) are inherited.
 
@@ -469,7 +475,7 @@ A double-quoted string on one line. `${...}` interpolation works inside the quot
 
 ```jaiph
 prompt "Review the following code for security issues"
-answer = prompt "Summarize the report"
+const answer = prompt "Summarize the report"
 ```
 
 If a `"` string has no closing quote on the same line, the parser rejects it — multiline prompt text must use a triple-quoted block (`prompt """..."""`).
@@ -481,7 +487,7 @@ A bare identifier after `prompt` uses the string value of an existing binding (e
 ```jaiph
 const text = "Analyze this code for security issues"
 prompt text
-result = prompt text returns "{ type: string, risk: string }"
+const result = prompt text returns "{ type: string, risk: string }"
 ```
 
 **3. Triple-quoted block (multiline)**
@@ -495,10 +501,10 @@ Analyze the following: ${input}
 """
 ```
 
-All three forms work in capture and `const` capture positions:
+Capture uses **`const` only** — `name = prompt …` is rejected by the parser (use `const name = prompt …`).
 
 ```jaiph
-answer = prompt "Summarize the report"
+const answer = prompt "Summarize the report"
 const x = prompt myVar
 const y = prompt """
 Analyze this input in detail.
@@ -508,15 +514,15 @@ Analyze this input in detail.
 **Typed prompt (returns schema):** Ask the agent for structured JSON output. `returns "…"` may follow a single-line string or identifier body on the same line, or appear on the **line after** the closing `"""` of a triple-quoted block.
 
 ```jaiph
-result = prompt "Analyze this code" returns "{ type: string, risk: string }"
-result = prompt text returns "{ type: string, risk: string }"
+const result = prompt "Analyze this code" returns "{ type: string, risk: string }"
+const typed = prompt text returns "{ type: string, risk: string }"
 ```
 
 For a **triple-quoted** prompt, either put `returns "…"` on the line **immediately after** the closing `"""`, or on the **same line** as the closing delimiter: `""" returns "{ … }"` (nothing else may follow the schema string on that line).
 
-When `returns` is present, capture is required. The schema is flat only — allowed types are `string`, `number`, `boolean`. The runtime validates the response: it searches for valid JSON (last non-empty line, fenced code blocks, standalone `{…}`, embedded JSON). On success, the capture variable holds the raw JSON string and each field is accessible via **dot notation** — `${result.type}`, `${result.risk}`. On failure, the step fails with a parse, missing-field, or type error.
+When `returns` is present, **capture is required** — write `const name = prompt … returns "…"`. Uncaptured `prompt … returns` fails at compile time with `E_PARSE` (`validatePromptStepReturns` in `src/transpile/validate-prompt-schema.ts`).
 
-**String values in orchestration:** Bindings in workflows and rules are **strings** end-to-end (including capture, `return`, and `${…}` interpolation). For typed prompts, schema types only constrain the **parsed JSON** from the agent: after validation, each field is coerced with string conversion for storage. For example, `returns "{ n: number }"` with `{"n":42}` stores `42` as the **text** `"42"` in `${x.n}`, not a numeric type. The same applies to `boolean`. Bare `return x.field` in a workflow is sugar for `return "${x.field}"`.
+The schema is flat only — allowed types are `string`, `number`, `boolean` (`E_SCHEMA` if invalid). The runtime validates the response: it searches for valid JSON (last non-empty line, fenced code blocks, standalone `{…}`, embedded JSON). On success, the capture variable holds the raw JSON string and each field is accessible via **dot notation** — `${result.type}`, `${result.risk}`. On failure, the step fails with a parse, missing-field, or type error. Bindings in workflows and rules are **strings** end-to-end (including capture, `return`, and `${…}` interpolation). For typed prompts, schema types only constrain the **parsed JSON** from the agent: after validation, each field is coerced with string conversion for storage. For example, `returns "{ n: number }"` with `{"n":42}` stores `42` as the **text** `"42"` in `${x.n}`, not a numeric type. The same applies to `boolean`. Bare `return x.field` in a workflow is sugar for `return "${x.field}"`.
 
 **Dot notation validation:** The compiler validates `${var.field}` references at compile time. If `var` is not a typed prompt capture, the compiler reports an error. If `field` is not defined in the `returns` schema, the error lists available fields.
 
@@ -756,13 +762,12 @@ script setup_env = `export BASE_DIR=$(pwd) && mkdir -p "$BASE_DIR/output" && ech
 
 ### Bash Scripts (fenced block)
 
-```jaiph
-script setup_env = ```
+<pre><code>script setup_env = ```
 export BASE_DIR=$(pwd)
 mkdir -p "$BASE_DIR/output"
 echo "Environment initialized"
 ```
-```
+</code></pre>
 
 Script bodies are opaque bash — the compiler does not parse them as Jaiph steps. For bash scripts, the emitter applies only lightweight transforms: `return` normalization, `local`/`export`/`readonly` spacing, and import alias resolution.
 
@@ -777,19 +782,17 @@ Script bodies are opaque bash — the compiler does not parse them as Jaiph step
 
 Use a fence lang tag (`` ```<tag> ``) to select an interpreter without writing a shebang line. The tag maps directly to a shebang: `` ```<tag> `` becomes `#!/usr/bin/env <tag>`. Any tag is valid — there is no hardcoded allowlist.
 
-```jaiph
-script analyze = ```python3
+<pre><code>script analyze = ```python3
 import sys
 print(f"Analyzing {sys.argv[1]}")
 ```
-```
+</code></pre>
 
-```jaiph
-script transform = ```node
+<pre><code>script transform = ```node
 const data = process.argv[2];
 console.log(JSON.stringify({ result: data }));
 ```
-```
+</code></pre>
 
 Examples of tag-to-shebang mapping:
 
@@ -810,12 +813,11 @@ Combining a fence lang tag with a manual `#!` shebang in the body is an error �
 
 If no fence tag is present, the user may provide a manual `#!` shebang as the first line of the body:
 
-```jaiph
-script run_lua = ```
+<pre><code>script run_lua = ```
 #!/usr/bin/env lua
 print("hello from lua")
 ```
-```
+</code></pre>
 
 Non-bash scripts skip Jaiph keyword validation and emit the body verbatim.
 
@@ -893,12 +895,13 @@ Key rules:
 
 ## EBNF (Practical Form)
 
-Informal symbols: `string` = quoted string; `call_ref` = `REF "(" [args] ")"` — parentheses are always required (each argument may be a quoted string, `${var}`, or a **bare identifier** — see [Call Arguments](#call-arguments-and-positional-parameters)); `double_quoted_string` = single-line double-quoted string supporting `\$`, `\"`, `\\`, `` \` `` escapes and `${identifier}` / `${run …}` / `${ensure …}` interpolation; `triple_quoted_block` = multiline string delimited by `"""` on opening and closing lines, supporting the same interpolation; `prompt_body` = single-line double-quoted string | bare `IDENT` (reference to an existing binding) | triple-quoted block (`""" … """`).
+Informal symbols: `string` = quoted string; `call_ref` = `REF "(" [args] ")"` — parentheses are always required (each argument may be a quoted string, `${var}`, or a **bare identifier** — see [Call Arguments](#call-arguments-and-named-parameters)); `double_quoted_string` = single-line double-quoted string supporting `\$`, `\"`, `\\`, `` \` `` escapes and `${identifier}` / `${run …}` / `${ensure …}` interpolation; `triple_quoted_block` = multiline string delimited by `"""` on opening and closing lines, supporting the same interpolation; `prompt_body` = single-line double-quoted string | bare `IDENT` (reference to an existing binding) | triple-quoted block (`""" … """`).
 
 ```ebnf
 file            = { top_level } ;
 
 top_level       = config_block | import_stmt | import_script_stmt | channel_decl | env_decl | rule_decl | script_decl | workflow_decl ;
+ (* env_decl is written `const` in source; parsed into `envDecls` / module constants in `src/parser.ts`. *)
 
 config_block    = "config" "{" { config_line } "}" ;
 config_line     = config_key "=" config_value ;
@@ -922,8 +925,8 @@ env_value       = double_quoted_string | triple_quoted_block | bare_value ;
 
 rule_decl       = [ "export" ] "rule" IDENT [ "(" param_list ")" ] "{" { rule_body_step } "}" ;
 rule_body_step  = comment_line | workflow_step ;
-  (* validation rejects prompt, send, const…=prompt, run async,
-     and run targets that are not scripts *)
+  (* Parsed with the same statement dispatcher as workflows, but validation rejects
+     shell, prompt, send, const … = prompt, run async, and run targets that are not scripts. *)
 
 script_decl     = "script" IDENT "=" script_rhs ;
 script_rhs      = backtick_script_body | fenced_script_block ;
@@ -939,12 +942,13 @@ workflow_config = config_block ;
   (* optional per-workflow override; must appear before steps;
      only agent.* and run.* keys allowed; runtime.* and module.* yield E_PARSE *)
 
-workflow_step   = ensure_stmt | run_stmt | run_catch_stmt | run_recover_stmt | run_async_stmt | prompt_stmt | prompt_capture_stmt
+workflow_step   = ensure_stmt | run_stmt | run_catch_stmt | run_recover_stmt | run_async_stmt | prompt_stmt
                 | const_decl_step | return_stmt
                 | fail_stmt | log_stmt | logerr_stmt | send_stmt
                 | match_stmt | if_stmt | comment_line ;
   (* route declarations (-> workflow) belong at the top level in channel_decl,
      not inside workflow bodies; a -> inside a body is E_PARSE *)
+  (* Any line that does not match the managed forms above becomes a shell step in workflows. *)
 
 const_decl_step = "const" IDENT "=" const_rhs ;
 const_rhs       = double_quoted_string | triple_quoted_block | bash_value_expr
@@ -955,7 +959,6 @@ const_rhs       = double_quoted_string | triple_quoted_block | bash_value_expr
 
 fail_stmt       = "fail" ( double_quoted_string | triple_quoted_block ) ;
 run_async_stmt  = "run" "async" call_ref [ "recover" recover_bindings recover_body ] [ "catch" catch_bindings catch_body ] ;
-run_async_capture = "const" IDENT "=" "run" "async" call_ref ;
 return_stmt     = "return" return_value ;
 return_value    = double_quoted_string | triple_quoted_block | "$" IDENT | "${" IDENT "}"
                 | IDENT
@@ -1004,7 +1007,7 @@ catch_bindings  = "(" IDENT ")" ;  (* failure payload *)
 catch_body      = single_workflow_stmt | "{" { workflow_step } "}" ;
 recover_bindings = "(" IDENT ")" ;  (* failure payload — same as catch *)
 recover_body    = single_workflow_stmt | "{" { workflow_step } "}" ;
-single_workflow_stmt = ensure_stmt | run_stmt | run_catch_stmt | run_recover_stmt | prompt_stmt | prompt_capture_stmt
+single_workflow_stmt = ensure_stmt | run_stmt | run_catch_stmt | run_recover_stmt | prompt_stmt
                 | const_decl_step
                 | return_stmt | fail_stmt | log_stmt | logerr_stmt
                 | send_stmt ;
@@ -1014,7 +1017,7 @@ single_workflow_stmt = ensure_stmt | run_stmt | run_catch_stmt | run_recover_stm
 
 After parsing, the compiler validates references and config (`src/transpile/validate.ts`). Error codes:
 
-- **E_PARSE:** Invalid syntax — duplicate config, invalid keys/values, `$(…)` or `${var:-fallback}` in orchestration strings, `${...}` interpolation in script bodies, `prompt … returns` without capture, bare `ref(args)` in const RHS (use `run`/`ensure`/`prompt`), `local` at top level, unrecognized workflow/rule line, invalid send RHS, arguments after `catch`, bare `catch` with no recovery step, nested inline captures, shell redirection after `run`/`ensure`, invalid parameter names (non-identifier, duplicate, or reserved keyword), or missing `{` on definition line.
+- **E_PARSE:** Invalid syntax — duplicate config, invalid keys/values, `$(…)` or `${var:-fallback}` in orchestration strings, `${...}` interpolation in **single-line backtick** script bodies, `prompt … returns` without `const` capture, `name = prompt …` / assignment captures without `const` for `run`/`ensure`, bare `ref(args)` in const RHS (use `run`/`ensure`/`prompt`), `local` at top level, unrecognized workflow/rule line, invalid send RHS, arguments after `catch`, bare `catch` with no recovery step, nested inline captures, shell redirection after `run`/`ensure`, invalid parameter names (non-identifier, duplicate, or reserved keyword), or missing `{` on definition line.
 - **E_SCHEMA:** Invalid `returns` schema — empty, non-flat, unsupported type (only `string`, `number`, `boolean`).
 - **E_VALIDATE:** Reference errors — unknown rule/workflow, duplicate alias, `ensure` on non-rule, `run` on rule, `run` to workflow inside rule, `run async` in rule, forbidden Jaiph usage inside `$(…)`, dot notation on non-prompt variable or invalid field name, bare identifier argument referencing an unknown variable, `${identifier}` in strings referencing an unknown variable, standalone `"${identifier}"` in call arguments (use bare identifier instead), arity mismatch (call-site argument count differs from callee's declared parameter count), **bare nested managed calls** — `run foo(bar())` or `run foo(rule_bar())` without explicit `run`/`ensure` keyword, **bare nested inline script calls** — `run foo(\`echo aaa\`())` without explicit `run`, **type crossing** — `prompt` with a script name (`scripts are not promptable`), `run` with a string const (`strings are not executable`), `const x = scriptName` (`scripts are not values`), `${scriptName}` interpolation (`scripts cannot be interpolated`).
 - **E_IMPORT_NOT_FOUND:** Import target file does not exist.

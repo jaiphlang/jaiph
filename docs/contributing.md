@@ -7,7 +7,9 @@ redirect_from:
 
 # Contributing to Jaiph
 
-A shared workflow needs shared expectations: which branch to target, how to build from a clone, and what evidence a change should carry. **This page is that contract for Jaiph** — branching, local install, code and testing philosophy, the layered test stack (TypeScript, txtar, goldens, bash E2E), and what CI enforces. It does **not** teach the language; for that, use [Getting Started](getting-started.md) (documentation map), [Setup](setup.md) (install and workspace), and [Grammar](grammar.md). For **how the implementation is structured** (components, compile and run pipelines, `buildRuntimeGraph` vs validation, runtime contracts, artifact paths), use [Architecture](architecture.md) as the source of truth.
+Open source only works when expectations match reality: where to land changes, how to reproduce CI locally, and how to prove behavior with the right test layer. **This page is that contract** — branching, install-from-clone, engineering conventions, the test stack (TypeScript, txtar, golden AST, bash E2E), and what GitHub Actions run on each push.
+
+**Related documentation:** [Getting Started](getting-started.md) (map), [Language](language.md) (patterns), [Setup](setup.md), and [Grammar](grammar.md). **Implementation boundaries** (pipelines, `buildRuntimeGraph` vs `validateReferences`, runtime contracts, artifact layout) are spelled out in [Architecture](architecture.md); if this page disagrees with that file, **Architecture wins**.
 
 ## Branching and pull requests
 
@@ -105,7 +107,7 @@ Jaiph uses several test layers. Each layer catches a different class of bug. Use
 
 ### Key principles
 
-1. **Compile-time validation vs graph loading.** `buildScripts` / `emitScriptsForModule` run **`validateReferences`** before any script files are written. **`buildRuntimeGraph()`** only parses modules and follows imports — it does **not** re-run that validation. Lock compile errors in the compiler/validator tests; the runtime graph is the wrong layer for that (see [Architecture — Transpiler / Node workflow runtime](architecture.md#core-components)).
+1. **Compile-time validation vs graph loading.** `buildScripts` / `emitScriptsForModule` run **`validateReferences`** before any script files are written. **`buildRuntimeGraph()`** only parses modules and follows imports — it does **not** re-run that validation. Lock compile errors in the compiler/validator tests; the runtime graph is the wrong layer for that (see [Architecture — Core components](architecture.md#core-components)). **`jaiph compile`** runs **`validateReferences` only** (no **`buildScripts`**, no runner); cover it with txtar/acceptance/E2E such as `e2e/tests/109_compile_command.sh`, not by expecting the full transpile path — see [Architecture — System overview](architecture.md#system-overview).
 2. **Tests are behavior contracts.** E2E tests and acceptance tests define what the product does. Default approach: change production code to satisfy tests, not the other way around.
 3. **Modify existing tests only with a strong reason:** intentional product behavior change, incorrect test expectation, or removal of an obsolete feature. Any such change should be minimal and paired with a clear rationale.
 4. **Golden tests are the compiler's safety net.** After transpiler changes, run `npm test`. Failures in `src/transpile/compiler-golden.test.ts` usually mean updating an explicit expected string or fixture in that file — there is no separate dump script; align expectations with intentional emitter changes and re-run `npm test`. **Golden AST tests** (`test-fixtures/golden-ast/`) complement this by locking in the parse tree shape — if those fail, regenerate with `UPDATE_GOLDEN=1 npm run test:golden-ast` and review the diff.
@@ -167,14 +169,16 @@ The project uses GitHub Actions (`.github/workflows/ci.yml`). The workflow defin
 |-----|--------|---------|
 | **ShellCheck** | `ubuntu-latest` | Runs `shellcheck` on `runtime/overlay-run.sh` to lint the standalone shell script shipped in the npm package. |
 | **Compiler and unit tests** | `ubuntu-latest` | `npm test` (TypeScript unit + acceptance + golden tests), plus a `curl` check that the public install URL responds and a git-tag verification on `main`. |
-| **E2E install and CLI workflow** | Matrix: **`ubuntu-latest` twice** + **`macos-latest`** | `npm run test:e2e` — full build-and-run E2E suite. In **CI**, the **docker** matrix leg builds `jaiph-ci-runtime:local` from `runtime/Dockerfile` and sets **`JAIPH_DOCKER_IMAGE`** so the job does not pull the public GHCR image during the run. **Ubuntu — docker:** `JAIPH_UNSAFE` unset (container sandbox). **Ubuntu / macOS — host:** `JAIPH_UNSAFE=true` (no Docker; macOS does not run the docker leg). On a **developer machine**, with `JAIPH_UNSAFE` unset, the CLI still resolves the default image (typically `ghcr.io/jaiphlang/jaiph-runtime`) for Docker-backed runs — see `src/runtime/docker.ts` and [Architecture](architecture.md). |
+| **E2E** | Matrix: **`ubuntu-latest` twice** + **`macos-latest`** | Job id `e2e`; in the Actions UI each leg appears as **`E2E (<os>, <label>)`**. Runs `npm run test:e2e`. In **CI**, the **`docker`** leg builds `jaiph-ci-runtime:local` from `runtime/Dockerfile` and sets **`JAIPH_DOCKER_IMAGE`** so tests do not pull the public GHCR image during the run. **`docker` leg:** `JAIPH_UNSAFE` unset (container sandbox). **`host` legs (Ubuntu + macOS):** `JAIPH_UNSAFE=true` (no Docker; macOS does not run a docker leg). On a **developer machine**, with `JAIPH_UNSAFE` unset, the CLI still resolves the default image (typically `ghcr.io/jaiphlang/jaiph-runtime`) for Docker-backed runs — see `src/runtime/docker.ts` and [Architecture](architecture.md). |
 | **Getting started (local)** | `ubuntu-latest` | Serves the Jekyll site from `docs/` on `127.0.0.1:4000`, smoke-checks key routes with `curl`, builds the same local runtime image as E2E for any Docker-backed sample paths, installs Playwright (Chromium), and runs `npx playwright test` for landing-page samples. The Playwright step builds Jaiph, checks sample source against `examples/*.jh`, and runs deterministic samples through the CLI. No runtime dependency on `jaiph.org` for the site content. |
 | **E2E install and CLI workflow (windows-latest + wsl)** | `windows-latest` | Provisions or selects a WSL distro, installs Node inside it, and runs `npm run test:e2e` under WSL with **`JAIPH_UNSAFE=true`**. |
 | **Publish Docker runtime image** | `ubuntu-latest` | *Conditional (see above).* Multi-arch push to GHCR. |
 
-### npm publish on tag (trusted publishing)
+### Version tags and npm
 
-Pushing a version tag (`v*`) triggers `.github/workflows/release.yml`, which publishes to npm using **trusted publishing** (OIDC). No classic `NPM_TOKEN` secret is stored in the repo. After a successful publish, a smoke job installs `jaiph` globally and verifies `--version` and `--help` match expectations. The npm package must have trusted publishing enabled for the `jaiphlang/jaiph` repo and `release.yml` workflow on npmjs.com.
+Pushing a **`v*`** ref does **not** run any npm publish step from this repository: the automation checked in under **`.github/workflows/`** is **`ci.yml`** (push CI) and **`nightly-engineer.yml`** (optional manual engineer run) — **neither publishes to npm**. The same tag pattern **does** satisfy the `if:` on the **`docker-publish`** job in **`ci.yml`**, which pushes `ghcr.io/jaiphlang/jaiph-runtime` after the other CI jobs succeed.
+
+If you are preparing a release that includes the **npm** package, coordinate version bumps, registry publish, and smoke checks with the maintainers — that flow is intentionally outside this repo’s workflows.
 
 ### Local docs site (Jekyll)
 
@@ -265,7 +269,7 @@ EOF
 # When — build and run
 hello_out="$(e2e::run "hello.jh")"
 
-# Then — assert on CLI tree output
+# Then — assert on CLI tree output (include workflow return value when default() returns one)
 e2e::expect_stdout "${hello_out}" <<'EOF'
 
 Jaiph: Running hello.jh
@@ -274,6 +278,8 @@ workflow default
   ▸ script hello_impl
   ✓ script hello_impl (<time>)
 ✓ PASS workflow default (<time>)
+
+hello-jh
 EOF
 
 # Then — assert on run artifacts
@@ -337,6 +343,7 @@ After a workflow runs, its step outputs are written as sequenced artifact files 
 |--------|-------------|
 | `e2e::assert_contains "$actual" "$needle" "label"` | Assert that `actual` contains `needle`. |
 | `e2e::assert_equals "$actual" "$expected" "label"` | Assert exact string equality. |
+| `e2e::assert_output_equals "$actual" "$expected" "label"` | Like **`assert_equals`**, but runs both strings through **`e2e::normalize_output`** first (ANSI, `<time>`, async line ordering — same normalization as **`expect_stdout`**). |
 | `e2e::assert_file_exists "path" "label"` | Assert that a file exists at `path`. |
 | `e2e::assert_file_executable "path" "label"` | Assert that a file exists and is executable. |
 | `e2e::pass "label"` | Print a `[PASS]` line. |
