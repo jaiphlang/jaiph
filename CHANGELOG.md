@@ -1,23 +1,17 @@
 # Unreleased
 
-- **Language:** `for <id> in <id> { … }` in workflows and rules iterates newline-delimited lines of a string binding. Newlines normalize `\r\n` to `\n`; a single trailing empty segment from a final newline is omitted. Lines are not trimmed and empty interior lines are still iterated unless the body skips them (e.g. `if line != "" { … }`). Documented in `docs/language.md`.
-- **Tests / QA:** Unit tests for string line splitting (`src/runtime/string-lines.test.ts`); E2E `e2e/tests/135_for_string_lines.sh`.
-
 # 0.9.4
 
 ## Summary
 
-Maintenance and simplification:
-- **Breaking:** Inbox dispatch is sequential only (parallel config/env removed). Stricter grammar: multiline `config` blocks only; no one-line braced workflows; no semicolon-separated statements in workflow/rule bodies.
-- **Runtime:** Single-line shell steps run in the Node runtime (`sh -c`); script capture only on success; async `run` + `recover` return propagation fixed; mock prompts use JSON arm dispatch and an in-memory response queue; inbox artifact files are written only when a route consumes the channel.
-- **CLI / install:** Failure footers use the **last** failed step in `run_summary.jsonl`; curl install ships `package.json` so stable installs resolve the correct default Docker image tag.
-- **Language:** RHS bare identifiers and bare dotted identifiers are treated as interpolation sugar where applicable.
-- **Library:** `artifacts.save(paths)` in single-argument form (path or newline-separated list); `git format-patch` workflows use `--stdout` so patch bytes are captured.
-- **Repo:** `node-workflow-runtime` split into arg-parser, event-emitter, and mock modules; test directories consolidated under `integration/`, `test-fixtures/`, `test-infra/`; `JAIPH_TEST_MODE` no longer suppresses stderr events in runtime code (constructor option instead).
-- **Docs / DX:** Agent-proxy design note; explicit parse error for `test` blocks outside `*.test.jh`; architecture/inbox corrections; getting-started shortened.
+- Feature: `for <line> in <string> { ... }` loop.
+- Simplifying: Sequential inbox only; stricter grammar (multiline `config`, no one-line braced workflows, no `;` in workflow/rule bodies).
+- Hardening, test refactoring and bug fixes
 
 ## All changes
 
+- **Language:** `for <id> in <id> { … }` in workflows and rules iterates newline-delimited lines of a string binding. Newlines normalize `\r\n` to `\n`; a single trailing empty segment from a final newline is omitted. Lines are not trimmed and empty interior lines are still iterated unless the body skips them (e.g. `if line != "" { … }`). Documented in `docs/language.md`.
+- **Tests / QA:** Unit tests for string line splitting (`src/runtime/string-lines.test.ts`); E2E `e2e/tests/135_for_string_lines.sh`.
 - **Breaking — Language:** Inline one-line `config { k = v }` is removed — only the multiline `config {\n  … \n}` form parses (matches documented grammar). The formatter no longer emits compact inline `config`, which would be invalid input. Examples such as `examples/async.jh` were migrated.
 - **Breaking — Language:** Single-line `workflow name() { stmt }` braced form removed; workflow and rule bodies require one statement per line as in the grammar.
 - **Breaking — Language:** Semicolons no longer separate statements in workflow/rule bodies (`splitStatementsOnSemicolons` remains for `match` arms). Multiple statements on one line joined by `;` must be split across lines.
