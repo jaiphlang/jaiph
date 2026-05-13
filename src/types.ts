@@ -253,6 +253,14 @@ export type WorkflowStepDef =
       loc: SourceLoc;
     }
   | {
+      /** `for line in paths { ... }` — iterate lines of a string variable (newline-delimited). */
+      type: "for_lines";
+      iterVar: string;
+      sourceVar: string;
+      body: WorkflowStepDef[];
+      loc: SourceLoc;
+    }
+  | {
       /** Preserved intentional blank line between steps (formatter only). */
       type: "blank_line";
     };

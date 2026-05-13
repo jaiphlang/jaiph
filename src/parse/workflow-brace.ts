@@ -160,6 +160,27 @@ export function parseBlockStatement(
     );
   }
 
+  // for <iter> in <string-var> { ... }
+  const forHead = inner.match(/^for\s+([A-Za-z_][A-Za-z0-9_]*)\s+in\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{\s*$/);
+  if (forHead) {
+    const iterVar = forHead[1];
+    const sourceVar = forHead[2];
+    const forLoc = { line: innerNo, col: innerRaw.indexOf("for") + 1 };
+    const { steps: body, nextIdx } = parseBraceBlockBody(filePath, lines, idx + 1, innerNo, opts);
+    return {
+      step: { type: "for_lines", iterVar, sourceVar, body, loc: forLoc },
+      nextIdx,
+    };
+  }
+  if (/^for\s/.test(inner)) {
+    fail(
+      filePath,
+      'invalid for syntax; expected: for <identifier> in <identifier> { ... }',
+      innerNo,
+      innerRaw.indexOf("for") + 1,
+    );
+  }
+
   const constMatch = inner.match(/^const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/s);
   if (constMatch) {
     const name = constMatch[1];

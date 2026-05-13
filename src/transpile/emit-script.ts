@@ -91,6 +91,10 @@ function collectInlineScripts(
     } else if ((s.type === "ensure" || s.type === "run") && s.catch) {
       const recoverSteps = "single" in s.catch ? [s.catch.single] : s.catch.block;
       collectInlineScripts(recoverSteps, seen, out);
+    } else if (s.type === "if") {
+      collectInlineScripts(s.body, seen, out);
+    } else if (s.type === "for_lines") {
+      collectInlineScripts(s.body, seen, out);
     }
   }
 }

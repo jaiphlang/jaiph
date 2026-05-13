@@ -92,7 +92,7 @@ const JAIPH_KEYWORDS = new Set([
   "run", "ensure", "prompt", "return", "fail", "log", "logerr",
   "if", "else", "not", "const", "match", "import", "export",
   "workflow", "rule", "script", "channel", "config", "catch", "async",
-  "returns", "send", "true", "false",
+  "returns", "send", "true", "false", "for", "in",
 ]);
 
 /** Check if a token is a bare identifier (valid identifier, not a keyword). */

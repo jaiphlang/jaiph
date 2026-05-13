@@ -206,6 +206,10 @@ function collectKnownVars(steps: WorkflowStepDef[], envDecls?: { name: string }[
       if (s.type === "if") {
         walk(s.body);
       }
+      if (s.type === "for_lines") {
+        vars.add(s.iterVar);
+        walk(s.body);
+      }
     }
   };
   walk(steps);
@@ -227,8 +231,8 @@ function validateImmutableBindings(
     bound.set(p, { kind: "parameter", line: declLoc.line });
   }
 
-  const check = (name: string, kind: string, loc: { line: number; col: number }): void => {
-    const prev = bound.get(name);
+  const check = (name: string, kind: string, loc: { line: number; col: number }, b: Map<string, { kind: string; line: number }>): void => {
+    const prev = b.get(name);
     if (prev) {
       throw jaiphError(
         filePath,
@@ -247,33 +251,47 @@ function validateImmutableBindings(
         `cannot rebind immutable name "${name}"; already bound as script in this module`,
       );
     }
-    bound.set(name, { kind, line: loc.line });
+    b.set(name, { kind, line: loc.line });
   };
 
-  const walk = (ss: WorkflowStepDef[]): void => {
+  const walk = (ss: WorkflowStepDef[], b: Map<string, { kind: string; line: number }>): void => {
     for (const s of ss) {
       if (s.type === "const") {
-        check(s.name, "const", s.loc);
+        check(s.name, "const", s.loc, b);
       }
       if (s.type === "ensure" && s.captureName) {
-        check(s.captureName, "capture", s.ref.loc);
+        check(s.captureName, "capture", s.ref.loc, b);
       }
       if (s.type === "run" && s.captureName) {
-        check(s.captureName, "capture", s.workflow.loc);
+        check(s.captureName, "capture", s.workflow.loc, b);
       }
       if ((s.type === "prompt" || s.type === "run_inline_script") && s.captureName) {
-        check(s.captureName, "capture", s.loc);
+        check(s.captureName, "capture", s.loc, b);
       }
       if ((s.type === "ensure" || s.type === "run") && s.catch) {
         const recoverSteps = "single" in s.catch ? [s.catch.single] : s.catch.block;
-        walk(recoverSteps);
+        walk(recoverSteps, b);
       }
       if (s.type === "if") {
-        walk(s.body);
+        walk(s.body, b);
+      }
+      if (s.type === "for_lines") {
+        if (b.has(s.iterVar)) {
+          throw jaiphError(
+            filePath,
+            s.loc.line,
+            s.loc.col,
+            "E_VALIDATE",
+            `for loop iterator "${s.iterVar}" conflicts with an existing binding`,
+          );
+        }
+        const inner = new Map(b);
+        inner.set(s.iterVar, { kind: "loop_iterator", line: s.loc.line });
+        walk(s.body, inner);
       }
     }
   };
-  walk(steps);
+  walk(steps, bound);
 }
 
 /** Count the number of call arguments from a space-separated args string (respects quotes). */
@@ -882,6 +900,19 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         for (const bodyStep of s.body) validateRuleStep(bodyStep);
         return;
       }
+      if (s.type === "for_lines") {
+        if (!ruleKnownVars.has(s.sourceVar)) {
+          throw jaiphError(
+            ast.filePath,
+            s.loc.line,
+            s.loc.col,
+            "E_VALIDATE",
+            `for ... in <name>: "${s.sourceVar}" is not a known variable in this scope`,
+          );
+        }
+        for (const bodyStep of s.body) validateRuleStep(bodyStep);
+        return;
+      }
       if (s.type === "run_inline_script") {
         return;
       }
@@ -1266,6 +1297,19 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
           try { new RegExp(s.operand.source); } catch {
             throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `invalid regex in if condition: /${s.operand.source}/`);
           }
+        }
+        for (const bodyStep of s.body) validateStep(bodyStep, recoverBindings);
+        return;
+      }
+      if (s.type === "for_lines") {
+        if (!wfKnownVars.has(s.sourceVar)) {
+          throw jaiphError(
+            ast.filePath,
+            s.loc.line,
+            s.loc.col,
+            "E_VALIDATE",
+            `for ... in <name>: "${s.sourceVar}" is not a known variable in this scope`,
+          );
         }
         for (const bodyStep of s.body) validateStep(bodyStep, recoverBindings);
         return;
