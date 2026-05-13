@@ -9,24 +9,27 @@ redirect_from:
 
 ## Overview
 
-Pipelines often split work across **workflows** that hand off a payload: one
-stage produces output, a later stage reacts to it. A generic way to do that
-without a separate broker is an **in-module channel**: a named queue the
-runtime can drain after a caller finishes its steps, driving receiver workflows
-in order.
+Many pipelines split work across stages: one part of the system produces a
+payload and another reacts later. Without standing up a message broker, a
+common pattern is an **in-process queue**: producers enqueue messages, and the
+runtime drains that queue at predictable boundaries so receivers run in order.
 
-**Jaiph’s model** is a small orchestration feature on top of that idea: a
-`channel` is declared with optional `->` routes to **workflow** targets; a send
-uses `<-` to enqueue a string payload. `NodeWorkflowRuntime` keeps the queue
-and route map in memory, may persist a routed send to disk for audit, and
-**dispatches** targets when the **entry** workflow’s step list completes (plus
-any implicit `run async` join) — not when a separate `->` “fires”; the `->`
-in source code is **static routing** on the channel line, not a runtime
-operator.
+**Jaiph’s channels** follow that pattern at workflow granularity. You declare a
+`channel` at module scope, optionally list workflow targets after `->`, and use
+`<-` inside a workflow to enqueue a **string** payload. Routing on the
+`channel … ->` line is **static** (parsed into the AST); nothing “fires” at
+parse time. Delivery happens later: after a workflow’s steps finish — including
+waiting out any **`run async`** handles joined at workflow exit — the runtime
+drains that workflow frame’s queue and **`run`s** each route target in order.
 
-`NodeWorkflowRuntime` attaches an **in-memory** queue (`WorkflowContext.queue`) and route **`Map`** per **`run <workflow>()`**. **`channel … ->`** bindings load into **`routes` only when `inheritCallerMetadataScope` is **`false`** (CLI **`jaiph run`** → **`workflow default`**, programmatic **`runNamedWorkflow`** → the named callee). Nested **`run`** workflows begin with **`routes = new Map()` — see **[Who registers routes and who drains](#who-registers-routes-and-who-drains)**.
-
-On **`send`**, **`inboxSeq`** increments, an **`InboxMsg`** queues on **`targetCtx`**, and **`run_summary.jsonl`** always gains **`INBOX_ENQUEUE`** (channel / sender / sequence metadata only — **[Trigger contract](#trigger-contract)**). **`inbox/NNN-<literal>.txt`** is created only when the runtime marked the send **`routed`** (**`routes.has(step.channel)`** in **`node-workflow-runtime.ts`**). If **every** send stays **`routed === false`**, **`inbox/`** may be omitted. Interpreter queue + drain — **[Architecture — Channels and hooks](architecture.md#channels-and-hooks-in-context)** — no brokers, no **`inotify`**, no polling **`inbox/`**.
+Under the hood, `NodeWorkflowRuntime` keeps queues and route maps **in memory**
+(see [Architecture — Channels and hooks in context](architecture.md#channels-and-hooks-in-context)).
+**`run_summary.jsonl`** records **`INBOX_ENQUEUE`** on every send (metadata only;
+see [Trigger contract](#trigger-contract)). **`inbox/NNN-<channel>.txt`** files
+are optional **audit** copies of the payload for **routed** sends only; routing
+does not read them back — no filesystem watchers or inbox polling. Which stack
+frame owns routes, and how sends bubble to an ancestor frame, is spelled out in
+[Who registers routes and who drains](#who-registers-routes-and-who-drains).
 
 ## At a glance
 
@@ -58,7 +61,10 @@ channel name, and sender bound to its declared parameters `message`, `chan`, and
   join for `run async`). `inbox/*.txt` is an optional audit copy for routed sends —
   routing does **not** read from disk — no `inotifywait`, `fswatch`, or polling loops.
 - **Sequential dispatch.** For each queued message, route targets run **in list
-  order** (declaration order on the `channel` line), one completion at a time.
+  order** (declaration order on the `channel` line), strictly **one after
+  another**. Older Jaiph releases exposed parallel inbox dispatch via config /
+  environment variables; that mode is **removed** — `run.inbox_parallel` is an
+  unknown config key and **`JAIPH_INBOX_PARALLEL` has no effect** on ordering.
 - **Inbox is scoped per run.** **`inbox/*.txt`** persists **routed** payloads under that UTC run directory (**[Architecture — Durable artifact layout](architecture.md#durable-artifact-layout)**); there is no repo-wide mailbox outside **`.jaiph/runs`**.
 - **Channels are compile-checked.** Unknown channels, bad route targets, and
   invalid `send` RHS forms are `E_PARSE` / `E_VALIDATE` from
@@ -171,6 +177,13 @@ Route declarations are static routing rules stored on `ChannelDef`, not on
 workflow definitions or steps. The compiler validates that all target workflow
 references exist and declare exactly 3 parameters.
 
+A **`channel <name>`** line **without** **`->`** still defines **`name`** for **`send`**
+validation, but the runtime **never** adds **`name`** to **`ctx.routes`** — only
+channels with **at least one** **`->`** target populate the route map
+(**`node-workflow-runtime.ts`** skips bare channels when building **`routes`**).
+Sends on those names therefore behave like **unrouted** sends (no **`inbox/*.txt`**),
+and **`drainWorkflowQueue`** has nothing to **`run`** for them.
+
 A `->` route inside a workflow body is a **parse error** with guidance:
 `route declarations belong at the top level: channel <name> -> <targets>`.
 
@@ -210,12 +223,16 @@ Persisted payloads are exactly the **routed** sends — the orchestration queue 
 ### Who registers routes and who drains
 
 Every entered workflow gets a **`WorkflowContext`**: `workflowName`, a route **`Map`**,
-and a message queue. **`->` bindings are populated only when the workflow is entered
-with `inheritCallerMetadataScope === false`** — ordinary **`jaiph run`** invokes **`workflow default`** from your **`run` filepath**, and **`runNamedWorkflow`** (tests / embedders) uses the same **`false`** branch for whichever workflow it launches, so **`routes`** mirror **that callee module’s** top-level **`channel ->`** lines—not files you only **`import`**. Each nested **`run child()`** pushes another frame with an **empty** route **`Map`**
-(**`// Only register on the entry workflow`** in **`node-workflow-runtime.ts`**), so **`send`** walks **outward** until **`routes.has(step.channel)`** succeeds (**`step.channel`** token from the **`send`** AST node).
+and a message queue. **`->` bindings are populated only on “entry” workflows:**
+the interpreter passes **`inheritCallerMetadataScope === false`** for **`jaiph run`’s
+`default`**, for **`runNamedWorkflow`** (used by **`jaiph test`**’s
+**`test_run_workflow`**), and for any other path that starts a workflow the same
+way — so **`routes`** mirror **that callee module’s** top-level **`channel ->`** lines,
+not modules you only **`import`**. Each nested **`run child()`** passes **`inheritCallerMetadataScope === true`**, which keeps **`routes`** as an **empty** **`Map`**
+(see **`node-workflow-runtime.ts`** — routes register only when **not** inheriting the caller metadata scope), so **`send`** walks **up the workflow stack** until **`routes.has(step.channel)`** succeeds (**`step.channel`** is the exact AST token left of **`<-`**).
 After **each** workflow body finishes (implicit **`run async` join included), **`drainWorkflowQueue`** runs for **that** frame’s queue and route table **before** the frame pops — nested exits are usually no-ops, while the **`jaiph run`** root drains work that nested sends enqueued onto it.
 
-**Module scope.** `ctx.routes` **keys** are bare names from **`channel <name>`** in the callee module (**`parseChannelLine`**). Imports allow **`lib.topic <-`** (validator proves **`topic`** exists inside **`lib`**) yet **`routes.has("lib.topic")`** is still **false** for default layouts, because registered keys omit the **`alias.`** prefix (**`step.channel`** is compared verbatim). Prefer **`topic <-`** next to **`channel topic -> …`** in the **`inheritCallerMetadataScope === false` module**, or **`jaiph run lib.jh`** when **`lib.jh`'s **`channel`** lines should supply the **`->`** bindings.
+**Module scope.** `ctx.routes` **keys** are bare names from **`channel <name>`** in the callee module (**`parseChannelLine`**). Imports allow **`lib.topic <-`** (validator proves **`topic`** exists inside **`lib`**) yet **`routes.has("lib.topic")`** is still **false** for default layouts, because registered keys omit the **`alias.`** prefix (**`step.channel`** is compared verbatim). Prefer **`topic <-`** next to **`channel topic -> …`** in the **entry module** (the workflow started by **`jaiph run`** or **`runNamedWorkflow`**), or **`jaiph run lib.jh`** when **`lib.jh`'s **`channel`** lines should supply the **`->`** bindings.
 
 ### Dispatch loop
 
@@ -228,7 +245,7 @@ handling and `drainWorkflowQueue`.
 4. On `<-`: resolve payload; bump `inboxSeq` (`NNN` zero-padded to **3** digits);
    enqueue on the routed context selected by scanning the stack outward; **`if routed`**
    write `inbox/NNN-<channel>.txt`; always append **`INBOX_ENQUEUE`**
-   (`channel`, `sender`, **`inbox_seq`**, **`ts`**, **`run_id`**, **`event_version`**) to **`run_summary.jsonl`** .
+   (`channel`, `sender`, **`inbox_seq`**, **`ts`**, **`run_id`**, **`event_version`**) to **`run_summary.jsonl`**.
 5. After all steps (and implicit `run async` joins) complete,
    `drainWorkflowQueue`:
    - `while (cursor < queue.length)` — new sends during dispatch append to the
@@ -318,7 +335,7 @@ no environment-variable plumbing.
 
 ### Example output
 
-Shape aligns with **`e2e/tests/91_inbox_dispatch.sh`** (**`display_inbox.jh`**): `scanner` sends on **`findings`**, **`analyst`** sends on **`report`**, **`default`** routes both:
+The shape matches the **`display_inbox.jh`** fixture inline in the same test file (search for **`display_inbox.jh`** in **`e2e/tests/91_inbox_dispatch.sh`**): `scanner` sends on **`findings`**, **`analyst`** sends on **`report`**, **`default`** routes both:
 
 ```
 workflow default

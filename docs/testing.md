@@ -7,9 +7,15 @@ redirect_from:
 
 # Testing Jaiph Workflows
 
-Jaiph includes a built-in test harness for workflow testing. Test files (`*.test.jh`) let you mock prompt responses, stub workflows, rules, and scripts, run workflows through the same in-process [Node workflow runtime](architecture.md#core-components) used by `jaiph run` (`NodeWorkflowRuntime`), and assert on captured output — all without calling real LLMs or depending on external state. Unlike `jaiph run`, the test harness does not spawn a separate `node-workflow-runner` process: after `buildScripts`, the CLI runs `runTestFile` from `node-test-runner.ts` in the same process. There is no Docker mode for `jaiph test` (workflows under test always run on the host). The system layout (including **Test runner integration** and the Node test runner) is described in [Architecture](architecture.md).
+**Scope:** this page is about **authoring** `*.test.jh` workflow tests (`jaiph test`) and how those pieces relate to the same [Node workflow runtime](architecture.md#core-components) as `jaiph run`. It also summarizes **repository** test layers (compiler txtar, golden AST, shell E2E) that contributors run in CI.
+
+## Why workflow tests exist
 
 In production, a workflow’s behavior depends on live models, host timing, and local files. A harness fixes inputs (mock prompts, stubbed workflows/scripts), runs the same interpreter the CLI uses for real runs, and checks outputs with small assertions so CI and refactors can catch regressions without external services.
+
+## What Jaiph provides
+
+Jaiph includes a built-in test harness: test files (`*.test.jh`) mock prompt responses, stub workflows, rules, and scripts, execute workflows through `NodeWorkflowRuntime` **in-process**, and assert on captured output — without calling real LLMs or depending on external state. Unlike `jaiph run`, the harness does not spawn `node-workflow-runner`: after `buildScripts`, the CLI calls `runTestFile()` in `src/runtime/kernel/node-test-runner.ts`. There is no Docker mode for `jaiph test`; workflows under test always run on the host. **How** that fits `buildRuntimeGraph`, `suppressLiveEvents`, and artifact writes is in [Architecture — Test runner integration](architecture.md#test-runner-integration-testjh-in-the-kernel).
 
 ## File naming and layout
 
@@ -37,9 +43,9 @@ jaiph test ./e2e/workflow_greeting.test.jh
 jaiph ./e2e/workflow_greeting.test.jh
 ```
 
-`jaiph path.test.jh` without the `test` subcommand is only accepted when that path resolves to an existing file (`src/cli/index.ts`); otherwise the CLI treats the token as an unknown command.
+`jaiph path.test.jh` without the `test` subcommand is only accepted when the **first** CLI argument ends with `.test.jh` **and** `path` resolves to an existing file (`src/cli/index.ts`); otherwise the token is treated as an unknown command.
 
-**Discovery:** With no path argument, Jaiph scans the detected workspace root recursively; with a directory, it scans that tree. Only `*.test.jh` files are collected: the name must end in `.jh` and the stem must end with `.test` (see `walkTestFiles` in `src/transpile/build.ts`). The workspace root—for locating imports and setting `JAIPH_WORKSPACE`—is from `detectWorkspaceRoot` in `src/cli/shared/paths.ts`: walk upward from a starting directory (the current working directory, the directory you passed, or the parent of a single test file) until `.jaiph` or `.git` is found, subject to a few guards for shared temp directories and nested `.jaiph/tmp` layouts; if nothing matches, the resolved starting directory is used as the root.
+**Discovery:** With no path argument, Jaiph scans the detected workspace root recursively; with a directory, it scans that tree. Only `*.test.jh` files are collected: the name must end in `.jh` and the stem must end with `.test` (see `walkTestFiles` in `src/transpile/build.ts`). Unlike `walkjhFiles` (used when compiling ordinary `*.jh` trees), test discovery does **not** skip `.jaiph/` subtrees, so stray `*.test.jh` files under `.jaiph/...` would be picked up — keep test modules in normal source locations. The workspace root—for locating imports and setting `JAIPH_WORKSPACE`—is from `detectWorkspaceRoot` in `src/cli/shared/paths.ts`: walk upward from a starting directory (the current working directory, the directory you passed, or the parent of a single test file) until `.jaiph` or `.git` is found, subject to a few guards for shared temp directories and nested `.jaiph/tmp` layouts; if nothing matches, the resolved starting directory is used as the root.
 
 If no `*.test.jh` files are found, the command prints an error and exits with status 1. A file must contain at least one `test` block; otherwise the CLI reports a parse error. Passing a plain `*.jh` file that is not named `*.test.jh` is rejected — use `jaiph run` for those.
 
@@ -58,7 +64,7 @@ test "runs happy path and prints PASS" {
 }
 ```
 
-Inside a test block, steps execute in order. The following step types are available.
+Inside a test block, steps execute in order. **`#` line comments** and **blank lines** are allowed between steps (they are ignored by the runner).
 
 ### Mock prompt (inline)
 
@@ -70,7 +76,7 @@ mock prompt "second response"
 mock prompt myConstName
 ```
 
-Use a **double-quoted string** (escapes: `\"`, `\n`, `\\`) or a bare identifier for a [test `const`](#test-block-constants) defined earlier in the block.
+Use a **double-quoted string** (escapes: `\"`, `\n`, `\\`) or a bare identifier for a [test `const`](#test-block-constants) defined earlier in the block. **Single-quoted** mock text is rejected at parse time — use double quotes.
 
 ### Mock prompt (content-based dispatch)
 
@@ -104,6 +110,8 @@ mock workflow w.greet() {
 }
 ```
 
+**Syntax:** `mock workflow <ref>(<params>) { ... }` — **parentheses are required**, even when there are no parameters (`()`). The legacy form `mock workflow ref {` without `()` is rejected with a fix hint.
+
 The reference format is `<alias>.<workflow>` (preferred) or `<name>` for a workflow defined in the test file itself.
 
 ### Mock rule
@@ -118,7 +126,7 @@ mock rule w.validate() {
 
 ### Mock script
 
-Stubs a module `script` block:
+Stubs a module `script` block. The body is **shell**, like a real `script` step (the runner executes it as a managed shell mock — see `runtime-mock.ts`):
 
 ```jaiph
 mock script w.helper() {
@@ -128,6 +136,8 @@ mock script w.helper() {
 
 Test stubs use `mock script`, not `mock function`; the latter is a parse error with a fix hint.
 
+`mock script` uses the same **`ref() { ... }`** header shape as `mock workflow` / `mock rule`.
+
 ### Workflow run (with capture)
 
 Runs a workflow and captures its output into a variable:
@@ -136,13 +146,13 @@ Runs a workflow and captures its output into a variable:
 const response = run w.default()
 ```
 
-**Capture semantics** match production behavior:
+**Capture semantics** (see `runTestBlock` in `node-test-runner.ts`) pick the first branch that applies:
 
-1. If the workflow exits 0 with a non-empty explicit `return` value, that string is captured.
-2. If the workflow fails (non-zero exit), the runtime error string is captured (when present).
-3. Otherwise, the harness reads all `*.out` files in the run directory sorted by filename, or falls back to the runtime's aggregated output.
+1. **Exit code 0** and a **non-empty** `return` string from the workflow → that return value is captured.
+2. **Non-zero exit** and a non-empty runtime **error** string → the trimmed error string is captured (useful with `allow_failure` when you assert on failure output).
+3. **All other cases** (for example exit 0 with no return text, non-zero without an error string, or empty return) → the harness concatenates every `*.out` step capture in the run directory **in sorted filename order**; if listing or reading those files fails, it falls back to the runtime’s aggregated output string.
 
-The test fails on non-zero exit unless `allow_failure` is specified.
+The test still **fails** on non-zero exit unless `allow_failure` is set; capture content is independent of that check.
 
 **Variants:**
 
@@ -193,7 +203,7 @@ const want = "expected substring"
 expect_contain response want
 ```
 
-Failures print expected vs. actual previews.
+`expect_equal` failures print a short `diff`-style `-` / `+` preview; substring assertions report lengths and the expected fragment.
 
 ## Typed prompts
 
@@ -207,7 +217,7 @@ The runner output looks like:
 
 ```
 testing workflow_greeting.test.jh
-  ▸ runs happy path
+  ▸ runs happy path and prints PASS
   ✓ 0s
   ▸ handles error case
   ✗ expect_contain failed: "response" (42 chars) does not contain "expected" 1s
@@ -220,7 +230,7 @@ When all tests pass: `✓ N test(s) passed`. Exit status is 0 on full success, n
 
 ## How it works
 
-The CLI parses each test file and passes `test "…" { … }` blocks to `runTestFile()` (`src/runtime/kernel/node-test-runner.ts`). That path aligns with the **Test runner integration** description in [Architecture](architecture.md):
+The CLI parses each test file and passes `test "…" { … }` blocks to `runTestFile()` (`src/runtime/kernel/node-test-runner.ts`). That path aligns with [Architecture — Test runner integration](architecture.md#test-runner-integration-testjh-in-the-kernel):
 
 1. **`buildScripts(testFileAbs, tmpDir, workspaceRoot)`** — same helper as `jaiph run`, with the **test file as the entrypoint** (`test.ts` calls it with the absolute path to the `*.test.jh` file). For a file entrypoint, the transpiler walks the test module and every file reachable by transitive **`import`** (see `collectTransitiveJhModules` in `src/transpile/build.ts`); it runs `validateReferences` / `emitScriptsForModule` per file and writes atomic **`script`** files into a temp `scripts/` tree. (If `buildScripts` were ever given a **directory** entrypoint, directory walks skip `*.test.jh` files — that is not how `jaiph test` invokes it.)
 2. **`buildRuntimeGraph(testFileAbs, workspaceRoot)`** — called **once per test file**; the same graph is reused for every `test` block in that file and for every `run` step inside them.
@@ -295,15 +305,15 @@ workflow default() {
 | Directive | Meaning |
 |-----------|---------|
 | `# @expect ok` | Parse + validate succeed with no errors |
-| `# @expect error E_CODE "substring"` | An error is thrown whose message contains both `E_CODE` and `substring` |
+| `# @expect error E_CODE "substring"` | An error is thrown whose message contains both `E_CODE` and `substring` (substring must be **double-quoted** in the fixture — the runner parses that form only) |
 | `# @expect error E_CODE "substring" @L` | Same, and the error must be reported at line `L` (any column) |
 | `# @expect error E_CODE "substring" @L:C` | Same, and the error must be reported at line `L`, column `C` |
 
 ### Single-file vs multi-file tests
 
-- **Single-file:** use `--- input.jh`. The runner compiles `input.jh`.
+- **Single-file:** use `--- input.jh`. The runner parses and validates `input.jh`.
 - **Single test file:** use `--- input.test.jh` for test-specific fixtures.
-- **Multi-file:** use `--- main.jh` as the entry file plus additional `--- lib.jh` etc. The runner compiles `main.jh`.
+- **Multi-file:** use `--- main.jh` as the entry file plus additional `--- lib.jh` etc. The runner parses and validates `main.jh` as the entry.
 
 The entry file is determined by priority: `main.jh` if present, otherwise `input.jh`, otherwise `input.test.jh`, otherwise the first file.
 
@@ -413,9 +423,10 @@ The project includes a Playwright-based test (`e2e/playwright/landing-page.spec.
 
 ## Limitations (v1)
 
-- **Prompt mocks** must be written **inside the test file** (inline `mock prompt "…"`, `mock prompt <const>`, or `mock prompt { … }`) — there are no external mock-config file paths.
+- **Prompt mocks** must be written **inside the test file** (inline `mock prompt "…"`, `mock prompt <const>`, or `mock prompt { … }`) — there are no external mock-config file paths. Inline responses must use **double** quotes (not single quotes).
 - **Do not combine** `mock prompt { … }` with queue-style `mock prompt "…"` / `mock prompt <const>` in the same test block; when a block is present, queued entries are ignored.
-- **Capture** without a successful non-empty `return` concatenates all step `*.out` files in the run directory (sorted by filename), then falls back to the runtime’s aggregated output string.
+- **`mock workflow` / `mock rule` / `mock script`** require `ref()` with parentheses — empty `()` when there are no parameters.
+- **Capture**: only a **non-empty** return value on success bypasses concatenating `*.out` files; exit 0 with an empty return, failures without a runtime error string, and other edge cases use the `*.out` / aggregated-output path described above.
 - **`expect_*` right-hand side** is either a double-quoted literal or a test `const` name — not an arbitrary expression.
 - **`expectContain` / `expectEqual` / `expectNotContain` (camelCase)** are rejected; use `expect_contain`, `expect_equal`, `expect_not_contain`.
 - **Extra CLI arguments** after the path (`jaiph test <path> [extra...]`) are accepted but ignored (reserved for future use).

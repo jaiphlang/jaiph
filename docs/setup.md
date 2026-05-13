@@ -9,7 +9,7 @@ redirect_from:
 
 ## Overview
 
-Jaiph ships as a **CLI** backed by Node: it parses `.jh` sources, emits extracted **`script`** files, and starts a **Node workflow runtime** that interprets workflows in process (same stack for local runs, Docker, and tests — see [Architecture](architecture.md)). This page focuses on **installing that CLI**, **running your first workflow**, **project layout**, and **`jaiph init`** — not syntax or internals.
+Jaiph ships as a **CLI** backed by Node: it parses `.jh` sources, runs compile-time validation during script extraction, emits **`script`** bodies into a **`scripts/`** directory (path in **`JAIPH_SCRIPTS`**), and starts a **Node workflow runtime** that interprets workflow ASTs in process (same stack for local runs, Docker, and tests — see [Architecture — System overview](architecture.md#system-overview)). This page covers **installing the CLI**, **running your first workflow**, **workspace layout**, and **`jaiph init`**, not language syntax or runtime internals.
 
 Goals you should leave with:
 
@@ -19,8 +19,8 @@ Goals you should leave with:
 
 ### Prerequisites
 
-- **Node.js** — required to run `jaiph` itself (installer runs `npm` + `npm run build`).
-- **`bash`** — required on the machine if your workflows use **`script`** steps that execute shell bodies (see [Architecture — Distribution](architecture.md)): the runtime runs those as subprocesses using the host shell you configure.
+- **Node.js** — required to run `jaiph` (the curl installer runs `npm install` and `npm run build` in a checkout).
+- **Shell tooling** — the CLI and workflow runtime are Node-based; **emitted `script` steps** run by spawning the script path so the interpreter comes from each file’s **shebang** (often `#!/usr/bin/env bash` or another interpreter on your `PATH`). **Shell lines inside workflows** (after Jaiph interpolation) run via **`sh -c`**, so a POSIX **`sh`** must exist. See [Architecture — Distribution](architecture.md#distribution-node-vs-bun-standalone).
 
 ## Install
 
@@ -28,13 +28,13 @@ Goals you should leave with:
 curl -fsSL https://jaiph.org/install | bash
 ```
 
-This installs a small wrapper **`jaiph`** under `~/.local/bin` plus a **`~/.local/bin/.jaiph/`** tree (CLI sources and **`jaiph-skill.md`** beside `src/`). Alternatively:
+This installs a small wrapper **`jaiph`** under `~/.local/bin` plus a **`~/.local/bin/.jaiph/`** tree: `src/` (compiled CLI), `package.json`, and **`jaiph-skill.md`** (copied from the repo for `jaiph init`). Alternatively:
 
 ```bash
 npm install -g jaiph
 ```
 
-The published npm package may **not** include `docs/jaiph-skill.md` next to the CLI the way the curl layout does — if **`jaiph init`** does not write `.jaiph/SKILL.md`, point **`JAIPH_SKILL_PATH`** at a skill file (for example clone [Agent Skill source](jaiph-skill.md) or the repo `docs/jaiph-skill.md`).
+The published npm package may **not** include `docs/jaiph-skill.md` next to the CLI the way the curl layout does — if **`jaiph init`** does not write `.jaiph/SKILL.md`, point **`JAIPH_SKILL_PATH`** at a skill file (for example the repo’s `docs/jaiph-skill.md`, or download the canonical raw skill: `https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md`).
 
 Verify:
 
@@ -44,7 +44,7 @@ jaiph --version
 
 If the command is not found, ensure `~/.local/bin` (installer) or the npm global bin directory is on your **`PATH`** (the **`docs/run`** helper prepends `$HOME/.local/bin` automatically after installing).
 
-Switch versions anytime: **`jaiph use`** re-runs your install command (default: `curl … /install | bash`) with **`JAIPH_REPO_REF`** set to **`nightly`** or to **`v`** plus the version you pass (for example **`0.9.4`** → **`v0.9.4`**).
+Switch versions anytime: **`jaiph use`** runs your install command via **`bash -c`** (default: `curl -fsSL https://jaiph.org/install | bash`) with **`JAIPH_REPO_REF`** set to **`nightly`** or to **`v`** plus the version (for example **`0.9.4`** → **`v0.9.4`**).
 
 ```bash
 jaiph use nightly
@@ -71,7 +71,7 @@ For more runnable samples (inbox, async, testing, ensure/catch), see the [`examp
 
 ## Running a workflow
 
-Jaiph workflows live in **`.jh`** files ( **`*.test.jh`** suites use **`jaiph test`** instead — see [Testing](testing.md)). **`jaiph run`** loads a **single entry file** and runs the workflow named **`default`** (`workflow default(...) { ... }`). Use a **shebang** (`#!/usr/bin/env jaiph`) or the CLI — if the first argument is an existing **`.jh`** path, **`*.test.jh`** routes to **`jaiph test`** and other **`.jh`** files to **`jaiph run`** (see [CLI — file shorthand](cli.md#file-shorthand)).
+Jaiph workflows live in **`.jh`** files (**`*.test.jh`** suites use **`jaiph test`** instead — see [Testing](testing.md)). **`jaiph run`** loads a **single entry file** and runs the workflow named **`default`** (`workflow default(...) { ... }`). Use a **shebang** (`#!/usr/bin/env jaiph`) or the CLI: if the first argument is an existing file path, names ending in **`.test.jh`** dispatch to **`jaiph test`** (this check runs before the generic **`.jh`** rule), and every other **`.jh`** file dispatches to **`jaiph run`** (see [CLI — file shorthand](cli.md#file-shorthand)).
 
 ```bash
 ./path/to/main.jh "feature request or task"
@@ -107,7 +107,7 @@ Use your shell’s globbing if you pass multiple files (for example `jaiph forma
 
 - **`jaiph compile`** — validates the import closure (**`validateReferences` only**); no script emission or runner. See [Architecture — Summary](architecture.md#summary) and [CLI](cli.md).
 - **`jaiph test`** — runs **`*.test.jh`** blocks in-process with mocks. See [Testing](testing.md).
-- **`jaiph install`** — fetches reusable modules into **`.jaiph/libs/`**. See [Libraries](libraries.md).
+- **`jaiph install`** — fetches reusable modules into **`.jaiph/libs/`**; workspace root is detected from your **current working directory** (not the entry-`.jh` rule used by **`jaiph run`**). See [Libraries](libraries.md) and [CLI — `jaiph install`](cli.md#jaiph-install).
 
 ## Workspace setup
 
@@ -121,8 +121,8 @@ jaiph init path/to/repo # explicit workspace root
 This creates **`.jaiph/`** under the chosen root with:
 
 - **`.jaiph/.gitignore`** — ignores ephemeral **`runs/`** and **`tmp/`** under **`.jaiph/`** (workflows and libraries stay tracked).
-- **`.jaiph/bootstrap.jh`** — an executable workflow with a triple-quoted multiline **`prompt`** and **`log`** of the result; it points the agent at **`.jaiph/SKILL.md`**.
-- **`.jaiph/SKILL.md`** — copied only when **`resolveInstalledSkillPath()`** finds **`jaiph-skill.md`**; see **`src/cli/shared/paths.ts`** (**`JAIPH_SKILL_PATH`** first when that file exists, then **`jaiph-skill.md`** next to the shipped **`src/`** tree — the curl installer keeps that under **`~/.local/bin/.jaiph/`** by default — then **`docs/jaiph-skill.md`** as a sibling of that **`src/`** parent, then **`docs/jaiph-skill.md`** under **`process.cwd()`**). If nothing resolves, **`jaiph init`** skips the file and tells you to set **`JAIPH_SKILL_PATH`** and run again.
+- **`.jaiph/bootstrap.jh`** — executable **`workflow default`** whose template uses a triple-quoted multiline **prompt**; it tells the agent to read **`.jaiph/SKILL.md`**, scaffold workflows under **`.jaiph/`**, and end with **WHAT CHANGED** and **WHY**; the workflow **`log`**s the result.
+- **`.jaiph/SKILL.md`** — copied when **`jaiph init`** can resolve a skill markdown file: if **`JAIPH_SKILL_PATH`** is set **and** that path exists, it wins; otherwise the CLI tries install-relative paths (`jaiph-skill.md` beside the packaged tree — curl install: **`~/.local/bin/.jaiph/jaiph-skill.md`** next to **`src/`** — then **`docs/jaiph-skill.md`** beside the package when present), then **`docs/jaiph-skill.md`** under the current working directory. Resolution lives in **`resolveInstalledSkillPath()`** (`src/cli/shared/paths.ts`). If nothing resolves, the skill file is skipped and a message tells you to set **`JAIPH_SKILL_PATH`** and run **`jaiph init`** again. Same rules as [CLI — `jaiph init`](cli.md#jaiph-init).
 
 Run the bootstrap workflow:
 

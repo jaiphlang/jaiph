@@ -1,4 +1,7 @@
 source "https://rubygems.org"
+# Ruby 4.0+ bundles some stdlib as gems; Jekyll 3 / Liquid / safe_yaml still require them.
+gem "base64"
+gem "bigdecimal"
 gem "jekyll", "~> 3.9"
 gem "kramdown-parser-gfm"
 gem "jekyll-relative-links"

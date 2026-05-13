@@ -38,6 +38,7 @@ export function printUsage(): void {
       "jaiph compile:",
       "  Parse import closures and validateReferences only (same compile-time checks as before jaiph run;",
       "  no scripts/ emission, no buildRuntimeGraph, no runner). Useful for editors and CI.",
+      "  -h, --help      show compile command usage (also accepted after jaiph compile)",
       "  --json          stdout: JSON array of { file, line, col, code, message } (empty array if ok).",
       "  --workspace <dir>  workspace root for import resolution (default: auto-detect per file).",
       "",
