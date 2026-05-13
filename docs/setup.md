@@ -31,11 +31,11 @@ jaiph --version
 
 If the command is not found, ensure `~/.local/bin` (installer) or the npm global bin directory is in your `PATH`.
 
-Switch versions at any time (re-runs the install script with a Git ref: `nightly` or `v<version>` such as `v0.9.3` when you pass `0.9.3`):
+Switch versions at any time (re-runs the install script with a Git ref: `nightly` or `v<version>` such as `v0.9.4` when you pass `0.9.4`):
 
 ```bash
 jaiph use nightly
-jaiph use 0.9.3
+jaiph use 0.9.4
 ```
 
 The default install command is `curl -fsSL https://jaiph.org/install | bash`. Override it with `JAIPH_INSTALL_COMMAND` if you need a fork, air-gapped bundle, or local script.
