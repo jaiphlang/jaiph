@@ -48,3 +48,20 @@ When starting workflows (e.g. `jaiph run` / first step), users observe a 2–4 s
 * `npm test` passes.
 
 ***
+
+## `for … in …` — optional built-in trim / skip-empty #dev-ready
+
+**Goal**
+Evaluate optional sugar (keywords, modifiers, or a small stdlib helper) for trimming each iterated line or skipping empty lines, if authors repeatedly need shell-style normalization beyond an explicit `if line != "" { … }`.
+
+**Scope**
+
+* Baseline behavior and splitting rules are documented in `docs/language.md`.
+* If a language change is chosen, add tests and note migration for workflows that would adopt it.
+
+**Acceptance criteria**
+
+* Decision recorded in `docs/language.md` (new subsection or changelog in that doc).
+* `npm test` passes.
+
+***
