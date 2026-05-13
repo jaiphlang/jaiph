@@ -31,6 +31,7 @@ import {
 } from "./runtime-arg-parser";
 import { RuntimeEventEmitter, type Frame } from "./runtime-event-emitter";
 import { executeMockBodyDef, type MockBodyDef, type StepResult } from "./runtime-mock";
+import { linesOfDelimitedString } from "../string-lines";
 
 export type { MockBodyDef } from "./runtime-mock";
 
@@ -857,6 +858,22 @@ export class NodeWorkflowRuntime {
           condMet = !new RegExp(step.operand.source).test(subjectVal);
         }
         if (condMet) {
+          const bodyResult = await this.executeSteps(scope, step.body, io);
+          if (bodyResult.status !== 0 || bodyResult.returnValue !== undefined) {
+            return this.mergeStepResult(accOut, accErr, bodyResult);
+          }
+          accOut += bodyResult.output;
+          accErr += bodyResult.error;
+        }
+        continue;
+      }
+      if (step.type === "for_lines") {
+        const raw =
+          scope.vars.get(step.sourceVar) ??
+          scope.env?.[step.sourceVar] ??
+          "";
+        for (const line of linesOfDelimitedString(raw)) {
+          scope.vars.set(step.iterVar, line);
           const bodyResult = await this.executeSteps(scope, step.body, io);
           if (bodyResult.status !== 0 || bodyResult.returnValue !== undefined) {
             return this.mergeStepResult(accOut, accErr, bodyResult);

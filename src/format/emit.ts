@@ -731,6 +731,13 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string): st
       lines.push(`${ci}}`);
       break;
     }
+
+    case "for_lines": {
+      lines.push(`${ci}for ${step.iterVar} in ${step.sourceVar} {`);
+      lines.push(...emitSteps(step.body, pad, ci + pad));
+      lines.push(`${ci}}`);
+      break;
+    }
   }
 
   return lines;

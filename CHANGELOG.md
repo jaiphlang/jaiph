@@ -1,5 +1,8 @@
 # Unreleased
 
+- **Language:** `for <id> in <id> { … }` in workflows and rules iterates newline-delimited lines of a string binding. Newlines normalize `\r\n` to `\n`; a single trailing empty segment from a final newline is omitted. Lines are not trimmed and empty interior lines are still iterated unless the body skips them (e.g. `if line != "" { … }`). Documented in `docs/language.md`.
+- **Tests / QA:** Unit tests for string line splitting (`src/runtime/string-lines.test.ts`); E2E `e2e/tests/135_for_string_lines.sh`.
+
 # 0.9.4
 
 ## Summary
