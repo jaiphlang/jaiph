@@ -7,9 +7,11 @@ redirect_from:
 
 # Contributing to Jaiph
 
-Open source only works when expectations match reality: where to land changes, how to reproduce CI locally, and how to prove behavior with the right test layer. **This page is that contract** — branching, install-from-clone, engineering conventions, the test stack (TypeScript, txtar, golden AST, bash E2E), and what GitHub Actions run on each push.
+Contributor docs answer a narrow question: **where changes belong**, **how to run the same checks CI runs**, and **which test layer** should encode a behavior change.
 
-**Related documentation:** [Getting Started](getting-started.md) (map), [Language](language.md) (patterns), [Setup](setup.md), and [Grammar](grammar.md). **Implementation boundaries** (pipelines, `buildRuntimeGraph` vs `validateReferences`, runtime contracts, artifact layout) are spelled out in [Architecture](architecture.md); if this page disagrees with that file, **Architecture wins**.
+At a high level, Jaiph is built as described in [Architecture](architecture.md) — transpile path (`emitScriptsForModule`, `buildScripts`), parse-only **`buildRuntimeGraph()`**, **`jaiph compile`** (validate-only), **`NodeWorkflowRuntime`**, artifact layout, and Docker helper contracts. Treat that page as authoritative for pipelines and boundaries; if anything here diverges from it or from the implementation, prefer **architecture + source**.
+
+For workflow syntax, library usage, tooling setup, and grammar details, see [Language](language.md), [Setup](setup.md), [Grammar](grammar.md), and the overview in [Getting Started](getting-started.md).
 
 ## Branching and pull requests
 
@@ -41,7 +43,7 @@ The script installs from local source (including uncommitted changes) and places
 
 For day-to-day work on the compiler and CLI you usually stay inside the clone: install dev dependencies once, then build and run tests from npm scripts.
 
-**Prerequisites:** Node.js and npm (the installer also expects `git` and `bash`). End-to-end tests are written in bash and are run by `e2e/test_all.sh`.
+**Prerequisites:** Node.js **20.x** and npm (same **`setup-node`** version as `.github/workflows/ci.yml`). The installers also expect `git` and `bash`. End-to-end tests are written in bash and are run by `e2e/test_all.sh`.
 
 **Typical commands** (from the repo root):
 
@@ -49,14 +51,14 @@ For day-to-day work on the compiler and CLI you usually stay inside the clone: i
 |---------|----------------|
 | `npm install` | Installs TypeScript and types (dev dependencies). |
 | `npm run build` | Runs `tsc`, then copies **`src/runtime`** → **`dist/src/runtime`** (kernel JS for the compiled CLI) and **`runtime/overlay-run.sh`** → **`dist/src/runtime/overlay-run.sh`** (Docker overlay entrypoint). |
-| `npm run build:standalone` | `npm run build`, then copies **`dist/src/runtime`** → **`dist/runtime`** and runs **`bun build --compile`** on `src/cli.ts` → **`dist/jaiph`**. Requires [Bun](https://bun.sh). Ship the **`dist/`** tree (binary plus the runtime directory) for a self-contained layout. |
+| `npm run build:standalone` | `npm run build`, then copies **`dist/src/runtime`** → **`dist/runtime`** and runs **`bun build --compile ./src/cli.ts --outfile ./dist/jaiph`**. Requires [Bun](https://bun.sh). Ship **`dist/jaiph`** beside **`dist/runtime`** ([Architecture — Distribution](architecture.md#distribution-node-vs-bun-standalone)). |
 | `npm test` | **`npm run clean`**, then **`npm run build`**, then the Node.js test runner with **`JAIPH_UNSAFE=true`**, **`NODE_OPTIONS`** including **`--enable-source-maps`** and a large heap limit, on every file under `dist/integration/` matching `*.test.js`, every file under `dist/src/` matching `*.test.js` or `*.acceptance.test.js` (via `find`), `dist/test-infra/compiler-test-runner.js` (txtar compiler tests), and `dist/test-infra/golden-ast-runner.js` (golden AST tests). |
 | `npm run test:compiler` | **`npm run build`**, then **`node --test`** on `dist/test-infra/compiler-test-runner.js` — runs txtar-based compiler test fixtures from `test-fixtures/compiler-txtar/`. |
 | `npm run test:golden-ast` | **`npm run build`**, then **`node --test`** on `dist/test-infra/golden-ast-runner.js` — runs golden AST tests from `test-fixtures/golden-ast/`. Use `UPDATE_GOLDEN=1 npm run test:golden-ast` to regenerate goldens after intentional parser changes. |
-| `npm run test:acceptance:compiler` | **`npm run build`**, then **`node --test`** on only `dist/src/**/*.acceptance.test.js` — compiler acceptance tests without the full unit suite or E2E. |
+| `npm run test:acceptance:compiler` | **`npm run build`**, then **`node --test`** with only `*.acceptance.test.js` files under **`dist/src/`** (same `find … -name '*.acceptance.test.js'` fragment as **`package.json`**) — compiler acceptance tests without the full unit suite or E2E. |
 | `npm run test:acceptance:runtime` | **`bash ./e2e/test_all.sh`** only — same E2E driver as below **without** an implicit rebuild; ensure `dist/` is up to date before running. |
 | `npm run test:acceptance` | **`npm run test:acceptance:compiler`** then **`npm run test:acceptance:runtime`**. |
-| `npm run test:e2e` | **`npm run build`**, then **`bash ./e2e/test_all.sh`**. Prefer this when you want a fresh `dist/` before E2E. By default this exercises the **Docker** sandbox when `JAIPH_UNSAFE` is unset. For a faster host-only run (no container), use **`JAIPH_UNSAFE=true npm run test:e2e`**. |
+| `npm run test:e2e` | **`npm run build`**, then **`bash ./e2e/test_all.sh`**. Prefer this when you want a fresh `dist/` before E2E. **`e2e::prepare_shared_context`** in `e2e/lib/common.sh` exports **`JAIPH_DOCKER_ENABLED=false`** after clearing most **`JAIPH_*`** variables, so typical tests run on the **host**; Docker coverage lives in scripts that set **`JAIPH_DOCKER_ENABLED=true`** — see [E2E testing](#e2e-testing) and **`resolveDockerConfig`** in `src/runtime/docker.ts` / [Architecture — Core components](architecture.md#core-components). |
 | `npm run test:samples` | **`npx playwright test`** — Playwright suite for the docs landing page (`e2e/playwright/`). Uses `http://127.0.0.1:4000` (see `playwright.config.ts`); starts Jekyll via `webServer` or reuses one already on that port. Requires Playwright (`npx playwright install chromium` once). |
 | `npm run test:ci` | `npm test` followed by `npm run test:e2e` — useful before pushing when you want the full local picture. |
 
@@ -108,11 +110,12 @@ Jaiph uses several test layers. Each layer catches a different class of bug. Use
 ### Key principles
 
 1. **Compile-time validation vs graph loading.** `buildScripts` / `emitScriptsForModule` run **`validateReferences`** before any script files are written. **`buildRuntimeGraph()`** only parses modules and follows imports — it does **not** re-run that validation. Lock compile errors in the compiler/validator tests; the runtime graph is the wrong layer for that (see [Architecture — Core components](architecture.md#core-components)). **`jaiph compile`** runs **`validateReferences` only** (no **`buildScripts`**, no runner); cover it with txtar/acceptance/E2E such as `e2e/tests/109_compile_command.sh`, not by expecting the full transpile path — see [Architecture — System overview](architecture.md#system-overview).
-2. **Tests are behavior contracts.** E2E tests and acceptance tests define what the product does. Default approach: change production code to satisfy tests, not the other way around.
-3. **Modify existing tests only with a strong reason:** intentional product behavior change, incorrect test expectation, or removal of an obsolete feature. Any such change should be minimal and paired with a clear rationale.
-4. **Golden tests are the compiler's safety net.** After transpiler changes, run `npm test`. Failures in `src/transpile/compiler-golden.test.ts` usually mean updating an explicit expected string or fixture in that file — there is no separate dump script; align expectations with intentional emitter changes and re-run `npm test`. **Golden AST tests** (`test-fixtures/golden-ast/`) complement this by locking in the parse tree shape — if those fail, regenerate with `UPDATE_GOLDEN=1 npm run test:golden-ast` and review the diff.
-5. **E2E tests assert two things independently:** what the user sees (CLI tree output via `e2e::expect_stdout`) and what the runtime persists (artifact files via `e2e::expect_out`, `e2e::expect_file`). A bug could break one without the other.
-6. **Prefer the narrowest test layer.** A pure function bug should be caught by a unit test, not an E2E test. E2E tests are expensive to run and hard to debug — reserve them for integration-level behavior.
+2. **`jaiph test` vs live events.** **`jaiph test`** reuses **`NodeWorkflowRuntime`** with **`suppressLiveEvents: true`** so **`__JAIPH_EVENT__`** lines are **not** written to stderr alongside **`node --test`** output while **`run_summary.jsonl`** and other artifact paths stay consistent where the harness writes them ([Architecture — Test runner integration](architecture.md#test-runner-integration-testjh-in-the-kernel)).
+3. **Tests are behavior contracts.** E2E tests and acceptance tests define what the product does. Default approach: change production code to satisfy tests, not the other way around.
+4. **Modify existing tests only with a strong reason:** intentional product behavior change, incorrect test expectation, or removal of an obsolete feature. Any such change should be minimal and paired with a clear rationale.
+5. **Golden tests are the compiler's safety net.** After transpiler changes, run `npm test`. Failures in `src/transpile/compiler-golden.test.ts` usually mean updating an explicit expected string or fixture in that file — there is no separate dump script; align expectations with intentional emitter changes and re-run `npm test`. **Golden AST tests** (`test-fixtures/golden-ast/`) complement this by locking in the parse tree shape — if those fail, regenerate with `UPDATE_GOLDEN=1 npm run test:golden-ast` and review the diff.
+6. **E2E tests assert two things independently:** what the user sees (CLI tree output via `e2e::expect_stdout`) and what the runtime persists (artifact files via `e2e::expect_out`, `e2e::expect_file`). A bug could break one without the other.
+7. **Prefer the narrowest test layer.** A pure function bug should be caught by a unit test, not an E2E test. E2E tests are expensive to run and hard to debug — reserve them for integration-level behavior.
 
 ### TypeScript test layout
 
@@ -169,7 +172,7 @@ The project uses GitHub Actions (`.github/workflows/ci.yml`). The workflow defin
 |-----|--------|---------|
 | **ShellCheck** | `ubuntu-latest` | Runs `shellcheck` on `runtime/overlay-run.sh` to lint the standalone shell script shipped in the npm package. |
 | **Compiler and unit tests** | `ubuntu-latest` | `npm test` (TypeScript unit + acceptance + golden tests), plus a `curl` check that the public install URL responds and a git-tag verification on `main`. |
-| **E2E** | Matrix: **`ubuntu-latest` twice** + **`macos-latest`** | Job id `e2e`; in the Actions UI each leg appears as **`E2E (<os>, <label>)`**. Runs `npm run test:e2e`. In **CI**, the **`docker`** leg builds `jaiph-ci-runtime:local` from `runtime/Dockerfile` and sets **`JAIPH_DOCKER_IMAGE`** so tests do not pull the public GHCR image during the run. **`docker` leg:** `JAIPH_UNSAFE` unset (container sandbox). **`host` legs (Ubuntu + macOS):** `JAIPH_UNSAFE=true` (no Docker; macOS does not run a docker leg). On a **developer machine**, with `JAIPH_UNSAFE` unset, the CLI still resolves the default image (typically `ghcr.io/jaiphlang/jaiph-runtime`) for Docker-backed runs — see `src/runtime/docker.ts` and [Architecture](architecture.md). |
+| **E2E** | Matrix: **`ubuntu-latest` twice** + **`macos-latest`** | Job id `e2e`; in the Actions UI each leg appears as **`E2E (<os>, <label>)`**. Runs `npm run test:e2e`. The **`docker`** Ubuntu leg builds **`jaiph-ci-runtime:local`** from **`runtime/Dockerfile`** and exports **`JAIPH_DOCKER_IMAGE=jaiph-ci-runtime:local`** so scripts that set **`JAIPH_DOCKER_ENABLED=true`** do not pull **`ghcr.io/…`** during the job. **`JAIPH_UNSAFE`** is unset on that leg and set to **`true`** on Ubuntu **host** plus **macOS** — unlike manual **`jaiph run`** (see **`resolveDockerConfig`** / [Sandboxing](sandboxing.md)), that matrix choice does **not** mean “everything runs in Docker”: **`e2e/lib/common.sh`** sets **`JAIPH_DOCKER_ENABLED=false`** by default, so only scripts that explicitly re-enable Docker hit the sandbox. Container-only assertions on non-Linux runners use **`e2e::skip`** or availability guards. Implementation: **`src/runtime/docker.ts`**; overview: [Architecture — Core components](architecture.md#core-components). |
 | **Getting started (local)** | `ubuntu-latest` | Serves the Jekyll site from `docs/` on `127.0.0.1:4000`, smoke-checks key routes with `curl`, builds the same local runtime image as E2E for any Docker-backed sample paths, installs Playwright (Chromium), and runs `npx playwright test` for landing-page samples. The Playwright step builds Jaiph, checks sample source against `examples/*.jh`, and runs deterministic samples through the CLI. No runtime dependency on `jaiph.org` for the site content. |
 | **E2E install and CLI workflow (windows-latest + wsl)** | `windows-latest` | Provisions or selects a WSL distro, installs Node inside it, and runs `npm run test:e2e` under WSL with **`JAIPH_UNSAFE=true`**. |
 | **Publish Docker runtime image** | `ubuntu-latest` | *Conditional (see above).* Multi-arch push to GHCR. |
@@ -203,7 +206,7 @@ After the Jekyll smoke-check, the CI job also verifies that code samples shown o
 The test does two things:
 
 1. **Source parity** — extracts each sample's source code from the DOM (`[data-sample-source]` elements inside `[data-sample]` tab panels) and compares it byte-for-byte against the corresponding file in `examples/` (identified by `data-sample-file`).
-2. **Output verification** — for deterministic samples (currently `say_hello.jh` failure path and `agent_inbox.jh`), runs the workflow via `node dist/src/cli.js run` and asserts that key output lines match what the page displays (`[data-sample-output]` blocks), after normalizing ANSI codes, timestamps, and trailing whitespace.
+2. **Output verification** — for each **`[data-sample-output]`** block whose sample/output key is **not** listed in **`SKIP_OUTPUT`** (`e2e/playwright/landing-page.spec.ts`), the test parses the **`➜`** command line, runs it against the temp copy of the page source (the executable **`.jh`** from **`examples/`** named by **`data-sample-file`**, with **`say_hello.test.jh`** also copying companion **`say_hello.jh`**), and compares normalized CLI output to the block. Normalization mirrors **`e2e::normalize_output`** (ANSI, durations, `<agent-command>` / `<script-path>`, log/summary/out/err path lines collapsed to `<path>`, spacing before **`✓ PASS`**). Entries in **`SKIP_OUTPUT`** mark nondeterministic model or agent-backed tabs (e.g. **`say-hello` / success**, **`async` / run**, **`recover-loop` / run**).
 
 To run locally:
 
@@ -213,11 +216,11 @@ npm run test:samples
 
 If a Jekyll server is already running on **`http://127.0.0.1:4000`**, Playwright reuses it (`reuseExistingServer` in `playwright.config.ts`). Otherwise it starts one.
 
-Samples that require live agent backends (e.g. `async.jh`, `recover_loop.jh`) are verified for source parity only — output verification is limited to fully deterministic workflows.
+Samples whose rendered output embeds nondeterministic model or agent transcripts skip output comparison per-tab via **`SKIP_OUTPUT`** in **`e2e/playwright/landing-page.spec.ts`** (see [Landing-page sample verification](#landing-page-sample-verification-playwright)); those tabs still participate in DOM **source parity**.
 
 ## E2E testing
 
-The E2E test suite (`e2e/tests/*.sh`) exercises the full build-and-run pipeline from the outside: compile a workflow, run it, and assert on both the CLI tree output and the run artifact files (`.out`, `.err`) written to `.jaiph/runs/`.
+The E2E test suite (`e2e/tests/*.sh`) drives the toolchain from outside the TypeScript harness: **`e2e::prepare_test_env`** (via **`prepare_shared_context`** in **`e2e/lib/common.sh`**) prepends a **`jaiph` shim** to **`PATH`** (preferring **`dist/src/cli.js`** when built), sanitizes stray **`JAIPH_*`** vars, wires **`JAIPH_REPO_URL`** to the cloned tree, exports **`JAIPH_DOCKER_ENABLED=false`** by default, then each script invokes **`jaiph run`**; Docker-specific assertions set **`JAIPH_DOCKER_ENABLED=true`** and expect **`JAIPH_DOCKER_IMAGE`** (for example **`jaiph-ci-runtime:local`** on the CI **`e2e`** **docker** matrix leg). Scripts assert on both the CLI tree (**`e2e::expect_stdout`**) and **`*.out` / `.err`** / **`run_summary.jsonl`** under **`.jaiph/runs/`** — see also [Architecture — Durable artifact layout](architecture.md#durable-artifact-layout).
 
 Some scripts are **contract** tests: they validate persisted machine-readable output (for example `e2e/tests/88_run_summary_event_contract.sh` and `run_summary.jsonl`) in addition to or instead of golden CLI trees.
 
@@ -236,7 +239,7 @@ E2E tests are the outermost **behavior contracts** for the CLI and runtime. Each
 - **Unbounded or variable-length logs** — e.g. `run_summary.jsonl` with platform-dependent event counts, or live step output where line count varies.
 - **Platform-dependent text** — e.g. OS-specific error messages, paths that differ across CI environments.
 
-**Normalization:** `e2e::normalize_output` (in `e2e/lib/common.sh`) strips ANSI codes, replaces timing values with `<time>`, normalizes some CLI-specific strings (`<agent-command>`, `<script-path>`), and **sorts** a class of async progress lines (UTF-8 subscript markers) so strict equality stays stable when parallel branches finish in different orders. This keeps full-equality heredocs usable across machines.
+**Normalization:** `e2e::normalize_output` (in `e2e/lib/common.sh`) strips ANSI codes, replaces timing values with `<time>`, normalizes **`__inline_<hash>`** script names to **`__inline_<id>`**, swaps some CLI-specific strings (`<agent-command>`, `<script-path>`), and **sorts** a class of async progress lines (UTF-8 subscript markers) so strict equality stays stable when parallel branches finish in different orders. This keeps full-equality heredocs usable across machines.
 
 **Where files land on disk** (directory tree, sequence prefixes): [Architecture — Durable artifact layout](architecture.md#durable-artifact-layout). Runtime testing with `*.test.jh` is covered in [Testing](testing.md). The `run_summary.jsonl` event contract is exercised in `e2e/tests/88_run_summary_event_contract.sh`.
 
@@ -266,7 +269,7 @@ workflow default() {
 }
 EOF
 
-# When — build and run
+# When — run workflow (`jaiph` transpiles and executes inside the shim)
 hello_out="$(e2e::run "hello.jh")"
 
 # Then — assert on CLI tree output (include workflow return value when default() returns one)

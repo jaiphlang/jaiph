@@ -9,7 +9,7 @@ redirect_from:
 
 Workflow systems usually need two layers: a **host language** that sequences work, handles failures, and talks to tools, and **task code** (shell, Python, and so on) that does the mechanical steps. Jaiph’s `.jh` modules are that host layer: they wire prompts, scripts, validation **rules**, and **channels** into pipelines you can run from the CLI or CI.
 
-Under the hood, the **TypeScript CLI** parses modules, runs **`validateReferences`** while emitting script files (`emitScriptsForModule` / `buildScripts`), then starts a **Node workflow runtime** that walks the same AST in process — there is no separate workflow shell. The runtime’s `buildRuntimeGraph` pass loads imports with the parser only; compile-time checks live in the transpile path, not in the graph loader. For repository layout, event contracts, and diagrams, see [Architecture](architecture.md).
+Under the hood, the **TypeScript CLI** parses modules, runs **`validateReferences`** while emitting script files (`emitScriptsForModule` / `buildScripts`), then starts a **Node workflow runtime** that walks the same AST in process — there is no separate workflow shell. The **`jaiph compile`** command walks the same import closure with **`validateReferences`** only — it **does not** emit `scripts/`, **invoke** **`buildRuntimeGraph`**, or spawn the workflow runner (`src/cli/commands/compile.ts`). The runtime’s **`buildRuntimeGraph`** pass loads imports with the parser only; compile-time checks live in the transpile path, not in the graph loader. For repository layout, event contracts, and diagrams, see [Architecture](architecture.md).
 
 This page is the practical reference for language primitives — syntax, steps, and runtime behavior at the author’s eye level. For lexical/syntax tables and edge-case grammar, see [Grammar](grammar.md). Test files (`*.test.jh`) are a dialect documented in [Testing](testing.md).
 
@@ -148,7 +148,9 @@ world
 """
 ```
 
-Values can be double-quoted strings (single-line), triple-quoted strings (multiline `"""..."""`), or bare tokens. Declaration order matters — `${name}` only expands variables already bound above. Module constants are **not** passed to script subprocesses; use arguments or shared libraries instead.
+Values can be double-quoted strings (single-line), triple-quoted strings (multiline `"""..."""`), or a **bare** right-hand side: everything after `=` on that line becomes the stored string verbatim (including tokens that look like numbers, for example `const N = 42` keeps **`"42"`** as text for `${N}` — there is no separate numeric type).
+
+Declaration order matters — `${name}` only expands variables already bound above. Module constants are **not** passed to script subprocesses; use arguments or shared libraries instead.
 
 ### Channels
 
@@ -164,7 +166,7 @@ Routes (`->`) declare which workflows receive messages sent to the channel. See 
 
 ### Config
 
-Optional `config { … }` block. At **module** level it may set `agent.*`, `run.*`, `runtime.*`, and `module.*` keys (see `src/parse/metadata.ts`). A **workflow** may contain **at most one** nested `config { … }`, it must appear **before** the first step, and only **`agent.*`** and **`run.*`** are allowed there — `runtime.*` and `module.*` are rejected with `E_PARSE`.
+Optional `config { … }` block. At **module** level only the keys allowed in **`src/parse/metadata.ts`** are accepted (`agent.*`, `run.*`, `runtime.*`, `module.*` — each assignment is validated for type). For example **`agent.backend`** must be **`cursor`**, **`claude`**, or **`codex`**. A **workflow** may contain **at most one** nested `config { … }`, it must appear **before** the first step, and only **`agent.*`** and **`run.*`** are allowed there — `runtime.*` and `module.*` are rejected with `E_PARSE`.
 
 ```jaiph
 config {
@@ -174,7 +176,7 @@ config {
 }
 ```
 
-See [Configuration](configuration.md) for all available keys and precedence rules.
+See [Configuration](configuration.md) for key semantics and precedence rules.
 
 ## Definitions
 
@@ -224,7 +226,7 @@ rule gate(path) {
 }
 ```
 
-Rules are more restricted than workflows: the compiler rejects `prompt`, `send`, and `run async` in rule bodies, and `run` may only target **scripts** (never workflows or other rules via `run` — use `ensure` for rules). Rule bodies also reject `const … = prompt`. Those restrictions are **static** (see `validateReferences` in `src/transpile/validate.ts`). At runtime, `run` inside a rule still launches a normal managed script subprocess with the same **environment model** as workflow scripts (see [Script isolation](#script-isolation)); scripts can perform side effects — the language simply keeps orchestration-heavy steps out of rules.
+Rules are more restricted than workflows: the compiler rejects `prompt`, `send`, and `run async` in rule bodies, and `run` may only target **scripts** (never workflows or other rules via `run` — use `ensure` for rules). Rule bodies also reject `const … = prompt`. Otherwise rule bodies share the same structured step set as workflows for control flow (**`match`**, **`if`**, **`for … in …`**), captures, logging, **`return`**, and failure handling (**`catch`** / **`recover`** on **`run`**). Those restrictions are **static** (see `validateReferences` in `src/transpile/validate.ts`). At runtime, `run` inside a rule still launches a normal managed script subprocess with the same **environment model** as workflow scripts (see [Script isolation](#script-isolation)); scripts can perform side effects — the language simply keeps orchestration-heavy steps out of rules.
 
 `catch` and **`recover`** on **`run`** are allowed in rules the same as in workflows. **`recover` never attaches to `ensure`** — only `run` steps support `recover`.
 
@@ -320,7 +322,7 @@ run lib.build_project(task)
 const output = run transform()
 ```
 
-**Capture:** For a workflow, captures the explicit `return` value. For a script, captures stdout.
+**Capture:** For a workflow, captures the explicit `return` value. For a script or inline script, captures **trimmed** stdout on success (`node-workflow-runtime.ts` treats the emitted stdout string with `.trim()` when producing the capture value).
 
 ### `run async` — Concurrent Execution with Handles
 
@@ -328,7 +330,7 @@ const output = run transform()
 
 ```jaiph
 workflow default() {
-  # Fire-and-forget style (handle created but not captured)
+  # Start work without storing a binding — still tracked until this step list ends
   run async lib.task_a()
 
   # Capture the handle for later use
@@ -339,9 +341,13 @@ workflow default() {
 }
 ```
 
-**Handle resolution:** The handle resolves on first non-passthrough read — string interpolation, passing as argument to `run`, comparison, conditional branching, or match subject. Passthrough operations (initial capture into `const`, re-assignment) do not force resolution.
+**Handle resolution:** The handle resolves on first **non-passthrough** read — string interpolation, passing as a bare argument to `run` / `ensure` (rewritten to use `${name}`), comparison / regex tests in **`if`**, **`match`** on the handle variable, **`prompt`** bodies that mention `${h}`, **`send`** payloads that interpolate `${h}`, and similar paths that scan orchestration strings (full table in [Spec: Async Handles](spec-async-handles.md)).
 
-**Implicit join:** When a workflow scope exits, the runtime implicitly joins all remaining unresolved handles created in that scope. This is not an error — it preserves backward compatibility with the pre-handle `run async` model.
+**Passthrough:** `const h = run async foo()` binds the opaque handle token **without awaiting** `foo()` on that line. A bare `run async foo()` also performs no handle read — it still registers the branch for joining.
+
+**Important:** Workflow **`const`** can use a bare identifier RHS (for example `const copy = h`); that desugars to string interpolation **`"${h}"`** in `parse/const-rhs.ts`, which **does** resolve a handle — unlike the initial async capture alone.
+
+**Implicit join:** When the **`executeSteps`** scope that created handles **finishes** (for example end of an `if` body, **`for`** body, or the outer workflow step list), the runtime awaits **every** `run async` handle registered there — including handles that were never read. Nested blocks join **their** handles before control continues outward. Failures aggregate like a synchronous step failure. This preserves backward compatibility with the pre-handle concurrency model while still allowing overlap until a read or a scope boundary forces ordering ([Spec: Async Handles](spec-async-handles.md#implicit-join)).
 
 **`recover` composition:** `recover` works with `run async` to provide retry-loop semantics on the async branch:
 
@@ -474,7 +480,9 @@ const result = prompt "Analyze this code" returns "{ type: string, risk: string 
 log "Type: ${result.type}, Risk: ${result.risk}"
 ```
 
-Schema supports flat fields with types `string`, `number`, `boolean`. Fields are accessible via dot notation (`${result.type}`). The compiler validates field references at compile time.
+The schema is a flat comma-separated `{ field: type, … }` fragment — only `string`, `number`, and `boolean`; no nested objects or union syntax (`validatePromptReturnsSchema` in `src/transpile/validate-prompt-schema.ts`). Fields are exposed as dot accessors (`${result.type}`); the compiler checks those references against the declared fields.
+
+Prompts using `returns` must be captured (`const … = prompt … returns …`). A `returns` prompt without capture is rejected at compile time.
 
 Prompts are not allowed in rules.
 
@@ -760,8 +768,8 @@ Every step produces three outputs: status, value, and logs.
 |---|---|---|---|
 | `ensure rule` | exit code | explicit `return` value | artifacts |
 | `run workflow` | exit code | explicit `return` value | artifacts |
-| `run script` | exit code | stdout | artifacts |
-| `run` inline | exit code | stdout | artifacts |
+| `run script` | exit code | trimmed stdout | artifacts |
+| `run` inline | exit code | trimmed stdout | artifacts |
 | `prompt` | exit code | final assistant answer | artifacts |
 | `log` / `logerr` | always 0 | — | event stream |
 | `fail` | non-zero (abort) | — | stderr |

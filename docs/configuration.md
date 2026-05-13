@@ -11,7 +11,7 @@ When you need the same workflow sources to behave differently on different machi
 
 All execution is interpreted by the Node workflow runtime (`NodeWorkflowRuntime`): the AST, managed scripts, prompts, channels, inbox, and `.jaiph/runs` artifacts (see [Architecture](architecture.md)). Configuration only adjusts that stack; it does not change the workflow language or the compile graph.
 
-`jaiph compile` parses each module in the import closure (same grammar as `buildScripts()`), so **unknown `config` keys and wrong value types** produce the same parse errors as a normal build. `jaiph compile` then runs **`validateReferences` only** — it does not emit scripts or spawn the runner (see [Architecture](architecture.md#summary)). Runtime graph loading is parse-only; **compile-time** reference validation runs in the transpile path, not in `buildRuntimeGraph()`.
+`jaiph compile` parses each module in the import closure (same grammar as `emitScriptsForModule`), so **unknown `config` keys and wrong value types** surface as the same parse diagnostics as before `jaiph run`. With a **directory** argument it treats every non-test **`*.jh`** file in that directory as its own entrypoint (see `walkjhFiles` — `*.test.jh` is skipped unless you pass a test file explicitly) and validates each entry’s transitive imports. **`validateReferences` only** — no `scripts/` emission, no `buildRuntimeGraph()`, no runner spawn (see [Architecture](architecture.md#summary)). Runtime graph loading is parse-only; **compile-time** reference validation runs in the transpile path, not in `buildRuntimeGraph()`.
 
 **Source of truth:** When this document and the implementation disagree, treat the source code as authoritative.
 
@@ -29,7 +29,7 @@ For **agent and run keys**, the full precedence chain is:
 
 `run.recover_limit` is an exception: only **module-level** values affect `run … recover` (see [Run keys](#run-keys)).
 
-For **`runtime.*` (image, network, timeout)**, the CLI merges at **`jaiph run` launch** — not inside `NodeWorkflowRuntime` — in the order **`JAIPH_DOCKER_*` environment > in-file `runtime.*` > defaults** (and separately: Docker on/off is env-only, see above and [Precedence in detail](#precedence-in-detail)). `runtime.*` cannot appear in workflow-level `config` blocks.
+For **`runtime.*` (image, network, timeout)**, the host CLI merges them when it **may spawn Docker** (`resolveDockerConfig` in `src/runtime/docker.ts`) — not inside `NodeWorkflowRuntime`. Precedence is **`JAIPH_DOCKER_*` environment > module-level `runtime.*` > defaults** (Docker on/off remains env-only, see above and [Precedence in detail](#precedence-in-detail)). A **host** invocation of **`jaiph run --raw`** skips that driver entirely and always runs the workflow runner **locally** (no container); **`runtime.*` is unused on that path**. Sandboxed workflows still run `jaiph run --raw …` **inside** the container. `runtime.*` cannot appear in workflow-level `config` blocks.
 
 ## In-file config blocks
 
@@ -166,9 +166,11 @@ workflow default() {
 
 ### Runtime keys (Docker sandbox — beta)
 
-These configure Docker sandboxing. Unlike agent and run keys, runtime keys are resolved by the `jaiph run` CLI at launch — not by the workflow runtime. They can only appear in **module-level** config blocks (not workflow-level).
+These configure Docker sandboxing. Unlike agent and run keys, they are read when the CLI considers a **Docker launch** for interactive **`jaiph run`** (`src/cli/commands/run.ts` → `spawnExec`). They never affect **`NodeWorkflowRuntime`** directly. They can only appear in **module-level** config blocks (not workflow-level).
 
 > Docker sandboxing is in **beta**. See [Sandboxing](sandboxing.md) for mounts, workspace layout, env forwarding, path remapping, and container behavior.
+
+> **Host `--raw`:** If you run **`jaiph run --raw`** yourself on the host, the CLI does not enter the Docker branch; image/network/timeout merge is irrelevant for that invocation. Embedding and container flows use **`--raw` inside** the sandbox where the CLI has already picked the image — see [Architecture](architecture.md#sequence-diagram-regular-flow-jh).
 
 | Key | Type | Default | Env variable | Description |
 |-----|------|---------|--------------|-------------|
@@ -187,7 +189,7 @@ For **agent and run keys**, resolution order (highest wins):
 3. **Module-level `config`** — applies to workflows that don't define their own block.
 4. **Built-in defaults.**
 
-For **Docker enablement**, the `jaiph run` driver uses **`JAIPH_DOCKER_ENABLED` env > unsafe default rule** (env only; `runtime.docker_enabled` is no longer supported). The default rule enables Docker unless `JAIPH_UNSAFE=true` is set; `CI=true` no longer disables Docker (see [Sandboxing — Enabling Docker](sandboxing.md#enabling-docker)). For other `runtime.*` keys (image, network, timeout), the merge is **`JAIPH_DOCKER_*` env > module-level `runtime.*` > defaults**. Workflow-level config cannot set runtime keys.
+For **Docker enablement** on **interactive** **`jaiph run`** (no `--raw` on the host), the CLI uses **`JAIPH_DOCKER_ENABLED` env > unsafe default rule** (env only; `runtime.docker_enabled` is no longer supported). The default rule enables Docker unless `JAIPH_UNSAFE=true` is set; `CI=true` no longer disables Docker (see [Sandboxing — Enabling Docker](sandboxing.md#enabling-docker)). **Host** **`jaiph run --raw`** never consults this branch. For other `runtime.*` keys (image, network, timeout), the merge is **`JAIPH_DOCKER_*` env > module-level `runtime.*` > defaults** whenever Docker launch is considered. Workflow-level config cannot set runtime keys.
 
 ### Locked variables
 
@@ -227,7 +229,9 @@ Backend-specific flags come from `agent.cursor_flags` / `agent.claude_flags` (or
 
 ### Custom agent commands
 
-When `agent.command` points to an executable other than `cursor-agent`, Jaiph treats it as a **custom agent command**. This lets you use any shell script, Python wrapper, or CLI tool as a prompt backend — no need to implement the `stream-json` protocol.
+Only the **cursor** backend consults **`agent.command`**. For **`claude`** and **`codex`**, Jaiph always invokes the Claude CLI or the Codex HTTP path (`prompt.ts`), regardless of `agent.command`.
+
+When **`agent.backend` is `cursor`** (the default) and `agent.command`’s basename is anything other than `cursor-agent`, Jaiph treats it as a **custom agent command**. That lets you use a shell script, Python wrapper, or other CLI as a prompt backend — no need to implement the `stream-json` protocol.
 
 **How it works:**
 
@@ -292,15 +296,15 @@ When a `prompt` step runs, Jaiph resolves the effective model using this order:
 
 `agent.default_model` applies to **cursor**, **claude**, and **codex**. For the **Claude** backend, when `agent.default_model` is set and `agent.claude_flags` does not already contain `--model`, Jaiph passes `--model <value>` to the Claude CLI automatically. If both are set, the value in `agent.claude_flags` takes precedence (it is appended last).
 
-**Diagnostics.** Every prompt step records the resolved model in `PROMPT_START` and `PROMPT_END` events in `run_summary.jsonl`:
+**Diagnostics.** Every prompt step records model metadata in **`PROMPT_START`** and **`PROMPT_END`** in **`run_summary.jsonl`** (`model`, `model_reason`):
 
 ```jsonl
 {"type":"PROMPT_START","backend":"cursor","model":"gpt-4","model_reason":"explicit",...}
 ```
 
-The `model_reason` field is one of: `explicit` (from `agent.default_model`), `flags` (extracted from backend flags), or `backend-default` (no model configured — the backend picks its own). Inspect these events directly in the run summary file.
+`model_reason` is one of: **`explicit`** (non-empty **`agent.default_model` / `JAIPH_AGENT_MODEL`**), **`flags`** (`--model` taken from **`agent.cursor_flags`** or **`agent.claude_flags`**), or **`backend-default`** (no resolved model string — Cursor/Claude binaries choose their own; **codex** also reports this when no model is configured, **even though** the HTTP client defaults to **`gpt-4o`**, so the **`model`** field may be omitted there). Inspect these events directly in the summary file.
 
-**No-model troubleshooting.** If the backend rejects the auto-selected default, set `agent.default_model` explicitly or pass `--model <name>` in the backend-specific flags.
+**No-model troubleshooting.** If the backend rejects the auto-selected default, set **`agent.default_model`** (all backends). For **cursor** and **claude** you can also pass **`--model <name>`** in **`agent.cursor_flags`** / **`agent.claude_flags`**; **codex** has no flag channel — use **`agent.default_model`** or env **`JAIPH_AGENT_MODEL`** only.
 
 ## Testing with `jaiph test`
 
@@ -329,6 +333,13 @@ Quick reference for all in-file keys and their environment variable equivalents:
 | `module.name` | _(no env override)_ |
 | `module.version` | _(no env override)_ |
 | `module.description` | _(no env override)_ |
+
+There is **no in-file key** for the Codex HTTP endpoint or API key. Use environment only:
+
+| Purpose | Environment variable |
+|---------|----------------------|
+| OpenAI-compatible API key (required for **codex**) | `OPENAI_API_KEY` |
+| OpenAI-compatible chat-completions URL override | `JAIPH_CODEX_API_URL` |
 
 ## Inspecting effective config at runtime
 

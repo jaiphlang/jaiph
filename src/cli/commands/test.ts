@@ -65,8 +65,8 @@ export async function runTest(rest: string[]): Promise<number> {
   }
 
   process.stderr.write(
-    "jaiph test requires a *.test.jh file with inline mock prompt steps. Example:\n" +
-      "  test \"...\" { mock prompt \"response\"; response = w.default; expectContain response \"...\"; }\n",
+    "jaiph test requires a *.test.jh file. Example:\n" +
+      "  test \"...\" { mock prompt \"response\"; const r = run w.default(); expect_contain r \"...\"; }\n",
   );
   return 1;
 }

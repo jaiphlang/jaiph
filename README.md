@@ -1,6 +1,6 @@
 # ![Jaiph](docs/logo.png)
 
-[jaiph.org](https://jaiph.org) · [Getting Started](docs/getting-started.md) ([jaiph.org/getting-started](https://jaiph.org/getting-started)) · [Setup](docs/setup.md) · [Libraries](docs/libraries.md) · [Grammar](docs/grammar.md) · [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Testing](docs/testing.md) · [Hooks](docs/hooks.md) · [Inbox & Dispatch](docs/inbox.md) · [Sandboxing](docs/sandboxing.md) · [Runtime artifacts](docs/artifacts.md) · [Async Handles](docs/spec-async-handles.md) · [Architecture](docs/architecture.md) · [Contributing](docs/contributing.md)
+[jaiph.org](https://jaiph.org) · [Getting Started](docs/getting-started.md) ([jaiph.org/getting-started](https://jaiph.org/getting-started)) · [Setup](docs/setup.md) · [Libraries](docs/libraries.md) · [Language](docs/language.md) · [Grammar](docs/grammar.md) · [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Testing](docs/testing.md) · [Hooks](docs/hooks.md) · [Inbox & Dispatch](docs/inbox.md) · [Sandboxing](docs/sandboxing.md) · [Runtime artifacts](docs/artifacts.md) · [Async Handles](docs/spec-async-handles.md) · [Architecture](docs/architecture.md) · [Contributing](docs/contributing.md)
 
 ---
 
@@ -63,6 +63,17 @@ npm install -g jaiph
 ```
 
 Verify: `jaiph --version`. Switch versions: `jaiph use nightly` or `jaiph use 0.9.4`.
+
+Initialize a project (optional): `jaiph init` writes `.jaiph/` with bootstrap workflow, gitignore entries for runs/tmp, and **`SKILL.md`** when the CLI resolves a skill file on disk (`JAIPH_SKILL_PATH`, install-relative `jaiph-skill.md`, or `docs/jaiph-skill.md` under cwd — see [Setup](docs/setup.md)). Canonical skill text for agents: `https://raw.githubusercontent.com/jaiphlang/jaiph/refs/heads/main/docs/jaiph-skill.md`.
+
+## Usage
+
+- Run the default workflow: `jaiph run path/to/main.jh [args...]` or `./main.jh [args...]` with a `#!/usr/bin/env jaiph` shebang.
+- Run tests: `jaiph test` (workspace), `jaiph test ./dir`, or `jaiph test path.test.jh`.
+- Validate without executing: `jaiph compile …` (same `validateReferences` checks as before `jaiph run`; no `scripts/` emission — see [Architecture](docs/architecture.md)).
+- Format sources: `jaiph format …` / `jaiph format --check …`.
+
+Full flags and environment variables: [CLI reference](docs/cli.md). Doc map: [Getting Started](docs/getting-started.md).
 
 ## Example
 
