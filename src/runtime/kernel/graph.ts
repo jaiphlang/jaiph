@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parsejaiph } from "../../parser";
+import type { CompilePrep } from "../../transpile/compile-prep";
 import type { RuleDef, ScriptDef, WorkflowDef, WorkflowRefDef, RuleRefDef, jaiphModule } from "../../types";
 import { resolveImportPath } from "../../transpile/resolve";
 
@@ -30,29 +31,53 @@ export interface ResolvedScript {
   script: ScriptDef;
 }
 
-function buildNode(filePath: string, workspaceRoot?: string): RuntimeModuleNode {
-  const ast = parsejaiph(readFileSync(filePath, "utf8"), filePath);
+/** Inject `ScriptDef` stubs for `import script` declarations so `resolveScriptRef` finds them. Idempotent. */
+function attachScriptImportStubs(ast: jaiphModule): void {
+  if (!ast.scriptImports) return;
+  for (const si of ast.scriptImports) {
+    if (ast.scripts.some((s) => s.name === si.alias)) continue;
+    ast.scripts.push({
+      name: si.alias,
+      comments: [],
+      body: "",
+      bodyKind: "fenced",
+      loc: si.loc,
+    });
+  }
+}
+
+function nodeFromAst(filePath: string, ast: jaiphModule, workspaceRoot?: string): RuntimeModuleNode {
   const imports = new Map<string, string>();
   for (const imp of ast.imports) {
     imports.set(imp.alias, resolveImportPath(filePath, imp.path, workspaceRoot));
   }
-  // Synthesise ScriptDef stubs for script imports so resolveScriptRef finds them.
-  if (ast.scriptImports) {
-    for (const si of ast.scriptImports) {
-      ast.scripts.push({
-        name: si.alias,
-        comments: [],
-        body: "",
-        bodyKind: "fenced",
-        loc: si.loc,
-      });
-    }
-  }
+  attachScriptImportStubs(ast);
   return { filePath, ast, imports };
 }
 
-export function buildRuntimeGraph(entryFile: string, workspaceRoot?: string): RuntimeGraph {
+function buildNode(filePath: string, workspaceRoot?: string): RuntimeModuleNode {
+  const ast = parsejaiph(readFileSync(filePath, "utf8"), filePath);
+  return nodeFromAst(filePath, ast, workspaceRoot);
+}
+
+/**
+ * When `prep` is supplied, every reachable module is taken from the pre-parsed
+ * cache and no `.jh` files are read from disk. The cache is shared with the
+ * parent CLI's `buildScripts` so each module is parsed exactly once per run.
+ */
+export function buildRuntimeGraph(
+  entryFile: string,
+  workspaceRoot?: string,
+  prep?: CompilePrep,
+): RuntimeGraph {
   const entry = resolve(entryFile);
+  if (prep) {
+    const modules = new Map<string, RuntimeModuleNode>();
+    for (const [filePath, ast] of prep.astByFile) {
+      modules.set(filePath, nodeFromAst(filePath, ast, workspaceRoot));
+    }
+    return { entryFile: entry, modules };
+  }
   const modules = new Map<string, RuntimeModuleNode>();
   const queue: string[] = [entry];
   while (queue.length > 0) {

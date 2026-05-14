@@ -1,6 +1,7 @@
 import { chmodSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, extname, join, parse, relative, resolve } from "node:path";
 import { parsejaiph } from "../parser";
+import type { CompilePrep } from "./compile-prep";
 import type { ScriptArtifact } from "./emit-script";
 import { JAIPH_EXT_REGEX, resolveImportPath } from "./resolve";
 
@@ -115,13 +116,16 @@ export function collectTransitiveJhModules(entrypoint: string, workspaceRoot?: s
 }
 
 /**
- * Writes extracted `script` bodies to `<targetDir>/scripts`.
+ * Writes extracted `script` bodies to `<targetDir>/scripts`. When `prep` is
+ * supplied, the transitive-module list comes from the pre-parsed cache instead
+ * of re-walking and re-parsing the import closure.
  */
 export function buildScripts(
   inputPath: string,
   targetDir: string | undefined,
   emitScriptsFn: (file: string, root: string) => ScriptArtifact[],
   workspaceRoot?: string,
+  prep?: CompilePrep,
 ): { scriptsDir: string } {
   const absInput = resolve(inputPath);
   const inputStat = statSync(absInput);
@@ -130,7 +134,9 @@ export function buildScripts(
   ensureDir(outRoot);
 
   const entrypointFile = inputStat.isFile() ? absInput : null;
-  const files = entrypointFile ? collectTransitiveJhModules(entrypointFile, workspaceRoot) : walkjhFiles(rootDir);
+  const files = prep
+    ? [...prep.astByFile.keys()].sort()
+    : entrypointFile ? collectTransitiveJhModules(entrypointFile, workspaceRoot) : walkjhFiles(rootDir);
   const scriptsRoot = join(outRoot, "scripts");
   ensureDir(scriptsRoot);
 
