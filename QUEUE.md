@@ -13,38 +13,39 @@ Process rules:
 
 ***
 
-## Performance — investigate and fix slow installation
+## Performance — remove redundant local workflow-start work #dev-ready
+
+**Problem**
+The default local `jaiph run <file.jh>` path does redundant startup work before the first useful workflow event:
+
+* `src/cli/commands/run.ts` parses the entry file to read metadata/config and print the banner.
+* `buildScripts()` walks and parses the transitive `.jh` module set to emit script bodies.
+* The spawned `src/runtime/kernel/node-workflow-runner.ts` then calls `buildRuntimeGraph()`, which reads and parses the import closure again before constructing `NodeWorkflowRuntime`.
+
+For small workflows this duplicate parse/graph setup is a plausible source of the observed 2-4 second lag. Optimize this path before chasing Docker, raw mode, or external subprocess costs.
 
 **Goal**
-`jaiph install` (and related dependency or bootstrap steps) feels unreasonably slow; find the dominant cost and improve it without weakening reproducibility (lockfile, shallow clone behavior, etc.).
+Reduce cold-start latency for default local `jaiph run <file.jh>` by eliminating avoidable repeated `.jh` reads/parses between CLI compile prep and the runtime graph used by `NodeWorkflowRuntime`.
 
 **Scope**
 
-* Profile or instrument the install path (git clone, lockfile I/O, post-install) and document the top 1–3 contributors to latency.
-* Implement targeted fixes (e.g. avoid redundant work, reduce subprocess churn, cache safely) and verify wall-clock improvement on a cold and warm run where applicable.
+* In scope: non-Docker, non-`--raw` `jaiph run <file.jh>` from the host CLI through the spawned Node workflow runner.
+* Out of scope: `jaiph run --raw`, Docker startup/image prep, prompt provider latency, shell command runtime, and bootstrap install performance.
+* Prefer one shared module-graph/compile-prep representation over separate ad hoc caches. If serialization is used to cross the process boundary, keep it internal and deterministic.
+* Preserve user-visible run semantics: banner, hooks, run artifacts, summaries, return values, exit codes, and `__JAIPH_EVENT__` handling must remain compatible with current behavior.
+
+**Measurement notes**
+
+* Use a minimal workflow and one imported-module workflow as repro cases.
+* Measure time from CLI process start to the first parsed `__JAIPH_EVENT__` line on stderr. If an implementation chooses a different first-event marker, define it in the PR or commit message.
+* Record before/after timings on the same machine. These timings are evidence for the optimization, not acceptance criteria.
 
 **Acceptance criteria**
 
-* A short note in the commit or PR description states what was slow and what changed, with before/after rough timings on the same machine.
-* `jaiph install` behavior remains correct: same lockfile semantics and failure modes for bad URLs or missing refs.
-* `npm test` passes.
-
-***
-
-## Performance — investigate and fix slow workflow start (initial 2–4 s lag)
-
-**Goal**
-When starting workflows (e.g. `jaiph run` / first step), users observe a 2–4 second delay before useful work; reduce that lag or explain and eliminate unnecessary startup work (JIT, imports, process spawn, discovery).
-
-**Scope**
-
-* Reproduce the lag with a minimal `.jh` workflow; trace Node startup, module load, and runtime init (`NodeWorkflowRuntime` and friends).
-* Address fixable costs (e.g. defer heavy work, lazy imports, avoid redundant file scans) without changing user-visible workflow semantics.
-
-**Acceptance criteria**
-
-* Documented repro (command + minimal file) and what was measured (time to first event / first step).
-* Measurable reduction in the cold-start path on a representative case, or a clear justification if the lag is irreducible (e.g. external subprocess).
+* A unit or integration test proves the default local run path does not read/parse the entry module once in the parent and then re-read/re-parse the same module in the child to build the runtime graph. The test must fail if the old `run.ts` + `buildScripts()` + `node-workflow-runner.ts` duplicate parse pattern returns.
+* A test with at least one imported `.jh` module proves the optimized graph/compile-prep path preserves cross-module workflow, rule, and script resolution.
+* Existing local run behavior remains covered: a minimal workflow still emits the expected start/end events, writes run artifacts/summary metadata, returns the workflow return value, and exits with the correct status.
+* The change does not alter `jaiph run --raw` or Docker launch behavior; add a focused test or assertion if shared launch code is touched.
 * `npm test` passes.
 
 ***

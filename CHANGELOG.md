@@ -1,5 +1,7 @@
 # Unreleased
 
+- **Performance — `jaiph install` parallelism:** Missing-library clones now run in parallel through a small bounded-concurrency executor (default 4 in flight), replacing the previous sequential `execSync` loop. The user contract is unchanged: warm-path libraries (target directory exists and `--force` is absent) still skip without invoking `git` for both explicit args and restore-from-lock; failed clones still exit non-zero and do not produce a lock entry; restore-from-lock still does not invent new lock entries. The default clone runner now uses `spawn("git", ["clone", "--depth", "1", …])` so multiple clones can overlap network and process latency. `runInstall` is now `async` and exposes injectable `CloneRunner` / `concurrency` options for testing. Tests cover concurrent overlap (peak in-flight ≥ 2), warm-path skipping for explicit args and restore, invalid-remote and unknown-ref failure paths, mixed success/failure lockfile bookkeeping, and the existing corrupt/missing-lockfile behavior. Docs updated in `docs/cli.md` and `docs/libraries.md`.
+
 # 0.9.4
 
 ## Summary
