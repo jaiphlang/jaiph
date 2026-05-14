@@ -11,6 +11,7 @@ import { dirname, join, resolve, extname } from "node:path";
 import { basename } from "node:path";
 import { parsejaiph } from "../../parser";
 import { buildScripts } from "../../transpiler";
+import { prepareCompile, writeCompilePrep } from "../../transpile/compile-prep";
 import { metadataToConfig } from "../../config";
 import { buildStepDisplayParamPairs, formatNamedParamsForDisplay } from "./format-params.js";
 import {
@@ -80,7 +81,8 @@ export async function runWorkflow(rest: string[]): Promise<number> {
   }
 
   const hooksConfig = loadMergedHooks(workspaceRoot);
-  const mod = parsejaiph(readFileSync(inputAbs, "utf8"), inputAbs);
+  const prep = prepareCompile(inputAbs, workspaceRoot);
+  const mod = prep.astByFile.get(inputAbs)!;
   const effectiveConfig = metadataToConfig(mod.metadata);
 
   const outDir = target ? resolve(target) : mkdtempSync(join(tmpdir(), "jaiph-run-"));
@@ -111,8 +113,18 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       dockerConfigForBanner.enabled,
       sandboxModeForBanner,
     );
-    const { scriptsDir } = buildScripts(inputAbs, outDir, workspaceRoot);
+    const { scriptsDir } = buildScripts(inputAbs, outDir, workspaceRoot, prep);
     runtimeEnv.JAIPH_SCRIPTS = scriptsDir;
+    // Cache file consumed by the spawned runner (or container) so the runtime
+    // graph reuses these ASTs instead of re-parsing every reachable module.
+    // Docker mounts the workspace read-only, so place the cache under outDir,
+    // which the host already arranges for the container side via its existing
+    // sandbox layout. For local runs the runner reads the path directly.
+    const prepFile = join(outDir, ".jaiph-compile-prep.json");
+    writeCompilePrep(prepFile, prep);
+    if (!dockerConfigForBanner.enabled) {
+      runtimeEnv.JAIPH_COMPILE_PREP_FILE = prepFile;
+    }
     const metaFile = join(outDir, `.jaiph-run-meta-${Date.now()}-${process.pid}.txt`);
 
     const emitter = createRunEmitter();

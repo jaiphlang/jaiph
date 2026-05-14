@@ -2,23 +2,39 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { parsejaiph } from "./parser";
 import { buildScripts as buildScriptsImpl, walkTestFiles } from "./transpile/build";
+import type { CompilePrep } from "./transpile/compile-prep";
 import { buildScriptFiles, type ScriptArtifact } from "./transpile/emit-script";
 import { resolveImportPath, workflowSymbolForFile } from "./transpile/resolve";
 import { resolveScriptImportPath, validateReferences } from "./transpile/validate";
 
 export { resolveImportPath, workflowSymbolForFile } from "./transpile/resolve";
 export type { ScriptArtifact } from "./transpile/emit-script";
+export type { CompilePrep } from "./transpile/compile-prep";
 
 /**
  * Parse, validate, and extract per-`script` bash files for one module (no workflow bash emission).
+ * When `prep` is supplied, reuses already-parsed ASTs instead of re-reading from disk.
  */
-export function emitScriptsForModule(inputFile: string, rootDir: string, workspaceRoot?: string): ScriptArtifact[] {
-  const ast = parsejaiph(readFileSync(inputFile, "utf8"), inputFile);
+export function emitScriptsForModule(
+  inputFile: string,
+  rootDir: string,
+  workspaceRoot?: string,
+  prep?: CompilePrep,
+): ScriptArtifact[] {
+  const cachedAst = prep?.astByFile.get(inputFile);
+  const ast = cachedAst ?? parsejaiph(readFileSync(inputFile, "utf8"), inputFile);
+  const readFile = prep
+    ? (path: string): string => (prep.astByFile.has(path) ? "" : readFileSync(path, "utf8"))
+    : (path: string): string => readFileSync(path, "utf8");
+  const parse = prep
+    ? (content: string, filePath: string) =>
+        prep.astByFile.get(filePath) ?? parsejaiph(content, filePath)
+    : parsejaiph;
   validateReferences(ast, {
     resolveImportPath,
     existsSync,
-    readFile: (path: string) => readFileSync(path, "utf8"),
-    parse: parsejaiph,
+    readFile,
+    parse,
     workspaceRoot,
   });
   const workflowSymbol = workflowSymbolForFile(inputFile, rootDir);
@@ -41,7 +57,12 @@ export function emitScriptsForModule(inputFile: string, rootDir: string, workspa
 
 export { walkTestFiles };
 
-export function buildScripts(inputPath: string, targetDir?: string, workspaceRoot?: string): { scriptsDir: string } {
-  const emitFn = (file: string, root: string) => emitScriptsForModule(file, root, workspaceRoot);
-  return buildScriptsImpl(inputPath, targetDir, emitFn, workspaceRoot);
+export function buildScripts(
+  inputPath: string,
+  targetDir?: string,
+  workspaceRoot?: string,
+  prep?: CompilePrep,
+): { scriptsDir: string } {
+  const emitFn = (file: string, root: string) => emitScriptsForModule(file, root, workspaceRoot, prep);
+  return buildScriptsImpl(inputPath, targetDir, emitFn, workspaceRoot, prep);
 }
