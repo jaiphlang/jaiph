@@ -348,9 +348,11 @@ jaiph install [--force]
 
 **With arguments** — clone each repo into `.jaiph/libs/<name>/` (shallow: `--depth 1`) and upsert the entry in `.jaiph/libs.lock`. The library name is derived from the URL: last path segment, stripped of `.git` suffix (e.g. `github.com/you/queue-lib.git` → `queue-lib`). Version pinning is usually written as **`https://…/name.git@<tag-or-branch>`**; other URL shapes with a trailing **`@ref`** are also accepted when the parser can split URL and version unambiguously.
 
-**Without arguments** — restore all libraries from `.jaiph/libs.lock`. Useful after cloning a project or in CI. If the lockfile exists but lists **no** libraries, the command prints `No libs in lockfile.` and exits **0**.
+**Without arguments** — restore all libraries from `.jaiph/libs.lock`. Useful after cloning a project or in CI. If the lockfile exists but lists **no** libraries, the command prints `No libs in lockfile.` and exits **0**. Restore mode does **not** invent new lock entries — the lockfile is read but not rewritten.
 
-If `.jaiph/libs/<name>/` already exists, the library is skipped. Use **`--force`** (anywhere in the argument list) to delete and re-clone.
+If `.jaiph/libs/<name>/` already exists, the library is skipped without invoking `git` (warm path) — both for explicit arguments and for restore-from-lock. Use **`--force`** (anywhere in the argument list) to delete and re-clone.
+
+**Parallel clones.** Missing libraries are cloned concurrently with a small bounded-concurrency executor (default **4 in flight**); the warm-path skip runs in a pre-pass before any clone work starts. Independent network/process latency therefore overlaps when several libraries are missing. Failures from individual clones still propagate: any non-zero clone exits the command non-zero, and failed libraries are **not** added to `.jaiph/libs.lock`. Successful and warm-skipped libraries are upserted as before.
 
 **Lockfile format** (`.jaiph/libs.lock`):
 
