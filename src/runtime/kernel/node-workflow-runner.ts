@@ -1,5 +1,6 @@
 import { basename, dirname, join } from "node:path";
 import { writeFileSync } from "node:fs";
+import { readCompilePrep } from "../../transpile/compile-prep";
 import { buildRuntimeGraph } from "./graph";
 import { NodeWorkflowRuntime } from "./node-workflow-runtime";
 
@@ -28,7 +29,9 @@ async function main(): Promise<number> {
     process.env.JAIPH_SCRIPTS = join(dirname(builtScript), "scripts");
   }
   const workspaceRoot = process.env.JAIPH_WORKSPACE || undefined;
-  const graph = buildRuntimeGraph(sourceFile, workspaceRoot);
+  const prepFile = process.env.JAIPH_COMPILE_PREP_FILE;
+  const prep = prepFile ? readCompilePrep(prepFile) : undefined;
+  const graph = buildRuntimeGraph(sourceFile, workspaceRoot, prep);
   const runtime = new NodeWorkflowRuntime(graph, { env: process.env, cwd: process.cwd() });
   const status = workflowName === "default" ? await runtime.runDefault(runArgs) : 1;
   writeFileSync(
