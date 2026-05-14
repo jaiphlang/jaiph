@@ -53,7 +53,9 @@ jaiph install https://github.com/you/queue-lib.git@v1.0
 jaiph install
 ```
 
-`jaiph install` writes **`.jaiph/libs.lock`** under the workspace root. Commit the lockfile; add **`.jaiph/libs/`** to `.gitignore` if you do not want vendored clones in version control. If **`.jaiph/libs/<name>/`** already exists, the clone is skipped unless you pass **`--force`** (URL / `@ref` parsing: [CLI — `jaiph install`](cli.md#jaiph-install)).
+`jaiph install` writes **`.jaiph/libs.lock`** under the workspace root. Commit the lockfile; add **`.jaiph/libs/`** to `.gitignore` if you do not want vendored clones in version control. If **`.jaiph/libs/<name>/`** already exists, the clone is skipped without invoking `git` unless you pass **`--force`** (URL / `@ref` parsing: [CLI — `jaiph install`](cli.md#jaiph-install)).
+
+Missing libraries are cloned **concurrently** (default 4 in flight), so restoring or installing several repositories at once does not pay full network/process latency one repo at a time. Failed clones still exit the command non-zero and do not produce a lock entry. Restore-from-lock (`jaiph install` with no args) does not invent new lock entries. See [CLI — `jaiph install`](cli.md#jaiph-install) for the full contract.
 
 The clone directory name is **`deriveLibName(url)`** (last path segment, **`.git`** stripped), so imports use that segment as **`lib-name`**.
 

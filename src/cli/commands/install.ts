@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { execSync } from "node:child_process";
+import { join } from "node:path";
+import { spawn } from "node:child_process";
 import { colorPalette } from "../shared/errors";
 import { detectWorkspaceRoot } from "../shared/paths";
 
@@ -13,6 +13,29 @@ interface LockEntry {
 interface LockFile {
   libs: LockEntry[];
 }
+
+export interface InstallSpec {
+  name: string;
+  url: string;
+  version?: string;
+  libDir: string;
+}
+
+export interface CloneOutcome {
+  spec: InstallSpec;
+  ok: boolean;
+  message?: string;
+}
+
+export type CloneRunner = (spec: InstallSpec) => Promise<CloneOutcome>;
+
+export interface RunInstallOptions {
+  cwd?: string;
+  cloneRunner?: CloneRunner;
+  concurrency?: number;
+}
+
+const DEFAULT_CONCURRENCY = 4;
 
 function deriveLibName(url: string): string {
   const lastSegment = url.split("/").pop() ?? url;
@@ -53,80 +76,134 @@ function upsertLockEntry(lock: LockFile, entry: LockEntry): void {
   }
 }
 
-function cloneLib(
-  url: string,
-  version: string | undefined,
-  targetDir: string,
-  force: boolean,
-  palette: ReturnType<typeof colorPalette>,
-): boolean {
-  const name = deriveLibName(url);
-  const libDir = join(targetDir, name);
-
-  if (existsSync(libDir)) {
-    if (force) {
-      rmSync(libDir, { recursive: true, force: true });
-    } else {
-      process.stdout.write(`${palette.dim}▸ ${name} already exists, skipping (use --force to re-clone)${palette.reset}\n`);
-      return true;
-    }
-  }
-
-  const branchFlag = version ? ` --branch ${version}` : "";
-  const cmd = `git clone --depth 1${branchFlag} ${url} ${libDir}`;
-  try {
-    execSync(cmd, { stdio: "pipe" });
-    process.stdout.write(`${palette.green}✓ Installed ${name}${version ? ` @ ${version}` : ""}${palette.reset}\n`);
-    return true;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`Failed to install ${name}: ${msg}\n`);
-    return false;
-  }
+function specToLockEntry(spec: InstallSpec): LockEntry {
+  return { name: spec.name, url: spec.url, ...(spec.version ? { version: spec.version } : {}) };
 }
 
-export function runInstall(rest: string[]): number {
+/** Default clone runner: `git clone --depth 1 [--branch <ref>] <url> <libDir>` via spawn. */
+function gitCloneRunner(spec: InstallSpec): Promise<CloneOutcome> {
+  return new Promise((done) => {
+    const args = ["clone", "--depth", "1"];
+    if (spec.version) {
+      args.push("--branch", spec.version);
+    }
+    args.push(spec.url, spec.libDir);
+    const child = spawn("git", args, { stdio: ["ignore", "pipe", "pipe"] });
+    let stderr = "";
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", (err) => {
+      done({ spec, ok: false, message: err.message });
+    });
+    child.on("close", (code) => {
+      if (code === 0) {
+        done({ spec, ok: true });
+      } else {
+        const tail = stderr.trim().split(/\r?\n/).filter(Boolean).pop();
+        done({ spec, ok: false, message: tail ?? `git clone exited with code ${code}` });
+      }
+    });
+  });
+}
+
+async function runWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (true) {
+      const i = next++;
+      if (i >= items.length) return;
+      results[i] = await fn(items[i]!);
+    }
+  };
+  const workerCount = Math.max(1, Math.min(limit, items.length));
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return results;
+}
+
+export async function runInstall(rest: string[], opts: RunInstallOptions = {}): Promise<number> {
   const palette = colorPalette();
   const force = rest.includes("--force");
   const args = rest.filter((a) => a !== "--force");
-  const workspaceRoot = detectWorkspaceRoot(process.cwd());
+  const cwd = opts.cwd ?? process.cwd();
+  const workspaceRoot = detectWorkspaceRoot(cwd);
   const libsDir = join(workspaceRoot, ".jaiph", "libs");
   const lockPath = join(workspaceRoot, ".jaiph", "libs.lock");
+  const cloneRunner = opts.cloneRunner ?? gitCloneRunner;
+  const concurrency = Math.max(1, opts.concurrency ?? DEFAULT_CONCURRENCY);
 
   mkdirSync(libsDir, { recursive: true });
 
-  // No args: restore from lockfile
-  if (args.length === 0) {
-    const lock = readLockFile(lockPath);
+  const isRestoreFromLock = args.length === 0;
+  let lock: LockFile;
+  let specs: InstallSpec[];
+
+  if (isRestoreFromLock) {
+    lock = readLockFile(lockPath);
     if (lock.libs.length === 0) {
       process.stdout.write("No libs in lockfile.\n");
       return 0;
     }
     process.stdout.write(`\nRestoring ${lock.libs.length} lib(s) from lockfile\n\n`);
-    let ok = true;
-    for (const entry of lock.libs) {
-      if (!cloneLib(entry.url, entry.version, libsDir, force, palette)) {
-        ok = false;
-      }
-    }
+    specs = lock.libs.map((e) => ({
+      name: e.name,
+      url: e.url,
+      version: e.version,
+      libDir: join(libsDir, e.name),
+    }));
+  } else {
     process.stdout.write("\n");
-    return ok ? 0 : 1;
+    lock = readLockFile(lockPath);
+    specs = args.map((a) => {
+      const { url, version } = parseUrlAndVersion(a);
+      const name = deriveLibName(url);
+      return { name, url, version, libDir: join(libsDir, name) };
+    });
   }
 
-  // Install each specified lib
-  process.stdout.write("\n");
-  const lock = readLockFile(lockPath);
-  let ok = true;
-  for (const arg of args) {
-    const { url, version } = parseUrlAndVersion(arg);
-    const name = deriveLibName(url);
-    if (!cloneLib(url, version, libsDir, force, palette)) {
-      ok = false;
-      continue;
+  // Plan phase: skip warm-path libs without invoking the cloner; queue the rest.
+  const skipped: InstallSpec[] = [];
+  const jobs: InstallSpec[] = [];
+  for (const spec of specs) {
+    if (existsSync(spec.libDir)) {
+      if (force) {
+        rmSync(spec.libDir, { recursive: true, force: true });
+        jobs.push(spec);
+      } else {
+        process.stdout.write(`${palette.dim}▸ ${spec.name} already exists, skipping (use --force to re-clone)${palette.reset}\n`);
+        skipped.push(spec);
+      }
+    } else {
+      jobs.push(spec);
     }
-    upsertLockEntry(lock, { name, url, ...(version ? { version } : {}) });
   }
-  writeLockFile(lockPath, lock);
+
+  const outcomes = await runWithConcurrency(jobs, concurrency, cloneRunner);
+
+  let allOk = true;
+  for (const outcome of outcomes) {
+    if (outcome.ok) {
+      const v = outcome.spec.version ? ` @ ${outcome.spec.version}` : "";
+      process.stdout.write(`${palette.green}✓ Installed ${outcome.spec.name}${v}${palette.reset}\n`);
+    } else {
+      allOk = false;
+      process.stderr.write(`Failed to install ${outcome.spec.name}: ${outcome.message ?? "unknown error"}\n`);
+    }
+  }
+
+  if (!isRestoreFromLock) {
+    for (const spec of skipped) {
+      upsertLockEntry(lock, specToLockEntry(spec));
+    }
+    for (const outcome of outcomes) {
+      if (outcome.ok) {
+        upsertLockEntry(lock, specToLockEntry(outcome.spec));
+      }
+    }
+    writeLockFile(lockPath, lock);
+  }
+
   process.stdout.write("\n");
-  return ok ? 0 : 1;
+  return allOk ? 0 : 1;
 }
