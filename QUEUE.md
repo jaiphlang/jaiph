@@ -12,3 +12,303 @@ Process rules:
 6. **Acceptance criteria are non-negotiable.** A task is not done until every acceptance bullet is verified by a test that fails when the contract is violated. "It works on my machine" or "the existing tests pass" is not acceptance.
 
 ***
+
+## Promote `CompilePrep` to a first-class `ModuleGraph` and make the parser I/O-pure #dev-ready
+
+**Design reference:** `design/2026-05-15-parser-compiler-simplification.md` § Refactor 5.
+
+**Why:** Three different traversal strategies exist for "the set of modules in this build" — the validator recursively re-reads + re-parses imports via `ValidateContext` callbacks (`src/transpile/validate.ts`), `emitScriptsForModule` (`src/transpiler.ts`) re-wraps the same callbacks with an optional `prep` cache, and `buildScripts` (`src/transpile/build.ts`) walks the file system directly. `compile-prep` already proved the right model — pre-parse all reachable modules once, hand them to validator and emitter — but it is an optimization, not the path.
+
+**Scope:**
+
+- Introduce `ModuleGraph` (generalization of `CompilePrep`) as the single representation of "all modules reachable from an entry point, parsed once."
+- `parsejaiph(source, filePath)` must remain a pure function `(string, string) => jaiphModule`. No fs calls reachable from `parsejaiph`.
+- `validate(graph)` and `emit(graph, outDir)` must operate entirely in-memory. The `ValidateContext` callback shape (`resolveImportPath`, `existsSync`, `readFile`, `parse`, `workspaceRoot`) is removed.
+- A single discovery routine (`loadModuleGraph(entry, workspaceRoot?)`) replaces `collectTransitiveJhModules`, the cache-population logic in `compile-prep.ts`, and the bespoke re-parse paths inside `validateReferences` / `emitScriptsForModule`.
+- The `prep?` optional parameter on `emitScriptsForModule` and `buildScripts` goes away; both take a `ModuleGraph`.
+- LSP / single-file edits and full compiles must share the same pipeline — only the graph root differs.
+
+**Acceptance criteria** (each verified by a test that fails when violated):
+
+1. `parsejaiph` cannot reach `fs`. A unit test stubs `node:fs` to throw on any call and parses every fixture in `test-fixtures/` and `examples/`; all must succeed.
+2. `validate(graph)` and `emit(graph, outDir)` cannot reach `fs` for source/AST reads (writing emitted scripts is allowed inside `emit`). A unit test stubs `fs.readFileSync`/`fs.existsSync` to throw on any `.jh` path and runs the full pipeline against `test-fixtures/`; all must succeed.
+3. `ValidateContext` is deleted from `src/transpile/validate.ts`; `validateReferences` takes a `ModuleGraph` (or equivalent) only.
+4. Each `.jh` source file in a compile is parsed exactly once. A test instruments `parsejaiph` with a call counter and asserts no duplicate parses across the full pipeline for at least one fixture with transitive imports.
+5. `npm test` and `npm run build` pass. The full golden corpus (`src/transpile/compiler-golden.test.ts`, `src/transpile/compiler-edge.acceptance.test.ts`) passes byte-for-byte against emitted output.
+6. The CLI entry points (`src/cli.ts`, `src/cli/`) and `e2e` tests pass unchanged from a user perspective.
+
+**Out of scope:** changes to the AST shape (Refactor 3), the validator switch structure (Refactor 4), the parser internals (Refactors 1 & 2), and any surface syntax.
+
+***
+
+## Split source-fidelity data from the semantic AST into a Trivia / CST layer #dev-ready
+
+**Design reference:** `design/2026-05-15-parser-compiler-simplification.md` § Appendix A.
+
+**Why:** `WorkflowStepDef` and `jaiphModule` today carry roughly ten fields whose only consumer is the formatter: `leadingComments`, `configLeadingComments`, `trailingTopLevelComments`, `configBodySequence`, `topLevelOrder`, `bareSource`, the `tripleQuoted` flags on literal/return/log/fail/send/const, `bodyKind`, `bodyIdentifier`. Every validator/emitter path has to ignore or thread these through unchanged. Pulling them out before the AST is collapsed (next task) lets the new `Expr` shape be designed against the *semantic* core only.
+
+**Scope:**
+
+- Introduce a `Trivia` layer (parallel map keyed by node id, or a CST node with both a semantic and a syntactic side) that owns all source-fidelity data currently on the AST.
+- Every formatter-only field listed above is removed from `WorkflowStepDef`, `jaiphModule`, `ConstRhs`, `SendRhsDef`, and any other AST type, and re-homed in `Trivia`.
+- `parsejaiph` returns `{ ast, trivia }` (or equivalent) instead of a single fat AST.
+- The formatter is rewritten to read from `Trivia` alongside the AST. No other consumer (validator, emitter, transpiler, runtime) reads `Trivia` at all.
+- Round-trip behavior is bit-for-bit identical for every fixture under `test-fixtures/` and `examples/`.
+
+**Acceptance criteria** (each verified by a test):
+
+1. None of the listed fields appear on any `WorkflowStepDef` variant, `jaiphModule`, `ConstRhs`, `SendRhsDef`, or other semantic AST type. A type-level test fails if any of them reappears.
+2. Validator and emitter source files do not reference `Trivia` or its fields. A grep test fails if they do.
+3. Formatter round-trip is bit-for-bit on every fixture under `test-fixtures/` and `examples/`. Add an explicit test that parses → formats → parses → formats and asserts both formatted outputs match.
+4. `npm test` passes, including formatter round-trip tests and the golden corpus.
+5. `npm run build` passes; TypeScript strict-mode errors are zero.
+
+**Out of scope:** the `Expr` collapse (next task) — this refactor only relocates source-fidelity fields, it does not change the semantic AST's shape. Surface syntax.
+
+**Dependency:** Refactor 5 (ModuleGraph, previous task) should be complete first so the parser is already I/O-pure when its return shape changes.
+
+***
+
+## Collapse `bareIdentifierArgs` into a typed `Arg[]` on every call site #dev-ready
+
+**Design reference:** `design/2026-05-15-parser-compiler-simplification.md` § Appendix D.
+
+**Why:** Every call-bearing AST node carries both `args: string` (raw text) and `bareIdentifierArgs: string[]` (a re-parse of which args happened to be bare identifiers). Validator must remember to check both. Emitter does its own re-parse of `args` because it doesn't trust either field alone. The dual representation is also why the validator has a `validateBareIdentifierArgs` helper called by hand at every site.
+
+**Scope:**
+
+- Introduce a typed `Arg` sum and replace the `args: string` + `bareIdentifierArgs?: string[]` pair on every call-bearing node:
+
+  ```ts
+  type Arg =
+    | { kind: "literal"; raw: string }       // "..." / ${var} / etc., as authored
+    | { kind: "var";     name: string };     // bare identifier reference
+
+  // Call-bearing nodes carry args: Arg[]. No second field.
+  ```
+
+- Parser does the bare-identifier classification once, at parse time. Validator and emitter consume `Arg[]` directly; no re-parse of `args` anywhere downstream.
+- Affected nodes (non-exhaustive): every `WorkflowStepDef` variant with a call (`run`, `ensure`, `return.managed`, `log.managed`, `logerr.managed`, `send.rhs`), every `ConstRhs` capture variant.
+- `validateBareIdentifierArgs` is deleted; its logic moves into the per-step validator that already walks the call.
+
+**Acceptance criteria** (each verified by a test):
+
+1. The field `bareIdentifierArgs` does not appear in any AST type definition under `src/types.ts`. A type-level test fails if it reappears.
+2. No production code under `src/parse/` or `src/transpile/` re-parses the `args` string into bare-identifier components. A grep test fails if `args` is split on `,` or scanned char-by-char outside the tokenizer/parser.
+3. `validateBareIdentifierArgs` is deleted; `validate.ts` contains no equivalent helper. A grep test fails if it reappears.
+4. The full golden corpus passes byte-for-byte: `npm test`, including all `validate-*.test.ts` files and the golden corpus.
+5. `npm run build` passes; TypeScript strict-mode errors are zero.
+
+**Out of scope:** the full `Expr` collapse (next task). Surface syntax. This refactor only changes how call arguments are represented; the call-bearing nodes themselves stay where they are.
+
+**Dependency:** None hard, but easier after the Trivia split (previous task) because the AST is otherwise stable.
+
+***
+
+## Collapse the AST around a single `Expr` type, eliminating the three "managed call" encodings #dev-ready
+
+**Design reference:** `design/2026-05-15-parser-compiler-simplification.md` § Refactor 3.
+
+**Why:** The concept "a managed call that yields a value" is encoded three different ways in `src/types.ts`: as a statement (`{ type: "run", workflow, args }`), as a const RHS (`{ kind: "run_capture", ref, args }`), and as a `managed:` sidecar on `return`/`log`/`logerr` with a placeholder string (e.g. `value: "__match__"`, `value: "run inline_script"`). Inline scripts add a fourth (`run_inline_script_capture`). The same is true for `prompt`, `match`, and `ensure` captures. Validator, formatter, and emitter all have to know about the dual representation.
+
+**Scope:**
+
+- Introduce a single `Expr` sum type (or equivalent) used everywhere a value can appear:
+
+  ```ts
+  type Expr =
+    | { kind: "literal";       raw: string }
+    | { kind: "var";           name: string; field?: string }
+    | { kind: "call";          callee: Ref;   args: Arg[] }
+    | { kind: "ensure_call";   callee: Ref;   args: Arg[] }
+    | { kind: "inline_script"; lang?: string; body: string; args?: Arg[] }
+    | { kind: "prompt";        body: Expr;    returns?: Schema }
+    | { kind: "match";         subject: Expr; arms: MatchArm[] };
+  ```
+
+- Replace `ConstRhs` with `Expr`.
+- Replace `SendRhsDef` with `Expr` (plus the channel arrow itself).
+- `ReturnStep`, `LogStep`, `LogerrStep` become `{ value | message: Expr }`. The placeholder strings `"__match__"`, `"run inline_script"`, etc. are deleted.
+- The `managed:` sidecar field is deleted from `WorkflowStepDef`.
+- `WorkflowStepDef` ends up with ~7 variants (down from 14).
+- All references to the deleted shapes in parser, validator, emitter, and formatter are migrated.
+
+**Acceptance criteria** (each verified by a test):
+
+1. The string literals `"__match__"`, `"run inline_script"`, and any other AST placeholder strings are absent from `src/`. Add a meta-test (e.g. a `grep` test) that fails if any reappear.
+2. `WorkflowStepDef` has at most 8 variants. Add a type-level test (e.g. an exhaustive `switch` in a compile-time assertion file) that fails if a new variant is silently added.
+3. `ConstRhs` and `SendRhsDef` are deleted as separate types; their fields are reachable via `Expr`. A test asserting the export surface of `src/types.ts` fails when those symbols reappear.
+4. Every existing parser path that produced a `managed:` sidecar now produces an `Expr` node, and a new parser test asserts the AST shape directly for `return run …`, `return ensure …`, `return match … { … }`, `return run \`…\`(…)`, `log run \`…\`(…)`, and `const x = prompt …`.
+5. `npm test` passes. The golden corpus (`compiler-golden.test.ts`, `compiler-edge.acceptance.test.ts`) passes byte-for-byte against emitted bash output. The formatter round-trip tests pass byte-for-byte against source.
+6. `npm run build` passes; TypeScript strict-mode errors are zero.
+
+**Out of scope:** surface syntax, the validator's structural rewrite (Refactor 4), parser internals (Refactors 1 & 2). This refactor is purely an AST + producer/consumer migration.
+
+**Dependency:** The Trivia/CST split and `Arg[]` collapse (two previous tasks) should be complete first so the new `Expr` shape is designed against the semantic core only.
+
+***
+
+## Fold the validator's pre-passes (knownVars / promptSchemas / immutableBindings) into a single workflow walk #dev-ready
+
+**Design reference:** `design/2026-05-15-parser-compiler-simplification.md` § Appendix C.
+
+**Why:** `src/transpile/validate.ts` walks each workflow's step tree at least three times before its main check loop runs: `collectKnownVars`, `collectPromptSchemas`, `validateImmutableBindings`. Each re-implements the same recursion over if/for_lines/catch/recover with subtly different rules — bug-fixes to "what counts as a binding here" land in 2–3 walkers.
+
+**Scope:**
+
+- Replace the three pre-passes with a single visitor that descends the workflow once, accumulating `{ knownVars, promptSchemas, bindings }` as it goes.
+- The main per-step validator runs in the same descent (or as a second pass over the accumulated state), but the *structural* recursion over if/for_lines/catch/recover happens exactly once.
+- All existing validation rules and error messages are preserved bit-for-bit.
+
+**Acceptance criteria** (each verified by a test):
+
+1. `collectKnownVars`, `collectPromptSchemas`, and `validateImmutableBindings` are deleted as separate functions. A grep test fails if they reappear by name.
+2. There is exactly one recursion over workflow/rule step trees in `src/transpile/validate.ts`. A test counts recursive helpers that walk `WorkflowStepDef[]` and asserts ≤ 1.
+3. Every existing `E_VALIDATE` error message and location is preserved bit-for-bit. Snapshot test across every `validate-*.test.ts` fixture.
+4. `npm test` passes, including all `validate-*.test.ts` files and the golden corpus.
+
+**Out of scope:** the visitor-table refactor (Refactor 4, two tasks ahead). Changes to validation rules.
+
+**Dependency:** The `Expr` collapse (previous task) should be complete first.
+
+***
+
+## Replace fail-fast errors with a Diagnostics collector that aggregates per compile #dev-ready
+
+**Design reference:** `design/2026-05-15-parser-compiler-simplification.md` § Appendix B.
+
+**Why:** Today `fail()` (in `src/parse/core.ts`) and `jaiphError()` (in `src/errors.ts`) both throw on the first error. Users fix one error, recompile, fix the next, recompile. The validator also pre-orders some checks defensively because it knows it will only get to surface one error. A diagnostics collector lets the parser and validator append errors and the run report the full set at the end.
+
+**Scope:**
+
+- Introduce `class Diagnostics { errors: JaiphDiagnostic[]; add(...); hasFatal(): boolean; report(): never | void }` (or equivalent).
+- Parser and validator append diagnostics instead of throwing for non-fatal errors. A "fatal" tier remains for cases where continuing would produce garbage AST (unterminated triple-quote, unterminated brace block).
+- At the end of a compile, `Diagnostics.report()` either prints all collected errors sorted by file/line and exits non-zero, or returns cleanly. The CLI surfaces the full set instead of just the first.
+- Existing call sites of `fail()` / `jaiphError()` migrate to `diagnostics.add(...)` where the error is recoverable.
+
+**Acceptance criteria** (each verified by a test):
+
+1. A fixture containing **N ≥ 3 independent errors** (e.g. an undefined channel, a duplicate import alias, and an unknown ref in a `run` call) reports all N errors in one compile, not just the first. Add a test that asserts the full set is reported in source order.
+2. The existing single-error tests still pass: every `parse-*.test.ts` and `validate-*.test.ts` fixture that asserts a specific `{ message, line, col, code }` still gets exactly that error (now the only one in `Diagnostics`).
+3. `fail()` and `jaiphError()` throwing call-sites are reduced to a documented "fatal" subset (count it in the test). Non-fatal call-sites use the collector.
+4. CLI exit code on any non-empty `Diagnostics` is non-zero. Add an `e2e` or CLI test.
+5. `npm test` and `npm run build` pass.
+
+**Out of scope:** changing what counts as an error (the *what*) — this refactor only changes the *how*. LSP integration (a follow-up).
+
+**Dependency:** None hard, but cheapest to do immediately before the visitor-table validator refactor (next task), since the new visitor's per-step entry/exit is the natural place to plug in the collector.
+
+***
+
+## Replace the 1,441-line validator switch with a per-step visitor table indexed by scope #dev-ready
+
+**Design reference:** `design/2026-05-15-parser-compiler-simplification.md` § Refactor 4.
+
+**Why:** `src/transpile/validate.ts` is one function with two near-identical inner walkers (`validateRuleStep` ~250 lines, `validateStep` ~350 lines). Each step type's validation is written twice with subtle differences, and the 5-check sequence (`validateNoShellRedirection` → `validateNestedManagedCallArgs` → `validateRef` → `validateArity` → `validateBareIdentifierArgs`) is repeated by hand at 6+ sites per side — at least 12 places to keep in sync.
+
+**Scope:**
+
+- Replace the two inner walkers with a single AST visitor parameterized by a `Scope` value:
+  - `Scope` carries `allow: Set<StepType>`, `refSpec: RefSpec`, and any other rule-vs-workflow differences.
+  - A `VALIDATORS: Record<StepType, Validator>` table holds one validator per step type, written once.
+  - `validateCallStep("run" | "ensure")` is a single helper invoked by both `run` and `ensure` validators with different ref-spec / arity-kind arguments.
+- The 5-check sequence is encapsulated in one helper (`validateManagedCallShape` or similar) invoked from each call-bearing validator.
+- "Is this step allowed in this scope?" becomes a single set-lookup at the top of the visitor, not three throw sites.
+- All existing error messages and error codes (`E_VALIDATE`, etc.) are preserved verbatim — both content and source location (line/col) must match what users see today.
+
+**Acceptance criteria** (each verified by a test):
+
+1. `src/transpile/validate.ts` is at most 700 lines (down from 1,441). Add a CI check (or test) that fails if it exceeds the bound.
+2. `validateReferences` contains exactly one step-walking function. A grep test fails if a second walker is introduced.
+3. Every `E_VALIDATE` error message and error location produced today is produced bit-for-bit by the new code. Add a snapshot-style test over every `validate-*.test.ts` fixture asserting `{ message, line, col, code }` matches the pre-refactor output.
+4. Adding a new step type requires adding exactly one row to `VALIDATORS` and (if needed) updating the `Scope.allow` sets. Add a test that introduces a synthetic step type behind a test-only flag and asserts the validator rejects it with a single expected message until the row is added.
+5. `npm test` passes (all of `validate-immutable-bindings.test.ts`, `validate-managed-calls.test.ts`, `validate-match.test.ts`, `validate-prompt-schema.test.ts`, `validate-ref-resolution.test.ts`, `validate-run-async.test.ts`, `validate-string.test.ts`, `validate-substitution.test.ts`, `validate-type-crossing.test.ts`, plus the golden corpus).
+
+**Out of scope:** changes to validation rules (the *what*) — this refactor only changes the *how*. Parser changes. AST changes (Refactor 3 must already be merged).
+
+**Dependency:** Refactor 3 (Expr collapse) and the single-pass-walk + Diagnostics tasks (previous two) must be complete first; otherwise the new visitor still needs to special-case the `managed:` sidecar and the pre-pass-walker pattern.
+
+***
+
+## Decouple the validator from runtime semantics #dev-ready
+
+**Design reference:** `design/2026-05-15-parser-compiler-simplification.md` § Appendix E.
+
+**Why:** `src/transpile/validate.ts` imports `tripleQuotedRawForRuntime` from `src/runtime/orchestration-text.ts` so it can compute "what the runtime will see" when validating string content. That is a one-way dependency from compile-time on runtime semantics — a layering inversion that will keep biting if the runtime grows more such helpers.
+
+**Scope:**
+
+- Move the canonicalization of triple-quoted strings (currently `tripleQuotedRawForRuntime`) into a parser-side helper (e.g. `src/parse/triple-quote.ts:canonicalizeTripleQuotedString`).
+- The validator imports from `src/parse/`, not `src/runtime/`.
+- The runtime, if it still needs the same canonical form at runtime, imports from `src/parse/` as well (or the canonical form is baked in at compile time by the emitter).
+- Any other `validate*.ts → runtime/*` imports get the same treatment.
+
+**Acceptance criteria** (each verified by a test):
+
+1. No file under `src/transpile/` imports from `src/runtime/`. A grep test fails if any such import appears.
+2. The canonical string for every triple-quoted form in `test-fixtures/` and `examples/` is bit-for-bit unchanged before and after the move. A test compares pre/post output for every fixture.
+3. `npm test` passes, including the golden corpus and all `validate-string.test.ts` cases.
+4. `npm run build` passes; TypeScript strict-mode errors are zero.
+
+**Out of scope:** rethinking what the canonical form *is*. This refactor only relocates the helper.
+
+**Dependency:** None.
+
+***
+
+## Unify `catch` and `recover` parsing into a single attached-block routine #dev-ready
+
+**Design reference:** `design/2026-05-15-parser-compiler-simplification.md` § Refactor 2.
+
+**Why:** `src/parse/steps.ts` contains three near-identical 100+ line functions — `parseEnsureStep`, `parseRunCatchStep`, `parseRunRecoverStep` — that parse the same syntactic shape (`<host-step> <keyword> (binding) { body } | single-stmt`) and differ only in which host step they decorate and the literal keyword. Their body parser, `parseCatchStatement` (~280 lines), re-implements a stripped-down version of `parseBlockStatement` with diverging coverage.
+
+**Scope:**
+
+- Replace `parseEnsureStep`, `parseRunCatchStep`, `parseRunRecoverStep`, and `parseCatchStatement` with:
+  - `parseAttachedBlock(keyword: "catch" | "recover", host: WorkflowStepDef)` returning `{ bindings, body: WorkflowStepDef[] }`.
+  - A body parsed by the **same** `parseBlockStatement` used at the top level — no mini parser.
+- All four functions and any helpers that exist only to serve them are deleted from `src/parse/steps.ts`.
+- "Is this statement allowed inside a catch/recover body?" is a validator concern after this refactor, not enforced by which mini-parser branches happen to fire.
+
+**Acceptance criteria** (each verified by a test):
+
+1. `src/parse/steps.ts` is at most 200 lines (down from 757), and contains no function whose name matches `/parse(Run)?(Catch|Recover|EnsureStep)/`. A grep/size test fails if either bound is violated.
+2. `parseBlockStatement` is the single entry point for any statement appearing inside a catch or recover body. Add a test that introduces a new statement form (behind a test-only flag) and asserts it is accepted identically at top level and inside `catch (e) { … }` and `recover(e) { … }` without parser changes inside the catch/recover code path.
+3. Every existing parse error message and location related to `catch` / `recover` (bindings missing, too many bindings, unterminated block, etc.) is preserved bit-for-bit. Snapshot test over `parse-*.test.ts` fixtures.
+4. The full parser/validator/emitter golden corpus passes byte-for-byte: `npm test`, including `parse-steps.test.ts`, `parse-bare-call.test.ts`, `parse-run-async.test.ts`, `compiler-golden.test.ts`, `compiler-edge.acceptance.test.ts`.
+
+**Out of scope:** the wider tokenizer rewrite (next task) — this task explicitly stays on the line-walking parser, since the goal is incremental simplification. Validator changes beyond minor message preservation.
+
+**Dependency:** Refactor 3 (AST collapse) should be complete first so the unified parser emits `Expr` nodes directly. If it is not, this task may proceed but must avoid introducing new producers of the deprecated `managed:` sidecar.
+
+***
+
+## Replace the line-by-line ad-hoc parser with a tokenizer + recursive-descent parser #dev-ready
+
+**Design reference:** `design/2026-05-15-parser-compiler-simplification.md` § Refactor 1.
+
+**Why:** The current parser walks `lines: string[]`, returns `{ step, nextIdx }` from every routine, and dispatches statements via a long cascade of `startsWith` + regex in `parseBlockStatement` (`src/parse/workflow-brace.ts:102-615`). Order matters — `"run async "` before `"run "`, etc. Quote/triple-quote/backtick/fence/brace state is re-implemented from scratch in at least seven independent scanners across `src/parse/`. Adding a new keyword or fixing a string-aware scanner means changes in multiple places.
+
+**Scope:**
+
+- Introduce a tokenizer (`src/parse/tokenize.ts` or similar) that owns *all* scanning state: identifiers, keywords, string literals (single + triple-quoted), backtick bodies, fenced code blocks, line comments, braces, parens, the send arrow `<-`, the match arm arrow `=>`, etc.
+- Introduce a recursive-descent parser that consumes the token stream and dispatches via a `STATEMENT: Record<Keyword, StatementParser>` table.
+- All ad-hoc scanners in `src/parse/` are deleted: `splitCatchStatements` (if still present), `splitStatementsOnSemicolons`, `matchSendOperator`, `hasUnquotedSendArrow`, `indexOfClosingDoubleQuote`, `stripQuotedArgContent`, `parseSendRhs`'s internal scanner, and any `inDoubleQuote` / `inTripleQuote` / `braceDepth` state machines outside the tokenizer.
+- Surface syntax is unchanged. Error messages and error locations are preserved bit-for-bit where the existing tests assert them, and at minimum match in `code` + `line` + `col` everywhere else.
+- Staging: it is acceptable (and recommended) to land the new parser behind a flag, run both parsers on the golden corpus in CI, diff their ASTs, and remove the old parser only once the diff is empty.
+
+**Acceptance criteria** (each verified by a test):
+
+1. `src/parse/` is at most 4,000 lines total (down from ~8,150), excluding test files. A CI check fails if exceeded.
+2. The substrings `inDoubleQuote`, `inTripleQuote`, `braceDepth` appear only inside the tokenizer module. A grep test fails if any of those state-tracking idioms appear in other files under `src/parse/` or `src/transpile/`.
+3. `parseBlockStatement` (or whatever the equivalent dispatcher is in the new parser) dispatches via a table, not a cascade. The size of any single function in `src/parse/` is bounded — no function exceeds 120 lines. A test computing function lengths fails if exceeded.
+4. Every existing parse-error location and message asserted by `src/parse/parse-*.test.ts` matches verbatim. Add a snapshot test that re-emits `{ code, message, line, col }` for every error fixture and fails on any diff.
+5. Adding a new top-level keyword (e.g. a synthetic `noop` for the test) requires changes in exactly two files (the tokenizer's keyword set + the `STATEMENT` table). A test introduces a synthetic keyword behind a flag and asserts it parses without touching any other file.
+6. The full golden corpus passes byte-for-byte: `npm test`, including `compiler-golden.test.ts`, `compiler-edge.acceptance.test.ts`, all `parse-*.test.ts` files, and the formatter round-trip tests.
+7. `npm run build` passes; TypeScript strict-mode errors are zero.
+
+**Out of scope:** adopting a parser generator (the grammar is small and the line-oriented language sensibility maps cleanly to a hand-written tokenizer). Surface syntax changes. Runtime / `runtime/` changes.
+
+**Dependency:** All previous tasks (Refactors 5, 3, 4, 2 plus all five appendix tasks) should be complete first so the new parser only has to target one AST shape and the validator does not need to special-case parser quirks during the transition.
+
+***
