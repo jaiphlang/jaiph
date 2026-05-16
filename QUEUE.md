@@ -13,31 +13,6 @@ Process rules:
 
 ***
 
-## Fold the validator's pre-passes (knownVars / promptSchemas / immutableBindings) into a single workflow walk #dev-ready
-
-**Design reference:** `design/2026-05-15-parser-compiler-simplification.md` § Appendix C.
-
-**Why:** `src/transpile/validate.ts` walks each workflow's step tree at least three times before its main check loop runs: `collectKnownVars`, `collectPromptSchemas`, `validateImmutableBindings`. Each re-implements the same recursion over if/for_lines/catch/recover with subtly different rules — bug-fixes to "what counts as a binding here" land in 2–3 walkers.
-
-**Scope:**
-
-- Replace the three pre-passes with a single visitor that descends the workflow once, accumulating `{ knownVars, promptSchemas, bindings }` as it goes.
-- The main per-step validator runs in the same descent (or as a second pass over the accumulated state), but the *structural* recursion over if/for_lines/catch/recover happens exactly once.
-- All existing validation rules and error messages are preserved bit-for-bit.
-
-**Acceptance criteria** (each verified by a test):
-
-1. `collectKnownVars`, `collectPromptSchemas`, and `validateImmutableBindings` are deleted as separate functions. A grep test fails if they reappear by name.
-2. There is exactly one recursion over workflow/rule step trees in `src/transpile/validate.ts`. A test counts recursive helpers that walk `WorkflowStepDef[]` and asserts ≤ 1.
-3. Every existing `E_VALIDATE` error message and location is preserved bit-for-bit. Snapshot test across every `validate-*.test.ts` fixture.
-4. `npm test` passes, including all `validate-*.test.ts` files and the golden corpus.
-
-**Out of scope:** the visitor-table refactor (Refactor 4, two tasks ahead). Changes to validation rules.
-
-**Dependency:** The `Expr` collapse (previous task) should be complete first.
-
-***
-
 ## Replace fail-fast errors with a Diagnostics collector that aggregates per compile #dev-ready
 
 **Design reference:** `design/2026-05-15-parser-compiler-simplification.md` § Appendix B.
