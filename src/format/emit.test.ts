@@ -1,11 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { parsejaiph } from "../parser";
+import { parsejaiphWithTrivia } from "../parser";
 import { emitModule } from "./emit";
 
 function roundTrip(source: string, filePath = "test.jh"): string {
-  const mod = parsejaiph(source, filePath);
-  return emitModule(mod);
+  const { ast, trivia } = parsejaiphWithTrivia(source, filePath);
+  return emitModule(ast, trivia);
 }
 
 describe("emitModule", () => {
@@ -166,8 +166,8 @@ describe("emitModule", () => {
       "}",
       "",
     ].join("\n");
-    const mod = parsejaiph(input, "test.jh");
-    assert.equal(emitModule(mod, { indent: 4 }), expected);
+    const { ast, trivia } = parsejaiphWithTrivia(input, "test.jh");
+    assert.equal(emitModule(ast, trivia, { indent: 4 }), expected);
   });
 
   it("reorders out-of-order definitions to canonical order", () => {

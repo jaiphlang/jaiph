@@ -26,7 +26,6 @@ import {
   extractDotFieldRefs,
 } from "./validate-string";
 import { validatePromptReturnsSchema, validatePromptStepReturns } from "./validate-prompt-schema";
-import { dedentCommonLeadingWhitespace } from "../parse/dedent";
 import { matchSendOperator } from "../parse/core";
 import { tripleQuotedRawForRuntime } from "../runtime/orchestration-text";
 
@@ -611,10 +610,13 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
     return m?.[1];
   };
 
-  /** Inner string for validation: same margin removal as runtime for `"""` orchestration text. */
-  const semanticQuotedOrchestrationInner = (dqRaw: string, tripleQuoted: boolean): string => {
-    if (!tripleQuoted) return stripDQ(dqRaw);
-    return stripDQ(tripleQuotedRawForRuntime(dqRaw));
+  /** Inner string for validation. Triple-quoted bodies are pre-dedented by the parser. */
+  const semanticQuotedOrchestrationInner = (dqRaw: string): string => stripDQ(dqRaw);
+
+  /** Detect `prompt <identifier>` form from raw `"${identifier}"` shape. */
+  const promptBareIdentifier = (raw: string): string | undefined => {
+    const m = raw.match(/^"\$\{([A-Za-z_][A-Za-z0-9_]*)\}"$/);
+    return m?.[1];
   };
 
   /** Parse field names from a returns schema string like '{ name: string, age: number }'. */
@@ -762,8 +764,8 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
         return;
       }
       if (s.type === "fail") {
-        validateFailString(s.message, ast.filePath, s.loc.line, s.loc.col, { tripleQuoted: s.tripleQuoted });
-        const failInner = semanticQuotedOrchestrationInner(s.message, s.tripleQuoted === true);
+        validateFailString(s.message, ast.filePath, s.loc.line, s.loc.col);
+        const failInner = semanticQuotedOrchestrationInner(s.message);
         validateRuleStringCaptures(failInner, s.loc);
         validateSimpleInterpolationIdentifiers(
           failInner,
@@ -781,8 +783,8 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
       }
       if (s.type === "log") {
         if (s.managed?.kind === "run_inline_script") return; // inline script — no ref to validate
-        validateLogString(s.message, ast.filePath, s.loc.line, s.loc.col, "log", { tripleQuoted: s.tripleQuoted });
-        const logRuleInner = s.tripleQuoted ? dedentCommonLeadingWhitespace(s.message) : s.message;
+        validateLogString(s.message, ast.filePath, s.loc.line, s.loc.col, "log");
+        const logRuleInner = s.message;
         validateRuleStringCaptures(logRuleInner, s.loc);
         validateSimpleInterpolationIdentifiers(
           logRuleInner,
@@ -800,10 +802,8 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
       }
       if (s.type === "logerr") {
         if (s.managed?.kind === "run_inline_script") return; // inline script — no ref to validate
-        validateLogString(s.message, ast.filePath, s.loc.line, s.loc.col, "logerr", {
-          tripleQuoted: s.tripleQuoted,
-        });
-        const logerrRuleInner = s.tripleQuoted ? dedentCommonLeadingWhitespace(s.message) : s.message;
+        validateLogString(s.message, ast.filePath, s.loc.line, s.loc.col, "logerr");
+        const logerrRuleInner = s.message;
         validateRuleStringCaptures(logerrRuleInner, s.loc);
         validateSimpleInterpolationIdentifiers(
           logerrRuleInner,
@@ -840,9 +840,9 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
           }
           // run_inline_script — no ref to validate
         } else {
-          validateReturnString(s.value, ast.filePath, s.loc.line, s.loc.col, { tripleQuoted: s.tripleQuoted });
+          validateReturnString(s.value, ast.filePath, s.loc.line, s.loc.col);
           if (s.value.startsWith('"')) {
-            const retRuleInner = semanticQuotedOrchestrationInner(s.value, s.tripleQuoted === true);
+            const retRuleInner = semanticQuotedOrchestrationInner(s.value);
             validateRuleStringCaptures(retRuleInner, s.loc);
             validateSimpleInterpolationIdentifiers(
               retRuleInner,
@@ -1108,14 +1108,13 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
         return;
       }
       if (s.type === "prompt") {
-        if (s.bodyKind === "identifier" && s.bodyIdentifier && localScripts.has(s.bodyIdentifier)) {
-          throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `scripts are not promptable; "${s.bodyIdentifier}" is a script — use a string const instead`);
+        const promptIdent = promptBareIdentifier(s.raw);
+        if (promptIdent && localScripts.has(promptIdent)) {
+          throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `scripts are not promptable; "${promptIdent}" is a script — use a string const instead`);
         }
-        validatePromptString(s.raw, ast.filePath, s.loc.line, s.loc.col, {
-          tripleQuoted: s.bodyKind === "triple_quoted",
-        });
+        validatePromptString(s.raw, ast.filePath, s.loc.line, s.loc.col);
         validatePromptStepReturns(s, ast.filePath);
-        const promptInner = semanticQuotedOrchestrationInner(s.raw, s.bodyKind === "triple_quoted");
+        const promptInner = semanticQuotedOrchestrationInner(s.raw);
         validateWorkflowStringCaptures(promptInner, s.loc);
         validateDotFieldRefs(promptInner, s.loc, promptSchemas);
         validateSimpleInterpolationIdentifiers(
@@ -1134,10 +1133,8 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
       }
       if (s.type === "log") {
         if (s.managed?.kind === "run_inline_script") return; // inline script — no ref to validate
-        validateLogString(s.message, ast.filePath, s.loc.line, s.loc.col, "log", {
-          tripleQuoted: s.tripleQuoted,
-        });
-        const logInner = s.tripleQuoted ? dedentCommonLeadingWhitespace(s.message) : s.message;
+        validateLogString(s.message, ast.filePath, s.loc.line, s.loc.col, "log");
+        const logInner = s.message;
         validateWorkflowStringCaptures(logInner, s.loc);
         validateDotFieldRefs(logInner, s.loc, promptSchemas);
         validateSimpleInterpolationIdentifiers(
@@ -1156,10 +1153,8 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
       }
       if (s.type === "logerr") {
         if (s.managed?.kind === "run_inline_script") return; // inline script — no ref to validate
-        validateLogString(s.message, ast.filePath, s.loc.line, s.loc.col, "logerr", {
-          tripleQuoted: s.tripleQuoted,
-        });
-        const logerrInner = s.tripleQuoted ? dedentCommonLeadingWhitespace(s.message) : s.message;
+        validateLogString(s.message, ast.filePath, s.loc.line, s.loc.col, "logerr");
+        const logerrInner = s.message;
         validateWorkflowStringCaptures(logerrInner, s.loc);
         validateDotFieldRefs(logerrInner, s.loc, promptSchemas);
         validateSimpleInterpolationIdentifiers(
@@ -1197,9 +1192,9 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
           }
           return;
         }
-        validateReturnString(s.value, ast.filePath, s.loc.line, s.loc.col, { tripleQuoted: s.tripleQuoted });
+        validateReturnString(s.value, ast.filePath, s.loc.line, s.loc.col);
         if (s.value.startsWith('"')) {
-          const retInner = semanticQuotedOrchestrationInner(s.value, s.tripleQuoted === true);
+          const retInner = semanticQuotedOrchestrationInner(s.value);
           validateWorkflowStringCaptures(retInner, s.loc);
           validateDotFieldRefs(retInner, s.loc, promptSchemas);
           validateSimpleInterpolationIdentifiers(
@@ -1218,8 +1213,8 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
         return;
       }
       if (s.type === "fail") {
-        validateFailString(s.message, ast.filePath, s.loc.line, s.loc.col, { tripleQuoted: s.tripleQuoted });
-        const failWfInner = semanticQuotedOrchestrationInner(s.message, s.tripleQuoted === true);
+        validateFailString(s.message, ast.filePath, s.loc.line, s.loc.col);
+        const failWfInner = semanticQuotedOrchestrationInner(s.message);
         validateWorkflowStringCaptures(failWfInner, s.loc);
         validateDotFieldRefs(failWfInner, s.loc, promptSchemas);
         validateSimpleInterpolationIdentifiers(
@@ -1256,16 +1251,15 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
 
           validateBareIdentifierArgs(ast.filePath, v.ref.loc, v.bareIdentifierArgs, wfKnownVars, recoverBindings);
         } else if (v.kind === "prompt_capture") {
-          if (v.bodyKind === "identifier" && v.bodyIdentifier && localScripts.has(v.bodyIdentifier)) {
-            throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `scripts are not promptable; "${v.bodyIdentifier}" is a script — use a string const instead`);
+          const promptIdent = promptBareIdentifier(v.raw);
+          if (promptIdent && localScripts.has(promptIdent)) {
+            throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `scripts are not promptable; "${promptIdent}" is a script — use a string const instead`);
           }
-          validatePromptString(v.raw, ast.filePath, s.loc.line, s.loc.col, {
-            tripleQuoted: v.bodyKind === "triple_quoted",
-          });
+          validatePromptString(v.raw, ast.filePath, s.loc.line, s.loc.col);
           if (v.returns !== undefined) {
             validatePromptReturnsSchema(v.returns, ast.filePath, s.loc.line, s.loc.col);
           }
-          const pcInner = semanticQuotedOrchestrationInner(v.raw, v.bodyKind === "triple_quoted");
+          const pcInner = semanticQuotedOrchestrationInner(v.raw);
           validateWorkflowStringCaptures(pcInner, s.loc);
           validateDotFieldRefs(pcInner, s.loc, promptSchemas);
           validateSimpleInterpolationIdentifiers(
@@ -1289,7 +1283,7 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
           if (scriptName && localScripts.has(scriptName)) {
             throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `scripts are not values; "${scriptName}" is a script definition`);
           }
-          const exprInner = semanticQuotedOrchestrationInner(v.bashRhs, v.tripleQuoted === true);
+          const exprInner = semanticQuotedOrchestrationInner(v.bashRhs);
           validateWorkflowStringCaptures(exprInner, s.loc);
           validateDotFieldRefs(exprInner, s.loc, promptSchemas);
           validateSimpleInterpolationIdentifiers(

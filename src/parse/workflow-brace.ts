@@ -1,4 +1,5 @@
 import type { WorkflowMetadata, WorkflowStepDef } from "../types";
+import { createTrivia, type Trivia } from "./trivia";
 import {
   colFromRaw,
   fail,
@@ -9,7 +10,7 @@ import {
   parseLogMessageRhs,
   rejectTrailingContent,
 } from "./core";
-import { consumeTripleQuotedArg, tripleQuoteBodyToRaw } from "./triple-quote";
+import { consumeTripleQuotedArg, dedentTripleQuotedBody, tripleQuoteBodyToRaw } from "./triple-quote";
 import { parseConstRhs } from "./const-rhs";
 import { parseAnonymousInlineScript } from "./inline-script";
 import { parseConfigBlock } from "./metadata";
@@ -37,6 +38,7 @@ export function parseBraceBlockBody(
   lines: string[],
   startIdx: number,
   openerLineNo: number,
+  trivia: Trivia = createTrivia(),
   opts?: BlockParseOpts,
 ): { steps: WorkflowStepDef[]; nextIdx: number } {
   const steps: WorkflowStepDef[] = [];
@@ -72,7 +74,7 @@ export function parseBraceBlockBody(
       if (hadNonCommentStep) {
         fail(filePath, "config block inside workflow must appear before any steps", innerNo);
       }
-      const { metadata, nextIndex } = parseConfigBlock(filePath, lines, idx);
+      const { metadata, nextIndex } = parseConfigBlock(filePath, lines, idx, trivia);
       opts.onConfigBlock(metadata, innerNo);
       idx = nextIndex;
       continue;
@@ -89,7 +91,7 @@ export function parseBraceBlockBody(
       );
     }
     hadNonCommentStep = true;
-    const one = parseBlockStatement(filePath, lines, idx, opts);
+    const one = parseBlockStatement(filePath, lines, idx, trivia, opts);
     steps.push(one.step);
     idx = one.nextIdx;
   }
@@ -103,6 +105,7 @@ export function parseBlockStatement(
   filePath: string,
   lines: string[],
   idx: number,
+  trivia: Trivia = createTrivia(),
   opts?: BlockParseOpts,
 ): { step: WorkflowStepDef; nextIdx: number } {
   const innerRaw = lines[idx];
@@ -145,7 +148,7 @@ export function parseBlockStatement(
       fail(filePath, `operator "${operator}" requires a regex operand (/pattern/), not a string`, innerNo, ifLoc.col);
     }
 
-    const { steps: body, nextIdx } = parseBraceBlockBody(filePath, lines, idx + 1, innerNo);
+    const { steps: body, nextIdx } = parseBraceBlockBody(filePath, lines, idx + 1, innerNo, trivia);
     return {
       step: { type: "if", subject, operator, operand, body, loc: ifLoc },
       nextIdx,
@@ -166,7 +169,7 @@ export function parseBlockStatement(
     const iterVar = forHead[1];
     const sourceVar = forHead[2];
     const forLoc = { line: innerNo, col: innerRaw.indexOf("for") + 1 };
-    const { steps: body, nextIdx } = parseBraceBlockBody(filePath, lines, idx + 1, innerNo, opts);
+    const { steps: body, nextIdx } = parseBraceBlockBody(filePath, lines, idx + 1, innerNo, trivia, opts);
     return {
       step: { type: "for_lines", iterVar, sourceVar, body, loc: forLoc },
       nextIdx,
@@ -186,7 +189,7 @@ export function parseBlockStatement(
     const name = constMatch[1];
     const rhs = constMatch[2].trim();
     const { value, nextLineIdx } = parseConstRhs(
-      filePath, lines, idx, rhs, innerNo, innerRaw.indexOf(rhs) + 1, forRule, name,
+      filePath, lines, idx, rhs, innerNo, innerRaw.indexOf(rhs) + 1, forRule, name, trivia,
     );
     const nextLine = nextLineIdx > idx ? nextLineIdx + 1 : idx + 1;
     return {
@@ -201,11 +204,10 @@ export function parseBlockStatement(
     const failCol = innerRaw.indexOf("fail") + 1;
     if (arg.startsWith('"""')) {
       const { body, nextIdx } = consumeTripleQuotedArg(filePath, lines, idx, arg);
-      const message = tripleQuoteBodyToRaw(body);
-      return {
-        step: { type: "fail", message, tripleQuoted: true, loc: { line: innerNo, col: failCol } },
-        nextIdx,
-      };
+      const message = tripleQuoteBodyToRaw(dedentTripleQuotedBody(body));
+      const step = { type: "fail" as const, message, loc: { line: innerNo, col: failCol } };
+      trivia.setNode(step, { tripleQuoted: true, rawBody: body });
+      return { step, nextIdx };
     }
     if (!arg.startsWith('"')) {
       fail(filePath, 'fail must match: fail "<reason>" or fail """..."""', innerNo, failCol);
@@ -232,7 +234,7 @@ export function parseBlockStatement(
     const ensureBody = inner.slice("ensure ".length).trim();
     const r = parseEnsureStep(
       filePath, lines, idx, innerNo, innerRaw,
-      ensureBody,
+      ensureBody, undefined, trivia,
     );
     return { step: r.step, nextIdx: r.nextIdx + 1 };
   }
@@ -243,7 +245,7 @@ export function parseBlockStatement(
       fail(filePath, "run async is not supported with inline scripts", innerNo, innerRaw.indexOf("run") + 1);
     }
     // run async ... recover(name) { ... }
-    const recoverResult = parseRunRecoverStep(filePath, lines, idx, innerNo, innerRaw, runBody);
+    const recoverResult = parseRunRecoverStep(filePath, lines, idx, innerNo, innerRaw, runBody, undefined, trivia);
     if (recoverResult && recoverResult.step.type === "run") {
       return {
         step: { ...recoverResult.step, async: true },
@@ -251,7 +253,7 @@ export function parseBlockStatement(
       };
     }
     // run async ... catch(name) { ... }
-    const catchResult = parseRunCatchStep(filePath, lines, idx, innerNo, innerRaw, runBody);
+    const catchResult = parseRunCatchStep(filePath, lines, idx, innerNo, innerRaw, runBody, undefined, trivia);
     if (catchResult && catchResult.step.type === "run") {
       return {
         step: { ...catchResult.step, async: true },
@@ -298,12 +300,12 @@ export function parseBlockStatement(
       fail(filePath, 'inline script syntax has changed: use run `body`(args) instead of run script(args) "body"', innerNo);
     }
     // Check for run ... recover (loop semantics)
-    const recoverResult = parseRunRecoverStep(filePath, lines, idx, innerNo, innerRaw, runBody);
+    const recoverResult = parseRunRecoverStep(filePath, lines, idx, innerNo, innerRaw, runBody, undefined, trivia);
     if (recoverResult) {
       return { step: recoverResult.step, nextIdx: recoverResult.nextIdx + 1 };
     }
     // Check for run ... catch
-    const catchResult = parseRunCatchStep(filePath, lines, idx, innerNo, innerRaw, runBody);
+    const catchResult = parseRunCatchStep(filePath, lines, idx, innerNo, innerRaw, runBody, undefined, trivia);
     if (catchResult) {
       return { step: catchResult.step, nextIdx: catchResult.nextIdx + 1 };
     }
@@ -342,7 +344,7 @@ export function parseBlockStatement(
   if (inner.startsWith("prompt ")) {
     const promptCol = innerRaw.indexOf("prompt") + 1;
     const promptArg = innerRaw.slice(innerRaw.indexOf("prompt") + "prompt".length).trimStart();
-    const result = parsePromptStep(filePath, lines, idx, promptArg, promptCol);
+    const result = parsePromptStep(filePath, lines, idx, promptArg, promptCol, undefined, trivia);
     return { step: result.step, nextIdx: result.nextLineIdx + 1 };
   }
 
@@ -392,7 +394,9 @@ export function parseBlockStatement(
     }
     if (logArg.startsWith('"""')) {
       const { body, nextIdx } = consumeTripleQuotedArg(filePath, lines, idx, logArg);
-      return { step: { type: "log", message: body, tripleQuoted: true, loc: { line: innerNo, col: logCol } }, nextIdx };
+      const step = { type: "log" as const, message: dedentTripleQuotedBody(body), loc: { line: innerNo, col: logCol } };
+      trivia.setNode(step, { tripleQuoted: true, rawBody: body });
+      return { step, nextIdx };
     }
     if (logArg.startsWith('"') && !hasUnescapedClosingQuote(logArg, 1)) {
       fail(filePath, 'multiline strings use triple quotes: log """..."""', innerNo, logCol);
@@ -428,7 +432,9 @@ export function parseBlockStatement(
     }
     if (logerrArg.startsWith('"""')) {
       const { body, nextIdx } = consumeTripleQuotedArg(filePath, lines, idx, logerrArg);
-      return { step: { type: "logerr", message: body, tripleQuoted: true, loc: { line: innerNo, col: logerrCol } }, nextIdx };
+      const step = { type: "logerr" as const, message: dedentTripleQuotedBody(body), loc: { line: innerNo, col: logerrCol } };
+      trivia.setNode(step, { tripleQuoted: true, rawBody: body });
+      return { step, nextIdx };
     }
     if (logerrArg.startsWith('"') && !hasUnescapedClosingQuote(logerrArg, 1)) {
       fail(filePath, 'multiline strings use triple quotes: logerr """..."""', innerNo, logerrCol);
@@ -455,10 +461,13 @@ export function parseBlockStatement(
     // return """..."""
     if (returnValue.startsWith('"""')) {
       const { body, nextIdx } = consumeTripleQuotedArg(filePath, lines, idx, returnValue);
-      return {
-        step: { type: "return", value: tripleQuoteBodyToRaw(body), tripleQuoted: true, loc: retLoc },
-        nextIdx,
+      const step = {
+        type: "return" as const,
+        value: tripleQuoteBodyToRaw(dedentTripleQuotedBody(body)),
+        loc: retLoc,
       };
+      trivia.setNode(step, { tripleQuoted: true, rawBody: body });
+      return { step, nextIdx };
     }
     // return match var { ... }
     const returnMatchHead = returnValue.match(/^match\s+(.+?)\s*\{\s*$/);
@@ -561,13 +570,12 @@ export function parseBlockStatement(
         : isBare
           ? bareIdentifierToQuotedString(returnValue)
           : returnValue;
+      const step = { type: "return" as const, value, loc: retLoc };
+      if (isBareDotted || isBare) {
+        trivia.setNode(step, { bareSource: returnValue.trim() });
+      }
       return {
-        step: {
-          type: "return",
-          value,
-          loc: retLoc,
-          ...(isBareDotted || isBare ? { bareSource: returnValue.trim() } : {}),
-        },
+        step,
         nextIdx: idx + 1,
       };
     }
@@ -592,7 +600,7 @@ export function parseBlockStatement(
     }
     const arrowIdx = inner.indexOf("<-");
     const rhsCol = arrowIdx >= 0 ? arrowIdx + 3 : 1;
-    const { rhs, nextIdx: sendNextIdx } = parseSendRhs(filePath, sendMatch.rhsText, innerNo, rhsCol, lines, idx);
+    const { rhs, nextIdx: sendNextIdx } = parseSendRhs(filePath, sendMatch.rhsText, innerNo, rhsCol, lines, idx, trivia);
     return {
       step: {
         type: "send",

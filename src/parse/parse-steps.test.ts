@@ -148,7 +148,6 @@ test("parseEnsureStep: multiline catch block with triple-quoted prompt", () => {
     const p = step.catch.block[1];
     assert.equal(p.type, "prompt");
     if (p.type === "prompt") {
-      assert.equal(p.bodyKind, "triple_quoted");
       assert.ok(p.raw.includes("fix CI"));
     }
     assert.equal(step.catch.block[2].type, "run");
@@ -279,7 +278,6 @@ test("parsejaiph: workflow with ensure catch and multiline triple-quoted prompt"
     const p = ensureStep.catch.block[0];
     assert.equal(p.type, "prompt");
     if (p.type === "prompt") {
-      assert.equal(p.bodyKind, "triple_quoted");
       assert.ok(p.raw.includes("hello"));
     }
   }

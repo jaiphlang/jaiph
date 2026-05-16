@@ -29,7 +29,6 @@ function attachScriptImportStubs(ast: jaiphModule): void {
       name: si.alias,
       comments: [],
       body: "",
-      bodyKind: "fenced",
       loc: si.loc,
     });
   }

@@ -1,4 +1,5 @@
 import type { ScriptDef } from "../types";
+import { createTrivia, type Trivia } from "./trivia";
 import { fail, parseSingleBacktickBody } from "./core";
 import { parseFencedBlock } from "./fence";
 
@@ -42,6 +43,7 @@ export function parseScriptBlock(
   lines: string[],
   startIndex: number,
   pendingComments: string[],
+  trivia: Trivia = createTrivia(),
 ): { scriptDef: ScriptDef; nextIndex: number; exported: boolean } {
   const lineNo = startIndex + 1;
   const raw = lines[startIndex];
@@ -100,15 +102,16 @@ export function parseScriptBlock(
       );
     }
 
+    const scriptDef: ScriptDef = {
+      name: scriptName,
+      comments: pendingComments,
+      body,
+      ...(lang ? { lang } : {}),
+      loc: { line: lineNo, col: 1 },
+    };
+    trivia.setNode(scriptDef, { scriptBodyKind: "fenced" });
     return {
-      scriptDef: {
-        name: scriptName,
-        comments: pendingComments,
-        body,
-        ...(lang ? { lang } : {}),
-        bodyKind: "fenced",
-        loc: { line: lineNo, col: 1 },
-      },
+      scriptDef,
       nextIndex: nextIdx,
       exported: isExported,
     };
@@ -124,14 +127,15 @@ export function parseScriptBlock(
 
     validateScriptBodyNoInterpolation(body, filePath, lineNo, 1);
 
+    const scriptDef: ScriptDef = {
+      name: scriptName,
+      comments: pendingComments,
+      body,
+      loc: { line: lineNo, col: 1 },
+    };
+    trivia.setNode(scriptDef, { scriptBodyKind: "backtick" });
     return {
-      scriptDef: {
-        name: scriptName,
-        comments: pendingComments,
-        body,
-        bodyKind: "backtick",
-        loc: { line: lineNo, col: 1 },
-      },
+      scriptDef,
       nextIndex: startIndex + 1,
       exported: isExported,
     };
