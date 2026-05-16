@@ -276,7 +276,7 @@ jaiph test e2e/say_hello.test.jh
 
 ## `jaiph compile`
 
-Parse modules and run **`validateReferences`** (the same compile-time checks as before `jaiph run`) **without** writing `scripts/`, **without** calling **`buildRuntimeGraph`**, and **without** spawning the workflow runner. Use this for CI gates, pre-commit hooks, or editor diagnostics.
+Parse modules and run the same compile-time validation as before `jaiph run` **without** writing `scripts/`, **without** calling **`buildRuntimeGraph`**, and **without** spawning the workflow runner. Use this for CI gates, pre-commit hooks, or editor diagnostics.
 
 ```bash
 jaiph compile [--json] [--workspace <dir>] <file.jh | directory> ...
@@ -288,9 +288,11 @@ At least one path is required. **`jaiph compile -h`** or **`jaiph compile --help
 
 **Directory arguments** — The tree is scanned for `*.jh` files whose basename is **not** `*.test.jh` (same rule as `walkjhFiles` in the transpiler: files like `foo.test.jh` are skipped). Each non-test `*.jh` under the tree is treated as an entrypoint and its closure merged into the same validation set. To validate a test module’s graph explicitly, pass that **`*.test.jh` file** as a path (directories never pick up `*.test.jh` as roots).
 
+**Multiple-error reporting.** `jaiph compile` aggregates **all** recoverable validation errors across the import closure before exiting, rather than stopping at the first failure. Internally it calls **`collectDiagnostics(graph)`** (`src/transpile/validate.ts`), which walks every reachable module and returns a `Diagnostics` collector (`src/diagnostics.ts`) populated with every error the validator accumulated through `diag.error(...)` and `diag.capture(...)`. Output is sorted by `(file, line, col)` so a single compile cycle surfaces independent errors together — for example, a duplicate `import` alias on line 2, an undefined channel in a `send` on line 6, and an unknown `run` target on line 7 all appear in one report. **Fatal** errors (parser failures like an unterminated triple-quote, loader failures, etc.) still abort the closure for the affected entry — `jaiph compile` reports them as a single diagnostic for that entry and continues with the next entry. Any non-empty diagnostic set exits **1**.
+
 **Flags:**
 
-- **`--json`** — On success, print `[]` to stdout. On failure, print one JSON **array** of objects `{ "file", "line", "col", "code", "message" }` to stdout and exit **1** (non-JSON errors use a synthetic `E_COMPILE` object when the message is not in `file:line:col CODE …` form).
+- **`--json`** — On success, print `[]` to stdout. On failure, print **one** JSON **array** containing every collected diagnostic — objects `{ "file", "line", "col", "code", "message" }` — to stdout and exit **1** (non-JSON errors use a synthetic `E_COMPILE` object when the message is not in `file:line:col CODE …` form). Without `--json`, the same set is written to **stderr** as one `path:line:col CODE message` line per diagnostic, in the same sorted order.
 - **`--workspace <dir>`** — Override the workspace root used for **library import resolution** (`<workspace>/.jaiph/libs/`, etc.) for **all** modules reached from the given paths. When omitted, the workspace is **auto-detected** from each path’s location (`detectWorkspaceRoot` — same algorithm as `jaiph run`, starting from the file’s directory or from a directory argument).
 
 ## `jaiph format`
