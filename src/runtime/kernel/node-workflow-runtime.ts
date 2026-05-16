@@ -13,7 +13,7 @@ import { buildStepDisplayParamPairs } from "../../cli/commands/format-params.js"
 import { resolveRuleRef, resolveScriptRef, resolveWorkflowRef, type RuntimeGraph } from "./graph";
 import type { WorkflowMetadata } from "../../types";
 import { extractJson, validateFields } from "./schema";
-import { tripleQuotedRawForRuntime } from "../orchestration-text";
+import { canonicalizeTripleQuotedString } from "../../parse/triple-quote";
 import {
   commaArgsToInterpolated,
   interpolate,
@@ -463,7 +463,7 @@ export class NodeWorkflowRuntime {
       if (matched) {
         let body = arm.body.trimStart();
         if (arm.tripleQuotedBody) {
-          body = tripleQuotedRawForRuntime(arm.body).trimStart();
+          body = canonicalizeTripleQuotedString(arm.body).trimStart();
         }
 
         // fail "message" — abort with failure
