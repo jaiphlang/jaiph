@@ -14,7 +14,7 @@ import { consumeTripleQuotedArg, dedentTripleQuotedBody, tripleQuoteBodyToRaw } 
 import { parseConstRhs } from "./const-rhs";
 import { parseAnonymousInlineScript } from "./inline-script";
 import { parseConfigBlock } from "./metadata";
-import { parseEnsureStep, parseRunCatchStep, parseRunRecoverStep } from "./steps";
+import { parseAttachedBlock } from "./steps";
 import { parsePromptStep } from "./prompt";
 import { parseSendRhs } from "./send-rhs";
 import { parseMatchExpr } from "./match";
@@ -113,6 +113,120 @@ function execStep(
     ...(extras.recover ? { recover: extras.recover } : {}),
     loc,
   };
+}
+
+/**
+ * Parse `run [async] <ref>(args)` or `ensure <ref>(args)`, optionally followed
+ * by `catch (binding) { ... }` or — for `run` only — `recover(binding) { ... }`.
+ *
+ * The catch/recover clause is parsed via the unified `parseAttachedBlock`, whose
+ * body uses the same `parseBlockStatement` as the top-level dispatcher.
+ */
+function parseRunOrEnsure(
+  filePath: string,
+  lines: string[],
+  idx: number,
+  innerNo: number,
+  innerRaw: string,
+  host: "run" | "ensure",
+  hostBody: string,
+  isAsync: boolean,
+  captureName: string | undefined,
+  trivia: Trivia,
+): { step: WorkflowStepDef; nextIdx: number } {
+  const hostName = host === "ensure" ? "ensure" : isAsync ? "run async" : "run";
+  const hostCol = innerRaw.indexOf(host) + 1;
+  const stepLoc = { line: innerNo, col: hostCol };
+
+  if (/\scatch$/.test(hostBody)) {
+    fail(
+      filePath,
+      'catch requires explicit bindings and a body: catch (<name>) { ... }',
+      innerNo,
+      innerRaw.indexOf("catch") + 1,
+    );
+  }
+  if (host === "run" && / recover$/.test(hostBody)) {
+    fail(
+      filePath,
+      'recover requires explicit bindings and a body: recover(<name>) { ... }',
+      innerNo,
+      innerRaw.indexOf("recover") + 1,
+    );
+  }
+
+  let attached:
+    | { keyword: "catch" | "recover"; left: string; after: string }
+    | null = null;
+  if (host === "run") {
+    const m = hostBody.match(/ recover(?=[\s(])/);
+    if (m) {
+      const pos = m.index!;
+      attached = {
+        keyword: "recover",
+        left: hostBody.slice(0, pos).trim(),
+        after: hostBody.slice(pos + " recover".length),
+      };
+    }
+  }
+  if (!attached) {
+    const ci = hostBody.indexOf(" catch ");
+    if (ci !== -1) {
+      attached = {
+        keyword: "catch",
+        left: hostBody.slice(0, ci).trim(),
+        after: hostBody.slice(ci + " catch ".length),
+      };
+    }
+  }
+
+  // `run` falls back to plain parsing when the call before catch/recover has
+  // trailing content, preserving the legacy "unexpected content" error shape.
+  if (attached && host === "run") {
+    const probe = parseCallRef(attached.left);
+    if (!probe || probe.rest.trim()) {
+      attached = null;
+    }
+  }
+
+  if (!attached) {
+    const call = parseCallRef(hostBody);
+    if (!call) {
+      fail(
+        filePath,
+        `${hostName} must target a valid reference: ${hostName} ref() or ${hostName} ref(args) — parentheses are required`,
+        innerNo,
+      );
+    }
+    rejectTrailingContent(filePath, innerNo, hostName, call.rest);
+    const callee = { value: call.ref, loc: stepLoc };
+    const body: Expr = host === "ensure"
+      ? { kind: "ensure_call", callee, args: call.args }
+      : { kind: "call", callee, args: call.args, ...(isAsync ? { async: true as const } : {}) };
+    return { step: execStep(body, stepLoc, { captureName }), nextIdx: idx + 1 };
+  }
+
+  const call = parseCallRef(attached.left);
+  if (!call) {
+    fail(
+      filePath,
+      `${hostName} must target a valid reference: ${hostName} ref() or ${hostName} ref(args) — parentheses are required`,
+      innerNo,
+    );
+  }
+  rejectTrailingContent(filePath, innerNo, hostName, call.rest);
+  const callee = { value: call.ref, loc: stepLoc };
+  const body: Expr = host === "ensure"
+    ? { kind: "ensure_call", callee, args: call.args }
+    : { kind: "call", callee, args: call.args, ...(isAsync ? { async: true as const } : {}) };
+
+  const result = parseAttachedBlock(
+    filePath, lines, idx, innerNo, innerRaw, attached.keyword, attached.after, trivia,
+  );
+  const extras = attached.keyword === "catch"
+    ? { captureName, catch: result.body }
+    : { captureName, recover: result.body };
+  return { step: execStep(body, stepLoc, extras), nextIdx: result.nextIdx };
 }
 
 /**
@@ -256,11 +370,9 @@ export function parseBlockStatement(
 
   if (inner.startsWith("ensure ")) {
     const ensureBody = inner.slice("ensure ".length).trim();
-    const r = parseEnsureStep(
-      filePath, lines, idx, innerNo, innerRaw,
-      ensureBody, undefined, trivia,
+    return parseRunOrEnsure(
+      filePath, lines, idx, innerNo, innerRaw, "ensure", ensureBody, false, undefined, trivia,
     );
-    return { step: r.step, nextIdx: r.nextIdx + 1 };
   }
 
   if (inner.startsWith("run async ")) {
@@ -269,37 +381,9 @@ export function parseBlockStatement(
     if (runBody.startsWith("`")) {
       fail(filePath, "run async is not supported with inline scripts", innerNo, runCol);
     }
-    // run async ... recover(name) { ... }
-    const recoverResult = parseRunRecoverStep(filePath, lines, idx, innerNo, innerRaw, runBody, undefined, trivia);
-    if (recoverResult && recoverResult.step.type === "exec" && recoverResult.step.body.kind === "call") {
-      const body: Expr = { ...recoverResult.step.body, async: true };
-      return {
-        step: { ...recoverResult.step, body },
-        nextIdx: recoverResult.nextIdx + 1,
-      };
-    }
-    // run async ... catch(name) { ... }
-    const catchResult = parseRunCatchStep(filePath, lines, idx, innerNo, innerRaw, runBody, undefined, trivia);
-    if (catchResult && catchResult.step.type === "exec" && catchResult.step.body.kind === "call") {
-      const body: Expr = { ...catchResult.step.body, async: true };
-      return {
-        step: { ...catchResult.step, body },
-        nextIdx: catchResult.nextIdx + 1,
-      };
-    }
-    const call = parseCallRef(runBody);
-    if (!call) {
-      fail(filePath, "run async must target a valid reference: run async ref() or run async ref(args) — parentheses are required", innerNo);
-    }
-    rejectTrailingContent(filePath, innerNo, "run async", call.rest);
-    const callee = { value: call.ref, loc: { line: innerNo, col: runCol } };
-    return {
-      step: execStep(
-        { kind: "call", callee, args: call.args, async: true },
-        { line: innerNo, col: runCol },
-      ),
-      nextIdx: idx + 1,
-    };
+    return parseRunOrEnsure(
+      filePath, lines, idx, innerNo, innerRaw, "run", runBody, true, undefined, trivia,
+    );
   }
 
   if (inner.startsWith("run ")) {
@@ -323,29 +407,9 @@ export function parseBlockStatement(
     if (runBody.startsWith("script(") || runBody.startsWith("script (")) {
       fail(filePath, 'inline script syntax has changed: use run `body`(args) instead of run script(args) "body"', innerNo);
     }
-    // Check for run ... recover (loop semantics)
-    const recoverResult = parseRunRecoverStep(filePath, lines, idx, innerNo, innerRaw, runBody, undefined, trivia);
-    if (recoverResult) {
-      return { step: recoverResult.step, nextIdx: recoverResult.nextIdx + 1 };
-    }
-    // Check for run ... catch
-    const catchResult = parseRunCatchStep(filePath, lines, idx, innerNo, innerRaw, runBody, undefined, trivia);
-    if (catchResult) {
-      return { step: catchResult.step, nextIdx: catchResult.nextIdx + 1 };
-    }
-    const call = parseCallRef(runBody);
-    if (!call) {
-      fail(filePath, "run must target a valid reference: run ref() or run ref(args) — parentheses are required", innerNo);
-    }
-    rejectTrailingContent(filePath, innerNo, "run", call.rest);
-    const callee = { value: call.ref, loc: { line: innerNo, col: runCol } };
-    return {
-      step: execStep(
-        { kind: "call", callee, args: call.args },
-        { line: innerNo, col: runCol },
-      ),
-      nextIdx: idx + 1,
-    };
+    return parseRunOrEnsure(
+      filePath, lines, idx, innerNo, innerRaw, "run", runBody, false, undefined, trivia,
+    );
   }
 
   if (forRule && (inner.startsWith("prompt ") || /^[A-Za-z_][A-Za-z0-9_]*\s*=\s*prompt\s/.test(inner))) {
