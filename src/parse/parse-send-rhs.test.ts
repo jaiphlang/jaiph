@@ -67,7 +67,7 @@ test("parseSendRhs: run call with args", () => {
   assert.equal(rhs.kind, "run");
   if (rhs.kind === "run") {
     assert.equal(rhs.ref.value, "my_script");
-    assert.equal(rhs.args, '"arg1"');
+    assert.deepEqual(rhs.args, [{ kind: "literal", raw: '"arg1"' }]);
   }
 });
 

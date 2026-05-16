@@ -129,7 +129,7 @@ test("parseConstRhs: parses run capture with args", () => {
   assert.equal(result.value.kind, "run_capture");
   if (result.value.kind === "run_capture") {
     assert.equal(result.value.ref.value, "my_script");
-    assert.equal(result.value.args, '"arg"');
+    assert.deepEqual(result.value.args, [{ kind: "literal", raw: '"arg"' }]);
   }
 });
 

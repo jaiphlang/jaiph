@@ -47,24 +47,36 @@ export interface MatchExprDef {
   loc: SourceLoc;
 }
 
+/**
+ * Single call argument, classified at parse time.
+ *
+ * - `var`: a bare identifier reference (e.g. `foo(task)` → `{ kind: "var", name: "task" }`).
+ *   The validator checks `name` against in-scope bindings; the runtime sees `${name}`.
+ * - `literal`: any other form (quoted string, `${…}` interpolation, nested `run …` /
+ *   `ensure …` / inline-script call). Stored verbatim as authored, between the surrounding commas.
+ */
+export type Arg =
+  | { kind: "literal"; raw: string }
+  | { kind: "var"; name: string };
+
 export type ConstRhs =
   | { kind: "expr"; bashRhs: string }
-  | { kind: "run_capture"; ref: WorkflowRefDef; args?: string; bareIdentifierArgs?: string[]; async?: boolean }
-  | { kind: "ensure_capture"; ref: RuleRefDef; args?: string; bareIdentifierArgs?: string[] }
+  | { kind: "run_capture"; ref: WorkflowRefDef; args?: Arg[]; async?: boolean }
+  | { kind: "ensure_capture"; ref: RuleRefDef; args?: Arg[] }
   | {
       kind: "prompt_capture";
       raw: string;
       loc: SourceLoc;
       returns?: string;
     }
-  | { kind: "run_inline_script_capture"; body: string; lang?: string; args?: string; bareIdentifierArgs?: string[] }
+  | { kind: "run_inline_script_capture"; body: string; lang?: string; args?: Arg[] }
   | { kind: "match_expr"; match: MatchExprDef };
 
 /** RHS of `channel <- …` */
 export type SendRhsDef =
   | { kind: "literal"; token: string }
   | { kind: "var"; bash: string }
-  | { kind: "run"; ref: WorkflowRefDef; args?: string; bareIdentifierArgs?: string[] }
+  | { kind: "run"; ref: WorkflowRefDef; args?: Arg[] }
   /** Parsed then rejected in validation (use `run ref` to capture a return value). */
   | { kind: "bare_ref"; ref: WorkflowRefDef }
   /** Shell fragment emitted as `"$(...)"` for inbox send. */
@@ -111,8 +123,7 @@ export type WorkflowStepDef =
   | {
       type: "ensure";
       ref: RuleRefDef;
-      args?: string;
-      bareIdentifierArgs?: string[];
+      args?: Arg[];
       /** When set, capture step stdout into this variable name. */
       captureName?: string;
       /** When set, catch failure and run recovery body once. */
@@ -123,8 +134,7 @@ export type WorkflowStepDef =
   | {
       type: "run";
       workflow: WorkflowRefDef;
-      args?: string;
-      bareIdentifierArgs?: string[];
+      args?: Arg[];
       /** When set, capture step stdout into this variable name. */
       captureName?: string;
       /** When set, execute asynchronously with implicit join before workflow completes. */
@@ -168,14 +178,14 @@ export type WorkflowStepDef =
       message: string;
       loc: SourceLoc;
       /** When set, log message comes from a managed inline-script call. */
-      managed?: { kind: "run_inline_script"; body: string; lang?: string; args?: string; bareIdentifierArgs?: string[] };
+      managed?: { kind: "run_inline_script"; body: string; lang?: string; args?: Arg[] };
     }
   | {
       type: "logerr";
       message: string;
       loc: SourceLoc;
       /** When set, logerr message comes from a managed inline-script call. */
-      managed?: { kind: "run_inline_script"; body: string; lang?: string; args?: string; bareIdentifierArgs?: string[] };
+      managed?: { kind: "run_inline_script"; body: string; lang?: string; args?: Arg[] };
     }
   | {
       type: "send";
@@ -189,18 +199,17 @@ export type WorkflowStepDef =
       loc: SourceLoc;
       /** When set, return value comes from a managed run/ensure/match instead of the literal `value`. */
       managed?:
-        | { kind: "run"; ref: WorkflowRefDef; args?: string; bareIdentifierArgs?: string[] }
-        | { kind: "ensure"; ref: RuleRefDef; args?: string; bareIdentifierArgs?: string[] }
+        | { kind: "run"; ref: WorkflowRefDef; args?: Arg[] }
+        | { kind: "ensure"; ref: RuleRefDef; args?: Arg[] }
         | { kind: "match"; match: MatchExprDef }
-        | { kind: "run_inline_script"; body: string; lang?: string; args?: string; bareIdentifierArgs?: string[] };
+        | { kind: "run_inline_script"; body: string; lang?: string; args?: Arg[] };
     }
   | {
       type: "run_inline_script";
       body: string;
       /** Fence language tag (e.g. "node", "python3"). Maps to `#!/usr/bin/env <lang>`. */
       lang?: string;
-      args?: string;
-      bareIdentifierArgs?: string[];
+      args?: Arg[];
       captureName?: string;
       loc: SourceLoc;
     }

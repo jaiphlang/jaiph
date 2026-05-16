@@ -21,7 +21,7 @@ test("parseEnsureStep: parses ensure with args", () => {
   const { step } = parseEnsureStep("test.jh", lines, 0, 1, lines[0], 'my_rule("arg1")');
   if (step.type === "ensure") {
     assert.equal(step.ref.value, "my_rule");
-    assert.equal(step.args, '"arg1"');
+    assert.deepEqual(step.args, [{ kind: "literal", raw: '"arg1"' }]);
   }
 });
 

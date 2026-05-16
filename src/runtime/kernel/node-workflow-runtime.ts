@@ -5,6 +5,7 @@ import { PassThrough } from "node:stream";
 import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { inlineScriptName } from "../../inline-script-name";
+import { argsToRuntimeString } from "../../parse/core";
 import type { MatchExprDef, WorkflowStepDef } from "../../types";
 import { executePrompt, resolveConfig, resolveModel, resolvePromptStepName } from "./prompt";
 import { appendRunSummaryLine } from "./emit";
@@ -522,7 +523,7 @@ export class NodeWorkflowRuntime {
         let message: string;
         if (step.managed?.kind === "run_inline_script") {
           const shebang = step.managed.lang ? `#!/usr/bin/env ${step.managed.lang}` : undefined;
-          const result = await this.executeInlineScript(scope, step.managed.body, shebang, step.managed.args ?? "");
+          const result = await this.executeInlineScript(scope, step.managed.body, shebang, argsToRuntimeString(step.managed.args));
           if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
           message = result.returnValue ?? result.output.trim();
         } else {
@@ -570,14 +571,14 @@ export class NodeWorkflowRuntime {
           }
           if (step.managed.kind === "run_inline_script") {
             const shebang = step.managed.lang ? `#!/usr/bin/env ${step.managed.lang}` : undefined;
-            const result = await this.executeInlineScript(scope, step.managed.body, shebang, step.managed.args ?? "");
+            const result = await this.executeInlineScript(scope, step.managed.body, shebang, argsToRuntimeString(step.managed.args));
             if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
             returnValue = result.returnValue ?? result.output.trim();
             return this.mergeStepResult(accOut, accErr, { status: 0, output: "", error: "", returnValue });
           }
           const result = step.managed.kind === "run"
-            ? await this.executeRunRef(scope, step.managed.ref.value, step.managed.args ?? "")
-            : await this.executeEnsureRef(scope, step.managed.ref.value, step.managed.args ?? "", undefined);
+            ? await this.executeRunRef(scope, step.managed.ref.value, argsToRuntimeString(step.managed.args))
+            : await this.executeEnsureRef(scope, step.managed.ref.value, argsToRuntimeString(step.managed.args), undefined);
           if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
           returnValue = result.returnValue ?? result.output.trim();
           return this.mergeStepResult(accOut, accErr, { status: 0, output: "", error: "", returnValue });
@@ -607,7 +608,7 @@ export class NodeWorkflowRuntime {
           if (sendHandleErr) return this.mergeStepResult(accOut, accErr, sendHandleErr);
           payload = interpolate(step.rhs.bash, scope.vars, scope.env);
         } else if (step.rhs.kind === "run") {
-          const runValue = await this.executeRunRef(scope, step.rhs.ref.value, step.rhs.args ?? "");
+          const runValue = await this.executeRunRef(scope, step.rhs.ref.value, argsToRuntimeString(step.rhs.args));
           if (runValue.status !== 0) return this.mergeStepResult(accOut, accErr, runValue);
           payload = runValue.returnValue ?? runValue.output.trim();
         } else {
@@ -679,7 +680,7 @@ export class NodeWorkflowRuntime {
         }
         if (step.value.kind === "run_capture") {
           const captureRef = step.value.ref.value;
-          const captureArgs = step.value.args ?? "";
+          const captureArgs = argsToRuntimeString(step.value.args);
           if (step.value.async) {
             // Async capture: create handle, store in scope, register for join.
             asyncCounter += 1;
@@ -702,13 +703,13 @@ export class NodeWorkflowRuntime {
         }
         if (step.value.kind === "run_inline_script_capture") {
           const shebang = step.value.lang ? `#!/usr/bin/env ${step.value.lang}` : undefined;
-          const result = await this.executeInlineScript(scope, step.value.body, shebang, step.value.args ?? "");
+          const result = await this.executeInlineScript(scope, step.value.body, shebang, argsToRuntimeString(step.value.args));
           if (result.status !== 0) return this.mergeStepResult(accOut, accErr, result);
           scope.vars.set(step.name, result.returnValue ?? result.output.trim());
           continue;
         }
         if (step.value.kind === "ensure_capture") {
-          const ensureResult = await this.executeEnsureRef(scope, step.value.ref.value, step.value.args ?? "", undefined);
+          const ensureResult = await this.executeEnsureRef(scope, step.value.ref.value, argsToRuntimeString(step.value.args), undefined);
           if (ensureResult.status !== 0) return this.mergeStepResult(accOut, accErr, ensureResult);
           scope.vars.set(step.name, ensureResult.returnValue ?? ensureResult.output.trim());
           continue;
@@ -738,7 +739,7 @@ export class NodeWorkflowRuntime {
           const branchStack = [...this.getFrameStack()];
           const branchIndices = [...this.getAsyncIndices(), asyncCounter];
           const ref = step.workflow.value;
-          const argsRaw = step.args ?? "";
+          const argsRaw = argsToRuntimeString(step.args);
           const runInBranch = (fn: () => Promise<StepResult>): Promise<StepResult> =>
             this.asyncFrameStack.run(branchStack, () =>
               this.asyncIndicesStorage.run(branchIndices, fn),
@@ -780,12 +781,12 @@ export class NodeWorkflowRuntime {
         }
         if (step.recover) {
           const limit = this.resolveRecoverLimit(scope.filePath);
-          let lastResult = await this.executeRunRef(scope, step.workflow.value, step.args ?? "");
+          let lastResult = await this.executeRunRef(scope, step.workflow.value, argsToRuntimeString(step.args));
           let attempt = 1;
           while (lastResult.status !== 0 && attempt <= limit) {
             const rr = await this.runRecoverBody(scope, step.recover, `${lastResult.output}${lastResult.error}`);
             if (rr.status !== 0 || rr.returnValue !== undefined) return this.mergeStepResult(accOut, accErr, rr);
-            lastResult = await this.executeRunRef(scope, step.workflow.value, step.args ?? "");
+            lastResult = await this.executeRunRef(scope, step.workflow.value, argsToRuntimeString(step.args));
             attempt += 1;
           }
           if (lastResult.status === 0) {
@@ -797,7 +798,7 @@ export class NodeWorkflowRuntime {
           }
           continue;
         }
-        const runResult = await this.executeRunRef(scope, step.workflow.value, step.args ?? "");
+        const runResult = await this.executeRunRef(scope, step.workflow.value, argsToRuntimeString(step.args));
         if (runResult.status === 0) {
           if (step.captureName) {
             scope.vars.set(step.captureName, runResult.returnValue ?? runResult.output.trim());
@@ -812,7 +813,7 @@ export class NodeWorkflowRuntime {
       }
       if (step.type === "run_inline_script") {
         const shebang = step.lang ? `#!/usr/bin/env ${step.lang}` : undefined;
-        const result = await this.executeInlineScript(scope, step.body, shebang, step.args ?? "");
+        const result = await this.executeInlineScript(scope, step.body, shebang, argsToRuntimeString(step.args));
         if (step.captureName && result.status === 0) {
           scope.vars.set(step.captureName, result.returnValue ?? result.output.trim());
         }
@@ -820,7 +821,7 @@ export class NodeWorkflowRuntime {
         continue;
       }
       if (step.type === "ensure") {
-        const ensureResult = await this.executeEnsureRef(scope, step.ref.value, step.args ?? "", step.catch);
+        const ensureResult = await this.executeEnsureRef(scope, step.ref.value, argsToRuntimeString(step.args), step.catch);
         if (step.captureName && ensureResult.status === 0) {
           scope.vars.set(step.captureName, ensureResult.returnValue ?? ensureResult.output.trim());
         }

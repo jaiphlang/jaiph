@@ -1,7 +1,7 @@
 import type { WorkflowStepDef } from "../types";
 import { createTrivia, type Trivia } from "./trivia";
 import { parseConstRhs } from "./const-rhs";
-import { fail, indexOfClosingDoubleQuote, isRef, parseCallRef, parseLogMessageRhs, rejectTrailingContent } from "./core";
+import { argsToSourceForm, fail, indexOfClosingDoubleQuote, isRef, parseCallRef, parseLogMessageRhs, rejectTrailingContent } from "./core";
 import { parseAnonymousInlineScript } from "./inline-script";
 import { isBareIdentifierReturn, bareIdentifierToQuotedString, isBareDottedIdentifierReturn, dottedReturnToQuotedString } from "./workflow-return-dotted";
 import { parsePromptStep } from "./prompt";
@@ -115,13 +115,12 @@ function parseCatchStatement(
       if (call && !call.rest.trim()) {
         return {
           type: "return",
-          value: `run ${call.ref}(${call.args ?? ""})`,
+          value: `run ${call.ref}(${argsToSourceForm(call.args)})`,
           loc: { line: lineNo, col },
           managed: {
             kind: "run",
             ref: { value: call.ref, loc: { line: lineNo, col } },
             args: call.args,
-            ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
           },
         };
       }
@@ -132,13 +131,12 @@ function parseCatchStatement(
       if (call && !call.rest.trim()) {
         return {
           type: "return",
-          value: `ensure ${call.ref}(${call.args ?? ""})`,
+          value: `ensure ${call.ref}(${argsToSourceForm(call.args)})`,
           loc: { line: lineNo, col },
           managed: {
             kind: "ensure",
             ref: { value: call.ref, loc: { line: lineNo, col } },
             args: call.args,
-            ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
           },
         };
       }
@@ -213,7 +211,6 @@ function parseCatchStatement(
         body: result.body,
         ...(result.lang ? { lang: result.lang } : {}),
         args: result.args,
-        ...(result.bareIdentifierArgs ? { bareIdentifierArgs: result.bareIdentifierArgs } : {}),
         loc: { line: lineNo, col },
       };
     }
@@ -240,7 +237,6 @@ function parseCatchStatement(
                 type: "run",
                 workflow: { value: callPart.ref, loc: { line: lineNo, col } },
                 args: callPart.args,
-                ...(callPart.bareIdentifierArgs ? { bareIdentifierArgs: callPart.bareIdentifierArgs } : {}),
                 recover: { block: blockSteps, bindings },
               };
             }
@@ -250,7 +246,6 @@ function parseCatchStatement(
                 type: "run",
                 workflow: { value: callPart.ref, loc: { line: lineNo, col } },
                 args: callPart.args,
-                ...(callPart.bareIdentifierArgs ? { bareIdentifierArgs: callPart.bareIdentifierArgs } : {}),
                 recover: { single: singleStep, bindings },
               };
             }
@@ -280,7 +275,6 @@ function parseCatchStatement(
                 type: "run",
                 workflow: { value: callPart.ref, loc: { line: lineNo, col } },
                 args: callPart.args,
-                ...(callPart.bareIdentifierArgs ? { bareIdentifierArgs: callPart.bareIdentifierArgs } : {}),
                 catch: { block: blockSteps, bindings },
               };
             }
@@ -290,7 +284,6 @@ function parseCatchStatement(
                 type: "run",
                 workflow: { value: callPart.ref, loc: { line: lineNo, col } },
                 args: callPart.args,
-                ...(callPart.bareIdentifierArgs ? { bareIdentifierArgs: callPart.bareIdentifierArgs } : {}),
                 catch: { single: singleStep, bindings },
               };
             }
@@ -305,7 +298,6 @@ function parseCatchStatement(
         type: "run",
         workflow: { value: call.ref, loc: { line: lineNo, col } },
         args: call.args,
-        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
       };
     }
   }
@@ -332,7 +324,6 @@ function parseCatchStatement(
                 type: "ensure",
                 ref: { value: callPart.ref, loc: { line: lineNo, col } },
                 args: callPart.args,
-                ...(callPart.bareIdentifierArgs ? { bareIdentifierArgs: callPart.bareIdentifierArgs } : {}),
                 catch: { block: blockSteps, bindings },
               };
             }
@@ -342,7 +333,6 @@ function parseCatchStatement(
                 type: "ensure",
                 ref: { value: callPart.ref, loc: { line: lineNo, col } },
                 args: callPart.args,
-                ...(callPart.bareIdentifierArgs ? { bareIdentifierArgs: callPart.bareIdentifierArgs } : {}),
                 catch: { single: singleStep, bindings },
               };
             }
@@ -357,7 +347,6 @@ function parseCatchStatement(
         type: "ensure",
         ref: { value: call.ref, loc: { line: lineNo, col } },
         args: call.args,
-        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
       };
     }
   }
@@ -432,7 +421,6 @@ export function parseEnsureStep(
         type: "ensure",
         ref: { value: call.ref, loc: { line: innerNo, col: ensureCol } },
         args: call.args,
-        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
         ...(captureName ? { captureName } : {}),
       },
       nextIdx: idx,
@@ -481,7 +469,6 @@ export function parseEnsureStep(
   const refLoc = { value: ref, loc: { line: innerNo, col: ensureCol } };
   const base = {
     type: "ensure" as const, ref: refLoc, args,
-    ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
     ...(captureName ? { captureName } : {}),
   };
 
@@ -598,7 +585,6 @@ export function parseRunRecoverStep(
     type: "run" as const,
     workflow: { value: call.ref, loc: { line: innerNo, col: runCol } },
     args: call.args,
-    ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
     ...(captureName ? { captureName } : {}),
   };
 
@@ -714,7 +700,6 @@ export function parseRunCatchStep(
     type: "run" as const,
     workflow: { value: call.ref, loc: { line: innerNo, col: runCol } },
     args: call.args,
-    ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
     ...(captureName ? { captureName } : {}),
   };
 

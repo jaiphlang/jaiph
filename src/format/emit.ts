@@ -1,4 +1,5 @@
 import type {
+  Arg,
   jaiphModule,
   WorkflowStepDef,
   ConstRhs,
@@ -13,7 +14,6 @@ import type {
   WorkflowMetadata,
   TopLevelEmitOrder,
 } from "../types";
-import { parseCallRef } from "../parse/core";
 import { createTrivia, type NodeTrivia, type Trivia } from "../parse/trivia";
 
 export interface EmitOptions {
@@ -359,99 +359,25 @@ function emitSteps(steps: WorkflowStepDef[], pad: string, currentIndent: string,
   return lines;
 }
 
-/** Try to parse `` `body`(args) `` from the start of a string. Returns consumed length or null. */
-function parseInlineScriptArg(s: string): { body: string; innerArgs: string; consumed: number } | null {
-  if (!s.startsWith("`")) return null;
-  const closeIdx = s.indexOf("`", 1);
-  if (closeIdx === -1) return null;
-  const body = s.slice(1, closeIdx);
-  const afterClose = s.slice(closeIdx + 1);
-  if (!afterClose.startsWith("(")) return null;
-  let depth = 1;
-  let j = 1;
-  let inQuote: string | null = null;
-  while (j < afterClose.length && depth > 0) {
-    const ch = afterClose[j];
-    if (inQuote) {
-      if (ch === inQuote && afterClose[j - 1] !== "\\") inQuote = null;
-    } else {
-      if (ch === '"' || ch === "'") inQuote = ch;
-      else if (ch === "(") depth++;
-      else if (ch === ")") depth--;
-    }
-    j++;
-  }
-  if (depth !== 0) return null;
-  const innerArgs = afterClose.slice(1, j - 1).trim();
-  return { body, innerArgs, consumed: closeIdx + 1 + j };
-}
-
-/** Convert space-separated args back to comma-separated format with bare identifiers. */
-function formatArgs(args: string, bareIdentifierArgs?: string[]): string {
-  const bare = new Set(bareIdentifierArgs ?? []);
-  const tokens: string[] = [];
-  let i = 0;
-  while (i < args.length) {
-    while (i < args.length && (args[i] === " " || args[i] === "\t")) i++;
-    if (i >= args.length) break;
-    const tail = args.slice(i);
-    const keyword = tail.startsWith("run ")
-      ? "run"
-      : tail.startsWith("ensure ")
-        ? "ensure"
-        : null;
-    if (keyword) {
-      const afterKeyword = args.slice(i + keyword.length).trimStart();
-      const skipped = args.slice(i + keyword.length).length - afterKeyword.length;
-      const call = parseCallRef(afterKeyword);
-      if (call && (call.rest.length === 0 || /^\s/.test(call.rest))) {
-        const consumed = afterKeyword.length - call.rest.length;
-        tokens.push(`${keyword} ${call.ref}(${formatArgs(call.args ?? "", call.bareIdentifierArgs)})`);
-        i += keyword.length + skipped + consumed;
-        continue;
-      }
-      // Try inline script form: run `body`(args)
-      if (keyword === "run") {
-        const inlineResult = parseInlineScriptArg(afterKeyword);
-        if (inlineResult) {
-          const formattedInner = inlineResult.innerArgs ? formatArgs(inlineResult.innerArgs) : "";
-          tokens.push(`run \`${inlineResult.body}\`(${formattedInner})`);
-          i += keyword.length + skipped + inlineResult.consumed;
-          continue;
-        }
-      }
-    }
-    if (args[i] === '"') {
-      let j = i + 1;
-      while (j < args.length && !(args[j] === '"' && args[j - 1] !== "\\")) j++;
-      tokens.push(args.slice(i, j + 1));
-      i = j + 1;
-    } else {
-      let j = i;
-      while (j < args.length && args[j] !== " " && args[j] !== "\t") j++;
-      const token = args.slice(i, j);
-      const m = token.match(/^\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}$/);
-      if (m && bare.has(m[1])) {
-        tokens.push(m[1]);
-      } else {
-        tokens.push(token);
-      }
-      i = j;
-    }
-  }
-  return tokens.join(", ");
+/**
+ * Render `Arg[]` back as comma-separated source form. Each `var` becomes the bare name
+ * and each `literal` is emitted as authored (already in source form, including nested
+ * `run …` / `ensure …` calls and inline-script bodies).
+ */
+function formatArgs(args: Arg[] | undefined): string {
+  if (!args || args.length === 0) return "";
+  return args.map((a) => (a.kind === "var" ? a.name : a.raw)).join(", ");
 }
 
 /** Emit inline script form: `prefix \`body\`(args)` or fenced block. */
 function emitInlineScriptLines(
   prefix: string,
   body: string,
-  lang?: string,
-  args?: string,
-  bareIdentifierArgs?: string[],
+  lang: string | undefined,
+  args: Arg[] | undefined,
   ci?: string,
 ): string[] {
-  const argsStr = formatArgs(args ?? "", bareIdentifierArgs);
+  const argsStr = formatArgs(args);
   if (lang || body.includes("\n")) {
     const langTag = lang ?? "";
     const result = [`${prefix} \`\`\`${langTag}`];
@@ -464,9 +390,9 @@ function emitInlineScriptLines(
   return [`${prefix} \`${body}\`(${argsStr})`];
 }
 
-function emitRef(ref: { value: string }, args?: string, bareIdentifierArgs?: string[]): string {
+function emitRef(ref: { value: string }, args: Arg[] | undefined): string {
   if (args !== undefined) {
-    return `${ref.value}(${formatArgs(args, bareIdentifierArgs)})`;
+    return `${ref.value}(${formatArgs(args)})`;
   }
   return `${ref.value}()`;
 }
@@ -516,7 +442,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string, tri
     }
 
     case "ensure": {
-      const ref = emitRef(step.ref, step.args, step.bareIdentifierArgs);
+      const ref = emitRef(step.ref, step.args);
       const capture = step.captureName ? `${step.captureName} = ` : "";
       if (step.catch) {
         const b = step.catch.bindings;
@@ -537,7 +463,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string, tri
     }
 
     case "run": {
-      const ref = emitRef(step.workflow, step.args, step.bareIdentifierArgs);
+      const ref = emitRef(step.workflow, step.args);
       const capture = step.captureName ? `${step.captureName} = ` : "";
       const asyncPrefix = step.async ? "async " : "";
       if (step.recover) {
@@ -572,7 +498,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string, tri
 
     case "run_inline_script": {
       const capture = step.captureName ? `${step.captureName} = ` : "";
-      const argsStr = formatArgs(step.args ?? "", step.bareIdentifierArgs);
+      const argsStr = formatArgs(step.args);
       if (step.lang || step.body.includes("\n")) {
         const langTag = step.lang ?? "";
         lines.push(`${ci}${capture}run \`\`\`${langTag}`);
@@ -618,7 +544,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string, tri
         for (const bl of step.value.body.split("\n")) {
           lines.push(bl);
         }
-        const argsStr = formatArgs(step.value.args ?? "", step.value.bareIdentifierArgs);
+        const argsStr = formatArgs(step.value.args);
         lines.push(`${ci}\`\`\`(${argsStr})`);
       }
       // Handle multi-line triple-quoted prompt capture body
@@ -666,7 +592,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string, tri
 
     case "log":
       if (step.managed?.kind === "run_inline_script") {
-        lines.push(...emitInlineScriptLines(`${ci}log run`, step.managed.body, step.managed.lang, step.managed.args, step.managed.bareIdentifierArgs, ci));
+        lines.push(...emitInlineScriptLines(`${ci}log run`, step.managed.body, step.managed.lang, step.managed.args, ci));
       } else if (stepTrivia.tripleQuoted) {
         const inner = stepTrivia.rawBody ?? step.message;
         lines.push(`${ci}log """`);
@@ -681,7 +607,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string, tri
 
     case "logerr":
       if (step.managed?.kind === "run_inline_script") {
-        lines.push(...emitInlineScriptLines(`${ci}logerr run`, step.managed.body, step.managed.lang, step.managed.args, step.managed.bareIdentifierArgs, ci));
+        lines.push(...emitInlineScriptLines(`${ci}logerr run`, step.managed.body, step.managed.lang, step.managed.args, ci));
       } else if (stepTrivia.tripleQuoted) {
         const inner = stepTrivia.rawBody ?? step.message;
         lines.push(`${ci}logerr """`);
@@ -697,9 +623,9 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string, tri
     case "return": {
       if (step.managed) {
         if (step.managed.kind === "run") {
-          lines.push(`${ci}return run ${emitRef(step.managed.ref, step.managed.args, step.managed.bareIdentifierArgs)}`);
+          lines.push(`${ci}return run ${emitRef(step.managed.ref, step.managed.args)}`);
         } else if (step.managed.kind === "ensure") {
-          lines.push(`${ci}return ensure ${emitRef(step.managed.ref, step.managed.args, step.managed.bareIdentifierArgs)}`);
+          lines.push(`${ci}return ensure ${emitRef(step.managed.ref, step.managed.args)}`);
         } else if (step.managed.kind === "match") {
           lines.push(`${ci}return match ${step.managed.match.subject} {`);
           for (const arm of step.managed.match.arms) {
@@ -707,7 +633,7 @@ function emitStep(step: WorkflowStepDef, pad: string, currentIndent: string, tri
           }
           lines.push(`${ci}}`);
         } else if (step.managed.kind === "run_inline_script") {
-          lines.push(...emitInlineScriptLines(`${ci}return run`, step.managed.body, step.managed.lang, step.managed.args, step.managed.bareIdentifierArgs, ci));
+          lines.push(...emitInlineScriptLines(`${ci}return run`, step.managed.body, step.managed.lang, step.managed.args, ci));
         }
       } else if (stepTrivia.bareSource) {
         lines.push(`${ci}return ${stepTrivia.bareSource}`);
@@ -781,10 +707,10 @@ function emitConstStep(name: string, value: ConstRhs, valueTrivia: NodeTrivia): 
       return `const ${name} = ${value.bashRhs}`;
     case "run_capture": {
       const asyncMod = value.async ? "async " : "";
-      return `const ${name} = run ${asyncMod}${emitRef(value.ref, value.args, value.bareIdentifierArgs)}`;
+      return `const ${name} = run ${asyncMod}${emitRef(value.ref, value.args)}`;
     }
     case "ensure_capture":
-      return `const ${name} = ensure ${emitRef(value.ref, value.args, value.bareIdentifierArgs)}`;
+      return `const ${name} = ensure ${emitRef(value.ref, value.args)}`;
     case "prompt_capture": {
       const returns = value.returns ? ` returns "${value.returns}"` : "";
       if (valueTrivia.bodyKind === "identifier" && valueTrivia.bodyIdentifier) {
@@ -801,7 +727,7 @@ function emitConstStep(name: string, value: ConstRhs, valueTrivia: NodeTrivia): 
       return `const ${name} = match ${value.match.subject} {`;
     }
     case "run_inline_script_capture": {
-      const argsStr = formatArgs(value.args ?? "", value.bareIdentifierArgs);
+      const argsStr = formatArgs(value.args);
       if (value.lang || value.body.includes("\n")) {
         const langTag = value.lang ?? "";
         return `const ${name} = run \`\`\`${langTag}`;
@@ -818,7 +744,7 @@ function emitSendRhs(rhs: SendRhsDef): string {
     case "var":
       return rhs.bash;
     case "run":
-      return `run ${emitRef(rhs.ref, rhs.args, rhs.bareIdentifierArgs)}`;
+      return `run ${emitRef(rhs.ref, rhs.args)}`;
     case "bare_ref":
       return rhs.ref.value;
     case "shell":

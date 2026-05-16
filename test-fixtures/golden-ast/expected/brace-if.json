@@ -42,9 +42,15 @@
             },
             "block": [
               {
-                "args": "${err} \"error.log\"",
-                "bareIdentifierArgs": [
-                  "err"
+                "args": [
+                  {
+                    "kind": "var",
+                    "name": "err"
+                  },
+                  {
+                    "kind": "literal",
+                    "raw": "\"error.log\""
+                  }
                 ],
                 "type": "run",
                 "workflow": {

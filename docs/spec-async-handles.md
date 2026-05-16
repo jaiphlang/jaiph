@@ -49,7 +49,7 @@ A handle resolves to the `run` result: workflow **`return`**, or **trimmed scrip
 
 ### Reads that force resolution
 
-The runtime scans for `${name}` in the places below. **Call arguments:** at parse time, bare identifiers in a `run` / `ensure` argument list are rewritten to **`${name}`** (`commaArgsToSpaced` in `src/parse/core.ts`), so they go through the same `resolveHandlesInInput` path as explicit interpolation (see [Grammar — Call-site arguments](grammar.md#call-site-arguments) and [Language — `run`](language.md#run--execute-a-workflow-or-script)).
+The runtime scans for `${name}` in the places below. **Call arguments:** the parser classifies each argument once into a typed `Arg` (`{ kind: "var"; name }` for bare identifiers, `{ kind: "literal"; raw }` for everything else); when the runtime needs the space-separated argv string, `argsToRuntimeString` in `src/parse/core.ts` renders each `var` as **`${name}`** and emits each `literal` verbatim, so bare-identifier args go through the same `resolveHandlesInInput` path as explicit interpolation (see [Grammar — Call-site arguments](grammar.md#call-site-arguments) and [Language — `run`](language.md#run--execute-a-workflow-or-script)).
 
 | Access pattern | Example | Forces resolution? |
 | --- | --- | --- |
