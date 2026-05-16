@@ -205,13 +205,20 @@ test("reserved keyword as parameter name is rejected", () => {
   );
 });
 
-test("log accepts a bare identifier (stored as interpolation)", () => {
+test("log accepts a bare identifier (stored as interpolation Expr.literal)", () => {
   const mod = parsejaiph(
     ["workflow w() {", "  log msg", "}", ""].join("\n"),
     "test.jh",
   );
-  assert.equal(mod.workflows[0].steps[0].type, "log");
-  assert.equal((mod.workflows[0].steps[0] as { message: string }).message, "${msg}");
+  const step = mod.workflows[0].steps[0];
+  assert.equal(step.type, "say");
+  if (step.type === "say") {
+    assert.equal(step.level, "log");
+    assert.equal(step.message.kind, "literal");
+    if (step.message.kind === "literal") {
+      assert.equal(step.message.raw, "${msg}");
+    }
+  }
 });
 
 // === import script ===

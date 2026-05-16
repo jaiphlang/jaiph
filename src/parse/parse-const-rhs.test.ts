@@ -91,44 +91,44 @@ test("validateConstBashExpr: rejects ${var:?message} fallback", () => {
 
 // === parseConstRhs ===
 
-test("parseConstRhs: parses bash expression", () => {
+test("parseConstRhs: parses literal expression", () => {
   const result = parseConstRhs("test.jh", ['const x = "hello"'], 0, '"hello"', 1, 1, false, "x");
-  assert.equal(result.value.kind, "expr");
-  if (result.value.kind === "expr") {
-    assert.equal(result.value.bashRhs, '"hello"');
+  assert.equal(result.value.kind, "literal");
+  if (result.value.kind === "literal") {
+    assert.equal(result.value.raw, '"hello"');
   }
   assert.equal(result.nextLineIdx, 0);
 });
 
-test("parseConstRhs: bare identifier is sugar for interpolated string", () => {
+test("parseConstRhs: bare identifier is sugar for interpolated literal", () => {
   const result = parseConstRhs("test.jh", ["const x = response"], 0, "response", 1, 1, false, "x");
-  assert.equal(result.value.kind, "expr");
-  if (result.value.kind === "expr") {
-    assert.equal(result.value.bashRhs, '"${response}"');
+  assert.equal(result.value.kind, "literal");
+  if (result.value.kind === "literal") {
+    assert.equal(result.value.raw, '"${response}"');
   }
 });
 
-test("parseConstRhs: bare dotted identifier is sugar for interpolated string", () => {
+test("parseConstRhs: bare dotted identifier is sugar for interpolated literal", () => {
   const result = parseConstRhs("test.jh", ["const x = response.message"], 0, "response.message", 1, 1, false, "x");
-  assert.equal(result.value.kind, "expr");
-  if (result.value.kind === "expr") {
-    assert.equal(result.value.bashRhs, '"${response.message}"');
+  assert.equal(result.value.kind, "literal");
+  if (result.value.kind === "literal") {
+    assert.equal(result.value.raw, '"${response.message}"');
   }
 });
 
-test("parseConstRhs: parses run capture", () => {
+test("parseConstRhs: parses run capture as Expr.call", () => {
   const result = parseConstRhs("test.jh", ["const x = run my_script()"], 0, "run my_script()", 1, 1, false, "x");
-  assert.equal(result.value.kind, "run_capture");
-  if (result.value.kind === "run_capture") {
-    assert.equal(result.value.ref.value, "my_script");
+  assert.equal(result.value.kind, "call");
+  if (result.value.kind === "call") {
+    assert.equal(result.value.callee.value, "my_script");
   }
 });
 
-test("parseConstRhs: parses run capture with args", () => {
+test("parseConstRhs: parses run capture with args as Expr.call", () => {
   const result = parseConstRhs("test.jh", ['const x = run my_script("arg")'], 0, 'run my_script("arg")', 1, 1, false, "x");
-  assert.equal(result.value.kind, "run_capture");
-  if (result.value.kind === "run_capture") {
-    assert.equal(result.value.ref.value, "my_script");
+  assert.equal(result.value.kind, "call");
+  if (result.value.kind === "call") {
+    assert.equal(result.value.callee.value, "my_script");
     assert.deepEqual(result.value.args, [{ kind: "literal", raw: '"arg"' }]);
   }
 });
@@ -140,11 +140,11 @@ test("parseConstRhs: run without parens rejects (parens required)", () => {
   );
 });
 
-test("parseConstRhs: parses ensure capture", () => {
+test("parseConstRhs: parses ensure capture as Expr.ensure_call", () => {
   const result = parseConstRhs("test.jh", ["const x = ensure my_rule()"], 0, "ensure my_rule()", 1, 1, false, "x");
-  assert.equal(result.value.kind, "ensure_capture");
-  if (result.value.kind === "ensure_capture") {
-    assert.equal(result.value.ref.value, "my_rule");
+  assert.equal(result.value.kind, "ensure_call");
+  if (result.value.kind === "ensure_call") {
+    assert.equal(result.value.callee.value, "my_rule");
   }
 });
 
@@ -176,11 +176,11 @@ test("parseConstRhs: bare call without run suggests fix", () => {
   );
 });
 
-test("parseConstRhs: parses prompt capture in workflow", () => {
+test("parseConstRhs: parses prompt capture as Expr.prompt", () => {
   const lines = ['  const x = prompt "What is your name?"'];
   const result = parseConstRhs("test.jh", lines, 0, 'prompt "What is your name?"', 1, 1, false, "x");
-  assert.equal(result.value.kind, "prompt_capture");
-  if (result.value.kind === "prompt_capture") {
+  assert.equal(result.value.kind, "prompt");
+  if (result.value.kind === "prompt") {
     assert.equal(result.value.raw, '"What is your name?"');
   }
 });

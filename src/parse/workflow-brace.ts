@@ -1,7 +1,6 @@
-import type { WorkflowMetadata, WorkflowStepDef } from "../types";
+import type { CatchBody, Expr, WorkflowMetadata, WorkflowStepDef } from "../types";
 import { createTrivia, type Trivia } from "./trivia";
 import {
-  argsToSourceForm,
   colFromRaw,
   fail,
   hasUnescapedClosingQuote,
@@ -23,7 +22,7 @@ import { dottedReturnToQuotedString, isBareDottedIdentifierReturn, isBareIdentif
 
 export type BlockParseOpts = {
   forRule?: boolean;
-  /** When true, push `blank_line` steps so the formatter can preserve spacing. */
+  /** When true, push `blank_line` trivia steps so the formatter can preserve spacing. */
   preserveBlankLines?: boolean;
   /**
    * When set, allow a `config { … }` block as the first non-comment statement.
@@ -52,8 +51,8 @@ export function parseBraceBlockBody(
     if (inner === "") {
       if (opts?.preserveBlankLines) {
         const last = steps[steps.length - 1];
-        if (last && last.type !== "blank_line") {
-          steps.push({ type: "blank_line" });
+        if (last && !(last.type === "trivia" && last.kind === "blank_line")) {
+          steps.push({ type: "trivia", kind: "blank_line" });
         }
       }
       idx += 1;
@@ -61,7 +60,8 @@ export function parseBraceBlockBody(
     }
     if (inner.startsWith("#")) {
       steps.push({
-        type: "comment",
+        type: "trivia",
+        kind: "comment",
         text: innerRaw.trim(),
         loc: { line: innerNo, col: 1 },
       });
@@ -99,6 +99,22 @@ export function parseBraceBlockBody(
   fail(filePath, 'unterminated block, expected "}"', openerLineNo);
 }
 
+/** Build an `exec` step from a value expression and optional capture/catch/recover. */
+function execStep(
+  body: Expr,
+  loc: { line: number; col: number },
+  extras: { captureName?: string; catch?: CatchBody; recover?: CatchBody } = {},
+): WorkflowStepDef {
+  return {
+    type: "exec",
+    body,
+    ...(extras.captureName ? { captureName: extras.captureName } : {}),
+    ...(extras.catch ? { catch: extras.catch } : {}),
+    ...(extras.recover ? { recover: extras.recover } : {}),
+    loc,
+  };
+}
+
 /**
  * One workflow statement inside `{ … }` (catch body, etc.).
  */
@@ -117,7 +133,8 @@ export function parseBlockStatement(
   if (inner.startsWith("#")) {
     return {
       step: {
-        type: "comment",
+        type: "trivia",
+        kind: "comment",
         text: innerRaw.trim(),
         loc: { line: innerNo, col: 1 },
       },
@@ -205,9 +222,10 @@ export function parseBlockStatement(
     const failCol = innerRaw.indexOf("fail") + 1;
     if (arg.startsWith('"""')) {
       const { body, nextIdx } = consumeTripleQuotedArg(filePath, lines, idx, arg);
-      const message = tripleQuoteBodyToRaw(dedentTripleQuotedBody(body));
-      const step = { type: "fail" as const, message, loc: { line: innerNo, col: failCol } };
-      trivia.setNode(step, { tripleQuoted: true, rawBody: body });
+      const raw = tripleQuoteBodyToRaw(dedentTripleQuotedBody(body));
+      const message: Expr = { kind: "literal", raw };
+      trivia.setNode(message, { tripleQuoted: true, rawBody: body });
+      const step: WorkflowStepDef = { type: "say", level: "fail", message, loc: { line: innerNo, col: failCol } };
       return { step, nextIdx };
     }
     if (!arg.startsWith('"')) {
@@ -220,9 +238,14 @@ export function parseBlockStatement(
     if (closeIdx === -1) {
       fail(filePath, "unterminated fail string", innerNo, failCol);
     }
-    const message = arg.slice(0, closeIdx + 1);
+    const raw = arg.slice(0, closeIdx + 1);
     return {
-      step: { type: "fail", message, loc: { line: innerNo, col: failCol } },
+      step: {
+        type: "say",
+        level: "fail",
+        message: { kind: "literal", raw },
+        loc: { line: innerNo, col: failCol },
+      },
       nextIdx: idx + 1,
     };
   }
@@ -242,22 +265,25 @@ export function parseBlockStatement(
 
   if (inner.startsWith("run async ")) {
     const runBody = inner.slice("run async ".length).trim();
+    const runCol = innerRaw.indexOf("run") + 1;
     if (runBody.startsWith("`")) {
-      fail(filePath, "run async is not supported with inline scripts", innerNo, innerRaw.indexOf("run") + 1);
+      fail(filePath, "run async is not supported with inline scripts", innerNo, runCol);
     }
     // run async ... recover(name) { ... }
     const recoverResult = parseRunRecoverStep(filePath, lines, idx, innerNo, innerRaw, runBody, undefined, trivia);
-    if (recoverResult && recoverResult.step.type === "run") {
+    if (recoverResult && recoverResult.step.type === "exec" && recoverResult.step.body.kind === "call") {
+      const body: Expr = { ...recoverResult.step.body, async: true };
       return {
-        step: { ...recoverResult.step, async: true },
+        step: { ...recoverResult.step, body },
         nextIdx: recoverResult.nextIdx + 1,
       };
     }
     // run async ... catch(name) { ... }
     const catchResult = parseRunCatchStep(filePath, lines, idx, innerNo, innerRaw, runBody, undefined, trivia);
-    if (catchResult && catchResult.step.type === "run") {
+    if (catchResult && catchResult.step.type === "exec" && catchResult.step.body.kind === "call") {
+      const body: Expr = { ...catchResult.step.body, async: true };
       return {
-        step: { ...catchResult.step, async: true },
+        step: { ...catchResult.step, body },
         nextIdx: catchResult.nextIdx + 1,
       };
     }
@@ -266,32 +292,31 @@ export function parseBlockStatement(
       fail(filePath, "run async must target a valid reference: run async ref() or run async ref(args) — parentheses are required", innerNo);
     }
     rejectTrailingContent(filePath, innerNo, "run async", call.rest);
+    const callee = { value: call.ref, loc: { line: innerNo, col: runCol } };
     return {
-      step: {
-        type: "run",
-        workflow: {
-          value: call.ref,
-          loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
-        },
-        args: call.args,
-        async: true,
-      },
+      step: execStep(
+        { kind: "call", callee, args: call.args, async: true },
+        { line: innerNo, col: runCol },
+      ),
       nextIdx: idx + 1,
     };
   }
 
   if (inner.startsWith("run ")) {
     const runBody = inner.slice("run ".length).trim();
+    const runCol = innerRaw.indexOf("run") + 1;
     if (runBody.startsWith("`")) {
-      const result = parseAnonymousInlineScript(filePath, lines, idx, runBody, innerNo, innerRaw.indexOf("run") + 1);
+      const result = parseAnonymousInlineScript(filePath, lines, idx, runBody, innerNo, runCol);
       return {
-        step: {
-          type: "run_inline_script",
-          body: result.body,
-          ...(result.lang ? { lang: result.lang } : {}),
-          args: result.args,
-          loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
-        },
+        step: execStep(
+          {
+            kind: "inline_script",
+            body: result.body,
+            ...(result.lang ? { lang: result.lang } : {}),
+            args: result.args,
+          },
+          { line: innerNo, col: runCol },
+        ),
         nextIdx: result.nextLineIdx,
       };
     }
@@ -313,15 +338,12 @@ export function parseBlockStatement(
       fail(filePath, "run must target a valid reference: run ref() or run ref(args) — parentheses are required", innerNo);
     }
     rejectTrailingContent(filePath, innerNo, "run", call.rest);
+    const callee = { value: call.ref, loc: { line: innerNo, col: runCol } };
     return {
-      step: {
-        type: "run",
-        workflow: {
-          value: call.ref,
-          loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
-        },
-        args: call.args,
-      },
+      step: execStep(
+        { kind: "call", callee, args: call.args },
+        { line: innerNo, col: runCol },
+      ),
       nextIdx: idx + 1,
     };
   }
@@ -368,82 +390,78 @@ export function parseBlockStatement(
   if (inner.startsWith("log ") || inner === "log") {
     const logArg = inner.slice("log".length).trimStart();
     const logCol = innerRaw.indexOf("log") + 1;
+    const stepLoc = { line: innerNo, col: logCol };
     if (logArg.startsWith("run ") && logArg.slice("run ".length).trimStart().startsWith("`")) {
       const runBody = logArg.slice("run ".length).trim();
       const result = parseAnonymousInlineScript(filePath, lines, idx, runBody, innerNo, logCol);
-      return {
-        step: {
-          type: "log",
-          message: "",
-          loc: { line: innerNo, col: logCol },
-          managed: {
-            kind: "run_inline_script",
-            body: result.body,
-            ...(result.lang ? { lang: result.lang } : {}),
-            args: result.args,
-          },
-        },
-        nextIdx: result.nextLineIdx,
+      const message: Expr = {
+        kind: "inline_script",
+        body: result.body,
+        ...(result.lang ? { lang: result.lang } : {}),
+        args: result.args,
       };
+      return { step: { type: "say", level: "log", message, loc: stepLoc }, nextIdx: result.nextLineIdx };
     }
     if (logArg.startsWith("`") || logArg.startsWith("```")) {
       fail(filePath, 'bare inline scripts in log are not allowed; use "log run `...`()" to execute a managed inline script', innerNo, logCol);
     }
     if (logArg.startsWith('"""')) {
       const { body, nextIdx } = consumeTripleQuotedArg(filePath, lines, idx, logArg);
-      const step = { type: "log" as const, message: dedentTripleQuotedBody(body), loc: { line: innerNo, col: logCol } };
-      trivia.setNode(step, { tripleQuoted: true, rawBody: body });
-      return { step, nextIdx };
+      const raw = dedentTripleQuotedBody(body);
+      const message: Expr = { kind: "literal", raw };
+      trivia.setNode(message, { tripleQuoted: true, rawBody: body });
+      return { step: { type: "say", level: "log", message, loc: stepLoc }, nextIdx };
     }
     if (logArg.startsWith('"') && !hasUnescapedClosingQuote(logArg, 1)) {
       fail(filePath, 'multiline strings use triple quotes: log """..."""', innerNo, logCol);
     }
-    const message = parseLogMessageRhs(filePath, innerNo, logCol, logArg, "log");
-    return { step: { type: "log", message, loc: { line: innerNo, col: logCol } }, nextIdx: idx + 1 };
+    const messageRaw = parseLogMessageRhs(filePath, innerNo, logCol, logArg, "log");
+    return {
+      step: { type: "say", level: "log", message: { kind: "literal", raw: messageRaw }, loc: stepLoc },
+      nextIdx: idx + 1,
+    };
   }
 
   if (inner.startsWith("logerr ") || inner === "logerr") {
     const logerrArg = inner.slice("logerr".length).trimStart();
     const logerrCol = innerRaw.indexOf("logerr") + 1;
+    const stepLoc = { line: innerNo, col: logerrCol };
     if (logerrArg.startsWith("run ") && logerrArg.slice("run ".length).trimStart().startsWith("`")) {
       const runBody = logerrArg.slice("run ".length).trim();
       const result = parseAnonymousInlineScript(filePath, lines, idx, runBody, innerNo, logerrCol);
-      return {
-        step: {
-          type: "logerr",
-          message: "",
-          loc: { line: innerNo, col: logerrCol },
-          managed: {
-            kind: "run_inline_script",
-            body: result.body,
-            ...(result.lang ? { lang: result.lang } : {}),
-            args: result.args,
-          },
-        },
-        nextIdx: result.nextLineIdx,
+      const message: Expr = {
+        kind: "inline_script",
+        body: result.body,
+        ...(result.lang ? { lang: result.lang } : {}),
+        args: result.args,
       };
+      return { step: { type: "say", level: "logerr", message, loc: stepLoc }, nextIdx: result.nextLineIdx };
     }
     if (logerrArg.startsWith("`") || logerrArg.startsWith("```")) {
       fail(filePath, 'bare inline scripts in logerr are not allowed; use "logerr run `...`()" to execute a managed inline script', innerNo, logerrCol);
     }
     if (logerrArg.startsWith('"""')) {
       const { body, nextIdx } = consumeTripleQuotedArg(filePath, lines, idx, logerrArg);
-      const step = { type: "logerr" as const, message: dedentTripleQuotedBody(body), loc: { line: innerNo, col: logerrCol } };
-      trivia.setNode(step, { tripleQuoted: true, rawBody: body });
-      return { step, nextIdx };
+      const raw = dedentTripleQuotedBody(body);
+      const message: Expr = { kind: "literal", raw };
+      trivia.setNode(message, { tripleQuoted: true, rawBody: body });
+      return { step: { type: "say", level: "logerr", message, loc: stepLoc }, nextIdx };
     }
     if (logerrArg.startsWith('"') && !hasUnescapedClosingQuote(logerrArg, 1)) {
       fail(filePath, 'multiline strings use triple quotes: logerr """..."""', innerNo, logerrCol);
     }
-    const message = parseLogMessageRhs(filePath, innerNo, logerrCol, logerrArg, "logerr");
-    return { step: { type: "logerr", message, loc: { line: innerNo, col: logerrCol } }, nextIdx: idx + 1 };
+    const messageRaw = parseLogMessageRhs(filePath, innerNo, logerrCol, logerrArg, "logerr");
+    return {
+      step: { type: "say", level: "logerr", message: { kind: "literal", raw: messageRaw }, loc: stepLoc },
+      nextIdx: idx + 1,
+    };
   }
 
   if (inner.trim() === "return") {
     return {
       step: {
         type: "return",
-        value: '""',
+        value: { kind: "literal", raw: '""' },
         loc: { line: innerNo, col: innerRaw.indexOf("return") + 1 },
       },
       nextIdx: idx + 1,
@@ -457,13 +475,12 @@ export function parseBlockStatement(
     // return """..."""
     if (returnValue.startsWith('"""')) {
       const { body, nextIdx } = consumeTripleQuotedArg(filePath, lines, idx, returnValue);
-      const step = {
-        type: "return" as const,
-        value: tripleQuoteBodyToRaw(dedentTripleQuotedBody(body)),
-        loc: retLoc,
+      const value: Expr = { kind: "literal", raw: tripleQuoteBodyToRaw(dedentTripleQuotedBody(body)) };
+      trivia.setNode(value, { tripleQuoted: true, rawBody: body });
+      return {
+        step: { type: "return", value, loc: retLoc },
+        nextIdx,
       };
-      trivia.setNode(step, { tripleQuoted: true, rawBody: body });
-      return { step, nextIdx };
     }
     // return match var { ... }
     const returnMatchHead = returnValue.match(/^match\s+(.+?)\s*\{\s*$/);
@@ -471,12 +488,7 @@ export function parseBlockStatement(
       const subject = returnMatchHead[1].trim();
       const { expr, nextIndex } = parseMatchExpr(filePath, lines, idx, subject, retLoc);
       return {
-        step: {
-          type: "return",
-          value: `__match__`,
-          loc: retLoc,
-          managed: { kind: "match", match: expr },
-        },
+        step: { type: "return", value: { kind: "match", match: expr }, loc: retLoc },
         nextIdx: nextIndex,
       };
     }
@@ -484,33 +496,23 @@ export function parseBlockStatement(
       const runBody = returnValue.slice("run ".length).trim();
       if (runBody.startsWith("`")) {
         const result = parseAnonymousInlineScript(filePath, lines, idx, runBody, innerNo, innerRaw.indexOf("run") + 1);
+        const value: Expr = {
+          kind: "inline_script",
+          body: result.body,
+          ...(result.lang ? { lang: result.lang } : {}),
+          args: result.args,
+        };
         return {
-          step: {
-            type: "return",
-            value: `run inline_script`,
-            loc: retLoc,
-            managed: {
-              kind: "run_inline_script",
-              body: result.body,
-              ...(result.lang ? { lang: result.lang } : {}),
-              args: result.args,
-                },
-          },
+          step: { type: "return", value, loc: retLoc },
           nextIdx: result.nextLineIdx,
         };
       }
       const call = parseCallRef(runBody);
       if (call) {
         rejectTrailingContent(filePath, innerNo, "run", call.rest);
+        const callee = { value: call.ref, loc: retLoc };
         return {
-          step: {
-            type: "return",
-            value: `run ${call.ref}(${argsToSourceForm(call.args)})`,
-            loc: retLoc,
-            managed: {
-              kind: "run", ref: { value: call.ref, loc: retLoc }, args: call.args,
-            },
-          },
+          step: { type: "return", value: { kind: "call", callee, args: call.args }, loc: retLoc },
           nextIdx: idx + 1,
         };
       }
@@ -519,15 +521,9 @@ export function parseBlockStatement(
       const call = parseCallRef(returnValue.slice("ensure ".length).trim());
       if (call) {
         rejectTrailingContent(filePath, innerNo, "ensure", call.rest);
+        const callee = { value: call.ref, loc: retLoc };
         return {
-          step: {
-            type: "return",
-            value: `ensure ${call.ref}(${argsToSourceForm(call.args)})`,
-            loc: retLoc,
-            managed: {
-              kind: "ensure", ref: { value: call.ref, loc: retLoc }, args: call.args,
-            },
-          },
+          step: { type: "return", value: { kind: "ensure_call", callee, args: call.args }, loc: retLoc },
           nextIdx: idx + 1,
         };
       }
@@ -558,17 +554,17 @@ export function parseBlockStatement(
       }
       const isBareDotted = isBareDottedIdentifierReturn(returnValue);
       const isBare = !isBareDotted && isBareIdentifierReturn(returnValue);
-      const value = isBareDotted
+      const raw = isBareDotted
         ? dottedReturnToQuotedString(returnValue)
         : isBare
           ? bareIdentifierToQuotedString(returnValue)
           : returnValue;
-      const step = { type: "return" as const, value, loc: retLoc };
+      const value: Expr = { kind: "literal", raw };
       if (isBareDotted || isBare) {
-        trivia.setNode(step, { bareSource: returnValue.trim() });
+        trivia.setNode(value, { bareSource: returnValue.trim() });
       }
       return {
-        step,
+        step: { type: "return", value, loc: retLoc },
         nextIdx: idx + 1,
       };
     }
@@ -581,7 +577,7 @@ export function parseBlockStatement(
     const matchLoc = { line: innerNo, col: innerRaw.indexOf("match") + 1 };
     const { expr, nextIndex } = parseMatchExpr(filePath, lines, idx, subject, matchLoc);
     return {
-      step: { type: "match", expr },
+      step: execStep({ kind: "match", match: expr }, matchLoc),
       nextIdx: nextIndex,
     };
   }
@@ -593,12 +589,12 @@ export function parseBlockStatement(
     }
     const arrowIdx = inner.indexOf("<-");
     const rhsCol = arrowIdx >= 0 ? arrowIdx + 3 : 1;
-    const { rhs, nextIdx: sendNextIdx } = parseSendRhs(filePath, sendMatch.rhsText, innerNo, rhsCol, lines, idx, trivia);
+    const { value, nextIdx: sendNextIdx } = parseSendRhs(filePath, sendMatch.rhsText, innerNo, rhsCol, lines, idx, trivia);
     return {
       step: {
         type: "send",
         channel: sendMatch.channel,
-        rhs,
+        value,
         loc: { line: innerNo, col: 1 },
       },
       nextIdx: sendNextIdx,
@@ -606,11 +602,10 @@ export function parseBlockStatement(
   }
 
   return {
-    step: {
-      type: "shell",
-      command: inner,
-      loc: { line: innerNo, col: colFromRaw(innerRaw) },
-    },
+    step: execStep(
+      { kind: "shell", command: inner, loc: { line: innerNo, col: colFromRaw(innerRaw) } },
+      { line: innerNo, col: colFromRaw(innerRaw) },
+    ),
     nextIdx: idx + 1,
   };
 }

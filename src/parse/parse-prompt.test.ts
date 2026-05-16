@@ -5,39 +5,50 @@ import { createTrivia } from "./trivia";
 
 const trivia = createTrivia();
 
+/**
+ * `parsePromptStep` now returns an `exec` step whose `body` is an `Expr.prompt`.
+ * The bodyKind / bodyIdentifier / rawBody trivia hangs off that inner Expr.
+ */
+function unwrapPrompt(step: import("../types").WorkflowStepDef): import("../types").Expr & { kind: "prompt" } {
+  if (step.type !== "exec" || step.body.kind !== "prompt") {
+    throw new Error(`expected exec step with prompt body, got ${step.type}`);
+  }
+  return step.body;
+}
+
 // === parsePromptStep: single-line string literal ===
 
 test("parsePromptStep: parses simple single-line prompt", () => {
   const lines = ['  prompt "Hello world"'];
   const result = parsePromptStep("test.jh", lines, 0, '"Hello world"', 3, undefined, trivia);
-  assert.equal(result.step.type, "prompt");
-  assert.equal(result.step.raw, '"Hello world"');
-  assert.equal(result.step.loc.line, 1);
-  assert.equal(result.step.loc.col, 3);
-  assert.equal(result.step.captureName, undefined);
-  assert.equal(result.step.returns, undefined);
-  if (result.step.type === "prompt") {
-    assert.equal(trivia.getNode(result.step)?.bodyKind, "string");
+  const body = unwrapPrompt(result.step);
+  assert.equal(body.raw, '"Hello world"');
+  assert.equal(body.loc.line, 1);
+  assert.equal(body.loc.col, 3);
+  if (result.step.type === "exec") {
+    assert.equal(result.step.captureName, undefined);
   }
+  assert.equal(body.returns, undefined);
+  assert.equal(trivia.getNode(body)?.bodyKind, "string");
 });
 
 test("parsePromptStep: parses captured prompt", () => {
   const lines = ['  answer = prompt "What?"'];
   const result = parsePromptStep("test.jh", lines, 0, '"What?"', 3, "answer", trivia);
-  assert.equal(result.step.type, "prompt");
-  assert.equal(result.step.raw, '"What?"');
-  assert.equal(result.step.captureName, "answer");
-  if (result.step.type === "prompt") {
-    assert.equal(trivia.getNode(result.step)?.bodyKind, "string");
+  const body = unwrapPrompt(result.step);
+  assert.equal(body.raw, '"What?"');
+  if (result.step.type === "exec") {
+    assert.equal(result.step.captureName, "answer");
   }
+  assert.equal(trivia.getNode(body)?.bodyKind, "string");
 });
 
 test("parsePromptStep: parses prompt with returns schema (double-quoted)", () => {
   const lines = ['  prompt "Classify" returns "{ type: string }"'];
   const result = parsePromptStep("test.jh", lines, 0, '"Classify" returns "{ type: string }"', 3, undefined, trivia);
-  assert.equal(result.step.type, "prompt");
-  assert.equal(result.step.raw, '"Classify"');
-  assert.equal(result.step.returns, "{ type: string }");
+  const body = unwrapPrompt(result.step);
+  assert.equal(body.raw, '"Classify"');
+  assert.equal(body.returns, "{ type: string }");
 });
 
 test("parsePromptStep: rejects single-quoted returns schema", () => {
@@ -66,35 +77,31 @@ test("parsePromptStep: multiline quoted prompt throws with clear error", () => {
 test("parsePromptStep: parses bare identifier prompt", () => {
   const lines = ['  prompt myVar'];
   const result = parsePromptStep("test.jh", lines, 0, "myVar", 3, undefined, trivia);
-  assert.equal(result.step.type, "prompt");
-  if (result.step.type === "prompt") {
-    assert.equal(trivia.getNode(result.step)?.bodyKind, "identifier");
-    assert.equal(trivia.getNode(result.step)?.bodyIdentifier, "myVar");
-    assert.equal(result.step.raw, '"${myVar}"');
-    assert.equal(result.step.returns, undefined);
-  }
+  const body = unwrapPrompt(result.step);
+  assert.equal(trivia.getNode(body)?.bodyKind, "identifier");
+  assert.equal(trivia.getNode(body)?.bodyIdentifier, "myVar");
+  assert.equal(body.raw, '"${myVar}"');
+  assert.equal(body.returns, undefined);
 });
 
 test("parsePromptStep: parses identifier prompt with returns", () => {
   const lines = ['  prompt myVar returns "{ type: string }"'];
   const result = parsePromptStep("test.jh", lines, 0, 'myVar returns "{ type: string }"', 3, undefined, trivia);
-  assert.equal(result.step.type, "prompt");
-  if (result.step.type === "prompt") {
-    assert.equal(trivia.getNode(result.step)?.bodyKind, "identifier");
-    assert.equal(trivia.getNode(result.step)?.bodyIdentifier, "myVar");
-    assert.equal(result.step.returns, "{ type: string }");
-  }
+  const body = unwrapPrompt(result.step);
+  assert.equal(trivia.getNode(body)?.bodyKind, "identifier");
+  assert.equal(trivia.getNode(body)?.bodyIdentifier, "myVar");
+  assert.equal(body.returns, "{ type: string }");
 });
 
 test("parsePromptStep: parses captured identifier prompt", () => {
   const lines = ['  answer = prompt text'];
   const result = parsePromptStep("test.jh", lines, 0, "text", 3, "answer", trivia);
-  assert.equal(result.step.type, "prompt");
-  assert.equal(result.step.captureName, "answer");
-  if (result.step.type === "prompt") {
-    assert.equal(trivia.getNode(result.step)?.bodyKind, "identifier");
-    assert.equal(trivia.getNode(result.step)?.bodyIdentifier, "text");
+  const body = unwrapPrompt(result.step);
+  if (result.step.type === "exec") {
+    assert.equal(result.step.captureName, "answer");
   }
+  assert.equal(trivia.getNode(body)?.bodyKind, "identifier");
+  assert.equal(trivia.getNode(body)?.bodyIdentifier, "text");
 });
 
 // === parsePromptStep: triple-quoted block ===
@@ -107,13 +114,10 @@ test("parsePromptStep: parses triple-quoted block prompt", () => {
     '"""',
   ];
   const result = parsePromptStep("test.jh", lines, 0, '"""', 3, undefined, trivia);
-  assert.equal(result.step.type, "prompt");
-  if (result.step.type === "prompt") {
-    assert.equal(trivia.getNode(result.step)?.bodyKind, "triple_quoted");
-    // raw contains the body wrapped in quotes for runtime interpolation
-    assert.ok(result.step.raw.includes("You are a helpful assistant."));
-    assert.ok(result.step.raw.includes("${input}"));
-  }
+  const body = unwrapPrompt(result.step);
+  assert.equal(trivia.getNode(body)?.bodyKind, "triple_quoted");
+  assert.ok(body.raw.includes("You are a helpful assistant."));
+  assert.ok(body.raw.includes("${input}"));
 });
 
 test("parsePromptStep: parses captured triple-quoted block prompt", () => {
@@ -123,11 +127,11 @@ test("parsePromptStep: parses captured triple-quoted block prompt", () => {
     '"""',
   ];
   const result = parsePromptStep("test.jh", lines, 0, '"""', 3, "answer", trivia);
-  assert.equal(result.step.type, "prompt");
-  assert.equal(result.step.captureName, "answer");
-  if (result.step.type === "prompt") {
-    assert.equal(trivia.getNode(result.step)?.bodyKind, "triple_quoted");
+  const body = unwrapPrompt(result.step);
+  if (result.step.type === "exec") {
+    assert.equal(result.step.captureName, "answer");
   }
+  assert.equal(trivia.getNode(body)?.bodyKind, "triple_quoted");
 });
 
 test("parsePromptStep: triple-quoted block may be followed by returns on the next line", () => {
@@ -138,11 +142,9 @@ test("parsePromptStep: triple-quoted block may be followed by returns on the nex
     'returns "{ role: string }"',
   ];
   const result = parsePromptStep("test.jh", lines, 0, '"""', 3, "answer", trivia);
-  assert.equal(result.step.type, "prompt");
-  if (result.step.type === "prompt") {
-    assert.equal(trivia.getNode(result.step)?.bodyKind, "triple_quoted");
-    assert.equal(result.step.returns, "{ role: string }");
-  }
+  const body = unwrapPrompt(result.step);
+  assert.equal(trivia.getNode(body)?.bodyKind, "triple_quoted");
+  assert.equal(body.returns, "{ role: string }");
   assert.equal(result.nextLineIdx, 3);
 });
 
@@ -153,11 +155,9 @@ test("parsePromptStep: triple-quoted block may close with returns on same line",
     '""" returns "{ role: string }"',
   ];
   const result = parsePromptStep("test.jh", lines, 0, '"""', 3, "answer", trivia);
-  assert.equal(result.step.type, "prompt");
-  if (result.step.type === "prompt") {
-    assert.equal(trivia.getNode(result.step)?.bodyKind, "triple_quoted");
-    assert.equal(result.step.returns, "{ role: string }");
-  }
+  const body = unwrapPrompt(result.step);
+  assert.equal(trivia.getNode(body)?.bodyKind, "triple_quoted");
+  assert.equal(body.returns, "{ role: string }");
   assert.equal(result.nextLineIdx, 2);
 });
 
@@ -173,8 +173,6 @@ test("parsePromptStep: unterminated triple-quoted block throws", () => {
   );
 });
 
-// === parsePromptStep: triple-backtick fences are rejected for prompts ===
-
 test("parsePromptStep: triple-backtick fence is rejected with guidance", () => {
   const lines = [
     '  prompt ```',
@@ -186,8 +184,6 @@ test("parsePromptStep: triple-backtick fence is rejected with guidance", () => {
     /prompt blocks use triple quotes.*triple backticks are for scripts/,
   );
 });
-
-// === parsePromptStep: errors ===
 
 test("parsePromptStep: unterminated single-line string throws", () => {
   const lines = ['  prompt "Hello'];
@@ -216,8 +212,6 @@ test("parsePromptStep: unterminated returns schema throws", () => {
 test("parsePromptStep: returns with double-quoted schema", () => {
   const lines = ['  prompt "Classify" returns "{ type: string }"'];
   const result = parsePromptStep("test.jh", lines, 0, '"Classify" returns "{ type: string }"', 3, undefined, trivia);
-  assert.equal(result.step.type, "prompt");
-  if (result.step.type === "prompt") {
-    assert.equal(result.step.returns, "{ type: string }");
-  }
+  const body = unwrapPrompt(result.step);
+  assert.equal(body.returns, "{ type: string }");
 });

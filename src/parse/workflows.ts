@@ -79,8 +79,14 @@ export function parseWorkflowBlock(
     },
   );
   workflow.steps.push(...bodySteps);
-  // Strip trailing blank_line (whitespace before closing brace).
-  while (workflow.steps.length > 0 && workflow.steps[workflow.steps.length - 1].type === "blank_line") {
+  // Strip trailing blank_line trivia (whitespace before closing brace).
+  while (
+    workflow.steps.length > 0 &&
+    (() => {
+      const last = workflow.steps[workflow.steps.length - 1];
+      return last.type === "trivia" && last.kind === "blank_line";
+    })()
+  ) {
     workflow.steps.pop();
   }
   return { workflow, nextIndex: afterClose, exported: isExported };

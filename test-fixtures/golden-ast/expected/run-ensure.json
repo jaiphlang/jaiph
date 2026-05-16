@@ -9,10 +9,13 @@
       "params": [],
       "steps": [
         {
-          "type": "run",
-          "workflow": {
-            "value": "validator"
-          }
+          "body": {
+            "callee": {
+              "value": "validator"
+            },
+            "kind": "call"
+          },
+          "type": "exec"
         }
       ]
     }
@@ -31,16 +34,22 @@
       "params": [],
       "steps": [
         {
-          "ref": {
-            "value": "check"
+          "body": {
+            "callee": {
+              "value": "check"
+            },
+            "kind": "ensure_call"
           },
-          "type": "ensure"
+          "type": "exec"
         },
         {
-          "type": "run",
-          "workflow": {
-            "value": "helper"
-          }
+          "body": {
+            "callee": {
+              "value": "helper"
+            },
+            "kind": "call"
+          },
+          "type": "exec"
         }
       ]
     },
@@ -50,8 +59,12 @@
       "params": [],
       "steps": [
         {
-          "message": "helping",
-          "type": "log"
+          "level": "log",
+          "message": {
+            "kind": "literal",
+            "raw": "helping"
+          },
+          "type": "say"
         }
       ]
     }
