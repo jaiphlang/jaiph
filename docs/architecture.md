@@ -19,8 +19,8 @@ For **how to contribute** — branches, test layers, E2E assertion policy, and b
 
 Workflow authors write `.jh` / `.test.jh` modules. The toolchain turns those files into **validated** modules plus **extracted script files**, then the **same AST interpreter** runs workflows whether you use local `jaiph run`, Docker, or `jaiph test`.
 
-1. Parse source into AST. For the default local `jaiph run <file.jh>` path, the CLI walks the entry plus its transitive `.jh` import closure **once** through **`prepareCompile`** (`src/transpile/compile-prep.ts`) and reuses that **`CompilePrep`** for the banner (`metadataToConfig`), for **`buildScripts`** (script-body extraction), and — across the parent → child process boundary — for **`buildRuntimeGraph`** in the spawned runner (see [Local single-parse compile prep](#local-single-parse-compile-prep) and the sequence diagram below). Other paths (`jaiph run --raw`, Docker `jaiph run`, `jaiph test`, `jaiph compile`) keep their existing parser calls and re-read `.jh` sources on demand.
-2. **Compile-time** validation (`validateReferences`, invoked from **`emitScriptsForModule`** / **`buildScripts()`**) runs before script extraction, not inside `buildRuntimeGraph()` (the graph loader only parses modules and follows imports). The **`jaiph compile`** command walks the same import closure but runs **`validateReferences` only**: it parses each reachable module on disk and **does not** emit **`scripts/`** (no **`buildScriptFiles`** / **`buildScripts`**), **does not** invoke **`buildRuntimeGraph()`**, and never spawns the workflow runner (`src/cli/commands/compile.ts`). For a **directory** argument it discovers `*.jh` via `walkjhFiles`, which **skips** `*.test.jh`; to validate a test module, pass that file explicitly. Imported modules in the closure are still validated recursively either way.
+1. Parse source into AST. Every CLI path walks the entry plus its transitive `.jh` import closure **once** through **`loadModuleGraph`** (`src/transpile/module-graph.ts`) and reuses that **`ModuleGraph`** for the banner (`metadataToConfig`), validation (**`validateReferences(graph)`**), script-body extraction (**`buildScriptsFromGraph`**), and — across the parent → child process boundary on the default local `jaiph run` — for **`buildRuntimeGraph(graph)`** in the spawned runner (see [Local module graph](#local-module-graph) and the sequence diagram below). `parsejaiph(source, filePath)` is I/O-pure; `validate` and `emit` operate entirely on the in-memory graph and never re-read `.jh` files. The only fs entry point that reads `.jh` sources is `loadModuleGraph`.
+2. **Compile-time** validation (`validateReferences(graph)`, invoked from **`emitScriptsForModuleFromGraph`** / **`buildScriptsFromGraph()`**) runs before script extraction. The validator consumes the in-memory graph; imported ASTs are looked up by absolute path and never re-read from disk. The **`jaiph compile`** command walks the same import closure but runs **`validateReferences` only**: it builds a graph per entry, validates it, and **does not** emit **`scripts/`**, **does not** invoke **`buildRuntimeGraph()`**, and never spawns the workflow runner (`src/cli/commands/compile.ts`). For a **directory** argument it discovers `*.jh` via `walkjhFiles`, which **skips** `*.test.jh`; to validate a test module, pass that file explicitly. Imported modules in the closure are still validated recursively either way.
 3. **CLI** (`dist/src/cli.js` via npm, or a **Bun-compiled** `dist/jaiph` binary) prepares script executables (scripts-only), then spawns a **detached child** that loads **`node-workflow-runner.js`**. That child calls `buildRuntimeGraph()` and runs **`NodeWorkflowRuntime`**. The child’s interpreter is **`process.execPath`** of the CLI process (Node when you run `node dist/src/cli.js`, the standalone Bun binary when you run `dist/jaiph`). Script steps execute as managed subprocesses; prompt, inbox I/O, and event/summary emission are handled by the kernel under `src/runtime/kernel/`.
 4. Stream live events to the CLI and persist durable run artifacts.
 
@@ -46,8 +46,8 @@ All orchestration — local `jaiph run`, `jaiph test`, and **Docker `jaiph run`*
   - Resolves imports and symbol references; emits deterministic compile-time errors. Import resolution (`resolveImportPath` in `transpile/resolve.ts`) checks relative paths first, then falls back to project-scoped libraries under `<workspace>/.jaiph/libs/` — the workspace root is threaded through all compilation call sites. Export visibility is enforced by `validateRef` in `validate-ref-resolution.ts`: if an imported module declares any `export`, only exported names are reachable through the import alias.
 
 - **Transpiler (`src/transpiler.ts`, `src/transpile/*`)**
-  - **`emitScriptsForModule`** parses, runs **`validateReferences`**, and **`buildScriptFiles`** — the only compile path for `jaiph run` / `jaiph test` — **persists only atomic `script` files** under `scripts/`. **`buildScripts()`** can also take a **directory** of non-test `*.jh` modules (`src/transpile/build.ts` uses `walkjhFiles`); the **`jaiph run`** and **`jaiph test`** commands always pass a **single entry file** (`.jh` or `*.test.jh`). Inline scripts (`` run `body`(args) ``) are also emitted as `scripts/__inline_<hash>` with deterministic hash-based names (`inlineScriptName` in `src/inline-script-name.ts`). There is no workflow-level bash emission.
-  - Both **`buildScripts()`** and **`emitScriptsForModule`** accept an optional **`CompilePrep`** parameter. When supplied, the transitive-module list comes from the pre-parsed cache instead of re-walking the import closure, and `validateReferences` reads its `readFile` / `parse` callbacks against that same cache so each reachable module is parsed exactly once per `jaiph run` (see [Local single-parse compile prep](#local-single-parse-compile-prep)).
+  - **`emitScriptsForModuleFromGraph`** validates one module against the graph and runs **`buildScriptFiles`** — the only compile path for `jaiph run` / `jaiph test` — **persists only atomic `script` files** under `scripts/`. **`buildScripts(input, outDir, ws?)`** is the path-based wrapper used by tests and the directory walk; it loads a `ModuleGraph` and delegates. **`buildScriptsFromGraph(graph, outDir)`** is the graph-based entry point used by `jaiph run` / `jaiph test`, which already loaded the graph. Inline scripts (`` run `body`(args) ``) are also emitted as `scripts/__inline_<hash>` with deterministic hash-based names (`inlineScriptName` in `src/inline-script-name.ts`). There is no workflow-level bash emission.
+  - The pipeline contract is `loadModuleGraph` → `validateReferences(graph)` → `emit(graph, outDir)`. `parsejaiph` is I/O-pure; `validate` and `emit` never touch `.jh` on disk. Each reachable module is parsed exactly once per `jaiph run` (see [Local module graph](#local-module-graph)).
 
 - **Node Workflow Runtime (`src/runtime/kernel/node-workflow-runtime.ts`)**
   - `NodeWorkflowRuntime` interprets the AST directly: walks workflow steps, manages scope/variables, delegates prompt and script execution to kernel helpers, handles channels/inbox/dispatch, owns the frame stack and heartbeat, and writes run artifacts.
@@ -55,7 +55,7 @@ All orchestration — local `jaiph run`, `jaiph test`, and **Docker `jaiph run`*
     - **`runtime-arg-parser.ts`** — stateless interpolation and call-argument parsing (`interpolate`, `parseInlineCaptureCall`, `commaArgsToInterpolated`, `parseArgsRaw`, `parseInlineScriptAt`, `parseManagedArgAt`, `parseArgTokens`, `stripOuterQuotes`, `parsePromptSchema`, `sanitizeName`, `nowIso`) plus shared constants and the `ParsedArgToken` / `PromptSchemaField` types. Direct unit tests live in `runtime-arg-parser.test.ts`.
     - **`runtime-event-emitter.ts`** — `RuntimeEventEmitter` owns **`__JAIPH_EVENT__`** writes on stderr (step/log traffic when not suppressed), **`run_summary.jsonl`** appends for the wider timeline (including workflow/prompt records that are summary-first), plus step/prompt sequence counters. Constructed with `{ runId, runDir, env, getFrameStack, getAsyncIndices, suppressLiveEvents? }`; the runtime delegates structured emission to it. The optional `suppressLiveEvents` flag (forwarded from `NodeWorkflowRuntime`'s `suppressLiveEvents` option) skips the live stderr **`__JAIPH_EVENT__`** lines while **`appendRunSummaryLine`** keeps updating **`run_summary.jsonl`** — used by in-process callers like the test runner that share stderr with `node --test` reporter output. The CLI's spawned `node-workflow-runner` child does not set it, so production runs stream events to stderr as before.
     - **`runtime-mock.ts`** — `executeMockBodyDef` and `executeMockShellBody` for `*.test.jh` workflow/rule/script mocks. Shell-kind mocks run `bash -c`; steps-kind mocks dispatch back into the runtime via an `executeStepsBack` callback so the body runs against the full step interpreter.
-  - `buildRuntimeGraph()` (`graph.ts`) loads reachable modules with **`parsejaiph` only** (import closure); it does **not** run `validateReferences`. Cross-module refs are resolved from that graph at runtime. For **`script import`** declarations, `buildRuntimeGraph()` injects synthetic `ScriptDef` stubs (`graph.ts`) so reference resolution matches the validated compile path without re-reading external script bodies at graph-build time. The function also accepts an optional **`CompilePrep`**: when supplied, every reachable module is taken from the cache and no `.jh` file is read from disk in the runner. The stub-injection helper (`attachScriptImportStubs`) is idempotent so cached and uncached paths produce the same node shape.
+  - `buildRuntimeGraph()` (`graph.ts`) accepts either an entry file path (legacy) or an already-loaded `ModuleGraph` and returns the runtime-ready view by injecting `ScriptDef` stubs for **`script import`** declarations so reference resolution matches the validated compile path without re-reading external script bodies. Cross-module refs are resolved from that graph at runtime. `RuntimeGraph` is a type alias for `ModuleGraph` — there is one canonical "all reachable modules" representation. The stub-injection helper (`attachScriptImportStubs`) is idempotent.
 
 - **Node Test Runner (`src/runtime/kernel/node-test-runner.ts`)**
   - Executes `*.test.jh` test blocks using `NodeWorkflowRuntime` with mock support (mock prompts, mock workflow/rule/script bodies). Pure Node harness — no Bash test transpilation.
@@ -70,18 +70,18 @@ All orchestration — local `jaiph run`, `jaiph test`, and **Docker `jaiph run`*
   - Parses mount specs, resolves Docker config (image, network, timeout), and builds the `docker run` invocation when the CLI enables **Docker sandboxing** for `jaiph run` (environment-driven; there is no `jaiph run --docker` flag — see [Sandboxing](sandboxing.md)). The container runs the same `node-workflow-runner` entry as local execution. The default image is the official `ghcr.io/jaiphlang/jaiph-runtime` GHCR image; every selected image must already contain `jaiph` (no auto-install or derived-image build at runtime). Image preparation (`prepareImage`) runs before the CLI banner: it checks whether the image is local, pulls with `--quiet` if needed (short status lines on stderr instead of Docker’s default pull UI), and verifies that `jaiph` exists in the image. `spawnDockerProcess` does not pull or verify — it receives a pre-resolved image. The spawn call uses `stdio: ["ignore", "pipe", "pipe"]` — stdin is ignored so the Docker CLI does not block on stdin EOF, which would stall event streaming and hang the host CLI after the container exits.
   - **Workspace immutability:** Docker runs cannot modify the host workspace. The host checkout is mounted read-only; `/jaiph/workspace` is a sandbox-local copy-on-write overlay discarded on exit. The only host-writable path is `/jaiph/run` (run artifacts). Workflows that need to capture workspace changes should write files (for example a `git diff` into a temp path) and publish them with `artifacts.save()`. See [Sandboxing](sandboxing.md) for the full contract and [Libraries — `jaiphlang/artifacts`](libraries.md#jaiphlangartifacts--publishing-files-out-of-the-sandbox).
 
-## Local single-parse compile prep
-{: #local-single-parse-compile-prep}
+## Local module graph
+{: #local-module-graph}
 
-The default local `jaiph run <file.jh>` path uses one shared module-graph representation across the parent CLI → child runner boundary so each reachable `.jh` is parsed exactly **once** per run.
+The toolchain has one canonical representation — **`ModuleGraph`** — for "all `.jh` modules reachable from an entry point, parsed once." The same graph is used by the validator, the script emitter, and the runtime; on the default local `jaiph run` path it also crosses the parent CLI → child runner boundary so each reachable `.jh` is parsed exactly **once** per run.
 
-- **`prepareCompile(entryFile, workspaceRoot)`** (`src/transpile/compile-prep.ts`) walks the entry plus its transitive `import` edges through `resolveImportPath` and returns a **`CompilePrep`** record: `{ entryFile, workspaceRoot, astByFile: Map<absPath, jaiphModule> }`. **`jaiphlang/<name>`** library imports resolve through the same workspace fallback as the rest of the toolchain.
-- **`src/cli/commands/run.ts`** calls `prepareCompile` once after path normalization. The entry AST is reused for **`metadataToConfig(mod.metadata)`** (banner / `runtime` config) — no separate `parsejaiph(readFileSync(...))` for metadata. The same prep is passed to **`buildScripts(input, outDir, workspaceRoot, prep)`** so `emitScriptsForModule` skips `readFileSync` + `parsejaiph` per module; `validateReferences` runs against the cached AST via injected `readFile` / `parse` callbacks.
-- **Process boundary.** The CLI serializes the prep with **`writeCompilePrep`** to **`<outDir>/.jaiph-compile-prep.json`** (deterministic JSON: entries sorted by absolute path; ASTs included verbatim). It points the spawned **`node-workflow-runner.js`** at the file through the internal env var **`JAIPH_COMPILE_PREP_FILE`**. The runner reads it back with **`readCompilePrep`** and passes the result to **`buildRuntimeGraph(entry, workspaceRoot, prep)`**, which builds the `RuntimeGraph` from the cached `Map` instead of re-reading `.jh` files. Cross-module workflow / rule / script resolution and `script import` stub injection match the on-disk parse path.
-- **Scope of the optimization.** `JAIPH_COMPILE_PREP_FILE` is set **only** when the host CLI spawns the local **`node-workflow-runner.js`** child with Docker sandboxing disabled (`dockerConfigForBanner.enabled === false`). It is **not** set on these paths, which keep their existing parse calls:
-  - **`jaiph run --raw`** — `runWorkflowRaw` (`src/cli/commands/run.ts`) calls `parsejaiph` / `buildScripts` directly without a prep cache; the runner uses inherited stdio and never reads this env var.
-  - **Docker `jaiph run`** — the host writes the prep file under `outDir`, but skips the env var because the inner container command is `jaiph run --raw …` and the host bind-mount layout does not plumb the cache file inside the container.
-  - **`jaiph test`** — `runTestFile` keeps its own one-time `buildRuntimeGraph(testFileAbs)` per test file (see [Test runner integration](#test-runner-integration-testjh-in-the-kernel)).
+- **`loadModuleGraph(entryFile, workspaceRoot?)`** (`src/transpile/module-graph.ts`) walks the entry plus its transitive `import` edges through `resolveImportPath` and returns `{ entryFile, workspaceRoot?, modules: Map<absPath, { filePath, ast, imports: Map<alias, absPath> }> }`. **`jaiphlang/<name>`** library imports resolve through the same workspace fallback as the rest of the toolchain. This is the **only** routine that reads `.jh` sources from disk; `parsejaiph(source, filePath)` itself is I/O-pure.
+- **`src/cli/commands/run.ts`** calls `loadModuleGraph` once after path normalization. The entry AST is reused for **`metadataToConfig(mod.metadata)`** (banner / `runtime` config). The same graph is passed to **`buildScriptsFromGraph(graph, outDir)`**, which calls `emitScriptsForModuleFromGraph` per reachable module; `validateReferences(graph)` runs against the in-memory ASTs.
+- **Process boundary.** The CLI serializes the graph with **`writeModuleGraph`** to **`<outDir>/.jaiph-module-graph.json`** (deterministic JSON: entries sorted by absolute path; ASTs included verbatim). It points the spawned **`node-workflow-runner.js`** at the file through the internal env var **`JAIPH_MODULE_GRAPH_FILE`**. The runner reads it back with **`readModuleGraph`** and passes the result to **`buildRuntimeGraph(graph)`**, which produces the runtime view (with `script import` stub injection) without touching disk. Cross-module workflow / rule / script resolution matches the on-disk load path.
+- **Scope of the env-var hand-off.** `JAIPH_MODULE_GRAPH_FILE` is set **only** when the host CLI spawns the local **`node-workflow-runner.js`** child with Docker sandboxing disabled (`dockerConfigForBanner.enabled === false`). It is **not** set on these paths, which load the graph from disk inside the runner instead:
+  - **`jaiph run --raw`** — `runWorkflowRaw` (`src/cli/commands/run.ts`) calls `buildScripts` directly without writing the graph file; the runner uses inherited stdio and falls back to `loadModuleGraph` from the source file.
+  - **Docker `jaiph run`** — the host writes the graph file under `outDir`, but skips the env var because the inner container command is `jaiph run --raw …` and the host bind-mount layout does not plumb the cache file inside the container.
+  - **`jaiph test`** — `runSingleTestFile` builds the graph in `src/cli/commands/test.ts` and threads it through `runTestFile(graph, ...)` directly (no env var needed; same process).
 
   When the env var is absent the runner falls back to the disk-walk parse path, preserving prior behavior.
 
@@ -137,9 +137,9 @@ Channels are validated at compile time (`validateReferences` / send RHS rules) a
 
 ## Test runner integration (`*.test.jh` in the kernel)
 
-**How** `jaiph test` wires into the same stack as `jaiph run`: `*.test.jh` files are parsed in the CLI; `runTestFile()` drives blocks in-process. **`buildRuntimeGraph(testFile)`** is called **once per `runTestFile` invocation** and the resulting graph is reused across all blocks and `test_run_workflow` steps (the import closure is constant for a given test file within a single process run). Each `test_run_workflow` step resolves mocks against that cached graph, then constructs `NodeWorkflowRuntime` with `mockBodies` / mock prompt env, passing **`suppressLiveEvents: true`** so **`RuntimeEventEmitter`** skips writing **`__JAIPH_EVENT__`** lines to **stderr** while still appending **`run_summary.jsonl`** for that run. Without this flag, every workflow event would print to the test process's stderr and swamp `node --test` reporter output. Mock prompts, workflows, rules, and scripts are supported through the runtime's mock infrastructure.
+**How** `jaiph test` wires into the same stack as `jaiph run`: `runSingleTestFile` (`src/cli/commands/test.ts`) calls `loadModuleGraph(testFileAbs, workspaceRoot)` once, then threads the resulting `ModuleGraph` through `buildScriptsFromGraph(graph, tmpDir)` and `runTestFile(graph, …)`. `runTestFile` calls `buildRuntimeGraph(graph)` once per file and the runtime view is reused across all blocks and `test_run_workflow` steps (the import closure is constant for a given test file within a single process run). Each `test_run_workflow` step resolves mocks against that runtime view, then constructs `NodeWorkflowRuntime` with `mockBodies` / mock prompt env, passing **`suppressLiveEvents: true`** so **`RuntimeEventEmitter`** skips writing **`__JAIPH_EVENT__`** lines to **stderr** while still appending **`run_summary.jsonl`** for that run. Without this flag, every workflow event would print to the test process's stderr and swamp `node --test` reporter output. Mock prompts, workflows, rules, and scripts are supported through the runtime's mock infrastructure.
 
-Before that, the CLI prepares script executables via **`buildScripts(testFileAbs, tmpDir, workspaceRoot)`** — the same **`buildScripts`** helper as `jaiph run`, with the **test file as the entrypoint**. That walks the test module and its **import closure** (transitive `import` edges), runs **`validateReferences`** / **`emitScriptsForModule`** per reachable file, and writes `scripts/` so imported workflows have paths under `JAIPH_SCRIPTS`. Unrelated `*.jh` files elsewhere in the repo are not compiled unless imported.
+The `buildScriptsFromGraph` call writes `scripts/` so imported workflows have paths under `JAIPH_SCRIPTS`. Unrelated `*.jh` files elsewhere in the repo are not compiled unless imported.
 
 Authoring rules, fixtures, and mock syntax for `*.test.jh` are documented in [Testing](testing.md), not here.
 
@@ -158,28 +158,27 @@ The progress UI combines a **static** step tree derived from the workflow AST (`
 flowchart TD
     U[User / CI] --> CLI[CLI: Node or Bun jaiph]
 
-    subgraph Transpile["Per-module: emitScriptsForModule()"]
-        PARSE[parsejaiph]
+    subgraph Transpile["Per-module: emitScriptsForModuleFromGraph()"]
         VAL[validateReferences]
         EMIT[Emit atomic script files under scripts/]
-        PARSE --> VAL
         VAL -->|compile errors| ERR[Deterministic compile errors]
         VAL --> EMIT
     end
 
-    CLI -->|jaiph run| CP1[prepareCompile entry + closure]
-    CP1 --> BS1[buildScripts prep]
+    CLI -->|jaiph run| LMG1[loadModuleGraph entry + closure]
+    LMG1 --> BS1[buildScriptsFromGraph]
     BS1 --> Transpile
 
-    CLI -->|jaiph test| BS2[buildScripts(entry .test.jh)]
+    CLI -->|jaiph test| LMG2[loadModuleGraph(entry .test.jh)]
+    LMG2 --> BS2[buildScriptsFromGraph]
     BS2 --> Transpile
-    BS2 --> TR[Node Test Runner in-process]
+    LMG2 --> TR[Node Test Runner in-process]
 
     Transpile -->|jaiph run local| RW[Node workflow runner child]
     Transpile -->|jaiph run Docker| DC[Container runs node-workflow-runner]
-    CP1 -. JAIPH_COMPILE_PREP_FILE (local non-Docker only) .-> RW
+    LMG1 -. JAIPH_MODULE_GRAPH_FILE (local non-Docker only) .-> RW
 
-    RW --> G[buildRuntimeGraph parse-only or cached prep]
+    RW --> G[buildRuntimeGraph from graph]
     G --> GRAPH[RuntimeGraph]
     RW --> RT[NodeWorkflowRuntime]
     RT --> GRAPH
@@ -213,26 +212,26 @@ Interactive **`jaiph run`** (no **`--raw`**): banner, progress tree, hooks, and 
 sequenceDiagram
     participant User
     participant CLI as CLI jaiph run
-    participant CP as prepareCompile
-    participant Prep as buildScripts(prep)
-    participant TF as emitScriptsForModule per module
+    participant Load as loadModuleGraph
+    participant Prep as buildScriptsFromGraph
+    participant TF as emitScriptsForModuleFromGraph per module
     participant Runner as node-workflow-runner
-    participant Graph as buildRuntimeGraph(prep)
+    participant Graph as buildRuntimeGraph(graph)
     participant Runtime as NodeWorkflowRuntime
     participant Kernel as JS kernel
     participant Report as Artifacts (.jaiph/runs)
 
     User->>CLI: jaiph run main.jh args...
-    CLI->>CP: prepareCompile(entry, workspace)
-    CP-->>CLI: CompilePrep (astByFile)
+    CLI->>Load: loadModuleGraph(entry, workspace)
+    Load-->>CLI: ModuleGraph (modules map)
     Note over CLI: reuse entry AST for metadataToConfig / banner
-    CLI->>Prep: buildScripts(input, outDir, workspace, prep)
-    Prep->>TF: loop: validateReferences + emit (cached AST)
+    CLI->>Prep: buildScriptsFromGraph(graph, outDir)
+    Prep->>TF: loop: validateModule + emit (in-memory AST)
     TF-->>Prep: scripts/ atomic only
     Prep-->>CLI: scriptsDir + env JAIPH_SCRIPTS
     alt local (non-Docker)
-        CLI->>CLI: writeCompilePrep(<outDir>/.jaiph-compile-prep.json)
-        Note over CLI: set JAIPH_COMPILE_PREP_FILE on child env
+        CLI->>CLI: writeModuleGraph(<outDir>/.jaiph-module-graph.json)
+        Note over CLI: set JAIPH_MODULE_GRAPH_FILE on child env
         CLI->>Runner: spawn detached node-workflow-runner
     else Docker
         CLI->>CLI: prepareImage (pull --quiet + verify jaiph)
@@ -240,12 +239,13 @@ sequenceDiagram
         CLI->>Runner: spawn container running node-workflow-runner
         Note over CLI: CLI parses events on stderr only
     end
-    alt JAIPH_COMPILE_PREP_FILE set (local non-Docker)
-        Runner->>Runner: readCompilePrep(file)
-        Runner->>Graph: buildRuntimeGraph(sourceAbs, workspace, prep)
+    alt JAIPH_MODULE_GRAPH_FILE set (local non-Docker)
+        Runner->>Runner: readModuleGraph(file)
+        Runner->>Graph: buildRuntimeGraph(graph)
         Note over Graph: no .jh re-reads
     else absent (Docker / --raw / test runner)
-        Runner->>Graph: buildRuntimeGraph(sourceAbs) parse-only
+        Runner->>Runner: loadModuleGraph(sourceAbs, workspace)
+        Runner->>Graph: buildRuntimeGraph(graph)
     end
     Graph-->>Runner: RuntimeGraph
     Runner->>Runtime: runDefault(run args)
@@ -265,20 +265,20 @@ sequenceDiagram
 sequenceDiagram
     participant User
     participant CLI as CLI jaiph test
-    participant Parser as parsejaiph
-    participant Prep as buildScripts(test file)
+    participant Load as loadModuleGraph
+    participant Prep as buildScriptsFromGraph
     participant TestRunner as runTestFile / runTestBlock
-    participant Graph as buildRuntimeGraph
+    participant Graph as buildRuntimeGraph(graph)
     participant Runtime as NodeWorkflowRuntime
     participant Report as Artifacts
 
     User->>CLI: jaiph test flow.test.jh
-    CLI->>Parser: parse test file
-    Parser-->>CLI: jaiphModule + tests[] blocks
-    CLI->>Prep: buildScripts(test path, tmp) import closure
+    CLI->>Load: loadModuleGraph(test file, workspace)
+    Load-->>CLI: ModuleGraph (entry + import closure)
+    CLI->>Prep: buildScriptsFromGraph(graph, tmp)
     Prep-->>CLI: scriptsDir
-    CLI->>TestRunner: runTestFile(test path workspace scriptsDir blocks)
-    TestRunner->>Graph: buildRuntimeGraph(test file) once per file
+    CLI->>TestRunner: runTestFile(graph, workspace, scriptsDir, blocks)
+    TestRunner->>Graph: buildRuntimeGraph(graph) once per file
     Graph-->>TestRunner: RuntimeGraph cached
     loop each test block
         TestRunner->>TestRunner: mocks / shell steps / expectations
@@ -295,7 +295,7 @@ sequenceDiagram
 
 ## Summary
 
-- `.jh` / `*.test.jh` share parser/AST; **compile-time** validation runs in **`emitScriptsForModule`** during **`buildScripts`**. **`buildRuntimeGraph`** loads modules with **parse-only** imports — or, on the default local **`jaiph run`** path, from a shared **`CompilePrep`** the parent CLI built with **`prepareCompile`** and handed across the process boundary through **`JAIPH_COMPILE_PREP_FILE`** (see [Local single-parse compile prep](#local-single-parse-compile-prep)).
+- `.jh` / `*.test.jh` share parser/AST. The pipeline is **`loadModuleGraph` → `validateReferences(graph)` → `emit(graph, outDir)`**; `parsejaiph` is I/O-pure and `validate` / `emit` operate entirely in-memory. **`buildRuntimeGraph`** consumes the same `ModuleGraph` (loaded in the runner from disk or — on the default local **`jaiph run`** path — deserialized from the parent CLI's graph file via **`JAIPH_MODULE_GRAPH_FILE`**; see [Local module graph](#local-module-graph)).
 - **`jaiph compile`** walks import closures with **`validateReferences` only**, and exits — no **`scripts/`** emission (**no **`buildScriptFiles`** / **`buildScripts`**), no **`buildRuntimeGraph()`**, no runner spawn. Directory discovery omits **`*.test.jh`** unless you pass a test file explicitly.
 - **Node-only runtime:** all execution — local `jaiph run`, Docker `jaiph run`, and `jaiph test` — goes through `NodeWorkflowRuntime`. Docker containers run `node-workflow-runner` with the compiled JS tree and scripts mounted, using the same semantics as local execution.
 - **CLI** owns launch, observation, hooks (except **`jaiph run --raw`**), and runtime preparation (`buildScripts`). **`jaiph run --raw`** still emits **`__JAIPH_EVENT__`** on stderr from the runtime; the CLI does not attach the interactive progress/hooks pipeline. **`jaiph test`** passes **`suppressLiveEvents: true`** into **`NodeWorkflowRuntime`** so **`RuntimeEventEmitter`** skips writing those live stderr lines while **`run_summary.jsonl`** still records workflow traffic where the emitter appends it.

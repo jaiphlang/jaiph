@@ -20,7 +20,7 @@ Jaiph source files (`.jh`) combine a small orchestration language with shell exe
 This guide answers three questions for workflow authors:
 
 1. **What can appear in a `.jh` file?** — Top-level imports, config, channels, module `const` bindings, scripts, rules, and workflows; execution constructs (`run`, `ensure`, `prompt`, control flow, channels) live in workflow and rule bodies with different restrictions.
-2. **Where is it enforced?** — The parser (`src/parser.ts`, `src/parse/*`) builds the AST; **`validateReferences`** (`src/transpile/validate.ts`) rejects invalid references, arity, and disallowed constructs before **`emitScriptsForModule`** extracts **`script`** bodies to `scripts/`. The **Node workflow runtime** interprets everything else from the AST ([Architecture](architecture.md)).
+2. **Where is it enforced?** — The parser (`src/parser.ts`, `src/parse/*`) builds the AST; **`validateReferences(graph)`** (`src/transpile/validate.ts`) rejects invalid references, arity, and disallowed constructs before **`emitScriptsForModuleFromGraph`** extracts **`script`** bodies to `scripts/`. The **Node workflow runtime** interprets everything else from the AST ([Architecture](architecture.md)).
 3. **How do scripts relate to Jaiph?** — Only **`script`** definitions and inline **`run \`…\`()` / `run ```…```()`** bodies become executable files under `scripts/`; they run as child processes while workflows and rules stay in the interpreter.
 
 The sections below go from **values and declarations** through **steps**, **scripts**, **interpolation**, then **formal notes** (lexical, EBNF, validation catalog).

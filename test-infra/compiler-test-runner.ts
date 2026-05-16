@@ -1,11 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, writeFileSync, mkdtempSync, rmSync, readdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync, rmSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { parsejaiph } from "../src/parser";
+import { loadModuleGraph } from "../src/transpile/module-graph";
 import { validateReferences } from "../src/transpile/validate";
-import { resolveImportPath } from "../src/transpile/resolve";
 
 // --- txtar parser ---
 
@@ -119,13 +118,8 @@ function runTestCase(tc: TxtarTestCase): void {
 
     let caughtError: Error | undefined;
     try {
-      const ast = parsejaiph(readFileSync(entryPath, "utf8"), entryPath);
-      validateReferences(ast, {
-        resolveImportPath,
-        existsSync: (p: string) => existsSync(p),
-        readFile: (p: string) => readFileSync(p, "utf8"),
-        parse: parsejaiph,
-      });
+      const graph = loadModuleGraph(entryPath);
+      validateReferences(graph);
     } catch (err) {
       caughtError = err as Error;
     }

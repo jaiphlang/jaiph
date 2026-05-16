@@ -13,34 +13,6 @@ Process rules:
 
 ***
 
-## Promote `CompilePrep` to a first-class `ModuleGraph` and make the parser I/O-pure #dev-ready
-
-**Design reference:** `design/2026-05-15-parser-compiler-simplification.md` § Refactor 5.
-
-**Why:** Three different traversal strategies exist for "the set of modules in this build" — the validator recursively re-reads + re-parses imports via `ValidateContext` callbacks (`src/transpile/validate.ts`), `emitScriptsForModule` (`src/transpiler.ts`) re-wraps the same callbacks with an optional `prep` cache, and `buildScripts` (`src/transpile/build.ts`) walks the file system directly. `compile-prep` already proved the right model — pre-parse all reachable modules once, hand them to validator and emitter — but it is an optimization, not the path.
-
-**Scope:**
-
-- Introduce `ModuleGraph` (generalization of `CompilePrep`) as the single representation of "all modules reachable from an entry point, parsed once."
-- `parsejaiph(source, filePath)` must remain a pure function `(string, string) => jaiphModule`. No fs calls reachable from `parsejaiph`.
-- `validate(graph)` and `emit(graph, outDir)` must operate entirely in-memory. The `ValidateContext` callback shape (`resolveImportPath`, `existsSync`, `readFile`, `parse`, `workspaceRoot`) is removed.
-- A single discovery routine (`loadModuleGraph(entry, workspaceRoot?)`) replaces `collectTransitiveJhModules`, the cache-population logic in `compile-prep.ts`, and the bespoke re-parse paths inside `validateReferences` / `emitScriptsForModule`.
-- The `prep?` optional parameter on `emitScriptsForModule` and `buildScripts` goes away; both take a `ModuleGraph`.
-- LSP / single-file edits and full compiles must share the same pipeline — only the graph root differs.
-
-**Acceptance criteria** (each verified by a test that fails when violated):
-
-1. `parsejaiph` cannot reach `fs`. A unit test stubs `node:fs` to throw on any call and parses every fixture in `test-fixtures/` and `examples/`; all must succeed.
-2. `validate(graph)` and `emit(graph, outDir)` cannot reach `fs` for source/AST reads (writing emitted scripts is allowed inside `emit`). A unit test stubs `fs.readFileSync`/`fs.existsSync` to throw on any `.jh` path and runs the full pipeline against `test-fixtures/`; all must succeed.
-3. `ValidateContext` is deleted from `src/transpile/validate.ts`; `validateReferences` takes a `ModuleGraph` (or equivalent) only.
-4. Each `.jh` source file in a compile is parsed exactly once. A test instruments `parsejaiph` with a call counter and asserts no duplicate parses across the full pipeline for at least one fixture with transitive imports.
-5. `npm test` and `npm run build` pass. The full golden corpus (`src/transpile/compiler-golden.test.ts`, `src/transpile/compiler-edge.acceptance.test.ts`) passes byte-for-byte against emitted output.
-6. The CLI entry points (`src/cli.ts`, `src/cli/`) and `e2e` tests pass unchanged from a user perspective.
-
-**Out of scope:** changes to the AST shape (Refactor 3), the validator switch structure (Refactor 4), the parser internals (Refactors 1 & 2), and any surface syntax.
-
-***
-
 ## Split source-fidelity data from the semantic AST into a Trivia / CST layer #dev-ready
 
 **Design reference:** `design/2026-05-15-parser-compiler-simplification.md` § Appendix A.

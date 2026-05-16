@@ -27,7 +27,7 @@ Implications:
 - **Imports without `/`** — e.g. **`import "submod"`** — only relative-to-file lookup is attempted; there is **no** library fallback under `.jaiph/libs/` even if a matching folder name exists.
 - **`jaiph compile`** runs the same **`validateReferences`** check as **`jaiph run`** but does not emit **`scripts/`** or invoke **`buildRuntimeGraph()`** ([Architecture — Summary](architecture.md#summary)).
 
-**Workspace root:** whatever the invoking CLI path passes into **`emitScriptsForModule`** / **`validateReferences`**:
+**Workspace root:** whatever the invoking CLI path passes into **`loadModuleGraph`** (the single discovery routine consumed by **`validateReferences`** / **`emitScriptsForModuleFromGraph`**):
 
 - **`jaiph run`** and **`jaiph test`** on an explicit **`*.jh` / `*.test.jh`** file use **`detectWorkspaceRoot(dirname(entry))`** (same predicate for both commands).
 - **`jaiph test`** with **no** file argument discovers tests under **`detectWorkspaceRoot(process.cwd())`** (`src/cli/commands/test.ts`).

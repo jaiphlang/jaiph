@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { buildRuntimeGraph, resolveWorkflowRef, resolveRuleRef, resolveScriptRef, type RuntimeGraph } from "./graph";
+import type { ModuleGraph } from "../../transpile/module-graph";
 import { NodeWorkflowRuntime, type MockBodyDef } from "./node-workflow-runtime";
 import type { MockPromptArm } from "./mock";
 import type { TestBlockDef, TestStepDef } from "../../types";
@@ -256,11 +257,12 @@ async function runTestBlock(
 }
 
 export async function runTestFile(
-  testFileAbs: string,
+  moduleGraph: ModuleGraph,
   workspaceRoot: string,
   scriptsDir: string,
   blocks: TestBlockDef[],
 ): Promise<number> {
+  const testFileAbs = moduleGraph.entryFile;
   const bold = "\x1b[1m";
   const reset = "\x1b[0m";
   const red = "\x1b[31m";
@@ -291,12 +293,13 @@ export async function runTestFile(
 
   process.stdout.write(`${bold}testing${reset} ${displayName}\n`);
 
-  // Build the runtime graph once for the entire test file.
-  // The graph depends only on testFileAbs and its import closure, which are
-  // constant across all blocks and steps within a single runTestFile call.
-  // If a future test step mutates imported files on disk mid-run, a manual
-  // rebuild would be needed — but that is not a supported pattern today.
-  const graph = buildRuntimeGraph(testFileAbs, workspaceRoot);
+  // Build the runtime view of the already-loaded module graph once for the
+  // entire test file. The graph depends only on testFileAbs and its import
+  // closure, which are constant across all blocks and steps within a single
+  // runTestFile call. If a future test step mutates imported files on disk
+  // mid-run, a manual rebuild would be needed — but that is not a supported
+  // pattern today.
+  const graph = buildRuntimeGraph(moduleGraph, workspaceRoot);
 
   let total = 0;
   let failed = 0;
