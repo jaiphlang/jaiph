@@ -1,9 +1,9 @@
-import { chmodSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, extname, join, parse, relative, resolve } from "node:path";
-import { parsejaiph } from "../parser";
-import type { CompilePrep } from "./compile-prep";
-import type { ScriptArtifact } from "./emit-script";
-import { JAIPH_EXT_REGEX, resolveImportPath } from "./resolve";
+import { emitScriptsForModuleFromGraph } from "./emit-from-graph";
+import type { ModuleGraph } from "./module-graph";
+import { loadModuleGraph } from "./module-graph";
+import { JAIPH_EXT_REGEX } from "./resolve";
 
 function ensureDir(path: string): void {
   mkdirSync(path, { recursive: true });
@@ -96,58 +96,70 @@ export function walkTestFiles(inputPath: string): string[] {
   return files;
 }
 
-/** Entry `.jh` plus all files reachable via `import` (transitive), sorted. */
-export function collectTransitiveJhModules(entrypoint: string, workspaceRoot?: string): string[] {
-  const visited = new Set<string>();
-  const queue = [entrypoint];
-  while (queue.length > 0) {
-    const file = queue.pop()!;
-    if (visited.has(file)) continue;
-    visited.add(file);
-    const ast = parsejaiph(readFileSync(file, "utf8"), file);
-    for (const imp of ast.imports) {
-      const importedFile = resolveImportPath(file, imp.path, workspaceRoot);
-      if (!visited.has(importedFile)) queue.push(importedFile);
-    }
-  }
-  const files = [...visited];
-  files.sort();
-  return files;
-}
-
 /**
- * Writes extracted `script` bodies to `<targetDir>/scripts`. When `prep` is
- * supplied, the transitive-module list comes from the pre-parsed cache instead
- * of re-walking and re-parsing the import closure.
+ * Path-based entry point. Loads a `ModuleGraph` and writes extracted `script`
+ * bodies under `<targetDir>/scripts`. For a directory input, every non-test
+ * `.jh` becomes its own root: each rooted graph is loaded and emitted. The
+ * directory walk preserves the historical multi-entry validation semantics
+ * for `jaiph compile <dir>` and the integration test corpus.
  */
 export function buildScripts(
   inputPath: string,
   targetDir: string | undefined,
-  emitScriptsFn: (file: string, root: string) => ScriptArtifact[],
   workspaceRoot?: string,
-  prep?: CompilePrep,
 ): { scriptsDir: string } {
   const absInput = resolve(inputPath);
   const inputStat = statSync(absInput);
   const rootDir = inputStat.isDirectory() ? absInput : dirname(absInput);
   const outRoot = resolve(targetDir ?? rootDir);
   ensureDir(outRoot);
-
-  const entrypointFile = inputStat.isFile() ? absInput : null;
-  const files = prep
-    ? [...prep.astByFile.keys()].sort()
-    : entrypointFile ? collectTransitiveJhModules(entrypointFile, workspaceRoot) : walkjhFiles(rootDir);
   const scriptsRoot = join(outRoot, "scripts");
   ensureDir(scriptsRoot);
 
+  if (inputStat.isFile()) {
+    const graph = loadModuleGraph(absInput, workspaceRoot);
+    emitGraphInto(graph, rootDir, scriptsRoot);
+    return { scriptsDir: scriptsRoot };
+  }
+
+  for (const entry of walkjhFiles(absInput)) {
+    const graph = loadModuleGraph(entry, workspaceRoot);
+    emitGraphInto(graph, rootDir, scriptsRoot);
+  }
+  return { scriptsDir: scriptsRoot };
+}
+
+/**
+ * Graph-based entry point. The caller has already built a `ModuleGraph` (the
+ * default `jaiph run` path); emit every reachable module's scripts into
+ * `<targetDir>/scripts` without re-parsing anything. `rootDir` defaults to
+ * the entry's parent directory so symbol prefixes match the path-based form.
+ */
+export function buildScriptsFromGraph(
+  graph: ModuleGraph,
+  targetDir: string,
+  rootDir?: string,
+): { scriptsDir: string } {
+  const outRoot = resolve(targetDir);
+  ensureDir(outRoot);
+  const scriptsRoot = join(outRoot, "scripts");
+  ensureDir(scriptsRoot);
+  const resolvedRoot = resolve(rootDir ?? dirname(graph.entryFile));
+  emitGraphInto(graph, resolvedRoot, scriptsRoot);
+  return { scriptsDir: scriptsRoot };
+}
+
+function emitGraphInto(graph: ModuleGraph, rootDir: string, scriptsRoot: string): void {
+  const files = [...graph.modules.keys()].sort();
   for (const file of files) {
-    const scripts = emitScriptsFn(file, rootDir);
+    const scripts = emitScriptsForModuleFromGraph(graph, file, rootDir);
     for (const s of scripts) {
       const scriptPath = join(scriptsRoot, s.name);
       writeFileSync(scriptPath, s.content, "utf8");
       chmodSync(scriptPath, 0o755);
     }
   }
-
-  return { scriptsDir: scriptsRoot };
 }
+
+// Re-export so `jaiph compile` can use the centralized regex.
+export { JAIPH_EXT_REGEX };

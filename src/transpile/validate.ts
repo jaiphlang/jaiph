@@ -1,6 +1,8 @@
+import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { jaiphError } from "../errors";
 import type { jaiphModule, MatchExprDef, WorkflowStepDef } from "../types";
+import type { ModuleGraph } from "./module-graph";
 import type { SubstitutionValidateEnv } from "./validate-substitution";
 import { validateManagedWorkflowShell } from "./validate-substitution";
 import type { RefResolutionContext, RefTargetKind } from "./validate-ref-resolution";
@@ -27,14 +29,6 @@ import { validatePromptReturnsSchema, validatePromptStepReturns } from "./valida
 import { dedentCommonLeadingWhitespace } from "../parse/dedent";
 import { matchSendOperator } from "../parse/core";
 import { tripleQuotedRawForRuntime } from "../runtime/orchestration-text";
-
-export interface ValidateContext {
-  resolveImportPath: (fromFile: string, importPath: string, workspaceRoot?: string) => string;
-  existsSync: (path: string) => boolean;
-  readFile: (path: string) => string;
-  parse: (content: string, filePath: string) => jaiphModule;
-  workspaceRoot?: string;
-}
 
 /** True when `<-` appears outside quotes (same idea as `matchSendOperator`). */
 function hasUnquotedSendArrow(line: string): boolean {
@@ -492,7 +486,19 @@ export function resolveScriptImportPath(fromFile: string, importPath: string): s
   return resolve(dirname(fromFile), importPath);
 }
 
-export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void {
+/** Validate every module in the graph. Equivalent to `validateModule` per entry, plus de-dup. */
+export function validateReferences(graph: ModuleGraph): void {
+  for (const node of graph.modules.values()) {
+    validateModule(node.ast, graph);
+  }
+}
+
+/**
+ * Validate one module's references against the graph. Imported ASTs are read
+ * from `graph.modules` — no `.jh` filesystem access. `existsSync` is used
+ * only for `import script` paths, which point at non-`.jh` script bodies.
+ */
+export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
   const localChannels = new Set(ast.channels.map((c) => c.name));
   const localRules = new Set(ast.rules.map((r) => r.name));
   const localWorkflows = new Set(ast.workflows.map((w) => w.name));
@@ -500,11 +506,13 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
   const importsByAlias = new Map<string, string>();
   const importedAstCache = new Map<string, jaiphModule>();
 
-  // Validate script imports: resolve paths and check existence.
+  // Validate script imports: resolve paths and check existence. These point
+  // at non-`.jh` script bodies (resolved + emitted later), so `existsSync` is
+  // allowed here under acceptance criterion 2.
   if (ast.scriptImports) {
     for (const si of ast.scriptImports) {
       const resolved = resolveScriptImportPath(ast.filePath, si.path);
-      if (!ctx.existsSync(resolved)) {
+      if (!existsSync(resolved)) {
         throw jaiphError(
           ast.filePath,
           si.loc.line,
@@ -517,6 +525,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
     }
   }
 
+  const node = graph.modules.get(ast.filePath);
   for (const imp of ast.imports) {
     if (importsByAlias.has(imp.alias)) {
       throw jaiphError(
@@ -527,9 +536,19 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         `duplicate import alias "${imp.alias}"`,
       );
     }
-    const resolved = ctx.resolveImportPath(ast.filePath, imp.path, ctx.workspaceRoot);
+    const resolved = node?.imports.get(imp.alias);
+    if (!resolved) {
+      throw jaiphError(
+        ast.filePath,
+        imp.loc.line,
+        imp.loc.col,
+        "E_IMPORT_NOT_FOUND",
+        `import "${imp.alias}" could not be resolved`,
+      );
+    }
     importsByAlias.set(imp.alias, resolved);
-    if (!ctx.existsSync(resolved)) {
+    const importedAst = graph.modules.get(resolved)?.ast;
+    if (!importedAst) {
       throw jaiphError(
         ast.filePath,
         imp.loc.line,
@@ -538,7 +557,7 @@ export function validateReferences(ast: jaiphModule, ctx: ValidateContext): void
         `import "${imp.alias}" resolves to missing file "${resolved}"`,
       );
     }
-    importedAstCache.set(resolved, ctx.parse(ctx.readFile(resolved), resolved));
+    importedAstCache.set(resolved, importedAst);
   }
 
   const refCtx: RefResolutionContext = {

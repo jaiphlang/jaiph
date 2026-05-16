@@ -9,7 +9,7 @@ redirect_from:
 
 Contributor docs answer a narrow question: **where changes belong**, **how to run the same checks CI runs**, and **which test layer** should encode a behavior change.
 
-At a high level, Jaiph is built as described in [Architecture](architecture.md) — transpile path (`emitScriptsForModule`, `buildScripts`), parse-only **`buildRuntimeGraph()`**, **`jaiph compile`** (validate-only), **`NodeWorkflowRuntime`**, artifact layout, and Docker helper contracts. Treat that page as authoritative for pipelines and boundaries; if anything here diverges from it or from the implementation, prefer **architecture + source**.
+At a high level, Jaiph is built as described in [Architecture](architecture.md) — single-graph transpile path (`loadModuleGraph` → `validateReferences(graph)` → `emitScriptsForModuleFromGraph` / `buildScriptsFromGraph`), graph-consuming **`buildRuntimeGraph(graph)`**, **`jaiph compile`** (validate-only), **`NodeWorkflowRuntime`**, artifact layout, and Docker helper contracts. Treat that page as authoritative for pipelines and boundaries; if anything here diverges from it or from the implementation, prefer **architecture + source**.
 
 For workflow syntax, library usage, tooling setup, and grammar details, see [Language](language.md), [Setup](setup.md), [Grammar](grammar.md), and the overview in [Getting Started](getting-started.md).
 

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { runTestFile } from "./node-test-runner";
+import { loadModuleGraph } from "../../transpile/module-graph";
 import type { SourceLoc } from "../../types";
 
 const loc: SourceLoc = { line: 1, col: 1 };
@@ -35,7 +36,7 @@ test "block B" {
     // Before this change, buildRuntimeGraph would be called once per
     // test_run_workflow step (2 calls). After caching, it is called once.
     // We verify behavioral correctness: both blocks pass with the shared graph.
-    const exitCode = await runTestFile(testFile, dir, scriptsDir, [
+    const exitCode = await runTestFile(loadModuleGraph(testFile, dir), dir, scriptsDir, [
       {
         description: "block A", loc,
         steps: [{ type: "test_run_workflow" as const, workflowRef: "greet", args: [], loc }],
@@ -75,7 +76,7 @@ test "const drives mock and expect" {
 `,
     );
 
-    const exitCode = await runTestFile(testFile, dir, scriptsDir, [
+    const exitCode = await runTestFile(loadModuleGraph(testFile, dir), dir, scriptsDir, [
       {
         description: "const drives mock and expect", loc,
         steps: [
@@ -119,7 +120,7 @@ test "undefined const ref" {
 `,
     );
 
-    const exitCode = await runTestFile(testFile, dir, scriptsDir, [
+    const exitCode = await runTestFile(loadModuleGraph(testFile, dir), dir, scriptsDir, [
       {
         description: "undefined const ref", loc,
         steps: [
@@ -161,7 +162,7 @@ test "no implicit response" {
 `,
     );
 
-    const exitCode = await runTestFile(testFile, dir, scriptsDir, [
+    const exitCode = await runTestFile(loadModuleGraph(testFile, dir), dir, scriptsDir, [
       {
         description: "no implicit response", loc,
         steps: [

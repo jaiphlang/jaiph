@@ -1,14 +1,13 @@
 import {
   mkdtempSync,
-  readFileSync,
   rmSync,
   statSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, extname } from "node:path";
 import { basename } from "node:path";
-import { buildScripts, walkTestFiles } from "../../transpiler";
-import { parsejaiph } from "../../parser";
+import { buildScriptsFromGraph, walkTestFiles } from "../../transpiler";
+import { loadModuleGraph } from "../../transpile/module-graph";
 import { jaiphError } from "../../errors";
 import { detectWorkspaceRoot } from "../shared/paths";
 import { parseArgs } from "../shared/usage";
@@ -76,7 +75,8 @@ export async function runSingleTestFile(
   workspaceRoot: string,
   _runArgs: string[],
 ): Promise<number> {
-  const ast = parsejaiph(readFileSync(testFileAbs, "utf8"), testFileAbs);
+  const graph = loadModuleGraph(testFileAbs, workspaceRoot);
+  const ast = graph.modules.get(graph.entryFile)!.ast;
   if (!ast.tests || ast.tests.length === 0) {
     throw jaiphError(ast.filePath, 1, 1, "E_PARSE", "test file must contain at least one test block");
   }
@@ -85,8 +85,8 @@ export async function runSingleTestFile(
   const outDir = mkdtempSync(join(tmpdir(), "jaiph-test-"));
   try {
     /** Only compile the test module and its imports — not every `.jh` under the workspace. */
-    const { scriptsDir } = buildScripts(testFileAbs, outDir, workspaceRoot);
-    return await runTestFile(testFileAbs, workspaceRoot, scriptsDir, ast.tests);
+    const { scriptsDir } = buildScriptsFromGraph(graph, outDir);
+    return await runTestFile(graph, workspaceRoot, scriptsDir, ast.tests);
   } finally {
     rmSync(outDir, { recursive: true, force: true });
   }

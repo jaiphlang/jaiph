@@ -1,20 +1,9 @@
-import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { parsejaiph } from "../../parser";
-import type { CompilePrep } from "../../transpile/compile-prep";
+import { loadModuleGraph, type ModuleGraph, type ModuleNode } from "../../transpile/module-graph";
 import type { RuleDef, ScriptDef, WorkflowDef, WorkflowRefDef, RuleRefDef, jaiphModule } from "../../types";
-import { resolveImportPath } from "../../transpile/resolve";
 
-export interface RuntimeModuleNode {
-  filePath: string;
-  ast: jaiphModule;
-  imports: Map<string, string>;
-}
-
-export interface RuntimeGraph {
-  entryFile: string;
-  modules: Map<string, RuntimeModuleNode>;
-}
+export type RuntimeModuleNode = ModuleNode;
+export type RuntimeGraph = ModuleGraph;
 
 export interface ResolvedWorkflow {
   filePath: string;
@@ -46,50 +35,23 @@ function attachScriptImportStubs(ast: jaiphModule): void {
   }
 }
 
-function nodeFromAst(filePath: string, ast: jaiphModule, workspaceRoot?: string): RuntimeModuleNode {
-  const imports = new Map<string, string>();
-  for (const imp of ast.imports) {
-    imports.set(imp.alias, resolveImportPath(filePath, imp.path, workspaceRoot));
-  }
-  attachScriptImportStubs(ast);
-  return { filePath, ast, imports };
-}
-
-function buildNode(filePath: string, workspaceRoot?: string): RuntimeModuleNode {
-  const ast = parsejaiph(readFileSync(filePath, "utf8"), filePath);
-  return nodeFromAst(filePath, ast, workspaceRoot);
-}
-
 /**
- * When `prep` is supplied, every reachable module is taken from the pre-parsed
- * cache and no `.jh` files are read from disk. The cache is shared with the
- * parent CLI's `buildScripts` so each module is parsed exactly once per run.
+ * Adapt a {@link ModuleGraph} for runtime dispatch by injecting `ScriptDef`
+ * stubs for `import script` declarations so `resolveScriptRef` lookups
+ * succeed for cross-module script imports. The injection mutates the AST
+ * in-place; the helper is idempotent so repeated calls are safe.
  */
 export function buildRuntimeGraph(
-  entryFile: string,
+  source: string | ModuleGraph,
   workspaceRoot?: string,
-  prep?: CompilePrep,
 ): RuntimeGraph {
-  const entry = resolve(entryFile);
-  if (prep) {
-    const modules = new Map<string, RuntimeModuleNode>();
-    for (const [filePath, ast] of prep.astByFile) {
-      modules.set(filePath, nodeFromAst(filePath, ast, workspaceRoot));
-    }
-    return { entryFile: entry, modules };
+  const graph = typeof source === "string"
+    ? loadModuleGraph(source, workspaceRoot)
+    : source;
+  for (const node of graph.modules.values()) {
+    attachScriptImportStubs(node.ast);
   }
-  const modules = new Map<string, RuntimeModuleNode>();
-  const queue: string[] = [entry];
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    if (modules.has(current)) continue;
-    const node = buildNode(current, workspaceRoot);
-    modules.set(current, node);
-    for (const imported of node.imports.values()) {
-      if (!modules.has(imported)) queue.push(imported);
-    }
-  }
-  return { entryFile: entry, modules };
+  return graph;
 }
 
 export function lookupWorkflow(graph: RuntimeGraph, fromFile: string, ref: WorkflowRefDef): WorkflowDef | null {
