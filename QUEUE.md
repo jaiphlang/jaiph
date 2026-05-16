@@ -13,36 +13,6 @@ Process rules:
 
 ***
 
-## Replace the 1,441-line validator switch with a per-step visitor table indexed by scope #dev-ready
-
-**Design reference:** `design/2026-05-15-parser-compiler-simplification.md` § Refactor 4.
-
-**Why:** `src/transpile/validate.ts` is one function with two near-identical inner walkers (`validateRuleStep` ~250 lines, `validateStep` ~350 lines). Each step type's validation is written twice with subtle differences, and the 5-check sequence (`validateNoShellRedirection` → `validateNestedManagedCallArgs` → `validateRef` → `validateArity` → `validateBareIdentifierArgs`) is repeated by hand at 6+ sites per side — at least 12 places to keep in sync.
-
-**Scope:**
-
-- Replace the two inner walkers with a single AST visitor parameterized by a `Scope` value:
-  - `Scope` carries `allow: Set<StepType>`, `refSpec: RefSpec`, and any other rule-vs-workflow differences.
-  - A `VALIDATORS: Record<StepType, Validator>` table holds one validator per step type, written once.
-  - `validateCallStep("run" | "ensure")` is a single helper invoked by both `run` and `ensure` validators with different ref-spec / arity-kind arguments.
-- The 5-check sequence is encapsulated in one helper (`validateManagedCallShape` or similar) invoked from each call-bearing validator.
-- "Is this step allowed in this scope?" becomes a single set-lookup at the top of the visitor, not three throw sites.
-- All existing error messages and error codes (`E_VALIDATE`, etc.) are preserved verbatim — both content and source location (line/col) must match what users see today.
-
-**Acceptance criteria** (each verified by a test):
-
-1. `src/transpile/validate.ts` is at most 700 lines (down from 1,441). Add a CI check (or test) that fails if it exceeds the bound.
-2. `validateReferences` contains exactly one step-walking function. A grep test fails if a second walker is introduced.
-3. Every `E_VALIDATE` error message and error location produced today is produced bit-for-bit by the new code. Add a snapshot-style test over every `validate-*.test.ts` fixture asserting `{ message, line, col, code }` matches the pre-refactor output.
-4. Adding a new step type requires adding exactly one row to `VALIDATORS` and (if needed) updating the `Scope.allow` sets. Add a test that introduces a synthetic step type behind a test-only flag and asserts the validator rejects it with a single expected message until the row is added.
-5. `npm test` passes (all of `validate-immutable-bindings.test.ts`, `validate-managed-calls.test.ts`, `validate-match.test.ts`, `validate-prompt-schema.test.ts`, `validate-ref-resolution.test.ts`, `validate-run-async.test.ts`, `validate-string.test.ts`, `validate-substitution.test.ts`, `validate-type-crossing.test.ts`, plus the golden corpus).
-
-**Out of scope:** changes to validation rules (the *what*) — this refactor only changes the *how*. Parser changes. AST changes (Refactor 3 must already be merged).
-
-**Dependency:** Refactor 3 (Expr collapse) and the single-pass-walk + Diagnostics tasks (previous two) must be complete first; otherwise the new visitor still needs to special-case the `managed:` sidecar and the pre-pass-walker pattern.
-
-***
-
 ## Decouple the validator from runtime semantics #dev-ready
 
 **Design reference:** `design/2026-05-15-parser-compiler-simplification.md` § Appendix E.
