@@ -1,0 +1,990 @@
+{
+  "validate-errors.txt > unknown local rule reference": [
+    {
+      "file": "input.jh",
+      "line": 2,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "unknown local rule reference \"missing_rule\""
+    }
+  ],
+  "validate-errors.txt > unknown local workflow or script reference in run": [
+    {
+      "file": "input.jh",
+      "line": 2,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "unknown local workflow or script reference \"missing_workflow\""
+    }
+  ],
+  "validate-errors.txt > unknown local channel in send": [
+    {
+      "file": "input.jh",
+      "line": 5,
+      "col": 1,
+      "code": "E_VALIDATE",
+      "message": "Channel \"typo\" is not defined"
+    }
+  ],
+  "validate-errors.txt > rule with inline brace group fails shell-step ban": [
+    {
+      "file": "input.jh",
+      "line": 2,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "inline shell steps are forbidden in rules; use explicit script blocks"
+    }
+  ],
+  "validate-errors.txt > rule with multi-line brace group fails shell-step ban": [
+    {
+      "file": "input.jh",
+      "line": 2,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "inline shell steps are forbidden in rules; use explicit script blocks"
+    }
+  ],
+  "validate-errors.txt > unsupported type in returns schema": [
+    {
+      "file": "input.jh",
+      "line": 2,
+      "col": 3,
+      "code": "E_SCHEMA",
+      "message": "unsupported type in returns schema: \"array\" (only string, number, boolean allowed)"
+    }
+  ],
+  "validate-errors.txt > workflow raw shell that names a script must use run": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "use run f() — a bare name that refers to a script or workflow must use a managed run step"
+    }
+  ],
+  "validate-errors.txt > workflow raw shell that names a workflow must use run": [
+    {
+      "file": "input.jh",
+      "line": 6,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "use run w() — a bare name that refers to a script or workflow must use a managed run step"
+    }
+  ],
+  "validate-errors.txt > send RHS cannot invoke workflow via shell": [
+    {
+      "file": "input.jh",
+      "line": 7,
+      "col": 5,
+      "code": "E_VALIDATE",
+      "message": "workflow \"w\" must be called with run"
+    }
+  ],
+  "validate-errors.txt > bare identifier arg unknown name fails": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "unknown identifier \"unknown_var\" used as bare argument; declare it with \"const\", use a capture, or add a workflow/rule parameter"
+    }
+  ],
+  "validate-errors.txt > run async is rejected in rules": [
+    {
+      "file": "input.jh",
+      "line": 5,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "run async is not allowed in rules; use it in workflows only"
+    }
+  ],
+  "validate-errors.txt > route with unknown workflow": [
+    {
+      "file": "input.jh",
+      "line": 1,
+      "col": 21,
+      "code": "E_VALIDATE",
+      "message": "unknown local workflow reference \"missing_wf\""
+    }
+  ],
+  "validate-errors.txt > route with rule ref": [
+    {
+      "file": "input.jh",
+      "line": 1,
+      "col": 21,
+      "code": "E_VALIDATE",
+      "message": "rule \"check\" must be called with ensure"
+    }
+  ],
+  "validate-errors.txt > route inside workflow body is parse error": [
+    {
+      "file": "input.jh",
+      "line": 2,
+      "col": 1,
+      "code": "E_PARSE",
+      "message": "route declarations belong at the top level: channel findings -> analyst"
+    }
+  ],
+  "validate-errors.txt > inline run ref with unknown script": [
+    {
+      "file": "input.jh",
+      "line": 2,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "unknown local workflow or script reference \"nonexistent\""
+    }
+  ],
+  "validate-errors.txt > dot field ref where var has no schema": [
+    {
+      "file": "input.jh",
+      "line": 2,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "${x.field}: \"x\" is not a typed prompt capture; dot notation requires a prompt with \"returns\" schema"
+    }
+  ],
+  "validate-errors.txt > dot field ref with nonexistent field in schema": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "${result.bogus}: field \"bogus\" is not defined in the returns schema for \"result\"; available fields: type, risk"
+    }
+  ],
+  "validate-errors.txt > unknown import alias in rule reference": [
+    {
+      "file": "input.jh",
+      "line": 2,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "unknown import alias \"ghost\" for rule reference \"ghost.guard\""
+    }
+  ],
+  "validate-errors.txt > match: missing wildcard arm": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "match must have exactly one wildcard (_) arm"
+    }
+  ],
+  "validate-errors.txt > match: multiple wildcard arms": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "match must have exactly one wildcard (_) arm, found multiple"
+    }
+  ],
+  "validate-errors.txt > shell redirection in ensure args rejected": [
+    {
+      "file": "input.jh",
+      "line": 5,
+      "col": 1,
+      "code": "E_PARSE",
+      "message": "unexpected content after ensure call: '| grep ok'; shell redirection (>, |, &) is not supported — use a script block"
+    }
+  ],
+  "validate-errors.txt > run in workflow targeting a rule is rejected": [
+    {
+      "file": "input.jh",
+      "line": 5,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "rule \"check\" must be called with ensure, not run"
+    }
+  ],
+  "validate-errors.txt > run in rule targeting a rule is rejected": [
+    {
+      "file": "input.jh",
+      "line": 5,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "rule \"other_rule\" must be called with ensure, not run"
+    }
+  ],
+  "validate-errors.txt > ensure rejects local script reference": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "script \"my_script\" cannot be called with ensure"
+    }
+  ],
+  "validate-errors.txt > const prompt in rules (caught at parse time)": [
+    {
+      "file": "input.jh",
+      "line": 2,
+      "col": 13,
+      "code": "E_PARSE",
+      "message": "const ... = prompt is not allowed in rules"
+    }
+  ],
+  "validate-errors.txt > returns schema cannot be empty": [
+    {
+      "file": "input.jh",
+      "line": 2,
+      "col": 3,
+      "code": "E_SCHEMA",
+      "message": "returns schema cannot be empty"
+    }
+  ],
+  "validate-errors.txt > returns schema rejects array types": [
+    {
+      "file": "input.jh",
+      "line": 2,
+      "col": 3,
+      "code": "E_SCHEMA",
+      "message": "returns schema must be flat (no arrays or union types); only string, number, boolean allowed"
+    }
+  ],
+  "validate-errors.txt > returns schema rejects union types": [
+    {
+      "file": "input.jh",
+      "line": 2,
+      "col": 3,
+      "code": "E_SCHEMA",
+      "message": "returns schema must be flat (no arrays or union types); only string, number, boolean allowed"
+    }
+  ],
+  "validate-errors.txt > returns schema rejects malformed entry": [
+    {
+      "file": "input.jh",
+      "line": 2,
+      "col": 3,
+      "code": "E_SCHEMA",
+      "message": "invalid returns schema entry: expected \"fieldName: type\" (got badentry...)"
+    }
+  ],
+  "validate-errors.txt > returns schema rejects unsupported type": [
+    {
+      "file": "input.jh",
+      "line": 2,
+      "col": 3,
+      "code": "E_SCHEMA",
+      "message": "unsupported type in returns schema: \"array\" (only string, number, boolean allowed)"
+    }
+  ],
+  "validate-errors.txt > run in workflow targeting a rule via import": [
+    {
+      "file": "main.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "rule \"lib.check\" must be called with ensure, not run"
+    }
+  ],
+  "validate-errors.txt > ensure imported workflow requires run": [
+    {
+      "file": "main.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "workflow \"lib.deploy\" must be called with run"
+    }
+  ],
+  "validate-errors.txt > ensure rejects imported script": [
+    {
+      "file": "main.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "script \"lib.helper\" cannot be called with ensure"
+    }
+  ],
+  "validate-errors.txt > run inside rule must target script not imported workflow": [
+    {
+      "file": "main.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "run inside a rule must target a script, not workflow \"lib.deploy\""
+    }
+  ],
+  "validate-errors.txt > route with imported rule ref rejected": [
+    {
+      "file": "main.jh",
+      "line": 2,
+      "col": 21,
+      "code": "E_VALIDATE",
+      "message": "rule \"lib.check\" must be called with ensure"
+    }
+  ],
+  "validate-errors.txt > arity mismatch: too few args to workflow": [
+    {
+      "file": "input.jh",
+      "line": 5,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "workflow \"helper\" expects 2 argument(s) (a, b), but got 1"
+    }
+  ],
+  "validate-errors.txt > arity mismatch: too many args to workflow": [
+    {
+      "file": "input.jh",
+      "line": 5,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "workflow \"helper\" expects 1 argument(s) (a), but got 2"
+    }
+  ],
+  "validate-errors.txt > arity mismatch: zero args to workflow expecting two": [
+    {
+      "file": "input.jh",
+      "line": 5,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "workflow \"helper\" expects 2 argument(s) (a, b), but got 0"
+    }
+  ],
+  "validate-errors.txt > arity mismatch: too few args to rule": [
+    {
+      "file": "input.jh",
+      "line": 5,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "rule \"check\" expects 1 argument(s) (x), but got 0"
+    }
+  ],
+  "validate-errors.txt > route target with wrong parameter count": [
+    {
+      "file": "input.jh",
+      "line": 1,
+      "col": 21,
+      "code": "E_VALIDATE",
+      "message": "inbox route target \"handler\" must declare exactly 3 parameters (message, channel, sender), but declares 1"
+    }
+  ],
+  "validate-errors.txt > route target with zero parameters": [
+    {
+      "file": "input.jh",
+      "line": 1,
+      "col": 21,
+      "code": "E_VALIDATE",
+      "message": "inbox route target \"handler\" must declare exactly 3 parameters (message, channel, sender), but declares 0"
+    }
+  ],
+  "validate-errors.txt > inline run ref with unknown rule": [
+    {
+      "file": "input.jh",
+      "line": 2,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "unknown local workflow or script reference \"nonexistent\""
+    }
+  ],
+  "validate-errors.txt > match: missing wildcard arm with single pattern": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "match must have exactly one wildcard (_) arm"
+    }
+  ],
+  "validate-errors.txt > send RHS with local rule bare ref": [
+    {
+      "file": "input.jh",
+      "line": 6,
+      "col": 5,
+      "code": "E_VALIDATE",
+      "message": "rule \"check\" must be called with ensure"
+    }
+  ],
+  "validate-errors.txt > shell redirection in run args rejected in rule": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 1,
+      "code": "E_PARSE",
+      "message": "unexpected content after run call: '| grep ok'; shell redirection (>, |, &) is not supported — use a script block"
+    }
+  ],
+  "validate-errors.txt > shell redirection in run args rejected in workflow": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 1,
+      "code": "E_PARSE",
+      "message": "unexpected content after run call: '> /tmp/out'; shell redirection (>, |, &) is not supported — use a script block"
+    }
+  ],
+  "validate-errors.txt > shell redirection in ensure args rejected in workflow": [
+    {
+      "file": "input.jh",
+      "line": 5,
+      "col": 1,
+      "code": "E_PARSE",
+      "message": "unexpected content after ensure call: '| grep ok'; shell redirection (>, |, &) is not supported — use a script block"
+    }
+  ],
+  "validate-errors.txt > channel ref with unknown import alias": [
+    {
+      "file": "main.jh",
+      "line": 3,
+      "col": 1,
+      "code": "E_VALIDATE",
+      "message": "Channel \"ghost.mychan\" is not defined"
+    }
+  ],
+  "validate-errors.txt > imported route target with wrong parameter count": [
+    {
+      "file": "main.jh",
+      "line": 2,
+      "col": 21,
+      "code": "E_VALIDATE",
+      "message": "inbox route target \"lib.handler\" must declare exactly 3 parameters (message, channel, sender), but declares 1"
+    }
+  ],
+  "validate-errors.txt > const run of string variable in rule rejected": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 13,
+      "code": "E_VALIDATE",
+      "message": "strings are not executable; \"name\" is a string — use a script instead"
+    }
+  ],
+  "validate-errors.txt > channel reference with three dot parts is rejected": [
+    {
+      "file": "input.jh",
+      "line": 2,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "invalid send: channel must be a single name or `alias.name` (at most one dot in the channel part)"
+    }
+  ],
+  "validate-errors.txt > command substitution invokes workflow in send shell RHS": [
+    {
+      "file": "input.jh",
+      "line": 6,
+      "col": 5,
+      "code": "E_VALIDATE",
+      "message": "command substitution cannot invoke workflow \"helper\"; use run helper ... in a workflow step"
+    }
+  ],
+  "validate-errors.txt > command substitution invokes script in send shell RHS": [
+    {
+      "file": "input.jh",
+      "line": 4,
+      "col": 5,
+      "code": "E_VALIDATE",
+      "message": "command substitution cannot invoke script \"helper\"; use run helper ... for managed calls (or use pure shell inside $(...))"
+    }
+  ],
+  "validate-errors.txt > scripts are not values in rule const": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "scripts are not values; \"helper\" is a script definition"
+    }
+  ],
+  "validate-errors.txt > scripts are not values in workflow const": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "scripts are not values; \"helper\" is a script definition"
+    }
+  ],
+  "validate-errors.txt > scripts are not promptable in workflow": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "scripts are not promptable; \"helper\" is a script — use a string const instead"
+    }
+  ],
+  "validate-errors.txt > scripts cannot be interpolated in log": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "scripts cannot be interpolated; \"helper\" is a script definition"
+    }
+  ],
+  "validate-errors.txt > match arm body cannot start with return": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "match arm body must not start with \"return\"; the match expression itself produces the value — use the expression directly after =>"
+    }
+  ],
+  "validate-errors.txt > inline script in match arm body rejected": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "inline scripts are not allowed in match arm bodies; use a named script with \"run script_name(…)\" instead"
+    }
+  ],
+  "validate-errors.txt > strings are not executable in workflow run": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "strings are not executable; \"name\" is a string — use a script instead"
+    }
+  ],
+  "validate-errors.txt > match arm body cannot start with return in const context": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 13,
+      "code": "E_VALIDATE",
+      "message": "match arm body must not start with \"return\"; the match expression itself produces the value — use the expression directly after =>"
+    }
+  ],
+  "validate-errors.txt > unknown identifier in fail string": [
+    {
+      "file": "input.jh",
+      "line": 2,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "unknown identifier \"ghost\" in fail; declare it with `const`, use a capture, or add a workflow parameter"
+    }
+  ],
+  "validate-errors.txt > unknown identifier in rule log string": [
+    {
+      "file": "input.jh",
+      "line": 2,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "unknown identifier \"ghost\" in log; declare it with `const`, use a capture, or add a rule parameter"
+    }
+  ],
+  "validate-errors.txt > unknown identifier in send literal": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 1,
+      "code": "E_VALIDATE",
+      "message": "unknown identifier \"ghost\" in send; declare it with `const`, use a capture, or add a workflow parameter"
+    }
+  ],
+  "validate-errors.txt > send RHS with local script bare ref requires run": [
+    {
+      "file": "input.jh",
+      "line": 4,
+      "col": 5,
+      "code": "E_VALIDATE",
+      "message": "script \"helper\" must be called with run"
+    }
+  ],
+  "validate-errors.txt > unknown identifier in workflow logerr string": [
+    {
+      "file": "input.jh",
+      "line": 2,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "unknown identifier \"ghost\" in logerr; declare it with `const`, use a capture, or add a workflow parameter"
+    }
+  ],
+  "validate-errors.txt > unknown identifier in workflow return string": [
+    {
+      "file": "input.jh",
+      "line": 2,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "unknown identifier \"ghost\" in return; declare it with `const`, use a capture, or add a workflow parameter"
+    }
+  ],
+  "validate-errors.txt > scripts cannot be interpolated in logerr": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "scripts cannot be interpolated; \"helper\" is a script definition"
+    }
+  ],
+  "validate-errors.txt > scripts cannot be interpolated in fail": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "scripts cannot be interpolated; \"helper\" is a script definition"
+    }
+  ],
+  "validate-errors.txt > scripts cannot be interpolated in return": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "scripts cannot be interpolated; \"helper\" is a script definition"
+    }
+  ],
+  "validate-errors.txt > strings are not executable in workflow const run": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 13,
+      "code": "E_VALIDATE",
+      "message": "strings are not executable; \"name\" is a string — use a script instead"
+    }
+  ],
+  "validate-errors.txt > ensure rejects local workflow reference": [
+    {
+      "file": "input.jh",
+      "line": 5,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "workflow \"helper\" must be called with run"
+    }
+  ],
+  "validate-errors.txt > run async is rejected in rules with imported workflow": [
+    {
+      "file": "main.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "run async is not allowed in rules; use it in workflows only"
+    }
+  ],
+  "validate-errors.txt > scripts cannot be interpolated in send literal": [
+    {
+      "file": "input.jh",
+      "line": 4,
+      "col": 1,
+      "code": "E_VALIDATE",
+      "message": "scripts cannot be interpolated; \"helper\" is a script definition"
+    }
+  ],
+  "validate-errors.txt > unknown identifier in inline run capture in log": [
+    {
+      "file": "input.jh",
+      "line": 2,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "unknown local workflow or script reference \"nonexistent_script\""
+    }
+  ],
+  "validate-errors.txt > strings are not executable in rule run": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 13,
+      "code": "E_VALIDATE",
+      "message": "strings are not executable; \"greeting\" is a string — use a script instead"
+    }
+  ],
+  "validate-errors.txt > unknown identifier in workflow log string": [
+    {
+      "file": "input.jh",
+      "line": 2,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "unknown identifier \"ghost\" in log; declare it with `const`, use a capture, or add a workflow parameter"
+    }
+  ],
+  "validate-errors.txt > match arm body with ensure arm in const context": [],
+  "validate-errors.txt > return bare unknown identifier": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "unknown identifier \"missing_name\" in return; declare it with `const`, use a capture, or add a workflow parameter"
+    }
+  ],
+  "validate-errors.txt > test block: expect_equal LHS variable not captured (no implicit `response`)": [
+    {
+      "file": "input.test.jh",
+      "line": 5,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "expect_equal: undefined name \"response\" (capture it first with: const response = run …)"
+    }
+  ],
+  "validate-errors.txt > test block: expect_equal RHS const reference not declared": [
+    {
+      "file": "input.test.jh",
+      "line": 5,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "expect_equal: undefined name \"expected\" (declare it earlier with: const expected = \"…\")"
+    }
+  ],
+  "validate-errors.txt > test block: mock prompt <ident> references undeclared const": [
+    {
+      "file": "input.test.jh",
+      "line": 4,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "mock prompt: undefined name \"reply\" (declare it earlier with: const reply = \"…\")"
+    }
+  ],
+  "validate-errors.txt > test block: explicit capture + const reference is valid": [],
+  "validate-errors.txt > invalid regex in if condition in workflow": [
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "invalid regex in if condition: /[bad(/"
+    }
+  ],
+  "validate-errors.txt > invalid regex in if condition in rule": [
+    {
+      "file": "input.jh",
+      "line": 4,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "invalid regex in if condition: /[bad(/"
+    }
+  ],
+  "validate-errors.txt > import script resolves to missing file": [
+    {
+      "file": "input.jh",
+      "line": 1,
+      "col": 1,
+      "code": "E_IMPORT_NOT_FOUND",
+      "message": "import script \"queue\" resolves to missing file \"<TMP>/missing.py\""
+    },
+    {
+      "file": "input.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "unknown local workflow or script reference \"queue\""
+    }
+  ],
+  "validate-errors.txt > bare imported workflow as shell line must use run": [
+    {
+      "file": "main.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "use run lib.deploy() — \"lib.deploy\" is a valid script or workflow reference; use a managed run step"
+    }
+  ],
+  "validate-errors.txt > bare imported script as shell line must use run": [
+    {
+      "file": "main.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "use run lib.helper() — \"lib.helper\" is a valid script or workflow reference; use a managed run step"
+    }
+  ],
+  "validate-errors.txt > command substitution invokes rule in send shell RHS": [
+    {
+      "file": "input.jh",
+      "line": 6,
+      "col": 5,
+      "code": "E_VALIDATE",
+      "message": "command substitution cannot invoke rule \"check\"; use ensure check ... in a workflow step"
+    }
+  ],
+  "validate-errors.txt > command substitution contains channel send": [
+    {
+      "file": "input.jh",
+      "line": 4,
+      "col": 5,
+      "code": "E_VALIDATE",
+      "message": "command substitution cannot contain channel send (<-); use a workflow send step instead"
+    }
+  ],
+  "validate-errors-multi-module.txt > duplicate import alias": [
+    {
+      "file": "main.jh",
+      "line": 2,
+      "col": 1,
+      "code": "E_VALIDATE",
+      "message": "duplicate import alias \"mod\""
+    },
+    {
+      "file": "main.jh",
+      "line": 5,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "imported rule \"mod.one\" does not exist"
+    }
+  ],
+  "validate-errors-multi-module.txt > imported workflow missing": [
+    {
+      "file": "main.jh",
+      "line": 4,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "imported workflow or script \"lib.missing\" does not exist"
+    }
+  ],
+  "validate-errors-multi-module.txt > send RHS with unknown imported symbol": [
+    {
+      "file": "main.jh",
+      "line": 4,
+      "col": 5,
+      "code": "E_VALIDATE",
+      "message": "unknown symbol \"lib.nonexistent\" in send right-hand side"
+    }
+  ],
+  "validate-errors-multi-module.txt > missing channel import fails": [
+    {
+      "file": "main.jh",
+      "line": 3,
+      "col": 1,
+      "code": "E_VALIDATE",
+      "message": "Channel \"shared.typo\" is not defined"
+    }
+  ],
+  "validate-errors-multi-module.txt > unknown import alias in run reference": [
+    {
+      "file": "main.jh",
+      "line": 2,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "unknown import alias \"ghost\" for run target \"ghost.deploy\""
+    }
+  ],
+  "validate-errors-multi-module.txt > imported script does not exist": [
+    {
+      "file": "main.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "imported workflow or script \"lib.nonexistent\" does not exist"
+    }
+  ],
+  "validate-errors-multi-module.txt > run in rule targeting imported rule rejected": [
+    {
+      "file": "main.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "rule \"lib.other_rule\" must be called with ensure, not run"
+    }
+  ],
+  "validate-errors-multi-module.txt > import resolves to missing file": [
+    {
+      "file": "main.jh",
+      "line": 1,
+      "col": 1,
+      "code": "E_IMPORT_NOT_FOUND",
+      "message": "import \"lib\" resolves to missing file \"<TMP>/nonexistent.jh\""
+    }
+  ],
+  "validate-errors-multi-module.txt > arity mismatch on imported workflow": [
+    {
+      "file": "main.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "workflow \"lib.helper\" expects 2 argument(s) (a, b), but got 1"
+    }
+  ],
+  "validate-errors-multi-module.txt > send RHS with imported script bare ref": [
+    {
+      "file": "main.jh",
+      "line": 4,
+      "col": 5,
+      "code": "E_VALIDATE",
+      "message": "script \"lib.helper\" must be called with run"
+    }
+  ],
+  "validate-errors-multi-module.txt > send RHS with imported rule bare ref": [
+    {
+      "file": "main.jh",
+      "line": 4,
+      "col": 5,
+      "code": "E_VALIDATE",
+      "message": "rule \"lib.check\" must be called with ensure"
+    }
+  ],
+  "validate-errors-multi-module.txt > imported channel name not found": [
+    {
+      "file": "main.jh",
+      "line": 3,
+      "col": 1,
+      "code": "E_VALIDATE",
+      "message": "Channel \"lib.nonexistent_chan\" is not defined"
+    }
+  ],
+  "validate-errors-multi-module.txt > ensure non-exported rule from module with exports": [
+    {
+      "file": "main.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "\"private_check\" is not exported from module \"lib\""
+    }
+  ],
+  "validate-errors-multi-module.txt > run non-exported workflow from module with exports": [
+    {
+      "file": "main.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "\"private_wf\" is not exported from module \"lib\""
+    }
+  ],
+  "validate-errors-multi-module.txt > shell line with unknown imported symbol in workflow": [
+    {
+      "file": "main.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "imported workflow or script \"lib.nonexistent_thing\" does not exist"
+    }
+  ],
+  "validate-errors-multi-module.txt > run non-exported script from module with exports": [
+    {
+      "file": "main.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "\"private_script\" is not exported from module \"lib\""
+    }
+  ],
+  "validate-errors-multi-module.txt > send RHS with non-exported workflow bare ref": [
+    {
+      "file": "main.jh",
+      "line": 4,
+      "col": 5,
+      "code": "E_VALIDATE",
+      "message": "\"private_wf\" is not exported from module \"lib\""
+    }
+  ],
+  "validate-errors-multi-module.txt > arity mismatch on imported rule": [
+    {
+      "file": "main.jh",
+      "line": 3,
+      "col": 3,
+      "code": "E_VALIDATE",
+      "message": "rule \"lib.check\" expects 2 argument(s) (a, b), but got 1"
+    }
+  ],
+  "validate-errors-multi-module.txt > send RHS with non-exported script bare ref": [
+    {
+      "file": "main.jh",
+      "line": 4,
+      "col": 5,
+      "code": "E_VALIDATE",
+      "message": "\"private_script\" is not exported from module \"lib\""
+    }
+  ],
+  "validate-errors-multi-module.txt > const ensure on imported workflow rejected": [
+    {
+      "file": "main.jh",
+      "line": 3,
+      "col": 13,
+      "code": "E_VALIDATE",
+      "message": "workflow \"lib.deploy\" must be called with run"
+    }
+  ]
+}

@@ -10,6 +10,7 @@ import { collectDiagnostics } from "./validate";
 // Compiled test sits at dist/src/transpile/; the source tree is three levels up.
 const repoRoot = resolve(__dirname, "../../..");
 const validatePath = resolve(repoRoot, "src/transpile/validate.ts");
+const validateStepPath = resolve(repoRoot, "src/transpile/validate-step.ts");
 const cliJsPath = resolve(repoRoot, "dist/src/cli.js");
 
 /**
@@ -89,19 +90,26 @@ test("Diagnostics: collects 3 independent errors from one compile in source orde
  * exercise the throwing legacy bridge.
  */
 test("Diagnostics: throwing call-sites match the documented fatal allowlist", () => {
-  const src = readFileSync(validatePath, "utf8");
-  const throwCount = (src.match(/throw\s+jaiphError\(/g) ?? []).length;
+  const validateSrc = readFileSync(validatePath, "utf8");
+  const validateStepSrc = readFileSync(validateStepPath, "utf8");
+  const throwCount =
+    (validateSrc.match(/throw\s+jaiphError\(/g) ?? []).length +
+    (validateStepSrc.match(/throw\s+jaiphError\(/g) ?? []).length;
   assert.equal(
     throwCount,
     0,
-    `expected validate.ts to use diag.error exclusively, found ${throwCount} throw jaiphError sites`,
+    `expected validate.ts + validate-step.ts to use diag.error exclusively, found ${throwCount} throw jaiphError sites`,
   );
 
-  // Sanity: confirm the migration replaced rather than removed.
-  const diagErrorCount = (src.match(/diag\.error\(/g) ?? []).length;
+  // Sanity: confirm the migration replaced rather than removed. After Refactor 4
+  // (visitor-table validator) the bulk of these sites moved into the sibling
+  // `validate-step.ts`, so count across both files.
+  const diagErrorCount =
+    (validateSrc.match(/diag\.error\(/g) ?? []).length +
+    (validateStepSrc.match(/diag\.error\(/g) ?? []).length;
   assert.ok(
     diagErrorCount >= 40,
-    `expected many diag.error sites, found ${diagErrorCount}`,
+    `expected many diag.error sites across validate.ts + validate-step.ts, found ${diagErrorCount}`,
   );
 
   // The fatal allowlist: files where a `throw jaiphError(...)` is allowed

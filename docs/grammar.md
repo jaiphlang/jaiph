@@ -1064,12 +1064,12 @@ single_workflow_stmt = ensure_stmt | run_stmt | run_catch_stmt | run_recover_stm
                 | send_stmt ;
   (* Actual catch/recover bodies use parseCatchStatement in src/parse/steps.ts: a richer subset
      than this sketch, including inline shell text for workflow recovery blocks — rule bodies still
-     reject unstructured shell via validateRuleStep. *)
+     reject unstructured shell via the visitor's RULE_SCOPE (validate-step.ts). *)
 ```
 
 ## Validation Rules
 
-After parsing, the compiler validates references and config (`src/transpile/validate.ts`). Error codes:
+After parsing, the compiler validates references and config (`src/transpile/validate.ts` for the module-level entry plus the single workflow walk; `src/transpile/validate-step.ts` for the per-step visitor table). Error codes:
 
 - **E_PARSE:** Invalid syntax — duplicate config, invalid keys/values, `$(…)` or `${var:-fallback}` in orchestration strings, `${...}` interpolation in **single-line backtick** script bodies, `prompt … returns` without `const` capture, `name = prompt …` / assignment captures without `const` for `run`/`ensure`, bare `ref(args)` in const RHS (use `run`/`ensure`/`prompt`), `local` at top level, unrecognized workflow/rule line, invalid send RHS, arguments after `catch`, bare `catch` with no recovery step, nested inline captures, shell redirection after `run`/`ensure`, invalid parameter names (non-identifier, duplicate, or reserved keyword), or missing `{` on definition line.
 - **E_SCHEMA:** Invalid `returns` schema — empty, non-flat, unsupported type (only `string`, `number`, `boolean`).
