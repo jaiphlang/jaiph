@@ -1,9 +1,13 @@
 import { existsSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { loadModuleGraph } from "../../transpile/module-graph";
-import { validateReferences } from "../../transpile/validate";
+import { collectDiagnostics } from "../../transpile/validate";
 import { walkjhFiles } from "../../transpile/build";
 import { detectWorkspaceRoot } from "../shared/paths";
+import {
+  diagnosticFromThrown as parseThrownDiagnostic,
+  type JaiphDiagnostic,
+} from "../../diagnostics";
 
 export interface CompileDiagnostic {
   file: string;
@@ -15,16 +19,12 @@ export interface CompileDiagnostic {
 
 /** Parse `path:line:col CODE message` from {@link jaiphError} and similar throws. */
 export function diagnosticFromThrown(err: unknown): CompileDiagnostic | null {
-  if (!(err instanceof Error)) return null;
-  const m = err.message.match(/^(.+):(\d+):(\d+) (\S+) (.+)$/s);
-  if (!m) return null;
-  return {
-    file: m[1],
-    line: Number(m[2]),
-    col: Number(m[3]),
-    code: m[4],
-    message: m[5].trimEnd(),
-  };
+  const d = parseThrownDiagnostic(err);
+  return d ? { file: d.file, line: d.line, col: d.col, code: d.code, message: d.message } : null;
+}
+
+function toCompileDiagnostic(d: JaiphDiagnostic): CompileDiagnostic {
+  return { file: d.file, line: d.line, col: d.col, code: d.code, message: d.message };
 }
 
 function printUsage(): void {
@@ -37,6 +37,16 @@ function printUsage(): void {
       "  --json       Print one JSON array of diagnostics to stdout (empty on success).\n" +
       "  --workspace  Override workspace root for import resolution for all paths.\n",
   );
+}
+
+function writeDiagnostics(json: boolean, diags: CompileDiagnostic[]): void {
+  if (json) {
+    process.stdout.write(JSON.stringify(diags) + "\n");
+    return;
+  }
+  for (const d of diags) {
+    process.stderr.write(`${d.file}:${d.line}:${d.col} ${d.code} ${d.message}\n`);
+  }
 }
 
 export function runCompile(args: string[]): number {
@@ -97,51 +107,47 @@ export function runCompile(args: string[]): number {
     }
   } catch (err) {
     const d = diagnosticFromThrown(err);
-    if (json) {
-      const fallback: CompileDiagnostic = {
-        file: "",
-        line: 1,
-        col: 1,
-        code: "E_COMPILE",
-        message: err instanceof Error ? err.message : String(err),
-      };
-      process.stdout.write(JSON.stringify(d ? [d] : [fallback]) + "\n");
-    } else {
-      process.stderr.write((err instanceof Error ? err.message : String(err)) + "\n");
-    }
+    const fallback: CompileDiagnostic = {
+      file: "",
+      line: 1,
+      col: 1,
+      code: "E_COMPILE",
+      message: err instanceof Error ? err.message : String(err),
+    };
+    writeDiagnostics(json, [d ?? fallback]);
     return 1;
   }
 
+  const collected: CompileDiagnostic[] = [];
   const seen = new Set<string>();
   for (const { file, workspaceRoot } of entries) {
     if (seen.has(file)) continue;
     seen.add(file);
     try {
       const graph = loadModuleGraph(file, workspaceRoot);
-      validateReferences(graph);
-      // Mark every reachable module as already validated so a directory walk
-      // does not double-validate shared imports.
+      const diag = collectDiagnostics(graph);
+      for (const d of diag.sorted()) collected.push(toCompileDiagnostic(d));
       for (const reachable of graph.modules.keys()) seen.add(reachable);
     } catch (err) {
+      // Loader / parser errors are fatal (unrecoverable AST). Surface them
+      // as a single diagnostic; they do not flow through `Diagnostics`.
       const d = diagnosticFromThrown(err);
-      if (json) {
-        const fallback: CompileDiagnostic = {
+      collected.push(
+        d ?? {
           file,
           line: 1,
           col: 1,
           code: "E_COMPILE",
           message: err instanceof Error ? err.message : String(err),
-        };
-        process.stdout.write(JSON.stringify(d ? [d] : [fallback]) + "\n");
-      } else {
-        process.stderr.write((err instanceof Error ? err.message : String(err)) + "\n");
-      }
-      return 1;
+        },
+      );
     }
   }
 
-  if (json) {
-    process.stdout.write("[]\n");
+  if (collected.length === 0) {
+    if (json) process.stdout.write("[]\n");
+    return 0;
   }
-  return 0;
+  writeDiagnostics(json, collected);
+  return 1;
 }
