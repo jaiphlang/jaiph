@@ -13,33 +13,6 @@ Process rules:
 
 ***
 
-## Unify `catch` and `recover` parsing into a single attached-block routine #dev-ready
-
-**Design reference:** `design/2026-05-15-parser-compiler-simplification.md` § Refactor 2.
-
-**Why:** `src/parse/steps.ts` contains three near-identical 100+ line functions — `parseEnsureStep`, `parseRunCatchStep`, `parseRunRecoverStep` — that parse the same syntactic shape (`<host-step> <keyword> (binding) { body } | single-stmt`) and differ only in which host step they decorate and the literal keyword. Their body parser, `parseCatchStatement` (~280 lines), re-implements a stripped-down version of `parseBlockStatement` with diverging coverage.
-
-**Scope:**
-
-- Replace `parseEnsureStep`, `parseRunCatchStep`, `parseRunRecoverStep`, and `parseCatchStatement` with:
-  - `parseAttachedBlock(keyword: "catch" | "recover", host: WorkflowStepDef)` returning `{ bindings, body: WorkflowStepDef[] }`.
-  - A body parsed by the **same** `parseBlockStatement` used at the top level — no mini parser.
-- All four functions and any helpers that exist only to serve them are deleted from `src/parse/steps.ts`.
-- "Is this statement allowed inside a catch/recover body?" is a validator concern after this refactor, not enforced by which mini-parser branches happen to fire.
-
-**Acceptance criteria** (each verified by a test):
-
-1. `src/parse/steps.ts` is at most 200 lines (down from 757), and contains no function whose name matches `/parse(Run)?(Catch|Recover|EnsureStep)/`. A grep/size test fails if either bound is violated.
-2. `parseBlockStatement` is the single entry point for any statement appearing inside a catch or recover body. Add a test that introduces a new statement form (behind a test-only flag) and asserts it is accepted identically at top level and inside `catch (e) { … }` and `recover(e) { … }` without parser changes inside the catch/recover code path.
-3. Every existing parse error message and location related to `catch` / `recover` (bindings missing, too many bindings, unterminated block, etc.) is preserved bit-for-bit. Snapshot test over `parse-*.test.ts` fixtures.
-4. The full parser/validator/emitter golden corpus passes byte-for-byte: `npm test`, including `parse-steps.test.ts`, `parse-bare-call.test.ts`, `parse-run-async.test.ts`, `compiler-golden.test.ts`, `compiler-edge.acceptance.test.ts`.
-
-**Out of scope:** the wider tokenizer rewrite (next task) — this task explicitly stays on the line-walking parser, since the goal is incremental simplification. Validator changes beyond minor message preservation.
-
-**Dependency:** Refactor 3 (AST collapse) should be complete first so the unified parser emits `Expr` nodes directly. If it is not, this task may proceed but must avoid introducing new producers of the deprecated `managed:` sidecar.
-
-***
-
 ## Replace the line-by-line ad-hoc parser with a tokenizer + recursive-descent parser #dev-ready
 
 **Design reference:** `design/2026-05-15-parser-compiler-simplification.md` § Refactor 1.

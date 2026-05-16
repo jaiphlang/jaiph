@@ -919,7 +919,9 @@ workflow default() {
 }
 
 === catch: fail without double quote
-# @expect error E_PARSE "fail must match" @5:1
+# Body parsing unified with parseBlockStatement (Refactor 2). Error now points
+# to the inner statement's actual line/col.
+# @expect error E_PARSE "fail must match" @6:5
 --- input.jh
 rule check() {
   return "ok"
@@ -931,7 +933,7 @@ workflow default() {
 }
 
 === catch: unterminated fail string
-# @expect error E_PARSE "unterminated fail string" @5:1
+# @expect error E_PARSE "multiline strings use triple quotes: fail" @6:5
 --- input.jh
 rule check() {
   return "ok"
@@ -943,7 +945,7 @@ workflow default() {
 }
 
 === catch: log without double quote
-# @expect error E_PARSE "log must match" @5:1
+# @expect error E_PARSE "log must match" @6:5
 --- input.jh
 rule check() {
   return "ok"
@@ -955,7 +957,7 @@ workflow default() {
 }
 
 === catch: unterminated log string
-# @expect error E_PARSE "unterminated log string" @5:1
+# @expect error E_PARSE "multiline strings use triple quotes: log" @6:5
 --- input.jh
 rule check() {
   return "ok"
@@ -967,7 +969,7 @@ workflow default() {
 }
 
 === catch: logerr without double quote
-# @expect error E_PARSE "logerr must match" @5:1
+# @expect error E_PARSE "logerr must match" @6:5
 --- input.jh
 rule check() {
   return "ok"
@@ -979,7 +981,7 @@ workflow default() {
 }
 
 === catch: unterminated logerr string
-# @expect error E_PARSE "unterminated logerr string" @5:1
+# @expect error E_PARSE "multiline strings use triple quotes: logerr" @6:5
 --- input.jh
 rule check() {
   return "ok"
@@ -1439,7 +1441,7 @@ workflow default() {
 }
 
 === catch: prompt capture without const
-# @expect error E_PARSE "const name = prompt" @5:1
+# @expect error E_PARSE "const name = prompt" @6:5
 --- input.jh
 rule check() {
   return "ok"
@@ -1899,7 +1901,7 @@ workflow default() {
 }
 
 === inline catch unterminated fail string
-# @expect error E_PARSE "unterminated fail string"
+# @expect error E_PARSE "multiline strings use triple quotes: fail"
 --- input.jh
 rule check() {
   return "ok"
