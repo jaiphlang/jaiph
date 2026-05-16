@@ -14,12 +14,13 @@
           "name": "input",
           "type": "const",
           "value": {
-            "bashRhs": "\"hello\"",
-            "kind": "expr"
+            "kind": "literal",
+            "raw": "\"hello\""
           }
         },
         {
-          "managed": {
+          "type": "return",
+          "value": {
             "kind": "match",
             "match": {
               "arms": [
@@ -46,9 +47,7 @@
               ],
               "subject": "input"
             }
-          },
-          "type": "return",
-          "value": "__match__"
+          }
         }
       ]
     }

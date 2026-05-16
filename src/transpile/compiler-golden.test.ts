@@ -109,13 +109,17 @@ test("parser: assignment capture parses for ensure, run, and const run capture",
   const steps = mod.workflows[0].steps;
   assert.equal(steps.length, 2);
   assert.equal(steps[0].type, "const");
-  const c0 = steps[0] as { type: "const"; name: string; value: { kind: string } };
-  assert.equal(c0.name, "response");
-  assert.equal(c0.value.kind, "ensure_capture");
+  const c0 = steps[0];
+  if (c0.type === "const") {
+    assert.equal(c0.name, "response");
+    assert.equal(c0.value.kind, "ensure_call");
+  }
   assert.equal(steps[1].type, "const");
-  const c1 = steps[1] as { type: "const"; name: string; value: { kind: string } };
-  assert.equal(c1.name, "out");
-  assert.equal(c1.value.kind, "run_capture");
+  const c1 = steps[1];
+  if (c1.type === "const") {
+    assert.equal(c1.name, "out");
+    assert.equal(c1.value.kind, "call");
+  }
 });
 
 test("parser: config block parses and populates mod.metadata", () => {
@@ -343,13 +347,13 @@ test("parser: run ... catch parses correctly", () => {
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
   const step = mod.workflows[0].steps[0];
-  assert.equal(step.type, "run");
-  if (step.type === "run") {
+  assert.equal(step.type, "exec");
+  if (step.type === "exec" && step.body.kind === "call") {
     assert.ok(step.catch);
     assert.equal(step.catch!.bindings.failure, "err");
     const recoverSteps = "block" in step.catch! ? step.catch!.block : [step.catch!.single];
     assert.equal(recoverSteps.length, 1);
-    assert.equal(recoverSteps[0].type, "log");
+    assert.equal(recoverSteps[0].type, "say");
   }
 });
 
@@ -360,9 +364,14 @@ test("parser: fail step parses quoted message", () => {
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
-  const step = mod.workflows[0].steps[0] as { type: string; message: string };
-  assert.equal(step.type, "fail");
-  assert.equal(step.message, '"expected reason"');
+  const step = mod.workflows[0].steps[0];
+  assert.equal(step.type, "say");
+  if (step.type === "say") {
+    assert.equal(step.level, "fail");
+    if (step.message.kind === "literal") {
+      assert.equal(step.message.raw, '"expected reason"');
+    }
+  }
 });
 
 test("parser: const string expr and const run capture parse", () => {
@@ -376,15 +385,19 @@ test("parser: const string expr and const run capture parse", () => {
   const mod = parsejaiph(source, "/fake/entry.jh");
   const steps = mod.workflows[0].steps;
   assert.equal(steps.length, 2);
-  const c0 = steps[0] as { type: string; name: string; value: { kind: string; bashRhs?: string } };
-  const c1 = steps[1] as { type: string; name: string; value: { kind: string } };
+  const c0 = steps[0];
+  const c1 = steps[1];
   assert.equal(c0.type, "const");
-  assert.equal(c0.name, "msg");
-  assert.equal(c0.value.kind, "expr");
-  assert.equal(c0.value.bashRhs, '"hi"');
+  if (c0.type === "const") {
+    assert.equal(c0.name, "msg");
+    assert.equal(c0.value.kind, "literal");
+    if (c0.value.kind === "literal") assert.equal(c0.value.raw, '"hi"');
+  }
   assert.equal(c1.type, "const");
-  assert.equal(c1.name, "out");
-  assert.equal(c1.value.kind, "run_capture");
+  if (c1.type === "const") {
+    assert.equal(c1.name, "out");
+    assert.equal(c1.value.kind, "call");
+  }
 });
 
 test("parser: const rejects bare call-like rhs without run", () => {
@@ -408,16 +421,13 @@ test("parser: const allows run-wrapped script call with args", () => {
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
-  const step = mod.workflows[0].steps[0] as {
-    type: string;
-    name: string;
-    value: { kind: string; ref?: { value: string }; args?: import("../types").Arg[] };
-  };
+  const step = mod.workflows[0].steps[0];
   assert.equal(step.type, "const");
-  assert.equal(step.name, "x");
-  assert.equal(step.value.kind, "run_capture");
-  assert.equal(step.value.ref?.value, "some_script");
-  assert.deepEqual(step.value.args, [{ kind: "var", name: "arg1" }]);
+  if (step.type === "const" && step.value.kind === "call") {
+    assert.equal(step.name, "x");
+    assert.equal(step.value.callee.value, "some_script");
+    assert.deepEqual(step.value.args, [{ kind: "var", name: "arg1" }]);
+  }
 });
 
 test("parser: const prompt capture parses", () => {
@@ -427,14 +437,12 @@ test("parser: const prompt capture parses", () => {
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
-  const step = mod.workflows[0].steps[0] as {
-    type: string;
-    name: string;
-    value: { kind: string };
-  };
+  const step = mod.workflows[0].steps[0];
   assert.equal(step.type, "const");
-  assert.equal(step.name, "ans");
-  assert.equal(step.value.kind, "prompt_capture");
+  if (step.type === "const") {
+    assert.equal(step.name, "ans");
+    assert.equal(step.value.kind, "prompt");
+  }
 });
 
 test("parser: wait parses as workflow step (not shell)", () => {
@@ -478,8 +486,10 @@ test("parser: send operator parses channel <- \"literal\"", () => {
   const step = mod.workflows[0].steps[0];
   assert.equal(step.type, "send");
   if (step.type !== "send") throw new Error("expected send");
-  assert.equal(step.rhs.kind, "literal");
-  assert.equal(step.rhs.token, `"hello"`);
+  assert.equal(step.value.kind, "literal");
+  if (step.value.kind === "literal") {
+    assert.equal(step.value.raw, `"hello"`);
+  }
   assert.equal(step.channel, "findings");
 });
 
@@ -597,7 +607,7 @@ test("parser: <- inside quotes is not a send", () => {
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
   assert.equal(mod.workflows[0].steps.length, 1);
-  assert.equal(mod.workflows[0].steps[0].type, "log");
+  assert.equal(mod.workflows[0].steps[0].type, "say");
 });
 
 test("parser: channel route declaration parses into ChannelDef.routes", () => {
@@ -659,8 +669,12 @@ test("parser: capture + send is E_PARSE", () => {
     "}",
   ].join("\n");
   const mod = parsejaiph(source, "/fake/entry.jh");
-  // Parsed as a shell step; validation will reject it later
-  assert.equal(mod.workflows[0].steps[0].type, "shell");
+  // Parsed as an exec step with shell body; validation will reject it later
+  const step = mod.workflows[0].steps[0];
+  assert.equal(step.type, "exec");
+  if (step.type === "exec") {
+    assert.equal(step.body.kind, "shell");
+  }
 });
 
 // === Top-level const (env declaration) tests ===

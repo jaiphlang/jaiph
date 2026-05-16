@@ -272,7 +272,7 @@ test("workflow config: parses config inside workflow", () => {
   const mod = parsejaiph(src, "test.jh");
   assert.equal(mod.workflows[0].metadata?.agent?.backend, "claude");
   assert.equal(mod.workflows[0].steps.length, 1);
-  assert.equal(mod.workflows[0].steps[0].type, "log");
+  assert.equal(mod.workflows[0].steps[0].type, "say");
 });
 
 test("workflow config: allows comments before config", () => {

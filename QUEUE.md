@@ -13,49 +13,6 @@ Process rules:
 
 ***
 
-## Collapse the AST around a single `Expr` type, eliminating the three "managed call" encodings #dev-ready
-
-**Design reference:** `design/2026-05-15-parser-compiler-simplification.md` § Refactor 3.
-
-**Why:** The concept "a managed call that yields a value" is encoded three different ways in `src/types.ts`: as a statement (`{ type: "run", workflow, args }`), as a const RHS (`{ kind: "run_capture", ref, args }`), and as a `managed:` sidecar on `return`/`log`/`logerr` with a placeholder string (e.g. `value: "__match__"`, `value: "run inline_script"`). Inline scripts add a fourth (`run_inline_script_capture`). The same is true for `prompt`, `match`, and `ensure` captures. Validator, formatter, and emitter all have to know about the dual representation.
-
-**Scope:**
-
-- Introduce a single `Expr` sum type (or equivalent) used everywhere a value can appear:
-
-  ```ts
-  type Expr =
-    | { kind: "literal";       raw: string }
-    | { kind: "var";           name: string; field?: string }
-    | { kind: "call";          callee: Ref;   args: Arg[] }
-    | { kind: "ensure_call";   callee: Ref;   args: Arg[] }
-    | { kind: "inline_script"; lang?: string; body: string; args?: Arg[] }
-    | { kind: "prompt";        body: Expr;    returns?: Schema }
-    | { kind: "match";         subject: Expr; arms: MatchArm[] };
-  ```
-
-- Replace `ConstRhs` with `Expr`.
-- Replace `SendRhsDef` with `Expr` (plus the channel arrow itself).
-- `ReturnStep`, `LogStep`, `LogerrStep` become `{ value | message: Expr }`. The placeholder strings `"__match__"`, `"run inline_script"`, etc. are deleted.
-- The `managed:` sidecar field is deleted from `WorkflowStepDef`.
-- `WorkflowStepDef` ends up with ~7 variants (down from 14).
-- All references to the deleted shapes in parser, validator, emitter, and formatter are migrated.
-
-**Acceptance criteria** (each verified by a test):
-
-1. The string literals `"__match__"`, `"run inline_script"`, and any other AST placeholder strings are absent from `src/`. Add a meta-test (e.g. a `grep` test) that fails if any reappear.
-2. `WorkflowStepDef` has at most 8 variants. Add a type-level test (e.g. an exhaustive `switch` in a compile-time assertion file) that fails if a new variant is silently added.
-3. `ConstRhs` and `SendRhsDef` are deleted as separate types; their fields are reachable via `Expr`. A test asserting the export surface of `src/types.ts` fails when those symbols reappear.
-4. Every existing parser path that produced a `managed:` sidecar now produces an `Expr` node, and a new parser test asserts the AST shape directly for `return run …`, `return ensure …`, `return match … { … }`, `return run \`…\`(…)`, `log run \`…\`(…)`, and `const x = prompt …`.
-5. `npm test` passes. The golden corpus (`compiler-golden.test.ts`, `compiler-edge.acceptance.test.ts`) passes byte-for-byte against emitted bash output. The formatter round-trip tests pass byte-for-byte against source.
-6. `npm run build` passes; TypeScript strict-mode errors are zero.
-
-**Out of scope:** surface syntax, the validator's structural rewrite (Refactor 4), parser internals (Refactors 1 & 2). This refactor is purely an AST + producer/consumer migration.
-
-**Dependency:** The Trivia/CST split and `Arg[]` collapse (two previous tasks) should be complete first so the new `Expr` shape is designed against the semantic core only.
-
-***
-
 ## Fold the validator's pre-passes (knownVars / promptSchemas / immutableBindings) into a single workflow walk #dev-ready
 
 **Design reference:** `design/2026-05-15-parser-compiler-simplification.md` § Appendix C.

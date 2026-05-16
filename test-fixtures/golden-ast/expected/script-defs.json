@@ -27,16 +27,22 @@
       "params": [],
       "steps": [
         {
-          "type": "run",
-          "workflow": {
-            "value": "greet"
-          }
+          "body": {
+            "callee": {
+              "value": "greet"
+            },
+            "kind": "call"
+          },
+          "type": "exec"
         },
         {
-          "type": "run",
-          "workflow": {
-            "value": "multiline"
-          }
+          "body": {
+            "callee": {
+              "value": "multiline"
+            },
+            "kind": "call"
+          },
+          "type": "exec"
         }
       ]
     }

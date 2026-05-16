@@ -1,5 +1,5 @@
 import { inlineScriptName } from "../inline-script-name";
-import type { jaiphModule, ScriptImportDef, WorkflowStepDef } from "../types";
+import type { Expr, jaiphModule, ScriptImportDef, WorkflowStepDef } from "../types";
 import { scriptShebangIsBash } from "../parse/script-bash";
 import { langToShebang } from "../parse/scripts";
 
@@ -69,31 +69,50 @@ function wrapBashStandaloneScriptBody(body: string, envPreamble: string): string
 
 export type ScriptArtifact = { name: string; content: string };
 
-/** Collect all inline script steps from a step tree (handles if/else/catch nesting). */
+/** Walk all `Expr` nodes carried by a step and yield inline-script bodies. */
+function emitInlineFromExpr(expr: Expr, seen: Set<string>, out: ScriptArtifact[]): void {
+  if (expr.kind === "inline_script") {
+    const shebang = expr.lang ? langToShebang(expr.lang) : undefined;
+    emitInlineScriptArtifact(expr.body, shebang, seen, out);
+  }
+}
+
+/** Collect all inline script bodies from a step tree (handles if/for/catch/recover nesting). */
 function collectInlineScripts(
   steps: WorkflowStepDef[],
   seen: Set<string>,
   out: ScriptArtifact[],
 ): void {
   for (const s of steps) {
-    if (s.type === "run_inline_script") {
-      const shebang = s.lang ? langToShebang(s.lang) : undefined;
-      emitInlineScriptArtifact(s.body, shebang, seen, out);
-    } else if (s.type === "const" && s.value.kind === "run_inline_script_capture") {
-      const shebang = s.value.lang ? langToShebang(s.value.lang) : undefined;
-      emitInlineScriptArtifact(s.value.body, shebang, seen, out);
-    } else if (s.type === "return" && s.managed?.kind === "run_inline_script") {
-      const shebang = s.managed.lang ? langToShebang(s.managed.lang) : undefined;
-      emitInlineScriptArtifact(s.managed.body, shebang, seen, out);
-    } else if ((s.type === "log" || s.type === "logerr") && s.managed?.kind === "run_inline_script") {
-      const shebang = s.managed.lang ? langToShebang(s.managed.lang) : undefined;
-      emitInlineScriptArtifact(s.managed.body, shebang, seen, out);
-    } else if ((s.type === "ensure" || s.type === "run") && s.catch) {
-      const recoverSteps = "single" in s.catch ? [s.catch.single] : s.catch.block;
-      collectInlineScripts(recoverSteps, seen, out);
-    } else if (s.type === "if") {
-      collectInlineScripts(s.body, seen, out);
-    } else if (s.type === "for_lines") {
+    if (s.type === "exec") {
+      emitInlineFromExpr(s.body, seen, out);
+      if (s.catch) {
+        const recoverSteps = "single" in s.catch ? [s.catch.single] : s.catch.block;
+        collectInlineScripts(recoverSteps, seen, out);
+      }
+      if (s.recover) {
+        const recoverSteps = "single" in s.recover ? [s.recover.single] : s.recover.block;
+        collectInlineScripts(recoverSteps, seen, out);
+      }
+      continue;
+    }
+    if (s.type === "const") {
+      emitInlineFromExpr(s.value, seen, out);
+      continue;
+    }
+    if (s.type === "return") {
+      emitInlineFromExpr(s.value, seen, out);
+      continue;
+    }
+    if (s.type === "say") {
+      emitInlineFromExpr(s.message, seen, out);
+      continue;
+    }
+    if (s.type === "send") {
+      emitInlineFromExpr(s.value, seen, out);
+      continue;
+    }
+    if (s.type === "if" || s.type === "for_lines") {
       collectInlineScripts(s.body, seen, out);
     }
   }

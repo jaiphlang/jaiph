@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { parsejaiph } from "../parser";
 
-test("parse: run async produces run step with async flag", () => {
+test("parse: run async produces exec/call with async flag on the body", () => {
   const src = [
     "workflow default() {",
     "  run async some_wf()",
@@ -10,10 +10,10 @@ test("parse: run async produces run step with async flag", () => {
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
   const step = mod.workflows[0]!.steps[0]!;
-  assert.equal(step.type, "run");
-  if (step.type === "run") {
-    assert.equal(step.workflow.value, "some_wf");
-    assert.equal(step.async, true);
+  assert.equal(step.type, "exec");
+  if (step.type === "exec" && step.body.kind === "call") {
+    assert.equal(step.body.callee.value, "some_wf");
+    assert.equal(step.body.async, true);
   }
 });
 
@@ -25,14 +25,14 @@ test("parse: run async with args", () => {
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
   const step = mod.workflows[0]!.steps[0]!;
-  assert.equal(step.type, "run");
-  if (step.type === "run") {
-    assert.equal(step.workflow.value, "other_wf");
-    assert.deepEqual(step.args, [
+  assert.equal(step.type, "exec");
+  if (step.type === "exec" && step.body.kind === "call") {
+    assert.equal(step.body.callee.value, "other_wf");
+    assert.deepEqual(step.body.args, [
       { kind: "literal", raw: '"hello"' },
       { kind: "literal", raw: '"$x"' },
     ]);
-    assert.equal(step.async, true);
+    assert.equal(step.body.async, true);
   }
 });
 
@@ -44,10 +44,10 @@ test("parse: run async with qualified ref", () => {
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
   const step = mod.workflows[0]!.steps[0]!;
-  assert.equal(step.type, "run");
-  if (step.type === "run") {
-    assert.equal(step.workflow.value, "mod.some_wf");
-    assert.equal(step.async, true);
+  assert.equal(step.type, "exec");
+  if (step.type === "exec" && step.body.kind === "call") {
+    assert.equal(step.body.callee.value, "mod.some_wf");
+    assert.equal(step.body.async, true);
   }
 });
 
@@ -59,9 +59,9 @@ test("parse: regular run does not have async flag", () => {
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
   const step = mod.workflows[0]!.steps[0]!;
-  assert.equal(step.type, "run");
-  if (step.type === "run") {
-    assert.equal(step.async, undefined);
+  assert.equal(step.type, "exec");
+  if (step.type === "exec" && step.body.kind === "call") {
+    assert.equal(step.body.async, undefined);
   }
 });
 
@@ -77,7 +77,7 @@ test("parse: capture + run async is rejected without const", () => {
   );
 });
 
-test("parse: const capture + run async produces run_capture with async flag", () => {
+test("parse: const capture + run async produces Expr.call with async flag", () => {
   const src = [
     "workflow default() {",
     "  const h = run async some_wf()",
@@ -86,13 +86,10 @@ test("parse: const capture + run async produces run_capture with async flag", ()
   const mod = parsejaiph(src, "test.jh");
   const step = mod.workflows[0]!.steps[0]!;
   assert.equal(step.type, "const");
-  if (step.type === "const") {
+  if (step.type === "const" && step.value.kind === "call") {
     assert.equal(step.name, "h");
-    assert.equal(step.value.kind, "run_capture");
-    if (step.value.kind === "run_capture") {
-      assert.equal(step.value.ref.value, "some_wf");
-      assert.equal(step.value.async, true);
-    }
+    assert.equal(step.value.callee.value, "some_wf");
+    assert.equal(step.value.async, true);
   }
 });
 
@@ -105,13 +102,10 @@ test("parse: const capture + run async with args", () => {
   const mod = parsejaiph(src, "test.jh");
   const step = mod.workflows[0]!.steps[0]!;
   assert.equal(step.type, "const");
-  if (step.type === "const") {
-    assert.equal(step.value.kind, "run_capture");
-    if (step.value.kind === "run_capture") {
-      assert.equal(step.value.ref.value, "other_wf");
-      assert.deepEqual(step.value.args, [{ kind: "literal", raw: '"hello"' }]);
-      assert.equal(step.value.async, true);
-    }
+  if (step.type === "const" && step.value.kind === "call") {
+    assert.equal(step.value.callee.value, "other_wf");
+    assert.deepEqual(step.value.args, [{ kind: "literal", raw: '"hello"' }]);
+    assert.equal(step.value.async, true);
   }
 });
 
@@ -123,15 +117,15 @@ test("parse: run async with recover block", () => {
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
   const step = mod.workflows[0]!.steps[0]!;
-  assert.equal(step.type, "run");
-  if (step.type === "run") {
-    assert.equal(step.workflow.value, "foo");
-    assert.equal(step.async, true);
+  assert.equal(step.type, "exec");
+  if (step.type === "exec" && step.body.kind === "call") {
+    assert.equal(step.body.callee.value, "foo");
+    assert.equal(step.body.async, true);
     assert.ok(step.recover);
     if (step.recover && "block" in step.recover) {
       assert.equal(step.recover.bindings.failure, "err");
       assert.equal(step.recover.block.length, 1);
-      assert.equal(step.recover.block[0].type, "log");
+      assert.equal(step.recover.block[0].type, "say");
     }
   }
 });
@@ -147,9 +141,9 @@ test("parse: run async with multi-line recover block", () => {
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
   const step = mod.workflows[0]!.steps[0]!;
-  assert.equal(step.type, "run");
-  if (step.type === "run") {
-    assert.equal(step.async, true);
+  assert.equal(step.type, "exec");
+  if (step.type === "exec" && step.body.kind === "call") {
+    assert.equal(step.body.async, true);
     assert.ok(step.recover);
     if (step.recover && "block" in step.recover) {
       assert.equal(step.recover.block.length, 2);
@@ -165,10 +159,10 @@ test("parse: run async with catch block", () => {
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
   const step = mod.workflows[0]!.steps[0]!;
-  assert.equal(step.type, "run");
-  if (step.type === "run") {
-    assert.equal(step.workflow.value, "bar");
-    assert.equal(step.async, true);
+  assert.equal(step.type, "exec");
+  if (step.type === "exec" && step.body.kind === "call") {
+    assert.equal(step.body.callee.value, "bar");
+    assert.equal(step.body.async, true);
     assert.ok(step.catch);
     if (step.catch && "block" in step.catch) {
       assert.equal(step.catch.bindings.failure, "e");
