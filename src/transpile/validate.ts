@@ -169,59 +169,69 @@ function validateMatchExpr(filePath: string, expr: MatchExprDef, knownVars: Set<
   }
 }
 
-/** Collect all variable names defined in a step list (consts, captures, params). Flat walk — includes nested if/else blocks. */
-function collectKnownVars(steps: WorkflowStepDef[], envDecls?: { name: string }[], params?: string[]): Set<string> {
-  const vars = new Set<string>();
-  if (envDecls) {
-    for (const d of envDecls) vars.add(d.name);
-  }
-  for (const p of params ?? []) {
-    vars.add(p);
-  }
-  const walk = (ss: WorkflowStepDef[]): void => {
-    for (const s of ss) {
-      if (s.type === "const") {
-        vars.add(s.name);
-      }
-      if (s.type === "exec" && s.captureName) {
-        vars.add(s.captureName);
-      }
-      if (s.type === "exec" && s.catch) {
-        const recoverSteps = "single" in s.catch ? [s.catch.single] : s.catch.block;
-        walk(recoverSteps);
-      }
-      if (s.type === "exec" && s.recover) {
-        const recoverSteps = "single" in s.recover ? [s.recover.single] : s.recover.block;
-        walk(recoverSteps);
-      }
-      if (s.type === "if") {
-        walk(s.body);
-      }
-      if (s.type === "for_lines") {
-        vars.add(s.iterVar);
-        walk(s.body);
-      }
-    }
-  };
-  walk(steps);
-  return vars;
+/**
+ * One step entry in the flat list built by the single workflow walk.
+ *
+ * `recoverBindings` is the `Set` of failure-binding names contributed by an
+ * enclosing `catch` / `recover`, threaded down so steps inside a recovery
+ * body can resolve `<failure>` as an in-scope identifier.
+ */
+interface FlatStepEntry {
+  step: WorkflowStepDef;
+  recoverBindings: Set<string> | undefined;
 }
 
-/** Validate that no immutable binding (param, const, capture) is redefined in the same scope. */
-function validateImmutableBindings(
+/**
+ * Result of the single recursive descent over a workflow's / rule's step
+ * tree: the global identifier set (envDecls + params + every nested const /
+ * capture / for-iterator), the top-level prompt schemas, and a flat list of
+ * every step in tree order. The flat list is what the main validator loop
+ * iterates over — that loop is non-recursive, so the only recursive helper
+ * walking `WorkflowStepDef[]` in this file is `walkStepTree` itself.
+ *
+ * Replaces three prior pre-passes that each walked the same step tree with
+ * subtly different recursion rules. Immutable-binding rules are enforced
+ * inline during the descent so the failure order matches the prior
+ * "binding errors first, then per-step errors" behavior.
+ */
+interface StepTreeWalk {
+  knownVars: Set<string>;
+  promptSchemas: Map<string, string[]>;
+  flat: FlatStepEntry[];
+}
+
+function walkStepTree(
   filePath: string,
   steps: WorkflowStepDef[],
+  envDecls: { name: string; loc: { line: number; col: number } }[] | undefined,
   params: string[],
   declLoc: { line: number; col: number },
-  envDecls?: { name: string; loc: { line: number; col: number } }[],
-  moduleScripts?: Set<string>,
-): void {
-  const bound = new Map<string, { kind: string; line: number }>();
+  moduleScripts: Set<string>,
+  parseSchemaFieldNames: (rawSchema: string) => string[],
+  options: { withPromptSchemas: boolean },
+): StepTreeWalk {
+  const knownVars = new Set<string>();
+  const promptSchemas = new Map<string, string[]>();
+  const flat: FlatStepEntry[] = [];
+
+  if (envDecls) {
+    for (const d of envDecls) knownVars.add(d.name);
+  }
   for (const p of params) {
-    bound.set(p, { kind: "parameter", line: declLoc.line });
+    knownVars.add(p);
   }
 
-  const check = (name: string, kind: string, loc: { line: number; col: number }, b: Map<string, { kind: string; line: number }>): void => {
+  const seedBindings = new Map<string, { kind: string; line: number }>();
+  for (const p of params) {
+    seedBindings.set(p, { kind: "parameter", line: declLoc.line });
+  }
+
+  const checkBinding = (
+    name: string,
+    kind: string,
+    loc: { line: number; col: number },
+    b: Map<string, { kind: string; line: number }>,
+  ): void => {
     const prev = b.get(name);
     if (prev) {
       throw jaiphError(
@@ -232,7 +242,7 @@ function validateImmutableBindings(
         `cannot rebind immutable name "${name}"; already bound as ${prev.kind} at ${filePath}:${prev.line}`,
       );
     }
-    if (moduleScripts?.has(name)) {
+    if (moduleScripts.has(name)) {
       throw jaiphError(
         filePath,
         loc.line,
@@ -244,28 +254,52 @@ function validateImmutableBindings(
     b.set(name, { kind, line: loc.line });
   };
 
-  const walk = (ss: WorkflowStepDef[], b: Map<string, { kind: string; line: number }>): void => {
+  const descend = (
+    ss: WorkflowStepDef[],
+    bindings: Map<string, { kind: string; line: number }>,
+    recoverBindings: Set<string> | undefined,
+    topLevel: boolean,
+  ): void => {
     for (const s of ss) {
+      flat.push({ step: s, recoverBindings });
+
       if (s.type === "const") {
-        check(s.name, "const", s.loc, b);
+        knownVars.add(s.name);
+        checkBinding(s.name, "const", s.loc, bindings);
+        if (options.withPromptSchemas && topLevel && s.value.kind === "prompt" && s.value.returns !== undefined) {
+          promptSchemas.set(s.name, parseSchemaFieldNames(s.value.returns));
+        }
+        continue;
       }
-      if (s.type === "exec" && s.captureName) {
-        const captureLoc = execBodyLoc(s.body) ?? s.loc;
-        check(s.captureName, "capture", captureLoc, b);
+
+      if (s.type === "exec") {
+        if (s.captureName) {
+          knownVars.add(s.captureName);
+          const captureLoc = execBodyLoc(s.body) ?? s.loc;
+          checkBinding(s.captureName, "capture", captureLoc, bindings);
+          if (options.withPromptSchemas && topLevel && s.body.kind === "prompt" && s.body.returns !== undefined) {
+            promptSchemas.set(s.captureName, parseSchemaFieldNames(s.body.returns));
+          }
+        }
+        if (s.catch) {
+          const catchSteps = "single" in s.catch ? [s.catch.single] : s.catch.block;
+          descend(catchSteps, bindings, new Set([s.catch.bindings.failure]), false);
+        }
+        if (s.recover) {
+          const recoverSteps = "single" in s.recover ? [s.recover.single] : s.recover.block;
+          descend(recoverSteps, bindings, new Set([s.recover.bindings.failure]), false);
+        }
+        continue;
       }
-      if (s.type === "exec" && s.catch) {
-        const recoverSteps = "single" in s.catch ? [s.catch.single] : s.catch.block;
-        walk(recoverSteps, b);
-      }
-      if (s.type === "exec" && s.recover) {
-        const recoverSteps = "single" in s.recover ? [s.recover.single] : s.recover.block;
-        walk(recoverSteps, b);
-      }
+
       if (s.type === "if") {
-        walk(s.body, b);
+        descend(s.body, bindings, recoverBindings, false);
+        continue;
       }
+
       if (s.type === "for_lines") {
-        if (b.has(s.iterVar)) {
+        knownVars.add(s.iterVar);
+        if (bindings.has(s.iterVar)) {
           throw jaiphError(
             filePath,
             s.loc.line,
@@ -274,13 +308,16 @@ function validateImmutableBindings(
             `for loop iterator "${s.iterVar}" conflicts with an existing binding`,
           );
         }
-        const inner = new Map(b);
+        const inner = new Map(bindings);
         inner.set(s.iterVar, { kind: "loop_iterator", line: s.loc.line });
-        walk(s.body, inner);
+        descend(s.body, inner, recoverBindings, false);
+        continue;
       }
     }
   };
-  walk(steps, bound);
+
+  descend(steps, seedBindings, undefined, true);
+  return { knownVars, promptSchemas, flat };
 }
 
 /** Best-effort location for an exec body — used to attribute capture-binding errors. */
@@ -592,19 +629,6 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
     return names;
   };
 
-  const collectPromptSchemas = (steps: WorkflowStepDef[]): Map<string, string[]> => {
-    const schemas = new Map<string, string[]>();
-    for (const s of steps) {
-      if (s.type === "exec" && s.captureName && s.body.kind === "prompt" && s.body.returns !== undefined) {
-        schemas.set(s.captureName, parseSchemaFieldNames(s.body.returns));
-      }
-      if (s.type === "const" && s.value.kind === "prompt" && s.value.returns !== undefined) {
-        schemas.set(s.name, parseSchemaFieldNames(s.value.returns));
-      }
-    }
-    return schemas;
-  };
-
   const validateDotFieldRefs = (
     content: string,
     loc: { line: number; col: number },
@@ -852,8 +876,17 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
   };
 
   for (const rule of ast.rules) {
-    validateImmutableBindings(ast.filePath, rule.steps, rule.params, rule.loc, ast.envDecls, localScripts);
-    const ruleKnownVars = collectKnownVars(rule.steps, ast.envDecls, rule.params);
+    const ruleWalk = walkStepTree(
+      ast.filePath,
+      rule.steps,
+      ast.envDecls,
+      rule.params,
+      rule.loc,
+      localScripts,
+      parseSchemaFieldNames,
+      { withPromptSchemas: false },
+    );
+    const ruleKnownVars = ruleWalk.knownVars;
     const validateRuleStep = (s: WorkflowStepDef): void => {
       if (s.type === "trivia") return;
       if (s.type === "say") {
@@ -910,14 +943,6 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
           }
         }
         validateCallable(body, ruleKnownVars, "rule");
-        if (s.catch) {
-          const steps = "single" in s.catch ? [s.catch.single] : s.catch.block;
-          for (const r of steps) validateRuleStep(r);
-        }
-        if (s.recover) {
-          const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
-          for (const r of steps) validateRuleStep(r);
-        }
         return;
       }
       if (s.type === "if") {
@@ -926,7 +951,6 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
             throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `invalid regex in if condition: /${s.operand.source}/`);
           }
         }
-        for (const bodyStep of s.body) validateRuleStep(bodyStep);
         return;
       }
       if (s.type === "for_lines") {
@@ -936,14 +960,13 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
             `for ... in <name>: "${s.sourceVar}" is not a known variable in this scope`,
           );
         }
-        for (const bodyStep of s.body) validateRuleStep(bodyStep);
         return;
       }
       const _never: never = s;
       return _never;
     };
-    for (const st of rule.steps) {
-      validateRuleStep(st);
+    for (const entry of ruleWalk.flat) {
+      validateRuleStep(entry.step);
     }
   }
 
@@ -986,9 +1009,18 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
   }
 
   for (const workflow of ast.workflows) {
-    validateImmutableBindings(ast.filePath, workflow.steps, workflow.params, workflow.loc, ast.envDecls, localScripts);
-    const promptSchemas = collectPromptSchemas(workflow.steps);
-    const wfKnownVars = collectKnownVars(workflow.steps, ast.envDecls, workflow.params);
+    const wfWalk = walkStepTree(
+      ast.filePath,
+      workflow.steps,
+      ast.envDecls,
+      workflow.params,
+      workflow.loc,
+      localScripts,
+      parseSchemaFieldNames,
+      { withPromptSchemas: true },
+    );
+    const wfKnownVars = wfWalk.knownVars;
+    const promptSchemas = wfWalk.promptSchemas;
 
     const validateStep = (s: WorkflowStepDef, recoverBindings?: Set<string>): void => {
       if (s.type === "trivia") return;
@@ -1069,14 +1101,6 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
           return;
         }
         validateCallable(body, wfKnownVars, "workflow", recoverBindings);
-        if (s.catch) {
-          const steps = "single" in s.catch ? [s.catch.single] : s.catch.block;
-          for (const r of steps) validateStep(r, new Set([s.catch.bindings.failure]));
-        }
-        if (s.recover) {
-          const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
-          for (const r of steps) validateStep(r, new Set([s.recover.bindings.failure]));
-        }
         return;
       }
       if (s.type === "if") {
@@ -1085,7 +1109,6 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
             throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `invalid regex in if condition: /${s.operand.source}/`);
           }
         }
-        for (const bodyStep of s.body) validateStep(bodyStep, recoverBindings);
         return;
       }
       if (s.type === "for_lines") {
@@ -1095,15 +1118,14 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
             `for ... in <name>: "${s.sourceVar}" is not a known variable in this scope`,
           );
         }
-        for (const bodyStep of s.body) validateStep(bodyStep, recoverBindings);
         return;
       }
       const _never: never = s;
       return _never;
     };
 
-    for (const step of workflow.steps) {
-      validateStep(step);
+    for (const entry of wfWalk.flat) {
+      validateStep(entry.step, entry.recoverBindings);
     }
   }
 
