@@ -20,7 +20,7 @@ test("parse: run async produces run step with async flag", () => {
 test("parse: run async with args", () => {
   const src = [
     "workflow default() {",
-    '  run async other_wf("hello" "$x")',
+    '  run async other_wf("hello", "$x")',
     "}",
   ].join("\n");
   const mod = parsejaiph(src, "test.jh");
@@ -28,7 +28,10 @@ test("parse: run async with args", () => {
   assert.equal(step.type, "run");
   if (step.type === "run") {
     assert.equal(step.workflow.value, "other_wf");
-    assert.equal(step.args, '"hello" "$x"');
+    assert.deepEqual(step.args, [
+      { kind: "literal", raw: '"hello"' },
+      { kind: "literal", raw: '"$x"' },
+    ]);
     assert.equal(step.async, true);
   }
 });
@@ -106,7 +109,7 @@ test("parse: const capture + run async with args", () => {
     assert.equal(step.value.kind, "run_capture");
     if (step.value.kind === "run_capture") {
       assert.equal(step.value.ref.value, "other_wf");
-      assert.equal(step.value.args, '"hello"');
+      assert.deepEqual(step.value.args, [{ kind: "literal", raw: '"hello"' }]);
       assert.equal(step.value.async, true);
     }
   }

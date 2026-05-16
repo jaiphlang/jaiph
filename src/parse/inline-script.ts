@@ -1,12 +1,12 @@
 import { fail, parseParenArgs, parseSingleBacktickBody } from "./core";
 import { parseFencedBlock } from "./fence";
 import { validateScriptBodyNoInterpolation } from "./scripts";
+import type { Arg } from "../types";
 
 export interface InlineScriptParsed {
   body: string;
   lang?: string;
-  args?: string;
-  bareIdentifierArgs?: string[];
+  args?: Arg[];
   nextLineIdx: number;
 }
 
@@ -62,7 +62,6 @@ export function parseAnonymousInlineScript(
       body,
       ...(lang ? { lang } : {}),
       args: argsResult.args,
-      ...(argsResult.bareIdentifierArgs ? { bareIdentifierArgs: argsResult.bareIdentifierArgs } : {}),
       nextLineIdx: nextIdx,
     };
   }
@@ -93,7 +92,6 @@ export function parseAnonymousInlineScript(
     return {
       body,
       args: argsResult.args,
-      ...(argsResult.bareIdentifierArgs ? { bareIdentifierArgs: argsResult.bareIdentifierArgs } : {}),
       nextLineIdx: lineIdx + 1,
     };
   }

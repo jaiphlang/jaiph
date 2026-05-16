@@ -411,13 +411,13 @@ test("parser: const allows run-wrapped script call with args", () => {
   const step = mod.workflows[0].steps[0] as {
     type: string;
     name: string;
-    value: { kind: string; ref?: { value: string }; args?: string };
+    value: { kind: string; ref?: { value: string }; args?: import("../types").Arg[] };
   };
   assert.equal(step.type, "const");
   assert.equal(step.name, "x");
   assert.equal(step.value.kind, "run_capture");
   assert.equal(step.value.ref?.value, "some_script");
-  assert.equal(step.value.args, '${arg1}');
+  assert.deepEqual(step.value.args, [{ kind: "var", name: "arg1" }]);
 });
 
 test("parser: const prompt capture parses", () => {

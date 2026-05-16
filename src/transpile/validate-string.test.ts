@@ -399,11 +399,11 @@ test("rejected: ${run ref} with unknown ref in workflow", () => {
   });
 });
 
-test("extractInlineCaptures extracts run and ensure with args", () => {
+test("extractInlineCaptures extracts run and ensure with typed Arg[]", () => {
   const { extractInlineCaptures } = require("./validate-string");
   const result = extractInlineCaptures('prefix ${run greet(world)} middle ${ensure check()} suffix');
   assert.deepEqual(result, [
-    { kind: "run", ref: "greet", args: "${world}" },
+    { kind: "run", ref: "greet", args: [{ kind: "var", name: "world" }] },
     { kind: "ensure", ref: "check", args: undefined },
   ]);
 });

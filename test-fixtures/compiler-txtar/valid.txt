@@ -288,7 +288,7 @@ workflow other_wf(a, b) {
   log "ok"
 }
 workflow default() {
-  run async other_wf("hello" "$x")
+  run async other_wf("hello", "$x")
 }
 
 === run async with qualified ref

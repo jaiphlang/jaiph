@@ -5,7 +5,7 @@
  * resolve interpolated strings, parse call argument lists (including managed
  * `run`/`ensure` and inline-script forms), and validate prompt return schemas.
  */
-import { parseCallRef } from "../../parse/core";
+import { argsToRuntimeString, parseCallRef } from "../../parse/core";
 import { formatUtcTimestamp } from "./emit";
 
 export const BARE_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -146,7 +146,7 @@ export function parseManagedArgAt(raw: string, start: number): { token: ParsedAr
         kind: "managed",
         managedKind: keyword,
         ref: call.ref,
-        argsRaw: call.args ?? "",
+        argsRaw: argsToRuntimeString(call.args),
       },
       next: start + keyword.length + skipped + consumed,
     };

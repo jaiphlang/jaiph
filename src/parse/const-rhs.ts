@@ -107,7 +107,6 @@ export function parseConstRhs(
       return {
         value: {
           kind: "run_capture", ref, args: call.args,
-          ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
           async: true,
         },
         nextLineIdx: lineIdx,
@@ -121,7 +120,6 @@ export function parseConstRhs(
           body: result.body,
           ...(result.lang ? { lang: result.lang } : {}),
           args: result.args,
-          ...(result.bareIdentifierArgs ? { bareIdentifierArgs: result.bareIdentifierArgs } : {}),
         },
         nextLineIdx: result.nextLineIdx - 1,
       };
@@ -138,7 +136,6 @@ export function parseConstRhs(
     return {
       value: {
         kind: "run_capture", ref, args: call.args,
-        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
       },
       nextLineIdx: lineIdx,
     };
@@ -156,7 +153,6 @@ export function parseConstRhs(
     return {
       value: {
         kind: "ensure_capture", ref, args: call.args,
-        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
       },
       nextLineIdx: lineIdx,
     };

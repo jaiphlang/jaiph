@@ -13,42 +13,6 @@ Process rules:
 
 ***
 
-## Collapse `bareIdentifierArgs` into a typed `Arg[]` on every call site #dev-ready
-
-**Design reference:** `design/2026-05-15-parser-compiler-simplification.md` § Appendix D.
-
-**Why:** Every call-bearing AST node carries both `args: string` (raw text) and `bareIdentifierArgs: string[]` (a re-parse of which args happened to be bare identifiers). Validator must remember to check both. Emitter does its own re-parse of `args` because it doesn't trust either field alone. The dual representation is also why the validator has a `validateBareIdentifierArgs` helper called by hand at every site.
-
-**Scope:**
-
-- Introduce a typed `Arg` sum and replace the `args: string` + `bareIdentifierArgs?: string[]` pair on every call-bearing node:
-
-  ```ts
-  type Arg =
-    | { kind: "literal"; raw: string }       // "..." / ${var} / etc., as authored
-    | { kind: "var";     name: string };     // bare identifier reference
-
-  // Call-bearing nodes carry args: Arg[]. No second field.
-  ```
-
-- Parser does the bare-identifier classification once, at parse time. Validator and emitter consume `Arg[]` directly; no re-parse of `args` anywhere downstream.
-- Affected nodes (non-exhaustive): every `WorkflowStepDef` variant with a call (`run`, `ensure`, `return.managed`, `log.managed`, `logerr.managed`, `send.rhs`), every `ConstRhs` capture variant.
-- `validateBareIdentifierArgs` is deleted; its logic moves into the per-step validator that already walks the call.
-
-**Acceptance criteria** (each verified by a test):
-
-1. The field `bareIdentifierArgs` does not appear in any AST type definition under `src/types.ts`. A type-level test fails if it reappears.
-2. No production code under `src/parse/` or `src/transpile/` re-parses the `args` string into bare-identifier components. A grep test fails if `args` is split on `,` or scanned char-by-char outside the tokenizer/parser.
-3. `validateBareIdentifierArgs` is deleted; `validate.ts` contains no equivalent helper. A grep test fails if it reappears.
-4. The full golden corpus passes byte-for-byte: `npm test`, including all `validate-*.test.ts` files and the golden corpus.
-5. `npm run build` passes; TypeScript strict-mode errors are zero.
-
-**Out of scope:** the full `Expr` collapse (next task). Surface syntax. This refactor only changes how call arguments are represented; the call-bearing nodes themselves stay where they are.
-
-**Dependency:** None hard, but easier after the Trivia split (previous task) because the AST is otherwise stable.
-
-***
-
 ## Collapse the AST around a single `Expr` type, eliminating the three "managed call" encodings #dev-ready
 
 **Design reference:** `design/2026-05-15-parser-compiler-simplification.md` § Refactor 3.
