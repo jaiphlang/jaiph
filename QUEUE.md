@@ -13,32 +13,6 @@ Process rules:
 
 ***
 
-## Decouple the validator from runtime semantics #dev-ready
-
-**Design reference:** `design/2026-05-15-parser-compiler-simplification.md` § Appendix E.
-
-**Why:** `src/transpile/validate.ts` imports `tripleQuotedRawForRuntime` from `src/runtime/orchestration-text.ts` so it can compute "what the runtime will see" when validating string content. That is a one-way dependency from compile-time on runtime semantics — a layering inversion that will keep biting if the runtime grows more such helpers.
-
-**Scope:**
-
-- Move the canonicalization of triple-quoted strings (currently `tripleQuotedRawForRuntime`) into a parser-side helper (e.g. `src/parse/triple-quote.ts:canonicalizeTripleQuotedString`).
-- The validator imports from `src/parse/`, not `src/runtime/`.
-- The runtime, if it still needs the same canonical form at runtime, imports from `src/parse/` as well (or the canonical form is baked in at compile time by the emitter).
-- Any other `validate*.ts → runtime/*` imports get the same treatment.
-
-**Acceptance criteria** (each verified by a test):
-
-1. No file under `src/transpile/` imports from `src/runtime/`. A grep test fails if any such import appears.
-2. The canonical string for every triple-quoted form in `test-fixtures/` and `examples/` is bit-for-bit unchanged before and after the move. A test compares pre/post output for every fixture.
-3. `npm test` passes, including the golden corpus and all `validate-string.test.ts` cases.
-4. `npm run build` passes; TypeScript strict-mode errors are zero.
-
-**Out of scope:** rethinking what the canonical form *is*. This refactor only relocates the helper.
-
-**Dependency:** None.
-
-***
-
 ## Unify `catch` and `recover` parsing into a single attached-block routine #dev-ready
 
 **Design reference:** `design/2026-05-15-parser-compiler-simplification.md` § Refactor 2.

@@ -8,7 +8,7 @@
 import { Diagnostics } from "../diagnostics";
 import { matchSendOperator } from "../parse/core";
 import type { Arg, Expr, jaiphModule, MatchExprDef, WorkflowStepDef } from "../types";
-import { tripleQuotedRawForRuntime } from "../runtime/orchestration-text";
+import { canonicalizeTripleQuotedString } from "../parse/triple-quote";
 import {
   BARE_SEND_REF_MSG,
   lookupKind,
@@ -546,7 +546,7 @@ export function validateMatchExpr(
         );
       }
     }
-    const bodyTrimmed = (arm.tripleQuotedBody ? tripleQuotedRawForRuntime(arm.body) : arm.body).trimStart();
+    const bodyTrimmed = (arm.tripleQuotedBody ? canonicalizeTripleQuotedString(arm.body) : arm.body).trimStart();
     if (/^return(\s|$)/.test(bodyTrimmed)) {
       diag.error(
         filePath,
