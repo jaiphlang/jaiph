@@ -1066,7 +1066,10 @@ single_workflow_stmt = ensure_stmt | run_stmt | run_catch_stmt | run_recover_stm
      (dispatched through parseAttachedBlock in src/parse/steps.ts), so every statement form
      accepted in a workflow / rule body is accepted identically inside a catch / recover body —
      including inline shell text for workflow bodies. Rule bodies still reject unstructured shell
-     via the visitor's RULE_SCOPE (validate-step.ts). *)
+     via the visitor's RULE_SCOPE (validate-step.ts). parseBlockStatement itself routes each line
+     through a STATEMENT: Record<string, BlockHandler> keyword table in src/parse/workflow-brace.ts;
+     non-keyword lines fall through to the send and shell handlers. Adding a new top-level keyword
+     is a two-place change: STATEMENT (workflow-brace.ts) + JAIPH_KEYWORDS (core.ts). *)
 ```
 
 ## Validation Rules
