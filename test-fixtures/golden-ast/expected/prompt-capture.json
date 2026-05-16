@@ -14,13 +14,17 @@
           "name": "answer",
           "type": "const",
           "value": {
-            "kind": "prompt_capture",
+            "kind": "prompt",
             "raw": "\"What is your name?\""
           }
         },
         {
-          "message": "${answer}",
-          "type": "log"
+          "level": "log",
+          "message": {
+            "kind": "literal",
+            "raw": "${answer}"
+          },
+          "type": "say"
         }
       ]
     }

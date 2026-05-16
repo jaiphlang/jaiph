@@ -1,57 +1,62 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { ConstRhs, SendRhsDef, WorkflowStepDef } from "../types";
+import type { Expr, WorkflowStepDef } from "../types";
 
 /**
- * AC1: `bareIdentifierArgs` must not appear on any call-bearing AST node.
+ * AC1 (Refactor 3): `bareIdentifierArgs` must not appear on any call-bearing
+ * AST node, and the three "managed call that yields a value" encodings
+ * — `managed:` sidecar / `run_capture` const RHS / placeholder strings
+ * — have been replaced by a single `Expr` shape that carries `args: Arg[]`.
  *
- * Each helper below probes a specific variant where the field used to live; if
- * it is re-added, `HasField` widens to `true`, the type-level assertion fails,
- * and TypeScript breaks compilation.
+ * Each helper below probes a specific Expr variant where the field used to
+ * live; if it is re-added, `HasField` widens to `true`, the type-level
+ * assertion fails, and TypeScript breaks compilation.
  */
 type HasField<T, K extends string> = T extends Record<K, unknown> ? true : false;
 
-type EnsureStep = Extract<WorkflowStepDef, { type: "ensure" }>;
-type RunStep = Extract<WorkflowStepDef, { type: "run" }>;
-type RunInlineScriptStep = Extract<WorkflowStepDef, { type: "run_inline_script" }>;
-type LogStep = Extract<WorkflowStepDef, { type: "log" }>;
-type LogerrStep = Extract<WorkflowStepDef, { type: "logerr" }>;
+type ExecStep = Extract<WorkflowStepDef, { type: "exec" }>;
 type ReturnStep = Extract<WorkflowStepDef, { type: "return" }>;
-type LogManaged = NonNullable<LogStep["managed"]>;
-type LogerrManaged = NonNullable<LogerrStep["managed"]>;
-type ReturnManaged = NonNullable<ReturnStep["managed"]>;
-type ReturnManagedRun = Extract<ReturnManaged, { kind: "run" }>;
-type ReturnManagedEnsure = Extract<ReturnManaged, { kind: "ensure" }>;
-type ReturnManagedInline = Extract<ReturnManaged, { kind: "run_inline_script" }>;
-type RunCapture = Extract<ConstRhs, { kind: "run_capture" }>;
-type EnsureCapture = Extract<ConstRhs, { kind: "ensure_capture" }>;
-type InlineScriptCapture = Extract<ConstRhs, { kind: "run_inline_script_capture" }>;
-type SendRun = Extract<SendRhsDef, { kind: "run" }>;
+type SayStep = Extract<WorkflowStepDef, { type: "say" }>;
+type SendStep = Extract<WorkflowStepDef, { type: "send" }>;
+type ConstStep = Extract<WorkflowStepDef, { type: "const" }>;
 
-const _ensureNoBare: HasField<EnsureStep, "bareIdentifierArgs"> = false;
-const _runNoBare: HasField<RunStep, "bareIdentifierArgs"> = false;
-const _inlineNoBare: HasField<RunInlineScriptStep, "bareIdentifierArgs"> = false;
-const _logManagedNoBare: HasField<LogManaged, "bareIdentifierArgs"> = false;
-const _logerrManagedNoBare: HasField<LogerrManaged, "bareIdentifierArgs"> = false;
-const _returnManagedRunNoBare: HasField<ReturnManagedRun, "bareIdentifierArgs"> = false;
-const _returnManagedEnsureNoBare: HasField<ReturnManagedEnsure, "bareIdentifierArgs"> = false;
-const _returnManagedInlineNoBare: HasField<ReturnManagedInline, "bareIdentifierArgs"> = false;
-const _runCaptureNoBare: HasField<RunCapture, "bareIdentifierArgs"> = false;
-const _ensureCaptureNoBare: HasField<EnsureCapture, "bareIdentifierArgs"> = false;
-const _inlineCaptureNoBare: HasField<InlineScriptCapture, "bareIdentifierArgs"> = false;
-const _sendRunNoBare: HasField<SendRun, "bareIdentifierArgs"> = false;
+type CallExpr = Extract<Expr, { kind: "call" }>;
+type EnsureCallExpr = Extract<Expr, { kind: "ensure_call" }>;
+type InlineScriptExpr = Extract<Expr, { kind: "inline_script" }>;
+type PromptExpr = Extract<Expr, { kind: "prompt" }>;
+type SendRunExpr = SendStep["value"];
+type ConstValueExpr = ConstStep["value"];
 
-test("AC1: bareIdentifierArgs does not appear on any call-bearing AST type", () => {
-  assert.equal(_ensureNoBare, false);
-  assert.equal(_runNoBare, false);
+const _callNoBare: HasField<CallExpr, "bareIdentifierArgs"> = false;
+const _ensureCallNoBare: HasField<EnsureCallExpr, "bareIdentifierArgs"> = false;
+const _inlineNoBare: HasField<InlineScriptExpr, "bareIdentifierArgs"> = false;
+const _promptNoBare: HasField<PromptExpr, "bareIdentifierArgs"> = false;
+const _sendValueNoBare: HasField<SendRunExpr, "bareIdentifierArgs"> = false;
+const _constValueNoBare: HasField<ConstValueExpr, "bareIdentifierArgs"> = false;
+
+// Managed sidecar / placeholder strings on return/log/logerr/etc. are gone:
+const _returnNoManaged: HasField<ReturnStep, "managed"> = false;
+const _sayNoManaged: HasField<SayStep, "managed"> = false;
+const _execNoManaged: HasField<ExecStep, "managed"> = false;
+
+// return.value is now an Expr (not a placeholder string).
+const _returnValueIsExpr: ReturnStep["value"] extends Expr ? true : false = true;
+const _sayMessageIsExpr: SayStep["message"] extends Expr ? true : false = true;
+const _sendValueIsExpr: SendStep["value"] extends Expr ? true : false = true;
+const _constValueIsExpr: ConstStep["value"] extends Expr ? true : false = true;
+
+test("AC1: managed-call encodings collapsed into Expr; no `bareIdentifierArgs` on Expr", () => {
+  assert.equal(_callNoBare, false);
+  assert.equal(_ensureCallNoBare, false);
   assert.equal(_inlineNoBare, false);
-  assert.equal(_logManagedNoBare, false);
-  assert.equal(_logerrManagedNoBare, false);
-  assert.equal(_returnManagedRunNoBare, false);
-  assert.equal(_returnManagedEnsureNoBare, false);
-  assert.equal(_returnManagedInlineNoBare, false);
-  assert.equal(_runCaptureNoBare, false);
-  assert.equal(_ensureCaptureNoBare, false);
-  assert.equal(_inlineCaptureNoBare, false);
-  assert.equal(_sendRunNoBare, false);
+  assert.equal(_promptNoBare, false);
+  assert.equal(_sendValueNoBare, false);
+  assert.equal(_constValueNoBare, false);
+  assert.equal(_returnNoManaged, false);
+  assert.equal(_sayNoManaged, false);
+  assert.equal(_execNoManaged, false);
+  assert.equal(_returnValueIsExpr, true);
+  assert.equal(_sayMessageIsExpr, true);
+  assert.equal(_sendValueIsExpr, true);
+  assert.equal(_constValueIsExpr, true);
 });

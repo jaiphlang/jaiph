@@ -212,19 +212,6 @@ export function argsToRuntimeString(args: Arg[] | undefined): string {
 }
 
 /**
- * Convert `Arg[]` back to comma-separated source form:
- * - `var` → name (bare)
- * - `literal` → raw as authored
- *
- * Used to populate the placeholder `value` string on managed
- * `return run …` / `return ensure …` steps. Empty / undefined → empty string.
- */
-export function argsToSourceForm(args: Arg[] | undefined): string {
-  if (!args || args.length === 0) return "";
-  return args.map((a) => (a.kind === "var" ? a.name : a.raw)).join(", ");
-}
-
-/**
  * Parse a call expression `ref(args)` or `ref()` from a string.
  * Returns the ref, optional typed `Arg[]`, and the rest of the string after `)`.
  * Returns null if the string doesn't start with a valid call expression.

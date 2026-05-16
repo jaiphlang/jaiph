@@ -24,10 +24,10 @@ test("run with args and parens still works", () => {
     "test.jh",
   );
   const step = mod.workflows[0].steps[0];
-  assert.equal(step.type, "run");
-  if (step.type === "run") {
-    assert.equal(step.workflow.value, "deploy");
-    assert.deepEqual(step.args, [
+  assert.equal(step.type, "exec");
+  if (step.type === "exec" && step.body.kind === "call") {
+    assert.equal(step.body.callee.value, "deploy");
+    assert.deepEqual(step.body.args, [
       { kind: "literal", raw: '"prod"' },
       { kind: "literal", raw: '"v1"' },
     ]);
@@ -86,32 +86,38 @@ test("const x = ensure bare identifier is rejected — parentheses required", ()
 
 // === return run/ensure bare identifier (no parens) now falls through ===
 
-test("return run bare identifier does not parse as managed return", () => {
+test("return run bare identifier falls through to exec/shell", () => {
   // Without parens, "return run helper" is not recognized as a managed return
-  // and falls through to a shell step
+  // and falls through to a shell exec step
   const mod = parsejaiph(
     `workflow default() {\n  return run helper\n}`,
     "test.jh",
   );
   const step = mod.workflows[0].steps[0];
-  assert.equal(step.type, "shell");
+  assert.equal(step.type, "exec");
+  if (step.type === "exec") {
+    assert.equal(step.body.kind, "shell");
+  }
 });
 
-test("return ensure bare identifier does not parse as managed return", () => {
+test("return ensure bare identifier falls through to exec/shell", () => {
   // Without parens, "return ensure check" is not recognized as a managed return
-  // and falls through to a shell step
+  // and falls through to a shell exec step
   const mod = parsejaiph(
     `rule check() {\n  return "ok"\n}\nworkflow default() {\n  return ensure check\n}`,
     "test.jh",
   );
   const step = mod.workflows[0].steps[0];
-  assert.equal(step.type, "shell");
+  assert.equal(step.type, "exec");
+  if (step.type === "exec") {
+    assert.equal(step.body.kind, "shell");
+  }
 });
 
 // === send RHS with bare identifier (no parens) ===
 
-test("channel <- run bare identifier does not parse as send with run RHS", () => {
-  // Without parens, the send RHS falls through to shell kind
+test("channel <- run bare identifier does not parse as send with call value", () => {
+  // Without parens, the send RHS falls through to Expr.shell
   const mod = parsejaiph(
     [
       "channel alerts",
@@ -125,8 +131,7 @@ test("channel <- run bare identifier does not parse as send with run RHS", () =>
   assert.equal(step.type, "send");
   if (step.type === "send") {
     assert.equal(step.channel, "alerts");
-    // Without parens, parseCallRef returns null, so it falls through to shell kind
-    assert.equal(step.rhs.kind, "shell");
+    assert.equal(step.value.kind, "shell");
   }
 });
 

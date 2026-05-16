@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { jaiphError } from "../errors";
-import type { Arg, jaiphModule, MatchExprDef, WorkflowStepDef } from "../types";
+import type { Arg, Expr, jaiphModule, MatchExprDef, WorkflowStepDef } from "../types";
 import type { ModuleGraph } from "./module-graph";
 import type { SubstitutionValidateEnv } from "./validate-substitution";
 import { validateManagedWorkflowShell } from "./validate-substitution";
@@ -113,7 +113,6 @@ function validateMatchExpr(filePath: string, expr: MatchExprDef, knownVars: Set<
         );
       }
     }
-    // Reject `return` as the leading token of an arm body.
     const bodyTrimmed = (arm.tripleQuotedBody ? tripleQuotedRawForRuntime(arm.body) : arm.body).trimStart();
     if (/^return(\s|$)/.test(bodyTrimmed)) {
       throw jaiphError(
@@ -124,7 +123,6 @@ function validateMatchExpr(filePath: string, expr: MatchExprDef, knownVars: Set<
         `match arm body must not start with "return"; the match expression itself produces the value — use the expression directly after =>`,
       );
     }
-    // Reject inline script forms in arm bodies (backtick `…`() or fenced ```…```()).
     if (/`[^`]*`\s*\(/.test(bodyTrimmed) || bodyTrimmed.startsWith("```")) {
       throw jaiphError(
         filePath,
@@ -134,12 +132,6 @@ function validateMatchExpr(filePath: string, expr: MatchExprDef, knownVars: Set<
         `inline scripts are not allowed in match arm bodies; use a named script with "run script_name(…)" instead`,
       );
     }
-    // Reject unknown verbs, bare function-call forms, and bare unknown identifiers in arm bodies.
-    // Allowed bodies: string literal ("..." or """..."""), $var/${var},
-    // bare in-scope identifier (param/const/capture), or a verb call: fail "...", run ref(...), ensure ref(...).
-    // A bare identifier followed by space+content (e.g. `error "msg"`) or by `(` (e.g. `error("msg")`)
-    // is a programming mistake — most likely a typo for `fail`. A bare identifier not in scope
-    // (e.g. `true`, `blorp`) is also rejected. Skip the check for triple-quoted bodies since those are literal text.
     if (!arm.tripleQuotedBody) {
       const idMatch = bodyTrimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)/);
       if (idMatch) {
@@ -157,9 +149,6 @@ function validateMatchExpr(filePath: string, expr: MatchExprDef, knownVars: Set<
             `unknown match arm verb "${ident}"; allowed: fail "...", run ref(...), ensure ref(...).${hint}`,
           );
         }
-        // Reject bare unknown identifiers (e.g. `_ => true`, `_ => blorp`).
-        // Only bare words with no trailing content reach here — valid ones
-        // must be in-scope variables (params, consts, captures).
         if (!startsCall && !startsArgs && after.trim() === "" && !knownVars.has(ident)) {
           throw jaiphError(
             filePath,
@@ -194,11 +183,15 @@ function collectKnownVars(steps: WorkflowStepDef[], envDecls?: { name: string }[
       if (s.type === "const") {
         vars.add(s.name);
       }
-      if ((s.type === "ensure" || s.type === "run" || s.type === "prompt" || s.type === "run_inline_script") && s.captureName) {
+      if (s.type === "exec" && s.captureName) {
         vars.add(s.captureName);
       }
-      if ((s.type === "ensure" || s.type === "run") && s.catch) {
+      if (s.type === "exec" && s.catch) {
         const recoverSteps = "single" in s.catch ? [s.catch.single] : s.catch.block;
+        walk(recoverSteps);
+      }
+      if (s.type === "exec" && s.recover) {
+        const recoverSteps = "single" in s.recover ? [s.recover.single] : s.recover.block;
         walk(recoverSteps);
       }
       if (s.type === "if") {
@@ -223,7 +216,6 @@ function validateImmutableBindings(
   envDecls?: { name: string; loc: { line: number; col: number } }[],
   moduleScripts?: Set<string>,
 ): void {
-  // Map from name → { kind, line } for the first binding site.
   const bound = new Map<string, { kind: string; line: number }>();
   for (const p of params) {
     bound.set(p, { kind: "parameter", line: declLoc.line });
@@ -257,17 +249,16 @@ function validateImmutableBindings(
       if (s.type === "const") {
         check(s.name, "const", s.loc, b);
       }
-      if (s.type === "ensure" && s.captureName) {
-        check(s.captureName, "capture", s.ref.loc, b);
+      if (s.type === "exec" && s.captureName) {
+        const captureLoc = execBodyLoc(s.body) ?? s.loc;
+        check(s.captureName, "capture", captureLoc, b);
       }
-      if (s.type === "run" && s.captureName) {
-        check(s.captureName, "capture", s.workflow.loc, b);
-      }
-      if ((s.type === "prompt" || s.type === "run_inline_script") && s.captureName) {
-        check(s.captureName, "capture", s.loc, b);
-      }
-      if ((s.type === "ensure" || s.type === "run") && s.catch) {
+      if (s.type === "exec" && s.catch) {
         const recoverSteps = "single" in s.catch ? [s.catch.single] : s.catch.block;
+        walk(recoverSteps, b);
+      }
+      if (s.type === "exec" && s.recover) {
+        const recoverSteps = "single" in s.recover ? [s.recover.single] : s.recover.block;
         walk(recoverSteps, b);
       }
       if (s.type === "if") {
@@ -292,7 +283,14 @@ function validateImmutableBindings(
   walk(steps, bound);
 }
 
-/** Look up declared params for a workflow or rule target. Returns undefined if target has no declared params. */
+/** Best-effort location for an exec body — used to attribute capture-binding errors. */
+function execBodyLoc(body: Expr): { line: number; col: number } | undefined {
+  if (body.kind === "call" || body.kind === "ensure_call") return body.callee.loc;
+  if (body.kind === "prompt" || body.kind === "shell") return body.loc;
+  if (body.kind === "match") return body.match.loc;
+  return undefined;
+}
+
 function lookupCalleeParams(
   ref: string,
   targetKind: "workflow" | "rule",
@@ -325,7 +323,6 @@ function lookupCalleeParams(
   return undefined;
 }
 
-/** Validate arity: if the callee declares named params, the call must supply exactly that many args. */
 function validateArity(
   filePath: string,
   loc: { line: number; col: number },
@@ -336,7 +333,7 @@ function validateArity(
   refCtx: RefResolutionContext,
 ): void {
   const params = lookupCalleeParams(ref, targetKind, ast, refCtx);
-  if (params === undefined) return; // callee not a workflow/rule in scope — skip
+  if (params === undefined) return;
   const argCount = args?.length ?? 0;
   if (argCount !== params.length) {
     throw jaiphError(
@@ -349,7 +346,6 @@ function validateArity(
   }
 }
 
-/** Check each var-arg against the in-scope bindings; recover bindings are extra names. */
 function validateArgVarRefs(
   filePath: string,
   loc: { line: number; col: number },
@@ -372,11 +368,6 @@ function validateArgVarRefs(
   }
 }
 
-/**
- * Reject nested unmanaged calls inside literal args, e.g. `outer(inner())` or `outer(\`body\`())`.
- * Each literal arg is one source segment, so a nested `name(` or `` `...`( `` form is only
- * valid when explicitly prefixed with `run` or `ensure`.
- */
 function validateNestedManagedCallArgs(
   filePath: string,
   loc: { line: number; col: number },
@@ -425,7 +416,6 @@ function checkNestedManagedInLiteral(
   }
 }
 
-/** Replace double/single-quoted content (and surrounding quotes) with spaces for shape scanning. */
 function stripQuotedSegmentContent(segment: string): string {
   let out = "";
   let quote: "'" | '"' | null = null;
@@ -448,7 +438,6 @@ function stripQuotedSegmentContent(segment: string): string {
   return out;
 }
 
-/** Resolve a route target workflow ref to its declared parameter count. Returns undefined if unresolvable. */
 function resolveRouteTargetParams(
   ref: string,
   ast: jaiphModule,
@@ -469,23 +458,16 @@ function resolveRouteTargetParams(
   return wf?.params.length;
 }
 
-/** Resolve a script import path relative to the importing file's directory. */
 export function resolveScriptImportPath(fromFile: string, importPath: string): string {
   return resolve(dirname(fromFile), importPath);
 }
 
-/** Validate every module in the graph. Equivalent to `validateModule` per entry, plus de-dup. */
 export function validateReferences(graph: ModuleGraph): void {
   for (const node of graph.modules.values()) {
     validateModule(node.ast, graph);
   }
 }
 
-/**
- * Validate one module's references against the graph. Imported ASTs are read
- * from `graph.modules` — no `.jh` filesystem access. `existsSync` is used
- * only for `import script` paths, which point at non-`.jh` script bodies.
- */
 export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
   const localChannels = new Set(ast.channels.map((c) => c.name));
   const localRules = new Set(ast.rules.map((r) => r.name));
@@ -494,9 +476,6 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
   const importsByAlias = new Map<string, string>();
   const importedAstCache = new Map<string, jaiphModule>();
 
-  // Validate script imports: resolve paths and check existence. These point
-  // at non-`.jh` script bodies (resolved + emitted later), so `existsSync` is
-  // allowed here under acceptance criterion 2.
   if (ast.scriptImports) {
     for (const si of ast.scriptImports) {
       const resolved = resolveScriptImportPath(ast.filePath, si.path);
@@ -587,10 +566,6 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
   const stripDQ = (s: string): string =>
     s.length >= 2 && s[0] === '"' && s[s.length - 1] === '"' ? s.slice(1, -1) : s;
 
-  /**
-   * Detect `const x = scriptName` and its parser sugar form `const x = "${scriptName}"`.
-   * Both should report the same domain error ("scripts are not values").
-   */
   const extractConstScriptName = (rhs: string): string | undefined => {
     const trimmed = rhs.trim();
     if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmed)) return trimmed;
@@ -599,16 +574,13 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
     return m?.[1];
   };
 
-  /** Inner string for validation. Triple-quoted bodies are pre-dedented by the parser. */
   const semanticQuotedOrchestrationInner = (dqRaw: string): string => stripDQ(dqRaw);
 
-  /** Detect `prompt <identifier>` form from raw `"${identifier}"` shape. */
   const promptBareIdentifier = (raw: string): string | undefined => {
     const m = raw.match(/^"\$\{([A-Za-z_][A-Za-z0-9_]*)\}"$/);
     return m?.[1];
   };
 
-  /** Parse field names from a returns schema string like '{ name: string, age: number }'. */
   const parseSchemaFieldNames = (rawSchema: string): string[] => {
     const inner = rawSchema.trim().replace(/^\s*\{\s*/, "").replace(/\s*\}\s*$/, "").trim();
     if (!inner) return [];
@@ -620,21 +592,19 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
     return names;
   };
 
-  /** Collect prompt capture schemas from all steps in a workflow (pre-pass). */
   const collectPromptSchemas = (steps: WorkflowStepDef[]): Map<string, string[]> => {
     const schemas = new Map<string, string[]>();
     for (const s of steps) {
-      if (s.type === "prompt" && s.captureName && s.returns !== undefined) {
-        schemas.set(s.captureName, parseSchemaFieldNames(s.returns));
+      if (s.type === "exec" && s.captureName && s.body.kind === "prompt" && s.body.returns !== undefined) {
+        schemas.set(s.captureName, parseSchemaFieldNames(s.body.returns));
       }
-      if (s.type === "const" && s.value.kind === "prompt_capture" && s.value.returns !== undefined) {
+      if (s.type === "const" && s.value.kind === "prompt" && s.value.returns !== undefined) {
         schemas.set(s.name, parseSchemaFieldNames(s.value.returns));
       }
     }
     return schemas;
   };
 
-  /** Validate ${var.field} references against known prompt schemas. */
   const validateDotFieldRefs = (
     content: string,
     loc: { line: number; col: number },
@@ -687,216 +657,267 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
     }
   };
 
+  /** Run the 5 standard checks (redirection, nested-managed, ref, arity, var-ref) on a callable Expr. */
+  const validateCallable = (
+    body: Expr,
+    knownVars: Set<string>,
+    scope: "workflow" | "rule",
+    recoverBindings?: Set<string>,
+  ): void => {
+    if (body.kind === "call") {
+      const loc = body.callee.loc;
+      validateNoShellRedirection(ast.filePath, loc, "run", body.args);
+      validateNestedManagedCallArgs(ast.filePath, loc, body.args);
+      const isRuleScope = scope === "rule";
+      if (!body.callee.value.includes(".") && knownVars.has(body.callee.value) && !localScripts.has(body.callee.value) && !(scope === "workflow" && localWorkflows.has(body.callee.value))) {
+        throw jaiphError(ast.filePath, loc.line, loc.col, "E_VALIDATE", `strings are not executable; "${body.callee.value}" is a string — use a script instead`);
+      }
+      validateRef(body.callee, ast, refCtx, isRuleScope ? expectRunInRuleRef : expectRunTargetRef);
+      validateArity(ast.filePath, loc, body.callee.value, body.args, "workflow", ast, refCtx);
+      validateArgVarRefs(ast.filePath, loc, body.args, knownVars, recoverBindings);
+      return;
+    }
+    if (body.kind === "ensure_call") {
+      const loc = body.callee.loc;
+      validateNoShellRedirection(ast.filePath, loc, "ensure", body.args);
+      validateNestedManagedCallArgs(ast.filePath, loc, body.args);
+      validateRef(body.callee, ast, refCtx, expectRuleRef);
+      validateArity(ast.filePath, loc, body.callee.value, body.args, "rule", ast, refCtx);
+      validateArgVarRefs(ast.filePath, loc, body.args, knownVars, recoverBindings);
+      return;
+    }
+    if (body.kind === "inline_script") {
+      return; // no ref to validate
+    }
+    if (body.kind === "match") {
+      validateMatchExpr(ast.filePath, body.match, knownVars);
+      return;
+    }
+  };
+
+  /** Validate the value Expr stored under a `const` / `return` / `send` step in a workflow context. */
+  const validateWorkflowValueExpr = (
+    expr: Expr,
+    stepLoc: { line: number; col: number },
+    knownVars: Set<string>,
+    promptSchemas: Map<string, string[]>,
+    recoverBindings: Set<string> | undefined,
+    label: "const" | "return" | "send",
+    constName?: string,
+  ): void => {
+    if (expr.kind === "literal") {
+      if (label === "send") {
+        const inner = expr.raw.startsWith('"') && expr.raw.endsWith('"') ? expr.raw.slice(1, -1) : expr.raw;
+        validateJaiphStringContent(inner, ast.filePath, stepLoc.line, stepLoc.col, "send");
+        validateWorkflowStringCaptures(inner, stepLoc);
+        validateDotFieldRefs(inner, stepLoc, promptSchemas);
+        validateSimpleInterpolationIdentifiers(
+          inner, ast.filePath, stepLoc.line, stepLoc.col,
+          "send", knownVars, "workflow", promptSchemas, recoverBindings, localScripts,
+        );
+        return;
+      }
+      if (label === "return") {
+        validateReturnString(expr.raw, ast.filePath, stepLoc.line, stepLoc.col);
+        if (expr.raw.startsWith('"')) {
+          const retInner = semanticQuotedOrchestrationInner(expr.raw);
+          validateWorkflowStringCaptures(retInner, stepLoc);
+          validateDotFieldRefs(retInner, stepLoc, promptSchemas);
+          validateSimpleInterpolationIdentifiers(
+            retInner, ast.filePath, stepLoc.line, stepLoc.col,
+            "return", knownVars, "workflow", promptSchemas, recoverBindings, localScripts,
+          );
+        }
+        return;
+      }
+      // const
+      const scriptName = extractConstScriptName(expr.raw);
+      if (scriptName && localScripts.has(scriptName)) {
+        throw jaiphError(ast.filePath, stepLoc.line, stepLoc.col, "E_VALIDATE", `scripts are not values; "${scriptName}" is a script definition`);
+      }
+      const inner = semanticQuotedOrchestrationInner(expr.raw);
+      validateWorkflowStringCaptures(inner, stepLoc);
+      validateDotFieldRefs(inner, stepLoc, promptSchemas);
+      validateSimpleInterpolationIdentifiers(
+        inner, ast.filePath, stepLoc.line, stepLoc.col,
+        "const", knownVars, "workflow", promptSchemas, recoverBindings, localScripts,
+      );
+      return;
+    }
+    if (expr.kind === "call") {
+      validateCallable(expr, knownVars, "workflow", recoverBindings);
+      return;
+    }
+    if (expr.kind === "ensure_call") {
+      validateCallable(expr, knownVars, "workflow", recoverBindings);
+      return;
+    }
+    if (expr.kind === "inline_script") {
+      return;
+    }
+    if (expr.kind === "match") {
+      validateMatchExpr(ast.filePath, expr.match, knownVars);
+      return;
+    }
+    if (expr.kind === "prompt") {
+      if (label !== "const") {
+        throw jaiphError(ast.filePath, stepLoc.line, stepLoc.col, "E_VALIDATE", `prompt is not a valid ${label} value`);
+      }
+      const promptIdent = promptBareIdentifier(expr.raw);
+      if (promptIdent && localScripts.has(promptIdent)) {
+        throw jaiphError(ast.filePath, stepLoc.line, stepLoc.col, "E_VALIDATE", `scripts are not promptable; "${promptIdent}" is a script — use a string const instead`);
+      }
+      validatePromptString(expr.raw, ast.filePath, stepLoc.line, stepLoc.col);
+      if (expr.returns !== undefined) {
+        validatePromptReturnsSchema(expr.returns, ast.filePath, stepLoc.line, stepLoc.col);
+      }
+      const pcInner = semanticQuotedOrchestrationInner(expr.raw);
+      validateWorkflowStringCaptures(pcInner, stepLoc);
+      validateDotFieldRefs(pcInner, stepLoc, promptSchemas);
+      validateSimpleInterpolationIdentifiers(
+        pcInner, ast.filePath, stepLoc.line, stepLoc.col,
+        "prompt", knownVars, "workflow", promptSchemas, recoverBindings, localScripts,
+      );
+      return;
+    }
+    if (expr.kind === "bare_ref") {
+      if (label !== "send") {
+        throw jaiphError(ast.filePath, expr.ref.loc.line, expr.ref.loc.col, "E_VALIDATE", `bare reference is only valid as a send payload`);
+      }
+      validateRef(expr.ref, ast, refCtx, bareSendRefSpec);
+      return;
+    }
+    if (expr.kind === "shell") {
+      if (label !== "send") {
+        throw jaiphError(ast.filePath, expr.loc.line, expr.loc.col, "E_VALIDATE", `raw shell fragment is only valid as a send payload`);
+      }
+      validateManagedWorkflowShell(expr.command, makeSubEnv({ line: expr.loc.line, col: expr.loc.col }));
+      return;
+    }
+    void constName;
+  };
+
+  /** Same as `validateWorkflowValueExpr` but with rule-scope rules (no prompt, restricted run targets). */
+  const validateRuleValueExpr = (
+    expr: Expr,
+    stepLoc: { line: number; col: number },
+    knownVars: Set<string>,
+    label: "const" | "return",
+  ): void => {
+    if (expr.kind === "literal") {
+      if (label === "return") {
+        validateReturnString(expr.raw, ast.filePath, stepLoc.line, stepLoc.col);
+        if (expr.raw.startsWith('"')) {
+          const retRuleInner = semanticQuotedOrchestrationInner(expr.raw);
+          validateRuleStringCaptures(retRuleInner, stepLoc);
+          validateSimpleInterpolationIdentifiers(
+            retRuleInner, ast.filePath, stepLoc.line, stepLoc.col,
+            "return", knownVars, "rule", undefined, undefined, localScripts,
+          );
+        }
+        return;
+      }
+      const scriptName = extractConstScriptName(expr.raw);
+      if (scriptName && localScripts.has(scriptName)) {
+        throw jaiphError(ast.filePath, stepLoc.line, stepLoc.col, "E_VALIDATE", `scripts are not values; "${scriptName}" is a script definition`);
+      }
+      validateRuleStringCaptures(stripDQ(expr.raw), stepLoc);
+      validateSimpleInterpolationIdentifiers(
+        stripDQ(expr.raw), ast.filePath, stepLoc.line, stepLoc.col,
+        "const", knownVars, "rule", undefined, undefined, localScripts,
+      );
+      return;
+    }
+    if (expr.kind === "call") {
+      validateCallable(expr, knownVars, "rule");
+      return;
+    }
+    if (expr.kind === "ensure_call") {
+      validateCallable(expr, knownVars, "rule");
+      return;
+    }
+    if (expr.kind === "inline_script") {
+      return;
+    }
+    if (expr.kind === "match") {
+      validateMatchExpr(ast.filePath, expr.match, knownVars);
+      return;
+    }
+    if (expr.kind === "prompt") {
+      throw jaiphError(ast.filePath, stepLoc.line, stepLoc.col, "E_VALIDATE", "const ... = prompt is not allowed in rules");
+    }
+    if (expr.kind === "bare_ref" || expr.kind === "shell") {
+      throw jaiphError(ast.filePath, stepLoc.line, stepLoc.col, "E_VALIDATE", `${expr.kind} expression is not allowed in rules`);
+    }
+  };
+
   for (const rule of ast.rules) {
     validateImmutableBindings(ast.filePath, rule.steps, rule.params, rule.loc, ast.envDecls, localScripts);
     const ruleKnownVars = collectKnownVars(rule.steps, ast.envDecls, rule.params);
-    // Named params are validated via knownVars; positional argN access was removed.
     const validateRuleStep = (s: WorkflowStepDef): void => {
-      if (s.type === "prompt" || s.type === "send") {
-        throw jaiphError(
-          ast.filePath,
-          s.loc.line,
-          s.loc.col,
-          "E_VALIDATE",
-          `${s.type} is not allowed in rules`,
+      if (s.type === "trivia") return;
+      if (s.type === "say") {
+        if (s.level === "log" || s.level === "logerr") {
+          if (s.message.kind === "inline_script") return;
+          if (s.message.kind === "literal") {
+            validateLogString(s.message.raw, ast.filePath, s.loc.line, s.loc.col, s.level);
+            const inner = s.message.raw;
+            validateRuleStringCaptures(inner, s.loc);
+            validateSimpleInterpolationIdentifiers(
+              inner, ast.filePath, s.loc.line, s.loc.col,
+              s.level, ruleKnownVars, "rule", undefined, undefined, localScripts,
+            );
+            return;
+          }
+          throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `unsupported ${s.level} message form`);
+        }
+        // fail
+        if (s.message.kind !== "literal") {
+          throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", "fail message must be a literal string");
+        }
+        validateFailString(s.message.raw, ast.filePath, s.loc.line, s.loc.col);
+        const failInner = semanticQuotedOrchestrationInner(s.message.raw);
+        validateRuleStringCaptures(failInner, s.loc);
+        validateSimpleInterpolationIdentifiers(
+          failInner, ast.filePath, s.loc.line, s.loc.col,
+          "fail", ruleKnownVars, "rule", undefined, undefined, localScripts,
         );
-      }
-      if (s.type === "comment" || s.type === "blank_line") {
         return;
       }
-      if (s.type === "ensure") {
-        validateNoShellRedirection(ast.filePath, s.ref.loc, "ensure", s.args);
-        validateNestedManagedCallArgs(ast.filePath, s.ref.loc, s.args);
-        validateRef(s.ref, ast, refCtx, expectRuleRef);
-        validateArity(ast.filePath, s.ref.loc, s.ref.value, s.args, "rule", ast, refCtx);
-
-        validateArgVarRefs(ast.filePath, s.ref.loc, s.args, ruleKnownVars);
-        if (s.catch) {
-          const steps = "single" in s.catch ? [s.catch.single] : s.catch.block;
-          const rb = new Set<string>();
-          rb.add(s.catch.bindings.failure);
-          for (const r of steps) validateRuleStep(r);
-        }
+      if (s.type === "send") {
+        throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", "send is not allowed in rules");
+      }
+      if (s.type === "return") {
+        validateRuleValueExpr(s.value, s.loc, ruleKnownVars, "return");
         return;
       }
-      if (s.type === "run") {
-        validateNoShellRedirection(ast.filePath, s.workflow.loc, "run", s.args);
-        validateNestedManagedCallArgs(ast.filePath, s.workflow.loc, s.args);
-        if (s.async) {
-          throw jaiphError(
-            ast.filePath,
-            s.workflow.loc.line,
-            s.workflow.loc.col,
-            "E_VALIDATE",
-            "run async is not allowed in rules; use it in workflows only",
-          );
+      if (s.type === "const") {
+        validateRuleValueExpr(s.value, s.loc, ruleKnownVars, "const");
+        return;
+      }
+      if (s.type === "exec") {
+        const body = s.body;
+        if (body.kind === "prompt") {
+          throw jaiphError(ast.filePath, body.loc.line, body.loc.col, "E_VALIDATE", "prompt is not allowed in rules");
         }
-        if (!s.workflow.value.includes(".") && ruleKnownVars.has(s.workflow.value) && !localScripts.has(s.workflow.value)) {
-          throw jaiphError(ast.filePath, s.workflow.loc.line, s.workflow.loc.col, "E_VALIDATE", `strings are not executable; "${s.workflow.value}" is a string — use a script instead`);
+        if (body.kind === "shell") {
+          throw jaiphError(ast.filePath, body.loc.line, body.loc.col, "E_VALIDATE", "inline shell steps are forbidden in rules; use explicit script blocks");
         }
-        validateRef(s.workflow, ast, refCtx, expectRunInRuleRef);
-        validateArity(ast.filePath, s.workflow.loc, s.workflow.value, s.args, "workflow", ast, refCtx);
-
-        validateArgVarRefs(ast.filePath, s.workflow.loc, s.args, ruleKnownVars);
+        if (body.kind === "call" && (s as Extract<WorkflowStepDef, { type: "exec" }>).body.kind === "call") {
+          const callBody = body;
+          if (callBody.async) {
+            throw jaiphError(ast.filePath, callBody.callee.loc.line, callBody.callee.loc.col, "E_VALIDATE", "run async is not allowed in rules; use it in workflows only");
+          }
+        }
+        validateCallable(body, ruleKnownVars, "rule");
         if (s.catch) {
           const steps = "single" in s.catch ? [s.catch.single] : s.catch.block;
-          const rb = new Set<string>();
-          rb.add(s.catch.bindings.failure);
           for (const r of steps) validateRuleStep(r);
         }
         if (s.recover) {
           const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
-          const rb = new Set<string>();
-          rb.add(s.recover.bindings.failure);
           for (const r of steps) validateRuleStep(r);
         }
-        return;
-      }
-      if (s.type === "fail") {
-        validateFailString(s.message, ast.filePath, s.loc.line, s.loc.col);
-        const failInner = semanticQuotedOrchestrationInner(s.message);
-        validateRuleStringCaptures(failInner, s.loc);
-        validateSimpleInterpolationIdentifiers(
-          failInner,
-          ast.filePath,
-          s.loc.line,
-          s.loc.col,
-          "fail",
-          ruleKnownVars,
-          "rule",
-          undefined,
-          undefined,
-          localScripts,
-        );
-        return;
-      }
-      if (s.type === "log") {
-        if (s.managed?.kind === "run_inline_script") return; // inline script — no ref to validate
-        validateLogString(s.message, ast.filePath, s.loc.line, s.loc.col, "log");
-        const logRuleInner = s.message;
-        validateRuleStringCaptures(logRuleInner, s.loc);
-        validateSimpleInterpolationIdentifiers(
-          logRuleInner,
-          ast.filePath,
-          s.loc.line,
-          s.loc.col,
-          "log",
-          ruleKnownVars,
-          "rule",
-          undefined,
-          undefined,
-          localScripts,
-        );
-        return;
-      }
-      if (s.type === "logerr") {
-        if (s.managed?.kind === "run_inline_script") return; // inline script — no ref to validate
-        validateLogString(s.message, ast.filePath, s.loc.line, s.loc.col, "logerr");
-        const logerrRuleInner = s.message;
-        validateRuleStringCaptures(logerrRuleInner, s.loc);
-        validateSimpleInterpolationIdentifiers(
-          logerrRuleInner,
-          ast.filePath,
-          s.loc.line,
-          s.loc.col,
-          "logerr",
-          ruleKnownVars,
-          "rule",
-          undefined,
-          undefined,
-          localScripts,
-        );
-        return;
-      }
-      if (s.type === "return") {
-        if (s.managed) {
-          if (s.managed.kind === "run") {
-            validateNoShellRedirection(ast.filePath, s.managed.ref.loc, "run", s.managed.args);
-            validateNestedManagedCallArgs(ast.filePath, s.managed.ref.loc, s.managed.args);
-            validateRef(s.managed.ref, ast, refCtx, expectRunInRuleRef);
-            validateArity(ast.filePath, s.managed.ref.loc, s.managed.ref.value, s.managed.args, "workflow", ast, refCtx);
-
-            validateArgVarRefs(ast.filePath, s.managed.ref.loc, s.managed.args, ruleKnownVars);
-          } else if (s.managed.kind === "ensure") {
-            validateNoShellRedirection(ast.filePath, s.managed.ref.loc, "ensure", s.managed.args);
-            validateNestedManagedCallArgs(ast.filePath, s.managed.ref.loc, s.managed.args);
-            validateRef(s.managed.ref, ast, refCtx, expectRuleRef);
-            validateArity(ast.filePath, s.managed.ref.loc, s.managed.ref.value, s.managed.args, "rule", ast, refCtx);
-
-            validateArgVarRefs(ast.filePath, s.managed.ref.loc, s.managed.args, ruleKnownVars);
-          } else if (s.managed.kind === "match") {
-            validateMatchExpr(ast.filePath, s.managed.match, ruleKnownVars);
-          }
-          // run_inline_script — no ref to validate
-        } else {
-          validateReturnString(s.value, ast.filePath, s.loc.line, s.loc.col);
-          if (s.value.startsWith('"')) {
-            const retRuleInner = semanticQuotedOrchestrationInner(s.value);
-            validateRuleStringCaptures(retRuleInner, s.loc);
-            validateSimpleInterpolationIdentifiers(
-              retRuleInner,
-              ast.filePath,
-              s.loc.line,
-              s.loc.col,
-              "return",
-              ruleKnownVars,
-              "rule",
-              undefined,
-              undefined,
-              localScripts,
-            );
-          }
-        }
-        return;
-      }
-      if (s.type === "const") {
-        const v = s.value;
-        if (v.kind === "run_capture") {
-          validateNoShellRedirection(ast.filePath, v.ref.loc, "run", v.args);
-          validateNestedManagedCallArgs(ast.filePath, v.ref.loc, v.args);
-          if (!v.ref.value.includes(".") && ruleKnownVars.has(v.ref.value) && !localScripts.has(v.ref.value)) {
-            throw jaiphError(ast.filePath, v.ref.loc.line, v.ref.loc.col, "E_VALIDATE", `strings are not executable; "${v.ref.value}" is a string — use a script instead`);
-          }
-          validateRef(v.ref, ast, refCtx, expectRunInRuleRef);
-          validateArity(ast.filePath, v.ref.loc, v.ref.value, v.args, "workflow", ast, refCtx);
-
-          validateArgVarRefs(ast.filePath, v.ref.loc, v.args, ruleKnownVars);
-        } else if (v.kind === "ensure_capture") {
-          validateNoShellRedirection(ast.filePath, v.ref.loc, "ensure", v.args);
-          validateNestedManagedCallArgs(ast.filePath, v.ref.loc, v.args);
-          validateRef(v.ref, ast, refCtx, expectRuleRef);
-          validateArity(ast.filePath, v.ref.loc, v.ref.value, v.args, "rule", ast, refCtx);
-
-          validateArgVarRefs(ast.filePath, v.ref.loc, v.args, ruleKnownVars);
-        } else if (v.kind === "prompt_capture") {
-          throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", "const ... = prompt is not allowed in rules");
-        } else if (v.kind === "run_inline_script_capture") {
-          // inline script capture — no ref to validate
-        } else if (v.kind === "match_expr") {
-          validateMatchExpr(ast.filePath, v.match, ruleKnownVars);
-        } else if (v.kind === "expr") {
-          const scriptName = extractConstScriptName(v.bashRhs);
-          if (scriptName && localScripts.has(scriptName)) {
-            throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `scripts are not values; "${scriptName}" is a script definition`);
-          }
-          validateRuleStringCaptures(stripDQ(v.bashRhs), s.loc);
-          validateSimpleInterpolationIdentifiers(
-            stripDQ(v.bashRhs),
-            ast.filePath,
-            s.loc.line,
-            s.loc.col,
-            "const",
-            ruleKnownVars,
-            "rule",
-            undefined,
-            undefined,
-            localScripts,
-          );
-        }
-        return;
-      }
-      if (s.type === "match") {
-        validateMatchExpr(ast.filePath, s.expr, ruleKnownVars);
         return;
       }
       if (s.type === "if") {
@@ -911,27 +932,12 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
       if (s.type === "for_lines") {
         if (!ruleKnownVars.has(s.sourceVar)) {
           throw jaiphError(
-            ast.filePath,
-            s.loc.line,
-            s.loc.col,
-            "E_VALIDATE",
+            ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE",
             `for ... in <name>: "${s.sourceVar}" is not a known variable in this scope`,
           );
         }
         for (const bodyStep of s.body) validateRuleStep(bodyStep);
         return;
-      }
-      if (s.type === "run_inline_script") {
-        return;
-      }
-      if (s.type === "shell") {
-        throw jaiphError(
-          ast.filePath,
-          s.loc.line,
-          s.loc.col,
-          "E_VALIDATE",
-          "inline shell steps are forbidden in rules; use explicit script blocks",
-        );
       }
       const _never: never = s;
       return _never;
@@ -941,57 +947,29 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
     }
   }
 
-  const validateChannelRef = (
-    channel: string,
-    loc: { line: number; col: number },
-  ): void => {
+  const validateChannelRef = (channel: string, loc: { line: number; col: number }): void => {
     const parts = channel.split(".");
     if (parts.length === 1) {
       if (!localChannels.has(channel)) {
-        throw jaiphError(
-          ast.filePath,
-          loc.line,
-          loc.col,
-          "E_VALIDATE",
-          `Channel "${channel}" is not defined`,
-        );
+        throw jaiphError(ast.filePath, loc.line, loc.col, "E_VALIDATE", `Channel "${channel}" is not defined`);
       }
       return;
     }
     if (parts.length !== 2) {
-      throw jaiphError(
-        ast.filePath,
-        loc.line,
-        loc.col,
-        "E_VALIDATE",
-        `Channel "${channel}" is not defined`,
-      );
+      throw jaiphError(ast.filePath, loc.line, loc.col, "E_VALIDATE", `Channel "${channel}" is not defined`);
     }
     const [alias, importedChannel] = parts;
     const importedFile = importsByAlias.get(alias);
     if (!importedFile) {
-      throw jaiphError(
-        ast.filePath,
-        loc.line,
-        loc.col,
-        "E_VALIDATE",
-        `Channel "${channel}" is not defined`,
-      );
+      throw jaiphError(ast.filePath, loc.line, loc.col, "E_VALIDATE", `Channel "${channel}" is not defined`);
     }
     const importedAst = importedAstCache.get(importedFile)!;
     const importedChannels = new Set(importedAst.channels.map((c) => c.name));
     if (!importedChannels.has(importedChannel)) {
-      throw jaiphError(
-        ast.filePath,
-        loc.line,
-        loc.col,
-        "E_VALIDATE",
-        `Channel "${channel}" is not defined`,
-      );
+      throw jaiphError(ast.filePath, loc.line, loc.col, "E_VALIDATE", `Channel "${channel}" is not defined`);
     }
   };
 
-  // Validate channel-level route declarations.
   for (const ch of ast.channels) {
     if (ch.routes) {
       for (const wfRef of ch.routes) {
@@ -999,10 +977,7 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
         const targetParams = resolveRouteTargetParams(wfRef.value, ast, refCtx);
         if (targetParams !== undefined && targetParams !== 3) {
           throw jaiphError(
-            ast.filePath,
-            wfRef.loc.line,
-            wfRef.loc.col,
-            "E_VALIDATE",
+            ast.filePath, wfRef.loc.line, wfRef.loc.col, "E_VALIDATE",
             `inbox route target "${wfRef.value}" must declare exactly 3 parameters (message, channel, sender), but declares ${targetParams}`,
           );
         }
@@ -1014,284 +989,94 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
     validateImmutableBindings(ast.filePath, workflow.steps, workflow.params, workflow.loc, ast.envDecls, localScripts);
     const promptSchemas = collectPromptSchemas(workflow.steps);
     const wfKnownVars = collectKnownVars(workflow.steps, ast.envDecls, workflow.params);
-    // Named params are validated via knownVars; positional argN access was removed.
 
     const validateStep = (s: WorkflowStepDef, recoverBindings?: Set<string>): void => {
-      if (s.type === "comment" || s.type === "blank_line") {
-        return;
-      }
+      if (s.type === "trivia") return;
       if (s.type === "send") {
         validateChannelRef(s.channel, s.loc);
-        if (s.rhs.kind === "run") {
-          validateNoShellRedirection(ast.filePath, s.rhs.ref.loc, "run", s.rhs.args);
-          validateNestedManagedCallArgs(ast.filePath, s.rhs.ref.loc, s.rhs.args);
-          validateRef(s.rhs.ref, ast, refCtx, expectRunTargetRef);
-          validateArity(ast.filePath, s.rhs.ref.loc, s.rhs.ref.value, s.rhs.args, "workflow", ast, refCtx);
-
-          validateArgVarRefs(ast.filePath, s.rhs.ref.loc, s.rhs.args, wfKnownVars, recoverBindings);
-        } else if (s.rhs.kind === "literal") {
-          const inner = s.rhs.token.startsWith('"') && s.rhs.token.endsWith('"')
-            ? s.rhs.token.slice(1, -1) : s.rhs.token;
-          validateJaiphStringContent(inner, ast.filePath, s.loc.line, s.loc.col, "send");
-          validateWorkflowStringCaptures(inner, s.loc);
-          validateDotFieldRefs(inner, s.loc, promptSchemas);
-          validateSimpleInterpolationIdentifiers(
-            inner,
-            ast.filePath,
-            s.loc.line,
-            s.loc.col,
-            "send",
-            wfKnownVars,
-            "workflow",
-            promptSchemas,
-            recoverBindings,
-            localScripts,
-          );
-        } else if (s.rhs.kind === "bare_ref") {
-          validateRef(s.rhs.ref, ast, refCtx, bareSendRefSpec);
-        } else if (s.rhs.kind === "shell") {
-          validateManagedWorkflowShell(
-            s.rhs.command,
-            makeSubEnv({ line: s.rhs.loc.line, col: s.rhs.loc.col }),
-          );
-        }
+        validateWorkflowValueExpr(s.value, s.loc, wfKnownVars, promptSchemas, recoverBindings, "send");
         return;
       }
-      if (s.type === "ensure") {
-        validateNoShellRedirection(ast.filePath, s.ref.loc, "ensure", s.args);
-        validateNestedManagedCallArgs(ast.filePath, s.ref.loc, s.args);
-        validateRef(s.ref, ast, refCtx, expectRuleRef);
-        validateArity(ast.filePath, s.ref.loc, s.ref.value, s.args, "rule", ast, refCtx);
-
-        validateArgVarRefs(ast.filePath, s.ref.loc, s.args, wfKnownVars, recoverBindings);
-        if (s.catch) {
-          const steps = "single" in s.catch ? [s.catch.single] : s.catch.block;
-          const rb = new Set<string>();
-          rb.add(s.catch.bindings.failure);
-          for (const r of steps) validateStep(r, rb);
+      if (s.type === "say") {
+        if (s.level === "log" || s.level === "logerr") {
+          if (s.message.kind === "inline_script") return;
+          if (s.message.kind === "literal") {
+            validateLogString(s.message.raw, ast.filePath, s.loc.line, s.loc.col, s.level);
+            const inner = s.message.raw;
+            validateWorkflowStringCaptures(inner, s.loc);
+            validateDotFieldRefs(inner, s.loc, promptSchemas);
+            validateSimpleInterpolationIdentifiers(
+              inner, ast.filePath, s.loc.line, s.loc.col,
+              s.level, wfKnownVars, "workflow", promptSchemas, recoverBindings, localScripts,
+            );
+            return;
+          }
+          throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `unsupported ${s.level} message form`);
         }
-        return;
-      }
-      if (s.type === "run") {
-        validateNoShellRedirection(ast.filePath, s.workflow.loc, "run", s.args);
-        validateNestedManagedCallArgs(ast.filePath, s.workflow.loc, s.args);
-        if (!s.workflow.value.includes(".") && wfKnownVars.has(s.workflow.value) && !localScripts.has(s.workflow.value) && !localWorkflows.has(s.workflow.value)) {
-          throw jaiphError(ast.filePath, s.workflow.loc.line, s.workflow.loc.col, "E_VALIDATE", `strings are not executable; "${s.workflow.value}" is a string — use a script instead`);
+        // fail
+        if (s.message.kind !== "literal") {
+          throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", "fail message must be a literal string");
         }
-        validateRef(s.workflow, ast, refCtx, expectRunTargetRef);
-        validateArity(ast.filePath, s.workflow.loc, s.workflow.value, s.args, "workflow", ast, refCtx);
-
-        validateArgVarRefs(ast.filePath, s.workflow.loc, s.args, wfKnownVars, recoverBindings);
-        if (s.catch) {
-          const steps = "single" in s.catch ? [s.catch.single] : s.catch.block;
-          const rb = new Set<string>();
-          rb.add(s.catch.bindings.failure);
-          for (const r of steps) validateStep(r, rb);
-        }
-        if (s.recover) {
-          const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
-          const rb = new Set<string>();
-          rb.add(s.recover.bindings.failure);
-          for (const r of steps) validateStep(r, rb);
-        }
-        return;
-      }
-      if (s.type === "prompt") {
-        const promptIdent = promptBareIdentifier(s.raw);
-        if (promptIdent && localScripts.has(promptIdent)) {
-          throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `scripts are not promptable; "${promptIdent}" is a script — use a string const instead`);
-        }
-        validatePromptString(s.raw, ast.filePath, s.loc.line, s.loc.col);
-        validatePromptStepReturns(s, ast.filePath);
-        const promptInner = semanticQuotedOrchestrationInner(s.raw);
-        validateWorkflowStringCaptures(promptInner, s.loc);
-        validateDotFieldRefs(promptInner, s.loc, promptSchemas);
+        validateFailString(s.message.raw, ast.filePath, s.loc.line, s.loc.col);
+        const failInner = semanticQuotedOrchestrationInner(s.message.raw);
+        validateWorkflowStringCaptures(failInner, s.loc);
+        validateDotFieldRefs(failInner, s.loc, promptSchemas);
         validateSimpleInterpolationIdentifiers(
-          promptInner,
-          ast.filePath,
-          s.loc.line,
-          s.loc.col,
-          "prompt",
-          wfKnownVars,
-          "workflow",
-          promptSchemas,
-          recoverBindings,
-          localScripts,
-        );
-        return;
-      }
-      if (s.type === "log") {
-        if (s.managed?.kind === "run_inline_script") return; // inline script — no ref to validate
-        validateLogString(s.message, ast.filePath, s.loc.line, s.loc.col, "log");
-        const logInner = s.message;
-        validateWorkflowStringCaptures(logInner, s.loc);
-        validateDotFieldRefs(logInner, s.loc, promptSchemas);
-        validateSimpleInterpolationIdentifiers(
-          logInner,
-          ast.filePath,
-          s.loc.line,
-          s.loc.col,
-          "log",
-          wfKnownVars,
-          "workflow",
-          promptSchemas,
-          recoverBindings,
-          localScripts,
-        );
-        return;
-      }
-      if (s.type === "logerr") {
-        if (s.managed?.kind === "run_inline_script") return; // inline script — no ref to validate
-        validateLogString(s.message, ast.filePath, s.loc.line, s.loc.col, "logerr");
-        const logerrInner = s.message;
-        validateWorkflowStringCaptures(logerrInner, s.loc);
-        validateDotFieldRefs(logerrInner, s.loc, promptSchemas);
-        validateSimpleInterpolationIdentifiers(
-          logerrInner,
-          ast.filePath,
-          s.loc.line,
-          s.loc.col,
-          "logerr",
-          wfKnownVars,
-          "workflow",
-          promptSchemas,
-          recoverBindings,
-          localScripts,
+          failInner, ast.filePath, s.loc.line, s.loc.col,
+          "fail", wfKnownVars, "workflow", promptSchemas, recoverBindings, localScripts,
         );
         return;
       }
       if (s.type === "return") {
-        if (s.managed) {
-          if (s.managed.kind === "run") {
-            validateNoShellRedirection(ast.filePath, s.managed.ref.loc, "run", s.managed.args);
-            validateNestedManagedCallArgs(ast.filePath, s.managed.ref.loc, s.managed.args);
-            validateRef(s.managed.ref, ast, refCtx, expectRunTargetRef);
-            validateArity(ast.filePath, s.managed.ref.loc, s.managed.ref.value, s.managed.args, "workflow", ast, refCtx);
-
-            validateArgVarRefs(ast.filePath, s.managed.ref.loc, s.managed.args, wfKnownVars, recoverBindings);
-          } else if (s.managed.kind === "ensure") {
-            validateNoShellRedirection(ast.filePath, s.managed.ref.loc, "ensure", s.managed.args);
-            validateNestedManagedCallArgs(ast.filePath, s.managed.ref.loc, s.managed.args);
-            validateRef(s.managed.ref, ast, refCtx, expectRuleRef);
-            validateArity(ast.filePath, s.managed.ref.loc, s.managed.ref.value, s.managed.args, "rule", ast, refCtx);
-
-            validateArgVarRefs(ast.filePath, s.managed.ref.loc, s.managed.args, wfKnownVars, recoverBindings);
-          } else if (s.managed.kind === "match") {
-            validateMatchExpr(ast.filePath, s.managed.match, wfKnownVars);
-          }
-          return;
-        }
-        validateReturnString(s.value, ast.filePath, s.loc.line, s.loc.col);
-        if (s.value.startsWith('"')) {
-          const retInner = semanticQuotedOrchestrationInner(s.value);
-          validateWorkflowStringCaptures(retInner, s.loc);
-          validateDotFieldRefs(retInner, s.loc, promptSchemas);
-          validateSimpleInterpolationIdentifiers(
-            retInner,
-            ast.filePath,
-            s.loc.line,
-            s.loc.col,
-            "return",
-            wfKnownVars,
-            "workflow",
-            promptSchemas,
-            recoverBindings,
-            localScripts,
-          );
-        }
-        return;
-      }
-      if (s.type === "fail") {
-        validateFailString(s.message, ast.filePath, s.loc.line, s.loc.col);
-        const failWfInner = semanticQuotedOrchestrationInner(s.message);
-        validateWorkflowStringCaptures(failWfInner, s.loc);
-        validateDotFieldRefs(failWfInner, s.loc, promptSchemas);
-        validateSimpleInterpolationIdentifiers(
-          failWfInner,
-          ast.filePath,
-          s.loc.line,
-          s.loc.col,
-          "fail",
-          wfKnownVars,
-          "workflow",
-          promptSchemas,
-          recoverBindings,
-          localScripts,
-        );
+        validateWorkflowValueExpr(s.value, s.loc, wfKnownVars, promptSchemas, recoverBindings, "return");
         return;
       }
       if (s.type === "const") {
-        const v = s.value;
-        if (v.kind === "run_capture") {
-          validateNoShellRedirection(ast.filePath, v.ref.loc, "run", v.args);
-          validateNestedManagedCallArgs(ast.filePath, v.ref.loc, v.args);
-          if (!v.ref.value.includes(".") && wfKnownVars.has(v.ref.value) && !localScripts.has(v.ref.value) && !localWorkflows.has(v.ref.value)) {
-            throw jaiphError(ast.filePath, v.ref.loc.line, v.ref.loc.col, "E_VALIDATE", `strings are not executable; "${v.ref.value}" is a string — use a script instead`);
-          }
-          validateRef(v.ref, ast, refCtx, expectRunTargetRef);
-          validateArity(ast.filePath, v.ref.loc, v.ref.value, v.args, "workflow", ast, refCtx);
-
-          validateArgVarRefs(ast.filePath, v.ref.loc, v.args, wfKnownVars, recoverBindings);
-        } else if (v.kind === "ensure_capture") {
-          validateNoShellRedirection(ast.filePath, v.ref.loc, "ensure", v.args);
-          validateNestedManagedCallArgs(ast.filePath, v.ref.loc, v.args);
-          validateRef(v.ref, ast, refCtx, expectRuleRef);
-          validateArity(ast.filePath, v.ref.loc, v.ref.value, v.args, "rule", ast, refCtx);
-
-          validateArgVarRefs(ast.filePath, v.ref.loc, v.args, wfKnownVars, recoverBindings);
-        } else if (v.kind === "prompt_capture") {
-          const promptIdent = promptBareIdentifier(v.raw);
-          if (promptIdent && localScripts.has(promptIdent)) {
-            throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `scripts are not promptable; "${promptIdent}" is a script — use a string const instead`);
-          }
-          validatePromptString(v.raw, ast.filePath, s.loc.line, s.loc.col);
-          if (v.returns !== undefined) {
-            validatePromptReturnsSchema(v.returns, ast.filePath, s.loc.line, s.loc.col);
-          }
-          const pcInner = semanticQuotedOrchestrationInner(v.raw);
-          validateWorkflowStringCaptures(pcInner, s.loc);
-          validateDotFieldRefs(pcInner, s.loc, promptSchemas);
-          validateSimpleInterpolationIdentifiers(
-            pcInner,
-            ast.filePath,
-            s.loc.line,
-            s.loc.col,
-            "prompt",
-            wfKnownVars,
-            "workflow",
-            promptSchemas,
-            recoverBindings,
-            localScripts,
-          );
-        } else if (v.kind === "run_inline_script_capture") {
-          // inline script capture — no ref to validate
-        } else if (v.kind === "match_expr") {
-          validateMatchExpr(ast.filePath, v.match, wfKnownVars);
-        } else if (v.kind === "expr") {
-          const scriptName = extractConstScriptName(v.bashRhs);
-          if (scriptName && localScripts.has(scriptName)) {
-            throw jaiphError(ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE", `scripts are not values; "${scriptName}" is a script definition`);
-          }
-          const exprInner = semanticQuotedOrchestrationInner(v.bashRhs);
-          validateWorkflowStringCaptures(exprInner, s.loc);
-          validateDotFieldRefs(exprInner, s.loc, promptSchemas);
-          validateSimpleInterpolationIdentifiers(
-            exprInner,
-            ast.filePath,
-            s.loc.line,
-            s.loc.col,
-            "const",
-            wfKnownVars,
-            "workflow",
-            promptSchemas,
-            recoverBindings,
-            localScripts,
-          );
-        }
+        validateWorkflowValueExpr(s.value, s.loc, wfKnownVars, promptSchemas, recoverBindings, "const", s.name);
         return;
       }
-      if (s.type === "match") {
-        validateMatchExpr(ast.filePath, s.expr, wfKnownVars);
+      if (s.type === "exec") {
+        const body = s.body;
+        if (body.kind === "prompt") {
+          validateWorkflowValueExpr(body, s.loc, wfKnownVars, promptSchemas, recoverBindings, "const");
+          validatePromptStepReturns(body, s.captureName, ast.filePath);
+          return;
+        }
+        if (body.kind === "shell") {
+          if (hasUnquotedSendArrow(body.command) && matchSendOperator(body.command) === null) {
+            throw jaiphError(
+              ast.filePath, body.loc.line, body.loc.col, "E_VALIDATE",
+              "invalid send: channel must be a single name or `alias.name` (at most one dot in the channel part)",
+            );
+          }
+          const t = body.command.trim();
+          if (/^(?:[A-Za-z_][A-Za-z0-9_]*)(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/.test(t)) {
+            if (!t.includes(".")) {
+              if (localScripts.has(t) || localWorkflows.has(t)) {
+                throw jaiphError(
+                  ast.filePath, body.loc.line, body.loc.col, "E_VALIDATE",
+                  `use run ${t}() — a bare name that refers to a script or workflow must use a managed run step`,
+                );
+              }
+            } else {
+              validateRef({ value: t, loc: body.loc }, ast, refCtx, expectRunTargetRef);
+              throw jaiphError(
+                ast.filePath, body.loc.line, body.loc.col, "E_VALIDATE",
+                `use run ${t}() — "${t}" is a valid script or workflow reference; use a managed run step`,
+              );
+            }
+          }
+          return;
+        }
+        validateCallable(body, wfKnownVars, "workflow", recoverBindings);
+        if (s.catch) {
+          const steps = "single" in s.catch ? [s.catch.single] : s.catch.block;
+          for (const r of steps) validateStep(r, new Set([s.catch.bindings.failure]));
+        }
+        if (s.recover) {
+          const steps = "single" in s.recover ? [s.recover.single] : s.recover.block;
+          for (const r of steps) validateStep(r, new Set([s.recover.bindings.failure]));
+        }
         return;
       }
       if (s.type === "if") {
@@ -1306,58 +1091,16 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
       if (s.type === "for_lines") {
         if (!wfKnownVars.has(s.sourceVar)) {
           throw jaiphError(
-            ast.filePath,
-            s.loc.line,
-            s.loc.col,
-            "E_VALIDATE",
+            ast.filePath, s.loc.line, s.loc.col, "E_VALIDATE",
             `for ... in <name>: "${s.sourceVar}" is not a known variable in this scope`,
           );
         }
         for (const bodyStep of s.body) validateStep(bodyStep, recoverBindings);
         return;
       }
-      if (s.type === "run_inline_script") {
-        return;
-      }
-      if (s.type === "shell") {
-        if (hasUnquotedSendArrow(s.command) && matchSendOperator(s.command) === null) {
-          throw jaiphError(
-            ast.filePath,
-            s.loc.line,
-            s.loc.col,
-            "E_VALIDATE",
-            "invalid send: channel must be a single name or `alias.name` (at most one dot in the channel part)",
-          );
-        }
-        const t = s.command.trim();
-        if (/^(?:[A-Za-z_][A-Za-z0-9_]*)(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/.test(t)) {
-          if (!t.includes(".")) {
-            if (localScripts.has(t) || localWorkflows.has(t)) {
-              throw jaiphError(
-                ast.filePath,
-                s.loc.line,
-                s.loc.col,
-                "E_VALIDATE",
-                `use run ${t}() — a bare name that refers to a script or workflow must use a managed run step`,
-              );
-            }
-          } else {
-            validateRef({ value: t, loc: s.loc }, ast, refCtx, expectRunTargetRef);
-            throw jaiphError(
-              ast.filePath,
-              s.loc.line,
-              s.loc.col,
-              "E_VALIDATE",
-              `use run ${t}() — "${t}" is a valid script or workflow reference; use a managed run step`,
-            );
-          }
-        }
-        return;
-      }
       const _never: never = s;
       return _never;
     };
-
 
     for (const step of workflow.steps) {
       validateStep(step);
@@ -1369,17 +1112,6 @@ export function validateModule(ast: jaiphModule, graph: ModuleGraph): void {
   }
 }
 
-/**
- * Validate variable references inside `test` blocks. The only names in scope are
- * those introduced by `const NAME = …` (literal or `run … capture`) earlier in
- * the same block. There is no implicit `response`: an `expect_*` step that
- * references an undeclared name is a compile-time error.
- *
- * Errors raised:
- * - `mock prompt <ident>` where `<ident>` was not declared earlier
- * - `expect_*` LHS variable not declared earlier
- * - `expect_* var <ident>` RHS where `<ident>` was not declared earlier
- */
 function validateTestBlocks(ast: jaiphModule, tests: import("../types").TestBlockDef[]): void {
   for (const tb of tests) {
     const inScope = new Set<string>();
@@ -1433,11 +1165,6 @@ function validateTestBlocks(ast: jaiphModule, tests: import("../types").TestBloc
         }
         continue;
       }
-      // Other step types (mock_workflow/rule/script bodies, blank_line, comment) are
-      // out of scope for this pass: their bodies are validated as workflow/rule steps
-      // by the regular path when materialized, and they do not contribute to the
-      // test-level `vars` map.
     }
   }
 }
-

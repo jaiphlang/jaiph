@@ -11,16 +11,28 @@
       "params": [],
       "steps": [
         {
-          "message": "hello world",
-          "type": "log"
+          "level": "log",
+          "message": {
+            "kind": "literal",
+            "raw": "hello world"
+          },
+          "type": "say"
         },
         {
-          "message": "${USER} logged in",
-          "type": "log"
+          "level": "log",
+          "message": {
+            "kind": "literal",
+            "raw": "${USER} logged in"
+          },
+          "type": "say"
         },
         {
-          "message": "something went wrong",
-          "type": "logerr"
+          "level": "logerr",
+          "message": {
+            "kind": "literal",
+            "raw": "something went wrong"
+          },
+          "type": "say"
         }
       ]
     }
