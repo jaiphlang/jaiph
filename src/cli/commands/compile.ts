@@ -1,11 +1,9 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { parsejaiph } from "../../parser";
+import { loadModuleGraph } from "../../transpile/module-graph";
 import { validateReferences } from "../../transpile/validate";
-import { resolveImportPath } from "../../transpile/resolve";
-import { collectTransitiveJhModules, walkjhFiles } from "../../transpile/build";
+import { walkjhFiles } from "../../transpile/build";
 import { detectWorkspaceRoot } from "../shared/paths";
-import type { ValidateContext } from "../../transpile/validate";
 
 export interface CompileDiagnostic {
   file: string;
@@ -26,16 +24,6 @@ export function diagnosticFromThrown(err: unknown): CompileDiagnostic | null {
     col: Number(m[3]),
     code: m[4],
     message: m[5].trimEnd(),
-  };
-}
-
-function makeValidateContext(workspaceRoot?: string): ValidateContext {
-  return {
-    resolveImportPath,
-    existsSync,
-    readFile: (path: string) => readFileSync(path, "utf8"),
-    parse: parsejaiph,
-    workspaceRoot,
   };
 }
 
@@ -83,7 +71,7 @@ export function runCompile(args: string[]): number {
     return 1;
   }
 
-  const filesToValidate = new Set<string>();
+  const entries: Array<{ file: string; workspaceRoot: string }> = [];
 
   try {
     for (const p of paths) {
@@ -97,15 +85,11 @@ export function runCompile(args: string[]): number {
           throw new Error(`compile expects .jh files: ${p}`);
         }
         const wr = workspaceFlag ?? detectWorkspaceRoot(dirname(abs));
-        for (const f of collectTransitiveJhModules(abs, wr)) {
-          filesToValidate.add(f);
-        }
+        entries.push({ file: abs, workspaceRoot: wr });
       } else if (st.isDirectory()) {
         const wr = workspaceFlag ?? detectWorkspaceRoot(abs);
         for (const entry of walkjhFiles(abs)) {
-          for (const f of collectTransitiveJhModules(entry, wr)) {
-            filesToValidate.add(f);
-          }
+          entries.push({ file: entry, workspaceRoot: wr });
         }
       } else {
         throw new Error(`not a file or directory: ${p}`);
@@ -128,17 +112,16 @@ export function runCompile(args: string[]): number {
     return 1;
   }
 
-  const sorted = [...filesToValidate].sort();
   const seen = new Set<string>();
-
-  for (const file of sorted) {
+  for (const { file, workspaceRoot } of entries) {
     if (seen.has(file)) continue;
     seen.add(file);
-    const wr = workspaceFlag ?? detectWorkspaceRoot(dirname(file));
-    const ctx = makeValidateContext(wr);
     try {
-      const ast = parsejaiph(readFileSync(file, "utf8"), file);
-      validateReferences(ast, ctx);
+      const graph = loadModuleGraph(file, workspaceRoot);
+      validateReferences(graph);
+      // Mark every reachable module as already validated so a directory walk
+      // does not double-validate shared imports.
+      for (const reachable of graph.modules.keys()) seen.add(reachable);
     } catch (err) {
       const d = diagnosticFromThrown(err);
       if (json) {

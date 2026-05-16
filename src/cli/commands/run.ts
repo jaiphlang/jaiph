@@ -10,8 +10,8 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve, extname } from "node:path";
 import { basename } from "node:path";
 import { parsejaiph } from "../../parser";
-import { buildScripts } from "../../transpiler";
-import { prepareCompile, writeCompilePrep } from "../../transpile/compile-prep";
+import { buildScripts, buildScriptsFromGraph } from "../../transpiler";
+import { loadModuleGraph, writeModuleGraph } from "../../transpile/module-graph";
 import { metadataToConfig } from "../../config";
 import { buildStepDisplayParamPairs, formatNamedParamsForDisplay } from "./format-params.js";
 import {
@@ -81,8 +81,8 @@ export async function runWorkflow(rest: string[]): Promise<number> {
   }
 
   const hooksConfig = loadMergedHooks(workspaceRoot);
-  const prep = prepareCompile(inputAbs, workspaceRoot);
-  const mod = prep.astByFile.get(inputAbs)!;
+  const graph = loadModuleGraph(inputAbs, workspaceRoot);
+  const mod = graph.modules.get(inputAbs)!.ast;
   const effectiveConfig = metadataToConfig(mod.metadata);
 
   const outDir = target ? resolve(target) : mkdtempSync(join(tmpdir(), "jaiph-run-"));
@@ -113,17 +113,17 @@ export async function runWorkflow(rest: string[]): Promise<number> {
       dockerConfigForBanner.enabled,
       sandboxModeForBanner,
     );
-    const { scriptsDir } = buildScripts(inputAbs, outDir, workspaceRoot, prep);
+    const { scriptsDir } = buildScriptsFromGraph(graph, outDir);
     runtimeEnv.JAIPH_SCRIPTS = scriptsDir;
-    // Cache file consumed by the spawned runner (or container) so the runtime
+    // Serialized module graph consumed by the spawned runner so the runtime
     // graph reuses these ASTs instead of re-parsing every reachable module.
     // Docker mounts the workspace read-only, so place the cache under outDir,
     // which the host already arranges for the container side via its existing
     // sandbox layout. For local runs the runner reads the path directly.
-    const prepFile = join(outDir, ".jaiph-compile-prep.json");
-    writeCompilePrep(prepFile, prep);
+    const graphFile = join(outDir, ".jaiph-module-graph.json");
+    writeModuleGraph(graphFile, graph);
     if (!dockerConfigForBanner.enabled) {
-      runtimeEnv.JAIPH_COMPILE_PREP_FILE = prepFile;
+      runtimeEnv.JAIPH_MODULE_GRAPH_FILE = graphFile;
     }
     const metaFile = join(outDir, `.jaiph-run-meta-${Date.now()}-${process.pid}.txt`);
 

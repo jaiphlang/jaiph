@@ -751,7 +751,7 @@ If the inline capture fails, the enclosing step fails. Nested inline captures ar
 
 ## Script isolation
 
-**Emitted script files** do not embed module `const` values or other Jaiph “shims” — the transpiler writes the authored body plus a shebang (see `emitScriptsForModule` / `emit-script.ts`). Anything a script needs from the module must be passed as **positional arguments** (`$1`, `$2`, …), read from paths under `JAIPH_WORKSPACE`, or live in shared script sources (`import script`).
+**Emitted script files** do not embed module `const` values or other Jaiph “shims” — the transpiler writes the authored body plus a shebang (see `emitScriptsForModuleFromGraph` / `emit-script.ts`). Anything a script needs from the module must be passed as **positional arguments** (`$1`, `$2`, …), read from paths under `JAIPH_WORKSPACE`, or live in shared script sources (`import script`).
 
 **Subprocess environment (`NodeWorkflowRuntime`):** Managed **script** steps (`run` on a named script, script import, or inline `` `…` `` / fenced body), and **workflow inline shell** lines, all use the same **`scope.env`**: the runner’s `process.env` as adjusted by Jaiph (for example `JAIPH_SCRIPTS`, `JAIPH_WORKSPACE`, `JAIPH_RUN_DIR`, `JAIPH_ARTIFACTS_DIR`, prompt-related `JAIPH_AGENT_*` when set, and keys derived from `config { … }`). It is **not** reset to a small fixed allowlist; anything visible to the workflow runner is visible to child processes unless your deployment strips the parent environment.
 
