@@ -52,7 +52,6 @@ export function parseSendRhs(
         rhs: {
           kind: "run", ref,
           ...(call.args ? { args: call.args } : {}),
-          ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
         },
         nextIdx: defaultNext,
       };

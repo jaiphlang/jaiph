@@ -27,7 +27,10 @@ test("run with args and parens still works", () => {
   assert.equal(step.type, "run");
   if (step.type === "run") {
     assert.equal(step.workflow.value, "deploy");
-    assert.equal(step.args, '"prod" "v1"');
+    assert.deepEqual(step.args, [
+      { kind: "literal", raw: '"prod"' },
+      { kind: "literal", raw: '"v1"' },
+    ]);
   }
 });
 

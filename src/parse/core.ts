@@ -1,4 +1,5 @@
 import { jaiphError } from "../errors";
+import type { Arg } from "../types";
 
 export function fail(filePath: string, message: string, lineNo: number, col = 1): never {
   throw jaiphError(filePath, lineNo, col, "E_PARSE", message);
@@ -162,13 +163,17 @@ export function parseParamList(filePath: string, content: string, lineNo: number
 }
 
 /**
- * Convert comma-separated call arguments to space-separated form for runtime.
- * Respects quoted strings so commas inside quotes are preserved.
- * Bare identifiers (valid names, not keywords) are converted to ${name} form.
+ * Split a comma-separated call argument list into typed `Arg[]`.
+ *
+ * Each top-level comma-separated segment is classified:
+ * - bare identifier (and not a Jaiph keyword): `{ kind: "var", name }`
+ * - anything else (quoted string, ${…}, nested `run …` / `ensure …` call, inline-script
+ *   form, etc.): `{ kind: "literal", raw }`, stored as authored.
+ *
+ * Commas inside quoted strings are preserved (the scanner tracks quote state).
  */
-function commaArgsToSpaced(content: string): { spaced: string; bareIdentifiers: string[] } {
-  const parts: string[] = [];
-  const bareIdentifiers: string[] = [];
+export function commaArgsToArgList(content: string): Arg[] {
+  const out: Arg[] = [];
   let current = "";
   let inQuote: string | null = null;
   for (let j = 0; j < content.length; j++) {
@@ -177,39 +182,54 @@ function commaArgsToSpaced(content: string): { spaced: string; bareIdentifiers: 
       current += ch;
       if (ch === inQuote && content[j - 1] !== "\\") inQuote = null;
     } else if (ch === ",") {
-      const trimmed = current.trim();
-      if (trimmed) {
-        if (isBareIdentifier(trimmed)) {
-          bareIdentifiers.push(trimmed);
-          parts.push(`\${${trimmed}}`);
-        } else {
-          parts.push(trimmed);
-        }
-      }
+      pushArg(out, current);
       current = "";
     } else {
       if (ch === '"' || ch === "'") inQuote = ch;
       current += ch;
     }
   }
-  const trimmed = current.trim();
-  if (trimmed) {
-    if (isBareIdentifier(trimmed)) {
-      bareIdentifiers.push(trimmed);
-      parts.push(`\${${trimmed}}`);
-    } else {
-      parts.push(trimmed);
-    }
-  }
-  return { spaced: parts.filter((p) => p).join(" "), bareIdentifiers };
+  pushArg(out, current);
+  return out;
+}
+
+function pushArg(out: Arg[], segment: string): void {
+  const trimmed = segment.trim();
+  if (!trimmed) return;
+  out.push(isBareIdentifier(trimmed) ? { kind: "var", name: trimmed } : { kind: "literal", raw: trimmed });
+}
+
+/**
+ * Convert `Arg[]` back to the space-separated string the runtime consumes:
+ * - `var` → `${name}` (so runtime interpolation expands it against in-scope vars)
+ * - `literal` → raw as authored
+ *
+ * Empty / undefined → empty string.
+ */
+export function argsToRuntimeString(args: Arg[] | undefined): string {
+  if (!args || args.length === 0) return "";
+  return args.map((a) => (a.kind === "var" ? `\${${a.name}}` : a.raw)).join(" ");
+}
+
+/**
+ * Convert `Arg[]` back to comma-separated source form:
+ * - `var` → name (bare)
+ * - `literal` → raw as authored
+ *
+ * Used to populate the placeholder `value` string on managed
+ * `return run …` / `return ensure …` steps. Empty / undefined → empty string.
+ */
+export function argsToSourceForm(args: Arg[] | undefined): string {
+  if (!args || args.length === 0) return "";
+  return args.map((a) => (a.kind === "var" ? a.name : a.raw)).join(", ");
 }
 
 /**
  * Parse a call expression `ref(args)` or `ref()` from a string.
- * Returns the ref, optional args (space-separated), bare identifier names, and the rest of the string after `)`.
+ * Returns the ref, optional typed `Arg[]`, and the rest of the string after `)`.
  * Returns null if the string doesn't start with a valid call expression.
  */
-export function parseCallRef(s: string): { ref: string; args?: string; bareIdentifierArgs?: string[]; rest: string } | null {
+export function parseCallRef(s: string): { ref: string; args?: Arg[]; rest: string } | null {
   const t = s.trimStart();
   // Parenthesized form: ref(args) or ref()
   const refMatch = t.match(/^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\(/);
@@ -234,13 +254,8 @@ export function parseCallRef(s: string): { ref: string; args?: string; bareIdent
     const argsContent = t.slice(parenStart, i - 1).trim();
     const rest = t.slice(i);
     if (!argsContent) return { ref, rest };
-    const { spaced, bareIdentifiers } = commaArgsToSpaced(argsContent);
-    return {
-      ref,
-      args: spaced || undefined,
-      ...(bareIdentifiers.length > 0 ? { bareIdentifierArgs: bareIdentifiers } : {}),
-      rest,
-    };
+    const args = commaArgsToArgList(argsContent);
+    return { ref, ...(args.length > 0 ? { args } : {}), rest };
   }
   // Bare identifier form (no parens) is no longer allowed — require parentheses.
   return null;
@@ -248,14 +263,14 @@ export function parseCallRef(s: string): { ref: string; args?: string; bareIdent
 
 /**
  * Parse a parenthesized argument list `(args)` or `()` at the start of a string.
- * Returns args (space-separated), bare identifier names, and remaining text after `)`.
- * Returns null if the string doesn't start with `(`.
+ * Returns typed `Arg[]` and remaining text after `)`. Returns null if the string
+ * doesn't start with `(`.
  */
-export function parseParenArgs(s: string): { args?: string; bareIdentifierArgs?: string[]; rest: string } | null {
+export function parseParenArgs(s: string): { args?: Arg[]; rest: string } | null {
   if (!s.trimStart().startsWith("(")) return null;
   const result = parseCallRef(`__anon${s.trimStart()}`);
   if (!result) return null;
-  return { args: result.args, bareIdentifierArgs: result.bareIdentifierArgs, rest: result.rest };
+  return { args: result.args, rest: result.rest };
 }
 
 /**

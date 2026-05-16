@@ -198,62 +198,61 @@ test("isBareIdentifier: rejects string with spaces", () => {
   assert.equal(isBareIdentifier("has space"), false);
 });
 
-// === parseCallRef: bare identifiers ===
+// === parseCallRef: typed Arg[] classification ===
 
-test("parseCallRef: bare identifier arg is converted to interpolation form", () => {
+test("parseCallRef: bare identifier becomes var arg", () => {
   const result = parseCallRef("foo(task)");
   assert.ok(result);
   assert.equal(result.ref, "foo");
-  assert.equal(result.args, "${task}");
-  assert.deepEqual(result.bareIdentifierArgs, ["task"]);
+  assert.deepEqual(result.args, [{ kind: "var", name: "task" }]);
 });
 
 test("parseCallRef: bare identifier mixed with quoted arg", () => {
   const result = parseCallRef('foo(task, "hello")');
   assert.ok(result);
   assert.equal(result.ref, "foo");
-  assert.equal(result.args, '${task} "hello"');
-  assert.deepEqual(result.bareIdentifierArgs, ["task"]);
+  assert.deepEqual(result.args, [
+    { kind: "var", name: "task" },
+    { kind: "literal", raw: '"hello"' },
+  ]);
 });
 
 test("parseCallRef: multiple bare identifiers", () => {
   const result = parseCallRef("foo(task, branch_name)");
   assert.ok(result);
   assert.equal(result.ref, "foo");
-  assert.equal(result.args, "${task} ${branch_name}");
-  assert.deepEqual(result.bareIdentifierArgs, ["task", "branch_name"]);
+  assert.deepEqual(result.args, [
+    { kind: "var", name: "task" },
+    { kind: "var", name: "branch_name" },
+  ]);
 });
 
-test("parseCallRef: keyword arg is not treated as bare identifier", () => {
+test("parseCallRef: keyword arg is stored as literal (not var)", () => {
   const result = parseCallRef("foo(run)");
   assert.ok(result);
   assert.equal(result.ref, "foo");
-  assert.equal(result.args, "run");
-  assert.equal(result.bareIdentifierArgs, undefined);
+  assert.deepEqual(result.args, [{ kind: "literal", raw: "run" }]);
 });
 
-test("parseCallRef: quoted string arg is not treated as bare identifier", () => {
+test("parseCallRef: quoted string arg is stored as literal", () => {
   const result = parseCallRef('foo("task")');
   assert.ok(result);
   assert.equal(result.ref, "foo");
-  assert.equal(result.args, '"task"');
-  assert.equal(result.bareIdentifierArgs, undefined);
+  assert.deepEqual(result.args, [{ kind: "literal", raw: '"task"' }]);
 });
 
-test("parseCallRef: ${var} arg is not treated as bare identifier", () => {
+test("parseCallRef: ${var} interpolation arg is stored as literal", () => {
   const result = parseCallRef("foo(${task})");
   assert.ok(result);
   assert.equal(result.ref, "foo");
-  assert.equal(result.args, "${task}");
-  assert.equal(result.bareIdentifierArgs, undefined);
+  assert.deepEqual(result.args, [{ kind: "literal", raw: "${task}" }]);
 });
 
-test("parseCallRef: no args returns no bareIdentifierArgs", () => {
+test("parseCallRef: no args returns undefined args", () => {
   const result = parseCallRef("foo()");
   assert.ok(result);
   assert.equal(result.ref, "foo");
   assert.equal(result.args, undefined);
-  assert.equal(result.bareIdentifierArgs, undefined);
 });
 
 // === parseCallRef: bare identifier (no parens) — now returns null ===

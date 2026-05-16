@@ -11,6 +11,7 @@
 
 import { jaiphError } from "../errors";
 import { parseCallRef } from "../parse/core";
+import type { Arg } from "../types";
 
 /**
  * Check for shell fallback/expansion syntax inside ${...} blocks.
@@ -98,7 +99,7 @@ const INLINE_CAPTURE_RE = /\$\{(run|ensure)\s+([^}]+)\}/g;
 export interface InlineCapture {
   kind: "run" | "ensure";
   ref: string;
-  args?: string;
+  args?: Arg[];
 }
 
 /** Extract ${run ref [args]} and ${ensure ref [args]} from string content (unquoted). */
@@ -280,7 +281,7 @@ export function validateJaiphStringContent(
       );
     }
 
-    if (call.args && /\$\{(?:run|ensure)\s/.test(call.args)) {
+    if (call.args?.some((a) => a.kind === "literal" && /\$\{(?:run|ensure)\s/.test(a.raw))) {
       throw jaiphError(
         filePath, line, col, "E_PARSE",
         `${context} cannot contain nested inline captures; extract to a const variable`,

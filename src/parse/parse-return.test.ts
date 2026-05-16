@@ -28,8 +28,13 @@ test("return run parses managed run call with args", () => {
   if (step.type === "return") {
     assert.ok(step.managed);
     assert.equal(step.managed!.kind, "run");
-    assert.equal(step.managed!.ref.value, "helper");
-    assert.equal(step.managed!.args, '"a" "b"');
+    if (step.managed!.kind === "run") {
+      assert.equal(step.managed!.ref.value, "helper");
+      assert.deepEqual(step.managed!.args, [
+        { kind: "literal", raw: '"a"' },
+        { kind: "literal", raw: '"b"' },
+      ]);
+    }
   }
 });
 
@@ -73,7 +78,9 @@ test("return ensure parses managed ensure call with args", () => {
   if (step.type === "return") {
     assert.ok(step.managed);
     assert.equal(step.managed!.kind, "ensure");
-    assert.equal(step.managed!.args, '"x"');
+    if (step.managed!.kind === "ensure") {
+      assert.deepEqual(step.managed!.args, [{ kind: "literal", raw: '"x"' }]);
+    }
   }
 });
 
@@ -163,7 +170,7 @@ test("return run inline script with args", () => {
     assert.equal(step.managed!.kind, "run_inline_script");
     if (step.managed!.kind === "run_inline_script") {
       assert.equal(step.managed!.body, "echo $1");
-      assert.equal(step.managed!.args, '"x"');
+      assert.deepEqual(step.managed!.args, [{ kind: "literal", raw: '"x"' }]);
     }
   }
 });
@@ -200,8 +207,10 @@ test("log run inline script with args", () => {
   if (step.type === "log") {
     assert.ok(step.managed);
     assert.equal(step.managed!.kind, "run_inline_script");
-    assert.equal(step.managed!.body, "echo $1");
-    assert.equal(step.managed!.args, '"x"');
+    if (step.managed!.kind === "run_inline_script") {
+      assert.equal(step.managed!.body, "echo $1");
+      assert.deepEqual(step.managed!.args, [{ kind: "literal", raw: '"x"' }]);
+    }
   }
 });
 

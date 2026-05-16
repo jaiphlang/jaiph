@@ -31,7 +31,10 @@ workflow default() {
   assert.equal(step.type, "run_inline_script");
   if (step.type === "run_inline_script") {
     assert.equal(step.body, "echo $1");
-    assert.equal(step.args, '"arg1" "arg2"');
+    assert.deepEqual(step.args, [
+      { kind: "literal", raw: '"arg1"' },
+      { kind: "literal", raw: '"arg2"' },
+    ]);
   }
 });
 
@@ -107,8 +110,7 @@ test("parser: rule body supports multiline fenced run ```", () => {
   assert.equal(step.type, "run_inline_script");
   if (step.type === "run_inline_script") {
     assert.ok(step.body.includes('if [ -z "$1" ]'));
-    assert.equal(step.args, "${name}");
-    assert.deepEqual(step.bareIdentifierArgs, ["name"]);
+    assert.deepEqual(step.args, [{ kind: "var", name: "name" }]);
   }
 });
 

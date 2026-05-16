@@ -1,6 +1,7 @@
 import type { WorkflowMetadata, WorkflowStepDef } from "../types";
 import { createTrivia, type Trivia } from "./trivia";
 import {
+  argsToSourceForm,
   colFromRaw,
   fail,
   hasUnescapedClosingQuote,
@@ -273,7 +274,6 @@ export function parseBlockStatement(
           loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
         },
         args: call.args,
-        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
         async: true,
       },
       nextIdx: idx + 1,
@@ -290,7 +290,6 @@ export function parseBlockStatement(
           body: result.body,
           ...(result.lang ? { lang: result.lang } : {}),
           args: result.args,
-          ...(result.bareIdentifierArgs ? { bareIdentifierArgs: result.bareIdentifierArgs } : {}),
           loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
         },
         nextIdx: result.nextLineIdx,
@@ -322,7 +321,6 @@ export function parseBlockStatement(
           loc: { line: innerNo, col: innerRaw.indexOf("run") + 1 },
         },
         args: call.args,
-        ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
       },
       nextIdx: idx + 1,
     };
@@ -383,7 +381,6 @@ export function parseBlockStatement(
             body: result.body,
             ...(result.lang ? { lang: result.lang } : {}),
             args: result.args,
-            ...(result.bareIdentifierArgs ? { bareIdentifierArgs: result.bareIdentifierArgs } : {}),
           },
         },
         nextIdx: result.nextLineIdx,
@@ -421,7 +418,6 @@ export function parseBlockStatement(
             body: result.body,
             ...(result.lang ? { lang: result.lang } : {}),
             args: result.args,
-            ...(result.bareIdentifierArgs ? { bareIdentifierArgs: result.bareIdentifierArgs } : {}),
           },
         },
         nextIdx: result.nextLineIdx,
@@ -498,8 +494,7 @@ export function parseBlockStatement(
               body: result.body,
               ...(result.lang ? { lang: result.lang } : {}),
               args: result.args,
-              ...(result.bareIdentifierArgs ? { bareIdentifierArgs: result.bareIdentifierArgs } : {}),
-            },
+                },
           },
           nextIdx: result.nextLineIdx,
         };
@@ -510,11 +505,10 @@ export function parseBlockStatement(
         return {
           step: {
             type: "return",
-            value: `run ${call.ref}(${call.args ?? ""})`,
+            value: `run ${call.ref}(${argsToSourceForm(call.args)})`,
             loc: retLoc,
             managed: {
               kind: "run", ref: { value: call.ref, loc: retLoc }, args: call.args,
-              ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
             },
           },
           nextIdx: idx + 1,
@@ -528,11 +522,10 @@ export function parseBlockStatement(
         return {
           step: {
             type: "return",
-            value: `ensure ${call.ref}(${call.args ?? ""})`,
+            value: `ensure ${call.ref}(${argsToSourceForm(call.args)})`,
             loc: retLoc,
             managed: {
               kind: "ensure", ref: { value: call.ref, loc: retLoc }, args: call.args,
-              ...(call.bareIdentifierArgs ? { bareIdentifierArgs: call.bareIdentifierArgs } : {}),
             },
           },
           nextIdx: idx + 1,
